@@ -33,20 +33,51 @@ export type Attachment = {
 };
 
 /**
- * Nome de arquivo seguro como chave de objeto.
+ * Caracteres que o Storage aceita numa chave de objeto.
  *
- * Barra viraria pasta nova e furaria o `{sala}/{uid}/` que as policies usam
- * para decidir quem escreve onde — é uma questão de acesso, não de estética.
+ * Medido contra o servidor, não deduzido: qualquer coisa fora deste conjunto
+ * volta como `Invalid key` e o envio falha inteiro. Acento não está incluído —
+ * e "Histórico - Edgar.jpg" é o nome que qualquer ficha em português tem.
+ *
+ * A barra fica de fora de propósito, apesar de o servidor aceitá-la: ela
+ * viraria pasta nova e furaria o `{sala}/{uid}/` que as policies usam para
+ * decidir quem escreve onde. É acesso, não estética.
+ */
+const ALLOWED_KEY_CHARS = /[^ !#$&'()*+,.:;=?@_0-9A-Za-z-]/g;
+
+/** Tira o acento mantendo a letra: "ação" vira "acao", não "a--o". */
+function deaccent(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function cleanPart(part: string): string {
+  return deaccent(part).replace(ALLOWED_KEY_CHARS, "-").replace(/-{2,}/g, "-").trim();
+}
+
+/**
+ * Nome de arquivo utilizável como chave de objeto.
+ *
+ * O nome exibido sai daqui — não há onde guardar o original sem custo: metadado
+ * customizado sobrevive no Storage, mas só o `info` de cada arquivo o devolve, e
+ * isso trocaria uma assinatura em lote por uma chamada por anexo a cada abertura
+ * da aba. Um acento perdido custa menos que isso no celular de quem joga.
+ *
+ * Dois nomes que só diferem no acento passam a colidir, e o segundo substitui o
+ * primeiro — mesma regra de sempre para nomes iguais.
  */
 export function safeName(name: string): string {
-  const cleaned = name
-    .replace(/[/\\]/g, "-")
-    // Caracteres de controle: invisiveis no nome e recusados como chave.
-    .replace(/[\u0000-\u001f\u007f]/g, "")
-    .trim()
-    .slice(0, 120);
+  const dot = name.lastIndexOf(".");
+  // Extensão só conta se for curta e vier depois de algum nome: assim
+  // "ficha.tar.gz" mantém ".gz" e ".gitignore" não é tratado como extensão solta.
+  const hasExtension = dot > 0 && name.length - dot <= 11;
 
-  return cleaned || "arquivo";
+  const stem = cleanPart(hasExtension ? name.slice(0, dot) : name)
+    .slice(0, 100)
+    .replace(/^-+|-+$/g, "");
+
+  // Um nome inteiro fora do ASCII vira só traços; um nome genérico que preserva
+  // a extensão diz mais que "---.jpg".
+  return (stem || "arquivo") + cleanPart(hasExtension ? name.slice(dot) : "");
 }
 
 function folder(roomId: string, userId: string): string {
@@ -96,7 +127,9 @@ export async function uploadAttachment(roomId: string, userId: string, file: Fil
       upsert: true,
     });
 
-  if (error) throw error;
+  // O erro do Storage vem em inglês e sem dizer de qual arquivo é. Enviando
+  // vários de uma vez, saber o nome é metade da informação.
+  if (error) throw new Error(`${file.name} não pôde ser enviado. ${error.message}`);
 }
 
 export async function deleteAttachment(path: string): Promise<void> {
