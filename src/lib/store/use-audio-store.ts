@@ -11,8 +11,6 @@ type AudioStore = {
    * de diferença, o que soa como eco. Um por vez resolve.
    */
   enabled: boolean;
-  /** Volume deste aparelho, 0 a 1. Multiplica o volume que a cena definiu. */
-  masterVolume: number;
   /**
    * O browser recusou tocar por falta de gesto do usuário. Vira `false` no
    * primeiro `play()` que der certo.
@@ -24,7 +22,6 @@ type AudioStore = {
   playingEffects: string[];
 
   setEnabled: (enabled: boolean) => void;
-  setMasterVolume: (volume: number) => void;
   setBlocked: (blocked: boolean) => void;
   retry: () => void;
   setPlayingEffects: (ids: string[]) => void;
@@ -38,22 +35,27 @@ type AudioStore = {
  */
 export const useAudioStore = create<AudioStore>((set) => ({
   enabled: true,
-  masterVolume: 0.7,
   blocked: false,
   nudge: 0,
   playingEffects: [],
 
   setEnabled: (enabled) => set({ enabled }),
-  setMasterVolume: (masterVolume) => set({ masterVolume }),
   setBlocked: (blocked) => set({ blocked }),
   retry: () => set((state) => ({ nudge: state.nudge + 1 })),
   setPlayingEffects: (playingEffects) => set({ playingEffects }),
 }));
 
-/** Ganho final aplicado a um elemento, já considerando a saída deste aparelho. */
+/**
+ * Ganho final aplicado a um elemento.
+ *
+ * Um volume só, o da cena, e ele viaja: o mestre regula de um lugar e a TV e
+ * os celulares seguem. Um segundo volume por aparelho se multiplicaria com
+ * este — trilha a 5% com aparelho a 70% dá 3,5%, e quem arrasta um slider não
+ * entende por que o som não sobe. Ajuste fino por aparelho é o volume do
+ * próprio sistema, que todo aparelho já tem.
+ */
 export function outputVolume(trackVolume: number): number {
-  const { enabled, masterVolume } = useAudioStore.getState();
-  if (!enabled) return 0;
+  if (!useAudioStore.getState().enabled) return 0;
 
-  return Math.max(0, Math.min(1, trackVolume * masterVolume));
+  return Math.max(0, Math.min(1, trackVolume));
 }

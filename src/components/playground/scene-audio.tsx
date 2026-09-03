@@ -29,7 +29,6 @@ export function SceneAudio({ scene }: { scene: Scene | null }) {
   const effectUrl = useAssetUrl(effect?.assetId);
 
   const enabled = useAudioStore((state) => state.enabled);
-  const masterVolume = useAudioStore((state) => state.masterVolume);
   const nudge = useAudioStore((state) => state.nudge);
   const setBlocked = useAudioStore((state) => state.setBlocked);
 
@@ -43,7 +42,7 @@ export function SceneAudio({ scene }: { scene: Scene | null }) {
 
     element.volume = outputVolume(trackVolume);
     refreshEffectVolume();
-  }, [trackVolume, masterVolume, enabled]);
+  }, [trackVolume, enabled]);
 
   useEffect(() => {
     const element = elementRef.current;

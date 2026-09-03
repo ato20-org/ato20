@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Music, Pause, Play, Square, Trash2, Upload, Volume2, VolumeX } from "lucide-react";
+import { Music, Pause, Play, Square, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,6 @@ import { countAssetUsage } from "@/lib/operator/asset-usage";
 import { getAssetUrl } from "@/lib/storage/assets";
 import { useAudioStore } from "@/lib/store/use-audio-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
-import { cn } from "@/lib/utils";
 import type { AssetMeta, Scene } from "@/types/scene";
 
 /** Volume padrão de uma trilha recém-atribuída à cena. */
@@ -35,10 +34,6 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
   const setSceneTrackPlaying = useSceneStore((state) => state.setSceneTrackPlaying);
   const fireSceneEffect = useSceneStore((state) => state.fireSceneEffect);
 
-  const enabled = useAudioStore((state) => state.enabled);
-  const setEnabled = useAudioStore((state) => state.setEnabled);
-  const masterVolume = useAudioStore((state) => state.masterVolume);
-  const setMasterVolume = useAudioStore((state) => state.setMasterVolume);
   const playingEffects = useAudioStore((state) => state.playingEffects);
 
   const track = scene.audio;
@@ -54,30 +49,7 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="space-y-3 p-2">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={enabled ? "Silenciar este aparelho" : "Emitir som neste aparelho"}
-            aria-pressed={!enabled}
-            onClick={() => setEnabled(!enabled)}
-          >
-            {enabled ? <Volume2 /> : <VolumeX />}
-          </Button>
-          <Slider
-            className="flex-1"
-            aria-label="Volume deste aparelho"
-            value={[Math.round(masterVolume * 100)]}
-            max={100}
-            step={1}
-            onValueChange={(value) => setMasterVolume(firstValue(value) / 100)}
-          />
-          <span className="text-muted-foreground w-8 text-right text-xs tabular-nums">
-            {Math.round(masterVolume * 100)}
-          </span>
-        </div>
-
+      <div className="p-2">
         <Button
           className="w-full"
           variant="outline"
@@ -144,10 +116,12 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
               />
             </div>
 
+            {/* Único volume do app, e ele viaja: o mestre regula aqui e a TV e
+                os celulares seguem. */}
             <div className="flex items-center gap-2">
               <Slider
                 className="flex-1"
-                aria-label="Volume da trilha"
+                aria-label="Volume do som, em todas as telas"
                 value={[Math.round(track.volume * 100)]}
                 max={100}
                 step={1}
@@ -225,33 +199,29 @@ function AudioRow({
         </span>
       </span>
 
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        // Tocar como efeito o arquivo que já é a trilha soaria duas vezes ao
-        // mesmo tempo, e foi assim que o som dobrado apareceu.
-        disabled={isTrack}
-        aria-label={
-          isTrack
-            ? `${asset.name} já é a trilha da cena`
-            : isFiring
-              ? `Parar ${asset.name}`
-              : `Disparar ${asset.name}`
-        }
-        title={isTrack ? "Já é a trilha desta cena" : undefined}
-        onClick={isFiring ? onStopFiring : onFire}
-      >
-        {isFiring ? <Square /> : <Play />}
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={`Usar ${asset.name} como trilha da cena`}
-        className={cn(isTrack && "text-primary")}
-        onClick={onSetTrack}
-      >
-        <Music />
-      </Button>
+      {/* O arquivo que já é a trilha não repete os controles dela: play e
+          pausa moram no bloco acima, e dois lugares para a mesma ação era
+          exatamente a confusão. */}
+      {isTrack ? null : (
+        <>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={isFiring ? `Parar ${asset.name}` : `Disparar ${asset.name}`}
+            onClick={isFiring ? onStopFiring : onFire}
+          >
+            {isFiring ? <Square /> : <Play />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Usar ${asset.name} como trilha da cena`}
+            onClick={onSetTrack}
+          >
+            <Music />
+          </Button>
+        </>
+      )}
       <Button
         variant="ghost"
         size="icon-xs"
