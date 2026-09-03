@@ -12,9 +12,15 @@ export function kindFromMimeType(mimeType: string): AssetKind | null {
 }
 
 function toMeta(record: AssetRecord): AssetMeta {
-  const { id, kind, name, mimeType, size, createdAt, naturalWidth, naturalHeight, remoteAt } =
-    record;
-  return { id, kind, name, mimeType, size, createdAt, naturalWidth, naturalHeight, remoteAt };
+  const {
+    id, kind, name, mimeType, size, createdAt,
+    naturalWidth, naturalHeight, remoteAt, remoteRoomId,
+  } = record;
+
+  return {
+    id, kind, name, mimeType, size, createdAt,
+    naturalWidth, naturalHeight, remoteAt, remoteRoomId,
+  };
 }
 
 /**
@@ -75,28 +81,33 @@ export async function deleteAsset(id: string): Promise<void> {
   revokeAssetUrl(id);
 }
 
-/** Registra que o arquivo já está no Storage, para não subir de novo. */
-export async function markAssetRemote(id: string): Promise<void> {
+/** Registra que o arquivo já está no Storage daquela sala. */
+export async function markAssetRemote(id: string, roomId: string): Promise<void> {
   const db = await getDb();
   const record = await db.get("assets", id);
   if (!record) return;
 
-  await db.put("assets", { ...record, remoteAt: Date.now() });
+  await db.put("assets", { ...record, remoteAt: Date.now(), remoteRoomId: roomId });
 }
 
 /**
- * Arquivos que precisam subir e ainda não subiram.
+ * Arquivos que precisam subir para esta sala.
+ *
+ * Compara a sala, não só a presença de `remoteAt`: um arquivo enviado para
+ * uma sala anterior está no Storage, mas em `{outraSala}/{asset}`, endereço
+ * que ninguém consulta. Comparar aqui faz o acervo se reconstruir sozinho
+ * quando a sala muda.
  *
  * É uma reconciliação, não um gancho no upload: cobre também o que foi
  * enviado antes de a sala existir, ou numa sessão em que o Supabase estava
  * fora do ar.
  */
-export async function listPendingUploads(): Promise<AssetMeta[]> {
+export async function listPendingUploads(roomId: string): Promise<AssetMeta[]> {
   const db = await getDb();
   const records = await db.getAll("assets");
 
   return records
-    .filter((record) => !record.remoteAt && SYNCED_KINDS.includes(record.kind))
+    .filter((record) => record.remoteRoomId !== roomId && SYNCED_KINDS.includes(record.kind))
     .map(toMeta);
 }
 

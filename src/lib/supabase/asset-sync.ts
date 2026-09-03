@@ -43,7 +43,7 @@ export async function uploadAsset(roomId: string, assetId: string): Promise<void
 
   if (error) throw error;
 
-  await markAssetRemote(assetId);
+  await markAssetRemote(assetId, roomId);
 }
 
 /** Melhor esforço: falhar aqui não deve impedir a exclusão local. */

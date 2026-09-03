@@ -27,6 +27,15 @@ export type AssetMeta = {
    * existe neste navegador, e nenhum celular consegue vê-lo.
    */
   remoteAt?: number;
+  /**
+   * Para QUAL sala ele subiu.
+   *
+   * O caminho no Storage é `{sala}/{asset}`, então "já subiu" sozinho não
+   * basta: se a sala muda — outro navegador, dados limpos, sessão anônima
+   * nova — o arquivo continua lá, mas num endereço que ninguém mais consulta,
+   * e o acervo inteiro some das telas sem erro nenhum.
+   */
+  remoteRoomId?: string;
 };
 
 /**
