@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { ACCESS_COOKIE, isProtectedPath, secretsMatch } from "@/lib/auth/access";
+import { ACCESS_COOKIE, isProtectedPath, SEE_OTHER, secretsMatch } from "@/lib/auth/access";
 
 /**
  * Portão de acesso, no servidor.
@@ -38,7 +38,7 @@ function deny(request: NextRequest, from: string, reason: string) {
   // da Plateia carrega o código da mesa na query.
   url.searchParams.set("de", from);
 
-  return NextResponse.redirect(url);
+  return NextResponse.redirect(url, SEE_OTHER);
 }
 
 export const config = {

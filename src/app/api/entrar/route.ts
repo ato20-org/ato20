@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { ACCESS_COOKIE, ACCESS_MAX_AGE_SECONDS, secretsMatch } from "@/lib/auth/access";
+import { ACCESS_COOKIE, ACCESS_MAX_AGE_SECONDS, SEE_OTHER, secretsMatch } from "@/lib/auth/access";
 
 /** Só caminhos internos: `de` vem da query e não pode virar redirecionamento aberto. */
 function safeDestination(raw: string | null): string {
@@ -10,7 +10,7 @@ function safeDestination(raw: string | null): string {
 }
 
 function grant(request: NextRequest, destination: string) {
-  const response = NextResponse.redirect(new URL(destination, request.url));
+  const response = NextResponse.redirect(new URL(destination, request.url), SEE_OTHER);
 
   response.cookies.set({
     name: ACCESS_COOKIE,
@@ -32,7 +32,7 @@ function reject(request: NextRequest, destination: string) {
   url.searchParams.set("motivo", "invalido");
   url.searchParams.set("de", destination);
 
-  return NextResponse.redirect(url);
+  return NextResponse.redirect(url, SEE_OTHER);
 }
 
 function check(request: NextRequest, provided: string | null, destination: string) {
@@ -41,7 +41,7 @@ function check(request: NextRequest, provided: string | null, destination: strin
     const url = new URL("/entrar", request.url);
     url.searchParams.set("motivo", "nao-configurado");
 
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(url, SEE_OTHER);
   }
 
   if (!provided || !secretsMatch(provided, expected)) return reject(request, destination);
