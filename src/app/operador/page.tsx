@@ -1,5 +1,5 @@
-import { OperatorShell } from "@/components/operator/operator-shell";
+import { Operator } from "@/components/operator/operator";
 
 export default function OperadorPage() {
-  return <OperatorShell />;
+  return <Operator />;
 }

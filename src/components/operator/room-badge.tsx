@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
 import { Loader2, WifiOff } from "lucide-react";
 
 import { InviteBadge } from "@/components/operator/invite-badge";
+import { OperatorCodeDialog } from "@/components/operator/operator-code-dialog";
 import { PlayersDialog } from "@/components/operator/players-dialog";
 import { RulesDialog } from "@/components/operator/rules-dialog";
 import { Button } from "@/components/ui/button";
@@ -18,11 +18,9 @@ export function RoomBadge() {
   const status = useRoomStore((state) => state.status);
   const room = useRoomStore((state) => state.room);
   const error = useRoomStore((state) => state.error);
+  // Quem conecta é o `Operator`, que decide entre a porta e a mesa antes deste
+  // cabeçalho existir. Aqui a ação só serve ao botão de tentar de novo.
   const connectAsMaster = useRoomStore((state) => state.connectAsMaster);
-
-  useEffect(() => {
-    void connectAsMaster();
-  }, [connectAsMaster]);
 
   if (status === "offline") {
     return (
@@ -68,11 +66,13 @@ export function RoomBadge() {
     );
   }
 
-  // Duas peças, não uma: o código fica à mão para ser passado, e a ficha dos
-  // jogadores atrás de um clique, porque só é consultada de vez em quando.
+  // O código da mesa fica à mão, porque é ditado no começo de toda sessão. O
+  // código de operação, a ficha dos jogadores e as regras ficam atrás de um
+  // clique — e a senha, ainda escondida lá dentro.
   return (
     <>
       <InviteBadge room={room} />
+      <OperatorCodeDialog room={room} />
       <PlayersDialog room={room} />
       <RulesDialog room={room} />
     </>
