@@ -10,7 +10,9 @@ import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
 import { currentUserId } from "@/lib/supabase/auth";
 import {
   deleteAttachment,
+  formatBytes,
   listAttachments,
+  MAX_ATTACHMENT_BYTES,
   signAttachments,
   uploadAttachment,
   type Attachment,
@@ -76,8 +78,17 @@ export function PlayerAttachments({ roomId }: { roomId: string }) {
       const results = await Promise.allSettled(
         [...selected].map((file) => uploadAttachment(roomId, userId, file)),
       );
-      const failed = results.filter((result) => result.status === "rejected").length;
-      if (failed > 0) toast.error(`${failed} arquivo(s) não puderam ser enviados.`);
+
+      // Um motivo por arquivo, não uma contagem. "1 arquivo não pôde ser
+      // enviado" obriga quem enviou a adivinhar se foi tamanho, tipo ou rede.
+      for (const result of results) {
+        if (result.status !== "rejected") continue;
+
+        const { reason } = result;
+        toast.error(
+          reason instanceof Error ? reason.message : "Não foi possível enviar o arquivo.",
+        );
+      }
 
       await reload(userId);
     } finally {
@@ -114,6 +125,9 @@ export function PlayerAttachments({ roomId }: { roomId: string }) {
         {busy ? <Loader2 className="animate-spin" /> : <Paperclip />}
         Anexar arquivo
       </Button>
+      <p className="text-muted-foreground text-[10px]">
+        Qualquer tipo, até {formatBytes(MAX_ATTACHMENT_BYTES)} por arquivo.
+      </p>
       <input
         ref={inputRef}
         type="file"

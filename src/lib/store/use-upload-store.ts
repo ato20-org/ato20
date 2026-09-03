@@ -9,6 +9,8 @@ export type UploadState = "pending" | "uploading" | "done" | "error";
 
 type UploadStore = {
   states: Record<string, UploadState>;
+  /** Motivo da falha, por arquivo. Sem ele o mestre só vê "falhou". */
+  errors: Record<string, string>;
   queue: string[];
   running: boolean;
 
@@ -48,8 +50,14 @@ export const useUploadStore = create<UploadStore>((set, get) => {
         try {
           await uploadAsset(roomId, assetId);
           set((state) => ({ states: { ...state.states, [assetId]: "done" } }));
-        } catch {
-          set((state) => ({ states: { ...state.states, [assetId]: "error" } }));
+        } catch (cause) {
+          set((state) => ({
+            states: { ...state.states, [assetId]: "error" },
+            errors: {
+              ...state.errors,
+              [assetId]: cause instanceof Error ? cause.message : "Falha no envio",
+            },
+          }));
         }
       }
     } finally {
@@ -59,6 +67,7 @@ export const useUploadStore = create<UploadStore>((set, get) => {
 
   return {
     states: {},
+    errors: {},
     queue: [],
     running: false,
 

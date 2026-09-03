@@ -41,6 +41,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   const online = useRoomStore((state) => Boolean(state.room));
   const uploadStates = useUploadStore((state) => state.states);
   const retryFailed = useUploadStore((state) => state.retryFailed);
+  const uploadErrors = useUploadStore((state) => state.errors);
 
   const inFlight = assets.filter(
     (asset) => !asset.remoteAt && isInFlight(uploadStates[asset.id]),
@@ -112,6 +113,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
                 isBackground={asset.id === scene.backgroundAssetId}
                 usageCount={countAssetUsage(scenes ?? [], asset.id)}
                 uploadState={uploadStates[asset.id]}
+                uploadError={uploadErrors[asset.id]}
                 online={online}
                 onAdd={() => handleAddToScene(asset)}
                 onSetBackground={() => setBackground(scene.id, asset.id)}
@@ -134,6 +136,7 @@ type AssetRowProps = {
   isBackground: boolean;
   usageCount: number;
   uploadState: UploadState | undefined;
+  uploadError: string | undefined;
   online: boolean;
   onAdd: () => void;
   onSetBackground: () => void;
@@ -145,6 +148,7 @@ function AssetRow({
   isBackground,
   usageCount,
   uploadState,
+  uploadError,
   online,
   onAdd,
   onSetBackground,
@@ -170,7 +174,7 @@ function AssetRow({
         ) : null}
       </span>
 
-      <SyncIndicator asset={asset} state={uploadState} online={online} />
+      <SyncIndicator asset={asset} state={uploadState} error={uploadError} online={online} />
 
       <Button
         variant="ghost"
@@ -211,10 +215,12 @@ function AssetRow({
 function SyncIndicator({
   asset,
   state,
+  error,
   online,
 }: {
   asset: AssetMeta;
   state: UploadState | undefined;
+  error: string | undefined;
   online: boolean;
 }) {
   if (asset.remoteAt || state === "done") return null;
@@ -232,7 +238,9 @@ function SyncIndicator({
       : state === "error"
         ? {
             icon: <CloudOff className="text-destructive size-3.5" />,
-            hint: "O envio falhou. Os celulares não vão ver esta imagem.",
+            // O motivo, quando existe: "falhou" sozinho não diz se foi
+            // tamanho, permissão ou rede.
+            hint: error ?? "O envio falhou. Os celulares não vão ver esta imagem.",
           }
         : {
             icon: <CloudUpload className="text-muted-foreground size-3.5" />,

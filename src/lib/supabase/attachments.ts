@@ -7,6 +7,22 @@ const BUCKET = "attachments";
 /** Uma hora. Tempo de sobra para abrir o arquivo, curto para vazar um link. */
 const SIGNED_URL_TTL_SECONDS = 3600;
 
+/**
+ * Teto por arquivo no Storage.
+ *
+ * É limite do plano, não escolha nossa: o servidor recusa acima disso com
+ * "The object exceeded the maximum allowed size". Conferir antes de enviar
+ * troca uma espera longa que termina em erro por uma resposta imediata que
+ * diz o tamanho e o limite.
+ */
+export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+
+export function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))} MB`;
+
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 export type Attachment = {
   /** Caminho completo no bucket. É o identificador. */
   path: string;
@@ -63,6 +79,12 @@ export async function listAttachments(roomId: string, userId: string): Promise<A
  * PDF, print de conversa, gravação da sessão.
  */
 export async function uploadAttachment(roomId: string, userId: string, file: File): Promise<void> {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error(
+      `${file.name} tem ${formatBytes(file.size)} e o limite por arquivo é ${formatBytes(MAX_ATTACHMENT_BYTES)}.`,
+    );
+  }
+
   const path = `${folder(roomId, userId)}/${safeName(file.name)}`;
 
   const { error } = await getSupabase()
