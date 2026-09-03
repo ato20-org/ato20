@@ -123,7 +123,6 @@ export type SceneAudio = {
  * disparo, e é o que faz o espectador reconhecer que houve um novo: comparar
  * `assetId` não distinguiria dois disparos do mesmo som.
  */
-export type SceneEffect = { assetId: string; firedAt: number };
 
 /** O que o chamador informa ao criar um item; `id`, `z` e afins são do store. */
 export type NewCanvasItem = Pick<CanvasItem, "assetId" | "x" | "y" | "width" | "height">;
@@ -147,7 +146,6 @@ export type Scene = {
    */
   camera?: Viewport;
   audio?: SceneAudio;
-  effect?: SceneEffect;
   createdAt: number;
   updatedAt: number;
 };

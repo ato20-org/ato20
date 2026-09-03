@@ -82,8 +82,6 @@ type SceneStore = {
   startSceneTrack: (sceneId: string, assetId: string, volume: number) => void;
   /** Pausa ou retoma, reiniciando a contagem de posição. */
   setSceneTrackPlaying: (sceneId: string, playing: boolean) => void;
-  /** Registra um disparo de efeito na cena, para os espectadores ouvirem. */
-  fireSceneEffect: (sceneId: string, assetId: string) => void;
   /** `undefined` devolve a mesa ao plano inteiro. */
   setSceneCamera: (sceneId: string, camera: Viewport | undefined) => void;
   /** Devolve o id do item criado, para já deixá-lo selecionado. */
@@ -265,15 +263,6 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           }
         : scene,
     );
-  },
-
-  fireSceneEffect(sceneId, assetId) {
-    // `firedAt` no store, não na interface: o instante pertence à mutação, e
-    // ler o relógio durante o render é efeito colateral disfarçado.
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      effect: { assetId, firedAt: Date.now() },
-    }));
   },
 
   setSceneCamera(sceneId, camera) {

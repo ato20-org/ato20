@@ -18,13 +18,10 @@ type AudioStore = {
   blocked: boolean;
   /** Contador incrementado por "Ativar som" para forçar nova tentativa. */
   nudge: number;
-  /** Efeitos tocando agora, por `assetId`, para a interface poder pará-los. */
-  playingEffects: string[];
 
   setEnabled: (enabled: boolean) => void;
   setBlocked: (blocked: boolean) => void;
   retry: () => void;
-  setPlayingEffects: (ids: string[]) => void;
 };
 
 /**
@@ -37,12 +34,10 @@ export const useAudioStore = create<AudioStore>((set) => ({
   enabled: true,
   blocked: false,
   nudge: 0,
-  playingEffects: [],
 
   setEnabled: (enabled) => set({ enabled }),
   setBlocked: (blocked) => set({ blocked }),
   retry: () => set((state) => ({ nudge: state.nudge + 1 })),
-  setPlayingEffects: (playingEffects) => set({ playingEffects }),
 }));
 
 /**

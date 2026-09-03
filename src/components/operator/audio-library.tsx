@@ -10,10 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useAssetList } from "@/hooks/use-asset-list";
-import { playEffect, stopEffect } from "@/lib/audio/effects";
 import { countAssetUsage } from "@/lib/operator/asset-usage";
-import { getAssetUrl } from "@/lib/storage/assets";
-import { useAudioStore } from "@/lib/store/use-audio-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import type { AssetMeta, Scene } from "@/types/scene";
 
@@ -32,20 +29,10 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
   const setSceneAudio = useSceneStore((state) => state.setSceneAudio);
   const startSceneTrack = useSceneStore((state) => state.startSceneTrack);
   const setSceneTrackPlaying = useSceneStore((state) => state.setSceneTrackPlaying);
-  const fireSceneEffect = useSceneStore((state) => state.fireSceneEffect);
 
-  const playingEffects = useAudioStore((state) => state.playingEffects);
 
   const track = scene.audio;
   const trackAsset = assets.find((asset) => asset.id === track?.assetId);
-
-  /** Toca na hora e registra na cena, para a TV e os celulares ouvirem também. */
-  async function fire(asset: AssetMeta) {
-    fireSceneEffect(scene.id, asset.id);
-
-    const url = await getAssetUrl(asset.id);
-    if (url) void playEffect(asset.id, url);
-  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -150,10 +137,7 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
                 key={asset.id}
                 asset={asset}
                 isTrack={asset.id === track?.assetId}
-                isFiring={playingEffects.includes(asset.id)}
                 usageCount={countAssetUsage(scenes ?? [], asset.id)}
-                onFire={() => void fire(asset)}
-                onStopFiring={() => stopEffect(asset.id)}
                 onSetTrack={() => startSceneTrack(scene.id, asset.id, DEFAULT_TRACK_VOLUME)}
                 onRemove={() => void remove(asset.id)}
               />
@@ -168,24 +152,12 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
 type AudioRowProps = {
   asset: AssetMeta;
   isTrack: boolean;
-  isFiring: boolean;
   usageCount: number;
-  onFire: () => void;
-  onStopFiring: () => void;
   onSetTrack: () => void;
   onRemove: () => void;
 };
 
-function AudioRow({
-  asset,
-  isTrack,
-  isFiring,
-  usageCount,
-  onFire,
-  onStopFiring,
-  onSetTrack,
-  onRemove,
-}: AudioRowProps) {
+function AudioRow({ asset, isTrack, usageCount, onSetTrack, onRemove }: AudioRowProps) {
   return (
     <li className="hover:bg-accent/50 flex items-center gap-1 rounded-md p-1">
       <span className="min-w-0 flex-1">
@@ -195,32 +167,20 @@ function AudioRow({
         <span className="text-muted-foreground block text-[10px]">
           {Math.round(asset.size / 1024)} KB
           {isTrack ? " · trilha" : ""}
-          {isFiring ? " · tocando" : ""}
         </span>
       </span>
 
-      {/* O arquivo que já é a trilha não repete os controles dela: play e
-          pausa moram no bloco acima, e dois lugares para a mesma ação era
-          exatamente a confusão. */}
+      {/* A linha do acervo só escolhe: play e pausa moram no bloco da trilha,
+          que é o único lugar onde som é controlado. */}
       {isTrack ? null : (
-        <>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={isFiring ? `Parar ${asset.name}` : `Disparar ${asset.name}`}
-            onClick={isFiring ? onStopFiring : onFire}
-          >
-            {isFiring ? <Square /> : <Play />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Usar ${asset.name} como trilha da cena`}
-            onClick={onSetTrack}
-          >
-            <Music />
-          </Button>
-        </>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Usar ${asset.name} como trilha da cena`}
+          onClick={onSetTrack}
+        >
+          <Music />
+        </Button>
       )}
       <Button
         variant="ghost"

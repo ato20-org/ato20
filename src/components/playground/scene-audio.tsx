@@ -3,12 +3,8 @@
 import { useEffect, useRef } from "react";
 
 import { useAssetUrl } from "@/hooks/use-asset-url";
-import { playEffect, refreshEffectVolume, stopAllEffects } from "@/lib/audio/effects";
 import { outputVolume, useAudioStore } from "@/lib/store/use-audio-store";
 import type { Scene } from "@/types/scene";
-
-/** Depois disso, um efeito na cena é história e não deve tocar de novo. */
-const EFFECT_FRESH_MS = 5_000;
 
 /** Só busca a posição da faixa se estiver atrasada mais que isto. */
 const SEEK_TOLERANCE_SECONDS = 2;
@@ -23,10 +19,8 @@ const SEEK_TOLERANCE_SECONDS = 2;
  */
 export function SceneAudio({ scene }: { scene: Scene | null }) {
   const audio = scene?.audio;
-  const effect = scene?.effect;
 
   const url = useAssetUrl(audio?.assetId);
-  const effectUrl = useAssetUrl(effect?.assetId);
 
   const enabled = useAudioStore((state) => state.enabled);
   const nudge = useAudioStore((state) => state.nudge);
@@ -41,7 +35,6 @@ export function SceneAudio({ scene }: { scene: Scene | null }) {
     if (!element) return;
 
     element.volume = outputVolume(trackVolume);
-    refreshEffectVolume();
   }, [trackVolume, enabled]);
 
   useEffect(() => {
@@ -71,23 +64,6 @@ export function SceneAudio({ scene }: { scene: Scene | null }) {
       () => setBlocked(true),
     );
   }, [url, shouldPlay, audio?.loop, audio?.startedAt, nudge, setBlocked]);
-
-  // Efeito recém-disparado. `firedAt` distingue dois disparos do mesmo som, e
-  // a janela de frescor evita que quem chega no meio ouça um trovão antigo.
-  const lastEffectRef = useRef(0);
-
-  useEffect(() => {
-    if (!effect || !effectUrl) return;
-    if (effect.firedAt === lastEffectRef.current) return;
-
-    lastEffectRef.current = effect.firedAt;
-    if (Date.now() - effect.firedAt > EFFECT_FRESH_MS) return;
-
-    void playEffect(effect.assetId, effectUrl, 1);
-  }, [effect, effectUrl]);
-
-  // Sair da tela não pode deixar som pendurado.
-  useEffect(() => () => stopAllEffects(), []);
 
   if (!url) return null;
 
