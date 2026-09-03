@@ -24,8 +24,10 @@ export function SessionAudio({ track }: { track: SessionTrack | null }) {
   const url = useAssetUrl(track?.assetId);
 
   const enabled = useAudioStore((state) => state.enabled);
+  const blocked = useAudioStore((state) => state.blocked);
   const nudge = useAudioStore((state) => state.nudge);
   const setBlocked = useAudioStore((state) => state.setBlocked);
+  const retry = useAudioStore((state) => state.retry);
 
   const elementRef = useRef<HTMLAudioElement>(null);
   const volume = track?.volume ?? 1;
@@ -79,6 +81,30 @@ export function SessionAudio({ track }: { track: SessionTrack | null }) {
 
     return () => element.removeEventListener("loadedmetadata", seekAndPlay);
   }, [url, shouldPlay, track?.loop, track?.startedAt, nudge, setBlocked]);
+
+  useEffect(() => {
+    if (!blocked || !enabled) return;
+
+    /**
+     * Qualquer toque na página serve de gesto.
+     *
+     * Depois de uma interação o browser marca a página como "ativada" e passa
+     * a permitir tocar, então o jogador não precisa encontrar o botão de som:
+     * o primeiro toque em qualquer lugar já resolve. Sem isso, ele voltava de
+     * um F5 no silêncio sem saber por quê.
+     */
+    const unblock = () => retry();
+
+    window.addEventListener("pointerdown", unblock, { once: true });
+    window.addEventListener("keydown", unblock, { once: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", unblock);
+      window.removeEventListener("keydown", unblock);
+    };
+    // `nudge` entra para rearmar: se a tentativa falhar de novo, o próximo
+    // gesto tenta outra vez em vez de o áudio ficar preso.
+  }, [blocked, enabled, nudge, retry]);
 
   if (!url) return null;
 
