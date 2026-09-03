@@ -54,8 +54,39 @@ No painel do Supabase:
 2. **SQL Editor**: execute os arquivos de `supabase/migrations/` em ordem. Eles criam as
    tabelas, as policies, os RPC e os dois buckets de Storage. São idempotentes.
 
-O mestre abre o Operador, que gera um código de 6 caracteres. O jogador entra por
-`/plateia?code=XXXXXX` ou pelo link de convite.
+### Os dois códigos
+
+Cada mesa tem duas senhas, com públicos diferentes:
+
+| | Quem digita | Tamanho | Onde aparece |
+|---|---|---|---|
+| **Código da mesa** | o jogador, para entrar na Plateia | 6 | no cabeçalho do Operador, à mão |
+| **Código de operação** | o mestre, para assumir o Operador | 8 | atrás de um clique, escondido |
+
+O jogador entra por `/plateia?code=XXXXXX` ou pelo link de convite.
+
+O código de operação nasce com a mesa e aparece **uma vez**, na criação. Ele é conferido
+no servidor: um RPC `unlock_room` move o `master_id` da sala para a sessão que o digitou —
+e é isso que faz ele valer algo, porque `master_id` é o que a RLS olha para decidir o que
+o mestre pode fazer. Uma comparação em JavaScript seria enfeite.
+
+Duas consequências que valem saber:
+
+- **Ele recupera a mesa.** A identidade do mestre é a sessão anônima do navegador, que
+  desaparece ao limpar os dados do site. O código é o único fio que liga o mestre à mesa
+  dele — sem ele, a mesa fica presa àquele navegador.
+- **Ele move a mesa, não a duplica.** Digitá-lo num segundo aparelho transfere o comando
+  para lá, e o primeiro perde acesso de escrita até reassumir. As **cenas não viajam**:
+  elas moram no IndexedDB da máquina, não no Supabase.
+
+Quem já comanda a mesa naquele navegador entra sem senha. A porta existe para barrar quem
+**não** comanda mesa nenhuma — o celular do jogador que abre `/operador` —, não para
+cobrar pedágio do mestre a cada F5.
+
+O código de operação não é legível pelos jogadores, e isso não é só policy de linha: a
+`rooms_select_member` deixa qualquer membro ler a **linha** da sala, então a coluna é
+protegida por **privilégio de coluna** (`grant select (id, code, master_id, rules,
+created_at)`). RLS decide quais linhas; privilégio de coluna decide quais colunas.
 
 ### Os dois buckets
 
@@ -87,12 +118,18 @@ sem ninguém perceber. Em desenvolvimento, libera.
 
 ### O que este portão não é
 
-Um segredo compartilhado, não contas de usuário: quem tem a chave tem acesso de mestre.
-Não há permissão por pessoa nem como revogar um aparelho sem revogar todos.
+Um segredo compartilhado, não contas de usuário. Não há permissão por pessoa nem como
+revogar um aparelho sem revogar todos.
+
+Ele libera o **site**, não a mesa: passar por ele e abrir `/operador` só oferece a porta
+do código de operação. Quem tem a chave de acesso mas não a senha do mestre pode, no
+máximo, abrir uma mesa vazia própria.
 
 E a chave pública do Supabase continua embutida no bundle — por design. Ela não é
 segredo; é a RLS que protege os dados. Mas quem a obtiver pode criar salas próprias no seu
-projeto, gastando sua cota. Se isso importar, restrinja o `insert` em `rooms`.
+projeto, gastando sua cota: `create_room` está aberto a qualquer sessão anônima, porque é
+por ele que o mestre abre a mesa dele. O `insert` direto em `rooms` está fechado, o que
+impede uma sala nascer com uma senha que ninguém consegue ler.
 
 ## Deploy no Vercel
 
