@@ -15,17 +15,17 @@ export type Room = { id: string; code: string };
 export type RuleLink = { id: string; label: string; url?: string; assetId?: string };
 
 /**
- * Sala do mestre neste navegador, criada na primeira vez.
+ * A sala que este navegador já comanda, se houver.
  *
- * A sala é permanente e amarrada ao usuário anônimo: o jogador salva o link
- * uma vez e nunca digita código de novo, e os anexos de personagem
- * sobrevivem entre sessões.
+ * A identidade do mestre é a sessão anônima do navegador. Ela some quando os
+ * dados do site são limpos — é justamente esse buraco que o código de operação
+ * fecha, permitindo reassumir a mesa em `unlockRoom`.
  */
-export async function ensureMasterRoom(): Promise<Room> {
+export async function findMasterRoom(): Promise<Room | null> {
   const supabase = getSupabase();
   const userId = await ensureAnonSession();
 
-  const { data: existing, error: selectError } = await supabase
+  const { data, error } = await supabase
     .from("rooms")
     .select("id, code")
     .eq("master_id", userId)
@@ -33,19 +33,63 @@ export async function ensureMasterRoom(): Promise<Room> {
     .limit(1)
     .maybeSingle();
 
-  if (selectError) throw selectError;
-  if (existing) return existing;
+  if (error) throw error;
 
-  // `code` tem default no banco (`generate_room_code`), então não é enviado.
-  const { data: created, error: insertError } = await supabase
-    .from("rooms")
-    .insert({ master_id: userId })
-    .select("id, code")
-    .single();
+  return data ?? null;
+}
 
-  if (insertError) throw insertError;
+/** A sala recém-criada, com a senha que só aparece neste momento. */
+export type NewRoom = Room & { operatorCode: string };
 
-  return created;
+/**
+ * Cria a mesa.
+ *
+ * Vai por RPC porque `operator_code` não é mais legível pela tabela — nem para
+ * o mestre. O único jeito de vê-lo na criação é o servidor devolvê-lo aqui.
+ */
+export async function createRoom(): Promise<NewRoom> {
+  const supabase = getSupabase();
+  await ensureAnonSession();
+
+  const { data, error } = await supabase.rpc("create_room");
+  if (error) throw error;
+
+  const room = data as { id: string; code: string; operator_code: string };
+
+  return { id: room.id, code: room.code, operatorCode: room.operator_code };
+}
+
+/**
+ * Assume a mesa com o código de operação.
+ *
+ * A conferência é do servidor, não da tela: comparar o código em JavaScript
+ * seria enfeite, já que quem decide o que o mestre pode fazer é a RLS, que
+ * olha `master_id`. O código certo é o que move `master_id` para esta sessão —
+ * e é por isso que ele vale alguma coisa.
+ */
+export async function unlockRoom(operatorCode: string): Promise<Room> {
+  const supabase = getSupabase();
+  await ensureAnonSession();
+
+  const { data, error } = await supabase.rpc("unlock_room", {
+    p_operator_code: operatorCode,
+  });
+
+  if (error) throw error;
+  if (!data) throw new Error("Código de operação inválido");
+
+  return data as Room;
+}
+
+/** Relê a própria senha, para abrir o Operador em outra máquina. */
+export async function fetchOperatorCode(roomId: string): Promise<string> {
+  const { data, error } = await getSupabase().rpc("my_operator_code", {
+    p_room_id: roomId,
+  });
+
+  if (error) throw error;
+
+  return data as string;
 }
 
 export async function loadRules(roomId: string): Promise<RuleLink[]> {
