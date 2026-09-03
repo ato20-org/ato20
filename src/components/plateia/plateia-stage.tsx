@@ -3,12 +3,12 @@
 import { useRef } from "react";
 import { Maximize, Minimize } from "lucide-react";
 
-import { SceneAudio } from "@/components/playground/scene-audio";
+import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
-import { useSceneSubscription } from "@/hooks/use-scene-broadcast";
+import { useSubscription } from "@/hooks/use-scene-broadcast";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
  * `viewer`: névoa preta e sólida, sem contorno nem numeração.
  */
 export function PlateiaStage({ roomId }: { roomId: string }) {
-  const { scene, synced, stalled } = useSceneSubscription({ roomId });
+  const { scene, track, synced, stalled } = useSubscription({ roomId });
   const { expanded, toggle } = useFullscreen();
   const frameRef = useRef<HTMLDivElement>(null);
 
@@ -69,7 +69,7 @@ export function PlateiaStage({ roomId }: { roomId: string }) {
           </p>
         ) : null}
 
-        <SceneAudio scene={scene} />
+        <SessionAudio track={track} />
 
         <SoundToggle className="absolute top-2 right-12" />
 

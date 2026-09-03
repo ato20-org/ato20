@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Music, Pause, Play, Square, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -12,26 +12,40 @@ import { Switch } from "@/components/ui/switch";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { countAssetUsage } from "@/lib/operator/asset-usage";
 import { useSceneStore } from "@/lib/store/use-scene-store";
-import type { AssetMeta, Scene } from "@/types/scene";
+import { useTrackStore } from "@/lib/store/use-track-store";
+import type { AssetMeta } from "@/types/scene";
 
-/** Volume padrão de uma trilha recém-atribuída à cena. */
+/** Volume padrão de uma trilha recém-escolhida. */
 const DEFAULT_TRACK_VOLUME = 0.8;
 
 function firstValue(value: number | readonly number[]): number {
   return Array.isArray(value) ? value[0] : (value as number);
 }
 
-export function AudioLibrary({ scene }: { scene: Scene }) {
+/**
+ * Acervo de sons e a trilha da sessão.
+ *
+ * Não recebe cena de propósito: a trilha pertence ao sistema, não a uma cena.
+ * Trocar de cena não corta a música.
+ */
+export function AudioLibrary() {
   const { assets, upload, remove } = useAssetList("audio");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const scenes = useSceneStore((state) => state.board?.scenes);
-  const setSceneAudio = useSceneStore((state) => state.setSceneAudio);
-  const startSceneTrack = useSceneStore((state) => state.startSceneTrack);
-  const setSceneTrackPlaying = useSceneStore((state) => state.setSceneTrackPlaying);
 
+  const track = useTrackStore((state) => state.track);
+  const hydrate = useTrackStore((state) => state.hydrate);
+  const start = useTrackStore((state) => state.start);
+  const setPlaying = useTrackStore((state) => state.setPlaying);
+  const setVolume = useTrackStore((state) => state.setVolume);
+  const setLoop = useTrackStore((state) => state.setLoop);
+  const clear = useTrackStore((state) => state.clear);
 
-  const track = scene.audio;
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+
   const trackAsset = assets.find((asset) => asset.id === track?.assetId);
 
   return (
@@ -65,7 +79,7 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
           <Separator />
           <div className="bg-accent/40 space-y-2 p-2">
             <p className="text-muted-foreground text-[10px] tracking-wide uppercase">
-              Trilha da cena
+              Trilha da sessão
             </p>
 
             <div className="flex items-center gap-1">
@@ -73,19 +87,14 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
                 variant="ghost"
                 size="icon-xs"
                 aria-label={track.playing ? "Pausar trilha" : "Retomar trilha"}
-                onClick={() => setSceneTrackPlaying(scene.id, !track.playing)}
+                onClick={() => setPlaying(!track.playing)}
               >
                 {track.playing ? <Pause /> : <Play />}
               </Button>
               <span className="min-w-0 flex-1 truncate text-sm">
                 {trackAsset?.name ?? "Arquivo removido"}
               </span>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label="Remover trilha da cena"
-                onClick={() => setSceneAudio(scene.id, undefined)}
-              >
+              <Button variant="ghost" size="icon-xs" aria-label="Remover trilha" onClick={clear}>
                 <Square />
               </Button>
             </div>
@@ -94,16 +103,10 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
               <Label className="text-xs" htmlFor="track-loop">
                 Repetir
               </Label>
-              <Switch
-                id="track-loop"
-                checked={track.loop}
-                onCheckedChange={(checked) =>
-                  setSceneAudio(scene.id, { ...track, loop: checked })
-                }
-              />
+              <Switch id="track-loop" checked={track.loop} onCheckedChange={setLoop} />
             </div>
 
-            {/* Único volume do app, e ele viaja: o mestre regula aqui e a TV e
+            {/* Único volume do som, e ele viaja: o mestre regula aqui e a TV e
                 os celulares seguem. */}
             <div className="flex items-center gap-2">
               <Slider
@@ -112,9 +115,7 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
                 value={[Math.round(track.volume * 100)]}
                 max={100}
                 step={1}
-                onValueChange={(value) =>
-                  setSceneAudio(scene.id, { ...track, volume: firstValue(value) / 100 })
-                }
+                onValueChange={(value) => setVolume(firstValue(value) / 100)}
               />
               <span className="text-muted-foreground w-8 text-right text-xs tabular-nums">
                 {Math.round(track.volume * 100)}
@@ -128,7 +129,8 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
       <ScrollArea className="min-h-0 flex-1">
         {assets.length === 0 ? (
           <p className="text-muted-foreground p-3 text-xs">
-            Nenhum som ainda. Envie trilhas para as cenas e efeitos para disparar na hora.
+            Nenhum som ainda. A trilha escolhida aqui toca durante a sessão inteira,
+            independente da cena no ar.
           </p>
         ) : (
           <ul className="space-y-1 p-2">
@@ -137,8 +139,8 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
                 key={asset.id}
                 asset={asset}
                 isTrack={asset.id === track?.assetId}
-                usageCount={countAssetUsage(scenes ?? [], asset.id)}
-                onSetTrack={() => startSceneTrack(scene.id, asset.id, DEFAULT_TRACK_VOLUME)}
+                usageCount={countAssetUsage(scenes ?? [], asset.id, track)}
+                onSetTrack={() => start(asset.id, DEFAULT_TRACK_VOLUME)}
                 onRemove={() => void remove(asset.id)}
               />
             ))}
@@ -170,13 +172,13 @@ function AudioRow({ asset, isTrack, usageCount, onSetTrack, onRemove }: AudioRow
         </span>
       </span>
 
-      {/* A linha do acervo só escolhe: play e pausa moram no bloco da trilha,
-          que é o único lugar onde som é controlado. */}
+      {/* A linha do acervo só escolhe: play, pausa e volume moram no bloco da
+          trilha, que é o único lugar onde som é controlado. */}
       {isTrack ? null : (
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={`Usar ${asset.name} como trilha da cena`}
+          aria-label={`Usar ${asset.name} como trilha`}
           onClick={onSetTrack}
         >
           <Music />
@@ -185,11 +187,11 @@ function AudioRow({ asset, isTrack, usageCount, onSetTrack, onRemove }: AudioRow
       <Button
         variant="ghost"
         size="icon-xs"
-        // Apagar um arquivo em uso deixaria a cena apontando para um id que
-        // não existe mais.
+        // Apagar um arquivo em uso deixaria a cena ou a trilha apontando para
+        // um id que não existe mais.
         disabled={usageCount > 0}
         aria-label={`Remover ${asset.name}`}
-        title={usageCount > 0 ? `Em uso em ${usageCount} cena(s)` : undefined}
+        title={usageCount > 0 ? `Em uso em ${usageCount} lugar(es)` : undefined}
         onClick={onRemove}
       >
         <Trash2 />

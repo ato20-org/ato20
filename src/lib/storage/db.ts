@@ -1,6 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
-import type { AssetKind, AssetMeta, Board } from "@/types/scene";
+import type { AssetKind, AssetMeta, Board, SessionTrack } from "@/types/scene";
 
 /**
  * Chave do banco no browser, não o nome do projeto — por isso não acompanhou
@@ -8,12 +8,13 @@ import type { AssetKind, AssetMeta, Board } from "@/types/scene";
  * vazio, e todo o board, imagem e som já gravados ficam órfãos no disco.
  */
 const DB_NAME = "rpg-show";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /** Metadados + binário. O binário nunca vira base64: infla 33% e estoura cota. */
 export type AssetRecord = AssetMeta & { blob: Blob };
 
 export const BOARD_KEY = "default";
+export const SESSION_KEY = "default";
 
 interface RpgShowDB extends DBSchema {
   assets: {
@@ -24,6 +25,11 @@ interface RpgShowDB extends DBSchema {
   boards: {
     key: string;
     value: Board;
+  };
+  /** Estado da sessão que não pertence a nenhuma cena. */
+  session: {
+    key: string;
+    value: { track: SessionTrack | null };
   };
 }
 
@@ -46,6 +52,11 @@ export function getDb(): Promise<IDBPDatabase<RpgShowDB>> {
       }
       if (!db.objectStoreNames.contains("boards")) {
         db.createObjectStore("boards");
+      }
+      // Versão 2. Criar um store novo preserva os existentes: o board, as
+      // imagens e os sons já gravados continuam onde estão.
+      if (!db.objectStoreNames.contains("session")) {
+        db.createObjectStore("session");
       }
     },
   });

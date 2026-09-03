@@ -34,12 +34,9 @@ export function LibraryPanel({ scene }: { scene: Scene | null }) {
           )}
         </TabsContent>
 
+        {/* Sons não dependem de cena: a trilha é da sessão. */}
         <TabsContent value="sons" className="flex min-h-0 flex-1 flex-col">
-          {scene ? (
-            <AudioLibrary scene={scene} />
-          ) : (
-            <p className="text-muted-foreground p-3 text-xs">Crie uma cena primeiro.</p>
-          )}
+          <AudioLibrary />
         </TabsContent>
       </Tabs>
 

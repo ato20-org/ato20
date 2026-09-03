@@ -94,16 +94,19 @@ export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height">;
 export type Viewport = { x: number; y: number; width: number; height: number };
 
 /**
- * Trilha da cena.
+ * Trilha da sessão.
  *
- * Vive na cena, e não num player solto no Operador, porque é isso que a faz
- * viajar: a TV e os celulares recebem o JSON da cena e sabem o que tocar. Uma
- * trilha guardada só na máquina do mestre nunca sai de lá.
+ * Pertence ao sistema, não a uma cena: a música acompanha a mesa e não deve
+ * ser cortada porque o mestre trocou de cena. Antes vivia dentro de `Scene`, e
+ * era exatamente isso que acontecia.
+ *
+ * Continua viajando junto da cena no canal, porque a TV e os celulares
+ * precisam saber o que tocar.
  */
-export type SceneAudio = {
+export type SessionTrack = {
   assetId: string;
   loop: boolean;
-  /** 0 a 1. Multiplicado pelo volume local de cada aparelho. */
+  /** 0 a 1. Único volume do som, e vale em todas as telas. */
   volume: number;
   /** Pausado é diferente de ausente: a faixa continua escolhida. */
   playing: boolean;
@@ -145,7 +148,6 @@ export type Scene = {
    * O zoom do Operador só chega aqui quando ele manda, pelo botão de enquadrar.
    */
   camera?: Viewport;
-  audio?: SceneAudio;
   createdAt: number;
   updatedAt: number;
 };

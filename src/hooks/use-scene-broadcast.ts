@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 
 import { createSceneChannel, type SceneChannel, type SceneChannelOptions } from "@/lib/sync";
-import type { Scene } from "@/types/scene";
+import type { LiveState } from "@/lib/sync/channel";
+import type { Scene, SessionTrack } from "@/types/scene";
 
 /**
  * Reenvio do pedido inicial.
  *
- * Broadcast não é persistido: um `scene:request` que chega antes de o Operador
+ * Broadcast não é persistido: um `live:request` que chega antes de o Operador
  * terminar de se inscrever no canal simplesmente não existe para ele. Basta o
  * celular abrir primeiro, ou o socket do Operador ter reconectado. Sem reenvio,
  * o jogador espera para sempre por uma resposta que ninguém ouviu pedir.
@@ -16,7 +17,7 @@ import type { Scene } from "@/types/scene";
 const REQUEST_RETRY_MS = 2500;
 
 /**
- * Reanúncio periódico da cena.
+ * Reanúncio periódico do estado.
  *
  * Cobre o caso em que o espectador já recebeu algo e depois perdeu o socket: o
  * Supabase reconecta sozinho, mas ninguém pede de novo, e a tela ficaria
@@ -29,31 +30,31 @@ const HEARTBEAT_MS = 20_000;
 const STALLED_AFTER_MS = 12_000;
 
 /**
- * Lado do Operador: anuncia a cena atual e responde a quem chega depois.
- * Sem responder ao `scene:request`, uma aba de Assistir aberta no meio da
- * sessão ficaria em branco até a próxima mudança de cena.
+ * Lado do Operador: anuncia cena e trilha, e responde a quem chega depois.
+ * Sem responder ao `live:request`, uma aba de Assistir aberta no meio da
+ * sessão ficaria em branco até a próxima mudança.
  */
-export function useScenePublisher(
-  scene: Scene | null,
+export function usePublisher(
+  state: LiveState,
   { local = false, roomId = null }: SceneChannelOptions,
 ): void {
   const channelRef = useRef<SceneChannel | null>(null);
-  const sceneRef = useRef(scene);
+  const stateRef = useRef(state);
 
   useEffect(() => {
     const channel = createSceneChannel({ local, roomId });
     channelRef.current = channel;
 
     const unsubscribe = channel.subscribe((message) => {
-      if (message.type === "scene:request") {
-        channel.send({ type: "scene:update", scene: sceneRef.current });
+      if (message.type === "live:request") {
+        channel.send({ type: "live:update", ...stateRef.current });
       }
     });
 
     // A sala aparece depois da montagem (login anônimo é assíncrono), então
     // este efeito roda de novo com `roomId` preenchido. Republicar aqui
-    // garante que o celular não espere a próxima mudança de cena.
-    channel.send({ type: "scene:update", scene: sceneRef.current });
+    // garante que o celular não espere a próxima mudança.
+    channel.send({ type: "live:update", ...stateRef.current });
 
     return () => {
       unsubscribe();
@@ -63,21 +64,22 @@ export function useScenePublisher(
   }, [local, roomId]);
 
   useEffect(() => {
-    sceneRef.current = scene;
-    channelRef.current?.send({ type: "scene:update", scene });
-  }, [scene]);
+    stateRef.current = state;
+    channelRef.current?.send({ type: "live:update", ...state });
+  }, [state]);
 
   useEffect(() => {
     const beat = setInterval(() => {
-      channelRef.current?.send({ type: "scene:update", scene: sceneRef.current });
+      channelRef.current?.send({ type: "live:update", ...stateRef.current });
     }, HEARTBEAT_MS);
 
     return () => clearInterval(beat);
   }, []);
 }
 
-export type SceneSubscription = {
+export type Subscription = {
   scene: Scene | null;
+  track: SessionTrack | null;
   /** Já chegou alguma resposta do Operador. */
   synced: boolean;
   /** Passou tempo demais sem nenhuma resposta. */
@@ -85,11 +87,11 @@ export type SceneSubscription = {
 };
 
 /** Lado do espectador (Assistir e Plateia): só recebe. */
-export function useSceneSubscription({
+export function useSubscription({
   local = false,
   roomId = null,
-}: SceneChannelOptions): SceneSubscription {
-  const [scene, setScene] = useState<Scene | null>(null);
+}: SceneChannelOptions): Subscription {
+  const [live, setLive] = useState<LiveState>({ scene: null, track: null });
   const [synced, setSynced] = useState(false);
   const [stalled, setStalled] = useState(false);
 
@@ -99,15 +101,15 @@ export function useSceneSubscription({
     let answered = false;
 
     const unsubscribe = channel.subscribe((message) => {
-      if (message.type !== "scene:update") return;
+      if (message.type !== "live:update") return;
 
       answered = true;
-      setScene(message.scene);
+      setLive({ scene: message.scene, track: message.track });
       setSynced(true);
       setStalled(false);
     });
 
-    const ask = () => channel.send({ type: "scene:request" });
+    const ask = () => channel.send({ type: "live:request" });
     ask();
 
     const retry = setInterval(() => {
@@ -131,5 +133,5 @@ export function useSceneSubscription({
     };
   }, [local, roomId]);
 
-  return { scene, synced, stalled };
+  return { scene: live.scene, track: live.track, synced, stalled };
 }

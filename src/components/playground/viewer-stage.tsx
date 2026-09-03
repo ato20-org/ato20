@@ -1,10 +1,10 @@
 "use client";
 
-import { SceneAudio } from "@/components/playground/scene-audio";
+import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
-import { useSceneSubscription } from "@/hooks/use-scene-broadcast";
+import { useSubscription } from "@/hooks/use-scene-broadcast";
 
 /**
  * Visão Assistir: recebe a cena e não emite nada. Nenhum controle, nenhum
@@ -12,7 +12,7 @@ import { useSceneSubscription } from "@/hooks/use-scene-broadcast";
  */
 export function ViewerStage() {
   // Mesma máquina do Operador: `BroadcastChannel` basta e não gasta rede.
-  const { scene, synced, stalled } = useSceneSubscription({ local: true });
+  const { scene, track, synced, stalled } = useSubscription({ local: true });
 
   return (
     // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
@@ -22,7 +22,7 @@ export function ViewerStage() {
         {scene ? <SceneLayer scene={scene} /> : null}
       </SceneStage>
 
-      <SceneAudio scene={scene} />
+      <SessionAudio track={track} />
 
       {/* Discreto no canto: a TV fica virada para a mesa, e o controle existe
           para o mestre escolher qual aparelho emite o som. */}

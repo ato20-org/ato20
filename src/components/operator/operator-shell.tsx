@@ -23,14 +23,14 @@ import { RoomBadge } from "@/components/operator/room-badge";
 import { ScenesPanel } from "@/components/operator/scenes-panel";
 import { StageContextMenu } from "@/components/operator/stage-context-menu";
 import { ViewportControls } from "@/components/operator/viewport-controls";
-import { SceneAudio } from "@/components/playground/scene-audio";
+import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAssetSync } from "@/hooks/use-asset-sync";
 import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
-import { useScenePublisher } from "@/hooks/use-scene-broadcast";
+import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { useAudioStore } from "@/lib/store/use-audio-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
@@ -42,6 +42,7 @@ import {
   selectLiveScene,
   useSceneStore,
 } from "@/lib/store/use-scene-store";
+import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { Scene } from "@/types/scene";
 
@@ -69,11 +70,18 @@ export function OperatorShell() {
   const undo = useSceneStore((state) => state.undo);
   const redo = useSceneStore((state) => state.redo);
 
+  const track = useTrackStore((state) => state.track);
+  const hydrateTrack = useTrackStore((state) => state.hydrate);
+
   const roomId = useRoomStore((state) => state.room?.id ?? null);
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    void hydrateTrack();
+  }, [hydrateTrack]);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação.
@@ -84,7 +92,7 @@ export function OperatorShell() {
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.
   // `local` alimenta a TV na mesma máquina; `roomId` alimenta os celulares.
-  useScenePublisher(liveScene, { local: true, roomId });
+  usePublisher({ scene: liveScene, track }, { local: true, roomId });
   useOperatorShortcuts();
   useSpacePan();
   useAssetSync(roomId);
@@ -169,7 +177,7 @@ export function OperatorShell() {
 
         {/* O browser recusa tocar antes de um gesto na página. Só aparece
             quando há trilha para desbloquear. */}
-        {audioBlocked && liveScene?.audio ? (
+        {audioBlocked && track ? (
           <Button variant="secondary" size="sm" onClick={retryAudio}>
             <Volume2 />
             Ativar som
@@ -212,9 +220,9 @@ export function OperatorShell() {
         {rightOpen ? <LibraryPanel scene={editingScene} /> : null}
       </div>
 
-      {/* A trilha é do que a mesa está vivendo: segue a cena no ar, senão
-          preparar a próxima cena trocaria o ambiente no meio do jogo. */}
-      <SceneAudio scene={liveScene} />
+      {/* A trilha é da sessão, não da cena: trocar de cena não corta a
+          música. */}
+      <SessionAudio track={track} />
     </div>
   );
 }

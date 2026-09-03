@@ -44,7 +44,7 @@ export function createSupabaseSceneChannel(roomId: string): SceneChannel {
   const throttled = createTrailingThrottle<ChannelMessage>(SCENE_BROADCAST_INTERVAL_MS, push);
 
   // `subscribe()` é assíncrono. O que for enviado antes de o socket estar
-  // pronto se perderia, e o primeiro `scene:update` do Operador é exatamente
+  // pronto se perderia, e o primeiro `live:update` do Operador é exatamente
   // um desses.
   let subscribed = false;
   const queue: ChannelMessage[] = [];
@@ -63,10 +63,10 @@ export function createSupabaseSceneChannel(roomId: string): SceneChannel {
         return;
       }
 
-      // `scene:request` é o aperto de mão de quem acabou de abrir a tela.
+      // `live:request` é o aperto de mão de quem acabou de abrir a tela.
       // Passar pelo throttle atrasaria a primeira imagem em até 100 ms sem
       // motivo, e ele acontece uma vez só.
-      if (message.type === "scene:request") {
+      if (message.type === "live:request") {
         push(message);
         return;
       }
