@@ -3,13 +3,12 @@
 import { useRef } from "react";
 import { Maximize, Minimize } from "lucide-react";
 
-import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
-import { useSubscription } from "@/hooks/use-scene-broadcast";
 import { cn } from "@/lib/utils";
+import type { Scene } from "@/types/scene";
 
 /**
  * A cena no celular do jogador. Só recebe — nenhum controle sobre nada.
@@ -23,9 +22,20 @@ import { cn } from "@/lib/utils";
  *
  * Renderiza o mesmo `SceneLayer` do Operador e do Assistir, na variante
  * `viewer`: névoa preta e sólida, sem contorno nem numeração.
+ *
+ * Recebe a cena por prop em vez de assinar o canal: esta tela vive dentro de
+ * uma aba, e aba inativa é desmontada — a inscrição morreria a cada vez que o
+ * jogador fosse ver a própria ficha.
  */
-export function PlateiaStage({ roomId }: { roomId: string }) {
-  const { scene, track, synced, stalled } = useSubscription({ roomId });
+export function PlateiaStage({
+  scene,
+  synced,
+  stalled,
+}: {
+  scene: Scene | null;
+  synced: boolean;
+  stalled: boolean;
+}) {
   const { expanded, toggle } = useFullscreen();
   const frameRef = useRef<HTMLDivElement>(null);
 
@@ -68,8 +78,6 @@ export function PlateiaStage({ roomId }: { roomId: string }) {
                 : "Aguardando o mestre…"}
           </p>
         ) : null}
-
-        <SessionAudio track={track} />
 
         <SoundToggle className="absolute top-2 right-12" />
 

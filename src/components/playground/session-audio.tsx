@@ -9,6 +9,9 @@ import type { SessionTrack } from "@/types/scene";
 /** Só busca a posição da faixa se estiver atrasada mais que isto. */
 const SEEK_TOLERANCE_SECONDS = 2;
 
+/** `readyState` a partir do qual `duration` já tem valor. */
+const HAVE_METADATA = 1;
+
 /**
  * A trilha da sessão, em qualquer visão. Não desenha nada.
  *
@@ -44,23 +47,37 @@ export function SessionAudio({ track }: { track: SessionTrack | null }) {
       return;
     }
 
-    // Entra na altura em que a mesa está, em vez de começar do zero. Só vale
-    // com `loop`: numa faixa única, buscar além do fim a encerraria na hora.
-    if (track?.loop && track.startedAt) {
-      const elapsed = (Date.now() - track.startedAt) / 1000;
+    /** Entra na altura em que a mesa está, em vez de começar do zero. */
+    const seekAndPlay = () => {
+      const elapsed = track?.startedAt ? (Date.now() - track.startedAt) / 1000 : 0;
       const { duration } = element;
 
       if (Number.isFinite(duration) && duration > 0 && elapsed > SEEK_TOLERANCE_SECONDS) {
-        element.currentTime = elapsed % duration;
+        // Em loop a posição dá a volta; numa faixa única, buscar além do fim a
+        // encerraria na hora, então só busca se ainda houver faixa.
+        const target = track?.loop ? elapsed % duration : elapsed;
+        if (target < duration) element.currentTime = target;
       }
+
+      void element.play().then(
+        () => setBlocked(false),
+        // O browser recusa tocar antes de qualquer gesto na página. Quem trata
+        // é o botão de ativar som, que incrementa `nudge`.
+        () => setBlocked(true),
+      );
+    };
+
+    // `duration` é NaN até os metadados chegarem, e num carregamento novo este
+    // efeito roda antes disso. Sem esperar, o seek era ignorado e a faixa
+    // começava do zero — era isso que o refresh fazia.
+    if (element.readyState >= HAVE_METADATA) {
+      seekAndPlay();
+      return;
     }
 
-    void element.play().then(
-      () => setBlocked(false),
-      // O browser recusa tocar antes de qualquer gesto na página. Quem trata é
-      // o botão de ativar som, que incrementa `nudge`.
-      () => setBlocked(true),
-    );
+    element.addEventListener("loadedmetadata", seekAndPlay, { once: true });
+
+    return () => element.removeEventListener("loadedmetadata", seekAndPlay);
   }, [url, shouldPlay, track?.loop, track?.startedAt, nudge, setBlocked]);
 
   if (!url) return null;

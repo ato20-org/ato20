@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { BookOpen, Loader2, Monitor, Smartphone, User, WifiOff } from "lucide-react";
 
 import { PlateiaStage } from "@/components/plateia/plateia-stage";
+import { SessionAudio } from "@/components/playground/session-audio";
 import { PlayerAttachments } from "@/components/plateia/player-attachments";
 import { PlayerIdentity } from "@/components/plateia/player-identity";
 import { PlayerNotes } from "@/components/plateia/player-notes";
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSubscription, type Subscription } from "@/hooks/use-scene-broadcast";
 import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useRoomStore } from "@/lib/store/use-room-store";
@@ -141,6 +143,11 @@ export function PlateiaShell() {
 function Connected({ roomId, code }: { roomId: string; code: string }) {
   const tabbed = useTabbedLayout();
 
+  // A inscrição vive aqui, e não dentro da aba Cena: aba inativa é desmontada,
+  // e o jogador que fosse ver a ficha sairia do canal e perderia as trocas de
+  // cena até voltar.
+  const live = useSubscription({ roomId });
+
   return (
     // `h-dvh` fixa a altura na viewport real do celular, já descontando a
     // barra do navegador.
@@ -151,10 +158,21 @@ function Connected({ roomId, code }: { roomId: string; code: string }) {
         <code className="text-muted-foreground text-sm tracking-widest">{code}</code>
       </header>
 
-      {tabbed ? <TabbedLayout roomId={roomId} /> : <StackedLayout roomId={roomId} />}
+      {tabbed ? (
+        <TabbedLayout roomId={roomId} live={live} />
+      ) : (
+        <StackedLayout roomId={roomId} live={live} />
+      )}
+
+      {/* Fora das abas: a trilha não pode parar porque o jogador foi consultar
+          a própria ficha. Música cortada no meio quebra a imersão que ela
+          existe para criar. */}
+      <SessionAudio track={live.track} />
     </main>
   );
 }
+
+type LayoutProps = { roomId: string; live: Subscription };
 
 /**
  * Tela em pé: cena presa no topo, abas embaixo para o resto.
@@ -163,14 +181,14 @@ function Connected({ roomId, code }: { roomId: string; code: string }) {
  * o conteúdo ao mesmo tempo. Presa, e não rolando junto: perder o mapa de
  * vista ao consultar a própria ficha é o oposto do que serve numa mesa.
  */
-function StackedLayout({ roomId }: { roomId: string }) {
+function StackedLayout({ roomId, live }: LayoutProps) {
   const [tab, setTab] = useState<StackedTab>("personagem");
   const swipe = useSwipeTabs(STACKED_TABS, tab, setTab);
 
   return (
     <>
       <div className="shrink-0 p-2">
-        <PlateiaStage roomId={roomId} />
+        <PlateiaStage scene={live.scene} synced={live.synced} stalled={live.stalled} />
       </div>
 
       <Tabs
@@ -229,7 +247,7 @@ function BottomBar({ children }: { children: React.ReactNode }) {
 }
 
 /** Tela deitada: uma aba por vez, com arraste lateral e barra centralizada. */
-function TabbedLayout({ roomId }: { roomId: string }) {
+function TabbedLayout({ roomId, live }: LayoutProps) {
   const [tab, setTab] = useState<Tab>("cena");
   const swipe = useSwipeTabs(TABBED_TABS, tab, setTab);
 
@@ -241,7 +259,7 @@ function TabbedLayout({ roomId }: { roomId: string }) {
     >
       <div className="min-h-0 flex-1" {...swipe}>
         <TabsContent value="cena" className="h-full p-2">
-          <PlateiaStage roomId={roomId} />
+          <PlateiaStage scene={live.scene} synced={live.synced} stalled={live.stalled} />
         </TabsContent>
 
         <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">
