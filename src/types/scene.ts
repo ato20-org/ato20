@@ -32,11 +32,15 @@ export type AssetMeta = {
 /**
  * Tipos que precisam existir na nuvem.
  *
- * Áudio fica fora: quem toca som é só o Operador, na mesma máquina que
- * alimenta a TV. Subir trilhas gastaria a cota de Storage sem ninguém do
- * outro lado precisar delas.
+ * Áudio entrou porque a Plateia passou a tocar a trilha da cena, e o celular
+ * do jogador não tem o IndexedDB do mestre — um arquivo que não subiu é
+ * silêncio do outro lado.
+ *
+ * Custa cota: trilha é o tipo de arquivo mais pesado do acervo, e o plano
+ * gratuito do Supabase aperta primeiro no Storage. A alternativa era a Plateia
+ * nunca ter som.
  */
-export const SYNCED_KINDS: readonly AssetKind[] = ["image", "pdf"];
+export const SYNCED_KINDS: readonly AssetKind[] = ["image", "audio", "pdf"];
 
 /** Uma imagem posicionada sobre o fundo da cena. */
 export type CanvasItem = {
@@ -89,12 +93,37 @@ export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height">;
  */
 export type Viewport = { x: number; y: number; width: number; height: number };
 
+/**
+ * Trilha da cena.
+ *
+ * Vive na cena, e não num player solto no Operador, porque é isso que a faz
+ * viajar: a TV e os celulares recebem o JSON da cena e sabem o que tocar. Uma
+ * trilha guardada só na máquina do mestre nunca sai de lá.
+ */
 export type SceneAudio = {
   assetId: string;
   loop: boolean;
-  /** 0 a 1. */
+  /** 0 a 1. Multiplicado pelo volume local de cada aparelho. */
   volume: number;
+  /** Pausado é diferente de ausente: a faixa continua escolhida. */
+  playing: boolean;
+  /**
+   * Quando o play atual começou, em epoch ms.
+   *
+   * Serve para um espectador que chega no meio entrar mais ou menos na altura
+   * certa, em vez de começar a faixa do zero enquanto a mesa está no refrão.
+   */
+  startedAt: number;
 };
+
+/**
+ * Efeito disparado agora — porta rangendo, trovão, grito.
+ *
+ * Também mora na cena, pelo mesmo motivo da trilha. `firedAt` muda a cada
+ * disparo, e é o que faz o espectador reconhecer que houve um novo: comparar
+ * `assetId` não distinguiria dois disparos do mesmo som.
+ */
+export type SceneEffect = { assetId: string; firedAt: number };
 
 /** O que o chamador informa ao criar um item; `id`, `z` e afins são do store. */
 export type NewCanvasItem = Pick<CanvasItem, "assetId" | "x" | "y" | "width" | "height">;
@@ -118,6 +147,7 @@ export type Scene = {
    */
   camera?: Viewport;
   audio?: SceneAudio;
+  effect?: SceneEffect;
   createdAt: number;
   updatedAt: number;
 };

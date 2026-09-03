@@ -20,10 +20,10 @@ import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
 import { OperatorToolbar } from "@/components/operator/operator-toolbar";
 import { RoomBadge } from "@/components/operator/room-badge";
-import { SceneAudioPlayer } from "@/components/operator/scene-audio-player";
 import { ScenesPanel } from "@/components/operator/scenes-panel";
 import { StageContextMenu } from "@/components/operator/stage-context-menu";
 import { ViewportControls } from "@/components/operator/viewport-controls";
+import { SceneAudio } from "@/components/playground/scene-audio";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -53,8 +53,8 @@ export function OperatorShell() {
   const editingScene = useSceneStore(selectEditingScene);
   const liveScene = useSceneStore(selectLiveScene);
 
-  const muted = useAudioStore((state) => state.muted);
-  const setMuted = useAudioStore((state) => state.setMuted);
+  const soundOn = useAudioStore((state) => state.enabled);
+  const setSoundOn = useAudioStore((state) => state.setEnabled);
   const audioBlocked = useAudioStore((state) => state.blocked);
   const retryAudio = useAudioStore((state) => state.retry);
 
@@ -157,11 +157,11 @@ export function OperatorShell() {
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={muted ? "Reativar som" : "Silenciar"}
-          aria-pressed={muted}
-          onClick={() => setMuted(!muted)}
+          aria-label={soundOn ? "Silenciar esta tela" : "Ligar o som desta tela"}
+          aria-pressed={!soundOn}
+          onClick={() => setSoundOn(!soundOn)}
         >
-          {muted ? <VolumeX /> : <Volume2 />}
+          {soundOn ? <Volume2 /> : <VolumeX />}
         </Button>
 
         <Separator orientation="vertical" className="mx-1 h-8" />
@@ -214,7 +214,7 @@ export function OperatorShell() {
 
       {/* A trilha é do que a mesa está vivendo: segue a cena no ar, senão
           preparar a próxima cena trocaria o ambiente no meio do jogo. */}
-      <SceneAudioPlayer audio={liveScene?.audio} />
+      <SceneAudio scene={liveScene} />
     </div>
   );
 }

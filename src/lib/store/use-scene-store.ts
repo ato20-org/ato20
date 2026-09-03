@@ -76,8 +76,14 @@ type SceneStore = {
   updateScene: (sceneId: string, updater: (scene: Scene) => Scene) => void;
 
   setBackground: (sceneId: string, assetId: string | undefined) => void;
-  /** `undefined` desliga o ambiente da cena. */
+  /** Ajustes de trilha que não mexem no relógio: volume, repetir. */
   setSceneAudio: (sceneId: string, audio: SceneAudio | undefined) => void;
+  /** Escolhe a trilha e começa a tocar. O instante é estampado aqui. */
+  startSceneTrack: (sceneId: string, assetId: string, volume: number) => void;
+  /** Pausa ou retoma, reiniciando a contagem de posição. */
+  setSceneTrackPlaying: (sceneId: string, playing: boolean) => void;
+  /** Registra um disparo de efeito na cena, para os espectadores ouvirem. */
+  fireSceneEffect: (sceneId: string, assetId: string) => void;
   /** `undefined` devolve a mesa ao plano inteiro. */
   setSceneCamera: (sceneId: string, camera: Viewport | undefined) => void;
   /** Devolve o id do item criado, para já deixá-lo selecionado. */
@@ -239,6 +245,35 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
   setSceneAudio(sceneId, audio) {
     get().updateScene(sceneId, (scene) => ({ ...scene, audio }));
+  },
+
+  startSceneTrack(sceneId, assetId, volume) {
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      audio: { assetId, loop: true, volume, playing: true, startedAt: Date.now() },
+    }));
+  },
+
+  setSceneTrackPlaying(sceneId, playing) {
+    get().updateScene(sceneId, (scene) =>
+      scene.audio
+        ? {
+            ...scene,
+            // Reinicia a contagem: sem isso, quem chega depois calcularia a
+            // posição da faixa incluindo o tempo em que ela ficou pausada.
+            audio: { ...scene.audio, playing, startedAt: Date.now() },
+          }
+        : scene,
+    );
+  },
+
+  fireSceneEffect(sceneId, assetId) {
+    // `firedAt` no store, não na interface: o instante pertence à mutação, e
+    // ler o relógio durante o render é efeito colateral disfarçado.
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      effect: { assetId, firedAt: Date.now() },
+    }));
   },
 
   setSceneCamera(sceneId, camera) {

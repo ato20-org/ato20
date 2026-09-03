@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Music, Play, Square, Trash2, Upload, Volume2, VolumeX } from "lucide-react";
+import { Music, Pause, Play, Square, Trash2, Upload, Volume2, VolumeX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,8 +10,9 @@ import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useAssetList } from "@/hooks/use-asset-list";
-import { playOneShot } from "@/lib/audio/play-one-shot";
+import { playEffect, stopEffect } from "@/lib/audio/effects";
 import { countAssetUsage } from "@/lib/operator/asset-usage";
+import { getAssetUrl } from "@/lib/storage/assets";
 import { useAudioStore } from "@/lib/store/use-audio-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
@@ -30,14 +31,26 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
 
   const scenes = useSceneStore((state) => state.board?.scenes);
   const setSceneAudio = useSceneStore((state) => state.setSceneAudio);
+  const startSceneTrack = useSceneStore((state) => state.startSceneTrack);
+  const setSceneTrackPlaying = useSceneStore((state) => state.setSceneTrackPlaying);
+  const fireSceneEffect = useSceneStore((state) => state.fireSceneEffect);
 
-  const muted = useAudioStore((state) => state.muted);
-  const setMuted = useAudioStore((state) => state.setMuted);
+  const enabled = useAudioStore((state) => state.enabled);
+  const setEnabled = useAudioStore((state) => state.setEnabled);
   const masterVolume = useAudioStore((state) => state.masterVolume);
   const setMasterVolume = useAudioStore((state) => state.setMasterVolume);
+  const playingEffects = useAudioStore((state) => state.playingEffects);
 
-  const ambience = scene.audio;
-  const ambienceAsset = assets.find((asset) => asset.id === ambience?.assetId);
+  const track = scene.audio;
+  const trackAsset = assets.find((asset) => asset.id === track?.assetId);
+
+  /** Toca na hora e registra na cena, para a TV e os celulares ouvirem também. */
+  async function fire(asset: AssetMeta) {
+    fireSceneEffect(scene.id, asset.id);
+
+    const url = await getAssetUrl(asset.id);
+    if (url) void playEffect(asset.id, url);
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -46,14 +59,15 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={muted ? "Reativar som" : "Silenciar"}
-            onClick={() => setMuted(!muted)}
+            aria-label={enabled ? "Silenciar este aparelho" : "Emitir som neste aparelho"}
+            aria-pressed={!enabled}
+            onClick={() => setEnabled(!enabled)}
           >
-            {muted ? <VolumeX /> : <Volume2 />}
+            {enabled ? <Volume2 /> : <VolumeX />}
           </Button>
           <Slider
             className="flex-1"
-            aria-label="Volume geral"
+            aria-label="Volume deste aparelho"
             value={[Math.round(masterVolume * 100)]}
             max={100}
             step={1}
@@ -87,21 +101,30 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
         />
       </div>
 
-      {ambience ? (
+      {track ? (
         <>
           <Separator />
           <div className="bg-accent/40 space-y-2 p-2">
             <p className="text-muted-foreground text-[10px] tracking-wide uppercase">
-              Ambiente da cena
+              Trilha da cena
             </p>
+
             <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={track.playing ? "Pausar trilha" : "Retomar trilha"}
+                onClick={() => setSceneTrackPlaying(scene.id, !track.playing)}
+              >
+                {track.playing ? <Pause /> : <Play />}
+              </Button>
               <span className="min-w-0 flex-1 truncate text-sm">
-                {ambienceAsset?.name ?? "Arquivo removido"}
+                {trackAsset?.name ?? "Arquivo removido"}
               </span>
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label="Parar ambiente"
+                aria-label="Remover trilha da cena"
                 onClick={() => setSceneAudio(scene.id, undefined)}
               >
                 <Square />
@@ -109,14 +132,14 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
             </div>
 
             <div className="flex items-center gap-2">
-              <Label className="text-xs" htmlFor="ambience-loop">
+              <Label className="text-xs" htmlFor="track-loop">
                 Repetir
               </Label>
               <Switch
-                id="ambience-loop"
-                checked={ambience.loop}
+                id="track-loop"
+                checked={track.loop}
                 onCheckedChange={(checked) =>
-                  setSceneAudio(scene.id, { ...ambience, loop: checked })
+                  setSceneAudio(scene.id, { ...track, loop: checked })
                 }
               />
             </div>
@@ -124,16 +147,16 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
             <div className="flex items-center gap-2">
               <Slider
                 className="flex-1"
-                aria-label="Volume do ambiente"
-                value={[Math.round(ambience.volume * 100)]}
+                aria-label="Volume da trilha"
+                value={[Math.round(track.volume * 100)]}
                 max={100}
                 step={1}
                 onValueChange={(value) =>
-                  setSceneAudio(scene.id, { ...ambience, volume: firstValue(value) / 100 })
+                  setSceneAudio(scene.id, { ...track, volume: firstValue(value) / 100 })
                 }
               />
               <span className="text-muted-foreground w-8 text-right text-xs tabular-nums">
-                {Math.round(ambience.volume * 100)}
+                {Math.round(track.volume * 100)}
               </span>
             </div>
           </div>
@@ -144,7 +167,7 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
       <ScrollArea className="min-h-0 flex-1">
         {assets.length === 0 ? (
           <p className="text-muted-foreground p-3 text-xs">
-            Nenhum som ainda. Envie ambientes para as cenas e efeitos para disparar na hora.
+            Nenhum som ainda. Envie trilhas para as cenas e efeitos para disparar na hora.
           </p>
         ) : (
           <ul className="space-y-1 p-2">
@@ -152,16 +175,12 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
               <AudioRow
                 key={asset.id}
                 asset={asset}
-                isAmbience={asset.id === ambience?.assetId}
+                isTrack={asset.id === track?.assetId}
+                isFiring={playingEffects.includes(asset.id)}
                 usageCount={countAssetUsage(scenes ?? [], asset.id)}
-                onPlay={() => void playOneShot(asset.id, muted ? 0 : masterVolume)}
-                onSetAmbience={() =>
-                  setSceneAudio(scene.id, {
-                    assetId: asset.id,
-                    loop: true,
-                    volume: DEFAULT_TRACK_VOLUME,
-                  })
-                }
+                onFire={() => void fire(asset)}
+                onStopFiring={() => stopEffect(asset.id)}
+                onSetTrack={() => startSceneTrack(scene.id, asset.id, DEFAULT_TRACK_VOLUME)}
                 onRemove={() => void remove(asset.id)}
               />
             ))}
@@ -174,19 +193,23 @@ export function AudioLibrary({ scene }: { scene: Scene }) {
 
 type AudioRowProps = {
   asset: AssetMeta;
-  isAmbience: boolean;
+  isTrack: boolean;
+  isFiring: boolean;
   usageCount: number;
-  onPlay: () => void;
-  onSetAmbience: () => void;
+  onFire: () => void;
+  onStopFiring: () => void;
+  onSetTrack: () => void;
   onRemove: () => void;
 };
 
 function AudioRow({
   asset,
-  isAmbience,
+  isTrack,
+  isFiring,
   usageCount,
-  onPlay,
-  onSetAmbience,
+  onFire,
+  onStopFiring,
+  onSetTrack,
   onRemove,
 }: AudioRowProps) {
   return (
@@ -197,19 +220,35 @@ function AudioRow({
         </span>
         <span className="text-muted-foreground block text-[10px]">
           {Math.round(asset.size / 1024)} KB
-          {isAmbience ? " · ambiente" : ""}
+          {isTrack ? " · trilha" : ""}
+          {isFiring ? " · tocando" : ""}
         </span>
       </span>
 
-      <Button variant="ghost" size="icon-xs" aria-label={`Tocar ${asset.name}`} onClick={onPlay}>
-        <Play />
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        // Tocar como efeito o arquivo que já é a trilha soaria duas vezes ao
+        // mesmo tempo, e foi assim que o som dobrado apareceu.
+        disabled={isTrack}
+        aria-label={
+          isTrack
+            ? `${asset.name} já é a trilha da cena`
+            : isFiring
+              ? `Parar ${asset.name}`
+              : `Disparar ${asset.name}`
+        }
+        title={isTrack ? "Já é a trilha desta cena" : undefined}
+        onClick={isFiring ? onStopFiring : onFire}
+      >
+        {isFiring ? <Square /> : <Play />}
       </Button>
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label={`Usar ${asset.name} como ambiente da cena`}
-        className={cn(isAmbience && "text-primary")}
-        onClick={onSetAmbience}
+        aria-label={`Usar ${asset.name} como trilha da cena`}
+        className={cn(isTrack && "text-primary")}
+        onClick={onSetTrack}
       >
         <Music />
       </Button>

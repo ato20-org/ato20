@@ -3,8 +3,10 @@
 import { useRef } from "react";
 import { Maximize, Minimize } from "lucide-react";
 
+import { SceneAudio } from "@/components/playground/scene-audio";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
+import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { useSceneSubscription } from "@/hooks/use-scene-broadcast";
 import { cn } from "@/lib/utils";
@@ -66,6 +68,10 @@ export function PlateiaStage({ roomId }: { roomId: string }) {
                 : "Aguardando o mestre…"}
           </p>
         ) : null}
+
+        <SceneAudio scene={scene} />
+
+        <SoundToggle className="absolute top-2 right-12" />
 
         <button
           type="button"

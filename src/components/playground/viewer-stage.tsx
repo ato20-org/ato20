@@ -1,7 +1,9 @@
 "use client";
 
+import { SceneAudio } from "@/components/playground/scene-audio";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
+import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useSceneSubscription } from "@/hooks/use-scene-broadcast";
 
 /**
@@ -19,6 +21,12 @@ export function ViewerStage() {
       <SceneStage viewport={scene?.camera}>
         {scene ? <SceneLayer scene={scene} /> : null}
       </SceneStage>
+
+      <SceneAudio scene={scene} />
+
+      {/* Discreto no canto: a TV fica virada para a mesa, e o controle existe
+          para o mestre escolher qual aparelho emite o som. */}
+      <SoundToggle className="absolute top-3 right-3 opacity-40 hover:opacity-100" />
 
       {/* Irmão do palco, não filho — ver a nota em `PlateiaStage`. */}
       {!scene ? (
