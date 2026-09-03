@@ -64,10 +64,16 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
 
     if (get().status === "loading") return;
 
+    // Já dentro desta mesma mesa: sair daqui evita um RPC redundante quando o
+    // efeito de auto-entrada roda de novo, por exemplo depois de a URL ganhar
+    // o código.
+    const normalized = code.trim().toUpperCase();
+    if (get().status === "ready" && get().room?.code === normalized) return;
+
     set({ status: "loading", error: null });
 
     try {
-      set({ room: await joinRoomByCode(code), role: "player", status: "ready" });
+      set({ room: await joinRoomByCode(normalized), role: "player", status: "ready" });
     } catch (cause) {
       set({ status: "error", error: describe(cause) });
     }

@@ -49,6 +49,19 @@ export function PlateiaShell() {
     if (codeFromLink.length === CODE_LENGTH) void connectAsPlayer(codeFromLink);
   }, [codeFromLink, connectAsPlayer]);
 
+  useEffect(() => {
+    if (!room) return;
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("code") === room.code) return;
+
+    url.searchParams.set("code", room.code);
+    // `replaceState` e não navegação do router: a sala já está conectada, e
+    // navegar remontaria a árvore e reexecutaria a entrada. Aqui só o endereço
+    // muda, para o refresh e o favorito reencontrarem a mesa.
+    window.history.replaceState(null, "", url);
+  }, [room]);
+
   if (status === "offline") {
     return (
       <Centered>
