@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   BookOpen,
-  ExternalLink,
   EyeOff,
   Image as ImageIcon,
   KeyRound,
@@ -11,21 +10,12 @@ import {
   Music,
   ScanSearch,
   Smartphone,
-  Terminal,
   Wand2,
 } from "lucide-react";
 
 import logo from "@/assets/logo-white.png";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-/**
- * Endereço do repositório.
- *
- * `null` esconde o botão em vez de apontar para um link inventado. Preencher
- * quando o repositório existir.
- */
-const REPO_URL: string | null = null;
 
 const views = [
   {
@@ -72,8 +62,7 @@ export default function LandingPage() {
         </h1>
 
         <p className="max-w-2xl text-xl text-balance">
-          Ferramenta <span className="font-medium">open source</span> para organizar e exibir cenas
-          de RPG de mesa.
+          Ferramenta para organizar e exibir cenas de RPG de mesa.
         </p>
 
         <p className="text-muted-foreground max-w-2xl text-balance">
@@ -86,31 +75,17 @@ export default function LandingPage() {
             <KeyRound />
             Entrar na instância
           </Button>
-
-          {REPO_URL ? (
-            <Button
-              render={<a href={REPO_URL} target="_blank" rel="noopener" />}
-              nativeButton={false}
-              variant="outline"
-            >
-              <ExternalLink />
-              Código no GitHub
-            </Button>
-          ) : null}
         </div>
       </header>
 
       {/* Dito de frente, não em letra miúda: quem chega precisa saber que não
           vai criar uma conta aqui. */}
       <section className="border-primary/40 space-y-3 rounded-lg border-l-2 pl-5">
-        <h2 className="text-lg font-medium">Não é um serviço hospedado</h2>
+        <h2 className="text-lg font-medium">Projeto pessoal, instância fechada</h2>
         <p className="text-muted-foreground max-w-2xl text-sm text-balance">
-          Não existe cadastro, plano nem instância pública. Esta que você está vendo é pessoal e
-          fechada: o acesso à ferramenta exige uma chave, e só a apresentação fica aberta.
-        </p>
-        <p className="text-muted-foreground max-w-2xl text-sm text-balance">
-          Para usar, rode a sua própria — no seu computador ou no seu servidor. O projeto é aberto
-          justamente para isso.
+          Não é um serviço: não existe cadastro, plano nem inscrição. Esta instância pertence a uma
+          mesa específica, e o acesso à ferramenta exige uma chave — só esta apresentação fica
+          aberta.
         </p>
       </section>
 
@@ -145,33 +120,18 @@ export default function LandingPage() {
         </ul>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <Terminal className="size-5" aria-hidden />
-          Rodar a sua
-        </h2>
+      <section className="space-y-3">
+        <h2 className="text-2xl font-semibold tracking-tight">Como funciona</h2>
 
         <p className="text-muted-foreground max-w-2xl text-sm text-balance">
           Roda inteira no navegador. Cenas, imagens e sons ficam no próprio aparelho, e o Operador
-          fala com a TV sem servidor nenhum no meio. O Supabase só entra para levar a cena aos
-          celulares dos jogadores — sem ele, as duas primeiras telas funcionam igual.
-        </p>
-
-        <pre className="overflow-x-auto rounded-lg border p-4 text-xs">
-          <code>{`git clone <repositório> ato20
-cd ato20
-pnpm install
-pnpm dev`}</code>
-        </pre>
-
-        <p className="text-muted-foreground text-xs">
-          Next.js, TypeScript e Tailwind. Os dados locais vivem em IndexedDB; nada é enviado a
-          lugar nenhum por padrão.
+          fala com a TV sem servidor nenhum no meio — o que também significa que funciona com a
+          internet caída. A nuvem só entra para levar a cena aos celulares dos jogadores.
         </p>
       </section>
 
       <footer className="text-muted-foreground border-t pt-6 text-xs">
-        ATO20 · projeto open source · uso local ou pessoal
+        ATO20 · projeto pessoal · instância fechada
       </footer>
     </main>
   );

@@ -1,11 +1,11 @@
 # ATO20
 
-Ferramenta open source para organizar e exibir cenas de RPG de mesa.
+Ferramenta para organizar e exibir cenas de RPG de mesa.
 
 Feita para jogo presencial: o mestre monta a próxima cena no notebook enquanto a mesa
 continua vendo a atual na TV, e cada jogador acompanha pelo próprio celular.
 
-**Não é um serviço hospedado.** Não há cadastro nem instância pública — rode a sua.
+**Projeto pessoal.** Repositório privado, instância fechada por chave de acesso.
 
 ## Três telas
 
@@ -130,4 +130,4 @@ runner ainda é trabalho pendente.
 
 ## Licença
 
-MIT.
+Sem licença definida. Repositório privado, uso pessoal — todos os direitos reservados.
