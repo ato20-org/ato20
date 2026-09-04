@@ -36,7 +36,23 @@ export type AssetMeta = {
    * e o acervo inteiro some das telas sem erro nenhum.
    */
   remoteRoomId?: string;
+  /**
+   * Pasta em que o mestre guardou o arquivo. Ausente = raiz.
+   *
+   * Guarda o id, não o nome: renomear a pasta não pode obrigar a reescrever
+   * todos os arquivos dentro dela.
+   */
+  folderId?: string;
 };
+
+/**
+ * Pasta do acervo.
+ *
+ * Só raiz, sem aninhamento: numa campanha o que se quer é separar mapas de
+ * retratos e de fichas, e uma árvore profunda cobraria navegação em troca de
+ * organização que ninguém pediu.
+ */
+export type AssetFolder = { id: string; name: string; createdAt: number };
 
 /**
  * Tipos que precisam existir na nuvem.
@@ -135,6 +151,33 @@ export type SessionTrack = {
  * disparo, e é o que faz o espectador reconhecer que houve um novo: comparar
  * `assetId` não distinguiria dois disparos do mesmo som.
  */
+
+/**
+ * Retrato de personagem sobre a cena.
+ *
+ * Ancorado na **câmera**, não no plano: `x`, `y`, `width` e `height` são
+ * frações de 0 a 1 do recorte que a mesa está vendo. É isso que faz o retrato
+ * ficar parado quando o mestre aproxima o mapa, e ocupar a mesma parte da tela
+ * na TV de 1920 e no celular de 390 — pixel de tela exigiria uma camada de
+ * coordenadas própria em cada visão.
+ *
+ * Pertence à sessão, como a trilha: quem está na conversa não muda porque o
+ * mestre trocou de mapa.
+ */
+export type Portrait = {
+  id: string;
+  assetId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Fora do ar aparece fantasma só para o mestre, para ele posicionar antes. */
+  visible: boolean;
+  /** Virar o retrato para o lado da tela em que ele está. */
+  flipX?: boolean;
+  /** Moldura e sombra, para não parecer recorte colado no mapa. */
+  framed?: boolean;
+};
 
 /** O que o chamador informa ao criar um item; `id`, `z` e afins são do store. */
 export type NewCanvasItem = Pick<CanvasItem, "assetId" | "x" | "y" | "width" | "height">;

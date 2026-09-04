@@ -11,6 +11,7 @@ import {
   nudgeSelection,
   pasteClipboard,
   removeFogSelection,
+  removePortraitSelection,
   removeSelection,
   selectAllItems,
 } from "@/lib/operator/item-actions";
@@ -127,8 +128,12 @@ export function useOperatorShortcuts(): void {
         // Backspace navega para trás no browser se não for barrado.
         event.preventDefault();
 
-        if (useSelectionStore.getState().selectedFogId) {
+        const selection = useSelectionStore.getState();
+
+        if (selection.selectedFogId) {
           removeFogSelection();
+        } else if (selection.selectedPortraitIds.length > 0) {
+          removePortraitSelection();
         } else {
           removeSelection();
         }

@@ -3,6 +3,7 @@
 import { offsetInsideScene } from "@/lib/geometry/transform";
 import { flipPatches, type FlipAxis } from "@/lib/operator/flip";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
+import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { selectEditingScene, useSceneStore, type ZDirection } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import type { CanvasItem, ItemDraft, Scene } from "@/types/scene";
@@ -137,6 +138,23 @@ export function removeFogSelection(): void {
   if (!scene || !fogId) return;
 
   useSceneStore.getState().removeFog(scene.id, fogId);
+  useSelectionStore.getState().clear();
+}
+
+/**
+ * Apaga o retrato selecionado.
+ *
+ * Não passa pelo board: retrato é da sessão, e por isso também não entra no
+ * histórico de desfazer — um Ctrl+Z depois de mover uma imagem não deve
+ * ressuscitar um retrato que o mestre tirou de propósito.
+ */
+export function removePortraitSelection(): void {
+  const { selectedPortraitIds } = useSelectionStore.getState();
+  if (selectedPortraitIds.length === 0) return;
+
+  const { remove } = usePortraitStore.getState();
+  for (const portraitId of selectedPortraitIds) remove(portraitId);
+
   useSelectionStore.getState().clear();
 }
 

@@ -4,16 +4,28 @@ import { create } from "zustand";
 
 const STORAGE_KEY = "ato20:panels";
 
+/** Abas do painel esquerdo. */
+export type LeftTab = "cenas" | "areas" | "retratos";
+
 type PanelsStore = {
   /** Cenas e áreas escondidas. */
   left: boolean;
   /** Bibliotecas de imagem e som, mais as camadas da cena. */
   right: boolean;
+  /**
+   * Aba aberta no painel esquerdo.
+   *
+   * Vive no store, e não dentro do painel, porque o palco depende dela: com
+   * Retratos aberta, ele desenha todos os retratos para o mestre arrastar.
+   * Estar na aba É a intenção de editar retrato.
+   */
+  leftTab: LeftTab;
   /** `localStorage` já foi lido. Antes disso os valores são só o padrão. */
   restored: boolean;
 
   toggleLeft: () => void;
   toggleRight: () => void;
+  setLeftTab: (tab: LeftTab) => void;
   restore: () => void;
 };
 
@@ -44,10 +56,14 @@ function read(): Stored | null {
 export const usePanelsStore = create<PanelsStore>((set, get) => ({
   left: true,
   right: true,
+  leftTab: "cenas",
   restored: false,
 
   toggleLeft: () => set({ left: !get().left }),
   toggleRight: () => set({ right: !get().right }),
+  // Não é persistida de propósito: abrir o Operador já com retratos desenhados
+  // sobre o mapa surpreenderia quem só quer montar a cena.
+  setLeftTab: (leftTab) => set({ leftTab }),
 
   restore() {
     if (get().restored) return;
