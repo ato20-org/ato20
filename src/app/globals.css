@@ -128,3 +128,78 @@
     @apply font-sans;
   }
 }
+/* -------------------------------------------------------------
+   Suavização das visões de espectador
+   -------------------------------------------------------------
+
+   A cena viaja em amostras, não em frames: o canal de rede publica no máximo
+   a cada 100 ms (ver `SCENE_BROADCAST_INTERVAL_MS`). Sem interpolação, um
+   boneco arrastado atravessa a TV em saltos de 10 Hz.
+
+   Interpolar em CSS, e não em JS: o compositor anima `transform` e `opacity`
+   fora da thread principal, e o mesmo laço que redesenharia a cena a cada
+   frame já está ocupado desenhando a cena.
+
+   Duração acima do intervalo de publicação de propósito — com uma amostra
+   atrasada, a anterior ainda está em curso e o movimento não engasga. O preço
+   é a TV ficar ~150 ms atrás do mouse do mestre, o que ninguém sentado à mesa
+   percebe.
+
+   Só o espectador. No Operador o arrasto é manipulação direta: interpolar ali
+   faria a imagem correr atrás do cursor.
+
+   Tudo dentro de `prefers-reduced-motion`: quem pediu menos movimento no
+   sistema recebe os saltos, que é o comportamento honesto para essa
+   preferência. */
+@media (prefers-reduced-motion: no-preference) {
+  .scene-smooth-item {
+    transition:
+      transform 150ms linear,
+      width 150ms linear,
+      height 150ms linear;
+  }
+
+  /* Câmera com desaceleração, e mais longa: enquadrar é um gesto do mestre com
+     começo e fim, não um fluxo contínuo — e é o movimento que arrasta a tela
+     inteira, onde o salto incomoda mais. Cobre zoom e deslocamento juntos,
+     porque os dois vivem no mesmo `transform`. */
+  .scene-smooth-camera {
+    transition: transform 450ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  /* Revelar uma área escondida é dramaturgia: o preto sai desaparecendo em vez
+     de piscar. */
+  .scene-smooth-fog {
+    transition:
+      opacity 500ms ease-out,
+      transform 150ms linear,
+      width 150ms linear,
+      height 150ms linear;
+  }
+
+  /* Troca de cena. A cena anterior sai da árvore no mesmo instante — não há
+     como saber que ela ia sair antes de a nova chegar —, então o que existe é
+     a entrada: a nova surge do preto, e o resultado lê como corte suave em vez
+     de estalo. */
+  .scene-fade-in {
+    animation: scene-fade-in 450ms ease-out both;
+  }
+
+  /* Item novo no meio da cena. Curto: é para a mesa notar que algo entrou, não
+     para esperar uma aparição. */
+  .scene-item-in {
+    animation: scene-fade-in 200ms ease-out both;
+  }
+}
+
+/* Fora do `@media` de propósito: uma animação referenciada sem os keyframes
+   definidos é ignorada pelo browser, e manter a regra aqui evita depender da
+   ordem em que os dois blocos são lidos. */
+@keyframes scene-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

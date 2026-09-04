@@ -188,7 +188,12 @@ function StackedLayout({ roomId, live }: LayoutProps) {
   return (
     <>
       <div className="shrink-0 p-2">
-        <PlateiaStage scene={live.scene} synced={live.synced} stalled={live.stalled} />
+        <PlateiaStage
+          scene={live.scene}
+          portraits={live.portraits}
+          synced={live.synced}
+          stalled={live.stalled}
+        />
       </div>
 
       <Tabs
@@ -259,7 +264,12 @@ function TabbedLayout({ roomId, live }: LayoutProps) {
     >
       <div className="min-h-0 flex-1" {...swipe}>
         <TabsContent value="cena" className="h-full p-2">
-          <PlateiaStage scene={live.scene} synced={live.synced} stalled={live.stalled} />
+          <PlateiaStage
+          scene={live.scene}
+          portraits={live.portraits}
+          synced={live.synced}
+          stalled={live.stalled}
+        />
         </TabsContent>
 
         <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">

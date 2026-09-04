@@ -60,6 +60,15 @@ type SceneStageProps = {
   panOnDrag?: boolean;
   /** Contorno do limite do plano. Útil ao mestre quando está ampliado. */
   bounds?: boolean;
+  /**
+   * Interpola a câmera: zoom e deslocamento chegam em amostras, e sem isto a
+   * tela inteira salta a cada uma. Ver `.scene-smooth-camera` em
+   * `globals.css`.
+   *
+   * Desligado onde a câmera é gesto direto — o palco do Operador —, senão o
+   * enquadramento correria atrás da roda do mouse.
+   */
+  smooth?: boolean;
 };
 
 /**
@@ -77,10 +86,12 @@ export function SceneStage({
   onViewportChange,
   panOnDrag = false,
   bounds = false,
+  smooth = false,
 }: SceneStageProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const planeRef = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
+
 
   useEffect(() => {
     const element = frameRef.current;
@@ -96,6 +107,7 @@ export function SceneStage({
     return () => observer.disconnect();
   }, []);
 
+
   // Zero em qualquer eixo significa que a moldura ainda não foi medida — ou
   // que a cadeia de altura acima dela quebrou. Nos dois casos não há escala
   // possível, e desenhar com `scale(0)` só mostraria preto.
@@ -108,6 +120,21 @@ export function SceneStage({
   // no canto, translate e scale compõem de forma previsível.
   const offsetX = (frame.width - viewport.width * scale) / 2 - viewport.x * scale;
   const offsetY = (frame.height - viewport.height * scale) / 2 - viewport.y * scale;
+
+  /**
+   * Liga a transição da câmera só depois do primeiro paint já medido.
+   *
+   * Imperativo de propósito: se a classe entrasse no mesmo render em que a
+   * escala deixa de ser zero, a abertura de toda tela começaria com a cena
+   * crescendo do nada — o `scale(0)` do primeiro paint seria o quadro inicial
+   * da animação. Aqui ela passa a valer para a mudança de câmera *seguinte*,
+   * que é a que precisa ser suave.
+   */
+  useEffect(() => {
+    if (!smooth || scale === 0) return;
+
+    planeRef.current?.classList.add("scene-smooth-camera");
+  }, [smooth, scale]);
 
   const toScene = useCallback(
     (clientX: number, clientY: number): Vec => {

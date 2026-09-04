@@ -4,16 +4,31 @@ import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
 import { FogLayer } from "@/components/playground/fog-layer";
+import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { useAssetUrl } from "@/hooks/use-asset-url";
-import type { CanvasItem, FogRegion, Scene } from "@/types/scene";
+import type { CanvasItem, FogRegion, Portrait, Scene } from "@/types/scene";
 
 type SceneLayerProps = {
   scene: Scene;
   /** `viewer` é o que a mesa vê. `operator` deixa o mestre atravessar a névoa. */
   variant?: "operator" | "viewer";
+  /**
+   * Interpola o que muda entre as amostras recebidas.
+   *
+   * Ligado nas telas que só assistem. No Operador fica desligado: lá o arrasto
+   * é manipulação direta, e a imagem correndo atrás do cursor é o oposto de
+   * suave.
+   */
+  smooth?: boolean;
+  /**
+   * Retratos da sessão. Não vêm de dentro da cena de propósito: eles ficam no
+   * ar atravessando a troca de cena, e são ancorados na câmera dela.
+   */
+  portraits?: Portrait[];
   /** Ausente = camada só de leitura, que é o caso do Assistir. */
   onItemPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
+  onPortraitPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
 };
 
 /**
@@ -25,8 +40,11 @@ type SceneLayerProps = {
 export function SceneLayer({
   scene,
   variant = "viewer",
+  smooth = false,
+  portraits,
   onItemPointerDown,
   onFogPointerDown,
+  onPortraitPointerDown,
 }: SceneLayerProps) {
   const backgroundUrl = useAssetUrl(scene.backgroundAssetId);
   const items = useMemo(() => [...scene.items].sort((a, b) => a.z - b.z), [scene.items]);
@@ -45,10 +63,30 @@ export function SceneLayer({
       ) : null}
 
       {items.map((item) => (
-        <CanvasItemView key={item.id} item={item} onPointerDown={onItemPointerDown} />
+        <CanvasItemView
+          key={item.id}
+          item={item}
+          smooth={smooth}
+          onPointerDown={onItemPointerDown}
+        />
       ))}
 
-      <FogLayer fog={scene.fog} variant={variant} onFogPointerDown={onFogPointerDown} />
+      <FogLayer
+        fog={scene.fog}
+        variant={variant}
+        smooth={smooth}
+        onFogPointerDown={onFogPointerDown}
+      />
+
+      {portraits && portraits.length > 0 ? (
+        <PortraitLayer
+          portraits={portraits}
+          camera={scene.camera}
+          variant={variant}
+          smooth={smooth}
+          onPortraitPointerDown={onPortraitPointerDown}
+        />
+      ) : null}
     </>
   );
 }

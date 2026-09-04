@@ -8,7 +8,7 @@ import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { cn } from "@/lib/utils";
-import type { Scene } from "@/types/scene";
+import type { Portrait, Scene } from "@/types/scene";
 
 /**
  * A cena no celular do jogador. Só recebe — nenhum controle sobre nada.
@@ -29,10 +29,12 @@ import type { Scene } from "@/types/scene";
  */
 export function PlateiaStage({
   scene,
+  portraits,
   synced,
   stalled,
 }: {
   scene: Scene | null;
+  portraits: Portrait[];
   synced: boolean;
   stalled: boolean;
 }) {
@@ -60,8 +62,14 @@ export function PlateiaStage({
               "aspect-video max-h-full w-full rounded-lg",
         )}
       >
-        <SceneStage className="size-full" viewport={scene?.camera}>
-          {scene ? <SceneLayer scene={scene} /> : null}
+        <SceneStage className="size-full" viewport={scene?.camera} smooth>
+          {/* Mesma suavização da TV: o celular também só recebe amostras, e a
+              troca de cena entra em fade em vez de estalar. */}
+          {scene ? (
+            <div key={scene.id} className="scene-fade-in absolute inset-0">
+              <SceneLayer scene={scene} portraits={portraits} smooth />
+            </div>
+          ) : null}
         </SceneStage>
 
         {/* Irmão do palco, não filho: o `SceneStage` esconde o próprio plano

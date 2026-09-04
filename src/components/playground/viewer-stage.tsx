@@ -9,17 +9,30 @@ import { useSubscription } from "@/hooks/use-scene-broadcast";
 /**
  * Visão Assistir: recebe a cena e não emite nada. Nenhum controle, nenhum
  * atalho — a tela vai numa TV virada para a mesa.
+ *
+ * `roomId` vem da porta do `ViewerShell`. `null` só acontece na instalação sem
+ * Supabase, onde a mesa não existe e a TV tem de ser a própria máquina.
  */
-export function ViewerStage() {
-  // Mesma máquina do Operador: `BroadcastChannel` basta e não gasta rede.
-  const { scene, track, synced, stalled } = useSubscription({ local: true });
+export function ViewerStage({ roomId }: { roomId: string | null }) {
+  // `local` sempre: quando a TV é uma aba da máquina do Operador, o
+  // `BroadcastChannel` chega antes da rede e não gasta cota. `roomId` é o que
+  // permite a TV estar em outro aparelho.
+  const { scene, track, portraits, synced, stalled } = useSubscription({ local: true, roomId });
 
   return (
     // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
     <main className="relative flex flex-1 flex-col bg-black">
-      {/* A TV não tem quem opere: enquadramento vem só da câmera da cena. */}
-      <SceneStage viewport={scene?.camera}>
-        {scene ? <SceneLayer scene={scene} /> : null}
+      {/* A TV não tem quem opere: enquadramento vem só da câmera da cena.
+          `smooth` porque aqui ninguém manipula nada — o que chega são amostras
+          do Operador, e interpolá-las é o que separa movimento de salto. */}
+      <SceneStage viewport={scene?.camera} smooth>
+        {/* `key` na cena: trocar de cena remonta a camada, e é a remontagem
+            que dispara a entrada em fade. */}
+        {scene ? (
+          <div key={scene.id} className="scene-fade-in absolute inset-0">
+            <SceneLayer scene={scene} portraits={portraits} smooth />
+          </div>
+        ) : null}
       </SceneStage>
 
       <SessionAudio track={track} />
@@ -34,7 +47,11 @@ export function ViewerStage() {
           {synced
             ? "O mestre não colocou nenhuma cena no ar."
             : stalled
-              ? "Sem resposta. A tela do Operador precisa estar aberta nesta mesma máquina."
+              ? // Sem sala, o único transporte é a própria máquina, e é isso que
+                // a mensagem precisa dizer para não mandar procurar na rede.
+                roomId
+                ? "Sem resposta. A tela do Operador precisa estar aberta."
+                : "Sem resposta. A tela do Operador precisa estar aberta nesta mesma máquina."
               : "Aguardando o Operador…"}
         </p>
       ) : null}
