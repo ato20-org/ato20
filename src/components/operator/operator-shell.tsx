@@ -15,6 +15,8 @@ import {
   VolumeX,
 } from "lucide-react";
 
+import { AccountBadge } from "@/components/operator/account-badge";
+import { BoardConflictBar, BoardSyncBadge } from "@/components/operator/board-sync-badge";
 import { LibraryPanel } from "@/components/operator/library-panel";
 import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
@@ -34,6 +36,7 @@ import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { useAudioStore } from "@/lib/store/use-audio-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
+import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useRoomStore } from "@/lib/store/use-room-store";
 import {
   selectCanRedo,
@@ -73,15 +76,27 @@ export function OperatorShell() {
   const track = useTrackStore((state) => state.track);
   const hydrateTrack = useTrackStore((state) => state.hydrate);
 
+  const portraits = usePortraitStore((state) => state.portraits);
+  const hydratePortraits = usePortraitStore((state) => state.hydrate);
+
   const roomId = useRoomStore((state) => state.room?.id ?? null);
+  // A porta do Assistir pede o código da mesa. O botão daqui já o leva: quem
+  // abre a TV é o mestre, e ele não deveria digitar o que já está na tela.
+  const roomCode = useRoomStore((state) => state.room?.code ?? null);
 
   useEffect(() => {
-    void hydrate();
-  }, [hydrate]);
+    // A mesa entra na hidratação: o board é por mesa, e trocar de mesa troca
+    // de board — inclusive o cache local, que antes era um só por navegador.
+    void hydrate(roomId);
+  }, [hydrate, roomId]);
 
   useEffect(() => {
     void hydrateTrack();
   }, [hydrateTrack]);
+
+  useEffect(() => {
+    void hydratePortraits();
+  }, [hydratePortraits]);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação.
@@ -92,7 +107,7 @@ export function OperatorShell() {
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.
   // `local` alimenta a TV na mesma máquina; `roomId` alimenta os celulares.
-  usePublisher({ scene: liveScene, track }, { local: true, roomId });
+  usePublisher({ scene: liveScene, track, portraits }, { local: true, roomId });
   useOperatorShortcuts();
   useSpacePan();
   useAssetSync(roomId);
@@ -174,6 +189,7 @@ export function OperatorShell() {
 
         <Separator orientation="vertical" className="mx-1 h-8" />
         <RoomBadge />
+        <BoardSyncBadge />
 
         {/* O browser recusa tocar antes de um gesto na página. Só aparece
             quando há trilha para desbloquear. */}
@@ -185,8 +201,16 @@ export function OperatorShell() {
         ) : null}
 
         <div className="ml-auto flex items-center gap-2">
+          <AccountBadge />
+
           <Button
-            render={<Link href="/assistir" target="_blank" rel="noopener" />}
+            render={
+              <Link
+                href={roomCode ? `/assistir?code=${roomCode}` : "/assistir"}
+                target="_blank"
+                rel="noopener"
+              />
+            }
             nativeButton={false}
             variant="outline"
             size="sm"
@@ -205,6 +229,8 @@ export function OperatorShell() {
           />
         </div>
       </header>
+
+      <BoardConflictBar />
 
       <div className="flex min-h-0 flex-1">
         {leftOpen ? <ScenesPanel scene={editingScene} ready={status === "ready"} /> : null}
