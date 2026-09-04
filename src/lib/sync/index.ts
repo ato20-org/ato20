@@ -15,7 +15,8 @@ export type SceneChannelOptions = {
  * Monta o transporte da cena.
  *
  * - Operador: `local` + `roomId` — alimenta a TV e os celulares de uma vez.
- * - Assistir: só `local` — está na mesma máquina, não precisa de rede.
+ * - Assistir: `local` + `roomId` — a TV pode ser uma aba desta máquina, onde o
+ *   `BroadcastChannel` chega antes e de graça, ou outro aparelho na rede.
  * - Plateia: só `roomId` — está noutro aparelho.
  */
 export function createSceneChannel({

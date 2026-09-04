@@ -1,5 +1,12 @@
-import { ViewerStage } from "@/components/playground/viewer-stage";
+import { Suspense } from "react";
+
+import { ViewerShell } from "@/components/playground/viewer-shell";
 
 export default function AssistirPage() {
-  return <ViewerStage />;
+  // `useSearchParams` exige fronteira de Suspense numa página estática.
+  return (
+    <Suspense fallback={null}>
+      <ViewerShell />
+    </Suspense>
+  );
 }
