@@ -3,14 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { BookOpen, Loader2, Monitor, Smartphone, User, WifiOff } from "lucide-react";
+import { Loader2, Monitor, Smartphone, User, WifiOff } from "lucide-react";
 
 import { PlateiaStage } from "@/components/plateia/plateia-stage";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { PlayerAttachments } from "@/components/plateia/player-attachments";
 import { PlayerIdentity } from "@/components/plateia/player-identity";
 import { PlayerNotes } from "@/components/plateia/player-notes";
-import { PlayerRules } from "@/components/plateia/player-rules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,8 +27,8 @@ const CODE_LENGTH = 6;
  * Em pé a cena fica presa no topo e não é aba; deitado ela disputa a altura
  * com o resto e volta a ser.
  */
-const STACKED_TABS = ["personagem", "regras"] as const;
-const TABBED_TABS = ["cena", "personagem", "regras"] as const;
+const STACKED_TABS = ["personagem"] as const;
+const TABBED_TABS = ["cena", "personagem"] as const;
 
 type StackedTab = (typeof STACKED_TABS)[number];
 type Tab = (typeof TABBED_TABS)[number];
@@ -206,19 +205,12 @@ function StackedLayout({ roomId, live }: LayoutProps) {
             <CharacterPanel roomId={roomId} />
           </TabsContent>
 
-          <TabsContent value="regras" className="h-full overflow-y-auto p-3">
-            <PlayerRules roomId={roomId} />
-          </TabsContent>
         </div>
 
         <BottomBar>
           <TabsTrigger value="personagem">
             <User />
             Personagem
-          </TabsTrigger>
-          <TabsTrigger value="regras">
-            <BookOpen />
-            Regras
           </TabsTrigger>
         </BottomBar>
       </Tabs>
@@ -276,9 +268,6 @@ function TabbedLayout({ roomId, live }: LayoutProps) {
           <CharacterPanel roomId={roomId} />
         </TabsContent>
 
-        <TabsContent value="regras" className="h-full overflow-y-auto p-3">
-          <PlayerRules roomId={roomId} />
-        </TabsContent>
       </div>
 
       <BottomBar>
@@ -289,10 +278,6 @@ function TabbedLayout({ roomId, live }: LayoutProps) {
         <TabsTrigger value="personagem">
           <User />
           Personagem
-        </TabsTrigger>
-        <TabsTrigger value="regras">
-          <BookOpen />
-          Regras
         </TabsTrigger>
       </BottomBar>
     </Tabs>

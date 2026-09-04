@@ -6,15 +6,6 @@ import { getSupabase } from "@/lib/supabase/client";
 export type Room = { id: string; code: string };
 
 /**
- * Uma entrada de material de regras.
- *
- * Ou aponta para um arquivo que o mestre subiu (`assetId`, resolvido no bucket
- * público), ou para um link externo (`url`). Os dois casos existem porque o
- * livro pode estar num PDF que ele tem ou numa página que ele só quer indicar.
- */
-export type RuleLink = { id: string; label: string; url?: string; assetId?: string };
-
-/**
  * As mesas desta conta, da mais nova para a mais velha.
  *
  * Plural porque um mestre abre mais de uma mesa ao longo do tempo, e a versão
@@ -130,24 +121,6 @@ export async function fetchOperatorCode(roomId: string): Promise<string> {
   if (error) throw error;
 
   return data as string;
-}
-
-export async function loadRules(roomId: string): Promise<RuleLink[]> {
-  const { data, error } = await getSupabase()
-    .from("rooms")
-    .select("rules")
-    .eq("id", roomId)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  return (data?.rules as RuleLink[] | null) ?? [];
-}
-
-/** Só o mestre passa pela policy de update de `rooms`. */
-export async function saveRules(roomId: string, rules: RuleLink[]): Promise<void> {
-  const { error } = await getSupabase().from("rooms").update({ rules }).eq("id", roomId);
-  if (error) throw error;
 }
 
 /**

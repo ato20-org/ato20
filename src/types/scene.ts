@@ -9,7 +9,12 @@
 export const SCENE_WIDTH = 1920;
 export const SCENE_HEIGHT = 1080;
 
-export type AssetKind = "image" | "audio" | "pdf";
+/**
+ * `pdf` saiu junto com o material de regras: era o unico caminho que criava
+ * arquivo desse tipo. Registros antigos gravados como `pdf` continuam no
+ * IndexedDB sem aparecer em lista nenhuma -- inofensivos, e apagaveis a mao.
+ */
+export type AssetKind = "image" | "audio";
 
 /** Metadados de um arquivo enviado pelo mestre. O binário fica em `AssetRecord`. */
 export type AssetMeta = {
@@ -65,7 +70,7 @@ export type AssetFolder = { id: string; name: string; createdAt: number };
  * gratuito do Supabase aperta primeiro no Storage. A alternativa era a Plateia
  * nunca ter som.
  */
-export const SYNCED_KINDS: readonly AssetKind[] = ["image", "audio", "pdf"];
+export const SYNCED_KINDS: readonly AssetKind[] = ["image", "audio"];
 
 /** Uma imagem posicionada sobre o fundo da cena. */
 export type CanvasItem = {
