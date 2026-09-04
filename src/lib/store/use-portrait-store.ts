@@ -28,6 +28,14 @@ type PortraitStore = {
   remove: (id: string) => void;
   /** Aplica um estado recebido do canal, sem regravar no disco. */
   receive: (portraits: Portrait[]) => void;
+  /**
+   * Assume o elenco que veio da mesa, gravando no disco.
+   *
+   * Diferente de `receive`: ali é o espectador só olhando, aqui é o mestre
+   * abrindo a mesa noutra máquina — o estado passa a ser dele, e some no
+   * próximo refresh se não for gravado.
+   */
+  adopt: (portraits: Portrait[]) => void;
 };
 
 /**
@@ -94,6 +102,11 @@ export const usePortraitStore = create<PortraitStore>((set, get) => ({
   receive(portraits) {
     // Espectador não grava: o disco pertence a quem opera.
     set({ portraits, hydrated: true });
+  },
+
+  adopt(portraits) {
+    persist(portraits, set);
+    set({ hydrated: true });
   },
 }));
 

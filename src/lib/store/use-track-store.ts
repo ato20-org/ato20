@@ -20,6 +20,8 @@ type TrackStore = {
   clear: () => void;
   /** Aplica um estado recebido do canal, sem regravar no disco. */
   receive: (track: SessionTrack | null) => void;
+  /** Assume a trilha que veio da mesa, gravando no disco. Ver `PortraitStore`. */
+  adopt: (track: SessionTrack | null) => void;
 };
 
 /**
@@ -75,6 +77,11 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   receive(track) {
     // Espectador não grava: o disco pertence a quem opera.
     set({ track, hydrated: true });
+  },
+
+  adopt(track) {
+    persist(track, set);
+    set({ hydrated: true });
   },
 }));
 
