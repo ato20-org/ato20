@@ -1,6 +1,6 @@
 "use client";
 
-import { ensureAnonSession } from "@/lib/supabase/auth";
+import { currentUserId, ensureAnonSession } from "@/lib/supabase/auth";
 import { getSupabase } from "@/lib/supabase/client";
 
 export type Room = { id: string; code: string };
@@ -15,27 +15,67 @@ export type Room = { id: string; code: string };
 export type RuleLink = { id: string; label: string; url?: string; assetId?: string };
 
 /**
- * A sala que este navegador já comanda, se houver.
+ * As mesas desta conta, da mais nova para a mais velha.
  *
- * A identidade do mestre é a sessão anônima do navegador. Ela some quando os
- * dados do site são limpos — é justamente esse buraco que o código de operação
- * fecha, permitindo reassumir a mesa em `unlockRoom`.
+ * Plural porque um mestre abre mais de uma mesa ao longo do tempo, e a versão
+ * que devolvia só a primeira era exatamente o que impedia escolher qual abrir.
+ *
+ * Filtra por `master_id` no cliente e na RLS: a policy já esconde mesa alheia,
+ * e o `eq` explícito é o que faz um código vindo da URL não poder apontar para
+ * fora da conta.
  */
-export async function findMasterRoom(): Promise<Room | null> {
-  const supabase = getSupabase();
-  const userId = await ensureAnonSession();
+export async function listMasterRooms(): Promise<Room[]> {
+  const userId = await currentUserId();
+  if (!userId) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("rooms")
     .select("id, code")
     .eq("master_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
 
-  return data ?? null;
+  return data ?? [];
+}
+
+/** Uma mesa que este navegador alcança, e o que ele é nela. */
+export type KnownRoom = Room & {
+  createdAt: string;
+  /** Este navegador é o mestre — a única condição que libera o Operador. */
+  mastered: boolean;
+};
+
+/**
+ * As mesas que esta sessão alcança: as da conta de mestre e as em que este
+ * aparelho entrou como jogador.
+ *
+ * Não filtra por dono: quem filtra é a `rooms_select_member`. Pedir a tabela
+ * inteira aqui não traz mesa alheia — traz vazio. Uma linha visível que não é
+ * comandada por esta sessão só pode ser uma em que ela entrou.
+ *
+ * Não cria sessão: `/mesa` é tela de escolha, e visitá-la não deveria cadastrar
+ * usuário nenhum. `null` é esse caso — "não há sessão aqui" não é a mesma
+ * coisa que "não há mesa", e confundir os dois deixa quem procura sem saber o
+ * que fazer.
+ */
+export async function listKnownRooms(): Promise<KnownRoom[] | null> {
+  const userId = await currentUserId();
+  if (!userId) return null;
+
+  const { data, error } = await getSupabase()
+    .from("rooms")
+    .select("id, code, master_id, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    code: row.code as string,
+    createdAt: row.created_at as string,
+    mastered: row.master_id === userId,
+  }));
 }
 
 /** A sala recém-criada, com a senha que só aparece neste momento. */
