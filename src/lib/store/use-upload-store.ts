@@ -2,8 +2,10 @@
 
 import { create } from "zustand";
 
+import { getAssetMeta } from "@/lib/storage/assets";
 import { useRoomStore } from "@/lib/store/use-room-store";
 import { uploadAsset } from "@/lib/supabase/asset-sync";
+import { markMirror, setInBucket, upsertAssets } from "@/lib/supabase/library";
 
 export type UploadState = "pending" | "uploading" | "done" | "error";
 
@@ -49,6 +51,7 @@ export const useUploadStore = create<UploadStore>((set, get) => {
 
         try {
           await uploadAsset(roomId, assetId);
+          await publishRow(roomId, assetId);
           set((state) => ({ states: { ...state.states, [assetId]: "done" } }));
         } catch (cause) {
           set((state) => ({
@@ -62,6 +65,31 @@ export const useUploadStore = create<UploadStore>((set, get) => {
       }
     } finally {
       set({ running: false });
+    }
+  }
+
+  /**
+   * Registra o arquivo no acervo da mesa depois de o binário subir.
+   *
+   * É o que faz o painel de imagens da outra máquina saber que ele existe:
+   * nome, tipo, medidas e pasta só existiam no IndexedDB de quem enviou.
+   *
+   * Melhor esforço: o binário já está no Storage e a mesa já o alcança, então
+   * uma falha aqui não deve marcar o envio como erro — a próxima abertura da
+   * mesa sobe a linha que faltou.
+   */
+  async function publishRow(roomId: string, assetId: string) {
+    try {
+      const meta = await getAssetMeta(assetId);
+      if (!meta) return;
+
+      await upsertAssets(roomId, [meta]);
+      // De volta ao bucket, se a faxina tinha tirado, e este aparelho tem
+      // cópia local — ele acabou de subir a partir dela.
+      await setInBucket(roomId, [assetId], true);
+      await markMirror(roomId, assetId);
+    } catch {
+      // Silencioso de propósito: ver a nota acima.
     }
   }
 

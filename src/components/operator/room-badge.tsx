@@ -5,7 +5,7 @@ import { Loader2, WifiOff } from "lucide-react";
 import { InviteBadge } from "@/components/operator/invite-badge";
 import { OperatorCodeDialog } from "@/components/operator/operator-code-dialog";
 import { PlayersDialog } from "@/components/operator/players-dialog";
-import { RulesDialog } from "@/components/operator/rules-dialog";
+import { StorageDialog } from "@/components/operator/storage-dialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRoomStore } from "@/lib/store/use-room-store";
@@ -67,14 +67,14 @@ export function RoomBadge() {
   }
 
   // O código da mesa fica à mão, porque é ditado no começo de toda sessão. O
-  // código de operação, a ficha dos jogadores e as regras ficam atrás de um
-  // clique — e a senha, ainda escondida lá dentro.
+  // código de operação e a ficha dos jogadores ficam atrás de um clique — e a
+  // senha, ainda escondida lá dentro.
   return (
     <>
       <InviteBadge room={room} />
       <OperatorCodeDialog room={room} />
       <PlayersDialog room={room} />
-      <RulesDialog room={room} />
+      <StorageDialog room={room} />
     </>
   );
 }

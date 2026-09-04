@@ -46,6 +46,23 @@ export async function uploadAsset(roomId: string, assetId: string): Promise<void
   await markAssetRemote(assetId, roomId);
 }
 
+/**
+ * Baixa o binário do Storage.
+ *
+ * Pelo endereço público, e não pela API de download do cliente: é a mesma URL
+ * que as cenas já usam, então o arquivo provavelmente está no cache do
+ * navegador — e o que não está entra nele, servindo as duas coisas de uma vez.
+ */
+export async function downloadRemoteAsset(roomId: string, assetId: string): Promise<Blob> {
+  const url = remoteAssetUrl(roomId, assetId);
+  if (!url) throw new Error("Supabase não configurado");
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Falha ao baixar (${response.status})`);
+
+  return response.blob();
+}
+
 /** Melhor esforço: falhar aqui não deve impedir a exclusão local. */
 export async function deleteRemoteAsset(roomId: string, assetId: string): Promise<void> {
   if (!isSupabaseConfigured()) return;

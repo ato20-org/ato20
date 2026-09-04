@@ -4,7 +4,6 @@ import { SYNCED_KINDS, type AssetKind, type AssetMeta } from "@/types/scene";
 const MIME_TO_KIND: Array<[prefix: string, kind: AssetKind]> = [
   ["image/", "image"],
   ["audio/", "audio"],
-  ["application/pdf", "pdf"],
 ];
 
 export function kindFromMimeType(mimeType: string): AssetKind | null {
@@ -61,9 +60,41 @@ export async function putAsset(file: File): Promise<AssetMeta> {
   return toMeta(record);
 }
 
+/**
+ * Grava um arquivo que veio da nuvem.
+ *
+ * Mantém o `id` de origem: é ele que a cena, o retrato e a trilha referenciam,
+ * e gerar um novo aqui deixaria todas as referências apontando para o nada.
+ *
+ * Já nasce marcado como remoto desta sala, senão a reconciliação de upload
+ * tentaria devolver ao Storage o arquivo que acabou de vir dele.
+ */
+export async function putRemoteAsset(
+  meta: AssetMeta,
+  blob: Blob,
+  roomId: string,
+): Promise<void> {
+  const db = await getDb();
+
+  await db.put("assets", {
+    ...meta,
+    blob,
+    remoteAt: Date.now(),
+    remoteRoomId: roomId,
+  });
+}
+
 export async function getAsset(id: string): Promise<AssetRecord | undefined> {
   const db = await getDb();
   return db.get("assets", id);
+}
+
+/** Metadado de um arquivo, sem carregar o binário para a memória à toa. */
+export async function getAssetMeta(id: string): Promise<AssetMeta | undefined> {
+  const db = await getDb();
+  const record = await db.get("assets", id);
+
+  return record ? toMeta(record) : undefined;
 }
 
 export async function listAssets(kind?: AssetKind): Promise<AssetMeta[]> {
@@ -115,13 +146,28 @@ export async function markAssetRemote(id: string, roomId: string): Promise<void>
  * É uma reconciliação, não um gancho no upload: cobre também o que foi
  * enviado antes de a sala existir, ou numa sessão em que o Supabase estava
  * fora do ar.
+ *
+ * `ids` limita ao material que a mesa precisa de fato — o que está numa cena,
+ * num fundo, num retrato ou na trilha. Sem esse limite, o acervo inteiro subia
+ * no primeiro upload, e o teto do Storage passava a ser o tamanho da
+ * biblioteca em vez do tamanho das cenas vivas. Omitir devolve tudo, que é o
+ * comportamento certo para uma conferência manual.
  */
-export async function listPendingUploads(roomId: string): Promise<AssetMeta[]> {
+export async function listPendingUploads(
+  roomId: string,
+  ids?: Iterable<string>,
+): Promise<AssetMeta[]> {
   const db = await getDb();
   const records = await db.getAll("assets");
+  const wanted = ids ? new Set(ids) : null;
 
   return records
-    .filter((record) => record.remoteRoomId !== roomId && SYNCED_KINDS.includes(record.kind))
+    .filter(
+      (record) =>
+        record.remoteRoomId !== roomId &&
+        SYNCED_KINDS.includes(record.kind) &&
+        (!wanted || wanted.has(record.id)),
+    )
     .map(toMeta);
 }
 

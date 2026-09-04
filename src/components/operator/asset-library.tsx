@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  CloudDownload,
   CloudOff,
   CloudUpload,
   FolderClosed,
@@ -33,6 +34,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useFolderList } from "@/hooks/use-folder-list";
+import { useLibraryStore } from "@/lib/store/use-library-store";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { hasAssetDrag, readAssetDrag, writeAssetDrag } from "@/lib/operator/asset-drag";
@@ -64,9 +66,14 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   const addPortrait = usePortraitStore((state) => state.add);
   const selectPortrait = useSelectionStore((state) => state.selectPortrait);
 
+  const roomId = useRoomStore((state) => state.room?.id);
   const online = useRoomStore((state) => Boolean(state.room));
+  const outOfBucket = useLibraryStore((state) => state.outOfBucket);
+  const downloading = useLibraryStore((state) => state.pending);
+  const downloaded = useLibraryStore((state) => state.done);
   const uploadStates = useUploadStore((state) => state.states);
   const retryFailed = useUploadStore((state) => state.retryFailed);
+  const enqueue = useUploadStore((state) => state.enqueue);
   const uploadErrors = useUploadStore((state) => state.errors);
 
   const inFlight = assets.filter(
@@ -124,6 +131,14 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
         onSetBackground={() => setBackground(scene.id, asset.id)}
         onUseAsPortrait={() => handleUseAsPortrait(asset)}
         onMove={(folderId) => handleMove(asset.id, folderId)}
+        // Oferecido sempre que o binário não está no bucket desta mesa: agora
+        // sobe só o que entra em cena, então o acervo guardado numa pasta
+        // precisa de um empurrão para atravessar para a outra máquina.
+        onRepublish={
+          outOfBucket.includes(asset.id) || asset.remoteRoomId !== roomId
+            ? () => enqueue([asset.id])
+            : undefined
+        }
         onRemove={() => void remove(asset.id)}
       />
     );
@@ -170,6 +185,15 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
             <ImageOff />
             Remover fundo
           </Button>
+        ) : null}
+
+        {/* Baixando o que a outra máquina subiu. Aparece só enquanto dura: o
+            acervo já está listado, o que falta é o arquivo chegar aqui. */}
+        {downloading > 0 ? (
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <CloudDownload className="size-3 animate-pulse" aria-hidden />
+            Baixando {downloading} da mesa ({downloaded} prontos)
+          </p>
         ) : null}
 
         {inFlight > 0 ? (
@@ -266,14 +290,16 @@ function FolderGroup({
   onDropAsset: (assetId: string) => void;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(true);
+  // Fechada por padrão: o painel tem 288px de largura, e três pastas abertas
+  // empurram a raiz — de onde sai o arquivo recém-enviado — para fora da vista.
+  const [open, setOpen] = useState(false);
   const [receiving, setReceiving] = useState(false);
 
   return (
     <section>
       <div
         className={cn(
-          "flex items-center gap-1 rounded-md px-1 py-1",
+          "group flex items-center gap-1 rounded-md px-1 py-1",
           receiving ? "bg-primary/15 ring-primary/60 ring-1" : "hover:bg-accent/50",
         )}
         onDragOver={(event) => {
@@ -329,7 +355,16 @@ function FolderGroup({
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button variant="ghost" size="icon-xs" aria-label={`Opções de ${folder.name}`}>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Opções de ${folder.name}`}
+                    // Escondido até o ponteiro chegar ou o foco entrar: renomear
+                    // e apagar pasta são gestos raros, e três pontos em cada
+                    // linha viram ruído numa lista que se lê de relance.
+                    // `focus-within` mantém o alcance pelo teclado.
+                    className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100"
+                  >
                     <MoreVertical />
                   </Button>
                 }
@@ -446,6 +481,8 @@ type AssetRowProps = {
   onSetBackground: () => void;
   onUseAsPortrait: () => void;
   onMove: (folderId: string | undefined) => void;
+  /** Ausente quando o binário já está no bucket. */
+  onRepublish?: () => void;
   onRemove: () => void;
 };
 
@@ -461,6 +498,7 @@ function AssetRow({
   onSetBackground,
   onUseAsPortrait,
   onMove,
+  onRepublish,
   onRemove,
 }: AssetRowProps) {
   const url = useAssetUrl(asset.id);
@@ -470,7 +508,7 @@ function AssetRow({
     // o menor da tela, e o `+` continua ali para quem prefere clicar — a cena
     // aceita a imagem no centro por ele.
     <li
-      className="hover:bg-accent/50 flex items-center gap-1 rounded-md p-1"
+      className="hover:bg-accent/50 group flex items-center gap-1 rounded-md p-1"
       draggable
       onDragStart={(event) => writeAssetDrag(event.dataTransfer, asset)}
     >
@@ -522,7 +560,12 @@ function AssetRow({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button variant="ghost" size="icon-xs" aria-label={`Opções de ${asset.name}`}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Opções de ${asset.name}`}
+              className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100"
+            >
               <MoreVertical />
             </Button>
           }
@@ -544,7 +587,16 @@ function AssetRow({
               </DropdownMenuItem>
             ))}
 
-          {folders.length > 0 || asset.folderId ? <DropdownMenuSeparator /> : null}
+          {onRepublish ? (
+            <DropdownMenuItem onClick={onRepublish}>
+              <CloudUpload />
+              Subir para a mesa
+            </DropdownMenuItem>
+          ) : null}
+
+          {folders.length > 0 || asset.folderId || onRepublish ? (
+            <DropdownMenuSeparator />
+          ) : null}
 
           <DropdownMenuItem
             // Apagar um arquivo em uso deixaria a cena apontando para um id que
@@ -588,17 +640,25 @@ function SyncIndicator({
           icon: <Loader2 className="text-muted-foreground size-3.5 animate-spin" />,
           hint: "Subindo para a mesa.",
         }
-      : state === "error"
+      : state === "pending"
         ? {
-            icon: <CloudOff className="text-destructive size-3.5" />,
-            // O motivo, quando existe: "falhou" sozinho não diz se foi
-            // tamanho, permissão ou rede.
-            hint: error ?? "O envio falhou. Os celulares não vão ver esta imagem.",
-          }
-        : {
             icon: <CloudUpload className="text-muted-foreground size-3.5" />,
             hint: "Na fila para subir.",
-          };
+          }
+        : state === "error"
+          ? {
+              icon: <CloudOff className="text-destructive size-3.5" />,
+              // O motivo, quando existe: "falhou" sozinho não diz se foi
+              // tamanho, permissão ou rede.
+              hint: error ?? "O envio falhou. Os celulares não vão ver esta imagem.",
+            }
+          : {
+              // Estado normal, não aviso: agora só sobe o que entra em cena, e
+              // o resto do acervo fica em casa de propósito — é o que mantém o
+              // Storage do tamanho das cenas.
+              icon: <CloudOff className="text-muted-foreground/60 size-3.5" />,
+              hint: "Só neste computador. Vai para a mesa quando entrar numa cena, ou pelo \"Subir para a mesa\" do menu.",
+            };
 
   return (
     <Tooltip>

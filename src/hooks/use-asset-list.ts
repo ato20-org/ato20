@@ -3,11 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { deleteAsset, listAssets, putAsset, setAssetFolder } from "@/lib/storage/assets";
+import {
+  deleteAsset,
+  getAssetMeta,
+  listAssets,
+  putAsset,
+  setAssetFolder,
+} from "@/lib/storage/assets";
 import { useRoomStore } from "@/lib/store/use-room-store";
-import { useUploadStore } from "@/lib/store/use-upload-store";
 import { deleteRemoteAsset } from "@/lib/supabase/asset-sync";
-import { SYNCED_KINDS, type AssetKind, type AssetMeta } from "@/types/scene";
+import { deleteAssetRow, upsertAssets } from "@/lib/supabase/library";
+import type { AssetKind, AssetMeta } from "@/types/scene";
 
 type AssetListApi = {
   assets: AssetMeta[];
@@ -27,7 +33,6 @@ type AssetListApi = {
 export function useAssetList(kind: AssetKind): AssetListApi {
   const [assets, setAssets] = useState<AssetMeta[]>([]);
   const [version, setVersion] = useState(0);
-  const enqueue = useUploadStore((state) => state.enqueue);
 
   useEffect(() => {
     let active = true;
@@ -51,17 +56,14 @@ export function useAssetList(kind: AssetKind): AssetListApi {
 
       if (failed > 0) toast.error(`${failed} arquivo(s) não puderam ser enviados.`);
 
-      // Sobe no momento do upload, não na troca de cena: um mapa de 5 MB
-      // subindo enquanto a mesa espera a cena mudar travaria o jogo.
-      if (SYNCED_KINDS.includes(kind)) {
-        enqueue(
-          results.flatMap((result) => (result.status === "fulfilled" ? [result.value.id] : [])),
-        );
-      }
-
+      // NÃO sobe para o Storage aqui. Enviar tudo no momento do upload fazia o
+      // teto do bucket ser o tamanho da biblioteca, não o das cenas vivas — e
+      // o plano gratuito aperta primeiro nele. Quem sobe é o `useAssetSync`,
+      // quando o arquivo entra numa cena, num fundo, num retrato ou na trilha;
+      // o resto vai a pedido, pelo "Subir para a mesa" da linha.
       refresh();
     },
-    [enqueue, kind, refresh],
+    [refresh],
   );
 
   const remove = useCallback(
@@ -70,7 +72,13 @@ export function useAssetList(kind: AssetKind): AssetListApi {
       // Remoto primeiro, local depois: se o remoto falhar, o arquivo continua
       // listado e o mestre pode tentar de novo. Na ordem inversa ficaria um
       // órfão pagando cota de Storage sem aparecer em lugar nenhum.
-      if (roomId) await deleteRemoteAsset(roomId, assetId);
+      if (roomId) {
+        await deleteRemoteAsset(roomId, assetId);
+        // A linha sai junto: sem isso a outra máquina continuaria listando um
+        // arquivo cujo binário não existe mais, e tentaria baixá-lo a cada
+        // abertura da mesa.
+        await deleteAssetRow(roomId, assetId);
+      }
 
       await deleteAsset(assetId);
       refresh();
@@ -81,6 +89,13 @@ export function useAssetList(kind: AssetKind): AssetListApi {
   const move = useCallback(
     async (assetId: string, folderId: string | undefined) => {
       await setAssetFolder(assetId, folderId);
+
+      // Pasta é organização, e organização é o que mais dói perder ao trocar
+      // de máquina: a linha acompanha na hora.
+      const roomId = useRoomStore.getState().room?.id;
+      const meta = roomId ? await getAssetMeta(assetId) : undefined;
+      if (roomId && meta) await upsertAssets(roomId, [meta]);
+
       refresh();
     },
     [refresh],

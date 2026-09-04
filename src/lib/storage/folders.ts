@@ -18,6 +18,12 @@ export async function createFolder(name: string): Promise<AssetFolder> {
   return folder;
 }
 
+/** Grava uma pasta que veio da nuvem, com o id de origem. */
+export async function putFolder(folder: AssetFolder): Promise<void> {
+  const db = await getDb();
+  await db.put("folders", folder);
+}
+
 export async function renameFolder(id: string, name: string): Promise<void> {
   const db = await getDb();
   const folder = await db.get("folders", id);
