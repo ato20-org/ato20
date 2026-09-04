@@ -38,6 +38,7 @@ export function LibraryPanel({ scene }: { scene: Scene | null }) {
         <TabsContent value="sons" className="flex min-h-0 flex-1 flex-col">
           <AudioLibrary />
         </TabsContent>
+
       </Tabs>
 
       {/* Fora das abas: as camadas da cena continuam à vista tanto ao mexer em

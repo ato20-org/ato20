@@ -14,12 +14,12 @@ export function kindFromMimeType(mimeType: string): AssetKind | null {
 function toMeta(record: AssetRecord): AssetMeta {
   const {
     id, kind, name, mimeType, size, createdAt,
-    naturalWidth, naturalHeight, remoteAt, remoteRoomId,
+    naturalWidth, naturalHeight, remoteAt, remoteRoomId, folderId,
   } = record;
 
   return {
     id, kind, name, mimeType, size, createdAt,
-    naturalWidth, naturalHeight, remoteAt, remoteRoomId,
+    naturalWidth, naturalHeight, remoteAt, remoteRoomId, folderId,
   };
 }
 
@@ -79,6 +79,20 @@ export async function deleteAsset(id: string): Promise<void> {
   const db = await getDb();
   await db.delete("assets", id);
   revokeAssetUrl(id);
+}
+
+/**
+ * Move o arquivo para uma pasta. `undefined` devolve à raiz.
+ *
+ * Só metadado: o binário não se move, e nada sobe de novo para o Storage —
+ * pasta é organização de quem opera, e a mesa não sabe que ela existe.
+ */
+export async function setAssetFolder(id: string, folderId: string | undefined): Promise<void> {
+  const db = await getDb();
+  const record = await db.get("assets", id);
+  if (!record) return;
+
+  await db.put("assets", { ...record, folderId });
 }
 
 /** Registra que o arquivo já está no Storage daquela sala. */

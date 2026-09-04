@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { deleteAsset, listAssets, putAsset } from "@/lib/storage/assets";
+import { deleteAsset, listAssets, putAsset, setAssetFolder } from "@/lib/storage/assets";
 import { useRoomStore } from "@/lib/store/use-room-store";
 import { useUploadStore } from "@/lib/store/use-upload-store";
 import { deleteRemoteAsset } from "@/lib/supabase/asset-sync";
@@ -13,6 +13,10 @@ type AssetListApi = {
   assets: AssetMeta[];
   upload: (files: FileList | null) => Promise<void>;
   remove: (assetId: string) => Promise<void>;
+  /** Move para uma pasta. `undefined` devolve à raiz. */
+  move: (assetId: string, folderId: string | undefined) => Promise<void>;
+  /** Recarrega a lista. Usado por quem mexe em pasta, que muda os arquivos. */
+  refresh: () => void;
 };
 
 /**
@@ -74,5 +78,13 @@ export function useAssetList(kind: AssetKind): AssetListApi {
     [refresh],
   );
 
-  return { assets, upload, remove };
+  const move = useCallback(
+    async (assetId: string, folderId: string | undefined) => {
+      await setAssetFolder(assetId, folderId);
+      refresh();
+    },
+    [refresh],
+  );
+
+  return { assets, upload, remove, move, refresh };
 }

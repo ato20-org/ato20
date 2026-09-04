@@ -241,3 +241,19 @@ export function centeredBox(width: number, height: number): ItemBox {
     height,
   };
 }
+
+/**
+ * Caixa centrada num ponto do plano, para o item nascer onde foi solto.
+ *
+ * Sem clamp de propósito: soltar perto da borda deve deixar o item mordendo a
+ * borda, que é o que o mestre viu ao soltar. Empurrá-lo para dentro moveria a
+ * imagem sozinha depois do gesto.
+ */
+export function boxAround(center: Vec, width: number, height: number): ItemBox {
+  return {
+    x: Math.round(center.x - width / 2),
+    y: Math.round(center.y - height / 2),
+    width,
+    height,
+  };
+}
