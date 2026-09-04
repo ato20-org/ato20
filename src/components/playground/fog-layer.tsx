@@ -17,10 +17,12 @@ type FogLayerProps = {
    * cima. Serve para a mesa, não contra um jogador que abra o devtools.
    */
   variant: "operator" | "viewer";
+  /** Interpola o desaparecer da área e o ajuste de caixa. */
+  smooth?: boolean;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
 };
 
-export function FogLayer({ fog, variant, onFogPointerDown }: FogLayerProps) {
+export function FogLayer({ fog, variant, smooth = false, onFogPointerDown }: FogLayerProps) {
   const { scale } = useSceneScale();
   const isOperator = variant === "operator";
 
@@ -29,24 +31,32 @@ export function FogLayer({ fog, variant, onFogPointerDown }: FogLayerProps) {
       {fog.map((region, index) => {
         // Revelada, a mesa não vê nada. O mestre continua vendo o contorno,
         // senão não teria como esconder a área de novo.
-        if (region.revealed && !isOperator) return null;
+        //
+        // Com suavização o bloco fica montado e transparente, em vez de sair
+        // da árvore: desmontar mataria a transição, e o preto sumiria de um
+        // frame para o outro — que é exatamente o corte que queremos evitar.
+        const revealedToTable = region.revealed && !isOperator;
+        if (revealedToTable && !smooth) return null;
 
         return (
           <div
             key={region.id}
             data-fog-id={region.id}
             className={cn(
-              "absolute",
+              "absolute top-0 left-0",
               isOperator && "touch-none",
               region.revealed
                 ? "border-dashed border-white/25"
                 : isOperator
                   ? "border-dashed border-white/40 bg-black/70"
                   : "bg-black",
+              smooth && "scene-smooth-fog",
+              revealedToTable && "bg-black opacity-0",
             )}
+            // `transform` em vez de `left/top`, pelo mesmo motivo do item: mover
+            // a área não deve refazer o layout do plano.
             style={{
-              left: region.x,
-              top: region.y,
+              transform: `translate(${region.x}px, ${region.y}px)`,
               width: region.width,
               height: region.height,
               zIndex: FOG_Z,

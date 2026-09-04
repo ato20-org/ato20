@@ -1,6 +1,6 @@
 "use client";
 
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { memo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { cn } from "@/lib/utils";
@@ -8,10 +8,25 @@ import type { CanvasItem } from "@/types/scene";
 
 type CanvasItemViewProps = {
   item: CanvasItem;
+  /**
+   * Interpola posição, tamanho e giro entre as amostras que chegam do
+   * Operador. Ver `.scene-smooth-item` em `globals.css`.
+   */
+  smooth?: boolean;
   onPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
 };
 
-export function CanvasItemView({ item, onPointerDown }: CanvasItemViewProps) {
+/**
+ * `memo` porque o board é imutável e `updateItems` preserva a identidade dos
+ * itens que não mudaram: arrastar um token num mapa com quarenta re-renderizava
+ * os quarenta a cada frame do gesto. Só vale com handler estável — ver o
+ * envelope de handlers em `OperatorStage`.
+ */
+export const CanvasItemView = memo(function CanvasItemView({
+  item,
+  smooth = false,
+  onPointerDown,
+}: CanvasItemViewProps) {
   const url = useAssetUrl(item.assetId);
   // Item travado continua clicável — é o único jeito de selecioná-lo para
   // destravar. O que o travamento bloqueia é o arrasto, decidido no Operador.
@@ -20,13 +35,26 @@ export function CanvasItemView({ item, onPointerDown }: CanvasItemViewProps) {
   return (
     <div
       data-item-id={item.id}
-      className={cn("absolute", interactive && "touch-none", interactive && !item.locked && "cursor-move")}
+      className={cn(
+        // Posicionado no canto e movido por `transform`: ver o `style`.
+        "absolute top-0 left-0",
+        interactive && "touch-none",
+        interactive && !item.locked && "cursor-move",
+        // Um item que entra na cena aparece surgindo, não estalando: no meio de
+        // uma cena, o token novo é justamente o que a mesa precisa notar.
+        smooth && "scene-smooth-item scene-item-in",
+      )}
+      // Posição em `transform`, não em `left/top`. As duas desenham igual, mas
+      // `left/top` são propriedades de layout: mover um item obrigava o browser
+      // a refazer o layout do plano inteiro a cada frame — do gesto no Operador
+      // e da interpolação em quem assiste. `transform` fica no compositor.
+      //
+      // `rotate` depois do `translate`, e a origem segue o centro do próprio
+      // item, então girar continua sendo em torno do centro.
       style={{
-        left: item.x,
-        top: item.y,
+        transform: `translate(${item.x}px, ${item.y}px) rotate(${item.rotation}deg)`,
         width: item.width,
         height: item.height,
-        transform: `rotate(${item.rotation}deg)`,
         zIndex: item.z,
       }}
       onPointerDown={onPointerDown ? (event) => onPointerDown(event, item) : undefined}
@@ -53,4 +81,4 @@ export function CanvasItemView({ item, onPointerDown }: CanvasItemViewProps) {
       ) : null}
     </div>
   );
-}
+});

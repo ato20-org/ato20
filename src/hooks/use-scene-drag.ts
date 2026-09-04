@@ -34,17 +34,48 @@ export function useSceneDrag() {
 
       target.setPointerCapture(pointerId);
 
-      const handleMove = (native: PointerEvent) => {
-        if (native.pointerId !== pointerId) return;
+      /**
+       * Um commit por frame, no máximo.
+       *
+       * Mouse gamer e caneta reportam bem acima de 60 Hz, e cada evento
+       * entregue virava um update de store — logo um render da cena inteira.
+       * Os navegadores já agrupam `pointermove` na maior parte dos casos; isto
+       * transforma "na maior parte" em garantia, e o último evento da janela é
+       * o que vale, que é exatamente o que um arrasto precisa.
+       */
+      let frame: number | undefined;
+      let pending: PointerEvent | null = null;
 
+      const apply = (native: PointerEvent) => {
         handlers.onMove(
           { x: (native.clientX - startX) / scale, y: (native.clientY - startY) / scale },
           native,
         );
       };
 
+      const handleMove = (native: PointerEvent) => {
+        if (native.pointerId !== pointerId) return;
+
+        pending = native;
+        if (frame !== undefined) return;
+
+        frame = requestAnimationFrame(() => {
+          frame = undefined;
+          const latest = pending;
+          pending = null;
+          if (latest) apply(latest);
+        });
+      };
+
       const handleEnd = (native: PointerEvent) => {
         if (native.pointerId !== pointerId) return;
+
+        // O último movimento pendente entra antes do fim: descartá-lo deixaria
+        // o item um frame atrás de onde o mestre soltou.
+        if (frame !== undefined) cancelAnimationFrame(frame);
+        if (pending) apply(pending);
+        frame = undefined;
+        pending = null;
 
         target.releasePointerCapture(pointerId);
         target.removeEventListener("pointermove", handleMove);

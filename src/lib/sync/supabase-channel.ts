@@ -1,18 +1,14 @@
 "use client";
 
 import { getSupabase } from "@/lib/supabase/client";
-import type { ChannelMessage, SceneChannel } from "@/lib/sync/channel";
+import {
+  SCENE_BROADCAST_INTERVAL_MS,
+  type ChannelMessage,
+  type SceneChannel,
+} from "@/lib/sync/channel";
 import { createTrailingThrottle } from "@/lib/sync/throttle";
 
 const BROADCAST_EVENT = "scene";
-
-/**
- * 10 Hz. Arrastar um item gera ~60 mudanças de estado por segundo, e o plano
- * gratuito do Supabase conta mensagens de realtime por mês — publicar cada
- * frame estouraria a cota numa única sessão. 10 Hz é suave para quem assiste
- * e cabe com folga.
- */
-export const SCENE_BROADCAST_INTERVAL_MS = 100;
 
 /**
  * Transporte de rede da cena: broadcast do Supabase Realtime, um canal por

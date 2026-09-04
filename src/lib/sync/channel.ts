@@ -1,4 +1,4 @@
-import type { Scene, SessionTrack } from "@/types/scene";
+import type { Portrait, Scene, SessionTrack } from "@/types/scene";
 
 /**
  * Só o JSON da cena viaja. As imagens ficam no IndexedDB, que é compartilhado
@@ -18,6 +18,12 @@ export type LiveState = {
   scene: Scene | null;
   /** `null` = nenhuma trilha escolhida. */
   track: SessionTrack | null;
+  /**
+   * Retratos sobre a cena. Viajam junto porque são da sessão e ficam no ar
+   * atravessando a troca de cena — mandá-los em outra mensagem exigiria um
+   * segundo aperto de mão para o espectador que chega no meio.
+   */
+  portraits: Portrait[];
 };
 
 export type ChannelMessage =
@@ -25,6 +31,20 @@ export type ChannelMessage =
   | ({ type: "live:update" } & LiveState)
   /** Espectador acabou de abrir e pede o estado atual. */
   | { type: "live:request" };
+
+/**
+ * Cadência de publicação da cena, comum aos dois transportes.
+ *
+ * 10 Hz. Arrastar um item gera ~60 mudanças de estado por segundo: na rede
+ * isso estouraria a cota de mensagens do plano gratuito, e no
+ * `BroadcastChannel` pagaria uma cópia estruturada do board inteiro por frame
+ * — para nada, porque quem assiste interpola entre as amostras (ver
+ * `.scene-smooth-item` em `globals.css`).
+ *
+ * Vive aqui, no módulo de tipos, para o transporte local não precisar importar
+ * o do Supabase — e com ele o cliente inteiro — só para ler um número.
+ */
+export const SCENE_BROADCAST_INTERVAL_MS = 100;
 
 export interface SceneChannel {
   send(message: ChannelMessage): void;

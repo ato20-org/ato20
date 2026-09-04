@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { createSceneChannel, type SceneChannel, type SceneChannelOptions } from "@/lib/sync";
 import type { LiveState } from "@/lib/sync/channel";
-import type { Scene, SessionTrack } from "@/types/scene";
+import type { Portrait, Scene, SessionTrack } from "@/types/scene";
 
 /**
  * Reenvio do pedido inicial.
@@ -66,7 +66,12 @@ export function usePublisher(
   useEffect(() => {
     stateRef.current = state;
     channelRef.current?.send({ type: "live:update", ...state });
-  }, [state]);
+    // Dependências no conteúdo, não no objeto: quem chama monta `{ scene,
+    // track }` a cada render, e comparar essa embalagem fazia o Operador
+    // publicar enquanto montava a PRÓXIMA cena — mensagem de rede, e cota, por
+    // uma mudança que a mesa não vê.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.scene, state.track, state.portraits]);
 
   useEffect(() => {
     const beat = setInterval(() => {
@@ -80,6 +85,7 @@ export function usePublisher(
 export type Subscription = {
   scene: Scene | null;
   track: SessionTrack | null;
+  portraits: Portrait[];
   /** Já chegou alguma resposta do Operador. */
   synced: boolean;
   /** Passou tempo demais sem nenhuma resposta. */
@@ -91,7 +97,7 @@ export function useSubscription({
   local = false,
   roomId = null,
 }: SceneChannelOptions): Subscription {
-  const [live, setLive] = useState<LiveState>({ scene: null, track: null });
+  const [live, setLive] = useState<LiveState>({ scene: null, track: null, portraits: [] });
   const [synced, setSynced] = useState(false);
   const [stalled, setStalled] = useState(false);
 
@@ -104,7 +110,13 @@ export function useSubscription({
       if (message.type !== "live:update") return;
 
       answered = true;
-      setLive({ scene: message.scene, track: message.track });
+      setLive({
+        scene: message.scene,
+        track: message.track,
+        // Mensagem de uma versão anterior não traz o campo: lista vazia é o
+        // estado certo, e não uma tela quebrada.
+        portraits: message.portraits ?? [],
+      });
       setSynced(true);
       setStalled(false);
     });
@@ -133,5 +145,11 @@ export function useSubscription({
     };
   }, [local, roomId]);
 
-  return { scene: live.scene, track: live.track, synced, stalled };
+  return {
+    scene: live.scene,
+    track: live.track,
+    portraits: live.portraits,
+    synced,
+    stalled,
+  };
 }
