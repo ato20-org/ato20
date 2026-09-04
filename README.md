@@ -18,6 +18,12 @@ continua vendo a atual na TV, e cada jogador acompanha pelo próprio celular.
 A cena **em edição** e a cena **no ar** são separadas — é isso que permite preparar a
 próxima enquanto a mesa segue na atual.
 
+`/mesa` é a tela de escolha, e abaixo dos três cartões ela lista as mesas que aquele
+aparelho alcança — as da conta de mestre logada nele e as em que ele entrou como jogador —,
+com o link direto de Assistir, Plateia e, na mesa comandada, Operador. Cada linha diz o que
+o aparelho é ali: `tua mesa` ou `você entrou`. Quem filtra é a RLS, não o cliente, e
+visitar `/mesa` não cria sessão nenhuma.
+
 ## Rodar local
 
 Requer Node 20+ e pnpm.
@@ -51,8 +57,39 @@ No painel do Supabase:
 
 1. **Authentication → Sign In / Providers → Anonymous Sign-Ins**: habilite. O jogador
    entra sem cadastro, e é o `auth.uid()` anônimo que a RLS usa para isolar os dados.
-2. **SQL Editor**: execute os arquivos de `supabase/migrations/` em ordem. Eles criam as
+2. **Authentication → Sign In / Providers → Email**: habilite, e **desligue "Confirm
+   email"**. É por aqui que o mestre cria a conta dele; com a confirmação ligada, o
+   cadastro fica pendente esperando um e-mail que o SMTP default não entrega de forma
+   confiável.
+3. **SQL Editor**: execute os arquivos de `supabase/migrations/` em ordem. Eles criam as
    tabelas, as policies, os RPC e os dois buckets de Storage. São idempotentes.
+
+### A conta do mestre
+
+Só o mestre tem conta — e-mail e senha, em `/operador`. Jogador e TV continuam anônimos:
+pedir cadastro no celular de quem senta na mesa mataria o uso presencial, que é a premissa
+do projeto.
+
+A conta existe porque a identidade do mestre precisava sobreviver ao aparelho. Enquanto ela
+era a sessão anônima do navegador, limpar os dados do site ou trocar de máquina significava
+não conseguir nem **ver** que a mesa existe, e "qual dessas mesas é a minha?" não tinha
+resposta.
+
+Nada disso mexeu no schema: `rooms.master_id` sempre foi `auth.uid()`, e a única diferença
+é esse uid pertencer agora a um usuário permanente em vez de a um anônimo. A RLS ficou
+igual.
+
+Duas consequências:
+
+- **Cadastrar num navegador que já tem sessão anônima promove essa sessão** (`updateUser`),
+  em vez de abrir usuário novo. O uid não muda, então mesas, anexos e jogadores daquele
+  navegador continuam sendo dele. Cadastrar num usuário novo os deixaria órfãos no mesmo
+  instante.
+- **A conta pode ter várias mesas.** A porta do Operador lista as mesas da conta para
+  escolher, e `/operador?code=XXXXXX` — o link da lista em `/mesa` — abre direto a que foi
+  clicada. Uma mesa só abre sem escolha nenhuma.
+
+Recuperação de senha por e-mail exige SMTP configurado; até lá, é reset pelo painel.
 
 ### Os dois códigos
 
@@ -60,33 +97,105 @@ Cada mesa tem duas senhas, com públicos diferentes:
 
 | | Quem digita | Tamanho | Onde aparece |
 |---|---|---|---|
-| **Código da mesa** | o jogador, para entrar na Plateia | 6 | no cabeçalho do Operador, à mão |
-| **Código de operação** | o mestre, para assumir o Operador | 8 | atrás de um clique, escondido |
+| **Código da mesa** | o jogador na Plateia e a TV no Assistir | 6 | no cabeçalho do Operador, à mão |
+| **Código de operação** | o mestre, para trazer uma mesa para a conta dele | 8 | atrás de um clique, escondido |
 
 O jogador entra por `/plateia?code=XXXXXX` ou pelo link de convite.
+
+O Assistir pede o mesmo código, por `/assistir?code=XXXXXX` ou digitado na porta — é ele
+que solta a TV da máquina do Operador e deixa qualquer aparelho da casa servir de tela.
+O botão "Abrir Assistir" do Operador já leva o código na URL. Sem Supabase configurado
+não há código para pedir, e a TV volta a ser uma aba da mesma máquina.
 
 O código de operação nasce com a mesa e aparece **uma vez**, na criação. Ele é conferido
 no servidor: um RPC `unlock_room` move o `master_id` da sala para a sessão que o digitou —
 e é isso que faz ele valer algo, porque `master_id` é o que a RLS olha para decidir o que
 o mestre pode fazer. Uma comparação em JavaScript seria enfeite.
 
-Duas consequências que valem saber:
+Ele não é login — a conta é. O que ele faz é **mover a mesa**, e isso vale em dois casos:
 
-- **Ele recupera a mesa.** A identidade do mestre é a sessão anônima do navegador, que
-  desaparece ao limpar os dados do site. O código é o único fio que liga o mestre à mesa
-  dele — sem ele, a mesa fica presa àquele navegador.
-- **Ele move a mesa, não a duplica.** Digitá-lo num segundo aparelho transfere o comando
-  para lá, e o primeiro perde acesso de escrita até reassumir. As **cenas não viajam**:
-  elas moram no IndexedDB da máquina, não no Supabase.
+- **Adotar uma mesa antiga**, criada antes de existir conta ou em outro navegador. É o
+  único caminho para ela virar tua sem SQL no painel.
+- **Trocar de máquina.** Digitá-lo em outro aparelho transfere o comando para lá, e o
+  anterior perde acesso de escrita até reassumir. As **cenas não viajam**: elas moram no
+  IndexedDB da máquina, não no Supabase.
 
-Quem já comanda a mesa naquele navegador entra sem senha. A porta existe para barrar quem
-**não** comanda mesa nenhuma — o celular do jogador que abre `/operador` —, não para
-cobrar pedágio do mestre a cada F5.
+Perder o código não perde mais a mesa: ela pertence à conta, não ao navegador.
 
 O código de operação não é legível pelos jogadores, e isso não é só policy de linha: a
 `rooms_select_member` deixa qualquer membro ler a **linha** da sala, então a coluna é
 protegida por **privilégio de coluna** (`grant select (id, code, master_id, rules,
 created_at)`). RLS decide quais linhas; privilégio de coluna decide quais colunas.
+
+### As cenas na nuvem
+
+O board — as cenas, os itens, as áreas escondidas, a câmera — vive na tabela `boards`, uma
+linha por mesa, com o JSON inteiro numa coluna `jsonb`. Antes ele morava só no IndexedDB do
+navegador, e a consequência era direta: montar a mesa no trabalho e continuar em casa era
+impossível.
+
+O IndexedDB continua sendo o primeiro a ser lido e o primeiro a ser gravado — é ele que faz
+o Operador funcionar com a internet caída. A nuvem entra depois: 400 ms para o disco, 5 s
+para o servidor, e uma subida imediata quando a aba é escondida, para fechar o notebook não
+custar os últimos segundos.
+
+**Um operador por vez, garantido pelo servidor.** Cada linha tem uma `version`, e a
+gravação passa pelo RPC `save_board`, que recusa quem chega com versão velha. Se as duas
+pontas mudaram, o Operador mostra uma barra com duas saídas — *puxar de lá* ou *manter
+esta* — e para de subir até você escolher. Nada é sobrescrito em silêncio.
+
+Jogador e TV **não** leem `boards`: a cena no ar chega neles por broadcast, e o board
+inteiro entregaria as áreas escondidas do mapa a quem elas existem para enganar.
+
+O que ainda não viaja é o **acervo**: os binários estão no bucket `assets` e resolvem por
+URL pública, então as cenas aparecem completas na outra máquina — mas o painel de imagens e
+sons lista o IndexedDB local, e lá ele começa vazio.
+
+### Retratos de personagem
+
+Retrato é HUD, não cenário: ele fica preso à **câmera**, não ao plano. Aproximar o mapa
+não o arrasta, e trocar de cena não o derruba — ele pertence à sessão, como a trilha.
+
+A geometria é guardada em **fração do recorte da câmera** (`x`, `y`, `width`, `height`
+entre 0 e 1). É o que faz as três visões desenharem pelo mesmo caminho: no Assistir a
+câmera é a tela inteira, no Operador ela é o retângulo da moldura, e a conta —
+`camera.x + x * camera.width` — é a mesma. Pixel de tela exigiria uma camada de
+coordenadas própria por visão, e o retrato ocuparia partes diferentes da cena na TV de
+1920 e no celular de 390.
+
+Vem do mesmo acervo de imagens (botão de retrato na linha do arquivo) e desenha acima da
+névoa — retrato coberto pelo bloco preto leria como bug.
+
+No palco do Operador, quem manda é a aba: com **Retratos** aberta — no painel esquerdo,
+junto de cenas e áreas, porque as três são o que está no ar e não arquivo de acervo —, o
+palco desenha **todos** os retratos para o mestre arrastar. Fora dela, só os selecionados.
+Desenhar todos sempre punha cabeça flutuando sobre a moldura da câmera justamente enquanto
+o mestre monta o mapa.
+
+**Shift** soma à seleção, no palco e na lista. Com vários selecionados, o gizmo passa a ser
+um só e escala o grupo inteiro por um fator único — é o que mantém os rostos coerentes entre
+si, porque ajustar um por um sempre termina com um NPC maior que o outro sem motivo.
+Arrastar qualquer um do grupo move o grupo.
+
+Fora do ar o retrato aparece apagado no palco, e nunca na mesa.
+
+### Pastas do acervo
+
+O painel de imagens agrupa por pasta — **só raiz, sem aninhamento**: o que se quer numa
+campanha é separar mapas de retratos e de fichas, e uma árvore profunda cobraria navegação
+em troca de organização que ninguém pediu.
+
+Arquivo entra na pasta arrastando a linha para o cabeçalho dela, ou pelo menu da linha —
+que existe porque o arrasto não alcança pasta rolada fora de vista, nem funciona por toque.
+Upload novo cai na raiz, que é de onde ele é distribuído.
+
+Pasta é **metadado local**: o `folderId` mora no registro do arquivo no IndexedDB, nada
+sobe para o Storage por causa dela, e a mesa não sabe que ela existe. Guarda o id e não o
+nome, para renomear não obrigar a reescrever todos os arquivos dentro. E **apagar pasta não
+apaga arquivo**: o conteúdo volta para a raiz.
+
+Como a trilha, fica **fora do board**: não entra no histórico de desfazer nem sobe para a
+tabela `boards`.
 
 ### Os dois buckets
 
@@ -122,8 +231,10 @@ Um segredo compartilhado, não contas de usuário. Não há permissão por pesso
 revogar um aparelho sem revogar todos.
 
 Ele libera o **site**, não a mesa: passar por ele e abrir `/operador` só oferece a porta
-do código de operação. Quem tem a chave de acesso mas não a senha do mestre pode, no
-máximo, abrir uma mesa vazia própria.
+da conta. Quem tem a chave de acesso mas não uma conta de mestre não vê mesa nenhuma — a
+`rooms_select_member` só devolve a linha de quem comanda a mesa ou entrou nela —, e não
+escreve em mesa alheia, porque a RLS de escrita continua amarrada em
+`master_id = auth.uid()`.
 
 E a chave pública do Supabase continua embutida no bundle — por design. Ela não é
 segredo; é a RLS que protege os dados. Mas quem a obtiver pode criar salas próprias no seu
@@ -151,9 +262,17 @@ aparece na TV.
 
 **Transporte atrás de uma interface de três métodos** (`src/lib/sync/`). O Operador
 publica em `BroadcastChannel` e no Supabase Realtime ao mesmo tempo, e nenhum componente
-de desenho sabe qual está em uso. As mensagens de rede passam por um throttle de 10 Hz —
-arrastar um item emite ~60 mudanças por segundo, e o plano gratuito conta mensagens por
-mês.
+de desenho sabe qual está em uso. Os dois passam pelo mesmo throttle de 10 Hz — arrastar um
+item emite ~60 mudanças por segundo, o plano gratuito conta mensagens por mês, e o
+`BroadcastChannel` pagaria uma cópia do board inteiro por frame.
+
+**A cena viaja em amostras, e quem assiste interpola.** Assistir e Plateia recebem 10
+amostras por segundo e animam o caminho entre elas em CSS: posição, tamanho e giro dos
+itens em 150 ms lineares, câmera — zoom e deslocamento juntos, porque vivem no mesmo
+`transform` — em 450 ms com desaceleração, área escondida sumindo em 500 ms, e troca de
+cena entrando em fade. O Operador **não** interpola: lá o arrasto é manipulação direta, e
+a imagem correndo atrás do cursor é o oposto de suave. Tudo dentro de
+`prefers-reduced-motion` — ver o fim de `globals.css`.
 
 A lógica pura fica isolada em `src/lib/geometry/` e `src/lib/operator/` justamente para
 ser verificável sem navegador.

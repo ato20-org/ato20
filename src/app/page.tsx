@@ -10,6 +10,7 @@ import {
   Music,
   ScanSearch,
   Smartphone,
+  UserSquare,
   Wand2,
 } from "lucide-react";
 
@@ -44,6 +45,7 @@ const features = [
   { icon: ScanSearch, label: "Enquadramento controlado pelo mestre" },
   { icon: ImageIcon, label: "Imagens livres: mover, girar, espelhar, empilhar" },
   { icon: Music, label: "Trilha por cena e efeitos avulsos" },
+  { icon: UserSquare, label: "Retratos de personagem presos à câmera" },
   { icon: BookOpen, label: "Anexos de personagem e material de regras" },
 ];
 
@@ -124,9 +126,10 @@ export default function LandingPage() {
         <h2 className="text-2xl font-semibold tracking-tight">Como funciona</h2>
 
         <p className="text-muted-foreground max-w-2xl text-sm text-balance">
-          Roda inteira no navegador. Cenas, imagens e sons ficam no próprio aparelho, e o Operador
+          Roda inteira no navegador: cenas, imagens e sons ficam no próprio aparelho, e o Operador
           fala com a TV sem servidor nenhum no meio — o que também significa que funciona com a
-          internet caída. A nuvem só entra para levar a cena aos celulares dos jogadores.
+          internet caída. A nuvem entra para levar a cena aos celulares dos jogadores e para
+          guardar as cenas da mesa, que assim continuam de onde pararam em outro computador.
         </p>
       </section>
 
