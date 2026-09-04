@@ -13,7 +13,7 @@ continua vendo a atual na TV, e cada jogador acompanha pelo próprio celular.
 | --- | --- | --- |
 | Operador | `/operador` | A tela do mestre: monta cenas, arrasta imagens, esconde regiões, decide o que entra no ar |
 | Assistir | `/assistir` | Só o palco, sem controle. Vai na TV atrás do mestre |
-| Plateia | `/plateia` | O celular de cada jogador: vê a cena, guarda anexos do personagem, consulta regras |
+| Plateia | `/plateia` | O celular de cada jogador: vê a cena e guarda os anexos do personagem |
 
 A cena **em edição** e a cena **no ar** são separadas — é isso que permite preparar a
 próxima enquanto a mesa segue na atual.
@@ -124,7 +124,7 @@ Perder o código não perde mais a mesa: ela pertence à conta, não ao navegado
 
 O código de operação não é legível pelos jogadores, e isso não é só policy de linha: a
 `rooms_select_member` deixa qualquer membro ler a **linha** da sala, então a coluna é
-protegida por **privilégio de coluna** (`grant select (id, code, master_id, rules,
+protegida por **privilégio de coluna** (`grant select (id, code, master_id,
 created_at)`). RLS decide quais linhas; privilégio de coluna decide quais colunas.
 
 ### As cenas na nuvem
@@ -195,7 +195,64 @@ nome, para renomear não obrigar a reescrever todos os arquivos dentro. E **apag
 apaga arquivo**: o conteúdo volta para a raiz.
 
 Como a trilha, fica **fora do board**: não entra no histórico de desfazer nem sobe para a
-tabela `boards`.
+tabela `boards`. Mas atravessa máquina: quem está no ar, em que canto, de que tamanho — e
+a trilha escolhida — vivem em `room_session` (migração **0008**), uma linha por mesa com
+dois `jsonb`.
+
+Sem contador de versão ali, ao contrário do board: a regra é **quem está na máquina agora
+ganha**. Retrato reposicionado custa um arrasto para refazer, e uma tela de conflito
+cobraria uma decisão mais cara que o dano que evita. A trilha é adotada **pausada** —
+música começando sozinha ao abrir o Operador assusta, e retomar é um clique.
+
+### O acervo entre máquinas
+
+O binário já viajava: ele mora no bucket por mesa e o resolvedor cai na URL
+pública quando o arquivo não está no disco local — é assim que o celular do jogador
+vê o mapa. O que **não** viajava era o metadado, e sem ele a segunda máquina abria o
+painel de imagens vazio, sem as pastas, mesmo com os arquivos lá.
+
+As tabelas `library_assets` e `library_folders` (migração **0006**) guardam nome, tipo,
+medidas, pasta e criação, com leitura e escrita só para o mestre — a lista do acervo
+entregaria ao jogador o material que o mestre ainda não mostrou. São alguns KB por
+mesa: metadado não é o que enche o Storage.
+
+Na abertura da mesa o Operador reconcilia em quatro fases, nesta ordem por dependência:
+sobe o que só existe naquela máquina (cobre o acervo de antes desta feature, que não tem
+linha nenhuma), **baixa** o que falta ali e grava no IndexedDB com o mesmo id, conclui
+exclusões feitas na outra máquina, e por fim varre o bucket. Subir antes de concluir
+exclusão não é detalhe: na ordem inversa, um acervo sem linhas seria lido como "apagado
+noutra máquina" e destruído.
+
+### O teto do Storage
+
+**Só sobe o que a mesa precisa alcançar de fora da máquina**: item de cena, fundo, retrato
+e trilha. O resto do acervo fica no IndexedDB de quem enviou. Antes subia tudo no momento
+do upload, e o efeito era o teto do bucket ser o tamanho da **biblioteca** em vez do
+tamanho das **cenas vivas** — num plano que aperta primeiro no Storage, é a diferença
+entre caber por construção e caber por sorte.
+
+Na outra ponta, a varredura tira do bucket tudo que deixou de estar em uso. A linha fica
+com `in_bucket = false` e o arquivo continua listado: o que muda é onde o binário mora.
+Ela não espera espelho em duas máquinas — esperava quando o bucket também servia de
+transporte do acervo inteiro. Uma cópia local sempre existe, porque apagar o arquivo apaga
+o objeto junto.
+
+A conta de "em uso" vive num lugar só (`collectUsedAssetIds`) e é usada pelas duas pontas.
+Se ela divergisse, um lado subiria o que o outro apaga.
+
+Consequência aceita: arquivo guardado numa pasta e ainda não usado **não** atravessa
+sozinho para a outra máquina. A linha dele ganha "Subir para a mesa" em quem tem a cópia
+local, e o indicador da linha diz isso em vez de fingir que é erro.
+
+O cabeçalho tem um painel de **espaço da mesa**: lê o bucket (não a tabela), mostra quanto
+está em uso e quanto sobrou, libera o que sobrou num clique, e lista prefixos que não são
+mesas desta conta — porque o Storage não tem chave estrangeira com `rooms`, e apagar a
+linha da mesa **não** apagou os arquivos dela. Apagar prefixo alheio é recusado pela
+policy, então a tela pode oferecer sem arriscar.
+
+Os espelhos continuam contados por **aparelho**, não por usuário: as duas máquinas do
+mestre usam a mesma conta, e `auth.uid()` não responde "quem tem o arquivo". O id fica no
+`localStorage`, e limpá-lo custa uma marca a mais, nunca um arquivo.
 
 ### Os dois buckets
 
@@ -204,6 +261,12 @@ pública permite cache do navegador e da CDN.
 
 `attachments` é **privado**: é a ficha do jogador. Sai por URL assinada de curta duração,
 e a RLS garante que só o dono e o mestre a alcancem.
+
+O que **não** existe mais é a lista de material de regras. PDF de livro de RPG pesa
+dezenas de MB, o plano gratuito aperta primeiro no Storage, e a mesa tem o livro na mão
+— guardá-lo aqui pagava a parte mais cara em troca da conveniência menor. A migração
+**0007** derruba a coluna `rules`, o privilégio de update em `rooms` (que existia só
+para ela) e a policy que sobrou sem uso.
 
 ## Chave de acesso
 

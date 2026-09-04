@@ -46,7 +46,7 @@ const features = [
   { icon: ImageIcon, label: "Imagens livres: mover, girar, espelhar, empilhar" },
   { icon: Music, label: "Trilha por cena e efeitos avulsos" },
   { icon: UserSquare, label: "Retratos de personagem presos à câmera" },
-  { icon: BookOpen, label: "Anexos de personagem e material de regras" },
+  { icon: BookOpen, label: "Anexos de personagem, na mão do jogador" },
 ];
 
 export const metadata = {
