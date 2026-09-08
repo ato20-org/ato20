@@ -9,6 +9,22 @@ type DragHandlers = {
   /** `delta` é acumulado desde o pointerdown, em unidades de cena. */
   onMove: (delta: Vec, event: PointerEvent) => void;
   onEnd?: (event: PointerEvent) => void;
+  /**
+   * Deixa o `click` nativo acontecer depois do gesto. Padrão: não deixa.
+   *
+   * `preventDefault` no pointerdown suprime os eventos de mouse de
+   * compatibilidade, e o `click` é um deles. Para item, área e retrato isso é o
+   * certo — eles reagem no próprio pointerdown e um clique a mais não
+   * significa nada.
+   *
+   * O ponto de anotação é o caso contrário: o alfinete é o gatilho de um
+   * `Popover`, e gatilho de Popover abre no CLIQUE. Matando o clique, abrir
+   * virava responsabilidade do `onEnd` daqui — e aí o painel abria no
+   * pointerup e o clique seguinte era lido pela lógica de dispensa como
+   * pressão externa, fechando no mesmo gesto. O sintoma era um alfinete que
+   * arrastava e não abria.
+   */
+  mantemClique?: boolean;
 };
 
 /**
@@ -26,7 +42,10 @@ export function useSceneDrag() {
     (event: ReactPointerEvent, handlers: DragHandlers) => {
       if (event.button !== 0 || scale === 0) return;
 
-      event.preventDefault();
+      if (!handlers.mantemClique) event.preventDefault();
+      // O `stopPropagation` fica em qualquer caso: ele é o que impede o palco
+      // de tratar o mesmo gesto como clique no vazio — marcar vários, ou
+      // cravar um ponto por cima do que se estava pegando.
       event.stopPropagation();
 
       const target = event.currentTarget as HTMLElement;

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import { PinNote } from "@/components/operator/pin-note";
-import { Popover, PopoverContent } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -21,10 +21,10 @@ const ALFINETE_PX = 22;
 
 /**
  * Quanto o ponteiro precisa andar, em pixels de tela, para o gesto deixar de
- * ser um toque e passar a ser um arrasto.
+ * ser um clique e passar a ser um arrasto.
  *
- * Existe porque os dois gestos começam iguais e moram no mesmo alvo: tocar
- * abre a nota, arrastar move o alfinete. Sem folga, a mão que treme ao clicar
+ * Existe porque os dois gestos começam iguais e moram no mesmo alvo: clicar
+ * abre a nota, arrastar move o ponto. Sem folga, a mão que treme ao clicar
  * moveria o ponto alguns pixels e não abriria nada — e o mestre veria um
  * clique que "não funcionou" e mexeu o mapa de lugar.
  */
@@ -43,6 +43,25 @@ const LIMIAR_PX = 4;
  * coordenada, não uma caixa. É por isso que ele também não usa o
  * `use-selection-store` — lá as seleções são mutuamente exclusivas porque
  * disputam o mesmo gizmo, e nada disso vale aqui.
+ *
+ * ## Clicar abre, arrastar só arrasta
+ *
+ * Os dois gestos disputam o mesmo alvo, e a divisão de trabalho aqui foi a
+ * segunda tentativa. A primeira tirou o `PopoverTrigger` do marcador para
+ * poder tratar o pointerdown, e abria a nota no `onEnd` do arrasto quando o
+ * gesto não passava do limiar. Não funcionava: o painel abria no pointerup e
+ * o `click` que vinha logo depois era lido pela lógica de dispensa do base-ui
+ * como pressão FORA do painel, que fechava no mesmo gesto. O alfinete
+ * arrastava e não abria.
+ *
+ * Agora o marcador é gatilho de novo, e quem abre é o base-ui pelo caminho
+ * dele — o clique —, que é também o caminho que ele sabe excluir da dispensa e
+ * o que dá Enter e Espaço de graça. O arrasto convive porque pede
+ * `mantemClique` (para o clique existir) e porque o `onOpenChange` engole o
+ * clique que vem no fim de um arrasto.
+ *
+ * A guarda é uma referência, não um relógio: comparar instantes acertaria na
+ * média e erraria no gesto lento.
  */
 export function PinLayer({
   scene,
@@ -62,13 +81,14 @@ export function PinLayer({
   const updatePin = useSceneStore((state) => state.updatePin);
 
   /**
-   * O elemento do alfinete aberto, para o painel se ancorar nele.
+   * O gesto atual virou arrasto.
    *
-   * Um `Popover` para a camada inteira, e não um por alfinete: só uma nota
-   * fica aberta, e N painéis montados custariam N consultas ao acervo para
-   * mostrar um. A âncora explícita é o que permite isso — ver `PopoverContent`.
+   * Referência e não estado: ela é escrita durante o gesto e lida no
+   * `onOpenChange` que vem depois dele, e nenhuma das duas coisas precisa
+   * redesenhar nada. Como estado, o `set` do meio do arrasto renderizaria a
+   * camada inteira por frame.
    */
-  const [ancora, setAncora] = useState<HTMLElement | null>(null);
+  const arrastou = useRef(false);
 
   /** Qual alfinete está sendo arrastado agora, só para o cursor. */
   const [arrastando, setArrastando] = useState<string | null>(null);
@@ -78,42 +98,26 @@ export function PinLayer({
 
   const lado = ALFINETE_PX / scale;
 
-  function alternar(pinId: string, elemento: HTMLElement) {
-    if (abertoId === pinId) {
-      onAbrir(null);
-      return;
-    }
-
-    setAncora(elemento);
-    onAbrir(pinId);
-  }
-
   function iniciarGesto(event: ReactPointerEvent, pinId: string, origemX: number, origemY: number) {
-    // Com espaço segurado o gesto é da cena, não do alfinete. Sem `return` aqui
-    // o `stopPropagation` do arrasto comeria o deslocamento.
+    // Zera antes de tudo: sem isto, um arrasto deixaria a guarda levantada e o
+    // PRÓXIMO clique — um clique de verdade — seria engolido.
+    arrastou.current = false;
+
+    // Com espaço segurado o gesto é da cena, não do alfinete. Sem `return`
+    // aqui o `stopPropagation` do arrasto comeria o deslocamento.
     if (panMode) return;
 
-    const elemento = event.currentTarget as HTMLElement;
-
-    /**
-     * O gesto já passou do limiar.
-     *
-     * Uma vez arrasto, sempre arrasto: voltar ao ponto de partida no meio do
-     * caminho não pode reabrir a possibilidade de virar toque, senão soltar
-     * onde se começou abriria a nota depois de ter movido o ponto por meio
-     * mapa.
-     */
-    let mexeu = false;
-
     startDrag(event, {
+      // O clique tem de sobreviver ao gesto: é ele que abre a nota.
+      mantemClique: true,
       onMove: (delta) => {
-        if (!mexeu && Math.hypot(delta.x, delta.y) * scale < LIMIAR_PX) return;
+        if (!arrastou.current && Math.hypot(delta.x, delta.y) * scale < LIMIAR_PX) return;
 
-        if (!mexeu) {
-          mexeu = true;
+        if (!arrastou.current) {
+          arrastou.current = true;
           setArrastando(pinId);
-          // A nota deste ponto sai da frente: ela está ancorada num elemento
-          // que vai andar, e um cartão parado ao lado do alfinete em movimento
+          // A nota deste ponto sai da frente: ela está ancorada num alfinete
+          // que vai andar, e um cartão parado ao lado do marcador em movimento
           // parece painel travado.
           if (abertoId === pinId) onAbrir(null);
         }
@@ -125,75 +129,68 @@ export function PinLayer({
           y: Math.round(Math.min(Math.max(origemY + delta.y, 0), SCENE_HEIGHT)),
         });
       },
-      onEnd: () => {
-        setArrastando(null);
-        // Não passou do limiar: era toque, e toque abre a nota. O `startDrag`
-        // chama `preventDefault` no pointerdown, o que suprime o `click` do
-        // mouse — então abrir daqui é o caminho, não um `onClick`.
-        if (!mexeu) alternar(pinId, elemento);
-      },
+      onEnd: () => setArrastando(null),
     });
   }
-
-  const aberto = pins.find((pin) => pin.id === abertoId);
-  const indiceAberto = aberto ? pins.indexOf(aberto) + 1 : 0;
 
   return (
     <>
       {pins.map((pin, index) => (
-        <button
+        <Popover
           key={pin.id}
-          type="button"
-          // Título no `title` além do cartão: passar o mouse pelos alfinetes é
-          // como se acha o certo num mapa com doze deles, e abrir cada um para
-          // descobrir qual é seria pior.
-          title={pin.title || `Ponto ${index + 1}`}
-          aria-label={pin.title || `Ponto ${index + 1}`}
-          aria-expanded={abertoId === pin.id}
-          className={cn(
-            "absolute grid place-items-center rounded-full bg-amber-400 font-semibold text-amber-950 tabular-nums shadow-md",
-            // Anel escuro: sobre mapa claro um círculo âmbar sem contorno some,
-            // e é a única coisa na tela que o mestre precisa achar rápido.
-            "ring-2 ring-neutral-900/70",
-            abertoId === pin.id && "ring-primary ring-[3px]",
-            arrastando === pin.id ? "cursor-grabbing" : "cursor-grab",
-          )}
-          style={{
-            left: pin.x,
-            top: pin.y,
-            width: lado,
-            height: lado,
-            // Centrado no ponto: o marcador é um círculo, e um círculo não tem
-            // ponta que indique onde ele crava.
-            transform: "translate(-50%, -50%)",
-            fontSize: lado * 0.5,
-            // A numeração é do desenho, não do texto: sem isto o número herda a
-            // altura de linha do palco e sai descentrado.
-            lineHeight: 1,
-          }}
-          onPointerDown={(event) => iniciarGesto(event, pin.id, pin.x, pin.y)}
-          // Teclado abre pelo caminho próprio: o `preventDefault` do arrasto
-          // mata o `click` do mouse, e um `onClick` aqui só serviria ao teclado
-          // — mas correria o risco de disparar duas vezes num navegador que
-          // entregue o clique de todo jeito. Enter e Espaço não passam por
-          // pointer nenhum, então não há ambiguidade.
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
+          open={abertoId === pin.id}
+          onOpenChange={(open) => {
+            // O clique do fim de um arrasto chega aqui como pedido de abrir.
+            // Engoli-lo é o que faz "arrastar só arrastar".
+            if (open && arrastou.current) return;
 
-            // Espaço rolaria a página, e é também o atalho de deslocar a cena.
-            event.preventDefault();
-            alternar(pin.id, event.currentTarget);
+            onAbrir(open ? pin.id : null);
           }}
         >
-          {index + 1}
-        </button>
-      ))}
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                // Título no `title` além do cartão: passar o mouse pelos
+                // alfinetes é como se acha o certo num mapa com doze deles, e
+                // abrir cada um para descobrir qual é seria pior.
+                title={pin.title || `Ponto ${index + 1}`}
+                aria-label={pin.title || `Ponto ${index + 1}`}
+                className={cn(
+                  "absolute grid place-items-center rounded-full bg-amber-400 font-semibold text-amber-950 tabular-nums shadow-md select-none",
+                  // Anel escuro: sobre mapa claro um círculo âmbar sem contorno
+                  // some, e é a única coisa na tela que o mestre precisa achar
+                  // rápido.
+                  "ring-2 ring-neutral-900/70",
+                  abertoId === pin.id && "ring-primary ring-[3px]",
+                  arrastando === pin.id ? "cursor-grabbing" : "cursor-grab",
+                )}
+                style={{
+                  left: pin.x,
+                  top: pin.y,
+                  width: lado,
+                  height: lado,
+                  // Centrado no ponto: o marcador é um círculo, e um círculo
+                  // não tem ponta que indique onde ele crava.
+                  transform: "translate(-50%, -50%)",
+                  fontSize: lado * 0.5,
+                  // A numeração é do desenho, não do texto: sem isto o número
+                  // herda a altura de linha do palco e sai descentrado.
+                  lineHeight: 1,
+                  // Sem `preventDefault` no pointerdown — ele mataria o clique
+                  // —, é isto que impede o toque de rolar a tela durante o
+                  // arrasto.
+                  touchAction: "none",
+                }}
+                onPointerDown={(event) => iniciarGesto(event, pin.id, pin.x, pin.y)}
+              >
+                {index + 1}
+              </button>
+            }
+          />
 
-      <Popover open={Boolean(aberto)} onOpenChange={(open) => !open && onAbrir(null)}>
-        {aberto ? (
           <PopoverContent
             className="w-80"
-            anchor={ancora}
             side="right"
             // Fora do palco quando não couber à direita: o cartão sobre o mapa
             // é aceitável, o cartão cortado pela borda da janela não.
@@ -201,13 +198,13 @@ export function PinLayer({
           >
             <PinNote
               sceneId={scene.id}
-              pin={aberto}
-              indice={indiceAberto}
+              pin={pin}
+              indice={index + 1}
               onClose={() => onAbrir(null)}
             />
           </PopoverContent>
-        ) : null}
-      </Popover>
+        </Popover>
+      ))}
     </>
   );
 }
