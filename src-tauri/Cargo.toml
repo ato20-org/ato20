@@ -1,0 +1,25 @@
+[package]
+name = "ato20"
+version = "0.1.0"
+description = "Ferramenta para organizar e exibir cenas de RPG de mesa"
+authors = ["valb-mig"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+# O binario e uma casca de tres linhas; tudo vive na lib para o alvo mobile do
+# Tauri poder entrar pelo `mobile_entry_point` sem passar por `main`.
+name = "ato20_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3" }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.3" }
+tauri-plugin-log = "2"
