@@ -15,13 +15,11 @@ import {
   VolumeX,
 } from "lucide-react";
 
-import { AccountBadge } from "@/components/operator/account-badge";
-import { BoardConflictBar, BoardSyncBadge } from "@/components/operator/board-sync-badge";
+import { CampaignBadge } from "@/components/operator/campaign-badge";
 import { LibraryPanel } from "@/components/operator/library-panel";
 import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
 import { OperatorToolbar } from "@/components/operator/operator-toolbar";
-import { RoomBadge } from "@/components/operator/room-badge";
 import { ScenesPanel } from "@/components/operator/scenes-panel";
 import { StageContextMenu } from "@/components/operator/stage-context-menu";
 import { ViewportControls } from "@/components/operator/viewport-controls";
@@ -30,17 +28,12 @@ import { SceneStage } from "@/components/playground/scene-stage";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAssetSync } from "@/hooks/use-asset-sync";
-import { collectUsedAssetIds } from "@/lib/operator/asset-usage";
 import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { useAudioStore } from "@/lib/store/use-audio-store";
-import { useLibraryStore } from "@/lib/store/use-library-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
-import { useSessionSyncStore } from "@/lib/store/use-session-sync-store";
-import { useRoomStore } from "@/lib/store/use-room-store";
 import {
   selectCanRedo,
   selectCanUndo,
@@ -57,7 +50,6 @@ export function OperatorShell() {
   const status = useSceneStore((state) => state.status);
   const error = useSceneStore((state) => state.error);
   // Duas cenas distintas: a que o mestre edita e a que a mesa vê.
-  const scenes = useSceneStore((state) => state.board?.scenes);
   const editingScene = useSceneStore(selectEditingScene);
   const liveScene = useSceneStore(selectLiveScene);
 
@@ -83,18 +75,9 @@ export function OperatorShell() {
   const portraits = usePortraitStore((state) => state.portraits);
   const hydratePortraits = usePortraitStore((state) => state.hydrate);
 
-  const roomId = useRoomStore((state) => state.room?.id ?? null);
-  const syncLibrary = useLibraryStore((state) => state.sync);
-  const syncSession = useSessionSyncStore((state) => state.sync);
-  // A porta do Assistir pede o código da mesa. O botão daqui já o leva: quem
-  // abre a TV é o mestre, e ele não deveria digitar o que já está na tela.
-  const roomCode = useRoomStore((state) => state.room?.code ?? null);
-
   useEffect(() => {
-    // A mesa entra na hidratação: o board é por mesa, e trocar de mesa troca
-    // de board — inclusive o cache local, que antes era um só por navegador.
-    void hydrate(roomId);
-  }, [hydrate, roomId]);
+    void hydrate();
+  }, [hydrate]);
 
   useEffect(() => {
     void hydrateTrack();
@@ -112,31 +95,9 @@ export function OperatorShell() {
 
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.
-  // `local` alimenta a TV na mesma máquina; `roomId` alimenta os celulares.
-  usePublisher({ scene: liveScene, track, portraits }, { local: true, roomId });
+  usePublisher({ scene: liveScene, track, portraits });
   useOperatorShortcuts();
   useSpacePan();
-  // O que a mesa precisa alcançar de fora desta máquina. É a mesma conta que a
-  // faxina do bucket usa, e por isso vive num lugar só.
-  //
-  // Assinado do store, e não lido com `getState()`: o arquivo tem de subir no
-  // instante em que entra numa cena, e uma leitura pontual não reagiria a isso.
-  const usedAssetIds = collectUsedAssetIds(scenes ?? [], portraits, track);
-
-  useAssetSync(roomId, usedAssetIds);
-
-  // Depois do board, não junto: a faxina do bucket precisa saber o que está em
-  // uso, e sem board carregado essa conta seria vazia — ela apagaria justamente
-  // o material das cenas.
-  //
-  // A sessão vem antes do acervo de propósito: ela decide quais retratos estão
-  // no ar, e a faxina precisa contar esses arquivos como em uso.
-  useEffect(() => {
-    if (!roomId || status !== "ready") return;
-
-    void syncSession(roomId).then(() => syncLibrary(roomId));
-  }, [roomId, status, syncLibrary, syncSession]);
-
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* `flex-wrap`: abaixo de ~1000px a barra quebra em duas linhas em vez
@@ -213,8 +174,7 @@ export function OperatorShell() {
         </Button>
 
         <Separator orientation="vertical" className="mx-1 h-8" />
-        <RoomBadge />
-        <BoardSyncBadge />
+        <CampaignBadge />
 
         {/* O browser recusa tocar antes de um gesto na página. Só aparece
             quando há trilha para desbloquear. */}
@@ -226,16 +186,11 @@ export function OperatorShell() {
         ) : null}
 
         <div className="ml-auto flex items-center gap-2">
-          <AccountBadge />
-
+          {/* Sem `?code=`: enquanto o transporte é o `BroadcastChannel`, o
+              Assistir só alcança a cena sendo outra aba desta máquina, e não
+              há código a passar. O código volta para cá com o daemon. */}
           <Button
-            render={
-              <Link
-                href={roomCode ? `/assistir?code=${roomCode}` : "/assistir"}
-                target="_blank"
-                rel="noopener"
-              />
-            }
+            render={<Link href="/assistir" target="_blank" rel="noopener" />}
             nativeButton={false}
             variant="outline"
             size="sm"
@@ -254,8 +209,6 @@ export function OperatorShell() {
           />
         </div>
       </header>
-
-      <BoardConflictBar />
 
       <div className="flex min-h-0 flex-1">
         {leftOpen ? <ScenesPanel scene={editingScene} ready={status === "ready"} /> : null}

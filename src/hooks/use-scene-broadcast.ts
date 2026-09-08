@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { createSceneChannel, type SceneChannel, type SceneChannelOptions } from "@/lib/sync";
+import { createSceneChannel, type SceneChannel } from "@/lib/sync";
 import type { LiveState } from "@/lib/sync/channel";
 import type { Portrait, Scene, SessionTrack } from "@/types/scene";
 
@@ -19,10 +19,8 @@ const REQUEST_RETRY_MS = 2500;
 /**
  * Reanúncio periódico do estado.
  *
- * Cobre o caso em que o espectador já recebeu algo e depois perdeu o socket: o
- * Supabase reconecta sozinho, mas ninguém pede de novo, e a tela ficaria
- * parada numa cena velha sem dar sinal. A 20s são ~3 mensagens por minuto,
- * desprezível contra a cota mensal.
+ * Cobre o espectador que já recebeu algo e depois perdeu o canal: ninguém pede
+ * de novo, e a tela ficaria parada numa cena velha sem dar sinal.
  */
 const HEARTBEAT_MS = 20_000;
 
@@ -34,15 +32,12 @@ const STALLED_AFTER_MS = 12_000;
  * Sem responder ao `live:request`, uma aba de Assistir aberta no meio da
  * sessão ficaria em branco até a próxima mudança.
  */
-export function usePublisher(
-  state: LiveState,
-  { local = false, roomId = null }: SceneChannelOptions,
-): void {
+export function usePublisher(state: LiveState): void {
   const channelRef = useRef<SceneChannel | null>(null);
   const stateRef = useRef(state);
 
   useEffect(() => {
-    const channel = createSceneChannel({ local, roomId });
+    const channel = createSceneChannel();
     channelRef.current = channel;
 
     const unsubscribe = channel.subscribe((message) => {
@@ -51,9 +46,8 @@ export function usePublisher(
       }
     });
 
-    // A sala aparece depois da montagem (login anônimo é assíncrono), então
-    // este efeito roda de novo com `roomId` preenchido. Republicar aqui
-    // garante que o celular não espere a próxima mudança.
+    // Anuncia na montagem: uma aba de Assistir aberta antes desta ficaria em
+    // branco até a próxima mudança.
     channel.send({ type: "live:update", ...stateRef.current });
 
     return () => {
@@ -61,15 +55,15 @@ export function usePublisher(
       channel.close();
       channelRef.current = null;
     };
-  }, [local, roomId]);
+  }, []);
 
   useEffect(() => {
     stateRef.current = state;
     channelRef.current?.send({ type: "live:update", ...state });
     // Dependências no conteúdo, não no objeto: quem chama monta `{ scene,
     // track }` a cada render, e comparar essa embalagem fazia o Operador
-    // publicar enquanto montava a PRÓXIMA cena — mensagem de rede, e cota, por
-    // uma mudança que a mesa não vê.
+    // publicar enquanto montava a PRÓXIMA cena — uma publicação por uma
+    // mudança que a mesa não vê.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.scene, state.track, state.portraits]);
 
@@ -93,16 +87,13 @@ export type Subscription = {
 };
 
 /** Lado do espectador (Assistir e Plateia): só recebe. */
-export function useSubscription({
-  local = false,
-  roomId = null,
-}: SceneChannelOptions): Subscription {
+export function useSubscription(): Subscription {
   const [live, setLive] = useState<LiveState>({ scene: null, track: null, portraits: [] });
   const [synced, setSynced] = useState(false);
   const [stalled, setStalled] = useState(false);
 
   useEffect(() => {
-    const channel = createSceneChannel({ local, roomId });
+    const channel = createSceneChannel();
 
     let answered = false;
 
@@ -143,7 +134,7 @@ export function useSubscription({
       unsubscribe();
       channel.close();
     };
-  }, [local, roomId]);
+  }, []);
 
   return {
     scene: live.scene,

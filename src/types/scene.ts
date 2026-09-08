@@ -11,12 +11,16 @@ export const SCENE_HEIGHT = 1080;
 
 /**
  * `pdf` saiu junto com o material de regras: era o unico caminho que criava
- * arquivo desse tipo. Registros antigos gravados como `pdf` continuam no
- * IndexedDB sem aparecer em lista nenhuma -- inofensivos, e apagaveis a mao.
+ * arquivo desse tipo.
  */
 export type AssetKind = "image" | "audio";
 
-/** Metadados de um arquivo enviado pelo mestre. O binário fica em `AssetRecord`. */
+/**
+ * Metadados de um arquivo enviado pelo mestre. O binário fica em `assets/`.
+ *
+ * Este tipo atravessa o IPC: o espelho dele em Rust é `vault::assets::AssetMeta`,
+ * e é o Rust que grava `assets.json`. Campo novo aqui precisa de campo novo lá.
+ */
 export type AssetMeta = {
   id: string;
   kind: AssetKind;
@@ -27,20 +31,6 @@ export type AssetMeta = {
   /** Dimensões naturais, medidas no upload. Só existem para `kind: "image"`. */
   naturalWidth?: number;
   naturalHeight?: number;
-  /**
-   * Quando o arquivo terminou de subir para o Storage. Ausente = ainda só
-   * existe neste navegador, e nenhum celular consegue vê-lo.
-   */
-  remoteAt?: number;
-  /**
-   * Para QUAL sala ele subiu.
-   *
-   * O caminho no Storage é `{sala}/{asset}`, então "já subiu" sozinho não
-   * basta: se a sala muda — outro navegador, dados limpos, sessão anônima
-   * nova — o arquivo continua lá, mas num endereço que ninguém mais consulta,
-   * e o acervo inteiro some das telas sem erro nenhum.
-   */
-  remoteRoomId?: string;
   /**
    * Pasta em que o mestre guardou o arquivo. Ausente = raiz.
    *
@@ -58,19 +48,6 @@ export type AssetMeta = {
  * organização que ninguém pediu.
  */
 export type AssetFolder = { id: string; name: string; createdAt: number };
-
-/**
- * Tipos que precisam existir na nuvem.
- *
- * Áudio entrou porque a Plateia passou a tocar a trilha da cena, e o celular
- * do jogador não tem o IndexedDB do mestre — um arquivo que não subiu é
- * silêncio do outro lado.
- *
- * Custa cota: trilha é o tipo de arquivo mais pesado do acervo, e o plano
- * gratuito do Supabase aperta primeiro no Storage. A alternativa era a Plateia
- * nunca ter som.
- */
-export const SYNCED_KINDS: readonly AssetKind[] = ["image", "audio"];
 
 /** Uma imagem posicionada sobre o fundo da cena. */
 export type CanvasItem = {

@@ -1,36 +1,20 @@
 import { createBroadcastSceneChannel } from "@/lib/sync/broadcast-channel";
 import type { SceneChannel } from "@/lib/sync/channel";
-import { createCompositeSceneChannel } from "@/lib/sync/composite-channel";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
-import { createSupabaseSceneChannel } from "@/lib/sync/supabase-channel";
-
-export type SceneChannelOptions = {
-  /** Abas da mesma máquina, via `BroadcastChannel`. Grátis e instantâneo. */
-  local?: boolean;
-  /** Sala do Supabase, para os celulares. `null` enquanto não há sala. */
-  roomId?: string | null;
-};
 
 /**
  * Monta o transporte da cena.
  *
- * - Operador: `local` + `roomId` — alimenta a TV e os celulares de uma vez.
- * - Assistir: `local` + `roomId` — a TV pode ser uma aba desta máquina, onde o
- *   `BroadcastChannel` chega antes e de graça, ou outro aparelho na rede.
- * - Plateia: só `roomId` — está noutro aparelho.
+ * Um transporte só, agora: `BroadcastChannel`, que alcança abas da MESMA
+ * máquina. É o que o Operador e o Assistir usam quando a TV é uma aba do
+ * próprio computador do mestre.
+ *
+ * O composto de dois transportes saiu junto com o Supabase, e com ele a
+ * indireção que existia para o playground não saber quantos havia. O que
+ * substitui o alcance de rede é o SSE do daemon, que entra no passo seguinte —
+ * até lá, a Plateia num outro aparelho não recebe cena.
  */
-export function createSceneChannel({
-  local = false,
-  roomId = null,
-}: SceneChannelOptions): SceneChannel {
-  const parts: SceneChannel[] = [];
-
-  if (local) parts.push(createBroadcastSceneChannel());
-  if (roomId && isSupabaseConfigured()) parts.push(createSupabaseSceneChannel(roomId));
-
-  // Um só transporte dispensa a indireção; zero devolve um canal inerte, que
-  // é o comportamento certo antes de a sala existir.
-  return parts.length === 1 ? parts[0] : createCompositeSceneChannel(parts);
+export function createSceneChannel(): SceneChannel {
+  return createBroadcastSceneChannel();
 }
 
 export type { ChannelMessage, SceneChannel } from "@/lib/sync/channel";

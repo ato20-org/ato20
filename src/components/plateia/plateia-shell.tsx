@@ -1,151 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Loader2, Monitor, Smartphone, User, WifiOff } from "lucide-react";
+import { Smartphone } from "lucide-react";
 
 import { PlateiaStage } from "@/components/plateia/plateia-stage";
 import { SessionAudio } from "@/components/playground/session-audio";
-import { PlayerAttachments } from "@/components/plateia/player-attachments";
-import { PlayerIdentity } from "@/components/plateia/player-identity";
-import { PlayerNotes } from "@/components/plateia/player-notes";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useSubscription, type Subscription } from "@/hooks/use-scene-broadcast";
-import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
-import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
-import { useRoomStore } from "@/lib/store/use-room-store";
-
-const CODE_LENGTH = 6;
+import { useSubscription } from "@/hooks/use-scene-broadcast";
 
 /**
- * Abas por layout, na ordem em que o arraste lateral navega.
+ * A visão do jogador — por enquanto, só a cena.
  *
- * Em pé a cena fica presa no topo e não é aba; deitado ela disputa a altura
- * com o resto e volta a ser.
+ * Duas coisas saíram daqui junto com o Supabase, e voltam em passos diferentes:
+ *
+ * A **porta do código** existia para achar a mesa na nuvem. Enquanto o
+ * transporte é o `BroadcastChannel`, esta tela só recebe cena sendo uma aba da
+ * máquina do Operador, e não há mesa remota a procurar. Ela volta com o SSE do
+ * daemon, e o código passa a valer de novo.
+ *
+ * A **ficha do personagem** — nome, anexos e notas — dependia da tabela
+ * `players` e do bucket de anexos, com a RLS isolando a ficha de um jogador da
+ * do outro. Isso não desaparece por mudar de armazenamento: vira código no
+ * daemon, com token por jogador, e é por isso que volta depois, e não agora.
+ * Deixá-la na tela ligada a nada seria pior que não tê-la.
+ *
+ * Com a ficha foi o layout de abas: sem um segundo painel, "Cena" e
+ * "Personagem" seriam uma aba só.
  */
-const STACKED_TABS = ["personagem"] as const;
-const TABBED_TABS = ["cena", "personagem"] as const;
-
-type StackedTab = (typeof STACKED_TABS)[number];
-type Tab = (typeof TABBED_TABS)[number];
-
 export function PlateiaShell() {
-  const searchParams = useSearchParams();
-  const codeFromLink = (searchParams.get("code") ?? "").trim().toUpperCase();
-
-  const status = useRoomStore((state) => state.status);
-  const room = useRoomStore((state) => state.room);
-  const error = useRoomStore((state) => state.error);
-  const connectAsPlayer = useRoomStore((state) => state.connectAsPlayer);
-
-  const [code, setCode] = useState(codeFromLink);
-
-  useEffect(() => {
-    // Link do mestre já traz o código: entrar sozinho poupa o jogador de
-    // digitar seis caracteres na tela do celular.
-    if (codeFromLink.length === CODE_LENGTH) void connectAsPlayer(codeFromLink);
-  }, [codeFromLink, connectAsPlayer]);
-
-  useEffect(() => {
-    if (!room) return;
-
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("code") === room.code) return;
-
-    url.searchParams.set("code", room.code);
-    // `replaceState` e não navegação do router: a sala já está conectada, e
-    // navegar remontaria a árvore e reexecutaria a entrada. Aqui só o endereço
-    // muda, para o refresh e o favorito reencontrarem a mesa.
-    window.history.replaceState(null, "", url);
-  }, [room]);
-
-  if (status === "offline") {
-    return (
-      <Centered>
-        <WifiOff className="text-muted-foreground size-8" aria-hidden />
-        <h1 className="text-2xl font-semibold tracking-tight">Plateia</h1>
-        <p className="text-muted-foreground text-sm">
-          Esta instalação está em modo local. A visão dos jogadores precisa das chaves do Supabase
-          configuradas pelo mestre.
-        </p>
-        <Link href="/mesa" className="text-sm underline underline-offset-4">
-          Voltar
-        </Link>
-      </Centered>
-    );
-  }
-
-  if (status === "ready" && room) {
-    return <Connected roomId={room.id} code={room.code} />;
-  }
-
-  return (
-    <Centered>
-      <Smartphone className="text-muted-foreground size-8" aria-hidden />
-      <h1 className="text-2xl font-semibold tracking-tight">Entrar na mesa</h1>
-      <p className="text-muted-foreground text-sm">
-        Digite o código que o mestre está mostrando na tela dele.
-      </p>
-
-      <form
-        className="w-full space-y-3 text-left"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void connectAsPlayer(code);
-        }}
-      >
-        <Label htmlFor="room-code">Código da mesa</Label>
-        <Input
-          id="room-code"
-          value={code}
-          onChange={(event) => setCode(event.target.value.toUpperCase())}
-          maxLength={CODE_LENGTH}
-          autoCapitalize="characters"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="ABC234"
-          className="text-center text-lg tracking-[0.4em]"
-        />
-
-        {status === "error" ? <p className="text-destructive text-sm">{error}</p> : null}
-
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={code.length !== CODE_LENGTH || status === "loading"}
-        >
-          {status === "loading" ? <Loader2 className="animate-spin" /> : null}
-          Entrar
-        </Button>
-      </form>
-    </Centered>
-  );
-}
-
-/**
- * A mesa, em dois layouts.
- *
- * O que decide é a proporção da tela — ver `useTabbedLayout`.
- *
- * Mais alta que larga: a cena presa no topo cabe em no máximo 56% da altura,
- * então sobra espaço garantido para a ficha embaixo.
- *
- * Mais larga que alta: a cena pediria altura demais e sufocaria o resto, então
- * ela mesma volta a ser aba e só uma coisa aparece por vez.
- *
- * Nos dois casos a barra fica centralizada embaixo e o arraste lateral navega.
- */
-function Connected({ roomId, code }: { roomId: string; code: string }) {
-  const tabbed = useTabbedLayout();
-
-  // A inscrição vive aqui, e não dentro da aba Cena: aba inativa é desmontada,
-  // e o jogador que fosse ver a ficha sairia do canal e perderia as trocas de
-  // cena até voltar.
-  const live = useSubscription({ roomId });
+  const { scene, track, portraits, synced, stalled } = useSubscription();
 
   return (
     // `h-dvh` fixa a altura na viewport real do celular, já descontando a
@@ -153,142 +34,16 @@ function Connected({ roomId, code }: { roomId: string; code: string }) {
     <main className="flex h-dvh min-w-0 flex-col overflow-hidden">
       <header className="flex shrink-0 items-center gap-2 border-b px-4 py-2 [@media(max-height:520px)]:py-1">
         <Smartphone className="text-muted-foreground size-4 shrink-0" aria-hidden />
-        <span className="text-sm font-medium [@media(max-height:520px)]:hidden">Mesa</span>
-        <code className="text-muted-foreground text-sm tracking-widest">{code}</code>
+        <span className="text-sm font-medium">Mesa</span>
       </header>
 
-      {tabbed ? (
-        <TabbedLayout roomId={roomId} live={live} />
-      ) : (
-        <StackedLayout roomId={roomId} live={live} />
-      )}
-
-      {/* Fora das abas: a trilha não pode parar porque o jogador foi consultar
-          a própria ficha. Música cortada no meio quebra a imersão que ela
-          existe para criar. */}
-      <SessionAudio track={live.track} />
-    </main>
-  );
-}
-
-type LayoutProps = { roomId: string; live: Subscription };
-
-/**
- * Tela em pé: cena presa no topo, abas embaixo para o resto.
- *
- * A cena não é aba aqui porque não precisa ser — sobra altura para ela e para
- * o conteúdo ao mesmo tempo. Presa, e não rolando junto: perder o mapa de
- * vista ao consultar a própria ficha é o oposto do que serve numa mesa.
- */
-function StackedLayout({ roomId, live }: LayoutProps) {
-  const [tab, setTab] = useState<StackedTab>("personagem");
-  const swipe = useSwipeTabs(STACKED_TABS, tab, setTab);
-
-  return (
-    <>
-      <div className="shrink-0 p-2">
-        <PlateiaStage
-          scene={live.scene}
-          portraits={live.portraits}
-          synced={live.synced}
-          stalled={live.stalled}
-        />
+      <div className="min-h-0 flex-1 p-2">
+        <PlateiaStage scene={scene} portraits={portraits} synced={synced} stalled={stalled} />
       </div>
 
-      <Tabs
-        value={tab}
-        onValueChange={(value) => setTab(value as StackedTab)}
-        className="flex min-h-0 flex-1 flex-col gap-0"
-      >
-        <div className="min-h-0 flex-1" {...swipe}>
-          <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">
-            <CharacterPanel roomId={roomId} />
-          </TabsContent>
-
-        </div>
-
-        <BottomBar>
-          <TabsTrigger value="personagem">
-            <User />
-            Personagem
-          </TabsTrigger>
-        </BottomBar>
-      </Tabs>
-    </>
-  );
-}
-
-/** Nome, arquivos e notas — o bloco é o mesmo nos dois layouts. */
-function CharacterPanel({ roomId }: { roomId: string }) {
-  return (
-    <>
-      <PlayerIdentity roomId={roomId} />
-      <PlayerAttachments roomId={roomId} />
-      <PlayerNotes roomId={roomId} />
-    </>
-  );
-}
-
-/**
- * Barra centralizada e compacta.
- *
- * O polegar alcança o meio da tela muito melhor que os cantos, e a barra
- * ocupar a largura inteira só afastava os alvos um do outro.
- */
-function BottomBar({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex shrink-0 justify-center border-t p-1">
-      <TabsList>{children}</TabsList>
-    </div>
-  );
-}
-
-/** Tela deitada: uma aba por vez, com arraste lateral e barra centralizada. */
-function TabbedLayout({ roomId, live }: LayoutProps) {
-  const [tab, setTab] = useState<Tab>("cena");
-  const swipe = useSwipeTabs(TABBED_TABS, tab, setTab);
-
-  return (
-    <Tabs
-      value={tab}
-      onValueChange={(value) => setTab(value as Tab)}
-      className="flex min-h-0 flex-1 flex-col gap-0"
-    >
-      <div className="min-h-0 flex-1" {...swipe}>
-        <TabsContent value="cena" className="h-full p-2">
-          <PlateiaStage
-          scene={live.scene}
-          portraits={live.portraits}
-          synced={live.synced}
-          stalled={live.stalled}
-        />
-        </TabsContent>
-
-        <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">
-          <CharacterPanel roomId={roomId} />
-        </TabsContent>
-
-      </div>
-
-      <BottomBar>
-        <TabsTrigger value="cena">
-          <Monitor />
-          Cena
-        </TabsTrigger>
-        <TabsTrigger value="personagem">
-          <User />
-          Personagem
-        </TabsTrigger>
-      </BottomBar>
-    </Tabs>
-  );
-}
-
-/** Telas de antessala: uma coluna centrada, largura de celular. */
-function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col items-center justify-center gap-4 px-6 py-10 text-center">
-      {children}
+      {/* Fora do palco: a trilha pertence à sessão, e não à cena que está no
+          ar — trocar de cena não pode cortar a música. */}
+      <SessionAudio track={track} />
     </main>
   );
 }

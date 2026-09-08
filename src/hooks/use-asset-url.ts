@@ -2,40 +2,43 @@
 
 import { useEffect, useState } from "react";
 
-import { resolveAssetUrl } from "@/lib/assets/resolve";
-import { useRoomStore } from "@/lib/store/use-room-store";
+import { assetUrl } from "@/lib/vault/assets";
 
 type Resolved = { assetId: string; url: string | null };
 
 /**
- * Resolve um `assetId` para um endereço utilizável: blob local no Operador,
- * URL do Storage no celular do jogador.
+ * Resolve um `assetId` para um endereço utilizável.
  *
  * O id resolvido é guardado junto e conferido na saída, para trocar de asset
- * não mostrar a imagem anterior por um frame. `roomId` entra nas dependências
- * mas não no portão: a sala aparece depois do primeiro render, e uma imagem
- * local já resolvida não deve piscar em branco quando isso acontece.
+ * não mostrar a imagem anterior por um frame.
  *
- * Não revoga no unmount de propósito: o cache de blob URLs é global por aba e
- * o mesmo asset pode estar em várias cenas e na biblioteca ao mesmo tempo.
- * Quem apaga o asset revoga.
+ * Não revoga nada no unmount porque não há mais nada a revogar: antes isto
+ * devolvia uma blob URL do IndexedDB, e o cache global por aba existia para o
+ * mesmo arquivo em várias cenas não vazar memória. Agora é uma URL do daemon,
+ * e quem guarda cópia é o cache HTTP do browser.
  */
 export function useAssetUrl(assetId: string | undefined): string | null {
-  const roomId = useRoomStore((state) => state.room?.id ?? null);
   const [resolved, setResolved] = useState<Resolved | null>(null);
 
   useEffect(() => {
     if (!assetId) return;
 
     let active = true;
-    void resolveAssetUrl(assetId, roomId).then((url) => {
-      if (active) setResolved({ assetId, url });
-    });
+    void assetUrl(assetId).then(
+      (url) => {
+        if (active) setResolved({ assetId, url });
+      },
+      () => {
+        // Sem daemon alcançável a cena desenha sem a imagem, em vez de a tela
+        // inteira cair.
+        if (active) setResolved({ assetId, url: null });
+      },
+    );
 
     return () => {
       active = false;
     };
-  }, [assetId, roomId]);
+  }, [assetId]);
 
   if (!assetId || resolved?.assetId !== assetId) return null;
 

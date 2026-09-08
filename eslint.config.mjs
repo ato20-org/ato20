@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Artefatos do cargo. O `build.rs` do Tauri gera JavaScript aqui, e
+    // lintar a saida de outro compilador so produz aviso que ninguem pode
+    // corrigir.
+    "src-tauri/target/**",
   ]),
 ]);
 

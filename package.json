@@ -12,6 +12,8 @@
   "dependencies": {
     "@base-ui/react": "^1.7.0",
     "@supabase/supabase-js": "^2.114.0",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "idb": "^8.0.3",

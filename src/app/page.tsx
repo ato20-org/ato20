@@ -1,10 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  ArrowRight,
   BookOpen,
   EyeOff,
   Image as ImageIcon,
-  KeyRound,
   Layers,
   Monitor,
   Music,
@@ -73,9 +73,9 @@ export default function LandingPage() {
         </p>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button render={<Link href="/entrar" />} nativeButton={false}>
-            <KeyRound />
-            Entrar na instância
+          <Button render={<Link href="/mesa" />} nativeButton={false}>
+            <ArrowRight />
+            Escolher a tela
           </Button>
         </div>
       </header>
@@ -83,11 +83,11 @@ export default function LandingPage() {
       {/* Dito de frente, não em letra miúda: quem chega precisa saber que não
           vai criar uma conta aqui. */}
       <section className="border-primary/40 space-y-3 rounded-lg border-l-2 pl-5">
-        <h2 className="text-lg font-medium">Projeto pessoal, instância fechada</h2>
+        <h2 className="text-lg font-medium">Projeto pessoal, aplicativo de desktop</h2>
         <p className="text-muted-foreground max-w-2xl text-sm text-balance">
-          Não é um serviço: não existe cadastro, plano nem inscrição. Esta instância pertence a uma
-          mesa específica, e o acesso à ferramenta exige uma chave — só esta apresentação fica
-          aberta.
+          Não é um serviço: não existe cadastro, plano nem inscrição — e também não existe mais
+          chave de acesso. O Operador roda no computador do mestre e lê a campanha de uma pasta
+          dele; a mesa acompanha pela rede local.
         </p>
       </section>
 
@@ -126,15 +126,15 @@ export default function LandingPage() {
         <h2 className="text-2xl font-semibold tracking-tight">Como funciona</h2>
 
         <p className="text-muted-foreground max-w-2xl text-sm text-balance">
-          Roda inteira no navegador: cenas, imagens e sons ficam no próprio aparelho, e o Operador
-          fala com a TV sem servidor nenhum no meio — o que também significa que funciona com a
-          internet caída. A nuvem entra para levar a cena aos celulares dos jogadores e para
-          guardar as cenas da mesa, que assim continuam de onde pararam em outro computador.
+          Uma campanha é uma pasta no computador do mestre: cenas em arquivos de texto, imagens e
+          sons ao lado deles. O aplicativo abre essa pasta, e a mesa acompanha pela rede local — não
+          há servidor no meio, e por isso não há limite de tamanho além do disco nem nada que pare
+          de funcionar quando a internet cai. A pasta cabe num zip, e o zip abre em outra máquina.
         </p>
       </section>
 
       <footer className="text-muted-foreground border-t pt-6 text-xs">
-        ATO20 · projeto pessoal · instância fechada
+        ATO20 · projeto pessoal · aplicativo de desktop
       </footer>
     </main>
   );

@@ -3,15 +3,15 @@
 import { create } from "zustand";
 
 import { createPortrait } from "@/lib/geometry/portrait";
-import { loadPortraits, savePortraits } from "@/lib/storage/portraits";
+import { loadPortraits, savePortraits } from "@/lib/vault/session";
 import type { Portrait } from "@/types/scene";
 
 /**
  * Gravação atrasada, como a do board.
  *
- * Arrastar um retrato emite uma mudança por frame, e gravar todas no
- * IndexedDB derruba o frame rate por nada — o que importa é o estado em que
- * o gesto parou.
+ * Arrastar um retrato emite uma mudança por frame, e gravar todas no disco
+ * derruba o frame rate por nada — o que importa é o estado em que o gesto
+ * parou.
  */
 const PERSIST_DEBOUNCE_MS = 400;
 

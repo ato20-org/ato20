@@ -4,7 +4,6 @@ import { ArrowRight, Smartphone, Tv, Wand2 } from "lucide-react";
 
 import logo from "@/assets/logo-white.png";
 
-import { KnownRooms } from "@/components/mesa/known-rooms";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type ViewLink = {
@@ -90,10 +89,6 @@ export default function MesaPage() {
           ))}
         </ul>
       </nav>
-
-      {/* Abaixo dos cartões, não acima: escolher a visão é a decisão da tela;
-          a mesa a reabrir é atalho de quem já jogou aqui. */}
-      <KnownRooms />
     </main>
   );
 }

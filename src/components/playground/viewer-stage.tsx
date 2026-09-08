@@ -10,14 +10,12 @@ import { useSubscription } from "@/hooks/use-scene-broadcast";
  * Visão Assistir: recebe a cena e não emite nada. Nenhum controle, nenhum
  * atalho — a tela vai numa TV virada para a mesa.
  *
- * `roomId` vem da porta do `ViewerShell`. `null` só acontece na instalação sem
- * Supabase, onde a mesa não existe e a TV tem de ser a própria máquina.
+ * Sem `roomId`: enquanto o transporte é o `BroadcastChannel`, esta tela é uma
+ * aba da própria máquina do Operador. O que a solta para outro aparelho é o
+ * SSE do daemon, no passo seguinte.
  */
-export function ViewerStage({ roomId }: { roomId: string | null }) {
-  // `local` sempre: quando a TV é uma aba da máquina do Operador, o
-  // `BroadcastChannel` chega antes da rede e não gasta cota. `roomId` é o que
-  // permite a TV estar em outro aparelho.
-  const { scene, track, portraits, synced, stalled } = useSubscription({ local: true, roomId });
+export function ViewerStage() {
+  const { scene, track, portraits, synced, stalled } = useSubscription();
 
   return (
     // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
@@ -47,11 +45,9 @@ export function ViewerStage({ roomId }: { roomId: string | null }) {
           {synced
             ? "O mestre não colocou nenhuma cena no ar."
             : stalled
-              ? // Sem sala, o único transporte é a própria máquina, e é isso que
-                // a mensagem precisa dizer para não mandar procurar na rede.
-                roomId
-                ? "Sem resposta. A tela do Operador precisa estar aberta."
-                : "Sem resposta. A tela do Operador precisa estar aberta nesta mesma máquina."
+              ? // O único transporte é a própria máquina, e é isso que a
+                // mensagem precisa dizer para não mandar procurar na rede.
+                "Sem resposta. A tela do Operador precisa estar aberta nesta mesma máquina."
               : "Aguardando o Operador…"}
         </p>
       ) : null}

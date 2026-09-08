@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import { loadTrack, saveTrack } from "@/lib/storage/track";
+import { loadTrack, saveTrack } from "@/lib/vault/session";
 import type { SessionTrack } from "@/types/scene";
 
 type TrackStore = {
