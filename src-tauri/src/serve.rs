@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use axum::body::Body;
 use axum::extract::{
-    ConnectInfo, Multipart, Path as AxumPath, Query, Request as AxumRequest, State,
+    ConnectInfo, DefaultBodyLimit, Multipart, Path as AxumPath, Query, Request as AxumRequest,
+    State,
 };
 use axum::http::{Request, StatusCode, Uri};
 use axum::middleware::{self, Next};
@@ -53,13 +54,6 @@ pub struct DaemonAddr {
 }
 
 const TOKEN_HEADER: &str = "x-ato20-token";
-
-/// Teto por arquivo enviado.
-///
-/// Nao e limite de plano, como era no Storage -- e o disco do mestre. Existe
-/// so para um upload errado nao encher a particao em silencio: um mapa de RPG
-/// nao passa de dezenas de MB, e um arquivo de 2GB aqui e engano, nao cena.
-const MAX_UPLOAD_BYTES: u64 = 512 * 1024 * 1024;
 
 /// Quantos estados o canal guarda para quem esta lendo devagar.
 ///
@@ -226,28 +220,22 @@ fn lan_ip() -> Option<IpAddr> {
 pub fn router(state: Arc<Daemon>) -> Router {
     Router::new()
         .route("/asset/{id}", get(serve_asset))
-        .route(
-            "/asset",
-            // O portao vem como camada, e nao como checagem no corpo do
-            // handler: os extractors do axum rodam ANTES do handler, entao um
-            // `Multipart` invalido era recusado com 400 sem o token nunca ter
-            // sido olhado. Nada era gravado, mas quem nao esta autorizado
-            // chegava ao parser -- e o lugar de recusar e antes disso.
-            post(upload_asset).layer(middleware::from_fn_with_state(
-                Arc::clone(&state),
-                require_token,
-            )),
-        )
         .route("/sala", get(check))
         .route("/sala/entrar", post(join_table))
         .route("/sala/live", get(live))
         .nest("/eu", player_routes(Arc::clone(&state)))
         .route(
             "/sala/publicar",
-            post(publish).layer(middleware::from_fn_with_state(
-                Arc::clone(&state),
-                require_token,
-            )),
+            post(publish)
+                // O padrao do axum sao 2 MB, e o corpo aqui e a cena inteira em
+                // JSON. Uma cena com muitos itens passaria disso e a publicacao
+                // falharia em silencio -- a TV simplesmente pararia de
+                // atualizar, sem nada na tela dizendo por que.
+                .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
+                .layer(middleware::from_fn_with_state(
+                    Arc::clone(&state),
+                    require_token,
+                )),
         )
         .route("/saude", get(|| async { "ok" }))
         // Tudo que nao casou com as rotas acima e a tela do espectador.
@@ -270,7 +258,18 @@ pub fn router(state: Arc<Daemon>) -> Router {
 fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
     Router::new()
         .route("/", get(me).patch(update_me))
-        .route("/anexos", get(my_attachments).post(upload_attachment))
+        .route(
+            "/anexos",
+            get(my_attachments).post(upload_attachment).layer(
+                // Desligado, e nao aumentado: o handler conta os bytes que
+                // chegam e recusa acima de 64 MB com uma mensagem. Deixar o
+                // padrao de 2 MB do axum cortava o stream antes disso, e o
+                // multer via corpo truncado -- o cliente recebia "load failed"
+                // e o log dizia "Error parsing multipart/form-data", nenhum dos
+                // dois apontando para o limite.
+                DefaultBodyLimit::disable(),
+            ),
+        )
         .route("/anexos/{arquivo}", get(read_attachment).delete(remove_attachment))
         .layer(middleware::from_fn_with_state(state, require_player))
 }
@@ -885,151 +884,11 @@ async fn serve_asset(
     }
 }
 
-/// `POST /asset` -- multipart com o campo `file`, e `largura`/`altura` opcionais.
-///
-/// Por HTTP e nao por `invoke`: um mapa de 80MB atravessando o IPC vira
-/// serializacao de array de numeros, e o mesmo arquivo pelo loopback e
-/// streaming direto para o disco.
-async fn upload_asset(State(state): State<Arc<Daemon>>, mut multipart: Multipart) -> Response {
-    let temp = {
-        let guard = state.vault.read().expect("vault envenenado");
-        let Some(vault) = guard.as_ref() else {
-            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
-        };
-
-        if let Err(cause) = std::fs::create_dir_all(vault.assets_dir()) {
-            log::error!("upload: {cause}");
-            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
-        }
-
-        assets::upload_temp(vault)
-    };
-
-    let mut name = String::new();
-    let mut mime_type = String::new();
-    let mut natural_width = None;
-    let mut natural_height = None;
-    let mut received = false;
-    let mut size: u64 = 0;
-
-    loop {
-        let field = match multipart.next_field().await {
-            Ok(Some(field)) => field,
-            Ok(None) => break,
-            Err(cause) => {
-                let _ = tokio::fs::remove_file(&temp).await;
-                log::warn!("upload: multipart invalido: {cause}");
-                return fail(StatusCode::BAD_REQUEST, "envio malformado");
-            }
-        };
-
-        match field.name().unwrap_or_default() {
-            "largura" => natural_width = field.text().await.ok().and_then(|t| t.parse().ok()),
-            "altura" => natural_height = field.text().await.ok().and_then(|t| t.parse().ok()),
-            "file" => {
-                name = field.file_name().unwrap_or("arquivo").to_string();
-                mime_type = field
-                    .content_type()
-                    .unwrap_or("application/octet-stream")
-                    .to_string();
-
-                let mut file = match tokio::fs::File::create(&temp).await {
-                    Ok(file) => file,
-                    Err(cause) => {
-                        log::error!("upload: {cause}");
-                        return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
-                    }
-                };
-
-                let mut field = field;
-                loop {
-                    match field.chunk().await {
-                        Ok(Some(chunk)) => {
-                            size += chunk.len() as u64;
-
-                            if size > MAX_UPLOAD_BYTES {
-                                let _ = tokio::fs::remove_file(&temp).await;
-                                return fail(
-                                    StatusCode::PAYLOAD_TOO_LARGE,
-                                    "arquivo acima do teto de 512 MB",
-                                );
-                            }
-
-                            if let Err(cause) = file.write_all(&chunk).await {
-                                let _ = tokio::fs::remove_file(&temp).await;
-                                log::error!("upload: {cause}");
-                                return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
-                            }
-                        }
-                        Ok(None) => break,
-                        Err(cause) => {
-                            let _ = tokio::fs::remove_file(&temp).await;
-                            log::warn!("upload interrompido: {cause}");
-                            return fail(StatusCode::BAD_REQUEST, "envio interrompido");
-                        }
-                    }
-                }
-
-                if let Err(cause) = file.flush().await {
-                    let _ = tokio::fs::remove_file(&temp).await;
-                    log::error!("upload: {cause}");
-                    return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
-                }
-
-                received = true;
-            }
-            // Campo desconhecido: consome e ignora, senao o corpo fica pela
-            // metade e o proximo `next_field` falha.
-            _ => {
-                let _ = field.bytes().await;
-            }
-        }
-    }
-
-    if !received {
-        let _ = tokio::fs::remove_file(&temp).await;
-        return fail(StatusCode::BAD_REQUEST, "nenhum campo `file` no envio");
-    }
-
-    // `adopt` move o temporario e escreve o indice. As medidas naturais vem da
-    // webview: ela ja decodificou a imagem para exibi-la, e refazer isso aqui
-    // custaria um crate de imagem para chegar ao mesmo numero.
-    let result = {
-        let guard = state.vault.read().expect("vault envenenado");
-        let Some(vault) = guard.as_ref() else {
-            let _ = std::fs::remove_file(&temp);
-            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
-        };
-
-        assets::adopt(vault, &temp, &name, &mime_type, natural_width, natural_height)
-    };
-
-    match result {
-        Ok(meta) => (StatusCode::CREATED, axum::Json(meta)).into_response(),
-        Err(crate::error::AppError::UnsupportedKind(mime)) => (
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            format!("tipo de arquivo nao suportado: {mime}"),
-        )
-            .into_response(),
-        Err(cause) => {
-            log::error!("upload: {cause}");
-            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar no acervo")
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::body::to_bytes;
     use axum::http::Request as HttpRequest;
-
-    const CORPO: &str = "--X\r\n\
-Content-Disposition: form-data; name=\"file\"; filename=\"mapa.webp\"\r\n\
-Content-Type: image/webp\r\n\
-\r\n\
-bytes\r\n\
---X--\r\n";
 
     fn daemon() -> (tempfile::TempDir, Arc<Daemon>, String) {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1059,19 +918,6 @@ bytes\r\n\
         request
     }
 
-    fn upload(token: Option<&str>) -> HttpRequest<Body> {
-        let mut request = HttpRequest::builder()
-            .method("POST")
-            .uri("/asset")
-            .header("content-type", "multipart/form-data; boundary=X");
-
-        if let Some(token) = token {
-            request = request.header(TOKEN_HEADER, token);
-        }
-
-        request.body(Body::from(CORPO)).expect("request")
-    }
-
     fn publicar(token: Option<&str>, corpo: &str, ip: &str) -> HttpRequest<Body> {
         let mut request = HttpRequest::builder().method("POST").uri("/sala/publicar");
 
@@ -1088,119 +934,42 @@ bytes\r\n\
     // --- acervo -------------------------------------------------------------
 
     #[tokio::test]
-    async fn upload_sem_token_e_recusado() {
-        let (_dir, state, _) = daemon();
+    async fn arquivo_importado_e_servivel_por_http() {
+        let (dir, state, _) = daemon();
 
-        let response = router(state).oneshot(upload(None)).await.expect("resposta");
+        let origem = dir.path().join("mapa.webp");
+        std::fs::write(&origem, b"bytes do mapa").expect("origem");
 
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
+        let id = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            let (aceitos, recusados) =
+                assets::import(vault, &[origem]).expect("import");
 
-    #[tokio::test]
-    async fn upload_com_token_errado_e_recusado() {
-        let (_dir, state, _) = daemon();
+            assert!(recusados.is_empty(), "{recusados:?}");
+            aceitos[0].id.clone()
+        };
 
-        let response = router(state)
-            .oneshot(upload(Some("chute")))
-            .await
-            .expect("resposta");
-
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn corpo_invalido_sem_token_para_no_portao() {
-        let (_dir, state, _) = daemon();
-
-        // O 401 tem de vir ANTES do parser: era aqui que a versao com a
-        // checagem dentro do handler devolvia 400, porque o extractor do
-        // `Multipart` recusava o corpo sem o token ter sido olhado.
+        // O mestre importa por IPC, copiando do disco; a mesa le por HTTP. Este
+        // teste e a costura entre os dois -- o que entrou tem de sair.
         let response = router(state)
             .oneshot(
                 HttpRequest::builder()
-                    .method("POST")
-                    .uri("/asset")
-                    .body(Body::from("nada disso e multipart"))
-                    .expect("request"),
-            )
-            .await
-            .expect("resposta");
-
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn tipo_recusado_nao_entra_nem_deixa_temporario() {
-        let (_dir, state, _) = daemon();
-
-        let corpo = CORPO
-            .replace("mapa.webp", "livro.pdf")
-            .replace("image/webp", "application/pdf");
-
-        let response = router(Arc::clone(&state))
-            .oneshot(
-                HttpRequest::builder()
-                    .method("POST")
-                    .uri("/asset")
-                    .header("content-type", "multipart/form-data; boundary=X")
-                    .header(TOKEN_HEADER, "segredo")
-                    .body(Body::from(corpo))
-                    .expect("request"),
-            )
-            .await
-            .expect("resposta");
-
-        assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
-
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-
-        assert!(assets::list(vault, None).expect("list").is_empty());
-
-        // O temporario de um tipo recusado nao entra no indice, entao ninguem
-        // o apagaria depois -- ficaria ocupando disco para sempre.
-        let sobrou = std::fs::read_dir(vault.assets_dir())
-            .expect("assets/")
-            .filter_map(Result::ok)
-            .any(|entry| entry.file_name().to_string_lossy().starts_with(".upload-"));
-
-        assert!(!sobrou, "temporario de upload recusado ficou no disco");
-    }
-
-    #[tokio::test]
-    async fn upload_com_token_grava_e_fica_servivel() {
-        let (_dir, state, _) = daemon();
-
-        let response = router(Arc::clone(&state))
-            .oneshot(upload(Some("segredo")))
-            .await
-            .expect("resposta");
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-
-        let bytes = to_bytes(response.into_body(), 64 * 1024).await.expect("corpo");
-        let meta: assets::AssetMeta = serde_json::from_slice(&bytes).expect("json");
-        assert_eq!(meta.name, "mapa.webp");
-        assert_eq!(meta.kind, "image");
-        assert_eq!(meta.size, 5);
-
-        // O arquivo enviado tem de sair pela rota de leitura: e por ela que a
-        // TV e o celular do jogador buscam o mapa.
-        let served = router(state)
-            .oneshot(
-                HttpRequest::builder()
-                    .uri(format!("/asset/{}", meta.id))
+                    .uri(format!("/asset/{id}"))
                     .body(Body::empty())
                     .expect("request"),
             )
             .await
             .expect("resposta");
 
-        assert_eq!(served.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
-            served.headers().get("content-type").map(|v| v.to_str().unwrap()),
+            response.headers().get("content-type").map(|v| v.to_str().unwrap()),
             Some("image/webp")
         );
+
+        let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
+        assert_eq!(&bytes[..], b"bytes do mapa");
     }
 
     #[tokio::test]

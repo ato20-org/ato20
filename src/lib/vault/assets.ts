@@ -1,6 +1,8 @@
 "use client";
 
-import { call, daemonAddr, isDesktop, VaultError } from "@/lib/vault/bridge";
+import { open } from "@tauri-apps/plugin-dialog";
+
+import { call, daemonAddr, isDesktop } from "@/lib/vault/bridge";
 import type { AssetKind, AssetMeta } from "@/types/scene";
 
 /**
@@ -37,61 +39,40 @@ export function setAssetFolder(id: string, folderId: string | undefined): Promis
 }
 
 /**
- * Mede a imagem antes de enviar.
+ * O que a importação devolve.
  *
- * Aqui e não no Rust: o browser já vai decodificar a imagem para exibi-la, e
- * refazer isso do outro lado custaria um crate de imagem no binário para
- * chegar ao mesmo número. Falha em medir não impede o envio — o arquivo vale,
- * e sem medida a cena só perde a proporção sugerida ao arrastar.
+ * Recusados vem como um motivo por arquivo, e não uma contagem: quem escolheu
+ * doze mapas e teve um recusado quer os onze e quer saber qual.
  */
-async function measure(file: File): Promise<{ largura?: number; altura?: number }> {
-  if (!file.type.startsWith("image/")) return {};
-
-  try {
-    const bitmap = await createImageBitmap(file);
-
-    try {
-      return { largura: bitmap.width, altura: bitmap.height };
-    } finally {
-      bitmap.close();
-    }
-  } catch {
-    return {};
-  }
-}
+export type ImportResult = { aceitos: AssetMeta[]; recusados: string[] };
 
 /**
- * Envia um arquivo para o acervo.
+ * Traz arquivos de fora para o acervo.
  *
- * Por HTTP e não pelo IPC: o corpo vai em streaming direto para o disco, e o
- * pico de memória fica no tamanho do buffer em vez do tamanho do mapa.
+ * Abre o seletor nativo e manda os CAMINHOS ao Rust, que copia do disco para
+ * `assets/`. O arquivo não passa pela webview nem por HTTP — era o contrário
+ * antes, e além de três travessias para o que o sistema de arquivos faz numa, o
+ * limite de corpo do axum (2 MB por padrão) cortava o envio de um mapa grande
+ * no meio: o cliente via "load failed" e o log dizia "Error parsing
+ * multipart/form-data", nenhum dos dois apontando para o limite.
+ *
+ * `null` = o mestre fechou o diálogo, que não é erro.
  */
-export async function putAsset(file: File): Promise<AssetMeta> {
-  const { url, token } = await daemonAddr();
-  const { largura, altura } = await measure(file);
-
-  const body = new FormData();
-  // O nome do arquivo acompanha o campo, e o daemon o guarda só como rótulo:
-  // o caminho no disco é `{id}.{ext}`, então nome vindo de fora não escolhe
-  // onde nada é gravado.
-  body.append("file", file, file.name);
-  if (largura !== undefined) body.append("largura", String(largura));
-  if (altura !== undefined) body.append("altura", String(altura));
-
-  const response = await fetch(`${url}/asset`, {
-    method: "POST",
-    headers: { "x-ato20-token": token },
-    body,
+export async function importAssets(kind: AssetKind): Promise<ImportResult | null> {
+  const escolhidos = await open({
+    multiple: true,
+    title: kind === "image" ? "Escolha as imagens" : "Escolha os sons",
+    filters: [
+      kind === "image"
+        ? { name: "Imagens", extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"] }
+        : { name: "Sons", extensions: ["mp3", "ogg", "oga", "opus", "wav", "flac", "m4a", "aac"] },
+    ],
   });
 
-  if (!response.ok) {
-    // A mensagem do daemon é curta e em português; repassá-la diz mais que
-    // "erro 415" para quem acabou de arrastar um `.docx` para o acervo.
-    throw new VaultError(
-      response.status === 415 ? "tipo-nao-suportado" : "envio",
-      (await response.text().catch(() => "")) || `Falha ao enviar ${file.name}`,
-    );
-  }
+  if (!escolhidos) return null;
 
-  return (await response.json()) as AssetMeta;
+  const paths = Array.isArray(escolhidos) ? escolhidos : [escolhidos];
+  if (paths.length === 0) return null;
+
+  return call<ImportResult>("asset_import", { paths });
 }

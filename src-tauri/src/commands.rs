@@ -333,3 +333,33 @@ pub fn campaign_import(
 
     Ok(info)
 }
+
+/// O que a importacao devolve para a tela.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportResult {
+    pub aceitos: Vec<AssetMeta>,
+    /// Um motivo por arquivo recusado, e nao uma contagem.
+    ///
+    /// "1 arquivo nao pode ser enviado" obriga quem escolheu doze a adivinhar
+    /// qual e por que.
+    pub recusados: Vec<String>,
+}
+
+/// Traz arquivos de fora para o acervo, copiando.
+///
+/// Recebe CAMINHOS, e nao bytes: quem escolhe e o dialogo nativo, e o arquivo
+/// vai do disco para o disco sem passar pela webview nem pelo HTTP. Era o
+/// contrario antes -- o navegador lia o arquivo inteiro e o mandava por
+/// multipart pelo loopback --, e alem de tres travessias para o que o sistema de
+/// arquivos faz numa, o limite de corpo do axum cortava o stream de um mapa
+/// grande no meio.
+#[tauri::command]
+pub fn asset_import(state: State<'_, AppState>, paths: Vec<String>) -> AppResult<ImportResult> {
+    state.with_vault(|vault| {
+        let origens: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+        let (aceitos, recusados) = assets::import(vault, &origens)?;
+
+        Ok(ImportResult { aceitos, recusados })
+    })
+}

@@ -50,6 +50,13 @@ mime = "0.3"
 # tipo de dependencia que um app de desktop nao pode ter.
 rusqlite = { version = "0.32", features = ["bundled"] }
 
+# Le so o CABECALHO da imagem para saber as medidas -- nao decodifica nada.
+# Elas eram medidas na webview, o que funcionava enquanto o arquivo passava por
+# la; importar copiando direto do disco significa que o navegador nunca ve a
+# imagem, e um `image` completo seria um decodificador inteiro no binario para
+# responder duas perguntas.
+imagesize = "0.13"
+
 uuid = { version = "1", features = ["v4"] }
 
 # Token de jogador. `getrandom` e o CSPRNG do sistema, e nao um gerador

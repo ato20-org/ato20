@@ -410,29 +410,9 @@ pub fn safe_attachment_name(name: &str) -> String {
     }
 }
 
-/// Tipo declarado a partir da extensao.
-///
-/// Tabela e nao adivinhacao pelo conteudo: o `Content-Type` do anexo decide se
-/// o celular abre a imagem na tela ou baixa o arquivo, e o que o jogador enviou
-/// diz mais que um sniff de bytes.
+/// Tipo declarado a partir da extensao. Ver `vault::mime`.
 pub fn mime_for(arquivo: &str) -> &'static str {
-    match arquivo.rsplit('.').next().unwrap_or("") {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        "gif" => "image/gif",
-        "avif" => "image/avif",
-        "svg" => "image/svg+xml",
-        "pdf" => "application/pdf",
-        "txt" | "md" => "text/plain; charset=utf-8",
-        "mp3" => "audio/mpeg",
-        "ogg" => "audio/ogg",
-        "m4a" => "audio/mp4",
-        "wav" => "audio/wav",
-        "mp4" => "video/mp4",
-        "webm" => "video/webm",
-        _ => "application/octet-stream",
-    }
+    super::mime::from_name(arquivo)
 }
 
 pub fn list_attachments(vault: &Vault, id: &str) -> AppResult<Vec<Attachment>> {

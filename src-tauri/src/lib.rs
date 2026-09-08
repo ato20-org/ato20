@@ -64,6 +64,7 @@ pub fn run() {
             commands::board_load,
             commands::board_save,
             commands::asset_list,
+            commands::asset_import,
             commands::asset_delete,
             commands::asset_set_folder,
             commands::folder_list,

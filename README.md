@@ -129,7 +129,6 @@ sidecar exigiria empacotar um runtime a mais só para não trocar de linguagem.
 ```
 GET   /                as telas de espectador, do bundle estatico
 GET   /asset/{id}      o arquivo, com Range e ETag
-POST  /asset           multipart, exige o token
 GET   /sala?codigo=    confere o codigo, devolve o nome da campanha
 GET   /sala/live?codigo=   a cena, em SSE
 POST  /sala/publicar   o Operador anuncia; token + loopback
@@ -191,19 +190,31 @@ alta no começo da sessão, sem limite de tentativas. Ele impede que um aparelho
 Wi-Fi caia na cena por acaso ao varrer portas. Contra alguém determinado na tua rede, não
 defende.
 
-**Por que os arquivos vão por HTTP e não pelo IPC.** Um mapa de 80 MB atravessando o
-`invoke` vira serialização de array de números; pelo loopback é streaming direto para o
-disco, com o pico de memória no tamanho do buffer. É também o que faz o endereço de um
-arquivo ser **um só** para as três telas — antes eram dois caminhos, blob URL do IndexedDB
-no Operador e URL pública do Storage no celular. Com ele foram embora o cache de object
-URLs, o `revokeAssetUrl` e a classe de vazamento de memória que os dois existiam para
-conter: quem guarda cópia agora é o cache HTTP do browser.
+**O daemon serve arquivo, e não recebe.** Ele é a razão de o endereço de um arquivo ser
+**um só** para as três telas — antes eram dois caminhos, blob URL do IndexedDB no Operador e
+URL pública do Storage no celular. Com ele foram embora o cache de object URLs, o
+`revokeAssetUrl` e a classe de vazamento de memória que os dois existiam para conter: quem
+guarda cópia agora é o cache HTTP do browser.
+
+Escrever no acervo é outra história, e ela mudou uma vez. Havia um `POST /asset` em
+multipart: o navegador lia o arquivo escolhido, mandava pelo loopback, o daemon gravava.
+Três travessias para o que o sistema de arquivos faz numa — e um limite escondido, porque o
+padrão do axum são **2 MB** e ele cortava o stream de um mapa grande no meio. O sintoma não
+apontava para nada: o cliente dizia "load failed" e o log dizia "Error parsing
+multipart/form-data".
+
+Agora **importar é copiar**: o seletor nativo devolve caminhos, e o Rust faz `fs::copy` para
+`assets/`. O arquivo nunca entra na webview. Com isso a rota de escrita de acervo deixou de
+existir, e o daemon não aceita mais nenhuma escrita de acervo pela rede.
+
+As medidas da imagem saem do **cabeçalho** do arquivo (`imagesize`), sem decodificar. Elas
+eram medidas na webview, o que fazia sentido enquanto o arquivo passava por lá.
 
 `Range` não é opcional: sem ele a trilha só toca do início, nunca é arrastada.
 
 ### O token de escrita
 
-`POST /asset` e `POST /sala/publicar` exigem o cabeçalho `x-ato20-token`, gerado a cada
+`POST /sala/publicar` exige o cabeçalho `x-ato20-token`, gerado a cada
 abertura do aplicativo e nunca gravado em disco. Só a janela o recebe, pelo IPC. A porta
 agora está na rede: sem o token, qualquer aparelho do Wi-Fi poderia enviar arquivo para o
 acervo do mestre.
@@ -211,6 +222,12 @@ acervo do mestre.
 Publicar cena exige, **além** do token, que a requisição venha de loopback. O token
 sozinho bastaria — ele não sai desta máquina —, mas publicar é a única rota cujo abuso
 apareceria direto na TV da mesa, e a segunda condição custa três linhas.
+
+**Todo `POST` do daemon declara o próprio limite de corpo.** O padrão do axum são 2 MB, e
+herdá-lo em silêncio já custou um bug: o envio de anexo era cortado no meio e o erro
+resultante não mencionava tamanho. Publicar cena aceita 16 MB (é a cena inteira em JSON), e
+o anexo do jogador desliga o limite da camada porque o handler conta os bytes e recusa acima
+de 64 MB com uma mensagem que diz isso.
 
 O portão é uma **camada**, e não uma checagem no corpo do handler. Não é estilo: os
 extractors do axum rodam antes do handler, então um `Multipart` inválido era recusado com

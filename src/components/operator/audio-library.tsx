@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Music, Pause, Play, Square, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -29,8 +29,7 @@ function firstValue(value: number | readonly number[]): number {
  * Trocar de cena não corta a música.
  */
 export function AudioLibrary() {
-  const { assets, upload, remove } = useAssetList("audio");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const { assets, importar, remove } = useAssetList("audio");
 
   const scenes = useSceneStore((state) => state.board?.scenes);
 
@@ -55,23 +54,11 @@ export function AudioLibrary() {
           className="w-full"
           variant="outline"
           size="sm"
-          onClick={() => inputRef.current?.click()}
+          onClick={() => void importar()}
         >
           <Upload />
-          Enviar sons
+          Importar sons
         </Button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="audio/*"
-          multiple
-          className="sr-only"
-          onChange={(event) => {
-            void upload(event.target.files);
-            // Sem isso, reenviar o mesmo arquivo não dispara `change`.
-            event.target.value = "";
-          }}
-        />
       </div>
 
       {track ? (

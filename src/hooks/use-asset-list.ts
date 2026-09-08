@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { deleteAsset, listAssets, putAsset, setAssetFolder } from "@/lib/vault/assets";
+import { deleteAsset, importAssets, listAssets, setAssetFolder } from "@/lib/vault/assets";
 import type { AssetKind, AssetMeta } from "@/types/scene";
 
 type AssetListApi = {
   assets: AssetMeta[];
-  upload: (files: FileList | null) => Promise<void>;
+  /** Abre o seletor nativo e copia o que for escolhido para a campanha. */
+  importar: () => Promise<void>;
   remove: (assetId: string) => Promise<void>;
   /** Move para uma pasta. `undefined` devolve à raiz. */
   move: (assetId: string, folderId: string | undefined) => Promise<void>;
@@ -25,6 +26,9 @@ type AssetListApi = {
  * entre elas importando (remoto primeiro na exclusão, para não deixar órfão
  * pagando cota). Com o arquivo no disco de quem opera sobrou uma chamada por
  * ação, e a pergunta "e se a segunda falhar" deixou de existir.
+ *
+ * Importar é seletor nativo e cópia no disco, e não `<input type="file">` com
+ * envio: o arquivo nunca entra na webview.
  */
 export function useAssetList(kind: AssetKind): AssetListApi {
   const [assets, setAssets] = useState<AssetMeta[]>([]);
@@ -50,30 +54,22 @@ export function useAssetList(kind: AssetKind): AssetListApi {
 
   const refresh = useCallback(() => setVersion((current) => current + 1), []);
 
-  const upload = useCallback(
-    async (files: FileList | null) => {
-      if (!files?.length) return;
+  const importar = useCallback(async () => {
+    try {
+      const resultado = await importAssets(kind);
 
-      // Em série, e não em paralelo: são arquivos grandes indo para o mesmo
-      // disco, e cinco de uma vez só faz todos terminarem mais tarde.
-      let failed = 0;
-      for (const file of files) {
-        try {
-          await putAsset(file);
-        } catch (cause) {
-          failed += 1;
-          // O motivo importa: tipo não suportado e disco cheio pedem coisas
-          // diferentes de quem acabou de arrastar a pasta errada.
-          toast.error(cause instanceof Error ? cause.message : `Falha ao enviar ${file.name}`);
-        }
-      }
+      // `null` é o diálogo fechado sem escolher: não muda nada, e não avisa.
+      if (!resultado) return;
 
-      if (failed > 1) toast.error(`${failed} arquivos não puderam ser enviados.`);
+      // Um motivo por arquivo. "1 arquivo não pôde ser enviado" obriga quem
+      // escolheu doze a adivinhar qual e por quê.
+      for (const motivo of resultado.recusados) toast.error(motivo);
 
-      refresh();
-    },
-    [refresh],
-  );
+      if (resultado.aceitos.length > 0) refresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+    }
+  }, [kind, refresh]);
 
   const remove = useCallback(
     async (assetId: string) => {
@@ -91,5 +87,5 @@ export function useAssetList(kind: AssetKind): AssetListApi {
     [refresh],
   );
 
-  return { assets, upload, remove, move, refresh };
+  return { assets, importar, remove, move, refresh };
 }

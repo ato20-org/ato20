@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -42,11 +42,10 @@ import type { AssetFolder, AssetMeta, Scene } from "@/types/scene";
 const FALLBACK_SIZE = { x: 480, y: 270 };
 
 export function AssetLibrary({ scene }: { scene: Scene }) {
-  const { assets, upload, remove, move, refresh } = useAssetList("image");
+  const { assets, importar, remove, move, refresh } = useAssetList("image");
   // Mexer em pasta muda arquivo — apagar devolve o conteúdo à raiz —, então a
   // lista de arquivos recarrega junto.
   const { folders, create, rename, remove: removeFolder } = useFolderList(refresh);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [creating, setCreating] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
@@ -112,9 +111,9 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-2 p-2">
-        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+        <Button variant="outline" size="sm" onClick={() => void importar()}>
           <Upload />
-          Enviar imagens
+          Importar imagens
         </Button>
 
         {creating ? (
@@ -132,18 +131,6 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
             Nova pasta
           </Button>
         )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="sr-only"
-          onChange={(event) => {
-            void upload(event.target.files);
-            // Sem isso, reenviar o mesmo arquivo não dispara `change`.
-            event.target.value = "";
-          }}
-        />
 
         {scene.backgroundAssetId ? (
           <Button variant="ghost" size="sm" onClick={() => setBackground(scene.id, undefined)}>

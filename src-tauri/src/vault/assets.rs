@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -21,10 +21,11 @@ pub struct AssetMeta {
     pub mime_type: String,
     pub size: u64,
     pub created_at: i64,
-    /// Medidas naturais. So existem para imagem, e sao medidas na webview --
-    /// o browser ja tem o arquivo decodificado no upload, e decodificar de
-    /// novo no Rust exigiria um crate de imagem para reproduzir o que ja foi
-    /// feito.
+    /// Medidas naturais. So existem para imagem.
+    ///
+    /// Lidas do CABECALHO do arquivo na importacao, sem decodificar (ver
+    /// `import`). Ausencia e estado valido -- arquivo com cabecalho ilegivel
+    /// entra sem medida, e a cena perde so a proporcao sugerida ao arrastar.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub natural_width: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -43,30 +44,6 @@ pub struct AssetFolder {
     pub created_at: i64,
 }
 
-/// Extensao a partir do tipo declarado.
-///
-/// Tabela e nao um crate de mime: o caminho no disco tem de ser DERIVAVEL do
-/// metadado, senao servir `/asset/{id}` exigiria varrer o diretorio a cada
-/// requisicao. Tipo desconhecido cai em `bin`, que continua sendo um caminho
-/// deterministico.
-fn extension_for(mime: &str) -> &'static str {
-    match mime {
-        "image/webp" => "webp",
-        "image/png" => "png",
-        "image/jpeg" => "jpg",
-        "image/gif" => "gif",
-        "image/avif" => "avif",
-        "image/svg+xml" => "svg",
-        "audio/mpeg" | "audio/mp3" => "mp3",
-        "audio/ogg" => "ogg",
-        "audio/wav" | "audio/x-wav" => "wav",
-        "audio/flac" | "audio/x-flac" => "flac",
-        "audio/mp4" | "audio/aac" | "audio/x-m4a" => "m4a",
-        "audio/webm" => "weba",
-        _ => "bin",
-    }
-}
-
 fn kind_for(mime: &str) -> AppResult<&'static str> {
     if mime.starts_with("image/") {
         Ok("image")
@@ -82,7 +59,7 @@ fn kind_for(mime: &str) -> AppResult<&'static str> {
 pub fn asset_path(vault: &Vault, meta: &AssetMeta) -> PathBuf {
     vault
         .assets_dir()
-        .join(format!("{}.{}", meta.id, extension_for(&meta.mime_type)))
+        .join(format!("{}.{}", meta.id, super::mime::extension_for(&meta.mime_type)))
 }
 
 pub fn index(vault: &Vault) -> AppResult<Vec<AssetMeta>> {
@@ -110,62 +87,101 @@ pub fn find(vault: &Vault, id: &str) -> AppResult<Option<AssetMeta>> {
     Ok(index(vault)?.into_iter().find(|asset| asset.id == id))
 }
 
-/// Nome do temporario que um upload em curso ocupa.
+/// Traz arquivos de fora para o acervo, copiando.
 ///
-/// Dentro de `assets/` de proposito, e nao em `/tmp`: `rename` entre pontos de
-/// montagem nao e atomico, e `/tmp` costuma ser outro. O ponto na frente o
-/// esconde do explorador enquanto sobe.
-pub fn upload_temp(vault: &Vault) -> PathBuf {
-    vault
-        .assets_dir()
-        .join(format!(".upload-{}", uuid::Uuid::new_v4().simple()))
-}
+/// E o caminho do mestre importando imagem e som, e ele COPIA em vez de mover:
+/// o arquivo escolhido e do usuario, esta na pasta dele, e provavelmente e
+/// usado por outra coisa. Mover seria arrancar.
+///
+/// Substituiu o envio por HTTP, e a diferenca nao e so de gosto. Antes o
+/// navegador lia o arquivo inteiro, mandava por multipart pelo loopback e o
+/// daemon gravava -- tres travessias para o que o sistema de arquivos faz numa.
+/// Um mapa de 80MB pagava isso todo, e o limite de corpo do axum cortava o
+/// stream no meio.
+///
+/// As medidas saem do CABECALHO da imagem, sem decodificar. Elas eram medidas na
+/// webview, o que fazia sentido enquanto o arquivo passava por la; agora ele
+/// nunca chega ao navegador.
+///
+/// Devolve o que entrou e o motivo do que ficou de fora, em vez de falhar no
+/// primeiro erro: quem escolheu doze arquivos e teve um recusado quer os onze e
+/// quer saber qual.
+pub fn import(vault: &Vault, origens: &[PathBuf]) -> AppResult<(Vec<AssetMeta>, Vec<String>)> {
+    std::fs::create_dir_all(vault.assets_dir())?;
 
-/// Adota um arquivo que ja esta no disco, movendo-o para o lugar definitivo.
-///
-/// Existe por causa do upload: um mapa de 80MB lido inteiro para um `Vec`
-/// antes de gravar cobra 80MB de RAM por arquivo em voo, e o daemon aceita
-/// varios de uma vez quando o mestre arrasta uma pasta. Escrevendo em
-/// streaming para o temporario, a memoria fica no tamanho do buffer.
-pub fn adopt(
-    vault: &Vault,
-    temp: &Path,
-    name: &str,
-    mime_type: &str,
-    natural_width: Option<u32>,
-    natural_height: Option<u32>,
-) -> AppResult<AssetMeta> {
-    let kind = match kind_for(mime_type) {
-        Ok(kind) => kind,
-        Err(cause) => {
-            // O temporario nao pode ficar para tras num tipo recusado: ele nao
-            // esta no indice, ninguem o apagaria depois.
-            let _ = std::fs::remove_file(temp);
-            return Err(cause);
+    let mut aceitos = Vec::new();
+    let mut recusados = Vec::new();
+    let mut indice = index(vault)?;
+
+    for origem in origens {
+        let nome = origem
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "arquivo".to_string());
+
+        let mime_type = super::mime::from_name(&nome).to_string();
+
+        let kind = match kind_for(&mime_type) {
+            Ok(kind) => kind,
+            Err(_) => {
+                recusados.push(format!("{nome}: o acervo aceita imagem e som"));
+                continue;
+            }
+        };
+
+        let tamanho = match std::fs::metadata(origem) {
+            Ok(meta) => meta.len(),
+            Err(cause) => {
+                recusados.push(format!("{nome}: {cause}"));
+                continue;
+            }
+        };
+
+        // So imagem tem medida, e ausencia nao impede a entrada: sem ela a cena
+        // perde a proporcao sugerida ao arrastar, e o arquivo continua valendo.
+        let (largura, altura) = if kind == "image" {
+            match imagesize::size(origem) {
+                Ok(medida) => (Some(medida.width as u32), Some(medida.height as u32)),
+                Err(cause) => {
+                    log::warn!("acervo: {nome} sem medidas legiveis: {cause}");
+                    (None, None)
+                }
+            }
+        } else {
+            (None, None)
+        };
+
+        let meta = AssetMeta {
+            id: uuid::Uuid::new_v4().to_string(),
+            kind: kind.to_string(),
+            name: nome.clone(),
+            mime_type,
+            size: tamanho,
+            created_at: now_ms(),
+            natural_width: largura,
+            natural_height: altura,
+            folder_id: None,
+        };
+
+        // Binario primeiro, indice depois -- mesma ordem de `adopt`, e pelo
+        // mesmo motivo: o pior caso e um binario orfao, que nao aparece em
+        // lista nenhuma, e nao uma linha apontando para o vazio.
+        if let Err(cause) = std::fs::copy(origem, asset_path(vault, &meta)) {
+            recusados.push(format!("{nome}: {cause}"));
+            continue;
         }
-    };
 
-    let size = std::fs::metadata(temp)?.len();
+        indice.push(meta.clone());
+        aceitos.push(meta);
+    }
 
-    let meta = AssetMeta {
-        id: uuid::Uuid::new_v4().to_string(),
-        kind: kind.to_string(),
-        name: name.trim().to_string(),
-        mime_type: mime_type.to_string(),
-        size,
-        created_at: now_ms(),
-        natural_width,
-        natural_height,
-        folder_id: None,
-    };
+    // Uma gravacao do indice para o lote inteiro, e nao uma por arquivo:
+    // importar uma pasta de trinta mapas reescreveria o indice trinta vezes.
+    if !aceitos.is_empty() {
+        write_index(vault, &indice)?;
+    }
 
-    std::fs::rename(temp, asset_path(vault, &meta))?;
-
-    let mut assets = index(vault)?;
-    assets.push(meta.clone());
-    write_index(vault, &assets)?;
-
-    Ok(meta)
+    Ok((aceitos, recusados))
 }
 
 pub fn delete(vault: &Vault, id: &str) -> AppResult<()> {
@@ -270,6 +286,8 @@ pub fn delete_folder(vault: &Vault, id: &str) -> AppResult<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     fn campanha() -> (tempfile::TempDir, Vault) {
@@ -279,95 +297,184 @@ mod tests {
         (dir, vault)
     }
 
-    /// Simula o que o daemon faz: escreve o temporario e manda adotar.
-    fn enviar(vault: &Vault, name: &str, mime: &str, bytes: &[u8]) -> AppResult<AssetMeta> {
-        let temp = upload_temp(vault);
-        std::fs::write(&temp, bytes).expect("temp");
+    /// Um PNG minimo de verdade, para o leitor de cabecalho ter o que ler.
+    ///
+    /// Bytes a mao em vez de um crate de imagem: o que se testa e que as
+    /// medidas chegam ao indice, e para isso basta um cabecalho valido.
+    fn png(largura: u32, altura: u32) -> Vec<u8> {
+        let mut bytes = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+        bytes.extend_from_slice(&13u32.to_be_bytes());
+        bytes.extend_from_slice(b"IHDR");
+        bytes.extend_from_slice(&largura.to_be_bytes());
+        bytes.extend_from_slice(&altura.to_be_bytes());
+        bytes.extend_from_slice(&[8, 6, 0, 0, 0]);
+        bytes.extend_from_slice(&[0, 0, 0, 0]);
 
-        adopt(vault, &temp, name, mime, None, None)
+        bytes
+    }
+
+    /// Escreve um arquivo FORA da campanha, como o do usuario.
+    fn de_fora(dir: &Path, nome: &str, conteudo: &[u8]) -> PathBuf {
+        let origem = dir.join("de-fora");
+        std::fs::create_dir_all(&origem).expect("origem");
+
+        let caminho = origem.join(nome);
+        std::fs::write(&caminho, conteudo).expect("arquivo");
+
+        caminho
     }
 
     #[test]
-    fn envio_grava_binario_e_indice() {
-        let (_dir, vault) = campanha();
+    fn importar_copia_e_nao_move() {
+        let (dir, vault) = campanha();
+        let origem = de_fora(dir.path(), "mapa.png", &png(1920, 1080));
 
-        let meta = enviar(&vault, "mapa.webp", "image/webp", b"bytes").expect("adopt");
+        let (aceitos, recusados) = import(&vault, &[origem.clone()]).expect("import");
 
-        assert_eq!(meta.kind, "image");
-        assert_eq!(meta.size, 5);
-        assert!(asset_path(&vault, &meta).exists());
-        assert_eq!(list(&vault, None).expect("list").len(), 1);
+        assert!(recusados.is_empty(), "{recusados:?}");
+        assert_eq!(aceitos.len(), 1);
+
+        // O arquivo e do usuario e provavelmente usado por outra coisa: mover
+        // seria arrancar.
+        assert!(origem.is_file(), "o original foi movido");
+        assert!(asset_path(&vault, &aceitos[0]).is_file());
     }
 
     #[test]
-    fn caminho_vem_do_id_e_nao_do_nome_enviado() {
-        let (_dir, vault) = campanha();
+    fn medidas_saem_do_cabecalho() {
+        let (dir, vault) = campanha();
+        let origem = de_fora(dir.path(), "mapa.png", &png(1920, 1080));
 
-        // Nome vindo de fora nao escolhe onde nada e gravado. Se escolhesse,
-        // um `../../` no nome do arquivo sairia da campanha.
-        let meta = enviar(&vault, "../../fora.webp", "image/webp", b"x").expect("adopt");
-        let path = asset_path(&vault, &meta);
+        let (aceitos, _) = import(&vault, &[origem]).expect("import");
 
-        assert_eq!(path.parent(), Some(vault.assets_dir().as_path()));
-        assert!(path.file_name().expect("nome").to_string_lossy().starts_with(&meta.id));
+        assert_eq!(aceitos[0].natural_width, Some(1920));
+        assert_eq!(aceitos[0].natural_height, Some(1080));
+        assert_eq!(aceitos[0].mime_type, "image/png");
+        assert_eq!(aceitos[0].kind, "image");
     }
 
     #[test]
-    fn tipo_recusado_nao_deixa_temporario_para_tras() {
-        let (_dir, vault) = campanha();
+    fn audio_entra_sem_medida() {
+        let (dir, vault) = campanha();
+        let origem = de_fora(dir.path(), "trilha.ogg", b"nao e ogg de verdade");
 
-        let temp = upload_temp(&vault);
-        std::fs::write(&temp, b"pdf").expect("temp");
+        let (aceitos, recusados) = import(&vault, &[origem]).expect("import");
 
-        assert!(adopt(&vault, &temp, "livro.pdf", "application/pdf", None, None).is_err());
-        // Um temporario de tipo recusado nao entra no indice, entao ninguem o
-        // apagaria depois.
-        assert!(!temp.exists());
-        assert!(list(&vault, None).expect("list").is_empty());
+        assert!(recusados.is_empty(), "{recusados:?}");
+        assert_eq!(aceitos[0].kind, "audio");
+        assert_eq!(aceitos[0].natural_width, None);
+    }
+
+    #[test]
+    fn imagem_com_cabecalho_ilegivel_entra_sem_medida() {
+        let (dir, vault) = campanha();
+        let origem = de_fora(dir.path(), "quebrada.png", b"isto nao e png");
+
+        let (aceitos, recusados) = import(&vault, &[origem]).expect("import");
+
+        // Ausencia de medida nao impede a entrada: a cena perde so a proporcao
+        // sugerida ao arrastar, e o arquivo continua valendo.
+        assert!(recusados.is_empty(), "{recusados:?}");
+        assert_eq!(aceitos.len(), 1);
+        assert_eq!(aceitos[0].natural_width, None);
+    }
+
+    #[test]
+    fn caminho_vem_do_id_e_nao_do_nome_do_arquivo() {
+        let (dir, vault) = campanha();
+        // Nome hostil de um arquivo escolhido no dialogo.
+        let origem = de_fora(dir.path(), "..-mapa.png", &png(10, 10));
+
+        let (aceitos, _) = import(&vault, &[origem]).expect("import");
+        let caminho = asset_path(&vault, &aceitos[0]);
+
+        assert_eq!(caminho.parent(), Some(vault.assets_dir().as_path()));
+        assert!(caminho
+            .file_name()
+            .expect("nome")
+            .to_string_lossy()
+            .starts_with(&aceitos[0].id));
+    }
+
+    #[test]
+    fn lote_com_um_recusado_traz_o_resto_e_o_motivo() {
+        let (dir, vault) = campanha();
+
+        let bom = de_fora(dir.path(), "mapa.png", &png(100, 100));
+        let ruim = de_fora(dir.path(), "livro.pdf", b"%PDF");
+        let som = de_fora(dir.path(), "trilha.mp3", b"som");
+
+        let (aceitos, recusados) = import(&vault, &[bom, ruim, som]).expect("import");
+
+        // Quem escolheu tres e teve um recusado quer os dois e quer saber qual.
+        assert_eq!(aceitos.len(), 2);
+        assert_eq!(recusados.len(), 1);
+        assert!(recusados[0].contains("livro.pdf"), "{recusados:?}");
+        assert_eq!(list(&vault, None).expect("list").len(), 2);
+    }
+
+    #[test]
+    fn arquivo_que_nao_existe_nao_derruba_o_lote() {
+        let (dir, vault) = campanha();
+        let bom = de_fora(dir.path(), "mapa.png", &png(10, 10));
+
+        let (aceitos, recusados) =
+            import(&vault, &[bom, dir.path().join("sumiu.png")]).expect("import");
+
+        assert_eq!(aceitos.len(), 1);
+        assert_eq!(recusados.len(), 1);
     }
 
     #[test]
     fn lista_filtra_por_tipo_e_ordena_do_mais_novo() {
-        let (_dir, vault) = campanha();
+        let (dir, vault) = campanha();
 
-        let primeiro = enviar(&vault, "a.webp", "image/webp", b"a").expect("a");
+        let a = de_fora(dir.path(), "a.png", &png(10, 10));
+        import(&vault, &[a]).expect("a");
         std::thread::sleep(std::time::Duration::from_millis(5));
-        let segundo = enviar(&vault, "b.webp", "image/webp", b"b").expect("b");
-        enviar(&vault, "t.ogg", "audio/ogg", b"t").expect("t");
+
+        let b = de_fora(dir.path(), "b.png", &png(10, 10));
+        let t = de_fora(dir.path(), "t.ogg", b"som");
+        import(&vault, &[b, t]).expect("b");
 
         let imagens = list(&vault, Some("image")).expect("list");
         assert_eq!(imagens.len(), 2);
-        assert_eq!(imagens[0].id, segundo.id, "o mais novo vem primeiro");
-        assert_eq!(imagens[1].id, primeiro.id);
+        assert_eq!(imagens[0].name, "b.png", "o mais novo vem primeiro");
         assert_eq!(list(&vault, Some("audio")).expect("list").len(), 1);
     }
 
     #[test]
     fn apagar_tira_do_indice_e_do_disco() {
-        let (_dir, vault) = campanha();
+        let (dir, vault) = campanha();
+        let origem = de_fora(dir.path(), "mapa.png", &png(10, 10));
 
-        let meta = enviar(&vault, "mapa.webp", "image/webp", b"x").expect("adopt");
-        delete(&vault, &meta.id).expect("delete");
+        let (aceitos, _) = import(&vault, &[origem]).expect("import");
+        delete(&vault, &aceitos[0].id).expect("delete");
 
         assert!(list(&vault, None).expect("list").is_empty());
-        assert!(!asset_path(&vault, &meta).exists());
+        assert!(!asset_path(&vault, &aceitos[0]).exists());
     }
 
     #[test]
     fn apagar_pasta_devolve_o_conteudo_a_raiz() {
-        let (_dir, vault) = campanha();
+        let (dir, vault) = campanha();
 
         let pasta = create_folder(&vault, "Mapas").expect("folder");
-        let meta = enviar(&vault, "mapa.webp", "image/webp", b"x").expect("adopt");
-        set_folder(&vault, &meta.id, Some(pasta.id.clone())).expect("move");
+        let origem = de_fora(dir.path(), "mapa.png", &png(10, 10));
+        let (aceitos, _) = import(&vault, &[origem]).expect("import");
+        let id = aceitos[0].id.clone();
 
-        assert_eq!(find(&vault, &meta.id).expect("find").expect("meta").folder_id, Some(pasta.id.clone()));
+        set_folder(&vault, &id, Some(pasta.id.clone())).expect("move");
+        assert_eq!(
+            find(&vault, &id).expect("find").expect("meta").folder_id,
+            Some(pasta.id.clone())
+        );
 
         delete_folder(&vault, &pasta.id).expect("delete folder");
 
         // Nunca apaga arquivo: perder um mapa por um clique em "apagar pasta"
         // seria dano desproporcional ao gesto.
-        let ainda = find(&vault, &meta.id).expect("find").expect("meta");
+        let ainda = find(&vault, &id).expect("find").expect("meta");
         assert_eq!(ainda.folder_id, None);
         assert!(asset_path(&vault, &ainda).exists());
         assert!(folders(&vault).expect("folders").is_empty());
@@ -381,7 +488,8 @@ mod tests {
         create_folder(&vault, "mapas").expect("f");
         create_folder(&vault, "Fichas").expect("f");
 
-        let nomes: Vec<String> = folders(&vault).expect("folders").into_iter().map(|f| f.name).collect();
+        let nomes: Vec<String> =
+            folders(&vault).expect("folders").into_iter().map(|f| f.name).collect();
         assert_eq!(nomes, vec!["Fichas", "mapas", "Retratos"]);
     }
 }
