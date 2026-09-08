@@ -97,6 +97,29 @@ pnpm tauri dev
 `pnpm dev` sozinho serve as telas em `localhost:3000`, mas o Operador aparece dizendo "abra
 pelo aplicativo": uma aba de navegador não alcança o disco.
 
+### A barra da janela
+
+A janela roda **sem decoração do sistema** (`decorations: false`) e desenha a própria barra:
+arrastar, minimizar, maximizar, fechar. Barra fina e separada, e não os botões embutidos no
+cabeçalho do Operador — aquele cabeçalho quebra em duas linhas em janela estreita, e um
+botão de fechar que muda de lugar conforme a largura é o tipo de coisa que se clica por
+engano.
+
+Com a decoração vão embora as **bordas de redimensionar**, que ninguém lembra até perder:
+`WindowChrome` as recria como oito faixas invisíveis (4px nas laterais, 8px nos cantos) que
+pedem `startResizeDragging` ao sistema. Elas desaparecem com a janela maximizada, onde não
+há o que redimensionar e roubariam clique nas beiradas dos painéis.
+
+A barra só existe dentro do aplicativo, e o "estou no aplicativo?" é lido por
+`useSyncExternalStore` com snapshot de servidor `false` — não por `useEffect` + `setState`.
+Não é estilo: isso não é estado que muda, é leitura de ambiente, e o HTML pré-renderizado
+não sabe onde vai rodar. Ler a marca do Tauri durante a hidratação faria o cliente desenhar
+uma árvore diferente da que veio no HTML.
+
+**Num gerenciador de janelas de mosaico** — bspwm, i3 e afins — arrastar e maximizar
+provavelmente não fazem nada: quem decide posição e tamanho ali é o WM, não a janela.
+Fechar e minimizar continuam valendo. Não é defeito da barra, é o contrato desses WMs.
+
 ## O daemon
 
 Dentro do processo do aplicativo roda um servidor HTTP, escutando em `0.0.0.0:20200`. Ele é
