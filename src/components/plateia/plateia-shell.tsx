@@ -46,7 +46,7 @@ export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMes
     // `h-dvh` fixa a altura na viewport real do celular, já descontando a
     // barra do navegador.
     <main className="flex h-dvh min-w-0 flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center gap-2 border-b px-4 py-2 [@media(max-height:520px)]:py-1">
+      <header className="flex shrink-0 items-center gap-2 border-b px-4 py-2 select-none [@media(max-height:520px)]:py-1">
         <Smartphone className="text-muted-foreground size-4 shrink-0" aria-hidden />
         {/* O nome da mesa, e não o código: quem já entrou não precisa mais do
             código, e precisa saber que entrou na mesa certa. */}
@@ -143,7 +143,7 @@ function CharacterPanel({ codigo }: { codigo: string }) {
  */
 function BottomBar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex shrink-0 justify-center border-t p-1">
+    <div className="flex shrink-0 justify-center border-t p-1 select-none">
       <TabsList>{children}</TabsList>
     </div>
   );

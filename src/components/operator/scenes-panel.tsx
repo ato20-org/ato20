@@ -27,7 +27,7 @@ export function ScenesPanel({ scene, ready }: { scene: Scene | null; ready: bool
   const setTab = usePanelsStore((state) => state.setLeftTab);
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r">
+    <aside className="flex w-72 shrink-0 flex-col border-r select-none">
       <Tabs
         value={tab}
         onValueChange={(value) => setTab(value as LeftTab)}

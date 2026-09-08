@@ -53,7 +53,7 @@ export function TrackBar() {
   const conhecida = duration > 0;
 
   return (
-    <footer className="flex shrink-0 items-center gap-3 border-t px-3 py-1.5">
+    <footer className="flex shrink-0 items-center gap-3 border-t px-3 py-1.5 select-none">
       <Button
         variant="ghost"
         size="icon-sm"

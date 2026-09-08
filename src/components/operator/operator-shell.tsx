@@ -90,7 +90,7 @@ export function OperatorShell() {
           toggles de painel, que agora moram nos próprios painéis, e desfazer e
           refazer, que são Ctrl+Z e Ctrl+Y e não precisavam de alvo na tela.
           A campanha subiu para a barra da janela. */}
-      <header className="flex flex-wrap items-center gap-2 gap-y-1 border-b px-3 py-2">
+      <header className="flex flex-wrap items-center gap-2 gap-y-1 border-b px-3 py-2 select-none">
         <OnAirControl editing={editingScene} />
 
         <Separator orientation="vertical" className="mx-1 h-8" />

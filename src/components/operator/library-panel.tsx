@@ -19,7 +19,7 @@ import type { Scene } from "@/types/scene";
  */
 export function LibraryPanel({ scene }: { scene: Scene | null }) {
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l">
+    <aside className="flex w-72 shrink-0 flex-col border-l select-none">
       <Tabs defaultValue="imagens" className="flex min-h-0 flex-1 flex-col gap-0">
         <div className="flex items-center gap-1 p-2">
           <PanelCollapse side="right" label="Imagens e sons" />
