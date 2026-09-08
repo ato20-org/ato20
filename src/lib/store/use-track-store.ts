@@ -16,6 +16,15 @@ type TrackStore = {
   /** Pausa ou retoma, reiniciando a contagem de posição. */
   setPlaying: (playing: boolean) => void;
   setVolume: (volume: number) => void;
+  /**
+   * Move a faixa para um instante.
+   *
+   * Reescreve `startedAt` em vez de mandar um comando de "buscar": é assim que
+   * a posição já viajava, e por isso a TV e os celulares seguem sozinhos —
+   * cada um recalcula a própria posição a partir dele. Um comando novo exigiria
+   * que todos estivessem ouvindo no instante exato do clique.
+   */
+  seek: (seconds: number) => void;
   setLoop: (loop: boolean) => void;
   clear: () => void;
   /** Aplica um estado recebido do canal, sem regravar no disco. */
@@ -63,6 +72,13 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   setVolume(volume) {
     const { track } = get();
     if (track) persist({ ...track, volume }, set);
+  },
+
+  seek(seconds) {
+    const { track } = get();
+    if (!track) return;
+
+    persist({ ...track, startedAt: Date.now() - Math.max(0, seconds) * 1000 }, set);
   },
 
   setLoop(loop) {

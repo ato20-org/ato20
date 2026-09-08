@@ -4,13 +4,12 @@ import { useEffect } from "react";
 import {
   PanelLeftOpen,
   PanelRightOpen,
-  Volume2,
-  VolumeX,
 } from "lucide-react";
 
 import { OpenViewer } from "@/components/operator/open-viewer";
 import { PlayersDialog } from "@/components/operator/players-dialog";
 import { TableInvite } from "@/components/operator/table-invite";
+import { TrackBar } from "@/components/operator/track-bar";
 import { LibraryPanel } from "@/components/operator/library-panel";
 import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
@@ -26,7 +25,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
-import { useAudioStore } from "@/lib/store/use-audio-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
@@ -45,11 +43,6 @@ export function OperatorShell() {
   // Duas cenas distintas: a que o mestre edita e a que a mesa vê.
   const editingScene = useSceneStore(selectEditingScene);
   const liveScene = useSceneStore(selectLiveScene);
-
-  const soundOn = useAudioStore((state) => state.enabled);
-  const setSoundOn = useAudioStore((state) => state.setEnabled);
-  const audioBlocked = useAudioStore((state) => state.blocked);
-  const retryAudio = useAudioStore((state) => state.retry);
 
   const leftOpen = usePanelsStore((state) => state.left);
   const rightOpen = usePanelsStore((state) => state.right);
@@ -101,27 +94,7 @@ export function OperatorShell() {
         <OnAirControl editing={editingScene} />
 
         <Separator orientation="vertical" className="mx-1 h-8" />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={soundOn ? "Silenciar esta tela" : "Ligar o som desta tela"}
-          aria-pressed={!soundOn}
-          onClick={() => setSoundOn(!soundOn)}
-        >
-          {soundOn ? <Volume2 /> : <VolumeX />}
-        </Button>
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
         <PlayersDialog />
-
-        {/* O browser recusa tocar antes de um gesto na página. Só aparece
-            quando há trilha para desbloquear. */}
-        {audioBlocked && track ? (
-          <Button variant="secondary" size="sm" onClick={retryAudio}>
-            <Volume2 />
-            Ativar som
-          </Button>
-        ) : null}
 
         {/* As duas juntas, na mesma ponta: são a mesma pergunta — como as
             outras telas entram na mesa. Uma dá o QR para o celular e para a TV
@@ -166,6 +139,10 @@ export function OperatorShell() {
 
         {rightOpen ? <LibraryPanel scene={editingScene} /> : null}
       </div>
+
+      {/* A linha de baixo: o que está tocando, com onde está e quanto falta.
+          Só aparece quando há trilha escolhida. */}
+      <TrackBar />
 
       {/* A trilha é da sessão, não da cena: trocar de cena não corta a
           música. */}

@@ -19,9 +19,24 @@ type AudioStore = {
   /** Contador incrementado por "Ativar som" para forçar nova tentativa. */
   nudge: number;
 
+  /**
+   * Onde a faixa está, em segundos, e quanto ela tem.
+   *
+   * Vem do elemento `<audio>` desta tela — é o único que sabe. `duration` é 0
+   * até os metadados chegarem, e a barra mostra `--:--` nesse intervalo em vez
+   * de fingir um número.
+   *
+   * Mora aqui, e não no `use-track-store`, porque não é da SESSÃO: é o estado
+   * do reprodutor deste aparelho. O que viaja para a TV e para os celulares é
+   * `startedAt`, e cada um calcula a própria posição a partir dele.
+   */
+  position: number;
+  duration: number;
+
   setEnabled: (enabled: boolean) => void;
   setBlocked: (blocked: boolean) => void;
   retry: () => void;
+  setProgress: (position: number, duration: number) => void;
 };
 
 /**
@@ -34,10 +49,13 @@ export const useAudioStore = create<AudioStore>((set) => ({
   enabled: true,
   blocked: false,
   nudge: 0,
+  position: 0,
+  duration: 0,
 
   setEnabled: (enabled) => set({ enabled }),
   setBlocked: (blocked) => set({ blocked }),
   retry: () => set((state) => ({ nudge: state.nudge + 1 })),
+  setProgress: (position, duration) => set({ position, duration }),
 }));
 
 /**

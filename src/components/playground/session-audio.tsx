@@ -82,6 +82,43 @@ export function SessionAudio({ track }: { track: SessionTrack | null }) {
     return () => element.removeEventListener("loadedmetadata", seekAndPlay);
   }, [url, shouldPlay, track?.loop, track?.startedAt, nudge, setBlocked]);
 
+  /**
+   * Informa onde a faixa está.
+   *
+   * Escrito por `getState()` e não por um hook, de propósito: `timeupdate`
+   * dispara ~4 vezes por segundo, e assinar isso aqui re-renderizaria este
+   * componente nessa cadência — junto com o `<audio>`, que é a última coisa que
+   * se quer remontando. Quem re-renderiza é só quem lê a barra.
+   */
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+
+    const { setProgress } = useAudioStore.getState();
+
+    const report = () => {
+      const { currentTime, duration } = element;
+
+      setProgress(currentTime, Number.isFinite(duration) ? duration : 0);
+    };
+
+    report();
+
+    element.addEventListener("timeupdate", report);
+    element.addEventListener("loadedmetadata", report);
+    element.addEventListener("durationchange", report);
+    element.addEventListener("seeked", report);
+
+    return () => {
+      element.removeEventListener("timeupdate", report);
+      element.removeEventListener("loadedmetadata", report);
+      element.removeEventListener("durationchange", report);
+      element.removeEventListener("seeked", report);
+      // Faixa que saiu não deixa a barra parada no último instante dela.
+      setProgress(0, 0);
+    };
+  }, [url]);
+
   useEffect(() => {
     if (!blocked || !enabled) return;
 
