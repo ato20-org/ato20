@@ -54,7 +54,7 @@ function useIsDesktop(): boolean {
  *
  * Só existe dentro do aplicativo: no navegador não há janela para controlar.
  */
-export function WindowChrome() {
+export function WindowChrome({ subtitulo }: { subtitulo?: string }) {
   const noApp = useIsDesktop();
   const [maximizada, setMaximizada] = useState(false);
 
@@ -97,11 +97,19 @@ export function WindowChrome() {
         // faz isso sozinho num elemento de arraste.
         onDoubleClick={() => void janela.toggleMaximize()}
       >
-        <span
-          data-tauri-drag-region
-          className="text-muted-foreground flex-1 truncate text-xs"
-        >
-          ATO20
+        {/* O nome e o que se está editando, na barra da janela.
+            "Editando Cena 1" vivia num bloco do cabeçalho do Operador, ao lado
+            da palavra "Operador" — que não dizia nada a quem já está olhando
+            para a tela do Operador. Aqui a informação fica e o rótulo inútil
+            sai, sem custar altura de palco. */}
+        <span data-tauri-drag-region className="min-w-0 flex-1 truncate text-xs">
+          <span className="text-muted-foreground">ATO20</span>
+          {subtitulo ? (
+            <>
+              <span className="text-muted-foreground/50 mx-1.5">—</span>
+              <span className="text-foreground">Editando {subtitulo}</span>
+            </>
+          ) : null}
         </span>
 
         <div className="flex items-center">

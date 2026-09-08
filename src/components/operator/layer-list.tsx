@@ -108,7 +108,7 @@ export function LayerList({ scene }: { scene: Scene }) {
 
       {ordered.length === 0 ? (
         <p className="text-muted-foreground px-3 pb-3 text-xs">
-          Nada na cena. Envie uma imagem acima e clique no <span className="font-medium">+</span>.
+          Nada na cena. Importe uma imagem acima e clique no <span className="font-medium">+</span>.
         </p>
       ) : (
         <ScrollArea className="min-h-0 flex-1">

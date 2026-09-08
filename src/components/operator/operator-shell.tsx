@@ -114,16 +114,6 @@ export function OperatorShell() {
 
         <Separator orientation="vertical" className="mx-1 h-8" />
 
-        {/* `max-w-40` porque `truncate` só corta dentro de largura definida —
-            sem o limite, um nome longo de cena empurraria o resto da barra. */}
-        <div className="min-w-0 max-w-40">
-          <p className="text-sm leading-none font-medium">Operador</p>
-          <p className="text-muted-foreground truncate text-xs">
-            {editingScene ? `Editando ${editingScene.name}` : "Nenhuma cena aberta"}
-          </p>
-        </div>
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
         <Button
           variant="ghost"
           size="icon-sm"

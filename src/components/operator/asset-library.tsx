@@ -144,7 +144,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
       <ScrollArea className="min-h-0 flex-1">
         {assets.length === 0 && folders.length === 0 ? (
           <p className="text-muted-foreground p-3 text-xs">
-            Nenhuma imagem ainda. Envie mapas, documentos e retratos.
+            Nenhuma imagem ainda. Importe mapas, tokens e retratos.
           </p>
         ) : (
           <div className="space-y-2 p-2">
