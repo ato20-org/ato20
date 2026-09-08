@@ -20,8 +20,11 @@ use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
+mod page;
+
 use crate::error::AppResult;
 use crate::vault::{assets, players, Vault};
+use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
 ///
@@ -772,10 +775,7 @@ async fn remove_attachment(
 /// relativo, sem a tela precisar descobrir endereco nenhum.
 async fn serve_web(State(state): State<Arc<Daemon>>, request: Request<Body>) -> Response {
     let Some(root) = state.web_root.clone() else {
-        return fail(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "bundle das telas nao encontrado -- rode `pnpm build`",
-        );
+        return ErrorPage::sem_bundle().into_response();
     };
 
     let path = request.uri().path().trim_end_matches('/').to_string();
@@ -835,7 +835,7 @@ async fn serve_web(State(state): State<Arc<Daemon>>, request: Request<Body>) -> 
         }
     }
 
-    fail(StatusCode::NOT_FOUND, "tela nao encontrada")
+    ErrorPage::tela_desconhecida().into_response()
 }
 
 /// `GET /asset/{id}`
@@ -1703,6 +1703,50 @@ bytes\r\n\
             let bytes = to_bytes(response.into_body(), 4096).await.expect("corpo");
             assert_eq!(String::from_utf8_lossy(&bytes), esperado, "{uri}");
         }
+    }
+
+    #[tokio::test]
+    async fn tela_desconhecida_e_uma_pagina_e_nao_um_texto_solto() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(&out).expect("out");
+        std::fs::write(out.join("index.html"), "raiz").expect("index");
+
+        let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(Some(vault))),
+            "segredo".into(),
+            Some(out),
+        ));
+
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/tela-que-nao-existe")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        // HTML, e nao `text/plain`: quem abre isto e uma pessoa, muitas vezes
+        // numa TV do outro lado da sala.
+        assert_eq!(
+            response.headers().get("content-type").map(|v| v.to_str().unwrap()),
+            Some("text/html; charset=utf-8")
+        );
+
+        let bytes = to_bytes(response.into_body(), 32 * 1024).await.expect("corpo");
+        let texto = String::from_utf8_lossy(&bytes);
+
+        // Diz o que fazer, e oferece as duas telas que existem.
+        assert!(texto.contains("Essa tela não existe"), "{texto}");
+        assert!(texto.contains("/assistir"), "{texto}");
+        assert!(texto.contains("/plateia"), "{texto}");
+        // E NAO ecoa o caminho pedido: seria XSS refletido numa porta que esta
+        // na rede local.
+        assert!(!texto.contains("tela-que-nao-existe"), "o caminho foi ecoado");
     }
 
     #[tokio::test]

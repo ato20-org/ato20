@@ -98,12 +98,22 @@ pub fn run() {
 /// corrente, e o `out/` esta um nivel acima. `None` e estado valido: quem nunca
 /// rodou `pnpm build` tem o Operador funcionando e as telas de espectador
 /// dizendo o que falta, em vez de uma tela branca.
+///
+/// A ORDEM depende do perfil, e isso custou um bug. O `resource_dir()/out` e um
+/// RETRATO, copiado pelo Tauri no momento do build do Rust; o `../out` e a
+/// saida viva do Next. Em desenvolvimento o frontend e reconstruido a toda hora
+/// e o Rust nao, entao o retrato envelhece -- e preferi-lo servia uma tela que
+/// nao existe mais, ou faltava, com 404 de "tela nao encontrada". Em release e
+/// o inverso: o retrato dentro do pacote e o unico que existe.
 fn find_web_root(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let candidates = [
-        app.path().resource_dir().ok().map(|dir| dir.join("out")),
-        Some(PathBuf::from("../out")),
-        Some(PathBuf::from("out")),
-    ];
+    let embutido = app.path().resource_dir().ok().map(|dir| dir.join("out"));
+    let vivo = Some(PathBuf::from("../out"));
+
+    let candidates = if cfg!(debug_assertions) {
+        [vivo, embutido, Some(PathBuf::from("out"))]
+    } else {
+        [embutido, vivo, Some(PathBuf::from("out"))]
+    };
 
     candidates
         .into_iter()

@@ -366,6 +366,19 @@ que vem dentro dele é antigo e não entende uma seção que a toolchain do Arch
 O `out/` viaja como recurso do bundle e é lido de `resource_dir()`. Verificado no pacote:
 o AppImage serve `/assistir` de dentro de si mesmo, com o daemon em `0.0.0.0:20200`.
 
+**A ordem de busca depende do perfil, e isso custou um bug.** O `resource_dir()/out` é um
+*retrato*, copiado pelo Tauri no momento do build do Rust; o `../out` é a saída viva do
+Next. Em desenvolvimento o frontend é reconstruído a toda hora e o Rust não, então o retrato
+envelhece — preferi-lo servia 404 numa tela que existia. Em release é o inverso: o retrato
+dentro do pacote é o único que existe. `find_web_root` inverte a ordem conforme
+`debug_assertions`.
+
+Quando algo falha nas rotas de tela, o daemon devolve uma **página** — HTML e CSS embutidos
+no Rust, sem tocar o bundle, porque em um dos casos o que falta é justamente o bundle. Ela
+diz o que houve, o que fazer, e oferece as duas telas que existem. O tamanho do texto cresce
+com a tela: essa página aparece numa TV do outro lado da sala com a mesma frequência que num
+celular na mão.
+
 **Uma armadilha que custou um bug, e por isso existe o `clean:web-resources`.** O Tauri
 copia o que está em `bundle.resources` para `target/{perfil}/` e **não poda** o que deixou
 de existir. Medido, não deduzido: uma página deletada do código continuou sendo servida na
