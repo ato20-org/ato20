@@ -15,13 +15,34 @@ export const MAX_ZOOM = 8;
 const ASPECT = SCENE_HEIGHT / SCENE_WIDTH;
 const MIN_WIDTH = SCENE_WIDTH / MAX_ZOOM;
 
+/**
+ * Quanto o recorte pode passar das bordas do plano, em unidades de cena.
+ *
+ * Antes não podia nada: o deslocamento parava na beirada do mapa, e o preto em
+ * volta era só letterbox — espaço que existia na tela e não podia ser
+ * alcançado. Isso apertava justamente quem trabalha nas bordas, e ficou visível
+ * quando as notas dos pontos de anotação passaram a poder ser estacionadas fora
+ * do mapa: dava para pôr o cartão ali e não dava para chegar nele.
+ *
+ * Um plano inteiro de folga para cada lado, o que dá uma área de trabalho de
+ * três planos por três. Não é infinito de verdade, e não deveria ser: o
+ * recorte é o que o botão de enquadrar manda para a mesa, e um limite mantém
+ * esse número dentro de algo que a TV consegue mostrar. É folga demais para
+ * incomodar e pouca o bastante para não virar um vazio sem fundo.
+ *
+ * Perder o mapa de vista aqui é recuperável num clique: o botão da porcentagem
+ * volta ao plano inteiro.
+ */
+const FOLGA_X = SCENE_WIDTH;
+const FOLGA_Y = SCENE_HEIGHT;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
 /**
  * Ajusta o recorte para algo exibível: proporção do plano, dentro dos limites
- * de ampliação e sem sair das bordas.
+ * de ampliação e dentro do plano mais a folga.
  *
  * A proporção é derivada da largura, nunca aceita da entrada: um recorte fora
  * de 16:9 faria cada visão letterboxar de um jeito diferente, e o
@@ -32,8 +53,10 @@ export function clampViewport({ x, y, width }: Viewport): Viewport {
   const clampedHeight = clampedWidth * ASPECT;
 
   return {
-    x: clamp(x, 0, SCENE_WIDTH - clampedWidth),
-    y: clamp(y, 0, SCENE_HEIGHT - clampedHeight),
+    // A folga entra nas duas pontas: à esquerda do zero e depois do fim do
+    // plano. Ver `FOLGA_X`.
+    x: clamp(x, -FOLGA_X, SCENE_WIDTH - clampedWidth + FOLGA_X),
+    y: clamp(y, -FOLGA_Y, SCENE_HEIGHT - clampedHeight + FOLGA_Y),
     width: clampedWidth,
     height: clampedHeight,
   };
@@ -68,6 +91,25 @@ export function viewportZoom(viewport: Viewport): number {
 
 export function isFullViewport(viewport: Viewport): boolean {
   return viewport.width >= SCENE_WIDTH;
+}
+
+/**
+ * Recentra o recorte num ponto do plano, sem mudar a ampliação.
+ *
+ * Serve a busca de pontos de anotação: escolher um da lista tem de levar a
+ * vista até ele, e mudar o zoom no caminho tiraria o mestre do enquadramento
+ * em que ele estava trabalhando.
+ *
+ * O `clampViewport` cuida das bordas, então um ponto no canto do mapa fica
+ * visível sem ficar centrado — que é o certo: centrar de verdade exigiria
+ * mostrar área fora do plano.
+ */
+export function centerViewportOn(viewport: Viewport, point: Vec): Viewport {
+  return clampViewport({
+    ...viewport,
+    x: point.x - viewport.width / 2,
+    y: point.y - viewport.height / 2,
+  });
 }
 
 /** Zoom mantendo o centro parado — é o que os botões de + e - fazem. */
