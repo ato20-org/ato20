@@ -34,6 +34,7 @@ import {
   type NewCanvasItem,
   type NewFogRegion,
   type Scene,
+  type SceneGrid,
   type Viewport,
 } from "@/types/scene";
 
@@ -95,6 +96,13 @@ type SceneStore = {
   setBackground: (sceneId: string, assetId: string | undefined) => void;
   /** `undefined` devolve a mesa ao plano inteiro. */
   setSceneCamera: (sceneId: string, camera: Viewport | undefined) => void;
+  /**
+   * Liga, ajusta ou desliga a grade da cena. `undefined` desliga.
+   *
+   * Passa pelo `updateScene`, e portanto pelo histórico: ligar a grade é uma
+   * edição da cena como qualquer outra, e Ctrl+Z tem de desfazê-la.
+   */
+  setSceneGrid: (sceneId: string, grid: SceneGrid | undefined) => void;
   /** Devolve o id do item criado, para já deixá-lo selecionado. */
   addItem: (sceneId: string, item: NewCanvasItem) => string;
   /** Devolve os ids na mesma ordem dos rascunhos. */
@@ -271,6 +279,10 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
   setSceneCamera(sceneId, camera) {
     get().updateScene(sceneId, (scene) => ({ ...scene, camera }));
+  },
+
+  setSceneGrid(sceneId, grid) {
+    get().updateScene(sceneId, (scene) => ({ ...scene, grid }));
   },
 
   addItem(sceneId, item) {

@@ -96,6 +96,49 @@ export type FogRegion = {
   revealed: boolean;
 };
 
+/**
+ * Grade sobre o mapa.
+ *
+ * Mora na CENA, e não numa preferência da máquina, porque cada mapa tem a
+ * própria escala: a grade que casa com uma taverna desenhada em 40px por
+ * quadrado não casa com um mapa de região. E porque ela precisa viajar — a
+ * mesa vê a mesma grade que o mestre, senão contar movimento em voz alta não
+ * significa nada.
+ *
+ * Ausente em `Scene.grid` = sem grade. É o padrão: a maioria das cenas de
+ * ambiente não quer uma.
+ */
+export type SceneGrid = {
+  /**
+   * Lado do quadrado, em unidades de cena.
+   *
+   * Unidade de cena e não pixel de tela, como todo o resto: assim a grade
+   * acompanha o zoom e é a mesma no palco do mestre, na TV de 1920 e no celular
+   * de 390.
+   */
+  size: number;
+  /**
+   * Deslocamento da origem.
+   *
+   * Existe porque mapas comprados já vêm com uma grade desenhada, e ela quase
+   * nunca começa no canto exato da imagem. Sem isto, casar as duas exigiria
+   * recortar o arquivo.
+   */
+  offsetX: number;
+  offsetY: number;
+  /** Opacidade da linha, de 0 a 1. */
+  opacity: number;
+  /**
+   * Linha escura em vez de clara.
+   *
+   * Duas opções, e não um seletor de cor: o que decide é o mapa embaixo, e
+   * mapa de RPG é claro (pergaminho, planta baixa) ou escuro (caverna, noite).
+   * Um seletor cobriria casos que não existem e pediria uma decisão a mais em
+   * cada cena.
+   */
+  dark?: boolean;
+};
+
 /** O que o chamador informa ao desenhar uma área; `id` e `revealed` são do store. */
 export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height">;
 
@@ -190,6 +233,8 @@ export type Scene = {
    * O zoom do Operador só chega aqui quando ele manda, pelo botão de enquadrar.
    */
   camera?: Viewport;
+  /** Grade sobre o mapa. Ausente = sem grade. */
+  grid?: SceneGrid;
   createdAt: number;
   updatedAt: number;
 };
@@ -208,6 +253,14 @@ export type Board = {
    */
   liveSceneId: string | null;
 };
+
+/**
+ * Grade que uma cena ganha ao ser ligada pela primeira vez.
+ *
+ * 96 unidades num plano de 1920 dá 20 colunas por 11 linhas e meia — perto do
+ * que um mapa de batalha costuma usar, e um número redondo de onde ajustar.
+ */
+export const DEFAULT_GRID: SceneGrid = { size: 96, offsetX: 0, offsetY: 0, opacity: 0.35 };
 
 export function createScene(name: string): Scene {
   const now = Date.now();
