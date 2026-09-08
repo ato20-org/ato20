@@ -7,13 +7,14 @@ import {
 } from "lucide-react";
 
 import { OpenViewer } from "@/components/operator/open-viewer";
-import { PlayersDialog } from "@/components/operator/players-dialog";
+import { PlayersChip } from "@/components/operator/players-chip";
 import { TableInvite } from "@/components/operator/table-invite";
 import { TrackBar } from "@/components/operator/track-bar";
 import { LibraryPanel } from "@/components/operator/library-panel";
 import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
 import { OperatorToolbar } from "@/components/operator/operator-toolbar";
+import { PinIndex } from "@/components/operator/pin-index";
 import { ScenesPanel } from "@/components/operator/scenes-panel";
 import { SpotlightChip } from "@/components/operator/spotlight-chip";
 import { StageContextMenu } from "@/components/operator/stage-context-menu";
@@ -21,12 +22,13 @@ import { ViewportControls } from "@/components/operator/viewport-controls";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
+import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
+import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
   selectEditingScene,
@@ -58,6 +60,7 @@ export function OperatorShell() {
   const toggleLeft = usePanelsStore((state) => state.toggleLeft);
   const toggleRight = usePanelsStore((state) => state.toggleRight);
   const restorePanels = usePanelsStore((state) => state.restore);
+  const restorePinNotes = usePinWindowStore((state) => state.restaurar);
 
   const track = useTrackStore((state) => state.track);
 
@@ -66,10 +69,12 @@ export function OperatorShell() {
   const spotlight = useSpotlightStore((state) => state.spotlight);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
-  // padrões, e ler `localStorage` antes disso divergiria na hidratação.
+  // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale
+  // para os painéis e para onde cada nota de ponto foi deixada.
   useEffect(() => {
     restorePanels();
-  }, [restorePanels]);
+    restorePinNotes();
+  }, [restorePanels, restorePinNotes]);
 
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.
@@ -89,17 +94,15 @@ export function OperatorShell() {
           zoom foram para o canto do palco, onde a mão já está —, os dois
           toggles de painel, que agora moram nos próprios painéis, e desfazer e
           refazer, que são Ctrl+Z e Ctrl+Y e não precisavam de alvo na tela.
+          Jogadores saiu junto: virou pílula com contador no canto do palco.
           A campanha subiu para a barra da janela. */}
       <header className="flex flex-wrap items-center gap-2 gap-y-1 border-b px-3 py-2 select-none">
         <OnAirControl editing={editingScene} />
 
-        <Separator orientation="vertical" className="mx-1 h-8" />
-        <PlayersDialog />
-
         {/* As duas juntas, na mesma ponta: são a mesma pergunta — como as
             outras telas entram na mesa. Uma dá o QR para o celular e para a TV
-            de outro aparelho; a outra abre a TV aqui. "Jogadores" fica do outro
-            lado porque é outra coisa: quem já entrou. */}
+            de outro aparelho; a outra abre a TV aqui. Quem JÁ entrou é outra
+            coisa, e mora no canto do palco — ver `PlayersChip`. */}
         <div className="ml-auto flex items-center gap-2">
           <TableInvite />
           <OpenViewer />
@@ -113,22 +116,30 @@ export function OperatorShell() {
           {/* Painel fechado deixa um alvo flutuando no canto de cima do palco,
               do lado dele. É o caminho de volta: sem isso, fechar um painel o
               deixaria inalcançável. */}
-          {leftOpen ? null : (
-            <FloatingPanelToggle
-              onToggle={toggleLeft}
-              label="Cenas e áreas"
-              className="top-2 left-2"
-              icon={<PanelLeftOpen />}
-            />
-          )}
-          {rightOpen ? null : (
-            <FloatingPanelToggle
-              onToggle={toggleRight}
-              label="Imagens e sons"
-              className="top-2 right-2"
-              icon={<PanelRightOpen />}
-            />
-          )}
+          <div className="absolute top-2 left-2 z-10">
+            {leftOpen ? null : (
+              <FloatingPanelToggle
+                onToggle={toggleLeft}
+                label="Cenas e áreas"
+                icon={<PanelLeftOpen />}
+              />
+            )}
+          </div>
+
+          {/* Quem está na mesa fica aqui, e não no cabeçalho: é consulta, como
+              o índice de pontos, e a contagem só serve se estiver à vista o
+              tempo todo. Fora do `StageBoundary`: uma mesa cheia continua
+              cheia sem cena nenhuma selecionada. */}
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+            <PlayersChip />
+            {rightOpen ? null : (
+              <FloatingPanelToggle
+                onToggle={toggleRight}
+                label="Imagens e sons"
+                icon={<PanelRightOpen />}
+              />
+            )}
+          </div>
 
           {status === "error" ? (
             <p className="text-destructive m-auto max-w-sm text-center text-sm">{error}</p>
@@ -154,7 +165,8 @@ export function OperatorShell() {
 /**
  * O alvo que devolve um painel fechado.
  *
- * Flutua sobre o canto de cima do palco, do lado do painel que ele reabre.
+ * Flutua sobre o canto de cima do palco, do lado do painel que ele reabre —
+ * quem o posiciona é o grupo que o envolve.
  * Substituiu os dois botões que viviam nas pontas do cabeçalho: eles ficavam
  * longe do que controlavam, e eram dois dos itens que faziam a barra parecer
  * cheia.
@@ -162,12 +174,10 @@ export function OperatorShell() {
 function FloatingPanelToggle({
   onToggle,
   label,
-  className,
   icon,
 }: {
   onToggle: () => void;
   label: string;
-  className: string;
   icon: React.ReactNode;
 }) {
   return (
@@ -177,9 +187,9 @@ function FloatingPanelToggle({
           <Button
             variant="secondary"
             size="icon-sm"
-            // `z-10` para vencer o palco. Sem sombra e semitransparente: ele
-            // fica sobre a cena, e um botão opaco ali competiria com o mapa.
-            className={`bg-background/85 absolute z-10 backdrop-blur ${className}`}
+            // Sem sombra e semitransparente: ele fica sobre a cena, e um
+            // botão opaco ali competiria com o mapa.
+            className="bg-background/85 backdrop-blur"
             aria-label={`Mostrar ${label}`}
             onClick={onToggle}
           >
@@ -201,7 +211,8 @@ function FloatingPanelToggle({
 function StageBoundary({ scene, status }: { scene: Scene | null; status: string }) {
   const viewport = useViewportStore((state) => state.viewport);
   const setViewport = useViewportStore((state) => state.setViewport);
-  const panMode = useViewportStore((state) => state.panMode);
+  // A mesma resposta que o `OperatorStage` usa para soltar os itens.
+  const panMode = usePanMode();
 
   const stage = (
     // Com espaço segurado, o arrasto de botão esquerdo passa a deslocar a cena
@@ -236,6 +247,16 @@ function StageBoundary({ scene, status }: { scene: Scene | null; status: string 
         <div className="absolute bottom-3 left-3 flex items-center gap-2">
           <OperatorToolbar />
           <ViewportControls scene={scene} />
+        </div>
+      ) : null}
+
+      {/* Canto oposto ao das ferramentas, de propósito: aquele lado é gesto
+          sobre o mapa — mira, ampliação, enquadramento — e este é consulta.
+          Na mesma fila, seria mais um alvo a atravessar com o cursor entre
+          duas ações que nada têm a ver uma com a outra. */}
+      {scene ? (
+        <div className="absolute right-3 bottom-3 flex items-center gap-2">
+          <PinIndex scene={scene} />
         </div>
       ) : null}
     </div>
