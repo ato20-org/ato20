@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import {
-  ExternalLink,
-  Home,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -16,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { CampaignBadge } from "@/components/operator/campaign-badge";
+import { OpenViewer } from "@/components/operator/open-viewer";
 import { PlayersDialog } from "@/components/operator/players-dialog";
 import { TableInvite } from "@/components/operator/table-invite";
 import { LibraryPanel } from "@/components/operator/library-panel";
@@ -34,7 +32,6 @@ import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { useAudioStore } from "@/lib/store/use-audio-store";
-import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
@@ -78,8 +75,6 @@ export function OperatorShell() {
   const portraits = usePortraitStore((state) => state.portraits);
   const hydratePortraits = usePortraitStore((state) => state.hydrate);
 
-  const campaignCode = useCampaignStore((state) => state.campaign?.codigo ?? null);
-
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
@@ -109,19 +104,6 @@ export function OperatorShell() {
           de comprimir os controles ou vazar para fora da tela. Duas linhas em
           janela estreita é honesto; controle inalcançável não é. */}
       <header className="flex flex-wrap items-center gap-2 gap-y-1 border-b px-3 py-2">
-        {/* `nativeButton={false}`: o Base UI avisa que renderizar um <a> como
-            botão apaga a semântica nativa. Aqui é um link de verdade — navega,
-            abre em nova aba, aceita "copiar endereço" — então declaramos isso. */}
-        <Button
-          render={<Link href="/mesa" />}
-          nativeButton={false}
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Escolher visão"
-        >
-          <Home />
-        </Button>
-
         <PanelToggle
           open={leftOpen}
           onToggle={toggleLeft}
@@ -193,25 +175,7 @@ export function OperatorShell() {
         ) : null}
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Leva o código: quem abre a TV é o mestre, e ele não deveria
-              digitar o que já está na tela dele. Abre a aba desta máquina —
-              para a TV noutro aparelho, o QR de "Entrar na mesa". */}
-          <Button
-            render={
-              <Link
-                href={campaignCode ? `/assistir?code=${campaignCode}` : "/assistir"}
-                target="_blank"
-                rel="noopener"
-              />
-            }
-            nativeButton={false}
-            variant="outline"
-            size="sm"
-            aria-label="Abrir Assistir"
-          >
-            <ExternalLink />
-            <span className="hidden xl:inline">Abrir Assistir</span>
-          </Button>
+          <OpenViewer />
 
           <PanelToggle
             open={rightOpen}

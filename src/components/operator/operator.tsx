@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
 import { OperatorGate } from "@/components/operator/operator-gate";
@@ -38,9 +37,6 @@ export function Operator() {
         <p className="text-destructive max-w-sm text-sm">{error}</p>
         <Button variant="outline" size="sm" onClick={() => void boot()}>
           Tentar de novo
-        </Button>
-        <Button render={<Link href="/mesa" />} nativeButton={false} variant="ghost" size="sm">
-          Voltar
         </Button>
       </div>
     );

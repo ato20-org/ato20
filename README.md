@@ -50,19 +50,29 @@ tempo, é a receita para escrita perdida. Esse texto é materializado em
 
 ## Três telas
 
-| Tela | Rota | O que é |
+| Tela | Onde roda | O que é |
 | --- | --- | --- |
-| Operador | `/operador` | A tela do mestre: monta cenas, arrasta imagens, esconde regiões, decide o que entra no ar |
-| Assistir | `/assistir` | Só o palco, sem controle. Vai na TV atrás do mestre |
-| Plateia | `/plateia` | O celular de cada jogador |
+| Operador | **no aplicativo** | A tela do mestre: monta cenas, arrasta imagens, esconde regiões, decide o que entra no ar |
+| Assistir | navegador | Só o palco, sem controle. Vai na TV atrás do mestre |
+| Plateia | navegador | O celular de cada jogador |
 
 A cena **em edição** e a cena **no ar** são separadas — é isso que permite preparar a
 próxima enquanto a mesa segue na atual.
 
-**O aplicativo é o operador.** Não há login, não há conta de mestre, não há código de
-operação para mover a mesa entre máquinas: quem abriu o programa já está na máquina onde as
-campanhas moram, e uma senha ali só protegeria o disco de si mesmo. Trocar de máquina é
-copiar a pasta.
+**O aplicativo é o operador**, e a janela abre direto nele: a lista de campanhas, um clique,
+e a mesa. Não há tela de escolher visão nem apresentação no caminho — quem baixou o
+aplicativo é o mestre, e as outras duas telas nem funcionariam aqui, porque o Operador é o
+único que precisa alcançar o disco.
+
+Não há login, não há conta de mestre, não há código de operação para mover a mesa entre
+máquinas: quem abriu o programa já está na máquina onde as campanhas moram, e uma senha ali
+só protegeria o disco de si mesmo. Trocar de máquina é copiar a pasta.
+
+As duas telas de espectador vivem no navegador, e o daemon as serve. "Abrir Assistir" no
+Operador abre o **navegador do sistema**, e não uma aba desta janela: a janela é a mesa do
+mestre, e a TV costuma ir para um segundo monitor, que o navegador sabe arrastar e a webview
+não. Quem digitar o IP do notebook e cair na raiz encontra as duas — normalmente ninguém vê
+essa página, porque o QR do Operador leva direto para a tela certa, já com o código.
 
 ## Estado atual da migração
 
@@ -84,8 +94,8 @@ pnpm install
 pnpm tauri dev
 ```
 
-`pnpm dev` sozinho serve as três telas em `localhost:3000`, mas o Operador aparece dizendo
-"abra pelo aplicativo": uma aba de navegador não alcança o disco.
+`pnpm dev` sozinho serve as telas em `localhost:3000`, mas o Operador aparece dizendo "abra
+pelo aplicativo": uma aba de navegador não alcança o disco.
 
 ## O daemon
 
@@ -332,6 +342,14 @@ que vem dentro dele é antigo e não entende uma seção que a toolchain do Arch
 
 O `out/` viaja como recurso do bundle e é lido de `resource_dir()`. Verificado no pacote:
 o AppImage serve `/assistir` de dentro de si mesmo, com o daemon em `0.0.0.0:20200`.
+
+**Uma armadilha que custou um bug, e por isso existe o `clean:web-resources`.** O Tauri
+copia o que está em `bundle.resources` para `target/{perfil}/` e **não poda** o que deixou
+de existir. Medido, não deduzido: uma página deletada do código continuou sendo servida na
+rede local — o `index.html` era sobrescrito a cada build, mas o arquivo da rota removida
+ficava lá para sempre. E não é sujeira de desenvolvimento: a cópia de `target/release/` é a
+que entra no `.deb` e no AppImage, então a rota apagada viajaria dentro do pacote. O
+`beforeDevCommand` e o `beforeBuildCommand` apagam essas cópias antes de cada build.
 
 ## Como o vault grava
 

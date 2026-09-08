@@ -64,6 +64,10 @@ zip = { version = "4", default-features = false, features = ["deflate"] }
 # Guarda-se o HASH do token, nunca ele. Um `.ato20/estado.db` que vaza -- num
 # zip, num backup, num Dropbox -- nao pode entregar as credenciais da mesa.
 sha2 = "0.10"
+# Abrir o Assistir no navegador do SISTEMA, e nao dentro da webview: a TV e uma
+# tela de espectador, e servi-la na mesma janela do Operador tiraria o mestre da
+# mesa dele.
+tauri-plugin-opener = "2.5.5"
 
 [dev-dependencies]
 # Cada teste do vault precisa de uma campanha propria num diretorio que se

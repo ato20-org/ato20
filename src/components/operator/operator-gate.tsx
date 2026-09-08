@@ -42,12 +42,14 @@ function NoApp() {
       <MonitorOff className="text-muted-foreground size-8" aria-hidden />
       <h1 className="text-2xl font-semibold tracking-tight">Abra pelo aplicativo</h1>
       <p className="text-muted-foreground text-sm">
-        O Operador lê e grava a campanha na pasta que você escolher, e uma aba do navegador não
-        alcança o disco. Assistir e Plateia, sim: elas são as telas que rodam nos outros aparelhos.
+        O Operador lê e grava a campanha numa pasta do computador, e uma aba do navegador não
+        alcança o disco. Quem baixou o aplicativo é o mestre; ele abre direto nesta tela.
       </p>
 
-      <Button render={<Link href="/mesa" />} nativeButton={false} variant="outline" size="sm">
-        Voltar
+      {/* Para as duas telas que FUNCIONAM aqui: quem caiu neste endereço pelo
+          navegador é quase sempre alguém da mesa que digitou o IP. */}
+      <Button render={<Link href="/" />} nativeButton={false} variant="outline" size="sm">
+        Ver as telas da mesa
       </Button>
     </Centered>
   );
@@ -144,10 +146,6 @@ function CampaignDoor() {
       </Button>
 
       {error ? <p className="text-destructive text-sm">{error}</p> : null}
-
-      <Button render={<Link href="/mesa" />} nativeButton={false} variant="ghost" size="sm">
-        Voltar
-      </Button>
     </Centered>
   );
 }
