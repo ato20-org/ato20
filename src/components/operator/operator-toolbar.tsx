@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, MousePointer2, SquareDashedBottom } from "lucide-react";
+import { Hand, MapPin, MousePointer2, SquareDashedBottom } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -12,6 +12,12 @@ const TOOLS: Array<{ tool: Tool; label: string; hint: string; icon: typeof Mouse
     label: "Selecionar",
     hint: "Clique para selecionar, arraste no vazio para marcar vários.",
     icon: MousePointer2,
+  },
+  {
+    tool: "hand",
+    label: "Deslocar a cena",
+    hint: "Arraste para percorrer o mapa. Segurar espaço faz o mesmo sem trocar de ferramenta.",
+    icon: Hand,
   },
   {
     tool: "fog",
