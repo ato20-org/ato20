@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { CampaignBadge } from "@/components/operator/campaign-badge";
+import { PlayersDialog } from "@/components/operator/players-dialog";
 import { TableInvite } from "@/components/operator/table-invite";
 import { LibraryPanel } from "@/components/operator/library-panel";
 import { OnAirControl } from "@/components/operator/on-air-control";
@@ -180,6 +181,7 @@ export function OperatorShell() {
         <Separator orientation="vertical" className="mx-1 h-8" />
         <CampaignBadge />
         <TableInvite />
+        <PlayersDialog />
 
         {/* O browser recusa tocar antes de um gesto na página. Só aparece
             quando há trilha para desbloquear. */}

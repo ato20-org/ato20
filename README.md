@@ -25,8 +25,11 @@ minha-campanha/
   pastas.json
   retratos.json        quem está no ar, em que canto, de que tamanho
   trilha.json
+  jogadores/
+    a8b9.../
+      historico-ana.txt   o que cada jogador anexou
   .ato20/
-    estado.db          sessão e jogadores — não viaja no zip
+    estado.db          nome, notas e credencial de cada jogador
 ```
 
 Isso existe por causa de um custo que travou a versão anterior. Ela guardava mapas e
@@ -60,10 +63,8 @@ copiar a pasta.
 - **Operador: completo.** Abre a pasta, grava as cenas, envia imagens e sons.
 - **Assistir e Plateia: na rede local.** O daemon serve as duas telas e publica a cena por
   SSE, então qualquer aparelho da casa serve de TV e cada jogador acompanha pelo celular.
-- **Ficha do personagem: ainda não.** Nome, anexos e notas dependiam da tabela `players`
-  com RLS isolando a ficha de um jogador da do outro. Isso não desaparece por trocar de
-  armazenamento: vira código no daemon, com token por jogador. Deixá-la na tela ligada a
-  nada seria pior que não tê-la, então a Plateia hoje mostra só a cena.
+- **Ficha do personagem: na Plateia.** Nome, notas e anexos, com um token por jogador no
+  lugar da RLS que fazia esse trabalho antes.
 - **Exportar e importar zip: ainda não.**
 
 ## Rodar
@@ -180,6 +181,83 @@ A leitura (`GET /asset/{id}`) é aberta de propósito: é dela que a TV e o celu
 vão buscar mapa e trilha, e exigir segredo por arquivo faria cada `<img>` da cena carregar
 um cabeçalho que o HTML não sabe mandar.
 
+## Jogadores
+
+Entrar na **mesa** e entrar como **jogador** são duas coisas, e ficaram separadas de
+propósito. O código da mesa dá acesso à cena; o nome cria a ficha. A TV entra na mesa e
+nunca vira jogador, e quem só quer olhar o mapa também não. Se fossem uma coisa só, cada
+aparelho que abrisse a Plateia criaria uma linha na campanha do mestre, e a lista dele
+encheria de fantasmas.
+
+```
+POST   /sala/entrar        {codigo, nome} -> {id, nome, token}
+GET    /eu                 Bearer
+PATCH  /eu                 {nome?, notas?}
+GET    /eu/anexos
+POST   /eu/anexos          multipart
+GET    /eu/anexos/{arquivo}
+DELETE /eu/anexos/{arquivo}
+```
+
+**O token substitui a RLS.** Era o Postgres que impedia a ficha de um jogador de vazar para
+o outro; agora é um token de 32 bytes do CSPRNG do sistema, guardado no `localStorage` do
+celular e apresentado em `Authorization`. O jogador **nunca informa o próprio id** — ele
+apresenta o token, e quem decide a identidade é o banco. É a diferença entre isto e um
+`?jogador={id}`, que deixaria qualquer um ler a ficha alheia trocando o id.
+
+**O banco guarda o hash, nunca o token.** O `.ato20/estado.db` fica dentro da pasta que o
+mestre sincroniza, põe em backup e um dia manda por zip: o token em claro faria qualquer
+cópia desse arquivo virar acesso à ficha de todo mundo da mesa. SHA-256 sem sal e sem
+alongamento, de propósito — isto não é senha escolhida por humano, e um KDF lento aqui
+custaria latência por requisição para defender de um ataque de dicionário que não existe
+contra 256 bits.
+
+**`rotulo` é do mestre, e a garantia é a ausência do campo.** O apelido que o mestre anota
+não está em `PATCH /eu` nem em `update_self`, e por isso nem o dono da linha escreve nele.
+Era privilégio de coluna no Postgres. Há teste que manda `rotulo` no corpo do `PATCH` e
+confere que ele foi ignorado.
+
+**Nome repetido não reaproveita ficha.** É tentador — quem perdeu o token e digitou o mesmo
+nome de novo gostaria de reencontrar a ficha —, mas abriria a porta para qualquer um do
+Wi-Fi assumir a ficha alheia digitando o nome dela. Duas linhas com o mesmo nome são
+visíveis para o mestre, que apaga a errada; o contrário não teria remédio.
+
+**Tirar da mesa revoga.** A linha sai, os anexos vão com ela, e o token deixa de valer na
+requisição seguinte. É a única operação do projeto que apaga arquivo sem o dono pedir, e a
+alternativa — linha removida e pasta órfã — deixaria o disco crescendo com material de quem
+não está mais na mesa e sem nenhuma tela por onde alcançá-lo.
+
+### Os anexos
+
+Vão para `jogadores/{id}/`, dentro da pasta da campanha, então **viajam no zip** junto com
+as cenas. O id é o diretório, nunca o nome que o jogador escolheu: nome vindo da rede não
+decide caminho, e dois jogadores chamados "Edgar" não podem escrever na mesma pasta.
+
+O nome do arquivo é saneado na entrada e **saneado de novo na leitura**, do mesmo jeito, em
+vez de confiar no que foi pedido — e o caminho resultante é conferido contra a pasta do
+jogador antes de qualquer leitura. `../../config.json` não sobrevive a isso.
+
+O teto é 64 MB por arquivo e 30 arquivos por jogador, menor que os 512 MB do acervo do
+mestre. A diferença é proposital: aqui a entrada não é confiável, vem de um celular na rede
+para dentro da pasta de outra pessoa. Ficha, retrato e print cabem folgados; o que não cabe
+é alguém encher o disco do mestre pela porta da Plateia.
+
+As miniaturas são blob URLs, e não `<img src="/eu/anexos/...">`. É a única forma que mantém
+**uma** credencial: `<img>` não manda cabeçalho, e as alternativas seriam pôr o token na URL
+— onde ele vaza para histórico e log — ou trocá-lo por um cookie, que reintroduziria CSRF
+numa porta que hoje não tem nenhum.
+
+### O que o mestre vê
+
+A lista de jogadores vem por **IPC**, não pelas rotas do daemon. O aplicativo *é* o mestre:
+uma rota `/mestre/...` obrigaria o daemon a responder "quem é o mestre?", pergunta que não
+tem resposta boa numa porta aberta na rede e que aqui simplesmente não existe.
+
+O mestre vê nome, apelido, notas e a lista de anexos de cada um. Abrir um anexo acontece no
+explorador do sistema, em `jogadores/{id}/` — consequência do vault, e não limitação: os
+arquivos estão numa pasta de verdade, e uma rota para o mestre ler anexo pela rede seria
+superfície nova para resolver o que o gerenciador de arquivos já resolve.
+
 ## Como o vault grava
 
 **Escrita atômica, sempre.** Arquivo temporário no mesmo diretório, `sync_all`, `rename`. O
@@ -292,6 +370,11 @@ renomeação que não move arquivo, colisão de nome de cena, id órfão, caminh
 vem do nome enviado, o portão de token, publicação recusada de fora da máquina, código da
 mesa, travessia de caminho na rota estática — que agora está na rede — e a rota com
 diretório homônimo que devolvia 307.
+
+Sobre jogadores, ela cobre o que a RLS garantia antes: token que não vaza em claro para o
+banco, ficha que só o próprio token abre, `rotulo` que o jogador não alcança, anexo de um
+que não é legível nem listável pelo outro, nome de arquivo hostil que não escapa da pasta,
+e token que deixa de valer quando o mestre tira o jogador da mesa.
 
 O lado TypeScript **ainda não tem runner**. Os módulos puros foram escritos para serem
 testáveis de fora — é o motivo de `reorderByZ`, `clampViewport`, `flipPatches`, `scaleGroup`

@@ -52,6 +52,14 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 
 uuid = { version = "1", features = ["v4"] }
 
+# Token de jogador. `getrandom` e o CSPRNG do sistema, e nao um gerador
+# qualquer: este token e a unica coisa que separa a ficha de um jogador da do
+# outro depois que a RLS do Postgres saiu.
+getrandom = "0.3"
+# Guarda-se o HASH do token, nunca ele. Um `.ato20/estado.db` que vaza -- num
+# zip, num backup, num Dropbox -- nao pode entregar as credenciais da mesa.
+sha2 = "0.10"
+
 [dev-dependencies]
 # Cada teste do vault precisa de uma campanha propria num diretorio que se
 # apague sozinho: testes que compartilham pasta passam isolados e falham juntos.

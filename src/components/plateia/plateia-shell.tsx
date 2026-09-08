@@ -1,31 +1,45 @@
 "use client";
 
-import { Smartphone } from "lucide-react";
+import { useState } from "react";
+import { Monitor, Smartphone, User } from "lucide-react";
 
 import { PlateiaStage } from "@/components/plateia/plateia-stage";
+import { PlayerAttachments } from "@/components/plateia/player-attachments";
+import { PlayerGate } from "@/components/plateia/player-gate";
+import { PlayerIdentity } from "@/components/plateia/player-identity";
+import { PlayerNotes } from "@/components/plateia/player-notes";
 import { SessionAudio } from "@/components/playground/session-audio";
-import { useSubscription } from "@/hooks/use-scene-broadcast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSubscription, type Subscription } from "@/hooks/use-scene-broadcast";
+import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
+import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
 
 /**
- * A visão do jogador.
+ * Abas por layout, na ordem em que o arraste lateral navega.
  *
- * Já é outro aparelho de novo: o daemon serve esta página pela rede local e a
- * cena chega por SSE. O que ainda falta é a **ficha do personagem** — nome,
- * anexos e notas.
- *
- * Ela dependia da tabela `players` com a RLS isolando a ficha de um jogador da
- * do outro, e isso não desaparece por trocar de armazenamento: vira código no
- * daemon, com token por jogador. É o passo seguinte, e com ela volta o layout
- * de abas — que sem um segundo painel seria uma aba só.
+ * Em pé a cena fica presa no topo e não é aba; deitado ela disputa a altura
+ * com o resto e volta a ser.
  */
-export function PlateiaShell({
-  codigo,
-  nomeDaMesa,
-}: {
-  codigo: string;
-  nomeDaMesa: string;
-}) {
-  const { scene, track, portraits, synced, stalled } = useSubscription(codigo);
+const STACKED_TABS = ["personagem"] as const;
+const TABBED_TABS = ["cena", "personagem"] as const;
+
+type StackedTab = (typeof STACKED_TABS)[number];
+type Tab = (typeof TABBED_TABS)[number];
+
+/**
+ * A visão do jogador: a cena, e a ficha do personagem.
+ *
+ * A cena chega por SSE do daemon; a ficha, pelas rotas `/eu`. São dois níveis
+ * de entrada de propósito — o código da mesa dá acesso à cena, e o nome cria a
+ * ficha. Quem só quer olhar o mapa nunca vira uma linha na campanha do mestre.
+ */
+export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMesa: string }) {
+  const tabbed = useTabbedLayout();
+
+  // A inscrição vive aqui, e não dentro da aba Cena: aba inativa é desmontada,
+  // e o jogador que fosse ver a ficha sairia do fluxo e perderia as trocas de
+  // cena até voltar.
+  const live = useSubscription(codigo);
 
   return (
     // `h-dvh` fixa a altura na viewport real do celular, já descontando a
@@ -38,13 +52,127 @@ export function PlateiaShell({
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{nomeDaMesa}</span>
       </header>
 
-      <div className="min-h-0 flex-1 p-2">
-        <PlateiaStage scene={scene} portraits={portraits} synced={synced} stalled={stalled} />
+      {tabbed ? (
+        <TabbedLayout codigo={codigo} live={live} />
+      ) : (
+        <StackedLayout codigo={codigo} live={live} />
+      )}
+
+      {/* Fora das abas: a trilha não pode parar porque o jogador foi consultar
+          a própria ficha. Música cortada no meio quebra a imersão que ela
+          existe para criar. */}
+      <SessionAudio track={live.track} />
+    </main>
+  );
+}
+
+type LayoutProps = { codigo: string; live: Subscription };
+
+/**
+ * Tela em pé: cena presa no topo, abas embaixo para o resto.
+ *
+ * A cena não é aba aqui porque não precisa ser — sobra altura para ela e para
+ * o conteúdo ao mesmo tempo. Presa, e não rolando junto: perder o mapa de
+ * vista ao consultar a própria ficha é o oposto do que serve numa mesa.
+ */
+function StackedLayout({ codigo, live }: LayoutProps) {
+  const [tab, setTab] = useState<StackedTab>("personagem");
+  const swipe = useSwipeTabs(STACKED_TABS, tab, setTab);
+
+  return (
+    <>
+      <div className="shrink-0 p-2">
+        <PlateiaStage
+          scene={live.scene}
+          portraits={live.portraits}
+          synced={live.synced}
+          stalled={live.stalled}
+        />
       </div>
 
-      {/* Fora do palco: a trilha pertence à sessão, e não à cena que está no
-          ar — trocar de cena não pode cortar a música. */}
-      <SessionAudio track={track} />
-    </main>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as StackedTab)}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        <div className="min-h-0 flex-1" {...swipe}>
+          <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">
+            <CharacterPanel codigo={codigo} />
+          </TabsContent>
+        </div>
+
+        <BottomBar>
+          <TabsTrigger value="personagem">
+            <User />
+            Personagem
+          </TabsTrigger>
+        </BottomBar>
+      </Tabs>
+    </>
+  );
+}
+
+/** Nome, arquivos e notas — o bloco é o mesmo nos dois layouts. */
+function CharacterPanel({ codigo }: { codigo: string }) {
+  return (
+    <PlayerGate codigo={codigo}>
+      <PlayerIdentity codigo={codigo} />
+      <PlayerAttachments codigo={codigo} />
+      <PlayerNotes codigo={codigo} />
+    </PlayerGate>
+  );
+}
+
+/**
+ * Barra centralizada e compacta.
+ *
+ * O polegar alcança o meio da tela muito melhor que os cantos, e a barra
+ * ocupar a largura inteira só afastava os alvos um do outro.
+ */
+function BottomBar({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex shrink-0 justify-center border-t p-1">
+      <TabsList>{children}</TabsList>
+    </div>
+  );
+}
+
+/** Tela deitada: uma aba por vez, com arraste lateral e barra centralizada. */
+function TabbedLayout({ codigo, live }: LayoutProps) {
+  const [tab, setTab] = useState<Tab>("cena");
+  const swipe = useSwipeTabs(TABBED_TABS, tab, setTab);
+
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(value) => setTab(value as Tab)}
+      className="flex min-h-0 flex-1 flex-col gap-0"
+    >
+      <div className="min-h-0 flex-1" {...swipe}>
+        <TabsContent value="cena" className="h-full p-2">
+          <PlateiaStage
+            scene={live.scene}
+            portraits={live.portraits}
+            synced={live.synced}
+            stalled={live.stalled}
+          />
+        </TabsContent>
+
+        <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">
+          <CharacterPanel codigo={codigo} />
+        </TabsContent>
+      </div>
+
+      <BottomBar>
+        <TabsTrigger value="cena">
+          <Monitor />
+          Cena
+        </TabsTrigger>
+        <TabsTrigger value="personagem">
+          <User />
+          Personagem
+        </TabsTrigger>
+      </BottomBar>
+    </Tabs>
   );
 }

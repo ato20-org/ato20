@@ -1,0 +1,64 @@
+"use client";
+
+import { call } from "@/lib/vault/bridge";
+
+/**
+ * Os jogadores, do lado do mestre.
+ *
+ * Por IPC, e não pelas rotas HTTP do daemon: o aplicativo **é** o mestre. Uma
+ * rota `/mestre/...` obrigaria o daemon a responder "quem é o mestre?" — e essa
+ * pergunta não tem resposta boa numa porta aberta na rede. Aqui ela não existe,
+ * porque só a janela alcança o IPC.
+ */
+export type Player = {
+  id: string;
+  /** Nome que o próprio jogador escolheu. */
+  nome: string;
+  /** Apelido que o mestre deu. Só daqui é gravável. */
+  rotulo: string;
+  notas: string;
+  entrouEm: number;
+  /** Última vez que este jogador falou com o daemon. */
+  vistoEm: number;
+};
+
+export type PlayerAttachment = {
+  arquivo: string;
+  tamanho: number;
+  mimeType: string;
+};
+
+export function listPlayers(): Promise<Player[]> {
+  return call<Player[]>("players_list");
+}
+
+/**
+ * O apelido que o mestre dá.
+ *
+ * Fora do alcance do próprio jogador: `PATCH /eu` não tem este campo, e
+ * `update_self` no Rust também não. Era privilégio de coluna no Postgres.
+ */
+export function setPlayerLabel(id: string, rotulo: string): Promise<void> {
+  return call("player_set_label", { id, rotulo });
+}
+
+/** Tira o jogador da mesa, com os anexos dele. Revoga o token. */
+export function removePlayer(id: string): Promise<void> {
+  return call("player_remove", { id });
+}
+
+/**
+ * Os anexos de um jogador — só a lista.
+ *
+ * Abrir o arquivo acontece no explorador do sistema, em `jogadores/{id}/`. Isso
+ * é consequência do vault e não limitação: os arquivos estão numa pasta de
+ * verdade, e uma rota para o mestre ler anexo pela rede seria superfície nova
+ * para resolver o que o gerenciador de arquivos já resolve.
+ */
+export function playerAttachments(id: string): Promise<PlayerAttachment[]> {
+  return call<PlayerAttachment[]>("player_attachments", { id });
+}
+
+export function playerAttachmentsDir(id: string): Promise<string> {
+  return call<string>("player_attachments_dir", { id });
+}

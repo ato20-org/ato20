@@ -73,6 +73,11 @@ pub fn run() {
             commands::portraits_save,
             commands::track_load,
             commands::track_save,
+            commands::players_list,
+            commands::player_set_label,
+            commands::player_remove,
+            commands::player_attachments,
+            commands::player_attachments_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

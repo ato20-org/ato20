@@ -7,6 +7,15 @@ use std::collections::HashSet;
 /// `a-taverna-do-javali.json`, que e o que faz `cenas/` valer alguma coisa
 /// para quem olha de fora do aplicativo.
 pub fn slugify(name: &str) -> String {
+    slugify_with_fallback(name, "cena")
+}
+
+/// O mesmo, com o nome de reserva de quem chama.
+///
+/// Existe porque "cena" nao serve para tudo: um anexo cujo nome inteiro esta
+/// fora do ASCII precisa cair em "arquivo", e um nome de arquivo chamado "cena"
+/// so confundiria quem abre a pasta.
+pub fn slugify_with_fallback(name: &str, fallback: &str) -> String {
     let mut out = String::new();
     let mut last_dash = true;
 
@@ -28,12 +37,24 @@ pub fn slugify(name: &str) -> String {
 
     // Nome inteiro fora do ASCII, ou vazio, viraria arquivo sem nome.
     if trimmed.is_empty() {
-        return "cena".to_string();
+        return fallback.to_string();
     }
 
     // Teto de 60: alguns sistemas de arquivos param em 255 bytes no componente,
     // e um nome de cena longo somado ao sufixo de colisao chegaria perto.
-    trimmed.chars().take(60).collect::<String>().trim_matches('-').to_string()
+    let cortado = trimmed
+        .chars()
+        .take(60)
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+
+    // O corte pode ter deixado so tracos.
+    if cortado.is_empty() {
+        fallback.to_string()
+    } else {
+        cortado
+    }
 }
 
 /// Tira o acento mantendo a letra: "ação" vira "acao", nao "a--o".

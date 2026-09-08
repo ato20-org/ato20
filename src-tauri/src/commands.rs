@@ -9,7 +9,8 @@ use crate::serve::{DaemonAddr, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
 use crate::vault::board::Board;
 use crate::vault::session::Json;
-use crate::vault::{assets, board, session, CampaignInfo, Vault};
+use crate::vault::players::{Attachment, Player};
+use crate::vault::{assets, board, players, session, CampaignInfo, Vault};
 
 /// Preferencia que guarda a ultima campanha aberta.
 const LAST_CAMPAIGN: &str = "ultima-campanha";
@@ -229,4 +230,56 @@ pub fn track_load(state: State<'_, AppState>) -> AppResult<Option<Json>> {
 #[tauri::command]
 pub fn track_save(state: State<'_, AppState>, track: Option<Json>) -> AppResult<()> {
     state.with_vault(|vault| session::save_track(vault, track.as_ref()))
+}
+
+// --- jogadores --------------------------------------------------------------
+
+// As operacoes do mestre vem por IPC, e nao por HTTP, e a razao e simples: o
+// aplicativo E o mestre. Uma rota `/mestre/...` obrigaria o daemon a responder
+// "quem e o mestre?" -- pergunta que nao tem resposta boa numa porta aberta na
+// rede, e que aqui simplesmente nao existe, porque so a janela alcanca o IPC.
+
+/// Todos os jogadores da mesa, em ordem de entrada.
+#[tauri::command]
+pub fn players_list(state: State<'_, AppState>) -> AppResult<Vec<Player>> {
+    state.with_vault(players::list)
+}
+
+/// O apelido que o mestre da a um jogador.
+///
+/// Fora do alcance do proprio jogador de proposito: `PATCH /eu` nao tem este
+/// campo, e `update_self` tambem nao. Era privilegio de coluna no Postgres.
+#[tauri::command]
+pub fn player_set_label(
+    state: State<'_, AppState>,
+    id: String,
+    rotulo: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| players::set_label(vault, &id, &rotulo))
+}
+
+/// Tira o jogador da mesa, com os anexos dele.
+#[tauri::command]
+pub fn player_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.with_vault(|vault| players::remove(vault, &id))
+}
+
+/// Os anexos de um jogador, para o mestre ver o que existe.
+///
+/// So a lista -- nome, tamanho e tipo. Abrir o arquivo acontece no explorador
+/// do sistema, em `jogadores/{id}/`, e isso e consequencia do vault e nao
+/// limitacao: os arquivos estao numa pasta de verdade, e uma rota para o mestre
+/// ler anexo pela rede seria superficie nova para resolver o que o gerenciador
+/// de arquivos ja resolve.
+#[tauri::command]
+pub fn player_attachments(state: State<'_, AppState>, id: String) -> AppResult<Vec<Attachment>> {
+    state.with_vault(|vault| players::list_attachments(vault, &id))
+}
+
+/// Onde ficam os anexos de um jogador, para o mestre abrir no explorador.
+#[tauri::command]
+pub fn player_attachments_dir(state: State<'_, AppState>, id: String) -> AppResult<String> {
+    state.with_vault(|vault| {
+        Ok(players::attachments_dir(vault, &id).display().to_string())
+    })
 }
