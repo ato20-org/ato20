@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { CampaignBadge } from "@/components/operator/campaign-badge";
+import { TableInvite } from "@/components/operator/table-invite";
 import { LibraryPanel } from "@/components/operator/library-panel";
 import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
@@ -32,6 +33,7 @@ import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { useAudioStore } from "@/lib/store/use-audio-store";
+import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
@@ -74,6 +76,8 @@ export function OperatorShell() {
 
   const portraits = usePortraitStore((state) => state.portraits);
   const hydratePortraits = usePortraitStore((state) => state.hydrate);
+
+  const campaignCode = useCampaignStore((state) => state.campaign?.codigo ?? null);
 
   useEffect(() => {
     void hydrate();
@@ -175,6 +179,7 @@ export function OperatorShell() {
 
         <Separator orientation="vertical" className="mx-1 h-8" />
         <CampaignBadge />
+        <TableInvite />
 
         {/* O browser recusa tocar antes de um gesto na página. Só aparece
             quando há trilha para desbloquear. */}
@@ -186,11 +191,17 @@ export function OperatorShell() {
         ) : null}
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Sem `?code=`: enquanto o transporte é o `BroadcastChannel`, o
-              Assistir só alcança a cena sendo outra aba desta máquina, e não
-              há código a passar. O código volta para cá com o daemon. */}
+          {/* Leva o código: quem abre a TV é o mestre, e ele não deveria
+              digitar o que já está na tela dele. Abre a aba desta máquina —
+              para a TV noutro aparelho, o QR de "Entrar na mesa". */}
           <Button
-            render={<Link href="/assistir" target="_blank" rel="noopener" />}
+            render={
+              <Link
+                href={campaignCode ? `/assistir?code=${campaignCode}` : "/assistir"}
+                target="_blank"
+                rel="noopener"
+              />
+            }
             nativeButton={false}
             variant="outline"
             size="sm"

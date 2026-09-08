@@ -71,7 +71,19 @@ export async function call<T>(command: string, args?: Record<string, unknown>): 
   }
 }
 
-export type DaemonAddr = { url: string; token: string };
+export type DaemonAddr = {
+  /** Loopback. É por aqui que a janela do Operador fala com o daemon. */
+  url: string;
+  /**
+   * O mesmo daemon pelo IP da rede local, para a TV e os celulares.
+   *
+   * `null` quando a máquina não tem rota de rede — sem Wi-Fi nem cabo. A tela
+   * diz isso, em vez de mostrar um endereço que não responderia.
+   */
+  lanUrl: string | null;
+  /** Segredo das rotas que escrevem. */
+  token: string;
+};
 
 /**
  * Endereço do daemon, resolvido uma vez por aba.

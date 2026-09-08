@@ -32,7 +32,10 @@ tauri-plugin-dialog = "2"
 # ja tem fs, sqlite, zip e http -- um sidecar Node exigiria empacotar um
 # runtime a mais so para nao trocar de linguagem.
 axum = { version = "0.8", features = ["multipart"] }
-tokio = { version = "1", features = ["rt-multi-thread", "net", "fs", "io-util", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "fs", "io-util", "macros", "sync"] }
+# O SSE: um canal `broadcast` do tokio virado em stream. Ele ja resolve o fanout
+# -- cada espectador e um receptor, e quem le devagar nao segura os outros.
+tokio-stream = { version = "0.1", features = ["sync"] }
 tower = "0.5"
 # `ServeFile` em vez de ler o arquivo a mao: ele ja implementa Range,
 # `If-None-Match` e `Last-Modified`. Range nao e opcional -- sem ele o audio da

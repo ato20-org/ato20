@@ -4,6 +4,7 @@ mod error;
 mod serve;
 mod vault;
 
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use tauri::Manager;
@@ -39,8 +40,13 @@ pub fn run() {
             // atraves do `RwLock`, entao trocar de campanha nao reinicia o
             // servidor nem muda a porta -- e a porta e o que a TV e os
             // celulares vao ter anotado.
-            let daemon = serve::spawn(Arc::clone(&vault))?;
-            log::info!("daemon em {}", daemon.url);
+            let web_root = find_web_root(app.handle());
+            if web_root.is_none() {
+                log::warn!("bundle das telas nao encontrado; Assistir e Plateia nao serao servidos");
+            }
+
+            let daemon = serve::spawn(Arc::clone(&vault), web_root)?;
+            log::info!("daemon em {} (rede: {:?})", daemon.url, daemon.lan_url);
 
             app.manage(AppState { vault, db, daemon });
 
@@ -70,4 +76,28 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Onde esta o `out/` do Next.
+///
+/// A janela le o bundle pelo protocolo do Tauri, que o embute no executavel --
+/// mas o daemon precisa dos MESMOS arquivos no disco para servi-los a TV e aos
+/// celulares, e o embutido nao e alcancavel de fora da webview. Por isso o
+/// `out/` tambem viaja como recurso do bundle (ver `bundle.resources`).
+///
+/// Em desenvolvimento o `cargo run` roda com `src-tauri/` como diretorio
+/// corrente, e o `out/` esta um nivel acima. `None` e estado valido: quem nunca
+/// rodou `pnpm build` tem o Operador funcionando e as telas de espectador
+/// dizendo o que falta, em vez de uma tela branca.
+fn find_web_root(app: &tauri::AppHandle) -> Option<PathBuf> {
+    let candidates = [
+        app.path().resource_dir().ok().map(|dir| dir.join("out")),
+        Some(PathBuf::from("../out")),
+        Some(PathBuf::from("out")),
+    ];
+
+    candidates
+        .into_iter()
+        .flatten()
+        .find(|dir| dir.join("index.html").is_file())
 }

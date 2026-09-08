@@ -57,17 +57,13 @@ copiar a pasta.
 
 ## Estado atual da migração
 
-O projeto está no meio da saída do Supabase, e vale ser específico sobre o que ainda não
-funciona:
-
 - **Operador: completo.** Abre a pasta, grava as cenas, envia imagens e sons.
-- **Assistir: só como aba desta máquina.** O transporte da cena é `BroadcastChannel`
-  enquanto o SSE do daemon não entra. A porta que pedia o código da mesa saiu junto com a
-  nuvem, e volta com ele.
-- **Plateia: só a cena, e pelo mesmo motivo.** A ficha do personagem — nome, anexos e notas
-  — dependia da tabela `players` com RLS isolando a ficha de um jogador da do outro. Isso
-  não desaparece por trocar de armazenamento: vira código no daemon, com token por jogador.
-  Deixá-la na tela ligada a nada seria pior que não tê-la.
+- **Assistir e Plateia: na rede local.** O daemon serve as duas telas e publica a cena por
+  SSE, então qualquer aparelho da casa serve de TV e cada jogador acompanha pelo celular.
+- **Ficha do personagem: ainda não.** Nome, anexos e notas dependiam da tabela `players`
+  com RLS isolando a ficha de um jogador da do outro. Isso não desaparece por trocar de
+  armazenamento: vira código no daemon, com token por jogador. Deixá-la na tela ligada a
+  nada seria pior que não tê-la, então a Plateia hoje mostra só a cena.
 - **Exportar e importar zip: ainda não.**
 
 ## Rodar
@@ -85,16 +81,74 @@ pnpm tauri dev
 
 ## O daemon
 
-Dentro do processo do aplicativo roda um servidor HTTP — hoje só em `127.0.0.1`, numa porta
-efêmera. Ele é uma thread `axum`, e não um sidecar Node, porque o Rust já tem fs, sqlite,
-zip e http; um sidecar exigiria empacotar um runtime a mais só para não trocar de
-linguagem.
+Dentro do processo do aplicativo roda um servidor HTTP, escutando em `0.0.0.0:20200`. Ele é
+uma thread `axum`, e não um sidecar Node, porque o Rust já tem fs, sqlite, zip e http; um
+sidecar exigiria empacotar um runtime a mais só para não trocar de linguagem.
 
 ```
-GET   /asset/{id}    o arquivo, com Range e ETag
-POST  /asset         multipart, exige o token
+GET   /                as telas de espectador, do bundle estatico
+GET   /asset/{id}      o arquivo, com Range e ETag
+POST  /asset           multipart, exige o token
+GET   /sala?codigo=    confere o codigo, devolve o nome da campanha
+GET   /sala/live?codigo=   a cena, em SSE
+POST  /sala/publicar   o Operador anuncia; token + loopback
 GET   /saude
 ```
+
+**A porta é fixa (20200), e isso é por causa do celular.** Com porta sorteada a cada
+abertura, o endereço da Plateia mudaria toda sessão e nenhum jogador conseguiria guardar o
+link nem recarregar a aba do dia anterior. Se ela estiver ocupada — uma segunda janela do
+aplicativo, ou o processo anterior ainda soltando o socket — cai para uma efêmera: a sessão
+funciona, só custa reler o endereço na tela.
+
+O IP da rede sai de um truque sem dependência: abrir um socket UDP e "conectar" a um
+endereço roteável não envia pacote nenhum, e faz o sistema escolher a interface de saída
+pela própria tabela de rotas. É essa que se quer — a interface por onde os celulares da
+casa chegam — e não a primeira da lista, que costuma ser docker ou uma VPN.
+
+### Uma origem só
+
+O espectador é servido **pelo daemon**, e não pelo Next. É isso que o deixa na mesma origem
+do servidor, e por isso `/asset/{id}` e `/sala/live` resolvem como caminho relativo, sem a
+tela precisar descobrir endereço nenhum. Em desenvolvimento isso significa que a TV e o
+celular usam a porta do daemon, e não a do `next dev` — rode `pnpm build` uma vez para o
+`out/` existir.
+
+O `out/` também viaja como recurso do bundle (`bundle.resources`): a janela lê o frontend
+pelo protocolo do Tauri, que o embute no executável, mas o embutido não é alcançável de
+fora da webview, e o daemon precisa dos mesmos arquivos no disco.
+
+Uma armadilha medida no app rodando, não deduzida: o export do Next grava `/assistir` como
+`assistir.html` **e** cria um diretório `assistir/` com os payloads RSC ao lado. Servindo o
+caminho cru primeiro, o `ServeDir` encontrava o diretório e respondia 307 para `/assistir/`,
+que não tem `index.html` — a TV recebia um redirecionamento para lugar nenhum. Por isso o
+`.html` é tentado antes, e redirecionamento conta como "tente o próximo".
+
+### SSE, não WebSocket
+
+O fluxo é de mão única a 10 Hz, o `EventSource` reconecta sozinho quando o Wi-Fi oscila, e
+o pouco que o espectador manda para cima é HTTP normal. Um WebSocket cobraria handshake e
+keepalive próprios para nada.
+
+E ele apagou uma parte do protocolo. Antes havia `live:request`: o espectador que abria a
+tela no meio da sessão pedia o estado, e o Operador respondia — com reenvio a cada 2,5 s,
+porque um pedido que chegasse antes de o Operador se inscrever simplesmente não existia para
+ele. O daemon guarda o último estado publicado e o entrega na conexão, então quem chega no
+meio já nasce sincronizado. Com o pedido foram o reenvio, o `ChannelMessage` e metade do
+`useSubscription`.
+
+### O código da mesa
+
+`/sala/live` exige `?codigo=`, e a porta das telas de espectador o confere antes de abrir o
+fluxo. A conferência é um `fetch` separado por um motivo concreto: o `EventSource` não
+entrega o status da resposta ao JavaScript, então um 403 chegaria como `onerror`
+indistinguível de queda de rede — e ele reconectaria em loop contra um código que nunca vai
+passar.
+
+**O código não é senha forte, e vale dizer o que ele é.** Seis caracteres, ditados em voz
+alta no começo da sessão, sem limite de tentativas. Ele impede que um aparelho do mesmo
+Wi-Fi caia na cena por acaso ao varrer portas. Contra alguém determinado na tua rede, não
+defende.
 
 **Por que os arquivos vão por HTTP e não pelo IPC.** Um mapa de 80 MB atravessando o
 `invoke` vira serialização de array de números; pelo loopback é streaming direto para o
@@ -108,10 +162,14 @@ conter: quem guarda cópia agora é o cache HTTP do browser.
 
 ### O token de escrita
 
-`POST /asset` exige o cabeçalho `x-ato20-token`, gerado a cada abertura do aplicativo e
-nunca gravado em disco. Loopback **não** é privado: qualquer página aberta no navegador da
-máquina pode fazer POST para `127.0.0.1`, e um formulário não precisa nem de CORS para
-isso. A porta efêmera esconde o alvo, e esconder não é proteger.
+`POST /asset` e `POST /sala/publicar` exigem o cabeçalho `x-ato20-token`, gerado a cada
+abertura do aplicativo e nunca gravado em disco. Só a janela o recebe, pelo IPC. A porta
+agora está na rede: sem o token, qualquer aparelho do Wi-Fi poderia enviar arquivo para o
+acervo do mestre.
+
+Publicar cena exige, **além** do token, que a requisição venha de loopback. O token
+sozinho bastaria — ele não sai desta máquina —, mas publicar é a única rota cujo abuso
+apareceria direto na TV da mesa, e a segunda condição custa três linhas.
 
 O portão é uma **camada**, e não uma checagem no corpo do handler. Não é estilo: os
 extractors do axum rodam antes do handler, então um `Multipart` inválido era recusado com
@@ -205,10 +263,12 @@ Três decisões que explicam o resto do código:
 escala o plano para caber nela. Sem isso, o que o mestre posiciona não bate com o que
 aparece na TV.
 
-**Transporte atrás de uma interface de três métodos** (`src/lib/sync/`). Hoje há uma
-implementação só, `BroadcastChannel`; o SSE do daemon entra pela mesma porta, e nenhum
-componente de desenho sabe qual está em uso. O throttle de 10 Hz continua: arrastar um item
-emite ~60 mudanças por segundo, e publicar todas pagaria uma cópia do board por frame.
+**Transporte atrás de uma interface de três métodos** (`src/lib/sync/`). Uma implementação
+só, e é o daemon: `BroadcastChannel` saiu porque alcançava apenas abas da mesma máquina, e
+o daemon cobre esse caso pelo loopback com latência que não se mede — manter os dois seria
+dois caminhos para depurar em troca de nada. O throttle de 10 Hz continua: arrastar um item
+emite ~60 mudanças por segundo, e publicar todas pagaria uma serialização do board por
+frame.
 
 **A cena viaja em amostras, e quem assiste interpola.** Assistir e Plateia recebem 10
 amostras por segundo e animam o caminho entre elas em CSS: posição, tamanho e giro dos itens
@@ -227,9 +287,11 @@ verificável sem navegador.
 cd src-tauri && cargo test
 ```
 
-O lado nativo tem suíte: gravação por diferença, renomeação que não move arquivo, colisão de
-nome, id órfão, caminho de asset que não vem do nome enviado, e o portão de token do daemon
-exercitado pelo router sem abrir porta.
+O lado nativo tem suíte. Ela cobre o que erra em silêncio: gravação por diferença,
+renomeação que não move arquivo, colisão de nome de cena, id órfão, caminho de asset que não
+vem do nome enviado, o portão de token, publicação recusada de fora da máquina, código da
+mesa, travessia de caminho na rota estática — que agora está na rede — e a rota com
+diretório homônimo que devolvia 307.
 
 O lado TypeScript **ainda não tem runner**. Os módulos puros foram escritos para serem
 testáveis de fora — é o motivo de `reorderByZ`, `clampViewport`, `flipPatches`, `scaleGroup`

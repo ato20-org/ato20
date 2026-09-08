@@ -10,12 +10,11 @@ import { useSubscription } from "@/hooks/use-scene-broadcast";
  * Visão Assistir: recebe a cena e não emite nada. Nenhum controle, nenhum
  * atalho — a tela vai numa TV virada para a mesa.
  *
- * Sem `roomId`: enquanto o transporte é o `BroadcastChannel`, esta tela é uma
- * aba da própria máquina do Operador. O que a solta para outro aparelho é o
- * SSE do daemon, no passo seguinte.
+ * O código vem da porta, já conferido: é o daemon que decide quem pode ouvir o
+ * fluxo, e é isso que permite esta tela estar em qualquer aparelho da casa.
  */
-export function ViewerStage() {
-  const { scene, track, portraits, synced, stalled } = useSubscription();
+export function ViewerStage({ codigo }: { codigo: string }) {
+  const { scene, track, portraits, synced, stalled } = useSubscription(codigo);
 
   return (
     // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
@@ -45,9 +44,10 @@ export function ViewerStage() {
           {synced
             ? "O mestre não colocou nenhuma cena no ar."
             : stalled
-              ? // O único transporte é a própria máquina, e é isso que a
-                // mensagem precisa dizer para não mandar procurar na rede.
-                "Sem resposta. A tela do Operador precisa estar aberta nesta mesma máquina."
+              ? // A mesa foi encontrada — o código passou —, então o que falta
+                // é o Operador publicar. Dizer isso poupa procurar problema na
+                // rede, que é onde ninguém acharia nada.
+                "Sem resposta. A tela do Operador precisa estar aberta."
               : "Aguardando o Operador…"}
         </p>
       ) : null}

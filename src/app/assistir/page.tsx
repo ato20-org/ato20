@@ -1,15 +1,22 @@
+"use client";
+
+import { Tv } from "lucide-react";
+
+import { RoomDoor } from "@/components/playground/room-door";
 import { ViewerStage } from "@/components/playground/viewer-stage";
 
 /**
- * A porta que pedia o código da mesa saiu junto com o Supabase.
+ * A TV.
  *
- * Enquanto o transporte é o `BroadcastChannel`, o Assistir só alcança a cena
- * sendo outra aba da máquina do Operador — não há mesa remota a encontrar, e
- * então não há código a digitar. A porta volta com o SSE do daemon, e aí o
- * código passa a valer de novo: é ele que solta a TV desta máquina.
- *
- * Sem `Suspense`: era exigência do `useSearchParams`, que saiu com a porta.
+ * A porta do código voltou junto com o daemon na rede: é ela que solta esta
+ * tela da máquina do Operador e deixa qualquer aparelho da casa servir de TV.
+ * O botão "Abrir Assistir" do Operador já leva o código no QR e na URL, porque
+ * a TV não tem quem digite nela.
  */
 export default function AssistirPage() {
-  return <ViewerStage />;
+  return (
+    <RoomDoor titulo="Assistir" icone={<Tv className="text-muted-foreground size-8" aria-hidden />}>
+      {(codigo) => <ViewerStage codigo={codigo} />}
+    </RoomDoor>
+  );
 }
