@@ -14,7 +14,7 @@ import {
 import {
   appendScene,
   insertSceneAfter,
-  moveScene as moveSceneInBoard,
+  moveSceneToIndex as moveSceneToIndexInBoard,
   removeScene as removeSceneFromBoard,
 } from "@/lib/operator/board-ops";
 import {
@@ -90,7 +90,8 @@ type SceneStore = {
   addScene: (name?: string) => string;
   renameScene: (sceneId: string, name: string) => void;
   duplicateScene: (sceneId: string) => string | null;
-  moveScene: (sceneId: string, direction: "up" | "down") => void;
+  /** Posição na lista de cenas. É o que o arrasto da lista emite. */
+  moveSceneToIndex: (sceneId: string, index: number) => void;
   removeScene: (sceneId: string) => void;
   /** Primitiva única de mutação de cena. Toda operação de item usa isto. */
   updateScene: (sceneId: string, updater: (scene: Scene) => Scene) => void;
@@ -257,11 +258,11 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     return copy.id;
   },
 
-  moveScene(sceneId, direction) {
+  moveSceneToIndex(sceneId, index) {
     const { board } = get();
     if (!board) return;
 
-    commit(moveSceneInBoard(board, sceneId, direction));
+    commit(moveSceneToIndexInBoard(board, sceneId, index));
   },
 
   removeScene(sceneId) {

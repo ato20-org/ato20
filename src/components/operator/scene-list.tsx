@@ -1,16 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  CopyPlus,
-  MoreVertical,
-  Pencil,
-  Plus,
-  Radio,
-  Trash2,
-} from "lucide-react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { CopyPlus, GripVertical, MoreVertical, Pencil, Plus, Radio, Trash2 } from "lucide-react";
 
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { Button } from "@/components/ui/button";
@@ -24,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useListReorder } from "@/hooks/use-list-reorder";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -42,6 +34,11 @@ export function SceneList({ ready }: { ready: boolean }) {
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
+  const moveSceneToIndex = useSceneStore((state) => state.moveSceneToIndex);
+  const { listRef, dropIndex, startReorder } = useListReorder<string>((sceneId, index) =>
+    moveSceneToIndex(sceneId, index),
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="p-2">
@@ -58,16 +55,16 @@ export function SceneList({ ready }: { ready: boolean }) {
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <ul className="space-y-1 p-2 pt-0">
+        <ul ref={listRef} className="space-y-1 p-2 pt-0">
           {scenes?.map((scene, index) => (
             <SceneRow
               key={scene.id}
               scene={scene}
               onStage={scene.id === editingSceneId}
               live={scene.id === liveSceneId}
-              first={index === 0}
-              last={index === scenes.length - 1}
               onlyScene={scenes.length === 1}
+              dropTarget={dropIndex === index}
+              onReorderStart={(event) => startReorder(event, scene.id)}
               renaming={renamingId === scene.id}
               onRename={() => setRenamingId(scene.id)}
               onRenameDone={() => setRenamingId(null)}
@@ -94,9 +91,10 @@ type SceneRowProps = {
   onStage: boolean;
   /** Sendo exibida para a mesa. */
   live: boolean;
-  first: boolean;
-  last: boolean;
   onlyScene: boolean;
+  /** Linha onde a cena arrastada cairia. */
+  dropTarget: boolean;
+  onReorderStart: (event: ReactPointerEvent) => void;
   renaming: boolean;
   onRename: () => void;
   onRenameDone: () => void;
@@ -108,9 +106,9 @@ function SceneRow({
   scene,
   onStage,
   live,
-  first,
-  last,
   onlyScene,
+  dropTarget,
+  onReorderStart,
   renaming,
   onRename,
   onRenameDone,
@@ -119,7 +117,6 @@ function SceneRow({
 }: SceneRowProps) {
   const renameScene = useSceneStore((state) => state.renameScene);
   const duplicateScene = useSceneStore((state) => state.duplicateScene);
-  const moveScene = useSceneStore((state) => state.moveScene);
   const removeScene = useSceneStore((state) => state.removeScene);
 
   function commitRename(value: string) {
@@ -131,10 +128,21 @@ function SceneRow({
   return (
     <li
       className={cn(
-        "flex items-center gap-2 rounded-md p-1",
+        "flex items-center gap-1 rounded-md p-1",
         onStage ? "bg-accent" : "hover:bg-accent/50",
+        dropTarget && "ring-primary ring-1",
       )}
     >
+      {/* A alça, e não a linha toda: a linha inteira já responde ao clique
+          abrindo a cena, e arrastar de qualquer ponto dela deixaria os dois
+          gestos disputando o mesmo alvo. */}
+      <span
+        className="text-muted-foreground hover:text-foreground shrink-0 cursor-grab touch-none px-0.5"
+        aria-hidden
+        onPointerDown={onReorderStart}
+      >
+        <GripVertical className="size-3.5" />
+      </span>
       <button
         type="button"
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -222,17 +230,6 @@ function SceneRow({
               <DropdownMenuItem onClick={() => duplicateScene(scene.id)}>
                 <CopyPlus />
                 Duplicar
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem disabled={first} onClick={() => moveScene(scene.id, "up")}>
-                <ArrowUp />
-                Mover para cima
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={last} onClick={() => moveScene(scene.id, "down")}>
-                <ArrowDown />
-                Mover para baixo
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />

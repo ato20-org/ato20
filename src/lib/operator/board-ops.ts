@@ -30,13 +30,29 @@ export function insertSceneAfter(board: Board, afterId: string, scene: Scene): B
   };
 }
 
-export function moveScene(board: Board, sceneId: string, direction: "up" | "down"): Board {
+/**
+ * Move a cena para uma posição da lista.
+ *
+ * Substituiu o par "para cima"/"para baixo". Aqueles trocavam com o vizinho, o
+ * que servia para acertar uma cena fora de lugar e não para organizar um
+ * roteiro: levar a última cena para o começo custava um clique por posição,
+ * cada um deles no fundo de um menu que precisava ser reaberto. Arrastar
+ * resolve numa passada.
+ *
+ * Remove e insere, e não troca de lugar: trocar embaralharia tudo que estivesse
+ * entre a origem e o destino, e o que se quer de um arrasto é a cena parar onde
+ * foi solta com o resto fechando a fila.
+ */
+export function moveSceneToIndex(board: Board, sceneId: string, index: number): Board {
   const from = board.scenes.findIndex((scene) => scene.id === sceneId);
-  const to = from + (direction === "up" ? -1 : 1);
-  if (from < 0 || to < 0 || to >= board.scenes.length) return board;
+  if (from < 0) return board;
+
+  const target = Math.min(Math.max(index, 0), board.scenes.length - 1);
+  if (target === from) return board;
 
   const scenes = [...board.scenes];
-  [scenes[from], scenes[to]] = [scenes[to]!, scenes[from]!];
+  const [moving] = scenes.splice(from, 1);
+  scenes.splice(target, 0, moving!);
 
   return { ...board, scenes };
 }
