@@ -112,7 +112,6 @@ export function OperatorShell() {
         </Button>
 
         <Separator orientation="vertical" className="mx-1 h-8" />
-        <TableInvite />
         <PlayersDialog />
 
         {/* O browser recusa tocar antes de um gesto na página. Só aparece
@@ -124,7 +123,12 @@ export function OperatorShell() {
           </Button>
         ) : null}
 
+        {/* As duas juntas, na mesma ponta: são a mesma pergunta — como as
+            outras telas entram na mesa. Uma dá o QR para o celular e para a TV
+            de outro aparelho; a outra abre a TV aqui. "Jogadores" fica do outro
+            lado porque é outra coisa: quem já entrou. */}
         <div className="ml-auto flex items-center gap-2">
+          <TableInvite />
           <OpenViewer />
         </div>
       </header>
