@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Loader2, Paperclip, Pin, PinOff, Radio, RadioTower, Trash2, X } from "lucide-react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Loader2, Paperclip, PinOff, Radio, RadioTower, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -19,10 +19,10 @@ import type { MapPin } from "@/types/scene";
 /**
  * A nota de um ponto de anotação: título, texto e anexos.
  *
- * Vive dentro de um `Popover` ancorado no alfinete, e não num painel lateral
- * nem num diálogo. O diálogo cobriria o mapa — justamente o mapa onde o ponto
- * está —, e um painel lateral desfaria a única coisa que dá sentido ao ponto:
- * a nota estar ONDE o lugar está.
+ * Vive no cartão amarrado ao alfinete — ver `PinWindow` —, e não num painel
+ * lateral nem num diálogo. O diálogo cobriria o mapa, justamente o mapa onde o
+ * ponto está; um painel lateral desfaria a única coisa que dá sentido ao
+ * ponto, que é a nota estar ONDE o lugar está.
  *
  * Nada aqui chega à mesa. O que sai deste cartão para a TV e para os celulares
  * é só o que o mestre transmite, um anexo por vez.
@@ -32,33 +32,20 @@ export function PinNote({
   pin,
   indice,
   onClose,
-  onFixar,
-  onDesafixar,
   onArrastar,
 }: {
   sceneId: string;
   pin: MapPin;
   /** Número do alfinete no mapa, para o cartão dizer qual ponto é este. */
   indice: number;
+  /** Tira a nota da tela. O ponto continua no mapa. */
   onClose: () => void;
-  /**
-   * Presente só no modo popover: transforma este cartão numa janela fixa.
-   *
-   * Recebe o retângulo atual do cartão para a janela nascer exatamente onde
-   * ele já está. Sem isso o cartão daria um salto para o canto no instante em
-   * que fosse fixado, e o mestre perderia de vista o que estava lendo.
-   */
-  onFixar?: (rect: DOMRect) => void;
-  /** Presente só no modo janela: tira a nota da tela. Mesmo slot do `onFixar`. */
-  onDesafixar?: () => void;
-  /** Presente só no modo janela: faz do cabeçalho a alça de arrasto. */
+  /** Faz do cabeçalho a alça de arrasto. */
   onArrastar?: (event: ReactPointerEvent) => void;
 }) {
   const updatePin = useSceneStore((state) => state.updatePin);
   const removePin = useSceneStore((state) => state.removePin);
   const attachToPin = useSceneStore((state) => state.attachToPin);
-
-  const raiz = useRef<HTMLDivElement>(null);
 
   // O acervo entra só pelos nomes: o cartão mostra de que arquivo é cada
   // anexo, e `refresh` é o que faz um arquivo recém-importado aparecer com
@@ -100,17 +87,15 @@ export function PinNote({
 
   return (
     // Sem soltura de arrasto do acervo aqui, embora fosse o gesto natural para
-    // anexar uma imagem que já está na campanha. O arrasto começa com uma
-    // pressão FORA deste painel — na lista do acervo —, e o `Popover` fecha em
-    // pressão externa: o alvo de soltura deixaria de existir no meio do gesto.
-    // Resolver isso exigiria o painel ignorar pressão externa, e aí clicar no
-    // mapa não o fecharia mais. Por enquanto anexa-se por arquivo, e uma
-    // imagem já importada é importada de novo.
-    <div ref={raiz} className="space-y-3">
-      {/* O cabeçalho é também a alça de arrasto, quando este cartão é janela.
-          Uma barra de título separada duplicaria o número e o nome do ponto
-          que já estão aqui, e o cartão tem 320 pixels de largura para gastar
-          com conteúdo, não com cromo. */}
+    // anexar uma imagem que já está na campanha: o cartão vive dentro do
+    // palco, e uma soltura sobre ele cairia no mesmo alvo que recebe imagem
+    // solta na CENA — a imagem entraria no mapa, atrás do cartão. Por
+    // enquanto anexa-se por arquivo, e uma imagem já importada é importada de
+    // novo.
+    <div className="space-y-3">
+      {/* O cabeçalho é também a alça de arrasto. Uma barra de título separada
+          duplicaria o número e o nome do ponto que já estão aqui, e o cartão
+          tem 320 pixels de largura para gastar com conteúdo, não com cromo. */}
       <div
         className={cn("flex items-center gap-2", onArrastar && "cursor-move")}
         onPointerDown={onArrastar}
@@ -130,64 +115,32 @@ export function PinNote({
           onChange={(event) => updatePin(sceneId, pin.id, { title: event.target.value })}
         />
 
-        {/* Um slot, dois sentidos: fixar quando o cartão é popover, desafixar
-            quando já é janela. O mesmo lugar para a ida e a volta poupa
-            procurar onde se desfaz o que se acabou de fazer. */}
-        {onFixar ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Fixar esta nota na tela"
-                  onClick={() => {
-                    const rect = raiz.current?.getBoundingClientRect();
-                    if (rect) onFixar(rect);
-                  }}
-                >
-                  <Pin />
-                </Button>
-              }
-            />
-            <TooltipContent>
-              <p className="max-w-52">
-                Deixa esta nota aberta na tela, fora do caminho. Clicar no mapa não a fecha mais, e
-                ela pode ser arrastada pelo cabeçalho.
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        ) : null}
-
-        {onDesafixar ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Tirar esta nota da tela"
-                  onClick={onDesafixar}
-                >
-                  <PinOff />
-                </Button>
-              }
-            />
-            <TooltipContent>
-              <p>Tira a nota da tela. O ponto continua no mapa.</p>
-            </TooltipContent>
-          </Tooltip>
-        ) : null}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Tirar esta nota da tela"
+                onClick={onClose}
+              >
+                <PinOff />
+              </Button>
+            }
+          />
+          <TooltipContent>
+            <p>Tira a nota da tela. O ponto continua no mapa.</p>
+          </TooltipContent>
+        </Tooltip>
 
         <Button
           variant="ghost"
           size="icon-sm"
           aria-label="Apagar este ponto"
           onClick={() => {
-            // Fecha antes de apagar, e a ordem importa nos dois modos: como
-            // popover, o painel está ancorado num alfinete que deixa de
-            // existir e ficaria flutuando sem posição; como janela, ela
-            // renderiza a partir do ponto e passaria um frame sem ele.
+            // Fecha antes de apagar, e a ordem importa: o cartão se posiciona a
+            // partir do alfinete, e apagar primeiro o deixaria um quadro sem
+            // ponto de onde se ancorar.
             onClose();
             removePin(sceneId, pin.id);
           }}

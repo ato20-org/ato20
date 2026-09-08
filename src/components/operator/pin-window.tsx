@@ -11,12 +11,13 @@ import {
 import type { MapPin } from "@/types/scene";
 
 /**
- * A nota de um ponto, fixa sobre o mapa e arrastável.
+ * A nota de um ponto, sobre o mapa e arrastável.
  *
- * O `Popover` do alfinete serve a olhada rápida — abre, lê, fecha ao clicar
- * fora. Este cartão serve o outro uso, que é conduzir a cena com a nota à
- * vista: ali o mestre move tokens, revela áreas e enquadra a câmera, e cada um
- * desses cliques fecharia o popover.
+ * É o único jeito de a nota aparecer: clicar no alfinete abre isto. Antes
+ * havia um popover no caminho, e um botão dentro dele fixava o cartão — o
+ * mesmo cartão, um passo depois. Caiu porque o uso normal é conduzir a cena
+ * com a nota à vista, e mover um token, revelar uma área ou enquadrar a câmera
+ * são cliques no mapa que fechavam o popover.
  *
  * ## Posição no mapa, tamanho na tela
  *
@@ -49,6 +50,7 @@ export function PinWindow({
   const startDrag = useSceneDrag();
 
   const mover = usePinWindowStore((state) => state.mover);
+  const guardar = usePinWindowStore((state) => state.guardar);
   const fechar = usePinWindowStore((state) => state.fechar);
   const trazerPraFrente = usePinWindowStore((state) => state.trazerPraFrente);
 
@@ -81,7 +83,6 @@ export function PinWindow({
         pin={pin}
         indice={indice}
         onClose={() => fechar(pin.id)}
-        onDesafixar={() => fechar(pin.id)}
         onArrastar={(event) => {
           // O cabeçalho é a alça, mas contém o campo de título e os botões. Sem
           // esta guarda, tentar posicionar o cursor no meio do título
@@ -97,6 +98,10 @@ export function PinWindow({
             // zoom.
             onMove: (delta) =>
               mover(pin.id, origem.dx + delta.x * escala, origem.dy + delta.y * escala),
+            // Só no fim: é aqui que a posição passa a valer para as próximas
+            // aberturas deste ponto. Guardar a cada quadro do arrasto seriam
+            // dezenas de escritas em disco por gesto.
+            onEnd: () => guardar(pin.id),
           });
         }}
       />

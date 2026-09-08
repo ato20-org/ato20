@@ -17,6 +17,7 @@ import { SceneLayer } from "@/components/playground/scene-layer";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { SelectionBox } from "@/components/playground/selection-box";
 import { TransformHandles } from "@/components/playground/transform-handles";
+import { usePanMode } from "@/hooks/use-pan-mode";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
   flipSelection,
@@ -54,13 +55,12 @@ import {
   MIN_ITEM_SIZE,
 } from "@/lib/geometry/transform";
 import { hasAssetDrag, readAssetDrag } from "@/lib/operator/asset-drag";
-import { isFullViewport } from "@/lib/geometry/viewport";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
+import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
-import { useViewportStore } from "@/lib/store/use-viewport-store";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
@@ -88,20 +88,21 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   /** Imagem do acervo pairando sobre o palco. */
   const [receiving, setReceiving] = useState(false);
   /**
-   * Qual nota de ponto está aberta.
+   * Abrir a nota de um ponto.
    *
-   * Estado local, e não no `use-selection-store`: lá as seleções se excluem
-   * porque disputam o mesmo gizmo, e fechar a nota ao clicar num token seria
-   * exatamente o contrário do que se quer — o mestre lê a nota e move a peça
-   * de acordo com ela.
+   * Do store das notas, e não de um estado local aqui: quantas notas estão na
+   * tela e em que ordem é assunto delas, e o palco só precisa saber pedir a
+   * abertura de uma. Foi este `useState` que sobrou quando o popover
+   * intermediário caiu — ele guardava "qual popover está aberto", e não existe
+   * mais um.
    */
-  const [openPinId, setOpenPinId] = useState<string | null>(null);
+  const abrirNota = usePinWindowStore((state) => state.abrir);
 
   const tool = useToolStore((state) => state.tool);
   const setTool = useToolStore((state) => state.setTool);
 
-  const panMode = useViewportStore((state) => state.panMode);
-  const viewport = useViewportStore((state) => state.viewport);
+  // Por tecla OU por ferramenta; ver `usePanMode`.
+  const panMode = usePanMode();
 
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
@@ -339,7 +340,7 @@ export function OperatorStage({ scene }: { scene: Scene }) {
     // porque cravar sem escrever nada deixaria na tela um alfinete numerado que
     // não diz nada — e o gesto seguinte é sempre escrever.
     if (tool === "pin") {
-      setOpenPinId(addPin(scene.id, { x: Math.round(anchor.x), y: Math.round(anchor.y) }));
+      abrirNota(addPin(scene.id, { x: Math.round(anchor.x), y: Math.round(anchor.y) }));
       // Volta ao modo normal, como a névoa: cravar dois pontos seguidos é
       // raro, e ficar preso na ferramenta faz o mestre semear o mapa de
       // alfinetes por acidente ao tentar mover um token.
@@ -477,9 +478,14 @@ export function OperatorStage({ scene }: { scene: Scene }) {
    * em vez de cobrir a região ou cravar o alfinete ali.
    */
   const aiming = drawingFog || (tool === "pin" && !panMode);
-  // Mão aberta só quando há para onde deslocar. No encaixe, o cursor prometeria
-  // um movimento que o clamp não permite.
-  const canPan = panMode && !isFullViewport(viewport);
+  // Mão aberta sempre que o espaço estiver segurado.
+  //
+  // Antes era `panMode && !isFullViewport(viewport)`, porque no encaixe o clamp
+  // não deixava deslocar nada e o cursor prometeria um movimento que não
+  // aconteceria. Com a folga além das bordas do plano (ver `FOLGA_X`) há para
+  // onde ir em qualquer ampliação, inclusive no encaixe — e a condição antiga
+  // passou a mentir ao contrário, escondendo a mão num gesto que funciona.
+  const canPan = panMode;
 
   return (
     <>
@@ -530,12 +536,7 @@ export function OperatorStage({ scene }: { scene: Scene }) {
       {/* Irmão do `SceneLayer`, e de propósito FORA dele: o `SceneLayer` é o
           mesmo componente do Assistir e da Plateia, e um ponto de anotação
           desenhado lá apareceria na TV virada para a mesa. */}
-      <PinLayer
-        scene={scene}
-        abertoId={openPinId}
-        onAbrir={setOpenPinId}
-        panMode={panMode}
-      />
+      <PinLayer scene={scene} panMode={panMode} />
 
       {/* Contorno enquanto a imagem paira: promete que soltar ali funciona, e
           é o que diferencia o palco do resto da janela durante o arrasto. */}
