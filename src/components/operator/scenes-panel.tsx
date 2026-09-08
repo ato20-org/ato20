@@ -5,6 +5,7 @@ import { PortraitList } from "@/components/operator/portrait-list";
 import { SceneList } from "@/components/operator/scene-list";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PanelCollapse } from "@/components/operator/panel-collapse";
 import { usePanelsStore, type LeftTab } from "@/lib/store/use-panels-store";
 import type { Scene } from "@/types/scene";
 
@@ -32,11 +33,17 @@ export function ScenesPanel({ scene, ready }: { scene: Scene | null; ready: bool
         onValueChange={(value) => setTab(value as LeftTab)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        <TabsList className="m-2">
-          <TabsTrigger value="cenas">Cenas</TabsTrigger>
-          <TabsTrigger value="areas">Áreas</TabsTrigger>
-          <TabsTrigger value="retratos">Retratos</TabsTrigger>
-        </TabsList>
+        {/* O botão de recolher mora no próprio painel, do lado da borda que
+            ele encosta. Antes vivia na ponta do cabeçalho, longe do que
+            controla. */}
+        <div className="flex items-center gap-1 p-2">
+          <TabsList className="min-w-0 flex-1">
+            <TabsTrigger value="cenas">Cenas</TabsTrigger>
+            <TabsTrigger value="areas">Áreas</TabsTrigger>
+            <TabsTrigger value="retratos">Retratos</TabsTrigger>
+          </TabsList>
+          <PanelCollapse side="left" label="Cenas e áreas" />
+        </div>
         <Separator />
 
         <TabsContent value="cenas" className="flex min-h-0 flex-1 flex-col">

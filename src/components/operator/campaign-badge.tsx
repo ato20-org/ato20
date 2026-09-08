@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, FolderOpen, FolderSymlink, PackageOpen } from "lucide-react";
+import { ChevronDown, FolderSymlink, PackageOpen } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,15 +15,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 
 /**
- * A campanha aberta, no cabeçalho do Operador.
+ * A campanha aberta, na barra da janela.
  *
- * Substitui o crachá da mesa, e com ele saíram os quatro diálogos que viviam
- * aqui: convite, código de operação, jogadores e espaço no Storage. Os dois
- * primeiros não existem mais — não há conta a mover nem cota a vigiar. Os
- * jogadores voltam quando o daemon expuser a mesa na rede.
+ * Mora ali, e não no cabeçalho do Operador, porque é o que a janela É: qual
+ * pasta está aberta não muda durante o trabalho, e uma informação estável
+ * disputando espaço com controles de gesto era parte do que deixava a barra de
+ * ferramentas pesada.
  *
- * O que fica é o que se pergunta no meio de uma sessão: qual campanha está
- * aberta, e qual é o código que a mesa digita.
+ * Compacto de propósito — a barra tem 32px de altura. Botão de 24px e texto
+ * `text-xs`, sem ícone de pasta antes do nome: o contexto já diz que é pasta.
  */
 export function CampaignBadge() {
   const campaign = useCampaignStore((state) => state.campaign);
@@ -44,20 +44,23 @@ export function CampaignBadge() {
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-1">
+    <div className="flex min-w-0 items-center gap-1.5">
       <DropdownMenu>
         <Tooltip>
           <TooltipTrigger
             render={
               <DropdownMenuTrigger
                 render={
-                  <Button variant="ghost" size="sm" className="min-w-0" disabled={busy}>
-                    <FolderOpen />
-                    {/* `max-w-32` porque `truncate` só corta dentro de largura
-                        definida — sem o limite, um nome longo empurra o resto
-                        da barra para fora da janela. */}
-                    <span className="max-w-32 truncate">{campaign.nome}</span>
-                    <ChevronDown className="opacity-60" />
+                  <Button
+                    variant="ghost"
+                    // `h-6` e `px-1.5`: os botões de barra de título são mais
+                    // baixos que os do corpo, senão a faixa parece uma segunda
+                    // barra de ferramentas.
+                    className="h-6 min-w-0 gap-1 px-1.5 text-xs font-normal"
+                    disabled={busy}
+                  >
+                    <span className="max-w-40 truncate">{campaign.nome}</span>
+                    <ChevronDown className="size-3 opacity-60" />
                   </Button>
                 }
               />
@@ -68,11 +71,7 @@ export function CampaignBadge() {
           </TooltipContent>
         </Tooltip>
 
-        <DropdownMenuContent align="start" className="w-64">
-          {/* Um item, e leva tudo. Havia dois — com e sem as fichas dos
-              jogadores —, e a escolha cobrava uma decisão em todo export por um
-              caso raro: quem exporta está quase sempre levando a campanha para
-              outra máquina, e ali "tudo" é a única resposta certa. */}
+        <DropdownMenuContent align="start" className="w-56">
           <DropdownMenuItem onClick={exportarCampanha}>
             <PackageOpen />
             Exportar campanha
@@ -88,11 +87,11 @@ export function CampaignBadge() {
       </DropdownMenu>
 
       {/* O código fica à mão, e não atrás de um clique, porque é ditado no
-          começo de toda sessão. */}
+          começo de toda sessão. São seis caracteres. */}
       <Tooltip>
         <TooltipTrigger
           render={
-            <code className="bg-muted rounded px-1.5 py-0.5 text-xs tracking-widest">
+            <code className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px] tracking-widest">
               {campaign.codigo}
             </code>
           }

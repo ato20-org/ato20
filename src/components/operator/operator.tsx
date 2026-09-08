@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
 import { WindowChrome } from "@/components/desktop/window-chrome";
+import { CampaignBadge } from "@/components/operator/campaign-badge";
 import { OperatorGate } from "@/components/operator/operator-gate";
 import { OperatorShell } from "@/components/operator/operator-shell";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,13 @@ export function Operator() {
 
   return (
     <>
-      <WindowChrome subtitulo={status === "ready" ? editando : undefined} />
+      <WindowChrome
+        // A campanha na ponta esquerda, junto do nome: ela é o que a janela é,
+        // e não um controle de gesto que dispute espaço com a barra de
+        // ferramentas.
+        inicio={status === "ready" ? <CampaignBadge /> : undefined}
+        subtitulo={status === "ready" ? editando : undefined}
+      />
       <Conteudo status={status} error={error} onRetry={boot} />
     </>
   );

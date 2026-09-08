@@ -2,17 +2,12 @@
 
 import { useEffect } from "react";
 import {
-  PanelLeftClose,
   PanelLeftOpen,
-  PanelRightClose,
   PanelRightOpen,
-  Redo2,
-  Undo2,
   Volume2,
   VolumeX,
 } from "lucide-react";
 
-import { CampaignBadge } from "@/components/operator/campaign-badge";
 import { OpenViewer } from "@/components/operator/open-viewer";
 import { PlayersDialog } from "@/components/operator/players-dialog";
 import { TableInvite } from "@/components/operator/table-invite";
@@ -35,8 +30,6 @@ import { useAudioStore } from "@/lib/store/use-audio-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
-  selectCanRedo,
-  selectCanUndo,
   selectEditingScene,
   selectLiveScene,
   useSceneStore,
@@ -63,11 +56,6 @@ export function OperatorShell() {
   const toggleLeft = usePanelsStore((state) => state.toggleLeft);
   const toggleRight = usePanelsStore((state) => state.toggleRight);
   const restorePanels = usePanelsStore((state) => state.restore);
-
-  const canUndo = useSceneStore(selectCanUndo);
-  const canRedo = useSceneStore(selectCanRedo);
-  const undo = useSceneStore((state) => state.undo);
-  const redo = useSceneStore((state) => state.redo);
 
   const track = useTrackStore((state) => state.track);
   const hydrateTrack = useTrackStore((state) => state.hydrate);
@@ -103,41 +91,14 @@ export function OperatorShell() {
       {/* `flex-wrap`: abaixo de ~1000px a barra quebra em duas linhas em vez
           de comprimir os controles ou vazar para fora da tela. Duas linhas em
           janela estreita é honesto; controle inalcançável não é. */}
+      {/* O que sobrou aqui é o que pertence à SESSÃO: o que está no ar, o som,
+          e quem alcança a mesa. Saíram os controles de gesto — ferramentas e
+          zoom foram para o canto do palco, onde a mão já está —, os dois
+          toggles de painel, que agora moram nos próprios painéis, e desfazer e
+          refazer, que são Ctrl+Z e Ctrl+Y e não precisavam de alvo na tela.
+          A campanha subiu para a barra da janela. */}
       <header className="flex flex-wrap items-center gap-2 gap-y-1 border-b px-3 py-2">
-        <PanelToggle
-          open={leftOpen}
-          onToggle={toggleLeft}
-          label="Cenas e áreas"
-          openIcon={<PanelLeftClose />}
-          closedIcon={<PanelLeftOpen />}
-        />
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Desfazer"
-          disabled={!canUndo}
-          onClick={undo}
-        >
-          <Undo2 />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Refazer"
-          disabled={!canRedo}
-          onClick={redo}
-        >
-          <Redo2 />
-        </Button>
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
         <OnAirControl editing={editingScene} />
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
-        <OperatorToolbar />
 
         <Separator orientation="vertical" className="mx-1 h-8" />
         <Button
@@ -151,7 +112,6 @@ export function OperatorShell() {
         </Button>
 
         <Separator orientation="vertical" className="mx-1 h-8" />
-        <CampaignBadge />
         <TableInvite />
         <PlayersDialog />
 
@@ -166,21 +126,33 @@ export function OperatorShell() {
 
         <div className="ml-auto flex items-center gap-2">
           <OpenViewer />
-
-          <PanelToggle
-            open={rightOpen}
-            onToggle={toggleRight}
-            label="Imagens e sons"
-            openIcon={<PanelRightClose />}
-            closedIcon={<PanelRightOpen />}
-          />
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
         {leftOpen ? <ScenesPanel scene={editingScene} ready={status === "ready"} /> : null}
 
-        <main className="flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
+        <main className="relative flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
+          {/* Painel fechado deixa um alvo flutuando no canto de cima do palco,
+              do lado dele. É o caminho de volta: sem isso, fechar um painel o
+              deixaria inalcançável. */}
+          {leftOpen ? null : (
+            <FloatingPanelToggle
+              onToggle={toggleLeft}
+              label="Cenas e áreas"
+              className="top-2 left-2"
+              icon={<PanelLeftOpen />}
+            />
+          )}
+          {rightOpen ? null : (
+            <FloatingPanelToggle
+              onToggle={toggleRight}
+              label="Imagens e sons"
+              className="top-2 right-2"
+              icon={<PanelRightOpen />}
+            />
+          )}
+
           {status === "error" ? (
             <p className="text-destructive m-auto max-w-sm text-center text-sm">{error}</p>
           ) : (
@@ -198,34 +170,44 @@ export function OperatorShell() {
   );
 }
 
-type PanelToggleProps = {
-  open: boolean;
+/**
+ * O alvo que devolve um painel fechado.
+ *
+ * Flutua sobre o canto de cima do palco, do lado do painel que ele reabre.
+ * Substituiu os dois botões que viviam nas pontas do cabeçalho: eles ficavam
+ * longe do que controlavam, e eram dois dos itens que faziam a barra parecer
+ * cheia.
+ */
+function FloatingPanelToggle({
+  onToggle,
+  label,
+  className,
+  icon,
+}: {
   onToggle: () => void;
   label: string;
-  openIcon: React.ReactNode;
-  closedIcon: React.ReactNode;
-};
-
-function PanelToggle({ open, onToggle, label, openIcon, closedIcon }: PanelToggleProps) {
+  className: string;
+  icon: React.ReactNode;
+}) {
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <Button
-            variant="ghost"
+            variant="secondary"
             size="icon-sm"
-            aria-label={`${open ? "Esconder" : "Mostrar"} ${label}`}
-            aria-pressed={open}
+            // `z-10` para vencer o palco. Sem sombra e semitransparente: ele
+            // fica sobre a cena, e um botão opaco ali competiria com o mapa.
+            className={`bg-background/85 absolute z-10 backdrop-blur ${className}`}
+            aria-label={`Mostrar ${label}`}
             onClick={onToggle}
           >
-            {open ? openIcon : closedIcon}
+            {icon}
           </Button>
         }
       />
       <TooltipContent>
-        <p>
-          {open ? "Esconder" : "Mostrar"} {label}
-        </p>
+        <p>Mostrar {label}</p>
       </TooltipContent>
     </Tooltip>
   );
@@ -259,9 +241,14 @@ function StageBoundary({ scene, status }: { scene: Scene | null; status: string 
       {scene ? <StageContextMenu scene={scene}>{stage}</StageContextMenu> : stage}
 
       {/* Fora do gatilho do menu de contexto: botão direito sobre os controles
-          não deve abrir o menu da cena. */}
+          não deve abrir o menu da cena.
+          Canto inferior ESQUERDO, e num grupo só com as ferramentas: escolher
+          a ferramenta e ajustar o zoom são o mesmo tipo de gesto — mira no
+          mapa —, e tê-los em cantos opostos obrigava a atravessar a tela entre
+          duas ações que andam juntas. */}
       {scene ? (
-        <div className="absolute right-3 bottom-3">
+        <div className="absolute bottom-3 left-3 flex items-center gap-2">
+          <OperatorToolbar />
           <ViewportControls scene={scene} />
         </div>
       ) : null}
