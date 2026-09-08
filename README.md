@@ -204,6 +204,15 @@ ganha**. Retrato reposicionado custa um arrasto para refazer, e uma tela de conf
 cobraria uma decisão mais cara que o dano que evita. A trilha é adotada **pausada** —
 música começando sozinha ao abrir o Operador assusta, e retomar é um clique.
 
+O **volume é da sessão, não da faixa**: uma barra só no painel de sons, e toda música que
+entrar obedece a ela. Antes o ganho morava dentro da trilha escolhida, e trocar de música
+trocava o volume junto — a faixa nova entrava com o ganho de quando foi escolhida, e o
+mestre reajustava o slider a cada troca. Agora ele tem coluna própria em `room_session`
+(migração **0009**), e não um campo no `jsonb`: a barra continua valendo quando nenhuma
+faixa está escolhida, e dentro da trilha ela desapareceria junto com a música removida.
+O ajuste **viaja** — o mestre regula num lugar e a TV e os celulares seguem; ajuste fino
+por aparelho é o volume do próprio sistema, que todo aparelho já tem.
+
 ### O acervo entre máquinas
 
 O binário já viajava: ele mora no bucket por mesa e o resolvedor cai na URL
