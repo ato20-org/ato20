@@ -68,8 +68,11 @@ type CampaignStore = {
   create: (nome: string) => Promise<void>;
   /** Tira da lista de recentes. Não apaga nada do disco. */
   forget: (path: string) => Promise<void>;
-  /** Zipa a campanha aberta. Devolve o caminho gravado, ou `null` se desistiu. */
-  exportar: (incluirJogadores: boolean) => Promise<string | null>;
+  /**
+   * Zipa a campanha aberta, inteira. Devolve o caminho gravado, ou `null` se
+   * desistiu no diálogo.
+   */
+  exportar: () => Promise<string | null>;
   /** Importa um zip como campanha nova e a abre. */
   importar: () => Promise<void>;
   /** Volta para a escolha sem fechar nada no disco. */
@@ -175,13 +178,13 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     }
   },
 
-  async exportar(incluirJogadores) {
+  async exportar() {
     if (get().busy) return null;
 
     set({ busy: true, error: null });
 
     try {
-      const dest = await exportCampaign(incluirJogadores);
+      const dest = await exportCampaign();
       set({ busy: false });
 
       return dest;

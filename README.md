@@ -329,10 +329,14 @@ bytes aleatórios, então quem tem o zip pode *verificar* um token que já tenha
 um. Levando-o, o celular de cada jogador continua valendo depois do import — sem isso, a
 mesa toda teria de entrar de novo e o mestre ficaria com fichas duplicadas.
 
-**Duas opções de export, e não uma marca num diálogo.** "Exportar campanha" deixa
-`jogadores/` de fora; "Exportar com as fichas dos jogadores" leva. A diferença é quem vai
-receber o zip — outro mestre, ou a sua outra máquina — e essa decisão fica mais clara
-escrita do que numa caixa a marcar.
+**Um export, e ele leva tudo.** Houve uma versão com duas opções — com e sem `jogadores/`
+—, pensada para quem manda a campanha a outro mestre e não quer repassar a ficha em PDF de
+quem joga na casa dele. Saiu porque cobrava uma decisão em *todo* export por um caso raro:
+quem exporta está quase sempre levando a campanha para outra máquina ou guardando cópia, e
+ali "tudo" é a única resposta certa.
+
+A consequência fica dita: o zip carrega nome, apelido, notas e anexos de cada jogador.
+Compartilhar a campanha compartilha isso.
 
 O que o import recusa, e por quê:
 

@@ -70,15 +70,16 @@ export async function pickFolder(title: string): Promise<string | null> {
 // --- zip --------------------------------------------------------------------
 
 /**
- * Exporta a campanha para um zip.
+ * Exporta a campanha inteira para um zip.
  *
- * `incluirJogadores` desligado por padrão: quem manda a campanha para outro
- * mestre quer as cenas e os mapas, e a ficha em PDF de quem joga na casa dele
- * não é material a repassar. Quem está trocando de máquina liga.
+ * Tudo, sem escolha. Havia duas opções — com e sem as fichas dos jogadores —,
+ * pensadas para quem manda a campanha a outro mestre; saíram porque cobravam
+ * uma decisão em todo export por um caso raro. Quem exporta está quase sempre
+ * levando a campanha para outra máquina ou guardando cópia.
  *
  * `null` = o mestre fechou o diálogo, que não é erro.
  */
-export async function exportCampaign(incluirJogadores: boolean): Promise<string | null> {
+export async function exportCampaign(): Promise<string | null> {
   const sugerido = await call<string>("campaign_export_name");
 
   const dest = await save({
@@ -89,7 +90,7 @@ export async function exportCampaign(incluirJogadores: boolean): Promise<string 
 
   if (!dest) return null;
 
-  await call("campaign_export", { dest, incluirJogadores });
+  await call("campaign_export", { dest });
 
   return dest;
 }

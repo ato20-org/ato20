@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, FolderOpen, FolderSymlink, PackageOpen, Users } from "lucide-react";
+import { ChevronDown, FolderOpen, FolderSymlink, PackageOpen } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,8 @@ export function CampaignBadge() {
 
   if (!campaign) return null;
 
-  function exportarCom(incluirJogadores: boolean) {
-    void exportar(incluirJogadores).then(
+  function exportarCampanha() {
+    void exportar().then(
       (dest) => {
         // `null` é o diálogo fechado sem escolher: não avisa nada.
         if (dest) toast.success(`Campanha exportada em ${dest}`);
@@ -69,16 +69,13 @@ export function CampaignBadge() {
         </Tooltip>
 
         <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuItem onClick={() => exportarCom(false)}>
+          {/* Um item, e leva tudo. Havia dois — com e sem as fichas dos
+              jogadores —, e a escolha cobrava uma decisão em todo export por um
+              caso raro: quem exporta está quase sempre levando a campanha para
+              outra máquina, e ali "tudo" é a única resposta certa. */}
+          <DropdownMenuItem onClick={exportarCampanha}>
             <PackageOpen />
             Exportar campanha
-          </DropdownMenuItem>
-          {/* Dois itens em vez de uma marca num diálogo: a diferença entre eles
-              é quem vai receber o zip, e essa decisão fica mais clara escrita
-              do que numa caixa a marcar. */}
-          <DropdownMenuItem onClick={() => exportarCom(true)}>
-            <Users />
-            Exportar com as fichas dos jogadores
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />

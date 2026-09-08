@@ -56,13 +56,18 @@ const MAX_ENTRIES: usize = 50_000;
 
 // --- exportar ---------------------------------------------------------------
 
-/// Zipa a campanha.
+/// Zipa a campanha inteira.
 ///
-/// `incluir_jogadores` decide se `jogadores/` entra. O padrao e nao: quem manda
-/// a campanha para outro mestre quer as cenas e os mapas, e a ficha em PDF de
-/// quem joga na casa dele nao e material a repassar. Quem esta trocando de
-/// maquina quer tudo.
-pub fn export(vault: &Vault, dest: &Path, incluir_jogadores: bool) -> AppResult<()> {
+/// Tudo, sem escolha. Houve uma versao com duas opcoes -- com e sem
+/// `jogadores/` --, pensada para quem manda a campanha a outro mestre e nao quer
+/// repassar a ficha em PDF de quem joga na casa dele. Saiu porque cobrava uma
+/// decisao em TODO export por um caso raro: quem exporta esta quase sempre
+/// levando a campanha para outra maquina ou guardando copia, e ali "tudo" e a
+/// unica resposta certa.
+///
+/// A consequencia fica registrada: o zip carrega nome, apelido, notas e anexos
+/// de cada jogador. Compartilhar a campanha compartilha isso.
+pub fn export(vault: &Vault, dest: &Path) -> AppResult<()> {
     // Materializa a foto dos jogadores ANTES de varrer o diretorio, para que o
     // `_meta.json` de cada um entre no mesmo zip.
     //
@@ -71,10 +76,8 @@ pub fn export(vault: &Vault, dest: &Path, incluir_jogadores: bool) -> AppResult<
     // acervo e os anexos estao intactos em arquivos ao lado -- e quem exporta
     // costuma estar exportando justamente porque algo deu errado. Perde-se o
     // texto dos jogadores, que e o que estava ilegivel de todo jeito.
-    if incluir_jogadores {
-        if let Err(cause) = write_player_meta(vault) {
-            log::warn!("export sem o texto dos jogadores: {cause}");
-        }
+    if let Err(cause) = write_player_meta(vault) {
+        log::warn!("export sem o texto dos jogadores: {cause}");
     }
 
     let file = File::create(dest)?;
@@ -87,7 +90,7 @@ pub fn export(vault: &Vault, dest: &Path, incluir_jogadores: bool) -> AppResult<
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
 
     let mut entradas = 0usize;
-    walk(&vault.root, &vault.root, incluir_jogadores, &mut |relativo, caminho| {
+    walk(&vault.root, &vault.root, &mut |relativo, caminho| {
         entradas += 1;
 
         zip.start_file(relativo.to_string_lossy().replace('\\', "/"), options)
@@ -115,7 +118,6 @@ pub fn export(vault: &Vault, dest: &Path, incluir_jogadores: bool) -> AppResult<
 fn walk(
     root: &Path,
     dir: &Path,
-    incluir_jogadores: bool,
     visitar: &mut impl FnMut(&Path, &Path) -> AppResult<()>,
 ) -> AppResult<()> {
     for entrada in std::fs::read_dir(dir)? {
@@ -129,12 +131,8 @@ fn walk(
             continue;
         }
 
-        if !incluir_jogadores && caminho == root.join("jogadores") {
-            continue;
-        }
-
         if caminho.is_dir() {
-            walk(root, &caminho, incluir_jogadores, visitar)?;
+            walk(root, &caminho, visitar)?;
             continue;
         }
 
@@ -391,7 +389,7 @@ mod tests {
         let vault = campanha(dir.path(), "A Marca do Javali");
 
         let zip_path = dir.path().join("saida.ato20.zip");
-        export(&vault, &zip_path, true).expect("export");
+        export(&vault, &zip_path).expect("export");
         assert!(zip_path.is_file());
 
         let destino = dir.path().join("importadas");
@@ -421,7 +419,7 @@ mod tests {
         assert!(vault.state_dir().join("estado.db").is_file());
 
         let zip_path = dir.path().join("saida.zip");
-        export(&vault, &zip_path, true).expect("export");
+        export(&vault, &zip_path).expect("export");
 
         let arquivo = File::open(&zip_path).expect("open");
         let mut zip = ZipArchive::new(BufReader::new(arquivo)).expect("archive");
@@ -449,7 +447,7 @@ mod tests {
 
         // As cenas e o acervo estao intactos em arquivos: perder o texto dos
         // jogadores nao pode custar a exportacao da campanha.
-        export(&vault, &zip_path, true).expect("export");
+        export(&vault, &zip_path).expect("export");
 
         let arquivo = File::open(&zip_path).expect("open");
         let mut zip = ZipArchive::new(BufReader::new(arquivo)).expect("archive");
@@ -459,30 +457,6 @@ mod tests {
 
         assert!(nomes.iter().any(|n| n == "cenas/a-taverna.json"), "{nomes:?}");
         assert!(nomes.iter().any(|n| n == "assets/a1.webp"), "{nomes:?}");
-    }
-
-    #[test]
-    fn jogadores_podem_ficar_de_fora() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let vault = campanha(dir.path(), "Campanha");
-
-        let (player, _) = players::join(&vault, "Ana").expect("join");
-        let pasta = players::attachments_dir(&vault, &player.id);
-        std::fs::create_dir_all(&pasta).expect("dir");
-        std::fs::write(pasta.join("ficha.pdf"), b"ficha").expect("ficha");
-
-        let sem = dir.path().join("sem.zip");
-        export(&vault, &sem, false).expect("export");
-
-        let arquivo = File::open(&sem).expect("open");
-        let mut zip = ZipArchive::new(BufReader::new(arquivo)).expect("archive");
-        let nomes: Vec<String> = (0..zip.len())
-            .map(|i| zip.by_index(i).expect("entrada").name().to_string())
-            .collect();
-
-        // Quem manda a campanha para outro mestre nao quer repassar a ficha em
-        // PDF de quem joga na casa dele.
-        assert!(!nomes.iter().any(|n| n.starts_with("jogadores/")), "{nomes:?}");
     }
 
     #[test]
@@ -500,7 +474,7 @@ mod tests {
         std::fs::write(pasta.join("ficha.pdf"), b"ficha da Ana").expect("ficha");
 
         let zip_path = dir.path().join("saida.zip");
-        export(&vault, &zip_path, true).expect("export");
+        export(&vault, &zip_path).expect("export");
 
         let importada = import(&zip_path, &dir.path().join("destino")).expect("import");
 
@@ -528,7 +502,7 @@ mod tests {
         let vault = campanha(dir.path(), "Campanha");
 
         let zip_path = dir.path().join("saida.zip");
-        export(&vault, &zip_path, true).expect("export");
+        export(&vault, &zip_path).expect("export");
 
         let destino = dir.path().join("destino");
         import(&zip_path, &destino).expect("primeiro import");

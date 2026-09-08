@@ -292,20 +292,10 @@ pub fn campaign_export_name(state: State<'_, AppState>) -> AppResult<String> {
     state.with_vault(|vault| Ok(zip::suggested_name(vault)))
 }
 
-/// Zipa a campanha aberta em `dest`.
-///
-/// `incluir_jogadores` desligado por padrao na tela: quem manda a campanha para
-/// outro mestre quer as cenas e os mapas, e a ficha em PDF de quem joga na casa
-/// dele nao e material a repassar. Quem esta trocando de maquina liga.
+/// Zipa a campanha aberta em `dest`. Tudo, sem escolha -- ver `zip::export`.
 #[tauri::command]
-pub fn campaign_export(
-    state: State<'_, AppState>,
-    dest: String,
-    incluir_jogadores: bool,
-) -> AppResult<()> {
-    state.with_vault(|vault| {
-        zip::export(vault, std::path::Path::new(&dest), incluir_jogadores)
-    })
+pub fn campaign_export(state: State<'_, AppState>, dest: String) -> AppResult<()> {
+    state.with_vault(|vault| zip::export(vault, std::path::Path::new(&dest)))
 }
 
 /// Importa um zip como campanha nova dentro de `parent`, e a abre.
