@@ -46,10 +46,19 @@ pub fn run() {
                 log::warn!("bundle das telas nao encontrado; Assistir e Plateia nao serao servidos");
             }
 
-            let daemon = serve::spawn(Arc::clone(&vault), web_root)?;
-            log::info!("daemon em {} (rede: {:?})", daemon.url, daemon.lan_url);
+            let started = serve::spawn(Arc::clone(&vault), web_root)?;
+            log::info!(
+                "daemon em {} (rede: {:?})",
+                started.addr.url,
+                started.addr.lan_url
+            );
 
-            app.manage(AppState { vault, db, daemon });
+            app.manage(AppState {
+                vault,
+                db,
+                daemon: started.addr,
+                evidence: started.evidence,
+            });
 
             Ok(())
         })
@@ -80,6 +89,9 @@ pub fn run() {
             commands::player_set_label,
             commands::player_remove,
             commands::player_attachments,
+            commands::player_attachment_bytes,
+            commands::player_attachment_share,
+            commands::player_attachment_unshare,
             commands::player_attachments_dir,
             commands::campaign_export_name,
             commands::campaign_export,

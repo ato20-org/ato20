@@ -33,6 +33,25 @@ use page::ErrorPage;
 /// -- a unica escrita -- acontece uma vez por sessao.
 pub type SharedVault = Arc<RwLock<Option<Vault>>>;
 
+/// O anexo de jogador que esta em evidencia, se houver.
+///
+/// Um slot, e nao um mapa: evidencia e singular por construcao -- a mesa olha
+/// UMA coisa -- e transmitir outra coisa substitui esta, sem deixar endereco
+/// vivo para tras. Tirar do ar apaga daqui, e o endereco morre com isso.
+pub type SharedEvidence = Arc<RwLock<Option<Evidence>>>;
+
+/// Um anexo de jogador alcancavel pela mesa enquanto o mestre o mantem no ar.
+pub struct Evidence {
+    /// Id sorteado a cada transmissao.
+    ///
+    /// E o que substitui, nesta rota, o token que protege `/eu/anexos`: o nome
+    /// do arquivo e adivinhavel -- "ficha.pdf" e o palpite obvio --, e 32 hex
+    /// aleatorios nao sao. Novo a cada vez, para o endereco de ontem nao
+    /// responder hoje.
+    pub id: String,
+    pub path: PathBuf,
+}
+
 /// O endereco do daemon, entregue a webview.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,6 +94,8 @@ pub struct Daemon {
     /// e esperar o Operador ouvir, o daemon ja tem a resposta na conexao.
     live: Mutex<Option<String>>,
     live_tx: broadcast::Sender<String>,
+    /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
+    evidence: SharedEvidence,
 }
 
 impl Daemon {
@@ -87,6 +108,7 @@ impl Daemon {
             web_root,
             live: Mutex::new(None),
             live_tx,
+            evidence: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -109,7 +131,17 @@ impl Daemon {
 ///
 /// Escuta em `0.0.0.0`, e nao mais so em loopback: e isso que solta a TV e os
 /// celulares da maquina do mestre.
-pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>) -> AppResult<DaemonAddr> {
+pub struct Started {
+    /// Onde a webview alcanca o daemon.
+    pub addr: DaemonAddr,
+    /// A mesma caixa que o daemon le ao servir `/evidencia/{id}`.
+    ///
+    /// Devolvida para a janela poder POR algo nela pelo IPC. O `Daemon` a cria
+    /// e a mantem; isto e so o outro punho da mesma alavanca.
+    pub evidence: SharedEvidence,
+}
+
+pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>) -> AppResult<Started> {
     let listener = bind()?;
     let port = listener.local_addr()?.port();
     listener.set_nonblocking(true)?;
@@ -118,6 +150,7 @@ pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>) -> AppResult<DaemonA
     let lan_url = lan_ip().map(|ip| format!("http://{ip}:{port}"));
 
     let state = Arc::new(Daemon::new(vault, token.clone(), web_root));
+    let evidence = Arc::clone(&state.evidence);
 
     std::thread::Builder::new()
         .name("ato20-daemon".into())
@@ -150,10 +183,13 @@ pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>) -> AppResult<DaemonA
             });
         })?;
 
-    Ok(DaemonAddr {
-        url: format!("http://127.0.0.1:{port}"),
-        lan_url,
-        token,
+    Ok(Started {
+        addr: DaemonAddr {
+            url: format!("http://127.0.0.1:{port}"),
+            lan_url,
+            token,
+        },
+        evidence,
     })
 }
 
@@ -220,6 +256,7 @@ fn lan_ip() -> Option<IpAddr> {
 pub fn router(state: Arc<Daemon>) -> Router {
     Router::new()
         .route("/asset/{id}", get(serve_asset))
+        .route("/evidencia/{id}", get(serve_evidence))
         .route("/sala", get(check))
         .route("/sala/entrar", post(join_table))
         .route("/sala/live", get(live))
@@ -884,6 +921,62 @@ async fn serve_asset(
     }
 }
 
+/// `GET /evidencia/{id}`
+///
+/// O anexo que o mestre mandou a mesa olhar. Sem token, como `/asset/{id}`, e
+/// pelo mesmo motivo: o id nao se adivinha, e o que esta em evidencia e
+/// exatamente o que a mesa toda deve ver.
+///
+/// A diferenca em relacao a `/eu/anexos/{arquivo}`, que exige o token do
+/// jogador, e quem escolheu: la o dono do arquivo pede o proprio arquivo por
+/// nome; aqui foi o mestre que expos UM arquivo, com um endereco sorteado, e
+/// que morre quando ele tira do ar. Sem isto, transmitir a ficha de um jogador
+/// exigiria ou abrir a pasta de anexos na rede -- e os nomes sao adivinhaveis
+/// -- ou copiar o arquivo para o acervo, que deixaria um duplicado por
+/// transmissao na biblioteca de imagens do mestre.
+async fn serve_evidence(
+    State(state): State<Arc<Daemon>>,
+    AxumPath(id): AxumPath<String>,
+    request: Request<Body>,
+) -> Response {
+    let found = {
+        let guard = state.evidence.read().expect("evidencia envenenada");
+
+        // Confere o id do slot, e nao so a existencia dele: um endereco de uma
+        // transmissao anterior nao pode servir a atual.
+        guard
+            .as_ref()
+            .filter(|evidence| evidence.id == id)
+            .map(|evidence| {
+                let nome = evidence
+                    .path
+                    .file_name()
+                    .map(|nome| nome.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                (evidence.path.clone(), players::mime_for(&nome).to_string())
+            })
+    };
+
+    let Some((path, mime_type)) = found else {
+        return fail(StatusCode::NOT_FOUND, "nada em evidencia com esse endereco");
+    };
+
+    match ServeFile::new_with_mime(
+        &path,
+        &mime_type.parse().unwrap_or(mime::APPLICATION_OCTET_STREAM),
+    )
+    .oneshot(request)
+    .await
+    {
+        Ok(response) => response.into_response(),
+        Err(cause) => {
+            log::error!("evidencia em {}: {cause}", path.display());
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o arquivo")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -970,6 +1063,85 @@ mod tests {
 
         let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
         assert_eq!(&bytes[..], b"bytes do mapa");
+    }
+
+    // --- evidencia ----------------------------------------------------------
+
+    #[tokio::test]
+    async fn anexo_em_evidencia_e_servivel_e_so_pelo_endereco_sorteado() {
+        let (dir, state, _) = daemon();
+
+        let anexo = dir.path().join("retrato.png");
+        std::fs::write(&anexo, b"bytes do retrato").expect("anexo");
+
+        *state.evidence.write().expect("evidencia") = Some(Evidence {
+            id: "abc123".into(),
+            path: anexo,
+        });
+
+        // Sem token, como `/asset/{id}`: quem busca e um `<img>` na TV.
+        let response = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/evidencia/abc123")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("content-type").map(|v| v.to_str().unwrap()),
+            Some("image/png")
+        );
+
+        let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
+        assert_eq!(&bytes[..], b"bytes do retrato");
+
+        // O id e o portao: sem ele, ter a rota nao da acesso ao arquivo que
+        // esta no ar -- e nomes de anexo sao adivinhaveis.
+        let outro = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/evidencia/retrato.png")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(outro.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn tirado_do_ar_o_endereco_da_evidencia_morre() {
+        let (dir, state, _) = daemon();
+
+        let anexo = dir.path().join("ficha.jpg");
+        std::fs::write(&anexo, b"bytes da ficha").expect("anexo");
+
+        *state.evidence.write().expect("evidencia") = Some(Evidence {
+            id: "sorteado".into(),
+            path: anexo,
+        });
+
+        // O que o `player_attachment_unshare` faz, e o que o `clear` da
+        // evidencia dispara: o arquivo do jogador deixa de ser alcancavel no
+        // instante em que sai do ar.
+        *state.evidence.write().expect("evidencia") = None;
+
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/evidencia/sorteado")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

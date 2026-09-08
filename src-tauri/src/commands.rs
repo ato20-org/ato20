@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::db::AppDb;
 use crate::error::{AppError, AppResult};
-use crate::serve::{DaemonAddr, SharedVault};
+use crate::serve::{DaemonAddr, Evidence, SharedEvidence, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
 use crate::vault::board::Board;
 use crate::vault::session::Json;
@@ -19,6 +19,8 @@ pub struct AppState {
     pub vault: SharedVault,
     pub db: AppDb,
     pub daemon: DaemonAddr,
+    /// O anexo de jogador em evidencia. A mesma caixa que o daemon le.
+    pub evidence: SharedEvidence,
 }
 
 impl AppState {
@@ -284,6 +286,85 @@ pub fn player_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {
 #[tauri::command]
 pub fn player_attachments(state: State<'_, AppState>, id: String) -> AppResult<Vec<Attachment>> {
     state.with_vault(|vault| players::list_attachments(vault, &id))
+}
+
+/// Os bytes de um anexo, para o mestre VER a imagem sem sair do aplicativo.
+///
+/// Pelo IPC, e nao por uma rota: `GET /eu/anexos/{arquivo}` fica atras do token
+/// do jogador, e o mestre nao tem token nenhum -- ele e dono do disco. Uma rota
+/// `/mestre/...` obrigaria o daemon a responder "quem e o mestre?" numa porta
+/// aberta na rede, e essa pergunta nao tem resposta boa.
+///
+/// `ipc::Response`, e nao `Vec<u8>`: o retorno comum atravessaria como array de
+/// numeros em JSON -- varias vezes o tamanho, mais um parser no caminho. Isto
+/// usa o canal binario do IPC, e a webview recebe um `ArrayBuffer`.
+///
+/// O caminho sai de `attachment_path`, que sanea o nome pedido e confere o
+/// resultado contra a pasta do jogador: `../../config.json` nao sobrevive.
+#[tauri::command]
+pub fn player_attachment_bytes(
+    state: State<'_, AppState>,
+    id: String,
+    arquivo: String,
+) -> AppResult<tauri::ipc::Response> {
+    state.with_vault(|vault| {
+        let caminho = players::attachment_path(vault, &id, &arquivo).ok_or_else(|| {
+            AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("o anexo {arquivo} nao esta mais la"),
+            ))
+        })?;
+
+        Ok(tauri::ipc::Response::new(std::fs::read(caminho)?))
+    })
+}
+
+/// Poe um anexo de jogador em evidencia, e devolve o endereco que a mesa usa.
+///
+/// O arquivo NAO e copiado para o acervo. Copiar era o caminho barato -- daria
+/// um `assetId` e a evidencia que ja existe funcionaria sem mais nada --, mas
+/// deixaria um duplicado por transmissao na biblioteca de imagens do mestre, e
+/// o retrato do personagem de outra pessoa nao e acervo da campanha.
+///
+/// Em vez disso o daemon passa a servir ESTE arquivo, num endereco sorteado,
+/// enquanto ele estiver no ar. Ver `serve_evidence` para por que essa rota
+/// pode dispensar token.
+///
+/// Um por vez, por construcao: o slot e um, e transmitir outra coisa mata o
+/// endereco anterior.
+#[tauri::command]
+pub fn player_attachment_share(
+    state: State<'_, AppState>,
+    id: String,
+    arquivo: String,
+) -> AppResult<String> {
+    let caminho = state.with_vault(|vault| {
+        players::attachment_path(vault, &id, &arquivo).ok_or_else(|| {
+            AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("o anexo {arquivo} nao esta mais la"),
+            ))
+        })
+    })?;
+
+    let sorteado = uuid::Uuid::new_v4().simple().to_string();
+
+    *state.evidence.write().expect("evidencia envenenada") = Some(Evidence {
+        id: sorteado.clone(),
+        path: caminho,
+    });
+
+    Ok(sorteado)
+}
+
+/// Tira o anexo da evidencia. O endereco de antes deixa de responder.
+///
+/// Chamado tambem quando o mestre transmite uma imagem do ACERVO: a mesa passa
+/// a olhar outra coisa, e o arquivo do jogador nao tem por que continuar
+/// alcancavel.
+#[tauri::command]
+pub fn player_attachment_unshare(state: State<'_, AppState>) {
+    *state.evidence.write().expect("evidencia envenenada") = None;
 }
 
 /// Onde ficam os anexos de um jogador, para o mestre abrir no explorador.

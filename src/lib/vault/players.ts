@@ -59,6 +59,30 @@ export function playerAttachments(id: string): Promise<PlayerAttachment[]> {
   return call<PlayerAttachment[]>("player_attachments", { id });
 }
 
+/**
+ * Um anexo baixado para endereço exibível.
+ *
+ * Blob URL, e não uma URL do daemon: a rota do anexo (`GET /eu/anexos/...`)
+ * está atrás do token DO JOGADOR, e o mestre não tem token nenhum — ele
+ * alcança o arquivo por ser dono do disco, pelo IPC. É o inverso do acervo,
+ * onde `/asset/{id}` serve a mesa toda e a URL basta.
+ *
+ * Quem chamou revoga: `URL.revokeObjectURL` na saída da tela. Sem isso, abrir
+ * a ficha de cinco jogadores numa sessão deixa cinco imagens presas na memória
+ * da webview até a janela fechar.
+ */
+export async function playerAttachmentUrl(id: string, anexo: PlayerAttachment): Promise<string> {
+  // `ArrayBuffer` porque o Rust responde pelo canal binário do IPC — ver
+  // `player_attachment_bytes`. O `mimeType` vem da listagem: sem ele o Blob
+  // nasce sem tipo e o `<img>` recusa.
+  const bytes = await call<ArrayBuffer>("player_attachment_bytes", {
+    id,
+    arquivo: anexo.arquivo,
+  });
+
+  return URL.createObjectURL(new Blob([bytes], { type: anexo.mimeType }));
+}
+
 export function playerAttachmentsDir(id: string): Promise<string> {
   return call<string>("player_attachments_dir", { id });
 }
