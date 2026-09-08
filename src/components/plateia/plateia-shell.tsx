@@ -9,6 +9,7 @@ import { PlayerGate } from "@/components/plateia/player-gate";
 import { PlayerIdentity } from "@/components/plateia/player-identity";
 import { PlayerNotes } from "@/components/plateia/player-notes";
 import { SessionAudio } from "@/components/playground/session-audio";
+import { SpotlightLayer } from "@/components/playground/spotlight-layer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSubscription, type Subscription } from "@/hooks/use-scene-broadcast";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
@@ -62,6 +63,17 @@ export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMes
           a própria ficha. Música cortada no meio quebra a imersão que ela
           existe para criar. */}
       <SessionAudio track={live.track} />
+
+      {/* Fora das abas pelo mesmo motivo, e sobre a tela inteira em vez de
+          dentro da moldura da cena: a imagem em evidência costuma ser um
+          documento ou uma carta, e num retângulo de 16:9 no alto de um celular
+          nada disso se lê.
+
+          `dismissable` só aqui. O jogador tem também o mapa e a própria ficha,
+          e uma imagem que ele não pudesse encostar de lado o deixaria preso até
+          o mestre lembrar de tirá-la. Esconder é local: a imagem continua no ar
+          para todo mundo. */}
+      <SpotlightLayer spotlight={live.spotlight} dismissable />
     </main>
   );
 }

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createPublisher, createSubscriber, type SceneChannel } from "@/lib/sync";
 import type { LiveState } from "@/lib/sync/channel";
-import type { Portrait, Scene, SessionTrack } from "@/types/scene";
+import { sceneForTable } from "@/lib/sync/for-table";
+import type { Portrait, Scene, SessionTrack, Spotlight } from "@/types/scene";
 
 /**
  * Reanúncio periódico do estado.
@@ -29,7 +30,22 @@ const STALLED_AFTER_MS = 12_000;
  */
 export function usePublisher(state: LiveState): void {
   const channelRef = useRef<SceneChannel | null>(null);
-  const stateRef = useRef(state);
+
+  /**
+   * A cena sem os pontos de anotação do mestre.
+   *
+   * A remoção acontece AQUI, dentro do publicador, e não em quem o chama. A
+   * diferença é o que separa uma decisão de um lembrete: no chamador, qualquer
+   * caminho de publicação que alguém escreva depois vaza a preparação por
+   * esquecimento; aqui, todo caminho passa por esta linha por construção.
+   *
+   * O `useMemo` não é otimização — é correção. O efeito abaixo compara a cena
+   * por identidade para decidir se publica, e uma cópia nova a cada render
+   * faria o Operador publicar 60 vezes por segundo com a mesa parada.
+   */
+  const scene = useMemo(() => sceneForTable(state.scene), [state.scene]);
+
+  const stateRef = useRef({ ...state, scene });
 
   useEffect(() => {
     const channel = createPublisher();
@@ -44,14 +60,20 @@ export function usePublisher(state: LiveState): void {
   }, []);
 
   useEffect(() => {
-    stateRef.current = state;
-    channelRef.current?.publish(state);
-    // Dependências no conteúdo, não no objeto: quem chama monta `{ scene,
-    // track, portraits }` a cada render, e comparar essa embalagem fazia o
-    // Operador publicar enquanto montava a PRÓXIMA cena — uma publicação por
-    // uma mudança que a mesa não vê.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.scene, state.track, state.portraits]);
+    const paraMesa: LiveState = {
+      scene,
+      track: state.track,
+      portraits: state.portraits,
+      spotlight: state.spotlight,
+    };
+
+    stateRef.current = paraMesa;
+    channelRef.current?.publish(paraMesa);
+    // Dependências nos campos, não no objeto `state`: quem chama monta
+    // `{ scene, track, portraits, spotlight }` a cada render, e comparar essa
+    // embalagem fazia o Operador publicar enquanto montava a PRÓXIMA cena —
+    // uma publicação por uma mudança que a mesa não vê.
+  }, [scene, state.track, state.portraits, state.spotlight]);
 
   useEffect(() => {
     const beat = setInterval(() => {
@@ -63,9 +85,12 @@ export function usePublisher(state: LiveState): void {
 }
 
 export type Subscription = {
+  /** A cena como a mesa pode vê-la: sem os pontos de anotação do mestre. */
   scene: Scene | null;
   track: SessionTrack | null;
   portraits: Portrait[];
+  /** Imagem em evidência sobre tudo. `null` = nenhuma. */
+  spotlight: Spotlight | null;
   /** Já chegou alguma coisa do daemon. */
   synced: boolean;
   /** Passou tempo demais sem nada. */
@@ -79,7 +104,12 @@ export type Subscription = {
  * URL do SSE porque é o daemon que decide quem pode ouvir.
  */
 export function useSubscription(codigo: string): Subscription {
-  const [live, setLive] = useState<LiveState>({ scene: null, track: null, portraits: [] });
+  const [live, setLive] = useState<LiveState>({
+    scene: null,
+    track: null,
+    portraits: [],
+    spotlight: null,
+  });
   const [synced, setSynced] = useState(false);
   const [stalled, setStalled] = useState(false);
 
@@ -112,6 +142,7 @@ export function useSubscription(codigo: string): Subscription {
     scene: live.scene,
     track: live.track,
     portraits: live.portraits,
+    spotlight: live.spotlight,
     synced,
     stalled,
   };

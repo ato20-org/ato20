@@ -121,6 +121,7 @@ export function createSubscriberChannel(base: string, codigo: string): SceneChan
             // Estado gravado por uma versão anterior pode não trazer o campo:
             // lista vazia é o certo, e não uma tela quebrada.
             portraits: state.portraits ?? [],
+            spotlight: state.spotlight ?? null,
           });
         } catch {
           // O daemon valida que é JSON antes de repassar, então isto só

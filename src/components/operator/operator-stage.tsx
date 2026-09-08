@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { PinLayer } from "@/components/operator/pin-layer";
 import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
 import { MarqueeBox } from "@/components/playground/marquee-box";
@@ -86,6 +87,15 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const [guides, setGuides] = useState<Guide[]>(NO_GUIDES);
   /** Imagem do acervo pairando sobre o palco. */
   const [receiving, setReceiving] = useState(false);
+  /**
+   * Qual nota de ponto está aberta.
+   *
+   * Estado local, e não no `use-selection-store`: lá as seleções se excluem
+   * porque disputam o mesmo gizmo, e fechar a nota ao clicar num token seria
+   * exatamente o contrário do que se quer — o mestre lê a nota e move a peça
+   * de acordo com ela.
+   */
+  const [openPinId, setOpenPinId] = useState<string | null>(null);
 
   const tool = useToolStore((state) => state.tool);
   const setTool = useToolStore((state) => state.setTool);
@@ -108,6 +118,7 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const updateItems = useSceneStore((state) => state.updateItems);
   const addFog = useSceneStore((state) => state.addFog);
   const updateFog = useSceneStore((state) => state.updateFog);
+  const addPin = useSceneStore((state) => state.addPin);
   const setSceneCamera = useSceneStore((state) => state.setSceneCamera);
 
   const portraits = usePortraitStore((state) => state.portraits);
@@ -324,6 +335,19 @@ export function OperatorStage({ scene }: { scene: Scene }) {
 
     const anchor = toScene(event.clientX, event.clientY);
 
+    // Clique, e não arrasto: o ponto não tem tamanho. Cravar já abre a nota,
+    // porque cravar sem escrever nada deixaria na tela um alfinete numerado que
+    // não diz nada — e o gesto seguinte é sempre escrever.
+    if (tool === "pin") {
+      setOpenPinId(addPin(scene.id, { x: Math.round(anchor.x), y: Math.round(anchor.y) }));
+      // Volta ao modo normal, como a névoa: cravar dois pontos seguidos é
+      // raro, e ficar preso na ferramenta faz o mestre semear o mapa de
+      // alfinetes por acidente ao tentar mover um token.
+      setTool("select");
+
+      return;
+    }
+
     if (tool === "fog") {
       startDrag(event, {
         onMove: (delta) =>
@@ -445,6 +469,14 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   // Espaço tem precedência sobre a ferramenta: segurar espaço desloca a cena,
   // mesmo com a névoa escolhida.
   const drawingFog = tool === "fog" && !panMode;
+  /**
+   * Ferramenta de mira ativa: névoa ou ponto.
+   *
+   * As duas precisam do mesmo bloqueio. Repassar os handlers de item enquanto
+   * uma delas está escolhida faria o gesto sobre um token virar "mover token"
+   * em vez de cobrir a região ou cravar o alfinete ali.
+   */
+  const aiming = drawingFog || (tool === "pin" && !panMode);
   // Mão aberta só quando há para onde deslocar. No encaixe, o cursor prometeria
   // um movimento que o clamp não permite.
   const canPan = panMode && !isFullViewport(viewport);
@@ -459,7 +491,7 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           ancestral e dispararia junto se este também respondesse. */}
       <div
         className="absolute inset-0"
-        style={{ cursor: canPan ? "grab" : drawingFog ? "crosshair" : undefined }}
+        style={{ cursor: canPan ? "grab" : aiming ? "crosshair" : undefined }}
         onPointerDown={panMode ? undefined : handleCanvasPointerDown}
         // `dragover` precisa de `preventDefault` a cada evento, senão o
         // navegador recusa o drop e mostra o cursor de proibido.
@@ -486,13 +518,19 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           portraits={
             editingPortraits ? portraits : selectedPortraits.length > 0 ? selectedPortraits : undefined
           }
-          // Na ferramenta névoa, o arrasto sempre desenha: repassar os handlers
-          // faria clicar sobre um item existente virar "mover item".
-          onItemPointerDown={panMode || drawingFog ? undefined : onItemPointerDown}
-          onFogPointerDown={panMode || drawingFog ? undefined : onFogPointerDown}
-          onPortraitPointerDown={panMode || drawingFog ? undefined : onPortraitPointerDown}
+          // Com ferramenta de mira escolhida, o gesto sempre vale para ela:
+          // repassar os handlers faria clicar sobre um item existente virar
+          // "mover item".
+          onItemPointerDown={panMode || aiming ? undefined : onItemPointerDown}
+          onFogPointerDown={panMode || aiming ? undefined : onFogPointerDown}
+          onPortraitPointerDown={panMode || aiming ? undefined : onPortraitPointerDown}
         />
       </div>
+
+      {/* Irmão do `SceneLayer`, e de propósito FORA dele: o `SceneLayer` é o
+          mesmo componente do Assistir e da Plateia, e um ponto de anotação
+          desenhado lá apareceria na TV virada para a mesa. */}
+      <PinLayer scene={scene} abertoId={openPinId} onAbrir={setOpenPinId} />
 
       {/* Contorno enquanto a imagem paira: promete que soltar ali funciona, e
           é o que diferencia o palco do resto da janela durante o arrasto. */}

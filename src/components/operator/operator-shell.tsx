@@ -15,6 +15,7 @@ import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
 import { OperatorToolbar } from "@/components/operator/operator-toolbar";
 import { ScenesPanel } from "@/components/operator/scenes-panel";
+import { SpotlightChip } from "@/components/operator/spotlight-chip";
 import { StageContextMenu } from "@/components/operator/stage-context-menu";
 import { ViewportControls } from "@/components/operator/viewport-controls";
 import { SessionAudio } from "@/components/playground/session-audio";
@@ -32,6 +33,7 @@ import {
   selectLiveScene,
   useSceneStore,
 } from "@/lib/store/use-scene-store";
+import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { Scene } from "@/types/scene";
@@ -61,6 +63,8 @@ export function OperatorShell() {
 
   const portraits = usePortraitStore((state) => state.portraits);
 
+  const spotlight = useSpotlightStore((state) => state.spotlight);
+
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação.
   useEffect(() => {
@@ -69,7 +73,10 @@ export function OperatorShell() {
 
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.
-  usePublisher({ scene: liveScene, track, portraits });
+  //
+  // A cena entra aqui inteira, com os pontos de anotação; quem os remove é o
+  // próprio `usePublisher`, e não este chamador. Ver `sceneForTable`.
+  usePublisher({ scene: liveScene, track, portraits, spotlight });
   useOperatorShortcuts();
   useSpacePan();
   return (
@@ -213,6 +220,11 @@ function StageBoundary({ scene, status }: { scene: Scene | null; status: string 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       {scene ? <StageContextMenu scene={scene}>{stage}</StageContextMenu> : stage}
+
+      {/* Fora do gatilho do menu de contexto, e independente de haver cena: uma
+          imagem transmitida continua no ar mesmo sem cena nenhuma no palco, e é
+          justamente aí que esquecê-la é mais fácil. */}
+      <SpotlightChip />
 
       {/* Fora do gatilho do menu de contexto: botão direito sobre os controles
           não deve abrir o menu da cena.

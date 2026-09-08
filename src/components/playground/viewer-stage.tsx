@@ -4,6 +4,7 @@ import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
+import { SpotlightLayer } from "@/components/playground/spotlight-layer";
 import { useSubscription } from "@/hooks/use-scene-broadcast";
 
 /**
@@ -14,7 +15,7 @@ import { useSubscription } from "@/hooks/use-scene-broadcast";
  * fluxo, e é isso que permite esta tela estar em qualquer aparelho da casa.
  */
 export function ViewerStage({ codigo }: { codigo: string }) {
-  const { scene, track, portraits, synced, stalled } = useSubscription(codigo);
+  const { scene, track, portraits, spotlight, synced, stalled } = useSubscription(codigo);
 
   return (
     // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
@@ -33,6 +34,11 @@ export function ViewerStage({ codigo }: { codigo: string }) {
       </SceneStage>
 
       <SessionAudio track={track} />
+
+      {/* Sem `dismissable`: não há ninguém na TV para fechar nada, e um botão
+          ali só criaria a chance de alguém encostar. Quem tira do ar é o
+          mestre. */}
+      <SpotlightLayer spotlight={spotlight} />
 
       {/* Discreto no canto: a TV fica virada para a mesa, e o controle existe
           para o mestre escolher qual aparelho emite o som. */}

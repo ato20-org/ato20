@@ -1,6 +1,6 @@
 "use client";
 
-import { MousePointer2, SquareDashedBottom } from "lucide-react";
+import { MapPin, MousePointer2, SquareDashedBottom } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -18,6 +18,12 @@ const TOOLS: Array<{ tool: Tool; label: string; hint: string; icon: typeof Mouse
     label: "Área escondida",
     hint: "Arraste sobre a cena para cobrir uma região. A mesa vê preto sólido.",
     icon: SquareDashedBottom,
+  },
+  {
+    tool: "pin",
+    label: "Ponto de anotação",
+    hint: "Clique no mapa para cravar um ponto com nota e anexos. Só você vê — nem a TV nem os celulares recebem.",
+    icon: MapPin,
   },
 ];
 

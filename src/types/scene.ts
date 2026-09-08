@@ -139,6 +139,68 @@ export type SceneGrid = {
   dark?: boolean;
 };
 
+/**
+ * Ponto de anotação: um alfinete no mapa com nota e anexos, só do mestre.
+ *
+ * Mora na CENA porque é colado num lugar dela — o alçapão atrás do balcão, a
+ * marca na parede do terceiro corredor. Uma lista de notas fora da cena
+ * perderia justamente a coordenada, que é a razão de existir.
+ *
+ * Morar na cena tem um custo que precisa de guarda: a cena viaja inteira para
+ * a mesa. É por isso que `sceneForTable` existe e que a camada que desenha os
+ * pontos vive no `OperatorStage`, e não no `SceneLayer` compartilhado — sem as
+ * duas coisas, o jogador leria a preparação do mestre no inspetor do
+ * navegador.
+ */
+export type MapPin = {
+  id: string;
+  /** Onde o alfinete crava, em coordenadas de cena. */
+  x: number;
+  y: number;
+  /** Uma linha, para reconhecer o ponto sem abrir a nota. */
+  title: string;
+  /** O texto livre. Pode ser vazio: às vezes o anexo é a nota. */
+  note: string;
+  /**
+   * Anexos, por id do acervo.
+   *
+   * Ids e não arquivos próprios: importar já copia para `assets/` da campanha,
+   * e `/asset/{id}` já serve com token. Um segundo cofre de arquivos
+   * duplicaria os dois lados para nada — e é justamente esse caminho que
+   * "transmitir" usa para a imagem aparecer na TV.
+   */
+  attachments: string[];
+};
+
+/** O que o chamador informa ao cravar um ponto; o resto é do store. */
+export type NewMapPin = Pick<MapPin, "x" | "y"> & Partial<Pick<MapPin, "title" | "note">>;
+
+/**
+ * A imagem em evidência: o que o mestre mandou a mesa olhar agora.
+ *
+ * Nível de sessão, como a trilha, e não da cena: transmitir um retrato de PNJ
+ * não deve sumir porque o mestre trocou o mapa embaixo.
+ *
+ * Não é persistida de propósito, e aqui ela difere da trilha. Trilha é
+ * ambiente e continua valendo de uma sessão para a outra; evidência é um gesto
+ * — "olha isto" — e restaurá-la ao reabrir o aplicativo mandaria para a TV um
+ * documento que a mesa já passou. Nada se perde: o ponto de anotação guarda o
+ * anexo, e retransmitir é um clique.
+ */
+export type Spotlight = {
+  assetId: string;
+  /** O título do ponto de onde a imagem saiu, para a mesa saber o que é. */
+  caption?: string;
+  /**
+   * Quando entrou no ar.
+   *
+   * Muda a cada transmissão, e é o que faz o espectador reconhecer uma imagem
+   * nova: comparar `assetId` não distinguiria transmitir o mesmo arquivo duas
+   * vezes, que é como se chama a atenção de novo para ele.
+   */
+  since: number;
+};
+
 /** O que o chamador informa ao desenhar uma área; `id` e `revealed` são do store. */
 export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height">;
 
@@ -229,6 +291,12 @@ export type Scene = {
   items: CanvasItem[];
   fog: FogRegion[];
   /**
+   * Pontos de anotação do mestre. Ausente = nenhum.
+   *
+   * NUNCA chega à mesa: `sceneForTable` remove este campo antes de publicar.
+   */
+  pins?: MapPin[];
+  /**
    * Enquadramento que a Plateia e o Assistir usam. Ausente = plano inteiro.
    * O zoom do Operador só chega aqui quando ele manda, pelo botão de enquadrar.
    */
@@ -290,6 +358,10 @@ export function cloneScene(source: Scene, name: string): Scene {
     name,
     items: source.items.map((item) => ({ ...item, id: crypto.randomUUID() })),
     fog: source.fog.map((region) => ({ ...region, id: crypto.randomUUID() })),
+    // Os anexos continuam apontando para os MESMOS assets: o arquivo é do
+    // acervo da campanha, não do ponto, e copiá-lo duplicaria um mapa de 8 MB
+    // por duplicar a cena.
+    pins: source.pins?.map((pin) => ({ ...pin, id: crypto.randomUUID() })),
     createdAt: now,
     updatedAt: now,
   };

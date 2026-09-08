@@ -31,8 +31,10 @@ import {
   type CanvasItem,
   type FogRegion,
   type ItemDraft,
+  type MapPin,
   type NewCanvasItem,
   type NewFogRegion,
+  type NewMapPin,
   type Scene,
   type SceneGrid,
   type Viewport,
@@ -119,6 +121,14 @@ type SceneStore = {
   addFog: (sceneId: string, region: NewFogRegion) => string;
   updateFog: (sceneId: string, fogId: string, patch: Partial<FogRegion>) => void;
   removeFog: (sceneId: string, fogId: string) => void;
+
+  /** Crava um ponto de anotação. Devolve o id, para já abrir a nota dele. */
+  addPin: (sceneId: string, pin: NewMapPin) => string;
+  updatePin: (sceneId: string, pinId: string, patch: Partial<MapPin>) => void;
+  removePin: (sceneId: string, pinId: string) => void;
+  /** Anexa arquivos do acervo ao ponto, sem repetir os que já estão nele. */
+  attachToPin: (sceneId: string, pinId: string, assetIds: string[]) => void;
+  detachFromPin: (sceneId: string, pinId: string, assetId: string) => void;
 };
 
 export const useSceneStore = create<SceneStore>((set, get) => {
@@ -383,6 +393,66 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     get().updateScene(sceneId, (scene) => ({
       ...scene,
       fog: scene.fog.filter((region) => region.id !== fogId),
+    }));
+  },
+
+  addPin(sceneId, pin) {
+    const id = crypto.randomUUID();
+
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      pins: [
+        ...(scene.pins ?? []),
+        { title: "", note: "", ...pin, id, attachments: [] },
+      ],
+    }));
+
+    return id;
+  },
+
+  updatePin(sceneId, pinId, patch) {
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      pins: (scene.pins ?? []).map((pin) => (pin.id === pinId ? { ...pin, ...patch } : pin)),
+    }));
+  },
+
+  removePin(sceneId, pinId) {
+    get().updateScene(sceneId, (scene) => {
+      const restantes = (scene.pins ?? []).filter((pin) => pin.id !== pinId);
+
+      // Volta a `undefined` quando esvazia, em vez de deixar `[]` no arquivo:
+      // é o mesmo estado, e `sceneForTable` decide por identidade da
+      // referência quando o campo está ausente.
+      return { ...scene, pins: restantes.length > 0 ? restantes : undefined };
+    });
+  },
+
+  attachToPin(sceneId, pinId, assetIds) {
+    if (assetIds.length === 0) return;
+
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      pins: (scene.pins ?? []).map((pin) =>
+        pin.id === pinId
+          ? // `Set` para o mesmo arquivo anexado duas vezes não render duas
+            // miniaturas iguais com o mesmo botão de transmitir.
+            { ...pin, attachments: [...new Set([...pin.attachments, ...assetIds])] }
+          : pin,
+      ),
+    }));
+  },
+
+  detachFromPin(sceneId, pinId, assetId) {
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      pins: (scene.pins ?? []).map((pin) =>
+        pin.id === pinId
+          ? // Só desanexa: o arquivo continua no acervo. Apagar o asset aqui
+            // levaria embora a imagem de quem a usa como fundo de outra cena.
+            { ...pin, attachments: pin.attachments.filter((id) => id !== assetId) }
+          : pin,
+      ),
     }));
   },
   };

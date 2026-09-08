@@ -1,12 +1,15 @@
-import type { Portrait, Scene, SessionTrack } from "@/types/scene";
+import type { Portrait, Scene, SessionTrack, Spotlight } from "@/types/scene";
 
 /**
  * Tudo que um espectador precisa saber.
  *
- * Cena, trilha e retratos viajam numa mensagem só. Nenhum dos três pertence aos
- * outros — a trilha e os retratos são da sessão, não da cena —, mas separá-los
- * exigiria três reenvios e três heartbeats para nenhum ganho, e faria quem
- * chega no meio da sessão receber a cena antes do elenco.
+ * Cena, trilha, retratos e evidência viajam numa mensagem só. Nenhum pertence
+ * aos outros — trilha, retratos e evidência são da sessão, não da cena —, mas
+ * separá-los exigiria um reenvio e um heartbeat para cada um, para nenhum
+ * ganho, e faria quem chega no meio da sessão receber a cena antes do elenco.
+ *
+ * A cena que entra aqui passou por `sceneForTable`: ela é a cena SEM os pontos
+ * de anotação do mestre. Este quadro é público para quem tem o código da mesa.
  */
 export type LiveState = {
   /** `null` = nada no ar. */
@@ -15,6 +18,8 @@ export type LiveState = {
   track: SessionTrack | null;
   /** Retratos sobre a cena, ancorados na câmera. */
   portraits: Portrait[];
+  /** Imagem em evidência sobre tudo. `null` = nenhuma. */
+  spotlight: Spotlight | null;
 };
 
 /**
