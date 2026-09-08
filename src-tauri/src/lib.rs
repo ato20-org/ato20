@@ -78,6 +78,9 @@ pub fn run() {
             commands::player_remove,
             commands::player_attachments,
             commands::player_attachments_dir,
+            commands::campaign_export_name,
+            commands::campaign_export,
+            commands::campaign_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

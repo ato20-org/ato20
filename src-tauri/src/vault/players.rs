@@ -199,6 +199,59 @@ pub fn by_token(vault: &Vault, token: &str) -> AppResult<Option<Player>> {
     Ok(player)
 }
 
+/// O hash do token de um jogador, para o export levar junto.
+///
+/// Existe so para o zip. O hash nao e credencial -- e SHA-256 de 32 bytes
+/// aleatorios, entao quem tem o zip pode VERIFICAR um token que ja tenha, nunca
+/// derivar um. E levando-o que o celular de cada jogador continua valendo
+/// depois de o mestre trocar de maquina.
+pub fn token_hash_of(vault: &Vault, id: &str) -> AppResult<Option<String>> {
+    let conn = open(vault)?;
+
+    Ok(conn
+        .query_row("select token_hash from jogadores where id = ?1", [id], |row| {
+            row.get::<_, String>(0)
+        })
+        .ok())
+}
+
+/// Recria a linha de um jogador vinda de um import.
+///
+/// `visto_em` nasce zerado, e nao com o instante do import: o jogador nao esta
+/// na mesa por causa de uma importacao, e marcar presenca aqui pintaria de verde
+/// quem nao abriu o celular ainda.
+pub fn restore(vault: &Vault, id: &str, meta: &super::zip::PlayerMeta) -> AppResult<()> {
+    let conn = open(vault)?;
+
+    // Hash ausente -- export de uma versao que nao o levava, ou `_meta.json`
+    // editado a mao. Um valor aleatorio mantem o indice unico satisfeito e nao
+    // resolve para token nenhum: a ficha aparece para o mestre, e o jogador
+    // entra de novo. Deixar vazio faria dois jogadores nessa situacao
+    // colidirem no indice.
+    let hash = if meta.token_hash.trim().is_empty() {
+        new_token()?
+    } else {
+        meta.token_hash.trim().to_string()
+    };
+
+    conn.execute(
+        "insert into jogadores (id, token_hash, nome, rotulo, notas, entrou_em, visto_em)
+         values (?1, ?2, ?3, ?4, ?5, ?6, 0)
+         on conflict(id) do update set
+             token_hash = ?2, nome = ?3, rotulo = ?4, notas = ?5, entrou_em = ?6",
+        rusqlite::params![
+            id,
+            hash,
+            meta.nome.chars().take(60).collect::<String>(),
+            meta.rotulo.chars().take(60).collect::<String>(),
+            meta.notas.chars().take(20_000).collect::<String>(),
+            meta.entrou_em,
+        ],
+    )?;
+
+    Ok(())
+}
+
 /// Todos os jogadores, do mais antigo para o mais novo.
 ///
 /// Ordem de entrada, e nao de atividade: a lista do mestre e lida como "quem

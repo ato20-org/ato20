@@ -4,6 +4,7 @@ pub mod board;
 pub mod players;
 pub mod session;
 pub mod slug;
+pub mod zip;
 
 use std::path::{Path, PathBuf};
 

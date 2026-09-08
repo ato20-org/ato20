@@ -1,6 +1,6 @@
 "use client";
 
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 
 import { call } from "@/lib/vault/bridge";
 
@@ -65,4 +65,52 @@ export async function pickFolder(title: string): Promise<string | null> {
   const chosen = await open({ directory: true, multiple: false, title });
 
   return typeof chosen === "string" ? chosen : null;
+}
+
+// --- zip --------------------------------------------------------------------
+
+/**
+ * Exporta a campanha para um zip.
+ *
+ * `incluirJogadores` desligado por padrão: quem manda a campanha para outro
+ * mestre quer as cenas e os mapas, e a ficha em PDF de quem joga na casa dele
+ * não é material a repassar. Quem está trocando de máquina liga.
+ *
+ * `null` = o mestre fechou o diálogo, que não é erro.
+ */
+export async function exportCampaign(incluirJogadores: boolean): Promise<string | null> {
+  const sugerido = await call<string>("campaign_export_name");
+
+  const dest = await save({
+    title: "Exportar campanha",
+    defaultPath: sugerido,
+    filters: [{ name: "Campanha do ATO20", extensions: ["zip"] }],
+  });
+
+  if (!dest) return null;
+
+  await call("campaign_export", { dest, incluirJogadores });
+
+  return dest;
+}
+
+/**
+ * Importa um zip como campanha nova e a abre.
+ *
+ * Dois diálogos: o zip, e onde criar. `null` em qualquer um dos dois desiste
+ * sem erro.
+ */
+export async function importCampaign(): Promise<CampaignInfo | null> {
+  const escolhido = await open({
+    multiple: false,
+    title: "Escolha o zip da campanha",
+    filters: [{ name: "Campanha do ATO20", extensions: ["zip"] }],
+  });
+
+  if (typeof escolhido !== "string") return null;
+
+  const parent = await pickFolder("Onde criar a campanha importada");
+  if (!parent) return null;
+
+  return call<CampaignInfo>("campaign_import", { zipPath: escolhido, parent });
 }

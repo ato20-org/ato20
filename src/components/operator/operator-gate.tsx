@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { FolderOpen, FolderPlus, Loader2, MonitorOff, X } from "lucide-react";
+import { FileArchive, FolderOpen, FolderPlus, Loader2, MonitorOff, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,7 @@ function CampaignDoor() {
   const choose = useCampaignStore((state) => state.choose);
   const openFolder = useCampaignStore((state) => state.openFolder);
   const forget = useCampaignStore((state) => state.forget);
+  const importar = useCampaignStore((state) => state.importar);
 
   const [creating, setCreating] = useState(false);
 
@@ -132,6 +133,14 @@ function CampaignDoor() {
       >
         <FolderPlus />
         Criar campanha
+      </Button>
+
+      {/* Importar mora aqui, e não atrás da campanha aberta: quem recebeu um
+          zip de outro mestre ainda não tem campanha nenhuma, e a porta é a
+          primeira tela que ele vê. */}
+      <Button variant="ghost" className="w-full" disabled={busy} onClick={() => void importar()}>
+        <FileArchive />
+        Importar de um zip
       </Button>
 
       {error ? <p className="text-destructive text-sm">{error}</p> : null}

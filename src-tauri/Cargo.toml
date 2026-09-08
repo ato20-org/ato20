@@ -56,6 +56,11 @@ uuid = { version = "1", features = ["v4"] }
 # qualquer: este token e a unica coisa que separa a ficha de um jogador da do
 # outro depois que a RLS do Postgres saiu.
 getrandom = "0.3"
+# Exportar e importar a campanha. So `deflate`: os outros codecs trariam AES,
+# lzma e bzip2 para dentro do binario, e o que se comprime aqui e JSON e imagem
+# ja comprimida -- deflate resolve o primeiro e nao piora o segundo.
+zip = { version = "4", default-features = false, features = ["deflate"] }
+
 # Guarda-se o HASH do token, nunca ele. Um `.ato20/estado.db` que vaza -- num
 # zip, num backup, num Dropbox -- nao pode entregar as credenciais da mesa.
 sha2 = "0.10"

@@ -6,7 +6,9 @@ import { isDesktop, VaultError } from "@/lib/vault/bridge";
 import {
   createCampaign,
   currentCampaign,
+  exportCampaign,
   forgetCampaign,
+  importCampaign,
   openCampaign,
   pickFolder,
   recentCampaigns,
@@ -66,6 +68,10 @@ type CampaignStore = {
   create: (nome: string) => Promise<void>;
   /** Tira da lista de recentes. Não apaga nada do disco. */
   forget: (path: string) => Promise<void>;
+  /** Zipa a campanha aberta. Devolve o caminho gravado, ou `null` se desistiu. */
+  exportar: (incluirJogadores: boolean) => Promise<string | null>;
+  /** Importa um zip como campanha nova e a abre. */
+  importar: () => Promise<void>;
   /** Volta para a escolha sem fechar nada no disco. */
   close: () => void;
 };
@@ -166,6 +172,40 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       await forgetCampaign(path);
     } finally {
       set({ recents: await refreshRecents() });
+    }
+  },
+
+  async exportar(incluirJogadores) {
+    if (get().busy) return null;
+
+    set({ busy: true, error: null });
+
+    try {
+      const dest = await exportCampaign(incluirJogadores);
+      set({ busy: false });
+
+      return dest;
+    } catch (cause) {
+      set({ busy: false, error: describe(cause) });
+
+      return null;
+    }
+  },
+
+  async importar() {
+    if (get().busy) return;
+
+    set({ busy: true, error: null });
+
+    try {
+      const info = await importCampaign();
+
+      // `null` é o diálogo fechado sem escolher: não muda nada, e não é erro.
+      set(info ? { campaign: info, status: "ready", busy: false } : { busy: false });
+    } catch (cause) {
+      // A porta fica, com o motivo: zip que não é campanha e pasta que já tem
+      // uma são os dois casos comuns, e os dois pedem escolher outra coisa.
+      set({ busy: false, error: describe(cause), recents: await refreshRecents() });
     }
   },
 

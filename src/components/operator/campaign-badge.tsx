@@ -1,8 +1,16 @@
 "use client";
 
-import { FolderOpen } from "lucide-react";
+import { ChevronDown, FolderOpen, FolderSymlink, PackageOpen, Users } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 
@@ -19,34 +27,68 @@ import { useCampaignStore } from "@/lib/store/use-campaign-store";
  */
 export function CampaignBadge() {
   const campaign = useCampaignStore((state) => state.campaign);
+  const busy = useCampaignStore((state) => state.busy);
   const close = useCampaignStore((state) => state.close);
+  const exportar = useCampaignStore((state) => state.exportar);
 
   if (!campaign) return null;
 
+  function exportarCom(incluirJogadores: boolean) {
+    void exportar(incluirJogadores).then(
+      (dest) => {
+        // `null` é o diálogo fechado sem escolher: não avisa nada.
+        if (dest) toast.success(`Campanha exportada em ${dest}`);
+      },
+      () => toast.error("Não foi possível exportar a campanha."),
+    );
+  }
+
   return (
     <div className="flex min-w-0 items-center gap-1">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-w-0"
-              onClick={close}
-              aria-label="Trocar de campanha"
-            >
-              <FolderOpen />
-              {/* `max-w-32` porque `truncate` só corta dentro de largura
-                  definida — sem o limite, um nome longo empurra o resto da
-                  barra para fora da janela. */}
-              <span className="max-w-32 truncate">{campaign.nome}</span>
-            </Button>
-          }
-        />
-        <TooltipContent>
-          <p className="max-w-64 break-all">{campaign.path}</p>
-        </TooltipContent>
-      </Tooltip>
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="ghost" size="sm" className="min-w-0" disabled={busy}>
+                    <FolderOpen />
+                    {/* `max-w-32` porque `truncate` só corta dentro de largura
+                        definida — sem o limite, um nome longo empurra o resto
+                        da barra para fora da janela. */}
+                    <span className="max-w-32 truncate">{campaign.nome}</span>
+                    <ChevronDown className="opacity-60" />
+                  </Button>
+                }
+              />
+            }
+          />
+          <TooltipContent>
+            <p className="max-w-64 break-all">{campaign.path}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuItem onClick={() => exportarCom(false)}>
+            <PackageOpen />
+            Exportar campanha
+          </DropdownMenuItem>
+          {/* Dois itens em vez de uma marca num diálogo: a diferença entre eles
+              é quem vai receber o zip, e essa decisão fica mais clara escrita
+              do que numa caixa a marcar. */}
+          <DropdownMenuItem onClick={() => exportarCom(true)}>
+            <Users />
+            Exportar com as fichas dos jogadores
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem onClick={close}>
+            <FolderSymlink />
+            Trocar de campanha
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* O código fica à mão, e não atrás de um clique, porque é ditado no
           começo de toda sessão. */}

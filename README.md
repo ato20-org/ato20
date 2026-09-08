@@ -38,9 +38,15 @@ pagar servidor por usuário ou empilhar compressão para caber. No disco de quem
 custo não existe, e o teto passa a ser o HD.
 
 O formato é texto onde dá: `git diff` numa cena mostra o token que andou, e um `config.json`
-aberto no editor diz o que a campanha é. **Nada essencial mora no SQLite** — se
-`.ato20/estado.db` se perder, a campanha continua inteira. É esse o teste que decide onde
-cada coisa fica.
+aberto no editor diz o que a campanha é.
+
+**O que mora no SQLite, e o que isso custa.** Cenas, acervo, retratos, trilha e os anexos
+dos jogadores são arquivos: perder o `.ato20/estado.db` não toca em nenhum deles. O que mora
+só lá é o *texto* de cada jogador — nome, apelido e notas — porque as notas gravam a cada
+800 ms de digitação e reescrever um JSON inteiro nesse ritmo, com vários celulares ao mesmo
+tempo, é a receita para escrita perdida. Esse texto é materializado em
+`jogadores/{id}/_meta.json` **no export**, e não continuamente: entre dois exports, ele é a
+única coisa da campanha que só existe no banco.
 
 ## Três telas
 
@@ -65,7 +71,8 @@ copiar a pasta.
   SSE, então qualquer aparelho da casa serve de TV e cada jogador acompanha pelo celular.
 - **Ficha do personagem: na Plateia.** Nome, notas e anexos, com um token por jogador no
   lugar da RLS que fazia esse trabalho antes.
-- **Exportar e importar zip: ainda não.**
+- **Exportar e importar zip: pronto.** A campanha cabe num arquivo, e o arquivo abre em
+  qualquer outra máquina — com a mesa continuando a valer.
 
 ## Rodar
 
@@ -258,6 +265,74 @@ explorador do sistema, em `jogadores/{id}/` — consequência do vault, e não l
 arquivos estão numa pasta de verdade, e uma rota para o mestre ler anexo pela rede seria
 superfície nova para resolver o que o gerenciador de arquivos já resolve.
 
+## Exportar e importar
+
+A campanha vira um `.ato20.zip` — o vault inteiro menos o `.ato20/`, que é derivado. Do
+outro lado, importar extrai numa pasta nova, reconstrói o banco da sessão a partir dos
+`_meta.json` e abre a campanha.
+
+**O código da mesa viaja**, então é o mesmo depois de importar: trocá-lo obrigaria todo
+jogador a reconfigurar o celular a cada troca de máquina do mestre.
+
+**O hash do token viaja também, e isso é deliberado.** Ele não é credencial: é SHA-256 de 32
+bytes aleatórios, então quem tem o zip pode *verificar* um token que já tenha, nunca derivar
+um. Levando-o, o celular de cada jogador continua valendo depois do import — sem isso, a
+mesa toda teria de entrar de novo e o mestre ficaria com fichas duplicadas.
+
+**Duas opções de export, e não uma marca num diálogo.** "Exportar campanha" deixa
+`jogadores/` de fora; "Exportar com as fichas dos jogadores" leva. A diferença é quem vai
+receber o zip — outro mestre, ou a sua outra máquina — e essa decisão fica mais clara
+escrita do que numa caixa a marcar.
+
+O que o import recusa, e por quê:
+
+- **Zip que não é campanha.** A identidade é lida de dentro do arquivo *antes* de escrever
+  qualquer coisa, então recusar não deixa diretório pela metade no disco de quem tentou.
+- **Pasta que já tem campanha.** Importar por cima apagaria trabalho, e o gesto não anuncia
+  isso.
+- **Zip-slip.** Um zip preparado com `../../..` no nome das entradas escreveria fora da
+  pasta de destino — em qualquer lugar onde o usuário possa escrever. Quem valida é o
+  `enclosed_name` do próprio crate, de propósito: reimplementar essa checagem à mão é
+  exatamente onde esse tipo de bug nasce. Há teste com um zip hostil de verdade.
+- **Bomba.** Um zip de 2 MB pode virar 100 GB. A defesa não é confiar no cabeçalho e sim
+  contar o que sai: teto de 5 GB e de 50 mil entradas, e o que passar disso apaga o que já
+  foi extraído.
+
+Uma coisa que um teste ensinou: um `estado.db` ilegível **não** derruba o export. Ele
+derrubava, e isso estava errado — as cenas, o acervo e os anexos estão intactos em arquivos
+ao lado, e quem exporta costuma estar exportando justamente porque algo deu errado. Perde-se
+o texto dos jogadores, que era o que estava ilegível de todo jeito.
+
+## Empacotar
+
+```bash
+pnpm tauri build
+```
+
+No Linux sai `.deb`, `.rpm` e `.AppImage`. Os tamanhos dizem uma coisa que vale saber:
+
+| | Tamanho | Webview |
+| --- | --- | --- |
+| `.deb` / `.rpm` | 6,5 MB | a do sistema |
+| `.AppImage` | 99 MB | embutida |
+
+O `.deb` é o número que justificou escolher Tauri em vez de Electron. O AppImage embute a
+WebKitGTK e desfaz isso — ele existe para quem não instala pacote, e não como o artefato
+recomendado.
+
+**No Arch, o AppImage precisa de `NO_STRIP=1`:**
+
+```bash
+NO_STRIP=1 pnpm tauri build
+```
+
+Sem isso o `linuxdeploy` falha com `unknown type [0x13] section '.relr.dyn'` — o `strip`
+que vem dentro dele é antigo e não entende uma seção que a toolchain do Arch emite. O
+`.deb` e o `.rpm` não passam por ele e não precisam da variável.
+
+O `out/` viaja como recurso do bundle e é lido de `resource_dir()`. Verificado no pacote:
+o AppImage serve `/assistir` de dentro de si mesmo, com o daemon em `0.0.0.0:20200`.
+
 ## Como o vault grava
 
 **Escrita atômica, sempre.** Arquivo temporário no mesmo diretório, `sync_all`, `rename`. O
@@ -375,6 +450,11 @@ Sobre jogadores, ela cobre o que a RLS garantia antes: token que não vaza em cl
 banco, ficha que só o próprio token abre, `rotulo` que o jogador não alcança, anexo de um
 que não é legível nem listável pelo outro, nome de arquivo hostil que não escapa da pasta,
 e token que deixa de valer quando o mestre tira o jogador da mesa.
+
+Sobre o zip: ida e volta preservando cenas e acervo, o `.ato20/` que não viaja, jogadores
+que ficam de fora quando pedido, a mesa que continua valendo depois do import, import que
+não sobrescreve, zip que não é campanha recusado sem sujar o disco, e um zip-slip de
+verdade que não escreve fora do destino.
 
 O lado TypeScript **ainda não tem runner**. Os módulos puros foram escritos para serem
 testáveis de fora — é o motivo de `reorderByZ`, `clampViewport`, `flipPatches`, `scaleGroup`

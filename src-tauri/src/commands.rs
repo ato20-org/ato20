@@ -10,7 +10,7 @@ use crate::vault::assets::{AssetFolder, AssetMeta};
 use crate::vault::board::Board;
 use crate::vault::session::Json;
 use crate::vault::players::{Attachment, Player};
-use crate::vault::{assets, board, players, session, CampaignInfo, Vault};
+use crate::vault::{assets, board, players, session, zip, CampaignInfo, Vault};
 
 /// Preferencia que guarda a ultima campanha aberta.
 const LAST_CAMPAIGN: &str = "ultima-campanha";
@@ -282,4 +282,54 @@ pub fn player_attachments_dir(state: State<'_, AppState>, id: String) -> AppResu
     state.with_vault(|vault| {
         Ok(players::attachments_dir(vault, &id).display().to_string())
     })
+}
+
+// --- zip --------------------------------------------------------------------
+
+/// Nome sugerido para o arquivo, para o dialogo de salvar ja vir preenchido.
+#[tauri::command]
+pub fn campaign_export_name(state: State<'_, AppState>) -> AppResult<String> {
+    state.with_vault(|vault| Ok(zip::suggested_name(vault)))
+}
+
+/// Zipa a campanha aberta em `dest`.
+///
+/// `incluir_jogadores` desligado por padrao na tela: quem manda a campanha para
+/// outro mestre quer as cenas e os mapas, e a ficha em PDF de quem joga na casa
+/// dele nao e material a repassar. Quem esta trocando de maquina liga.
+#[tauri::command]
+pub fn campaign_export(
+    state: State<'_, AppState>,
+    dest: String,
+    incluir_jogadores: bool,
+) -> AppResult<()> {
+    state.with_vault(|vault| {
+        zip::export(vault, std::path::Path::new(&dest), incluir_jogadores)
+    })
+}
+
+/// Importa um zip como campanha nova dentro de `parent`, e a abre.
+///
+/// Abre em seguida de proposito: importar e abrir sao um gesto so na cabeca de
+/// quem clicou, e deixar a campanha importada fechada obrigaria a procurar a
+/// pasta que o proprio aplicativo acabou de criar.
+#[tauri::command]
+pub fn campaign_import(
+    state: State<'_, AppState>,
+    zip_path: String,
+    parent: String,
+) -> AppResult<CampaignInfo> {
+    let vault = zip::import(
+        std::path::Path::new(&zip_path),
+        std::path::Path::new(&parent),
+    )?;
+
+    let info = vault.info();
+
+    state.db.remember(&info.path, &info.nome)?;
+    state.db.set_pref(LAST_CAMPAIGN, &info.path)?;
+
+    *state.vault.write().expect("vault envenenado") = Some(vault);
+
+    Ok(info)
 }
