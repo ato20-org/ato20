@@ -4,7 +4,7 @@ import { RadioTower, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAssetList } from "@/hooks/use-asset-list";
-import { useAssetUrl } from "@/hooks/use-asset-url";
+import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 
 /**
@@ -29,15 +29,18 @@ export function SpotlightChip() {
   const spotlight = useSpotlightStore((state) => state.spotlight);
   const clear = useSpotlightStore((state) => state.clear);
 
-  const url = useAssetUrl(spotlight?.assetId);
+  const url = useSpotlightUrl(spotlight);
   // O nome do arquivo, que é o que este aviso tem para identificar a imagem.
   // O título do ponto de origem seria mais descritivo, mas ele não viaja mais:
   // ver a nota em `Spotlight`.
   const { assets } = useAssetList("image");
+  // Anexo de jogador não está no acervo, então não há lista onde procurar o
+  // nome dele: quem o guarda é o store, do lado do mestre.
+  const origem = useSpotlightStore((state) => state.origem);
 
   if (!spotlight) return null;
 
-  const nome = assets.find((asset) => asset.id === spotlight.assetId)?.name;
+  const nome = origem ?? assets.find((asset) => asset.id === spotlight.assetId)?.name;
 
   return (
     <div className="bg-background/90 pointer-events-auto absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-lg border py-1 pr-1 pl-2 shadow-sm backdrop-blur">

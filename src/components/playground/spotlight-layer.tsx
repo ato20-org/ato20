@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { ChevronUp, Eye, EyeOff } from "lucide-react";
 
-import { useAssetUrl } from "@/hooks/use-asset-url";
+import { ImageZoom } from "@/components/attachments/image-zoom";
+import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
 import { cn } from "@/lib/utils";
 import type { Spotlight } from "@/types/scene";
 
@@ -15,12 +16,15 @@ import type { Spotlight } from "@/types/scene";
  * perguntando o que era aquilo no canto. Um documento, um retrato ou uma carta
  * precisam ser lidos, e ler exige o espaço.
  *
- * `dismissable` é a diferença entre a TV e o celular. Na TV não há ninguém para
- * fechar nada, e um botão ali só correria o risco de alguém encostar. No
- * celular o jogador tem também a própria ficha e o mapa, e uma imagem que ele
- * não pode encostar de lado o deixaria preso enquanto o mestre não lembrasse de
- * tirar. Encostar de lado não é tirar do ar: a imagem continua no ar para todo
- * mundo, e volta com um toque.
+ * `dismissable` é a diferença entre a TV e o celular, e vale para os dois
+ * controles desta tela — esconder e ampliar. Na TV não há ninguém operando:
+ * botão ali só corre o risco de alguém encostar, e ninguém vai fazer zoom numa
+ * tela sem cursor nem dono. No celular há uma mão. O jogador tem também a
+ * própria ficha e o mapa, e uma imagem que ele não pode encostar de lado o
+ * deixaria preso enquanto o mestre não lembrasse de tirar; e uma carta ou uma
+ * ficha caberem na tela não é o mesmo que poderem ser lidas nela — sem zoom, a
+ * mesa recebe a imagem e não alcança o que está escrito. Encostar de lado não é
+ * tirar do ar: a imagem continua no ar para todo mundo, e volta com um toque.
  */
 export function SpotlightLayer({
   spotlight,
@@ -29,7 +33,9 @@ export function SpotlightLayer({
   spotlight: Spotlight | null;
   dismissable?: boolean;
 }) {
-  const url = useAssetUrl(spotlight?.assetId);
+  // Pelo `useSpotlightUrl`, e não pelo id do acervo: a evidência também pode
+  // ser o anexo de um jogador, que não é asset e sai por `/evidencia/{id}`.
+  const url = useSpotlightUrl(spotlight);
 
   /**
    * QUAL transmissão o jogador encostou de lado — o `since` dela, não um
@@ -77,16 +83,24 @@ export function SpotlightLayer({
       key={spotlight.since}
     >
       {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt="Imagem em evidência"
-          draggable={false}
-          // `object-contain` com teto de altura: documento em pé e mapa
-          // deitado passam pelo mesmo caminho, e cortar qualquer um dos dois
-          // esconderia justamente o que se mandou olhar.
-          className="max-h-full min-h-0 w-auto max-w-full flex-1 object-contain select-none"
-        />
+        dismissable ? (
+          // O mesmo gesto que o jogador já tem nos próprios arquivos: roda,
+          // pinça, arrasto e duplo toque. O `key` do contêiner é o `since`, e
+          // é isso que faz cada transmissão nova nascer encaixada em vez de
+          // herdar o recorte da anterior.
+          <ImageZoom src={url} alt="Imagem em evidência" className="min-h-0 w-full flex-1" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt="Imagem em evidência"
+            draggable={false}
+            // `object-contain` com teto de altura: documento em pé e mapa
+            // deitado passam pelo mesmo caminho, e cortar qualquer um dos dois
+            // esconderia justamente o que se mandou olhar.
+            className="max-h-full min-h-0 w-auto max-w-full flex-1 object-contain select-none"
+          />
+        )
       ) : null}
 
       {dismissable ? (

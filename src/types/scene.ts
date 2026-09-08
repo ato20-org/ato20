@@ -188,7 +188,22 @@ export type NewMapPin = Pick<MapPin, "x" | "y"> & Partial<Pick<MapPin, "title" |
  * anexo, e retransmitir é um clique.
  */
 export type Spotlight = {
-  assetId: string;
+  /**
+   * Imagem do acervo. Exclusivo com `sharedId`.
+   *
+   * Opcional porque a evidência passou a ter duas origens: o acervo, cujo id a
+   * mesa resolve em `/asset/{id}`, e o anexo de um jogador, que não é acervo e
+   * não tem id de asset nenhum.
+   */
+  assetId?: string;
+  /**
+   * Anexo de jogador, pelo endereço efêmero que o daemon abriu para ele.
+   *
+   * Sorteado a cada transmissão e servido em `/evidencia/{id}` só enquanto
+   * está no ar — ver `player_attachment_share` no lado nativo. O nome do
+   * arquivo não viaja: é a mesma razão de não haver legenda aqui.
+   */
+  sharedId?: string;
   /*
    * Sem legenda, e isto foi uma correção.
    *
@@ -204,7 +219,7 @@ export type Spotlight = {
    * Quando entrou no ar.
    *
    * Muda a cada transmissão, e é o que faz o espectador reconhecer uma imagem
-   * nova: comparar `assetId` não distinguiria transmitir o mesmo arquivo duas
+   * nova: comparar a origem não distinguiria transmitir o mesmo arquivo duas
    * vezes, que é como se chama a atenção de novo para ele.
    */
   since: number;
