@@ -78,6 +78,7 @@ export function OperatorShell() {
   const redo = useSceneStore((state) => state.redo);
 
   const track = useTrackStore((state) => state.track);
+  const trackVolume = useTrackStore((state) => state.volume);
   const hydrateTrack = useTrackStore((state) => state.hydrate);
 
   const portraits = usePortraitStore((state) => state.portraits);
@@ -113,7 +114,10 @@ export function OperatorShell() {
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.
   // `local` alimenta a TV na mesma máquina; `roomId` alimenta os celulares.
-  usePublisher({ scene: liveScene, track, portraits }, { local: true, roomId });
+  usePublisher(
+    { scene: liveScene, track, volume: trackVolume, portraits },
+    { local: true, roomId },
+  );
   useOperatorShortcuts();
   useSpacePan();
   // O que a mesa precisa alcançar de fora desta máquina. É a mesma conta que a
@@ -273,7 +277,7 @@ export function OperatorShell() {
 
       {/* A trilha é da sessão, não da cena: trocar de cena não corta a
           música. */}
-      <SessionAudio track={track} />
+      <SessionAudio track={track} volume={trackVolume} />
     </div>
   );
 }

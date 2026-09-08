@@ -17,7 +17,10 @@ export function ViewerStage({ roomId }: { roomId: string | null }) {
   // `local` sempre: quando a TV é uma aba da máquina do Operador, o
   // `BroadcastChannel` chega antes da rede e não gasta cota. `roomId` é o que
   // permite a TV estar em outro aparelho.
-  const { scene, track, portraits, synced, stalled } = useSubscription({ local: true, roomId });
+  const { scene, track, volume, portraits, synced, stalled } = useSubscription({
+    local: true,
+    roomId,
+  });
 
   return (
     // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
@@ -35,7 +38,7 @@ export function ViewerStage({ roomId }: { roomId: string | null }) {
         ) : null}
       </SceneStage>
 
-      <SessionAudio track={track} />
+      <SessionAudio track={track} volume={volume} />
 
       {/* Discreto no canto: a TV fica virada para a mesa, e o controle existe
           para o mestre escolher qual aparelho emite o som. */}

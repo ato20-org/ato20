@@ -166,7 +166,7 @@ function Connected({ roomId, code }: { roomId: string; code: string }) {
       {/* Fora das abas: a trilha não pode parar porque o jogador foi consultar
           a própria ficha. Música cortada no meio quebra a imersão que ela
           existe para criar. */}
-      <SessionAudio track={live.track} />
+      <SessionAudio track={live.track} volume={live.volume} />
     </main>
   );
 }

@@ -46,22 +46,23 @@ export const useSessionSyncStore = create<SessionSyncStore>((set, get) => ({
     try {
       const remote = await loadRoomSession(roomId);
       const portraits = usePortraitStore.getState().portraits;
-      const track = useTrackStore.getState().track;
+      const { track, volume } = useTrackStore.getState();
 
       if (!remote) {
         // Mesa que nunca gravou sessão: esta máquina é a origem.
-        await saveRoomSession(roomId, portraits, track);
+        await saveRoomSession(roomId, portraits, track, volume);
       } else if (dirty) {
         // Houve edição aqui antes de abrir a mesa. Quem está na máquina agora
         // ganha -- ver a nota na 0008.
-        await saveRoomSession(roomId, portraits, track);
+        await saveRoomSession(roomId, portraits, track, volume);
       } else {
         usePortraitStore.getState().adopt(remote.portraits);
         // Trilha entra pausada de proposito: musica comecando sozinha ao abrir
-        // o Operador assusta, e retomar e um clique.
+        // o Operador assusta, e retomar e um clique. O volume vem junto: e da
+        // mesa, e a outra maquina do mestre continua no ganho ajustado.
         useTrackStore
           .getState()
-          .adopt(remote.track ? { ...remote.track, playing: false } : null);
+          .adopt(remote.track ? { ...remote.track, playing: false } : null, remote.volume);
       }
 
       set({ status: "ready", syncedRoomId: roomId });
@@ -101,7 +102,7 @@ function watch(roomId: string): void {
   });
 
   useTrackStore.subscribe((state, previous) => {
-    if (state.track !== previous.track) mark();
+    if (state.track !== previous.track || state.volume !== previous.volume) mark();
   });
 
   // Fechar a aba não pode custar o arranjo dos retratos: o disco já gravou em
@@ -127,6 +128,7 @@ async function push(roomId: string): Promise<void> {
       roomId,
       usePortraitStore.getState().portraits,
       useTrackStore.getState().track,
+      useTrackStore.getState().volume,
     );
     dirty = false;
   } catch (cause) {

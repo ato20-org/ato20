@@ -19,6 +19,13 @@ export type LiveState = {
   /** `null` = nenhuma trilha escolhida. */
   track: SessionTrack | null;
   /**
+   * Volume do som, de 0 a 1, para todas as telas.
+   *
+   * Viaja fora da faixa porque é da sessão: o mestre regula de um lugar, a TV
+   * e os celulares seguem, e trocar de música não mexe no ganho.
+   */
+  volume: number;
+  /**
    * Retratos sobre a cena. Viajam junto porque são da sessão e ficam no ar
    * atravessando a troca de cena — mandá-los em outra mensagem exigiria um
    * segundo aperto de mão para o espectador que chega no meio.
