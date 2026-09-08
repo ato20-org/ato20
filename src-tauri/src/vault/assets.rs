@@ -33,6 +33,18 @@ pub struct AssetMeta {
     /// Pasta em que o mestre guardou. Ausente = raiz.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub folder_id: Option<String>,
+    /// A forma da onda, para a barra da trilha desenhar. So para `audio`.
+    ///
+    /// Um valor por balde, de 0 a 100. Calculado UMA vez, pela webview, na
+    /// primeira vez que a faixa aparece na barra -- e gravado aqui para nunca
+    /// mais precisar decodificar o arquivo.
+    ///
+    /// Nao e calculado aqui no Rust de proposito: decodificar mp3, ogg, flac e
+    /// m4a exigiria um decodificador de audio inteiro no binario, e o browser
+    /// ja tem um. Ausente e estado valido -- a barra desenha uma linha lisa
+    /// enquanto nao houver picos, e o arquivo continua tocando.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peaks: Option<Vec<u8>>,
 }
 
 /// Pasta do acervo. So raiz, sem aninhamento.
@@ -161,6 +173,7 @@ pub fn import(vault: &Vault, origens: &[PathBuf]) -> AppResult<(Vec<AssetMeta>, 
             natural_width: largura,
             natural_height: altura,
             folder_id: None,
+            peaks: None,
         };
 
         // Binario primeiro, indice depois -- mesma ordem de `adopt`, e pelo
@@ -206,6 +219,39 @@ pub fn delete(vault: &Vault, id: &str) -> AppResult<()> {
 
     Ok(())
 }
+
+/// Guarda a forma da onda de um arquivo de som.
+///
+/// Escrito uma vez por arquivo. Chamado pela tela na primeira vez que a faixa
+/// aparece na barra, depois de decodificar o audio -- ver o comentario em
+/// `AssetMeta::peaks`.
+///
+/// Recusa em silencio um id que nao existe ou que nao e som: e uma otimizacao
+/// de desenho, e falhar aqui nao pode custar a sessao.
+pub fn set_peaks(vault: &Vault, id: &str, peaks: Vec<u8>) -> AppResult<()> {
+    let mut assets = index(vault)?;
+
+    let Some(asset) = assets.iter_mut().find(|asset| asset.id == id) else {
+        return Ok(());
+    };
+
+    if asset.kind != "audio" {
+        return Ok(());
+    }
+
+    // Teto no numero de baldes: o valor vem da tela, e um array de um milhao de
+    // posicoes gravado no `assets.json` engordaria a leitura de todo o acervo
+    // para sempre.
+    asset.peaks = Some(peaks.into_iter().take(MAX_PEAKS).collect());
+
+    write_index(vault, &assets)
+}
+
+/// Quantos baldes a forma da onda pode ter.
+///
+/// A barra desenha ~120. O teto e folgado para caber uma tela larga, e existe
+/// so para o `assets.json` nao virar despejo do que a webview mandar.
+pub const MAX_PEAKS: usize = 512;
 
 /// Move para uma pasta. `None` devolve a raiz. So metadado: o binario nao anda.
 pub fn set_folder(vault: &Vault, id: &str, folder_id: Option<String>) -> AppResult<()> {
@@ -441,6 +487,39 @@ mod tests {
         assert_eq!(imagens.len(), 2);
         assert_eq!(imagens[0].name, "b.png", "o mais novo vem primeiro");
         assert_eq!(list(&vault, Some("audio")).expect("list").len(), 1);
+    }
+
+    #[test]
+    fn picos_gravam_so_em_som_e_com_teto() {
+        let (dir, vault) = campanha();
+
+        let som = de_fora(dir.path(), "trilha.ogg", b"som");
+        let imagem = de_fora(dir.path(), "mapa.png", &png(10, 10));
+        let (aceitos, _) = import(&vault, &[som, imagem]).expect("import");
+
+        let id_som = aceitos.iter().find(|a| a.kind == "audio").expect("som").id.clone();
+        let id_img = aceitos.iter().find(|a| a.kind == "image").expect("img").id.clone();
+
+        set_peaks(&vault, &id_som, vec![10, 90, 40]).expect("peaks");
+        assert_eq!(
+            find(&vault, &id_som).expect("find").expect("meta").peaks,
+            Some(vec![10, 90, 40])
+        );
+
+        // Imagem nao tem forma de onda, e gravar ali seria lixo no indice.
+        set_peaks(&vault, &id_img, vec![1, 2, 3]).expect("peaks");
+        assert_eq!(find(&vault, &id_img).expect("find").expect("meta").peaks, None);
+
+        // O valor vem da tela: um array gigante engordaria a leitura de todo o
+        // acervo para sempre.
+        set_peaks(&vault, &id_som, vec![7; MAX_PEAKS * 3]).expect("peaks");
+        assert_eq!(
+            find(&vault, &id_som).expect("find").expect("meta").peaks.expect("peaks").len(),
+            MAX_PEAKS
+        );
+
+        // Id que nao existe nao e erro: e otimizacao de desenho.
+        assert!(set_peaks(&vault, "fantasma", vec![1]).is_ok());
     }
 
     #[test]

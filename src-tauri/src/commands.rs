@@ -190,6 +190,16 @@ pub fn asset_set_folder(
     state.with_vault(|vault| assets::set_folder(vault, &id, folder_id.clone()))
 }
 
+/// Guarda a forma da onda de um som, calculada pela tela.
+#[tauri::command]
+pub fn asset_set_peaks(
+    state: State<'_, AppState>,
+    id: String,
+    peaks: Vec<u8>,
+) -> AppResult<()> {
+    state.with_vault(|vault| assets::set_peaks(vault, &id, peaks.clone()))
+}
+
 #[tauri::command]
 pub fn folder_list(state: State<'_, AppState>) -> AppResult<Vec<AssetFolder>> {
     state.with_vault(|vault| assets::folders(vault))

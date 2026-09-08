@@ -67,6 +67,7 @@ pub fn run() {
             commands::asset_import,
             commands::asset_delete,
             commands::asset_set_folder,
+            commands::asset_set_peaks,
             commands::folder_list,
             commands::folder_create,
             commands::folder_rename,

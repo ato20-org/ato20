@@ -33,6 +33,17 @@ export function deleteAsset(id: string): Promise<void> {
   return call("asset_delete", { id });
 }
 
+/**
+ * Guarda a forma da onda de um som.
+ *
+ * Chamada uma vez por arquivo, depois de a tela decodificar o áudio. O Rust
+ * recusa em silêncio um id que não existe ou que não é som — é otimização de
+ * desenho, e falhar aqui não pode custar a sessão.
+ */
+export function setAssetPeaks(id: string, peaks: number[]): Promise<void> {
+  return call("asset_set_peaks", { id, peaks });
+}
+
 /** Move para uma pasta. `undefined` devolve à raiz. */
 export function setAssetFolder(id: string, folderId: string | undefined): Promise<void> {
   return call("asset_set_folder", { id, folderId: folderId ?? null });

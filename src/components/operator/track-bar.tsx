@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import { Pause, Play, Repeat, Square, Volume2, VolumeX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TrackWave } from "@/components/operator/track-wave";
 import { useAssetList } from "@/hooks/use-asset-list";
+import { useTrackPeaks } from "@/hooks/use-track-peaks";
 import { useAudioStore } from "@/lib/store/use-audio-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
@@ -41,22 +42,14 @@ export function TrackBar() {
   const blocked = useAudioStore((state) => state.blocked);
   const retry = useAudioStore((state) => state.retry);
 
-  // O nome vem do acervo: a trilha guarda só o `assetId`.
+  // O nome e a forma da onda vêm do acervo: a trilha guarda só o `assetId`.
   const { assets } = useAssetList("audio");
-
-  /**
-   * Instante que o dedo está arrastando.
-   *
-   * Enquanto existe, a barra mostra ele e não a posição real — senão o
-   * `timeupdate`, que chega quatro vezes por segundo, empurraria o controle de
-   * volta para debaixo do cursor a cada atualização.
-   */
-  const [arrastando, setArrastando] = useState<number | null>(null);
+  const asset = assets.find((candidato) => candidato.id === track?.assetId);
+  const peaks = useTrackPeaks(asset);
 
   if (!track) return null;
 
-  const nome = assets.find((asset) => asset.id === track.assetId)?.name ?? "Arquivo removido";
-  const mostrado = arrastando ?? position;
+  const nome = asset?.name ?? "Arquivo removido";
   const conhecida = duration > 0;
 
   return (
@@ -77,26 +70,13 @@ export function TrackBar() {
       </span>
 
       <span className="text-muted-foreground w-10 shrink-0 text-right text-[10px] tabular-nums">
-        {formatar(mostrado)}
+        {formatar(position)}
       </span>
 
-      {/* A linha de reprodução. Arrastar reescreve `startedAt`, então a TV e os
-          celulares acompanham — ver `seek` no store. */}
-      <Slider
-        className="min-w-24 flex-1"
-        aria-label="Posição da faixa"
-        // Sem duração conhecida não há como posicionar: fica em zero e
-        // desabilitada, em vez de fingir uma escala.
-        disabled={!conhecida}
-        value={[conhecida ? Math.min(mostrado, duration) : 0]}
-        max={conhecida ? duration : 1}
-        step={1}
-        onValueChange={(value) => setArrastando(primeiro(value))}
-        onValueCommitted={(value) => {
-          seek(primeiro(value));
-          setArrastando(null);
-        }}
-      />
+      {/* A forma da onda, com a parte tocada acesa. Arrastar reescreve
+          `startedAt`, então a TV e os celulares acompanham — ver `seek` no
+          store. */}
+      <TrackWave peaks={peaks} position={position} duration={duration} onSeek={seek} />
 
       <span className="text-muted-foreground w-10 shrink-0 text-[10px] tabular-nums">
         {conhecida ? formatar(duration) : "--:--"}

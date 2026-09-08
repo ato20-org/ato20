@@ -38,6 +38,14 @@ export type AssetMeta = {
    * todos os arquivos dentro dela.
    */
   folderId?: string;
+  /**
+   * A forma da onda, um valor de 0 a 100 por barra. Só para `audio`.
+   *
+   * Medida uma vez pela tela, na primeira vez que a faixa aparece na barra da
+   * trilha, e gravada no vault. Ausente = ainda não medida, e a barra desenha
+   * uma linha lisa.
+   */
+  peaks?: number[];
 };
 
 /**
