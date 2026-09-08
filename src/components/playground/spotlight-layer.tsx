@@ -56,8 +56,7 @@ export function SpotlightLayer({
         onClick={() => setEscondido(null)}
       >
         <Eye className="size-3.5" aria-hidden />
-        {/* O título quando há: "ver imagem" não diz se vale a pena reabrir. */}
-        {spotlight.caption ? `Ver: ${spotlight.caption}` : "Ver a imagem do mestre"}
+        Ver a imagem do mestre
         <ChevronUp className="size-3.5" aria-hidden />
       </button>
     );
@@ -81,17 +80,13 @@ export function SpotlightLayer({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={url}
-          alt={spotlight.caption ?? "Imagem em evidência"}
+          alt="Imagem em evidência"
           draggable={false}
           // `object-contain` com teto de altura: documento em pé e mapa
           // deitado passam pelo mesmo caminho, e cortar qualquer um dos dois
           // esconderia justamente o que se mandou olhar.
           className="max-h-full min-h-0 w-auto max-w-full flex-1 object-contain select-none"
         />
-      ) : null}
-
-      {spotlight.caption ? (
-        <p className="shrink-0 text-center text-sm text-white/80">{spotlight.caption}</p>
       ) : null}
 
       {dismissable ? (

@@ -189,8 +189,17 @@ export type NewMapPin = Pick<MapPin, "x" | "y"> & Partial<Pick<MapPin, "title" |
  */
 export type Spotlight = {
   assetId: string;
-  /** O título do ponto de onde a imagem saiu, para a mesa saber o que é. */
-  caption?: string;
+  /*
+   * Sem legenda, e isto foi uma correção.
+   *
+   * A primeira versão mandava o título do ponto de origem como legenda, "para
+   * a mesa saber o que é". O que a mesa recebia era prosa de preparação:
+   * transmitir a carta do ponto "Alçapão atrás do balcão" punha na TV, embaixo
+   * da carta, a existência do alçapão. Título de ponto é anotação do mestre, e
+   * o resto deste arquivo existe justamente para isso não sair da tela dele.
+   *
+   * A imagem se explica sozinha; quem a mandou está na mesa e pode falar.
+   */
   /**
    * Quando entrou no ar.
    *

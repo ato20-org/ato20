@@ -530,7 +530,12 @@ export function OperatorStage({ scene }: { scene: Scene }) {
       {/* Irmão do `SceneLayer`, e de propósito FORA dele: o `SceneLayer` é o
           mesmo componente do Assistir e da Plateia, e um ponto de anotação
           desenhado lá apareceria na TV virada para a mesa. */}
-      <PinLayer scene={scene} abertoId={openPinId} onAbrir={setOpenPinId} />
+      <PinLayer
+        scene={scene}
+        abertoId={openPinId}
+        onAbrir={setOpenPinId}
+        panMode={panMode}
+      />
 
       {/* Contorno enquanto a imagem paira: promete que soltar ali funciona, e
           é o que diferencia o palco do resto da janela durante o arrasto. */}

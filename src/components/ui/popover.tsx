@@ -26,15 +26,27 @@ function PopoverContent({
   sideOffset = 8,
   align = "center",
   alignOffset = 0,
+  anchor,
   children,
   ...props
 }: PopoverPrimitive.Popup.Props &
-  Pick<PopoverPrimitive.Positioner.Props, "align" | "alignOffset" | "side" | "sideOffset">) {
+  Pick<
+    PopoverPrimitive.Positioner.Props,
+    "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
+  >) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}
+        // Âncora explícita, para quem não usa `PopoverTrigger`.
+        //
+        // Existe por causa dos pontos de anotação: o marcador deles precisa
+        // tratar o próprio pointerdown para poder ser arrastado, e o gatilho do
+        // base-ui abre no clique — os dois no mesmo elemento disputariam o
+        // gesto. Ancorando por elemento, o painel se posiciona igual sem que
+        // ninguém precise ser um gatilho.
+        anchor={anchor}
         side={side}
         sideOffset={sideOffset}
         className="isolate z-50"

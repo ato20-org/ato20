@@ -138,7 +138,6 @@ export function PinNote({
               pinId={pin.id}
               assetId={assetId}
               nome={assets.find((asset) => asset.id === assetId)?.name}
-              legenda={pin.title}
             />
           ))}
         </ul>
@@ -174,13 +173,11 @@ function Anexo({
   pinId,
   assetId,
   nome,
-  legenda,
 }: {
   sceneId: string;
   pinId: string;
   assetId: string;
   nome: string | undefined;
-  legenda: string;
 }) {
   const url = useAssetUrl(assetId);
 
@@ -218,7 +215,7 @@ function Anexo({
               // retransmitir: o botão é o mesmo alvo, e ficar preso com uma
               // imagem cobrindo a TV enquanto se procura onde desligá-la é o
               // pior momento possível para procurar um botão.
-              onClick={() => (noAr ? clear() : transmit(assetId, legenda || nome))}
+              onClick={() => (noAr ? clear() : transmit(assetId))}
             >
               {noAr ? <RadioTower /> : <Radio />}
             </Button>

@@ -15,7 +15,7 @@ type SpotlightStore = {
    * arquivo de novo é como se chama a atenção para ele outra vez, e sem um
    * campo que muda a tela não teria como distinguir isso de nada acontecendo.
    */
-  transmit: (assetId: string, caption?: string) => void;
+  transmit: (assetId: string) => void;
   /** Tira da evidência. A mesa volta a ver só a cena. */
   clear: () => void;
 };
@@ -36,8 +36,8 @@ type SpotlightStore = {
 export const useSpotlightStore = create<SpotlightStore>((set) => ({
   spotlight: null,
 
-  transmit(assetId, caption) {
-    set({ spotlight: { assetId, caption, since: Date.now() } });
+  transmit(assetId) {
+    set({ spotlight: { assetId, since: Date.now() } });
   },
 
   clear() {

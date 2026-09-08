@@ -30,8 +30,9 @@ export function SpotlightChip() {
   const clear = useSpotlightStore((state) => state.clear);
 
   const url = useAssetUrl(spotlight?.assetId);
-  // Só pelo nome do arquivo: o rótulo do ponto de origem viaja em `caption`,
-  // mas um ponto sem título deixaria o aviso dizendo apenas "no ar".
+  // O nome do arquivo, que é o que este aviso tem para identificar a imagem.
+  // O título do ponto de origem seria mais descritivo, mas ele não viaja mais:
+  // ver a nota em `Spotlight`.
   const { assets } = useAssetList("image");
 
   if (!spotlight) return null;
@@ -55,7 +56,7 @@ export function SpotlightChip() {
       </span>
 
       <span className="text-muted-foreground max-w-40 truncate text-[11px]">
-        {spotlight.caption || nome || "imagem"}
+        {nome ?? "imagem"}
       </span>
 
       <Button variant="ghost" size="icon-sm" aria-label="Tirar da evidência" onClick={clear}>
