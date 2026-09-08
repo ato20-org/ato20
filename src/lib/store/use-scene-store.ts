@@ -63,14 +63,23 @@ type SceneStore = {
   redo: () => void;
 
   /**
+   * Qual campanha o board carregado pertence.
+   *
+   * Existe para a hidratação se guardar sozinha. A versão sem isto saía cedo
+   * "se já carregou", e trocar de campanha mantinha o board da anterior na
+   * tela — com o agravante de que a próxima gravação o escreveria dentro da
+   * campanha nova.
+   */
+  campaignPath: string | null;
+
+  /**
    * Carrega o board do vault.
    *
-   * Não recebe mais mesa: uma campanha é uma pasta, e a pasta aberta é a única
-   * que existe. Com a nuvem foram embora a versão remota, a marca de pendente
-   * e o estado de conflito — o disco é a verdade, e não há segunda ponta com
-   * quem discordar.
+   * Com a nuvem foram embora a versão remota, a marca de pendente e o estado
+   * de conflito — o disco é a verdade, e não há segunda ponta com quem
+   * discordar.
    */
-  hydrate: () => Promise<void>;
+  hydrate: (campaignPath: string) => Promise<void>;
   /** Abre a cena no palco do Operador. Não muda o que a mesa vê. */
   setEditingSceneId: (sceneId: string | null) => void;
   /** Coloca a cena no ar. `null` deixa a mesa sem nada. */
@@ -127,6 +136,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
   board: null,
   status: "idle",
   error: null,
+  campaignPath: null,
 
   history: emptyHistory<Board>(),
   lastCommitAt: 0,
@@ -153,12 +163,16 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     set({ board: step.value, history: step.history, lastCommitAt: 0 });
   },
 
-  async hydrate() {
-    // Sai fora se já carregou: o Operador remonta, e reler o disco por cima do
-    // que está sendo editado perderia edição que o debounce ainda não gravou.
-    if (get().status !== "idle") return;
+  async hydrate(campaignPath) {
+    // Sai fora se já carregou ESTA campanha: o Operador remonta, e reler o
+    // disco por cima do que está sendo editado perderia edição que o debounce
+    // ainda não gravou. Campanha diferente sempre recarrega.
+    if (get().campaignPath === campaignPath && get().status !== "idle") return;
 
-    set({ status: "loading" });
+    // Zera antes de ler: sem isto o board da campanha anterior ficaria na tela
+    // durante a leitura, e o assinante de gravação o escreveria na campanha
+    // nova.
+    set({ board: null, status: "loading", campaignPath, history: emptyHistory<Board>() });
 
     try {
       // Campanha sem board ainda devolve `null`, e quem cria o primeiro é
@@ -171,6 +185,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         board,
         status: "ready",
         error: null,
+        campaignPath,
         history: emptyHistory<Board>(),
         lastCommitAt: 0,
       });
@@ -402,6 +417,24 @@ useSceneStore.subscribe((state, previous) => {
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => void saveBoard(board), PERSIST_DEBOUNCE_MS);
 });
+
+/**
+ * Grava agora o que estiver pendente.
+ *
+ * Chamado ANTES de trocar de campanha, e a ordem não é detalhe: `saveBoard`
+ * grava na campanha que o processo nativo tem aberta. Um debounce de 400ms
+ * ainda no ar no momento da troca escreveria o board da campanha ANTERIOR
+ * dentro da nova — e ninguém associaria a perda ao clique de trocar.
+ */
+export async function flushBoard(): Promise<void> {
+  clearTimeout(persistTimer);
+  persistTimer = undefined;
+
+  const { board } = useSceneStore.getState();
+  if (!board) return;
+
+  await saveBoard(board);
+}
 
 /**
  * Fechar a janela não pode custar os últimos 400ms de trabalho.

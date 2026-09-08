@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 
+import { flushPortraits } from "@/lib/store/use-portrait-store";
+import { flushBoard } from "@/lib/store/use-scene-store";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
 import {
   createCampaign,
@@ -86,6 +88,26 @@ function describe(cause: unknown): string {
   return "Falha ao abrir a campanha";
 }
 
+/**
+ * Grava o que estiver pendente ANTES de trocar a campanha aberta.
+ *
+ * A ordem é o ponto todo. O board e os retratos gravam com 400ms de atraso, e
+ * `saveBoard` escreve na campanha que o processo nativo tem aberta — um
+ * debounce ainda no ar no instante da troca escreveria o conteúdo da campanha
+ * ANTERIOR dentro da nova. Ninguém associaria a perda ao clique de trocar.
+ *
+ * Melhor esforço: se a gravação falhar, a troca continua. Recusar a trocar de
+ * campanha por causa de um erro de disco prenderia o mestre onde ele não quer
+ * estar, e o motivo apareceria de novo na próxima gravação.
+ */
+async function fecharOAnterior(): Promise<void> {
+  try {
+    await Promise.all([flushBoard(), flushPortraits()]);
+  } catch {
+    // Ver acima.
+  }
+}
+
 /** Recarrega a lista de recentes sem derrubar a tela se ela falhar. */
 async function refreshRecents(): Promise<RecentEntry[]> {
   try {
@@ -136,6 +158,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     set({ busy: true, error: null });
 
     try {
+      await fecharOAnterior();
       set({ campaign: await openCampaign(path), status: "ready", busy: false });
     } catch (cause) {
       // A porta fica: a pasta pode ter sido movida, e a lista é o caminho de
@@ -164,6 +187,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     set({ busy: true, error: null });
 
     try {
+      await fecharOAnterior();
       set({ campaign: await createCampaign(parent, nome), status: "ready", busy: false });
     } catch (cause) {
       set({ busy: false, error: describe(cause) });
@@ -201,6 +225,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     set({ busy: true, error: null });
 
     try {
+      await fecharOAnterior();
       const info = await importCampaign();
 
       // `null` é o diálogo fechado sem escolher: não muda nada, e não é erro.

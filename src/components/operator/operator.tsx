@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
 
 import { WindowChrome } from "@/components/desktop/window-chrome";
 import { CampaignBadge } from "@/components/operator/campaign-badge";
+import { CampaignBoot } from "@/components/operator/campaign-boot";
+import { CampaignSplash } from "@/components/operator/campaign-splash";
 import { OperatorGate } from "@/components/operator/operator-gate";
-import { OperatorShell } from "@/components/operator/operator-shell";
 import { Button } from "@/components/ui/button";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
@@ -26,6 +26,7 @@ import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
  */
 export function Operator() {
   const status = useCampaignStore((state) => state.status);
+  const campaign = useCampaignStore((state) => state.campaign);
   const error = useCampaignStore((state) => state.error);
   const boot = useCampaignStore((state) => state.boot);
 
@@ -46,7 +47,7 @@ export function Operator() {
         inicio={status === "ready" ? <CampaignBadge /> : undefined}
         subtitulo={status === "ready" ? editando : undefined}
       />
-      <Conteudo status={status} error={error} onRetry={boot} />
+      <Conteudo status={status} campaign={campaign} error={error} onRetry={boot} />
     </>
   );
 }
@@ -60,10 +61,12 @@ export function Operator() {
  */
 function Conteudo({
   status,
+  campaign,
   error,
   onRetry,
 }: {
   status: ReturnType<typeof useCampaignStore.getState>["status"];
+  campaign: ReturnType<typeof useCampaignStore.getState>["campaign"];
   error: string | null;
   onRetry: () => void;
 }) {
@@ -82,16 +85,17 @@ function Conteudo({
     );
   }
 
-  if (status === "idle" || status === "loading") {
+  if (status === "idle" || status === "loading" || !campaign) {
+    // Antes de saber QUAL campanha, o único passo é achá-la. Mesma tela, para
+    // abrir o aplicativo e trocar de campanha lerem como a mesma coisa.
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <Loader2
-          className="text-muted-foreground size-5 animate-spin"
-          aria-label="Abrindo campanha"
-        />
-      </div>
+      <CampaignSplash
+        passos={[{ chave: "campanha", rotulo: "Abrindo a campanha", estado: "fazendo" }]}
+      />
     );
   }
 
-  return <OperatorShell />;
+  // `key` na campanha: trocar de campanha remonta o carregamento inteiro, em
+  // vez de exigir que um efeito desfaça estado na mão.
+  return <CampaignBoot key={campaign.path} campaign={campaign} />;
 }

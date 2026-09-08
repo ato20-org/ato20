@@ -17,9 +17,10 @@ const PERSIST_DEBOUNCE_MS = 400;
 
 type PortraitStore = {
   portraits: Portrait[];
-  hydrated: boolean;
+  /** Qual campanha estes retratos pertencem. Ver `use-scene-store`. */
+  hydratedPath: string | null;
 
-  hydrate: () => Promise<void>;
+  hydrate: (campaignPath: string) => Promise<void>;
   /** Cria um retrato a partir de uma imagem do acervo, no canto inferior. */
   add: (assetId: string, naturalWidth?: number, naturalHeight?: number) => string;
   update: (id: string, patch: Partial<Portrait>) => void;
@@ -28,14 +29,7 @@ type PortraitStore = {
   remove: (id: string) => void;
   /** Aplica um estado recebido do canal, sem regravar no disco. */
   receive: (portraits: Portrait[]) => void;
-  /**
-   * Assume o elenco que veio da mesa, gravando no disco.
-   *
-   * Diferente de `receive`: ali é o espectador só olhando, aqui é o mestre
-   * abrindo a mesa noutra máquina — o estado passa a ser dele, e some no
-   * próximo refresh se não for gravado.
-   */
-  adopt: (portraits: Portrait[]) => void;
+
 };
 
 /**
@@ -47,16 +41,19 @@ type PortraitStore = {
  */
 export const usePortraitStore = create<PortraitStore>((set, get) => ({
   portraits: [],
-  hydrated: false,
+  hydratedPath: null,
 
-  async hydrate() {
-    if (get().hydrated) return;
+  async hydrate(campaignPath) {
+    if (get().hydratedPath === campaignPath) return;
+
+    // Zera antes de ler: elenco da campanha anterior na tela seria pior que
+    // palco vazio por um instante.
+    set({ portraits: [], hydratedPath: campaignPath });
 
     try {
-      set({ portraits: await loadPortraits(), hydrated: true });
+      set({ portraits: await loadPortraits() });
     } catch {
       // Sessão sem retrato guardado é estado válido; não derruba a tela.
-      set({ hydrated: true });
     }
   },
 
@@ -101,12 +98,7 @@ export const usePortraitStore = create<PortraitStore>((set, get) => ({
 
   receive(portraits) {
     // Espectador não grava: o disco pertence a quem opera.
-    set({ portraits, hydrated: true });
-  },
-
-  adopt(portraits) {
-    persist(portraits, set);
-    set({ hydrated: true });
+    set({ portraits });
   },
 }));
 
@@ -117,4 +109,14 @@ function persist(portraits: Portrait[], set: (partial: { portraits: Portrait[] }
 
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => void savePortraits(portraits), PERSIST_DEBOUNCE_MS);
+}
+
+/**
+ * Grava agora o que estiver pendente. Ver `flushBoard` em `use-scene-store`.
+ */
+export async function flushPortraits(): Promise<void> {
+  clearTimeout(persistTimer);
+  persistTimer = undefined;
+
+  await savePortraits(usePortraitStore.getState().portraits);
 }

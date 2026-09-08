@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { Music, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,8 +22,8 @@ const DEFAULT_TRACK_VOLUME = 0.8;
  * trilha, e o que está tocando é olhado durante a sessão inteira — o que
  * obrigava a abrir o painel e trocar de aba só para ver se a música rodava.
  *
- * A hidratação da trilha continua aqui porque é aqui que ela é escolhida, e a
- * barra do pé só desenha o que já existe.
+ * Quem lê a trilha do disco é o `CampaignBoot`, antes de a mesa aparecer: este
+ * painel só a escolhe.
  */
 export function AudioLibrary() {
   const { assets, importar, remove } = useAssetList("audio");
@@ -32,12 +31,7 @@ export function AudioLibrary() {
   const scenes = useSceneStore((state) => state.board?.scenes);
 
   const track = useTrackStore((state) => state.track);
-  const hydrate = useTrackStore((state) => state.hydrate);
   const start = useTrackStore((state) => state.start);
-
-  useEffect(() => {
-    void hydrate();
-  }, [hydrate]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

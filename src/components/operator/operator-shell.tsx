@@ -36,8 +36,15 @@ import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { Scene } from "@/types/scene";
 
+/**
+ * A mesa.
+ *
+ * Monta com tudo já lido: quem carrega a campanha é o `CampaignBoot`, e este
+ * componente antes disparava as hidratações nos próprios efeitos — o que fazia
+ * a mesa aparecer aos pedaços e deixava os efeitos de publicação rodarem antes
+ * de haver cena.
+ */
 export function OperatorShell() {
-  const hydrate = useSceneStore((state) => state.hydrate);
   const status = useSceneStore((state) => state.status);
   const error = useSceneStore((state) => state.error);
   // Duas cenas distintas: a que o mestre edita e a que a mesa vê.
@@ -51,22 +58,8 @@ export function OperatorShell() {
   const restorePanels = usePanelsStore((state) => state.restore);
 
   const track = useTrackStore((state) => state.track);
-  const hydrateTrack = useTrackStore((state) => state.hydrate);
 
   const portraits = usePortraitStore((state) => state.portraits);
-  const hydratePortraits = usePortraitStore((state) => state.hydrate);
-
-  useEffect(() => {
-    void hydrate();
-  }, [hydrate]);
-
-  useEffect(() => {
-    void hydrateTrack();
-  }, [hydrateTrack]);
-
-  useEffect(() => {
-    void hydratePortraits();
-  }, [hydratePortraits]);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação.

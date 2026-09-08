@@ -8,9 +8,10 @@ import type { SessionTrack } from "@/types/scene";
 type TrackStore = {
   /** `null` = nenhuma trilha escolhida. */
   track: SessionTrack | null;
-  hydrated: boolean;
+  /** Qual campanha esta trilha pertence. Ver `use-scene-store`. */
+  hydratedPath: string | null;
 
-  hydrate: () => Promise<void>;
+  hydrate: (campaignPath: string) => Promise<void>;
   /** Escolhe a faixa e começa a tocar. O instante é estampado aqui. */
   start: (assetId: string, volume: number) => void;
   /** Pausa ou retoma, reiniciando a contagem de posição. */
@@ -29,8 +30,7 @@ type TrackStore = {
   clear: () => void;
   /** Aplica um estado recebido do canal, sem regravar no disco. */
   receive: (track: SessionTrack | null) => void;
-  /** Assume a trilha que veio da mesa, gravando no disco. Ver `PortraitStore`. */
-  adopt: (track: SessionTrack | null) => void;
+
 };
 
 /**
@@ -43,16 +43,19 @@ type TrackStore = {
  */
 export const useTrackStore = create<TrackStore>((set, get) => ({
   track: null,
-  hydrated: false,
+  hydratedPath: null,
 
-  async hydrate() {
-    if (get().hydrated) return;
+  async hydrate(campaignPath) {
+    if (get().hydratedPath === campaignPath) return;
+
+    // Zera antes de ler: a música da campanha anterior continuaria tocando
+    // sobre a nova enquanto o disco respondesse.
+    set({ track: null, hydratedPath: campaignPath });
 
     try {
-      set({ track: await loadTrack(), hydrated: true });
+      set({ track: await loadTrack() });
     } catch {
       // Sem trilha guardada é estado válido; não vale derrubar a tela por isso.
-      set({ hydrated: true });
     }
   },
 
@@ -92,12 +95,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
 
   receive(track) {
     // Espectador não grava: o disco pertence a quem opera.
-    set({ track, hydrated: true });
-  },
-
-  adopt(track) {
-    persist(track, set);
-    set({ hydrated: true });
+    set({ track });
   },
 }));
 

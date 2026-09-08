@@ -99,7 +99,7 @@ export function WindowChrome({
         // intercepta o gesto no elemento e pede a movimentação da janela ao
         // sistema. Precisa da permissão `core:window:allow-start-dragging`.
         data-tauri-drag-region
-        className="bg-muted/40 relative flex h-8 shrink-0 items-center gap-2 border-b px-3 select-none"
+        className="bg-muted/40 flex h-8 shrink-0 items-center gap-2 border-b px-3 select-none"
         // Duplo clique maximiza, como em qualquer barra de título. O Tauri não
         // faz isso sozinho num elemento de arraste.
         onDoubleClick={() => void janela.toggleMaximize()}
@@ -112,20 +112,27 @@ export function WindowChrome({
         {inicio}
 
         {/* Centro da barra: o que está sendo editado.
-            Centrado por posição absoluta, e não por `flex`, porque as duas
-            pontas têm larguras diferentes — num flex ele ficaria no meio do que
-            sobra, que não é o meio da janela.
+            Centrado DENTRO do espaço que sobra, e não na largura da janela.
+            A primeira versão usava posição absoluta para acertar o meio exato,
+            e o preço apareceu numa janela de 830px: o texto passava por cima do
+            nome da campanha. Num gerenciador de janelas de mosaico o `minWidth`
+            é ignorado, então "estreito" acontece de verdade.
+            Perde-se o centro perfeito quando as pontas têm larguras muito
+            diferentes; ganha-se nunca sobrepor.
             `pointer-events-none` para o texto não roubar o gesto de arrastar:
             sem ele, o alvo do clique seria este span, e a janela só se moveria
             pelas beiradas. */}
-        {subtitulo ? (
-          <span className="pointer-events-none absolute left-1/2 flex max-w-[40%] -translate-x-1/2 items-center gap-1.5 text-xs">
-            <Clapperboard className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-            <span className="truncate">Editando {subtitulo}</span>
-          </span>
-        ) : null}
-
-        <span data-tauri-drag-region className="flex-1" />
+        <span
+          data-tauri-drag-region
+          className="flex min-w-0 flex-1 items-center justify-center"
+        >
+          {subtitulo ? (
+            <span className="pointer-events-none flex min-w-0 items-center gap-1.5 text-xs">
+              <Clapperboard className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+              <span className="truncate">Editando {subtitulo}</span>
+            </span>
+          ) : null}
+        </span>
 
         <div className="flex items-center">
           <ChromeButton
