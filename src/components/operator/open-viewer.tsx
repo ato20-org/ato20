@@ -27,13 +27,34 @@ export function OpenViewer() {
   const codigo = useCampaignStore((state) => state.campaign?.codigo ?? null);
 
   async function abrir() {
+    let alvo = "";
+
     try {
       const { url } = await daemonAddr();
-      const alvo = codigo ? `${url}/assistir?code=${codigo}` : `${url}/assistir`;
+      alvo = codigo ? `${url}/assistir?code=${codigo}` : `${url}/assistir`;
 
       await openUrl(alvo);
-    } catch {
-      toast.error("Não foi possível abrir o navegador.");
+    } catch (cause) {
+      // O motivo, e não só "não deu". A primeira versão engolia a causa, e a
+      // falha real — escopo do `opener` recusando o endereço — era
+      // indistinguível de não haver navegador instalado.
+      //
+      // O endereço vai junto porque ele é copiável: se abrir falhar, colar na
+      // barra do navegador é o caminho de saída, e a mensagem já entrega o que
+      // colar.
+      toast.error(
+        cause instanceof Error ? cause.message : `Não foi possível abrir ${alvo}`,
+        {
+          description: alvo || undefined,
+          duration: 12_000,
+          action: alvo
+            ? {
+                label: "Copiar endereço",
+                onClick: () => void navigator.clipboard.writeText(alvo).catch(() => {}),
+              }
+            : undefined,
+        },
+      );
     }
   }
 

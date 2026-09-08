@@ -9,7 +9,17 @@
     "core:default",
     "dialog:allow-open",
     "dialog:allow-save",
-    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "http://127.0.0.1:*/*"
+        },
+        {
+          "url": "http://localhost:*/*"
+        }
+      ]
+    },
     "core:window:allow-start-dragging",
     "core:window:allow-start-resize-dragging",
     "core:window:allow-minimize",
