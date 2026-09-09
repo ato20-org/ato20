@@ -450,10 +450,41 @@ pub fn read_anexo(vault: &Vault, id: &str, autor: Autor, arquivo: &str) -> AppRe
     Ok(std::fs::read(anexo_path(vault, id, autor, arquivo))?)
 }
 
+/// Apaga o anexo, e limpa o campo Ficha se era ele.
+///
+/// O campo guarda o NOME do arquivo, nao uma referencia que o disco valide --
+/// ver `Personagem::ficha`. Sem esta limpeza, apagar a ficha pela lista de
+/// arquivos deixava o campo apontando para um nome que nao existe mais: a
+/// linha da ficha seguia mostrando o nome, oferecia transmitir, e a
+/// transmissao falhava no daemon. Retrato e miniatura nao entram aqui porque
+/// guardam id do acervo, e nao anexo.
 pub fn remove_anexo(vault: &Vault, id: &str, autor: Autor, arquivo: &str) -> AppResult<()> {
     let caminho = anexo_path(vault, id, autor, arquivo);
     if caminho.exists() {
         std::fs::remove_file(caminho)?;
+    }
+
+    // Ficha e sempre anexo do mestre: o jogador apagando um arquivo dele nao
+    // pode limpar campo de personagem.
+    if autor != Autor::Mestre {
+        return Ok(());
+    }
+
+    let nome = safe_attachment_name(arquivo);
+    let mut personagens = load(vault)?;
+    let mut mexeu = false;
+
+    for personagem in personagens.iter_mut() {
+        if personagem.id == id && personagem.ficha.as_deref() == Some(nome.as_str()) {
+            personagem.ficha = None;
+            mexeu = true;
+        }
+    }
+
+    // Só regrava se mexeu: apagar um anexo qualquer nao deveria reescrever o
+    // indice inteiro.
+    if mexeu {
+        save(vault, &personagens)?;
     }
 
     Ok(())
@@ -557,6 +588,37 @@ mod tests {
         let anexos = list_anexos(&vault, &p.id).unwrap();
         assert_eq!(anexos.len(), 1);
         assert_eq!(anexos[0].autor, Autor::Jogador);
+    }
+
+    #[test]
+    fn apagar_a_ficha_limpa_o_campo() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        let anexo = write_anexo(&vault, &p.id, "ficha-edgar.jpg", b"jpg").unwrap();
+        set_campo(&vault, &p.id, Campo::Ficha, Some(&anexo.arquivo)).unwrap();
+
+        remove_anexo(&vault, &p.id, Autor::Mestre, &anexo.arquivo).unwrap();
+
+        // Campo pendurado num arquivo apagado fazia a tela oferecer transmitir
+        // uma ficha que nao existe.
+        let lido = load(&vault).unwrap();
+        assert_eq!(lido[0].ficha, None);
+    }
+
+    #[test]
+    fn apagar_outro_anexo_nao_mexe_na_ficha() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        write_anexo(&vault, &p.id, "ficha-edgar.jpg", b"jpg").unwrap();
+        let outro = write_anexo(&vault, &p.id, "mario.jpg", b"jpg").unwrap();
+        set_campo(&vault, &p.id, Campo::Ficha, Some("ficha-edgar.jpg")).unwrap();
+
+        remove_anexo(&vault, &p.id, Autor::Mestre, &outro.arquivo).unwrap();
+
+        let lido = load(&vault).unwrap();
+        assert_eq!(lido[0].ficha.as_deref(), Some("ficha-edgar.jpg"));
     }
 
     #[test]
