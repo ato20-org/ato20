@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { DadoLayer } from "@/components/operator/dado-layer";
 import { PinLayer } from "@/components/operator/pin-layer";
 import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
@@ -940,6 +941,14 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           mesmo componente do Assistir e da Plateia, e um ponto de anotação
           desenhado lá apareceria na TV virada para a mesa. */}
       <PinLayer scene={scene} panMode={panMode} />
+
+      {/* Fora do `SceneLayer` pela mesma razão do `PinLayer`: hoje o dado é só
+          do mestre. Dentro dele, os dados apareceriam na TV — e a decisão de
+          mostrar a rolagem para a mesa é do mestre, não deste arquivo.
+
+          Dentro do plano, porém: o dado é jogado SOBRE o mapa, e tem de
+          acompanhar zoom e deslocamento como a névoa e os riscos acompanham. */}
+      <DadoLayer />
 
       {/* Contorno enquanto a imagem paira: promete que soltar ali funciona, e
           é o que diferencia o palco do resto da janela durante o arrasto. */}
