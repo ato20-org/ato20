@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "perf": "node scripts/perf/medir.mjs",
     "tauri": "tauri",
     "clean:web-resources": "node scripts/clean-web-resources.mjs"
   },

@@ -97,6 +97,39 @@ pnpm tauri dev
 `pnpm dev` sozinho serve as telas em `localhost:3000`, mas o Operador aparece dizendo "abra
 pelo aplicativo": uma aba de navegador não alcança o disco.
 
+### Medir o desempenho
+
+Duas medidas, e elas respondem perguntas diferentes.
+
+`public/perf.html` mede o **motor**: DOM na mesma forma do palco, o mesmo CSS, e
+nenhum React no caminho. Foi ela que decidiu que a webview do WebKitGTK aguenta
+a cena. Abre em qualquer browser, e abrir dentro do aplicativo é o que responde
+se *aquele* notebook dá conta.
+
+`/perf` mede o que ela deixou de fora: os componentes de verdade e o store de
+verdade — `updateItem` -> histórico -> assinantes -> reconciliação. Dirigida por
+um script, que serve o `out/`, responde `/asset/*` com bitmap sintético e lê o
+resultado da página:
+
+```bash
+pnpm perf                                  # matriz padrão
+pnpm perf --cenario dados --n 6,20,60
+pnpm perf --cenario biblioteca --n 200 --sem-lazy   # o acervo, com e sem miniatura preguiçosa
+node scripts/perf/medir.mjs --janela --repetir 3    # com janela, mediana de 3
+```
+
+**Repita antes de acreditar.** Medido: a mesma corrida de sessenta dados, sem
+mudar uma linha, deu 8,9%, 12,2% e 16,9% de quadro perdido em três tentativas
+numa tela com desktop em cima. Uma corrida por célula faz qualquer otimização
+"provar" o que quiser — `--repetir 3` mostra a mediana, e `xvfb-run` tira o
+desktop da conta.
+
+Sem `--janela` o Chrome roda sem tela, e sem tela não há vsync: a cadência sai
+travada em ~30 fps por um motivo que não existe na mesa. Aí o que vale são as
+colunas de **script**, **estilo** e **layout**, que medem trabalho e não
+cadência. Com janela — `xvfb-run` serve — as três primeiras colunas voltam a
+significar quadro perdido.
+
 ### A barra da janela
 
 A janela roda **sem decoração do sistema** (`decorations: false`) e desenha a própria barra:
