@@ -1,5 +1,6 @@
 "use client";
 
+import type * as React from "react";
 import { ChevronDown, FolderSymlink, PackageOpen } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,7 +26,7 @@ import { useCampaignStore } from "@/lib/store/use-campaign-store";
  * Compacto de propósito — a barra tem 32px de altura. Botão de 24px e texto
  * `text-xs`, sem ícone de pasta antes do nome: o contexto já diz que é pasta.
  */
-export function CampaignBadge() {
+export function CampaignBadge({ children }: { children?: React.ReactNode }) {
   const campaign = useCampaignStore((state) => state.campaign);
   const busy = useCampaignStore((state) => state.busy);
   const close = useCampaignStore((state) => state.close);
@@ -85,6 +86,12 @@ export function CampaignBadge() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Entre o nome e o código: é onde entra o que quem chama quiser pôr no
+          meio do bloco da campanha. O código fica na ponta de propósito -- ele
+          é o que se dita em voz alta, e uma sequência de seis caracteres no meio
+          de dois controles se acha mais devagar do que no fim da fileira. */}
+      {children}
 
       {/* O código fica à mão, e não atrás de um clique, porque é ditado no
           começo de toda sessão. São seis caracteres. */}

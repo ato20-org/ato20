@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import { WindowChrome } from "@/components/desktop/window-chrome";
 import { CampaignBadge } from "@/components/operator/campaign-badge";
+import { PanelsMenu } from "@/components/operator/panels-menu";
 import { CampaignBoot } from "@/components/operator/campaign-boot";
 import { CampaignSplash } from "@/components/operator/campaign-splash";
 import { OperatorGate } from "@/components/operator/operator-gate";
@@ -44,7 +45,17 @@ export function Operator() {
         // A campanha na ponta esquerda, junto do nome: ela é o que a janela é,
         // e não um controle de gesto que dispute espaço com a barra de
         // ferramentas.
-        inicio={status === "ready" ? <CampaignBadge /> : undefined}
+        inicio={
+          status === "ready" ? (
+            // Dentro do bloco da campanha, entre o nome e o código: as duas
+            // coisas dizem o que a JANELA tem, e não o que a sessão está
+            // fazendo. O código continua na ponta, que é onde se acha rápido
+            // para ditar.
+            <CampaignBadge>
+              <PanelsMenu />
+            </CampaignBadge>
+          ) : undefined
+        }
         subtitulo={status === "ready" ? editando : undefined}
       />
       <Conteudo status={status} campaign={campaign} error={error} onRetry={boot} />
