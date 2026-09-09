@@ -72,6 +72,7 @@ pub fn run() {
             commands::campaign_reopen_last,
             commands::board_load,
             commands::board_save,
+            commands::board_save_patch,
             commands::asset_list,
             commands::asset_import,
             commands::asset_set_escopo,

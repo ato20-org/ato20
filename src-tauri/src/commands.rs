@@ -7,7 +7,7 @@ use crate::db::AppDb;
 use crate::error::{AppError, AppResult};
 use crate::serve::{DaemonAddr, Evidence, SharedEvidence, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
-use crate::vault::board::Board;
+use crate::vault::board::{Board, BoardPatch};
 use crate::vault::session::Json;
 use crate::vault::characters::{Anexo, Autor, Campo, Personagem};
 use crate::vault::players::{Attachment, Player};
@@ -170,6 +170,16 @@ pub fn board_load(state: State<'_, AppState>) -> AppResult<Option<Board>> {
 #[tauri::command]
 pub fn board_save(state: State<'_, AppState>, board: Board) -> AppResult<()> {
     state.with_vault(|vault| board::save(vault, &board))
+}
+
+/// Grava so as cenas que mudaram.
+///
+/// O caminho normal do Operador. `board_save` continua para quem nao tem base
+/// de comparacao -- a primeira gravacao depois de abrir a campanha -- e para o
+/// import do zip. Ver `BoardPatch`.
+#[tauri::command]
+pub fn board_save_patch(state: State<'_, AppState>, patch: BoardPatch) -> AppResult<()> {
+    state.with_vault(|vault| board::save_patch(vault, &patch))
 }
 
 // --- acervo -----------------------------------------------------------------
