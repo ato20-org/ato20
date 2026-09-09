@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { createSceneChannel, type SceneChannel, type SceneChannelOptions } from "@/lib/sync";
 import type { LiveState } from "@/lib/sync/channel";
-import type { Portrait, Scene, SessionTrack } from "@/types/scene";
+import { DEFAULT_SESSION_VOLUME, type Portrait, type Scene, type SessionTrack } from "@/types/scene";
 
 /**
  * Reenvio do pedido inicial.
@@ -71,7 +71,7 @@ export function usePublisher(
     // publicar enquanto montava a PRÓXIMA cena — mensagem de rede, e cota, por
     // uma mudança que a mesa não vê.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.scene, state.track, state.portraits]);
+  }, [state.scene, state.track, state.volume, state.portraits]);
 
   useEffect(() => {
     const beat = setInterval(() => {
@@ -85,6 +85,8 @@ export function usePublisher(
 export type Subscription = {
   scene: Scene | null;
   track: SessionTrack | null;
+  /** Volume do som para esta tela, de 0 a 1. Quem regula é a mesa. */
+  volume: number;
   portraits: Portrait[];
   /** Já chegou alguma resposta do Operador. */
   synced: boolean;
@@ -97,7 +99,12 @@ export function useSubscription({
   local = false,
   roomId = null,
 }: SceneChannelOptions): Subscription {
-  const [live, setLive] = useState<LiveState>({ scene: null, track: null, portraits: [] });
+  const [live, setLive] = useState<LiveState>({
+    scene: null,
+    track: null,
+    volume: DEFAULT_SESSION_VOLUME,
+    portraits: [],
+  });
   const [synced, setSynced] = useState(false);
   const [stalled, setStalled] = useState(false);
 
@@ -113,8 +120,10 @@ export function useSubscription({
       setLive({
         scene: message.scene,
         track: message.track,
-        // Mensagem de uma versão anterior não traz o campo: lista vazia é o
-        // estado certo, e não uma tela quebrada.
+        // Mensagem de uma versão anterior não traz os campos: lista vazia e
+        // volume padrão são o estado certo, e não uma tela quebrada. Naquela
+        // versão o ganho vinha dentro da faixa, e é de lá que ele é lido.
+        volume: message.volume ?? legacyVolume(message.track) ?? DEFAULT_SESSION_VOLUME,
         portraits: message.portraits ?? [],
       });
       setSynced(true);
@@ -148,8 +157,16 @@ export function useSubscription({
   return {
     scene: live.scene,
     track: live.track,
+    volume: live.volume,
     portraits: live.portraits,
     synced,
     stalled,
   };
+}
+
+/** Operador de uma versão anterior, que ainda manda o ganho dentro da faixa. */
+function legacyVolume(track: SessionTrack | null): number | null {
+  const volume = (track as (SessionTrack & { volume?: unknown }) | null)?.volume;
+
+  return typeof volume === "number" ? volume : null;
 }

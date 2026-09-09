@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Music, Pause, Play, Square, Trash2, Upload } from "lucide-react";
+import { Music, Pause, Play, Square, Trash2, Upload, Volume2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,9 +14,6 @@ import { countAssetUsage } from "@/lib/operator/asset-usage";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import type { AssetMeta } from "@/types/scene";
-
-/** Volume padrão de uma trilha recém-escolhida. */
-const DEFAULT_TRACK_VOLUME = 0.8;
 
 function firstValue(value: number | readonly number[]): number {
   return Array.isArray(value) ? value[0] : (value as number);
@@ -35,6 +32,7 @@ export function AudioLibrary() {
   const scenes = useSceneStore((state) => state.board?.scenes);
 
   const track = useTrackStore((state) => state.track);
+  const volume = useTrackStore((state) => state.volume);
   const hydrate = useTrackStore((state) => state.hydrate);
   const start = useTrackStore((state) => state.start);
   const setPlaying = useTrackStore((state) => state.setPlaying);
@@ -74,6 +72,32 @@ export function AudioLibrary() {
         />
       </div>
 
+      <Separator />
+
+      {/* Barra do som, e não volume por música: fica aqui fora porque é da
+          sessão. Trocar de faixa não mexe nela, e ela continua valendo quando
+          nenhuma faixa está escolhida. O ajuste viaja — o mestre regula neste
+          slider e a TV e os celulares seguem. */}
+      <div className="space-y-1 p-2">
+        <p className="text-muted-foreground text-[10px] tracking-wide uppercase">
+          Volume do som
+        </p>
+        <div className="flex items-center gap-2">
+          <Volume2 className="text-muted-foreground size-3.5 shrink-0" />
+          <Slider
+            className="flex-1"
+            aria-label="Volume do som, em todas as telas"
+            value={[Math.round(volume * 100)]}
+            max={100}
+            step={1}
+            onValueChange={(value) => setVolume(firstValue(value) / 100)}
+          />
+          <span className="text-muted-foreground w-8 text-right text-xs tabular-nums">
+            {Math.round(volume * 100)}
+          </span>
+        </div>
+      </div>
+
       {track ? (
         <>
           <Separator />
@@ -105,22 +129,6 @@ export function AudioLibrary() {
               </Label>
               <Switch id="track-loop" checked={track.loop} onCheckedChange={setLoop} />
             </div>
-
-            {/* Único volume do som, e ele viaja: o mestre regula aqui e a TV e
-                os celulares seguem. */}
-            <div className="flex items-center gap-2">
-              <Slider
-                className="flex-1"
-                aria-label="Volume do som, em todas as telas"
-                value={[Math.round(track.volume * 100)]}
-                max={100}
-                step={1}
-                onValueChange={(value) => setVolume(firstValue(value) / 100)}
-              />
-              <span className="text-muted-foreground w-8 text-right text-xs tabular-nums">
-                {Math.round(track.volume * 100)}
-              </span>
-            </div>
           </div>
           <Separator />
         </>
@@ -140,7 +148,7 @@ export function AudioLibrary() {
                 asset={asset}
                 isTrack={asset.id === track?.assetId}
                 usageCount={countAssetUsage(scenes ?? [], asset.id, track)}
-                onSetTrack={() => start(asset.id, DEFAULT_TRACK_VOLUME)}
+                onSetTrack={() => start(asset.id)}
                 onRemove={() => void remove(asset.id)}
               />
             ))}
@@ -172,8 +180,8 @@ function AudioRow({ asset, isTrack, usageCount, onSetTrack, onRemove }: AudioRow
         </span>
       </span>
 
-      {/* A linha do acervo só escolhe: play, pausa e volume moram no bloco da
-          trilha, que é o único lugar onde som é controlado. */}
+      {/* A linha do acervo só escolhe: play e pausa moram no bloco da trilha, e
+          o volume na barra do som, acima. */}
       {isTrack ? null : (
         <Button
           variant="ghost"

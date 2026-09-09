@@ -36,7 +36,11 @@ interface RpgShowDB extends DBSchema {
   /** Estado da sessão que não pertence a nenhuma cena. */
   session: {
     key: string;
-    value: { track: SessionTrack | null };
+    /**
+     * `volume` é opcional só para o registro escrito antes de ele existir:
+     * naquela época o ganho morava dentro de `track`. Ver `storage/track.ts`.
+     */
+    value: { track: SessionTrack | null; volume?: number };
   };
   /**
    * O que este navegador sabe da cópia na nuvem, por mesa.
