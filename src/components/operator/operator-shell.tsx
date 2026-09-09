@@ -16,6 +16,7 @@ import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
 import { OperatorToolbar } from "@/components/operator/operator-toolbar";
 import { PinIndex } from "@/components/operator/pin-index";
+import { SaquinhoDados } from "@/components/operator/saquinho-dados";
 import { SpotlightChip } from "@/components/operator/spotlight-chip";
 import { StageContextMenu } from "@/components/operator/stage-context-menu";
 import { ViewportControls } from "@/components/operator/viewport-controls";
@@ -32,6 +33,7 @@ import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
+import { useDadosStore } from "@/lib/store/use-dados-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
@@ -68,6 +70,7 @@ export function OperatorShell() {
   const toggleRight = usePanelsStore((state) => state.toggleRight);
   const restorePanels = usePanelsStore((state) => state.restore);
   const restorePinNotes = usePinWindowStore((state) => state.restaurar);
+  const restoreSaquinho = useDadosStore((state) => state.restaurar);
   const restoreLayout = useLayoutStore((state) => state.restaurar);
   const restoreWindows = useWindowStore((state) => state.restaurar);
 
@@ -92,13 +95,15 @@ export function OperatorShell() {
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale
-  // para os painéis e para onde cada nota de ponto foi deixada.
+  // para os painéis, para onde cada nota de ponto foi deixada, e para o canto
+  // onde a bolinha dos dados ficou.
   useEffect(() => {
     restorePanels();
     restorePinNotes();
     restoreWindows();
     restoreLayout();
-  }, [restorePanels, restorePinNotes, restoreWindows, restoreLayout]);
+    restoreSaquinho();
+  }, [restorePanels, restorePinNotes, restoreWindows, restoreLayout, restoreSaquinho]);
 
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.
@@ -340,6 +345,13 @@ function StageBoundary({ scene, status }: { scene: Scene | null; status: string 
           <ViewportControls scene={scene} />
         </div>
       ) : null}
+
+      {/* Flutuante, sem canto fixo: os quatro já têm dono, e o mestre leva a
+          bolinha para o vazio do mapa dele. Ver `SaquinhoDados`.
+
+          Só com cena: o dado cai SOBRE o mapa, e sem mapa a jogada não teria
+          onde pousar -- a camada que a desenha vive dentro do palco. */}
+      {scene ? <SaquinhoDados /> : null}
     </div>
   );
 }

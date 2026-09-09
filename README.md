@@ -30,6 +30,8 @@ minha-campanha/
       historico-ana.txt   o que cada jogador anexou
   .ato20/
     estado.db          nome, notas e credencial de cada jogador
+    mini/
+      a1b2c3.png       miniatura de 160px, refeita a partir do original
 ```
 
 Isso existe por causa de um custo que travou a versão anterior. Ela guardava mapas e
@@ -39,6 +41,14 @@ custo não existe, e o teto passa a ser o HD.
 
 O formato é texto onde dá: `git diff` numa cena mostra o token que andou, e um `config.json`
 aberto no editor diz o que a campanha é.
+
+**Por que a miniatura mora aqui.** As listas do Operador e da Plateia desenham um
+quadrado de 40px, e apontavam para o arquivo original: um mapa de 4000x3000 é decodificado
+como 48 MB de bitmap para caber num polegar de tela. Medido em `scripts/perf/medir.mjs`,
+cenário `biblioteca`, acervo de 200 mapas: 200 arquivos e 1,9 GB de tráfego contra **47
+arquivos e 464 MB** só com `loading="lazy"`, e alguns KB por linha com a miniatura. Ela é
+derivada, então vive em `.ato20/` e não viaja no zip — apagar a pasta não perde nada, o
+daemon a refaz no primeiro pedido. Quem gera é `vault/mini.rs`, na importação e sob demanda.
 
 **O que mora no SQLite, e o que isso custa.** Cenas, acervo, retratos, trilha e os anexos
 dos jogadores são arquivos: perder o `.ato20/estado.db` não toca em nenhum deles. O que mora
@@ -96,6 +106,39 @@ pnpm tauri dev
 
 `pnpm dev` sozinho serve as telas em `localhost:3000`, mas o Operador aparece dizendo "abra
 pelo aplicativo": uma aba de navegador não alcança o disco.
+
+### Medir o desempenho
+
+Duas medidas, e elas respondem perguntas diferentes.
+
+`public/perf.html` mede o **motor**: DOM na mesma forma do palco, o mesmo CSS, e
+nenhum React no caminho. Foi ela que decidiu que a webview do WebKitGTK aguenta
+a cena. Abre em qualquer browser, e abrir dentro do aplicativo é o que responde
+se *aquele* notebook dá conta.
+
+`/perf` mede o que ela deixou de fora: os componentes de verdade e o store de
+verdade — `updateItem` -> histórico -> assinantes -> reconciliação. Dirigida por
+um script, que serve o `out/`, responde `/asset/*` com bitmap sintético e lê o
+resultado da página:
+
+```bash
+pnpm perf                                  # matriz padrão
+pnpm perf --cenario dados --n 6,20,60
+pnpm perf --cenario biblioteca --n 200 --sem-lazy   # o acervo, com e sem miniatura preguiçosa
+node scripts/perf/medir.mjs --janela --repetir 3    # com janela, mediana de 3
+```
+
+**Repita antes de acreditar.** Medido: a mesma corrida de sessenta dados, sem
+mudar uma linha, deu 8,9%, 12,2% e 16,9% de quadro perdido em três tentativas
+numa tela com desktop em cima. Uma corrida por célula faz qualquer otimização
+"provar" o que quiser — `--repetir 3` mostra a mediana, e `xvfb-run` tira o
+desktop da conta.
+
+Sem `--janela` o Chrome roda sem tela, e sem tela não há vsync: a cadência sai
+travada em ~30 fps por um motivo que não existe na mesa. Aí o que vale são as
+colunas de **script**, **estilo** e **layout**, que medem trabalho e não
+cadência. Com janela — `xvfb-run` serve — as três primeiras colunas voltam a
+significar quadro perdido.
 
 ### A barra da janela
 
@@ -575,4 +618,9 @@ acontecer responde se **aquele** aparelho dá conta.
 
 ## Licença
 
-Sem licença definida. Repositório privado, uso pessoal — todos os direitos reservados.
+MIT — o texto está em [LICENSE](LICENSE).
+
+Permissiva de propósito. O que a licença defenderia aqui é o cenário de alguém rodar o
+projeto como serviço fechado, e ele não existe: o daemon escuta na rede da casa de quem
+opera, e não há o que hospedar. Copyleft custaria contribuidor e deixaria plugin de
+terceiro em zona cinzenta de obra derivada — justamente o que se quer que apareça.

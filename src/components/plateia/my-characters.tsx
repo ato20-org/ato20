@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { MINIATURA } from "@/lib/miniatura";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
 import {
   characterFileUrl,
@@ -222,10 +223,11 @@ function CharacterCard({
                 <span className="bg-muted block size-14 overflow-hidden rounded border">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/asset/${assetId}`}
+                    src={`/asset/${assetId}/mini`}
                     alt={titulo}
                     draggable={false}
                     className="size-full object-cover"
+                    {...MINIATURA}
                   />
                 </span>
                 <span className="text-muted-foreground block text-[10px]">{titulo}</span>

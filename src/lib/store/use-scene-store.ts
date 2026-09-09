@@ -22,7 +22,7 @@ import {
   reorderByZ,
   type ZDirection,
 } from "@/lib/operator/z-order";
-import { loadBoard, saveBoard } from "@/lib/vault/board";
+import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
   cloneScene,
   createEmptyBoard,
@@ -201,13 +201,25 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     // Zera antes de ler: sem isto o board da campanha anterior ficaria na tela
     // durante a leitura, e o assinante de gravação o escreveria na campanha
     // nova.
+    // Zera a base da diferença ANTES de ler: ela descreve o que o disco da
+    // campanha ANTERIOR tinha, e usá-la para diferenciar o board de outra
+    // campanha mandaria um patch medido contra o vault errado.
+    salvo = null;
+
     set({ board: null, status: "loading", campaignPath, history: emptyHistory<Board>() });
 
     try {
       // Campanha sem board ainda devolve `null`, e quem cria o primeiro é
       // daqui: o formato de `Scene` é da tela, e o Rust trata cena como JSON
       // opaco justamente para o formato não ter duas fontes de verdade.
-      const board = (await loadBoard()) ?? createEmptyBoard();
+      const carregado = await loadBoard();
+      const board = carregado ?? createEmptyBoard();
+
+      // Board que veio do disco JÁ está no disco: a primeira gravação depois de
+      // abrir a campanha pode ser um patch. Board criado aqui — campanha sem
+      // board ainda — não, e por isso a base fica nula: não existe arquivo
+      // nenhum contra o que diferenciar.
+      salvo = carregado;
 
       // Histórico nasce vazio: não faz sentido desfazer para antes de abrir.
       set({
@@ -524,13 +536,62 @@ const PERSIST_DEBOUNCE_MS = 400;
 
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 
+/**
+ * O board que o disco JÁ TEM.
+ *
+ * Base da diferença, e é o que permite mandar só as cenas mudadas. Avança
+ * apenas depois de a gravação voltar: se ela falhar e este ponteiro avançasse
+ * junto, a gravação seguinte omitiria uma mudança que nunca chegou ao disco — e
+ * a perda apareceria só na próxima abertura da campanha.
+ *
+ * Zerado na hidratação, por campanha. Ver `hydrate`.
+ */
+let salvo: Board | null = null;
+
+/**
+ * Manda ao disco o que mudou desde a última gravação.
+ *
+ * A comparação é por IDENTIDADE, e é de graça: cena é imutável aqui, e
+ * `updateScene` troca só a cena editada — as outras vinte e nove chegam neste
+ * ponto como a mesma referência que o disco já viu. Ver `saveBoardPatch`.
+ *
+ * Sem base — a primeira gravação de uma campanha recém-aberta cujo board nasceu
+ * na tela, ou uma gravação anterior que falhou — vai o board inteiro. É o
+ * caminho de antes, e ele continua sendo o certo quando não há do que
+ * diferenciar.
+ */
+async function persistir(board: Board): Promise<void> {
+  const base = salvo;
+
+  if (base === null) {
+    await saveBoard(board);
+    salvo = board;
+
+    return;
+  }
+
+  const noDisco = new Map(base.scenes.map((scene) => [scene.id, scene]));
+
+  await saveBoardPatch({
+    // Completa de propósito: é ela que decide o que existe, e cena que sai
+    // dela tem o arquivo apagado. Mandar a lista parcial faria "não mudou" e
+    // "foi apagada" virarem a mesma coisa.
+    ordem: board.scenes.map((scene) => scene.id),
+    scenes: board.scenes.filter((scene) => noDisco.get(scene.id) !== scene),
+    editingSceneId: board.editingSceneId,
+    liveSceneId: board.liveSceneId,
+  });
+
+  salvo = board;
+}
+
 useSceneStore.subscribe((state, previous) => {
   if (state.board === previous.board || !state.board) return;
 
   const { board } = state;
 
   clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => void saveBoard(board), PERSIST_DEBOUNCE_MS);
+  persistTimer = setTimeout(() => void persistir(board), PERSIST_DEBOUNCE_MS);
 });
 
 /**
@@ -548,7 +609,7 @@ export async function flushBoard(): Promise<void> {
   const { board } = useSceneStore.getState();
   if (!board) return;
 
-  await saveBoard(board);
+  await persistir(board);
 }
 
 /**
@@ -566,6 +627,6 @@ if (typeof document !== "undefined") {
     if (!board) return;
 
     clearTimeout(persistTimer);
-    void saveBoard(board);
+    void persistir(board);
   });
 }

@@ -24,7 +24,7 @@ use tower_http::services::{ServeDir, ServeFile};
 mod page;
 
 use crate::error::AppResult;
-use crate::vault::{assets, characters, players, Vault};
+use crate::vault::{assets, characters, mini, players, Vault};
 use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
@@ -96,6 +96,18 @@ pub struct Daemon {
     live_tx: broadcast::Sender<String>,
     /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
     evidence: SharedEvidence,
+    /// Quantas miniaturas se geram ao mesmo tempo.
+    ///
+    /// Abrir o acervo pede varias de uma vez, e cada uma decodifica um mapa
+    /// inteiro -- centenas de milissegundos e dezenas de MB de pico. Sem
+    /// limite, `spawn_blocking` aceita centenas de tarefas e a maquina do
+    /// mestre para de responder no gesto de abrir um painel; com fila, a
+    /// primeira miniatura aparece no mesmo tempo e o resto entra em ordem.
+    ///
+    /// Dois, e nao um: o pedido e disparado por `<img>`, entao o que se ganha
+    /// com paralelismo maior e latencia que ninguem ve, e o que se perde e a
+    /// maquina inteira.
+    mini_gate: tokio::sync::Semaphore,
 }
 
 impl Daemon {
@@ -109,6 +121,7 @@ impl Daemon {
             live: Mutex::new(None),
             live_tx,
             evidence: Arc::new(RwLock::new(None)),
+            mini_gate: tokio::sync::Semaphore::new(2),
         }
     }
 
@@ -256,6 +269,7 @@ fn lan_ip() -> Option<IpAddr> {
 pub fn router(state: Arc<Daemon>) -> Router {
     Router::new()
         .route("/asset/{id}", get(serve_asset))
+        .route("/asset/{id}/mini", get(serve_mini))
         .route("/evidencia/{id}", get(serve_evidence))
         .route("/sala", get(check))
         .route("/sala/entrar", post(join_table))
@@ -1193,6 +1207,100 @@ async fn serve_asset(
         Ok(response) => response.into_response(),
         Err(cause) => {
             log::error!("asset {id} em {}: {cause}", path.display());
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o arquivo")
+        }
+    }
+}
+
+/// `GET /asset/{id}/mini`
+///
+/// A miniatura, para as LISTAS. Sem token, como a irma dela, e pelo mesmo
+/// motivo: quem pede e um `<img>`.
+///
+/// Toda falha cai no arquivo original em vez de virar imagem quebrada na
+/// lista: som nao tem miniatura, um `.png` que na verdade nao e PNG existe, e
+/// um disco cheio nao pode esconder o acervo do mestre. O preco de cair e
+/// exatamente o comportamento de antes desta rota existir.
+async fn serve_mini(
+    State(state): State<Arc<Daemon>>,
+    AxumPath(id): AxumPath<String>,
+    request: Request<Body>,
+) -> Response {
+    let found = {
+        let guard = state.vault.read().expect("vault envenenado");
+        let Some(vault) = guard.as_ref() else {
+            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        };
+
+        match assets::find(vault, &id) {
+            // Os dois caminhos saem daqui, de dentro do lock: a alternativa
+            // seria devolver a raiz do vault e remontar caminho fora, com duas
+            // regras de nome de arquivo em vez de uma.
+            Ok(Some(meta)) => Some((
+                mini::path(vault, &meta.id),
+                assets::asset_path(vault, &meta),
+                meta,
+            )),
+            Ok(None) => None,
+            Err(cause) => {
+                log::error!("asset {id}: {cause}");
+                return fail(StatusCode::INTERNAL_SERVER_ERROR, "acervo ilegivel");
+            }
+        }
+    };
+
+    let Some((pronta, original, meta)) = found else {
+        return fail(StatusCode::NOT_FOUND, "arquivo nao esta no acervo");
+    };
+
+    // Caminho quente primeiro, e sem tomar o semaforo: depois da primeira vez
+    // isto e um `ServeFile` de alguns KB, e nao ha nada para gerar.
+    let caminho = if pronta.exists() {
+        Some(pronta)
+    } else {
+        // `spawn_blocking` porque decodificar imagem e CPU, e segurar a thread
+        // do tokio aqui pararia o SSE da cena -- a TV congelaria porque alguem
+        // abriu o acervo.
+        let _vez = state.mini_gate.acquire().await;
+
+        let vault = Arc::clone(&state.vault);
+        let alvo = meta.clone();
+
+        match tokio::task::spawn_blocking(move || {
+            let guard = vault.read().expect("vault envenenado");
+            let vault = guard.as_ref().ok_or(crate::error::AppError::NoCampaign)?;
+
+            mini::ensure(vault, &alvo)
+        })
+        .await
+        {
+            Ok(Ok(caminho)) => Some(caminho),
+            Ok(Err(cause)) => {
+                log::warn!("miniatura de {id} nao saiu, servindo o original: {cause}");
+                None
+            }
+            Err(cause) => {
+                log::warn!("miniatura de {id} morreu na thread: {cause}");
+                None
+            }
+        }
+    };
+
+    let (caminho, mime_type) = match caminho {
+        Some(caminho) => (caminho, "image/png".to_string()),
+        None => (original, meta.mime_type.clone()),
+    };
+
+    match ServeFile::new_with_mime(
+        &caminho,
+        &mime_type.parse().unwrap_or(mime::APPLICATION_OCTET_STREAM),
+    )
+    .oneshot(request)
+    .await
+    {
+        Ok(response) => response.into_response(),
+        Err(cause) => {
+            log::error!("miniatura {id} em {}: {cause}", caminho.display());
             fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o arquivo")
         }
     }

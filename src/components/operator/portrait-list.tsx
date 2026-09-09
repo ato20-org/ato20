@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useCharacters } from "@/hooks/use-characters";
+import { MINIATURA } from "@/lib/miniatura";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -142,7 +143,7 @@ function PortraitRow({
   retrato: Portrait | null;
   filaAuto: boolean;
 }) {
-  const url = useAssetUrl(personagem.retrato);
+  const url = useAssetUrl(personagem.retrato, true);
   const update = usePortraitStore((state) => state.update);
   const armar = usePortraitStore((state) => state.armar);
   const desarmar = usePortraitStore((state) => state.desarmar);
@@ -207,7 +208,13 @@ function PortraitRow({
       >
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="" className="size-full object-cover" draggable={false} />
+          <img
+            src={url}
+            alt=""
+            className="size-full object-cover"
+            draggable={false}
+            {...MINIATURA}
+          />
         ) : (
           <UserSquare className="text-muted-foreground m-auto size-4" aria-hidden />
         )}

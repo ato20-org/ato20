@@ -52,6 +52,33 @@ pub struct Board {
     pub live_scene_id: Option<String>,
 }
 
+/// O board como o TypeScript o manda quando SO ALGUMAS cenas mudaram.
+///
+/// `save` ja gravava por diferenca -- compara o JSON com o disco e nao
+/// reescreve cena intocada --, mas a diferenca comecava tarde: o board INTEIRO
+/// atravessava o IPC para o Rust descobrir que vinte e nove das trinta cenas
+/// estavam iguais. Medido com `JSON.stringify` no formato real: 0,60 MB numa
+/// campanha de trinta cenas, 3,71 MB numa de oitenta com traco em todas -- e
+/// isso a cada 400 ms de pausa na edicao.
+///
+/// `ordem` e SEMPRE completa, e e ela que decide o que existe: cena que sai
+/// dela tem o arquivo apagado, exatamente como no `save` inteiro. O que o
+/// patch encurta e o CORPO das cenas, nao a lista delas -- se a lista tambem
+/// viesse parcial, nao haveria como distinguir "esta cena nao mudou" de "esta
+/// cena foi apagada", e o primeiro erro nessa distincao apaga trabalho de
+/// alguem.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardPatch {
+    /// Todos os ids, na ordem da lista de cenas.
+    pub ordem: Vec<String>,
+    /// So as cenas cujo corpo mudou. Pode estar vazio -- navegar entre cenas
+    /// muda `editando` e mais nada.
+    pub scenes: Vec<SceneJson>,
+    pub editing_scene_id: Option<String>,
+    pub live_scene_id: Option<String>,
+}
+
 fn scene_id(scene: &SceneJson) -> AppResult<String> {
     scene
         .get("id")
@@ -103,6 +130,38 @@ pub fn load(vault: &Vault) -> AppResult<Option<Board>> {
     }))
 }
 
+/// Grava UMA cena, se ela mudou.
+///
+/// Compara com o que esta no disco antes de gravar. Ler e barato e paginado;
+/// gravar suja o arquivo, mexe no mtime e aparece no `git diff` da campanha.
+///
+/// Compartilhada pelo `save` inteiro e pelo `save_patch`: duas copias desta
+/// comparacao divergiriam, e a que divergisse por ultimo passaria a sujar o
+/// repositorio da campanha sem ninguem entender por que.
+fn write_scene(dir: &std::path::Path, file: &str, scene: &SceneJson) -> AppResult<()> {
+    let path = dir.join(file);
+
+    let next = serde_json::to_vec_pretty(scene).map_err(|cause| AppError::Malformed {
+        file: file.to_string(),
+        cause: cause.to_string(),
+    })?;
+
+    let changed = match std::fs::read(&path) {
+        Ok(current) => current.trim_ascii_end() != next.as_slice(),
+        Err(_) => true,
+    };
+
+    if changed {
+        super::atomic::write_atomic(&path, &{
+            let mut bytes = next;
+            bytes.push(b'\n');
+            bytes
+        })?;
+    }
+
+    Ok(())
+}
+
 /// Grava o board.
 ///
 /// Grava por diferenca, e nao tudo: o Operador chama isto a cada 400ms de
@@ -142,27 +201,7 @@ pub fn save(vault: &Vault, board: &Board) -> AppResult<()> {
             }
         };
 
-        let path = dir.join(&file);
-
-        // Compara com o que esta no disco antes de gravar. Ler e barato e
-        // paginado; gravar suja o arquivo, mexe no mtime e aparece no git.
-        let next = serde_json::to_vec_pretty(scene).map_err(|cause| AppError::Malformed {
-            file: file.clone(),
-            cause: cause.to_string(),
-        })?;
-
-        let changed = match std::fs::read(&path) {
-            Ok(current) => current.trim_ascii_end() != next.as_slice(),
-            Err(_) => true,
-        };
-
-        if changed {
-            super::atomic::write_atomic(&path, &{
-                let mut bytes = next;
-                bytes.push(b'\n');
-                bytes
-            })?;
-        }
+        write_scene(&dir, &file, scene)?;
 
         entries.push(SceneEntry { id, arquivo: file });
     }
@@ -185,6 +224,106 @@ pub fn save(vault: &Vault, board: &Board) -> AppResult<()> {
             cenas: entries,
             editando: board.editing_scene_id.clone(),
             no_ar: board.live_scene_id.clone(),
+        },
+    )
+}
+
+/// Grava so as cenas que mudaram.
+///
+/// A cena ausente do patch e mantida como esta no disco, com o arquivo dela
+/// intacto e a entrada dela preservada no indice. A cena que saiu da `ordem` e
+/// apagada, como no `save` inteiro.
+///
+/// Recusa o patch que pede uma cena que nao existe em lugar nenhum -- nem no
+/// corpo, nem no indice anterior. Isso seria uma cena listada sem arquivo, e o
+/// `load` a ignoraria em silencio: o mestre veria a cena desaparecer sem nada
+/// dizer por que. Recusar deixa o erro aparecer enquanto ele ainda e um bug, e
+/// nao uma perda.
+pub fn save_patch(vault: &Vault, patch: &BoardPatch) -> AppResult<()> {
+    let dir = vault.scenes_dir();
+    std::fs::create_dir_all(&dir)?;
+
+    let previous = read_json::<Order>(&vault.order_path())?;
+
+    let mut file_of: std::collections::HashMap<String, String> = previous
+        .as_ref()
+        .map(|order| {
+            order
+                .cenas
+                .iter()
+                .map(|e| (e.id.clone(), e.arquivo.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut taken: HashSet<String> = file_of.values().cloned().collect();
+
+    let mut corpo: std::collections::HashMap<String, &SceneJson> =
+        std::collections::HashMap::with_capacity(patch.scenes.len());
+    for scene in &patch.scenes {
+        corpo.insert(scene_id(scene)?, scene);
+    }
+
+    let mut entries = Vec::with_capacity(patch.ordem.len());
+
+    for id in &patch.ordem {
+        let existente = file_of.remove(id);
+
+        let Some(scene) = corpo.remove(id) else {
+            // Sem corpo: a cena nao mudou, e o arquivo dela fica onde esta.
+            let Some(file) = existente else {
+                return Err(AppError::Malformed {
+                    file: "ordem.json".into(),
+                    cause: format!("cena {id} sem corpo no patch e sem arquivo no disco"),
+                });
+            };
+
+            entries.push(SceneEntry {
+                id: id.clone(),
+                arquivo: file,
+            });
+            continue;
+        };
+
+        let file = match existente {
+            Some(file) => file,
+            None => {
+                let file = unique_file(&slugify(scene_name(scene)), "json", &taken);
+                taken.insert(file.clone());
+                file
+            }
+        };
+
+        write_scene(&dir, &file, scene)?;
+
+        entries.push(SceneEntry {
+            id: id.clone(),
+            arquivo: file,
+        });
+    }
+
+    // Corpo que chegou para cena fora da `ordem`: ou o cliente montou o patch
+    // errado, ou apagou a cena e mandou o corpo dela no mesmo passo. Nos dois
+    // casos a `ordem` manda, e gravar o arquivo criaria um orfao.
+    for id in corpo.keys() {
+        log::warn!("cena {id} veio no patch mas nao esta na ordem: ignorada");
+    }
+
+    // O que sobrou em `file_of` saiu da ordem: apagada pelo mestre.
+    for (id, file) in file_of {
+        let path = dir.join(&file);
+        if let Err(cause) = std::fs::remove_file(&path) {
+            log::warn!("cena {id} removida do board mas {file} ficou: {cause}");
+        }
+    }
+
+    write_json(
+        &vault.order_path(),
+        &Order {
+            versao: super::VAULT_VERSION,
+            cenas: entries,
+            editando: patch.editing_scene_id.clone(),
+            no_ar: patch.live_scene_id.clone(),
         },
     )
 }
@@ -356,6 +495,190 @@ mod tests {
 
         assert!(!vault.scenes_dir().join("ponte.json").exists());
         assert_eq!(load(&vault).expect("load").expect("board").scenes.len(), 1);
+    }
+
+    /// Um patch e a ordem completa mais os corpos que mudaram.
+    fn patch(ordem: &[&str], corpos: Vec<SceneJson>, editando: Option<&str>) -> BoardPatch {
+        BoardPatch {
+            ordem: ordem.iter().map(|s| s.to_string()).collect(),
+            scenes: corpos,
+            editing_scene_id: editando.map(str::to_string),
+            live_scene_id: None,
+        }
+    }
+
+    fn com_tres_cenas() -> (tempfile::TempDir, Vault) {
+        let (dir, vault) = campanha();
+
+        save(
+            &vault,
+            &Board {
+                scenes: vec![
+                    scene("s1", "Taverna", 1),
+                    scene("s2", "Ponte", 2),
+                    scene("s3", "Floresta", 3),
+                ],
+                editing_scene_id: Some("s1".into()),
+                live_scene_id: None,
+            },
+        )
+        .expect("save inicial");
+
+        (dir, vault)
+    }
+
+    #[test]
+    fn patch_grava_a_cena_que_mudou_e_preserva_as_outras() {
+        let (_dir, vault) = com_tres_cenas();
+
+        save_patch(&vault, &patch(&["s1", "s2", "s3"], vec![scene("s2", "Ponte", 999)], Some("s1")))
+            .expect("patch");
+
+        let lido = load(&vault).expect("load").expect("board");
+
+        // A que mudou mudou; as outras duas continuam exatamente como estavam.
+        // E o ponto inteiro: o corpo delas nem atravessou o IPC.
+        assert_eq!(lido.scenes.len(), 3);
+        assert_eq!(lido.scenes[0]["items"][0]["x"], 1);
+        assert_eq!(lido.scenes[1]["items"][0]["x"], 999);
+        assert_eq!(lido.scenes[2]["items"][0]["x"], 3);
+    }
+
+    #[test]
+    fn patch_nao_toca_no_arquivo_da_cena_ausente() {
+        let (_dir, vault) = com_tres_cenas();
+
+        let parada = vault.scenes_dir().join("taverna.json");
+        let antes = std::fs::metadata(&parada).expect("meta").modified().expect("mtime");
+
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        save_patch(&vault, &patch(&["s1", "s2", "s3"], vec![scene("s3", "Floresta", 7)], None))
+            .expect("patch");
+
+        let depois = std::fs::metadata(&parada).expect("meta").modified().expect("mtime");
+        assert_eq!(antes, depois, "cena fora do patch foi reescrita");
+    }
+
+    #[test]
+    fn patch_sem_corpo_nenhum_ainda_move_o_que_esta_no_ar() {
+        let (_dir, vault) = com_tres_cenas();
+
+        // Trocar a cena no ar nao muda cena nenhuma: e navegacao, e o patch
+        // dela e a `ordem` mais dois ids. Zero bytes de cena no IPC.
+        save_patch(
+            &vault,
+            &BoardPatch {
+                ordem: vec!["s1".into(), "s2".into(), "s3".into()],
+                scenes: vec![],
+                editing_scene_id: Some("s2".into()),
+                live_scene_id: Some("s3".into()),
+            },
+        )
+        .expect("patch");
+
+        let lido = load(&vault).expect("load").expect("board");
+        assert_eq!(lido.editing_scene_id.as_deref(), Some("s2"));
+        assert_eq!(lido.live_scene_id.as_deref(), Some("s3"));
+        assert_eq!(lido.scenes.len(), 3);
+    }
+
+    #[test]
+    fn patch_cria_a_cena_nova() {
+        let (_dir, vault) = com_tres_cenas();
+
+        save_patch(
+            &vault,
+            &patch(
+                &["s1", "s2", "s3", "s4"],
+                vec![scene("s4", "Cripta", 4)],
+                Some("s4"),
+            ),
+        )
+        .expect("patch");
+
+        assert!(vault.scenes_dir().join("cripta.json").exists());
+        assert_eq!(load(&vault).expect("load").expect("board").scenes.len(), 4);
+    }
+
+    #[test]
+    fn patch_apaga_a_cena_que_saiu_da_ordem() {
+        let (_dir, vault) = com_tres_cenas();
+
+        // A `ordem` e quem decide o que existe -- e por isso que ela vem
+        // completa mesmo quando nenhum corpo vem.
+        save_patch(&vault, &patch(&["s1", "s3"], vec![], Some("s1"))).expect("patch");
+
+        assert!(!vault.scenes_dir().join("ponte.json").exists());
+
+        let lido = load(&vault).expect("load").expect("board");
+        assert_eq!(lido.scenes.len(), 2);
+        assert_eq!(lido.scenes[1]["id"], "s3");
+    }
+
+    #[test]
+    fn patch_reordena_sem_reescrever_cena() {
+        let (_dir, vault) = com_tres_cenas();
+
+        save_patch(&vault, &patch(&["s3", "s1", "s2"], vec![], None)).expect("patch");
+
+        let lido = load(&vault).expect("load").expect("board");
+        assert_eq!(lido.scenes[0]["id"], "s3");
+        assert_eq!(lido.scenes[1]["id"], "s1");
+        assert_eq!(lido.scenes[2]["id"], "s2");
+
+        // Arrastar a lista de cenas nao muda uma cena: os arquivos ficam onde
+        // estao, e quem guarda a ordem e o indice.
+        assert!(vault.scenes_dir().join("floresta.json").exists());
+    }
+
+    #[test]
+    fn patch_que_pede_cena_inexistente_e_recusado() {
+        let (_dir, vault) = com_tres_cenas();
+
+        // Sem corpo e sem arquivo, a cena viraria uma linha no indice
+        // apontando para o vazio -- e o `load` a ignora em silencio. O mestre
+        // veria a cena desaparecer sem nada dizer por que, entao o lugar do
+        // erro e aqui.
+        let erro = save_patch(&vault, &patch(&["s1", "s2", "s3", "fantasma"], vec![], None));
+        assert!(matches!(erro, Err(AppError::Malformed { .. })));
+
+        // E o indice de antes continua valendo: a recusa nao pode ter gravado
+        // metade.
+        assert_eq!(load(&vault).expect("load").expect("board").scenes.len(), 3);
+    }
+
+    #[test]
+    fn patch_no_lugar_de_save_inteiro_da_o_mesmo_board() {
+        let (_dir, vault) = com_tres_cenas();
+
+        save_patch(
+            &vault,
+            &patch(&["s1", "s2", "s3"], vec![scene("s2", "Ponte", 42)], Some("s2")),
+        )
+        .expect("patch");
+        let por_patch = load(&vault).expect("load").expect("board");
+
+        let (_dir2, outro) = campanha();
+        save(
+            &outro,
+            &Board {
+                scenes: vec![
+                    scene("s1", "Taverna", 1),
+                    scene("s2", "Ponte", 42),
+                    scene("s3", "Floresta", 3),
+                ],
+                editing_scene_id: Some("s2".into()),
+                live_scene_id: None,
+            },
+        )
+        .expect("save inteiro");
+        let por_save = load(&outro).expect("load").expect("board");
+
+        // O caminho curto e o caminho longo tem de produzir a MESMA campanha.
+        // Se divergirem, o Operador passa a gravar uma coisa diferente do que
+        // o import do zip grava, e a diferenca aparece um mes depois.
+        assert_eq!(por_patch.scenes, por_save.scenes);
+        assert_eq!(por_patch.editing_scene_id, por_save.editing_scene_id);
     }
 
     #[test]

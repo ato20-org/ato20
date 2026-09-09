@@ -3,8 +3,8 @@ name = "ato20"
 version = "0.1.0"
 description = "Ferramenta para organizar e exibir cenas de RPG de mesa"
 authors = ["valb-mig"]
-license = ""
-repository = ""
+license = "MIT"
+repository = "https://github.com/valb-mig/ato20"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -56,6 +56,34 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # imagem, e um `image` completo seria um decodificador inteiro no binario para
 # responder duas perguntas.
 imagesize = "0.13"
+
+# Decodifica de verdade, e so para uma coisa: a MINIATURA do acervo.
+#
+# O comentario acima -- "um `image` completo seria um decodificador inteiro no
+# binario para responder duas perguntas" -- continua valendo para as medidas, e
+# e por isso que o `imagesize` fica. O que mudou foi a pergunta: as listas do
+# Operador e da Plateia desenham um quadrado de 40px apontando para o arquivo
+# ORIGINAL, e um acervo de duzentos mapas obrigava a webview a buscar e
+# decodificar duzentos arquivos inteiros para isso. Medido no
+# `scripts/perf/medir.mjs`, cenario `biblioteca`: 200 arquivos e 1,9 GB de
+# trafego contra 47 arquivos com `loading="lazy"` -- e mesmo os 47 sao mapas
+# inteiros na memoria.
+#
+# Reduzir imagem exige decodificar imagem. Nao ha atalho de cabecalho para
+# isso, e fazer na webview poria processamento de binario justamente na ponta
+# que este projeto tirou dele.
+#
+# Codecs escolhidos, e nao `default-features`: o padrao traz TIFF, DDS, HDR,
+# OpenEXR, PNM e farm -- formatos que o seletor de importacao nem oferece. AVIF
+# fica de fora por outro motivo: o decodificador dele puxa C (dav1d), e o
+# arquivo que nao decodificar cai no original, que e o que acontecia antes.
+image = { version = "0.25", default-features = false, features = [
+  "png",
+  "jpeg",
+  "gif",
+  "bmp",
+  "webp",
+] }
 
 uuid = { version = "1", features = ["v4"] }
 

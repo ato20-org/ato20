@@ -17,12 +17,30 @@ import type { AssetKind, AssetMeta, EscopoAsset } from "@/types/scene";
  * que os dois existiam para conter: quem guarda cópia agora é o cache HTTP do
  * browser, por ETag.
  */
-export async function assetUrl(assetId: string): Promise<string> {
-  if (!isDesktop()) return `/asset/${assetId}`;
+export async function assetUrl(
+  assetId: string,
+  /**
+   * Pede a MINIATURA em vez do arquivo.
+   *
+   * Para lista, e so para lista. O acervo guarda o original -- e ele que vai
+   * para a cena, para a TV e para o zip --, e apontar um quadrado de 40px para
+   * um mapa de doze megapixels fazia a webview decodificar o mapa inteiro para
+   * desenhar o quadrado. Ver `vault/mini.rs` no Rust, que gera e guarda em
+   * `.ato20/mini/`, e `MINIATURA`, que e o par disto no `<img>`.
+   *
+   * Quando nao ha miniatura possivel -- som, arquivo ilegivel, disco cheio --
+   * o daemon responde o ORIGINAL nesta mesma rota. Quem chama nunca precisa de
+   * plano B.
+   */
+  mini = false,
+): Promise<string> {
+  const caminho = mini ? `/asset/${assetId}/mini` : `/asset/${assetId}`;
+
+  if (!isDesktop()) return caminho;
 
   const { url } = await daemonAddr();
 
-  return `${url}/asset/${assetId}`;
+  return `${url}${caminho}`;
 }
 
 export function listAssets(kind?: AssetKind): Promise<AssetMeta[]> {

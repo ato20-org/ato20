@@ -19,6 +19,7 @@ import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { MINIATURA } from "@/lib/miniatura";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
 import { shareAttachment } from "@/lib/vault/evidence";
@@ -328,6 +329,7 @@ function Ficha({
                             src={urls[anexo.arquivo]}
                             alt={anexo.arquivo}
                             className="aspect-square w-full bg-black object-cover"
+                            {...MINIATURA}
                           />
                         ) : (
                           <span className="bg-muted grid aspect-square w-full place-items-center">

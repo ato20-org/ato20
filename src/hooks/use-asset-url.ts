@@ -17,14 +17,18 @@ type Resolved = { assetId: string; url: string | null };
  * mesmo arquivo em várias cenas não vazar memória. Agora é uma URL do daemon,
  * e quem guarda cópia é o cache HTTP do browser.
  */
-export function useAssetUrl(assetId: string | undefined): string | null {
+export function useAssetUrl(
+  assetId: string | undefined,
+  /** Pede a miniatura. Para lista -- ver `assetUrl`. */
+  mini = false,
+): string | null {
   const [resolved, setResolved] = useState<Resolved | null>(null);
 
   useEffect(() => {
     if (!assetId) return;
 
     let active = true;
-    void assetUrl(assetId).then(
+    void assetUrl(assetId, mini).then(
       (url) => {
         if (active) setResolved({ assetId, url });
       },
@@ -38,7 +42,7 @@ export function useAssetUrl(assetId: string | undefined): string | null {
     return () => {
       active = false;
     };
-  }, [assetId]);
+  }, [assetId, mini]);
 
   if (!assetId || resolved?.assetId !== assetId) return null;
 

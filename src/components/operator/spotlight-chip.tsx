@@ -5,6 +5,7 @@ import { RadioTower, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
+import { MINIATURA } from "@/lib/miniatura";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 
 /**
@@ -54,7 +55,13 @@ export function SpotlightChip() {
       <span className="bg-muted h-6 w-9 shrink-0 overflow-hidden rounded">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="" draggable={false} className="size-full object-cover" />
+          <img
+            src={url}
+            alt=""
+            draggable={false}
+            className="size-full object-cover"
+            {...MINIATURA}
+          />
         ) : null}
       </span>
 

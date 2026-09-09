@@ -9,6 +9,7 @@ import { useAssetList } from "@/hooks/use-asset-list";
 import { useCharacters } from "@/hooks/use-characters";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useListReorder } from "@/hooks/use-list-reorder";
+import { MINIATURA } from "@/lib/miniatura";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { cn } from "@/lib/utils";
@@ -141,7 +142,7 @@ function LayerRow({
   onToggleLock,
   onRemove,
 }: LayerRowProps) {
-  const url = useAssetUrl(item.assetId);
+  const url = useAssetUrl(item.assetId, true);
 
   return (
     <li
@@ -173,6 +174,7 @@ function LayerRow({
               alt=""
               className="size-full object-cover"
               draggable={false}
+              {...MINIATURA}
               // Mesmo espelho do palco, para a miniatura bater com o que se vê.
               style={
                 item.flipX || item.flipY

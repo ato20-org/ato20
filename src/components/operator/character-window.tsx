@@ -44,6 +44,7 @@ import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
+import { MINIATURA } from "@/lib/miniatura";
 import { attachmentKind, imageMimeByName, type AttachmentKind } from "@/lib/attachments/kind";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { chaveDe, type ConteudoJanela } from "@/lib/store/use-window-store";
@@ -815,7 +816,14 @@ function Thumb({
 }) {
   const imagem = url ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" draggable={false} className="size-full object-cover" onError={onError} />
+    <img
+      src={url}
+      alt=""
+      draggable={false}
+      className="size-full object-cover"
+      onError={onError}
+      {...MINIATURA}
+    />
   ) : null;
 
   const moldura = "bg-background size-9 shrink-0 overflow-hidden rounded border";
