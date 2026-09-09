@@ -9,8 +9,9 @@ use crate::serve::{DaemonAddr, Evidence, SharedEvidence, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
 use crate::vault::board::Board;
 use crate::vault::session::Json;
+use crate::vault::characters::{Anexo, Autor, Campo, Personagem};
 use crate::vault::players::{Attachment, Player};
-use crate::vault::{assets, board, players, session, zip, CampaignInfo, Vault};
+use crate::vault::{assets, board, characters, players, session, zip, CampaignInfo, Vault};
 
 /// Preferencia que guarda a ultima campanha aberta.
 const LAST_CAMPAIGN: &str = "ultima-campanha";
@@ -257,19 +258,6 @@ pub fn players_list(state: State<'_, AppState>) -> AppResult<Vec<Player>> {
     state.with_vault(players::list)
 }
 
-/// O apelido que o mestre da a um jogador.
-///
-/// Fora do alcance do proprio jogador de proposito: `PATCH /eu` nao tem este
-/// campo, e `update_self` tambem nao. Era privilegio de coluna no Postgres.
-#[tauri::command]
-pub fn player_set_label(
-    state: State<'_, AppState>,
-    id: String,
-    rotulo: String,
-) -> AppResult<()> {
-    state.with_vault(|vault| players::set_label(vault, &id, &rotulo))
-}
-
 /// Tira o jogador da mesa, com os anexos dele.
 #[tauri::command]
 pub fn player_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {
@@ -443,4 +431,240 @@ pub fn asset_import(state: State<'_, AppState>, paths: Vec<String>) -> AppResult
 
         Ok(ImportResult { aceitos, recusados })
     })
+}
+
+/// O que a anexacao devolve.
+///
+/// Recusados vem como um motivo por arquivo, e nao uma contagem, pelo mesmo
+/// motivo do acervo: "1 arquivo nao pode ser anexado" obriga quem escolheu seis
+/// a adivinhar qual e por que.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnexoImport {
+    pub aceitos: Vec<Anexo>,
+    pub recusados: Vec<String>,
+}
+
+// --- personagens ------------------------------------------------------------
+
+/// A lista de personagens da campanha.
+#[tauri::command]
+pub fn characters_list(state: State<'_, AppState>) -> AppResult<Vec<Personagem>> {
+    state.with_vault(characters::load)
+}
+
+#[tauri::command]
+pub fn character_create(state: State<'_, AppState>, nome: String) -> AppResult<Personagem> {
+    state.with_vault(|vault| characters::create(vault, &nome))
+}
+
+#[tauri::command]
+pub fn character_rename(state: State<'_, AppState>, id: String, nome: String) -> AppResult<()> {
+    state.with_vault(|vault| characters::rename(vault, &id, &nome))
+}
+
+/// Remove o personagem, a pasta dele, e o que o banco guardava sobre ele.
+///
+/// Dois donos numa operacao: o vault tira o indice e os anexos, o banco tira
+/// vinculo e notas. Nessa ordem, porque o vault e a verdade sobre o que existe
+/// -- se o processo morrer no meio, sobra vinculo apontando para nada, que a
+/// Plateia ignora, e nao arquivo orfao que ninguem mais lista.
+#[tauri::command]
+pub fn character_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.with_vault(|vault| {
+        characters::remove(vault, &id)?;
+        players::forget_character(vault, &id)
+    })
+}
+
+/// Preenche ou limpa um dos tres campos nomeados: ficha, retrato, miniatura.
+///
+/// Um comando, e nao tres: os tres guardam uma string opcional no indice, e o
+/// que muda e o campo. Ver `characters::Campo`.
+///
+/// O `valor` e nome de arquivo para a ficha e id do acervo para os outros dois.
+/// A assimetria e proposital e esta documentada em `Personagem`: a ficha e
+/// documento e nao precisa chegar a TV; retrato e miniatura precisam, e a TV so
+/// alcanca imagem por `/asset/{id}`.
+#[tauri::command]
+pub fn character_set_campo(
+    state: State<'_, AppState>,
+    id: String,
+    campo: Campo,
+    valor: Option<String>,
+) -> AppResult<()> {
+    state.with_vault(|vault| characters::set_campo(vault, &id, campo, valor.as_deref()))
+}
+
+#[tauri::command]
+pub fn character_attachments(state: State<'_, AppState>, id: String) -> AppResult<Vec<Anexo>> {
+    state.with_vault(|vault| characters::list_anexos(vault, &id))
+}
+
+/// Anexa arquivos do disco do mestre ao personagem.
+///
+/// Recebe CAMINHOS e copia no lado nativo, como o acervo faz: o arquivo nao
+/// passa pela webview nem por HTTP. Ver `asset_import` para a historia -- o
+/// limite de corpo do axum cortava mapa grande no meio, e o cliente via "load
+/// failed" sem nada apontando para o limite.
+///
+/// Devolve aceitos e recusados separados, e um motivo por recusa: quem escolheu
+/// seis arquivos e teve um recusado quer os cinco e quer saber qual.
+#[tauri::command]
+pub fn character_attach(
+    state: State<'_, AppState>,
+    id: String,
+    paths: Vec<String>,
+) -> AppResult<AnexoImport> {
+    state.with_vault(|vault| {
+        let mut aceitos = Vec::new();
+        let mut recusados = Vec::new();
+
+        for path in &paths {
+            match characters::import_anexo(vault, &id, std::path::Path::new(path)) {
+                Ok(anexo) => aceitos.push(anexo),
+                Err(cause) => recusados.push(format!("{path}: {cause}")),
+            }
+        }
+
+        Ok(AnexoImport { aceitos, recusados })
+    })
+}
+
+/// Tira um anexo do personagem.
+///
+/// O `autor` faz parte da identificacao, nao e informacao extra: ele e o
+/// diretorio, e sem ele "ficha.pdf" seria ambiguo entre o arquivo que o mestre
+/// pos e o que o jogador mandou. O mestre alcanca os dois.
+#[tauri::command]
+pub fn character_detach(
+    state: State<'_, AppState>,
+    id: String,
+    autor: Autor,
+    arquivo: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| characters::remove_anexo(vault, &id, autor, &arquivo))
+}
+
+/// Os bytes de um anexo, para o mestre VER sem sair do aplicativo.
+///
+/// Mesmo desenho do anexo de jogador: canal binario do IPC em vez de rota,
+/// porque o mestre nao tem token e nao deveria precisar de um.
+#[tauri::command]
+pub fn character_attachment_bytes(
+    state: State<'_, AppState>,
+    id: String,
+    autor: Autor,
+    arquivo: String,
+) -> AppResult<tauri::ipc::Response> {
+    let bytes = state.with_vault(|vault| characters::read_anexo(vault, &id, autor, &arquivo))?;
+
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Poe um anexo de personagem em evidencia, num endereco sorteado.
+///
+/// Mesmo desenho do anexo de jogador, e o mesmo motivo para nao reusar o
+/// `assetId`: copiar o arquivo para o acervo deixaria um duplicado por
+/// transmissao na biblioteca de imagens, para um documento que nem e imagem de
+/// mapa. Aqui o daemon serve UM arquivo, por um id sorteado que morre quando
+/// sai do ar.
+#[tauri::command]
+pub fn character_attachment_share(
+    state: State<'_, AppState>,
+    id: String,
+    autor: Autor,
+    arquivo: String,
+) -> AppResult<String> {
+    let caminho = state.with_vault(|vault| {
+        characters::anexo_existente(vault, &id, autor, &arquivo).ok_or_else(|| {
+            AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("o anexo {arquivo} nao esta mais la"),
+            ))
+        })
+    })?;
+
+    let sorteado = uuid::Uuid::new_v4().simple().to_string();
+
+    *state.evidence.write().expect("evidencia envenenada") = Some(Evidence {
+        id: sorteado.clone(),
+        path: caminho,
+    });
+
+    Ok(sorteado)
+}
+
+/// A pasta do personagem, para abrir no explorador do sistema.
+#[tauri::command]
+pub fn character_dir(state: State<'_, AppState>, id: String) -> AppResult<String> {
+    state.with_vault(|vault| Ok(characters::dir(vault, &id).display().to_string()))
+}
+
+// --- vinculo ----------------------------------------------------------------
+
+#[tauri::command]
+pub fn character_link(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] jogadorId: String,
+    id: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| players::link(vault, &jogadorId, &id))
+}
+
+#[tauri::command]
+pub fn character_unlink(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] jogadorId: String,
+    id: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| players::unlink(vault, &jogadorId, &id))
+}
+
+/// Os personagens de um jogador, por id.
+#[tauri::command]
+pub fn player_characters(state: State<'_, AppState>, id: String) -> AppResult<Vec<String>> {
+    state.with_vault(|vault| players::characters_of(vault, &id))
+}
+
+/// Todos os vinculos, como pares `[jogadorId, personagemId]`.
+///
+/// Serve a lista de jogadores, que mostra o personagem de cada um: pedir por
+/// jogador seria uma chamada por linha da lista.
+#[tauri::command]
+pub fn character_links(state: State<'_, AppState>) -> AppResult<Vec<(String, String)>> {
+    state.with_vault(players::all_links)
+}
+
+/// Quem esta com um personagem, por id de jogador.
+#[tauri::command]
+pub fn character_players(state: State<'_, AppState>, id: String) -> AppResult<Vec<String>> {
+    state.with_vault(|vault| players::players_of(vault, &id))
+}
+
+// --- notas de personagem ----------------------------------------------------
+
+/// A nota que um jogador escreveu sobre um personagem.
+#[tauri::command]
+pub fn character_note(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] jogadorId: String,
+) -> AppResult<String> {
+    state.with_vault(|vault| players::note(vault, &id, &jogadorId))
+}
+
+/// O mestre reescreve a nota de um jogador.
+///
+/// Existe porque o mestre edita o que o jogador escreveu -- e o `jogadorId` diz
+/// de QUEM e a nota, nao quem esta escrevendo. Sem esse par, a nota do Edgar e
+/// a da Mira sobre o mesmo personagem seriam o mesmo texto.
+#[tauri::command]
+pub fn character_set_note(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] jogadorId: String,
+    texto: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| players::set_note(vault, &id, &jogadorId, &texto))
 }

@@ -24,7 +24,7 @@ use tower_http::services::{ServeDir, ServeFile};
 mod page;
 
 use crate::error::AppResult;
-use crate::vault::{assets, players, Vault};
+use crate::vault::{assets, characters, players, Vault};
 use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
@@ -308,6 +308,23 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             ),
         )
         .route("/anexos/{arquivo}", get(read_attachment).delete(remove_attachment))
+        // Personagens: so os VINCULADOS a este jogador. Token valido nao basta,
+        // e cada rota confere -- ver `ligado`.
+        .route("/personagens", get(my_characters))
+        .route(
+            "/personagens/{id}/anexos",
+            get(character_files).post(upload_character_file).layer(
+                // Desligado, e nao aumentado, pelo mesmo motivo de `/eu/anexos`:
+                // quem conta os bytes e o handler, e o padrao de 2 MB do axum
+                // cortava o stream antes de o teto ser alcancado.
+                DefaultBodyLimit::disable(),
+            ),
+        )
+        .route(
+            "/personagens/{id}/anexos/{autor}/{arquivo}",
+            get(read_character_file).delete(remove_character_file),
+        )
+        .route("/personagens/{id}/nota", get(read_character_note).put(write_character_note))
         .layer(middleware::from_fn_with_state(state, require_player))
 }
 
@@ -587,9 +604,11 @@ pub struct UpdateMe {
 
 /// `PATCH /eu` -- o jogador muda o proprio nome e as proprias notas.
 ///
-/// `rotulo` nao esta aqui, e a ausencia e o controle: o apelido e do mestre, e
-/// nem o dono da linha escreve nele. No Postgres isso era privilegio de coluna;
-/// aqui e o campo nao existir nesta rota nem em `update_self`.
+/// O corpo tem `nome` e `notas`, e mais nada: a ausencia dos outros campos E o
+/// controle. `entrouEm` e `vistoEm` sao do daemon, e um celular que os
+/// reescrevesse mudaria a ordem da lista da mesa. No Postgres isso era
+/// privilegio de coluna; aqui e o campo nao existir nesta rota nem em
+/// `update_self`.
 async fn update_me(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -623,6 +642,237 @@ async fn my_attachments(
         Err(cause) => {
             log::error!("anexos de {}: {cause}", player.id);
             fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao listar os anexos")
+        }
+    }
+}
+
+// --- personagens do jogador -------------------------------------------------
+
+/// Confere o vinculo e devolve a campanha aberta.
+///
+/// Toda rota de personagem passa por aqui, e e a unica coisa que separa o
+/// jogador da ficha dos outros. O token diz QUEM ele e; o vinculo diz o que e
+/// dele. Sem esta checagem, `/eu/personagens/{id}/anexos` seria um id
+/// adivinhavel de distancia da preparacao do mestre.
+fn ligado(state: &Arc<Daemon>, jogador: &str, personagem: &str) -> Result<Vault, Response> {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return Err(fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta"));
+    };
+
+    match players::is_linked(vault, jogador, personagem) {
+        Ok(true) => Ok(vault.clone()),
+        // 404 e nao 403: dizer "existe mas nao e seu" confirmaria a existencia
+        // de um personagem a quem chutou o id.
+        Ok(false) => Err(fail(StatusCode::NOT_FOUND, "personagem nao encontrado")),
+        Err(cause) => {
+            log::error!("vinculo de {jogador}: {cause}");
+            Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao conferir o vinculo"))
+        }
+    }
+}
+
+/// `GET /eu/personagens` -- os personagens deste jogador.
+async fn my_characters(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    let (Ok(ids), Ok(todos)) = (
+        players::characters_of(vault, &player.id),
+        characters::load(vault),
+    ) else {
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler os personagens");
+    };
+
+    // Filtra o indice pelos ids vinculados, mantendo a ordem do VINCULO: e a
+    // ordem em que o mestre entregou os personagens a este jogador.
+    let meus: Vec<&characters::Personagem> = ids
+        .iter()
+        .filter_map(|id| todos.iter().find(|p| &p.id == id))
+        .collect();
+
+    axum::Json(meus).into_response()
+}
+
+/// `GET /eu/personagens/{id}/anexos`
+async fn character_files(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match characters::list_anexos(&vault, &id) {
+        Ok(anexos) => axum::Json(anexos).into_response(),
+        Err(cause) => {
+            log::error!("anexos do personagem {id}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao listar os anexos")
+        }
+    }
+}
+
+/// `GET /eu/personagens/{id}/anexos/{autor}/{arquivo}`
+///
+/// O `autor` esta no caminho porque ele e o diretorio: "ficha.pdf" do mestre e
+/// "ficha.pdf" do jogador sao dois arquivos, e sem ele a rota teria de escolher
+/// um dos dois em silencio.
+async fn read_character_file(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, autor, arquivo)): AxumPath<(String, String, String)>,
+    request: Request<Body>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let autor = match autor.as_str() {
+        "mestre" => characters::Autor::Mestre,
+        "jogador" => characters::Autor::Jogador,
+        _ => return fail(StatusCode::NOT_FOUND, "anexo nao encontrado"),
+    };
+
+    // Le pelo modulo, que sanea o nome na LEITURA tambem: e o que impede
+    // `../../config.json` de virar caminho por aqui.
+    let bytes = match characters::read_anexo(&vault, &id, autor, &arquivo) {
+        Ok(bytes) => bytes,
+        Err(_) => return fail(StatusCode::NOT_FOUND, "anexo nao encontrado"),
+    };
+
+    let mime_type = characters::mime_do_anexo(&arquivo);
+
+    ([(axum::http::header::CONTENT_TYPE, mime_type)], bytes).into_response()
+}
+
+/// `POST /eu/personagens/{id}/anexos` -- multipart, campo `file`.
+///
+/// Grava sempre como `Autor::Jogador`, e isso nao e parametro: o autor sai de
+/// QUEM esta chamando, nunca do corpo. Aceita-lo faria o jogador poder escrever
+/// na pasta do mestre, que e justamente a que ele nao pode tocar.
+async fn upload_character_file(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+    multipart: Multipart,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let autor = characters::Autor::Jogador;
+
+    if let Err(cause) = std::fs::create_dir_all(characters::anexos_dir(&vault, &id, autor)) {
+        log::error!("anexo do personagem {id}: {cause}");
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
+    }
+
+    let temp = characters::anexo_temp(&vault, &id, autor);
+
+    let nome = match recebe_arquivo(multipart, &temp, autor.max_bytes()).await {
+        Ok(nome) => nome,
+        Err(response) => return response,
+    };
+
+    match characters::adopt_anexo(&vault, &id, autor, &temp, &nome) {
+        Ok(anexo) => (StatusCode::CREATED, axum::Json(anexo)).into_response(),
+        Err(crate::error::AppError::Malformed { cause, .. }) => {
+            (StatusCode::CONFLICT, cause).into_response()
+        }
+        Err(cause) => {
+            log::error!("anexo do personagem {id}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao guardar o anexo")
+        }
+    }
+}
+
+/// `DELETE /eu/personagens/{id}/anexos/{autor}/{arquivo}`
+///
+/// So o que o proprio jogador anexou. O que o mestre pos e leitura para ele --
+/// e o outro lado da segmentacao: a ficha existe independente de quem joga, e
+/// nao pode sumir porque alguem se irritou com a sessao.
+async fn remove_character_file(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, autor, arquivo)): AxumPath<(String, String, String)>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    if autor != "jogador" {
+        return fail(StatusCode::FORBIDDEN, "este anexo e do mestre");
+    }
+
+    match characters::remove_anexo(&vault, &id, characters::Autor::Jogador, &arquivo) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(cause) => {
+            log::error!("anexo {arquivo} do personagem {id}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao remover o anexo")
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct NotaBody {
+    texto: String,
+}
+
+/// `GET /eu/personagens/{id}/nota`
+async fn read_character_note(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match players::note(&vault, &id, &player.id) {
+        Ok(texto) => axum::Json(NotaBody { texto }).into_response(),
+        Err(cause) => {
+            log::error!("nota de {} sobre {id}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler a nota")
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WriteNota {
+    texto: String,
+}
+
+/// `PUT /eu/personagens/{id}/nota`
+///
+/// A nota e do PAR (personagem, jogador), e o jogador nunca informa o proprio
+/// id: ele vem do token. Nao ha id a trocar para escrever na nota de outro.
+async fn write_character_note(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+    axum::Json(body): axum::Json<WriteNota>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match players::set_note(&vault, &id, &player.id, &body.texto) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(cause) => {
+            log::error!("nota de {} sobre {id}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar a nota")
         }
     }
 }
@@ -668,6 +918,100 @@ async fn read_attachment(
     }
 }
 
+/// Recebe o campo `file` de um multipart para um arquivo temporario.
+///
+/// Extraido quando o anexo de PERSONAGEM passou a precisar do mesmo caminho.
+/// Uma segunda copia deste laco seria a que esquece de apagar o temporario num
+/// dos ramos de erro -- sao seis -- e deixa lixo invisivel na pasta da
+/// campanha.
+///
+/// Em stream para o disco, e nao para a memoria: sao 64 MB vindos de um celular
+/// e varios podem chegar juntos. O teto e conferido a cada pedaco, entao um
+/// envio grande e cortado no meio em vez de ser medido depois de caber na RAM.
+///
+/// Devolve o nome que o cliente declarou. O temporario fica no lugar, para quem
+/// chamou adota-lo; em qualquer erro ele e removido antes de a resposta sair.
+async fn recebe_arquivo(
+    mut multipart: Multipart,
+    temp: &std::path::Path,
+    teto: u64,
+) -> Result<String, Response> {
+    let mut nome = String::new();
+    let mut recebido = false;
+    let mut tamanho: u64 = 0;
+
+    loop {
+        let field = match multipart.next_field().await {
+            Ok(Some(field)) => field,
+            Ok(None) => break,
+            Err(cause) => {
+                let _ = tokio::fs::remove_file(temp).await;
+                log::warn!("anexo: multipart invalido: {cause}");
+                return Err(fail(StatusCode::BAD_REQUEST, "envio malformado"));
+            }
+        };
+
+        if field.name().unwrap_or_default() != "file" {
+            let _ = field.bytes().await;
+            continue;
+        }
+
+        nome = field.file_name().unwrap_or("arquivo").to_string();
+
+        let mut file = match tokio::fs::File::create(temp).await {
+            Ok(file) => file,
+            Err(cause) => {
+                log::error!("anexo: {cause}");
+                return Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco"));
+            }
+        };
+
+        let mut field = field;
+        loop {
+            match field.chunk().await {
+                Ok(Some(chunk)) => {
+                    tamanho += chunk.len() as u64;
+
+                    if tamanho > teto {
+                        let _ = tokio::fs::remove_file(temp).await;
+                        return Err(fail(
+                            StatusCode::PAYLOAD_TOO_LARGE,
+                            &format!("arquivo acima do teto de {} MB", teto / 1024 / 1024),
+                        ));
+                    }
+
+                    if let Err(cause) = file.write_all(&chunk).await {
+                        let _ = tokio::fs::remove_file(temp).await;
+                        log::error!("anexo: {cause}");
+                        return Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco"));
+                    }
+                }
+                Ok(None) => break,
+                Err(cause) => {
+                    let _ = tokio::fs::remove_file(temp).await;
+                    log::warn!("anexo interrompido: {cause}");
+                    return Err(fail(StatusCode::BAD_REQUEST, "envio interrompido"));
+                }
+            }
+        }
+
+        if let Err(cause) = file.flush().await {
+            let _ = tokio::fs::remove_file(temp).await;
+            log::error!("anexo: {cause}");
+            return Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco"));
+        }
+
+        recebido = true;
+    }
+
+    if !recebido {
+        let _ = tokio::fs::remove_file(temp).await;
+        return Err(fail(StatusCode::BAD_REQUEST, "nenhum campo `file` no envio"));
+    }
+
+    Ok(nome)
+}
+
 /// `POST /eu/anexos` -- multipart, campo `file`.
 async fn upload_attachment(
     State(state): State<Arc<Daemon>>,
@@ -688,78 +1032,11 @@ async fn upload_attachment(
         players::attachment_temp(vault, &player.id)
     };
 
-    let mut nome = String::new();
-    let mut recebido = false;
-    let mut tamanho: u64 = 0;
+    let nome = match recebe_arquivo(multipart, &temp, players::MAX_ATTACHMENT_BYTES).await {
+        Ok(nome) => nome,
+        Err(response) => return response,
+    };
 
-    loop {
-        let field = match multipart.next_field().await {
-            Ok(Some(field)) => field,
-            Ok(None) => break,
-            Err(cause) => {
-                let _ = tokio::fs::remove_file(&temp).await;
-                log::warn!("anexo: multipart invalido: {cause}");
-                return fail(StatusCode::BAD_REQUEST, "envio malformado");
-            }
-        };
-
-        if field.name().unwrap_or_default() != "file" {
-            let _ = field.bytes().await;
-            continue;
-        }
-
-        nome = field.file_name().unwrap_or("arquivo").to_string();
-
-        let mut file = match tokio::fs::File::create(&temp).await {
-            Ok(file) => file,
-            Err(cause) => {
-                log::error!("anexo: {cause}");
-                return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
-            }
-        };
-
-        let mut field = field;
-        loop {
-            match field.chunk().await {
-                Ok(Some(chunk)) => {
-                    tamanho += chunk.len() as u64;
-
-                    if tamanho > players::MAX_ATTACHMENT_BYTES {
-                        let _ = tokio::fs::remove_file(&temp).await;
-                        return fail(
-                            StatusCode::PAYLOAD_TOO_LARGE,
-                            "arquivo acima do teto de 64 MB",
-                        );
-                    }
-
-                    if let Err(cause) = file.write_all(&chunk).await {
-                        let _ = tokio::fs::remove_file(&temp).await;
-                        log::error!("anexo: {cause}");
-                        return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
-                    }
-                }
-                Ok(None) => break,
-                Err(cause) => {
-                    let _ = tokio::fs::remove_file(&temp).await;
-                    log::warn!("anexo interrompido: {cause}");
-                    return fail(StatusCode::BAD_REQUEST, "envio interrompido");
-                }
-            }
-        }
-
-        if let Err(cause) = file.flush().await {
-            let _ = tokio::fs::remove_file(&temp).await;
-            log::error!("anexo: {cause}");
-            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
-        }
-
-        recebido = true;
-    }
-
-    if !recebido {
-        let _ = tokio::fs::remove_file(&temp).await;
-        return fail(StatusCode::BAD_REQUEST, "nenhum campo `file` no envio");
-    }
 
     let result = {
         let guard = state.vault.read().expect("vault envenenado");
@@ -1475,26 +1752,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn jogador_muda_nome_e_notas_e_nao_o_rotulo() {
+    async fn jogador_so_escreve_os_campos_que_sao_dele() {
         let (_dir, state, codigo) = daemon();
         let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
 
-        {
+        let entrou_antes = {
             let guard = state.vault.read().expect("vault");
-            let vault = guard.as_ref().expect("campanha");
-            let id = players::list(vault).expect("list")[0].id.clone();
-            players::set_label(vault, &id, "o ladino").expect("label");
-        }
+            players::list(guard.as_ref().expect("campanha")).expect("list")[0].entrou_em
+        };
 
-        // `rotulo` vai no corpo de proposito: ele tem de ser IGNORADO. O campo
-        // nao existe em `UpdateMe` nem em `update_self`, e e essa ausencia que
-        // substitui o privilegio de coluna do Postgres.
+        // Campo que NAO e dele vai no corpo de proposito: tem de ser ignorado.
+        // O controle e `UpdateMe` nao ter o campo -- e essa ausencia que
+        // substitui o privilegio de coluna que o Postgres dava.
+        //
+        // Este teste guardava o `rotulo`, o apelido que o mestre dava. Ele saiu
+        // com a segmentacao de personagem, e a garantia foi reapontada para
+        // `entrouEm`: a data de entrada tambem nao e do jogador, e um celular
+        // que a reescrevesse mudaria a ordem da lista da mesa.
         let response = router(Arc::clone(&state))
             .oneshot(como(
                 &token,
                 "PATCH",
                 "/eu",
-                Some(r#"{"nome":"Edgar Veloz","notas":"achei uma chave","rotulo":"o chefe"}"#),
+                Some(r#"{"nome":"Edgar Veloz","notas":"achei uma chave","entrouEm":0}"#),
             ))
             .await
             .expect("resposta");
@@ -1506,7 +1786,7 @@ mod tests {
 
         assert_eq!(ficha.nome, "Edgar Veloz");
         assert_eq!(ficha.notas, "achei uma chave");
-        assert_eq!(ficha.rotulo, "o ladino", "o jogador mexeu no rotulo");
+        assert_eq!(ficha.entrou_em, entrou_antes, "o jogador mexeu no entrou_em");
     }
 
     #[tokio::test]
@@ -1793,4 +2073,215 @@ mod tests {
             );
         }
     }
+
+    /// Uma campanha com dois jogadores e um personagem vinculado ao primeiro.
+    ///
+    /// Devolve os tokens e o id do personagem. O do segundo jogador existe para
+    /// os testes poderem provar o que ele NAO alcanca.
+    async fn com_personagem(state: Arc<Daemon>, codigo: &str) -> (String, String, String) {
+        let token_a = token_de(Arc::clone(&state), codigo, "Edgar").await;
+        let token_b = token_de(Arc::clone(&state), codigo, "Mira").await;
+
+        let personagem = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+
+            let personagem = characters::create(vault, "Corvo").expect("personagem");
+            let jogadores = players::list(vault).expect("jogadores");
+            let edgar = jogadores.iter().find(|j| j.nome == "Edgar").expect("edgar");
+
+            players::link(vault, &edgar.id, &personagem.id).expect("vinculo");
+
+            personagem.id
+        };
+
+        (token_a, token_b, personagem)
+    }
+
+    async fn corpo(response: Response) -> String {
+        let bytes = to_bytes(response.into_body(), 65_536).await.expect("corpo");
+        String::from_utf8_lossy(&bytes).to_string()
+    }
+
+    #[tokio::test]
+    async fn lista_so_os_personagens_vinculados() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, _) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let meus = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "GET", "/eu/personagens", None))
+            .await
+            .expect("resposta");
+        assert_eq!(meus.status(), StatusCode::OK);
+        assert!(corpo(meus).await.contains("Corvo"));
+
+        // O outro jogador tem token valido e nao tem personagem nenhum: token
+        // diz quem ele e, o vinculo diz o que e dele.
+        let dele = router(Arc::clone(&state))
+            .oneshot(como(&token_b, "GET", "/eu/personagens", None))
+            .await
+            .expect("resposta");
+        assert_eq!(corpo(dele).await, "[]");
+    }
+
+    #[tokio::test]
+    async fn personagem_de_outro_responde_404() {
+        let (_dir, state, codigo) = daemon();
+        let (_, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        for uri in [
+            format!("/eu/personagens/{personagem}/anexos"),
+            format!("/eu/personagens/{personagem}/nota"),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token_b, "GET", &uri, None))
+                .await
+                .expect("resposta");
+
+            // 404 e nao 403: dizer "existe mas nao e seu" confirmaria a
+            // existencia do personagem a quem chutou o id.
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn nota_e_do_par_personagem_jogador() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let uri = format!("/eu/personagens/{personagem}/nota");
+
+        let gravou = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "PUT", &uri, Some(r#"{"texto":"o alcapao range"}"#)))
+            .await
+            .expect("resposta");
+        assert_eq!(gravou.status(), StatusCode::NO_CONTENT);
+
+        let leu = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "GET", &uri, None))
+            .await
+            .expect("resposta");
+        assert!(corpo(leu).await.contains("o alcapao range"));
+    }
+
+    #[tokio::test]
+    async fn anexo_do_personagem_nao_escapa_da_pasta() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            characters::write_anexo(vault, &personagem, "ficha.pdf", b"conteudo").expect("anexo");
+        }
+
+        // O que existe, o jogador vinculado le.
+        let ok = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "GET",
+                &format!("/eu/personagens/{personagem}/anexos/jogador/ficha.pdf"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(ok.status(), StatusCode::OK);
+        assert_eq!(corpo(ok).await, "conteudo");
+
+        // Travessia e autor invalido nao alcancam nada.
+        for uri in [
+            format!("/eu/personagens/{personagem}/anexos/jogador/../../../config.json"),
+            format!("/eu/personagens/{personagem}/anexos/mestre/ficha.pdf"),
+            format!("/eu/personagens/{personagem}/anexos/chute/ficha.pdf"),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token_a, "GET", &uri, None))
+                .await
+                .expect("resposta");
+
+            assert_ne!(response.status(), StatusCode::OK, "{uri}");
+            assert!(!corpo(response).await.contains("Campanha"), "{uri}");
+        }
+    }
+
+
+    #[tokio::test]
+    async fn jogador_nao_apaga_anexo_do_mestre() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+
+            let origem = _dir.path().join("ficha.pdf");
+            std::fs::write(&origem, b"do mestre").expect("arquivo");
+            characters::import_anexo(vault, &personagem, &origem).expect("anexo");
+        }
+
+        let recusa = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "DELETE",
+                &format!("/eu/personagens/{personagem}/anexos/mestre/ficha.pdf"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(recusa.status(), StatusCode::FORBIDDEN);
+
+        // E continua la: a recusa nao pode ser so a resposta.
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        assert_eq!(characters::list_anexos(vault, &personagem).expect("anexos").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn jogador_anexa_e_apaga_o_proprio() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let multipart = concat!(
+            "--X\r\n",
+            "Content-Disposition: form-data; name=\"file\"; filename=\"Meu Diario.txt\"\r\n",
+            "Content-Type: text/plain\r\n\r\n",
+            "anotei tudo\r\n",
+            "--X--\r\n",
+        );
+
+        let mut envio = como(
+            &token_a,
+            "POST",
+            &format!("/eu/personagens/{personagem}/anexos"),
+            None,
+        );
+        *envio.body_mut() = Body::from(multipart);
+        envio.headers_mut().insert(
+            "content-type",
+            "multipart/form-data; boundary=X".parse().expect("header"),
+        );
+
+        let criou = router(Arc::clone(&state)).oneshot(envio).await.expect("resposta");
+        assert_eq!(criou.status(), StatusCode::CREATED);
+        // O nome sai saneado, e o autor e de quem chamou -- nao do corpo.
+        let json = corpo(criou).await;
+        assert!(json.contains("meu-diario.txt"), "{json}");
+        assert!(json.contains("jogador"), "{json}");
+
+        let apagou = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "DELETE",
+                &format!("/eu/personagens/{personagem}/anexos/jogador/meu-diario.txt"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(apagou.status(), StatusCode::NO_CONTENT);
+
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        assert!(characters::list_anexos(vault, &personagem).expect("anexos").is_empty());
+    }
+
 }

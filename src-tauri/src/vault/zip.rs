@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::{Component, Path};
@@ -7,7 +8,7 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use super::atomic::write_json;
-use super::{players, Vault};
+use super::{characters, players, Vault};
 use crate::error::{AppError, AppResult};
 
 /// O que uma campanha exportada carrega de cada jogador.
@@ -27,7 +28,6 @@ use crate::error::{AppError, AppResult};
 pub struct PlayerMeta {
     pub id: String,
     pub nome: String,
-    pub rotulo: String,
     pub notas: String,
     pub entrou_em: i64,
     pub token_hash: String,
@@ -35,6 +35,14 @@ pub struct PlayerMeta {
 
 /// Nome do arquivo que descreve um jogador dentro de `jogadores/{id}/`.
 const PLAYER_META: &str = "_meta.json";
+
+/// As notas de um personagem, dentro de `personagens/{id}/`.
+///
+/// Arquivo proprio, e nao um campo do `personagens.json`: o indice e reescrito
+/// inteiro a cada renomeacao e a cada troca de miniatura, e carregar dentro
+/// dele o texto de todos os jogadores faria cada um desses gestos regravar
+/// paginas de nota.
+const CHARACTER_NOTES: &str = "_notas.json";
 
 /// Diretorio que NAO viaja.
 ///
@@ -78,6 +86,13 @@ pub fn export(vault: &Vault, dest: &Path) -> AppResult<()> {
     // texto dos jogadores, que e o que estava ilegivel de todo jeito.
     if let Err(cause) = write_player_meta(vault) {
         log::warn!("export sem o texto dos jogadores: {cause}");
+    }
+
+    // As notas de personagem, pelo mesmo motivo e com a mesma tolerancia: elas
+    // vivem no banco, que nao viaja, e um banco ilegivel nao pode custar o
+    // export das cenas e dos anexos.
+    if let Err(cause) = write_character_notes(vault) {
+        log::warn!("export sem as notas de personagem: {cause}");
     }
 
     let file = File::create(dest)?;
@@ -160,11 +175,33 @@ fn write_player_meta(vault: &Vault) -> AppResult<()> {
             &PlayerMeta {
                 id: player.id,
                 nome: player.nome,
-                rotulo: player.rotulo,
                 notas: player.notas,
                 entrou_em: player.entrou_em,
                 token_hash: hash.unwrap_or_default(),
             },
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Grava `personagens/{id}/_notas.json` para cada personagem do indice.
+fn write_character_notes(vault: &Vault) -> AppResult<()> {
+    for personagem in characters::load(vault)? {
+        let notas = players::notes_of_character(vault, &personagem.id)?;
+
+        // Personagem sem nota nenhuma nao ganha arquivo: um `{}` por
+        // personagem seria sujeira no zip e no diretorio de quem importa.
+        if notas.is_empty() {
+            continue;
+        }
+
+        let dir = characters::dir(vault, &personagem.id);
+        std::fs::create_dir_all(&dir)?;
+
+        write_json(
+            &dir.join(CHARACTER_NOTES),
+            &notas.into_iter().collect::<BTreeMap<String, String>>(),
         )?;
     }
 
@@ -281,7 +318,11 @@ pub fn import(zip_path: &Path, parent: &Path) -> AppResult<Vault> {
     let vault = Vault::open(&destino)?;
 
     // Reconstroi o banco da sessao a partir do que veio no zip.
+    //
+    // Jogadores primeiro: as notas sao chaveadas por id de jogador, e restaurar
+    // na ordem inversa gravaria nota de gente que o banco ainda nao conhece.
     restore_players(&vault)?;
+    restore_character_notes(&vault)?;
 
     Ok(vault)
 }
@@ -316,6 +357,27 @@ fn read_config<R: Read + Seek>(arquivo: &mut ZipArchive<R>) -> AppResult<super::
 ///
 /// Levando o hash junto, o celular de cada jogador continua valendo -- e por
 /// isso a mesa nao precisa entrar de novo depois de o mestre trocar de maquina.
+/// Le de volta as notas de personagem que o zip trouxe.
+///
+/// Silencioso quando nao ha nada: campanha exportada por uma versao anterior
+/// nao tem `_notas.json`, e isso e estado valido, nao erro de importacao.
+fn restore_character_notes(vault: &Vault) -> AppResult<()> {
+    for personagem in characters::load(vault)? {
+        let caminho = characters::dir(vault, &personagem.id).join(CHARACTER_NOTES);
+
+        let Some(notas): Option<BTreeMap<String, String>> = super::atomic::read_json(&caminho)?
+        else {
+            continue;
+        };
+
+        for (jogador_id, texto) in notas {
+            players::set_note(vault, &personagem.id, &jogador_id, &texto)?;
+        }
+    }
+
+    Ok(())
+}
+
 fn restore_players(vault: &Vault) -> AppResult<()> {
     let dir = vault.root.join("jogadores");
 
@@ -381,6 +443,93 @@ mod tests {
         std::fs::write(vault.assets_dir().join("a1.webp"), b"bytes do mapa").expect("asset");
 
         vault
+    }
+
+    /// O personagem sobrevive ao zip, com os anexos dos dois autores.
+    ///
+    /// E a afirmacao central da segmentacao: o que dura deixou de estar
+    /// pendurado na identidade do jogador, que nem viaja. Se este teste
+    /// quebrar, `personagens/` parou de ser conteudo de campanha e a ficha
+    /// voltou a existir so na maquina onde foi anexada.
+    #[test]
+    fn personagem_viaja_no_zip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = campanha(dir.path(), "A Marca do Javali");
+
+        let personagem = super::super::characters::create(&vault, "Corvo").expect("personagem");
+        super::super::characters::write_anexo(&vault, &personagem.id, "ficha.pdf", b"do jogador")
+            .expect("anexo");
+        super::super::characters::set_campo(
+            &vault,
+            &personagem.id,
+            super::super::characters::Campo::Miniatura,
+            Some("a1"),
+        )
+        .expect("miniatura");
+
+        let zip_path = dir.path().join("saida.ato20.zip");
+        export(&vault, &zip_path).expect("export");
+
+        let importada =
+            import(&zip_path, &dir.path().join("importadas")).expect("import");
+
+        let lista = super::super::characters::load(&importada).expect("personagens");
+        assert_eq!(lista.len(), 1);
+        assert_eq!(lista[0].nome, "Corvo");
+        // A miniatura viaja como id do acervo, e o asset viaja junto no mesmo
+        // zip: e o que faz o vinculo continuar valendo do outro lado.
+        assert_eq!(lista[0].miniatura.as_deref(), Some("a1"));
+
+        let anexos = super::super::characters::list_anexos(&importada, &personagem.id)
+            .expect("anexos");
+        assert_eq!(anexos.len(), 1);
+        assert_eq!(anexos[0].arquivo, "ficha.pdf");
+        assert_eq!(
+            super::super::characters::read_anexo(
+                &importada,
+                &personagem.id,
+                super::super::characters::Autor::Jogador,
+                "ficha.pdf",
+            )
+            .expect("bytes"),
+            b"do jogador"
+        );
+    }
+
+    /// A nota do jogador sobre o personagem sobrevive ao zip.
+    ///
+    /// Ela vive no SQLite, que NAO viaja: sem materializar, a campanha chegaria
+    /// do outro lado com personagem e anexos intactos e sem uma linha do que os
+    /// jogadores escreveram.
+    #[test]
+    fn nota_de_personagem_viaja_no_zip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = campanha(dir.path(), "A Marca do Javali");
+
+        let personagem = characters::create(&vault, "Corvo").expect("personagem");
+        // `join` devolve o jogador e o token em claro; aqui basta o id dele.
+        let (edgar, _token) = players::join(&vault, "Edgar").expect("entrar");
+        let jogador = edgar.id;
+
+        players::link(&vault, &jogador, &personagem.id).expect("vinculo");
+        players::set_note(&vault, &personagem.id, &jogador, "o alcapao range").expect("nota");
+
+        let zip_path = dir.path().join("saida.ato20.zip");
+        export(&vault, &zip_path).expect("export");
+
+        let importada = import(&zip_path, &dir.path().join("importadas")).expect("import");
+
+        // O id do jogador tambem viaja, no `_meta.json` dele: e o que faz a
+        // nota reencontrar o dono do outro lado.
+        assert_eq!(
+            players::note(&importada, &personagem.id, &jogador).expect("nota"),
+            "o alcapao range"
+        );
+        // E o vinculo NAO viaja, de proposito: quem senta na mesa e da maquina,
+        // nao da campanha. O mestre revincula ao importar.
+        assert!(players::characters_of(&importada, &jogador)
+            .expect("vinculos")
+            .is_empty());
     }
 
     #[test]
@@ -465,7 +614,6 @@ mod tests {
         let vault = campanha(dir.path(), "Campanha");
 
         let (player, token) = players::join(&vault, "Ana").expect("join");
-        players::set_label(&vault, &player.id, "a ladina").expect("label");
         players::update_self(&vault, &player.id, None, Some("a chave esta no poco"))
             .expect("notas");
 
@@ -487,7 +635,6 @@ mod tests {
 
         assert_eq!(achada.id, player.id);
         assert_eq!(achada.nome, "Ana");
-        assert_eq!(achada.rotulo, "a ladina");
         assert_eq!(achada.notas, "a chave esta no poco");
         assert_eq!(
             std::fs::read(players::attachments_dir(&importada, &player.id).join("ficha.pdf"))

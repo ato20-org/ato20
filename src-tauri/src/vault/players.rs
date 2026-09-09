@@ -22,9 +22,14 @@ use crate::error::{AppError, AppResult};
 pub struct Player {
     pub id: String,
     /// Nome que o proprio jogador escolheu.
+    ///
+    /// O unico nome que existe agora. Havia tambem um `rotulo` -- apelido que o
+    /// mestre dava -- e ele saiu junto com a segmentacao de personagem: servia
+    /// para a tela do mestre mostrar algo com sentido em vez do que o jogador
+    /// digitou, e o "algo com sentido" era quase sempre o personagem. Agora o
+    /// vinculo com `personagens` responde isso com dado, e nao com uma string
+    /// digitada a mao que nao acompanha quando o personagem muda.
     pub nome: String,
-    /// Apelido que o mestre deu. So o mestre escreve, e ele escreve por IPC.
-    pub rotulo: String,
     pub notas: String,
     pub entrou_em: i64,
     /// Ultima vez que este jogador falou com o daemon.
@@ -35,7 +40,7 @@ pub struct Player {
 }
 
 /// Versao do schema do banco da campanha, em `PRAGMA user_version`.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 3;
 
 /// Abre o banco da campanha.
 ///
@@ -73,6 +78,10 @@ fn migrate(conn: &Connection) -> AppResult<()> {
                  id         text primary key,
                  token_hash text not null unique,
                  nome       text not null,
+                 -- Derrubada na v3. Fica aqui porque migracao e HISTORICO, nao
+                 -- estado desejado: um banco que ja passou pela v1 tem esta
+                 -- coluna, e reescrever o passado faria o `drop` da v3 falhar
+                 -- num banco novo por tentar derrubar o que nunca existiu.
                  rotulo     text not null default '',
                  notas      text not null default '',
                  entrou_em  integer not null,
@@ -81,21 +90,57 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         )?;
     }
 
+    if current < 2 {
+        // O vinculo mora AQUI, e nao no arquivo do personagem, porque o
+        // personagem viaja no zip e o jogador nao. Guardado do outro lado, uma
+        // campanha importada chegaria cheia de ids de jogador que nao existem
+        // na maquina de destino -- e o mestre teria de limpar sujeira antes de
+        // poder vincular quem senta na mesa dele.
+        //
+        // Sem `foreign key` para `personagens.json`: ele e arquivo do vault,
+        // nao tabela. Quem garante a coerencia e o comando que remove o
+        // personagem, chamando `unlink_character`.
+        conn.execute_batch(
+            "create table if not exists jogador_personagem (
+                 jogador_id    text not null,
+                 personagem_id text not null,
+                 vinculado_em  integer not null,
+                 primary key (jogador_id, personagem_id)
+             );
+
+             create table if not exists personagem_notas (
+                 personagem_id text not null,
+                 jogador_id    text not null,
+                 texto         text not null default '',
+                 gravado_em    integer not null,
+                 primary key (personagem_id, jogador_id)
+             );",
+        )?;
+    }
+
+    if current < 3 {
+        // O apelido do mestre saiu. Ver a nota em `Player::nome`: quem responde
+        // "quem e esta pessoa na mesa" passou a ser o personagem vinculado.
+        //
+        // `drop column` de verdade, e nao a coluna abandonada: deixa-la ali
+        // faria o proximo a ler o schema procurar quem escreve nela.
+        conn.execute_batch("alter table jogadores drop column rotulo;")?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
     Ok(())
 }
 
-const COLUNAS: &str = "id, nome, rotulo, notas, entrou_em, visto_em";
+const COLUNAS: &str = "id, nome, notas, entrou_em, visto_em";
 
 fn read_player(row: &rusqlite::Row<'_>) -> rusqlite::Result<Player> {
     Ok(Player {
         id: row.get(0)?,
         nome: row.get(1)?,
-        rotulo: row.get(2)?,
-        notas: row.get(3)?,
-        entrou_em: row.get(4)?,
-        visto_em: row.get(5)?,
+        notas: row.get(2)?,
+        entrou_em: row.get(3)?,
+        visto_em: row.get(4)?,
     })
 }
 
@@ -154,7 +199,6 @@ pub fn join(vault: &Vault, nome: &str) -> AppResult<(Player, String)> {
         // Teto no nome: ele aparece na tela do mestre, e um nome de dez mil
         // caracteres vindo de um celular na rede e entrada hostil, nao nome.
         nome: nome.chars().take(60).collect(),
-        rotulo: String::new(),
         notas: String::new(),
         entrou_em: agora,
         visto_em: agora,
@@ -162,8 +206,8 @@ pub fn join(vault: &Vault, nome: &str) -> AppResult<(Player, String)> {
 
     let conn = open(vault)?;
     conn.execute(
-        "insert into jogadores (id, token_hash, nome, rotulo, notas, entrou_em, visto_em)
-         values (?1, ?2, ?3, '', '', ?4, ?4)",
+        "insert into jogadores (id, token_hash, nome, notas, entrou_em, visto_em)
+         values (?1, ?2, ?3, '', ?4, ?4)",
         rusqlite::params![player.id, hash_token(&token), player.nome, agora],
     )?;
 
@@ -235,15 +279,14 @@ pub fn restore(vault: &Vault, id: &str, meta: &super::zip::PlayerMeta) -> AppRes
     };
 
     conn.execute(
-        "insert into jogadores (id, token_hash, nome, rotulo, notas, entrou_em, visto_em)
-         values (?1, ?2, ?3, ?4, ?5, ?6, 0)
+        "insert into jogadores (id, token_hash, nome, notas, entrou_em, visto_em)
+         values (?1, ?2, ?3, ?4, ?5, 0)
          on conflict(id) do update set
-             token_hash = ?2, nome = ?3, rotulo = ?4, notas = ?5, entrou_em = ?6",
+             token_hash = ?2, nome = ?3, notas = ?4, entrou_em = ?5",
         rusqlite::params![
             id,
             hash,
             meta.nome.chars().take(60).collect::<String>(),
-            meta.rotulo.chars().take(60).collect::<String>(),
             meta.notas.chars().take(20_000).collect::<String>(),
             meta.entrou_em,
         ],
@@ -273,7 +316,7 @@ pub fn list(vault: &Vault) -> AppResult<Vec<Player>> {
 
 /// O que o proprio jogador pode mudar: o nome e as notas.
 ///
-/// `rotulo` esta fora daqui de proposito -- e o apelido que o mestre da, e nem
+/// Havia um `rotulo` fora daqui de proposito -- o apelido do mestre, e nem
 /// o dono da linha escreve nele. Era um privilegio de coluna no Postgres; aqui
 /// e a ausencia do campo nesta funcao.
 pub fn update_self(
@@ -307,17 +350,6 @@ pub fn update_self(
     Ok(())
 }
 
-/// O apelido dado pelo mestre. Chamado por IPC, nunca por HTTP.
-pub fn set_label(vault: &Vault, id: &str, rotulo: &str) -> AppResult<()> {
-    let conn = open(vault)?;
-    conn.execute(
-        "update jogadores set rotulo = ?1 where id = ?2",
-        rusqlite::params![rotulo.trim().chars().take(60).collect::<String>(), id],
-    )?;
-
-    Ok(())
-}
-
 /// Tira o jogador da mesa, com os anexos dele.
 ///
 /// Apaga arquivo, ao contrario de tudo o mais no vault. E a excecao certa: o
@@ -336,6 +368,207 @@ pub fn remove(vault: &Vault, id: &str) -> AppResult<()> {
     }
 
     Ok(())
+}
+
+// --- vinculo com personagem -------------------------------------------------
+//
+// Mora neste modulo, e nao num `roster.rs` proprio, porque quem abre o banco e
+// aplica a migracao esta aqui. Espalhar o schema por dois arquivos faria a
+// proxima migracao ter de ser escrita em dois lugares que precisam concordar.
+
+/// Vincula um personagem a um jogador.
+///
+/// Idempotente: vincular duas vezes nao e erro nem duplica. A tela do mestre
+/// pode chamar isto a partir de um estado que ela leu segundos antes, e falhar
+/// por corrida seria pedir a ele que tentasse de novo sem nada ter mudado.
+pub fn link(vault: &Vault, jogador_id: &str, personagem_id: &str) -> AppResult<()> {
+    open(vault)?.execute(
+        "insert into jogador_personagem (jogador_id, personagem_id, vinculado_em)
+         values (?1, ?2, ?3)
+         on conflict(jogador_id, personagem_id) do nothing",
+        rusqlite::params![jogador_id, personagem_id, now_ms()],
+    )?;
+
+    Ok(())
+}
+
+pub fn unlink(vault: &Vault, jogador_id: &str, personagem_id: &str) -> AppResult<()> {
+    open(vault)?.execute(
+        "delete from jogador_personagem where jogador_id = ?1 and personagem_id = ?2",
+        rusqlite::params![jogador_id, personagem_id],
+    )?;
+
+    Ok(())
+}
+
+/// Os personagens de um jogador, por id, do vinculo mais antigo para o mais novo.
+///
+/// Devolve ids, e nao personagens: quem tem o `personagens.json` e o vault, e
+/// este modulo nao deveria ler arquivo de la para nao criar uma dependencia
+/// circular entre o banco e o indice.
+pub fn characters_of(vault: &Vault, jogador_id: &str) -> AppResult<Vec<String>> {
+    let conn = open(vault)?;
+
+    let mut stmt = conn.prepare(
+        "select personagem_id from jogador_personagem
+         where jogador_id = ?1 order by vinculado_em asc",
+    )?;
+
+    let ids = stmt
+        .query_map([jogador_id], |row| row.get(0))?
+        .collect::<Result<Vec<String>, _>>()?;
+
+    Ok(ids)
+}
+
+/// Todos os vinculos da campanha, como pares (jogador, personagem).
+///
+/// Uma chamada, e nao uma por jogador: a lista do mestre mostra o personagem de
+/// cada um embaixo do nome, e resolver isso jogador por jogador seria N idas ao
+/// banco para desenhar uma lista de cinco linhas.
+pub fn all_links(vault: &Vault) -> AppResult<Vec<(String, String)>> {
+    let conn = open(vault)?;
+
+    let mut stmt = conn.prepare(
+        "select jogador_id, personagem_id from jogador_personagem
+         order by vinculado_em asc",
+    )?;
+
+    let pares = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(pares)
+}
+
+/// Quem esta vinculado a um personagem.
+///
+/// Existe para a tela do mestre poder dizer "esta com o Edgar" sem varrer a
+/// lista de jogadores inteira perguntando um por um.
+pub fn players_of(vault: &Vault, personagem_id: &str) -> AppResult<Vec<String>> {
+    let conn = open(vault)?;
+
+    let mut stmt = conn.prepare(
+        "select jogador_id from jogador_personagem
+         where personagem_id = ?1 order by vinculado_em asc",
+    )?;
+
+    let ids = stmt
+        .query_map([personagem_id], |row| row.get(0))?
+        .collect::<Result<Vec<String>, _>>()?;
+
+    Ok(ids)
+}
+
+/// Apaga do banco tudo que apontava para um personagem que deixou de existir.
+///
+/// Chamado pelo comando que remove o personagem, depois de o vault ter
+/// removido a pasta. Sem isto, o vinculo sobreviveria ao personagem e a Plateia
+/// pediria um id que nao esta mais no indice.
+pub fn forget_character(vault: &Vault, personagem_id: &str) -> AppResult<()> {
+    let conn = open(vault)?;
+
+    conn.execute(
+        "delete from jogador_personagem where personagem_id = ?1",
+        [personagem_id],
+    )?;
+    conn.execute(
+        "delete from personagem_notas where personagem_id = ?1",
+        [personagem_id],
+    )?;
+
+    Ok(())
+}
+
+/// O jogador pode ver este personagem.
+///
+/// A pergunta que toda rota da Plateia faz antes de entregar arquivo. Um
+/// jogador com token valido continua sendo um estranho para os personagens que
+/// nao sao dele.
+pub fn is_linked(vault: &Vault, jogador_id: &str, personagem_id: &str) -> AppResult<bool> {
+    let conn = open(vault)?;
+
+    let count: i64 = conn.query_row(
+        "select count(*) from jogador_personagem where jogador_id = ?1 and personagem_id = ?2",
+        rusqlite::params![jogador_id, personagem_id],
+        |row| row.get(0),
+    )?;
+
+    Ok(count > 0)
+}
+
+// --- notas de personagem ----------------------------------------------------
+
+/// Teto do texto de uma nota.
+///
+/// Existe pelo mesmo motivo do teto de anexo: a escrita vem de um celular na
+/// rede. Vinte mil caracteres sao umas dez paginas, folgado para o que se anota
+/// sobre um personagem numa campanha.
+const MAX_NOTA: usize = 20_000;
+
+pub fn note(vault: &Vault, personagem_id: &str, jogador_id: &str) -> AppResult<String> {
+    let conn = open(vault)?;
+
+    let texto = conn
+        .query_row(
+            "select texto from personagem_notas where personagem_id = ?1 and jogador_id = ?2",
+            rusqlite::params![personagem_id, jogador_id],
+            |row| row.get(0),
+        )
+        .or_else(|cause| match cause {
+            // Personagem sem nota ainda: texto vazio, nao erro. E o estado
+            // inicial de todo personagem novo.
+            rusqlite::Error::QueryReturnedNoRows => Ok(String::new()),
+            outro => Err(outro),
+        })?;
+
+    Ok(texto)
+}
+
+/// Grava a nota de um jogador sobre um personagem.
+///
+/// O mesmo caminho serve ao jogador, pela rota, e ao mestre, pelo IPC -- ele
+/// pode editar a nota do jogador, e o `jogador_id` diz de quem e a nota que
+/// esta sendo escrita, nao quem esta escrevendo. Quem confere permissao e a
+/// camada de cima: a rota exige o token do jogador e que ele esteja vinculado.
+pub fn set_note(vault: &Vault, personagem_id: &str, jogador_id: &str, texto: &str) -> AppResult<()> {
+    open(vault)?.execute(
+        "insert into personagem_notas (personagem_id, jogador_id, texto, gravado_em)
+         values (?1, ?2, ?3, ?4)
+         on conflict(personagem_id, jogador_id) do update set texto = ?3, gravado_em = ?4",
+        rusqlite::params![
+            personagem_id,
+            jogador_id,
+            texto.chars().take(MAX_NOTA).collect::<String>(),
+            now_ms(),
+        ],
+    )?;
+
+    Ok(())
+}
+
+/// Todas as notas de um personagem, por jogador.
+///
+/// Existe para o export: as notas vivem no banco, que nao viaja no zip, e sem
+/// materializa-las uma campanha importada chegaria com os personagens e os
+/// anexos intactos e sem uma linha do que os jogadores escreveram.
+///
+/// Inclui nota de quem NAO esta mais vinculado, de proposito: desvincular e
+/// mudanca de acesso, nao destruicao, e o zip nao deveria ser mais destrutivo
+/// que a operacao normal.
+pub fn notes_of_character(vault: &Vault, personagem_id: &str) -> AppResult<Vec<(String, String)>> {
+    let conn = open(vault)?;
+
+    let mut stmt = conn.prepare(
+        "select jogador_id, texto from personagem_notas
+         where personagem_id = ?1 order by jogador_id asc",
+    )?;
+
+    let notas = stmt
+        .query_map([personagem_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(notas)
 }
 
 // --- anexos -----------------------------------------------------------------
@@ -574,11 +807,10 @@ mod tests {
     }
 
     #[test]
-    fn jogador_muda_nome_e_notas_mas_nao_o_rotulo() {
+    fn jogador_muda_o_proprio_nome_e_as_proprias_notas() {
         let (_dir, vault) = campanha();
 
         let (player, _) = join(&vault, "Edgar").expect("join");
-        set_label(&vault, &player.id, "o ladino").expect("label");
 
         update_self(&vault, &player.id, Some("Edgar, o Rápido"), Some("achei uma chave"))
             .expect("update");
@@ -586,9 +818,6 @@ mod tests {
         let depois = &list(&vault).expect("list")[0];
         assert_eq!(depois.nome, "Edgar, o Rápido");
         assert_eq!(depois.notas, "achei uma chave");
-        // `rotulo` nao e alcancavel por `update_self`: era privilegio de coluna
-        // no Postgres, aqui e a ausencia do campo na funcao.
-        assert_eq!(depois.rotulo, "o ladino");
     }
 
     #[test]
@@ -720,4 +949,85 @@ mod tests {
         // nenhuma, e ninguem o apagaria depois.
         assert!(!temp.exists());
     }
+
+    #[test]
+    fn vincula_e_lista() {
+        let (_tmp, vault) = campanha();
+
+        link(&vault, "j1", "p1").unwrap();
+        link(&vault, "j1", "p2").unwrap();
+        link(&vault, "j2", "p1").unwrap();
+
+        assert_eq!(characters_of(&vault, "j1").unwrap(), vec!["p1", "p2"]);
+        assert_eq!(players_of(&vault, "p1").unwrap(), vec!["j1", "j2"]);
+    }
+
+    #[test]
+    fn vincular_duas_vezes_nao_duplica() {
+        let (_tmp, vault) = campanha();
+
+        link(&vault, "j1", "p1").unwrap();
+        link(&vault, "j1", "p1").unwrap();
+
+        assert_eq!(characters_of(&vault, "j1").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn vinculo_decide_o_acesso() {
+        let (_tmp, vault) = campanha();
+        link(&vault, "j1", "p1").unwrap();
+
+        assert!(is_linked(&vault, "j1", "p1").unwrap());
+        // Token valido nao basta: o personagem de outro continua fechado.
+        assert!(!is_linked(&vault, "j2", "p1").unwrap());
+        assert!(!is_linked(&vault, "j1", "p9").unwrap());
+    }
+
+    #[test]
+    fn desvincular_nao_apaga_a_nota() {
+        let (_tmp, vault) = campanha();
+        link(&vault, "j1", "p1").unwrap();
+        set_note(&vault, "p1", "j1", "o alcapao").unwrap();
+
+        unlink(&vault, "j1", "p1").unwrap();
+
+        // Desvincular e mudanca de acesso, nao destruicao: revincular devolve o
+        // que o jogador escreveu. Quem apaga nota e remover o personagem.
+        assert_eq!(note(&vault, "p1", "j1").unwrap(), "o alcapao");
+    }
+
+    #[test]
+    fn nota_nasce_vazia_e_e_por_par() {
+        let (_tmp, vault) = campanha();
+
+        assert_eq!(note(&vault, "p1", "j1").unwrap(), "");
+
+        set_note(&vault, "p1", "j1", "do j1").unwrap();
+        set_note(&vault, "p1", "j2", "do j2").unwrap();
+
+        assert_eq!(note(&vault, "p1", "j1").unwrap(), "do j1");
+        assert_eq!(note(&vault, "p1", "j2").unwrap(), "do j2");
+    }
+
+    #[test]
+    fn nota_tem_teto() {
+        let (_tmp, vault) = campanha();
+
+        set_note(&vault, "p1", "j1", &"a".repeat(MAX_NOTA + 500)).unwrap();
+
+        assert_eq!(note(&vault, "p1", "j1").unwrap().chars().count(), MAX_NOTA);
+    }
+
+    #[test]
+    fn remover_personagem_leva_vinculo_e_nota() {
+        let (_tmp, vault) = campanha();
+        link(&vault, "j1", "p1").unwrap();
+        set_note(&vault, "p1", "j1", "algo").unwrap();
+
+        forget_character(&vault, "p1").unwrap();
+
+        assert!(characters_of(&vault, "j1").unwrap().is_empty());
+        assert_eq!(note(&vault, "p1", "j1").unwrap(), "");
+    }
+
 }

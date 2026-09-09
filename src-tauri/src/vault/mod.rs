@@ -1,6 +1,7 @@
 pub mod assets;
 pub mod atomic;
 pub mod board;
+pub mod characters;
 pub mod mime;
 pub mod players;
 pub mod session;
