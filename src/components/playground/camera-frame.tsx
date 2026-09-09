@@ -104,7 +104,7 @@ export function CameraFrame({ camera, onChange }: CameraFrameProps) {
           }}
           onPointerDown={startMove}
         >
-          a mesa vê isto
+          câmera
         </span>
       </div>
 
