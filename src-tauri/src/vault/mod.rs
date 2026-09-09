@@ -3,6 +3,7 @@ pub mod atomic;
 pub mod board;
 pub mod characters;
 pub mod mime;
+pub mod mini;
 pub mod players;
 pub mod session;
 pub mod slug;

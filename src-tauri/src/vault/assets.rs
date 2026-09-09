@@ -206,6 +206,16 @@ pub fn import(
             continue;
         }
 
+        // Aquece a miniatura aqui, e nao so sob demanda: o arquivo acabou de
+        // ser lido, o disco esta quente, e o mestre normalmente importa antes
+        // de abrir a lista. Falhar nao recusa o arquivo -- o daemon gera de
+        // novo no primeiro pedido, e se nem la der, serve o original.
+        if meta.kind == "image" {
+            if let Err(cause) = super::mini::ensure(vault, &meta) {
+                log::warn!("acervo: {} entrou sem miniatura: {cause}", meta.name);
+            }
+        }
+
         indice.push(meta.clone());
         aceitos.push(meta);
     }
@@ -238,6 +248,8 @@ pub fn delete(vault: &Vault, id: &str) -> AppResult<()> {
             log::warn!("acervo: {} saiu do indice mas o binario ficou: {cause}", meta.id);
         }
     }
+
+    super::mini::discard(vault, &meta.id);
 
     Ok(())
 }

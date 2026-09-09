@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { MINIATURA } from "@/lib/miniatura";
 import { cn } from "@/lib/utils";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
@@ -207,7 +208,7 @@ function Anexo({
   assetId: string;
   nome: string | undefined;
 }) {
-  const url = useAssetUrl(assetId);
+  const url = useAssetUrl(assetId, true);
 
   const detachFromPin = useSceneStore((state) => state.detachFromPin);
   const spotlight = useSpotlightStore((state) => state.spotlight);
@@ -223,7 +224,13 @@ function Anexo({
       <span className="bg-background h-10 w-14 shrink-0 overflow-hidden rounded">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="" draggable={false} className="size-full object-cover" />
+          <img
+            src={url}
+            alt=""
+            draggable={false}
+            className="size-full object-cover"
+            {...MINIATURA}
+          />
         ) : null}
       </span>
 

@@ -26,6 +26,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useFolderList } from "@/hooks/use-folder-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { MINIATURA } from "@/lib/miniatura";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import {
   hasAssetDrag,
@@ -421,7 +422,7 @@ function AssetRow({
   onMove,
   onRemove,
 }: AssetRowProps) {
-  const url = useAssetUrl(asset.id);
+  const url = useAssetUrl(asset.id, true);
 
   return (
     // Arrastável inteiro, e não só a miniatura: o alvo de 40px do polegar seria
@@ -440,6 +441,7 @@ function AssetRow({
             alt=""
             className="size-full object-cover"
             draggable={false}
+            {...MINIATURA}
           />
         ) : null}
       </span>
