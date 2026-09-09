@@ -3,12 +3,13 @@
 import { useRef } from "react";
 import { Maximize, Minimize } from "lucide-react";
 
+import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { cn } from "@/lib/utils";
-import type { Portrait, Scene } from "@/types/scene";
+import type { Medida, Portrait, Scene } from "@/types/scene";
 
 /**
  * A cena no celular do jogador. Só recebe — nenhum controle sobre nada.
@@ -30,11 +31,14 @@ import type { Portrait, Scene } from "@/types/scene";
 export function PlateiaStage({
   scene,
   portraits,
+  medida,
   synced,
   stalled,
 }: {
   scene: Scene | null;
   portraits: Portrait[];
+  /** A régua do mestre, enquanto ele mede. `null` = ninguém medindo. */
+  medida: Medida | null;
   synced: boolean;
   stalled: boolean;
 }) {
@@ -68,6 +72,13 @@ export function PlateiaStage({
           {scene ? (
             <div key={scene.id} className="scene-fade-in absolute inset-0">
               <SceneLayer scene={scene} portraits={portraits} smooth />
+
+              {/* A régua, como na TV: dentro do palco porque as pontas são
+                  coordenadas de cena, e fora do `SceneLayer` porque ela não é
+                  conteúdo do mapa. */}
+              {medida && scene.grid ? (
+                <RulerOverlay de={medida.de} para={medida.para} grid={scene.grid} />
+              ) : null}
             </div>
           ) : null}
         </SceneStage>

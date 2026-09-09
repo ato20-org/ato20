@@ -1,7 +1,8 @@
 "use client";
 
-import { Hand, MapPin, MousePointer2, SquareDashedBottom } from "lucide-react";
+import { Eraser, Hand, MapPin, MousePointer2, Pencil, SquareDashedBottom } from "lucide-react";
 
+import { PencilControl } from "@/components/operator/pencil-control";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
@@ -30,6 +31,18 @@ const TOOLS: Array<{ tool: Tool; label: string; hint: string; icon: typeof Mouse
     label: "Ponto de anotação",
     hint: "Clique no mapa para cravar um ponto com nota e anexos. Só você vê — nem a TV nem os celulares recebem.",
     icon: MapPin,
+  },
+  {
+    tool: "lapis",
+    label: "Lápis",
+    hint: "Arraste para riscar o mapa à mão livre. A mesa vê. Cor e espessura ficam no botão ao lado.",
+    icon: Pencil,
+  },
+  {
+    tool: "borracha",
+    label: "Borracha",
+    hint: "Passe sobre um risco para apagá-lo inteiro. Ctrl+Z devolve.",
+    icon: Eraser,
   },
 ];
 
@@ -72,6 +85,10 @@ export function OperatorToolbar() {
           </TooltipContent>
         </Tooltip>
       ))}
+
+      {/* Depois da fileira, e só com o lápis na mão: é ajuste do lápis, não uma
+          sexta ferramenta. */}
+      <PencilControl />
     </div>
   );
 }

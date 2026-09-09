@@ -1,6 +1,7 @@
 "use client";
 
 import { SessionAudio } from "@/components/playground/session-audio";
+import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
@@ -15,7 +16,7 @@ import { useSubscription } from "@/hooks/use-scene-broadcast";
  * fluxo, e é isso que permite esta tela estar em qualquer aparelho da casa.
  */
 export function ViewerStage({ codigo }: { codigo: string }) {
-  const { scene, track, volume, portraits, spotlight, synced, stalled } =
+  const { scene, track, volume, portraits, spotlight, medida, synced, stalled } =
     useSubscription(codigo);
 
   return (
@@ -30,6 +31,13 @@ export function ViewerStage({ codigo }: { codigo: string }) {
         {scene ? (
           <div key={scene.id} className="scene-fade-in absolute inset-0">
             <SceneLayer scene={scene} portraits={portraits} smooth />
+
+            {/* A régua do mestre, enquanto ele mede. Dentro do palco porque as
+                pontas são coordenadas de cena, e fora do `SceneLayer` porque
+                ela não é conteúdo do mapa -- some quando ele solta. */}
+            {medida && scene.grid ? (
+              <RulerOverlay de={medida.de} para={medida.para} grid={scene.grid} />
+            ) : null}
           </div>
         ) : null}
       </SceneStage>

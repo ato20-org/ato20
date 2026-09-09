@@ -126,6 +126,7 @@ export function createSubscriberChannel(base: string, codigo: string): SceneChan
             // da faixa: o padrão é o estado certo, e não silêncio.
             volume: state.volume ?? DEFAULT_SESSION_VOLUME,
             spotlight: state.spotlight ?? null,
+            medida: state.medida ?? null,
           });
         } catch {
           // O daemon valida que é JSON antes de repassar, então isto só

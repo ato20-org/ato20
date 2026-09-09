@@ -1,4 +1,4 @@
-import type { Portrait, Scene, SessionTrack, Spotlight } from "@/types/scene";
+import type { Medida, Portrait, Scene, SessionTrack, Spotlight } from "@/types/scene";
 
 /**
  * Tudo que um espectador precisa saber.
@@ -27,6 +27,8 @@ export type LiveState = {
   portraits: Portrait[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
+  /** A medida em curso da régua. `null` = ninguém medindo. */
+  medida: Medida | null;
 };
 
 /**

@@ -41,6 +41,7 @@ import {
   selectLiveScene,
   useSceneStore,
 } from "@/lib/store/use-scene-store";
+import { useReguaStore } from "@/lib/store/use-regua-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -87,6 +88,7 @@ export function OperatorShell() {
   const portraits = retratosDaCena(guardados, liveScene?.items ?? [], personagens ?? []);
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
+  const medida = useReguaStore((state) => state.medida);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale
@@ -106,7 +108,16 @@ export function OperatorShell() {
   //
   // O volume viaja FORA da faixa: é da sessão, e trocar de música não mexe
   // nele.
-  usePublisher({ scene: liveScene, track, volume: trackVolume, portraits, spotlight });
+  // A medida entra no quadro publicado: a mesa acompanha a conta enquanto o
+  // mestre mede. Ver `useReguaStore`.
+  usePublisher({
+    scene: liveScene,
+    track,
+    volume: trackVolume,
+    portraits,
+    spotlight,
+    medida,
+  });
 
   // A fila arruma o elenco da cena EM EDIÇÃO, que é a que o mestre vê no palco.
   // A publicação acima usa a que está no ar. Ver `useFilaDeRetratos`.
@@ -158,7 +169,18 @@ export function OperatorShell() {
             {/* Painel fechado deixa um alvo flutuando no canto de cima do palco,
                 do lado dele. É o caminho de volta: sem isso, fechar um painel o
                 deixaria inalcançável. */}
-            <div className="absolute top-2 left-2 z-10">
+            {/* Canto de cima à esquerda: o caminho de volta do painel fechado, e
+                o índice de pontos.
+
+                Os dois são a mesma coisa — alcançar o que está fora da vista:
+                um devolve o painel recolhido, o outro leva a um ponto de
+                anotação que pode estar fora do enquadramento. E nenhum é gesto
+                sobre o mapa, que é o que mora embaixo.
+
+                Na mesma fila e não em blocos separados porque eles se
+                sobreporiam: este bloco fica na folga do `main`, e o palco
+                começa 16 pixels adentro. */}
+            <div className="absolute top-2 left-2 z-10 flex items-center gap-2">
               {leftOpen ? null : (
                 <FloatingPanelToggle
                   onToggle={toggleLeft}
@@ -169,6 +191,8 @@ export function OperatorShell() {
                   icon={<PanelLeftOpen />}
                 />
               )}
+
+              {editingScene ? <PinIndex scene={editingScene} /> : null}
             </div>
 
             {/* Quem está na mesa fica aqui, e não no cabeçalho: é consulta, como
@@ -300,24 +324,20 @@ function StageBoundary({ scene, status }: { scene: Scene | null; status: string 
 
       {/* Fora do gatilho do menu de contexto: botão direito sobre os controles
           não deve abrir o menu da cena.
-          Canto inferior ESQUERDO, e num grupo só com as ferramentas: escolher
-          a ferramenta e ajustar o zoom são o mesmo tipo de gesto — mira no
-          mapa —, e tê-los em cantos opostos obrigava a atravessar a tela entre
-          duas ações que andam juntas. */}
+
+          As ferramentas à esquerda e o zoom à direita, um canto para cada
+          grupo. Estavam juntas à esquerda, e o lápis com a borracha levaram a
+          fila a seis alvos: com o zoom emendado, a barra atravessava metade do
+          palco e as duas pontas dela não tinham relação nenhuma. */}
       {scene ? (
         <div className="absolute bottom-3 left-3 flex items-center gap-2">
           <OperatorToolbar />
-          <ViewportControls scene={scene} />
         </div>
       ) : null}
 
-      {/* Canto oposto ao das ferramentas, de propósito: aquele lado é gesto
-          sobre o mapa — mira, ampliação, enquadramento — e este é consulta.
-          Na mesma fila, seria mais um alvo a atravessar com o cursor entre
-          duas ações que nada têm a ver uma com a outra. */}
       {scene ? (
         <div className="absolute right-3 bottom-3 flex items-center gap-2">
-          <PinIndex scene={scene} />
+          <ViewportControls scene={scene} />
         </div>
       ) : null}
     </div>

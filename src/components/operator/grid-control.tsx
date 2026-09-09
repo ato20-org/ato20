@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { DEFAULT_GRID, SCENE_WIDTH, type Scene, type SceneGrid } from "@/types/scene";
 
@@ -89,6 +90,15 @@ export function GridControl({ scene }: { scene: Scene }) {
                 Padrão
               </Button>
             </div>
+
+            {/* A convenção, dita de uma vez: sem ela, "20 colunas" é um número
+                de layout, e com ela é a escala do mapa -- é o que faz casar a
+                grade com o desenho valer a pena, e é de onde a régua tira o
+                metro. Ver `METROS_POR_QUADRADO`. */}
+            <p className="text-muted-foreground text-[10px] leading-snug">
+              Cada quadrado vale {METROS_POR_QUADRADO} m — um metro quadrado de chão. Case a
+              grade com o desenho do mapa e a régua mede certo.
+            </p>
 
             <Campo
               rotulo="Tamanho do quadrado"

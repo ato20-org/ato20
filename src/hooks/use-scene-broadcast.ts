@@ -7,6 +7,7 @@ import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import {
   DEFAULT_SESSION_VOLUME,
+  type Medida,
   type Portrait,
   type Scene,
   type SessionTrack,
@@ -72,15 +73,16 @@ export function usePublisher(state: LiveState): void {
       volume: state.volume,
       portraits: state.portraits,
       spotlight: state.spotlight,
+      medida: state.medida,
     };
 
     stateRef.current = paraMesa;
     channelRef.current?.publish(paraMesa);
     // Dependências nos campos, não no objeto `state`: quem chama monta
-    // `{ scene, track, volume, portraits, spotlight }` a cada render, e
+    // `{ scene, track, volume, portraits, spotlight, medida }` a cada render, e
     // comparar essa embalagem fazia o Operador publicar enquanto montava a
     // PRÓXIMA cena — uma publicação por uma mudança que a mesa não vê.
-  }, [scene, state.track, state.volume, state.portraits, state.spotlight]);
+  }, [scene, state.track, state.volume, state.portraits, state.spotlight, state.medida]);
 
   useEffect(() => {
     const beat = setInterval(() => {
@@ -100,6 +102,8 @@ export type Subscription = {
   portraits: Portrait[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
+  /** A medida em curso da régua, que a mesa acompanha. */
+  medida: Medida | null;
   /** Já chegou alguma coisa do daemon. */
   synced: boolean;
   /** Passou tempo demais sem nada. */
@@ -119,6 +123,7 @@ export function useSubscription(codigo: string): Subscription {
     volume: DEFAULT_SESSION_VOLUME,
     portraits: [],
     spotlight: null,
+    medida: null,
   });
   const [synced, setSynced] = useState(false);
   const [stalled, setStalled] = useState(false);
@@ -154,6 +159,7 @@ export function useSubscription(codigo: string): Subscription {
     volume: live.volume,
     portraits: live.portraits,
     spotlight: live.spotlight,
+    medida: live.medida,
     synced,
     stalled,
   };

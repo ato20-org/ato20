@@ -261,6 +261,50 @@ export type Spotlight = {
 export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height">;
 
 /**
+ * Um risco a mao livre sobre o mapa.
+ *
+ * Mora na CENA, como a nevoa e os pontos, e pelas mesmas razoes: o risco marca
+ * ALGO do mapa -- por onde os guardas passam, onde o chao cede --, entao ele
+ * pertence ao mapa e nao ao momento. Viaja no zip, entra no desfazer, e trocar
+ * de cena troca os riscos.
+ *
+ * A mesa ve: riscar o mapa e apontar para ela.
+ */
+export type Traco = {
+  id: string;
+  /**
+   * Os pontos, ACHATADOS: `x0, y0, x1, y1, ...`, em unidades de cena.
+   *
+   * Achatado e nao uma lista de `{x, y}` porque um risco de tres segundos tem
+   * umas duzentas amostras: duzentos objetos por risco, num arquivo de cena que
+   * e lido e gravado inteiro, e num payload que atravessa o canal a cada
+   * publicacao. E e a forma que o `points` do SVG quer.
+   */
+  pontos: number[];
+  /** Cor CSS, como o mestre escolheu. */
+  cor: string;
+  /** Espessura em unidades de cena, para acompanhar o zoom como o resto. */
+  espessura: number;
+};
+
+export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura">;
+
+/**
+ * A medida em curso da regua, em unidades de cena.
+ *
+ * Viaja FORA da cena, como o retrato e a evidencia: ela nao pertence ao mapa --
+ * nao viaja no zip, nao entra no desfazer -- e existe so enquanto o dedo esta
+ * no botao. A mesa ve para acompanhar a conta: "cabe o carro nessa viela?" e
+ * pergunta que todo mundo na mesa quer ver respondida.
+ *
+ * `null` = ninguem medindo.
+ */
+export type Medida = {
+  de: { x: number; y: number };
+  para: { x: number; y: number };
+};
+
+/**
  * Recorte do plano de cena. Sempre na proporção do plano, para toda visão
  * caber o mesmo enquadramento sem cortar nada.
  *
@@ -425,6 +469,13 @@ export type Scene = {
   camera?: Viewport;
   /** Grade sobre o mapa. Ausente = sem grade. */
   grid?: SceneGrid;
+  /**
+   * Os riscos a mao livre. Ausente = nenhum, que e o caso da maioria.
+   *
+   * Opcional e nao uma lista vazia para nao engordar toda cena que nunca foi
+   * riscada -- mesma razao de `grid`.
+   */
+  tracos?: Traco[];
   createdAt: number;
   updatedAt: number;
 };

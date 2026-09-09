@@ -14,6 +14,7 @@ import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
 import { MarqueeBox } from "@/components/playground/marquee-box";
 import { PortraitAnchors } from "@/components/playground/portrait-anchors";
+import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { SelectionBox } from "@/components/playground/selection-box";
@@ -62,6 +63,7 @@ import {
 import { hasAssetDrag, readAssetDrag } from "@/lib/operator/asset-drag";
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
+import { useReguaStore } from "@/lib/store/use-regua-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -74,9 +76,81 @@ import {
   type FogRegion,
   type Portrait,
   type Scene,
+  type Traco,
 } from "@/types/scene";
 
 const NO_GUIDES: Guide[] = [];
+
+/** Identidade estável: um `Set` novo por render reiniciaria a memo da camada. */
+const NADA_APAGANDO: ReadonlySet<string> = new Set<string>();
+
+/**
+ * Distância mínima entre duas amostras de um risco, em pixels de TELA.
+ *
+ * Em pixel de tela e não de cena: riscar ampliado guarda mais detalhe, que é o
+ * que se quer quando se amplia justamente para marcar algo pequeno.
+ */
+const AMOSTRA_PX = 3;
+
+/**
+ * Folga da borracha além da própria espessura, em pixels de tela.
+ *
+ * Existe porque acertar um fio de três unidades com o ponteiro exigiria
+ * pontaria, e apagar é gesto de correção -- quem apaga já errou uma vez.
+ */
+const ALCANCE_BORRACHA_PX = 6;
+
+/**
+ * A borracha alcançou este risco?
+ *
+ * Testa a distância do ponto a cada SEGMENTO, e não aos vértices: com risco
+ * grosso e amostras espaçadas, testar só os vértices deixaria passar a borracha
+ * pelo meio de um segmento longo sem apagar nada.
+ */
+function tracoAlcancado(
+  traco: Traco,
+  ponto: { x: number; y: number },
+  alcance: number,
+): boolean {
+  const { pontos } = traco;
+
+  for (let i = 0; i + 3 < pontos.length; i += 2) {
+    if (
+      distanciaAoSegmento(
+        ponto,
+        { x: pontos[i]!, y: pontos[i + 1]! },
+        { x: pontos[i + 2]!, y: pontos[i + 3]! },
+      ) <= alcance
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/** Distância de um ponto ao segmento `a`-`b`. */
+function distanciaAoSegmento(
+  ponto: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const comprimento = dx * dx + dy * dy;
+
+  // Segmento de comprimento zero é um ponto: acontece quando duas amostras
+  // caem no mesmo lugar arredondado.
+  if (comprimento === 0) return Math.hypot(ponto.x - a.x, ponto.y - a.y);
+
+  // Onde no segmento cai a projeção do ponto, limitado às pontas.
+  const t = Math.max(
+    0,
+    Math.min(1, ((ponto.x - a.x) * dx + (ponto.y - a.y) * dy) / comprimento),
+  );
+
+  return Math.hypot(ponto.x - (a.x + t * dx), ponto.y - (a.y + t * dy));
+}
 
 /** Usado quando a medida do arquivo não veio — arquivo antigo ou corrompido. */
 const FALLBACK_DROP_SIZE = { x: 480, y: 270 };
@@ -105,6 +179,8 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const abrirNota = usePinWindowStore((state) => state.abrir);
 
   const tool = useToolStore((state) => state.tool);
+  const cor = useToolStore((state) => state.cor);
+  const espessura = useToolStore((state) => state.espessura);
   const setTool = useToolStore((state) => state.setTool);
 
   // Por tecla OU por ferramenta; ver `usePanMode`.
@@ -128,6 +204,8 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const updateItems = useSceneStore((state) => state.updateItems);
   const addFog = useSceneStore((state) => state.addFog);
   const updateFog = useSceneStore((state) => state.updateFog);
+  const addTraco = useSceneStore((state) => state.addTraco);
+  const removeTracos = useSceneStore((state) => state.removeTracos);
   const addPin = useSceneStore((state) => state.addPin);
   const setSceneCamera = useSceneStore((state) => state.setSceneCamera);
 
@@ -244,6 +322,38 @@ export function OperatorStage({ scene }: { scene: Scene }) {
         : selectedFog && panMode
           ? boxBounds(selectedFog)
           : null;
+
+  /**
+   * O risco em curso, e o que a borracha está tocando.
+   *
+   * Local e não no store: um risco de três segundos emite umas duzentas
+   * amostras, e cada uma no store seria um passo no histórico de desfazer e uma
+   * gravação atrasada do board. O gesto vive aqui e chega ao store UMA vez, ao
+   * soltar -- um risco, um Ctrl+Z.
+   *
+   * `riscando` é só "há um risco em curso", e não os pontos: quem move a linha
+   * é o DOM, pelo `previa`. Guardar os pontos em estado re-renderizava o palco
+   * INTEIRO por amostra -- com o mapa, os tokens e as camadas dentro --, e o
+   * risco engasgava justamente onde ele precisa acompanhar a mão.
+   */
+  const [riscando, setRiscando] = useState(false);
+
+  /**
+   * A medida em curso, no store porque ela é PUBLICADA.
+   *
+   * A mesa acompanha a conta enquanto o mestre mede, e um estado local do palco
+   * não chegaria ao `OperatorShell`, que monta o quadro publicado.
+   *
+   * No estado e não no DOM como a prévia do risco: a régua emite um par de
+   * pontos por quadro, e não uma lista que cresce -- e a etiqueta recalcula o
+   * número, que é React de qualquer jeito.
+   */
+  const medindo = useReguaStore((state) => state.medida);
+  const medirNoStore = useReguaStore((state) => state.medir);
+  const limparMedida = useReguaStore((state) => state.limpar);
+  const previa = useRef<SVGPolylineElement | null>(null);
+
+  const [apagando, setApagando] = useState<ReadonlySet<string>>(NADA_APAGANDO);
 
   /**
    * A área sob o ponteiro enquanto a fila de retratos é arrastada.
@@ -444,6 +554,123 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   }
 
   /**
+   * Mede a distância entre dois pontos, em metros.
+   *
+   * Sem grade não mede: é o quadrado que diz quanto vale um metro. O botão da
+   * régua fica desabilitado nesse caso, e esta guarda é o segundo cinto -- o
+   * atalho de teclado ou um estado antigo poderiam chegar aqui com a grade
+   * desligada.
+   */
+  function medir(event: ReactPointerEvent, anchor: { x: number; y: number }) {
+    if (!scene.grid) return;
+
+    medirNoStore({ de: anchor, para: anchor });
+
+    startDrag(event, {
+      onMove: (_delta, native) =>
+        medirNoStore({ de: anchor, para: toScene(native.clientX, native.clientY) }),
+      // Solta e some: medida é pergunta, não anotação. O que se quer registrar
+      // tem lápis e ponto de anotação.
+      onEnd: limparMedida,
+    });
+  }
+
+  /**
+   * Risca à mão livre.
+   *
+   * Amostra por DISTÂNCIA e não por evento: mouse de alta taxa entrega
+   * centenas de pontos num traço curto, e guardá-los todos engorda a cena e o
+   * payload sem mudar nada na tela -- dois pontos a meio pixel um do outro
+   * desenham a mesma linha que um.
+   *
+   * O passo é em unidades de cena divididas pela escala, então ele é constante
+   * na TELA: riscar ampliado guarda mais detalhe, que é o que se quer quando se
+   * amplia para marcar algo pequeno.
+   */
+  function riscar(event: ReactPointerEvent, anchor: { x: number; y: number }) {
+    const pontos = [Math.round(anchor.x), Math.round(anchor.y)];
+    const passo = AMOSTRA_PX / scale;
+
+    setRiscando(true);
+
+    startDrag(event, {
+      onMove: (_delta, native) => {
+        const ponto = toScene(native.clientX, native.clientY);
+
+        const ultimoX = pontos[pontos.length - 2] ?? 0;
+        const ultimoY = pontos[pontos.length - 1] ?? 0;
+
+        if (Math.hypot(ponto.x - ultimoX, ponto.y - ultimoY) < passo) return;
+
+        pontos.push(Math.round(ponto.x), Math.round(ponto.y));
+
+        // Direto no atributo, como os gestos das janelas: pelo estado, cada
+        // amostra custaria um render do palco inteiro.
+        previa.current?.setAttribute("points", pontos.join(" "));
+      },
+      onEnd: () => {
+        setRiscando(false);
+
+        // Um ponto só é um clique, e clique não é risco: guardá-lo deixaria uma
+        // bolinha no mapa que ninguém pediu.
+        if (pontos.length < 4) return;
+
+        addTraco(scene.id, { pontos, cor, espessura });
+      },
+    });
+  }
+
+  /**
+   * Apaga os riscos por onde a borracha passar.
+   *
+   * O traço INTEIRO que ela tocar, e não o pedaço: cortar uma polilinha em duas
+   * a cada passada exigiria recriar traços a cada quadro, e desfazer deixaria
+   * de ser "o risco volta" para ser "o risco volta remendado".
+   *
+   * Marca durante o gesto e remove ao soltar, numa vez: a borracha atravessa
+   * três riscos numa passada, e removê-los um por um daria três entradas no
+   * desfazer para um gesto só. Enquanto isso eles ficam translúcidos, senão o
+   * mestre não saberia o que vai levar.
+   */
+  function apagar(event: ReactPointerEvent, anchor: { x: number; y: number }) {
+    const alvos = new Set<string>();
+
+    // A folga é em pixel de TELA: acertar um fio de três unidades com o ponteiro
+    // exigiria pontaria, e apagar é gesto de correção -- quem apaga já errou uma
+    // vez. Constante no zoom porque a mão é a mesma em qualquer ampliação.
+    const folga = ALCANCE_BORRACHA_PX / scale;
+
+    const tocar = (ponto: { x: number; y: number }) => {
+      const antes = alvos.size;
+
+      for (const traco of scene.tracos ?? []) {
+        if (alvos.has(traco.id)) continue;
+
+        // O alcance sai da espessura DO RISCO, e não do lápis: com o lápis fino
+        // escolhido, um risco grosso ficava difícil de acertar -- e a borracha
+        // deixou de ler a espessura do lápis quando as duas viraram ferramentas
+        // separadas.
+        if (tracoAlcancado(traco, ponto, traco.espessura / 2 + folga)) alvos.add(traco.id);
+      }
+
+      // Só quando o conjunto cresceu: a borracha passa a maior parte do gesto
+      // sobre o que já marcou, e um `Set` novo por quadro renderizaria o palco
+      // sem nada ter mudado.
+      if (alvos.size !== antes) setApagando(new Set(alvos));
+    };
+
+    tocar(anchor);
+
+    startDrag(event, {
+      onMove: (_delta, native) => tocar(toScene(native.clientX, native.clientY)),
+      onEnd: () => {
+        setApagando(NADA_APAGANDO);
+        removeTracos(scene.id, [...alvos]);
+      },
+    });
+  }
+
+  /**
    * Leva a fila de retratos para outra área.
    *
    * A fila não segue o ponteiro: as seis áreas acendem, a de baixo do cursor
@@ -502,6 +729,21 @@ export function OperatorStage({ scene }: { scene: Scene }) {
       // alfinetes por acidente ao tentar mover um token.
       setTool("select");
 
+      return;
+    }
+
+    if (tool === "regua") {
+      medir(event, anchor);
+      return;
+    }
+
+    if (tool === "lapis") {
+      riscar(event, anchor);
+      return;
+    }
+
+    if (tool === "borracha") {
+      apagar(event, anchor);
       return;
     }
 
@@ -627,13 +869,17 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   // mesmo com a névoa escolhida.
   const drawingFog = tool === "fog" && !panMode;
   /**
-   * Ferramenta de mira ativa: névoa ou ponto.
+   * Ferramenta de mira ativa: névoa, ponto, lápis, borracha ou régua.
    *
-   * As duas precisam do mesmo bloqueio. Repassar os handlers de item enquanto
+   * As cinco precisam do mesmo bloqueio. Repassar os handlers de item enquanto
    * uma delas está escolhida faria o gesto sobre um token virar "mover token"
-   * em vez de cobrir a região ou cravar o alfinete ali.
+   * em vez de cobrir a região, cravar o alfinete, riscar ou apagar ali — e
+   * riscar por cima de um token é justamente o gesto de circular um inimigo.
    */
-  const aiming = drawingFog || (tool === "pin" && !panMode);
+  const aiming =
+    drawingFog ||
+    (!panMode &&
+      (tool === "pin" || tool === "lapis" || tool === "borracha" || tool === "regua"));
   // Mão aberta sempre que o espaço estiver segurado.
   //
   // Antes era `panMode && !isFullViewport(viewport)`, porque no encaixe o clamp
@@ -672,6 +918,7 @@ export function OperatorStage({ scene }: { scene: Scene }) {
         onDrop={handleDrop}
       >
         <SceneLayer
+          apagando={apagando}
           scene={scene}
           variant="operator"
           // Todos enquanto a aba Retratos está aberta; fora dela, só o
@@ -883,6 +1130,35 @@ export function OperatorStage({ scene }: { scene: Scene }) {
 
       {arrastandoFila ? (
         <PortraitAnchors camera={scene.camera} alvo={areaDaFila} />
+      ) : null}
+
+      {/* O risco em curso, antes de virar traço da cena. Desenhado aqui e não
+          na camada compartilhada porque ele não existe na cena ainda -- e a
+          mesa não deve ver a linha crescendo. */}
+      {riscando ? (
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          width={SCENE_WIDTH}
+          height={SCENE_HEIGHT}
+          // Acima dos itens e abaixo da névoa (5000), que é onde o traço vai
+          // parar quando virar da cena: sem isto a linha nasceria por cima da
+          // névoa e escorregaria para baixo dela ao soltar.
+          style={{ zIndex: 4_000 }}
+        >
+          <polyline
+            ref={previa}
+            fill="none"
+            stroke={cor}
+            strokeWidth={espessura}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : null}
+
+      {medindo && scene.grid ? (
+        <RulerOverlay de={medindo.de} para={medindo.para} grid={scene.grid} />
       ) : null}
 
       {marquee ? <MarqueeBox bounds={marquee} /> : null}
