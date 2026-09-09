@@ -15,8 +15,6 @@ export type PlayerSheet = {
   id: string;
   /** Nome que o próprio jogador escolheu. */
   nome: string;
-  /** Apelido que o mestre deu. Só de leitura aqui. */
-  rotulo: string;
   notas: string;
   entrouEm: number;
   vistoEm: number;
@@ -80,13 +78,19 @@ export class PlayerError extends Error {
   }
 }
 
-async function fail(response: Response, fallback: string): Promise<PlayerError> {
+/**
+ * Exportados porque as rotas de PERSONAGEM, noutro arquivo, precisam das mesmas
+ * duas coisas: o cabeçalho da credencial e a leitura do corpo de erro. Uma
+ * segunda cópia de `authorized` seria a que um dia esquece de mandar o token —
+ * e o sintoma seria 401 em uma tela só.
+ */
+export async function fail(response: Response, fallback: string): Promise<PlayerError> {
   const texto = await response.text().catch(() => "");
 
   return new PlayerError(response.status, texto || fallback);
 }
 
-function authorized(codigo: string): HeadersInit {
+export function authorized(codigo: string): HeadersInit {
   const token = storedToken(codigo);
 
   return token ? { authorization: `Bearer ${token}` } : {};
@@ -119,7 +123,6 @@ export async function join(codigo: string, nome: string): Promise<PlayerSheet> {
   return {
     id,
     nome: nomeAceito,
-    rotulo: "",
     notas: "",
     entrouEm: Date.now(),
     vistoEm: Date.now(),
@@ -148,7 +151,7 @@ export async function fetchMe(codigo: string): Promise<PlayerSheet | null> {
   return (await response.json()) as PlayerSheet;
 }
 
-/** Nome e notas. `rotulo` não está aqui porque é do mestre. */
+/** Nome e notas: os dois campos que são dele. */
 export async function patchMe(
   codigo: string,
   patch: { nome?: string; notas?: string },

@@ -18,7 +18,6 @@ import { toast } from "sonner";
 import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
@@ -27,11 +26,11 @@ import { shareAttachment } from "@/lib/vault/evidence";
 // para ele; repetir a conta aqui faria a mesma pasta ser medida em duas
 // unidades dependendo de quem olha.
 import { formatBytes } from "@/lib/player/session";
+import { useCharacterNames } from "@/hooks/use-character-names";
 import {
   playerAttachments,
   playerAttachmentUrl,
   removePlayer,
-  setPlayerLabel,
   type Player,
   type PlayerAttachment,
 } from "@/lib/vault/players";
@@ -94,7 +93,9 @@ function Ficha({
   onVoltar: () => void;
   onChanged: () => void;
 }) {
-  const [rotulo, setRotulo] = useState(player.rotulo);
+  /** Os personagens dele. Substituiu o apelido — ver a seção abaixo. */
+  const nomes = useCharacterNames();
+
   const [anexos, setAnexos] = useState<PlayerAttachment[] | null>(null);
   const [vendo, setVendo] = useState<PlayerAttachment | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -262,34 +263,34 @@ function Ficha({
         </div>
       </div>
 
-      <form
-        className="space-y-1.5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void setPlayerLabel(player.id, rotulo).then(onChanged, () =>
-            toast.error("Não foi possível salvar o apelido."),
-          );
-        }}
-      >
-        <p className="text-muted-foreground text-xs">Teu apelido para ele</p>
-        <div className="flex gap-2">
-          <Input
-            value={rotulo}
-            onChange={(event) => setRotulo(event.target.value)}
-            placeholder="Como tu o chamas"
-            className="h-8 text-xs"
-            maxLength={60}
-          />
-          <Button
-            type="submit"
-            variant="outline"
-            size="sm"
-            disabled={rotulo.trim() === player.rotulo}
-          >
-            Anotar
-          </Button>
-        </div>
-      </form>
+      {/* Os personagens dele, no lugar onde ficava o apelido.
+
+          O apelido era um campo de texto que o mestre preenchia à mão, e o que
+          ele escrevia ali era quase sempre o personagem — os próprios testes do
+          projeto o preenchiam com "o ladino". Com personagem de verdade, isto
+          deixou de ser anotação e passou a ser vínculo: acompanha quando o
+          mestre troca o personagem de mãos, e não vira mentira quando ele
+          esquece de atualizar. Quem vincula é o diálogo de personagens. */}
+      <section className="space-y-1.5">
+        <p className="text-muted-foreground text-xs">Personagens</p>
+        {(nomes.get(player.id) ?? []).length === 0 ? (
+          <p className="text-muted-foreground text-xs">
+            Nenhum. Entregue um a ele pelo canto de personagens do palco — é o que dá acesso à
+            ficha e às notas.
+          </p>
+        ) : (
+          <ul className="flex flex-wrap gap-1.5">
+            {(nomes.get(player.id) ?? []).map((nome) => (
+              <li
+                key={nome}
+                className="bg-muted/40 rounded-md border px-2 py-0.5 text-xs"
+              >
+                {nome}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="space-y-1.5">
         <p className="text-muted-foreground text-xs">Arquivos</p>

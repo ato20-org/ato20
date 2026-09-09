@@ -23,6 +23,21 @@ export function shareAttachment(playerId: string, arquivo: string): Promise<stri
 }
 
 /**
+ * O mesmo, para um anexo de PERSONAGEM.
+ *
+ * Um comando próprio porque o caminho é outro — `personagens/{id}/anexos/{autor}/`
+ * —, e o `autor` faz parte da identificação: "ficha.pdf" do mestre e "ficha.pdf"
+ * do jogador são dois arquivos.
+ */
+export function shareCharacterAttachment(
+  personagemId: string,
+  autor: "mestre" | "jogador",
+  arquivo: string,
+): Promise<string> {
+  return call<string>("character_attachment_share", { id: personagemId, autor, arquivo });
+}
+
+/**
  * Fecha o endereço da evidência anterior.
  *
  * Sem erro para quem chama: é limpeza, e o mestre tirando algo do ar não pode

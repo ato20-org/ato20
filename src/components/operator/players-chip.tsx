@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useCharacterNames } from "@/hooks/use-character-names";
 import { presente as estaPresente, usePlayers } from "@/hooks/use-players";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,9 @@ export function PlayersChip() {
 
   const { players, loaded, agora, recarregar } = usePlayers(aberto ? ABERTO_MS : FECHADO_MS);
 
+  /** Qual personagem cada jogador tem. Substituiu o apelido — ver o hook. */
+  const nomes = useCharacterNames();
+
   const total = players.length;
   const presentes = players.filter((player) => estaPresente(player, agora)).length;
 
@@ -54,13 +58,16 @@ export function PlayersChip() {
     const termo = normaliza(busca.trim());
     if (!termo) return players;
 
-    // No nome E no apelido: quem deu o apelido foi o mestre, e é por ele que
-    // ele lembra de metade da mesa.
+    // No nome E no personagem: numa mesa em que todos se chamam pelo nome do
+    // personagem, é por ele que o mestre lembra de metade da sala.
     return players.filter(
       (player) =>
-        normaliza(player.nome).includes(termo) || normaliza(player.rotulo).includes(termo),
+        normaliza(player.nome).includes(termo) ||
+        // Era a busca pelo apelido; agora o texto vem do vínculo em vez de ter
+        // sido digitado à mão.
+        (nomes.get(player.id) ?? []).some((nome) => normaliza(nome).includes(termo)),
     );
-  }, [players, busca]);
+  }, [players, busca, nomes]);
 
   // Pelo id, e não guardando o objeto: a sondagem troca as instâncias a cada
   // cinco segundos, e um objeto guardado deixaria a ficha aberta congelada na
@@ -167,12 +174,18 @@ export function PlayersChip() {
                             <span className="block truncate text-xs font-medium">
                               {player.nome}
                             </span>
-                            {/* O apelido do mestre embaixo do nome, não no
-                                lugar dele: na hora de falar com o jogador o
-                                que vale é o nome que ele escolheu. */}
-                            {player.rotulo ? (
+                            {/* O personagem embaixo do nome, não no lugar
+                                dele: na hora de falar com a pessoa o que vale é
+                                o nome que ela escolheu.
+
+                                Aqui havia o apelido que o mestre digitava, e o
+                                que ele digitava era quase sempre isto. Agora sai
+                                do vínculo — acompanha quando o personagem troca
+                                de mãos, e não vira mentira quando o mestre
+                                esquece de atualizar. */}
+                            {(nomes.get(player.id) ?? []).length > 0 ? (
                               <span className="text-muted-foreground block truncate text-[10px]">
-                                {player.rotulo}
+                                {(nomes.get(player.id) ?? []).join(", ")}
                               </span>
                             ) : null}
                           </span>

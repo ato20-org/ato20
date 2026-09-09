@@ -12,10 +12,16 @@ import { call } from "@/lib/vault/bridge";
  */
 export type Player = {
   id: string;
-  /** Nome que o próprio jogador escolheu. */
+  /**
+   * Nome que o próprio jogador escolheu. O único nome que existe.
+   *
+   * Havia também um `rotulo`, apelido que o mestre dava, e ele saiu com a
+   * segmentação de personagem: servia para a tela do mestre mostrar algo com
+   * sentido em vez do que o jogador digitou, e o "algo com sentido" era quase
+   * sempre o personagem. Quem responde isso agora é o vínculo — dado, e não
+   * uma string à mão que não acompanha quando o personagem muda.
+   */
   nome: string;
-  /** Apelido que o mestre deu. Só daqui é gravável. */
-  rotulo: string;
   notas: string;
   entrouEm: number;
   /** Última vez que este jogador falou com o daemon. */
@@ -30,16 +36,6 @@ export type PlayerAttachment = {
 
 export function listPlayers(): Promise<Player[]> {
   return call<Player[]>("players_list");
-}
-
-/**
- * O apelido que o mestre dá.
- *
- * Fora do alcance do próprio jogador: `PATCH /eu` não tem este campo, e
- * `update_self` no Rust também não. Era privilégio de coluna no Postgres.
- */
-export function setPlayerLabel(id: string, rotulo: string): Promise<void> {
-  return call("player_set_label", { id, rotulo });
 }
 
 /** Tira o jogador da mesa, com os anexos dele. Revoga o token. */

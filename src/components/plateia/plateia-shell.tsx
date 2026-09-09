@@ -4,10 +4,9 @@ import { useState } from "react";
 import { Monitor, Smartphone, User } from "lucide-react";
 
 import { PlateiaStage } from "@/components/plateia/plateia-stage";
-import { PlayerAttachments } from "@/components/plateia/player-attachments";
+import { MyCharacters } from "@/components/plateia/my-characters";
 import { PlayerGate } from "@/components/plateia/player-gate";
 import { PlayerIdentity } from "@/components/plateia/player-identity";
-import { PlayerNotes } from "@/components/plateia/player-notes";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { SpotlightLayer } from "@/components/playground/spotlight-layer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -124,13 +123,21 @@ function StackedLayout({ codigo, live }: LayoutProps) {
   );
 }
 
-/** Nome, arquivos e notas — o bloco é o mesmo nos dois layouts. */
+/**
+ * Quem o jogador é, e os personagens que o mestre entregou a ele.
+ *
+ * Os arquivos e as notas saíram do jogador e foram para o PERSONAGEM. Antes
+ * ficavam pendurados na identidade de quem joga, e o mestre não tinha onde
+ * amarrar uma miniatura: se o jogador não anexasse a ficha, ou a apagasse no
+ * meio da campanha, não havia nada estável a que ligar.
+ *
+ * `PlayerIdentity` fica: o nome continua sendo dele.
+ */
 function CharacterPanel({ codigo }: { codigo: string }) {
   return (
     <PlayerGate codigo={codigo}>
       <PlayerIdentity codigo={codigo} />
-      <PlayerAttachments codigo={codigo} />
-      <PlayerNotes codigo={codigo} />
+      <MyCharacters codigo={codigo} />
     </PlayerGate>
   );
 }

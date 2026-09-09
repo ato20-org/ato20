@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 
 import { OpenViewer } from "@/components/operator/open-viewer";
+import { CharactersChip } from "@/components/operator/characters-chip";
 import { PlayersChip } from "@/components/operator/players-chip";
 import { TableInvite } from "@/components/operator/table-invite";
 import { TrackBar } from "@/components/operator/track-bar";
@@ -131,6 +132,9 @@ export function OperatorShell() {
               tempo todo. Fora do `StageBoundary`: uma mesa cheia continua
               cheia sem cena nenhuma selecionada. */}
           <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+            {/* Personagens ao lado de jogadores: as duas metades da mesma
+                pergunta — quem senta na mesa, e quem eles interpretam. */}
+            <CharactersChip />
             <PlayersChip />
             {rightOpen ? null : (
               <FloatingPanelToggle

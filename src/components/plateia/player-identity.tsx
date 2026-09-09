@@ -67,11 +67,6 @@ export function PlayerIdentity({ codigo }: { codigo: string }) {
 
       {/* O apelido do mestre, quando existe. Só de leitura: nem o dono da linha
           escreve nele — `PATCH /eu` não tem esse campo. */}
-      {sheet.rotulo ? (
-        <p className="text-muted-foreground text-xs">
-          O mestre te anotou como <span className="font-medium">{sheet.rotulo}</span>.
-        </p>
-      ) : null}
     </section>
   );
 }
