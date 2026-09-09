@@ -14,6 +14,15 @@ type PanelsStore = {
 
   toggleLeft: () => void;
   toggleRight: () => void;
+  /**
+   * Garante a coluna à vista. Idempotente, ao contrário dos `toggle`.
+   *
+   * Existe porque pedir uma janela que está atracada numa coluna RECOLHIDA
+   * precisa abrir a coluna antes de apontar a aba — ver `useAbrirJanela`. Com
+   * `toggle` no lugar disto, pedir a mesma janela duas vezes fecharia a coluna
+   * na segunda.
+   */
+  show: (side: "left" | "right") => void;
   restore: () => void;
 };
 
@@ -53,6 +62,7 @@ export const usePanelsStore = create<PanelsStore>((set, get) => ({
 
   toggleLeft: () => set({ left: !get().left }),
   toggleRight: () => set({ right: !get().right }),
+  show: (side) => set(side === "left" ? { left: true } : { right: true }),
 
   restore() {
     if (get().restored) return;

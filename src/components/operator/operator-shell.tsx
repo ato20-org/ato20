@@ -130,7 +130,7 @@ export function OperatorShell() {
           quem alcança a mesa, e a de baixo é o que está tocando. Uma janela
           cobrindo qualquer das duas esconderia controle de sessão atrás de
           consulta de ficha. */}
-      <div className="relative flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 min-w-0 flex-1">
         <DockRow>
           <main className="relative flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
             {/* Painel fechado deixa um alvo flutuando no canto de cima do palco,

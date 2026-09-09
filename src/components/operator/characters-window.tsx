@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useCharacterOwners } from "@/hooks/use-character-owners";
 import { normaliza } from "@/lib/search";
@@ -30,7 +31,7 @@ import { cn } from "@/lib/utils";
  */
 export function CharactersBody() {
   const { personagens, jogadores, recarregar } = useCharacters();
-  const abrir = useWindowStore((state) => state.abrir);
+  const abrir = useAbrirJanela();
 
   /** Quem joga cada personagem. É o que a busca também alcança. */
   const donos = useCharacterOwners(jogadores);

@@ -4,6 +4,7 @@ import { Drama } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
@@ -31,7 +32,7 @@ import { cn } from "@/lib/utils";
  */
 export function CharactersChip() {
   const { personagens } = useCharacters();
-  const abrir = useWindowStore((state) => state.abrir);
+  const abrir = useAbrirJanela();
   const aberta = useWindowStore((state) =>
     state.janelas.some((janela) => janela.conteudo.tipo === "personagens"),
   );

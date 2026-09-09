@@ -201,6 +201,35 @@
   .scene-item-in {
     animation: scene-fade-in 200ms ease-out both;
   }
+
+  /* Rolagem sem a barra à vista.
+     A tira de abas do dock tem 26 pixels de altura: uma barra horizontal ali
+     come metade do alvo de clique das abas, e a rolagem não é o assunto — o
+     mestre arrasta a tira ou usa a aba que já está à vista. O conteúdo continua
+     rolável por roda, por trackpad e por teclado. */
+  .rolagem-limpa {
+    scrollbar-width: none;
+  }
+
+  .rolagem-limpa::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* "Já está aqui." Pedir Personagens com a lista já atracada na coluna não
+     abre uma segunda cópia — aponta a que existe. Duas batidas, e não uma
+     piscada só: uma pode passar por artefato de render; duas leem como aviso.
+
+     `box-shadow` e não `outline`: a aba vive numa tira com rolagem, e um
+     contorno somaria à caixa e empurraria as vizinhas a cada batida. */
+  .piscar {
+    animation: piscar 420ms ease-in-out 2;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .piscar {
+      animation: none;
+    }
+  }
 }
 
 /* Fora do `@media` de propósito: uma animação referenciada sem os keyframes
@@ -212,5 +241,16 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Ver `.piscar`. Fora do `@media`, pela mesma razão do `scene-fade-in`. */
+@keyframes piscar {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 2px var(--color-primary);
   }
 }

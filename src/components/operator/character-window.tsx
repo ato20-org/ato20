@@ -30,11 +30,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { attachmentKind, imageMimeByName, type AttachmentKind } from "@/lib/attachments/kind";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
-import { chaveDe, useWindowStore, type ConteudoJanela } from "@/lib/store/use-window-store";
+import { chaveDe, type ConteudoJanela } from "@/lib/store/use-window-store";
 import { shareCharacterAttachment } from "@/lib/vault/evidence";
 import { formatBytes } from "@/lib/player/session";
 import {
@@ -82,7 +83,7 @@ const ICONE: Record<AttachmentKind, typeof File> = {
 export function CharacterBody({ personagemId }: { personagemId: string }) {
   const { personagens, jogadores, recarregar } = useCharacters();
   const fecharJanela = useFecharJanela();
-  const abrirJanela = useWindowStore((state) => state.abrir);
+  const abrirJanela = useAbrirJanela();
 
   const personagem = personagens?.find((atual) => atual.id === personagemId) ?? null;
 

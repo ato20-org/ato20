@@ -50,8 +50,17 @@ export function DockColumn({ lado }: { lado: Lado }) {
       // `data-dock-coluna`: o divisor de largura, que é irmão desta coluna e
       // não filho, precisa alcançá-la para mexer na largura durante o gesto.
       data-dock-coluna={lado}
+      // `min-w-0` é o que faz a largura declarada valer. Item de flex tem
+      // `min-width: auto` por padrão — o tamanho MÍNIMO DO CONTEÚDO —, e uma
+      // ficha desenhada para 512 pixels atracada numa coluna de 288 empurrava a
+      // coluna, que empurrava a linha, que estourava a tela inteira: o mapa
+      // ficava cortado e os painéis saíam pela direita.
+      //
+      // `max-w` como teto de verdade: o limite do store é em pixel e não sabe o
+      // tamanho da janela do aplicativo, então numa tela estreita duas colunas
+      // no máximo não deixariam palco nenhum.
       className={cn(
-        "flex min-h-0 shrink-0 flex-col select-none",
+        "flex min-h-0 max-w-[40%] min-w-0 shrink-0 flex-col overflow-hidden select-none",
         lado === "esquerda" ? "border-r" : "border-l",
       )}
       style={{ width: coluna.largura }}
@@ -63,7 +72,7 @@ export function DockColumn({ lado }: { lado: Lado }) {
           // A fração vira `flex-basis` com `flex-grow: 0`: em `flex-grow` as
           // sobras se redistribuiriam sozinhas e o divisor deixaria de mandar
           // no tamanho.
-          className="flex min-h-0 flex-col"
+          className="flex min-h-0 min-w-0 flex-col overflow-hidden"
           style={{ flex: `0 1 ${coluna.fracoes[indice] * 100}%` }}
         >
           <DockGroup lado={lado} grupo={grupo} comRecolher={indice === 0} />

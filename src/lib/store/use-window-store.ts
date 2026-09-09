@@ -226,7 +226,12 @@ type WindowStore = {
   posicoes: Record<string, Posicao>;
 
   /**
-   * Traz a janela para a tela. Já aberta, só vem para a frente.
+   * Traz a janela para a tela FLUTUANDO. Já aberta, só vem para a frente.
+   *
+   * Consulta apenas esta pilha: se a janela estiver atracada numa coluna, ela
+   * abre uma segunda cópia da mesma tela. Quem atende a um pedido do mestre
+   * deve chamar `useAbrirJanela`, que olha as duas casas; este caminho direto é
+   * para quem já sabe que quer uma janela solta — desatracar, por exemplo.
    *
    * `posicao` força o canto, e existe para desatracar: arrastar uma aba para
    * fora tem de deixar a janela onde a mão a soltou, e não onde ela estava a
@@ -263,6 +268,18 @@ type WindowStore = {
   fechar: (chave: string) => void;
   /** Fecha a que está na frente. É o que o ESC de dentro de uma janela usa. */
   fecharDaFrente: () => void;
+  /**
+   * A chave que está piscando, para apontar uma janela que já existe.
+   *
+   * Pedir Personagens com a lista já atracada na coluna não abre uma segunda
+   * cópia — aponta a que está lá. Sem isso o clique parecia não fazer nada,
+   * porque a janela pedida já estava na tela desde antes.
+   *
+   * Vive aqui e não no store do layout porque a janela apontada pode estar nas
+   * duas casas: atracada como aba, ou flutuando atrás de outra.
+   */
+  piscando: string | null;
+  piscar: (chave: string) => void;
   /**
    * Lê as posições guardadas.
    *
@@ -400,6 +417,22 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   fecharDaFrente() {
     set((state) => ({ janelas: state.janelas.slice(0, -1) }));
+  },
+
+  piscando: null,
+
+  piscar(chave) {
+    // Apaga antes de acender: pedir duas vezes seguidas a mesma janela tem de
+    // piscar duas vezes, e sem o intervalo a classe nunca sai do elemento —
+    // a animação não reinicia se o valor não mudou.
+    set({ piscando: null });
+
+    setTimeout(() => set({ piscando: chave }), 20);
+    // Um pouco além das duas batidas de 420ms, para a classe sair só depois de
+    // a animação terminar.
+    setTimeout(() => {
+      if (get().piscando === chave) set({ piscando: null });
+    }, 1_000);
   },
 
   restaurar() {

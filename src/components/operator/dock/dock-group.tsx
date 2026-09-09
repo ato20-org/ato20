@@ -1,9 +1,14 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Plus } from "lucide-react";
 
 import { useDockDrag } from "@/components/operator/dock/dock-drag";
-import { JanelaCorpo, useRotuloJanela } from "@/components/operator/dock/window-content";
+import {
+  JanelaCorpo,
+  larguraMinima,
+  useRotuloJanela,
+} from "@/components/operator/dock/window-content";
 import { PanelCollapse } from "@/components/operator/panel-collapse";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,7 +56,10 @@ export function DockGroup({
     <section
       data-dock-grupo={grupo.id}
       data-dock-lado={lado}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      // `min-w-0` pela mesma razão da coluna: sem isso o corpo da aba dita a
+      // largura mínima do grupo, e uma ficha larga atracada numa coluna estreita
+      // arrasta a linha inteira atrás dela.
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       aria-label={`Região ${grupo.id}`}
     >
       <div className="flex items-center gap-1 p-1.5">
@@ -61,10 +69,14 @@ export function DockGroup({
           <PanelCollapse side="right" label="este painel" />
         ) : null}
 
+        {/* A tira ROLA, e as abas não encolhem: com cinco abas numa coluna de
+            288 pixels, encolher deixava "Ce…", "Retr…", "Ár…" — rótulo de duas
+            letras não identifica nada, e as cinco juntas ainda não caberiam. A
+            barra fica escondida porque ela comeria metade da altura da tira. */}
         <div
           role="tablist"
           aria-label={`Abas de ${grupo.id}`}
-          className="bg-muted/60 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-md p-0.5"
+          className="bg-muted/60 rolagem-limpa flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-md p-0.5"
         >
           {grupo.abas.map((aba) => (
             <Aba
@@ -90,11 +102,17 @@ export function DockGroup({
           duas fichas na mesma região trocariam de conteúdo sem reler nada. */}
       {/* O fade acompanha a remontagem: sem ele, trocar de aba é um corte seco
           entre duas listas de tamanhos diferentes. */}
+      {/* Rola de lado quando o conteúdo tem piso de largura e a coluna é mais
+          estreita que ele. `overflow-y-hidden` explícito porque um eixo em
+          `auto` faz o outro deixar de ser `visible` — sem isso apareceriam duas
+          barras verticais, a desta caixa e a do corpo. */}
       <div
         key={chaveDe(ativa)}
-        className="animate-in fade-in-0 flex min-h-0 flex-1 flex-col overflow-hidden duration-100 motion-reduce:animate-none"
+        className="animate-in fade-in-0 min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden duration-100 motion-reduce:animate-none"
       >
-        <JanelaCorpo conteudo={ativa} />
+        <div className="flex h-full flex-col" style={{ minWidth: larguraMinima(ativa) }}>
+          <JanelaCorpo conteudo={ativa} />
+        </div>
       </div>
     </section>
   );
@@ -194,19 +212,39 @@ function Aba({
   const startDockDrag = useDockDrag();
   const removerAba = useLayoutStore((state) => state.removerAba);
   const abrirFlutuante = useWindowStore((state) => state.abrir);
+  const piscando = useWindowStore((state) => state.piscando === chaveDe(aba));
+
+  const botao = useRef<HTMLButtonElement | null>(null);
+
+  // Aba escolhida fora da vista se traz para a vista. Desde que a tira rola em
+  // vez de encolher, ativar Camadas pelo menu do `+` — ou piscá-la porque o
+  // mestre pediu de novo o que já estava aqui — podia acender uma aba fora do
+  // recorte, e o pedido dele pareceria não ter efeito.
+  //
+  // `nearest` nos dois eixos: o movimento mínimo que resolve. Sem isso o
+  // navegador pode centralizar a aba e sacudir a coluna de lado.
+  useEffect(() => {
+    if (!ativa && !piscando) return;
+
+    botao.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [ativa, piscando]);
 
   return (
     <button
+      ref={botao}
       type="button"
       role="tab"
       aria-selected={ativa}
       className={cn(
-        "min-w-0 shrink cursor-grab truncate rounded-sm px-2 py-1 text-xs transition-all active:cursor-grabbing",
+        "shrink-0 cursor-grab whitespace-nowrap rounded-sm px-2 py-1 text-xs transition-all active:cursor-grabbing",
         // Arrastando, a aba fica apagada e recuada: é o par visual da etiqueta
         // que saiu dela e está no cursor. Sem isso a aba continuava acesa na
         // tira, e a etiqueta parecia uma segunda cópia em vez de a mesma coisa
         // sendo levada para outro lugar.
         "data-arrastando:scale-95 data-arrastando:opacity-40 motion-reduce:transition-none",
+        // Pedida de novo estando já aqui: duas batidas apontam qual é. Ver
+        // `useAbrirJanela`.
+        piscando && "piscar",
         ativa
           ? "bg-background text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground",

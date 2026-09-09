@@ -93,6 +93,30 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
 }
 
 /**
+ * O quanto o corpo precisa para não ficar ilegível, quando atracado.
+ *
+ * Abaixo disto a REGIÃO ROLA de lado em vez de espremer o conteúdo. A ficha foi
+ * desenhada para 512 pixels: numa coluna de 288 o botão "Trocar" de cada campo
+ * ficava cortado e inalcançável, e um botão que não se alcança é pior que um
+ * botão fora da vista com rolagem até ele.
+ *
+ * Zero para os painéis, que nasceram num `aside` de 288 e não têm piso nenhum:
+ * dar-lhes um obrigaria a lista de cenas a rolar de lado numa coluna do tamanho
+ * exato em que ela sempre viveu.
+ */
+export function larguraMinima(conteudo: ConteudoJanela): number {
+  switch (conteudo.tipo) {
+    case "personagem":
+      return 360;
+    case "anexo":
+    case "asset":
+      return 320;
+    default:
+      return 0;
+  }
+}
+
+/**
  * O corpo, sem moldura.
  *
  * Os painéis leem a cena do store em vez de receber por prop: o dock é genérico
