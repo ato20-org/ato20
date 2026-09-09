@@ -366,6 +366,20 @@ derrubava, e isso estava errado — as cenas, o acervo e os anexos estão intact
 ao lado, e quem exporta costuma estar exportando justamente porque algo deu errado. Perde-se
 o texto dos jogadores, que era o que estava ilegível de todo jeito.
 
+## Não há deploy
+
+O `vercel.json` desliga o deploy por Git. Ele existe porque o repositório nasceu
+como aplicação web na Vercel, e a integração continuou ligada depois de o projeto
+virar aplicativo de desktop — cada push publicava o export estático das telas.
+
+O que subia não era um site quebrado por acidente: era um site que **não pode
+funcionar**. As telas de Assistir e Plateia falam com o daemon que roda na
+máquina do mestre, e num domínio público não há daemon nenhum para responder.
+Quem abrisse veria a porta pedindo o código de uma mesa que não existe.
+
+Desligar aqui impede novos deploys. **Não apaga o projeto nem tira do ar o que
+já foi publicado** — isso é no painel da Vercel, e é lá que o domínio se remove.
+
 ## Empacotar
 
 ```bash
