@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { characterLinks, listCharacters } from "@/lib/vault/characters";
 
 /**
@@ -17,10 +18,16 @@ import { characterLinks, listCharacters } from "@/lib/vault/characters";
  * Duas chamadas e uma junção aqui, em vez de uma por jogador: uma mesa de cinco
  * pessoas custaria cinco idas ao IPC para desenhar cinco linhas.
  *
+ * Relê quando o contador compartilhado muda, como o `useCharacterOwners`:
+ * vincular um jogador na ficha do personagem tem de mudar as duas listas, e
+ * antes esta lia uma vez na montagem e ficava velha até recarregar a página.
+ *
  * Devolve mapa vazio em qualquer falha — a lista de jogadores continua útil sem
  * os personagens, e não vale derrubá-la por causa da linha de baixo.
  */
 export function useCharacterNames(): Map<string, string[]> {
+  const versao = useCharactersStore((state) => state.versao);
+
   const [nomes, setNomes] = useState<Map<string, string[]>>(new Map());
 
   useEffect(() => {
@@ -52,7 +59,7 @@ export function useCharacterNames(): Map<string, string[]> {
     return () => {
       ativo = false;
     };
-  }, []);
+  }, [versao]);
 
   return nomes;
 }

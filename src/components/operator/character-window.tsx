@@ -9,7 +9,6 @@ import {
   FileVideo,
   Loader2,
   Paperclip,
-  Plus,
   Radio,
   RadioTower,
   Trash2,
@@ -17,17 +16,25 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
-import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
+import { useCharacters } from "@/hooks/use-characters";
+import { useFecharJanela } from "@/hooks/use-fechar-janela";
+import { attachmentKind, imageMimeByName, type AttachmentKind } from "@/lib/attachments/kind";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
+import { chaveDe, useWindowStore, type ConteudoJanela } from "@/lib/store/use-window-store";
 import { shareCharacterAttachment } from "@/lib/vault/evidence";
 import { formatBytes } from "@/lib/player/session";
 import {
@@ -36,10 +43,8 @@ import {
   characterAttachments,
   characterNote,
   characterPlayers,
-  createCharacter,
   detachFromCharacter,
   linkCharacter,
-  listCharacters,
   removeCharacter,
   renameCharacter,
   preencherCampoComArquivo,
@@ -47,7 +52,7 @@ import {
   setCharacterNote,
   unlinkCharacter,
 } from "@/lib/vault/characters";
-import { listPlayers, type Player } from "@/lib/vault/players";
+import type { Player } from "@/lib/vault/players";
 import { cn } from "@/lib/utils";
 import type { AnexoPersonagem, CampoPersonagem, Personagem } from "@/types/character";
 import { doJogador } from "@/types/character";
@@ -62,178 +67,82 @@ const ICONE: Record<AttachmentKind, typeof File> = {
 };
 
 /**
- * Os personagens da campanha, do lado do mestre.
+ * A ficha de um personagem: nome, arquivos, campos e donos.
  *
- * Lista à esquerda, o escolhido à direita. Um diálogo, e não uma aba do painel
- * esquerdo: isto é preparação — criar personagem, anexar ficha, escolher a
- * miniatura, entregar a quem joga —, não algo que fica à vista durante a
- * sessão. E o painel esquerdo já tem três abas em 288 pixels.
+ * Uma janela por personagem, e não uma que troca de conteúdo: duas fichas lado
+ * a lado é o caso real — comparar o que dois jogadores têm, ou conduzir uma
+ * cena com os dois presentes. A chave da janela sai do id, então clicar duas
+ * vezes no mesmo nome traz a que já está aberta para a frente em vez de
+ * duplicá-la. Ver `chaveDe`.
  *
- * O que este diálogo escreve é conteúdo de campanha: vai para `personagens/` no
- * vault e viaja no zip. O vínculo com jogador é a exceção, e mora no banco de
- * estado da máquina — o personagem viaja, quem senta na mesa não.
+ * Corpo sem moldura: quem desenha cabeçalho, arrasto e X é a moldura de fora —
+ * `InnerWindow` quando a ficha flutua, a tira de abas do grupo quando ela está
+ * atracada numa coluna. O mesmo corpo serve aos dois.
  */
-export function CharactersDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  /**
-   * `null` é "ainda não leu", e não uma lista vazia.
-   *
-   * Distinguir os dois é o que permite mostrar "Lendo…" sem uma segunda
-   * variável de estado — e uma variável a menos aqui é uma escrita a menos
-   * dentro do efeito, que é o que o compilador do React não aceita.
-   */
-  const [personagens, setPersonagens] = useState<Personagem[] | null>(null);
-  const [jogadores, setJogadores] = useState<Player[]>([]);
-  const [escolhido, setEscolhido] = useState<string | null>(null);
+export function CharacterBody({ personagemId }: { personagemId: string }) {
+  const { personagens, jogadores, recarregar } = useCharacters();
+  const fecharJanela = useFecharJanela();
+  const abrirJanela = useWindowStore((state) => state.abrir);
 
-  /**
-   * Contador de releituras, no lugar de uma função que busca e grava.
-   *
-   * Mesmo padrão do `useAssetList`: quem mexe em algo incrementa isto, e existe
-   * UM lugar que busca. A alternativa — uma `recarregar()` chamada do efeito e
-   * dos handlers — grava estado de dentro do efeito, o que o compilador
-   * proíbe, e ainda espalha a busca por vários pontos.
-   */
-  const [versao, setVersao] = useState(0);
-  const recarregar = useCallback(() => setVersao((atual) => atual + 1), []);
+  const personagem = personagens?.find((atual) => atual.id === personagemId) ?? null;
 
-  // Relê a cada abertura, e não uma vez só: o mestre pode ter anexado arquivo
-  // pela pasta, ou um jogador pode ter entrado desde a última vez.
+  const chave = chaveDe({ tipo: "personagem", personagemId });
+
+  // Apagado por outra janela — ou pela própria, no botão da lixeira: a ficha de
+  // quem não existe mais sai da tela em vez de ficar mostrando o último retrato
+  // dele. `personagens === null` é "ainda não leu", e não "não existe".
   useEffect(() => {
-    if (!open) return;
+    if (personagens !== null && !personagem) fecharJanela(chave);
+  }, [personagens, personagem, fecharJanela, chave]);
 
-    let ativo = true;
-
-    void Promise.all([listCharacters(), listPlayers()]).then(
-      ([lista, mesa]) => {
-        if (!ativo) return;
-
-        setPersonagens(lista);
-        setJogadores(mesa);
-      },
-      (cause) => {
-        if (!ativo) return;
-
-        setPersonagens([]);
-        toast.error(cause instanceof Error ? cause.message : "Falha ao ler os personagens.");
-      },
-    );
-
-    return () => {
-      ativo = false;
-    };
-  }, [open, versao]);
-
-  const atual = personagens?.find((p) => p.id === escolhido) ?? null;
-
-  async function criar() {
-    try {
-      const novo = await createCharacter("Novo personagem");
-      await recarregar();
-      // Já escolhido: o gesto seguinte é sempre dar um nome a ele.
-      setEscolhido(novo.id);
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao criar.");
-    }
+  if (!personagem) {
+    return <p className="text-muted-foreground p-4 text-xs">Lendo…</p>;
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92dvh] gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <div className="border-b p-4">
-          <DialogTitle className="text-base">Personagens</DialogTitle>
-          <DialogDescription className="text-xs">
-            Ficha, miniaturas e a quem cada um pertence. Fica na campanha e viaja no zip — o
-            jogador lê o que está aqui, e não pode apagar.
-          </DialogDescription>
-        </div>
-
-        <div className="grid min-h-0 flex-1 grid-cols-[13rem_1fr] divide-x">
-          <div className="flex min-h-0 flex-col">
-            <div className="p-2">
-              <Button variant="outline" size="sm" className="w-full" onClick={() => void criar()}>
-                <Plus />
-                Novo
-              </Button>
-            </div>
-
-            <ScrollArea className="min-h-0 flex-1">
-              {personagens === null ? (
-                <p className="text-muted-foreground p-3 text-xs">Lendo…</p>
-              ) : personagens.length === 0 ? (
-                <p className="text-muted-foreground p-3 text-xs leading-snug">
-                  Nenhum personagem ainda. Crie um e anexe a ficha dele.
-                </p>
-              ) : (
-                <ul className="space-y-0.5 p-2 pt-0">
-                  {personagens.map((personagem) => (
-                    <li key={personagem.id}>
-                      <button
-                        type="button"
-                        className={cn(
-                          "w-full truncate rounded-md px-2 py-1.5 text-left text-xs",
-                          personagem.id === escolhido ? "bg-accent" : "hover:bg-accent/50",
-                        )}
-                        onClick={() => setEscolhido(personagem.id)}
-                      >
-                        {personagem.nome}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </ScrollArea>
-          </div>
-
-          {atual ? (
-            <CharacterPane
-              personagem={atual}
-              jogadores={jogadores}
-              onChanged={recarregar}
-              onRemoved={() => {
-                setEscolhido(null);
-                recarregar();
-              }}
-            />
-          ) : (
-            <p className="text-muted-foreground m-auto max-w-56 p-6 text-center text-xs">
-              Escolha um personagem à esquerda.
-            </p>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+    <Ficha
+      personagem={personagem}
+      jogadores={jogadores}
+      onChanged={recarregar}
+      onRemoved={() => fecharJanela(chave)}
+      onAbrirJanela={abrirJanela}
+    />
   );
 }
 
-/** O personagem escolhido: nome, arquivos, miniaturas e donos. */
-function CharacterPane({
+/**
+ * O conteúdo, num componente à parte.
+ *
+ * Separado da moldura porque `personagem` já chega garantido aqui: as leituras
+ * de anexo e de dono são deste personagem, e um componente que aceitasse `null`
+ * teria de checar isso em cada uma delas.
+ */
+function Ficha({
   personagem,
   jogadores,
   onChanged,
   onRemoved,
+  onAbrirJanela,
 }: {
   personagem: Personagem;
   jogadores: Player[];
   onChanged: () => void;
   onRemoved: () => void;
+  onAbrirJanela: (conteudo: ConteudoJanela) => void;
 }) {
   const [anexos, setAnexos] = useState<AnexoPersonagem[]>([]);
   const [donos, setDonos] = useState<string[]>([]);
   const [anexando, setAnexando] = useState(false);
 
-  /** Ver a nota em `CharactersDialog`: um lugar que busca, um contador. */
+  /**
+   * Contador de releituras dos ANEXOS, local a esta ficha.
+   *
+   * Separado do contador compartilhado do `useCharactersStore`: anexar arquivo
+   * ao Edgar não tem por que fazer a ficha da Mira reler a pasta dela. O que é
+   * compartilhado é o índice — nome, campos, quem existe.
+   */
   const [versao, setVersao] = useState(0);
   const relerAnexos = useCallback(() => setVersao((atual) => atual + 1), []);
-
-  /** Anexo aberto no visualizador, com o endereço já resolvido. */
-  const [abrindo, setAbrindo] = useState<AnexoPersonagem | null>(null);
-  const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let ativo = true;
@@ -261,13 +170,21 @@ function CharacterPane({
     };
   }, [personagem.id, versao]);
 
-  // A blob URL do visualizador é revogada ao fechar. Sem isto, abrir a ficha de
-  // cinco personagens numa sessão deixa cinco arquivos presos na memória da
-  // webview até a janela fechar.
-  function fecharVisualizador() {
-    if (url) URL.revokeObjectURL(url);
-    setUrl(null);
-    setAbrindo(null);
+  /**
+   * Abre um arquivo como JANELA, e não como modal por cima desta.
+   *
+   * Ver a imagem grande enquanto a ficha continua à vista é o ponto: no modal,
+   * conferir se o token é o certo cobria a ficha de onde o token saiu. E a
+   * janela da imagem entra na mesma pilha desta, então ela vem para a frente
+   * quando é ela que está em uso.
+   */
+  function abrirAnexo(anexo: AnexoPersonagem) {
+    onAbrirJanela({ tipo: "anexo", personagemId: personagem.id, anexo });
+  }
+
+  /** Abre uma imagem do acervo — retrato, miniatura. */
+  function abrirImagem(assetId: string, nome: string) {
+    onAbrirJanela({ tipo: "asset", assetId, nome });
   }
 
   async function anexar() {
@@ -287,8 +204,8 @@ function CharacterPane({
   }
 
   return (
-    <ScrollArea className="min-h-0">
-      <div className="space-y-5 p-4">
+    <ScrollArea className="min-h-0 flex-1">
+      <div className="space-y-5 p-3">
         <div className="flex items-center gap-2">
           <Input
             className="h-8 flex-1 text-sm font-medium"
@@ -331,25 +248,44 @@ function CharacterPane({
         <Files
           personagemId={personagem.id}
           anexos={anexos}
+          ficha={personagem.ficha}
           anexando={anexando}
           onAnexar={() => void anexar()}
-          onAbrir={async (anexo) => {
-            setAbrindo(anexo);
-            setUrl(await characterAttachmentUrl(personagem.id, anexo));
-          }}
+          onAbrir={abrirAnexo}
           onRemover={async (anexo) => {
             await detachFromCharacter(personagem.id, anexo.autor, anexo.arquivo);
             relerAnexos();
+            // Apagar o anexo da ficha limpa o CAMPO ficha do lado nativo — ver
+            // `remove_anexo`. Sem reler o índice, a linha da ficha continuaria
+            // mostrando o nome de um arquivo que acabou de sair do disco.
+            onChanged();
           }}
         />
 
-        <Slots personagem={personagem} onChanged={onChanged} />
+        {/* Os dois: preencher a ficha muda o ÍNDICE (o campo) e a pasta de
+            anexos (o arquivo). Chamando só `onChanged`, a lista de arquivos
+            acima ficava dizendo "nada anexado" com a ficha já posta. */}
+        <Slots
+          personagem={personagem}
+          onChanged={() => {
+            onChanged();
+            relerAnexos();
+          }}
+          onAbrirAnexo={abrirAnexo}
+          onAbrirImagem={abrirImagem}
+        />
 
+        {/* Os dois de novo: vincular muda quem são os donos DESTA ficha, que é
+            leitura local, e muda o nome que a lista de personagens mostra
+            embaixo do nome dele — outra janela. Ver `useCharacterOwners`. */}
         <Owners
           personagem={personagem}
           jogadores={jogadores}
           donos={donos}
-          onChanged={relerAnexos}
+          onChanged={() => {
+            relerAnexos();
+            onChanged();
+          }}
         />
 
         <p className="text-muted-foreground text-[10px] leading-snug">
@@ -358,19 +294,24 @@ function CharacterPane({
         </p>
       </div>
 
-      <AttachmentViewer
-        attachment={abrindo}
-        url={url}
-        onClose={fecharVisualizador}
-      />
     </ScrollArea>
   );
 }
 
-/** Ficha e arquivos, dos dois autores. */
+/**
+ * O que existe ALÉM dos campos: anexos soltos, dos dois autores.
+ *
+ * A ficha sai daqui de propósito. Ela é anexo como qualquer outro no disco, mas
+ * na tela é um CAMPO — tem linha própria, com miniatura, transmitir e trocar.
+ * Aparecendo nos dois lugares, a mesma ficha ficava com dois nomes de gesto:
+ * "Trocar" ali e um X aqui, um que limpa o campo e outro que apaga o arquivo.
+ * O que sobra nesta lista é o que ninguém nomeou — o mapa da masmorra que o
+ * mestre anexou, o desenho que o jogador mandou.
+ */
 function Files({
   personagemId,
   anexos,
+  ficha,
   anexando,
   onAnexar,
   onAbrir,
@@ -378,35 +319,58 @@ function Files({
 }: {
   personagemId: string;
   anexos: AnexoPersonagem[];
+  /** O nome do arquivo que é a ficha, para não repeti-lo aqui. */
+  ficha: string | undefined;
   anexando: boolean;
   onAnexar: () => void;
-  onAbrir: (anexo: AnexoPersonagem) => Promise<void>;
+  onAbrir: (anexo: AnexoPersonagem) => void;
   onRemover: (anexo: AnexoPersonagem) => Promise<void>;
 }) {
+  // Só a do mestre: um "ficha-edgar.jpg" que o JOGADOR mandou é outro arquivo,
+  // noutra pasta, e não é o campo. Ver `AnexoAutor`.
+  const soltos = anexos.filter(
+    (anexo) => !(anexo.autor === "mestre" && anexo.arquivo === ficha),
+  );
+
   return (
     <section className="space-y-2">
       <h3 className="text-xs font-medium">Arquivos</h3>
 
-      {anexos.length === 0 ? (
+      {soltos.length === 0 ? (
         <p className="text-muted-foreground text-xs">
-          Nada anexado. A ficha entra aqui, e o jogador vinculado passa a ler.
+          Nada além dos campos. O que entrar aqui o jogador vinculado também lê.
         </p>
       ) : (
         <ul className="space-y-1">
-          {anexos.map((anexo) => {
-            const Icone = ICONE[attachmentKind(anexo.arquivo, anexo.mimeType)];
+          {soltos.map((anexo) => {
+            const kind = attachmentKind(anexo.arquivo, anexo.mimeType);
+            const Icone = ICONE[kind];
 
             return (
               <li
                 key={`${anexo.autor}/${anexo.arquivo}`}
                 className="bg-muted/40 flex items-center gap-2 rounded-md border p-1.5"
               >
-                <Icone className="text-muted-foreground size-4 shrink-0" aria-hidden />
+                {/* Imagem mostra a imagem, e não o ícone de imagem: numa
+                    campanha com trinta arquivos "logo1.png" não diz nada, e o
+                    ícone diz menos ainda. O resto continua ícone — não há
+                    miniatura de PDF nem de som para mostrar. */}
+                {kind === "image" ? (
+                  <AnexoThumb
+                    key={anexo.arquivo}
+                    personagemId={personagemId}
+                    anexo={anexo}
+                    Fallback={Icone}
+                    onAbrir={() => onAbrir(anexo)}
+                  />
+                ) : (
+                  <Icone className="text-muted-foreground size-4 shrink-0" aria-hidden />
+                )}
 
                 <button
                   type="button"
                   className="min-w-0 flex-1 truncate text-left text-xs hover:underline"
-                  onClick={() => void onAbrir(anexo)}
+                  onClick={() => onAbrir(anexo)}
                 >
                   {anexo.arquivo}
                 </button>
@@ -547,9 +511,13 @@ const CAMPOS: Array<{ campo: CampoPersonagem; titulo: string; nota: string }> = 
 function Slots({
   personagem,
   onChanged,
+  onAbrirAnexo,
+  onAbrirImagem,
 }: {
   personagem: Personagem;
   onChanged: () => void;
+  onAbrirAnexo: (anexo: AnexoPersonagem) => void;
+  onAbrirImagem: (assetId: string, nome: string) => void;
 }) {
   return (
     <section className="space-y-2">
@@ -564,6 +532,8 @@ function Slots({
             titulo={titulo}
             nota={nota}
             onChanged={onChanged}
+            onAbrirAnexo={onAbrirAnexo}
+            onAbrirImagem={onAbrirImagem}
           />
         ))}
       </ul>
@@ -577,17 +547,49 @@ function Slot({
   titulo,
   nota,
   onChanged,
+  onAbrirAnexo,
+  onAbrirImagem,
 }: {
   personagem: Personagem;
   campo: CampoPersonagem;
   titulo: string;
   nota: string;
   onChanged: () => void;
+  onAbrirAnexo: (anexo: AnexoPersonagem) => void;
+  onAbrirImagem: (assetId: string, nome: string) => void;
 }) {
   const [ocupado, setOcupado] = useState(false);
 
   const valor = personagem[campo];
   const { assets } = useAssetList("image");
+
+  // O endereço do asset sai daqui, e não de dentro da miniatura: ele é o mesmo
+  // que o visualizador usa ao abrir a imagem grande, e resolvê-lo duas vezes
+  // faria a linha e o diálogo pedirem o mesmo arquivo ao daemon.
+  const enderecoAsset = useAssetUrl(campo === "ficha" ? undefined : valor);
+
+  /**
+   * A ficha como anexo, quando ela é imagem.
+   *
+   * Ficha imagem existe — um print da ficha de papel, um card de personagem —,
+   * e nesse caso ela é evidência como qualquer outra imagem: cabe na TV e cabe
+   * no quadradinho. Ficha PDF continua só ícone, porque o Assistir não
+   * renderiza PDF.
+   *
+   * O registro é montado do NOME, e não procurado na lista de anexos: o campo
+   * guarda o nome, e a lista é outra leitura, que pode não ter chegado ainda —
+   * ou não ter o arquivo, se ele foi apagado por fora. Procurar ali fazia a
+   * miniatura e o transmitir simplesmente não aparecerem, sem dizer por quê.
+   * `tamanho` fica em zero porque só a lista de arquivos o mostra.
+   */
+  const fichaImagem: AnexoPersonagem | null = (() => {
+    if (campo !== "ficha" || !valor) return null;
+
+    const mimeType = imageMimeByName(valor);
+    if (!mimeType) return null;
+
+    return { arquivo: valor, mimeType, tamanho: 0, autor: "mestre" };
+  })();
 
   // Ficha guarda nome de arquivo; retrato e miniatura guardam id do acervo, e
   // o nome sai da lista de imagens. Ver `Personagem`.
@@ -621,11 +623,31 @@ function Slot({
   return (
     <li className="bg-muted/40 flex items-center gap-2 rounded-md border p-1.5">
       {/* A miniatura do próprio arquivo quando ele é imagem: numa campanha com
-          trinta imagens o nome raramente é o que faz reconhecer qual é. */}
-      {campo === "ficha" ? (
-        <FileText className="text-muted-foreground size-4 shrink-0" aria-hidden />
+          trinta imagens o nome raramente é o que faz reconhecer qual é. E ela
+          abre o visualizador, com zoom: o quadradinho de 36 pixels serve para
+          reconhecer, não para conferir se o token é o certo. */}
+      {campo !== "ficha" ? (
+        <Thumb
+          url={enderecoAsset}
+          alt={rotulo ?? titulo}
+          // Pelo id do asset, e não pelo endereço que a miniatura já tem: a
+          // janela resolve o endereço por conta dela, e passar o resolvido para
+          // dentro do store amarraria a janela ao ciclo de vida desta linha.
+          onAbrir={valor ? () => onAbrirImagem(valor, rotulo ?? titulo) : undefined}
+        />
+      ) : fichaImagem ? (
+        // `key` no arquivo: trocar a ficha REMONTA a miniatura, e é o que
+        // devolve o estado de "falhou" ao início sem escrever estado de dentro
+        // do efeito.
+        <AnexoThumb
+          key={fichaImagem.arquivo}
+          personagemId={personagem.id}
+          anexo={fichaImagem}
+          Fallback={FileText}
+          onAbrir={() => onAbrirAnexo(fichaImagem)}
+        />
       ) : (
-        <SlotThumb assetId={valor} />
+        <FileText className="text-muted-foreground size-4 shrink-0" aria-hidden />
       )}
 
       <span className="min-w-0 flex-1">
@@ -634,6 +656,10 @@ function Slot({
           {rotulo ?? nota}
         </span>
       </span>
+
+      {fichaImagem ? (
+        <Transmitir anexo={fichaImagem} personagemId={personagem.id} />
+      ) : null}
 
       <Button variant="secondary" size="sm" disabled={ocupado} onClick={() => void escolher()}>
         {ocupado ? <Loader2 className="animate-spin" /> : <Paperclip />}
@@ -655,22 +681,108 @@ function Slot({
 }
 
 /**
- * A imagem do campo, quando há.
+ * A miniatura de um anexo imagem, e o atalho para vê-lo grande.
  *
- * Limpar o campo NÃO apaga o asset do acervo, e é de propósito: a imagem pode
- * estar numa cena como item, e apagá-la por causa deste campo deixaria um item
- * órfão no mapa.
+ * Não dá para reusar `useAssetUrl`: anexo é do personagem, fica atrás do token
+ * e chega por IPC como bytes — não tem `/asset/{id}`. Isso custa uma blob URL
+ * por linha, revogada na saída; sem revogar, abrir dez personagens numa sessão
+ * deixa dez arquivos presos na memória da webview.
+ *
+ * `Fallback` é o ícone de quando os bytes não vêm. O caso real é campo
+ * apontando para arquivo que saiu do disco, e ali um quadrado vazio não diria
+ * nada ao mestre.
  */
-function SlotThumb({ assetId }: { assetId: string | undefined }) {
-  const url = useAssetUrl(assetId);
+function AnexoThumb({
+  personagemId,
+  anexo,
+  Fallback,
+  onAbrir,
+}: {
+  personagemId: string;
+  anexo: AnexoPersonagem;
+  Fallback: typeof File;
+  onAbrir: () => void;
+}) {
+  const { autor, arquivo, mimeType, tamanho } = anexo;
+  const [url, setUrl] = useState<string | null>(null);
+  const [falhou, setFalhou] = useState(false);
+
+  useEffect(() => {
+    let ativo = true;
+    let criada: string | null = null;
+
+    void characterAttachmentUrl(personagemId, { autor, arquivo, mimeType, tamanho }).then(
+      (endereco) => {
+        // Trocou o arquivo enquanto os bytes vinham: a blob nova não serve mais
+        // a ninguém, e guardá-la seria vazamento.
+        if (!ativo) {
+          URL.revokeObjectURL(endereco);
+          return;
+        }
+
+        criada = endereco;
+        setUrl(endereco);
+      },
+      () => {
+        if (ativo) setFalhou(true);
+      },
+    );
+
+    return () => {
+      ativo = false;
+      if (criada) URL.revokeObjectURL(criada);
+    };
+  }, [personagemId, autor, arquivo, mimeType, tamanho]);
+
+  if (falhou) return <Fallback className="text-muted-foreground size-4 shrink-0" aria-hidden />;
 
   return (
-    <span className="bg-background size-9 shrink-0 overflow-hidden rounded border">
-      {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" draggable={false} className="size-full object-cover" />
-      ) : null}
-    </span>
+    <Thumb
+      url={url}
+      alt={arquivo}
+      onAbrir={url ? onAbrir : undefined}
+      onError={() => setFalhou(true)}
+    />
+  );
+}
+
+/**
+ * O quadrado da imagem, vazio enquanto não há endereço.
+ *
+ * Com `onAbrir` é botão, e não `span` com clique pendurado: abrir a imagem
+ * grande é ação, e ação que não alcança o teclado deixa metade da tela fora do
+ * alcance de quem não usa mouse. Sem `onAbrir` — enquanto o endereço não
+ * chegou — fica o `span`, porque botão que não faz nada ainda recebe foco.
+ */
+function Thumb({
+  url,
+  alt,
+  onAbrir,
+  onError,
+}: {
+  url: string | null | undefined;
+  alt: string;
+  onAbrir?: () => void;
+  onError?: () => void;
+}) {
+  const imagem = url ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="" draggable={false} className="size-full object-cover" onError={onError} />
+  ) : null;
+
+  const moldura = "bg-background size-9 shrink-0 overflow-hidden rounded border";
+
+  if (!onAbrir) return <span className={moldura}>{imagem}</span>;
+
+  return (
+    <button
+      type="button"
+      className={cn(moldura, "hover:ring-ring focus-visible:ring-ring cursor-zoom-in hover:ring-2 focus-visible:ring-2 focus-visible:outline-none")}
+      aria-label={`Ver ${alt}`}
+      onClick={onAbrir}
+    >
+      {imagem}
+    </button>
   );
 }
 
@@ -785,23 +897,25 @@ function Owners({
       )}
 
       {livres.length > 0 ? (
-        <select
-          className="bg-background h-8 w-full rounded-md border px-2 text-xs"
-          aria-label="Vincular a um jogador"
-          value=""
-          onChange={(event) => {
-            if (event.target.value) {
-              void linkCharacter(event.target.value, personagem.id).then(onChanged);
+        <Select<string>
+          value={null}
+          onValueChange={(jogadorId) => {
+            if (jogadorId) {
+              void linkCharacter(jogadorId, personagem.id).then(onChanged);
             }
           }}
         >
-          <option value="">Vincular a…</option>
-          {livres.map((jogador) => (
-            <option key={jogador.id} value={jogador.id}>
-              {jogador.nome}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-full text-xs" aria-label="Vincular a um jogador">
+            <SelectValue placeholder="Vincular a…" />
+          </SelectTrigger>
+          <SelectContent>
+            {livres.map((jogador) => (
+              <SelectItem key={jogador.id} value={jogador.id} className="text-xs">
+                {jogador.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ) : jogadores.length === 0 ? (
         <p className="text-muted-foreground text-xs">
           Ninguém entrou na mesa ainda. Desvincular não apaga nota: o que o jogador escreveu volta

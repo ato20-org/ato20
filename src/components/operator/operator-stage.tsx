@@ -55,7 +55,7 @@ import {
   MIN_ITEM_SIZE,
 } from "@/lib/geometry/transform";
 import { hasAssetDrag, readAssetDrag } from "@/lib/operator/asset-drag";
-import { usePanelsStore } from "@/lib/store/use-panels-store";
+import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -126,7 +126,15 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   // A aba aberta declara a intenção: em Retratos, o mestre está mexendo neles,
   // e ver todos de uma vez é o que torna o ajuste possível. Fora dela, o mapa
   // é o assunto e só o selecionado aparece.
-  const editingPortraits = usePanelsStore((state) => state.leftTab === "retratos");
+  /**
+   * Retrato só é editável no palco quando a LISTA dele está à vista.
+   *
+   * Era `leftTab === "retratos"`: uma aba fixa do painel esquerdo. Com o dock, a
+   * lista pode estar em qualquer grupo de qualquer coluna, então a pergunta
+   * deixou de ser "qual aba do painel esquerdo" e passou a ser "esta aba está
+   * ativa em algum lugar". Ver `selectAbaAtiva`.
+   */
+  const editingPortraits = useLayoutStore(selectAbaAtiva("retratos"));
   const updatePortrait = usePortraitStore((state) => state.update);
   const updatePortraits = usePortraitStore((state) => state.updateMany);
 

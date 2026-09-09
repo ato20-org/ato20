@@ -10,13 +10,13 @@ import { OpenViewer } from "@/components/operator/open-viewer";
 import { CharactersChip } from "@/components/operator/characters-chip";
 import { PlayersChip } from "@/components/operator/players-chip";
 import { TableInvite } from "@/components/operator/table-invite";
+import { DockRow } from "@/components/operator/dock/dock-row";
 import { TrackBar } from "@/components/operator/track-bar";
-import { LibraryPanel } from "@/components/operator/library-panel";
+import { WindowLayer } from "@/components/operator/window-layer";
 import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
 import { OperatorToolbar } from "@/components/operator/operator-toolbar";
 import { PinIndex } from "@/components/operator/pin-index";
-import { ScenesPanel } from "@/components/operator/scenes-panel";
 import { SpotlightChip } from "@/components/operator/spotlight-chip";
 import { StageContextMenu } from "@/components/operator/stage-context-menu";
 import { ViewportControls } from "@/components/operator/viewport-controls";
@@ -29,7 +29,9 @@ import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
+import { useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
+import { useWindowStore } from "@/lib/store/use-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
   selectEditingScene,
@@ -62,6 +64,8 @@ export function OperatorShell() {
   const toggleRight = usePanelsStore((state) => state.toggleRight);
   const restorePanels = usePanelsStore((state) => state.restore);
   const restorePinNotes = usePinWindowStore((state) => state.restaurar);
+  const restoreLayout = useLayoutStore((state) => state.restaurar);
+  const restoreWindows = useWindowStore((state) => state.restaurar);
 
   const track = useTrackStore((state) => state.track);
   const trackVolume = useTrackStore((state) => state.volume);
@@ -76,7 +80,9 @@ export function OperatorShell() {
   useEffect(() => {
     restorePanels();
     restorePinNotes();
-  }, [restorePanels, restorePinNotes]);
+    restoreWindows();
+    restoreLayout();
+  }, [restorePanels, restorePinNotes, restoreWindows, restoreLayout]);
 
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.
@@ -114,49 +120,71 @@ export function OperatorShell() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        {leftOpen ? <ScenesPanel scene={editingScene} ready={status === "ready"} /> : null}
+      {/* `relative` porque é este retângulo que as janelas internas medem: elas
+          vão POR CIMA dos painéis, e a posição delas é relativa a ele. Antes a
+          camada morava dentro do palco, e o painel de imagens cortava a janela
+          no meio — arrastar a ficha para a direita a levava para debaixo da
+          biblioteca em vez de sobre ela.
 
-        <main className="relative flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
-          {/* Painel fechado deixa um alvo flutuando no canto de cima do palco,
-              do lado dele. É o caminho de volta: sem isso, fechar um painel o
-              deixaria inalcançável. */}
-          <div className="absolute top-2 left-2 z-10">
-            {leftOpen ? null : (
-              <FloatingPanelToggle
-                onToggle={toggleLeft}
-                label="Cenas e áreas"
-                icon={<PanelLeftOpen />}
-              />
+          A linha, e não a raiz do shell: a barra de cima é o que está NO AR e
+          quem alcança a mesa, e a de baixo é o que está tocando. Uma janela
+          cobrindo qualquer das duas esconderia controle de sessão atrás de
+          consulta de ficha. */}
+      <div className="relative flex min-h-0 flex-1">
+        <DockRow>
+          <main className="relative flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
+            {/* Painel fechado deixa um alvo flutuando no canto de cima do palco,
+                do lado dele. É o caminho de volta: sem isso, fechar um painel o
+                deixaria inalcançável. */}
+            <div className="absolute top-2 left-2 z-10">
+              {leftOpen ? null : (
+                <FloatingPanelToggle
+                  onToggle={toggleLeft}
+                  // "o painel esquerdo", e não "Cenas e áreas": o que mora na
+                  // coluna agora é escolha do mestre, e o rótulo mentiria no
+                  // dia em que ele arrastasse Cenas para o outro lado.
+                  label="o painel esquerdo"
+                  icon={<PanelLeftOpen />}
+                />
+              )}
+            </div>
+
+            {/* Quem está na mesa fica aqui, e não no cabeçalho: é consulta, como
+                o índice de pontos, e a contagem só serve se estiver à vista o
+                tempo todo. Fora do `StageBoundary`: uma mesa cheia continua
+                cheia sem cena nenhuma selecionada. */}
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+              {/* Personagens e jogadores na MESMA pílula: são as duas metades da
+                  mesma pergunta — quem senta na mesa, e quem eles interpretam —,
+                  e separá-las em duas pílulas de um botão fazia parecerem duas
+                  ferramentas sem relação. Os dois chips saem sem moldura por
+                  isso; a moldura é esta. */}
+              <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+                <CharactersChip />
+                <PlayersChip />
+              </div>
+              {rightOpen ? null : (
+                <FloatingPanelToggle
+                  onToggle={toggleRight}
+                  label="o painel direito"
+                  icon={<PanelRightOpen />}
+                />
+              )}
+            </div>
+
+            {status === "error" ? (
+              <p className="text-destructive m-auto max-w-sm text-center text-sm">{error}</p>
+            ) : (
+              <StageBoundary scene={editingScene} status={status} />
             )}
-          </div>
+          </main>
+        </DockRow>
 
-          {/* Quem está na mesa fica aqui, e não no cabeçalho: é consulta, como
-              o índice de pontos, e a contagem só serve se estiver à vista o
-              tempo todo. Fora do `StageBoundary`: uma mesa cheia continua
-              cheia sem cena nenhuma selecionada. */}
-          <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-            {/* Personagens ao lado de jogadores: as duas metades da mesma
-                pergunta — quem senta na mesa, e quem eles interpretam. */}
-            <CharactersChip />
-            <PlayersChip />
-            {rightOpen ? null : (
-              <FloatingPanelToggle
-                onToggle={toggleRight}
-                label="Imagens e sons"
-                icon={<PanelRightOpen />}
-              />
-            )}
-          </div>
-
-          {status === "error" ? (
-            <p className="text-destructive m-auto max-w-sm text-center text-sm">{error}</p>
-          ) : (
-            <StageBoundary scene={editingScene} status={status} />
-          )}
-        </main>
-
-        {rightOpen ? <LibraryPanel scene={editingScene} /> : null}
+        {/* Por último na marcação: as janelas ficam acima de tudo o que está
+            nesta linha, e deixar a ordem do DOM concordar com a ordem visual é
+            o que mantém a navegação por Tab indo do mapa e dos painéis para a
+            janela, e não o contrário. */}
+        <WindowLayer />
       </div>
 
       {/* A linha de baixo: o que está tocando, com onde está e quanto falta.

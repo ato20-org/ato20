@@ -1,81 +1,66 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Users2 } from "lucide-react";
+import { Drama } from "lucide-react";
 
-import { CharactersDialog } from "@/components/operator/characters-dialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { listCharacters } from "@/lib/vault/characters";
+import { useCharacters } from "@/hooks/use-characters";
+import { useWindowStore } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
 
 /**
  * Quantos personagens a campanha tem, no canto do palco.
  *
- * Mesma pílula das ferramentas, do zoom, do índice de pontos e dos jogadores.
- * Ao lado da de jogadores de propósito: são as duas metades da mesma pergunta
- * — quem senta na mesa, e quem eles interpretam — e a segmentação entre as duas
- * é justamente o que este trabalho introduziu.
+ * Divide a pílula com os jogadores, e não tem uma própria: são as duas metades
+ * da mesma pergunta — quem senta na mesa, e quem eles interpretam —, e duas
+ * pílulas de um botão lado a lado leem como duas ferramentas sem relação. Quem
+ * desenha a pílula é `OperatorShell`; aqui sai só o botão.
  *
- * A contagem é lida uma vez e ao fechar o diálogo. Sem sondagem: personagem é
- * conteúdo que só o mestre cria, e ninguém mais o adiciona por trás dele —
- * diferente da lista de jogadores, que muda quando um celular entra.
+ * O ícone é a máscara, e não outro grupo de gente: ao lado do de jogadores,
+ * dois ícones de pessoas viravam a mesma silhueta duas vezes, e o que separa os
+ * dois cantos é justamente pessoa contra papel que ela interpreta.
+ *
+ * A contagem sai do `useCharacters`, que relê quando qualquer janela mexe nos
+ * personagens. Sem sondagem: personagem é conteúdo que só o mestre cria, e
+ * ninguém mais o adiciona por trás dele — diferente da lista de jogadores, que
+ * muda quando um celular entra.
+ *
+ * O botão fica marcado enquanto a janela da lista está aberta, e clicar de novo
+ * a traz para a frente em vez de abrir uma segunda — quem garante isso é a
+ * chave derivada do conteúdo, no store.
  */
 export function CharactersChip() {
-  const [aberto, setAberto] = useState(false);
-  const [total, setTotal] = useState<number | null>(null);
+  const { personagens } = useCharacters();
+  const abrir = useWindowStore((state) => state.abrir);
+  const aberta = useWindowStore((state) =>
+    state.janelas.some((janela) => janela.conteudo.tipo === "personagens"),
+  );
 
-  useEffect(() => {
-    // Relê ao FECHAR o diálogo, que é quando o número pode ter mudado.
-    if (aberto) return;
-
-    let ativo = true;
-
-    void listCharacters().then(
-      (lista) => {
-        if (ativo) setTotal(lista.length);
-      },
-      () => {
-        // Sem campanha aberta a contagem não existe; a pílula fica só com o
-        // ícone em vez de a tela cair.
-        if (ativo) setTotal(null);
-      },
-    );
-
-    return () => {
-      ativo = false;
-    };
-  }, [aberto]);
+  const total = personagens?.length ?? null;
 
   return (
-    <>
-      <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant={aberto ? "secondary" : "ghost"}
-                size="icon-sm"
-                className={cn(total ? "w-auto gap-1 px-2" : undefined)}
-                aria-label="Personagens"
-                onClick={() => setAberto(true)}
-              >
-                <Users2 />
-                {total ? <span className="text-xs tabular-nums">{total}</span> : null}
-              </Button>
-            }
-          />
-          <TooltipContent>
-            <p className="font-medium">Personagens</p>
-            <p className="text-muted-foreground max-w-52">
-              Ficha, miniaturas e a quem cada um pertence. O que está aqui fica na campanha, não
-              na mão de quem joga.
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
-
-      <CharactersDialog open={aberto} onOpenChange={setAberto} />
-    </>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={aberta ? "secondary" : "ghost"}
+            size="icon-sm"
+            className={cn(total ? "w-auto gap-1 px-2" : undefined)}
+            aria-label="Personagens"
+            onClick={() => abrir({ tipo: "personagens" })}
+          >
+            <Drama />
+            {total ? <span className="text-xs tabular-nums">{total}</span> : null}
+          </Button>
+        }
+      />
+      <TooltipContent>
+        <p className="font-medium">Personagens</p>
+        <p className="text-muted-foreground max-w-52">
+          Ficha, miniaturas e a quem cada um pertence. Abre como janela: fica na tela enquanto
+          você mexe no mapa.
+        </p>
+      </TooltipContent>
+    </Tooltip>
   );
 }

@@ -24,6 +24,32 @@ const BY_EXTENSION: Record<string, AttachmentKind> = {
 };
 
 /**
+ * O tipo de imagem pela extensão.
+ *
+ * Só imagem, e de propósito: quem precisa disto é a ficha, que é guardada pelo
+ * NOME do arquivo e não pelo registro do anexo — ver `Personagem.ficha`. Para
+ * montar a blob da miniatura é preciso um tipo, e blob sem tipo deixa a decisão
+ * de renderizar para o palpite do navegador.
+ */
+const IMAGE_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+};
+
+/** O tipo MIME de imagem pelo nome, ou `null` se o nome não é de imagem. */
+export function imageMimeByName(name: string): string | null {
+  const extension = name.split(".").pop()?.toLowerCase() ?? "";
+
+  return IMAGE_MIME[extension] ?? null;
+}
+
+/**
  * Como exibir o anexo.
  *
  * O `mimeType` manda, mas o Storage às vezes devolve vazio ou
