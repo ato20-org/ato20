@@ -575,4 +575,9 @@ acontecer responde se **aquele** aparelho dá conta.
 
 ## Licença
 
-Sem licença definida. Repositório privado, uso pessoal — todos os direitos reservados.
+MIT — o texto está em [LICENSE](LICENSE).
+
+Permissiva de propósito. O que a licença defenderia aqui é o cenário de alguém rodar o
+projeto como serviço fechado, e ele não existe: o daemon escuta na rede da casa de quem
+opera, e não há o que hospedar. Copyleft custaria contribuidor e deixaria plugin de
+terceiro em zona cinzenta de obra derivada — justamente o que se quer que apareça.
