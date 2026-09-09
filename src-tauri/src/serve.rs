@@ -1314,7 +1314,7 @@ mod tests {
             let guard = state.vault.read().expect("vault");
             let vault = guard.as_ref().expect("campanha");
             let (aceitos, recusados) =
-                assets::import(vault, &[origem]).expect("import");
+                assets::import(vault, &[origem], None).expect("import");
 
             assert!(recusados.is_empty(), "{recusados:?}");
             aceitos[0].id.clone()

@@ -96,6 +96,7 @@ function StackedLayout({ codigo, live }: LayoutProps) {
         <PlateiaStage
           scene={live.scene}
           portraits={live.portraits}
+          medida={live.medida}
           synced={live.synced}
           stalled={live.stalled}
         />
@@ -172,6 +173,7 @@ function TabbedLayout({ codigo, live }: LayoutProps) {
           <PlateiaStage
             scene={live.scene}
             portraits={live.portraits}
+            medida={live.medida}
             synced={live.synced}
             stalled={live.stalled}
           />

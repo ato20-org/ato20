@@ -74,6 +74,7 @@ pub fn run() {
             commands::board_save,
             commands::asset_list,
             commands::asset_import,
+            commands::asset_set_escopo,
             commands::asset_delete,
             commands::asset_set_folder,
             commands::asset_set_peaks,

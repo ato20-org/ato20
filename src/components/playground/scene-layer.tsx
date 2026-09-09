@@ -6,11 +6,19 @@ import { CanvasItemView } from "@/components/playground/canvas-item-view";
 import { FogLayer } from "@/components/playground/fog-layer";
 import { GridLayer } from "@/components/playground/grid-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
+import { TracoLayer } from "@/components/playground/traco-layer";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { CanvasItem, FogRegion, Portrait, Scene } from "@/types/scene";
 
 type SceneLayerProps = {
   scene: Scene;
+  /**
+   * Riscos que a borracha está tocando, translúcidos até o dedo soltar.
+   *
+   * Só o Operador passa: a mesa não tem borracha, e ela nunca vê um risco
+   * meio-apagado — a remoção chega pronta na publicação seguinte.
+   */
+  apagando?: ReadonlySet<string>;
   /** `viewer` é o que a mesa vê. `operator` deixa o mestre atravessar a névoa. */
   variant?: "operator" | "viewer";
   /**
@@ -46,6 +54,7 @@ export function SceneLayer({
   onItemPointerDown,
   onFogPointerDown,
   onPortraitPointerDown,
+  apagando,
 }: SceneLayerProps) {
   const backgroundUrl = useAssetUrl(scene.backgroundAssetId);
   const items = useMemo(() => [...scene.items].sort((a, b) => a.z - b.z), [scene.items]);
@@ -76,6 +85,13 @@ export function SceneLayer({
           onPointerDown={onItemPointerDown}
         />
       ))}
+
+      {/* Depois dos itens e ANTES da névoa: o risco marca o mapa e o que está
+          nele, então passar por cima de um token é o certo -- circular um
+          inimigo é justamente o gesto. Mas atrás da névoa, porque o que está
+          escondido não pode ser denunciado por uma marca que o mestre riscou
+          antes de esconder. */}
+      <TracoLayer tracos={scene.tracos ?? []} apagando={apagando} />
 
       <FogLayer
         fog={scene.fog}

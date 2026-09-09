@@ -142,7 +142,12 @@ export function removeFogSelection(): void {
 }
 
 /**
- * Apaga o retrato selecionado.
+ * Tira da tela o retrato selecionado, e esquece onde ele estava.
+ *
+ * Desde que retrato passou a ser de personagem, "apagar" não faz mais o
+ * personagem sair de lugar nenhum: ele continua na cena e continua na lista. O
+ * que se apaga é a ARRUMAÇÃO -- posição, tamanho, moldura. É o par da lixeira
+ * na linha, e o oposto do olho, que tira do ar guardando tudo.
  *
  * Não passa pelo board: retrato é da sessão, e por isso também não entra no
  * histórico de desfazer — um Ctrl+Z depois de mover uma imagem não deve

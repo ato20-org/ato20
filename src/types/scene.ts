@@ -39,6 +39,19 @@ export type AssetMeta = {
    */
   folderId?: string;
   /**
+   * A que este arquivo PERTENCE: `cena` ou `personagem`.
+   *
+   * Ausente é o caso comum — imagem que serve a qualquer cena: mobília, um
+   * handout, um mapa dentro do mapa. Presente quando tem dono: fundo de cena,
+   * retrato ou miniatura de personagem.
+   *
+   * Existe para a BIBLIOTECA não listá-lo. Antes toda imagem aparecia ali,
+   * inclusive o fundo e os dois arquivos de cada personagem, e a lista
+   * misturava o que se escolhe com o que já foi escolhido. O espelho em Rust é
+   * `AssetMeta::escopo`.
+   */
+  escopo?: EscopoAsset;
+  /**
    * A forma da onda, um valor de 0 a 100 por barra. Só para `audio`.
    *
    * Medida uma vez pela tela, na primeira vez que a faixa aparece na barra da
@@ -57,10 +70,29 @@ export type AssetMeta = {
  */
 export type AssetFolder = { id: string; name: string; createdAt: number };
 
+/** O dono de um arquivo do acervo, quando ele tem um. */
+export type EscopoAsset = "cena" | "personagem";
+
 /** Uma imagem posicionada sobre o fundo da cena. */
 export type CanvasItem = {
   id: string;
   assetId: string;
+  /**
+   * De quem e este token, quando ele e um.
+   *
+   * Ausente na imensa maioria dos itens: mobilia, mapa dentro do mapa, marca
+   * de sangue. Presente quando o item entrou pela lista de personagens, e e o
+   * que permite ao mapa saber que aquela figura E o Edgar em vez de ser um
+   * arquivo chamado "Personagem - Edgar.png".
+   *
+   * Aponta para o PERSONAGEM, e nao para o jogador: e a razao de o personagem
+   * existir como conteudo de campanha -- ver `Personagem`. O token sobrevive a
+   * quem o interpreta trocar de maos, e continua valendo no zip que viaja.
+   *
+   * Guarda o id e nao o nome: renomear o personagem tem de renomear o token,
+   * e um nome copiado aqui viraria mentira na primeira renomeacao.
+   */
+  personagemId?: string;
   /** Canto superior esquerdo, em coordenadas de cena. */
   x: number;
   y: number;
@@ -229,6 +261,50 @@ export type Spotlight = {
 export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height">;
 
 /**
+ * Um risco a mao livre sobre o mapa.
+ *
+ * Mora na CENA, como a nevoa e os pontos, e pelas mesmas razoes: o risco marca
+ * ALGO do mapa -- por onde os guardas passam, onde o chao cede --, entao ele
+ * pertence ao mapa e nao ao momento. Viaja no zip, entra no desfazer, e trocar
+ * de cena troca os riscos.
+ *
+ * A mesa ve: riscar o mapa e apontar para ela.
+ */
+export type Traco = {
+  id: string;
+  /**
+   * Os pontos, ACHATADOS: `x0, y0, x1, y1, ...`, em unidades de cena.
+   *
+   * Achatado e nao uma lista de `{x, y}` porque um risco de tres segundos tem
+   * umas duzentas amostras: duzentos objetos por risco, num arquivo de cena que
+   * e lido e gravado inteiro, e num payload que atravessa o canal a cada
+   * publicacao. E e a forma que o `points` do SVG quer.
+   */
+  pontos: number[];
+  /** Cor CSS, como o mestre escolheu. */
+  cor: string;
+  /** Espessura em unidades de cena, para acompanhar o zoom como o resto. */
+  espessura: number;
+};
+
+export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura">;
+
+/**
+ * A medida em curso da regua, em unidades de cena.
+ *
+ * Viaja FORA da cena, como o retrato e a evidencia: ela nao pertence ao mapa --
+ * nao viaja no zip, nao entra no desfazer -- e existe so enquanto o dedo esta
+ * no botao. A mesa ve para acompanhar a conta: "cabe o carro nessa viela?" e
+ * pergunta que todo mundo na mesa quer ver respondida.
+ *
+ * `null` = ninguem medindo.
+ */
+export type Medida = {
+  de: { x: number; y: number };
+  para: { x: number; y: number };
+};
+
+/**
  * Recorte do plano de cena. Sempre na proporção do plano, para toda visão
  * caber o mesmo enquadramento sem cortar nada.
  *
@@ -297,6 +373,28 @@ export type SessionTrack = {
  */
 export type Portrait = {
   id: string;
+  /**
+   * De quem e este retrato.
+   *
+   * Todo retrato e de um personagem: nao existe mais "retrato solto", feito de
+   * uma imagem qualquer do acervo. A lista deriva dos tokens que estao na cena,
+   * e este campo e a amarra entre a figura na tela e a ficha de quem ela e --
+   * o mesmo papel que `personagemId` faz no item do mapa.
+   *
+   * O registro guardado e GEOMETRIA: onde ele esta, de que tamanho, e se esta
+   * no ar. Desligar mantem o registro, e e isso que faz a posicao ser lembrada
+   * de uma cena para a outra.
+   */
+  personagemId: string;
+  /**
+   * A imagem, resolvida do campo Retrato do personagem.
+   *
+   * Fica no tipo porque o payload publicado precisa dela: o Assistir nao tem
+   * credencial nem indice de personagens, so `/asset/{id}`. Mas quem manda e o
+   * campo da ficha, e nao esta copia -- ver `retratosDaCena`, que a resolve na
+   * hora. Copia crava a imagem de quando o retrato foi armado, e trocar o
+   * Retrato na ficha deixaria a mesa vendo a antiga.
+   */
   assetId: string;
   x: number;
   y: number;
@@ -306,12 +404,44 @@ export type Portrait = {
   visible: boolean;
   /** Virar o retrato para o lado da tela em que ele está. */
   flipX?: boolean;
-  /** Moldura e sombra, para não parecer recorte colado no mapa. */
-  framed?: boolean;
+  /**
+   * Solto da fila automatica, quando ela esta ligada.
+   *
+   * Excecao e nao regra: o interruptor da fila e um so, no painel, e vale para
+   * todos. Este campo e o que permite tirar UM da fila sem desligar o modo --
+   * o vilao no canto enquanto o grupo se enfileira embaixo.
+   *
+   * Ausente na maioria, e por isso e o campo que existe: `naFila: true` em
+   * todos os registros diria a mesma coisa ocupando mais espaco, e obrigaria a
+   * preencher o padrao a cada retrato novo.
+   */
+  foraDaFila?: boolean;
 };
 
+/**
+ * Onde a fila de retratos encosta.
+ *
+ * Areas, e nao posicao livre: a fila e um conjunto, e arrastar um conjunto para
+ * um ponto exato e um gesto que ninguem quer repetir -- o que se quer e "esse
+ * grupo fica no canto de cima a direita". Seis, porque sao as combinacoes de
+ * cima/baixo com esquerda/centro/direita, e nenhuma das seis e estranha numa
+ * tela de mesa.
+ *
+ * Em fracao da camera, como o resto do retrato: o que a mesa ve e o recorte.
+ */
+export type AncoraRetrato =
+  | "cima-esquerda"
+  | "cima-centro"
+  | "cima-direita"
+  | "baixo-esquerda"
+  | "baixo-centro"
+  | "baixo-direita";
+
 /** O que o chamador informa ao criar um item; `id`, `z` e afins são do store. */
-export type NewCanvasItem = Pick<CanvasItem, "assetId" | "x" | "y" | "width" | "height">;
+export type NewCanvasItem = Pick<
+  CanvasItem,
+  "assetId" | "x" | "y" | "width" | "height" | "personagemId"
+>;
 
 /**
  * Item novo que pode trazer rotação e travamento próprios — é o que o
@@ -339,6 +469,13 @@ export type Scene = {
   camera?: Viewport;
   /** Grade sobre o mapa. Ausente = sem grade. */
   grid?: SceneGrid;
+  /**
+   * Os riscos a mao livre. Ausente = nenhum, que e o caso da maioria.
+   *
+   * Opcional e nao uma lista vazia para nao engordar toda cena que nunca foi
+   * riscada -- mesma razao de `grid`.
+   */
+  tracos?: Traco[];
   createdAt: number;
   updatedAt: number;
 };

@@ -13,7 +13,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { daemonAddr } from "@/lib/vault/bridge";
 
@@ -72,8 +76,9 @@ export function TableInvite() {
         />
         <TooltipContent>
           <p className="max-w-52">
-            Esta máquina não está numa rede local, então a TV e os celulares não têm como
-            alcançá-la. Conecte o Wi-Fi ou o cabo e reabra o aplicativo.
+            Esta máquina não está numa rede local, então a TV e os celulares não
+            têm como alcançá-la. Conecte o Wi-Fi ou o cabo e reabra o
+            aplicativo.
           </p>
         </TooltipContent>
       </Tooltip>
@@ -84,7 +89,7 @@ export function TableInvite() {
     <Dialog>
       <DialogTrigger
         render={
-          <Button variant="outline" size="sm">
+          <Button variant="ghost" size="sm">
             <QrCode />
             <span className="hidden lg:inline">Entrar na mesa</span>
           </Button>
@@ -93,7 +98,8 @@ export function TableInvite() {
       <DialogContent className="max-w-sm">
         <DialogTitle>Entrar na mesa</DialogTitle>
         <DialogDescription>
-          Aponte a câmera do celular. O código já vai no QR — ninguém precisa digitar nada.
+          Aponte a câmera do celular. O código já vai no QR — ninguém precisa
+          digitar nada.
         </DialogDescription>
 
         <Tabs defaultValue="plateia" className="gap-3">
@@ -110,8 +116,8 @@ export function TableInvite() {
         </Tabs>
 
         <p className="text-muted-foreground border-t pt-3 text-xs">
-          Vale só na mesma rede. O código não é senha forte — ele impede a entrada por acaso, não
-          alguém decidido no teu Wi-Fi.
+          Vale só na mesma rede. O código não é senha forte — ele impede a
+          entrada por acaso, não alguém decidido no teu Wi-Fi.
         </p>
       </DialogContent>
     </Dialog>
@@ -160,7 +166,9 @@ function Alvo({ url }: { url: string }) {
         <div className="bg-muted size-48 animate-pulse rounded-md" />
       )}
 
-      <code className="text-muted-foreground w-full text-center text-xs break-all">{url}</code>
+      <code className="text-muted-foreground w-full text-center text-xs break-all">
+        {url}
+      </code>
 
       <Button
         variant="ghost"

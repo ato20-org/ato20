@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import Image from "next/image";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Clapperboard, Maximize2, Minimize2, Minus, X } from "lucide-react";
 
+import logo from "@/assets/logo-white.png";
 import { isDesktop } from "@/lib/vault/bridge";
 import { cn } from "@/lib/utils";
 
@@ -106,7 +108,18 @@ export function WindowChrome({
       >
         {/* Ponta esquerda: o nome, e o que quem chama quiser pôr ao lado dele
             — hoje a campanha. */}
-        <span data-tauri-drag-region className="text-muted-foreground shrink-0 text-xs">
+        <span
+          data-tauri-drag-region
+          className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs"
+        >
+          {/* `pointer-events-none` no logo pelo mesmo motivo do subtitulo: uma
+              imagem no meio da faixa de arraste roubaria o gesto. */}
+          <Image
+            src={logo}
+            alt=""
+            priority
+            className="pointer-events-none h-3.5 w-auto opacity-70"
+          />
           ATO20
         </span>
         {inicio}
@@ -128,7 +141,10 @@ export function WindowChrome({
         >
           {subtitulo ? (
             <span className="pointer-events-none flex min-w-0 items-center gap-1.5 text-xs">
-              <Clapperboard className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+              <Clapperboard
+                className="text-muted-foreground size-3.5 shrink-0"
+                aria-hidden
+              />
               <span className="truncate">Editando {subtitulo}</span>
             </span>
           ) : null}
@@ -208,15 +224,51 @@ function ChromeButton({
 function ResizeEdges() {
   const janela = getCurrentWindow();
 
-  const arestas: Array<{ dir: ResizeDirection; className: string; cursor: string }> = [
-    { dir: "North", className: "top-0 right-2 left-2 h-1", cursor: "cursor-n-resize" },
-    { dir: "South", className: "bottom-0 right-2 left-2 h-1", cursor: "cursor-s-resize" },
-    { dir: "West", className: "top-2 bottom-2 left-0 w-1", cursor: "cursor-w-resize" },
-    { dir: "East", className: "top-2 right-0 bottom-2 w-1", cursor: "cursor-e-resize" },
-    { dir: "NorthWest", className: "top-0 left-0 size-2", cursor: "cursor-nw-resize" },
-    { dir: "NorthEast", className: "top-0 right-0 size-2", cursor: "cursor-ne-resize" },
-    { dir: "SouthWest", className: "bottom-0 left-0 size-2", cursor: "cursor-sw-resize" },
-    { dir: "SouthEast", className: "right-0 bottom-0 size-2", cursor: "cursor-se-resize" },
+  const arestas: Array<{
+    dir: ResizeDirection;
+    className: string;
+    cursor: string;
+  }> = [
+    {
+      dir: "North",
+      className: "top-0 right-2 left-2 h-1",
+      cursor: "cursor-n-resize",
+    },
+    {
+      dir: "South",
+      className: "bottom-0 right-2 left-2 h-1",
+      cursor: "cursor-s-resize",
+    },
+    {
+      dir: "West",
+      className: "top-2 bottom-2 left-0 w-1",
+      cursor: "cursor-w-resize",
+    },
+    {
+      dir: "East",
+      className: "top-2 right-0 bottom-2 w-1",
+      cursor: "cursor-e-resize",
+    },
+    {
+      dir: "NorthWest",
+      className: "top-0 left-0 size-2",
+      cursor: "cursor-nw-resize",
+    },
+    {
+      dir: "NorthEast",
+      className: "top-0 right-0 size-2",
+      cursor: "cursor-ne-resize",
+    },
+    {
+      dir: "SouthWest",
+      className: "bottom-0 left-0 size-2",
+      cursor: "cursor-sw-resize",
+    },
+    {
+      dir: "SouthEast",
+      className: "right-0 bottom-0 size-2",
+      cursor: "cursor-se-resize",
+    },
   ];
 
   return (

@@ -45,22 +45,32 @@ function bestOffset(moving: number[], targets: number[], threshold: number) {
   return distance < threshold ? { offset, position } : null;
 }
 
+/** O plano de cena, que é a moldura padrão. Ver `computeSnap`. */
+const PLANO: Bounds = { minX: 0, minY: 0, maxX: SCENE_WIDTH, maxY: SCENE_HEIGHT };
+
 /**
- * Atração do item em movimento às bordas e centros dos outros itens e do
- * próprio plano de cena. Cada eixo resolve sozinho: um item pode grudar em X
- * e continuar livre em Y.
+ * Atração do item em movimento às bordas e centros dos outros itens e de uma
+ * moldura. Cada eixo resolve sozinho: um item pode grudar em X e continuar
+ * livre em Y.
+ *
+ * A moldura é sempre candidata: alinhar ao centro é o caso mais comum de todos
+ * numa mesa de RPG.
+ *
+ * Qual moldura depende do que se move. Item da cena se alinha ao PLANO, que é
+ * onde ele vive. Retrato se alinha à CÂMERA: ele é preso a ela, e o que a mesa
+ * vê é o recorte, não o plano — grudar no centro do plano deixaria o retrato
+ * torto na tela da mesa, que é a única tela em que ele aparece.
  */
 export function computeSnap(
   moving: Bounds,
   targets: Bounds[],
   threshold: number,
+  frame: Bounds = PLANO,
 ): SnapResult {
   if (threshold <= 0) return NO_SNAP;
 
-  // O plano é sempre candidato: alinhar ao centro da tela é o caso mais comum
-  // de todos numa mesa de RPG.
-  const targetsX = [0, SCENE_WIDTH / 2, SCENE_WIDTH, ...targets.flatMap(edgesX)];
-  const targetsY = [0, SCENE_HEIGHT / 2, SCENE_HEIGHT, ...targets.flatMap(edgesY)];
+  const targetsX = [...edgesX(frame), ...targets.flatMap(edgesX)];
+  const targetsY = [...edgesY(frame), ...targets.flatMap(edgesY)];
 
   const x = bestOffset(edgesX(moving), targetsX, threshold);
   const y = bestOffset(edgesY(moving), targetsY, threshold);

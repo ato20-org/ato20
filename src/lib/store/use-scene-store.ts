@@ -34,6 +34,7 @@ import {
   type MapPin,
   type NewCanvasItem,
   type NewFogRegion,
+  type NewTraco,
   type NewMapPin,
   type Scene,
   type SceneGrid,
@@ -120,6 +121,15 @@ type SceneStore = {
   setItemsLocked: (sceneId: string, itemIds: string[], locked: boolean) => void;
 
   addFog: (sceneId: string, region: NewFogRegion) => string;
+  /** Crava um risco. Passa pelo histórico: riscar é edição da cena. */
+  addTraco: (sceneId: string, traco: NewTraco) => string;
+  /**
+   * Apaga vários riscos de uma vez.
+   *
+   * Vários e não um: a borracha atravessa três riscos numa passada, e apagar um
+   * por um daria três entradas no desfazer para um gesto só.
+   */
+  removeTracos: (sceneId: string, tracoIds: string[]) => void;
   updateFog: (sceneId: string, fogId: string, patch: Partial<FogRegion>) => void;
   removeFog: (sceneId: string, fogId: string) => void;
 
@@ -381,6 +391,28 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     }));
 
     return id;
+  },
+
+  addTraco(sceneId, traco) {
+    const id = crypto.randomUUID();
+
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      tracos: [...(scene.tracos ?? []), { ...traco, id }],
+    }));
+
+    return id;
+  },
+
+  removeTracos(sceneId, tracoIds) {
+    if (tracoIds.length === 0) return;
+
+    const apagar = new Set(tracoIds);
+
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      tracos: (scene.tracos ?? []).filter((traco) => !apagar.has(traco.id)),
+    }));
   },
 
   updateFog(sceneId, fogId, patch) {

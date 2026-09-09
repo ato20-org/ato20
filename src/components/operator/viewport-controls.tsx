@@ -1,12 +1,14 @@
 "use client";
 
-import { Maximize, ScanSearch, ZoomIn, ZoomOut } from "lucide-react";
+import { Maximize, Ruler, ScanSearch, ZoomIn, ZoomOut } from "lucide-react";
 
 import { GridControl } from "@/components/operator/grid-control";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import { isFullViewport, viewportZoom } from "@/lib/geometry/viewport";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useToolStore } from "@/lib/store/use-tool-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { Scene } from "@/types/scene";
 
@@ -23,6 +25,9 @@ export function ViewportControls({ scene }: { scene: Scene }) {
   const fit = useViewportStore((state) => state.fit);
 
   const setSceneCamera = useSceneStore((state) => state.setSceneCamera);
+
+  const tool = useToolStore((state) => state.tool);
+  const setTool = useToolStore((state) => state.setTool);
 
   const zoom = viewportZoom(viewport);
   const atFit = isFullViewport(viewport);
@@ -57,6 +62,35 @@ export function ViewportControls({ scene }: { scene: Scene }) {
 
       {/* Ao lado do enquadrar: as duas respondem o que a mesa vê do mapa. */}
       <GridControl scene={scene} />
+
+      {/* A régua colada na grade, e não na barra de ferramentas: ela só
+          significa algo com a grade ligada, porque é o quadrado que diz quanto
+          vale um metro. Longe dela, o botão desabilitado não explicaria por
+          quê. */}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant={tool === "regua" ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-label="Régua"
+              aria-pressed={tool === "regua"}
+              disabled={!scene.grid}
+              onClick={() => setTool(tool === "regua" ? "select" : "regua")}
+            >
+              <Ruler />
+            </Button>
+          }
+        />
+        <TooltipContent>
+          <p className="font-medium">Régua</p>
+          <p className="text-muted-foreground max-w-48">
+            {scene.grid
+              ? `Arraste para medir. Cada quadrado da grade vale ${METROS_POR_QUADRADO} m.`
+              : "Ligue a grade primeiro: é o quadrado dela que diz quanto vale um metro."}
+          </p>
+        </TooltipContent>
+      </Tooltip>
 
       <span className="bg-border mx-1 h-5 w-px" />
 

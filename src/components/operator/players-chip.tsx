@@ -11,19 +11,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCharacterNames } from "@/hooks/use-character-names";
 import { presente as estaPresente, usePlayers } from "@/hooks/use-players";
+import { normaliza } from "@/lib/search";
 import { cn } from "@/lib/utils";
 
 /** Passo da sondagem com a lista aberta, e com ela fechada. Ver `usePlayers`. */
 const ABERTO_MS = 5_000;
 const FECHADO_MS = 30_000;
-
-/** Sem acento e sem caixa: "Álvaro" tem de ser achável digitando "alvaro". */
-function normaliza(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase();
-}
 
 /**
  * Quem está na mesa, no canto do palco.
@@ -31,7 +24,8 @@ function normaliza(texto: string): string {
  * Saiu do cabeçalho: lá ele era um alvo de largura variável no meio da barra da
  * sessão, e a contagem — a única coisa que o mestre olha sem querer abrir nada
  * — não aparecia. Aqui é a mesma pílula das ferramentas, do zoom e do índice de
- * pontos, com o número ao lado do ícone.
+ * pontos, com o número ao lado do ícone. A pílula é dividida com os
+ * personagens e é desenhada por `OperatorShell`; daqui sai só o botão.
  *
  * A lista vem por IPC: o mestre não passa pelas rotas do daemon, porque o
  * aplicativo é ele. Substitui o diálogo que lia a tabela `players` do Supabase,
@@ -77,38 +71,36 @@ export function PlayersChip() {
   return (
     <>
       <Popover open={aberto} onOpenChange={setAberto}>
-        <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <PopoverTrigger
-                  render={
-                    <Button
-                      variant={aberto ? "secondary" : "ghost"}
-                      size="icon-sm"
-                      // Largura própria quando há gente: o número ao lado do
-                      // ícone é o que responde "quantos entraram?" sem abrir
-                      // nada. Mesma pílula do índice de pontos.
-                      className={cn(total > 0 && "w-auto gap-1 px-2")}
-                      aria-label={`Jogadores (${total})`}
-                    >
-                      <Users />
-                      {total > 0 ? <span className="text-xs tabular-nums">{total}</span> : null}
-                    </Button>
-                  }
-                />
-              }
-            />
-            <TooltipContent>
-              <p className="font-medium">Jogadores</p>
-              <p className="text-muted-foreground max-w-48">
-                {total === 0
-                  ? "Ninguém entrou pela Plateia ainda."
-                  : `${presentes} de ${total} na mesa agora. Escolha um para ver arquivos e notas.`}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <PopoverTrigger
+                render={
+                  <Button
+                    variant={aberto ? "secondary" : "ghost"}
+                    size="icon-sm"
+                    // Largura própria quando há gente: o número ao lado do
+                    // ícone é o que responde "quantos entraram?" sem abrir
+                    // nada. Mesma pílula do índice de pontos.
+                    className={cn(total > 0 && "w-auto gap-1 px-2")}
+                    aria-label={`Jogadores (${total})`}
+                  >
+                    <Users />
+                    {total > 0 ? <span className="text-xs tabular-nums">{total}</span> : null}
+                  </Button>
+                }
+              />
+            }
+          />
+          <TooltipContent>
+            <p className="font-medium">Jogadores</p>
+            <p className="text-muted-foreground max-w-48">
+              {total === 0
+                ? "Ninguém entrou pela Plateia ainda."
+                : `${presentes} de ${total} na mesa agora. Escolha um para ver arquivos e notas.`}
+            </p>
+          </TooltipContent>
+        </Tooltip>
 
         <PopoverContent className="w-72 p-0" side="bottom" align="end">
           {!loaded ? (
@@ -139,7 +131,7 @@ export function PlayersChip() {
                   autoFocus
                   value={busca}
                   onChange={(event) => setBusca(event.target.value)}
-                  placeholder="Buscar por nome ou apelido"
+                  placeholder="Buscar por nome ou personagem"
                   aria-label="Buscar jogador"
                   className="h-9 border-0 pl-8 text-sm shadow-none focus-visible:ring-0"
                 />

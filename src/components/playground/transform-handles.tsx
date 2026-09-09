@@ -1,10 +1,11 @@
 "use client";
 
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { FlipHorizontal, RotateCw, Trash2 } from "lucide-react";
+import { Drama, FlipHorizontal, RotateCw, Trash2 } from "lucide-react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { cn } from "@/lib/utils";
 import {
   angleTo,
   handleCursor,
@@ -25,6 +26,31 @@ const GIZMO_Z = 10_000;
 const HANDLE_PX = 10;
 const OUTLINE_PX = 1.5;
 const ROTATE_OFFSET_PX = 30;
+
+/**
+ * A cor do gizmo, por tom.
+ *
+ * Existe porque token de personagem tem de se distinguir de qualquer outra
+ * imagem selecionada: numa cena com mobília, mapa e quatro tokens, saber que a
+ * caixa em volta é de uma PESSOA muda o que o mestre vai fazer com ela. Azul
+ * porque o resto do palco já é do tom primário -- a moldura da câmera, a
+ * seleção comum -- e um segundo item no mesmo tom não seria distinção nenhuma.
+ *
+ * O traço é uma string de CSS e não classe porque o contorno é `outline`
+ * inline: `outline` com espessura em unidade de cena não sai de utilitário.
+ */
+const TOM = {
+  default: {
+    traco: "var(--primary)",
+    alca: "border-primary",
+    botao: "bg-primary text-primary-foreground",
+  },
+  personagem: {
+    traco: "var(--color-sky-400)",
+    alca: "border-sky-400",
+    botao: "bg-sky-500 text-white",
+  },
+} as const;
 
 const HANDLE_POSITION: Record<ResizeHandle, { left: string; top: string }> = {
   nw: { left: "0%", top: "0%" },
@@ -51,6 +77,15 @@ type TransformHandlesProps = {
   /** Empilhamento, para o gizmo da câmera ficar acima do da seleção. */
   zIndex?: number;
   /**
+   * A cor do gizmo. `personagem` pinta contorno, alças e botões de azul.
+   *
+   * Não é derivado de `onOpenSheet` estar presente, apesar de hoje os dois
+   * andarem juntos: cor e ação são coisas diferentes, e amarrá-las faria um
+   * item com ficha mas sem botão -- travado, por exemplo -- perder a cor que o
+   * identifica.
+   */
+  tom?: keyof typeof TOM;
+  /**
    * Contorno sólido em volta da caixa. Desligado quando quem chama já desenha
    * o próprio contorno, como a câmera com sua borda tracejada.
    */
@@ -67,6 +102,14 @@ type TransformHandlesProps = {
   onDelete?: () => void;
   /** Presente = mostra o botão de espelhar na horizontal. */
   onFlip?: () => void;
+  /**
+   * Presente = mostra o botão que abre a ficha de quem este item é.
+   *
+   * Só aparece em token, que é item com `personagemId`. Uma imagem de mobília
+   * não tem ficha para abrir, e um botão que existisse sempre — cinza na maior
+   * parte dos itens — faria a fileira do gizmo crescer sem dizer nada.
+   */
+  onOpenSheet?: () => void;
   /**
    * Avisado no pointerdown de redimensionar ou girar.
    *
@@ -89,15 +132,19 @@ export function TransformHandles({
   handles = RESIZE_HANDLES,
   keepAspect = false,
   zIndex = GIZMO_Z,
+  tom = "default",
   outline = true,
   round = true,
   onDelete,
   onFlip,
+  onOpenSheet,
   onGestureStart,
   onChange,
 }: TransformHandlesProps) {
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
+
+  const cor = TOM[tom];
 
   /** Pixels de tela convertidos para unidades de cena. */
   const px = (value: number) => value / scale;
@@ -153,14 +200,14 @@ export function TransformHandles({
       {outline ? (
         <div
           className="absolute inset-0"
-          style={{ outline: `${px(OUTLINE_PX)}px solid var(--primary)` }}
+          style={{ outline: `${px(OUTLINE_PX)}px solid ${cor.traco}` }}
         />
       ) : null}
 
       {/* Fileira acima da caixa. Girar e excluir moram juntos porque nenhum
           dos dois é redimensionamento, e ficariam competindo com as alças se
           fossem postos nas bordas. */}
-      {rotatable || onFlip || onDelete ? (
+      {rotatable || onFlip || onOpenSheet || onDelete ? (
         <div
           className="pointer-events-none absolute flex items-center"
           style={{
@@ -174,7 +221,10 @@ export function TransformHandles({
             <button
               type="button"
               aria-label="Rotacionar"
-              className="text-primary-foreground bg-primary pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full"
+              className={cn(
+                "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                cor.botao,
+              )}
               style={{
                 width: px(HANDLE_PX * 2),
                 height: px(HANDLE_PX * 2),
@@ -190,7 +240,10 @@ export function TransformHandles({
             <button
               type="button"
               aria-label="Espelhar na horizontal"
-              className="text-primary-foreground bg-primary pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full"
+              className={cn(
+                "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                cor.botao,
+              )}
               style={{ width: px(HANDLE_PX * 2), height: px(HANDLE_PX * 2) }}
               onPointerDown={(event) => {
                 event.preventDefault();
@@ -201,6 +254,27 @@ export function TransformHandles({
               <FlipHorizontal
                 style={{ width: px(HANDLE_PX * 1.2), height: px(HANDLE_PX * 1.2) }}
               />
+            </button>
+          ) : null}
+
+          {/* Antes do excluir, de propósito: o destrutivo fica na ponta da
+              fileira, longe do que se clica sem medo. */}
+          {onOpenSheet ? (
+            <button
+              type="button"
+              aria-label="Abrir a ficha do personagem"
+              className={cn(
+                "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                cor.botao,
+              )}
+              style={{ width: px(HANDLE_PX * 2), height: px(HANDLE_PX * 2) }}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenSheet();
+              }}
+            >
+              <Drama style={{ width: px(HANDLE_PX * 1.2), height: px(HANDLE_PX * 1.2) }} />
             </button>
           ) : null}
 
@@ -229,7 +303,10 @@ export function TransformHandles({
           key={handle}
           type="button"
           aria-label={`Redimensionar ${handle}`}
-          className="bg-background border-primary pointer-events-auto absolute touch-none rounded-[1px]"
+          className={cn(
+            "bg-background pointer-events-auto absolute touch-none rounded-[1px]",
+            cor.alca,
+          )}
           style={{
             ...HANDLE_POSITION[handle],
             width: px(HANDLE_PX),

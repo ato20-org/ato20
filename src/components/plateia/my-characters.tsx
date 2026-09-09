@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { File, FileAudio, FileImage, FileText, FileVideo, Loader2, Paperclip, X } from "lucide-react";
+import {
+  File,
+  FileAudio,
+  FileImage,
+  FileText,
+  FileVideo,
+  Loader2,
+  Paperclip,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
@@ -129,6 +138,24 @@ function CharacterCard({
 
   const reler = useCallback(() => setVersao((atual) => atual + 1), []);
 
+  /** Baixa e mostra um anexo. Serve à lista e ao bloco da ficha. */
+  const abrirAnexo = useCallback(
+    (anexo: AnexoPersonagem) => {
+      setAbrindo(anexo);
+      void characterFileUrl(codigo, personagem.id, anexo).then(setUrl, () =>
+        toast.error("Não foi possível abrir o arquivo."),
+      );
+    },
+    [codigo, personagem.id],
+  );
+
+  // A ficha tem bloco próprio acima: aqui fica o que ninguém nomeou. Só a do
+  // mestre, porque um arquivo de mesmo nome mandado pelo jogador é outro
+  // arquivo, noutra pasta — ver `AnexoAutor`.
+  const soltos = anexos.filter(
+    (anexo) => !(anexo.autor === "mestre" && anexo.arquivo === personagem.ficha),
+  );
+
   async function enviar(files: FileList | null) {
     if (!files || files.length === 0) return;
 
@@ -167,12 +194,24 @@ function CharacterCard({
     <section className="space-y-2 rounded-lg border p-3">
       <h3 className="text-sm font-medium">{personagem.nome}</h3>
 
-      {/* Retrato e miniatura saem do acervo da campanha, e `/asset/{id}` é
-          aberto para a mesa — então o celular os alcança sem credencial
-          própria. A ficha não aparece aqui: ela é anexo, e entra na lista de
-          arquivos abaixo com os outros. */}
-      {personagem.retrato || personagem.miniatura ? (
-        <ul className="flex flex-wrap gap-1.5">
+      {/* Os três campos do personagem, juntos e antes do resto: é o que o
+          mestre nomeou, e é o que o jogador vem ver. Retrato e miniatura saem
+          do acervo, e `/asset/{id}` é aberto para a mesa — o celular os alcança
+          sem credencial própria. A ficha é anexo, atrás do token, e por isso
+          abre por toque em vez de aparecer desenhada.
+
+          A ficha sai da lista de arquivos abaixo, onde estava antes: ela tem
+          lugar próprio aqui, e nos dois lugares o mesmo arquivo aparecia duas
+          vezes — uma delas com um X que o jogador nem pode usar. */}
+      {personagem.ficha || personagem.retrato || personagem.miniatura ? (
+        <ul className="flex flex-wrap items-start gap-1.5">
+          {personagem.ficha ? (
+            <li className="space-y-0.5">
+              <FichaTile arquivo={personagem.ficha} onAbrir={abrirAnexo} />
+              <span className="text-muted-foreground block text-[10px]">Ficha</span>
+            </li>
+          ) : null}
+
           {([
             ["Retrato", personagem.retrato],
             ["Miniatura", personagem.miniatura],
@@ -195,9 +234,9 @@ function CharacterCard({
         </ul>
       ) : null}
 
-      {anexos.length > 0 ? (
+      {soltos.length > 0 ? (
         <ul className="space-y-1">
-          {anexos.map((anexo) => {
+          {soltos.map((anexo) => {
             const Icone = ICONE[attachmentKind(anexo.arquivo, anexo.mimeType)];
 
             return (
@@ -210,12 +249,7 @@ function CharacterCard({
                 <button
                   type="button"
                   className="min-w-0 flex-1 truncate text-left text-xs"
-                  onClick={() => {
-                    setAbrindo(anexo);
-                    void characterFileUrl(codigo, personagem.id, anexo).then(setUrl, () =>
-                      toast.error("Não foi possível abrir o arquivo."),
-                    );
-                  }}
+                  onClick={() => abrirAnexo(anexo)}
                 >
                   {anexo.arquivo}
                 </button>
@@ -232,7 +266,7 @@ function CharacterCard({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Remover ${anexo.arquivo}`}
+                    aria-label={`Apagar ${anexo.arquivo}`}
                     onClick={() => {
                       void deleteCharacterFile(codigo, personagem.id, anexo.arquivo).then(
                         reler,
@@ -243,7 +277,10 @@ function CharacterCard({
                       );
                     }}
                   >
-                    <X />
+                    {/* Lixeira: isto apaga o arquivo do disco do mestre, e não
+                        o tira de uma lista. Mesma regra dos dois ícones do lado
+                        dele. */}
+                    <Trash2 />
                   </Button>
                 ) : (
                   <span
@@ -283,6 +320,46 @@ function CharacterCard({
 
       <AttachmentViewer attachment={abrindo} url={url} onClose={fecharVisualizador} />
     </section>
+  );
+}
+
+/**
+ * O bloco da ficha, do tamanho dos outros dois campos.
+ *
+ * Ícone, e não miniatura do arquivo. A ficha fica atrás do token, então
+ * desenhá-la exigiria BAIXÁ-LA no carregamento da aba — um PDF de quarenta
+ * megabytes puxado no 4G para render de cinquenta e seis pixels. E a blob é
+ * compartilhada com o visualizador, que a revoga ao fechar: a miniatura
+ * quebraria na primeira vez que o jogador fechasse a ficha.
+ *
+ * O ícone sai do tipo do arquivo, então uma ficha em imagem e uma em PDF não
+ * ficam com o mesmo desenho.
+ */
+function FichaTile({
+  arquivo,
+  onAbrir,
+}: {
+  arquivo: string;
+  onAbrir: (anexo: AnexoPersonagem) => void;
+}) {
+  // Montado do NOME, que é o que o campo guarda. O `mimeType` vazio deixa
+  // `attachmentKind` cair na extensão, e o tipo de verdade da blob vem do
+  // daemon na hora de abrir — ver `characterFileUrl`.
+  const anexo: AnexoPersonagem = { arquivo, mimeType: "", tamanho: 0, autor: "mestre" };
+  const Icone = ICONE[attachmentKind(arquivo, "")];
+
+  return (
+    <button
+      type="button"
+      className="bg-muted hover:bg-accent grid size-14 place-items-center rounded border"
+      // O nome do arquivo vive no rótulo acessível e no título do visualizador:
+      // dentro de um quadrado de cinquenta e seis pixels ele viraria três
+      // letras e reticências. Retrato e miniatura também não mostram nome.
+      aria-label={`Abrir ${arquivo}`}
+      onClick={() => onAbrir(anexo)}
+    >
+      <Icone className="text-muted-foreground size-6 shrink-0" aria-hidden />
+    </button>
   );
 }
 

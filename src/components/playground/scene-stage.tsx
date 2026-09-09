@@ -313,7 +313,21 @@ export function SceneStage({
           transformOrigin: "0 0",
         }}
       >
-        <SceneScaleContext.Provider value={value}>{children}</SceneScaleContext.Provider>
+        {/* Sem escala, sem filhos.
+            Treze lugares no palco convertem pixel de tela em unidade de cena
+            dividindo por `scale` -- a borda do gizmo, a faixa da moldura de
+            câmera, o alfinete, o traço do laço. Com `scale` em zero todos eles
+            viram `Infinity`, e o React recusa o valor com um erro de console
+            por propriedade: "`Infinity` is an invalid value for the `height`
+            css style property".
+
+            Esconder o plano não bastava, porque `invisible` esconde sem
+            desmontar. Não renderizar é o que resolve na origem, e é honesto:
+            enquanto não há medida não há cena para desenhar. Os filhos entram
+            no mesmo quadro em que o plano deixa de estar invisível. */}
+        <SceneScaleContext.Provider value={value}>
+          {scale === 0 ? null : children}
+        </SceneScaleContext.Provider>
       </div>
     </div>
   );

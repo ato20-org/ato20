@@ -4,28 +4,25 @@ import { create } from "zustand";
 
 const STORAGE_KEY = "ato20:panels";
 
-/** Abas do painel esquerdo. */
-export type LeftTab = "cenas" | "areas" | "retratos";
-
 type PanelsStore = {
   /** Cenas e áreas escondidas. */
   left: boolean;
   /** Bibliotecas de imagem e som, mais as camadas da cena. */
   right: boolean;
-  /**
-   * Aba aberta no painel esquerdo.
-   *
-   * Vive no store, e não dentro do painel, porque o palco depende dela: com
-   * Retratos aberta, ele desenha todos os retratos para o mestre arrastar.
-   * Estar na aba É a intenção de editar retrato.
-   */
-  leftTab: LeftTab;
   /** `localStorage` já foi lido. Antes disso os valores são só o padrão. */
   restored: boolean;
 
   toggleLeft: () => void;
   toggleRight: () => void;
-  setLeftTab: (tab: LeftTab) => void;
+  /**
+   * Garante a coluna à vista. Idempotente, ao contrário dos `toggle`.
+   *
+   * Existe porque pedir uma janela que está atracada numa coluna RECOLHIDA
+   * precisa abrir a coluna antes de apontar a aba — ver `useAbrirJanela`. Com
+   * `toggle` no lugar disto, pedir a mesma janela duas vezes fecharia a coluna
+   * na segunda.
+   */
+  show: (side: "left" | "right") => void;
   restore: () => void;
 };
 
@@ -47,7 +44,12 @@ function read(): Stored | null {
 }
 
 /**
- * Painéis laterais abertos ou fechados.
+ * Colunas laterais recolhidas ou à vista.
+ *
+ * Só isso: qual aba está aberta e onde cada janela mora saíram para o
+ * `useLayoutStore` quando os painéis viraram dock. Recolher continua aqui
+ * porque é gesto do momento — tem caminho de volta no canto do palco — e não
+ * arrumação de bancada.
  *
  * Lido do `localStorage` só depois da montagem, por `restore()`. Ler na criação
  * do store daria divergência de hidratação: `/operador` é pré-renderizado com
@@ -56,14 +58,11 @@ function read(): Stored | null {
 export const usePanelsStore = create<PanelsStore>((set, get) => ({
   left: true,
   right: true,
-  leftTab: "cenas",
   restored: false,
 
   toggleLeft: () => set({ left: !get().left }),
   toggleRight: () => set({ right: !get().right }),
-  // Não é persistida de propósito: abrir o Operador já com retratos desenhados
-  // sobre o mapa surpreenderia quem só quer montar a cena.
-  setLeftTab: (leftTab) => set({ leftTab }),
+  show: (side) => set(side === "left" ? { left: true } : { right: true }),
 
   restore() {
     if (get().restored) return;

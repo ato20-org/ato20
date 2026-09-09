@@ -33,6 +33,23 @@ pub struct AssetMeta {
     /// Pasta em que o mestre guardou. Ausente = raiz.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub folder_id: Option<String>,
+    /// A que este arquivo PERTENCE: `cena` ou `personagem`.
+    ///
+    /// Ausente e o caso comum -- imagem do acervo, que serve a cena qualquer:
+    /// mobilia, handout, um mapa dentro do mapa. Presente quando o arquivo tem
+    /// dono: fundo de cena, retrato ou miniatura de personagem.
+    ///
+    /// Existe para a BIBLIOTECA nao lista-lo. Antes toda imagem aparecia ali,
+    /// inclusive o fundo e os dois arquivos de cada personagem, e a lista
+    /// misturava o que se escolhe com o que ja foi escolhido -- numa campanha
+    /// com dez personagens, vinte linhas que ninguem vai arrastar para o mapa.
+    ///
+    /// Marcado na importacao e nao derivado do uso: derivar exigiria varrer as
+    /// cenas e os personagens a cada listagem. O preco e que a marca pode
+    /// mentir se o campo for limpo depois -- o arquivo fica escondido sem ser
+    /// de ninguem. Ver `asset_set_escopo`, que e como o cliente conserta.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escopo: Option<String>,
     /// A forma da onda, para a barra da trilha desenhar. So para `audio`.
     ///
     /// Um valor por balde, de 0 a 100. Calculado UMA vez, pela webview, na
@@ -118,7 +135,11 @@ pub fn find(vault: &Vault, id: &str) -> AppResult<Option<AssetMeta>> {
 /// Devolve o que entrou e o motivo do que ficou de fora, em vez de falhar no
 /// primeiro erro: quem escolheu doze arquivos e teve um recusado quer os onze e
 /// quer saber qual.
-pub fn import(vault: &Vault, origens: &[PathBuf]) -> AppResult<(Vec<AssetMeta>, Vec<String>)> {
+pub fn import(
+    vault: &Vault,
+    origens: &[PathBuf],
+    escopo: Option<&str>,
+) -> AppResult<(Vec<AssetMeta>, Vec<String>)> {
     std::fs::create_dir_all(vault.assets_dir())?;
 
     let mut aceitos = Vec::new();
@@ -173,6 +194,7 @@ pub fn import(vault: &Vault, origens: &[PathBuf]) -> AppResult<(Vec<AssetMeta>, 
             natural_width: largura,
             natural_height: altura,
             folder_id: None,
+            escopo: escopo.map(str::to_string),
             peaks: None,
         };
 
@@ -254,6 +276,19 @@ pub fn set_peaks(vault: &Vault, id: &str, peaks: Vec<u8>) -> AppResult<()> {
 pub const MAX_PEAKS: usize = 512;
 
 /// Move para uma pasta. `None` devolve a raiz. So metadado: o binario nao anda.
+/// Marca ou desmarca o dono do arquivo. Ver `AssetMeta::escopo`.
+pub fn set_escopo(vault: &Vault, id: &str, escopo: Option<String>) -> AppResult<()> {
+    let mut assets = index(vault)?;
+
+    let Some(asset) = assets.iter_mut().find(|asset| asset.id == id) else {
+        return Ok(());
+    };
+
+    asset.escopo = escopo;
+
+    write_index(vault, &assets)
+}
+
 pub fn set_folder(vault: &Vault, id: &str, folder_id: Option<String>) -> AppResult<()> {
     let mut assets = index(vault)?;
 
@@ -375,7 +410,7 @@ mod tests {
         let (dir, vault) = campanha();
         let origem = de_fora(dir.path(), "mapa.png", &png(1920, 1080));
 
-        let (aceitos, recusados) = import(&vault, &[origem.clone()]).expect("import");
+        let (aceitos, recusados) = import(&vault, &[origem.clone()], None).expect("import");
 
         assert!(recusados.is_empty(), "{recusados:?}");
         assert_eq!(aceitos.len(), 1);
@@ -391,7 +426,7 @@ mod tests {
         let (dir, vault) = campanha();
         let origem = de_fora(dir.path(), "mapa.png", &png(1920, 1080));
 
-        let (aceitos, _) = import(&vault, &[origem]).expect("import");
+        let (aceitos, _) = import(&vault, &[origem], None).expect("import");
 
         assert_eq!(aceitos[0].natural_width, Some(1920));
         assert_eq!(aceitos[0].natural_height, Some(1080));
@@ -404,7 +439,7 @@ mod tests {
         let (dir, vault) = campanha();
         let origem = de_fora(dir.path(), "trilha.ogg", b"nao e ogg de verdade");
 
-        let (aceitos, recusados) = import(&vault, &[origem]).expect("import");
+        let (aceitos, recusados) = import(&vault, &[origem], None).expect("import");
 
         assert!(recusados.is_empty(), "{recusados:?}");
         assert_eq!(aceitos[0].kind, "audio");
@@ -416,7 +451,7 @@ mod tests {
         let (dir, vault) = campanha();
         let origem = de_fora(dir.path(), "quebrada.png", b"isto nao e png");
 
-        let (aceitos, recusados) = import(&vault, &[origem]).expect("import");
+        let (aceitos, recusados) = import(&vault, &[origem], None).expect("import");
 
         // Ausencia de medida nao impede a entrada: a cena perde so a proporcao
         // sugerida ao arrastar, e o arquivo continua valendo.
@@ -431,7 +466,7 @@ mod tests {
         // Nome hostil de um arquivo escolhido no dialogo.
         let origem = de_fora(dir.path(), "..-mapa.png", &png(10, 10));
 
-        let (aceitos, _) = import(&vault, &[origem]).expect("import");
+        let (aceitos, _) = import(&vault, &[origem], None).expect("import");
         let caminho = asset_path(&vault, &aceitos[0]);
 
         assert_eq!(caminho.parent(), Some(vault.assets_dir().as_path()));
@@ -450,7 +485,7 @@ mod tests {
         let ruim = de_fora(dir.path(), "livro.pdf", b"%PDF");
         let som = de_fora(dir.path(), "trilha.mp3", b"som");
 
-        let (aceitos, recusados) = import(&vault, &[bom, ruim, som]).expect("import");
+        let (aceitos, recusados) = import(&vault, &[bom, ruim, som], None).expect("import");
 
         // Quem escolheu tres e teve um recusado quer os dois e quer saber qual.
         assert_eq!(aceitos.len(), 2);
@@ -465,7 +500,7 @@ mod tests {
         let bom = de_fora(dir.path(), "mapa.png", &png(10, 10));
 
         let (aceitos, recusados) =
-            import(&vault, &[bom, dir.path().join("sumiu.png")]).expect("import");
+            import(&vault, &[bom, dir.path().join("sumiu.png")], None).expect("import");
 
         assert_eq!(aceitos.len(), 1);
         assert_eq!(recusados.len(), 1);
@@ -476,12 +511,12 @@ mod tests {
         let (dir, vault) = campanha();
 
         let a = de_fora(dir.path(), "a.png", &png(10, 10));
-        import(&vault, &[a]).expect("a");
+        import(&vault, &[a], None).expect("a");
         std::thread::sleep(std::time::Duration::from_millis(5));
 
         let b = de_fora(dir.path(), "b.png", &png(10, 10));
         let t = de_fora(dir.path(), "t.ogg", b"som");
-        import(&vault, &[b, t]).expect("b");
+        import(&vault, &[b, t], None).expect("b");
 
         let imagens = list(&vault, Some("image")).expect("list");
         assert_eq!(imagens.len(), 2);
@@ -495,7 +530,7 @@ mod tests {
 
         let som = de_fora(dir.path(), "trilha.ogg", b"som");
         let imagem = de_fora(dir.path(), "mapa.png", &png(10, 10));
-        let (aceitos, _) = import(&vault, &[som, imagem]).expect("import");
+        let (aceitos, _) = import(&vault, &[som, imagem], None).expect("import");
 
         let id_som = aceitos.iter().find(|a| a.kind == "audio").expect("som").id.clone();
         let id_img = aceitos.iter().find(|a| a.kind == "image").expect("img").id.clone();
@@ -527,7 +562,7 @@ mod tests {
         let (dir, vault) = campanha();
         let origem = de_fora(dir.path(), "mapa.png", &png(10, 10));
 
-        let (aceitos, _) = import(&vault, &[origem]).expect("import");
+        let (aceitos, _) = import(&vault, &[origem], None).expect("import");
         delete(&vault, &aceitos[0].id).expect("delete");
 
         assert!(list(&vault, None).expect("list").is_empty());
@@ -540,7 +575,7 @@ mod tests {
 
         let pasta = create_folder(&vault, "Mapas").expect("folder");
         let origem = de_fora(dir.path(), "mapa.png", &png(10, 10));
-        let (aceitos, _) = import(&vault, &[origem]).expect("import");
+        let (aceitos, _) = import(&vault, &[origem], None).expect("import");
         let id = aceitos[0].id.clone();
 
         set_folder(&vault, &id, Some(pasta.id.clone())).expect("move");

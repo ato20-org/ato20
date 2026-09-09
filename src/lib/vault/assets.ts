@@ -3,7 +3,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { call, daemonAddr, isDesktop } from "@/lib/vault/bridge";
-import type { AssetKind, AssetMeta } from "@/types/scene";
+import type { AssetKind, AssetMeta, EscopoAsset } from "@/types/scene";
 
 /**
  * Endereço de um arquivo do acervo.
@@ -50,6 +50,17 @@ export function setAssetFolder(id: string, folderId: string | undefined): Promis
 }
 
 /**
+ * Marca ou desmarca o dono de um arquivo.
+ *
+ * Serve a dois casos: um campo passar a apontar para arquivo que entrou solto,
+ * e o acerto dos arquivos que já existiam antes de o escopo existir — ver
+ * `useEscopoDosAssets`.
+ */
+export function setAssetEscopo(id: string, escopo: EscopoAsset | undefined): Promise<void> {
+  return call("asset_set_escopo", { id, escopo: escopo ?? null });
+}
+
+/**
  * O que a importação devolve.
  *
  * Recusados vem como um motivo por arquivo, e não uma contagem: quem escolheu
@@ -67,9 +78,16 @@ export type ImportResult = { aceitos: AssetMeta[]; recusados: string[] };
  * no meio: o cliente via "load failed" e o log dizia "Error parsing
  * multipart/form-data", nenhum dos dois apontando para o limite.
  *
+ * `escopo` marca o dono do arquivo, e com ele a biblioteca deixa de listá-lo:
+ * fundo de cena e os dois arquivos de personagem entram por aqui com dono. Sem
+ * escopo, o arquivo entra solto e aparece na lista.
+ *
  * `null` = o mestre fechou o diálogo, que não é erro.
  */
-export async function importAssets(kind: AssetKind): Promise<ImportResult | null> {
+export async function importAssets(
+  kind: AssetKind,
+  escopo?: EscopoAsset,
+): Promise<ImportResult | null> {
   const escolhidos = await open({
     multiple: true,
     title: kind === "image" ? "Escolha as imagens" : "Escolha os sons",
@@ -85,5 +103,5 @@ export async function importAssets(kind: AssetKind): Promise<ImportResult | null
   const paths = Array.isArray(escolhidos) ? escolhidos : [escolhidos];
   if (paths.length === 0) return null;
 
-  return call<ImportResult>("asset_import", { paths });
+  return call<ImportResult>("asset_import", { paths, escopo: escopo ?? null });
 }

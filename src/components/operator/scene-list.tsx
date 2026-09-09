@@ -1,7 +1,19 @@
 "use client";
 
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
-import { CopyPlus, GripVertical, MoreVertical, Pencil, Plus, Radio, Trash2 } from "lucide-react";
+import {
+  CopyPlus,
+  GripVertical,
+  Image as ImageIcon,
+  ImageOff,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Radio,
+  Trash2,
+} from "lucide-react";
+
+import { toast } from "sonner";
 
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { Button } from "@/components/ui/button";
@@ -16,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useListReorder } from "@/hooks/use-list-reorder";
+import { escolherFundoDaCena, tirarFundoDaCena } from "@/lib/operator/scene-background";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -231,6 +244,30 @@ function SceneRow({
                 <CopyPlus />
                 Duplicar
               </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              {/* O fundo mora aqui e não na biblioteca de imagens: ele é da
+                  CENA. Na biblioteca, ele era mais uma linha entre imagens que
+                  ainda não são de ninguém -- e depois de escolhido continuava
+                  ali, oferecendo-se de novo. Ver `escolherFundoDaCena`. */}
+              <DropdownMenuItem
+                onClick={() => {
+                  void escolherFundoDaCena(scene.id).catch((cause) =>
+                    toast.error(cause instanceof Error ? cause.message : "Falha ao importar."),
+                  );
+                }}
+              >
+                <ImageIcon />
+                {scene.backgroundAssetId ? "Trocar o fundo" : "Escolher o fundo"}
+              </DropdownMenuItem>
+
+              {scene.backgroundAssetId ? (
+                <DropdownMenuItem onClick={() => void tirarFundoDaCena(scene.id)}>
+                  <ImageOff />
+                  Tirar o fundo
+                </DropdownMenuItem>
+              ) : null}
 
               <DropdownMenuSeparator />
 
