@@ -85,7 +85,11 @@ export async function preencherCampoComArquivo(
     return primeiro.arquivo;
   }
 
-  const resultado = await importAssets("image");
+  // Com dono: retrato e miniatura pertencem a ESTE personagem, e a biblioteca
+  // de imagens deixa de listá-los. Antes elas apareciam lá, e a lista misturava
+  // o que se escolhe com o que já foi escolhido -- dez personagens davam vinte
+  // linhas que ninguém vai arrastar para o mapa.
+  const resultado = await importAssets("image", "personagem");
   if (!resultado) return null;
 
   const primeiro = resultado.aceitos[0];

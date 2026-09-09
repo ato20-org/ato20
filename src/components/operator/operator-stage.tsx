@@ -13,6 +13,7 @@ import { PinLayer } from "@/components/operator/pin-layer";
 import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
 import { MarqueeBox } from "@/components/playground/marquee-box";
+import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { SelectionBox } from "@/components/playground/selection-box";
@@ -44,9 +45,11 @@ import {
   scaleGroup,
 } from "@/lib/geometry/group";
 import {
+  areasDeRetrato,
   portraitBox,
   portraitFraction,
   portraitsBounds,
+  retratosDaCena,
   scalePortraitGroup,
 } from "@/lib/geometry/portrait";
 import { computeSnap, SNAP_THRESHOLD_PX, type Guide } from "@/lib/geometry/snap";
@@ -66,6 +69,7 @@ import { useToolStore } from "@/lib/store/use-tool-store";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
+  type AncoraRetrato,
   type CanvasItem,
   type FogRegion,
   type Portrait,
@@ -115,6 +119,7 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const toggle = useSelectionStore((state) => state.toggle);
   const selectFog = useSelectionStore((state) => state.selectFog);
   const selectPortrait = useSelectionStore((state) => state.selectPortrait);
+  const selectPortraits = useSelectionStore((state) => state.selectPortraits);
   const togglePortrait = useSelectionStore((state) => state.togglePortrait);
   const clear = useSelectionStore((state) => state.clear);
 
@@ -126,7 +131,19 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const addPin = useSceneStore((state) => state.addPin);
   const setSceneCamera = useSceneStore((state) => state.setSceneCamera);
 
-  const portraits = usePortraitStore((state) => state.portraits);
+  const guardados = usePortraitStore((state) => state.portraits);
+  const filaAuto = usePortraitStore((state) => state.filaAuto);
+  const ancorar = usePortraitStore((state) => state.ancorar);
+
+  /**
+   * Os retratos desta cena, com a imagem resolvida da ficha.
+   *
+   * Derivado e não a lista crua do store: retrato agora é de personagem, e quem
+   * decide se ele existe nesta cena é o token dele estar nela. Ver
+   * `retratosDaCena` -- o painel e o publicador usam a mesma função, cada um
+   * com a sua cena.
+   */
+  const portraits = retratosDaCena(guardados, scene.items, personagens ?? []);
   // A aba aberta declara a intenção: em Retratos, o mestre está mexendo neles,
   // e ver todos de uma vez é o que torna o ajuste possível. Fora dela, o mapa
   // é o assunto e só o selecionado aparece.
@@ -172,6 +189,24 @@ export function OperatorStage({ scene }: { scene: Scene }) {
     selectedPortraitIds.includes(portrait.id),
   );
   const singlePortrait = selectedPortraits.length === 1 ? selectedPortraits[0] : undefined;
+  /**
+   * Os retratos que a fila governa, na ordem dela.
+   *
+   * No ar e não soltos -- os mesmos que `useFilaDeRetratos` posiciona. Fora do
+   * ar não ocupa vaga, e solto tem posição própria.
+   */
+  const fila = filaAuto
+    ? portraits.filter((retrato) => retrato.visible && !retrato.foraDaFila)
+    : [];
+
+  const naFila = (retrato: Portrait) => fila.some((atual) => atual.id === retrato.id);
+
+  /** A seleção É a fila inteira? É o que decide o rótulo da caixa. */
+  const filaSelecionada =
+    fila.length > 0 &&
+    fila.length === selectedPortraitIds.length &&
+    fila.every((retrato) => selectedPortraitIds.includes(retrato.id));
+
   const portraitGroupBounds =
     selectedPortraits.length > 1 ? portraitsBounds(selectedPortraits, scene.camera) : null;
 
@@ -210,6 +245,16 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           ? boxBounds(selectedFog)
           : null;
 
+  /**
+   * A área sob o ponteiro enquanto a fila de retratos é arrastada.
+   *
+   * `null` fora do gesto, e é o que faz as seis áreas não existirem no resto do
+   * tempo: são retângulos sobre o mapa, e à vista o tempo todo poluiriam a
+   * imagem que a mesa está olhando.
+   */
+  const [areaDaFila, setAreaDaFila] = useState<AncoraRetrato | null>(null);
+  const [arrastandoFila, setArrastandoFila] = useState(false);
+
   /** Evita re-render por frame quando não há guia nenhuma para mostrar. */
   function clearGuides() {
     setGuides((previous) => (previous.length === 0 ? previous : NO_GUIDES));
@@ -229,6 +274,8 @@ export function OperatorStage({ scene }: { scene: Scene }) {
     origin: Bounds,
     targets: Bounds[],
     apply: (dx: number, dy: number) => void,
+    /** A que se alinhar além dos alvos. Padrão: o plano. Ver `computeSnap`. */
+    frame?: Bounds,
   ) {
     startDrag(event, {
       onMove: (delta, native) => {
@@ -244,6 +291,7 @@ export function OperatorStage({ scene }: { scene: Scene }) {
             translateBounds(origin, dx, dy),
             targets,
             SNAP_THRESHOLD_PX / scale,
+            frame,
           );
 
           dx += snap.dx;
@@ -346,19 +394,92 @@ export function OperatorStage({ scene }: { scene: Scene }) {
     if (!alreadySelected) selectPortrait(portrait.id);
 
     const camera = scene.camera;
+
+    // Retrato da fila não se mexe sozinho: posição e tamanho dele são da fila.
+    // Arrastá-lo livremente faria a figura voltar no quadro seguinte, quando o
+    // efeito reaplicasse o layout.
+    //
+    // Então o clique seleciona a FILA INTEIRA. É o que torna o grupo evidente
+    // sem precisar de aviso: aparece a caixa pontilhada em volta dos cinco, com
+    // o rótulo, e o gizmo que sobe é o do grupo -- que escala todos por um
+    // fator só. Selecionar um e mexer nos outros seria o mesmo efeito com
+    // aparência de defeito.
+    if (naFila(portrait)) {
+      selectPortraits(fila.map((atual) => atual.id));
+      arrastarFila(event);
+      return;
+    }
+
     const origins = moving.map(({ id, x, y }) => ({ id, x, y }));
 
-    startDrag(event, {
-      onMove: (delta) =>
+    const movendo = new Set(moving.map((atual) => atual.id));
+    const caixa = portraitsBounds(moving, camera);
+
+    // Alinha aos OUTROS retratos e à câmera, e não aos itens do mapa: retrato é
+    // preso à câmera, e um item do mapa passa por baixo dele quando o mestre
+    // desloca a cena -- grudar num alvo que anda seria pior que não grudar.
+    const alvos = portraits
+      .filter((atual) => !movendo.has(atual.id))
+      .map((atual) => boxBounds(portraitBox(atual, camera)));
+
+    if (!caixa) return;
+
+    dragBox(
+      event,
+      caixa,
+      alvos,
+      (dx, dy) =>
         updatePortraits(
           origins.map((origin) => ({
             id: origin.id,
             patch: {
-              x: origin.x + delta.x / (camera?.width ?? SCENE_WIDTH),
-              y: origin.y + delta.y / (camera?.height ?? SCENE_HEIGHT),
+              // De volta para fração da câmera, que é onde o retrato mora.
+              x: origin.x + dx / (camera?.width ?? SCENE_WIDTH),
+              y: origin.y + dy / (camera?.height ?? SCENE_HEIGHT),
             },
           })),
         ),
+      camera ? boundsFromBox(camera) : undefined,
+    );
+  }
+
+  /**
+   * Leva a fila de retratos para outra área.
+   *
+   * A fila não segue o ponteiro: as seis áreas acendem, a de baixo do cursor
+   * destaca, e soltar troca a âncora. Seguir o ponteiro exigiria um layout por
+   * quadro para uma escolha que tem seis respostas possíveis -- movimento a
+   * mais para a mesma decisão.
+   */
+  function arrastarFila(event: ReactPointerEvent) {
+    const areas = areasDeRetrato(scene.camera);
+
+    const sob = (clientX: number, clientY: number) => {
+      const ponto = toScene(clientX, clientY);
+
+      return (
+        areas.find(
+          ({ box }) =>
+            ponto.x >= box.x &&
+            ponto.x <= box.x + box.width &&
+            ponto.y >= box.y &&
+            ponto.y <= box.y + box.height,
+        )?.ancora ?? null
+      );
+    };
+
+    setArrastandoFila(true);
+    setAreaDaFila(sob(event.clientX, event.clientY));
+
+    startDrag(event, {
+      onMove: (_delta, native) => setAreaDaFila(sob(native.clientX, native.clientY)),
+      onEnd: (native) => {
+        const escolhida = sob(native.clientX, native.clientY);
+        if (escolhida) ancorar(escolhida);
+
+        setArrastandoFila(false);
+        setAreaDaFila(null);
+      },
     });
   }
 
@@ -717,22 +838,51 @@ export function OperatorStage({ scene }: { scene: Scene }) {
             const frozen = portraitSnapshot.current;
             if (!frozen || patch.x === undefined || patch.width === undefined) return;
 
+            const escalados = scalePortraitGroup(
+              frozen.portraits,
+              frozen.bounds,
+              boundsFromBox({
+                x: patch.x,
+                y: patch.y ?? frozen.bounds.minY,
+                width: patch.width,
+                height: patch.height ?? 0,
+              }),
+              scene.camera,
+            );
+
+            // Sendo a fila, o gizmo só manda no TAMANHO: a posição é dela, e
+            // deixar os dois escreverem no mesmo quadro faz o retrato pular --
+            // o gizmo o põe onde a escala calculou, e o efeito o traz de volta
+            // para a fila no quadro seguinte.
             updatePortraits(
-              scalePortraitGroup(
-                frozen.portraits,
-                frozen.bounds,
-                boundsFromBox({
-                  x: patch.x,
-                  y: patch.y ?? frozen.bounds.minY,
-                  width: patch.width,
-                  height: patch.height ?? 0,
-                }),
-                scene.camera,
-              ),
+              filaSelecionada
+                ? escalados.map(({ id, patch: mudanca }) => ({
+                    id,
+                    patch: { width: mudanca.width, height: mudanca.height },
+                  }))
+                : escalados,
             );
           }}
           onDelete={removePortraitSelection}
         />
+      ) : null}
+
+      {/* A caixa do grupo de retratos, que o gizmo dele não desenha -- ele só
+          põe as alças nos cantos. Sem ela, mexer em cinco rostos de uma vez não
+          tinha nenhum sinal na tela de que cinco estavam em jogo. */}
+      {portraitGroupBounds && !panMode ? (
+        <SelectionBox
+          bounds={portraitGroupBounds}
+          rotulo={
+            filaSelecionada
+              ? `fila · ${fila.length}`
+              : `${selectedPortraitIds.length} retratos`
+          }
+        />
+      ) : null}
+
+      {arrastandoFila ? (
+        <PortraitAnchors camera={scene.camera} alvo={areaDaFila} />
       ) : null}
 
       {marquee ? <MarqueeBox bounds={marquee} /> : null}

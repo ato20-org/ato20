@@ -120,11 +120,7 @@ const PortraitView = memo(function PortraitView({
           draggable={false}
           // `object-contain`: retrato deformado é pior que retrato pequeno, e
           // aqui a proporção é a do arquivo, não a da caixa.
-          className={cn(
-            "size-full object-contain select-none",
-            portrait.framed &&
-              "rounded-md bg-black/40 ring-1 ring-white/25 shadow-lg shadow-black/60",
-          )}
+          className="size-full object-contain select-none"
           style={portrait.flipX ? { transform: "scaleX(-1)" } : undefined}
         />
       ) : null}

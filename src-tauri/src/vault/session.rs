@@ -15,12 +15,18 @@ pub type Json = serde_json::Value;
 /// IndexedDB: dois escritores no mesmo registro se sobrescrevem, e a trilha
 /// grava a cada ajuste de volume enquanto o retrato grava a cada frame de
 /// arrasto.
-pub fn load_portraits(vault: &Vault) -> AppResult<Vec<Json>> {
-    Ok(read_json(&vault.portraits_path())?.unwrap_or_default())
+/// Os retratos da sessao, como o cliente os guarda.
+///
+/// `Json` opaco e nao `Vec<Json>`: o arquivo deixou de ser uma lista e virou um
+/// objeto -- alem dos retratos ele guarda se a fila automatica esta ligada e em
+/// que area ela esta ancorada, e isso nao cabe num array. Quem sabe a forma e o
+/// cliente; aqui o valor so atravessa, e a leitura tolera o formato antigo.
+pub fn load_portraits(vault: &Vault) -> AppResult<Json> {
+    Ok(read_json(&vault.portraits_path())?.unwrap_or(Json::Null))
 }
 
-pub fn save_portraits(vault: &Vault, portraits: &[Json]) -> AppResult<()> {
-    write_json(&vault.portraits_path(), &portraits)
+pub fn save_portraits(vault: &Vault, portraits: &Json) -> AppResult<()> {
+    write_json(&vault.portraits_path(), portraits)
 }
 
 /// A trilha da sessao. `None` = nenhuma escolhida.

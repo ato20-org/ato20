@@ -39,6 +39,19 @@ export type AssetMeta = {
    */
   folderId?: string;
   /**
+   * A que este arquivo PERTENCE: `cena` ou `personagem`.
+   *
+   * Ausente é o caso comum — imagem que serve a qualquer cena: mobília, um
+   * handout, um mapa dentro do mapa. Presente quando tem dono: fundo de cena,
+   * retrato ou miniatura de personagem.
+   *
+   * Existe para a BIBLIOTECA não listá-lo. Antes toda imagem aparecia ali,
+   * inclusive o fundo e os dois arquivos de cada personagem, e a lista
+   * misturava o que se escolhe com o que já foi escolhido. O espelho em Rust é
+   * `AssetMeta::escopo`.
+   */
+  escopo?: EscopoAsset;
+  /**
    * A forma da onda, um valor de 0 a 100 por barra. Só para `audio`.
    *
    * Medida uma vez pela tela, na primeira vez que a faixa aparece na barra da
@@ -56,6 +69,9 @@ export type AssetMeta = {
  * organização que ninguém pediu.
  */
 export type AssetFolder = { id: string; name: string; createdAt: number };
+
+/** O dono de um arquivo do acervo, quando ele tem um. */
+export type EscopoAsset = "cena" | "personagem";
 
 /** Uma imagem posicionada sobre o fundo da cena. */
 export type CanvasItem = {
@@ -313,6 +329,28 @@ export type SessionTrack = {
  */
 export type Portrait = {
   id: string;
+  /**
+   * De quem e este retrato.
+   *
+   * Todo retrato e de um personagem: nao existe mais "retrato solto", feito de
+   * uma imagem qualquer do acervo. A lista deriva dos tokens que estao na cena,
+   * e este campo e a amarra entre a figura na tela e a ficha de quem ela e --
+   * o mesmo papel que `personagemId` faz no item do mapa.
+   *
+   * O registro guardado e GEOMETRIA: onde ele esta, de que tamanho, e se esta
+   * no ar. Desligar mantem o registro, e e isso que faz a posicao ser lembrada
+   * de uma cena para a outra.
+   */
+  personagemId: string;
+  /**
+   * A imagem, resolvida do campo Retrato do personagem.
+   *
+   * Fica no tipo porque o payload publicado precisa dela: o Assistir nao tem
+   * credencial nem indice de personagens, so `/asset/{id}`. Mas quem manda e o
+   * campo da ficha, e nao esta copia -- ver `retratosDaCena`, que a resolve na
+   * hora. Copia crava a imagem de quando o retrato foi armado, e trocar o
+   * Retrato na ficha deixaria a mesa vendo a antiga.
+   */
   assetId: string;
   x: number;
   y: number;
@@ -322,9 +360,38 @@ export type Portrait = {
   visible: boolean;
   /** Virar o retrato para o lado da tela em que ele está. */
   flipX?: boolean;
-  /** Moldura e sombra, para não parecer recorte colado no mapa. */
-  framed?: boolean;
+  /**
+   * Solto da fila automatica, quando ela esta ligada.
+   *
+   * Excecao e nao regra: o interruptor da fila e um so, no painel, e vale para
+   * todos. Este campo e o que permite tirar UM da fila sem desligar o modo --
+   * o vilao no canto enquanto o grupo se enfileira embaixo.
+   *
+   * Ausente na maioria, e por isso e o campo que existe: `naFila: true` em
+   * todos os registros diria a mesma coisa ocupando mais espaco, e obrigaria a
+   * preencher o padrao a cada retrato novo.
+   */
+  foraDaFila?: boolean;
 };
+
+/**
+ * Onde a fila de retratos encosta.
+ *
+ * Areas, e nao posicao livre: a fila e um conjunto, e arrastar um conjunto para
+ * um ponto exato e um gesto que ninguem quer repetir -- o que se quer e "esse
+ * grupo fica no canto de cima a direita". Seis, porque sao as combinacoes de
+ * cima/baixo com esquerda/centro/direita, e nenhuma das seis e estranha numa
+ * tela de mesa.
+ *
+ * Em fracao da camera, como o resto do retrato: o que a mesa ve e o recorte.
+ */
+export type AncoraRetrato =
+  | "cima-esquerda"
+  | "cima-centro"
+  | "cima-direita"
+  | "baixo-esquerda"
+  | "baixo-centro"
+  | "baixo-direita";
 
 /** O que o chamador informa ao criar um item; `id`, `z` e afins são do store. */
 export type NewCanvasItem = Pick<

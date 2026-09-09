@@ -88,7 +88,8 @@ export const MIN_FRACAO = 0.12;
 /**
  * O layout de fábrica: exatamente a tela que existia antes do dock.
  *
- * À esquerda, um grupo com as três abas que o painel de cenas tinha. À direita,
+ * À esquerda, as três abas que o painel de cenas tinha mais Personagens, que
+ * antes era uma pílula no canto do palco. À direita,
  * dois grupos empilhados — porque o painel direito já era dois: as abas em cima
  * e as camadas da cena embaixo, com uma altura de `h-2/5` cravada no CSS. O que
  * mudou é que agora aquela divisão tem um divisor que se arrasta.
@@ -100,7 +101,16 @@ function padrao(): Layout {
       grupos: [
         {
           id: "esquerda-1",
-          abas: [{ tipo: "cenas" }, { tipo: "areas" }, { tipo: "retratos" }],
+          // Personagens entra aqui, e não numa pílula no canto do palco: as
+          // quatro são "o que existe na sessão", e a de personagens é a que
+          // alimenta as outras -- token no mapa vem dela, e a de retratos
+          // deriva dos tokens.
+          abas: [
+            { tipo: "cenas" },
+            { tipo: "areas" },
+            { tipo: "retratos" },
+            { tipo: "personagens" },
+          ],
           ativa: "cenas",
         },
       ],

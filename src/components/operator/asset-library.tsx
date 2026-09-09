@@ -6,14 +6,11 @@ import {
   ChevronRight,
   FolderClosed,
   FolderPlus,
-  ImageIcon,
-  ImageOff,
   MoreVertical,
   Pencil,
   Plus,
   Trash2,
   Upload,
-  UserSquare,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -30,9 +27,12 @@ import { useAssetList } from "@/hooks/use-asset-list";
 import { useFolderList } from "@/hooks/use-folder-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
-import { hasAssetDrag, readAssetDrag, writeAssetDrag } from "@/lib/operator/asset-drag";
+import {
+  hasAssetDrag,
+  readAssetDrag,
+  writeAssetDrag,
+} from "@/lib/operator/asset-drag";
 import { countAssetUsage } from "@/lib/operator/asset-usage";
-import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { cn } from "@/lib/utils";
@@ -42,19 +42,34 @@ import type { AssetFolder, AssetMeta, Scene } from "@/types/scene";
 const FALLBACK_SIZE = { x: 480, y: 270 };
 
 export function AssetLibrary({ scene }: { scene: Scene }) {
-  const { assets, importar, remove, move, refresh } = useAssetList("image");
+  const { assets: todos, importar, remove, move, refresh } = useAssetList("image");
+
+  /**
+   * Só o que não tem dono.
+   *
+   * Fundo de cena, retrato e miniatura de personagem entram no acervo porque
+   * precisam alcançar a TV, mas eles JÁ SÃO de alguém: aparecer aqui misturava o
+   * que ainda vai ser escolhido com o que já foi. Numa campanha com dez
+   * personagens eram vinte linhas que ninguém vai arrastar para o mapa.
+   *
+   * Cada um deles é trocado onde mora — o fundo no menu da cena, os dois no
+   * campo da ficha. Ver `AssetMeta.escopo`.
+   */
+  const assets = todos.filter((asset) => !asset.escopo);
   // Mexer em pasta muda arquivo — apagar devolve o conteúdo à raiz —, então a
   // lista de arquivos recarrega junto.
-  const { folders, create, rename, remove: removeFolder } = useFolderList(refresh);
+  const {
+    folders,
+    create,
+    rename,
+    remove: removeFolder,
+  } = useFolderList(refresh);
   const [creating, setCreating] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
   const scenes = useSceneStore((state) => state.board?.scenes);
   const addItem = useSceneStore((state) => state.addItem);
-  const setBackground = useSceneStore((state) => state.setBackground);
   const select = useSelectionStore((state) => state.select);
-  const addPortrait = usePortraitStore((state) => state.add);
-  const selectPortrait = useSelectionStore((state) => state.selectPortrait);
 
   function handleAddToScene(asset: AssetMeta) {
     const size =
@@ -62,22 +77,15 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
         ? fitInitialSize(asset.naturalWidth, asset.naturalHeight)
         : FALLBACK_SIZE;
 
-    select([addItem(scene.id, { assetId: asset.id, ...centeredBox(size.x, size.y) })]);
-  }
-
-  /**
-   * Vira retrato: sai da cena e passa a viver na câmera.
-   *
-   * Já selecionado, porque o gesto seguinte é arrastar para o canto certo — e
-   * o retrato nasce no inferior esquerdo, que raramente é onde ele fica.
-   */
-  function handleUseAsPortrait(asset: AssetMeta) {
-    selectPortrait(addPortrait(asset.id, asset.naturalWidth, asset.naturalHeight));
+    select([
+      addItem(scene.id, { assetId: asset.id, ...centeredBox(size.x, size.y) }),
+    ]);
   }
 
   /** Move e é chamado tanto pelo arrasto quanto pelo menu da linha. */
   const handleMove = useCallback(
-    (assetId: string, folderId: string | undefined) => void move(assetId, folderId),
+    (assetId: string, folderId: string | undefined) =>
+      void move(assetId, folderId),
     [move],
   );
 
@@ -97,11 +105,8 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
         key={asset.id}
         asset={asset}
         folders={folders}
-        isBackground={asset.id === scene.backgroundAssetId}
         usageCount={countAssetUsage(scenes ?? [], asset.id)}
         onAdd={() => handleAddToScene(asset)}
-        onSetBackground={() => setBackground(scene.id, asset.id)}
-        onUseAsPortrait={() => handleUseAsPortrait(asset)}
         onMove={(folderId) => handleMove(asset.id, folderId)}
         onRemove={() => void remove(asset.id)}
       />
@@ -131,14 +136,6 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
             Nova pasta
           </Button>
         )}
-
-        {scene.backgroundAssetId ? (
-          <Button variant="ghost" size="sm" onClick={() => setBackground(scene.id, undefined)}>
-            <ImageOff />
-            Remover fundo
-          </Button>
-        ) : null}
-
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
@@ -151,7 +148,9 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
             {/* Pastas primeiro, e a raiz embaixo: arquivo novo cai na raiz, e é
                 de lá que ele é distribuído. */}
             {folders.map((folder) => {
-              const inside = assets.filter((asset) => asset.folderId === folder.id);
+              const inside = assets.filter(
+                (asset) => asset.folderId === folder.id,
+              );
 
               return (
                 <FolderGroup
@@ -174,12 +173,15 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
             })}
 
             {folders.length > 0 ? (
-              <RootDrop onDropAsset={(assetId) => handleMove(assetId, undefined)}>
+              <RootDrop
+                onDropAsset={(assetId) => handleMove(assetId, undefined)}
+              >
                 {loose.length > 0 ? (
                   loose.map(renderRow)
                 ) : (
                   <p className="text-muted-foreground px-1 py-2 text-xs">
-                    Nada fora de pasta. Solte um arquivo aqui para tirá-lo da pasta.
+                    Nada fora de pasta. Solte um arquivo aqui para tirá-lo da
+                    pasta.
                   </p>
                 )}
               </RootDrop>
@@ -230,7 +232,9 @@ function FolderGroup({
       <div
         className={cn(
           "group flex items-center gap-1 rounded-md px-1 py-1",
-          receiving ? "bg-primary/15 ring-primary/60 ring-1" : "hover:bg-accent/50",
+          receiving
+            ? "bg-primary/15 ring-primary/60 ring-1"
+            : "hover:bg-accent/50",
         )}
         onDragOver={(event) => {
           if (!hasAssetDrag(event.dataTransfer)) return;
@@ -262,7 +266,10 @@ function FolderGroup({
           {open ? <ChevronDown /> : <ChevronRight />}
         </Button>
 
-        <FolderClosed className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+        <FolderClosed
+          className="text-muted-foreground size-3.5 shrink-0"
+          aria-hidden
+        />
 
         {renaming ? (
           <FolderNameInput
@@ -356,7 +363,9 @@ function RootDrop({
         onDropAsset(payload.assetId);
       }}
     >
-      <p className="text-muted-foreground px-1 pb-1 text-[10px] uppercase">Fora de pasta</p>
+      <p className="text-muted-foreground px-1 pb-1 text-[10px] uppercase">
+        Fora de pasta
+      </p>
       <ul className="space-y-1">{children}</ul>
     </section>
   );
@@ -398,11 +407,8 @@ function FolderNameInput({
 type AssetRowProps = {
   asset: AssetMeta;
   folders: AssetFolder[];
-  isBackground: boolean;
   usageCount: number;
   onAdd: () => void;
-  onSetBackground: () => void;
-  onUseAsPortrait: () => void;
   onMove: (folderId: string | undefined) => void;
   onRemove: () => void;
 };
@@ -410,11 +416,8 @@ type AssetRowProps = {
 function AssetRow({
   asset,
   folders,
-  isBackground,
   usageCount,
   onAdd,
-  onSetBackground,
-  onUseAsPortrait,
   onMove,
   onRemove,
 }: AssetRowProps) {
@@ -432,7 +435,12 @@ function AssetRow({
       <span className="bg-muted size-10 shrink-0 overflow-hidden rounded">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="" className="size-full object-cover" draggable={false} />
+          <img
+            src={url}
+            alt=""
+            className="size-full object-cover"
+            draggable={false}
+          />
         ) : null}
       </span>
 
@@ -440,11 +448,7 @@ function AssetRow({
         <span className="block truncate text-xs" title={asset.name}>
           {asset.name}
         </span>
-        {isBackground ? (
-          <span className="text-muted-foreground text-[10px] uppercase">fundo</span>
-        ) : null}
       </span>
-
 
       <Button
         variant="ghost"
@@ -454,25 +458,13 @@ function AssetRow({
       >
         <Plus />
       </Button>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={`Usar ${asset.name} como fundo`}
-        onClick={onSetBackground}
-      >
-        <ImageIcon />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={`Usar ${asset.name} como retrato`}
-        onClick={onUseAsPortrait}
-      >
-        <UserSquare />
-      </Button>
-      {/* Menu com o que não é gesto de uma mão: mover entre pastas — que
-          também se faz arrastando, mas o arrasto não alcança pasta rolada fora
-          de vista — e apagar. */}
+      {/* Menu com o resto: mover entre pastas — que também se faz arrastando,
+          mas o arrasto não alcança pasta rolada fora de vista — e apagar. Só o
+          `+` fica solto na linha; ícones lado a lado numa lista rolável eram
+          ruído, e nenhum deles é gesto de toda hora como adicionar à cena.
+
+          "Usar como fundo" e "usar como retrato" saíram: cada arquivo agora tem
+          uma casa só, e é de lá que ele é escolhido. */}
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -480,7 +472,6 @@ function AssetRow({
               variant="ghost"
               size="icon-xs"
               aria-label={`Opções de ${asset.name}`}
-              className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100"
             >
               <MoreVertical />
             </Button>
@@ -497,12 +488,14 @@ function AssetRow({
           {folders
             .filter((folder) => folder.id !== asset.folderId)
             .map((folder) => (
-              <DropdownMenuItem key={folder.id} onClick={() => onMove(folder.id)}>
+              <DropdownMenuItem
+                key={folder.id}
+                onClick={() => onMove(folder.id)}
+              >
                 <FolderClosed />
                 <span className="truncate">Mover para {folder.name}</span>
               </DropdownMenuItem>
             ))}
-
 
           {folders.length > 0 || asset.folderId ? (
             <DropdownMenuSeparator />

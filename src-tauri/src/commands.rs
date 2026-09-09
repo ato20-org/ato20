@@ -226,12 +226,12 @@ pub fn folder_delete(state: State<'_, AppState>, id: String) -> AppResult<()> {
 // --- sessao -----------------------------------------------------------------
 
 #[tauri::command]
-pub fn portraits_load(state: State<'_, AppState>) -> AppResult<Vec<Json>> {
+pub fn portraits_load(state: State<'_, AppState>) -> AppResult<Json> {
     state.with_vault(|vault| session::load_portraits(vault))
 }
 
 #[tauri::command]
-pub fn portraits_save(state: State<'_, AppState>, portraits: Vec<Json>) -> AppResult<()> {
+pub fn portraits_save(state: State<'_, AppState>, portraits: Json) -> AppResult<()> {
     state.with_vault(|vault| session::save_portraits(vault, &portraits))
 }
 
@@ -424,13 +424,35 @@ pub struct ImportResult {
 /// arquivos faz numa, o limite de corpo do axum cortava o stream de um mapa
 /// grande no meio.
 #[tauri::command]
-pub fn asset_import(state: State<'_, AppState>, paths: Vec<String>) -> AppResult<ImportResult> {
+/// Importa arquivos para o acervo.
+///
+/// `escopo` e `cena` ou `personagem` quando o arquivo tem dono, e `None` quando
+/// ele entra solto na biblioteca. Ver `AssetMeta::escopo`.
+pub fn asset_import(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+    escopo: Option<String>,
+) -> AppResult<ImportResult> {
     state.with_vault(|vault| {
         let origens: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
-        let (aceitos, recusados) = assets::import(vault, &origens)?;
+        let (aceitos, recusados) = assets::import(vault, &origens, escopo.as_deref())?;
 
         Ok(ImportResult { aceitos, recusados })
     })
+}
+
+/// Marca ou desmarca o dono de um arquivo do acervo.
+///
+/// O cliente chama isto quando um campo passa a apontar para um arquivo que
+/// entrou sem dono -- e no acerto dos arquivos que ja existiam antes de o
+/// escopo existir. Ver `AssetMeta::escopo`.
+#[tauri::command]
+pub fn asset_set_escopo(
+    state: State<'_, AppState>,
+    id: String,
+    escopo: Option<String>,
+) -> AppResult<()> {
+    state.with_vault(|vault| assets::set_escopo(vault, &id, escopo))
 }
 
 /// O que a anexacao devolve.

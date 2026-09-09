@@ -47,6 +47,7 @@ import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { attachmentKind, imageMimeByName, type AttachmentKind } from "@/lib/attachments/kind";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { chaveDe, type ConteudoJanela } from "@/lib/store/use-window-store";
+import { setAssetEscopo } from "@/lib/vault/assets";
 import { shareCharacterAttachment } from "@/lib/vault/evidence";
 import { formatBytes } from "@/lib/player/session";
 import {
@@ -653,6 +654,14 @@ function Slot({
   async function limpar() {
     try {
       await setCharacterCampo(personagem.id, campo, null);
+
+      // Retrato e miniatura são arquivos do acervo marcados como `personagem`,
+      // e a biblioteca esconde quem tem dono. Limpar o campo os deixa sem dono:
+      // sem desmarcar, eles ficariam escondidos para sempre e sem lugar de onde
+      // ser alcançados. O arquivo em si continua no acervo, de propósito -- a
+      // imagem pode estar numa cena como item.
+      if (campo !== "ficha" && valor) await setAssetEscopo(valor, undefined);
+
       onChanged();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Falha ao limpar.");

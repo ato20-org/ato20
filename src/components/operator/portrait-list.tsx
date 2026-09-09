@@ -1,40 +1,123 @@
 "use client";
 
-import { Eye, EyeOff, FlipHorizontal, Frame, Trash2, UserSquare } from "lucide-react";
+import {
+  AlignHorizontalDistributeCenter,
+  Eye,
+  EyeOff,
+  FlipHorizontal,
+  Trash2,
+  UserSquare,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAssetList } from "@/hooks/use-asset-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { useCharacters } from "@/hooks/use-characters";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
+import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { cn } from "@/lib/utils";
-import type { Portrait } from "@/types/scene";
+import type { Personagem } from "@/types/character";
+import type { AncoraRetrato, Portrait } from "@/types/scene";
+
+/** O nome da área, para a linha de estado do painel. */
+const LUGAR: Record<AncoraRetrato, string> = {
+  "cima-esquerda": "cima, à esquerda",
+  "cima-centro": "cima, ao centro",
+  "cima-direita": "cima, à direita",
+  "baixo-esquerda": "baixo, à esquerda",
+  "baixo-centro": "baixo, ao centro",
+  "baixo-direita": "baixo, à direita",
+};
 
 /**
- * Os retratos da sessão.
+ * Quem está na cena, e quem dela está no ar.
  *
- * Lista separada do acervo porque são coisas diferentes: o acervo é o arquivo,
- * e aqui está a cópia que está em cena — a mesma imagem pode ser retrato de um
- * NPC e fundo de outra cena ao mesmo tempo.
+ * A lista deriva dos TOKENS da cena em edição, e não de uma coleção própria:
+ * antes o mestre criava retrato à mão a partir de qualquer imagem do acervo, e
+ * o resultado era uma segunda lista de gente que não tinha relação nenhuma com
+ * os personagens da campanha. A mesma pessoa existia duas vezes — como ficha e
+ * como recorte — e nada ligava as duas.
  *
- * Não pertence à cena: trocar de mapa não mexe nesta lista.
+ * Agora é uma pergunta só: quem está no mapa desta cena pode aparecer na tela
+ * da mesa. Pôr o token é o que traz a linha; a linha é o interruptor.
+ *
+ * A cena EM EDIÇÃO, e não a que está no ar: é aqui que o mestre monta a
+ * próxima. O que a mesa vê é filtrado pela cena no ar, em `OperatorShell` —
+ * armar um retrato numa cena que ainda não subiu não vaza nada.
  */
 export function PortraitList() {
-  const portraits = usePortraitStore((state) => state.portraits);
+  const scene = useSceneStore(selectEditingScene);
+  const { personagens } = useCharacters();
+  const guardados = usePortraitStore((state) => state.portraits);
+  const filaAuto = usePortraitStore((state) => state.filaAuto);
+  const ancora = usePortraitStore((state) => state.ancora);
+  const alternarFila = usePortraitStore((state) => state.alternarFila);
+
+  /**
+   * Um personagem por token, na ordem em que entraram na cena.
+   *
+   * Ordem dos itens e não do registro guardado: é a ordem que o mestre acabou
+   * de construir no mapa.
+   */
+  const elenco: Personagem[] = [];
+  const vistos = new Set<string>();
+
+  for (const item of scene?.items ?? []) {
+    if (!item.personagemId || vistos.has(item.personagemId)) continue;
+
+    vistos.add(item.personagemId);
+
+    const personagem = personagens?.find((atual) => atual.id === item.personagemId);
+    // Token de personagem apagado: some da lista em vez de virar linha sem
+    // nome. O botão da ficha no palco desaparece pela mesma razão.
+    if (personagem) elenco.push(personagem);
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* O interruptor da fila fica FORA da rolagem: ele vale para a lista
+          inteira, e rolar até ele para desligar seria absurdo numa mesa de
+          seis. */}
+      <div className="flex items-center gap-2 border-b px-2 py-1.5">
+        <Toggle
+          active={filaAuto}
+          label={filaAuto ? "Desligar a fila automática" : "Ligar a fila automática"}
+          hint={
+            filaAuto
+              ? "Ligada: quem entra no ar se enfileira sozinho. Arraste um deles para mudar a área onde a fila encosta."
+              : "Enfileira sozinho quem entra no ar, na ordem desta lista."
+          }
+          onClick={alternarFila}
+        >
+          <AlignHorizontalDistributeCenter />
+        </Toggle>
+
+        <span className="text-muted-foreground min-w-0 flex-1 truncate text-[10px]">
+          {filaAuto ? `Fila em ${LUGAR[ancora]}` : "Fila automática desligada"}
+        </span>
+      </div>
+
       <ScrollArea className="min-h-0 flex-1">
-        {portraits.length === 0 ? (
-          <p className="text-muted-foreground p-3 text-xs">
-            Nenhum retrato. Na aba Imagens, use o botão de retrato numa imagem para pôr o
-            personagem sobre a cena. Ele fica preso à câmera, então aproximar o mapa não o move.
+        {elenco.length === 0 ? (
+          <p className="text-muted-foreground p-3 text-xs leading-snug">
+            Ninguém na cena. Ponha o token de um personagem no mapa — pela lista de Personagens —
+            e ele aparece aqui para entrar na tela da mesa. O retrato fica preso à câmera, então
+            aproximar o mapa não o move.
           </p>
         ) : (
           <ul className="space-y-1 p-2">
-            {portraits.map((portrait) => (
-              <PortraitRow key={portrait.id} portrait={portrait} />
+            {elenco.map((personagem) => (
+              <PortraitRow
+                key={personagem.id}
+                personagem={personagem}
+                filaAuto={filaAuto}
+                retrato={
+                  guardados.find((atual) => atual.personagemId === personagem.id) ?? null
+                }
+              />
             ))}
           </ul>
         )}
@@ -43,15 +126,59 @@ export function PortraitList() {
   );
 }
 
-function PortraitRow({ portrait }: { portrait: Portrait }) {
-  const url = useAssetUrl(portrait.assetId);
+/**
+ * A linha de um personagem em cena.
+ *
+ * `retrato` é `null` quando ele nunca foi armado. A linha existe de qualquer
+ * jeito — ela é a lista do elenco, não a dos retratos guardados —, e é o botão
+ * do olho que cria o registro na primeira vez.
+ */
+function PortraitRow({
+  personagem,
+  retrato,
+  filaAuto,
+}: {
+  personagem: Personagem;
+  retrato: Portrait | null;
+  filaAuto: boolean;
+}) {
+  const url = useAssetUrl(personagem.retrato);
   const update = usePortraitStore((state) => state.update);
+  const armar = usePortraitStore((state) => state.armar);
+  const desarmar = usePortraitStore((state) => state.desarmar);
   const remove = usePortraitStore((state) => state.remove);
+
   const selectedIds = useSelectionStore((state) => state.selectedPortraitIds);
   const selectPortrait = useSelectionStore((state) => state.selectPortrait);
   const togglePortrait = useSelectionStore((state) => state.togglePortrait);
 
-  const selected = selectedIds.includes(portrait.id);
+  // O tamanho natural decide a proporção com que o retrato nasce. Uma leitura
+  // do acervo para a lista inteira seria melhor, mas a linha é uma por
+  // personagem em cena -- meia dúzia, não uma por arquivo do acervo.
+  const { assets } = useAssetList("image");
+  const asset = assets.find((atual) => atual.id === personagem.retrato);
+
+  const noAr = Boolean(retrato?.visible);
+  const selected = retrato ? selectedIds.includes(retrato.id) : false;
+
+  // Sem Retrato na ficha não há o que pôr na tela. A linha fica, porque o
+  // personagem ESTÁ na cena: é a pista de que falta preencher o campo.
+  if (!personagem.retrato) {
+    return (
+      <li className="flex items-center gap-2 rounded-md p-1">
+        <span className="bg-muted grid size-10 shrink-0 place-items-center rounded">
+          <UserSquare className="text-muted-foreground size-4" aria-hidden />
+        </span>
+
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs">{personagem.nome}</span>
+          <span className="text-muted-foreground block truncate text-[10px]">
+            Sem retrato na ficha
+          </span>
+        </span>
+      </li>
+    );
+  }
 
   return (
     <li
@@ -61,17 +188,22 @@ function PortraitRow({ portrait }: { portrait: Portrait }) {
       )}
     >
       {/* A miniatura seleciona: é o caminho para as alças aparecerem no palco
-          quando o retrato está atrás de outro, ou fora do enquadramento atual. */}
+          quando o retrato está atrás de outro, ou fora do enquadramento atual.
+          Fora do ar não há o que selecionar, então ela vira só a imagem. */}
       <button
         type="button"
-        aria-label="Selecionar retrato"
+        aria-label={`Selecionar retrato de ${personagem.nome}`}
         aria-pressed={selected}
+        disabled={!retrato}
         className="bg-muted size-10 shrink-0 overflow-hidden rounded"
         // Shift soma à seleção, como no palco: é assim que se pega o elenco
         // inteiro para redimensionar tudo junto.
-        onClick={(event) =>
-          event.shiftKey ? togglePortrait(portrait.id) : selectPortrait(portrait.id)
-        }
+        onClick={(event) => {
+          if (!retrato) return;
+
+          if (event.shiftKey) togglePortrait(retrato.id);
+          else selectPortrait(retrato.id);
+        }}
       >
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -81,53 +213,74 @@ function PortraitRow({ portrait }: { portrait: Portrait }) {
         )}
       </button>
 
-      <span className="min-w-0 flex-1 text-xs">
-        {portrait.visible ? (
-          <span className="text-muted-foreground">no ar</span>
-        ) : (
-          <span className="text-muted-foreground/60">só você vê</span>
-        )}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs">{personagem.nome}</span>
+        <span className="text-muted-foreground block truncate text-[10px]">
+          {noAr ? "no ar" : retrato ? "só você vê" : "fora da tela"}
+        </span>
       </span>
 
       <Toggle
-        active={portrait.visible}
-        label={portrait.visible ? "Tirar do ar" : "Pôr no ar"}
+        active={noAr}
+        label={noAr ? `Tirar ${personagem.nome} do ar` : `Pôr ${personagem.nome} no ar`}
         hint={
-          portrait.visible
+          noAr
             ? "A mesa está vendo este retrato."
-            : "Fora do ar: aparece apagado só no teu palco."
+            : retrato
+              ? "Fora do ar: aparece apagado só no teu palco, onde você o deixou."
+              : "Entra no canto de baixo, e você arrasta daí."
         }
-        onClick={() => update(portrait.id, { visible: !portrait.visible })}
+        onClick={() => {
+          if (noAr) desarmar(personagem.id);
+          else armar(personagem.id, personagem.retrato!, asset?.naturalWidth, asset?.naturalHeight);
+        }}
       >
-        {portrait.visible ? <Eye /> : <EyeOff />}
+        {noAr ? <Eye /> : <EyeOff />}
       </Toggle>
 
-      <Toggle
-        active={Boolean(portrait.flipX)}
-        label="Espelhar"
-        hint="Vira o retrato para o lado da tela em que ele está."
-        onClick={() => update(portrait.id, { flipX: !portrait.flipX })}
-      >
-        <FlipHorizontal />
-      </Toggle>
+      {/* Espelhar e esquecer só existem depois de haver geometria: são ajustes
+          de uma figura que já está posta. */}
+      {retrato ? (
+        <>
+          {/* Só faz sentido com a fila ligada: fora dela, todo retrato já é
+              solto, e um interruptor que não muda nada é ruído. */}
+          {filaAuto ? (
+            <Toggle
+              active={!retrato.foraDaFila}
+              label={retrato.foraDaFila ? "Devolver à fila" : "Soltar da fila"}
+              hint={
+                retrato.foraDaFila
+                  ? "Fora da fila: você o arrasta onde quiser."
+                  : "Na fila: a posição dele é da fila, e arrastá-lo move o grupo."
+              }
+              onClick={() => update(retrato.id, { foraDaFila: !retrato.foraDaFila })}
+            >
+              <AlignHorizontalDistributeCenter />
+            </Toggle>
+          ) : null}
 
-      <Toggle
-        active={Boolean(portrait.framed)}
-        label="Moldura"
-        hint="Borda e sombra, para o retrato não parecer recorte colado no mapa."
-        onClick={() => update(portrait.id, { framed: !portrait.framed })}
-      >
-        <Frame />
-      </Toggle>
+          <Toggle
+            active={Boolean(retrato.flipX)}
+            label="Espelhar"
+            hint="Vira o retrato para o lado da tela em que ele está."
+            onClick={() => update(retrato.id, { flipX: !retrato.flipX })}
+          >
+            <FlipHorizontal />
+          </Toggle>
 
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label="Remover retrato"
-        onClick={() => remove(portrait.id)}
-      >
-        <Trash2 />
-      </Button>
+          {/* Lixeira porque destrói: esquece onde a figura estava e de que
+              tamanho. O personagem continua na cena e na lista -- o que se
+              apaga é a arrumação, não o elenco. */}
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Esquecer a posição do retrato de ${personagem.nome}`}
+            onClick={() => remove(retrato.id)}
+          >
+            <Trash2 />
+          </Button>
+        </>
+      ) : null}
     </li>
   );
 }

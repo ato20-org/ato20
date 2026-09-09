@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 
 import { OpenViewer } from "@/components/operator/open-viewer";
-import { CharactersChip } from "@/components/operator/characters-chip";
 import { PlayersChip } from "@/components/operator/players-chip";
 import { TableInvite } from "@/components/operator/table-invite";
 import { DockRow } from "@/components/operator/dock/dock-row";
@@ -24,6 +23,9 @@ import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useCharacters } from "@/hooks/use-characters";
+import { useEscopoDosAssets } from "@/hooks/use-escopo-dos-assets";
+import { useFilaDeRetratos } from "@/hooks/use-fila-de-retratos";
 import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
@@ -33,6 +35,7 @@ import { useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
+import { retratosDaCena } from "@/lib/geometry/portrait";
 import {
   selectEditingScene,
   selectLiveScene,
@@ -70,7 +73,18 @@ export function OperatorShell() {
   const track = useTrackStore((state) => state.track);
   const trackVolume = useTrackStore((state) => state.volume);
 
-  const portraits = usePortraitStore((state) => state.portraits);
+  const guardados = usePortraitStore((state) => state.portraits);
+  const { personagens } = useCharacters();
+
+  /**
+   * O que a mesa vê: os retratos de quem tem token na cena NO AR.
+   *
+   * Pela cena no ar, e não pela que está sendo editada -- é a mesma promessa
+   * que o resto da publicação faz. O mestre monta a cena seguinte com os
+   * retratos dela já armados e posicionados, e nada disso chega à TV antes de
+   * a cena subir. Ver `retratosDaCena`, que o painel usa com a outra cena.
+   */
+  const portraits = retratosDaCena(guardados, liveScene?.items ?? [], personagens ?? []);
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
 
@@ -93,6 +107,14 @@ export function OperatorShell() {
   // O volume viaja FORA da faixa: é da sessão, e trocar de música não mexe
   // nele.
   usePublisher({ scene: liveScene, track, volume: trackVolume, portraits, spotlight });
+
+  // A fila arruma o elenco da cena EM EDIÇÃO, que é a que o mestre vê no palco.
+  // A publicação acima usa a que está no ar. Ver `useFilaDeRetratos`.
+  useFilaDeRetratos(editingScene);
+
+  // Passagem única: marca o dono dos arquivos que entraram antes de o escopo
+  // existir, senão eles ficariam na biblioteca para sempre.
+  useEscopoDosAssets(status === "ready");
   useOperatorShortcuts();
   useSpacePan();
   return (
@@ -154,13 +176,16 @@ export function OperatorShell() {
                 tempo todo. Fora do `StageBoundary`: uma mesa cheia continua
                 cheia sem cena nenhuma selecionada. */}
             <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-              {/* Personagens e jogadores na MESMA pílula: são as duas metades da
-                  mesma pergunta — quem senta na mesa, e quem eles interpretam —,
-                  e separá-las em duas pílulas de um botão fazia parecerem duas
-                  ferramentas sem relação. Os dois chips saem sem moldura por
-                  isso; a moldura é esta. */}
+              {/* Só jogadores. Personagens tinha uma pílula ao lado desta, e ela
+                  saiu quando a lista virou aba padrão da bancada: um atalho no
+                  canto do palco para uma tela que já está à vista é um segundo
+                  caminho para o mesmo lugar, e o contador dela repetia o que a
+                  própria lista mostra.
+
+                  Jogadores fica: quem entrou pela Plateia não tem aba nenhuma,
+                  e a contagem é o que responde "quantos entraram?" sem abrir
+                  nada. O chip sai sem moldura; a moldura é esta. */}
               <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-                <CharactersChip />
                 <PlayersChip />
               </div>
               {rightOpen ? null : (

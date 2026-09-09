@@ -1,7 +1,12 @@
 "use client";
 
 import { call } from "@/lib/vault/bridge";
-import { DEFAULT_SESSION_VOLUME, type Portrait, type SessionTrack } from "@/types/scene";
+import {
+  DEFAULT_SESSION_VOLUME,
+  type AncoraRetrato,
+  type Portrait,
+  type SessionTrack,
+} from "@/types/scene";
 
 /**
  * Retratos e trilha: o estado que pertence à sessão, e não a nenhuma cena.
@@ -12,11 +17,32 @@ import { DEFAULT_SESSION_VOLUME, type Portrait, type SessionTrack } from "@/type
  * enquanto o retrato grava a cada frame de arrasto.
  */
 
-export function loadPortraits(): Promise<Portrait[]> {
-  return call<Portrait[]>("portraits_load");
+/**
+ * Os retratos da sessão, mais a configuração da fila automática.
+ *
+ * O arquivo era um array e virou objeto: a fila tem dois campos que são de
+ * TODOS os retratos — se ela está ligada e em que área está ancorada —, e isso
+ * não cabe num item da lista. O Rust guarda JSON opaco, então a mudança de
+ * forma é só aqui e na leitura.
+ */
+export type RetratosSalvos = {
+  retratos: Portrait[];
+  filaAuto: boolean;
+  ancora: AncoraRetrato;
+};
+
+/**
+ * Lê o arquivo cru.
+ *
+ * `unknown` de propósito: pode vir `null` (campanha sem arquivo), o ARRAY do
+ * formato antigo, ou o objeto de agora. Quem sabe conciliar os três é o store,
+ * que já tolera lixo — ver `usePortraitStore.hydrate`.
+ */
+export function loadPortraits(): Promise<unknown> {
+  return call<unknown>("portraits_load");
 }
 
-export function savePortraits(portraits: Portrait[]): Promise<void> {
+export function savePortraits(portraits: RetratosSalvos): Promise<void> {
   return call("portraits_save", { portraits });
 }
 
