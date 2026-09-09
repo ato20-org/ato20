@@ -6,6 +6,7 @@ import {
   type SceneChannel,
 } from "@/lib/sync/channel";
 import { createTrailingThrottle } from "@/lib/sync/throttle";
+import { DEFAULT_SESSION_VOLUME } from "@/types/scene";
 
 /**
  * Onde o daemon está, e com que segredo se escreve nele.
@@ -121,6 +122,9 @@ export function createSubscriberChannel(base: string, codigo: string): SceneChan
             // Estado gravado por uma versão anterior pode não trazer o campo:
             // lista vazia é o certo, e não uma tela quebrada.
             portraits: state.portraits ?? [],
+            // Quadro sem volume é de um Operador anterior a ele sair de dentro
+            // da faixa: o padrão é o estado certo, e não silêncio.
+            volume: state.volume ?? DEFAULT_SESSION_VOLUME,
             spotlight: state.spotlight ?? null,
           });
         } catch {

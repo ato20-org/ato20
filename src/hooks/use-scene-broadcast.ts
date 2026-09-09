@@ -5,7 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPublisher, createSubscriber, type SceneChannel } from "@/lib/sync";
 import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
-import type { Portrait, Scene, SessionTrack, Spotlight } from "@/types/scene";
+import {
+  DEFAULT_SESSION_VOLUME,
+  type Portrait,
+  type Scene,
+  type SessionTrack,
+  type Spotlight,
+} from "@/types/scene";
 
 /**
  * Reanúncio periódico do estado.
@@ -63,6 +69,7 @@ export function usePublisher(state: LiveState): void {
     const paraMesa: LiveState = {
       scene,
       track: state.track,
+      volume: state.volume,
       portraits: state.portraits,
       spotlight: state.spotlight,
     };
@@ -70,10 +77,10 @@ export function usePublisher(state: LiveState): void {
     stateRef.current = paraMesa;
     channelRef.current?.publish(paraMesa);
     // Dependências nos campos, não no objeto `state`: quem chama monta
-    // `{ scene, track, portraits, spotlight }` a cada render, e comparar essa
-    // embalagem fazia o Operador publicar enquanto montava a PRÓXIMA cena —
-    // uma publicação por uma mudança que a mesa não vê.
-  }, [scene, state.track, state.portraits, state.spotlight]);
+    // `{ scene, track, volume, portraits, spotlight }` a cada render, e
+    // comparar essa embalagem fazia o Operador publicar enquanto montava a
+    // PRÓXIMA cena — uma publicação por uma mudança que a mesa não vê.
+  }, [scene, state.track, state.volume, state.portraits, state.spotlight]);
 
   useEffect(() => {
     const beat = setInterval(() => {
@@ -88,6 +95,8 @@ export type Subscription = {
   /** A cena como a mesa pode vê-la: sem os pontos de anotação do mestre. */
   scene: Scene | null;
   track: SessionTrack | null;
+  /** Volume do som para esta tela, de 0 a 1. Quem regula é a mesa. */
+  volume: number;
   portraits: Portrait[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
@@ -107,6 +116,7 @@ export function useSubscription(codigo: string): Subscription {
   const [live, setLive] = useState<LiveState>({
     scene: null,
     track: null,
+    volume: DEFAULT_SESSION_VOLUME,
     portraits: [],
     spotlight: null,
   });
@@ -141,6 +151,7 @@ export function useSubscription(codigo: string): Subscription {
   return {
     scene: live.scene,
     track: live.track,
+    volume: live.volume,
     portraits: live.portraits,
     spotlight: live.spotlight,
     synced,

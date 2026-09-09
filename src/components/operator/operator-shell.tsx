@@ -64,6 +64,7 @@ export function OperatorShell() {
   const restorePinNotes = usePinWindowStore((state) => state.restaurar);
 
   const track = useTrackStore((state) => state.track);
+  const trackVolume = useTrackStore((state) => state.volume);
 
   const portraits = usePortraitStore((state) => state.portraits);
 
@@ -82,7 +83,10 @@ export function OperatorShell() {
   //
   // A cena entra aqui inteira, com os pontos de anotação; quem os remove é o
   // próprio `usePublisher`, e não este chamador. Ver `sceneForTable`.
-  usePublisher({ scene: liveScene, track, portraits, spotlight });
+  //
+  // O volume viaja FORA da faixa: é da sessão, e trocar de música não mexe
+  // nele.
+  usePublisher({ scene: liveScene, track, volume: trackVolume, portraits, spotlight });
   useOperatorShortcuts();
   useSpacePan();
   return (
@@ -161,7 +165,7 @@ export function OperatorShell() {
 
       {/* A trilha é da sessão, não da cena: trocar de cena não corta a
           música. */}
-      <SessionAudio track={track} />
+      <SessionAudio track={track} volume={trackVolume} />
     </div>
   );
 }

@@ -19,8 +19,17 @@ const HAVE_METADATA = 1;
  * canal, e cada aparelho decide se emite som — `enabled` no store local. Isso
  * é necessário porque Operador e Assistir costumam rodar na mesma máquina, e
  * os dois emitindo produziriam eco.
+ *
+ * `volume` vem de fora, e não da faixa: é o volume da sessão, e vale para
+ * qualquer música que entre.
  */
-export function SessionAudio({ track }: { track: SessionTrack | null }) {
+export function SessionAudio({
+  track,
+  volume,
+}: {
+  track: SessionTrack | null;
+  volume: number;
+}) {
   const url = useAssetUrl(track?.assetId);
 
   const enabled = useAudioStore((state) => state.enabled);
@@ -30,7 +39,6 @@ export function SessionAudio({ track }: { track: SessionTrack | null }) {
   const retry = useAudioStore((state) => state.retry);
 
   const elementRef = useRef<HTMLAudioElement>(null);
-  const volume = track?.volume ?? 1;
   const shouldPlay = Boolean(url) && (track?.playing ?? false);
 
   useEffect(() => {
@@ -51,6 +59,11 @@ export function SessionAudio({ track }: { track: SessionTrack | null }) {
 
     /** Entra na altura em que a mesa está, em vez de começar do zero. */
     const seekAndPlay = () => {
+      // De novo aqui, e não só no efeito de volume: um elemento recém-criado
+      // nasce em 1, e sem isto a faixa nova dava o primeiro instante no volume
+      // cheio antes de o outro efeito descer o ganho.
+      element.volume = outputVolume(volume);
+
       const elapsed = track?.startedAt ? (Date.now() - track.startedAt) / 1000 : 0;
       const { duration } = element;
 
@@ -80,6 +93,9 @@ export function SessionAudio({ track }: { track: SessionTrack | null }) {
     element.addEventListener("loadedmetadata", seekAndPlay, { once: true });
 
     return () => element.removeEventListener("loadedmetadata", seekAndPlay);
+    // `volume` fica fora: ele só ajusta o ganho, e reentrar aqui faria cada
+    // passo do slider buscar a posição e chamar `play()` de novo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, shouldPlay, track?.loop, track?.startedAt, nudge, setBlocked]);
 
   /**

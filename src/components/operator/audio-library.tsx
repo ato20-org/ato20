@@ -10,9 +10,6 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import type { AssetMeta } from "@/types/scene";
 
-/** Volume padrão de uma trilha recém-escolhida. */
-const DEFAULT_TRACK_VOLUME = 0.8;
-
 /**
  * Acervo de sons. Só isso.
  *
@@ -61,7 +58,7 @@ export function AudioLibrary() {
                 asset={asset}
                 isTrack={asset.id === track?.assetId}
                 usageCount={countAssetUsage(scenes ?? [], asset.id, track)}
-                onSetTrack={() => start(asset.id, DEFAULT_TRACK_VOLUME)}
+                onSetTrack={() => start(asset.id)}
                 onRemove={() => void remove(asset.id)}
               />
             ))}

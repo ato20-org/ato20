@@ -212,6 +212,15 @@ eram medidas na webview, o que fazia sentido enquanto o arquivo passava por lá.
 
 `Range` não é opcional: sem ele a trilha só toca do início, nunca é arrastada.
 
+O **volume é da sessão, não da faixa**: uma barra só, na linha de baixo, e toda música que
+entrar obedece a ela. Antes o ganho morava dentro da trilha escolhida, e trocar de música
+trocava o volume junto — a faixa nova entrava com o ganho de quando foi escolhida, e o
+mestre reajustava o slider a cada troca. Agora ele fica ao lado da faixa em `trilha.json`,
+e não dentro dela: sobrevive a tirar a trilha, que é o caso em que ele desapareceria junto
+com a música. O ajuste **viaja** no mesmo quadro da cena — o mestre regula num lugar e a TV
+e os celulares seguem. Ajuste fino por aparelho é o volume do próprio sistema, que todo
+aparelho já tem.
+
 ### O token de escrita
 
 `POST /sala/publicar` exige o cabeçalho `x-ato20-token`, gerado a cada

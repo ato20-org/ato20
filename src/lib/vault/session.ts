@@ -1,7 +1,7 @@
 "use client";
 
 import { call } from "@/lib/vault/bridge";
-import type { Portrait, SessionTrack } from "@/types/scene";
+import { DEFAULT_SESSION_VOLUME, type Portrait, type SessionTrack } from "@/types/scene";
 
 /**
  * Retratos e trilha: o estado que pertence à sessão, e não a nenhuma cena.
@@ -20,11 +20,46 @@ export function savePortraits(portraits: Portrait[]): Promise<void> {
   return call("portraits_save", { portraits });
 }
 
-/** `null` = nenhuma trilha escolhida. */
-export function loadTrack(): Promise<SessionTrack | null> {
-  return call<SessionTrack | null>("track_load");
+/**
+ * O som da sessão: a faixa escolhida e o volume.
+ *
+ * Os dois no mesmo arquivo porque são gravados no mesmo gesto, mas o volume
+ * fica FORA da faixa: ele é da sessão, sobrevive a trocar de música e a tirar a
+ * trilha. Guardado dentro da faixa, cada troca trazia o ganho de quando aquela
+ * música foi escolhida e o som saltava.
+ *
+ * `trilha.json` continua opaco para o Rust — ele só grava e lê —, então mudar a
+ * forma aqui não pede mudança lá.
+ */
+export type SessionAudio = { track: SessionTrack | null; volume: number };
+
+/** Formato antigo: o arquivo era a faixa, com o volume dentro dela. */
+type TrilhaGravada =
+  | (SessionTrack & { volume?: number })
+  | SessionAudio
+  | null;
+
+export async function loadAudio(): Promise<SessionAudio> {
+  const gravado = await call<TrilhaGravada>("track_load");
+
+  if (!gravado) return { track: null, volume: DEFAULT_SESSION_VOLUME };
+
+  // Forma nova: um envelope com os dois campos.
+  if ("track" in gravado) {
+    return {
+      track: gravado.track,
+      volume: gravado.volume ?? DEFAULT_SESSION_VOLUME,
+    };
+  }
+
+  // Forma antiga, de antes de o volume sair da faixa. Lida uma vez e regravada
+  // no formato novo na primeira alteração — sem passo de migração, porque um
+  // arquivo que se converte ao ser tocado não precisa de um.
+  const { volume, ...track } = gravado;
+
+  return { track, volume: volume ?? DEFAULT_SESSION_VOLUME };
 }
 
-export function saveTrack(track: SessionTrack | null): Promise<void> {
-  return call("track_save", { track });
+export function saveAudio(track: SessionTrack | null, volume: number): Promise<void> {
+  return call("track_save", { track: { track, volume } });
 }

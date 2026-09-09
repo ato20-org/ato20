@@ -16,6 +16,13 @@ export type LiveState = {
   scene: Scene | null;
   /** `null` = nenhuma trilha escolhida. */
   track: SessionTrack | null;
+  /**
+   * Volume do som, de 0 a 1, para todas as telas.
+   *
+   * Viaja fora da faixa porque é da sessão: o mestre regula de um lugar, a TV
+   * e os celulares seguem, e trocar de música não mexe no ganho.
+   */
+  volume: number;
   /** Retratos sobre a cena, ancorados na câmera. */
   portraits: Portrait[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */

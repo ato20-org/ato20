@@ -61,14 +61,15 @@ export const useAudioStore = create<AudioStore>((set) => ({
 /**
  * Ganho final aplicado a um elemento.
  *
- * Um volume só, o da cena, e ele viaja: o mestre regula de um lugar e a TV e
- * os celulares seguem. Um segundo volume por aparelho se multiplicaria com
- * este — trilha a 5% com aparelho a 70% dá 3,5%, e quem arrasta um slider não
- * entende por que o som não sobe. Ajuste fino por aparelho é o volume do
- * próprio sistema, que todo aparelho já tem.
+ * Um volume só, o da sessão, e ele viaja: o mestre regula de um lugar e a TV e
+ * os celulares seguem. Nem por faixa, nem por aparelho. Por faixa, cada troca
+ * de música trazia o ganho de quando ela foi escolhida e o som saltava; por
+ * aparelho, os dois se multiplicariam — sessão a 5% com aparelho a 70% dá
+ * 3,5%, e quem arrasta um slider não entende por que o som não sobe. Ajuste
+ * fino por aparelho é o volume do próprio sistema, que todo aparelho já tem.
  */
-export function outputVolume(trackVolume: number): number {
+export function outputVolume(sessionVolume: number): number {
   if (!useAudioStore.getState().enabled) return 0;
 
-  return Math.max(0, Math.min(1, trackVolume));
+  return Math.max(0, Math.min(1, sessionVolume));
 }

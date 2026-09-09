@@ -238,6 +238,15 @@ export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height">;
 export type Viewport = { x: number; y: number; width: number; height: number };
 
 /**
+ * Volume de partida da sessão.
+ *
+ * Vive junto dos tipos porque três lugares precisam do mesmo número: o store,
+ * o disco (registro gravado antes de o volume sair da faixa) e o canal
+ * (mensagem de uma versão anterior, que não traz o campo).
+ */
+export const DEFAULT_SESSION_VOLUME = 0.8;
+
+/**
  * Trilha da sessão.
  *
  * Pertence ao sistema, não a uma cena: a música acompanha a mesa e não deve
@@ -246,12 +255,15 @@ export type Viewport = { x: number; y: number; width: number; height: number };
  *
  * Continua viajando junto da cena no canal, porque a TV e os celulares
  * precisam saber o que tocar.
+ *
+ * Sem campo de volume: o ganho é da sessão, não da faixa. Guardado por faixa,
+ * cada troca de música trocava o volume junto — a escolhida entrava com o
+ * ganho de quando foi gravada, e o mestre reajustava o slider a cada troca.
+ * O volume da sessão mora no `TrackStore`.
  */
 export type SessionTrack = {
   assetId: string;
   loop: boolean;
-  /** 0 a 1. Único volume do som, e vale em todas as telas. */
-  volume: number;
   /** Pausado é diferente de ausente: a faixa continua escolhida. */
   playing: boolean;
   /**

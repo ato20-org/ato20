@@ -31,6 +31,7 @@ export function TrackBar() {
   const track = useTrackStore((state) => state.track);
   const setPlaying = useTrackStore((state) => state.setPlaying);
   const setLoop = useTrackStore((state) => state.setLoop);
+  const volume = useTrackStore((state) => state.volume);
   const setVolume = useTrackStore((state) => state.setVolume);
   const seek = useTrackStore((state) => state.seek);
   const clear = useTrackStore((state) => state.clear);
@@ -103,18 +104,22 @@ export function TrackBar() {
       </Tooltip>
 
       {/* Único volume do som, e ele viaja: o mestre regula aqui e a TV e os
-          celulares seguem. */}
+          celulares seguem.
+
+          Da SESSÃO, e não da faixa: trocar de música não mexe nele, e tirar a
+          trilha não perde o ajuste. Guardado por faixa, cada troca trazia o
+          ganho de quando aquela música foi escolhida e o som saltava. */}
       <div className="flex w-32 shrink-0 items-center gap-2">
         <Slider
           className="flex-1"
           aria-label="Volume do som, em todas as telas"
-          value={[Math.round(track.volume * 100)]}
+          value={[Math.round(volume * 100)]}
           max={100}
           step={1}
           onValueChange={(value) => setVolume(primeiro(value) / 100)}
         />
         <span className="text-muted-foreground w-6 text-right text-[10px] tabular-nums">
-          {Math.round(track.volume * 100)}
+          {Math.round(volume * 100)}
         </span>
       </div>
 

@@ -2,20 +2,32 @@
 
 import { create } from "zustand";
 
-import { loadTrack, saveTrack } from "@/lib/vault/session";
-import type { SessionTrack } from "@/types/scene";
+import { loadAudio, saveAudio } from "@/lib/vault/session";
+import { DEFAULT_SESSION_VOLUME, type SessionTrack } from "@/types/scene";
 
 type TrackStore = {
   /** `null` = nenhuma trilha escolhida. */
   track: SessionTrack | null;
+  /**
+   * Volume do som da sessão, de 0 a 1.
+   *
+   * Fica FORA da faixa e sobrevive a ela: trocar de música não mexe no ganho, e
+   * tirar a trilha não perde o ajuste. É a barra do sistema, e toda faixa que
+   * entrar obedece a ela.
+   *
+   * Guardado por faixa, cada troca trazia o ganho de quando aquela música foi
+   * escolhida e o som saltava — o mestre reajustava o slider a cada troca.
+   */
+  volume: number;
   /** Qual campanha esta trilha pertence. Ver `use-scene-store`. */
   hydratedPath: string | null;
 
   hydrate: (campaignPath: string) => Promise<void>;
   /** Escolhe a faixa e começa a tocar. O instante é estampado aqui. */
-  start: (assetId: string, volume: number) => void;
+  start: (assetId: string) => void;
   /** Pausa ou retoma, reiniciando a contagem de posição. */
   setPlaying: (playing: boolean) => void;
+  /** Regula o som da sessão. Vale com ou sem trilha escolhida. */
   setVolume: (volume: number) => void;
   /**
    * Move a faixa para um instante.
@@ -30,11 +42,10 @@ type TrackStore = {
   clear: () => void;
   /** Aplica um estado recebido do canal, sem regravar no disco. */
   receive: (track: SessionTrack | null) => void;
-
 };
 
 /**
- * A trilha da sessão.
+ * A trilha da sessão, e o volume dela.
  *
  * Store próprio, separado do board, por dois motivos. O histórico de desfazer
  * tira retratos do board, e a música não deve voltar junto de um Ctrl+Z num
@@ -43,6 +54,7 @@ type TrackStore = {
  */
 export const useTrackStore = create<TrackStore>((set, get) => ({
   track: null,
+  volume: DEFAULT_SESSION_VOLUME,
   hydratedPath: null,
 
   async hydrate(campaignPath) {
@@ -50,47 +62,52 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
 
     // Zera antes de ler: a música da campanha anterior continuaria tocando
     // sobre a nova enquanto o disco respondesse.
-    set({ track: null, hydratedPath: campaignPath });
+    set({ track: null, volume: DEFAULT_SESSION_VOLUME, hydratedPath: campaignPath });
 
     try {
-      set({ track: await loadTrack() });
+      const { track, volume } = await loadAudio();
+      set({ track, volume });
     } catch {
       // Sem trilha guardada é estado válido; não vale derrubar a tela por isso.
     }
   },
 
-  start(assetId, volume) {
-    persist({ assetId, loop: true, volume, playing: true, startedAt: Date.now() }, set);
+  start(assetId) {
+    // Sem volume no argumento: a faixa nova entra no volume em que a mesa já
+    // está. Passar um padrão aqui era o que fazia o som saltar a cada troca.
+    persist({ assetId, loop: true, playing: true, startedAt: Date.now() }, get().volume, set);
   },
 
   setPlaying(playing) {
-    const { track } = get();
+    const { track, volume } = get();
     if (!track) return;
 
     // Reinicia a contagem: sem isso, quem chega depois calcularia a posição da
     // faixa incluindo o tempo em que ela ficou pausada.
-    persist({ ...track, playing, startedAt: Date.now() }, set);
+    persist({ ...track, playing, startedAt: Date.now() }, volume, set);
   },
 
   setVolume(volume) {
-    const { track } = get();
-    if (track) persist({ ...track, volume }, set);
+    // Sem `if (track)`: o volume é da sessão, e regular com o som parado tem de
+    // valer para a próxima faixa que entrar.
+    persist(get().track, volume, set);
   },
 
   seek(seconds) {
-    const { track } = get();
+    const { track, volume } = get();
     if (!track) return;
 
-    persist({ ...track, startedAt: Date.now() - Math.max(0, seconds) * 1000 }, set);
+    persist({ ...track, startedAt: Date.now() - Math.max(0, seconds) * 1000 }, volume, set);
   },
 
   setLoop(loop) {
-    const { track } = get();
-    if (track) persist({ ...track, loop }, set);
+    const { track, volume } = get();
+    if (track) persist({ ...track, loop }, volume, set);
   },
 
   clear() {
-    persist(null, set);
+    // O volume fica: tirar a música não é abaixar o som.
+    persist(null, get().volume, set);
   },
 
   receive(track) {
@@ -99,7 +116,11 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   },
 }));
 
-function persist(track: SessionTrack | null, set: (partial: { track: SessionTrack | null }) => void) {
-  set({ track });
-  void saveTrack(track);
+function persist(
+  track: SessionTrack | null,
+  volume: number,
+  set: (partial: { track: SessionTrack | null; volume: number }) => void,
+) {
+  set({ track, volume });
+  void saveAudio(track, volume);
 }

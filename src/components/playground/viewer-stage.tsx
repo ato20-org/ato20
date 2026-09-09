@@ -15,7 +15,8 @@ import { useSubscription } from "@/hooks/use-scene-broadcast";
  * fluxo, e é isso que permite esta tela estar em qualquer aparelho da casa.
  */
 export function ViewerStage({ codigo }: { codigo: string }) {
-  const { scene, track, portraits, spotlight, synced, stalled } = useSubscription(codigo);
+  const { scene, track, volume, portraits, spotlight, synced, stalled } =
+    useSubscription(codigo);
 
   return (
     // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
@@ -33,7 +34,7 @@ export function ViewerStage({ codigo }: { codigo: string }) {
         ) : null}
       </SceneStage>
 
-      <SessionAudio track={track} />
+      <SessionAudio track={track} volume={volume} />
 
       {/* Sem `dismissable`: não há ninguém na TV para fechar nada, e um botão
           ali só criaria a chance de alguém encostar. Quem tira do ar é o

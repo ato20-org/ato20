@@ -61,7 +61,7 @@ export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMes
       {/* Fora das abas: a trilha não pode parar porque o jogador foi consultar
           a própria ficha. Música cortada no meio quebra a imersão que ela
           existe para criar. */}
-      <SessionAudio track={live.track} />
+      <SessionAudio track={live.track} volume={live.volume} />
 
       {/* Fora das abas pelo mesmo motivo, e sobre a tela inteira em vez de
           dentro da moldura da cena: a imagem em evidência costuma ser um
