@@ -16,6 +16,17 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -223,27 +234,49 @@ function Ficha({
             }}
           />
 
-          <Tooltip>
-            <TooltipTrigger
+          {/* Pergunta antes, e é a única ação do aplicativo que pergunta.
+              Apagar cena ou imagem tem desfazer; isto não tem: o personagem sai
+              do índice, a pasta dele sai do disco com a ficha e os anexos
+              dentro, e as notas que os jogadores escreveram vão com ele. E a
+              lixeira fica a um clique do campo de nome, que é onde a mão está
+              logo depois de renomear. */}
+          <AlertDialog>
+            {/* Sem tooltip: ele avisava o que a lixeira apaga, e agora é o
+                próprio diálogo que faz isso -- com mais espaço e no momento em
+                que a informação importa. Dois textos dizendo a mesma coisa, um
+                no hover e um depois do clique, era um deles a mais. */}
+            <AlertDialogTrigger
               render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Apagar este personagem"
-                  onClick={() => {
-                    void removeCharacter(personagem.id).then(onRemoved);
-                  }}
-                >
+                <Button variant="ghost" size="icon-sm" aria-label="Apagar este personagem">
                   <Trash2 />
                 </Button>
               }
             />
-            <TooltipContent>
-              <p className="max-w-52">
-                Apaga o personagem, os arquivos dele e as notas que os jogadores escreveram.
-              </p>
-            </TooltipContent>
-          </Tooltip>
+
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Apagar {personagem.nome}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Vão com ele a ficha, os arquivos que você anexou, os que o jogador mandou, e as
+                  notas que cada um escreveu sobre ele. O token que estiver no mapa continua lá,
+                  como imagem. Não tem como desfazer.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    void removeCharacter(personagem.id).then(onRemoved, (cause) =>
+                      toast.error(cause instanceof Error ? cause.message : "Falha ao apagar."),
+                    );
+                  }}
+                >
+                  Apagar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         <Files
@@ -396,15 +429,20 @@ function Files({
 
                 <Transmitir anexo={anexo} personagemId={personagemId} />
 
-                {/* O mestre alcança os dois autores — é o lado dele da
+                {/* Lixeira, e não X: isto APAGA o arquivo do disco, e não o
+                    tira de uma lista. A regra dos dois ícones no aplicativo é
+                    essa -- lixeira destrói, X fecha ou desfaz um vínculo --, e
+                    um X aqui prometia algo reversível que não é.
+
+                    O mestre alcança os dois autores, que é o lado dele da
                     segmentação. O jogador só apaga o que ele mesmo mandou. */}
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  aria-label={`Tirar ${anexo.arquivo}`}
+                  aria-label={`Apagar ${anexo.arquivo}`}
                   onClick={() => void onRemover(anexo)}
                 >
-                  <X />
+                  <Trash2 />
                 </Button>
               </li>
             );

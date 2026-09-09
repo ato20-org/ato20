@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { File, FileAudio, FileImage, FileText, FileVideo, Loader2, Paperclip, X } from "lucide-react";
+import {
+  File,
+  FileAudio,
+  FileImage,
+  FileText,
+  FileVideo,
+  Loader2,
+  Paperclip,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
@@ -257,7 +266,7 @@ function CharacterCard({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Remover ${anexo.arquivo}`}
+                    aria-label={`Apagar ${anexo.arquivo}`}
                     onClick={() => {
                       void deleteCharacterFile(codigo, personagem.id, anexo.arquivo).then(
                         reler,
@@ -268,7 +277,10 @@ function CharacterCard({
                       );
                     }}
                   >
-                    <X />
+                    {/* Lixeira: isto apaga o arquivo do disco do mestre, e não
+                        o tira de uma lista. Mesma regra dos dois ícones do lado
+                        dele. */}
+                    <Trash2 />
                   </Button>
                 ) : (
                   <span
