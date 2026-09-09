@@ -1,21 +1,16 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
-  CloudDownload,
-  CloudOff,
-  CloudUpload,
   FolderClosed,
   FolderPlus,
   ImageIcon,
   ImageOff,
-  Loader2,
   MoreVertical,
   Pencil,
   Plus,
-  RefreshCw,
   Trash2,
   Upload,
   UserSquare,
@@ -31,19 +26,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useFolderList } from "@/hooks/use-folder-list";
-import { useLibraryStore } from "@/lib/store/use-library-store";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { hasAssetDrag, readAssetDrag, writeAssetDrag } from "@/lib/operator/asset-drag";
 import { countAssetUsage } from "@/lib/operator/asset-usage";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
-import { useRoomStore } from "@/lib/store/use-room-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { useUploadStore, type UploadState } from "@/lib/store/use-upload-store";
 import { cn } from "@/lib/utils";
 import type { AssetFolder, AssetMeta, Scene } from "@/types/scene";
 
@@ -51,11 +42,10 @@ import type { AssetFolder, AssetMeta, Scene } from "@/types/scene";
 const FALLBACK_SIZE = { x: 480, y: 270 };
 
 export function AssetLibrary({ scene }: { scene: Scene }) {
-  const { assets, upload, remove, move, refresh } = useAssetList("image");
+  const { assets, importar, remove, move, refresh } = useAssetList("image");
   // Mexer em pasta muda arquivo — apagar devolve o conteúdo à raiz —, então a
   // lista de arquivos recarrega junto.
   const { folders, create, rename, remove: removeFolder } = useFolderList(refresh);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [creating, setCreating] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
@@ -65,21 +55,6 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   const select = useSelectionStore((state) => state.select);
   const addPortrait = usePortraitStore((state) => state.add);
   const selectPortrait = useSelectionStore((state) => state.selectPortrait);
-
-  const roomId = useRoomStore((state) => state.room?.id);
-  const online = useRoomStore((state) => Boolean(state.room));
-  const outOfBucket = useLibraryStore((state) => state.outOfBucket);
-  const downloading = useLibraryStore((state) => state.pending);
-  const downloaded = useLibraryStore((state) => state.done);
-  const uploadStates = useUploadStore((state) => state.states);
-  const retryFailed = useUploadStore((state) => state.retryFailed);
-  const enqueue = useUploadStore((state) => state.enqueue);
-  const uploadErrors = useUploadStore((state) => state.errors);
-
-  const inFlight = assets.filter(
-    (asset) => !asset.remoteAt && isInFlight(uploadStates[asset.id]),
-  ).length;
-  const failed = assets.filter((asset) => uploadStates[asset.id] === "error").length;
 
   function handleAddToScene(asset: AssetMeta) {
     const size =
@@ -124,21 +99,10 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
         folders={folders}
         isBackground={asset.id === scene.backgroundAssetId}
         usageCount={countAssetUsage(scenes ?? [], asset.id)}
-        uploadState={uploadStates[asset.id]}
-        uploadError={uploadErrors[asset.id]}
-        online={online}
         onAdd={() => handleAddToScene(asset)}
         onSetBackground={() => setBackground(scene.id, asset.id)}
         onUseAsPortrait={() => handleUseAsPortrait(asset)}
         onMove={(folderId) => handleMove(asset.id, folderId)}
-        // Oferecido sempre que o binário não está no bucket desta mesa: agora
-        // sobe só o que entra em cena, então o acervo guardado numa pasta
-        // precisa de um empurrão para atravessar para a outra máquina.
-        onRepublish={
-          outOfBucket.includes(asset.id) || asset.remoteRoomId !== roomId
-            ? () => enqueue([asset.id])
-            : undefined
-        }
         onRemove={() => void remove(asset.id)}
       />
     );
@@ -147,9 +111,9 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-2 p-2">
-        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+        <Button variant="outline" size="sm" onClick={() => void importar()}>
           <Upload />
-          Enviar imagens
+          Importar imagens
         </Button>
 
         {creating ? (
@@ -167,18 +131,6 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
             Nova pasta
           </Button>
         )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="sr-only"
-          onChange={(event) => {
-            void upload(event.target.files);
-            // Sem isso, reenviar o mesmo arquivo não dispara `change`.
-            event.target.value = "";
-          }}
-        />
 
         {scene.backgroundAssetId ? (
           <Button variant="ghost" size="sm" onClick={() => setBackground(scene.id, undefined)}>
@@ -187,34 +139,12 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
           </Button>
         ) : null}
 
-        {/* Baixando o que a outra máquina subiu. Aparece só enquanto dura: o
-            acervo já está listado, o que falta é o arquivo chegar aqui. */}
-        {downloading > 0 ? (
-          <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-            <CloudDownload className="size-3 animate-pulse" aria-hidden />
-            Baixando {downloading} da mesa ({downloaded} prontos)
-          </p>
-        ) : null}
-
-        {inFlight > 0 ? (
-          <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-            <Loader2 className="size-3 animate-spin" aria-hidden />
-            Subindo {inFlight} para a mesa…
-          </p>
-        ) : null}
-
-        {failed > 0 ? (
-          <Button variant="ghost" size="sm" onClick={retryFailed}>
-            <RefreshCw />
-            Repetir {failed} envio(s)
-          </Button>
-        ) : null}
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
         {assets.length === 0 && folders.length === 0 ? (
           <p className="text-muted-foreground p-3 text-xs">
-            Nenhuma imagem ainda. Envie mapas, documentos e retratos.
+            Nenhuma imagem ainda. Importe mapas, tokens e retratos.
           </p>
         ) : (
           <div className="space-y-2 p-2">
@@ -465,24 +395,15 @@ function FolderNameInput({
   );
 }
 
-function isInFlight(state: UploadState | undefined): boolean {
-  return state === "pending" || state === "uploading";
-}
-
 type AssetRowProps = {
   asset: AssetMeta;
   folders: AssetFolder[];
   isBackground: boolean;
   usageCount: number;
-  uploadState: UploadState | undefined;
-  uploadError: string | undefined;
-  online: boolean;
   onAdd: () => void;
   onSetBackground: () => void;
   onUseAsPortrait: () => void;
   onMove: (folderId: string | undefined) => void;
-  /** Ausente quando o binário já está no bucket. */
-  onRepublish?: () => void;
   onRemove: () => void;
 };
 
@@ -491,14 +412,10 @@ function AssetRow({
   folders,
   isBackground,
   usageCount,
-  uploadState,
-  uploadError,
-  online,
   onAdd,
   onSetBackground,
   onUseAsPortrait,
   onMove,
-  onRepublish,
   onRemove,
 }: AssetRowProps) {
   const url = useAssetUrl(asset.id);
@@ -528,7 +445,6 @@ function AssetRow({
         ) : null}
       </span>
 
-      <SyncIndicator asset={asset} state={uploadState} error={uploadError} online={online} />
 
       <Button
         variant="ghost"
@@ -587,14 +503,8 @@ function AssetRow({
               </DropdownMenuItem>
             ))}
 
-          {onRepublish ? (
-            <DropdownMenuItem onClick={onRepublish}>
-              <CloudUpload />
-              Subir para a mesa
-            </DropdownMenuItem>
-          ) : null}
 
-          {folders.length > 0 || asset.folderId || onRepublish ? (
+          {folders.length > 0 || asset.folderId ? (
             <DropdownMenuSeparator />
           ) : null}
 
@@ -610,62 +520,5 @@ function AssetRow({
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
-  );
-}
-
-/**
- * Estado do arquivo em relação à mesa. Silencioso quando já subiu — o normal
- * não precisa de ícone; o que precisa de aviso é o que ainda não chegou lá.
- */
-function SyncIndicator({
-  asset,
-  state,
-  error,
-  online,
-}: {
-  asset: AssetMeta;
-  state: UploadState | undefined;
-  error: string | undefined;
-  online: boolean;
-}) {
-  if (asset.remoteAt || state === "done") return null;
-
-  const { icon, hint } = !online
-    ? {
-        icon: <CloudOff className="text-muted-foreground size-3.5" />,
-        hint: "Modo local: este arquivo só existe neste navegador.",
-      }
-    : state === "uploading"
-      ? {
-          icon: <Loader2 className="text-muted-foreground size-3.5 animate-spin" />,
-          hint: "Subindo para a mesa.",
-        }
-      : state === "pending"
-        ? {
-            icon: <CloudUpload className="text-muted-foreground size-3.5" />,
-            hint: "Na fila para subir.",
-          }
-        : state === "error"
-          ? {
-              icon: <CloudOff className="text-destructive size-3.5" />,
-              // O motivo, quando existe: "falhou" sozinho não diz se foi
-              // tamanho, permissão ou rede.
-              hint: error ?? "O envio falhou. Os celulares não vão ver esta imagem.",
-            }
-          : {
-              // Estado normal, não aviso: agora só sobe o que entra em cena, e
-              // o resto do acervo fica em casa de propósito — é o que mantém o
-              // Storage do tamanho das cenas.
-              icon: <CloudOff className="text-muted-foreground/60 size-3.5" />,
-              hint: "Só neste computador. Vai para a mesa quando entrar numa cena, ou pelo \"Subir para a mesa\" do menu.",
-            };
-
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<span className="grid size-6 place-items-center">{icon}</span>} />
-      <TooltipContent>
-        <p className="max-w-48">{hint}</p>
-      </TooltipContent>
-    </Tooltip>
   );
 }

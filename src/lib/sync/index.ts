@@ -1,36 +1,35 @@
-import { createBroadcastSceneChannel } from "@/lib/sync/broadcast-channel";
-import type { SceneChannel } from "@/lib/sync/channel";
-import { createCompositeSceneChannel } from "@/lib/sync/composite-channel";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
-import { createSupabaseSceneChannel } from "@/lib/sync/supabase-channel";
+"use client";
 
-export type SceneChannelOptions = {
-  /** Abas da mesma máquina, via `BroadcastChannel`. Grátis e instantâneo. */
-  local?: boolean;
-  /** Sala do Supabase, para os celulares. `null` enquanto não há sala. */
-  roomId?: string | null;
-};
+import type { SceneChannel } from "@/lib/sync/channel";
+import {
+  createPublisherChannel,
+  createSubscriberChannel,
+} from "@/lib/sync/server-channel";
+import { daemonAddr } from "@/lib/vault/bridge";
 
 /**
  * Monta o transporte da cena.
  *
- * - Operador: `local` + `roomId` — alimenta a TV e os celulares de uma vez.
- * - Assistir: `local` + `roomId` — a TV pode ser uma aba desta máquina, onde o
- *   `BroadcastChannel` chega antes e de graça, ou outro aparelho na rede.
- * - Plateia: só `roomId` — está noutro aparelho.
+ * Um só, e é o daemon. O `BroadcastChannel` saiu: ele alcançava apenas abas da
+ * mesma máquina, e o daemon cobre esse caso pelo loopback com latência que não
+ * se mede — manter os dois significaria dois caminhos para depurar em troca de
+ * nada.
+ *
+ * O que ele resolve, e o broadcast não resolvia, é a razão de a Plateia
+ * existir: o celular do jogador é outro aparelho.
  */
-export function createSceneChannel({
-  local = false,
-  roomId = null,
-}: SceneChannelOptions): SceneChannel {
-  const parts: SceneChannel[] = [];
-
-  if (local) parts.push(createBroadcastSceneChannel());
-  if (roomId && isSupabaseConfigured()) parts.push(createSupabaseSceneChannel(roomId));
-
-  // Um só transporte dispensa a indireção; zero devolve um canal inerte, que
-  // é o comportamento certo antes de a sala existir.
-  return parts.length === 1 ? parts[0] : createCompositeSceneChannel(parts);
+export function createPublisher(): SceneChannel {
+  // O endereço vem por IPC e chega depois do primeiro render. O canal cuida
+  // disso guardando o último estado pendente — ver `createPublisherChannel`.
+  return createPublisherChannel(daemonAddr().then(({ url, token }) => ({ base: url, token })));
 }
 
-export type { ChannelMessage, SceneChannel } from "@/lib/sync/channel";
+/**
+ * Espectador. `base` vazio é mesma origem, e é sempre o caso: quem serviu esta
+ * página foi o próprio daemon.
+ */
+export function createSubscriber(codigo: string): SceneChannel {
+  return createSubscriberChannel("", codigo);
+}
+
+export type { LiveState, SceneChannel } from "@/lib/sync/channel";

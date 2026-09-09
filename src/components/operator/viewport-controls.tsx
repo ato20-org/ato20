@@ -2,6 +2,7 @@
 
 import { Maximize, ScanSearch, ZoomIn, ZoomOut } from "lucide-react";
 
+import { GridControl } from "@/components/operator/grid-control";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { isFullViewport, viewportZoom } from "@/lib/geometry/viewport";
@@ -51,6 +52,11 @@ export function ViewportControls({ scene }: { scene: Scene }) {
       <Button variant="ghost" size="icon-sm" aria-label="Mais zoom" onClick={zoomIn}>
         <ZoomIn />
       </Button>
+
+      <span className="bg-border mx-1 h-5 w-px" />
+
+      {/* Ao lado do enquadrar: as duas respondem o que a mesa vê do mapa. */}
+      <GridControl scene={scene} />
 
       <span className="bg-border mx-1 h-5 w-px" />
 

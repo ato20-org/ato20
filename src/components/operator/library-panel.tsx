@@ -3,6 +3,7 @@
 import { AssetLibrary } from "@/components/operator/asset-library";
 import { AudioLibrary } from "@/components/operator/audio-library";
 import { LayerList } from "@/components/operator/layer-list";
+import { PanelCollapse } from "@/components/operator/panel-collapse";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Scene } from "@/types/scene";
@@ -18,12 +19,15 @@ import type { Scene } from "@/types/scene";
  */
 export function LibraryPanel({ scene }: { scene: Scene | null }) {
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l">
+    <aside className="flex w-72 shrink-0 flex-col border-l select-none">
       <Tabs defaultValue="imagens" className="flex min-h-0 flex-1 flex-col gap-0">
-        <TabsList className="m-2">
-          <TabsTrigger value="imagens">Imagens</TabsTrigger>
-          <TabsTrigger value="sons">Sons</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center gap-1 p-2">
+          <PanelCollapse side="right" label="Imagens e sons" />
+          <TabsList className="min-w-0 flex-1">
+            <TabsTrigger value="imagens">Imagens</TabsTrigger>
+            <TabsTrigger value="sons">Sons</TabsTrigger>
+          </TabsList>
+        </div>
         <Separator />
 
         <TabsContent value="imagens" className="flex min-h-0 flex-1 flex-col">

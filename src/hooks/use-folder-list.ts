@@ -7,9 +7,7 @@ import {
   deleteFolder,
   listFolders,
   renameFolder,
-} from "@/lib/storage/folders";
-import { useRoomStore } from "@/lib/store/use-room-store";
-import { deleteFolderRow, upsertFolders } from "@/lib/supabase/library";
+} from "@/lib/vault/folders";
 import type { AssetFolder } from "@/types/scene";
 
 type FolderListApi = {
@@ -25,33 +23,26 @@ type FolderListApi = {
  * Mesmo formato do `useAssetList`: lista mais ações que recarregam. Os dois
  * vivem no mesmo painel, e um `onChanged` liga a atualização de um à do outro
  * — apagar pasta muda arquivo, e mover arquivo muda o que cada pasta contém.
- */
-/**
- * Manda a pasta para a mesa.
  *
- * Melhor esforço: sem mesa, ou com a rede fora, a pasta continua valendo
- * localmente — a próxima abertura da mesa sobe o que faltou.
+ * O espelho para a nuvem saiu inteiro, e com ele o `mirror` de melhor esforço
+ * que existia porque a pasta podia valer localmente e falhar no servidor. Uma
+ * pasta agora é uma linha em `pastas.json`, e gravar ou não gravar é a única
+ * coisa que pode acontecer.
  */
-async function mirror(folders: AssetFolder[]): Promise<void> {
-  const roomId = useRoomStore.getState().room?.id;
-  if (!roomId) return;
-
-  try {
-    await upsertFolders(roomId, folders);
-  } catch {
-    // Ver a nota acima.
-  }
-}
-
 export function useFolderList(onChanged?: () => void): FolderListApi {
   const [folders, setFolders] = useState<AssetFolder[]>([]);
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let active = true;
-    void listFolders().then((next) => {
-      if (active) setFolders(next);
-    });
+    void listFolders().then(
+      (next) => {
+        if (active) setFolders(next);
+      },
+      () => {
+        if (active) setFolders([]);
+      },
+    );
 
     return () => {
       active = false;
@@ -65,8 +56,7 @@ export function useFolderList(onChanged?: () => void): FolderListApi {
 
   const create = useCallback(
     async (name: string) => {
-      const folder = await createFolder(name);
-      await mirror([folder]);
+      await createFolder(name);
       refresh();
     },
     [refresh],
@@ -75,10 +65,6 @@ export function useFolderList(onChanged?: () => void): FolderListApi {
   const rename = useCallback(
     async (id: string, name: string) => {
       await renameFolder(id, name);
-
-      const folder = (await listFolders()).find((candidate) => candidate.id === id);
-      if (folder) await mirror([folder]);
-
       refresh();
     },
     [refresh],
@@ -87,10 +73,6 @@ export function useFolderList(onChanged?: () => void): FolderListApi {
   const remove = useCallback(
     async (id: string) => {
       await deleteFolder(id);
-
-      const roomId = useRoomStore.getState().room?.id;
-      if (roomId) await deleteFolderRow(roomId, id);
-
       refresh();
     },
     [refresh],

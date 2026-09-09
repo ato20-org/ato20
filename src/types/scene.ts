@@ -11,12 +11,16 @@ export const SCENE_HEIGHT = 1080;
 
 /**
  * `pdf` saiu junto com o material de regras: era o unico caminho que criava
- * arquivo desse tipo. Registros antigos gravados como `pdf` continuam no
- * IndexedDB sem aparecer em lista nenhuma -- inofensivos, e apagaveis a mao.
+ * arquivo desse tipo.
  */
 export type AssetKind = "image" | "audio";
 
-/** Metadados de um arquivo enviado pelo mestre. O binário fica em `AssetRecord`. */
+/**
+ * Metadados de um arquivo enviado pelo mestre. O binário fica em `assets/`.
+ *
+ * Este tipo atravessa o IPC: o espelho dele em Rust é `vault::assets::AssetMeta`,
+ * e é o Rust que grava `assets.json`. Campo novo aqui precisa de campo novo lá.
+ */
 export type AssetMeta = {
   id: string;
   kind: AssetKind;
@@ -28,26 +32,20 @@ export type AssetMeta = {
   naturalWidth?: number;
   naturalHeight?: number;
   /**
-   * Quando o arquivo terminou de subir para o Storage. Ausente = ainda só
-   * existe neste navegador, e nenhum celular consegue vê-lo.
-   */
-  remoteAt?: number;
-  /**
-   * Para QUAL sala ele subiu.
-   *
-   * O caminho no Storage é `{sala}/{asset}`, então "já subiu" sozinho não
-   * basta: se a sala muda — outro navegador, dados limpos, sessão anônima
-   * nova — o arquivo continua lá, mas num endereço que ninguém mais consulta,
-   * e o acervo inteiro some das telas sem erro nenhum.
-   */
-  remoteRoomId?: string;
-  /**
    * Pasta em que o mestre guardou o arquivo. Ausente = raiz.
    *
    * Guarda o id, não o nome: renomear a pasta não pode obrigar a reescrever
    * todos os arquivos dentro dela.
    */
   folderId?: string;
+  /**
+   * A forma da onda, um valor de 0 a 100 por barra. Só para `audio`.
+   *
+   * Medida uma vez pela tela, na primeira vez que a faixa aparece na barra da
+   * trilha, e gravada no vault. Ausente = ainda não medida, e a barra desenha
+   * uma linha lisa.
+   */
+  peaks?: number[];
 };
 
 /**
@@ -58,19 +56,6 @@ export type AssetMeta = {
  * organização que ninguém pediu.
  */
 export type AssetFolder = { id: string; name: string; createdAt: number };
-
-/**
- * Tipos que precisam existir na nuvem.
- *
- * Áudio entrou porque a Plateia passou a tocar a trilha da cena, e o celular
- * do jogador não tem o IndexedDB do mestre — um arquivo que não subiu é
- * silêncio do outro lado.
- *
- * Custa cota: trilha é o tipo de arquivo mais pesado do acervo, e o plano
- * gratuito do Supabase aperta primeiro no Storage. A alternativa era a Plateia
- * nunca ter som.
- */
-export const SYNCED_KINDS: readonly AssetKind[] = ["image", "audio"];
 
 /** Uma imagem posicionada sobre o fundo da cena. */
 export type CanvasItem = {
@@ -109,6 +94,135 @@ export type FogRegion = {
   height: number;
   /** Revelada deixa de esconder em todas as visões. */
   revealed: boolean;
+};
+
+/**
+ * Grade sobre o mapa.
+ *
+ * Mora na CENA, e não numa preferência da máquina, porque cada mapa tem a
+ * própria escala: a grade que casa com uma taverna desenhada em 40px por
+ * quadrado não casa com um mapa de região. E porque ela precisa viajar — a
+ * mesa vê a mesma grade que o mestre, senão contar movimento em voz alta não
+ * significa nada.
+ *
+ * Ausente em `Scene.grid` = sem grade. É o padrão: a maioria das cenas de
+ * ambiente não quer uma.
+ */
+export type SceneGrid = {
+  /**
+   * Lado do quadrado, em unidades de cena.
+   *
+   * Unidade de cena e não pixel de tela, como todo o resto: assim a grade
+   * acompanha o zoom e é a mesma no palco do mestre, na TV de 1920 e no celular
+   * de 390.
+   */
+  size: number;
+  /**
+   * Deslocamento da origem.
+   *
+   * Existe porque mapas comprados já vêm com uma grade desenhada, e ela quase
+   * nunca começa no canto exato da imagem. Sem isto, casar as duas exigiria
+   * recortar o arquivo.
+   */
+  offsetX: number;
+  offsetY: number;
+  /** Opacidade da linha, de 0 a 1. */
+  opacity: number;
+  /**
+   * Linha escura em vez de clara.
+   *
+   * Duas opções, e não um seletor de cor: o que decide é o mapa embaixo, e
+   * mapa de RPG é claro (pergaminho, planta baixa) ou escuro (caverna, noite).
+   * Um seletor cobriria casos que não existem e pediria uma decisão a mais em
+   * cada cena.
+   */
+  dark?: boolean;
+};
+
+/**
+ * Ponto de anotação: um alfinete no mapa com nota e anexos, só do mestre.
+ *
+ * Mora na CENA porque é colado num lugar dela — o alçapão atrás do balcão, a
+ * marca na parede do terceiro corredor. Uma lista de notas fora da cena
+ * perderia justamente a coordenada, que é a razão de existir.
+ *
+ * Morar na cena tem um custo que precisa de guarda: a cena viaja inteira para
+ * a mesa. É por isso que `sceneForTable` existe e que a camada que desenha os
+ * pontos vive no `OperatorStage`, e não no `SceneLayer` compartilhado — sem as
+ * duas coisas, o jogador leria a preparação do mestre no inspetor do
+ * navegador.
+ */
+export type MapPin = {
+  id: string;
+  /** Onde o alfinete crava, em coordenadas de cena. */
+  x: number;
+  y: number;
+  /** Uma linha, para reconhecer o ponto sem abrir a nota. */
+  title: string;
+  /** O texto livre. Pode ser vazio: às vezes o anexo é a nota. */
+  note: string;
+  /**
+   * Anexos, por id do acervo.
+   *
+   * Ids e não arquivos próprios: importar já copia para `assets/` da campanha,
+   * e `/asset/{id}` já serve com token. Um segundo cofre de arquivos
+   * duplicaria os dois lados para nada — e é justamente esse caminho que
+   * "transmitir" usa para a imagem aparecer na TV.
+   */
+  attachments: string[];
+};
+
+/** O que o chamador informa ao cravar um ponto; o resto é do store. */
+export type NewMapPin = Pick<MapPin, "x" | "y"> & Partial<Pick<MapPin, "title" | "note">>;
+
+/**
+ * A imagem em evidência: o que o mestre mandou a mesa olhar agora.
+ *
+ * Nível de sessão, como a trilha, e não da cena: transmitir um retrato de PNJ
+ * não deve sumir porque o mestre trocou o mapa embaixo.
+ *
+ * Não é persistida de propósito, e aqui ela difere da trilha. Trilha é
+ * ambiente e continua valendo de uma sessão para a outra; evidência é um gesto
+ * — "olha isto" — e restaurá-la ao reabrir o aplicativo mandaria para a TV um
+ * documento que a mesa já passou. Nada se perde: o ponto de anotação guarda o
+ * anexo, e retransmitir é um clique.
+ */
+export type Spotlight = {
+  /**
+   * Imagem do acervo. Exclusivo com `sharedId`.
+   *
+   * Opcional porque a evidência passou a ter duas origens: o acervo, cujo id a
+   * mesa resolve em `/asset/{id}`, e o anexo de um jogador, que não é acervo e
+   * não tem id de asset nenhum.
+   */
+  assetId?: string;
+  /**
+   * Anexo de jogador, pelo endereço efêmero que o daemon abriu para ele.
+   *
+   * Sorteado a cada transmissão e servido em `/evidencia/{id}` só enquanto
+   * está no ar — ver `player_attachment_share` no lado nativo. O nome do
+   * arquivo não viaja: é a mesma razão de não haver legenda aqui.
+   */
+  sharedId?: string;
+  /*
+   * Sem legenda, e isto foi uma correção.
+   *
+   * A primeira versão mandava o título do ponto de origem como legenda, "para
+   * a mesa saber o que é". O que a mesa recebia era prosa de preparação:
+   * transmitir a carta do ponto "Alçapão atrás do balcão" punha na TV, embaixo
+   * da carta, a existência do alçapão. Título de ponto é anotação do mestre, e
+   * o resto deste arquivo existe justamente para isso não sair da tela dele.
+   *
+   * A imagem se explica sozinha; quem a mandou está na mesa e pode falar.
+   */
+  /**
+   * Quando entrou no ar.
+   *
+   * Muda a cada transmissão, e é o que faz o espectador reconhecer uma imagem
+   * nova: comparar a origem não distinguiria transmitir o mesmo arquivo duas
+   * vezes, que é como se chama a atenção de novo para ele.
+   */
+  since: number;
 };
 
 /** O que o chamador informa ao desenhar uma área; `id` e `revealed` são do store. */
@@ -213,10 +327,18 @@ export type Scene = {
   items: CanvasItem[];
   fog: FogRegion[];
   /**
+   * Pontos de anotação do mestre. Ausente = nenhum.
+   *
+   * NUNCA chega à mesa: `sceneForTable` remove este campo antes de publicar.
+   */
+  pins?: MapPin[];
+  /**
    * Enquadramento que a Plateia e o Assistir usam. Ausente = plano inteiro.
    * O zoom do Operador só chega aqui quando ele manda, pelo botão de enquadrar.
    */
   camera?: Viewport;
+  /** Grade sobre o mapa. Ausente = sem grade. */
+  grid?: SceneGrid;
   createdAt: number;
   updatedAt: number;
 };
@@ -235,6 +357,14 @@ export type Board = {
    */
   liveSceneId: string | null;
 };
+
+/**
+ * Grade que uma cena ganha ao ser ligada pela primeira vez.
+ *
+ * 96 unidades num plano de 1920 dá 20 colunas por 11 linhas e meia — perto do
+ * que um mapa de batalha costuma usar, e um número redondo de onde ajustar.
+ */
+export const DEFAULT_GRID: SceneGrid = { size: 96, offsetX: 0, offsetY: 0, opacity: 0.35 };
 
 export function createScene(name: string): Scene {
   const now = Date.now();
@@ -264,6 +394,10 @@ export function cloneScene(source: Scene, name: string): Scene {
     name,
     items: source.items.map((item) => ({ ...item, id: crypto.randomUUID() })),
     fog: source.fog.map((region) => ({ ...region, id: crypto.randomUUID() })),
+    // Os anexos continuam apontando para os MESMOS assets: o arquivo é do
+    // acervo da campanha, não do ponto, e copiá-lo duplicaria um mapa de 8 MB
+    // por duplicar a cena.
+    pins: source.pins?.map((pin) => ({ ...pin, id: crypto.randomUUID() })),
     createdAt: now,
     updatedAt: now,
   };

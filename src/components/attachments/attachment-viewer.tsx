@@ -7,12 +7,21 @@ import { ImageZoom } from "@/components/attachments/image-zoom";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { attachmentKind } from "@/lib/attachments/kind";
-import type { Attachment } from "@/lib/supabase/attachments";
+import type { Attachment } from "@/lib/player/session";
 
 type AttachmentViewerProps = {
   attachment: Attachment | null;
-  /** URL assinada. `null` enquanto o lote não voltou. */
+  /** Endereço exibível. `null` enquanto ainda não foi baixado. */
   url: string | null;
+  /**
+   * Pedido para resolver o endereço deste anexo.
+   *
+   * Existe porque a rota do anexo exige a credencial do jogador, e por isso o
+   * arquivo tem de ser baixado para uma blob URL antes de aparecer. Só as
+   * imagens são resolvidas na montagem da aba; o resto -- um PDF de 40 MB --
+   * espera alguém abrir, e é este gancho que dispara isso.
+   */
+  onOpen?: (attachment: Attachment) => void | Promise<void>;
   onClose: () => void;
 };
 
@@ -23,12 +32,18 @@ type AttachmentViewerProps = {
  * sobra cai num botão de download — melhor oferecer isso claramente do que
  * abrir um visualizador vazio.
  */
-export function AttachmentViewer({ attachment, url, onClose }: AttachmentViewerProps) {
+export function AttachmentViewer({ attachment, url, onOpen, onClose }: AttachmentViewerProps) {
+  useEffect(() => {
+    if (!attachment || url || !onOpen) return;
+
+    void onOpen(attachment);
+  }, [attachment, url, onOpen]);
+
   return (
     <Dialog open={Boolean(attachment)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[92dvh] gap-3 overflow-hidden sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle className="truncate pr-6 text-sm">{attachment?.name}</DialogTitle>
+          <DialogTitle className="truncate pr-6 text-sm">{attachment?.arquivo}</DialogTitle>
         </DialogHeader>
 
         {attachment ? <Body attachment={attachment} url={url} /> : null}
@@ -38,7 +53,7 @@ export function AttachmentViewer({ attachment, url, onClose }: AttachmentViewerP
 }
 
 function Body({ attachment, url }: { attachment: Attachment; url: string | null }) {
-  const kind = attachmentKind(attachment.name, attachment.mimeType);
+  const kind = attachmentKind(attachment.arquivo, attachment.mimeType);
 
   if (!url) {
     return (
@@ -52,13 +67,13 @@ function Body({ attachment, url }: { attachment: Attachment; url: string | null 
     // `key` na URL: trocar de anexo remonta e o zoom volta ao encaixe.
     // Herdar a ampliação do arquivo anterior mostraria o novo cortado num
     // canto qualquer.
-    return <ImageZoom key={url} src={url} alt={attachment.name} />;
+    return <ImageZoom key={url} src={url} alt={attachment.arquivo} />;
   }
 
   if (kind === "pdf") {
     return (
       <div className="space-y-2">
-        <iframe src={url} title={attachment.name} className="h-[70dvh] w-full rounded-md border" />
+        <iframe src={url} title={attachment.arquivo} className="h-[70dvh] w-full rounded-md border" />
         {/* iOS Safari costuma recusar PDF em iframe. Em vez de detectar
             navegador, deixo a saída sempre visível. */}
         <ExternalButton url={url} label="Abrir o PDF no navegador" />
@@ -75,7 +90,7 @@ function Body({ attachment, url }: { attachment: Attachment; url: string | null 
   }
 
   if (kind === "text") {
-    return <TextBody url={url} name={attachment.name} />;
+    return <TextBody url={url} name={attachment.arquivo} />;
   }
 
   return (
@@ -85,7 +100,7 @@ function Body({ attachment, url }: { attachment: Attachment; url: string | null 
         Este tipo de arquivo não pode ser exibido aqui.
       </p>
       <Button
-        render={<a href={url} download={attachment.name} />}
+        render={<a href={url} download={attachment.arquivo} />}
         nativeButton={false}
         variant="outline"
         size="sm"

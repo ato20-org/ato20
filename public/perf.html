@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATO20 - spike de perf</title>
+<style>
+  /* Reproduz o caminho quente do playground. Copiado de globals.css, nao
+     reescrito: se a medida nao usar a mesma transicao, ela nao mede nada. */
+  @media (prefers-reduced-motion: no-preference) {
+    .scene-smooth-item {
+      transition:
+        transform 150ms linear,
+        width 150ms linear,
+        height 150ms linear;
+    }
+    .scene-smooth-camera {
+      transition: transform 450ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #0a0a0a;
+    color: #e5e5e5;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow: hidden;
+  }
+
+  /* A moldura, como em SceneStage: mede o espaco e escala o plano. */
+  #frame {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  /* O plano fixo de 1920x1080, movido por transform com origem no canto. */
+  #plane {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1920px;
+    height: 1080px;
+    transform-origin: 0 0;
+    background: #111;
+  }
+
+  .item {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  .item > img {
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    user-select: none;
+    display: block;
+  }
+
+  #hud {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 99999;
+    background: #000000d9;
+    border: 1px solid #333;
+    padding: 12px 14px;
+    white-space: pre;
+    max-width: 46ch;
+  }
+  #hud b { color: #7dd3fc; font-weight: 600; }
+  .bad { color: #f87171; }
+  .ok { color: #4ade80; }
+  .warn { color: #fbbf24; }
+</style>
+</head>
+<body>
+
+<div id="frame"><div id="plane"></div></div>
+<div id="hud">iniciando...</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Spike de perf do ATO20: a webview do Tauri no Linux e WebKitGTK, nao
+// Chromium, e o playground anima transform em N itens a 60Hz. Este arquivo
+// mede exatamente isso, no mesmo formato de DOM e com o mesmo CSS, para a
+// escolha da casca desktop ser decidida por numero e nao por fe.
+//
+// Dois cenarios, porque eles estressam coisas diferentes:
+//
+//   drag       Operador arrastando um token. UM item muda de transform por
+//              frame, os outros ficam parados. E o gesto do mestre.
+//   transition Espectador. As amostras chegam a 10Hz e TODOS os itens
+//              interpolam via `transition: transform 150ms linear`. Este e o
+//              caso pesado, e e o que roda na TV.
+//
+// Parametros: ?n=40&mode=transition&secs=10&label=tauri
+// ---------------------------------------------------------------------------
+
+const params = new URLSearchParams(location.search);
+const N = Number(params.get("n") ?? 40);
+const MODE = params.get("mode") ?? "transition";
+const SECS = Number(params.get("secs") ?? 10);
+const LABEL = params.get("label") ?? "desconhecido";
+const COLLECTOR = params.get("collector") ?? "http://127.0.0.1:7799/r";
+/**
+ * Quanto do inicio se joga fora.
+ *
+ * 500ms nao bastavam: num browser recem-aberto a primeira medida da corrente
+ * saia PIOR com 40 itens do que com 100, o que e impossivel e denunciava que
+ * o que estava sendo medido era a subida de textura para a GPU, o JIT e o
+ * mapeamento da janela — nao o regime que a mesa vive.
+ */
+const WARMUP_MS = Number(params.get("warmup") ?? 2500);
+/** Passo de aquecimento: roda e nao reporta. */
+const SKIP = params.has("skip");
+
+const SCENE_W = 1920;
+const SCENE_H = 1080;
+/** Cadencia de publicacao do Operador. Igual a SCENE_BROADCAST_INTERVAL_MS. */
+const SAMPLE_MS = 100;
+
+const hud = document.getElementById("hud");
+const frame = document.getElementById("frame");
+const plane = document.getElementById("plane");
+
+// --- imagens sinteticas -----------------------------------------------------
+// Bitmap de verdade, decodificado e enviado para a GPU como textura. Um
+// gradiente CSS nao mediria a mesma coisa: o custo de compor N texturas e
+// justamente parte do que esta em duvida.
+function makeImage(w, h, hue) {
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+
+  const grad = ctx.createLinearGradient(0, 0, w, h);
+  grad.addColorStop(0, `hsl(${hue} 70% 55%)`);
+  grad.addColorStop(1, `hsl(${(hue + 60) % 360} 70% 25%)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Ruido: uma textura chapada comprime e compoe diferente de uma foto.
+  const noise = ctx.getImageData(0, 0, w, h);
+  for (let i = 0; i < noise.data.length; i += 4) {
+    const d = (Math.random() * 40) | 0;
+    noise.data[i] += d;
+    noise.data[i + 1] += d;
+    noise.data[i + 2] += d;
+  }
+  ctx.putImageData(noise, 0, 0);
+
+  return new Promise((resolve) => canvas.toBlob((b) => resolve(URL.createObjectURL(b)), "image/webp", 0.9));
+}
+
+// --- cena -------------------------------------------------------------------
+const items = [];
+
+function buildScene(bgUrl, tokenUrls) {
+  const bg = document.createElement("div");
+  bg.className = "item";
+  bg.style.transform = "translate(0px, 0px)";
+  bg.style.width = SCENE_W + "px";
+  bg.style.height = SCENE_H + "px";
+  bg.style.zIndex = "0";
+  bg.innerHTML = `<img src="${bgUrl}" alt="" draggable="false">`;
+  plane.appendChild(bg);
+
+  for (let i = 0; i < N; i++) {
+    const el = document.createElement("div");
+    el.className = "item" + (MODE === "transition" ? " scene-smooth-item" : "");
+
+    const size = 180 + ((i * 37) % 140);
+    const state = {
+      el,
+      x: (i * 173) % (SCENE_W - size),
+      y: (i * 291) % (SCENE_H - size),
+      size,
+      rotation: (i * 23) % 360,
+      // Cada item com fase propria: itens em sincronia deixariam o
+      // compositor agrupar o que na cena real nunca esta agrupado.
+      phase: (i / N) * Math.PI * 2,
+    };
+
+    el.style.width = size + "px";
+    el.style.height = size + "px";
+    el.style.zIndex = String(i + 1);
+    el.style.transform = `translate(${state.x}px, ${state.y}px) rotate(${state.rotation}deg)`;
+    el.innerHTML = `<img src="${tokenUrls[i % tokenUrls.length]}" alt="" draggable="false">`;
+
+    plane.appendChild(el);
+    items.push(state);
+  }
+}
+
+// Escala o plano para caber na moldura, como SceneStage faz.
+function fitPlane() {
+  const scale = Math.min(frame.clientWidth / SCENE_W, frame.clientHeight / SCENE_H);
+  const dx = (frame.clientWidth - SCENE_W * scale) / 2;
+  const dy = (frame.clientHeight - SCENE_H * scale) / 2;
+  plane.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+}
+
+// --- medicao ----------------------------------------------------------------
+const frames = [];
+let running = false;
+let startedAt = 0;
+let lastSample = 0;
+
+function moveItems(t) {
+  // Orbita curta: cada item anda uns 120px e gira. Nao importa o desenho do
+  // movimento, importa que todo item mude de transform na amostra.
+  for (const it of items) {
+    const a = t / 1000 + it.phase;
+    const nx = it.x + Math.cos(a) * 60;
+    const ny = it.y + Math.sin(a) * 60;
+    it.el.style.transform = `translate(${nx}px, ${ny}px) rotate(${it.rotation + Math.sin(a) * 25}deg)`;
+  }
+}
+
+function moveOne(t) {
+  // Caso Operador: so o item 0 se move, a cada frame.
+  const it = items[0];
+  if (!it) return;
+
+  const a = t / 1000;
+  it.el.style.transform =
+    `translate(${it.x + Math.cos(a) * 300}px, ${it.y + Math.sin(a) * 200}px) rotate(${it.rotation}deg)`;
+}
+
+function tick(t) {
+  if (!running) return;
+
+  frames.push(t);
+
+  if (MODE === "drag") {
+    // 60Hz, um item. E o gesto do mestre no palco.
+    moveOne(t);
+  } else {
+    // 10Hz de amostras, todos os itens, transicao de 150ms cobrindo o vao.
+    if (t - lastSample >= SAMPLE_MS) {
+      lastSample = t;
+      moveItems(t);
+    }
+  }
+
+  const elapsed = (t - startedAt) / 1000;
+  if (elapsed >= SECS) {
+    running = false;
+    report();
+    return;
+  }
+
+  hud.textContent = `medindo ${MODE} n=${N}\n${elapsed.toFixed(1)}s / ${SECS}s`;
+  requestAnimationFrame(tick);
+}
+
+function percentile(sorted, p) {
+  if (sorted.length === 0) return 0;
+  const i = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  return sorted[i];
+}
+
+function report() {
+  const warm = frames.filter((t) => t - startedAt > WARMUP_MS);
+  const deltas = [];
+  for (let i = 1; i < warm.length; i++) deltas.push(warm[i] - warm[i - 1]);
+  deltas.sort((a, b) => a - b);
+
+  const total = warm.length > 1 ? warm[warm.length - 1] - warm[0] : 0;
+  const fps = total > 0 ? ((warm.length - 1) / total) * 1000 : 0;
+  const p50 = percentile(deltas, 50);
+  const p95 = percentile(deltas, 95);
+  const worst = deltas.length ? deltas[deltas.length - 1] : 0;
+  // Acima de 20ms um frame de 60Hz ja escapou. E a metrica que a mesa sente.
+  const dropped = deltas.filter((d) => d > 20).length;
+
+  const result = {
+    label: LABEL,
+    mode: MODE,
+    n: N,
+    ua: navigator.userAgent,
+    fps: Number(fps.toFixed(1)),
+    p50: Number(p50.toFixed(2)),
+    p95: Number(p95.toFixed(2)),
+    worst: Number(worst.toFixed(2)),
+    droppedPct: deltas.length ? Number(((dropped / deltas.length) * 100).toFixed(1)) : 0,
+    frames: warm.length,
+    dpr: window.devicePixelRatio,
+    at: new Date().toISOString(),
+  };
+
+  const verdict =
+    result.fps >= 55 && result.droppedPct < 5
+      ? ["ok", "PASSA"]
+      : result.fps >= 40
+        ? ["warn", "LIMITE"]
+        : ["bad", "REPROVA"];
+
+  hud.innerHTML =
+    `<b>${LABEL} / ${MODE} / n=${N}</b>\n` +
+    `fps      ${result.fps}\n` +
+    `p50      ${result.p50} ms\n` +
+    `p95      ${result.p95} ms\n` +
+    `pior     ${result.worst} ms\n` +
+    `perdidos ${result.droppedPct}%\n` +
+    `<span class="${verdict[0]}">${verdict[1]}</span>`;
+
+  window.__result = result;
+
+  // Manda para o coletor: a janela do Tauri nao tem devtools aberto aqui, e o
+  // resultado precisa sair para um arquivo que se possa comparar depois.
+  if (SKIP) {
+    hud.innerHTML += "\n(aquecimento, nao reportado)";
+  } else fetch(COLLECTOR, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(result),
+    mode: "cors",
+  }).catch(() => {
+    hud.innerHTML += "\n<span class=\"warn\">(coletor fora do ar)</span>";
+  });
+
+  // Encadeia a proxima medida, para uma abertura de janela cobrir a matriz
+  // inteira sem ninguem clicar nada.
+  const next = params.get("next");
+  if (next) {
+    setTimeout(() => {
+      location.search = next;
+    }, 600);
+  }
+}
+
+// --- start ------------------------------------------------------------------
+(async function main() {
+  hud.textContent = "gerando imagens...";
+
+  const [bg, ...tokens] = await Promise.all([
+    makeImage(SCENE_W, SCENE_H, 210),
+    makeImage(256, 256, 20),
+    makeImage(256, 256, 140),
+    makeImage(256, 256, 300),
+  ]);
+
+  buildScene(bg, tokens);
+  fitPlane();
+  new ResizeObserver(fitPlane).observe(frame);
+
+  // Espera as imagens realmente decodificarem: medir durante a decodificacao
+  // mediria a decodificacao.
+  await Promise.all(
+    [...document.images].map((img) => (img.complete ? Promise.resolve() : img.decode().catch(() => {}))),
+  );
+
+  await new Promise((r) => setTimeout(r, 400));
+
+  running = true;
+  requestAnimationFrame((t) => {
+    startedAt = t;
+    lastSample = t;
+    tick(t);
+  });
+})();
+</script>
+</body>
+</html>

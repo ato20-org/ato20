@@ -127,6 +127,17 @@
   html {
     @apply font-sans;
   }
+
+  /* Campo de texto seleciona, mesmo dentro de cromo marcado `select-none`.
+     `user-select` é herdado: sem esta regra, o `select-none` do cabeçalho e dos
+     painéis desceria para o campo de renomear cena e para o de nome de pasta, e
+     não haveria como corrigir uma digitação no meio de uma palavra — só apagar
+     tudo e reescrever. */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    @apply select-text;
+  }
 }
 /* -------------------------------------------------------------
    Suavização das visões de espectador

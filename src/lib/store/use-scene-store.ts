@@ -14,7 +14,7 @@ import {
 import {
   appendScene,
   insertSceneAfter,
-  moveScene as moveSceneInBoard,
+  moveSceneToIndex as moveSceneToIndexInBoard,
   removeScene as removeSceneFromBoard,
 } from "@/lib/operator/board-ops";
 import {
@@ -22,46 +22,25 @@ import {
   reorderByZ,
   type ZDirection,
 } from "@/lib/operator/z-order";
-import {
-  loadLocalBoard,
-  loadSyncMark,
-  saveLocalBoard,
-  saveSyncMark,
-} from "@/lib/storage/board";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
-import { BoardConflictError, loadRemoteBoard, saveRemoteBoard } from "@/lib/supabase/boards";
+import { loadBoard, saveBoard } from "@/lib/vault/board";
 import {
   cloneScene,
+  createEmptyBoard,
   createScene,
   type Board,
   type CanvasItem,
   type FogRegion,
   type ItemDraft,
+  type MapPin,
   type NewCanvasItem,
   type NewFogRegion,
+  type NewMapPin,
   type Scene,
+  type SceneGrid,
   type Viewport,
 } from "@/types/scene";
 
 type HydrationStatus = "idle" | "loading" | "ready" | "error";
-
-/**
- * Relação com a cópia na nuvem.
- *
- * `local` cobre dois casos que a tela trata igual: instalação sem Supabase, e
- * mesa nenhuma aberta. Nos dois, o board é só deste navegador e não há o que
- * dizer ao mestre.
- */
-export type SyncStatus = "local" | "saving" | "synced" | "conflict" | "error";
-
-/**
- * Intervalo entre subidas.
- *
- * Bem acima do debounce de gravação local: disco é instantâneo e de graça,
- * rede não. Cinco segundos de atraso não se percebem montando cena, e cortam
- * dezenas de escritas por minuto durante um arrasto longo.
- */
-const PUSH_DEBOUNCE_MS = 5000;
 
 /**
  * Janela de fusão do histórico.
@@ -86,27 +65,24 @@ type SceneStore = {
   undo: () => void;
   redo: () => void;
 
-  /** Qual mesa este board pertence. `null` = instalação local. */
-  roomId: string | null;
-  syncStatus: SyncStatus;
-  syncError: string | null;
-  /** Versão que este navegador carregou. Zero = nunca subiu. */
-  remoteVersion: number;
-  /** Há edição local que ainda não subiu. */
-  dirty: boolean;
+  /**
+   * Qual campanha o board carregado pertence.
+   *
+   * Existe para a hidratação se guardar sozinha. A versão sem isto saía cedo
+   * "se já carregou", e trocar de campanha mantinha o board da anterior na
+   * tela — com o agravante de que a próxima gravação o escreveria dentro da
+   * campanha nova.
+   */
+  campaignPath: string | null;
 
   /**
-   * Carrega o board da mesa e reconcilia com a nuvem.
+   * Carrega o board do vault.
    *
-   * Local primeiro, sempre: ele pinta a tela na hora e é o que faz o Operador
-   * funcionar com a internet caída. A nuvem entra depois, e só ela decide o
-   * conflito.
+   * Com a nuvem foram embora a versão remota, a marca de pendente e o estado
+   * de conflito — o disco é a verdade, e não há segunda ponta com quem
+   * discordar.
    */
-  hydrate: (roomId: string | null) => Promise<void>;
-  /** Descarta o board local e assume o do servidor. */
-  pullRemote: () => Promise<void>;
-  /** Manda o board local por cima do servidor, seja qual for a versão dele. */
-  overwriteRemote: () => Promise<void>;
+  hydrate: (campaignPath: string) => Promise<void>;
   /** Abre a cena no palco do Operador. Não muda o que a mesa vê. */
   setEditingSceneId: (sceneId: string | null) => void;
   /** Coloca a cena no ar. `null` deixa a mesa sem nada. */
@@ -114,7 +90,8 @@ type SceneStore = {
   addScene: (name?: string) => string;
   renameScene: (sceneId: string, name: string) => void;
   duplicateScene: (sceneId: string) => string | null;
-  moveScene: (sceneId: string, direction: "up" | "down") => void;
+  /** Posição na lista de cenas. É o que o arrasto da lista emite. */
+  moveSceneToIndex: (sceneId: string, index: number) => void;
   removeScene: (sceneId: string) => void;
   /** Primitiva única de mutação de cena. Toda operação de item usa isto. */
   updateScene: (sceneId: string, updater: (scene: Scene) => Scene) => void;
@@ -122,6 +99,13 @@ type SceneStore = {
   setBackground: (sceneId: string, assetId: string | undefined) => void;
   /** `undefined` devolve a mesa ao plano inteiro. */
   setSceneCamera: (sceneId: string, camera: Viewport | undefined) => void;
+  /**
+   * Liga, ajusta ou desliga a grade da cena. `undefined` desliga.
+   *
+   * Passa pelo `updateScene`, e portanto pelo histórico: ligar a grade é uma
+   * edição da cena como qualquer outra, e Ctrl+Z tem de desfazê-la.
+   */
+  setSceneGrid: (sceneId: string, grid: SceneGrid | undefined) => void;
   /** Devolve o id do item criado, para já deixá-lo selecionado. */
   addItem: (sceneId: string, item: NewCanvasItem) => string;
   /** Devolve os ids na mesma ordem dos rascunhos. */
@@ -138,6 +122,14 @@ type SceneStore = {
   addFog: (sceneId: string, region: NewFogRegion) => string;
   updateFog: (sceneId: string, fogId: string, patch: Partial<FogRegion>) => void;
   removeFog: (sceneId: string, fogId: string) => void;
+
+  /** Crava um ponto de anotação. Devolve o id, para já abrir a nota dele. */
+  addPin: (sceneId: string, pin: NewMapPin) => string;
+  updatePin: (sceneId: string, pinId: string, patch: Partial<MapPin>) => void;
+  removePin: (sceneId: string, pinId: string) => void;
+  /** Anexa arquivos do acervo ao ponto, sem repetir os que já estão nele. */
+  attachToPin: (sceneId: string, pinId: string, assetIds: string[]) => void;
+  detachFromPin: (sceneId: string, pinId: string, assetId: string) => void;
 };
 
 export const useSceneStore = create<SceneStore>((set, get) => {
@@ -163,12 +155,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
   board: null,
   status: "idle",
   error: null,
-
-  roomId: null,
-  syncStatus: "local",
-  syncError: null,
-  remoteVersion: 0,
-  dirty: false,
+  campaignPath: null,
 
   history: emptyHistory<Board>(),
   lastCommitAt: 0,
@@ -195,104 +182,39 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     set({ board: step.value, history: step.history, lastCommitAt: 0 });
   },
 
-  async hydrate(roomId) {
-    // Sai fora quando a mesa é a mesma: o Operador remonta, e recarregar o
-    // board por cima do que está sendo editado perderia edição não gravada.
-    if (get().status !== "idle" && get().roomId === roomId) return;
+  async hydrate(campaignPath) {
+    // Sai fora se já carregou ESTA campanha: o Operador remonta, e reler o
+    // disco por cima do que está sendo editado perderia edição que o debounce
+    // ainda não gravou. Campanha diferente sempre recarrega.
+    if (get().campaignPath === campaignPath && get().status !== "idle") return;
 
-    set({ status: "loading", roomId });
+    // Zera antes de ler: sem isto o board da campanha anterior ficaria na tela
+    // durante a leitura, e o assinante de gravação o escreveria na campanha
+    // nova.
+    set({ board: null, status: "loading", campaignPath, history: emptyHistory<Board>() });
 
     try {
-      const local = await loadLocalBoard(roomId);
-      const mark = await loadSyncMark(roomId);
+      // Campanha sem board ainda devolve `null`, e quem cria o primeiro é
+      // daqui: o formato de `Scene` é da tela, e o Rust trata cena como JSON
+      // opaco justamente para o formato não ter duas fontes de verdade.
+      const board = (await loadBoard()) ?? createEmptyBoard();
 
       // Histórico nasce vazio: não faz sentido desfazer para antes de abrir.
       set({
-        board: local,
+        board,
         status: "ready",
         error: null,
+        campaignPath,
         history: emptyHistory<Board>(),
         lastCommitAt: 0,
-        remoteVersion: mark.version,
-        dirty: mark.dirty,
-        syncStatus: "local",
-        syncError: null,
       });
-
-      if (!roomId || !isSupabaseConfigured()) return;
-
-      const remote = await loadRemoteBoard(roomId);
-
-      // Mesa sem board na nuvem: este navegador é a origem. É o caminho da
-      // primeira vez e o da mesa criada antes desta feature existir.
-      if (!remote) {
-        await pushBoard(local, roomId, 0);
-        return;
-      }
-
-      // Servidor na mesma versão que carregamos: nada a fazer — o que está na
-      // tela já é o que está lá, mais as edições pendentes daqui.
-      if (remote.version === mark.version) {
-        set({ syncStatus: mark.dirty ? "saving" : "synced" });
-        if (mark.dirty) await pushBoard(get().board ?? local, roomId, mark.version);
-
-        return;
-      }
-
-      // Servidor à frente E edição local pendente: as duas pontas mudaram, e
-      // escolher sozinho apagaria trabalho de alguém. Quem decide é o mestre.
-      if (mark.dirty) {
-        set({ syncStatus: "conflict" });
-        return;
-      }
-
-      // Servidor à frente e nada pendente aqui: ele é a verdade.
-      await adoptRemote(roomId, remote.board, remote.version);
     } catch (cause) {
-      // Falha de rede não invalida o board local: a tela segue editável, e o
-      // aviso diz que não está subindo.
+      // Sem board não há tela: ao contrário da falha de rede de antes, que
+      // deixava o Operador editável e só avisava que não estava subindo, um
+      // disco ilegível não tem versão local para cair.
       set({
-        syncStatus: "error",
-        syncError: cause instanceof Error ? cause.message : "Falha ao sincronizar o board",
-      });
-    }
-  },
-
-  async pullRemote() {
-    const { roomId } = get();
-    if (!roomId) return;
-
-    set({ syncStatus: "saving", syncError: null });
-
-    try {
-      const remote = await loadRemoteBoard(roomId);
-      if (!remote) return;
-
-      await adoptRemote(roomId, remote.board, remote.version);
-    } catch (cause) {
-      set({
-        syncStatus: "error",
-        syncError: cause instanceof Error ? cause.message : "Falha ao puxar o board",
-      });
-    }
-  },
-
-  async overwriteRemote() {
-    const { roomId, board } = get();
-    if (!roomId || !board) return;
-
-    set({ syncStatus: "saving", syncError: null });
-
-    try {
-      // Lê a versão atual só para poder passar por cima dela: o RPC recusa
-      // qualquer outra, e é essa recusa que protege contra sobrescrita
-      // acidental — aqui ela é intencional.
-      const remote = await loadRemoteBoard(roomId);
-      await pushBoard(board, roomId, remote?.version ?? 0);
-    } catch (cause) {
-      set({
-        syncStatus: "error",
-        syncError: cause instanceof Error ? cause.message : "Falha ao gravar o board",
+        status: "error",
+        error: cause instanceof Error ? cause.message : "Falha ao abrir o board",
       });
     }
   },
@@ -336,11 +258,11 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     return copy.id;
   },
 
-  moveScene(sceneId, direction) {
+  moveSceneToIndex(sceneId, index) {
     const { board } = get();
     if (!board) return;
 
-    commit(moveSceneInBoard(board, sceneId, direction));
+    commit(moveSceneToIndexInBoard(board, sceneId, index));
   },
 
   removeScene(sceneId) {
@@ -368,6 +290,10 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
   setSceneCamera(sceneId, camera) {
     get().updateScene(sceneId, (scene) => ({ ...scene, camera }));
+  },
+
+  setSceneGrid(sceneId, grid) {
+    get().updateScene(sceneId, (scene) => ({ ...scene, grid }));
   },
 
   addItem(sceneId, item) {
@@ -470,6 +396,66 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       fog: scene.fog.filter((region) => region.id !== fogId),
     }));
   },
+
+  addPin(sceneId, pin) {
+    const id = crypto.randomUUID();
+
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      pins: [
+        ...(scene.pins ?? []),
+        { title: "", note: "", ...pin, id, attachments: [] },
+      ],
+    }));
+
+    return id;
+  },
+
+  updatePin(sceneId, pinId, patch) {
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      pins: (scene.pins ?? []).map((pin) => (pin.id === pinId ? { ...pin, ...patch } : pin)),
+    }));
+  },
+
+  removePin(sceneId, pinId) {
+    get().updateScene(sceneId, (scene) => {
+      const restantes = (scene.pins ?? []).filter((pin) => pin.id !== pinId);
+
+      // Volta a `undefined` quando esvazia, em vez de deixar `[]` no arquivo:
+      // é o mesmo estado, e `sceneForTable` decide por identidade da
+      // referência quando o campo está ausente.
+      return { ...scene, pins: restantes.length > 0 ? restantes : undefined };
+    });
+  },
+
+  attachToPin(sceneId, pinId, assetIds) {
+    if (assetIds.length === 0) return;
+
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      pins: (scene.pins ?? []).map((pin) =>
+        pin.id === pinId
+          ? // `Set` para o mesmo arquivo anexado duas vezes não render duas
+            // miniaturas iguais com o mesmo botão de transmitir.
+            { ...pin, attachments: [...new Set([...pin.attachments, ...assetIds])] }
+          : pin,
+      ),
+    }));
+  },
+
+  detachFromPin(sceneId, pinId, assetId) {
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      pins: (scene.pins ?? []).map((pin) =>
+        pin.id === pinId
+          ? // Só desanexa: o arquivo continua no acervo. Apagar o asset aqui
+            // levaria embora a imagem de quem a usa como fundo de outra cena.
+            { ...pin, attachments: pin.attachments.filter((id) => id !== assetId) }
+          : pin,
+      ),
+    }));
+  },
   };
 });
 
@@ -505,111 +491,49 @@ export function selectLiveScene(state: SceneStore): Scene | null {
 const PERSIST_DEBOUNCE_MS = 400;
 
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
-let pushTimer: ReturnType<typeof setTimeout> | undefined;
 
 useSceneStore.subscribe((state, previous) => {
   if (state.board === previous.board || !state.board) return;
 
-  const { board, roomId } = state;
+  const { board } = state;
 
   clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => {
-    void saveLocalBoard(roomId, board);
-    // A marca de pendente é gravada junto com o board: se o navegador fechar
-    // antes de subir, a próxima abertura sabe que há edição local à frente da
-    // nuvem — e é isso que faz o conflito ser detectado em vez de silenciado.
-    void saveSyncMark(roomId, {
-      version: useSceneStore.getState().remoteVersion,
-      dirty: true,
-    });
-  }, PERSIST_DEBOUNCE_MS);
-
-  if (!roomId || !isSupabaseConfigured()) return;
-
-  useSceneStore.setState({ dirty: true });
-
-  // Em conflito nada sobe até o mestre decidir: empurrar por cima seria
-  // exatamente a sobrescrita que a versão existe para impedir.
-  if (state.syncStatus !== "conflict") schedulePush();
+  persistTimer = setTimeout(() => void saveBoard(board), PERSIST_DEBOUNCE_MS);
 });
 
-function schedulePush(): void {
-  clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => {
-    const { board, roomId, remoteVersion, syncStatus } = useSceneStore.getState();
-    if (!board || !roomId || syncStatus === "conflict") return;
+/**
+ * Grava agora o que estiver pendente.
+ *
+ * Chamado ANTES de trocar de campanha, e a ordem não é detalhe: `saveBoard`
+ * grava na campanha que o processo nativo tem aberta. Um debounce de 400ms
+ * ainda no ar no momento da troca escreveria o board da campanha ANTERIOR
+ * dentro da nova — e ninguém associaria a perda ao clique de trocar.
+ */
+export async function flushBoard(): Promise<void> {
+  clearTimeout(persistTimer);
+  persistTimer = undefined;
 
-    void pushBoard(board, roomId, remoteVersion);
-  }, PUSH_DEBOUNCE_MS);
+  const { board } = useSceneStore.getState();
+  if (!board) return;
+
+  await saveBoard(board);
 }
 
 /**
- * Sobe o board e reconcilia a versão.
+ * Fechar a janela não pode custar os últimos 400ms de trabalho.
  *
- * `version` é a que este cliente carregou. O RPC recusa qualquer outra, e essa
- * recusa é o conflito — não um erro de rede.
+ * Continua valendo sem a nuvem, e por um motivo diferente do de antes: o
+ * atraso que sobrou é o do próprio disco, e é justamente o gesto de fechar que
+ * cai dentro dele.
  */
-async function pushBoard(board: Board, roomId: string, version: number): Promise<void> {
-  useSceneStore.setState({ syncStatus: "saving", syncError: null });
-
-  try {
-    const next = await saveRemoteBoard(roomId, board, version);
-
-    // O mestre pode ter continuado editando durante a subida. Nesse caso a
-    // pendência continua de pé, senão a última edição ficaria só no disco.
-    const settled = useSceneStore.getState().board === board;
-
-    await saveSyncMark(roomId, { version: next, dirty: !settled });
-    useSceneStore.setState({
-      remoteVersion: next,
-      dirty: !settled,
-      syncStatus: settled ? "synced" : "saving",
-    });
-
-    if (!settled) schedulePush();
-  } catch (cause) {
-    if (cause instanceof BoardConflictError) {
-      await saveSyncMark(roomId, { version, dirty: true });
-      useSceneStore.setState({ dirty: true, syncStatus: "conflict" });
-
-      return;
-    }
-
-    useSceneStore.setState({
-      syncStatus: "error",
-      syncError: cause instanceof Error ? cause.message : "Falha ao gravar o board",
-    });
-  }
-}
-
-/** Assume o board do servidor, no disco e na tela. */
-async function adoptRemote(roomId: string, board: Board, version: number): Promise<void> {
-  await saveLocalBoard(roomId, board);
-  await saveSyncMark(roomId, { version, dirty: false });
-
-  useSceneStore.setState({
-    board,
-    remoteVersion: version,
-    dirty: false,
-    syncStatus: "synced",
-    syncError: null,
-    // Histórico zerado: desfazer para um estado que veio de outra máquina não
-    // é desfazer, é apagar o trabalho de lá.
-    history: emptyHistory<Board>(),
-    lastCommitAt: 0,
-  });
-}
-
-// Fechar a aba ou minimizar não pode custar os últimos segundos de trabalho:
-// o disco já gravou em 400 ms, mas a nuvem só em `PUSH_DEBOUNCE_MS`.
 if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "hidden") return;
 
-    const { board, roomId, remoteVersion, dirty, syncStatus } = useSceneStore.getState();
-    if (!board || !roomId || !dirty || syncStatus === "conflict") return;
+    const { board } = useSceneStore.getState();
+    if (!board) return;
 
-    clearTimeout(pushTimer);
-    void pushBoard(board, roomId, remoteVersion);
+    clearTimeout(persistTimer);
+    void saveBoard(board);
   });
 }

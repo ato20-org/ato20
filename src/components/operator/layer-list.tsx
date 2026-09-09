@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, ChevronUp, GripVertical, Lock, LockOpen, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { useListReorder } from "@/hooks/use-list-reorder";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { cn } from "@/lib/utils";
@@ -41,61 +42,9 @@ export function LayerList({ scene }: { scene: Scene }) {
   // lista, o que está por cima se lê no topo.
   const ordered = useMemo(() => [...scene.items].sort((a, b) => b.z - a.z), [scene.items]);
 
-  const listRef = useRef<HTMLUListElement>(null);
-  /** Índice sob o cursor durante o arrasto, para a linha de inserção. */
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-
-  /**
-   * Arrasta a linha para reordenar.
-   *
-   * O índice de destino sai da altura do cursor sobre a lista, não de qual
-   * linha recebeu o evento: com `setPointerCapture`, todos os eventos vão para
-   * a linha de origem, e ela nunca saberia sobre quem está passando.
-   */
-  function startReorder(event: ReactPointerEvent, itemId: string) {
-    if (event.button !== 0) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const target = event.currentTarget as HTMLElement;
-    const { pointerId } = event;
-    target.setPointerCapture(pointerId);
-
-    const indexFor = (clientY: number): number => {
-      const rows = [...(listRef.current?.children ?? [])] as HTMLElement[];
-      if (rows.length === 0) return 0;
-
-      for (const [index, row] of rows.entries()) {
-        const rect = row.getBoundingClientRect();
-        if (clientY < rect.top + rect.height / 2) return index;
-      }
-
-      return rows.length - 1;
-    };
-
-    const handleMove = (native: PointerEvent) => {
-      if (native.pointerId !== pointerId) return;
-
-      setDropIndex(indexFor(native.clientY));
-    };
-
-    const handleEnd = (native: PointerEvent) => {
-      if (native.pointerId !== pointerId) return;
-
-      target.releasePointerCapture(pointerId);
-      target.removeEventListener("pointermove", handleMove);
-      target.removeEventListener("pointerup", handleEnd);
-      target.removeEventListener("pointercancel", handleEnd);
-
-      moveItemToIndex(scene.id, itemId, indexFor(native.clientY));
-      setDropIndex(null);
-    };
-
-    target.addEventListener("pointermove", handleMove);
-    target.addEventListener("pointerup", handleEnd);
-    target.addEventListener("pointercancel", handleEnd);
-  }
+  const { listRef, dropIndex, startReorder } = useListReorder<string>((itemId, index) =>
+    moveItemToIndex(scene.id, itemId, index),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -108,7 +57,7 @@ export function LayerList({ scene }: { scene: Scene }) {
 
       {ordered.length === 0 ? (
         <p className="text-muted-foreground px-3 pb-3 text-xs">
-          Nada na cena. Envie uma imagem acima e clique no <span className="font-medium">+</span>.
+          Nada na cena. Importe uma imagem acima e clique no <span className="font-medium">+</span>.
         </p>
       ) : (
         <ScrollArea className="min-h-0 flex-1">

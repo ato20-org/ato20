@@ -1,270 +1,154 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import {
-  ExternalLink,
-  Home,
-  PanelLeftClose,
   PanelLeftOpen,
-  PanelRightClose,
   PanelRightOpen,
-  Redo2,
-  Undo2,
-  Volume2,
-  VolumeX,
 } from "lucide-react";
 
-import { AccountBadge } from "@/components/operator/account-badge";
-import { BoardConflictBar, BoardSyncBadge } from "@/components/operator/board-sync-badge";
+import { OpenViewer } from "@/components/operator/open-viewer";
+import { CharactersChip } from "@/components/operator/characters-chip";
+import { PlayersChip } from "@/components/operator/players-chip";
+import { TableInvite } from "@/components/operator/table-invite";
+import { TrackBar } from "@/components/operator/track-bar";
 import { LibraryPanel } from "@/components/operator/library-panel";
 import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
 import { OperatorToolbar } from "@/components/operator/operator-toolbar";
-import { RoomBadge } from "@/components/operator/room-badge";
+import { PinIndex } from "@/components/operator/pin-index";
 import { ScenesPanel } from "@/components/operator/scenes-panel";
+import { SpotlightChip } from "@/components/operator/spotlight-chip";
 import { StageContextMenu } from "@/components/operator/stage-context-menu";
 import { ViewportControls } from "@/components/operator/viewport-controls";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAssetSync } from "@/hooks/use-asset-sync";
-import { collectUsedAssetIds } from "@/lib/operator/asset-usage";
 import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
+import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
-import { useAudioStore } from "@/lib/store/use-audio-store";
-import { useLibraryStore } from "@/lib/store/use-library-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
+import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
-import { useSessionSyncStore } from "@/lib/store/use-session-sync-store";
-import { useRoomStore } from "@/lib/store/use-room-store";
 import {
-  selectCanRedo,
-  selectCanUndo,
   selectEditingScene,
   selectLiveScene,
   useSceneStore,
 } from "@/lib/store/use-scene-store";
+import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { Scene } from "@/types/scene";
 
+/**
+ * A mesa.
+ *
+ * Monta com tudo já lido: quem carrega a campanha é o `CampaignBoot`, e este
+ * componente antes disparava as hidratações nos próprios efeitos — o que fazia
+ * a mesa aparecer aos pedaços e deixava os efeitos de publicação rodarem antes
+ * de haver cena.
+ */
 export function OperatorShell() {
-  const hydrate = useSceneStore((state) => state.hydrate);
   const status = useSceneStore((state) => state.status);
   const error = useSceneStore((state) => state.error);
   // Duas cenas distintas: a que o mestre edita e a que a mesa vê.
-  const scenes = useSceneStore((state) => state.board?.scenes);
   const editingScene = useSceneStore(selectEditingScene);
   const liveScene = useSceneStore(selectLiveScene);
-
-  const soundOn = useAudioStore((state) => state.enabled);
-  const setSoundOn = useAudioStore((state) => state.setEnabled);
-  const audioBlocked = useAudioStore((state) => state.blocked);
-  const retryAudio = useAudioStore((state) => state.retry);
 
   const leftOpen = usePanelsStore((state) => state.left);
   const rightOpen = usePanelsStore((state) => state.right);
   const toggleLeft = usePanelsStore((state) => state.toggleLeft);
   const toggleRight = usePanelsStore((state) => state.toggleRight);
   const restorePanels = usePanelsStore((state) => state.restore);
-
-  const canUndo = useSceneStore(selectCanUndo);
-  const canRedo = useSceneStore(selectCanRedo);
-  const undo = useSceneStore((state) => state.undo);
-  const redo = useSceneStore((state) => state.redo);
+  const restorePinNotes = usePinWindowStore((state) => state.restaurar);
 
   const track = useTrackStore((state) => state.track);
   const trackVolume = useTrackStore((state) => state.volume);
-  const hydrateTrack = useTrackStore((state) => state.hydrate);
 
   const portraits = usePortraitStore((state) => state.portraits);
-  const hydratePortraits = usePortraitStore((state) => state.hydrate);
 
-  const roomId = useRoomStore((state) => state.room?.id ?? null);
-  const syncLibrary = useLibraryStore((state) => state.sync);
-  const syncSession = useSessionSyncStore((state) => state.sync);
-  // A porta do Assistir pede o código da mesa. O botão daqui já o leva: quem
-  // abre a TV é o mestre, e ele não deveria digitar o que já está na tela.
-  const roomCode = useRoomStore((state) => state.room?.code ?? null);
-
-  useEffect(() => {
-    // A mesa entra na hidratação: o board é por mesa, e trocar de mesa troca
-    // de board — inclusive o cache local, que antes era um só por navegador.
-    void hydrate(roomId);
-  }, [hydrate, roomId]);
-
-  useEffect(() => {
-    void hydrateTrack();
-  }, [hydrateTrack]);
-
-  useEffect(() => {
-    void hydratePortraits();
-  }, [hydratePortraits]);
+  const spotlight = useSpotlightStore((state) => state.spotlight);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
-  // padrões, e ler `localStorage` antes disso divergiria na hidratação.
+  // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale
+  // para os painéis e para onde cada nota de ponto foi deixada.
   useEffect(() => {
     restorePanels();
-  }, [restorePanels]);
+    restorePinNotes();
+  }, [restorePanels, restorePinNotes]);
 
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.
-  // `local` alimenta a TV na mesma máquina; `roomId` alimenta os celulares.
-  usePublisher(
-    { scene: liveScene, track, volume: trackVolume, portraits },
-    { local: true, roomId },
-  );
+  //
+  // A cena entra aqui inteira, com os pontos de anotação; quem os remove é o
+  // próprio `usePublisher`, e não este chamador. Ver `sceneForTable`.
+  //
+  // O volume viaja FORA da faixa: é da sessão, e trocar de música não mexe
+  // nele.
+  usePublisher({ scene: liveScene, track, volume: trackVolume, portraits, spotlight });
   useOperatorShortcuts();
   useSpacePan();
-  // O que a mesa precisa alcançar de fora desta máquina. É a mesma conta que a
-  // faxina do bucket usa, e por isso vive num lugar só.
-  //
-  // Assinado do store, e não lido com `getState()`: o arquivo tem de subir no
-  // instante em que entra numa cena, e uma leitura pontual não reagiria a isso.
-  const usedAssetIds = collectUsedAssetIds(scenes ?? [], portraits, track);
-
-  useAssetSync(roomId, usedAssetIds);
-
-  // Depois do board, não junto: a faxina do bucket precisa saber o que está em
-  // uso, e sem board carregado essa conta seria vazia — ela apagaria justamente
-  // o material das cenas.
-  //
-  // A sessão vem antes do acervo de propósito: ela decide quais retratos estão
-  // no ar, e a faxina precisa contar esses arquivos como em uso.
-  useEffect(() => {
-    if (!roomId || status !== "ready") return;
-
-    void syncSession(roomId).then(() => syncLibrary(roomId));
-  }, [roomId, status, syncLibrary, syncSession]);
-
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* `flex-wrap`: abaixo de ~1000px a barra quebra em duas linhas em vez
           de comprimir os controles ou vazar para fora da tela. Duas linhas em
           janela estreita é honesto; controle inalcançável não é. */}
-      <header className="flex flex-wrap items-center gap-2 gap-y-1 border-b px-3 py-2">
-        {/* `nativeButton={false}`: o Base UI avisa que renderizar um <a> como
-            botão apaga a semântica nativa. Aqui é um link de verdade — navega,
-            abre em nova aba, aceita "copiar endereço" — então declaramos isso. */}
-        <Button
-          render={<Link href="/mesa" />}
-          nativeButton={false}
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Escolher visão"
-        >
-          <Home />
-        </Button>
-
-        <PanelToggle
-          open={leftOpen}
-          onToggle={toggleLeft}
-          label="Cenas e áreas"
-          openIcon={<PanelLeftClose />}
-          closedIcon={<PanelLeftOpen />}
-        />
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
-
-        {/* `max-w-40` porque `truncate` só corta dentro de largura definida —
-            sem o limite, um nome longo de cena empurraria o resto da barra. */}
-        <div className="min-w-0 max-w-40">
-          <p className="text-sm leading-none font-medium">Operador</p>
-          <p className="text-muted-foreground truncate text-xs">
-            {editingScene ? `Editando ${editingScene.name}` : "Nenhuma cena aberta"}
-          </p>
-        </div>
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Desfazer"
-          disabled={!canUndo}
-          onClick={undo}
-        >
-          <Undo2 />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Refazer"
-          disabled={!canRedo}
-          onClick={redo}
-        >
-          <Redo2 />
-        </Button>
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
+      {/* O que sobrou aqui é o que pertence à SESSÃO: o que está no ar, o som,
+          e quem alcança a mesa. Saíram os controles de gesto — ferramentas e
+          zoom foram para o canto do palco, onde a mão já está —, os dois
+          toggles de painel, que agora moram nos próprios painéis, e desfazer e
+          refazer, que são Ctrl+Z e Ctrl+Y e não precisavam de alvo na tela.
+          Jogadores saiu junto: virou pílula com contador no canto do palco.
+          A campanha subiu para a barra da janela. */}
+      <header className="flex flex-wrap items-center gap-2 gap-y-1 border-b px-3 py-2 select-none">
         <OnAirControl editing={editingScene} />
 
-        <Separator orientation="vertical" className="mx-1 h-8" />
-        <OperatorToolbar />
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={soundOn ? "Silenciar esta tela" : "Ligar o som desta tela"}
-          aria-pressed={!soundOn}
-          onClick={() => setSoundOn(!soundOn)}
-        >
-          {soundOn ? <Volume2 /> : <VolumeX />}
-        </Button>
-
-        <Separator orientation="vertical" className="mx-1 h-8" />
-        <RoomBadge />
-        <BoardSyncBadge />
-
-        {/* O browser recusa tocar antes de um gesto na página. Só aparece
-            quando há trilha para desbloquear. */}
-        {audioBlocked && track ? (
-          <Button variant="secondary" size="sm" onClick={retryAudio}>
-            <Volume2 />
-            Ativar som
-          </Button>
-        ) : null}
-
+        {/* As duas juntas, na mesma ponta: são a mesma pergunta — como as
+            outras telas entram na mesa. Uma dá o QR para o celular e para a TV
+            de outro aparelho; a outra abre a TV aqui. Quem JÁ entrou é outra
+            coisa, e mora no canto do palco — ver `PlayersChip`. */}
         <div className="ml-auto flex items-center gap-2">
-          <AccountBadge />
-
-          <Button
-            render={
-              <Link
-                href={roomCode ? `/assistir?code=${roomCode}` : "/assistir"}
-                target="_blank"
-                rel="noopener"
-              />
-            }
-            nativeButton={false}
-            variant="outline"
-            size="sm"
-            aria-label="Abrir Assistir"
-          >
-            <ExternalLink />
-            <span className="hidden xl:inline">Abrir Assistir</span>
-          </Button>
-
-          <PanelToggle
-            open={rightOpen}
-            onToggle={toggleRight}
-            label="Imagens e sons"
-            openIcon={<PanelRightClose />}
-            closedIcon={<PanelRightOpen />}
-          />
+          <TableInvite />
+          <OpenViewer />
         </div>
       </header>
-
-      <BoardConflictBar />
 
       <div className="flex min-h-0 flex-1">
         {leftOpen ? <ScenesPanel scene={editingScene} ready={status === "ready"} /> : null}
 
-        <main className="flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
+        <main className="relative flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
+          {/* Painel fechado deixa um alvo flutuando no canto de cima do palco,
+              do lado dele. É o caminho de volta: sem isso, fechar um painel o
+              deixaria inalcançável. */}
+          <div className="absolute top-2 left-2 z-10">
+            {leftOpen ? null : (
+              <FloatingPanelToggle
+                onToggle={toggleLeft}
+                label="Cenas e áreas"
+                icon={<PanelLeftOpen />}
+              />
+            )}
+          </div>
+
+          {/* Quem está na mesa fica aqui, e não no cabeçalho: é consulta, como
+              o índice de pontos, e a contagem só serve se estiver à vista o
+              tempo todo. Fora do `StageBoundary`: uma mesa cheia continua
+              cheia sem cena nenhuma selecionada. */}
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+            {/* Personagens ao lado de jogadores: as duas metades da mesma
+                pergunta — quem senta na mesa, e quem eles interpretam. */}
+            <CharactersChip />
+            <PlayersChip />
+            {rightOpen ? null : (
+              <FloatingPanelToggle
+                onToggle={toggleRight}
+                label="Imagens e sons"
+                icon={<PanelRightOpen />}
+              />
+            )}
+          </div>
+
           {status === "error" ? (
             <p className="text-destructive m-auto max-w-sm text-center text-sm">{error}</p>
           ) : (
@@ -275,6 +159,10 @@ export function OperatorShell() {
         {rightOpen ? <LibraryPanel scene={editingScene} /> : null}
       </div>
 
+      {/* A linha de baixo: o que está tocando, com onde está e quanto falta.
+          Só aparece quando há trilha escolhida. */}
+      <TrackBar />
+
       {/* A trilha é da sessão, não da cena: trocar de cena não corta a
           música. */}
       <SessionAudio track={track} volume={trackVolume} />
@@ -282,34 +170,43 @@ export function OperatorShell() {
   );
 }
 
-type PanelToggleProps = {
-  open: boolean;
+/**
+ * O alvo que devolve um painel fechado.
+ *
+ * Flutua sobre o canto de cima do palco, do lado do painel que ele reabre —
+ * quem o posiciona é o grupo que o envolve.
+ * Substituiu os dois botões que viviam nas pontas do cabeçalho: eles ficavam
+ * longe do que controlavam, e eram dois dos itens que faziam a barra parecer
+ * cheia.
+ */
+function FloatingPanelToggle({
+  onToggle,
+  label,
+  icon,
+}: {
   onToggle: () => void;
   label: string;
-  openIcon: React.ReactNode;
-  closedIcon: React.ReactNode;
-};
-
-function PanelToggle({ open, onToggle, label, openIcon, closedIcon }: PanelToggleProps) {
+  icon: React.ReactNode;
+}) {
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <Button
-            variant="ghost"
+            variant="secondary"
             size="icon-sm"
-            aria-label={`${open ? "Esconder" : "Mostrar"} ${label}`}
-            aria-pressed={open}
+            // Sem sombra e semitransparente: ele fica sobre a cena, e um
+            // botão opaco ali competiria com o mapa.
+            className="bg-background/85 backdrop-blur"
+            aria-label={`Mostrar ${label}`}
             onClick={onToggle}
           >
-            {open ? openIcon : closedIcon}
+            {icon}
           </Button>
         }
       />
       <TooltipContent>
-        <p>
-          {open ? "Esconder" : "Mostrar"} {label}
-        </p>
+        <p>Mostrar {label}</p>
       </TooltipContent>
     </Tooltip>
   );
@@ -322,7 +219,8 @@ function PanelToggle({ open, onToggle, label, openIcon, closedIcon }: PanelToggl
 function StageBoundary({ scene, status }: { scene: Scene | null; status: string }) {
   const viewport = useViewportStore((state) => state.viewport);
   const setViewport = useViewportStore((state) => state.setViewport);
-  const panMode = useViewportStore((state) => state.panMode);
+  // A mesma resposta que o `OperatorStage` usa para soltar os itens.
+  const panMode = usePanMode();
 
   const stage = (
     // Com espaço segurado, o arrasto de botão esquerdo passa a deslocar a cena
@@ -342,11 +240,31 @@ function StageBoundary({ scene, status }: { scene: Scene | null; status: string 
     <div className="relative flex min-h-0 flex-1 flex-col">
       {scene ? <StageContextMenu scene={scene}>{stage}</StageContextMenu> : stage}
 
+      {/* Fora do gatilho do menu de contexto, e independente de haver cena: uma
+          imagem transmitida continua no ar mesmo sem cena nenhuma no palco, e é
+          justamente aí que esquecê-la é mais fácil. */}
+      <SpotlightChip />
+
       {/* Fora do gatilho do menu de contexto: botão direito sobre os controles
-          não deve abrir o menu da cena. */}
+          não deve abrir o menu da cena.
+          Canto inferior ESQUERDO, e num grupo só com as ferramentas: escolher
+          a ferramenta e ajustar o zoom são o mesmo tipo de gesto — mira no
+          mapa —, e tê-los em cantos opostos obrigava a atravessar a tela entre
+          duas ações que andam juntas. */}
       {scene ? (
-        <div className="absolute right-3 bottom-3">
+        <div className="absolute bottom-3 left-3 flex items-center gap-2">
+          <OperatorToolbar />
           <ViewportControls scene={scene} />
+        </div>
+      ) : null}
+
+      {/* Canto oposto ao das ferramentas, de propósito: aquele lado é gesto
+          sobre o mapa — mira, ampliação, enquadramento — e este é consulta.
+          Na mesma fila, seria mais um alvo a atravessar com o cursor entre
+          duas ações que nada têm a ver uma com a outra. */}
+      {scene ? (
+        <div className="absolute right-3 bottom-3 flex items-center gap-2">
+          <PinIndex scene={scene} />
         </div>
       ) : null}
     </div>

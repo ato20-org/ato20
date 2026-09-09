@@ -1,17 +1,15 @@
-import type { Portrait, Scene, SessionTrack } from "@/types/scene";
+import type { Portrait, Scene, SessionTrack, Spotlight } from "@/types/scene";
 
-/**
- * Só o JSON da cena viaja. As imagens ficam no IndexedDB, que é compartilhado
- * entre abas da mesma origem — o espectador resolve `assetId` localmente.
- * Na Fase 2 (Plateia no celular) isso muda: outra máquina, outro storage, e
- * aí entra uma implementação de `SceneChannel` que também sobe os binários.
- */
 /**
  * Tudo que um espectador precisa saber.
  *
- * Cena e trilha viajam juntas numa mensagem só. A trilha não pertence à cena
- * — ela é da sessão — mas separá-las em duas mensagens exigiria dois apertos
- * de mão, dois reenvios e dois heartbeats, para nenhum ganho.
+ * Cena, trilha, retratos e evidência viajam numa mensagem só. Nenhum pertence
+ * aos outros — trilha, retratos e evidência são da sessão, não da cena —, mas
+ * separá-los exigiria um reenvio e um heartbeat para cada um, para nenhum
+ * ganho, e faria quem chega no meio da sessão receber a cena antes do elenco.
+ *
+ * A cena que entra aqui passou por `sceneForTable`: ela é a cena SEM os pontos
+ * de anotação do mestre. Este quadro é público para quem tem o código da mesa.
  */
 export type LiveState = {
   /** `null` = nada no ar. */
@@ -25,37 +23,39 @@ export type LiveState = {
    * e os celulares seguem, e trocar de música não mexe no ganho.
    */
   volume: number;
-  /**
-   * Retratos sobre a cena. Viajam junto porque são da sessão e ficam no ar
-   * atravessando a troca de cena — mandá-los em outra mensagem exigiria um
-   * segundo aperto de mão para o espectador que chega no meio.
-   */
+  /** Retratos sobre a cena, ancorados na câmera. */
   portraits: Portrait[];
+  /** Imagem em evidência sobre tudo. `null` = nenhuma. */
+  spotlight: Spotlight | null;
 };
 
-export type ChannelMessage =
-  /** Operador anuncia o estado atual. */
-  | ({ type: "live:update" } & LiveState)
-  /** Espectador acabou de abrir e pede o estado atual. */
-  | { type: "live:request" };
-
 /**
- * Cadência de publicação da cena, comum aos dois transportes.
+ * Cadência de publicação da cena.
  *
- * 10 Hz. Arrastar um item gera ~60 mudanças de estado por segundo: na rede
- * isso estouraria a cota de mensagens do plano gratuito, e no
- * `BroadcastChannel` pagaria uma cópia estruturada do board inteiro por frame
- * — para nada, porque quem assiste interpola entre as amostras (ver
- * `.scene-smooth-item` em `globals.css`).
- *
- * Vive aqui, no módulo de tipos, para o transporte local não precisar importar
- * o do Supabase — e com ele o cliente inteiro — só para ler um número.
+ * 10 Hz. Arrastar um item gera ~60 mudanças de estado por segundo, e publicar
+ * todas pagaria uma serialização do board por frame para produzir a mesma
+ * imagem — quem assiste interpola entre as amostras (ver `.scene-smooth-item`
+ * em `globals.css`).
  */
 export const SCENE_BROADCAST_INTERVAL_MS = 100;
 
+/**
+ * O transporte da cena.
+ *
+ * Encolheu quando o daemon entrou. Antes havia `live:request`: o espectador que
+ * abria a tela no meio da sessão pedia o estado, e o Operador respondia — com
+ * reenvio a cada 2,5s, porque um pedido que chegasse antes de o Operador se
+ * inscrever simplesmente não existia para ele.
+ *
+ * Nada disso é preciso agora. O daemon guarda o último estado publicado e o
+ * manda na conexão, então quem chega no meio já entra sincronizado sem aperto
+ * de mão nenhum. Com o pedido foram embora o `ChannelMessage`, o reenvio e a
+ * metade do `useSubscription`.
+ */
 export interface SceneChannel {
-  send(message: ChannelMessage): void;
+  /** Só o Operador chama. Num canal de espectador é inerte. */
+  publish(state: LiveState): void;
   /** Devolve a função de cancelamento. */
-  subscribe(handler: (message: ChannelMessage) => void): () => void;
+  subscribe(handler: (state: LiveState) => void): () => void;
   close(): void;
 }

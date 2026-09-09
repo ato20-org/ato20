@@ -1,0 +1,84 @@
+[package]
+name = "ato20"
+version = "0.1.0"
+description = "Ferramenta para organizar e exibir cenas de RPG de mesa"
+authors = ["valb-mig"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+# O binario e uma casca de tres linhas; tudo vive na lib para o alvo mobile do
+# Tauri poder entrar pelo `mobile_entry_point` sem passar por `main`.
+name = "ato20_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-log = "2"
+# Escolher a pasta da campanha e um dialogo nativo: um seletor desenhado na
+# webview nao alcanca o disco, e digitar caminho a mao e o que Obsidian
+# acertou em nao pedir.
+tauri-plugin-dialog = "2"
+
+# O daemon. Vive numa thread deste processo, e nao num sidecar, porque o Rust
+# ja tem fs, sqlite, zip e http -- um sidecar Node exigiria empacotar um
+# runtime a mais so para nao trocar de linguagem.
+axum = { version = "0.8", features = ["multipart"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "fs", "io-util", "macros", "sync"] }
+# O SSE: um canal `broadcast` do tokio virado em stream. Ele ja resolve o fanout
+# -- cada espectador e um receptor, e quem le devagar nao segura os outros.
+tokio-stream = { version = "0.1", features = ["sync"] }
+tower = "0.5"
+# `ServeFile` em vez de ler o arquivo a mao: ele ja implementa Range,
+# `If-None-Match` e `Last-Modified`. Range nao e opcional -- sem ele o audio da
+# trilha nao pode ser buscado, so tocado do inicio.
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+# So para o `Mime` que o `ServeFile` pede. O tipo declarado no upload e o que
+# volta no `Content-Type`, e adivinhar pela extensao diria menos.
+mime = "0.3"
+
+# `bundled` compila o SQLite junto. Sem isso o aplicativo passaria a depender
+# de uma libsqlite do sistema na maquina de quem instala, que e exatamente o
+# tipo de dependencia que um app de desktop nao pode ter.
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Le so o CABECALHO da imagem para saber as medidas -- nao decodifica nada.
+# Elas eram medidas na webview, o que funcionava enquanto o arquivo passava por
+# la; importar copiando direto do disco significa que o navegador nunca ve a
+# imagem, e um `image` completo seria um decodificador inteiro no binario para
+# responder duas perguntas.
+imagesize = "0.13"
+
+uuid = { version = "1", features = ["v4"] }
+
+# Token de jogador. `getrandom` e o CSPRNG do sistema, e nao um gerador
+# qualquer: este token e a unica coisa que separa a ficha de um jogador da do
+# outro depois que a RLS do Postgres saiu.
+getrandom = "0.3"
+# Exportar e importar a campanha. So `deflate`: os outros codecs trariam AES,
+# lzma e bzip2 para dentro do binario, e o que se comprime aqui e JSON e imagem
+# ja comprimida -- deflate resolve o primeiro e nao piora o segundo.
+zip = { version = "4", default-features = false, features = ["deflate"] }
+
+# Guarda-se o HASH do token, nunca ele. Um `.ato20/estado.db` que vaza -- num
+# zip, num backup, num Dropbox -- nao pode entregar as credenciais da mesa.
+sha2 = "0.10"
+# Abrir o Assistir no navegador do SISTEMA, e nao dentro da webview: a TV e uma
+# tela de espectador, e servi-la na mesma janela do Operador tiraria o mestre da
+# mesa dele.
+tauri-plugin-opener = "2.5.5"
+
+[dev-dependencies]
+# Cada teste do vault precisa de uma campanha propria num diretorio que se
+# apague sozinho: testes que compartilham pasta passam isolados e falham juntos.
+tempfile = "3"
+# `#[tokio::test]` para exercitar o router sem abrir porta.
+tokio = { version = "1", features = ["rt", "macros"] }

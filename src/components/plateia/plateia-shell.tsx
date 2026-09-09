@@ -1,25 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Loader2, Monitor, Smartphone, User, WifiOff } from "lucide-react";
+import { useState } from "react";
+import { Monitor, Smartphone, User } from "lucide-react";
 
 import { PlateiaStage } from "@/components/plateia/plateia-stage";
-import { SessionAudio } from "@/components/playground/session-audio";
-import { PlayerAttachments } from "@/components/plateia/player-attachments";
+import { MyCharacters } from "@/components/plateia/my-characters";
+import { PlayerGate } from "@/components/plateia/player-gate";
 import { PlayerIdentity } from "@/components/plateia/player-identity";
-import { PlayerNotes } from "@/components/plateia/player-notes";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { SessionAudio } from "@/components/playground/session-audio";
+import { SpotlightLayer } from "@/components/playground/spotlight-layer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSubscription, type Subscription } from "@/hooks/use-scene-broadcast";
-import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
-import { useRoomStore } from "@/lib/store/use-room-store";
-
-const CODE_LENGTH = 6;
+import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
 
 /**
  * Abas por layout, na ordem em que o arraste lateral navega.
@@ -33,145 +26,58 @@ const TABBED_TABS = ["cena", "personagem"] as const;
 type StackedTab = (typeof STACKED_TABS)[number];
 type Tab = (typeof TABBED_TABS)[number];
 
-export function PlateiaShell() {
-  const searchParams = useSearchParams();
-  const codeFromLink = (searchParams.get("code") ?? "").trim().toUpperCase();
-
-  const status = useRoomStore((state) => state.status);
-  const room = useRoomStore((state) => state.room);
-  const error = useRoomStore((state) => state.error);
-  const connectAsPlayer = useRoomStore((state) => state.connectAsPlayer);
-
-  const [code, setCode] = useState(codeFromLink);
-
-  useEffect(() => {
-    // Link do mestre já traz o código: entrar sozinho poupa o jogador de
-    // digitar seis caracteres na tela do celular.
-    if (codeFromLink.length === CODE_LENGTH) void connectAsPlayer(codeFromLink);
-  }, [codeFromLink, connectAsPlayer]);
-
-  useEffect(() => {
-    if (!room) return;
-
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("code") === room.code) return;
-
-    url.searchParams.set("code", room.code);
-    // `replaceState` e não navegação do router: a sala já está conectada, e
-    // navegar remontaria a árvore e reexecutaria a entrada. Aqui só o endereço
-    // muda, para o refresh e o favorito reencontrarem a mesa.
-    window.history.replaceState(null, "", url);
-  }, [room]);
-
-  if (status === "offline") {
-    return (
-      <Centered>
-        <WifiOff className="text-muted-foreground size-8" aria-hidden />
-        <h1 className="text-2xl font-semibold tracking-tight">Plateia</h1>
-        <p className="text-muted-foreground text-sm">
-          Esta instalação está em modo local. A visão dos jogadores precisa das chaves do Supabase
-          configuradas pelo mestre.
-        </p>
-        <Link href="/mesa" className="text-sm underline underline-offset-4">
-          Voltar
-        </Link>
-      </Centered>
-    );
-  }
-
-  if (status === "ready" && room) {
-    return <Connected roomId={room.id} code={room.code} />;
-  }
-
-  return (
-    <Centered>
-      <Smartphone className="text-muted-foreground size-8" aria-hidden />
-      <h1 className="text-2xl font-semibold tracking-tight">Entrar na mesa</h1>
-      <p className="text-muted-foreground text-sm">
-        Digite o código que o mestre está mostrando na tela dele.
-      </p>
-
-      <form
-        className="w-full space-y-3 text-left"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void connectAsPlayer(code);
-        }}
-      >
-        <Label htmlFor="room-code">Código da mesa</Label>
-        <Input
-          id="room-code"
-          value={code}
-          onChange={(event) => setCode(event.target.value.toUpperCase())}
-          maxLength={CODE_LENGTH}
-          autoCapitalize="characters"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="ABC234"
-          className="text-center text-lg tracking-[0.4em]"
-        />
-
-        {status === "error" ? <p className="text-destructive text-sm">{error}</p> : null}
-
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={code.length !== CODE_LENGTH || status === "loading"}
-        >
-          {status === "loading" ? <Loader2 className="animate-spin" /> : null}
-          Entrar
-        </Button>
-      </form>
-    </Centered>
-  );
-}
-
 /**
- * A mesa, em dois layouts.
+ * A visão do jogador: a cena, e a ficha do personagem.
  *
- * O que decide é a proporção da tela — ver `useTabbedLayout`.
- *
- * Mais alta que larga: a cena presa no topo cabe em no máximo 56% da altura,
- * então sobra espaço garantido para a ficha embaixo.
- *
- * Mais larga que alta: a cena pediria altura demais e sufocaria o resto, então
- * ela mesma volta a ser aba e só uma coisa aparece por vez.
- *
- * Nos dois casos a barra fica centralizada embaixo e o arraste lateral navega.
+ * A cena chega por SSE do daemon; a ficha, pelas rotas `/eu`. São dois níveis
+ * de entrada de propósito — o código da mesa dá acesso à cena, e o nome cria a
+ * ficha. Quem só quer olhar o mapa nunca vira uma linha na campanha do mestre.
  */
-function Connected({ roomId, code }: { roomId: string; code: string }) {
+export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMesa: string }) {
   const tabbed = useTabbedLayout();
 
   // A inscrição vive aqui, e não dentro da aba Cena: aba inativa é desmontada,
-  // e o jogador que fosse ver a ficha sairia do canal e perderia as trocas de
+  // e o jogador que fosse ver a ficha sairia do fluxo e perderia as trocas de
   // cena até voltar.
-  const live = useSubscription({ roomId });
+  const live = useSubscription(codigo);
 
   return (
     // `h-dvh` fixa a altura na viewport real do celular, já descontando a
     // barra do navegador.
     <main className="flex h-dvh min-w-0 flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center gap-2 border-b px-4 py-2 [@media(max-height:520px)]:py-1">
+      <header className="flex shrink-0 items-center gap-2 border-b px-4 py-2 select-none [@media(max-height:520px)]:py-1">
         <Smartphone className="text-muted-foreground size-4 shrink-0" aria-hidden />
-        <span className="text-sm font-medium [@media(max-height:520px)]:hidden">Mesa</span>
-        <code className="text-muted-foreground text-sm tracking-widest">{code}</code>
+        {/* O nome da mesa, e não o código: quem já entrou não precisa mais do
+            código, e precisa saber que entrou na mesa certa. */}
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{nomeDaMesa}</span>
       </header>
 
       {tabbed ? (
-        <TabbedLayout roomId={roomId} live={live} />
+        <TabbedLayout codigo={codigo} live={live} />
       ) : (
-        <StackedLayout roomId={roomId} live={live} />
+        <StackedLayout codigo={codigo} live={live} />
       )}
 
       {/* Fora das abas: a trilha não pode parar porque o jogador foi consultar
           a própria ficha. Música cortada no meio quebra a imersão que ela
           existe para criar. */}
       <SessionAudio track={live.track} volume={live.volume} />
+
+      {/* Fora das abas pelo mesmo motivo, e sobre a tela inteira em vez de
+          dentro da moldura da cena: a imagem em evidência costuma ser um
+          documento ou uma carta, e num retângulo de 16:9 no alto de um celular
+          nada disso se lê.
+
+          `dismissable` só aqui. O jogador tem também o mapa e a própria ficha,
+          e uma imagem que ele não pudesse encostar de lado o deixaria preso até
+          o mestre lembrar de tirá-la. Esconder é local: a imagem continua no ar
+          para todo mundo. */}
+      <SpotlightLayer spotlight={live.spotlight} dismissable />
     </main>
   );
 }
 
-type LayoutProps = { roomId: string; live: Subscription };
+type LayoutProps = { codigo: string; live: Subscription };
 
 /**
  * Tela em pé: cena presa no topo, abas embaixo para o resto.
@@ -180,7 +86,7 @@ type LayoutProps = { roomId: string; live: Subscription };
  * o conteúdo ao mesmo tempo. Presa, e não rolando junto: perder o mapa de
  * vista ao consultar a própria ficha é o oposto do que serve numa mesa.
  */
-function StackedLayout({ roomId, live }: LayoutProps) {
+function StackedLayout({ codigo, live }: LayoutProps) {
   const [tab, setTab] = useState<StackedTab>("personagem");
   const swipe = useSwipeTabs(STACKED_TABS, tab, setTab);
 
@@ -202,9 +108,8 @@ function StackedLayout({ roomId, live }: LayoutProps) {
       >
         <div className="min-h-0 flex-1" {...swipe}>
           <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">
-            <CharacterPanel roomId={roomId} />
+            <CharacterPanel codigo={codigo} />
           </TabsContent>
-
         </div>
 
         <BottomBar>
@@ -218,14 +123,22 @@ function StackedLayout({ roomId, live }: LayoutProps) {
   );
 }
 
-/** Nome, arquivos e notas — o bloco é o mesmo nos dois layouts. */
-function CharacterPanel({ roomId }: { roomId: string }) {
+/**
+ * Quem o jogador é, e os personagens que o mestre entregou a ele.
+ *
+ * Os arquivos e as notas saíram do jogador e foram para o PERSONAGEM. Antes
+ * ficavam pendurados na identidade de quem joga, e o mestre não tinha onde
+ * amarrar uma miniatura: se o jogador não anexasse a ficha, ou a apagasse no
+ * meio da campanha, não havia nada estável a que ligar.
+ *
+ * `PlayerIdentity` fica: o nome continua sendo dele.
+ */
+function CharacterPanel({ codigo }: { codigo: string }) {
   return (
-    <>
-      <PlayerIdentity roomId={roomId} />
-      <PlayerAttachments roomId={roomId} />
-      <PlayerNotes roomId={roomId} />
-    </>
+    <PlayerGate codigo={codigo}>
+      <PlayerIdentity codigo={codigo} />
+      <MyCharacters codigo={codigo} />
+    </PlayerGate>
   );
 }
 
@@ -237,14 +150,14 @@ function CharacterPanel({ roomId }: { roomId: string }) {
  */
 function BottomBar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex shrink-0 justify-center border-t p-1">
+    <div className="flex shrink-0 justify-center border-t p-1 select-none">
       <TabsList>{children}</TabsList>
     </div>
   );
 }
 
 /** Tela deitada: uma aba por vez, com arraste lateral e barra centralizada. */
-function TabbedLayout({ roomId, live }: LayoutProps) {
+function TabbedLayout({ codigo, live }: LayoutProps) {
   const [tab, setTab] = useState<Tab>("cena");
   const swipe = useSwipeTabs(TABBED_TABS, tab, setTab);
 
@@ -257,17 +170,16 @@ function TabbedLayout({ roomId, live }: LayoutProps) {
       <div className="min-h-0 flex-1" {...swipe}>
         <TabsContent value="cena" className="h-full p-2">
           <PlateiaStage
-          scene={live.scene}
-          portraits={live.portraits}
-          synced={live.synced}
-          stalled={live.stalled}
-        />
+            scene={live.scene}
+            portraits={live.portraits}
+            synced={live.synced}
+            stalled={live.stalled}
+          />
         </TabsContent>
 
         <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">
-          <CharacterPanel roomId={roomId} />
+          <CharacterPanel codigo={codigo} />
         </TabsContent>
-
       </div>
 
       <BottomBar>
@@ -281,14 +193,5 @@ function TabbedLayout({ roomId, live }: LayoutProps) {
         </TabsTrigger>
       </BottomBar>
     </Tabs>
-  );
-}
-
-/** Telas de antessala: uma coluna centrada, largura de celular. */
-function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col items-center justify-center gap-4 px-6 py-10 text-center">
-      {children}
-    </main>
   );
 }

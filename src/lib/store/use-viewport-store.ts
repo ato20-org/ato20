@@ -3,9 +3,11 @@
 import { create } from "zustand";
 
 import {
+  centerViewportOn,
   FULL_VIEWPORT,
   zoomViewportCentered,
 } from "@/lib/geometry/viewport";
+import type { Vec } from "@/lib/geometry/transform";
 import type { Viewport } from "@/types/scene";
 
 /** Passo dos botões e atalhos de zoom. */
@@ -25,6 +27,14 @@ type ViewportStore = {
   zoomIn: () => void;
   zoomOut: () => void;
   fit: () => void;
+  /**
+   * Leva a vista até um ponto do plano, mantendo a ampliação.
+   *
+   * Usado pela busca de pontos de anotação: escolher um da lista sem mover a
+   * vista não responderia nada, porque o alfinete pode estar fora do recorte
+   * atual.
+   */
+  centerOn: (point: Vec) => void;
 };
 
 /**
@@ -43,4 +53,5 @@ export const useViewportStore = create<ViewportStore>((set, get) => ({
   zoomIn: () => set({ viewport: zoomViewportCentered(get().viewport, STEP) }),
   zoomOut: () => set({ viewport: zoomViewportCentered(get().viewport, 1 / STEP) }),
   fit: () => set({ viewport: FULL_VIEWPORT }),
+  centerOn: (point) => set({ viewport: centerViewportOn(get().viewport, point) }),
 }));

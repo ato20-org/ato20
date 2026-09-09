@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Maximize, ZoomIn, ZoomOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   clampZoomState,
   FIT,
@@ -24,10 +25,22 @@ const BUTTON_STEP = 1.5;
  *
  * Ficha de personagem e mapa rabiscado só servem se puderem ser lidos de
  * perto. No encaixe a imagem cabe inteira; ampliando, arrasta-se para
- * percorrer. Vale igual para o jogador vendo o próprio arquivo e para o mestre
- * abrindo o de outro.
+ * percorrer. Vale igual para o jogador vendo o próprio arquivo, para o mestre
+ * abrindo o de outro, e para a mesa recebendo uma imagem em evidência.
+ *
+ * `className` decide o TAMANHO da caixa, e é a razão de ele existir: dentro de
+ * um diálogo a altura é fixa, e cobrindo a tela inteira ela tem de esticar.
+ * Sem isso, a evidência em tela cheia teria de reimplementar o gesto.
  */
-export function ImageZoom({ src, alt }: { src: string; alt: string }) {
+export function ImageZoom({
+  src,
+  alt,
+  className,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<ZoomState>(FIT);
   const [container, setContainer] = useState<Size>({ width: 0, height: 0 });
@@ -155,10 +168,13 @@ export function ImageZoom({ src, alt }: { src: string; alt: string }) {
   const fitted = isFit(state);
 
   return (
-    <div className="relative">
+    // A altura mora na raiz e o quadro a preenche, em vez de o quadro trazer a
+    // sua: assim quem chama muda o tamanho num lugar só, e a barra de zoom —
+    // que se posiciona pela raiz — acompanha.
+    <div className={cn("relative", className ?? "h-[70dvh]")}>
       <div
         ref={frameRef}
-        className="relative h-[70dvh] overflow-hidden rounded-md bg-black"
+        className="absolute inset-0 overflow-hidden rounded-md bg-black"
         // Sem isto o browser rouba o gesto de duas mãos para dar zoom na página.
         style={{ touchAction: "none", cursor: fitted ? "default" : "grab" }}
         onDoubleClick={() =>

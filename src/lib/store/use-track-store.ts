@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import { loadAudio, saveAudio } from "@/lib/storage/track";
+import { loadAudio, saveAudio } from "@/lib/vault/session";
 import { DEFAULT_SESSION_VOLUME, type SessionTrack } from "@/types/scene";
 
 type TrackStore = {
@@ -11,30 +11,41 @@ type TrackStore = {
   /**
    * Volume do som da sessão, de 0 a 1.
    *
-   * Fica fora da faixa e sobrevive a ela: trocar de música não mexe no ganho,
-   * e remover a trilha não perde o ajuste. É a barra do sistema, e toda faixa
-   * que entrar obedece a ela.
+   * Fica FORA da faixa e sobrevive a ela: trocar de música não mexe no ganho, e
+   * tirar a trilha não perde o ajuste. É a barra do sistema, e toda faixa que
+   * entrar obedece a ela.
+   *
+   * Guardado por faixa, cada troca trazia o ganho de quando aquela música foi
+   * escolhida e o som saltava — o mestre reajustava o slider a cada troca.
    */
   volume: number;
-  hydrated: boolean;
+  /** Qual campanha esta trilha pertence. Ver `use-scene-store`. */
+  hydratedPath: string | null;
 
-  hydrate: () => Promise<void>;
+  hydrate: (campaignPath: string) => Promise<void>;
   /** Escolhe a faixa e começa a tocar. O instante é estampado aqui. */
   start: (assetId: string) => void;
   /** Pausa ou retoma, reiniciando a contagem de posição. */
   setPlaying: (playing: boolean) => void;
   /** Regula o som da sessão. Vale com ou sem trilha escolhida. */
   setVolume: (volume: number) => void;
+  /**
+   * Move a faixa para um instante.
+   *
+   * Reescreve `startedAt` em vez de mandar um comando de "buscar": é assim que
+   * a posição já viajava, e por isso a TV e os celulares seguem sozinhos —
+   * cada um recalcula a própria posição a partir dele. Um comando novo exigiria
+   * que todos estivessem ouvindo no instante exato do clique.
+   */
+  seek: (seconds: number) => void;
   setLoop: (loop: boolean) => void;
   clear: () => void;
   /** Aplica um estado recebido do canal, sem regravar no disco. */
   receive: (track: SessionTrack | null) => void;
-  /** Assume o som que veio da mesa, gravando no disco. Ver `PortraitStore`. */
-  adopt: (track: SessionTrack | null, volume: number) => void;
 };
 
 /**
- * A trilha da sessão.
+ * A trilha da sessão, e o volume dela.
  *
  * Store próprio, separado do board, por dois motivos. O histórico de desfazer
  * tira retratos do board, e a música não deve voltar junto de um Ctrl+Z num
@@ -44,17 +55,20 @@ type TrackStore = {
 export const useTrackStore = create<TrackStore>((set, get) => ({
   track: null,
   volume: DEFAULT_SESSION_VOLUME,
-  hydrated: false,
+  hydratedPath: null,
 
-  async hydrate() {
-    if (get().hydrated) return;
+  async hydrate(campaignPath) {
+    if (get().hydratedPath === campaignPath) return;
+
+    // Zera antes de ler: a música da campanha anterior continuaria tocando
+    // sobre a nova enquanto o disco respondesse.
+    set({ track: null, volume: DEFAULT_SESSION_VOLUME, hydratedPath: campaignPath });
 
     try {
       const { track, volume } = await loadAudio();
-      set({ track, volume, hydrated: true });
+      set({ track, volume });
     } catch {
       // Sem trilha guardada é estado válido; não vale derrubar a tela por isso.
-      set({ hydrated: true });
     }
   },
 
@@ -74,7 +88,16 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   },
 
   setVolume(volume) {
+    // Sem `if (track)`: o volume é da sessão, e regular com o som parado tem de
+    // valer para a próxima faixa que entrar.
     persist(get().track, volume, set);
+  },
+
+  seek(seconds) {
+    const { track, volume } = get();
+    if (!track) return;
+
+    persist({ ...track, startedAt: Date.now() - Math.max(0, seconds) * 1000 }, volume, set);
   },
 
   setLoop(loop) {
@@ -83,19 +106,13 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   },
 
   clear() {
-    // O volume fica: é da sessão, e a próxima faixa entra nele.
+    // O volume fica: tirar a música não é abaixar o som.
     persist(null, get().volume, set);
   },
 
   receive(track) {
-    // Espectador não grava: o disco pertence a quem opera. E não recebe volume
-    // pelo store — quem assiste aplica o que vem na mensagem do canal.
-    set({ track, hydrated: true });
-  },
-
-  adopt(track, volume) {
-    persist(track, volume, set);
-    set({ hydrated: true });
+    // Espectador não grava: o disco pertence a quem opera.
+    set({ track });
   },
 }));
 
@@ -105,5 +122,5 @@ function persist(
   set: (partial: { track: SessionTrack | null; volume: number }) => void,
 ) {
   set({ track, volume });
-  void saveAudio({ track, volume });
+  void saveAudio(track, volume);
 }

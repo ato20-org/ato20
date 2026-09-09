@@ -3,21 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  deleteAsset,
-  getAssetMeta,
-  listAssets,
-  putAsset,
-  setAssetFolder,
-} from "@/lib/storage/assets";
-import { useRoomStore } from "@/lib/store/use-room-store";
-import { deleteRemoteAsset } from "@/lib/supabase/asset-sync";
-import { deleteAssetRow, upsertAssets } from "@/lib/supabase/library";
+import { deleteAsset, importAssets, listAssets, setAssetFolder } from "@/lib/vault/assets";
 import type { AssetKind, AssetMeta } from "@/types/scene";
 
 type AssetListApi = {
   assets: AssetMeta[];
-  upload: (files: FileList | null) => Promise<void>;
+  /** Abre o seletor nativo e copia o que for escolhido para a campanha. */
+  importar: () => Promise<void>;
   remove: (assetId: string) => Promise<void>;
   /** Move para uma pasta. `undefined` devolve à raiz. */
   move: (assetId: string, folderId: string | undefined) => Promise<void>;
@@ -29,6 +21,14 @@ type AssetListApi = {
  * Biblioteca de arquivos de um tipo. Compartilhada pelos painéis de imagem e
  * de som — os dois fazem o mesmo upload, listagem e exclusão, só a linha da
  * lista é diferente.
+ *
+ * Cada ação era duas antes: uma no IndexedDB e outra no Supabase, com a ordem
+ * entre elas importando (remoto primeiro na exclusão, para não deixar órfão
+ * pagando cota). Com o arquivo no disco de quem opera sobrou uma chamada por
+ * ação, e a pergunta "e se a segunda falhar" deixou de existir.
+ *
+ * Importar é seletor nativo e cópia no disco, e não `<input type="file">` com
+ * envio: o arquivo nunca entra na webview.
  */
 export function useAssetList(kind: AssetKind): AssetListApi {
   const [assets, setAssets] = useState<AssetMeta[]>([]);
@@ -36,9 +36,16 @@ export function useAssetList(kind: AssetKind): AssetListApi {
 
   useEffect(() => {
     let active = true;
-    void listAssets(kind).then((next) => {
-      if (active) setAssets(next);
-    });
+    void listAssets(kind).then(
+      (next) => {
+        if (active) setAssets(next);
+      },
+      () => {
+        // Sem campanha aberta a lista é vazia, não quebrada: a porta de
+        // escolher pasta está na frente desta tela.
+        if (active) setAssets([]);
+      },
+    );
 
     return () => {
       active = false;
@@ -47,39 +54,25 @@ export function useAssetList(kind: AssetKind): AssetListApi {
 
   const refresh = useCallback(() => setVersion((current) => current + 1), []);
 
-  const upload = useCallback(
-    async (files: FileList | null) => {
-      if (!files?.length) return;
+  const importar = useCallback(async () => {
+    try {
+      const resultado = await importAssets(kind);
 
-      const results = await Promise.allSettled([...files].map(putAsset));
-      const failed = results.filter((result) => result.status === "rejected").length;
+      // `null` é o diálogo fechado sem escolher: não muda nada, e não avisa.
+      if (!resultado) return;
 
-      if (failed > 0) toast.error(`${failed} arquivo(s) não puderam ser enviados.`);
+      // Um motivo por arquivo. "1 arquivo não pôde ser enviado" obriga quem
+      // escolheu doze a adivinhar qual e por quê.
+      for (const motivo of resultado.recusados) toast.error(motivo);
 
-      // NÃO sobe para o Storage aqui. Enviar tudo no momento do upload fazia o
-      // teto do bucket ser o tamanho da biblioteca, não o das cenas vivas — e
-      // o plano gratuito aperta primeiro nele. Quem sobe é o `useAssetSync`,
-      // quando o arquivo entra numa cena, num fundo, num retrato ou na trilha;
-      // o resto vai a pedido, pelo "Subir para a mesa" da linha.
-      refresh();
-    },
-    [refresh],
-  );
+      if (resultado.aceitos.length > 0) refresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+    }
+  }, [kind, refresh]);
 
   const remove = useCallback(
     async (assetId: string) => {
-      const roomId = useRoomStore.getState().room?.id;
-      // Remoto primeiro, local depois: se o remoto falhar, o arquivo continua
-      // listado e o mestre pode tentar de novo. Na ordem inversa ficaria um
-      // órfão pagando cota de Storage sem aparecer em lugar nenhum.
-      if (roomId) {
-        await deleteRemoteAsset(roomId, assetId);
-        // A linha sai junto: sem isso a outra máquina continuaria listando um
-        // arquivo cujo binário não existe mais, e tentaria baixá-lo a cada
-        // abertura da mesa.
-        await deleteAssetRow(roomId, assetId);
-      }
-
       await deleteAsset(assetId);
       refresh();
     },
@@ -89,17 +82,10 @@ export function useAssetList(kind: AssetKind): AssetListApi {
   const move = useCallback(
     async (assetId: string, folderId: string | undefined) => {
       await setAssetFolder(assetId, folderId);
-
-      // Pasta é organização, e organização é o que mais dói perder ao trocar
-      // de máquina: a linha acompanha na hora.
-      const roomId = useRoomStore.getState().room?.id;
-      const meta = roomId ? await getAssetMeta(assetId) : undefined;
-      if (roomId && meta) await upsertAssets(roomId, [meta]);
-
       refresh();
     },
     [refresh],
   );
 
-  return { assets, upload, remove, move, refresh };
+  return { assets, importar, remove, move, refresh };
 }

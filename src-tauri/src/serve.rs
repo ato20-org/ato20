@@ -1,0 +1,2287 @@
+use std::net::{IpAddr, SocketAddr, TcpListener, UdpSocket};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, RwLock};
+
+use axum::body::Body;
+use axum::extract::{
+    ConnectInfo, DefaultBodyLimit, Multipart, Path as AxumPath, Query, Request as AxumRequest,
+    State,
+};
+use axum::http::{Request, StatusCode, Uri};
+use axum::middleware::{self, Next};
+use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
+use axum::Router;
+use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
+use tokio::sync::broadcast;
+use tokio_stream::{Stream, StreamExt};
+use tower::ServiceExt;
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
+
+mod page;
+
+use crate::error::AppResult;
+use crate::vault::{assets, characters, players, Vault};
+use page::ErrorPage;
+
+/// A campanha aberta, compartilhada entre a janela e o daemon.
+///
+/// `RwLock` e nao `Mutex`: toda requisicao de arquivo le, e trocar de campanha
+/// -- a unica escrita -- acontece uma vez por sessao.
+pub type SharedVault = Arc<RwLock<Option<Vault>>>;
+
+/// O anexo de jogador que esta em evidencia, se houver.
+///
+/// Um slot, e nao um mapa: evidencia e singular por construcao -- a mesa olha
+/// UMA coisa -- e transmitir outra coisa substitui esta, sem deixar endereco
+/// vivo para tras. Tirar do ar apaga daqui, e o endereco morre com isso.
+pub type SharedEvidence = Arc<RwLock<Option<Evidence>>>;
+
+/// Um anexo de jogador alcancavel pela mesa enquanto o mestre o mantem no ar.
+pub struct Evidence {
+    /// Id sorteado a cada transmissao.
+    ///
+    /// E o que substitui, nesta rota, o token que protege `/eu/anexos`: o nome
+    /// do arquivo e adivinhavel -- "ficha.pdf" e o palpite obvio --, e 32 hex
+    /// aleatorios nao sao. Novo a cada vez, para o endereco de ontem nao
+    /// responder hoje.
+    pub id: String,
+    pub path: PathBuf,
+}
+
+/// O endereco do daemon, entregue a webview.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DaemonAddr {
+    /// Loopback. E por aqui que a janela do Operador fala com o daemon.
+    pub url: String,
+    /// O mesmo daemon pelo IP da rede local, para a TV e os celulares.
+    ///
+    /// `None` quando nao ha rota de rede -- maquina sem Wi-Fi nem cabo. A tela
+    /// diz isso, em vez de mostrar um endereco que nao responderia.
+    pub lan_url: Option<String>,
+    /// Segredo exigido nas rotas que ESCREVEM.
+    ///
+    /// A porta agora esta na REDE, e nao mais so em loopback: sem o token,
+    /// qualquer aparelho do Wi-Fi poderia enviar arquivo para o acervo do
+    /// mestre. Nasce a cada abertura do aplicativo e nao e gravado em lugar
+    /// nenhum.
+    pub token: String,
+}
+
+const TOKEN_HEADER: &str = "x-ato20-token";
+
+/// Quantos estados o canal guarda para quem esta lendo devagar.
+///
+/// Baixo de proposito. O Operador publica 10 vezes por segundo, e um espectador
+/// atrasado nao quer o historico -- quer o estado ATUAL. Estourar a fila faz o
+/// receptor pular para o mais recente, que e o comportamento certo aqui: cena
+/// velha na TV e pior que cena que saltou.
+const LIVE_BUFFER: usize = 8;
+
+pub struct Daemon {
+    vault: SharedVault,
+    token: String,
+    /// De onde sai o HTML das telas de espectador. `None` = nao encontrado.
+    web_root: Option<PathBuf>,
+    /// O ultimo estado publicado, cru.
+    ///
+    /// Guardado para responder a quem chega no meio da sessao, e e ele que
+    /// substituiu o aperto de mao `live:request`: em vez de o espectador pedir
+    /// e esperar o Operador ouvir, o daemon ja tem a resposta na conexao.
+    live: Mutex<Option<String>>,
+    live_tx: broadcast::Sender<String>,
+    /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
+    evidence: SharedEvidence,
+}
+
+impl Daemon {
+    fn new(vault: SharedVault, token: String, web_root: Option<PathBuf>) -> Self {
+        let (live_tx, _) = broadcast::channel(LIVE_BUFFER);
+
+        Self {
+            vault,
+            token,
+            web_root,
+            live: Mutex::new(None),
+            live_tx,
+            evidence: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// O codigo da campanha aberta, se houver.
+    fn code(&self) -> Option<String> {
+        self.vault
+            .read()
+            .expect("vault envenenado")
+            .as_ref()
+            .map(|vault| vault.config.codigo.clone())
+    }
+}
+
+/// Sobe o daemon numa thread com runtime proprio.
+///
+/// Thread e nao `tauri::async_runtime` porque o loop de eventos da janela nao
+/// e tokio, e um servidor bloqueando nele congelaria a interface. O `bind` e
+/// sincrono de proposito: a porta e efemera, e a webview precisa do numero
+/// antes de renderizar a primeira imagem.
+///
+/// Escuta em `0.0.0.0`, e nao mais so em loopback: e isso que solta a TV e os
+/// celulares da maquina do mestre.
+pub struct Started {
+    /// Onde a webview alcanca o daemon.
+    pub addr: DaemonAddr,
+    /// A mesma caixa que o daemon le ao servir `/evidencia/{id}`.
+    ///
+    /// Devolvida para a janela poder POR algo nela pelo IPC. O `Daemon` a cria
+    /// e a mantem; isto e so o outro punho da mesma alavanca.
+    pub evidence: SharedEvidence,
+}
+
+pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>) -> AppResult<Started> {
+    let listener = bind()?;
+    let port = listener.local_addr()?.port();
+    listener.set_nonblocking(true)?;
+
+    let token = uuid::Uuid::new_v4().simple().to_string();
+    let lan_url = lan_ip().map(|ip| format!("http://{ip}:{port}"));
+
+    let state = Arc::new(Daemon::new(vault, token.clone(), web_root));
+    let evidence = Arc::clone(&state.evidence);
+
+    std::thread::Builder::new()
+        .name("ato20-daemon".into())
+        .spawn(move || {
+            let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+                Ok(runtime) => runtime,
+                Err(cause) => {
+                    log::error!("daemon: runtime nao subiu: {cause}");
+                    return;
+                }
+            };
+
+            runtime.block_on(async move {
+                let listener = match tokio::net::TcpListener::from_std(listener) {
+                    Ok(listener) => listener,
+                    Err(cause) => {
+                        log::error!("daemon: porta nao adotada: {cause}");
+                        return;
+                    }
+                };
+
+                // `into_make_service_with_connect_info` para o handler poder
+                // saber de onde a requisicao veio: publicar cena e restrito a
+                // loopback, e sem isso essa checagem nao existiria.
+                let service = router(state).into_make_service_with_connect_info::<SocketAddr>();
+
+                if let Err(cause) = axum::serve(listener, service).await {
+                    log::error!("daemon: servico caiu: {cause}");
+                }
+            });
+        })?;
+
+    Ok(Started {
+        addr: DaemonAddr {
+            url: format!("http://127.0.0.1:{port}"),
+            lan_url,
+            token,
+        },
+        evidence,
+    })
+}
+
+/// Porta preferida.
+///
+/// Fixa, e nao efemera, por causa do celular: com porta sorteada a cada
+/// abertura, o endereco da Plateia muda toda sessao, e nenhum jogador consegue
+/// guardar o link nem recarregar a aba do dia anterior. Um numero estavel deixa
+/// o favorito valer.
+///
+/// Fora das faixas registradas comuns e do que um dev costuma ter em pe (3000,
+/// 5173, 8080, 8000).
+const PREFERRED_PORT: u16 = 20200;
+
+/// Abre a porta preferida, ou uma efemera se ela estiver ocupada.
+///
+/// Ocupada acontece de verdade: uma segunda janela do aplicativo, ou o processo
+/// anterior ainda soltando o socket. Cair para efemera e melhor que recusar a
+/// abrir -- a sessao funciona, so custa reler o endereco na tela.
+fn bind() -> AppResult<TcpListener> {
+    match TcpListener::bind(("0.0.0.0", PREFERRED_PORT)) {
+        Ok(listener) => Ok(listener),
+        Err(cause) => {
+            log::warn!("porta {PREFERRED_PORT} ocupada ({cause}); sorteando outra");
+            Ok(TcpListener::bind("0.0.0.0:0")?)
+        }
+    }
+}
+
+/// O IP desta maquina na rede local.
+///
+/// Sem crate de enumeracao de interfaces: abrir um socket UDP e "conectar" a um
+/// endereco roteavel nao envia pacote nenhum, e faz o sistema escolher a
+/// interface de saida pela propria tabela de rotas. E isso que se quer -- a
+/// interface por onde os celulares da casa chegam -- e nao a primeira da lista,
+/// que costuma ser docker ou uma VPN.
+fn lan_ip() -> Option<IpAddr> {
+    // Dois alvos: um publico, e um privado para o caso de a casa nao ter saida
+    // para a internet. Nenhum dos dois recebe nada.
+    for target in ["1.1.1.1:80", "192.168.0.1:80"] {
+        let Ok(socket) = UdpSocket::bind("0.0.0.0:0") else {
+            continue;
+        };
+
+        if socket.connect(target).is_err() {
+            continue;
+        }
+
+        if let Ok(addr) = socket.local_addr() {
+            if !addr.ip().is_loopback() && !addr.ip().is_unspecified() {
+                return Some(addr.ip());
+            }
+        }
+    }
+
+    None
+}
+
+/// As rotas.
+///
+/// Separado do `spawn` para poder ser exercitado sem abrir porta -- o portao de
+/// token e o do codigo da mesa sao os unicos controles que existem, e eles
+/// merecem teste.
+pub fn router(state: Arc<Daemon>) -> Router {
+    Router::new()
+        .route("/asset/{id}", get(serve_asset))
+        .route("/evidencia/{id}", get(serve_evidence))
+        .route("/sala", get(check))
+        .route("/sala/entrar", post(join_table))
+        .route("/sala/live", get(live))
+        .nest("/eu", player_routes(Arc::clone(&state)))
+        .route(
+            "/sala/publicar",
+            post(publish)
+                // O padrao do axum sao 2 MB, e o corpo aqui e a cena inteira em
+                // JSON. Uma cena com muitos itens passaria disso e a publicacao
+                // falharia em silencio -- a TV simplesmente pararia de
+                // atualizar, sem nada na tela dizendo por que.
+                .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
+                .layer(middleware::from_fn_with_state(
+                    Arc::clone(&state),
+                    require_token,
+                )),
+        )
+        .route("/saude", get(|| async { "ok" }))
+        // Tudo que nao casou com as rotas acima e a tela do espectador.
+        .fallback(get(serve_web))
+        // A janela do Operador roda em outra origem (`http://localhost:3000` em
+        // dev, o protocolo do Tauri empacotado), entao o `fetch` dela e
+        // cross-origin. Liberar e seguro porque quem autoriza escrita e o
+        // token, nao a origem -- CORS nunca protegeu nada contra quem controla
+        // o cliente. O espectador e servido POR aqui, e nem precisa disso.
+        .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).allow_methods(Any))
+        .with_state(state)
+}
+
+/// As rotas da ficha do jogador, todas atras do token dele.
+///
+/// Agrupadas num `nest` com uma camada so, em vez de repetir a checagem em cada
+/// handler: uma rota nova aqui nasce protegida, e esquecer o portao deixou de
+/// ser possivel. Era o que a RLS do Postgres fazia -- a protecao vinha da
+/// tabela, nao de cada consulta.
+fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
+    Router::new()
+        .route("/", get(me).patch(update_me))
+        .route(
+            "/anexos",
+            get(my_attachments).post(upload_attachment).layer(
+                // Desligado, e nao aumentado: o handler conta os bytes que
+                // chegam e recusa acima de 64 MB com uma mensagem. Deixar o
+                // padrao de 2 MB do axum cortava o stream antes disso, e o
+                // multer via corpo truncado -- o cliente recebia "load failed"
+                // e o log dizia "Error parsing multipart/form-data", nenhum dos
+                // dois apontando para o limite.
+                DefaultBodyLimit::disable(),
+            ),
+        )
+        .route("/anexos/{arquivo}", get(read_attachment).delete(remove_attachment))
+        // Personagens: so os VINCULADOS a este jogador. Token valido nao basta,
+        // e cada rota confere -- ver `ligado`.
+        .route("/personagens", get(my_characters))
+        .route(
+            "/personagens/{id}/anexos",
+            get(character_files).post(upload_character_file).layer(
+                // Desligado, e nao aumentado, pelo mesmo motivo de `/eu/anexos`:
+                // quem conta os bytes e o handler, e o padrao de 2 MB do axum
+                // cortava o stream antes de o teto ser alcancado.
+                DefaultBodyLimit::disable(),
+            ),
+        )
+        .route(
+            "/personagens/{id}/anexos/{autor}/{arquivo}",
+            get(read_character_file).delete(remove_character_file),
+        )
+        .route("/personagens/{id}/nota", get(read_character_note).put(write_character_note))
+        .layer(middleware::from_fn_with_state(state, require_player))
+}
+
+/// Exige o token nas rotas que escrevem.
+async fn require_token(
+    State(state): State<Arc<Daemon>>,
+    request: AxumRequest,
+    next: Next,
+) -> Response {
+    let provided = request
+        .headers()
+        .get(TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok());
+
+    if provided != Some(state.token.as_str()) {
+        return fail(StatusCode::UNAUTHORIZED, "token ausente ou invalido");
+    }
+
+    next.run(request).await
+}
+
+/// Resolve o token do jogador e o deixa na requisicao.
+///
+/// `Authorization: Bearer <token>`. O jogador nunca diz QUEM e -- ele apresenta
+/// o token, e quem decide a identidade e o banco. E a diferenca entre isto e um
+/// `?jogador={id}`, que deixaria qualquer um ler a ficha alheia trocando o id.
+async fn require_player(
+    State(state): State<Arc<Daemon>>,
+    mut request: AxumRequest,
+    next: Next,
+) -> Response {
+    let token = request
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(str::to_string);
+
+    let Some(token) = token else {
+        return fail(StatusCode::UNAUTHORIZED, "sem credencial de jogador");
+    };
+
+    let found = {
+        let guard = state.vault.read().expect("vault envenenado");
+        let Some(vault) = guard.as_ref() else {
+            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        };
+
+        players::by_token(vault, &token)
+    };
+
+    match found {
+        Ok(Some(player)) => {
+            request.extensions_mut().insert(player);
+            next.run(request).await
+        }
+        // Token que nao resolve inclui o caso de o mestre ter tirado o jogador
+        // da mesa, e tambem o de a campanha ter mudado. A tela do jogador trata
+        // os dois igual: volta para a porta.
+        Ok(None) => fail(StatusCode::UNAUTHORIZED, "credencial nao reconhecida"),
+        Err(cause) => {
+            log::error!("jogadores: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "banco da campanha ilegivel")
+        }
+    }
+}
+
+/// Erro HTTP curto. O daemon nao devolve o `AppError` inteiro: o corpo de uma
+/// resposta HTTP e visivel na rede, e caminho de disco nao precisa estar nele.
+fn fail(status: StatusCode, message: &str) -> Response {
+    (status, message.to_string()).into_response()
+}
+
+
+// --- a cena no ar -----------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct CodeQuery {
+    codigo: Option<String>,
+}
+
+/// Confere o codigo da mesa contra a campanha aberta.
+///
+/// O codigo nao e senha forte -- seis caracteres, ditados em voz alta no comeco
+/// da sessao. O que ele faz e impedir que um aparelho do mesmo Wi-Fi caia na
+/// cena por acaso ao varrer portas. Contra alguem determinado na tua rede ele
+/// nao defende, e nao ha limite de tentativas: o README diz isso com essas
+/// palavras, para a decisao ser consciente em vez de parecer protecao.
+fn code_matches(state: &Daemon, provided: Option<&str>) -> Result<(), Response> {
+    let Some(expected) = state.code() else {
+        return Err(fail(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "nenhuma campanha aberta",
+        ));
+    };
+
+    if provided.unwrap_or_default().trim().eq_ignore_ascii_case(&expected) {
+        return Ok(());
+    }
+
+    Err(fail(StatusCode::FORBIDDEN, "codigo da mesa invalido"))
+}
+
+/// O que o espectador precisa saber da mesa que encontrou.
+#[derive(Debug, Serialize)]
+pub struct RoomInfo {
+    pub nome: String,
+}
+
+/// `GET /sala?codigo=XXXXXX` -- confere o codigo e diz o nome da campanha.
+///
+/// Existe por causa do `EventSource`: ele nao entrega o status da resposta ao
+/// JavaScript. Um 403 no `/sala/live` chegaria a tela como `onerror`
+/// indistinguivel de queda de rede, e o proprio `EventSource` reconectaria em
+/// loop contra um codigo que nunca vai passar. A porta confere aqui, com
+/// `fetch`, e so abre o fluxo depois.
+///
+/// Devolver o nome nao e enfeite: e o que deixa o jogador confirmar que entrou
+/// na mesa certa antes de a primeira cena chegar.
+async fn check(
+    State(state): State<Arc<Daemon>>,
+    Query(query): Query<CodeQuery>,
+) -> Result<axum::Json<RoomInfo>, Response> {
+    code_matches(&state, query.codigo.as_deref())?;
+
+    let nome = state
+        .vault
+        .read()
+        .expect("vault envenenado")
+        .as_ref()
+        .map(|vault| vault.config.nome.clone())
+        .unwrap_or_default();
+
+    Ok(axum::Json(RoomInfo { nome }))
+}
+
+/// `POST /sala/publicar` -- o Operador anuncia o estado atual.
+///
+/// Restrito a loopback ALEM do token. O token sozinho ja bastaria, e ele nao
+/// sai desta maquina -- so a janela o recebe, pelo IPC. Mas a porta agora esta
+/// na rede, e publicar cena e a unica rota cujo abuso apareceria direto na TV
+/// da mesa; a segunda condicao custa tres linhas.
+async fn publish(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    body: String,
+) -> Response {
+    if !addr.ip().is_loopback() {
+        return fail(StatusCode::FORBIDDEN, "publicar so a partir desta maquina");
+    }
+
+    // Valida que e JSON antes de guardar. O daemon nao ENTENDE `LiveState` --
+    // ele e opaco, como a cena --, mas repassar lixo faria cada espectador
+    // falhar no `JSON.parse` sem ninguem saber de onde veio.
+    if serde_json::from_str::<serde_json::Value>(&body).is_err() {
+        return fail(StatusCode::BAD_REQUEST, "corpo nao e JSON");
+    }
+
+    *state.live.lock().expect("live envenenado") = Some(body.clone());
+
+    // `send` falha quando nao ha receptor nenhum. Nao e erro: significa que a
+    // mesa ainda nao abriu tela, e o estado ja esta guardado para quando abrir.
+    let _ = state.live_tx.send(body);
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// `GET /sala/live?codigo=XXXXXX` -- a cena, em SSE.
+///
+/// SSE e nao WebSocket: o fluxo e de mao unica a 10Hz, o `EventSource` reconecta
+/// sozinho, e o pouco que o espectador manda para cima e HTTP normal. Um
+/// WebSocket cobraria handshake e keepalive proprios para nada.
+async fn live(
+    State(state): State<Arc<Daemon>>,
+    Query(query): Query<CodeQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
+    code_matches(&state, query.codigo.as_deref())?;
+
+    // `subscribe` ANTES de ler o guardado, nesta ordem: no inverso, uma
+    // publicacao entre as duas linhas nao entraria em nenhum dos dois, e o
+    // espectador ficaria uma amostra atras sem nada indicando isso.
+    let receiver = state.live_tx.subscribe();
+    let current = state.live.lock().expect("live envenenado").clone();
+
+    // O estado atual primeiro, depois o fluxo. E o que faz quem abre a TV no
+    // meio da sessao ver a cena na hora em vez de esperar o mestre mexer em
+    // algo -- e e o que apagou o `live:request` do protocolo, porque o daemon
+    // ja sabe a resposta e nao precisa perguntar a ninguem.
+    let replay = tokio_stream::iter(current.into_iter());
+    let updates = tokio_stream::wrappers::BroadcastStream::new(receiver).filter_map(|item| {
+        // Receptor lento que perdeu amostras: seguir para a proxima e o certo,
+        // porque o que interessa e o estado atual, nao o historico.
+        item.ok()
+    });
+
+    Ok(Sse::new(
+        replay
+            .chain(updates)
+            .map(|state| Ok(Event::default().data(state))),
+    )
+    // A rede local derruba conexao ociosa, e celular com a tela apagada e
+    // exatamente isso. O keep-alive do SSE e o que mantem o socket vivo entre
+    // duas cenas.
+    .keep_alive(KeepAlive::default()))
+}
+
+// --- a ficha do jogador -----------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct JoinBody {
+    codigo: String,
+    nome: String,
+}
+
+/// O que volta na entrada. O token aparece AQUI e em lugar nenhum mais.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinResult {
+    pub id: String,
+    pub nome: String,
+    pub token: String,
+}
+
+/// `POST /sala/entrar` -- o jogador se apresenta e recebe a credencial.
+///
+/// Exige o codigo da mesa: sem ele, qualquer aparelho do Wi-Fi criaria fichas
+/// na campanha do mestre.
+///
+/// Sem token de maquina, ao contrario das outras rotas de escrita, e tem de ser
+/// assim: e justamente a rota de quem ainda nao tem credencial nenhuma.
+async fn join_table(
+    State(state): State<Arc<Daemon>>,
+    axum::Json(body): axum::Json<JoinBody>,
+) -> Response {
+    if let Err(recusa) = code_matches(&state, Some(&body.codigo)) {
+        return recusa;
+    }
+
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    match players::join(vault, &body.nome) {
+        Ok((player, token)) => (
+            StatusCode::CREATED,
+            axum::Json(JoinResult {
+                id: player.id,
+                nome: player.nome,
+                token,
+            }),
+        )
+            .into_response(),
+        Err(crate::error::AppError::Malformed { .. }) => {
+            fail(StatusCode::BAD_REQUEST, "diga um nome para a mesa te achar")
+        }
+        Err(cause) => {
+            log::error!("entrada de jogador: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao entrar na mesa")
+        }
+    }
+}
+
+/// `GET /eu` -- a propria ficha.
+///
+/// O jogador vem da camada, resolvido pelo token: ele nunca informa o proprio
+/// id, e por isso nao ha id a trocar para ler a ficha de outro.
+async fn me(axum::Extension(player): axum::Extension<players::Player>) -> Response {
+    axum::Json(player).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateMe {
+    nome: Option<String>,
+    notas: Option<String>,
+}
+
+/// `PATCH /eu` -- o jogador muda o proprio nome e as proprias notas.
+///
+/// O corpo tem `nome` e `notas`, e mais nada: a ausencia dos outros campos E o
+/// controle. `entrouEm` e `vistoEm` sao do daemon, e um celular que os
+/// reescrevesse mudaria a ordem da lista da mesa. No Postgres isso era
+/// privilegio de coluna; aqui e o campo nao existir nesta rota nem em
+/// `update_self`.
+async fn update_me(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    axum::Json(body): axum::Json<UpdateMe>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    match players::update_self(vault, &player.id, body.nome.as_deref(), body.notas.as_deref()) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(cause) => {
+            log::error!("ficha de {}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar a ficha")
+        }
+    }
+}
+
+async fn my_attachments(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    match players::list_attachments(vault, &player.id) {
+        Ok(anexos) => axum::Json(anexos).into_response(),
+        Err(cause) => {
+            log::error!("anexos de {}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao listar os anexos")
+        }
+    }
+}
+
+// --- personagens do jogador -------------------------------------------------
+
+/// Confere o vinculo e devolve a campanha aberta.
+///
+/// Toda rota de personagem passa por aqui, e e a unica coisa que separa o
+/// jogador da ficha dos outros. O token diz QUEM ele e; o vinculo diz o que e
+/// dele. Sem esta checagem, `/eu/personagens/{id}/anexos` seria um id
+/// adivinhavel de distancia da preparacao do mestre.
+fn ligado(state: &Arc<Daemon>, jogador: &str, personagem: &str) -> Result<Vault, Response> {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return Err(fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta"));
+    };
+
+    match players::is_linked(vault, jogador, personagem) {
+        Ok(true) => Ok(vault.clone()),
+        // 404 e nao 403: dizer "existe mas nao e seu" confirmaria a existencia
+        // de um personagem a quem chutou o id.
+        Ok(false) => Err(fail(StatusCode::NOT_FOUND, "personagem nao encontrado")),
+        Err(cause) => {
+            log::error!("vinculo de {jogador}: {cause}");
+            Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao conferir o vinculo"))
+        }
+    }
+}
+
+/// `GET /eu/personagens` -- os personagens deste jogador.
+async fn my_characters(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    let (Ok(ids), Ok(todos)) = (
+        players::characters_of(vault, &player.id),
+        characters::load(vault),
+    ) else {
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler os personagens");
+    };
+
+    // Filtra o indice pelos ids vinculados, mantendo a ordem do VINCULO: e a
+    // ordem em que o mestre entregou os personagens a este jogador.
+    let meus: Vec<&characters::Personagem> = ids
+        .iter()
+        .filter_map(|id| todos.iter().find(|p| &p.id == id))
+        .collect();
+
+    axum::Json(meus).into_response()
+}
+
+/// `GET /eu/personagens/{id}/anexos`
+async fn character_files(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match characters::list_anexos(&vault, &id) {
+        Ok(anexos) => axum::Json(anexos).into_response(),
+        Err(cause) => {
+            log::error!("anexos do personagem {id}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao listar os anexos")
+        }
+    }
+}
+
+/// `GET /eu/personagens/{id}/anexos/{autor}/{arquivo}`
+///
+/// O `autor` esta no caminho porque ele e o diretorio: "ficha.pdf" do mestre e
+/// "ficha.pdf" do jogador sao dois arquivos, e sem ele a rota teria de escolher
+/// um dos dois em silencio.
+async fn read_character_file(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, autor, arquivo)): AxumPath<(String, String, String)>,
+    request: Request<Body>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let autor = match autor.as_str() {
+        "mestre" => characters::Autor::Mestre,
+        "jogador" => characters::Autor::Jogador,
+        _ => return fail(StatusCode::NOT_FOUND, "anexo nao encontrado"),
+    };
+
+    // Le pelo modulo, que sanea o nome na LEITURA tambem: e o que impede
+    // `../../config.json` de virar caminho por aqui.
+    let bytes = match characters::read_anexo(&vault, &id, autor, &arquivo) {
+        Ok(bytes) => bytes,
+        Err(_) => return fail(StatusCode::NOT_FOUND, "anexo nao encontrado"),
+    };
+
+    let mime_type = characters::mime_do_anexo(&arquivo);
+
+    ([(axum::http::header::CONTENT_TYPE, mime_type)], bytes).into_response()
+}
+
+/// `POST /eu/personagens/{id}/anexos` -- multipart, campo `file`.
+///
+/// Grava sempre como `Autor::Jogador`, e isso nao e parametro: o autor sai de
+/// QUEM esta chamando, nunca do corpo. Aceita-lo faria o jogador poder escrever
+/// na pasta do mestre, que e justamente a que ele nao pode tocar.
+async fn upload_character_file(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+    multipart: Multipart,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let autor = characters::Autor::Jogador;
+
+    if let Err(cause) = std::fs::create_dir_all(characters::anexos_dir(&vault, &id, autor)) {
+        log::error!("anexo do personagem {id}: {cause}");
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
+    }
+
+    let temp = characters::anexo_temp(&vault, &id, autor);
+
+    let nome = match recebe_arquivo(multipart, &temp, autor.max_bytes()).await {
+        Ok(nome) => nome,
+        Err(response) => return response,
+    };
+
+    match characters::adopt_anexo(&vault, &id, autor, &temp, &nome) {
+        Ok(anexo) => (StatusCode::CREATED, axum::Json(anexo)).into_response(),
+        Err(crate::error::AppError::Malformed { cause, .. }) => {
+            (StatusCode::CONFLICT, cause).into_response()
+        }
+        Err(cause) => {
+            log::error!("anexo do personagem {id}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao guardar o anexo")
+        }
+    }
+}
+
+/// `DELETE /eu/personagens/{id}/anexos/{autor}/{arquivo}`
+///
+/// So o que o proprio jogador anexou. O que o mestre pos e leitura para ele --
+/// e o outro lado da segmentacao: a ficha existe independente de quem joga, e
+/// nao pode sumir porque alguem se irritou com a sessao.
+async fn remove_character_file(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, autor, arquivo)): AxumPath<(String, String, String)>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    if autor != "jogador" {
+        return fail(StatusCode::FORBIDDEN, "este anexo e do mestre");
+    }
+
+    match characters::remove_anexo(&vault, &id, characters::Autor::Jogador, &arquivo) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(cause) => {
+            log::error!("anexo {arquivo} do personagem {id}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao remover o anexo")
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct NotaBody {
+    texto: String,
+}
+
+/// `GET /eu/personagens/{id}/nota`
+async fn read_character_note(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match players::note(&vault, &id, &player.id) {
+        Ok(texto) => axum::Json(NotaBody { texto }).into_response(),
+        Err(cause) => {
+            log::error!("nota de {} sobre {id}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler a nota")
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WriteNota {
+    texto: String,
+}
+
+/// `PUT /eu/personagens/{id}/nota`
+///
+/// A nota e do PAR (personagem, jogador), e o jogador nunca informa o proprio
+/// id: ele vem do token. Nao ha id a trocar para escrever na nota de outro.
+async fn write_character_note(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+    axum::Json(body): axum::Json<WriteNota>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match players::set_note(&vault, &id, &player.id, &body.texto) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(cause) => {
+            log::error!("nota de {} sobre {id}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar a nota")
+        }
+    }
+}
+
+/// `GET /eu/anexos/{arquivo}`
+///
+/// Atras do token, ao contrario de `/asset/{id}`. A diferenca e o que o arquivo
+/// e: mapa e trilha sao o que a mesa toda ve, e o id deles e um UUID que so
+/// chega junto com a cena. Um anexo e a ficha de UMA pessoa, e o nome dele e
+/// adivinhavel -- "ficha.pdf" e o palpite obvio.
+async fn read_attachment(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(arquivo): AxumPath<String>,
+    request: Request<Body>,
+) -> Response {
+    let found = {
+        let guard = state.vault.read().expect("vault envenenado");
+        let Some(vault) = guard.as_ref() else {
+            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        };
+
+        players::attachment_path(vault, &player.id, &arquivo)
+            .map(|caminho| (caminho, players::mime_for(&arquivo).to_string()))
+    };
+
+    let Some((caminho, mime_type)) = found else {
+        return fail(StatusCode::NOT_FOUND, "anexo nao encontrado");
+    };
+
+    match ServeFile::new_with_mime(
+        &caminho,
+        &mime_type.parse().unwrap_or(mime::APPLICATION_OCTET_STREAM),
+    )
+    .oneshot(request)
+    .await
+    {
+        Ok(response) => response.into_response(),
+        Err(cause) => {
+            log::error!("anexo {arquivo}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o anexo")
+        }
+    }
+}
+
+/// Recebe o campo `file` de um multipart para um arquivo temporario.
+///
+/// Extraido quando o anexo de PERSONAGEM passou a precisar do mesmo caminho.
+/// Uma segunda copia deste laco seria a que esquece de apagar o temporario num
+/// dos ramos de erro -- sao seis -- e deixa lixo invisivel na pasta da
+/// campanha.
+///
+/// Em stream para o disco, e nao para a memoria: sao 64 MB vindos de um celular
+/// e varios podem chegar juntos. O teto e conferido a cada pedaco, entao um
+/// envio grande e cortado no meio em vez de ser medido depois de caber na RAM.
+///
+/// Devolve o nome que o cliente declarou. O temporario fica no lugar, para quem
+/// chamou adota-lo; em qualquer erro ele e removido antes de a resposta sair.
+async fn recebe_arquivo(
+    mut multipart: Multipart,
+    temp: &std::path::Path,
+    teto: u64,
+) -> Result<String, Response> {
+    let mut nome = String::new();
+    let mut recebido = false;
+    let mut tamanho: u64 = 0;
+
+    loop {
+        let field = match multipart.next_field().await {
+            Ok(Some(field)) => field,
+            Ok(None) => break,
+            Err(cause) => {
+                let _ = tokio::fs::remove_file(temp).await;
+                log::warn!("anexo: multipart invalido: {cause}");
+                return Err(fail(StatusCode::BAD_REQUEST, "envio malformado"));
+            }
+        };
+
+        if field.name().unwrap_or_default() != "file" {
+            let _ = field.bytes().await;
+            continue;
+        }
+
+        nome = field.file_name().unwrap_or("arquivo").to_string();
+
+        let mut file = match tokio::fs::File::create(temp).await {
+            Ok(file) => file,
+            Err(cause) => {
+                log::error!("anexo: {cause}");
+                return Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco"));
+            }
+        };
+
+        let mut field = field;
+        loop {
+            match field.chunk().await {
+                Ok(Some(chunk)) => {
+                    tamanho += chunk.len() as u64;
+
+                    if tamanho > teto {
+                        let _ = tokio::fs::remove_file(temp).await;
+                        return Err(fail(
+                            StatusCode::PAYLOAD_TOO_LARGE,
+                            &format!("arquivo acima do teto de {} MB", teto / 1024 / 1024),
+                        ));
+                    }
+
+                    if let Err(cause) = file.write_all(&chunk).await {
+                        let _ = tokio::fs::remove_file(temp).await;
+                        log::error!("anexo: {cause}");
+                        return Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco"));
+                    }
+                }
+                Ok(None) => break,
+                Err(cause) => {
+                    let _ = tokio::fs::remove_file(temp).await;
+                    log::warn!("anexo interrompido: {cause}");
+                    return Err(fail(StatusCode::BAD_REQUEST, "envio interrompido"));
+                }
+            }
+        }
+
+        if let Err(cause) = file.flush().await {
+            let _ = tokio::fs::remove_file(temp).await;
+            log::error!("anexo: {cause}");
+            return Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco"));
+        }
+
+        recebido = true;
+    }
+
+    if !recebido {
+        let _ = tokio::fs::remove_file(temp).await;
+        return Err(fail(StatusCode::BAD_REQUEST, "nenhum campo `file` no envio"));
+    }
+
+    Ok(nome)
+}
+
+/// `POST /eu/anexos` -- multipart, campo `file`.
+async fn upload_attachment(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    mut multipart: Multipart,
+) -> Response {
+    let temp = {
+        let guard = state.vault.read().expect("vault envenenado");
+        let Some(vault) = guard.as_ref() else {
+            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        };
+
+        if let Err(cause) = std::fs::create_dir_all(players::attachments_dir(vault, &player.id)) {
+            log::error!("anexo: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
+        }
+
+        players::attachment_temp(vault, &player.id)
+    };
+
+    let nome = match recebe_arquivo(multipart, &temp, players::MAX_ATTACHMENT_BYTES).await {
+        Ok(nome) => nome,
+        Err(response) => return response,
+    };
+
+
+    let result = {
+        let guard = state.vault.read().expect("vault envenenado");
+        let Some(vault) = guard.as_ref() else {
+            let _ = std::fs::remove_file(&temp);
+            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        };
+
+        players::adopt_attachment(vault, &player.id, &temp, &nome)
+    };
+
+    match result {
+        Ok(anexo) => (StatusCode::CREATED, axum::Json(anexo)).into_response(),
+        Err(crate::error::AppError::Malformed { cause, .. }) => {
+            (StatusCode::CONFLICT, cause).into_response()
+        }
+        Err(cause) => {
+            log::error!("anexo de {}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao guardar o anexo")
+        }
+    }
+}
+
+async fn remove_attachment(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(arquivo): AxumPath<String>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    match players::delete_attachment(vault, &player.id, &arquivo) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(cause) => {
+            log::error!("anexo {arquivo}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao remover o anexo")
+        }
+    }
+}
+
+// --- as telas ---------------------------------------------------------------
+
+/// As telas de espectador, do bundle estatico.
+///
+/// Servidas POR aqui, e nao pelo Next: e isso que as deixa na MESMA origem do
+/// daemon, e por isso `/asset/{id}` e `/sala/live` resolvem como caminho
+/// relativo, sem a tela precisar descobrir endereco nenhum.
+async fn serve_web(State(state): State<Arc<Daemon>>, request: Request<Body>) -> Response {
+    let Some(root) = state.web_root.clone() else {
+        return ErrorPage::sem_bundle().into_response();
+    };
+
+    let path = request.uri().path().trim_end_matches('/').to_string();
+
+    // O `.html` vem ANTES do caminho cru, e isto foi um bug medido: o export do
+    // Next grava `/assistir` como `assistir.html` E cria um diretorio
+    // `assistir/` com os payloads RSC ao lado. Tentando o caminho cru primeiro,
+    // o `ServeDir` encontrava o DIRETORIO e respondia 307 para `/assistir/`,
+    // que nao tem `index.html` -- a TV recebia um redirecionamento para lugar
+    // nenhum em vez da tela.
+    //
+    // O `.html` so e tentado quando o ultimo segmento nao tem extensao: rota
+    // nao tem, arquivo tem, e sem esse corte todo `.js` do bundle pagaria uma
+    // busca por `.js.html` antes de ser servido.
+    let looks_like_file = path
+        .rsplit('/')
+        .next()
+        .is_some_and(|segment| segment.contains('.'));
+
+    let candidates = if path.is_empty() {
+        vec!["/index.html".to_string()]
+    } else if looks_like_file {
+        vec![path.clone()]
+    } else {
+        vec![
+            format!("{path}.html"),
+            format!("{path}/index.html"),
+            path.clone(),
+        ]
+    };
+
+    // Tentar URIs, em vez de montar caminho de disco a mao, mantem a protecao
+    // de travessia do `ServeDir`: quem resolve caminho continua sendo ele, e
+    // essa porta agora esta na rede.
+    for candidate in candidates {
+        let Ok(uri) = candidate.parse::<Uri>() else {
+            continue;
+        };
+
+        let mut attempt = Request::builder()
+            .uri(uri)
+            .body(Body::empty())
+            .expect("request");
+        *attempt.headers_mut() = request.headers().clone();
+
+        // O erro do `ServeDir` e `Infallible`, entao este `let` e irrefutavel:
+        // um arquivo ausente vem como 404, nao como `Err`.
+        let Ok(response) = ServeDir::new(&root).oneshot(attempt).await;
+        let status = response.status();
+
+        // Sucesso serve; 304 tambem, senao o cache condicional do browser
+        // pararia de funcionar e cada troca de tela rebaixaria o bundle
+        // inteiro. Redirecionamento e o caso do diretorio homonimo acima: nao
+        // e resposta, e sinal de que se deve tentar o proximo candidato.
+        if status.is_success() || status == StatusCode::NOT_MODIFIED {
+            return response.into_response();
+        }
+    }
+
+    ErrorPage::tela_desconhecida().into_response()
+}
+
+/// `GET /asset/{id}`
+///
+/// Sem token de proposito: no passo seguinte e daqui que a TV e o celular do
+/// jogador buscam mapa e trilha, e exigir segredo por arquivo faria cada
+/// `<img>` da cena carregar um cabecalho que o HTML nao sabe mandar.
+async fn serve_asset(
+    State(state): State<Arc<Daemon>>,
+    AxumPath(id): AxumPath<String>,
+    request: Request<Body>,
+) -> Response {
+    let found = {
+        let guard = state.vault.read().expect("vault envenenado");
+        let Some(vault) = guard.as_ref() else {
+            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        };
+
+        match assets::find(vault, &id) {
+            Ok(Some(meta)) => Some((assets::asset_path(vault, &meta), meta.mime_type)),
+            Ok(None) => None,
+            Err(cause) => {
+                log::error!("asset {id}: {cause}");
+                return fail(StatusCode::INTERNAL_SERVER_ERROR, "acervo ilegivel");
+            }
+        }
+    };
+
+    let Some((path, mime_type)) = found else {
+        return fail(StatusCode::NOT_FOUND, "arquivo nao esta no acervo");
+    };
+
+    // `ServeFile` cuida de Range, `If-None-Match` e `Last-Modified`. Range e o
+    // que permite arrastar a trilha em vez de so toca-la do inicio.
+    match ServeFile::new_with_mime(
+        &path,
+        &mime_type.parse().unwrap_or(mime::APPLICATION_OCTET_STREAM),
+    )
+    .oneshot(request)
+    .await
+    {
+        Ok(response) => response.into_response(),
+        Err(cause) => {
+            log::error!("asset {id} em {}: {cause}", path.display());
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o arquivo")
+        }
+    }
+}
+
+/// `GET /evidencia/{id}`
+///
+/// O anexo que o mestre mandou a mesa olhar. Sem token, como `/asset/{id}`, e
+/// pelo mesmo motivo: o id nao se adivinha, e o que esta em evidencia e
+/// exatamente o que a mesa toda deve ver.
+///
+/// A diferenca em relacao a `/eu/anexos/{arquivo}`, que exige o token do
+/// jogador, e quem escolheu: la o dono do arquivo pede o proprio arquivo por
+/// nome; aqui foi o mestre que expos UM arquivo, com um endereco sorteado, e
+/// que morre quando ele tira do ar. Sem isto, transmitir a ficha de um jogador
+/// exigiria ou abrir a pasta de anexos na rede -- e os nomes sao adivinhaveis
+/// -- ou copiar o arquivo para o acervo, que deixaria um duplicado por
+/// transmissao na biblioteca de imagens do mestre.
+async fn serve_evidence(
+    State(state): State<Arc<Daemon>>,
+    AxumPath(id): AxumPath<String>,
+    request: Request<Body>,
+) -> Response {
+    let found = {
+        let guard = state.evidence.read().expect("evidencia envenenada");
+
+        // Confere o id do slot, e nao so a existencia dele: um endereco de uma
+        // transmissao anterior nao pode servir a atual.
+        guard
+            .as_ref()
+            .filter(|evidence| evidence.id == id)
+            .map(|evidence| {
+                let nome = evidence
+                    .path
+                    .file_name()
+                    .map(|nome| nome.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                (evidence.path.clone(), players::mime_for(&nome).to_string())
+            })
+    };
+
+    let Some((path, mime_type)) = found else {
+        return fail(StatusCode::NOT_FOUND, "nada em evidencia com esse endereco");
+    };
+
+    match ServeFile::new_with_mime(
+        &path,
+        &mime_type.parse().unwrap_or(mime::APPLICATION_OCTET_STREAM),
+    )
+    .oneshot(request)
+    .await
+    {
+        Ok(response) => response.into_response(),
+        Err(cause) => {
+            log::error!("evidencia em {}: {cause}", path.display());
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o arquivo")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use axum::http::Request as HttpRequest;
+
+    fn daemon() -> (tempfile::TempDir, Arc<Daemon>, String) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
+        let codigo = vault.config.codigo.clone();
+
+        (
+            dir,
+            Arc::new(Daemon::new(
+                Arc::new(RwLock::new(Some(vault))),
+                "segredo".into(),
+                None,
+            )),
+            codigo,
+        )
+    }
+
+    /// Requisicao com o endereco de origem que o `publish` exige.
+    ///
+    /// Em producao quem preenche isto e o `into_make_service_with_connect_info`;
+    /// no teste tem de ser explicito, e e melhor assim -- connect info ausente
+    /// nao pode virar permissao por omissao.
+    fn from_ip(mut request: HttpRequest<Body>, ip: &str) -> HttpRequest<Body> {
+        let addr: SocketAddr = format!("{ip}:50000").parse().expect("addr");
+        request.extensions_mut().insert(ConnectInfo(addr));
+
+        request
+    }
+
+    fn publicar(token: Option<&str>, corpo: &str, ip: &str) -> HttpRequest<Body> {
+        let mut request = HttpRequest::builder().method("POST").uri("/sala/publicar");
+
+        if let Some(token) = token {
+            request = request.header(TOKEN_HEADER, token);
+        }
+
+        from_ip(
+            request.body(Body::from(corpo.to_string())).expect("request"),
+            ip,
+        )
+    }
+
+    // --- acervo -------------------------------------------------------------
+
+    #[tokio::test]
+    async fn arquivo_importado_e_servivel_por_http() {
+        let (dir, state, _) = daemon();
+
+        let origem = dir.path().join("mapa.webp");
+        std::fs::write(&origem, b"bytes do mapa").expect("origem");
+
+        let id = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            let (aceitos, recusados) =
+                assets::import(vault, &[origem]).expect("import");
+
+            assert!(recusados.is_empty(), "{recusados:?}");
+            aceitos[0].id.clone()
+        };
+
+        // O mestre importa por IPC, copiando do disco; a mesa le por HTTP. Este
+        // teste e a costura entre os dois -- o que entrou tem de sair.
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(format!("/asset/{id}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("content-type").map(|v| v.to_str().unwrap()),
+            Some("image/webp")
+        );
+
+        let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
+        assert_eq!(&bytes[..], b"bytes do mapa");
+    }
+
+    // --- evidencia ----------------------------------------------------------
+
+    #[tokio::test]
+    async fn anexo_em_evidencia_e_servivel_e_so_pelo_endereco_sorteado() {
+        let (dir, state, _) = daemon();
+
+        let anexo = dir.path().join("retrato.png");
+        std::fs::write(&anexo, b"bytes do retrato").expect("anexo");
+
+        *state.evidence.write().expect("evidencia") = Some(Evidence {
+            id: "abc123".into(),
+            path: anexo,
+        });
+
+        // Sem token, como `/asset/{id}`: quem busca e um `<img>` na TV.
+        let response = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/evidencia/abc123")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("content-type").map(|v| v.to_str().unwrap()),
+            Some("image/png")
+        );
+
+        let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
+        assert_eq!(&bytes[..], b"bytes do retrato");
+
+        // O id e o portao: sem ele, ter a rota nao da acesso ao arquivo que
+        // esta no ar -- e nomes de anexo sao adivinhaveis.
+        let outro = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/evidencia/retrato.png")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(outro.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn tirado_do_ar_o_endereco_da_evidencia_morre() {
+        let (dir, state, _) = daemon();
+
+        let anexo = dir.path().join("ficha.jpg");
+        std::fs::write(&anexo, b"bytes da ficha").expect("anexo");
+
+        *state.evidence.write().expect("evidencia") = Some(Evidence {
+            id: "sorteado".into(),
+            path: anexo,
+        });
+
+        // O que o `player_attachment_unshare` faz, e o que o `clear` da
+        // evidencia dispara: o arquivo do jogador deixa de ser alcancavel no
+        // instante em que sai do ar.
+        *state.evidence.write().expect("evidencia") = None;
+
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/evidencia/sorteado")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn leitura_e_aberta_e_arquivo_ausente_e_404() {
+        let (_dir, state, _) = daemon();
+
+        // Sem token de proposito: e daqui que a TV busca o mapa, e um `<img>`
+        // nao sabe mandar cabecalho.
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/asset/inexistente")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn sem_campanha_aberta_a_leitura_diz_503() {
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(None)),
+            "segredo".into(),
+            None,
+        ));
+
+        // 503 e nao 404: a diferenca entre "esta campanha nao tem esse
+        // arquivo" e "nao ha campanha" muda o que a tela deve mostrar.
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/asset/qualquer")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    // --- a cena no ar -------------------------------------------------------
+
+    #[tokio::test]
+    async fn publicar_exige_token() {
+        let (_dir, state, _) = daemon();
+
+        let response = router(state)
+            .oneshot(publicar(None, r#"{"scene":null}"#, "127.0.0.1"))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn publicar_de_fora_da_maquina_e_recusado() {
+        let (_dir, state, _) = daemon();
+
+        // Com o token CERTO: e o cenario de um token vazado. A porta esta na
+        // rede agora, e publicar cena e a unica rota cujo abuso apareceria
+        // direto na TV da mesa.
+        let response = router(state)
+            .oneshot(publicar(Some("segredo"), r#"{"scene":null}"#, "192.168.7.99"))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn publicar_corpo_nao_json_e_recusado() {
+        let (_dir, state, _) = daemon();
+
+        // O daemon nao entende `LiveState` -- ele e opaco --, mas repassar lixo
+        // faria cada espectador falhar no `JSON.parse` sem ninguem saber por que.
+        let response = router(state)
+            .oneshot(publicar(Some("segredo"), "isto nao e json", "127.0.0.1"))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn live_com_codigo_errado_e_recusado() {
+        let (_dir, state, _) = daemon();
+
+        for uri in ["/sala/live", "/sala/live?codigo=ZZZZZZ"] {
+            let response = router(Arc::clone(&state))
+                .oneshot(HttpRequest::builder().uri(uri).body(Body::empty()).expect("request"))
+                .await
+                .expect("resposta");
+
+            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn live_sem_campanha_diz_503() {
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(None)),
+            "segredo".into(),
+            None,
+        ));
+
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/sala/live?codigo=QUALQUER")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn quem_chega_no_meio_recebe_o_estado_atual() {
+        let (_dir, state, codigo) = daemon();
+
+        let publicado = r#"{"scene":{"id":"s1"},"track":null,"portraits":[]}"#;
+
+        let response = router(Arc::clone(&state))
+            .oneshot(publicar(Some("segredo"), publicado, "127.0.0.1"))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // Abre a TV DEPOIS da publicacao. E este caso que apagou o
+        // `live:request` do protocolo: o daemon guarda o ultimo estado e o
+        // manda na conexao, em vez de o espectador pedir e esperar o Operador
+        // ouvir o pedido.
+        let sse = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(format!("/sala/live?codigo={codigo}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(sse.status(), StatusCode::OK);
+        assert_eq!(
+            sse.headers().get("content-type").map(|v| v.to_str().unwrap()),
+            Some("text/event-stream")
+        );
+
+        // Só o primeiro quadro: o fluxo é infinito por design, e `to_bytes`
+        // nele nunca voltaria.
+        let mut body = sse.into_body().into_data_stream();
+        let first = body.next().await.expect("quadro").expect("bytes");
+        let text = String::from_utf8_lossy(&first);
+
+        assert!(text.starts_with("data:"), "não é quadro SSE: {text}");
+        assert!(text.contains(r#""id":"s1""#), "estado atual não veio: {text}");
+    }
+
+    #[tokio::test]
+    async fn codigo_da_mesa_nao_diferencia_maiuscula() {
+        let (_dir, state, codigo) = daemon();
+
+        // O jogador digita no celular, com o teclado decidindo sozinho a
+        // capitalizacao. Recusar por causa disso seria uma tentativa perdida a
+        // cada vez.
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(format!("/sala/live?codigo={}", codigo.to_lowercase()))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn conferir_codigo_devolve_o_nome_da_campanha() {
+        let (_dir, state, codigo) = daemon();
+
+        let response = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(format!("/sala?codigo={codigo}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let bytes = to_bytes(response.into_body(), 4096).await.expect("corpo");
+        assert!(String::from_utf8_lossy(&bytes).contains("Campanha"));
+
+        // Codigo errado tem de dar 403 AQUI, com status legivel, e nao no
+        // `/sala/live`: o `EventSource` nao entrega status ao JavaScript e
+        // reconectaria em loop contra um codigo que nunca vai passar.
+        let recusado = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/sala?codigo=ZZZZZZ")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(recusado.status(), StatusCode::FORBIDDEN);
+    }
+
+    // --- ficha do jogador ---------------------------------------------------
+
+    /// Entra na mesa e devolve o token.
+    async fn entrar(state: Arc<Daemon>, codigo: &str, nome: &str) -> (StatusCode, String) {
+        let corpo = serde_json::json!({ "codigo": codigo, "nome": nome }).to_string();
+
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .method("POST")
+                    .uri("/sala/entrar")
+                    .header("content-type", "application/json")
+                    .body(Body::from(corpo))
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
+
+        (status, String::from_utf8_lossy(&bytes).to_string())
+    }
+
+    async fn token_de(state: Arc<Daemon>, codigo: &str, nome: &str) -> String {
+        let (status, corpo) = entrar(state, codigo, nome).await;
+        assert_eq!(status, StatusCode::CREATED, "{corpo}");
+
+        serde_json::from_str::<serde_json::Value>(&corpo).expect("json")["token"]
+            .as_str()
+            .expect("token")
+            .to_string()
+    }
+
+    fn como(token: &str, method: &str, uri: &str, corpo: Option<&str>) -> HttpRequest<Body> {
+        let mut request = HttpRequest::builder()
+            .method(method)
+            .uri(uri)
+            .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"));
+
+        if corpo.is_some() {
+            request = request.header("content-type", "application/json");
+        }
+
+        request
+            .body(corpo.map(|c| Body::from(c.to_string())).unwrap_or_else(Body::empty))
+            .expect("request")
+    }
+
+    #[tokio::test]
+    async fn entrar_exige_o_codigo_da_mesa() {
+        let (_dir, state, codigo) = daemon();
+
+        // Sem o codigo, qualquer aparelho do Wi-Fi criaria fichas na campanha
+        // do mestre.
+        let (status, _) = entrar(Arc::clone(&state), "ZZZZZZ", "Edgar").await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+
+        let guard = state.vault.read().expect("vault");
+        assert!(players::list(guard.as_ref().expect("campanha")).expect("list").is_empty());
+        drop(guard);
+
+        let (status, _) = entrar(state, &codigo, "Edgar").await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn entrar_sem_nome_e_recusado() {
+        let (_dir, state, codigo) = daemon();
+
+        let (status, _) = entrar(state, &codigo, "   ").await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn ficha_exige_credencial() {
+        let (_dir, state, codigo) = daemon();
+        token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        for request in [
+            HttpRequest::builder().uri("/eu").body(Body::empty()).expect("sem header"),
+            como("chute", "GET", "/eu", None),
+        ] {
+            let response = router(Arc::clone(&state)).oneshot(request).await.expect("resposta");
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    #[tokio::test]
+    async fn o_token_decide_de_quem_e_a_ficha() {
+        let (_dir, state, codigo) = daemon();
+
+        let token_a = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+        let token_b = token_de(Arc::clone(&state), &codigo, "Wanda").await;
+
+        // Era a RLS que garantia isto. Agora e o token: o jogador nunca informa
+        // o proprio id, entao nao ha id a trocar para ler a ficha alheia.
+        for (token, esperado) in [(&token_a, "Edgar"), (&token_b, "Wanda")] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(token, "GET", "/eu", None))
+                .await
+                .expect("resposta");
+
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
+            let ficha: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+
+            assert_eq!(ficha["nome"], esperado);
+        }
+    }
+
+    #[tokio::test]
+    async fn jogador_so_escreve_os_campos_que_sao_dele() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        let entrou_antes = {
+            let guard = state.vault.read().expect("vault");
+            players::list(guard.as_ref().expect("campanha")).expect("list")[0].entrou_em
+        };
+
+        // Campo que NAO e dele vai no corpo de proposito: tem de ser ignorado.
+        // O controle e `UpdateMe` nao ter o campo -- e essa ausencia que
+        // substitui o privilegio de coluna que o Postgres dava.
+        //
+        // Este teste guardava o `rotulo`, o apelido que o mestre dava. Ele saiu
+        // com a segmentacao de personagem, e a garantia foi reapontada para
+        // `entrouEm`: a data de entrada tambem nao e do jogador, e um celular
+        // que a reescrevesse mudaria a ordem da lista da mesa.
+        let response = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "PATCH",
+                "/eu",
+                Some(r#"{"nome":"Edgar Veloz","notas":"achei uma chave","entrouEm":0}"#),
+            ))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let guard = state.vault.read().expect("vault");
+        let ficha = &players::list(guard.as_ref().expect("campanha")).expect("list")[0];
+
+        assert_eq!(ficha.nome, "Edgar Veloz");
+        assert_eq!(ficha.notas, "achei uma chave");
+        assert_eq!(ficha.entrou_em, entrou_antes, "o jogador mexeu no entrou_em");
+    }
+
+    #[tokio::test]
+    async fn anexo_sobe_volta_e_nao_atravessa_para_o_outro() {
+        let (_dir, state, codigo) = daemon();
+        let token_a = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+        let token_b = token_de(Arc::clone(&state), &codigo, "Wanda").await;
+
+        let corpo = "--X\r\nContent-Disposition: form-data; name=\"file\"; filename=\"Histórico - Edgar.pdf\"\r\nContent-Type: application/pdf\r\n\r\nficha do Edgar\r\n--X--\r\n";
+
+        let mut envio = como(&token_a, "POST", "/eu/anexos", None);
+        *envio.body_mut() = Body::from(corpo);
+        envio.headers_mut().insert(
+            "content-type",
+            "multipart/form-data; boundary=X".parse().expect("header"),
+        );
+
+        let response = router(Arc::clone(&state)).oneshot(envio).await.expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
+        let anexo: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(anexo["arquivo"], "historico-edgar.pdf");
+
+        // O dono le.
+        let lido = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "GET", "/eu/anexos/historico-edgar.pdf", None))
+            .await
+            .expect("resposta");
+
+        assert_eq!(lido.status(), StatusCode::OK);
+        let bytes = to_bytes(lido.into_body(), 8192).await.expect("corpo");
+        assert_eq!(String::from_utf8_lossy(&bytes), "ficha do Edgar");
+
+        // O outro nao: o caminho vem do id do TOKEN, e "ficha.pdf" seria o
+        // palpite obvio de quem quisesse tentar.
+        for uri in [
+            "/eu/anexos/historico-edgar.pdf",
+            "/eu/anexos/../../config.json",
+            "/eu/anexos/%2e%2e%2f%2e%2e%2fconfig.json",
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token_b, "GET", uri, None))
+                .await
+                .expect("resposta");
+
+            let status = response.status();
+            let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
+            let texto = String::from_utf8_lossy(&bytes);
+
+            assert!(!texto.contains("ficha do Edgar"), "{uri} vazou ({status})");
+            assert!(!texto.contains("\"codigo\""), "{uri} vazou o config ({status})");
+        }
+
+        // E a lista de um nao mostra o anexo do outro.
+        let lista = router(Arc::clone(&state))
+            .oneshot(como(&token_b, "GET", "/eu/anexos", None))
+            .await
+            .expect("resposta");
+
+        let bytes = to_bytes(lista.into_body(), 8192).await.expect("corpo");
+        assert_eq!(String::from_utf8_lossy(&bytes), "[]");
+    }
+
+    #[tokio::test]
+    async fn tirado_da_mesa_o_token_deixa_de_valer() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            let id = players::list(vault).expect("list")[0].id.clone();
+            players::remove(vault, &id).expect("remove");
+        }
+
+        // Tirar da mesa tem de revogar de verdade, e nao so esconder da lista
+        // do mestre.
+        let response = router(state)
+            .oneshot(como(&token, "GET", "/eu", None))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // --- telas --------------------------------------------------------------
+
+    #[tokio::test]
+    async fn sem_bundle_a_tela_diz_o_que_falta() {
+        let (_dir, state, _) = daemon();
+
+        // `web_root: None` -- quem clonou o repo e nunca rodou `pnpm build`.
+        // Melhor dizer isso que servir tela branca.
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/assistir")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let bytes = to_bytes(response.into_body(), 4096).await.expect("corpo");
+        assert!(String::from_utf8_lossy(&bytes).contains("pnpm build"));
+    }
+
+    #[tokio::test]
+    async fn rota_do_next_resolve_para_o_html_exportado() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(&out).expect("out");
+        std::fs::write(out.join("index.html"), "raiz").expect("index");
+        // `output: "export"` grava `/assistir` como `assistir.html`.
+        std::fs::write(out.join("assistir.html"), "a TV").expect("assistir");
+
+        let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(Some(vault))),
+            "segredo".into(),
+            Some(out),
+        ));
+
+        for (uri, esperado) in [("/", "raiz"), ("/assistir", "a TV"), ("/assistir/", "a TV")] {
+            let response = router(Arc::clone(&state))
+                .oneshot(HttpRequest::builder().uri(uri).body(Body::empty()).expect("request"))
+                .await
+                .expect("resposta");
+
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+
+            let bytes = to_bytes(response.into_body(), 4096).await.expect("corpo");
+            assert_eq!(String::from_utf8_lossy(&bytes), esperado, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn tela_desconhecida_e_uma_pagina_e_nao_um_texto_solto() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(&out).expect("out");
+        std::fs::write(out.join("index.html"), "raiz").expect("index");
+
+        let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(Some(vault))),
+            "segredo".into(),
+            Some(out),
+        ));
+
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/tela-que-nao-existe")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        // HTML, e nao `text/plain`: quem abre isto e uma pessoa, muitas vezes
+        // numa TV do outro lado da sala.
+        assert_eq!(
+            response.headers().get("content-type").map(|v| v.to_str().unwrap()),
+            Some("text/html; charset=utf-8")
+        );
+
+        let bytes = to_bytes(response.into_body(), 32 * 1024).await.expect("corpo");
+        let texto = String::from_utf8_lossy(&bytes);
+
+        // Diz o que fazer, e oferece as duas telas que existem.
+        assert!(texto.contains("Essa tela não existe"), "{texto}");
+        assert!(texto.contains("/assistir"), "{texto}");
+        assert!(texto.contains("/plateia"), "{texto}");
+        // E NAO ecoa o caminho pedido: seria XSS refletido numa porta que esta
+        // na rede local.
+        assert!(!texto.contains("tela-que-nao-existe"), "o caminho foi ecoado");
+    }
+
+    #[tokio::test]
+    async fn rota_com_diretorio_homonimo_serve_o_html() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(out.join("assistir")).expect("out");
+        std::fs::write(out.join("index.html"), "raiz").expect("index");
+        std::fs::write(out.join("assistir.html"), "a TV").expect("html");
+        // O export do Next cria os DOIS: `assistir.html` e um diretorio
+        // `assistir/` com os payloads RSC. Tentando o caminho cru primeiro, o
+        // `ServeDir` achava o diretorio e devolvia 307 para `/assistir/`, que
+        // nao tem `index.html` -- a TV recebia redirecionamento para lugar
+        // nenhum. Foi medido no app rodando, nao deduzido.
+        std::fs::write(out.join("assistir/__next._tree.txt"), "payload").expect("rsc");
+
+        let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(Some(vault))),
+            "segredo".into(),
+            Some(out),
+        ));
+
+        for uri in ["/assistir", "/assistir/"] {
+            let response = router(Arc::clone(&state))
+                .oneshot(HttpRequest::builder().uri(uri).body(Body::empty()).expect("request"))
+                .await
+                .expect("resposta");
+
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+
+            let bytes = to_bytes(response.into_body(), 4096).await.expect("corpo");
+            assert_eq!(String::from_utf8_lossy(&bytes), "a TV", "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn arquivo_do_bundle_e_servido_direto() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(out.join("_next/static")).expect("out");
+        std::fs::write(out.join("index.html"), "raiz").expect("index");
+        std::fs::write(out.join("_next/static/app.js"), "bundle").expect("js");
+
+        let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(Some(vault))),
+            "segredo".into(),
+            Some(out),
+        ));
+
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/_next/static/app.js")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let bytes = to_bytes(response.into_body(), 4096).await.expect("corpo");
+        assert_eq!(String::from_utf8_lossy(&bytes), "bundle");
+    }
+
+    #[tokio::test]
+    async fn travessia_de_caminho_nao_sai_do_bundle() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(&out).expect("out");
+        std::fs::write(out.join("index.html"), "raiz").expect("index");
+        std::fs::write(dir.path().join("segredo.txt"), "nao deveria sair").expect("segredo");
+
+        let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(Some(vault))),
+            "segredo".into(),
+            Some(out),
+        ));
+
+        // Esta porta esta na REDE. Quem resolve caminho e o `ServeDir`, e e por
+        // isso que o handler tenta URIs em vez de montar caminho de disco.
+        for uri in [
+            "/../segredo.txt",
+            "/..%2fsegredo.txt",
+            "/%2e%2e%2fsegredo.txt",
+            "/subdir/../../segredo.txt",
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(HttpRequest::builder().uri(uri).body(Body::empty()).expect("request"))
+                .await
+                .expect("resposta");
+
+            let status = response.status();
+            let bytes = to_bytes(response.into_body(), 4096).await.expect("corpo");
+            let text = String::from_utf8_lossy(&bytes);
+
+            assert!(
+                !text.contains("nao deveria sair"),
+                "{uri} vazou o arquivo (status {status})"
+            );
+        }
+    }
+
+    /// Uma campanha com dois jogadores e um personagem vinculado ao primeiro.
+    ///
+    /// Devolve os tokens e o id do personagem. O do segundo jogador existe para
+    /// os testes poderem provar o que ele NAO alcanca.
+    async fn com_personagem(state: Arc<Daemon>, codigo: &str) -> (String, String, String) {
+        let token_a = token_de(Arc::clone(&state), codigo, "Edgar").await;
+        let token_b = token_de(Arc::clone(&state), codigo, "Mira").await;
+
+        let personagem = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+
+            let personagem = characters::create(vault, "Corvo").expect("personagem");
+            let jogadores = players::list(vault).expect("jogadores");
+            let edgar = jogadores.iter().find(|j| j.nome == "Edgar").expect("edgar");
+
+            players::link(vault, &edgar.id, &personagem.id).expect("vinculo");
+
+            personagem.id
+        };
+
+        (token_a, token_b, personagem)
+    }
+
+    async fn corpo(response: Response) -> String {
+        let bytes = to_bytes(response.into_body(), 65_536).await.expect("corpo");
+        String::from_utf8_lossy(&bytes).to_string()
+    }
+
+    #[tokio::test]
+    async fn lista_so_os_personagens_vinculados() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, _) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let meus = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "GET", "/eu/personagens", None))
+            .await
+            .expect("resposta");
+        assert_eq!(meus.status(), StatusCode::OK);
+        assert!(corpo(meus).await.contains("Corvo"));
+
+        // O outro jogador tem token valido e nao tem personagem nenhum: token
+        // diz quem ele e, o vinculo diz o que e dele.
+        let dele = router(Arc::clone(&state))
+            .oneshot(como(&token_b, "GET", "/eu/personagens", None))
+            .await
+            .expect("resposta");
+        assert_eq!(corpo(dele).await, "[]");
+    }
+
+    #[tokio::test]
+    async fn personagem_de_outro_responde_404() {
+        let (_dir, state, codigo) = daemon();
+        let (_, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        for uri in [
+            format!("/eu/personagens/{personagem}/anexos"),
+            format!("/eu/personagens/{personagem}/nota"),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token_b, "GET", &uri, None))
+                .await
+                .expect("resposta");
+
+            // 404 e nao 403: dizer "existe mas nao e seu" confirmaria a
+            // existencia do personagem a quem chutou o id.
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn nota_e_do_par_personagem_jogador() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let uri = format!("/eu/personagens/{personagem}/nota");
+
+        let gravou = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "PUT", &uri, Some(r#"{"texto":"o alcapao range"}"#)))
+            .await
+            .expect("resposta");
+        assert_eq!(gravou.status(), StatusCode::NO_CONTENT);
+
+        let leu = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "GET", &uri, None))
+            .await
+            .expect("resposta");
+        assert!(corpo(leu).await.contains("o alcapao range"));
+    }
+
+    #[tokio::test]
+    async fn anexo_do_personagem_nao_escapa_da_pasta() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            characters::write_anexo(vault, &personagem, "ficha.pdf", b"conteudo").expect("anexo");
+        }
+
+        // O que existe, o jogador vinculado le.
+        let ok = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "GET",
+                &format!("/eu/personagens/{personagem}/anexos/jogador/ficha.pdf"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(ok.status(), StatusCode::OK);
+        assert_eq!(corpo(ok).await, "conteudo");
+
+        // Travessia e autor invalido nao alcancam nada.
+        for uri in [
+            format!("/eu/personagens/{personagem}/anexos/jogador/../../../config.json"),
+            format!("/eu/personagens/{personagem}/anexos/mestre/ficha.pdf"),
+            format!("/eu/personagens/{personagem}/anexos/chute/ficha.pdf"),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token_a, "GET", &uri, None))
+                .await
+                .expect("resposta");
+
+            assert_ne!(response.status(), StatusCode::OK, "{uri}");
+            assert!(!corpo(response).await.contains("Campanha"), "{uri}");
+        }
+    }
+
+
+    #[tokio::test]
+    async fn jogador_nao_apaga_anexo_do_mestre() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+
+            let origem = _dir.path().join("ficha.pdf");
+            std::fs::write(&origem, b"do mestre").expect("arquivo");
+            characters::import_anexo(vault, &personagem, &origem).expect("anexo");
+        }
+
+        let recusa = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "DELETE",
+                &format!("/eu/personagens/{personagem}/anexos/mestre/ficha.pdf"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(recusa.status(), StatusCode::FORBIDDEN);
+
+        // E continua la: a recusa nao pode ser so a resposta.
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        assert_eq!(characters::list_anexos(vault, &personagem).expect("anexos").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn jogador_anexa_e_apaga_o_proprio() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let multipart = concat!(
+            "--X\r\n",
+            "Content-Disposition: form-data; name=\"file\"; filename=\"Meu Diario.txt\"\r\n",
+            "Content-Type: text/plain\r\n\r\n",
+            "anotei tudo\r\n",
+            "--X--\r\n",
+        );
+
+        let mut envio = como(
+            &token_a,
+            "POST",
+            &format!("/eu/personagens/{personagem}/anexos"),
+            None,
+        );
+        *envio.body_mut() = Body::from(multipart);
+        envio.headers_mut().insert(
+            "content-type",
+            "multipart/form-data; boundary=X".parse().expect("header"),
+        );
+
+        let criou = router(Arc::clone(&state)).oneshot(envio).await.expect("resposta");
+        assert_eq!(criou.status(), StatusCode::CREATED);
+        // O nome sai saneado, e o autor e de quem chamou -- nao do corpo.
+        let json = corpo(criou).await;
+        assert!(json.contains("meu-diario.txt"), "{json}");
+        assert!(json.contains("jogador"), "{json}");
+
+        let apagou = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "DELETE",
+                &format!("/eu/personagens/{personagem}/anexos/jogador/meu-diario.txt"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(apagou.status(), StatusCode::NO_CONTENT);
+
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        assert!(characters::list_anexos(vault, &personagem).expect("anexos").is_empty());
+    }
+
+}

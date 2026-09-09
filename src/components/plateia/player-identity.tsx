@@ -1,38 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getMyPlayer, saveMyName } from "@/lib/supabase/players";
+import { usePlayerStore } from "@/lib/store/use-player-store";
 
 type SaveState = "idle" | "saving" | "saved";
 
 /**
- * O jogador se nomeia. Um campo, sem cadastro — a identidade é a sessão
- * anônima do aparelho, e o nome existe só para o mestre saber quem é quem.
+ * O jogador se renomeia.
+ *
+ * Um campo, sem cadastro — a identidade é o token guardado neste aparelho, e o
+ * nome existe só para o mestre saber quem é quem.
  */
-export function PlayerIdentity({ roomId }: { roomId: string }) {
-  const [name, setName] = useState("");
-  const [masterLabel, setMasterLabel] = useState("");
-  const [loaded, setLoaded] = useState(false);
+export function PlayerIdentity({ codigo }: { codigo: string }) {
+  const sheet = usePlayerStore((state) => state.sheet);
+  const atualizar = usePlayerStore((state) => state.atualizar);
+
+  const [nome, setNome] = useState(sheet?.nome ?? "");
   const [saveState, setSaveState] = useState<SaveState>("idle");
-
-  const load = useCallback(() => {
-    void getMyPlayer(roomId).then(
-      (player) => {
-        setName(player?.name ?? "");
-        setMasterLabel(player?.master_label ?? "");
-        setLoaded(true);
-      },
-      () => setLoaded(true),
-    );
-  }, [roomId]);
-
-  useEffect(load, [load]);
 
   useEffect(() => {
     if (saveState !== "saved") return;
@@ -42,52 +31,42 @@ export function PlayerIdentity({ roomId }: { roomId: string }) {
     return () => clearTimeout(timer);
   }, [saveState]);
 
-  async function submit() {
-    setSaveState("saving");
+  if (!sheet) return null;
 
-    try {
-      await saveMyName(roomId, name);
-      setSaveState("saved");
-    } catch {
-      setSaveState("idle");
-      toast.error("Não foi possível salvar o nome.");
-    }
-  }
-
-  if (!loaded) {
-    return <Loader2 className="text-muted-foreground mx-auto size-4 animate-spin" />;
-  }
+  const inalterado = nome.trim() === sheet.nome || nome.trim().length === 0;
 
   return (
-    <form
-      className="w-full space-y-2 text-left"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submit();
-      }}
-    >
-      <Label htmlFor="player-name">Seu nome na mesa</Label>
-      <div className="flex gap-2">
-        <Input
-          id="player-name"
-          value={name}
-          maxLength={40}
-          placeholder="Como o mestre te chama"
-          autoComplete="off"
-          onChange={(event) => setName(event.target.value)}
-        />
-        <Button type="submit" disabled={saveState === "saving"}>
-          {saveState === "saving" ? <Loader2 className="animate-spin" /> : null}
-          {saveState === "saved" ? <Check /> : null}
-          Salvar
-        </Button>
-      </div>
+    <section className="space-y-2">
+      <form
+        className="space-y-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setSaveState("saving");
+          void atualizar(codigo, { nome: nome.trim() }).then(() => setSaveState("saved"));
+        }}
+      >
+        <Label htmlFor="player-nome">Teu nome</Label>
+        <div className="flex gap-2">
+          <Input
+            id="player-nome"
+            value={nome}
+            onChange={(event) => setNome(event.target.value)}
+            maxLength={60}
+            spellCheck={false}
+          />
+          <Button type="submit" variant="outline" size="sm" disabled={inalterado}>
+            {saveState === "saving" ? (
+              <Loader2 className="animate-spin" />
+            ) : saveState === "saved" ? (
+              <Check />
+            ) : null}
+            Salvar
+          </Button>
+        </div>
+      </form>
 
-      {masterLabel ? (
-        <p className="text-muted-foreground text-xs">
-          O mestre te anotou como <span className="text-foreground">{masterLabel}</span>.
-        </p>
-      ) : null}
-    </form>
+      {/* O apelido do mestre, quando existe. Só de leitura: nem o dono da linha
+          escreve nele — `PATCH /eu` não tem esse campo. */}
+    </section>
   );
 }

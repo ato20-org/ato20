@@ -2,159 +2,113 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Copy, KeyRound, Loader2, LogOut, UserRound } from "lucide-react";
+import { FileArchive, FolderOpen, FolderPlus, Loader2, MonitorOff, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useRoomStore } from "@/lib/store/use-room-store";
+import { useCampaignStore } from "@/lib/store/use-campaign-store";
 
-/** Oito caracteres, contra os seis do código da mesa. */
-const OPERATOR_CODE_LENGTH = 8;
+/**
+ * Porta do Operador: qual pasta abrir.
+ *
+ * Substitui as duas etapas de antes — conta de e-mail, depois escolha de mesa
+ * — por uma só, e a razão é que o aplicativo de desktop **é** o operador. Não
+ * há a quem provar identidade: quem abriu o programa já está na máquina onde
+ * as campanhas moram, e uma senha ali só protegeria o disco de si mesmo.
+ *
+ * O que sobrou é o modelo do Obsidian: uma pasta é uma campanha, e a porta
+ * mostra as últimas abertas mais o seletor nativo.
+ */
+export function OperatorGate() {
+  const status = useCampaignStore((state) => state.status);
 
-/** O mínimo do Supabase. Exigir mais aqui só criaria erro que a tela não prevê. */
-const MIN_PASSWORD = 6;
+  if (status === "sem-aplicativo") return <NoApp />;
 
-/** Tira hífen de agrupamento e espaço colado por gerenciador de senha. */
-function normalizeCode(raw: string): string {
-  return raw
-    .replace(/[^A-Za-z0-9]/g, "")
-    .toUpperCase()
-    .slice(0, OPERATOR_CODE_LENGTH);
+  return <CampaignDoor />;
 }
 
 /**
- * Porta do Operador, em duas etapas: a conta, e depois a mesa.
+ * Aberto numa aba de navegador em vez do aplicativo.
  *
- * A conta existe porque a identidade do mestre precisa sobreviver ao aparelho.
- * Enquanto ela era a sessão anônima do navegador, limpar os dados do site ou
- * trocar de máquina significava não conseguir nem ver que a mesa existe — e
- * "qual das mesas é a minha?" não tinha resposta.
- *
- * A mesa é etapa separada porque um mestre acumula mesas, e abrir a errada no
- * meio de uma sessão é pior que um clique a mais.
+ * Acontece de verdade: `pnpm dev` serve as três telas em `localhost:3000`, e o
+ * Operador é a única que precisa alcançar o disco. Dizer isso é melhor que uma
+ * tela de erro genérica sobre um comando que falhou.
  */
-export function OperatorGate() {
-  const account = useRoomStore((state) => state.account);
-  const [fresh, setFresh] = useState<string | null>(null);
-
-  // A senha da mesa recém-criada. Aparece uma vez e some da tela junto com a
-  // porta, então o aviso tem de ser mais forte que a vontade de seguir.
-  if (fresh) return <FreshCode operatorCode={fresh} />;
-  if (!account) return <AccountDoor />;
-
-  return <RoomDoor onCreated={setFresh} />;
-}
-
-/** Entrar ou criar a conta do mestre. */
-function AccountDoor() {
-  const busy = useRoomStore((state) => state.busy);
-  const error = useRoomStore((state) => state.error);
-  const signIn = useRoomStore((state) => state.signIn);
-  const signUp = useRoomStore((state) => state.signUp);
-
-  const [creating, setCreating] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const incomplete = !email.includes("@") || password.length < MIN_PASSWORD;
-
+function NoApp() {
   return (
     <Centered>
-      <UserRound className="text-muted-foreground size-8" aria-hidden />
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {creating ? "Criar conta de mestre" : "Entrar como mestre"}
-      </h1>
+      <MonitorOff className="text-muted-foreground size-8" aria-hidden />
+      <h1 className="text-2xl font-semibold tracking-tight">Abra pelo aplicativo</h1>
       <p className="text-muted-foreground text-sm">
-        {creating
-          ? "A conta é o que amarra as mesas a você em qualquer aparelho. Jogador não cria conta: o celular dele entra só com o código da mesa."
-          : "Só o mestre tem conta. Para acompanhar a cena, use Assistir ou Plateia."}
+        O Operador lê e grava a campanha numa pasta do computador, e uma aba do navegador não
+        alcança o disco. Quem baixou o aplicativo é o mestre; ele abre direto nesta tela.
       </p>
 
-      <form
-        className="w-full space-y-3 text-left"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void (creating ? signUp(email, password) : signIn(email, password));
-        }}
-      >
-        <div className="space-y-1.5">
-          <Label htmlFor="account-email">E-mail</Label>
-          <Input
-            id="account-email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-            spellCheck={false}
-            placeholder="mestre@exemplo.com"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="account-password">Senha</Label>
-          <Input
-            id="account-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            // `new-password` no cadastro faz o gerenciador oferecer uma senha
-            // forte em vez de tentar preencher com uma antiga.
-            autoComplete={creating ? "new-password" : "current-password"}
-            placeholder={creating ? `Mínimo de ${MIN_PASSWORD} caracteres` : undefined}
-          />
-        </div>
-
-        {error ? <p className="text-destructive text-sm">{error}</p> : null}
-
-        <Button type="submit" className="w-full" disabled={incomplete || busy}>
-          {busy ? <Loader2 className="animate-spin" /> : null}
-          {creating ? "Criar conta" : "Entrar"}
-        </Button>
-      </form>
-
-      <Button variant="ghost" size="sm" disabled={busy} onClick={() => setCreating(!creating)}>
-        {creating ? "Já tenho conta" : "Criar uma conta"}
-      </Button>
-
-      <Button render={<Link href="/mesa" />} nativeButton={false} variant="ghost" size="sm">
-        Voltar
+      {/* Para as duas telas que FUNCIONAM aqui: quem caiu neste endereço pelo
+          navegador é quase sempre alguém da mesa que digitou o IP. */}
+      <Button render={<Link href="/" />} nativeButton={false} variant="outline" size="sm">
+        Ver as telas da mesa
       </Button>
     </Centered>
   );
 }
 
-/** Escolher a mesa, criar a primeira, ou assumir uma com o código de operação. */
-function RoomDoor({ onCreated }: { onCreated: (operatorCode: string) => void }) {
-  const account = useRoomStore((state) => state.account);
-  const masterRooms = useRoomStore((state) => state.masterRooms);
-  const busy = useRoomStore((state) => state.busy);
-  const error = useRoomStore((state) => state.error);
-  const chooseRoom = useRoomStore((state) => state.chooseRoom);
-  const openRoom = useRoomStore((state) => state.openRoom);
-  const signOut = useRoomStore((state) => state.signOut);
+function CampaignDoor() {
+  const recents = useCampaignStore((state) => state.recents);
+  const busy = useCampaignStore((state) => state.busy);
+  const error = useCampaignStore((state) => state.error);
+  const choose = useCampaignStore((state) => state.choose);
+  const openFolder = useCampaignStore((state) => state.openFolder);
+  const forget = useCampaignStore((state) => state.forget);
+  const importar = useCampaignStore((state) => state.importar);
 
-  const [code, setCode] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  if (creating) return <CreateForm onCancel={() => setCreating(false)} />;
 
   return (
     <Centered>
-      <KeyRound className="text-muted-foreground size-8" aria-hidden />
+      <FolderOpen className="text-muted-foreground size-8" aria-hidden />
       <h1 className="text-2xl font-semibold tracking-tight">
-        {masterRooms.length > 0 ? "Escolha a mesa" : "Abra a primeira mesa"}
+        {recents.length > 0 ? "Abrir campanha" : "Comece uma campanha"}
       </h1>
       <p className="text-muted-foreground text-sm">
-        {masterRooms.length > 0
-          ? "Todas as mesas desta conta. As cenas moram no navegador, não na mesa: abrir esta mesa em outro computador mostra o acervo de imagens, mas nenhuma cena montada."
-          : "Esta conta ainda não tem mesa. Crie uma, ou assuma uma existente com o código de operação."}
+        Uma campanha é uma pasta no seu computador: cenas em arquivos de texto, imagens e sons ao
+        lado deles. Ela cabe num zip, e o zip abre em qualquer outra máquina.
       </p>
 
-      {masterRooms.length > 0 ? (
-        <ul className="w-full space-y-2">
-          {masterRooms.map((room) => (
-            <li key={room.id}>
-              <Button variant="outline" className="w-full" onClick={() => chooseRoom(room)}>
-                <span className="tracking-widest">{room.code}</span>
+      {recents.length > 0 ? (
+        <ul className="w-full space-y-1 text-left">
+          {recents.map((entry) => (
+            <li key={entry.path} className="group flex items-center gap-1">
+              <Button
+                variant="outline"
+                // `min-w-0` porque `truncate` só corta dentro de largura
+                // definida — sem ele um caminho longo estica a porta inteira.
+                className="min-w-0 flex-1 justify-start"
+                // Pasta que não está no disco continua na lista de propósito:
+                // o volume externo pode estar desconectado, e esconder a linha
+                // fecharia o caminho de volta quando ele voltasse.
+                disabled={busy || !entry.existe}
+                onClick={() => void choose(entry.path)}
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="block truncate text-sm">{entry.nome}</span>
+                  <span className="text-muted-foreground block truncate text-xs">
+                    {entry.existe ? entry.path : `${entry.path} — não encontrada`}
+                  </span>
+                </span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Tirar ${entry.nome} da lista`}
+                className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                onClick={() => void forget(entry.path)}
+              >
+                <X />
               </Button>
             </li>
           ))}
@@ -162,120 +116,93 @@ function RoomDoor({ onCreated }: { onCreated: (operatorCode: string) => void }) 
       ) : null}
 
       <Button
-        variant={masterRooms.length > 0 ? "ghost" : "default"}
+        variant={recents.length > 0 ? "ghost" : "outline"}
         className="w-full"
         disabled={busy}
-        onClick={() => {
-          void openRoom().then(onCreated, () => {
-            // O store já guardou o motivo e manteve a porta.
-          });
-        }}
+        onClick={() => void openFolder()}
       >
-        Criar mesa
+        {busy ? <Loader2 className="animate-spin" /> : <FolderOpen />}
+        Abrir uma pasta
       </Button>
 
       <Separator />
 
-      <AssumeForm code={code} onCode={setCode} />
+      <Button
+        variant={recents.length > 0 ? "ghost" : "default"}
+        className="w-full"
+        disabled={busy}
+        onClick={() => setCreating(true)}
+      >
+        <FolderPlus />
+        Criar campanha
+      </Button>
+
+      {/* Importar mora aqui, e não atrás da campanha aberta: quem recebeu um
+          zip de outro mestre ainda não tem campanha nenhuma, e a porta é a
+          primeira tela que ele vê. */}
+      <Button variant="ghost" className="w-full" disabled={busy} onClick={() => void importar()}>
+        <FileArchive />
+        Importar de um zip
+      </Button>
 
       {error ? <p className="text-destructive text-sm">{error}</p> : null}
-
-      <div className="text-muted-foreground flex w-full items-center justify-between gap-2 border-t pt-4 text-xs">
-        <span className="truncate">{account?.email}</span>
-        <Button variant="ghost" size="sm" disabled={busy} onClick={() => void signOut()}>
-          <LogOut />
-          Sair
-        </Button>
-      </div>
     </Centered>
   );
 }
 
 /**
- * Assumir uma mesa que esta conta ainda não comanda.
+ * Nome antes da pasta-mãe.
  *
- * É o caminho de quem criou a mesa antes de existir conta, e de quem quer
- * mover o comando para outra máquina: o RPC `unlock_room` troca o `master_id`
- * da sala para esta sessão, e é a RLS que olha esse campo.
+ * Nesta ordem porque o nome é o que decide o nome da pasta: pedir a pasta
+ * primeiro e o nome depois deixaria o mestre escolhendo onde criar algo que
+ * ele ainda não nomeou.
  */
-function AssumeForm({ code, onCode }: { code: string; onCode: (code: string) => void }) {
-  const busy = useRoomStore((state) => state.busy);
-  const unlock = useRoomStore((state) => state.unlock);
+function CreateForm({ onCancel }: { onCancel: () => void }) {
+  const busy = useCampaignStore((state) => state.busy);
+  const error = useCampaignStore((state) => state.error);
+  const create = useCampaignStore((state) => state.create);
 
-  return (
-    <form
-      className="w-full space-y-2 text-left"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void unlock(code);
-      }}
-    >
-      <Label htmlFor="operator-code">Assumir com o código de operação</Label>
-      <Input
-        id="operator-code"
-        value={code}
-        onChange={(event) => onCode(normalizeCode(event.target.value))}
-        autoCapitalize="characters"
-        autoComplete="off"
-        spellCheck={false}
-        placeholder="ABCD2345"
-        className="text-center text-lg tracking-[0.3em]"
-      />
-      <Button
-        type="submit"
-        variant="outline"
-        className="w-full"
-        disabled={code.length !== OPERATOR_CODE_LENGTH || busy}
-      >
-        {busy ? <Loader2 className="animate-spin" /> : null}
-        Assumir a mesa
-      </Button>
-    </form>
-  );
-}
-
-/**
- * A senha da mesa aparecendo pela única vez.
- *
- * Sem "continuar" automático: o mestre precisa de um instante para copiar isto
- * para onde ele guarda senhas. Ela é o que move a mesa para outra conta ou
- * outra máquina depois.
- */
-function FreshCode({ operatorCode }: { operatorCode: string }) {
-  const [copied, setCopied] = useState(false);
+  const [nome, setNome] = useState("");
 
   return (
     <Centered>
-      <KeyRound className="size-8 text-amber-500" aria-hidden />
-      <h1 className="text-2xl font-semibold tracking-tight">Guarde este código</h1>
+      <FolderPlus className="text-muted-foreground size-8" aria-hidden />
+      <h1 className="text-2xl font-semibold tracking-tight">Nova campanha</h1>
       <p className="text-muted-foreground text-sm">
-        É a senha desta mesa. Ela move o comando para outro aparelho ou outra conta — e é o único
-        jeito de reassumir a mesa se a conta mudar.
+        O próximo passo abre o seletor de pasta. A campanha nasce numa subpasta com o nome que você
+        der aqui.
       </p>
 
-      <code className="bg-muted w-full rounded-md py-3 text-center text-2xl font-medium tracking-[0.3em]">
-        {operatorCode}
-      </code>
-
-      <Button
-        variant="outline"
-        className="w-full"
-        onClick={() => {
-          void navigator.clipboard.writeText(operatorCode).then(
-            () => setCopied(true),
-            // `clipboard` exige contexto seguro; em HTTP na rede local falha, e
-            // o código continua legível na tela.
-            () => setCopied(false),
-          );
+      <form
+        className="w-full space-y-3 text-left"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void create(nome);
         }}
       >
-        {copied ? <Check /> : <Copy />}
-        {copied ? "Copiado" : "Copiar código"}
-      </Button>
+        <div className="space-y-1.5">
+          <Label htmlFor="campaign-name">Nome da campanha</Label>
+          <Input
+            id="campaign-name"
+            value={nome}
+            onChange={(event) => setNome(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="A Marca do Javali"
+          />
+        </div>
 
-      <p className="text-muted-foreground text-xs">
-        Não mostre este código aos jogadores: quem o digita assume a mesa.
-      </p>
+        {error ? <p className="text-destructive text-sm">{error}</p> : null}
+
+        <Button type="submit" className="w-full" disabled={nome.trim().length === 0 || busy}>
+          {busy ? <Loader2 className="animate-spin" /> : null}
+          Escolher a pasta
+        </Button>
+      </form>
+
+      <Button variant="ghost" size="sm" disabled={busy} onClick={onCancel}>
+        Voltar
+      </Button>
     </Centered>
   );
 }

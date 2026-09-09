@@ -4,6 +4,7 @@ import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
 import { FogLayer } from "@/components/playground/fog-layer";
+import { GridLayer } from "@/components/playground/grid-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { CanvasItem, FogRegion, Portrait, Scene } from "@/types/scene";
@@ -61,6 +62,11 @@ export function SceneLayer({
           className="absolute inset-0 size-full object-contain select-none"
         />
       ) : null}
+
+      {/* Depois do fundo e ANTES dos itens: a grade é do mapa, e um token em
+          cima dela é o que se conta. Por cima dos itens ela riscaria os
+          personagens. */}
+      {scene.grid ? <GridLayer grid={scene.grid} /> : null}
 
       {items.map((item) => (
         <CanvasItemView

@@ -4,23 +4,19 @@ import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
+import { SpotlightLayer } from "@/components/playground/spotlight-layer";
 import { useSubscription } from "@/hooks/use-scene-broadcast";
 
 /**
  * Visão Assistir: recebe a cena e não emite nada. Nenhum controle, nenhum
  * atalho — a tela vai numa TV virada para a mesa.
  *
- * `roomId` vem da porta do `ViewerShell`. `null` só acontece na instalação sem
- * Supabase, onde a mesa não existe e a TV tem de ser a própria máquina.
+ * O código vem da porta, já conferido: é o daemon que decide quem pode ouvir o
+ * fluxo, e é isso que permite esta tela estar em qualquer aparelho da casa.
  */
-export function ViewerStage({ roomId }: { roomId: string | null }) {
-  // `local` sempre: quando a TV é uma aba da máquina do Operador, o
-  // `BroadcastChannel` chega antes da rede e não gasta cota. `roomId` é o que
-  // permite a TV estar em outro aparelho.
-  const { scene, track, volume, portraits, synced, stalled } = useSubscription({
-    local: true,
-    roomId,
-  });
+export function ViewerStage({ codigo }: { codigo: string }) {
+  const { scene, track, volume, portraits, spotlight, synced, stalled } =
+    useSubscription(codigo);
 
   return (
     // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
@@ -40,6 +36,11 @@ export function ViewerStage({ roomId }: { roomId: string | null }) {
 
       <SessionAudio track={track} volume={volume} />
 
+      {/* Sem `dismissable`: não há ninguém na TV para fechar nada, e um botão
+          ali só criaria a chance de alguém encostar. Quem tira do ar é o
+          mestre. */}
+      <SpotlightLayer spotlight={spotlight} />
+
       {/* Discreto no canto: a TV fica virada para a mesa, e o controle existe
           para o mestre escolher qual aparelho emite o som. */}
       <SoundToggle className="absolute top-3 right-3 opacity-40 hover:opacity-100" />
@@ -50,11 +51,10 @@ export function ViewerStage({ roomId }: { roomId: string | null }) {
           {synced
             ? "O mestre não colocou nenhuma cena no ar."
             : stalled
-              ? // Sem sala, o único transporte é a própria máquina, e é isso que
-                // a mensagem precisa dizer para não mandar procurar na rede.
-                roomId
-                ? "Sem resposta. A tela do Operador precisa estar aberta."
-                : "Sem resposta. A tela do Operador precisa estar aberta nesta mesma máquina."
+              ? // A mesa foi encontrada — o código passou —, então o que falta
+                // é o Operador publicar. Dizer isso poupa procurar problema na
+                // rede, que é onde ninguém acharia nada.
+                "Sem resposta. A tela do Operador precisa estar aberta."
               : "Aguardando o Operador…"}
         </p>
       ) : null}
