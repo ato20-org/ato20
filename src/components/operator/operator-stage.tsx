@@ -17,6 +17,8 @@ import { SceneLayer } from "@/components/playground/scene-layer";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { SelectionBox } from "@/components/playground/selection-box";
 import { TransformHandles } from "@/components/playground/transform-handles";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import { useCharacters } from "@/hooks/use-characters";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
@@ -103,6 +105,8 @@ export function OperatorStage({ scene }: { scene: Scene }) {
 
   // Por tecla OU por ferramenta; ver `usePanMode`.
   const panMode = usePanMode();
+  const abrirJanela = useAbrirJanela();
+  const { personagens } = useCharacters();
 
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
@@ -140,6 +144,29 @@ export function OperatorStage({ scene }: { scene: Scene }) {
 
   const selectedItems = scene.items.filter((item) => selectedIds.includes(item.id));
   const single = selectedItems.length === 1 ? selectedItems[0] : undefined;
+
+  /**
+   * De quem é o item selecionado, quando ele é um token de personagem que
+   * AINDA EXISTE.
+   *
+   * A checagem contra o índice não é zelo: apagar o personagem não mexe nos
+   * itens das cenas -- a imagem dele está no acervo, que sobrevive --, então o
+   * token continua no mapa com um `personagemId` apontando para o vazio. Sem
+   * isto, o botão azul seguia ali abrindo uma ficha que se fecha sozinha no
+   * quadro seguinte: um clique que não faz nada.
+   *
+   * `null` é "ainda não leu", e nesse caso o botão aparece: esconder e mostrar
+   * depois seria a fileira do gizmo mudando de tamanho na frente de quem olha.
+   *
+   * Fora do JSX porque `single.personagemId` dentro do callback não estreita o
+   * tipo -- do ponto de vista do compilador, ele pode ter mudado entre a
+   * leitura e o clique.
+   */
+  const personagemDoItem =
+    single?.personagemId &&
+    (personagens === null || personagens.some((atual) => atual.id === single.personagemId))
+      ? single.personagemId
+      : undefined;
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedPortraits = portraits.filter((portrait) =>
     selectedPortraitIds.includes(portrait.id),
@@ -608,8 +635,20 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           box={single}
           handles={CORNER_HANDLES}
           keepAspect
+          // Azul quando é token: numa cena com mobília, mapa e quatro tokens,
+          // saber que a caixa em volta é de uma PESSOA muda o que o mestre vai
+          // fazer com ela.
+          tom={personagemDoItem ? "personagem" : "default"}
           onChange={(patch) => updateItem(scene.id, single.id, patch)}
           onFlip={() => flipSelection("x")}
+          // Token abre a ficha de quem ele é. É o atalho que faltava no meio da
+          // sessão: o mestre clica na figura no mapa, e não na lista de
+          // personagens, porque no mapa é onde a mão dele já está.
+          onOpenSheet={
+            personagemDoItem
+              ? () => abrirJanela({ tipo: "personagem", personagemId: personagemDoItem })
+              : undefined
+          }
           onDelete={removeSelection}
         />
       ) : null}

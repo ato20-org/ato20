@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, GripVertical, Lock, LockOpen, Trash2 } from "lu
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAssetList } from "@/hooks/use-asset-list";
+import { useCharacters } from "@/hooks/use-characters";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -23,6 +24,7 @@ import type { CanvasItem, Scene } from "@/types/scene";
  */
 export function LayerList({ scene }: { scene: Scene }) {
   const { assets } = useAssetList("image");
+  const { personagens } = useCharacters();
 
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const select = useSelectionStore((state) => state.select);
@@ -37,6 +39,25 @@ export function LayerList({ scene }: { scene: Scene }) {
     () => new Map(assets.map((asset) => [asset.id, asset.name])),
     [assets],
   );
+
+  /**
+   * O nome do personagem vence o do arquivo, quando o item é um token.
+   *
+   * O token do Edgar aparecia como "Personagem - Edgar.png", que é o nome que
+   * o arquivo tem no acervo. Numa cena com quatro tokens e três mapas, é a
+   * linha que o mestre mais procura e a que dizia menos. Ver `personagemId`.
+   *
+   * Pelo id, e não por um nome copiado no item: renomear o personagem renomeia
+   * a linha, em vez de deixar o nome de antes cravado na cena.
+   */
+  const porPersonagem = useMemo(
+    () => new Map((personagens ?? []).map((personagem) => [personagem.id, personagem.nome])),
+    [personagens],
+  );
+
+  const nomeDe = (item: CanvasItem) =>
+    (item.personagemId ? porPersonagem.get(item.personagemId) : undefined) ??
+    names.get(item.assetId);
 
   // Frente primeiro. É o inverso de como o palco desenha, de propósito: numa
   // lista, o que está por cima se lê no topo.
@@ -66,7 +87,7 @@ export function LayerList({ scene }: { scene: Scene }) {
               <LayerRow
                 key={item.id}
                 item={item}
-                name={names.get(item.assetId)}
+                name={nomeDe(item)}
                 selected={selectedIds.includes(item.id)}
                 atFront={index === 0}
                 atBack={index === ordered.length - 1}

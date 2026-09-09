@@ -61,6 +61,22 @@ export type AssetFolder = { id: string; name: string; createdAt: number };
 export type CanvasItem = {
   id: string;
   assetId: string;
+  /**
+   * De quem e este token, quando ele e um.
+   *
+   * Ausente na imensa maioria dos itens: mobilia, mapa dentro do mapa, marca
+   * de sangue. Presente quando o item entrou pela lista de personagens, e e o
+   * que permite ao mapa saber que aquela figura E o Edgar em vez de ser um
+   * arquivo chamado "Personagem - Edgar.png".
+   *
+   * Aponta para o PERSONAGEM, e nao para o jogador: e a razao de o personagem
+   * existir como conteudo de campanha -- ver `Personagem`. O token sobrevive a
+   * quem o interpreta trocar de maos, e continua valendo no zip que viaja.
+   *
+   * Guarda o id e nao o nome: renomear o personagem tem de renomear o token,
+   * e um nome copiado aqui viraria mentira na primeira renomeacao.
+   */
+  personagemId?: string;
   /** Canto superior esquerdo, em coordenadas de cena. */
   x: number;
   y: number;
@@ -311,7 +327,10 @@ export type Portrait = {
 };
 
 /** O que o chamador informa ao criar um item; `id`, `z` e afins são do store. */
-export type NewCanvasItem = Pick<CanvasItem, "assetId" | "x" | "y" | "width" | "height">;
+export type NewCanvasItem = Pick<
+  CanvasItem,
+  "assetId" | "x" | "y" | "width" | "height" | "personagemId"
+>;
 
 /**
  * Item novo que pode trazer rotação e travamento próprios — é o que o

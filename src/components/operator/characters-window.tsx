@@ -1,19 +1,35 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { PersonStanding, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAssetList } from "@/hooks/use-asset-list";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useCharacterOwners } from "@/hooks/use-character-owners";
+import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { normaliza } from "@/lib/search";
+import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
+import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import { createCharacter } from "@/lib/vault/characters";
+import type { Personagem } from "@/types/character";
+import type { AssetMeta } from "@/types/scene";
 import { cn } from "@/lib/utils";
+
+/**
+ * Tamanho de um token cuja imagem nao declara dimensao.
+ *
+ * Menor que o do acervo (480x270, medida de mapa): token e figura de pessoa
+ * sobre a grade, e nascer do tamanho de um mapa faria o mestre encolher toda
+ * vez.
+ */
+const TAMANHO_PADRAO = { x: 140, y: 140 };
 
 /**
  * A lista de personagens da campanha.
@@ -35,6 +51,12 @@ export function CharactersBody() {
 
   /** Quem joga cada personagem. É o que a busca também alcança. */
   const donos = useCharacterOwners(jogadores);
+
+  // Uma leitura do acervo para a lista inteira, e não uma por linha: o botão de
+  // pôr no mapa precisa do tamanho natural da miniatura, e um `useAssetList`
+  // dentro dele custaria uma ida ao IPC por personagem. Mesma razão do cache de
+  // personagens — ver `useCharactersStore`.
+  const { assets } = useAssetList("image");
 
   const [busca, setBusca] = useState("");
 
@@ -118,16 +140,20 @@ export function CharactersBody() {
               const quem = donos.get(personagem.id) ?? [];
 
               return (
-                <li key={personagem.id}>
+                <li
+                  key={personagem.id}
+                  className={cn(
+                    "flex items-center gap-1 rounded-md pr-1",
+                    // Marcado é "a ficha dele está aberta", e não "foi o
+                    // último clicado": com várias fichas na tela, o destaque
+                    // tem de dizer quais são elas. Subiu do botão para a linha
+                    // porque agora há dois alvos nela.
+                    escolhidos.has(personagem.id) ? "bg-accent" : "hover:bg-accent/50",
+                  )}
+                >
                   <button
                     type="button"
-                    className={cn(
-                      "w-full rounded-md px-2 py-1.5 text-left",
-                      // Marcado é "a ficha dele está aberta", e não "foi o
-                      // último clicado": com várias fichas na tela, o destaque
-                      // tem de dizer quais são elas.
-                      escolhidos.has(personagem.id) ? "bg-accent" : "hover:bg-accent/50",
-                    )}
+                    className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-left"
                     onClick={() => abrir({ tipo: "personagem", personagemId: personagem.id })}
                   >
                     <span className="block truncate text-xs">{personagem.nome}</span>
@@ -144,6 +170,11 @@ export function CharactersBody() {
                       </span>
                     ) : null}
                   </button>
+
+                  <PorNoMapa
+                    personagem={personagem}
+                    miniatura={assets.find((asset) => asset.id === personagem.miniatura)}
+                  />
                 </li>
               );
             })}
@@ -151,5 +182,82 @@ export function CharactersBody() {
         )}
       </ScrollArea>
     </>
+  );
+}
+
+/**
+ * Poe o token do personagem no mapa.
+ *
+ * A miniatura JA e um asset do acervo -- e por isso que ela e asset e nao anexo,
+ * para alcancar a TV --, entao isto reusa o mesmo caminho do `+` do acervo:
+ * nasce centrado no que o mestre esta vendo, no tamanho que a imagem pede, e ja
+ * selecionado, porque o gesto seguinte e arrastar para o lugar.
+ *
+ * A diferenca e o `personagemId`: o item passa a saber de quem ele e. Sem isso o
+ * token e uma imagem como outra qualquer, e a lista de camadas o chama de
+ * "Personagem - Edgar.png" em vez de "Edgar".
+ *
+ * Sem miniatura o botao fica desabilitado com o motivo, e nao escondido: o lugar
+ * onde ele apareceria e a pista de que existe um campo a preencher.
+ */
+function PorNoMapa({
+  personagem,
+  /**
+   * A miniatura no acervo, quando ela existe la.
+   *
+   * Vem de fora porque quem le o acervo e a lista, uma vez para todas as
+   * linhas. Serve para o tamanho natural: uma miniatura de 512 pixels e uma de
+   * 64 nao podem entrar no mapa do mesmo tamanho.
+   */
+  miniatura,
+}: {
+  personagem: Personagem;
+  miniatura: AssetMeta | undefined;
+}) {
+  const scene = useSceneStore(selectEditingScene);
+  const addItem = useSceneStore((state) => state.addItem);
+  const select = useSelectionStore((state) => state.select);
+
+  const impedimento = !personagem.miniatura
+    ? "Sem miniatura. Anexe uma na ficha dele."
+    : !scene
+      ? "Nenhuma cena aberta."
+      : null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground shrink-0"
+            aria-label={`Por o token de ${personagem.nome} no mapa`}
+            disabled={impedimento !== null}
+            onClick={() => {
+              if (!scene || !personagem.miniatura) return;
+
+              const tamanho =
+                miniatura?.naturalWidth && miniatura.naturalHeight
+                  ? fitInitialSize(miniatura.naturalWidth, miniatura.naturalHeight)
+                  : TAMANHO_PADRAO;
+
+              select([
+                addItem(scene.id, {
+                  assetId: personagem.miniatura,
+                  personagemId: personagem.id,
+                  ...centeredBox(tamanho.x, tamanho.y),
+                }),
+              ]);
+            }}
+          >
+            <PersonStanding />
+          </Button>
+        }
+      />
+      <TooltipContent>
+        <p className="max-w-48">{impedimento ?? `Por ${personagem.nome} no mapa`}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
