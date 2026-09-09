@@ -28,8 +28,18 @@ import { cn } from "@/lib/utils";
  * Menor que o do acervo (480x270, medida de mapa): token e figura de pessoa
  * sobre a grade, e nascer do tamanho de um mapa faria o mestre encolher toda
  * vez.
+ *
+ * Em pe, e nao quadrado. Era quadrado, e o resultado era uma pessoa esticada
+ * na largura -- e o gizmo do item trava a proporcao, entao redimensionar depois
+ * mantinha o erro: o token nascia quadrado e continuava quadrado para sempre. A
+ * unica saida era apagar e por de novo.
+ *
+ * Continua sendo chute, porque sem a medida do arquivo nao ha o que preservar.
+ * Chute de figura em pe erra menos que chute de quadrado, e e usado so quando o
+ * acervo nao sabe a dimensao -- ver `PorNoMapa`, que exige o registro do
+ * acervo justamente para nao precisar chutar.
  */
-const TAMANHO_PADRAO = { x: 140, y: 140 };
+const TAMANHO_PADRAO = { x: 140, y: 187 };
 
 /**
  * A lista de personagens da campanha.
@@ -222,7 +232,16 @@ function PorNoMapa({
     ? "Sem miniatura. Anexe uma na ficha dele."
     : !scene
       ? "Nenhuma cena aberta."
-      : null;
+      : // Sem o registro do acervo nao se sabe a proporcao da imagem, e por o
+        // token com tamanho chutado o deixa esticado PARA SEMPRE: o gizmo do
+        // item trava a proporcao, entao nem redimensionando se corrige.
+        //
+        // Vale para os dois casos em que o registro falta -- o acervo ainda
+        // nao respondeu, ou a imagem foi apagada de lá. No segundo, desabilitar
+        // e o certo de qualquer jeito: nao ha imagem para por no mapa.
+        !miniatura
+        ? "Lendo o acervo. Se insistir, a imagem da miniatura pode ter sido apagada."
+        : null;
 
   return (
     <Tooltip>
