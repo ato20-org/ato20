@@ -20,15 +20,17 @@ import {
 /**
  * Os retratos da sessão, mais a configuração da fila automática.
  *
- * O arquivo era um array e virou objeto: a fila tem dois campos que são de
- * TODOS os retratos — se ela está ligada e em que área está ancorada —, e isso
- * não cabe num item da lista. O Rust guarda JSON opaco, então a mudança de
- * forma é só aqui e na leitura.
+ * O arquivo era um array e virou objeto: a fila tem campos que são de TODOS os
+ * retratos — se ela está ligada, em que área está ancorada, e quanto espaço vai
+ * entre dois vizinhos —, e isso não cabe num item da lista. O Rust guarda JSON
+ * opaco, então a mudança de forma é só aqui e na leitura.
  */
 export type RetratosSalvos = {
   retratos: Portrait[];
   filaAuto: boolean;
   ancora: AncoraRetrato;
+  /** Espaço entre dois retratos da fila. Negativo sobrepõe — ver `FOLGA_MIN`. */
+  folga: number;
 };
 
 /**

@@ -5,16 +5,21 @@ import {
   Eye,
   EyeOff,
   FlipHorizontal,
+  RotateCcw,
   Trash2,
   UserSquare,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useCharacters } from "@/hooks/use-characters";
+import { FOLGA_MAX, FOLGA_MIN, FOLGA_PADRAO } from "@/lib/geometry/portrait";
 import { MINIATURA } from "@/lib/miniatura";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
@@ -55,7 +60,9 @@ export function PortraitList() {
   const guardados = usePortraitStore((state) => state.portraits);
   const filaAuto = usePortraitStore((state) => state.filaAuto);
   const ancora = usePortraitStore((state) => state.ancora);
+  const folga = usePortraitStore((state) => state.folga);
   const alternarFila = usePortraitStore((state) => state.alternarFila);
+  const ajustarFolga = usePortraitStore((state) => state.ajustarFolga);
 
   /**
    * Um personagem por token, na ordem em que entraram na cena.
@@ -95,6 +102,69 @@ export function PortraitList() {
         >
           <AlignHorizontalDistributeCenter />
         </Toggle>
+
+        {/* O ajuste do vão só existe com a fila ligada: fora dela cada retrato
+            tem posição própria, e não há vão nenhum para medir. Atrás de uma
+            seta pelo mesmo motivo da grade -- ligar é gesto de toda sessão,
+            ajustar é de uma vez por mesa. */}
+        {filaAuto ? (
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Ajustar o espaçamento da fila"
+                  className="text-muted-foreground w-5"
+                >
+                  <span aria-hidden className="text-[10px]">
+                    ▲
+                  </span>
+                </Button>
+              }
+            />
+            <PopoverContent align="start" className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">Espaçamento da fila</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground h-7 px-2 text-xs"
+                  onClick={() => ajustarFolga(FOLGA_PADRAO)}
+                >
+                  <RotateCcw className="size-3" />
+                  Padrão
+                </Button>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <Label className="text-xs font-normal">Entre um retrato e o vizinho</Label>
+                  <span className="text-muted-foreground text-[10px] tabular-nums">
+                    {emPorcento(folga)}
+                  </span>
+                </div>
+                {/* Em décimos de por cento porque o slider anda em inteiros, e a
+                    folga é uma fração pequena da câmera: passar 0.015 direto
+                    daria um controle de dois passos. */}
+                <Slider
+                  aria-label="Espaçamento entre os retratos da fila"
+                  value={[Math.round(folga * 1000)]}
+                  min={Math.round(FOLGA_MIN * 1000)}
+                  max={Math.round(FOLGA_MAX * 1000)}
+                  step={5}
+                  onValueChange={(valor) => ajustarFolga(primeiro(valor) / 1000)}
+                />
+              </div>
+
+              <p className="text-muted-foreground text-[10px] leading-snug">
+                Em fração da largura da tela, então o vão é o mesmo para o chefe e para o
+                capanga. Negativo sobrepõe de propósito — é o que dá o elenco ombro a ombro,
+                e o que fecha o vão que retrato com borda transparente traz de fábrica.
+              </p>
+            </PopoverContent>
+          </Popover>
+        ) : null}
 
         <span className="text-muted-foreground min-w-0 flex-1 truncate text-[10px]">
           {filaAuto ? `Fila em ${LUGAR[ancora]}` : "Fila automática desligada"}
@@ -290,6 +360,22 @@ function PortraitRow({
       ) : null}
     </li>
   );
+}
+
+/**
+ * O espaçamento como ele aparece no painel.
+ *
+ * Por cento com uma casa, e o sinal explícito no positivo: o controle vai dos
+ * dois lados do zero, e "1,5%" sem sinal não diz de que lado está.
+ */
+function emPorcento(folga: number): string {
+  const valor = (folga * 100).toFixed(1).replace(".", ",");
+
+  return folga > 0 ? `+${valor}%` : valor.replace("-0,0", "0,0") + "%";
+}
+
+function primeiro(valor: number | readonly number[]): number {
+  return Array.isArray(valor) ? (valor[0] ?? 0) : (valor as number);
 }
 
 /** Botão de estado: o ícone diz o que é, e o fundo diz se está ligado. */

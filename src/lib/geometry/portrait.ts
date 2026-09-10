@@ -185,8 +185,43 @@ export function retratosDaCena(
  */
 const MARGEM_FILA = 0.03;
 
-/** Espaço entre dois retratos da fila. Encolhe quando não cabe. */
-const FOLGA = 0.015;
+/**
+ * Espaço entre dois retratos da fila, em fração da câmera.
+ *
+ * É o padrão, e não mais o valor: o mestre ajusta, e o ajuste mora na sessão --
+ * ver `usePortraitStore.folga`. Continua existindo como constante porque
+ * `filaDeRetratos` precisa de um número quando ninguém escolheu nenhum.
+ */
+export const FOLGA_PADRAO = 0.015;
+
+/**
+ * Os limites do ajuste, e por que o negativo está entre eles.
+ *
+ * Sobrepor a fila é um pedido de verdade: retrato com borda transparente nasce
+ * com um vão que não está no desenho, e elenco ombro a ombro é uma imagem que
+ * fila espaçada não produz. A sobreposição já existia no algoritmo como saída
+ * de emergência -- aqui ela vira escolha.
+ *
+ * Simétricos e pequenos: a fila ocupa uma faixa da tela, e um dezesseis avos
+ * dela de respiro entre duas figuras já é muito. Quem quer mais que isso não
+ * quer uma fila, quer os retratos soltos.
+ */
+export const FOLGA_MIN = -0.06;
+export const FOLGA_MAX = 0.06;
+
+/**
+ * Prende a folga aos limites, ou devolve o padrão para o que não é número.
+ *
+ * Existe porque o valor entra por dois caminhos que ninguém controla: o
+ * `retratos.json` de uma versão futura ou corrompido, e o estado que chega pelo
+ * canal. O slider já não deixa sair do intervalo -- é dos outros dois que este
+ * guarda protege.
+ */
+export function limitarFolga(folga: unknown): number {
+  return typeof folga === "number" && Number.isFinite(folga)
+    ? Math.min(FOLGA_MAX, Math.max(FOLGA_MIN, folga))
+    : FOLGA_PADRAO;
+}
 
 /**
  * Onde cada área de encaixe fica, em fração da câmera.
@@ -214,13 +249,16 @@ const AREAS: Record<AncoraRetrato, { horizontal: "esquerda" | "centro" | "direit
  * alturas diferentes lado a lado precisam de uma linha comum, e no chão é onde
  * uma pessoa em pé encosta.
  *
- * Não cabendo, a folga encolhe até zero; ainda não cabendo, eles se sobrepõem o
- * necessário para a fila terminar dentro da margem. Fila sobreposta é feia; fila
- * fora da tela é inútil, e é a única tela em que o retrato aparece.
+ * `escolhida` é o espaço entre dois vizinhos, e pode ser NEGATIVO -- ver
+ * `FOLGA_MIN`. Não cabendo, a folga positiva encolhe até zero; ainda não
+ * cabendo, eles se sobrepõem o necessário para a fila terminar dentro da
+ * margem. Fila sobreposta sem querer é feia; fila fora da tela é inútil, e é a
+ * única tela em que o retrato aparece. Ver `folgaAplicada`.
  */
 export function filaDeRetratos(
   fila: ReadonlyArray<Pick<Portrait, "id" | "width" | "height">>,
   ancora: AncoraRetrato,
+  escolhida: number = FOLGA_PADRAO,
 ): Array<{ id: string; x: number; y: number }> {
   if (fila.length === 0) return [];
 
@@ -230,9 +268,7 @@ export function filaDeRetratos(
   const larguras = fila.reduce((soma, retrato) => soma + retrato.width, 0);
   const vaos = fila.length - 1;
 
-  // A folga cede antes de qualquer coisa: ela é respiro, e respiro é o primeiro
-  // a sair quando falta espaço.
-  const folga = vaos > 0 ? Math.min(FOLGA, Math.max(0, (disponivel - larguras) / vaos)) : 0;
+  const folga = vaos > 0 ? folgaAplicada(escolhida, disponivel - larguras, vaos, fila) : 0;
   const total = larguras + folga * vaos;
 
   /**
@@ -265,6 +301,42 @@ export function filaDeRetratos(
 
     return posicao;
   });
+}
+
+/**
+ * A folga que a fila usa de verdade, dada a que o mestre escolheu.
+ *
+ * Assimétrica de propósito, e é a única regra nova do ajuste.
+ *
+ * Folga POSITIVA é respiro, e respiro é o primeiro a sair quando falta espaço:
+ * ela encolhe até zero antes de a fila começar a se sobrepor.
+ *
+ * Folga NEGATIVA é a sobreposição PEDIDA, e falta de espaço não é motivo para
+ * desfazê-la. O clamp de antes -- um `Math.max(0, ...)` sobre a sobra -- zerava
+ * justamente o valor negativo quando a fila está cheia, que é quando se quer
+ * sobrepor.
+ *
+ * O piso é METADE da largura do menor retrato, e não a largura inteira: com a
+ * largura inteira o passo entre dois vizinhos chega a zero e a fila empilha
+ * tudo no mesmo ponto -- oito retratos de 4% da tela com -6% pedido faziam
+ * exatamente isso. Metade garante que sempre sobre meia figura à mostra, que é
+ * o mínimo para ainda ser uma fila e não um retrato perdido.
+ *
+ * É também o que garante que a fila não some: com N retratos e N-1 vãos, o pior
+ * caso deixa `menor * (N + 1) / 2` de largura total, sempre positiva -- é o que
+ * mantém o cálculo do início dentro da tela.
+ */
+function folgaAplicada(
+  escolhida: number,
+  sobra: number,
+  vaos: number,
+  fila: ReadonlyArray<Pick<Portrait, "width">>,
+): number {
+  if (escolhida >= 0) return Math.min(escolhida, Math.max(0, sobra / vaos));
+
+  const menor = fila.reduce((menor, retrato) => Math.min(menor, retrato.width), Infinity);
+
+  return Math.max(escolhida, -menor / 2);
 }
 
 /**

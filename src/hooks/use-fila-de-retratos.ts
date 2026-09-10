@@ -50,6 +50,7 @@ export function useFilaDeRetratos(scene: Scene | null): void {
   const guardados = usePortraitStore((state) => state.portraits);
   const filaAuto = usePortraitStore((state) => state.filaAuto);
   const ancora = usePortraitStore((state) => state.ancora);
+  const folga = usePortraitStore((state) => state.folga);
   const updateMany = usePortraitStore((state) => state.updateMany);
 
   useEffect(() => {
@@ -59,7 +60,7 @@ export function useFilaDeRetratos(scene: Scene | null): void {
       (retrato) => retrato.visible && !retrato.foraDaFila,
     );
 
-    const posicoes = filaDeRetratos(naFila, ancora);
+    const posicoes = filaDeRetratos(naFila, ancora, folga);
 
     // Só o que saiu de lugar. Sem esta comparação, cada aplicação produziria
     // um estado novo, que dispararia o efeito, que aplicaria de novo — e a
@@ -76,5 +77,5 @@ export function useFilaDeRetratos(scene: Scene | null): void {
       .map(({ id, x, y }) => ({ id, patch: { x, y } }));
 
     if (patches.length > 0) updateMany(patches);
-  }, [filaAuto, ancora, scene, guardados, personagens, updateMany]);
+  }, [filaAuto, ancora, folga, scene, guardados, personagens, updateMany]);
 }

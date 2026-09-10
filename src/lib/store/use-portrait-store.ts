@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import { createPortrait } from "@/lib/geometry/portrait";
+import { createPortrait, FOLGA_PADRAO, limitarFolga } from "@/lib/geometry/portrait";
 import { loadPortraits, savePortraits, type RetratosSalvos } from "@/lib/vault/session";
 import type { AncoraRetrato, Portrait } from "@/types/scene";
 
@@ -27,6 +27,16 @@ type PortraitStore = {
   filaAuto: boolean;
   /** Onde a fila encosta. Ver `AncoraRetrato`. */
   ancora: AncoraRetrato;
+  /**
+   * Espaço entre dois retratos da fila, em fração da câmera.
+   *
+   * Global como os outros dois campos da fila, e pelo mesmo motivo: o vão é uma
+   * propriedade da FILA, não de um retrato. Guardado por retrato, cada vizinho
+   * teria uma opinião sobre o mesmo vão.
+   *
+   * Negativo sobrepõe de propósito — ver `FOLGA_MIN`.
+   */
+  folga: number;
   /** Qual campanha estes retratos pertencem. Ver `use-scene-store`. */
   hydratedPath: string | null;
 
@@ -49,6 +59,8 @@ type PortraitStore = {
   alternarFila: () => void;
   /** Troca a área em que a fila encosta. */
   ancorar: (ancora: AncoraRetrato) => void;
+  /** Muda o espaço entre os retratos da fila. Ver `folga`. */
+  ajustarFolga: (folga: number) => void;
   /** Aplica um estado recebido do canal, sem regravar no disco. */
   receive: (portraits: Portrait[]) => void;
 
@@ -73,6 +85,7 @@ export const usePortraitStore = create<PortraitStore>((set, get) => ({
   portraits: [],
   filaAuto: false,
   ancora: "baixo-centro",
+  folga: FOLGA_PADRAO,
   hydratedPath: null,
 
   async hydrate(campaignPath) {
@@ -151,6 +164,13 @@ export const usePortraitStore = create<PortraitStore>((set, get) => ({
     persist(get().portraits, set, { ancora });
   },
 
+  ajustarFolga(folga) {
+    const limitada = limitarFolga(folga);
+
+    set({ folga: limitada });
+    persist(get().portraits, set, { folga: limitada });
+  },
+
   receive(portraits) {
     // Espectador não grava: o disco pertence a quem opera.
     set({ portraits });
@@ -162,15 +182,15 @@ let persistTimer: ReturnType<typeof setTimeout> | undefined;
 /**
  * Grava a sessão inteira, e não só a lista.
  *
- * O arquivo virou objeto porque a fila tem dois campos que são de todos os
- * retratos. `extra` existe para as ações que mexem NESSES campos: o `set` delas
+ * O arquivo virou objeto porque a fila tem campos que são de todos os retratos.
+ * `extra` existe para as ações que mexem NESSES campos: o `set` delas
  * já aconteceu, mas o estado do store ainda não chegou aqui pelo `get` do
  * chamador — passar o valor novo à mão evita gravar o antigo.
  */
 function persist(
   portraits: Portrait[],
   set: (partial: { portraits: Portrait[] }) => void,
-  extra?: Partial<Pick<RetratosSalvos, "filaAuto" | "ancora">>,
+  extra?: Partial<Pick<RetratosSalvos, "filaAuto" | "ancora" | "folga">>,
 ) {
   set({ portraits });
 
@@ -179,10 +199,10 @@ function persist(
 }
 
 /** O objeto que vai para o disco. */
-function tudo(extra?: Partial<Pick<RetratosSalvos, "filaAuto" | "ancora">>): RetratosSalvos {
-  const { portraits, filaAuto, ancora } = usePortraitStore.getState();
+function tudo(extra?: Partial<Pick<RetratosSalvos, "filaAuto" | "ancora" | "folga">>): RetratosSalvos {
+  const { portraits, filaAuto, ancora, folga } = usePortraitStore.getState();
 
-  return { retratos: portraits, filaAuto, ancora, ...extra };
+  return { retratos: portraits, filaAuto, ancora, folga, ...extra };
 }
 
 /**
@@ -197,8 +217,13 @@ function tudo(extra?: Partial<Pick<RetratosSalvos, "filaAuto" | "ancora">>): Ret
  * um solto não teria linha nenhuma para ser desligado — ficaria publicado para a
  * mesa e fora do alcance do mestre. Some na leitura.
  */
-function ler(cru: unknown): Pick<PortraitStore, "portraits" | "filaAuto" | "ancora"> {
-  const padrao = { portraits: [], filaAuto: false, ancora: "baixo-centro" as AncoraRetrato };
+function ler(cru: unknown): Pick<PortraitStore, "portraits" | "filaAuto" | "ancora" | "folga"> {
+  const padrao = {
+    portraits: [],
+    filaAuto: false,
+    ancora: "baixo-centro" as AncoraRetrato,
+    folga: FOLGA_PADRAO,
+  };
 
   const lista = Array.isArray(cru)
     ? cru
@@ -214,6 +239,9 @@ function ler(cru: unknown): Pick<PortraitStore, "portraits" | "filaAuto" | "anco
     portraits: (lista as Portrait[]).filter((retrato) => Boolean(retrato?.personagemId)),
     filaAuto: typeof objeto?.filaAuto === "boolean" ? objeto.filaAuto : padrao.filaAuto,
     ancora: ANCORAS.has(objeto?.ancora as AncoraRetrato) ? objeto!.ancora : padrao.ancora,
+    // Arquivo de antes do ajuste não tem o campo, e `limitarFolga` devolve o
+    // padrão para isso pelo mesmo caminho que usa para lixo.
+    folga: limitarFolga(objeto?.folga),
   };
 }
 
