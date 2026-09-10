@@ -33,8 +33,8 @@ const MIN_WIDTH = SCENE_WIDTH / MAX_ZOOM;
  * Perder o mapa de vista aqui é recuperável num clique: o botão da porcentagem
  * volta ao plano inteiro.
  */
-const FOLGA_X = SCENE_WIDTH;
-const FOLGA_Y = SCENE_HEIGHT;
+export const FOLGA_X = SCENE_WIDTH;
+export const FOLGA_Y = SCENE_HEIGHT;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
