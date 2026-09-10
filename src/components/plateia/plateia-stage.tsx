@@ -71,7 +71,11 @@ export function PlateiaStage({
               troca de cena entra em fade em vez de estalar. */}
           {scene ? (
             <div key={scene.id} className="scene-fade-in absolute inset-0">
-              <SceneLayer scene={scene} portraits={portraits} smooth />
+              {/* `tela`: o celular recebe a mesma cena que a TV, e desenha
+                  numa tela de 400px de largura. Sem a variante ele baixava os
+                  8 MB do mapa para decodificar 51 MB de bitmap -- por celular,
+                  e são N na mesa. Ver `SceneLayer.variante`. */}
+              <SceneLayer scene={scene} portraits={portraits} smooth variante="tela" />
 
               {/* A régua, como na TV: dentro do palco porque as pontas são
                   coordenadas de cena, e fora do `SceneLayer` porque ela não é

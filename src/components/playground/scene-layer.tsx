@@ -8,6 +8,7 @@ import { GridLayer } from "@/components/playground/grid-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import type { Variante } from "@/lib/vault/assets";
 import type { CanvasItem, FogRegion, Portrait, Scene } from "@/types/scene";
 
 type SceneLayerProps = {
@@ -30,6 +31,24 @@ type SceneLayerProps = {
    */
   smooth?: boolean;
   /**
+   * Qual tamanho dos arquivos desenhar. Ausente = os arquivos.
+   *
+   * `mini` é da prévia de cena. Medido no `scripts/perf/medir.mjs`, cenário
+   * `lista`, com trinta cenas de mapa próprio enquanto o mestre arrasta um
+   * token: 45,6 fps, pior quadro de 383 ms e 536 MB buscados, contra 60 fps,
+   * 16,8 ms e 14,4 MB com miniatura. Um mapa de 3537x3750 são 51 MB de bitmap,
+   * e a lista os decodificava um por linha para desenhar um quadrado de 56x32.
+   * Não é o `SceneStage` por linha que pesa: as duas corridas têm os mesmos 409
+   * nós no DOM.
+   *
+   * `tela` é do celular do jogador: mesma cena que a TV, numa tela de 400px.
+   * Medido no mapa real, 8,0 MB e 51 MB decodificado contra 0,44 MB e 13 MB.
+   *
+   * O palco do mestre e a TV ficam sem variante de propósito: um é onde se
+   * amplia para conferir detalhe, a outra é a tela grande da mesa.
+   */
+  variante?: Variante;
+  /**
    * Retratos da sessão. Não vêm de dentro da cena de propósito: eles ficam no
    * ar atravessando a troca de cena, e são ancorados na câmera dela.
    */
@@ -50,13 +69,14 @@ export function SceneLayer({
   scene,
   variant = "viewer",
   smooth = false,
+  variante,
   portraits,
   onItemPointerDown,
   onFogPointerDown,
   onPortraitPointerDown,
   apagando,
 }: SceneLayerProps) {
-  const backgroundUrl = useAssetUrl(scene.backgroundAssetId);
+  const backgroundUrl = useAssetUrl(scene.backgroundAssetId, variante);
   const items = useMemo(() => [...scene.items].sort((a, b) => a.z - b.z), [scene.items]);
 
   return (
@@ -82,6 +102,7 @@ export function SceneLayer({
           key={item.id}
           item={item}
           smooth={smooth}
+          variante={variante}
           onPointerDown={onItemPointerDown}
         />
       ))}

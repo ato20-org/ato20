@@ -206,12 +206,16 @@ pub fn import(
             continue;
         }
 
-        // Aquece a miniatura aqui, e nao so sob demanda: o arquivo acabou de
+        // Aquece a MINIATURA aqui, e nao so sob demanda: o arquivo acabou de
         // ser lido, o disco esta quente, e o mestre normalmente importa antes
         // de abrir a lista. Falhar nao recusa o arquivo -- o daemon gera de
         // novo no primeiro pedido, e se nem la der, serve o original.
+        //
+        // A variante de TELA nao entra aqui: ela e do celular do jogador, que
+        // pode nem existir nesta sessao, e gerar um JPEG de 1920px por arquivo
+        // importado cobraria segundos de uma importacao de trinta mapas.
         if meta.kind == "image" {
-            if let Err(cause) = super::mini::ensure(vault, &meta) {
+            if let Err(cause) = super::variantes::ensure(vault, super::variantes::Variante::Mini, &meta) {
                 log::warn!("acervo: {} entrou sem miniatura: {cause}", meta.name);
             }
         }
@@ -249,7 +253,7 @@ pub fn delete(vault: &Vault, id: &str) -> AppResult<()> {
         }
     }
 
-    super::mini::discard(vault, &meta.id);
+    super::variantes::discard(vault, &meta.id);
 
     Ok(())
 }

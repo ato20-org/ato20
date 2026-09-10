@@ -24,7 +24,7 @@ use tower_http::services::{ServeDir, ServeFile};
 mod page;
 
 use crate::error::AppResult;
-use crate::vault::{assets, characters, mini, players, Vault};
+use crate::vault::{assets, characters, players, variantes, Vault};
 use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
@@ -96,7 +96,7 @@ pub struct Daemon {
     live_tx: broadcast::Sender<String>,
     /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
     evidence: SharedEvidence,
-    /// Quantas miniaturas se geram ao mesmo tempo.
+    /// Quantas reducoes de imagem se geram ao mesmo tempo.
     ///
     /// Abrir o acervo pede varias de uma vez, e cada uma decodifica um mapa
     /// inteiro -- centenas de milissegundos e dezenas de MB de pico. Sem
@@ -269,7 +269,7 @@ fn lan_ip() -> Option<IpAddr> {
 pub fn router(state: Arc<Daemon>) -> Router {
     Router::new()
         .route("/asset/{id}", get(serve_asset))
-        .route("/asset/{id}/mini", get(serve_mini))
+        .route("/asset/{id}/{variante}", get(serve_variante))
         .route("/evidencia/{id}", get(serve_evidence))
         .route("/sala", get(check))
         .route("/sala/entrar", post(join_table))
@@ -1212,20 +1212,24 @@ async fn serve_asset(
     }
 }
 
-/// `GET /asset/{id}/mini`
+/// `GET /asset/{id}/{variante}` -- `mini` ou `tela`.
 ///
-/// A miniatura, para as LISTAS. Sem token, como a irma dela, e pelo mesmo
-/// motivo: quem pede e um `<img>`.
+/// Sem token, como a irma dela, e pelo mesmo motivo: quem pede e um `<img>`.
 ///
-/// Toda falha cai no arquivo original em vez de virar imagem quebrada na
-/// lista: som nao tem miniatura, um `.png` que na verdade nao e PNG existe, e
-/// um disco cheio nao pode esconder o acervo do mestre. O preco de cair e
-/// exatamente o comportamento de antes desta rota existir.
-async fn serve_mini(
+/// Toda falha cai no arquivo ORIGINAL em vez de virar imagem quebrada: som nao
+/// tem reducao, um `.png` que na verdade nao e PNG existe, um recorte com alfa
+/// nao tem variante de tela, e um disco cheio nao pode esconder o acervo do
+/// mestre. O preco de cair e exatamente o comportamento de antes desta rota
+/// existir -- servir o arquivo inteiro.
+async fn serve_variante(
     State(state): State<Arc<Daemon>>,
-    AxumPath(id): AxumPath<String>,
+    AxumPath((id, variante)): AxumPath<(String, String)>,
     request: Request<Body>,
 ) -> Response {
+    let Some(variante) = variantes::Variante::de_nome(&variante) else {
+        return fail(StatusCode::NOT_FOUND, "variante desconhecida");
+    };
+
     let found = {
         let guard = state.vault.read().expect("vault envenenado");
         let Some(vault) = guard.as_ref() else {
@@ -1237,7 +1241,7 @@ async fn serve_mini(
             // seria devolver a raiz do vault e remontar caminho fora, com duas
             // regras de nome de arquivo em vez de uma.
             Ok(Some(meta)) => Some((
-                mini::path(vault, &meta.id),
+                variantes::path(vault, variante, &meta.id),
                 assets::asset_path(vault, &meta),
                 meta,
             )),
@@ -1270,24 +1274,37 @@ async fn serve_mini(
             let guard = vault.read().expect("vault envenenado");
             let vault = guard.as_ref().ok_or(crate::error::AppError::NoCampaign)?;
 
-            mini::ensure(vault, &alvo)
+            variantes::ensure(vault, variante, &alvo)
         })
         .await
         {
             Ok(Ok(caminho)) => Some(caminho),
             Ok(Err(cause)) => {
-                log::warn!("miniatura de {id} nao saiu, servindo o original: {cause}");
+                log::warn!(
+                    "{} de {id} nao saiu, servindo o original: {cause}",
+                    variante.nome()
+                );
                 None
             }
             Err(cause) => {
-                log::warn!("miniatura de {id} morreu na thread: {cause}");
+                log::warn!("{} de {id} morreu na thread: {cause}", variante.nome());
                 None
             }
         }
     };
 
     let (caminho, mime_type) = match caminho {
-        Some(caminho) => (caminho, "image/png".to_string()),
+        // O tipo sai da VARIANTE e nao do arquivo original: a miniatura e
+        // sempre PNG e a de tela e sempre JPEG, independente do que entrou no
+        // acervo.
+        Some(caminho) => (
+            caminho,
+            if variante == variantes::Variante::Mini {
+                "image/png".to_string()
+            } else {
+                "image/jpeg".to_string()
+            },
+        ),
         None => (original, meta.mime_type.clone()),
     };
 
@@ -1300,7 +1317,7 @@ async fn serve_mini(
     {
         Ok(response) => response.into_response(),
         Err(cause) => {
-            log::error!("miniatura {id} em {}: {cause}", caminho.display());
+                log::error!("{} {id} em {}: {cause}", variante.nome(), caminho.display());
             fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o arquivo")
         }
     }

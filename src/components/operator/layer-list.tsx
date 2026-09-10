@@ -142,7 +142,7 @@ function LayerRow({
   onToggleLock,
   onRemove,
 }: LayerRowProps) {
-  const url = useAssetUrl(item.assetId, true);
+  const url = useAssetUrl(item.assetId, "mini");
 
   return (
     <li

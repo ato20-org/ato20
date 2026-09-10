@@ -208,7 +208,7 @@ function Anexo({
   assetId: string;
   nome: string | undefined;
 }) {
-  const url = useAssetUrl(assetId, true);
+  const url = useAssetUrl(assetId, "mini");
 
   const detachFromPin = useSceneStore((state) => state.detachFromPin);
   const spotlight = useSpotlightStore((state) => state.spotlight);

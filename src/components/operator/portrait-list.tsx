@@ -143,7 +143,7 @@ function PortraitRow({
   retrato: Portrait | null;
   filaAuto: boolean;
 }) {
-  const url = useAssetUrl(personagem.retrato, true);
+  const url = useAssetUrl(personagem.retrato, "mini");
   const update = usePortraitStore((state) => state.update);
   const armar = usePortraitStore((state) => state.armar);
   const desarmar = usePortraitStore((state) => state.desarmar);
