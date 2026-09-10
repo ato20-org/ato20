@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
-import { pintarDado } from "@/components/operator/dado-pincel";
+import { DadoFacetas } from "@/components/operator/dado-facetas";
 import { useGestoDeArremesso } from "@/hooks/use-gesto-de-arremesso";
 import {
   desenharDado,
@@ -12,9 +18,13 @@ import {
   quadroDaQueda,
   quadroNaMao,
 } from "@/lib/geometry/dado";
+import type { Vec } from "@/lib/geometry/transform";
 import { DADO_Z, RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
 import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
 import { tipoDado, valorDaRolagem, type Dado } from "@/types/dado";
+
+/** A mão do store, sem exportar o tipo dele só para nomear uma propriedade. */
+type Mao = ReturnType<typeof useDadosStore.getState>["naMao"];
 
 /**
  * Os dados sobre o tabuleiro.
@@ -29,44 +39,71 @@ import { tipoDado, valorDaRolagem, type Dado } from "@/types/dado";
  * dele. É o que permite redesenhar sem nunca escrever no store durante a
  * queda, que seria um render da cena inteira sessenta vezes por segundo.
  *
- * ## Canvas, e não SVG
+ * ## SVG, e não canvas
  *
- * Foi SVG, e pela razão certa: o plano é um `div` escalado por CSS, e bitmap
- * dentro de `scale()` borra. O que mudou foi a medida. Com o amostrador de
- * perfil do `scripts/perf/medir.mjs`:
+ * Foi canvas por um tempo, e a medida que o trouxe estava certa -- só não
+ * cobria o palco AMPLIADO, que é onde a mesa passa metade do tempo.
  *
- *   dados n=20    23% do tempo em `(program)`,  2,8% em `setAttribute`
- *   dados n=60    47% do tempo em `(program)`,    5% em `setAttribute`
+ * O que o canvas custava lá é o borrão do mapa. Um `<canvas>` dentro do plano é
+ * uma camada COMPOSTA, e um descendente composto basta: o motor passa a compor
+ * o plano ampliado como camada única, rasteriza no tamanho CSS dela e o
+ * compositor estica a textura. Medido no inspetor da webview, a 400% com dado
+ * na mesa, na camada do plano:
  *
- * `(program)` é o motor processando mudança de DOM. A geometria — projetar
- * sessenta e dois vértices, girar o quaternion, resolver a queda — não passava
- * de 3%. O custo nunca foi calcular o dado: era escrever vinte `<polygon>` por
- * dado, sessenta vezes por segundo, e pagar o estilo e o layout que isso pede.
+ *   Composited  1922x1082      <- rasterizado no tamanho CSS do plano
+ *   Visible     3760x2115      <- esticado pelo compositor
+ *   Reasons for compositing
+ *     Element has a 2D transform and composited descendants
  *
- * ## O canvas cobre o que se VÊ, e não o plano
+ * O mapa e os tokens perdiam quase metade da definição, e ficavam assim
+ * enquanto houvesse dado na mesa -- bastava recolher para voltarem. SVG não faz
+ * isso: é vetor, rasterizado na resolução final, sem textura para esticar.
  *
- * Aqui está o defeito que a primeira versão tinha e que só apareceu no
- * aplicativo: um canvas do tamanho do plano precisa de `1920 * escala` pixels de
- * backing, e com o palco ampliado em seis vezes isso são vinte e oito
- * megapixels. O motor não entrega, rebaixa a camada -- e o borrão pegava o dado
- * E a interface em volta, porque o que foi rebaixado foi a camada composta.
+ * ## Duas saídas que não serviram
  *
- * Então o canvas mede a REGIÃO VISÍVEL, em unidades de cena, e guarda os pixels
- * da janela. O backing fica limitado pela tela, não pelo zoom: ampliar não pede
- * um pixel a mais. É o que resolve, na origem, o borrão que motivou a escolha do
- * SVG -- e não ampliar bitmap nenhum é o que o `<svg>` fazia de graça.
+ * Tirar o canvas do PLANO, para um irmão de fora do `transform`: o dado ficou
+ * nítido e o mapa borrado do mesmo jeito. Não é onde o canvas mora, é ele
+ * existir sobre o palco.
  *
- * ## O que o canvas não dá, e como isso volta
+ * Trocar a ampliação do palco de `transform: scale` para `zoom`, que entra no
+ * layout e não teria textura para esticar: quebra os controles. Eles se
+ * dimensionam em `valor / scale` para ter tamanho constante na tela, e a 800%
+ * `OUTLINE_PX / scale` são 0,1875px -- que `transform` preserva, sendo
+ * geométrico, e `zoom` arredonda para um pixel antes de multiplicar de volta.
+ * Bordas oito vezes mais grossas, e traço de ícone engrossando até virar bola
+ * branca. Esse padrão está em treze lugares do palco.
  *
- * O `<g>` de cada dado era alvo de clique, recebia foco de teclado e carregava
- * `aria-label` e `<title>`. Canvas é uma superfície: não tem nada disso.
+ * ## O que o canvas ganhava, e onde
  *
- * Então os dados ASSENTADOS ganham um `<button>` transparente por cima, do
- * tamanho deles. São eles que capturam o gesto, respondem ao Enter e falam com
- * o leitor de tela — e não custam quadro nenhum, porque dado assentado não se
- * move: o botão é escrito uma vez e fica. Dado no ar não tem botão, que é
- * exatamente o que o `pointer-events: none` fazia antes: alvo em movimento com
- * resultado ainda por ler é alvo que se erra.
+ * Medido no cenário `dados` do `scripts/perf/medir.mjs`, mediana de três
+ * corridas, fps e quadros perdidos:
+ *
+ *              zoom 1              zoom 4
+ *   n     canvas      SVG      canvas      SVG
+ *   6     60 / 0%   60 / 0%   58,9/1,8%   60 / 0%
+ *   20    60 / 0%   59,1/1,5% 42,9/35,6%  57,6/3,8%
+ *   60    58,4/2,8% 51,3/11,3% 25,7/32,4% 38,9/40,2%
+ *
+ * O canvas ganha sem ampliação e com MUITOS dados -- e é exatamente o que a
+ * medida original viu, em n=20 e n=60. Com o palco ampliado a conta inverte,
+ * porque ali ele paga o backing e a camada. Na faixa de uma mesa, de um a dez
+ * dados, o SVG dá sessenta quadros e nenhum perdido nas duas condições.
+ *
+ * Ou seja: o canvas ganhava num cenário que a mesa não vive, e cobrava o borrão
+ * num que ela vive. Vinte dados parados custam mais em SVG do que custavam em
+ * canvas; `recolher` limpa, e ninguém joga vinte de uma vez.
+ *
+ * ## O alvo de clique é um `<button>`, e não o `<g>`
+ *
+ * Os dados ASSENTADOS ganham um `<button>` transparente por cima, do tamanho
+ * deles. São eles que capturam o gesto, respondem ao Enter e falam com o leitor
+ * de tela -- e não custam quadro nenhum, porque dado assentado não se move: o
+ * botão é escrito uma vez e fica. Dado no ar não tem botão: alvo em movimento
+ * com resultado ainda por ler é alvo que se erra.
+ *
+ * Veio da época do canvas, que não tem elemento por dado, e ficou porque é
+ * melhor -- separa o que DESENHA do que RECEBE gesto, e o alvo redondo é o que
+ * a mão mira numa silhueta facetada.
  */
 export function DadoLayer() {
   const dados = useDadosStore((state) => state.dados);
@@ -75,64 +112,18 @@ export function DadoLayer() {
   const consumirArremesso = useDadosStore((state) => state.consumirArremesso);
   const guardar = useDadosStore((state) => state.guardar);
   const lancar = useDadosStore((state) => state.lancar);
-  const { scale, toScene, viewport } = useSceneScale();
-
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { scale, toScene } = useSceneScale();
 
   /**
-   * A região que o canvas cobre, em unidades de cena.
+   * O instante que a queda está desenhando.
    *
-   * Do tamanho da JANELA, centrada no recorte. A janela é um teto folgado para
-   * a moldura do palco -- ela é o que sobra depois dos painéis --, e sobrar é o
-   * certo: o canvas cobre com folga o que pode estar à vista, inclusive a faixa
-   * que a proporção da moldura deixa aparecer além do recorte. O custo dessa
-   * folga é limitado pela tela, não pelo zoom.
-   *
-   * Centrada no RECORTE, e não num `getBoundingClientRect`: a posição vem da
-   * mesma conta que move o plano, então ela nunca fica um quadro atrás dele.
+   * O único estado da animação. Quem o avança é o laço abaixo, e todo o resto é
+   * função pura dele: `quadroDaQueda(dado, idade)` só depende da idade do dado e
+   * da semente dele. É o que permite redesenhar sessenta vezes por segundo sem
+   * nunca escrever no store durante a queda -- o que seria um render da cena
+   * inteira por quadro.
    */
-  const visivel =
-    typeof window === "undefined" || scale === 0
-      ? { x: 0, y: 0, largura: SCENE_WIDTH, altura: SCENE_HEIGHT }
-      : (() => {
-          const largura = window.innerWidth / scale;
-          const altura = window.innerHeight / scale;
-
-          return {
-            x: viewport.x + viewport.width / 2 - largura / 2,
-            y: viewport.y + viewport.height / 2 - altura / 2,
-            largura,
-            altura,
-          };
-        })();
-
-  /**
-   * O laço lê a região por ref, e a ref é atualizada em EFEITO.
-   *
-   * Por ref porque durante um arrasto de câmera isto muda a cada quadro, e
-   * depender dela nas dependências do efeito remontaria o laço junto. Em efeito
-   * e não em render pela mesma razão que o `SceneStage` documenta: escrever
-   * numa ref durante o render é o que o React proíbe.
-   */
-  const visivelRef = useRef(visivel);
-
-  useEffect(() => {
-    visivelRef.current = visivel;
-  });
-
-  /**
-   * Pixels de verdade, e limitados pela TELA.
-   *
-   * O backing tem os pixels da janela vezes a densidade dela; a caixa CSS tem a
-   * mesma área em unidades de cena, e o `transform` do plano a devolve ao
-   * tamanho certo na tela. Ampliar o palco muda a caixa, nunca o backing.
-   */
-  const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
-  const pixels = {
-    largura: Math.max(1, Math.round(visivel.largura * scale * dpr)),
-    altura: Math.max(1, Math.round(visivel.altura * scale * dpr)),
-  };
-
+  const [agora, setAgora] = useState(0);
   /**
    * Resolve o arremesso do saquinho.
    *
@@ -173,209 +164,94 @@ export function DadoLayer() {
   const temMao = naMao !== null;
 
   /**
-   * O laço que pinta.
+   * Há dado em MOVIMENTO? É isto que liga e desliga o laço de animação.
    *
-   * Lê a lista de dados de dentro do próprio laço, pelo `getState`, e não das
-   * propriedades: o que muda a cada quadro é o TEMPO, e depender do estado do
-   * React aqui obrigaria o efeito a remontar o laço a cada mudança de mão.
+   * Uma queda dura dois segundos; a jogada fica na mesa até alguém recolher.
+   * Então a mesa passa quase todo o tempo com dados PARADOS, e parado não
+   * precisa de quadro nenhum: a pose não muda mais.
    *
-   * Morre quando o último dado assenta e não há mão — a mesa parada não paga
-   * quadro nenhum. Um dado na mão nunca deixa o laço parar: ele tomba entre os
-   * dedos até ser solto.
+   * ## Quem liga e quem desliga
    *
-   * ## Por que a REGIÃO VISÍVEL entra nas dependências
+   * LIGA no render, por comparação: uma jogada nova é uma jogada que o
+   * componente ainda não viu, e `lancadoEm` no `token` distingue relançar um
+   * dado no mesmo lugar de não fazer nada. Sem consultar o relógio -- ler
+   * `Date.now()` no render é função impura, e o mesmo render repetido daria
+   * respostas diferentes.
    *
-   * Porque o canvas está ancorado nela: a caixa dele tem `left`/`top` em
-   * unidades de cena, e vive dentro do plano. Quando o mestre arrasta o mapa, o
-   * elemento anda junto -- e se o laço já morreu, o bitmap dentro dele continua
-   * desenhado para a origem ANTIGA. O resultado é o dado escorregando com o
-   * arrasto em vez de ficar preso ao mapa, e voltando ao lugar no primeiro
-   * zoom, que é quando o tamanho do backing muda e o efeito remonta.
+   * DESLIGA no laço de pintura, no quadro em que o último dado assenta. É lá
+   * que a informação nasce: o laço já decidia isso para saber se reagenda. Ver
+   * o fim de `passo`.
+   */
+  const token = `${dados.map((dado) => `${dado.id}@${dado.lancadoEm}`).join(",")}|${temMao}`;
+  const [visto, setVisto] = useState({ token: "", emMovimento: false });
+
+  if (visto.token !== token) {
+    // Ajuste de estado derivado DURANTE o render, que é o caminho que o React
+    // documenta para isto -- e não um efeito, que renderizaria uma vez com a
+    // resposta velha e pintaria um quadro sem o dado que acabou de ser jogado.
+    setVisto({ token, emMovimento: dados.length > 0 || temMao });
+  }
+
+  const algumEmMovimento = visto.emMovimento;
+
+  const assentou = useCallback(
+    () => setVisto((atual) => ({ ...atual, emMovimento: false })),
+    [],
+  );
+
+  /**
+   * O relógio da queda.
    *
-   * Com a região nas dependências, cada mudança de câmera remonta o laço, e o
-   * laço sempre pinta pelo menos um quadro. Mesa parada continua sem pagar
-   * nada: sem arrasto e sem dado rolando, o efeito não roda.
+   * Um `requestAnimationFrame` só, para todos os dados, e ele MORRE quando o
+   * último assenta -- a mesa parada não paga quadro nenhum. Um dado na mão nunca
+   * deixa o laço parar: ele tomba entre os dedos até ser solto.
+   *
+   * O laço não desenha: ele só avança o instante, e quem desenha é o React a
+   * partir dele. A animação não mora em estado nenhum além deste número -- cada
+   * quadro é `quadroDaQueda(dado, idade)`, função pura da idade do dado e da
+   * semente dele.
    */
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || scale === 0) return;
-    if (dados.length === 0 && !temMao) {
-      const ctx = canvas.getContext("2d");
-      ctx?.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // A fonte sai do próprio elemento, e não de uma constante: o número do dado
-    // é desenhado com a fonte da interface, e o SVG a herdava por estar na
-    // árvore. Canvas exige nomeá-la.
-    const familiaDaFonte = getComputedStyle(canvas).fontFamily || "sans-serif";
-
-    // Uma limpeza cheia na entrada: o canvas pode vir de um redimensionamento
-    // com pixel velho, e dali em diante só a área suja é apagada.
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!algumEmMovimento) return;
 
     let frame = 0;
-    /**
-     * O que foi sujo no quadro anterior.
-     *
-     * Limpar o canvas inteiro custa fixo, e o fixo aqui e grande: o plano tem
-     * dois megapixels, e limpar e recompor isso a cada quadro travou a medida
-     * em 46 fps com SEIS dados -- pior que o SVG que saiu. Com a area suja o
-     * custo volta a ser proporcional ao que se move, que e o ponto de ter
-     * trocado de tecnica.
-     *
-     * Guarda a caixa do quadro ANTERIOR tambem: o dado saiu de la, e sem
-     * apagar aquele lugar ele deixaria rastro.
-     */
-    let sujoAntes: Array<{ x: number; y: number; l: number; a: number }> = [];
 
     const passo = () => {
       const instante = Date.now();
       const { dados: atuais, naMao: mao } = useDadosStore.getState();
 
-      // Decide ANTES de desenhar: assim o último quadro é o do dado já
-      // assentado, e não um quadro antes dele.
+      // Decide ANTES de publicar o instante: assim o último quadro é o do dado
+      // já assentado, e não um quadro antes dele.
       const rolando =
         mao !== null ||
-        atuais.some(
-          (dado) => (instante - dado.lancadoEm) / 1000 < duracaoDaQueda(dado),
-        );
+        atuais.some((dado) => (instante - dado.lancadoEm) / 1000 < duracaoDaQueda(dado));
 
-      // Uma transformação só, e é ela que resolve o borrão: o desenho acontece
-      // em unidades de cena, e o backing store tem os pixels da tela. O
-      // deslocamento é o canto da região visível -- o canvas não cobre o plano
-      // inteiro, cobre o que está à vista.
-      const area = visivelRef.current;
-      const densidade = canvas.width / area.largura;
+      setAgora(instante);
 
-      ctx.save();
-      ctx.setTransform(densidade, 0, 0, densidade, -area.x * densidade, -area.y * densidade);
+      if (rolando) {
+        frame = requestAnimationFrame(passo);
 
-      for (const caixa of sujoAntes) {
-        ctx.clearRect(caixa.x, caixa.y, caixa.l, caixa.a);
+        return;
       }
 
-      const sujoAgora: typeof sujoAntes = [];
-      /**
-       * A caixa que um dado suja, em unidades de cena.
-       *
-       * Folga de três raios para cada lado: a maior escala da queda passa de
-       * 1,4, a sombra sai mais larga que o corpo E deslocada dele, e a aresta
-       * tem espessura. Sobrar custa pixel apagado a mais; faltar deixa rastro
-       * na tela, que é o defeito que ninguém perdoa numa animação.
-       */
-      const sujar = (x: number, y: number, raio: number) => {
-        const lado = raio * 6;
-        sujoAgora.push({ x: x - lado / 2, y: y - lado / 2, l: lado, a: lado });
-      };
-
-      for (const dado of atuais) {
-        // O que está na mão sai da mesa: quem o desenha é o bloco de baixo.
-        if (mao?.daMesa === dado.id) continue;
-
-        const tipo = tipoDado(dado.faces);
-        // O tempo CONGELA quando o dado assenta: a pose não muda mais, e sem
-        // isto todo dado da mesa era redesenhado enquanto QUALQUER um rolava.
-        const idade = Math.min(
-          (instante - dado.lancadoEm) / 1000,
-          duracaoDaQueda(dado),
-        );
-        const quadro = quadroDaQueda(dado, idade);
-        sujar(quadro.x, quadro.y, dado.raio);
-
-        pintarDado(ctx, {
-          tipo,
-          raio: dado.raio,
-          quadro,
-          familiaDaFonte,
-          desenho: desenharDado({
-            faces: dado.faces,
-            orientacao: quadro.orientacao,
-            cx: quadro.x,
-            cy: quadro.y,
-            raio: dado.raio,
-            nitidez: quadro.nitidez,
-          }),
-        });
-      }
-
-      // Por último, então por cima: o que está na mão passa sobre o que já está
-      // na mesa, porque está mais alto que eles.
-      if (mao) {
-        const tipo = tipoDado(mao.faces);
-        const raio = RAIO_DADO * tipo.escala;
-        const ponto = toScene(mao.clientX, mao.clientY);
-        const quadro = quadroNaMao({ raio, semente: mao.semente, t: instante / 1000 });
-        sujar(ponto.x, ponto.y, raio);
-
-        pintarDado(ctx, {
-          tipo,
-          raio,
-          familiaDaFonte,
-          quadro: {
-            x: ponto.x,
-            y: ponto.y,
-            escala: quadro.escala,
-            esmagaX: 1,
-            esmagaY: 1,
-            nitidez: 1,
-            sombra: quadro.sombra,
-          },
-          desenho: desenharDado({
-            faces: mao.faces,
-            orientacao: quadro.orientacao,
-            cx: ponto.x,
-            cy: ponto.y,
-            raio,
-          }),
-        });
-      }
-
-      ctx.restore();
-      sujoAntes = sujoAgora;
-
-      if (rolando) frame = requestAnimationFrame(passo);
+      // Acabou de assentar. O laço morre aqui, e com ele o custo por quadro.
+      assentou();
     };
 
     frame = requestAnimationFrame(passo);
 
     return () => cancelAnimationFrame(frame);
-    // `pixels.*` porque trocar o tamanho do backing store limpa o canvas, e
-    // `visivel.*` porque o canvas está ancorado na região -- ver a nota acima.
-  }, [
-    dados,
-    temMao,
-    scale,
-    toScene,
-    pixels.largura,
-    pixels.altura,
-    visivel.x,
-    visivel.y,
-    visivel.largura,
-    visivel.altura,
-  ]);
+  }, [algumEmMovimento, assentou]);
 
   if (dados.length === 0 && !naMao) return null;
 
   return (
     <>
-      <canvas
-        ref={canvasRef}
-        aria-hidden
-        className="pointer-events-none absolute"
-        width={pixels.largura}
-        height={pixels.altura}
-        style={{
-          left: visivel.x,
-          top: visivel.y,
-          width: visivel.largura,
-          height: visivel.altura,
-          zIndex: DADO_Z,
-        }}
+      <DadosEmCena
+        dados={dados}
+        agora={agora}
+        naMao={naMao}
+        pontoDaMao={naMao && scale > 0 ? toScene(naMao.clientX, naMao.clientY) : null}
       />
 
       {/* A camada de alcance: um botão por dado ASSENTADO. Ver a nota do
@@ -388,12 +264,189 @@ export function DadoLayer() {
 }
 
 /**
+ * Os dados no tabuleiro.
+ *
+ * Um `<svg>` só, para todos eles, com o gradiente da sombra num `<defs>`
+ * compartilhado. Por que SVG e não canvas está na nota do componente: o resumo
+ * é que canvas dentro do plano borra o mapa, e nenhum jeito de mudá-lo de lugar
+ * conserta isso.
+ *
+ * A sombra é GRADIENTE e não filtro de desfoque: filtro é recalculado a cada
+ * quadro e é o primeiro lugar onde uma animação de sessenta quadros engasga.
+ * Gradiente é de graça.
+ */
+function DadosEmCena({
+  dados,
+  agora,
+  naMao,
+  /** Onde a mão está, em unidades de cena. `null` = mão vazia. */
+  pontoDaMao,
+}: {
+  dados: Dado[];
+  agora: number;
+  naMao: Mao;
+  pontoDaMao: Vec | null;
+}) {
+  return (
+    <svg
+      aria-hidden
+      className="pointer-events-none absolute inset-0 size-full"
+      viewBox={`0 0 ${SCENE_WIDTH} ${SCENE_HEIGHT}`}
+      style={{ zIndex: DADO_Z }}
+    >
+      <defs>
+        <radialGradient id="dado-sombra">
+          <stop offset="0%" stopColor="#000" stopOpacity="0.55" />
+          <stop offset="55%" stopColor="#000" stopOpacity="0.34" />
+          <stop offset="100%" stopColor="#000" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {dados.map((dado) => (
+        <DadoNaMesa
+          key={dado.id}
+          dado={dado}
+          /*
+           * O tempo CONGELA quando o dado assenta.
+           *
+           * Depois de assentado a pose não muda mais, então `agora` deixa de
+           * significar algo para ele -- e com a propriedade parada o `memo` do
+           * `DadoNaMesa` pula a subárvore inteira: nem `quadroDaQueda`, nem
+           * `desenharDado`, nem reconciliação dos vinte polígonos.
+           *
+           * Sem isto, todo dado da mesa era redesenhado a cada quadro enquanto
+           * QUALQUER um rolava -- o que rolava pagava a conta de todos os que
+           * já tinham parado.
+           */
+          agora={Math.min(agora, dado.lancadoEm + duracaoDaQueda(dado) * 1000)}
+          naMao={naMao?.daMesa === dado.id}
+        />
+      ))}
+
+      {/* Por último, então por cima: o que está na mão passa sobre o que já
+          está na mesa, porque está mais alto que eles. */}
+      {naMao && pontoDaMao ? (
+        <DadoNaMao
+          faces={naMao.faces}
+          semente={naMao.semente}
+          ponto={pontoDaMao}
+          agora={agora}
+        />
+      ) : null}
+    </svg>
+  );
+}
+
+/**
+ * Um dado no tabuleiro.
+ *
+ * `memo` porque a maioria dos dados numa mesa está PARADA, e parado não muda de
+ * quadro: quem chama congela o `agora` deles, e a comparação rasa do `memo`
+ * transforma isso em zero trabalho por quadro. Ver a propriedade `agora`.
+ */
+const DadoNaMesa = memo(function DadoNaMesa({
+  dado,
+  agora,
+  /** Está na mão agora. Continua na lista, mas quem o desenha é a `DadoNaMao`. */
+  naMao,
+}: {
+  dado: Dado;
+  agora: number;
+  naMao: boolean;
+}) {
+  // O que está na mão sai da mesa: quem o desenha é o bloco de baixo.
+  if (naMao) return null;
+
+  const tipo = tipoDado(dado.faces);
+  const quadro = quadroDaQueda(dado, (agora - dado.lancadoEm) / 1000);
+  const desenho = desenharDado({
+    faces: dado.faces,
+    orientacao: quadro.orientacao,
+    cx: quadro.x,
+    cy: quadro.y,
+    raio: dado.raio,
+    // Enquanto ele tomba rápido não sai número nenhum: não se leria, e é o que
+    // faz doze dados no ar caberem no quadro. Ver `QuadroDaQueda.nitidez`.
+    nitidez: quadro.nitidez,
+  });
+
+  return (
+    <>
+      {/* Antes do corpo, então por baixo dele. */}
+      <ellipse
+        cx={quadro.x + quadro.sombra.dx}
+        cy={quadro.y + quadro.sombra.dy}
+        rx={quadro.sombra.raio * 1.25}
+        ry={quadro.sombra.raio * 1.1}
+        fill="url(#dado-sombra)"
+        opacity={quadro.sombra.opacidade / 0.42}
+      />
+
+      <g
+        // Altura vira TAMANHO, porque a mesa é vista de cima. O esmagamento da
+        // batida entra aqui junto, no mesmo `scale`.
+        transform={
+          `translate(${quadro.x} ${quadro.y}) ` +
+          `scale(${quadro.escala * quadro.esmagaX} ${quadro.escala * quadro.esmagaY}) ` +
+          `translate(${-quadro.x} ${-quadro.y})`
+        }
+      >
+        <DadoFacetas tipo={tipo} desenho={desenho} raio={dado.raio} nitidez={quadro.nitidez} />
+      </g>
+    </>
+  );
+});
+
+/**
+ * O dado que está na mão, tombando entre os dedos.
+ *
+ * Sem sombra: ele não está no chão. E sem alvo de clique -- quem captura o
+ * ponteiro durante o gesto é o botão que ficou na mesa, ver `AlcanceDoDado`.
+ */
+function DadoNaMao({
+  faces,
+  semente,
+  ponto,
+  agora,
+}: {
+  faces: Dado["faces"];
+  semente: number;
+  ponto: Vec;
+  agora: number;
+}) {
+  const tipo = tipoDado(faces);
+  const raio = RAIO_DADO * tipo.escala;
+  const quadro = quadroNaMao({ raio, semente, t: agora / 1000 });
+  const desenho = desenharDado({
+    faces,
+    orientacao: quadro.orientacao,
+    cx: ponto.x,
+    cy: ponto.y,
+    raio,
+  });
+
+  return (
+    <g
+      transform={
+        `translate(${ponto.x} ${ponto.y}) ` +
+        `scale(${quadro.escala}) ` +
+        `translate(${-ponto.x} ${-ponto.y})`
+      }
+    >
+      <DadoFacetas tipo={tipo} desenho={desenho} raio={raio} />
+    </g>
+  );
+}
+
+/**
  * O alvo de um dado: clique, arrasto, teclado e leitor de tela.
  *
- * Existe porque o canvas não tem elemento por dado. Só nasce depois de o dado
- * assentar — dado no ar não aceita gesto, e é a mesma regra de antes: o alvo
- * está se movendo e o resultado ainda não foi lido, então quem apertou ali
- * quase certamente mirou onde o dado estava um instante antes.
+ * Separado do que DESENHA, e é o que permite o alvo ser redondo enquanto o
+ * corpo é facetado: a silhueta não vale a pena perseguir num alvo de clique, e
+ * o círculo do raio é o que a mão mira. Só nasce depois de o dado assentar --
+ * dado no ar não aceita gesto: o alvo está se movendo e o resultado ainda não
+ * foi lido, então quem apertou ali quase certamente mirou onde o dado estava um
+ * instante antes.
  *
  * Não anima: a pose de um dado assentado não muda, então este elemento é
  * escrito uma vez e fica parado. É o que faz a camada de alcance não devolver o
@@ -424,8 +477,8 @@ function AlcanceDoDado({ dado, naMao }: { dado: Dado; naMao: boolean }) {
    * para sempre. Foi exatamente o que aconteceu quando esta camada nasceu, e é
    * o mesmo aviso que o `<g>` do SVG carregava antes dela.
    *
-   * Quem desenha o dado enquanto ele está no ar é o canvas, no bloco da mão --
-   * aqui o elemento continua invisível e no lugar de onde o dado saiu.
+   * Quem desenha o dado enquanto ele está no ar é a `DadoNaMao` -- aqui o
+   * elemento continua invisível e no lugar de onde o dado saiu.
    */
   if (!quadro.parado) return null;
 

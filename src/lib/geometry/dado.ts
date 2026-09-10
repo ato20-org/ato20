@@ -1119,11 +1119,9 @@ export type QuadroDaQueda = {
    * p95 de 33 ms e trinta quadros longos em noventa; sem eles, 16,9 ms e
    * nenhum.
    *
-   * Com o dado em canvas esse ganho encolheu -- não há elemento para
-   * reposicionar, só `fillText` a menos --, e a rampa passou a valer sobretudo
-   * pelo que ela sempre foi na tela: um dado a quatro voltas por segundo não
-   * mostra número nenhum, e dez algarismos piscando não se leem. Ver
-   * `dado-pincel`.
+   * O ganho de desenho é parte disso, mas o que a rampa sempre foi está na
+   * tela: um dado a quatro voltas por segundo não mostra número nenhum, e dez
+   * algarismos piscando não se leem. Ver `DadoNaMesa`.
    */
   nitidez: number;
   /** Já assentou: quem anima pode largar o `requestAnimationFrame`. */
