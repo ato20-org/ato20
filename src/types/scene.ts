@@ -208,6 +208,76 @@ export type MapPin = {
 export type NewMapPin = Pick<MapPin, "x" | "y"> & Partial<Pick<MapPin, "title" | "note">>;
 
 /**
+ * As cores de um postit.
+ *
+ * Nome e não hex, ao contrário de `CORES_LAPIS`. A diferença é o que cada uma
+ * é: cor de lápis é tinta, e tinta tem um valor exato; cor de postit é papel, e
+ * papel precisa de fundo, borda e texto que contrastem tanto no tema claro
+ * quanto no escuro. Um `#fde047` no arquivo travaria os três de uma vez, e o
+ * papel amarelo do tema escuro ficaria a mesma mancha berrante do claro.
+ *
+ * Quatro, e não seis como o lápis: aqui a cor separa ASSUNTO — o que é pista, o
+ * que é regra, o que é fala de PNJ, o que é lembrete — e uma mesa não sustenta
+ * seis assuntos combinados de cabeça.
+ */
+export const CORES_POSTIT = ["amarelo", "rosa", "azul", "verde"] as const;
+
+export type CorPostit = (typeof CORES_POSTIT)[number];
+
+/** Tamanho de um postit recém-colado, em unidades de cena. */
+export const POSTIT_LARGURA = 260;
+export const POSTIT_ALTURA = 180;
+
+/** O menor que o mestre pode encolher um postit, em unidades de cena. */
+export const POSTIT_MINIMO = 120;
+
+/**
+ * Um postit colado na board: texto do mestre em qualquer lugar do mapa.
+ *
+ * Irmão do ponto de anotação, e separado dele de propósito. O alfinete é uma
+ * COORDENADA — ele aponta o alçapão atrás do balcão, e a nota dele abre num
+ * cartão à parte porque a coordenada não tem tamanho para caber texto. O postit
+ * é uma CAIXA: ele tem largura e altura, o texto vive à vista dentro dele, e o
+ * que ele marca é a região embaixo, não um ponto.
+ *
+ * Escala com o zoom, e nisto ele difere do cartão do alfinete (ver
+ * `PinWindow`). É a escolha que o faz parecer papel colado no mapa em vez de
+ * janela flutuando sobre ele: afastar o zoom afasta o papel junto.
+ *
+ * Mora na CENA, como os pontos e os riscos — e com o mesmo custo, que a cena
+ * viaja inteira para a mesa. `sceneForTable` apaga este campo antes de
+ * publicar, e a camada que o desenha vive no `OperatorStage` e não no
+ * `SceneLayer`. As duas barreiras juntas: vazar exigiria dois erros
+ * independentes.
+ */
+export type Postit = {
+  id: string;
+  /** Canto superior esquerdo, em coordenadas de cena. */
+  x: number;
+  y: number;
+  /** Tamanho do papel, em unidades de cena. */
+  largura: number;
+  altura: number;
+  /**
+   * O texto, CRU, com os marcadores como o mestre os digitou.
+   *
+   * Guardar o texto e não uma árvore de nós é o que mantém o postit editável
+   * como texto: o mestre apaga um `@` e o vínculo morre ali, sem estrutura
+   * órfã no arquivo. Quem separa `**negrito**`, `@personagem`, `/arquivo` e
+   * `>cena` é `parsePostit`, na hora de desenhar.
+   *
+   * A consequência é que o vínculo é por NOME: renomear o personagem desfaz a
+   * marcação, que volta a ser texto. Ver `postit-texto.ts`.
+   */
+  texto: string;
+  cor: CorPostit;
+};
+
+/** O que o chamador informa ao colar um postit; o resto é do store. */
+export type NewPostit = Pick<Postit, "x" | "y"> &
+  Partial<Pick<Postit, "largura" | "altura" | "texto" | "cor">>;
+
+/**
  * A imagem em evidência: o que o mestre mandou a mesa olhar agora.
  *
  * Nível de sessão, como a trilha, e não da cena: transmitir um retrato de PNJ
@@ -463,6 +533,13 @@ export type Scene = {
    */
   pins?: MapPin[];
   /**
+   * Postits colados no mapa. Ausente = nenhum.
+   *
+   * NUNCA chega à mesa, pela mesma razão dos pontos: `sceneForTable` remove
+   * este campo antes de publicar.
+   */
+  postits?: Postit[];
+  /**
    * Enquadramento que a Plateia e o Assistir usam. Ausente = plano inteiro.
    * O zoom do Operador só chega aqui quando ele manda, pelo botão de enquadrar.
    */
@@ -535,6 +612,11 @@ export function cloneScene(source: Scene, name: string): Scene {
     // acervo da campanha, não do ponto, e copiá-lo duplicaria um mapa de 8 MB
     // por duplicar a cena.
     pins: source.pins?.map((pin) => ({ ...pin, id: crypto.randomUUID() })),
+    // O texto vem junto com os marcadores dentro dele, e os marcadores são por
+    // nome: um `>Porão` copiado continua apontando para a MESMA cena de porão,
+    // não para a cópia dela. É o que se quer — duplicar uma cena não duplica o
+    // porão a que ela leva.
+    postits: source.postits?.map((postit) => ({ ...postit, id: crypto.randomUUID() })),
     createdAt: now,
     updatedAt: now,
   };

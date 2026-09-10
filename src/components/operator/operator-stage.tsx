@@ -11,6 +11,8 @@ import {
 
 import { DadoLayer } from "@/components/operator/dado-layer";
 import { PinLayer } from "@/components/operator/pin-layer";
+import { PostitLayer } from "@/components/operator/postit-layer";
+import { postitNaArea } from "@/lib/geometry/postit";
 import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
 import { MarqueeBox } from "@/components/playground/marquee-box";
@@ -64,12 +66,15 @@ import {
 import { hasAssetDrag, readAssetDrag } from "@/lib/operator/asset-drag";
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
+import { usePostitStore } from "@/lib/store/use-postit-store";
 import { useReguaStore } from "@/lib/store/use-regua-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import {
+  POSTIT_ALTURA,
+  POSTIT_LARGURA,
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type AncoraRetrato,
@@ -182,7 +187,10 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const tool = useToolStore((state) => state.tool);
   const cor = useToolStore((state) => state.cor);
   const espessura = useToolStore((state) => state.espessura);
+  const corPostit = useToolStore((state) => state.corPostit);
   const setTool = useToolStore((state) => state.setTool);
+
+  const editarPostit = usePostitStore((state) => state.editar);
 
   // Por tecla OU por ferramenta; ver `usePanMode`.
   const panMode = usePanMode();
@@ -208,6 +216,7 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const addTraco = useSceneStore((state) => state.addTraco);
   const removeTracos = useSceneStore((state) => state.removeTracos);
   const addPin = useSceneStore((state) => state.addPin);
+  const addPostit = useSceneStore((state) => state.addPostit);
   const setSceneCamera = useSceneStore((state) => state.setSceneCamera);
 
   const guardados = usePortraitStore((state) => state.portraits);
@@ -733,6 +742,35 @@ export function OperatorStage({ scene }: { scene: Scene }) {
       return;
     }
 
+    // Clique também, e não arrasto, embora o postit TENHA tamanho: desenhar a
+    // caixa antes de escrever pediria uma decisão — quanto papel isto vai
+    // precisar — que o mestre só sabe responder depois de digitar. Nasce no
+    // tamanho padrão, e a alça do canto ajusta depois.
+    if (tool === "postit") {
+      // Centrado no clique, e não com o canto nele: o gesto é "aqui", e o
+      // "aqui" de um papel é o meio dele. Colado no canto, o papel apareceria
+      // todo para baixo e para a direita do que o mestre estava apontando.
+      //
+      // Preso à área de trabalho e não ao plano, o mesmo limite do arrasto: o
+      // mestre pode clicar na margem, fora do mapa, e é lá que o papel deve
+      // nascer quando ele clica lá. Ver `postitNaArea`.
+      const onde = postitNaArea(
+        anchor.x - POSTIT_LARGURA / 2,
+        anchor.y - POSTIT_ALTURA / 2,
+        POSTIT_LARGURA,
+        POSTIT_ALTURA,
+      );
+
+      editarPostit(addPostit(scene.id, { ...onde, cor: corPostit }));
+
+      // Volta ao modo normal pela mesma razão do alfinete, e com mais força
+      // aqui: o papel ocupa 260 por 180, e um clique acidental com a
+      // ferramenta presa cobriria um pedaço do mapa.
+      setTool("select");
+
+      return;
+    }
+
     if (tool === "regua") {
       medir(event, anchor);
       return;
@@ -870,17 +908,22 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   // mesmo com a névoa escolhida.
   const drawingFog = tool === "fog" && !panMode;
   /**
-   * Ferramenta de mira ativa: névoa, ponto, lápis, borracha ou régua.
+   * Ferramenta de mira ativa: névoa, ponto, postit, lápis, borracha ou régua.
    *
-   * As cinco precisam do mesmo bloqueio. Repassar os handlers de item enquanto
+   * As seis precisam do mesmo bloqueio. Repassar os handlers de item enquanto
    * uma delas está escolhida faria o gesto sobre um token virar "mover token"
-   * em vez de cobrir a região, cravar o alfinete, riscar ou apagar ali — e
-   * riscar por cima de um token é justamente o gesto de circular um inimigo.
+   * em vez de cobrir a região, cravar o alfinete, colar o papel, riscar ou
+   * apagar ali — e riscar por cima de um token é justamente o gesto de
+   * circular um inimigo.
    */
   const aiming =
     drawingFog ||
     (!panMode &&
-      (tool === "pin" || tool === "lapis" || tool === "borracha" || tool === "regua"));
+      (tool === "pin" ||
+        tool === "postit" ||
+        tool === "lapis" ||
+        tool === "borracha" ||
+        tool === "regua"));
   // Mão aberta sempre que o espaço estiver segurado.
   //
   // Antes era `panMode && !isFullViewport(viewport)`, porque no encaixe o clamp
@@ -941,6 +984,11 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           mesmo componente do Assistir e da Plateia, e um ponto de anotação
           desenhado lá apareceria na TV virada para a mesa. */}
       <PinLayer scene={scene} panMode={panMode} />
+
+      {/* Irmã do `PinLayer`, e fora do `SceneLayer` pela mesma razão: o texto
+          de um postit é preparação do mestre, e o `SceneLayer` é o mesmo
+          componente que desenha na TV. */}
+      <PostitLayer scene={scene} panMode={panMode} />
 
       {/* Fora do `SceneLayer` pela mesma razão do `PinLayer`: hoje o dado é só
           do mestre. Dentro dele, os dados apareceriam na TV — e a decisão de

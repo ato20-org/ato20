@@ -17,24 +17,31 @@ import type { AssetKind, AssetMeta, EscopoAsset } from "@/types/scene";
  * que os dois existiam para conter: quem guarda cópia agora é o cache HTTP do
  * browser, por ETag.
  */
+/**
+ * Qual tamanho do arquivo se pede.
+ *
+ * O acervo guarda o ORIGINAL, e ele é quem vai para o palco do mestre, para a
+ * TV e para o zip. As duas reduções existem para quem não precisa dele:
+ *
+ * - `mini` (160px) para LISTA. Apontar um quadrado de 40px para um mapa de
+ *   treze megapixels fazia a webview decodificar 51 MB de bitmap por linha.
+ * - `tela` (1920px, JPEG) para o CELULAR do jogador. Ele recebe a mesma cena
+ *   que a TV numa tela de 400px, e baixava os 8 MB do arquivo. Medido no mapa
+ *   real: 0,44 MB e 13 MB decodificado.
+ *
+ * Quando a redução não é possível — som, arquivo ilegível, recorte com
+ * transparência na variante JPEG, disco cheio — o daemon responde o ORIGINAL
+ * nesta mesma rota. Quem chama nunca precisa de plano B.
+ *
+ * Ver `vault/variantes.rs` no Rust, que gera e guarda em `.ato20/{variante}/`.
+ */
+export type Variante = "mini" | "tela";
+
 export async function assetUrl(
   assetId: string,
-  /**
-   * Pede a MINIATURA em vez do arquivo.
-   *
-   * Para lista, e so para lista. O acervo guarda o original -- e ele que vai
-   * para a cena, para a TV e para o zip --, e apontar um quadrado de 40px para
-   * um mapa de doze megapixels fazia a webview decodificar o mapa inteiro para
-   * desenhar o quadrado. Ver `vault/mini.rs` no Rust, que gera e guarda em
-   * `.ato20/mini/`, e `MINIATURA`, que e o par disto no `<img>`.
-   *
-   * Quando nao ha miniatura possivel -- som, arquivo ilegivel, disco cheio --
-   * o daemon responde o ORIGINAL nesta mesma rota. Quem chama nunca precisa de
-   * plano B.
-   */
-  mini = false,
+  variante?: Variante,
 ): Promise<string> {
-  const caminho = mini ? `/asset/${assetId}/mini` : `/asset/${assetId}`;
+  const caminho = variante ? `/asset/${assetId}/${variante}` : `/asset/${assetId}`;
 
   if (!isDesktop()) return caminho;
 

@@ -2,10 +2,19 @@
 
 import { create } from "zustand";
 
+import { CORES_POSTIT, type CorPostit } from "@/types/scene";
+
 /**
  * `select` é o modo normal, `hand` desloca a cena no arrasto, `fog` desenha uma
- * área escondida no arrasto, `pin` crava um ponto de anotação no clique, e
- * `lapis`/`borracha` riscam e apagam à mão livre.
+ * área escondida no arrasto, `pin` crava um ponto de anotação no clique,
+ * `postit` cola um papel de texto no clique, e `lapis`/`borracha` riscam e
+ * apagam à mão livre.
+ *
+ * `pin` e `postit` são os dois do mestre e ficam lado a lado, mas não são a
+ * mesma coisa: o alfinete é uma coordenada com nota fechada atrás dela — bom
+ * para a preparação que não pode estar à vista o tempo todo —, e o postit é
+ * texto ABERTO sobre uma região, que é o que se quer para o que precisa ser
+ * lido de relance no meio da sessão.
  *
  * `regua` mede em metros no arrasto, e mora ao lado da grade e não na barra de
  * ferramentas: ela só significa algo com a grade ligada, porque é o quadrado
@@ -18,7 +27,15 @@ import { create } from "zustand";
  * `hand` não substitui o espaço segurado, que continua sendo o caminho
  * momentâneo. Ver `usePanMode`, que junta os dois.
  */
-export type Tool = "select" | "hand" | "fog" | "pin" | "lapis" | "borracha" | "regua";
+export type Tool =
+  | "select"
+  | "hand"
+  | "fog"
+  | "pin"
+  | "postit"
+  | "lapis"
+  | "borracha"
+  | "regua";
 
 /**
  * As cores do lápis.
@@ -57,6 +74,19 @@ type ToolStore = {
   cor: string;
   espessura: number;
   setLapis: (lapis: { cor?: string; espessura?: number }) => void;
+
+  /**
+   * A cor do PRÓXIMO postit colado.
+   *
+   * Aqui e não na cena pela mesma razão da cor do lápis: é preferência de quem
+   * anota, e vale para a cena seguinte. Cada postit guarda a cópia da cor que
+   * estava escolhida quando ele nasceu — trocar esta não repinta o que já está
+   * no mapa, e trocar a cor de um papel já colado é botão dele.
+   *
+   * É o que faz colar três pistas em rosa seguidas ser três cliques, e não seis.
+   */
+  corPostit: CorPostit;
+  setCorPostit: (cor: CorPostit) => void;
 };
 
 export const useToolStore = create<ToolStore>((set) => ({
@@ -66,4 +96,7 @@ export const useToolStore = create<ToolStore>((set) => ({
   cor: CORES_LAPIS[0],
   espessura: ESPESSURAS_LAPIS[1],
   setLapis: (lapis) => set(lapis),
+
+  corPostit: CORES_POSTIT[0],
+  setCorPostit: (corPostit) => set({ corPostit }),
 }));

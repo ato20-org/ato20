@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { assetUrl } from "@/lib/vault/assets";
+import { assetUrl, type Variante } from "@/lib/vault/assets";
 
 type Resolved = { assetId: string; url: string | null };
 
@@ -19,8 +19,8 @@ type Resolved = { assetId: string; url: string | null };
  */
 export function useAssetUrl(
   assetId: string | undefined,
-  /** Pede a miniatura. Para lista -- ver `assetUrl`. */
-  mini = false,
+  /** Qual tamanho pedir. Ausente = o arquivo. Ver `assetUrl`. */
+  variante?: Variante,
 ): string | null {
   const [resolved, setResolved] = useState<Resolved | null>(null);
 
@@ -28,7 +28,7 @@ export function useAssetUrl(
     if (!assetId) return;
 
     let active = true;
-    void assetUrl(assetId, mini).then(
+    void assetUrl(assetId, variante).then(
       (url) => {
         if (active) setResolved({ assetId, url });
       },
@@ -42,7 +42,7 @@ export function useAssetUrl(
     return () => {
       active = false;
     };
-  }, [assetId, mini]);
+  }, [assetId, variante]);
 
   if (!assetId || resolved?.assetId !== assetId) return null;
 

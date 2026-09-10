@@ -422,7 +422,7 @@ function AssetRow({
   onMove,
   onRemove,
 }: AssetRowProps) {
-  const url = useAssetUrl(asset.id, true);
+  const url = useAssetUrl(asset.id, "mini");
 
   return (
     // Arrastável inteiro, e não só a miniatura: o alvo de 40px do polegar seria

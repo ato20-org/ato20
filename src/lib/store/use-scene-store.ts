@@ -25,8 +25,11 @@ import {
 import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
   cloneScene,
+  CORES_POSTIT,
   createEmptyBoard,
   createScene,
+  POSTIT_ALTURA,
+  POSTIT_LARGURA,
   type Board,
   type CanvasItem,
   type FogRegion,
@@ -34,8 +37,10 @@ import {
   type MapPin,
   type NewCanvasItem,
   type NewFogRegion,
+  type NewPostit,
   type NewTraco,
   type NewMapPin,
+  type Postit,
   type Scene,
   type SceneGrid,
   type Viewport,
@@ -140,6 +145,11 @@ type SceneStore = {
   /** Anexa arquivos do acervo ao ponto, sem repetir os que já estão nele. */
   attachToPin: (sceneId: string, pinId: string, assetIds: string[]) => void;
   detachFromPin: (sceneId: string, pinId: string, assetId: string) => void;
+
+  /** Cola um postit. Devolve o id, para já abrir o texto dele para digitar. */
+  addPostit: (sceneId: string, postit: NewPostit) => string;
+  updatePostit: (sceneId: string, postitId: string, patch: Partial<Postit>) => void;
+  removePostit: (sceneId: string, postitId: string) => void;
 };
 
 export const useSceneStore = create<SceneStore>((set, get) => {
@@ -499,6 +509,47 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           : pin,
       ),
     }));
+  },
+
+  addPostit(sceneId, postit) {
+    const id = crypto.randomUUID();
+
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      postits: [
+        ...(scene.postits ?? []),
+        {
+          largura: POSTIT_LARGURA,
+          altura: POSTIT_ALTURA,
+          texto: "",
+          cor: CORES_POSTIT[0],
+          ...postit,
+          id,
+        },
+      ],
+    }));
+
+    return id;
+  },
+
+  updatePostit(sceneId, postitId, patch) {
+    get().updateScene(sceneId, (scene) => ({
+      ...scene,
+      postits: (scene.postits ?? []).map((postit) =>
+        postit.id === postitId ? { ...postit, ...patch } : postit,
+      ),
+    }));
+  },
+
+  removePostit(sceneId, postitId) {
+    get().updateScene(sceneId, (scene) => {
+      const restantes = (scene.postits ?? []).filter((postit) => postit.id !== postitId);
+
+      // Volta a `undefined` quando esvazia, como `removePin`: é o mesmo estado,
+      // e é a AUSÊNCIA do campo que faz `sceneForTable` devolver a mesma
+      // referência em vez de uma cópia por render.
+      return { ...scene, postits: restantes.length > 0 ? restantes : undefined };
+    });
   },
   };
 });

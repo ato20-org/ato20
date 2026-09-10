@@ -21,6 +21,16 @@ type SceneScale = {
   scale: number;
   /** Converte um ponto de `clientX/clientY` para coordenadas de cena. */
   toScene: (clientX: number, clientY: number) => Vec;
+  /**
+   * O recorte que está sendo mostrado, em coordenadas de cena.
+   *
+   * Existe para quem precisa saber ONDE a câmera está sem ler layout: o
+   * `DadoLayer` dimensiona o canvas dele pela região visível, e derivar isso de
+   * `getBoundingClientRect` durante o render devolve a posição do quadro
+   * ANTERIOR -- o plano só recebe o `transform` novo depois. O resultado era o
+   * dado um quadro atrás do mapa durante o arrasto.
+   */
+  viewport: Viewport;
 };
 
 const SceneScaleContext = createContext<SceneScale | null>(null);
@@ -148,7 +158,10 @@ export function SceneStage({
     [scale],
   );
 
-  const value = useMemo<SceneScale>(() => ({ scale, toScene }), [scale, toScene]);
+  const value = useMemo<SceneScale>(
+    () => ({ scale, toScene, viewport }),
+    [scale, toScene, viewport],
+  );
 
   // Guardados em ref porque os listeners nativos abaixo são registrados uma
   // vez e precisam ver sempre o estado atual. Atualizados em efeito, não em

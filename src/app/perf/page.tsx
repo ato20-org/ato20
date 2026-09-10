@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { DadoLayer } from "@/components/operator/dado-layer";
+import { LayerList } from "@/components/operator/layer-list";
 import { SceneLayer } from "@/components/playground/scene-layer";
+import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
+import { FULL_VIEWPORT, zoomViewport } from "@/lib/geometry/viewport";
 import { MINIATURA } from "@/lib/miniatura";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { useDadosStore } from "@/lib/store/use-dados-store";
@@ -40,8 +43,49 @@ import { SCENE_HEIGHT, SCENE_WIDTH, type CanvasItem, type Scene } from "@/types/
  * `amostras-id` A mesma coisa, preservando a identidade dos itens que não
  *               mudaram. Existe para responder por número se vale a pena
  *               reconciliar o quadro recebido antes de entregá-lo à árvore.
- * `dados`       N dados caindo ao mesmo tempo: `requestAnimationFrame` +
- *               `quadroDaQueda` + vinte polígonos por dado.
+ * `dados`       N dados caindo ao mesmo tempo, com `?zoom=` para reproduzir o
+ *               palco ampliado do mestre -- que é onde o canvas dos dados
+ *               cobra o backing dele.
+ * `lista`      A LISTA DE CENAS enquanto o mestre arrasta um token. Cada linha
+ *               monta um `SceneStage` completo -- plano de 1920x1080, fundo,
+ *               itens --, e `?n=` é quantas linhas. O palco é o mesmo do
+ *               cenário `arrasto`, então a diferença entre `n=0` e `n=30` é o
+ *               que a lista custa. Cada prévia com mapa PRÓPRIO, que é o caso
+ *               de uma campanha de verdade.
+ * `lista-mesmo-mapa` A mesma coisa com todas as prévias apontando para o mesmo
+ *               arquivo, para separar o custo de DECODIFICAR do custo de
+ *               montar e compor. Medido: com trinta cenas, os dois têm os
+ *               MESMOS 409 nós no DOM -- o que pesa é o bitmap por linha, não a
+ *               montagem.
+ * `camadas`    A JANELA DE CAMADAS enquanto o mestre arrasta um token. Uma
+ *               linha por item da cena, e `?n=` é quantos itens -- que é
+ *               também o tamanho da lista, porque na janela real os dois são o
+ *               mesmo número. O palco é o do cenário `arrasto`, então a
+ *               comparação que responde "quanto o painel custa" é contra
+ *               `arrasto` no MESMO `n`, e não contra outro `n` deste cenário.
+ *
+ *               O que ele isola é o RENDER: as miniaturas já pedem a variante
+ *               `mini`, e o servidor da medida responde `no-store`, então nem
+ *               o bitmap do original nem a revalidação de cache entram na
+ *               conta. Sobra o que se quer ver -- N linhas reconciliando a
+ *               cada quadro do arrasto, com quatro botões de ícone cada.
+ *
+ *               Sem IPC nesta página os nomes vêm vazios e a linha diz
+ *               "Imagem removida". É um `<span>` truncado de qualquer forma:
+ *               muda o texto, não a contagem de nós nem o número de renders.
+ *
+ * `camera`     A CÂMERA mudando de ampliação a cada quadro, com N itens na
+ *               cena. Os outros cenários mexem no CONTEÚDO com a câmera
+ *               parada; este mexe na câmera, que é o outro gesto do mestre e o
+ *               único que faz o plano inteiro se redesenhar. Nasceu medindo uma
+ *               tentativa de conserto do borrão do palco ampliado -- pôr a
+ *               ampliação no layout, com `zoom`, em vez de na composição -- e
+ *               ficou: era o custo do gesto de zoom que ninguém tinha medido.
+ *
+ * `plateia`    O CELULAR do jogador: as mesmas amostras de 10 Hz, mas com um
+ *               mapa de 3537x3750 no fundo e pedindo a variante `tela`.
+ *               `--sem-variante` mede o que ele fazia antes -- baixar o
+ *               arquivo inteiro. A coluna que importa aqui é `rede`.
  * `biblioteca`  Abrir o acervo com N arquivos. Não é sobre quadro: é sobre
  *               quantos MEGABYTES a tela busca e decodifica para desenhar
  *               quadradinhos de 40px, porque o acervo guarda o original. Com
@@ -63,7 +107,17 @@ const AQUECIMENTO_MS = 2500;
 /** Acima disto um quadro de 60Hz já escapou. É a métrica que a mesa sente. */
 const QUADRO_PERDIDO_MS = 20;
 
-type Cenario = "arrasto" | "amostras" | "amostras-id" | "dados" | "biblioteca";
+type Cenario =
+  | "arrasto"
+  | "amostras"
+  | "amostras-id"
+  | "dados"
+  | "biblioteca"
+  | "lista"
+  | "lista-mesmo-mapa"
+  | "camadas"
+  | "camera"
+  | "plateia";
 
 function montarCena(n: number): Scene {
   const agora = Date.now();
@@ -94,6 +148,40 @@ function montarCena(n: number): Scene {
     name: "medida",
     backgroundAssetId: "perf-fundo",
     items,
+    fog: [],
+    createdAt: agora,
+    updatedAt: agora,
+  };
+}
+
+/**
+ * Uma cena para a lista, com o mapa que a prévia vai desenhar.
+ *
+ * `mapaG-*` é o prefixo que o servidor da medida responde com 3537x3750 -- a
+ * ordem de grandeza de um mapa que alguém baixou para usar na mesa. É ele que
+ * faz a conta de memória ser o que ela é: 3537 x 3750 x 4 bytes são 53 MB de
+ * bitmap por arquivo distinto.
+ */
+function cenaDaLista(indice: number, mesmoMapa: boolean): Scene {
+  const agora = Date.now();
+
+  return {
+    id: `perf-lista-${indice}`,
+    name: `Cena ${indice + 1}`,
+    backgroundAssetId: mesmoMapa ? "mapaG-comum" : `mapaG-${indice}`,
+    items: [
+      {
+        id: `perf-lista-${indice}-token`,
+        assetId: "perf-token-0",
+        x: 700,
+        y: 300,
+        width: 180,
+        height: 380,
+        rotation: 0,
+        z: 1,
+        locked: false,
+      },
+    ],
     fog: [],
     createdAt: agora,
     updatedAt: agora,
@@ -223,12 +311,21 @@ function PalcoEspectador({
   n,
   identidade,
   movidos,
+  variante,
+  mapaGrande,
 }: {
   n: number;
   identidade: boolean;
   movidos: number;
+  /** Qual tamanho de arquivo a tela pede. Ver `SceneLayer.variante`. */
+  variante?: "mini" | "tela";
+  /** Fundo de 3537x3750, do tamanho de um mapa de mesa. */
+  mapaGrande?: boolean;
 }) {
-  const base = useMemo(() => montarCena(n), [n]);
+  const base = useMemo(
+    () => ({ ...montarCena(n), backgroundAssetId: mapaGrande ? "mapaG-plateia" : "perf-fundo" }),
+    [n, mapaGrande],
+  );
   const [cena, setCena] = useState(base);
   const anterior = useRef(base);
 
@@ -270,7 +367,7 @@ function PalcoEspectador({
 
   return (
     <SceneStage viewport={cena.camera} smooth>
-      <SceneLayer scene={cena} smooth />
+      <SceneLayer scene={cena} smooth variante={variante} />
     </SceneStage>
   );
 }
@@ -330,6 +427,56 @@ function PalcoOperador({ n }: { n: number }) {
 }
 
 /**
+ * A CÂMERA mudando de ampliação a cada quadro, com N itens na cena.
+ *
+ * Sessenta mudanças de zoom por segundo é mais do que a pinça de um touchpad
+ * pede, e é o ponto: os outros cenários todos medem a câmera PARADA, e o custo
+ * de mexer nela nunca tinha aparecido em número nenhum.
+ *
+ * Medido aqui: com a ampliação na composição -- `transform: scale`, que é o que
+ * o palco faz -- mexer no zoom não custa refluxo nenhum, 24 ms de estilo com
+ * sessenta itens. Trocando para `zoom`, que entra no LAYOUT, os mesmos oito
+ * segundos pagam 889 ms de estilo e 164 ms de layout. Foi essa a medida que
+ * matou aquela tentativa de conserto do borrão -- junto com o que ela fazia com
+ * as bordas de meio pixel dos controles.
+ */
+function PalcoCamera({ n }: { n: number }) {
+  const cena = useMemo(() => montarCena(n), [n]);
+  const [viewport, setViewport] = useState(FULL_VIEWPORT);
+
+  useEffect(() => {
+    let quadro = 0;
+    const comecou = performance.now();
+
+    const passo = () => {
+      const a = (performance.now() - comecou) / 1000;
+      // Vai e volta entre o plano inteiro e umas quatro vezes de ampliação,
+      // que é a faixa onde o borrão aparecia.
+      const fator = 2.5 + Math.cos(a) * 1.5;
+
+      setViewport(
+        zoomViewport(FULL_VIEWPORT, fator, {
+          x: SCENE_WIDTH / 2,
+          y: SCENE_HEIGHT / 2,
+        }),
+      );
+
+      quadro = requestAnimationFrame(passo);
+    };
+
+    quadro = requestAnimationFrame(passo);
+
+    return () => cancelAnimationFrame(quadro);
+  }, []);
+
+  return (
+    <SceneStage viewport={viewport} bounds>
+      <SceneLayer scene={cena} variant="operator" />
+    </SceneStage>
+  );
+}
+
+/**
  * N dados caindo de uma vez, sobre uma cena com N itens parados.
  *
  * Relançados quando todos assentam. Sem isso a medida cronometraria sobretudo
@@ -337,18 +484,42 @@ function PalcoOperador({ n }: { n: number }) {
  * `DadoLayer` MORRE quando o último assenta -- de propósito, e é a razão de a
  * mesa não pagar nada por dado parado. O que se quer medir aqui é a queda.
  */
-function PalcoDados({ n }: { n: number }) {
+function PalcoDados({
+  n,
+  zoom,
+}: {
+  n: number;
+  /** Ampliação do palco. O mestre joga dado com a cena ampliada. */
+  zoom: number;
+}) {
   const cena = useMemo(() => montarCena(n), [n]);
+  const recorte = useMemo(
+    () =>
+      zoom <= 1
+        ? undefined
+        : zoomViewport(
+            { x: 0, y: 0, width: SCENE_WIDTH, height: SCENE_HEIGHT },
+            zoom,
+            { x: SCENE_WIDTH / 2, y: SCENE_HEIGHT / 2 },
+          ),
+    [zoom],
+  );
 
   useEffect(() => {
     const jogar = () => {
       const { lancar } = useDadosStore.getState();
 
+      // Dentro do RECORTE quando o palco está ampliado: com o zoom do mestre a
+      // vista é um pedaço pequeno do plano, e dado jogado no canto dele cairia
+      // fora da tela -- a medida cronometraria uma cena vazia.
+      const area = recorte ?? { x: 0, y: 0, width: SCENE_WIDTH, height: SCENE_HEIGHT };
+      const folga = Math.min(200, area.width / 5);
+
       for (let i = 0; i < n; i++) {
         lancar(
           ([4, 6, 8, 10, 12, 20] as const)[i % 6],
-          200 + ((i * 137) % (SCENE_WIDTH - 400)),
-          200 + ((i * 211) % (SCENE_HEIGHT - 400)),
+          area.x + folga + ((i * 137) % Math.max(1, area.width - folga * 2)),
+          area.y + folga + ((i * 211) % Math.max(1, area.height - folga * 2)),
           { x: Math.cos(i) * 400, y: Math.sin(i) * 400 },
           i + 1,
         );
@@ -366,10 +537,10 @@ function PalcoDados({ n }: { n: number }) {
       clearInterval(relance);
       useDadosStore.getState().recolher();
     };
-  }, [n]);
+  }, [n, recorte]);
 
   return (
-    <SceneStage>
+    <SceneStage viewport={recorte}>
       <SceneLayer scene={cena} variant="operator" />
       <DadoLayer />
     </SceneStage>
@@ -448,6 +619,60 @@ function PalcoBiblioteca({
   );
 }
 
+/**
+ * A lista de cenas ao lado do palco que o mestre está arrastando.
+ *
+ * A coluna tem largura fixa e existe nas duas corridas: sem isso, `n=0`
+ * deixaria o palco mais largo, a escala mudaria, e a comparação mediria layout
+ * em vez de custo da lista.
+ */
+function PalcoComLista({ n, mesmoMapa }: { n: number; mesmoMapa: boolean }) {
+  const cenas = useMemo(
+    () => Array.from({ length: n }, (_, i) => cenaDaLista(i, mesmoMapa)),
+    [n, mesmoMapa],
+  );
+
+  return (
+    <div className="flex flex-1">
+      <aside className="w-[340px] shrink-0 overflow-y-auto border-r border-neutral-800 bg-neutral-950">
+        <ul className="p-1">
+          {cenas.map((cena) => (
+            <li key={cena.id} className="flex items-center gap-2 p-1.5">
+              <ScenePreview scene={cena} className="h-8 w-14 shrink-0" />
+              <span className="truncate text-xs text-neutral-400">{cena.name}</span>
+            </li>
+          ))}
+        </ul>
+      </aside>
+
+      {/* O mesmo gesto do cenário `arrasto`: um item por quadro, pelo store. */}
+      <PalcoOperador n={40} />
+    </div>
+  );
+}
+
+/**
+ * A janela de camadas ao lado do palco, com o mesmo gesto de arrasto.
+ *
+ * A cena sai do store -- a MESMA que `PalcoOperador` monta e mexe --, e não de
+ * uma cópia montada aqui: o ponto do cenário é que arrastar um item notifica os
+ * assinantes do zustand, e `LayerList` é um deles. Montar cena própria para o
+ * painel mediria uma lista parada.
+ */
+function PalcoComCamadas({ n }: { n: number }) {
+  const cena = useSceneStore(selectEditingScene);
+
+  return (
+    <div className="flex flex-1">
+      <aside className="flex w-[340px] shrink-0 flex-col border-r border-neutral-800 bg-neutral-950">
+        {cena ? <LayerList scene={cena} /> : null}
+      </aside>
+
+      <PalcoOperador n={n} />
+    </div>
+  );
+}
+
 export default function PerfPage() {
   /**
    * "Já estou no cliente?", pelo mesmo caminho que o `WindowChrome` usa para
@@ -489,6 +714,10 @@ function Medida({ params }: { params: URLSearchParams }) {
   /** Quantos itens mudam por amostra. `todos` para o pior caso. */
   const movidos = params.get("movidos") === "todos" ? n : Number(params.get("movidos") ?? 1);
   /** `biblioteca`: com ou sem os atributos de `MINIATURA`, e percorrendo ou não. */
+  /** `plateia`: pedir a variante `tela` ou o arquivo inteiro. */
+  const comVariante = params.get("variante") !== "0";
+  /** `dados`: ampliação do palco, que é o que estoura o backing do canvas. */
+  const zoomDoPalco = Number(params.get("zoom") ?? 1);
   const lazy = params.get("lazy") !== "0";
   const rolar = params.get("rolar") === "1";
 
@@ -501,12 +730,43 @@ function Medida({ params }: { params: URLSearchParams }) {
     (window as unknown as { __resultado?: Resultado }).__resultado = resultado;
   }, [resultado]);
 
+  useEffect(() => {
+    /**
+     * O store dos dados, alcançável de fora.
+     *
+     * Existe para o teste de GESTO: pegar um dado e arremessar é ponteiro, e a
+     * única forma de verificar isso sem mão humana é despachar os eventos pelo
+     * protocolo de depuração e depois perguntar ao store o que aconteceu. Sem
+     * isto, "o dado travou na mão" só se descobre no aplicativo, com o mestre
+     * reclamando -- que foi exatamente como se descobriu.
+     */
+    (window as unknown as { __dados?: () => unknown }).__dados = () => {
+      const { dados, naMao, arremesso } = useDadosStore.getState();
+
+      // Id e instante de cada dado, e não só a contagem: relançar no lugar
+      // troca o dado por um novo, e a contagem não muda -- foi o que fez a
+      // primeira versão deste teste dizer "não relançou" sobre um relance que
+      // tinha acontecido.
+      return {
+        dados: dados.map((dado) => ({ id: dado.id, lancadoEm: dado.lancadoEm })),
+        naMao,
+        arremesso,
+      };
+    };
+  }, []);
+
   return (
     <main className="flex h-dvh flex-col bg-black">
       {cenario === "arrasto" ? (
         <PalcoOperador n={n} />
+      ) : cenario === "camera" ? (
+        <PalcoCamera n={n} />
       ) : cenario === "dados" ? (
-        <PalcoDados n={n} />
+        <PalcoDados n={n} zoom={zoomDoPalco} />
+      ) : cenario === "lista" || cenario === "lista-mesmo-mapa" ? (
+        <PalcoComLista n={n} mesmoMapa={cenario === "lista-mesmo-mapa"} />
+      ) : cenario === "camadas" ? (
+        <PalcoComCamadas n={n} />
       ) : cenario === "biblioteca" ? (
         <PalcoBiblioteca n={n} lazy={lazy} rolar={rolar} />
       ) : (
@@ -514,6 +774,8 @@ function Medida({ params }: { params: URLSearchParams }) {
           n={n}
           identidade={cenario === "amostras-id"}
           movidos={movidos}
+          variante={cenario === "plateia" && comVariante ? "tela" : undefined}
+          mapaGrande={cenario === "plateia"}
         />
       )}
 

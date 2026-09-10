@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useMemo, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, ChevronUp, GripVertical, Lock, LockOpen, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -28,13 +28,16 @@ export function LayerList({ scene }: { scene: Scene }) {
   const { personagens } = useCharacters();
 
   const selectedIds = useSelectionStore((state) => state.selectedIds);
-  const select = useSelectionStore((state) => state.select);
-  const toggle = useSelectionStore((state) => state.toggle);
 
-  const moveItemsZ = useSceneStore((state) => state.moveItemsZ);
-  const moveItemToIndex = useSceneStore((state) => state.moveItemToIndex);
-  const removeItems = useSceneStore((state) => state.removeItems);
-  const setItemsLocked = useSceneStore((state) => state.setItemsLocked);
+  /**
+   * As AÇÕES saem por `getState()`, e não por assinatura.
+   *
+   * Elas são fixas na criação do store — assinar nunca trouxe atualização
+   * nenhuma —, e a diferença é que agora a linha as chama por conta própria em
+   * vez de receber quatro arrows novas por render. É o que faz o `memo` do
+   * `LayerRow` valer: ver a nota lá embaixo.
+   */
+  const moveItemToIndex = useSceneStore.getState().moveItemToIndex;
 
   const names = useMemo(
     () => new Map(assets.map((asset) => [asset.id, asset.name])),
@@ -87,22 +90,14 @@ export function LayerList({ scene }: { scene: Scene }) {
             {ordered.map((item, index) => (
               <LayerRow
                 key={item.id}
+                sceneId={scene.id}
                 item={item}
                 name={nomeDe(item)}
                 selected={selectedIds.includes(item.id)}
                 atFront={index === 0}
                 atBack={index === ordered.length - 1}
                 dropTarget={dropIndex === index}
-                onReorderStart={(event) => startReorder(event, item.id)}
-                onSelect={(event) => {
-                  // Shift soma à seleção, igual ao palco.
-                  if (event.shiftKey) toggle(item.id);
-                  else select([item.id]);
-                }}
-                onForward={() => moveItemsZ(scene.id, [item.id], "forward")}
-                onBackward={() => moveItemsZ(scene.id, [item.id], "backward")}
-                onToggleLock={() => setItemsLocked(scene.id, [item.id], !item.locked)}
-                onRemove={() => removeItems(scene.id, [item.id])}
+                onReorderStart={startReorder}
               />
             ))}
           </ul>
@@ -113,6 +108,7 @@ export function LayerList({ scene }: { scene: Scene }) {
 }
 
 type LayerRowProps = {
+  sceneId: string;
   item: CanvasItem;
   name: string | undefined;
   selected: boolean;
@@ -120,15 +116,33 @@ type LayerRowProps = {
   atBack: boolean;
   /** Linha onde o item arrastado cairia. */
   dropTarget: boolean;
-  onReorderStart: (event: ReactPointerEvent) => void;
-  onSelect: (event: MouseEvent) => void;
-  onForward: () => void;
-  onBackward: () => void;
-  onToggleLock: () => void;
-  onRemove: () => void;
+  /** O do `useListReorder`, cru: ele é estável, e a linha passa o próprio id. */
+  onReorderStart: (event: ReactPointerEvent, itemId: string) => void;
 };
 
-function LayerRow({
+/**
+ * Uma camada, e ela NÃO re-renderiza quando outra se move.
+ *
+ * `memo` porque o painel fica aberto ao lado do palco, e arrastar um token
+ * chama `updateItems` a cada movimento do ponteiro: sem isto, mover UM item
+ * reconciliava TODAS as linhas, cada uma com quatro botões de ícone. Medido no
+ * cenário `camadas` do `/perf`, com o painel aberto e o mesmo gesto do cenário
+ * `arrasto`:
+ *
+ *   n=20   473 ms de script no palco sozinho, 3686 ms com o painel
+ *   n=60   394 ms sozinho, 6737 ms com o painel -- 24,1% dos quadros perdidos
+ *   n=200  503 ms sozinho, 6855 ms com o painel -- 14,9 fps, p50 de 66,7 ms
+ *
+ * O `memo` só pode cortar porque `updateItems` PRESERVA a identidade do item
+ * que não mudou (ver `use-scene-store`), e porque nenhuma prop daqui é criada
+ * por render: as ações vêm de `getState()` dentro dos handlers, e
+ * `onReorderStart` é o `startReorder` estável do `useListReorder`. Trocar
+ * qualquer uma delas por uma arrow no `map` desfaz a medida acima sem alterar
+ * uma linha deste componente -- é o tipo de regressão que só o cenário de perf
+ * pega.
+ */
+const LayerRow = memo(function LayerRow({
+  sceneId,
   item,
   name,
   selected,
@@ -136,13 +150,16 @@ function LayerRow({
   atBack,
   dropTarget,
   onReorderStart,
-  onSelect,
-  onForward,
-  onBackward,
-  onToggleLock,
-  onRemove,
 }: LayerRowProps) {
-  const url = useAssetUrl(item.assetId, true);
+  const url = useAssetUrl(item.assetId, "mini");
+
+  const onSelect = (event: MouseEvent) => {
+    // Shift soma à seleção, igual ao palco.
+    const { select, toggle } = useSelectionStore.getState();
+
+    if (event.shiftKey) toggle(item.id);
+    else select([item.id]);
+  };
 
   return (
     <li
@@ -155,7 +172,7 @@ function LayerRow({
       <span
         className="text-muted-foreground hover:text-foreground shrink-0 cursor-grab touch-none px-0.5"
         aria-hidden
-        onPointerDown={onReorderStart}
+        onPointerDown={(event) => onReorderStart(event, item.id)}
       >
         <GripVertical className="size-3.5" />
       </span>
@@ -203,7 +220,7 @@ function LayerRow({
         size="icon-xs"
         aria-label={`Trazer ${name ?? "imagem"} para frente`}
         disabled={atFront}
-        onClick={onForward}
+        onClick={() => useSceneStore.getState().moveItemsZ(sceneId, [item.id], "forward")}
       >
         <ChevronUp />
       </Button>
@@ -212,7 +229,7 @@ function LayerRow({
         size="icon-xs"
         aria-label={`Enviar ${name ?? "imagem"} para trás`}
         disabled={atBack}
-        onClick={onBackward}
+        onClick={() => useSceneStore.getState().moveItemsZ(sceneId, [item.id], "backward")}
       >
         <ChevronDown />
       </Button>
@@ -220,13 +237,18 @@ function LayerRow({
         variant="ghost"
         size="icon-xs"
         aria-label={item.locked ? "Destravar" : "Travar"}
-        onClick={onToggleLock}
+        onClick={() => useSceneStore.getState().setItemsLocked(sceneId, [item.id], !item.locked)}
       >
         {item.locked ? <Lock /> : <LockOpen />}
       </Button>
-      <Button variant="ghost" size="icon-xs" aria-label="Remover da cena" onClick={onRemove}>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Remover da cena"
+        onClick={() => useSceneStore.getState().removeItems(sceneId, [item.id])}
+      >
         <Trash2 />
       </Button>
     </li>
   );
-}
+});

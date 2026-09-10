@@ -3,11 +3,20 @@
 import { memo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import type { Variante } from "@/lib/vault/assets";
 import { cn } from "@/lib/utils";
 import type { CanvasItem } from "@/types/scene";
 
 type CanvasItemViewProps = {
   item: CanvasItem;
+  /**
+   * Qual tamanho do arquivo desenhar. Ausente = o arquivo.
+   *
+   * `mini` é da prévia de cena, que desenha o item num quadrado de 56x32;
+   * `tela` é do celular do jogador. No palco do mestre fica ausente: ali o
+   * token é conteúdo, e ele amplia para conferir detalhe.
+   */
+  variante?: Variante;
   /**
    * Interpola posição, tamanho e giro entre as amostras que chegam do
    * Operador. Ver `.scene-smooth-item` em `globals.css`.
@@ -25,9 +34,10 @@ type CanvasItemViewProps = {
 export const CanvasItemView = memo(function CanvasItemView({
   item,
   smooth = false,
+  variante,
   onPointerDown,
 }: CanvasItemViewProps) {
-  const url = useAssetUrl(item.assetId);
+  const url = useAssetUrl(item.assetId, variante);
   // Item travado continua clicável — é o único jeito de selecioná-lo para
   // destravar. O que o travamento bloqueia é o arrasto, decidido no Operador.
   const interactive = Boolean(onPointerDown);

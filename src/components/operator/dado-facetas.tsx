@@ -60,7 +60,10 @@ export function DadoFacetas({
           face.numeros.map((numero, i) => (
             <text
               key={`${face.chave}n${i}`}
-              transform={numero.transform}
+              // A `matrix(...)` do SVG montada aqui, a partir dos seis números
+              // que a geometria devolve -- ver `NumeroDesenhado.matriz`. Quem
+              // desenha em canvas passa os mesmos números para `ctx.transform`.
+              transform={`matrix(${numero.matriz.join(" ")})`}
               // `1` porque a matriz já traz o corpo da fonte, a escala do dado e o
               // encurtamento da perspectiva. Por isso o número deita junto com a
               // face em vez de flutuar de frente para a tela.

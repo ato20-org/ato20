@@ -1,8 +1,17 @@
 "use client";
 
-import { Eraser, Hand, MapPin, MousePointer2, Pencil, SquareDashedBottom } from "lucide-react";
+import {
+  Eraser,
+  Hand,
+  MapPin,
+  MousePointer2,
+  Pencil,
+  SquareDashedBottom,
+  StickyNote,
+} from "lucide-react";
 
 import { PencilControl } from "@/components/operator/pencil-control";
+import { PostitControl } from "@/components/operator/postit-control";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
@@ -31,6 +40,12 @@ const TOOLS: Array<{ tool: Tool; label: string; hint: string; icon: typeof Mouse
     label: "Ponto de anotação",
     hint: "Clique no mapa para cravar um ponto com nota e anexos. Só você vê — nem a TV nem os celulares recebem.",
     icon: MapPin,
+  },
+  {
+    tool: "postit",
+    label: "Postit",
+    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou cena; ** dos dois lados deixa em negrito. Só você vê — nem a TV nem os celulares recebem.",
+    icon: StickyNote,
   },
   {
     tool: "lapis",
@@ -87,8 +102,10 @@ export function OperatorToolbar() {
       ))}
 
       {/* Depois da fileira, e só com o lápis na mão: é ajuste do lápis, não uma
-          sexta ferramenta. */}
+          sexta ferramenta. Mesma coisa para a cor do postit — as duas nunca
+          aparecem juntas, porque só uma ferramenta está na mão. */}
       <PencilControl />
+      <PostitControl />
     </div>
   );
 }
