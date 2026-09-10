@@ -697,8 +697,16 @@ function curto(valor: number, casas = 1): number {
 
 export type NumeroDesenhado = {
   texto: string;
-  /** `matrix(...)` que assenta o número no plano da face. */
-  transform: string;
+  /**
+   * A base afim que assenta o número no plano da face, como
+   * `[a, b, c, d, e, f]`.
+   *
+   * Os MESMOS seis números que o `matrix(...)` do SVG carrega, e é por isso que
+   * eles vêm em número e não em texto: quem desenha em canvas os passa direto
+   * para `ctx.transform`, e quem desenha em SVG monta a string. Duas
+   * formatações do mesmo dado, uma fonte de verdade.
+   */
+  matriz: readonly [number, number, number, number, number, number];
   sublinhado: boolean;
 };
 
@@ -722,7 +730,14 @@ export function corDaTinta(tinta: string, luz: number): string {
 export type FaceDesenhada = {
   /** Chave estável de render. A face, não o número: o d4 tem três por face. */
   chave: string;
-  /** `x0,y0 x1,y1 ...` em unidades de cena, pronto para o `points` do SVG. */
+  /**
+   * Os vértices achatados: `x0, y0, x1, y1, ...`, em unidades de cena.
+   *
+   * Em número, para quem desenha em canvas traçar o polígono sem reparsear
+   * texto. Quem desenha em SVG usa `pontos`, que é esta mesma lista formatada.
+   */
+  vertices: number[];
+  /** `x0,y0 x1,y1 ...`, pronto para o `points` do SVG. */
   pontos: string;
   /** 0 = na sombra, 1 = de frente para a luz. */
   luz: number;
@@ -776,9 +791,17 @@ export function desenharDado({
     const normal = girar(orientacao, face.normal);
     if (normal.z <= 0.001) continue;
 
-    const pontos = face.indices
-      .map((i) => `${curto(tela[i].x)},${curto(tela[i].y)}`)
-      .join(" ");
+    const vertices: number[] = [];
+    for (const i of face.indices) {
+      vertices.push(curto(tela[i].x), curto(tela[i].y));
+    }
+
+    // A string sai dos MESMOS números arredondados: é ela que o React compara
+    // para decidir se escreve no DOM -- ver `curto`.
+    const pontos = [];
+    for (let i = 0; i < vertices.length; i += 2) {
+      pontos.push(`${vertices[i]},${vertices[i + 1]}`);
+    }
     const luz = Math.max(0, normal.x * LUZ.x + normal.y * LUZ.y + normal.z * LUZ.z);
 
     const numeros: NumeroDesenhado[] = [];
@@ -801,7 +824,12 @@ export function desenharDado({
        * determinante e o número sai ESPELHADO, o que numa face girada parece só
        * um algarismo estranho — um 20 virava 05 de trás para frente.
        */
-      const afim = (origem: Vec3, eixoU: Vec3, eixoV: Vec3, corpo: number) => {
+      const afim = (
+        origem: Vec3,
+        eixoU: Vec3,
+        eixoV: Vec3,
+        corpo: number,
+      ): NumeroDesenhado["matriz"] => {
         const o = projetar(origem);
         const pu = projetar({
           x: origem.x + eixoU.x * corpo,
@@ -816,11 +844,14 @@ export function desenharDado({
 
         // Três casas na base e uma na posição: a base é um vetor de umas
         // dezesseis unidades, a posição é um ponto do plano de cena.
-        return (
-          `matrix(${curto(pu.x - o.x, 3)} ${curto(pu.y - o.y, 3)} ` +
-          `${curto(pv.x - o.x, 3)} ${curto(pv.y - o.y, 3)} ` +
-          `${curto(o.x)} ${curto(o.y)})`
-        );
+        return [
+          curto(pu.x - o.x, 3),
+          curto(pu.y - o.y, 3),
+          curto(pv.x - o.x, 3),
+          curto(pv.y - o.y, 3),
+          curto(o.x),
+          curto(o.y),
+        ] as const;
       };
 
       if (solido.leitura === "apice") {
@@ -844,7 +875,7 @@ export function desenharDado({
             texto: String(solido.numerosDoVertice?.[indice] ?? ""),
             // O "para cima" do algarismo é a direção do canto, então `v` do
             // texto é o contrário dela: o topo da letra fica virado para fora.
-            transform: afim(
+            matriz: afim(
               posicao,
               aoLado,
               { x: -paraFora.x, y: -paraFora.y, z: -paraFora.z },
@@ -859,13 +890,19 @@ export function desenharDado({
 
         numeros.push({
           texto: String(face.numero),
-          transform: afim(centro, u, v, solido.tamanhoNumero),
+          matriz: afim(centro, u, v, solido.tamanhoNumero),
           sublinhado: solido.sublinha && (face.numero === 6 || face.numero === 9),
         });
       }
     }
 
-    desenhadas.push({ chave: `f${indiceFace}`, pontos, luz, numeros });
+    desenhadas.push({
+      chave: `f${indiceFace}`,
+      vertices,
+      pontos: pontos.join(" "),
+      luz,
+      numeros,
+    });
   }
 
   return desenhadas;
@@ -1076,12 +1113,17 @@ export type QuadroDaQueda = {
    * enxame de algarismos piscando que ninguém lia. Sobe para um no fim do
    * assentamento, que é quando o resultado passa a ser a informação.
    *
-   * Também é a otimização que mais rendeu. Os `<text>` de SVG são o gasto
-   * dominante da animação: cada quadro com a matriz nova obriga o navegador a
-   * reposicionar os glifos. Medido, com doze dados rolando juntos: com números
-   * em todo quadro, p95 de 33 ms e trinta quadros longos em noventa; sem eles,
-   * 16,9 ms e nenhum. Não desenhar o que não se pode ler custa nada e devolve o
-   * quadro inteiro.
+   * Foi também a otimização que mais rendeu, enquanto o dado era SVG: cada
+   * quadro com a matriz nova obrigava o navegador a reposicionar os glifos.
+   * Medido então, com doze dados rolando juntos: com números em todo quadro,
+   * p95 de 33 ms e trinta quadros longos em noventa; sem eles, 16,9 ms e
+   * nenhum.
+   *
+   * Com o dado em canvas esse ganho encolheu -- não há elemento para
+   * reposicionar, só `fillText` a menos --, e a rampa passou a valer sobretudo
+   * pelo que ela sempre foi na tela: um dado a quatro voltas por segundo não
+   * mostra número nenhum, e dez algarismos piscando não se leem. Ver
+   * `dado-pincel`.
    */
   nitidez: number;
   /** Já assentou: quem anima pode largar o `requestAnimationFrame`. */
