@@ -7,6 +7,7 @@ import { useDockDrag } from "@/components/operator/dock/dock-drag";
 import {
   JanelaCorpo,
   larguraMinima,
+  TELAS,
   useRotuloJanela,
 } from "@/components/operator/dock/window-content";
 import { PanelCollapse } from "@/components/operator/panel-collapse";
@@ -18,8 +19,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import { useLayoutStore, type Grupo, type Lado } from "@/lib/store/use-layout-store";
-import { chaveDe, useWindowStore, type ConteudoJanela } from "@/lib/store/use-window-store";
+import {
+  useLayoutStore,
+  type Grupo,
+  type Lado,
+} from "@/lib/store/use-layout-store";
+import {
+  chaveDe,
+  useWindowStore,
+  type ConteudoJanela,
+} from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -110,23 +119,16 @@ export function DockGroup({
         key={chaveDe(ativa)}
         className="animate-in fade-in-0 min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden duration-100 motion-reduce:animate-none"
       >
-        <div className="flex h-full flex-col" style={{ minWidth: larguraMinima(ativa) }}>
+        <div
+          className="flex h-full flex-col"
+          style={{ minWidth: larguraMinima(ativa) }}
+        >
           <JanelaCorpo conteudo={ativa} />
         </div>
       </div>
     </section>
   );
 }
-
-/** Os painéis que existem, e como se chamam no menu de trazer de volta. */
-const PAINEIS: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
-  { conteudo: { tipo: "cenas" }, titulo: "Cenas" },
-  { conteudo: { tipo: "areas" }, titulo: "Áreas" },
-  { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
-  { conteudo: { tipo: "imagens" }, titulo: "Imagens" },
-  { conteudo: { tipo: "sons" }, titulo: "Sons" },
-  { conteudo: { tipo: "camadas" }, titulo: "Camadas" },
-];
 
 /**
  * Traz de volta um painel que não está em lugar nenhum.
@@ -150,7 +152,9 @@ function Adicionar({ lado, grupoId }: { lado: Lado; grupoId: string }) {
     ...flutuantes.map((janela) => janela.chave),
   ]);
 
-  const faltando = PAINEIS.filter(({ conteudo }) => !ocupadas.has(chaveDe(conteudo)));
+  const faltando = TELAS.filter(
+    ({ conteudo }) => !ocupadas.has(chaveDe(conteudo)),
+  );
 
   if (faltando.length === 0) return null;
 
@@ -226,7 +230,11 @@ function Aba({
   useEffect(() => {
     if (!ativa && !piscando) return;
 
-    botao.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    botao.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
   }, [ativa, piscando]);
 
   return (
@@ -278,8 +286,14 @@ function Aba({
             const y = ponto.y - (camadaRect?.top ?? 0) - 12;
 
             abrirFlutuante(aba, {
-              x: Math.min(Math.max(x, 0), Math.max(0, (camadaRect?.width ?? 0) - 80)),
-              y: Math.min(Math.max(y, 0), Math.max(0, (camadaRect?.height ?? 0) - 40)),
+              x: Math.min(
+                Math.max(x, 0),
+                Math.max(0, (camadaRect?.width ?? 0) - 80),
+              ),
+              y: Math.min(
+                Math.max(y, 0),
+                Math.max(0, (camadaRect?.height ?? 0) - 40),
+              ),
             });
           },
         });

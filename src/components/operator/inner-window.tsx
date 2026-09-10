@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp, GripHorizontal, X } from "lucide-react";
 import { useDockDrag } from "@/components/operator/dock/dock-drag";
 import { Button } from "@/components/ui/button";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
-import { TAB_PX, useWindowStore, type Janela } from "@/lib/store/use-window-store";
+import { encaixar, TAB_PX, useWindowStore, type Janela } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -54,6 +54,9 @@ export function InnerWindow({
   const startDockDrag = useDockDrag();
 
   const mover = useWindowStore((state) => state.mover);
+  // O retângulo que comporta as janelas, para o gesto respeitar o mesmo limite
+  // que o store aplica ao soltar. Ver `encaixar`.
+  const limites = useWindowStore((state) => state.limites);
   const redimensionar = useWindowStore((state) => state.redimensionar);
   const guardar = useWindowStore((state) => state.guardar);
   const fechar = useWindowStore((state) => state.fechar);
@@ -176,13 +179,19 @@ export function InnerWindow({
           startDockDrag(event, {
             conteudo: janela.conteudo,
             aoMover: (delta) => {
-              fim.current = {
-                ...fim.current,
-                x: inicio.current.x + delta.x,
-                y: inicio.current.y + delta.y,
-              };
+              // Limitado DURANTE o gesto, e não só ao soltar: o cabeçalho é o
+              // único jeito de pegar a janela de novo, e uma janela que sai da
+              // tela sob o ponteiro para voltar no fim do arrasto ensina que
+              // dá para perdê-la.
+              const { x, y } = encaixar(
+                inicio.current.x + delta.x,
+                inicio.current.y + delta.y,
+                limites,
+              );
 
-              aplicar({ left: fim.current.x, top: fim.current.y });
+              fim.current = { ...fim.current, x, y };
+
+              aplicar({ left: x, top: y });
             },
             aoSoltarSolto: () => {
               mover(janela.chave, fim.current.x, fim.current.y);

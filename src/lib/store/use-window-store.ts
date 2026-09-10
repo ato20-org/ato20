@@ -30,6 +30,12 @@ export type ConteudoJanela =
   // Sem campo nenhum: o que eles mostram sai do store da cena, não de um
   // descritor. Só existe UMA lista de cenas, e é isso que os torna diferentes
   // de uma ficha, que existe uma por personagem.
+  // A estante e um livro dela. A estante é da MÁQUINA e não da campanha -- o
+  // manual de um sistema serve todas as mesas dele --, e é por isso que o livro
+  // guarda só o id: o título vem do banco, e renomear o livro um dia não pode
+  // criar uma segunda janela do mesmo PDF. Ver `chaveDe`.
+  | { tipo: "estante" }
+  | { tipo: "livro"; livroId: string; titulo: string }
   | { tipo: "cenas" }
   | { tipo: "areas" }
   | { tipo: "retratos" }
@@ -54,6 +60,12 @@ export function chaveDe(conteudo: ConteudoJanela): string {
       return `anexo:${conteudo.personagemId}/${conteudo.anexo.autor}/${conteudo.anexo.arquivo}`;
     case "asset":
       return `asset:${conteudo.assetId}`;
+    case "estante":
+      return "estante";
+    // Sem o título: ele é rótulo, não identidade. Dois pedidos do mesmo livro
+    // são a mesma janela, e a posição lembrada é por livro.
+    case "livro":
+      return `livro:${conteudo.livroId}`;
     // Painel é único: o próprio tipo é a chave, e é o que impede dois grupos de
     // mostrarem a mesma lista de cenas.
     case "cenas":
@@ -149,6 +161,38 @@ const MAX_PX = 1_600;
 /** Largura da janela recolhida. Ver `alternarRecolhida`. */
 export const TAB_PX = 240;
 
+/**
+ * Onde a janela pode estar, dado o retângulo que a comporta.
+ *
+ * Existia só no `acomodar`, que roda quando a JANELA DO APLICATIVO muda de
+ * tamanho — e por isso o arrasto podia deixar o cabeçalho acima do topo ou fora
+ * pela esquerda, e ele ficava lá até um redimensionamento acidental o trazer de
+ * volta. Não há barra de tarefas onde reencontrar uma janela perdida: reabrir
+ * pela lista traz a posição guardada, que é o mesmo nada.
+ *
+ * O canto nunca é negativo, e sobra ao menos `MARGEM_PX` de janela dentro do
+ * retângulo — o cabeçalho é o que precisa continuar agarrável, e ele é a borda
+ * de cima.
+ *
+ * Retângulo de tamanho zero é o estado antes da primeira medida, e aí não há
+ * limite a aplicar: cravar tudo em zero empilharia as janelas no canto de cima.
+ *
+ * Exportada porque o arrasto precisa do MESMO limite: ele mexe no DOM durante o
+ * gesto e só chama `mover` ao soltar, e sem isto a janela escorregaria para fora
+ * sob o ponteiro para saltar de volta no fim — a mesma razão que faz os
+ * divisores do dock conhecerem os limites deles.
+ */
+export function encaixar(x: number, y: number, limites: { largura: number; altura: number }) {
+  if (limites.largura <= 0 || limites.altura <= 0) {
+    return { x: Math.round(x), y: Math.round(y) };
+  }
+
+  return {
+    x: Math.round(Math.min(Math.max(x, 0), Math.max(0, limites.largura - MARGEM_PX))),
+    y: Math.round(Math.min(Math.max(y, 0), Math.max(0, limites.altura - MARGEM_PX))),
+  };
+}
+
 function eNumeroOuAusente(valor: unknown): boolean {
   return valor === undefined || typeof valor === "number";
 }
@@ -224,6 +268,14 @@ type WindowStore = {
    * consulta.
    */
   posicoes: Record<string, Posicao>;
+  /**
+   * O retângulo que comporta as janelas, medido pela camada que as desenha.
+   *
+   * Guardado aqui, e não passado a cada chamada, porque quem move a janela é o
+   * cabeçalho dela e ele não mede nada: o tamanho é da TELA, e só a camada o
+   * conhece. Zero até a primeira medida — ver `encaixar`.
+   */
+  limites: { largura: number; altura: number };
 
   /**
    * Traz a janela para a tela FLUTUANDO. Já aberta, só vem para a frente.
@@ -319,6 +371,7 @@ type WindowStore = {
 export const useWindowStore = create<WindowStore>((set, get) => ({
   janelas: [],
   posicoes: {},
+  limites: { largura: 0, altura: 0 },
 
   abrir(conteudo, posicao) {
     const chave = chaveDe(conteudo);
@@ -330,7 +383,10 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
     // A posição de antes vence o padrão: reabrir é continuar de onde se parou,
     // não recomeçar a arrumação da mesa. Mas a pedida vence as duas.
-    const lembrada = posicao ?? get().posicoes[chave];
+    // A pedida também passa pelo encaixe: desatracar soltando a aba na beirada
+    // da tela deixaria a janela nascer com o cabeçalho fora dela.
+    const pedida = posicao ? encaixar(posicao.x, posicao.y, get().limites) : undefined;
+    const lembrada = pedida ?? get().posicoes[chave];
     const escada = get().janelas.length * ESCADA;
     const inicial = { x: INICIAL.x + escada, y: INICIAL.y + escada };
 
@@ -341,9 +397,11 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   },
 
   mover(chave, x, y) {
+    const encaixada = encaixar(x, y, get().limites);
+
     set((state) => ({
       janelas: state.janelas.map((janela) =>
-        janela.chave === chave ? { ...janela, x: Math.round(x), y: Math.round(y) } : janela,
+        janela.chave === chave ? { ...janela, ...encaixada } : janela,
       ),
     }));
   },
@@ -442,11 +500,13 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   acomodar(largura, altura) {
     if (largura <= 0 || altura <= 0) return;
 
+    const limites = { largura, altura };
+
     set((state) => ({
+      limites,
       janelas: state.janelas.map((janela) => ({
         ...janela,
-        x: Math.min(Math.max(janela.x, 0), Math.max(0, largura - MARGEM_PX)),
-        y: Math.min(Math.max(janela.y, 0), Math.max(0, altura - MARGEM_PX)),
+        ...encaixar(janela.x, janela.y, limites),
       })),
     }));
   },

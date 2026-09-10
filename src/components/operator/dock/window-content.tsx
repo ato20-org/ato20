@@ -5,7 +5,9 @@ import { AudioLibrary } from "@/components/operator/audio-library";
 import { AnexoBody, AssetBody } from "@/components/operator/attachment-window";
 import { CharacterBody } from "@/components/operator/character-window";
 import { CharactersBody } from "@/components/operator/characters-window";
+import { EstanteBody } from "@/components/operator/estante-window";
 import { FogList } from "@/components/operator/fog-list";
+import { LeitorLivro } from "@/components/operator/leitor/leitor-livro";
 import { LayerList } from "@/components/operator/layer-list";
 import { PortraitList } from "@/components/operator/portrait-list";
 import { SceneList } from "@/components/operator/scene-list";
@@ -29,6 +31,33 @@ import type { ConteudoJanela } from "@/lib/store/use-window-store";
 export type Rotulo = { titulo: string; subtitulo?: string };
 
 /**
+ * As telas que existem, na ordem em que aparecem nos menus.
+ *
+ * Uma lista só, e é uma correção: havia duas escritas à mão — uma no menu
+ * "Abas" da barra da janela e outra no `+` da tira de abas — e a Estante entrou
+ * numa e não na outra, o que deixou a tela nova alcançável por um caminho e
+ * invisível pelo outro.
+ *
+ * Escrita à mão e não derivada do layout, isso continua: ela precisa listar o
+ * que NÃO está aberto, e o que não está aberto não existe em lugar nenhum para
+ * ser derivado. É também a única lista que responde "quais telas existem", o que
+ * a torna o lugar certo para uma tela nova ser anunciada.
+ *
+ * Só telas SEM identidade própria. Um livro da estante não entra: ele tem id, e
+ * uma lista de livros abertos é a Estante, não um menu de painéis.
+ */
+export const TELAS: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
+  { conteudo: { tipo: "cenas" }, titulo: "Cenas" },
+  { conteudo: { tipo: "areas" }, titulo: "Áreas" },
+  { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
+  { conteudo: { tipo: "camadas" }, titulo: "Camadas" },
+  { conteudo: { tipo: "imagens" }, titulo: "Imagens" },
+  { conteudo: { tipo: "sons" }, titulo: "Sons" },
+  { conteudo: { tipo: "personagens" }, titulo: "Personagens" },
+  { conteudo: { tipo: "estante" }, titulo: "Estante" },
+];
+
+/**
  * O rótulo, como hook, e não função pura.
  *
  * Porque um deles depende de dado: a ficha se chama pelo nome do personagem, e
@@ -43,7 +72,9 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
     case "personagens":
       return { titulo: "Personagens", subtitulo: "Ficha, miniaturas e donos" };
     case "personagem": {
-      const nome = personagens?.find((atual) => atual.id === conteudo.personagemId)?.nome;
+      const nome = personagens?.find(
+        (atual) => atual.id === conteudo.personagemId,
+      )?.nome;
 
       // "Personagem" enquanto o índice não chegou, e não vazio: título que
       // aparece depois faz a largura da aba pular na frente de quem olha.
@@ -52,10 +83,20 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
     case "anexo":
       return {
         titulo: conteudo.anexo.arquivo,
-        subtitulo: conteudo.anexo.autor === "jogador" ? "Anexo do jogador" : "Anexo do mestre",
+        subtitulo:
+          conteudo.anexo.autor === "jogador"
+            ? "Anexo do jogador"
+            : "Anexo do mestre",
       };
     case "asset":
       return { titulo: conteudo.nome, subtitulo: "Imagem do acervo" };
+    case "estante":
+      return {
+        titulo: "Estante",
+        subtitulo: "Os livros de regras desta máquina",
+      };
+    case "livro":
+      return { titulo: conteudo.titulo, subtitulo: "Livro de regras" };
     case "cenas":
       return { titulo: "Cenas" };
     case "areas":
@@ -87,6 +128,10 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
     case "anexo":
     case "asset":
       return 560;
+    // O leitor nasce largo: uma página de manual é diagramada em duas colunas
+    // de texto, e a 288 pixels ela chega ilegível mesmo ajustada à largura.
+    case "livro":
+      return 720;
     default:
       return 288;
   }
@@ -111,6 +156,11 @@ export function larguraMinima(conteudo: ConteudoJanela): number {
     case "anexo":
     case "asset":
       return 320;
+    // A barra do leitor envolve em vez de rolar, mas a página tem um piso: com
+    // a tira de marcadores aberta, abaixo disto sobra uma faixa de folha de 60
+    // pixels ao lado dela.
+    case "livro":
+      return 420;
     default:
       return 0;
   }
@@ -133,16 +183,30 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
     case "personagem":
       return <CharacterBody personagemId={conteudo.personagemId} />;
     case "anexo":
-      return <AnexoBody personagemId={conteudo.personagemId} anexo={conteudo.anexo} />;
+      return (
+        <AnexoBody
+          personagemId={conteudo.personagemId}
+          anexo={conteudo.anexo}
+        />
+      );
     case "asset":
       return <AssetBody assetId={conteudo.assetId} nome={conteudo.nome} />;
+    // A estante e o leitor não dependem de cena nem de campanha: o mestre
+    // consulta uma regra na porta do aplicativo, antes de escolher a mesa da
+    // noite. Ver `estante.rs` e a rota `/livro/{id}`.
+    case "estante":
+      return <EstanteBody />;
+    case "livro":
+      return <LeitorLivro livroId={conteudo.livroId} />;
     case "cenas":
       return <SceneList ready={pronta} />;
     case "areas":
       return scene ? (
         <FogList scene={scene} />
       ) : (
-        <p className="text-muted-foreground p-3 text-xs">Crie uma cena primeiro.</p>
+        <p className="text-muted-foreground p-3 text-xs">
+          Crie uma cena primeiro.
+        </p>
       );
     // Retrato não depende de cena: ele é da sessão e atravessa a troca.
     case "retratos":
@@ -151,7 +215,9 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
       return scene ? (
         <AssetLibrary scene={scene} />
       ) : (
-        <p className="text-muted-foreground p-3 text-xs">Crie uma cena primeiro.</p>
+        <p className="text-muted-foreground p-3 text-xs">
+          Crie uma cena primeiro.
+        </p>
       );
     // Som também não: a trilha é da sessão.
     case "sons":
@@ -160,7 +226,9 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
       return scene ? (
         <LayerList scene={scene} />
       ) : (
-        <p className="text-muted-foreground p-3 text-xs">Crie uma cena primeiro.</p>
+        <p className="text-muted-foreground p-3 text-xs">
+          Crie uma cena primeiro.
+        </p>
       );
   }
 }

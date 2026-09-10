@@ -12,28 +12,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { TELAS } from "@/components/operator/dock/window-content";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
-import { chaveDe, useWindowStore, type ConteudoJanela } from "@/lib/store/use-window-store";
-
-/**
- * O que este menu governa, na ordem em que aparece.
- *
- * A lista é escrita à mão e não derivada do layout porque ela precisa listar o
- * que NÃO está aberto — e o que não está aberto não existe em lugar nenhum para
- * ser derivado. É também a única lista no aplicativo que diz quais telas
- * existem, o que a torna o lugar certo para uma tela nova ser anunciada.
- */
-const TELAS: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
-  { conteudo: { tipo: "cenas" }, titulo: "Cenas" },
-  { conteudo: { tipo: "areas" }, titulo: "Áreas" },
-  { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
-  { conteudo: { tipo: "camadas" }, titulo: "Camadas" },
-  { conteudo: { tipo: "imagens" }, titulo: "Imagens" },
-  { conteudo: { tipo: "sons" }, titulo: "Sons" },
-  { conteudo: { tipo: "personagens" }, titulo: "Personagens" },
-];
+import { chaveDe, useWindowStore } from "@/lib/store/use-window-store";
 
 /**
  * Quais telas estão à vista, na barra da janela.
@@ -68,7 +51,9 @@ export function PanelsMenu() {
     ...flutuantes.map((janela) => janela.chave),
   ]);
 
-  const quantas = TELAS.filter(({ conteudo }) => abertas.has(chaveDe(conteudo))).length;
+  const quantas = TELAS.filter(({ conteudo }) =>
+    abertas.has(chaveDe(conteudo)),
+  ).length;
 
   return (
     <DropdownMenu>
