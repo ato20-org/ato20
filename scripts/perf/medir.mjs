@@ -69,6 +69,10 @@ const SEGUNDOS = Number(opcao("segundos", 8));
 const REPETICOES = Number(opcao("repetir", 1));
 /** Itens que mudam por amostra nos cenarios de espectador. Ver a pagina. */
 const MOVIDOS = opcao("movidos", "1");
+/** `dados`: ampliacao do palco. E ela que estoura o backing de um canvas grande. */
+const ZOOM = opcao("zoom", "1");
+/** `plateia`: `--sem-variante` mede o celular baixando o arquivo inteiro. */
+const VARIANTE = temFlag("sem-variante") ? "0" : "1";
 /** `biblioteca`: `--sem-lazy` mede a lista sem os atributos de `MINIATURA`. */
 const LAZY = temFlag("sem-lazy") ? "0" : "1";
 /** `biblioteca`: percorre a lista durante a medida. */
@@ -83,6 +87,14 @@ const CHROME = opcao("chrome", process.env.CHROME ?? "google-chrome-stable");
  * colunas de script, estilo e layout, que medem TRABALHO e nao cadencia.
  */
 const JANELA = temFlag("janela");
+/**
+ * Liga o amostrador de perfil e imprime onde o tempo de JavaScript foi.
+ *
+ * Serve a uma pergunta que a coluna `script` nao responde: dela sai QUANTO, e
+ * nao ONDE. Sem isso, "otimizar o script" e escolher entre a matematica, o
+ * desenho e a reconciliacao do React por palpite.
+ */
+const PERFIL = temFlag("perfil");
 
 // ---------------------------------------------------------------------------
 // PNG de ruído, sem dependência.
@@ -171,17 +183,43 @@ function servir(porta) {
     const caminho = decodeURIComponent(new URL(req.url, "http://x").pathname);
 
     if (caminho.startsWith("/asset/")) {
-      const id = caminho.slice("/asset/".length);
+      // `/asset/{id}/{variante}` responde reduzido, como o daemon: e a rota
+      // que o `vault/variantes.rs` serve, e sem imita-la aqui as medidas de
+      // lista e de Plateia nao mediriam nada -- a tela pediria a reducao e
+      // receberia o arquivo.
+      const partes = caminho.slice("/asset/".length).split("/");
+      const variante = partes.length > 1 ? partes[1] : null;
+      // Mesmos lados do Rust. Ver `Variante::lado`.
+      const ladoDaVariante = variante === "mini" ? 160 : variante === "tela" ? 1920 : null;
+      const id = partes[0] + (variante ? `#${variante}` : "");
       if (!cache.has(id)) {
         const fundo = id === "perf-fundo";
         // `mapa-*` responde grande de proposito: e o cenario `biblioteca`, e o
         // que ele mede e justamente o custo de o acervo guardar o original.
         const mapa = id.startsWith("mapa-");
+        // `mapaG-*`: a ordem de grandeza de um mapa de verdade (3537x3750, o
+        // do acervo que motivou esta medida). E o que faz a conta de memoria
+        // ser 53 MB de bitmap por arquivo distinto.
+        const mapaGrande = id.startsWith("mapaG-");
         // Semente derivada do id: cada token tem textura própria, e a mesma
         // corrida repetida tem as mesmas texturas.
         const semente = [...id].reduce((soma, c) => (soma * 31 + c.charCodeAt(0)) >>> 0, 7);
-        const lado = mapa ? 2048 : fundo ? 1920 : 256;
-        cache.set(id, png(lado, mapa ? 2048 : fundo ? 1080 : 256, semente || 1));
+        const cheia = {
+          largura: mapaGrande ? 3537 : mapa ? 2048 : fundo ? 1920 : 256,
+          altura: mapaGrande ? 3750 : mapa ? 2048 : fundo ? 1080 : 256,
+        };
+        // Mesma regra do Rust: o lado maior no alvo, sem ampliar.
+        const escala = ladoDaVariante
+          ? Math.min(1, ladoDaVariante / Math.max(cheia.largura, cheia.altura))
+          : 1;
+        cache.set(
+          id,
+          png(
+            Math.max(1, Math.round(cheia.largura * escala)),
+            Math.max(1, Math.round(cheia.altura * escala)),
+            semente || 1,
+          ),
+        );
       }
 
       res.writeHead(200, { "content-type": "image/png", "cache-control": "no-store" });
@@ -324,6 +362,13 @@ async function medir(cdp, url) {
   await cdp.enviar("Performance.enable", {}, sessionId);
   await cdp.enviar("Network.enable", {}, sessionId);
 
+  if (PERFIL) {
+    await cdp.enviar("Profiler.enable", {}, sessionId);
+    // 100 microssegundos: fino o bastante para separar funcoes que rodam
+    // dezenas de vezes por quadro.
+    await cdp.enviar("Profiler.setSamplingInterval", { interval: 100 }, sessionId);
+  }
+
   /**
    * Bytes que a tela realmente buscou.
    *
@@ -366,6 +411,7 @@ async function medir(cdp, url) {
   };
 
   let antes = null;
+  let perfilLigado = false;
   const limite = Date.now() + (SEGUNDOS + 40) * 1000;
 
   while (Date.now() < limite) {
@@ -374,6 +420,13 @@ async function medir(cdp, url) {
     // A primeira leitura vai depois de a página existir, senão o delta de
     // script incluiria o parse do bundle em vez do custo do cenário.
     antes ??= await metricas();
+
+    if (PERFIL && !perfilLigado) {
+      // Depois do aquecimento, senao o perfil e dominado pelo parse do bundle.
+      await new Promise((r) => setTimeout(r, 3000));
+      await cdp.enviar("Profiler.start", {}, sessionId);
+      perfilLigado = true;
+    }
 
     const { result } = await cdp.enviar(
       "Runtime.evaluate",
@@ -385,6 +438,7 @@ async function medir(cdp, url) {
     if (!bruto) continue;
 
     const depois = await metricas();
+    const perfil = PERFIL ? await cdp.enviar("Profiler.stop", {}, sessionId) : null;
     pararDeOuvir();
     await cdp.enviar("Target.closeTarget", { targetId });
 
@@ -392,10 +446,12 @@ async function medir(cdp, url) {
       ...bruto,
       bytes,
       imagens,
+      perfil: perfil ? ondeFoiOTempo(perfil.profile) : null,
       // Tempo que o renderizador passou em JavaScript, em estilo e em layout
       // durante a corrida. É aqui que React e zustand aparecem: `perf.html`
       // move `style.transform` e não paga nada disto.
       scriptMs: Math.round((depois.ScriptDuration - antes.ScriptDuration) * 1000),
+      heapMb: Math.round(depois.JSHeapUsedSize / 1024 / 1024),
       estiloMs: Math.round((depois.RecalcStyleDuration - antes.RecalcStyleDuration) * 1000),
       layoutMs: Math.round((depois.LayoutDuration - antes.LayoutDuration) * 1000),
       nodes: depois.Nodes,
@@ -406,6 +462,41 @@ async function medir(cdp, url) {
   await cdp.enviar("Target.closeTarget", { targetId });
 
   throw new Error(`sem resultado em ${url}`);
+}
+
+/**
+ * Onde o tempo de JavaScript foi, por funcao.
+ *
+ * Tempo PROPRIO, e nao acumulado: o que se quer saber e quem gastou, nao quem
+ * chamou. Um no do perfil traz a contagem de amostras dele mesmo, e o
+ * intervalo de amostragem converte isso em milissegundos.
+ */
+function ondeFoiOTempo(profile) {
+  const porFuncao = new Map();
+  const total = profile.nodes.reduce((soma, no) => soma + (no.hitCount ?? 0), 0);
+  if (total === 0) return [];
+
+  const janela = (profile.endTime - profile.startTime) / 1000;
+
+  for (const no of profile.nodes) {
+    if (!no.hitCount) continue;
+
+    const quadro = no.callFrame;
+    const arquivo = (quadro.url ?? "").split("/").pop() ?? "";
+    const nome = quadro.functionName || "(anonimo)";
+    const chave = arquivo ? `${nome}  ${arquivo}` : nome;
+
+    porFuncao.set(chave, (porFuncao.get(chave) ?? 0) + no.hitCount);
+  }
+
+  return [...porFuncao.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([nome, amostras]) => ({
+      nome,
+      ms: Math.round((amostras / total) * janela),
+      pct: Number(((amostras / total) * 100).toFixed(1)),
+    }));
 }
 
 /**
@@ -434,6 +525,8 @@ function mediana(corridas) {
     pior: meio("pior"),
     perdidosPct: meio("perdidosPct"),
     scriptMs: meio("scriptMs"),
+    heapMb: meio("heapMb"),
+    nodes: meio("nodes"),
     estiloMs: meio("estiloMs"),
     layoutMs: meio("layoutMs"),
     bytes: meio("bytes"),
@@ -468,7 +561,7 @@ async function principal() {
   try {
     for (const cenario of CENARIOS) {
       for (const n of NS) {
-        const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&rotulo=chrome`;
+        const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&rotulo=chrome`;
         const corridas = [];
 
         for (let i = 1; i <= REPETICOES; i++) {
@@ -490,8 +583,8 @@ async function principal() {
     await rm(perfil, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => {});
   }
 
-  const cab = ["cenario", "n", "fps", "p50", "p95", "pior", "perdidos", "script", "estilo", "layout", "rede", "imagens"];
-  const largura = [12, 5, 6, 7, 7, 7, 9, 8, 8, 8, 10, 9];
+  const cab = ["cenario", "n", "fps", "p50", "p95", "pior", "perdidos", "script", "estilo", "layout", "rede", "imagens", "heap", "nos"];
+  const largura = [18, 5, 6, 7, 7, 7, 9, 8, 8, 8, 10, 9, 8, 7];
   const fmt = (celulas) => celulas.map((c, i) => String(c).padStart(largura[i])).join("");
 
   console.log(`\n${fmt(cab)}`);
@@ -511,6 +604,8 @@ async function principal() {
         `${l.layoutMs}ms`,
         `${(l.bytes / 1024 / 1024).toFixed(1)}MB`,
         l.imagens,
+        `${l.heapMb}MB`,
+        l.nodes,
       ]),
     );
   }
@@ -518,6 +613,15 @@ async function principal() {
   console.log(
     `\n${SEGUNDOS}s por medida${REPETICOES > 1 ? `, mediana de ${REPETICOES} corridas` : ""}, ${AQUECIMENTO_NOTA}.`,
   );
+  for (const l of linhas) {
+    if (!l.perfil || l.perfil.length === 0) continue;
+
+    console.log(`\nonde o JavaScript foi -- ${l.cenario} n=${l.n}:`);
+    for (const { nome, ms, pct } of l.perfil) {
+      console.log(`  ${String(pct).padStart(5)}%  ${String(ms).padStart(5)}ms  ${nome}`);
+    }
+  }
+
   console.log(
     JANELA
       ? "Com janela: fps e p95 valem. Chrome, nao a webview -- para o motor, ver public/perf.html."
