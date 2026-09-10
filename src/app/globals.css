@@ -124,15 +124,31 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Nada de seleção de texto na aplicação.
+     Esta é uma mesa de RPG operada com o mouse: quase todo arrasto é
+     manipulação direta — boneco no mapa, aba no dock, janela pelo cabeçalho,
+     alça de redimensionar. Sem esta regra, um arrasto que começa um pixel fora
+     do alvo pinta metade da interface de azul e o gesto vira seleção de texto
+     em vez do movimento pretendido.
+
+     Na raiz e não espalhado em `select-none` por componente: `user-select` é
+     herdado, então uma regra em `html` cobre tudo o que existe hoje e tudo o
+     que for criado depois, e ninguém precisa lembrar de marcar o próximo
+     painel.
+
+     `-webkit-touch-callout` junto: no WebKit (é o motor do Tauri no Linux e no
+     macOS) o toque longo ainda abriria o menu de seleção do sistema, que é a
+     mesma interrupção por outra porta. */
   html {
-    @apply font-sans;
+    @apply font-sans select-none;
+    -webkit-touch-callout: none;
   }
 
-  /* Campo de texto seleciona, mesmo dentro de cromo marcado `select-none`.
-     `user-select` é herdado: sem esta regra, o `select-none` do cabeçalho e dos
-     painéis desceria para o campo de renomear cena e para o de nome de pasta, e
-     não haveria como corrigir uma digitação no meio de uma palavra — só apagar
-     tudo e reescrever. */
+  /* Campo de texto é a exceção, e a única. O `select-none` da raiz desceria
+     para o campo de renomear cena, para o de nome de pasta e para o corpo do
+     post-it, e não haveria como corrigir uma digitação no meio de uma palavra
+     — só apagar tudo e reescrever. Digitar é edição de texto, não manipulação
+     direta: ali a seleção é a ferramenta, não o acidente. */
   input,
   textarea,
   [contenteditable="true"] {
