@@ -9,6 +9,8 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  Radio,
+  RadioTower,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -36,6 +38,7 @@ import {
 import { countAssetUsage } from "@/lib/operator/asset-usage";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
+import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { cn } from "@/lib/utils";
 import type { AssetFolder, AssetMeta, Scene } from "@/types/scene";
 
@@ -424,6 +427,15 @@ function AssetRow({
 }: AssetRowProps) {
   const url = useAssetUrl(asset.id, "mini");
 
+  // Boolean, e não o objeto: seletor que devolve o `spotlight` inteiro
+  // redesenharia toda linha da lista a cada troca de evidência. Assim só as
+  // duas linhas que mudam de estado — a que saiu e a que entrou — redesenham.
+  const noAr = useSpotlightStore(
+    (state) => state.spotlight?.assetId === asset.id,
+  );
+  const transmit = useSpotlightStore((state) => state.transmit);
+  const clear = useSpotlightStore((state) => state.clear);
+
   return (
     // Arrastável inteiro, e não só a miniatura: o alvo de 40px do polegar seria
     // o menor da tela, e o `+` continua ali para quem prefere clicar — a cena
@@ -460,10 +472,11 @@ function AssetRow({
       >
         <Plus />
       </Button>
-      {/* Menu com o resto: mover entre pastas — que também se faz arrastando,
-          mas o arrasto não alcança pasta rolada fora de vista — e apagar. Só o
-          `+` fica solto na linha; ícones lado a lado numa lista rolável eram
-          ruído, e nenhum deles é gesto de toda hora como adicionar à cena.
+      {/* Menu com o resto: transmitir para a mesa, mover entre pastas — que
+          também se faz arrastando, mas o arrasto não alcança pasta rolada fora
+          de vista — e apagar. Só o `+` fica solto na linha; ícones lado a lado
+          numa lista rolável eram ruído, e nenhum deles é gesto de toda hora
+          como adicionar à cena.
 
           "Usar como fundo" e "usar como retrato" saíram: cada arquivo agora tem
           uma casa só, e é de lá que ele é escolhido. */}
@@ -480,6 +493,21 @@ function AssetRow({
           }
         />
         <DropdownMenuContent align="end" className="w-48">
+          {/* Primeiro item, e acima de mover e apagar: é a única coisa aqui que
+              a mesa vê acontecer, e as outras são arrumação do acervo.
+
+              Existe porque o `+` da linha é o outro destino possível da mesma
+              imagem, e os dois não são a mesma pergunta: mapa é cenário que
+              fica, evidência é "olha isto" — o retrato do PNJ, o documento, a
+              carta. Antes disto, mostrar um handout obrigava a jogá-lo no mapa
+              e depois apagá-lo de lá. */}
+          <DropdownMenuItem onClick={noAr ? clear : () => transmit(asset.id)}>
+            {noAr ? <RadioTower /> : <Radio />}
+            {noAr ? "Tirar da evidência" : "Transmitir para a mesa"}
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
           {asset.folderId ? (
             <DropdownMenuItem onClick={() => onMove(undefined)}>
               <FolderClosed />
