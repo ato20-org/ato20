@@ -41,3 +41,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# o runtime do pdf.js, copiado de node_modules por scripts/copiar-pdfjs.mjs
+/public/pdfjs/
+
+# Worktrees de git, que moram DENTRO do repositorio para o build isolado nao
+# competir com o `tauri dev` aberto no tree principal. O conteudo e uma copia
+# de trabalho, nao fonte. O `eslint.config.mjs` ignora `.claude/**` pela mesma
+# razao, e la e mais largo: o `.next/` de um worktree rendia 36 mil avisos.
+/.claude/worktrees/

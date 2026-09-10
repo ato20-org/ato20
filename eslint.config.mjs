@@ -16,6 +16,14 @@ const eslintConfig = defineConfig([
     // lintar a saida de outro compilador so produz aviso que ninguem pode
     // corrigir.
     "src-tauri/target/**",
+    // O runtime do pdf.js, copiado de `node_modules` por
+    // `scripts/copiar-pdfjs.mjs`. Codigo de terceiro e minificado: lintar o
+    // worker rendia dez erros numa linha de meio milhao de colunas.
+    "public/pdfjs/**",
+    // Ferramentaria e worktrees de git, que moram DENTRO do repositorio. O
+    // ignore de `.next/**` casa so na raiz, entao o build de um worktree aqui
+    // entrava no lint: 36 mil avisos de codigo gerado por outro compilador.
+    ".claude/**",
   ]),
 ]);
 

@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm clean:web-resources && pnpm dev",
-    "beforeBuildCommand": "pnpm clean:web-resources && pnpm build"
+    "beforeDevCommand": "pnpm clean:web-resources && pnpm pdfjs && pnpm dev",
+    "beforeBuildCommand": "pnpm clean:web-resources && pnpm pdfjs && pnpm build"
   },
   "app": {
     "windows": [
