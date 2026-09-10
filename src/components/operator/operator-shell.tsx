@@ -33,6 +33,7 @@ import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
+import { useLeitorStore } from "@/lib/store/use-leitor-store";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { useWindowStore } from "@/lib/store/use-window-store";
@@ -73,6 +74,7 @@ export function OperatorShell() {
   const restoreSaquinho = useDadosStore((state) => state.restaurar);
   const restoreLayout = useLayoutStore((state) => state.restaurar);
   const restoreWindows = useWindowStore((state) => state.restaurar);
+  const restoreLeitor = useLeitorStore((state) => state.restaurar);
 
   const track = useTrackStore((state) => state.track);
   const trackVolume = useTrackStore((state) => state.volume);
@@ -103,7 +105,15 @@ export function OperatorShell() {
     restoreWindows();
     restoreLayout();
     restoreSaquinho();
-  }, [restorePanels, restorePinNotes, restoreWindows, restoreLayout, restoreSaquinho]);
+    restoreLeitor();
+  }, [
+    restorePanels,
+    restorePinNotes,
+    restoreWindows,
+    restoreLayout,
+    restoreSaquinho,
+    restoreLeitor,
+  ]);
 
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
   // montar a próxima cena sem a mesa ver o rascunho.

@@ -4,6 +4,7 @@ import { useRef, type ReactNode } from "react";
 
 import { DockColumn } from "@/components/operator/dock/dock-column";
 import { Splitter } from "@/components/operator/dock/splitter";
+import { LeitorSplit } from "@/components/operator/leitor/leitor-split";
 import {
   MAX_LARGURA_PX,
   MIN_LARGURA_PX,
@@ -57,6 +58,12 @@ export function DockRow({ children }: { children: ReactNode }) {
           <DockColumn lado="direita" />
         </>
       ) : null}
+
+      {/* O leitor de Regras na PONTA da linha, depois da coluna direita, e não
+          entre ela e o palco: as duas colunas cercam o mapa, e enfiar meia tela
+          de manual no meio empurraria a coluna direita para longe do que ela
+          controla. Só existe quando há livro no split. Ver `LeitorSplit`. */}
+      <LeitorSplit />
     </>
   );
 }
