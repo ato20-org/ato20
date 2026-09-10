@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { DadoLayer } from "@/components/operator/dado-layer";
+import { LayerList } from "@/components/operator/layer-list";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
-import { zoomViewport } from "@/lib/geometry/viewport";
+import { FULL_VIEWPORT, zoomViewport } from "@/lib/geometry/viewport";
 import { MINIATURA } from "@/lib/miniatura";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { useDadosStore } from "@/lib/store/use-dados-store";
@@ -56,6 +57,31 @@ import { SCENE_HEIGHT, SCENE_WIDTH, type CanvasItem, type Scene } from "@/types/
  *               montar e compor. Medido: com trinta cenas, os dois têm os
  *               MESMOS 409 nós no DOM -- o que pesa é o bitmap por linha, não a
  *               montagem.
+ * `camadas`    A JANELA DE CAMADAS enquanto o mestre arrasta um token. Uma
+ *               linha por item da cena, e `?n=` é quantos itens -- que é
+ *               também o tamanho da lista, porque na janela real os dois são o
+ *               mesmo número. O palco é o do cenário `arrasto`, então a
+ *               comparação que responde "quanto o painel custa" é contra
+ *               `arrasto` no MESMO `n`, e não contra outro `n` deste cenário.
+ *
+ *               O que ele isola é o RENDER: as miniaturas já pedem a variante
+ *               `mini`, e o servidor da medida responde `no-store`, então nem
+ *               o bitmap do original nem a revalidação de cache entram na
+ *               conta. Sobra o que se quer ver -- N linhas reconciliando a
+ *               cada quadro do arrasto, com quatro botões de ícone cada.
+ *
+ *               Sem IPC nesta página os nomes vêm vazios e a linha diz
+ *               "Imagem removida". É um `<span>` truncado de qualquer forma:
+ *               muda o texto, não a contagem de nós nem o número de renders.
+ *
+ * `camera`     A CÂMERA mudando de ampliação a cada quadro, com N itens na
+ *               cena. Os outros cenários mexem no CONTEÚDO com a câmera
+ *               parada; este mexe na câmera, que é o outro gesto do mestre e o
+ *               único que faz o plano inteiro se redesenhar. Nasceu medindo uma
+ *               tentativa de conserto do borrão do palco ampliado -- pôr a
+ *               ampliação no layout, com `zoom`, em vez de na composição -- e
+ *               ficou: era o custo do gesto de zoom que ninguém tinha medido.
+ *
  * `plateia`    O CELULAR do jogador: as mesmas amostras de 10 Hz, mas com um
  *               mapa de 3537x3750 no fundo e pedindo a variante `tela`.
  *               `--sem-variante` mede o que ele fazia antes -- baixar o
@@ -89,6 +115,8 @@ type Cenario =
   | "biblioteca"
   | "lista"
   | "lista-mesmo-mapa"
+  | "camadas"
+  | "camera"
   | "plateia";
 
 function montarCena(n: number): Scene {
@@ -399,6 +427,56 @@ function PalcoOperador({ n }: { n: number }) {
 }
 
 /**
+ * A CÂMERA mudando de ampliação a cada quadro, com N itens na cena.
+ *
+ * Sessenta mudanças de zoom por segundo é mais do que a pinça de um touchpad
+ * pede, e é o ponto: os outros cenários todos medem a câmera PARADA, e o custo
+ * de mexer nela nunca tinha aparecido em número nenhum.
+ *
+ * Medido aqui: com a ampliação na composição -- `transform: scale`, que é o que
+ * o palco faz -- mexer no zoom não custa refluxo nenhum, 24 ms de estilo com
+ * sessenta itens. Trocando para `zoom`, que entra no LAYOUT, os mesmos oito
+ * segundos pagam 889 ms de estilo e 164 ms de layout. Foi essa a medida que
+ * matou aquela tentativa de conserto do borrão -- junto com o que ela fazia com
+ * as bordas de meio pixel dos controles.
+ */
+function PalcoCamera({ n }: { n: number }) {
+  const cena = useMemo(() => montarCena(n), [n]);
+  const [viewport, setViewport] = useState(FULL_VIEWPORT);
+
+  useEffect(() => {
+    let quadro = 0;
+    const comecou = performance.now();
+
+    const passo = () => {
+      const a = (performance.now() - comecou) / 1000;
+      // Vai e volta entre o plano inteiro e umas quatro vezes de ampliação,
+      // que é a faixa onde o borrão aparecia.
+      const fator = 2.5 + Math.cos(a) * 1.5;
+
+      setViewport(
+        zoomViewport(FULL_VIEWPORT, fator, {
+          x: SCENE_WIDTH / 2,
+          y: SCENE_HEIGHT / 2,
+        }),
+      );
+
+      quadro = requestAnimationFrame(passo);
+    };
+
+    quadro = requestAnimationFrame(passo);
+
+    return () => cancelAnimationFrame(quadro);
+  }, []);
+
+  return (
+    <SceneStage viewport={viewport} bounds>
+      <SceneLayer scene={cena} variant="operator" />
+    </SceneStage>
+  );
+}
+
+/**
  * N dados caindo de uma vez, sobre uma cena com N itens parados.
  *
  * Relançados quando todos assentam. Sem isso a medida cronometraria sobretudo
@@ -573,6 +651,28 @@ function PalcoComLista({ n, mesmoMapa }: { n: number; mesmoMapa: boolean }) {
   );
 }
 
+/**
+ * A janela de camadas ao lado do palco, com o mesmo gesto de arrasto.
+ *
+ * A cena sai do store -- a MESMA que `PalcoOperador` monta e mexe --, e não de
+ * uma cópia montada aqui: o ponto do cenário é que arrastar um item notifica os
+ * assinantes do zustand, e `LayerList` é um deles. Montar cena própria para o
+ * painel mediria uma lista parada.
+ */
+function PalcoComCamadas({ n }: { n: number }) {
+  const cena = useSceneStore(selectEditingScene);
+
+  return (
+    <div className="flex flex-1">
+      <aside className="flex w-[340px] shrink-0 flex-col border-r border-neutral-800 bg-neutral-950">
+        {cena ? <LayerList scene={cena} /> : null}
+      </aside>
+
+      <PalcoOperador n={n} />
+    </div>
+  );
+}
+
 export default function PerfPage() {
   /**
    * "Já estou no cliente?", pelo mesmo caminho que o `WindowChrome` usa para
@@ -659,10 +759,14 @@ function Medida({ params }: { params: URLSearchParams }) {
     <main className="flex h-dvh flex-col bg-black">
       {cenario === "arrasto" ? (
         <PalcoOperador n={n} />
+      ) : cenario === "camera" ? (
+        <PalcoCamera n={n} />
       ) : cenario === "dados" ? (
         <PalcoDados n={n} zoom={zoomDoPalco} />
       ) : cenario === "lista" || cenario === "lista-mesmo-mapa" ? (
         <PalcoComLista n={n} mesmoMapa={cenario === "lista-mesmo-mapa"} />
+      ) : cenario === "camadas" ? (
+        <PalcoComCamadas n={n} />
       ) : cenario === "biblioteca" ? (
         <PalcoBiblioteca n={n} lazy={lazy} rolar={rolar} />
       ) : (
