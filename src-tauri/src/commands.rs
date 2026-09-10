@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use serde::Serialize;
 use tauri::State;
 
-use crate::db::AppDb;
+use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
+use crate::estante;
 use crate::serve::{DaemonAddr, Evidence, SharedEvidence, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
 use crate::vault::board::{Board, BoardPatch};
@@ -22,6 +23,8 @@ pub struct AppState {
     pub daemon: DaemonAddr,
     /// O anexo de jogador em evidencia. A mesma caixa que o daemon le.
     pub evidence: SharedEvidence,
+    /// Onde os livros de regras desta maquina moram. O mesmo que o daemon serve.
+    pub estante: PathBuf,
 }
 
 impl AppState {
@@ -699,4 +702,181 @@ pub fn character_set_note(
     texto: String,
 ) -> AppResult<()> {
     state.with_vault(|vault| players::set_note(vault, &id, &jogadorId, &texto))
+}
+
+// --- estante ----------------------------------------------------------------
+
+/// O que a importacao de livros devolve.
+///
+/// Mesma forma do acervo, e pelo mesmo motivo: quem escolheu tres manuais e
+/// teve um recusado quer os dois e quer saber qual ficou fora.
+#[derive(Debug, Serialize)]
+pub struct EstanteImport {
+    pub aceitos: Vec<Livro>,
+    /// Um motivo por arquivo recusado, como no acervo, e nao so o nome dele: a
+    /// tela mostra um aviso por linha, e "Tormenta20.epub" sozinho nao diz que
+    /// o problema foi o formato.
+    pub recusados: Vec<String>,
+}
+
+/// Os livros desta maquina, do mais recentemente aberto para o mais antigo.
+///
+/// Nao passa por `with_vault`: a estante existe sem campanha aberta, e e de
+/// proposito -- o mestre consulta uma regra na porta do aplicativo, antes de
+/// escolher a mesa da noite.
+#[tauri::command]
+pub fn estante_list(state: State<'_, AppState>) -> AppResult<Vec<Livro>> {
+    state.db.livros()
+}
+
+/// Traz PDFs de fora para a estante, copiando.
+///
+/// Recebe CAMINHOS, como `asset_import`, e pela mesma razao: o arquivo vai do
+/// disco para o disco sem passar pela webview nem pelo HTTP.
+///
+/// Um arquivo recusado nao derruba os outros: a lista de recusados sai junto
+/// com os aceitos, e nenhum dos dois casos e erro para quem chamou.
+#[tauri::command]
+pub fn estante_import(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> AppResult<EstanteImport> {
+    let mut aceitos = Vec::new();
+    let mut recusados = Vec::new();
+
+    for path in paths {
+        let origem = PathBuf::from(&path);
+
+        match estante::import(&state.estante, &origem) {
+            Ok(livro) => match state.db.livro_upsert(&livro) {
+                Ok(()) => aceitos.push(livro),
+                Err(cause) => {
+                    // O arquivo ja esta copiado e o registro nao entrou: sem a
+                    // linha no banco o livro e inalcancavel, entao a copia
+                    // orfa sai daqui em vez de ocupar disco para sempre.
+                    log::error!("estante: {path} nao registrou: {cause}");
+                    let _ = estante::remove(&state.estante, &livro.id);
+                    recusados.push(format!(
+                        "{}: copiado, mas nao entrou na estante",
+                        livro.arquivo
+                    ));
+                }
+            },
+            Err(cause) => {
+                log::warn!("estante: {path} recusado: {cause}");
+
+                let nome = origem
+                    .file_name()
+                    .map(|nome| nome.to_string_lossy().to_string())
+                    .unwrap_or(path);
+
+                // So PDF entra, e e o unico jeito de cair aqui que depende da
+                // escolha do mestre: dizer isso poupa a ele abrir o dialogo de
+                // novo para descobrir.
+                recusados.push(match cause {
+                    AppError::UnsupportedKind(_) => format!("{nome}: so PDF entra na estante"),
+                    outro => format!("{nome}: {outro}"),
+                });
+            }
+        }
+    }
+
+    Ok(EstanteImport { aceitos, recusados })
+}
+
+/// Marca onde o mestre parou num livro.
+///
+/// `paginas` vem preenchido na primeira marcacao de cada abertura, quando o
+/// leitor ja contou o documento, e vazio nas seguintes -- ver `livro_pagina`.
+#[tauri::command]
+pub fn estante_pagina(
+    state: State<'_, AppState>,
+    id: String,
+    pagina: i64,
+    paginas: Option<i64>,
+) -> AppResult<()> {
+    state.db.livro_pagina(&id, pagina, paginas)
+}
+
+/// Tira o livro da estante: a linha do banco e o arquivo copiado.
+///
+/// O registro sai primeiro. Se o arquivo resistir, o livro ja desapareceu da
+/// tela e o que sobra e um PDF orfao no diretorio -- a ordem inversa deixaria
+/// uma linha apontando para arquivo que nao existe, que e pior: um livro na
+/// estante que nao abre.
+#[tauri::command]
+pub fn estante_remover(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.db.livro_forget(&id)?;
+    estante::remove(&state.estante, &id)
+}
+
+// --- marcadores -------------------------------------------------------------
+
+/// Os marcadores da campanha aberta neste livro.
+///
+/// Passa por `with_vault`, ao contrario de `estante_list`, porque marcador e da
+/// MESA: sem campanha aberta nao existe resposta certa, e devolver lista vazia
+/// esconderia o motivo. A tela ramifica no `NoCampaign` e diz que marcar pagina
+/// pede campanha aberta -- o livro continua abrindo e sendo lido sem isso.
+#[tauri::command]
+pub fn marcador_list(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] livroId: String,
+) -> AppResult<Vec<Marcador>> {
+    state.with_vault(|vault| state.db.marcadores(&vault.config.codigo, &livroId))
+}
+
+/// Marca uma pagina deste livro para a campanha aberta.
+///
+/// Devolve o marcador inteiro, e nao so o id: a tira lateral insere a linha com
+/// o que voltou em vez de reler a lista, e assim o marcador aparece no mesmo
+/// quadro em que o mestre o criou.
+#[tauri::command]
+pub fn marcador_add(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] livroId: String,
+    pagina: i64,
+    rotulo: String,
+) -> AppResult<Marcador> {
+    // Rotulo vazio vira o numero da pagina, aqui e nao na tela: a lista nao
+    // pode ter linha sem texto, e um marcador anonimo e exatamente o que se
+    // cria ao marcar depressa no meio da sessao.
+    let rotulo = rotulo.trim();
+    let rotulo = if rotulo.is_empty() {
+        format!("Pagina {pagina}")
+    } else {
+        rotulo.to_string()
+    };
+
+    let marcador = Marcador {
+        id: uuid::Uuid::new_v4().simple().to_string(),
+        livro_id: livroId,
+        pagina,
+        rotulo,
+        criado_em: crate::vault::now_ms(),
+    };
+
+    state.with_vault(|vault| state.db.marcador_add(&vault.config.codigo, &marcador))?;
+
+    Ok(marcador)
+}
+
+/// Reescreve o rotulo de um marcador.
+#[tauri::command]
+pub fn marcador_rotulo(state: State<'_, AppState>, id: String, rotulo: String) -> AppResult<()> {
+    let rotulo = rotulo.trim();
+    if rotulo.is_empty() {
+        // Apagar o texto inteiro nao apaga o marcador: quem quer tirar a pagina
+        // da lista usa o botao de remover, e um rotulo vazio na tabela deixaria
+        // uma linha em branco impossivel de reconhecer.
+        return Ok(());
+    }
+
+    state.db.marcador_rotulo(&id, rotulo)
+}
+
+/// Tira o marcador da lista.
+#[tauri::command]
+pub fn marcador_remover(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.db.marcador_forget(&id)
 }

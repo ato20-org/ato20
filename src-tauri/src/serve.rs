@@ -7,6 +7,7 @@ use axum::extract::{
     ConnectInfo, DefaultBodyLimit, Multipart, Path as AxumPath, Query, Request as AxumRequest,
     State,
 };
+use axum::http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE};
 use axum::http::{Request, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -24,6 +25,7 @@ use tower_http::services::{ServeDir, ServeFile};
 mod page;
 
 use crate::error::AppResult;
+use crate::estante;
 use crate::vault::{assets, characters, players, variantes, Vault};
 use page::ErrorPage;
 
@@ -96,6 +98,12 @@ pub struct Daemon {
     live_tx: broadcast::Sender<String>,
     /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
     evidence: SharedEvidence,
+    /// Onde estao os livros de regras desta maquina.
+    ///
+    /// Vem de fora, e nao do vault, porque a estante nao e da campanha: e o
+    /// unico diretorio que o daemon serve sem passar pelo `RwLock` da campanha
+    /// aberta, e por isso `/livro/{id}` responde com a mesa fechada.
+    estante: PathBuf,
     /// Quantas reducoes de imagem se geram ao mesmo tempo.
     ///
     /// Abrir o acervo pede varias de uma vez, e cada uma decodifica um mapa
@@ -111,7 +119,12 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    fn new(vault: SharedVault, token: String, web_root: Option<PathBuf>) -> Self {
+    fn new(
+        vault: SharedVault,
+        token: String,
+        web_root: Option<PathBuf>,
+        estante: PathBuf,
+    ) -> Self {
         let (live_tx, _) = broadcast::channel(LIVE_BUFFER);
 
         Self {
@@ -121,6 +134,7 @@ impl Daemon {
             live: Mutex::new(None),
             live_tx,
             evidence: Arc::new(RwLock::new(None)),
+            estante,
             mini_gate: tokio::sync::Semaphore::new(2),
         }
     }
@@ -154,7 +168,7 @@ pub struct Started {
     pub evidence: SharedEvidence,
 }
 
-pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>) -> AppResult<Started> {
+pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>, estante: PathBuf) -> AppResult<Started> {
     let listener = bind()?;
     let port = listener.local_addr()?.port();
     listener.set_nonblocking(true)?;
@@ -162,7 +176,7 @@ pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>) -> AppResult<Started
     let token = uuid::Uuid::new_v4().simple().to_string();
     let lan_url = lan_ip().map(|ip| format!("http://{ip}:{port}"));
 
-    let state = Arc::new(Daemon::new(vault, token.clone(), web_root));
+    let state = Arc::new(Daemon::new(vault, token.clone(), web_root, estante));
     let evidence = Arc::clone(&state.evidence);
 
     std::thread::Builder::new()
@@ -271,6 +285,13 @@ pub fn router(state: Arc<Daemon>) -> Router {
         .route("/asset/{id}", get(serve_asset))
         .route("/asset/{id}/{variante}", get(serve_variante))
         .route("/evidencia/{id}", get(serve_evidence))
+        .route(
+            "/livro/{id}",
+            get(serve_livro).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_token,
+            )),
+        )
         .route("/sala", get(check))
         .route("/sala/entrar", post(join_table))
         .route("/sala/live", get(live))
@@ -296,7 +317,20 @@ pub fn router(state: Arc<Daemon>) -> Router {
         // cross-origin. Liberar e seguro porque quem autoriza escrita e o
         // token, nao a origem -- CORS nunca protegeu nada contra quem controla
         // o cliente. O espectador e servido POR aqui, e nem precisa disso.
-        .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).allow_methods(Any))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_headers(Any)
+                .allow_methods(Any)
+                // Os cabecalhos de Range, expostos de proposito. Sem
+                // `Access-Control-Expose-Headers` o navegador ENTREGA a resposta
+                // e ESCONDE estes tres do JavaScript que a pediu -- e um leitor
+                // cross-origin que nao le `Content-Range` nao consegue montar o
+                // documento por pedacos. O efeito seria o leitor de Regras
+                // baixar um manual inteiro antes de desenhar a primeira pagina,
+                // apesar de o `ServeFile` servir Range corretamente.
+                .expose_headers([ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE]),
+        )
         .with_state(state)
 }
 
@@ -1165,6 +1199,44 @@ async fn serve_web(State(state): State<Arc<Daemon>>, request: Request<Body>) -> 
     ErrorPage::tela_desconhecida().into_response()
 }
 
+/// `GET /livro/{id}` -- um livro da estante, para o leitor de Regras.
+///
+/// COM token, ao contrario das rotas de acervo. A diferenca nao e de risco de
+/// escrita, e de PUBLICO: `/asset/{id}` existe porque um `<img>` da TV precisa
+/// dele, e o material da cena e justamente o que a mesa tem de ver. Um manual
+/// de regras nao e da mesa -- e do mestre, e a porta do daemon esta na rede
+/// local. Quem pede aqui e o leitor do Operador, que manda o token pelo
+/// `httpHeaders` do pdf.js.
+///
+/// Nao consulta o banco antes de montar o caminho: `id_valido` responde pela
+/// forma, e e o que impede a rota de virar leitura de arquivo arbitrario. Ver a
+/// nota em `estante::id_valido`.
+///
+/// `ServeFile` cuida de Range, e aqui isso nao e detalhe: e o que faz o leitor
+/// abrir a pagina 214 de um manual de trezentas sem baixar as outras.
+async fn serve_livro(
+    State(state): State<Arc<Daemon>>,
+    AxumPath(id): AxumPath<String>,
+    request: Request<Body>,
+) -> Response {
+    if !estante::id_valido(&id) {
+        return fail(StatusCode::NOT_FOUND, "livro nao esta na estante");
+    }
+
+    let path = estante::path_for(&state.estante, &id);
+
+    match ServeFile::new_with_mime(&path, &mime::APPLICATION_PDF)
+        .oneshot(request)
+        .await
+    {
+        Ok(response) => response.into_response(),
+        Err(cause) => {
+            log::error!("livro {id} em {}: {cause}", path.display());
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o livro")
+        }
+    }
+}
+
 /// `GET /asset/{id}`
 ///
 /// Sem token de proposito: no passo seguinte e daqui que a TV e o celular do
@@ -1390,12 +1462,15 @@ mod tests {
         let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
         let codigo = vault.config.codigo.clone();
 
+        let estante = dir.path().join("estante");
+
         (
             dir,
             Arc::new(Daemon::new(
                 Arc::new(RwLock::new(Some(vault))),
                 "segredo".into(),
                 None,
+                estante,
             )),
             codigo,
         )
@@ -1571,6 +1646,10 @@ mod tests {
             Arc::new(RwLock::new(None)),
             "segredo".into(),
             None,
+            // A estante nao entra em jogo aqui: nenhum destes casos pede
+            // `/livro/{id}`, e um diretorio que nao existe responde 404
+            // pela mesma porta que um id que nao existe.
+            std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
         // 503 e nao 404: a diferenca entre "esta campanha nao tem esse
@@ -1651,6 +1730,10 @@ mod tests {
             Arc::new(RwLock::new(None)),
             "segredo".into(),
             None,
+            // A estante nao entra em jogo aqui: nenhum destes casos pede
+            // `/livro/{id}`, e um diretorio que nao existe responde 404
+            // pela mesma porta que um id que nao existe.
+            std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
         let response = router(state)
@@ -2036,6 +2119,10 @@ mod tests {
             Arc::new(RwLock::new(Some(vault))),
             "segredo".into(),
             Some(out),
+            // A estante nao entra em jogo aqui: nenhum destes casos pede
+            // `/livro/{id}`, e um diretorio que nao existe responde 404
+            // pela mesma porta que um id que nao existe.
+            std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
         for (uri, esperado) in [("/", "raiz"), ("/assistir", "a TV"), ("/assistir/", "a TV")] {
@@ -2063,6 +2150,10 @@ mod tests {
             Arc::new(RwLock::new(Some(vault))),
             "segredo".into(),
             Some(out),
+            // A estante nao entra em jogo aqui: nenhum destes casos pede
+            // `/livro/{id}`, e um diretorio que nao existe responde 404
+            // pela mesma porta que um id que nao existe.
+            std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
         let response = router(state)
@@ -2114,6 +2205,10 @@ mod tests {
             Arc::new(RwLock::new(Some(vault))),
             "segredo".into(),
             Some(out),
+            // A estante nao entra em jogo aqui: nenhum destes casos pede
+            // `/livro/{id}`, e um diretorio que nao existe responde 404
+            // pela mesma porta que um id que nao existe.
+            std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
         for uri in ["/assistir", "/assistir/"] {
@@ -2142,6 +2237,10 @@ mod tests {
             Arc::new(RwLock::new(Some(vault))),
             "segredo".into(),
             Some(out),
+            // A estante nao entra em jogo aqui: nenhum destes casos pede
+            // `/livro/{id}`, e um diretorio que nao existe responde 404
+            // pela mesma porta que um id que nao existe.
+            std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
         let response = router(state)
@@ -2173,6 +2272,10 @@ mod tests {
             Arc::new(RwLock::new(Some(vault))),
             "segredo".into(),
             Some(out),
+            // A estante nao entra em jogo aqui: nenhum destes casos pede
+            // `/livro/{id}`, e um diretorio que nao existe responde 404
+            // pela mesma porta que um id que nao existe.
+            std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
         // Esta porta esta na REDE. Quem resolve caminho e o `ServeDir`, e e por

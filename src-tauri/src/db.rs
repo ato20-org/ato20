@@ -22,7 +22,7 @@ pub struct AppDb {
 /// Guardada no proprio arquivo e nao numa tabela: uma tabela de versao precisa
 /// existir antes de poder dizer que versao existe, e o pragma nao tem esse
 /// problema de ovo e galinha.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +30,53 @@ pub struct RecentCampaign {
     pub path: String,
     pub nome: String,
     pub aberta_em: i64,
+}
+
+/// Um livro na estante da maquina.
+///
+/// Mora aqui, e nao no vault, pela mesma razao das campanhas recentes: o livro
+/// de um SISTEMA serve todas as campanhas daquele sistema. Guardado dentro de
+/// uma campanha, o mesmo PDF de oitenta megabytes seria copiado uma vez por
+/// mesa e viajaria em cada zip exportado.
+///
+/// `paginas` e `Option` porque quem conta as paginas e o leitor, na tela: o
+/// Rust copia o arquivo sem abri-lo. Fica nulo entre a importacao e a primeira
+/// abertura, e a lista mostra o livro sem o total em vez de esconde-lo.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Livro {
+    pub id: String,
+    pub titulo: String,
+    /// O nome do arquivo escolhido, para a tela poder dizer de onde ele veio.
+    pub arquivo: String,
+    pub tamanho: i64,
+    pub paginas: Option<i64>,
+    /// Onde o mestre parou. 1 e o padrao, nao 0: pagina de livro conta de um.
+    pub pagina: i64,
+    pub aberto_em: i64,
+}
+
+/// Um marcador de pagina: a pagina que UMA campanha quer num livro.
+///
+/// Mora no banco da maquina e nao no vault por uma razao de export: qualquer
+/// arquivo na raiz da campanha viaja no zip, e o livro NAO viaja -- um manual
+/// de oitenta megabytes nao e material de mesa. Marcador exportado apontaria,
+/// na maquina de destino, para um PDF que ela nao tem.
+///
+/// Por campanha e nao por maquina porque a pagina que interessa muda de mesa: a
+/// tabela de condicoes serve a campanha de horror, e a de veiculos serve a
+/// outra. O par (livro, campanha) e o que identifica esta lista.
+///
+/// A campanha nao entra no que sai para a tela: quem pergunta e sempre a mesa
+/// aberta, e repetir o codigo dela em cada linha seria dado que ninguem le.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Marcador {
+    pub id: String,
+    pub livro_id: String,
+    pub pagina: i64,
+    pub rotulo: String,
+    pub criado_em: i64,
 }
 
 impl AppDb {
@@ -124,6 +171,166 @@ impl AppDb {
 
         Ok(value)
     }
+
+    // --- estante ------------------------------------------------------------
+
+    /// Registra um livro que acabou de entrar na estante.
+    pub fn livro_upsert(&self, livro: &Livro) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+
+        // `do update` no id nunca dispara na importacao -- o id nasce sorteado.
+        // Esta aqui para o comando ser idempotente se um dia a estante for
+        // reconstruida a partir dos arquivos no disco.
+        conn.execute(
+            "insert into livros (id, titulo, arquivo, tamanho, paginas, pagina, aberto_em)
+             values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             on conflict(id) do update set titulo = ?2, arquivo = ?3, tamanho = ?4",
+            rusqlite::params![
+                livro.id,
+                livro.titulo,
+                livro.arquivo,
+                livro.tamanho,
+                livro.paginas,
+                livro.pagina,
+                livro.aberto_em,
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    /// Os livros da estante, do mais recentemente aberto para o mais antigo.
+    pub fn livros(&self) -> AppResult<Vec<Livro>> {
+        let conn = self.conn.lock().expect("banco envenenado");
+
+        let mut stmt = conn.prepare(
+            "select id, titulo, arquivo, tamanho, paginas, pagina, aberto_em
+             from livros order by aberto_em desc",
+        )?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(Livro {
+                    id: row.get(0)?,
+                    titulo: row.get(1)?,
+                    arquivo: row.get(2)?,
+                    tamanho: row.get(3)?,
+                    paginas: row.get(4)?,
+                    pagina: row.get(5)?,
+                    aberto_em: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(rows)
+    }
+
+    /// Marca onde o mestre parou, e de quantas paginas o livro e.
+    ///
+    /// `aberto_em` sobe junto porque a lista e ordenada por ele: marcar a
+    /// pagina E o gesto de estar lendo, e o livro em uso tem de subir para o
+    /// topo da estante sem um segundo comando para isso.
+    ///
+    /// `paginas` so grava quando vem preenchido: a tela manda o total na
+    /// primeira marcacao de cada abertura e `None` nas seguintes, e um
+    /// `coalesce` evita que a segunda apague o que a primeira soube.
+    pub fn livro_pagina(&self, id: &str, pagina: i64, paginas: Option<i64>) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+
+        conn.execute(
+            "update livros
+             set pagina = ?2, paginas = coalesce(?3, paginas), aberto_em = ?4
+             where id = ?1",
+            rusqlite::params![id, pagina, paginas, crate::vault::now_ms()],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn livro_forget(&self, id: &str) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+        conn.execute("delete from livros where id = ?1", [id])?;
+
+        Ok(())
+    }
+
+    // --- marcadores ---------------------------------------------------------
+
+    /// Guarda um marcador desta campanha neste livro.
+    ///
+    /// Insert e nao upsert, ao contrario do livro: cada marcador e um gesto
+    /// novo do mestre, e o id nasce sorteado aqui do lado. Nao ha o que
+    /// reconciliar.
+    pub fn marcador_add(&self, campanha: &str, marcador: &Marcador) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+
+        conn.execute(
+            "insert into marcadores (id, livro_id, campanha, pagina, rotulo, criado_em)
+             values (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                marcador.id,
+                marcador.livro_id,
+                campanha,
+                marcador.pagina,
+                marcador.rotulo,
+                marcador.criado_em,
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    /// Os marcadores desta campanha neste livro, na ordem das paginas.
+    ///
+    /// Pela pagina e nao pela criacao: a tira e um indice do livro, e indice
+    /// que salta de 200 para 12 e volta para 87 nao ajuda a achar nada. Dois
+    /// marcadores na mesma pagina desempatam pelo mais antigo, que e a ordem em
+    /// que o mestre os escreveu.
+    pub fn marcadores(&self, campanha: &str, livro_id: &str) -> AppResult<Vec<Marcador>> {
+        let conn = self.conn.lock().expect("banco envenenado");
+
+        let mut stmt = conn.prepare(
+            "select id, livro_id, pagina, rotulo, criado_em from marcadores
+             where campanha = ?1 and livro_id = ?2
+             order by pagina asc, criado_em asc",
+        )?;
+
+        let rows = stmt
+            .query_map([campanha, livro_id], |row| {
+                Ok(Marcador {
+                    id: row.get(0)?,
+                    livro_id: row.get(1)?,
+                    pagina: row.get(2)?,
+                    rotulo: row.get(3)?,
+                    criado_em: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(rows)
+    }
+
+    /// Reescreve o rotulo de um marcador.
+    ///
+    /// Sem a campanha na condicao: o id e sorteado, e a tela so oferece renomear
+    /// o que ela mesma acabou de listar. Exigir o par aqui seria uma checagem
+    /// que nenhum caminho de tela pode violar.
+    pub fn marcador_rotulo(&self, id: &str, rotulo: &str) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+        conn.execute(
+            "update marcadores set rotulo = ?2 where id = ?1",
+            [id, rotulo],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn marcador_forget(&self, id: &str) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+        conn.execute("delete from marcadores where id = ?1", [id])?;
+
+        Ok(())
+    }
 }
 
 fn migrate(conn: &Connection) -> AppResult<()> {
@@ -148,7 +355,183 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         )?;
     }
 
+    if current < 2 {
+        // A estante: os livros de regras desta maquina. O binario fica em
+        // `estante/{id}.pdf`, ao lado deste banco -- ver `estante.rs`.
+        conn.execute_batch(
+            "create table if not exists livros (
+                 id        text primary key,
+                 titulo    text not null,
+                 arquivo   text not null,
+                 tamanho   integer not null,
+                 paginas   integer,
+                 pagina    integer not null default 1,
+                 aberto_em integer not null
+             );",
+        )?;
+    }
+
+    if current < 3 {
+        // Os marcadores. O `cascade` e o que impede marcador apontando para
+        // livro que saiu da estante -- o mesmo cuidado que `estante_remover`
+        // toma com o arquivo no disco, e aqui de graca porque o `foreign_keys`
+        // esta ligado em `open`.
+        //
+        // A campanha entra pelo `codigo` do `config.json`, e nao pelo caminho
+        // da pasta: mover a campanha de lugar nao pode apagar os marcadores
+        // dela, e o codigo nasce com a campanha e viaja com ela.
+        //
+        // O indice cobre a unica pergunta que a tela faz -- os marcadores desta
+        // mesa neste livro, em ordem de pagina --, e por conte-la inteira ele
+        // responde sem tocar na tabela.
+        conn.execute_batch(
+            "create table if not exists marcadores (
+                 id        text primary key,
+                 livro_id  text not null references livros(id) on delete cascade,
+                 campanha  text not null,
+                 pagina    integer not null,
+                 rotulo    text not null,
+                 criado_em integer not null
+             );
+             create index if not exists marcadores_da_mesa
+                 on marcadores (campanha, livro_id, pagina);",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn banco() -> (tempfile::TempDir, AppDb) {
+        let dir = tempfile::tempdir().unwrap();
+        let db = AppDb::open(&dir.path().join("ato20.db")).unwrap();
+
+        (dir, db)
+    }
+
+    fn livro(id: &str) -> Livro {
+        Livro {
+            id: id.into(),
+            titulo: "Tormenta20".into(),
+            arquivo: "Tormenta20.pdf".into(),
+            tamanho: 86_112_044,
+            paginas: None,
+            pagina: 1,
+            aberto_em: 1,
+        }
+    }
+
+    fn marcador(id: &str, livro_id: &str, pagina: i64) -> Marcador {
+        Marcador {
+            id: id.into(),
+            livro_id: livro_id.into(),
+            pagina,
+            rotulo: format!("Marcador da {pagina}"),
+            criado_em: pagina,
+        }
+    }
+
+    #[test]
+    fn o_total_de_paginas_nao_se_perde_na_segunda_marcacao() {
+        let (_tmp, db) = banco();
+        db.livro_upsert(&livro("a")).unwrap();
+
+        // A tela manda o total na primeira marcacao de cada abertura, quando o
+        // leitor ja contou o documento, e nada nas seguintes.
+        db.livro_pagina("a", 112, Some(300)).unwrap();
+        db.livro_pagina("a", 113, None).unwrap();
+
+        let lido = &db.livros().unwrap()[0];
+        assert_eq!(lido.pagina, 113);
+        assert_eq!(lido.paginas, Some(300), "o `coalesce` protege o total");
+    }
+
+    #[test]
+    fn marcar_pagina_sobe_o_livro_na_estante() {
+        let (_tmp, db) = banco();
+        db.livro_upsert(&livro("a")).unwrap();
+        db.livro_upsert(&Livro {
+            titulo: "Ordem Paranormal".into(),
+            aberto_em: 2,
+            ..livro("b")
+        })
+        .unwrap();
+
+        // Marcar a pagina E o gesto de estar lendo: o livro em uso tem de subir
+        // para o topo sem um segundo comando para isso.
+        db.livro_pagina("a", 5, None).unwrap();
+
+        assert_eq!(db.livros().unwrap()[0].id, "a");
+    }
+
+    #[test]
+    fn marcadores_sao_de_uma_campanha_so() {
+        let (_tmp, db) = banco();
+        db.livro_upsert(&livro("a")).unwrap();
+
+        db.marcador_add("HORROR", &marcador("m1", "a", 112)).unwrap();
+        db.marcador_add("PIRATAS", &marcador("m2", "a", 40)).unwrap();
+
+        // A pagina que interessa muda de mesa, e e a razao de o marcador ser da
+        // campanha: a de horror nao ve a tabela de veiculos da outra.
+        let horror = db.marcadores("HORROR", "a").unwrap();
+        assert_eq!(horror.len(), 1);
+        assert_eq!(horror[0].pagina, 112);
+
+        assert_eq!(db.marcadores("PIRATAS", "a").unwrap()[0].pagina, 40);
+        assert!(db.marcadores("DESCONHECIDA", "a").unwrap().is_empty());
+    }
+
+    #[test]
+    fn marcadores_saem_em_ordem_de_pagina() {
+        let (_tmp, db) = banco();
+        db.livro_upsert(&livro("a")).unwrap();
+
+        for pagina in [200, 12, 87] {
+            db.marcador_add("HORROR", &marcador(&format!("m{pagina}"), "a", pagina))
+                .unwrap();
+        }
+
+        let paginas: Vec<i64> = db
+            .marcadores("HORROR", "a")
+            .unwrap()
+            .iter()
+            .map(|marcador| marcador.pagina)
+            .collect();
+
+        // Indice que salta de 200 para 12 e volta para 87 nao ajuda a achar
+        // nada.
+        assert_eq!(paginas, vec![12, 87, 200]);
+    }
+
+    #[test]
+    fn tirar_o_livro_leva_os_marcadores_dele() {
+        let (_tmp, db) = banco();
+        db.livro_upsert(&livro("a")).unwrap();
+        db.livro_upsert(&livro("b")).unwrap();
+
+        db.marcador_add("HORROR", &marcador("m1", "a", 112)).unwrap();
+        db.marcador_add("HORROR", &marcador("m2", "b", 9)).unwrap();
+
+        db.livro_forget("a").unwrap();
+
+        // O `cascade` e o que impede marcador apontando para livro que saiu da
+        // estante -- linha que a tela mostraria e que nao abre nada.
+        assert!(db.marcadores("HORROR", "a").unwrap().is_empty());
+        assert_eq!(db.marcadores("HORROR", "b").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn marcador_de_livro_que_nao_existe_e_recusado() {
+        let (_tmp, db) = banco();
+
+        // A chave estrangeira, e nao uma checagem no comando: o `foreign_keys`
+        // esta ligado em `open`, e o banco recusa antes de a linha entrar.
+        assert!(db.marcador_add("HORROR", &marcador("m1", "fantasma", 3)).is_err());
+    }
 }

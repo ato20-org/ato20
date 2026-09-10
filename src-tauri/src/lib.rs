@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod error;
+mod estante;
 mod serve;
 mod vault;
 
@@ -32,6 +33,12 @@ pub fn run() {
             let db_path = app.path().app_config_dir()?.join("ato20.db");
             let db = AppDb::open(&db_path)?;
 
+            // A estante fica no diretorio de DADOS, e nao junto do banco: um
+            // manual de trezentas paginas nao e preferencia de maquina. Ver
+            // `estante::dir`. O diretorio nasce na primeira importacao -- nao
+            // aqui --, para quem nunca abriu um livro nao ter uma pasta vazia.
+            let estante = estante::dir(&app.path().app_data_dir()?);
+
             // A campanha comeca fechada. Reabrir a ultima e um comando que a
             // tela chama, para uma pasta que desapareceu ter onde aparecer
             // como erro em vez de derrubar a abertura da janela.
@@ -46,7 +53,7 @@ pub fn run() {
                 log::warn!("bundle das telas nao encontrado; Assistir e Plateia nao serao servidos");
             }
 
-            let started = serve::spawn(Arc::clone(&vault), web_root)?;
+            let started = serve::spawn(Arc::clone(&vault), web_root, estante.clone())?;
             log::info!(
                 "daemon em {} (rede: {:?})",
                 started.addr.url,
@@ -58,6 +65,7 @@ pub fn run() {
                 db,
                 daemon: started.addr,
                 evidence: started.evidence,
+                estante,
             });
 
             Ok(())
@@ -115,6 +123,14 @@ pub fn run() {
             commands::campaign_export_name,
             commands::campaign_export,
             commands::campaign_import,
+            commands::estante_list,
+            commands::estante_import,
+            commands::estante_pagina,
+            commands::estante_remover,
+            commands::marcador_list,
+            commands::marcador_add,
+            commands::marcador_rotulo,
+            commands::marcador_remover,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
