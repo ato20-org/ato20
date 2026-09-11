@@ -11,6 +11,7 @@ import { CampaignSplash } from "@/components/operator/campaign-splash";
 import { OperatorGate } from "@/components/operator/operator-gate";
 import { Button } from "@/components/ui/button";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 
@@ -35,6 +36,7 @@ export function Operator() {
   const restaurarPreferencias = usePreferenciasStore(
     (state) => state.restaurar,
   );
+  const carregarExtensoes = useExtensoesStore((state) => state.carregar);
 
   // A cena em edição vira o subtítulo da janela. `undefined` na porta, onde
   // ainda não há campanha aberta — e aí a barra mostra só o nome.
@@ -46,8 +48,13 @@ export function Operator() {
     // troca de tamanho é menos incômoda de se ver acontecer -- `setZoom` é IPC,
     // então o primeiro quadro nasce em 100% e salta.
     restaurarPreferencias();
+    // As extensões junto com o zoom, e pela mesma razão: o tema delas vale para
+    // a porta e para a tela de erro, que é justamente onde a campanha não abriu
+    // e o mestre ainda precisa ler a interface. Carregar só ao abrir a mesa
+    // daria a porta no tema de fábrica e um salto de cores ao entrar.
+    void carregarExtensoes();
     void boot();
-  }, [boot, restaurarPreferencias]);
+  }, [boot, carregarExtensoes, restaurarPreferencias]);
 
   return (
     <>

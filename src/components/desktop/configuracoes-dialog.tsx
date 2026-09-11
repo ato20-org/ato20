@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  Blocks,
   Keyboard,
   Minus,
   Moon,
+  Palette,
   Plus,
   Puzzle,
   Settings,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 
 import { ChromeButton } from "@/components/desktop/window-chrome";
@@ -22,7 +25,10 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { atalhosPorGrupo } from "@/lib/operator/atalhos";
+import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import {
   DEGRAUS_ZOOM,
   usePreferenciasStore,
@@ -301,27 +307,211 @@ function Tecla({ children }: { children: string }) {
 }
 
 /**
- * Os plugins, antes de existirem.
+ * As extensões desta máquina: o que está instalado, e o que está ligado.
  *
- * Seção presente e honesta: ela diz que não há nenhum e que importar ainda não
- * funciona, em vez de oferecer um botão que abre um seletor de arquivos para um
- * formato que ninguém definiu. O botão desabilitado com o motivo à vista é o
- * que anuncia o assunto sem prometer a data.
+ * A seção continua se chamando "Plugins" na barra lateral porque é a palavra
+ * que quem procura isto tem na cabeça, e o código diz "extensão" porque é o
+ * que o Rust e o `manifesto.json` dizem. Vale a divergência: renomear a barra
+ * lateral custaria o termo que o usuário reconhece, e renomear o código
+ * custaria o termo que o autor de extensão vai ler na documentação.
+ *
+ * A lista é lida ao ABRIR a seção, e não uma vez na montagem do diálogo:
+ * instalar uma extensão é copiar uma pasta, e quem faz isso por fora do
+ * aplicativo espera achá-la aqui sem reabrir a janela.
  */
 function PainelPlugins() {
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+  const carregada = useExtensoesStore((state) => state.carregada);
+  const ocupada = useExtensoesStore((state) => state.ocupada);
+  const erro = useExtensoesStore((state) => state.erro);
+  const carregar = useExtensoesStore((state) => state.carregar);
+  const importar = useExtensoesStore((state) => state.importar);
+
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
+
   return (
     <>
-      <TituloSecao ajuda="Nenhum plugin importado.">Plugins</TituloSecao>
+      <TituloSecao ajuda="Uma extensão é uma pasta com manifesto.json dentro. Instalar é copiá-la para cá.">
+        Plugins
+      </TituloSecao>
 
-      <Button variant="outline" size="sm" disabled className="w-full">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={ocupada}
+        className="w-full"
+        onClick={() => void importar()}
+      >
         <Puzzle />
         Importar plugin
       </Button>
 
-      <p className="text-muted-foreground text-xs">
-        Ainda não dá: o formato do plugin e onde ele mora na máquina não estão
-        decididos.
-      </p>
+      {erro ? (
+        <p className="text-destructive text-xs" role="alert">
+          {erro}
+        </p>
+      ) : null}
+
+      {/* Enquanto a primeira leitura não voltou, nada: uma lista vazia que
+          vira lista cheia um quadro depois diz "você não tem nenhum" para
+          quem tem. */}
+      {!carregada ? null : extensoes.length === 0 ? (
+        <p className="text-muted-foreground text-xs">
+          Nenhum plugin instalado. Por ora eles trocam o tema — cores, cantos e
+          a fonte da interface.
+        </p>
+      ) : (
+        <Grupos extensoes={extensoes} />
+      )}
     </>
+  );
+}
+
+/**
+ * Os plugins, separados por natureza.
+ *
+ * A separação é a coisa mais importante desta tela, e não arrumação: um TEMA é
+ * CSS que a cascata aplica, e o pior que ele faz é deixar a interface feia —
+ * dá para desligar olhando. Uma FUNCIONALIDADE é código que roda com o alcance
+ * da janela, e instalar uma é confiar em quem a escreveu.
+ *
+ * Duas listas sob dois cabeçalhos, e não uma lista com etiqueta na ponta
+ * direita de cada linha: a etiqueta é lida DEPOIS do nome, e é o nome que a
+ * pessoa já decidiu instalar. O cabeçalho vem antes, e é o que faz a segunda
+ * decisão não se disfarçar da primeira.
+ *
+ * Grupo vazio não aparece. Quem só tem temas não precisa ver uma seção de
+ * funcionalidades para saber que não tem nenhuma.
+ */
+function Grupos({ extensoes }: { extensoes: Extensao[] }) {
+  const temas = extensoes.filter((extensao) => tipoDaExtensao(extensao) === "tema");
+  const funcionalidades = extensoes.filter(
+    (extensao) => tipoDaExtensao(extensao) === "funcionalidade",
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Grupo
+        titulo="Temas"
+        icone={Palette}
+        extensoes={temas}
+        nota="Só aparência: cores, cantos e fonte da interface."
+      />
+
+      <Grupo
+        titulo="Funcionalidades"
+        icone={Blocks}
+        extensoes={funcionalidades}
+        // A ressalva do código não carregado desceu para a LINHA, e não vale
+        // para o grupo inteiro: um plugin declarativo -- fontes de retrato, por
+        // exemplo -- é funcionalidade e já funciona. A nota aqui diria que ele
+        // não roda, o que seria falso.
+        nota="Estendem o que o ATO20 faz. Podem executar código com o alcance da janela."
+      />
+    </div>
+  );
+}
+
+/** Um grupo da lista. Nada, quando não há extensão dele. */
+function Grupo({
+  titulo,
+  icone: Icone,
+  extensoes,
+  nota,
+}: {
+  titulo: string;
+  icone: typeof Palette;
+  extensoes: Extensao[];
+  nota: string;
+}) {
+  if (extensoes.length === 0) return null;
+
+  return (
+    <section className="flex flex-col gap-1">
+      {/* A mesma forma dos grupos de Teclado, que já resolvem este problema
+          na seção ao lado: maiúscula miúda, e a lista encostada embaixo. */}
+      <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase">
+        <Icone className="size-3" aria-hidden />
+        {titulo}
+      </p>
+
+      <p className="text-muted-foreground mb-1 text-xs">{nota}</p>
+
+      <ul className="flex flex-col">
+        {extensoes.map((extensao) => (
+          <LinhaExtensao key={extensao.id} extensao={extensao} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * Uma extensão na lista.
+ *
+ * O interruptor é o alvo grande e a lixeira é o alvo pequeno, e é de propósito:
+ * desligar é o gesto reversível e frequente — experimentar um tema e voltar —,
+ * e desinstalar apaga a pasta do disco. O tamanho do botão é o que separa os
+ * dois debaixo do mesmo dedo.
+ */
+function LinhaExtensao({ extensao }: { extensao: Extensao }) {
+  const habilitar = useExtensoesStore((state) => state.habilitar);
+  const remover = useExtensoesStore((state) => state.remover);
+
+  // A etiqueta só para a HÍBRIDA: uma extensão de código que também traz CSS.
+  // Nos outros casos o cabeçalho do grupo já disse o que ela é, e repetir na
+  // ponta de cada linha seria ruído em toda lista para cobrir um caso raro.
+  const tambemTema = extensao.tema && tipoDaExtensao(extensao) === "funcionalidade";
+
+  return (
+    <li className="flex items-center gap-3 border-b py-2 last:border-b-0">
+      <Switch
+        checked={extensao.habilitada}
+        onCheckedChange={(ligada) => void habilitar(extensao.id, ligada)}
+        aria-label={`Habilitar ${extensao.nome}`}
+      />
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm">{extensao.nome}</p>
+        <p className="text-muted-foreground truncate text-xs">
+          {/* A versão sempre, o autor quando há. O `manifesto.json` pode vir
+              sem autor, e "por undefined" seria pior que só a versão. */}
+          {extensao.versao}
+          {extensao.autor ? ` · ${extensao.autor}` : ""}
+        </p>
+
+        {/* Só para quem declara `principal`. O plugin aparece habilitado e o
+            que ele declara é lido, mas o módulo não é importado nesta versão —
+            e quem instalou um precisa saber disso aqui, e não procurando na
+            interface o que ele acrescentou. */}
+        {extensao.principal ? (
+          <p className="text-muted-foreground/70 truncate text-[10px]">
+            Código ainda não carregado nesta versão.
+          </p>
+        ) : null}
+      </div>
+
+      {tambemTema ? (
+        <span
+          className="text-muted-foreground flex shrink-0 items-center gap-1 text-[10px] uppercase"
+          title="Esta extensão também traz um tema."
+        >
+          <Palette className="size-3" aria-hidden />
+          Tema
+        </span>
+      ) : null}
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className="text-muted-foreground hover:text-destructive size-7 shrink-0"
+        aria-label={`Desinstalar ${extensao.nome}`}
+        onClick={() => void remover(extensao.id)}
+      >
+        <Trash2 className="size-3.5" />
+      </Button>
+    </li>
   );
 }
