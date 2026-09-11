@@ -1,0 +1,20 @@
+{
+  "id": "cris-portrait",
+  "nome": "CRIS Portrait",
+  "versao": "1.0.0",
+  "autor": "ATO20",
+  "descricao": "Retrato ao vivo do C.R.I.S. — vida, sanidade e esforço que se atualizam sozinhos.",
+  "repositorio": "https://github.com/valb-mig/ato20",
+  "apiVersao": 1,
+  "retratos": [
+    {
+      "fonte": "cris",
+      "rotulo": "C.R.I.S.",
+      "modelo": "https://crisordemparanormal.com/agente/stream/{codigo}",
+      "campo": "Código do agente",
+      "exemplo": "HF3A7iJLOTnWFic9SYKo",
+      "largura": 1920,
+      "altura": 1100
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "exemplo-funcionalidade",
+  "nome": "Exemplo de funcionalidade",
+  "versao": "0.1.0",
+  "autor": "ATO20",
+  "descricao": "O esqueleto de um plugin de código. Ainda não é carregado.",
+  "repositorio": "https://github.com/valb-mig/ato20",
+  "apiVersao": 1,
+  "principal": "main.js"
+}
