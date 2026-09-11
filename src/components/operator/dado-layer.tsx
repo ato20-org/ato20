@@ -4,6 +4,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -105,14 +106,106 @@ type Mao = ReturnType<typeof useDadosStore.getState>["naMao"];
  * melhor -- separa o que DESENHA do que RECEBE gesto, e o alvo redondo é o que
  * a mão mira numa silhueta facetada.
  */
+/**
+ * O espaço em que os dados caem.
+ *
+ * Existe porque há DOIS, e eles não são o mesmo tipo de lugar. No palco do
+ * mestre o dado cai sobre o MAPA: ele vive em unidades de cena, acompanha zoom
+ * e deslocamento, e fica onde caiu no mapa mesmo que o mestre percorra a cena.
+ * No celular do jogador ele cai sobre a TELA: o aparelho na mão é a mesa, e o
+ * dado não pertence a lugar nenhum do mapa — pertence ao vidro.
+ *
+ * O que os dois têm em comum é tudo o que importa: a mesma queda, a mesma
+ * semente, o mesmo tato do arremesso. Por isso um espaço declarado e não dois
+ * componentes parecidos — dois componentes divergem, e a divergência aparece
+ * como "o dado do celular é mais escorregadio", que é o tipo de diferença que
+ * se sente sem conseguir nomear.
+ */
+export type EspacoDoDado = {
+  /** Tamanho do espaço, na unidade dele. */
+  largura: number;
+  altura: number;
+  /**
+   * Quantos pixels de tela vale uma unidade do espaço.
+   *
+   * É por ela que a VELOCIDADE do arremesso é traduzida: o gesto acontece em
+   * pixel de tela, e o dado vive na unidade do espaço. É o que faz o mesmo
+   * peteleco mandar o dado à mesma distância aparente em qualquer zoom, e no
+   * celular em qualquer tamanho de tela.
+   */
+  escala: number;
+  /** Converte um ponto de `clientX/clientY` para a unidade do espaço. */
+  paraEspaco: (clientX: number, clientY: number) => Vec;
+};
+
+/**
+ * A jogada que um arremesso virou, já traduzida para o espaço.
+ *
+ * Quem a executa é quem montou a camada, e é isso que separa as duas telas: no
+ * mestre ela vira `lancar` direto, com o valor sorteado aqui. No celular ela
+ * passa pelo daemon, que é quem sorteia — ver `rolarDado`.
+ */
+export type Jogada = {
+  faces: Dado["faces"];
+  x: number;
+  y: number;
+  impulso: Vec;
+  semente: number;
+  /** O dado da mesa que saiu para virar esta jogada, se veio de um. */
+  daMesa?: string;
+};
+
+/**
+ * Os dados sobre o MAPA, no palco do mestre.
+ *
+ * A camada em unidades de cena: o dado acompanha o zoom e o deslocamento, e
+ * fica onde caiu no mapa. Quem sorteia é o próprio `lancar` — o dado do mestre
+ * não viaja para lugar nenhum, então não há o que conferir com ninguém.
+ */
 export function DadoLayer() {
+  const { scale, toScene } = useSceneScale();
+
+  const espaco = useMemo<EspacoDoDado>(
+    () => ({
+      largura: SCENE_WIDTH,
+      altura: SCENE_HEIGHT,
+      escala: scale,
+      paraEspaco: toScene,
+    }),
+    [scale, toScene],
+  );
+
+  return <DadosNoEspaco espaco={espaco} />;
+}
+
+/**
+ * Os dados, num espaço qualquer.
+ *
+ * Tudo que é comum às duas telas mora aqui: o relógio da queda, o desenho, o
+ * alvo de clique e a conversão do arremesso. O que muda é o espaço, e a
+ * execução da jogada.
+ */
+export function DadosNoEspaco({
+  espaco,
+  aoArremessar,
+}: {
+  espaco: EspacoDoDado;
+  /**
+   * Executa a jogada. Ausente = `lancar` direto, que é o caso do mestre.
+   *
+   * O celular passa a dele: lá quem sorteia é o daemon, e a jogada só nasce
+   * quando a resposta chega. Ver `DadosNaTela`.
+   */
+  aoArremessar?: (jogada: Jogada) => void;
+}) {
   const dados = useDadosStore((state) => state.dados);
   const naMao = useDadosStore((state) => state.naMao);
   const arremesso = useDadosStore((state) => state.arremesso);
   const consumirArremesso = useDadosStore((state) => state.consumirArremesso);
   const guardar = useDadosStore((state) => state.guardar);
   const lancar = useDadosStore((state) => state.lancar);
-  const { scale, toScene } = useSceneScale();
+
+  const { escala: scale, paraEspaco: toScene } = espaco;
 
   /**
    * O instante que a queda está desenhando.
@@ -142,23 +235,55 @@ export function DadoLayer() {
     const ponto = toScene(arremesso.clientX, arremesso.clientY);
     const folga = RAIO_DADO * 1.4;
 
-    if (arremesso.daMesa) guardar(arremesso.daMesa);
+    /**
+     * A velocidade do gesto, traduzida para a unidade do espaço -- e nada além
+     * disso.
+     *
+     * Houve aqui, por uma versão, um segundo fator que encolhia o impulso em
+     * mesas menores, para o dado não atravessar a tela toda. A conta fechava e
+     * a jogada morreu: o impulso não governa só a DISTÂNCIA. Dele saem também a
+     * velocidade angular (`6 + força × 22` rad/s), quantas vezes o dado quica e
+     * quanto tempo a queda dura. Encolhido, o dado parava de rolar e passava a
+     * pousar -- medido na mesa de verdade, oito pixels de deslocamento do
+     * lançamento ao repouso, com o número aparecendo quase junto.
+     *
+     * O que uma mesa menor pede não é um gesto mais fraco: é uma mesa com mais
+     * lugar. Quem resolve isso é o tamanho do espaço -- ver `LARGURA`, em
+     * `DadosNaTela` -- e a trava de borda em `quadroDaQueda`, que segura na
+     * beirada o que vier com força demais, como a beirada de uma mesa segura.
+     */
+    const jogada: Jogada = {
+      faces: arremesso.faces,
+      x: Math.min(espaco.largura - folga, Math.max(folga, ponto.x)),
+      y: Math.min(espaco.altura - folga, Math.max(folga, ponto.y)),
+      impulso: { x: arremesso.vx / scale, y: arremesso.vy / scale },
+      semente: arremesso.semente,
+      daMesa: arremesso.daMesa,
+    };
 
-    lancar(
-      arremesso.faces,
-      Math.min(SCENE_WIDTH - folga, Math.max(folga, ponto.x)),
-      Math.min(SCENE_HEIGHT - folga, Math.max(folga, ponto.y)),
-      { x: arremesso.vx / scale, y: arremesso.vy / scale },
-      arremesso.semente,
-    );
+    // Consome ANTES de executar: quem executa pode ser assíncrono -- no celular
+    // a jogada passa pelo daemon --, e um arremesso ainda pendurado no store
+    // entraria de novo neste efeito no render seguinte, jogando dois dados para
+    // um gesto.
     consumirArremesso();
+
+    if (aoArremessar) {
+      aoArremessar(jogada);
+      return;
+    }
+
+    if (jogada.daMesa) guardar(jogada.daMesa);
+    lancar(jogada.faces, jogada.x, jogada.y, jogada.impulso, jogada.semente);
   }, [
     arremesso,
     scale,
     toScene,
+    espaco.largura,
+    espaco.altura,
     lancar,
     guardar,
     consumirArremesso,
+    aoArremessar,
   ]);
 
   const temMao = naMao !== null;
@@ -251,13 +376,20 @@ export function DadoLayer() {
         dados={dados}
         agora={agora}
         naMao={naMao}
+        espaco={espaco}
         pontoDaMao={naMao && scale > 0 ? toScene(naMao.clientX, naMao.clientY) : null}
       />
 
       {/* A camada de alcance: um botão por dado ASSENTADO. Ver a nota do
           componente. */}
       {dados.map((dado) => (
-        <AlcanceDoDado key={dado.id} dado={dado} naMao={naMao?.daMesa === dado.id} />
+        <AlcanceDoDado
+          key={dado.id}
+          dado={dado}
+          naMao={naMao?.daMesa === dado.id}
+          espaco={espaco}
+          aoArremessar={aoArremessar}
+        />
       ))}
     </>
   );
@@ -279,19 +411,25 @@ function DadosEmCena({
   dados,
   agora,
   naMao,
-  /** Onde a mão está, em unidades de cena. `null` = mão vazia. */
+  espaco,
+  /** Onde a mão está, na unidade do espaço. `null` = mão vazia. */
   pontoDaMao,
 }: {
   dados: Dado[];
   agora: number;
   naMao: Mao;
+  espaco: EspacoDoDado;
   pontoDaMao: Vec | null;
 }) {
+  // As bordas da mesa, na unidade do espaço. É o que a queda usa para parar o
+  // dado na beirada em vez de deixá-lo sair do quadro. Ver `quadroDaQueda`.
+  const limites = { largura: espaco.largura, altura: espaco.altura };
+
   return (
     <svg
       aria-hidden
       className="pointer-events-none absolute inset-0 size-full"
-      viewBox={`0 0 ${SCENE_WIDTH} ${SCENE_HEIGHT}`}
+      viewBox={`0 0 ${espaco.largura} ${espaco.altura}`}
       style={{ zIndex: DADO_Z }}
     >
       <defs>
@@ -320,6 +458,7 @@ function DadosEmCena({
            */
           agora={Math.min(agora, dado.lancadoEm + duracaoDaQueda(dado) * 1000)}
           naMao={naMao?.daMesa === dado.id}
+          limites={limites}
         />
       ))}
 
@@ -349,16 +488,19 @@ const DadoNaMesa = memo(function DadoNaMesa({
   agora,
   /** Está na mão agora. Continua na lista, mas quem o desenha é a `DadoNaMao`. */
   naMao,
+  limites,
 }: {
   dado: Dado;
   agora: number;
   naMao: boolean;
+  /** As bordas da mesa. Ver `quadroDaQueda`. */
+  limites: { largura: number; altura: number };
 }) {
   // O que está na mão sai da mesa: quem o desenha é o bloco de baixo.
   if (naMao) return null;
 
   const tipo = tipoDado(dado.faces);
-  const quadro = quadroDaQueda(dado, (agora - dado.lancadoEm) / 1000);
+  const quadro = quadroDaQueda(dado, (agora - dado.lancadoEm) / 1000, limites);
   const desenho = desenharDado({
     faces: dado.faces,
     orientacao: quadro.orientacao,
@@ -452,7 +594,18 @@ function DadoNaMao({
  * escrito uma vez e fica parado. É o que faz a camada de alcance não devolver o
  * custo que sair do SVG economizou.
  */
-function AlcanceDoDado({ dado, naMao }: { dado: Dado; naMao: boolean }) {
+function AlcanceDoDado({
+  dado,
+  naMao,
+  espaco,
+  aoArremessar,
+}: {
+  dado: Dado;
+  naMao: boolean;
+  espaco: EspacoDoDado;
+  /** Ver `DadosNoEspaco`. O clique passa por aqui pelo mesmo motivo do arrasto. */
+  aoArremessar?: (jogada: Jogada) => void;
+}) {
   const guardar = useDadosStore((state) => state.guardar);
   const lancar = useDadosStore((state) => state.lancar);
   const pegarDado = useDadosStore((state) => state.pegarDado);
@@ -465,8 +618,13 @@ function AlcanceDoDado({ dado, naMao }: { dado: Dado; naMao: boolean }) {
   // o zero do d10 vale dez. Quem é lido em voz alta é o valor.
   const valor = valorDaRolagem(dado.faces, dado.valor);
 
-  // A pose final, e só ela: este elemento não acompanha a queda.
-  const quadro = quadroDaQueda(dado, duracaoDaQueda(dado));
+  // A pose final, e só ela: este elemento não acompanha a queda. Com os MESMOS
+  // limites do desenho -- com outros, o alvo de clique pousaria num lugar e o
+  // dado noutro.
+  const quadro = quadroDaQueda(dado, duracaoDaQueda(dado), {
+    largura: espaco.largura,
+    altura: espaco.altura,
+  });
 
   /*
    * Fica montado ENQUANTO o dado está na mão, e isto não é detalhe.
@@ -488,10 +646,30 @@ function AlcanceDoDado({ dado, naMao }: { dado: Dado; naMao: boolean }) {
    * É o caminho do CLIQUE. Um arremesso de um terço de força em direção
    * qualquer, e não um largar parado: o dado já está ali, e uma jogada nova que
    * não desloca nem tomba direito passa sem ser notada.
+   *
+   * Passa pelo `aoArremessar` como o arrasto, e isto não é simetria de estilo:
+   * relançar é uma ROLAGEM NOVA, e no celular quem sorteia é o daemon. Chamar
+   * `lancar` direto aqui daria ao jogador um caminho -- o toque -- em que o
+   * número sai do aparelho dele. O arrasto estava certo e o toque, errado, é
+   * exatamente o tipo de furo que ninguém vê até alguém procurar.
    */
   function relancarNoLugar() {
+    const jogada: Jogada = {
+      faces: dado.faces,
+      x: quadro.x,
+      y: quadro.y,
+      impulso: impulsoDeRelance(),
+      semente: crypto.getRandomValues(new Uint32Array(1))[0],
+      daMesa: dado.id,
+    };
+
+    if (aoArremessar) {
+      aoArremessar(jogada);
+      return;
+    }
+
     guardar(dado.id);
-    lancar(dado.faces, quadro.x, quadro.y, impulsoDeRelance());
+    lancar(jogada.faces, jogada.x, jogada.y, jogada.impulso, jogada.semente);
   }
 
   /**

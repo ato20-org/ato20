@@ -1,13 +1,15 @@
 "use client";
 
-import { memo, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useMemo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { CANVAS_PADRAO } from "@/lib/extensoes/fontes";
 import { usePaginaVivaSuportada } from "@/lib/motor";
+import { RolagensDoRetrato } from "@/components/playground/rolagens-do-retrato";
 import { portraitBox } from "@/lib/geometry/portrait";
 import { cn } from "@/lib/utils";
+import type { RolagemDaMesa } from "@/types/dado";
 import type { Portrait, Viewport } from "@/types/scene";
 
 /**
@@ -25,6 +27,14 @@ type PortraitLayerProps = {
   /** `operator` mostra os que estão fora do ar, em fantasma. */
   variant: "operator" | "viewer";
   smooth?: boolean;
+  /**
+   * Os dados que os jogadores jogaram há pouco, para pendurar nos retratos.
+   *
+   * Só as telas da mesa passam. No palco do mestre eles têm lugar próprio --
+   * uma fileira no canto, com limpar e histórico à mão --, e repeti-los no
+   * retrato daria dois lugares para a mesma coisa numa tela que já é cheia.
+   */
+  rolagens?: RolagemDaMesa[];
   onPortraitPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
 };
 
@@ -40,9 +50,28 @@ export function PortraitLayer({
   camera,
   variant,
   smooth = false,
+  rolagens,
   onPortraitPointerDown,
 }: PortraitLayerProps) {
   const isOperator = variant === "operator";
+
+  /**
+   * Os dados por personagem, montados uma vez.
+   *
+   * Rolagem sem `personagemId` — jogador que ainda não tem personagem vinculado
+   * — não entra em nenhum grupo, e é o certo: ela não tem retrato onde pousar.
+   * Quem a vê é o mestre, na fileira do palco dele, que desenha pelo nome.
+   */
+  const porPersonagem = useMemo(() => {
+    const mapa = new Map<string, RolagemDaMesa[]>();
+
+    for (const rolagem of rolagens ?? []) {
+      if (!rolagem.personagemId) continue;
+      mapa.set(rolagem.personagemId, [...(mapa.get(rolagem.personagemId) ?? []), rolagem]);
+    }
+
+    return mapa;
+  }, [rolagens]);
 
   return (
     <>
@@ -62,6 +91,11 @@ export function PortraitLayer({
             operador={isOperator}
             interactive={Boolean(onPortraitPointerDown)}
             smooth={smooth}
+            // Agrupado uma vez, e não filtrado aqui dentro: a `PortraitView`
+            // é `memo`, e um `filter` no corpo do `map` devolveria um array
+            // novo a cada quadro recebido -- o retrato inteiro redesenharia a
+            // 10 Hz mesmo sem ninguém rolar nada.
+            rolagens={porPersonagem.get(portrait.personagemId)}
             onPointerDown={onPortraitPointerDown}
           />
         );
@@ -188,6 +222,8 @@ type PortraitViewProps = {
   operador: boolean;
   interactive: boolean;
   smooth: boolean;
+  /** Os dados deste personagem. Ausente = nenhum, ou é o palco do mestre. */
+  rolagens?: RolagemDaMesa[];
   onPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
 };
 
@@ -199,6 +235,7 @@ const PortraitView = memo(function PortraitView({
   operador,
   interactive,
   smooth,
+  rolagens,
   onPointerDown,
 }: PortraitViewProps) {
   const url = useAssetUrl(portrait.assetId);
@@ -266,6 +303,13 @@ const PortraitView = memo(function PortraitView({
           uma limitação que não é dele e que ele não pode resolver. */}
       {portrait.url && !paginaVivaOk && !url && operador ? (
         <MarcaPaginaViva escala={scale} />
+      ) : null}
+
+      {/* Fora do ar, o retrato não desenha para a mesa -- e o dado pendurado
+          nele não pode desenhar sozinho. A rolagem continua existindo: o mestre
+          a vê na fileira do palco dele. */}
+      {rolagens && rolagens.length > 0 ? (
+        <RolagensDoRetrato rolagens={rolagens} largura={box.width} />
       ) : null}
     </div>
   );

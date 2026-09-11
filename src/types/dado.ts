@@ -168,6 +168,31 @@ export type Rolagem = {
 };
 
 /**
+ * A rolagem de um JOGADOR, que é a que viaja.
+ *
+ * Nasce no daemon e não no aparelho — ver `POST /eu/rolagens`. O celular pede
+ * um dado, o daemon sorteia, e o número que volta é o que o celular anima e o
+ * que a mesa vê. Sorteado no aparelho de quem se beneficia dele, um vinte seria
+ * indefensável.
+ *
+ * Leva o NOME junto com o id do jogador. O id amarra ao personagem quando há
+ * vínculo; o nome é o que a tela desenha quando não há — jogador sem personagem
+ * também rola dado.
+ */
+export type RolagemDaMesa = Rolagem & {
+  jogadorId: string;
+  jogador: string;
+  /**
+   * O personagem de quem rolou, quando o mestre já os vinculou.
+   *
+   * Resolvido pelo OPERADOR, e não pelo daemon nem pelo celular: o vínculo mora
+   * no cofre da campanha, e nem a TV nem o telefone o alcançam. É ele que diz em
+   * qual retrato a TV pendura o dado. Ausente = desenha pelo nome.
+   */
+  personagemId?: string;
+};
+
+/**
  * Sorteio sem viés, entre os números gravados no dado.
  *
  * Devolve o GRAVADO, então um d10 sorteia entre zero e nove. A distribuição é a

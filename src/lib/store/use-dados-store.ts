@@ -3,6 +3,7 @@
 import { create } from "zustand";
 
 import { sortearValor, tipoDado, type Dado, type FacesDado, type Rolagem } from "@/types/dado";
+import { novoId } from "@/lib/id";
 
 const STORAGE_KEY = "ato20:saquinho";
 
@@ -134,6 +135,16 @@ type DadosStore = {
     y: number,
     impulso: { x: number; y: number },
     semente?: number,
+    /**
+     * O número gravado, quando ele NÃO foi sorteado aqui.
+     *
+     * É o caso do celular do jogador: lá quem sorteia é o daemon, e o que a
+     * tela faz é animar até a face que voltou. Ver `rolarDado`.
+     *
+     * Ausente é o caso do mestre, e continua sendo o normal: o dado dele não
+     * viaja para lugar nenhum, então não há o que conferir com ninguém.
+     */
+    valor?: number,
   ) => Dado;
   recolher: () => void;
   /** Tira um dado do tabuleiro, sem mexer no histórico. */
@@ -176,10 +187,17 @@ function limitar(valor: number): number {
  * Os dados no tabuleiro NÃO persistem: dado esquecido de ontem reaparecendo
  * sobre o mapa de hoje é lixo, não memória.
  *
- * Nada aqui é publicado. Hoje só o mestre vê, e é por isso que a camada mora em
- * `components/operator` e não em `components/playground` — quem está em
- * `playground` é o que as duas visões desenham, e uma camada de dados lá dentro
- * prometeria uma transmissão que não existe.
+ * Nada aqui é publicado, e isso continua valendo depois de os jogadores
+ * passarem a rolar dados. Este store é a MESA DE QUEM OLHA: no Operador ele é o
+ * saquinho do mestre, no celular é o do jogador, e em nenhum dos dois o que
+ * está nele viaja. O que viaja é a `RolagemDaMesa`, que nasce no daemon e mora
+ * em `useRolagensStore` — dois estados, porque são duas coisas: o dado que ESTÁ
+ * na minha tela, e o fato de alguém ter rolado.
+ *
+ * A camada que desenha continua em `components/operator` por consequência
+ * disso: ela é a mesma nas duas telas justamente por não prometer transmissão
+ * nenhuma. O que a mesa vê de uma rolagem alheia é o `DadoParado`, que está em
+ * `playground` porque as três telas o desenham.
  */
 export const useDadosStore = create<DadosStore>((set, get) => ({
   dados: [],
@@ -215,12 +233,13 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
    * girar. Ver o comentário de `Dado`: é o que torna a jogada conferível, e é o
    * que deixa publicar para a mesa ser um clique em vez de sincronizar física.
    */
-  lancar(faces, x, y, impulso, semente) {
-    const valor = sortearValor(faces);
+  lancar(faces, x, y, impulso, semente, valorDeFora) {
+    // Sorteia aqui SÓ quando ninguém sorteou antes. Ver o parâmetro.
+    const valor = valorDeFora ?? sortearValor(faces);
     const agora = Date.now();
 
     const dado: Dado = {
-      id: crypto.randomUUID(),
+      id: novoId(),
       faces,
       x,
       y,

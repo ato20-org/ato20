@@ -1163,6 +1163,24 @@ export function quadroDaQueda(
     impulso: { x: number; y: number };
   },
   t: number,
+  /**
+   * Onde ficam as bordas da mesa, na unidade em que o dado vive.
+   *
+   * Existe porque a mesa deixou de ser sempre a cena. No palco do mestre ela é
+   * o plano de 1920 por 1080; no celular do jogador é a tela dele, que tem
+   * outra largura e outra proporção — ver `EspacoDoDado`.
+   *
+   * Estava cravado em `SCENE_WIDTH`/`SCENE_HEIGHT`, e o sintoma de deixar
+   * assim não foi um dado meio para fora: foi um dado que sumia. Num espaço de
+   * 600 de largura, o peteleco levava o dado para além de 600 e a trava só o
+   * segurava em 1920 — fora do quadro, invisível —, enquanto no eixo Y ele
+   * ficava grudado na folga do topo. A queda acontecia inteira, num lugar que
+   * ninguém via.
+   */
+  limites: { largura: number; altura: number } = {
+    largura: SCENE_WIDTH,
+    altura: SCENE_HEIGHT,
+  },
 ): QuadroDaQueda {
   const rnd = semeado(dado.semente);
 
@@ -1207,12 +1225,12 @@ export function quadroDaQueda(
     y: dado.y + (empurrao.x * sen + empurrao.y * cos) * percorrido,
   };
 
-  // Para na borda do mapa, como pararia na borda da mesa. Sem isto, um peteleco
-  // forte para a beirada mandava o dado para fora do plano, onde ele fica
-  // recortado e a jogada se perde sem deixar pista.
+  // Para na borda da mesa, seja ela o mapa ou a tela. Sem isto, um peteleco
+  // forte para a beirada mandava o dado para fora, onde ele fica recortado e a
+  // jogada se perde sem deixar pista.
   const folga = dado.raio * 1.15;
-  const x = Math.min(SCENE_WIDTH - folga, Math.max(folga, bruto.x));
-  const y = Math.min(SCENE_HEIGHT - folga, Math.max(folga, bruto.y));
+  const x = Math.min(limites.largura - folga, Math.max(folga, bruto.x));
+  const y = Math.min(limites.altura - folga, Math.max(folga, bruto.y));
 
   const inicioAssento = duracao - ASSENTO;
   const alvo = orientacaoParaValor(dado.faces, dado.valor);
