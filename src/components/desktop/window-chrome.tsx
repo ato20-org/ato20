@@ -58,10 +58,20 @@ function useIsDesktop(): boolean {
  */
 export function WindowChrome({
   inicio,
+  acoes,
   subtitulo,
 }: {
   /** Vai à direita do nome, na ponta esquerda da barra. */
   inicio?: React.ReactNode;
+  /**
+   * Vai à esquerda dos botões da janela, na ponta direita da barra.
+   *
+   * Slot separado do `inicio` porque o lado da barra é o assunto: à esquerda
+   * fica o que a janela É — hoje a campanha —, e aqui o que se FAZ com ela.
+   * Configurações mora deste lado pelo mesmo motivo que minimizar e fechar: é
+   * da máquina e da janela, não da mesa aberta.
+   */
+  acoes?: React.ReactNode;
   subtitulo?: string;
 }) {
   const noApp = useIsDesktop();
@@ -151,6 +161,8 @@ export function WindowChrome({
         </span>
 
         <div className="flex items-center">
+          {acoes}
+
           <ChromeButton
             label="Minimizar"
             onClick={() => void janela.minimize()}
@@ -181,17 +193,26 @@ export function WindowChrome({
   );
 }
 
-function ChromeButton({
+/**
+ * Um botão da barra da janela.
+ *
+ * Exportado porque o slot `acoes` precisa do MESMO botão: um controle com outro
+ * tamanho ou outro arredondamento ao lado de minimizar leria como coisa de
+ * outro lugar que caiu ali.
+ *
+ * Repassa o resto das props ao `<button>` para poder ser o gatilho de um menu
+ * ou de um diálogo -- o `render` do base-ui injeta `onClick`, `aria-expanded` e
+ * a referência, e sem o repasse eles se perderiam e o gatilho não abriria nada.
+ */
+export function ChromeButton({
   label,
   icon,
-  onClick,
   className,
+  ...rest
 }: {
   label: string;
   icon: React.ReactNode;
-  onClick: () => void;
-  className?: string;
-}) {
+} & React.ComponentProps<"button">) {
   return (
     <button
       type="button"
@@ -203,7 +224,7 @@ function ChromeButton({
         "hover:bg-accent focus-visible:ring-ring grid h-7 w-8 place-items-center transition-colors focus-visible:ring-2 focus-visible:outline-none",
         className,
       )}
-      onClick={onClick}
+      {...rest}
     >
       {icon}
     </button>

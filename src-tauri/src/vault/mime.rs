@@ -29,6 +29,17 @@ pub fn from_name(name: &str) -> &'static str {
         "bmp" => "image/bmp",
         "pdf" => "application/pdf",
         "txt" | "md" => "text/plain; charset=utf-8",
+        // Os tres que uma EXTENSAO serve, e o tipo aqui nao e cosmetico: CSS
+        // com o tipo errado e recusado como folha de estilo, e modulo ESM com
+        // o tipo errado e recusado pelo `import`. Ver `extensoes.rs`.
+        "css" => "text/css; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "json" => "application/json; charset=utf-8",
+        // As fontes que um tema traz junto.
+        "woff2" => "font/woff2",
+        "woff" => "font/woff",
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
         "mp3" => "audio/mpeg",
         "ogg" | "oga" => "audio/ogg",
         "m4a" | "aac" => "audio/mp4",

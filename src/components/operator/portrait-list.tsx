@@ -7,6 +7,7 @@ import {
   FlipHorizontal,
   RotateCcw,
   Trash2,
+  Radio,
   UserSquare,
 } from "lucide-react";
 
@@ -232,9 +233,13 @@ function PortraitRow({
   const noAr = Boolean(retrato?.visible);
   const selected = retrato ? selectedIds.includes(retrato.id) : false;
 
-  // Sem Retrato na ficha não há o que pôr na tela. A linha fica, porque o
-  // personagem ESTÁ na cena: é a pista de que falta preencher o campo.
-  if (!personagem.retrato) {
+  // Sem NENHUM dos dois retratos não há o que pôr na tela. A linha fica, porque
+  // o personagem ESTÁ na cena: é a pista de que falta preencher o campo.
+  //
+  // Os dois, e não só o do acervo: quem tem apenas o Retrato ao vivo tem o que
+  // mostrar, e barrá-lo aqui deixaria a URL gravada na ficha sem caminho
+  // nenhum para chegar ao ar.
+  if (!personagem.retrato && !personagem.retratoUrl) {
     return (
       <li className="flex items-center gap-2 rounded-md p-1">
         <span className="bg-muted grid size-10 shrink-0 place-items-center rounded">
@@ -286,7 +291,11 @@ function PortraitRow({
             {...MINIATURA}
           />
         ) : (
-          <UserSquare className="text-muted-foreground m-auto size-4" aria-hidden />
+          // Sem imagem no acervo — o caso de quem só tem página viva. O ícone
+          // diz que a linha é de retrato, e não desenhar a página aqui é de
+          // propósito: seria um quadro de 1920px por linha da lista, para um
+          // polegar de 40 pixels.
+          <Radio className="text-muted-foreground m-auto size-4" aria-hidden />
         )}
       </button>
 
@@ -309,7 +318,15 @@ function PortraitRow({
         }
         onClick={() => {
           if (noAr) desarmar(personagem.id);
-          else armar(personagem.id, personagem.retrato!, asset?.naturalWidth, asset?.naturalHeight);
+          // Vazio quando só há página viva: o registro guarda GEOMETRIA, e o
+          // `assetId` dele é sobrescrito por `retratosDaCena` a cada leitura.
+          else
+            armar(
+              personagem.id,
+              personagem.retrato ?? "",
+              asset?.naturalWidth,
+              asset?.naturalHeight,
+            );
         }}
       >
         {noAr ? <Eye /> : <EyeOff />}

@@ -18,6 +18,14 @@ pub enum AppError {
     Db(rusqlite::Error),
     /// O tipo de arquivo nao entra no acervo.
     UnsupportedKind(String),
+    /// A pasta escolhida nao e uma extensao, ou o manifesto dela nao serve.
+    ExtensaoInvalida(String),
+    /// A extensao pede uma API mais nova que a deste aplicativo.
+    ///
+    /// Variante propria, e nao uma `ExtensaoInvalida` com o texto dentro,
+    /// porque a providencia e outra: aqui quem esta velho e o ATO20, e a tela
+    /// tem de dizer isso em vez de mandar falar com quem escreveu a extensao.
+    ExtensaoIncompativel { pede: u32, temos: u32 },
 }
 
 impl std::fmt::Display for AppError {
@@ -35,6 +43,13 @@ impl std::fmt::Display for AppError {
             Self::UnsupportedKind(mime) => {
                 write!(f, "Tipo de arquivo nao suportado: {mime}")
             }
+            Self::ExtensaoInvalida(motivo) => {
+                write!(f, "Extensao invalida: {motivo}")
+            }
+            Self::ExtensaoIncompativel { pede, temos } => write!(
+                f,
+                "Esta extensao pede a API {pede} e este ATO20 fala a {temos}. Atualize o aplicativo."
+            ),
         }
     }
 }
@@ -65,6 +80,8 @@ impl Serialize for AppError {
             Self::Malformed { .. } => "ilegivel",
             Self::Db(_) => "banco",
             Self::UnsupportedKind(_) => "tipo-nao-suportado",
+            Self::ExtensaoInvalida(_) => "extensao-invalida",
+            Self::ExtensaoIncompativel { .. } => "extensao-incompativel",
         };
 
         let mut out = serializer.serialize_struct("AppError", 2)?;

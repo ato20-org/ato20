@@ -22,7 +22,7 @@ pub struct AppDb {
 /// Guardada no proprio arquivo e nao numa tabela: uma tabela de versao precisa
 /// existir antes de poder dizer que versao existe, e o pragma nao tem esse
 /// problema de ovo e galinha.
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -333,6 +333,52 @@ impl AppDb {
     }
 }
 
+impl AppDb {
+    /// Quem esta ligada e quem esta desligada, por id.
+    ///
+    /// Devolve o BANCO inteiro e nao so as habilitadas: quem cruza com o disco
+    /// e `extensoes_listar`, e ele precisa distinguir "desligada" de "nunca
+    /// vista" -- extensao nova nasce ligada, e uma que o usuario desligou tem
+    /// de continuar desligada mesmo depois de reinstalada por cima.
+    pub fn extensoes_estado(&self) -> AppResult<Vec<(String, bool)>> {
+        let conn = self.conn.lock().expect("banco envenenado");
+        let mut stmt = conn.prepare("select id, habilitada from extensoes")?;
+
+        let linhas = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(linhas)
+    }
+
+    /// Registra a extensao, ou muda o estado dela.
+    ///
+    /// `instalada_em` so e escrito na PRIMEIRA vez -- o `do update` nao o toca.
+    /// Reinstalar por cima e atualizar, e a data que interessa na lista e a de
+    /// quando aquilo entrou na maquina.
+    pub fn extensao_marcar(&self, id: &str, habilitada: bool) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+
+        conn.execute(
+            "insert into extensoes (id, habilitada, instalada_em) values (?1, ?2, ?3)
+             on conflict(id) do update set habilitada = excluded.habilitada",
+            rusqlite::params![id, habilitada as i64, crate::vault::now_ms()],
+        )?;
+
+        Ok(())
+    }
+
+    /// Tira a extensao do banco. O disco e assunto de `extensoes::remover`.
+    pub fn extensao_forget(&self, id: &str) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+        conn.execute("delete from extensoes where id = ?1", [id])?;
+
+        Ok(())
+    }
+}
+
 fn migrate(conn: &Connection) -> AppResult<()> {
     let current: i64 = conn.query_row("pragma user_version", [], |row| row.get(0))?;
 
@@ -395,6 +441,27 @@ fn migrate(conn: &Connection) -> AppResult<()> {
              );
              create index if not exists marcadores_da_mesa
                  on marcadores (campanha, livro_id, pagina);",
+        )?;
+    }
+
+    if current < 4 {
+        // As extensoes desta maquina. UMA coluna de estado, e e o ponto: o que
+        // a extensao E vive no `manifesto.json` dentro da pasta dela, e copiar
+        // a pasta para outra maquina tem de bastar para instalar. O que nao
+        // viaja com a pasta e a decisao de quem usa -- ligada ou desligada --,
+        // e e so isso que o banco guarda.
+        //
+        // Sem `foreign key` para nada, e sem lista de arquivos: quem sabe o que
+        // existe e o disco, e uma segunda copia disso aqui envelheceria na
+        // primeira vez que alguem apagasse uma pasta pelo gerenciador de
+        // arquivos -- que e um jeito legitimo de desinstalar quando a extensao
+        // e uma pasta.
+        conn.execute_batch(
+            "create table if not exists extensoes (
+                 id           text primary key,
+                 habilitada   integer not null default 1,
+                 instalada_em integer not null
+             );",
         )?;
     }
 

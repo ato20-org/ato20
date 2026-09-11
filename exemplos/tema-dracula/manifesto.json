@@ -1,0 +1,10 @@
+{
+  "id": "tema-dracula",
+  "nome": "Dracula",
+  "versao": "1.0.0",
+  "autor": "ATO20",
+  "descricao": "A paleta Dracula, com o roxo #bd93f9 como cor de ação.",
+  "repositorio": "https://github.com/valb-mig/ato20",
+  "apiVersao": 1,
+  "tema": "tema.css"
+}

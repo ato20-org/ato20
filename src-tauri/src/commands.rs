@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::Serialize;
@@ -6,6 +7,7 @@ use tauri::State;
 use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
 use crate::estante;
+use crate::extensoes::{self, Extensao};
 use crate::serve::{DaemonAddr, Evidence, SharedEvidence, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
 use crate::vault::board::{Board, BoardPatch};
@@ -25,6 +27,8 @@ pub struct AppState {
     pub evidence: SharedEvidence,
     /// Onde os livros de regras desta maquina moram. O mesmo que o daemon serve.
     pub estante: PathBuf,
+    /// Onde as extensoes moram. O mesmo que o protocolo `ato20-ext` serve.
+    pub extensoes: PathBuf,
 }
 
 impl AppState {
@@ -879,4 +883,83 @@ pub fn marcador_rotulo(state: State<'_, AppState>, id: String, rotulo: String) -
 #[tauri::command]
 pub fn marcador_remover(state: State<'_, AppState>, id: String) -> AppResult<()> {
     state.db.marcador_forget(&id)
+}
+
+// --- extensoes --------------------------------------------------------------
+
+/// O que esta instalado nesta maquina, com o estado de cada uma.
+///
+/// O DISCO e a fonte de verdade do que existe, e o banco so responde "ligada ou
+/// desligada". Por isso a lista sai de `extensoes::listar` e o banco entra como
+/// consulta: apagar uma pasta pelo gerenciador de arquivos e um jeito legitimo
+/// de desinstalar, e uma lista tirada do banco mostraria o que ja nao esta la.
+///
+/// Extensao que o banco nunca viu nasce HABILITADA: quem acabou de escolher a
+/// pasta ja disse o que queria, e pedir um segundo clique para ligar seria
+/// perguntar duas vezes a mesma coisa.
+#[tauri::command]
+pub fn extensoes_listar(state: State<'_, AppState>) -> AppResult<Vec<Extensao>> {
+    let estado: HashMap<String, bool> = state.db.extensoes_estado()?.into_iter().collect();
+
+    Ok(extensoes::listar(&state.extensoes)?
+        .into_iter()
+        .map(|manifesto| Extensao {
+            habilitada: estado.get(&manifesto.id).copied().unwrap_or(true),
+            manifesto,
+        })
+        .collect())
+}
+
+/// Copia uma pasta de fora para `extensoes/` e a registra.
+///
+/// Reinstalar por cima NAO religa o que o usuario tinha desligado: o estado e
+/// decisao dele, e a versao nova da mesma extensao nao e um pedido para
+/// reconsidera-la. E por isso que a marcacao so acontece quando o id e novo.
+#[tauri::command]
+pub fn extensao_importar(state: State<'_, AppState>, caminho: String) -> AppResult<Extensao> {
+    let manifesto = extensoes::importar(&state.extensoes, std::path::Path::new(&caminho))?;
+
+    let conhecida = state
+        .db
+        .extensoes_estado()?
+        .into_iter()
+        .find(|(id, _)| id == &manifesto.id);
+
+    let habilitada = match conhecida {
+        Some((_, habilitada)) => habilitada,
+        None => {
+            state.db.extensao_marcar(&manifesto.id, true)?;
+            true
+        }
+    };
+
+    Ok(Extensao {
+        manifesto,
+        habilitada,
+    })
+}
+
+/// Desinstala: a pasta sai do disco e a linha sai do banco.
+///
+/// Nesta ordem. O contrario deixaria, se o disco falhasse no meio, uma pasta
+/// sem registro -- que a proxima listagem mostraria de volta como extensao nova
+/// e habilitada, desfazendo sozinha o que o usuario acabou de pedir.
+#[tauri::command]
+pub fn extensao_remover(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    extensoes::remover(&state.extensoes, &id)?;
+    state.db.extensao_forget(&id)
+}
+
+/// Liga ou desliga, sem tocar no disco.
+#[tauri::command]
+pub fn extensao_habilitar(
+    state: State<'_, AppState>,
+    id: String,
+    habilitada: bool,
+) -> AppResult<()> {
+    if !extensoes::id_valido(&id) {
+        return Err(AppError::ExtensaoInvalida(format!("id invalido: {id:?}")));
+    }
+
+    state.db.extensao_marcar(&id, habilitada)
 }

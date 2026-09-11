@@ -2,9 +2,11 @@ mod commands;
 mod db;
 mod error;
 mod estante;
+mod extensoes;
 mod serve;
 mod vault;
 
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
@@ -18,6 +20,58 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // O que faz uma extensao existir para a webview.
+        //
+        // Protocolo proprio, e nao `blob:` com o texto do arquivo dentro: com
+        // blob, um `import` relativo de dentro da extensao nao resolve e o erro
+        // aparece como `blob:abc-123` sem nome de arquivo. Aqui a extensao e
+        // uma arvore de arquivos com URL estavel, que e o que permite a ela ter
+        // mais de um modulo e uma fonte ao lado do CSS.
+        //
+        // E nao pelo daemon, que ja serve HTTP: o daemon escuta em `0.0.0.0`, e
+        // por ele a extensao viraria alcancavel por qualquer aparelho da rede.
+        // O protocolo so existe dentro da webview desta janela.
+        //
+        // A URL e sempre `ato20-ext://localhost/{id}/{arquivo}`. O `localhost`
+        // nao e enfeite: sem ele o primeiro segmento vira a AUTORIDADE da URL e
+        // o id some do caminho.
+        .register_uri_scheme_protocol("ato20-ext", |ctx, request| {
+            let dir = ctx
+                .app_handle()
+                .path()
+                .app_data_dir()
+                .ok()
+                .map(|base| extensoes::dir(&base));
+
+            let arquivo = dir.and_then(|dir| {
+                let caminho = request.uri().path().trim_start_matches('/');
+                let (id, rel) = caminho.split_once('/')?;
+
+                extensoes::caminho_do_arquivo(&dir, &decodificar(id)?, &decodificar(rel)?)
+            });
+
+            // 404 igual para id torto, arquivo ausente e travessia recusada:
+            // respostas diferentes contariam quais extensoes existem na maquina.
+            let Some(arquivo) = arquivo else {
+                return nao_encontrado();
+            };
+
+            let Ok(bytes) = std::fs::read(&arquivo) else {
+                return nao_encontrado();
+            };
+
+            let tipo = vault::mime::from_name(&arquivo.to_string_lossy());
+
+            tauri::http::Response::builder()
+                .header(tauri::http::header::CONTENT_TYPE, tipo)
+                // Sem cache, e de proposito: quem escreve uma extensao edita o
+                // `tema.css` e quer ver o resultado ao religa-la. O arquivo esta
+                // no disco local, entao reler nao custa o suficiente para pagar
+                // um `ETag` aqui.
+                .header(tauri::http::header::CACHE_CONTROL, "no-store")
+                .body(Cow::Owned(bytes))
+                .unwrap_or_else(|_| nao_encontrado())
+        })
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -38,6 +92,11 @@ pub fn run() {
             // `estante::dir`. O diretorio nasce na primeira importacao -- nao
             // aqui --, para quem nunca abriu um livro nao ter uma pasta vazia.
             let estante = estante::dir(&app.path().app_data_dir()?);
+
+            // As extensoes ficam ao lado da estante, e pelo mesmo motivo: sao
+            // DADO da maquina, e podem trazer imagem e fonte junto. O
+            // diretorio nasce na primeira importacao -- nao aqui.
+            let extensoes = extensoes::dir(&app.path().app_data_dir()?);
 
             // A campanha comeca fechada. Reabrir a ultima e um comando que a
             // tela chama, para uma pasta que desapareceu ter onde aparecer
@@ -66,6 +125,7 @@ pub fn run() {
                 daemon: started.addr,
                 evidence: started.evidence,
                 estante,
+                extensoes,
             });
 
             Ok(())
@@ -131,9 +191,45 @@ pub fn run() {
             commands::marcador_add,
             commands::marcador_rotulo,
             commands::marcador_remover,
+            commands::extensoes_listar,
+            commands::extensao_importar,
+            commands::extensao_remover,
+            commands::extensao_habilitar,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// A resposta do protocolo para tudo que nao se serve.
+fn nao_encontrado() -> tauri::http::Response<Cow<'static, [u8]>> {
+    tauri::http::Response::builder()
+        .status(tauri::http::StatusCode::NOT_FOUND)
+        .body(Cow::Borrowed(&b""[..]))
+        .expect("resposta de 404 mal formada")
+}
+
+/// Desfaz o `%20` e companhia de um segmento da URL.
+///
+/// A mao, e nao com um crate: a webview escapa o que o `<link>` e o `import`
+/// pedem, e nome de arquivo com espaco ou acento chega assim. `None` para
+/// escape malformado, que cai no mesmo 404 de qualquer outro pedido torto.
+fn decodificar(segmento: &str) -> Option<String> {
+    let bytes = segmento.as_bytes();
+    let mut saida = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = segmento.get(i + 1..i + 3)?;
+            saida.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            saida.push(bytes[i]);
+            i += 1;
+        }
+    }
+
+    String::from_utf8(saida).ok()
 }
 
 /// Onde esta o `out/` do Next.
