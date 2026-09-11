@@ -527,6 +527,56 @@ si, porque ajustar um por um sempre termina com um NPC maior que o outro sem mot
 
 Fora do ar o retrato aparece apagado no palco, e nunca na mesa.
 
+### Retrato ao vivo
+
+O retrato pode ser uma **página** em vez de uma imagem parada — a mesma que se
+põe de fonte de navegador no OBS, com vida e sanidade mudando durante a sessão.
+A ficha ganha um campo para a URL, e quem sabe montá-la a partir de um código é
+uma extensão, que declara a fonte. Ver **Extensões**.
+
+O quadro **não ocupa a caixa do retrato**. Ele renderiza no canvas de projeto da
+página e é encolhido por CSS até caber, que é o que o OBS faz. Medido no
+C.R.I.S., não deduzido: pontos de quebra em 1023, 1260 e 1280, e a 420px de
+largura aparece só um canto do card. É por isso que a fonte declara `largura` e
+`altura` — sem esses dois números isto seria "cole um link" e não precisaria de
+extensão nenhuma.
+
+A âncora do `transform` é o canto superior esquerdo, com a centralização vindo
+de um `translate` antes do `scale`. Não é estilo: com o quadro centralizado por
+`place-items` e `transform-origin: center`, **ele não pinta**. Medido no Chrome,
+headless antigo e novo, com e sem GPU. O quadro tem 1920px de largura de layout
+dentro de uma caixa de 420, e centralizá-lo o joga para fora do recorte antes de
+a transformação acontecer.
+
+A imagem do acervo fica **atrás**, e não no lugar: internet cai, e a mesa
+continua vendo o rosto. Vale preencher os dois campos por isso.
+
+O canvas viaja no payload publicado, porque quem desenha o quadro é o **aparelho
+de quem assiste** — a TV e o celular abrem a página por conta própria, e o
+daemon não intermedia. Extensão só existe no Operador, então sem o número a TV
+teria de adivinhar em que tamanho renderizar uma página de layout fixo.
+
+**Não funciona no WebKit.** Medido no webkit2gtk-4.1 2.52.5 com a página do
+C.R.I.S.: a aplicação dela não resolve a própria rota e redireciona para a raiz
+do site — dentro de quadro *ou aberta direto*, o que descarta o embutimento como
+causa. Descartados um a um: `sandbox`, `referrerPolicy`, cookie de terceiro, ITP
+e suporte de JS moderno.
+
+| Tela | Motor | Retrato ao vivo |
+| --- | --- | --- |
+| Assistir, na TV ou no notebook | Chrome, Firefox | funciona |
+| Plateia no Android | Chrome | funciona |
+| Plateia no **iPhone** | Safari, sempre | **não** |
+| Operador, no Linux | WebKitGTK | **não** |
+
+O iPhone não tem escapatória: a Apple obriga todo navegador de iOS a usar o
+WebKit dela. Onde não funciona, o ATO20 **não desenha a página** e mostra o
+Retrato do acervo — ver `usePaginaVivaSuportada`. Farejar `userAgent` envelhece
+mal, e está ali porque a alternativa é pior: ver a página de erro de um serviço
+no lugar do rosto de um personagem, na TV, no meio da sessão. E porque não há
+outra — o quadro é de outra origem, o evento de carga dispara igual quando o
+conteúdo é um erro, e nada dentro dele é legível daqui.
+
 ## Pastas do acervo
 
 O painel de imagens agrupa por pasta — **só raiz, sem aninhamento**: o que se quer numa
@@ -540,6 +590,182 @@ Upload novo cai na raiz.
 Pasta guarda o id e não o nome, para renomear não obrigar a reescrever todos os arquivos
 dentro. E **apagar pasta não apaga arquivo**: o conteúdo volta para a raiz, porque perder um
 mapa por causa de um clique em "apagar pasta" seria dano desproporcional ao gesto.
+
+## Extensões
+
+Uma extensão é uma **pasta com `manifesto.json` dentro**. Instalar é copiá-la
+para a máquina, por Configurações → Plugins. É o mesmo formato que se publica
+no GitHub: quem clona o repositório já tem exatamente o que o diálogo pede.
+
+Elas ficam em `{dados do app}/extensoes/`, ao lado da estante e pela mesma
+razão: são da MÁQUINA e não da campanha — um tema serve todas as mesas, e
+exportar uma campanha não leva o tema de quem a montou. O banco guarda uma
+coisa só, se está habilitada; o que a extensão *é* vive no manifesto, dentro da
+própria pasta, porque copiar a pasta tem de bastar para instalar.
+
+Só o **Operador**. Assistir e Plateia rodam no navegador de outro aparelho, e
+servir código de extensão pela rede é outra decisão — ver o fim desta seção.
+
+### Duas naturezas, e a separação importa
+
+Um **tema** é CSS que a cascata aplica: o pior que ele faz é deixar a interface
+feia, e isso se vê e se desliga. Uma **funcionalidade** é código que roda com o
+alcance da janela, e instalar uma é confiar em quem a escreveu — do mesmo jeito
+que se confia numa extensão do VSCode.
+
+A tela de Plugins separa as duas em grupos com cabeçalho, e não com etiqueta na
+ponta direita de cada linha: a etiqueta é lida *depois* do nome, e é o nome que
+a pessoa já decidiu instalar. O cabeçalho vem antes, e é o que impede a segunda
+decisão de se disfarçar da primeira.
+
+### Tema é um arquivo
+
+```css
+/* tema.css */
+:root, .dark {
+  --background: #282a36;
+  --primary: #bd93f9;
+}
+```
+
+Ele não reescreve componente nenhum. Redeclara as variáveis que o
+`src/app/globals.css` define, e vence porque a folha entra no **fim** do
+`<head>` — última declaração da mesma especificidade ganha. A posição na cascata
+é o mecanismo inteiro, e é o que faz um tema custar ao autor dois arquivos e
+nenhuma ferramenta.
+
+`<link>` e não um `<style>` com o texto dentro: o arquivo pode pedir uma fonte
+ou uma imagem ao lado dele, e URL relativa só resolve se a folha tiver endereço
+próprio.
+
+Variável não declarada mantém o valor do aplicativo, então um tema de cor não
+repete o resto. E a variável aceita qualquer cor de CSS, não só `oklch` — uma
+paleta publicada em hexadecimal se transcreve em vez de ser reconvertida, e o
+que se transcreve dá para conferir contra a fonte.
+
+### Declarar e implementar são duas coisas
+
+O manifesto **declara** o que a extensão acrescenta; o `principal` — um módulo
+ESM — **implementa**.
+
+```json
+{
+  "id": "meu-plugin", "nome": "Meu plugin", "versao": "1.0.0",
+  "apiVersao": 1, "principal": "main.js",
+  "contribui": {
+    "paineis":  [{ "id": "notas", "titulo": "Notas da sessão" }],
+    "comandos": [{ "id": "rolar", "titulo": "Rolar", "atalho": "Ctrl+Shift+F" }],
+    "ferramentas": [{ "id": "marcar", "titulo": "Marcar ponto" }],
+    "camadas": [{ "id": "marcas", "titulo": "Marcas" }]
+  }
+}
+```
+
+A separação compra duas coisas. A tela de Plugins lista o que cada extensão faz
+**sem rodar uma linha** do código dela — que é exatamente a informação que
+alguém quer antes de habilitar o plugin de um estranho. E o módulo só é
+importado quando alguém abre o painel ou dispara o comando: dez extensões
+instaladas não custam dez módulos na abertura da janela, que é onde o mestre
+está esperando a mesa abrir.
+
+A exceção é a **camada**: ela não tem gesto de abertura — está no mapa ou não
+está —, então quem declara camada carrega cedo.
+
+É o modelo do VSCode, e a razão é a mesma: uma extensão que declara o que faz
+pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
+app a rodar todas para saber o que existe.
+
+### O módulo
+
+```js
+const plugin = {
+  ativar(api) {
+    const h = api.react.createElement;
+
+    return api.registrar.painel({
+      id: "notas",
+      corpo: () => h("p", { className: "p-3 text-sm" }, "Olá da extensão."),
+    });
+  },
+};
+
+export default plugin;
+```
+
+Quatro regras que não mudam:
+
+- É um **módulo ESM comum**, lido direto do disco. Sem npm, sem bundler, sem
+  passo de build — o arquivo que você escreve é o arquivo que roda.
+- **Não empacote React.** A interface tem uma instância só, e uma segunda
+  quebraria os hooks dela. Ele chega em `api.react`.
+- **Sem JSX**, porque não há build para compilá-lo.
+- Tudo que se registra **devolve a função de desfazer**. É o que faz desligar o
+  plugin não pedir reinício do aplicativo.
+
+### O que a API dá, e o que ela não dá
+
+Ações **nomeadas**, e nunca os stores. Um plugin não alcança `useSceneStore`: se
+alcançasse, todo plugin passaria a depender do formato interno de `Scene` e dos
+nomes dos métodos do zustand, e mexer neles quebraria o ecossistema — que é
+exatamente o que matou a compatibilidade de plugins do Atom. Uma ação nomeada é
+um contrato que dá para manter enquanto o interior muda. Ver `src/lib/extensoes/api.ts`,
+que é a promessa do projeto para quem escreve plugin: o que está lá vira
+compromisso de compatibilidade, e o que não está pode mudar sem aviso.
+
+`api.cena.ajustarItem` aceita cinco campos — posição, tamanho e giro. Repassar o
+patch cru deixaria um `assetId` trocado por engano apagar a imagem de alguém.
+
+`api.cena.dados()` e `gravarDados()` guardam o que é do plugin dentro da cena,
+em `scene.extensoes[id]`. Viaja no zip da campanha e **sai** do que é publicado
+para a TV e para os celulares, junto com alfinetes e postits. Não é cautela
+genérica: o formato é do plugin e o aplicativo não lê o que tem dentro, e
+publicar o que não se consegue ler seria apostar que nenhum autor vai guardar
+ali a nota do mestre. Ver `sceneForTable`.
+
+### Atalho de plugin não rouba atalho do aplicativo
+
+A tabela de `atalhos.ts` é consultada em ordem e os do plugin entram **depois**.
+Um `Ctrl+Z` declarado por uma extensão nunca alcança o desfazer. Não há
+conferência de colisão em lugar nenhum — a ordem já decide, e decide a favor do
+aplicativo.
+
+Comando sem tecla continua alcançável: ele aparece numa seção do menu **Abas**,
+que some quando não há nenhum.
+
+### Quando o plugin quebra
+
+Um `ativar` que estoura é contido. A extensão é marcada como falha, o que ela
+chegou a registrar é esquecido, e o motivo aparece no corpo do painel em
+monoespaçada — quem vai consertar é quem escreveu o plugin, e essa pessoa
+precisa do texto exato.
+
+Metade de um plugin na interface é pior que nenhuma. E um plugin que brigasse a
+janela deixaria o mestre sem alcançar o botão que o desliga, que é o pior
+desfecho possível.
+
+### Onde o código da extensão vive
+
+Um protocolo próprio, `ato20-ext://localhost/{id}/{arquivo}`, e não `blob:`:
+com blob, um `import` relativo de dentro da extensão não resolve e o erro
+aparece como `blob:abc-123` sem nome de arquivo. Com URL estável a extensão pode
+ter mais de um módulo e uma fonte ao lado do CSS.
+
+E **não pelo daemon**, que já serve HTTP: ele escuta em `0.0.0.0`, e por ele a
+extensão viraria alcançável por qualquer aparelho da rede. O protocolo só existe
+dentro da webview desta janela — que é também a razão de plugin alcançar só o
+Operador. Levar isto às telas de espectador é abrir essa superfície, e é uma
+decisão à parte.
+
+### Confiança
+
+Não há loja, não há revisão e não há sandbox. Quem instala um plugin de código
+está executando o código de quem o escreveu, com o alcance da janela. A tela
+avisa o que é tema e o que é funcionalidade, e mostra autor e repositório — o
+resto é a mesma confiança que se dá a uma extensão de editor.
+
+As guardas que existem são contra plugin **malformado**, não contra plugin
+malicioso: travessia de caminho, link simbólico plantado na pasta, molde de URL
+sem `{codigo}`, canvas absurdo. Todas têm teste em `src-tauri/src/extensoes.rs`.
 
 ## Como está construído
 
