@@ -2,32 +2,7 @@
 
 import { useEffect } from "react";
 
-import {
-  copySelection,
-  cutSelection,
-  duplicateSelection,
-  flipSelection,
-  moveSelectionZ,
-  nudgeSelection,
-  pasteClipboard,
-  removeFogSelection,
-  removePortraitSelection,
-  removeSelection,
-  selectAllItems,
-} from "@/lib/operator/item-actions";
-import { useSceneStore } from "@/lib/store/use-scene-store";
-import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { useViewportStore } from "@/lib/store/use-viewport-store";
-
-const NUDGE = 1;
-const NUDGE_FAST = 10;
-
-const ARROW_DELTA: Record<string, { x: number; y: number }> = {
-  ArrowLeft: { x: -1, y: 0 },
-  ArrowRight: { x: 1, y: 0 },
-  ArrowUp: { x: 0, y: -1 },
-  ArrowDown: { x: 0, y: 1 },
-};
+import { ATALHOS } from "@/lib/operator/atalhos";
 
 function isTyping(target: EventTarget | null): boolean {
   return Boolean(
@@ -36,116 +11,29 @@ function isTyping(target: EventTarget | null): boolean {
 }
 
 /**
- * Atalhos do Operador. O efeito roda uma única vez: as ações leem o estado
- * atual por conta própria, então o listener nunca precisa ser remontado.
+ * Atalhos do Operador.
+ *
+ * O listener é um laço sobre a tabela de `atalhos.ts`, e não um encadeado de
+ * `if` com o mapeamento embutido: a MESMA tabela é o que a lista de atalhos em
+ * Configurações desenha, e é isso que impede a interface de anunciar uma tecla
+ * que o listener não atende mais.
+ *
+ * O efeito roda uma única vez: as ações leem o estado atual por conta própria,
+ * então o listener nunca precisa ser remontado.
  */
 export function useOperatorShortcuts(): void {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isTyping(event.target)) return;
 
-      const modifier = event.ctrlKey || event.metaKey;
-      const key = event.key.toLowerCase();
+      // Quem casa primeiro executa, e mais ninguém é consultado -- a ordem da
+      // tabela É a precedência. Ver a nota em `ATALHOS`.
+      const atalho = ATALHOS.find(({ combina }) => combina(event));
+      if (!atalho) return;
 
-      if (event.key === "Escape") {
-        useSelectionStore.getState().clear();
-        return;
-      }
+      if (atalho.impedirPadrao) event.preventDefault();
 
-      if (modifier) {
-        // Desfazer antes do resto: Ctrl+Z é o atalho que não pode falhar.
-        if (key === "z") {
-          event.preventDefault();
-          if (event.shiftKey) useSceneStore.getState().redo();
-          else useSceneStore.getState().undo();
-          return;
-        }
-
-        if (key === "y") {
-          event.preventDefault();
-          useSceneStore.getState().redo();
-          return;
-        }
-
-        const action =
-          key === "a"
-            ? selectAllItems
-            : key === "c"
-              ? copySelection
-              : key === "x"
-                ? cutSelection
-                : key === "v"
-                  ? pasteClipboard
-                  : key === "d"
-                    ? duplicateSelection
-                    : null;
-
-        if (action) {
-          event.preventDefault();
-          action();
-          return;
-        }
-
-        // Zoom: os mesmos atalhos que o browser usa, agora aplicados ao palco.
-        if (event.key === "0") {
-          event.preventDefault();
-          useViewportStore.getState().fit();
-          return;
-        }
-
-        if (event.key === "=" || event.key === "+") {
-          event.preventDefault();
-          useViewportStore.getState().zoomIn();
-          return;
-        }
-
-        if (event.key === "-" || event.key === "_") {
-          event.preventDefault();
-          useViewportStore.getState().zoomOut();
-          return;
-        }
-
-        if (event.key === "]" || event.key === "[") {
-          event.preventDefault();
-          const forward = event.key === "]";
-          moveSelectionZ(
-            event.shiftKey ? (forward ? "front" : "back") : forward ? "forward" : "backward",
-          );
-          return;
-        }
-
-        return;
-      }
-
-      // Espelhar. Shift sozinho, sem Ctrl: Ctrl+V já é colar.
-      if (event.shiftKey && (key === "h" || key === "v")) {
-        event.preventDefault();
-        flipSelection(key === "h" ? "x" : "y");
-        return;
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        // Backspace navega para trás no browser se não for barrado.
-        event.preventDefault();
-
-        const selection = useSelectionStore.getState();
-
-        if (selection.selectedFogId) {
-          removeFogSelection();
-        } else if (selection.selectedPortraitIds.length > 0) {
-          removePortraitSelection();
-        } else {
-          removeSelection();
-        }
-        return;
-      }
-
-      const arrow = ARROW_DELTA[event.key];
-      if (arrow) {
-        event.preventDefault();
-        const step = event.shiftKey ? NUDGE_FAST : NUDGE;
-        nudgeSelection(arrow.x * step, arrow.y * step);
-      }
+      atalho.executar(event);
     };
 
     window.addEventListener("keydown", handleKeyDown);
