@@ -60,7 +60,57 @@ export type Manifesto = {
   principal: string | null;
   /** As fontes de retrato ao vivo que ela ensina. Ver `FonteRetrato`. */
   retratos: FonteRetrato[];
+  /** O que ela acrescenta à interface. Ver `Contribuicoes`. */
+  contribui: Contribuicoes;
 };
+
+/**
+ * O que uma extensão acrescenta à interface, DECLARADO.
+ *
+ * Declarado e não descoberto executando o módulo, e a diferença compra duas
+ * coisas: a tela de Plugins lista o que cada extensão faz sem rodar uma linha
+ * do código dela, e o módulo só precisa ser importado quando alguém abre o
+ * painel ou dispara o comando. Dez extensões instaladas não custam dez módulos
+ * na abertura da janela.
+ *
+ * Espelho de `extensoes::Contribuicoes`, que é quem valida.
+ */
+export type Contribuicoes = {
+  paineis: PainelDeclarado[];
+  comandos: ComandoDeclarado[];
+  ferramentas: FerramentaDeclarada[];
+  camadas: CamadaDeclarada[];
+};
+
+export type PainelDeclarado = { id: string; titulo: string; subtitulo: string | null };
+
+export type ComandoDeclarado = {
+  id: string;
+  titulo: string;
+  /**
+   * Como o atalho se escreve. Não pode roubar um de fábrica, e não precisa ser
+   * conferido para isso: a tabela é consultada em ordem e os do plugin entram
+   * DEPOIS, então `Ctrl+Z` declarado por uma extensão nunca alcança o desfazer.
+   */
+  atalho: string | null;
+  grupo: string | null;
+};
+
+export type FerramentaDeclarada = { id: string; titulo: string; icone: string | null };
+
+/**
+ * Uma camada sobre o mapa. Do MESTRE, e não da mesa.
+ *
+ * Plugin só alcança o Operador nesta etapa, então o que ele desenha vive na
+ * bancada — que é o que os alfinetes e os postits já são. O dado dela sai do
+ * payload publicado pelo mesmo caminho que apaga aqueles dois.
+ */
+export type CamadaDeclarada = { id: string; titulo: string };
+
+/** A chave de uma contribuição: quem a trouxe, e qual é. */
+export function chaveContribuicao(extensaoId: string, id: string): string {
+  return `${extensaoId}/${id}`;
+}
 
 export type Extensao = Manifesto & { habilitada: boolean };
 

@@ -9,6 +9,7 @@ import {
   listarExtensoes,
   removerExtensao,
 } from "@/lib/extensoes/manifesto";
+import { descarregar } from "@/lib/extensoes/carregar";
 import { aplicarTemas } from "@/lib/extensoes/tema";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
 
@@ -93,6 +94,11 @@ export const useExtensoesStore = create<ExtensoesStore>((set, get) => ({
 
     set({ ocupada: true, erro: null });
 
+    // Desfaz ANTES de apagar do disco: o que a extensão registrou continua na
+    // interface até alguém desfazer, e um painel de plugin que já não existe no
+    // disco é pior que um erro -- ele parece funcionar.
+    descarregar(id);
+
     try {
       await removerExtensao(id);
       await get().carregar();
@@ -108,6 +114,11 @@ export const useExtensoesStore = create<ExtensoesStore>((set, get) => ({
     // responder ao dedo, e o que ele liga é um `<link>` que já está no disco.
     // Os outros dois mexem em arquivo e podem demorar o que o disco demorar.
     const antes = get().extensoes;
+
+    // Desligar solta o módulo. Religar NÃO o carrega de volta aqui: quem o
+    // importa é o painel ou o comando ao ser usado, e é o que mantém a
+    // ativação preguiçosa valendo depois do primeiro ciclo.
+    if (!habilitada) descarregar(id);
 
     set({
       extensoes: antes.map((extensao) =>
