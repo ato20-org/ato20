@@ -42,6 +42,21 @@ pub struct Personagem {
     /// acervo e a tela. Ver `character-slots` no lado TypeScript.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retrato: Option<String>,
+    /// O retrato AO VIVO, por URL de uma pagina externa.
+    ///
+    /// Convive com `retrato` em vez de substitui-lo, e a convivencia e o ponto:
+    /// a pagina viva depende de internet, e a imagem do acervo nao. Quem tem as
+    /// duas mostra a pagina quando ela carrega.
+    ///
+    /// O valor e a URL INTEIRA, e nao um par fonte-mais-codigo. Quem sabe montar
+    /// a URL de um servico e a extensao que declara a fonte, e ela roda na tela
+    /// -- guardar o par aqui obrigaria o vault a conhecer as extensoes para
+    /// remontar a URL, e uma extensao desinstalada deixaria retrato ilegivel.
+    ///
+    /// NAO e validada aqui, pelo mesmo motivo que o `retrato` nao e: ver
+    /// `set_campo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrato_url: Option<String>,
     /// A miniatura, por id do ACERVO. Mesma razao do retrato.
     ///
     /// Uma, e nao uma lista: o campo responde "qual e a peca deste personagem
@@ -158,6 +173,7 @@ pub fn create(vault: &Vault, nome: &str) -> AppResult<Personagem> {
         nome: if nome.is_empty() { "Sem nome".to_string() } else { nome.to_string() },
         ficha: None,
         retrato: None,
+        retrato_url: None,
         miniatura: None,
         criado_em: now_ms(),
     };
@@ -195,6 +211,10 @@ pub enum Campo {
     Ficha,
     Retrato,
     Miniatura,
+    /// A URL do retrato ao vivo. `lowercase` daria `retratourl`, que a tela
+    /// nao escreve -- dai o nome explicito.
+    #[serde(rename = "retratoUrl")]
+    RetratoUrl,
 }
 
 /// Preenche ou limpa um dos campos nomeados. `None` limpa.
@@ -217,6 +237,7 @@ pub fn set_campo(vault: &Vault, id: &str, campo: Campo, valor: Option<&str>) -> 
             Campo::Ficha => personagem.ficha = valor.clone(),
             Campo::Retrato => personagem.retrato = valor.clone(),
             Campo::Miniatura => personagem.miniatura = valor.clone(),
+            Campo::RetratoUrl => personagem.retrato_url = valor.clone(),
         }
     }
 

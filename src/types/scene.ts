@@ -466,6 +466,26 @@ export type Portrait = {
    * Retrato na ficha deixaria a mesa vendo a antiga.
    */
   assetId: string;
+  /**
+   * A pagina viva deste retrato, quando ha uma.
+   *
+   * Resolvida do campo `retratoUrl` da ficha pelo mesmo caminho que o
+   * `assetId` -- ver `retratosDaCena`. Viaja no payload publicado porque quem
+   * desenha o quadro e o APARELHO do espectador: a TV e o celular abrem a
+   * pagina por conta propria, e o daemon nao intermedia nada disso.
+   *
+   * Ausente e o caso comum: retrato de imagem, como sempre foi.
+   */
+  url?: string;
+  /**
+   * O canvas de projeto da pagina, em pixels. So existe com `url`.
+   *
+   * Viaja junto porque quem sabe este numero e a EXTENSAO, e extensao so existe
+   * no Operador. Sem ele, a TV teria de adivinhar em que tamanho renderizar uma
+   * pagina de layout fixo -- e adivinhar errado mostra um canto do card.
+   */
+  urlLargura?: number;
+  urlAltura?: number;
   x: number;
   y: number;
   width: number;

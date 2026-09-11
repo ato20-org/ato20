@@ -1,3 +1,4 @@
+import { canvasDaUrl, type FonteRetrato } from "@/lib/extensoes/fontes";
 import { boxBounds, unionBounds, type Bounds } from "@/lib/geometry/bounds";
 import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
 import {
@@ -142,12 +143,20 @@ export function scalePortraitGroup(
  * personagens entraram na cena, que e a que o mestre acabou de construir.
  *
  * `assetId` vem do campo Retrato do personagem, sobrescrevendo o que estiver
- * guardado -- ver `Portrait.assetId`.
+ * guardado -- ver `Portrait.assetId`. O mesmo vale para `url`, que vem do campo
+ * Retrato ao vivo e e resolvida aqui pela mesma razao: crava-la no registro
+ * guardado deixaria a mesa vendo a pagina antiga depois de o mestre trocar o
+ * link.
+ *
+ * `fontes` sao as fontes de retrato das extensoes habilitadas, e entram so para
+ * responder em que CANVAS a pagina foi desenhada. Lista vazia e estado valido --
+ * quem colou a URL a mao, sem extensao nenhuma, cai no `CANVAS_PADRAO`.
  */
 export function retratosDaCena(
   guardados: Portrait[],
   itens: ReadonlyArray<{ personagemId?: string }>,
-  personagens: ReadonlyArray<{ id: string; retrato?: string }>,
+  personagens: ReadonlyArray<{ id: string; retrato?: string; retratoUrl?: string }>,
+  fontes: FonteRetrato[] = [],
 ): Portrait[] {
   const porId = new Map(guardados.map((retrato) => [retrato.personagemId, retrato]));
   const fichas = new Map(personagens.map((personagem) => [personagem.id, personagem]));
@@ -161,16 +170,29 @@ export function retratosDaCena(
 
     vistos.add(personagemId);
 
-    // Sem ficha, o token e de um personagem apagado. Sem Retrato, nao ha o que
-    // desenhar -- o painel ainda mostra a linha, com o motivo, mas ela nao
-    // gera retrato nenhum.
-    const retratoAsset = fichas.get(personagemId)?.retrato;
-    if (!retratoAsset) continue;
+    // Sem ficha, o token e de um personagem apagado. Sem NENHUM dos dois
+    // retratos, nao ha o que desenhar -- o painel ainda mostra a linha, com o
+    // motivo, mas ela nao gera retrato nenhum.
+    const ficha = fichas.get(personagemId);
+    const retratoAsset = ficha?.retrato;
+    const url = ficha?.retratoUrl;
+    if (!retratoAsset && !url) continue;
 
     const guardado = porId.get(personagemId);
     if (!guardado) continue;
 
-    saida.push({ ...guardado, assetId: retratoAsset });
+    const canvas = url ? canvasDaUrl(url, fontes) : null;
+
+    saida.push({
+      ...guardado,
+      // Vazio e nao `undefined`: o campo e obrigatorio no tipo, e quem so tem
+      // pagina viva nao tem asset nenhum para apontar. `useAssetUrl` devolve
+      // nada para id vazio, que e o que faz a imagem de tras nao existir.
+      assetId: retratoAsset ?? "",
+      ...(url && canvas
+        ? { url, urlLargura: canvas.largura, urlAltura: canvas.altura }
+        : {}),
+    });
   }
 
   return saida;

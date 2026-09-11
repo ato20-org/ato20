@@ -27,6 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useCharacters } from "@/hooks/use-characters";
 import { useEscopoDosAssets } from "@/hooks/use-escopo-dos-assets";
 import { useFilaDeRetratos } from "@/hooks/use-fila-de-retratos";
+import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
@@ -90,7 +91,13 @@ export function OperatorShell() {
    * retratos dela já armados e posicionados, e nada disso chega à TV antes de
    * a cena subir. Ver `retratosDaCena`, que o painel usa com a outra cena.
    */
-  const portraits = retratosDaCena(guardados, liveScene?.items ?? [], personagens ?? []);
+  const fontes = useFontesDeRetrato();
+  const portraits = retratosDaCena(
+    guardados,
+    liveScene?.items ?? [],
+    personagens ?? [],
+    fontes,
+  );
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
   const medida = useReguaStore((state) => state.medida);

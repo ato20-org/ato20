@@ -40,6 +40,20 @@ export type Personagem = {
    */
   retrato?: string;
   /**
+   * O retrato AO VIVO, por URL de uma página externa.
+   *
+   * Convive com `retrato` em vez de substituí-lo, e a convivência é o ponto: a
+   * página viva depende de internet e a imagem do acervo não. Quem tem as duas
+   * mostra a página quando ela carrega.
+   *
+   * A URL INTEIRA, e não um par fonte-mais-código. Quem sabe montar a URL de um
+   * serviço é a extensão que declara a fonte — guardar o par aqui faria uma
+   * extensão desinstalada deixar o retrato ilegível.
+   *
+   * O espelho em Rust é `Personagem::retrato_url`.
+   */
+  retratoUrl?: string;
+  /**
    * A miniatura, por id do ACERVO. Mesma razão do retrato.
    *
    * Uma, e não uma lista: o campo responde "qual é a peça deste personagem no
@@ -68,8 +82,14 @@ export type AnexoPersonagem = {
   autor: AnexoAutor;
 };
 
-/** Os três campos nomeados do personagem. Todos pedem um arquivo. */
-export type CampoPersonagem = "ficha" | "retrato" | "miniatura";
+/**
+ * Os campos nomeados do personagem.
+ *
+ * Os três primeiros pedem ARQUIVO; `retratoUrl` pede texto colado. É a razão de
+ * ele não entrar na lista `CAMPOS` da ficha, que desenha um seletor de arquivo
+ * para cada linha — ver `character-window`.
+ */
+export type CampoPersonagem = "ficha" | "retrato" | "miniatura" | "retratoUrl";
 
 /** O jogador pode mexer neste anexo. */
 export function doJogador(anexo: AnexoPersonagem): boolean {

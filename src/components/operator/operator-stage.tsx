@@ -48,6 +48,7 @@ import {
   rotateGroup,
   scaleGroup,
 } from "@/lib/geometry/group";
+import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import {
   areasDeRetrato,
   portraitBox,
@@ -223,6 +224,10 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const filaAuto = usePortraitStore((state) => state.filaAuto);
   const ancorar = usePortraitStore((state) => state.ancorar);
 
+  // As fontes das extensões, para o retrato ao vivo saber em que canvas a
+  // página foi desenhada. Ver `useFontesDeRetrato`.
+  const fontes = useFontesDeRetrato();
+
   /**
    * Os retratos desta cena, com a imagem resolvida da ficha.
    *
@@ -231,7 +236,7 @@ export function OperatorStage({ scene }: { scene: Scene }) {
    * `retratosDaCena` -- o painel e o publicador usam a mesma função, cada um
    * com a sua cena.
    */
-  const portraits = retratosDaCena(guardados, scene.items, personagens ?? []);
+  const portraits = retratosDaCena(guardados, scene.items, personagens ?? [], fontes);
   // A aba aberta declara a intenção: em Retratos, o mestre está mexendo neles,
   // e ver todos de uma vez é o que torna o ajuste possível. Fora dela, o mapa
   // é o assunto e só o selecionado aparece.

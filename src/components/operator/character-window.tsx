@@ -44,6 +44,9 @@ import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
+import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
+import { fonteDaUrl, urlDaFonte } from "@/lib/extensoes/fontes";
+import { usePaginaVivaSuportada } from "@/lib/motor";
 import { MINIATURA } from "@/lib/miniatura";
 import { attachmentKind, imageMimeByName, type AttachmentKind } from "@/lib/attachments/kind";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
@@ -311,6 +314,8 @@ function Ficha({
           onAbrirImagem={abrirImagem}
         />
 
+        <RetratoAoVivo personagem={personagem} onChanged={onChanged} />
+
         {/* Os dois de novo: vincular muda quem são os donos DESTA ficha, que é
             leitura local, e muda o nome que a lista de personagens mostra
             embaixo do nome dele — outra janela. Ver `useCharacterOwners`. */}
@@ -548,6 +553,157 @@ const CAMPOS: Array<{ campo: CampoPersonagem; titulo: string; nota: string }> = 
     nota: "A peça dele no mapa. Também entra no acervo, pela mesma razão.",
   },
 ];
+
+/**
+ * O retrato ao vivo: uma página externa no lugar da imagem parada.
+ *
+ * Fora da lista `CAMPOS` porque o gesto é outro: aqueles três abrem um seletor
+ * de ARQUIVO, e este pede um texto colado. Uma linha de arquivo com um campo de
+ * texto dentro pareceria um dos três e se comportaria como nenhum.
+ *
+ * Convive com o Retrato do acervo em vez de substituí-lo. Quem tem os dois vê a
+ * página, com a imagem atrás — é o que mantém o rosto na mesa quando a internet
+ * cai no meio da sessão.
+ *
+ * O que é gravado é a URL INTEIRA, mesmo quando montada por uma fonte: o dia em
+ * que a extensão for desinstalada, o retrato continua desenhando. A fonte
+ * escolhida é reconhecida de volta pelo começo da URL — ver `fonteDaUrl`.
+ */
+function RetratoAoVivo({
+  personagem,
+  onChanged,
+}: {
+  personagem: Personagem;
+  onChanged: () => void;
+}) {
+  const fontes = useFontesDeRetrato();
+  const paginaVivaOk = usePaginaVivaSuportada();
+  const salva = personagem.retratoUrl ?? "";
+  const fonteSalva = salva ? fonteDaUrl(salva, fontes) : null;
+
+  // `URL completa` é a opção sempre presente, e o padrão de quem não tem
+  // extensão nenhuma: colar o link do serviço funciona sem plugin.
+  const [fonteId, setFonteId] = useState<string>(fonteSalva?.fonte ?? "");
+  const [texto, setTexto] = useState(() =>
+    fonteSalva ? salva.slice(fonteSalva.modelo.split("{codigo}")[0].length) : salva,
+  );
+  const [salvando, setSalvando] = useState(false);
+
+  const fonte = fontes.find((atual) => atual.fonte === fonteId) ?? null;
+  const alvo = texto.trim() ? (fonte ? urlDaFonte(fonte, texto) : texto.trim()) : null;
+  const mudou = (alvo ?? "") !== salva;
+
+  async function gravar(valor: string | null) {
+    setSalvando(true);
+
+    try {
+      await setCharacterCampo(personagem.id, "retratoUrl", valor);
+      onChanged();
+    } catch (causa) {
+      toast.error(causa instanceof Error ? causa.message : "Não deu para gravar.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <section className="space-y-2">
+      <div>
+        <h3 className="text-xs font-medium">Retrato ao vivo</h3>
+        <p className="text-muted-foreground text-[11px]">
+          Uma página que se atualiza sozinha — vida, sanidade, o que o serviço
+          mostrar. Sem internet ela não carrega, e o Retrato do acervo aparece
+          no lugar.
+        </p>
+      </div>
+
+      <div className="flex gap-1.5">
+        {/* O seletor só existe quando há o que selecionar: com nenhuma extensão
+            de fonte instalada, ele seria um menu de uma opção só. */}
+        {fontes.length > 0 ? (
+          <select
+            value={fonteId}
+            onChange={(evento) => {
+              setFonteId(evento.target.value);
+              setTexto("");
+            }}
+            aria-label="Fonte do retrato"
+            className="border-input bg-background h-8 shrink-0 rounded-md border px-2 text-xs"
+          >
+            <option value="">URL completa</option>
+            {fontes.map((atual) => (
+              <option key={atual.fonte} value={atual.fonte}>
+                {atual.rotulo}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
+        <Input
+          value={texto}
+          onChange={(evento) => setTexto(evento.target.value)}
+          placeholder={fonte ? (fonte.exemplo ?? fonte.campo) : "https://…"}
+          aria-label={fonte ? fonte.campo : "URL do retrato ao vivo"}
+          className="h-8 min-w-0 flex-1 text-xs"
+          // Enter grava: o campo tem um valor só, e pedir um clique depois de
+          // colar é um passo a mais para a coisa mais frequente aqui.
+          onKeyDown={(evento) => {
+            if (evento.key === "Enter" && mudou && alvo) void gravar(alvo);
+          }}
+        />
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 shrink-0"
+          disabled={salvando || !mudou || !alvo}
+          onClick={() => alvo && void gravar(alvo)}
+        >
+          Usar
+        </Button>
+
+        {salva ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="text-muted-foreground hover:text-destructive size-8 shrink-0"
+            aria-label="Tirar o retrato ao vivo"
+            disabled={salvando}
+            onClick={() => {
+              setTexto("");
+              setFonteId("");
+              void gravar(null);
+            }}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        ) : null}
+      </div>
+
+      {/* A URL gravada por extenso, e não só "configurado": é ela que a mesa
+          vai abrir, e conferir o link é o jeito de descobrir que se colou o do
+          personagem errado. */}
+      {salva ? (
+        <p className="text-muted-foreground truncate font-mono text-[10px]" title={salva}>
+          {salva}
+        </p>
+      ) : null}
+
+      {/* O aviso só aparece quando há URL E esta tela não desenha página viva.
+          Sem ele, o mestre veria a imagem parada na própria bancada e concluiria
+          que o link está errado -- quando ele está certo, e a mesa está vendo. */}
+      {salva && !paginaVivaOk ? (
+        <p className="text-muted-foreground text-[11px]">
+          Esta tela não desenha página viva — ela usa o motor WebKit, e é uma
+          limitação do serviço, não do link. Aqui aparece o Retrato do acervo.
+          <strong className="font-medium"> A TV e os celulares Android mostram
+          normalmente</strong>; iPhone, não, porque todo navegador de iOS é
+          WebKit.
+        </p>
+      ) : null}
+    </section>
+  );
+}
 
 function Slots({
   personagem,
