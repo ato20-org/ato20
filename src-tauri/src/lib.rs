@@ -64,6 +64,18 @@ pub fn run() {
 
             tauri::http::Response::builder()
                 .header(tauri::http::header::CONTENT_TYPE, tipo)
+                // Sem isto, o CSS de um tema carrega e o MODULO de um plugin
+                // nao. Folha de estilo nao e pedida em modo CORS; `import()` e
+                // -- e a janela do Operador vive noutra origem, que em
+                // desenvolvimento e o `localhost:3000` do Next e em release e o
+                // protocolo do Tauri. Sem o cabecalho, o modulo e recusado
+                // antes de o codigo dele existir, e o erro nao diz por que.
+                //
+                // `*` e nao a origem da janela: ela MUDA entre dev e release, e
+                // o que este protocolo serve ja e so o que esta em
+                // `extensoes/` -- decidir por origem nao acrescenta nada que a
+                // guarda de caminho nao decida melhor.
+                .header(tauri::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
                 // Sem cache, e de proposito: quem escreve uma extensao edita o
                 // `tema.css` e quer ver o resultado ao religa-la. O arquivo esta
                 // no disco local, entao reler nao custa o suficiente para pagar
@@ -180,6 +192,13 @@ pub fn run() {
             commands::character_links,
             commands::character_note,
             commands::character_set_note,
+            commands::inventory_list,
+            commands::inventory_add,
+            commands::inventory_update,
+            commands::inventory_remove,
+            commands::inventory_move,
+            commands::inventory_set_imagem,
+            commands::inventory_promote_imagem,
             commands::campaign_export_name,
             commands::campaign_export,
             commands::campaign_import,

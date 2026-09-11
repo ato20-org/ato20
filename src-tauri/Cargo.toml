@@ -85,6 +85,24 @@ image = { version = "0.25", default-features = false, features = [
   "webp",
 ] }
 
+# A miniatura sai em PALETA, e estes dois sao o que falta para isso.
+#
+# O `image` nao escreve PNG indexado: o `PngEncoder` dele aceita L8, La8, Rgb8 e
+# Rgba8, e paleta pede PLTE e tRNS escritos a mao. O `png` e o mesmo que o
+# `image` ja usa por dentro -- ver o lock --, entao isto nao traz codigo novo
+# para o binario, so o alcança daqui.
+#
+# Medido nos arquivos de uma campanha real, miniatura de 160px: RGBA de 16 a 43
+# KB contra 6,5 a 14,5 KB em paleta de 256 cores. Nivel de compressao do zlib nao
+# ajuda -- no maximo, saiu 2% maior. O que pesa e profundidade de cor.
+png = "0.18"
+# Quem escolhe as 256. NeuQuant trata o ALFA como quarta dimensao, e e isso que
+# permite trocar de RGBA para paleta sem perder o recorte: JPEG seria menor
+# ainda e poria fundo preto em todo token.
+#
+# Ja esta no lock pelo codec de GIF do `image`.
+color_quant = "1.1"
+
 uuid = { version = "1", features = ["v4"] }
 
 # Token de jogador. `getrandom` e o CSPRNG do sistema, e nao um gerador

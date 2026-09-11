@@ -90,6 +90,91 @@ pub struct Manifesto {
     /// As fontes de retrato ao vivo que esta extensao ensina. Ver `FonteRetrato`.
     #[serde(default)]
     pub retratos: Vec<FonteRetrato>,
+    /// O que ela acrescenta a interface. Ver `Contribuicoes`.
+    #[serde(default)]
+    pub contribui: Contribuicoes,
+}
+
+/// O que uma extensao acrescenta a interface, DECLARADO.
+///
+/// Declarado e nao descoberto executando o modulo, e a diferenca compra duas
+/// coisas. A tela de Plugins lista o que cada extensao faz sem rodar uma linha
+/// do codigo dela -- que e exatamente a informacao que alguem quer ANTES de
+/// habilitar um plugin de estranho. E o modulo so precisa ser importado quando
+/// alguem abre o painel ou dispara o comando: dez extensoes instaladas nao
+/// custam dez modulos na abertura da janela, que e onde o mestre esta esperando
+/// a mesa abrir.
+///
+/// E o modelo do VSCode, e a razao dele e a mesma: uma extensao que declara o
+/// que faz pode ser listada, pesquisada e carregada tarde. Uma que so descobre
+/// isso rodando obriga o app a rodar todas para saber o que existe.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Contribuicoes {
+    /// Telas que se atracam no dock, como as de fabrica.
+    #[serde(default)]
+    pub paineis: Vec<Painel>,
+    /// Acoes, alcancaveis por tecla e por menu.
+    #[serde(default)]
+    pub comandos: Vec<Comando>,
+    /// Modos do palco, como o lapis e o postit.
+    #[serde(default)]
+    pub ferramentas: Vec<Ferramenta>,
+    /// Camadas sobre o mapa. Do MESTRE -- ver a nota em `Camada`.
+    #[serde(default)]
+    pub camadas: Vec<Camada>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Painel {
+    pub id: String,
+    pub titulo: String,
+    /// A linha de baixo na aba, quando ha.
+    #[serde(default)]
+    pub subtitulo: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Comando {
+    pub id: String,
+    pub titulo: String,
+    /// Como o atalho se escreve -- "Ctrl+Shift+F". Opcional.
+    ///
+    /// NAO pode roubar um atalho de fabrica, e nao precisa ser conferido aqui
+    /// para isso: a tabela do Operador e consultada em ordem, e os do plugin
+    /// entram DEPOIS. Quem casa primeiro executa, entao `Ctrl+Z` declarado por
+    /// uma extensao nunca alcanca o desfazer.
+    #[serde(default)]
+    pub atalho: Option<String>,
+    /// Sob que titulo ele aparece na lista de Configuracoes.
+    #[serde(default)]
+    pub grupo: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ferramenta {
+    pub id: String,
+    pub titulo: String,
+    /// Arquivo de icone dentro da pasta da extensao.
+    #[serde(default)]
+    pub icone: Option<String>,
+}
+
+/// Uma camada que a extensao desenha sobre o mapa.
+///
+/// Do MESTRE, e nao da mesa. Plugin so alcanca o Operador nesta etapa, entao o
+/// que ele desenha vive na bancada -- que e exatamente o que os alfinetes e os
+/// postits ja sao. O dado dela entra em `scene.extensoes` e sai do payload
+/// publicado pelo mesmo caminho que apaga aqueles dois, o que a faz nascer
+/// sigilosa por construcao em vez de por lembranca.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Camada {
+    pub id: String,
+    pub titulo: String,
 }
 
 /// Uma fonte de retrato ao vivo: como montar a URL de um servico, e em que
@@ -194,7 +279,101 @@ pub fn ler_manifesto(pasta: &Path) -> AppResult<Manifesto> {
         validar_fonte(fonte)?;
     }
 
+    validar_contribuicoes(&manifesto)?;
+
     Ok(manifesto)
+}
+
+/// O que a extensao declara acrescentar faz sentido?
+///
+/// Recusa na IMPORTACAO pela mesma razao das fontes: com a mesa montada, uma
+/// aba que abre vazia ou um atalho que nao faz nada custam a sessao. Aqui o
+/// dialogo de escolher pasta ainda esta na cabeca de quem clicou.
+fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
+    let c = &manifesto.contribui;
+
+    let declarou_algo = !c.paineis.is_empty()
+        || !c.comandos.is_empty()
+        || !c.ferramentas.is_empty()
+        || !c.camadas.is_empty();
+
+    // Quem implementa contribuicao e o modulo. Declarar sem `principal` daria
+    // uma aba na lista de telas que abre vazia, e um comando no menu que nao
+    // faz nada -- e a causa estaria num arquivo que nao existe.
+    if declarou_algo && manifesto.principal.is_none() {
+        return Err(AppError::ExtensaoInvalida(
+            "a extensao declara contribuicoes mas nao tem `principal`; nada as implementaria"
+                .to_string(),
+        ));
+    }
+
+    let grupos: [(&str, Vec<(&String, &String)>); 4] = [
+        (
+            "paineis",
+            c.paineis.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "comandos",
+            c.comandos.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "ferramentas",
+            c.ferramentas.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "camadas",
+            c.camadas.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+    ];
+
+    for (nome, itens) in grupos {
+        let mut vistos: Vec<&str> = Vec::new();
+
+        for (id, titulo) in itens {
+            // Mesma forma do id de extensao, e pelo mesmo motivo: este id entra
+            // em chave de janela e em id de ferramenta, que viram texto em
+            // lugares que nao esperam barra nem espaco.
+            if !id_valido(id) {
+                return Err(AppError::ExtensaoInvalida(format!(
+                    "o id {id:?} em `{nome}` nao serve: so minusculas, digitos e hifen"
+                )));
+            }
+
+            // Titulo vazio daria uma aba sem nome, impossivel de achar de novo.
+            if titulo.trim().is_empty() {
+                return Err(AppError::ExtensaoInvalida(format!(
+                    "a contribuicao {id:?} em `{nome}` esta sem titulo"
+                )));
+            }
+
+            // Repetido dentro do MESMO grupo e ambiguidade de verdade: duas
+            // telas com o mesmo id disputariam a mesma chave de janela. Entre
+            // grupos nao ha conflito -- um painel e uma ferramenta chamados
+            // `notas` sao coisas diferentes.
+            if vistos.contains(&id.as_str()) {
+                return Err(AppError::ExtensaoInvalida(format!(
+                    "o id {id:?} aparece duas vezes em `{nome}`"
+                )));
+            }
+
+            vistos.push(id);
+        }
+    }
+
+    // Icone de ferramenta e caminho dentro da pasta, e vale a mesma guarda do
+    // `tema` e do `principal`.
+    for ferramenta in &c.ferramentas {
+        if let Some(icone) = &ferramenta.icone {
+            if !caminho_relativo_seguro(icone) {
+                return Err(AppError::ExtensaoInvalida(format!(
+                    "o icone de {:?} ({icone:?}) sai da pasta da extensao",
+                    ferramenta.id
+                )));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Uma fonte de retrato serve?
@@ -604,6 +783,142 @@ mod tests {
 
         assert!(matches!(
             ler(base.path(), &com_fonte("fonte", "../escapa")).unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    /// Um manifesto com `contribui`, e o pedaco que se quer quebrar.
+    fn com_contrib(corpo: &str) -> String {
+        format!(
+            r#"{{"id":"plug","nome":"Plug","versao":"1.0.0","apiVersao":1,"principal":"main.js","contribui":{corpo}}}"#
+        )
+    }
+
+    #[test]
+    fn contribuicoes_entram_inteiras() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_contrib(
+                r#"{"paineis":[{"id":"tabela","titulo":"Tabela"}],
+                    "comandos":[{"id":"rolar","titulo":"Rolar","atalho":"Ctrl+Shift+F"}],
+                    "ferramentas":[{"id":"pincel","titulo":"Pincel"}],
+                    "camadas":[{"id":"grade","titulo":"Grade"}]}"#,
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(m.contribui.paineis[0].id, "tabela");
+        assert_eq!(m.contribui.comandos[0].atalho.as_deref(), Some("Ctrl+Shift+F"));
+        assert_eq!(m.contribui.ferramentas[0].titulo, "Pincel");
+        assert_eq!(m.contribui.camadas.len(), 1);
+    }
+
+    #[test]
+    fn extensao_sem_contribuicoes_continua_valida() {
+        let base = tempfile::tempdir().unwrap();
+        // O campo e `default`: um tema nao escreve `"contribui": {}` para ser lido.
+        let m = ler(
+            base.path(),
+            r#"{"id":"plug","nome":"So tema","versao":"1.0.0","apiVersao":1,"tema":"tema.css"}"#,
+        )
+        .unwrap();
+
+        assert!(m.contribui.paineis.is_empty());
+        assert!(m.contribui.comandos.is_empty());
+    }
+
+    #[test]
+    fn declarar_sem_principal_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+        let pasta = base.path().join("plug");
+        // Sem `principal`, a aba abriria vazia e o comando nao faria nada -- e a
+        // causa estaria num arquivo que nao existe.
+        escrever(
+            &pasta,
+            MANIFESTO,
+            r#"{"id":"plug","nome":"Plug","versao":"1.0.0","apiVersao":1,
+                "contribui":{"paineis":[{"id":"tabela","titulo":"Tabela"}]}}"#,
+        );
+
+        assert!(matches!(
+            ler_manifesto(&pasta).unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    #[test]
+    fn id_repetido_no_mesmo_grupo_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        // Duas telas com o mesmo id disputariam a mesma chave de janela.
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_contrib(
+                    r#"{"paineis":[{"id":"t","titulo":"A"},{"id":"t","titulo":"B"}]}"#
+                )
+            )
+            .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    #[test]
+    fn o_mesmo_id_em_grupos_diferentes_e_permitido() {
+        let base = tempfile::tempdir().unwrap();
+
+        // Um painel e uma ferramenta chamados `notas` sao coisas diferentes.
+        let m = ler(
+            base.path(),
+            &com_contrib(
+                r#"{"paineis":[{"id":"notas","titulo":"Notas"}],
+                    "ferramentas":[{"id":"notas","titulo":"Notas"}]}"#,
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(m.contribui.paineis[0].id, m.contribui.ferramentas[0].id);
+    }
+
+    #[test]
+    fn contribuicao_sem_titulo_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+
+        // Aba sem nome e impossivel de achar de novo.
+        assert!(matches!(
+            ler(base.path(), &com_contrib(r#"{"paineis":[{"id":"t","titulo":"  "}]}"#))
+                .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    #[test]
+    fn id_de_contribuicao_segue_a_regra_do_slug() {
+        let base = tempfile::tempdir().unwrap();
+
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_contrib(r#"{"comandos":[{"id":"../fuga","titulo":"Fuga"}]}"#)
+            )
+            .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    #[test]
+    fn icone_de_ferramenta_nao_sai_da_pasta() {
+        let base = tempfile::tempdir().unwrap();
+
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_contrib(
+                    r#"{"ferramentas":[{"id":"p","titulo":"P","icone":"../../etc/passwd"}]}"#
+                )
+            )
+            .unwrap_err(),
             AppError::ExtensaoInvalida(_)
         ));
     }

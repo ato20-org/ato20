@@ -7,12 +7,12 @@ use axum::extract::{
     ConnectInfo, DefaultBodyLimit, Multipart, Path as AxumPath, Query, Request as AxumRequest,
     State,
 };
-use axum::http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE};
-use axum::http::{Request, StatusCode, Uri};
+use axum::http::header::{ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE};
+use axum::http::{HeaderValue, Request, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post, put};
 use axum::Router;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
@@ -26,7 +26,7 @@ mod page;
 
 use crate::error::AppResult;
 use crate::estante;
-use crate::vault::{assets, characters, players, variantes, Vault};
+use crate::vault::{assets, characters, inventory, players, variantes, Vault};
 use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
@@ -84,6 +84,15 @@ const TOKEN_HEADER: &str = "x-ato20-token";
 /// velha na TV e pior que cena que saltou.
 const LIVE_BUFFER: usize = 8;
 
+/// Quantas rolagens o canal guarda para quem esta lendo devagar.
+///
+/// Maior que o do estado, e pelo motivo oposto. Estado atrasado se joga fora --
+/// o que vale e o atual. Rolagem nao: cada uma e um evento que aconteceu uma
+/// vez, e pular a de alguem apagaria da mesa um dado que a pessoa viu cair no
+/// proprio celular. Trinta e dois cobre a mesa inteira rolando iniciativa junta
+/// com a janela do mestre ocupada por um instante.
+const ROLAGENS_BUFFER: usize = 32;
+
 pub struct Daemon {
     vault: SharedVault,
     token: String,
@@ -96,6 +105,17 @@ pub struct Daemon {
     /// e esperar o Operador ouvir, o daemon ja tem a resposta na conexao.
     live: Mutex<Option<String>>,
     live_tx: broadcast::Sender<String>,
+    /// As rolagens dos jogadores, a caminho da janela do mestre.
+    ///
+    /// Canal SEPARADO do `live`, e sem par guardado como o `live: Mutex`. Sao
+    /// duas naturezas diferentes: o `live` e ESTADO -- tem um valor atual, e
+    /// quem chega no meio da sessao quer ve-lo na hora. Rolagem e EVENTO --
+    /// aconteceu num instante, e reentregar a quem chegou depois poria na mesa
+    /// um dado de dez minutos atras.
+    ///
+    /// O daemon nao acumula bandeja: quem guarda os dados na tela, e por quanto
+    /// tempo, e o Operador. Aqui e so o cano.
+    rolagens_tx: broadcast::Sender<String>,
     /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
     evidence: SharedEvidence,
     /// Onde estao os livros de regras desta maquina.
@@ -126,6 +146,7 @@ impl Daemon {
         estante: PathBuf,
     ) -> Self {
         let (live_tx, _) = broadcast::channel(LIVE_BUFFER);
+        let (rolagens_tx, _) = broadcast::channel(ROLAGENS_BUFFER);
 
         Self {
             vault,
@@ -133,6 +154,7 @@ impl Daemon {
             web_root,
             live: Mutex::new(None),
             live_tx,
+            rolagens_tx,
             evidence: Arc::new(RwLock::new(None)),
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
@@ -295,6 +317,7 @@ pub fn router(state: Arc<Daemon>) -> Router {
         .route("/sala", get(check))
         .route("/sala/entrar", post(join_table))
         .route("/sala/live", get(live))
+        .route("/sala/rolagens", get(rolls))
         .nest("/eu", player_routes(Arc::clone(&state)))
         .route(
             "/sala/publicar",
@@ -356,6 +379,7 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             ),
         )
         .route("/anexos/{arquivo}", get(read_attachment).delete(remove_attachment))
+        .route("/rolagens", post(roll))
         // Personagens: so os VINCULADOS a este jogador. Token valido nao basta,
         // e cada rota confere -- ver `ligado`.
         .route("/personagens", get(my_characters))
@@ -372,7 +396,26 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             "/personagens/{id}/anexos/{autor}/{arquivo}",
             get(read_character_file).delete(remove_character_file),
         )
+        .route(
+            "/personagens/{id}/anexos/{autor}/{arquivo}/{variante}",
+            get(read_character_file_variante),
+        )
         .route("/personagens/{id}/nota", get(read_character_note).put(write_character_note))
+        .route(
+            "/personagens/{id}/inventario",
+            get(character_inventory).post(add_inventory_item),
+        )
+        .route(
+            "/personagens/{id}/inventario/{itemId}",
+            patch(update_inventory_item).delete(remove_inventory_item),
+        )
+        .route(
+            "/personagens/{id}/inventario/{itemId}/imagem",
+            // Desligado pelo mesmo motivo de `/anexos`: quem conta os bytes e o
+            // handler, e o padrao de 2 MB do axum cortava o stream antes do
+            // teto, entregando ao cliente um "load failed" sem causa.
+            put(set_inventory_image).layer(DefaultBodyLimit::disable()),
+        )
         .layer(middleware::from_fn_with_state(state, require_player))
 }
 
@@ -579,6 +622,153 @@ async fn live(
     .keep_alive(KeepAlive::default()))
 }
 
+// --- os dados da mesa -------------------------------------------------------
+
+/// O que o celular pede: um dado, e so.
+#[derive(Debug, Deserialize)]
+pub struct RollBody {
+    faces: u32,
+}
+
+/// Uma rolagem de jogador, como ela viaja.
+///
+/// Leva o NOME junto com o id, e nao so o id. O id e o que a janela do mestre
+/// usa para achar o personagem e pendurar o dado no retrato certo; o nome e o
+/// que ela desenha enquanto esse vinculo nao existe -- jogador sem personagem
+/// vinculado tambem rola dado, e o mestre precisa saber de quem foi.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rolagem {
+    id: String,
+    jogador_id: String,
+    jogador: String,
+    faces: u32,
+    /// O numero GRAVADO na face, como no lado da janela.
+    ///
+    /// O d10 sai entre zero e nove, e nao entre um e dez: e o que esta gravado
+    /// nele de verdade, e a traducao para o valor que a mesa soma mora em
+    /// `valorDaRolagem`, num lugar so. Ver `types/dado.ts`.
+    valor: u32,
+    quando: i64,
+}
+
+/// Os solidos que existem. Recusar o resto e o que impede um `faces: 1000000`
+/// vindo de um celular de virar um dado que nenhuma tela sabe desenhar.
+const FACES_VALIDAS: [u32; 6] = [20, 12, 10, 8, 6, 4];
+
+/// `POST /eu/rolagens` -- o jogador joga um dado na mesa.
+///
+/// Quem sorteia e o DAEMON, e nao o celular. O celular ate poderia: ele tem
+/// `crypto.getRandomValues` e a mesma funcao ja roda ali para o dado do mestre.
+/// Mas um numero sorteado no aparelho de quem se beneficia dele e um numero que
+/// um cliente modificado crava em vinte, e dado e justamente a coisa que a mesa
+/// mais quer poder acusar de ser viciada. Sorteado aqui, a resposta e "sai da
+/// maquina do mestre" -- e o celular so ANIMA ate a face que voltou.
+///
+/// A rota vive sob `require_player`, entao o token ja foi conferido e o jogador
+/// chega resolvido: ninguem rola em nome de outro, e quem so digitou o codigo
+/// da mesa ve os dados cairem sem poder jogar nenhum.
+async fn roll(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    axum::Json(body): axum::Json<RollBody>,
+) -> Response {
+    if !FACES_VALIDAS.contains(&body.faces) {
+        return fail(StatusCode::BAD_REQUEST, "este dado nao existe");
+    }
+
+    let Some(valor) = sortear_face(body.faces) else {
+        // Sem aleatoriedade do sistema nao se rola dado. Devolver um numero
+        // qualquer seria pior que recusar: a mesa nao saberia que o dado
+        // parou de ser dado.
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "sem fonte de aleatoriedade");
+    };
+
+    let rolagem = Rolagem {
+        id: uuid::Uuid::new_v4().to_string(),
+        jogador_id: player.id,
+        jogador: player.nome,
+        faces: body.faces,
+        valor,
+        quando: crate::vault::now_ms(),
+    };
+
+    let corpo = match serde_json::to_string(&rolagem) {
+        Ok(corpo) => corpo,
+        Err(cause) => {
+            log::error!("rolagem: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao anunciar a rolagem");
+        }
+    };
+
+    // `send` falha quando nao ha receptor: a janela do mestre esta fechada. Nao
+    // e erro para o celular -- o dado dele cai na mao dele do mesmo jeito, e o
+    // que se perde e a mesa ver. A tela do jogador ja distingue mesa muda, pelo
+    // `stalled` da assinatura.
+    let _ = state.rolagens_tx.send(corpo);
+
+    (StatusCode::CREATED, axum::Json(rolagem)).into_response()
+}
+
+/// `GET /sala/rolagens` -- o fluxo de rolagens, para a janela do mestre.
+///
+/// Restrito a LOOPBACK, como `/sala/publicar`, e sem codigo de mesa: quem
+/// escuta aqui e o Operador, que roda nesta maquina. A TV e os celulares nao
+/// precisam desta rota -- o que eles veem sai do estado publicado, depois de o
+/// mestre resolver de qual personagem e cada dado. Abrir este fluxo para a rede
+/// seria dar a qualquer aparelho do Wi-Fi as rolagens cruas, antes de a mesa
+/// decidir o que fazer com elas.
+///
+/// Sem replay do que passou, ao contrario de `/sala/live`: rolagem e evento.
+/// Uma janela que reabre nao quer receber de novo os dados que ja cairam.
+async fn rolls(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
+    if !addr.ip().is_loopback() {
+        return Err(fail(StatusCode::FORBIDDEN, "as rolagens sao desta maquina"));
+    }
+
+    let receiver = state.rolagens_tx.subscribe();
+
+    let updates = tokio_stream::wrappers::BroadcastStream::new(receiver).filter_map(|item| {
+        // Receptor lento que perdeu amostras: nao ha o que recuperar, e seguir
+        // e melhor que derrubar o fluxo. Ver `ROLAGENS_BUFFER`.
+        item.ok()
+    });
+
+    Ok(Sse::new(updates.map(|rolagem| Ok(Event::default().data(rolagem))))
+        .keep_alive(KeepAlive::default()))
+}
+
+/// Sorteia a face, sem vies, entre os numeros GRAVADOS no dado.
+///
+/// O laco descarta o resto da faixa em vez de tirar modulo direto, como o
+/// `sortearValor` do lado da janela: `2^32` nao e multiplo de 20 nem de 12 nem
+/// de 10, e o modulo puro faria os primeiros valores sairem um tiquinho mais
+/// que os ultimos. Invisivel numa sessao, e exatamente o tipo de defeito que
+/// nao se quer ter de defender quando alguem reclamar do dado.
+///
+/// `None` quando o sistema nao tem aleatoriedade a dar. Quem chama recusa a
+/// rolagem; nao ha atalho aceitavel aqui.
+fn sortear_face(faces: u32) -> Option<u32> {
+    let limite = (u32::MAX / faces) * faces;
+
+    let mut bytes = [0u8; 4];
+    let bruto = loop {
+        getrandom::fill(&mut bytes).ok()?;
+        let bruto = u32::from_le_bytes(bytes);
+        if bruto < limite {
+            break bruto;
+        }
+    };
+
+    // O d10 e gravado de zero a nove; todo o resto comeca em um.
+    let inicio = if faces == 10 { 0 } else { 1 };
+
+    Some(inicio + bruto % faces)
+}
+
 // --- a ficha do jogador -----------------------------------------------------
 
 #[derive(Debug, Deserialize)]
@@ -783,22 +973,139 @@ async fn read_character_file(
         Err(response) => return response,
     };
 
-    let autor = match autor.as_str() {
-        "mestre" => characters::Autor::Mestre,
-        "jogador" => characters::Autor::Jogador,
-        _ => return fail(StatusCode::NOT_FOUND, "anexo nao encontrado"),
+    let Some(autor) = autor_de(&autor) else {
+        return fail(StatusCode::NOT_FOUND, "anexo nao encontrado");
     };
 
-    // Le pelo modulo, que sanea o nome na LEITURA tambem: e o que impede
-    // `../../config.json` de virar caminho por aqui.
-    let bytes = match characters::read_anexo(&vault, &id, autor, &arquivo) {
+    anexo_original(&vault, &id, autor, &arquivo)
+}
+
+/// O autor pelo segmento da rota.
+///
+/// Segmento desconhecido e 404 e nao 400: `autor` faz parte do CAMINHO do
+/// arquivo -- ver `characters::Autor` --, entao "jogadr" nomeia um anexo que
+/// nao existe, nao um pedido malformado.
+fn autor_de(autor: &str) -> Option<characters::Autor> {
+    match autor {
+        "mestre" => Some(characters::Autor::Mestre),
+        "jogador" => Some(characters::Autor::Jogador),
+        _ => None,
+    }
+}
+
+/// O anexo inteiro, como ele esta no disco.
+///
+/// Le pelo modulo, que sanea o nome na LEITURA tambem: e o que impede
+/// `../../config.json` de virar caminho por aqui.
+fn anexo_original(vault: &Vault, id: &str, autor: characters::Autor, arquivo: &str) -> Response {
+    let bytes = match characters::read_anexo(vault, id, autor, arquivo) {
         Ok(bytes) => bytes,
         Err(_) => return fail(StatusCode::NOT_FOUND, "anexo nao encontrado"),
     };
 
-    let mime_type = characters::mime_do_anexo(&arquivo);
+    let mime_type = characters::mime_do_anexo(arquivo);
 
     ([(axum::http::header::CONTENT_TYPE, mime_type)], bytes).into_response()
+}
+
+/// `GET /eu/personagens/{id}/anexos/{autor}/{arquivo}/{variante}` -- `mini` ou `tela`.
+///
+/// A reducao do acervo, aplicada ao anexo do personagem, e existe pelo mesmo
+/// motivo que `/asset/{id}/mini`: a tela do jogador desenha quadrados de 80px,
+/// e apontar cada um para o arquivo inteiro faz um print de ficha de 6 MB
+/// atravessar o 4G para virar um polegar.
+///
+/// Atras do token, ao contrario da irma do acervo, e a diferenca nao e
+/// esquecimento: anexo de personagem nao tem rota publica -- ver
+/// `Personagem::retrato`, que e asset justamente porque a TV precisa alcanca-lo
+/// sem credencial. Abrir uma rota publica para a reducao entregaria o conteudo
+/// da ficha a quem adivinhasse o nome, que e o que o token evita. Quem pede
+/// aqui e um `fetch` com cabecalho, que vira blob na tela.
+///
+/// Toda falha cai no arquivo ORIGINAL, como no acervo: PDF nao tem reducao, um
+/// `.png` que na verdade nao e PNG existe, e disco cheio nao pode esconder a
+/// ficha de quem esta jogando. O preco de cair e o comportamento de antes desta
+/// rota -- servir o arquivo inteiro.
+async fn read_character_file_variante(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, autor, arquivo, variante)): AxumPath<(String, String, String, String)>,
+    request: Request<Body>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let Some(autor) = autor_de(&autor) else {
+        return fail(StatusCode::NOT_FOUND, "anexo nao encontrado");
+    };
+
+    let Some(variante) = variantes::Variante::de_nome(&variante) else {
+        return fail(StatusCode::NOT_FOUND, "variante desconhecida");
+    };
+
+    let origem = characters::anexo_caminho(&vault, &id, autor, &arquivo);
+    let chave = characters::anexo_chave(&id, autor, &arquivo);
+
+    // Pelo tipo declarado, e antes de tentar: mandar um PDF ao decodificador de
+    // imagem uma vez por requisicao gastaria disco e um `spawn_blocking` para
+    // chegar sempre ao mesmo erro.
+    let reduzivel = characters::mime_do_anexo(&arquivo).starts_with("image/");
+
+    let caminho = if !reduzivel {
+        None
+    } else if let Some(pronta) = variantes::pronta(&vault, variante, &chave, &origem) {
+        // Caminho quente, e sem tomar o semaforo: depois da primeira vez isto e
+        // um `stat` e um `ServeFile` de alguns KB.
+        Some(pronta)
+    } else {
+        // `spawn_blocking` porque decodificar imagem e CPU, e segurar a thread
+        // do tokio aqui pararia o SSE da cena -- a TV congelaria porque um
+        // jogador abriu a propria ficha.
+        let _vez = state.mini_gate.acquire().await;
+
+        let (destino, nome) = (vault.clone(), arquivo.clone());
+
+        match tokio::task::spawn_blocking(move || {
+            variantes::ensure_arquivo(&destino, variante, &origem, &chave, &nome)
+        })
+        .await
+        {
+            Ok(Ok(caminho)) => Some(caminho),
+            Ok(Err(cause)) => {
+                log::warn!(
+                    "{} de {arquivo} nao saiu, servindo o original: {cause}",
+                    variante.nome()
+                );
+                None
+            }
+            Err(cause) => {
+                log::warn!("{} de {arquivo} morreu na thread: {cause}", variante.nome());
+                None
+            }
+        }
+    };
+
+    let Some(caminho) = caminho else {
+        return anexo_original(&vault, &id, autor, &arquivo);
+    };
+
+    // O tipo sai da VARIANTE e nao do anexo: a miniatura e sempre PNG e a de
+    // tela e sempre JPEG, independente do que o mestre anexou.
+    let mime_type = if variante == variantes::Variante::Mini {
+        mime::IMAGE_PNG
+    } else {
+        mime::IMAGE_JPEG
+    };
+
+    match ServeFile::new_with_mime(&caminho, &mime_type).oneshot(request).await {
+        Ok(response) => response.into_response(),
+        Err(cause) => {
+            log::error!("{} de {arquivo} em {}: {cause}", variante.nome(), caminho.display());
+            anexo_original(&vault, &id, autor, &arquivo)
+        }
+    }
 }
 
 /// `POST /eu/personagens/{id}/anexos` -- multipart, campo `file`.
@@ -922,6 +1229,173 @@ async fn write_character_note(
             log::error!("nota de {} sobre {id}: {cause}", player.id);
             fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar a nota")
         }
+    }
+}
+
+// --- inventario do jogador --------------------------------------------------
+
+/// Traduz a recusa do inventario em resposta.
+///
+/// `Malformed` cobre os tres "nao": nao existe, nao e seu, passou do limite.
+/// Todos viram 409, e nao 500: e pedido invalido, nao falha do servidor, e o
+/// texto de `cause` e escrito para ser lido no celular. As demais viram 500 com
+/// mensagem generica -- o que quebrou no disco nao e da conta de quem pediu.
+fn recusa(cause: crate::error::AppError, o_que: &str) -> Response {
+    match cause {
+        crate::error::AppError::Malformed { cause, .. } => {
+            (StatusCode::CONFLICT, cause).into_response()
+        }
+        outra => {
+            log::error!("{o_que}: {outra}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha no inventario")
+        }
+    }
+}
+
+/// `GET /eu/personagens/{id}/inventario`
+///
+/// Filtrado AQUI, e nao na tela: o item escondido que chega ao celular e some
+/// no React ja vazou -- esta no JSON que o navegador guardou, e a aba de rede
+/// do celular o mostra. Ver `inventory::visiveis`.
+async fn character_inventory(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match inventory::load(&vault, &id) {
+        Ok(itens) => {
+            axum::Json(inventory::visiveis(itens, characters::Autor::Jogador)).into_response()
+        }
+        Err(cause) => {
+            log::error!("inventario de {id}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o inventario")
+        }
+    }
+}
+
+/// `POST /eu/personagens/{id}/inventario`
+///
+/// Entra sempre como `Autor::Jogador`, e isso nao e campo do corpo: o autor sai
+/// de QUEM esta chamando. Aceita-lo faria o celular criar item que o mestre nao
+/// distinguiria dos dele. O `escondido` do corpo e ignorado pelo mesmo motivo,
+/// dentro de `inventory::add`.
+async fn add_inventory_item(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+    axum::Json(novo): axum::Json<inventory::Novo>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match inventory::add(&vault, &id, characters::Autor::Jogador, novo) {
+        Ok(item) => (StatusCode::CREATED, axum::Json(item)).into_response(),
+        Err(cause) => recusa(cause, &format!("item novo em {id}")),
+    }
+}
+
+/// `PATCH /eu/personagens/{id}/inventario/{itemId}`
+///
+/// So o que o proprio jogador criou -- `inventory::update` recusa o resto, e a
+/// recusa vira 409. A tela nao deveria nem oferecer o botao nesse caso, e a
+/// checagem existe porque a tela nao e onde uma permissao se decide.
+async fn update_inventory_item(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, item_id)): AxumPath<(String, String)>,
+    axum::Json(patch): axum::Json<inventory::Patch>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match inventory::update(&vault, &id, &item_id, patch, characters::Autor::Jogador) {
+        Ok(item) => axum::Json(item).into_response(),
+        Err(cause) => recusa(cause, &format!("item {item_id} de {id}")),
+    }
+}
+
+/// `DELETE /eu/personagens/{id}/inventario/{itemId}`
+async fn remove_inventory_item(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, item_id)): AxumPath<(String, String)>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match inventory::remove(&vault, &id, &item_id, characters::Autor::Jogador) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(cause) => recusa(cause, &format!("item {item_id} de {id}")),
+    }
+}
+
+/// `PUT /eu/personagens/{id}/inventario/{itemId}/imagem` -- multipart, campo `file`.
+///
+/// A imagem do item do jogador vira ANEXO, e nao asset: o acervo e do mestre, e
+/// abri-lo a uma entrada que vem de um celular na rede faria a biblioteca da
+/// campanha crescer com o que qualquer um subir. Como anexo ela ganha de graca
+/// o nome saneado, o teto de 64 MB e a rota `/mini` que ja existem -- e chega a
+/// mesa, quando o mestre quiser, por `character_attachment_share`.
+///
+/// O item e conferido ANTES do upload, e a razao e nao gravar 60 MB para
+/// descobrir depois que o item e do mestre: `set_imagem_anexo` recusaria, e o
+/// arquivo ja estaria no disco.
+async fn set_inventory_image(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, item_id)): AxumPath<(String, String)>,
+    multipart: Multipart,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let autor = characters::Autor::Jogador;
+
+    match inventory::load(&vault, &id) {
+        Ok(itens) => match itens.iter().find(|item| item.id == item_id) {
+            Some(item) if item.autor == autor => {}
+            Some(_) => return fail(StatusCode::FORBIDDEN, "este item e do mestre"),
+            None => return fail(StatusCode::NOT_FOUND, "item nao encontrado"),
+        },
+        Err(cause) => {
+            log::error!("inventario de {id}: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o inventario");
+        }
+    }
+
+    if let Err(cause) = std::fs::create_dir_all(characters::anexos_dir(&vault, &id, autor)) {
+        log::error!("imagem do item {item_id}: {cause}");
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha de disco");
+    }
+
+    let temp = characters::anexo_temp(&vault, &id, autor);
+
+    let nome = match recebe_arquivo(multipart, &temp, autor.max_bytes()).await {
+        Ok(nome) => nome,
+        Err(response) => return response,
+    };
+
+    let anexo = match characters::adopt_anexo(&vault, &id, autor, &temp, &nome) {
+        Ok(anexo) => anexo,
+        Err(cause) => return recusa(cause, &format!("imagem do item {item_id}")),
+    };
+
+    match inventory::set_imagem_anexo(&vault, &id, &item_id, autor, &anexo.arquivo, autor) {
+        Ok(item) => axum::Json(item).into_response(),
+        Err(cause) => recusa(cause, &format!("imagem do item {item_id}")),
     }
 }
 
@@ -1192,11 +1666,40 @@ async fn serve_web(State(state): State<Arc<Daemon>>, request: Request<Body>) -> 
         // inteiro. Redirecionamento e o caso do diretorio homonimo acima: nao
         // e resposta, e sinal de que se deve tentar o proximo candidato.
         if status.is_success() || status == StatusCode::NOT_MODIFIED {
-            return response.into_response();
+            let mut response = response.into_response();
+            response
+                .headers_mut()
+                .insert(CACHE_CONTROL, cache_do_bundle(&path));
+
+            return response;
         }
     }
 
     ErrorPage::tela_desconhecida().into_response()
+}
+
+/// Por quanto tempo o browser pode guardar cada pedaco do bundle.
+///
+/// Sem isto nao ia cabecalho nenhum, e um browser sem `cache-control` decide
+/// sozinho: com so um `last-modified` na resposta, ele guarda por heuristica e
+/// pode continuar mostrando a tela antiga depois de um build novo. Foi medido
+/// numa sessao -- a Plateia ficou duas compilacoes atras enquanto o daemon ja
+/// servia a nova, e a suspeita do usuario ("cache?") estava certa.
+///
+/// Duas politicas, porque sao duas naturezas de arquivo:
+///
+/// - `/_next/static/...` tem HASH no nome. Conteudo novo e nome novo, entao o
+///   arquivo com aquele nome nunca muda e pode ficar guardado para sempre.
+/// - O HTML da rota tem nome fixo e e quem aponta para os hashes da vez. Esse
+///   precisa ser conferido a cada visita, senao aponta para o bundle velho --
+///   que e exatamente a falha acima. `no-cache` nao proibe guardar: obriga a
+///   revalidar, e o 304 do `ServeDir` continua poupando a transferencia.
+fn cache_do_bundle(path: &str) -> HeaderValue {
+    if path.starts_with("/_next/static/") {
+        HeaderValue::from_static("public, max-age=31536000, immutable")
+    } else {
+        HeaderValue::from_static("no-cache")
+    }
 }
 
 /// `GET /livro/{id}` -- um livro da estante, para o leitor de Regras.
@@ -2331,6 +2834,199 @@ mod tests {
         String::from_utf8_lossy(&bytes).to_string()
     }
 
+    // --- inventario ---------------------------------------------------------
+
+    #[tokio::test]
+    async fn item_escondido_nao_chega_ao_celular() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+
+            inventory::add(
+                vault,
+                &personagem,
+                characters::Autor::Mestre,
+                inventory::Novo { nome: "Tocha".into(), ..inventory::Novo::default() },
+            )
+            .expect("item");
+
+            inventory::add(
+                vault,
+                &personagem,
+                characters::Autor::Mestre,
+                inventory::Novo {
+                    nome: "Anel amaldicoado".into(),
+                    escondido: true,
+                    ..inventory::Novo::default()
+                },
+            )
+            .expect("item");
+        }
+
+        let lista = router(Arc::clone(&state))
+            .oneshot(como(&token, "GET", &format!("/eu/personagens/{personagem}/inventario"), None))
+            .await
+            .expect("resposta");
+
+        assert_eq!(lista.status(), StatusCode::OK);
+
+        let texto = corpo(lista).await;
+        assert!(texto.contains("Tocha"));
+        // O escondido nao pode nem passar pelo fio: filtrar na tela deixaria o
+        // nome dele no JSON que o navegador guardou.
+        assert!(!texto.contains("Anel amaldicoado"), "vazou: {texto}");
+    }
+
+    #[tokio::test]
+    async fn jogador_nao_mexe_no_item_do_mestre() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let item = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+
+            inventory::add(
+                vault,
+                &personagem,
+                characters::Autor::Mestre,
+                inventory::Novo { nome: "Espada do mestre".into(), ..inventory::Novo::default() },
+            )
+            .expect("item")
+            .id
+        };
+
+        let base = format!("/eu/personagens/{personagem}/inventario/{item}");
+
+        let editar = router(Arc::clone(&state))
+            .oneshot(como(&token, "PATCH", &base, Some(r#"{"nome":"minha agora"}"#)))
+            .await
+            .expect("resposta");
+        assert_eq!(editar.status(), StatusCode::CONFLICT);
+
+        let apagar = router(Arc::clone(&state))
+            .oneshot(como(&token, "DELETE", &base, None))
+            .await
+            .expect("resposta");
+        assert_eq!(apagar.status(), StatusCode::CONFLICT);
+
+        // E o item continua o que era.
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        let itens = inventory::load(vault, &personagem).expect("itens");
+        assert_eq!(itens.len(), 1);
+        assert_eq!(itens[0].nome, "Espada do mestre");
+    }
+
+    #[tokio::test]
+    async fn jogador_cria_o_proprio_item_e_nao_consegue_esconde_lo() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let criado = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "POST",
+                &format!("/eu/personagens/{personagem}/inventario"),
+                // `escondido` vem no corpo de proposito: e o pedido que o
+                // daemon tem de ignorar.
+                Some(r#"{"nome":"Corda","quantidade":2,"escondido":true}"#),
+            ))
+            .await
+            .expect("resposta");
+
+        assert_eq!(criado.status(), StatusCode::CREATED);
+
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        let itens = inventory::load(vault, &personagem).expect("itens");
+
+        assert_eq!(itens.len(), 1);
+        assert_eq!(itens[0].nome, "Corda");
+        assert_eq!(itens[0].quantidade, 2);
+        assert_eq!(itens[0].autor, characters::Autor::Jogador);
+        assert!(!itens[0].escondido, "o corpo escondeu um item do jogador");
+    }
+
+    #[tokio::test]
+    async fn inventario_de_personagem_de_outro_responde_404() {
+        let (_dir, state, codigo) = daemon();
+        let (_, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        // Token valido, personagem que nao e dele: 404, e nao 403 -- dizer
+        // "existe mas nao e seu" confirmaria a existencia a quem chutou o id.
+        for (metodo, uri, corpo_json) in [
+            ("GET", format!("/eu/personagens/{personagem}/inventario"), None),
+            (
+                "POST",
+                format!("/eu/personagens/{personagem}/inventario"),
+                Some(r#"{"nome":"Gazua"}"#),
+            ),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token_b, metodo, &uri, corpo_json))
+                .await
+                .expect("resposta");
+
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{metodo} {uri}");
+        }
+
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        assert!(inventory::load(vault, &personagem).expect("itens").is_empty());
+    }
+
+    #[tokio::test]
+    async fn jogador_edita_e_apaga_o_proprio_item() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let item = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+
+            item_do_jogador(vault, &personagem)
+        };
+
+        let base = format!("/eu/personagens/{personagem}/inventario/{item}");
+
+        let editar = router(Arc::clone(&state))
+            .oneshot(como(&token, "PATCH", &base, Some(r#"{"quantidade":5}"#)))
+            .await
+            .expect("resposta");
+        assert_eq!(editar.status(), StatusCode::OK);
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            assert_eq!(inventory::load(vault, &personagem).expect("itens")[0].quantidade, 5);
+        }
+
+        let apagar = router(Arc::clone(&state))
+            .oneshot(como(&token, "DELETE", &base, None))
+            .await
+            .expect("resposta");
+        assert_eq!(apagar.status(), StatusCode::NO_CONTENT);
+
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        assert!(inventory::load(vault, &personagem).expect("itens").is_empty());
+    }
+
+    fn item_do_jogador(vault: &Vault, personagem: &str) -> String {
+        inventory::add(
+            vault,
+            personagem,
+            characters::Autor::Jogador,
+            inventory::Novo { nome: "Corda".into(), ..inventory::Novo::default() },
+        )
+        .expect("item")
+        .id
+    }
+
     #[tokio::test]
     async fn lista_so_os_personagens_vinculados() {
         let (_dir, state, codigo) = daemon();
@@ -2434,6 +3130,101 @@ mod tests {
 
 
     #[tokio::test]
+    async fn miniatura_do_anexo_encolhe_o_arquivo_e_continua_atras_do_token() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let origem = _dir.path().join("ficha.png");
+        let mut imagem = image::RgbaImage::new(900, 600);
+        for (x, y, pixel) in imagem.enumerate_pixels_mut() {
+            *pixel = image::Rgba([(x % 256) as u8, (y % 256) as u8, 30, 255]);
+        }
+        imagem.save(&origem).expect("png");
+
+        let inteiro = std::fs::metadata(&origem).expect("meta").len();
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+
+            characters::import_anexo(vault, &personagem, &origem).expect("ficha");
+
+            let notas = _dir.path().join("notas.txt");
+            std::fs::write(&notas, b"conteudo").expect("notas");
+            characters::import_anexo(vault, &personagem, &notas).expect("notas");
+        }
+
+        let mini = format!("/eu/personagens/{personagem}/anexos/mestre/ficha.png/mini");
+
+        // O que a reducao existe para fazer: o celular busca alguns KB no lugar
+        // do arquivo inteiro.
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "GET", &mini, None))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(axum::http::header::CONTENT_TYPE).expect("tipo"),
+            "image/png"
+        );
+
+        let bytes = to_bytes(response.into_body(), 4 * 1024 * 1024)
+            .await
+            .expect("corpo");
+        assert!(
+            (bytes.len() as u64) < inteiro / 2,
+            "miniatura de {} bytes contra {inteiro} do original",
+            bytes.len()
+        );
+        assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
+
+        // A segunda vez sai do cache em disco, e tem de ser o mesmo arquivo.
+        let dnv = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "GET", &mini, None))
+            .await
+            .expect("resposta");
+        assert_eq!(dnv.status(), StatusCode::OK);
+        assert_eq!(
+            to_bytes(dnv.into_body(), 4 * 1024 * 1024).await.expect("corpo").len(),
+            bytes.len()
+        );
+
+        // Sem reducao possivel, o original -- e nao um erro. O que nao e imagem
+        // continua alcancavel pelo mesmo endereco.
+        let texto = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "GET",
+                &format!("/eu/personagens/{personagem}/anexos/mestre/notas.txt/mini"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(texto.status(), StatusCode::OK);
+        assert_eq!(corpo(texto).await, "conteudo");
+
+        // E o vinculo vale aqui como vale na rota do arquivo inteiro: a
+        // reducao nao pode ser a porta dos fundos para a ficha alheia.
+        let de_outro = router(Arc::clone(&state))
+            .oneshot(como(&token_b, "GET", &mini, None))
+            .await
+            .expect("resposta");
+        assert_eq!(de_outro.status(), StatusCode::NOT_FOUND);
+
+        let sem_token = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .method("GET")
+                    .uri(&mini)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+        assert_eq!(sem_token.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
     async fn jogador_nao_apaga_anexo_do_mestre() {
         let (_dir, state, codigo) = daemon();
         let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
@@ -2512,4 +3303,136 @@ mod tests {
         assert!(characters::list_anexos(vault, &personagem).expect("anexos").is_empty());
     }
 
+
+    // --- os dados da mesa ---------------------------------------------------
+
+    #[tokio::test]
+    async fn rolar_exige_credencial_de_jogador() {
+        let (_dir, state, _codigo) = daemon();
+
+        // Quem so digitou o codigo da mesa ve os dados cairem e nao joga
+        // nenhum: a rolagem aparece na mesa com o nome de quem rolou, e quem
+        // nao se nomeou nao tem nome a emprestar.
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .method("POST")
+                    .uri("/eu/rolagens")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"faces":20}"#))
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn dado_que_nao_existe_e_recusado() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        // Um `faces` qualquer vindo de um celular viraria um dado que nenhuma
+        // tela sabe desenhar.
+        for faces in ["7", "0", "1000000"] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(
+                    &token,
+                    "POST",
+                    "/eu/rolagens",
+                    Some(&format!(r#"{{"faces":{faces}}}"#)),
+                ))
+                .await
+                .expect("resposta");
+
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "faces {faces}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_rolagem_sai_assinada_e_dentro_da_faixa() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token, "POST", "/eu/rolagens", Some(r#"{"faces":20}"#)))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let json: serde_json::Value = serde_json::from_str(&corpo(response).await).expect("json");
+
+        // O nome vem do jogador resolvido pelo token, e nao do corpo: ninguem
+        // rola em nome de outro.
+        assert_eq!(json["jogador"], "Edgar");
+        assert_eq!(json["faces"], 20);
+
+        let valor = json["valor"].as_i64().expect("valor");
+        assert!((1..=20).contains(&valor), "{valor} fora da faixa do d20");
+    }
+
+    #[tokio::test]
+    async fn o_d10_sai_gravado_de_zero_a_nove() {
+        // Como o `rotulosDoDado` do lado da janela: o d10 e numerado de zero a
+        // nove, que e como quase todo d10 fisico vem. Quanto a face VALE e
+        // outra pergunta, e a resposta mora num lugar so -- `valorDaRolagem`.
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        let mut viu_zero = false;
+
+        // Sessenta tiragens: a chance de nenhuma dar zero por acaso e 0,9^60,
+        // menos de dois por mil.
+        for _ in 0..60 {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token, "POST", "/eu/rolagens", Some(r#"{"faces":10}"#)))
+                .await
+                .expect("resposta");
+
+            let json: serde_json::Value =
+                serde_json::from_str(&corpo(response).await).expect("json");
+            let valor = json["valor"].as_i64().expect("valor");
+
+            assert!((0..=9).contains(&valor), "{valor} fora da faixa gravada do d10");
+            viu_zero |= valor == 0;
+        }
+
+        assert!(viu_zero, "sessenta tiragens sem um zero: a faixa comeca em um?");
+    }
+
+    #[tokio::test]
+    async fn o_fluxo_de_rolagens_e_desta_maquina() {
+        let (_dir, state, _codigo) = daemon();
+
+        // Quem escuta aqui e a janela do mestre, em loopback. Aberto para a
+        // rede, qualquer aparelho do Wi-Fi teria as rolagens cruas antes de a
+        // mesa decidir o que fazer com elas.
+        let recusado = router(Arc::clone(&state))
+            .oneshot(from_ip(
+                HttpRequest::builder()
+                    .uri("/sala/rolagens")
+                    .body(Body::empty())
+                    .expect("request"),
+                "192.168.7.99",
+            ))
+            .await
+            .expect("resposta");
+
+        assert_eq!(recusado.status(), StatusCode::FORBIDDEN);
+
+        let aceito = router(state)
+            .oneshot(from_ip(
+                HttpRequest::builder()
+                    .uri("/sala/rolagens")
+                    .body(Body::empty())
+                    .expect("request"),
+                "127.0.0.1",
+            ))
+            .await
+            .expect("resposta");
+
+        assert_eq!(aceito.status(), StatusCode::OK);
+    }
 }

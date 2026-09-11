@@ -244,11 +244,13 @@ name = "ato20"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "color_quant",
  "getrandom 0.3.4",
  "image",
  "imagesize",
  "log",
  "mime",
+ "png 0.18.1",
  "rusqlite",
  "serde",
  "serde_json",

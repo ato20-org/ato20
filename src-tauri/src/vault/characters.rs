@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::atomic::{read_json, write_json};
 use super::players::{mime_for, safe_attachment_name};
@@ -320,6 +321,46 @@ pub fn list_anexos(vault: &Vault, id: &str) -> AppResult<Vec<Anexo>> {
 /// ele entrega -- e quem pede a leitura e uma rota da rede.
 fn anexo_path(vault: &Vault, id: &str, autor: Autor, arquivo: &str) -> PathBuf {
     anexos_dir(vault, id, autor).join(safe_attachment_name(arquivo))
+}
+
+/// O caminho do anexo, para quem precisa do ARQUIVO e nao dos bytes.
+///
+/// Quem precisa disso e a reducao: ela decodifica a imagem do disco, e ler 8 MB
+/// para a memoria antes so para entrega-los ao decodificador seria pagar a
+/// copia inteira duas vezes -- ver `variantes::ensure_arquivo`.
+pub fn anexo_caminho(vault: &Vault, id: &str, autor: Autor, arquivo: &str) -> PathBuf {
+    anexo_path(vault, id, autor, arquivo)
+}
+
+/// A chave de cache da reducao de um anexo.
+///
+/// O acervo usa o id do asset, que ja e um nome de arquivo valido e unico. O
+/// anexo nao tem id: ele e identificado por PERSONAGEM + AUTOR + NOME, e nome
+/// de arquivo do jogador pode ter acento, espaco e barra. O hash resolve os
+/// dois problemas de uma vez -- vira nome seguro, e nao colide entre dois
+/// personagens com "ficha.pdf".
+///
+/// Saneado antes de entrar no hash, e nao depois: a chave tem de ser a mesma
+/// que o caminho lido, e `anexo_path` sanea. Sem isso, "ficha .pdf" e
+/// "ficha.pdf" -- que viram o mesmo arquivo -- teriam duas reducoes.
+///
+/// A reducao de um anexo APAGADO fica para tras no cache. E alguns KB por
+/// arquivo removido, num diretorio que existe para ser descartavel: quem troca
+/// o anexo pelo mesmo nome reescreve a mesma chave, e quem apaga de vez deixa
+/// um orfao que nada alcanca.
+pub fn anexo_chave(id: &str, autor: Autor, arquivo: &str) -> String {
+    let digest = Sha256::digest(
+        format!("{id}/{}/{}", autor.pasta(), safe_attachment_name(arquivo)).as_bytes(),
+    );
+
+    // Metade do sha256 -- 128 bits. Colisao aqui e a miniatura de um anexo
+    // aparecendo noutro, e 128 bits sao mais do que suficiente para uma chave
+    // de cache local.
+    digest[..16].iter().fold("anexo-".to_string(), |mut chave, byte| {
+        use std::fmt::Write as _;
+        let _ = write!(chave, "{byte:02x}");
+        chave
+    })
 }
 
 /// Copia um arquivo do disco do mestre para os anexos do personagem.

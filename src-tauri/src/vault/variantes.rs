@@ -27,6 +27,30 @@
 //! arquivos e 464 MB. O `lazy` cortou o que esta fora da vista; a miniatura
 //! corta o que sobrou -- os 47 visiveis passam a ser 47 PNGs de alguns KB.
 //!
+//! ## A miniatura sai em PALETA
+//!
+//! 256 cores escolhidas por arquivo, e nao RGBA de 8 bits por canal. Medido
+//! pelo pipeline deste modulo sobre os arquivos de uma campanha real, a 160px:
+//!
+//!   retrato 900x900 (recorte)    43,2 KB -> 14,5 KB
+//!   token   765x1567 (recorte)   16,3 KB ->  6,5 KB
+//!   mapa    3537x3750            24,3 KB ->  9,7 KB
+//!   mapa    3537x3750            34,6 KB -> 13,2 KB
+//!
+//! De duas e meia a tres vezes, em todo arquivo. Numa lista de sessenta a conta
+//! sai de 2,5 MB para menos de 900 KB.
+//!
+//! COR, e nao compressao, e isso foi medido antes de ser escolhido: o nivel
+//! maximo de zlib deixou os mesmos arquivos 2% MAIORES, e desligar os filtros de
+//! linha, 7%. O padrao do `png` -- `Balanced`, filtro adaptativo -- ja e o
+//! melhor dos tres. O que ocupava a miniatura eram os milhoes de cores que um
+//! quadrado de 160px nao mostra.
+//!
+//! PNG, e nao JPEG, e isso nao e conservadorismo: JPEG seria cerca de duas vezes
+//! menor ainda, e nao guarda alfa. Quatro dos seis arquivos medidos sao
+//! RECORTE, e cada um viraria um retangulo de fundo preto no mapa. A paleta
+//! mantem o alfa porque o `tRNS` guarda um por cor.
+//!
 //! ## Onde ela mora, e por que nao em `assets/`
 //!
 //! Em `.ato20/mini/`, junto do resto que e DERIVADO: perder esta pasta nao
@@ -43,9 +67,8 @@
 //! hoje ficaria sem miniatura para sempre -- e a migracao seria um passo que
 //! alguem tem de rodar.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use image::codecs::png::PngEncoder;
 use image::{ImageEncoder, ImageReader};
 
 use super::assets::{asset_path, AssetMeta};
@@ -114,6 +137,24 @@ impl Variante {
         82
     }
 
+    /// Quantas cores a paleta guarda, quando a variante e indexada.
+    ///
+    /// So a miniatura e. A variante de TELA e o arquivo que o jogador olha de
+    /// perto -- 1920px de mapa em 256 cores mostraria banda em todo ceu e toda
+    /// sombra. A miniatura e um quadrado de 160px numa lista, e ali a conta e
+    /// outra: quatro vezes menos bytes por um erro que nao se ve.
+    ///
+    /// 256 e o teto do PNG indexado de 8 bits. Descer para 128 tirou mais 15%
+    /// nos arquivos medidos, e nao vale: o ganho seria de 1,5 KB por miniatura,
+    /// e quem paga sao os rostos -- e retrato de personagem que mais aparece
+    /// nessas listas.
+    fn cores(self) -> Option<usize> {
+        match self {
+            Self::Mini => Some(256),
+            Self::Tela => None,
+        }
+    }
+
     fn extensao(self) -> &'static str {
         if self.preserva_alfa() {
             "png"
@@ -133,8 +174,10 @@ impl Variante {
  *
  * 2 = Lanczos com alfa pre-multiplicado. 1 era `DynamicImage::thumbnail`, o
  * redutor rapido -- ver `reduzir`.
+ * 3 = miniatura em paleta de 256 cores. As de antes sao RGBA, de tres a quatro
+ *     vezes maiores, e nao ha como distinguir uma da outra pelo nome.
  */
-const VERSAO: u32 = 2;
+const VERSAO: u32 = 3;
 
 pub fn dir(vault: &Vault, variante: Variante) -> PathBuf {
     vault
@@ -262,6 +305,65 @@ fn reduzir(origem: &image::RgbaImage, lado: u32) -> image::RgbaImage {
     reduzida
 }
 
+/// Quantas passadas o quantizador da sobre os pixels.
+///
+/// 1 le todos, e e o mais lento -- o autor sugere 10 como meio-termo. Aqui
+/// sempre 1: o que entra nesta funcao ja passou pela reducao, entao sao no
+/// maximo 160x160 pixels. O "lento" e um laco de vinte e cinco mil elementos
+/// numa operacao que acontece uma vez por arquivo, num `spawn_blocking`.
+const AMOSTRAGEM: i32 = 1;
+
+/// A reducao em PNG INDEXADO, de `cores` cores.
+///
+/// Escrito com o `png` direto, e nao com o `PngEncoder` do `image`: este aceita
+/// L8, La8, Rgb8 e Rgba8, e nenhum deles e paleta. O que a paleta pede sao dois
+/// blocos que o formato ja tem -- `PLTE` com as cores e `tRNS` com o alfa de
+/// cada uma --, e escreve-los e o que faz a miniatura caber em um quarto do
+/// tamanho sem deixar de ser PNG para quem a le.
+///
+/// O alfa entra na ESCOLHA das cores, e nao depois dela: o quantizador trata
+/// RGBA como quatro dimensoes. Quantizar so o RGB e pendurar o alfa depois
+/// daria a mesma cor para o pixel opaco e para o transparente ao lado dele, e a
+/// borda de todo recorte e feita justamente desses pares.
+fn indexado(rgba: &image::RgbaImage, cores: usize) -> Result<Vec<u8>, String> {
+    let quantizador = color_quant::NeuQuant::new(AMOSTRAGEM, cores, rgba.as_raw());
+    let mapa = quantizador.color_map_rgba();
+
+    let indices: Vec<u8> = rgba
+        .pixels()
+        .map(|pixel| quantizador.index_of(&pixel.0) as u8)
+        .collect();
+
+    let mut paleta = Vec::with_capacity(mapa.len() / 4 * 3);
+    let mut alfas = Vec::with_capacity(mapa.len() / 4);
+
+    for cor in mapa.chunks_exact(4) {
+        paleta.extend_from_slice(&cor[..3]);
+        alfas.push(cor[3]);
+    }
+
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, rgba.width(), rgba.height());
+
+    encoder.set_color(png::ColorType::Indexed);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder.set_palette(paleta);
+
+    // `tRNS` so quando ha o que dizer: um mapa e opaco, e escrever o bloco
+    // cheio de 255 gastaria 256 bytes para afirmar o padrao.
+    if alfas.iter().any(|alfa| *alfa != 255) {
+        encoder.set_trns(alfas);
+    }
+
+    let mut escritor = encoder.write_header().map_err(|cause| cause.to_string())?;
+    escritor
+        .write_image_data(&indices)
+        .map_err(|cause| cause.to_string())?;
+    escritor.finish().map_err(|cause| cause.to_string())?;
+
+    Ok(bytes)
+}
+
 /// Devolve a miniatura, gerando se ainda nao existe.
 ///
 /// Recusa audio: `AssetMeta::peaks` e a "miniatura" de som, e ela e outra
@@ -271,12 +373,73 @@ pub fn ensure(vault: &Vault, variante: Variante, meta: &AssetMeta) -> AppResult<
         return Err(AppError::UnsupportedKind(meta.mime_type.clone()));
     }
 
-    let destino = path(vault, variante, &meta.id);
-    let origem = asset_path(vault, meta);
+    ensure_arquivo(
+        vault,
+        variante,
+        &asset_path(vault, meta),
+        &meta.id,
+        &meta.name,
+    )
+}
 
-    // O original nunca muda depois de importado -- o nome do arquivo vem do id
-    // --, entao existir basta: nao ha versao nova para conferir por mtime.
-    if destino.exists() {
+/// A reducao ja pronta, se ela existe e nao ficou para tras da origem.
+///
+/// Separada do `ensure` para quem serve poder responder o caminho quente sem
+/// tomar o semaforo nem entrar num `spawn_blocking`: depois da primeira vez
+/// isto e um `stat` e um `ServeFile` de alguns KB.
+pub fn pronta(vault: &Vault, variante: Variante, chave: &str, origem: &Path) -> Option<PathBuf> {
+    let destino = path(vault, variante, chave);
+
+    atual(&origem_ou_nada(origem), &destino).then_some(destino)
+}
+
+/// `true` quando a reducao existe e e mais nova que a origem.
+///
+/// O acervo nao precisaria disto -- o original nunca muda depois de importado,
+/// porque o nome do arquivo vem do id --, mas o ANEXO de personagem muda: o
+/// mestre troca a ficha por outra com o mesmo nome, e uma reducao que so
+/// conferisse existencia devolveria a ficha velha para sempre.
+///
+/// Origem ilegivel e `false` de proposito: o arquivo saiu do disco, e servir a
+/// reducao dele seria mostrar o que nao existe mais. Quem chamar o `ensure`
+/// depois disso recebe o erro de leitura, que e a resposta honesta.
+fn atual(origem: &Option<std::fs::Metadata>, destino: &Path) -> bool {
+    let (Some(fonte), Ok(pronta)) = (origem.as_ref(), std::fs::metadata(destino)) else {
+        return false;
+    };
+
+    match (fonte.modified(), pronta.modified()) {
+        (Ok(fonte), Ok(pronta)) => pronta >= fonte,
+        // Sistema de arquivos sem mtime: a reducao que existe serve. E o
+        // comportamento de antes desta checagem, e ele valia para o acervo,
+        // que e a maioria do que passa por aqui.
+        _ => true,
+    }
+}
+
+fn origem_ou_nada(origem: &Path) -> Option<std::fs::Metadata> {
+    std::fs::metadata(origem).ok()
+}
+
+/// A mesma reducao, para um arquivo que nao esta no acervo.
+///
+/// O acervo entra por `ensure`, que sabe montar caminho e chave a partir do
+/// metadado. Quem nao tem metadado -- o anexo de personagem -- entra por aqui,
+/// trazendo o caminho e uma chave de cache que ele mesmo monta; ver
+/// `characters::anexo_chave`.
+///
+/// `nome` so aparece em mensagem de erro: e o que deixa "mapa.png nao decodifica"
+/// legivel em vez de um hash.
+pub fn ensure_arquivo(
+    vault: &Vault,
+    variante: Variante,
+    origem: &Path,
+    chave: &str,
+    nome: &str,
+) -> AppResult<PathBuf> {
+    let destino = path(vault, variante, chave);
+
+    if atual(&origem_ou_nada(origem), &destino) {
         return Ok(destino);
     }
 
@@ -284,13 +447,13 @@ pub fn ensure(vault: &Vault, variante: Variante, meta: &AssetMeta) -> AppResult<
     std::fs::create_dir_all(dir(vault, variante))?;
 
     let ilegivel = |cause: String| AppError::Malformed {
-        file: meta.name.clone(),
+        file: nome.to_string(),
         cause,
     };
 
     // `with_guessed_format` e nao confiar na extensao: o mime aqui foi deduzido
     // do NOME na importacao, e um `.png` que na verdade e JPEG entrou assim.
-    let leitor = ImageReader::open(&origem)?
+    let leitor = ImageReader::open(origem)?
         .with_guessed_format()
         .map_err(|cause| ilegivel(cause.to_string()))?;
 
@@ -307,8 +470,7 @@ pub fn ensure(vault: &Vault, variante: Variante, meta: &AssetMeta) -> AppResult<
     // mapa, e todo recorte deste projeto e menor que 1920 de qualquer forma.
     if !variante.preserva_alfa() && cheia.pixels().any(|pixel| pixel[3] != 255) {
         return Err(AppError::UnsupportedKind(format!(
-            "{} tem transparencia e a variante {} e JPEG",
-            meta.name,
+            "{nome} tem transparencia e a variante {} e JPEG",
             variante.nome()
         )));
     }
@@ -317,29 +479,24 @@ pub fn ensure(vault: &Vault, variante: Variante, meta: &AssetMeta) -> AppResult<
     // antes poria um retangulo preto em volta de cada figura.
     let rgba = reduzir(&cheia, variante.lado());
 
-    let mut bytes = Vec::new();
+    let bytes = match variante.cores() {
+        Some(cores) => indexado(&rgba, cores).map_err(ilegivel)?,
+        None => {
+            let rgb = image::DynamicImage::ImageRgba8(rgba).to_rgb8();
+            let mut bytes = Vec::new();
 
-    if variante.preserva_alfa() {
-        PngEncoder::new(&mut bytes)
-            .write_image(
-                rgba.as_raw(),
-                rgba.width(),
-                rgba.height(),
-                image::ExtendedColorType::Rgba8,
-            )
-            .map_err(|cause| ilegivel(cause.to_string()))?;
-    } else {
-        let rgb = image::DynamicImage::ImageRgba8(rgba).to_rgb8();
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, variante.qualidade())
+                .write_image(
+                    rgb.as_raw(),
+                    rgb.width(),
+                    rgb.height(),
+                    image::ExtendedColorType::Rgb8,
+                )
+                .map_err(|cause| ilegivel(cause.to_string()))?;
 
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, variante.qualidade())
-            .write_image(
-                rgb.as_raw(),
-                rgb.width(),
-                rgb.height(),
-                image::ExtendedColorType::Rgb8,
-            )
-            .map_err(|cause| ilegivel(cause.to_string()))?;
-    }
+            bytes
+        }
+    };
 
     // Atomico: duas telas pedem a mesma reducao ao mesmo tempo na primeira
     // abertura, e meio arquivo servido e uma imagem quebrada na tela.
@@ -390,6 +547,93 @@ mod tests {
             .expect("gravar original");
 
         meta
+    }
+
+    /// Uma imagem de ruido: cada pixel independente do vizinho.
+    ///
+    /// Gradiente nao serviria para medir a paleta -- ele ja comprime bem em
+    /// RGBA, e o ganho apareceria menor do que e num retrato de verdade.
+    fn com_ruido(vault: &Vault, lado: u32) -> AssetMeta {
+        let meta = AssetMeta {
+            id: "ruido".into(),
+            kind: "image".into(),
+            name: "retrato.png".into(),
+            mime_type: "image/png".into(),
+            size: 0,
+            created_at: 1,
+            natural_width: Some(lado),
+            natural_height: Some(lado),
+            folder_id: None,
+            escopo: None,
+            peaks: None,
+        };
+
+        std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
+
+        // LCG, para o teste medir sempre a mesma imagem.
+        let mut semente: u32 = 0x1234_5678;
+        let mut proximo = || {
+            semente = semente.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (semente >> 16) as u8
+        };
+
+        let mut imagem = RgbaImage::new(lado, lado);
+        for pixel in imagem.pixels_mut() {
+            *pixel = image::Rgba([proximo(), proximo(), proximo(), 255]);
+        }
+        imagem
+            .save_with_format(asset_path(vault, &meta), ImageFormat::Png)
+            .expect("gravar original");
+
+        meta
+    }
+
+    #[test]
+    fn miniatura_sai_em_paleta_e_encolhe() {
+        let (_dir, vault) = campanha();
+        let meta = com_ruido(&vault, 900);
+
+        let caminho = ensure(&vault, Variante::Mini, &meta).expect("miniatura");
+        let bytes = std::fs::read(&caminho).expect("ler");
+
+        // Tipo de cor no IHDR: 8 da assinatura, 8 do cabecalho do bloco, e o
+        // tipo e o decimo primeiro byte dos dados. 3 = indexado.
+        assert_eq!(bytes[25], 3, "a miniatura deixou de ser indexada");
+
+        // O mesmo quadro em RGBA, que e o que ela era ate a versao 3. A conta
+        // que importa nao e o byte exato -- e a ordem de grandeza que o celular
+        // do jogador e a lista do acervo pagam por arquivo.
+        let cheia = ImageReader::open(asset_path(&vault, &meta))
+            .expect("abrir")
+            .decode()
+            .expect("decodificar")
+            .to_rgba8();
+        let reduzida = reduzir(&cheia, LADO);
+
+        let mut rgba = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut rgba)
+            .write_image(
+                reduzida.as_raw(),
+                reduzida.width(),
+                reduzida.height(),
+                image::ExtendedColorType::Rgba8,
+            )
+            .expect("rgba");
+
+        assert!(
+            bytes.len() * 2 < rgba.len(),
+            "paleta em {} bytes contra {} em RGBA",
+            bytes.len(),
+            rgba.len()
+        );
+
+        // E ela continua sendo uma imagem, do tamanho certo: um PNG indexado
+        // que ninguem consegue decodificar seria a pior forma de economizar.
+        let lida = ImageReader::open(&caminho)
+            .expect("abrir")
+            .decode()
+            .expect("decodificar");
+        assert_eq!(lida.width(), LADO);
     }
 
     #[test]
