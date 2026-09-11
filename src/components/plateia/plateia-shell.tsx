@@ -1,40 +1,77 @@
 "use client";
 
-import { useState } from "react";
-import { Monitor, Smartphone, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import { Dices, FolderOpen, NotebookPen, Package, User } from "lucide-react";
 
-import { PlateiaStage } from "@/components/plateia/plateia-stage";
+import logo from "@/assets/logo-white.png";
+
+import { AnotacoesJogador } from "@/components/plateia/anotacoes-jogador";
+import { DadosNaTela } from "@/components/plateia/dados-na-tela";
 import { MyCharacters } from "@/components/plateia/my-characters";
-import { PlayerGate } from "@/components/plateia/player-gate";
-import { PlayerIdentity } from "@/components/plateia/player-identity";
+import { PlateiaStage } from "@/components/plateia/plateia-stage";
+import { PlateiaToolbar, ToolbarItem } from "@/components/plateia/plateia-toolbar";
+import { Dock, DockButton, Drawer } from "@/components/plateia/plateia-rails";
+import { ConteudoDoSaquinho } from "@/components/plateia/saquinho-plateia";
+import { PlayerEntrada } from "@/components/plateia/player-entrada";
+import { PlayerMenu } from "@/components/plateia/player-menu";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { SpotlightLayer } from "@/components/playground/spotlight-layer";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSubscription, type Subscription } from "@/hooks/use-scene-broadcast";
+import { usePlayerStore } from "@/lib/store/use-player-store";
+import { cn } from "@/lib/utils";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
 
 /**
- * Abas por layout, na ordem em que o arraste lateral navega.
+ * As abas da tela em pé, na ordem em que o arraste lateral navega.
  *
- * Em pé a cena fica presa no topo e não é aba; deitado ela disputa a altura
- * com o resto e volta a ser.
+ * Só ela tem abas. Deitado o espaço dá para a cena e para as ferramentas ao
+ * mesmo tempo, e lá o desenho é outro: trilhas nas bordas e gavetas por cima
+ * do mapa — ver `LandscapeLayout`.
  */
-const STACKED_TABS = ["personagem"] as const;
-const TABBED_TABS = ["cena", "personagem"] as const;
+const STACKED_TABS = ["personagem", "anotacoes"] as const;
 
 type StackedTab = (typeof STACKED_TABS)[number];
-type Tab = (typeof TABBED_TABS)[number];
+
+/** As ferramentas das trilhas da tela deitada. */
+const FERRAMENTAS = {
+  personagem: { lado: "esquerda", rotulo: "Personagem", icone: <User /> },
+  inventario: { lado: "esquerda", rotulo: "Inventário", icone: <Package /> },
+  arquivos: { lado: "esquerda", rotulo: "Arquivos", icone: <FolderOpen /> },
+  dados: { lado: "direita", rotulo: "Saquinho", icone: <Dices /> },
+  anotacoes: { lado: "direita", rotulo: "Anotações", icone: <NotebookPen /> },
+} as const;
+
+type Ferramenta = keyof typeof FERRAMENTAS;
 
 /**
  * A visão do jogador: a cena, e a ficha do personagem.
  *
- * A cena chega por SSE do daemon; a ficha, pelas rotas `/eu`. São dois níveis
- * de entrada de propósito — o código da mesa dá acesso à cena, e o nome cria a
- * ficha. Quem só quer olhar o mapa nunca vira uma linha na campanha do mestre.
+ * A cena chega por SSE do daemon; a ficha, pelas rotas `/eu`. Continuam sendo
+ * duas portas — o código da mesa dá acesso à cena, o nome cria a ficha —, mas
+ * aqui as duas se atravessam de uma vez: esta tela é a de quem VAI jogar, e
+ * quem só quer olhar o mapa tem `/assistir`, que nunca vira uma linha na
+ * campanha do mestre.
  */
 export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMesa: string }) {
   const tabbed = useTabbedLayout();
+
+  /**
+   * Procura a credencial guardada assim que a tela abre.
+   *
+   * Aqui, e não dentro de uma aba: é o resultado disto que decide se a tela
+   * mostra a mesa ou o campo do nome. A chamada é guardada contra repetição no
+   * próprio store.
+   */
+  const boot = usePlayerStore((state) => state.boot);
+  useEffect(() => {
+    void boot(codigo);
+  }, [boot, codigo]);
+
+  /** Sem nome não há mesa: a tela inteira vira a porta de entrada. */
+  const status = usePlayerStore((state) => state.status);
+  const dentro = status === "dentro";
 
   // A inscrição vive aqui, e não dentro da aba Cena: aba inativa é desmontada,
   // e o jogador que fosse ver a ficha sairia do fluxo e perderia as trocas de
@@ -45,23 +82,54 @@ export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMes
     // `h-dvh` fixa a altura na viewport real do celular, já descontando a
     // barra do navegador.
     <main className="flex h-dvh min-w-0 flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center gap-2 border-b px-4 py-2 select-none [@media(max-height:520px)]:py-1">
-        <Smartphone className="text-muted-foreground size-4 shrink-0" aria-hidden />
+      {/* Baixo quando deitado: 40px em vez de 48. A altura é o que falta nesse
+          formato, e uma faixa que só diz o nome da mesa não é onde ela se
+          gasta. */}
+      <header
+        className={cn(
+          "flex shrink-0 items-center gap-2 border-b px-4 select-none",
+          tabbed ? "py-1.5" : "py-2",
+        )}
+      >
+        {/* A marca, e não o ícone de celular: o aparelho o jogador já sabe que
+            tem na mão. O que a faixa precisa dizer é de que mesa isto é. */}
+        <Image src={logo} alt="ATO20" priority className="h-4 w-auto shrink-0 opacity-80" />
         {/* O nome da mesa, e não o código: quem já entrou não precisa mais do
             código, e precisa saber que entrou na mesa certa. */}
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{nomeDaMesa}</span>
+
+        {/* Quem joga, no canto da faixa — e o menu de trocar de nome ou sair.
+            Some sozinho enquanto não há jogador. */}
+        <PlayerMenu codigo={codigo} />
       </header>
 
-      {tabbed ? (
-        <TabbedLayout codigo={codigo} live={live} />
+      {dentro ? (
+        tabbed ? (
+          <LandscapeLayout codigo={codigo} live={live} />
+        ) : (
+          <StackedLayout codigo={codigo} live={live} />
+        )
       ) : (
-        <StackedLayout codigo={codigo} live={live} />
+        <PlayerEntrada codigo={codigo} />
       )}
 
-      {/* Fora das abas: a trilha não pode parar porque o jogador foi consultar
-          a própria ficha. Música cortada no meio quebra a imersão que ela
-          existe para criar. */}
-      <SessionAudio track={live.track} volume={live.volume} />
+      {/* Os dados, sobre a página inteira. O celular na mão é a mesa: o dado
+          cai por cima do mapa, da ficha e dos arquivos, como um dado jogado
+          sobre uma mesa cai sobre o que estiver nela. Fora das abas porque uma
+          aba desmontada levaria a jogada junto no meio da queda.
+
+          O saquinho que os joga não está mais aqui: ele virou a bolinha do meio
+          da barra de baixo. */}
+      {dentro ? (
+        <>
+          <DadosNaTela codigo={codigo} />
+
+          {/* Fora das abas: a trilha não pode parar porque o jogador foi
+              consultar a própria ficha. Música cortada no meio quebra a imersão
+              que ela existe para criar. */}
+          <SessionAudio track={live.track} volume={live.volume} />
+        </>
+      ) : null}
 
       {/* Fora das abas pelo mesmo motivo, e sobre a tela inteira em vez de
           dentro da moldura da cena: a imagem em evidência costuma ser um
@@ -71,8 +139,9 @@ export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMes
           `dismissable` só aqui. O jogador tem também o mapa e a própria ficha,
           e uma imagem que ele não pudesse encostar de lado o deixaria preso até
           o mestre lembrar de tirá-la. Esconder é local: a imagem continua no ar
-          para todo mundo. */}
-      <SpotlightLayer spotlight={live.spotlight} dismissable />
+          para todo mundo. Nada disso antes de entrar: som e imagem em cima do
+          campo do nome seriam a mesa falando com quem ainda não chegou. */}
+      {dentro ? <SpotlightLayer spotlight={live.spotlight} dismissable /> : null}
     </main>
   );
 }
@@ -80,7 +149,82 @@ export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMes
 type LayoutProps = { codigo: string; live: Subscription };
 
 /**
- * Tela em pé: cena presa no topo, abas embaixo para o resto.
+ * Tela deitada: a cena ocupa tudo, e as ferramentas vivem nas bordas.
+ *
+ * O formato deitado é o da mesa: quem está com o celular de lado, ou no
+ * monitor, está OLHANDO a cena — e tudo o que não é ela é ferramenta. Por isso
+ * aqui não há aba nem painel fixo: duas docas flutuantes seguram cinco
+ * ferramentas nas bordas, e o mapa fica com a tela inteira por baixo delas.
+ *
+ * Uma gaveta por vez, e as duas trilhas dividem o mesmo estado. Duas gavetas
+ * abertas ao mesmo tempo cercariam a cena pelos dois lados, que é exatamente o
+ * que os painéis fixos faziam de errado. Tocar na ferramenta aberta fecha —
+ * o mesmo botão que abriu.
+ */
+function LandscapeLayout({ codigo, live }: LayoutProps) {
+  const [aberta, setAberta] = useState<Ferramenta | null>(null);
+
+  function alternar(ferramenta: Ferramenta) {
+    setAberta((atual) => (atual === ferramenta ? null : ferramenta));
+  }
+
+  function botoes(lado: "esquerda" | "direita") {
+    return (Object.keys(FERRAMENTAS) as Ferramenta[])
+      .filter((chave) => FERRAMENTAS[chave].lado === lado)
+      .map((chave) => (
+        <DockButton
+          key={chave}
+          ativo={aberta === chave}
+          rotulo={FERRAMENTAS[chave].rotulo}
+          icone={FERRAMENTAS[chave].icone}
+          onClick={() => alternar(chave)}
+        />
+      ));
+  }
+
+  return (
+    // `relative`: é a moldura em que as docas e a gaveta se posicionam. A cena
+    // ocupa tudo por baixo — o jogador confere a ficha sem perder de vista o
+    // que está acontecendo no mapa.
+    <div className="relative min-h-0 min-w-0 flex-1 p-2">
+      <PlateiaStage
+        scene={live.scene}
+        portraits={live.portraits}
+        medida={live.medida}
+        rolagens={live.rolagens}
+        synced={live.synced}
+        stalled={live.stalled}
+      />
+
+      <Dock lado="esquerda">{botoes("esquerda")}</Dock>
+      <Dock lado="direita">{botoes("direita")}</Dock>
+
+      {aberta ? (
+        <Drawer
+          lado={FERRAMENTAS[aberta].lado}
+          titulo={FERRAMENTAS[aberta].rotulo}
+          icone={FERRAMENTAS[aberta].icone}
+          onFechar={() => setAberta(null)}
+        >
+          <ConteudoDaFerramenta codigo={codigo} ferramenta={aberta} />
+        </Drawer>
+      ) : null}
+    </div>
+  );
+}
+
+/** O que cada gaveta mostra. */
+function ConteudoDaFerramenta({ codigo, ferramenta }: { codigo: string; ferramenta: Ferramenta }) {
+  if (ferramenta === "dados") return <ConteudoDoSaquinho />;
+  if (ferramenta === "anotacoes") return <AnotacoesJogador codigo={codigo} />;
+
+  // As três do personagem são o mesmo componente, cada uma pedindo o seu
+  // pedaço: a ficha com o retrato, o inventário, os arquivos.
+  return <MyCharacters codigo={codigo} secao={ferramenta} />;
+}
+
+/**
+ * Tela em pé: cena presa no topo, o resto embaixo.
  *
  * A cena não é aba aqui porque não precisa ser — sobra altura para ela e para
  * o conteúdo ao mesmo tempo. Presa, e não rolando junto: perder o mapa de
@@ -97,103 +241,65 @@ function StackedLayout({ codigo, live }: LayoutProps) {
           scene={live.scene}
           portraits={live.portraits}
           medida={live.medida}
+          rolagens={live.rolagens}
           synced={live.synced}
           stalled={live.stalled}
         />
       </div>
 
-      <Tabs
-        value={tab}
-        onValueChange={(value) => setTab(value as StackedTab)}
-        className="flex min-h-0 flex-1 flex-col gap-0"
-      >
-        <div className="min-h-0 flex-1" {...swipe}>
-          <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">
-            <CharacterPanel codigo={codigo} />
-          </TabsContent>
-        </div>
+      <div className="min-h-0 flex-1" {...swipe}>
+        <Painel codigo={codigo} tab={tab} />
+      </div>
 
-        <BottomBar>
-          <TabsTrigger value="personagem">
-            <User />
-            Personagem
-          </TabsTrigger>
-        </BottomBar>
-      </Tabs>
+      <PlateiaToolbar
+        esquerda={
+          <ToolbarItem
+            ativo={tab === "personagem"}
+            icone={<User />}
+            rotulo="Personagem"
+            onClick={() => setTab("personagem")}
+          />
+        }
+        direita={
+          <ToolbarItem
+            ativo={tab === "anotacoes"}
+            icone={<NotebookPen />}
+            rotulo="Anotações"
+            onClick={() => setTab("anotacoes")}
+          />
+        }
+      />
     </>
   );
 }
 
 /**
- * Quem o jogador é, e os personagens que o mestre entregou a ele.
+ * O que a aba escolhida mostra.
  *
- * Os arquivos e as notas saíram do jogador e foram para o PERSONAGEM. Antes
- * ficavam pendurados na identidade de quem joga, e o mestre não tinha onde
- * amarrar uma miniatura: se o jogador não anexasse a ficha, ou a apagasse no
- * meio da campanha, não havia nada estável a que ligar.
+ * Só a aba ativa é montada — era o que as `TabsContent` já faziam, e é o que
+ * mantém um celular mediano longe de ter as duas listas de arquivos vivas ao
+ * mesmo tempo.
  *
- * `PlayerIdentity` fica: o nome continua sendo dele.
+ * As anotações não rolam por fora: o campo é que ocupa a altura, e rolar é
+ * dentro dele. Um caderno com duas barras de rolagem — a da página e a do
+ * campo — é o tipo de coisa que só aparece depois que alguém escreveu duas
+ * telas de texto no celular.
  */
-function CharacterPanel({ codigo }: { codigo: string }) {
-  return (
-    <PlayerGate codigo={codigo}>
-      <PlayerIdentity codigo={codigo} />
-      <MyCharacters codigo={codigo} />
-    </PlayerGate>
-  );
-}
-
-/**
- * Barra centralizada e compacta.
- *
- * O polegar alcança o meio da tela muito melhor que os cantos, e a barra
- * ocupar a largura inteira só afastava os alvos um do outro.
- */
-function BottomBar({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex shrink-0 justify-center border-t p-1 select-none">
-      <TabsList>{children}</TabsList>
-    </div>
-  );
-}
-
-/** Tela deitada: uma aba por vez, com arraste lateral e barra centralizada. */
-function TabbedLayout({ codigo, live }: LayoutProps) {
-  const [tab, setTab] = useState<Tab>("cena");
-  const swipe = useSwipeTabs(TABBED_TABS, tab, setTab);
-
-  return (
-    <Tabs
-      value={tab}
-      onValueChange={(value) => setTab(value as Tab)}
-      className="flex min-h-0 flex-1 flex-col gap-0"
-    >
-      <div className="min-h-0 flex-1" {...swipe}>
-        <TabsContent value="cena" className="h-full p-2">
-          <PlateiaStage
-            scene={live.scene}
-            portraits={live.portraits}
-            medida={live.medida}
-            synced={live.synced}
-            stalled={live.stalled}
-          />
-        </TabsContent>
-
-        <TabsContent value="personagem" className="h-full space-y-4 overflow-y-auto p-3">
-          <CharacterPanel codigo={codigo} />
-        </TabsContent>
+function Painel({ codigo, tab }: { codigo: string; tab: StackedTab }) {
+  // `pb` maior que o resto: a bolinha do saquinho sobe metade para fora da
+  // barra e cobre a faixa do meio logo acima dela. Sem a folga, a última linha
+  // do caderno e o último arquivo da lista ficam atrás dela.
+  if (tab === "anotacoes") {
+    return (
+      <div className="h-full p-3 pb-6">
+        <AnotacoesJogador codigo={codigo} />
       </div>
+    );
+  }
 
-      <BottomBar>
-        <TabsTrigger value="cena">
-          <Monitor />
-          Cena
-        </TabsTrigger>
-        <TabsTrigger value="personagem">
-          <User />
-          Personagem
-        </TabsTrigger>
-      </BottomBar>
-    </Tabs>
+  return (
+    <div className="scroll-fade h-full space-y-4 overflow-y-auto p-3 pb-10">
+      <MyCharacters codigo={codigo} />
+    </div>
   );
 }

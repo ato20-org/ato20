@@ -9,6 +9,7 @@ import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { cn } from "@/lib/utils";
+import type { RolagemDaMesa } from "@/types/dado";
 import type { Medida, Portrait, Scene } from "@/types/scene";
 
 /**
@@ -32,6 +33,7 @@ export function PlateiaStage({
   scene,
   portraits,
   medida,
+  rolagens,
   synced,
   stalled,
 }: {
@@ -39,6 +41,14 @@ export function PlateiaStage({
   portraits: Portrait[];
   /** A régua do mestre, enquanto ele mede. `null` = ninguém medindo. */
   medida: Medida | null;
+  /**
+   * Os dados que a mesa jogou há pouco, pendurados nos retratos.
+   *
+   * Inclui os do próprio jogador. O dado dele cai animado no saquinho, e depois
+   * aparece aqui como o de todo mundo -- é o mesmo dado, visto de fora, e é o
+   * que confirma que a mesa recebeu a jogada.
+   */
+  rolagens: RolagemDaMesa[];
   synced: boolean;
   stalled: boolean;
 }) {
@@ -75,13 +85,23 @@ export function PlateiaStage({
                   numa tela de 400px de largura. Sem a variante ele baixava os
                   8 MB do mapa para decodificar 51 MB de bitmap -- por celular,
                   e são N na mesa. Ver `SceneLayer.variante`. */}
-              <SceneLayer scene={scene} portraits={portraits} smooth variante="tela" />
+              <SceneLayer
+                scene={scene}
+                portraits={portraits}
+                rolagens={rolagens}
+                smooth
+                variante="tela"
+              />
 
               {/* A régua, como na TV: dentro do palco porque as pontas são
                   coordenadas de cena, e fora do `SceneLayer` porque ela não é
                   conteúdo do mapa. */}
               {medida && scene.grid ? (
-                <RulerOverlay de={medida.de} para={medida.para} grid={scene.grid} />
+                <RulerOverlay
+                  de={medida.de}
+                  para={medida.para}
+                  grid={scene.grid}
+                />
               ) : null}
             </div>
           ) : null}
@@ -112,16 +132,13 @@ export function PlateiaStage({
           className="absolute top-2 right-2 rounded-md bg-black/60 p-2 text-white backdrop-blur"
           onClick={() => toggle(frameRef.current)}
         >
-          {expanded ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+          {expanded ? (
+            <Minimize className="size-4" />
+          ) : (
+            <Maximize className="size-4" />
+          )}
         </button>
       </div>
-
-      {/* Some com a tela deitada: 16 pixels de nome não valem 16 pixels de mapa. */}
-      {scene && !expanded ? (
-        <p className="text-muted-foreground shrink-0 text-center text-xs [@media(max-height:520px)]:hidden">
-          {scene.name}
-        </p>
-      ) : null}
     </div>
   );
 }

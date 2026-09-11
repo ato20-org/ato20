@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronUp, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 import { ImageZoom } from "@/components/attachments/image-zoom";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
@@ -56,14 +56,18 @@ export function SpotlightLayer({
 
   if (oculto) {
     return (
+      // No ALTO, e não mais no rodapé. Embaixo ela caía exatamente sobre a
+      // bolinha do saquinho, que passou a morar no meio da barra: o aviso de
+      // que há uma imagem no ar cobria o botão mais usado da tela, e tocar num
+      // era tocar no outro. Em cima não disputa com nada fixo — a cena fica
+      // logo abaixo do cabeçalho, e o que a faixa cobre é imagem, não controle.
       <button
         type="button"
-        className="fixed bottom-3 left-1/2 z-60 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/80 px-3 py-1.5 text-xs text-white shadow-lg backdrop-blur"
+        className="fixed top-2 left-1/2 z-60 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/80 px-3 py-1.5 text-xs text-white shadow-lg backdrop-blur"
         onClick={() => setEscondido(null)}
       >
         <Eye className="size-3.5" aria-hidden />
         Ver a imagem do mestre
-        <ChevronUp className="size-3.5" aria-hidden />
       </button>
     );
   }

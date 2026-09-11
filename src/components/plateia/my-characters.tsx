@@ -9,7 +9,9 @@ import {
   FileVideo,
   Loader2,
   Paperclip,
+  TriangleAlert,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,8 +19,11 @@ import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MINIATURA } from "@/lib/miniatura";
+
+import { InventarioJogador } from "./inventario-jogador";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
 import {
+  characterFileThumbUrl,
   characterFileUrl,
   characterFiles,
   characterNote,
@@ -60,7 +65,22 @@ const DEBOUNCE_MS = 800;
  * Sem personagem vinculado a lista fica vazia, e isso é estado normal — não
  * erro. Quem entrega personagem é o mestre.
  */
-export function MyCharacters({ codigo }: { codigo: string }) {
+/**
+ * Que parte do personagem mostrar.
+ *
+ * Existe porque a tela deitada quebrou o cartão em gavetas: ficha, inventário e
+ * arquivos viraram três ferramentas da trilha lateral, e cada uma abre só o seu
+ * pedaço. Em pé continua tudo junto — lá o cartão inteiro É a tela.
+ */
+export type SecaoPersonagem = "tudo" | "personagem" | "inventario" | "arquivos" | "notas";
+
+export function MyCharacters({
+  codigo,
+  secao = "tudo",
+}: {
+  codigo: string;
+  secao?: SecaoPersonagem;
+}) {
   const [personagens, setPersonagens] = useState<Personagem[] | null>(null);
 
   useEffect(() => {
@@ -89,8 +109,8 @@ export function MyCharacters({ codigo }: { codigo: string }) {
   if (personagens.length === 0) {
     return (
       <p className="text-muted-foreground text-xs leading-snug">
-        Nenhum personagem ainda. O mestre é quem entrega um a você — quando isso acontecer, a
-        ficha e os arquivos dele aparecem aqui.
+        Nenhum personagem ainda. O mestre é quem entrega um a você — quando isso acontecer, a ficha
+        e os arquivos dele aparecem aqui.
       </p>
     );
   }
@@ -98,25 +118,42 @@ export function MyCharacters({ codigo }: { codigo: string }) {
   return (
     <div className="space-y-4">
       {personagens.map((personagem) => (
-        <CharacterCard key={personagem.id} codigo={codigo} personagem={personagem} />
+        <CharacterCard key={personagem.id} codigo={codigo} personagem={personagem} secao={secao} />
       ))}
     </div>
   );
 }
 
+/** Um arquivo em envio, e o que aconteceu com ele. */
+type Envio = { nome: string; erro?: string };
+
 function CharacterCard({
   codigo,
   personagem,
+  secao,
 }: {
   codigo: string;
   personagem: Personagem;
+  secao: SecaoPersonagem;
 }) {
   const [anexos, setAnexos] = useState<AnexoPersonagem[]>([]);
   const [versao, setVersao] = useState(0);
   const [enviando, setEnviando] = useState(false);
 
+  // O que está subindo, e o que falhou ao subir. Antes isto era só o ícone do
+  // botão trocando de forma: mandando três arquivos, o jogador não via qual
+  // deles o daemon recusou — e a recusa vinha num toast que some sozinho, sobre
+  // uma tela que ele já tinha rolado.
+  const [fila, setFila] = useState<Envio[]>([]);
+
   const [abrindo, setAbrindo] = useState<AnexoPersonagem | null>(null);
   const [url, setUrl] = useState<string | null>(null);
+
+  // O retrato e a miniatura ampliados. Estado à parte do `abrindo`: aqueles são
+  // ANEXOS, atrás do token e baixados para uma blob que depois se revoga; estes
+  // são imagens do acervo, servidas abertas para a mesa em `/asset/{id}`. Um
+  // estado só obrigaria o fechamento a adivinhar qual dos dois caminhos desfazer.
+  const [zoom, setZoom] = useState<{ titulo: string; assetId: string } | null>(null);
 
   const entrada = useRef<HTMLInputElement>(null);
 
@@ -157,32 +194,59 @@ function CharacterCard({
     (anexo) => !(anexo.autor === "mestre" && anexo.arquivo === personagem.ficha),
   );
 
+  // Separados por AUTOR, em dois blocos com título, e não misturados com uma
+  // etiqueta por linha. São duas coisas diferentes na cabeça de quem joga: o
+  // que a mesa entregou a ele, e o que ele juntou. Misturados, a diferença que
+  // importava — o que ele pode apagar — ficava num selo de dez pixels no fim
+  // da linha, que é onde ninguém olha antes de tocar na lixeira.
+  const doMestre = soltos.filter((anexo) => !doJogador(anexo));
+  const meus = soltos.filter(doJogador);
+
   async function enviar(files: FileList | null) {
     if (!files || files.length === 0) return;
 
+    const escolhidos = Array.from(files);
+
     setEnviando(true);
+    // A fila nova substitui a anterior: os erros que ficaram na tela são do
+    // envio passado, e mantê-los ao lado dos novos faria o jogador conferir
+    // duas vezes o que já resolveu.
+    setFila(escolhidos.map((file) => ({ nome: file.name })));
 
-    try {
-      for (const file of Array.from(files)) {
-        // Conferido aqui além do daemon: subir 80 MB por 4G para receber uma
-        // recusa no fim é o pior jeito de descobrir um limite.
-        if (file.size > MAX_ATTACHMENT_BYTES) {
-          toast.error(`${file.name} passa do limite de ${formatBytes(MAX_ATTACHMENT_BYTES)}.`);
-          continue;
-        }
+    /** Marca o fim de UM arquivo: sai da fila se deu certo, fica se falhou. */
+    const encerra = (nome: string, erro?: string) =>
+      setFila((atual) =>
+        atual.flatMap((envio) =>
+          envio.nome === nome && envio.erro === undefined
+            ? erro
+              ? [{ nome, erro }]
+              : []
+            : [envio],
+        ),
+      );
 
-        await uploadCharacterFile(codigo, personagem.id, file);
+    for (const file of escolhidos) {
+      // Conferido aqui além do daemon: subir 80 MB por 4G para receber uma
+      // recusa no fim é o pior jeito de descobrir um limite.
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        encerra(file.name, `Passa do limite de ${formatBytes(MAX_ATTACHMENT_BYTES)}.`);
+        continue;
       }
 
-      reler();
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao enviar.");
-    } finally {
-      setEnviando(false);
-      // Zera a entrada para o mesmo arquivo poder ser escolhido de novo: sem
-      // isso, o `change` não dispara na segunda tentativa.
-      if (entrada.current) entrada.current.value = "";
+      try {
+        await uploadCharacterFile(codigo, personagem.id, file);
+        encerra(file.name);
+      } catch (cause) {
+        encerra(file.name, cause instanceof Error ? cause.message : "Falha ao enviar.");
+      }
     }
+
+    setEnviando(false);
+    reler();
+
+    // Zera a entrada para o mesmo arquivo poder ser escolhido de novo: sem
+    // isso, o `change` não dispara na segunda tentativa.
+    if (entrada.current) entrada.current.value = "";
   }
 
   function fecharVisualizador() {
@@ -191,36 +255,107 @@ function CharacterCard({
     setAbrindo(null);
   }
 
-  return (
-    <section className="space-y-2 rounded-lg border p-3">
-      <h3 className="text-sm font-medium">{personagem.nome}</h3>
+  // A MINIATURA, grande, quando existe uma. É ela que o mestre põe no mapa, e
+  // é por ela que a mesa reconhece o personagem durante a sessão — a imagem
+  // que o jogador tem na cabeça quando alguém fala o nome dele.
+  //
+  // Retrato serve de reserva: é a mesma pessoa de outro ângulo, e um quadro
+  // vazio ao lado do nome é pior que a segunda escolha.
+  const heroi = personagem.miniatura ?? personagem.retrato;
 
-      {/* Os três campos do personagem, juntos e antes do resto: é o que o
-          mestre nomeou, e é o que o jogador vem ver. Retrato e miniatura saem
-          do acervo, e `/asset/{id}` é aberto para a mesa — o celular os alcança
-          sem credencial própria. A ficha é anexo, atrás do token, e por isso
-          abre por toque em vez de aparecer desenhada.
+  // Só a nota: é a gaveta de anotações, que junta o caderno do jogador com o
+  // que ele escreveu sobre cada personagem. Sai por cima para não arrastar a
+  // moldura do cartão inteiro atrás de um `<textarea>`.
+  if (secao === "notas") {
+    return (
+      <section className="space-y-1">
+        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+          Sobre {personagem.nome}
+        </p>
+        <CharacterNote codigo={codigo} personagemId={personagem.id} />
+      </section>
+    );
+  }
 
-          A ficha sai da lista de arquivos abaixo, onde estava antes: ela tem
-          lugar próprio aqui, e nos dois lugares o mesmo arquivo aparecia duas
-          vezes — uma delas com um X que o jogador nem pode usar. */}
-      {personagem.ficha || personagem.retrato || personagem.miniatura ? (
-        <ul className="flex flex-wrap items-start gap-1.5">
+  /** O token de corpo inteiro, grande e clicável. */
+  const retratoGrande = (className: string) =>
+    heroi ? (
+      <button
+        type="button"
+        onClick={() =>
+          setZoom({
+            titulo: personagem.miniatura ? "Miniatura" : "Retrato",
+            assetId: heroi,
+          })
+        }
+        aria-label={`Ampliar a imagem de ${personagem.nome}`}
+        className={className}
+      >
+        {/* `/asset/{id}` inteiro, e não a variante `mini`: aqui a imagem é o
+            assunto, e a redução existe para caber num quadrado de 80px.
+            `object-contain` porque o token costuma ser um recorte de corpo
+            inteiro — cortar a cabeça para preencher a caixa é o oposto do que
+            ele serve.
+
+            Aberto para a mesa: o celular alcança sem credencial própria. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`/asset/${heroi}`}
+          alt={personagem.nome}
+          draggable={false}
+          className="max-h-72 w-full rounded-md object-contain object-bottom"
+        />
+      </button>
+    ) : null;
+
+  /**
+   * Os três campos que o mestre nomeou: ficha, retrato e miniatura.
+   *
+   * A ficha sai da lista de arquivos abaixo, onde estava antes: ela tem lugar
+   * próprio aqui, e nos dois lugares o mesmo arquivo aparecia duas vezes — uma
+   * delas com um X que o jogador nem pode usar.
+   */
+  const blocoDeArquivos =
+    personagem.ficha || personagem.retrato || personagem.miniatura ? (
+      <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
+        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+          Arquivos do personagem
+        </p>
+
+        <ul className="flex flex-wrap items-start gap-2">
           {personagem.ficha ? (
             <li className="space-y-0.5">
-              <FichaTile arquivo={personagem.ficha} onAbrir={abrirAnexo} />
+              <FichaTile
+                codigo={codigo}
+                personagemId={personagem.id}
+                arquivo={personagem.ficha}
+                onAbrir={abrirAnexo}
+              />
               <span className="text-muted-foreground block text-[10px]">Ficha</span>
             </li>
           ) : null}
 
-          {([
-            ["Retrato", personagem.retrato],
-            ["Miniatura", personagem.miniatura],
-          ] as const)
+          {(
+            [
+              ["Retrato", personagem.retrato],
+              ["Miniatura", personagem.miniatura],
+            ] as const
+          )
             .filter(([, assetId]) => Boolean(assetId))
             .map(([titulo, assetId]) => (
               <li key={titulo} className="space-y-0.5">
-                <span className="bg-muted block size-14 overflow-hidden rounded border">
+                {/* 80px, e não os 56 de antes: isto é alvo de toque num celular,
+                    e o dedo médio cobre uns 45. Eles embrulham na coluna
+                    estreita em vez de encolher — o que não cabe desce, e
+                    continua clicável. */}
+                <button
+                  type="button"
+                  onClick={() => setZoom({ titulo, assetId: assetId! })}
+                  aria-label={`Ampliar ${titulo}`}
+                  className="bg-muted hover:bg-accent block size-20 overflow-hidden rounded border"
+                >
+                  {/* A miniatura de 80px continua vindo da variante `mini`: o
+                      que amplia é o diálogo, e só ele paga o arquivo inteiro. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`/asset/${assetId}/mini`}
@@ -229,75 +364,98 @@ function CharacterCard({
                     className="size-full object-cover"
                     {...MINIATURA}
                   />
-                </span>
+                </button>
                 <span className="text-muted-foreground block text-[10px]">{titulo}</span>
               </li>
             ))}
         </ul>
+      </section>
+    ) : null;
+
+  /** O que o mestre entregou, o que o jogador juntou, e o botão de mandar mais. */
+  const listaDeArquivos = (
+    <>
+      {doMestre.length > 0 ? (
+        <Grupo titulo="Do mestre">
+          {doMestre.map((anexo) => (
+            <LinhaAnexo
+              key={`mestre/${anexo.arquivo}`}
+              codigo={codigo}
+              personagemId={personagem.id}
+              anexo={anexo}
+              onAbrir={abrirAnexo}
+            />
+          ))}
+        </Grupo>
       ) : null}
 
-      {soltos.length > 0 ? (
-        <ul className="space-y-1">
-          {soltos.map((anexo) => {
-            const Icone = ICONE[attachmentKind(anexo.arquivo, anexo.mimeType)];
+      <Grupo titulo="Seus arquivos">
+        {meus.map((anexo) => (
+          <LinhaAnexo
+            key={`jogador/${anexo.arquivo}`}
+            codigo={codigo}
+            personagemId={personagem.id}
+            anexo={anexo}
+            onAbrir={abrirAnexo}
+            // Só o que ele mesmo mandou, e é por isso que o botão vive aqui e
+            // não no bloco de cima. O arquivo do mestre é leitura — a ficha
+            // existe independente de quem joga, e não pode sumir porque alguém
+            // se irritou com a sessão.
+            onApagar={() => {
+              void deleteCharacterFile(codigo, personagem.id, anexo.arquivo).then(reler, (cause) =>
+                toast.error(cause instanceof Error ? cause.message : "Falha ao remover."),
+              );
+            }}
+          />
+        ))}
 
-            return (
-              <li
-                key={`${anexo.autor}/${anexo.arquivo}`}
-                className="bg-muted/40 flex items-center gap-2 rounded-md border p-1.5"
-              >
-                <Icone className="text-muted-foreground size-4 shrink-0" aria-hidden />
+        {fila.map((envio) => (
+          <li
+            key={envio.nome}
+            className="bg-muted/40 flex items-center gap-2 rounded-md border p-1.5"
+          >
+            <span className="bg-muted grid size-10 shrink-0 place-items-center rounded">
+              {envio.erro ? (
+                <TriangleAlert className="size-4 text-amber-400" aria-hidden />
+              ) : (
+                <Loader2 className="text-muted-foreground size-4 animate-spin" aria-hidden />
+              )}
+            </span>
 
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 truncate text-left text-xs"
-                  onClick={() => abrirAnexo(anexo)}
-                >
-                  {anexo.arquivo}
-                </button>
-
-                <span className="text-muted-foreground shrink-0 text-[10px] tabular-nums">
-                  {formatBytes(anexo.tamanho)}
-                </span>
-
-                {/* Só o que ele mesmo mandou. O arquivo do mestre é leitura —
-                    é o outro lado da segmentação: a ficha existe independente
-                    de quem joga, e não pode sumir porque alguém se irritou com
-                    a sessão. */}
-                {doJogador(anexo) ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Apagar ${anexo.arquivo}`}
-                    onClick={() => {
-                      void deleteCharacterFile(codigo, personagem.id, anexo.arquivo).then(
-                        reler,
-                        (cause) =>
-                          toast.error(
-                            cause instanceof Error ? cause.message : "Falha ao remover.",
-                          ),
-                      );
-                    }}
-                  >
-                    {/* Lixeira: isto apaga o arquivo do disco do mestre, e não
-                        o tira de uma lista. Mesma regra dos dois ícones do lado
-                        dele. */}
-                    <Trash2 />
-                  </Button>
-                ) : (
-                  <span
-                    className={cn(
-                      "shrink-0 rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] text-amber-300",
-                    )}
-                  >
-                    do mestre
-                  </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs">{envio.nome}</span>
+              <span
+                className={cn(
+                  "block text-[10px]",
+                  envio.erro ? "text-amber-300" : "text-muted-foreground",
                 )}
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+              >
+                {envio.erro ?? "Enviando…"}
+              </span>
+            </span>
+
+            {/* O erro fica até ele dispensar. Some sozinho seria o toast de
+                novo, que é o que não funcionava: a recusa apagava antes de o
+                jogador voltar a olhar a tela. */}
+            {envio.erro ? (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Dispensar o aviso de ${envio.nome}`}
+                onClick={() => setFila((atual) => atual.filter((outro) => outro !== envio))}
+              >
+                <X />
+              </Button>
+            ) : null}
+          </li>
+        ))}
+
+        {meus.length === 0 && fila.length === 0 ? (
+          <li className="text-muted-foreground px-1 text-[11px] leading-snug">
+            Nada ainda. O que você mandar daqui fica com o personagem, e o mestre vê.
+          </li>
+        ) : null}
+      </Grupo>
 
       <input
         ref={entrada}
@@ -317,30 +475,265 @@ function CharacterCard({
         {enviando ? <Loader2 className="animate-spin" /> : <Paperclip />}
         Enviar arquivo
       </Button>
+    </>
+  );
 
-      <CharacterNote codigo={codigo} personagemId={personagem.id} />
-
+  const visualizadores = (
+    <>
       <AttachmentViewer attachment={abrindo} url={url} onClose={fecharVisualizador} />
+
+      {/* O mesmo visualizador da ficha, com o mesmo zoom de pinça: o jogador que
+          quer ler o brasão no peito do retrato faz o gesto que já fez na ficha.
+          Sem baixar nada antes — `/asset/{id}` é aberto para a mesa, e o
+          endereço vai direto para a tag. */}
+      <AttachmentViewer
+        attachment={zoom ? { arquivo: zoom.titulo, tamanho: 0, mimeType: "image/*" } : null}
+        url={zoom ? `/asset/${zoom.assetId}` : null}
+        onClose={() => setZoom(null)}
+      />
+    </>
+  );
+
+  // A GAVETA da tela deitada: uma coisa só, numa coluna só.
+  //
+  // Nome no alto, token embaixo dele, e os arquivos embaixo do token — nessa
+  // ordem porque a gaveta é estreita e alta, o contrário do cartão largo da
+  // tela em pé. Pôr o token ao lado dos arquivos ali dentro espremia os dois.
+  if (secao !== "tudo") {
+    return (
+      <section className="space-y-3">
+        {secao === "personagem" ? (
+          <>
+            <h3 className="truncate text-2xl leading-tight font-semibold">{personagem.nome}</h3>
+            {retratoGrande("block w-full")}
+            {blocoDeArquivos}
+          </>
+        ) : null}
+
+        {/* Sem moldura por dentro: a gaveta já é o cartão, e dois retângulos
+            encaixados só roubam largura dos quadros. */}
+        {secao === "inventario" ? (
+          <InventarioJogador codigo={codigo} personagemId={personagem.id} />
+        ) : null}
+
+        {secao === "arquivos" ? listaDeArquivos : null}
+
+        {visualizadores}
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-4 rounded-lg border p-3">
+      {/* O cartão da tela em pé: o token à esquerda, atravessando as linhas, e o
+          nome, os arquivos e o inventário do lado.
+
+          Em grade e não em dois `flex`: é o que deixa o token ATRAVESSAR as
+          linhas. A quarta linha, vazia, segura o espaçamento — sem ela a altura
+          que sobra da imagem era repartida entre as linhas ocupadas, e o nome
+          ficava boiando a uma mão de distância dos arquivos. */}
+      <div
+        className={cn(
+          "grid items-start gap-x-3 gap-y-2",
+          heroi
+            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
+            : "grid-cols-1",
+        )}
+      >
+        {retratoGrande("row-span-4 h-full")}
+
+        <h3 className="min-w-0 truncate text-2xl leading-tight font-semibold">{personagem.nome}</h3>
+
+        {blocoDeArquivos}
+
+        {/* O inventário é do personagem, como a ficha e o token. Na coluna da
+            direita e com a mesma largura dos arquivos: passar por baixo do
+            token dava a ele a largura da tela inteira, e os quadros viravam
+            alvos maiores que o próprio personagem. */}
+        <div className={cn("bg-muted/20 rounded-lg border p-2", heroi && "col-start-2")}>
+          <InventarioJogador codigo={codigo} personagemId={personagem.id} />
+        </div>
+      </div>
+
+      {listaDeArquivos}
+
+      {visualizadores}
     </section>
+  );
+}
+
+/**
+ * Um bloco de arquivos com título.
+ *
+ * O título é o que separa o que o mestre entregou do que o jogador juntou. Era
+ * uma etiqueta por linha antes, e ela dizia a mesma coisa cinco vezes gastando
+ * a largura em que o nome do arquivo cabia.
+ */
+function Grupo({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+        {titulo}
+      </p>
+      <ul className="space-y-1">{children}</ul>
+    </div>
+  );
+}
+
+/**
+ * Uma linha de arquivo: miniatura quando dá, ícone quando não.
+ *
+ * A miniatura é o que deixa bater o olho. "emb.jpg" e "estabrzemb.jpg" são o
+ * mesmo ícone de imagem e dois nomes que ninguém escolheu pensando em ser lido
+ * depois — o que distingue os dois é o que tem dentro.
+ *
+ * `onApagar` ausente é linha de leitura: é assim que o bloco do mestre não
+ * oferece um botão que o daemon recusaria com 403.
+ */
+function LinhaAnexo({
+  codigo,
+  personagemId,
+  anexo,
+  onAbrir,
+  onApagar,
+}: {
+  codigo: string;
+  personagemId: string;
+  anexo: AnexoPersonagem;
+  onAbrir: (anexo: AnexoPersonagem) => void;
+  onApagar?: () => void;
+}) {
+  const Icone = ICONE[attachmentKind(anexo.arquivo, anexo.mimeType)];
+
+  return (
+    <li className="bg-muted/40 flex items-center gap-2 rounded-md border p-1.5">
+      <AnexoThumb
+        codigo={codigo}
+        personagemId={personagemId}
+        anexo={anexo}
+        className="size-10 rounded"
+        Fallback={Icone}
+      />
+
+      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onAbrir(anexo)}>
+        <span className="block truncate text-xs">{anexo.arquivo}</span>
+        <span className="text-muted-foreground block text-[10px] tabular-nums">
+          {formatBytes(anexo.tamanho)}
+        </span>
+      </button>
+
+      {onApagar ? (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Apagar ${anexo.arquivo}`}
+          onClick={onApagar}
+        >
+          {/* Lixeira: isto apaga o arquivo do disco do mestre, e não o tira de
+              uma lista. Mesma regra dos dois ícones do lado dele. */}
+          <Trash2 />
+        </Button>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * A miniatura de um anexo, quando ele é imagem.
+ *
+ * Pela variante `mini` da rota do anexo, e não pelo arquivo inteiro: são uns
+ * poucos KB contra os megabytes do original, e quem paga a diferença é um
+ * celular no 4G — ver `characterFileThumbUrl`. Ainda assim é um `fetch` e uma
+ * blob, porque a rota está atrás do token e `<img src>` não manda cabeçalho.
+ *
+ * Quem não é imagem nem tenta: o tipo sai do `mimeType` do anexo, e cai na
+ * extensão quando o celular não declarou nenhum. PDF vira ícone direto.
+ *
+ * `Fallback` é o ícone de quando os bytes não vêm — arquivo que saiu do disco
+ * por fora, redução que não saiu. Um quadrado vazio não diria nada.
+ */
+function AnexoThumb({
+  codigo,
+  personagemId,
+  anexo,
+  className,
+  Fallback,
+  fallbackClassName = "size-4",
+}: {
+  codigo: string;
+  personagemId: string;
+  anexo: AnexoPersonagem;
+  className?: string;
+  Fallback: typeof File;
+  /** Tamanho do ícone de reserva: a linha tem 40px de caixa, o tile tem 80. */
+  fallbackClassName?: string;
+}) {
+  const eImagem = attachmentKind(anexo.arquivo, anexo.mimeType) === "image";
+
+  const [url, setUrl] = useState<string | null>(null);
+  const [falhou, setFalhou] = useState(false);
+
+  // Pelo AUTOR e pelo NOME, e não pelo objeto: o registro da ficha é montado a
+  // cada render — ver `FichaTile` —, e um efeito que dependesse dele rebuscaria
+  // a miniatura em todo render.
+  const { autor, arquivo } = anexo;
+
+  useEffect(() => {
+    if (!eImagem) return;
+
+    let ativo = true;
+
+    void characterFileThumbUrl(codigo, personagemId, autor, arquivo).then(
+      (endereco) => {
+        if (ativo) setUrl(endereco);
+      },
+      () => {
+        if (ativo) setFalhou(true);
+      },
+    );
+
+    return () => {
+      ativo = false;
+    };
+  }, [codigo, personagemId, autor, arquivo, eImagem]);
+
+  return (
+    <span className={cn("bg-muted grid shrink-0 place-items-center overflow-hidden", className)}>
+      {eImagem && url && !falhou ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={url}
+          alt={arquivo}
+          draggable={false}
+          className="size-full object-cover"
+          onError={() => setFalhou(true)}
+        />
+      ) : eImagem && !falhou ? null : ( // ícone aqui faria ele piscar e ser trocado pela imagem em toda linha. // Enquanto a blob não chega: o quadrado do tamanho final, vazio. Pôr o
+        <Fallback className={cn("text-muted-foreground shrink-0", fallbackClassName)} aria-hidden />
+      )}
+    </span>
   );
 }
 
 /**
  * O bloco da ficha, do tamanho dos outros dois campos.
  *
- * Ícone, e não miniatura do arquivo. A ficha fica atrás do token, então
- * desenhá-la exigiria BAIXÁ-LA no carregamento da aba — um PDF de quarenta
- * megabytes puxado no 4G para render de cinquenta e seis pixels. E a blob é
- * compartilhada com o visualizador, que a revoga ao fechar: a miniatura
- * quebraria na primeira vez que o jogador fechasse a ficha.
+ * Ficha imagem é miniatura, como no lado do mestre: um print da ficha de papel,
+ * um card de personagem. Ficha PDF é ícone, e continua sendo — o que o daemon
+ * reduz é imagem, e o navegador do celular renderizando a primeira página de um
+ * PDF para um quadrado de 80px seria o arquivo inteiro no fio para isso.
  *
- * O ícone sai do tipo do arquivo, então uma ficha em imagem e uma em PDF não
- * ficam com o mesmo desenho.
+ * O ícone sai do tipo do arquivo, então uma ficha em imagem que não abriu e uma
+ * em PDF não ficam com o mesmo desenho.
  */
 function FichaTile({
+  codigo,
+  personagemId,
   arquivo,
   onAbrir,
 }: {
+  codigo: string;
+  personagemId: string;
   arquivo: string;
   onAbrir: (anexo: AnexoPersonagem) => void;
 }) {
@@ -353,14 +746,21 @@ function FichaTile({
   return (
     <button
       type="button"
-      className="bg-muted hover:bg-accent grid size-14 place-items-center rounded border"
+      className="hover:bg-accent block size-20 overflow-hidden rounded border"
       // O nome do arquivo vive no rótulo acessível e no título do visualizador:
-      // dentro de um quadrado de cinquenta e seis pixels ele viraria três
-      // letras e reticências. Retrato e miniatura também não mostram nome.
+      // dentro de um quadrado de oitenta pixels ele viraria três letras e
+      // reticências. Retrato e miniatura também não mostram nome.
       aria-label={`Abrir ${arquivo}`}
       onClick={() => onAbrir(anexo)}
     >
-      <Icone className="text-muted-foreground size-6 shrink-0" aria-hidden />
+      <AnexoThumb
+        codigo={codigo}
+        personagemId={personagemId}
+        anexo={anexo}
+        className="size-full"
+        Fallback={Icone}
+        fallbackClassName="size-7"
+      />
     </button>
   );
 }
@@ -373,13 +773,7 @@ function FichaTile({
  * mestre grava no `blur` porque a janela dele é a mesma que escreve no disco;
  * aqui a aba pode fechar antes, e por isso o atraso é curto.
  */
-function CharacterNote({
-  codigo,
-  personagemId,
-}: {
-  codigo: string;
-  personagemId: string;
-}) {
+function CharacterNote({ codigo, personagemId }: { codigo: string; personagemId: string }) {
   const [texto, setTexto] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
