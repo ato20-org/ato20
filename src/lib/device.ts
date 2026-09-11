@@ -1,5 +1,7 @@
 "use client";
 
+import { novoId } from "@/lib/id";
+
 const STORAGE_KEY = "ato20:device";
 
 /**
@@ -17,12 +19,12 @@ export function deviceId(): string {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) return stored;
 
-    const fresh = crypto.randomUUID();
+    const fresh = novoId();
     localStorage.setItem(STORAGE_KEY, fresh);
 
     return fresh;
   } catch {
     // Modo privado ou cota cheia: um id efêmero ainda serve para a sessão.
-    return crypto.randomUUID();
+    return novoId();
   }
 }

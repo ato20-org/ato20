@@ -41,7 +41,14 @@ export type ConteudoJanela =
   | { tipo: "retratos" }
   | { tipo: "imagens" }
   | { tipo: "sons" }
-  | { tipo: "camadas" };
+  | { tipo: "camadas" }
+  // A tela que uma EXTENSAO trouxe. Dois campos e nao um id concatenado: quem
+  // desenha precisa saber de qual extensao pedir o corpo, e desmontar uma
+  // string para descobrir isso seria trocar um tipo por uma convencao.
+  //
+  // Unica variante que o aplicativo nao sabe desenhar sozinho -- ver
+  // `PainelDeExtensao`, que carrega o modulo e mostra o que faltar.
+  | { tipo: "extensao"; extensaoId: string; painelId: string };
 
 /**
  * A chave de uma janela, derivada do conteúdo.
@@ -75,6 +82,10 @@ export function chaveDe(conteudo: ConteudoJanela): string {
     case "sons":
     case "camadas":
       return conteudo.tipo;
+    // A extensao entra na chave: dois plugins podem chamar o painel de `notas`,
+    // e sem o dono os dois disputariam a mesma janela.
+    case "extensao":
+      return `extensao:${conteudo.extensaoId}/${conteudo.painelId}`;
   }
 }
 
@@ -321,18 +332,6 @@ type WindowStore = {
   /** Fecha a que está na frente. É o que o ESC de dentro de uma janela usa. */
   fecharDaFrente: () => void;
   /**
-   * A chave que está piscando, para apontar uma janela que já existe.
-   *
-   * Pedir Personagens com a lista já atracada na coluna não abre uma segunda
-   * cópia — aponta a que está lá. Sem isso o clique parecia não fazer nada,
-   * porque a janela pedida já estava na tela desde antes.
-   *
-   * Vive aqui e não no store do layout porque a janela apontada pode estar nas
-   * duas casas: atracada como aba, ou flutuando atrás de outra.
-   */
-  piscando: string | null;
-  piscar: (chave: string) => void;
-  /**
    * Lê as posições guardadas.
    *
    * Depois da montagem, e não na criação do store: ler `localStorage` antes
@@ -477,21 +476,6 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     set((state) => ({ janelas: state.janelas.slice(0, -1) }));
   },
 
-  piscando: null,
-
-  piscar(chave) {
-    // Apaga antes de acender: pedir duas vezes seguidas a mesma janela tem de
-    // piscar duas vezes, e sem o intervalo a classe nunca sai do elemento —
-    // a animação não reinicia se o valor não mudou.
-    set({ piscando: null });
-
-    setTimeout(() => set({ piscando: chave }), 20);
-    // Um pouco além das duas batidas de 420ms, para a classe sair só depois de
-    // a animação terminar.
-    setTimeout(() => {
-      if (get().piscando === chave) set({ piscando: null });
-    }, 1_000);
-  },
 
   restaurar() {
     set({ posicoes: ler() });

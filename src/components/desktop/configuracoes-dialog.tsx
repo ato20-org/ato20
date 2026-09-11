@@ -257,6 +257,11 @@ function SecaoTema() {
  * escrita à mão: ver a nota em `ATALHOS`.
  */
 function PainelTeclado() {
+  // A lista passou a depender dos plugins habilitados, e `atalhosPorGrupo` lê o
+  // store por fora do React. Sem esta assinatura, ligar uma extensão com a tela
+  // aberta não acrescentaria os atalhos dela aqui.
+  useExtensoesStore((state) => state.extensoes);
+
   const grupos = atalhosPorGrupo();
 
   return (

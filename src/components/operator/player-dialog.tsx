@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   File,
@@ -27,7 +27,10 @@ import { shareAttachment } from "@/lib/vault/evidence";
 // para ele; repetir a conta aqui faria a mesma pasta ser medida em duas
 // unidades dependendo de quem olha.
 import { formatBytes } from "@/lib/player/session";
+import { DadoParado } from "@/components/playground/dado-parado";
 import { useCharacterNames } from "@/hooks/use-character-names";
+import { useRolagensStore } from "@/lib/store/use-rolagens-store";
+import { valorDaRolagem } from "@/types/dado";
 import {
   playerAttachments,
   playerAttachmentUrl,
@@ -96,6 +99,24 @@ function Ficha({
 }) {
   /** Os personagens dele. Substituiu o apelido — ver a seção abaixo. */
   const nomes = useCharacterNames();
+
+  /**
+   * O que este jogador tirou nesta sessão.
+   *
+   * Filtrado do histórico da mesa, e não guardado por jogador: a lista inteira
+   * cabe em sessenta linhas, e um índice por jogador seria estrutura para
+   * economizar um `filter` que roda quando alguém abre uma ficha.
+   *
+   * O `filter` fica no `useMemo` e NÃO dentro do seletor. Seletor que monta um
+   * array novo a cada chamada devolve uma referência nova toda vez, e o zustand
+   * compara por identidade para decidir se re-renderiza: o componente entraria
+   * em laço.
+   */
+  const historico = useRolagensStore((state) => state.historico);
+  const rolagens = useMemo(
+    () => historico.filter((rolagem) => rolagem.jogadorId === player.id),
+    [historico, player.id],
+  );
 
   const [anexos, setAnexos] = useState<PlayerAttachment[] | null>(null);
   const [vendo, setVendo] = useState<PlayerAttachment | null>(null);
@@ -423,13 +444,38 @@ function Ficha({
       </section>
 
       <section className="space-y-1.5">
+        <p className="text-muted-foreground text-xs">O que ele tirou</p>
+
+        {/* Da sessão, e só dela: o histórico da mesa vive na memória desta
+            janela, não no cofre. Ver `useRolagensStore`. */}
+        {rolagens.length === 0 ? (
+          <p className="text-muted-foreground text-xs">Nenhum dado nesta sessão.</p>
+        ) : (
+          <ul className="flex flex-wrap gap-1">
+            {rolagens.map((rolagem) => (
+              <li
+                key={rolagem.id}
+                className="flex items-center gap-1 rounded border px-1.5 py-0.5"
+                title={`d${rolagem.faces}`}
+              >
+                <DadoParado faces={rolagem.faces} valor={rolagem.valor} tamanho={18} />
+                <span className="text-xs font-medium tabular-nums">
+                  {valorDaRolagem(rolagem.faces, rolagem.valor)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-1.5">
         <p className="text-muted-foreground text-xs">Notas dele</p>
 
         {/* As notas do jogador são dele, mas o mestre é dono do disco: não faz
             sentido esconder na tela o que está em texto no SQLite ao lado. O
             que o token protege é o acesso de OUTRO jogador. */}
         {player.notas ? (
-          <p className="max-h-48 overflow-y-auto text-xs whitespace-pre-wrap">{player.notas}</p>
+          <p className="scroll-fade max-h-48 overflow-y-auto text-xs whitespace-pre-wrap">{player.notas}</p>
         ) : (
           <p className="text-muted-foreground text-xs">Nada escrito ainda.</p>
         )}

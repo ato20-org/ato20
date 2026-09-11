@@ -15,6 +15,8 @@ import {
 } from "@/lib/operator/item-actions";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
+import { executarComando } from "@/lib/extensoes/carregar";
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 
 /** De quanto o empurrão anda, e de quanto ele anda com Shift. */
@@ -35,7 +37,15 @@ const SETAS: Record<string, { x: number; y: number }> = {
  * mando isto para trás", não "o que o Ctrl faz".
  */
 export type GrupoAtalho =
-  "Desfazer" | "Área de transferência" | "Câmera" | "Camadas" | "Seleção";
+  | "Desfazer"
+  | "Área de transferência"
+  | "Câmera"
+  | "Camadas"
+  | "Seleção"
+  // Extensão declara o grupo dela, ou cai no próprio nome. A união fica aberta
+  // para isso -- fechar obrigaria a tabela do aplicativo a conhecer os nomes
+  // que um autor de plugin vai escolher.
+  | (string & {});
 
 export type Atalho = {
   grupo: GrupoAtalho;
@@ -84,7 +94,7 @@ function letra(evento: KeyboardEvent): string {
  * As ações leem o estado atual por conta própria -- é o que permite ao listener
  * ser montado uma vez e nunca mais.
  */
-export const ATALHOS: Atalho[] = [
+export const ATALHOS_BASE: Atalho[] = [
   // Desfazer no alto da tabela: Ctrl+Z é o atalho que não pode falhar.
   {
     grupo: "Desfazer",
@@ -308,6 +318,79 @@ export const ATALHOS: Atalho[] = [
   },
 ];
 
+/**
+ * A tabela que vale AGORA: a de fábrica mais os comandos dos plugins.
+ *
+ * Os do plugin entram DEPOIS, e isso é a regra inteira de conflito. A ordem da
+ * tabela é a precedência -- quem casa primeiro executa --, então um `Ctrl+Z`
+ * declarado por uma extensão nunca alcança o desfazer. Não é preciso conferir
+ * colisão em lugar nenhum: a ordem já decide, e decide a favor do aplicativo.
+ *
+ * Função e não constante porque a lista depende do que está instalado e
+ * habilitado. O listener a chama a cada tecla, e isso é barato: são poucas
+ * entradas, e a alternativa seria remontar o ouvinte a cada mudança de plugin.
+ */
+export function atalhos(): Atalho[] {
+  return [...ATALHOS_BASE, ...atalhosDeExtensoes()];
+}
+
+/**
+ * Os comandos de plugin que declararam tecla, como entradas da tabela.
+ *
+ * Só os que TÊM atalho: um comando sem tecla não tem o que fazer aqui, e
+ * aparece no menu da barra da janela.
+ */
+function atalhosDeExtensoes(): Atalho[] {
+  return useExtensoesStore
+    .getState()
+    .extensoes.filter((extensao) => extensao.habilitada)
+    .flatMap((extensao) =>
+      (extensao.contribui?.comandos ?? [])
+        .filter((comando) => comando.atalho)
+        .map((comando) => ({
+          grupo: comando.grupo ?? extensao.nome,
+          tecla: comando.atalho as string,
+          rotulo: comando.titulo,
+          combina: combinaCom(comando.atalho as string),
+          // O módulo pode nem estar importado: é `executarComando` quem
+          // garante a carga antes de chamar. Ver a ativação preguiçosa.
+          executar: () => void executarComando(extensao, comando.id),
+          // Sempre, e é o certo para tecla de plugin: quase toda combinação
+          // com Ctrl tem dono no browser, e um atalho que dispara a ação E
+          // favorita a página faz as duas coisas erradas.
+          impedirPadrao: true,
+        })),
+    );
+}
+
+/**
+ * Transforma "Ctrl+Shift+F" na pergunta "este evento é este atalho?".
+ *
+ * Tolerante na escrita porque quem a digita é o autor do plugin, num JSON, sem
+ * autocompletar: `ctrl`, `Ctrl` e `CTRL` valem o mesmo, e `Cmd` é lido como o
+ * mesmo modificador de comando que o `Ctrl` -- a mesma equivalência que o resto
+ * da tabela já faz.
+ *
+ * Combinação sem tecla final, ou que este parser não entende, nunca casa: é
+ * melhor um atalho que não funciona do que um que dispara sozinho.
+ */
+function combinaCom(tecla: string): (evento: KeyboardEvent) => boolean {
+  const partes = tecla.split("+").map((parte) => parte.trim().toLowerCase());
+  const alvo = partes.at(-1) ?? "";
+
+  const precisaComando = partes.includes("ctrl") || partes.includes("cmd");
+  const precisaShift = partes.includes("shift");
+  const precisaAlt = partes.includes("alt");
+
+  if (!alvo || ["ctrl", "cmd", "shift", "alt"].includes(alvo)) return () => false;
+
+  return (evento) =>
+    comando(evento) === precisaComando &&
+    evento.shiftKey === precisaShift &&
+    evento.altKey === precisaAlt &&
+    letra(evento) === alvo;
+}
+
 function empurrar(evento: KeyboardEvent, passo: number): void {
   const seta = SETAS[evento.key];
   if (!seta) return;
@@ -327,7 +410,7 @@ export function atalhosPorGrupo(): Array<{
 }> {
   const grupos: Array<{ grupo: GrupoAtalho; atalhos: Atalho[] }> = [];
 
-  for (const atalho of ATALHOS) {
+  for (const atalho of atalhos()) {
     const atual = grupos.find(({ grupo }) => grupo === atalho.grupo);
 
     if (atual) atual.atalhos.push(atalho);

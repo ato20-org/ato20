@@ -9,6 +9,7 @@ import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { Variante } from "@/lib/vault/assets";
+import type { RolagemDaMesa } from "@/types/dado";
 import type { CanvasItem, FogRegion, Portrait, Scene } from "@/types/scene";
 
 type SceneLayerProps = {
@@ -53,6 +54,13 @@ type SceneLayerProps = {
    * ar atravessando a troca de cena, e são ancorados na câmera dela.
    */
   portraits?: Portrait[];
+  /**
+   * Os dados que os jogadores jogaram há pouco. Ver `PortraitLayer`.
+   *
+   * Só as telas da mesa passam: no palco do mestre os dados de jogador têm
+   * lugar próprio, fora do plano da cena.
+   */
+  rolagens?: RolagemDaMesa[];
   /** Ausente = camada só de leitura, que é o caso do Assistir. */
   onItemPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
@@ -71,6 +79,7 @@ export function SceneLayer({
   smooth = false,
   variante,
   portraits,
+  rolagens,
   onItemPointerDown,
   onFogPointerDown,
   onPortraitPointerDown,
@@ -127,6 +136,7 @@ export function SceneLayer({
           camera={scene.camera}
           variant={variant}
           smooth={smooth}
+          rolagens={rolagens}
           onPortraitPointerDown={onPortraitPointerDown}
         />
       ) : null}

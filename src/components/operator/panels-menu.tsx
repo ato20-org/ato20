@@ -8,11 +8,17 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { TELAS } from "@/components/operator/dock/window-content";
+import { useMemo } from "react";
+
+import { useTelas } from "@/components/operator/dock/window-content";
+import { executarComando } from "@/lib/extensoes/carregar";
+import type { ComandoDeclarado, Extensao } from "@/lib/extensoes/manifesto";
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
@@ -51,7 +57,9 @@ export function PanelsMenu() {
     ...flutuantes.map((janela) => janela.chave),
   ]);
 
-  const quantas = TELAS.filter(({ conteudo }) =>
+  const telas = useTelas();
+  const comandos = useComandosDeExtensoes();
+  const quantas = telas.filter(({ conteudo }) =>
     abertas.has(chaveDe(conteudo)),
   ).length;
 
@@ -64,7 +72,7 @@ export function PanelsMenu() {
             size="sm"
             // 24px de altura como o botão da campanha: a barra tem 32.
             className="text-muted-foreground h-6 gap-1 px-1.5 text-xs"
-            aria-label={`Abas (${quantas} de ${TELAS.length} abertas)`}
+            aria-label={`Abas (${quantas} de ${telas.length} abertas)`}
           >
             <PanelsTopLeft className="size-3.5" />
             Abas
@@ -80,7 +88,7 @@ export function PanelsMenu() {
           <DropdownMenuLabel>Abas abertas</DropdownMenuLabel>
           <DropdownMenuSeparator />
 
-          {TELAS.map(({ conteudo, titulo }) => {
+          {telas.map(({ conteudo, titulo }) => {
             const chave = chaveDe(conteudo);
             const aberta = abertas.has(chave);
 
@@ -99,7 +107,58 @@ export function PanelsMenu() {
             );
           })}
         </DropdownMenuGroup>
+
+        {/* Os comandos dos plugins.
+            Existem aqui porque comando sem tecla não teria nenhum outro caminho
+            -- a tabela de atalhos só alcança o que declarou combinação, e um
+            comando inalcançável é pior que um comando que não existe.
+            O grupo some quando não há nenhum: um cabeçalho vazio anuncia um
+            recurso que o mestre não tem. */}
+        {comandos.length > 0 ? (
+          <DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Comandos</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+
+            {comandos.map(({ extensao, comando }) => (
+              <DropdownMenuItem
+                key={`${extensao.id}/${comando.id}`}
+                onClick={() => void executarComando(extensao, comando.id)}
+              >
+                <span className="min-w-0 flex-1 truncate">{comando.titulo}</span>
+                {comando.atalho ? (
+                  <span className="text-muted-foreground ml-2 font-mono text-[10px]">
+                    {comando.atalho}
+                  </span>
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Os comandos que as extensões habilitadas declaram.
+ *
+ * Do MANIFESTO e não do registro: o comando precisa aparecer no menu antes de o
+ * módulo ser importado — é o clique nele que causa a importação.
+ */
+function useComandosDeExtensoes(): Array<{
+  extensao: Extensao;
+  comando: ComandoDeclarado;
+}> {
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+
+  return useMemo(
+    () =>
+      extensoes
+        .filter((extensao) => extensao.habilitada)
+        .flatMap((extensao) =>
+          (extensao.contribui?.comandos ?? []).map((comando) => ({ extensao, comando })),
+        ),
+    [extensoes],
   );
 }

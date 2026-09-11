@@ -13,6 +13,10 @@ import { PortraitList } from "@/components/operator/portrait-list";
 import { SceneList } from "@/components/operator/scene-list";
 import { useCharacters } from "@/hooks/use-characters";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
+import { useMemo } from "react";
+
+import { PainelDeExtensao } from "@/components/operator/dock/painel-de-extensao";
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import type { ConteudoJanela } from "@/lib/store/use-window-store";
 
 /**
@@ -46,7 +50,7 @@ export type Rotulo = { titulo: string; subtitulo?: string };
  * Só telas SEM identidade própria. Um livro da estante não entra: ele tem id, e
  * uma lista de livros abertos é a Estante, não um menu de painéis.
  */
-export const TELAS: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
+export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "cenas" }, titulo: "Cenas" },
   { conteudo: { tipo: "areas" }, titulo: "Áreas" },
   { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
@@ -58,6 +62,37 @@ export const TELAS: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
 ];
 
 /**
+ * As telas que existem AGORA: as de fábrica mais as que os plugins trouxeram.
+ *
+ * Hook e não constante porque a lista passou a depender do que está instalado e
+ * habilitado. Sai do que as extensões DECLARAM no manifesto, e não do que elas
+ * registraram: a tela precisa aparecer no menu antes de o módulo ser importado
+ * — é o menu que causa a importação.
+ */
+export function useTelas(): Array<{ conteudo: ConteudoJanela; titulo: string }> {
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+
+  return useMemo(
+    () => [
+      ...TELAS_BASE,
+      ...extensoes
+        .filter((extensao) => extensao.habilitada)
+        .flatMap((extensao) =>
+          (extensao.contribui?.paineis ?? []).map((painel) => ({
+            conteudo: {
+              tipo: "extensao" as const,
+              extensaoId: extensao.id,
+              painelId: painel.id,
+            },
+            titulo: painel.titulo,
+          })),
+        ),
+    ],
+    [extensoes],
+  );
+}
+
+/**
  * O rótulo, como hook, e não função pura.
  *
  * Porque um deles depende de dado: a ficha se chama pelo nome do personagem, e
@@ -67,6 +102,7 @@ export const TELAS: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
  */
 export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
   const { personagens } = useCharacters();
+  const extensoes = useExtensoesStore((state) => state.extensoes);
 
   switch (conteudo.tipo) {
     case "personagens":
@@ -109,6 +145,18 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: "Sons" };
     case "camadas":
       return { titulo: "Camadas" };
+    case "extensao": {
+      const painel = extensoes
+        .find((extensao) => extensao.id === conteudo.extensaoId)
+        ?.contribui?.paineis.find((atual) => atual.id === conteudo.painelId);
+
+      // "Plugin" quando o painel declarado sumiu -- extensão desinstalada com a
+      // janela aberta. O título some, a janela fica, e o corpo diz o que houve.
+      return {
+        titulo: painel?.titulo ?? "Plugin",
+        subtitulo: painel?.subtitulo ?? undefined,
+      };
+    }
   }
 }
 
@@ -198,6 +246,15 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
       return <EstanteBody />;
     case "livro":
       return <LeitorLivro livroId={conteudo.livroId} />;
+    // A única que o aplicativo não desenha sozinho: o corpo vem do módulo da
+    // extensão, que só é importado agora. Ver `PainelDeExtensao`.
+    case "extensao":
+      return (
+        <PainelDeExtensao
+          extensaoId={conteudo.extensaoId}
+          painelId={conteudo.painelId}
+        />
+      );
     case "cenas":
       return <SceneList ready={pronta} />;
     case "areas":

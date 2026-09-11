@@ -123,6 +123,55 @@ export async function characterFileUrl(
   return url;
 }
 
+/**
+ * Endereço da MINIATURA de um anexo imagem.
+ *
+ * Outra rota, e não um recorte do arquivo já baixado: `/{variante}` devolve a
+ * redução que o daemon gera e guarda — uns poucos KB contra os megabytes do
+ * original. Um print de ficha de 6 MB atravessando o 4G para virar um quadrado
+ * de 80px é exatamente o que ela evita, e são N celulares na mesa.
+ *
+ * Continua sendo blob, e não `<img src>` direto, pelo motivo de sempre: a rota
+ * está atrás do token, `<img>` não manda cabeçalho, e as saídas seriam pôr o
+ * token na URL — onde ele vaza para histórico e log — ou trocá-lo por cookie,
+ * que reintroduziria CSRF numa porta que hoje não tem nenhum.
+ *
+ * Cache PRÓPRIO, separado do dos arquivos inteiros, e essa separação é o
+ * conserto de um bug: o visualizador revoga a blob ao fechar, e miniatura e
+ * arquivo compartilhando a mesma entrada faziam a miniatura quebrar na primeira
+ * vez que o jogador fechasse a ficha.
+ *
+ * Nunca revogada, ao contrário da outra. São alguns KB por anexo, no máximo
+ * trinta por autor — ver `MAX_ANEXOS` —, e revogar ao desmontar faria a lista
+ * rebuscar tudo a cada troca de aba, que é justamente o tráfego que a miniatura
+ * existe para cortar.
+ */
+const miniCache = new Map<string, string>();
+
+export async function characterFileThumbUrl(
+  codigo: string,
+  id: string,
+  autor: AnexoPersonagem["autor"],
+  arquivo: string,
+): Promise<string> {
+  const chave = `${id}/${autor}/${arquivo}`;
+
+  const cached = miniCache.get(chave);
+  if (cached) return cached;
+
+  const response = await fetch(
+    `/eu/personagens/${encodeURIComponent(id)}/anexos/${autor}/${encodeURIComponent(arquivo)}/mini`,
+    { headers: authorized(codigo) },
+  );
+
+  if (!response.ok) throw await fail(response, "Não foi possível abrir a miniatura.");
+
+  const url = URL.createObjectURL(await response.blob());
+  miniCache.set(chave, url);
+
+  return url;
+}
+
 export function revokeCharacterFileUrl(id: string, anexo: AnexoPersonagem): void {
   const url = blobCache.get(chave(id, anexo));
   if (!url) return;

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPublisher, createSubscriber, type SceneChannel } from "@/lib/sync";
 import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
+import type { RolagemDaMesa } from "@/types/dado";
 import {
   DEFAULT_SESSION_VOLUME,
   type Medida,
@@ -74,6 +75,7 @@ export function usePublisher(state: LiveState): void {
       portraits: state.portraits,
       spotlight: state.spotlight,
       medida: state.medida,
+      rolagens: state.rolagens,
     };
 
     stateRef.current = paraMesa;
@@ -82,7 +84,15 @@ export function usePublisher(state: LiveState): void {
     // `{ scene, track, volume, portraits, spotlight, medida }` a cada render, e
     // comparar essa embalagem fazia o Operador publicar enquanto montava a
     // PRÓXIMA cena — uma publicação por uma mudança que a mesa não vê.
-  }, [scene, state.track, state.volume, state.portraits, state.spotlight, state.medida]);
+  }, [
+    scene,
+    state.track,
+    state.volume,
+    state.portraits,
+    state.spotlight,
+    state.medida,
+    state.rolagens,
+  ]);
 
   useEffect(() => {
     const beat = setInterval(() => {
@@ -104,6 +114,8 @@ export type Subscription = {
   spotlight: Spotlight | null;
   /** A medida em curso da régua, que a mesa acompanha. */
   medida: Medida | null;
+  /** Os dados que os jogadores jogaram na mesa há pouco. Ver `LiveState`. */
+  rolagens: RolagemDaMesa[];
   /** Já chegou alguma coisa do daemon. */
   synced: boolean;
   /** Passou tempo demais sem nada. */
@@ -124,6 +136,7 @@ export function useSubscription(codigo: string): Subscription {
     portraits: [],
     spotlight: null,
     medida: null,
+    rolagens: [],
   });
   const [synced, setSynced] = useState(false);
   const [stalled, setStalled] = useState(false);
@@ -160,6 +173,9 @@ export function useSubscription(codigo: string): Subscription {
     portraits: live.portraits,
     spotlight: live.spotlight,
     medida: live.medida,
+    // O quadro de uma versão anterior não tem o campo: a lista vazia evita que
+    // a tela caia enquanto o daemon ainda serve um bundle velho.
+    rolagens: live.rolagens ?? [],
     synced,
     stalled,
   };

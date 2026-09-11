@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 
+import { novoId } from "@/lib/id";
+
 import {
   canRedo,
   canUndo,
@@ -333,7 +335,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
   },
 
   addItems(sceneId, drafts) {
-    const ids = drafts.map(() => crypto.randomUUID());
+    const ids = drafts.map(() => novoId());
 
     get().updateScene(sceneId, (scene) => {
       // Nascem na frente de tudo: o mestre acabou de colocar, quer ver.
@@ -405,7 +407,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
   },
 
   addFog(sceneId, region) {
-    const id = crypto.randomUUID();
+    const id = novoId();
 
     get().updateScene(sceneId, (scene) => ({
       ...scene,
@@ -416,7 +418,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
   },
 
   addTraco(sceneId, traco) {
-    const id = crypto.randomUUID();
+    const id = novoId();
 
     get().updateScene(sceneId, (scene) => ({
       ...scene,
@@ -452,7 +454,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
   },
 
   addPin(sceneId, pin) {
-    const id = crypto.randomUUID();
+    const id = novoId();
 
     get().updateScene(sceneId, (scene) => ({
       ...scene,
@@ -512,7 +514,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
   },
 
   addPostit(sceneId, postit) {
-    const id = crypto.randomUUID();
+    const id = novoId();
 
     get().updateScene(sceneId, (scene) => ({
       ...scene,

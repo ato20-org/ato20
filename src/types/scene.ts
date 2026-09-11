@@ -6,6 +6,9 @@
  * esse plano para caber na tela dela. Sem isso, o que o mestre posiciona não
  * bate com o que aparece na TV.
  */
+
+import { novoId } from "@/lib/id";
+
 export const SCENE_WIDTH = 1920;
 export const SCENE_HEIGHT = 1080;
 
@@ -575,6 +578,18 @@ export type Scene = {
   tracos?: Traco[];
   createdAt: number;
   updatedAt: number;
+  /**
+   * O guardado das EXTENSOES, por id de extensao.
+   *
+   * Opaco para o aplicativo e para o Rust: quem escreve e le e o plugin, e o
+   * formato e dele. Vive na cena porque e dado de cena -- viaja no zip da
+   * campanha e volta com ela.
+   *
+   * SAI do payload publicado, junto com alfinetes e postits. Nao e cautela
+   * generica: plugin so alcanca o Operador nesta etapa, entao o que ele escreve
+   * e anotacao do mestre por construcao. Ver `sceneForTable`.
+   */
+  extensoes?: Record<string, unknown>;
 };
 
 /** Documento inteiro persistido. Uma mesa = um board. */
@@ -603,7 +618,7 @@ export const DEFAULT_GRID: SceneGrid = { size: 96, offsetX: 0, offsetY: 0, opaci
 export function createScene(name: string): Scene {
   const now = Date.now();
   return {
-    id: crypto.randomUUID(),
+    id: novoId(),
     name,
     items: [],
     fog: [],
@@ -624,19 +639,19 @@ export function cloneScene(source: Scene, name: string): Scene {
 
   return {
     ...source,
-    id: crypto.randomUUID(),
+    id: novoId(),
     name,
-    items: source.items.map((item) => ({ ...item, id: crypto.randomUUID() })),
-    fog: source.fog.map((region) => ({ ...region, id: crypto.randomUUID() })),
+    items: source.items.map((item) => ({ ...item, id: novoId() })),
+    fog: source.fog.map((region) => ({ ...region, id: novoId() })),
     // Os anexos continuam apontando para os MESMOS assets: o arquivo é do
     // acervo da campanha, não do ponto, e copiá-lo duplicaria um mapa de 8 MB
     // por duplicar a cena.
-    pins: source.pins?.map((pin) => ({ ...pin, id: crypto.randomUUID() })),
+    pins: source.pins?.map((pin) => ({ ...pin, id: novoId() })),
     // O texto vem junto com os marcadores dentro dele, e os marcadores são por
     // nome: um `>Porão` copiado continua apontando para a MESMA cena de porão,
     // não para a cópia dela. É o que se quer — duplicar uma cena não duplica o
     // porão a que ela leva.
-    postits: source.postits?.map((postit) => ({ ...postit, id: crypto.randomUUID() })),
+    postits: source.postits?.map((postit) => ({ ...postit, id: novoId() })),
     createdAt: now,
     updatedAt: now,
   };

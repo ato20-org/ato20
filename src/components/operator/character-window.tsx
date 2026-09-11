@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   File,
   FileAudio,
@@ -9,10 +9,12 @@ import {
   FileVideo,
   Loader2,
   Paperclip,
+  Pencil,
   Radio,
   RadioTower,
   Trash2,
   X,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -53,6 +56,9 @@ import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { chaveDe, type ConteudoJanela } from "@/lib/store/use-window-store";
 import { setAssetEscopo } from "@/lib/vault/assets";
 import { shareCharacterAttachment } from "@/lib/vault/evidence";
+
+import { InventarioPersonagem } from "./inventario-personagem";
+import { SecaoFicha } from "./secao-ficha";
 import { formatBytes } from "@/lib/player/session";
 import {
   attachToCharacter,
@@ -120,6 +126,7 @@ export function CharacterBody({ personagemId }: { personagemId: string }) {
     <Ficha
       personagem={personagem}
       jogadores={jogadores}
+      outrosPersonagens={(personagens ?? []).filter((outro) => outro.id !== personagemId)}
       onChanged={recarregar}
       onRemoved={() => fecharJanela(chave)}
       onAbrirJanela={abrirJanela}
@@ -137,12 +144,15 @@ export function CharacterBody({ personagemId }: { personagemId: string }) {
 function Ficha({
   personagem,
   jogadores,
+  outrosPersonagens,
   onChanged,
   onRemoved,
   onAbrirJanela,
 }: {
   personagem: Personagem;
   jogadores: Player[];
+  /** Os demais personagens, destino possível de uma transferência de item. */
+  outrosPersonagens: Personagem[];
   onChanged: () => void;
   onRemoved: () => void;
   onAbrirJanela: (conteudo: ConteudoJanela) => void;
@@ -220,24 +230,224 @@ function Ficha({
     }
   }
 
+  const donosNomes = jogadores
+    .filter((jogador) => donos.includes(jogador.id))
+    .map((jogador) => jogador.nome);
+
   return (
     <ScrollArea className="min-h-0 flex-1">
-      <div className="space-y-5 p-3">
-        <div className="flex items-center gap-2">
-          <Input
-            className="h-8 flex-1 text-sm font-medium"
-            defaultValue={personagem.nome}
-            aria-label="Nome do personagem"
-            // No `blur`, e não a cada tecla: renomear reescreve o índice
-            // inteiro, e gravar por tecla o regravaria a cada letra.
-            key={personagem.id}
-            onBlur={(event) => {
-              const nome = event.target.value.trim();
-              if (!nome || nome === personagem.nome) return;
+      {/* `@container`, e nao breakpoint de tela: esta janela flutua, atraca numa
+          coluna e redimensiona na mao. A largura dela nao tem relacao nenhuma
+          com a da tela, e um `md:` aqui quebraria em duas colunas uma ficha de
+          360 pixels so porque o monitor e grande. */}
+      <div className="@container/ficha space-y-4 p-3">
+        <Identidade
+          personagem={personagem}
+          donos={donosNomes}
+          onChanged={onChanged}
+          onRemoved={onRemoved}
+          onAbrirImagem={abrirImagem}
+        />
 
-              void renameCharacter(personagem.id, nome).then(onChanged);
-            }}
-          />
+        {/* Duas colunas a partir de 560: abaixo disso os quadros do inventario
+            cairiam para 50 pixels, e a grade de cinco deixaria de ser legivel.
+            Acima, e a largura que a janela larga finalmente usa -- antes ela so
+            esticava o texto das mesmas linhas empilhadas. */}
+        <div className="grid gap-4 @[560px]/ficha:grid-cols-2 @[560px]/ficha:gap-x-6">
+          <div className="min-w-0 space-y-4">
+            {/* Os dois: preencher a ficha muda o ÍNDICE (o campo) e a pasta de
+                anexos (o arquivo). Chamando só `onChanged`, a lista de arquivos
+                ficava dizendo "nada anexado" com a ficha já posta. */}
+            <SecaoFicha secao="campos" titulo="Campos do personagem">
+              <Slots
+                personagem={personagem}
+                onChanged={() => {
+                  onChanged();
+                  relerAnexos();
+                }}
+                onAbrirAnexo={abrirAnexo}
+                onAbrirImagem={abrirImagem}
+              />
+            </SecaoFicha>
+
+            <Files
+              personagemId={personagem.id}
+              anexos={anexos}
+              ficha={personagem.ficha}
+              anexando={anexando}
+              onAnexar={() => void anexar()}
+              onAbrir={abrirAnexo}
+              onRemover={async (anexo) => {
+                await detachFromCharacter(personagem.id, anexo.autor, anexo.arquivo);
+                relerAnexos();
+                // Apagar o anexo da ficha limpa o CAMPO ficha do lado nativo —
+                // ver `remove_anexo`. Sem reler o índice, a linha da ficha
+                // continuaria mostrando o nome de um arquivo que saiu do disco.
+                onChanged();
+              }}
+            />
+          </div>
+
+          <div className="min-w-0 space-y-4">
+            {/* O inventário abre a coluna da direita porque é o bloco que mais
+                pede largura: a grade é de cinco, e cada coluna a mais de janela
+                vira quadro maior. Recarrega os anexos junto porque a imagem de
+                item do jogador é um anexo — e a lista de arquivos subtrai
+                justamente os que o inventário usa. */}
+            <InventarioPersonagem
+              personagem={personagem}
+              outros={outrosPersonagens}
+              onChangedAnexos={relerAnexos}
+            />
+
+            {/* Os dois de novo: vincular muda quem são os donos DESTA ficha, que
+                é leitura local, e muda o nome que a lista de personagens mostra
+                embaixo do nome dele — outra janela. Ver `useCharacterOwners`. */}
+            <Owners
+              personagem={personagem}
+              jogadores={jogadores}
+              donos={donos}
+              onChanged={() => {
+                relerAnexos();
+                onChanged();
+              }}
+            />
+          </div>
+        </div>
+
+        <p className="text-muted-foreground text-[10px] leading-snug">
+          Os arquivos ficam em <code>personagens/{personagem.id}/anexos/</code>, separados por
+          quem os pôs ali.
+        </p>
+      </div>
+
+    </ScrollArea>
+  );
+}
+
+/**
+ * O que existe ALÉM dos campos: anexos soltos, dos dois autores.
+ *
+ * A ficha sai daqui de propósito. Ela é anexo como qualquer outro no disco, mas
+ * na tela é um CAMPO — tem linha própria, com miniatura, transmitir e trocar.
+ * Aparecendo nos dois lugares, a mesma ficha ficava com dois nomes de gesto:
+ * "Trocar" ali e um X aqui, um que limpa o campo e outro que apaga o arquivo.
+ * O que sobra nesta lista é o que ninguém nomeou — o mapa da masmorra que o
+ * mestre anexou, o desenho que o jogador mandou.
+ */
+/**
+ * Quem o personagem e: retrato, nome, lixeira, e quem joga com ele.
+ *
+ * No topo e fora das secoes colapsaveis, porque e a unica parte que nao faz
+ * sentido fechar -- uma ficha sem nome nem rosto seria uma janela em branco
+ * dentro de uma janela com titulo.
+ *
+ * O retrato veio para ca de dentro dos campos. Ele continua editavel la, no
+ * quadro dele; aqui ele so identifica, e e por isso que o quadrado nao tem
+ * botao nenhum: dois lugares para trocar a mesma imagem foi o problema que a
+ * lista de arquivos e a linha da ficha ja tinham -- ver `Files`.
+ */
+function Identidade({
+  personagem,
+  donos,
+  onChanged,
+  onRemoved,
+  onAbrirImagem,
+}: {
+  personagem: Personagem;
+  /** Os nomes de quem joga com ele, para a linha embaixo do nome. */
+  donos: string[];
+  onChanged: () => void;
+  onRemoved: () => void;
+  onAbrirImagem: (assetId: string, nome: string) => void;
+}) {
+  const retrato = useAssetUrl(personagem.retrato);
+
+  const [editando, setEditando] = useState(false);
+  /** Saiu pelo Escape: o `blur` que vem em seguida não deve gravar. */
+  const desistiu = useRef(false);
+
+  return (
+    <div className="flex items-start gap-3">
+      {personagem.retrato ? (
+        <Thumb
+          url={retrato}
+          alt={personagem.nome}
+          onAbrir={() => onAbrirImagem(personagem.retrato as string, personagem.nome)}
+          className="size-16 rounded-md"
+        />
+      ) : (
+        // Sem retrato, um quadrado vazio seria indistinguível de um que ainda
+        // está carregando. O ícone diz que não há imagem, e a borda tracejada
+        // repete a mesma pista do quadro vazio dos campos.
+        <span className="bg-muted/40 flex size-16 shrink-0 items-center justify-center rounded-md border border-dashed">
+          <FileImage className="text-muted-foreground/40 size-6" aria-hidden />
+        </span>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center gap-2">
+          {editando ? (
+            <Input
+              className="h-8 min-w-0 flex-1 text-sm font-medium"
+              defaultValue={personagem.nome}
+              aria-label="Nome do personagem"
+              // O campo nasce com o foco e com o texto todo marcado: quem
+              // clicou no lápis quer escrever, e não posicionar cursor primeiro.
+              autoFocus
+              onFocus={(event) => event.target.select()}
+              onKeyDown={(event) => {
+                // Enter grava pelo mesmo caminho do `blur`, em vez de duplicar
+                // a gravação aqui: uma escrita só, um lugar só para errar.
+                if (event.key === "Enter") event.currentTarget.blur();
+
+                if (event.key === "Escape") {
+                  desistiu.current = true;
+                  event.currentTarget.blur();
+                }
+              }}
+              // No `blur`, e não a cada tecla: renomear reescreve o índice
+              // inteiro, e gravar por tecla o regravaria a cada letra.
+              onBlur={(event) => {
+                setEditando(false);
+
+                // Escape sai sem gravar. A marca é um `ref` e não estado
+                // porque ela é lida no `blur` que acontece no mesmo gesto --
+                // um `setState` aqui só chegaria no render seguinte.
+                if (desistiu.current) {
+                  desistiu.current = false;
+                  return;
+                }
+
+                const nome = event.target.value.trim();
+                if (!nome || nome === personagem.nome) return;
+
+                void renameCharacter(personagem.id, nome).then(onChanged);
+              }}
+            />
+          ) : (
+            <>
+              {/* Texto, e não um campo sempre aberto. Um `input` em volta do
+                  nome diz "isto está para ser escrito", e o que o mestre faz
+                  com esta linha quase sempre é LER — ele nomeia o personagem
+                  uma vez. O lápis é o que separa as duas coisas. */}
+              <h2
+                className="min-w-0 flex-1 truncate text-sm font-medium"
+                title={personagem.nome}
+              >
+                {personagem.nome}
+              </h2>
+
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Renomear ${personagem.nome}`}
+                onClick={() => setEditando(true)}
+              >
+                <Pencil />
+              </Button>
+            </>
+          )}
 
           {/* Pergunta antes, e é a única ação do aplicativo que pergunta.
               Apagar cena ou imagem tem desfazer; isto não tem: o personagem sai
@@ -284,71 +494,18 @@ function Ficha({
           </AlertDialog>
         </div>
 
-        <Files
-          personagemId={personagem.id}
-          anexos={anexos}
-          ficha={personagem.ficha}
-          anexando={anexando}
-          onAnexar={() => void anexar()}
-          onAbrir={abrirAnexo}
-          onRemover={async (anexo) => {
-            await detachFromCharacter(personagem.id, anexo.autor, anexo.arquivo);
-            relerAnexos();
-            // Apagar o anexo da ficha limpa o CAMPO ficha do lado nativo — ver
-            // `remove_anexo`. Sem reler o índice, a linha da ficha continuaria
-            // mostrando o nome de um arquivo que acabou de sair do disco.
-            onChanged();
-          }}
-        />
-
-        {/* Os dois: preencher a ficha muda o ÍNDICE (o campo) e a pasta de
-            anexos (o arquivo). Chamando só `onChanged`, a lista de arquivos
-            acima ficava dizendo "nada anexado" com a ficha já posta. */}
-        <Slots
-          personagem={personagem}
-          onChanged={() => {
-            onChanged();
-            relerAnexos();
-          }}
-          onAbrirAnexo={abrirAnexo}
-          onAbrirImagem={abrirImagem}
-        />
-
-        <RetratoAoVivo personagem={personagem} onChanged={onChanged} />
-
-        {/* Os dois de novo: vincular muda quem são os donos DESTA ficha, que é
-            leitura local, e muda o nome que a lista de personagens mostra
-            embaixo do nome dele — outra janela. Ver `useCharacterOwners`. */}
-        <Owners
-          personagem={personagem}
-          jogadores={jogadores}
-          donos={donos}
-          onChanged={() => {
-            relerAnexos();
-            onChanged();
-          }}
-        />
-
-        <p className="text-muted-foreground text-[10px] leading-snug">
-          Os arquivos ficam em <code>personagens/{personagem.id}/anexos/</code>, separados por
-          quem os pôs ali.
+        {/* Quem joga com ele, aqui em cima e nao so la embaixo: e a pergunta que
+            se faz olhando a ficha de longe -- "de quem e este?" --, e a resposta
+            estava a oitocentos pixels de rolagem dentro de uma secao. La embaixo
+            continua a lista que se EDITA; aqui e so o que ela diz. */}
+        <p className="text-muted-foreground truncate text-[11px]">
+          {donos.length === 0 ? "Sem dono" : donos.join(", ")}
         </p>
       </div>
-
-    </ScrollArea>
+    </div>
   );
 }
 
-/**
- * O que existe ALÉM dos campos: anexos soltos, dos dois autores.
- *
- * A ficha sai daqui de propósito. Ela é anexo como qualquer outro no disco, mas
- * na tela é um CAMPO — tem linha própria, com miniatura, transmitir e trocar.
- * Aparecendo nos dois lugares, a mesma ficha ficava com dois nomes de gesto:
- * "Trocar" ali e um X aqui, um que limpa o campo e outro que apaga o arquivo.
- * O que sobra nesta lista é o que ninguém nomeou — o mapa da masmorra que o
- * mestre anexou, o desenho que o jogador mandou.
- */
 function Files({
   personagemId,
   anexos,
@@ -374,9 +531,8 @@ function Files({
   );
 
   return (
-    <section className="space-y-2">
-      <h3 className="text-xs font-medium">Arquivos</h3>
-
+    <SecaoFicha secao="arquivos" titulo="Arquivos" contagem={soltos.length}>
+      <div className="space-y-2">
       {soltos.length === 0 ? (
         <p className="text-muted-foreground text-xs">
           Nada além dos campos. O que entrar aqui o jogador vinculado também lê.
@@ -461,7 +617,8 @@ function Files({
         {anexando ? <Loader2 className="animate-spin" /> : <Paperclip />}
         Anexar arquivos
       </Button>
-    </section>
+      </div>
+    </SecaoFicha>
   );
 }
 
@@ -607,7 +764,39 @@ function RetratoAoVivo({
   }
 
   return (
-    <section className="space-y-2">
+    <Popover>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={salva ? "Retrato ao vivo, configurado" : "Pôr um retrato ao vivo"}
+                  className={cn(
+                    "focus-visible:ring-ring absolute top-1 right-1 z-10 flex size-5 items-center justify-center rounded focus-visible:ring-2 focus-visible:outline-none",
+                    // Aceso quando há URL, apagado quando não: é a informação
+                    // que o bloco antigo gastava cem pixels e um parágrafo para
+                    // dar, e que agora se lê sem abrir nada.
+                    salva
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background/80 text-muted-foreground hover:text-foreground opacity-0 transition-opacity group-hover/slot:opacity-100 group-focus-within/slot:opacity-100 motion-reduce:transition-none",
+                  )}
+                >
+                  <Zap className="size-3" aria-hidden />
+                </button>
+              }
+            />
+          }
+        />
+        <TooltipContent>
+          <p className="max-w-48">
+            {salva ? "Retrato ao vivo no ar. Clique para trocar." : "Retrato ao vivo"}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+
+      <PopoverContent align="start" className="w-80 space-y-2">
       <div>
         <h3 className="text-xs font-medium">Retrato ao vivo</h3>
         <p className="text-muted-foreground text-[11px]">
@@ -701,10 +890,24 @@ function RetratoAoVivo({
           WebKit.
         </p>
       ) : null}
-    </section>
+      </PopoverContent>
+    </Popover>
   );
 }
 
+/**
+ * Os tres campos nomeados, como QUADROS e nao como linhas.
+ *
+ * Eram tres linhas de 56 pixels com miniatura, titulo, nome do arquivo e dois
+ * botoes -- 190 pixels de altura para dizer tres coisas. A Plateia ja mostrava
+ * os mesmos tres como quadrados de 80 lado a lado, e ali eles se leem de
+ * relance: o que identifica um retrato e a cara dele, nao o nome do arquivo.
+ *
+ * O que se perdeu na troca foi o nome do arquivo sempre visivel. Ele continua
+ * no `title` do quadro e no visualizador, e o caso em que importava -- conferir
+ * se o token e o certo -- sempre pediu a imagem grande, nao um nome truncado em
+ * dez caracteres.
+ */
 function Slots({
   personagem,
   onChanged,
@@ -717,24 +920,20 @@ function Slots({
   onAbrirImagem: (assetId: string, nome: string) => void;
 }) {
   return (
-    <section className="space-y-2">
-      <h3 className="text-xs font-medium">Campos do personagem</h3>
-
-      <ul className="space-y-1.5">
-        {CAMPOS.map(({ campo, titulo, nota }) => (
-          <Slot
-            key={campo}
-            personagem={personagem}
-            campo={campo}
-            titulo={titulo}
-            nota={nota}
-            onChanged={onChanged}
-            onAbrirAnexo={onAbrirAnexo}
-            onAbrirImagem={onAbrirImagem}
-          />
-        ))}
-      </ul>
-    </section>
+    <ul className="flex flex-wrap gap-2">
+      {CAMPOS.map(({ campo, titulo, nota }) => (
+        <Slot
+          key={campo}
+          personagem={personagem}
+          campo={campo}
+          titulo={titulo}
+          nota={nota}
+          onChanged={onChanged}
+          onAbrirAnexo={onAbrirAnexo}
+          onAbrirImagem={onAbrirImagem}
+        />
+      ))}
+    </ul>
   );
 }
 
@@ -825,62 +1024,109 @@ function Slot({
     }
   }
 
+  const preenchido = Boolean(valor);
+
   return (
-    <li className="bg-muted/40 flex items-center gap-2 rounded-md border p-1.5">
-      {/* A miniatura do próprio arquivo quando ele é imagem: numa campanha com
-          trinta imagens o nome raramente é o que faz reconhecer qual é. E ela
-          abre o visualizador, com zoom: o quadradinho de 36 pixels serve para
-          reconhecer, não para conferir se o token é o certo. */}
-      {campo !== "ficha" ? (
-        <Thumb
-          url={enderecoAsset}
-          alt={rotulo ?? titulo}
-          // Pelo id do asset, e não pelo endereço que a miniatura já tem: a
-          // janela resolve o endereço por conta dela, e passar o resolvido para
-          // dentro do store amarraria a janela ao ciclo de vida desta linha.
-          onAbrir={valor ? () => onAbrirImagem(valor, rotulo ?? titulo) : undefined}
-        />
-      ) : fichaImagem ? (
-        // `key` no arquivo: trocar a ficha REMONTA a miniatura, e é o que
-        // devolve o estado de "falhou" ao início sem escrever estado de dentro
-        // do efeito.
-        <AnexoThumb
-          key={fichaImagem.arquivo}
-          personagemId={personagem.id}
-          anexo={fichaImagem}
-          Fallback={FileText}
-          onAbrir={() => onAbrirAnexo(fichaImagem)}
-        />
-      ) : (
-        <FileText className="text-muted-foreground size-4 shrink-0" aria-hidden />
-      )}
+    <li className="w-20 space-y-1">
+      <div
+        title={rotulo ?? nota}
+        className={cn(
+          "group/slot bg-muted/40 relative size-20 overflow-hidden rounded-md border",
+          // Tracejado quando vazio, e e a unica pista que resta sem a linha de
+          // texto: um quadro cheio e um vazio com a mesma borda seriam dois
+          // quadros cinza para quem passa o olho.
+          !preenchido && "border-dashed",
+        )}
+      >
+        {campo !== "ficha" ? (
+          <Thumb
+            url={enderecoAsset}
+            alt={rotulo ?? titulo}
+            // Pelo id do asset, e nao pelo endereco que a miniatura ja tem: a
+            // janela resolve o endereco por conta dela, e passar o resolvido
+            // para dentro do store amarraria a janela ao ciclo de vida daqui.
+            onAbrir={valor ? () => onAbrirImagem(valor, rotulo ?? titulo) : undefined}
+            className="absolute inset-0 size-full rounded-none border-0"
+          />
+        ) : fichaImagem ? (
+          // `key` no arquivo: trocar a ficha REMONTA a miniatura, e e o que
+          // devolve o estado de "falhou" ao inicio sem escrever estado de
+          // dentro do efeito.
+          <AnexoThumb
+            key={fichaImagem.arquivo}
+            personagemId={personagem.id}
+            anexo={fichaImagem}
+            Fallback={FileText}
+            onAbrir={() => onAbrirAnexo(fichaImagem)}
+            className="absolute inset-0 size-full rounded-none border-0"
+          />
+        ) : (
+          <span className="absolute inset-0 flex items-center justify-center">
+            <FileText
+              className={cn(
+                "size-5",
+                preenchido ? "text-muted-foreground" : "text-muted-foreground/40",
+              )}
+              aria-hidden
+            />
+          </span>
+        )}
 
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs font-medium">{titulo}</span>
-        <span className="text-muted-foreground block truncate text-[10px]">
-          {rotulo ?? nota}
-        </span>
-      </span>
+        {/* O retrato ao vivo mora no canto do quadro do Retrato, e nao num
+            bloco proprio: era uma secao inteira -- titulo, paragrafo de tres
+            linhas, seletor, campo e botao -- para um campo que a maioria das
+            fichas deixa vazio. Aqui ele ocupa 20 pixels, e acende quando ha
+            URL, que e a informacao que o bloco levava cem pixels para dar. */}
+        {campo === "retrato" ? (
+          <RetratoAoVivo personagem={personagem} onChanged={onChanged} />
+        ) : null}
 
-      {fichaImagem ? (
-        <Transmitir anexo={fichaImagem} personagemId={personagem.id} />
-      ) : null}
+        {/* A tira de acoes aparece no hover E no foco de dentro. `opacity`, e
+            nao `hidden`: o botao escondido por `hidden` sai da ordem de
+            tabulacao, e trocar a ficha deixaria de ser alcancavel pelo teclado.
+            Com `opacity-0` ele continua focavel, e `focus-within` o revela. */}
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-0.5 bg-black/60 p-0.5 opacity-0 transition-opacity group-hover/slot:opacity-100 group-focus-within/slot:opacity-100 motion-reduce:transition-none">
+          {fichaImagem ? (
+            <Transmitir anexo={fichaImagem} personagemId={personagem.id} />
+          ) : null}
 
-      <Button variant="secondary" size="sm" disabled={ocupado} onClick={() => void escolher()}>
-        {ocupado ? <Loader2 className="animate-spin" /> : <Paperclip />}
-        {valor ? "Trocar" : "Anexar"}
-      </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-white hover:bg-white/20 hover:text-white"
+                  aria-label={`${preenchido ? "Trocar" : "Anexar"} ${titulo}`}
+                  disabled={ocupado}
+                  onClick={() => void escolher()}
+                >
+                  {ocupado ? <Loader2 className="animate-spin" /> : <Paperclip />}
+                </Button>
+              }
+            />
+            <TooltipContent>
+              <p className="max-w-48">{preenchido ? `Trocar ${titulo}` : nota}</p>
+            </TooltipContent>
+          </Tooltip>
 
-      {valor ? (
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={`Limpar ${titulo}`}
-          onClick={() => void limpar()}
-        >
-          <X />
-        </Button>
-      ) : null}
+          {preenchido ? (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="text-white hover:bg-white/20 hover:text-white"
+              aria-label={`Limpar ${titulo}`}
+              onClick={() => void limpar()}
+            >
+              <X />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <p className="truncate text-[10px] leading-tight font-medium" title={titulo}>
+        {titulo}
+      </p>
     </li>
   );
 }
@@ -902,11 +1148,13 @@ function AnexoThumb({
   anexo,
   Fallback,
   onAbrir,
+  className,
 }: {
   personagemId: string;
   anexo: AnexoPersonagem;
   Fallback: typeof File;
   onAbrir: () => void;
+  className?: string;
 }) {
   const { autor, arquivo, mimeType, tamanho } = anexo;
   const [url, setUrl] = useState<string | null>(null);
@@ -939,7 +1187,20 @@ function AnexoThumb({
     };
   }, [personagemId, autor, arquivo, mimeType, tamanho]);
 
-  if (falhou) return <Fallback className="text-muted-foreground size-4 shrink-0" aria-hidden />;
+  if (falhou) {
+    // Sem moldura pedida, o ícone vai solto: é como a linha de arquivo sempre o
+    // mostrou, ao lado do nome. Com moldura, ele precisa do quadro em volta —
+    // senão o quadro do campo colapsaria para nada quando os bytes não vêm.
+    if (!className) {
+      return <Fallback className="text-muted-foreground size-4 shrink-0" aria-hidden />;
+    }
+
+    return (
+      <span className={cn("bg-background flex items-center justify-center", className)}>
+        <Fallback className="text-muted-foreground size-5 shrink-0" aria-hidden />
+      </span>
+    );
+  }
 
   return (
     <Thumb
@@ -947,6 +1208,7 @@ function AnexoThumb({
       alt={arquivo}
       onAbrir={url ? onAbrir : undefined}
       onError={() => setFalhou(true)}
+      className={className}
     />
   );
 }
@@ -964,11 +1226,21 @@ function Thumb({
   alt,
   onAbrir,
   onError,
+  className,
 }: {
   url: string | null | undefined;
   alt: string;
   onAbrir?: () => void;
   onError?: () => void;
+  /**
+   * Por cima da moldura padrão.
+   *
+   * Existe porque o mesmo quadrado serve a dois tamanhos: 36 pixels na linha de
+   * um arquivo, e 80 preenchendo o quadro de um campo. Um componente por
+   * tamanho seria a segunda cópia da mesma blob, do mesmo `onError` e do mesmo
+   * cuidado com foco.
+   */
+  className?: string;
 }) {
   const imagem = url ? (
     // eslint-disable-next-line @next/next/no-img-element
@@ -982,7 +1254,7 @@ function Thumb({
     />
   ) : null;
 
-  const moldura = "bg-background size-9 shrink-0 overflow-hidden rounded border";
+  const moldura = cn("bg-background size-9 shrink-0 overflow-hidden rounded border", className);
 
   if (!onAbrir) return <span className={moldura}>{imagem}</span>;
 
@@ -1075,9 +1347,8 @@ function Owners({
   const livres = jogadores.filter((jogador) => !donos.includes(jogador.id));
 
   return (
-    <section className="space-y-2">
-      <h3 className="text-xs font-medium">Quem joga com ele</h3>
-
+    <SecaoFicha secao="nota" titulo="Quem joga com ele" contagem={vinculados.length}>
+      <div className="space-y-2">
       {vinculados.length === 0 ? (
         <p className="text-muted-foreground text-xs">
           Sem dono. Vinculado, o jogador passa a ver os arquivos e pode escrever notas.
@@ -1134,6 +1405,7 @@ function Owners({
           quando ele for vinculado de novo.
         </p>
       ) : null}
-    </section>
+      </div>
+    </SecaoFicha>
   );
 }

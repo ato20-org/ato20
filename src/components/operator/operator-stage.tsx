@@ -48,7 +48,10 @@ import {
   rotateGroup,
   scaleGroup,
 } from "@/lib/geometry/group";
+import { CamadasDeExtensoes } from "@/components/operator/camadas-de-extensoes";
 import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
+import { chaveContribuicao } from "@/lib/extensoes/manifesto";
+import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
 import {
   areasDeRetrato,
   portraitBox,
@@ -64,7 +67,10 @@ import {
   fitInitialSize,
   MIN_ITEM_SIZE,
 } from "@/lib/geometry/transform";
+import { toast } from "sonner";
+
 import { hasAssetDrag, readAssetDrag } from "@/lib/operator/asset-drag";
+import { promoverImagemDoItem } from "@/lib/vault/inventory";
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
@@ -72,7 +78,7 @@ import { useReguaStore } from "@/lib/store/use-regua-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { useToolStore } from "@/lib/store/use-tool-store";
+import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
 import {
   POSTIT_ALTURA,
   POSTIT_LARGURA,
@@ -822,6 +828,55 @@ export function OperatorStage({ scene }: { scene: Scene }) {
       return;
     }
 
+    // A ferramenta de uma extensão. Por último entre as de mira, e antes do
+    // marquee: se caísse depois, o gesto viraria seleção por área e a
+    // ferramenta do plugin nunca receberia nada.
+    const daExtensao = ferramentaDeExtensao(tool);
+    if (daExtensao) {
+      const registrada =
+        useContribuicoesStore.getState().ferramentas[
+          chaveContribuicao(daExtensao.extensaoId, daExtensao.ferramentaId)
+        ];
+
+      // Declarada e não registrada -- módulo ainda não importado, ou plugin que
+      // não a implementou. O clique não faz nada, e não faz nada é o certo:
+      // cair no marquee daria seleção por área enquanto o mestre acha que está
+      // usando outra coisa.
+      if (!registrada) return;
+
+      // As duas formas, e o plugin escolhe qual implementa. Arrasto vence
+      // quando ele oferece os dois: `aoClicar` dispararia no começo do gesto e
+      // o mestre veria a ação acontecer antes de soltar.
+      if (registrada.aoArrastar) {
+        startDrag(event, {
+          onMove: (delta) =>
+            setMarquee(
+              boundsFromPoints(anchor, { x: anchor.x + delta.x, y: anchor.y + delta.y }),
+            ),
+          onEnd: (native) => {
+            setMarquee(null);
+
+            const box = boundsToBox(
+              boundsFromPoints(anchor, toScene(native.clientX, native.clientY)),
+            );
+
+            registrada.aoArrastar?.({
+              x: Math.round(box.x),
+              y: Math.round(box.y),
+              largura: Math.round(box.width),
+              altura: Math.round(box.height),
+            });
+          },
+        });
+
+        return;
+      }
+
+      registrada.aoClicar?.({ x: Math.round(anchor.x), y: Math.round(anchor.y) });
+
+      return;
+    }
+
     const additive = event.shiftKey;
     // Retrato da seleção antes do arrasto: com Shift a área soma ao que já
     // estava marcado, sem Shift começa do zero.
@@ -897,29 +952,57 @@ export function OperatorStage({ scene }: { scene: Scene }) {
     // arrasto como navegação.
     event.preventDefault();
 
-    const size =
-      payload.naturalWidth && payload.naturalHeight
-        ? fitInitialSize(payload.naturalWidth, payload.naturalHeight)
-        : FALLBACK_DROP_SIZE;
-
+    // O ponto sai do evento AGORA, e não de dentro do `then`: o evento de
+    // arrasto é reciclado pelo React, e lê-lo depois de um `await` devolveria
+    // zero — a imagem cairia no canto da cena em vez de onde a mão soltou.
     const center = toScene(event.clientX, event.clientY);
 
-    // Já selecionado: o gesto seguinte é quase sempre ajustar o que acabou de
-    // entrar, e sem seleção seria preciso clicar na imagem antes.
-    select([addItem(scene.id, { assetId: payload.assetId, ...boxAround(center, size.x, size.y) })]);
+    const soltar = (assetId: string, largura?: number, altura?: number) => {
+      const size = largura && altura ? fitInitialSize(largura, altura) : FALLBACK_DROP_SIZE;
+
+      // Já selecionado: o gesto seguinte é quase sempre ajustar o que acabou de
+      // entrar, e sem seleção seria preciso clicar na imagem antes.
+      select([addItem(scene.id, { assetId, ...boxAround(center, size.x, size.y) })]);
+    };
+
+    if (payload.assetId) {
+      soltar(payload.assetId, payload.naturalWidth, payload.naturalHeight);
+      return;
+    }
+
+    // Veio do inventário: a imagem pode ser um anexo, que não tem id de acervo.
+    // O objeto de cena é GRAVADO e tem de resolver depois de reabrir o
+    // aplicativo, então ele precisa de um asset de verdade — e é aqui, depois
+    // do gesto, que dá para esperar o disco.
+    if (payload.item) {
+      const { personagemId, itemId } = payload.item;
+
+      void promoverImagemDoItem(personagemId, itemId).then(
+        (asset) => soltar(asset.id, asset.naturalWidth, asset.naturalHeight),
+        (cause: unknown) =>
+          toast.error(
+            cause instanceof Error ? cause.message : "Não deu para pôr o item na mesa.",
+          ),
+      );
+    }
   }
 
   // Espaço tem precedência sobre a ferramenta: segurar espaço desloca a cena,
   // mesmo com a névoa escolhida.
   const drawingFog = tool === "fog" && !panMode;
   /**
-   * Ferramenta de mira ativa: névoa, ponto, postit, lápis, borracha ou régua.
+   * Ferramenta de mira ativa: névoa, ponto, postit, lápis, borracha, régua —
+   * ou a de uma extensão.
    *
-   * As seis precisam do mesmo bloqueio. Repassar os handlers de item enquanto
-   * uma delas está escolhida faria o gesto sobre um token virar "mover token"
-   * em vez de cobrir a região, cravar o alfinete, colar o papel, riscar ou
-   * apagar ali — e riscar por cima de um token é justamente o gesto de
-   * circular um inimigo.
+   * Todas precisam do mesmo bloqueio. Repassar os handlers de item enquanto uma
+   * delas está escolhida faria o gesto sobre um token virar "mover token" em
+   * vez de cobrir a região, cravar o alfinete, colar o papel, riscar ou apagar
+   * ali — e riscar por cima de um token é justamente o gesto de circular um
+   * inimigo.
+   *
+   * A de extensão entra por construção, e não por nome: o aplicativo não sabe o
+   * que ela faz, e supor que ela não precisa do palco livre seria supor o caso
+   * mais raro.
    */
   const aiming =
     drawingFog ||
@@ -928,7 +1011,8 @@ export function OperatorStage({ scene }: { scene: Scene }) {
         tool === "postit" ||
         tool === "lapis" ||
         tool === "borracha" ||
-        tool === "regua"));
+        tool === "regua" ||
+        Boolean(ferramentaDeExtensao(tool))));
   // Mão aberta sempre que o espaço estiver segurado.
   //
   // Antes era `panMode && !isFullViewport(viewport)`, porque no encaixe o clamp
@@ -1002,6 +1086,12 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           Dentro do plano, porém: o dado é jogado SOBRE o mapa, e tem de
           acompanhar zoom e deslocamento como a névoa e os riscos acompanham. */}
       <DadoLayer />
+
+      {/* As camadas das extensões, e aqui pelo mesmo motivo das três acima: o
+          `SceneLayer` é o componente que desenha na TV, e plugin só alcança o
+          Operador nesta etapa. O que elas desenham é anotação do mestre, como
+          o alfinete e o postit. */}
+      <CamadasDeExtensoes />
 
       {/* Contorno enquanto a imagem paira: promete que soltar ali funciona, e
           é o que diferencia o palco do resto da janela durante o arrasto. */}

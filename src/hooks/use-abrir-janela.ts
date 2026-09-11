@@ -17,14 +17,18 @@ import { chaveDe, useWindowStore, type ConteudoJanela } from "@/lib/store/use-wi
  *
  * Três desfechos, e nenhum deles duplica:
  *
- * - atracada: abre a coluna se ela estiver recolhida, ativa a aba dela no grupo
- *   e pisca -- a janela pedida podia estar atrás de outra aba, ou dentro de uma
+ * - atracada: abre a coluna se ela estiver recolhida e ativa a aba dela no
+ *   grupo -- a janela pedida podia estar atrás de outra aba, ou dentro de uma
  *   coluna escondida, e nos dois casos apontar sem revelar leria como nada;
- * - flutuando: vem para a frente da pilha e pisca, pela mesma razão;
+ * - flutuando: vem para a frente da pilha;
  * - em lugar nenhum: nasce flutuante.
  *
- * A piscada é o que responde ao clique quando não há nada para abrir. Sem ela o
- * gesto parecia falhar, e a reação natural era clicar de novo.
+ * Houve uma PISCADA aqui, nos dois primeiros casos, para responder ao clique
+ * quando não havia nada a abrir. Saiu: os dois já respondem sozinhos -- a
+ * coluna abre, a aba troca, a janela sobe --, e a batida por cima disso pegava
+ * justamente o caso comum, o de clicar num nome e ver a ficha que já estava à
+ * vista tremer. O que se perde é o aviso quando a janela já está na frente e
+ * inteira à mostra, onde clicar de novo de fato não muda nada.
  */
 export function useAbrirJanela(): (conteudo: ConteudoJanela) => void {
   const layout = useLayoutStore((state) => state.layout);
@@ -33,7 +37,6 @@ export function useAbrirJanela(): (conteudo: ConteudoJanela) => void {
   const mostrarColuna = usePanelsStore((state) => state.show);
 
   const abrirFlutuante = useWindowStore((state) => state.abrir);
-  const piscar = useWindowStore((state) => state.piscar);
 
   return useCallback(
     (conteudo: ConteudoJanela) => {
@@ -46,23 +49,18 @@ export function useAbrirJanela(): (conteudo: ConteudoJanela) => void {
 
         if (!grupo) continue;
 
-        // A coluna primeiro: piscar uma aba dentro de uma coluna recolhida
-        // acenderia algo que ninguém vê. A piscada entra 20ms depois — ver
-        // `piscar` —, então a coluna já montou quando ela chega.
+        // A coluna primeiro: ativar uma aba dentro de uma coluna recolhida
+        // mudaria algo que ninguém vê.
         mostrarColuna(lado === "esquerda" ? "left" : "right");
 
         ativarAba(lado, grupo.id, chave);
-        piscar(chave);
         return;
       }
 
-      // `abrir` já traz para a frente quando a janela existe na pilha. A
-      // piscada acompanha nos dois casos: quem clica não sabe se ela estava
-      // atrás de outra ou se acabou de nascer, e piscar no nascimento não
-      // atrapalha — a janela já entra com fade e zoom.
+      // `abrir` já traz para a frente quando a janela existe na pilha, e a
+      // janela nova entra com fade e zoom por conta própria.
       abrirFlutuante(conteudo);
-      piscar(chave);
     },
-    [layout, ativarAba, mostrarColuna, abrirFlutuante, piscar],
+    [layout, ativarAba, mostrarColuna, abrirFlutuante],
   );
 }

@@ -28,6 +28,18 @@ import type { Scene } from "@/types/scene";
  * que o Assistir e a Plateia usam. Uma das duas barreiras bastaria; as duas
  * juntas significam que vazar exigiria dois erros independentes.
  *
+ * O guardado das EXTENSÕES entra pela mesma porta, e por um motivo a mais: o
+ * formato é do plugin e o aplicativo não sabe o que tem dentro. Publicar o que
+ * não se consegue ler seria apostar que nenhum autor de plugin vai guardar ali
+ * a nota do mestre — e o padrão tem de ser o seguro, não o otimista.
+ *
+ * O NOME da cena sai pela mesma pergunta, e é o caso em que ela se responde
+ * sozinha: o mestre batiza a cena para ele mesmo achá-la na lista, e batiza
+ * pelo que ela é — "Emboscada no Porão", "O traidor se revela". O nome chega
+ * antes da cena e conta o final dela. Aqui ele vira string vazia em vez de
+ * sumir do objeto porque `name` é obrigatório no tipo `Scene`, e a mesa não
+ * desenha nome nenhum.
+ *
  * A regra para campo novo em `Scene` é uma pergunta: se um jogador ler isto,
  * estraga a surpresa? Se sim, ele entra na lista abaixo.
  */
@@ -43,14 +55,15 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // A condição precisa cobrir TODOS os campos apagados abaixo. Um campo novo
   // aqui esquecido não vaza — o `delete` continua acontecendo —, mas um campo
   // apagado embaixo e esquecido nesta linha faz o Operador publicar por frame.
-  if (!scene.pins && !scene.postits) return scene;
+  if (!scene.name && !scene.pins && !scene.postits && !scene.extensoes) return scene;
 
   // Cópia e `delete`, e não desestruturação com um descarte: um descarte
   // nomeado só para ser ignorado é variável não usada, e a regra que a proíbe
   // está ligada aqui.
-  const paraMesa = { ...scene };
+  const paraMesa = { ...scene, name: "" };
   delete paraMesa.pins;
   delete paraMesa.postits;
+  delete paraMesa.extensoes;
 
   return paraMesa;
 }

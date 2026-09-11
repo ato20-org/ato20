@@ -16,7 +16,7 @@ import { useSubscription } from "@/hooks/use-scene-broadcast";
  * fluxo, e é isso que permite esta tela estar em qualquer aparelho da casa.
  */
 export function ViewerStage({ codigo }: { codigo: string }) {
-  const { scene, track, volume, portraits, spotlight, medida, synced, stalled } =
+  const { scene, track, volume, portraits, spotlight, medida, rolagens, synced, stalled } =
     useSubscription(codigo);
 
   return (
@@ -30,7 +30,7 @@ export function ViewerStage({ codigo }: { codigo: string }) {
             que dispara a entrada em fade. */}
         {scene ? (
           <div key={scene.id} className="scene-fade-in absolute inset-0">
-            <SceneLayer scene={scene} portraits={portraits} smooth />
+            <SceneLayer scene={scene} portraits={portraits} rolagens={rolagens} smooth />
 
             {/* A régua do mestre, enquanto ele mede. Dentro do palco porque as
                 pontas são coordenadas de cena, e fora do `SceneLayer` porque

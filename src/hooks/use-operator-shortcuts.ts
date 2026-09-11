@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { ATALHOS } from "@/lib/operator/atalhos";
+import { atalhos } from "@/lib/operator/atalhos";
 
 function isTyping(target: EventTarget | null): boolean {
   return Boolean(
@@ -27,8 +27,10 @@ export function useOperatorShortcuts(): void {
       if (isTyping(event.target)) return;
 
       // Quem casa primeiro executa, e mais ninguém é consultado -- a ordem da
-      // tabela É a precedência. Ver a nota em `ATALHOS`.
-      const atalho = ATALHOS.find(({ combina }) => combina(event));
+      // tabela É a precedência. Ver a nota em `ATALHOS_BASE`. A tabela é
+      // consultada a cada tecla e não capturada no efeito: os comandos dos
+      // plugins entram e saem dela conforme extensões são ligadas.
+      const atalho = atalhos().find(({ combina }) => combina(event));
       if (!atalho) return;
 
       if (atalho.impedirPadrao) event.preventDefault();

@@ -50,7 +50,7 @@ export function MarcadoresLivro({
         </p>
       ) : null}
 
-      <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+      <ul className="scroll-fade min-h-0 flex-1 space-y-1 overflow-y-auto">
         {marcadores.map((marcador) => (
           <li key={marcador.id} className="group/marcador flex items-center gap-1">
             {editando === marcador.id ? (

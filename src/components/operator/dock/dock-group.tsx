@@ -7,7 +7,7 @@ import { useDockDrag } from "@/components/operator/dock/dock-drag";
 import {
   JanelaCorpo,
   larguraMinima,
-  TELAS,
+  useTelas,
   useRotuloJanela,
 } from "@/components/operator/dock/window-content";
 import { PanelCollapse } from "@/components/operator/panel-collapse";
@@ -85,7 +85,7 @@ export function DockGroup({
         <div
           role="tablist"
           aria-label={`Abas de ${grupo.id}`}
-          className="bg-muted/60 rolagem-limpa flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-md p-0.5"
+          className="bg-muted/60 rolagem-limpa scroll-fade-x flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-md p-0.5"
         >
           {grupo.abas.map((aba) => (
             <Aba
@@ -152,7 +152,8 @@ function Adicionar({ lado, grupoId }: { lado: Lado; grupoId: string }) {
     ...flutuantes.map((janela) => janela.chave),
   ]);
 
-  const faltando = TELAS.filter(
+  const telas = useTelas();
+  const faltando = telas.filter(
     ({ conteudo }) => !ocupadas.has(chaveDe(conteudo)),
   );
 
@@ -216,26 +217,24 @@ function Aba({
   const startDockDrag = useDockDrag();
   const removerAba = useLayoutStore((state) => state.removerAba);
   const abrirFlutuante = useWindowStore((state) => state.abrir);
-  const piscando = useWindowStore((state) => state.piscando === chaveDe(aba));
 
   const botao = useRef<HTMLButtonElement | null>(null);
 
   // Aba escolhida fora da vista se traz para a vista. Desde que a tira rola em
-  // vez de encolher, ativar Camadas pelo menu do `+` — ou piscá-la porque o
-  // mestre pediu de novo o que já estava aqui — podia acender uma aba fora do
-  // recorte, e o pedido dele pareceria não ter efeito.
+  // vez de encolher, ativar Camadas pelo menu do `+` podia acender uma aba fora
+  // do recorte, e o pedido dele pareceria não ter efeito.
   //
   // `nearest` nos dois eixos: o movimento mínimo que resolve. Sem isso o
   // navegador pode centralizar a aba e sacudir a coluna de lado.
   useEffect(() => {
-    if (!ativa && !piscando) return;
+    if (!ativa) return;
 
     botao.current?.scrollIntoView({
       behavior: "smooth",
       block: "nearest",
       inline: "nearest",
     });
-  }, [ativa, piscando]);
+  }, [ativa]);
 
   return (
     <button
@@ -250,9 +249,6 @@ function Aba({
         // tira, e a etiqueta parecia uma segunda cópia em vez de a mesma coisa
         // sendo levada para outro lugar.
         "data-arrastando:scale-95 data-arrastando:opacity-40 motion-reduce:transition-none",
-        // Pedida de novo estando já aqui: duas batidas apontam qual é. Ver
-        // `useAbrirJanela`.
-        piscando && "piscar",
         ativa
           ? "bg-background text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground",

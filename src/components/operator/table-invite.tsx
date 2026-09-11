@@ -20,19 +20,24 @@ import {
 } from "@/components/ui/tooltip";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { daemonAddr } from "@/lib/vault/bridge";
-
-type Telas = "plateia" | "assistir";
+import { cn } from "@/lib/utils";
 
 /**
  * Como a mesa entra.
  *
  * Substitui o crachá de convite que existia com o Supabase, e o problema é
  * outro: lá o link era um domínio estável e o que faltava era o código; aqui o
- * endereço é o IP desta máquina na rede local, que ninguém decora e que
- * ninguém deveria digitar num celular.
+ * endereço é o IP desta máquina na rede local, que ninguém decora.
  *
- * Daí o QR. O código vai dentro dele, então o jogador aponta a câmera e cai na
- * mesa — sem digitar endereço nem código.
+ * As duas abas resolvem isso de formas diferentes porque os dois aparelhos são
+ * diferentes. O CELULAR tem câmera: o QR leva endereço e código de uma vez, e
+ * ninguém digita nada. A TV não tem câmera — o que existe ali é um navegador e
+ * um controle remoto —, então a aba dela mostra o endereço grande, para ser
+ * lido do outro lado da sala e digitado. O QR que estava ali era uma imagem que
+ * a TV não tem como usar.
+ *
+ * O código vai no endereço nos dois casos, e é por isso que não há nenhum campo
+ * de código em lugar nenhum.
  */
 export function TableInvite() {
   const campaign = useCampaignStore((state) => state.campaign);
@@ -98,21 +103,30 @@ export function TableInvite() {
       <DialogContent className="max-w-sm">
         <DialogTitle>Entrar na mesa</DialogTitle>
         <DialogDescription>
-          Aponte a câmera do celular. O código já vai no QR — ninguém precisa
-          digitar nada.
+          O código já vai no endereço — ninguém precisa digitá-lo à parte.
         </DialogDescription>
 
-        <Tabs defaultValue="plateia" className="gap-3">
+        <Tabs defaultValue="plateia" className="min-w-0 gap-3">
           <TabsList>
             <TabsTrigger value="plateia">Jogador</TabsTrigger>
             <TabsTrigger value="assistir">TV</TabsTrigger>
           </TabsList>
 
-          {(["plateia", "assistir"] as Telas[]).map((tela) => (
-            <TabsContent key={tela} value={tela} className="space-y-3">
-              <Alvo url={`${lanUrl}/${tela}?code=${campaign.codigo}`} />
-            </TabsContent>
-          ))}
+          <TabsContent value="plateia" className="min-w-0 space-y-3">
+            <Alvo url={`${lanUrl}/plateia?code=${campaign.codigo}`} />
+          </TabsContent>
+
+          {/* Sem QR: a TV não tem câmera para apontar para coisa nenhuma. O que
+              acontece ali é alguém digitando o endereço no navegador dela, com
+              um controle remoto — então o que a tela precisa dar é o endereço
+              legível e inteiro, não um quadrado preto.
+
+              E sem instrução escrita: a aba se chama TV, mostra um endereço e
+              um botão de copiar. O parágrafo que havia aqui explicava o que os
+              três já dizem. */}
+          <TabsContent value="assistir" className="min-w-0 space-y-3">
+            <Endereco url={`${lanUrl}/assistir?code=${campaign.codigo}`} grande />
+          </TabsContent>
         </Tabs>
 
         <p className="text-muted-foreground border-t pt-3 text-xs">
@@ -124,10 +138,16 @@ export function TableInvite() {
   );
 }
 
-/** O QR de um endereço, com o endereço legível embaixo. */
+/**
+ * O QR de um endereço, com o endereço legível embaixo.
+ *
+ * Só para o CELULAR. O QR existe porque o endereço é o IP desta máquina na rede
+ * local, que ninguém decora e ninguém deveria digitar num teclado de vidro — a
+ * câmera resolve isso. A TV não tem câmera, e lá o mesmo quadrado seria uma
+ * imagem que ninguém consegue usar; ver a aba dela.
+ */
 function Alvo({ url }: { url: string }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
-  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     let ativo = true;
@@ -154,7 +174,7 @@ function Alvo({ url }: { url: string }) {
   }, [url]);
 
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex w-full min-w-0 flex-col items-center gap-3">
       {dataUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -166,7 +186,41 @@ function Alvo({ url }: { url: string }) {
         <div className="bg-muted size-48 animate-pulse rounded-md" />
       )}
 
-      <code className="text-muted-foreground w-full text-center text-xs break-all">
+      <Endereco url={url} />
+    </div>
+  );
+}
+
+/**
+ * O endereço escrito, e o botão de copiá-lo.
+ *
+ * Separado do QR porque a aba da TV usa só isto. `grande` é o tamanho de quem
+ * vai LER e digitar de longe — na aba do celular o endereço é a legenda de
+ * baixo do QR, e ninguém o digita.
+ */
+function Endereco({ url, grande }: { url: string; grande?: boolean }) {
+  const [copiado, setCopiado] = useState(false);
+
+  // `min-w-0` em cada degrau da cadeia — aqui, no `Tabs`, no `TabsContent`:
+  // item de flex e de grid tem `min-width: auto`, que é o tamanho do CONTEÚDO,
+  // e um endereço que não cabe empurrava a caixa para fora do diálogo em vez de
+  // rolar dentro dela.
+  return (
+    <div className="flex w-full min-w-0 flex-col items-center gap-2">
+      <code
+        className={cn(
+          // `block`: `<code>` é inline, e em elemento inline `overflow` e
+          // `width` não valem nada. Era o que fazia a linha vazar o diálogo.
+          "block w-full min-w-0 text-center select-all",
+          grande
+            ? // Uma LINHA só, com rolagem lateral se não couber -- e não quebra
+              // por caractere. Quebrando, "assistir" virava "assist" numa linha
+              // e "ir" na outra, e quem está copiando isso para o controle da TV
+              // lê dois pedaços e digita um deles errado.
+              "bg-muted rolagem-limpa overflow-x-auto rounded-md px-3 py-2 text-left text-sm whitespace-nowrap"
+            : "text-muted-foreground text-xs break-all",
+        )}
+      >
         {url}
       </code>
 

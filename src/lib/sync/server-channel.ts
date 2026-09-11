@@ -127,6 +127,9 @@ export function createSubscriberChannel(base: string, codigo: string): SceneChan
             volume: state.volume ?? DEFAULT_SESSION_VOLUME,
             spotlight: state.spotlight ?? null,
             medida: state.medida ?? null,
+            // Mesma razão dos retratos: quadro de uma versão sem dados de
+            // jogador é quadro válido, e não motivo para a tela cair.
+            rolagens: state.rolagens ?? [],
           });
         } catch {
           // O daemon valida que é JSON antes de repassar, então isto só

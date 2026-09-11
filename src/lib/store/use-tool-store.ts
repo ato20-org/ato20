@@ -35,7 +35,28 @@ export type Tool =
   | "postit"
   | "lapis"
   | "borracha"
-  | "regua";
+  | "regua"
+  // A de uma EXTENSAO, no formato `ext:{extensaoId}/{ferramentaId}`.
+  //
+  // Prefixo e nao um campo separado no store porque a ferramenta e UM valor em
+  // dezenas de comparacoes espalhadas pelo palco: um par obrigaria todas elas a
+  // comparar duas coisas, e a primeira esquecida deixaria a ferramenta do
+  // plugin agindo como `select`.
+  | `ext:${string}`;
+
+/** O prefixo que separa ferramenta de plugin das de fabrica. */
+export const PREFIXO_FERRAMENTA_EXT = "ext:";
+
+/** Esta ferramenta e de extensao? Devolve quem a trouxe e qual e. */
+export function ferramentaDeExtensao(
+  tool: Tool,
+): { extensaoId: string; ferramentaId: string } | null {
+  if (!tool.startsWith(PREFIXO_FERRAMENTA_EXT)) return null;
+
+  const [extensaoId, ferramentaId] = tool.slice(PREFIXO_FERRAMENTA_EXT.length).split("/");
+
+  return extensaoId && ferramentaId ? { extensaoId, ferramentaId } : null;
+}
 
 /**
  * As cores do lápis.

@@ -254,7 +254,10 @@ function FolderGroup({
         onDrop={(event) => {
           const payload = readAssetDrag(event.dataTransfer);
           setReceiving(false);
-          if (!payload) return;
+          // Sem `assetId` é arrasto de ITEM de inventário, que vai para o mapa
+          // e não para uma pasta do acervo: ali o gesto é "guarde esta imagem
+          // aqui", e um item não é uma imagem que se guarde.
+          if (!payload?.assetId) return;
 
           event.preventDefault();
           onDropAsset(payload.assetId);
@@ -361,7 +364,8 @@ function RootDrop({
       onDrop={(event) => {
         const payload = readAssetDrag(event.dataTransfer);
         setReceiving(false);
-        if (!payload) return;
+        // Item de inventário não vai para pasta do acervo — ver acima.
+        if (!payload?.assetId) return;
 
         event.preventDefault();
         onDropAsset(payload.assetId);

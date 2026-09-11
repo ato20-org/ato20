@@ -8,15 +8,19 @@ import {
   Pencil,
   SquareDashedBottom,
   StickyNote,
+  Puzzle,
 } from "lucide-react";
 
 import { PencilControl } from "@/components/operator/pencil-control";
 import { PostitControl } from "@/components/operator/postit-control";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useMemo } from "react";
+
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
 
-const TOOLS: Array<{ tool: Tool; label: string; hint: string; icon: typeof MousePointer2 }> = [
+const TOOLS_BASE: Array<{ tool: Tool; label: string; hint: string; icon: typeof MousePointer2 }> = [
   {
     tool: "select",
     label: "Selecionar",
@@ -72,6 +76,36 @@ const TOOLS: Array<{ tool: Tool; label: string; hint: string; icon: typeof Mouse
 export function OperatorToolbar() {
   const tool = useToolStore((state) => state.tool);
   const setTool = useToolStore((state) => state.setTool);
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+
+  /**
+   * As de fábrica mais as dos plugins.
+   *
+   * As dos plugins vão no FIM, e é o que mantém a memória motor de quem já usa
+   * a barra: o dedo sabe onde fica o lápis, e um plugin que se enfiasse no meio
+   * moveria as sete de baixo de lugar.
+   *
+   * O ícone é sempre o mesmo desenho, e não o `icone` do manifesto: carregar
+   * imagem de extensão aqui pagaria um pedido por ferramenta numa barra que o
+   * mestre olha o tempo todo, e uma que falhasse deixaria um buraco no lugar de
+   * um botão. O nome aparece no `tooltip`.
+   */
+  const ferramentas = useMemo(
+    () => [
+      ...TOOLS_BASE,
+      ...extensoes
+        .filter((extensao) => extensao.habilitada)
+        .flatMap((extensao) =>
+          (extensao.contribui?.ferramentas ?? []).map((ferramenta) => ({
+            tool: `ext:${extensao.id}/${ferramenta.id}` as Tool,
+            label: ferramenta.titulo,
+            hint: extensao.nome,
+            icon: Puzzle,
+          })),
+        ),
+    ],
+    [extensoes],
+  );
 
   return (
     <div
@@ -79,7 +113,7 @@ export function OperatorToolbar() {
       role="toolbar"
       aria-label="Ferramentas"
     >
-      {TOOLS.map(({ tool: value, label, hint, icon: Icon }) => (
+      {ferramentas.map(({ tool: value, label, hint, icon: Icon }) => (
         <Tooltip key={value}>
           <TooltipTrigger
             render={

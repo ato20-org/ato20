@@ -79,7 +79,7 @@ export function BuscaLivro({
         </p>
       ) : null}
 
-      <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+      <ul className="scroll-fade min-h-0 flex-1 space-y-1 overflow-y-auto">
         {resultados.map((ocorrencia, indice) => (
           <li key={`${ocorrencia.pagina}-${indice}`}>
             <button

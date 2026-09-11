@@ -9,10 +9,12 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
+import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useCharacterOwners } from "@/hooks/use-character-owners";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
+import { MINIATURA } from "@/lib/miniatura";
 import { normaliza } from "@/lib/search";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -163,9 +165,12 @@ export function CharactersBody() {
                 >
                   <button
                     type="button"
-                    className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left"
                     onClick={() => abrir({ tipo: "personagem", personagemId: personagem.id })}
                   >
+                    <Rosto personagem={personagem} />
+
+                    <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs">{personagem.nome}</span>
 
                     {/* Quem joga, embaixo do nome do personagem — o espelho da
@@ -179,6 +184,7 @@ export function CharactersBody() {
                         {quem.join(", ")}
                       </span>
                     ) : null}
+                    </span>
                   </button>
 
                   <PorNoMapa
@@ -192,6 +198,41 @@ export function CharactersBody() {
         )}
       </ScrollArea>
     </>
+  );
+}
+
+/**
+ * O rosto do personagem na lista.
+ *
+ * RETRATO primeiro, miniatura como reserva. São duas imagens com papéis
+ * diferentes — o retrato é a cara dele, a miniatura é a peça no mapa —, e a
+ * pergunta que esta lista responde é "qual deles é este". Quando só existe a
+ * miniatura ela serve, porque ainda é mais reconhecível que o nome.
+ *
+ * A variante `mini`: são alguns KB por linha contra os megabytes do original, e
+ * numa campanha com trinta personagens a lista carregaria o acervo inteiro para
+ * desenhar quadrados de 28 pixels.
+ *
+ * Quadrado vazio quando não há nenhuma das duas, e não o ícone de pessoa: a
+ * lista tem PNJ sem imagem às dezenas, e um boneco repetido em vinte linhas
+ * viraria ruído do mesmo jeito que o rótulo "sem dono" virava.
+ */
+function Rosto({ personagem }: { personagem: Personagem }) {
+  const url = useAssetUrl(personagem.retrato ?? personagem.miniatura, "mini");
+
+  return (
+    <span className="bg-muted/60 size-7 shrink-0 overflow-hidden rounded border">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt=""
+          draggable={false}
+          className="size-full object-cover"
+          {...MINIATURA}
+        />
+      ) : null}
+    </span>
   );
 }
 

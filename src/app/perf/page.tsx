@@ -597,7 +597,7 @@ function PalcoBiblioteca({
   }, [rolar]);
 
   return (
-    <ul ref={lista} className="w-80 flex-1 overflow-y-auto p-1">
+    <ul ref={lista} className="scroll-fade w-80 flex-1 overflow-y-auto p-1">
       {Array.from({ length: n }, (_, i) => (
         <li key={i} className="flex items-center gap-1 rounded-md p-1">
           <span className="bg-muted size-10 shrink-0 overflow-hidden rounded">

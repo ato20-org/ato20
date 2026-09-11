@@ -1,3 +1,4 @@
+import type { RolagemDaMesa } from "@/types/dado";
 import type { Medida, Portrait, Scene, SessionTrack, Spotlight } from "@/types/scene";
 
 /**
@@ -29,6 +30,18 @@ export type LiveState = {
   spotlight: Spotlight | null;
   /** A medida em curso da régua. `null` = ninguém medindo. */
   medida: Medida | null;
+  /**
+   * Os dados que os jogadores jogaram na mesa, ainda quentes.
+   *
+   * O único campo deste quadro que NÃO nasce no Operador: a rolagem vem do
+   * celular, entra pelo daemon e o Operador a repassa depois de resolver de
+   * qual personagem ela é. Ele continua sendo quem publica — é o que mantém uma
+   * autoridade só sobre o que as telas mostram —, mas aqui ele é mensageiro.
+   *
+   * Lista curta e efêmera: o Operador tira cada uma da bandeja 30 segundos
+   * depois de ela cair. Não é histórico; histórico é dele e não viaja.
+   */
+  rolagens: RolagemDaMesa[];
 };
 
 /**

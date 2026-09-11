@@ -62,7 +62,6 @@ export function InnerWindow({
   const fechar = useWindowStore((state) => state.fechar);
   const alternarRecolhida = useWindowStore((state) => state.alternarRecolhida);
   const trazerPraFrente = useWindowStore((state) => state.trazerPraFrente);
-  const piscando = useWindowStore((state) => state.piscando === janela.chave);
 
   /**
    * A geometria no começo do gesto.
@@ -124,9 +123,6 @@ export function InnerWindow({
       // gesto, e um `scale` por cima disso brigaria com a mira do encaixe.
       className={cn(
         "bg-popover text-popover-foreground animate-in fade-in-0 zoom-in-95 pointer-events-auto absolute flex max-h-[calc(100%-1rem)] max-w-[calc(100%-1rem)] flex-col overflow-hidden rounded-lg border shadow-2xl duration-150 ease-out data-arrastando:opacity-90 data-arrastando:shadow-black/60 motion-reduce:animate-none motion-reduce:transition-none",
-        // Pedida de novo estando já aberta: ela vem para a frente da pilha, e
-        // as duas batidas dizem qual das janelas atendeu ao clique.
-        piscando && "piscar",
       )}
       style={{
         left: janela.x,

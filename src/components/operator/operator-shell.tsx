@@ -16,6 +16,8 @@ import { OnAirControl } from "@/components/operator/on-air-control";
 import { OperatorStage } from "@/components/operator/operator-stage";
 import { OperatorToolbar } from "@/components/operator/operator-toolbar";
 import { PinIndex } from "@/components/operator/pin-index";
+import { RolagensChip } from "@/components/operator/rolagens-chip";
+import { RolagensFaixa } from "@/components/operator/rolagens-faixa";
 import { SaquinhoDados } from "@/components/operator/saquinho-dados";
 import { SpotlightChip } from "@/components/operator/spotlight-chip";
 import { StageContextMenu } from "@/components/operator/stage-context-menu";
@@ -31,6 +33,7 @@ import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { useOperatorShortcuts } from "@/hooks/use-operator-shortcuts";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
+import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
@@ -46,6 +49,7 @@ import {
   useSceneStore,
 } from "@/lib/store/use-scene-store";
 import { useReguaStore } from "@/lib/store/use-regua-store";
+import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -101,6 +105,7 @@ export function OperatorShell() {
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
   const medida = useReguaStore((state) => state.medida);
+  const rolagens = useRolagensStore((state) => state.bandeja);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale
@@ -132,6 +137,10 @@ export function OperatorShell() {
   // nele.
   // A medida entra no quadro publicado: a mesa acompanha a conta enquanto o
   // mestre mede. Ver `useReguaStore`.
+  // As rolagens dos jogadores entram no quadro publicado, e é a única coisa
+  // dele que não nasceu nesta janela: ela chega do daemon, pelo fluxo que
+  // `useRolagensDaMesa` escuta, e sai daqui com o personagem já resolvido. O
+  // Operador continua sendo quem publica -- aqui ele é mensageiro.
   usePublisher({
     scene: liveScene,
     track,
@@ -139,6 +148,7 @@ export function OperatorShell() {
     portraits,
     spotlight,
     medida,
+    rolagens,
   });
 
   // A fila arruma o elenco da cena EM EDIÇÃO, que é a que o mestre vê no palco.
@@ -148,6 +158,10 @@ export function OperatorShell() {
   // Passagem única: marca o dono dos arquivos que entraram antes de o escopo
   // existir, senão eles ficariam na biblioteca para sempre.
   useEscopoDosAssets(status === "ready");
+
+  // O outro sentido do fluxo: o que os celulares jogam na mesa. Só esta janela
+  // escuta -- a rota é de loopback. Ver `useRolagensDaMesa`.
+  useRolagensDaMesa();
   useOperatorShortcuts();
   useSpacePan();
   return (
@@ -233,6 +247,10 @@ export function OperatorShell() {
                   nada. O chip sai sem moldura; a moldura é esta. */}
               <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
                 <PlayersChip />
+                {/* Segundo chip da mesma moldura -- ela foi escrita para
+                    dividir. As duas respondem sobre a MESA e não sobre o mapa:
+                    quem entrou, e o que eles tiraram. */}
+                <RolagensChip />
               </div>
               {rightOpen ? null : (
                 <FloatingPanelToggle
@@ -241,6 +259,22 @@ export function OperatorShell() {
                   icon={<PanelRightOpen />}
                 />
               )}
+            </div>
+
+            {/* Os dados dos jogadores, no alto e ao centro do palco. Fora do
+                plano da cena de propósito -- ver `RolagensFaixa`.
+
+                Saiu da direita, onde ficava embaixo da pílula que fala deles:
+                ali dividia espaço com os painéis atracados, e a fileira nascia
+                por cima do canto do mapa que o mestre mais usa. Ao centro ela
+                não disputa com nada -- o topo do palco é a única faixa que
+                nenhum painel ocupa.
+
+                A camada cobre o palco INTEIRO, e não só a faixa do topo: o
+                mestre move a fileira para onde quiser, e é ela quem se
+                posiciona dentro daqui. */}
+            <div className="pointer-events-none absolute inset-0 z-10">
+              <RolagensFaixa />
             </div>
 
             {status === "error" ? (
