@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { ConfiguracoesDialog } from "@/components/desktop/configuracoes-dialog";
 import { WindowChrome } from "@/components/desktop/window-chrome";
 import { CampaignBadge } from "@/components/operator/campaign-badge";
 import { PanelsMenu } from "@/components/operator/panels-menu";
@@ -10,6 +11,7 @@ import { CampaignSplash } from "@/components/operator/campaign-splash";
 import { OperatorGate } from "@/components/operator/operator-gate";
 import { Button } from "@/components/ui/button";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
+import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 
 /**
@@ -30,14 +32,22 @@ export function Operator() {
   const campaign = useCampaignStore((state) => state.campaign);
   const error = useCampaignStore((state) => state.error);
   const boot = useCampaignStore((state) => state.boot);
+  const restaurarPreferencias = usePreferenciasStore(
+    (state) => state.restaurar,
+  );
 
   // A cena em edição vira o subtítulo da janela. `undefined` na porta, onde
   // ainda não há campanha aberta — e aí a barra mostra só o nome.
   const editando = useSceneStore(selectEditingScene)?.name;
 
   useEffect(() => {
+    // O zoom antes da campanha, e não no `OperatorShell` como as outras
+    // restaurações: ele vale para a porta e para o splash também, que é onde a
+    // troca de tamanho é menos incômoda de se ver acontecer -- `setZoom` é IPC,
+    // então o primeiro quadro nasce em 100% e salta.
+    restaurarPreferencias();
     void boot();
-  }, [boot]);
+  }, [boot, restaurarPreferencias]);
 
   return (
     <>
@@ -56,6 +66,10 @@ export function Operator() {
             </CampaignBadge>
           ) : undefined
         }
+        // Sem condicionar ao status: configuração é da máquina, e o mestre tem
+        // de alcançar o zoom na porta e na tela de erro -- justamente onde a
+        // campanha não abriu e ele ainda precisa ler a interface.
+        acoes={<ConfiguracoesDialog />}
         subtitulo={status === "ready" ? editando : undefined}
       />
       <Conteudo status={status} campaign={campaign} error={error} onRetry={boot} />
