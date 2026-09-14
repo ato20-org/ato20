@@ -110,11 +110,15 @@ jobs:
         with:
           tagName: v${{ needs.versao.outputs.numero }}-alpha
           releaseName: ATO20 v${{ needs.versao.outputs.numero }} alpha
+          # Genérico de propósito: um texto que diga "primeira versão" deixa de
+          # ser verdade na segunda, e ninguém lembra de voltar aqui.
           releaseBody: |
-            Primeira versão pública, e ela é alpha: espere coisa quebrada.
+            Ainda é alpha: espere coisa quebrada.
 
-            **Linux** — `.AppImage` roda sem instalar; `.deb` e `.rpm` para
-            instalar pelo gerenciador.
+            **Linux** — `.AppImage` roda sem instalar, e na primeira abertura
+            ele mesmo põe o atalho no menu (rofi, wofi e afins). Basta dar
+            permissão de execução: `chmod +x ato20_*.AppImage`. `.deb` e `.rpm`
+            para quem prefere instalar pelo gerenciador.
             **Windows** — `.msi` ou o instalador `.exe`. Os dois saem SEM
             assinatura de código, então o SmartScreen vai avisar: "Mais
             informações" e "Executar mesmo assim".
