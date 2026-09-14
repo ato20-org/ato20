@@ -7,6 +7,7 @@ import { Clapperboard, Maximize2, Minimize2, Minus, X } from "lucide-react";
 
 import logo from "@/assets/logo-white.png";
 import { isDesktop } from "@/lib/vault/bridge";
+import { versaoAtual } from "@/lib/versoes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,6 +76,11 @@ export function WindowChrome({
   subtitulo?: string;
 }) {
   const noApp = useIsDesktop();
+
+  // Da lista de versões e não de `getVersion()` do Tauri: aquele é assíncrono,
+  // e a barra apareceria por um quadro sem o número e empurraria o logo quando
+  // ele chegasse. Ver `versaoAtual`.
+  const versao = versaoAtual()?.versao;
   const [maximizada, setMaximizada] = useState(false);
 
   useEffect(() => {
@@ -122,6 +128,21 @@ export function WindowChrome({
           data-tauri-drag-region
           className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs"
         >
+          {/* A versão ANTES do logo, e não depois do nome.
+
+              Ali ela é a primeira coisa da barra, que é onde se procura quando
+              se quer responder "qual versão é esta?" — a pergunta de quem vai
+              relatar um problema. Depois do nome ela leria como parte dele.
+
+              Fonte tabular para o número não dançar de largura entre uma versão
+              e outra: `0.0.11` é mais largo que `0.0.3` em fonte proporcional, e
+              o logo ao lado andaria junto. */}
+          {versao ? (
+            <span className="text-muted-foreground/60 tabular-nums">
+              {versao}
+            </span>
+          ) : null}
+
           {/* `pointer-events-none` no logo pelo mesmo motivo do subtitulo: uma
               imagem no meio da faixa de arraste roubaria o gesto. */}
           <Image
