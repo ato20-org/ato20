@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "ato20"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "axum",
  "color_quant",
