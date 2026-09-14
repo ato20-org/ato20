@@ -38,8 +38,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "category": "RolePlayingGame",
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      }
     },
     "resources": {
       "../out": "out"

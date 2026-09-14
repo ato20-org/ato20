@@ -1,3 +1,4 @@
+mod appimage;
 mod commands;
 mod db;
 mod error;
@@ -17,6 +18,10 @@ use db::AppDb;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Antes de tudo, e antes de qualquer thread: mexe no ambiente do processo,
+    // e o que herda a correcao e o `WebKitWebProcess` que a webview vai subir.
+    appimage::corrigir_wayland();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -111,6 +116,10 @@ pub fn run() {
             // DADO da maquina, e podem trazer imagem e fonte junto. O
             // diretorio nasce na primeira importacao -- nao aqui.
             let extensoes = extensoes::dir(&app.path().app_data_dir()?);
+
+            // O atalho do menu, para quem roda o AppImage. Aqui e nao no
+            // instalador porque o AppImage NAO TEM instalador: ver `appimage`.
+            appimage::atalho(&app.path().app_data_dir()?);
 
             // A campanha comeca fechada. Reabrir a ultima e um comando que a
             // tela chama, para uma pasta que desapareceu ter onde aparecer
