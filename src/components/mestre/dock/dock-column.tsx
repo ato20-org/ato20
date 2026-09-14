@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { Fragment, useRef, useState } from "react";
 
 import { DockGroup } from "@/components/mestre/dock/dock-group";
 import { Splitter } from "@/components/mestre/dock/splitter";
@@ -24,12 +24,34 @@ import { cn } from "@/lib/utils";
  * para fora da coluna. A largura da coluna é o contrário, em pixel — ver
  * `Coluna`.
  */
-export function DockColumn({ lado }: { lado: Lado }) {
+export function DockColumn({
+  lado,
+  /** Avisa a linha que o ponteiro entrou ou saiu desta coluna. */
+  aoAproximar,
+}: {
+  lado: Lado;
+  aoAproximar?: (perto: boolean) => void;
+}) {
   const coluna = useLayoutStore((state) => state.layout[lado]);
   const redimensionarGrupos = useLayoutStore(
     (state) => state.redimensionarGrupos,
   );
   const guardar = useLayoutStore((state) => state.guardar);
+
+  /**
+   * Se o ponteiro está nesta coluna.
+   *
+   * É o gatilho das alças dos divisores: encostar em qualquer lugar da coluna
+   * acende as dela, e só as dela. Estado aqui e não `:hover` em CSS porque um
+   * dos divisores -- o da largura -- é IRMÃO da coluna, e não descendente:
+   * nenhum seletor a partir dela o alcança.
+   */
+  const [perto, setPerto] = useState(false);
+
+  function aproximar(valor: boolean) {
+    setPerto(valor);
+    aoAproximar?.(valor);
+  }
 
   /** A altura da coluna e as frações no começo do gesto. Ver `Splitter`. */
   const inicio = useRef({ altura: 0, fracoes: [] as number[] });
@@ -54,6 +76,8 @@ export function DockColumn({ lado }: { lado: Lado }) {
   return (
     <div
       ref={caixa}
+      onPointerEnter={() => aproximar(true)}
+      onPointerLeave={() => aproximar(false)}
       // `data-dock-coluna`: o divisor de largura, que é irmão desta coluna e
       // não filho, precisa alcançá-la para mexer na largura durante o gesto.
       data-dock-coluna={lado}
@@ -73,21 +97,26 @@ export function DockColumn({ lado }: { lado: Lado }) {
       style={{ width: coluna.largura }}
     >
       {coluna.grupos.map((grupo, indice) => (
-        <div
-          key={grupo.id}
-          data-dock-regiao={indice}
-          // A fração vira `flex-basis` com `flex-grow: 0`: em `flex-grow` as
-          // sobras se redistribuiriam sozinhas e o divisor deixaria de mandar
-          // no tamanho.
-          className="flex min-h-0 min-w-0 flex-col overflow-hidden"
-          style={{ flex: `0 1 ${coluna.fracoes[indice] * 100}%` }}
-        >
-          <DockGroup lado={lado} grupo={grupo} comRecolher={indice === 0} />
+        // O divisor é IRMÃO da região, e não filho: a região tem
+        // `overflow-hidden`, e a alça é mais alta que a faixa -- dentro dela o
+        // que passava da borda era cortado, e a pílula aparecia pela metade.
+        <Fragment key={grupo.id}>
+          <div
+            data-dock-regiao={indice}
+            // A fração vira `flex-basis` com `flex-grow: 0`: em `flex-grow` as
+            // sobras se redistribuiriam sozinhas e o divisor deixaria de mandar
+            // no tamanho.
+            className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+            style={{ flex: `0 1 ${coluna.fracoes[indice] * 100}%` }}
+          >
+            <DockGroup lado={lado} grupo={grupo} comRecolher={indice === 0} />
+          </div>
 
           {/* Entre este e o próximo, nunca depois do último. */}
           {indice < coluna.grupos.length - 1 ? (
             <Splitter
               direcao="horizontal"
+              aparente={perto}
               rotulo="Redimensionar as regiões"
               aoArrastar={(delta) => {
                 if (inicio.current.altura === 0) {
@@ -130,7 +159,7 @@ export function DockColumn({ lado }: { lado: Lado }) {
               }}
             />
           ) : null}
-        </div>
+        </Fragment>
       ))}
     </div>
   );

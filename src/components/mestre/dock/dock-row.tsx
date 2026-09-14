@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import { DockColumn } from "@/components/mestre/dock/dock-column";
 import { Splitter } from "@/components/mestre/dock/splitter";
@@ -31,6 +31,15 @@ import { usePanelsStore } from "@/lib/store/use-panels-store";
  * layout é onde cada janela mora.
  */
 export function DockRow({ children }: { children: ReactNode }) {
+  /**
+   * Em qual coluna o ponteiro está.
+   *
+   * Sobe até aqui porque o divisor de LARGURA é irmão da coluna, e não filho:
+   * quem encosta na coluna espera ver a alça que move a borda dela, e a coluna
+   * sozinha não tem como acender um irmão.
+   */
+  const [perto, setPerto] = useState<Lado | null>(null);
+
   const esquerdaAberta = usePanelsStore((state) => state.left);
   const direitaAberta = usePanelsStore((state) => state.right);
 
@@ -49,8 +58,11 @@ export function DockRow({ children }: { children: ReactNode }) {
     <>
       {esquerdaAberta && esquerda ? (
         <>
-          <DockColumn lado="esquerda" />
-          <LarguraSplitter lado="esquerda" />
+          <DockColumn
+            lado="esquerda"
+            aoAproximar={(dentro) => setPerto(dentro ? "esquerda" : null)}
+          />
+          <LarguraSplitter lado="esquerda" aparente={perto === "esquerda"} />
         </>
       ) : null}
 
@@ -58,8 +70,11 @@ export function DockRow({ children }: { children: ReactNode }) {
 
       {direitaAberta && direita ? (
         <>
-          <LarguraSplitter lado="direita" />
-          <DockColumn lado="direita" />
+          <LarguraSplitter lado="direita" aparente={perto === "direita"} />
+          <DockColumn
+            lado="direita"
+            aoAproximar={(dentro) => setPerto(dentro ? "direita" : null)}
+          />
         </>
       ) : null}
 
@@ -73,7 +88,13 @@ export function DockRow({ children }: { children: ReactNode }) {
 }
 
 /** O divisor entre uma coluna e o palco. */
-function LarguraSplitter({ lado }: { lado: Lado }) {
+function LarguraSplitter({
+  lado,
+  aparente,
+}: {
+  lado: Lado;
+  aparente: boolean;
+}) {
   const largura = useLayoutStore((state) => state.layout[lado].largura);
   const larguraColuna = useLayoutStore((state) => state.larguraColuna);
   const guardar = useLayoutStore((state) => state.guardar);
@@ -85,6 +106,7 @@ function LarguraSplitter({ lado }: { lado: Lado }) {
   return (
     <Splitter
       direcao="vertical"
+      aparente={aparente}
       rotulo={`Largura do painel ${lado === "esquerda" ? "esquerdo" : "direito"}`}
       aoArrastar={(delta) => {
         if (inicio.current === 0) inicio.current = largura;
