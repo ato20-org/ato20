@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Plus } from "lucide-react";
+import { Plus, type LucideIcon } from "lucide-react";
 
 import { useDockDrag } from "@/components/mestre/dock/dock-drag";
 import {
   JanelaCorpo,
+  iconeDaJanela,
   larguraMinima,
   useTelas,
   useRotuloJanela,
@@ -71,7 +72,11 @@ export function DockGroup({
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       aria-label={`Região ${grupo.id}`}
     >
-      <div className="flex items-center gap-1 p-1.5">
+      {/* `items-end` e sem `pb`: a tira de abas encosta na linha de baixo, que
+          é o que permite a aba ativa cobri-la e virar uma coisa só com o corpo.
+          Com `p-1.5` nos quatro lados havia um vão embaixo, e aba separada do
+          que ela abre é botão, não aba. */}
+      <div className="flex items-end gap-1 px-1.5 pt-1.5">
         {/* À esquerda o botão fica depois das abas, à direita antes: ele encosta
             na borda que a coluna dela toca. Era assim nos dois painéis. */}
         {comRecolher && lado === "direita" ? (
@@ -85,12 +90,13 @@ export function DockGroup({
         <div
           role="tablist"
           aria-label={`Abas de ${grupo.id}`}
-          className="bg-muted/60 rolagem-limpa scroll-fade-x flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-md p-0.5"
+          className="rolagem-limpa scroll-fade-x flex min-w-0 flex-1 items-end gap-px overflow-x-auto"
         >
           {grupo.abas.map((aba) => (
             <Aba
               key={chaveDe(aba)}
               aba={aba}
+              icone={iconeDaJanela(aba)}
               ativa={chaveDe(aba) === chaveDe(ativa)}
               aoEscolher={() => ativarAba(lado, grupo.id, chaveDe(aba))}
             />
@@ -205,10 +211,16 @@ function Adicionar({ lado, grupoId }: { lado: Lado; grupoId: string }) {
  */
 function Aba({
   aba,
+  // Chega pronto de quem percorre a lista, e não resolvido aqui dentro: o
+  // ícone é um COMPONENTE, e criar um durante o render é o que a regra
+  // `react-hooks/static-components` proíbe -- com razão, porque uma identidade
+  // nova a cada render remontaria o ícone a cada tecla digitada em outro lugar.
+  icone: Icone,
   ativa,
   aoEscolher,
 }: {
   aba: ConteudoJanela;
+  icone: LucideIcon;
   ativa: boolean;
   aoEscolher: () => void;
 }) {
@@ -243,15 +255,22 @@ function Aba({
       role="tab"
       aria-selected={ativa}
       className={cn(
-        "shrink-0 cursor-grab whitespace-nowrap rounded-sm px-2 py-1 text-xs transition-all active:cursor-grabbing",
+        "flex shrink-0 cursor-grab items-center gap-1.5 whitespace-nowrap rounded-t-md px-2.5 py-1.5 text-xs transition-all active:cursor-grabbing",
         // Arrastando, a aba fica apagada e recuada: é o par visual da etiqueta
         // que saiu dela e está no cursor. Sem isso a aba continuava acesa na
         // tira, e a etiqueta parecia uma segunda cópia em vez de a mesma coisa
         // sendo levada para outro lugar.
         "data-arrastando:scale-95 data-arrastando:opacity-40 motion-reduce:transition-none",
         ativa
-          ? "bg-background text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground",
+          ? // `-mb-px` com `z-10`: a aba desce um pixel e tapa a linha que
+            // separa a tira do corpo. É esse pixel que faz a aba e o que ela
+            // abre lerem como a mesma superfície, em vez de uma pastilha
+            // pousada sobre uma caixa.
+            //
+            // Fundo OPACO, e não `bg-muted/60`: por cima de uma linha, um fundo
+            // translúcido a deixa aparecer atravessando a aba.
+            "bg-muted text-foreground relative z-10 -mb-px border border-b-0"
+          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground border border-transparent border-b-0",
       )}
       title={titulo}
       onPointerDown={(event) => {
@@ -296,6 +315,7 @@ function Aba({
       }}
       onClick={aoEscolher}
     >
+      <Icone className="size-3.5 shrink-0" aria-hidden />
       {titulo}
     </button>
   );

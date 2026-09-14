@@ -1,5 +1,22 @@
 "use client";
 
+import {
+  BookOpen,
+  Clapperboard,
+  EyeOff,
+  Image,
+  Images,
+  Layers,
+  Library,
+  Music,
+  Paperclip,
+  PersonStanding,
+  Puzzle,
+  ScrollText,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+
 import { AssetLibrary } from "@/components/mestre/asset-library";
 import { AudioLibrary } from "@/components/mestre/audio-library";
 import { AnexoBody, AssetBody } from "@/components/mestre/attachment-window";
@@ -33,6 +50,57 @@ import type { ConteudoJanela } from "@/lib/store/use-window-store";
 
 /** O título e a linha de baixo, quando há. */
 export type Rotulo = { titulo: string; subtitulo?: string };
+
+/**
+ * O ícone de cada tela.
+ *
+ * Existe porque a aba encolheu: no formato de aba de navegador o rótulo é o
+ * que ocupa, e numa coluna de 288 pixels três abas já disputam espaço. O ícone
+ * é o que deixa a aba ativa reconhecível antes de o olho ler a palavra, e o que
+ * identifica as inativas quando a tira rola.
+ *
+ * Função pura, e separada de `useRotuloJanela`: o ícone não depende de dado
+ * nenhum -- a ficha do Victor e a do Edgar têm o mesmo --, então cobrá-lo de um
+ * hook obrigaria quem só quer desenhar um menu a montar o índice de personagens.
+ *
+ * Sem `default` no `switch`, de propósito: é ele que faz o TypeScript apontar a
+ * tela nova que entrou em `ConteudoJanela` e não escolheu ícone.
+ */
+export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
+  switch (conteudo.tipo) {
+    case "cenas":
+      return Clapperboard;
+    case "areas":
+      // A área é o que a mesa NÃO vê -- o olho cortado é o que ela faz.
+      return EyeOff;
+    case "retratos":
+      return PersonStanding;
+    case "camadas":
+      return Layers;
+    case "imagens":
+      return Images;
+    case "sons":
+      return Music;
+    case "personagens":
+      return Users;
+    case "personagem":
+      // Ficha, e não pessoa: `Users` já é a lista, e duas telas com o mesmo
+      // ícone na mesma tira não distinguem nada.
+      return ScrollText;
+    case "estante":
+      return Library;
+    case "livro":
+      return BookOpen;
+    case "anexo":
+      return Paperclip;
+    case "asset":
+      return Image;
+    case "extensao":
+      // Um ícone só para todas: o manifesto não declara um, e inventar por
+      // extensão seria escolher pelo autor dela.
+      return Puzzle;
+  }
+}
 
 /**
  * As telas que existem, na ordem em que aparecem nos menus.
