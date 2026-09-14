@@ -1,0 +1,64 @@
+# O que roda a cada commit na `main`.
+#
+# Não empacota nada: quem gera instalador é `empacotar.yml`, na `production`.
+# Aqui a pergunta é só "isto compila e os testes passam".
+#
+# Um job só, e não um para o web e outro para o Rust, por uma razão prática: o
+# `cargo test` do aplicativo passa pelo `tauri-build`, que lê o `tauri.conf.json`
+# e espera achar o `frontendDist` em `../out`. Separar em dois daria um job
+# rápido e um quebrado.
+
+name: verificar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verificar:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Do que a webview precisa para o Rust compilar. Mesmos pacotes do
+      # ambiente de desenvolvimento -- o `tauri` linka contra a WebKitGTK.
+      - name: Dependências do sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            build-essential \
+            patchelf
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      # `next build` roda o TypeScript junto -- não há `ignoreBuildErrors` no
+      # `next.config.ts`, então erro de tipo derruba aqui. E é ele que escreve o
+      # `out/` que o passo seguinte precisa.
+      - name: Build do web
+        run: pnpm pdfjs && pnpm build
+
+      - name: Testes do Rust
+        run: cargo test --manifest-path src-tauri/Cargo.toml

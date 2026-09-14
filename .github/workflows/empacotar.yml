@@ -1,0 +1,84 @@
+# Gera os instaladores, só na `production`.
+#
+# Empacotar custa dezenas de minutos entre os dois sistemas, e a `main` recebe
+# commit o dia inteiro. Então `main` verifica e `production` empacota: subir
+# versão é mesclar `main` na `production`.
+#
+# `workflow_dispatch` fica junto para poder rodar à mão sem inventar um commit.
+#
+# Cada sistema no próprio runner porque não há atalho: o Tauri usa o toolchain
+# nativo de cada um -- WebKitGTK no Linux, WebView2 e MSVC no Windows --, e
+# cruzar de um para o outro não é caminho suportado.
+
+name: empacotar
+
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+
+jobs:
+  empacotar:
+    strategy:
+      # Sem `fail-fast`: um erro só do Windows não pode jogar fora o pacote de
+      # Linux que já ficou pronto.
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04 e não o `latest`: o binário linka contra a glibc de quem o
+          # compilou, então compilar no mais novo produz um pacote que não roda
+          # em distro um pouco mais velha. Aqui o mais antigo disponível é o que
+          # alcança mais gente.
+          - os: ubuntu-22.04
+            nome: linux
+          - os: windows-latest
+            nome: windows
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependências do sistema
+        if: matrix.nome == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            build-essential \
+            patchelf
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.nome }}
+
+      - run: pnpm install --frozen-lockfile
+
+      # O `beforeBuildCommand` do `tauri.conf.json` já faz o resto: limpa as
+      # cópias velhas do `out/`, copia o runtime do pdf.js e roda o `next build`.
+      - name: Empacotar
+        run: pnpm tauri build
+
+      # `bundle/**` inteiro, e não um caminho por formato: `targets: "all"` faz
+      # o Linux sair com .deb, .rpm e .AppImage e o Windows com .msi e .exe, e
+      # listar os cinco aqui seria uma segunda fonte da verdade para esquecer de
+      # atualizar.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ato20-${{ matrix.nome }}
+          path: src-tauri/target/release/bundle/**
+          if-no-files-found: error
