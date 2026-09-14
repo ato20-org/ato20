@@ -18,6 +18,7 @@ import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useCharacterOwners } from "@/hooks/use-character-owners";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
+import { writeCharacterDrag } from "@/lib/mestre/asset-drag";
 import { MINIATURA } from "@/lib/miniatura";
 import { normaliza } from "@/lib/search";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
@@ -68,10 +69,11 @@ export function CharactersBody() {
   /** Quem joga cada personagem. É o que a busca também alcança. */
   const donos = useCharacterOwners(jogadores);
 
-  // Uma leitura do acervo para a lista inteira, e não uma por linha: o botão de
-  // pôr no mapa precisa do tamanho natural da miniatura, e um `useAssetList`
-  // dentro dele custaria uma ida ao IPC por personagem. Mesma razão do cache de
-  // personagens — ver `useCharactersStore`.
+  // O acervo serve à lista inteira, e não a uma linha: tanto o botão de pôr no
+  // mapa quanto o arrasto precisam do tamanho natural da miniatura. A leitura é
+  // compartilhada e sobrevive a quem anexa uma miniatura na ficha ao lado — ver
+  // `useAssetsStore`, que é também de onde vinha o bug de o token só poder
+  // entrar no mapa depois de reabrir o aplicativo.
   const { assets } = useAssetList("image");
 
   const [busca, setBusca] = useState("");
@@ -167,6 +169,9 @@ export function CharactersBody() {
           <ul className="space-y-0.5 p-2 pt-0">
             {achados.map((personagem) => {
               const quem = donos.get(personagem.id) ?? [];
+              const miniatura = assets.find(
+                (asset) => asset.id === personagem.miniatura,
+              );
 
               return (
                 <li
@@ -180,7 +185,27 @@ export function CharactersBody() {
                     escolhidos.has(personagem.id)
                       ? "bg-accent"
                       : "hover:bg-accent/50",
+                    // Só quem pode ir ao mapa ganha a mão de arrastar: uma
+                    // linha que promete o gesto e não o cumpre é pior que uma
+                    // que não o promete.
+                    miniatura ? "cursor-grab active:cursor-grabbing" : null,
                   )}
+                  // Arrastável inteira, e não só o rosto: o quadrado de 28px
+                  // seria o menor alvo da tela. Mesma decisão da linha do
+                  // acervo, e é dela que o palco recebe o mesmo tipo de arrasto.
+                  //
+                  // O clique no nome continua abrindo a ficha: arrastar exige
+                  // mover o ponteiro, e o navegador só dispara um dos dois.
+                  draggable={Boolean(miniatura)}
+                  onDragStart={(event) => {
+                    if (!miniatura) return;
+
+                    writeCharacterDrag(
+                      event.dataTransfer,
+                      personagem.id,
+                      miniatura,
+                    );
+                  }}
                 >
                   <button
                     type="button"
@@ -210,12 +235,7 @@ export function CharactersBody() {
                     </span>
                   </button>
 
-                  <PorNoMapa
-                    personagem={personagem}
-                    miniatura={assets.find(
-                      (asset) => asset.id === personagem.miniatura,
-                    )}
-                  />
+                  <PorNoMapa personagem={personagem} miniatura={miniatura} />
                 </li>
               );
             })}
@@ -275,6 +295,11 @@ function Rosto({ personagem }: { personagem: Personagem }) {
  *
  * Sem miniatura o botao fica desabilitado com o motivo, e nao escondido: o lugar
  * onde ele apareceria e a pista de que existe um campo a preencher.
+ *
+ * O botao continua existindo ao lado do arrasto da linha porque os dois gestos
+ * respondem perguntas diferentes: o botao poe no CENTRO do que o mestre esta
+ * vendo, sem ele precisar mirar, e o arrasto poe ONDE a mao soltou. Ver
+ * `writeCharacterDrag` e o `handleDrop` do palco.
  */
 function PorNoMapa({
   personagem,
@@ -345,7 +370,8 @@ function PorNoMapa({
       />
       <TooltipContent>
         <p className="max-w-48">
-          {impedimento ?? `Por ${personagem.nome} no mapa`}
+          {impedimento ??
+            `Por ${personagem.nome} no centro do mapa. Arraste a linha para escolher o lugar.`}
         </p>
       </TooltipContent>
     </Tooltip>

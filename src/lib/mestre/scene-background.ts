@@ -1,5 +1,6 @@
 "use client";
 
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { importAssets, setAssetEscopo } from "@/lib/vault/assets";
 
@@ -33,6 +34,10 @@ export async function escolherFundoDaCena(sceneId: string): Promise<boolean> {
     throw new Error(resultado.recusados[0] ?? "Nada foi importado.");
 
   const anterior = fundoAtual(sceneId);
+
+  // Entrou com dono, então a biblioteca não vai listá-lo -- mas o registro dele
+  // é o que diz a dimensão natural do arquivo, e há tela que a pede pelo id.
+  invalidarAcervo("image");
 
   useSceneStore.getState().setBackground(sceneId, primeiro.id);
 
@@ -76,4 +81,5 @@ async function soltarFundo(assetId: string | undefined): Promise<void> {
   if (aindaEmUso) return;
 
   await setAssetEscopo(assetId, undefined);
+  invalidarAcervo("image");
 }

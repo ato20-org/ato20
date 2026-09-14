@@ -2,6 +2,7 @@
 
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { call } from "@/lib/vault/bridge";
 import { shareCharacterAttachment } from "@/lib/vault/evidence";
 import type { AssetMeta } from "@/types/scene";
@@ -83,11 +84,15 @@ export async function escolherImagemDoDisco(
 
   if (!escolhido) return null;
 
-  return call<ItemInventario>("inventory_set_imagem", {
+  const item = await call<ItemInventario>("inventory_set_imagem", {
     id,
     itemId,
     path: escolhido,
   });
+
+  invalidarAcervo("image");
+
+  return item;
 }
 
 /**
@@ -106,14 +111,21 @@ export async function escolherImagemDoDisco(
  * item vai ao mapa mais de uma vez, e sem isso seriam cinco cópias do mesmo
  * arquivo no acervo.
  */
-export function promoverImagemDoItem(
+export async function promoverImagemDoItem(
   personagemId: string,
   itemId: string,
 ): Promise<AssetMeta> {
-  return call<AssetMeta>("inventory_promote_imagem", {
+  const asset = await call<AssetMeta>("inventory_promote_imagem", {
     id: personagemId,
     itemId,
   });
+
+  // Pode ter nascido um arquivo agora -- e por ser idempotente, pode não ter.
+  // Reler nos dois casos é uma chamada, e adivinhar qual foi custaria comparar
+  // com a lista de antes.
+  invalidarAcervo("image");
+
+  return asset;
 }
 
 /**
