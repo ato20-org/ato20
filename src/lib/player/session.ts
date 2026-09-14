@@ -15,7 +15,6 @@ export type PlayerSheet = {
   id: string;
   /** Nome que o próprio jogador escolheu. */
   nome: string;
-  notas: string;
   entrouEm: number;
   vistoEm: number;
 };
@@ -123,7 +122,6 @@ export async function join(codigo: string, nome: string): Promise<PlayerSheet> {
   return {
     id,
     nome: nomeAceito,
-    notas: "",
     entrouEm: Date.now(),
     vistoEm: Date.now(),
   };
@@ -151,11 +149,14 @@ export async function fetchMe(codigo: string): Promise<PlayerSheet | null> {
   return (await response.json()) as PlayerSheet;
 }
 
-/** Nome e notas: os dois campos que são dele. */
-export async function patchMe(
-  codigo: string,
-  patch: { nome?: string; notas?: string },
-): Promise<void> {
+/**
+ * O nome: o único campo da ficha que é dele.
+ *
+ * As notas saíram daqui e viraram o CADERNO, com rota própria em `/eu/notas` —
+ * ver `lib/player/caderno.ts`. A ficha voltou a ser identidade, e não
+ * identidade mais um campo de texto de dez páginas.
+ */
+export async function patchMe(codigo: string, patch: { nome?: string }): Promise<void> {
   const response = await fetch("/eu", {
     method: "PATCH",
     headers: { "content-type": "application/json", ...authorized(codigo) },

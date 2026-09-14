@@ -42,8 +42,8 @@ type PlayerStore = {
    */
   boot: (codigo: string) => Promise<void>;
   entrar: (codigo: string, nome: string) => Promise<void>;
-  /** Grava nome ou notas e atualiza a ficha local. */
-  atualizar: (codigo: string, patch: { nome?: string; notas?: string }) => Promise<void>;
+  /** Grava o nome e atualiza a ficha local. Ver `patchMe`. */
+  atualizar: (codigo: string, patch: { nome?: string }) => Promise<void>;
   /** Esquece a credencial deste aparelho. Não mexe na mesa. */
   sair: (codigo: string) => void;
 };

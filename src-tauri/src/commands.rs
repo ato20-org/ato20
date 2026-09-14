@@ -276,6 +276,21 @@ pub fn players_list(state: State<'_, AppState>) -> AppResult<Vec<Player>> {
     state.with_vault(players::list)
 }
 
+/// O caderno de um jogador, para o mestre ler.
+///
+/// Comando proprio, e nao um campo de `players_list`: a lista abre a cada
+/// janela de jogadores e so precisa de nome e presenca, enquanto o caderno pode
+/// ter duzentas notas de dez paginas. Carregar tudo junto seria ler a campanha
+/// inteira para desenhar cinco linhas.
+///
+/// O mestre LE e nao escreve: o caderno e de quem o escreveu. Ele e dono do
+/// disco -- pode apagar o jogador inteiro --, mas nao ha gesto para reescrever
+/// a anotacao alheia, e nao e por falta de comando para isso.
+#[tauri::command]
+pub fn player_notes(state: State<'_, AppState>, id: String) -> AppResult<Vec<players::Nota>> {
+    state.with_vault(|vault| players::notes(vault, &id))
+}
+
 /// Tira o jogador da mesa, com os anexos dele.
 #[tauri::command]
 pub fn player_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {

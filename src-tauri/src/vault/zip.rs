@@ -28,7 +28,19 @@ use crate::error::{AppError, AppResult};
 pub struct PlayerMeta {
     pub id: String,
     pub nome: String,
-    pub notas: String,
+    /// O caderno dele, inteiro.
+    ///
+    /// Materializado aqui pela mesma razao das notas de personagem: ele vive no
+    /// banco, o banco nao viaja no zip, e sem esta copia uma campanha importada
+    /// chegaria com os anexos de cada jogador intactos e sem uma linha do que
+    /// eles anotaram na mesa.
+    ///
+    /// `default` porque zip antigo nao tem o campo: ali as notas eram uma
+    /// coluna de texto na ficha, que a v4 do schema derrubou. Esse texto nao
+    /// volta -- ver a migracao --, e o import de um zip antigo traz o jogador
+    /// com o caderno vazio em vez de recusar o arquivo.
+    #[serde(default)]
+    pub caderno: Vec<players::Nota>,
     pub entrou_em: i64,
     pub token_hash: String,
 }
@@ -173,9 +185,9 @@ fn write_player_meta(vault: &Vault) -> AppResult<()> {
         write_json(
             &dir.join(PLAYER_META),
             &PlayerMeta {
+                caderno: players::notes(vault, &player.id)?,
                 id: player.id,
                 nome: player.nome,
-                notas: player.notas,
                 entrou_em: player.entrou_em,
                 token_hash: hash.unwrap_or_default(),
             },
@@ -614,8 +626,14 @@ mod tests {
         let vault = campanha(dir.path(), "Campanha");
 
         let (player, token) = players::join(&vault, "Ana").expect("join");
-        players::update_self(&vault, &player.id, None, Some("a chave esta no poco"))
-            .expect("notas");
+        players::create_note(
+            &vault,
+            &player.id,
+            "O poco",
+            "a chave esta no poco",
+            &["pista".into()],
+        )
+        .expect("nota");
 
         let pasta = players::attachments_dir(&vault, &player.id);
         std::fs::create_dir_all(&pasta).expect("dir");
@@ -635,7 +653,14 @@ mod tests {
 
         assert_eq!(achada.id, player.id);
         assert_eq!(achada.nome, "Ana");
-        assert_eq!(achada.notas, "a chave esta no poco");
+
+        // O caderno viaja no `_meta.json`: ele mora no banco, e o banco nao vai
+        // no zip. Sem esta copia, a campanha importada chegaria com os anexos
+        // da Ana intactos e sem uma linha do que ela anotou.
+        let caderno = players::notes(&importada, &player.id).expect("caderno");
+        assert_eq!(caderno.len(), 1, "{caderno:?}");
+        assert_eq!(caderno[0].texto, "a chave esta no poco");
+        assert_eq!(caderno[0].tags, vec!["pista".to_string()]);
         assert_eq!(
             std::fs::read(players::attachments_dir(&importada, &player.id).join("ficha.pdf"))
                 .expect("anexo"),

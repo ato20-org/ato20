@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::{now_ms, slug, Vault};
@@ -30,7 +30,6 @@ pub struct Player {
     /// vinculo com `personagens` responde isso com dado, e nao com uma string
     /// digitada a mao que nao acompanha quando o personagem muda.
     pub nome: String,
-    pub notas: String,
     pub entrou_em: i64,
     /// Ultima vez que este jogador falou com o daemon.
     ///
@@ -40,7 +39,7 @@ pub struct Player {
 }
 
 /// Versao do schema do banco da campanha, em `PRAGMA user_version`.
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 /// Abre o banco da campanha.
 ///
@@ -127,20 +126,52 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         conn.execute_batch("alter table jogadores drop column rotulo;")?;
     }
 
+    if current < 4 {
+        // O caderno nasceu tabela, e a coluna `notas` morreu com ele.
+        //
+        // Uma linha por nota, e nao um JSON dentro da coluna antiga: o teto de
+        // tamanho passa a valer POR NOTA em vez de valer para tudo que o
+        // jogador ja escreveu na campanha, e o mestre continua lendo texto em
+        // vez de um blob serializado na tela dele.
+        //
+        // O indice e por (dono, recencia) porque e assim que a lista e pedida:
+        // o caderno abre na nota mexida por ultimo, sempre.
+        //
+        // `drop column` de verdade, como o `rotulo` da v3: coluna abandonada
+        // faz o proximo a ler o schema procurar quem escreve nela. O que
+        // estava escrito ali se perde, e isso foi decidido -- o caderno de uma
+        // nota so nunca chegou a mesa de ninguem.
+        conn.execute_batch(
+            "create table if not exists jogador_notas (
+                 id            text primary key,
+                 jogador_id    text not null,
+                 titulo        text not null default '',
+                 texto         text not null default '',
+                 tags          text not null default '',
+                 criado_em     integer not null,
+                 atualizado_em integer not null
+             );
+
+             create index if not exists jogador_notas_por_dono
+                 on jogador_notas (jogador_id, atualizado_em desc);
+
+             alter table jogadores drop column notas;",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
     Ok(())
 }
 
-const COLUNAS: &str = "id, nome, notas, entrou_em, visto_em";
+const COLUNAS: &str = "id, nome, entrou_em, visto_em";
 
 fn read_player(row: &rusqlite::Row<'_>) -> rusqlite::Result<Player> {
     Ok(Player {
         id: row.get(0)?,
         nome: row.get(1)?,
-        notas: row.get(2)?,
-        entrou_em: row.get(3)?,
-        visto_em: row.get(4)?,
+        entrou_em: row.get(2)?,
+        visto_em: row.get(3)?,
     })
 }
 
@@ -199,15 +230,14 @@ pub fn join(vault: &Vault, nome: &str) -> AppResult<(Player, String)> {
         // Teto no nome: ele aparece na tela do mestre, e um nome de dez mil
         // caracteres vindo de um celular na rede e entrada hostil, nao nome.
         nome: nome.chars().take(60).collect(),
-        notas: String::new(),
         entrou_em: agora,
         visto_em: agora,
     };
 
     let conn = open(vault)?;
     conn.execute(
-        "insert into jogadores (id, token_hash, nome, notas, entrou_em, visto_em)
-         values (?1, ?2, ?3, '', ?4, ?4)",
+        "insert into jogadores (id, token_hash, nome, entrou_em, visto_em)
+         values (?1, ?2, ?3, ?4, ?4)",
         rusqlite::params![player.id, hash_token(&token), player.nome, agora],
     )?;
 
@@ -279,18 +309,22 @@ pub fn restore(vault: &Vault, id: &str, meta: &super::zip::PlayerMeta) -> AppRes
     };
 
     conn.execute(
-        "insert into jogadores (id, token_hash, nome, notas, entrou_em, visto_em)
-         values (?1, ?2, ?3, ?4, ?5, 0)
+        "insert into jogadores (id, token_hash, nome, entrou_em, visto_em)
+         values (?1, ?2, ?3, ?4, 0)
          on conflict(id) do update set
-             token_hash = ?2, nome = ?3, notas = ?4, entrou_em = ?5",
+             token_hash = ?2, nome = ?3, entrou_em = ?4",
         rusqlite::params![
             id,
             hash,
             meta.nome.chars().take(60).collect::<String>(),
-            meta.notas.chars().take(20_000).collect::<String>(),
             meta.entrou_em,
         ],
     )?;
+
+    // O caderno vem no mesmo `_meta.json`: ele mora no banco, e banco nao viaja
+    // no zip. Sem isto, uma campanha importada chegaria com os anexos de cada
+    // jogador intactos e sem uma linha do que eles anotaram.
+    restore_notes(vault, id, &meta.caderno)?;
 
     Ok(())
 }
@@ -314,17 +348,16 @@ pub fn list(vault: &Vault) -> AppResult<Vec<Player>> {
     Ok(players)
 }
 
-/// O que o proprio jogador pode mudar: o nome e as notas.
+/// O que o proprio jogador pode mudar na ficha: o nome, e so.
 ///
 /// Havia um `rotulo` fora daqui de proposito -- o apelido do mestre, e nem
 /// o dono da linha escreve nele. Era um privilegio de coluna no Postgres; aqui
 /// e a ausencia do campo nesta funcao.
-pub fn update_self(
-    vault: &Vault,
-    id: &str,
-    nome: Option<&str>,
-    notas: Option<&str>,
-) -> AppResult<()> {
+///
+/// As notas sairam daqui na v4 do schema: elas viraram o CADERNO, que e uma
+/// tabela e tem rota propria. A ficha voltou a ser identidade -- quem e esta
+/// pessoa na mesa --, e nao identidade mais um campo de texto de dez paginas.
+pub fn update_self(vault: &Vault, id: &str, nome: Option<&str>) -> AppResult<()> {
     let conn = open(vault)?;
 
     if let Some(nome) = nome {
@@ -335,16 +368,6 @@ pub fn update_self(
                 rusqlite::params![nome, id],
             )?;
         }
-    }
-
-    if let Some(notas) = notas {
-        // Teto generoso, mas teto: e um campo livre vindo da rede, e sem limite
-        // um celular pode encher o disco do mestre com uma requisicao.
-        let notas = notas.chars().take(20_000).collect::<String>();
-        conn.execute(
-            "update jogadores set notas = ?1 where id = ?2",
-            rusqlite::params![notas, id],
-        )?;
     }
 
     Ok(())
@@ -359,6 +382,10 @@ pub fn update_self(
 pub fn remove(vault: &Vault, id: &str) -> AppResult<()> {
     let conn = open(vault)?;
     conn.execute("delete from jogadores where id = ?1", [id])?;
+    // O caderno vai junto: sem isto ele ficaria no banco pendurado num
+    // `jogador_id` que nao resolve mais para ninguem, e nenhuma tela o
+    // alcancaria para apagar.
+    conn.execute("delete from jogador_notas where jogador_id = ?1", [id])?;
 
     let dir = attachments_dir(vault, id);
     if dir.exists() {
@@ -569,6 +596,288 @@ pub fn notes_of_character(vault: &Vault, personagem_id: &str) -> AppResult<Vec<(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(notas)
+}
+
+// --- caderno do jogador -----------------------------------------------------
+//
+// O que o jogador anota durante a sessao, e que nao e sobre a ficha de ninguem:
+// o nome do PNJ que mentiu, o numero que o mestre falou uma vez, a suspeita que
+// ainda nao virou nada. Antes era UMA coluna de texto na ficha dele, e o
+// problema dela nao era tamanho: era que um caderno de campanha inteira num
+// campo so nao tem como ser procurado, separado nem retomado tres semanas
+// depois.
+//
+// Tabela, e nao um JSON dentro daquela coluna: o teto passa a valer por nota, e
+// a lista do mestre continua lendo texto.
+
+/// Uma nota do caderno.
+///
+/// `Deserialize` por causa do zip: o caderno viaja no `_meta.json` do jogador,
+/// e e por ele que uma campanha importada chega com o que a mesa escreveu.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Nota {
+    pub id: String,
+    /// Uma linha para reconhecer a nota na lista sem abri-la.
+    pub titulo: String,
+    pub texto: String,
+    /// As etiquetas, ja limpas. Ver `junta_tags`.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub criado_em: i64,
+    pub atualizado_em: i64,
+}
+
+/// Quantas notas um jogador pode ter.
+///
+/// Existe pela mesma razao dos outros tetos deste arquivo: a criacao chega pela
+/// rede, de um celular, para dentro da pasta da campanha de outra pessoa. Sao
+/// duzentas notas de dez paginas cada -- folgado para uma campanha, e longe de
+/// ser uma porta para encher o disco do mestre.
+pub const MAX_NOTAS: usize = 200;
+
+/// Teto do titulo, em caracteres.
+const MAX_TITULO: usize = 120;
+
+/// Quantas etiquetas cabem numa nota, e o tamanho de cada uma.
+///
+/// Etiqueta serve para FILTRAR: doze numa nota ja nao filtram nada, e vinte e
+/// quatro caracteres cabem "taverna do porto" sem caber uma frase.
+const MAX_TAGS: usize = 12;
+const MAX_TAG: usize = 24;
+
+/// As colunas de uma nota, na ordem que `read_nota` le.
+const COLUNAS_NOTA: &str = "id, titulo, texto, tags, criado_em, atualizado_em";
+
+fn corta(texto: &str, teto: usize) -> String {
+    texto.chars().take(teto).collect()
+}
+
+/// O titulo cabe numa linha, sempre.
+///
+/// A tela o mostra numa lista de uma linha por nota; uma quebra vinda de um
+/// texto colado faria a lista crescer sozinha e desalinhar. Vira espaco em vez
+/// de ser recusada: quem colou duas linhas quis a primeira, nao um erro.
+fn titulo_valido(titulo: &str) -> String {
+    corta(&titulo.split_whitespace().collect::<Vec<_>>().join(" "), MAX_TITULO)
+}
+
+/// As etiquetas viram texto: uma por linha, numa coluna so.
+///
+/// Sem tabela propria e sem JSON na coluna. Tabela pagaria um `join` em toda
+/// leitura do caderno para guardar o que nunca e consultado sozinho -- ninguem
+/// pergunta "quais etiquetas existem" sem querer as notas junto. E JSON traria
+/// um modo de falha novo: coluna ilegivel derruba a leitura da nota inteira,
+/// enquanto uma linha estranha aqui e so uma etiqueta estranha.
+///
+/// A quebra de linha e o separador, entao ela nao pode sobreviver dentro de uma
+/// etiqueta -- `split_whitespace` a come junto com o espaco duplo. Repetida sai
+/// fora ignorando caixa: "Pista" e "pista" sao a mesma gaveta para quem filtra.
+fn junta_tags(tags: &[String]) -> String {
+    let mut limpas: Vec<String> = Vec::new();
+
+    for tag in tags {
+        let tag = corta(&tag.split_whitespace().collect::<Vec<_>>().join(" "), MAX_TAG);
+
+        if tag.is_empty() {
+            continue;
+        }
+
+        if limpas.iter().any(|outra| outra.to_lowercase() == tag.to_lowercase()) {
+            continue;
+        }
+
+        limpas.push(tag);
+
+        if limpas.len() == MAX_TAGS {
+            break;
+        }
+    }
+
+    limpas.join("\n")
+}
+
+fn separa_tags(texto: &str) -> Vec<String> {
+    texto.lines().filter(|tag| !tag.is_empty()).map(str::to_string).collect()
+}
+
+fn read_nota(row: &rusqlite::Row<'_>) -> rusqlite::Result<Nota> {
+    Ok(Nota {
+        id: row.get(0)?,
+        titulo: row.get(1)?,
+        texto: row.get(2)?,
+        tags: separa_tags(&row.get::<_, String>(3)?),
+        criado_em: row.get(4)?,
+        atualizado_em: row.get(5)?,
+    })
+}
+
+/// O caderno de um jogador, da nota mexida por ultimo para a mais antiga.
+///
+/// Por recencia, e nao por criacao: o caderno abre no que estava sendo escrito,
+/// que numa mesa e quase sempre o que o jogador quer de volta.
+pub fn notes(vault: &Vault, jogador_id: &str) -> AppResult<Vec<Nota>> {
+    let conn = open(vault)?;
+
+    let mut stmt = conn.prepare(&format!(
+        "select {COLUNAS_NOTA} from jogador_notas
+         where jogador_id = ?1 order by atualizado_em desc"
+    ))?;
+
+    let notas = stmt
+        .query_map([jogador_id], read_nota)?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(notas)
+}
+
+/// Abre uma nota nova no caderno de um jogador.
+pub fn create_note(
+    vault: &Vault,
+    jogador_id: &str,
+    titulo: &str,
+    texto: &str,
+    tags: &[String],
+) -> AppResult<Nota> {
+    let conn = open(vault)?;
+
+    let quantas: i64 = conn.query_row(
+        "select count(*) from jogador_notas where jogador_id = ?1",
+        [jogador_id],
+        |row| row.get(0),
+    )?;
+
+    if quantas as usize >= MAX_NOTAS {
+        return Err(AppError::Malformed {
+            file: "caderno".into(),
+            cause: format!("o caderno chegou ao limite de {MAX_NOTAS} notas"),
+        });
+    }
+
+    let agora = now_ms();
+    let tags = junta_tags(tags);
+
+    let nota = Nota {
+        id: uuid::Uuid::new_v4().to_string(),
+        titulo: titulo_valido(titulo),
+        texto: corta(texto, MAX_NOTA),
+        tags: separa_tags(&tags),
+        criado_em: agora,
+        atualizado_em: agora,
+    };
+
+    conn.execute(
+        "insert into jogador_notas (id, jogador_id, titulo, texto, tags, criado_em, atualizado_em)
+         values (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+        rusqlite::params![nota.id, jogador_id, nota.titulo, nota.texto, tags, agora],
+    )?;
+
+    Ok(nota)
+}
+
+/// Muda uma nota. `None` em cada campo e "nao mexe neste".
+///
+/// Devolve `None` quando a nota nao existe OU nao e deste jogador -- os dois
+/// casos sao o mesmo `where`, de proposito: a rota responde 404 para ambos, e
+/// dizer "existe mas nao e sua" confirmaria a nota alheia a quem chutou o id.
+///
+/// Campo a campo porque a tela grava com atraso: o texto sai a cada 800ms de
+/// digitacao, e o titulo e as etiquetas saem quando o jogador mexe neles. Um
+/// PUT do objeto inteiro faria a gravacao do texto carregar junto uma copia
+/// velha das etiquetas e desfazer o que acabou de ser marcado.
+pub fn update_note(
+    vault: &Vault,
+    jogador_id: &str,
+    id: &str,
+    titulo: Option<&str>,
+    texto: Option<&str>,
+    tags: Option<&[String]>,
+) -> AppResult<Option<Nota>> {
+    let conn = open(vault)?;
+
+    let atual = conn
+        .query_row(
+            &format!("select {COLUNAS_NOTA} from jogador_notas where id = ?1 and jogador_id = ?2"),
+            rusqlite::params![id, jogador_id],
+            read_nota,
+        )
+        .ok();
+
+    let Some(atual) = atual else {
+        return Ok(None);
+    };
+
+    let nota = Nota {
+        id: atual.id,
+        titulo: match titulo {
+            Some(titulo) => titulo_valido(titulo),
+            None => atual.titulo,
+        },
+        texto: match texto {
+            Some(texto) => corta(texto, MAX_NOTA),
+            None => atual.texto,
+        },
+        tags: match tags {
+            Some(tags) => separa_tags(&junta_tags(tags)),
+            None => atual.tags,
+        },
+        criado_em: atual.criado_em,
+        atualizado_em: now_ms(),
+    };
+
+    conn.execute(
+        "update jogador_notas set titulo = ?1, texto = ?2, tags = ?3, atualizado_em = ?4
+         where id = ?5 and jogador_id = ?6",
+        rusqlite::params![
+            nota.titulo,
+            nota.texto,
+            nota.tags.join("\n"),
+            nota.atualizado_em,
+            nota.id,
+            jogador_id,
+        ],
+    )?;
+
+    Ok(Some(nota))
+}
+
+/// Apaga uma nota. `false` = nao existe, ou nao e deste jogador.
+pub fn delete_note(vault: &Vault, jogador_id: &str, id: &str) -> AppResult<bool> {
+    let mexidas = open(vault)?.execute(
+        "delete from jogador_notas where id = ?1 and jogador_id = ?2",
+        rusqlite::params![id, jogador_id],
+    )?;
+
+    Ok(mexidas > 0)
+}
+
+/// Recria o caderno de um jogador vindo de um import.
+///
+/// Passa pelos mesmos tetos da criacao pela rede: `_meta.json` e arquivo dentro
+/// de um zip, e zip e entrada tao pouco confiavel quanto um celular.
+pub fn restore_notes(vault: &Vault, jogador_id: &str, notas: &[Nota]) -> AppResult<()> {
+    let conn = open(vault)?;
+
+    for nota in notas.iter().take(MAX_NOTAS) {
+        conn.execute(
+            "insert into jogador_notas (id, jogador_id, titulo, texto, tags, criado_em, atualizado_em)
+             values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             on conflict(id) do update set
+                 jogador_id = ?2, titulo = ?3, texto = ?4, tags = ?5,
+                 criado_em = ?6, atualizado_em = ?7",
+            rusqlite::params![
+                nota.id,
+                jogador_id,
+                titulo_valido(&nota.titulo),
+                corta(&nota.texto, MAX_NOTA),
+                junta_tags(&nota.tags),
+                nota.criado_em,
+                nota.atualizado_em,
+            ],
+        )?;
+    }
+
+    Ok(())
 }
 
 // --- anexos -----------------------------------------------------------------
@@ -807,17 +1116,57 @@ mod tests {
     }
 
     #[test]
-    fn jogador_muda_o_proprio_nome_e_as_proprias_notas() {
+    fn jogador_muda_o_proprio_nome() {
         let (_dir, vault) = campanha();
 
         let (player, _) = join(&vault, "Edgar").expect("join");
 
-        update_self(&vault, &player.id, Some("Edgar, o Rápido"), Some("achei uma chave"))
-            .expect("update");
+        update_self(&vault, &player.id, Some("Edgar, o Rápido")).expect("update");
 
         let depois = &list(&vault).expect("list")[0];
         assert_eq!(depois.nome, "Edgar, o Rápido");
-        assert_eq!(depois.notas, "achei uma chave");
+    }
+
+    #[test]
+    fn a_etiqueta_repetida_nao_entra_duas_vezes() {
+        let (_dir, vault) = campanha();
+
+        let (player, _) = join(&vault, "Edgar").expect("join");
+
+        let nota = create_note(
+            &vault,
+            &player.id,
+            "A taverna",
+            "o dono mentiu",
+            // A mesma gaveta escrita de tres jeitos, mais uma vazia do campo
+            // que ficou aberto. Quem filtra por "pista" quer uma so.
+            &["Pista".into(), "pista".into(), "  PISTA ".into(), "   ".into()],
+        )
+        .expect("nota");
+
+        assert_eq!(nota.tags, vec!["Pista".to_string()]);
+        assert_eq!(notes(&vault, &player.id).expect("caderno")[0].tags, nota.tags);
+    }
+
+    #[test]
+    fn a_nota_de_um_jogador_nao_e_alcancada_pelo_id() {
+        let (_dir, vault) = campanha();
+
+        let (edgar, _) = join(&vault, "Edgar").expect("join");
+        let (mira, _) = join(&vault, "Mira").expect("join");
+
+        let nota = create_note(&vault, &edgar.id, "O alcapao", "atras do balcao", &[])
+            .expect("nota");
+
+        // O id nao basta: o dono entra no `where` de toda consulta, e e ele que
+        // separa um caderno do outro.
+        assert!(update_note(&vault, &mira.id, &nota.id, None, Some("nao"), None)
+            .expect("update")
+            .is_none());
+        assert!(!delete_note(&vault, &mira.id, &nota.id).expect("delete"));
+
+        assert_eq!(notes(&vault, &edgar.id).expect("caderno").len(), 1);
+        assert_eq!(notes(&vault, &mira.id).expect("caderno").len(), 0);
     }
 
     #[test]

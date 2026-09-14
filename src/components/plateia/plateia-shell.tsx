@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Dices, FolderOpen, NotebookPen, Package, User } from "lucide-react";
 
@@ -78,6 +78,25 @@ export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMes
   // cena até voltar.
   const live = useSubscription(codigo);
 
+  /**
+   * Quem está com o retrato NO AR agora, por id de personagem.
+   *
+   * Sai do mesmo quadro que desenha a cena, e não de uma rota nova: o retrato
+   * ligado é o que a mesa está vendo, e `visible` é o que separa o que está no
+   * ar do que o mestre deixou posicionado para depois. Serve ao caderno, que
+   * pinta de verde a menção de quem está na tela logo acima dele.
+   *
+   * Aqui e não dentro da aba, pelo mesmo motivo da inscrição: aba desmontada
+   * perderia a conta e a refaria a cada volta.
+   */
+  const emCena = useMemo(
+    () =>
+      new Set(
+        live.portraits.filter((retrato) => retrato.visible).map((retrato) => retrato.personagemId),
+      ),
+    [live.portraits],
+  );
+
   return (
     // `h-dvh` fixa a altura na viewport real do celular, já descontando a
     // barra do navegador.
@@ -105,9 +124,9 @@ export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMes
 
       {dentro ? (
         tabbed ? (
-          <LandscapeLayout codigo={codigo} live={live} />
+          <LandscapeLayout codigo={codigo} live={live} emCena={emCena} />
         ) : (
-          <StackedLayout codigo={codigo} live={live} />
+          <StackedLayout codigo={codigo} live={live} emCena={emCena} />
         )
       ) : (
         <PlayerEntrada codigo={codigo} />
@@ -146,7 +165,12 @@ export function PlateiaShell({ codigo, nomeDaMesa }: { codigo: string; nomeDaMes
   );
 }
 
-type LayoutProps = { codigo: string; live: Subscription };
+type LayoutProps = {
+  codigo: string;
+  live: Subscription;
+  /** Ver `emCena`, no `PlateiaShell`. */
+  emCena: Set<string>;
+};
 
 /**
  * Tela deitada: a cena ocupa tudo, e as ferramentas vivem nas bordas.
@@ -161,8 +185,25 @@ type LayoutProps = { codigo: string; live: Subscription };
  * que os painéis fixos faziam de errado. Tocar na ferramenta aberta fecha —
  * o mesmo botão que abriu.
  */
-function LandscapeLayout({ codigo, live }: LayoutProps) {
+function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
   const [aberta, setAberta] = useState<Ferramenta | null>(null);
+
+  /**
+   * O botão do saquinho na doca — que aqui é a BOCA dele.
+   *
+   * Deitado não há bolinha: o saquinho é este botão da borda, e a gaveta que
+   * ele abre é o interior. Recolher suga os dados para cá, e não para o botão
+   * de recolher lá dentro — o dado entra pela boca, e a boca é o que continua à
+   * vista com a gaveta aberta.
+   */
+  const botaoDoSaquinho = useRef<HTMLButtonElement>(null);
+
+  function bocaDoSaquinho(): { clientX: number; clientY: number } | undefined {
+    const rect = botaoDoSaquinho.current?.getBoundingClientRect();
+    if (!rect) return undefined;
+
+    return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+  }
 
   function alternar(ferramenta: Ferramenta) {
     setAberta((atual) => (atual === ferramenta ? null : ferramenta));
@@ -174,6 +215,7 @@ function LandscapeLayout({ codigo, live }: LayoutProps) {
       .map((chave) => (
         <DockButton
           key={chave}
+          ref={chave === "dados" ? botaoDoSaquinho : undefined}
           ativo={aberta === chave}
           rotulo={FERRAMENTAS[chave].rotulo}
           icone={FERRAMENTAS[chave].icone}
@@ -206,7 +248,12 @@ function LandscapeLayout({ codigo, live }: LayoutProps) {
           icone={FERRAMENTAS[aberta].icone}
           onFechar={() => setAberta(null)}
         >
-          <ConteudoDaFerramenta codigo={codigo} ferramenta={aberta} />
+          <ConteudoDaFerramenta
+            codigo={codigo}
+            ferramenta={aberta}
+            emCena={emCena}
+            bocaDoSaquinho={bocaDoSaquinho}
+          />
         </Drawer>
       ) : null}
     </div>
@@ -214,9 +261,20 @@ function LandscapeLayout({ codigo, live }: LayoutProps) {
 }
 
 /** O que cada gaveta mostra. */
-function ConteudoDaFerramenta({ codigo, ferramenta }: { codigo: string; ferramenta: Ferramenta }) {
-  if (ferramenta === "dados") return <ConteudoDoSaquinho />;
-  if (ferramenta === "anotacoes") return <AnotacoesJogador codigo={codigo} />;
+function ConteudoDaFerramenta({
+  codigo,
+  ferramenta,
+  emCena,
+  bocaDoSaquinho,
+}: {
+  codigo: string;
+  ferramenta: Ferramenta;
+  emCena: Set<string>;
+  /** Para onde os dados são sugados ao recolher. Ver `LandscapeLayout`. */
+  bocaDoSaquinho: () => { clientX: number; clientY: number } | undefined;
+}) {
+  if (ferramenta === "dados") return <ConteudoDoSaquinho boca={bocaDoSaquinho} />;
+  if (ferramenta === "anotacoes") return <AnotacoesJogador codigo={codigo} emCena={emCena} />;
 
   // As três do personagem são o mesmo componente, cada uma pedindo o seu
   // pedaço: a ficha com o retrato, o inventário, os arquivos.
@@ -230,7 +288,7 @@ function ConteudoDaFerramenta({ codigo, ferramenta }: { codigo: string; ferramen
  * o conteúdo ao mesmo tempo. Presa, e não rolando junto: perder o mapa de
  * vista ao consultar a própria ficha é o oposto do que serve numa mesa.
  */
-function StackedLayout({ codigo, live }: LayoutProps) {
+function StackedLayout({ codigo, live, emCena }: LayoutProps) {
   const [tab, setTab] = useState<StackedTab>("personagem");
   const swipe = useSwipeTabs(STACKED_TABS, tab, setTab);
 
@@ -248,7 +306,7 @@ function StackedLayout({ codigo, live }: LayoutProps) {
       </div>
 
       <div className="min-h-0 flex-1" {...swipe}>
-        <Painel codigo={codigo} tab={tab} />
+        <Painel codigo={codigo} tab={tab} emCena={emCena} />
       </div>
 
       <PlateiaToolbar
@@ -285,14 +343,22 @@ function StackedLayout({ codigo, live }: LayoutProps) {
  * campo — é o tipo de coisa que só aparece depois que alguém escreveu duas
  * telas de texto no celular.
  */
-function Painel({ codigo, tab }: { codigo: string; tab: StackedTab }) {
+function Painel({
+  codigo,
+  tab,
+  emCena,
+}: {
+  codigo: string;
+  tab: StackedTab;
+  emCena: Set<string>;
+}) {
   // `pb` maior que o resto: a bolinha do saquinho sobe metade para fora da
   // barra e cobre a faixa do meio logo acima dela. Sem a folga, a última linha
   // do caderno e o último arquivo da lista ficam atrás dela.
   if (tab === "anotacoes") {
     return (
       <div className="h-full p-3 pb-6">
-        <AnotacoesJogador codigo={codigo} />
+        <AnotacoesJogador codigo={codigo} emCena={emCena} />
       </div>
     );
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { call } from "@/lib/vault/bridge";
+import type { Nota } from "@/types/caderno";
 
 /**
  * Os jogadores, do lado do mestre.
@@ -22,7 +23,6 @@ export type Player = {
    * uma string à mão que não acompanha quando o personagem muda.
    */
   nome: string;
-  notas: string;
   entrouEm: number;
   /** Última vez que este jogador falou com o daemon. */
   vistoEm: number;
@@ -36,6 +36,21 @@ export type PlayerAttachment = {
 
 export function listPlayers(): Promise<Player[]> {
   return call<Player[]>("players_list");
+}
+
+/**
+ * O caderno de um jogador, para o mestre LER.
+ *
+ * Chamada própria, e não um campo de `listPlayers`: a lista abre a cada janela
+ * de jogadores e só precisa de nome e presença, enquanto o caderno pode ter
+ * duzentas notas de dez páginas.
+ *
+ * Só leitura: o caderno é de quem o escreveu. O mestre é dono do disco — pode
+ * tirar o jogador da mesa inteiro —, mas não há gesto para reescrever a
+ * anotação alheia, e isso não é falta de comando.
+ */
+export function playerNotes(id: string): Promise<Nota[]> {
+  return call<Nota[]>("player_notes", { id });
 }
 
 /** Tira o jogador da mesa, com os anexos dele. Revoga o token. */

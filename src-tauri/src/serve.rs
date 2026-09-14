@@ -401,6 +401,14 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             get(read_character_file_variante),
         )
         .route("/personagens/{id}/nota", get(read_character_note).put(write_character_note))
+        // O caderno: notas do JOGADOR, que nao sao de personagem nenhum. Sem
+        // `ligado` pelo meio -- o dono e o token, e ele entra no `where` de
+        // cada consulta.
+        .route("/notas", get(my_notes).post(new_note))
+        .route("/notas/{id}", patch(edit_note).delete(drop_note))
+        // Quem mais esta na mesa, para as mencoes do caderno. Ver
+        // `table_characters`: PNJ nao entra.
+        .route("/mesa/personagens", get(table_characters))
         .route(
             "/personagens/{id}/inventario",
             get(character_inventory).post(add_inventory_item),
@@ -837,16 +845,16 @@ async fn me(axum::Extension(player): axum::Extension<players::Player>) -> Respon
 #[derive(Debug, Deserialize)]
 pub struct UpdateMe {
     nome: Option<String>,
-    notas: Option<String>,
 }
 
-/// `PATCH /eu` -- o jogador muda o proprio nome e as proprias notas.
+/// `PATCH /eu` -- o jogador muda o proprio nome.
 ///
-/// O corpo tem `nome` e `notas`, e mais nada: a ausencia dos outros campos E o
-/// controle. `entrouEm` e `vistoEm` sao do daemon, e um celular que os
-/// reescrevesse mudaria a ordem da lista da mesa. No Postgres isso era
-/// privilegio de coluna; aqui e o campo nao existir nesta rota nem em
-/// `update_self`.
+/// O corpo tem `nome`, e mais nada: a ausencia dos outros campos E o controle.
+/// `entrouEm` e `vistoEm` sao do daemon, e um celular que os reescrevesse
+/// mudaria a ordem da lista da mesa. No Postgres isso era privilegio de coluna;
+/// aqui e o campo nao existir nesta rota nem em `update_self`.
+///
+/// As notas sairam daqui: viraram o caderno, em `/eu/notas`.
 async fn update_me(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -857,7 +865,7 @@ async fn update_me(
         return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
     };
 
-    match players::update_self(vault, &player.id, body.nome.as_deref(), body.notas.as_deref()) {
+    match players::update_self(vault, &player.id, body.nome.as_deref()) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(cause) => {
             log::error!("ficha de {}: {cause}", player.id);
@@ -1230,6 +1238,212 @@ async fn write_character_note(
             fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar a nota")
         }
     }
+}
+
+// --- caderno do jogador -----------------------------------------------------
+//
+// O que o jogador anota na sessao e nao e sobre ficha nenhuma. Estas rotas nao
+// passam por `ligado`, e nao e esquecimento: nota de caderno nao tem personagem
+// do outro lado. Quem separa o caderno de um jogador do de outro e o
+// `jogador_id` no `where` de cada consulta -- ver `players::update_note`.
+
+#[derive(Debug, Deserialize)]
+pub struct CorpoNota {
+    titulo: Option<String>,
+    texto: Option<String>,
+    tags: Option<Vec<String>>,
+}
+
+/// `GET /eu/notas` -- o caderno deste jogador.
+async fn my_notes(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    match players::notes(vault, &player.id) {
+        Ok(notas) => axum::Json(notas).into_response(),
+        Err(cause) => {
+            log::error!("caderno de {}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o caderno")
+        }
+    }
+}
+
+/// `POST /eu/notas` -- abre uma nota nova.
+///
+/// Aceita corpo vazio (`{}`): o gesto na tela e "nota nova", e o jogador
+/// escreve DEPOIS de ela existir. Exigir titulo aqui faria a tela pedir um nome
+/// antes de deixar escrever, que e a pergunta mais inutil do meio de uma
+/// sessao.
+async fn new_note(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    axum::Json(body): axum::Json<CorpoNota>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    let criada = players::create_note(
+        vault,
+        &player.id,
+        body.titulo.as_deref().unwrap_or_default(),
+        body.texto.as_deref().unwrap_or_default(),
+        body.tags.as_deref().unwrap_or_default(),
+    );
+
+    match criada {
+        Ok(nota) => (StatusCode::CREATED, axum::Json(nota)).into_response(),
+        // Caderno cheio vira 409 com o texto que o celular mostra, e nao 500: e
+        // pedido invalido, nao falha do servidor. Mesma divisao do inventario,
+        // em `recusa`.
+        Err(crate::error::AppError::Malformed { cause, .. }) => {
+            (StatusCode::CONFLICT, cause).into_response()
+        }
+        Err(outra) => {
+            log::error!("nota nova de {}: {outra}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao abrir a nota")
+        }
+    }
+}
+
+/// `PATCH /eu/notas/{id}` -- muda titulo, texto ou etiquetas.
+///
+/// Campo ausente e "nao mexe neste", e nao "apaga": a tela grava o texto com
+/// atraso enquanto o jogador digita, e as etiquetas quando ele as marca. Um PUT
+/// do objeto inteiro faria a gravacao do texto levar junto uma copia velha das
+/// etiquetas.
+async fn edit_note(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+    axum::Json(body): axum::Json<CorpoNota>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    let mudada = players::update_note(
+        vault,
+        &player.id,
+        &id,
+        body.titulo.as_deref(),
+        body.texto.as_deref(),
+        body.tags.as_deref(),
+    );
+
+    match mudada {
+        Ok(Some(nota)) => axum::Json(nota).into_response(),
+        // 404 tambem para a nota que existe e e de outro jogador: dizer "existe
+        // mas nao e sua" confirmaria a nota alheia a quem chutou o id.
+        Ok(None) => fail(StatusCode::NOT_FOUND, "nota nao encontrada"),
+        Err(cause) => {
+            log::error!("nota {id} de {}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar a nota")
+        }
+    }
+}
+
+/// `DELETE /eu/notas/{id}`
+async fn drop_note(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    match players::delete_note(vault, &player.id, &id) {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => fail(StatusCode::NOT_FOUND, "nota nao encontrada"),
+        Err(cause) => {
+            log::error!("nota {id} de {}: {cause}", player.id);
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao apagar a nota")
+        }
+    }
+}
+
+/// Um personagem que o jogador pode mencionar no caderno.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PersonagemDaMesa {
+    id: String,
+    nome: String,
+    /// O nome de quem joga este personagem.
+    ///
+    /// Viaja porque a lista de sugestoes precisa desempatar dois nomes
+    /// parecidos, e porque "Thalor -- Alvaro" e como a mesa fala. Nao vaza
+    /// nada que quem esta sentado ali ja nao saiba: sao as pessoas da mesma
+    /// mesa.
+    dono: String,
+}
+
+/// `GET /eu/mesa/personagens` -- quem o caderno pode mencionar com `@`.
+///
+/// So personagem COM JOGADOR. E a diferenca entre esta rota e a lista do
+/// mestre, e ela e a feature: a campanha tem os PNJ que ainda nao apareceram, o
+/// vilao que ninguem viu, o traidor que ainda e aliado. Mandar o indice inteiro
+/// para o celular entregaria a preparacao do mestre na aba de rede do
+/// navegador, e nenhuma filtragem na tela conserta isso -- o que chegou, chegou.
+///
+/// Vinculo e uma aproximacao de "esta em cena", e nao a mesma coisa: o
+/// personagem de quem faltou hoje continua na lista. E a aproximacao certa --
+/// quem faltou na semana passada estava na mesa, e o jogador anota sobre ele.
+async fn table_characters(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let Some(vault) = guard.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    };
+
+    let (Ok(vinculos), Ok(jogadores), Ok(todos)) = (
+        players::all_links(vault),
+        players::list(vault),
+        characters::load(vault),
+    ) else {
+        log::error!("mesa para o caderno de {}", player.id);
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler a mesa");
+    };
+
+    // Percorre o INDICE e nao os vinculos: a ordem e a mesma que o mestre ve na
+    // janela de personagens, e um personagem com dois jogadores aparece uma vez
+    // so -- com o dono do vinculo mais antigo, que e a ordem que `all_links`
+    // devolve.
+    //
+    // `find_map` sobre TODOS os vinculos do personagem, e nao `find` no
+    // primeiro: vinculo orfao existe de verdade. `players::remove` apaga a
+    // linha do jogador e deixa o vinculo, e um zip importado numa maquina com
+    // outra mesa traz vinculos de jogadores que nunca existiram aqui. Parando
+    // no primeiro, um personagem entregue de verdade sumia da lista porque o
+    // vinculo mais VELHO dele apontava para um fantasma -- e o `@` do caderno
+    // nao sugeria ninguem.
+    let elenco: Vec<PersonagemDaMesa> = todos
+        .into_iter()
+        .filter_map(|personagem| {
+            let dono = vinculos
+                .iter()
+                .filter(|(_, personagem_id)| personagem_id == &personagem.id)
+                .find_map(|(jogador_id, _)| jogadores.iter().find(|j| &j.id == jogador_id))?;
+
+            Some(PersonagemDaMesa {
+                id: personagem.id,
+                nome: personagem.nome,
+                dono: dono.nome.clone(),
+            })
+        })
+        .collect();
+
+    axum::Json(elenco).into_response()
 }
 
 // --- inventario do jogador --------------------------------------------------
@@ -2496,8 +2710,13 @@ mod tests {
         let ficha = &players::list(guard.as_ref().expect("campanha")).expect("list")[0];
 
         assert_eq!(ficha.nome, "Edgar Veloz");
-        assert_eq!(ficha.notas, "achei uma chave");
         assert_eq!(ficha.entrou_em, entrou_antes, "o jogador mexeu no entrou_em");
+
+        // `notas` tambem foi no corpo, e tambem nao e mais desta rota: as notas
+        // viraram o caderno, em `/eu/notas`. Um PATCH que ainda as gravasse
+        // deixaria duas gavetas para a mesma coisa.
+        let caderno = players::notes(guard.as_ref().expect("campanha"), &ficha.id).expect("caderno");
+        assert!(caderno.is_empty(), "{caderno:?}");
     }
 
     #[tokio::test]
@@ -3434,5 +3653,145 @@ mod tests {
             .expect("resposta");
 
         assert_eq!(aceito.status(), StatusCode::OK);
+    }
+
+    // --- caderno do jogador -------------------------------------------------
+
+    /// Extrai o `id` da primeira nota de um corpo JSON, sem desserializar.
+    fn primeiro_id(texto: &str) -> String {
+        let marca = "\"id\":\"";
+        let inicio = texto.find(marca).expect("id na resposta") + marca.len();
+        let resto = &texto[inicio..];
+
+        resto[..resto.find('"').expect("id fechado")].to_string()
+    }
+
+    #[tokio::test]
+    async fn o_caderno_de_um_jogador_nao_alcanca_o_do_outro() {
+        let (_dir, state, codigo) = daemon();
+
+        let token_a = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+        let token_b = token_de(Arc::clone(&state), &codigo, "Mira").await;
+
+        let criada = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "POST",
+                "/eu/notas",
+                Some(r#"{"titulo":"O alcapao","texto":"atras do balcao"}"#),
+            ))
+            .await
+            .expect("resposta");
+
+        assert_eq!(criada.status(), StatusCode::CREATED);
+        let nota = primeiro_id(&corpo(criada).await);
+
+        // O caderno do outro nem sabe que ela existe.
+        let dele = router(Arc::clone(&state))
+            .oneshot(como(&token_b, "GET", "/eu/notas", None))
+            .await
+            .expect("resposta");
+
+        assert_eq!(corpo(dele).await, "[]");
+
+        // E mexer na nota alheia e 404, nao 403: dizer "existe mas nao e sua"
+        // confirmaria a nota de outro a quem chutou o id.
+        for (metodo, body) in [
+            ("PATCH", Some(r#"{"texto":"nao foi o que aconteceu"}"#)),
+            ("DELETE", None),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token_b, metodo, &format!("/eu/notas/{nota}"), body))
+                .await
+                .expect("resposta");
+
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{metodo}");
+        }
+
+        // E continua inteira para o dono.
+        let minha = router(state)
+            .oneshot(como(&token_a, "GET", "/eu/notas", None))
+            .await
+            .expect("resposta");
+
+        assert!(corpo(minha).await.contains("atras do balcao"));
+    }
+
+    #[tokio::test]
+    async fn campo_ausente_no_patch_nao_apaga_o_que_esta_gravado() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        let criada = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "POST",
+                "/eu/notas",
+                Some(r#"{"titulo":"A taverna","texto":"o dono mentiu","tags":["pista"]}"#),
+            ))
+            .await
+            .expect("resposta");
+
+        let nota = primeiro_id(&corpo(criada).await);
+
+        // A tela grava o texto a cada 800ms de digitacao, e so o texto: o
+        // titulo e as etiquetas vao noutro gesto. Se a ausencia apagasse, cada
+        // frase digitada limparia as etiquetas marcadas.
+        let mudada = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "PATCH",
+                &format!("/eu/notas/{nota}"),
+                Some(r#"{"texto":"o dono mentiu duas vezes"}"#),
+            ))
+            .await
+            .expect("resposta");
+
+        assert_eq!(mudada.status(), StatusCode::OK);
+
+        let texto = corpo(mudada).await;
+        assert!(texto.contains("duas vezes"), "{texto}");
+        assert!(texto.contains("A taverna"), "titulo sumiu: {texto}");
+        assert!(texto.contains("pista"), "etiqueta sumiu: {texto}");
+    }
+
+    #[tokio::test]
+    async fn a_mesa_do_caderno_nao_entrega_os_pnj() {
+        let (_dir, state, codigo) = daemon();
+
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+
+            let corvo = characters::create(vault, "Corvo").expect("personagem");
+            // Sem vinculo: e o vilao que ninguem viu ainda.
+            characters::create(vault, "O Encapuzado").expect("personagem");
+
+            let jogadores = players::list(vault).expect("jogadores");
+            let edgar = jogadores.iter().find(|j| j.nome == "Edgar").expect("edgar");
+
+            // Um vinculo ORFAO antes do de verdade: jogador que nao existe mais
+            // nesta mesa, que e o que `players::remove` deixa para tras e o que
+            // um zip importado traz. O de verdade vem depois, e e ele que tem
+            // de aparecer -- parar no primeiro sumia com o personagem inteiro.
+            players::link(vault, "jogador-que-ja-foi-embora", &corvo.id).expect("orfao");
+            players::link(vault, &edgar.id, &corvo.id).expect("vinculo");
+        }
+
+        let mesa = router(state)
+            .oneshot(como(&token, "GET", "/eu/mesa/personagens", None))
+            .await
+            .expect("resposta");
+
+        assert_eq!(mesa.status(), StatusCode::OK);
+
+        let texto = corpo(mesa).await;
+        assert!(texto.contains("Corvo"), "{texto}");
+        assert!(texto.contains("Edgar"), "o dono nao veio junto: {texto}");
+        // O PNJ nao pode nem passar pelo fio: filtrar na tela deixaria o nome
+        // dele no JSON que o celular guardou.
+        assert!(!texto.contains("Encapuzado"), "vazou a preparacao: {texto}");
     }
 }

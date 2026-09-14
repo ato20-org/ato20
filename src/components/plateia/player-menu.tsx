@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCadernoStore } from "@/lib/store/use-caderno-store";
 import { usePlayerStore } from "@/lib/store/use-player-store";
 
 /**
@@ -46,6 +47,7 @@ export function PlayerMenu({ codigo }: { codigo: string }) {
   const status = usePlayerStore((state) => state.status);
   const sheet = usePlayerStore((state) => state.sheet);
   const sair = usePlayerStore((state) => state.sair);
+  const limparCaderno = useCadernoStore((state) => state.limpar);
 
   const [renomeando, setRenomeando] = useState(false);
 
@@ -78,7 +80,15 @@ export function PlayerMenu({ codigo }: { codigo: string }) {
 
           <DropdownMenuSeparator />
 
-          <SairItem onSair={() => sair(codigo)} />
+          <SairItem
+            onSair={() => {
+              sair(codigo);
+              // O caderno vai junto: ele está em memória, e quem entrar em
+              // seguida neste aparelho veria as notas de quem saiu piscando na
+              // tela até a leitura nova voltar.
+              limparCaderno();
+            }}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
 

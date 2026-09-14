@@ -168,6 +168,7 @@ pub fn run() {
             commands::track_load,
             commands::track_save,
             commands::players_list,
+            commands::player_notes,
             commands::player_remove,
             commands::player_attachments,
             commands::player_attachment_bytes,

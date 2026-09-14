@@ -34,10 +34,12 @@ import { valorDaRolagem } from "@/types/dado";
 import {
   playerAttachments,
   playerAttachmentUrl,
+  playerNotes,
   removePlayer,
   type Player,
   type PlayerAttachment,
 } from "@/lib/vault/players";
+import type { Nota } from "@/types/caderno";
 
 const ICONE: Record<AttachmentKind, typeof File> = {
   image: FileImage,
@@ -120,6 +122,34 @@ function Ficha({
 
   const [anexos, setAnexos] = useState<PlayerAttachment[] | null>(null);
   const [vendo, setVendo] = useState<PlayerAttachment | null>(null);
+
+  /**
+   * O caderno dele, lido quando a ficha abre.
+   *
+   * Aqui e não na lista de jogadores, pelo mesmo motivo dos anexos: são
+   * duzentas notas possíveis por pessoa, e ninguém as pede para desenhar a
+   * linha "Edgar — na mesa agora".
+   */
+  const [caderno, setCaderno] = useState<Nota[]>([]);
+
+  useEffect(() => {
+    let ativo = true;
+
+    void playerNotes(player.id).then(
+      (notas) => {
+        if (ativo) setCaderno(notas);
+      },
+      // Silencioso: o resto da ficha — anexos, rolagens, o botão de tirar da
+      // mesa — continua servindo sem o caderno.
+      () => {
+        if (ativo) setCaderno([]);
+      },
+    );
+
+    return () => {
+      ativo = false;
+    };
+  }, [player.id]);
   const [urls, setUrls] = useState<Record<string, string>>({});
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
@@ -469,16 +499,15 @@ function Ficha({
       </section>
 
       <section className="space-y-1.5">
-        <p className="text-muted-foreground text-xs">Notas dele</p>
+        <p className="text-muted-foreground text-xs">Caderno dele</p>
 
-        {/* As notas do jogador são dele, mas o mestre é dono do disco: não faz
-            sentido esconder na tela o que está em texto no SQLite ao lado. O
-            que o token protege é o acesso de OUTRO jogador. */}
-        {player.notas ? (
-          <p className="scroll-fade max-h-48 overflow-y-auto text-xs whitespace-pre-wrap">{player.notas}</p>
-        ) : (
-          <p className="text-muted-foreground text-xs">Nada escrito ainda.</p>
-        )}
+        {/* O caderno é dele, mas o mestre é dono do disco: não faz sentido
+            esconder na tela o que está em texto no SQLite ao lado. O que o
+            token protege é o acesso de OUTRO jogador.
+
+            Só leitura, e não um campo editável: escrever na anotação alheia é
+            outra coisa, e não é uma que o mestre precise fazer. */}
+        <Caderno notas={caderno} />
       </section>
 
       {/* O mesmo visualizador da Plateia, com o zoom que ele já traz: a
@@ -508,5 +537,42 @@ function Ficha({
         Tirar {player.nome} da mesa, com os arquivos
       </Button>
     </>
+  );
+}
+
+/**
+ * O caderno do jogador, do lado do mestre.
+ *
+ * Em texto CRU, com os `@`, `/` e `#` à vista, e isso é deliberado: as menções
+ * de uma nota resolvem contra o que AQUELE jogador alcança — os personagens que
+ * ele conhece, os arquivos dos personagens dele, as outras notas dele. Pintá-las
+ * aqui pediria montar o mundo dele dentro da janela do mestre para transformar
+ * `/ficha.pdf` num botão que abriria o arquivo de outra pessoa.
+ *
+ * Rolagem no bloco inteiro, e não por nota: o mestre está lendo para saber o
+ * que a mesa anotou, e uma caixa de rolagem por nota transformaria isso em
+ * dezenas de janelinhas de três linhas.
+ */
+function Caderno({ notas }: { notas: Nota[] }) {
+  if (notas.length === 0) {
+    return <p className="text-muted-foreground text-xs">Nada escrito ainda.</p>;
+  }
+
+  return (
+    <ul className="scroll-fade max-h-56 space-y-2 overflow-y-auto">
+      {notas.map((nota) => (
+        <li key={nota.id} className="rounded border px-2 py-1.5">
+          <p className="truncate text-xs font-medium">{nota.titulo || "Sem título"}</p>
+
+          {nota.tags.length > 0 ? (
+            <p className="text-muted-foreground mt-0.5 text-[10px]">{nota.tags.join(" · ")}</p>
+          ) : null}
+
+          {nota.texto ? (
+            <p className="mt-1 text-xs whitespace-pre-wrap">{nota.texto}</p>
+          ) : null}
+        </li>
+      ))}
+    </ul>
   );
 }
