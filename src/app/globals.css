@@ -235,13 +235,31 @@
 
 /* Fora do `@media` de propósito: uma animação referenciada sem os keyframes
    definidos é ignorada pelo browser, e manter a regra aqui evita depender da
-   ordem em que os dois blocos são lidos. */
+   ordem em que os dois blocos são lidos.
+
+   SEM o `to`, e isso não é descuido. Um quadro de 100% que falta é preenchido
+   pelo valor de base do elemento — o `opacity` que o estilo dele já diz —, e é
+   exatamente isso que se quer: "aparece vindo do transparente e para na
+   opacidade que este elemento tem".
+
+   Escrito `to { opacity: 1 }`, a opacidade do item não funcionava na mesa, e o
+   caminho é este: animação CSS vence estilo inline no cascade, e o `both`
+   dessas regras faz o valor do último quadro GRUDAR depois de a animação
+   acabar. Então todo item de quem assiste ficava preso em 1 para sempre.
+   Aparecia como uma feature meio quebrada — o mestre esmaecia o token, via
+   acontecer no palco dele, e a mesa continuava vendo a figura cheia. No
+   Operador funcionava porque lá não há suavização, logo não há animação.
+
+   Medido no WebKitGTK 4.1, elemento com `opacity: 0.49` inline:
+
+     to { opacity: 1 }   durante 0,68   depois 1      mexendo depois 1
+     sem `to`            durante 0,34   depois 0,49   mexendo depois 0,49
+
+   Vale para os dois usos. No contêiner de troca de cena o valor de base é 1, e
+   o desenho não muda; no item e no retrato é o que conserta. */
 @keyframes scene-fade-in {
   from {
     opacity: 0;
-  }
-  to {
-    opacity: 1;
   }
 }
 
