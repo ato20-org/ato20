@@ -1,10 +1,10 @@
 /**
  * O que mudou em cada versão, na voz de quem USA o aplicativo.
  *
- * Viaja DENTRO do pacote, e não é buscada na rede. Duas razões, e a segunda é a
- * que decide: o repositório é privado, então a API de releases do GitHub pediria
- * um token que quem baixou não tem; e um histórico que só existe online some
- * justamente na mesa sem Wi-Fi, que é onde o aplicativo foi feito para rodar.
+ * Viaja DENTRO do pacote, e não é buscada na rede: um histórico que só existe
+ * online some justamente na mesa sem Wi-Fi, que é onde este aplicativo foi feito
+ * para rodar. Buscar da API de releases também amarraria a tela à disposição do
+ * GitHub de responder, por um texto que já estava pronto no dia do empacotamento.
  *
  * A consequência é a regra deste arquivo: a lista de uma versão termina NELA.
  * Quem está na 0.0.3 não sabe que a 0.0.4 existe — e não precisa saber, porque

@@ -148,17 +148,29 @@ Se algo quebrar, é uma versão nova que conserta — não uma tag movida.
 
 ## O que checar antes de prometer que o updater avisa alguém
 
-O endpoint é `releases/latest/download/latest.json`. **Enquanto o repositório for
-privado, ele responde 404 para quem baixou** e nenhuma máquina descobre que saiu
-versão nova. Confirme com:
+O endpoint é `releases/latest/download/latest.json`. Confirme que ele responde,
+sem autenticação:
 
 ```
 curl -s -o /dev/null -w "%{http_code}\n" \
   https://github.com/ato20-org/desktop.ato20/releases/latest/download/latest.json
 ```
 
-Se der 404, diga isso ao usuário em vez de anunciar que a atualização automática
-está funcionando.
+**404 tem duas causas, e a segunda engana.** A primeira é repositório privado,
+que esconde os ativos de quem baixou. A segunda é o `prerelease: true` do
+workflow: `releases/latest` do GitHub IGNORA pré-lançamento, então enquanto toda
+release for alpha não existe "latest" nenhum para o endpoint achar -- e o 404
+continua mesmo com o repositório público.
+
+Isso é decisão de produto, não defeito: enquanto for alpha, ninguém se atualiza
+sozinho. Mas não anuncie que a atualização automática funciona sem ter visto
+este `curl` responder 302. Para conferir qual das duas causas é:
+
+```
+gh release list --json tagName,isPrerelease,isLatest
+```
+
+`isLatest=false` em todas quer dizer que é o flag, e não a visibilidade.
 
 ## Armadilhas já pagas
 
