@@ -18,8 +18,9 @@ use db::AppDb;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Antes de tudo, e antes de qualquer thread: mexe no ambiente do processo,
-    // e o que herda a correcao e o `WebKitWebProcess` que a webview vai subir.
+    // Antes de tudo: no AppImage isto REINICIA o processo com a wayland do host
+    // no `LD_PRELOAD`, e daqui nao se volta. Nada pode existir ainda -- nem
+    // thread, nem janela, nem banco.
     appimage::corrigir_wayland();
 
     tauri::Builder::default()

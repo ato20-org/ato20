@@ -23,6 +23,10 @@ const WAYLAND: [&str; 3] = [
     "/usr/lib/libwayland-client.so.0",
 ];
 
+/// Marca que o processo ja e o de depois do `exec`. Sem ela o reinicio se
+/// repetiria para sempre.
+const JA_CORRIGIDO: &str = "ATO20_WAYLAND_DO_HOST";
+
 /// Faz o WebKit usar a `libwayland-client` DA MAQUINA, e nao a empacotada.
 ///
 /// O `linuxdeploy` traz para dentro do AppImage a `libwayland-client` da
@@ -34,26 +38,49 @@ const WAYLAND: [&str; 3] = [
 /// O estrago aparece no EGL: o `libEGL` da maquina e os drivers que ele carrega
 /// foram compilados contra a wayland do host, e com a antiga na frente a
 /// inicializacao falha. O WebKit imprime `Could not create surfaceless EGL
-/// display: EGL_BAD_ALLOC. Aborting...`, o `WebKitWebProcess` aborta, e o que a
-/// pessoa ve e uma janela BRANCA, sem mensagem nenhuma -- porque quem
-/// desenharia a mensagem e o processo que morreu.
+/// display: EGL_BAD_ALLOC. Aborting...` e ABORTA -- as vezes no
+/// `WebKitWebProcess`, as vezes no processo da janela; depende de qual chegou
+/// primeiro ao EGL. O que a pessoa ve, nos dois casos, e uma janela BRANCA sem
+/// mensagem nenhuma: quem desenharia a mensagem e o processo que morreu.
 ///
 /// `LD_PRELOAD` e o menor conserto que resolve: poe UMA biblioteca na frente
 /// sem tocar no `LD_LIBRARY_PATH`, que e o que mantem todo o resto do bundle em
-/// uso. Este processo ja resolveu as suas bibliotecas e nao muda; quem herda a
-/// variavel e o `WebKitWebProcess`, que e justamente quem faz EGL.
+/// uso.
+///
+/// E precisa REINICIAR o processo para valer. `LD_PRELOAD` e lido pelo
+/// carregador no `exec`, e a esta altura ja aconteceu: mudar a variavel agora
+/// alcancaria os processos FILHOS, mas o EGL tambem e inicializado no processo
+/// da janela, e foi ele quem abortou no pacote 0.0.2 -- o core dump aponta
+/// `usr/bin/ato20`, nao o `WebKitWebProcess`. Entao: poe a variavel, e troca a
+/// propria imagem por uma copia de si mesma, que ja nasce com ela.
+///
+/// Custa um `exec` na abertura, antes de existir janela, thread ou banco --
+/// nada para desfazer, nada para o usuario ver.
 ///
 /// Some daqui quando o `linuxdeploy` corrigir a lista de exclusao, ou quando o
 /// Tauri expuser o `--exclude-library` que o `linuxdeploy` ja aceita.
 ///
-/// Chamar ANTES de subir qualquer thread: `set_var` mexe no ambiente do
-/// processo inteiro, e ai ainda so existe a thread principal.
+/// Chamar como PRIMEIRA coisa do `run`: mexe no ambiente do processo inteiro, e
+/// ai ainda so existe a thread principal.
+#[cfg(target_os = "linux")]
 pub fn corrigir_wayland() {
+    use std::os::unix::process::CommandExt;
+
+    // Fora do AppImage as bibliotecas ja sao as da maquina.
     if std::env::var_os("APPIMAGE").is_none() {
         return;
     }
 
+    // Este processo E o reinicio. Sem esta guarda, cada `exec` faria outro.
+    if std::env::var_os(JA_CORRIGIDO).is_some() {
+        return;
+    }
+
     let Some(lib) = WAYLAND.iter().find(|caminho| Path::new(caminho).exists()) else {
+        return;
+    };
+
+    let Ok(binario) = std::env::current_exe() else {
         return;
     };
 
@@ -66,8 +93,20 @@ pub fn corrigir_wayland() {
         _ => (*lib).to_owned(),
     };
 
-    std::env::set_var("LD_PRELOAD", valor);
+    // `exec` so RETORNA se falhou. Se falhar, seguir em frente e melhor do que
+    // desistir: o aplicativo ainda pode abrir -- e numa maquina onde a wayland
+    // empacotada sirva, abre inteiro.
+    let erro = std::process::Command::new(binario)
+        .args(std::env::args_os().skip(1))
+        .env("LD_PRELOAD", valor)
+        .env(JA_CORRIGIDO, "1")
+        .exec();
+
+    eprintln!("nao foi possivel reiniciar com a wayland do host: {erro}");
 }
+
+#[cfg(not(target_os = "linux"))]
+pub fn corrigir_wayland() {}
 
 /// Escreve ou corrige o atalho do menu.
 ///
