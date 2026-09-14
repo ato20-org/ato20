@@ -29,7 +29,7 @@ minha-campanha/
     a8b9.../
       historico-ana.txt   o que cada jogador anexou
   .ato20/
-    estado.db          nome, notas e credencial de cada jogador
+    estado.db          nome, caderno e credencial de cada jogador
     mini/
       a1b2c3.png       miniatura de 160px, refeita a partir do original
 ```
@@ -52,9 +52,9 @@ daemon a refaz no primeiro pedido. Quem gera é `vault/mini.rs`, na importação
 
 **O que mora no SQLite, e o que isso custa.** Cenas, acervo, retratos, trilha e os anexos
 dos jogadores são arquivos: perder o `.ato20/estado.db` não toca em nenhum deles. O que mora
-só lá é o *texto* de cada jogador — nome, apelido e notas — porque as notas gravam a cada
-800 ms de digitação e reescrever um JSON inteiro nesse ritmo, com vários celulares ao mesmo
-tempo, é a receita para escrita perdida. Esse texto é materializado em
+só lá é o *texto* de cada jogador — o nome e o caderno de notas — porque uma nota grava a
+cada 800 ms de digitação e reescrever um JSON inteiro nesse ritmo, com vários celulares ao
+mesmo tempo, é a receita para escrita perdida. Esse texto é materializado em
 `jogadores/{id}/_meta.json` **no export**, e não continuamente: entre dois exports, ele é a
 única coisa da campanha que só existe no banco.
 
@@ -89,7 +89,7 @@ essa página, porque o QR do Operador leva direto para a tela certa, já com o c
 - **Operador: completo.** Abre a pasta, grava as cenas, envia imagens e sons.
 - **Assistir e Plateia: na rede local.** O daemon serve as duas telas e publica a cena por
   SSE, então qualquer aparelho da casa serve de TV e cada jogador acompanha pelo celular.
-- **Ficha do personagem: na Plateia.** Nome, notas e anexos, com um token por jogador no
+- **Ficha do personagem: na Plateia.** Nome, caderno de notas e anexos, com um token por jogador no
   lugar da RLS que fazia esse trabalho antes.
 - **Exportar e importar zip: pronto.** A campanha cabe num arquivo, e o arquivo abre em
   qualquer outra máquina — com a mesa continuando a valer.
@@ -301,12 +301,26 @@ encheria de fantasmas.
 ```
 POST   /sala/entrar        {codigo, nome} -> {id, nome, token}
 GET    /eu                 Bearer
-PATCH  /eu                 {nome?, notas?}
+PATCH  /eu                 {nome?}
 GET    /eu/anexos
 POST   /eu/anexos          multipart
 GET    /eu/anexos/{arquivo}
 DELETE /eu/anexos/{arquivo}
+GET    /eu/notas
+POST   /eu/notas           {titulo?, texto?, tags?} -> nota
+PATCH  /eu/notas/{id}      {titulo?, texto?, tags?}
+DELETE /eu/notas/{id}
+GET    /eu/mesa/personagens
 ```
+
+**O caderno é do jogador, e `/eu/mesa/personagens` é o que ele pode mencionar.** As notas
+saíram da ficha e viraram tabela: uma campanha inteira num campo de texto não tem como ser
+procurada nem retomada três semanas depois. Cada nota tem título, etiquetas e um corpo que
+aceita `@personagem`, `/arquivo` e `#nota` — o mesmo desenho dos postits do mestre, com os
+sinais trocados (ver `lib/mencoes/`). A diferença que importa está na rota da mesa: ela
+devolve **só personagem com jogador**. A campanha tem o vilão que ninguém viu e o traidor
+que ainda é aliado, e mandar o índice inteiro para o celular entregaria a preparação do
+mestre na aba de rede do navegador — nenhuma filtragem na tela conserta o que já chegou.
 
 **O token substitui a RLS.** Era o Postgres que impedia a ficha de um jogador de vazar para
 o outro; agora é um token de 32 bytes do CSPRNG do sistema, guardado no `localStorage` do
@@ -362,7 +376,7 @@ A lista de jogadores vem por **IPC**, não pelas rotas do daemon. O aplicativo *
 uma rota `/mestre/...` obrigaria o daemon a responder "quem é o mestre?", pergunta que não
 tem resposta boa numa porta aberta na rede e que aqui simplesmente não existe.
 
-O mestre vê nome, apelido, notas e a lista de anexos de cada um. Abrir um anexo acontece no
+O mestre vê nome, apelido, o caderno e a lista de anexos de cada um. Abrir um anexo acontece no
 explorador do sistema, em `jogadores/{id}/` — consequência do vault, e não limitação: os
 arquivos estão numa pasta de verdade, e uma rota para o mestre ler anexo pela rede seria
 superfície nova para resolver o que o gerenciador de arquivos já resolve.
@@ -387,7 +401,7 @@ quem joga na casa dele. Saiu porque cobrava uma decisão em *todo* export por um
 quem exporta está quase sempre levando a campanha para outra máquina ou guardando cópia, e
 ali "tudo" é a única resposta certa.
 
-A consequência fica dita: o zip carrega nome, apelido, notas e anexos de cada jogador.
+A consequência fica dita: o zip carrega nome, apelido, o caderno e os anexos de cada jogador.
 Compartilhar a campanha compartilha isso.
 
 O que o import recusa, e por quê:
