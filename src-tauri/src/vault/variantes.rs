@@ -1,13 +1,14 @@
 //! As versoes REDUZIDAS de um arquivo do acervo.
 //!
-//! Duas, e cada uma existe por uma razao propria:
+//! Tres, e cada uma existe por uma razao propria:
 //!
-//!   `Mini` (160px)   as listas -- acervo, camadas, retratos, previa de cena.
-//!   `Tela` (1920px)  o celular do jogador.
+//!   `Mini`  (160px)   as listas -- acervo, camadas, retratos, previa de cena.
+//!   `Tela`  (1920px)  o celular do jogador.
+//!   `Palco` (4096px)  o palco do mestre e a TV, com o plano cheio.
 //!
 //! O acervo guarda o ORIGINAL, e essa decisao nao muda: e ele que vai para o
-//! palco do mestre, para a TV e para o zip que viaja. O problema e quem NAO
-//! precisa dele.
+//! zip que viaja, e e ele que o palco volta a pedir quando o mestre amplia. O
+//! problema e quem NAO precisa dele.
 //!
 //! As LISTAS desenham um quadrado de 40px, e apontavam para o original para
 //! isso. Um mapa de 3537x3750 sao treze milhoes de pixels que a webview
@@ -21,6 +22,28 @@
 //! MB. Medido no mapa real: a 1920px de lado maior, JPEG de qualidade 82, o
 //! mesmo mapa sai em 0,44 MB e 13 MB decodificado -- dezoito vezes menos no
 //! fio, com N celulares na mesa.
+//!
+//! O PALCO do mestre e o terceiro, e o mais caro dos tres. Ele desenhava o
+//! original, e o argumento era que "e onde se amplia para conferir detalhe" --
+//! so que o gesto que doi e o contrario. Medido no motor do aplicativo
+//! (WebKitGTK 4.1, tela cheia de 1920x1080, grade ligada, quarenta itens, um
+//! mapa real de 8192x6144), cinco segundos por linha:
+//!
+//!   ampliando 1x<->2x, original 8192   19,4 fps   p95 274 ms   pior 772 ms
+//!   ampliando 4x<->8x, original 8192   57,8 fps   p95  23 ms   pior  33 ms
+//!   ampliando 1x<->2x, reduzido 4096   54,7 fps   p95  25 ms   pior  30 ms
+//!   ampliando 4x<->8x, reduzido 4096   58,5 fps   p95  23 ms   pior  26 ms
+//!
+//! O que custa nao e o tamanho do arquivo: e o FATOR DE REDUCAO na hora de
+//! rasterizar. Com o plano cheio, cinquenta megapixels sao espremidos em 1700px
+//! de tela a cada quadro, e e isso que da o quadro de 772 ms -- a mesa ve o
+//! palco travar quando o mestre afasta. Ampliado o custo some sozinho, porque
+//! ai so o recorte visivel e amostrado, e por isso o original continua sendo
+//! quem desenha o zoom fundo. Arrastar um token com o mesmo mapa nunca saiu de
+//! 60 fps: o problema e a CAMERA, nao a cena.
+//!
+//! O degrau esta entre 6144 (59,8 fps) e 7168 (47,6 fps), e nao e limite de
+//! textura -- o `MAX_TEXTURE_SIZE` da maquina medida e 16384.
 //!
 //! Medido em `scripts/perf/medir.mjs`, cenario `biblioteca`, acervo de 200:
 //! sem `loading="lazy"` a tela buscava 200 arquivos e 1,9 GB; com ele, 47
@@ -66,6 +89,13 @@
 //! sob demanda quando falta. Sem a segunda metade, toda campanha que existe
 //! hoje ficaria sem miniatura para sempre -- e a migracao seria um passo que
 //! alguem tem de rodar.
+//!
+//! So a MINIATURA e aquecida na importacao. As de tela e de palco nao, pelo
+//! mesmo motivo uma da outra: reduzir e Lanczos sobre a imagem inteira, e
+//! importar uma pasta de trinta mapas cobraria essa conta trinta vezes por uma
+//! variante que talvez nem seja pedida nesta sessao. O preco e a PRIMEIRA
+//! abertura de cada mapa grande, que espera a reducao sair -- uma vez por
+//! arquivo, e depois dela e um `stat`.
 
 use std::path::{Path, PathBuf};
 
@@ -83,6 +113,8 @@ pub enum Variante {
     Mini,
     /// O celular do jogador. 1920px, JPEG.
     Tela,
+    /// O palco do mestre e a TV, com o plano cheio. 4096px, JPEG.
+    Palco,
 }
 
 impl Variante {
@@ -91,6 +123,7 @@ impl Variante {
         match self {
             Self::Mini => "mini",
             Self::Tela => "tela",
+            Self::Palco => "palco",
         }
     }
 
@@ -98,6 +131,7 @@ impl Variante {
         match nome {
             "mini" => Some(Self::Mini),
             "tela" => Some(Self::Tela),
+            "palco" => Some(Self::Palco),
             _ => None,
         }
     }
@@ -111,10 +145,18 @@ impl Variante {
     /// largura, mas o retrato pode chegar a 3x de densidade, e o mestre pode
     /// enquadrar um pedaco do mapa -- e nesse caso a variante e ampliada. 1920
     /// aguenta os dois sem virar mais uma decisao a tomar por cena.
+    ///
+    /// 4096 para o palco. Nao e um numero de gosto: numa moldura de 1920px, um
+    /// arquivo de 4096 ainda e maior que a tela ate 2,1 vezes de ampliacao, e e
+    /// exatamente ai que o palco troca de volta pelo ORIGINAL -- a troca
+    /// acontece no ponto em que a reducao deixaria de ser 1:1, entao nao ha
+    /// zoom nenhum em que se veja menos detalhe do que se via antes dela. Ver
+    /// `useVarianteDoFundo` no cliente.
     fn lado(self) -> u32 {
         match self {
             Self::Mini => 160,
             Self::Tela => 1920,
+            Self::Palco => 4096,
         }
     }
 
@@ -123,9 +165,11 @@ impl Variante {
     /// A miniatura e sempre PNG: ela desenha token e retrato, que sao recortes
     /// com transparencia, e 160px de PNG sao alguns KB de qualquer forma.
     ///
-    /// A variante de tela e sempre JPEG, e por isso ela SO existe para imagem
-    /// opaca -- ver `ensure`. Um mapa com alfa nao existe na pratica, e um
-    /// recorte de 1920px em PNG nao economizaria nada.
+    /// As de tela e de palco sao sempre JPEG, e por isso SO existem para
+    /// imagem opaca -- ver `ensure`. Um mapa com alfa nao existe na pratica, e
+    /// um recorte de 1920px em PNG nao economizaria nada. Quem tiver alfa cai
+    /// no original, que e o comportamento de antes destas rotas: no palco isso
+    /// significa que o mapa transparente continua custando o que custava.
     fn preserva_alfa(self) -> bool {
         matches!(self, Self::Mini)
     }
@@ -139,8 +183,8 @@ impl Variante {
 
     /// Quantas cores a paleta guarda, quando a variante e indexada.
     ///
-    /// So a miniatura e. A variante de TELA e o arquivo que o jogador olha de
-    /// perto -- 1920px de mapa em 256 cores mostraria banda em todo ceu e toda
+    /// So a miniatura e. As de TELA e de PALCO sao o arquivo que alguem olha
+    /// de perto -- um mapa em 256 cores mostraria banda em todo ceu e toda
     /// sombra. A miniatura e um quadrado de 160px numa lista, e ali a conta e
     /// outra: quatro vezes menos bytes por um erro que nao se ve.
     ///
@@ -151,7 +195,7 @@ impl Variante {
     fn cores(self) -> Option<usize> {
         match self {
             Self::Mini => Some(256),
-            Self::Tela => None,
+            Self::Tela | Self::Palco => None,
         }
     }
 
@@ -227,7 +271,7 @@ pub fn path(vault: &Vault, variante: Variante, id: &str) -> PathBuf {
 /// Silencioso: sao cache, e cache que ficou para tras nao quebra nada -- o id
 /// nunca se repete, entao ninguem vai receber a reducao do arquivo errado.
 pub fn discard(vault: &Vault, id: &str) {
-    for variante in [Variante::Mini, Variante::Tela] {
+    for variante in [Variante::Mini, Variante::Tela, Variante::Palco] {
         let caminho = path(vault, variante, id);
 
         if let Err(cause) = std::fs::remove_file(&caminho) {
@@ -264,17 +308,9 @@ pub fn discard(vault: &Vault, id: &str) {
 /// Pre-multiplicar antes e desfazer depois faz a media acontecer no espaco em
 /// que ela e valida: cor ponderada pela opacidade.
 fn reduzir(origem: &image::RgbaImage, lado: u32) -> image::RgbaImage {
-    let (largura, altura) = (origem.width(), origem.height());
-    let maior = largura.max(altura);
-
-    // Nunca AMPLIA: arquivo menor que o alvo ja e a propria reducao, e esticar
-    // inventaria pixel que nao existe nele.
-    if maior <= lado {
+    let Some((largura, altura)) = alvo(origem.width(), origem.height(), lado) else {
         return origem.clone();
-    }
-
-    let fator = f64::from(lado) / f64::from(maior);
-    let alvo = |lado: u32| ((f64::from(lado) * fator).round() as u32).max(1);
+    };
 
     let mut pre = origem.clone();
     for pixel in pre.pixels_mut() {
@@ -286,8 +322,8 @@ fn reduzir(origem: &image::RgbaImage, lado: u32) -> image::RgbaImage {
 
     let mut reduzida = image::imageops::resize(
         &pre,
-        alvo(largura),
-        alvo(altura),
+        largura,
+        altura,
         image::imageops::FilterType::Lanczos3,
     );
 
@@ -303,6 +339,119 @@ fn reduzir(origem: &image::RgbaImage, lado: u32) -> image::RgbaImage {
     }
 
     reduzida
+}
+
+/// O tamanho de saida para caber em LADO x LADO, ou `None` se ja cabe.
+///
+/// `None` e "nao reduz", e nao "reduz para o mesmo tamanho": arquivo menor que
+/// o alvo ja e a propria reducao, e esticar inventaria pixel que nao existe
+/// nele.
+fn alvo(largura: u32, altura: u32, lado: u32) -> Option<(u32, u32)> {
+    if largura.max(altura) <= lado {
+        return None;
+    }
+
+    let fator = f64::from(lado) / f64::from(largura.max(altura));
+    let lado_de = |valor: u32| ((f64::from(valor) * fator).round() as u32).max(1);
+
+    Some((lado_de(largura), lado_de(altura)))
+}
+
+/// Divide por dois, com media de 2x2, enquanto a metade seguinte ainda couber.
+///
+/// E a metade barata do `reduzir_opaco`, e a razao de ela existir e medida: o
+/// `imageops::resize` com Lanczos3 levando um mapa de 8192x6144 para 4096 custa
+/// 2,5 s em release, e as mesmas metades custam 0,15 s. Dezesseis vezes, porque
+/// uma media de 2x2 e aritmetica de inteiro sobre cada pixel uma vez, e o
+/// Lanczos e treze amostras por eixo em ponto flutuante.
+///
+/// Reduzir por metades antes do filtro e o que uma pirâmide de mipmap faz, e
+/// pela mesma razao: na proporcao exata de 2:1 a media de 2x2 E a reamostragem
+/// correta -- cada pixel de saida e a area exata de quatro de entrada, sem peso
+/// nenhum para escolher.
+///
+/// Medido entre a saida deste caminho e a do Lanczos direto, no mapa real
+/// reduzido para 4096: RMSE de 0,47% e 2% menos detalhe fino pelo desvio do
+/// laplaciano (1466 contra 1498). Para comparar, o `DynamicImage::thumbnail`
+/// que este modulo ja recusou perdia trinta por cento.
+///
+/// Lado impar repete a ultima coluna ou linha em vez de descarta-la: jogar fora
+/// encolheria a imagem meio pixel por metade, e com quatro metades isso vira
+/// borda faltando.
+fn metades(origem: &image::RgbImage, lado: u32) -> Option<image::RgbImage> {
+    let mut atual: Option<image::RgbImage> = None;
+
+    while {
+        let fonte = atual.as_ref().unwrap_or(origem);
+        fonte.width().max(fonte.height()) / 2 >= lado
+    } {
+        let fonte = atual.as_ref().unwrap_or(origem);
+        let (largura, altura) = (fonte.width().div_ceil(2), fonte.height().div_ceil(2));
+        let (fim_x, fim_y) = (fonte.width() - 1, fonte.height() - 1);
+
+        let mut proxima = image::RgbImage::new(largura, altura);
+
+        for y in 0..altura {
+            let (y0, y1) = ((y * 2).min(fim_y), (y * 2 + 1).min(fim_y));
+
+            for x in 0..largura {
+                let (x0, x1) = ((x * 2).min(fim_x), (x * 2 + 1).min(fim_x));
+
+                let quatro = [
+                    fonte.get_pixel(x0, y0),
+                    fonte.get_pixel(x1, y0),
+                    fonte.get_pixel(x0, y1),
+                    fonte.get_pixel(x1, y1),
+                ];
+
+                let mut media = [0u8; 3];
+                for canal in 0..3 {
+                    let soma: u32 = quatro.iter().map(|pixel| u32::from(pixel[canal])).sum();
+                    // +2 antes de dividir por 4 arredonda em vez de truncar:
+                    // truncar escurece a imagem um pouco a cada metade, e com
+                    // quatro metades o mapa sai visivelmente mais escuro.
+                    media[canal] = ((soma + 2) / 4) as u8;
+                }
+
+                proxima.put_pixel(x, y, image::Rgb(media));
+            }
+        }
+
+        atual = Some(proxima);
+    }
+
+    atual
+}
+
+/// A mesma reducao, para imagem sem alfa.
+///
+/// Tres canais e nenhuma pre-multiplicacao: sem alfa nao ha borda para o
+/// Lanczos sujar, entao o cuidado que o `reduzir` toma aqui seria so custo. E
+/// custo grande, porque quem passa por aqui e o mapa inteiro -- ver o comentario
+/// do `ensure_arquivo` que separa os dois caminhos.
+///
+/// Metades inteiras primeiro, Lanczos3 no resto. O filtro continua sendo o
+/// Lanczos de proposito: a variante de palco e desenhada em tela cheia, e
+/// trocar o redutor por um mais barato apareceria no mapa. O que as metades
+/// fazem e entregar a ele uma imagem que ja esta a menos de duas vezes do alvo.
+///
+/// O alvo sai da imagem ORIGINAL, e nao do que as metades devolveram: e ele que
+/// guarda a proporcao de quem entrou, e um lado impar no meio do caminho a
+/// moveria por um pixel.
+fn reduzir_opaco(origem: &image::RgbImage, lado: u32) -> image::RgbImage {
+    let Some((largura, altura)) = alvo(origem.width(), origem.height(), lado) else {
+        return origem.clone();
+    };
+
+    let filtro = image::imageops::FilterType::Lanczos3;
+
+    match metades(origem, largura.max(altura)) {
+        // As metades cairam exatamente no alvo, que e o caso de todo mapa de
+        // lado potencia de dois. Nao ha resto para o Lanczos limpar.
+        Some(base) if base.width() == largura && base.height() == altura => base,
+        Some(base) => image::imageops::resize(&base, largura, altura, filtro),
+        None => image::imageops::resize(origem, largura, altura, filtro),
+    }
 }
 
 /// Quantas passadas o quantizador da sobre os pixels.
@@ -461,28 +610,55 @@ pub fn ensure_arquivo(
         .decode()
         .map_err(|cause| ilegivel(cause.to_string()))?;
 
-    let cheia = imagem.to_rgba8();
-
-    // A variante de tela e JPEG, e JPEG nao tem alfa. Um recorte com
-    // transparencia reduzido para ela ganharia fundo preto, entao ela nao
-    // existe para esse arquivo: quem pedir recebe o ORIGINAL, que e o
-    // comportamento de antes desta rota. Na pratica isso nunca acontece com
-    // mapa, e todo recorte deste projeto e menor que 1920 de qualquer forma.
-    if !variante.preserva_alfa() && cheia.pixels().any(|pixel| pixel[3] != 255) {
-        return Err(AppError::UnsupportedKind(format!(
-            "{nome} tem transparencia e a variante {} e JPEG",
-            variante.nome()
-        )));
-    }
-
-    // RGBA8 sempre na reducao: e nela que o alfa tem de sobreviver, e achatar
-    // antes poria um retangulo preto em volta de cada figura.
-    let rgba = reduzir(&cheia, variante.lado());
-
+    // Os dois caminhos se separam aqui, e nao dentro de um `match` no fim.
+    //
+    // O de ALFA -- a miniatura -- precisa de RGBA em todas as etapas, e paga
+    // por isso a pre-multiplicacao. O de JPEG nao tem alfa NENHUM para
+    // preservar: ele recusa a imagem que tiver, logo o que sobra e opaco por
+    // construcao, e carregar um quarto canal de 255 por tres passadas sobre a
+    // imagem inteira e trabalho que nao compra nada.
+    //
+    // Nao era assim, e ate a variante de tela isso nao importava: 1920px de
+    // lado, e o custo se perdia. O `palco` e que trouxe a conta para a mesa --
+    // 4096px a partir de um mapa de cinquenta megapixels. Medido no daemon,
+    // gerando a variante do mapa real de 8192x6144 com o Rust em DEBUG, que e o
+    // que `tauri dev` compila:
+    //
+    //   RGBA, Lanczos3 direto     92,8 s
+    //   RGB,  Lanczos3 direto     78,6 s   <- este comentario
+    //   RGB,  metades + Lanczos   30,5 s   <- mais o `reduzir_opaco`
+    //
+    // O caminho de RGB sozinho tira tres passadas de cinquenta milhoes de
+    // pixels e uns 380 MB de alocacao; as metades tiram o resto. Em RELEASE, que
+    // e o que a mesa roda, o mesmo arquivo sai em 1,08 s ponta a ponta --
+    // decodificar, reduzir e escrever o JPEG.
     let bytes = match variante.cores() {
-        Some(cores) => indexado(&rgba, cores).map_err(ilegivel)?,
+        Some(cores) => {
+            // RGBA8 na reducao: e nela que o alfa tem de sobreviver, e achatar
+            // antes poria um retangulo preto em volta de cada figura.
+            let rgba = reduzir(&imagem.to_rgba8(), variante.lado());
+
+            indexado(&rgba, cores).map_err(ilegivel)?
+        }
         None => {
-            let rgb = image::DynamicImage::ImageRgba8(rgba).to_rgb8();
+            // JPEG nao tem alfa. Um recorte com transparencia reduzido para ele
+            // ganharia fundo preto, entao a variante nao existe para esse
+            // arquivo: quem pedir recebe o ORIGINAL, que e o comportamento de
+            // antes destas rotas. Na pratica isso nunca acontece com mapa.
+            //
+            // A varredura so acontece quando o formato admite alfa: um JPEG de
+            // origem nao tem o que esconder, e perguntar pixel a pixel custaria
+            // uma passada inteira para chegar sempre a mesma resposta.
+            if imagem.color().has_alpha()
+                && imagem.to_rgba8().pixels().any(|pixel| pixel[3] != 255)
+            {
+                return Err(AppError::UnsupportedKind(format!(
+                    "{nome} tem transparencia e a variante {} e JPEG",
+                    variante.nome()
+                )));
+            }
+
+            let rgb = reduzir_opaco(&imagem.to_rgb8(), variante.lado());
             let mut bytes = Vec::new();
 
             image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, variante.qualidade())
@@ -961,5 +1137,63 @@ mod tests {
 
         // Chamado no `delete` de todo asset, inclusive som, que nunca teve uma.
         discard(&vault, "nunca-existiu");
+    }
+
+    #[test]
+    fn palco_tem_nome_e_pasta_proprios() {
+        let (_dir, vault) = campanha();
+
+        // O nome e o que o cliente escreve na URL: se ele deixar de ser aceito,
+        // o palco recebe 404 e volta a desenhar o original -- sem erro nenhum na
+        // tela, so o travamento de volta.
+        assert_eq!(Variante::de_nome("palco"), Some(Variante::Palco));
+
+        let palco = path(&vault, Variante::Palco, "a1");
+        assert_ne!(palco, path(&vault, Variante::Tela, "a1"));
+        assert!(palco.starts_with(vault.state_dir()));
+        assert_eq!(palco.extension().and_then(|e| e.to_str()), Some("jpg"));
+    }
+
+    #[test]
+    fn reduz_por_metades_ate_o_alvo_sem_escurecer() {
+        // 800 -> 400 -> 200: duas metades exatas, e o Lanczos nao precisa
+        // entrar. Cinza chapado porque a media de quatro cinzas iguais e o
+        // mesmo cinza -- qualquer truncamento em vez de arredondamento
+        // apareceria aqui como imagem mais escura a cada metade.
+        let origem = image::RgbImage::from_pixel(800, 600, image::Rgb([128, 128, 128]));
+        let saida = reduzir_opaco(&origem, 200);
+
+        assert_eq!((saida.width(), saida.height()), (200, 150));
+
+        for pixel in saida.pixels() {
+            assert_eq!(pixel.0, [128, 128, 128], "a metade mexeu no valor");
+        }
+    }
+
+    #[test]
+    fn metade_de_lado_impar_nao_perde_a_borda() {
+        // 401 de largura: a ultima coluna nao tem par, e descarta-la encolheria
+        // a imagem meio pixel por metade. Ela e marcada de branco sobre preto,
+        // entao some sem deixar rastro se for jogada fora.
+        let mut origem = image::RgbImage::from_pixel(401, 400, image::Rgb([0, 0, 0]));
+        for y in 0..400 {
+            origem.put_pixel(400, y, image::Rgb([255, 255, 255]));
+        }
+
+        let saida = reduzir_opaco(&origem, 200);
+        let ultima = saida.width() - 1;
+        let claro = (0..saida.height()).any(|y| saida.get_pixel(ultima, y)[0] > 60);
+
+        assert!(claro, "a coluna da borda sumiu na reducao");
+    }
+
+    #[test]
+    fn nao_amplia_imagem_menor_que_o_palco() {
+        // Mesma regra da miniatura, e o caminho opaco tem a sua propria copia
+        // dela: um token de 64x80 pedido como palco nao pode virar 4096.
+        let origem = image::RgbImage::from_pixel(64, 80, image::Rgb([10, 20, 30]));
+        let saida = reduzir_opaco(&origem, 4096);
+
+        assert_eq!((saida.width(), saida.height()), (64, 80));
     }
 }

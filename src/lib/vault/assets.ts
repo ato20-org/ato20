@@ -20,14 +20,20 @@ import type { AssetKind, AssetMeta, EscopoAsset } from "@/types/scene";
 /**
  * Qual tamanho do arquivo se pede.
  *
- * O acervo guarda o ORIGINAL, e ele é quem vai para o palco do mestre, para a
- * TV e para o zip. As duas reduções existem para quem não precisa dele:
+ * O acervo guarda o ORIGINAL, e ele é quem vai para o zip — e quem o palco
+ * volta a pedir quando o mestre amplia. As três reduções existem para quem não
+ * precisa dele:
  *
  * - `mini` (160px) para LISTA. Apontar um quadrado de 40px para um mapa de
  *   treze megapixels fazia a webview decodificar 51 MB de bitmap por linha.
  * - `tela` (1920px, JPEG) para o CELULAR do jogador. Ele recebe a mesma cena
  *   que a TV numa tela de 400px, e baixava os 8 MB do arquivo. Medido no mapa
  *   real: 0,44 MB e 13 MB decodificado.
+ * - `palco` (4096px, JPEG) para o PALCO do mestre e para a TV, enquanto o plano
+ *   está afastado. Com o mapa inteiro na tela, o original de 8192x6144 derrubava
+ *   o palco a 19,4 fps e um quadro de 772 ms — ver `useVarianteDoFundo`, que é
+ *   quem escolhe entre esta e o original, e `vault/variantes.rs` para as
+ *   medidas.
  *
  * Quando a redução não é possível — som, arquivo ilegível, recorte com
  * transparência na variante JPEG, disco cheio — o daemon responde o ORIGINAL
@@ -35,7 +41,7 @@ import type { AssetKind, AssetMeta, EscopoAsset } from "@/types/scene";
  *
  * Ver `vault/variantes.rs` no Rust, que gera e guarda em `.ato20/{variante}/`.
  */
-export type Variante = "mini" | "tela";
+export type Variante = "mini" | "tela" | "palco";
 
 export async function assetUrl(
   assetId: string,

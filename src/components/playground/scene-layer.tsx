@@ -4,10 +4,10 @@ import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
 import { FogLayer } from "@/components/playground/fog-layer";
+import { FundoDaCena } from "@/components/playground/fundo-da-cena";
 import { GridLayer } from "@/components/playground/grid-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
-import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { Variante } from "@/lib/vault/assets";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { CanvasItem, FogRegion, Portrait, Scene } from "@/types/scene";
@@ -32,7 +32,9 @@ type SceneLayerProps = {
    */
   smooth?: boolean;
   /**
-   * Qual tamanho dos arquivos desenhar. Ausente = os arquivos.
+   * Qual tamanho dos arquivos desenhar. Ausente = os arquivos -- com uma
+   * exceção, o FUNDO, que passou a escolher sozinho entre a redução de palco e
+   * o original conforme o zoom. Ver `useVarianteDoFundo`.
    *
    * `mini` é da prévia de cena. Medido no `scripts/perf/medir.mjs`, cenário
    * `lista`, com trinta cenas de mapa próprio enquanto o mestre arrasta um
@@ -46,7 +48,11 @@ type SceneLayerProps = {
    * Medido no mapa real, 8,0 MB e 51 MB decodificado contra 0,44 MB e 13 MB.
    *
    * O palco do mestre e a TV ficam sem variante de propósito: um é onde se
-   * amplia para conferir detalhe, a outra é a tela grande da mesa.
+   * amplia para conferir detalhe, a outra é a tela grande da mesa. Isso vale
+   * para os ITENS. O fundo dos dois é o que mais pesa, e ele tem regra própria:
+   * com o plano cheio, um mapa de 8192x6144 derrubava o palco a 19,4 fps e um
+   * quadro de 772 ms, e ampliado o mesmo arquivo entrega 57,8 fps -- ver
+   * `useVarianteDoFundo` e o cabeçalho de `vault/variantes.rs`.
    */
   variante?: Variante;
   /**
@@ -85,21 +91,11 @@ export function SceneLayer({
   onPortraitPointerDown,
   apagando,
 }: SceneLayerProps) {
-  const backgroundUrl = useAssetUrl(scene.backgroundAssetId, variante);
   const items = useMemo(() => [...scene.items].sort((a, b) => a.z - b.z), [scene.items]);
 
   return (
     <>
-      {backgroundUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={backgroundUrl}
-          alt=""
-          draggable={false}
-          // `object-contain`: mapa nenhum deve ser cortado por não ser 16:9.
-          className="absolute inset-0 size-full object-contain select-none"
-        />
-      ) : null}
+      <FundoDaCena assetId={scene.backgroundAssetId} variante={variante} />
 
       {/* Depois do fundo e ANTES dos itens: a grade é do mapa, e um token em
           cima dela é o que se conta. Por cima dos itens ela riscaria os
