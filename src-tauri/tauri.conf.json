@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ato20",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "identifier": "show.rpg.ato20",
   "build": {
     "frontendDist": "../out",
@@ -42,6 +42,14 @@
     },
     "resources": {
       "../out": "out"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ato20-org/desktop.ato20/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxRDRCQ0IzMTk4NkRGQkYKUldTLzM0WVpzN3pVc1R5TFVUcnZEa3RBQWpXYlM1Wk13NThHUEowOTJiUnhSb2FqWVpBdlBWdUEK"
     }
   }
 }

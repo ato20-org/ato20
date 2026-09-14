@@ -23,6 +23,7 @@ import logo from "@/assets/logo-white.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAtualizacao } from "@/hooks/use-atualizacao";
 import { useCaminhoCurto } from "@/hooks/use-caminho-curto";
 import { useEstante } from "@/hooks/use-estante";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
@@ -45,6 +46,10 @@ import type { RecentEntry } from "@/lib/vault/campaign";
  */
 export function MestreGate() {
   const status = useCampaignStore((state) => state.status);
+
+  // Na porta, e não com a mesa aberta: instalar uma atualização reinicia o
+  // aplicativo, e este é o único momento do uso em que isso não custa nada.
+  useAtualizacao();
 
   if (status === "sem-aplicativo") return <NoApp />;
 

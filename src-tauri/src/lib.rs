@@ -20,6 +20,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         // O que faz uma extensao existir para a webview.
         //
         // Protocolo proprio, e nao `blob:` com o texto do arquivo dentro: com

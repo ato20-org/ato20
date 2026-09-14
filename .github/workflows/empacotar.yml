@@ -1,7 +1,7 @@
-# Gera os instaladores, só na `production`.
+# Gera os instaladores e publica a release, só na `production`.
 #
 # Empacotar custa dezenas de minutos entre os dois sistemas, e a `main` recebe
-# commit o dia inteiro. Então `main` verifica e `production` empacota: subir
+# commit o dia inteiro. Então `main` verifica e `production` publica: subir
 # versão é mesclar `main` na `production`.
 #
 # `workflow_dispatch` fica junto para poder rodar à mão sem inventar um commit.
@@ -17,8 +17,29 @@ on:
     branches: [production]
   workflow_dispatch:
 
+# Só `contents`, e é o que a release precisa. O padrão do repositório pode ser
+# mais generoso; declarar aqui fecha o resto para este workflow.
+permissions:
+  contents: write
+
 jobs:
+  versao:
+    runs-on: ubuntu-22.04
+    outputs:
+      numero: ${{ steps.ler.outputs.numero }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # A versão sai do `tauri.conf.json`, que é a mesma que vai no instalador.
+      # Escrever o número no workflow daria duas fontes da verdade, e a segunda
+      # é sempre a que fica para trás.
+      - id: ler
+        run: echo "numero=$(jq -r .version src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
+
   empacotar:
+    needs: versao
+
     strategy:
       # Sem `fail-fast`: um erro só do Windows não pode jogar fora o pacote de
       # Linux que já ficou pronto.
@@ -68,17 +89,34 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # O `beforeBuildCommand` do `tauri.conf.json` já faz o resto: limpa as
-      # cópias velhas do `out/`, copia o runtime do pdf.js e roda o `next build`.
-      - name: Empacotar
-        run: pnpm tauri build
-
-      # `bundle/**` inteiro, e não um caminho por formato: `targets: "all"` faz
-      # o Linux sair com .deb, .rpm e .AppImage e o Windows com .msi e .exe, e
-      # listar os cinco aqui seria uma segunda fonte da verdade para esquecer de
-      # atualizar.
-      - uses: actions/upload-artifact@v4
+      # A action oficial faz o que daria três passos à mão: empacota, ASSINA
+      # cada pacote com a chave do updater, cria a release se ela ainda não
+      # existe e sobe o `latest.json` que o aplicativo instalado vai ler.
+      #
+      # `releaseDraft: false` porque rascunho não tem URL pública, e é
+      # justamente a URL que o endpoint do updater aponta -- uma release em
+      # rascunho deixaria o `latest.json` inalcançável.
+      #
+      # `prerelease: true` enquanto for alpha. Ele não muda o que o updater vê:
+      # `releases/latest/download` ignora pré-lançamento, então nenhuma versão
+      # instalada vai se atualizar sozinha para uma alpha.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A privada nunca sai dos segredos, e não existe em arquivo nenhum do
+          # repositório. Ver `tauri-plugin-updater` no `Cargo.toml`.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          name: ato20-${{ matrix.nome }}
-          path: src-tauri/target/release/bundle/**
-          if-no-files-found: error
+          tagName: v${{ needs.versao.outputs.numero }}-alpha
+          releaseName: ATO20 v${{ needs.versao.outputs.numero }} alpha
+          releaseBody: |
+            Primeira versão pública, e ela é alpha: espere coisa quebrada.
+
+            **Linux** — `.AppImage` roda sem instalar; `.deb` e `.rpm` para
+            instalar pelo gerenciador.
+            **Windows** — `.msi` ou o instalador `.exe`. Os dois saem SEM
+            assinatura de código, então o SmartScreen vai avisar: "Mais
+            informações" e "Executar mesmo assim".
+          releaseDraft: false
+          prerelease: true
