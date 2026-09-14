@@ -1017,7 +1017,8 @@ export function MestreStage({ scene }: { scene: Scene }) {
   );
 
   /**
-   * Insere a imagem do acervo onde ela foi solta.
+   * Insere onde foi solto: imagem do acervo, item de inventário ou token de
+   * personagem.
    *
    * Centrada no cursor, e não no plano como faz o `+` do acervo: o ponto do
    * gesto é a informação que o arrasto carrega, e ignorá-lo obrigaria a
@@ -1037,7 +1038,14 @@ export function MestreStage({ scene }: { scene: Scene }) {
     // zero — a imagem cairia no canto da cena em vez de onde a mão soltou.
     const center = toScene(event.clientX, event.clientY);
 
-    const soltar = (assetId: string, largura?: number, altura?: number) => {
+    const soltar = (
+      assetId: string,
+      largura?: number,
+      altura?: number,
+      // De quem é o token, quando veio da lista de personagens. `undefined` é o
+      // caso do acervo e do inventário: imagem que não é de ninguém.
+      personagemId?: string,
+    ) => {
       const size =
         largura && altura
           ? fitInitialSize(largura, altura)
@@ -1046,12 +1054,21 @@ export function MestreStage({ scene }: { scene: Scene }) {
       // Já selecionado: o gesto seguinte é quase sempre ajustar o que acabou de
       // entrar, e sem seleção seria preciso clicar na imagem antes.
       select([
-        addItem(scene.id, { assetId, ...boxAround(center, size.x, size.y) }),
+        addItem(scene.id, {
+          assetId,
+          personagemId,
+          ...boxAround(center, size.x, size.y),
+        }),
       ]);
     };
 
     if (payload.assetId) {
-      soltar(payload.assetId, payload.naturalWidth, payload.naturalHeight);
+      soltar(
+        payload.assetId,
+        payload.naturalWidth,
+        payload.naturalHeight,
+        payload.personagemId,
+      );
       return;
     }
 

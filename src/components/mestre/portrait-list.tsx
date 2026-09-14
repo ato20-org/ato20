@@ -192,9 +192,10 @@ export function PortraitList() {
       <ScrollArea className="min-h-0 flex-1">
         {elenco.length === 0 ? (
           <p className="text-muted-foreground p-3 text-xs leading-snug">
-            Ninguém na cena. Ponha o token de um personagem no mapa — pela lista
-            de Personagens — e ele aparece aqui para entrar na tela da mesa. O
-            retrato fica preso à câmera, então aproximar o mapa não o move.
+            Ninguém na cena. Ponha o token de um personagem no mapa — arraste-o
+            da lista de Personagens, ou use o botão dela — e ele aparece aqui
+            para entrar na tela da mesa. O retrato fica preso à câmera, então
+            aproximar o mapa não o move.
           </p>
         ) : (
           <ul className="space-y-1 p-2">
