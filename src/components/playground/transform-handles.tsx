@@ -1,8 +1,9 @@
 "use client";
 
-import type { PointerEvent as ReactPointerEvent } from "react";
-import { Drama, FlipHorizontal, RotateCw, Trash2 } from "lucide-react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Blend, Drama, FlipHorizontal, RotateCw, Trash2 } from "lucide-react";
 
+import { Slider } from "@/components/ui/slider";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,18 @@ const GIZMO_Z = 10_000;
 const HANDLE_PX = 10;
 const OUTLINE_PX = 1.5;
 const ROTATE_OFFSET_PX = 30;
+/** Folga entre a borda direita da caixa e o painel de opacidade. */
+const PAINEL_GAP_PX = 12;
+
+/**
+ * O mínimo que o slider de opacidade alcança, em porcento.
+ *
+ * Não vai a zero pela mesma razão dos degraus do menu: item invisível continua
+ * na cena, mas some da prévia e da lista de camadas — e o mestre fica com uma
+ * imagem que não está em lugar nenhum e continua ali. Sumir de verdade é névoa
+ * ou lixeira.
+ */
+const OPACIDADE_MINIMA = 10;
 
 /**
  * A cor do gizmo, por tom.
@@ -103,6 +116,18 @@ type TransformHandlesProps = {
   /** Presente = mostra o botão de espelhar na horizontal. */
   onFlip?: () => void;
   /**
+   * Presente = mostra o botão que abre o slider de opacidade.
+   *
+   * Um par valor/callback e não só o callback, ao contrário dos outros botões:
+   * este controle não dispara uma ação, ele MOSTRA um estado — um slider que
+   * não soubesse a opacidade atual começaria sempre no cheio e mentiria sobre
+   * o item.
+   *
+   * Ausente em tudo que não é imagem — névoa, moldura de câmera e retrato não
+   * têm o campo.
+   */
+  opacidade?: { valor: number; onChange: (valor: number) => void };
+  /**
    * Presente = mostra o botão que abre a ficha de quem este item é.
    *
    * Só aparece em token, que é item com `personagemId`. Uma imagem de mobília
@@ -140,9 +165,24 @@ export function TransformHandles({
   onOpenSheet,
   onGestureStart,
   onChange,
+  opacidade,
 }: TransformHandlesProps) {
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
+
+  /**
+   * O painel começa fechado e é o botão que o abre.
+   *
+   * Fechado por padrão porque opacidade é ajuste de algumas imagens da cena, e
+   * não de toda seleção: um painel sempre aberto cobriria o mapa à direita de
+   * cada item clicado, inclusive nos noventa por cento dos cliques que são
+   * para arrastar.
+   *
+   * Estado local, e não no store de seleção: abrir o painel não é um fato da
+   * cena nem da sessão — quem remonta o gizmo (trocar de item selecionado, com
+   * `key` no chamador) começa fechado de novo, que é o certo.
+   */
+  const [painelAberto, setPainelAberto] = useState(false);
 
   const cor = TOM[tom];
 
@@ -207,7 +247,7 @@ export function TransformHandles({
       {/* Fileira acima da caixa. Girar e excluir moram juntos porque nenhum
           dos dois é redimensionamento, e ficariam competindo com as alças se
           fossem postos nas bordas. */}
-      {rotatable || onFlip || onOpenSheet || onDelete ? (
+      {rotatable || onFlip || onOpenSheet || opacidade || onDelete ? (
         <div
           className="pointer-events-none absolute flex items-center"
           style={{
@@ -278,6 +318,29 @@ export function TransformHandles({
             </button>
           ) : null}
 
+          {opacidade ? (
+            <button
+              type="button"
+              aria-label="Opacidade da imagem"
+              aria-expanded={painelAberto}
+              className={cn(
+                "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                cor.botao,
+                // Aberto some o botão do fundo e deixa só o ícone: é o que
+                // conta que o painel à direita é deste item, e não do palco.
+                painelAberto && "ring-2 ring-white/70",
+              )}
+              style={{ width: px(HANDLE_PX * 2), height: px(HANDLE_PX * 2) }}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setPainelAberto((aberto) => !aberto);
+              }}
+            >
+              <Blend style={{ width: px(HANDLE_PX * 1.2), height: px(HANDLE_PX * 1.2) }} />
+            </button>
+          ) : null}
+
           {onDelete ? (
             <button
               type="button"
@@ -295,6 +358,62 @@ export function TransformHandles({
               <Trash2 style={{ width: px(HANDLE_PX * 1.2), height: px(HANDLE_PX * 1.2) }} />
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* O painel, colado na borda DIREITA da caixa.
+
+          À direita e não na fileira de cima porque ele não é um botão: é um
+          controle que fica aberto enquanto se arrasta, e a fileira de cima tem
+          30 pixels de altura contados para caber botões redondos.
+
+          Contra-girado pelo ângulo do item, e por duas razões. A primeira é
+          que um slider de cabeça para baixo num token girado 180 graus pede
+          para arrastar ao contrário. A segunda é aritmética: o slider mede o
+          ponteiro pelo retângulo do próprio controle, e retângulo de elemento
+          girado é a caixa envolvente -- com o giro anulado, o que sobra na
+          conta é só a escala do palco, que se cancela sozinha na razão.
+
+          Contra-escalado pelo mesmo motivo dos `px()` em volta, mas de uma vez
+          só: o slider é um componente de fora, com medidas em pixel de CSS, e
+          dividir cada uma delas pelo scale exigiria uma cópia dele aqui. */}
+      {opacidade && painelAberto ? (
+        <div
+          className="pointer-events-auto absolute"
+          style={{
+            left: "100%",
+            top: "50%",
+            transform: `translate(${px(PAINEL_GAP_PX)}px, -50%) rotate(${-item.rotation}deg)`,
+            transformOrigin: "0 50%",
+          }}
+          // O palco inteiro reage a pointerdown -- clicar aqui esvaziaria a
+          // seleção e o painel sumiria debaixo da mão. Sem `preventDefault`:
+          // o slider precisa do gesto que o `preventDefault` cancelaria.
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div
+            className="bg-popover ring-foreground/10 flex flex-col items-center gap-2 rounded-lg px-2 py-3 shadow-md ring-1"
+            style={{ transform: `scale(${1 / scale})`, transformOrigin: "0 50%" }}
+          >
+            <span className="text-muted-foreground text-[10px] tabular-nums">
+              {Math.round(opacidade.valor * 100)}%
+            </span>
+            <Slider
+              aria-label="Opacidade da imagem"
+              orientation="vertical"
+              value={[Math.round(opacidade.valor * 100)]}
+              min={OPACIDADE_MINIMA}
+              max={100}
+              step={1}
+              // 160px: é o `min-h-40` que o `Slider` vertical já impõe no
+              // trilho, e um valor menor aqui só faria o painel ficar menor
+              // que o conteúdo.
+              className="h-40"
+              onValueChange={(valor) =>
+                opacidade.onChange((Array.isArray(valor) ? (valor[0] ?? 100) : valor) / 100)
+              }
+            />
+          </div>
         </div>
       ) : null}
 

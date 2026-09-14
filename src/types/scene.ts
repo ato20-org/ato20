@@ -115,6 +115,18 @@ export type CanvasItem = {
    */
   flipX?: boolean;
   flipY?: boolean;
+  /**
+   * Opacidade da imagem, de 0 a 1. Ausente = opaca.
+   *
+   * Viaja com a cena, e não é um esmaecido só do palco do mestre: o uso é
+   * desenhar o que está MEIO ali — o fantasma, a lembrança, o contorno da
+   * passagem que ninguém abriu ainda, o token de quem caiu. Se a mesa visse a
+   * figura cheia, não haveria efeito nenhum.
+   *
+   * Opcional pela mesma razão do espelhamento: item já gravado não precisa de
+   * migração, e o caso comum — imagem opaca — continua sem campo nenhum.
+   */
+  opacity?: number;
 };
 
 /**
@@ -541,7 +553,7 @@ export type NewCanvasItem = Pick<
  * "colar" precisa para reproduzir a cópia fielmente.
  */
 export type ItemDraft = NewCanvasItem &
-  Partial<Pick<CanvasItem, "rotation" | "locked" | "flipX" | "flipY">>;
+  Partial<Pick<CanvasItem, "rotation" | "locked" | "flipX" | "flipY" | "opacity">>;
 
 export type Scene = {
   id: string;

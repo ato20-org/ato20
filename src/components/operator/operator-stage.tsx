@@ -32,6 +32,7 @@ import {
   removeFogSelection,
   removePortraitSelection,
   removeSelection,
+  setSelectionOpacity,
 } from "@/lib/operator/item-actions";
 import {
   boundsFromPoints,
@@ -1172,6 +1173,10 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           um eixo, e travar a razão nela faria o item crescer sem o mouse pedir. */}
       {single && !single.locked && !panMode ? (
         <TransformHandles
+          // Remonta ao trocar de item, e é o que fecha o painel de opacidade
+          // junto: o painel é do item que estava selecionado, e deixá-lo aberto
+          // sobre o próximo diria que o valor dali é deste novo item.
+          key={single.id}
           box={single}
           handles={CORNER_HANDLES}
           keepAspect
@@ -1181,6 +1186,9 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           tom={personagemDoItem ? "personagem" : "default"}
           onChange={(patch) => updateItem(scene.id, single.id, patch)}
           onFlip={() => flipSelection("x")}
+          // `setSelectionOpacity` e não `updateItem`: a seleção aqui é este
+          // item só, e a regra de que 100% APAGA o campo mora numa função só.
+          opacidade={{ valor: single.opacity ?? 1, onChange: setSelectionOpacity }}
           // Token abre a ficha de quem ele é. É o atalho que faltava no meio da
           // sessão: o mestre clica na figura no mapa, e não na lista de
           // personagens, porque no mapa é onde a mão dele já está.

@@ -66,6 +66,13 @@ export const CanvasItemView = memo(function CanvasItemView({
         width: item.width,
         height: item.height,
         zIndex: item.z,
+        // No contêiner e não na `img`: o que esmaece é o ITEM, e o dia em que
+        // ele tiver moldura ou rótulo os dois têm de esmaecer junto. Ausente
+        // no item vira ausente no estilo, e o browser desenha opaco.
+        //
+        // Não mexe no hit-test: um item a 10% continua clicável no palco, que
+        // é o que permite desfazer o exagero sem caçar o item na lista.
+        opacity: item.opacity,
       }}
       onPointerDown={onPointerDown ? (event) => onPointerDown(event, item) : undefined}
     >

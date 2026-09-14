@@ -21,17 +21,20 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
 
   copy(items) {
     set({
-      drafts: items.map(({ assetId, x, y, width, height, rotation, locked, flipX, flipY }) => ({
-        assetId,
-        x,
-        y,
-        width,
-        height,
-        rotation,
-        locked,
-        flipX,
-        flipY,
-      })),
+      drafts: items.map(
+        ({ assetId, x, y, width, height, rotation, locked, flipX, flipY, opacity }) => ({
+          assetId,
+          x,
+          y,
+          width,
+          height,
+          rotation,
+          locked,
+          flipX,
+          flipY,
+          opacity,
+        }),
+      ),
     });
   },
 }));

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Blend,
   ChevronsDown,
   ChevronsUp,
   ClipboardPaste,
@@ -26,20 +27,28 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
   copySelection,
   cutSelection,
+  DEGRAUS_OPACIDADE,
   duplicateSelection,
   flipSelection,
   moveSelectionZ,
+  opacidadeDaSelecao,
   pasteClipboard,
   removeFogSelection,
   removeSelection,
   selectAllItems,
+  setSelectionOpacity,
   toggleFogRevealed,
   toggleSelectionLock,
 } from "@/lib/operator/item-actions";
@@ -64,6 +73,7 @@ export function StageContextMenu({ scene, children }: { scene: Scene; children: 
   const selectedItems = scene.items.filter((item) => selectedIds.includes(item.id));
   const hasSelection = selectedItems.length > 0;
   const allLocked = hasSelection && selectedItems.every((item) => item.locked);
+  const opacidade = opacidadeDaSelecao(selectedItems);
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
 
   return (
@@ -117,6 +127,34 @@ export function StageContextMenu({ scene, children }: { scene: Scene; children: 
               Espelhar na vertical
               <ContextMenuShortcut>Shift+V</ContextMenuShortcut>
             </ContextMenuItem>
+
+            {/* Vizinho do espelhar, e não do travar: os dois mudam como a
+                imagem APARECE, e a mesa vê os dois. O travar e a ordem de
+                empilhamento são arrumação de bancada. */}
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <Blend />
+                Opacidade
+              </ContextMenuSubTrigger>
+              {/* O submenu NÃO fecha ao escolher — é o padrão do item de
+                  rádio, e aqui ele vale: escolher opacidade é olhar o palco e
+                  corrigir, e um menu que fecha cobraria dois cliques por
+                  tentativa. Fecha com Esc ou com um clique fora. */}
+              <ContextMenuSubContent className="min-w-28">
+                <ContextMenuRadioGroup
+                  // `null` quando a seleção discorda: nenhum degrau marcado,
+                  // que é o que se sabe. Escolher um iguala os dois.
+                  value={opacidade ?? null}
+                  onValueChange={(valor: number) => setSelectionOpacity(valor)}
+                >
+                  {DEGRAUS_OPACIDADE.map((degrau) => (
+                    <ContextMenuRadioItem key={degrau} value={degrau}>
+                      {degrau === 1 ? "Normal" : `${Math.round(degrau * 100)}%`}
+                    </ContextMenuRadioItem>
+                  ))}
+                </ContextMenuRadioGroup>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
 
             <ContextMenuSeparator />
 

@@ -12,6 +12,21 @@ import type { CanvasItem, ItemDraft, Scene } from "@/types/scene";
 export const PASTE_OFFSET = 32;
 
 /**
+ * Os degraus de opacidade que o menu oferece. 1 é a imagem como ela é.
+ *
+ * Uma escada e não um controle contínuo, pelo mesmo motivo do zoom da
+ * interface: o gesto é de MENU, e o que se quer é escolher um estado — meio
+ * apagado, quase sumido — e não calibrar um número. Um slider dentro de um
+ * menu de contexto ainda pediria arrastar com o menu aberto, que é o gesto que
+ * este menu existe para evitar.
+ *
+ * Vai até 10% e não até 0: item invisível continua selecionável no palco, mas
+ * seria invisível também na prévia e na lista de camadas, e some da cena sem
+ * ter saído dela. Quem quer que a mesa não veja tem a névoa e a lixeira.
+ */
+export const DEGRAUS_OPACIDADE = [1, 0.75, 0.5, 0.25, 0.1];
+
+/**
  * Ações do Operador sobre a seleção, em um lugar só.
  *
  * Atalhos de teclado e menu de contexto chamam exatamente estas funções — se
@@ -53,6 +68,7 @@ function offsetDraft(item: CanvasItem): ItemDraft {
     locked: item.locked,
     flipX: item.flipX,
     flipY: item.flipY,
+    opacity: item.opacity,
   };
 }
 
@@ -169,6 +185,42 @@ export function flipSelection(axis: FlipAxis): void {
   if (!scene || selectedItems.length === 0) return;
 
   useSceneStore.getState().updateItems(scene.id, flipPatches(selectedItems, axis));
+}
+
+/**
+ * Esmaece a seleção, ou a devolve ao normal.
+ *
+ * Age sobre TODOS os selecionados, travados inclusive — travar impede arrastar,
+ * e não repintar, do mesmo jeito que travar não impede empilhar nem espelhar.
+ *
+ * 1 apaga o campo em vez de gravar `opacity: 1`: opaco é a ausência do efeito,
+ * e é assim que o item nasce. Gravar o 1 deixaria toda cena velha com um campo
+ * a mais dizendo o padrão.
+ */
+export function setSelectionOpacity(opacity: number): void {
+  const { scene, selectedItems } = read();
+  if (!scene || selectedItems.length === 0) return;
+
+  const patch = { opacity: opacity >= 1 ? undefined : opacity };
+
+  useSceneStore.getState().updateItems(
+    scene.id,
+    selectedItems.map((item) => ({ id: item.id, patch })),
+  );
+}
+
+/**
+ * A opacidade que a seleção INTEIRA tem, quando é uma só.
+ *
+ * `undefined` quando os selecionados discordam — e aí o menu não marca degrau
+ * nenhum, que é a verdade: não há um valor para marcar.
+ */
+export function opacidadeDaSelecao(items: CanvasItem[]): number | undefined {
+  if (items.length === 0) return undefined;
+
+  const primeira = items[0]?.opacity ?? 1;
+
+  return items.every((item) => (item.opacity ?? 1) === primeira) ? primeira : undefined;
 }
 
 export function nudgeSelection(dx: number, dy: number): void {
