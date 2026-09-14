@@ -66,6 +66,7 @@ import {
 } from "@/lib/attachments/kind";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { chaveDe, type ConteudoJanela } from "@/lib/store/use-window-store";
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { setAssetEscopo } from "@/lib/vault/assets";
 import { shareCharacterAttachment } from "@/lib/vault/evidence";
 
@@ -1090,7 +1091,12 @@ function Slot({
       // sem desmarcar, eles ficariam escondidos para sempre e sem lugar de onde
       // ser alcançados. O arquivo em si continua no acervo, de propósito -- a
       // imagem pode estar numa cena como item.
-      if (campo !== "ficha" && valor) await setAssetEscopo(valor, undefined);
+      if (campo !== "ficha" && valor) {
+        await setAssetEscopo(valor, undefined);
+        // O arquivo volta a aparecer na biblioteca, e a biblioteca pode estar
+        // aberta ao lado desta ficha. `onChanged` só relê os personagens.
+        invalidarAcervo("image");
+      }
 
       onChanged();
     } catch (cause) {

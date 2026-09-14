@@ -2,6 +2,7 @@
 
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { importAssets } from "@/lib/vault/assets";
 import { call } from "@/lib/vault/bridge";
 import type {
@@ -98,6 +99,12 @@ export async function preencherCampoComArquivo(
     throw new Error(resultado.recusados[0] ?? "Nada foi importado.");
 
   await setCharacterCampo(id, campo, primeiro.id);
+
+  // O arquivo entrou no acervo AGORA, e quem o quer não é esta tela: o botão de
+  // pôr o token no mapa precisa da dimensão natural da miniatura, e ele lê o
+  // acervo na lista de personagens. Sem isto ele continuava desabilitado até o
+  // aplicativo ser reaberto. Ver `useAssetsStore`.
+  invalidarAcervo("image");
 
   return primeiro.id;
 }

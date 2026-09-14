@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 
-import { deleteAsset, importAssets, listAssets, setAssetFolder } from "@/lib/vault/assets";
+import { useAssetsStore } from "@/lib/store/use-assets-store";
+import { deleteAsset, importAssets, setAssetFolder } from "@/lib/vault/assets";
 import type { AssetKind, AssetMeta } from "@/types/scene";
 
 type AssetListApi = {
@@ -18,6 +19,14 @@ type AssetListApi = {
 };
 
 /**
+ * A mesma referência sempre, enquanto o acervo não foi lido.
+ *
+ * Um `[]` novo a cada render faria todo `useMemo` que depende da lista
+ * recalcular — e há tela que deriva dela a cada linha.
+ */
+const LENDO: AssetMeta[] = [];
+
+/**
  * Biblioteca de arquivos de um tipo. Compartilhada pelos painéis de imagem e
  * de som — os dois fazem o mesmo upload, listagem e exclusão, só a linha da
  * lista é diferente.
@@ -29,30 +38,24 @@ type AssetListApi = {
  *
  * Importar é seletor nativo e cópia no disco, e não `<input type="file">` com
  * envio: o arquivo nunca entra na webview.
+ *
+ * A lista em si mora no `useAssetsStore`, e não aqui: eram oito cópias
+ * envelhecendo em separado, e a que a lista de personagens guardava nunca via a
+ * miniatura recém-anexada na ficha. Este hook ficou sendo a janela para o store
+ * — mesma forma do `useCharacters`.
  */
 export function useAssetList(kind: AssetKind): AssetListApi {
-  const [assets, setAssets] = useState<AssetMeta[]>([]);
-  const [version, setVersion] = useState(0);
+  const assets = useAssetsStore((state) => state[kind].assets);
+  const garantir = useAssetsStore((state) => state.garantir);
+  const recarregar = useAssetsStore((state) => state.recarregar);
 
+  // Na montagem de cada tela, e não na criação do store: ler o disco na criação
+  // aconteceria durante a pré-renderização, onde não há IPC nenhum.
   useEffect(() => {
-    let active = true;
-    void listAssets(kind).then(
-      (next) => {
-        if (active) setAssets(next);
-      },
-      () => {
-        // Sem campanha aberta a lista é vazia, não quebrada: a porta de
-        // escolher pasta está na frente desta tela.
-        if (active) setAssets([]);
-      },
-    );
+    garantir(kind);
+  }, [garantir, kind]);
 
-    return () => {
-      active = false;
-    };
-  }, [kind, version]);
-
-  const refresh = useCallback(() => setVersion((current) => current + 1), []);
+  const refresh = useCallback(() => recarregar(kind), [recarregar, kind]);
 
   const importar = useCallback(async () => {
     try {
@@ -87,5 +90,5 @@ export function useAssetList(kind: AssetKind): AssetListApi {
     [refresh],
   );
 
-  return { assets, importar, remove, move, refresh };
+  return { assets: assets ?? LENDO, importar, remove, move, refresh };
 }

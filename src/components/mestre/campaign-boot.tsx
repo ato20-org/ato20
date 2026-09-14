@@ -10,6 +10,7 @@ import { MestreShell } from "@/components/mestre/mestre-shell";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
+import { esquecerAcervo } from "@/lib/store/use-assets-store";
 import { listAssets } from "@/lib/vault/assets";
 import { listFolders } from "@/lib/vault/folders";
 import type { CampaignInfo } from "@/lib/vault/campaign";
@@ -65,6 +66,12 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       // O relógio começa junto com o trabalho, não depois: o mínimo é para o
       // olho, e cobrar meio segundo ALÉM da leitura seria atraso de verdade.
       const comecou = Date.now();
+
+      // O acervo que está guardado é o da campanha ANTERIOR, se houver: uma
+      // campanha é uma pasta, e trocar de pasta troca os arquivos. Sem isto os
+      // painéis montariam mostrando as imagens da campanha que acabou de
+      // fechar, e nenhum deles teria razão para reler.
+      esquecerAcervo();
 
       try {
         await hydrateBoard(campaign.path);

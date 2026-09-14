@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { useCharacters } from "@/hooks/use-characters";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { listAssets, setAssetEscopo } from "@/lib/vault/assets";
 import type { EscopoAsset } from "@/types/scene";
 
@@ -53,6 +54,8 @@ export function useEscopoDosAssets(pronto: boolean): void {
 
     void listAssets("image").then(
       async (assets) => {
+        let marcou = false;
+
         for (const asset of assets) {
           const dono = donos.get(asset.id);
           // Só o que está sem marca: reescrever o que já tem dono transformaria
@@ -60,7 +63,13 @@ export function useEscopoDosAssets(pronto: boolean): void {
           if (!dono || asset.escopo) continue;
 
           await setAssetEscopo(asset.id, dono);
+          marcou = true;
         }
+
+        // Uma vez no fim, e não por arquivo: a passagem pode marcar dezenas, e
+        // reler o acervo a cada um seria uma ida ao IPC por arquivo marcado.
+        // Nada marcado é o caso normal, e aí não relê.
+        if (marcou) invalidarAcervo("image");
       },
       () => {
         // Sem acervo legível não há o que acertar. A lista mostra alguns
