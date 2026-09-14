@@ -6,7 +6,7 @@ import { homeDir } from "@tauri-apps/api/path";
 /**
  * Troca a pasta pessoal por `~` no começo do caminho.
  *
- * A porta do Operador mostra o caminho de cada campanha, e ele é a única coisa
+ * A porta do Mestre mostra o caminho de cada campanha, e ele é a única coisa
  * que distingue duas pastas de mesmo nome. Só que a metade inicial é sempre a
  * mesma — `/home/valb/` em toda linha —, e é justamente ela que empurra a parte
  * que importa para fora da largura disponível. `~` devolve esse espaço.

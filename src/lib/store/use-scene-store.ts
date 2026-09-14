@@ -12,18 +12,18 @@ import {
   redoStep,
   undoStep,
   type History,
-} from "@/lib/operator/history";
+} from "@/lib/mestre/history";
 import {
   appendScene,
   insertSceneAfter,
   moveSceneToIndex as moveSceneToIndexInBoard,
   removeScene as removeSceneFromBoard,
-} from "@/lib/operator/board-ops";
+} from "@/lib/mestre/board-ops";
 import {
   moveItemToFrontFirstIndex,
   reorderByZ,
   type ZDirection,
-} from "@/lib/operator/z-order";
+} from "@/lib/mestre/z-order";
 import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
   cloneScene,
@@ -91,7 +91,7 @@ type SceneStore = {
    * discordar.
    */
   hydrate: (campaignPath: string) => Promise<void>;
-  /** Abre a cena no palco do Operador. Não muda o que a mesa vê. */
+  /** Abre a cena no palco do Mestre. Não muda o que a mesa vê. */
   setEditingSceneId: (sceneId: string | null) => void;
   /** Coloca a cena no ar. `null` deixa a mesa sem nada. */
   setLiveSceneId: (sceneId: string | null) => void;
@@ -118,13 +118,25 @@ type SceneStore = {
   addItem: (sceneId: string, item: NewCanvasItem) => string;
   /** Devolve os ids na mesma ordem dos rascunhos. */
   addItems: (sceneId: string, drafts: ItemDraft[]) => string[];
-  updateItem: (sceneId: string, itemId: string, patch: Partial<CanvasItem>) => void;
+  updateItem: (
+    sceneId: string,
+    itemId: string,
+    patch: Partial<CanvasItem>,
+  ) => void;
   /** Um único update para N itens: arrastar em grupo não pode gravar N vezes por frame. */
   updateItems: (sceneId: string, patches: ItemPatch[]) => void;
   removeItems: (sceneId: string, itemIds: string[]) => void;
-  moveItemsZ: (sceneId: string, itemIds: string[], direction: ZDirection) => void;
+  moveItemsZ: (
+    sceneId: string,
+    itemIds: string[],
+    direction: ZDirection,
+  ) => void;
   /** Índice na lista frente-primeiro do painel de camadas. */
-  moveItemToIndex: (sceneId: string, itemId: string, frontFirstIndex: number) => void;
+  moveItemToIndex: (
+    sceneId: string,
+    itemId: string,
+    frontFirstIndex: number,
+  ) => void;
   setItemsLocked: (sceneId: string, itemIds: string[], locked: boolean) => void;
 
   addFog: (sceneId: string, region: NewFogRegion) => string;
@@ -137,7 +149,11 @@ type SceneStore = {
    * por um daria três entradas no desfazer para um gesto só.
    */
   removeTracos: (sceneId: string, tracoIds: string[]) => void;
-  updateFog: (sceneId: string, fogId: string, patch: Partial<FogRegion>) => void;
+  updateFog: (
+    sceneId: string,
+    fogId: string,
+    patch: Partial<FogRegion>,
+  ) => void;
   removeFog: (sceneId: string, fogId: string) => void;
 
   /** Crava um ponto de anotação. Devolve o id, para já abrir a nota dele. */
@@ -150,7 +166,11 @@ type SceneStore = {
 
   /** Cola um postit. Devolve o id, para já abrir o texto dele para digitar. */
   addPostit: (sceneId: string, postit: NewPostit) => string;
-  updatePostit: (sceneId: string, postitId: string, patch: Partial<Postit>) => void;
+  updatePostit: (
+    sceneId: string,
+    postitId: string,
+    patch: Partial<Postit>,
+  ) => void;
   removePostit: (sceneId: string, postitId: string) => void;
 };
 
@@ -174,388 +194,423 @@ export const useSceneStore = create<SceneStore>((set, get) => {
   }
 
   return {
-  board: null,
-  status: "idle",
-  error: null,
-  campaignPath: null,
+    board: null,
+    status: "idle",
+    error: null,
+    campaignPath: null,
 
-  history: emptyHistory<Board>(),
-  lastCommitAt: 0,
+    history: emptyHistory<Board>(),
+    lastCommitAt: 0,
 
-  undo() {
-    const { board, history } = get();
-    if (!board) return;
+    undo() {
+      const { board, history } = get();
+      if (!board) return;
 
-    const step = undoStep(history, board);
-    if (!step) return;
+      const step = undoStep(history, board);
+      if (!step) return;
 
-    // Zera o relógio de fusão: a próxima edição abre passo novo em vez de se
-    // grudar no que existia antes do desfazer.
-    set({ board: step.value, history: step.history, lastCommitAt: 0 });
-  },
+      // Zera o relógio de fusão: a próxima edição abre passo novo em vez de se
+      // grudar no que existia antes do desfazer.
+      set({ board: step.value, history: step.history, lastCommitAt: 0 });
+    },
 
-  redo() {
-    const { board, history } = get();
-    if (!board) return;
+    redo() {
+      const { board, history } = get();
+      if (!board) return;
 
-    const step = redoStep(history, board);
-    if (!step) return;
+      const step = redoStep(history, board);
+      if (!step) return;
 
-    set({ board: step.value, history: step.history, lastCommitAt: 0 });
-  },
+      set({ board: step.value, history: step.history, lastCommitAt: 0 });
+    },
 
-  async hydrate(campaignPath) {
-    // Sai fora se já carregou ESTA campanha: o Operador remonta, e reler o
-    // disco por cima do que está sendo editado perderia edição que o debounce
-    // ainda não gravou. Campanha diferente sempre recarrega.
-    if (get().campaignPath === campaignPath && get().status !== "idle") return;
+    async hydrate(campaignPath) {
+      // Sai fora se já carregou ESTA campanha: o Mestre remonta, e reler o
+      // disco por cima do que está sendo editado perderia edição que o debounce
+      // ainda não gravou. Campanha diferente sempre recarrega.
+      if (get().campaignPath === campaignPath && get().status !== "idle")
+        return;
 
-    // Zera antes de ler: sem isto o board da campanha anterior ficaria na tela
-    // durante a leitura, e o assinante de gravação o escreveria na campanha
-    // nova.
-    // Zera a base da diferença ANTES de ler: ela descreve o que o disco da
-    // campanha ANTERIOR tinha, e usá-la para diferenciar o board de outra
-    // campanha mandaria um patch medido contra o vault errado.
-    salvo = null;
+      // Zera antes de ler: sem isto o board da campanha anterior ficaria na tela
+      // durante a leitura, e o assinante de gravação o escreveria na campanha
+      // nova.
+      // Zera a base da diferença ANTES de ler: ela descreve o que o disco da
+      // campanha ANTERIOR tinha, e usá-la para diferenciar o board de outra
+      // campanha mandaria um patch medido contra o vault errado.
+      salvo = null;
 
-    set({ board: null, status: "loading", campaignPath, history: emptyHistory<Board>() });
-
-    try {
-      // Campanha sem board ainda devolve `null`, e quem cria o primeiro é
-      // daqui: o formato de `Scene` é da tela, e o Rust trata cena como JSON
-      // opaco justamente para o formato não ter duas fontes de verdade.
-      const carregado = await loadBoard();
-      const board = carregado ?? createEmptyBoard();
-
-      // Board que veio do disco JÁ está no disco: a primeira gravação depois de
-      // abrir a campanha pode ser um patch. Board criado aqui — campanha sem
-      // board ainda — não, e por isso a base fica nula: não existe arquivo
-      // nenhum contra o que diferenciar.
-      salvo = carregado;
-
-      // Histórico nasce vazio: não faz sentido desfazer para antes de abrir.
       set({
-        board,
-        status: "ready",
-        error: null,
+        board: null,
+        status: "loading",
         campaignPath,
         history: emptyHistory<Board>(),
-        lastCommitAt: 0,
       });
-    } catch (cause) {
-      // Sem board não há tela: ao contrário da falha de rede de antes, que
-      // deixava o Operador editável e só avisava que não estava subindo, um
-      // disco ilegível não tem versão local para cair.
-      set({
-        status: "error",
-        error: cause instanceof Error ? cause.message : "Falha ao abrir o board",
+
+      try {
+        // Campanha sem board ainda devolve `null`, e quem cria o primeiro é
+        // daqui: o formato de `Scene` é da tela, e o Rust trata cena como JSON
+        // opaco justamente para o formato não ter duas fontes de verdade.
+        const carregado = await loadBoard();
+        const board = carregado ?? createEmptyBoard();
+
+        // Board que veio do disco JÁ está no disco: a primeira gravação depois de
+        // abrir a campanha pode ser um patch. Board criado aqui — campanha sem
+        // board ainda — não, e por isso a base fica nula: não existe arquivo
+        // nenhum contra o que diferenciar.
+        salvo = carregado;
+
+        // Histórico nasce vazio: não faz sentido desfazer para antes de abrir.
+        set({
+          board,
+          status: "ready",
+          error: null,
+          campaignPath,
+          history: emptyHistory<Board>(),
+          lastCommitAt: 0,
+        });
+      } catch (cause) {
+        // Sem board não há tela: ao contrário da falha de rede de antes, que
+        // deixava o Mestre editável e só avisava que não estava subindo, um
+        // disco ilegível não tem versão local para cair.
+        set({
+          status: "error",
+          error:
+            cause instanceof Error ? cause.message : "Falha ao abrir o board",
+        });
+      }
+    },
+
+    setEditingSceneId(sceneId) {
+      const { board } = get();
+      if (!board) return;
+
+      set({ board: { ...board, editingSceneId: sceneId } });
+    },
+
+    setLiveSceneId(sceneId) {
+      const { board } = get();
+      if (!board) return;
+
+      set({ board: { ...board, liveSceneId: sceneId } });
+    },
+
+    addScene(name) {
+      const { board } = get();
+      const scene = createScene(
+        name ?? `Cena ${(board?.scenes.length ?? 0) + 1}`,
+      );
+      const base = board ?? {
+        scenes: [],
+        editingSceneId: null,
+        liveSceneId: null,
+      };
+
+      commit(appendScene(base, scene));
+
+      return scene.id;
+    },
+
+    renameScene(sceneId, name) {
+      get().updateScene(sceneId, (scene) => ({ ...scene, name }));
+    },
+
+    duplicateScene(sceneId) {
+      const { board } = get();
+      const source = board?.scenes.find((scene) => scene.id === sceneId);
+      if (!board || !source) return null;
+
+      const copy = cloneScene(source, `${source.name} (cópia)`);
+      commit(insertSceneAfter(board, sceneId, copy));
+
+      return copy.id;
+    },
+
+    moveSceneToIndex(sceneId, index) {
+      const { board } = get();
+      if (!board) return;
+
+      commit(moveSceneToIndexInBoard(board, sceneId, index));
+    },
+
+    removeScene(sceneId) {
+      const { board } = get();
+      if (!board) return;
+
+      commit(removeSceneFromBoard(board, sceneId));
+    },
+
+    updateScene(sceneId, updater) {
+      const { board } = get();
+      if (!board) return;
+
+      commit({
+        ...board,
+        scenes: board.scenes.map((scene) =>
+          scene.id === sceneId
+            ? { ...updater(scene), updatedAt: Date.now() }
+            : scene,
+        ),
       });
-    }
-  },
+    },
 
-  setEditingSceneId(sceneId) {
-    const { board } = get();
-    if (!board) return;
+    setBackground(sceneId, assetId) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        backgroundAssetId: assetId,
+      }));
+    },
 
-    set({ board: { ...board, editingSceneId: sceneId } });
-  },
+    setSceneCamera(sceneId, camera) {
+      get().updateScene(sceneId, (scene) => ({ ...scene, camera }));
+    },
 
-  setLiveSceneId(sceneId) {
-    const { board } = get();
-    if (!board) return;
+    setSceneGrid(sceneId, grid) {
+      get().updateScene(sceneId, (scene) => ({ ...scene, grid }));
+    },
 
-    set({ board: { ...board, liveSceneId: sceneId } });
-  },
+    addItem(sceneId, item) {
+      return get().addItems(sceneId, [item])[0];
+    },
 
-  addScene(name) {
-    const { board } = get();
-    const scene = createScene(name ?? `Cena ${(board?.scenes.length ?? 0) + 1}`);
-    const base = board ?? { scenes: [], editingSceneId: null, liveSceneId: null };
+    addItems(sceneId, drafts) {
+      const ids = drafts.map(() => novoId());
 
-    commit(appendScene(base, scene));
+      get().updateScene(sceneId, (scene) => {
+        // Nascem na frente de tudo: o mestre acabou de colocar, quer ver.
+        const topZ = scene.items.reduce(
+          (max, current) => Math.max(max, current.z),
+          0,
+        );
 
-    return scene.id;
-  },
+        const created: CanvasItem[] = drafts.map((draft, index) => ({
+          rotation: 0,
+          locked: false,
+          ...draft,
+          id: ids[index],
+          z: topZ + index + 1,
+        }));
 
-  renameScene(sceneId, name) {
-    get().updateScene(sceneId, (scene) => ({ ...scene, name }));
-  },
+        return { ...scene, items: [...scene.items, ...created] };
+      });
 
-  duplicateScene(sceneId) {
-    const { board } = get();
-    const source = board?.scenes.find((scene) => scene.id === sceneId);
-    if (!board || !source) return null;
+      return ids;
+    },
 
-    const copy = cloneScene(source, `${source.name} (cópia)`);
-    commit(insertSceneAfter(board, sceneId, copy));
+    updateItem(sceneId, itemId, patch) {
+      get().updateItems(sceneId, [{ id: itemId, patch }]);
+    },
 
-    return copy.id;
-  },
+    updateItems(sceneId, patches) {
+      if (patches.length === 0) return;
 
-  moveSceneToIndex(sceneId, index) {
-    const { board } = get();
-    if (!board) return;
+      const byId = new Map(patches.map(({ id, patch }) => [id, patch]));
 
-    commit(moveSceneToIndexInBoard(board, sceneId, index));
-  },
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        items: scene.items.map((item) => {
+          const patch = byId.get(item.id);
+          return patch ? { ...item, ...patch } : item;
+        }),
+      }));
+    },
 
-  removeScene(sceneId) {
-    const { board } = get();
-    if (!board) return;
+    removeItems(sceneId, itemIds) {
+      if (itemIds.length === 0) return;
 
-    commit(removeSceneFromBoard(board, sceneId));
-  },
+      const doomed = new Set(itemIds);
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        items: scene.items.filter((item) => !doomed.has(item.id)),
+      }));
+    },
 
-  updateScene(sceneId, updater) {
-    const { board } = get();
-    if (!board) return;
+    moveItemsZ(sceneId, itemIds, direction) {
+      if (itemIds.length === 0) return;
 
-    commit({
-      ...board,
-      scenes: board.scenes.map((scene) =>
-        scene.id === sceneId ? { ...updater(scene), updatedAt: Date.now() } : scene,
-      ),
-    });
-  },
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        items: reorderByZ(scene.items, itemIds, direction),
+      }));
+    },
 
-  setBackground(sceneId, assetId) {
-    get().updateScene(sceneId, (scene) => ({ ...scene, backgroundAssetId: assetId }));
-  },
+    moveItemToIndex(sceneId, itemId, frontFirstIndex) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        items: moveItemToFrontFirstIndex(scene.items, itemId, frontFirstIndex),
+      }));
+    },
 
-  setSceneCamera(sceneId, camera) {
-    get().updateScene(sceneId, (scene) => ({ ...scene, camera }));
-  },
+    setItemsLocked(sceneId, itemIds, locked) {
+      get().updateItems(
+        sceneId,
+        itemIds.map((id) => ({ id, patch: { locked } })),
+      );
+    },
 
-  setSceneGrid(sceneId, grid) {
-    get().updateScene(sceneId, (scene) => ({ ...scene, grid }));
-  },
+    addFog(sceneId, region) {
+      const id = novoId();
 
-  addItem(sceneId, item) {
-    return get().addItems(sceneId, [item])[0];
-  },
-
-  addItems(sceneId, drafts) {
-    const ids = drafts.map(() => novoId());
-
-    get().updateScene(sceneId, (scene) => {
-      // Nascem na frente de tudo: o mestre acabou de colocar, quer ver.
-      const topZ = scene.items.reduce((max, current) => Math.max(max, current.z), 0);
-
-      const created: CanvasItem[] = drafts.map((draft, index) => ({
-        rotation: 0,
-        locked: false,
-        ...draft,
-        id: ids[index],
-        z: topZ + index + 1,
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        fog: [...scene.fog, { ...region, id, revealed: false }],
       }));
 
-      return { ...scene, items: [...scene.items, ...created] };
-    });
+      return id;
+    },
 
-    return ids;
-  },
+    addTraco(sceneId, traco) {
+      const id = novoId();
 
-  updateItem(sceneId, itemId, patch) {
-    get().updateItems(sceneId, [{ id: itemId, patch }]);
-  },
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        tracos: [...(scene.tracos ?? []), { ...traco, id }],
+      }));
 
-  updateItems(sceneId, patches) {
-    if (patches.length === 0) return;
+      return id;
+    },
 
-    const byId = new Map(patches.map(({ id, patch }) => [id, patch]));
+    removeTracos(sceneId, tracoIds) {
+      if (tracoIds.length === 0) return;
 
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      items: scene.items.map((item) => {
-        const patch = byId.get(item.id);
-        return patch ? { ...item, ...patch } : item;
-      }),
-    }));
-  },
+      const apagar = new Set(tracoIds);
 
-  removeItems(sceneId, itemIds) {
-    if (itemIds.length === 0) return;
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        tracos: (scene.tracos ?? []).filter((traco) => !apagar.has(traco.id)),
+      }));
+    },
 
-    const doomed = new Set(itemIds);
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      items: scene.items.filter((item) => !doomed.has(item.id)),
-    }));
-  },
+    updateFog(sceneId, fogId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        fog: scene.fog.map((region) =>
+          region.id === fogId ? { ...region, ...patch } : region,
+        ),
+      }));
+    },
 
-  moveItemsZ(sceneId, itemIds, direction) {
-    if (itemIds.length === 0) return;
+    removeFog(sceneId, fogId) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        fog: scene.fog.filter((region) => region.id !== fogId),
+      }));
+    },
 
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      items: reorderByZ(scene.items, itemIds, direction),
-    }));
-  },
+    addPin(sceneId, pin) {
+      const id = novoId();
 
-  moveItemToIndex(sceneId, itemId, frontFirstIndex) {
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      items: moveItemToFrontFirstIndex(scene.items, itemId, frontFirstIndex),
-    }));
-  },
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        pins: [
+          ...(scene.pins ?? []),
+          { title: "", note: "", ...pin, id, attachments: [] },
+        ],
+      }));
 
-  setItemsLocked(sceneId, itemIds, locked) {
-    get().updateItems(
-      sceneId,
-      itemIds.map((id) => ({ id, patch: { locked } })),
-    );
-  },
+      return id;
+    },
 
-  addFog(sceneId, region) {
-    const id = novoId();
+    updatePin(sceneId, pinId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        pins: (scene.pins ?? []).map((pin) =>
+          pin.id === pinId ? { ...pin, ...patch } : pin,
+        ),
+      }));
+    },
 
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      fog: [...scene.fog, { ...region, id, revealed: false }],
-    }));
+    removePin(sceneId, pinId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.pins ?? []).filter((pin) => pin.id !== pinId);
 
-    return id;
-  },
+        // Volta a `undefined` quando esvazia, em vez de deixar `[]` no arquivo:
+        // é o mesmo estado, e `sceneForTable` decide por identidade da
+        // referência quando o campo está ausente.
+        return { ...scene, pins: restantes.length > 0 ? restantes : undefined };
+      });
+    },
 
-  addTraco(sceneId, traco) {
-    const id = novoId();
+    attachToPin(sceneId, pinId, assetIds) {
+      if (assetIds.length === 0) return;
 
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      tracos: [...(scene.tracos ?? []), { ...traco, id }],
-    }));
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        pins: (scene.pins ?? []).map((pin) =>
+          pin.id === pinId
+            ? // `Set` para o mesmo arquivo anexado duas vezes não render duas
+              // miniaturas iguais com o mesmo botão de transmitir.
+              {
+                ...pin,
+                attachments: [...new Set([...pin.attachments, ...assetIds])],
+              }
+            : pin,
+        ),
+      }));
+    },
 
-    return id;
-  },
+    detachFromPin(sceneId, pinId, assetId) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        pins: (scene.pins ?? []).map((pin) =>
+          pin.id === pinId
+            ? // Só desanexa: o arquivo continua no acervo. Apagar o asset aqui
+              // levaria embora a imagem de quem a usa como fundo de outra cena.
+              {
+                ...pin,
+                attachments: pin.attachments.filter((id) => id !== assetId),
+              }
+            : pin,
+        ),
+      }));
+    },
 
-  removeTracos(sceneId, tracoIds) {
-    if (tracoIds.length === 0) return;
+    addPostit(sceneId, postit) {
+      const id = novoId();
 
-    const apagar = new Set(tracoIds);
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        postits: [
+          ...(scene.postits ?? []),
+          {
+            largura: POSTIT_LARGURA,
+            altura: POSTIT_ALTURA,
+            texto: "",
+            cor: CORES_POSTIT[0],
+            ...postit,
+            id,
+          },
+        ],
+      }));
 
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      tracos: (scene.tracos ?? []).filter((traco) => !apagar.has(traco.id)),
-    }));
-  },
+      return id;
+    },
 
-  updateFog(sceneId, fogId, patch) {
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      fog: scene.fog.map((region) => (region.id === fogId ? { ...region, ...patch } : region)),
-    }));
-  },
+    updatePostit(sceneId, postitId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        postits: (scene.postits ?? []).map((postit) =>
+          postit.id === postitId ? { ...postit, ...patch } : postit,
+        ),
+      }));
+    },
 
-  removeFog(sceneId, fogId) {
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      fog: scene.fog.filter((region) => region.id !== fogId),
-    }));
-  },
+    removePostit(sceneId, postitId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.postits ?? []).filter(
+          (postit) => postit.id !== postitId,
+        );
 
-  addPin(sceneId, pin) {
-    const id = novoId();
-
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      pins: [
-        ...(scene.pins ?? []),
-        { title: "", note: "", ...pin, id, attachments: [] },
-      ],
-    }));
-
-    return id;
-  },
-
-  updatePin(sceneId, pinId, patch) {
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      pins: (scene.pins ?? []).map((pin) => (pin.id === pinId ? { ...pin, ...patch } : pin)),
-    }));
-  },
-
-  removePin(sceneId, pinId) {
-    get().updateScene(sceneId, (scene) => {
-      const restantes = (scene.pins ?? []).filter((pin) => pin.id !== pinId);
-
-      // Volta a `undefined` quando esvazia, em vez de deixar `[]` no arquivo:
-      // é o mesmo estado, e `sceneForTable` decide por identidade da
-      // referência quando o campo está ausente.
-      return { ...scene, pins: restantes.length > 0 ? restantes : undefined };
-    });
-  },
-
-  attachToPin(sceneId, pinId, assetIds) {
-    if (assetIds.length === 0) return;
-
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      pins: (scene.pins ?? []).map((pin) =>
-        pin.id === pinId
-          ? // `Set` para o mesmo arquivo anexado duas vezes não render duas
-            // miniaturas iguais com o mesmo botão de transmitir.
-            { ...pin, attachments: [...new Set([...pin.attachments, ...assetIds])] }
-          : pin,
-      ),
-    }));
-  },
-
-  detachFromPin(sceneId, pinId, assetId) {
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      pins: (scene.pins ?? []).map((pin) =>
-        pin.id === pinId
-          ? // Só desanexa: o arquivo continua no acervo. Apagar o asset aqui
-            // levaria embora a imagem de quem a usa como fundo de outra cena.
-            { ...pin, attachments: pin.attachments.filter((id) => id !== assetId) }
-          : pin,
-      ),
-    }));
-  },
-
-  addPostit(sceneId, postit) {
-    const id = novoId();
-
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      postits: [
-        ...(scene.postits ?? []),
-        {
-          largura: POSTIT_LARGURA,
-          altura: POSTIT_ALTURA,
-          texto: "",
-          cor: CORES_POSTIT[0],
-          ...postit,
-          id,
-        },
-      ],
-    }));
-
-    return id;
-  },
-
-  updatePostit(sceneId, postitId, patch) {
-    get().updateScene(sceneId, (scene) => ({
-      ...scene,
-      postits: (scene.postits ?? []).map((postit) =>
-        postit.id === postitId ? { ...postit, ...patch } : postit,
-      ),
-    }));
-  },
-
-  removePostit(sceneId, postitId) {
-    get().updateScene(sceneId, (scene) => {
-      const restantes = (scene.postits ?? []).filter((postit) => postit.id !== postitId);
-
-      // Volta a `undefined` quando esvazia, como `removePin`: é o mesmo estado,
-      // e é a AUSÊNCIA do campo que faz `sceneForTable` devolver a mesma
-      // referência em vez de uma cópia por render.
-      return { ...scene, postits: restantes.length > 0 ? restantes : undefined };
-    });
-  },
+        // Volta a `undefined` quando esvazia, como `removePin`: é o mesmo estado,
+        // e é a AUSÊNCIA do campo que faz `sceneForTable` devolver a mesma
+        // referência em vez de uma cópia por render.
+        return {
+          ...scene,
+          postits: restantes.length > 0 ? restantes : undefined,
+        };
+      });
+    },
   };
 });
-
 
 export function selectCanUndo(state: SceneStore): boolean {
   return canUndo(state.history);
@@ -565,13 +620,16 @@ export function selectCanRedo(state: SceneStore): boolean {
   return canRedo(state.history);
 }
 
-function findScene(state: SceneStore, sceneId: string | null | undefined): Scene | null {
+function findScene(
+  state: SceneStore,
+  sceneId: string | null | undefined,
+): Scene | null {
   if (!sceneId) return null;
 
   return state.board?.scenes.find((scene) => scene.id === sceneId) ?? null;
 }
 
-/** A cena aberta no palco do Operador. É sobre esta que todas as edições agem. */
+/** A cena aberta no palco do Mestre. É sobre esta que todas as edições agem. */
 export function selectEditingScene(state: SceneStore): Scene | null {
   return findScene(state, state.board?.editingSceneId);
 }

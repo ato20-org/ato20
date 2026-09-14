@@ -185,7 +185,7 @@ export type RolagemDaMesa = Rolagem & {
   /**
    * O personagem de quem rolou, quando o mestre já os vinculou.
    *
-   * Resolvido pelo OPERADOR, e não pelo daemon nem pelo celular: o vínculo mora
+   * Resolvido pelo MESTRE, e não pelo daemon nem pelo celular: o vínculo mora
    * no cofre da campanha, e nem a TV nem o telefone o alcançam. É ele que diz em
    * qual retrato a TV pendura o dado. Ausente = desenha pelo nome.
    */

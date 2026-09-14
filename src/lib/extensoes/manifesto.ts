@@ -82,7 +82,11 @@ export type Contribuicoes = {
   camadas: CamadaDeclarada[];
 };
 
-export type PainelDeclarado = { id: string; titulo: string; subtitulo: string | null };
+export type PainelDeclarado = {
+  id: string;
+  titulo: string;
+  subtitulo: string | null;
+};
 
 export type ComandoDeclarado = {
   id: string;
@@ -96,12 +100,16 @@ export type ComandoDeclarado = {
   grupo: string | null;
 };
 
-export type FerramentaDeclarada = { id: string; titulo: string; icone: string | null };
+export type FerramentaDeclarada = {
+  id: string;
+  titulo: string;
+  icone: string | null;
+};
 
 /**
  * Uma camada sobre o mapa. Do MESTRE, e não da mesa.
  *
- * Plugin só alcança o Operador nesta etapa, então o que ele desenha vive na
+ * Plugin só alcança o Mestre nesta etapa, então o que ele desenha vive na
  * bancada — que é o que os alfinetes e os postits já são. O dado dela sai do
  * payload publicado pelo mesmo caminho que apaga aqueles dois.
  */
@@ -155,7 +163,11 @@ export function tipoDaExtensao(extensao: Manifesto): TipoExtensao {
  * URL dentro da mesma página, e sem isso trocar o arquivo no disco não
  * apareceria sem reabrir o aplicativo.
  */
-export function urlDaExtensao(id: string, arquivo: string, versao?: string): string {
+export function urlDaExtensao(
+  id: string,
+  arquivo: string,
+  versao?: string,
+): string {
   const base = `ato20-ext://localhost/${encodeURIComponent(id)}/${arquivo
     .split("/")
     .map(encodeURIComponent)
@@ -196,6 +208,9 @@ export function removerExtensao(id: string): Promise<void> {
 }
 
 /** Liga ou desliga, sem tocar no disco. */
-export function habilitarExtensao(id: string, habilitada: boolean): Promise<void> {
+export function habilitarExtensao(
+  id: string,
+  habilitada: boolean,
+): Promise<void> {
   return call<void>("extensao_habilitar", { id, habilitada });
 }

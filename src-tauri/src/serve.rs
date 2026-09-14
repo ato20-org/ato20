@@ -7,7 +7,7 @@ use axum::extract::{
     ConnectInfo, DefaultBodyLimit, Multipart, Path as AxumPath, Query, Request as AxumRequest,
     State,
 };
-use axum::http::header::{ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE};
+use axum::http::header::{ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, LOCATION};
 use axum::http::{HeaderValue, Request, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -58,7 +58,7 @@ pub struct Evidence {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DaemonAddr {
-    /// Loopback. E por aqui que a janela do Operador fala com o daemon.
+    /// Loopback. E por aqui que a janela do Mestre fala com o daemon.
     pub url: String,
     /// O mesmo daemon pelo IP da rede local, para a TV e os celulares.
     ///
@@ -78,7 +78,7 @@ const TOKEN_HEADER: &str = "x-ato20-token";
 
 /// Quantos estados o canal guarda para quem esta lendo devagar.
 ///
-/// Baixo de proposito. O Operador publica 10 vezes por segundo, e um espectador
+/// Baixo de proposito. O Mestre publica 10 vezes por segundo, e um espectador
 /// atrasado nao quer o historico -- quer o estado ATUAL. Estourar a fila faz o
 /// receptor pular para o mais recente, que e o comportamento certo aqui: cena
 /// velha na TV e pior que cena que saltou.
@@ -102,7 +102,7 @@ pub struct Daemon {
     ///
     /// Guardado para responder a quem chega no meio da sessao, e e ele que
     /// substituiu o aperto de mao `live:request`: em vez de o espectador pedir
-    /// e esperar o Operador ouvir, o daemon ja tem a resposta na conexao.
+    /// e esperar o Mestre ouvir, o daemon ja tem a resposta na conexao.
     live: Mutex<Option<String>>,
     live_tx: broadcast::Sender<String>,
     /// As rolagens dos jogadores, a caminho da janela do mestre.
@@ -114,7 +114,7 @@ pub struct Daemon {
     /// um dado de dez minutos atras.
     ///
     /// O daemon nao acumula bandeja: quem guarda os dados na tela, e por quanto
-    /// tempo, e o Operador. Aqui e so o cano.
+    /// tempo, e o Mestre. Aqui e so o cano.
     rolagens_tx: broadcast::Sender<String>,
     /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
     evidence: SharedEvidence,
@@ -245,7 +245,7 @@ pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>, estante: PathBuf) ->
 /// Porta preferida.
 ///
 /// Fixa, e nao efemera, por causa do celular: com porta sorteada a cada
-/// abertura, o endereco da Plateia muda toda sessao, e nenhum jogador consegue
+/// abertura, o endereco do Jogador muda toda sessao, e nenhum jogador consegue
 /// guardar o link nem recarregar a aba do dia anterior. Um numero estavel deixa
 /// o favorito valer.
 ///
@@ -333,9 +333,23 @@ pub fn router(state: Arc<Daemon>) -> Router {
                 )),
         )
         .route("/saude", get(|| async { "ok" }))
+        // As telas mudaram de nome, e os enderecos antigos continuam de pe.
+        //
+        // `/assistir` e `/plateia` nao sao detalhe interno: eles estao no QR
+        // code que o mestre mostrou na mesa passada e no link que cada jogador
+        // salvou no proprio celular. Renomear sem isto trocaria um problema de
+        // vocabulario por um 404 no meio de uma sessao.
+        //
+        // A QUERY viaja junto, e e o ponto: o endereco salvo e
+        // `/plateia?code=VGMBWH`, e um redirecionamento que perdesse o codigo
+        // devolveria o jogador para a porta pedindo para digitar de novo.
+        .route("/assistir", get(|uri: Uri| async move { renomeada(uri, "/espectador") }))
+        .route("/assistir/", get(|uri: Uri| async move { renomeada(uri, "/espectador") }))
+        .route("/plateia", get(|uri: Uri| async move { renomeada(uri, "/jogador") }))
+        .route("/plateia/", get(|uri: Uri| async move { renomeada(uri, "/jogador") }))
         // Tudo que nao casou com as rotas acima e a tela do espectador.
         .fallback(get(serve_web))
-        // A janela do Operador roda em outra origem (`http://localhost:3000` em
+        // A janela do Mestre roda em outra origem (`http://localhost:3000` em
         // dev, o protocolo do Tauri empacotado), entao o `fetch` dela e
         // cross-origin. Liberar e seguro porque quem autoriza escrita e o
         // token, nao a origem -- CORS nunca protegeu nada contra quem controla
@@ -560,7 +574,7 @@ async fn check(
     Ok(axum::Json(RoomInfo { nome }))
 }
 
-/// `POST /sala/publicar` -- o Operador anuncia o estado atual.
+/// `POST /sala/publicar` -- o Mestre anuncia o estado atual.
 ///
 /// Restrito a loopback ALEM do token. O token sozinho ja bastaria, e ele nao
 /// sai desta maquina -- so a janela o recebe, pelo IPC. Mas a porta agora esta
@@ -721,7 +735,7 @@ async fn roll(
 /// `GET /sala/rolagens` -- o fluxo de rolagens, para a janela do mestre.
 ///
 /// Restrito a LOOPBACK, como `/sala/publicar`, e sem codigo de mesa: quem
-/// escuta aqui e o Operador, que roda nesta maquina. A TV e os celulares nao
+/// escuta aqui e o Mestre, que roda nesta maquina. A TV e os celulares nao
 /// precisam desta rota -- o que eles veem sai do estado publicado, depois de o
 /// mestre resolver de qual personagem e cada dado. Abrir este fluxo para a rede
 /// seria dar a qualquer aparelho do Wi-Fi as rolagens cruas, antes de a mesa
@@ -1822,6 +1836,36 @@ async fn remove_attachment(
 /// Servidas POR aqui, e nao pelo Next: e isso que as deixa na MESMA origem do
 /// daemon, e por isso `/asset/{id}` e `/sala/live` resolvem como caminho
 /// relativo, sem a tela precisar descobrir endereco nenhum.
+/// Uma tela que mudou de nome responde 301 para o nome novo.
+///
+/// 301 e nao 302 porque a mudanca e permanente: o navegador guarda, e o celular
+/// do jogador para de bater no endereco velho a partir da segunda vez. E o que
+/// se quer -- se um dia a palavra mudar de novo, quem paga e o proximo
+/// redirecionamento, nao este.
+fn renomeada(uri: Uri, destino: &str) -> Response {
+    let alvo = match uri.query() {
+        Some(query) => format!("{destino}?{query}"),
+        None => destino.to_string(),
+    };
+
+    let mut resposta = StatusCode::MOVED_PERMANENTLY.into_response();
+
+    // Cabecalho invalido nao deveria acontecer -- o destino e literal e a query
+    // veio de uma URI ja parseada --, mas um 301 sem `Location` e um beco sem
+    // saida. Sem ele, a tela desconhecida responde a pagina de ajuda, que ao
+    // menos diz onde as telas estao.
+    match HeaderValue::from_str(&alvo) {
+        Ok(valor) => {
+            resposta.headers_mut().insert(LOCATION, valor);
+            resposta
+        }
+        Err(cause) => {
+            log::warn!("redirecionamento para {alvo} nao montou: {cause}");
+            ErrorPage::tela_desconhecida().into_response()
+        }
+    }
+}
+
 async fn serve_web(State(state): State<Arc<Daemon>>, request: Request<Body>) -> Response {
     let Some(root) = state.web_root.clone() else {
         return ErrorPage::sem_bundle().into_response();
@@ -1830,9 +1874,9 @@ async fn serve_web(State(state): State<Arc<Daemon>>, request: Request<Body>) -> 
     let path = request.uri().path().trim_end_matches('/').to_string();
 
     // O `.html` vem ANTES do caminho cru, e isto foi um bug medido: o export do
-    // Next grava `/assistir` como `assistir.html` E cria um diretorio
-    // `assistir/` com os payloads RSC ao lado. Tentando o caminho cru primeiro,
-    // o `ServeDir` encontrava o DIRETORIO e respondia 307 para `/assistir/`,
+    // Next grava `/espectador` como `espectador.html` E cria um diretorio
+    // `espectador/` com os payloads RSC ao lado. Tentando o caminho cru primeiro,
+    // o `ServeDir` encontrava o DIRETORIO e respondia 307 para `/espectador/`,
     // que nao tem `index.html` -- a TV recebia um redirecionamento para lugar
     // nenhum em vez da tela.
     //
@@ -1897,7 +1941,7 @@ async fn serve_web(State(state): State<Arc<Daemon>>, request: Request<Body>) -> 
 /// Sem isto nao ia cabecalho nenhum, e um browser sem `cache-control` decide
 /// sozinho: com so um `last-modified` na resposta, ele guarda por heuristica e
 /// pode continuar mostrando a tela antiga depois de um build novo. Foi medido
-/// numa sessao -- a Plateia ficou duas compilacoes atras enquanto o daemon ja
+/// numa sessao -- o Jogador ficou duas compilacoes atras enquanto o daemon ja
 /// servia a nova, e a suspeita do usuario ("cache?") estava certa.
 ///
 /// Duas politicas, porque sao duas naturezas de arquivo:
@@ -1922,7 +1966,7 @@ fn cache_do_bundle(path: &str) -> HeaderValue {
 /// escrita, e de PUBLICO: `/asset/{id}` existe porque um `<img>` da TV precisa
 /// dele, e o material da cena e justamente o que a mesa tem de ver. Um manual
 /// de regras nao e da mesa -- e do mestre, e a porta do daemon esta na rede
-/// local. Quem pede aqui e o leitor do Operador, que manda o token pelo
+/// local. Quem pede aqui e o leitor do Mestre, que manda o token pelo
 /// `httpHeaders` do pdf.js.
 ///
 /// Nao consulta o banco antes de montar o caminho: `id_valido` responde pela
@@ -2481,7 +2525,7 @@ mod tests {
 
         // Abre a TV DEPOIS da publicacao. E este caso que apagou o
         // `live:request` do protocolo: o daemon guarda o ultimo estado e o
-        // manda na conexao, em vez de o espectador pedir e esperar o Operador
+        // manda na conexao, em vez de o espectador pedir e esperar o Mestre
         // ouvir o pedido.
         let sse = router(Arc::clone(&state))
             .oneshot(
@@ -2814,7 +2858,7 @@ mod tests {
         let response = router(state)
             .oneshot(
                 HttpRequest::builder()
-                    .uri("/assistir")
+                    .uri("/espectador")
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -2833,8 +2877,8 @@ mod tests {
         let out = dir.path().join("out");
         std::fs::create_dir_all(&out).expect("out");
         std::fs::write(out.join("index.html"), "raiz").expect("index");
-        // `output: "export"` grava `/assistir` como `assistir.html`.
-        std::fs::write(out.join("assistir.html"), "a TV").expect("assistir");
+        // `output: "export"` grava `/espectador` como `espectador.html`.
+        std::fs::write(out.join("espectador.html"), "a TV").expect("espectador");
 
         let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
         let state = Arc::new(Daemon::new(
@@ -2847,7 +2891,7 @@ mod tests {
             std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
-        for (uri, esperado) in [("/", "raiz"), ("/assistir", "a TV"), ("/assistir/", "a TV")] {
+        for (uri, esperado) in [("/", "raiz"), ("/espectador", "a TV"), ("/espectador/", "a TV")] {
             let response = router(Arc::clone(&state))
                 .oneshot(HttpRequest::builder().uri(uri).body(Body::empty()).expect("request"))
                 .await
@@ -2857,6 +2901,45 @@ mod tests {
 
             let bytes = to_bytes(response.into_body(), 4096).await.expect("corpo");
             assert_eq!(String::from_utf8_lossy(&bytes), esperado, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn endereco_antigo_da_tela_leva_ao_novo_com_o_codigo_junto() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(&out).expect("out");
+
+        let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(Some(vault))),
+            "segredo".into(),
+            Some(out),
+            std::env::temp_dir().join("ato20-estante-inexistente"),
+        ));
+
+        // O `?code=` e a razao de o redirecionamento existir: o endereco que o
+        // jogador tem salvo no celular carrega o codigo da mesa, e perde-lo
+        // devolveria ele para a porta pedindo para digitar de novo.
+        for (velho, novo) in [
+            ("/plateia?code=VGMBWH", "/jogador?code=VGMBWH"),
+            ("/plateia", "/jogador"),
+            ("/plateia/", "/jogador"),
+            ("/assistir?code=VGMBWH", "/espectador?code=VGMBWH"),
+            ("/assistir", "/espectador"),
+            ("/assistir/", "/espectador"),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(HttpRequest::builder().uri(velho).body(Body::empty()).expect("request"))
+                .await
+                .expect("resposta");
+
+            assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY, "{velho}");
+            assert_eq!(
+                response.headers().get(LOCATION).and_then(|valor| valor.to_str().ok()),
+                Some(novo),
+                "{velho}"
+            );
         }
     }
 
@@ -2901,8 +2984,8 @@ mod tests {
 
         // Diz o que fazer, e oferece as duas telas que existem.
         assert!(texto.contains("Essa tela não existe"), "{texto}");
-        assert!(texto.contains("/assistir"), "{texto}");
-        assert!(texto.contains("/plateia"), "{texto}");
+        assert!(texto.contains("/espectador"), "{texto}");
+        assert!(texto.contains("/jogador"), "{texto}");
         // E NAO ecoa o caminho pedido: seria XSS refletido numa porta que esta
         // na rede local.
         assert!(!texto.contains("tela-que-nao-existe"), "o caminho foi ecoado");
@@ -2912,15 +2995,15 @@ mod tests {
     async fn rota_com_diretorio_homonimo_serve_o_html() {
         let dir = tempfile::tempdir().expect("tempdir");
         let out = dir.path().join("out");
-        std::fs::create_dir_all(out.join("assistir")).expect("out");
+        std::fs::create_dir_all(out.join("espectador")).expect("out");
         std::fs::write(out.join("index.html"), "raiz").expect("index");
-        std::fs::write(out.join("assistir.html"), "a TV").expect("html");
-        // O export do Next cria os DOIS: `assistir.html` e um diretorio
-        // `assistir/` com os payloads RSC. Tentando o caminho cru primeiro, o
-        // `ServeDir` achava o diretorio e devolvia 307 para `/assistir/`, que
+        std::fs::write(out.join("espectador.html"), "a TV").expect("html");
+        // O export do Next cria os DOIS: `espectador.html` e um diretorio
+        // `espectador/` com os payloads RSC. Tentando o caminho cru primeiro, o
+        // `ServeDir` achava o diretorio e devolvia 307 para `/espectador/`, que
         // nao tem `index.html` -- a TV recebia redirecionamento para lugar
         // nenhum. Foi medido no app rodando, nao deduzido.
-        std::fs::write(out.join("assistir/__next._tree.txt"), "payload").expect("rsc");
+        std::fs::write(out.join("espectador/__next._tree.txt"), "payload").expect("rsc");
 
         let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
         let state = Arc::new(Daemon::new(
@@ -2933,7 +3016,7 @@ mod tests {
             std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
-        for uri in ["/assistir", "/assistir/"] {
+        for uri in ["/espectador", "/espectador/"] {
             let response = router(Arc::clone(&state))
                 .oneshot(HttpRequest::builder().uri(uri).body(Body::empty()).expect("request"))
                 .await

@@ -3,7 +3,7 @@ import type { Scene } from "@/types/scene";
 /**
  * A cena como a mesa pode vê-la.
  *
- * Existe por uma razão de segurança, não de tamanho. O que o Operador publica
+ * Existe por uma razão de segurança, não de tamanho. O que o Mestre publica
  * é o objeto `Scene` inteiro; o daemon o guarda e o reemite por SSE para
  * qualquer um que tenha o código da mesa. Com os pontos de anotação dentro da
  * cena — e é onde eles têm de estar, porque são coordenadas nela —, a nota do
@@ -24,8 +24,8 @@ import type { Scene } from "@/types/scene";
  * o personagem de quem está lendo.
  *
  * A segunda barreira é estrutural e mora noutro arquivo: quem desenha os
- * alfinetes e os postits são camadas do `OperatorStage`, e não o `SceneLayer`
- * que o Assistir e a Plateia usam. Uma das duas barreiras bastaria; as duas
+ * alfinetes e os postits são camadas do `MestreStage`, e não o `SceneLayer`
+ * que o Espectador e o Jogador usam. Uma das duas barreiras bastaria; as duas
  * juntas significam que vazar exigiria dois erros independentes.
  *
  * O guardado das EXTENSÕES entra pela mesma porta, e por um motivo a mais: o
@@ -50,12 +50,13 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   //
   // Não é economia de memória: o `usePublisher` compara a cena por
   // identidade para decidir se publica. Uma cópia nova a cada render faria o
-  // Operador publicar 60 vezes por segundo enquanto ninguém mexe em nada.
+  // Mestre publicar 60 vezes por segundo enquanto ninguém mexe em nada.
   //
   // A condição precisa cobrir TODOS os campos apagados abaixo. Um campo novo
   // aqui esquecido não vaza — o `delete` continua acontecendo —, mas um campo
-  // apagado embaixo e esquecido nesta linha faz o Operador publicar por frame.
-  if (!scene.name && !scene.pins && !scene.postits && !scene.extensoes) return scene;
+  // apagado embaixo e esquecido nesta linha faz o Mestre publicar por frame.
+  if (!scene.name && !scene.pins && !scene.postits && !scene.extensoes)
+    return scene;
 
   // Cópia e `delete`, e não desestruturação com um descarte: um descarte
   // nomeado só para ser ignorado é variável não usada, e a regra que a proíbe

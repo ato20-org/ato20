@@ -14,7 +14,7 @@ import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
  * do store. O `useMemo` sobre a lista de extensões — que só troca quando ela
  * troca de verdade — é o que prende isso.
  *
- * Só o Operador chama. O Assistir e a Plateia não têm extensão nenhuma: o que
+ * Só o Mestre chama. O Espectador e o Jogador não têm extensão nenhuma: o que
  * chega a eles é o retrato já resolvido, com a URL e o canvas dentro.
  */
 export function useFontesDeRetrato(): FonteRetrato[] {

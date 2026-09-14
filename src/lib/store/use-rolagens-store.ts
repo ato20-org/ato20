@@ -34,7 +34,7 @@ type RolagensStore = {
   /**
    * O que já foi rolado nesta sessão, o mais novo na frente.
    *
-   * Só do Operador: não entra no quadro publicado. O jogador tem o próprio
+   * Só do Mestre: não entra no quadro publicado. O jogador tem o próprio
    * histórico no aparelho dele, e mandar para a TV a lista do que a mesa tirou
    * nos últimos vinte minutos é mural, não mesa.
    *
@@ -78,7 +78,9 @@ export const useRolagensStore = create<RolagensStore>((set) => ({
     }),
 
   apagar: (id) =>
-    set((state) => ({ bandeja: state.bandeja.filter((rolagem) => rolagem.id !== id) })),
+    set((state) => ({
+      bandeja: state.bandeja.filter((rolagem) => rolagem.id !== id),
+    })),
 
   limpar: () => set({ bandeja: [] }),
   esquecer: () => set({ historico: [] }),

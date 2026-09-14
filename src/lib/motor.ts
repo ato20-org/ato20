@@ -59,7 +59,7 @@ export function motorWebKit(): boolean {
  * serviços quebrados por motor seria uma tabela para alguém manter, e o que se
  * sabe hoje é que este motor não dá conta da única fonte que existe.
  *
- * A consequência boa é que a mesa continua vendo: Assistir e Plateia rodam no
+ * A consequência boa é que a mesa continua vendo: Espectador e Jogador rodam no
  * navegador de verdade da TV e do celular. A ruim é o iPhone, onde não há
  * escapatória — e a bancada do mestre no Linux, que é WebKitGTK.
  */

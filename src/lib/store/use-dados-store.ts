@@ -2,7 +2,13 @@
 
 import { create } from "zustand";
 
-import { sortearValor, tipoDado, type Dado, type FacesDado, type Rolagem } from "@/types/dado";
+import {
+  sortearValor,
+  tipoDado,
+  type Dado,
+  type FacesDado,
+  type Rolagem,
+} from "@/types/dado";
 import { novoId } from "@/lib/id";
 
 const STORAGE_KEY = "ato20:saquinho";
@@ -104,7 +110,12 @@ type DadosStore = {
      */
     daMesa?: string;
   } | null;
-  pegarDado: (faces: FacesDado, clientX: number, clientY: number, daMesa?: string) => void;
+  pegarDado: (
+    faces: FacesDado,
+    clientX: number,
+    clientY: number,
+    daMesa?: string,
+  ) => void;
   moverMao: (clientX: number, clientY: number) => void;
 
   /**
@@ -192,7 +203,8 @@ function ler(): Guardado | null {
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as Partial<Guardado>;
-    if (typeof parsed.x !== "number" || typeof parsed.y !== "number") return null;
+    if (typeof parsed.x !== "number" || typeof parsed.y !== "number")
+      return null;
     if (!Number.isFinite(parsed.x) || !Number.isFinite(parsed.y)) return null;
 
     return { x: limitar(parsed.x), y: limitar(parsed.y) };
@@ -219,13 +231,13 @@ function limitar(valor: number): number {
  * sobre o mapa de hoje é lixo, não memória.
  *
  * Nada aqui é publicado, e isso continua valendo depois de os jogadores
- * passarem a rolar dados. Este store é a MESA DE QUEM OLHA: no Operador ele é o
+ * passarem a rolar dados. Este store é a MESA DE QUEM OLHA: no Mestre ele é o
  * saquinho do mestre, no celular é o do jogador, e em nenhum dos dois o que
  * está nele viaja. O que viaja é a `RolagemDaMesa`, que nasce no daemon e mora
  * em `useRolagensStore` — dois estados, porque são duas coisas: o dado que ESTÁ
  * na minha tela, e o fato de alguém ter rolado.
  *
- * A camada que desenha continua em `components/operator` por consequência
+ * A camada que desenha continua em `components/mestre` por consequência
  * disso: ela é a mesma nas duas telas justamente por não prometer transmissão
  * nenhuma. O que a mesa vê de uma rolagem alheia é o `DadoParado`, que está em
  * `playground` porque as três telas o desenham.
@@ -248,7 +260,9 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
       },
     }),
   moverMao: (clientX, clientY) =>
-    set((state) => (state.naMao ? { naMao: { ...state.naMao, clientX, clientY } } : {})),
+    set((state) =>
+      state.naMao ? { naMao: { ...state.naMao, clientX, clientY } } : {},
+    ),
 
   arremesso: null,
   arremessar: (vx, vy) =>
@@ -300,7 +314,8 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
   recolher: (destino) =>
     set((state) => {
       // Sem boca para onde ir, ou mesa vazia: não há o que animar.
-      if (!destino || state.dados.length === 0) return { dados: [], succao: null };
+      if (!destino || state.dados.length === 0)
+        return { dados: [], succao: null };
 
       // Pedido em cima de um recolhimento que já está acontecendo é impaciência:
       // engole tudo agora, em vez de recomeçar a espiral e fazer os dados que já
@@ -328,15 +343,19 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
         succao: null,
       };
     }),
-  guardar: (id) => set((state) => ({ dados: state.dados.filter((dado) => dado.id !== id) })),
+  guardar: (id) =>
+    set((state) => ({ dados: state.dados.filter((dado) => dado.id !== id) })),
 
-  mover: (posicao) => set({ posicao: { x: limitar(posicao.x), y: limitar(posicao.y) } }),
+  mover: (posicao) =>
+    set({ posicao: { x: limitar(posicao.x), y: limitar(posicao.y) } }),
 
   restaurar() {
     if (get().restaurado) return;
 
     const guardado = ler();
-    set(guardado ? { posicao: guardado, restaurado: true } : { restaurado: true });
+    set(
+      guardado ? { posicao: guardado, restaurado: true } : { restaurado: true },
+    );
   },
 }));
 
@@ -344,7 +363,11 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
 // desenho do `usePanelsStore`.
 useDadosStore.subscribe((state, anterior) => {
   if (!state.restaurado) return;
-  if (state.posicao.x === anterior.posicao.x && state.posicao.y === anterior.posicao.y) return;
+  if (
+    state.posicao.x === anterior.posicao.x &&
+    state.posicao.y === anterior.posicao.y
+  )
+    return;
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.posicao));

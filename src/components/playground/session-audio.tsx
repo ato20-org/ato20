@@ -15,9 +15,9 @@ const HAVE_METADATA = 1;
 /**
  * A trilha da sessão, em qualquer visão. Não desenha nada.
  *
- * O mesmo componente serve Operador, Assistir e Plateia: a trilha viaja no
+ * O mesmo componente serve Mestre, Espectador e Jogador: a trilha viaja no
  * canal, e cada aparelho decide se emite som — `enabled` no store local. Isso
- * é necessário porque Operador e Assistir costumam rodar na mesma máquina, e
+ * é necessário porque Mestre e Espectador costumam rodar na mesma máquina, e
  * os dois emitindo produziriam eco.
  *
  * `volume` vem de fora, e não da faixa: é o volume da sessão, e vale para
@@ -64,10 +64,16 @@ export function SessionAudio({
       // cheio antes de o outro efeito descer o ganho.
       element.volume = outputVolume(volume);
 
-      const elapsed = track?.startedAt ? (Date.now() - track.startedAt) / 1000 : 0;
+      const elapsed = track?.startedAt
+        ? (Date.now() - track.startedAt) / 1000
+        : 0;
       const { duration } = element;
 
-      if (Number.isFinite(duration) && duration > 0 && elapsed > SEEK_TOLERANCE_SECONDS) {
+      if (
+        Number.isFinite(duration) &&
+        duration > 0 &&
+        elapsed > SEEK_TOLERANCE_SECONDS
+      ) {
         // Em loop a posição dá a volta; numa faixa única, buscar além do fim a
         // encerraria na hora, então só busca se ainda houver faixa.
         const target = track?.loop ? elapsed % duration : elapsed;

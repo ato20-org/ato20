@@ -15,7 +15,7 @@ import { useViewportStore } from "@/lib/store/use-viewport-store";
  *
  * Existe como hook, e não como um `||` repetido, porque duas telas precisam da
  * MESMA resposta: o `SceneStage` decide se o arrasto desloca a cena, e o
- * `OperatorStage` decide se os itens continuam agarráveis. Derivar isso em dois
+ * `MestreStage` decide se os itens continuam agarráveis. Derivar isso em dois
  * lugares é a receita para uma delas ficar para trás — o palco deslocando
  * enquanto o outro ainda entrega os itens ao mesmo gesto.
  *

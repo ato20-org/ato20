@@ -8,7 +8,7 @@ import type { AssetKind, AssetMeta, EscopoAsset } from "@/types/scene";
 /**
  * Endereço de um arquivo do acervo.
  *
- * Um caminho só, para as três telas. No Operador é o loopback do próprio
+ * Um caminho só, para as três telas. No Mestre é o loopback do próprio
  * daemon; no celular do jogador é o mesmo daemon pela rede, e aí a página já
  * foi servida por ele — relativo resolve para o lugar certo sozinho.
  *
@@ -47,7 +47,9 @@ export async function assetUrl(
   assetId: string,
   variante?: Variante,
 ): Promise<string> {
-  const caminho = variante ? `/asset/${assetId}/${variante}` : `/asset/${assetId}`;
+  const caminho = variante
+    ? `/asset/${assetId}/${variante}`
+    : `/asset/${assetId}`;
 
   if (!isDesktop()) return caminho;
 
@@ -76,7 +78,10 @@ export function setAssetPeaks(id: string, peaks: number[]): Promise<void> {
 }
 
 /** Move para uma pasta. `undefined` devolve à raiz. */
-export function setAssetFolder(id: string, folderId: string | undefined): Promise<void> {
+export function setAssetFolder(
+  id: string,
+  folderId: string | undefined,
+): Promise<void> {
   return call("asset_set_folder", { id, folderId: folderId ?? null });
 }
 
@@ -87,7 +92,10 @@ export function setAssetFolder(id: string, folderId: string | undefined): Promis
  * e o acerto dos arquivos que já existiam antes de o escopo existir — ver
  * `useEscopoDosAssets`.
  */
-export function setAssetEscopo(id: string, escopo: EscopoAsset | undefined): Promise<void> {
+export function setAssetEscopo(
+  id: string,
+  escopo: EscopoAsset | undefined,
+): Promise<void> {
   return call("asset_set_escopo", { id, escopo: escopo ?? null });
 }
 
@@ -124,8 +132,23 @@ export async function importAssets(
     title: kind === "image" ? "Escolha as imagens" : "Escolha os sons",
     filters: [
       kind === "image"
-        ? { name: "Imagens", extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"] }
-        : { name: "Sons", extensions: ["mp3", "ogg", "oga", "opus", "wav", "flac", "m4a", "aac"] },
+        ? {
+            name: "Imagens",
+            extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"],
+          }
+        : {
+            name: "Sons",
+            extensions: [
+              "mp3",
+              "ogg",
+              "oga",
+              "opus",
+              "wav",
+              "flac",
+              "m4a",
+              "aac",
+            ],
+          },
     ],
   });
 

@@ -15,13 +15,15 @@ import { daemonAddr } from "@/lib/vault/bridge";
  * se mede — manter os dois significaria dois caminhos para depurar em troca de
  * nada.
  *
- * O que ele resolve, e o broadcast não resolvia, é a razão de a Plateia
+ * O que ele resolve, e o broadcast não resolvia, é a razão de o Jogador
  * existir: o celular do jogador é outro aparelho.
  */
 export function createPublisher(): SceneChannel {
   // O endereço vem por IPC e chega depois do primeiro render. O canal cuida
   // disso guardando o último estado pendente — ver `createPublisherChannel`.
-  return createPublisherChannel(daemonAddr().then(({ url, token }) => ({ base: url, token })));
+  return createPublisherChannel(
+    daemonAddr().then(({ url, token }) => ({ base: url, token })),
+  );
 }
 
 /**

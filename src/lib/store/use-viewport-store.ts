@@ -38,7 +38,7 @@ type ViewportStore = {
 };
 
 /**
- * Zoom e deslocamento do palco do Operador.
+ * Zoom e deslocamento do palco do Mestre.
  *
  * Estado de UI da máquina do mestre: não entra no board, não é persistido e
  * não viaja no canal. O que a mesa vê é `Scene.camera`, e só chega lá quando o
@@ -51,7 +51,9 @@ export const useViewportStore = create<ViewportStore>((set, get) => ({
   setViewport: (viewport) => set({ viewport }),
   setPanMode: (panMode) => set({ panMode }),
   zoomIn: () => set({ viewport: zoomViewportCentered(get().viewport, STEP) }),
-  zoomOut: () => set({ viewport: zoomViewportCentered(get().viewport, 1 / STEP) }),
+  zoomOut: () =>
+    set({ viewport: zoomViewportCentered(get().viewport, 1 / STEP) }),
   fit: () => set({ viewport: FULL_VIEWPORT }),
-  centerOn: (point) => set({ viewport: centerViewportOn(get().viewport, point) }),
+  centerOn: (point) =>
+    set({ viewport: centerViewportOn(get().viewport, point) }),
 }));

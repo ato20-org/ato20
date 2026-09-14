@@ -42,7 +42,7 @@ custo não existe, e o teto passa a ser o HD.
 O formato é texto onde dá: `git diff` numa cena mostra o token que andou, e um `config.json`
 aberto no editor diz o que a campanha é.
 
-**Por que a miniatura mora aqui.** As listas do Operador e da Plateia desenham um
+**Por que a miniatura mora aqui.** As listas do Mestre e do Jogador desenham um
 quadrado de 40px, e apontavam para o arquivo original: um mapa de 4000x3000 é decodificado
 como 48 MB de bitmap para caber num polegar de tela. Medido em `scripts/perf/medir.mjs`,
 cenário `biblioteca`, acervo de 200 mapas: 200 arquivos e 1,9 GB de tráfego contra **47
@@ -62,34 +62,34 @@ mesmo tempo, é a receita para escrita perdida. Esse texto é materializado em
 
 | Tela | Onde roda | O que é |
 | --- | --- | --- |
-| Operador | **no aplicativo** | A tela do mestre: monta cenas, arrasta imagens, esconde regiões, decide o que entra no ar |
-| Assistir | navegador | Só o palco, sem controle. Vai na TV atrás do mestre |
-| Plateia | navegador | O celular de cada jogador |
+| Mestre | **no aplicativo** | A tela do mestre: monta cenas, arrasta imagens, esconde regiões, decide o que entra no ar |
+| Espectador | navegador | Só o palco, sem controle. Vai na TV atrás do mestre |
+| Jogador | navegador | O celular de cada jogador |
 
 A cena **em edição** e a cena **no ar** são separadas — é isso que permite preparar a
 próxima enquanto a mesa segue na atual.
 
-**O aplicativo é o operador**, e a janela abre direto nele: a lista de campanhas, um clique,
+**O aplicativo é o mestre**, e a janela abre direto nele: a lista de campanhas, um clique,
 e a mesa. Não há tela de escolher visão nem apresentação no caminho — quem baixou o
-aplicativo é o mestre, e as outras duas telas nem funcionariam aqui, porque o Operador é o
+aplicativo é o mestre, e as outras duas telas nem funcionariam aqui, porque o Mestre é o
 único que precisa alcançar o disco.
 
 Não há login, não há conta de mestre, não há código de operação para mover a mesa entre
 máquinas: quem abriu o programa já está na máquina onde as campanhas moram, e uma senha ali
 só protegeria o disco de si mesmo. Trocar de máquina é copiar a pasta.
 
-As duas telas de espectador vivem no navegador, e o daemon as serve. "Abrir Assistir" no
-Operador abre o **navegador do sistema**, e não uma aba desta janela: a janela é a mesa do
+As duas telas de espectador vivem no navegador, e o daemon as serve. "Abrir Espectador" no
+Mestre abre o **navegador do sistema**, e não uma aba desta janela: a janela é a mesa do
 mestre, e a TV costuma ir para um segundo monitor, que o navegador sabe arrastar e a webview
 não. Quem digitar o IP do notebook e cair na raiz encontra as duas — normalmente ninguém vê
-essa página, porque o QR do Operador leva direto para a tela certa, já com o código.
+essa página, porque o QR do Mestre leva direto para a tela certa, já com o código.
 
 ## Estado atual da migração
 
-- **Operador: completo.** Abre a pasta, grava as cenas, envia imagens e sons.
-- **Assistir e Plateia: na rede local.** O daemon serve as duas telas e publica a cena por
+- **Mestre: completo.** Abre a pasta, grava as cenas, envia imagens e sons.
+- **Espectador e Jogador: na rede local.** O daemon serve as duas telas e publica a cena por
   SSE, então qualquer aparelho da casa serve de TV e cada jogador acompanha pelo celular.
-- **Ficha do personagem: na Plateia.** Nome, caderno de notas e anexos, com um token por jogador no
+- **Ficha do personagem: no Jogador.** Nome, caderno de notas e anexos, com um token por jogador no
   lugar da RLS que fazia esse trabalho antes.
 - **Exportar e importar zip: pronto.** A campanha cabe num arquivo, e o arquivo abre em
   qualquer outra máquina — com a mesa continuando a valer.
@@ -104,7 +104,7 @@ pnpm install
 pnpm tauri dev
 ```
 
-`pnpm dev` sozinho serve as telas em `localhost:3000`, mas o Operador aparece dizendo "abra
+`pnpm dev` sozinho serve as telas em `localhost:3000`, mas o Mestre aparece dizendo "abra
 pelo aplicativo": uma aba de navegador não alcança o disco.
 
 ### Medir o desempenho
@@ -144,7 +144,7 @@ significar quadro perdido.
 
 A janela roda **sem decoração do sistema** (`decorations: false`) e desenha a própria barra:
 arrastar, minimizar, maximizar, fechar. Barra fina e separada, e não os botões embutidos no
-cabeçalho do Operador — aquele cabeçalho quebra em duas linhas em janela estreita, e um
+cabeçalho do Mestre — aquele cabeçalho quebra em duas linhas em janela estreita, e um
 botão de fechar que muda de lugar conforme a largura é o tipo de coisa que se clica por
 engano.
 
@@ -174,12 +174,12 @@ GET   /                as telas de espectador, do bundle estatico
 GET   /asset/{id}      o arquivo, com Range e ETag
 GET   /sala?codigo=    confere o codigo, devolve o nome da campanha
 GET   /sala/live?codigo=   a cena, em SSE
-POST  /sala/publicar   o Operador anuncia; token + loopback
+POST  /sala/publicar   o Mestre anuncia; token + loopback
 GET   /saude
 ```
 
 **A porta é fixa (20200), e isso é por causa do celular.** Com porta sorteada a cada
-abertura, o endereço da Plateia mudaria toda sessão e nenhum jogador conseguiria guardar o
+abertura, o endereço do Jogador mudaria toda sessão e nenhum jogador conseguiria guardar o
 link nem recarregar a aba do dia anterior. Se ela estiver ocupada — uma segunda janela do
 aplicativo, ou o processo anterior ainda soltando o socket — cai para uma efêmera: a sessão
 funciona, só custa reler o endereço na tela.
@@ -201,9 +201,9 @@ O `out/` também viaja como recurso do bundle (`bundle.resources`): a janela lê
 pelo protocolo do Tauri, que o embute no executável, mas o embutido não é alcançável de
 fora da webview, e o daemon precisa dos mesmos arquivos no disco.
 
-Uma armadilha medida no app rodando, não deduzida: o export do Next grava `/assistir` como
-`assistir.html` **e** cria um diretório `assistir/` com os payloads RSC ao lado. Servindo o
-caminho cru primeiro, o `ServeDir` encontrava o diretório e respondia 307 para `/assistir/`,
+Uma armadilha medida no app rodando, não deduzida: o export do Next grava `/espectador` como
+`espectador.html` **e** cria um diretório `espectador/` com os payloads RSC ao lado. Servindo o
+caminho cru primeiro, o `ServeDir` encontrava o diretório e respondia 307 para `/espectador/`,
 que não tem `index.html` — a TV recebia um redirecionamento para lugar nenhum. Por isso o
 `.html` é tentado antes, e redirecionamento conta como "tente o próximo".
 
@@ -214,8 +214,8 @@ o pouco que o espectador manda para cima é HTTP normal. Um WebSocket cobraria h
 keepalive próprios para nada.
 
 E ele apagou uma parte do protocolo. Antes havia `live:request`: o espectador que abria a
-tela no meio da sessão pedia o estado, e o Operador respondia — com reenvio a cada 2,5 s,
-porque um pedido que chegasse antes de o Operador se inscrever simplesmente não existia para
+tela no meio da sessão pedia o estado, e o Mestre respondia — com reenvio a cada 2,5 s,
+porque um pedido que chegasse antes de o Mestre se inscrever simplesmente não existia para
 ele. O daemon guarda o último estado publicado e o entrega na conexão, então quem chega no
 meio já nasce sincronizado. Com o pedido foram o reenvio, o `ChannelMessage` e metade do
 `useSubscription`.
@@ -234,7 +234,7 @@ Wi-Fi caia na cena por acaso ao varrer portas. Contra alguém determinado na tua
 defende.
 
 **O daemon serve arquivo, e não recebe.** Ele é a razão de o endereço de um arquivo ser
-**um só** para as três telas — antes eram dois caminhos, blob URL do IndexedDB no Operador e
+**um só** para as três telas — antes eram dois caminhos, blob URL do IndexedDB no Mestre e
 URL pública do Storage no celular. Com ele foram embora o cache de object URLs, o
 `revokeAssetUrl` e a classe de vazamento de memória que os dois existiam para conter: quem
 guarda cópia agora é o cache HTTP do browser.
@@ -295,7 +295,7 @@ um cabeçalho que o HTML não sabe mandar.
 Entrar na **mesa** e entrar como **jogador** são duas coisas, e ficaram separadas de
 propósito. O código da mesa dá acesso à cena; o nome cria a ficha. A TV entra na mesa e
 nunca vira jogador, e quem só quer olhar o mapa também não. Se fossem uma coisa só, cada
-aparelho que abrisse a Plateia criaria uma linha na campanha do mestre, e a lista dele
+aparelho que abrisse o Jogador criaria uma linha na campanha do mestre, e a lista dele
 encheria de fantasmas.
 
 ```
@@ -363,7 +363,7 @@ jogador antes de qualquer leitura. `../../config.json` não sobrevive a isso.
 O teto é 64 MB por arquivo e 30 arquivos por jogador, menor que os 512 MB do acervo do
 mestre. A diferença é proposital: aqui a entrada não é confiável, vem de um celular na rede
 para dentro da pasta de outra pessoa. Ficha, retrato e print cabem folgados; o que não cabe
-é alguém encher o disco do mestre pela porta da Plateia.
+é alguém encher o disco do mestre pela porta do Jogador.
 
 As miniaturas são blob URLs, e não `<img src="/eu/anexos/...">`. É a única forma que mantém
 **uma** credencial: `<img>` não manda cabeçalho, e as alternativas seriam pôr o token na URL
@@ -430,7 +430,7 @@ como aplicação web na Vercel, e a integração continuou ligada depois de o pr
 virar aplicativo de desktop — cada push publicava o export estático das telas.
 
 O que subia não era um site quebrado por acidente: era um site que **não pode
-funcionar**. As telas de Assistir e Plateia falam com o daemon que roda na
+funcionar**. As telas de Espectador e Jogador falam com o daemon que roda na
 máquina do mestre, e num domínio público não há daemon nenhum para responder.
 Quem abrisse veria a porta pedindo o código de uma mesa que não existe.
 
@@ -465,7 +465,7 @@ que vem dentro dele é antigo e não entende uma seção que a toolchain do Arch
 `.deb` e o `.rpm` não passam por ele e não precisam da variável.
 
 O `out/` viaja como recurso do bundle e é lido de `resource_dir()`. Verificado no pacote:
-o AppImage serve `/assistir` de dentro de si mesmo, com o daemon em `0.0.0.0:20200`.
+o AppImage serve `/espectador` de dentro de si mesmo, com o daemon em `0.0.0.0:20200`.
 
 **A ordem de busca depende do perfil, e isso custou um bug.** O `resource_dir()/out` é um
 *retrato*, copiado pelo Tauri no momento do build do Rust; o `../out` é a saída viva do
@@ -522,8 +522,8 @@ Retrato é HUD, não cenário: ele fica preso à **câmera**, não ao plano. Apr
 o arrasta, e trocar de cena não o derruba — ele pertence à sessão, como a trilha.
 
 A geometria é guardada em **fração do recorte da câmera** (`x`, `y`, `width`, `height` entre
-0 e 1). É o que faz as três visões desenharem pelo mesmo caminho: no Assistir a câmera é a
-tela inteira, no Operador ela é o retângulo da moldura, e a conta —
+0 e 1). É o que faz as três visões desenharem pelo mesmo caminho: no Espectador a câmera é a
+tela inteira, no Mestre ela é o retângulo da moldura, e a conta —
 `camera.x + x * camera.width` — é a mesma. Pixel de tela exigiria uma camada de coordenadas
 própria por visão, e o retrato ocuparia partes diferentes da cena na TV de 1920 e no celular
 de 390.
@@ -531,7 +531,7 @@ de 390.
 Vem do mesmo acervo de imagens (botão de retrato na linha do arquivo) e desenha acima da
 névoa — retrato coberto pelo bloco preto leria como bug.
 
-No palco do Operador, quem manda é a aba: com **Retratos** aberta — no painel esquerdo,
+No palco do Mestre, quem manda é a aba: com **Retratos** aberta — no painel esquerdo,
 junto de cenas e áreas, porque as três são o que está no ar e não arquivo de acervo —, o
 palco desenha **todos** os retratos para o mestre arrastar. Fora dela, só os selecionados.
 
@@ -567,7 +567,7 @@ continua vendo o rosto. Vale preencher os dois campos por isso.
 
 O canvas viaja no payload publicado, porque quem desenha o quadro é o **aparelho
 de quem assiste** — a TV e o celular abrem a página por conta própria, e o
-daemon não intermedia. Extensão só existe no Operador, então sem o número a TV
+daemon não intermedia. Extensão só existe no Mestre, então sem o número a TV
 teria de adivinhar em que tamanho renderizar uma página de layout fixo.
 
 **Não funciona no WebKit.** Medido no webkit2gtk-4.1 2.52.5 com a página do
@@ -578,10 +578,10 @@ e suporte de JS moderno.
 
 | Tela | Motor | Retrato ao vivo |
 | --- | --- | --- |
-| Assistir, na TV ou no notebook | Chrome, Firefox | funciona |
-| Plateia no Android | Chrome | funciona |
-| Plateia no **iPhone** | Safari, sempre | **não** |
-| Operador, no Linux | WebKitGTK | **não** |
+| Espectador, na TV ou no notebook | Chrome, Firefox | funciona |
+| Jogador no Android | Chrome | funciona |
+| Jogador no **iPhone** | Safari, sempre | **não** |
+| Mestre, no Linux | WebKitGTK | **não** |
 
 O iPhone não tem escapatória: a Apple obriga todo navegador de iOS a usar o
 WebKit dela. Onde não funciona, o ATO20 **não desenha a página** e mostra o
@@ -617,7 +617,7 @@ exportar uma campanha não leva o tema de quem a montou. O banco guarda uma
 coisa só, se está habilitada; o que a extensão *é* vive no manifesto, dentro da
 própria pasta, porque copiar a pasta tem de bastar para instalar.
 
-Só o **Operador**. Assistir e Plateia rodam no navegador de outro aparelho, e
+Só o **Mestre**. Espectador e Jogador rodam no navegador de outro aparelho, e
 servir código de extensão pela rede é outra decisão — ver o fim desta seção.
 
 ### Duas naturezas, e a separação importa
@@ -767,7 +767,7 @@ ter mais de um módulo e uma fonte ao lado do CSS.
 E **não pelo daemon**, que já serve HTTP: ele escuta em `0.0.0.0`, e por ele a
 extensão viraria alcançável por qualquer aparelho da rede. O protocolo só existe
 dentro da webview desta janela — que é também a razão de plugin alcançar só o
-Operador. Levar isto às telas de espectador é abrir essa superfície, e é uma
+Mestre. Levar isto às telas de espectador é abrir essa superfície, e é uma
 decisão à parte.
 
 ### Confiança
@@ -804,15 +804,15 @@ dois caminhos para depurar em troca de nada. O throttle de 10 Hz continua: arras
 emite ~60 mudanças por segundo, e publicar todas pagaria uma serialização do board por
 frame.
 
-**A cena viaja em amostras, e quem assiste interpola.** Assistir e Plateia recebem 10
+**A cena viaja em amostras, e quem assiste interpola.** Espectador e Jogador recebem 10
 amostras por segundo e animam o caminho entre elas em CSS: posição, tamanho e giro dos itens
 em 150 ms lineares, câmera — zoom e deslocamento juntos, porque vivem no mesmo `transform` —
 em 450 ms com desaceleração, área escondida sumindo em 500 ms, e troca de cena entrando em
-fade. O Operador **não** interpola: lá o arrasto é manipulação direta, e a imagem correndo
+fade. O Mestre **não** interpola: lá o arrasto é manipulação direta, e a imagem correndo
 atrás do cursor é o oposto de suave. Tudo dentro de `prefers-reduced-motion` — ver o fim de
 `globals.css`.
 
-A lógica pura fica isolada em `src/lib/geometry/` e `src/lib/operator/` justamente para ser
+A lógica pura fica isolada em `src/lib/geometry/` e `src/lib/mestre/` justamente para ser
 verificável sem navegador.
 
 ## Testes

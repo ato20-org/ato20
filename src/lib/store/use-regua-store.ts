@@ -15,7 +15,7 @@ type ReguaStore = {
  * A medida em curso, que a mesa também vê.
  *
  * Store e não estado do palco porque ela é PUBLICADA: quem monta o quadro para
- * a mesa é o `OperatorShell`, e um estado local do palco não chega até lá.
+ * a mesa é o `MestreShell`, e um estado local do palco não chega até lá.
  *
  * Mesmo desenho do `useSpotlightStore`: da sessão, fora da cena, sem passar
  * pelo vault nem pelo histórico de desfazer. Medida não é conteúdo de campanha

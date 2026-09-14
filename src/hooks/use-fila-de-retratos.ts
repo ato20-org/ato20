@@ -34,15 +34,15 @@ const EPSILON = 1e-4;
  *
  * A que está sendo EDITADA, que é a que o mestre vê no palco: é ali que ele
  * arruma. A mesa recebe o elenco da cena NO AR com a geometria como ela ficou —
- * ver `OperatorShell`. Nas duas serem a mesma cena, que é o caso normal, não há
+ * ver `MestreShell`. Nas duas serem a mesma cena, que é o caso normal, não há
  * diferença nenhuma; editando outra, ele arruma a fila dela sem mexer no que
  * está no ar.
  *
  * ## Por que num efeito
  *
  * Porque tem de valer com o painel de Retratos fechado: a fila é do estado da
- * sessão, não da tela que a mostra. Quem chama é o `OperatorShell`, que existe
- * enquanto o Operador existe.
+ * sessão, não da tela que a mostra. Quem chama é o `MestreShell`, que existe
+ * enquanto o Mestre existe.
  */
 export function useFilaDeRetratos(scene: Scene | null): void {
   const { personagens } = useCharacters();
@@ -56,9 +56,11 @@ export function useFilaDeRetratos(scene: Scene | null): void {
   useEffect(() => {
     if (!filaAuto || !scene) return;
 
-    const naFila = retratosDaCena(guardados, scene.items, personagens ?? []).filter(
-      (retrato) => retrato.visible && !retrato.foraDaFila,
-    );
+    const naFila = retratosDaCena(
+      guardados,
+      scene.items,
+      personagens ?? [],
+    ).filter((retrato) => retrato.visible && !retrato.foraDaFila);
 
     const posicoes = filaDeRetratos(naFila, ancora, folga);
 
@@ -71,7 +73,8 @@ export function useFilaDeRetratos(scene: Scene | null): void {
         if (!atual) return false;
 
         return (
-          Math.abs(atual.x - posicao.x) > EPSILON || Math.abs(atual.y - posicao.y) > EPSILON
+          Math.abs(atual.x - posicao.x) > EPSILON ||
+          Math.abs(atual.y - posicao.y) > EPSILON
         );
       })
       .map(({ id, x, y }) => ({ id, patch: { x, y } }));

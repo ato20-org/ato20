@@ -26,10 +26,13 @@ const FALLBACK_ASPECT = 3 / 4;
  * Onde o retrato cai no plano de cena, dado o recorte atual da câmera.
  *
  * É a única ponte entre os dois espaços, e existe para as três visões
- * desenharem pelo mesmo caminho: no Assistir a câmera é a tela inteira, no
- * Operador ela é o retângulo da moldura, e a conta é a mesma.
+ * desenharem pelo mesmo caminho: no Espectador a câmera é a tela inteira, no
+ * Mestre ela é o retângulo da moldura, e a conta é a mesma.
  */
-export function portraitBox(portrait: Portrait, camera: Viewport = FULL_VIEWPORT): ItemBox {
+export function portraitBox(
+  portrait: Portrait,
+  camera: Viewport = FULL_VIEWPORT,
+): ItemBox {
   return {
     x: camera.x + portrait.x * camera.width,
     y: camera.y + portrait.y * camera.height,
@@ -65,7 +68,9 @@ export function createPortrait(
   naturalHeight?: number,
 ): Portrait {
   const aspect =
-    naturalWidth && naturalHeight ? naturalWidth / naturalHeight : FALLBACK_ASPECT;
+    naturalWidth && naturalHeight
+      ? naturalWidth / naturalHeight
+      : FALLBACK_ASPECT;
   const width = INITIAL_HEIGHT * aspect * PLANE_ASPECT;
 
   return {
@@ -84,8 +89,13 @@ export function createPortrait(
 }
 
 /** Caixa que envolve os retratos, em coordenadas de cena. */
-export function portraitsBounds(portraits: Portrait[], camera?: Viewport): Bounds | null {
-  return unionBounds(portraits.map((portrait) => boxBounds(portraitBox(portrait, camera))));
+export function portraitsBounds(
+  portraits: Portrait[],
+  camera?: Viewport,
+): Bounds | null {
+  return unionBounds(
+    portraits.map((portrait) => boxBounds(portraitBox(portrait, camera))),
+  );
 }
 
 /**
@@ -105,7 +115,10 @@ export function scalePortraitGroup(
   from: Bounds,
   to: Bounds,
   camera?: Viewport,
-): Array<{ id: string; patch: Pick<Portrait, "x" | "y" | "width" | "height"> }> {
+): Array<{
+  id: string;
+  patch: Pick<Portrait, "x" | "y" | "width" | "height">;
+}> {
   const width = from.maxX - from.minX;
   const height = from.maxY - from.minY;
   // Grupo sem área não define fator; devolver vazio é melhor que espalhar NaN.
@@ -155,11 +168,19 @@ export function scalePortraitGroup(
 export function retratosDaCena(
   guardados: Portrait[],
   itens: ReadonlyArray<{ personagemId?: string }>,
-  personagens: ReadonlyArray<{ id: string; retrato?: string; retratoUrl?: string }>,
+  personagens: ReadonlyArray<{
+    id: string;
+    retrato?: string;
+    retratoUrl?: string;
+  }>,
   fontes: FonteRetrato[] = [],
 ): Portrait[] {
-  const porId = new Map(guardados.map((retrato) => [retrato.personagemId, retrato]));
-  const fichas = new Map(personagens.map((personagem) => [personagem.id, personagem]));
+  const porId = new Map(
+    guardados.map((retrato) => [retrato.personagemId, retrato]),
+  );
+  const fichas = new Map(
+    personagens.map((personagem) => [personagem.id, personagem]),
+  );
 
   const vistos = new Set<string>();
   const saida: Portrait[] = [];
@@ -251,7 +272,10 @@ export function limitarFolga(folga: unknown): number {
  * Tabela e não `if`: as seis são as combinações de dois eixos, e escrever a
  * tabela deixa óbvio que nenhuma combinação foi esquecida.
  */
-const AREAS: Record<AncoraRetrato, { horizontal: "esquerda" | "centro" | "direita"; vertical: "cima" | "baixo" }> = {
+const AREAS: Record<
+  AncoraRetrato,
+  { horizontal: "esquerda" | "centro" | "direita"; vertical: "cima" | "baixo" }
+> = {
   "cima-esquerda": { horizontal: "esquerda", vertical: "cima" },
   "cima-centro": { horizontal: "centro", vertical: "cima" },
   "cima-direita": { horizontal: "direita", vertical: "cima" },
@@ -290,7 +314,8 @@ export function filaDeRetratos(
   const larguras = fila.reduce((soma, retrato) => soma + retrato.width, 0);
   const vaos = fila.length - 1;
 
-  const folga = vaos > 0 ? folgaAplicada(escolhida, disponivel - larguras, vaos, fila) : 0;
+  const folga =
+    vaos > 0 ? folgaAplicada(escolhida, disponivel - larguras, vaos, fila) : 0;
   const total = larguras + folga * vaos;
 
   /**
@@ -301,7 +326,9 @@ export function filaDeRetratos(
    * o que produz a sobreposição mínima que faz o último terminar na margem.
    */
   const passoFixo =
-    total > disponivel ? (disponivel - (fila[fila.length - 1]?.width ?? 0)) / Math.max(1, vaos) : null;
+    total > disponivel
+      ? (disponivel - (fila[fila.length - 1]?.width ?? 0)) / Math.max(1, vaos)
+      : null;
 
   const inicio =
     area.horizontal === "esquerda"
@@ -316,10 +343,16 @@ export function filaDeRetratos(
     const posicao = {
       id: retrato.id,
       x,
-      y: area.vertical === "cima" ? MARGEM_FILA : 1 - MARGEM_FILA - retrato.height,
+      y:
+        area.vertical === "cima"
+          ? MARGEM_FILA
+          : 1 - MARGEM_FILA - retrato.height,
     };
 
-    x = passoFixo === null ? x + retrato.width + folga : inicio + passoFixo * (indice + 1);
+    x =
+      passoFixo === null
+        ? x + retrato.width + folga
+        : inicio + passoFixo * (indice + 1);
 
     return posicao;
   });
@@ -356,7 +389,10 @@ function folgaAplicada(
 ): number {
   if (escolhida >= 0) return Math.min(escolhida, Math.max(0, sobra / vaos));
 
-  const menor = fila.reduce((menor, retrato) => Math.min(menor, retrato.width), Infinity);
+  const menor = fila.reduce(
+    (menor, retrato) => Math.min(menor, retrato.width),
+    Infinity,
+  );
 
   return Math.max(escolhida, -menor / 2);
 }

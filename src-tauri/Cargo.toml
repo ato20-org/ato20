@@ -62,7 +62,7 @@ imagesize = "0.13"
 # O comentario acima -- "um `image` completo seria um decodificador inteiro no
 # binario para responder duas perguntas" -- continua valendo para as medidas, e
 # e por isso que o `imagesize` fica. O que mudou foi a pergunta: as listas do
-# Operador e da Plateia desenham um quadrado de 40px apontando para o arquivo
+# Mestre e do Jogador desenham um quadrado de 40px apontando para o arquivo
 # ORIGINAL, e um acervo de duzentos mapas obrigava a webview a buscar e
 # decodificar duzentos arquivos inteiros para isso. Medido no
 # `scripts/perf/medir.mjs`, cenario `biblioteca`: 200 arquivos e 1,9 GB de
@@ -117,8 +117,8 @@ zip = { version = "4", default-features = false, features = ["deflate"] }
 # Guarda-se o HASH do token, nunca ele. Um `.ato20/estado.db` que vaza -- num
 # zip, num backup, num Dropbox -- nao pode entregar as credenciais da mesa.
 sha2 = "0.10"
-# Abrir o Assistir no navegador do SISTEMA, e nao dentro da webview: a TV e uma
-# tela de espectador, e servi-la na mesma janela do Operador tiraria o mestre da
+# Abrir o Espectador no navegador do SISTEMA, e nao dentro da webview: a TV e uma
+# tela de espectador, e servi-la na mesma janela do Mestre tiraria o mestre da
 # mesa dele.
 tauri-plugin-opener = "2.5.5"
 

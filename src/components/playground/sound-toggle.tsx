@@ -10,8 +10,8 @@ import { cn } from "@/lib/utils";
  *
  * Existe nas visões de espectador porque o som precisa de um gesto: o browser
  * recusa tocar antes de qualquer clique na página. O botão também deixa
- * explícito qual aparelho está emitindo, o que importa quando Operador e
- * Assistir rodam na mesma máquina e os dois juntos soariam como eco.
+ * explícito qual aparelho está emitindo, o que importa quando Mestre e
+ * Espectador rodam na mesma máquina e os dois juntos soariam como eco.
  */
 export function SoundToggle({ className }: { className?: string }) {
   const enabled = useAudioStore((state) => state.enabled);

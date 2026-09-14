@@ -29,7 +29,7 @@ export type Personagem = {
   /**
    * O retrato, por id do ACERVO.
    *
-   * Asset, e não anexo, e a razão é a TV: o Assistir não tem token nem IPC, e
+   * Asset, e não anexo, e a razão é a TV: o Espectador não tem token nem IPC, e
    * alcança imagem só por `/asset/{id}`. Um retrato guardado como anexo do
    * personagem exigiria abrir uma rota pública para arquivo de nome
    * adivinhável — justamente o problema que manter os anexos atrás do token

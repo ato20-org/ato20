@@ -9,7 +9,7 @@ export type CampaignInfo = {
   /** Caminho da pasta no disco. É a identidade: não há id além dele. */
   path: string;
   nome: string;
-  /** O código que a Plateia e o Assistir digitam. Viaja no zip. */
+  /** O código que o Jogador e o Espectador digitam. Viaja no zip. */
   codigo: string;
   /** Versão do formato do vault. */
   versao: number;
@@ -60,7 +60,10 @@ export function openCampaign(path: string): Promise<CampaignInfo> {
   return call<CampaignInfo>("campaign_open", { path });
 }
 
-export function createCampaign(parent: string, nome: string): Promise<CampaignInfo> {
+export function createCampaign(
+  parent: string,
+  nome: string,
+): Promise<CampaignInfo> {
   return call<CampaignInfo>("campaign_create", { parent, nome });
 }
 

@@ -63,7 +63,7 @@ export function setCharacterCampo(
  * lê-la, e não precisa alcançar a TV.
  *
  * Retrato e miniatura viram ASSET do acervo, porque precisam alcançar a TV — e o
- * Assistir não tem token nem IPC, só `/asset/{id}`. O efeito colateral visível é
+ * Espectador não tem token nem IPC, só `/asset/{id}`. O efeito colateral visível é
  * que as duas imagens passam a aparecer na biblioteca de imagens, o que é
  * honesto: são imagens da campanha.
  *
@@ -78,7 +78,8 @@ export async function preencherCampoComArquivo(
     if (!resultado) return null;
 
     const primeiro = resultado.aceitos[0];
-    if (!primeiro) throw new Error(resultado.recusados[0] ?? "Nada foi anexado.");
+    if (!primeiro)
+      throw new Error(resultado.recusados[0] ?? "Nada foi anexado.");
 
     await setCharacterCampo(id, campo, primeiro.arquivo);
 
@@ -93,7 +94,8 @@ export async function preencherCampoComArquivo(
   if (!resultado) return null;
 
   const primeiro = resultado.aceitos[0];
-  if (!primeiro) throw new Error(resultado.recusados[0] ?? "Nada foi importado.");
+  if (!primeiro)
+    throw new Error(resultado.recusados[0] ?? "Nada foi importado.");
 
   await setCharacterCampo(id, campo, primeiro.id);
 
@@ -120,8 +122,13 @@ export type AnexoImport = { aceitos: AnexoPersonagem[]; recusados: string[] };
  *
  * `null` = o mestre fechou o diálogo, que não é erro.
  */
-export async function attachToCharacter(id: string): Promise<AnexoImport | null> {
-  const escolhidos = await open({ multiple: true, title: "Escolha os arquivos do personagem" });
+export async function attachToCharacter(
+  id: string,
+): Promise<AnexoImport | null> {
+  const escolhidos = await open({
+    multiple: true,
+    title: "Escolha os arquivos do personagem",
+  });
   if (!escolhidos) return null;
 
   const paths = Array.isArray(escolhidos) ? escolhidos : [escolhidos];

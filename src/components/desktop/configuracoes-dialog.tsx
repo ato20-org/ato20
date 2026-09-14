@@ -26,7 +26,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { atalhosPorGrupo } from "@/lib/operator/atalhos";
+import { atalhosPorGrupo } from "@/lib/mestre/atalhos";
 import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import {
@@ -391,7 +391,9 @@ function PainelPlugins() {
  * funcionalidades para saber que não tem nenhuma.
  */
 function Grupos({ extensoes }: { extensoes: Extensao[] }) {
-  const temas = extensoes.filter((extensao) => tipoDaExtensao(extensao) === "tema");
+  const temas = extensoes.filter(
+    (extensao) => tipoDaExtensao(extensao) === "tema",
+  );
   const funcionalidades = extensoes.filter(
     (extensao) => tipoDaExtensao(extensao) === "funcionalidade",
   );
@@ -468,7 +470,8 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
   // A etiqueta só para a HÍBRIDA: uma extensão de código que também traz CSS.
   // Nos outros casos o cabeçalho do grupo já disse o que ela é, e repetir na
   // ponta de cada linha seria ruído em toda lista para cobrir um caso raro.
-  const tambemTema = extensao.tema && tipoDaExtensao(extensao) === "funcionalidade";
+  const tambemTema =
+    extensao.tema && tipoDaExtensao(extensao) === "funcionalidade";
 
   return (
     <li className="flex items-center gap-3 border-b py-2 last:border-b-0">

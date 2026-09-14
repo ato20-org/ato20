@@ -30,7 +30,7 @@ pub const VAULT_VERSION: u32 = 1;
 pub struct Config {
     pub versao: u32,
     pub nome: String,
-    /// O codigo que a Plateia e o Assistir digitam para achar esta mesa.
+    /// O codigo que o Jogador e o Espectador digitam para achar esta mesa.
     ///
     /// Nasce com a campanha e viaja no zip: e o mesmo codigo depois de
     /// importar noutra maquina, senao todo jogador teria de reconfigurar o
@@ -64,7 +64,7 @@ impl Vault {
 
     /// A identidade de uma campanha que NAO esta aberta.
     ///
-    /// Existe para a porta do Operador, que lista as recentes: ela quer o nome
+    /// Existe para a porta do Mestre, que lista as recentes: ela quer o nome
     /// e a data de nascimento de cada pasta sem montar um `Vault` para cada uma
     /// -- abrir doze campanhas para desenhar doze linhas.
     ///

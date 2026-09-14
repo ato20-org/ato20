@@ -20,7 +20,7 @@ const VARREDURA_MS = 1_000;
  * esquece. Rolagem é evento: reentregar a quem conectou depois poria na mesa um
  * dado de dez minutos atrás. Ver `GET /sala/rolagens`.
  *
- * Só o Operador chama. A rota é restrita a loopback, e o que a TV e os celulares
+ * Só o Mestre chama. A rota é restrita a loopback, e o que a TV e os celulares
  * veem não sai daqui — sai do `LiveState`, depois de esta janela resolver de
  * qual personagem é cada dado. O vínculo jogador→personagem mora no cofre, e
  * esta é a única tela que o alcança.

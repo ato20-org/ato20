@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CODE_LENGTH, useViewerStore } from "@/lib/store/use-viewer-store";
+import { CODE_LENGTH, useMesaStore } from "@/lib/store/use-mesa-store";
 
 /**
  * A porta das telas de espectador.
@@ -20,9 +20,9 @@ import { CODE_LENGTH, useViewerStore } from "@/lib/store/use-viewer-store";
  * SSE. Não é detalhe: o `EventSource` não entrega o status da resposta ao
  * JavaScript, então um código errado chegaria como `onerror` indistinguível de
  * queda de rede — e ele reconectaria em loop contra um código que nunca vai
- * passar. Ver `useViewerStore`.
+ * passar. Ver `useMesaStore`.
  *
- * Compartilhada por Assistir e Plateia porque a pergunta é a mesma. O que muda
+ * Compartilhada por Espectador e Jogador porque a pergunta é a mesma. O que muda
  * é o que vem depois, e isso é o `children`.
  */
 export function RoomDoor({
@@ -35,12 +35,12 @@ export function RoomDoor({
   /** Recebe o código já conferido. */
   children: (codigo: string, nomeDaMesa: string) => ReactNode;
 }) {
-  const status = useViewerStore((state) => state.status);
-  const codigoAceito = useViewerStore((state) => state.codigo);
-  const nome = useViewerStore((state) => state.nome);
-  const erro = useViewerStore((state) => state.erro);
-  const boot = useViewerStore((state) => state.boot);
-  const conferir = useViewerStore((state) => state.conferir);
+  const status = useMesaStore((state) => state.status);
+  const codigoAceito = useMesaStore((state) => state.codigo);
+  const nome = useMesaStore((state) => state.nome);
+  const erro = useMesaStore((state) => state.erro);
+  const boot = useMesaStore((state) => state.boot);
+  const conferir = useMesaStore((state) => state.conferir);
 
   const [digitado, setDigitado] = useState("");
 
@@ -98,9 +98,13 @@ export function RoomDoor({
         <Button
           type="submit"
           className="w-full"
-          disabled={digitado.trim().length !== CODE_LENGTH || status === "conferindo"}
+          disabled={
+            digitado.trim().length !== CODE_LENGTH || status === "conferindo"
+          }
         >
-          {status === "conferindo" ? <Loader2 className="animate-spin" /> : null}
+          {status === "conferindo" ? (
+            <Loader2 className="animate-spin" />
+          ) : null}
           Entrar
         </Button>
       </form>

@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
-import { DadoLayer } from "@/components/operator/dado-layer";
-import { LayerList } from "@/components/operator/layer-list";
+import { DadoLayer } from "@/components/mestre/dado-layer";
+import { LayerList } from "@/components/mestre/layer-list";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
@@ -12,7 +18,12 @@ import { MINIATURA } from "@/lib/miniatura";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
-import { SCENE_HEIGHT, SCENE_WIDTH, type CanvasItem, type Scene } from "@/types/scene";
+import {
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  type CanvasItem,
+  type Scene,
+} from "@/types/scene";
 
 /**
  * O que `public/perf.html` deixou de fora.
@@ -82,7 +93,7 @@ import { SCENE_HEIGHT, SCENE_WIDTH, type CanvasItem, type Scene } from "@/types/
  *               ampliação no layout, com `zoom`, em vez de na composição -- e
  *               ficou: era o custo do gesto de zoom que ninguém tinha medido.
  *
- * `plateia`    O CELULAR do jogador: as mesmas amostras de 10 Hz, mas com um
+ * `jogador`    O CELULAR do jogador: as mesmas amostras de 10 Hz, mas com um
  *               mapa de 3537x3750 no fundo e pedindo a variante `tela`.
  *               `--sem-variante` mede o que ele fazia antes -- baixar o
  *               arquivo inteiro. A coluna que importa aqui é `rede`.
@@ -117,7 +128,7 @@ type Cenario =
   | "lista-mesmo-mapa"
   | "camadas"
   | "camera"
-  | "plateia";
+  | "jogador";
 
 function montarCena(n: number): Scene {
   const agora = Date.now();
@@ -194,7 +205,12 @@ function cenaDaLista(indice: number, mesmoMapa: boolean): Scene {
  * Órbita curta, uma fase por item. A fase importa: itens em sincronia deixariam
  * o compositor agrupar o que numa cena real nunca está agrupado.
  */
-function moverItem(item: CanvasItem, indice: number, total: number, t: number): CanvasItem {
+function moverItem(
+  item: CanvasItem,
+  indice: number,
+  total: number,
+  t: number,
+): CanvasItem {
   const a = t / 1000 + (indice / total) * Math.PI * 2;
 
   return {
@@ -223,7 +239,9 @@ type Resultado = {
 function percentil(ordenados: number[], p: number): number {
   if (ordenados.length === 0) return 0;
 
-  return ordenados[Math.min(ordenados.length - 1, Math.floor((p / 100) * ordenados.length))];
+  return ordenados[
+    Math.min(ordenados.length - 1, Math.floor((p / 100) * ordenados.length))
+  ];
 }
 
 /**
@@ -234,7 +252,12 @@ function percentil(ordenados: number[], p: number): number {
  * para saber quanto ele custou. Devolve `pronto` para a página parar de mexer na
  * cena quando a janela fecha.
  */
-function useMedida(cenario: Cenario, n: number, segundos: number, rotulo: string) {
+function useMedida(
+  cenario: Cenario,
+  n: number,
+  segundos: number,
+  rotulo: string,
+) {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [decorrido, setDecorrido] = useState(0);
 
@@ -261,19 +284,26 @@ function useMedida(cenario: Cenario, n: number, segundos: number, rotulo: string
       // da janela não são o regime que a mesa vive. Com 500 ms, o spike do
       // motor mediu 40 itens PIOR que 100 -- impossível, e o sinal de que o que
       // estava sendo medido era a abertura da janela.
-      const quentes = instantes.filter((instante) => instante - comecou > AQUECIMENTO_MS);
+      const quentes = instantes.filter(
+        (instante) => instante - comecou > AQUECIMENTO_MS,
+      );
       const deltas: number[] = [];
-      for (let i = 1; i < quentes.length; i++) deltas.push(quentes[i] - quentes[i - 1]);
+      for (let i = 1; i < quentes.length; i++)
+        deltas.push(quentes[i] - quentes[i - 1]);
       deltas.sort((a, b) => a - b);
 
-      const total = quentes.length > 1 ? quentes[quentes.length - 1] - quentes[0] : 0;
+      const total =
+        quentes.length > 1 ? quentes[quentes.length - 1] - quentes[0] : 0;
       const perdidos = deltas.filter((d) => d > QUADRO_PERDIDO_MS).length;
 
       setResultado({
         rotulo,
         cenario,
         n,
-        fps: total > 0 ? Number((((quentes.length - 1) / total) * 1000).toFixed(1)) : 0,
+        fps:
+          total > 0
+            ? Number((((quentes.length - 1) / total) * 1000).toFixed(1))
+            : 0,
         p50: Number(percentil(deltas, 50).toFixed(2)),
         p95: Number(percentil(deltas, 95).toFixed(2)),
         pior: Number((deltas.at(-1) ?? 0).toFixed(2)),
@@ -323,7 +353,10 @@ function PalcoEspectador({
   mapaGrande?: boolean;
 }) {
   const base = useMemo(
-    () => ({ ...montarCena(n), backgroundAssetId: mapaGrande ? "mapaG-plateia" : "perf-fundo" }),
+    () => ({
+      ...montarCena(n),
+      backgroundAssetId: mapaGrande ? "mapaG-jogador" : "perf-fundo",
+    }),
     [n, mapaGrande],
   );
   const [cena, setCena] = useState(base);
@@ -339,7 +372,8 @@ function PalcoEspectador({
         // nove estão parados no mapa. Medir todos se movendo é medir um gesto
         // que ninguém faz -- e é justamente o caso em que preservar
         // identidade não pode ajudar, porque nada permaneceu igual.
-        const proximo = i < movidos ? moverItem(item, i, base.items.length, t) : { ...item };
+        const proximo =
+          i < movidos ? moverItem(item, i, base.items.length, t) : { ...item };
         if (!identidade) return proximo;
 
         const antes = anterior.current.items[i];
@@ -358,7 +392,7 @@ function PalcoEspectador({
       const nova = { ...base, items };
       anterior.current = nova;
       setCena(nova);
-      // A cadência é a do Operador de verdade -- 10 Hz. Ver
+      // A cadência é a do Mestre de verdade -- 10 Hz. Ver
       // `SCENE_BROADCAST_INTERVAL_MS`.
     }, SCENE_BROADCAST_INTERVAL_MS);
 
@@ -373,14 +407,14 @@ function PalcoEspectador({
 }
 
 /**
- * Operador: um item por quadro, atravessando o store.
+ * Mestre: um item por quadro, atravessando o store.
  *
  * O caminho inteiro, e é o ponto desta página: `updateItem` refaz a cena, funde
  * o passo de histórico, notifica os assinantes e agenda a gravação. O
  * `saveBoard` do fim vai falhar -- não há aplicativo aqui --, e falhar rápido é
  * o certo: o que se quer medir é o React, não o disco.
  */
-function PalcoOperador({ n }: { n: number }) {
+function PalcoMestre({ n }: { n: number }) {
   const cena = useSceneStore(selectEditingScene);
 
   useEffect(() => {
@@ -413,7 +447,11 @@ function PalcoOperador({ n }: { n: number }) {
 
     return () => {
       cancelAnimationFrame(quadro);
-      useSceneStore.setState({ board: null, status: "idle", campaignPath: null });
+      useSceneStore.setState({
+        board: null,
+        status: "idle",
+        campaignPath: null,
+      });
     };
   }, [n]);
 
@@ -421,7 +459,7 @@ function PalcoOperador({ n }: { n: number }) {
 
   return (
     <SceneStage bounds>
-      <SceneLayer scene={cena} variant="operator" />
+      <SceneLayer scene={cena} variant="mestre" />
     </SceneStage>
   );
 }
@@ -471,7 +509,7 @@ function PalcoCamera({ n }: { n: number }) {
 
   return (
     <SceneStage viewport={viewport} bounds>
-      <SceneLayer scene={cena} variant="operator" />
+      <SceneLayer scene={cena} variant="mestre" />
     </SceneStage>
   );
 }
@@ -512,7 +550,12 @@ function PalcoDados({
       // Dentro do RECORTE quando o palco está ampliado: com o zoom do mestre a
       // vista é um pedaço pequeno do plano, e dado jogado no canto dele cairia
       // fora da tela -- a medida cronometraria uma cena vazia.
-      const area = recorte ?? { x: 0, y: 0, width: SCENE_WIDTH, height: SCENE_HEIGHT };
+      const area = recorte ?? {
+        x: 0,
+        y: 0,
+        width: SCENE_WIDTH,
+        height: SCENE_HEIGHT,
+      };
       const folga = Math.min(200, area.width / 5);
 
       for (let i = 0; i < n; i++) {
@@ -541,7 +584,7 @@ function PalcoDados({
 
   return (
     <SceneStage viewport={recorte}>
-      <SceneLayer scene={cena} variant="operator" />
+      <SceneLayer scene={cena} variant="mestre" />
       <DadoLayer />
     </SceneStage>
   );
@@ -639,14 +682,16 @@ function PalcoComLista({ n, mesmoMapa }: { n: number; mesmoMapa: boolean }) {
           {cenas.map((cena) => (
             <li key={cena.id} className="flex items-center gap-2 p-1.5">
               <ScenePreview scene={cena} className="h-8 w-14 shrink-0" />
-              <span className="truncate text-xs text-neutral-400">{cena.name}</span>
+              <span className="truncate text-xs text-neutral-400">
+                {cena.name}
+              </span>
             </li>
           ))}
         </ul>
       </aside>
 
       {/* O mesmo gesto do cenário `arrasto`: um item por quadro, pelo store. */}
-      <PalcoOperador n={40} />
+      <PalcoMestre n={40} />
     </div>
   );
 }
@@ -654,7 +699,7 @@ function PalcoComLista({ n, mesmoMapa }: { n: number; mesmoMapa: boolean }) {
 /**
  * A janela de camadas ao lado do palco, com o mesmo gesto de arrasto.
  *
- * A cena sai do store -- a MESMA que `PalcoOperador` monta e mexe --, e não de
+ * A cena sai do store -- a MESMA que `PalcoMestre` monta e mexe --, e não de
  * uma cópia montada aqui: o ponto do cenário é que arrastar um item notifica os
  * assinantes do zustand, e `LayerList` é um deles. Montar cena própria para o
  * painel mediria uma lista parada.
@@ -668,7 +713,7 @@ function PalcoComCamadas({ n }: { n: number }) {
         {cena ? <LayerList scene={cena} /> : null}
       </aside>
 
-      <PalcoOperador n={n} />
+      <PalcoMestre n={n} />
     </div>
   );
 }
@@ -712,9 +757,10 @@ function Medida({ params }: { params: URLSearchParams }) {
   const segundos = Number(params.get("segundos") ?? 10);
   const rotulo = params.get("rotulo") ?? "chrome";
   /** Quantos itens mudam por amostra. `todos` para o pior caso. */
-  const movidos = params.get("movidos") === "todos" ? n : Number(params.get("movidos") ?? 1);
+  const movidos =
+    params.get("movidos") === "todos" ? n : Number(params.get("movidos") ?? 1);
   /** `biblioteca`: com ou sem os atributos de `MINIATURA`, e percorrendo ou não. */
-  /** `plateia`: pedir a variante `tela` ou o arquivo inteiro. */
+  /** `jogador`: pedir a variante `tela` ou o arquivo inteiro. */
   const comVariante = params.get("variante") !== "0";
   /** `dados`: ampliação do palco, que é o que estoura o backing do canvas. */
   const zoomDoPalco = Number(params.get("zoom") ?? 1);
@@ -748,7 +794,10 @@ function Medida({ params }: { params: URLSearchParams }) {
       // primeira versão deste teste dizer "não relançou" sobre um relance que
       // tinha acontecido.
       return {
-        dados: dados.map((dado) => ({ id: dado.id, lancadoEm: dado.lancadoEm })),
+        dados: dados.map((dado) => ({
+          id: dado.id,
+          lancadoEm: dado.lancadoEm,
+        })),
         naMao,
         arremesso,
       };
@@ -758,7 +807,7 @@ function Medida({ params }: { params: URLSearchParams }) {
   return (
     <main className="flex h-dvh flex-col bg-black">
       {cenario === "arrasto" ? (
-        <PalcoOperador n={n} />
+        <PalcoMestre n={n} />
       ) : cenario === "camera" ? (
         <PalcoCamera n={n} />
       ) : cenario === "dados" ? (
@@ -774,8 +823,8 @@ function Medida({ params }: { params: URLSearchParams }) {
           n={n}
           identidade={cenario === "amostras-id"}
           movidos={movidos}
-          variante={cenario === "plateia" && comVariante ? "tela" : undefined}
-          mapaGrande={cenario === "plateia"}
+          variante={cenario === "jogador" && comVariante ? "tela" : undefined}
+          mapaGrande={cenario === "jogador"}
         />
       )}
 

@@ -21,7 +21,10 @@ import type { FacesDado, RolagemDaMesa } from "@/types/dado";
  * Sem retentativa: quem chama avisa e o jogador rola de novo. Repetir sozinho
  * uma chamada que pode ter chegado jogaria dois dados para um gesto.
  */
-export async function rolarDado(codigo: string, faces: FacesDado): Promise<RolagemDaMesa> {
+export async function rolarDado(
+  codigo: string,
+  faces: FacesDado,
+): Promise<RolagemDaMesa> {
   const response = await fetch("/eu/rolagens", {
     method: "POST",
     headers: { "content-type": "application/json", ...authorized(codigo) },

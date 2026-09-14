@@ -40,7 +40,8 @@ export type PersonagemDaMesa = {
 export async function listNotas(codigo: string): Promise<Nota[]> {
   const response = await fetch("/eu/notas", { headers: authorized(codigo) });
 
-  if (!response.ok) throw await fail(response, "Não foi possível abrir o caderno.");
+  if (!response.ok)
+    throw await fail(response, "Não foi possível abrir o caderno.");
 
   return (await response.json()) as Nota[];
 }
@@ -52,14 +53,18 @@ export async function listNotas(codigo: string): Promise<Nota[]> {
  * DEPOIS de ela existir. Pedir um título antes de deixar escrever é a pergunta
  * mais inútil do meio de uma sessão.
  */
-export async function criarNota(codigo: string, base: PatchNota = {}): Promise<Nota> {
+export async function criarNota(
+  codigo: string,
+  base: PatchNota = {},
+): Promise<Nota> {
   const response = await fetch("/eu/notas", {
     method: "POST",
     headers: { ...authorized(codigo), "content-type": "application/json" },
     body: JSON.stringify(base),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível abrir a nota.");
+  if (!response.ok)
+    throw await fail(response, "Não foi possível abrir a nota.");
 
   return (await response.json()) as Nota;
 }
@@ -84,7 +89,8 @@ export async function mudarNota(
     body: JSON.stringify(patch),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível gravar a nota.");
+  if (!response.ok)
+    throw await fail(response, "Não foi possível gravar a nota.");
 
   return (await response.json()) as Nota;
 }
@@ -95,12 +101,17 @@ export async function apagarNota(codigo: string, id: string): Promise<void> {
     headers: authorized(codigo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível apagar a nota.");
+  if (!response.ok)
+    throw await fail(response, "Não foi possível apagar a nota.");
 }
 
 /** Os personagens que o caderno pode mencionar. Ver `PersonagemDaMesa`. */
-export async function personagensDaMesa(codigo: string): Promise<PersonagemDaMesa[]> {
-  const response = await fetch("/eu/mesa/personagens", { headers: authorized(codigo) });
+export async function personagensDaMesa(
+  codigo: string,
+): Promise<PersonagemDaMesa[]> {
+  const response = await fetch("/eu/mesa/personagens", {
+    headers: authorized(codigo),
+  });
 
   if (!response.ok) throw await fail(response, "Não foi possível ler a mesa.");
 

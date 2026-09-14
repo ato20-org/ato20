@@ -3,7 +3,7 @@
 import { create } from "zustand";
 
 type SelectionStore = {
-  /** Ids de itens selecionados no Operador. Ordem não importa. */
+  /** Ids de itens selecionados no Mestre. Ordem não importa. */
   selectedIds: string[];
   /** Área escondida selecionada. Uma por vez — são poucas e não formam grupo. */
   selectedFogId: string | null;
@@ -26,8 +26,8 @@ type SelectionStore = {
 };
 
 /**
- * Seleção é estado de UI do Operador: não é persistida no board e não viaja
- * no canal. A Plateia e o Assistir nunca sabem o que o mestre tem selecionado.
+ * Seleção é estado de UI do Mestre: não é persistida no board e não viaja
+ * no canal. O Jogador e o Espectador nunca sabem o que o mestre tem selecionado.
  *
  * Item, área escondida e retrato são seleções mutuamente exclusivas: os três
  * usam o mesmo gizmo na tela, e permitir dois juntos mostraria dois conjuntos
@@ -63,7 +63,11 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
   },
 
   selectPortraits(portraitIds) {
-    set({ selectedIds: [], selectedFogId: null, selectedPortraitIds: portraitIds });
+    set({
+      selectedIds: [],
+      selectedFogId: null,
+      selectedPortraitIds: portraitIds,
+    });
   },
 
   togglePortrait(portraitId) {

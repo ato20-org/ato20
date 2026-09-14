@@ -58,7 +58,7 @@ export function moveItem(
  * Pede uma imagem e a prende ao item.
  *
  * Vira ASSET do acervo, e não anexo, porque a imagem do item do mestre precisa
- * alcançar a TV — e o Assistir não tem token nem IPC, só `/asset/{id}`. É a
+ * alcançar a TV — e o Espectador não tem token nem IPC, só `/asset/{id}`. É a
  * mesma assimetria do retrato e da miniatura, e pelo mesmo motivo.
  *
  * Com escopo `personagem`, para a biblioteca de imagens não listá-la entre as
@@ -73,12 +73,21 @@ export async function escolherImagemDoDisco(
   const escolhido = await open({
     multiple: false,
     title: "Escolha a imagem do item",
-    filters: [{ name: "Imagem", extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif"] }],
+    filters: [
+      {
+        name: "Imagem",
+        extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif"],
+      },
+    ],
   });
 
   if (!escolhido) return null;
 
-  return call<ItemInventario>("inventory_set_imagem", { id, itemId, path: escolhido });
+  return call<ItemInventario>("inventory_set_imagem", {
+    id,
+    itemId,
+    path: escolhido,
+  });
 }
 
 /**
@@ -101,7 +110,10 @@ export function promoverImagemDoItem(
   personagemId: string,
   itemId: string,
 ): Promise<AssetMeta> {
-  return call<AssetMeta>("inventory_promote_imagem", { id: personagemId, itemId });
+  return call<AssetMeta>("inventory_promote_imagem", {
+    id: personagemId,
+    itemId,
+  });
 }
 
 /**
@@ -112,7 +124,7 @@ export function promoverImagemDoItem(
  *
  * `asset` já é alcançável pela TV por `/asset/{id}`, e basta apontar.
  *
- * `anexo` está atrás do token de quem o mandou, e o Assistir não tem token. O
+ * `anexo` está atrás do token de quem o mandou, e o Espectador não tem token. O
  * daemon então o publica num endereço SORTEADO que morre quando sai do ar —
  * mesmo desenho da ficha. Copiar para o acervo seria o caminho fácil e deixaria
  * um duplicado por transmissão na biblioteca de imagens.
@@ -124,7 +136,8 @@ export async function transmitirItem(
   personagemId: string,
   item: ItemInventario,
 ): Promise<{ assetId?: string; sharedId?: string }> {
-  if (!item.imagem) throw new Error("Este item não tem imagem para transmitir.");
+  if (!item.imagem)
+    throw new Error("Este item não tem imagem para transmitir.");
 
   if (item.imagem.tipo === "asset") return { assetId: item.imagem.id };
 

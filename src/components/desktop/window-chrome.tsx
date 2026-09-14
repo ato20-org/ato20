@@ -49,7 +49,7 @@ function useIsDesktop(): boolean {
  * a ser responsabilidade daqui. E, junto, o que ninguém lembra até perder:
  * **redimensionar pelas bordas**, que a decoração do sistema dava de graça.
  *
- * Barra própria e fina, em vez de embutir os botões no cabeçalho do Operador.
+ * Barra própria e fina, em vez de embutir os botões no cabeçalho do Mestre.
  * O cabeçalho de lá tem `flex-wrap` para quebrar em duas linhas em janela
  * estreita, e um botão de fechar que muda de lugar conforme a largura é o tipo
  * de coisa que se clica por engano. Aqui ele não se move.
@@ -102,7 +102,7 @@ export function WindowChrome({
   return (
     <>
       {/* Não com a janela maximizada: não há o que redimensionar, e as faixas
-          roubariam 4px de clique nas beiradas dos painéis do Operador -- onde
+          roubariam 4px de clique nas beiradas dos painéis do Mestre -- onde
           moram barras de rolagem -- sem oferecer nada em troca. */}
       {maximizada ? null : <ResizeEdges />}
 

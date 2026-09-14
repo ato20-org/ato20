@@ -19,7 +19,7 @@ type CanvasItemViewProps = {
   variante?: Variante;
   /**
    * Interpola posição, tamanho e giro entre as amostras que chegam do
-   * Operador. Ver `.scene-smooth-item` em `globals.css`.
+   * Mestre. Ver `.scene-smooth-item` em `globals.css`.
    */
   smooth?: boolean;
   onPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
@@ -29,7 +29,7 @@ type CanvasItemViewProps = {
  * `memo` porque o board é imutável e `updateItems` preserva a identidade dos
  * itens que não mudaram: arrastar um token num mapa com quarenta re-renderizava
  * os quarenta a cada frame do gesto. Só vale com handler estável — ver o
- * envelope de handlers em `OperatorStage`.
+ * envelope de handlers em `MestreStage`.
  */
 export const CanvasItemView = memo(function CanvasItemView({
   item,
@@ -39,7 +39,7 @@ export const CanvasItemView = memo(function CanvasItemView({
 }: CanvasItemViewProps) {
   const url = useAssetUrl(item.assetId, variante);
   // Item travado continua clicável — é o único jeito de selecioná-lo para
-  // destravar. O que o travamento bloqueia é o arrasto, decidido no Operador.
+  // destravar. O que o travamento bloqueia é o arrasto, decidido no Mestre.
   const interactive = Boolean(onPointerDown);
 
   return (
@@ -56,7 +56,7 @@ export const CanvasItemView = memo(function CanvasItemView({
       )}
       // Posição em `transform`, não em `left/top`. As duas desenham igual, mas
       // `left/top` são propriedades de layout: mover um item obrigava o browser
-      // a refazer o layout do plano inteiro a cada frame — do gesto no Operador
+      // a refazer o layout do plano inteiro a cada frame — do gesto no Mestre
       // e da interpolação em quem assiste. `transform` fica no compositor.
       //
       // `rotate` depois do `translate`, e a origem segue o centro do próprio
@@ -74,7 +74,9 @@ export const CanvasItemView = memo(function CanvasItemView({
         // é o que permite desfazer o exagero sem caçar o item na lista.
         opacity: item.opacity,
       }}
-      onPointerDown={onPointerDown ? (event) => onPointerDown(event, item) : undefined}
+      onPointerDown={
+        onPointerDown ? (event) => onPointerDown(event, item) : undefined
+      }
     >
       {url ? (
         // next/image não serve aqui: a fonte é uma blob URL do IndexedDB, sem
@@ -91,7 +93,9 @@ export const CanvasItemView = memo(function CanvasItemView({
           // e o hit-test seguem intactos — virar um token não move nada.
           style={
             item.flipX || item.flipY
-              ? { transform: `scale(${item.flipX ? -1 : 1}, ${item.flipY ? -1 : 1})` }
+              ? {
+                  transform: `scale(${item.flipX ? -1 : 1}, ${item.flipY ? -1 : 1})`,
+                }
               : undefined
           }
         />

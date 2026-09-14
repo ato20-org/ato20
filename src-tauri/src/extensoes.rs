@@ -143,7 +143,7 @@ pub struct Comando {
     /// Como o atalho se escreve -- "Ctrl+Shift+F". Opcional.
     ///
     /// NAO pode roubar um atalho de fabrica, e nao precisa ser conferido aqui
-    /// para isso: a tabela do Operador e consultada em ordem, e os do plugin
+    /// para isso: a tabela do Mestre e consultada em ordem, e os do plugin
     /// entram DEPOIS. Quem casa primeiro executa, entao `Ctrl+Z` declarado por
     /// uma extensao nunca alcanca o desfazer.
     #[serde(default)]
@@ -165,7 +165,7 @@ pub struct Ferramenta {
 
 /// Uma camada que a extensao desenha sobre o mapa.
 ///
-/// Do MESTRE, e nao da mesa. Plugin so alcanca o Operador nesta etapa, entao o
+/// Do MESTRE, e nao da mesa. Plugin so alcanca o Mestre nesta etapa, entao o
 /// que ele desenha vive na bancada -- que e exatamente o que os alfinetes e os
 /// postits ja sao. O dado dela entra em `scene.extensoes` e sai do payload
 /// publicado pelo mesmo caminho que apaga aqueles dois, o que a faz nascer
@@ -390,7 +390,7 @@ fn validar_fonte(fonte: &FonteRetrato) -> AppResult<()> {
         )));
     }
 
-    // `https` e nao `http`: a pagina e embutida na janela do Operador e nas
+    // `https` e nao `http`: a pagina e embutida na janela do Mestre e nas
     // telas da mesa, e uma origem em texto claro na rede de casa e alcancavel
     // por quem estiver nela. Nao e o modelo de ameaca deste projeto, mas
     // recusar aqui custa uma linha.

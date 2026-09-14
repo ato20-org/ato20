@@ -114,7 +114,9 @@ export function useQuedaDasRolagens(rolagens: RolagemDaMesa[]): {
   /** O instante do quadro. Congela quando a última assenta. */
   agora: number;
 } {
-  const chegada = new Map(rolagens.map((rolagem) => [rolagem.id, chegadaDe(rolagem.id)]));
+  const chegada = new Map(
+    rolagens.map((rolagem) => [rolagem.id, chegadaDe(rolagem.id)]),
+  );
 
   // A mais NOVA decide quando tudo terminou: nenhuma outra pode assentar depois
   // dela. Um número só, e não o mapa, porque é a dependência do relógio -- com o
@@ -168,7 +170,10 @@ function useRelogioDaQueda(ultima: number): number {
  * mais, e uma propriedade que continuasse subindo redesenharia o sólido inteiro
  * a cada quadro enquanto QUALQUER outro dado ainda cai.
  */
-export function instanteDaQueda(desde: number | undefined, agora: number): number {
+export function instanteDaQueda(
+  desde: number | undefined,
+  agora: number,
+): number {
   // Sem carimbo não há queda: a rolagem não passou por `chegadaDe`, e o certo é
   // mostrar a face em vez de inventar um arremesso.
   if (desde === undefined) return DURACAO_DA_CHEGADA;

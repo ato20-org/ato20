@@ -12,19 +12,24 @@ const FOG_Z = 5_000;
 type FogLayerProps = {
   fog: FogRegion[];
   /**
-   * `operator` deixa o mestre ver através da área; `viewer` é preto sólido.
-   * A máscara é visual: a Plateia recebe a imagem inteira e o bloco cobre por
+   * `mestre` deixa o mestre ver através da área; `mesa` é preto sólido.
+   * A máscara é visual: o Jogador recebe a imagem inteira e o bloco cobre por
    * cima. Serve para a mesa, não contra um jogador que abra o devtools.
    */
-  variant: "operator" | "viewer";
+  variant: "mestre" | "mesa";
   /** Interpola o desaparecer da área e o ajuste de caixa. */
   smooth?: boolean;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
 };
 
-export function FogLayer({ fog, variant, smooth = false, onFogPointerDown }: FogLayerProps) {
+export function FogLayer({
+  fog,
+  variant,
+  smooth = false,
+  onFogPointerDown,
+}: FogLayerProps) {
   const { scale } = useSceneScale();
-  const isOperator = variant === "operator";
+  const isOperator = variant === "mestre";
 
   return (
     <>
@@ -63,12 +68,20 @@ export function FogLayer({ fog, variant, smooth = false, onFogPointerDown }: Fog
               borderWidth: isOperator ? 1.5 / scale : 0,
               cursor: onFogPointerDown ? "move" : undefined,
             }}
-            onPointerDown={onFogPointerDown ? (event) => onFogPointerDown(event, region) : undefined}
+            onPointerDown={
+              onFogPointerDown
+                ? (event) => onFogPointerDown(event, region)
+                : undefined
+            }
           >
             {isOperator ? (
               <span
                 className="absolute font-medium text-white/60"
-                style={{ left: 4 / scale, top: 2 / scale, fontSize: 11 / scale }}
+                style={{
+                  left: 4 / scale,
+                  top: 2 / scale,
+                  fontSize: 11 / scale,
+                }}
               >
                 {index + 1}
               </span>

@@ -66,7 +66,7 @@ pub fn run() {
                 .header(tauri::http::header::CONTENT_TYPE, tipo)
                 // Sem isto, o CSS de um tema carrega e o MODULO de um plugin
                 // nao. Folha de estilo nao e pedida em modo CORS; `import()` e
-                // -- e a janela do Operador vive noutra origem, que em
+                // -- e a janela do Mestre vive noutra origem, que em
                 // desenvolvimento e o `localhost:3000` do Next e em release e o
                 // protocolo do Tauri. Sem o cabecalho, o modulo e recusado
                 // antes de o codigo dele existir, e o erro nao diz por que.
@@ -121,7 +121,7 @@ pub fn run() {
             // celulares vao ter anotado.
             let web_root = find_web_root(app.handle());
             if web_root.is_none() {
-                log::warn!("bundle das telas nao encontrado; Assistir e Plateia nao serao servidos");
+                log::warn!("bundle das telas nao encontrado; Espectador e Jogador nao serao servidos");
             }
 
             let started = serve::spawn(Arc::clone(&vault), web_root, estante.clone())?;
@@ -306,7 +306,7 @@ fn decodificar(segmento: &str) -> Option<String> {
 ///
 /// Em desenvolvimento o `cargo run` roda com `src-tauri/` como diretorio
 /// corrente, e o `out/` esta um nivel acima. `None` e estado valido: quem nunca
-/// rodou `pnpm build` tem o Operador funcionando e as telas de espectador
+/// rodou `pnpm build` tem o Mestre funcionando e as telas de espectador
 /// dizendo o que falta, em vez de uma tela branca.
 ///
 /// A ORDEM depende do perfil, e isso custou um bug. O `resource_dir()/out` e um

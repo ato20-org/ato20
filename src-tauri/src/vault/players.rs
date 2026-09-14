@@ -490,7 +490,7 @@ pub fn players_of(vault: &Vault, personagem_id: &str) -> AppResult<Vec<String>> 
 /// Apaga do banco tudo que apontava para um personagem que deixou de existir.
 ///
 /// Chamado pelo comando que remove o personagem, depois de o vault ter
-/// removido a pasta. Sem isto, o vinculo sobreviveria ao personagem e a Plateia
+/// removido a pasta. Sem isto, o vinculo sobreviveria ao personagem e o Jogador
 /// pediria um id que nao esta mais no indice.
 pub fn forget_character(vault: &Vault, personagem_id: &str) -> AppResult<()> {
     let conn = open(vault)?;
@@ -509,7 +509,7 @@ pub fn forget_character(vault: &Vault, personagem_id: &str) -> AppResult<()> {
 
 /// O jogador pode ver este personagem.
 ///
-/// A pergunta que toda rota da Plateia faz antes de entregar arquivo. Um
+/// A pergunta que toda rota do Jogador faz antes de entregar arquivo. Um
 /// jogador com token valido continua sendo um estranho para os personagens que
 /// nao sao dele.
 pub fn is_linked(vault: &Vault, jogador_id: &str, personagem_id: &str) -> AppResult<bool> {
@@ -887,7 +887,7 @@ pub fn restore_notes(vault: &Vault, jogador_id: &str, notas: &[Nota]) -> AppResu
 /// Menor que o do acervo do mestre (512 MB), e a diferenca e proposital: aqui a
 /// entrada e NAO CONFIAVEL -- vem de um celular na rede, para dentro da pasta da
 /// campanha de outra pessoa. Ficha, retrato e print cabem folgados; o que nao
-/// cabe e alguem encher o disco do mestre pela porta da Plateia.
+/// cabe e alguem encher o disco do mestre pela porta do Jogador.
 pub const MAX_ATTACHMENT_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Quantos anexos um jogador pode ter.

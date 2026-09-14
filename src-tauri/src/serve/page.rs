@@ -60,8 +60,8 @@ impl IntoResponse for ErrorPage {
     fn into_response(self) -> Response {
         let telas = if self.com_telas {
             r#"<nav>
-              <a href="/assistir">Assistir <small>a TV da mesa</small></a>
-              <a href="/plateia">Plateia <small>o teu celular</small></a>
+              <a href="/espectador">Espectador <small>a TV da mesa</small></a>
+              <a href="/jogador">Jogador <small>o teu celular</small></a>
             </nav>"#
         } else {
             ""

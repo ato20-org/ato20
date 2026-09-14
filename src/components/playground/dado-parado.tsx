@@ -1,6 +1,6 @@
 "use client";
 
-import { DadoFacetas } from "@/components/operator/dado-facetas";
+import { DadoFacetas } from "@/components/mestre/dado-facetas";
 import { desenharDado, orientacaoParaValor } from "@/lib/geometry/dado";
 import { tipoDado, type FacesDado } from "@/types/dado";
 
@@ -18,7 +18,7 @@ import { tipoDado, type FacesDado } from "@/types/dado";
  * ninguém fez naquela tela.
  *
  * Vive em `playground` porque as três telas o desenham. A camada do saquinho do
- * mestre continua em `components/operator`, e continua certo que ela esteja lá:
+ * mestre continua em `components/mestre`, e continua certo que ela esteja lá:
  * aquilo não é publicado. Ver `useDadosStore` e `useRolagensStore`.
  */
 export function DadoParado({

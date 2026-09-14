@@ -21,7 +21,7 @@ export const POSTIT_Z = 8_500;
  * O postit que está aberto para digitar.
  *
  * Num store e não em estado da camada porque quem manda abrir é de fora: colar
- * um postit acontece no `OperatorStage`, e o gesto seguinte é sempre escrever —
+ * um postit acontece no `MestreStage`, e o gesto seguinte é sempre escrever —
  * um papel em branco colado no mapa sem o cursor dentro dele é um passo a mais
  * para nada. Mesma razão de `abrirNota` depois de `addPin`.
  *

@@ -167,7 +167,7 @@ pub fn campaign_create(
 
 /// Reabre a campanha da sessao anterior.
 ///
-/// Chamado na montagem do Operador em vez de no `setup` do Rust: abrir uma
+/// Chamado na montagem do Mestre em vez de no `setup` do Rust: abrir uma
 /// campanha e um efeito visivel, e falhar antes de a janela existir nao teria
 /// onde ser mostrado. `None` cobre tres casos que a tela trata igual --
 /// primeira execucao, pasta movida, e pasta num volume desconectado.
@@ -207,7 +207,7 @@ pub fn board_save(state: State<'_, AppState>, board: Board) -> AppResult<()> {
 
 /// Grava so as cenas que mudaram.
 ///
-/// O caminho normal do Operador. `board_save` continua para quem nao tem base
+/// O caminho normal do Mestre. `board_save` continua para quem nao tem base
 /// de comparacao -- a primeira gravacao depois de abrir a campanha -- e para o
 /// import do zip. Ver `BoardPatch`.
 #[tauri::command]
@@ -548,7 +548,7 @@ pub fn character_rename(state: State<'_, AppState>, id: String, nome: String) ->
 /// Dois donos numa operacao: o vault tira o indice e os anexos, o banco tira
 /// vinculo e notas. Nessa ordem, porque o vault e a verdade sobre o que existe
 /// -- se o processo morrer no meio, sobra vinculo apontando para nada, que a
-/// Plateia ignora, e nao arquivo orfao que ninguem mais lista.
+/// Jogador ignora, e nao arquivo orfao que ninguem mais lista.
 #[tauri::command]
 pub fn character_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {
     state.with_vault(|vault| {

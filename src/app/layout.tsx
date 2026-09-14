@@ -16,7 +16,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "ATO20",
-  description: "Mesa virtual para mestrar RPG: cenas, imagens, áreas escondidas e trilha.",
+  description:
+    "Mesa virtual para mestrar RPG: cenas, imagens, áreas escondidas e trilha.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

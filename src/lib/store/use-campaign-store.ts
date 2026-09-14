@@ -23,8 +23,8 @@ import {
  * A campanha aberta.
  *
  * Substitui o store de sala, e com ele desaparecem conta de e-mail, código de
- * operação, sessão anônima e os três papéis de `master`/`player`/`viewer`. O
- * aplicativo de desktop **é** o operador: não há a quem pedir credencial, nem
+ * operação, sessão anônima e os três papéis de `master`/`player`/`mesa`. O
+ * aplicativo de desktop **é** o mestre: não há a quem pedir credencial, nem
  * mesa alheia a proteger de quem já está na máquina.
  *
  * O que sobrou é a pergunta que importa: qual pasta está aberta.
@@ -55,7 +55,7 @@ type CampaignStore = {
   busy: boolean;
 
   /**
-   * Chamado na montagem do Operador: reabre a campanha da sessão anterior.
+   * Chamado na montagem do Mestre: reabre a campanha da sessão anterior.
    *
    * Não cria nada. Abrir uma pasta é ato do mestre, não efeito de abrir a tela
    * — a versão que criava uma campanha padrão sozinha espalharia pastas pelo
@@ -131,7 +131,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       return;
     }
 
-    // Duas montagens do Operador não devem disparar duas aberturas.
+    // Duas montagens do Mestre não devem disparar duas aberturas.
     if (get().status === "loading" || get().status === "ready") return;
 
     set({ status: "loading", error: null });
@@ -146,7 +146,11 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
         return;
       }
 
-      set({ campaign: null, recents: await refreshRecents(), status: "escolhendo" });
+      set({
+        campaign: null,
+        recents: await refreshRecents(),
+        status: "escolhendo",
+      });
     } catch (cause) {
       set({ status: "error", error: describe(cause) });
     }
@@ -163,7 +167,11 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     } catch (cause) {
       // A porta fica: a pasta pode ter sido movida, e a lista é o caminho de
       // volta para escolher outra.
-      set({ busy: false, error: describe(cause), recents: await refreshRecents() });
+      set({
+        busy: false,
+        error: describe(cause),
+        recents: await refreshRecents(),
+      });
     }
   },
 
@@ -188,7 +196,11 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
 
     try {
       await fecharOAnterior();
-      set({ campaign: await createCampaign(parent, nome), status: "ready", busy: false });
+      set({
+        campaign: await createCampaign(parent, nome),
+        status: "ready",
+        busy: false,
+      });
     } catch (cause) {
       set({ busy: false, error: describe(cause) });
     }
@@ -229,11 +241,19 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       const info = await importCampaign();
 
       // `null` é o diálogo fechado sem escolher: não muda nada, e não é erro.
-      set(info ? { campaign: info, status: "ready", busy: false } : { busy: false });
+      set(
+        info
+          ? { campaign: info, status: "ready", busy: false }
+          : { busy: false },
+      );
     } catch (cause) {
       // A porta fica, com o motivo: zip que não é campanha e pasta que já tem
       // uma são os dois casos comuns, e os dois pedem escolher outra coisa.
-      set({ busy: false, error: describe(cause), recents: await refreshRecents() });
+      set({
+        busy: false,
+        error: describe(cause),
+        recents: await refreshRecents(),
+      });
     }
   },
 

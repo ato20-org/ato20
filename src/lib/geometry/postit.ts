@@ -1,5 +1,10 @@
 import { FOLGA_X, FOLGA_Y } from "@/lib/geometry/viewport";
-import { POSTIT_MINIMO, SCENE_HEIGHT, SCENE_WIDTH, type Postit } from "@/types/scene";
+import {
+  POSTIT_MINIMO,
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  type Postit,
+} from "@/types/scene";
 
 /**
  * Onde um postit pode estar, e de que tamanho.
@@ -8,7 +13,7 @@ import { POSTIT_MINIMO, SCENE_HEIGHT, SCENE_WIDTH, type Postit } from "@/types/s
  * ela prendia o papel dentro de 1920x1080, e o efeito era um postit que travava
  * na beirada do mapa. Errado por duas razões independentes.
  *
- * A primeira é que a área de trabalho do Operador é maior que o mapa: um plano
+ * A primeira é que a área de trabalho do Mestre é maior que o mapa: um plano
  * inteiro de folga para cada lado, ver `FOLGA_X`. Essa folga existe por causa
  * deste caso — o comentário dela conta que ela nasceu quando as notas dos
  * pontos de anotação passaram a poder ser estacionadas fora do mapa e não havia
@@ -17,7 +22,7 @@ import { POSTIT_MINIMO, SCENE_HEIGHT, SCENE_WIDTH, type Postit } from "@/types/s
  * pertence a lugar nenhum da planta.
  *
  * A segunda é consistência: item de imagem não é preso ao plano — `dragBox` no
- * `OperatorStage` não faz clamp nenhum —, e o plano não corta o que passa da
+ * `MestreStage` não faz clamp nenhum —, e o plano não corta o que passa da
  * borda. Prender só o postit faria dele o único objeto do palco com uma cerca
  * que os outros não têm.
  *
@@ -55,7 +60,10 @@ export function postitNaArea(
  * `POSTIT_MINIMO`, que é o menor papel em que ainda cabe uma linha de texto e a
  * faixa de arrasto.
  */
-export function postitNoTamanho(largura: number, altura: number): Pick<Postit, "largura" | "altura"> {
+export function postitNoTamanho(
+  largura: number,
+  altura: number,
+): Pick<Postit, "largura" | "altura"> {
   return {
     largura: preso(largura, POSTIT_MINIMO, SCENE_WIDTH),
     altura: preso(altura, POSTIT_MINIMO, SCENE_HEIGHT),

@@ -34,7 +34,8 @@ function read(): Stored | null {
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as Partial<Stored>;
-    if (typeof parsed.left !== "boolean" || typeof parsed.right !== "boolean") return null;
+    if (typeof parsed.left !== "boolean" || typeof parsed.right !== "boolean")
+      return null;
 
     return { left: parsed.left, right: parsed.right };
   } catch {
@@ -52,7 +53,7 @@ function read(): Stored | null {
  * arrumação de bancada.
  *
  * Lido do `localStorage` só depois da montagem, por `restore()`. Ler na criação
- * do store daria divergência de hidratação: `/operador` é pré-renderizado com
+ * do store daria divergência de hidratação: `/mestre` é pré-renderizado com
  * os padrões, e o cliente chegaria com outro valor no primeiro render.
  */
 export const usePanelsStore = create<PanelsStore>((set, get) => ({
@@ -74,10 +75,17 @@ export const usePanelsStore = create<PanelsStore>((set, get) => ({
 
 // Grava fora do React: é preferência de máquina, não estado de render.
 usePanelsStore.subscribe((state, previous) => {
-  if (!state.restored || (state.left === previous.left && state.right === previous.right)) return;
+  if (
+    !state.restored ||
+    (state.left === previous.left && state.right === previous.right)
+  )
+    return;
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ left: state.left, right: state.right }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ left: state.left, right: state.right }),
+    );
   } catch {
     // Sem espaço ou sem permissão: perder a preferência é aceitável.
   }

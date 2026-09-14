@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Quando a Plateia precisa de abas em vez de tudo empilhado.
+ * Quando o Jogador precisa de abas em vez de tudo empilhado.
  *
  * O critério é **proporção**, não altura absoluta. A cena presa no topo pede
  * `largura * 9/16` de altura. Numa tela mais alta que larga isso é no máximo

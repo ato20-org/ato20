@@ -2,7 +2,7 @@
  * Contrato central do projeto.
  *
  * Toda posição vive em "coordenadas de cena": um plano fixo de
- * SCENE_WIDTH x SCENE_HEIGHT. Cada visão (Operador, Assistir, Plateia) escala
+ * SCENE_WIDTH x SCENE_HEIGHT. Cada visão (Mestre, Espectador, Jogador) escala
  * esse plano para caber na tela dela. Sem isso, o que o mestre posiciona não
  * bate com o que aparece na TV.
  */
@@ -105,7 +105,7 @@ export type CanvasItem = {
   rotation: number;
   /** Ordem de empilhamento. Maior fica na frente. */
   z: number;
-  /** Item travado não é selecionável nem arrastável no Operador. */
+  /** Item travado não é selecionável nem arrastável no Mestre. */
   locked: boolean;
   /**
    * Espelhamento. Aplicado no referencial do próprio item, depois do giro:
@@ -130,8 +130,8 @@ export type CanvasItem = {
 };
 
 /**
- * Área escondida. Opaca na Plateia e no Assistir, semi-transparente no
- * Operador — o mestre vê o que tem embaixo, a mesa não.
+ * Área escondida. Opaca no Jogador e no Espectador, semi-transparente no
+ * Mestre — o mestre vê o que tem embaixo, a mesa não.
  */
 export type FogRegion = {
   id: string;
@@ -195,7 +195,7 @@ export type SceneGrid = {
  *
  * Morar na cena tem um custo que precisa de guarda: a cena viaja inteira para
  * a mesa. É por isso que `sceneForTable` existe e que a camada que desenha os
- * pontos vive no `OperatorStage`, e não no `SceneLayer` compartilhado — sem as
+ * pontos vive no `MestreStage`, e não no `SceneLayer` compartilhado — sem as
  * duas coisas, o jogador leria a preparação do mestre no inspetor do
  * navegador.
  */
@@ -220,7 +220,8 @@ export type MapPin = {
 };
 
 /** O que o chamador informa ao cravar um ponto; o resto é do store. */
-export type NewMapPin = Pick<MapPin, "x" | "y"> & Partial<Pick<MapPin, "title" | "note">>;
+export type NewMapPin = Pick<MapPin, "x" | "y"> &
+  Partial<Pick<MapPin, "title" | "note">>;
 
 /**
  * As cores de um postit.
@@ -261,7 +262,7 @@ export const POSTIT_MINIMO = 120;
  *
  * Mora na CENA, como os pontos e os riscos — e com o mesmo custo, que a cena
  * viaja inteira para a mesa. `sceneForTable` apaga este campo antes de
- * publicar, e a camada que o desenha vive no `OperatorStage` e não no
+ * publicar, e a camada que o desenha vive no `MestreStage` e não no
  * `SceneLayer`. As duas barreiras juntas: vazar exigiria dois erros
  * independentes.
  */
@@ -393,7 +394,7 @@ export type Medida = {
  * Recorte do plano de cena. Sempre na proporção do plano, para toda visão
  * caber o mesmo enquadramento sem cortar nada.
  *
- * Usado em dois lugares: o zoom local do Operador (não persistido, não viaja)
+ * Usado em dois lugares: o zoom local do Mestre (não persistido, não viaja)
  * e a câmera compartilhada da cena, que é o que a mesa enxerga.
  */
 export type Viewport = { x: number; y: number; width: number; height: number };
@@ -474,7 +475,7 @@ export type Portrait = {
   /**
    * A imagem, resolvida do campo Retrato do personagem.
    *
-   * Fica no tipo porque o payload publicado precisa dela: o Assistir nao tem
+   * Fica no tipo porque o payload publicado precisa dela: o Espectador nao tem
    * credencial nem indice de personagens, so `/asset/{id}`. Mas quem manda e o
    * campo da ficha, e nao esta copia -- ver `retratosDaCena`, que a resolve na
    * hora. Copia crava a imagem de quando o retrato foi armado, e trocar o
@@ -496,7 +497,7 @@ export type Portrait = {
    * O canvas de projeto da pagina, em pixels. So existe com `url`.
    *
    * Viaja junto porque quem sabe este numero e a EXTENSAO, e extensao so existe
-   * no Operador. Sem ele, a TV teria de adivinhar em que tamanho renderizar uma
+   * no Mestre. Sem ele, a TV teria de adivinhar em que tamanho renderizar uma
    * pagina de layout fixo -- e adivinhar errado mostra um canto do card.
    */
   urlLargura?: number;
@@ -553,7 +554,9 @@ export type NewCanvasItem = Pick<
  * "colar" precisa para reproduzir a cópia fielmente.
  */
 export type ItemDraft = NewCanvasItem &
-  Partial<Pick<CanvasItem, "rotation" | "locked" | "flipX" | "flipY" | "opacity">>;
+  Partial<
+    Pick<CanvasItem, "rotation" | "locked" | "flipX" | "flipY" | "opacity">
+  >;
 
 export type Scene = {
   id: string;
@@ -575,8 +578,8 @@ export type Scene = {
    */
   postits?: Postit[];
   /**
-   * Enquadramento que a Plateia e o Assistir usam. Ausente = plano inteiro.
-   * O zoom do Operador só chega aqui quando ele manda, pelo botão de enquadrar.
+   * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
+   * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.
    */
   camera?: Viewport;
   /** Grade sobre o mapa. Ausente = sem grade. */
@@ -598,7 +601,7 @@ export type Scene = {
    * campanha e volta com ela.
    *
    * SAI do payload publicado, junto com alfinetes e postits. Nao e cautela
-   * generica: plugin so alcanca o Operador nesta etapa, entao o que ele escreve
+   * generica: plugin so alcanca o Mestre nesta etapa, entao o que ele escreve
    * e anotacao do mestre por construcao. Ver `sceneForTable`.
    */
   extensoes?: Record<string, unknown>;
@@ -608,7 +611,7 @@ export type Scene = {
 export type Board = {
   scenes: Scene[];
   /**
-   * Cena aberta no palco do Operador. É o que o mestre edita, e só ele vê.
+   * Cena aberta no palco do Mestre. É o que o mestre edita, e só ele vê.
    */
   editingSceneId: string | null;
   /**
@@ -625,7 +628,12 @@ export type Board = {
  * 96 unidades num plano de 1920 dá 20 colunas por 11 linhas e meia — perto do
  * que um mapa de batalha costuma usar, e um número redondo de onde ajustar.
  */
-export const DEFAULT_GRID: SceneGrid = { size: 96, offsetX: 0, offsetY: 0, opacity: 0.35 };
+export const DEFAULT_GRID: SceneGrid = {
+  size: 96,
+  offsetX: 0,
+  offsetY: 0,
+  opacity: 0.35,
+};
 
 export function createScene(name: string): Scene {
   const now = Date.now();

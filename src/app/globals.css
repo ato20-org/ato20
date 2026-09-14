@@ -172,7 +172,7 @@
    é a TV ficar ~150 ms atrás do mouse do mestre, o que ninguém sentado à mesa
    percebe.
 
-   Só o espectador. No Operador o arrasto é manipulação direta: interpolar ali
+   Só o espectador. No Mestre o arrasto é manipulação direta: interpolar ali
    faria a imagem correr atrás do cursor.
 
    Tudo dentro de `prefers-reduced-motion`: quem pediu menos movimento no
@@ -248,7 +248,7 @@
    acabar. Então todo item de quem assiste ficava preso em 1 para sempre.
    Aparecia como uma feature meio quebrada — o mestre esmaecia o token, via
    acontecer no palco dele, e a mesa continuava vendo a figura cheia. No
-   Operador funcionava porque lá não há suavização, logo não há animação.
+   Mestre funcionava porque lá não há suavização, logo não há animação.
 
    Medido no WebKitGTK 4.1, elemento com `opacity: 0.49` inline:
 

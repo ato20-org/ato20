@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { createPublisher, createSubscriber, type SceneChannel } from "@/lib/sync";
+import {
+  createPublisher,
+  createSubscriber,
+  type SceneChannel,
+} from "@/lib/sync";
 import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -29,11 +33,11 @@ const HEARTBEAT_MS = 20_000;
 const STALLED_AFTER_MS = 12_000;
 
 /**
- * Lado do Operador: publica cena, trilha e retratos.
+ * Lado do Mestre: publica cena, trilha e retratos.
  *
  * O `live:request` saiu, e com ele a resposta a quem chega depois: o daemon
- * guarda o último estado publicado e o entrega na conexão. Uma aba de Assistir
- * aberta no meio da sessão já nasce sincronizada, sem o Operador saber que ela
+ * guarda o último estado publicado e o entrega na conexão. Uma aba de Espectador
+ * aberta no meio da sessão já nasce sincronizada, sem o Mestre saber que ela
  * existe.
  */
 export function usePublisher(state: LiveState): void {
@@ -49,7 +53,7 @@ export function usePublisher(state: LiveState): void {
    *
    * O `useMemo` não é otimização — é correção. O efeito abaixo compara a cena
    * por identidade para decidir se publica, e uma cópia nova a cada render
-   * faria o Operador publicar 60 vezes por segundo com a mesa parada.
+   * faria o Mestre publicar 60 vezes por segundo com a mesa parada.
    */
   const scene = useMemo(() => sceneForTable(state.scene), [state.scene]);
 
@@ -82,7 +86,7 @@ export function usePublisher(state: LiveState): void {
     channelRef.current?.publish(paraMesa);
     // Dependências nos campos, não no objeto `state`: quem chama monta
     // `{ scene, track, volume, portraits, spotlight, medida }` a cada render, e
-    // comparar essa embalagem fazia o Operador publicar enquanto montava a
+    // comparar essa embalagem fazia o Mestre publicar enquanto montava a
     // PRÓXIMA cena — uma publicação por uma mudança que a mesa não vê.
   }, [
     scene,
@@ -123,7 +127,7 @@ export type Subscription = {
 };
 
 /**
- * Lado do espectador (Assistir e Plateia): só recebe.
+ * Lado do espectador (Espectador e Jogador): só recebe.
  *
  * O código da mesa vem da porta, já conferido — ver `checkRoom`. Ele entra na
  * URL do SSE porque é o daemon que decide quem pode ouvir.

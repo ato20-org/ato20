@@ -12,13 +12,13 @@ import { DEFAULT_SESSION_VOLUME } from "@/types/scene";
  * Onde o daemon está, e com que segredo se escreve nele.
  *
  * `base` vazio significa mesma origem — é o caso do espectador, que recebeu
- * esta página do próprio daemon. O Operador roda noutra origem (a webview) e
+ * esta página do próprio daemon. O Mestre roda noutra origem (a webview) e
  * precisa do endereço absoluto.
  */
 export type DaemonEndpoint = { base: string; token: string | null };
 
 /**
- * Lado do Operador: publica o estado no daemon.
+ * Lado do Mestre: publica o estado no daemon.
  *
  * O endpoint chega como promessa porque a porta é efêmera e vem por IPC, e o
  * palco começa a publicar antes de essa resposta chegar. Em vez de o hook
@@ -26,7 +26,9 @@ export type DaemonEndpoint = { base: string; token: string | null };
  * endereço resolve — é a mesma regra do throttle, e pelo mesmo motivo: numa
  * publicação de cena o que importa é o estado atual, nunca a fila.
  */
-export function createPublisherChannel(endpoint: Promise<DaemonEndpoint>): SceneChannel {
+export function createPublisherChannel(
+  endpoint: Promise<DaemonEndpoint>,
+): SceneChannel {
   let resolved: DaemonEndpoint | null = null;
   let pending: LiveState | null = null;
   let closed = false;
@@ -42,7 +44,7 @@ export function createPublisherChannel(endpoint: Promise<DaemonEndpoint>): Scene
       }
     },
     () => {
-      // Sem daemon não há mesa. O Operador continua editando e gravando no
+      // Sem daemon não há mesa. O Mestre continua editando e gravando no
       // disco; quem não vê nada é a TV, e é a TV que mostra isso.
     },
   );
@@ -70,8 +72,9 @@ export function createPublisherChannel(endpoint: Promise<DaemonEndpoint>): Scene
     }
   }
 
-  const throttled = createTrailingThrottle<LiveState>(SCENE_BROADCAST_INTERVAL_MS, (state) =>
-    void push(state),
+  const throttled = createTrailingThrottle<LiveState>(
+    SCENE_BROADCAST_INTERVAL_MS,
+    (state) => void push(state),
   );
 
   return {
@@ -80,7 +83,7 @@ export function createPublisherChannel(endpoint: Promise<DaemonEndpoint>): Scene
     },
 
     subscribe() {
-      // O Operador é a fonte: ele não escuta o próprio eco. Devolver um
+      // O Mestre é a fonte: ele não escuta o próprio eco. Devolver um
       // cancelamento inerte deixa o hook de assinatura funcionar sem saber
       // disso.
       return () => {};
@@ -100,7 +103,10 @@ export function createPublisherChannel(endpoint: Promise<DaemonEndpoint>): Scene
  * sozinho quando o Wi-Fi oscila, e o pouco que o espectador manda para cima é
  * HTTP normal.
  */
-export function createSubscriberChannel(base: string, codigo: string): SceneChannel {
+export function createSubscriberChannel(
+  base: string,
+  codigo: string,
+): SceneChannel {
   let source: EventSource | null = null;
 
   return {
@@ -122,7 +128,7 @@ export function createSubscriberChannel(base: string, codigo: string): SceneChan
             // Estado gravado por uma versão anterior pode não trazer o campo:
             // lista vazia é o certo, e não uma tela quebrada.
             portraits: state.portraits ?? [],
-            // Quadro sem volume é de um Operador anterior a ele sair de dentro
+            // Quadro sem volume é de um Mestre anterior a ele sair de dentro
             // da faixa: o padrão é o estado certo, e não silêncio.
             volume: state.volume ?? DEFAULT_SESSION_VOLUME,
             spotlight: state.spotlight ?? null,
@@ -164,16 +170,22 @@ export async function checkRoom(
   codigo: string,
 ): Promise<{ nome: string } | { erro: string }> {
   try {
-    const response = await fetch(`${base}/sala?codigo=${encodeURIComponent(codigo)}`);
+    const response = await fetch(
+      `${base}/sala?codigo=${encodeURIComponent(codigo)}`,
+    );
 
-    if (response.status === 403) return { erro: "Código não confere com esta mesa." };
+    if (response.status === 403)
+      return { erro: "Código não confere com esta mesa." };
     if (response.status === 503) {
       return { erro: "O mestre ainda não abriu uma campanha." };
     }
-    if (!response.ok) return { erro: "A mesa respondeu de um jeito inesperado." };
+    if (!response.ok)
+      return { erro: "A mesa respondeu de um jeito inesperado." };
 
     return (await response.json()) as { nome: string };
   } catch {
-    return { erro: "Não foi possível alcançar a mesa. Confira o Wi-Fi e o endereço." };
+    return {
+      erro: "Não foi possível alcançar a mesa. Confira o Wi-Fi e o endereço.",
+    };
   }
 }

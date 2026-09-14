@@ -25,7 +25,7 @@ type CameraFrameProps = {
 /**
  * O recorte que a mesa está vendo, manipulável direto no palco.
  *
- * Sem esta moldura, o Operador ampliado num canto do mapa não tem como saber
+ * Sem esta moldura, o Mestre ampliado num canto do mapa não tem como saber
  * que a TV continua enquadrando outra região — e ele acabaria apontando para
  * algo que ninguém está olhando.
  *
@@ -50,7 +50,11 @@ export function CameraFrame({ camera, onChange }: CameraFrameProps) {
     startDrag(event, {
       onMove: (delta) =>
         onChange(
-          clampViewport({ ...camera, x: origin.x + delta.x, y: origin.y + delta.y }),
+          clampViewport({
+            ...camera,
+            x: origin.x + delta.x,
+            y: origin.y + delta.y,
+          }),
         ),
     });
   }
@@ -125,7 +129,14 @@ export function CameraFrame({ camera, onChange }: CameraFrameProps) {
           round={false}
           zIndex={HANDLES_Z}
           onChange={({ x, y, width, height }) =>
-            onChange(clampViewport({ x: x ?? camera.x, y: y ?? camera.y, width: width ?? camera.width, height: height ?? camera.height }))
+            onChange(
+              clampViewport({
+                x: x ?? camera.x,
+                y: y ?? camera.y,
+                width: width ?? camera.width,
+                height: height ?? camera.height,
+              }),
+            )
           }
         />
       ) : null}

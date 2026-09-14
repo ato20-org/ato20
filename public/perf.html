@@ -90,7 +90,7 @@
 //
 // Dois cenarios, porque eles estressam coisas diferentes:
 //
-//   drag       Operador arrastando um token. UM item muda de transform por
+//   drag       Mestre arrastando um token. UM item muda de transform por
 //              frame, os outros ficam parados. E o gesto do mestre.
 //   transition Espectador. As amostras chegam a 10Hz e TODOS os itens
 //              interpolam via `transition: transform 150ms linear`. Este e o
@@ -119,7 +119,7 @@ const SKIP = params.has("skip");
 
 const SCENE_W = 1920;
 const SCENE_H = 1080;
-/** Cadencia de publicacao do Operador. Igual a SCENE_BROADCAST_INTERVAL_MS. */
+/** Cadencia de publicacao do Mestre. Igual a SCENE_BROADCAST_INTERVAL_MS. */
 const SAMPLE_MS = 100;
 
 const hud = document.getElementById("hud");
@@ -221,7 +221,7 @@ function moveItems(t) {
 }
 
 function moveOne(t) {
-  // Caso Operador: so o item 0 se move, a cada frame.
+  // Caso Mestre: so o item 0 se move, a cada frame.
   const it = items[0];
   if (!it) return;
 

@@ -17,16 +17,16 @@ type SceneLayerProps = {
   /**
    * Riscos que a borracha está tocando, translúcidos até o dedo soltar.
    *
-   * Só o Operador passa: a mesa não tem borracha, e ela nunca vê um risco
+   * Só o Mestre passa: a mesa não tem borracha, e ela nunca vê um risco
    * meio-apagado — a remoção chega pronta na publicação seguinte.
    */
   apagando?: ReadonlySet<string>;
-  /** `viewer` é o que a mesa vê. `operator` deixa o mestre atravessar a névoa. */
-  variant?: "operator" | "viewer";
+  /** `mesa` é o que a mesa vê. `mestre` deixa o mestre atravessar a névoa. */
+  variant?: "mestre" | "mesa";
   /**
    * Interpola o que muda entre as amostras recebidas.
    *
-   * Ligado nas telas que só assistem. No Operador fica desligado: lá o arrasto
+   * Ligado nas telas que só assistem. No Mestre fica desligado: lá o arrasto
    * é manipulação direta, e a imagem correndo atrás do cursor é o oposto de
    * suave.
    */
@@ -67,21 +67,24 @@ type SceneLayerProps = {
    * lugar próprio, fora do plano da cena.
    */
   rolagens?: RolagemDaMesa[];
-  /** Ausente = camada só de leitura, que é o caso do Assistir. */
+  /** Ausente = camada só de leitura, que é o caso do Espectador. */
   onItemPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
-  onPortraitPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
+  onPortraitPointerDown?: (
+    event: ReactPointerEvent,
+    portrait: Portrait,
+  ) => void;
 };
 
 /**
  * Desenho da cena: fundo, itens empilhados e áreas escondidas por cima. É o
- * mesmo componente no Operador, no Assistir e na miniatura — se cada visão
+ * mesmo componente no Mestre, no Espectador e na miniatura — se cada visão
  * renderizasse por um caminho diferente, elas divergiriam no primeiro ajuste
  * de layout.
  */
 export function SceneLayer({
   scene,
-  variant = "viewer",
+  variant = "mesa",
   smooth = false,
   variante,
   portraits,
@@ -91,7 +94,10 @@ export function SceneLayer({
   onPortraitPointerDown,
   apagando,
 }: SceneLayerProps) {
-  const items = useMemo(() => [...scene.items].sort((a, b) => a.z - b.z), [scene.items]);
+  const items = useMemo(
+    () => [...scene.items].sort((a, b) => a.z - b.z),
+    [scene.items],
+  );
 
   return (
     <>

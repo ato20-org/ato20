@@ -25,7 +25,7 @@ pub type SceneJson = serde_json::Value;
 pub struct Order {
     pub versao: u32,
     pub cenas: Vec<SceneEntry>,
-    /// Cena aberta no palco do Operador. So o mestre ve.
+    /// Cena aberta no palco do Mestre. So o mestre ve.
     pub editando: Option<String>,
     /// Cena que a mesa esta vendo. `None` = nada no ar.
     #[serde(rename = "noAr")]
@@ -164,7 +164,7 @@ fn write_scene(dir: &std::path::Path, file: &str, scene: &SceneJson) -> AppResul
 
 /// Grava o board.
 ///
-/// Grava por diferenca, e nao tudo: o Operador chama isto a cada 400ms de
+/// Grava por diferenca, e nao tudo: o Mestre chama isto a cada 400ms de
 /// edicao, e reescrever as trinta cenas porque um token andou dez pixels
 /// gastaria disco proporcional ao tamanho da campanha em vez de ao tamanho da
 /// mudanca -- e encheria o `git log` de ruido.
@@ -414,7 +414,7 @@ mod tests {
 
         // Grava de novo mexendo SO na segunda cena. Se a primeira for
         // reescrita, mover um token numa cena sujaria a campanha inteira: o
-        // Operador grava a cada 400ms, e o `git log` viraria ruido.
+        // Mestre grava a cada 400ms, e o `git log` viraria ruido.
         board.scenes[1] = scene("s2", "Ponte", 999);
         std::thread::sleep(std::time::Duration::from_millis(20));
         save(&vault, &board).expect("save 2");
@@ -675,7 +675,7 @@ mod tests {
         let por_save = load(&outro).expect("load").expect("board");
 
         // O caminho curto e o caminho longo tem de produzir a MESMA campanha.
-        // Se divergirem, o Operador passa a gravar uma coisa diferente do que
+        // Se divergirem, o Mestre passa a gravar uma coisa diferente do que
         // o import do zip grava, e a diferenca aparece um mes depois.
         assert_eq!(por_patch.scenes, por_save.scenes);
         assert_eq!(por_patch.editing_scene_id, por_save.editing_scene_id);

@@ -6,7 +6,7 @@ type AudioStore = {
   /**
    * Este aparelho emite som.
    *
-   * É decisão local, não da cena. Operador e Assistir costumam rodar na mesma
+   * É decisão local, não da cena. Mestre e Espectador costumam rodar na mesma
    * máquina: os dois emitindo tocariam a mesma faixa com alguns milissegundos
    * de diferença, o que soa como eco. Um por vez resolve.
    */

@@ -38,7 +38,7 @@ function tokenKey(codigo: string): string {
 
 /**
  * `localStorage` num navegador que o proíbe (aba privada, cookies bloqueados)
- * lança no acesso, e não devolve `null`. Sem isto a Plateia cairia inteira em
+ * lança no acesso, e não devolve `null`. Sem isto o Jogador cairia inteira em
  * vez de pedir o nome de novo.
  */
 export function storedToken(codigo: string): string | null {
@@ -83,7 +83,10 @@ export class PlayerError extends Error {
  * segunda cópia de `authorized` seria a que um dia esquece de mandar o token —
  * e o sintoma seria 401 em uma tela só.
  */
-export async function fail(response: Response, fallback: string): Promise<PlayerError> {
+export async function fail(
+  response: Response,
+  fallback: string,
+): Promise<PlayerError> {
   const texto = await response.text().catch(() => "");
 
   return new PlayerError(response.status, texto || fallback);
@@ -109,9 +112,14 @@ export async function join(codigo: string, nome: string): Promise<PlayerSheet> {
     body: JSON.stringify({ codigo, nome }),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível entrar na mesa.");
+  if (!response.ok)
+    throw await fail(response, "Não foi possível entrar na mesa.");
 
-  const { id, nome: nomeAceito, token } = (await response.json()) as {
+  const {
+    id,
+    nome: nomeAceito,
+    token,
+  } = (await response.json()) as {
     id: string;
     nome: string;
     token: string;
@@ -144,7 +152,8 @@ export async function fetchMe(codigo: string): Promise<PlayerSheet | null> {
     return null;
   }
 
-  if (!response.ok) throw await fail(response, "Não foi possível abrir a ficha.");
+  if (!response.ok)
+    throw await fail(response, "Não foi possível abrir a ficha.");
 
   return (await response.json()) as PlayerSheet;
 }
@@ -156,7 +165,10 @@ export async function fetchMe(codigo: string): Promise<PlayerSheet | null> {
  * ver `lib/player/caderno.ts`. A ficha voltou a ser identidade, e não
  * identidade mais um campo de texto de dez páginas.
  */
-export async function patchMe(codigo: string, patch: { nome?: string }): Promise<void> {
+export async function patchMe(
+  codigo: string,
+  patch: { nome?: string },
+): Promise<void> {
   const response = await fetch("/eu", {
     method: "PATCH",
     headers: { "content-type": "application/json", ...authorized(codigo) },
@@ -169,12 +181,16 @@ export async function patchMe(codigo: string, patch: { nome?: string }): Promise
 export async function listAttachments(codigo: string): Promise<Attachment[]> {
   const response = await fetch("/eu/anexos", { headers: authorized(codigo) });
 
-  if (!response.ok) throw await fail(response, "Não foi possível listar os anexos.");
+  if (!response.ok)
+    throw await fail(response, "Não foi possível listar os anexos.");
 
   return (await response.json()) as Attachment[];
 }
 
-export async function uploadAttachment(codigo: string, file: File): Promise<Attachment> {
+export async function uploadAttachment(
+  codigo: string,
+  file: File,
+): Promise<Attachment> {
   const body = new FormData();
   body.append("file", file, file.name);
 
@@ -184,18 +200,23 @@ export async function uploadAttachment(codigo: string, file: File): Promise<Atta
     body,
   });
 
-  if (!response.ok) throw await fail(response, `Não foi possível enviar ${file.name}.`);
+  if (!response.ok)
+    throw await fail(response, `Não foi possível enviar ${file.name}.`);
 
   return (await response.json()) as Attachment;
 }
 
-export async function deleteAttachment(codigo: string, arquivo: string): Promise<void> {
+export async function deleteAttachment(
+  codigo: string,
+  arquivo: string,
+): Promise<void> {
   const response = await fetch(`/eu/anexos/${encodeURIComponent(arquivo)}`, {
     method: "DELETE",
     headers: authorized(codigo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível remover o anexo.");
+  if (!response.ok)
+    throw await fail(response, "Não foi possível remover o anexo.");
 }
 
 /**
@@ -212,7 +233,10 @@ export async function deleteAttachment(codigo: string, arquivo: string): Promise
  */
 const blobCache = new Map<string, string>();
 
-export async function attachmentUrl(codigo: string, arquivo: string): Promise<string> {
+export async function attachmentUrl(
+  codigo: string,
+  arquivo: string,
+): Promise<string> {
   const cached = blobCache.get(arquivo);
   if (cached) return cached;
 
@@ -220,7 +244,8 @@ export async function attachmentUrl(codigo: string, arquivo: string): Promise<st
     headers: authorized(codigo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível abrir o anexo.");
+  if (!response.ok)
+    throw await fail(response, "Não foi possível abrir o anexo.");
 
   const url = URL.createObjectURL(await response.blob());
   blobCache.set(arquivo, url);

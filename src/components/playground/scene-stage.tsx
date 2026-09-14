@@ -12,7 +12,11 @@ import {
 } from "react";
 
 import type { Vec } from "@/lib/geometry/transform";
-import { FULL_VIEWPORT, panViewport, zoomViewport } from "@/lib/geometry/viewport";
+import {
+  FULL_VIEWPORT,
+  panViewport,
+  zoomViewport,
+} from "@/lib/geometry/viewport";
 import { cn } from "@/lib/utils";
 import { SCENE_HEIGHT, SCENE_WIDTH, type Viewport } from "@/types/scene";
 
@@ -42,7 +46,8 @@ const SceneScaleContext = createContext<SceneScale | null>(null);
  */
 export function useSceneScale(): SceneScale {
   const value = useContext(SceneScaleContext);
-  if (!value) throw new Error("useSceneScale() precisa estar dentro de <SceneStage>");
+  if (!value)
+    throw new Error("useSceneScale() precisa estar dentro de <SceneStage>");
 
   return value;
 }
@@ -63,7 +68,7 @@ type SceneStageProps = {
   /**
    * Arrastar com um dedo/botão desloca a cena em vez de agir nos itens.
    *
-   * No Operador é ligado enquanto o espaço está pressionado. As visões de
+   * No Mestre é ligado enquanto o espaço está pressionado. As visões de
    * espectador não usam: quem enquadra é o mestre, e a câmera da cena é a
    * única fonte de enquadramento delas.
    */
@@ -75,7 +80,7 @@ type SceneStageProps = {
    * tela inteira salta a cada uma. Ver `.scene-smooth-camera` em
    * `globals.css`.
    *
-   * Desligado onde a câmera é gesto direto — o palco do Operador —, senão o
+   * Desligado onde a câmera é gesto direto — o palco do Mestre —, senão o
    * enquadramento correria atrás da roda do mouse.
    */
   smooth?: boolean;
@@ -87,7 +92,7 @@ type SceneStageProps = {
  * Renderiza um retângulo de SCENE_WIDTH x SCENE_HEIGHT e o escala para que o
  * recorte pedido caiba no espaço disponível, então todo filho pode posicionar
  * em coordenadas de cena e ignorar tanto o tamanho da tela quanto o zoom. É
- * isso que faz o layout do Operador bater com o da TV.
+ * isso que faz o layout do Mestre bater com o da TV.
  */
 export function SceneStage({
   children,
@@ -101,7 +106,6 @@ export function SceneStage({
   const frameRef = useRef<HTMLDivElement>(null);
   const planeRef = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
-
 
   useEffect(() => {
     const element = frameRef.current;
@@ -117,7 +121,6 @@ export function SceneStage({
     return () => observer.disconnect();
   }, []);
 
-
   // Zero em qualquer eixo significa que a moldura ainda não foi medida — ou
   // que a cadeia de altura acima dela quebrou. Nos dois casos não há escala
   // possível, e desenhar com `scale(0)` só mostraria preto.
@@ -128,8 +131,10 @@ export function SceneStage({
 
   // Deslocamento que centraliza o recorte na moldura. Com `transform-origin`
   // no canto, translate e scale compõem de forma previsível.
-  const offsetX = (frame.width - viewport.width * scale) / 2 - viewport.x * scale;
-  const offsetY = (frame.height - viewport.height * scale) / 2 - viewport.y * scale;
+  const offsetX =
+    (frame.width - viewport.width * scale) / 2 - viewport.x * scale;
+  const offsetY =
+    (frame.height - viewport.height * scale) / 2 - viewport.y * scale;
 
   /**
    * Liga a transição da câmera só depois do primeiro paint já medido.
@@ -153,7 +158,10 @@ export function SceneStage({
       const rect = planeRef.current?.getBoundingClientRect();
       if (!rect || scale === 0) return { x: 0, y: 0 };
 
-      return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
+      return {
+        x: (clientX - rect.left) / scale,
+        y: (clientY - rect.top) / scale,
+      };
     },
     [scale],
   );
@@ -166,10 +174,22 @@ export function SceneStage({
   // Guardados em ref porque os listeners nativos abaixo são registrados uma
   // vez e precisam ver sempre o estado atual. Atualizados em efeito, não em
   // render: escrever numa ref durante o render é o que o React proíbe.
-  const stateRef = useRef({ viewport, scale, toScene, onViewportChange, panOnDrag });
+  const stateRef = useRef({
+    viewport,
+    scale,
+    toScene,
+    onViewportChange,
+    panOnDrag,
+  });
 
   useEffect(() => {
-    stateRef.current = { viewport, scale, toScene, onViewportChange, panOnDrag };
+    stateRef.current = {
+      viewport,
+      scale,
+      toScene,
+      onViewportChange,
+      panOnDrag,
+    };
   });
 
   useEffect(() => {
@@ -210,10 +230,13 @@ export function SceneStage({
 
     function center(): Vec {
       const points = [...active.values()];
-      const sum = points.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), {
-        x: 0,
-        y: 0,
-      });
+      const sum = points.reduce(
+        (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+        {
+          x: 0,
+          y: 0,
+        },
+      );
 
       return { x: sum.x / points.length, y: sum.y / points.length };
     }
@@ -229,7 +252,7 @@ export function SceneStage({
       const { onViewportChange: notify, panOnDrag: pan } = stateRef.current;
       if (!notify) return;
 
-      // Botão do meio sempre navega, inclusive no Operador, onde o botão
+      // Botão do meio sempre navega, inclusive no Mestre, onde o botão
       // esquerdo pertence à seleção.
       const wantsPan = pan || event.button === 1;
       if (!wantsPan && event.pointerType === "mouse") return;
@@ -249,7 +272,11 @@ export function SceneStage({
     }
 
     function handleMove(event: PointerEvent) {
-      const { onViewportChange: notify, scale: current, toScene: project } = stateRef.current;
+      const {
+        onViewportChange: notify,
+        scale: current,
+        toScene: project,
+      } = stateRef.current;
       if (!notify || current === 0 || !active.has(event.pointerId)) return;
 
       const previous = active.get(event.pointerId)!;

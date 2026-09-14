@@ -40,8 +40,8 @@ export function isNoCampaign(cause: unknown): boolean {
 /**
  * Roda dentro do aplicativo, e não numa aba de browser.
  *
- * O mesmo bundle serve as três telas: o Operador só existe no aplicativo,
- * enquanto Assistir e Plateia são justamente as que rodam noutro aparelho.
+ * O mesmo bundle serve as três telas: o Mestre só existe no aplicativo,
+ * enquanto Espectador e Jogador são justamente as que rodam noutro aparelho.
  * Checar a marca do Tauri é o que permite as três compartilharem componente
  * sem uma saber da outra.
  */
@@ -50,7 +50,10 @@ export function isDesktop(): boolean {
 }
 
 /** Chama um comando nativo, traduzindo o erro do Rust. */
-export async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+export async function call<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   if (!isDesktop()) {
     throw new VaultError(
       "sem-aplicativo",
@@ -63,16 +66,24 @@ export async function call<T>(command: string, args?: Record<string, unknown>): 
   } catch (cause) {
     // O Rust serializa `{ code, message }`. Qualquer outra coisa é falha do
     // próprio IPC, e aí a mensagem crua é o que há.
-    if (cause && typeof cause === "object" && "code" in cause && "message" in cause) {
+    if (
+      cause &&
+      typeof cause === "object" &&
+      "code" in cause &&
+      "message" in cause
+    ) {
       throw new VaultError(String(cause.code), String(cause.message));
     }
 
-    throw new VaultError("ipc", typeof cause === "string" ? cause : "Falha ao falar com o aplicativo");
+    throw new VaultError(
+      "ipc",
+      typeof cause === "string" ? cause : "Falha ao falar com o aplicativo",
+    );
   }
 }
 
 export type DaemonAddr = {
-  /** Loopback. É por aqui que a janela do Operador fala com o daemon. */
+  /** Loopback. É por aqui que a janela do Mestre fala com o daemon. */
   url: string;
   /**
    * O mesmo daemon pelo IP da rede local, para a TV e os celulares.

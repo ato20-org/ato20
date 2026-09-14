@@ -3,7 +3,12 @@ import Link from "next/link";
 import { ArrowRight, Smartphone, Tv } from "lucide-react";
 
 import logo from "@/assets/logo-white.png";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export const metadata = {
   title: "ATO20",
@@ -13,7 +18,7 @@ export const metadata = {
 /**
  * A porta de quem chegou pelo navegador.
  *
- * Só as duas telas de espectador. O Operador não está aqui de propósito: ele
+ * Só as duas telas de espectador. O Mestre não está aqui de propósito: ele
  * precisa alcançar o disco, e só existe dentro do aplicativo — que abre direto
  * nele, sem passar por esta tela.
  *
@@ -23,8 +28,8 @@ export const metadata = {
  * da casa: quem chega aqui digitou o IP do notebook do mestre, e o que ele quer
  * é entrar na mesa.
  *
- * Normalmente ninguém vê esta página: o QR do Operador leva direto para
- * `/assistir` ou `/plateia`, já com o código.
+ * Normalmente ninguém vê esta página: o QR do Mestre leva direto para
+ * `/espectador` ou `/jogador`, já com o código.
  */
 export default function EntrarPage() {
   return (
@@ -32,7 +37,8 @@ export default function EntrarPage() {
       <header className="space-y-4">
         <Image src={logo} alt="ATO20" priority className="h-14 w-auto" />
         <p className="text-muted-foreground text-balance">
-          Acompanhe a mesa. O mestre dita o código da campanha no começo da sessão.
+          Acompanhe a mesa. O mestre dita o código da campanha no começo da
+          sessão.
         </p>
       </header>
 
@@ -40,16 +46,18 @@ export default function EntrarPage() {
         <ul className="grid gap-3 sm:grid-cols-2">
           {[
             {
-              href: "/assistir",
-              title: "Assistir",
-              description: "Só o palco, sem controle nenhum. Para a TV atrás do mestre.",
+              href: "/espectador",
+              title: "Espectador",
+              description:
+                "Só o palco, sem controle nenhum. Para a TV atrás do mestre.",
               icon: Tv,
               hint: "TV ou segundo monitor",
             },
             {
-              href: "/plateia",
-              title: "Plateia",
-              description: "A cena e a ficha do teu personagem, no teu celular.",
+              href: "/jogador",
+              title: "Jogador",
+              description:
+                "A cena e a ficha do teu personagem, no teu celular.",
               icon: Smartphone,
               hint: "Celular do jogador",
             },
@@ -58,13 +66,18 @@ export default function EntrarPage() {
               <Link href={href} className="group block h-full">
                 <Card className="hover:border-primary/60 h-full transition-colors">
                   <CardHeader>
-                    <Icon className="text-muted-foreground size-5" aria-hidden />
+                    <Icon
+                      className="text-muted-foreground size-5"
+                      aria-hidden
+                    />
                     <CardTitle className="flex items-center justify-between gap-2">
                       {title}
                       <ArrowRight className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
                     </CardTitle>
                     <CardDescription>{description}</CardDescription>
-                    <p className="text-muted-foreground mt-2 text-xs uppercase">{hint}</p>
+                    <p className="text-muted-foreground mt-2 text-xs uppercase">
+                      {hint}
+                    </p>
                   </CardHeader>
                 </Card>
               </Link>

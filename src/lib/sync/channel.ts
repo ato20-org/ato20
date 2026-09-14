@@ -1,5 +1,11 @@
 import type { RolagemDaMesa } from "@/types/dado";
-import type { Medida, Portrait, Scene, SessionTrack, Spotlight } from "@/types/scene";
+import type {
+  Medida,
+  Portrait,
+  Scene,
+  SessionTrack,
+  Spotlight,
+} from "@/types/scene";
 
 /**
  * Tudo que um espectador precisa saber.
@@ -33,12 +39,12 @@ export type LiveState = {
   /**
    * Os dados que os jogadores jogaram na mesa, ainda quentes.
    *
-   * O único campo deste quadro que NÃO nasce no Operador: a rolagem vem do
-   * celular, entra pelo daemon e o Operador a repassa depois de resolver de
+   * O único campo deste quadro que NÃO nasce no Mestre: a rolagem vem do
+   * celular, entra pelo daemon e o Mestre a repassa depois de resolver de
    * qual personagem ela é. Ele continua sendo quem publica — é o que mantém uma
    * autoridade só sobre o que as telas mostram —, mas aqui ele é mensageiro.
    *
-   * Lista curta e efêmera: o Operador tira cada uma da bandeja 30 segundos
+   * Lista curta e efêmera: o Mestre tira cada uma da bandeja 30 segundos
    * depois de ela cair. Não é histórico; histórico é dele e não viaja.
    */
   rolagens: RolagemDaMesa[];
@@ -58,8 +64,8 @@ export const SCENE_BROADCAST_INTERVAL_MS = 100;
  * O transporte da cena.
  *
  * Encolheu quando o daemon entrou. Antes havia `live:request`: o espectador que
- * abria a tela no meio da sessão pedia o estado, e o Operador respondia — com
- * reenvio a cada 2,5s, porque um pedido que chegasse antes de o Operador se
+ * abria a tela no meio da sessão pedia o estado, e o Mestre respondia — com
+ * reenvio a cada 2,5s, porque um pedido que chegasse antes de o Mestre se
  * inscrever simplesmente não existia para ele.
  *
  * Nada disso é preciso agora. O daemon guarda o último estado publicado e o
@@ -68,7 +74,7 @@ export const SCENE_BROADCAST_INTERVAL_MS = 100;
  * metade do `useSubscription`.
  */
 export interface SceneChannel {
-  /** Só o Operador chama. Num canal de espectador é inerte. */
+  /** Só o Mestre chama. Num canal de espectador é inerte. */
   publish(state: LiveState): void;
   /** Devolve a função de cancelamento. */
   subscribe(handler: (state: LiveState) => void): () => void;

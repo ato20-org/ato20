@@ -14,10 +14,10 @@ import {
 /**
  * A ficha do jogador neste aparelho.
  *
- * Separada do `use-viewer-store` de propósito: entrar na MESA e entrar como
+ * Separada do `use-mesa-store` de propósito: entrar na MESA e entrar como
  * JOGADOR são duas coisas. A TV entra na mesa e nunca vira jogador; um jogador
  * que só quer ver o mapa também não precisa criar ficha. Juntar as duas faria
- * cada aparelho que abre a Plateia criar uma linha na campanha do mestre — e a
+ * cada aparelho que abre o Jogador criar uma linha na campanha do mestre — e a
  * lista dele encheria de fantasmas.
  */
 export type PlayerStatus =
@@ -67,7 +67,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     try {
       const sheet = await fetchMe(codigo);
-      set(sheet ? { status: "dentro", sheet } : { status: "fora", sheet: null });
+      set(
+        sheet ? { status: "dentro", sheet } : { status: "fora", sheet: null },
+      );
     } catch (cause) {
       set({ status: "erro", erro: descreve(cause) });
     }

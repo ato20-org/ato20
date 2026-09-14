@@ -34,7 +34,7 @@ pub struct Personagem {
     pub ficha: Option<String>,
     /// O retrato, por id do ACERVO.
     ///
-    /// Asset, e nao anexo, e a razao e a TV: o Assistir nao tem token nem IPC,
+    /// Asset, e nao anexo, e a razao e a TV: o Espectador nao tem token nem IPC,
     /// e alcanca imagem so por `/asset/{id}`. Um retrato guardado como anexo do
     /// personagem exigiria abrir uma rota publica para arquivo de nome
     /// adivinhavel -- o problema que manter os anexos atras do token resolve.

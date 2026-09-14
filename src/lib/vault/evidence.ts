@@ -18,7 +18,10 @@ import { call, daemonAddr, isDesktop } from "@/lib/vault/bridge";
  */
 
 /** Marca o anexo como evidência e devolve o id do endereço. */
-export function shareAttachment(playerId: string, arquivo: string): Promise<string> {
+export function shareAttachment(
+  playerId: string,
+  arquivo: string,
+): Promise<string> {
   return call<string>("player_attachment_share", { id: playerId, arquivo });
 }
 
@@ -34,7 +37,11 @@ export function shareCharacterAttachment(
   autor: "mestre" | "jogador",
   arquivo: string,
 ): Promise<string> {
-  return call<string>("character_attachment_share", { id: personagemId, autor, arquivo });
+  return call<string>("character_attachment_share", {
+    id: personagemId,
+    autor,
+    arquivo,
+  });
 }
 
 /**
@@ -54,7 +61,7 @@ export function unshareAttachment(): Promise<void> {
  * Endereço da evidência, para quem vai desenhá-la.
  *
  * Mesmo formato de `assetUrl`: relativo nas telas servidas pelo daemon — a
- * Plateia e o Assistir —, absoluto no loopback para a janela do Operador, que
+ * Jogador e o Espectador —, absoluto no loopback para a janela do Mestre, que
  * roda noutra origem.
  */
 export async function evidenceUrl(sharedId: string): Promise<string> {

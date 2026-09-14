@@ -71,7 +71,7 @@ const REPETICOES = Number(opcao("repetir", 1));
 const MOVIDOS = opcao("movidos", "1");
 /** `dados`: ampliacao do palco. E ela que estoura o backing de um canvas grande. */
 const ZOOM = opcao("zoom", "1");
-/** `plateia`: `--sem-variante` mede o celular baixando o arquivo inteiro. */
+/** `jogador`: `--sem-variante` mede o celular baixando o arquivo inteiro. */
 const VARIANTE = temFlag("sem-variante") ? "0" : "1";
 /** `biblioteca`: `--sem-lazy` mede a lista sem os atributos de `MINIATURA`. */
 const LAZY = temFlag("sem-lazy") ? "0" : "1";
@@ -185,7 +185,7 @@ function servir(porta) {
     if (caminho.startsWith("/asset/")) {
       // `/asset/{id}/{variante}` responde reduzido, como o daemon: e a rota
       // que o `vault/variantes.rs` serve, e sem imita-la aqui as medidas de
-      // lista e de Plateia nao mediriam nada -- a tela pediria a reducao e
+      // lista e de Jogador nao mediriam nada -- a tela pediria a reducao e
       // receberia o arquivo.
       const partes = caminho.slice("/asset/".length).split("/");
       const variante = partes.length > 1 ? partes[1] : null;

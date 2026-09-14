@@ -33,8 +33,8 @@ type PortraitLayerProps = {
   portraits: Portrait[];
   /** Recorte atual da câmera. É o espaço em que o retrato vive. */
   camera?: Viewport;
-  /** `operator` mostra os que estão fora do ar, em fantasma. */
-  variant: "operator" | "viewer";
+  /** `mestre` mostra os que estão fora do ar, em fantasma. */
+  variant: "mestre" | "mesa";
   smooth?: boolean;
   /**
    * Os dados que os jogadores jogaram há pouco, para pendurar nos retratos.
@@ -47,7 +47,10 @@ type PortraitLayerProps = {
    * mestre precisa para narrar o resultado. Ver `RolagensFaixa`.
    */
   rolagens?: RolagemDaMesa[];
-  onPortraitPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
+  onPortraitPointerDown?: (
+    event: ReactPointerEvent,
+    portrait: Portrait,
+  ) => void;
 };
 
 /**
@@ -65,7 +68,7 @@ export function PortraitLayer({
   rolagens,
   onPortraitPointerDown,
 }: PortraitLayerProps) {
-  const isOperator = variant === "operator";
+  const isOperator = variant === "mestre";
 
   /**
    * Os dados por personagem, montados uma vez.
@@ -79,7 +82,10 @@ export function PortraitLayer({
 
     for (const rolagem of rolagens ?? []) {
       if (!rolagem.personagemId) continue;
-      mapa.set(rolagem.personagemId, [...(mapa.get(rolagem.personagemId) ?? []), rolagem]);
+      mapa.set(rolagem.personagemId, [
+        ...(mapa.get(rolagem.personagemId) ?? []),
+        rolagem,
+      ]);
     }
 
     return mapa;
@@ -100,7 +106,7 @@ export function PortraitLayer({
             // Ordem da lista é a ordem de empilhamento: o mais novo na frente.
             depth={index}
             ghost={isOperator && !portrait.visible}
-            operador={isOperator}
+            mestre={isOperator}
             interactive={Boolean(onPortraitPointerDown)}
             smooth={smooth}
             // Agrupado uma vez, e não filtrado aqui dentro: a `PortraitView`
@@ -136,7 +142,7 @@ export function PortraitLayer({
  * e centralizá-lo o joga para fora do recorte nos dois lados antes de a
  * transformação acontecer.
  *
- * `pointer-events: none` sempre, e não só no Operador. No Operador o quadro
+ * `pointer-events: none` sempre, e não só no Mestre. No Mestre o quadro
  * roubaria o arrasto do retrato; nas telas da mesa não há nada para clicar ali,
  * e um link que abrisse dentro do retrato tiraria a TV da cena.
  *
@@ -231,7 +237,7 @@ type PortraitViewProps = {
   depth: number;
   ghost: boolean;
   /** O palco do mestre. A marca de página viva só existe nele. */
-  operador: boolean;
+  mestre: boolean;
   interactive: boolean;
   smooth: boolean;
   /** Os dados deste personagem. Ausente = nenhum na mesa agora. */
@@ -244,7 +250,7 @@ const PortraitView = memo(function PortraitView({
   camera,
   depth,
   ghost,
-  operador,
+  mestre,
   interactive,
   smooth,
   rolagens,
@@ -278,7 +284,9 @@ const PortraitView = memo(function PortraitView({
         // mesma grossura aparente em qualquer zoom.
         outlineWidth: ghost ? 1.5 / scale : undefined,
       }}
-      onPointerDown={onPointerDown ? (event) => onPointerDown(event, portrait) : undefined}
+      onPointerDown={
+        onPointerDown ? (event) => onPointerDown(event, portrait) : undefined
+      }
     >
       {/* A imagem do acervo fica ATRÁS da página viva, e não no lugar dela.
           É o que faz o retrato existir enquanto o quadro carrega, e continuar
@@ -312,9 +320,9 @@ const PortraitView = memo(function PortraitView({
           desenha, e nenhum Retrato no acervo para ficar atrás. Sem ela o mestre
           vê um retângulo de seleção vazio e não tem como posicionar o que a TV
           vai mostrar -- que é justamente o trabalho dele neste palco.
-          Só no Operador: no celular de um jogador isto seria um aviso sobre
+          Só no Mestre: no celular de um jogador isto seria um aviso sobre
           uma limitação que não é dele e que ele não pode resolver. */}
-      {portrait.url && !paginaVivaOk && !url && operador ? (
+      {portrait.url && !paginaVivaOk && !url && mestre ? (
         <MarcaPaginaViva escala={scale} />
       ) : null}
 

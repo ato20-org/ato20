@@ -74,7 +74,7 @@ export function SpotlightLayer({
 
   return (
     // `fixed` e `z-60`: cobre a viewport inteira e vence a tela cheia da
-    // Plateia, que é `fixed inset-0 z-50`. Um jogador com o mapa expandido
+    // Jogador, que é `fixed inset-0 z-50`. Um jogador com o mapa expandido
     // veria, por baixo de um retângulo preto, justamente a imagem que o mestre
     // acabou de mandar olhar.
     <div
@@ -92,7 +92,11 @@ export function SpotlightLayer({
           // pinça, arrasto e duplo toque. O `key` do contêiner é o `since`, e
           // é isso que faz cada transmissão nova nascer encaixada em vez de
           // herdar o recorte da anterior.
-          <ImageZoom src={url} alt="Imagem em evidência" className="min-h-0 w-full flex-1" />
+          <ImageZoom
+            src={url}
+            alt="Imagem em evidência"
+            className="min-h-0 w-full flex-1"
+          />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img

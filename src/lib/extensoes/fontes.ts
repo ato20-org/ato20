@@ -3,7 +3,7 @@
  *
  * Módulo PURO e separado de `manifesto.ts` por causa do bundle: aquele importa
  * o diálogo nativo do Tauri, e estas funções são usadas por
- * `geometry/portrait.ts` — que a Plateia e o Assistir carregam. Juntos, o
+ * `geometry/portrait.ts` — que o Jogador e o Espectador carregam. Juntos, o
  * celular de cada jogador baixaria o seletor de arquivos do sistema para
  * resolver uma interpolação de string.
  *
@@ -77,7 +77,10 @@ export function urlDaFonte(fonte: FonteRetrato, codigo: string): string {
  * Serve a duas perguntas: que canvas usar ao desenhar, e que rótulo mostrar na
  * ficha para o mestre reconhecer o que colou.
  */
-export function fonteDaUrl(url: string, fontes: FonteRetrato[]): FonteRetrato | null {
+export function fonteDaUrl(
+  url: string,
+  fontes: FonteRetrato[],
+): FonteRetrato | null {
   const prefixos = fontes
     .map((fonte) => ({ fonte, prefixo: fonte.modelo.split("{codigo}")[0] }))
     // Mais específico primeiro: `.../stream/` tem de ganhar de `.../`.
@@ -93,7 +96,9 @@ export function canvasDaUrl(
 ): { largura: number; altura: number } {
   const fonte = fonteDaUrl(url, fontes);
 
-  return fonte ? { largura: fonte.largura, altura: fonte.altura } : CANVAS_PADRAO;
+  return fonte
+    ? { largura: fonte.largura, altura: fonte.altura }
+    : CANVAS_PADRAO;
 }
 
 /** Uma extensão instalada: o que ela diz de si, mais o que a máquina decidiu. */

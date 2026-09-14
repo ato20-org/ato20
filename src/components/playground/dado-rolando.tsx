@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 
-import { DadoFacetas } from "@/components/operator/dado-facetas";
+import { DadoFacetas } from "@/components/mestre/dado-facetas";
 import { desenharDado, quadroDaQueda } from "@/lib/geometry/dado";
 import { tipoDado, type FacesDado } from "@/types/dado";
 
@@ -143,7 +143,12 @@ export const DadoRolando = memo(function DadoRolando({
             `translate(${-quadro.x} ${-quadro.y})`
           }
         >
-          <DadoFacetas tipo={tipo} desenho={desenho} raio={raio} nitidez={quadro.nitidez} />
+          <DadoFacetas
+            tipo={tipo}
+            desenho={desenho}
+            raio={raio}
+            nitidez={quadro.nitidez}
+          />
         </g>
       </svg>
     </span>
