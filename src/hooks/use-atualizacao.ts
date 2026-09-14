@@ -5,6 +5,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 import { toast } from "sonner";
 
+import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { isDesktop } from "@/lib/vault/bridge";
 
 /**
@@ -27,10 +28,17 @@ import { isDesktop } from "@/lib/vault/bridge";
  * console, que é onde quem procura vai olhar.
  */
 export function useAtualizacao(): void {
+  const avisar = usePreferenciasStore((state) => state.avisarAtualizacao);
+
   useEffect(() => {
     // Numa aba de navegador não há aplicativo para atualizar, e chamar o plugin
     // fora do Tauri lança.
     if (!isDesktop()) return;
+
+    // Desligado nas Configurações: nem a PERGUNTA é feita. Checar e engolir a
+    // resposta ainda contaria à rede que esta máquina abriu o aplicativo, e
+    // quem desligou o aviso desligou o assunto.
+    if (!avisar) return;
 
     let vivo = true;
 
@@ -52,7 +60,9 @@ export function useAtualizacao(): void {
                   // Aqui o erro APARECE: quem clicou está esperando algo
                   // acontecer, e silêncio seria o aplicativo ignorando o botão.
                   toast.error(
-                    cause instanceof Error ? cause.message : "A atualização não instalou.",
+                    cause instanceof Error
+                      ? cause.message
+                      : "A atualização não instalou.",
                   );
                 }
               })();
@@ -68,5 +78,5 @@ export function useAtualizacao(): void {
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [avisar]);
 }

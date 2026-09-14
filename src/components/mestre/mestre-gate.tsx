@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
 import type { RecentEntry } from "@/lib/vault/campaign";
+import { NovidadesDaVersao } from "@/components/desktop/versoes-lista";
 
 /**
  * Porta do Mestre: qual pasta abrir.
@@ -219,6 +220,11 @@ function CampaignDoor() {
       {error ? (
         <p className="text-destructive text-center text-sm">{error}</p>
       ) : null}
+
+      {/* Por último, e de propósito: quem abriu o aplicativo veio entrar numa
+          mesa, e as novidades são o que se lê quando já se resolveu isso.
+          Acima dos botões elas estariam entre a pessoa e a campanha. */}
+      <NovidadesDaVersao />
     </Porta>
   );
 }

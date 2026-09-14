@@ -5,6 +5,7 @@ import {
   Blocks,
   Keyboard,
   Minus,
+  History,
   Moon,
   Palette,
   Plus,
@@ -26,6 +27,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { HistoricoDeVersoes } from "@/components/desktop/versoes-lista";
+import { versaoAtual } from "@/lib/versoes";
 import { atalhosPorGrupo } from "@/lib/mestre/atalhos";
 import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
@@ -43,6 +46,7 @@ import { cn } from "@/lib/utils";
  */
 const SECOES = [
   { chave: "geral", titulo: "Geral", icone: SlidersHorizontal },
+  { chave: "versao", titulo: "Versão", icone: History },
   { chave: "teclado", titulo: "Teclado", icone: Keyboard },
   { chave: "plugins", titulo: "Plugins", icone: Puzzle },
 ] as const;
@@ -125,6 +129,7 @@ export function ConfiguracoesDialog() {
                 diálogo e cairia sobre o título da seção. */}
             <div className="flex flex-col gap-4 p-4 pr-10">
               {secao === "geral" ? <PainelGeral /> : null}
+              {secao === "versao" ? <PainelVersao /> : null}
               {secao === "teclado" ? <PainelTeclado /> : null}
               {secao === "plugins" ? <PainelPlugins /> : null}
             </div>
@@ -256,6 +261,53 @@ function SecaoTema() {
  * A lista sai da MESMA tabela que o listener consulta, e não de uma cópia
  * escrita à mão: ver a nota em `ATALHOS`.
  */
+/**
+ * Qual versão está rodando, se ela avisa quando sai outra, e o que mudou até
+ * aqui.
+ *
+ * Os três no mesmo lugar porque são a mesma pergunta em três tempos: o que eu
+ * tenho, o que eu faço quando sair algo novo, e o que já mudou. Separar o
+ * histórico numa seção própria faria procurar duas vezes.
+ */
+function PainelVersao() {
+  const versao = versaoAtual();
+  const avisar = usePreferenciasStore((state) => state.avisarAtualizacao);
+  const definirAvisar = usePreferenciasStore(
+    (state) => state.definirAvisarAtualizacao,
+  );
+
+  return (
+    <>
+      <TituloSecao ajuda="O histórico vem dentro do pacote, e termina nesta versão.">
+        Versão {versao?.versao ?? ""}
+      </TituloSecao>
+
+      <label className="flex items-start gap-3">
+        <Switch
+          checked={avisar}
+          onCheckedChange={definirAvisar}
+          aria-label="Avisar quando sair versão nova"
+        />
+        <span className="min-w-0">
+          <span className="block text-sm">Avisar quando sair versão nova</span>
+          {/* Diz o que o desligado GARANTE, e não só o que ele evita: quem
+              desliga isto quer ficar na versão que tem, e a frase é o que
+              confirma que ficar é uma opção sustentada. */}
+          <span className="text-muted-foreground block text-xs">
+            Desligado, o aplicativo não procura atualização nenhuma e você fica
+            nesta versão até baixar outra por conta própria.
+          </span>
+        </span>
+      </label>
+
+      <Separator />
+
+      <TituloSecao>Histórico</TituloSecao>
+      <HistoricoDeVersoes />
+    </>
+  );
+}
+
 function PainelTeclado() {
   // A lista passou a depender dos plugins habilitados, e `atalhosPorGrupo` lê o
   // store por fora do React. Sem esta assinatura, ligar uma extensão com a tela

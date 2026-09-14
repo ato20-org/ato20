@@ -54,17 +54,47 @@ export function limitarZoom(valor: unknown): number {
   );
 }
 
-function ler(): number {
+/** O que sobrevive ao fechar o aplicativo. */
+type Guardado = { zoom: number; avisarAtualizacao: boolean };
+
+const PADRAO: Guardado = { zoom: ZOOM_PADRAO, avisarAtualizacao: true };
+
+/**
+ * Lê o objeto inteiro, e nunca um campo só.
+ *
+ * Era uma função que devolvia o zoom, e com uma preferência só isso bastava. Na
+ * segunda, não: quem grava reescreve a chave inteira, então gravar o zoom
+ * sabendo apenas o zoom APAGARIA o aviso de atualização. Ler tudo e gravar tudo
+ * é o que mantém as duas de pé.
+ */
+function ler(): Guardado {
   try {
     const cru = localStorage.getItem(CHAVE_DISCO);
-    if (!cru) return ZOOM_PADRAO;
+    if (!cru) return PADRAO;
 
     const lido: unknown = JSON.parse(cru);
-    if (typeof lido !== "object" || lido === null) return ZOOM_PADRAO;
+    if (typeof lido !== "object" || lido === null) return PADRAO;
 
-    return limitarZoom((lido as { zoom?: unknown }).zoom);
+    const objeto = lido as { zoom?: unknown; avisarAtualizacao?: unknown };
+
+    return {
+      zoom: limitarZoom(objeto.zoom),
+      // Só `false` desliga. Ausente é o caso de quem já usava o aplicativo
+      // antes desta preferência existir, e para essa pessoa nada mudou.
+      avisarAtualizacao: objeto.avisarAtualizacao !== false,
+    };
   } catch {
-    return ZOOM_PADRAO;
+    return PADRAO;
+  }
+}
+
+/** Grava a chave inteira. Falhar aqui custa a preferência, não a sessão. */
+function gravar(estado: Guardado): void {
+  try {
+    localStorage.setItem(CHAVE_DISCO, JSON.stringify(estado));
+  } catch {
+    // Cota cheia ou armazenamento bloqueado: vale nesta sessão e volta ao
+    // padrão na próxima. Não vale um aviso.
   }
 }
 
@@ -97,6 +127,18 @@ type PreferenciasStore = {
   zoom: number;
 
   /**
+   * Procurar versão nova ao abrir.
+   *
+   * Desligado, o aplicativo nunca mais pergunta nada à rede sobre si mesmo, e
+   * quem baixou uma versão fica nela pelo tempo que quiser. Existe porque a
+   * mesa é o lugar errado para uma novidade: quem está no meio de uma campanha
+   * que funciona não quer ser convidado a trocar de versão.
+   *
+   * Ligado por padrão -- correção de falha não chega a quem não é avisado.
+   */
+  avisarAtualizacao: boolean;
+
+  /**
    * Muda o zoom e grava.
    *
    * Grava a cada mudança, ao contrário da divisão do leitor, que espera o fim
@@ -104,6 +146,7 @@ type PreferenciasStore = {
    * decisão inteira.
    */
   definirZoom: (zoom: number) => void;
+  definirAvisarAtualizacao: (avisar: boolean) => void;
   /** Lê o disco e aplica. Chamado na abertura, antes da campanha. */
   restaurar: () => void;
 };
@@ -117,6 +160,7 @@ type PreferenciasStore = {
  */
 export const usePreferenciasStore = create<PreferenciasStore>((set, get) => ({
   zoom: ZOOM_PADRAO,
+  avisarAtualizacao: PADRAO.avisarAtualizacao,
 
   definirZoom(zoom) {
     const alvo = limitarZoom(zoom);
@@ -125,18 +169,20 @@ export const usePreferenciasStore = create<PreferenciasStore>((set, get) => ({
     set({ zoom: alvo });
     aplicar(alvo);
 
-    try {
-      localStorage.setItem(CHAVE_DISCO, JSON.stringify({ zoom: alvo }));
-    } catch {
-      // Cota cheia ou armazenamento bloqueado: o zoom vale nesta sessão e
-      // volta ao padrão na próxima. Não vale um aviso.
-    }
+    gravar({ zoom: alvo, avisarAtualizacao: get().avisarAtualizacao });
+  },
+
+  definirAvisarAtualizacao(avisar) {
+    if (avisar === get().avisarAtualizacao) return;
+
+    set({ avisarAtualizacao: avisar });
+    gravar({ zoom: get().zoom, avisarAtualizacao: avisar });
   },
 
   restaurar() {
-    const zoom = ler();
+    const { zoom, avisarAtualizacao } = ler();
 
-    set({ zoom });
+    set({ zoom, avisarAtualizacao });
     // Aplica mesmo no padrão: a webview pode ter guardado o zoom da execução
     // anterior por conta própria, e nesse caso 100% aqui é uma correção.
     aplicar(zoom);
