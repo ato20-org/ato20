@@ -146,7 +146,38 @@ type DadosStore = {
      */
     valor?: number,
   ) => Dado;
-  recolher: () => void;
+  /**
+   * O recolhimento em curso: os dados sendo sugados para a boca do saquinho.
+   *
+   * `null` = mesa parada. Enquanto existe, os dados listados CONTINUAM em
+   * `dados` — é o que permite animá-los; quem os tira é `consumirSuccao`, no
+   * quadro em que o último entra no saquinho.
+   *
+   * O destino vem em pixel de TELA, e pelo mesmo motivo do `naMao`: a boca do
+   * saquinho é um ponto da bancada, e só quem desenha sabe traduzi-la para a
+   * unidade em que o dado vive — no mestre isso depende do zoom e do
+   * deslocamento do palco.
+   *
+   * `ids` e não "todos os dados" porque a lista pode CRESCER no meio: o
+   * saquinho continua aberto durante a sucção, e um dado jogado enquanto os
+   * outros somem não foi mandado recolher. Sem a lista, ele nasceria já dentro
+   * do buraco.
+   */
+  succao: {
+    desde: number;
+    destino: { clientX: number; clientY: number };
+    ids: string[];
+  } | null;
+  /**
+   * Recolhe os dados da mesa.
+   *
+   * Com `destino`, eles são SUGADOS para lá — ver `succao`. Sem ele, a mesa
+   * limpa no ato: é o caminho de quem não tem boca de saquinho para mostrar,
+   * como a bancada de medição em `/perf`.
+   */
+  recolher: (destino?: { clientX: number; clientY: number }) => void;
+  /** Tira da mesa o que a sucção engoliu. Chamado por quem anima, no fim dela. */
+  consumirSuccao: () => void;
   /** Tira um dado do tabuleiro, sem mexer no histórico. */
   guardar: (id: string) => void;
   mover: (posicao: { x: number; y: number }) => void;
@@ -265,7 +296,38 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
     return dado;
   },
 
-  recolher: () => set({ dados: [] }),
+  succao: null,
+  recolher: (destino) =>
+    set((state) => {
+      // Sem boca para onde ir, ou mesa vazia: não há o que animar.
+      if (!destino || state.dados.length === 0) return { dados: [], succao: null };
+
+      // Pedido em cima de um recolhimento que já está acontecendo é impaciência:
+      // engole tudo agora, em vez de recomeçar a espiral e fazer os dados que já
+      // estavam quase dentro saltarem de volta para o lugar de onde saíram.
+      if (state.succao) return { dados: [], succao: null };
+
+      return {
+        succao: {
+          desde: Date.now(),
+          destino,
+          ids: state.dados.map((dado) => dado.id),
+        },
+      };
+    }),
+  consumirSuccao: () =>
+    set((state) => {
+      if (!state.succao) return {};
+
+      const engolidos = new Set(state.succao.ids);
+
+      return {
+        // Só os que foram mandados recolher: o que caiu na mesa depois do
+        // pedido fica. Ver `succao.ids`.
+        dados: state.dados.filter((dado) => !engolidos.has(dado.id)),
+        succao: null,
+      };
+    }),
   guardar: (id) => set((state) => ({ dados: state.dados.filter((dado) => dado.id !== id) })),
 
   mover: (posicao) => set({ posicao: { x: limitar(posicao.x), y: limitar(posicao.y) } }),

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -46,14 +46,24 @@ export function DockButton({
   rotulo,
   icone,
   onClick,
+  ref,
 }: {
   ativo: boolean;
   rotulo: string;
   icone: ReactNode;
   onClick: () => void;
+  /**
+   * O elemento do botão, para quem precisa saber ONDE ele está na tela.
+   *
+   * Existe por causa do saquinho: recolher os dados os suga para a boca dele, e
+   * na tela deitada a boca é este botão — a gaveta que ele abre é o interior do
+   * saquinho, não a entrada. Ver `ConteudoDoSaquinho`.
+   */
+  ref?: Ref<HTMLButtonElement>;
 }) {
   return (
     <Button
+      ref={ref}
       variant="ghost"
       size="icon"
       aria-label={rotulo}

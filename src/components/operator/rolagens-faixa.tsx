@@ -3,13 +3,18 @@
 import { useEffect, useRef } from "react";
 import { GripVertical, Maximize2 } from "lucide-react";
 
-import { DadoParado } from "@/components/playground/dado-parado";
+import { DadoRolando } from "@/components/playground/dado-rolando";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   limitarEscala,
   useKillfeedStore,
   type LugarDaFaixa,
 } from "@/lib/store/use-killfeed-store";
+import {
+  DURACAO_DA_CHEGADA,
+  instanteDaQueda,
+  useQuedaDasRolagens,
+} from "@/hooks/use-queda-das-rolagens";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { encaixar, useWindowStore } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
@@ -55,10 +60,17 @@ const PIXELS_POR_ESCALA = 200;
  * cor de fundo acerta uns mapas e erra outros. Texto claro com sombra escura
  * lê tanto sobre a masmorra preta quanto sobre a taverna clara -- é a razão de
  * o jogo inteiro desenhar assim.
+ *
+ * O dado CAI aqui, e o número só aparece quando ele pousa. Antes a linha nascia
+ * pronta no instante do arremesso, que é entre um e dois segundos ANTES de o
+ * dado pousar no aparelho de quem rolou: o mestre lia o número em voz alta
+ * enquanto o jogador ainda olhava o dado dele girando. Ver `DadoRolando`.
  */
 export function RolagensFaixa() {
   const bandeja = useRolagensStore((state) => state.bandeja);
   const apagar = useRolagensStore((state) => state.apagar);
+
+  const { chegada, agora } = useQuedaDasRolagens(bandeja);
 
   const lugar = useKillfeedStore((state) => state.lugar);
   const acomodar = useKillfeedStore((state) => state.acomodar);
@@ -184,41 +196,80 @@ export function RolagensFaixa() {
           className="flex origin-top flex-col items-center gap-0.5"
           style={{ scale: "var(--faixa-escala)" }}
         >
-      {bandeja.slice(0, TETO).map((rolagem) => (
-        <li key={rolagem.id}>
-          <button
-            type="button"
-            // O nome inteiro no rótulo: a linha o trunca quando o jogador
-            // escolheu um nome comprido, e quem lê por voz precisa do todo.
-            aria-label={`Tirar da mesa: ${rolagem.jogador} tirou ${valorDaRolagem(
-              rolagem.faces,
-              rolagem.valor,
-            )} no d${rolagem.faces}`}
-            onClick={() => apagar(rolagem.id)}
-            // A sombra vai no BOTÃO e não só no texto: ela alcança o desenho do
-            // dado junto, que é SVG e sumiria num mapa claro do mesmo jeito.
-            //
-            // O fundo só aparece no hover, e é o que diz que a linha é
-            // clicável: sem ele, passar o mouse por cima do texto solto não
-            // prometia nada.
-            className="flex items-center gap-1.5 rounded px-1.5 py-0.5 text-left drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] transition-colors hover:bg-black/40"
-          >
-            <DadoParado faces={rolagem.faces} valor={rolagem.valor} tamanho={22} />
+      {bandeja.slice(0, TETO).map((rolagem) => {
+        const t = instanteDaQueda(chegada.get(rolagem.id), agora);
+        const assentou = t >= DURACAO_DA_CHEGADA;
 
-            {/* Teto na largura e não largura fixa: a fileira é centrada, e um
-                bloco fixo deixaria "Ana" flutuando no meio de um vão. O teto só
-                existe para um nome de sessenta caracteres não atravessar o
-                mapa. */}
-            <span className="max-w-40 truncate text-xs leading-tight font-medium text-white">
-              {rolagem.jogador}
-            </span>
+        return (
+          <li key={rolagem.id}>
+            <button
+              type="button"
+              // O nome inteiro no rótulo: a linha o trunca quando o jogador
+              // escolheu um nome comprido, e quem lê por voz precisa do todo.
+              aria-label={`Tirar da mesa: ${rolagem.jogador} tirou ${valorDaRolagem(
+                rolagem.faces,
+                rolagem.valor,
+              )} no d${rolagem.faces}`}
+              onClick={() => apagar(rolagem.id)}
+              // A sombra vai no BOTÃO e não só no texto: ela alcança o desenho do
+              // dado junto, que é SVG e sumiria num mapa claro do mesmo jeito.
+              //
+              // O fundo só aparece no hover, e é o que diz que a linha é
+              // clicável: sem ele, passar o mouse por cima do texto solto não
+              // prometia nada.
+              className="flex items-center gap-1.5 rounded px-1.5 py-0.5 text-left drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] transition-colors hover:bg-black/40"
+            >
+              <DadoRolando
+                id={rolagem.id}
+                faces={rolagem.faces}
+                valor={rolagem.valor}
+                tamanho={22}
+                t={t}
+              />
 
-            <span className="text-sm leading-tight font-bold tabular-nums text-white">
-              {valorDaRolagem(rolagem.faces, rolagem.valor)}
-            </span>
-          </button>
-        </li>
-      ))}
+              {/* Teto na largura e não largura fixa: a fileira é centrada, e um
+                  bloco fixo deixaria "Ana" flutuando no meio de um vão. O teto só
+                  existe para um nome de sessenta caracteres não atravessar o
+                  mapa. */}
+              <span className="max-w-40 truncate text-xs leading-tight font-medium text-white">
+                {rolagem.jogador}
+              </span>
+
+              {/* A linha tem DOIS estados, e esta é a coluna deles: "Rolando"
+                  enquanto o dado tomba, o resultado quando ele pousa.
+
+                  A palavra existe porque o dado miúdo tombando é ambíguo a três
+                  metros de distância — dele sozinho não dá para saber se a
+                  jogada está em curso ou se a fileira travou. Com ela, a linha
+                  se explica antes de ter número.
+
+                  Os dois EMPILHADOS na mesma célula, e não um trocado pelo
+                  outro: a fileira é centrada linha a linha, e uma coluna que
+                  encolhesse de "Rolando" para "17" faria a linha inteira
+                  escorregar para o lado no instante do resultado — justo quando
+                  a mesa está olhando para ela. Empilhados, a célula tem a
+                  largura da palavra desde o primeiro quadro e nada se move; de
+                  quebra, os resultados das várias linhas ficam alinhados. */}
+              <span className="grid place-items-start">
+                <span
+                  className="text-sm leading-tight font-bold tabular-nums text-white transition-opacity duration-200 [grid-area:1/1]"
+                  style={{ opacity: assentou ? 1 : 0 }}
+                >
+                  {valorDaRolagem(rolagem.faces, rolagem.valor)}
+                </span>
+
+                <span
+                  aria-hidden
+                  className="text-xs leading-tight font-medium text-white/60 transition-opacity duration-200 [grid-area:1/1] self-center"
+                  style={{ opacity: assentou ? 0 : 1 }}
+                >
+                  Rolando…
+                </span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
         </ul>
 
         {/* As alças só existem no hover. A fileira é um aviso que passa, não um

@@ -1338,6 +1338,152 @@ export function quadroNaMao({
   };
 }
 
+/**
+ * Quanto dura a sucção do saquinho, em segundos.
+ *
+ * Seis décimos e um pouco: é o tempo de um gesto que se vê acontecer sem
+ * atrapalhar quem já está pegando o dado seguinte. Abaixo de meio segundo a
+ * espiral não chega a ser lida — o dado só pisca e some, que é o que o
+ * recolhimento fazia antes —, e acima de um segundo a mesa fica esperando uma
+ * animação para poder jogar de novo.
+ */
+export const DURACAO_DA_SUCCAO = 0.62;
+
+/**
+ * Quantas voltas o dado dá em torno do saquinho enquanto é engolido.
+ *
+ * Meia volta e pouco. Mais que isso e a trajetória deixa de parecer queda e
+ * passa a parecer órbita — o dado circula, e circular é o contrário de ser
+ * puxado.
+ */
+const VOLTAS_DA_ESPIRAL = 0.55;
+
+export type QuadroDaSuccao = {
+  /** Centro do dado, na unidade do espaço. */
+  x: number;
+  y: number;
+  orientacao: Quat;
+  /** Encolhe até zero: o dado entra no saquinho, não pousa nele. */
+  escala: number;
+  /**
+   * O esticão na direção do buraco, e o aperto no través.
+   *
+   * Aplicado num eixo GIRADO — ver `anguloDoEstica` —, e não nos eixos da tela.
+   * É o que faz o dado alongar na direção de para onde está sendo puxado em vez
+   * de alongar sempre na horizontal.
+   */
+  alonga: number;
+  aperta: number;
+  /** O ângulo do esticão, em graus, para entrar direto num `rotate` de SVG. */
+  anguloDoEstica: number;
+  sombra: { raio: number; opacidade: number };
+  /** Ver `QuadroDaQueda.nitidez`. Some depressa: o dado volta a ser borrão. */
+  nitidez: number;
+  opacidade: number;
+  /** Já foi engolido: quem anima pode tirá-lo da mesa. */
+  sumiu: boolean;
+};
+
+/**
+ * O dado sendo sugado para o saquinho, no instante `t` do recolhimento.
+ *
+ * A trajetória é a de quem cai num poço de gravidade: o raio até a boca do
+ * saquinho encolhe devagar no começo e desaba no fim — `1 − p^2,6`, que é uma
+ * atração que cresce conforme a distância diminui —, e o giro em torno dele
+ * acelera junto. O dado sai do lugar quase sem querer, e nos últimos décimos é
+ * arrancado.
+ *
+ * Todos chegam JUNTOS, e é por isso que a conta é em FRAÇÃO do raio de cada um
+ * e não em velocidade: o dado do outro canto do mapa anda mais depressa que o
+ * que caiu ao lado do saquinho, e os dois somem no mesmo quadro. Com velocidade
+ * igual o recolhimento terminaria em cascata, e a última meia dúzia de quadros
+ * seria um dado só arrastando o fim da animação.
+ *
+ * O alongamento é o que dá o BURACO NEGRO em vez de um simples encolher: o dado
+ * estica na direção da boca e aperta no través, cada vez mais conforme chega —
+ * a maré de quem cai de pé num poço. O volume é preservado (`aperta = 1 /
+ * alonga`), senão o dado ganharia massa enquanto é espremido.
+ *
+ * Função pura do instante, como a queda: nada aqui mora em estado, e o mesmo
+ * `t` desenha sempre o mesmo quadro. Ver `quadroDaQueda`.
+ */
+export function quadroDaSuccao(
+  dado: {
+    /** Onde o dado está AGORA, na unidade do espaço. Ver `quadroDaQueda`. */
+    x: number;
+    y: number;
+    raio: number;
+    semente: number;
+    /** A pose em que ele estava quando o recolhimento começou. */
+    orientacao: Quat;
+  },
+  /** A boca do saquinho, na mesma unidade. */
+  destino: { x: number; y: number },
+  t: number,
+): QuadroDaSuccao {
+  const p = Math.min(1, Math.max(0, t / DURACAO_DA_SUCCAO));
+  const resto = 1 - p;
+
+  const dx = dado.x - destino.x;
+  const dy = dado.y - destino.y;
+  const raio = Math.hypot(dx, dy);
+  const angulo = Math.atan2(dy, dx);
+
+  // A atração que cresce ao se aproximar. Em fração do raio de CADA dado, para
+  // todos chegarem juntos — ver a nota da função.
+  const restante = 1 - p ** 2.6;
+
+  // A espiral acelera junto com a queda: `p²` tem quase todo o giro no terço
+  // final, que é onde o dado já está perto o bastante para o giro ser visível.
+  const rnd = semeado(dado.semente);
+  // Um quarto de volta de defasagem entre dados, para dois que caíram lado a
+  // lado não entrarem no saquinho como um trilho só.
+  const espiral = (VOLTAS_DA_ESPIRAL + rnd() * 0.25) * Math.PI * 2 * p ** 2;
+  const rumo = angulo + espiral;
+
+  const x = destino.x + Math.cos(rumo) * raio * restante;
+  const y = destino.y + Math.sin(rumo) * raio * restante;
+
+  // O eixo da tombada é o mesmo da queda: é o segundo número da semente, e o
+  // dado não troca de eixo entre pousar e ser recolhido.
+  const eixo = normalizar({ x: rnd() * 2 - 1, y: rnd() * 2 - 1, z: rnd() * 2 - 1 });
+  // Umas três voltas, quase todas no fim: `p³` é o giro de quem acelera para
+  // dentro. O dado entra no saquinho rodando, não parado.
+  const orientacao = quatMul(quatDoEixo(eixo, p ** 3 * 18), dado.orientacao);
+
+  const alonga = 1 + p ** 2 * 0.6;
+
+  return {
+    x,
+    y,
+    orientacao,
+    // Encolhe até nada. A raiz deixa o dado em tamanho de LER na primeira
+    // metade — o mestre ainda enxerga o que estava na mesa — e some depressa na
+    // segunda, que é quando ele já está dentro da boca.
+    escala: resto ** 0.55,
+    alonga,
+    aperta: 1 / alonga,
+    // O esticão aponta para a boca pelo rumo DESTE quadro, e não pelo do
+    // primeiro: o dado espirala, então a linha que o liga ao saquinho gira
+    // junto com ele. Congelada, o alongamento sairia de través no fim.
+    anguloDoEstica: (rumo * 180) / Math.PI,
+    sombra: {
+      // A sombra sai antes do dado: ele está sendo LEVANTADO da mesa, e sombra
+      // que encolhe junto com o corpo o deixaria deslizando pelo chão.
+      raio: dado.raio * resto,
+      opacidade: 0.42 * resto ** 2.5,
+    },
+    // Volta a ser borrão: o número deixou de ser a informação no instante em
+    // que alguém mandou recolher, e um algarismo nítido girando a três voltas
+    // por segundo é um enxame. Ver `QuadroDaQueda.nitidez`.
+    nitidez: Math.max(0, 1 - p * 2) ** 2,
+    // Apaga só no fim, e rápido: o que faz o dado sumir é o tamanho, e apagar
+    // desde o começo o transformaria em fantasma no meio do caminho.
+    opacidade: Math.min(1, resto / 0.18),
+    sumiu: p >= 1,
+  };
+}
+
 function suavizarSaida(p: number): number {
   return 1 - (1 - p) ** 3;
 }

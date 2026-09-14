@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Trash2 } from "lucide-react";
 
 import { DadoParado } from "@/components/playground/dado-parado";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useDadosNaMesa } from "@/hooks/use-dados-na-mesa";
 import { useGestoDeArremesso } from "@/hooks/use-gesto-de-arremesso";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { cn } from "@/lib/utils";
@@ -43,10 +44,30 @@ const BOLINHA = 64;
  * página inteira: o celular é a mesa. Aqui só se diz onde a mão está.
  */
 export function SaquinhoPlateia() {
-  const dados = useDadosStore((state) => state.dados);
   const naMao = useDadosStore((state) => state.naMao);
+  const engolindo = useDadosStore((state) => state.succao !== null);
+
+  // Fora o que já está sendo sugado: o contador diz que há o que recolher, e
+  // um número que só zera meio segundo depois do toque parece um botão que não
+  // funcionou. Ver `useDadosNaMesa`.
+  const dados = useDadosNaMesa();
 
   const [aberto, setAberto] = useState(false);
+  const bolinha = useRef<HTMLButtonElement>(null);
+
+  /**
+   * A boca do saquinho, em pixel de tela: o centro da bolinha da barra.
+   *
+   * Do retângulo do próprio botão, e não de uma fração como no mestre: esta
+   * bolinha não é arrastável — ela mora no meio da barra de baixo —, então o
+   * lugar dela é o que o layout decidir, e só o elemento sabe qual é.
+   */
+  function boca(): { clientX: number; clientY: number } | undefined {
+    const rect = bolinha.current?.getBoundingClientRect();
+    if (!rect) return undefined;
+
+    return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+  }
 
   return (
     <Popover
@@ -69,10 +90,14 @@ export function SaquinhoPlateia() {
       <PopoverTrigger
         render={
           <button
+            ref={bolinha}
             type="button"
             aria-label="Saquinho de dados"
             className={cn(
               "relative grid shrink-0 place-items-center rounded-full border transition-transform active:scale-95",
+              // Incha enquanto engole e volta quando o último dado entra: é o
+              // gole que amarra a espiral dos dados a este ponto da tela.
+              engolindo && "scale-[1.15]",
               // Sobe metade para fora do cartão. Sem anel em volta: a bolinha
               // cruza duas cores — o cartão embaixo, o fundo da página em cima
               // —, e um anel de cor única erraria uma das duas. Quem a solta do
@@ -82,6 +107,14 @@ export function SaquinhoPlateia() {
             )}
             style={{ width: BOLINHA, height: BOLINHA }}
           >
+            {/* O anel do sorvedouro, só enquanto há o que engolir. */}
+            {engolindo ? (
+              <span
+                aria-hidden
+                className="border-primary/70 absolute inset-0 animate-ping rounded-full border-2"
+              />
+            ) : null}
+
             <DadoParado faces={20} valor={20} tamanho={40} />
 
             {/* Quantos dados estão na tela. Com a página rolada, um dado pode
@@ -115,7 +148,7 @@ export function SaquinhoPlateia() {
           naMao && "opacity-15",
         )}
       >
-        <ConteudoDoSaquinho />
+        <ConteudoDoSaquinho boca={boca} />
       </PopoverContent>
     </Popover>
   );
@@ -133,12 +166,26 @@ export function SaquinhoPlateia() {
  * de todo mundo. Uma segunda lista no próprio aparelho seria a mesma coisa dita
  * duas vezes, num espaço que não sobra.
  */
-export function ConteudoDoSaquinho() {
+export function ConteudoDoSaquinho({
+  boca,
+}: {
+  /**
+   * Onde os dados são sugados ao recolher, em pixel de tela.
+   *
+   * Vem de quem tem a bolinha: no celular ela está na barra de baixo. A coluna
+   * da tela larga não tem bolinha nenhuma — o saquinho lá É o painel —, e sem
+   * esta função os dados são sugados para o próprio botão de recolher, que é o
+   * ponto daquela tela que mais se parece com a boca do saquinho.
+   */
+  boca?: () => { clientX: number; clientY: number } | undefined;
+} = {}) {
   const pegarDado = useDadosStore((state) => state.pegarDado);
   const moverMao = useDadosStore((state) => state.moverMao);
   const arremessar = useDadosStore((state) => state.arremessar);
   const recolher = useDadosStore((state) => state.recolher);
-  const dados = useDadosStore((state) => state.dados);
+
+  // Fora os que já estão sendo engolidos. Ver `useDadosNaMesa`.
+  const dados = useDadosNaMesa();
 
   const gestoDeArremesso = useGestoDeArremesso();
 
@@ -216,11 +263,23 @@ export function ConteudoDoSaquinho() {
       {/* Recolhe o que está NESTE aparelho. Não tira da mesa: o que a mesa viu,
           viu -- e quem tira de lá é o mestre. */}
       {dados.length > 0 ? (
-        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={recolher}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          onClick={(event) => recolher(boca?.() ?? centroDe(event.currentTarget))}
+        >
           <Trash2 />
           Recolher {dados.length === 1 ? "o dado" : `os ${dados.length} dados`}
         </Button>
       ) : null}
     </div>
   );
+}
+
+/** O centro de um elemento, em pixel de tela. */
+function centroDe(alvo: HTMLElement): { clientX: number; clientY: number } {
+  const rect = alvo.getBoundingClientRect();
+
+  return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
 }

@@ -19,6 +19,7 @@ import { MarqueeBox } from "@/components/playground/marquee-box";
 import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
+import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { SelectionBox } from "@/components/playground/selection-box";
 import { TransformHandles } from "@/components/playground/transform-handles";
@@ -203,6 +204,15 @@ export function OperatorStage({ scene }: { scene: Scene }) {
   const panMode = usePanMode();
   const abrirJanela = useAbrirJanela();
   const { personagens } = useCharacters();
+
+  /**
+   * Os dados que os jogadores jogaram, para pendurar nos retratos.
+   *
+   * A bandeja, e não o histórico: é o que está NA MESA agora, e é a mesma
+   * lista que a fileira do canto desenha e que o quadro publicado leva para a
+   * TV e para os celulares. Ver `useRolagensStore`.
+   */
+  const bandeja = useRolagensStore((state) => state.bandeja);
 
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
@@ -1054,6 +1064,16 @@ export function OperatorStage({ scene }: { scene: Scene }) {
           apagando={apagando}
           scene={scene}
           variant="operator"
+          // Os dados dos jogadores pendurados nos retratos, aqui também.
+          //
+          // O palco do mestre ficou de fora quando isto nasceu, com o
+          // argumento de que a fileira do canto já os mostra e repetir daria
+          // dois lugares para a mesma coisa. O argumento caiu quando o dado
+          // passou a CAIR no retrato: a fileira diz o que foi rolado, e o
+          // retrato diz de quem é, com a queda acontecendo no rosto da pessoa.
+          // São duas leituras diferentes do mesmo fato, e o mestre precisa das
+          // duas -- ele é quem narra o resultado para a mesa.
+          rolagens={bandeja}
           // Todos enquanto a aba Retratos está aberta; fora dela, só o
           // selecionado. Desenhar todos sempre punha cabeça flutuando sobre a
           // moldura da câmera justamente enquanto o mestre monta o mapa.

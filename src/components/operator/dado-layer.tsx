@@ -15,8 +15,10 @@ import { useGestoDeArremesso } from "@/hooks/use-gesto-de-arremesso";
 import {
   desenharDado,
   duracaoDaQueda,
+  DURACAO_DA_SUCCAO,
   impulsoDeRelance,
   quadroDaQueda,
+  quadroDaSuccao,
   quadroNaMao,
 } from "@/lib/geometry/dado";
 import type { Vec } from "@/lib/geometry/transform";
@@ -26,6 +28,21 @@ import { tipoDado, valorDaRolagem, type Dado } from "@/types/dado";
 
 /** A mão do store, sem exportar o tipo dele só para nomear uma propriedade. */
 type Mao = ReturnType<typeof useDadosStore.getState>["naMao"];
+
+/**
+ * O recolhimento em curso, já traduzido para a unidade do espaço.
+ *
+ * O store guarda a boca do saquinho em pixel de TELA, porque é o que o saquinho
+ * sabe dizer — ver `succao`. Quem traduz é esta camada, que é quem está dentro
+ * do palco e conhece o zoom e o deslocamento.
+ */
+type SuccaoEmCena = {
+  desde: number;
+  /** A boca do saquinho, na unidade do espaço. */
+  destino: Vec;
+  /** Quem foi mandado recolher. O que caiu depois do pedido não está aqui. */
+  ids: ReadonlySet<string>;
+};
 
 /**
  * Os dados sobre o tabuleiro.
@@ -200,8 +217,10 @@ export function DadosNoEspaco({
 }) {
   const dados = useDadosStore((state) => state.dados);
   const naMao = useDadosStore((state) => state.naMao);
+  const succao = useDadosStore((state) => state.succao);
   const arremesso = useDadosStore((state) => state.arremesso);
   const consumirArremesso = useDadosStore((state) => state.consumirArremesso);
+  const consumirSuccao = useDadosStore((state) => state.consumirSuccao);
   const guardar = useDadosStore((state) => state.guardar);
   const lancar = useDadosStore((state) => state.lancar);
 
@@ -286,6 +305,23 @@ export function DadosNoEspaco({
     aoArremessar,
   ]);
 
+  /**
+   * O recolhimento, traduzido uma vez por quadro em vez de uma vez por dado.
+   *
+   * `useMemo` porque a referência entra no `memo` do `DadoNaMesa`: um objeto
+   * novo a cada render tiraria do atalho todo dado que NÃO está sendo engolido,
+   * e eles são justamente os que não têm nada a redesenhar.
+   */
+  const succaoEmCena = useMemo<SuccaoEmCena | null>(() => {
+    if (!succao || scale === 0) return null;
+
+    return {
+      desde: succao.desde,
+      destino: toScene(succao.destino.clientX, succao.destino.clientY),
+      ids: new Set(succao.ids),
+    };
+  }, [succao, scale, toScene]);
+
   const temMao = naMao !== null;
 
   /**
@@ -307,7 +343,12 @@ export function DadosNoEspaco({
    * que a informação nasce: o laço já decidia isso para saber se reagenda. Ver
    * o fim de `passo`.
    */
-  const token = `${dados.map((dado) => `${dado.id}@${dado.lancadoEm}`).join(",")}|${temMao}`;
+  const token =
+    `${dados.map((dado) => `${dado.id}@${dado.lancadoEm}`).join(",")}|${temMao}` +
+    // O recolhimento também ACORDA o laço: os dados já estão todos parados
+    // quando ele começa, e sem isto a sucção aconteceria num quadro só -- o
+    // último, o de todos já engolidos.
+    `|${succao?.desde ?? 0}`;
   const [visto, setVisto] = useState({ token: "", emMovimento: false });
 
   if (visto.token !== token) {
@@ -343,12 +384,16 @@ export function DadosNoEspaco({
 
     const passo = () => {
       const instante = Date.now();
-      const { dados: atuais, naMao: mao } = useDadosStore.getState();
+      const { dados: atuais, naMao: mao, succao: recolhendo } = useDadosStore.getState();
+
+      const engolindo =
+        recolhendo !== null && (instante - recolhendo.desde) / 1000 < DURACAO_DA_SUCCAO;
 
       // Decide ANTES de publicar o instante: assim o último quadro é o do dado
       // já assentado, e não um quadro antes dele.
       const rolando =
         mao !== null ||
+        engolindo ||
         atuais.some((dado) => (instante - dado.lancadoEm) / 1000 < duracaoDaQueda(dado));
 
       setAgora(instante);
@@ -359,6 +404,11 @@ export function DadosNoEspaco({
         return;
       }
 
+      // O último dado entrou no saquinho: agora, e não no clique, é que eles
+      // saem da mesa. Depois de `setAgora`, para o quadro do desaparecimento
+      // ser o que já os desenhou em tamanho nenhum.
+      if (recolhendo) consumirSuccao();
+
       // Acabou de assentar. O laço morre aqui, e com ele o custo por quadro.
       assentou();
     };
@@ -366,7 +416,7 @@ export function DadosNoEspaco({
     frame = requestAnimationFrame(passo);
 
     return () => cancelAnimationFrame(frame);
-  }, [algumEmMovimento, assentou]);
+  }, [algumEmMovimento, assentou, consumirSuccao]);
 
   if (dados.length === 0 && !naMao) return null;
 
@@ -376,21 +426,28 @@ export function DadosNoEspaco({
         dados={dados}
         agora={agora}
         naMao={naMao}
+        succao={succaoEmCena}
         espaco={espaco}
         pontoDaMao={naMao && scale > 0 ? toScene(naMao.clientX, naMao.clientY) : null}
       />
 
       {/* A camada de alcance: um botão por dado ASSENTADO. Ver a nota do
-          componente. */}
-      {dados.map((dado) => (
-        <AlcanceDoDado
-          key={dado.id}
-          dado={dado}
-          naMao={naMao?.daMesa === dado.id}
-          espaco={espaco}
-          aoArremessar={aoArremessar}
-        />
-      ))}
+          componente.
+
+          Quem está sendo engolido sai dela: o dado não está mais onde o botão
+          ficou, e um alvo parado no lugar de onde ele saiu relançaria um dado
+          que a mesa acabou de mandar recolher. */}
+      {dados
+        .filter((dado) => !succaoEmCena?.ids.has(dado.id))
+        .map((dado) => (
+          <AlcanceDoDado
+            key={dado.id}
+            dado={dado}
+            naMao={naMao?.daMesa === dado.id}
+            espaco={espaco}
+            aoArremessar={aoArremessar}
+          />
+        ))}
     </>
   );
 }
@@ -411,6 +468,7 @@ function DadosEmCena({
   dados,
   agora,
   naMao,
+  succao,
   espaco,
   /** Onde a mão está, na unidade do espaço. `null` = mão vazia. */
   pontoDaMao,
@@ -418,6 +476,8 @@ function DadosEmCena({
   dados: Dado[];
   agora: number;
   naMao: Mao;
+  /** O recolhimento em curso. `null` = ninguém está sendo engolido. */
+  succao: SuccaoEmCena | null;
   espaco: EspacoDoDado;
   pontoDaMao: Vec | null;
 }) {
@@ -428,7 +488,19 @@ function DadosEmCena({
   return (
     <svg
       aria-hidden
-      className="pointer-events-none absolute inset-0 size-full"
+      /*
+       * `overflow-visible` porque o RECOLHIMENTO sai do mapa.
+       *
+       * A boca do saquinho é um ponto da bancada, não da cena: a bolinha do
+       * mestre fica quase sempre ao lado do plano, e não dentro dele. Com o
+       * recorte padrão do SVG, o dado sugado desaparecia na beirada do mapa a
+       * meio caminho do saquinho -- a espiral ia para um lugar que ninguém via.
+       *
+       * Quem recorta continua existindo: é a moldura do palco, e ela cobre a
+       * bancada inteira. O que passa a caber aqui é o pedaço entre a borda do
+       * mapa e a bolinha.
+       */
+      className="pointer-events-none absolute inset-0 size-full overflow-visible"
       viewBox={`0 0 ${espaco.largura} ${espaco.altura}`}
       style={{ zIndex: DADO_Z }}
     >
@@ -440,27 +512,38 @@ function DadosEmCena({
         </radialGradient>
       </defs>
 
-      {dados.map((dado) => (
-        <DadoNaMesa
-          key={dado.id}
-          dado={dado}
-          /*
-           * O tempo CONGELA quando o dado assenta.
-           *
-           * Depois de assentado a pose não muda mais, então `agora` deixa de
-           * significar algo para ele -- e com a propriedade parada o `memo` do
-           * `DadoNaMesa` pula a subárvore inteira: nem `quadroDaQueda`, nem
-           * `desenharDado`, nem reconciliação dos vinte polígonos.
-           *
-           * Sem isto, todo dado da mesa era redesenhado a cada quadro enquanto
-           * QUALQUER um rolava -- o que rolava pagava a conta de todos os que
-           * já tinham parado.
-           */
-          agora={Math.min(agora, dado.lancadoEm + duracaoDaQueda(dado) * 1000)}
-          naMao={naMao?.daMesa === dado.id}
-          limites={limites}
-        />
-      ))}
+      {dados.map((dado) => {
+        const sugado = succao !== null && succao.ids.has(dado.id);
+
+        return (
+          <DadoNaMesa
+            key={dado.id}
+            dado={dado}
+            /*
+             * O tempo CONGELA quando o dado assenta.
+             *
+             * Depois de assentado a pose não muda mais, então `agora` deixa de
+             * significar algo para ele -- e com a propriedade parada o `memo` do
+             * `DadoNaMesa` pula a subárvore inteira: nem `quadroDaQueda`, nem
+             * `desenharDado`, nem reconciliação dos vinte polígonos.
+             *
+             * Sem isto, todo dado da mesa era redesenhado a cada quadro enquanto
+             * QUALQUER um rolava -- o que rolava pagava a conta de todos os que
+             * já tinham parado.
+             *
+             * Quem está sendo ENGOLIDO volta a andar: a sucção é uma segunda
+             * animação por cima da pose final, e congelar o relógio dele a
+             * deixaria num quadro só.
+             */
+            agora={
+              sugado ? agora : Math.min(agora, dado.lancadoEm + duracaoDaQueda(dado) * 1000)
+            }
+            naMao={naMao?.daMesa === dado.id}
+            succao={sugado ? succao : null}
+            limites={limites}
+          />
+        );
+      })}
 
       {/* Por último, então por cima: o que está na mão passa sobre o que já
           está na mesa, porque está mais alto que eles. */}
@@ -488,11 +571,14 @@ const DadoNaMesa = memo(function DadoNaMesa({
   agora,
   /** Está na mão agora. Continua na lista, mas quem o desenha é a `DadoNaMao`. */
   naMao,
+  succao,
   limites,
 }: {
   dado: Dado;
   agora: number;
   naMao: boolean;
+  /** Este dado está sendo engolido pelo saquinho. `null` = está só na mesa. */
+  succao: SuccaoEmCena | null;
   /** As bordas da mesa. Ver `quadroDaQueda`. */
   limites: { largura: number; altura: number };
 }) {
@@ -501,39 +587,80 @@ const DadoNaMesa = memo(function DadoNaMesa({
 
   const tipo = tipoDado(dado.faces);
   const quadro = quadroDaQueda(dado, (agora - dado.lancadoEm) / 1000, limites);
+
+  /**
+   * A sucção é uma animação POR CIMA da queda, e não no lugar dela.
+   *
+   * Ela parte de onde o dado está NESTE quadro — `quadro.x`, `quadro.y` e a
+   * pose que a queda deu —, e não de onde ele pousou. É o que permite recolher
+   * um dado ainda no ar sem salto: ele é arrancado de onde estiver, quicando ou
+   * não.
+   */
+  const sugado = succao
+    ? quadroDaSuccao(
+        {
+          x: quadro.x,
+          y: quadro.y,
+          raio: dado.raio,
+          semente: dado.semente,
+          orientacao: quadro.orientacao,
+        },
+        succao.destino,
+        (agora - succao.desde) / 1000,
+      )
+    : null;
+
+  const x = sugado ? sugado.x : quadro.x;
+  const y = sugado ? sugado.y : quadro.y;
+  const nitidez = sugado ? sugado.nitidez : quadro.nitidez;
+  const sombra = sugado ? sugado.sombra : quadro.sombra;
+
   const desenho = desenharDado({
     faces: dado.faces,
-    orientacao: quadro.orientacao,
-    cx: quadro.x,
-    cy: quadro.y,
+    orientacao: sugado ? sugado.orientacao : quadro.orientacao,
+    cx: x,
+    cy: y,
     raio: dado.raio,
     // Enquanto ele tomba rápido não sai número nenhum: não se leria, e é o que
     // faz doze dados no ar caberem no quadro. Ver `QuadroDaQueda.nitidez`.
-    nitidez: quadro.nitidez,
+    nitidez,
   });
 
   return (
     <>
       {/* Antes do corpo, então por baixo dele. */}
       <ellipse
-        cx={quadro.x + quadro.sombra.dx}
-        cy={quadro.y + quadro.sombra.dy}
-        rx={quadro.sombra.raio * 1.25}
-        ry={quadro.sombra.raio * 1.1}
+        cx={x + quadro.sombra.dx}
+        cy={y + quadro.sombra.dy}
+        rx={sombra.raio * 1.25}
+        ry={sombra.raio * 1.1}
         fill="url(#dado-sombra)"
-        opacity={quadro.sombra.opacidade / 0.42}
+        opacity={sombra.opacidade / 0.42}
       />
 
       <g
-        // Altura vira TAMANHO, porque a mesa é vista de cima. O esmagamento da
-        // batida entra aqui junto, no mesmo `scale`.
+        /*
+         * Altura vira TAMANHO, porque a mesa é vista de cima. O esmagamento da
+         * batida entra aqui junto, no mesmo `scale`.
+         *
+         * O do dado ENGOLIDO leva um `rotate` de cada lado do `scale`: é o que
+         * alonga o dado na direção do saquinho em vez de sempre na horizontal.
+         * Ver `QuadroDaSuccao.anguloDoEstica`.
+         */
         transform={
-          `translate(${quadro.x} ${quadro.y}) ` +
-          `scale(${quadro.escala * quadro.esmagaX} ${quadro.escala * quadro.esmagaY}) ` +
-          `translate(${-quadro.x} ${-quadro.y})`
+          sugado
+            ? `translate(${x} ${y}) ` +
+              `rotate(${sugado.anguloDoEstica}) ` +
+              `scale(${sugado.escala * sugado.alonga} ${sugado.escala * sugado.aperta}) ` +
+              `rotate(${-sugado.anguloDoEstica}) ` +
+              `translate(${-x} ${-y})`
+            : `translate(${x} ${y}) ` +
+              `scale(${quadro.escala * quadro.esmagaX} ${quadro.escala * quadro.esmagaY}) ` +
+              `translate(${-x} ${-y})`
         }
+        opacity={sugado ? sugado.opacidade : undefined}
       >
-        <DadoFacetas tipo={tipo} desenho={desenho} raio={dado.raio} nitidez={quadro.nitidez} />
+        <DadoFacetas tipo={tipo} desenho={desenho} raio={dado.raio} nitidez={nitidez} />
       </g>
     </>
   );

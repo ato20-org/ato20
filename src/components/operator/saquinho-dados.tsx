@@ -6,6 +6,7 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDadosNaMesa } from "@/hooks/use-dados-na-mesa";
 import { useGestoDeArremesso } from "@/hooks/use-gesto-de-arremesso";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
 import { DadoFacetas } from "@/components/operator/dado-facetas";
@@ -54,8 +55,12 @@ const LIMIAR = 4;
 export function SaquinhoDados() {
   const posicao = useDadosStore((state) => state.posicao);
   const mover = useDadosStore((state) => state.mover);
-  const dados = useDadosStore((state) => state.dados);
   const naMao = useDadosStore((state) => state.naMao);
+  const engolindo = useDadosStore((state) => state.succao !== null);
+
+  // O que ainda está na mesa, e não tudo que está na lista: o dado já sugado
+  // continua nela enquanto a espiral acontece. Ver `useDadosNaMesa`.
+  const dados = useDadosNaMesa();
 
   const [aberto, setAberto] = useState(false);
   const [arrastando, setArrastando] = useState(false);
@@ -166,7 +171,13 @@ export function SaquinhoDados() {
                   aria-label="Saquinho de dados"
                   className={cn(
                     "bg-background/85 pointer-events-auto absolute z-30 grid place-items-center rounded-full border shadow-lg backdrop-blur transition-transform",
-                    arrastando ? "scale-110 cursor-grabbing" : "cursor-grab hover:scale-105",
+                    arrastando && "scale-110 cursor-grabbing",
+                    !arrastando && !engolindo && "cursor-grab hover:scale-105",
+                    // Incha enquanto engole, e volta quando o último dado
+                    // entra: com a transição do próprio botão, a descida vira
+                    // um gole. Sem ela, o dado sumia num ponto qualquer da
+                    // bancada e nada ali dizia que foi para dentro do saquinho.
+                    engolindo && "scale-[1.15] cursor-grab",
                   )}
                   style={{
                     left: `${posicao.x * 100}%`,
@@ -179,6 +190,15 @@ export function SaquinhoDados() {
                     transform: "translate(-50%, -50%)",
                   }}
                 >
+                  {/* O anel do sorvedouro, só enquanto há o que engolir: é
+                      ele que amarra a espiral dos dados a este ponto da tela. */}
+                  {engolindo ? (
+                    <span
+                      aria-hidden
+                      className="border-primary/70 absolute inset-0 animate-ping rounded-full border-2"
+                    />
+                  ) : null}
+
                   <DadoEstatico tipo={tipoDado(20)} tamanho={30} />
 
                   {/* Quantos dados estão no tabuleiro. Com o mapa deslocado, um
@@ -234,11 +254,36 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
   const moverMao = useDadosStore((state) => state.moverMao);
   const arremessar = useDadosStore((state) => state.arremessar);
   const recolher = useDadosStore((state) => state.recolher);
-  const dados = useDadosStore((state) => state.dados);
+  const posicao = useDadosStore((state) => state.posicao);
   const historico = useDadosStore((state) => state.historico);
+
+  // Fora os que já estão sendo engolidos: eles saíram da mesa no clique, mesmo
+  // que o desenho ainda os mostre a caminho. Ver `useDadosNaMesa`.
+  const dados = useDadosNaMesa();
 
   const gestoDeArremesso = useGestoDeArremesso();
   const noAr = useDadosNoAr(dados);
+
+  /**
+   * A boca do saquinho, em pixel de tela: o centro da bolinha.
+   *
+   * Calculada do palco e da fração guardada, e não do retângulo da bolinha: o
+   * botão está num portal com o painel aberto por cima dele, e é esta mesma
+   * conta que o desenha. Uma segunda medida divergiria no dia em que a bolinha
+   * ganhasse uma margem.
+   *
+   * Sem palco não há para onde sugar, e `recolher` sem destino limpa a mesa no
+   * ato — que é o que já acontecia antes desta animação existir.
+   */
+  function boca(): { clientX: number; clientY: number } | undefined {
+    const rect = palco();
+    if (!rect) return undefined;
+
+    return {
+      clientX: rect.left + posicao.x * rect.width,
+      clientY: rect.top + posicao.y * rect.height,
+    };
+  }
 
   /**
    * Os que já pousaram, e quanto cada um vale.
@@ -398,7 +443,12 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
       ) : null}
 
       {dados.length > 0 ? (
-        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={recolher}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          onClick={() => recolher(boca())}
+        >
           <Trash2 />
           Recolher {dados.length === 1 ? "o dado" : `os ${dados.length} dados`}
         </Button>

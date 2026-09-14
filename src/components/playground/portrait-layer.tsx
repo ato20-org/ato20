@@ -8,6 +8,7 @@ import { CANVAS_PADRAO } from "@/lib/extensoes/fontes";
 import { usePaginaVivaSuportada } from "@/lib/motor";
 import { RolagensDoRetrato } from "@/components/playground/rolagens-do-retrato";
 import { portraitBox } from "@/lib/geometry/portrait";
+import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
 import { cn } from "@/lib/utils";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { Portrait, Viewport } from "@/types/scene";
@@ -20,6 +21,14 @@ import type { Portrait, Viewport } from "@/types/scene";
  */
 const PORTRAIT_Z = 6_000;
 
+/**
+ * O retrato sem dado nenhum.
+ *
+ * Uma constante, e não `[]` no corpo: o array literal nasce novo a cada render e
+ * quebraria o `memo` da `PortraitView` a cada quadro recebido.
+ */
+const SEM_ROLAGENS: RolagemDaMesa[] = [];
+
 type PortraitLayerProps = {
   portraits: Portrait[];
   /** Recorte atual da câmera. É o espaço em que o retrato vive. */
@@ -30,9 +39,12 @@ type PortraitLayerProps = {
   /**
    * Os dados que os jogadores jogaram há pouco, para pendurar nos retratos.
    *
-   * Só as telas da mesa passam. No palco do mestre eles têm lugar próprio --
-   * uma fileira no canto, com limpar e histórico à mão --, e repeti-los no
-   * retrato daria dois lugares para a mesma coisa numa tela que já é cheia.
+   * As TRÊS telas passam, o palco do mestre inclusive. Ele ficou de fora
+   * enquanto o dado chegava pronto: a fileira do canto já dizia o número, e
+   * repeti-lo no retrato era a mesma informação em dois lugares numa tela que
+   * já é cheia. Com a queda o retrato passou a dizer outra coisa -- de quem é o
+   * dado, e que ele ainda está rolando, no rosto da pessoa --, e é disso que o
+   * mestre precisa para narrar o resultado. Ver `RolagensFaixa`.
    */
   rolagens?: RolagemDaMesa[];
   onPortraitPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
@@ -222,7 +234,7 @@ type PortraitViewProps = {
   operador: boolean;
   interactive: boolean;
   smooth: boolean;
-  /** Os dados deste personagem. Ausente = nenhum, ou é o palco do mestre. */
+  /** Os dados deste personagem. Ausente = nenhum na mesa agora. */
   rolagens?: RolagemDaMesa[];
   onPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
 };
@@ -240,7 +252,8 @@ const PortraitView = memo(function PortraitView({
 }: PortraitViewProps) {
   const url = useAssetUrl(portrait.assetId);
   const { scale } = useSceneScale();
-  const box = portraitBox(portrait, camera);
+  const recorte = camera ?? FULL_VIEWPORT;
+  const box = portraitBox(portrait, recorte);
   // Em WebKit a página viva não desenha, e o que apareceria no lugar do rosto
   // seria a página de erro do serviço. Ver `usePaginaVivaSuportada`.
   const paginaVivaOk = usePaginaVivaSuportada();
@@ -307,10 +320,22 @@ const PortraitView = memo(function PortraitView({
 
       {/* Fora do ar, o retrato não desenha para a mesa -- e o dado pendurado
           nele não pode desenhar sozinho. A rolagem continua existindo: o mestre
-          a vê na fileira do palco dele. */}
-      {rolagens && rolagens.length > 0 ? (
-        <RolagensDoRetrato rolagens={rolagens} largura={box.width} />
-      ) : null}
+          a vê na fileira do palco dele.
+
+          SEMPRE montado, mesmo sem rolagem: ele guarda quando cada dado chegou
+          a esta tela, e um componente que nasce junto com o primeiro dado não
+          tem como saber que aquele dado é novo -- ele apareceria assentado, sem
+          queda. Quem não desenha nada é ele, por dentro. */}
+      <RolagensDoRetrato
+        rolagens={rolagens ?? SEM_ROLAGENS}
+        largura={box.width}
+        altura={box.height}
+        // Quanto sobra do RECORTE para cada lado do retrato, e não do plano: o
+        // que a mesa vê é a câmera, e um dado desenhado fora dela está tão
+        // perdido quanto um desenhado fora da cena.
+        folgaAbaixo={recorte.y + recorte.height - (box.y + box.height)}
+        folgaAcima={box.y - recorte.y}
+      />
     </div>
   );
 });
