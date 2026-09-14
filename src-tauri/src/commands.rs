@@ -71,6 +71,14 @@ pub struct RecentEntry {
     pub path: String,
     pub nome: String,
     pub aberta_em: i64,
+    /// Quanto tempo ela ja passou aberta, somado. Ver `AppDb::acumular_tempo`.
+    pub tempo_ms: i64,
+    /// Quando a campanha nasceu, do `config.json` dela.
+    ///
+    /// `Option` porque a pasta pode estar num volume desconectado, e ai nao ha
+    /// arquivo para ler. A tela mostra a linha sem a data em vez de esconder a
+    /// campanha -- mesma regra do `existe`.
+    pub criada_em: Option<i64>,
     /// A pasta ainda esta no disco.
     ///
     /// A linha nao e apagada quando desaparece: o volume externo pode estar
@@ -86,11 +94,28 @@ pub fn campaign_recents(state: State<'_, AppState>) -> AppResult<Vec<RecentEntry
         .db
         .recents(12)?
         .into_iter()
-        .map(|row| RecentEntry {
-            existe: Vault::config_path(std::path::Path::new(&row.path)).exists(),
-            path: row.path,
-            nome: row.nome,
-            aberta_em: row.aberta_em,
+        .map(|row| {
+            // O `config.json` ja era TOCADO aqui, para saber se a pasta
+            // continua no disco. Ler o conteudo em vez de so perguntar se ele
+            // existe custa a mesma ida ao disco e responde tambem quando a
+            // campanha nasceu -- e evita um comando novo so para isso.
+            //
+            // Falha em silencio, e vira `existe: false` -- que e a mesma coisa
+            // que a checagem anterior dizia, com uma diferenca de proposito:
+            // antes bastava o arquivo EXISTIR, e agora ele precisa ser legivel.
+            // Um `config.json` truncado pela metade e uma campanha que o `open`
+            // vai recusar de qualquer forma, e a linha apagada na lista e um
+            // aviso melhor do que um clique que abre um erro.
+            let config = Vault::read_config(std::path::Path::new(&row.path)).ok();
+
+            RecentEntry {
+                existe: config.is_some(),
+                criada_em: config.map(|config| config.criada_em),
+                path: row.path,
+                nome: row.nome,
+                aberta_em: row.aberta_em,
+                tempo_ms: row.tempo_ms,
+            }
         })
         .collect())
 }

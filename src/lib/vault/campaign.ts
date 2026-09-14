@@ -19,6 +19,16 @@ export type RecentEntry = {
   path: string;
   nome: string;
   abertaEm: number;
+  /**
+   * Quanto tempo esta campanha já passou ABERTA, somado, em milissegundos.
+   *
+   * É o relógio da janela, e não horas de jogo: quem deixa o aplicativo aberto
+   * a noite toda soma a noite toda. O rótulo da tela diz "aberta por" por isso.
+   * Ver `AppDb::acumular_tempo` no Rust.
+   */
+  tempoMs: number;
+  /** Quando ela nasceu. `null` = pasta fora de alcance, e aí não há o que ler. */
+  criadaEm: number | null;
   /** A pasta ainda está no disco. Falso = volume desconectado ou pasta movida. */
   existe: boolean;
 };

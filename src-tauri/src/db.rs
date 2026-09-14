@@ -22,7 +22,7 @@ pub struct AppDb {
 /// Guardada no proprio arquivo e nao numa tabela: uma tabela de versao precisa
 /// existir antes de poder dizer que versao existe, e o pragma nao tem esse
 /// problema de ovo e galinha.
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +30,12 @@ pub struct RecentCampaign {
     pub path: String,
     pub nome: String,
     pub aberta_em: i64,
+    /// Quanto tempo esta campanha ja passou ABERTA, somado, em milissegundos.
+    ///
+    /// Nao e tempo de jogo, e nao se pretende ser: e o relogio da janela. Ver
+    /// `acumular_tempo`, que e quem o alimenta, e a nota la sobre por que a
+    /// diferenca importa para o rotulo que a tela escreve.
+    pub tempo_ms: i64,
 }
 
 /// Um livro na estante da maquina.
@@ -114,6 +120,33 @@ impl AppDb {
         Ok(())
     }
 
+    /// Soma mais um pedaco de tempo a campanha aberta.
+    ///
+    /// Chamado por um relogio que bate de minuto em minuto enquanto ha campanha
+    /// aberta -- ver `lib.rs`. Somar de pouco em pouco, e nao medir do abrir ao
+    /// fechar, e o que torna isto a prova de queda: um aplicativo morto por
+    /// falta de memoria, ou a maquina desligada no botao, nunca chamam o
+    /// fechamento, e a sessao inteira se perderia. Assim o pior caso e perder o
+    /// ultimo minuto.
+    ///
+    /// O que se mede e a JANELA ABERTA, e nao mesa jogada: o mestre que deixa o
+    /// aplicativo aberto a noite toda soma a noite toda. Nao ha como distinguir
+    /// os dois sem inventar uma nocao de atividade, e o rotulo da tela diz
+    /// exatamente isto -- "aberta por" -- em vez de prometer horas de jogo.
+    ///
+    /// Silencioso quando a campanha nao esta na tabela: e cronometro, e falhar
+    /// aqui nao pode derrubar nada.
+    pub fn acumular_tempo(&self, path: &str, ms: i64) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+
+        conn.execute(
+            "update campanhas_recentes set tempo_ms = tempo_ms + ?2 where caminho = ?1",
+            rusqlite::params![path, ms],
+        )?;
+
+        Ok(())
+    }
+
     /// As campanhas abertas nesta maquina, da mais recente para a mais antiga.
     ///
     /// Uma pasta que sumiu do disco continua na tabela: o volume externo pode
@@ -124,7 +157,7 @@ impl AppDb {
         let conn = self.conn.lock().expect("banco envenenado");
 
         let mut stmt = conn.prepare(
-            "select caminho, nome, aberta_em from campanhas_recentes
+            "select caminho, nome, aberta_em, tempo_ms from campanhas_recentes
              order by aberta_em desc limit ?1",
         )?;
 
@@ -134,6 +167,7 @@ impl AppDb {
                     path: row.get(0)?,
                     nome: row.get(1)?,
                     aberta_em: row.get(2)?,
+                    tempo_ms: row.get(3)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -462,6 +496,22 @@ fn migrate(conn: &Connection) -> AppResult<()> {
                  habilitada   integer not null default 1,
                  instalada_em integer not null
              );",
+        )?;
+    }
+
+    if current < 5 {
+        // Quanto tempo cada campanha passou aberta, somado.
+        //
+        // Coluna na tabela que ja existe, e nao tabela de sessoes: uma linha
+        // por sessao responderia "quando foi cada uma", que e pergunta que
+        // ninguem faz nesta tela, e cobraria uma limpeza para a campanha que
+        // abre todo sabado ha dois anos nao virar cem linhas.
+        //
+        // `default 0` e o que faz a campanha que ja existe entrar sem
+        // migracao de dado: ela comeca do zero e conta dali em diante. Inventar
+        // um passado a partir de `aberta_em` seria numero bonito e falso.
+        conn.execute_batch(
+            "alter table campanhas_recentes add column tempo_ms integer not null default 0;",
         )?;
     }
 

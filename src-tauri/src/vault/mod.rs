@@ -62,6 +62,22 @@ impl Vault {
         root.join("config.json")
     }
 
+    /// A identidade de uma campanha que NAO esta aberta.
+    ///
+    /// Existe para a porta do Operador, que lista as recentes: ela quer o nome
+    /// e a data de nascimento de cada pasta sem montar um `Vault` para cada uma
+    /// -- abrir doze campanhas para desenhar doze linhas.
+    ///
+    /// Sem a checagem de versao do `open`, de proposito. Ali ela protege quem
+    /// vai ESCREVER na campanha; aqui quem le so quer desenhar uma linha, e uma
+    /// campanha de formato futuro deve aparecer na lista para poder ser
+    /// escolhida -- e recusada pelo `open`, que e onde a recusa tem o que
+    /// dizer.
+    pub fn read_config(root: &Path) -> AppResult<Config> {
+        read_json(&Self::config_path(root))?
+            .ok_or_else(|| AppError::NotACampaign(root.display().to_string()))
+    }
+
     pub fn scenes_dir(&self) -> PathBuf {
         self.root.join("cenas")
     }

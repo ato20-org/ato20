@@ -140,6 +140,8 @@ pub fn run() {
                 extensoes,
             });
 
+            relogio_da_mesa(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -221,6 +223,49 @@ pub fn run() {
 }
 
 /// A resposta do protocolo para tudo que nao se serve.
+
+/// De quanto em quanto tempo o relogio soma. Ver `AppDb::acumular_tempo`.
+///
+/// Um minuto e o compromisso entre escrever pouco e perder pouco: e uma
+/// gravacao por minuto num SQLite local, e o pior caso de uma queda e o ultimo
+/// minuto nao contado.
+const BATIDA: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Conta quanto tempo cada campanha passa aberta.
+///
+/// Uma thread, e nao um `setInterval` na tela: o que se quer medir e a campanha
+/// ABERTA, e ela continua aberta com a janela minimizada -- onde a webview pode
+/// ter os temporizadores estrangulados pelo sistema. Aqui o relogio bate igual.
+///
+/// Soma DEPOIS de dormir, e nao antes: assim abrir e fechar em dez segundos
+/// conta zero, em vez de um minuto que nao aconteceu.
+///
+/// Erro de banco so vira log. E cronometro de tela de abertura: se ele parar de
+/// contar, a campanha continua abrindo.
+fn relogio_da_mesa(handle: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(BATIDA);
+
+            let state = handle.state::<AppState>();
+
+            // O caminho sai de dentro do lock e o lock se fecha: gravar no
+            // banco com o `RwLock` do vault na mao faria este relogio disputar
+            // com cada leitura de cena.
+            let aberta = {
+                let guard = state.vault.read().expect("vault envenenado");
+                guard.as_ref().map(|vault| vault.root.display().to_string())
+            };
+
+            let Some(caminho) = aberta else { continue };
+
+            if let Err(cause) = state.db.acumular_tempo(&caminho, BATIDA.as_millis() as i64) {
+                log::warn!("relogio da mesa nao somou em {caminho}: {cause}");
+            }
+        }
+    });
+}
+
 fn nao_encontrado() -> tauri::http::Response<Cow<'static, [u8]>> {
     tauri::http::Response::builder()
         .status(tauri::http::StatusCode::NOT_FOUND)
