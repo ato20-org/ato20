@@ -1,10 +1,18 @@
 /**
- * Os marcadores de um postit: `**negrito**`, `@personagem`, `/arquivo`, `>cena`.
+ * Os marcadores de um texto com menção: `**negrito**` e os sinais que quem
+ * chama declarar.
  *
- * Puro e sem React de propósito. A camada que desenha o postit precisa dos
- * hooks que resolvem nome em personagem, arquivo e cena; a separação de onde o
- * texto QUEBRA é outra coisa, e é a única parte com regra suficiente para
- * errar sozinha.
+ * Quem declara os sinais é cada lado da mesa, e por isso este arquivo não
+ * conhece nenhum: o postit do mestre marca `@personagem`, `/arquivo` e
+ * `>cena`; o caderno do jogador marca `@personagem`, `/arquivo` e `#nota`, e
+ * nunca `>` — ele não tem lista de cenas, só a que está no ar. Um mapa fixo
+ * aqui faria o `#` de um postit virar menção que não resolve nada, e o `>` do
+ * caderno prometer uma cena que o celular não pode abrir.
+ *
+ * Puro e sem React de propósito. A camada que desenha precisa dos hooks que
+ * resolvem nome em personagem, arquivo e cena; a separação de onde o texto
+ * QUEBRA é outra coisa, e é a única parte com regra suficiente para errar
+ * sozinha.
  *
  * ## `@` é personagem, não a pessoa
  *
@@ -15,50 +23,46 @@
  *
  * ## Por que é por nome, e não por id
  *
- * O postit guarda o texto como o mestre digitou — `@Thalor` e não
- * `@[Thalor](uuid)`. A consequência aceita: renomear o personagem desfaz a
- * marcação, e `@Thalor` volta a ser texto sem vínculo. O que se ganha é o
- * postit continuar sendo TEXTO: o mestre apaga um caractere e o vínculo morre
- * ali, sem estrutura órfã dentro do arquivo da cena, e escrever um postit é
- * digitar, não operar um editor.
+ * O texto fica como foi digitado — `@Thalor` e não `@[Thalor](uuid)`. A
+ * consequência aceita: renomear o personagem desfaz a marcação, e `@Thalor`
+ * volta a ser texto sem vínculo. O que se ganha é o texto continuar sendo
+ * TEXTO: apaga-se um caractere e o vínculo morre ali, sem estrutura órfã dentro
+ * do arquivo da cena nem dentro da nota, e escrever é digitar, não operar um
+ * editor.
  *
  * ## O nome vai até o espaço
  *
  * `@Thalor sabe do alçapão` marca "Thalor" e deixa o resto como texto. Nome
- * composto pede aspas: `@"Thalor Pé-de-Ferro"`. É a regra que cabe num postit
+ * composto pede aspas: `@"Thalor Pé-de-Ferro"`. É a regra que cabe num texto
  * escrito no meio da sessão — sem aspas, `/mapa do porão` teria de decidir
  * sozinho se "do porão" é parte do nome do arquivo, e erraria metade das vezes
  * nos dois sentidos.
  */
 
+/**
+ * Que tipo de referência cada sinal abre.
+ *
+ * `@` sempre abre personagem nos dois lados da mesa, mas isso é convenção de
+ * quem chama, e não regra daqui: o que este arquivo sabe é que um sinal abre
+ * um marcador e que o tipo dele sai deste mapa.
+ */
+export type Sinais<Tipo extends string> = Readonly<Record<string, Tipo>>;
+
 /** Um pedaço do texto, já classificado. */
-export type Token =
+export type Token<Tipo extends string> =
   | { tipo: "texto"; valor: string }
   | { tipo: "bold"; valor: string }
   | { tipo: "quebra" }
   /**
    * Uma referência. `valor` é o nome CRU, como está escrito — resolver é de
-   * quem desenha, que é quem tem a lista de personagens, de arquivos e de
-   * cenas.
+   * quem desenha, que é quem tem a lista de personagens, de arquivos, de cenas
+   * ou de notas.
    *
    * `bruto` guarda o marcador inteiro, com o sinal e as aspas: é o que se
-   * mostra quando o nome não resolve, para o mestre ver o que escreveu e
+   * mostra quando o nome não resolve, para quem escreveu ver o que digitou e
    * corrigir em vez de ver o nome sem o `@` e não entender por que não pintou.
    */
-  | { tipo: "personagem" | "arquivo" | "cena"; valor: string; bruto: string };
-
-/** Que tipo de referência cada sinal abre. */
-const SINAIS = {
-  "@": "personagem",
-  "/": "arquivo",
-  ">": "cena",
-} as const;
-
-type Sinal = keyof typeof SINAIS;
-
-function eSinal(char: string): char is Sinal {
-  return char === "@" || char === "/" || char === ">";
-}
+  | { tipo: Tipo; valor: string; bruto: string };
 
 /**
  * Se um sinal nesta posição abre marcador ou é só um caractere.
@@ -68,7 +72,7 @@ function eSinal(char: string): char is Sinal {
  * mestre que escreve "3/4 do caminho" veria "4 do caminho" pintado de azul
  * procurando um arquivo chamado "4".
  */
-function abreMarcador(texto: string, indice: number): boolean {
+export function abreMarcador(texto: string, indice: number): boolean {
   if (indice === 0) return true;
 
   const anterior = texto[indice - 1];
@@ -86,9 +90,9 @@ function leNome(texto: string, inicio: number): { nome: string; fim: number } | 
   if (texto[inicio] === '"') {
     const fecha = texto.indexOf('"', inicio + 1);
 
-    // Aspas sem par: acontece a cada tecla enquanto o mestre digita o nome
-    // composto. Trata como texto até ele fechar, em vez de comer o resto do
-    // postit como se fosse um nome de trinta palavras.
+    // Aspas sem par: acontece a cada tecla enquanto o nome composto está
+    // sendo digitado. Trata como texto até ele fechar, em vez de comer o resto
+    // do texto como se fosse um nome de trinta palavras.
     if (fecha < 0) return null;
 
     const nome = texto.slice(inicio + 1, fecha);
@@ -111,11 +115,11 @@ function leNome(texto: string, inicio: number): { nome: string; fim: number } | 
 }
 
 /**
- * Separa o texto do postit em pedaços classificados.
+ * Separa o texto em pedaços classificados.
  *
  * `**negrito**` não atravessa quebra de linha: um asterisco duplo esquecido no
- * fim de uma linha deixaria o resto do postit em negrito, e é mais provável
- * que o mestre tenha esquecido de fechar do que tenha querido três linhas
+ * fim de uma linha deixaria o resto do texto em negrito, e é mais provável que
+ * quem escreveu tenha esquecido de fechar do que tenha querido três linhas
  * inteiras em negrito.
  *
  * Marcador dentro de negrito não aninha: `**@Thalor**` sai como negrito com o
@@ -123,11 +127,14 @@ function leNome(texto: string, inicio: number): { nome: string; fim: number } | 
  * link E é negrito ao mesmo tempo — algo que ninguém pede num papel colado no
  * mapa.
  */
-export function parsePostit(texto: string): Token[] {
-  const tokens: Token[] = [];
+export function parseMencoes<Tipo extends string>(
+  texto: string,
+  sinais: Sinais<Tipo>,
+): Array<Token<Tipo>> {
+  const tokens: Array<Token<Tipo>> = [];
 
   // Acumula texto comum e só o empurra quando algo o interrompe. Sem isso cada
-  // caractere viraria um token, e um postit de duzentas letras renderizaria
+  // caractere viraria um token, e um texto de duzentas letras renderizaria
   // duzentos `<span>`.
   let corrido = "";
 
@@ -155,8 +162,8 @@ export function parsePostit(texto: string): Token[] {
       const quebra = texto.indexOf("\n", i + 2);
 
       // Fecha na mesma linha: é negrito. Senão os dois asteriscos são texto —
-      // e são, literalmente, o que o mestre tem na tela enquanto digita o
-      // primeiro par.
+      // e são, literalmente, o que está na tela enquanto o primeiro par é
+      // digitado.
       if (fecha > i + 1 && (quebra < 0 || fecha < quebra)) {
         const valor = texto.slice(i + 2, fecha);
 
@@ -169,13 +176,15 @@ export function parsePostit(texto: string): Token[] {
       }
     }
 
-    if (eSinal(char) && abreMarcador(texto, i)) {
+    const tipo = sinais[char];
+
+    if (tipo !== undefined && abreMarcador(texto, i)) {
       const lido = leNome(texto, i + 1);
 
       if (lido) {
         fechaCorrido();
         tokens.push({
-          tipo: SINAIS[char],
+          tipo,
           valor: lido.nome,
           bruto: texto.slice(i, lido.fim),
         });

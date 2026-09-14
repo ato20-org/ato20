@@ -1,24 +1,25 @@
 /**
  * O marcador que está sendo digitado agora, e como completá-lo.
  *
- * Puro e separado de `postit-texto.ts` de propósito, embora as duas partes
- * falem dos mesmos sinais: aquele arquivo lê texto PARADO — o que já foi
- * escrito, para desenhar —, e este lê texto em MOVIMENTO, do ponto de vista do
- * cursor. As regras divergem no ponto que mais importa: para desenhar,
- * `@Tha` é um nome que não resolve nada; para sugerir, é justamente o pedido
- * de ajuda.
+ * Puro e separado de `texto.ts` de propósito, embora as duas partes falem dos
+ * mesmos sinais: aquele arquivo lê texto PARADO — o que já foi escrito, para
+ * desenhar —, e este lê texto em MOVIMENTO, do ponto de vista do cursor. As
+ * regras divergem no ponto que mais importa: para desenhar, `@Tha` é um nome
+ * que não resolve nada; para sugerir, é justamente o pedido de ajuda.
  *
- * Existe porque o vínculo é por NOME (ver `Postit.texto`). Sem sugestão, esse
- * desenho cobra do mestre lembrar como ele escreveu o nome do arquivo três
- * semanas atrás — e `/porao-final-2.jpg` não é o tipo de coisa que se lembra
- * no meio de uma cena. Com sugestão, ele digita `/por`, escolhe, e o nome sai
- * escrito certo.
+ * Existe porque o vínculo é por NOME (ver `texto.ts`). Sem sugestão, esse
+ * desenho cobra lembrar como o nome do arquivo foi escrito três semanas atrás
+ * — e `/porao-final-2.jpg` não é o tipo de coisa que se lembra no meio de uma
+ * cena. Com sugestão, digita-se `/por`, escolhe, e o nome sai escrito certo.
+ *
+ * Os sinais chegam por parâmetro, como no parser: o postit do mestre completa
+ * cena, o caderno do jogador completa nota, e nenhum dos dois quer a lista do
+ * outro abrindo no meio de uma frase.
  */
 
-/** Os mesmos sinais de `postit-texto.ts`. */
-export type Sinal = "@" | "/" | ">";
+import { abreMarcador } from "@/lib/mencoes/texto";
 
-/** O que o mestre pode escolher da lista. */
+/** O que se pode escolher da lista. */
 export type Sugestao = {
   /** O nome que vai para o texto. */
   nome: string;
@@ -34,29 +35,12 @@ export type Sugestao = {
  * por `@"Thalor Pé-de-Ferro"` — com acento e com aspas — sem o mestre digitar
  * disso.
  */
-export type Fragmento = {
+export type Fragmento<Sinal extends string = string> = {
   sinal: Sinal;
   /** O que já foi digitado depois do sinal. Vazio é normal: o sinal sozinho. */
   prefixo: string;
   inicio: number;
 };
-
-function eSinal(char: string | undefined): char is Sinal {
-  return char === "@" || char === "/" || char === ">";
-}
-
-/**
- * Mesma regra de `postit-texto.ts`: marcador abre em início de linha ou depois
- * de espaço. Duplicada em duas linhas em vez de exportada de lá — são dois
- * arquivos com ciclos de vida diferentes, e a regra é curta o bastante para
- * que a cópia seja mais honesta que um acoplamento entre eles.
- */
-function abreMarcador(texto: string, indice: number): boolean {
-  if (indice === 0) return true;
-
-  const anterior = texto[indice - 1];
-  return anterior === " " || anterior === "\n" || anterior === "\t";
-}
 
 /**
  * Qual marcador o cursor está dentro, se algum.
@@ -70,7 +54,11 @@ function abreMarcador(texto: string, indice: number): boolean {
  * sem ele a lista fecharia na barra de espaço de todo nome composto, que é
  * exatamente quando ela é mais útil.
  */
-export function fragmentoNoCursor(texto: string, cursor: number): Fragmento | null {
+export function fragmentoNoCursor<Sinal extends string>(
+  texto: string,
+  cursor: number,
+  sinais: readonly Sinal[],
+): Fragmento<Sinal> | null {
   const inicioLinha = texto.lastIndexOf("\n", cursor - 1) + 1;
 
   // De trás para frente: vale o marcador mais próximo do cursor. Numa linha com
@@ -81,9 +69,9 @@ export function fragmentoNoCursor(texto: string, cursor: number): Fragmento | nu
   // decide se o espaço encerrou o nome é a conferência lá embaixo, que já tem o
   // pedaço inteiro na mão e sabe se as aspas estão abertas.
   for (let i = cursor - 1; i >= inicioLinha; i -= 1) {
-    const char = texto[i];
+    const char = texto[i] as Sinal;
 
-    if (!eSinal(char) || !abreMarcador(texto, i)) continue;
+    if (!sinais.includes(char) || !abreMarcador(texto, i)) continue;
 
     const cru = texto.slice(i + 1, cursor);
 

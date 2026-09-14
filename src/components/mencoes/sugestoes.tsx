@@ -4,14 +4,14 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
-import type { Sinal, Sugestao } from "@/lib/operator/postit-sugestao";
+import type { Sugestao } from "@/lib/mencoes/sugestao";
 
 /**
- * Como o papel reconhece a própria lista.
+ * Como quem abriu a lista reconhece que o toque foi nela.
  *
- * A lista vive num portal no `body`, então ela NÃO está dentro do papel — e o
- * papel fecha a edição a qualquer toque fora de si. Sem esta marca, clicar numa
- * sugestão fecharia a edição antes de a escolha ser aplicada.
+ * A lista vive num portal no `body`, então ela NÃO está dentro do campo — e o
+ * papel do mestre fecha a edição a qualquer toque fora de si. Sem esta marca,
+ * clicar numa sugestão fecharia a edição antes de a escolha ser aplicada.
  *
  * Um atributo e não uma classe: classe é estilo, e alguém a trocaria numa
  * arrumação de CSS sem saber que ela também é contrato.
@@ -24,18 +24,12 @@ const LARGURA_PX = 224;
 /** Folga entre o papel e a lista, em pixels de tela. */
 const FOLGA_PX = 4;
 
-const TITULO: Record<Sinal, string> = {
-  "@": "Personagens da campanha",
-  "/": "Arquivos da campanha",
-  ">": "Cenas do board",
-};
-
 /**
- * A lista de nomes possíveis, enquanto o mestre digita um marcador.
+ * A lista de nomes possíveis, enquanto um marcador está sendo digitado.
  *
  * ## Em portal, e em pixels de tela
  *
- * O postit escala com o zoom — é o que o faz parecer papel colado no mapa —, e
+ * Nasceu para o postit, que escala com o zoom — é o que o faz parecer papel colado no mapa —, e
  * a lista NÃO pode escalar com ele. A 40% de zoom, seis linhas de nome viradas
  * papel seriam alvos de sete pixels; a 300%, uma lista de arquivo cobriria a
  * cena inteira. Então ela sai do palco por `createPortal` e se posiciona por
@@ -49,17 +43,30 @@ const TITULO: Record<Sinal, string> = {
  * `mousedown` com `preventDefault` — um clique comum tiraria o foco do campo,
  * e o `onBlur` dele fecharia a edição no meio do gesto de escolher.
  *
+ * No celular não há `mousedown` antes do toque terminar, mas o gesto é o
+ * mesmo: o navegador emite os eventos de mouse compatíveis depois do `touch`,
+ * e o `preventDefault` continua segurando o foco onde ele estava.
+ *
  * O teclado é o caminho principal, e ele mora no `onKeyDown` do campo: as setas
  * andam, Enter e Tab escolhem, Esc fecha a lista sem sair da edição.
  */
-export function PostitSugestoes({
-  sinal,
+export function ListaDeSugestoes({
+  titulo,
   itens,
   indice,
   ancora,
   onEscolher,
 }: {
-  sinal: Sinal;
+  /**
+   * O que a lista está oferecendo, numa linha: "Personagens da campanha",
+   * "Arquivos deste personagem", "Notas do caderno".
+   *
+   * Vem de fora porque só quem abriu a lista sabe o que ela está mostrando:
+   * o mesmo `/` pinça o acervo inteiro no postit do mestre e só os arquivos do
+   * próprio personagem no caderno do jogador, e a linha de título é o que
+   * conta essa diferença a quem está digitando.
+   */
+  titulo: string;
   itens: Sugestao[];
   /** Qual item está sob as setas. Enter escolhe este. */
   indice: number;
@@ -141,7 +148,7 @@ export function PostitSugestoes({
       // resto da frase.
       role="presentation"
     >
-      <p className="text-muted-foreground bg-muted/50 px-2 py-1 text-[10px]">{TITULO[sinal]}</p>
+      <p className="text-muted-foreground bg-muted/50 px-2 py-1 text-[10px]">{titulo}</p>
 
       <ul>
         {itens.map((item, posicao) => (

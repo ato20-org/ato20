@@ -10,7 +10,7 @@ import {
 } from "react";
 import { Trash2 } from "lucide-react";
 
-import { MARCA_LISTA, PostitSugestoes } from "@/components/operator/postit-sugestoes";
+import { ListaDeSugestoes, MARCA_LISTA } from "@/components/mencoes/sugestoes";
 import { PostitTextoView, type Vinculos } from "@/components/operator/postit-texto-view";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetList } from "@/hooks/use-asset-list";
@@ -23,10 +23,13 @@ import {
   aplicaSugestao,
   fantasmaDe,
   filtraSugestoes,
-  fragmentoNoCursor,
-  type Sinal,
   type Sugestao,
-} from "@/lib/operator/postit-sugestao";
+} from "@/lib/mencoes/sugestao";
+import {
+  fragmentoDoPostit,
+  TITULO_DO_POSTIT,
+  type SinalDoPostit,
+} from "@/lib/operator/postit-mencoes";
 import { normaliza } from "@/lib/search";
 import { POSTIT_Z, usePostitStore } from "@/lib/store/use-postit-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -250,7 +253,7 @@ function PostitCamada({
    * que distingue é de quem é cada um. Sem dono aparece "sem jogador" — PNJ, ou
    * ficha que ainda não foi entregue.
    */
-  const candidatos = useMemo<Record<Sinal, Sugestao[]>>(
+  const candidatos = useMemo<Record<SinalDoPostit, Sugestao[]>>(
     () => ({
       "@": [...(personagens ?? [])]
         .sort(
@@ -316,7 +319,7 @@ function PostitPapel({
   postit: Postit;
   panMode: boolean;
   vinculos: Vinculos;
-  candidatos: Record<Sinal, Sugestao[]>;
+  candidatos: Record<SinalDoPostit, Sugestao[]>;
   onChange: (patch: Partial<Postit>) => void;
   onRemove: () => void;
 }) {
@@ -490,7 +493,7 @@ function PostitPapel({
    * posição do cursor, e as duas coisas já estão aqui. Estado paralelo teria de
    * ser invalidado em cada tecla, cada clique e cada seta.
    */
-  const fragmento = editando ? fragmentoNoCursor(postit.texto, cursor) : null;
+  const fragmento = editando ? fragmentoDoPostit(postit.texto, cursor) : null;
 
   const sugestoes =
     fragmento && fragmento.inicio !== dispensadoEm
@@ -742,8 +745,8 @@ function PostitPapel({
           />
 
           {sugestoes.length > 0 && fragmento ? (
-            <PostitSugestoes
-              sinal={fragmento.sinal}
+            <ListaDeSugestoes
+              titulo={TITULO_DO_POSTIT[fragmento.sinal]}
               itens={sugestoes}
               indice={escolhido}
               // Na marca do cursor, e não no campo: a lista abre embaixo da

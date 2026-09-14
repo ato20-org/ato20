@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { MINIATURA } from "@/lib/miniatura";
-import { parsePostit, type Token } from "@/lib/operator/postit-texto";
+import type { Token } from "@/lib/mencoes/texto";
+import { parsePostit, type TipoNoPostit } from "@/lib/operator/postit-mencoes";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { cn } from "@/lib/utils";
 import type { AssetMeta } from "@/types/scene";
@@ -89,7 +90,13 @@ export function PostitTextoView({
   );
 }
 
-function TokenView({ token, vinculos }: { token: Token; vinculos: Vinculos }) {
+function TokenView({
+  token,
+  vinculos,
+}: {
+  token: Token<TipoNoPostit>;
+  vinculos: Vinculos;
+}) {
   if (token.tipo === "texto") return <>{token.valor}</>;
   if (token.tipo === "quebra") return <br />;
   if (token.tipo === "bold") return <strong className="font-semibold">{token.valor}</strong>;
