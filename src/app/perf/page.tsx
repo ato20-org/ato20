@@ -92,6 +92,8 @@ import {
  *               tentativa de conserto do borrão do palco ampliado -- pôr a
  *               ampliação no layout, com `zoom`, em vez de na composição -- e
  *               ficou: era o custo do gesto de zoom que ninguém tinha medido.
+ *               Foi ele também que aprovou o conserto seguinte, que usa as duas
+ *               formas conforme a câmera ande ou pare.
  *
  * `jogador`    O CELULAR do jogador: as mesmas amostras de 10 Hz, mas com um
  *               mapa de 3537x3750 no fundo e pedindo a variante `tela`.
@@ -471,12 +473,23 @@ function PalcoMestre({ n }: { n: number }) {
  * pede, e é o ponto: os outros cenários todos medem a câmera PARADA, e o custo
  * de mexer nela nunca tinha aparecido em número nenhum.
  *
- * Medido aqui: com a ampliação na composição -- `transform: scale`, que é o que
- * o palco faz -- mexer no zoom não custa refluxo nenhum, 24 ms de estilo com
- * sessenta itens. Trocando para `zoom`, que entra no LAYOUT, os mesmos oito
- * segundos pagam 889 ms de estilo e 164 ms de layout. Foi essa a medida que
- * matou aquela tentativa de conserto do borrão -- junto com o que ela fazia com
- * as bordas de meio pixel dos controles.
+ * Medido aqui: com a ampliação na composição -- `transform: scale` -- mexer no
+ * zoom não custa refluxo nenhum, 24 ms de estilo com sessenta itens. Trocando
+ * para `zoom`, que entra no LAYOUT, os mesmos oito segundos pagam 889 ms de
+ * estilo e 164 ms de layout. Foi essa a medida que matou aquela tentativa de
+ * conserto do borrão -- junto com o que ela fazia com as bordas de meio pixel
+ * dos controles.
+ *
+ * O conserto que ficou usa as DUAS, e é este cenário que diz que ele pode. O
+ * plano segue sempre na composição -- é o que mantém exato o tamanho dos
+ * controles, que se medem em pixel de tela. Quem troca de forma é só o
+ * CONTEÚDO: com a câmera parada o `SceneLayer` se desenha grande, com `zoom`, e
+ * se reduz de volta com um `scale` -- ver o cabeçalho dele.
+ *
+ * Aqui a câmera nunca para, então o que se mede é o gesto puro: 21 ms de estilo
+ * e 8 ms de layout, contra 30 e 11 do `transform` sozinho. O custo de parar sai
+ * dos números acima -- 164 ms por 480 mudanças dão 0,34 ms de layout, uma vez
+ * por gesto.
  */
 function PalcoCamera({ n }: { n: number }) {
   const cena = useMemo(() => montarCena(n), [n]);
