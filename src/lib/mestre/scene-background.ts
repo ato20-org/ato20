@@ -1,8 +1,11 @@
 "use client";
 
+import { countAssetUsage } from "@/lib/mestre/asset-usage";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
-import { importAssets, setAssetEscopo } from "@/lib/vault/assets";
+import { deleteAsset, importAssets, setAssetEscopo } from "@/lib/vault/assets";
+import type { Scene } from "@/types/scene";
 
 /**
  * Escolhe o fundo da cena, a partir de um arquivo do disco.
@@ -41,21 +44,19 @@ export async function escolherFundoDaCena(sceneId: string): Promise<boolean> {
 
   useSceneStore.getState().setBackground(sceneId, primeiro.id);
 
-  // O que era fundo deixa de ser de alguém, e volta para a biblioteca. Sem
-  // isto ele ficaria marcado como `cena` sem ser fundo de nenhuma: escondido da
-  // lista e sem lugar de onde ser alcançado.
-  await soltarFundo(anterior);
+  // O mapa trocado sai da campanha junto com a troca. Ver `descartarFundo`.
+  await descartarFundo(anterior);
 
   return true;
 }
 
-/** Tira o fundo da cena, e devolve o arquivo à biblioteca. */
+/** Tira o fundo da cena, e leva o arquivo junto. */
 export async function tirarFundoDaCena(sceneId: string): Promise<void> {
   const anterior = fundoAtual(sceneId);
 
   useSceneStore.getState().setBackground(sceneId, undefined);
 
-  await soltarFundo(anterior);
+  await descartarFundo(anterior);
 }
 
 function fundoAtual(sceneId: string): string | undefined {
@@ -65,21 +66,59 @@ function fundoAtual(sceneId: string): string | undefined {
 }
 
 /**
- * Desmarca o arquivo, se nenhuma outra cena ainda o usar.
+ * Apaga o arquivo que deixou de ser fundo.
  *
- * A checagem existe porque duplicar uma cena copia o `backgroundAssetId`: as
- * duas passam a apontar para o mesmo arquivo, e tirar o fundo de uma não pode
- * devolver à biblioteca algo que a outra ainda está mostrando.
+ * Antes ele era só desmarcado, e voltava a aparecer na biblioteca. Estava
+ * errado pelo mesmo motivo que tirou o fundo de lá: o mapa entrou na campanha
+ * PARA SER o fundo daquela cena, e sem a cena não é de ninguém — quem tira o
+ * fundo quer o mapa fora, e não um arquivo a mais na lista para ele apagar
+ * depois. Trocar o fundo é a mesma história: o mapa velho não vira acervo.
+ *
+ * Duas ressalvas, e as duas existem porque o mesmo id pode ter mais de um uso:
+ *
+ * - Duplicar uma cena copia o `backgroundAssetId`, e as duas passam a apontar
+ *   para o mesmo arquivo. Apagar deixaria a outra cena com um mapa que não
+ *   existe mais.
+ * - Campanhas anteriores ao escopo escolhiam o fundo NA biblioteca, então um
+ *   fundo de lá pode ser também item de mapa, retrato ou miniatura. Aí o
+ *   arquivo fica, e só perde o dono — que é o que esta função fazia sempre.
  */
-async function soltarFundo(assetId: string | undefined): Promise<void> {
+async function descartarFundo(assetId: string | undefined): Promise<void> {
   if (!assetId) return;
 
-  const aindaEmUso = useSceneStore
-    .getState()
-    .board?.scenes.some((cena) => cena.backgroundAssetId === assetId);
+  const cenas = useSceneStore.getState().board?.scenes ?? [];
 
-  if (aindaEmUso) return;
+  if (cenas.some((cena) => cena.backgroundAssetId === assetId)) return;
 
-  await setAssetEscopo(assetId, undefined);
+  if (usadoForaDoFundo(assetId, cenas)) {
+    await setAssetEscopo(assetId, undefined);
+    invalidarAcervo("image");
+    return;
+  }
+
+  await deleteAsset(assetId);
   invalidarAcervo("image");
+}
+
+/**
+ * O arquivo ainda serve a alguma outra coisa: item de mapa, retrato ou
+ * miniatura.
+ *
+ * Fundo nenhum chega aqui: `descartarFundo` já saiu antes se alguma cena ainda
+ * o usa como fundo, e por isso o que `countAssetUsage` acha são os itens.
+ *
+ * Personagens vêm do store, e `null` — ninguém leu ainda — conta como "pode
+ * ser": o preço de errar para este lado é um arquivo a mais na biblioteca, e
+ * para o outro é um retrato que some da ficha.
+ */
+function usadoForaDoFundo(assetId: string, cenas: Scene[]): boolean {
+  if (countAssetUsage(cenas, assetId) > 0) return true;
+
+  const personagens = useCharactersStore.getState().personagens;
+  if (personagens === null) return true;
+
+  return personagens.some(
+    (personagem) =>
+      personagem.retrato === assetId || personagem.miniatura === assetId,
+  );
 }
