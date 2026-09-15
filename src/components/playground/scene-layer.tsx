@@ -91,6 +91,22 @@ type SceneLayerProps = {
    * clique no vazio. Ele desce junto.
    */
   palco?: ComponentProps<"div"> & Record<`data-${string}`, unknown>;
+  /**
+   * Até onde o envelope do palco ACEITA gesto, em coordenadas de cena.
+   *
+   * O envelope cobre o plano e só ele, porque é o plano que ele emoldura. Isso
+   * bastava quando o plano era o mundo inteiro; hoje a área cresce com o que o
+   * mestre coloca, e sem esta zona o lado de fora vira uma vidraça: dá para
+   * ver, dá para navegar, e nada pega. Era o que impedia soltar uma imagem
+   * fora da borda, cravar um ponto ali ou começar um risco de lá.
+   *
+   * Um FILHO que transborda, e não o envelope redimensionado: o envelope é o
+   * bloco que contém todo o conteúdo da cena, e mover o canto dele arrastaria
+   * junto o mapa, os tokens e os riscos, que se posicionam a partir dele.
+   *
+   * Ausente = só o plano, que é o caso de quem não edita.
+   */
+  zona?: { x: number; y: number; width: number; height: number };
 };
 
 /**
@@ -111,6 +127,7 @@ export function SceneLayer({
   onPortraitPointerDown,
   apagando,
   palco,
+  zona,
 }: SceneLayerProps) {
   const items = useMemo(
     () => [...scene.items].sort((a, b) => a.z - b.z),
@@ -183,7 +200,33 @@ export function SceneLayer({
     </>
   );
 
-  const envelopado = palco ? <div {...palco}>{conteudo}</div> : conteudo;
+  const envelopado = palco ? (
+    <div {...palco}>
+      {/* PRIMEIRO filho: tudo o que vem depois desenha por cima, então a zona
+          não rouba o clique de nenhum token nem do fundo. Ela só recebe o que
+          sobra — que é exatamente o "clique no vazio" que o envelope trata.
+
+          Sem pintura nenhuma: o que ela faz é ocupar espaço para
+          `elementFromPoint` ter o que responder do lado de fora do plano. Ver
+          `zona` e `sobreAZona`. */}
+      {zona ? (
+        <div
+          aria-hidden
+          className="absolute"
+          style={{
+            left: zona.x,
+            top: zona.y,
+            width: zona.width,
+            height: zona.height,
+          }}
+        />
+      ) : null}
+
+      {conteudo}
+    </div>
+  ) : (
+    conteudo
+  );
 
   return planoDeConteudo
     ? createPortal(envelopado, planoDeConteudo)
