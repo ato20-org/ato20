@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useVarianteDoFundo } from "@/hooks/use-variante-do-fundo";
+import { caberEm } from "@/lib/geometry/caber";
 import type { Variante } from "@/lib/vault/assets";
 import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
 
@@ -102,7 +103,13 @@ export function FundoDaCena({ assetId, variante }: FundoDaCenaProps) {
 
   if (!assetId || pronta?.assetId !== assetId) return null;
 
-  const lugar = caixa(pronta.largura, pronta.altura);
+  // A conta do `contain` não pode ser do CSS aqui dentro: sob `zoom` ele a faz
+  // com o tamanho natural do arquivo, e erra. O porquê inteiro, com as medidas,
+  // está em `caberEm`.
+  const lugar = caberEm(
+    { largura: pronta.largura, altura: pronta.altura },
+    { width: SCENE_WIDTH, height: SCENE_HEIGHT },
+  );
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -110,65 +117,15 @@ export function FundoDaCena({ assetId, variante }: FundoDaCenaProps) {
       src={pronta.url}
       alt=""
       draggable={false}
+      // Mapa nenhum deve ser cortado por não ser 16:9, e é `caberEm` quem
+      // cuida disso agora.
       className="absolute select-none"
-      style={lugar}
+      style={{
+        left: lugar.x,
+        top: lugar.y,
+        width: lugar.width,
+        height: lugar.height,
+      }}
     />
   );
-}
-
-/**
- * Onde o mapa fica no plano: o que o `object-contain` faria, feito aqui.
- *
- * Mapa nenhum deve ser cortado por não ser 16:9, e era `absolute inset-0
- * size-full object-contain` que cuidava disso. A conta é a mesma; o que muda é
- * QUEM a faz -- e isso importa porque o `contain` a faz com o tamanho NATURAL
- * do arquivo, e sob `zoom` o WebKitGTK mede esse tamanho já multiplicado pela
- * ampliação. Passado o limite de textura do motor, o número que ele usa deixa
- * de ser o do arquivo, e o mapa aparece espremido -- e, mais ampliado ainda,
- * não aparece.
- *
- * Medido no motor do aplicativo, comparando o DESENHO em `zoom` contra o mesmo
- * quadro em `transform`, com a câmera parada no mesmo lugar:
- *
- *   arquivo         escala   com `contain`          com esta conta
- *   original 8192    1,5     igual                  igual
- *   original 8192    2,0     x . 0,92, y intacto    igual
- *   original 8192    2,5     quase tudo preto       igual
- *   original 8192    3,0     preto                  igual
- *   reduzida 4096    2,5     igual                  igual
- *   reduzida 4096    3,0     errado                 igual
- *   reduzida 4096    3,9     preto                  igual
- *
- * Só o eixo X erra, o que é a assinatura de uma proporção calculada com uma
- * largura que estourou e voltou cortada. As CAIXAS do DOM estão certas nos dois
- * modos -- o palco mede `3861,3x2172,0` no mesmo ponto, com `contain` ou sem
- * --, e os tokens, que se posicionam em pixel, não saem do lugar: quem erra é a
- * pintura da imagem, e só dela. Por isso o mapa "voltava ao normal" enquanto o
- * mestre arrastava: ali a câmera está em `transform`, e o `zoom` só entra quando
- * ela para. Ver `conteudoNoLayout`, no `SceneStage`, para por que ela entra.
- *
- * Com a caixa dita em unidade de cena não há tamanho natural na conta do motor,
- * e some a classe inteira de erro -- inclusive o dia em que a redução de palco
- * crescer, ou alguém importar um mapa maior ainda.
- *
- * Zero em qualquer lado é o arquivo que não decodificou: aí a imagem ocupa o
- * plano e o `<img>` falha em silêncio, como falhava antes.
- */
-function caixa(
-  largura: number,
-  altura: number,
-): { left: number; top: number; width: number; height: number } {
-  if (largura <= 0 || altura <= 0)
-    return { left: 0, top: 0, width: SCENE_WIDTH, height: SCENE_HEIGHT };
-
-  const cabe = Math.min(SCENE_WIDTH / largura, SCENE_HEIGHT / altura);
-  const width = largura * cabe;
-  const height = altura * cabe;
-
-  return {
-    left: (SCENE_WIDTH - width) / 2,
-    top: (SCENE_HEIGHT - height) / 2,
-    width,
-    height,
-  };
 }

@@ -1,12 +1,18 @@
 "use client";
 
-import { memo, useMemo, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  memo,
+  useMemo,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { CANVAS_PADRAO } from "@/lib/extensoes/fontes";
 import { usePaginaVivaSuportada } from "@/lib/motor";
 import { RolagensDoRetrato } from "@/components/playground/rolagens-do-retrato";
+import { caberEm } from "@/lib/geometry/caber";
 import { portraitBox } from "@/lib/geometry/portrait";
 import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
 import { cn } from "@/lib/utils";
@@ -260,6 +266,27 @@ const PortraitView = memo(function PortraitView({
   const { scale } = useSceneScale();
   const recorte = camera ?? FULL_VIEWPORT;
   const box = portraitBox(portrait, recorte);
+  /** Tamanho do arquivo, medido no `load` da imagem. Ver o `onLoad` abaixo. */
+  const [natural, setNatural] = useState<{
+    largura: number;
+    altura: number;
+  } | null>(null);
+  const lugar = natural ? caberEm(natural, box) : null;
+
+  /**
+   * Guarda a medida do arquivo, quando ela muda.
+   *
+   * A comparação não é zelo: `setNatural` com um objeto novo a cada `load`
+   * re-renderiza, o `ref` roda de novo e chama `medir` outra vez -- e o retrato
+   * entra em laço. Igual entra e sai sem tocar em estado.
+   */
+  function medir(node: HTMLImageElement) {
+    const { naturalWidth: largura, naturalHeight: altura } = node;
+    if (!largura || !altura) return;
+    if (natural?.largura === largura && natural?.altura === altura) return;
+
+    setNatural({ largura, altura });
+  }
   // Em WebKit a página viva não desenha, e o que apareceria no lugar do rosto
   // seria a página de erro do serviço. Ver `usePaginaVivaSuportada`.
   const paginaVivaOk = usePaginaVivaSuportada();
@@ -299,10 +326,30 @@ const PortraitView = memo(function PortraitView({
           src={url}
           alt=""
           draggable={false}
-          // `object-contain`: retrato deformado é pior que retrato pequeno, e
-          // aqui a proporção é a do arquivo, não a da caixa.
-          className="size-full object-contain select-none"
-          style={portrait.flipX ? { transform: "scaleX(-1)" } : undefined}
+          // Retrato deformado é pior que retrato pequeno, e a proporção aqui é
+          // a do arquivo, não a da caixa -- o mestre estica a caixa à vontade.
+          // Era `object-contain` quem cuidava disso, e dentro do palco ele erra
+          // a conta: ver `caberEm`, que tem a medida.
+          className={cn("absolute select-none", !natural && "invisible")}
+          // Medido no `load` porque só o arquivo sabe a própria proporção, e
+          // ela não viaja no registro do retrato -- o que viaja é a GEOMETRIA
+          // da caixa. Um quadro invisível é o preço, e ele acontece uma vez por
+          // retrato, atrás da mesma aparição que o `scene-item-in` já anima.
+          onLoad={(event) => medir(event.currentTarget)}
+          // A imagem que já está no cache pode terminar ANTES de o React
+          // pendurar o `onLoad`, e aí o evento não vem -- o retrato ficaria
+          // invisível para sempre. Trocar de retrato reusa o mesmo nó, então a
+          // conferência acontece a cada montagem, e não uma vez só.
+          ref={(node) => {
+            if (node?.complete) medir(node);
+          }}
+          style={{
+            left: lugar?.x,
+            top: lugar?.y,
+            width: lugar?.width,
+            height: lugar?.height,
+            transform: portrait.flipX ? "scaleX(-1)" : undefined,
+          }}
         />
       ) : null}
 
