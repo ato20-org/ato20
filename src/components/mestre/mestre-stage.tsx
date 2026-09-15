@@ -50,6 +50,7 @@ import {
   scaleGroup,
 } from "@/lib/geometry/group";
 import { CamadasDeExtensoes } from "@/components/mestre/camadas-de-extensoes";
+import { ArquivoFantasma } from "@/components/mestre/arquivo-fantasma";
 import { TokenFantasma } from "@/components/mestre/token-fantasma";
 import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
@@ -1122,6 +1123,11 @@ export function MestreStage({ scene }: { scene: Scene }) {
           do `SceneLayer` pelo mesmo motivo: é decisão em andamento do mestre, e
           a TV só recebe o que foi decidido. */}
       <TokenFantasma sceneId={scene.id} grid={scene.grid} />
+
+      {/* A mesma coisa para o arquivo arrastado de FORA do aplicativo, que não
+          é gesto próprio e por isso não cabia na sombra acima: ele chega pelo
+          sistema operacional, sem imagem legível e sem roda. */}
+      <ArquivoFantasma sceneId={scene.id} />
 
       {/* As camadas das extensões, e aqui pelo mesmo motivo das três acima: o
           `SceneLayer` é o componente que desenha na TV, e plugin só alcança o
