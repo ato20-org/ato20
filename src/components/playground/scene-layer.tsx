@@ -3,6 +3,7 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
+import { useSceneScale } from "@/components/playground/scene-stage";
 import { FogLayer } from "@/components/playground/fog-layer";
 import { FundoDaCena } from "@/components/playground/fundo-da-cena";
 import { GridLayer } from "@/components/playground/grid-layer";
@@ -10,7 +11,14 @@ import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
 import type { Variante } from "@/lib/vault/assets";
 import type { RolagemDaMesa } from "@/types/dado";
-import type { CanvasItem, FogRegion, Portrait, Scene } from "@/types/scene";
+import {
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  type CanvasItem,
+  type FogRegion,
+  type Portrait,
+  type Scene,
+} from "@/types/scene";
 
 type SceneLayerProps = {
   scene: Scene;
@@ -99,8 +107,45 @@ export function SceneLayer({
     [scene.items],
   );
 
+  const { scale, cameraParada } = useSceneScale();
+
   return (
-    <>
+    <div
+      className="absolute inset-0"
+      /**
+       * Desenha o conteúdo GRANDE e o reduz de volta, quando a câmera para.
+       *
+       * O plano é ampliado por `transform: scale`, e o WebKitGTK rasteriza uma
+       * camada transformada no tamanho de LAYOUT para esticar a textura depois.
+       * Num mapa desenhado a 9200 pixels a partir de um plano de 1920, o que a
+       * mesa vê é essa textura esticada quase cinco vezes -- ver `cameraParada`
+       * no `SceneStage`, onde está o que foi medido e o que foi descartado.
+       *
+       * `zoom` é a única propriedade que põe a ampliação no LAYOUT: com ele o
+       * `<img>` do mapa passa a ter 9200 de largura de verdade, e o motor o
+       * rasteriza nesse tamanho. O `scale(1/scale)` desfaz o crescimento para a
+       * caixa continuar ocupando as mesmas 1920 unidades do plano -- e reduzir
+       * não custa nitidez, que é justamente a assimetria de que este conserto
+       * vive: o caro é esticar.
+       *
+       * Aqui e não no plano do `SceneStage`, de propósito. `zoom` quebra a
+       * conta dos controles, que convertem pixel de tela em unidade de cena com
+       * `v / scale` -- sob `zoom` o erro cresce com a ampliação, e a 800% as
+       * alças e os ícones do gizmo incham. O conteúdo não tem essa conta: ele é
+       * medido em unidades de cena, que o `zoom` multiplica corretamente.
+       */
+      style={
+        cameraParada
+          ? {
+              zoom: scale,
+              width: SCENE_WIDTH,
+              height: SCENE_HEIGHT,
+              transform: `scale(${1 / scale})`,
+              transformOrigin: "0 0",
+            }
+          : undefined
+      }
+    >
       <FundoDaCena assetId={scene.backgroundAssetId} variante={variante} />
 
       {/* Depois do fundo e ANTES dos itens: a grade é do mapa, e um token em
@@ -142,6 +187,6 @@ export function SceneLayer({
           onPortraitPointerDown={onPortraitPointerDown}
         />
       ) : null}
-    </>
+    </div>
   );
 }

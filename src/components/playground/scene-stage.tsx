@@ -35,6 +35,11 @@ type SceneScale = {
    * dado um quadro atrás do mapa durante o arrasto.
    */
   viewport: Viewport;
+  /**
+   * A câmera está parada, e vale a pena redesenhar o conteúdo em resolução
+   * cheia. Quem responde a isto é o `SceneLayer` -- ver `cameraParada`.
+   */
+  cameraParada: boolean;
 };
 
 const SceneScaleContext = createContext<SceneScale | null>(null);
@@ -106,6 +111,13 @@ export function SceneStage({
   const frameRef = useRef<HTMLDivElement>(null);
   const planeRef = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
+  /**
+   * A câmera está parada há tempo bastante para valer a pena redesenhar nítido.
+   *
+   * Ver `zoom` no plano, logo abaixo: é este estado que escolhe entre as duas
+   * formas de ampliar.
+   */
+  const [parada, setParada] = useState(false);
 
   useEffect(() => {
     const element = frameRef.current;
@@ -135,6 +147,73 @@ export function SceneStage({
     (frame.width - viewport.width * scale) / 2 - viewport.x * scale;
   const offsetY =
     (frame.height - viewport.height * scale) / 2 - viewport.y * scale;
+
+  /**
+   * A câmera parou, e o conteúdo pode ser redesenhado em resolução cheia.
+   *
+   * ## O que estava errado
+   *
+   * `transform: scale` é resolvido pelo compositor, e o WebKitGTK rasteriza o
+   * plano no tamanho de LAYOUT -- 1920x1080 -- para depois esticar essa textura
+   * até o tamanho da tela. Ampliado quatro vezes, o que aparece é uma imagem de
+   * 1920 de largura esticada para 9200: borra tudo junto, mapa e token.
+   *
+   * Quando isso acontece é decisão interna do motor, e por isso o sintoma
+   * parecia aleatório: mexer no arranjo de abas da bancada -- que não toca o
+   * palco -- acendia e apagava o borrão. Medido com o mesmo `scale` de 4,5273
+   * nos dois arranjos e o mesmo arquivo de fundo: só a forma de ampliar muda o
+   * resultado.
+   *
+   * Descartados por medida, e não por suposição: o valor do `scale` (mesmo
+   * número em estado nítido e borrado), a variante do fundo (mesma URL nos
+   * dois), as máscaras de `scroll-fade`, o `backdrop-filter` dos controles
+   * flutuantes, a quantidade de camadas (o estado NÍTIDO tinha mais) e
+   * `WEBKIT_DISABLE_COMPOSITING_MODE=1`.
+   *
+   * ## Por que a decisão mora aqui e o conserto mora no `SceneLayer`
+   *
+   * Quem precisa de resolução é o CONTEÚDO -- mapa, token, retrato. Os
+   * controles não: eles são formas simples, e o que eles precisam é do tamanho
+   * exato, que vem de `px(v) = v / scale` e só fecha com `transform`. Pôr a
+   * ampliação no layout do plano INTEIRO quebra essa conta, e o erro cresce com
+   * o zoom -- a 800% as alças e os ícones do gizmo incham. Por isso o plano
+   * continua no `transform`, e quem troca de forma é só o `SceneLayer`.
+   *
+   * ## Por que só com a câmera parada
+   *
+   * Trocar `transform` por `zoom` o tempo todo foi tentado antes e reprovado na
+   * bancada -- 889 ms de estilo e 164 ms de layout contra 24 ms, no cenário
+   * `camera`. Ver `app/perf/page.tsx`.
+   *
+   * O que aquela tentativa media era o GESTO: sessenta mudanças de ampliação
+   * por segundo, cada uma refazendo o layout. Mas nitidez não é coisa que se
+   * olhe durante o gesto -- durante ele a imagem está correndo atrás do cursor.
+   * Então o gesto continua no compositor, onde é barato, e o layout é pago UMA
+   * vez, quando a mão para.
+   */
+
+  /** A câmera, resumida a uma string: mudou isto, mudou o enquadramento. */
+  const camera = `${scale}|${offsetX}|${offsetY}`;
+  const [ultima, setUltima] = useState(camera);
+
+  // Ajuste de estado no próprio render, que é o caminho que o React documenta
+  // para estado derivado -- e o mesmo de `useVarianteDoFundo`. Num efeito, o
+  // quadro entre a câmera mexer e o `parada` cair sairia nítido e com a
+  // geometria velha, que é a cena saltando.
+  if (ultima !== camera) {
+    setUltima(camera);
+    setParada(false);
+  }
+
+  useEffect(() => {
+    // Mais longo com a transição ligada: ali a câmera continua andando por
+    // 450 ms depois da última mudança de `viewport`, e trocar de forma no meio
+    // do voo faria a cena saltar -- o `zoom` não interpola, a transição é do
+    // `transform`. Ver `.scene-smooth-camera`.
+    const espera = window.setTimeout(() => setParada(true), smooth ? 620 : 180);
+
+    return () => window.clearTimeout(espera);
+  }, [camera, smooth]);
 
   /**
    * Liga a transição da câmera só depois do primeiro paint já medido.
@@ -167,8 +246,8 @@ export function SceneStage({
   );
 
   const value = useMemo<SceneScale>(
-    () => ({ scale, toScene, viewport }),
-    [scale, toScene, viewport],
+    () => ({ scale, toScene, viewport, cameraParada: parada && scale !== 0 }),
+    [scale, toScene, viewport, parada],
   );
 
   // Guardados em ref porque os listeners nativos abaixo são registrados uma
