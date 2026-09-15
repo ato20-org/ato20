@@ -35,6 +35,19 @@ type SceneScale = {
    * dado um quadro atrás do mapa durante o arrasto.
    */
   viewport: Viewport;
+  /**
+   * Onde o CONTEÚDO da cena deve se desenhar -- mapa, tokens, retratos.
+   *
+   * Um nó de DOM e não um `ReactNode` na outra ponta porque quem sabe montar o
+   * conteúdo é cada tela, lá no fundo da árvore, e passá-lo para cá exigiria
+   * que todas elas mudassem de forma. Quem desenha nele entra por portal; a
+   * árvore do React continua a mesma, e com ela os eventos e o `stopPropagation`
+   * de sempre.
+   *
+   * `null` até o primeiro paint. Ver `PlanoDeConteudo` e o cabeçalho do
+   * `SceneLayer`, onde está por que os dois planos existem.
+   */
+  planoDeConteudo: HTMLElement | null;
 };
 
 const SceneScaleContext = createContext<SceneScale | null>(null);
@@ -105,7 +118,10 @@ export function SceneStage({
 }: SceneStageProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const planeRef = useRef<HTMLDivElement>(null);
+  const [conteudoNo, setConteudoNo] = useState<HTMLDivElement | null>(null);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
+  /** A câmera está parada há tempo bastante para valer redesenhar nítido. */
+  const [parada, setParada] = useState(false);
 
   useEffect(() => {
     const element = frameRef.current;
@@ -135,6 +151,74 @@ export function SceneStage({
     (frame.width - viewport.width * scale) / 2 - viewport.x * scale;
   const offsetY =
     (frame.height - viewport.height * scale) / 2 - viewport.y * scale;
+
+  /**
+   * A câmera parou, e o CONTEÚDO pode ser redesenhado em resolução cheia.
+   *
+   * ## O que estava errado
+   *
+   * `transform: scale` é resolvido pelo compositor, e o WebKitGTK rasteriza uma
+   * camada transformada no tamanho de LAYOUT -- 1920x1080 -- para esticar essa
+   * textura depois. Com o plano ampliado quatro vezes e meia, o que a mesa via
+   * era uma imagem de 1920 de largura esticada para 9200.
+   *
+   * Quando o motor decide compor o plano é heurística interna dele, e por isso
+   * o sintoma parecia aleatório: mexer no arranjo de abas da bancada -- que não
+   * toca o palco -- acendia e apagava o borrão. Promover o plano à mão, com
+   * `will-change`, borra sempre.
+   *
+   * Descartados por medida: o valor do `scale` (o mesmo em estado nítido e
+   * borrado), a variante do fundo, as máscaras de `scroll-fade`, o
+   * `backdrop-filter` dos controles, a pressão de camadas -- o estado NÍTIDO
+   * tinha mais -- e `WEBKIT_DISABLE_COMPOSITING_MODE=1`.
+   *
+   * ## Por que dois planos, e não um com `zoom`
+   *
+   * `zoom` é a única propriedade que põe a ampliação no LAYOUT, e é o que faz o
+   * motor rasterizar o mapa no tamanho em que ele aparece. Mas ela tem de estar
+   * no elemento que FORMA a camada: pô-la mais fundo e desfazê-la com um
+   * `scale` não ganha nada, porque as duas coisas acontecem dentro da mesma
+   * camada e a textura continua com 1920. Foi assim que a primeira tentativa
+   * deste conserto passou por verificada sem funcionar.
+   *
+   * E no plano INTEIRO ela quebra os controles, que convertem pixel de tela em
+   * unidade de cena com `v / scale`: sob `zoom` o erro cresce com a ampliação,
+   * e a 800% as alças e os ícones do gizmo incham. Era isto que a bancada
+   * chamava de "o que ela fazia com as bordas de meio pixel dos controles".
+   *
+   * Daí os dois planos, com a mesma geometria: o de baixo leva o conteúdo e
+   * troca de forma, o de cima leva os controles e nunca sai do `transform`.
+   *
+   * ## Por que só com a câmera parada
+   *
+   * Trocar `transform` por `zoom` o tempo todo já foi reprovado na bancada --
+   * 889 ms de estilo e 164 ms de layout contra 24 ms, no cenário `camera`. Mas
+   * o que aquela medida mediu foi o GESTO, e nitidez não é coisa que se olhe
+   * durante o gesto: ali a imagem está correndo atrás do cursor. O gesto
+   * continua no compositor, e o layout é pago uma vez, quando a mão para.
+   */
+  const conteudoNoLayout = parada && scale !== 0;
+
+  /** A câmera, resumida a uma string: mudou isto, mudou o enquadramento. */
+  const camera = `${scale}|${offsetX}|${offsetY}`;
+  const [ultima, setUltima] = useState(camera);
+
+  // Ajuste de estado no próprio render, que é o caminho que o React documenta
+  // para estado derivado -- o mesmo de `useVarianteDoFundo`. Num efeito, o
+  // quadro entre a câmera mexer e o `parada` cair sairia com a geometria velha.
+  if (ultima !== camera) {
+    setUltima(camera);
+    setParada(false);
+  }
+
+  useEffect(() => {
+    // Mais longo com a transição ligada: ali a câmera continua andando por
+    // 450 ms depois da última mudança de `viewport`, e trocar de forma no meio
+    // do voo faria a cena saltar -- `zoom` não interpola.
+    const espera = window.setTimeout(() => setParada(true), smooth ? 620 : 180);
+
+    return () => window.clearTimeout(espera);
+  }, [camera, smooth]);
 
   /**
    * Liga a transição da câmera só depois do primeiro paint já medido.
@@ -167,8 +251,8 @@ export function SceneStage({
   );
 
   const value = useMemo<SceneScale>(
-    () => ({ scale, toScene, viewport }),
-    [scale, toScene, viewport],
+    () => ({ scale, toScene, viewport, planoDeConteudo: conteudoNo }),
+    [scale, toScene, viewport, conteudoNo],
   );
 
   // Guardados em ref porque os listeners nativos abaixo são registrados uma
@@ -337,12 +421,52 @@ export function SceneStage({
       // Sem isto o browser rouba o gesto de duas mãos para dar zoom na página.
       style={onViewportChange ? { touchAction: "none" } : undefined}
     >
+      {/* O plano de BAIXO: o conteúdo da cena, e o único que troca de forma de
+          ampliar. Quem desenha nele chega por portal -- ver `planoDeConteudo`. */}
+      <div
+        aria-hidden={scale === 0}
+        className={cn("absolute top-0 left-0", scale === 0 && "invisible")}
+        style={{
+          width: SCENE_WIDTH,
+          height: SCENE_HEIGHT,
+          transform: `translate(${offsetX}px, ${offsetY}px)`,
+          transformOrigin: "0 0",
+        }}
+      >
+        <div
+          ref={setConteudoNo}
+          // `relative` para este ser SEMPRE o containing block do conteúdo. Sem
+          // isso, o `absolute inset-0` de dentro se ancora aqui enquanto há
+          // `transform` -- que cria containing block -- e escapa para o
+          // elemento de fora quando a forma vira `zoom`, que não cria. O
+          // sintoma era o mapa saltando e sumindo no instante em que a câmera
+          // parava.
+          className="relative bg-black"
+          style={{
+            width: SCENE_WIDTH,
+            height: SCENE_HEIGHT,
+            // As duas formas produzem a MESMA geometria: é o que deixa alternar
+            // entre elas sem a cena saltar.
+            ...(conteudoNoLayout
+              ? { zoom: scale }
+              : { transform: `scale(${scale})`, transformOrigin: "0 0" }),
+          }}
+        />
+      </div>
+
+      {/* O plano de CIMA: os controles do mestre. Sempre no `transform`, porque
+          é o que mantém exato o `v / scale` com que eles se medem.
+
+          `pointer-events: none` porque ele cobre o plano de conteúdo inteiro, e
+          sem isso nenhum clique alcançaria o mapa embaixo. Quem é clicável aqui
+          se declara com `pointer-events-auto` -- o gizmo, o alfinete, o postit.
+          Ver `PLANO_DE_CONTROLES` em `globals.css`. */}
       <div
         ref={planeRef}
         // `scale === 0` é o primeiro paint, antes do ResizeObserver medir.
         // Renderizar nessa hora mostraria a cena em tamanho cheio por um frame.
         className={cn(
-          "absolute top-0 left-0 bg-black",
+          "plano-de-controles pointer-events-none absolute top-0 left-0",
           bounds && "outline outline-white/10",
           scale === 0 && "invisible",
         )}

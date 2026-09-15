@@ -1,8 +1,14 @@
 "use client";
 
-import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useMemo,
+  type ComponentProps,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { createPortal } from "react-dom";
 
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
+import { useSceneScale } from "@/components/playground/scene-stage";
 import { FogLayer } from "@/components/playground/fog-layer";
 import { FundoDaCena } from "@/components/playground/fundo-da-cena";
 import { GridLayer } from "@/components/playground/grid-layer";
@@ -74,6 +80,17 @@ type SceneLayerProps = {
     event: ReactPointerEvent,
     portrait: Portrait,
   ) => void;
+  /**
+   * O envelope que o Mestre põe em volta do conteúdo: a marca `data-palco`, o
+   * cursor da ferramenta, o clique no vazio e o `drop` do acervo.
+   *
+   * Vem por prop, e não continua sendo um `<div>` em volta do `<SceneLayer>` lá
+   * no Mestre, porque o conteúdo desceu para o plano de baixo -- ver o portal
+   * abaixo. Ficando em cima, este envelope cobriria os tokens e engoliria o
+   * clique que deveria pegá-los; ficando de fora, não haveria onde tratar o
+   * clique no vazio. Ele desce junto.
+   */
+  palco?: ComponentProps<"div"> & Record<`data-${string}`, unknown>;
 };
 
 /**
@@ -93,13 +110,34 @@ export function SceneLayer({
   onFogPointerDown,
   onPortraitPointerDown,
   apagando,
+  palco,
 }: SceneLayerProps) {
   const items = useMemo(
     () => [...scene.items].sort((a, b) => a.z - b.z),
     [scene.items],
   );
 
-  return (
+  /**
+   * O conteúdo desenha no plano DE BAIXO, e não onde ele foi escrito.
+   *
+   * Os dois planos existem para separar o que precisa de resolução -- mapa,
+   * token, retrato -- do que precisa de tamanho exato: os controles do mestre,
+   * que se medem em pixel de tela. Só o de baixo troca de forma de ampliar, e
+   * só ele fica nítido ampliado. O porquê inteiro está em `conteudoNoLayout`,
+   * no `SceneStage`.
+   *
+   * Por portal, e não por uma prop lá em cima: quem monta o conteúdo é cada
+   * tela, no fundo da árvore, e levá-lo até o `SceneStage` faria as cinco
+   * mudarem de forma. O portal move só o DOM -- a árvore do React continua a
+   * mesma, e com ela os eventos, o `stopPropagation` e os handlers que o Mestre
+   * pendura em volta.
+   *
+   * Sem o nó -- primeiro paint -- desenha onde está. É um quadro, e o quadro
+   * seguinte já vai para o lugar certo.
+   */
+  const { planoDeConteudo } = useSceneScale();
+
+  const conteudo = (
     <>
       <FundoDaCena assetId={scene.backgroundAssetId} variante={variante} />
 
@@ -144,4 +182,10 @@ export function SceneLayer({
       ) : null}
     </>
   );
+
+  const envelopado = palco ? <div {...palco}>{conteudo}</div> : conteudo;
+
+  return planoDeConteudo
+    ? createPortal(envelopado, planoDeConteudo)
+    : envelopado;
 }

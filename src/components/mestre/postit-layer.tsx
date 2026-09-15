@@ -591,7 +591,11 @@ function PostitPapel({
     <div
       ref={papel}
       className={cn(
-        "absolute flex flex-col overflow-hidden rounded-[3px] shadow-lg ring-1",
+        // `pointer-events-auto` porque o plano dos controles desliga o ponteiro
+        // para não cobrir o mapa, que agora mora num plano abaixo -- ver
+        // `plano-de-controles` no `SceneStage`. O papel é pegável, então ele
+        // liga de volta.
+        "pointer-events-auto absolute flex flex-col overflow-hidden rounded-[3px] shadow-lg ring-1",
         PAPEL[postit.cor],
         editando && "ring-2 ring-offset-1",
       )}
