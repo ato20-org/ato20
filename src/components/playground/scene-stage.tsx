@@ -65,6 +65,32 @@ export function useSceneScale(): SceneScale {
   return value;
 }
 
+/**
+ * Desfaz a ampliação do plano, para o que estiver dentro ser medido em PIXEL DE
+ * TELA -- e não em unidade de cena dividida pela escala.
+ *
+ * Os controles do palco têm tamanho fixo na tela: uma alça tem dez pixels em
+ * qualquer ampliação. Até aqui isso era feito dividindo -- `10 / scale` --, e o
+ * plano multiplicava de volta. A conta fecha no papel e quebra na prática: sob
+ * `zoom`, um valor computado abaixo de um pixel é levado PARA um pixel antes de
+ * ser multiplicado, e o que era para ter dez pixels na tela sai com o traço
+ * três vezes mais grosso. Medido nesta máquina: o traço do ícone do gizmo tem
+ * largura computada de `1 / scale`, e a 800% isso são 0,29px -- abaixo do piso.
+ * O botão, com 5,8px computados, passava intacto; era só o traço que engordava,
+ * e daí a impressão de que os ícones cresciam.
+ *
+ * Cancelando a escala aqui, nada lá dentro é sub-pixel: dez pixels são dez
+ * pixels, e o traço de um pixel é um pixel. Serve para as duas formas de
+ * ampliar, porque desfaz a que estiver valendo -- `zoom` vezes `1 / scale` dá
+ * um, e `scale` vezes `1 / scale` também.
+ *
+ * Só para o CONTEÚDO do controle. Onde ele fica no mapa continua em unidade de
+ * cena: é a posição que tem de acompanhar o item, e é só o tamanho que não.
+ */
+export function emPixelDeTela(scale: number): { zoom: number } {
+  return { zoom: 1 / scale };
+}
+
 /** Passo de zoom por notch da roda. */
 const WHEEL_ZOOM_STEP = 1.15;
 
@@ -461,20 +487,39 @@ export function SceneStage({
           sem isso nenhum clique alcançaria o mapa embaixo. Quem é clicável aqui
           se declara com `pointer-events-auto` -- o gizmo, o alfinete, o postit.
           Ver `PLANO_DE_CONTROLES` em `globals.css`. */}
+      {/* `pointer-events-none` nos DOIS níveis: este envelope tem o tamanho do
+          plano inteiro, e sem isso é ELE quem recebe o clique -- o mapa, que
+          vive no plano de baixo, fica inalcançável. */}
       <div
         ref={planeRef}
         // `scale === 0` é o primeiro paint, antes do ResizeObserver medir.
         // Renderizar nessa hora mostraria a cena em tamanho cheio por um frame.
         className={cn(
-          "plano-de-controles pointer-events-none absolute top-0 left-0",
-          bounds && "outline outline-white/10",
+          "pointer-events-none absolute top-0 left-0",
           scale === 0 && "invisible",
         )}
         style={{
           width: SCENE_WIDTH,
           height: SCENE_HEIGHT,
-          transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
+          transform: `translate(${offsetX}px, ${offsetY}px)`,
           transformOrigin: "0 0",
+        }}
+      >
+      <div
+        className={cn(
+          "plano-de-controles pointer-events-none relative",
+          bounds && "outline outline-white/10",
+        )}
+        style={{
+          width: SCENE_WIDTH,
+          height: SCENE_HEIGHT,
+          // Mesma alternância do conteúdo, e pelo mesmo motivo: o plano também
+          // borra esticado. O que os controles precisam, e o conteúdo não, é
+          // que as medidas de TELA deles não caiam no piso de um pixel que o
+          // `zoom` aplica -- ver `emPixelDeTela`.
+          ...(conteudoNoLayout
+            ? { zoom: scale }
+            : { transform: `scale(${scale})`, transformOrigin: "0 0" }),
         }}
       >
         {/* Sem escala, sem filhos.
@@ -492,6 +537,7 @@ export function SceneStage({
         <SceneScaleContext.Provider value={value}>
           {scale === 0 ? null : children}
         </SceneScaleContext.Provider>
+      </div>
       </div>
     </div>
   );

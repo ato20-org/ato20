@@ -4,7 +4,10 @@ import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Blend, Drama, FlipHorizontal, RotateCw, Trash2 } from "lucide-react";
 
 import { Slider } from "@/components/ui/slider";
-import { useSceneScale } from "@/components/playground/scene-stage";
+import {
+  emPixelDeTela,
+  useSceneScale,
+} from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { cn } from "@/lib/utils";
 import {
@@ -250,11 +253,16 @@ export function TransformHandles({
       {rotatable || onFlip || onOpenSheet || opacidade || onDelete ? (
         <div
           className="pointer-events-none absolute flex items-center"
+          // A POSIÇÃO continua em unidade de cena -- ela acompanha o item. O
+          // que muda é o conteúdo: `emPixelDeTela` desfaz a ampliação do plano,
+          // e daqui para dentro tudo é medido em pixel de tela, sem sub-pixel
+          // para o piso do `zoom` pegar.
           style={{
             left: "50%",
             top: 0,
-            gap: px(4),
-            transform: `translate(-50%, calc(-100% - ${px(ROTATE_OFFSET_PX - HANDLE_PX * 2)}px))`,
+            gap: 4,
+            ...emPixelDeTela(scale),
+            transform: `translate(-50%, calc(-100% - ${ROTATE_OFFSET_PX - HANDLE_PX * 2}px))`,
           }}
         >
           {rotatable ? (
@@ -266,13 +274,13 @@ export function TransformHandles({
                 cor.botao,
               )}
               style={{
-                width: px(HANDLE_PX * 2),
-                height: px(HANDLE_PX * 2),
+                width: HANDLE_PX * 2,
+                height: HANDLE_PX * 2,
                 cursor: "grab",
               }}
               onPointerDown={startRotate}
             >
-              <RotateCw style={{ width: px(HANDLE_PX * 1.2), height: px(HANDLE_PX * 1.2) }} />
+              <RotateCw style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
             </button>
           ) : null}
 
@@ -284,7 +292,7 @@ export function TransformHandles({
                 "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
                 cor.botao,
               )}
-              style={{ width: px(HANDLE_PX * 2), height: px(HANDLE_PX * 2) }}
+              style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
               onPointerDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -292,7 +300,7 @@ export function TransformHandles({
               }}
             >
               <FlipHorizontal
-                style={{ width: px(HANDLE_PX * 1.2), height: px(HANDLE_PX * 1.2) }}
+                style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
               />
             </button>
           ) : null}
@@ -307,14 +315,14 @@ export function TransformHandles({
                 "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
                 cor.botao,
               )}
-              style={{ width: px(HANDLE_PX * 2), height: px(HANDLE_PX * 2) }}
+              style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
               onPointerDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 onOpenSheet();
               }}
             >
-              <Drama style={{ width: px(HANDLE_PX * 1.2), height: px(HANDLE_PX * 1.2) }} />
+              <Drama style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
             </button>
           ) : null}
 
@@ -330,14 +338,14 @@ export function TransformHandles({
                 // conta que o painel à direita é deste item, e não do palco.
                 painelAberto && "ring-2 ring-white/70",
               )}
-              style={{ width: px(HANDLE_PX * 2), height: px(HANDLE_PX * 2) }}
+              style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
               onPointerDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 setPainelAberto((aberto) => !aberto);
               }}
             >
-              <Blend style={{ width: px(HANDLE_PX * 1.2), height: px(HANDLE_PX * 1.2) }} />
+              <Blend style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
             </button>
           ) : null}
 
@@ -346,7 +354,7 @@ export function TransformHandles({
               type="button"
               aria-label="Excluir"
               className="pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full bg-red-600 text-white"
-              style={{ width: px(HANDLE_PX * 2), height: px(HANDLE_PX * 2) }}
+              style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
               // `pointerdown` e não `click`: o palco inteiro reage a
               // pointerdown, e esperar o clique deixaria a seleção mudar antes.
               onPointerDown={(event) => {
@@ -355,7 +363,7 @@ export function TransformHandles({
                 onDelete();
               }}
             >
-              <Trash2 style={{ width: px(HANDLE_PX * 1.2), height: px(HANDLE_PX * 1.2) }} />
+              <Trash2 style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
             </button>
           ) : null}
         </div>
