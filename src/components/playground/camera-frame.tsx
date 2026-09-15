@@ -7,6 +7,7 @@ import { TransformHandles } from "@/components/playground/transform-handles";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
 import { clampViewport } from "@/lib/geometry/viewport";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { Viewport } from "@/types/scene";
 
 /** Acima do gizmo de seleção: a câmera é a camada de enquadramento. */
@@ -38,6 +39,17 @@ export function CameraFrame({ camera, onChange }: CameraFrameProps) {
   const { scale } = useSceneScale();
   const startDrag = useSceneDrag();
 
+  // Os mesmos limites do palco, e não o plano: o mestre pode largar coisa fora
+  // do plano, e uma moldura que não alcança o que ele largou seria um lugar
+  // onde dá para pôr e não dá para mostrar.
+  //
+  // Lido aqui e não recebido do `MestreStage`: a caixa muda a cada quadro em
+  // que o mestre arrasta um item para fora, e assinar isso lá em cima
+  // redesenharia o palco inteiro por quadro. Só esta moldura precisa saber.
+  // Quem renderiza a moldura é o Mestre, e só ele -- por isso ler o store dele
+  // aqui não amarra nenhuma outra visão.
+  const conteudo = useViewportStore((state) => state.conteudo);
+
   /** Pixels de tela convertidos para unidades de cena. */
   const px = (value: number) => value / scale;
 
@@ -50,11 +62,14 @@ export function CameraFrame({ camera, onChange }: CameraFrameProps) {
     startDrag(event, {
       onMove: (delta) =>
         onChange(
-          clampViewport({
-            ...camera,
-            x: origin.x + delta.x,
-            y: origin.y + delta.y,
-          }),
+          clampViewport(
+            {
+              ...camera,
+              x: origin.x + delta.x,
+              y: origin.y + delta.y,
+            },
+            conteudo,
+          ),
         ),
     });
   }
@@ -130,12 +145,15 @@ export function CameraFrame({ camera, onChange }: CameraFrameProps) {
           zIndex={HANDLES_Z}
           onChange={({ x, y, width, height }) =>
             onChange(
-              clampViewport({
-                x: x ?? camera.x,
-                y: y ?? camera.y,
-                width: width ?? camera.width,
-                height: height ?? camera.height,
-              }),
+              clampViewport(
+                {
+                  x: x ?? camera.x,
+                  y: y ?? camera.y,
+                  width: width ?? camera.width,
+                  height: height ?? camera.height,
+                },
+                conteudo,
+              ),
             )
           }
         />

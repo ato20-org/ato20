@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -26,6 +27,8 @@ import { TransformHandles } from "@/components/playground/transform-handles";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { usePanMode } from "@/hooks/use-pan-mode";
+import { comFolga } from "@/lib/geometry/viewport";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
   flipSelection,
@@ -1037,6 +1040,20 @@ export function MestreStage({ scene }: { scene: Scene }) {
   // aconteceria. Com a folga além das bordas do plano (ver `FOLGA_X`) há para
   // onde ir em qualquer ampliação, inclusive no encaixe — e a condição antiga
   // passou a mentir ao contrário, escondendo a mão num gesto que funciona.
+  /**
+   * Até onde o palco aceita gesto: a área navegável, e não o plano.
+   *
+   * A folga entra junto de propósito. A borda desenhada é o que EXISTE, e o
+   * vazio em volta dela é para onde as coisas vão — soltar uma imagem ali é
+   * justamente como ela passa a existir, e uma zona parada na borda tornaria
+   * esse primeiro gesto impossível. Ver `comFolga`.
+   */
+  const conteudoDoPalco = useViewportStore((state) => state.conteudo);
+  const zonaDoPalco = useMemo(
+    () => boundsToBox(comFolga(conteudoDoPalco)),
+    [conteudoDoPalco],
+  );
+
   const canPan = panMode;
 
   return (
@@ -1063,11 +1080,14 @@ export function MestreStage({ scene }: { scene: Scene }) {
               cursor: canPan ? "grab" : aiming ? "crosshair" : undefined,
             },
             onPointerDown: panMode ? undefined : handleCanvasPointerDown,
+            // O cursor fica no envelope e a zona o HERDA: `cursor` é herdado, e
+            // é o que faz a mira da ferramenta valer também fora do plano.
             // Sem handler de arrasto nativo: as três origens de dentro do
             // aplicativo chegam pelo gesto próprio -- ver `TokenFantasma` --, e
             // o arquivo vindo do sistema não passa pelo DOM, e sim pelo evento
             // do Tauri -- ver `ArquivoFantasma`.
           }}
+          zona={zonaDoPalco}
           apagando={apagando}
           scene={scene}
           variant="mestre"
@@ -1359,7 +1379,12 @@ export function MestreStage({ scene }: { scene: Scene }) {
       {riscando ? (
         <svg
           aria-hidden
-          className="pointer-events-none absolute inset-0"
+          // `overflow-visible` pelo mesmo motivo do `TracoLayer`, e este é o
+          // que o mestre vê PRIMEIRO: é a prévia, a linha que acompanha o dedo.
+          // Sem isto o risco sumia na borda do mapa enquanto está sendo feito,
+          // e reaparecia inteiro ao soltar — o que faz o gesto parecer quebrado
+          // justamente no instante em que a pessoa está olhando para ele.
+          className="pointer-events-none absolute inset-0 overflow-visible"
           width={SCENE_WIDTH}
           height={SCENE_HEIGHT}
           // Acima dos itens e abaixo da névoa (5000), que é onde o traço vai

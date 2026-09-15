@@ -2,9 +2,13 @@
 
 import { create } from "zustand";
 
+import type { Bounds } from "@/lib/geometry/bounds";
+import { mesmosLimites } from "@/lib/geometry/limites";
 import {
   centerViewportOn,
   FULL_VIEWPORT,
+  PLANO,
+  viewportQueCabe,
   zoomViewportCentered,
 } from "@/lib/geometry/viewport";
 import type { Vec } from "@/lib/geometry/transform";
@@ -16,6 +20,15 @@ const STEP = 1.4;
 type ViewportStore = {
   viewport: Viewport;
   /**
+   * A área que a cena ocupa — o plano mais o que foi colocado fora dele.
+   *
+   * Mora aqui, e não é lida da cena onde cada um precisa, porque é o zoom que
+   * a consome: afastar, encaixar e centralizar precisam saber até onde existe
+   * coisa, e os botões que disparam essas ações não têm a cena em mãos. Quem
+   * abastece é o `StageBoundary`, que tem.
+   */
+  conteudo: Bounds;
+  /**
    * Espaço pressionado: o arrasto passa a deslocar a cena em vez de mexer nos
    * itens. Mora aqui porque o palco e a camada interativa precisam concordar
    * sobre quem trata o gesto.
@@ -23,6 +36,7 @@ type ViewportStore = {
   panMode: boolean;
 
   setViewport: (viewport: Viewport) => void;
+  setConteudo: (conteudo: Bounds) => void;
   setPanMode: (panMode: boolean) => void;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -46,14 +60,31 @@ type ViewportStore = {
  */
 export const useViewportStore = create<ViewportStore>((set, get) => ({
   viewport: FULL_VIEWPORT,
+  conteudo: PLANO,
   panMode: false,
 
   setViewport: (viewport) => set({ viewport }),
+
+  // Devolver o estado intocado quando a caixa não mudou é o que deixa o palco
+  // chamar isto a cada quadro de arrasto de graça: o zustand não avisa ninguém
+  // quando o objeto volta idêntico. Ver `mesmosLimites`.
+  setConteudo: (conteudo) =>
+    set((state) =>
+      mesmosLimites(state.conteudo, conteudo) ? state : { conteudo },
+    ),
+
   setPanMode: (panMode) => set({ panMode }),
-  zoomIn: () => set({ viewport: zoomViewportCentered(get().viewport, STEP) }),
+  zoomIn: () =>
+    set({ viewport: zoomViewportCentered(get().viewport, STEP, get().conteudo) }),
   zoomOut: () =>
-    set({ viewport: zoomViewportCentered(get().viewport, 1 / STEP) }),
-  fit: () => set({ viewport: FULL_VIEWPORT }),
+    set({
+      viewport: zoomViewportCentered(get().viewport, 1 / STEP, get().conteudo),
+    }),
+
+  // O que CABE, e não o plano: com tudo dentro do plano os dois são o mesmo
+  // recorte, e fora dele é este botão que devolve a vista ao que existe.
+  fit: () => set({ viewport: viewportQueCabe(get().conteudo) }),
+
   centerOn: (point) =>
-    set({ viewport: centerViewportOn(get().viewport, point) }),
+    set({ viewport: centerViewportOn(get().viewport, point, get().conteudo) }),
 }));

@@ -35,7 +35,17 @@ export function TracoLayer({
   return (
     <svg
       aria-hidden
-      className="pointer-events-none absolute inset-0"
+      // `overflow-visible` porque o risco não para na borda do mapa.
+      //
+      // O SVG recorta o que passa da própria caixa, e a caixa aqui é o plano.
+      // Sem isto o mestre riscava para fora do mapa, o traço era GRAVADO
+      // inteiro — a captura não prende ponto nenhum — e voltava cortado numa
+      // linha vertical exata em `x = 0`, como se o lápis tivesse batido numa
+      // parede que não existe.
+      //
+      // Quem recorta é a moldura do palco, como já é o caso das linhas dos
+      // alfinetes e dos dados recolhidos. Ver `PinTethers` e `DadoLayer`.
+      className="pointer-events-none absolute inset-0 overflow-visible"
       width={SCENE_WIDTH}
       height={SCENE_HEIGHT}
     >

@@ -13,7 +13,7 @@ import { LayerList } from "@/components/mestre/layer-list";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
-import { FULL_VIEWPORT, zoomViewport } from "@/lib/geometry/viewport";
+import { FULL_VIEWPORT, PLANO, zoomViewport } from "@/lib/geometry/viewport";
 import { MINIATURA } from "@/lib/miniatura";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { useDadosStore } from "@/lib/store/use-dados-store";
@@ -458,7 +458,7 @@ function PalcoMestre({ n }: { n: number }) {
   if (!cena) return null;
 
   return (
-    <SceneStage bounds>
+    <SceneStage limites={PLANO}>
       <SceneLayer scene={cena} variant="mestre" />
     </SceneStage>
   );
@@ -508,7 +508,7 @@ function PalcoCamera({ n }: { n: number }) {
   }, []);
 
   return (
-    <SceneStage viewport={viewport} bounds>
+    <SceneStage viewport={viewport} limites={PLANO}>
       <SceneLayer scene={cena} variant="mestre" />
     </SceneStage>
   );
