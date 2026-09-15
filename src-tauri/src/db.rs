@@ -10,8 +10,8 @@ use crate::error::AppResult;
 ///
 /// Existe separado do `.ato20/estado.db` de cada campanha por uma razao que a
 /// arquitetura do vault forca: a lista de campanhas recentes nao pode morar
-/// dentro de uma campanha. Aqui ficam so preferencias e o historico de
-/// aberturas -- nada que precise viajar num zip, e nada cuja perda quebre uma
+/// dentro de uma campanha. Aqui ficam o historico de aberturas, a estante e os
+/// marcadores -- nada que precise viajar num zip, e nada cuja perda quebre uma
 /// campanha.
 pub struct AppDb {
     conn: Mutex<Connection>,
@@ -180,30 +180,6 @@ impl AppDb {
         conn.execute("delete from campanhas_recentes where caminho = ?1", [path])?;
 
         Ok(())
-    }
-
-    pub fn set_pref(&self, key: &str, value: &str) -> AppResult<()> {
-        let conn = self.conn.lock().expect("banco envenenado");
-
-        conn.execute(
-            "insert into prefs (chave, valor) values (?1, ?2)
-             on conflict(chave) do update set valor = ?2",
-            [key, value],
-        )?;
-
-        Ok(())
-    }
-
-    pub fn pref(&self, key: &str) -> AppResult<Option<String>> {
-        let conn = self.conn.lock().expect("banco envenenado");
-
-        let value = conn
-            .query_row("select valor from prefs where chave = ?1", [key], |row| {
-                row.get::<_, String>(0)
-            })
-            .ok();
-
-        Ok(value)
     }
 
     // --- estante ------------------------------------------------------------
@@ -421,6 +397,12 @@ fn migrate(conn: &Connection) -> AppResult<()> {
     }
 
     if current < 1 {
+        // A `prefs` nao tem mais leitor: a unica chave que existiu foi a
+        // `ultima-campanha`, e ela saiu quando o aplicativo passou a abrir na
+        // porta em vez de reabrir a mesa da sessao anterior. Fica de pe porque
+        // derrubar tabela em banco de usuario pede migracao, e uma tabela vazia
+        // nao cobra nada -- e porque uma preferencia de maquina e o tipo de
+        // coisa que volta a aparecer.
         conn.execute_batch(
             "create table if not exists prefs (
                  chave text primary key,

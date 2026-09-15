@@ -122,9 +122,11 @@ pub fn run() {
             // instalador porque o AppImage NAO TEM instalador: ver `appimage`.
             appimage::atalho(&app.path().app_data_dir()?);
 
-            // A campanha comeca fechada. Reabrir a ultima e um comando que a
-            // tela chama, para uma pasta que desapareceu ter onde aparecer
-            // como erro em vez de derrubar a abertura da janela.
+            // A campanha comeca fechada, e continua fechada ate o mestre
+            // escolher uma na porta. O Rust nao reabre a da sessao anterior:
+            // abrir sozinho uma pasta que pode ter sumido, ou estar num volume
+            // desconectado, seria trabalho de disco antes de a janela existir,
+            // com o erro sem onde aparecer.
             let vault = Arc::new(RwLock::new(None));
 
             // O daemon sobe ANTES de qualquer campanha: ele le a campanha
@@ -158,12 +160,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::daemon_addr,
-            commands::campaign_current,
             commands::campaign_recents,
             commands::campaign_forget,
             commands::campaign_open,
             commands::campaign_create,
-            commands::campaign_reopen_last,
             commands::board_load,
             commands::board_save,
             commands::board_save_patch,

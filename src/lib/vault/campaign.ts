@@ -33,21 +33,6 @@ export type RecentEntry = {
   existe: boolean;
 };
 
-export function currentCampaign(): Promise<CampaignInfo | null> {
-  return call<CampaignInfo | null>("campaign_current");
-}
-
-/**
- * Reabre a campanha da sessão anterior.
- *
- * `null` cobre três casos que a porta trata igual: primeira execução, pasta
- * movida, e pasta num volume desconectado. Nos três o que falta é escolher uma,
- * e distinguir só daria uma mensagem a mais para ler.
- */
-export function reopenLastCampaign(): Promise<CampaignInfo | null> {
-  return call<CampaignInfo | null>("campaign_reopen_last");
-}
-
 export function recentCampaigns(): Promise<RecentEntry[]> {
   return call<RecentEntry[]>("campaign_recents");
 }

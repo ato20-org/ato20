@@ -17,9 +17,6 @@ use crate::vault::players::{Attachment, Player};
 use crate::vault::inventory::{self, Item};
 use crate::vault::{assets, board, characters, players, session, zip, CampaignInfo, Vault};
 
-/// Preferencia que guarda a ultima campanha aberta.
-const LAST_CAMPAIGN: &str = "ultima-campanha";
-
 pub struct AppState {
     pub vault: SharedVault,
     pub db: AppDb,
@@ -53,16 +50,6 @@ pub fn daemon_addr(state: State<'_, AppState>) -> DaemonAddr {
 }
 
 // --- campanha ---------------------------------------------------------------
-
-#[tauri::command]
-pub fn campaign_current(state: State<'_, AppState>) -> Option<CampaignInfo> {
-    state
-        .vault
-        .read()
-        .expect("vault envenenado")
-        .as_ref()
-        .map(Vault::info)
-}
 
 /// Uma campanha da lista de recentes.
 #[derive(Debug, Serialize)]
@@ -131,7 +118,6 @@ pub fn campaign_open(state: State<'_, AppState>, path: String) -> AppResult<Camp
     let info = vault.info();
 
     state.db.remember(&info.path, &info.nome)?;
-    state.db.set_pref(LAST_CAMPAIGN, &info.path)?;
 
     *state.vault.write().expect("vault envenenado") = Some(vault);
 
@@ -158,37 +144,10 @@ pub fn campaign_create(
     let info = vault.info();
 
     state.db.remember(&info.path, &info.nome)?;
-    state.db.set_pref(LAST_CAMPAIGN, &info.path)?;
 
     *state.vault.write().expect("vault envenenado") = Some(vault);
 
     Ok(info)
-}
-
-/// Reabre a campanha da sessao anterior.
-///
-/// Chamado na montagem do Mestre em vez de no `setup` do Rust: abrir uma
-/// campanha e um efeito visivel, e falhar antes de a janela existir nao teria
-/// onde ser mostrado. `None` cobre tres casos que a tela trata igual --
-/// primeira execucao, pasta movida, e pasta num volume desconectado.
-#[tauri::command]
-pub fn campaign_reopen_last(state: State<'_, AppState>) -> AppResult<Option<CampaignInfo>> {
-    let Some(path) = state.db.pref(LAST_CAMPAIGN)? else {
-        return Ok(None);
-    };
-
-    match Vault::open(&path) {
-        Ok(vault) => {
-            let info = vault.info();
-            *state.vault.write().expect("vault envenenado") = Some(vault);
-
-            Ok(Some(info))
-        }
-        Err(cause) => {
-            log::warn!("ultima campanha em {path} nao abriu: {cause}");
-            Ok(None)
-        }
-    }
 }
 
 // --- board ------------------------------------------------------------------
@@ -454,7 +413,6 @@ pub fn campaign_import(
     let info = vault.info();
 
     state.db.remember(&info.path, &info.nome)?;
-    state.db.set_pref(LAST_CAMPAIGN, &info.path)?;
 
     *state.vault.write().expect("vault envenenado") = Some(vault);
 

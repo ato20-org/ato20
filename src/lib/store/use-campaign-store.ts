@@ -7,14 +7,12 @@ import { flushBoard } from "@/lib/store/use-scene-store";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
 import {
   createCampaign,
-  currentCampaign,
   exportCampaign,
   forgetCampaign,
   importCampaign,
   openCampaign,
   pickFolder,
   recentCampaigns,
-  reopenLastCampaign,
   type CampaignInfo,
   type RecentEntry,
 } from "@/lib/vault/campaign";
@@ -55,11 +53,14 @@ type CampaignStore = {
   busy: boolean;
 
   /**
-   * Chamado na montagem do Mestre: reabre a campanha da sessão anterior.
+   * Chamado na montagem do Mestre: põe a tela na porta.
    *
-   * Não cria nada. Abrir uma pasta é ato do mestre, não efeito de abrir a tela
-   * — a versão que criava uma campanha padrão sozinha espalharia pastas pelo
-   * disco de quem só quis olhar.
+   * Não abre campanha nenhuma, e é a regra inteira — montar o Mestre mostra a
+   * lista, e entrar numa mesa é ato do mestre. Vale igual para abrir o
+   * aplicativo e para recarregar a janela.
+   *
+   * Nem abre pasta, nem cria: a versão que criava uma campanha padrão sozinha
+   * espalharia pastas pelo disco de quem só quis olhar.
    */
   boot: () => Promise<void>;
   /** Abre uma campanha já conhecida, pelo caminho. */
@@ -137,15 +138,21 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     set({ status: "loading", error: null });
 
     try {
-      // `current` antes de `reopen`: numa remontagem a campanha já está aberta
-      // no processo nativo, e reabrir releria o disco por nada.
-      const open = (await currentCampaign()) ?? (await reopenLastCampaign());
-
-      if (open) {
-        set({ campaign: open, status: "ready" });
-        return;
-      }
-
+      // A porta, sempre. Não pergunta ao Rust que campanha ele tem aberta, e
+      // isso é a regra inteira: montar o Mestre mostra a lista, e entrar numa
+      // campanha é um clique do mestre.
+      //
+      // Perguntar era o que fazia recarregar a janela cair DENTRO da campanha.
+      // O `close()` devolve a tela para a lista de propósito sem fechar o vault
+      // no Rust -- é o que mantém o daemon servindo a TV e os celulares
+      // enquanto o mestre escolhe --, então na porta o processo nativo segue
+      // com uma campanha aberta. Recarregar zera este store, que é de módulo, e
+      // não zera o Rust: o `boot` perguntava, ouvia "tenho esta", e entrava.
+      //
+      // Remontar o componente não passa por aqui: a guarda acima sai cedo em
+      // `ready`, e o store sobrevive à remontagem por ser de módulo. Quem chega
+      // até este ponto ou abriu o aplicativo, ou recarregou a janela -- e as
+      // duas querem a porta.
       set({
         campaign: null,
         recents: await refreshRecents(),
