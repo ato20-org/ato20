@@ -6,7 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -191,7 +191,8 @@ export function SaquinhoDados() {
                   ref={bolinha}
                   type="button"
                   onPointerDown={pegarBolinha}
-                  aria-label="Saquinho de dados"
+                  aria-label={aberto ? "Fechar o saquinho" : "Saquinho de dados"}
+                  aria-expanded={aberto}
                   className={cn(
                     "bg-background/85 pointer-events-auto absolute z-30 grid place-items-center rounded-full border shadow-lg backdrop-blur transition-transform",
                     arrastando && "scale-110 cursor-grabbing",
@@ -222,7 +223,16 @@ export function SaquinhoDados() {
                     />
                   ) : null}
 
-                  <DadoEstatico tipo={tipoDado(20)} tamanho={30} />
+                  {/* Aberto, a bolinha vira um X: ela é o mesmo alvo que
+                      fecha o saquinho, e o d20 não dizia isso -- clicar de novo
+                      parecia jogar, não fechar. Com o painel aberto o desenho
+                      do dado já está lá dentro, em seis cores; aqui ele só
+                      repetia. */}
+                  {aberto ? (
+                    <X className="size-5" aria-hidden />
+                  ) : (
+                    <DadoEstatico tipo={tipoDado(20)} tamanho={30} />
+                  )}
 
                   {/* Quantos dados estão no tabuleiro. Com o mapa deslocado, um
                       dado pode estar fora da vista, e sem esta contagem o mestre
@@ -240,7 +250,8 @@ export function SaquinhoDados() {
         <TooltipContent side="left">
           <p className="font-medium">Saquinho de dados</p>
           <p className="text-muted-foreground max-w-48">
-            Clique para abrir. Arraste a bolinha para levá-la a outro canto.
+            Clique para abrir e para fechar. Arraste a bolinha para levá-la a
+            outro canto.
           </p>
         </TooltipContent>
       </Tooltip>
