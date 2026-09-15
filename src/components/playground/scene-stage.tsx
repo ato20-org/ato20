@@ -23,6 +23,17 @@ import { SCENE_HEIGHT, SCENE_WIDTH, type Viewport } from "@/types/scene";
 type SceneScale = {
   /** Fator entre pixels de tela e unidades de cena. 0 antes da primeira medida. */
   scale: number;
+  /**
+   * O plano amplia por `zoom` agora, e não por `transform`.
+   *
+   * Vale com a câmera PARADA -- ver a nota sobre os dois planos. Existe porque
+   * quem desenha um controle de tamanho fixo na tela precisa desfazer a
+   * ampliação, e tem de desfazê-la na MESMA forma que está valendo: `zoom`
+   * contra `zoom`, `transform` contra `transform`. Compensar `transform` com
+   * `zoom` dá a geometria certa parada e erra no gesto, que é quando as duas
+   * formas se alternam.
+   */
+  ampliacaoNoLayout: boolean;
   /** Converte um ponto de `clientX/clientY` para coordenadas de cena. */
   toScene: (clientX: number, clientY: number) => Vec;
   /**
@@ -277,8 +288,14 @@ export function SceneStage({
   );
 
   const value = useMemo<SceneScale>(
-    () => ({ scale, toScene, viewport, planoDeConteudo: conteudoNo }),
-    [scale, toScene, viewport, conteudoNo],
+    () => ({
+      scale,
+      ampliacaoNoLayout: conteudoNoLayout,
+      toScene,
+      viewport,
+      planoDeConteudo: conteudoNo,
+    }),
+    [scale, conteudoNoLayout, toScene, viewport, conteudoNo],
   );
 
   // Guardados em ref porque os listeners nativos abaixo são registrados uma
