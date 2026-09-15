@@ -381,43 +381,52 @@ fn alvo(largura: u32, altura: u32, lado: u32) -> Option<(u32, u32)> {
 fn metades(origem: &image::RgbImage, lado: u32) -> Option<image::RgbImage> {
     let mut atual: Option<image::RgbImage> = None;
 
-    while {
+    loop {
         let fonte = atual.as_ref().unwrap_or(origem);
-        fonte.width().max(fonte.height()) / 2 >= lado
-    } {
-        let fonte = atual.as_ref().unwrap_or(origem);
-        let (largura, altura) = (fonte.width().div_ceil(2), fonte.height().div_ceil(2));
-        let (fim_x, fim_y) = (fonte.width() - 1, fonte.height() - 1);
+        let (largura, altura) = (fonte.width() as usize, fonte.height() as usize);
 
-        let mut proxima = image::RgbImage::new(largura, altura);
+        if largura.max(altura) / 2 < lado as usize {
+            break;
+        }
 
-        for y in 0..altura {
+        let (meia_largura, meia_altura) = (largura.div_ceil(2), altura.div_ceil(2));
+        let (fim_x, fim_y) = (largura - 1, altura - 1);
+
+        // Sobre o buffer cru, linha a linha, e nao com `get_pixel` e
+        // `put_pixel`: cada um deles e uma chamada com checagem de limites por
+        // pixel, e sao cinquenta milhoes de pixels na primeira metade de um
+        // mapa grande. Medido na primeira metade do mapa real, em `dev` com
+        // as dependencias otimizadas e o aplicativo em `opt-level = 0`: 5,6 s
+        // pelos acessores, 2,4 s por aqui. A conta e a mesma.
+        let passo = largura * 3;
+        let fonte_cru = fonte.as_raw();
+        let mut destino = vec![0u8; meia_largura * meia_altura * 3];
+
+        for (y, saida) in destino.chunks_exact_mut(meia_largura * 3).enumerate() {
             let (y0, y1) = ((y * 2).min(fim_y), (y * 2 + 1).min(fim_y));
+            let linha0 = &fonte_cru[y0 * passo..y0 * passo + passo];
+            let linha1 = &fonte_cru[y1 * passo..y1 * passo + passo];
 
-            for x in 0..largura {
-                let (x0, x1) = ((x * 2).min(fim_x), (x * 2 + 1).min(fim_x));
+            for (x, pixel) in saida.chunks_exact_mut(3).enumerate() {
+                let (x0, x1) = ((x * 2).min(fim_x) * 3, (x * 2 + 1).min(fim_x) * 3);
 
-                let quatro = [
-                    fonte.get_pixel(x0, y0),
-                    fonte.get_pixel(x1, y0),
-                    fonte.get_pixel(x0, y1),
-                    fonte.get_pixel(x1, y1),
-                ];
-
-                let mut media = [0u8; 3];
                 for canal in 0..3 {
-                    let soma: u32 = quatro.iter().map(|pixel| u32::from(pixel[canal])).sum();
+                    let soma = u32::from(linha0[x0 + canal])
+                        + u32::from(linha0[x1 + canal])
+                        + u32::from(linha1[x0 + canal])
+                        + u32::from(linha1[x1 + canal]);
                     // +2 antes de dividir por 4 arredonda em vez de truncar:
                     // truncar escurece a imagem um pouco a cada metade, e com
                     // quatro metades o mapa sai visivelmente mais escuro.
-                    media[canal] = ((soma + 2) / 4) as u8;
+                    pixel[canal] = ((soma + 2) / 4) as u8;
                 }
-
-                proxima.put_pixel(x, y, image::Rgb(media));
             }
         }
 
-        atual = Some(proxima);
+        atual = Some(
+            image::RgbImage::from_raw(meia_largura as u32, meia_altura as u32, destino)
+                .expect("buffer do tamanho exato da metade"),
+        );
     }
 
     atual
@@ -634,9 +643,26 @@ pub fn ensure_arquivo(
     // decodificar, reduzir e escrever o JPEG.
     let bytes = match variante.cores() {
         Some(cores) => {
-            // RGBA8 na reducao: e nela que o alfa tem de sobreviver, e achatar
-            // antes poria um retangulo preto em volta de cada figura.
-            let rgba = reduzir(&imagem.to_rgba8(), variante.lado());
+            // Dois caminhos ate o RGBA que o quantizador pede.
+            //
+            // Sem alfa no FORMATO -- todo JPEG, e a maior parte dos mapas --
+            // nao ha borda para pre-multiplicar nem canal para preservar: a
+            // imagem vai pelo mesmo `reduzir_opaco` do palco, com as metades
+            // baratas, e so vira RGBA depois, em 160px. Medido no mapa real de
+            // 8192x6144, miniatura ponta a ponta com o perfil `dev` de antes:
+            // 66,9 s pelo `reduzir` em RGBA direto, 26,4 s por aqui. O resto
+            // do caminho ate 0,84 s e o perfil `dev` no `Cargo.toml` e o
+            // `metades` sobre o buffer cru.
+            //
+            // Com alfa, o cuidado do `reduzir` continua valendo: e o recorte
+            // de personagem, e ele e pequeno.
+            let rgba = if imagem.color().has_alpha() {
+                reduzir(&imagem.to_rgba8(), variante.lado())
+            } else {
+                let rgb = reduzir_opaco(&imagem.to_rgb8(), variante.lado());
+
+                image::DynamicImage::ImageRgb8(rgb).to_rgba8()
+            };
 
             indexado(&rgba, cores).map_err(ilegivel)?
         }
@@ -1197,3 +1223,4 @@ mod tests {
         assert_eq!((saida.width(), saida.height()), (64, 80));
     }
 }
+
