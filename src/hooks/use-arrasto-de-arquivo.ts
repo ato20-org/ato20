@@ -36,8 +36,16 @@ export type ArquivoNoAr = {
  * A posição vem em pixels FÍSICOS e é dividida pela densidade da tela: num
  * monitor a 150% o ponto do sistema é uma vez e meia o ponto do CSS, e sem a
  * divisão a caixa apareceria à direita e abaixo de onde a mão está.
+ *
+ * `zona` é o seletor do que ACEITA o arquivo — `[data-palco]` para o mapa,
+ * `[data-acervo-solto]` para o painel de imagens. Quem escuta são dois, e eles
+ * não disputam o mesmo arquivo: o ponto pertence a um nó só, e o painel
+ * flutuante que cobre o mapa não é descendente dele. Fora de toda zona o
+ * arquivo volta para de onde veio, que é o que já acontecia sobre uma janela da
+ * bancada.
  */
 export function useArrastoDeArquivo(
+  zona: string,
   aoSoltar: (caminhos: string[], x: number, y: number) => void,
 ): ArquivoNoAr | null {
   const [noAr, setNoAr] = useState<ArquivoNoAr | null>(null);
@@ -79,12 +87,12 @@ export function useArrastoDeArquivo(
           const caminhos = dados.type === "enter" ? dados.paths : null;
           const onde = ponto(dados.position);
 
-          // Fora do mapa não há prévia: sobre uma janela da bancada a caixa
+          // Fora da zona não há prévia: sobre uma janela da bancada a caixa
           // ficaria escondida atrás dela, e soltar cravaria a imagem num lugar
           // que o mestre não viu. Mesma pergunta que o gesto de token faz, e
           // pelo mesmo `elementFromPoint`.
           setNoAr(
-            sobreOPalco(onde)
+            sobreAZona(onde, zona)
               ? {
                   // No `over` os caminhos não vêm de novo: o que muda é a
                   // posição.
@@ -94,7 +102,7 @@ export function useArrastoDeArquivo(
               : null,
           );
 
-          // Guardado à parte do estado porque ele é zerado fora do mapa, e ao
+          // Guardado à parte do estado porque ele é zerado fora da zona, e ao
           // voltar para dentro o sistema não repete os caminhos: sem esta
           // memória, atravessar uma janela da bancada no meio do caminho
           // apagaria o nome do arquivo até soltar.
@@ -108,7 +116,7 @@ export function useArrastoDeArquivo(
 
         if (dados.type === "drop" && dados.paths.length > 0) {
           const onde = ponto(dados.position);
-          if (!sobreOPalco(onde)) return;
+          if (!sobreAZona(onde, zona)) return;
 
           soltar.current(dados.paths, onde.x, onde.y);
         }
@@ -124,17 +132,17 @@ export function useArrastoDeArquivo(
       vivo = false;
       desligar?.();
     };
-  }, []);
+  }, [zona]);
 
   return noAr;
 }
 
 /**
- * O ponto está sobre o plano da cena.
+ * O ponto está sobre quem aceita o arquivo.
  *
- * Pela mesma marca que o arrasto de token procura, e pela mesma razão: o que
- * vale é o que está DESENHADO ali, e as janelas da bancada ficam sobre o mapa.
+ * Por marca no DOM, como o arrasto de token faz, e pela mesma razão: o que vale
+ * é o que está DESENHADO ali, e as janelas da bancada ficam sobre o mapa.
  */
-function sobreOPalco({ x, y }: { x: number; y: number }): boolean {
-  return Boolean(document.elementFromPoint(x, y)?.closest("[data-palco]"));
+function sobreAZona({ x, y }: { x: number; y: number }, zona: string): boolean {
+  return Boolean(document.elementFromPoint(x, y)?.closest(zona));
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 
+import { absorverImportacao } from "@/lib/mestre/importar-arquivos";
 import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { deleteAsset, importAssets, setAssetFolder } from "@/lib/vault/assets";
 import type { AssetKind, AssetMeta } from "@/types/scene";
@@ -64,15 +65,13 @@ export function useAssetList(kind: AssetKind): AssetListApi {
       // `null` é o diálogo fechado sem escolher: não muda nada, e não avisa.
       if (!resultado) return;
 
-      // Um motivo por arquivo. "1 arquivo não pôde ser enviado" obriga quem
-      // escolheu doze a adivinhar qual e por quê.
-      for (const motivo of resultado.recusados) toast.error(motivo);
-
-      if (resultado.aceitos.length > 0) refresh();
+      // Avisa o que foi recusado e acorda as listas -- o mesmo que o arquivo
+      // solto do sistema faz, e por isso mora fora daqui.
+      absorverImportacao(resultado);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
     }
-  }, [kind, refresh]);
+  }, [kind]);
 
   const remove = useCallback(
     async (assetId: string) => {
