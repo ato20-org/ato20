@@ -4,6 +4,7 @@
   "private": true,
   "license": "MIT",
   "scripts": {
+    "preinstall": "node scripts/exigir-pnpm.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -12,7 +13,8 @@
     "banco": "node scripts/banco.mjs",
     "tauri": "tauri",
     "clean:web-resources": "node scripts/clean-web-resources.mjs",
-    "pdfjs": "node scripts/copiar-pdfjs.mjs"
+    "pdfjs": "node scripts/copiar-pdfjs.mjs",
+    "garantir-out": "node scripts/garantir-out.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

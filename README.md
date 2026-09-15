@@ -107,6 +107,18 @@ pnpm tauri dev
 `pnpm dev` sozinho serve as telas em `localhost:3000`, mas o Mestre aparece dizendo "abra
 pelo aplicativo": uma aba de navegador não alcança o disco.
 
+**pnpm, e não npm.** O `preinstall` recusa os outros gerenciadores, e a recusa é o barato:
+sem ela o npm escreve um segundo lockfile, ignora o `allowBuilds` do `pnpm-workspace.yaml` e
+deixa uma `node_modules` misturada que só dá defeito muito depois. O porquê inteiro está em
+`scripts/exigir-pnpm.mjs`.
+
+**Em clone limpo, a TV e o celular pedem um `pnpm build`.** O `tauri dev` roda `next dev`,
+que serve da memória e nunca escreve o `out/` — e é do `out/` que o daemon tira as telas de
+Espectador e Jogador. Então elas respondem "As telas não foram construídas" até o primeiro
+`pnpm build` — e esse primeiro pede reabrir o aplicativo, porque o daemon decide onde está o
+bundle uma vez só, quando sobe. O Mestre não depende disso e abre na hora. Dali em diante um
+`pnpm build` basta para atualizar as duas telas da rede: elas não têm recarga automática.
+
 ### Medir o desempenho
 
 Duas medidas, e elas respondem perguntas diferentes.
