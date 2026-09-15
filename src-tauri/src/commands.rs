@@ -1,8 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
@@ -36,11 +38,40 @@ impl AppState {
     /// tem de ser `NoCampaign` e nao `unwrap`, porque a tela ramifica nele para
     /// mostrar a porta de escolher pasta.
     fn with_vault<T>(&self, run: impl FnOnce(&Vault) -> AppResult<T>) -> AppResult<T> {
-        let guard = self.vault.read().expect("vault envenenado");
-        let vault = guard.as_ref().ok_or(AppError::NoCampaign)?;
-
-        run(vault)
+        com_vault(&self.vault, run)
     }
+}
+
+/// O mesmo que `AppState::with_vault`, para quem so tem a caixa clonada.
+///
+/// Existe por causa dos comandos que saem da thread principal: `spawn_blocking`
+/// exige `'static`, e o `State` e emprestado. Clonar o `Arc` e passar por aqui
+/// e o que permite a copia rodar longe da janela.
+fn com_vault<T>(shared: &SharedVault, run: impl FnOnce(&Vault) -> AppResult<T>) -> AppResult<T> {
+    let guard = shared.read().expect("vault envenenado");
+    let vault = guard.as_ref().ok_or(AppError::NoCampaign)?;
+
+    run(vault)
+}
+
+/// Roda trabalho de disco fora da thread principal.
+///
+/// Comando sincrono do Tauri executa na thread da janela: enquanto ele copia um
+/// mapa de 80 MB e gera a miniatura, a webview nao pinta um quadro. Tres imagens
+/// importadas de uma vez eram tres decodificacoes com a tela congelada. Aqui o
+/// comando vira `async` e o trabalho vai para a fila de bloqueantes do tokio; a
+/// janela segue respondendo e a resposta chega quando terminar.
+///
+/// O erro de join so aparece se a thread entrou em panico. Vira `Io` porque e o
+/// que o cliente sabe mostrar, e a mensagem carrega a causa.
+async fn em_segundo_plano<T: Send + 'static>(
+    run: impl FnOnce() -> AppResult<T> + Send + 'static,
+) -> AppResult<T> {
+    tokio::task::spawn_blocking(run)
+        .await
+        .map_err(|cause| {
+            AppError::Io(std::io::Error::other(format!("tarefa morreu na thread: {cause}")))
+        })?
 }
 
 /// Onde a webview alcanca o daemon, e com que token escreve.
@@ -541,6 +572,85 @@ pub struct ImportResult {
     /// "1 arquivo nao pode ser enviado" obriga quem escolheu doze a adivinhar
     /// qual e por que.
     pub recusados: Vec<String>,
+    /// Parou porque o mestre pediu. O que ja entrou fica e esta em `aceitos`.
+    pub cancelado: bool,
+}
+
+/// O que a webview ouve enquanto um arquivo copia. Evento `importacao-progresso`.
+///
+/// `importacao` e o id que a webview escolheu ao chamar `asset_import`: e o que
+/// deixa o toast certo pegar o evento certo quando ha duas importacoes no ar.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgressoImportacao {
+    pub importacao: String,
+    pub arquivo: String,
+    pub copiado: u64,
+    pub total: u64,
+    /// `copiando` enquanto os bytes andam; `miniatura` depois, sem medida --
+    /// decodificar imagem nao tem "quanto falta". Ver `Acompanhante::miniatura`.
+    pub etapa: &'static str,
+}
+
+/// Importacoes que o mestre pediu para parar, pelo id.
+///
+/// Estatico, e nao campo do `AppState`, porque quem le e a thread de copia
+/// -- que so tem o `Arc` do vault -- e quem escreve e um comando que pode
+/// chegar antes mesmo de a copia comecar. O id sai daqui quando a importacao
+/// termina, cancelada ou nao.
+static CANCELADAS: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
+
+fn canceladas() -> std::sync::MutexGuard<'static, HashSet<String>> {
+    CANCELADAS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Leva o progresso da copia ate a webview, e traz o pedido de parar.
+///
+/// Emite no maximo a cada 60 ms, e sempre no fim de cada arquivo: um mapa de
+/// 80 MB em blocos de 1 MB seriam oitenta eventos num segundo, e o toast nao
+/// precisa de mais de uns quinze por segundo para a barra parecer continua.
+struct Emissor {
+    app: AppHandle,
+    importacao: String,
+    ultimo: Instant,
+}
+
+impl assets::Acompanhante for Emissor {
+    fn avancou(&mut self, nome: &str, copiado: u64, total: u64) {
+        let fim = copiado >= total;
+        if !fim && self.ultimo.elapsed() < Duration::from_millis(60) {
+            return;
+        }
+        self.ultimo = Instant::now();
+
+        let _ = self.app.emit(
+            "importacao-progresso",
+            ProgressoImportacao {
+                importacao: self.importacao.clone(),
+                arquivo: nome.to_string(),
+                copiado,
+                total,
+                etapa: "copiando",
+            },
+        );
+    }
+
+    fn miniatura(&mut self, nome: &str) {
+        let _ = self.app.emit(
+            "importacao-progresso",
+            ProgressoImportacao {
+                importacao: self.importacao.clone(),
+                arquivo: nome.to_string(),
+                copiado: 0,
+                total: 0,
+                etapa: "miniatura",
+            },
+        );
+    }
+
+    fn cancelado(&self) -> bool {
+        canceladas().contains(&self.importacao)
+    }
 }
 
 /// Traz arquivos de fora para o acervo, copiando.
@@ -556,17 +666,60 @@ pub struct ImportResult {
 ///
 /// `escopo` e `cena` ou `personagem` quando o arquivo tem dono, e `None` quando
 /// ele entra solto na biblioteca. Ver `AssetMeta::escopo`.
-pub fn asset_import(
+///
+/// `importacao` e o id que a webview escolheu para ouvir o progresso e poder
+/// cancelar -- ver `ProgressoImportacao` e `asset_import_cancelar`. Sem ele a
+/// copia e muda, que serve a quem importa um arquivo por dentro de outro gesto.
+pub async fn asset_import(
+    app: AppHandle,
     state: State<'_, AppState>,
     paths: Vec<String>,
     escopo: Option<String>,
+    importacao: Option<String>,
 ) -> AppResult<ImportResult> {
-    state.with_vault(|vault| {
-        let origens: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
-        let (aceitos, recusados) = assets::import(vault, &origens, escopo.as_deref())?;
+    let shared = state.vault.clone();
 
-        Ok(ImportResult { aceitos, recusados })
+    // Fora da thread principal: copia e miniatura sao disco e CPU, e a janela
+    // nao pode esperar por eles. Ver `em_segundo_plano`.
+    let resultado = em_segundo_plano(move || {
+        com_vault(&shared, |vault| {
+            let origens: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+
+            let feito = match &importacao {
+                Some(id) => {
+                    let mut emissor = Emissor {
+                        app,
+                        importacao: id.clone(),
+                        ultimo: Instant::now() - Duration::from_secs(1),
+                    };
+                    let feito =
+                        assets::import_acompanhado(vault, &origens, escopo.as_deref(), &mut emissor);
+                    canceladas().remove(id);
+                    feito?
+                }
+                None => assets::import_acompanhado(vault, &origens, escopo.as_deref(), &mut assets::Silencio)?,
+            };
+
+            Ok(ImportResult {
+                aceitos: feito.aceitos,
+                recusados: feito.recusados,
+                cancelado: feito.cancelado,
+            })
+        })
     })
+    .await;
+
+    resultado
+}
+
+/// Pede para uma importacao parar.
+///
+/// A copia em andamento e descartada e os arquivos seguintes do lote nem
+/// comecam; o que ja entrou fica. Idempotente, e pode chegar antes de a copia
+/// comecar -- o id fica guardado ate `asset_import` terminar e o tirar.
+#[tauri::command]
+pub fn asset_import_cancelar(importacao: String) {
+    canceladas().insert(importacao);
 }
 
 /// Marca ou desmarca o dono de um arquivo do acervo.
@@ -679,24 +832,30 @@ pub fn character_attachments(state: State<'_, AppState>, id: String) -> AppResul
 /// Devolve aceitos e recusados separados, e um motivo por recusa: quem escolheu
 /// seis arquivos e teve um recusado quer os cinco e quer saber qual.
 #[tauri::command]
-pub fn character_attach(
+pub async fn character_attach(
     state: State<'_, AppState>,
     id: String,
     paths: Vec<String>,
 ) -> AppResult<AnexoImport> {
-    state.with_vault(|vault| {
-        let mut aceitos = Vec::new();
-        let mut recusados = Vec::new();
+    let shared = state.vault.clone();
 
-        for path in &paths {
-            match characters::import_anexo(vault, &id, std::path::Path::new(path)) {
-                Ok(anexo) => aceitos.push(anexo),
-                Err(cause) => recusados.push(format!("{path}: {cause}")),
+    // Mesma razao do `asset_import`: copia de arquivo fora da thread da janela.
+    em_segundo_plano(move || {
+        com_vault(&shared, |vault| {
+            let mut aceitos = Vec::new();
+            let mut recusados = Vec::new();
+
+            for path in &paths {
+                match characters::import_anexo(vault, &id, std::path::Path::new(path)) {
+                    Ok(anexo) => aceitos.push(anexo),
+                    Err(cause) => recusados.push(format!("{path}: {cause}")),
+                }
             }
-        }
 
-        Ok(AnexoImport { aceitos, recusados })
+            Ok(AnexoImport { aceitos, recusados })
+        })
     })
+    .await
 }
 
 /// Tira um anexo do personagem.
