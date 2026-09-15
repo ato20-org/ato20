@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { absorverImportacao } from "@/lib/mestre/importar-arquivos";
-import { useAssetsStore } from "@/lib/store/use-assets-store";
+import {
+  invalidarAcervo,
+  useAssetsStore,
+} from "@/lib/store/use-assets-store";
 import { deleteAsset, importAssets, setAssetFolder } from "@/lib/vault/assets";
 import type { AssetKind, AssetMeta } from "@/types/scene";
 
@@ -12,6 +15,8 @@ type AssetListApi = {
   assets: AssetMeta[];
   /** Abre o seletor nativo e copia o que for escolhido para a campanha. */
   importar: () => Promise<void>;
+  /** Há importação a caminho. O botão mostra o giro e recusa segundo clique. */
+  importando: boolean;
   remove: (assetId: string) => Promise<void>;
   /** Move para uma pasta. `undefined` devolve à raiz. */
   move: (assetId: string, folderId: string | undefined) => Promise<void>;
@@ -58,9 +63,17 @@ export function useAssetList(kind: AssetKind): AssetListApi {
 
   const refresh = useCallback(() => recarregar(kind), [recarregar, kind]);
 
+  const [importando, setImportando] = useState(false);
+
   const importar = useCallback(async () => {
+    setImportando(true);
+
     try {
-      const resultado = await importAssets(kind);
+      // Cada arquivo aceito acorda a lista na hora: escolher três imagens
+      // mostra a primeira enquanto a segunda ainda copia.
+      const resultado = await importAssets(kind, undefined, () =>
+        invalidarAcervo(kind),
+      );
 
       // `null` é o diálogo fechado sem escolher: não muda nada, e não avisa.
       if (!resultado) return;
@@ -70,6 +83,8 @@ export function useAssetList(kind: AssetKind): AssetListApi {
       absorverImportacao(resultado);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+    } finally {
+      setImportando(false);
     }
   }, [kind]);
 
@@ -89,5 +104,12 @@ export function useAssetList(kind: AssetKind): AssetListApi {
     [refresh],
   );
 
-  return { assets: assets ?? LENDO, importar, remove, move, refresh };
+  return {
+    assets: assets ?? LENDO,
+    importar,
+    importando,
+    remove,
+    move,
+    refresh,
+  };
 }

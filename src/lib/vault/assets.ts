@@ -1,7 +1,12 @@
 "use client";
 
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import {
+  AvisoDeImportacao,
+  type ProgressoImportacao,
+} from "@/lib/vault/aviso-de-importacao";
 import { call, daemonAddr, isDesktop } from "@/lib/vault/bridge";
 import type { AssetKind, AssetMeta, EscopoAsset } from "@/types/scene";
 
@@ -105,7 +110,12 @@ export function setAssetEscopo(
  * Recusados vem como um motivo por arquivo, e não uma contagem: quem escolheu
  * doze mapas e teve um recusado quer os onze e quer saber qual.
  */
-export type ImportResult = { aceitos: AssetMeta[]; recusados: string[] };
+export type ImportResult = {
+  aceitos: AssetMeta[];
+  recusados: string[];
+  /** O mestre parou no meio. O que já entrou está em `aceitos`. */
+  cancelado: boolean;
+};
 
 /**
  * Traz arquivos de fora para o acervo.
@@ -126,6 +136,7 @@ export type ImportResult = { aceitos: AssetMeta[]; recusados: string[] };
 export async function importAssets(
   kind: AssetKind,
   escopo?: EscopoAsset,
+  aoEntrar?: (asset: AssetMeta) => void,
 ): Promise<ImportResult | null> {
   const escolhidos = await open({
     multiple: true,
@@ -157,7 +168,7 @@ export async function importAssets(
   const paths = Array.isArray(escolhidos) ? escolhidos : [escolhidos];
   if (paths.length === 0) return null;
 
-  return importarCaminhos(paths, escopo);
+  return importarCaminhos(paths, escopo, aoEntrar);
 }
 
 /**
@@ -170,9 +181,75 @@ export async function importAssets(
  * Quem recusa o que não é imagem nem som é o Rust, um motivo por arquivo — aqui
  * não há filtro de extensão a repetir. Ver `assets::import`.
  */
+/**
+ * Um arquivo por ida ao Rust, em sequência, e não o lote inteiro numa chamada.
+ *
+ * O Rust aceita lote, e chamar uma vez seria menos IPC. Mas o lote só responde
+ * quando o ÚLTIMO arquivo terminou de copiar e ganhar miniatura, e até lá a
+ * lista não muda: três mapas escolhidos de uma vez ficavam três cópias em
+ * silêncio e apareciam juntos. Um por chamada, `aoEntrar` acorda a lista a cada
+ * aceito, e o primeiro aparece enquanto o segundo ainda copia.
+ *
+ * Em sequência, e não em paralelo: a cópia é do mesmo disco, e o vault tem uma
+ * tranca só. Disparar as três juntas só faria as três brigarem por ela.
+ */
 export async function importarCaminhos(
   paths: string[],
   escopo?: EscopoAsset,
+  aoEntrar?: (asset: AssetMeta) => void,
 ): Promise<ImportResult> {
-  return call<ImportResult>("asset_import", { paths, escopo: escopo ?? null });
+  const aceitos: AssetMeta[] = [];
+  const recusados: string[] = [];
+  let cancelado = false;
+
+  // O id que amarra as três pontas: o comando de importar, o evento de
+  // progresso e o comando de cancelar. Escolhido aqui, e não no Rust, para o
+  // ouvinte já estar no lugar antes do primeiro bloco copiar.
+  const importacao = crypto.randomUUID();
+
+  const aviso = new AvisoDeImportacao(paths, () => {
+    void call("asset_import_cancelar", { importacao });
+  });
+
+  const parar = await listen<ProgressoImportacao>(
+    "importacao-progresso",
+    (evento) => {
+      if (evento.payload.importacao === importacao)
+        aviso.progresso(evento.payload);
+    },
+  );
+
+  try {
+    for (const [indice, path] of paths.entries()) {
+      aviso.copiando(indice);
+
+      const parcial = await call<ImportResult>("asset_import", {
+        paths: [path],
+        escopo: escopo ?? null,
+        importacao,
+      });
+
+      aceitos.push(...parcial.aceitos);
+      recusados.push(...parcial.recusados);
+
+      for (const asset of parcial.aceitos) aoEntrar?.(asset);
+
+      // Cancelado neste arquivo: os seguintes nem vão ao Rust.
+      if (parcial.cancelado) {
+        cancelado = true;
+        break;
+      }
+    }
+  } catch (cause) {
+    // O IPC caiu no meio: o que entrou até aqui fica, e o aviso diz onde parou
+    // antes de o erro subir para quem chamou.
+    aviso.morreu(aceitos.length);
+    throw cause;
+  } finally {
+    parar();
+  }
+
+  aviso.terminou(aceitos.length, recusados, cancelado);
+
+  return { aceitos, recusados, cancelado };
 }

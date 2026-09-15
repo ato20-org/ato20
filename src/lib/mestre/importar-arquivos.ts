@@ -2,7 +2,10 @@
 
 import { toast } from "sonner";
 
-import { useAssetsStore } from "@/lib/store/use-assets-store";
+import {
+  invalidarAcervo,
+  useAssetsStore,
+} from "@/lib/store/use-assets-store";
 import { importarCaminhos, type ImportResult } from "@/lib/vault/assets";
 import type { AssetMeta } from "@/types/scene";
 
@@ -47,7 +50,11 @@ export async function importarCaminhosNoAcervo(
   caminhos: string[],
 ): Promise<AssetMeta[]> {
   try {
-    return absorverImportacao(await importarCaminhos(caminhos));
+    // A lista acorda a cada arquivo que entra, e não só no fim do lote: quem
+    // largou seis mapas vê o primeiro enquanto os outros ainda copiam.
+    return absorverImportacao(
+      await importarCaminhos(caminhos, undefined, () => invalidarAcervo()),
+    );
   } catch (cause) {
     toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
 

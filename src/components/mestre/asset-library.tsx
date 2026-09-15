@@ -7,6 +7,7 @@ import {
   FileImage,
   FolderClosed,
   FolderPlus,
+  Loader2,
   MoreVertical,
   Pencil,
   Plus,
@@ -72,6 +73,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   const {
     assets: todos,
     importar,
+    importando,
     remove,
     move,
     refresh,
@@ -192,9 +194,14 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
       )}
     >
       <div className="flex flex-col gap-2 p-2">
-        <Button variant="outline" size="sm" onClick={() => void importar()}>
-          <Upload />
-          Importar imagens
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={importando}
+          onClick={() => void importar()}
+        >
+          {importando ? <Loader2 className="animate-spin" /> : <Upload />}
+          {importando ? "Importando…" : "Importar imagens"}
         </Button>
 
         {/* O que está vindo, no mesmo rótulo que a sombra do mapa escreve. A
