@@ -1,5 +1,8 @@
 "use client";
 
+import { toast } from "sonner";
+import { create } from "zustand";
+
 import { countAssetUsage } from "@/lib/mestre/asset-usage";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
@@ -29,8 +32,45 @@ import type { Scene } from "@/types/scene";
  * Devolve `false` quando o mestre fechou o seletor, que não é erro.
  */
 export async function escolherFundoDaCena(sceneId: string): Promise<boolean> {
+  // Uma troca por cena de cada vez. Sem isto, abrir o menu três vezes seguidas
+  // enquanto o primeiro mapa copia disparava três importações do mesmo
+  // arquivo, e a cena ficava com o último a chegar -- e dois órfãos no acervo.
+  if (useFundoEmVoo.getState().cenas.includes(sceneId)) {
+    toast.info("Esta cena já está recebendo um fundo.");
+    return false;
+  }
+
+  useFundoEmVoo.getState().entrou(sceneId);
+
+  try {
+    return await trocarFundo(sceneId);
+  } finally {
+    useFundoEmVoo.getState().saiu(sceneId);
+  }
+}
+
+/**
+ * Cenas com um fundo a caminho. Ver `escolherFundoDaCena`, que é quem
+ * escreve; a lista de cenas lê para mostrar o giro e desabilitar o menu.
+ */
+export const useFundoEmVoo = create<{
+  cenas: string[];
+  entrou: (sceneId: string) => void;
+  saiu: (sceneId: string) => void;
+}>((set) => ({
+  cenas: [],
+  entrou: (sceneId) =>
+    set((state) => ({ cenas: [...state.cenas, sceneId] })),
+  saiu: (sceneId) =>
+    set((state) => ({ cenas: state.cenas.filter((id) => id !== sceneId) })),
+}));
+
+async function trocarFundo(sceneId: string): Promise<boolean> {
   const resultado = await importAssets("image", "cena");
-  if (!resultado) return false;
+
+  // Diálogo fechado ou importação cancelada no meio: não é erro, e a cena
+  // fica como estava.
+  if (!resultado || resultado.cancelado) return false;
 
   const primeiro = resultado.aceitos[0];
   if (!primeiro)

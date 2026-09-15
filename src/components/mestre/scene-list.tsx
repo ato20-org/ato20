@@ -6,6 +6,7 @@ import {
   GripVertical,
   Image as ImageIcon,
   ImageOff,
+  Loader2,
   MoreVertical,
   Pencil,
   Plus,
@@ -38,6 +39,7 @@ import {
 } from "@/hooks/use-renomear-pelo-menu";
 import {
   escolherFundoDaCena,
+  useFundoEmVoo,
   tirarFundoDaCena,
 } from "@/lib/mestre/scene-background";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -148,6 +150,8 @@ function SceneRow({
   // botão "Renomear" não fazer nada.
   const renomear = useRenomearPeloMenu(onRename);
 
+  const fundoEmVoo = useFundoEmVoo((state) => state.cenas.includes(scene.id));
+
   function commitRename(value: string) {
     const name = value.trim();
     if (name && name !== scene.name) renameScene(scene.id, name);
@@ -183,6 +187,16 @@ function SceneRow({
       >
         <span className="relative shrink-0">
           <ScenePreview scene={scene} className="h-9 w-16" />
+          {/* O fundo está copiando: o giro na miniatura é o que diz que o
+              clique de há dois segundos ainda está trabalhando. */}
+          {fundoEmVoo ? (
+            <span
+              className="absolute inset-0 flex items-center justify-center rounded bg-black/50"
+              aria-label="Importando o fundo"
+            >
+              <Loader2 className="size-4 animate-spin" />
+            </span>
+          ) : null}
           {/* Ponto vermelho na miniatura: qual cena a mesa vê precisa ser
               legível de relance, sem depender de ler o nome. */}
           {live ? (
@@ -276,6 +290,7 @@ function SceneRow({
                   ainda não são de ninguém -- e depois de escolhido continuava
                   ali, oferecendo-se de novo. Ver `escolherFundoDaCena`. */}
               <DropdownMenuItem
+                disabled={fundoEmVoo}
                 onClick={() => {
                   void escolherFundoDaCena(scene.id).catch((cause) =>
                     toast.error(
@@ -286,10 +301,16 @@ function SceneRow({
                   );
                 }}
               >
-                <ImageIcon />
-                {scene.backgroundAssetId
-                  ? "Trocar o fundo"
-                  : "Escolher o fundo"}
+                {fundoEmVoo ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <ImageIcon />
+                )}
+                {fundoEmVoo
+                  ? "Importando o fundo…"
+                  : scene.backgroundAssetId
+                    ? "Trocar o fundo"
+                    : "Escolher o fundo"}
               </DropdownMenuItem>
 
               {scene.backgroundAssetId ? (
