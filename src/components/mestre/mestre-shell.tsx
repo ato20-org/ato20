@@ -14,7 +14,6 @@ import { MestreStage } from "@/components/mestre/mestre-stage";
 import { MestreToolbar } from "@/components/mestre/mestre-toolbar";
 import { PinIndex } from "@/components/mestre/pin-index";
 import { RolagensChip } from "@/components/mestre/rolagens-chip";
-import { RolagensFaixa } from "@/components/mestre/rolagens-faixa";
 import { SaquinhoDados } from "@/components/mestre/saquinho-dados";
 import { SpotlightChip } from "@/components/mestre/spotlight-chip";
 import { StageContextMenu } from "@/components/mestre/stage-context-menu";
@@ -34,6 +33,7 @@ import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { useMestreShortcuts } from "@/hooks/use-mestre-shortcuts";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
+import { useJanelaDeRolagens } from "@/hooks/use-janela-de-rolagens";
 import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
@@ -163,6 +163,10 @@ export function MestreShell() {
   // O outro sentido do fluxo: o que os celulares jogam na mesa. Só esta janela
   // escuta -- a rota é de loopback. Ver `useRolagensDaMesa`.
   useRolagensDaMesa();
+  // E a janela que as mostra, que aparece sozinha quando alguém rola: o dado
+  // chega do outro lado da mesa, e ninguém desta bancada pediu por ele. Ver
+  // `useJanelaDeRolagens`.
+  useJanelaDeRolagens();
   useMestreShortcuts();
   useSpacePan();
   return (
@@ -260,22 +264,6 @@ export function MestreShell() {
                   icon={<PanelRightOpen />}
                 />
               )}
-            </div>
-
-            {/* Os dados dos jogadores, no alto e ao centro do palco. Fora do
-                plano da cena de propósito -- ver `RolagensFaixa`.
-
-                Saiu da direita, onde ficava embaixo da pílula que fala deles:
-                ali dividia espaço com os painéis atracados, e a fileira nascia
-                por cima do canto do mapa que o mestre mais usa. Ao centro ela
-                não disputa com nada -- o topo do palco é a única faixa que
-                nenhum painel ocupa.
-
-                A camada cobre o palco INTEIRO, e não só a faixa do topo: o
-                mestre move a fileira para onde quiser, e é ela quem se
-                posiciona dentro daqui. */}
-            <div className="pointer-events-none absolute inset-0 z-10">
-              <RolagensFaixa />
             </div>
 
             {status === "error" ? (
