@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 
+import type { Bounds } from "@/lib/geometry/bounds";
 import type { Vec } from "@/lib/geometry/transform";
 import {
   FULL_VIEWPORT,
@@ -123,8 +124,14 @@ type SceneStageProps = {
    * única fonte de enquadramento delas.
    */
   panOnDrag?: boolean;
-  /** Contorno do limite do plano. Útil ao mestre quando está ampliado. */
-  bounds?: boolean;
+  /**
+   * A área que a cena ocupa: o plano mais o que foi colocado fora dele.
+   *
+   * Presente = o palco desenha o contorno dela e navega dentro dela, o que é o
+   * caso do Mestre. Ausente = o plano, e sem contorno: quem não edita não
+   * navega, só desenha a câmera que chegou. Ver `limitesDoConteudo`.
+   */
+  limites?: Bounds;
   /**
    * Interpola a câmera: zoom e deslocamento chegam em amostras, e sem isto a
    * tela inteira salta a cada uma. Ver `.scene-smooth-camera` em
@@ -150,7 +157,7 @@ export function SceneStage({
   viewport = FULL_VIEWPORT,
   onViewportChange,
   panOnDrag = false,
-  bounds = false,
+  limites,
   smooth = false,
 }: SceneStageProps) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -307,6 +314,7 @@ export function SceneStage({
     toScene,
     onViewportChange,
     panOnDrag,
+    limites,
   });
 
   useEffect(() => {
@@ -316,6 +324,7 @@ export function SceneStage({
       toScene,
       onViewportChange,
       panOnDrag,
+      limites,
     };
   });
 
@@ -337,6 +346,7 @@ export function SceneStage({
           stateRef.current.viewport,
           factor,
           project(event.clientX, event.clientY),
+          stateRef.current.limites,
         ),
       );
     }
@@ -419,6 +429,7 @@ export function SceneStage({
               stateRef.current.viewport,
               now / pinchDistance,
               project(anchor.x, anchor.y),
+              stateRef.current.limites,
             ),
           );
         }
@@ -434,6 +445,7 @@ export function SceneStage({
           stateRef.current.viewport,
           -(next.x - previous.x) / current,
           -(next.y - previous.y) / current,
+          stateRef.current.limites,
         ),
       );
     }
@@ -523,10 +535,7 @@ export function SceneStage({
         }}
       >
       <div
-        className={cn(
-          "plano-de-controles pointer-events-none relative",
-          bounds && "outline outline-white/10",
-        )}
+        className="plano-de-controles pointer-events-none relative"
         style={{
           width: SCENE_WIDTH,
           height: SCENE_HEIGHT,
@@ -539,6 +548,27 @@ export function SceneStage({
             : { transform: `scale(${scale})`, transformOrigin: "0 0" }),
         }}
       >
+        {/* O contorno da área, desenhado como FILHO e não como `outline` do
+            plano: a caixa acompanha o conteúdo, e conteúdo largado à esquerda
+            do plano tem canto negativo -- que um contorno do próprio plano não
+            teria como representar, porque ele começa na origem por definição.
+
+            Mede em unidade de cena e herda a escala do plano, como todo o
+            resto: a linha engrossa e afina com o zoom sem ninguém dividir por
+            `scale`. */}
+        {limites ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute outline outline-white/10"
+            style={{
+              left: limites.minX,
+              top: limites.minY,
+              width: limites.maxX - limites.minX,
+              height: limites.maxY - limites.minY,
+            }}
+          />
+        ) : null}
+
         {/* Sem escala, sem filhos.
             Treze lugares no palco convertem pixel de tela em unidade de cena
             dividindo por `scale` -- a borda do gizmo, a faixa da moldura de

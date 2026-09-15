@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
-import { isFullViewport, viewportZoom } from "@/lib/geometry/viewport";
+import { cabeTudo, viewportZoom } from "@/lib/geometry/viewport";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -24,6 +24,7 @@ import type { Scene } from "@/types/scene";
  */
 export function ViewportControls({ scene }: { scene: Scene }) {
   const viewport = useViewportStore((state) => state.viewport);
+  const conteudo = useViewportStore((state) => state.conteudo);
   const zoomIn = useViewportStore((state) => state.zoomIn);
   const zoomOut = useViewportStore((state) => state.zoomOut);
   const fit = useViewportStore((state) => state.fit);
@@ -34,7 +35,9 @@ export function ViewportControls({ scene }: { scene: Scene }) {
   const setTool = useToolStore((state) => state.setTool);
 
   const zoom = viewportZoom(viewport);
-  const atFit = isFullViewport(viewport);
+  // O que CABE, e não o plano inteiro: com conteúdo largado além das bordas o
+  // plano deixa de ser o fim do afastar. Ver `cabeTudo`.
+  const atFit = cabeTudo(viewport, conteudo);
   const framed = Boolean(scene.camera);
 
   return (
@@ -52,7 +55,7 @@ export function ViewportControls({ scene }: { scene: Scene }) {
       <button
         type="button"
         className="hover:bg-accent w-14 rounded-md px-1 py-1 text-xs tabular-nums"
-        aria-label="Encaixar a cena inteira"
+        aria-label="Encaixar tudo o que existe"
         onClick={fit}
       >
         {Math.round(zoom * 100)}%
