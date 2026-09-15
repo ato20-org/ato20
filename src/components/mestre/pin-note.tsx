@@ -4,7 +4,6 @@ import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   Loader2,
   Paperclip,
-  PinOff,
   Radio,
   RadioTower,
   Trash2,
@@ -137,14 +136,28 @@ export function PinNote({
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Tirar esta nota da tela"
+                // Um X, e não o alfinete cortado: o `PinOff` desenhava um
+                // alfinete de 16 pixels com uma barra por cima, e nesse tamanho
+                // ele lia como "alfinete" e não como "fechar" -- o mestre o
+                // confundia com o próprio marcador do mapa. O X é o que toda
+                // janela desta bancada usa para a mesma coisa.
+                //
+                // O botão ao lado APAGA o ponto, e ele é que ganhou o
+                // vermelho no hover: dois ícones iguais encostados, um que tira
+                // da tela e outro que tira do mapa, pediam uma diferença ANTES
+                // do clique.
+                className="hover:text-foreground text-muted-foreground"
                 onClick={onClose}
               >
-                <PinOff />
+                <X />
               </Button>
             }
           />
           <TooltipContent>
-            <p>Tira a nota da tela. O ponto continua no mapa.</p>
+            <p className="max-w-48">
+              Tira a nota da tela. O ponto continua no mapa — clicar nele de
+              novo fecha e abre esta nota.
+            </p>
           </TooltipContent>
         </Tooltip>
 
@@ -152,6 +165,7 @@ export function PinNote({
           variant="ghost"
           size="icon-sm"
           aria-label="Apagar este ponto"
+          className="text-muted-foreground hover:text-destructive"
           onClick={() => {
             // Fecha antes de apagar, e a ordem importa: o cartão se posiciona a
             // partir do alfinete, e apagar primeiro o deixaria um quadro sem

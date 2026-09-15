@@ -558,6 +558,11 @@ function PalcoDados({
       };
       const folga = Math.min(200, area.width / 5);
 
+      // A bancada mede DESENHO, e o teto da mesa é regra de jogo: sem levantá-lo
+      // aqui, `?n=100` cronometraria cinquenta dados e o número diria outra
+      // coisa. Ver `TETO_DA_MESA`.
+      useDadosStore.getState().definirTeto(Number.POSITIVE_INFINITY);
+
       for (let i = 0; i < n; i++) {
         lancar(
           ([4, 6, 8, 10, 12, 20] as const)[i % 6],

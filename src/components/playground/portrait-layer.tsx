@@ -50,7 +50,7 @@ type PortraitLayerProps = {
    * repeti-lo no retrato era a mesma informação em dois lugares numa tela que
    * já é cheia. Com a queda o retrato passou a dizer outra coisa -- de quem é o
    * dado, e que ele ainda está rolando, no rosto da pessoa --, e é disso que o
-   * mestre precisa para narrar o resultado. Ver `RolagensFaixa`.
+   * mestre precisa para narrar o resultado. Ver `RolagensBody`.
    */
   rolagens?: RolagemDaMesa[];
   onPortraitPointerDown?: (

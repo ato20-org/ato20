@@ -34,7 +34,7 @@ const TETO = 4;
  * Sem fundo nenhum. A legibilidade vem da SOMBRA, como na fileira do mestre:
  * mapa é imagem, e qualquer cor de fundo acerta uns mapas e erra outros. A
  * pílula escura que havia aqui também competia com o retrato, que é a coisa que
- * esta camada existe para acompanhar. Ver `RolagensFaixa`.
+ * esta camada existe para acompanhar. Ver `RolagensBody`.
  *
  * Os dados CAEM aqui, e não chegam prontos. O número de uma rolagem alheia
  * aparecia no instante do arremesso — um a dois segundos antes de o dado pousar
@@ -146,7 +146,7 @@ export function RolagensDoRetrato({
                     `personagemId` — repetir o nome em cada linha era dizer quatro
                     vezes o que o rosto acima já diz. Quem rola sem personagem
                     vinculado aparece pelo nome na fileira do mestre, que é onde o
-                    nome ainda faz trabalho. Ver `PortraitLayer` e `RolagensFaixa`. */}
+                    nome ainda faz trabalho. Ver `PortraitLayer` e `RolagensBody`. */}
 
                 {/* O número em texto. O dado miúdo mostra a face, e
                     nesse tamanho o algarismo gravado nela não se lê do outro lado

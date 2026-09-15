@@ -52,11 +52,12 @@ const LIMIAR_PX = 4;
  * `use-selection-store` — lá as seleções são mutuamente exclusivas porque
  * disputam o mesmo gizmo, e nada disso vale aqui.
  *
- * ## Clicar abre, arrastar só arrasta
+ * ## Clicar alterna, arrastar só arrasta
  *
- * Os dois gestos disputam o mesmo alvo, e o clique é o que abre a nota. Ele
- * chega depois do `pointerup`, então o arrasto pede `mantemClique` para ele
- * existir e uma guarda para ele ser ignorado quando o gesto passou do limiar.
+ * Os dois gestos disputam o mesmo alvo, e o clique é o que abre a nota — e o
+ * que a fecha, quando ela já está na tela. Ele chega depois do `pointerup`,
+ * então o arrasto pede `mantemClique` para ele existir e uma guarda para ele
+ * ser ignorado quando o gesto passou do limiar.
  *
  * A guarda é uma referência, não um relógio: comparar instantes acertaria na
  * média e erraria no gesto lento.
@@ -82,6 +83,7 @@ export function PinLayer({
 
   const abertas = usePinWindowStore((state) => state.notas);
   const abrir = usePinWindowStore((state) => state.abrir);
+  const fechar = usePinWindowStore((state) => state.fechar);
 
   /**
    * O gesto atual virou arrasto.
@@ -158,8 +160,14 @@ export function PinLayer({
             // Título no `title` além do cartão: passar o mouse pelos alfinetes
             // é como se acha o certo num mapa com doze deles, e abrir cada um
             // para descobrir qual é seria pior.
-            title={pin.title || `Ponto ${index + 1}`}
+            title={
+              aberta
+                ? `${pin.title || `Ponto ${index + 1}`} — clique para fechar a nota`
+                : pin.title || `Ponto ${index + 1}`
+            }
             aria-label={pin.title || `Ponto ${index + 1}`}
+            // Alterna: diz a quem ouve a tela que este alvo abre e fecha.
+            aria-pressed={aberta}
             className={cn(
               "absolute grid place-items-center rounded-full bg-amber-400 font-semibold text-amber-950 tabular-nums shadow-md select-none",
               // Anel escuro: sobre mapa claro um círculo âmbar sem contorno
@@ -196,10 +204,17 @@ export function PinLayer({
               // guarda, mover o ponto abriria a nota dele no fim do gesto.
               if (arrastou.current) return;
 
-              // `abrir` já cobre o caso de a nota estar na tela: ela vem para
-              // a frente. É a resposta útil para "onde foi a nota deste
-              // ponto?" quando ela está atrás de outras.
-              abrir(pin.id);
+              // O alfinete ALTERNA: abre a nota, e fecha a que está aberta.
+              // O botão do cartão continua fechando, mas ele é de 24 pixels
+              // dentro de um cartão que pode estar atrás de outros três -- e o
+              // alfinete é o alvo que o mestre já está olhando, porque foi por
+              // ele que a nota apareceu.
+              //
+              // Fechar e abrir de novo é o que traz uma nota soterrada para a
+              // frente: ela reabre no topo da pilha, no mesmo lugar e com o
+              // mesmo texto. Ver `abrir`, que guarda a posição.
+              if (aberta) fechar(pin.id);
+              else abrir(pin.id);
             }}
           >
             {index + 1}

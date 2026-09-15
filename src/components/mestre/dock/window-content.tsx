@@ -3,6 +3,7 @@
 import {
   BookOpen,
   Clapperboard,
+  Dices,
   EyeOff,
   Image,
   Images,
@@ -27,6 +28,7 @@ import { FogList } from "@/components/mestre/fog-list";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { LayerList } from "@/components/mestre/layer-list";
 import { PortraitList } from "@/components/mestre/portrait-list";
+import { RolagensBody } from "@/components/mestre/rolagens-window";
 import { SceneList } from "@/components/mestre/scene-list";
 import { useCharacters } from "@/hooks/use-characters";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
@@ -68,6 +70,8 @@ export type Rotulo = { titulo: string; subtitulo?: string };
  */
 export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
   switch (conteudo.tipo) {
+    case "rolagens":
+      return Dices;
     case "cenas":
       return Clapperboard;
     case "areas":
@@ -126,6 +130,7 @@ export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "imagens" }, titulo: "Imagens" },
   { conteudo: { tipo: "sons" }, titulo: "Sons" },
   { conteudo: { tipo: "personagens" }, titulo: "Personagens" },
+  { conteudo: { tipo: "rolagens" }, titulo: "Rolagens" },
   { conteudo: { tipo: "estante" }, titulo: "Estante" },
 ];
 
@@ -204,6 +209,8 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       };
     case "livro":
       return { titulo: conteudo.titulo, subtitulo: "Livro de regras" };
+    case "rolagens":
+      return { titulo: "Rolagens", subtitulo: "O que a mesa tirou" };
     case "cenas":
       return { titulo: "Cenas" };
     case "areas":
@@ -350,6 +357,10 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
     // Som também não: a trilha é da sessão.
     case "sons":
       return <AudioLibrary />;
+    // Nem cena nem campanha: a rolagem é da SESSÃO, e continua valendo
+    // enquanto o mestre troca de mapa. Mesma razão de Retratos e Sons.
+    case "rolagens":
+      return <RolagensBody />;
     case "camadas":
       return scene ? (
         <LayerList scene={scene} />

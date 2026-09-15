@@ -17,6 +17,25 @@ const STORAGE_KEY = "ato20:saquinho";
 const HISTORICO = 12;
 
 /**
+ * Quantos dados cabem na mesa ao mesmo tempo.
+ *
+ * Existe porque nada tirava dado da mesa por conta própria: o dado fica onde
+ * caiu até alguém recolher, e quem joga vinte d6 seguidos no celular deixa
+ * vinte dados desenhados por cima da ficha, da cena e do que mais estiver ali.
+ * Numa mesa de cinco jogadores isso vira uma tela coberta de dado velho, e cada
+ * um deles continua sendo desenhado quadro a quadro.
+ *
+ * Cinquenta é folgado para a jogada mais larga que uma mesa faz de verdade --
+ * um punhado de d6 de dano, uma iniciativa da mesa inteira -- e ainda é um
+ * número que o navegador desenha sem suar.
+ *
+ * O teto RECUSA em vez de empurrar o mais antigo para fora: dado sumindo
+ * sozinho enquanto o jogador olha é pior que um aviso dizendo que a mesa
+ * encheu. Quem decide o que sai da mesa é quem recolhe.
+ */
+export const TETO_DA_MESA = 50;
+
+/**
  * Raio de referência do dado, em unidades de cena.
  *
  * Fixo, e não regulável: num plano de 1920 com grade de 96, isto dá um dado que
@@ -156,7 +175,18 @@ type DadosStore = {
      * viaja para lugar nenhum, então não há o que conferir com ninguém.
      */
     valor?: number,
-  ) => Dado;
+  ) => Dado | null;
+  /**
+   * O teto de dados da mesa, em uso agora. Ver `TETO_DA_MESA`.
+   *
+   * Campo e não constante lida direto porque a bancada de medição precisa
+   * levantá-lo: `/perf` joga cem dados de uma vez para medir o desenho, e um
+   * teto de cinquenta faria a medição cronometrar metade do que ela diz
+   * cronometrar. Ver `definirTeto` -- fora do laboratório, ninguém mexe nisto.
+   */
+  teto: number;
+  /** Troca o teto. Só a bancada de medição usa. */
+  definirTeto: (teto: number) => void;
   /**
    * O recolhimento em curso: os dados sendo sugados para a boca do saquinho.
    *
@@ -264,6 +294,9 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
       state.naMao ? { naMao: { ...state.naMao, clientX, clientY } } : {},
     ),
 
+  teto: TETO_DA_MESA,
+  definirTeto: (teto) => set({ teto }),
+
   arremesso: null,
   arremessar: (vx, vy) =>
     set((state) =>
@@ -279,6 +312,11 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
    * que deixa publicar para a mesa ser um clique em vez de sincronizar física.
    */
   lancar(faces, x, y, impulso, semente, valorDeFora) {
+    // Mesa cheia não recebe dado. Devolve `null` em vez de lançar exceção
+    // porque encher a mesa não é erro de programa, é a mesa estando cheia --
+    // quem chamou avisa quem jogou. Ver `TETO_DA_MESA`.
+    if (get().dados.length >= get().teto) return null;
+
     // Sorteia aqui SÓ quando ninguém sorteou antes. Ver o parâmetro.
     const valor = valorDeFora ?? sortearValor(faces);
     const agora = Date.now();
@@ -358,6 +396,25 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
     );
   },
 }));
+
+/**
+ * A mesa está cheia?
+ *
+ * Fora do componente de propósito: quem pergunta é o gesto de arremesso, e ele
+ * pergunta uma vez, no instante do lançamento. Como seletor, cada dado que
+ * caísse redesenharia o saquinho e a camada só para responder a uma pergunta
+ * que ninguém está olhando.
+ *
+ * Existe além da guarda dentro de `lancar` porque o celular pede o número ao
+ * daemon ANTES de lançar: sem esta pergunta, a mesa cheia gastaria uma rolagem
+ * de verdade -- registrada na mesa do mestre -- para depois não ter onde pôr o
+ * dado.
+ */
+export function mesaCheia(): boolean {
+  const { dados, teto } = useDadosStore.getState();
+
+  return dados.length >= teto;
+}
 
 // Grava fora do React: é preferência de máquina, não estado de render. Mesmo
 // desenho do `usePanelsStore`.

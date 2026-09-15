@@ -391,8 +391,15 @@ function Painel({
     );
   }
 
+  // Sem o esmaecido das bordas, ao contrário das outras áreas roláveis do
+  // aplicativo: aqui embaixo é TEXTO de ficha, e no celular a máscara apagava
+  // justamente a primeira e a última linha do que se foi ler. Numa lista de
+  // cartões o degradê insinua que há mais coisa; num parágrafo ele parece
+  // borrão de tela. Ver `useScrollFade`, que é a versão que mede antes de
+  // esmaecer -- e que aqui também não serve, porque o problema não é a caixa
+  // não rolar, é o conteúdo ser leitura.
   return (
-    <div className="scroll-fade h-full space-y-4 overflow-y-auto p-3 pb-10">
+    <div className="h-full space-y-4 overflow-y-auto p-3 pb-10">
       <MyCharacters codigo={codigo} />
     </div>
   );

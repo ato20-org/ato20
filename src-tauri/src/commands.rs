@@ -49,6 +49,118 @@ pub fn daemon_addr(state: State<'_, AppState>) -> DaemonAddr {
     state.daemon.clone()
 }
 
+// --- abrir no navegador -----------------------------------------------------
+
+/// Os programas que abrem um endereco, em ordem de preferencia.
+///
+/// Existe porque "abrir no navegador" nao e uma chamada de sistema no Linux: e
+/// uma convencao, e a convencao depende de um pacote instalado. O plugin
+/// `opener` tenta `xdg-open` e mais um punhado de atalhos de desktop, e numa
+/// maquina sem `xdg-utils` -- window manager enxuto, instalacao minima, sessao
+/// sem ambiente de desktop -- todos falham de uma vez. Foi o que aconteceu na
+/// maquina de um usuario: o botao Assistir nao abria nada.
+///
+/// Entao, depois que o plugin falha, esta lista tenta de novo mais fundo: os
+/// atalhos de distribuicao (`x-www-browser`, `sensible-browser`) e, por ultimo,
+/// os navegadores pelo nome. O ultimo recurso antes de a tela desistir e pedir
+/// para colar o endereco a mao.
+///
+/// `$BROWSER` vem antes de tudo, e nao esta nesta tabela: e a escolha explicita
+/// de quem opera a maquina, e ela vence qualquer palpite nosso.
+#[cfg(target_os = "linux")]
+const ABRIDORES: &[(&str, &[&str])] = &[
+    ("xdg-open", &[]),
+    ("gio", &["open"]),
+    ("gnome-open", &[]),
+    ("kde-open", &[]),
+    ("x-www-browser", &[]),
+    ("sensible-browser", &[]),
+    ("firefox", &[]),
+    ("chromium", &[]),
+    ("chromium-browser", &[]),
+    ("google-chrome", &[]),
+    ("brave-browser", &[]),
+    ("microsoft-edge", &[]),
+];
+
+/// So endereco do proprio daemon, em loopback.
+///
+/// Este comando executa programa da maquina com um argumento vindo da webview,
+/// e por isso ele NAO e um "abra o que eu mandar": o unico uso e o Espectador
+/// desta instancia, que mora em `http://127.0.0.1:<porta>`. A mesma cerca que o
+/// `opener` ja tem na capability -- ver `capabilities/default.json` --, repetida
+/// aqui porque este caminho nao passa por ela.
+fn e_do_daemon(url: &str) -> bool {
+    let loopback = url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:");
+
+    // Nada de espaco, quebra de linha ou caractere de controle: o argumento vai
+    // direto para o `exec` (sem shell no caminho), mas um endereco com controle
+    // dentro nao e endereco -- e recusar cedo e mais barato que confiar.
+    loopback && url.chars().all(|c| !c.is_whitespace() && !c.is_control())
+}
+
+/// Abre o endereco no navegador do sistema, quando o plugin ja desistiu.
+///
+/// Devolve o programa que aceitou, porque quem chama mostra isso em log e no
+/// aviso: saber que abriu pelo `firefox` direto, e nao pelo `xdg-open`, e a
+/// diferenca entre "resolvido" e "resolvido por acaso" quando alguem for
+/// investigar a mesma maquina de novo.
+#[tauri::command]
+pub fn abrir_no_navegador(url: String) -> AppResult<String> {
+    if !e_do_daemon(&url) {
+        return Err(AppError::SemNavegador(format!(
+            "{url} nao e um endereco desta mesa."
+        )));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::{Command, Stdio};
+
+        let escolhido = std::env::var("BROWSER").ok().filter(|v| !v.is_empty());
+        let mut tentados: Vec<String> = Vec::new();
+
+        let candidatos = escolhido
+            .iter()
+            .map(|programa| (programa.as_str(), &[] as &[&str]))
+            .chain(ABRIDORES.iter().copied());
+
+        for (programa, antes) in candidatos {
+            tentados.push(programa.to_string());
+
+            // Sem herdar as tres pontas: o navegador vive mais que este
+            // processo, e um `stdout` preso ao do aplicativo faria a saida dele
+            // aparecer no log da mesa -- ou, pior, encher o buffer e travar.
+            let saiu = Command::new(programa)
+                .args(antes)
+                .arg(&url)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn();
+
+            // O erro que interessa e "nao existe": ele diz para tentar o
+            // proximo. Qualquer outro -- permissao, executavel quebrado -- vale
+            // a mesma providencia, que e seguir a lista.
+            if saiu.is_ok() {
+                return Ok(programa.to_string());
+            }
+        }
+
+        return Err(AppError::SemNavegador(format!(
+            "Nenhum destes abriu o endereco: {}.",
+            tentados.join(", ")
+        )));
+    }
+
+    // Fora do Linux quem abre e o plugin, e se ele falhou nao ha segunda porta
+    // que este processo conheca. Dizer isso e melhor que fingir uma tentativa.
+    #[cfg(not(target_os = "linux"))]
+    Err(AppError::SemNavegador(
+        "O sistema recusou abrir o navegador.".to_string(),
+    ))
+}
+
 // --- campanha ---------------------------------------------------------------
 
 /// Uma campanha da lista de recentes.
@@ -1298,5 +1410,29 @@ mod tests {
         // que nao existe deixaria a grade com um quadro vazio e sem volta.
         let lido = inventory::load(&vault, &p).unwrap();
         assert!(matches!(lido[0].imagem, Some(inventory::Imagem::Anexo { .. })));
+    }
+
+    /// A cerca do `abrir_no_navegador`: so o daemon desta maquina.
+    ///
+    /// Este comando executa programa do sistema com um argumento que veio da
+    /// webview, entao a lista do que ele NAO aceita vale um teste: um dia
+    /// alguem vai querer reusar o comando para abrir a documentacao online, e
+    /// o teste e o que conta que a cerca existe de proposito.
+    #[test]
+    fn so_abre_o_proprio_daemon() {
+        assert!(e_do_daemon("http://127.0.0.1:45231/espectador"));
+        assert!(e_do_daemon("http://127.0.0.1:45231/espectador?code=VGMBWH"));
+        assert!(e_do_daemon("http://localhost:45231/espectador"));
+
+        // Fora da maquina, outro esquema, ou coisa que nem e endereco.
+        assert!(!e_do_daemon("http://exemplo.com/espectador"));
+        assert!(!e_do_daemon("https://127.0.0.1:45231/espectador"));
+        assert!(!e_do_daemon("file:///etc/passwd"));
+        assert!(!e_do_daemon("ato20-ext://plugin/painel"));
+
+        // Espaco e controle: o argumento vai para o `exec` sem shell no
+        // caminho, mas endereco com isso dentro nao e endereco.
+        assert!(!e_do_daemon("http://127.0.0.1:45231/a b"));
+        assert!(!e_do_daemon("http://127.0.0.1:45231/a\nb"));
     }
 }

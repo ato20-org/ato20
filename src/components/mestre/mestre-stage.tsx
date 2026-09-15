@@ -10,6 +10,7 @@ import {
 
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
+import { PostitFantasma } from "@/components/mestre/postit-fantasma";
 import { PostitLayer } from "@/components/mestre/postit-layer";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { AlignmentGuides } from "@/components/playground/alignment-guides";
@@ -1109,6 +1110,14 @@ export function MestreStage({ scene }: { scene: Scene }) {
           de um postit é preparação do mestre, e o `SceneLayer` é o mesmo
           componente que desenha na TV. */}
       <PostitLayer scene={scene} panMode={panMode} />
+
+      {/* Onde o papel vai cair, enquanto a ferramenta está na mão. Só com ela
+          escolhida, e nunca com espaço segurado -- aí o gesto é da câmera, e a
+          prévia de um papel que não vai ser colado seria ruído no meio de um
+          deslocamento. */}
+      {tool === "postit" && !panMode ? (
+        <PostitFantasma cor={corPostit} />
+      ) : null}
 
       {/* Fora do `SceneLayer` pela mesma razão do `PinLayer`: hoje o dado é só
           do mestre. Dentro dele, os dados apareceriam na TV — e a decisão de

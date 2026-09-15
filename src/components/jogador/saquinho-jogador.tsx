@@ -5,7 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 
 import { DadoParado } from "@/components/playground/dado-parado";
 import { Button } from "@/components/ui/button";
@@ -107,7 +107,8 @@ export function SaquinhoJogador() {
           <button
             ref={bolinha}
             type="button"
-            aria-label="Saquinho de dados"
+            aria-label={aberto ? "Fechar o saquinho" : "Saquinho de dados"}
+            aria-expanded={aberto}
             className={cn(
               "relative grid shrink-0 place-items-center rounded-full border transition-transform active:scale-95",
               // Incha enquanto engole e volta quando o último dado entra: é o
@@ -132,7 +133,15 @@ export function SaquinhoJogador() {
               />
             ) : null}
 
-            <DadoParado faces={20} valor={20} tamanho={40} />
+            {/* Aberto, a bolinha vira um X: ela é o mesmo alvo que fecha o
+                saquinho, e o d20 não dizia isso -- no celular, com o painel
+                cobrindo meia tela, o dedo procurava onde fechar e voltava a
+                tocar na bolinha esperando outra coisa. */}
+            {aberto ? (
+              <X className="size-8 text-white/80" aria-hidden />
+            ) : (
+              <DadoParado faces={20} valor={20} tamanho={40} />
+            )}
 
             {/* Quantos dados estão na tela. Com a página rolada, um dado pode
                 estar fora da vista, e sem a contagem não haveria como saber que
