@@ -1888,9 +1888,23 @@ async fn serve_web(State(state): State<Arc<Daemon>>, request: Request<Body>) -> 
         .next()
         .is_some_and(|segment| segment.contains('.'));
 
-    let candidates = if path.is_empty() {
-        vec!["/index.html".to_string()]
-    } else if looks_like_file {
+    // A raiz e o `index.html` sao o Mestre, e o Mestre nao se serve a rede: ele
+    // e a interface de quem tem a pasta da campanha no disco. Os dois enderecos
+    // recebem a porta da mesa, desenhada pelo Rust -- ver `porta_da_mesa`.
+    //
+    // O `/mestre` de antes nao precisa de bloqueio porque nao existe mais: o
+    // export do Next nao grava `mestre.html` para uma rota que saiu. O que ele
+    // grava agora e `index.html`, e este `if` e o que o mantem em casa.
+    //
+    // Sem diferenciar maiuscula: o `ServeDir` resolve pelo sistema de arquivos,
+    // e num disco que ignora caixa -- o do Windows, o do macOS por padrao --
+    // `/Index.html` abriria o mesmo arquivo por uma porta que a comparacao
+    // exata deixaria passar.
+    if path.is_empty() || path.eq_ignore_ascii_case("/index.html") {
+        return ErrorPage::porta_da_mesa().into_response();
+    }
+
+    let candidates = if looks_like_file {
         vec![path.clone()]
     } else {
         vec![
@@ -2876,7 +2890,6 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let out = dir.path().join("out");
         std::fs::create_dir_all(&out).expect("out");
-        std::fs::write(out.join("index.html"), "raiz").expect("index");
         // `output: "export"` grava `/espectador` como `espectador.html`.
         std::fs::write(out.join("espectador.html"), "a TV").expect("espectador");
 
@@ -2891,7 +2904,7 @@ mod tests {
             std::env::temp_dir().join("ato20-estante-inexistente"),
         ));
 
-        for (uri, esperado) in [("/", "raiz"), ("/espectador", "a TV"), ("/espectador/", "a TV")] {
+        for (uri, esperado) in [("/espectador", "a TV"), ("/espectador/", "a TV")] {
             let response = router(Arc::clone(&state))
                 .oneshot(HttpRequest::builder().uri(uri).body(Body::empty()).expect("request"))
                 .await
@@ -2901,6 +2914,51 @@ mod tests {
 
             let bytes = to_bytes(response.into_body(), 4096).await.expect("corpo");
             assert_eq!(String::from_utf8_lossy(&bytes), esperado, "{uri}");
+        }
+    }
+
+    /// A raiz da rede nao entrega o Mestre.
+    ///
+    /// O `index.html` do bundle E o Mestre desde que o aplicativo virou
+    /// desktop, e ele e a interface de quem tem a pasta da campanha no disco.
+    /// Este teste existe porque o vazamento seria silencioso: o arquivo esta
+    /// la, o `ServeDir` o serviria de bom grado, e o endereco que o pede e o
+    /// mais adivinhavel da rede local -- o IP do notebook, sem caminho nenhum.
+    #[tokio::test]
+    async fn a_raiz_da_rede_nao_serve_o_mestre() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(&out).expect("out");
+        std::fs::write(out.join("index.html"), "o Mestre").expect("index");
+        std::fs::write(out.join("espectador.html"), "a TV").expect("espectador");
+
+        let vault = Vault::create(dir.path().join("c"), "Campanha").expect("create");
+        let state = Arc::new(Daemon::new(
+            Arc::new(RwLock::new(Some(vault))),
+            "segredo".into(),
+            Some(out),
+            std::env::temp_dir().join("ato20-estante-inexistente"),
+        ));
+
+        // `/Index.html` junto: num disco que ignora caixa o `ServeDir` abriria
+        // o mesmo arquivo, e a comparacao exata deixaria a porta aberta.
+        for uri in ["/", "/index.html", "/Index.html"] {
+            let response = router(Arc::clone(&state))
+                .oneshot(HttpRequest::builder().uri(uri).body(Body::empty()).expect("request"))
+                .await
+                .expect("resposta");
+
+            // 200: o endereco esta certo, quem digitou o IP acertou.
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+
+            let bytes = to_bytes(response.into_body(), 8192).await.expect("corpo");
+            let corpo = String::from_utf8_lossy(&bytes);
+
+            assert!(!corpo.contains("o Mestre"), "{uri} entregou o bundle");
+            // A porta desenhada pelo Rust, com as duas telas que funcionam aqui.
+            assert!(corpo.contains("Entrar na mesa"), "{uri}");
+            assert!(corpo.contains("/espectador"), "{uri}");
+            assert!(corpo.contains("/jogador"), "{uri}");
         }
     }
 

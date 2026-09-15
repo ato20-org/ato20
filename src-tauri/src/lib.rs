@@ -318,8 +318,9 @@ fn decodificar(segmento: &str) -> Option<String> {
 ///
 /// Em desenvolvimento o `cargo run` roda com `src-tauri/` como diretorio
 /// corrente, e o `out/` esta um nivel acima. `None` e estado valido: quem nunca
-/// rodou `pnpm build` tem o Mestre funcionando e as telas de espectador
-/// dizendo o que falta, em vez de uma tela branca.
+/// rodou `pnpm build` tem o Mestre funcionando -- a janela le o bundle
+/// embutido, nao este -- e as telas de espectador dizendo o que falta, em vez
+/// de uma tela branca.
 ///
 /// A ORDEM depende do perfil, e isso custou um bug. O `resource_dir()/out` e um
 /// RETRATO, copiado pelo Tauri no momento do build do Rust; o `../out` e a
@@ -340,5 +341,9 @@ fn find_web_root(app: &tauri::AppHandle) -> Option<PathBuf> {
     candidates
         .into_iter()
         .flatten()
-        .find(|dir| dir.join("index.html").is_file())
+        // `espectador.html`, e nao `index.html`: o sinal de que o bundle serve
+        // tem de ser um arquivo que o daemon SIRVA. O `index.html` e o Mestre,
+        // que esta porta recusa de proposito (ver `porta_da_mesa`) -- prova-lo
+        // presente seria conferir justamente o arquivo que nao importa aqui.
+        .find(|dir| dir.join("espectador.html").is_file())
 }
