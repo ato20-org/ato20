@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
-import { daemonAddr } from "@/lib/vault/bridge";
+import { call, daemonAddr } from "@/lib/vault/bridge";
 
 /**
  * Abre o Espectador no navegador do sistema.
@@ -22,6 +22,22 @@ import { daemonAddr } from "@/lib/vault/bridge";
  *
  * Leva o código na URL porque quem clica já está olhando para ele na barra —
  * digitá-lo de novo seria trabalho que a tela já fez.
+ *
+ * ## Duas portas, e depois o endereço na mão
+ *
+ * O plugin `opener` é a primeira. Ele resolve em quase toda máquina e é o
+ * caminho que o Tauri mantém; quando falha, falha por um motivo que não é
+ * nosso: no Linux, "abrir no navegador" depende de um `xdg-open` instalado, e
+ * numa sessão enxuta ele simplesmente não existe. Foi o que aconteceu na
+ * máquina de um usuário — o botão não abria nada.
+ *
+ * A segunda é o `abrir_no_navegador`, no Rust, que desce a lista de abridores e
+ * de navegadores pelo nome. Ver o comando: ele só aceita endereço do próprio
+ * daemon.
+ *
+ * Falhando as duas, a tela entrega o que sobrou: o endereço, copiável, com o
+ * motivo de cada porta. Colar na barra do navegador é o caminho de saída, e ele
+ * nunca depende da máquina ter nada instalado.
  */
 export function AbrirEspectador() {
   const codigo = useCampaignStore((state) => state.campaign?.codigo ?? null);
@@ -33,7 +49,24 @@ export function AbrirEspectador() {
       const { url } = await daemonAddr();
       alvo = codigo ? `${url}/espectador?code=${codigo}` : `${url}/espectador`;
 
-      await openUrl(alvo);
+      try {
+        await openUrl(alvo);
+      } catch (recusa) {
+        // Segunda porta. O motivo da primeira vai junto na exceção que sai
+        // daqui quando esta também falhar: sem ele, "não abriu" some a
+        // diferença entre escopo recusado e máquina sem navegador nenhum.
+        try {
+          await call<string>("abrir_no_navegador", { url: alvo });
+        } catch (semNavegador) {
+          throw new Error(
+            [recusa, semNavegador]
+              .map((erro) =>
+                erro instanceof Error ? erro.message : String(erro),
+              )
+              .join(" "),
+          );
+        }
+      }
     } catch (cause) {
       // O motivo, e não só "não deu". A primeira versão engolia a causa, e a
       // falha real — escopo do `opener` recusando o endereço — era

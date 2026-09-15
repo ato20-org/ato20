@@ -160,6 +160,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::daemon_addr,
+            commands::abrir_no_navegador,
             commands::campaign_recents,
             commands::campaign_forget,
             commands::campaign_open,

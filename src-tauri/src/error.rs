@@ -20,6 +20,12 @@ pub enum AppError {
     UnsupportedKind(String),
     /// A pasta escolhida nao e uma extensao, ou o manifesto dela nao serve.
     ExtensaoInvalida(String),
+    /// Nao houve como abrir um endereco no navegador do sistema.
+    ///
+    /// Variante propria porque a providencia e do USUARIO e nao do aplicativo:
+    /// a maquina nao tem quem abra link, e o caminho de saida e colar o
+    /// endereco no navegador a mao. Ver `abrir_no_navegador`.
+    SemNavegador(String),
     /// A extensao pede uma API mais nova que a deste aplicativo.
     ///
     /// Variante propria, e nao uma `ExtensaoInvalida` com o texto dentro,
@@ -42,6 +48,9 @@ impl std::fmt::Display for AppError {
             Self::Db(cause) => write!(f, "Falha no banco de estado: {cause}"),
             Self::UnsupportedKind(mime) => {
                 write!(f, "Tipo de arquivo nao suportado: {mime}")
+            }
+            Self::SemNavegador(motivo) => {
+                write!(f, "Nao foi possivel abrir o navegador. {motivo}")
             }
             Self::ExtensaoInvalida(motivo) => {
                 write!(f, "Extensao invalida: {motivo}")
@@ -80,6 +89,7 @@ impl Serialize for AppError {
             Self::Malformed { .. } => "ilegivel",
             Self::Db(_) => "banco",
             Self::UnsupportedKind(_) => "tipo-nao-suportado",
+            Self::SemNavegador(_) => "sem-navegador",
             Self::ExtensaoInvalida(_) => "extensao-invalida",
             Self::ExtensaoIncompativel { .. } => "extensao-incompativel",
         };
