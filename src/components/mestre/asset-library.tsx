@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  FileImage,
   FolderClosed,
   FolderPlus,
   MoreVertical,
@@ -14,6 +15,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +31,7 @@ import {
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useFolderList } from "@/hooks/use-folder-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
@@ -36,6 +39,10 @@ import { useTokenDrag } from "@/hooks/use-token-drag";
 import { MINIATURA } from "@/lib/miniatura";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { countAssetUsage } from "@/lib/mestre/asset-usage";
+import {
+  importarCaminhosNoAcervo,
+  rotuloDoArrasto,
+} from "@/lib/mestre/importar-arquivos";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
@@ -45,6 +52,14 @@ import type { AssetFolder, AssetMeta, Scene } from "@/types/scene";
 
 /** Usado quando a medida do arquivo não veio — arquivo antigo ou corrompido. */
 const FALLBACK_SIZE = { x: 480, y: 270 };
+
+/**
+ * A marca do painel inteiro, que é quem aceita o arquivo vindo do sistema.
+ *
+ * O painel todo e não cada pasta: soltar aqui guarda no acervo, e escolher onde
+ * guardar é outro gesto — o da linha, que o `useTokenDrag` já leva às pastas.
+ */
+const ZONA_DO_ACERVO = "[data-acervo-solto]";
 
 /** O tamanho com que a imagem entra na cena, em unidades de cena. */
 function tamanhoNaCena(asset: AssetMeta): { x: number; y: number } {
@@ -84,6 +99,23 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   } = useFolderList(refresh);
   const [creating, setCreating] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+
+  /**
+   * O arquivo largado do gerenciador de arquivos SOBRE este painel.
+   *
+   * O outro destino do mesmo gesto é o mapa, e a diferença entre os dois é a
+   * pergunta que cada um responde: soltar no mapa é "põe isto na cena AQUI", e
+   * soltar aqui é "guarda isto para depois" — o arquivo entra no acervo e cena
+   * nenhuma muda. Ver `ArquivoFantasma`, que recebe o outro.
+   *
+   * Entra na raiz mesmo que o ponteiro esteja sobre uma pasta aberta: o arrasto
+   * é do sistema operacional, e a prévia dele não mostra a imagem nem escolhe
+   * tamanho — prometer pontaria fina num gesto que não tem retorno visual era
+   * convidar a errar a pasta.
+   */
+  const noAr = useArrastoDeArquivo(ZONA_DO_ACERVO, (caminhos) => {
+    void importarCaminhosNoAcervo(caminhos).then(avisarOsSons);
+  });
 
   const scenes = useSceneStore((state) => state.board?.scenes);
   const addItem = useSceneStore((state) => state.addItem);
@@ -149,12 +181,30 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      data-acervo-solto
+      className={cn(
+        "flex min-h-0 flex-1 flex-col",
+        // Por dentro (`ring-inset`): o painel atracado encosta na borda da
+        // coluna, e um anel por fora ficaria cortado justamente do lado por
+        // onde o arquivo chega.
+        noAr && "ring-primary/60 bg-primary/5 ring-2 ring-inset",
+      )}
+    >
       <div className="flex flex-col gap-2 p-2">
         <Button variant="outline" size="sm" onClick={() => void importar()}>
           <Upload />
           Importar imagens
         </Button>
+
+        {/* O que está vindo, no mesmo rótulo que a sombra do mapa escreve. A
+            borda acesa diz que o painel aceita; esta linha diz o quê. */}
+        {noAr ? (
+          <p className="border-primary/60 bg-primary/10 flex items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-[11px]">
+            <FileImage className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{rotuloDoArrasto(noAr.caminhos)}</span>
+          </p>
+        ) : null}
 
         {creating ? (
           <FolderNameInput
@@ -224,6 +274,24 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
         )}
       </ScrollArea>
     </div>
+  );
+}
+
+/**
+ * O som que caiu num painel de imagens entrou no acervo — e sumiu daqui.
+ *
+ * O Rust aceita os dois tipos na mesma importação, e recusar som aqui seria
+ * jogar fora arquivo que a campanha quer. Mas ele vai para o painel de sons, e
+ * sem este aviso o gesto pareceria não ter feito nada.
+ */
+function avisarOsSons(aceitos: AssetMeta[]) {
+  const sons = aceitos.filter((asset) => asset.kind !== "image").length;
+  if (sons === 0) return;
+
+  toast.info(
+    sons === 1
+      ? "1 som entrou no acervo. Ele está no painel de sons."
+      : `${sons} sons entraram no acervo. Eles estão no painel de sons.`,
   );
 }
 
