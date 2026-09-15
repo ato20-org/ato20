@@ -157,5 +157,22 @@ export async function importAssets(
   const paths = Array.isArray(escolhidos) ? escolhidos : [escolhidos];
   if (paths.length === 0) return null;
 
+  return importarCaminhos(paths, escopo);
+}
+
+/**
+ * O mesmo que `importAssets`, mas com os caminhos já escolhidos.
+ *
+ * Quem já os tem é o arrasto vindo do sistema operacional: o Tauri entrega os
+ * caminhos do que foi largado sobre a janela, e abrir um seletor de arquivos
+ * depois disso seria pedir de novo o que a mão acabou de dar.
+ *
+ * Quem recusa o que não é imagem nem som é o Rust, um motivo por arquivo — aqui
+ * não há filtro de extensão a repetir. Ver `assets::import`.
+ */
+export async function importarCaminhos(
+  paths: string[],
+  escopo?: EscopoAsset,
+): Promise<ImportResult> {
   return call<ImportResult>("asset_import", { paths, escopo: escopo ?? null });
 }

@@ -39,19 +39,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTokenDrag } from "@/hooks/use-token-drag";
 import { MINIATURA } from "@/lib/miniatura";
-import {
-  hasItemDrag,
-  itemEmArrasto,
-  limparItemEmArrasto,
-  readAssetDrag,
-  writeItemDrag,
-} from "@/lib/mestre/asset-drag";
+import { fitInitialSize } from "@/lib/geometry/transform";
 import {
   useInventarioStore,
   useVersaoInventario,
 } from "@/lib/store/use-inventario-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
+import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { characterAttachmentUrl } from "@/lib/vault/characters";
 import { assetUrl } from "@/lib/vault/assets";
 import {
@@ -108,8 +104,23 @@ export function InventarioPersonagem({
 }) {
   const [itens, setItens] = useState<ItemInventario[] | null>(null);
   const [aberto, setAberto] = useState<ItemInventario | "novo" | null>(null);
-  /** Um item de outra ficha está pairando sobre esta grade. */
-  const [recebendo, setRecebendo] = useState(false);
+
+  /**
+   * Um item de outra ficha está pairando sobre esta grade.
+   *
+   * Booleano tirado do arrasto, e não estado próprio alimentado por
+   * `dragenter`/`dragleave`: o gesto já sabe sobre que alvo o ponteiro está, e
+   * quem decide se este inventário aceita é `aceita`, num lugar só. Antes eram
+   * duas respostas para a mesma pergunta — a borda acendia pela marca de
+   * módulo, o drop conferia o conteúdo — e elas podiam discordar.
+   */
+  const recebendo = useTokenDragStore((state) => {
+    const destino = state.arrasto?.destino;
+
+    return (
+      destino?.tipo === "inventario" && destino.personagemId === personagem.id
+    );
+  });
 
   const invalidar = useInventarioStore((state) => state.invalidar);
 
@@ -135,38 +146,50 @@ export function InventarioPersonagem({
 
   useEffect(recarregar, [recarregar, versao]);
 
+  const receber = useCallback(
+    async (de: string, itemId: string) => {
+      try {
+        const item = await moveItem(de, personagem.id, itemId);
+
+        // Os DOIS: aqui ganhou um item, e a ficha de onde ele saiu perdeu um --
+        // e ela é outra janela, que não fica sabendo de nada sozinha.
+        mudou();
+        invalidar(de);
+
+        toast.success(`${item.nome} chegou em ${personagem.nome}.`);
+      } catch (cause) {
+        toast.error(
+          cause instanceof Error ? cause.message : "Falha ao mover o item.",
+        );
+      }
+    },
+    [mudou, invalidar, personagem.id, personagem.nome],
+  );
+
   /**
-   * Este arrasto pode cair aqui?
+   * Esta grade como destino do gesto.
    *
-   * O tipo diz que é item; QUEM é o dono vem da marca de módulo, porque o
-   * conteúdo do arrasto é ilegível enquanto o ponteiro passa por cima — ver
-   * `itemEmArrasto`. Sem a segunda parte, a grade de origem acenderia a borda
-   * para o próprio item, prometendo um movimento que o Rust recusa.
+   * Uma chave por personagem, porque há mais de uma ficha aberta ao mesmo
+   * tempo e cada uma recebe na própria pasta. Quem recusa o item do próprio
+   * dono é `aceita`, no store -- aqui a conferência é a do CONTEÚDO, que é a
+   * verdade, e sobrevive à ficha ter fechado no meio do gesto.
    */
-  function podeReceber(transfer: DataTransfer): boolean {
-    if (!hasItemDrag(transfer)) return false;
+  useEffect(
+    () =>
+      useTokenDragStore
+        .getState()
+        .registrarAlvo(`inventario:${personagem.id}`, (arrasto) => {
+          if (
+            arrasto.fonte.tipo !== "item" ||
+            arrasto.fonte.personagemId === personagem.id
+          ) {
+            return;
+          }
 
-    const arrasto = itemEmArrasto();
-
-    return Boolean(arrasto && arrasto.personagemId !== personagem.id);
-  }
-
-  async function receber(de: string, itemId: string) {
-    try {
-      const item = await moveItem(de, personagem.id, itemId);
-
-      // Os DOIS: aqui ganhou um item, e a ficha de onde ele saiu perdeu um --
-      // e ela é outra janela, que não fica sabendo de nada sozinha.
-      mudou();
-      invalidar(de);
-
-      toast.success(`${item.nome} chegou em ${personagem.nome}.`);
-    } catch (cause) {
-      toast.error(
-        cause instanceof Error ? cause.message : "Falha ao mover o item.",
-      );
-    }
-  }
+          void receber(arrasto.fonte.personagemId, arrasto.fonte.itemId);
+        }),
+    [personagem.id, receber],
+  );
 
   async function criar() {
     try {
@@ -212,40 +235,7 @@ export function InventarioPersonagem({
       contagem={itens.length}
       acao={adicionar}
     >
-      <Grade
-        recebendo={recebendo}
-        onDragOver={(event) => {
-          if (!podeReceber(event.dataTransfer)) return;
-
-          // `preventDefault` é o que declara "aceito aqui". Sem ele o navegador
-          // recusa o drop e o cursor mostra a placa de proibido.
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
-        }}
-        onDragEnter={(event) => {
-          if (podeReceber(event.dataTransfer)) setRecebendo(true);
-        }}
-        onDragLeave={(event) => {
-          // Só quando sai da grade de verdade: `dragleave` também dispara ao
-          // passar de um quadro para o vizinho, e sem esta guarda a borda
-          // piscaria a cada item sobrevoado.
-          if (event.currentTarget === event.target) setRecebendo(false);
-        }}
-        onDrop={(event) => {
-          setRecebendo(false);
-          if (!podeReceber(event.dataTransfer)) return;
-
-          event.preventDefault();
-
-          const payload = readAssetDrag(event.dataTransfer);
-          // Confere no CONTEÚDO, e não na marca de módulo que o `dragover`
-          // usou: aqui ele é legível, e é a verdade.
-          if (!payload?.item || payload.item.personagemId === personagem.id)
-            return;
-
-          void receber(payload.item.personagemId, payload.item.itemId);
-        }}
-      >
+      <Grade recebendo={recebendo} personagemId={personagem.id}>
         {itens.map((item) => (
           <ItemTile
             key={item.id}
@@ -292,25 +282,31 @@ export function InventarioPersonagem({
  */
 const PISO_QUADRO_PX = 80;
 
+/** Usado quando a imagem do item não disse a medida dela. */
+const TAMANHO_DE_RESERVA = { x: 480, y: 270 };
+
 /** As linhas do menu do quadro, menores que o padrão do componente. */
 const ITEM_MENU =
   "text-xs whitespace-nowrap [&_svg:not([class*='size-'])]:size-3.5";
 
 function Grade({
   recebendo,
+  personagemId,
   children,
-  ...arrasto
 }: {
   /** Acende a borda: há um item de outra ficha pairando aqui. */
   recebendo: boolean;
+  /** De quem é esta grade. O gesto lê daqui para saber quem recebe. */
+  personagemId: string;
   children: React.ReactNode;
-} & Pick<
-  React.ComponentProps<"div">,
-  "onDragOver" | "onDragEnter" | "onDragLeave" | "onDrop"
->) {
+}) {
   return (
     <div
-      {...arrasto}
+      // O alvo se anuncia por atributo, e não por handlers de arrasto nativo:
+      // quem procura é o gesto próprio do quadro, com `elementFromPoint`. Ver
+      // `useTokenDrag`.
+      data-inventario
+      data-personagem-id={personagemId}
       className={cn(
         "grid gap-1.5 rounded-md border border-transparent transition-colors motion-reduce:transition-none",
         // A borda é do CONTÊINER e não de um quadro: o alvo é o inventário
@@ -356,6 +352,16 @@ function ItemTile({
   const [ocupado, setOcupado] = useState(false);
 
   const [menuAberto, setMenuAberto] = useState(false);
+
+  const arrastar = useTokenDrag();
+
+  // O quadro desbota enquanto o item está no ar, como a linha do personagem:
+  // ele está na mão, e vê-lo inteiro nos dois lugares contradiz o gesto.
+  const naMao = useTokenDragStore(
+    (state) =>
+      state.arrasto?.fonte.tipo === "item" &&
+      state.arrasto.fonte.itemId === item.id,
+  );
 
   const { noAr, alternar: alternarTransmissao } = useTransmissaoDoItem(
     personagemId,
@@ -416,19 +422,42 @@ function ItemTile({
         // olha a grade inteira de relance para saber o que a mesa já viu, e um
         // ícone de 12px não responde isso à distância.
         item.escondido && "border-dashed",
+        item.imagem && "cursor-grab select-none active:cursor-grabbing",
+        naMao && "opacity-40",
       )}
-      // O arrasto vai no contêiner e não no botão: arrastar um `<button>` briga
-      // com o clique dele em alguns navegadores, e o que se arrasta é o item
-      // inteiro, não a imagem dentro dele.
-      draggable={Boolean(item.imagem)}
-      onDragStart={(event) => {
+      // O arrasto vai no contêiner e não no botão: o que se arrasta é o item
+      // inteiro, não a imagem dentro dele. O clique que abre o item continua
+      // valendo — o gesto só levanta depois que o ponteiro anda, e a partir daí
+      // o clique do fim é engolido.
+      //
+      // Gesto próprio e não o arrasto do navegador: é o que permite a sombra no
+      // mapa e a roda escolhendo o tamanho no ar. Ver `useTokenDrag`.
+      onPointerDown={(event) => {
         if (!item.imagem) return;
 
-        writeItemDrag(event.dataTransfer, personagemId, item.id);
+        // A imagem do quadro é a prévia: ela já está resolvida na tela, e pedir
+        // de novo ao disco travaria o `pointerdown`, que é síncrono. Item sem
+        // imagem carregada não sobe — a sombra não teria o que mostrar.
+        const img = event.currentTarget.querySelector("img");
+        const url = img?.currentSrc || img?.src;
+        if (!img || !url) return;
+
+        // A medida sai da imagem desenhada, que para asset é a MINIATURA: a
+        // proporção é a verdadeira, o tamanho absoluto é menor que o do
+        // arquivo. Quem decide o tamanho aqui é a roda, e a sombra mostra
+        // exatamente o que vai ser solto -- então o que precisa estar certo é a
+        // proporção.
+        const tamanho =
+          img.naturalWidth > 0 && img.naturalHeight > 0
+            ? fitInitialSize(img.naturalWidth, img.naturalHeight)
+            : TAMANHO_DE_RESERVA;
+
+        arrastar(event, {
+          fonte: { tipo: "item", personagemId, itemId: item.id, url },
+          largura: tamanho.x,
+          altura: tamanho.y,
+        });
       }}
-      // Solto ou abandonado, o arrasto acabou: a marca de módulo não pode
-      // sobreviver a ele e acender a borda de um inventário no gesto seguinte.
-      onDragEnd={limparItemEmArrasto}
     >
       {/* O botão preenche o quadro e é o que abre o item. Fica ATRÁS dos
           controles, que são irmãos com `z` maior: aninhar botão dentro de botão

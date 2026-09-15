@@ -92,7 +92,11 @@ export function CharactersBody() {
    * Só o id, e não o arrasto inteiro: este é o único campo que muda uma vez por
    * gesto em vez de uma vez por quadro.
    */
-  const noAr = useTokenDragStore((state) => state.arrasto?.personagemId);
+  const noAr = useTokenDragStore((state) =>
+    state.arrasto?.fonte.tipo === "personagem"
+      ? state.arrasto.fonte.personagemId
+      : undefined,
+  );
 
   /** Quem joga cada personagem. É o que a busca também alcança. */
   const donos = useCharacterOwners(jogadores);
@@ -237,8 +241,11 @@ export function CharactersBody() {
                     const tamanho = tamanhoDoToken(miniatura);
 
                     arrastarToken(event, {
-                      personagemId: personagem.id,
-                      assetId: miniatura.id,
+                      fonte: {
+                        tipo: "personagem",
+                        personagemId: personagem.id,
+                        assetId: miniatura.id,
+                      },
                       largura: tamanho.x,
                       altura: tamanho.y,
                     });
