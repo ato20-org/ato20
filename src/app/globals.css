@@ -194,6 +194,15 @@
     transition: transform 450ms cubic-bezier(0.22, 0.61, 0.36, 1);
   }
 
+  /* A mesma câmera em FLUXO: o mestre arrastando a moldura, uma amostra a
+     cada 100 ms. A curva de cima, reiniciada a cada amostra, nunca chega ao
+     alvo e a tela anda em serrote. Aqui vale a cadência dos itens, e pelo
+     mesmo motivo. Quem escolhe entre as duas é o `SceneStage`, pelo intervalo
+     entre amostras. */
+  .scene-smooth-camera-fluxo {
+    transition: transform 150ms linear;
+  }
+
   /* Revelar uma área escondida é dramaturgia: o preto sai desaparecendo em vez
      de piscar. */
   .scene-smooth-fog {
