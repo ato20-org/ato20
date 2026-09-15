@@ -22,6 +22,7 @@ import {
   quadroNaMao,
 } from "@/lib/geometry/dado";
 import type { Vec } from "@/lib/geometry/transform";
+import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import { DADO_Z, RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
 import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
 import { tipoDado, valorDaRolagem, type Dado } from "@/types/dado";
@@ -290,6 +291,11 @@ export function DadosNoEspaco({
       aoArremessar(jogada);
       return;
     }
+
+    // O dado que VEIO da mesa não faz a mesa crescer: ele sai antes de entrar,
+    // e recusá-lo prenderia quem está com a mesa cheia sem poder nem relançar o
+    // que já está nela. Ver `TETO_DA_MESA`.
+    if (!jogada.daMesa && recusaPorMesaCheia()) return;
 
     if (jogada.daMesa) guardar(jogada.daMesa);
     lancar(jogada.faces, jogada.x, jogada.y, jogada.impulso, jogada.semente);

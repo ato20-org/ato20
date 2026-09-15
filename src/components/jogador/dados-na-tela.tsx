@@ -8,6 +8,7 @@ import {
   type EspacoDoDado,
   type Jogada,
 } from "@/components/mestre/dado-layer";
+import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import { rolarDado } from "@/lib/player/rolagens";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 
@@ -106,6 +107,12 @@ export function DadosNaTela({ codigo }: { codigo: string }) {
    */
   const aoArremessar = useMemo(
     () => (jogada: Jogada) => {
+      // ANTES de pedir o número: a rolagem é registrada na mesa do mestre, e
+      // gastá-la para depois não ter onde pôr o dado mostraria à mesa inteira
+      // um resultado que nunca apareceu na tela de quem rolou. O dado que veio
+      // da mesa passa: ele sai antes de entrar. Ver `TETO_DA_MESA`.
+      if (!jogada.daMesa && recusaPorMesaCheia()) return;
+
       if (jogada.daMesa) guardar(jogada.daMesa);
 
       void rolarDado(codigo, jogada.faces)
