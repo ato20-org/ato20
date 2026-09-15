@@ -56,6 +56,19 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.0.5",
+    data: "2026-09-15",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo:
+          "A lista de novidades cabe numa tela, e cada linha abre quando você quer o detalhe",
+        detalhe:
+          "Com treze mudanças, a 0.0.4 virou uma parede de texto na tela de entrada e nas Configurações. Agora os títulos ficam à vista, separados entre o que é novo e o que foi consertado, e o detalhe de cada um abre com um clique. As versões anteriores vêm fechadas, uma linha cada, já dizendo quantas mudanças têm dentro.",
+      },
+    ],
+  },
+  {
     versao: "0.0.4",
     data: "2026-09-15",
     mudancas: [
