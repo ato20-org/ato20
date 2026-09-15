@@ -19,8 +19,15 @@ export type BootStep = { chave: string; rotulo: string; estado: BootStepState };
  * por um instante, trilha que aparecia depois. Um estado só, e nomeado, é mais
  * honesto que quatro estados parciais.
  *
- * Serve os dois momentos: abrir o aplicativo e trocar de campanha. É o mesmo
- * trabalho, e nomear as duas coisas separadas daria duas telas para manter.
+ * Serve dois momentos, e são o mesmo trabalho: entrar numa campanha pela porta
+ * e trocar de campanha já dentro de uma. Nomear as duas separadas daria duas
+ * telas para manter.
+ *
+ * E serve um terceiro que não é trabalho de campanha nenhuma: o instante entre
+ * montar o Mestre e a porta aparecer, enquanto a lista de campanhas é lida do
+ * banco da máquina. Os passos são dados por quem chama, então esse caso diz o
+ * que ele faz de verdade -- ver `Conteudo`, e a nota lá sobre o rótulo que
+ * mentia.
  */
 export function CampaignSplash({
   nome,

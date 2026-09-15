@@ -57,7 +57,18 @@ export function Mestre() {
   }, [boot, carregarExtensoes, restaurarPreferencias]);
 
   return (
-    <>
+    // `h-dvh`, e não `flex-1` contra o `min-h-full` do `body`: a altura desta
+    // coluna precisa ser DEFINIDA, e a do `body` não é. `flex-1` é
+    // `flex: 1 1 0%`, e uma base em porcentagem contra container de altura
+    // indefinida cai para o tamanho do CONTEÚDO -- então quem tivesse um filho
+    // alto reportava a altura dele para cima e esticava a página, em vez de
+    // rolar por dentro. Foi o que fez a porta empurrar a barra da janela para
+    // fora do quadro quando o painel de novidades chegou ao lado.
+    //
+    // `overflow-hidden` junto porque isto é janela de aplicativo: o que não
+    // couber rola dentro de quem o mostra -- o palco, o painel, a coluna da
+    // porta --, e nunca arrastando a barra de título embora.
+    <div className="flex h-dvh flex-col overflow-hidden">
       <WindowChrome
         // A campanha na ponta esquerda, junto do nome: ela é o que a janela é,
         // e não um controle de gesto que dispute espaço com a barra de
@@ -85,7 +96,7 @@ export function Mestre() {
         error={error}
         onRetry={boot}
       />
-    </>
+    </div>
   );
 }
 
@@ -123,9 +134,32 @@ function Conteudo({
     );
   }
 
-  if (status === "idle" || status === "loading" || !campaign) {
-    // Antes de saber QUAL campanha, o único passo é achá-la. Mesma tela, para
-    // abrir o aplicativo e trocar de campanha lerem como a mesma coisa.
+  // O caminho até a porta. O único trabalho aqui é ler a lista de campanhas do
+  // banco da máquina -- nenhuma campanha é aberta, e é por isso que o rótulo
+  // mudou: dizia "Abrindo a campanha", que virou mentira quando o aplicativo
+  // deixou de reabrir sozinho a mesa da sessão anterior. Quem recarregava a
+  // porta lia que estava entrando numa campanha e então caía na lista.
+  if (status === "idle" || status === "loading") {
+    return (
+      <CampaignSplash
+        passos={[
+          {
+            chave: "campanhas",
+            rotulo: "Procurando as campanhas",
+            estado: "fazendo",
+          },
+        ]}
+      />
+    );
+  }
+
+  // Abrindo: o vault sendo lido do disco, ou um zip sendo descompactado. Sem
+  // isto a porta continuava desenhada e sem reagir durante todo esse tempo, e
+  // só então o carregamento aparecia -- a ordem que fazia parecer travada. A
+  // tela de carregamento entra AGORA, com o trabalho, e o `CampaignBoot` a
+  // substitui por si mesma quando o vault abre, continuando a lista de passos
+  // de onde este parou.
+  if (status === "abrindo") {
     return (
       <CampaignSplash
         passos={[
@@ -138,6 +172,12 @@ function Conteudo({
       />
     );
   }
+
+  // `ready` sem campanha não deveria acontecer -- quem põe `ready` põe as duas
+  // coisas juntas. Se acontecer, a porta é a saída: ela lista o que há e deixa
+  // escolher. Um splash aqui giraria para sempre, esperando um estado que já
+  // chegou.
+  if (!campaign) return <MestreGate />;
 
   // `key` na campanha: trocar de campanha remonta o carregamento inteiro, em
   // vez de exigir que um efeito desfaça estado na mão.

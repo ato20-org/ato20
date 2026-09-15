@@ -7,14 +7,13 @@ import { flushBoard } from "@/lib/store/use-scene-store";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
 import {
   createCampaign,
-  currentCampaign,
   exportCampaign,
   forgetCampaign,
   importCampaign,
+  pickImport,
   openCampaign,
   pickFolder,
   recentCampaigns,
-  reopenLastCampaign,
   type CampaignInfo,
   type RecentEntry,
 } from "@/lib/vault/campaign";
@@ -36,6 +35,17 @@ export type CampaignStatus =
   | "loading"
   /** Nenhuma campanha aberta. A porta mostra recentes e o seletor de pasta. */
   | "escolhendo"
+  /**
+   * Abrindo uma campanha: lendo o vault do disco, ou descompactando um zip.
+   *
+   * Separado de `busy` porque os dois dizem coisas diferentes. `busy` cobre
+   * também a espera por um diálogo do SISTEMA, e ali quem tem de aparecer é o
+   * diálogo -- uma tela de carregamento por baixo dele anunciaria trabalho que
+   * ainda não começou, e que pode nem começar, porque a pessoa ainda vai
+   * decidir. Este aqui é só trabalho já em curso, e é o que a tela de
+   * carregamento espera para aparecer.
+   */
+  | "abrindo"
   | "ready"
   | "error";
 
@@ -55,11 +65,14 @@ type CampaignStore = {
   busy: boolean;
 
   /**
-   * Chamado na montagem do Mestre: reabre a campanha da sessão anterior.
+   * Chamado na montagem do Mestre: põe a tela na porta.
    *
-   * Não cria nada. Abrir uma pasta é ato do mestre, não efeito de abrir a tela
-   * — a versão que criava uma campanha padrão sozinha espalharia pastas pelo
-   * disco de quem só quis olhar.
+   * Não abre campanha nenhuma, e é a regra inteira — montar o Mestre mostra a
+   * lista, e entrar numa mesa é ato do mestre. Vale igual para abrir o
+   * aplicativo e para recarregar a janela.
+   *
+   * Nem abre pasta, nem cria: a versão que criava uma campanha padrão sozinha
+   * espalharia pastas pelo disco de quem só quis olhar.
    */
   boot: () => Promise<void>;
   /** Abre uma campanha já conhecida, pelo caminho. */
@@ -137,15 +150,21 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     set({ status: "loading", error: null });
 
     try {
-      // `current` antes de `reopen`: numa remontagem a campanha já está aberta
-      // no processo nativo, e reabrir releria o disco por nada.
-      const open = (await currentCampaign()) ?? (await reopenLastCampaign());
-
-      if (open) {
-        set({ campaign: open, status: "ready" });
-        return;
-      }
-
+      // A porta, sempre. Não pergunta ao Rust que campanha ele tem aberta, e
+      // isso é a regra inteira: montar o Mestre mostra a lista, e entrar numa
+      // campanha é um clique do mestre.
+      //
+      // Perguntar era o que fazia recarregar a janela cair DENTRO da campanha.
+      // O `close()` devolve a tela para a lista de propósito sem fechar o vault
+      // no Rust -- é o que mantém o daemon servindo a TV e os celulares
+      // enquanto o mestre escolhe --, então na porta o processo nativo segue
+      // com uma campanha aberta. Recarregar zera este store, que é de módulo, e
+      // não zera o Rust: o `boot` perguntava, ouvia "tenho esta", e entrava.
+      //
+      // Remontar o componente não passa por aqui: a guarda acima sai cedo em
+      // `ready`, e o store sobrevive à remontagem por ser de módulo. Quem chega
+      // até este ponto ou abriu o aplicativo, ou recarregou a janela -- e as
+      // duas querem a porta.
       set({
         campaign: null,
         recents: await refreshRecents(),
@@ -159,16 +178,21 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   async choose(path) {
     if (get().busy) return;
 
-    set({ busy: true, error: null });
+    // `abrindo` no mesmo gesto que `busy`: ler o vault do disco leva um tempo
+    // que se vê, e sem isto a porta continuava desenhada e sem reagir até a
+    // campanha estar pronta -- uma travada, e não uma espera.
+    set({ busy: true, status: "abrindo", error: null });
 
     try {
       await fecharOAnterior();
       set({ campaign: await openCampaign(path), status: "ready", busy: false });
     } catch (cause) {
-      // A porta fica: a pasta pode ter sido movida, e a lista é o caminho de
-      // volta para escolher outra.
+      // A porta volta: a pasta pode ter sido movida, e a lista é o caminho de
+      // volta para escolher outra. O `status` tem de voltar junto, senão a tela
+      // de carregamento gira para sempre sobre um erro que ninguém lê.
       set({
         busy: false,
+        status: "escolhendo",
         error: describe(cause),
         recents: await refreshRecents(),
       });
@@ -192,7 +216,9 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const parent = await pickFolder("Onde criar a campanha");
     if (!parent) return;
 
-    set({ busy: true, error: null });
+    // Depois do seletor, nunca antes: enquanto o diálogo do sistema está aberto
+    // não há trabalho em curso, e o que a pessoa tem de ver é o diálogo.
+    set({ busy: true, status: "abrindo", error: null });
 
     try {
       await fecharOAnterior();
@@ -202,7 +228,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
         busy: false,
       });
     } catch (cause) {
-      set({ busy: false, error: describe(cause) });
+      set({ busy: false, status: "escolhendo", error: describe(cause) });
     }
   },
 
@@ -234,23 +260,29 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   async importar() {
     if (get().busy) return;
 
-    set({ busy: true, error: null });
+    // Os dois diálogos ANTES de qualquer marca de ocupado: `null` é o diálogo
+    // fechado sem escolher, não muda nada e não é erro -- e enquanto eles estão
+    // abertos a porta continua sendo o fundo certo, sem tela de carregamento
+    // por baixo anunciando um trabalho que a pessoa ainda pode desistir de
+    // pedir.
+    const escolha = await pickImport();
+    if (!escolha) return;
+
+    // Daqui em diante é o passo mais demorado do aplicativo: o zip pode trazer
+    // gigabytes de acervo para descompactar.
+    set({ busy: true, status: "abrindo", error: null });
 
     try {
       await fecharOAnterior();
-      const info = await importCampaign();
+      const info = await importCampaign(escolha);
 
-      // `null` é o diálogo fechado sem escolher: não muda nada, e não é erro.
-      set(
-        info
-          ? { campaign: info, status: "ready", busy: false }
-          : { busy: false },
-      );
+      set({ campaign: info, status: "ready", busy: false });
     } catch (cause) {
-      // A porta fica, com o motivo: zip que não é campanha e pasta que já tem
+      // A porta volta, com o motivo: zip que não é campanha e pasta que já tem
       // uma são os dois casos comuns, e os dois pedem escolher outra coisa.
       set({
         busy: false,
+        status: "escolhendo",
         error: describe(cause),
         recents: await refreshRecents(),
       });

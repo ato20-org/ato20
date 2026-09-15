@@ -1,11 +1,15 @@
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 
-/// Uma pagina de erro que o daemon desenha sozinho.
+/// Uma pagina que o daemon desenha sozinho.
 ///
 /// HTML e CSS embutidos aqui, sem tocar o bundle, e a razao e direta: em dois
 /// dos tres casos o que falta E o bundle. Uma pagina de erro que depende do
 /// que quebrou nao aparece.
+///
+/// Nem toda ela e erro: a `porta_da_mesa` responde 200. O tipo continua com o
+/// nome do caso que o criou porque a forma e a mesma -- titulo, explicacao,
+/// saida e os links das duas telas --, e a porta precisa exatamente disso.
 ///
 /// Existe porque a versao anterior devolvia `text/plain`: "tela nao encontrada"
 /// em fonte monoespacada no canto superior esquerdo de uma tela branca. Isso e
@@ -37,6 +41,31 @@ impl ErrorPage {
             explicacao: "O endereço está diferente do que a mesa usa. Só duas telas acompanham \
                          a sessão: a TV e o celular de cada jogador.",
             saida: Some("Confira o endereço, ou escaneie de novo o QR que o mestre está mostrando."),
+            com_telas: true,
+        }
+    }
+
+    /// A raiz, para quem digitou o IP do notebook no navegador.
+    ///
+    /// Desenhada AQUI e nao no bundle, e a diferenca nao e de gosto. A raiz do
+    /// bundle e o Mestre -- o aplicativo abre nela --, e o Mestre le e grava a
+    /// pasta da campanha no disco. Servir esse HTML a rede local seria oferecer
+    /// a interface do dono da mesa a qualquer aparelho no wi-fi. Ela nao
+    /// funcionaria (o IPC do Tauri nao existe fora da webview), mas o endereco
+    /// mais adivinhavel da rede -- o IP puro -- nao e lugar para descobrir isso.
+    ///
+    /// Quem chega aqui quase sempre e alguem da mesa que digitou o IP em vez de
+    /// escanear o QR. O que essa pessoa quer sao as duas telas, e e so o que
+    /// esta pagina tem.
+    ///
+    /// 200, e nao 404: o endereco esta certo, e quem o digitou acertou.
+    pub fn porta_da_mesa() -> Self {
+        Self {
+            status: StatusCode::OK,
+            titulo: "Entrar na mesa",
+            explicacao: "Duas telas acompanham a sessão. O mestre dita o código da campanha no \
+                         começo dela.",
+            saida: None,
             com_telas: true,
         }
     }

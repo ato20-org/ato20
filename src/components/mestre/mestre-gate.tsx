@@ -11,7 +11,6 @@ import {
   FolderOpen,
   FolderPlus,
   Hourglass,
-  Laptop,
   Loader2,
   MonitorOff,
   Smartphone,
@@ -32,7 +31,7 @@ import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
 import type { RecentEntry } from "@/lib/vault/campaign";
-import { NovidadesDaVersao } from "@/components/desktop/versoes-lista";
+import { NovidadesLaterais } from "@/components/desktop/versoes-lista";
 
 /**
  * Porta do Mestre: qual pasta abrir.
@@ -78,15 +77,30 @@ function NoApp() {
       </p>
 
       {/* Para as duas telas que FUNCIONAM aqui: quem caiu neste endereço pelo
-          navegador é quase sempre alguém da mesa que digitou o IP. */}
-      <Button
-        render={<Link href="/" />}
-        nativeButton={false}
-        variant="outline"
-        size="sm"
-      >
-        Ver as telas da mesa
-      </Button>
+          navegador é quase sempre alguém da mesa que digitou o IP. Os dois
+          links, e não um só para a raiz: a raiz É esta tela desde que o
+          aplicativo virou desktop, então mandar para lá seria mandar para
+          aqui. */}
+      <div className="flex gap-2">
+        <Button
+          render={<Link href="/espectador" />}
+          nativeButton={false}
+          variant="outline"
+          size="sm"
+        >
+          <Tv aria-hidden />
+          A TV da mesa
+        </Button>
+        <Button
+          render={<Link href="/jogador" />}
+          nativeButton={false}
+          variant="outline"
+          size="sm"
+        >
+          <Smartphone aria-hidden />
+          O teu celular
+        </Button>
+      </div>
     </Centered>
   );
 }
@@ -109,10 +123,9 @@ function CampaignDoor() {
   // maioria das aberturas, ela É a resposta: o mestre está voltando para a
   // campanha em que estava.
   const [ultima, ...outras] = recents;
-  const vazio = recents.length === 0;
 
   return (
-    <Porta>
+    <Porta lateral={<NovidadesLaterais />}>
       <header className="flex flex-col items-center gap-3 text-center">
         {/* A logo com o NOME ao lado, e não um ícone de pasta.
             Esta é a primeira tela do aplicativo -- antes dela não há nada --,
@@ -131,28 +144,14 @@ function CampaignDoor() {
           <span className="text-xl font-semibold tracking-[0.2em]">ATO20</span>
         </div>
 
-        {/* Na primeira abertura o título é o que o aplicativo É, e não o que
-            fazer nele. Quem chegou aqui sem campanha nenhuma ainda não decidiu
-            usar isto -- "Comece uma campanha" mandava agir antes de dizer do
-            que se tratava, e os três botões logo abaixo já são o convite. */}
+        {/* Um título só, com ou sem campanha na lista. Eram dois -- "Sua IDE
+            para gerenciar mesas de RPG" na primeira abertura, "Bem-vindo ao
+            ATO20" depois --, e com eles mudavam o subtítulo, os três cartões
+            de apresentação e o peso dos botões. Lado a lado as duas pareciam
+            telas diferentes do mesmo aplicativo, e a porta é UMA. */}
         <h1 className="text-2xl font-semibold tracking-tight">
-          {vazio ? "Sua IDE para gerenciar mesas de RPG" : "Bem-vindo ao ATO20"}
+          Bem-vindo ao ATO20
         </h1>
-
-        {/* A apresentação só na primeira vez. Quem já tem campanha na lista
-            já sabe o que o aplicativo é, e a explicação passa a ser texto
-            entre ele e o botão que ele veio clicar.
-
-            O texto é o do `README.md`, e de propósito: duas descrições do
-            mesmo programa divergem na primeira vez que alguém corrige uma
-            delas. */}
-        {vazio ? (
-          <p className="text-muted-foreground max-w-md text-sm">
-            Feita para jogo presencial: o mestre monta a próxima cena no
-            notebook enquanto a mesa continua vendo a atual na TV, e cada
-            jogador acompanha pelo próprio celular.
-          </p>
-        ) : null}
       </header>
 
       {ultima ? (
@@ -181,17 +180,18 @@ function CampaignDoor() {
         </Secao>
       ) : null}
 
-      {vazio ? <Introducao /> : null}
-
       <Estante />
 
-      {/* As três em linha, e não empilhadas ocupando a largura.
-          Com a lista acima elas são saída secundária, e três botões de largura
-          cheia competiam com as campanhas pelo mesmo peso visual. Sem lista
-          nenhuma, criar vira a ação principal -- é o que sobra para fazer. */}
+      {/* As três em linha, e não empilhadas ocupando a largura: com a lista
+          acima elas são saída secundária, e três botões de largura cheia
+          competiam com as campanhas pelo mesmo peso visual.
+
+          O mesmo peso nas três, com lista ou sem ela. Antes "Criar campanha"
+          virava botão cheio na primeira abertura, e era metade do que fazia a
+          porta vazia parecer outra tela. */}
       <div className="flex flex-wrap items-center justify-center gap-2">
         <Button
-          variant={vazio ? "outline" : "ghost"}
+          variant="ghost"
           disabled={busy}
           onClick={() => void openFolder()}
         >
@@ -200,7 +200,7 @@ function CampaignDoor() {
         </Button>
 
         <Button
-          variant={vazio ? "default" : "ghost"}
+          variant="ghost"
           disabled={busy}
           onClick={() => setCreating(true)}
         >
@@ -220,76 +220,7 @@ function CampaignDoor() {
       {error ? (
         <p className="text-destructive text-center text-sm">{error}</p>
       ) : null}
-
-      {/* Por último, e de propósito: quem abriu o aplicativo veio entrar numa
-          mesa, e as novidades são o que se lê quando já se resolveu isso.
-          Acima dos botões elas estariam entre a pessoa e a campanha. */}
-      <NovidadesDaVersao />
     </Porta>
-  );
-}
-
-/**
- * O que o ATO20 é, para quem abriu pela primeira vez.
- *
- * A porta pedia uma pasta a alguém que ainda não sabia o que ia acontecer com
- * ela. Faltava a coisa mais simples: são TRÊS telas, e entender isso é
- * entender o aplicativo -- o resto se descobre usando.
- *
- * As três em vez de uma lista de recursos. Mapa, névoa, dados, trilha e
- * caderno são o que o ATO20 FAZ, e enumerá-los aqui seria um folheto; o que
- * uma pessoa precisa para decidir se isto serve à mesa dela é a FORMA, e a
- * forma é que a mesa presencial tem um notebook, uma TV e os celulares.
- *
- * Só no estado vazio. Quem já tem campanha na lista já passou por aqui, e uma
- * apresentação permanente vira aquele painel que todo mundo aprende a pular.
- */
-function Introducao() {
-  return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <Tela
-        icone={Laptop}
-        nome="Mestre"
-        onde="no aplicativo"
-        oque="A tela do mestre: monta as cenas, arrasta as imagens, esconde regiões e decide o que entra no ar."
-      />
-      <Tela
-        icone={Tv}
-        nome="Espectador"
-        onde="na TV da mesa"
-        oque="Só o palco, sem controle nenhum. Fica na TV atrás do mestre, e mostra a cena que está no ar."
-      />
-      <Tela
-        icone={Smartphone}
-        nome="Jogador"
-        onde="no celular"
-        oque="O celular de cada jogador: a ficha dele, o caderno de notas e os dados que ele joga na mesa."
-      />
-    </div>
-  );
-}
-
-function Tela({
-  icone: Icone,
-  nome,
-  onde,
-  oque,
-}: {
-  icone: LucideIcon;
-  nome: string;
-  /** Onde ela roda. É o que separa as três, mais que o nome. */
-  onde: string;
-  oque: string;
-}) {
-  return (
-    <div className="border-border/60 bg-input/20 flex flex-col gap-1.5 rounded-lg border p-3">
-      <Icone className="text-muted-foreground size-4" aria-hidden />
-      <p className="text-sm font-medium">
-        {nome}{" "}
-        <span className="text-muted-foreground font-normal">· {onde}</span>
-      </p>
-      <p className="text-muted-foreground text-xs leading-relaxed">{oque}</p>
-    </div>
   );
 }
 
@@ -518,17 +449,49 @@ function Numero({
  * a procurar onde cada linha começa. O cabeçalho continua centrado, porque ele
  * é apresentação e não escolha.
  */
-function Porta({ children }: { children: React.ReactNode }) {
+/**
+ * O corpo da porta: a coluna do mestre e, encostado na borda, o painel lateral.
+ *
+ * Em duas colunas a rolagem é de CADA UMA, e o `lg:overflow-hidden` aqui é o que
+ * garante isso: sem ele as duas rolariam juntas na página, e o painel deixaria
+ * de ser painel -- descer para ler uma versão antiga levaria a lista de
+ * campanhas embora.
+ *
+ * Empilhado, o contrário: a rolagem volta a ser da página. Com o corte aqui e a
+ * área de rolagem lá dentro, o painel que vem depois da coluna ficaria fora do
+ * quadro e sem como ser alcançado -- a altura que ele precisaria para rolar por
+ * dentro só existe quando ele é uma COLUNA ao lado, esticada pela linha.
+ *
+ * O painel traz a própria largura, a própria divisa e o próprio `aside`; aqui
+ * ele é só o segundo filho da linha. É o que permite não desenhar nada quando
+ * não há o que mostrar, em vez de deixar uma coluna vazia ocupando espaço.
+ *
+ * Linha só a partir de `lg`. Abaixo disso o painel empilha embaixo: a janela do
+ * aplicativo tem `minWidth: 1024` e nunca chega lá, mas as mesmas telas abrem no
+ * navegador em `pnpm dev`, e 20rem espremidas ao lado da lista de campanhas não
+ * servem a ninguém.
+ */
+function Porta({
+  children,
+  lateral,
+}: {
+  children: React.ReactNode;
+  lateral?: React.ReactNode;
+}) {
   return (
-    // `my-auto` no filho em vez de `items-center` no pai, e rolagem no pai: a
-    // lista guarda doze campanhas, e numa janela baixa a coluna passa da tela.
-    // Centralizar por `items-center` com estouro corta o topo -- o conteúdo
-    // sobe acima do início da área rolável e vira inalcançável. Assim ela
-    // centraliza quando cabe e rola quando não cabe.
-    <div className="flex flex-1 justify-center overflow-y-auto p-6">
-      <div className="my-auto flex w-full max-w-xl flex-col gap-6">
-        {children}
+    <div className="flex flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+      {/* `my-auto` no filho em vez de `items-center` no pai, e rolagem no pai:
+          a lista guarda doze campanhas, e numa janela baixa a coluna passa da
+          tela. Centralizar por `items-center` com estouro corta o topo -- o
+          conteúdo sobe acima do início da área rolável e vira inalcançável.
+          Assim ela centraliza quando cabe e rola quando não cabe. */}
+      <div className="flex flex-1 justify-center p-6 lg:min-h-0 lg:overflow-y-auto">
+        <div className="my-auto flex w-full max-w-xl flex-col gap-6">
+          {children}
+        </div>
       </div>
+
+      {lateral}
     </div>
   );
 }

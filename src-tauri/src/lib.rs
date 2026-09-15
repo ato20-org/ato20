@@ -122,9 +122,11 @@ pub fn run() {
             // instalador porque o AppImage NAO TEM instalador: ver `appimage`.
             appimage::atalho(&app.path().app_data_dir()?);
 
-            // A campanha comeca fechada. Reabrir a ultima e um comando que a
-            // tela chama, para uma pasta que desapareceu ter onde aparecer
-            // como erro em vez de derrubar a abertura da janela.
+            // A campanha comeca fechada, e continua fechada ate o mestre
+            // escolher uma na porta. O Rust nao reabre a da sessao anterior:
+            // abrir sozinho uma pasta que pode ter sumido, ou estar num volume
+            // desconectado, seria trabalho de disco antes de a janela existir,
+            // com o erro sem onde aparecer.
             let vault = Arc::new(RwLock::new(None));
 
             // O daemon sobe ANTES de qualquer campanha: ele le a campanha
@@ -158,12 +160,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::daemon_addr,
-            commands::campaign_current,
             commands::campaign_recents,
             commands::campaign_forget,
             commands::campaign_open,
             commands::campaign_create,
-            commands::campaign_reopen_last,
             commands::board_load,
             commands::board_save,
             commands::board_save_patch,
@@ -318,8 +318,9 @@ fn decodificar(segmento: &str) -> Option<String> {
 ///
 /// Em desenvolvimento o `cargo run` roda com `src-tauri/` como diretorio
 /// corrente, e o `out/` esta um nivel acima. `None` e estado valido: quem nunca
-/// rodou `pnpm build` tem o Mestre funcionando e as telas de espectador
-/// dizendo o que falta, em vez de uma tela branca.
+/// rodou `pnpm build` tem o Mestre funcionando -- a janela le o bundle
+/// embutido, nao este -- e as telas de espectador dizendo o que falta, em vez
+/// de uma tela branca.
 ///
 /// A ORDEM depende do perfil, e isso custou um bug. O `resource_dir()/out` e um
 /// RETRATO, copiado pelo Tauri no momento do build do Rust; o `../out` e a
@@ -340,5 +341,9 @@ fn find_web_root(app: &tauri::AppHandle) -> Option<PathBuf> {
     candidates
         .into_iter()
         .flatten()
-        .find(|dir| dir.join("index.html").is_file())
+        // `espectador.html`, e nao `index.html`: o sinal de que o bundle serve
+        // tem de ser um arquivo que o daemon SIRVA. O `index.html` e o Mestre,
+        // que esta porta recusa de proposito (ver `porta_da_mesa`) -- prova-lo
+        // presente seria conferir justamente o arquivo que nao importa aqui.
+        .find(|dir| dir.join("espectador.html").is_file())
 }

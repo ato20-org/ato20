@@ -35,9 +35,6 @@ yarn-error.log*
 # o exemplo e documentacao: precisa ir para o repositorio
 !.env.example
 
-# vercel
-.vercel
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts

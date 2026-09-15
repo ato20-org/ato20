@@ -53,8 +53,9 @@ function read(): Stored | null {
  * arrumação de bancada.
  *
  * Lido do `localStorage` só depois da montagem, por `restore()`. Ler na criação
- * do store daria divergência de hidratação: `/mestre` é pré-renderizado com
- * os padrões, e o cliente chegaria com outro valor no primeiro render.
+ * do store daria divergência de hidratação: a tela do Mestre é a raiz e é
+ * pré-renderizada com os padrões, e o cliente chegaria com outro valor no
+ * primeiro render.
  */
 export const usePanelsStore = create<PanelsStore>((set, get) => ({
   left: true,
