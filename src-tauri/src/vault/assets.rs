@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -140,13 +140,118 @@ pub fn import(
     origens: &[PathBuf],
     escopo: Option<&str>,
 ) -> AppResult<(Vec<AssetMeta>, Vec<String>)> {
+    let feito = import_acompanhado(vault, origens, escopo, &mut Silencio)?;
+
+    Ok((feito.aceitos, feito.recusados))
+}
+
+/// Quem assiste a copia, bloco a bloco.
+///
+/// A copia de um mapa de 80 MB leva segundos, e ate aqui a unica noticia dela
+/// era a resposta no fim. `avancou` recebe o quanto ja foi de CADA arquivo, e
+/// `cancelado` e consultado entre blocos e entre arquivos -- e o que permite
+/// desistir no meio sem esperar o lote inteiro.
+pub trait Acompanhante {
+    /// Bytes copiados ate agora deste arquivo, do total dele.
+    fn avancou(&mut self, nome: &str, copiado: u64, total: u64);
+
+    /// A copia acabou e a MINIATURA esta sendo gerada. Etapa a parte porque
+    /// e ela quem demora num arquivo local: copiar 17 MB do mesmo disco leva
+    /// milissegundos, decodificar e reduzir o JPEG leva segundos -- e sem este
+    /// aviso a barra parava em 100% com o toast ainda dizendo "importando".
+    fn miniatura(&mut self, _nome: &str) {}
+
+    /// Pediram para parar. O arquivo em andamento e descartado e os
+    /// seguintes nem comecam.
+    fn cancelado(&self) -> bool {
+        false
+    }
+}
+
+/// Acompanhante de quem nao quer saber: a importacao de um arquivo so, feita
+/// por dentro de outro comando, e os testes.
+pub struct Silencio;
+
+impl Acompanhante for Silencio {
+    fn avancou(&mut self, _nome: &str, _copiado: u64, _total: u64) {}
+}
+
+/// O que `import_acompanhado` devolve.
+pub struct Importado {
+    pub aceitos: Vec<AssetMeta>,
+    pub recusados: Vec<String>,
+    /// Parou porque pediram, e nao porque acabou. O que ja entrou fica.
+    pub cancelado: bool,
+}
+
+/// Tamanho do bloco da copia. Um mebibyte: grande o bastante para o disco nao
+/// ver diferenca de um `fs::copy`, pequeno o bastante para o progresso mexer
+/// varias vezes por segundo num mapa de 80 MB.
+const BLOCO: usize = 1024 * 1024;
+
+/// Copia em blocos, avisando a cada um e parando se pedirem.
+///
+/// `Ok(false)` e cancelamento: o destino parcial ja foi apagado. Um `fs::copy`
+/// teria sido uma linha, mas e opaco -- nao ha como saber quanto foi nem como
+/// interromper.
+fn copiar_acompanhando(
+    origem: &Path,
+    destino: &Path,
+    nome: &str,
+    total: u64,
+    quem: &mut dyn Acompanhante,
+) -> std::io::Result<bool> {
+    use std::io::{Read, Write};
+
+    let mut de = std::fs::File::open(origem)?;
+    let mut para = std::fs::File::create(destino)?;
+    let mut buffer = vec![0u8; BLOCO];
+    let mut copiado: u64 = 0;
+
+    quem.avancou(nome, 0, total);
+
+    loop {
+        if quem.cancelado() {
+            drop(para);
+            let _ = std::fs::remove_file(destino);
+            return Ok(false);
+        }
+
+        let lidos = de.read(&mut buffer)?;
+        if lidos == 0 {
+            break;
+        }
+
+        para.write_all(&buffer[..lidos])?;
+        copiado += lidos as u64;
+        quem.avancou(nome, copiado, total);
+    }
+
+    para.flush()?;
+
+    Ok(true)
+}
+
+/// `import`, com alguem assistindo. Ver `Acompanhante`.
+pub fn import_acompanhado(
+    vault: &Vault,
+    origens: &[PathBuf],
+    escopo: Option<&str>,
+    quem: &mut dyn Acompanhante,
+) -> AppResult<Importado> {
     std::fs::create_dir_all(vault.assets_dir())?;
 
     let mut aceitos = Vec::new();
     let mut recusados = Vec::new();
+    let mut cancelado = false;
     let mut indice = index(vault)?;
 
     for origem in origens {
+        if quem.cancelado() {
+            cancelado = true;
+            break;
+        }
+
         let nome = origem
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -201,9 +306,17 @@ pub fn import(
         // Binario primeiro, indice depois -- mesma ordem de `adopt`, e pelo
         // mesmo motivo: o pior caso e um binario orfao, que nao aparece em
         // lista nenhuma, e nao uma linha apontando para o vazio.
-        if let Err(cause) = std::fs::copy(origem, asset_path(vault, &meta)) {
-            recusados.push(format!("{nome}: {cause}"));
-            continue;
+        match copiar_acompanhando(origem, &asset_path(vault, &meta), &nome, tamanho, quem) {
+            Ok(true) => {}
+            Ok(false) => {
+                cancelado = true;
+                break;
+            }
+            Err(cause) => {
+                let _ = std::fs::remove_file(asset_path(vault, &meta));
+                recusados.push(format!("{nome}: {cause}"));
+                continue;
+            }
         }
 
         // Aquece a MINIATURA aqui, e nao so sob demanda: o arquivo acabou de
@@ -215,6 +328,16 @@ pub fn import(
         // pode nem existir nesta sessao, e gerar um JPEG de 1920px por arquivo
         // importado cobraria segundos de uma importacao de trinta mapas.
         if meta.kind == "image" {
+            // Cancelar aqui ainda vale: a copia acabou, mas o arquivo nao esta
+            // no indice, e apaga-lo deixa tudo como antes.
+            if quem.cancelado() {
+                let _ = std::fs::remove_file(asset_path(vault, &meta));
+                cancelado = true;
+                break;
+            }
+
+            quem.miniatura(&nome);
+
             if let Err(cause) = super::variantes::ensure(vault, super::variantes::Variante::Mini, &meta) {
                 log::warn!("acervo: {} entrou sem miniatura: {cause}", meta.name);
             }
@@ -230,7 +353,11 @@ pub fn import(
         write_index(vault, &indice)?;
     }
 
-    Ok((aceitos, recusados))
+    Ok(Importado {
+        aceitos,
+        recusados,
+        cancelado,
+    })
 }
 
 pub fn delete(vault: &Vault, id: &str) -> AppResult<()> {

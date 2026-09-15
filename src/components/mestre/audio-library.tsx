@@ -1,6 +1,6 @@
 "use client";
 
-import { Music, Trash2, Upload } from "lucide-react";
+import { Loader2, Music, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,7 +23,7 @@ import type { AssetMeta } from "@/types/scene";
  * painel só a escolhe.
  */
 export function AudioLibrary() {
-  const { assets, importar, remove } = useAssetList("audio");
+  const { assets, importar, importando, remove } = useAssetList("audio");
 
   const scenes = useSceneStore((state) => state.board?.scenes);
 
@@ -37,10 +37,11 @@ export function AudioLibrary() {
           className="w-full"
           variant="outline"
           size="sm"
+          disabled={importando}
           onClick={() => void importar()}
         >
-          <Upload />
-          Importar sons
+          {importando ? <Loader2 className="animate-spin" /> : <Upload />}
+          {importando ? "Importando…" : "Importar sons"}
         </Button>
       </div>
 

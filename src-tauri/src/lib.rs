@@ -170,6 +170,7 @@ pub fn run() {
             commands::board_save_patch,
             commands::asset_list,
             commands::asset_import,
+            commands::asset_import_cancelar,
             commands::asset_set_escopo,
             commands::asset_delete,
             commands::asset_set_folder,

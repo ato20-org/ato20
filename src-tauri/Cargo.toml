@@ -142,3 +142,27 @@ tauri-plugin-process = "2"
 tempfile = "3"
 # `#[tokio::test]` para exercitar o router sem abrir porta.
 tokio = { version = "1", features = ["rt", "macros"] }
+
+# As DEPENDENCIAS otimizadas mesmo em `tauri dev`; o codigo do aplicativo
+# continua em debug, com os simbolos e a compilacao rapida de sempre.
+#
+# Existe por causa da imagem. Decodificar um JPEG de 8192x6144 e reduzi-lo a
+# 160px passa por `image`, `zune-jpeg` e `color_quant`, e em debug essas
+# bibliotecas rodam dezenas de vezes mais devagar do que em release -- medido
+# com o mapa real: 26,4 s a miniatura em debug puro, 7,3 s com elas otimizadas,
+# e 1,08 s o palco em release. A mesa roda release; quem
+# desenvolve via a importacao "travar" por quase um minuto e nao era o produto,
+# era o perfil.
+#
+# Custa uma compilacao mais longa das dependencias na PRIMEIRA vez, e nada
+# depois: elas nao mudam entre um `cargo build` e outro.
+[profile.dev.package."*"]
+opt-level = 3
+
+# E o proprio aplicativo com a otimizacao mais leve. Ainda tem simbolos e
+# `debug_assertions`; o que ganha e o laco de pixel, que sem nada e uma chamada
+# com checagem de limite por byte. Medido no `metades` do mapa real: 2,4 s em
+# `opt-level = 0`, 0,15 s aqui. A miniatura inteira, decodificar incluso, cai
+# de 3,4 s para 0,84 s.
+[profile.dev]
+opt-level = 1

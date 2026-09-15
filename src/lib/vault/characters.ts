@@ -92,7 +92,7 @@ export async function preencherCampoComArquivo(
   // o que se escolhe com o que já foi escolhido -- dez personagens davam vinte
   // linhas que ninguém vai arrastar para o mapa.
   const resultado = await importAssets("image", "personagem");
-  if (!resultado) return null;
+  if (!resultado || resultado.cancelado) return null;
 
   const primeiro = resultado.aceitos[0];
   if (!primeiro)
