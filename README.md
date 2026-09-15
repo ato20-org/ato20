@@ -437,17 +437,21 @@ o texto dos jogadores, que era o que estava ilegível de todo jeito.
 
 ## Não há deploy
 
-O `vercel.json` desliga o deploy por Git. Ele existe porque o repositório nasceu
-como aplicação web na Vercel, e a integração continuou ligada depois de o projeto
-virar aplicativo de desktop — cada push publicava o export estático das telas.
+Este repositório não publica em lugar nenhum. O que ele produz é pacote de
+desktop, e o único jeito de as telas irem ao ar é alguém abrir o aplicativo.
 
-O que subia não era um site quebrado por acidente: era um site que **não pode
-funcionar**. As telas de Espectador e Jogador falam com o daemon que roda na
-máquina do mestre, e num domínio público não há daemon nenhum para responder.
-Quem abrisse veria a porta pedindo o código de uma mesa que não existe.
+Nem sempre foi assim: o repositório nasceu como aplicação web na Vercel, e a
+integração continuou ligada depois de o projeto virar aplicativo de desktop —
+cada push publicava o export estático das telas. O que subia não era um site
+quebrado por acidente: era um site que **não pode funcionar**. As telas de
+Espectador e Jogador falam com o daemon que roda na máquina do mestre, e num
+domínio público não há daemon nenhum para responder. Quem abrisse veria a porta
+pedindo o código de uma mesa que não existe.
 
-Desligar aqui impede novos deploys. **Não apaga o projeto nem tira do ar o que
-já foi publicado** — isso é no painel da Vercel, e é lá que o domínio se remove.
+Havia aqui um `vercel.json` que desligava o deploy por Git. Ele saiu junto com a
+conexão, no painel da Vercel — é lá que a integração se remove de verdade, e é lá
+também que se apaga o projeto e o domínio de qualquer coisa que já tenha sido
+publicada. Um arquivo no repositório nunca fez isso.
 
 ## Empacotar
 
