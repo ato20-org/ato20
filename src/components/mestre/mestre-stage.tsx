@@ -51,6 +51,7 @@ import {
   scaleGroup,
 } from "@/lib/geometry/group";
 import { CamadasDeExtensoes } from "@/components/mestre/camadas-de-extensoes";
+import { TokenFantasma } from "@/components/mestre/token-fantasma";
 import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
@@ -1017,8 +1018,12 @@ export function MestreStage({ scene }: { scene: Scene }) {
   );
 
   /**
-   * Insere onde foi solto: imagem do acervo, item de inventário ou token de
-   * personagem.
+   * Insere onde foi solto: imagem do acervo ou item de inventário.
+   *
+   * O token de personagem saiu daqui e tem caminho próprio -- ver
+   * `TokenFantasma` e `useTokenDrag`. O arrasto do navegador não entrega a
+   * prévia que aquele gesto precisa, e estes dois seguem nele porque mapa e
+   * item de inventário nascem com tamanho que não se escolhe no ar.
    *
    * Centrada no cursor, e não no plano como faz o `+` do acervo: o ponto do
    * gesto é a informação que o arrasto carrega, e ignorá-lo obrigaria a
@@ -1038,14 +1043,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
     // zero — a imagem cairia no canto da cena em vez de onde a mão soltou.
     const center = toScene(event.clientX, event.clientY);
 
-    const soltar = (
-      assetId: string,
-      largura?: number,
-      altura?: number,
-      // De quem é o token, quando veio da lista de personagens. `undefined` é o
-      // caso do acervo e do inventário: imagem que não é de ninguém.
-      personagemId?: string,
-    ) => {
+    const soltar = (assetId: string, largura?: number, altura?: number) => {
       const size =
         largura && altura
           ? fitInitialSize(largura, altura)
@@ -1056,19 +1054,13 @@ export function MestreStage({ scene }: { scene: Scene }) {
       select([
         addItem(scene.id, {
           assetId,
-          personagemId,
           ...boxAround(center, size.x, size.y),
         }),
       ]);
     };
 
     if (payload.assetId) {
-      soltar(
-        payload.assetId,
-        payload.naturalWidth,
-        payload.naturalHeight,
-        payload.personagemId,
-      );
+      soltar(payload.assetId, payload.naturalWidth, payload.naturalHeight);
       return;
     }
 
@@ -1135,6 +1127,11 @@ export function MestreStage({ scene }: { scene: Scene }) {
           gesto é o listener de deslocamento do `SceneStage`, que fica num
           ancestral e dispararia junto se este também respondesse. */}
       <div
+        // A marca que o arrasto de token procura sob o ponteiro para saber se
+        // está sobre o mapa. Por atributo e não por ref no store: quem pergunta
+        // é `document.elementFromPoint`, que devolve o nó de cima -- e é
+        // justamente "tem uma janela da bancada por cima?" o que se quer saber.
+        data-palco
         className="absolute inset-0"
         style={{ cursor: canPan ? "grab" : aiming ? "crosshair" : undefined }}
         onPointerDown={panMode ? undefined : handleCanvasPointerDown}
@@ -1206,6 +1203,11 @@ export function MestreStage({ scene }: { scene: Scene }) {
           Dentro do plano, porém: o dado é jogado SOBRE o mapa, e tem de
           acompanhar zoom e deslocamento como a névoa e os riscos acompanham. */}
       <DadoLayer />
+
+      {/* A sombra do token que está sendo arrastado da lista de personagens.
+          Irmã das três acima, e fora do `SceneLayer` pelo mesmo motivo: é
+          decisão em andamento do mestre, e a TV só recebe o que foi decidido. */}
+      <TokenFantasma sceneId={scene.id} grid={scene.grid} />
 
       {/* As camadas das extensões, e aqui pelo mesmo motivo das três acima: o
           `SceneLayer` é o componente que desenha na TV, e plugin só alcança o

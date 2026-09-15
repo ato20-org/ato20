@@ -41,16 +41,6 @@ export type AssetDragPayload = {
   naturalHeight?: number;
   /** Item de inventário, a ser resolvido em asset no momento em que for solto. */
   item?: { personagemId: string; itemId: string };
-  /**
-   * De quem é o token, quando o arrasto saiu da lista de personagens.
-   *
-   * Vai junto do `assetId` da miniatura, e não no lugar dele: o palco insere a
-   * imagem pelo mesmo caminho de sempre, e o que este campo acrescenta é o item
-   * saber de quem ele é -- o que traz a linha na lista de retratos e faz a
-   * camada se chamar "Edgar" em vez de "Personagem - Edgar.png". Mesmo efeito do
-   * botão `PorNoMapa`, pelo gesto de arrastar.
-   */
-  personagemId?: string;
 };
 
 export function writeAssetDrag(transfer: DataTransfer, asset: AssetMeta): void {
@@ -58,33 +48,6 @@ export function writeAssetDrag(transfer: DataTransfer, asset: AssetMeta): void {
     assetId: asset.id,
     naturalWidth: asset.naturalWidth,
     naturalHeight: asset.naturalHeight,
-  });
-}
-
-/**
- * Arrasta o token de um personagem para o mapa.
- *
- * A miniatura JÁ é um arquivo do acervo -- é por isso que ela é asset e não
- * anexo, para alcançar a TV --, então isto é o arrasto do acervo com o dono
- * marcado. O palco não precisa aprender um segundo tipo: ele já aceita
- * `ASSET_DRAG_TYPE`, já pinta a borda no `dragover`, e passa o `personagemId`
- * adiante ao criar o item.
- *
- * Quem não tem miniatura não é arrastável, e é o mesmo impedimento do botão:
- * sem o registro do acervo não se sabe a proporção da imagem, e token com
- * tamanho chutado fica esticado PARA SEMPRE -- o gizmo do item trava a
- * proporção. Ver `PorNoMapa`.
- */
-export function writeCharacterDrag(
-  transfer: DataTransfer,
-  personagemId: string,
-  miniatura: AssetMeta,
-): void {
-  escrever(transfer, {
-    assetId: miniatura.id,
-    naturalWidth: miniatura.naturalWidth,
-    naturalHeight: miniatura.naturalHeight,
-    personagemId,
   });
 }
 

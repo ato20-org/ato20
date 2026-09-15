@@ -18,11 +18,12 @@ import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useCharacterOwners } from "@/hooks/use-character-owners";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
-import { writeCharacterDrag } from "@/lib/mestre/asset-drag";
+import { useTokenDrag } from "@/hooks/use-token-drag";
 import { MINIATURA } from "@/lib/miniatura";
 import { normaliza } from "@/lib/search";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
+import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import { createCharacter } from "@/lib/vault/characters";
 import type { Personagem } from "@/types/character";
@@ -49,6 +50,20 @@ import { cn } from "@/lib/utils";
 const TAMANHO_PADRAO = { x: 140, y: 187 };
 
 /**
+ * Com que tamanho o token entra no mapa, em unidades de cena.
+ *
+ * Uma funcao e nao duas contas porque os dois gestos que poem o token -- o
+ * botao, que poe no centro, e o arrasto, que poe onde a mao soltou -- tem de
+ * concordar: o arrasto ainda multiplica isto pelo que a roda pediu, e uma base
+ * diferente faria a roda parada dar um token de outro tamanho que o botao.
+ */
+function tamanhoDoToken(miniatura: AssetMeta | undefined) {
+  return miniatura?.naturalWidth && miniatura.naturalHeight
+    ? fitInitialSize(miniatura.naturalWidth, miniatura.naturalHeight)
+    : TAMANHO_PADRAO;
+}
+
+/**
  * A lista de personagens da campanha.
  *
  * Só a lista. Antes isto era a coluna esquerda de um diálogo de 768 pixels que
@@ -65,6 +80,19 @@ const TAMANHO_PADRAO = { x: 140, y: 187 };
 export function CharactersBody() {
   const { personagens, jogadores, recarregar } = useCharacters();
   const abrir = useAbrirJanela();
+  const arrastarToken = useTokenDrag();
+  /**
+   * Quem está no ar agora, para a linha esmaecer enquanto o token viaja.
+   *
+   * O único sinal na lista de que o gesto pegou: a sombra do token só aparece
+   * depois que o ponteiro alcança o mapa, e no caminho até lá -- sobre a
+   * própria janela de personagens -- nada na tela mudava. O arrasto do
+   * navegador dava esse sinal de graça, com a imagem colada no cursor.
+   *
+   * Só o id, e não o arrasto inteiro: este é o único campo que muda uma vez por
+   * gesto em vez de uma vez por quadro.
+   */
+  const noAr = useTokenDragStore((state) => state.arrasto?.personagemId);
 
   /** Quem joga cada personagem. É o que a busca também alcança. */
   const donos = useCharacterOwners(jogadores);
@@ -188,23 +216,32 @@ export function CharactersBody() {
                     // Só quem pode ir ao mapa ganha a mão de arrastar: uma
                     // linha que promete o gesto e não o cumpre é pior que uma
                     // que não o promete.
-                    miniatura ? "cursor-grab active:cursor-grabbing" : null,
+                    miniatura
+                      ? "cursor-grab select-none active:cursor-grabbing"
+                      : null,
+                    noAr === personagem.id && "opacity-40",
                   )}
                   // Arrastável inteira, e não só o rosto: o quadrado de 28px
-                  // seria o menor alvo da tela. Mesma decisão da linha do
-                  // acervo, e é dela que o palco recebe o mesmo tipo de arrasto.
+                  // seria o menor alvo da tela.
                   //
-                  // O clique no nome continua abrindo a ficha: arrastar exige
-                  // mover o ponteiro, e o navegador só dispara um dos dois.
-                  draggable={Boolean(miniatura)}
-                  onDragStart={(event) => {
+                  // Gesto próprio e não o arrasto do navegador, ao contrário da
+                  // linha do acervo: é o que permite a sombra do token no mapa e
+                  // a roda escolhendo o tamanho no ar -- ver `useTokenDrag`.
+                  //
+                  // O clique no nome continua abrindo a ficha: o token só é
+                  // levantado depois que o ponteiro anda, e a partir daí o
+                  // clique do fim do gesto é engolido.
+                  onPointerDown={(event) => {
                     if (!miniatura) return;
 
-                    writeCharacterDrag(
-                      event.dataTransfer,
-                      personagem.id,
-                      miniatura,
-                    );
+                    const tamanho = tamanhoDoToken(miniatura);
+
+                    arrastarToken(event, {
+                      personagemId: personagem.id,
+                      assetId: miniatura.id,
+                      largura: tamanho.x,
+                      altura: tamanho.y,
+                    });
                   }}
                 >
                   <button
@@ -298,8 +335,8 @@ function Rosto({ personagem }: { personagem: Personagem }) {
  *
  * O botao continua existindo ao lado do arrasto da linha porque os dois gestos
  * respondem perguntas diferentes: o botao poe no CENTRO do que o mestre esta
- * vendo, sem ele precisar mirar, e o arrasto poe ONDE a mao soltou. Ver
- * `writeCharacterDrag` e o `handleDrop` do palco.
+ * vendo, sem ele precisar mirar, e o arrasto poe ONDE a mao soltou -- e, desde
+ * a sombra no mapa, com o tamanho escolhido na roda. Ver `useTokenDrag`.
  */
 function PorNoMapa({
   personagem,
@@ -347,13 +384,7 @@ function PorNoMapa({
             onClick={() => {
               if (!scene || !personagem.miniatura) return;
 
-              const tamanho =
-                miniatura?.naturalWidth && miniatura.naturalHeight
-                  ? fitInitialSize(
-                      miniatura.naturalWidth,
-                      miniatura.naturalHeight,
-                    )
-                  : TAMANHO_PADRAO;
+              const tamanho = tamanhoDoToken(miniatura);
 
               select([
                 addItem(scene.id, {
@@ -371,7 +402,7 @@ function PorNoMapa({
       <TooltipContent>
         <p className="max-w-48">
           {impedimento ??
-            `Por ${personagem.nome} no centro do mapa. Arraste a linha para escolher o lugar.`}
+            `Por ${personagem.nome} no centro do mapa. Arraste a linha para escolher o lugar, e role a roda no ar para o tamanho.`}
         </p>
       </TooltipContent>
     </Tooltip>
