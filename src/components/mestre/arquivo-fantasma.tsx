@@ -1,15 +1,16 @@
 "use client";
 
 import { FileImage } from "lucide-react";
-import { toast } from "sonner";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { boxAround, fitInitialSize } from "@/lib/geometry/transform";
-import { useAssetsStore } from "@/lib/store/use-assets-store";
+import {
+  importarCaminhosNoAcervo,
+  rotuloDoArrasto,
+} from "@/lib/mestre/importar-arquivos";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { importarCaminhos } from "@/lib/vault/assets";
 
 /** Junto da sombra do token, e pelo mesmo motivo. Ver `FANTASMA_Z`. */
 const FANTASMA_Z = 9_800;
@@ -25,6 +26,9 @@ const TAMANHO_DE_RESERVA = { x: 480, y: 270 };
  * exigia arrastar o de cima para o lado, um a um.
  */
 const ESCADA = 24;
+
+/** A marca do plano da cena, que é quem aceita o arquivo aqui. */
+const ZONA_DO_PALCO = "[data-palco]";
 
 /**
  * A prévia do arquivo que vem de FORA do aplicativo, e a inserção dele.
@@ -46,53 +50,35 @@ export function ArquivoFantasma({ sceneId }: { sceneId: string }) {
   const addItem = useSceneStore((state) => state.addItem);
   const select = useSelectionStore((state) => state.select);
 
-  const noAr = useArrastoDeArquivo((caminhos, x, y) => {
+  const noAr = useArrastoDeArquivo(ZONA_DO_PALCO, (caminhos, x, y) => {
     // O ponto sai do evento AGORA, e não de dentro do `then`: a importação vai
     // ao disco, e até ela voltar o ponteiro já está noutro lugar.
     const centro = toScene(x, y);
 
-    void importarCaminhos(caminhos).then(
-      (resultado) => {
-        // Um motivo por arquivo. "1 arquivo não pôde ser enviado" obriga quem
-        // soltou doze a adivinhar qual e por quê.
-        for (const motivo of resultado.recusados) toast.error(motivo);
+    void importarCaminhosNoAcervo(caminhos).then((aceitos) => {
+      const imagens = aceitos.filter((asset) => asset.kind === "image");
 
-        // A lista do acervo não fica sabendo sozinha que ganhou arquivo: quem
-        // importou aqui foi o palco, e o painel é outra janela.
-        if (resultado.aceitos.length > 0) {
-          useAssetsStore.getState().recarregar();
-        }
+      select(
+        imagens.map((asset, indice) => {
+          const tamanho =
+            asset.naturalWidth && asset.naturalHeight
+              ? fitInitialSize(asset.naturalWidth, asset.naturalHeight)
+              : TAMANHO_DE_RESERVA;
 
-        const imagens = resultado.aceitos.filter(
-          (asset) => asset.kind === "image",
-        );
-
-        select(
-          imagens.map((asset, indice) => {
-            const tamanho =
-              asset.naturalWidth && asset.naturalHeight
-                ? fitInitialSize(asset.naturalWidth, asset.naturalHeight)
-                : TAMANHO_DE_RESERVA;
-
-            return addItem(sceneId, {
-              assetId: asset.id,
-              ...boxAround(
-                {
-                  x: centro.x + indice * ESCADA,
-                  y: centro.y + indice * ESCADA,
-                },
-                tamanho.x,
-                tamanho.y,
-              ),
-            });
-          }),
-        );
-      },
-      (cause: unknown) =>
-        toast.error(
-          cause instanceof Error ? cause.message : "Falha ao importar.",
-        ),
-    );
+          return addItem(sceneId, {
+            assetId: asset.id,
+            ...boxAround(
+              {
+                x: centro.x + indice * ESCADA,
+                y: centro.y + indice * ESCADA,
+              },
+              tamanho.x,
+              tamanho.y,
+            ),
+          });
+        }),
+      );
+    });
   });
 
   if (!noAr || scale === 0) return null;
@@ -132,26 +118,10 @@ export function ArquivoFantasma({ sceneId }: { sceneId: string }) {
         >
           <span className="bg-popover text-popover-foreground flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] whitespace-nowrap shadow-md">
             <FileImage className="size-3.5 shrink-0" />
-            {rotulo(noAr.caminhos)}
+            {rotuloDoArrasto(noAr.caminhos)}
           </span>
         </div>
       </div>
     </div>
   );
-}
-
-/**
- * O que a caixa escreve.
- *
- * Com um arquivo, o nome dele: é a confirmação de que o que está vindo é o que
- * a mão pegou. Com vários, a contagem — seis nomes empilhados sobre o mapa
- * cobririam justamente o lugar onde eles vão cair.
- */
-function rotulo(caminhos: string[]): string {
-  if (caminhos.length === 0) return "Soltar aqui";
-  if (caminhos.length > 1) return `${caminhos.length} arquivos`;
-
-  // O separador é do sistema de quem opera: barra no Linux e no mac, contrabarra
-  // no Windows. Partir pelos dois dá o nome nos três.
-  return caminhos[0].split(/[\\/]/).pop() || "Soltar aqui";
 }
