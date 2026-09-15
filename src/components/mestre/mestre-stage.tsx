@@ -1126,32 +1126,38 @@ export function MestreStage({ scene }: { scene: Scene }) {
           Com espaço segurado, nenhum handler é passado adiante: quem trata o
           gesto é o listener de deslocamento do `SceneStage`, que fica num
           ancestral e dispararia junto se este também respondesse. */}
-      <div
-        // A marca que o arrasto de token procura sob o ponteiro para saber se
-        // está sobre o mapa. Por atributo e não por ref no store: quem pergunta
-        // é `document.elementFromPoint`, que devolve o nó de cima -- e é
-        // justamente "tem uma janela da bancada por cima?" o que se quer saber.
-        data-palco
-        className="absolute inset-0"
-        style={{ cursor: canPan ? "grab" : aiming ? "crosshair" : undefined }}
-        onPointerDown={panMode ? undefined : handleCanvasPointerDown}
-        // `dragover` precisa de `preventDefault` a cada evento, senão o
-        // navegador recusa o drop e mostra o cursor de proibido.
-        onDragOver={(event) => {
-          if (!hasAssetDrag(event.dataTransfer)) return;
+      <SceneLayer
+          // O envelope do palco desce junto com o conteúdo, para o plano de
+          // baixo: em cima ele cobriria os tokens e engoliria o clique que
+          // deveria pegá-los. Ver `palco` no `SceneLayer`.
+          palco={{
+            // A marca que o arrasto de token procura sob o ponteiro para saber
+            // se está sobre o mapa. Por atributo e não por ref no store: quem
+            // pergunta é `document.elementFromPoint`, que devolve o nó de cima
+            // -- e é justamente "tem uma janela da bancada por cima?" o que se
+            // quer saber.
+            "data-palco": true,
+            className: "absolute inset-0",
+            style: {
+              cursor: canPan ? "grab" : aiming ? "crosshair" : undefined,
+            },
+            onPointerDown: panMode ? undefined : handleCanvasPointerDown,
+            // `dragover` precisa de `preventDefault` a cada evento, senão o
+            // navegador recusa o drop e mostra o cursor de proibido.
+            onDragOver: (event) => {
+              if (!hasAssetDrag(event.dataTransfer)) return;
 
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "copy";
-          setReceiving(true);
-        }}
-        // `dragleave` dispara também ao cruzar para um filho; comparar o alvo
-        // com o próprio nó evita o contorno piscando durante o percurso.
-        onDragLeave={(event) => {
-          if (event.currentTarget === event.target) setReceiving(false);
-        }}
-        onDrop={handleDrop}
-      >
-        <SceneLayer
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setReceiving(true);
+            },
+            // `dragleave` dispara também ao cruzar para um filho; comparar o
+            // alvo com o próprio nó evita o contorno piscando no percurso.
+            onDragLeave: (event) => {
+              if (event.currentTarget === event.target) setReceiving(false);
+            },
+            onDrop: handleDrop,
+          }}
           apagando={apagando}
           scene={scene}
           variant="mestre"
@@ -1184,7 +1190,6 @@ export function MestreStage({ scene }: { scene: Scene }) {
             panMode || aiming ? undefined : onPortraitPointerDown
           }
         />
-      </div>
 
       {/* Irmão do `SceneLayer`, e de propósito FORA dele: o `SceneLayer` é o
           mesmo componente do Espectador e do Jogador, e um ponto de anotação

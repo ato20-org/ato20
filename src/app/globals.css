@@ -223,6 +223,20 @@
      come metade do alvo de clique das abas, e a rolagem não é o assunto — o
      mestre arrasta a tira ou usa a aba que já está à vista. O conteúdo continua
      rolável por roda, por trackpad e por teclado. */
+  /*
+   * O plano dos controles do palco desliga o ponteiro: ele cobre o plano do
+   * CONTEÚDO inteiro, e sem isso nenhum clique alcançaria o mapa embaixo. Ver
+   * `plano-de-controles` no `SceneStage`.
+   *
+   * O que é clicável liga de volta. Botão, campo e link por regra, porque são
+   * clicáveis por natureza e é o alfinete -- um `<button>` por ponto de
+   * anotação. O resto declara `pointer-events-auto` onde precisa: o papel do
+   * postit, as alças do gizmo, a moldura da câmera.
+   */
+  .plano-de-controles :is(button, a, input, textarea, select, label) {
+    pointer-events: auto;
+  }
+
   .rolagem-limpa {
     scrollbar-width: none;
   }
