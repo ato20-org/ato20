@@ -93,13 +93,21 @@ export async function exportCampaign(): Promise<string | null> {
   return dest;
 }
 
+/** O que os dois diálogos do import juntaram. */
+export type EscolhaDeImport = { zipPath: string; parent: string };
+
 /**
- * Importa um zip como campanha nova e a abre.
+ * Pergunta o que importar e para onde.
  *
  * Dois diálogos: o zip, e onde criar. `null` em qualquer um dos dois desiste
  * sem erro.
+ *
+ * Separado de `importCampaign` porque os dois momentos são de naturezas
+ * opostas: aqui o aplicativo ESPERA a pessoa, e lá ele trabalha. Juntos, a tela
+ * não tinha como mostrar a espera do trabalho sem mostrá-la também por cima do
+ * diálogo do sistema, que é onde a pessoa está olhando.
  */
-export async function importCampaign(): Promise<CampaignInfo | null> {
+export async function pickImport(): Promise<EscolhaDeImport | null> {
   const escolhido = await open({
     multiple: false,
     title: "Escolha o zip da campanha",
@@ -111,5 +119,17 @@ export async function importCampaign(): Promise<CampaignInfo | null> {
   const parent = await pickFolder("Onde criar a campanha importada");
   if (!parent) return null;
 
-  return call<CampaignInfo>("campaign_import", { zipPath: escolhido, parent });
+  return { zipPath: escolhido, parent };
+}
+
+/**
+ * Descompacta o zip como campanha nova e a abre.
+ *
+ * O passo demorado do import, e de longe: o zip pode trazer gigabytes de
+ * acervo. Ver `pickImport`, que é quem escolhe o que entra aqui.
+ */
+export function importCampaign(
+  escolha: EscolhaDeImport,
+): Promise<CampaignInfo> {
+  return call<CampaignInfo>("campaign_import", escolha);
 }

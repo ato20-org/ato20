@@ -134,9 +134,32 @@ function Conteudo({
     );
   }
 
-  if (status === "idle" || status === "loading" || !campaign) {
-    // Antes de saber QUAL campanha, o único passo é achá-la. Mesma tela, para
-    // abrir o aplicativo e trocar de campanha lerem como a mesma coisa.
+  // O caminho até a porta. O único trabalho aqui é ler a lista de campanhas do
+  // banco da máquina -- nenhuma campanha é aberta, e é por isso que o rótulo
+  // mudou: dizia "Abrindo a campanha", que virou mentira quando o aplicativo
+  // deixou de reabrir sozinho a mesa da sessão anterior. Quem recarregava a
+  // porta lia que estava entrando numa campanha e então caía na lista.
+  if (status === "idle" || status === "loading") {
+    return (
+      <CampaignSplash
+        passos={[
+          {
+            chave: "campanhas",
+            rotulo: "Procurando as campanhas",
+            estado: "fazendo",
+          },
+        ]}
+      />
+    );
+  }
+
+  // Abrindo: o vault sendo lido do disco, ou um zip sendo descompactado. Sem
+  // isto a porta continuava desenhada e sem reagir durante todo esse tempo, e
+  // só então o carregamento aparecia -- a ordem que fazia parecer travada. A
+  // tela de carregamento entra AGORA, com o trabalho, e o `CampaignBoot` a
+  // substitui por si mesma quando o vault abre, continuando a lista de passos
+  // de onde este parou.
+  if (status === "abrindo") {
     return (
       <CampaignSplash
         passos={[
@@ -149,6 +172,12 @@ function Conteudo({
       />
     );
   }
+
+  // `ready` sem campanha não deveria acontecer -- quem põe `ready` põe as duas
+  // coisas juntas. Se acontecer, a porta é a saída: ela lista o que há e deixa
+  // escolher. Um splash aqui giraria para sempre, esperando um estado que já
+  // chegou.
+  if (!campaign) return <MestreGate />;
 
   // `key` na campanha: trocar de campanha remonta o carregamento inteiro, em
   // vez de exigir que um efeito desfaça estado na mão.

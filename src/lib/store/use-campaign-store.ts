@@ -10,6 +10,7 @@ import {
   exportCampaign,
   forgetCampaign,
   importCampaign,
+  pickImport,
   openCampaign,
   pickFolder,
   recentCampaigns,
@@ -34,6 +35,17 @@ export type CampaignStatus =
   | "loading"
   /** Nenhuma campanha aberta. A porta mostra recentes e o seletor de pasta. */
   | "escolhendo"
+  /**
+   * Abrindo uma campanha: lendo o vault do disco, ou descompactando um zip.
+   *
+   * Separado de `busy` porque os dois dizem coisas diferentes. `busy` cobre
+   * também a espera por um diálogo do SISTEMA, e ali quem tem de aparecer é o
+   * diálogo -- uma tela de carregamento por baixo dele anunciaria trabalho que
+   * ainda não começou, e que pode nem começar, porque a pessoa ainda vai
+   * decidir. Este aqui é só trabalho já em curso, e é o que a tela de
+   * carregamento espera para aparecer.
+   */
+  | "abrindo"
   | "ready"
   | "error";
 
@@ -166,16 +178,21 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   async choose(path) {
     if (get().busy) return;
 
-    set({ busy: true, error: null });
+    // `abrindo` no mesmo gesto que `busy`: ler o vault do disco leva um tempo
+    // que se vê, e sem isto a porta continuava desenhada e sem reagir até a
+    // campanha estar pronta -- uma travada, e não uma espera.
+    set({ busy: true, status: "abrindo", error: null });
 
     try {
       await fecharOAnterior();
       set({ campaign: await openCampaign(path), status: "ready", busy: false });
     } catch (cause) {
-      // A porta fica: a pasta pode ter sido movida, e a lista é o caminho de
-      // volta para escolher outra.
+      // A porta volta: a pasta pode ter sido movida, e a lista é o caminho de
+      // volta para escolher outra. O `status` tem de voltar junto, senão a tela
+      // de carregamento gira para sempre sobre um erro que ninguém lê.
       set({
         busy: false,
+        status: "escolhendo",
         error: describe(cause),
         recents: await refreshRecents(),
       });
@@ -199,7 +216,9 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const parent = await pickFolder("Onde criar a campanha");
     if (!parent) return;
 
-    set({ busy: true, error: null });
+    // Depois do seletor, nunca antes: enquanto o diálogo do sistema está aberto
+    // não há trabalho em curso, e o que a pessoa tem de ver é o diálogo.
+    set({ busy: true, status: "abrindo", error: null });
 
     try {
       await fecharOAnterior();
@@ -209,7 +228,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
         busy: false,
       });
     } catch (cause) {
-      set({ busy: false, error: describe(cause) });
+      set({ busy: false, status: "escolhendo", error: describe(cause) });
     }
   },
 
@@ -241,23 +260,29 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   async importar() {
     if (get().busy) return;
 
-    set({ busy: true, error: null });
+    // Os dois diálogos ANTES de qualquer marca de ocupado: `null` é o diálogo
+    // fechado sem escolher, não muda nada e não é erro -- e enquanto eles estão
+    // abertos a porta continua sendo o fundo certo, sem tela de carregamento
+    // por baixo anunciando um trabalho que a pessoa ainda pode desistir de
+    // pedir.
+    const escolha = await pickImport();
+    if (!escolha) return;
+
+    // Daqui em diante é o passo mais demorado do aplicativo: o zip pode trazer
+    // gigabytes de acervo para descompactar.
+    set({ busy: true, status: "abrindo", error: null });
 
     try {
       await fecharOAnterior();
-      const info = await importCampaign();
+      const info = await importCampaign(escolha);
 
-      // `null` é o diálogo fechado sem escolher: não muda nada, e não é erro.
-      set(
-        info
-          ? { campaign: info, status: "ready", busy: false }
-          : { busy: false },
-      );
+      set({ campaign: info, status: "ready", busy: false });
     } catch (cause) {
-      // A porta fica, com o motivo: zip que não é campanha e pasta que já tem
+      // A porta volta, com o motivo: zip que não é campanha e pasta que já tem
       // uma são os dois casos comuns, e os dois pedem escolher outra coisa.
       set({
         busy: false,
+        status: "escolhendo",
         error: describe(cause),
         recents: await refreshRecents(),
       });
