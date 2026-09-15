@@ -24,6 +24,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  aoApertarF2,
+  useRenomearPeloMenu,
+} from "@/hooks/use-renomear-pelo-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useFolderList } from "@/hooks/use-folder-list";
@@ -276,6 +280,11 @@ function FolderGroup({
   const [open, setOpen] = useState(false);
   const receiving = useSobOPonteiro(folder.id);
 
+  // O campo de nome só nasce depois de o menu fechar: a troca desmonta o menu,
+  // e o foco devolvido ao gatilho que sumiu matava o campo no mesmo quadro. É a
+  // mesma correção da lista de cenas. Ver `useRenomearPeloMenu`.
+  const renomear = useRenomearPeloMenu(onRename);
+
   return (
     <section>
       <div
@@ -315,13 +324,15 @@ function FolderGroup({
               type="button"
               className="min-w-0 flex-1 truncate text-left text-xs font-medium"
               onDoubleClick={onRename}
+              // F2 renomeia, a mesma convenção da lista de cenas.
+              onKeyDown={aoApertarF2(onRename)}
               onClick={() => setOpen(!open)}
             >
               {folder.name}
             </button>
             <span className="text-muted-foreground text-[10px]">{count}</span>
 
-            <DropdownMenu>
+            <DropdownMenu onOpenChangeComplete={renomear.aoFechar}>
               <DropdownMenuTrigger
                 render={
                   <Button
@@ -339,7 +350,7 @@ function FolderGroup({
                 }
               />
               <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onClick={onRename}>
+                <DropdownMenuItem onClick={renomear.pedir}>
                   <Pencil />
                   Renomear
                 </DropdownMenuItem>

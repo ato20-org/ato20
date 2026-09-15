@@ -6,6 +6,7 @@ import { BookmarkPlus, Check, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMarcadores } from "@/hooks/use-marcadores";
+import { aoApertarF2 } from "@/hooks/use-renomear-pelo-menu";
 
 /**
  * Os marcadores da campanha aberta, como tira lateral.
@@ -100,6 +101,13 @@ export function MarcadoresLivro({
                 <button
                   type="button"
                   onClick={() => aoEscolher(marcador.pagina)}
+                  // F2 renomeia, a mesma convenção da lista de cenas e das
+                  // pastas do acervo. O lápis fica: aqui ele é o único caminho
+                  // para quem chega com o dedo, sem teclado.
+                  onKeyDown={aoApertarF2(() => {
+                    setEditando(marcador.id);
+                    setRascunho(marcador.rotulo);
+                  })}
                   className="hover:bg-accent aria-[current=true]:bg-accent min-w-0 flex-1 rounded-md p-1.5 text-left"
                   aria-current={marcador.pagina === paginaAtual}
                 >

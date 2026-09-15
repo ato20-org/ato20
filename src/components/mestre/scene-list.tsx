@@ -33,6 +33,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import {
+  aoApertarF2,
+  useRenomearPeloMenu,
+} from "@/hooks/use-renomear-pelo-menu";
+import {
   escolherFundoDaCena,
   tirarFundoDaCena,
 } from "@/lib/mestre/scene-background";
@@ -139,6 +143,11 @@ function SceneRow({
   const duplicateScene = useSceneStore((state) => state.duplicateScene);
   const removeScene = useSceneStore((state) => state.removeScene);
 
+  // O item do menu não renomeia na hora: ele PEDE, e o campo nasce quando o
+  // menu termina de fechar. Ver `useRenomearPeloMenu` — era isto que fazia o
+  // botão "Renomear" não fazer nada.
+  const renomear = useRenomearPeloMenu(onRename);
+
   function commitRename(value: string) {
     const name = value.trim();
     if (name && name !== scene.name) renameScene(scene.id, name);
@@ -169,6 +178,8 @@ function SceneRow({
         aria-current={onStage}
         onClick={onOpen}
         onDoubleClick={onRename}
+        // F2 renomeia, como no gerenciador de arquivos. Ver `aoApertarF2`.
+        onKeyDown={aoApertarF2(onRename)}
       >
         <span className="relative shrink-0">
           <ScenePreview scene={scene} className="h-9 w-16" />
@@ -232,7 +243,7 @@ function SceneRow({
             </Tooltip>
           )}
 
-          <DropdownMenu>
+          <DropdownMenu onOpenChangeComplete={renomear.aoFechar}>
             <DropdownMenuTrigger
               render={
                 <Button
@@ -249,7 +260,7 @@ function SceneRow({
                 <Radio />
                 Colocar no ar
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onRename}>
+              <DropdownMenuItem onClick={renomear.pedir}>
                 <Pencil />
                 Renomear
               </DropdownMenuItem>
