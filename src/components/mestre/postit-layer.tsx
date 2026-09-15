@@ -649,7 +649,19 @@ function PostitPapel({
         <button
           type="button"
           aria-label="Tirar este postit do mapa"
-          className="shrink-0 opacity-0 transition-opacity hover:text-red-700 group-hover:opacity-100"
+          // À vista SEMPRE, ao contrário das bolinhas de cor ao lado.
+          //
+          // Era escondido até o ponteiro entrar na faixa, e isso partia do
+          // princípio errado: a faixa tem 22 unidades de cena de altura, e com
+          // o mapa afastado ela é uma tira de três pixels na tela. Procurar o
+          // botão de tirar o papel virava esfregar o mouse no alto dele até
+          // algo aparecer -- e quem quer tirar um postit quer tirá-lo AGORA,
+          // porque ele está cobrindo o mapa.
+          //
+          // O cinza escuro é do papel, não do tema: o postit é sempre claro,
+          // nas quatro cores, e é sobre ele que este ícone precisa se ler. Ver
+          // `PAPEL`.
+          className="shrink-0 text-neutral-900/50 transition-colors hover:text-red-700"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => {
             // Fecha a edição antes: sem isto o store ficaria apontando para um
