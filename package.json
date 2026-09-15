@@ -4,6 +4,7 @@
   "private": true,
   "license": "MIT",
   "scripts": {
+    "preinstall": "node scripts/exigir-pnpm.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
