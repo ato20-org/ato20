@@ -288,6 +288,9 @@ function ArquivoChip({ asset }: { asset: AssetMeta }) {
               src={url}
               alt=""
               draggable={false}
+              // Este painel sai do palco por portal -- ver o comentario
+              // acima --, e a miniatura tem 160px de qualquer forma.
+              // eslint-disable-next-line no-restricted-syntax
               className="size-full object-cover"
               {...MINIATURA}
             />

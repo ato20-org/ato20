@@ -106,6 +106,9 @@ export function SpotlightLayer({
             // `object-contain` com teto de altura: documento em pé e mapa
             // deitado passam pelo mesmo caminho, e cortar qualquer um dos dois
             // esconderia justamente o que se mandou olhar.
+            // O `SpotlightLayer` e sobreposicao de tela inteira, montada
+            // fora do `SceneStage`: nao ha `zoom` no caminho dele.
+            // eslint-disable-next-line no-restricted-syntax
             className="max-h-full min-h-0 w-auto max-w-full flex-1 object-contain select-none"
           />
         )

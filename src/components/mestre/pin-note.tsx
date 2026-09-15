@@ -245,6 +245,10 @@ function Anexo({
             src={url}
             alt=""
             draggable={false}
+            // A miniatura tem 160px, e arquivo desse tamanho nao alcanca o
+            // teto em que o `cover` erra sob `zoom`: ate 800%, que e o limite
+            // do palco, ele passa. Ver a tabela em `caberEm`.
+            // eslint-disable-next-line no-restricted-syntax
             className="size-full object-cover"
             {...MINIATURA}
           />
