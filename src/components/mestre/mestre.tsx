@@ -57,7 +57,18 @@ export function Mestre() {
   }, [boot, carregarExtensoes, restaurarPreferencias]);
 
   return (
-    <>
+    // `h-dvh`, e não `flex-1` contra o `min-h-full` do `body`: a altura desta
+    // coluna precisa ser DEFINIDA, e a do `body` não é. `flex-1` é
+    // `flex: 1 1 0%`, e uma base em porcentagem contra container de altura
+    // indefinida cai para o tamanho do CONTEÚDO -- então quem tivesse um filho
+    // alto reportava a altura dele para cima e esticava a página, em vez de
+    // rolar por dentro. Foi o que fez a porta empurrar a barra da janela para
+    // fora do quadro quando o painel de novidades chegou ao lado.
+    //
+    // `overflow-hidden` junto porque isto é janela de aplicativo: o que não
+    // couber rola dentro de quem o mostra -- o palco, o painel, a coluna da
+    // porta --, e nunca arrastando a barra de título embora.
+    <div className="flex h-dvh flex-col overflow-hidden">
       <WindowChrome
         // A campanha na ponta esquerda, junto do nome: ela é o que a janela é,
         // e não um controle de gesto que dispute espaço com a barra de
@@ -85,7 +96,7 @@ export function Mestre() {
         error={error}
         onRetry={boot}
       />
-    </>
+    </div>
   );
 }
 
