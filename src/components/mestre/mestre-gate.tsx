@@ -78,15 +78,30 @@ function NoApp() {
       </p>
 
       {/* Para as duas telas que FUNCIONAM aqui: quem caiu neste endereço pelo
-          navegador é quase sempre alguém da mesa que digitou o IP. */}
-      <Button
-        render={<Link href="/" />}
-        nativeButton={false}
-        variant="outline"
-        size="sm"
-      >
-        Ver as telas da mesa
-      </Button>
+          navegador é quase sempre alguém da mesa que digitou o IP. Os dois
+          links, e não um só para a raiz: a raiz É esta tela desde que o
+          aplicativo virou desktop, então mandar para lá seria mandar para
+          aqui. */}
+      <div className="flex gap-2">
+        <Button
+          render={<Link href="/espectador" />}
+          nativeButton={false}
+          variant="outline"
+          size="sm"
+        >
+          <Tv aria-hidden />
+          A TV da mesa
+        </Button>
+        <Button
+          render={<Link href="/jogador" />}
+          nativeButton={false}
+          variant="outline"
+          size="sm"
+        >
+          <Smartphone aria-hidden />
+          O teu celular
+        </Button>
+      </div>
     </Centered>
   );
 }
