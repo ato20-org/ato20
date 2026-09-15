@@ -19,13 +19,25 @@ type CharactersStore = {
    * sinal de "releia também".
    */
   versao: number;
-  /** Número do pedido em voo. Ver `buscar`. */
+  /** Número do último pedido disparado. Ver `buscar`. */
   pedido: number;
+  /**
+   * Há leitura a caminho.
+   *
+   * Separado do `pedido` porque os dois respondem perguntas diferentes, e
+   * confundi-los custou um bug: o `garantir` pedia `pedido === 0` para dizer
+   * "ninguém leu ainda", e o contador nunca volta a zero. Zerá-lo para
+   * destravar seria pior -- uma resposta da campanha anterior ainda a caminho
+   * voltaria a bater com o número do pedido novo e seria aceita.
+   */
+  emVoo: boolean;
 
   /** Lê se ninguém leu ainda. É o que cada tela chama ao montar. */
   garantir: () => void;
   /** Relê agora: alguém mexeu nos personagens. */
   recarregar: () => void;
+  /** A campanha passou a ser outra: esqueça o que foi lido. */
+  esquecer: () => void;
 };
 
 /**
@@ -45,17 +57,49 @@ export const useCharactersStore = create<CharactersStore>((set, get) => ({
   jogadores: [],
   versao: 0,
   pedido: 0,
+  emVoo: false,
 
   garantir() {
     // Nunca lido e nada em voo: a primeira tela a montar dispara, as outras
     // pegam o resultado dela.
-    if (get().personagens === null && get().pedido === 0) buscar(set, get);
+    if (get().personagens === null && !get().emVoo) buscar(set, get);
   },
 
   recarregar() {
     buscar(set, get);
   },
+
+  esquecer() {
+    // O número sobe, e é o que descarta a resposta de uma leitura da campanha
+    // anterior que ainda esteja a caminho. `emVoo` volta a falso para o
+    // `garantir` da próxima tela poder disparar de novo.
+    //
+    // O `versao` sobe junto: o `useCharacterOwners` e o `useCharacterNames`
+    // leem os vínculos por conta própria, e sem este empurrão continuariam
+    // mostrando quem jogava o quê na campanha que acabou de fechar.
+    set({
+      personagens: null,
+      jogadores: [],
+      pedido: get().pedido + 1,
+      emVoo: false,
+      versao: get().versao + 1,
+    });
+  },
 }));
+
+/**
+ * O elenco passou a ser outro: esqueça o que foi lido. Ver `esquecer`.
+ *
+ * Uma campanha é uma pasta, e trocar de pasta troca os personagens. Sem isto as
+ * telas montavam mostrando o elenco da campanha que acabou de fechar, e nenhuma
+ * delas tinha razão para reler -- o store é de módulo e sobrevive à troca, então
+ * só recarregar a janela consertava.
+ *
+ * O gêmeo de `esquecerAcervo`, e pela mesma razão. Ver `use-assets-store`.
+ */
+export function esquecerPersonagens(): void {
+  useCharactersStore.getState().esquecer();
+}
 
 type Set = (parcial: Partial<CharactersStore>) => void;
 type Get = () => CharactersStore;
@@ -73,20 +117,25 @@ type Get = () => CharactersStore;
  */
 function buscar(set: Set, get: Get) {
   const meu = get().pedido + 1;
-  set({ pedido: meu });
+  set({ pedido: meu, emVoo: true });
 
   void Promise.all([listCharacters(), listPlayers()]).then(
     ([lista, mesa]) => {
       if (get().pedido !== meu) return;
 
-      set({ personagens: lista, jogadores: mesa, versao: get().versao + 1 });
+      set({
+        personagens: lista,
+        jogadores: mesa,
+        versao: get().versao + 1,
+        emVoo: false,
+      });
     },
     (cause) => {
       if (get().pedido !== meu) return;
 
       // Lista vazia, e não `null`: `null` faria cada tela mostrar "Lendo…" para
       // sempre. Vazio é um estado que elas sabem desenhar.
-      set({ personagens: [], versao: get().versao + 1 });
+      set({ personagens: [], versao: get().versao + 1, emVoo: false });
       toast.error(cause instanceof Error ? cause.message : "Falha ao ler os personagens.");
     },
   );
