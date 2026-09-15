@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm clean:web-resources && pnpm pdfjs && pnpm dev",
+    "beforeDevCommand": "pnpm clean:web-resources && pnpm pdfjs && pnpm garantir-out && pnpm dev",
     "beforeBuildCommand": "pnpm clean:web-resources && pnpm pdfjs && pnpm build"
   },
   "app": {
