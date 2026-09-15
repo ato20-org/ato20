@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -28,22 +28,26 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useFolderList } from "@/hooks/use-folder-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { useTokenDrag } from "@/hooks/use-token-drag";
 import { MINIATURA } from "@/lib/miniatura";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
-import {
-  hasAssetDrag,
-  readAssetDrag,
-  writeAssetDrag,
-} from "@/lib/mestre/asset-drag";
 import { countAssetUsage } from "@/lib/mestre/asset-usage";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
+import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { cn } from "@/lib/utils";
 import type { AssetFolder, AssetMeta, Scene } from "@/types/scene";
 
 /** Usado quando a medida do arquivo não veio — arquivo antigo ou corrompido. */
 const FALLBACK_SIZE = { x: 480, y: 270 };
+
+/** O tamanho com que a imagem entra na cena, em unidades de cena. */
+function tamanhoNaCena(asset: AssetMeta): { x: number; y: number } {
+  return asset.naturalWidth && asset.naturalHeight
+    ? fitInitialSize(asset.naturalWidth, asset.naturalHeight)
+    : FALLBACK_SIZE;
+}
 
 export function AssetLibrary({ scene }: { scene: Scene }) {
   const {
@@ -82,10 +86,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   const select = useSelectionStore((state) => state.select);
 
   function handleAddToScene(asset: AssetMeta) {
-    const size =
-      asset.naturalWidth && asset.naturalHeight
-        ? fitInitialSize(asset.naturalWidth, asset.naturalHeight)
-        : FALLBACK_SIZE;
+    const size = tamanhoNaCena(asset);
 
     select([
       addItem(scene.id, { assetId: asset.id, ...centeredBox(size.x, size.y) }),
@@ -97,6 +98,26 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
     (assetId: string, folderId: string | undefined) =>
       void move(assetId, folderId),
     [move],
+  );
+
+  /**
+   * Quem recebe a linha solta sobre uma pasta.
+   *
+   * Um registro para o painel inteiro, e não um por pasta: o que muda entre
+   * elas é só o `folderId`, que vem no destino. Ver `useTokenDrag`.
+   */
+  useEffect(
+    () =>
+      useTokenDragStore
+        .getState()
+        .registrarAlvo("acervo", (arrasto, destino) => {
+          if (arrasto.fonte.tipo !== "acervo" || destino.tipo !== "pasta") {
+            return;
+          }
+
+          handleMove(arrasto.fonte.assetId, destino.folderId);
+        }),
+    [handleMove],
   );
 
   const loose = assets.filter((asset) => !asset.folderId);
@@ -175,7 +196,6 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
                   }}
                   onRenameCancel={() => setRenamingId(null)}
                   onDelete={() => void removeFolder(folder.id)}
-                  onDropAsset={(assetId) => handleMove(assetId, folder.id)}
                 >
                   {inside.map(renderRow)}
                 </FolderGroup>
@@ -183,9 +203,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
             })}
 
             {folders.length > 0 ? (
-              <RootDrop
-                onDropAsset={(assetId) => handleMove(assetId, undefined)}
-              >
+              <RootDrop>
                 {loose.length > 0 ? (
                   loose.map(renderRow)
                 ) : (
@@ -206,10 +224,33 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
 }
 
 /**
+ * Uma pasta está sob o ponteiro de um arrasto agora?
+ *
+ * Booleano, e não o destino inteiro: um seletor que devolvesse o arrasto faria
+ * cada pasta redesenhar a cada quadro do gesto, e ele escreve a posição do
+ * ponteiro uma vez por quadro. Assim só as duas que mudam de estado — a que
+ * saiu e a que entrou — redesenham. Mesmo argumento da linha da evidência.
+ *
+ * Quem decide se a pasta é alvo válido é o gesto, em `aceita`: item de
+ * inventário passando por cima não a acende.
+ */
+function useSobOPonteiro(folderId: string | undefined): boolean {
+  return useTokenDragStore((state) => {
+    const destino = state.arrasto?.destino;
+
+    return destino?.tipo === "pasta" && destino.folderId === folderId;
+  });
+}
+
+/**
  * Uma pasta e o que está dentro.
  *
  * O cabeçalho é o alvo do arrasto: soltar a linha de um arquivo sobre ele
  * move. Aceita solto mesmo colapsada — é o caso de guardar sem querer ver.
+ *
+ * O alvo se anuncia por atributo no DOM, e não por handler de arrasto nativo:
+ * quem procura é o gesto próprio da linha, com `elementFromPoint`. Ver
+ * `useTokenDrag`.
  */
 function FolderGroup({
   folder,
@@ -219,7 +260,6 @@ function FolderGroup({
   onRenameCommit,
   onRenameCancel,
   onDelete,
-  onDropAsset,
   children,
 }: {
   folder: AssetFolder;
@@ -229,45 +269,24 @@ function FolderGroup({
   onRenameCommit: (name: string) => void;
   onRenameCancel: () => void;
   onDelete: () => void;
-  onDropAsset: (assetId: string) => void;
   children: React.ReactNode;
 }) {
   // Fechada por padrão: o painel tem 288px de largura, e três pastas abertas
   // empurram a raiz — de onde sai o arquivo recém-enviado — para fora da vista.
   const [open, setOpen] = useState(false);
-  const [receiving, setReceiving] = useState(false);
+  const receiving = useSobOPonteiro(folder.id);
 
   return (
     <section>
       <div
+        data-pasta-acervo
+        data-folder-id={folder.id}
         className={cn(
           "group flex items-center gap-1 rounded-md px-1 py-1",
           receiving
             ? "bg-primary/15 ring-primary/60 ring-1"
             : "hover:bg-accent/50",
         )}
-        onDragOver={(event) => {
-          if (!hasAssetDrag(event.dataTransfer)) return;
-
-          // `preventDefault` a cada evento, senão o browser recusa o drop.
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
-          setReceiving(true);
-        }}
-        onDragLeave={(event) => {
-          if (event.currentTarget === event.target) setReceiving(false);
-        }}
-        onDrop={(event) => {
-          const payload = readAssetDrag(event.dataTransfer);
-          setReceiving(false);
-          // Sem `assetId` é arrasto de ITEM de inventário, que vai para o mapa
-          // e não para uma pasta do acervo: ali o gesto é "guarde esta imagem
-          // aqui", e um item não é uma imagem que se guarde.
-          if (!payload?.assetId) return;
-
-          event.preventDefault();
-          onDropAsset(payload.assetId);
-        }}
       >
         <Button
           variant="ghost"
@@ -341,41 +360,22 @@ function FolderGroup({
   );
 }
 
-/** A raiz também recebe arrasto: é como um arquivo sai da pasta. */
-function RootDrop({
-  onDropAsset,
-  children,
-}: {
-  onDropAsset: (assetId: string) => void;
-  children: React.ReactNode;
-}) {
-  const [receiving, setReceiving] = useState(false);
+/**
+ * A raiz também recebe arrasto: é como um arquivo sai da pasta.
+ *
+ * Sem `data-folder-id`, e é isso que a distingue: o gesto lê o atributo ausente
+ * como "sem pasta", que é exatamente o que mover para cá significa.
+ */
+function RootDrop({ children }: { children: React.ReactNode }) {
+  const receiving = useSobOPonteiro(undefined);
 
   return (
     <section
+      data-pasta-acervo
       className={cn(
         "rounded-md border border-dashed p-1",
         receiving ? "border-primary/60 bg-primary/10" : "border-transparent",
       )}
-      onDragOver={(event) => {
-        if (!hasAssetDrag(event.dataTransfer)) return;
-
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-        setReceiving(true);
-      }}
-      onDragLeave={(event) => {
-        if (event.currentTarget === event.target) setReceiving(false);
-      }}
-      onDrop={(event) => {
-        const payload = readAssetDrag(event.dataTransfer);
-        setReceiving(false);
-        // Item de inventário não vai para pasta do acervo — ver acima.
-        if (!payload?.assetId) return;
-
-        event.preventDefault();
-        onDropAsset(payload.assetId);
-      }}
     >
       <p className="text-muted-foreground px-1 pb-1 text-[10px] uppercase">
         Fora de pasta
@@ -446,14 +446,37 @@ function AssetRow({
   const transmit = useSpotlightStore((state) => state.transmit);
   const clear = useSpotlightStore((state) => state.clear);
 
+  const arrastar = useTokenDrag();
+
+  // A linha some enquanto está no ar, como a do personagem: o arquivo está na
+  // mão, e vê-lo em dois lugares ao mesmo tempo contradiz o gesto.
+  const naMao = useTokenDragStore(
+    (state) =>
+      state.arrasto?.fonte.tipo === "acervo" &&
+      state.arrasto.fonte.assetId === asset.id,
+  );
+
   return (
     // Arrastável inteiro, e não só a miniatura: o alvo de 40px do polegar seria
     // o menor da tela, e o `+` continua ali para quem prefere clicar — a cena
     // aceita a imagem no centro por ele.
     <li
-      className="hover:bg-accent/50 group flex items-center gap-1 rounded-md p-1"
-      draggable
-      onDragStart={(event) => writeAssetDrag(event.dataTransfer, asset)}
+      className={cn(
+        "hover:bg-accent/50 group flex cursor-grab items-center gap-1 rounded-md p-1 select-none active:cursor-grabbing",
+        naMao && "opacity-40",
+      )}
+      // Gesto próprio e não o arrasto do navegador: é o que permite a sombra da
+      // imagem no mapa e a roda escolhendo o tamanho no ar -- ver `useTokenDrag`.
+      // O mesmo gesto alcança as pastas, que o arrasto nativo servia antes.
+      onPointerDown={(event) => {
+        const tamanho = tamanhoNaCena(asset);
+
+        arrastar(event, {
+          fonte: { tipo: "acervo", assetId: asset.id },
+          largura: tamanho.x,
+          altura: tamanho.y,
+        });
+      }}
     >
       <span className="bg-muted size-10 shrink-0 overflow-hidden rounded">
         {url ? (

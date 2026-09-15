@@ -3,30 +3,39 @@
 import { useCallback, type PointerEvent as ReactPointerEvent } from "react";
 
 import {
+  aceita,
+  chaveDoAlvo,
   PASSO_DA_RODA,
   useTokenDragStore,
+  type DestinoDoArrasto,
+  type FonteDoArrasto,
 } from "@/lib/store/use-token-drag-store";
 
 /**
  * Quanto o ponteiro precisa andar para ser arrasto e não clique.
  *
  * A linha do personagem tem dois papéis no mesmo alvo: clicar abre a ficha,
- * arrastar leva o token ao mapa. Sem esta folga, o tremor da mão ao clicar num
- * nome levantaria o token.
+ * arrastar leva o token ao mapa. O mesmo vale para a linha do acervo e para o
+ * quadro do inventário, que abrem o que mostram. Sem esta folga, o tremor da
+ * mão ao clicar num nome levantaria o token.
  */
 const LIMIAR_PX = 6;
 
 export type TokenParaArrastar = {
-  personagemId: string;
-  assetId: string;
+  fonte: FonteDoArrasto;
   /** O tamanho de nascença, em unidades de cena. Ver `fitInitialSize`. */
   largura: number;
   altura: number;
 };
 
 /**
- * Leva o token de um personagem ao mapa, com prévia e com a roda escolhendo o
- * tamanho no ar.
+ * Leva uma imagem ao mapa, com prévia e com a roda escolhendo o tamanho no ar.
+ *
+ * Serve às três origens que despejam imagem na mesa — a linha do personagem, a
+ * linha do acervo e o quadro do inventário —, e também aos destinos que essas
+ * listas têm entre si: pasta do acervo e a ficha de outro personagem. Um gesto
+ * só, porque um `pointerdown` só pode iniciar um, e decidir qual antes de saber
+ * para onde a mão vai é impossível.
  *
  * Irmão do `useScreenDrag` e do `useSceneDrag`, e não um parâmetro deles: este
  * gesto atravessa a tela inteira, da lista até o plano da cena, e o que ele
@@ -93,7 +102,7 @@ export function useTokenDrag() {
     };
 
     const posicao = (native: PointerEvent) => {
-      mover(native.clientX, native.clientY, sobreOPalco(native));
+      mover(native.clientX, native.clientY, destinoSob(native, token.fonte));
     };
 
     /** A roda, enquanto o token está no ar: tamanho, não zoom do palco. */
@@ -132,7 +141,7 @@ export function useTokenDrag() {
         fator: 1,
         x: native.clientX,
         y: native.clientY,
-        noPalco: sobreOPalco(native),
+        destino: destinoSob(native, token.fonte),
       });
     };
 
@@ -204,11 +213,16 @@ export function useTokenDrag() {
       comerOProximoClique();
       largar();
 
-      // Solto fora do plano — sobre uma janela da bancada, sobre a folga em
-      // volta do mapa — não põe nada. É o que a prévia prometeu ao sumir.
-      if (!emMaos?.noPalco) return;
+      // Solto onde nada recebe — sobre uma janela da bancada, sobre a folga em
+      // volta do mapa, sobre uma pasta que recusa item — não faz nada. É o que
+      // a prévia prometeu ao sumir.
+      const destino = emMaos?.destino;
+      if (!emMaos || !destino) return;
 
-      useTokenDragStore.getState().soltarNoPalco?.(emMaos);
+      useTokenDragStore.getState().alvos[chaveDoAlvo(destino)]?.(
+        emMaos,
+        destino,
+      );
     };
 
     window.addEventListener("pointermove", handleMove);
@@ -218,18 +232,52 @@ export function useTokenDrag() {
 }
 
 /**
- * O ponteiro está sobre o plano da cena.
+ * Que alvo está sob o ponteiro, entre os que aceitam o que está na mão.
  *
- * Por consulta ao que está DESENHADO no ponto, e não por comparação com o
- * retângulo do palco: as janelas da bancada ficam sobre ele, e pelo retângulo
- * uma prévia escondida atrás da lista de personagens ainda contaria como
- * "sobre o mapa". A prévia não tem `pointer-events`, então ela nunca é a
+ * Por consulta ao que está DESENHADO no ponto, e não por comparação com os
+ * retângulos de cada alvo: as janelas da bancada ficam sobre o palco, e pelo
+ * retângulo uma prévia escondida atrás da lista de personagens ainda contaria
+ * como "sobre o mapa". A prévia não tem `pointer-events`, então ela nunca é a
  * resposta.
+ *
+ * Os alvos se anunciam por atributo no DOM, e não por registro de coordenadas
+ * no store: o de cima ganha, que é o que `elementFromPoint` responde de graça —
+ * e uma pasta rolada para fora da vista deixa de ser alvo sem ninguém precisar
+ * avisar.
  */
-function sobreOPalco(native: PointerEvent): boolean {
-  return Boolean(
-    document
-      .elementFromPoint(native.clientX, native.clientY)
-      ?.closest("[data-palco]"),
-  );
+function destinoSob(
+  native: PointerEvent,
+  fonte: FonteDoArrasto,
+): DestinoDoArrasto | null {
+  const sob = document.elementFromPoint(native.clientX, native.clientY);
+  if (!sob) return null;
+
+  const destino = ler(sob);
+  if (!destino || !aceita(fonte, destino)) return null;
+
+  // Ninguém registrado para receber é o mesmo que alvo nenhum: a ficha pode ter
+  // fechado no meio do gesto, e acender uma borda que não vai receber nada é
+  // justamente a promessa que este gesto existe para não quebrar.
+  return useTokenDragStore.getState().alvos[chaveDoAlvo(destino)]
+    ? destino
+    : null;
+}
+
+function ler(sob: Element): DestinoDoArrasto | null {
+  const pasta = sob.closest<HTMLElement>("[data-pasta-acervo]");
+  // A pasta é lida ANTES do palco de propósito: o painel do acervo é uma janela
+  // da bancada, e ela fica por cima do mapa. Quem está por cima é quem recebe.
+  if (pasta) {
+    return { tipo: "pasta", folderId: pasta.dataset.folderId || undefined };
+  }
+
+  const inventario = sob.closest<HTMLElement>("[data-inventario]");
+  if (inventario?.dataset.personagemId) {
+    return {
+      tipo: "inventario",
+      personagemId: inventario.dataset.personagemId,
+    };
+  }
+
+  return sob.closest("[data-palco]") ? { tipo: "palco" } : null;
 }

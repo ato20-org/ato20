@@ -5,7 +5,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -68,16 +67,8 @@ import {
   SNAP_THRESHOLD_PX,
   type Guide,
 } from "@/lib/geometry/snap";
-import {
-  boxAround,
-  CORNER_HANDLES,
-  fitInitialSize,
-  MIN_ITEM_SIZE,
-} from "@/lib/geometry/transform";
-import { toast } from "sonner";
+import { CORNER_HANDLES, MIN_ITEM_SIZE } from "@/lib/geometry/transform";
 
-import { hasAssetDrag, readAssetDrag } from "@/lib/mestre/asset-drag";
-import { promoverImagemDoItem } from "@/lib/vault/inventory";
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
@@ -172,9 +163,6 @@ function distanciaAoSegmento(
   return Math.hypot(ponto.x - (a.x + t * dx), ponto.y - (a.y + t * dy));
 }
 
-/** Usado quando a medida do arquivo não veio — arquivo antigo ou corrompido. */
-const FALLBACK_DROP_SIZE = { x: 480, y: 270 };
-
 /**
  * Camada interativa do Mestre. Precisa viver dentro de `SceneStage` para ter
  * acesso ao fator de escala do palco.
@@ -185,8 +173,6 @@ export function MestreStage({ scene }: { scene: Scene }) {
 
   const [marquee, setMarquee] = useState<Bounds | null>(null);
   const [guides, setGuides] = useState<Guide[]>(NO_GUIDES);
-  /** Imagem do acervo pairando sobre o palco. */
-  const [receiving, setReceiving] = useState(false);
   /**
    * Abrir a nota de um ponto.
    *
@@ -233,7 +219,6 @@ export function MestreStage({ scene }: { scene: Scene }) {
   const togglePortrait = useSelectionStore((state) => state.togglePortrait);
   const clear = useSelectionStore((state) => state.clear);
 
-  const addItem = useSceneStore((state) => state.addItem);
   const updateItem = useSceneStore((state) => state.updateItem);
   const updateItems = useSceneStore((state) => state.updateItems);
   const addFog = useSceneStore((state) => state.addFog);
@@ -1017,72 +1002,6 @@ export function MestreStage({ scene }: { scene: Scene }) {
     [],
   );
 
-  /**
-   * Insere onde foi solto: imagem do acervo ou item de inventário.
-   *
-   * O token de personagem saiu daqui e tem caminho próprio -- ver
-   * `TokenFantasma` e `useTokenDrag`. O arrasto do navegador não entrega a
-   * prévia que aquele gesto precisa, e estes dois seguem nele porque mapa e
-   * item de inventário nascem com tamanho que não se escolhe no ar.
-   *
-   * Centrada no cursor, e não no plano como faz o `+` do acervo: o ponto do
-   * gesto é a informação que o arrasto carrega, e ignorá-lo obrigaria a
-   * reposicionar tudo à mão depois de cada inserção.
-   */
-  function handleDrop(event: ReactDragEvent) {
-    const payload = readAssetDrag(event.dataTransfer);
-    setReceiving(false);
-    if (!payload) return;
-
-    // Solto sobre o palco é para o palco: sem isto o navegador trataria o
-    // arrasto como navegação.
-    event.preventDefault();
-
-    // O ponto sai do evento AGORA, e não de dentro do `then`: o evento de
-    // arrasto é reciclado pelo React, e lê-lo depois de um `await` devolveria
-    // zero — a imagem cairia no canto da cena em vez de onde a mão soltou.
-    const center = toScene(event.clientX, event.clientY);
-
-    const soltar = (assetId: string, largura?: number, altura?: number) => {
-      const size =
-        largura && altura
-          ? fitInitialSize(largura, altura)
-          : FALLBACK_DROP_SIZE;
-
-      // Já selecionado: o gesto seguinte é quase sempre ajustar o que acabou de
-      // entrar, e sem seleção seria preciso clicar na imagem antes.
-      select([
-        addItem(scene.id, {
-          assetId,
-          ...boxAround(center, size.x, size.y),
-        }),
-      ]);
-    };
-
-    if (payload.assetId) {
-      soltar(payload.assetId, payload.naturalWidth, payload.naturalHeight);
-      return;
-    }
-
-    // Veio do inventário: a imagem pode ser um anexo, que não tem id de acervo.
-    // O objeto de cena é GRAVADO e tem de resolver depois de reabrir o
-    // aplicativo, então ele precisa de um asset de verdade — e é aqui, depois
-    // do gesto, que dá para esperar o disco.
-    if (payload.item) {
-      const { personagemId, itemId } = payload.item;
-
-      void promoverImagemDoItem(personagemId, itemId).then(
-        (asset) => soltar(asset.id, asset.naturalWidth, asset.naturalHeight),
-        (cause: unknown) =>
-          toast.error(
-            cause instanceof Error
-              ? cause.message
-              : "Não deu para pôr o item na mesa.",
-          ),
-      );
-    }
-  }
-
   // Espaço tem precedência sobre a ferramenta: segurar espaço desloca a cena,
   // mesmo com a névoa escolhida.
   const drawingFog = tool === "fog" && !panMode;
@@ -1142,21 +1061,10 @@ export function MestreStage({ scene }: { scene: Scene }) {
               cursor: canPan ? "grab" : aiming ? "crosshair" : undefined,
             },
             onPointerDown: panMode ? undefined : handleCanvasPointerDown,
-            // `dragover` precisa de `preventDefault` a cada evento, senão o
-            // navegador recusa o drop e mostra o cursor de proibido.
-            onDragOver: (event) => {
-              if (!hasAssetDrag(event.dataTransfer)) return;
-
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "copy";
-              setReceiving(true);
-            },
-            // `dragleave` dispara também ao cruzar para um filho; comparar o
-            // alvo com o próprio nó evita o contorno piscando no percurso.
-            onDragLeave: (event) => {
-              if (event.currentTarget === event.target) setReceiving(false);
-            },
-            onDrop: handleDrop,
+            // Sem handler de arrasto nativo: as três origens de dentro do
+            // aplicativo chegam pelo gesto próprio -- ver `TokenFantasma` --, e
+            // o arquivo vindo do sistema não passa pelo DOM, e sim pelo evento
+            // do Tauri -- ver `ArquivoFantasma`.
           }}
           apagando={apagando}
           scene={scene}
@@ -1209,9 +1117,10 @@ export function MestreStage({ scene }: { scene: Scene }) {
           acompanhar zoom e deslocamento como a névoa e os riscos acompanham. */}
       <DadoLayer />
 
-      {/* A sombra do token que está sendo arrastado da lista de personagens.
-          Irmã das três acima, e fora do `SceneLayer` pelo mesmo motivo: é
-          decisão em andamento do mestre, e a TV só recebe o que foi decidido. */}
+      {/* A sombra do que está sendo arrastado para o mapa: o personagem, a
+          imagem do acervo ou o item de inventário. Irmã das três acima, e fora
+          do `SceneLayer` pelo mesmo motivo: é decisão em andamento do mestre, e
+          a TV só recebe o que foi decidido. */}
       <TokenFantasma sceneId={scene.id} grid={scene.grid} />
 
       {/* As camadas das extensões, e aqui pelo mesmo motivo das três acima: o
@@ -1219,12 +1128,6 @@ export function MestreStage({ scene }: { scene: Scene }) {
           Mestre nesta etapa. O que elas desenham é anotação do mestre, como
           o alfinete e o postit. */}
       <CamadasDeExtensoes />
-
-      {/* Contorno enquanto a imagem paira: promete que soltar ali funciona, e
-          é o que diferencia o palco do resto da janela durante o arrasto. */}
-      {receiving ? (
-        <div className="ring-primary/70 pointer-events-none absolute inset-0 ring-2 ring-inset" />
-      ) : null}
 
       {outlineBounds ? <SelectionBox bounds={outlineBounds} /> : null}
 

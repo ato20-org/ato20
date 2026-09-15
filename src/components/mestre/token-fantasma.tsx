@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
@@ -8,9 +9,11 @@ import { boxAround } from "@/lib/geometry/transform";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import {
+  assetIdDoArrasto,
   tamanhoDoArrasto,
   useTokenDragStore,
 } from "@/lib/store/use-token-drag-store";
+import { promoverImagemDoItem } from "@/lib/vault/inventory";
 import type { SceneGrid } from "@/types/scene";
 
 /**
@@ -31,18 +34,21 @@ type TokenFantasmaProps = {
 };
 
 /**
- * A sombra do token enquanto ele ainda está na mão.
+ * A sombra da imagem enquanto ela ainda está na mão.
  *
- * Existe porque, até aqui, arrastar um personagem para o mapa era um gesto às
- * cegas: o token só aparecia depois de solto, e descobrir que ele caiu torto ou
- * do tamanho errado custava dois ajustes com o gizmo. A prévia responde as duas
- * perguntas ANTES de soltar — onde ele vai ficar e de que tamanho —, e a roda
+ * Existe porque, até aqui, arrastar algo para o mapa era um gesto às cegas: a
+ * peça só aparecia depois de solta, e descobrir que ela caiu torta ou do
+ * tamanho errado custava dois ajustes com o gizmo. A prévia responde as duas
+ * perguntas ANTES de soltar — onde ela vai ficar e de que tamanho —, e a roda
  * do mouse escolhe o tamanho sem sair do gesto.
+ *
+ * Vale para as três origens: o personagem, a imagem do acervo e o item de
+ * inventário. É o mesmo gesto e a mesma sombra -- ver `useTokenDrag`.
  *
  * Desenhada DENTRO do plano da cena, em unidades de cena, e não como um
  * fantasma em pixels de tela colado no cursor: o que o mestre precisa comparar
- * é o token com o mapa embaixo e com o quadrado da grade, e isso só é honesto
- * se a sombra acompanhar o zoom como o token acompanhará.
+ * é a peça com o mapa embaixo e com o quadrado da grade, e isso só é honesto
+ * se a sombra acompanhar o zoom como a peça acompanhará.
  *
  * Fora do `SceneLayer`, como o `PinLayer` e o `PostitLayer`, e pela mesma razão:
  * o `SceneLayer` é o componente que desenha na TV da mesa, e uma sombra de algo
@@ -51,7 +57,14 @@ type TokenFantasmaProps = {
 export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
   const { scale, toScene } = useSceneScale();
   const arrasto = useTokenDragStore((state) => state.arrasto);
-  const url = useAssetUrl(arrasto?.assetId);
+
+  // A URL do acervo resolve por id; a do item já vem pronta no arrasto, porque
+  // a imagem dele pode ser um anexo, que não tem id de acervo.
+  const doAcervo = useAssetUrl(
+    arrasto ? assetIdDoArrasto(arrasto.fonte) : undefined,
+  );
+  const url =
+    arrasto?.fonte.tipo === "item" ? arrasto.fonte.url : doAcervo;
 
   const addItem = useSceneStore((state) => state.addItem);
   const select = useSelectionStore((state) => state.select);
@@ -69,27 +82,57 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
   });
 
   useEffect(() => {
-    const { registrarPalco } = useTokenDragStore.getState();
+    const { registrarAlvo } = useTokenDragStore.getState();
 
-    registrarPalco((solto) => {
+    return registrarAlvo("palco", (solto) => {
       const { sceneId, toScene, addItem, select } = atual.current;
       const { largura, altura } = tamanhoDoArrasto(solto);
+      const centro = toScene(solto.x, solto.y);
 
-      // Já selecionado, como no arrasto do acervo: o gesto seguinte é quase
-      // sempre ajustar o que acabou de entrar.
-      select([
-        addItem(sceneId, {
-          assetId: solto.assetId,
-          personagemId: solto.personagemId,
-          ...boxAround(toScene(solto.x, solto.y), largura, altura),
-        }),
-      ]);
+      const por = (assetId: string, personagemId?: string) => {
+        // Já selecionado, como no `+` do acervo: o gesto seguinte é quase
+        // sempre ajustar o que acabou de entrar.
+        select([
+          addItem(sceneId, {
+            assetId,
+            personagemId,
+            ...boxAround(centro, largura, altura),
+          }),
+        ]);
+      };
+
+      if (solto.fonte.tipo === "item") {
+        // A imagem do item pode ser um anexo, que não tem id de acervo. O
+        // objeto de cena é GRAVADO e tem de resolver depois de reabrir o
+        // aplicativo, então ele precisa de um asset de verdade — e é aqui,
+        // depois do gesto, que dá para esperar o disco.
+        //
+        // O tamanho NÃO vem do asset promovido, e sim do que a sombra mostrou:
+        // o mestre acabou de escolhê-lo na roda, e trocá-lo agora pela medida
+        // natural do arquivo desmentiria a prévia que ele estava olhando.
+        const { personagemId, itemId } = solto.fonte;
+
+        void promoverImagemDoItem(personagemId, itemId).then(
+          (asset) => por(asset.id),
+          (cause: unknown) =>
+            toast.error(
+              cause instanceof Error
+                ? cause.message
+                : "Não deu para pôr o item na mesa.",
+            ),
+        );
+
+        return;
+      }
+
+      por(
+        solto.fonte.assetId,
+        solto.fonte.tipo === "personagem" ? solto.fonte.personagemId : undefined,
+      );
     });
-
-    return () => registrarPalco(null);
   }, []);
 
-  if (!arrasto || !arrasto.noPalco || scale === 0) return null;
+  if (!arrasto || arrasto.destino?.tipo !== "palco" || scale === 0) return null;
 
   const { largura, altura } = tamanhoDoArrasto(arrasto);
   const caixa = boxAround(toScene(arrasto.x, arrasto.y), largura, altura);
