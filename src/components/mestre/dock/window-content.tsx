@@ -9,6 +9,7 @@ import {
   Images,
   Layers,
   Library,
+  MonitorPlay,
   Music,
   Paperclip,
   PersonStanding,
@@ -26,6 +27,7 @@ import { CharactersBody } from "@/components/mestre/characters-window";
 import { EstanteBody } from "@/components/mestre/estante-window";
 import { FogList } from "@/components/mestre/fog-list";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
+import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
 import { LayerList } from "@/components/mestre/layer-list";
 import { PortraitList } from "@/components/mestre/portrait-list";
 import { RolagensBody } from "@/components/mestre/rolagens-window";
@@ -95,6 +97,8 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
       return Library;
     case "livro":
       return BookOpen;
+    case "miniplayer":
+      return MonitorPlay;
     case "anexo":
       return Paperclip;
     case "asset":
@@ -132,6 +136,7 @@ export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "personagens" }, titulo: "Personagens" },
   { conteudo: { tipo: "rolagens" }, titulo: "Rolagens" },
   { conteudo: { tipo: "estante" }, titulo: "Estante" },
+  { conteudo: { tipo: "miniplayer" }, titulo: "Mesa" },
 ];
 
 /**
@@ -209,6 +214,8 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       };
     case "livro":
       return { titulo: conteudo.titulo, subtitulo: "Livro de regras" };
+    case "miniplayer":
+      return { titulo: "Mesa", subtitulo: "O que a mesa está vendo" };
     case "rolagens":
       return { titulo: "Rolagens", subtitulo: "O que a mesa tirou" };
     case "cenas":
@@ -258,6 +265,10 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
     // de texto, e a 288 pixels ela chega ilegível mesmo ajustada à largura.
     case "livro":
       return 720;
+    // Largo o bastante para ler um token, e 16:9 dá 180 de altura: cabe num
+    // canto do palco sem esconder o que o mestre está editando.
+    case "miniplayer":
+      return 320;
     default:
       return 288;
   }
@@ -324,6 +335,9 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
       return <EstanteBody />;
     case "livro":
       return <LeitorLivro livroId={conteudo.livroId} />;
+    // Nem cena nem store: assina o fluxo do daemon como a TV. Ver o cabeçalho.
+    case "miniplayer":
+      return <MiniplayerBody />;
     // A única que o aplicativo não desenha sozinho: o corpo vem do módulo da
     // extensão, que só é importado agora. Ver `PainelDeExtensao`.
     case "extensao":

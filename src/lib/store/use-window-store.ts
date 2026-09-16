@@ -36,6 +36,11 @@ export type ConteudoJanela =
   // criar uma segunda janela do mesmo PDF. Ver `chaveDe`.
   | { tipo: "estante" }
   | { tipo: "livro"; livroId: string; titulo: string }
+  // O que a MESA está vendo, em miniatura. Assina o mesmo fluxo que a TV, e é
+  // isso que o torna prova e não estimativa: o que aparece aqui é o que saiu
+  // do daemon, já sem os pontos do mestre e já com a câmera da cena. Sem
+  // campo: só há uma mesa.
+  | { tipo: "miniplayer" }
   // O que a mesa tirou. Era uma fileira flutuante sobre o mapa com arrasto,
   // escala e posição próprios -- um sistema de janelas paralelo a este, escrito
   // à mão para uma tela só. Ver `RolagensBody`.
@@ -73,6 +78,8 @@ export function chaveDe(conteudo: ConteudoJanela): string {
       return `asset:${conteudo.assetId}`;
     case "estante":
       return "estante";
+    case "miniplayer":
+      return "miniplayer";
     // Sem o título: ele é rótulo, não identidade. Dois pedidos do mesmo livro
     // são a mesma janela, e a posição lembrada é por livro.
     case "livro":

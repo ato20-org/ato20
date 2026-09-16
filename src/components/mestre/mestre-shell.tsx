@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
 
 import { AbrirEspectador } from "@/components/mestre/abrir-espectador";
+import { MiniplayerToggle } from "@/components/mestre/miniplayer-window";
 import { PlayersChip } from "@/components/mestre/players-chip";
 import { TableInvite } from "@/components/mestre/table-invite";
 import { DockRow } from "@/components/mestre/dock/dock-row";
@@ -192,6 +193,7 @@ export function MestreShell() {
             coisa, e mora no canto do palco — ver `PlayersChip`. */}
         <div className="ml-auto flex items-center gap-2">
           <TableInvite />
+          <MiniplayerToggle />
           <AbrirEspectador />
         </div>
       </header>
