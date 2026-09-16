@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { listPlayers, type Player } from "@/lib/vault/players";
 
 /** Depois disso, o jogador deixa de contar como "na mesa agora". */
@@ -36,8 +37,12 @@ export function usePlayers(intervaloMs: number) {
 
   const recarregar = useCallback(async () => {
     try {
-      setPlayers(await listPlayers());
+      const mesa = await listPlayers();
+      setPlayers(mesa);
       setAgora(Date.now());
+      // A ficha lê os jogadores do store, que só relia quando alguém mexia
+      // em personagem. Ver `receberJogadores`.
+      useCharactersStore.getState().receberJogadores(mesa);
     } catch {
       setPlayers([]);
     }
