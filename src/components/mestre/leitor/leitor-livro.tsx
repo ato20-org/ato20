@@ -496,6 +496,7 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
                     largura={largura}
                     razaoPadrao={natural.razao}
                     desenhar={mantidas.has(numero)}
+                    prioridade={Math.abs(numero - atual)}
                     registrar={registrar(numero)}
                     lupa={lupa}
                     ampliacao={ampliacao}
