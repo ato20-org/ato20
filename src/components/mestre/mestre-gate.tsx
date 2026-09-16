@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  BookOpen,
   CalendarDays,
   Clock,
   FileArchive,
@@ -18,6 +17,8 @@ import {
   X,
 } from "lucide-react";
 
+import { toast } from "sonner";
+
 import logo from "@/assets/logo-white.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,8 @@ import { Label } from "@/components/ui/label";
 import { useAtualizacao } from "@/hooks/use-atualizacao";
 import { useCaminhoCurto } from "@/hooks/use-caminho-curto";
 import { useEstante } from "@/hooks/use-estante";
+import { Livro3D } from "@/components/mestre/livro-3d";
+import { abrirLivroNoSistema } from "@/lib/vault/estante";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { dataCurta, desde, duracao } from "@/lib/tempo";
 import { cn } from "@/lib/utils";
@@ -246,31 +249,34 @@ function Estante() {
   if (livros.length === 0) return null;
 
   return (
-    <Secao titulo="Na estante">
-      {livros.map((livro) => (
-        <li key={livro.id}>
-          <div className="bg-input/30 border-border flex items-center gap-2.5 rounded-lg border px-3 py-2">
-            <BookOpen
-              className="text-muted-foreground size-4 shrink-0"
-              aria-hidden
+    <section className="space-y-1.5">
+      <h2 className="text-muted-foreground px-1 text-xs font-medium tracking-wide uppercase">
+        Na estante
+      </h2>
+
+      {/* Prateleira, e não lista: com capa, cada livro é uma caixa em pé, e
+          caixas ficam lado a lado. Rola na horizontal quando não cabem, em vez
+          de empurrar a lista de campanhas para baixo. Abre no programa de PDF
+          da máquina -- ver `abrirLivroNoSistema`. */}
+      <ul className="-mx-2 flex gap-1 overflow-x-auto px-2 pt-2 pb-1">
+        {livros.map((livro) => (
+          <li key={livro.id} className="shrink-0">
+            <Livro3D
+              livro={livro}
+              onAbrir={() => {
+                void abrirLivroNoSistema(livro.id).catch((cause: unknown) =>
+                  toast.error(
+                    cause instanceof Error
+                      ? cause.message
+                      : "Não foi possível abrir o livro.",
+                  ),
+                );
+              }}
             />
-            <span className="min-w-0 flex-1 truncate text-sm">
-              {livro.titulo}
-            </span>
-            {/* Páginas só depois da primeira abertura: quem conta é o leitor,
-                na tela, e o Rust copia o arquivo sem abri-lo. Antes disso a
-                linha sai sem o número em vez de sair sem o livro. */}
-            {livro.paginas ? (
-              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                {livro.pagina > 1
-                  ? `pág. ${livro.pagina} de ${livro.paginas}`
-                  : `${livro.paginas} págs.`}
-              </span>
-            ) : null}
-          </div>
-        </li>
-      ))}
-    </Secao>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
