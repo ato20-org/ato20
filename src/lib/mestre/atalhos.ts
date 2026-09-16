@@ -13,6 +13,23 @@ import {
   removeSelection,
   selectAllItems,
 } from "@/lib/mestre/item-actions";
+import {
+  alternarTransmissao,
+  cameraAtual,
+  cameraNaPosicao,
+  cameraSelecionada,
+  enquadrarAqui,
+  enquadrarSelecao,
+  irParaCamera,
+  mostrarCenaInteira,
+  moverCamera,
+  novaCamera,
+  PASSO_CAMERA,
+  PASSO_CAMERA_LARGO,
+  zoomCamera,
+  ZOOM_CAMERA_STEP,
+} from "@/lib/mestre/camera-actions";
+import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { executarComando } from "@/lib/extensoes/carregar";
@@ -195,6 +212,196 @@ export const ATALHOS_BASE: Atalho[] = [
   },
 
   /*
+   * A câmera da MESA, que é outra coisa: os três acima mexem no palco do
+   * mestre, e estes mexem no que a TV mostra.
+   *
+   * O padrão: Ctrl é do palco do mestre, porque é o que o browser já faz com
+   * zoom. Letra SOLTA é da mesa, para as mãos ficarem no teclado durante a
+   * sessão. Shift é a variante forte ou inversa da mesma tecla, nunca uma
+   * função nova. E Alt não entra em nada: no Linux, Alt+arrastar é do
+   * gerenciador de janelas e Alt+setas o GTK engole antes da webview -- foi
+   * medido, as setas com Alt simplesmente não chegavam.
+   */
+  // Sem nada selecionado a seta não tem item para empurrar, e a câmera é o
+  // único alvo que sobra: aí ela anda sem precisar do Alt. Com seleção, a
+  // seta continua empurrando o item, como sempre.
+  {
+    grupo: "Câmera",
+    tecla: "Shift+Setas (sem seleção)",
+    rotulo: `Mover a câmera ${Math.round(PASSO_CAMERA_LARGO * 100)}% de cada vez`,
+    combina: (evento) =>
+      !comando(evento) &&
+      evento.shiftKey &&
+      evento.key in SETAS &&
+      semSelecao() &&
+      Boolean(cameraAtual()),
+    executar: (evento) => moverMesa(evento, PASSO_CAMERA_LARGO),
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Câmera",
+    tecla: "Setas (sem seleção)",
+    rotulo: `Mover a câmera ${Math.round(PASSO_CAMERA * 100)}% de cada vez`,
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.shiftKey &&
+      evento.key in SETAS &&
+      semSelecao() &&
+      Boolean(cameraAtual()),
+    executar: (evento) => moverMesa(evento, PASSO_CAMERA),
+    impedirPadrao: true,
+  },
+  // Os mesmos sinais do zoom do palco, sem o Ctrl: Ctrl+= é o teu zoom, = é o
+  // da mesa.
+  {
+    grupo: "Câmera",
+    tecla: "=",
+    rotulo: "Aproximar a câmera",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      (evento.key === "=" || evento.key === "+"),
+    executar: () => zoomCamera(ZOOM_CAMERA_STEP),
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Câmera",
+    tecla: "-",
+    rotulo: "Afastar a câmera",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      (evento.key === "-" || evento.key === "_"),
+    executar: () => zoomCamera(1 / ZOOM_CAMERA_STEP),
+    impedirPadrao: true,
+  },
+  // Shift dos dois lados, como nos pares de camada.
+  {
+    grupo: "Câmera",
+    tecla: "Shift+C",
+    rotulo: "Tirar do ar: a mesa fica escura",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      evento.shiftKey &&
+      letra(evento) === "c",
+    executar: mostrarCenaInteira,
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Câmera",
+    tecla: "F",
+    rotulo: "Enquadrar a seleção na câmera",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      !evento.shiftKey &&
+      letra(evento) === "f",
+    executar: enquadrarSelecao,
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Câmera",
+    tecla: "C",
+    rotulo: "Levar a câmera selecionada para onde estás",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      !evento.shiftKey &&
+      letra(evento) === "c",
+    executar: enquadrarAqui,
+    impedirPadrao: true,
+  },
+  // As travas alternam: a mesma tecla prende e solta, porque "prender no que
+  // já está preso" não é um estado diferente.
+  {
+    grupo: "Câmera",
+    tecla: "Shift+L",
+    rotulo: "Espelhar teu palco na câmera selecionada",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      evento.shiftKey &&
+      letra(evento) === "l",
+    executar: () => useCameraLockStore.getState().alternarEspelho(),
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Câmera",
+    tecla: "L",
+    rotulo: "Câmera selecionada segue a seleção",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      !evento.shiftKey &&
+      letra(evento) === "l",
+    // Alterna: com a câmera já seguindo alguém, L solta.
+    executar: () => {
+      const trava = useCameraLockStore.getState();
+      if (cameraSelecionada()?.alvoIds) trava.soltar();
+      else trava.prenderNaSelecao();
+    },
+    impedirPadrao: true,
+  },
+  /*
+   * Câmeras por posição. `event.code` e não `event.key`: com Shift, a tecla 1
+   * entrega "!" -- e em teclado ABNT entrega outra coisa ainda. O código
+   * físico é o mesmo em qualquer layout.
+   *
+   * Seleciona, não transmite: trocar o que a TV mostra é sempre o T, para o
+   * mestre nunca pôr uma câmera no ar por ter errado o número.
+   */
+  {
+    grupo: "Câmera",
+    tecla: "Shift+1..9",
+    rotulo: "Selecionar a câmera nessa posição",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      evento.shiftKey &&
+      digitoDe(evento) !== null,
+    executar: (evento) => {
+      const posicao = digitoDe(evento);
+      const camera = posicao === null ? undefined : cameraNaPosicao(posicao);
+      if (camera) useCameraLockStore.getState().selecionar(camera.id);
+    },
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Câmera",
+    tecla: "T",
+    rotulo: "Transmitir a câmera selecionada, ou tirar do ar",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      !evento.shiftKey &&
+      letra(evento) === "t",
+    executar: alternarTransmissao,
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Câmera",
+    tecla: "N",
+    rotulo: "Nova câmera a partir da selecionada",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      !evento.shiftKey &&
+      letra(evento) === "n",
+    executar: () => void novaCamera(),
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Câmera",
+    tecla: "Home",
+    rotulo: "Ir até a câmera selecionada",
+    combina: (evento) => !comando(evento) && evento.key === "Home",
+    executar: irParaCamera,
+    // Home rola a página para o topo se não for barrado.
+    impedirPadrao: true,
+  },
+
+  /*
    * Os quatro de camada, e o `}` ao lado do `]`.
    *
    * Pela mesma razão do `+` na câmera: com Shift apertado, `event.key` do `]`
@@ -247,11 +454,16 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Seleção",
     tecla: "Esc",
-    rotulo: "Largar a seleção",
+    rotulo: "Largar a seleção e soltar a câmera",
     // Sem exigir a ausência do comando, como estava antes: Ctrl+Esc também
     // larga, e é o comportamento que já existia.
     combina: (evento) => evento.key === "Escape",
-    executar: () => useSelectionStore.getState().clear(),
+    executar: () => {
+      useSelectionStore.getState().clear();
+      // E solta a mesa: Esc é "para tudo o que está acontecendo", e uma TV
+      // seguindo um token é algo que está acontecendo.
+      useCameraLockStore.getState().soltar();
+    },
     // Escape não faz nada no browser que valha barrar.
     impedirPadrao: false,
   },
@@ -390,6 +602,31 @@ function combinaCom(tecla: string): (evento: KeyboardEvent) => boolean {
     evento.shiftKey === precisaShift &&
     evento.altKey === precisaAlt &&
     letra(evento) === alvo;
+}
+
+/** 1..9 pela tecla FÍSICA (`Digit1`..`Digit9`), ou nada. */
+function digitoDe(evento: KeyboardEvent): number | null {
+  const casa = /^Digit([1-9])$/.exec(evento.code);
+
+  return casa ? Number(casa[1]) : null;
+}
+
+function semSelecao(): boolean {
+  const { selectedIds, selectedFogId, selectedPortraitIds } =
+    useSelectionStore.getState();
+
+  return (
+    selectedIds.length === 0 &&
+    !selectedFogId &&
+    selectedPortraitIds.length === 0
+  );
+}
+
+function moverMesa(evento: KeyboardEvent, passo: number): void {
+  const seta = SETAS[evento.key];
+  if (!seta) return;
+
+  moverCamera(seta.x * passo, seta.y * passo);
 }
 
 function empurrar(evento: KeyboardEvent, passo: number): void {

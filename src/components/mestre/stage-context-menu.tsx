@@ -9,15 +9,19 @@ import {
   ChevronsUp,
   ClipboardPaste,
   Copy,
+  Crosshair,
   CopyPlus,
   Eye,
   EyeOff,
   FlipHorizontal,
   FlipVertical,
+  Focus,
   Lock,
   LockOpen,
   Maximize,
   MousePointerSquareDashed,
+  Plus,
+  Radio,
   ScanSearch,
   Scissors,
   Trash2,
@@ -52,10 +56,16 @@ import {
   toggleFogRevealed,
   toggleSelectionLock,
 } from "@/lib/mestre/item-actions";
+import {
+  alternarTransmissao,
+  enquadrarAqui,
+  enquadrarSelecao,
+  mostrarCenaInteira,
+  novaCamera,
+} from "@/lib/mestre/camera-actions";
+import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
-import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { Scene } from "@/types/scene";
 
 /**
@@ -73,13 +83,20 @@ export function StageContextMenu({
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const hasClipboard = useClipboardStore((state) => state.drafts.length > 0);
-  const viewport = useViewportStore((state) => state.viewport);
-  const setSceneCamera = useSceneStore((state) => state.setSceneCamera);
 
   const selectedItems = scene.items.filter((item) =>
     selectedIds.includes(item.id),
   );
   const hasSelection = selectedItems.length > 0;
+  const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
+  const prenderNaSelecao = useCameraLockStore(
+    (state) => state.prenderNaSelecao,
+  );
+  const soltar = useCameraLockStore((state) => state.soltar);
+  const cameraSelecionada = scene.cameras?.find(
+    (camera) => camera.id === selecionadaId,
+  );
+  const segue = Boolean(cameraSelecionada?.alvoIds);
   const allLocked = hasSelection && selectedItems.every((item) => item.locked);
   const opacidade = opacidadeDaSelecao(selectedItems);
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
@@ -193,6 +210,34 @@ export function StageContextMenu({
 
             <ContextMenuSeparator />
 
+            {/* Junto das ações DO ITEM, e não lá embaixo com a câmera: quem
+                clica com o botão direito num token está pensando nele, e
+                "a câmera segue este" é uma coisa que se faz com o token. */}
+            <ContextMenuItem
+              disabled={!cameraSelecionada}
+              onClick={segue ? soltar : prenderNaSelecao}
+            >
+              <Crosshair />
+              {segue
+                ? "Câmera deixa de seguir"
+                : selectedItems.length > 1
+                  ? "Câmera segue estes"
+                  : "Câmera segue este"}
+              <ContextMenuShortcut>L</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={!cameraSelecionada}
+              onClick={enquadrarSelecao}
+            >
+              <Focus />
+              {selectedItems.length > 1
+                ? "Enquadrar estes na câmera"
+                : "Enquadrar este na câmera"}
+              <ContextMenuShortcut>F</ContextMenuShortcut>
+            </ContextMenuItem>
+
+            <ContextMenuSeparator />
+
             <ContextMenuItem onClick={toggleSelectionLock}>
               {allLocked ? <LockOpen /> : <Lock />}
               {allLocked ? "Destravar" : "Travar"}
@@ -223,14 +268,34 @@ export function StageContextMenu({
 
         <ContextMenuSeparator />
 
-        <ContextMenuItem onClick={() => setSceneCamera(scene.id, viewport)}>
+        <ContextMenuItem
+          disabled={!cameraSelecionada}
+          onClick={enquadrarAqui}
+        >
           <ScanSearch />
-          Enquadrar a mesa aqui
+          Trazer a câmera para aqui
+          <ContextMenuShortcut>C</ContextMenuShortcut>
         </ContextMenuItem>
-        {scene.camera ? (
-          <ContextMenuItem onClick={() => setSceneCamera(scene.id, undefined)}>
+        <ContextMenuItem disabled={!cameraSelecionada} onClick={() => void novaCamera()}>
+          <Plus />
+          Nova câmera
+          <ContextMenuShortcut>N</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={!cameraSelecionada}
+          onClick={alternarTransmissao}
+        >
+          <Radio />
+          {cameraSelecionada && scene.cameraNoArId === cameraSelecionada.id
+            ? "Tirar do ar"
+            : "Transmitir a câmera"}
+          <ContextMenuShortcut>T</ContextMenuShortcut>
+        </ContextMenuItem>
+        {scene.cameraNoArId ? (
+          <ContextMenuItem onClick={mostrarCenaInteira}>
             <Maximize />
-            Mostrar a cena inteira
+            Tirar do ar
+            <ContextMenuShortcut>Shift+C</ContextMenuShortcut>
           </ContextMenuItem>
         ) : null}
       </ContextMenuContent>

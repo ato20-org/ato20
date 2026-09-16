@@ -16,6 +16,7 @@ import { PinIndex } from "@/components/mestre/pin-index";
 import { SaquinhoDados } from "@/components/mestre/saquinho-dados";
 import { SpotlightChip } from "@/components/mestre/spotlight-chip";
 import { StageContextMenu } from "@/components/mestre/stage-context-menu";
+import { CamerasSalvas } from "@/components/mestre/cameras-salvas";
 import { ViewportControls } from "@/components/mestre/viewport-controls";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { SceneStage } from "@/components/playground/scene-stage";
@@ -417,7 +418,8 @@ function StageBoundary({
 
       {scene ? (
         <div className="absolute right-3 bottom-3 flex items-center gap-2">
-          <ViewportControls scene={scene} />
+          <CamerasSalvas scene={scene} />
+          <ViewportControls />
         </div>
       ) : null}
 

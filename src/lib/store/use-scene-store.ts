@@ -33,6 +33,7 @@ import {
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   type Board,
+  type CameraSalva,
   type CanvasItem,
   type FogRegion,
   type ItemDraft,
@@ -107,6 +108,21 @@ type SceneStore = {
   setBackground: (sceneId: string, assetId: string | undefined) => void;
   /** `undefined` devolve a mesa ao plano inteiro. */
   setSceneCamera: (sceneId: string, camera: Viewport | undefined) => void;
+  /** Cria uma câmera. Devolve o id. */
+  salvarCamera: (sceneId: string, camera: Omit<CameraSalva, "id">) => string;
+  /**
+   * Altera uma câmera. Se ela está no ar, o recorte novo vai junto para
+   * `camera`, que é o que a mesa lê: transmitir é contínuo, não um retrato.
+   */
+  atualizarCamera: (
+    sceneId: string,
+    cameraId: string,
+    patch: Partial<Omit<CameraSalva, "id">>,
+  ) => void;
+  /** Remove. Se era a que estava no ar, a mesa fica escura. */
+  removerCamera: (sceneId: string, cameraId: string) => void;
+  /** Põe uma câmera no ar, ou nenhuma: aí a mesa fica escura. */
+  transmitirCamera: (sceneId: string, cameraId: string | undefined) => void;
   /**
    * Liga, ajusta ou desliga a grade da cena. `undefined` desliga.
    *
@@ -362,6 +378,61 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
     setSceneCamera(sceneId, camera) {
       get().updateScene(sceneId, (scene) => ({ ...scene, camera }));
+    },
+
+    salvarCamera(sceneId, camera) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        cameras: [...(scene.cameras ?? []), { ...camera, id }],
+      }));
+
+      return id;
+    },
+
+    atualizarCamera(sceneId, cameraId, patch) {
+      get().updateScene(sceneId, (scene) => {
+        const noAr = scene.cameraNoArId === cameraId && patch.viewport;
+
+        return {
+          ...scene,
+          cameras: (scene.cameras ?? []).map((camera) =>
+            camera.id === cameraId ? { ...camera, ...patch } : camera,
+          ),
+          camera: noAr ? patch.viewport : scene.camera,
+        };
+      });
+    },
+
+    removerCamera(sceneId, cameraId) {
+      get().updateScene(sceneId, (scene) => {
+        const cameras = (scene.cameras ?? []).filter(
+          (camera) => camera.id !== cameraId,
+        );
+        const eraNoAr = scene.cameraNoArId === cameraId;
+
+        // Lista vazia sai do objeto, pela mesma razão de `grid` e `tracos`:
+        // não engordar toda cena com um campo que não diz nada.
+        return {
+          ...scene,
+          cameras: cameras.length > 0 ? cameras : undefined,
+          cameraNoArId: eraNoAr ? undefined : scene.cameraNoArId,
+          camera: eraNoAr ? undefined : scene.camera,
+        };
+      });
+    },
+
+    transmitirCamera(sceneId, cameraId) {
+      get().updateScene(sceneId, (scene) => {
+        const alvo = scene.cameras?.find((camera) => camera.id === cameraId);
+
+        return {
+          ...scene,
+          cameraNoArId: alvo?.id,
+          camera: alvo?.viewport,
+        };
+      });
     },
 
     setSceneGrid(sceneId, grid) {

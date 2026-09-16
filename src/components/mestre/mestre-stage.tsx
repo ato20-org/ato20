@@ -15,6 +15,7 @@ import { PostitLayer } from "@/components/mestre/postit-layer";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
+import { CamerasFantasma } from "@/components/playground/camera-fantasma";
 import { MarqueeBox } from "@/components/playground/marquee-box";
 import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { RulerOverlay } from "@/components/playground/ruler-overlay";
@@ -25,7 +26,10 @@ import { SelectionBox } from "@/components/playground/selection-box";
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
+import { useModoCinegrafista } from "@/hooks/use-modo-cinegrafista";
 import { usePanMode } from "@/hooks/use-pan-mode";
+import { gravarCameraManual } from "@/lib/mestre/camera-actions";
+import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
   flipSelection,
@@ -229,7 +233,33 @@ export function MestreStage({ scene }: { scene: Scene }) {
   const removeTracos = useSceneStore((state) => state.removeTracos);
   const addPin = useSceneStore((state) => state.addPin);
   const addPostit = useSceneStore((state) => state.addPostit);
-  const setSceneCamera = useSceneStore((state) => state.setSceneCamera);
+  // A câmera que o mestre está editando. Ver `useCameraLockStore`.
+  const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
+  const espelhoMestre = useCameraLockStore((state) => state.espelhoMestre);
+  const fantasmasVisiveis = useCameraLockStore(
+    (state) => state.fantasmasVisiveis,
+  );
+  const garantirCameraInicial = useCameraLockStore(
+    (state) => state.garantirCameraInicial,
+  );
+  const selecionada = scene.cameras?.find(
+    (camera) => camera.id === selecionadaId,
+  );
+
+  // Toda cena começa com a Câmera 1, e a selecionada tem de existir nela.
+  // Efeito e não render: cria câmera no store, e isso é escrita.
+  useEffect(() => {
+    garantirCameraInicial(scene);
+  }, [scene, garantirCameraInicial]);
+
+  // V segurado: a selecionada segue o mouse. Ver `useModoCinegrafista`.
+  const cinegrafista = useModoCinegrafista({
+    camera: selecionada?.viewport,
+    ativo: !panMode,
+    onChange: (viewport) => {
+      if (selecionada) gravarCameraManual(selecionada.id, viewport);
+    },
+  });
 
   const guardados = usePortraitStore((state) => state.portraits);
   const filaAuto = usePortraitStore((state) => state.filaAuto);
@@ -782,6 +812,21 @@ export function MestreStage({ scene }: { scene: Scene }) {
     }
 
     const anchor = toScene(event.clientX, event.clientY);
+
+    // Clique no vazio dentro de uma câmera seleciona a câmera -- a menor que
+    // contém o ponto, para a de dentro ganhar da de fora. Só com a ferramenta
+    // de seleção: com lápis ou névoa na mão o clique é um traço.
+    if (tool === "select") {
+      const dentro = (scene.cameras ?? [])
+        .filter(({ viewport: v }) =>
+          anchor.x >= v.x && anchor.x <= v.x + v.width &&
+          anchor.y >= v.y && anchor.y <= v.y + v.height,
+        )
+        .sort((a, b) => a.viewport.width - b.viewport.width)[0];
+
+      if (dentro && dentro.id !== selecionadaId)
+        useCameraLockStore.getState().selecionar(dentro.id);
+    }
 
     // Clique, e não arrasto: o ponto não tem tamanho. Cravar já abre a nota,
     // porque cravar sem escrever nada deixaria na tela um alfinete numerado que
@@ -1392,16 +1437,57 @@ export function MestreStage({ scene }: { scene: Scene }) {
       {marquee ? <MarqueeBox bounds={marquee} /> : null}
       <AlignmentGuides guides={guides} />
 
-      {scene.camera ? (
+      {fantasmasVisiveis && scene.cameras ? (
+        <CamerasFantasma
+          scene={scene}
+          selecionadaId={selecionadaId}
+          editavel={!panMode}
+        />
+      ) : null}
+
+      {/* Espelhando o palco, a moldura coincide com a tela: desenhá-la seria
+          uma borda em volta do palco inteiro dizendo nada. */}
+      {selecionada && !espelhoMestre ? (
         <CameraFrame
-          camera={scene.camera}
+          camera={selecionada}
+          transmitindo={scene.cameraNoArId === selecionada.id}
+          cinegrafista={cinegrafista}
           // Com espaço segurado a moldura vira só informativa: o gesto pertence
           // ao deslocamento da cena.
           onChange={
-            panMode ? undefined : (camera) => setSceneCamera(scene.id, camera)
+            panMode
+              ? undefined
+              : (viewport) => gravarCameraManual(selecionada.id, viewport)
           }
         />
       ) : null}
+
+      {/* Os itens que a selecionada segue, marcados: sem isto o mestre vê a
+          câmera andar sozinha e não sabe atrás de quem. Só contorno,
+          atravessável. */}
+      {selecionada?.alvoIds
+        ? scene.items
+            .filter((item) => selecionada.alvoIds?.includes(item.id))
+            .map((item) => {
+              const caixa = itemBounds(item);
+
+              return (
+                <div
+                  key={item.id}
+                  className="outline-primary pointer-events-none absolute rounded-sm outline-dashed"
+                  style={{
+                    left: caixa.minX,
+                    top: caixa.minY,
+                    width: caixa.maxX - caixa.minX,
+                    height: caixa.maxY - caixa.minY,
+                    outlineWidth: 2 / scale,
+                    outlineOffset: 4 / scale,
+                    zIndex: 11_500,
+                  }}
+                />
+              );
+            })
+        : null}
     </>
   );
 }
