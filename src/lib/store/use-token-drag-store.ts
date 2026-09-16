@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 
+import { MIN_ITEM_SIZE } from "@/lib/geometry/transform";
+
 /**
  * A imagem no ar: o que um painel já soltou da mão e o destino ainda não
  * recebeu.
@@ -164,16 +166,26 @@ type TokenDragStore = {
 export const PASSO_DA_RODA = 1.1;
 
 /**
- * Até onde a roda vai.
+ * Até onde a roda cresce.
  *
- * Um quarto e quatro vezes, e não livre, porque o gesto não tem trilho de volta:
- * quem passa de vinte entalhes para um lado precisa de vinte para o outro para
- * achar o tamanho de novo. Nos extremos o que sobra é apagar e pôr de novo, e
- * fora dessa faixa o token ou some sob a grade ou cobre o mapa inteiro — dois
- * tamanhos que ninguém escolhe de propósito.
+ * Quatro vezes, e não livre, porque o gesto não tem trilho de volta: quem passa
+ * de vinte entalhes para um lado precisa de vinte para o outro para achar o
+ * tamanho de novo. Acima disso o token cobre o mapa inteiro, tamanho que
+ * ninguém escolhe de propósito.
  */
-const FATOR_MIN = 0.25;
 const FATOR_MAX = 4;
+
+/**
+ * Até onde a roda encolhe: até o lado CURTO bater no mesmo piso do gizmo.
+ *
+ * Era um quarto do tamanho de nascença, e não bastava: a miniatura nasce em
+ * até 40% da cena, e um quarto disso ainda é um token de dez quadrados da
+ * grade. O piso agora é absoluto, e é o mesmo que o redimensionar pelos cantos
+ * respeita -- assim o que a roda deixa soltar é o que a alça deixa encolher.
+ */
+function fatorMinimo(arrasto: Pick<ArrastoDeToken, "largura" | "altura">): number {
+  return MIN_ITEM_SIZE / Math.min(arrasto.largura, arrasto.altura);
+}
 
 /** O tamanho que o token terá se for solto agora, em unidades de cena. */
 export function tamanhoDoArrasto(arrasto: ArrastoDeToken): {
@@ -208,7 +220,7 @@ export const useTokenDragStore = create<TokenDragStore>((set, get) => ({
 
       const fator = Math.min(
         FATOR_MAX,
-        Math.max(FATOR_MIN, state.arrasto.fator * passo),
+        Math.max(fatorMinimo(state.arrasto), state.arrasto.fator * passo),
       );
 
       // Identidade preservada no batente: sem isto, rodar contra o limite

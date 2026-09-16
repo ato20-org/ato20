@@ -131,7 +131,6 @@ export function resizeItem(
   // eixo só, e forçar o outro faria o item crescer sem o mouse pedir.
   if (keepAspect && direction.x !== 0 && direction.y !== 0) {
     const ratio = item.height / item.width;
-
     if (Math.abs(deltaWidth) > Math.abs(deltaHeight)) {
       deltaHeight = deltaWidth * ratio;
     } else {
@@ -139,8 +138,18 @@ export function resizeItem(
     }
   }
 
-  const width = Math.max(MIN_ITEM_SIZE, item.width + deltaWidth);
-  const height = Math.max(MIN_ITEM_SIZE, item.height + deltaHeight);
+  // Com a proporção travada o piso também tem de respeitá-la: um piso por
+  // eixo deixa o lado curto parar em 24 enquanto o longo continua encolhendo,
+  // e o item achata até virar um quadrado -- que era justamente o que travar a
+  // proporção existia para impedir. O piso vai para o lado CURTO, e o longo
+  // fica com o piso proporcional.
+  const aspectLocked = keepAspect && direction.x !== 0 && direction.y !== 0;
+  const ratio = item.height / item.width;
+  const minWidth = aspectLocked ? Math.max(MIN_ITEM_SIZE, MIN_ITEM_SIZE / ratio) : MIN_ITEM_SIZE;
+  const minHeight = aspectLocked ? Math.max(MIN_ITEM_SIZE, MIN_ITEM_SIZE * ratio) : MIN_ITEM_SIZE;
+
+  const width = Math.max(minWidth, item.width + deltaWidth);
+  const height = Math.max(minHeight, item.height + deltaHeight);
 
   // O clamp pode ter engolido parte do delta pedido; o centro anda metade do
   // crescimento que de fato aconteceu, não do que foi solicitado.
