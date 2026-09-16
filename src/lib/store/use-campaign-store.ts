@@ -4,7 +4,7 @@ import { create } from "zustand";
 
 import { flushPortraits } from "@/lib/store/use-portrait-store";
 import { flushBoard } from "@/lib/store/use-scene-store";
-import { isDesktop, VaultError } from "@/lib/vault/bridge";
+import { aoSumirCampanha, isDesktop, VaultError } from "@/lib/vault/bridge";
 import {
   createCampaign,
   exportCampaign,
@@ -47,6 +47,15 @@ export type CampaignStatus =
    */
   | "abrindo"
   | "ready"
+  /**
+   * A campanha estava aberta e a pasta dela sumiu do disco.
+   *
+   * Estado próprio, e não `escolhendo` com uma mensagem: a tela precisa do
+   * nome e do caminho da campanha que se perdeu, e a porta zera `campaign`.
+   * O processo nativo continua com o vault aberto -- é a cena na memória que
+   * uma futura "salvar em outra pasta" vai querer.
+   */
+  | "perdida"
   | "error";
 
 type CampaignStore = {
@@ -129,6 +138,21 @@ async function refreshRecents(): Promise<RecentEntry[]> {
     // A lista é conveniência: sem ela a porta ainda abre pelo seletor.
     return [];
   }
+}
+
+/**
+ * A pasta sumiu com a mesa aberta.
+ *
+ * Idempotente de propósito: o board grava com atraso e vai falhar de novo a
+ * cada tentativa enquanto a pasta não voltar, e o segundo aviso não pode
+ * derrubar nada -- nem a tela de "perdida", nem a porta se o mestre já saiu
+ * para ela. Só `ready` vira `perdida`.
+ */
+function campanhaSumiu(mensagem: string): void {
+  const { status } = useCampaignStore.getState();
+  if (status !== "ready") return;
+
+  useCampaignStore.setState({ status: "perdida", error: mensagem });
 }
 
 export const useCampaignStore = create<CampaignStore>((set, get) => ({
@@ -297,3 +321,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     void refreshRecents().then((recents) => set({ recents }));
   },
 }));
+
+// De módulo, como o store: vive enquanto a janela viver, e não há quem o
+// desligue. Ver `aoSumirCampanha`.
+aoSumirCampanha(campanhaSumiu);
