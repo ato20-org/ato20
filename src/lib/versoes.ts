@@ -56,6 +56,85 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.0.6",
+    data: "2026-09-16",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo:
+          "A cena tem câmeras com nome, e você escolhe qual delas está no ar",
+        detalhe:
+          "Cada câmera é um enquadramento guardado do mapa. Elas ficam numa pílula no alto da mesa, e transmitir é escolher uma — a que está no ar aparece marcada, e as outras ficam apagadas no palco, para você ver o que os jogadores não estão vendo. Trocar de câmera corta em fade na TV, e sem nenhuma no ar a mesa fica escura. Segurando V, o mouse vira cinegrafista e move o enquadramento sem mexer no mapa.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O acervo e a lista \"Em cena\" ganharam pastas",
+        detalhe:
+          "Pasta dentro de pasta, e arrastar uma pasta para dentro de outra. No acervo, Ctrl e Shift selecionam várias imagens de uma vez. Na lista \"Em cena\", clicar num item do mapa já pega a pasta inteira a que ele pertence.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "Importar arquivo grande não trava mais a janela, e dá para cancelar no meio",
+        detalhe:
+          "A cópia saiu da thread da janela: um aviso mostra o que está entrando, quanto falta e um botão de parar. A miniatura de um mapa de 50 megapixels agora sai em menos de um segundo.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Arquivo largado no painel de imagens entra no acervo",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A área do mapa cresce com o que você coloca nela",
+        detalhe:
+          "Antes o plano tinha um tamanho fixo e o que passava da borda ficava fora do alcance. Agora ele acompanha as peças.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A barra de ferramentas virou duas bolsas",
+        detalhe: "A grade e a régua foram para a bolsa do mapa.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O que a mesa tirou nas rolagens vira janela da bancada",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O alfinete alterna a nota do ponto, e a bolinha do saquinho vira X enquanto ele está aberto",
+        detalhe:
+          "Dois botões que antes só tinham ida: agora clicar de novo desfaz, e o ícone diz em que estado você está.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "Trocar o mapa de fundo três vezes seguidas importava o mesmo arquivo três vezes",
+        detalhe: "Três cópias do mesmo mapa pesado dentro da campanha.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "Abrir a tela do espectador no navegador falhava calado",
+        detalhe:
+          "Em máquina Linux sem o `xdg-open`, o botão não fazia nada e não dizia por quê.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "Renomear pelo menu não fazia nada, e agora F2 também renomeia",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O botão de tirar o post-it se escondia, e a prévia não mostrava onde o papel ia cair",
+      },
+      {
+        tipo: "correcao",
+        titulo: "No celular do jogador, o esmaecido da rolagem comia o texto da ficha",
+      },
+      {
+        tipo: "correcao",
+        titulo: "A mesa aceitava dado sem fim",
+        detalhe: "Agora o teto é cinquenta dados por rolagem.",
+      },
+    ],
+  },
+  {
     versao: "0.0.5",
     data: "2026-09-15",
     mudancas: [
