@@ -28,9 +28,9 @@ import {
 /**
  * Grade da cena: liga, desliga e ajusta.
  *
- * Ao lado do botão de enquadrar porque as duas são a mesma pergunta — o que a
- * mesa vê do mapa. E a grade é da cena, então ela viaja: a TV e os celulares
- * mostram a mesma, o que é o ponto de contar movimento em voz alta.
+ * Na pílula das ferramentas do MAPA, junto do alfinete e do postit: é marcação
+ * sobre o chão, como elas. E a grade é da cena, então ela viaja: a TV e os
+ * celulares mostram a mesma, o que é o ponto de contar movimento em voz alta.
  *
  * Clique liga e desliga; o ajuste fica atrás da seta. Ligar é o gesto de toda
  * sessão, e configurar é o de uma vez por mapa — cobrar o segundo para fazer o

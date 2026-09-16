@@ -3,33 +3,48 @@
 import {
   Eraser,
   Hand,
+  Map,
   MapPin,
   MousePointer2,
   Pencil,
+  Puzzle,
+  Ruler,
   SquareDashedBottom,
   StickyNote,
-  Puzzle,
 } from "lucide-react";
+import { useMemo, useState } from "react";
 
+import { GridControl } from "@/components/mestre/grid-control";
 import { PencilControl } from "@/components/mestre/pencil-control";
 import { PostitControl } from "@/components/mestre/postit-control";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useMemo } from "react";
-
+import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
+import type { Scene } from "@/types/scene";
 
-const TOOLS_BASE: Array<{
+type Ferramenta = {
   tool: Tool;
   label: string;
   hint: string;
   icon: typeof MousePointer2;
-}> = [
+};
+
+/**
+ * As do PALCO: mexem no que está em cena — escolher, arrastar, riscar, apagar.
+ * São as da mão, as que o mestre troca a cada minuto.
+ */
+const FERRAMENTAS_PALCO: Ferramenta[] = [
   {
     tool: "select",
     label: "Selecionar",
@@ -41,24 +56,6 @@ const TOOLS_BASE: Array<{
     label: "Deslocar a cena",
     hint: "Arraste para percorrer o mapa. Segurar espaço faz o mesmo sem trocar de ferramenta.",
     icon: Hand,
-  },
-  {
-    tool: "fog",
-    label: "Área escondida",
-    hint: "Arraste sobre a cena para cobrir uma região. A mesa vê preto sólido.",
-    icon: SquareDashedBottom,
-  },
-  {
-    tool: "pin",
-    label: "Ponto de anotação",
-    hint: "Clique no mapa para cravar um ponto com nota e anexos. Só você vê — nem a TV nem os celulares recebem.",
-    icon: MapPin,
-  },
-  {
-    tool: "postit",
-    label: "Postit",
-    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou cena; ** dos dois lados deixa em negrito. Só você vê — nem a TV nem os celulares recebem.",
-    icon: StickyNote,
   },
   {
     tool: "lapis",
@@ -75,34 +72,71 @@ const TOOLS_BASE: Array<{
 ];
 
 /**
- * Selecionar e esconder área, flutuando no canto do palco.
- *
- * Saiu do cabeçalho: escolher ferramenta é mira no mapa, e o cabeçalho é da
- * sessão. Mesma pílula dos controles de zoom, e ao lado deles — os dois são o
- * mesmo tipo de gesto, e em cantos opostos obrigavam a atravessar a tela entre
- * duas ações que andam juntas.
+ * As do MAPA: marcam o chão — pontos, papéis, áreas escondidas. Junto delas
+ * ficam a grade e a régua, que também são sobre o mapa e não sobre o que anda
+ * nele.
  */
-export function MestreToolbar() {
+const FERRAMENTAS_MAPA: Ferramenta[] = [
+  {
+    tool: "pin",
+    label: "Ponto de anotação",
+    hint: "Clique no mapa para cravar um ponto com nota e anexos. Só você vê — nem a TV nem os celulares recebem.",
+    icon: MapPin,
+  },
+  {
+    tool: "postit",
+    label: "Postit",
+    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou cena; ** dos dois lados deixa em negrito. Só você vê — nem a TV nem os celulares recebem.",
+    icon: StickyNote,
+  },
+  {
+    tool: "fog",
+    label: "Área escondida",
+    hint: "Arraste sobre a cena para cobrir uma região. A mesa vê preto sólido.",
+    icon: SquareDashedBottom,
+  },
+];
+
+/**
+ * As ferramentas, em duas BOLSAS no canto do palco.
+ *
+ * Como pasta de aplicativos no celular: dois botões à vista, e cada um abre a
+ * fileira do grupo por cima. Eram nove alvos numa fileira só, e a fileira não
+ * dizia por que o lápis ficava ao lado do alfinete — nem precisava estar toda
+ * à vista o tempo todo, porque a maior parte da sessão é com uma ferramenta
+ * na mão. Palco é o que se faz com a mão a cada minuto; Mapa é o que se marca
+ * no chão uma vez e fica. A grade e a régua vieram do zoom para a bolsa do
+ * mapa: são sobre o mapa, e moravam longe das outras que também são.
+ *
+ * O botão da bolsa mostra a ferramenta ATIVA dela, e não um ícone fixo: com a
+ * bolsa fechada, o que está na mão é a única informação que importa. Escolher
+ * uma ferramenta fecha a bolsa — escolheu, vai usar. Ligar a grade não fecha,
+ * porque o ajuste dela fica logo ao lado.
+ *
+ * A cor do lápis e a do postit ficam FORA das bolsas, ao lado dos dois botões:
+ * dentro, sumiriam junto com a bolsa no instante em que o mestre escolhesse a
+ * ferramenta que as pede.
+ */
+export function MestreToolbar({ scene }: { scene: Scene }) {
   const tool = useToolStore((state) => state.tool);
   const setTool = useToolStore((state) => state.setTool);
   const extensoes = useExtensoesStore((state) => state.extensoes);
 
+  const [aberta, setAberta] = useState<"palco" | "mapa" | null>(null);
+
   /**
-   * As de fábrica mais as dos plugins.
-   *
-   * As dos plugins vão no FIM, e é o que mantém a memória motor de quem já usa
-   * a barra: o dedo sabe onde fica o lápis, e um plugin que se enfiasse no meio
-   * moveria as sete de baixo de lugar.
+   * As dos plugins vão no FIM da bolsa do mapa, e é o que mantém a memória
+   * motor de quem já usa a barra: o dedo sabe onde fica o lápis, e um plugin
+   * que se enfiasse no meio moveria as de fábrica de lugar.
    *
    * O ícone é sempre o mesmo desenho, e não o `icone` do manifesto: carregar
    * imagem de extensão aqui pagaria um pedido por ferramenta numa barra que o
    * mestre olha o tempo todo, e uma que falhasse deixaria um buraco no lugar de
    * um botão. O nome aparece no `tooltip`.
    */
-  const ferramentas = useMemo(
-    () => [
-      ...TOOLS_BASE,
-      ...extensoes
+  const dasExtensoes = useMemo<Ferramenta[]>(
+    () =>
+      extensoes
         .filter((extensao) => extensao.habilitada)
         .flatMap((extensao) =>
           (extensao.contribui?.ferramentas ?? []).map((ferramenta) => ({
@@ -112,43 +146,166 @@ export function MestreToolbar() {
             icon: Puzzle,
           })),
         ),
-    ],
     [extensoes],
   );
 
-  return (
-    <div
-      className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur"
-      role="toolbar"
-      aria-label="Ferramentas"
-    >
-      {ferramentas.map(({ tool: value, label, hint, icon: Icon }) => (
-        <Tooltip key={value}>
-          <TooltipTrigger
-            render={
-              <Button
-                variant={tool === value ? "secondary" : "ghost"}
-                size="icon-sm"
-                aria-label={label}
-                aria-pressed={tool === value}
-                onClick={() => setTool(value)}
-              >
-                <Icon />
-              </Button>
-            }
-          />
-          <TooltipContent>
-            <p className="font-medium">{label}</p>
-            <p className="text-muted-foreground max-w-48">{hint}</p>
-          </TooltipContent>
-        </Tooltip>
-      ))}
+  const regua: Ferramenta = {
+    tool: "regua",
+    label: "Régua",
+    hint: scene.grid
+      ? `Arraste para medir. Cada quadrado da grade vale ${METROS_POR_QUADRADO} m.`
+      : "Ligue a grade primeiro: é o quadrado dela que diz quanto vale um metro.",
+    icon: Ruler,
+  };
 
-      {/* Depois da fileira, e só com o lápis na mão: é ajuste do lápis, não uma
-          sexta ferramenta. Mesma coisa para a cor do postit — as duas nunca
-          aparecem juntas, porque só uma ferramenta está na mão. */}
+  const doMapa = [...FERRAMENTAS_MAPA, regua, ...dasExtensoes];
+
+  // A ferramenta ativa de cada bolsa, para o botão dela mostrar. `select` é
+  // sempre do palco; então a bolsa do mapa só tem ativa quando é dela.
+  const ativaDoMapa = doMapa.find((f) => f.tool === tool);
+  const ativaDoPalco = FERRAMENTAS_PALCO.find((f) => f.tool === tool);
+
+  function escolher(value: Tool) {
+    setTool(value);
+    setAberta(null);
+  }
+
+  function botao({ tool: value, label, hint, icon: Icon }: Ferramenta) {
+    // A régua só mede com a grade ligada: é o quadrado que diz quanto vale um
+    // metro.
+    const desabilitada = value === "regua" && !scene.grid;
+
+    return (
+      <Tooltip key={value}>
+        <TooltipTrigger
+          render={
+            <Button
+              variant={tool === value ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-label={label}
+              aria-pressed={tool === value}
+              disabled={desabilitada}
+              onClick={() => escolher(value)}
+            >
+              <Icon />
+            </Button>
+          }
+        />
+        <TooltipContent>
+          <p className="font-medium">{label}</p>
+          <p className="text-muted-foreground max-w-48">{hint}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+      <Bolsa
+        nome="Ferramentas do palco"
+        dica="Selecionar, deslocar, lápis e borracha."
+        aberta={aberta === "palco"}
+        onAberta={(v) => setAberta(v ? "palco" : null)}
+        ativa={ativaDoPalco}
+        icone={MousePointer2}
+      >
+        {FERRAMENTAS_PALCO.map(botao)}
+      </Bolsa>
+
+      <Bolsa
+        nome="Ferramentas do mapa"
+        dica="Ponto, postit, área escondida, grade e régua."
+        aberta={aberta === "mapa"}
+        onAberta={(v) => setAberta(v ? "mapa" : null)}
+        ativa={ativaDoMapa}
+        icone={Map}
+      >
+        {FERRAMENTAS_MAPA.map(botao)}
+
+        <span className="bg-border mx-1 h-5 w-px" />
+
+        <GridControl scene={scene} />
+        {botao(regua)}
+
+        {dasExtensoes.length > 0 ? (
+          <>
+            <span className="bg-border mx-1 h-5 w-px" />
+            {dasExtensoes.map(botao)}
+          </>
+        ) : null}
+      </Bolsa>
+
+      {/* Só com a ferramenta correspondente na mão; os dois se escondem
+          sozinhos. */}
       <PencilControl />
       <PostitControl />
     </div>
+  );
+}
+
+/**
+ * Um botão que abre a fileira do grupo por cima.
+ *
+ * Com uma ferramenta do grupo na mão, o botão vira ela — mesmo desenho e mesma
+ * cor de "apertado" que ela teria na fileira. Sem nenhuma, mostra o ícone do
+ * grupo, apagado.
+ */
+function Bolsa({
+  nome,
+  dica,
+  aberta,
+  onAberta,
+  ativa,
+  icone: Icone,
+  children,
+}: {
+  nome: string;
+  dica: string;
+  aberta: boolean;
+  onAberta: (aberta: boolean) => void;
+  ativa: Ferramenta | undefined;
+  icone: typeof MousePointer2;
+  children: React.ReactNode;
+}) {
+  const Ativo = ativa?.icon ?? Icone;
+
+  return (
+    <Popover open={aberta} onOpenChange={onAberta}>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <PopoverTrigger
+              render={
+                <Button
+                  variant={ativa ? "secondary" : "ghost"}
+                  size="icon-sm"
+                  aria-label={nome}
+                  aria-expanded={aberta}
+                  className={ativa ? undefined : "text-muted-foreground"}
+                >
+                  <Ativo />
+                </Button>
+              }
+            />
+          }
+        />
+        <TooltipContent>
+          <p className="font-medium">{ativa ? ativa.label : nome}</p>
+          <p className="text-muted-foreground max-w-48">
+            {ativa ? `${nome}. Clique para trocar.` : dica}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+
+      <PopoverContent
+        align="start"
+        side="top"
+        className="flex w-auto items-center gap-0.5 p-1"
+        role="toolbar"
+        aria-label={nome}
+      >
+        {children}
+      </PopoverContent>
+    </Popover>
   );
 }

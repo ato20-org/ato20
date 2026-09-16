@@ -25,8 +25,23 @@ export const PLANO: Bounds = {
   maxY: SCENE_HEIGHT,
 };
 
-/** Recorte mínimo, ou seja, ampliação máxima. */
-export const MAX_ZOOM = 8;
+/**
+ * Recorte mínimo, ou seja, ampliação máxima.
+ *
+ * Vale para dois gestos de uma vez, porque os dois passam por `clampViewport`:
+ * quanto o mestre aproxima no palco, e quão pequena a moldura da câmera pode
+ * ficar -- que é quanto a TV aproxima. Era 8, e apertava nos dois: um token de
+ * 70 unidades num mapa de 1920 chegava a 290px de tela e parava, e a câmera não
+ * fechava num corredor estreito sem levar meia sala junto.
+ *
+ * 16 dobra o alcance. O custo não é no canal -- a câmera viaja como quatro
+ * números, qualquer que seja -- e sim no desenho: ampliado, o fundo volta ao
+ * arquivo original (ver `useVarianteDoFundo`), e o plano parado amplia por
+ * `zoom` no LAYOUT, que a 16x num quadro de 1920 vira uma caixa de 30 mil
+ * pixels de largura. O motor só rasteriza o recorte visível, mas isso é
+ * afirmação sobre a webview, e vale conferir nela antes de subir de novo.
+ */
+export const MAX_ZOOM = 16;
 
 const ASPECT = SCENE_HEIGHT / SCENE_WIDTH;
 

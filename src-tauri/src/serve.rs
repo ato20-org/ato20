@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::net::{IpAddr, SocketAddr, TcpListener, UdpSocket};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
@@ -7,7 +8,9 @@ use axum::extract::{
     ConnectInfo, DefaultBodyLimit, Multipart, Path as AxumPath, Query, Request as AxumRequest,
     State,
 };
-use axum::http::header::{ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, LOCATION};
+use axum::http::header::{
+    ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, LOCATION,
+};
 use axum::http::{HeaderValue, Request, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -84,6 +87,13 @@ const TOKEN_HEADER: &str = "x-ato20-token";
 /// velha na TV e pior que cena que saltou.
 const LIVE_BUFFER: usize = 8;
 
+/// Quantas amostras de depuracao do palco ficam guardadas. Duas por segundo
+/// por tela: dois minutos e meio de uma tela, ou um pouco menos de duas.
+const DEBUG_ANEL: usize = 300;
+
+/// Teto de uma amostra de depuracao. Uma real tem uns 700 bytes.
+const DEBUG_AMOSTRA_MAX: usize = 8 * 1024;
+
 /// Quantas rolagens o canal guarda para quem esta lendo devagar.
 ///
 /// Maior que o do estado, e pelo motivo oposto. Estado atrasado se joga fora --
@@ -105,6 +115,13 @@ pub struct Daemon {
     /// e esperar o Mestre ouvir, o daemon ja tem a resposta na conexao.
     live: Mutex<Option<String>>,
     live_tx: broadcast::Sender<String>,
+    /// Amostras do modo de depuracao do palco, cruas, as ultimas `DEBUG_ANEL`.
+    ///
+    /// O palco mede a propria geometria (`debug-palco.tsx`) e manda para ca;
+    /// um terminal le em `GET /debug/palco`. E o que permite depurar a pintura
+    /// da webview sem print de tela. Opaco como o `live`: o daemon nao entende
+    /// a amostra, so a guarda.
+    debug: Mutex<VecDeque<String>>,
     /// As rolagens dos jogadores, a caminho da janela do mestre.
     ///
     /// Canal SEPARADO do `live`, e sem par guardado como o `live: Mutex`. Sao
@@ -154,6 +171,7 @@ impl Daemon {
             web_root,
             live: Mutex::new(None),
             live_tx,
+            debug: Mutex::new(VecDeque::new()),
             rolagens_tx,
             evidence: Arc::new(RwLock::new(None)),
             estante,
@@ -332,6 +350,7 @@ pub fn router(state: Arc<Daemon>) -> Router {
                     require_token,
                 )),
         )
+        .route("/debug/palco", get(debug_palco_get).post(debug_palco_post))
         .route("/saude", get(|| async { "ok" }))
         // As telas mudaram de nome, e os enderecos antigos continuam de pe.
         //
@@ -642,6 +661,49 @@ async fn live(
     // exatamente isso. O keep-alive do SSE e o que mantem o socket vivo entre
     // duas cenas.
     .keep_alive(KeepAlive::default()))
+}
+
+// --- depuracao do palco ------------------------------------------------------
+
+/// `POST /debug/palco` -- uma tela manda o que mediu de si mesma.
+///
+/// Aceita de qualquer origem porque a TV e o celular tambem sao telas com palco
+/// e tambem pintam errado. O risco e baixo: corpo curto, anel pequeno, e o
+/// conteudo so vale para quem esta olhando o terminal do mestre.
+async fn debug_palco_post(State(state): State<Arc<Daemon>>, body: String) -> Response {
+    if body.len() > DEBUG_AMOSTRA_MAX {
+        return fail(StatusCode::PAYLOAD_TOO_LARGE, "amostra grande demais");
+    }
+    if serde_json::from_str::<serde_json::Value>(&body).is_err() {
+        return fail(StatusCode::BAD_REQUEST, "corpo nao e JSON");
+    }
+
+    let mut anel = state.debug.lock().expect("debug envenenado");
+    if anel.len() >= DEBUG_ANEL {
+        anel.pop_front();
+    }
+    anel.push_back(body);
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// `GET /debug/palco` -- as ultimas amostras, mais nova por ultimo, como um
+/// array JSON. Restrito a loopback: e o terminal do mestre que le.
+async fn debug_palco_get(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    if !addr.ip().is_loopback() {
+        return fail(StatusCode::FORBIDDEN, "so a partir desta maquina");
+    }
+
+    let corpo = {
+        let anel = state.debug.lock().expect("debug envenenado");
+        let itens: Vec<&str> = anel.iter().map(String::as_str).collect();
+        format!("[{}]", itens.join(","))
+    };
+
+    ([(CONTENT_TYPE, "application/json")], corpo).into_response()
 }
 
 // --- os dados da mesa -------------------------------------------------------

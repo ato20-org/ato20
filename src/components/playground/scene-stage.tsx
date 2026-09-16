@@ -5,12 +5,20 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 
+import { createPortal } from "react-dom";
+
+import {
+  DebugPalco,
+  MiraDebug,
+  useDebugDoPalco,
+} from "@/components/playground/debug-palco";
 import type { Bounds } from "@/lib/geometry/bounds";
 import type { Vec } from "@/lib/geometry/transform";
 import {
@@ -60,6 +68,12 @@ type SceneScale = {
    * `SceneLayer`, onde está por que os dois planos existem.
    */
   planoDeConteudo: HTMLElement | null;
+  /**
+   * O fundo do palco, atrás dos planos e do tamanho da moldura. É onde o
+   * envelope de gesto do mestre é montado, para o lado de fora do plano aceitar
+   * gesto sem nada transbordar do plano de conteúdo. Ver `fundoNo`.
+   */
+  fundoDoPalco: HTMLElement | null;
 };
 
 const SceneScaleContext = createContext<SceneScale | null>(null);
@@ -151,6 +165,15 @@ type SceneStageProps = {
  * em coordenadas de cena e ignorar tanto o tamanho da tela quanto o zoom. É
  * isso que faz o layout do Mestre bater com o da TV.
  */
+/**
+ * Abaixo disto entre duas amostras de câmera, é arrasto e não salto.
+ *
+ * O canal publica a cada 100 ms no máximo; 250 dá folga para uma amostra
+ * atrasada sem confundir dois toques seguidos no botão de enquadrar, que
+ * ninguém dá em menos de um quarto de segundo.
+ */
+const FLUXO_MS = 250;
+
 export function SceneStage({
   children,
   className,
@@ -162,6 +185,31 @@ export function SceneStage({
 }: SceneStageProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const planeRef = useRef<HTMLDivElement>(null);
+  /**
+   * O fundo do palco: um pega-gesto do tamanho da MOLDURA, atrás dos planos.
+   *
+   * É para onde o `SceneLayer` leva o envelope do palco do mestre, e o que faz
+   * o lado de fora do plano aceitar gesto -- soltar imagem, cravar ponto,
+   * começar risco. Já foi um filho de 3x3 planos transbordando DENTRO do plano
+   * de conteúdo, e isso inflava a camada composta: o WebKitGTK passou a pintar
+   * o mapa deslocado depois de cada troca de forma, e a ficar preto ampliado.
+   * Aqui ele tem o tamanho da moldura e não transborda nada.
+   */
+  const [fundoNo, setFundoNo] = useState<HTMLDivElement | null>(null);
+
+  // Modo de depuração: HUD e miras. `Ctrl+Alt+D`. Ver `debug-palco.tsx`.
+  const debug = useDebugDoPalco();
+  const [frameNo, setFrameNo] = useState<HTMLDivElement | null>(null);
+  const [controlesNo, setControlesNo] = useState<HTMLDivElement | null>(null);
+  /**
+   * O envelope do plano de CONTEÚDO -- o `div` que leva o `translate`.
+   *
+   * Existe para a transição da câmera alcançar o mapa. Quando o palco virou
+   * dois planos, o `planeRef` ficou com o de cima, o dos controles, e a
+   * suavização foi junto: na TV, onde os controles não existem, o que deslizava
+   * era um plano vazio e o mapa saltava a cada amostra de 100 ms.
+   */
+  const envelopeDoConteudoRef = useRef<HTMLDivElement>(null);
   const [conteudoNo, setConteudoNo] = useState<HTMLDivElement | null>(null);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
   /** A câmera está parada há tempo bastante para valer redesenhar nítido. */
@@ -240,8 +288,44 @@ export function SceneStage({
    * o que aquela medida mediu foi o GESTO, e nitidez não é coisa que se olhe
    * durante o gesto: ali a imagem está correndo atrás do cursor. O gesto
    * continua no compositor, e o layout é pago uma vez, quando a mão para.
+   *
+   * ## O que foi tentado e não serve: segurar o notch da roda em `zoom`
+   *
+   * Entre 450% e 700%, um notch da roda às vezes mostra por UM quadro o mapa
+   * em outro lugar -- o raster anterior deslocado pelo `translate` novo,
+   * medido quadro a quadro numa gravação. É corrida entre o compositor, que
+   * aplica o `transform` novo à textura que tiver, e o layout, que ainda está
+   * rasterizando. Tentou-se não trocar de forma no notch, aplicando o passo em
+   * `zoom` mesmo: cada notch a 400-500% passou a forçar um re-raster de seis a
+   * nove mil pixels, e o WebKitGTK pinta isso tile a tile -- o plano ficava
+   * PRETO por vários quadros, só com a moldura da câmera à vista. Pior. O notch
+   * tem de cair para o `transform`, onde o compositor estica a textura que já
+   * tem, na hora.
+   *
+   * ## Nunca em quem só assiste
+   *
+   * Com `smooth` o plano fica em `transform` sempre. O borrão que o `zoom`
+   * conserta é do WebKitGTK, a webview do MESTRE; Chrome e Safari redesenham
+   * uma camada escalada nítida sozinhos quando ela para. E a troca de forma
+   * custava um defeito na TV, filmado: a cada começo e fim de movimento da
+   * câmera -- e uns 600 ms depois de um F5, quando `parada` sobe pela primeira
+   * vez --, um token aparecia noutro ponto e era arrastado de volta ao lugar.
+   * São os únicos instantes em que o plano troca de forma. O mapa não mostrava
+   * o mesmo salto porque é uma imagem só, sem transição; o token tem
+   * `transition: transform` (ver `.scene-smooth-item`) e é ele que anda.
+   *
+   * De brinde, a TV deixa de pagar um layout de `1920 × scale` pixels a cada
+   * parada da câmera -- que a 16x é uma caixa de 30 mil pixels.
    */
-  const conteudoNoLayout = parada && scale !== 0;
+  /*
+   * Houve um teto aqui -- `zoom` só até 4096 px de raster -- posto quando o
+   * palco ficava PRETO ampliado. Saiu: o preto (e o mapa pintado deslocado)
+   * vinham de um filho de 3x3 planos transbordando dentro do plano de
+   * conteúdo, que inflava a camada composta para dezenas de milhares de pixels.
+   * Com a camada do tamanho do plano, o `zoom` nítido volta a valer em toda a
+   * faixa em que sempre valeu. Ver `zona` em `SceneLayer`.
+   */
+  const conteudoNoLayout = !smooth && parada && scale !== 0;
 
   /** A câmera, resumida a uma string: mudou isto, mudou o enquadramento. */
   const camera = `${scale}|${offsetX}|${offsetY}`;
@@ -255,29 +339,83 @@ export function SceneStage({
     setParada(false);
   }
 
+  /** Quando a última amostra de câmera chegou. `null` = nenhuma medida ainda. */
+  const ultimaCameraEm = useRef<number | null>(null);
+  /** A câmera está em FLUXO -- amostras seguidas -- e não num salto. */
+  const emFluxo = useRef(false);
+
+  /**
+   * Escolhe a transição da câmera pela cadência das amostras.
+   *
+   * São dois gestos distintos chegando pelo mesmo canal. O botão de enquadrar
+   * é um SALTO: uma amostra só, e a tela viaja até lá com desaceleração --
+   * 450 ms, ver `.scene-smooth-camera`. Arrastar a moldura é FLUXO: uma amostra
+   * a cada 100 ms, e a curva longa reiniciada a cada uma nunca alcança o alvo
+   * -- a tela anda em serrote, sempre atrás. Para o fluxo vale a mesma
+   * transição dos itens, `150ms linear`, pela mesma razão: cobre um intervalo
+   * de publicação e pouco mais, sem inércia para acumular.
+   *
+   * A escolha é pelo intervalo desde a amostra anterior. A TV não sabe qual
+   * botão o mestre apertou, mas sabe quando a anterior chegou -- e duas
+   * amostras a menos de `FLUXO_MS` uma da outra só existem no arrasto.
+   *
+   * `useLayoutEffect`, e não `useEffect`: a classe tem de estar no elemento
+   * ANTES de o quadro com o `transform` novo ser pintado, senão a transição que
+   * vale para esta amostra é a que a anterior escolheu, e a troca de cadência
+   * chega sempre uma amostra atrasada.
+   *
+   * Nos DOIS planos: o de cima leva os controles do mestre, o de baixo leva o
+   * mapa. Com cadências diferentes eles se descolariam no meio do voo.
+   *
+   * E nos DOIS níveis de cada plano. O envelope leva o `translate`; o interno
+   * leva o `scale`. Só o envelope interpolava, e redimensionar a moldura da
+   * câmera mexe nos dois: a TV deslizava o deslocamento e saltava a escala a
+   * cada amostra de 100 ms -- a imagem tremia enquanto a moldura crescia ou
+   * encolhia. Na TV o interno está sempre em `transform` (ver
+   * `conteudoNoLayout`), então a mesma transição alcança o `scale`.
+   *
+   * Só depois do primeiro paint já medido, e imperativo de propósito: se a
+   * classe entrasse no mesmo quadro em que a escala deixa de ser zero, a
+   * abertura de toda tela começaria com a cena vindo do canto -- o `translate`
+   * calculado com `scale(0)` seria o quadro inicial da animação. A primeira
+   * amostra só marca a hora; a transição passa a valer da seguinte em diante.
+   */
+  useLayoutEffect(() => {
+    if (!smooth || scale === 0) return;
+
+    const agora = performance.now();
+    const anterior = ultimaCameraEm.current;
+    ultimaCameraEm.current = agora;
+
+    if (anterior === null) return;
+
+    const fluxo = agora - anterior < FLUXO_MS;
+    emFluxo.current = fluxo;
+
+    for (const plano of [
+      planeRef.current,
+      envelopeDoConteudoRef.current,
+      controlesNo,
+      conteudoNo,
+    ]) {
+      plano?.classList.toggle("scene-smooth-camera", !fluxo);
+      plano?.classList.toggle("scene-smooth-camera-fluxo", fluxo);
+    }
+    // `camera` já carrega `scale`; ele entra à parte porque o corpo o lê.
+  }, [camera, smooth, scale, controlesNo, conteudoNo]);
+
   useEffect(() => {
-    // Mais longo com a transição ligada: ali a câmera continua andando por
-    // 450 ms depois da última mudança de `viewport`, e trocar de forma no meio
-    // do voo faria a cena saltar -- `zoom` não interpola.
-    const espera = window.setTimeout(() => setParada(true), smooth ? 620 : 180);
+    // Mais longo com a transição ligada: ali a câmera continua andando depois
+    // da última mudança de `viewport`, e trocar de forma no meio do voo faria a
+    // cena saltar -- `zoom` não interpola. A espera segue a transição em curso:
+    // 450 ms no salto, 150 ms no fluxo, mais a folga de um quadro de rede.
+    const espera = window.setTimeout(
+      () => setParada(true),
+      smooth ? (emFluxo.current ? 320 : 620) : 180,
+    );
 
     return () => window.clearTimeout(espera);
   }, [camera, smooth]);
-
-  /**
-   * Liga a transição da câmera só depois do primeiro paint já medido.
-   *
-   * Imperativo de propósito: se a classe entrasse no mesmo render em que a
-   * escala deixa de ser zero, a abertura de toda tela começaria com a cena
-   * crescendo do nada — o `scale(0)` do primeiro paint seria o quadro inicial
-   * da animação. Aqui ela passa a valer para a mudança de câmera *seguinte*,
-   * que é a que precisa ser suave.
-   */
-  useEffect(() => {
-    if (!smooth || scale === 0) return;
-
-    planeRef.current?.classList.add("scene-smooth-camera");
-  }, [smooth, scale]);
 
   const toScene = useCallback(
     (clientX: number, clientY: number): Vec => {
@@ -301,8 +439,9 @@ export function SceneStage({
       toScene,
       viewport,
       planoDeConteudo: conteudoNo,
+      fundoDoPalco: fundoNo,
     }),
-    [scale, conteudoNoLayout, toScene, viewport, conteudoNo],
+    [scale, conteudoNoLayout, toScene, viewport, conteudoNo, fundoNo],
   );
 
   // Guardados em ref porque os listeners nativos abaixo são registrados uma
@@ -471,14 +610,22 @@ export function SceneStage({
 
   return (
     <div
-      ref={frameRef}
+      ref={(no) => {
+        frameRef.current = no;
+        setFrameNo(no);
+      }}
       className={cn("relative flex-1 overflow-hidden bg-black", className)}
       // Sem isto o browser rouba o gesto de duas mãos para dar zoom na página.
       style={onViewportChange ? { touchAction: "none" } : undefined}
     >
+      {/* O fundo: PRIMEIRO filho, então tudo desenha por cima e ele só recebe o
+          gesto que sobra -- o clique no vazio, fora do plano. Ver `fundoNo`. */}
+      <div ref={setFundoNo} className="absolute inset-0" />
+
       {/* O plano de BAIXO: o conteúdo da cena, e o único que troca de forma de
           ampliar. Quem desenha nele chega por portal -- ver `planoDeConteudo`. */}
       <div
+        ref={envelopeDoConteudoRef}
         aria-hidden={scale === 0}
         className={cn("absolute top-0 left-0", scale === 0 && "invisible")}
         style={{
@@ -535,6 +682,7 @@ export function SceneStage({
         }}
       >
       <div
+        ref={setControlesNo}
         className="plano-de-controles pointer-events-none relative"
         style={{
           width: SCENE_WIDTH,
@@ -548,6 +696,9 @@ export function SceneStage({
             : { transform: `scale(${scale})`, transformOrigin: "0 0" }),
         }}
       >
+
+        {debug ? <MiraDebug cor="cyan" /> : null}
+
         {/* O contorno da área, desenhado como FILHO e não como `outline` do
             plano: a caixa acompanha o conteúdo, e conteúdo largado à esquerda
             do plano tem canto negativo -- que um contorno do próprio plano não
@@ -586,6 +737,90 @@ export function SceneStage({
         </SceneScaleContext.Provider>
       </div>
       </div>
+
+      {/* O que sobra em volta do recorte, tarjado de preto.
+
+          A moldura da câmera é 16:9 e a tela que assiste raramente é: uma
+          janela de navegador, um monitor 16:10. O recorte vai centrado e a
+          folga, sem isto, mostrava a cena que continua além da moldura -- o
+          mestre enquadrava a sala escondida com o personagem fora da câmera,
+          e a TV mostrava o personagem. O enquadramento tem de ser o que ele
+          escolheu, e a folga é preto.
+
+          Só onde não se navega: no palco do Mestre a moldura é o próprio
+          recorte, e a folga em volta é área de trabalho. Quatro tarjas e não
+          um `overflow: hidden` num envelope do tamanho do recorte, porque as
+          medidas de tela do palco -- `toScene`, o `ResizeObserver` -- são do
+          quadro inteiro, e mudar a caixa que elas medem mexeria em tudo o que
+          funciona. */}
+      {!onViewportChange && scale !== 0
+        ? tarjas(frame, viewport, scale).map((tarja, indice) => (
+            <div
+              key={indice}
+              aria-hidden
+              className="pointer-events-none absolute bg-black"
+              style={{ ...tarja, zIndex: 10 }}
+            />
+          ))
+        : null}
+
+      {debug && conteudoNo
+        ? createPortal(<MiraDebug cor="magenta" />, conteudoNo)
+        : null}
+      {debug ? (
+        <DebugPalco
+          tela={smooth ? "espectador" : "mestre"}
+          frame={frameNo}
+          conteudo={conteudoNo}
+          controles={controlesNo}
+          scale={scale}
+          offsetX={offsetX}
+          offsetY={offsetY}
+          modoZoom={conteudoNoLayout}
+          viewport={viewport}
+        />
+      ) : null}
     </div>
   );
 }
+
+/**
+ * As faixas entre o recorte centrado e a borda do quadro. Duas no máximo -- ou
+ * em cima e embaixo, ou nos lados --, e nenhuma quando o quadro tem a proporção
+ * do recorte. Abaixo de meio pixel é resto de divisão, não faixa.
+ */
+function tarjas(
+  frame: { width: number; height: number },
+  viewport: Viewport,
+  scale: number,
+): Array<{ left: number; top: number; width: number; height: number }> {
+  const sobraX = (frame.width - viewport.width * scale) / 2;
+  const sobraY = (frame.height - viewport.height * scale) / 2;
+  const faixas = [];
+
+  if (sobraY > 0.5) {
+    faixas.push(
+      { left: 0, top: 0, width: frame.width, height: sobraY },
+      {
+        left: 0,
+        top: frame.height - sobraY,
+        width: frame.width,
+        height: sobraY,
+      },
+    );
+  }
+  if (sobraX > 0.5) {
+    faixas.push(
+      { left: 0, top: 0, width: sobraX, height: frame.height },
+      {
+        left: frame.width - sobraX,
+        top: 0,
+        width: sobraX,
+        height: frame.height,
+      },
+    );
+  }
+
+  return faixas;
+}
+

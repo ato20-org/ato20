@@ -91,22 +91,6 @@ type SceneLayerProps = {
    * clique no vazio. Ele desce junto.
    */
   palco?: ComponentProps<"div"> & Record<`data-${string}`, unknown>;
-  /**
-   * Até onde o envelope do palco ACEITA gesto, em coordenadas de cena.
-   *
-   * O envelope cobre o plano e só ele, porque é o plano que ele emoldura. Isso
-   * bastava quando o plano era o mundo inteiro; hoje a área cresce com o que o
-   * mestre coloca, e sem esta zona o lado de fora vira uma vidraça: dá para
-   * ver, dá para navegar, e nada pega. Era o que impedia soltar uma imagem
-   * fora da borda, cravar um ponto ali ou começar um risco de lá.
-   *
-   * Um FILHO que transborda, e não o envelope redimensionado: o envelope é o
-   * bloco que contém todo o conteúdo da cena, e mover o canto dele arrastaria
-   * junto o mapa, os tokens e os riscos, que se posicionam a partir dele.
-   *
-   * Ausente = só o plano, que é o caso de quem não edita.
-   */
-  zona?: { x: number; y: number; width: number; height: number };
 };
 
 /**
@@ -127,7 +111,6 @@ export function SceneLayer({
   onPortraitPointerDown,
   apagando,
   palco,
-  zona,
 }: SceneLayerProps) {
   const items = useMemo(
     () => [...scene.items].sort((a, b) => a.z - b.z),
@@ -152,7 +135,7 @@ export function SceneLayer({
    * Sem o nó -- primeiro paint -- desenha onde está. É um quadro, e o quadro
    * seguinte já vai para o lugar certo.
    */
-  const { planoDeConteudo } = useSceneScale();
+  const { planoDeConteudo, fundoDoPalco } = useSceneScale();
 
   const conteudo = (
     <>
@@ -200,35 +183,32 @@ export function SceneLayer({
     </>
   );
 
-  const envelopado = palco ? (
-    <div {...palco}>
-      {/* PRIMEIRO filho: tudo o que vem depois desenha por cima, então a zona
-          não rouba o clique de nenhum token nem do fundo. Ela só recebe o que
-          sobra — que é exatamente o "clique no vazio" que o envelope trata.
+  const envelopado = palco ? <div {...palco}>{conteudo}</div> : conteudo;
 
-          Sem pintura nenhuma: o que ela faz é ocupar espaço para
-          `elementFromPoint` ter o que responder do lado de fora do plano. Ver
-          `zona` e `sobreAZona`. */}
-      {zona ? (
-        <div
-          aria-hidden
-          className="absolute"
-          style={{
-            left: zona.x,
-            top: zona.y,
-            width: zona.width,
-            height: zona.height,
-          }}
-        />
-      ) : null}
+  /**
+   * O mesmo envelope, sem filhos, no FUNDO do palco.
+   *
+   * O envelope cobre o plano e só ele, porque é o plano que ele emoldura. Mas
+   * a área cresce com o que o mestre coloca, e sem isto o lado de fora vira uma
+   * vidraça: dá para ver, dá para navegar, e nada pega -- não dava para soltar
+   * uma imagem fora da borda, cravar um ponto ali nem começar um risco de lá.
+   *
+   * Uma cópia no fundo da moldura, e não um filho transbordando dentro do
+   * plano: um filho de 3x3 planos em coordenadas negativas inflava a camada
+   * composta do plano de conteúdo, e o WebKitGTK passou a pintá-lo deslocado a
+   * cada troca de forma e a deixá-lo preto ampliado. O fundo tem o tamanho da
+   * moldura, nunca transborda, e recebe exatamente o que sobra: o gesto no
+   * vazio, que é o que o envelope trata. Ver `fundoDoPalco`.
+   */
+  const fundo =
+    palco && fundoDoPalco
+      ? createPortal(<div aria-hidden {...palco} />, fundoDoPalco)
+      : null;
 
-      {conteudo}
-    </div>
-  ) : (
-    conteudo
+  return (
+    <>
+      {fundo}
+      {planoDeConteudo ? createPortal(envelopado, planoDeConteudo) : envelopado}
+    </>
   );
-
-  return planoDeConteudo
-    ? createPortal(envelopado, planoDeConteudo)
-    : envelopado;
 }
