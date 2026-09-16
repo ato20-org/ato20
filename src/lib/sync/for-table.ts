@@ -55,7 +55,13 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // A condição precisa cobrir TODOS os campos apagados abaixo. Um campo novo
   // aqui esquecido não vaza — o `delete` continua acontecendo —, mas um campo
   // apagado embaixo e esquecido nesta linha faz o Mestre publicar por frame.
-  if (!scene.name && !scene.pins && !scene.postits && !scene.extensoes)
+  if (
+    !scene.name &&
+    !scene.pins &&
+    !scene.postits &&
+    !scene.extensoes &&
+    !scene.cameras
+  )
     return scene;
 
   // Cópia e `delete`, e não desestruturação com um descarte: um descarte
@@ -65,6 +71,10 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   delete paraMesa.pins;
   delete paraMesa.postits;
   delete paraMesa.extensoes;
+  // `cameraNoArId` FICA: é um id só, e é o que deixa a TV distinguir a mesma
+  // câmera andando (interpola) de uma câmera trocada (corta). Ver
+  // `useCorteDeCamera`.
+  delete paraMesa.cameras;
 
   return paraMesa;
 }

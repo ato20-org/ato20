@@ -558,6 +558,24 @@ export type ItemDraft = NewCanvasItem &
     Pick<CanvasItem, "rotation" | "locked" | "flipX" | "flipY" | "opacity">
   >;
 
+/**
+ * Uma câmera da cena: um recorte com nome.
+ *
+ * Existe porque uma cena grande tem mais de um lugar onde a mesa olha: a
+ * taverna onde metade do grupo negocia e o beco onde a outra metade briga.
+ * Sem isto o mestre reenquadrava à mão a cada troca de foco.
+ *
+ * `alvoIds` presente = a câmera SEGUE esses itens, e não um lugar fixo: é a
+ * câmera "do grupo A", que vai onde o grupo A for. O `viewport` aí guarda a
+ * ampliação e o último lugar visto, para o caso de os itens já não existirem.
+ */
+export type CameraSalva = {
+  id: string;
+  nome: string;
+  viewport: Viewport;
+  alvoIds?: string[];
+};
+
 export type Scene = {
   id: string;
   name: string;
@@ -582,6 +600,32 @@ export type Scene = {
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.
    */
   camera?: Viewport;
+  /**
+   * As câmeras da cena. Ausente = nenhuma ainda; o Mestre cria a primeira ao
+   * abrir a cena.
+   *
+   * Toda câmera tem nome e número: não existe "a câmera" anônima. O que a
+   * mesa vê é a que está NO AR (`cameraNoArId`), e `camera` acima é só a
+   * cópia do recorte dela, mantida porque é o que o canal e o espectador já
+   * leem. As demais são preparação: o mestre ajusta a do beco enquanto a TV
+   * ainda mostra a taverna.
+   *
+   * NUNCA chega à mesa: `sceneForTable` remove este campo antes de publicar.
+   */
+  cameras?: CameraSalva[];
+  /**
+   * Qual câmera está transmitindo. Ausente = a mesa fica ESCURA: sem câmera
+   * no ar não há nada a mostrar, e mostrar a cena inteira revelaria o que o
+   * mestre ainda não quis revelar.
+   *
+   * Persistido e não derivado de `camera` porque duas câmeras podem ter o
+   * mesmo recorte, e reabrir o app tem de acender o chip certo.
+   *
+   * CHEGA à mesa, ao contrário de `cameras`: é o que a TV usa para saber se o
+   * recorte mudou porque a mesma câmera andou (interpola) ou porque outra
+   * entrou no ar (corta em fade). Ver `useCorteDeCamera`.
+   */
+  cameraNoArId?: string;
   /** Grade sobre o mapa. Ausente = sem grade. */
   grid?: SceneGrid;
   /**
