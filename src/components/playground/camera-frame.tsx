@@ -15,7 +15,7 @@ import {
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
-import { clampViewport, comFolga, viewportZoom } from "@/lib/geometry/viewport";
+import { clampViewport, viewportZoom } from "@/lib/geometry/viewport";
 import { alternarTransmissao } from "@/lib/mestre/camera-actions";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { CameraSalva, Viewport } from "@/types/scene";
@@ -141,8 +141,14 @@ export function CameraFrame({
     ? "pointer-events-auto absolute touch-none"
     : "pointer-events-none absolute";
 
-  // A área navegável inteira, para a máscara cobrir até onde o mestre alcança.
-  const fora = comFolga(conteudo);
+  // Até o CONTEÚDO, e nunca a folga em volta dele. A máscara cobria a área
+  // navegável inteira -- três planos por três, com `left/top` negativos -- e
+  // isso é a armadilha número um do WebKitGTK (ver `debug-do-palco` §3): um
+  // filho que transborda o plano infla a camada composta, o motor pinta o
+  // mapa deslocado e, ampliado, preto. Foi o "bug da câmera no zoom" voltando
+  // pela terceira porta. O que fica fora do conteúdo já é preto por natureza;
+  // não há nada ali a escurecer.
+  const fora = conteudo;
   const opacidadeMascara =
     arrastando || cinegrafista ? MASCARA_ARRASTANDO : MASCARA_PARADA;
   const mascara = [

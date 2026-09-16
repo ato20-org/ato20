@@ -120,10 +120,22 @@ export function useModoCinegrafista({ camera, ativo, onChange }: Opcoes): boolea
     }
 
     function aoTecla(evento: KeyboardEvent) {
+      if (evento.key.toLowerCase() !== "v") return;
+
+      // SOLTAR vale sempre, venha de onde vier. Se o V foi apertado no palco
+      // e solto com o foco num campo -- renomear uma pasta no meio do gesto
+      // --, recusar o keyup deixava o visor preso: a roda passava a dar zoom
+      // na câmera em vez do mapa até a próxima tecla V. Foi o "bug da câmera
+      // no zoom" voltando por outra porta.
+      if (evento.type === "keyup") {
+        segurando = false;
+        setLigado(false);
+        return;
+      }
+
       // Só o V solto: Shift+V é espelhar, Ctrl+V é colar, e digitar num campo
       // não é segurar o visor.
       if (
-        evento.key.toLowerCase() !== "v" ||
         evento.ctrlKey ||
         evento.metaKey ||
         evento.shiftKey ||
@@ -136,8 +148,8 @@ export function useModoCinegrafista({ camera, ativo, onChange }: Opcoes): boolea
       // mudança de estado.
       if (evento.repeat) return;
 
-      segurando = evento.type === "keydown";
-      setLigado(segurando);
+      segurando = true;
+      setLigado(true);
     }
 
     // V solto fora da janela nunca chega como keyup.
