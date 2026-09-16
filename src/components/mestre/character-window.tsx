@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ChevronRight,
   File,
   FileAudio,
   FileImage,
@@ -70,6 +71,9 @@ import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { setAssetEscopo } from "@/lib/vault/assets";
 import { shareCharacterAttachment } from "@/lib/vault/evidence";
 
+import { PlayerDialog } from "@/components/mestre/player-dialog";
+import { presente } from "@/hooks/use-players";
+import { desde } from "@/lib/tempo";
 import { InventarioPersonagem } from "./inventario-personagem";
 import { SecaoFicha } from "./secao-ficha";
 import { formatBytes } from "@/lib/player/session";
@@ -341,10 +345,6 @@ function Ficha({
           </div>
         </div>
 
-        <p className="text-muted-foreground text-[10px] leading-snug">
-          Os arquivos ficam em <code>personagens/{personagem.id}/anexos/</code>,
-          separados por quem os pôs ali.
-        </p>
       </div>
     </ScrollArea>
   );
@@ -655,15 +655,27 @@ function Files({
           </ul>
         )}
 
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={anexando}
-          onClick={onAnexar}
-        >
-          {anexando ? <Loader2 className="animate-spin" /> : <Paperclip />}
-          Anexar arquivos
-        </Button>
+        {/* O caminho no disco era um rodapé fixo em toda ficha; é informação
+            de uma vez só, e mora onde o arquivo entra. */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={anexando}
+                onClick={onAnexar}
+              />
+            }
+          >
+            {anexando ? <Loader2 className="animate-spin" /> : <Paperclip />}
+            Anexar arquivos
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-64">
+            Ficam em <code>personagens/{personagemId}/anexos/</code>, separados
+            por quem os pôs ali. O jogador vinculado também os lê.
+          </TooltipContent>
+        </Tooltip>
       </div>
     </SecaoFicha>
   );
@@ -1408,6 +1420,10 @@ function PlayerNote({
   jogador: Player;
 }) {
   const [texto, setTexto] = useState<string | null>(null);
+  // Fechada por padrão: cinco jogadores vinculados eram cinco caixas vazias
+  // de 64px empilhadas. O resumo na linha diz se há algo dentro.
+  const [aberta, setAberta] = useState(false);
+  const [salvo, setSalvo] = useState(false);
 
   useEffect(() => {
     let ativo = true;
@@ -1428,30 +1444,71 @@ function PlayerNote({
     };
   }, [personagemId, jogador.id]);
 
+  useEffect(() => {
+    if (!salvo) return;
+    const timer = setTimeout(() => setSalvo(false), 2000);
+    return () => clearTimeout(timer);
+  }, [salvo]);
+
   if (texto === null) return null;
 
-  return (
-    <Textarea
-      className="min-h-16 resize-y text-xs"
-      placeholder={`O que ${jogador.nome} anotou sobre este personagem`}
-      aria-label={`Nota de ${jogador.nome}`}
-      defaultValue={texto}
-      onBlur={(event) => {
-        if (event.target.value === texto) return;
+  const resumo = texto.trim().split("\n")[0] ?? "";
+  const id = `nota-${personagemId}-${jogador.id}`;
 
-        void setCharacterNote(
-          personagemId,
-          jogador.id,
-          event.target.value,
-        ).then(
-          () => setTexto(event.target.value),
-          (cause) =>
-            toast.error(
-              cause instanceof Error ? cause.message : "Falha ao gravar.",
-            ),
-        );
-      }}
-    />
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={() => setAberta((v) => !v)}
+        aria-expanded={aberta}
+        aria-controls={id}
+        className="text-muted-foreground hover:text-foreground flex w-full min-w-0 items-center gap-1 rounded px-0.5 text-left text-[11px] focus-visible:ring-2 focus-visible:outline-none"
+      >
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 transition-transform motion-reduce:transition-none",
+            aberta && "rotate-90",
+          )}
+          aria-hidden
+        />
+        <span className="shrink-0">Nota</span>
+        <span className="min-w-0 flex-1 truncate italic">
+          {resumo || "vazia"}
+        </span>
+        {salvo ? (
+          <span className="text-emerald-500 shrink-0 not-italic">salvo</span>
+        ) : null}
+      </button>
+
+      {aberta ? (
+        <Textarea
+          id={id}
+          autoFocus
+          className="min-h-16 resize-y text-xs"
+          placeholder={`Sua nota sobre ${jogador.nome} neste personagem`}
+          aria-label={`Sua nota sobre ${jogador.nome}`}
+          defaultValue={texto}
+          onBlur={(event) => {
+            if (event.target.value === texto) return;
+
+            void setCharacterNote(
+              personagemId,
+              jogador.id,
+              event.target.value,
+            ).then(
+              () => {
+                setTexto(event.target.value);
+                setSalvo(true);
+              },
+              (cause) =>
+                toast.error(
+                  cause instanceof Error ? cause.message : "Falha ao gravar.",
+                ),
+            );
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -1469,6 +1526,18 @@ function Owners({
 }) {
   const vinculados = jogadores.filter((jogador) => donos.includes(jogador.id));
   const livres = jogadores.filter((jogador) => !donos.includes(jogador.id));
+  const [escolhido, setEscolhido] = useState<string | null>(null);
+
+  // Relógio em estado, e não `Date.now()` no render — ver `usePlayers`. A
+  // lista chega pela sondagem do chip, então acompanhar a mudança dela é
+  // acompanhar a sondagem.
+  const [agora, setAgora] = useState(0);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAgora(Date.now());
+  }, [jogadores]);
+
+  const aberto = jogadores.find((jogador) => jogador.id === escolhido) ?? null;
 
   return (
     <SecaoFicha
@@ -1479,37 +1548,58 @@ function Owners({
       <div className="space-y-2">
         {vinculados.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            Sem dono. Vinculado, o jogador passa a ver os arquivos e pode
-            escrever notas.
+            {jogadores.length === 0
+              ? "Ninguém entrou na mesa ainda."
+              : "Ninguém vinculado. Vinculado, o jogador vê os arquivos e escreve notas."}
           </p>
         ) : (
           <ul className="space-y-1">
-            {vinculados.map((jogador) => (
-              <li
-                key={jogador.id}
-                className="bg-muted/40 space-y-1.5 rounded-md border p-1.5"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-xs">
-                    {jogador.nome}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Desvincular ${jogador.nome}`}
-                    onClick={() => {
-                      void unlinkCharacter(jogador.id, personagem.id).then(
-                        onChanged,
-                      );
-                    }}
-                  >
-                    <X />
-                  </Button>
-                </div>
+            {vinculados.map((jogador) => {
+              const naMesa = presente(jogador, agora);
+              return (
+                <li
+                  key={jogador.id}
+                  className="bg-muted/40 space-y-1 rounded-md border p-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEscolhido(jogador.id)}
+                      className="hover:bg-muted flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left focus-visible:ring-2 focus-visible:outline-none"
+                      aria-label={`Abrir ${jogador.nome}`}
+                    >
+                      <span
+                        className={cn(
+                          "size-2 shrink-0 rounded-full",
+                          naMesa ? "bg-emerald-500" : "bg-muted-foreground/40",
+                        )}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 truncate text-xs">
+                        {jogador.nome}
+                      </span>
+                      <span className="text-muted-foreground shrink-0 text-[10px]">
+                        {naMesa ? "na mesa" : `visto ${desde(jogador.vistoEm)}`}
+                      </span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Desvincular ${jogador.nome}`}
+                      onClick={() => {
+                        void unlinkCharacter(jogador.id, personagem.id).then(
+                          onChanged,
+                        );
+                      }}
+                    >
+                      <X />
+                    </Button>
+                  </div>
 
-                <PlayerNote personagemId={personagem.id} jogador={jogador} />
-              </li>
-            ))}
+                  <PlayerNote personagemId={personagem.id} jogador={jogador} />
+                </li>
+              );
+            })}
           </ul>
         )}
 
@@ -1528,7 +1618,9 @@ function Owners({
             >
               <SelectValue placeholder="Vincular a…" />
             </SelectTrigger>
-            <SelectContent>
+            {/* Abaixo do gatilho, e não por cima: sem valor escolhido não há
+                item para alinhar, e o popup cobria o próprio "Vincular a…". */}
+            <SelectContent alignItemWithTrigger={false}>
               {livres.map((jogador) => (
                 <SelectItem
                   key={jogador.id}
@@ -1540,13 +1632,15 @@ function Owners({
               ))}
             </SelectContent>
           </Select>
-        ) : jogadores.length === 0 ? (
-          <p className="text-muted-foreground text-xs">
-            Ninguém entrou na mesa ainda. Desvincular não apaga nota: o que o
-            jogador escreveu volta quando ele for vinculado de novo.
-          </p>
         ) : null}
       </div>
+
+      <PlayerDialog
+        player={aberto}
+        presente={aberto ? presente(aberto, agora) : false}
+        onVoltar={() => setEscolhido(null)}
+        onChanged={onChanged}
+      />
     </SecaoFicha>
   );
 }
