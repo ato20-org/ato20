@@ -13,7 +13,6 @@ import { OnAirControl } from "@/components/mestre/on-air-control";
 import { MestreStage } from "@/components/mestre/mestre-stage";
 import { MestreToolbar } from "@/components/mestre/mestre-toolbar";
 import { PinIndex } from "@/components/mestre/pin-index";
-import { RolagensChip } from "@/components/mestre/rolagens-chip";
 import { SaquinhoDados } from "@/components/mestre/saquinho-dados";
 import { SpotlightChip } from "@/components/mestre/spotlight-chip";
 import { StageContextMenu } from "@/components/mestre/stage-context-menu";
@@ -252,12 +251,11 @@ export function MestreShell() {
                   Jogadores fica: quem entrou pelo Jogador não tem aba nenhuma,
                   e a contagem é o que responde "quantos entraram?" sem abrir
                   nada. O chip sai sem moldura; a moldura é esta. */}
+              {/* Rolagens não tem mais chip aqui: a janela abre sozinha quando
+                  chega dado (ver `useJanelaDeRolagens`) e vive no catálogo do
+                  dock. Um botão para o que já se abre era mobília. */}
               <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
                 <PlayersChip />
-                {/* Segundo chip da mesma moldura -- ela foi escrita para
-                    dividir. As duas respondem sobre a MESA e não sobre o mapa:
-                    quem entrou, e o que eles tiraram. */}
-                <RolagensChip />
               </div>
               {rightOpen ? null : (
                 <FloatingPanelToggle
