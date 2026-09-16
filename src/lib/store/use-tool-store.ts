@@ -16,9 +16,9 @@ import { CORES_POSTIT, type CorPostit } from "@/types/scene";
  * texto ABERTO sobre uma região, que é o que se quer para o que precisa ser
  * lido de relance no meio da sessão.
  *
- * `regua` mede em metros no arrasto, e mora ao lado da grade e não na barra de
- * ferramentas: ela só significa algo com a grade ligada, porque é o quadrado
- * que diz quanto vale um metro. Ver `METROS_POR_QUADRADO`.
+ * `regua` mede em metros no arrasto, e mora colada na grade, na pílula do mapa:
+ * ela só significa algo com a grade ligada, porque é o quadrado que diz quanto
+ * vale um metro. Ver `METROS_POR_QUADRADO`.
  *
  * As duas de mira são de gesto diferente de propósito: área é arrasto, porque
  * ela tem tamanho; ponto é clique, porque ele não tem — pedir um arrasto para

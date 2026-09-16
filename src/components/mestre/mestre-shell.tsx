@@ -411,7 +411,7 @@ function StageBoundary({
           palco e as duas pontas dela não tinham relação nenhuma. */}
       {scene ? (
         <div className="absolute bottom-3 left-3 flex items-center gap-2">
-          <MestreToolbar />
+          <MestreToolbar scene={scene} />
         </div>
       ) : null}
 
