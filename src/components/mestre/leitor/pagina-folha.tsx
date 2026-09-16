@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 import { filaDoLeitor } from "@/lib/leitor/fila-de-render";
+import type { Retangulo } from "@/hooks/use-busca-livro";
+
+/** Um destaque da busca nesta folha. `atual` é o que o mestre acabou de pedir. */
+export type Destaque = Retangulo & { atual: boolean };
 
 /**
  * Quanto se desenha por pixel de tela.
@@ -81,6 +85,7 @@ export function PaginaFolha({
   razaoPadrao,
   desenhar,
   prioridade,
+  destaques,
   registrar,
   lupa,
   ampliacao,
@@ -95,6 +100,8 @@ export function PaginaFolha({
   desenhar: boolean;
   /** Distância até a página lida. Zero é a que o mestre está olhando. */
   prioridade: number;
+  /** Onde a busca achou o termo nesta folha, em fração da página. */
+  destaques?: Destaque[];
   registrar: (elemento: HTMLElement | null) => void;
   /** A ferramenta de lupa está armada. */
   lupa: boolean;
@@ -469,6 +476,31 @@ export function PaginaFolha({
             className={`absolute inset-0 h-full w-full ${frente === "b" ? "" : "invisible"}`}
           />
         </>
+      ) : null}
+
+      {/* Os achados da busca, por cima do canvas. `div` e não canvas: escala
+          com a caixa por CSS, então o zoom não custa redesenho nenhum aqui. Só
+          aparecem com a folha pronta -- sobre a caixa branca de uma folha ainda
+          não desenhada, o destaque marcaria um lugar sem texto. */}
+      {pronta && destaques?.length ? (
+        <div className="pointer-events-none absolute inset-0" aria-hidden>
+          {destaques.map((destaque, indice) => (
+            <span
+              key={indice}
+              className={`absolute rounded-[2px] ${
+                destaque.atual
+                  ? "bg-orange-400/60 ring-1 ring-orange-500"
+                  : "bg-yellow-300/50"
+              }`}
+              style={{
+                left: `${destaque.x * 100}%`,
+                top: `${destaque.y * 100}%`,
+                width: `${destaque.w * 100}%`,
+                height: `${destaque.h * 100}%`,
+              }}
+            />
+          ))}
+        </div>
       ) : null}
 
       {/* O número no lugar do desenho, e não um spinner: rolando depressa
