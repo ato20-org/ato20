@@ -29,6 +29,7 @@ import { useCharacters } from "@/hooks/use-characters";
 import { useModoCinegrafista } from "@/hooks/use-modo-cinegrafista";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { gravarCameraManual } from "@/lib/mestre/camera-actions";
+import { alvoDoClique } from "@/lib/mestre/item-actions";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
@@ -491,23 +492,26 @@ export function MestreStage({ scene }: { scene: Scene }) {
 
   function handleItemPointerDown(event: ReactPointerEvent, item: CanvasItem) {
     const alreadySelected = selectedIds.includes(item.id);
+    // O item, ou a pasta fechada em que ele está. Ver `alvoDoClique`.
+    const alvo = alvoDoClique(scene, item);
 
     if (event.button === 2) {
       // Botão direito aponta o menu para o item clicado, mas não desfaz uma
       // seleção múltipla que já o inclua.
-      if (!alreadySelected) select([item.id]);
+      if (!alreadySelected) select(alvo);
       return;
     }
 
     if (event.button !== 0) return;
 
-    if (event.shiftKey) {
-      toggle(item.id);
+    // Shift e Ctrl somam à seleção: a pasta fechada inteira, ou o item.
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      for (const id of alvo) toggle(id);
       return;
     }
 
-    const draggedIds = alreadySelected ? selectedIds : [item.id];
-    if (!alreadySelected) select([item.id]);
+    const draggedIds = alreadySelected ? selectedIds : alvo;
+    if (!alreadySelected) select(alvo);
 
     const moving = scene.items.filter(
       (candidate) => draggedIds.includes(candidate.id) && !candidate.locked,
@@ -1193,6 +1197,32 @@ export function MestreStage({ scene }: { scene: Scene }) {
 
       {outlineBounds ? <SelectionBox bounds={outlineBounds} /> : null}
 
+      {/* Cada item da seleção múltipla com o próprio contorno: sem isto a
+          caixa do grupo era quatro cantos soltos num mapa escuro, e não se
+          via QUEM estava dentro. Tracejado fino, para não brigar com o
+          contorno sólido da caixa. */}
+      {groupBounds
+        ? selectedItems.map((item) => {
+            const caixa = itemBounds(item);
+
+            return (
+              <div
+                key={item.id}
+                className="outline-primary/80 pointer-events-none absolute outline-dashed"
+                style={{
+                  left: caixa.minX,
+                  top: caixa.minY,
+                  width: caixa.maxX - caixa.minX,
+                  height: caixa.maxY - caixa.minY,
+                  outlineWidth: 1.5 / scale,
+                  outlineOffset: 2 / scale,
+                  zIndex: 9_900,
+                }}
+              />
+            );
+          })
+        : null}
+
       {groupBounds && !panMode ? (
         <TransformHandles
           box={{ ...boundsToBox(groupBounds), rotation: 0 }}
@@ -1201,7 +1231,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
           // não representa.
           handles={CORNER_HANDLES}
           keepAspect
-          outline={false}
+          // Contorno ligado: era só os cantos, e a área do grupo não se lia.
           onGestureStart={() => {
             groupSnapshot.current = {
               items: selectedItems,

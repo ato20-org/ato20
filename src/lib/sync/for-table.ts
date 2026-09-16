@@ -60,7 +60,8 @@ export function sceneForTable(scene: Scene | null): Scene | null {
     !scene.pins &&
     !scene.postits &&
     !scene.extensoes &&
-    !scene.cameras
+    !scene.cameras &&
+    !scene.grupos
   )
     return scene;
 
@@ -75,6 +76,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // câmera andando (interpola) de uma câmera trocada (corta). Ver
   // `useCorteDeCamera`.
   delete paraMesa.cameras;
+  delete paraMesa.grupos;
 
   return paraMesa;
 }

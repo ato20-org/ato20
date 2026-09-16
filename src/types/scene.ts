@@ -71,7 +71,13 @@ export type AssetMeta = {
  * retratos e de fichas, e uma árvore profunda cobraria navegação em troca de
  * organização que ninguém pediu.
  */
-export type AssetFolder = { id: string; name: string; createdAt: number };
+/** Pasta do acervo. Pasta dentro de pasta pelo `parentId`; ausente = raiz. */
+export type AssetFolder = {
+  id: string;
+  name: string;
+  createdAt: number;
+  parentId?: string;
+};
 
 /** O dono de um arquivo do acervo, quando ele tem um. */
 export type EscopoAsset = "cena" | "personagem";
@@ -96,6 +102,13 @@ export type CanvasItem = {
    * e um nome copiado aqui viraria mentira na primeira renomeacao.
    */
   personagemId?: string;
+  /**
+   * O grupo em que o item está na lista de camadas. Ausente = solto na raiz.
+   *
+   * Só organização: não muda o `z`, não muda o desenho. A mesa nunca vê grupo.
+   * Ver `Grupo`.
+   */
+  grupoId?: string;
   /** Canto superior esquerdo, em coordenadas de cena. */
   x: number;
   y: number;
@@ -576,6 +589,29 @@ export type CameraSalva = {
   alvoIds?: string[];
 };
 
+/**
+ * Um grupo de itens na lista "Em cena", com nome. Grupo dentro de grupo pelo
+ * `parentId`.
+ *
+ * Existe para a lista deixar de ser vinte linhas planas: "os quatro
+ * guardas", "a mobília da taverna". Clicar no nome seleciona tudo dele, e daí
+ * o gizmo de grupo que já existe move, escala e gira.
+ *
+ * O que ele NÃO é: camada de desenho. A ordem de sobreposição continua sendo
+ * o `z` de cada item, e um item do grupo A pode estar entre dois do grupo B.
+ * Um grupo com `z` próprio mudaria o `SceneLayer`, que é compartilhado e chega
+ * à TV, para resolver uma coisa que a mesa nunca vê.
+ *
+ * `recolhido` é da lista e persiste na cena porque é a única casa que a lista
+ * tem: reabrir a campanha com os grupos como o mestre os deixou é o esperado.
+ */
+export type Grupo = {
+  id: string;
+  nome: string;
+  parentId?: string;
+  recolhido?: boolean;
+};
+
 export type Scene = {
   id: string;
   name: string;
@@ -600,6 +636,13 @@ export type Scene = {
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.
    */
   camera?: Viewport;
+  /**
+   * Grupos da lista de camadas. Ausente = nenhum.
+   *
+   * NUNCA chega à mesa: `sceneForTable` remove este campo antes de publicar.
+   * O `grupoId` nos itens viaja, mas sem a lista é só um id sem uso.
+   */
+  grupos?: Grupo[];
   /**
    * As câmeras da cena. Ausente = nenhuma ainda; o Mestre cria a primeira ao
    * abrir a cena.

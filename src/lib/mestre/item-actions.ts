@@ -140,6 +140,103 @@ export function toggleSelectionLock(): void {
   useSceneStore.getState().setItemsLocked(scene.id, selectedIds, locking);
 }
 
+/**
+ * Agrupa a seleção num grupo novo.
+ *
+ * Nasce dentro do grupo em que a seleção já está, quando todos vêm do mesmo:
+ * agrupar quatro guardas que estão na "taverna" faz "Grupo 2" dentro da
+ * taverna, e não um grupo solto na raiz que os tira de lá. Nome numerado, o
+ * mestre renomeia pelo F2.
+ */
+export function agruparSelecao(): string | undefined {
+  const { scene, selectedIds, selectedItems } = read();
+  if (!scene || selectedItems.length === 0) return undefined;
+
+  const pais = new Set(selectedItems.map((item) => item.grupoId));
+  const parentId = pais.size === 1 ? selectedItems[0]?.grupoId : undefined;
+  const ordem = (scene.grupos?.length ?? 0) + 1;
+
+  return useSceneStore
+    .getState()
+    .criarGrupo(scene.id, `Pasta ${ordem}`, selectedIds, parentId);
+}
+
+/**
+ * Desfaz os grupos a que a seleção pertence. Os itens sobem um nível.
+ *
+ * Todos os grupos tocados pela seleção, e não só um: com um guarda de cada
+ * grupo selecionado, "desagrupar" tem de valer para os dois.
+ */
+export function desagruparSelecao(): void {
+  const { scene, selectedItems } = read();
+  if (!scene) return;
+
+  const grupos = new Set(
+    selectedItems.flatMap((item) => (item.grupoId ? [item.grupoId] : [])),
+  );
+
+  for (const grupoId of grupos)
+    useSceneStore.getState().removerGrupo(scene.id, grupoId);
+}
+
+/** Os ids dos itens de um grupo, incluindo os dos subgrupos. */
+export function itensDoGrupo(scene: Scene, grupoId: string): string[] {
+  const filhos = new Set([grupoId]);
+  let cresceu = true;
+
+  // Fecha o conjunto dos descendentes. Laço e não recursão porque a lista de
+  // grupos é plana com `parentId`, e assim não há árvore para montar.
+  while (cresceu) {
+    cresceu = false;
+    for (const grupo of scene.grupos ?? []) {
+      if (grupo.parentId && filhos.has(grupo.parentId) && !filhos.has(grupo.id)) {
+        filhos.add(grupo.id);
+        cresceu = true;
+      }
+    }
+  }
+
+  return scene.items
+    .filter((item) => item.grupoId && filhos.has(item.grupoId))
+    .map((item) => item.id);
+}
+
+/**
+ * O que um clique neste item no MAPA seleciona.
+ *
+ * Item em pasta: a pasta INTEIRA, sempre, e a de fora quando há pasta dentro
+ * de pasta. Uma pasta é uma coisa só no mapa -- pegar um guarda move os
+ * quatro --, e era o que faltava: sem isto, agrupar não mudava nada no palco
+ * e a única forma de mexer em vários era Shift a cada clique.
+ *
+ * Para mexer num item sozinho, o caminho é a LISTA: abre a pasta, clica na
+ * linha dele. Ele fica selecionado, e arrastá-lo no mapa move só ele --
+ * `handleItemPointerDown` respeita a seleção que já existe. É o "entrar no
+ * grupo" do Figma, com a lista no lugar do duplo clique.
+ */
+export function alvoDoClique(scene: Scene, item: CanvasItem): string[] {
+  const grupos = scene.grupos ?? [];
+  let cursor = item.grupoId;
+  let raiz: string | undefined;
+
+  while (cursor) {
+    const grupo = grupos.find((candidato) => candidato.id === cursor);
+    if (!grupo) break;
+    raiz = grupo.id;
+    cursor = grupo.parentId;
+  }
+
+  return raiz ? itensDoGrupo(scene, raiz) : [item.id];
+}
+
+/** Seleciona tudo o que está num grupo, subgrupos incluídos. */
+export function selecionarGrupo(grupoId: string): void {
+  const { scene } = read();
+  if (!scene) return;
+
+  useSelectionStore.getState().select(itensDoGrupo(scene, grupoId));
+}
+
 export function selectAllItems(): void {
   const { scene } = read();
   if (!scene) return;
