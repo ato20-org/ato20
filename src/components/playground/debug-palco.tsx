@@ -76,6 +76,16 @@ export function useDebugDoPalco(): boolean {
 
 type Retangulo = { x: number; y: number; w: number; h: number };
 
+/** Quanto sobra para fora da caixa do plano, por lado, e o pior filho. */
+export type Transbordo = {
+  esquerda: number;
+  cima: number;
+  direita: number;
+  baixo: number;
+  /** `tag.classe` do filho que mais transborda, ou vazio. */
+  pior: string;
+};
+
 /** Uma amostra: o que a geometria espera e o que o DOM mede. */
 export type AmostraDoPalco = {
   tela: string;
@@ -93,6 +103,16 @@ export type AmostraDoPalco = {
   esperado: { x: number; y: number; w: number };
   conteudo: Retangulo | null;
   controles: Retangulo | null;
+  /**
+   * Quanto os filhos de cada plano passam da caixa dele, em px de tela, e
+   * quem passa mais. É a armadilha número um do WebKitGTK medida em vez de
+   * adivinhada: filho que transborda infla a camada composta, e o motor pinta
+   * o mapa deslocado ou preto. Zero é o normal; centenas é o culpado.
+   */
+  transbordo: {
+    conteudo: Transbordo | null;
+    controles: Transbordo | null;
+  };
   /** Centro medido da mira de cada plano, contra o centro esperado. */
   miras: {
     esperado: { x: number; y: number };
@@ -197,6 +217,46 @@ export function DebugPalco({
           };
         };
 
+        /**
+         * Filhos diretos e netos do plano contra a caixa do plano. Dois níveis
+         * bastam: o que fura o plano é sempre um retângulo grande posicionado
+         * nele, e não uma folha fundo na árvore.
+         */
+        const transbordo = (raiz: HTMLElement | null): Transbordo | null => {
+          if (!raiz) return null;
+          const caixa = raiz.getBoundingClientRect();
+          const t: Transbordo = { esquerda: 0, cima: 0, direita: 0, baixo: 0, pior: "" };
+          let maior = 0;
+          const olhar = (el: HTMLElement) => {
+            const b = el.getBoundingClientRect();
+            if (b.width === 0 && b.height === 0) return;
+            const e = Math.max(0, caixa.left - b.left);
+            const c = Math.max(0, caixa.top - b.top);
+            const d = Math.max(0, b.right - caixa.right);
+            const x = Math.max(0, b.bottom - caixa.bottom);
+            t.esquerda = Math.max(t.esquerda, e);
+            t.cima = Math.max(t.cima, c);
+            t.direita = Math.max(t.direita, d);
+            t.baixo = Math.max(t.baixo, x);
+            const total = e + c + d + x;
+            if (total > maior) {
+              maior = total;
+              t.pior = `${el.tagName.toLowerCase()}.${(el.className || "").toString().slice(0, 32)}`;
+            }
+          };
+          for (const filho of Array.from(raiz.children) as HTMLElement[]) {
+            olhar(filho);
+            for (const neto of Array.from(filho.children) as HTMLElement[]) olhar(neto);
+          }
+          return {
+            esquerda: Math.round(t.esquerda),
+            cima: Math.round(t.cima),
+            direita: Math.round(t.direita),
+            baixo: Math.round(t.baixo),
+            pior: t.pior,
+          };
+        };
+
         const amostra: AmostraDoPalco = {
           tela,
           quando: Date.now(),
@@ -211,6 +271,7 @@ export function DebugPalco({
           esperado: { x: offsetX, y: offsetY, w: SCENE_WIDTH * scale },
           conteudo: rel(conteudo),
           controles: rel(controles),
+          transbordo: { conteudo: transbordo(conteudo), controles: transbordo(controles) },
           miras: { esperado: centro, magenta: mira(conteudo), cyan: mira(controles) },
         };
         piorGap = 0;
@@ -232,6 +293,12 @@ export function DebugPalco({
     };
   }, [tela, frame, conteudo, controles, scale, offsetX, offsetY, modoZoom, viewport]);
 
+  const transTxt = (t: Transbordo | null) =>
+    !t
+      ? "-"
+      : t.esquerda + t.cima + t.direita + t.baixo === 0
+        ? "0 (ok)"
+        : `E${t.esquerda} C${t.cima} D${t.direita} B${t.baixo}px  pior: ${t.pior}  <-- FILHO FORA DO PLANO`;
   const fmt = (r: Retangulo | null) =>
     r ? `x=${r.x.toFixed(1)} y=${r.y.toFixed(1)} w=${r.w.toFixed(0)}` : "—";
   const desvio = (r: Retangulo | null) =>
@@ -254,6 +321,8 @@ viewport x=${viewport.x.toFixed(0)} y=${viewport.y.toFixed(0)} w=${viewport.widt
 esperado   x=${offsetX.toFixed(1)} y=${offsetY.toFixed(1)} w=${(SCENE_WIDTH * scale).toFixed(0)}
 conteudo   ${fmt(m?.conteudo ?? null)}   ${desvio(m?.conteudo ?? null)}
 controles  ${fmt(m?.controles ?? null)}   ${desvio(m?.controles ?? null)}
+transbordo conteudo  ${transTxt(m?.transbordo.conteudo ?? null)}
+transbordo controles ${transTxt(m?.transbordo.controles ?? null)}
 magenta ${miraTxt(m?.miras.magenta ?? null)}
 cyan    ${miraTxt(m?.miras.cyan ?? null)}
 (as duas miras marcam o CENTRO do plano; separadas = os planos se descolaram na pintura)`}

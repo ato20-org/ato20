@@ -1,6 +1,6 @@
 ---
 name: debug-do-palco
-description: Skill DO PROJETO desktop.ato20. Use quando o mapa/palco desenha errado — "o mapa pula", "vai pro centro e volta", "tela preta no zoom", "ficou embaçado", "a câmera trava na TV", "o token aparece em outro lugar", "o espectador redimensiona e quebra", ou qualquer sintoma visual de câmera, zoom, pan, planos ou espectador. Ensina a arquitetura do palco (dois planos, `zoom` × `transform`, portal, fundo), as armadilhas do WebKitGTK já medidas, e o modo de depuração (Ctrl+Alt+D + `GET /debug/palco` + scripts em `scripts/debug/`) que dá ao agente medida em vez de print. NÃO é sobre desempenho de renderização (isso é `pnpm perf`) nem sobre o canal SSE (ver `use-scene-broadcast.ts`).
+description: Skill DO PROJETO desktop.ato20. Use quando o mapa/palco desenha errado — "o mapa pula", "vai pro centro e volta", "tela preta no zoom", "o bug da câmera voltou", "bug da câmera ao dar zoom", "só dei zoom e bugou", "ficou embaçado", "a câmera trava na TV", "o token aparece em outro lugar", "o espectador redimensiona e quebra", ou qualquer sintoma visual de câmera, zoom, pan, planos ou espectador. Use TAMBÉM antes de acrescentar qualquer elemento dentro dos planos do palco (moldura, máscara, alça, fantasma, contorno): a regra de transbordo em §3 já derrubou o Mestre três vezes. Ensina a arquitetura do palco (dois planos, `zoom` × `transform`, portal, fundo), as armadilhas do WebKitGTK já medidas, e o modo de depuração (Ctrl+Alt+D + `GET /debug/palco` + scripts em `scripts/debug/`) que dá ao agente medida em vez de print. NÃO é sobre desempenho de renderização (isso é `pnpm perf`) nem sobre o canal SSE (ver `use-scene-broadcast.ts`).
 ---
 
 # Depurar o palco (mapa, câmera, zoom, planos)
@@ -71,18 +71,29 @@ buraco entre quadros).
 | `plano dx/dy ≠ 0` | geometria NOSSA errada (offset/clamp/forma) | `viewport.ts`, `SceneStage` |
 | DOM das miras coincide, tela mostra separadas | **pintura** do motor, não layout | o que infla/altera a camada composta (§3) |
 | `cadeia` com ancestral fora de `(0,0)` | um elemento entre a mira e o plano carrega deslocamento | esse elemento |
+| `transbordo ≠ 0` em qualquer plano | um filho passa da caixa do plano (§3, armadilha 1); o `pior` nomeia | esse elemento: encolha para o conteúdo |
 | `stall` de centenas de ms | thread principal presa em raster | raster grande demais nesse `modo` |
 | bug só em `modo=zoom` | forma de ampliar por layout | `conteudoNoLayout` e o que está dentro do plano |
 | bug só depois de `pnpm build` / só na TV | código da TV é o `out/` | build primeiro |
 
 ## 3. Armadilhas do WebKitGTK já medidas (não redescubra)
 
-- **Filho que transborda o plano de conteúdo infla a camada composta.** Um
-  `div` de 3×3 planos com `left/top` negativos dentro do plano fez o motor
-  pintar o mapa **deslocado por um vetor constante em unidades de cena** (DOM
-  certo, pixel errado) e ficar **preto** ampliado. Corrigido movendo o alvo de
-  gesto para o `fundoDoPalco`. Regra: nada dentro do plano de conteúdo sai da
-  caixa 1920×1080 além do que a cena realmente tem.
+- **Filho que transborda um plano infla a camada composta.** Vale para os
+  DOIS planos, o de conteúdo e o de controles. Um `div` de 3×3 planos com
+  `left/top` negativos fez o motor pintar o mapa **deslocado por um vetor
+  constante em unidades de cena** (DOM certo, pixel errado) e ficar **preto**
+  ampliado. Aconteceu **três vezes**, sempre por alguém novo pondo algo grande
+  dentro de um plano: (1) a zona de gesto do mestre, movida para o
+  `fundoDoPalco`; (2) a **máscara escura da câmera**, quatro retângulos que
+  cobriam `comFolga(conteudo)` no plano de controles, encolhida para
+  `conteudo`; (3) o mesmo padrão em qualquer moldura, alça ou contorno que se
+  posicione fora da caixa. O sintoma é sempre o mesmo e enganoso: **só no
+  Mestre, só com a câmera parada (`modo=zoom`), só dando zoom, o mapa pula
+  para outro lugar e depois fica preto** -- parece bug de câmera, e não é.
+  Regra: nada dentro de um plano sai da caixa do conteúdo. O HUD mede isso em
+  `transbordo` e nomeia o `pior` filho; leia ele ANTES de teorizar sobre
+  câmera, clamp ou zoom. Ao adicionar algo dentro do palco, ligue o HUD e
+  confira `transbordo = 0` em 100% e em 500%.
 - **Trocar `zoom`↔`transform` durante um notch da roda** deixa uma janela de
   corrida compositor×layout: por um quadro, textura velha com translate novo.
   Aceito como raro; **não** tente segurar o notch em `zoom` — cada notch força
@@ -106,7 +117,9 @@ buraco entre quadros).
 
 ## 4. Roteiro
 
-1. Reproduza com o HUD ligado. Leia `modo`, `raster`, `dx/dy`, miras.
+1. Reproduza com o HUD ligado. Leia `transbordo` PRIMEIRO; se ≠ 0, é a
+   armadilha 1 e o `pior` é o culpado -- pare aqui. Só depois `modo`,
+   `raster`, `dx/dy`, miras.
 2. `ler-palco.py`: geometria (dx≠0) ou pintura (dx=0, miras separadas)?
 3. Pintura: pergunte **o que mudou dentro do plano de conteúdo** — `git log
    -- src/components/playground` do dia; procure filhos com `left/top`

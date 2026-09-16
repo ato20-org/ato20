@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  agruparSelecao,
   copySelection,
   cutSelection,
+  desagruparSelecao,
   duplicateSelection,
   flipSelection,
   moveSelectionZ,
@@ -178,6 +180,27 @@ export const ATALHOS_BASE: Atalho[] = [
     rotulo: "Duplicar",
     combina: (evento) => comando(evento) && letra(evento) === "d",
     executar: duplicateSelection,
+    impedirPadrao: true,
+  },
+
+  // Agrupar como no Figma e no Illustrator. Shift dos dois lados, como nos
+  // pares de camada. Ctrl+G no browser é "procurar próximo"; barrado.
+  {
+    grupo: "Seleção",
+    tecla: "Ctrl+Shift+G",
+    rotulo: "Desagrupar",
+    combina: (evento) =>
+      comando(evento) && evento.shiftKey && letra(evento) === "g",
+    executar: desagruparSelecao,
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Seleção",
+    tecla: "Ctrl+G",
+    rotulo: "Agrupar a seleção",
+    combina: (evento) =>
+      comando(evento) && !evento.shiftKey && letra(evento) === "g",
+    executar: () => void agruparSelecao(),
     impedirPadrao: true,
   },
 

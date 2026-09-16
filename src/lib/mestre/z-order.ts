@@ -42,6 +42,47 @@ export function moveItemToFrontFirstIndex(
   return normalizeZ(ascending);
 }
 
+/**
+ * Move vários itens para logo ACIMA de um item âncora, mantendo a ordem
+ * relativa entre eles. `anchorId` nulo manda para o fundo da pilha.
+ *
+ * Um passe sobre a lista inteira, e não um `moveItemToFrontFirstIndex` por
+ * item: encadear os movimentos individuais depende do sentido de cada um --
+ * um item que já estava acima da âncora acaba na ordem trocada --, e o
+ * resultado dependia de quem foi movido primeiro. Aqui a lista final é
+ * construída de uma vez, então não há sentido a acertar.
+ *
+ * Âncora entre os movidos = nada a reposicionar: o destino é o próprio grupo
+ * que está sendo movido.
+ */
+export function moveItemsBefore(
+  items: CanvasItem[],
+  itemIds: string[],
+  anchorId: string | null,
+): CanvasItem[] {
+  const movendo = new Set(itemIds);
+  if (movendo.size === 0 || (anchorId && movendo.has(anchorId))) return items;
+
+  const frenteAoFundo = [...items].sort((a, b) => b.z - a.z);
+  const levados = frenteAoFundo.filter((item) => movendo.has(item.id));
+  if (levados.length === 0) return items;
+
+  const resto = frenteAoFundo.filter((item) => !movendo.has(item.id));
+  const achado = anchorId
+    ? resto.findIndex((item) => item.id === anchorId)
+    : resto.length;
+  const corte = achado < 0 ? resto.length : achado;
+
+  const nova = [
+    ...resto.slice(0, corte),
+    ...levados,
+    ...resto.slice(corte),
+  ];
+
+  // `normalizeZ` espera `z` CRESCENTE, e a lista acima é frente-primeiro.
+  return normalizeZ(nova.reverse());
+}
+
 export function reorderByZ(
   items: CanvasItem[],
   movingIds: string[],

@@ -6,14 +6,18 @@ import {
   createFolder,
   deleteFolder,
   listFolders,
+  moveFolder,
   renameFolder,
 } from "@/lib/vault/folders";
 import type { AssetFolder } from "@/types/scene";
 
 type FolderListApi = {
   folders: AssetFolder[];
-  create: (name: string) => Promise<void>;
+  /** Devolve a pasta criada, para quem quer pôr coisa dentro em seguida. */
+  create: (name: string, parentId?: string) => Promise<AssetFolder>;
   rename: (id: string, name: string) => Promise<void>;
+  /** Para dentro de outra pasta, ou para a raiz com `undefined`. */
+  move: (id: string, parentId: string | undefined) => Promise<void>;
   remove: (id: string) => Promise<void>;
 };
 
@@ -55,8 +59,17 @@ export function useFolderList(onChanged?: () => void): FolderListApi {
   }, [onChanged]);
 
   const create = useCallback(
-    async (name: string) => {
-      await createFolder(name);
+    async (name: string, parentId?: string) => {
+      const pasta = await createFolder(name, parentId);
+      refresh();
+      return pasta;
+    },
+    [refresh],
+  );
+
+  const move = useCallback(
+    async (id: string, parentId: string | undefined) => {
+      await moveFolder(id, parentId);
       refresh();
     },
     [refresh],
@@ -78,5 +91,5 @@ export function useFolderList(onChanged?: () => void): FolderListApi {
     [refresh],
   );
 
-  return { folders, create, rename, remove };
+  return { folders, create, rename, move, remove };
 }

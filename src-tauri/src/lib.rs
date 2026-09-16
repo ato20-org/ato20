@@ -177,6 +177,7 @@ pub fn run() {
             commands::asset_set_peaks,
             commands::folder_list,
             commands::folder_create,
+            commands::folder_move,
             commands::folder_rename,
             commands::folder_delete,
             commands::portraits_load,

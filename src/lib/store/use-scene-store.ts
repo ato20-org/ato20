@@ -20,6 +20,7 @@ import {
   removeScene as removeSceneFromBoard,
 } from "@/lib/mestre/board-ops";
 import {
+  moveItemsBefore,
   moveItemToFrontFirstIndex,
   reorderByZ,
   type ZDirection,
@@ -36,6 +37,7 @@ import {
   type CameraSalva,
   type CanvasItem,
   type FogRegion,
+  type Grupo,
   type ItemDraft,
   type MapPin,
   type NewCanvasItem,
@@ -154,6 +156,55 @@ type SceneStore = {
     frontFirstIndex: number,
   ) => void;
   setItemsLocked: (sceneId: string, itemIds: string[], locked: boolean) => void;
+
+  /**
+   * Cria um grupo com estes itens dentro. Devolve o id. `parentId` presente =
+   * nasce dentro de outro grupo.
+   */
+  criarGrupo: (
+    sceneId: string,
+    nome: string,
+    itemIds: string[],
+    parentId?: string,
+  ) => string;
+  atualizarGrupo: (
+    sceneId: string,
+    grupoId: string,
+    patch: Partial<Omit<Grupo, "id">>,
+  ) => void;
+  /**
+   * Desfaz o grupo. Itens e subgrupos sobem para o pai dele, ou para a raiz.
+   * Nunca apaga item: desagrupar é organização, não remoção.
+   */
+  removerGrupo: (sceneId: string, grupoId: string) => void;
+  /**
+   * O que um arrasto na lista de camadas faz: põe os itens numa pasta E os
+   * reposiciona, num commit só.
+   *
+   * Um só porque é um gesto só: em duas chamadas, o desfazer pedia dois
+   * Ctrl+Z para voltar um arrasto. `antesDe` nulo manda para o fundo.
+   */
+  soltarItens: (
+    sceneId: string,
+    itemIds: string[],
+    grupoId: string | undefined,
+    antesDe: string | null,
+  ) => void;
+  /** Põe itens num grupo, ou tira deles (`undefined` = raiz). */
+  moverParaGrupo: (
+    sceneId: string,
+    itemIds: string[],
+    grupoId: string | undefined,
+  ) => void;
+  /**
+   * Põe um grupo dentro de outro, ou na raiz. Recusa ciclo: um grupo não entra
+   * em si mesmo nem num descendente seu.
+   */
+  moverGrupo: (
+    sceneId: string,
+    grupoId: string,
+    parentId: string | undefined,
+  ) => void;
 
   addFog: (sceneId: string, region: NewFogRegion) => string;
   /** Crava um risco. Passa pelo histórico: riscar é edição da cena. */
@@ -516,6 +567,105 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         sceneId,
         itemIds.map((id) => ({ id, patch: { locked } })),
       );
+    },
+
+    criarGrupo(sceneId, nome, itemIds, parentId) {
+      const id = novoId();
+      const dentro = new Set(itemIds);
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        grupos: [...(scene.grupos ?? []), { id, nome: nome.trim(), parentId }],
+        items: scene.items.map((item) =>
+          dentro.has(item.id) ? { ...item, grupoId: id } : item,
+        ),
+      }));
+
+      return id;
+    },
+
+    atualizarGrupo(sceneId, grupoId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        grupos: (scene.grupos ?? []).map((grupo) =>
+          grupo.id === grupoId ? { ...grupo, ...patch } : grupo,
+        ),
+      }));
+    },
+
+    removerGrupo(sceneId, grupoId) {
+      get().updateScene(sceneId, (scene) => {
+        const alvo = scene.grupos?.find((grupo) => grupo.id === grupoId);
+        if (!alvo) return scene;
+
+        const grupos = (scene.grupos ?? [])
+          .filter((grupo) => grupo.id !== grupoId)
+          .map((grupo) =>
+            grupo.parentId === grupoId
+              ? { ...grupo, parentId: alvo.parentId }
+              : grupo,
+          );
+
+        return {
+          ...scene,
+          // Lista vazia sai do objeto, como `grid` e `tracos`.
+          grupos: grupos.length > 0 ? grupos : undefined,
+          items: scene.items.map((item) =>
+            item.grupoId === grupoId
+              ? { ...item, grupoId: alvo.parentId }
+              : item,
+          ),
+        };
+      });
+    },
+
+    soltarItens(sceneId, itemIds, grupoId, antesDe) {
+      if (itemIds.length === 0) return;
+
+      const dentro = new Set(itemIds);
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        items: moveItemsBefore(
+          scene.items.map((item) =>
+            dentro.has(item.id) ? { ...item, grupoId } : item,
+          ),
+          itemIds,
+          antesDe,
+        ),
+      }));
+    },
+
+    moverParaGrupo(sceneId, itemIds, grupoId) {
+      const alvo = new Set(itemIds);
+
+      get().updateItems(
+        sceneId,
+        get()
+          .board?.scenes.find((scene) => scene.id === sceneId)
+          ?.items.filter((item) => alvo.has(item.id) && item.grupoId !== grupoId)
+          .map((item) => ({ id: item.id, patch: { grupoId } })) ?? [],
+      );
+    },
+
+    moverGrupo(sceneId, grupoId, parentId) {
+      get().updateScene(sceneId, (scene) => {
+        const grupos = scene.grupos ?? [];
+
+        // Sobe do destino até a raiz; se passar pelo próprio grupo, é ciclo.
+        let cursor = parentId;
+        while (cursor) {
+          if (cursor === grupoId) return scene;
+          cursor = grupos.find((grupo) => grupo.id === cursor)?.parentId;
+        }
+
+        return {
+          ...scene,
+          grupos: grupos.map((grupo) =>
+            grupo.id === grupoId ? { ...grupo, parentId } : grupo,
+          ),
+        };
+      });
     },
 
     addFog(sceneId, region) {

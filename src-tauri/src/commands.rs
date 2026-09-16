@@ -354,8 +354,21 @@ pub fn folder_list(state: State<'_, AppState>) -> AppResult<Vec<AssetFolder>> {
 }
 
 #[tauri::command]
-pub fn folder_create(state: State<'_, AppState>, name: String) -> AppResult<AssetFolder> {
-    state.with_vault(|vault| assets::create_folder(vault, &name))
+pub fn folder_create(
+    state: State<'_, AppState>,
+    name: String,
+    parent_id: Option<String>,
+) -> AppResult<AssetFolder> {
+    state.with_vault(|vault| assets::create_folder(vault, &name, parent_id.clone()))
+}
+
+#[tauri::command]
+pub fn folder_move(
+    state: State<'_, AppState>,
+    id: String,
+    parent_id: Option<String>,
+) -> AppResult<()> {
+    state.with_vault(|vault| assets::move_folder(vault, &id, parent_id.clone()))
 }
 
 #[tauri::command]

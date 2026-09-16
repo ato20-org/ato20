@@ -16,6 +16,7 @@ import {
   FlipHorizontal,
   FlipVertical,
   Focus,
+  Group,
   Lock,
   LockOpen,
   Maximize,
@@ -25,6 +26,7 @@ import {
   ScanSearch,
   Scissors,
   Trash2,
+  Ungroup,
 } from "lucide-react";
 
 import {
@@ -55,6 +57,8 @@ import {
   setSelectionOpacity,
   toggleFogRevealed,
   toggleSelectionLock,
+  agruparSelecao,
+  desagruparSelecao,
 } from "@/lib/mestre/item-actions";
 import {
   alternarTransmissao,
@@ -238,6 +242,18 @@ export function StageContextMenu({
 
             <ContextMenuSeparator />
 
+            <ContextMenuItem onClick={() => void agruparSelecao()}>
+              <Group />
+              Agrupar
+              <ContextMenuShortcut>Ctrl+G</ContextMenuShortcut>
+            </ContextMenuItem>
+            {selectedItems.some((item) => item.grupoId) ? (
+              <ContextMenuItem onClick={desagruparSelecao}>
+                <Ungroup />
+                Desagrupar
+                <ContextMenuShortcut>Ctrl+Shift+G</ContextMenuShortcut>
+              </ContextMenuItem>
+            ) : null}
             <ContextMenuItem onClick={toggleSelectionLock}>
               {allLocked ? <LockOpen /> : <Lock />}
               {allLocked ? "Destravar" : "Travar"}
