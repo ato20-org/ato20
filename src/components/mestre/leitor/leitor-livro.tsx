@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bookmark,
   ChevronLeft,
@@ -17,7 +17,7 @@ import {
 
 import { BuscaLivro } from "@/components/mestre/leitor/busca-livro";
 import { MarcadoresLivro } from "@/components/mestre/leitor/marcadores-livro";
-import { PaginaFolha } from "@/components/mestre/leitor/pagina-folha";
+import { PaginaFolha, type Destaque } from "@/components/mestre/leitor/pagina-folha";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import { useBuscaLivro } from "@/hooks/use-busca-livro";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { useLivro } from "@/hooks/use-estante";
 import { useLivroDoc } from "@/hooks/use-livro-doc";
@@ -94,6 +95,43 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
 
   const [zoom, setZoom] = useState<number | "largura">("largura");
   const [lateral, setLateral] = useState<"marcadores" | "busca" | null>(null);
+
+  /**
+   * A busca mora aqui, e não na tira: quem desenha os achados são as folhas, e
+   * a ocorrência escolhida é o que decide para onde rolar. A tira só mostra a
+   * lista e recebe o gesto.
+   */
+  const busca = useBuscaLivro(documento.estado === "aberto" ? documento.doc : null);
+
+  /**
+   * A ocorrência escolhida, presa à lista em que foi escolhida.
+   *
+   * Derivada, e não zerada por efeito quando o termo muda: a escolha guarda a
+   * lista de onde saiu, e só vale enquanto a busca ainda devolver essa mesma
+   * lista. Termo novo produz lista nova, e o índice antigo cai sozinho.
+   */
+  const [escolha, setEscolha] = useState<{
+    de: typeof busca.resultados;
+    indice: number;
+  } | null>(null);
+  const ocorrenciaAtual =
+    escolha && escolha.de === busca.resultados ? escolha.indice : null;
+
+  /** Os destaques de cada página, só com a tira de busca aberta. */
+  const destaquesPorPagina = useMemo(() => {
+    const mapa = new Map<number, Destaque[]>();
+    if (lateral !== "busca") return mapa;
+
+    busca.resultados.forEach((ocorrencia, indice) => {
+      const lista = mapa.get(ocorrencia.pagina) ?? [];
+      for (const retangulo of ocorrencia.retangulos) {
+        lista.push({ ...retangulo, atual: indice === ocorrenciaAtual });
+      }
+      mapa.set(ocorrencia.pagina, lista);
+    });
+
+    return mapa;
+  }, [busca.resultados, ocorrenciaAtual, lateral]);
 
   /**
    * A ferramenta de lupa, armada ou não, e o quanto ela amplia.
@@ -252,6 +290,45 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
       irPara(Math.min(Math.max(Math.round(destino), 1), paginas));
     },
     [irPara, paginas],
+  );
+
+  /**
+   * Salta para uma ocorrência e rola até o TERMO, não até a página.
+   *
+   * `irPara` encosta a folha no topo, e num manual de duas colunas o achado
+   * pode estar no rodapé -- "achei a página, agora procura". Com o retângulo em
+   * mãos, o segundo passo põe o destaque no terço de cima da vista. Dois
+   * quadros depois, porque o `scrollIntoView` do salto ainda está por assentar
+   * e a folha pode estar corrigindo a própria altura ao desenhar.
+   */
+  const irAteOcorrencia = useCallback(
+    (indice: number) => {
+      const ocorrencia = busca.resultados[indice];
+      if (!ocorrencia) return;
+
+      setEscolha({ de: busca.resultados, indice });
+      ir(ocorrencia.pagina);
+
+      const alvo = ocorrencia.retangulos[0];
+      if (!alvo) return;
+
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const rolante = caixa.current;
+          const folha = rolante?.querySelector<HTMLElement>(
+            `[data-pagina="${ocorrencia.pagina}"]`,
+          );
+          if (!rolante || !folha) return;
+
+          const daFolha = folha.getBoundingClientRect();
+          const daCaixa = rolante.getBoundingClientRect();
+          const topoDoTermo = daFolha.top - daCaixa.top + alvo.y * daFolha.height;
+
+          rolante.scrollTop += topoDoTermo - rolante.clientHeight * 0.3;
+        }),
+      );
+    },
+    [busca.resultados, ir, caixa],
   );
 
   /** O degrau seguinte, para cima ou para baixo. `"largura"` entra como 1. */
@@ -474,6 +551,15 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
             tabIndex={0}
             className="focus-visible:ring-ring/50 min-h-0 min-w-0 flex-1 space-y-3 overflow-auto p-3 outline-none focus-visible:ring-2"
             onKeyDown={(evento) => {
+              // O gesto que todo mundo tenta primeiro. Abre a tira, e o foco
+              // vai para o campo por conta dela.
+              if ((evento.ctrlKey || evento.metaKey) && evento.key === "f") {
+                evento.preventDefault();
+                evento.stopPropagation();
+                setLateral("busca");
+                return;
+              }
+
               const anterior =
                 evento.key === "ArrowLeft" || evento.key === "PageUp";
               const proxima =
@@ -497,6 +583,7 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
                     razaoPadrao={natural.razao}
                     desenhar={mantidas.has(numero)}
                     prioridade={Math.abs(numero - atual)}
+                    destaques={destaquesPorPagina.get(numero)}
                     registrar={registrar(numero)}
                     lupa={lupa}
                     ampliacao={ampliacao}
@@ -514,8 +601,17 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
             )}
           </div>
 
+          {/* Flutuante, por cima da folha, e não uma coluna ao lado dela.
+              Numa janela de 540 px a coluna comia metade da folha, e a folha é
+              o motivo de a janela existir. E há um ganho que se mede: a coluna
+              mudava a largura disponível, e no zoom "Largura" isso era
+              redesenhar TODAS as páginas em vista só para abrir a busca. Aqui
+              a folha nem sabe que a tira abriu.
+
+              Fundo translúcido com desfoque: a folha continua visível atrás,
+              e o mestre não perde o lugar onde estava lendo. */}
           {lateral && documento.estado === "aberto" ? (
-            <aside className="flex w-60 min-w-0 shrink-0 flex-col overflow-hidden border-l p-2">
+            <aside className="bg-background/90 border-border absolute top-2 right-2 bottom-2 z-20 flex w-72 max-w-[calc(100%-1rem)] min-w-0 flex-col overflow-hidden rounded-lg border p-2 shadow-xl backdrop-blur-sm">
               {lateral === "marcadores" ? (
                 <MarcadoresLivro
                   livroId={livroId}
@@ -524,9 +620,14 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
                 />
               ) : (
                 <BuscaLivro
-                  doc={documento.doc}
+                  busca={busca}
                   paginaAtual={atual}
-                  aoEscolher={ir}
+                  atual={ocorrenciaAtual}
+                  aoEscolher={irAteOcorrencia}
+                  aoFechar={() => {
+                    setLateral(null);
+                    caixa.current?.focus();
+                  }}
                 />
               )}
             </aside>
