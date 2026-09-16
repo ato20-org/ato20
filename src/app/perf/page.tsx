@@ -13,6 +13,10 @@ import { LayerList } from "@/components/mestre/layer-list";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
+import { PaginaFolha } from "@/components/mestre/leitor/pagina-folha";
+import { useRolagemDoLivro } from "@/hooks/use-rolagem-do-livro";
+import { pdfjs, RUNTIME } from "@/lib/leitor/pdfjs";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import { FULL_VIEWPORT, PLANO, zoomViewport } from "@/lib/geometry/viewport";
 import { MINIATURA } from "@/lib/miniatura";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
@@ -119,6 +123,7 @@ const AQUECIMENTO_MS = 2500;
 const QUADRO_PERDIDO_MS = 20;
 
 type Cenario =
+  | "leitor"
   | "arrasto"
   | "amostras"
   | "amostras-id"
@@ -129,6 +134,18 @@ type Cenario =
   | "camadas"
   | "camera"
   | "jogador";
+
+/** Um degrau do `leitor`: o que custou trocar o zoom para ele. */
+type Passo = {
+  zoom: number;
+  /** Do degrau mudar ate a pagina sob os olhos estar pintada. */
+  atualMs: number;
+  /** Ate TODAS as mantidas estarem pintadas. */
+  todasMs: number;
+  /** Megapixels de canvas pintados no degrau. */
+  mp: number;
+  mantidas: number;
+};
 
 function montarCena(n: number): Scene {
   const agora = Date.now();
@@ -723,6 +740,256 @@ function PalcoComCamadas({ n }: { n: number }) {
   );
 }
 
+/**
+ * Leitor: um livro aberto, e os degraus de zoom em sequencia.
+ *
+ * Monta as pecas de baixo do leitor -- `useRolagemDoLivro` e `PaginaFolha` --,
+ * e nao o `LeitorLivro`: ele depende da estante e do daemon pelo IPC do Tauri,
+ * que nao existe aqui. O documento vem de `/livro/perf`, que o `medir.mjs`
+ * serve com `Range` como o daemon faz.
+ *
+ * O roteiro: abre na pagina pedida, espera tudo pronto, e a cada degrau mede
+ * do `setZoom` ate a folha sob os olhos ganhar `data-pronta`, e ate todas as
+ * mantidas ganharem. Le o DOM num `requestAnimationFrame`, e nao um callback
+ * da folha: e o que a tela mostra que se quer cronometrar. `window.__leitorFase`
+ * anuncia "meio" e "fim" de cada degrau para o `medir.mjs` fotografar.
+ */
+function PalcoLeitor({
+  pagina,
+  degraus,
+  rajada,
+}: {
+  pagina: number;
+  degraus: number[];
+  /** Troca de degrau a cada 150 ms sem esperar o anterior, e mede so o fim. */
+  rajada: boolean;
+}) {
+  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
+  const [natural, setNatural] = useState<{ largura: number; razao: number } | null>(null);
+  const paginas = doc?.numPages ?? 0;
+  const { caixa, registrar, atual, mantidas, irPara } = useRolagemDoLivro(paginas);
+  const [zoom, setZoom] = useState(degraus[0] ?? 1);
+  const largura = natural ? Math.round(natural.largura * zoom) : 0;
+
+  useEffect(() => {
+    let ativo = true;
+
+    void (async () => {
+      const mod = await pdfjs();
+      const aberto = await mod.getDocument({ url: "/livro/perf", ...RUNTIME }).promise;
+      const primeira = await aberto.getPage(1);
+      const viewport = primeira.getViewport({ scale: 1 });
+      if (!ativo) return;
+
+      setNatural({ largura: viewport.width, razao: viewport.height / viewport.width });
+      setDoc(aberto);
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const foi = useRef(false);
+  useEffect(() => {
+    if (foi.current || !doc || largura <= 0) return;
+
+    foi.current = true;
+    // As folhas ja existem com altura reservada neste ponto: o `largura > 0`
+    // e a mesma condicao que o leitor usa para retomar a pagina lembrada.
+    requestAnimationFrame(() => irPara(pagina));
+  }, [doc, largura, pagina, irPara]);
+
+  // O que o observador tem AGORA, e nao o que tinha quando o roteiro nasceu:
+  // o laco abaixo vive num efeito so, e ler `mantidas` pela closure mediria o
+  // conjunto do primeiro render -- a pagina 1, pronta antes do salto.
+  const mantidasRef = useRef(mantidas);
+  const atualRef = useRef(atual);
+  useEffect(() => {
+    mantidasRef.current = mantidas;
+    atualRef.current = atual;
+  }, [mantidas, atual]);
+
+  useEffect(() => {
+    // Para o `medir.mjs` dizer onde o roteiro parou quando estoura o prazo.
+    (window as unknown as { __leitorEstado?: () => unknown }).__leitorEstado = () => ({
+      aberto: Boolean(doc),
+      paginas,
+      natural,
+      largura,
+      atual: atualRef.current,
+      mantidas: [...mantidasRef.current],
+      prontas: [...(caixa.current?.querySelectorAll<HTMLElement>("[data-pronta]") ?? [])].map(
+        (folha) => Number(folha.dataset.pagina),
+      ),
+    });
+  }, [doc, paginas, natural, largura, caixa]);
+
+  // O roteiro, num laco so: espera a abertura na pagina pedida ficar pronta, e
+  // entao um degrau por vez.
+  useEffect(() => {
+    if (!doc || largura <= 0) return;
+
+    let vivo = true;
+    let quadro = 0;
+    let espera = 0;
+    const passos: Passo[] = [];
+    let estado: "abrindo" | "esperando" | "medindo" | "fim" = "abrindo";
+    let proximo = 0;
+    let inicio = 0;
+    let atualMs: number | null = null;
+    // As folhas que o degrau tem de pintar: fixadas no instante em que ele
+    // comeca, porque a lista de mantidas muda quando uma folha corrige a
+    // propria altura ao desenhar.
+    let alvo: number[] = [];
+
+    const fase = (texto: string) => {
+      (window as unknown as { __leitorFase?: string }).__leitorFase = texto;
+    };
+
+    const prontas = (numeros: number[]) => {
+      const raiz = caixa.current;
+      let mp = 0;
+      let todas = numeros.length > 0;
+      let atualPronta = false;
+      for (const numero of numeros) {
+        const folha = raiz?.querySelector<HTMLElement>(`[data-pagina="${numero}"]`);
+        const pronta = folha?.dataset.pronta === "1";
+        if (numero === atualRef.current) atualPronta = pronta;
+        if (!pronta) todas = false;
+        // So o canvas visivel: a folha tem dois, e o de fundo pode estar
+        // encolhido a 0x0 ou com o degrau anterior.
+        const canvas = folha?.querySelector<HTMLCanvasElement>("canvas:not(.invisible)");
+        if (pronta && canvas) mp += (canvas.width * canvas.height) / 1e6;
+      }
+
+      return { atualPronta, todas, mp: Number(mp.toFixed(1)) };
+    };
+
+    const iniciarDegrau = () => {
+      if (!vivo) return;
+
+      if (proximo >= degraus.length) {
+        estado = "fim";
+        (window as unknown as { __resultado?: unknown }).__resultado = {
+          rotulo: "chrome",
+          cenario: "leitor",
+          n: pagina,
+          paginas,
+          passos,
+          fps: 0,
+          p50: 0,
+          p95: 0,
+          pior: 0,
+          perdidosPct: 0,
+          quadros: 0,
+          dpr: window.devicePixelRatio,
+          ua: navigator.userAgent,
+          em: new Date().toISOString(),
+        };
+        fase("pronto");
+        return;
+      }
+
+      alvo = [...mantidasRef.current];
+      atualMs = null;
+      estado = "medindo";
+      inicio = performance.now();
+      setZoom(degraus[proximo]);
+      fase(`${degraus[proximo]}:meio`);
+
+      // Rajada: o proximo degrau vem por relogio, no meio do render deste. So
+      // o ULTIMO degrau e medido ate "todas"; os outros registram o que
+      // conseguiram em 150 ms, que e o que interessa -- foram cancelados.
+      if (rajada && proximo < degraus.length - 1) {
+        espera = window.setTimeout(() => {
+          if (!vivo || estado !== "medindo") return;
+          const { atualPronta, todas, mp } = prontas(alvo);
+          const agora = performance.now() - inicio;
+          passos.push({
+            zoom: degraus[proximo],
+            atualMs: atualPronta ? (atualMs ?? Math.round(agora)) : -1,
+            todasMs: todas ? Math.round(agora) : -1,
+            mp,
+            mantidas: alvo.length,
+          });
+          proximo += 1;
+          iniciarDegrau();
+        }, 150);
+      }
+    };
+
+    const passo = () => {
+      if (!vivo) return;
+
+      if (estado === "abrindo") {
+        // A pagina pedida em vista e tudo pintado. Nao `atual === pagina`: o
+        // salto encosta a pagina no topo, e quem cruza a linha do meio da caixa
+        // e a seguinte -- o que e correto para "onde estou lendo", e errado
+        // como condicao de partida.
+        const emVista = [...mantidasRef.current];
+        if (emVista.includes(pagina) && prontas(emVista).todas) {
+          estado = "esperando";
+          espera = window.setTimeout(iniciarDegrau, 300);
+        }
+      } else if (estado === "medindo") {
+        const { atualPronta, todas, mp } = prontas(alvo);
+        const agora = performance.now() - inicio;
+        if (atualPronta && atualMs === null) atualMs = Math.round(agora);
+        if (todas) {
+          passos.push({
+            zoom: degraus[proximo],
+            atualMs: atualMs ?? Math.round(agora),
+            todasMs: Math.round(agora),
+            mp,
+            mantidas: alvo.length,
+          });
+          fase(`${degraus[proximo]}:fim`);
+          proximo += 1;
+          estado = "esperando";
+          espera = window.setTimeout(iniciarDegrau, 400);
+        }
+      }
+
+      quadro = requestAnimationFrame(passo);
+    };
+
+    quadro = requestAnimationFrame(passo);
+
+    return () => {
+      vivo = false;
+      cancelAnimationFrame(quadro);
+      clearTimeout(espera);
+    };
+    // `largura > 0` e nao `largura`: o proprio roteiro muda a largura a cada
+    // degrau, e reiniciar o efeito nisso zeraria a medida no meio.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, largura > 0, degraus, pagina, paginas, caixa, rajada]);
+
+  return (
+    <div ref={caixa} className="flex-1 overflow-y-auto bg-neutral-800 p-4">
+      {doc && natural && largura > 0
+        ? Array.from({ length: paginas }, (_, i) => i + 1).map((numero) => (
+            <div key={numero} className="mb-3">
+              <PaginaFolha
+                doc={doc}
+                numero={numero}
+                largura={largura}
+                razaoPadrao={natural.razao}
+                desenhar={mantidas.has(numero)}
+                prioridade={Math.abs(numero - atual)}
+                registrar={registrar(numero)}
+                lupa={false}
+                ampliacao={3}
+                aoAmpliar={() => undefined}
+              />
+            </div>
+          ))
+        : null}
+    </div>
+  );
+}
+
 export default function PerfPage() {
   /**
    * "Já estou no cliente?", pelo mesmo caminho que o `WindowChrome` usa para
@@ -771,15 +1038,24 @@ function Medida({ params }: { params: URLSearchParams }) {
   const zoomDoPalco = Number(params.get("zoom") ?? 1);
   const lazy = params.get("lazy") !== "0";
   const rolar = params.get("rolar") === "1";
+  /** `leitor`: onde abrir e que degraus de zoom percorrer. */
+  const pagina = Number(params.get("pagina") ?? 20);
+  const degraus = useMemo(
+    () => (params.get("degraus") ?? "0.5,1,2,3,1").split(",").map(Number),
+    [params],
+  );
+  const rajada = params.get("rajada") === "1";
 
   const { resultado, decorrido } = useMedida(cenario, n, segundos, rotulo);
 
   useEffect(() => {
-    if (!resultado) return;
+    // O `leitor` escreve o proprio resultado, com outra forma; o relogio de
+    // quadros aqui e so o HUD.
+    if (!resultado || cenario === "leitor") return;
 
     // O contrato com o `medir.mjs`: ele espera este objeto aparecer.
     (window as unknown as { __resultado?: Resultado }).__resultado = resultado;
-  }, [resultado]);
+  }, [resultado, cenario]);
 
   useEffect(() => {
     /**
@@ -811,7 +1087,9 @@ function Medida({ params }: { params: URLSearchParams }) {
 
   return (
     <main className="flex h-dvh flex-col bg-black">
-      {cenario === "arrasto" ? (
+      {cenario === "leitor" ? (
+        <PalcoLeitor pagina={pagina} degraus={degraus} rajada={rajada} />
+      ) : cenario === "arrasto" ? (
         <PalcoMestre n={n} />
       ) : cenario === "camera" ? (
         <PalcoCamera n={n} />

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
+import { filaDoLeitor } from "@/lib/leitor/fila-de-render";
+
 /**
  * Quanto se desenha por pixel de tela.
  *
@@ -42,6 +44,35 @@ const NITIDO_MS = 90;
  * pequeno salto na rolagem. A alternativa era pedir as trezentas páginas ao
  * worker só para medi-las, na abertura, o que é exatamente o que este leitor
  * existe para não fazer.
+ *
+ * Dois canvas, frente e fundo. Trocar o zoom pede um desenho novo, e antes ele
+ * era feito no canvas visível: `width = …` apaga o bitmap na hora, e o worker
+ * leva centenas de milissegundos para devolver o próximo — medido no cenário
+ * `leitor` do `/perf`, 350 ms de página branca a cada degrau. Agora o degrau
+ * novo é pintado no canvas de trás, escondido, enquanto o da frente segue
+ * mostrando o bitmap antigo esticado por CSS; pronto, os dois trocam de papel,
+ * e o que foi para trás encolhe a 0×0 para devolver a memória — sem isso o
+ * teto de doze páginas do `useRolagemDoLivro` valeria o dobro.
+ *
+ * Quatro formas de fazer isso foram medidas no `/perf`, "todas" a 300%, oito
+ * folhas: canvas de trás com `visibility: hidden`, 701 ms; um canvas novo por
+ * pedido trocado no DOM, 874 ms; desenho num canvas fora do DOM copiado por
+ * `drawImage`, 1026 ms; os dois canvas visíveis trocando `z-index`, 1145 ms
+ * (dois compositados por quadro). A escondida ficou. `invisible` e não
+ * `hidden`, porque `display: none` num canvas descarta o contexto em algumas
+ * webviews, e é nele que o worker está desenhando.
+ *
+ * Compartilhar o canvas de trás entre um pedido cancelado e o seguinte é
+ * seguro: o `cancel()` do pdf.js chama `endDrawing()` e libera o canvas antes
+ * de rejeitar a promessa. Conferido em `InternalRenderTask.cancel`.
+ *
+ * Cada canvas anuncia o bitmap que tem em `data-bitmap` e a escala de tela em
+ * `data-dpr`: é o que se lê no Inspector quando a folha sai errada, e separa
+ * "o bitmap está errado" de "o CSS ou a camada está errada".
+ *
+ * O pedido ao worker passa por `filaDoLeitor`, com a distância até a página
+ * lida como prioridade: o worker é sequencial, e sem a fila a página sob os
+ * olhos esperava atrás das outras onze do degrau.
  */
 export function PaginaFolha({
   doc,
@@ -49,6 +80,7 @@ export function PaginaFolha({
   largura,
   razaoPadrao,
   desenhar,
+  prioridade,
   registrar,
   lupa,
   ampliacao,
@@ -61,13 +93,44 @@ export function PaginaFolha({
   /** Altura dividida pela largura, da primeira página. Ver acima. */
   razaoPadrao: number;
   desenhar: boolean;
+  /** Distância até a página lida. Zero é a que o mestre está olhando. */
+  prioridade: number;
   registrar: (elemento: HTMLElement | null) => void;
   /** A ferramenta de lupa está armada. */
   lupa: boolean;
   ampliacao: number;
   aoAmpliar: (delta: number) => void;
 }) {
-  const canvas = useRef<HTMLCanvasElement | null>(null);
+  const canvasA = useRef<HTMLCanvasElement | null>(null);
+  const canvasB = useRef<HTMLCanvasElement | null>(null);
+  /** Qual dos dois está na frente. O outro é onde se pinta o próximo. */
+  const [frente, setFrente] = useState<"a" | "b">("a");
+  // Espelho do estado para o pedido assíncrono ler o valor vivo: a closure do
+  // efeito congela o `frente` do render em que nasceu.
+  const frenteRef = useRef(frente);
+  useEffect(() => {
+    frenteRef.current = frente;
+  }, [frente]);
+  const daFrente = () => (frenteRef.current === "a" ? canvasA.current : canvasB.current);
+  const deTras = () => (frenteRef.current === "a" ? canvasB.current : canvasA.current);
+
+  /**
+   * O pedido que o canvas da frente tem de fato.
+   *
+   * É o cache: voltar a um zoom já desenhado não pede nada ao worker, porque o
+   * bitmap ainda está lá -- render cancelado no meio nunca troca de canvas,
+   * então o da frente sempre guarda o último COMPLETO. Zerado quando a folha
+   * sai do cache do leitor, porque aí os canvas desmontam.
+   */
+  const completo = useRef<string | null>(null);
+
+  // A prioridade muda toda vez que o mestre rola, e não pode reiniciar o
+  // pedido: só reordena quem ainda espera na fila.
+  const prioridadeRef = useRef(prioridade);
+  useEffect(() => {
+    prioridadeRef.current = prioridade;
+  }, [prioridade]);
+
   const lente = useRef<HTMLCanvasElement | null>(null);
   const caixa = useRef<HTMLDivElement | null>(null);
 
@@ -111,13 +174,30 @@ export function PaginaFolha({
     [registrar],
   );
 
+  // A folha saiu do cache do leitor: os canvas desmontam, e o que foi
+  // desenhado não existe mais. Na limpeza, e não no corpo, para não ser um
+  // `setState` síncrono dentro do efeito.
+  useEffect(() => {
+    if (!desenhar) return;
+
+    return () => {
+      completo.current = null;
+      setDesenhada(null);
+    };
+  }, [desenhar]);
+
   useEffect(() => {
     if (!desenhar || largura <= 0) return;
+    // O canvas da frente já tem exatamente isto: nada a pedir.
+    if (completo.current === pedido) return;
 
     let ativo = true;
     let tarefa: RenderTask | null = null;
 
-    void (async () => {
+    const cancelarNaFila = filaDoLeitor.pedir(pedido, prioridadeRef.current, async () => {
+      // Cancelado enquanto esperava a vez: nada a fazer, e a fila segue.
+      if (!ativo) return;
+
       try {
         const page = await doc.getPage(numero);
         if (!ativo) return;
@@ -127,20 +207,20 @@ export function PaginaFolha({
 
         const viewport = page.getViewport({ scale: largura / natural.width });
 
-        const alvo = canvas.current;
+        const alvo = deTras();
         const contexto = alvo?.getContext("2d");
         if (!alvo || !contexto) return;
 
         const dpr = Math.min(window.devicePixelRatio || 1, DPR_MAX);
 
-        // Duas medidas para o mesmo canvas: o atributo é a resolução em que se
-        // desenha, e o CSS é o tamanho que ele ocupa. Sem essa separação, a
-        // página sai borrada em tela de alta densidade.
+        // O atributo é a resolução em que se desenha; o tamanho que o canvas
+        // ocupa é do CSS (`inset-0`), e é o mesmo para os dois. Sem essa
+        // separação, a página sai borrada em tela de alta densidade.
         alvo.width = Math.floor(viewport.width * dpr);
         alvo.height = Math.floor(viewport.height * dpr);
-        alvo.style.width = `${Math.floor(viewport.width)}px`;
-        alvo.style.height = `${Math.floor(viewport.height)}px`;
-
+        alvo.dataset.bitmap = `${alvo.width}x${alvo.height}`;
+        alvo.dataset.dpr = String(dpr);
+        alvo.dataset.pedido = pedido;
         contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         tarefa = page.render({
@@ -150,7 +230,33 @@ export function PaginaFolha({
         });
         await tarefa.promise;
 
-        if (ativo) setDesenhada(pedido);
+        if (!ativo) return;
+
+        // A troca de `z-index`. O que estava na frente encolhe DEPOIS do
+        // commit: entre o `setState` e o quadro seguinte os dois têm bitmap, e
+        // encolher antes mostraria a folha vazia por um quadro.
+        const antigo = daFrente();
+        const novaFrente = alvo === canvasA.current ? "a" : "b";
+        // O ref AGORA, e não no efeito depois do commit: o pedido seguinte pode
+        // começar neste mesmo tick (a fila avança na resolução da promessa), e
+        // com o ref atrasado ele lia `deTras()` errado -- pintava por cima do
+        // canvas que acabou de virar frente, apagando o bitmap completo. Se
+        // esse pedido fosse cancelado, o parcial dele ficava na tela até o
+        // próximo render completo.
+        frenteRef.current = novaFrente;
+        completo.current = pedido;
+        setFrente(novaFrente);
+        setDesenhada(pedido);
+        if (antigo && antigo !== alvo) {
+          requestAnimationFrame(() => {
+            // Só se a troca de fato aconteceu e ninguém voltou atrás.
+            if (frenteRef.current === novaFrente) {
+              antigo.width = 0;
+              antigo.height = 0;
+              antigo.dataset.bitmap = "0x0";
+            }
+          });
+        }
       } catch (cause) {
         // `RenderingCancelledException` é o caminho NORMAL de rolar depressa: a
         // tarefa é cancelada de propósito na limpeza, e tratar isso como falha
@@ -165,13 +271,19 @@ export function PaginaFolha({
           setDesenhada(pedido);
         }
       }
-    })();
+    });
 
     return () => {
       ativo = false;
+      cancelarNaFila();
       tarefa?.cancel();
     };
   }, [doc, numero, largura, desenhar, pedido]);
+
+  // A página lida mudou: quem ainda espera na fila muda de lugar nela.
+  useEffect(() => {
+    filaDoLeitor.repriorizar(pedido, prioridade);
+  }, [pedido, prioridade]);
 
   /**
    * O que a lente mostra: o recorte, redesenhado pelo pdf.js na ampliação.
@@ -188,8 +300,8 @@ export function PaginaFolha({
 
     const alvoLente = lente.current;
     const contextoLente = alvoLente?.getContext("2d");
-    const fonte = canvas.current;
-    if (!alvoLente || !contextoLente || !fonte) return;
+    const fonte = daFrente();
+    if (!alvoLente || !contextoLente || !fonte || fonte.width === 0) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, DPR_MAX);
 
@@ -262,7 +374,8 @@ export function PaginaFolha({
       clearTimeout(espera);
       tarefa?.cancel();
     };
-  }, [doc, numero, largura, ampliacao, foco, razao, lentePx]);
+    // `frente` entra para a lente acompanhar a troca de canvas.
+  }, [doc, numero, largura, ampliacao, foco, razao, lentePx, frente]);
 
   /**
    * A roda ajusta a ampliação enquanto a lupa está segurada.
@@ -312,6 +425,10 @@ export function PaginaFolha({
       // Lido pelos observadores para saber de que página é a caixa: o alvo de um
       // `IntersectionObserver` é o elemento, e ele precisa dizer quem é.
       data-pagina={numero}
+      // Quando o que esta no canvas e o que foi pedido. Lido pelo cenario
+      // `leitor` do `/perf`, que mede o tempo ate aqui: um atributo custa nada
+      // e poupa a medida de adivinhar pelo bitmap.
+      data-pronta={pronta ? "1" : undefined}
       // Fundo branco declarado, e não herdado: o canvas do pdf.js desenha só a
       // tinta, e no tema escuro uma página sem fundo próprio apareceria como
       // texto preto sobre preto.
@@ -338,8 +455,20 @@ export function PaginaFolha({
       onPointerUp={() => setFoco(null)}
       onPointerCancel={() => setFoco(null)}
     >
+      {/* Os dois ocupam a caixa inteira por CSS: o da frente estica o bitmap
+          antigo enquanto o de trás, escondido, pinta o novo. Ver o comentário
+          do componente. */}
       {desenhar ? (
-        <canvas ref={canvas} className="block h-auto max-w-full" />
+        <>
+          <canvas
+            ref={canvasA}
+            className={`absolute inset-0 h-full w-full ${frente === "a" ? "" : "invisible"}`}
+          />
+          <canvas
+            ref={canvasB}
+            className={`absolute inset-0 h-full w-full ${frente === "b" ? "" : "invisible"}`}
+          />
+        </>
       ) : null}
 
       {/* O número no lugar do desenho, e não um spinner: rolando depressa
