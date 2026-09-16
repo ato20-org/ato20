@@ -155,6 +155,12 @@ type SceneStageProps = {
    * enquadramento correria atrás da roda do mouse.
    */
   smooth?: boolean;
+  /**
+   * Sobe a cada CORTE de câmera. Quando muda, a amostra que chega junto entra
+   * sem interpolar: a troca acontece atrás da cortina (ver `useCorteDeCamera`)
+   * e deslizar até lá mostraria o caminho quando a cortina abrisse.
+   */
+  corte?: number;
 };
 
 /**
@@ -182,6 +188,7 @@ export function SceneStage({
   panOnDrag = false,
   limites,
   smooth = false,
+  corte = 0,
 }: SceneStageProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const planeRef = useRef<HTMLDivElement>(null);
@@ -380,8 +387,33 @@ export function SceneStage({
    * calculado com `scale(0)` seria o quadro inicial da animação. A primeira
    * amostra só marca a hora; a transição passa a valer da seguinte em diante.
    */
+  const ultimoCorte = useRef(corte);
+
   useLayoutEffect(() => {
     if (!smooth || scale === 0) return;
+
+    const planos = [
+      planeRef.current,
+      envelopeDoConteudoRef.current,
+      controlesNo,
+      conteudoNo,
+    ];
+
+    // Corte: esta amostra entra seca, e a próxima recomeça a contagem como
+    // se fosse a primeira -- senão a amostra seguinte ao corte seria lida
+    // como fluxo, só porque veio logo depois.
+    if (corte !== ultimoCorte.current) {
+      ultimoCorte.current = corte;
+      ultimaCameraEm.current = null;
+      emFluxo.current = false;
+
+      for (const plano of planos) {
+        plano?.classList.remove("scene-smooth-camera");
+        plano?.classList.remove("scene-smooth-camera-fluxo");
+      }
+
+      return;
+    }
 
     const agora = performance.now();
     const anterior = ultimaCameraEm.current;
@@ -392,17 +424,12 @@ export function SceneStage({
     const fluxo = agora - anterior < FLUXO_MS;
     emFluxo.current = fluxo;
 
-    for (const plano of [
-      planeRef.current,
-      envelopeDoConteudoRef.current,
-      controlesNo,
-      conteudoNo,
-    ]) {
+    for (const plano of planos) {
       plano?.classList.toggle("scene-smooth-camera", !fluxo);
       plano?.classList.toggle("scene-smooth-camera-fluxo", fluxo);
     }
     // `camera` já carrega `scale`; ele entra à parte porque o corpo o lê.
-  }, [camera, smooth, scale, controlesNo, conteudoNo]);
+  }, [camera, smooth, scale, corte, controlesNo, conteudoNo]);
 
   useEffect(() => {
     // Mais longo com a transição ligada: ali a câmera continua andando depois

@@ -3,6 +3,10 @@
 import { SessionAudio } from "@/components/playground/session-audio";
 import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
+import {
+  CortinaDeCorte,
+  useCorteDeCamera,
+} from "@/components/playground/corte-de-camera";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { SpotlightLayer } from "@/components/playground/spotlight-layer";
@@ -28,19 +32,22 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
     stalled,
   } = useSubscription(codigo);
 
+  // Trocar de câmera corta em fade; a mesma câmera andando interpola.
+  const { cena, viewport, corte, cortando } = useCorteDeCamera(scene);
+
   return (
     // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
     <main className="relative flex flex-1 flex-col bg-black">
       {/* A TV não tem quem opere: enquadramento vem só da câmera da cena.
           `smooth` porque aqui ninguém manipula nada — o que chega são amostras
           do Mestre, e interpolá-las é o que separa movimento de salto. */}
-      <SceneStage viewport={scene?.camera} smooth>
+      <SceneStage viewport={viewport} corte={corte} smooth>
         {/* `key` na cena: trocar de cena remonta a camada, e é a remontagem
             que dispara a entrada em fade. */}
-        {scene ? (
-          <div key={scene.id} className="scene-fade-in absolute inset-0">
+        {cena ? (
+          <div key={cena.id} className="scene-fade-in absolute inset-0">
             <SceneLayer
-              scene={scene}
+              scene={cena}
               portraits={portraits}
               rolagens={rolagens}
               smooth
@@ -49,16 +56,18 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
             {/* A régua do mestre, enquanto ele mede. Dentro do palco porque as
                 pontas são coordenadas de cena, e fora do `SceneLayer` porque
                 ela não é conteúdo do mapa -- some quando ele solta. */}
-            {medida && scene.grid ? (
+            {medida && cena.grid ? (
               <RulerOverlay
                 de={medida.de}
                 para={medida.para}
-                grid={scene.grid}
+                grid={cena.grid}
               />
             ) : null}
           </div>
         ) : null}
       </SceneStage>
+
+      <CortinaDeCorte fechada={cortando} />
 
       <SessionAudio track={track} volume={volume} />
 

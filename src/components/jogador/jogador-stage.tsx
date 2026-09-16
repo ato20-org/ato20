@@ -5,6 +5,10 @@ import { Maximize, Minimize } from "lucide-react";
 
 import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
+import {
+  CortinaDeCorte,
+  useCorteDeCamera,
+} from "@/components/playground/corte-de-camera";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
@@ -54,6 +58,8 @@ export function JogadorStage({
 }) {
   const { expanded, toggle } = useFullscreen();
   const frameRef = useRef<HTMLDivElement>(null);
+  // Trocar de câmera corta em fade; a mesma câmera andando interpola.
+  const { cena, viewport, corte, cortando } = useCorteDeCamera(scene);
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2">
@@ -76,17 +82,17 @@ export function JogadorStage({
               "aspect-video max-h-full w-full rounded-lg",
         )}
       >
-        <SceneStage className="size-full" viewport={scene?.camera} smooth>
+        <SceneStage className="size-full" viewport={viewport} corte={corte} smooth>
           {/* Mesma suavização da TV: o celular também só recebe amostras, e a
               troca de cena entra em fade em vez de estalar. */}
-          {scene ? (
-            <div key={scene.id} className="scene-fade-in absolute inset-0">
+          {cena ? (
+            <div key={cena.id} className="scene-fade-in absolute inset-0">
               {/* `tela`: o celular recebe a mesma cena que a TV, e desenha
                   numa tela de 400px de largura. Sem a variante ele baixava os
                   8 MB do mapa para decodificar 51 MB de bitmap -- por celular,
                   e são N na mesa. Ver `SceneLayer.variante`. */}
               <SceneLayer
-                scene={scene}
+                scene={cena}
                 portraits={portraits}
                 rolagens={rolagens}
                 smooth
@@ -96,16 +102,18 @@ export function JogadorStage({
               {/* A régua, como na TV: dentro do palco porque as pontas são
                   coordenadas de cena, e fora do `SceneLayer` porque ela não é
                   conteúdo do mapa. */}
-              {medida && scene.grid ? (
+              {medida && cena.grid ? (
                 <RulerOverlay
                   de={medida.de}
                   para={medida.para}
-                  grid={scene.grid}
+                  grid={cena.grid}
                 />
               ) : null}
             </div>
           ) : null}
         </SceneStage>
+
+        <CortinaDeCorte fechada={cortando} />
 
         {/* Irmão do palco, não filho: o `SceneStage` esconde o próprio plano
             enquanto não mediu a moldura, e um aviso lá dentro desapareceria
