@@ -15,8 +15,15 @@ import {
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
-import { clampViewport, viewportZoom } from "@/lib/geometry/viewport";
-import { alternarTransmissao } from "@/lib/mestre/camera-actions";
+import {
+  clampViewport,
+  viewportZoom,
+  zoomViewportCentered,
+} from "@/lib/geometry/viewport";
+import {
+  alternarTransmissao,
+  ZOOM_CAMERA_STEP,
+} from "@/lib/mestre/camera-actions";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { CameraSalva, Viewport } from "@/types/scene";
 
@@ -107,13 +114,40 @@ export function CameraFrame({
   }, [camera]);
 
   function startMove(event: ReactPointerEvent) {
-    if (!onChange) return;
+    // O mesmo filtro do `useSceneDrag`: se ele recusar o gesto, o `onEnd` nunca
+    // vem, e o ouvinte da roda abaixo ficaria pendurado na janela.
+    if (!onChange || event.button !== 0 || scale === 0) return;
 
     // Incremental e não a partir de um retrato, ao contrário do resto do palco:
     // aqui o zoom da roda pode mexer na câmera NO MEIO do gesto, e somar o
     // delta acumulado sobre a origem apagaria o que a roda fez. A câmera não é
     // arredondada, então somar incrementos não acumula erro.
     let anterior = { x: 0, y: 0 };
+
+    /**
+     * A roda, enquanto a alça está segurada: zoom da câmera, no centro dela.
+     *
+     * Só com o botão apertado, e por isso não é o "roda sobre a alça dava zoom"
+     * que saiu: rolar por cima do rótulo sem segurar continua sendo o zoom do
+     * palco. Na captura e com `stopPropagation`, como o arrasto de token, porque
+     * o `SceneStage` também escuta a roda e um notch faria as duas coisas.
+     */
+    const aoRodar = (native: WheelEvent) => {
+      native.preventDefault();
+      native.stopPropagation();
+
+      onChange(
+        zoomViewportCentered(
+          cameraAtual.current,
+          native.deltaY < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP,
+          conteudo,
+        ),
+      );
+    };
+    window.addEventListener("wheel", aoRodar, {
+      capture: true,
+      passive: false,
+    });
 
     setArrastando(true);
     startDrag(event, {
@@ -132,7 +166,10 @@ export function CameraFrame({
         );
         anterior = delta;
       },
-      onEnd: () => setArrastando(false),
+      onEnd: () => {
+        window.removeEventListener("wheel", aoRodar, true);
+        setArrastando(false);
+      },
     });
   }
 
@@ -329,7 +366,9 @@ type AlcaProps = {
  * Teve um slider de zoom pendurado embaixo, e roda sobre a alça e o rótulo
  * dava zoom. Saíram: o slider era um alvo a mais colado no mapa, e a roda
  * mudava o tamanho da câmera quando o mestre só queria rolar por cima do
- * rótulo. Zoom da câmera é pelos cantos, por `=`/`-` e pela pílula.
+ * rótulo. Zoom da câmera é pelos cantos, por `=`/`-`, pela pílula -- e pela
+ * roda enquanto a alça está SEGURADA, que é gesto e não passagem (ver
+ * `startMove`).
  *
  * Fora da moldura, e não dentro: dentro ela cobriria o que a mesa está vendo,
  * que é justamente onde estão os itens que o mestre mexe.
