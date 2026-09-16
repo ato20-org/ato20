@@ -69,8 +69,12 @@ const FALLBACK_SIZE = { x: 480, y: 270 };
  */
 const ZONA_DO_ACERVO = "[data-acervo-solto]";
 
-/** O tamanho com que a imagem entra na cena, em unidades de cena. */
-function tamanhoNaCena(asset: AssetMeta): { x: number; y: number } {
+/**
+ * O tamanho com que a imagem entra na cena, em unidades de cena. Exportado
+ * porque o handout arrasta a mesma imagem para o mesmo palco -- ver
+ * `HandoutMestre`.
+ */
+export function tamanhoNaCena(asset: AssetMeta): { x: number; y: number } {
   return asset.naturalWidth && asset.naturalHeight
     ? fitInitialSize(asset.naturalWidth, asset.naturalHeight)
     : FALLBACK_SIZE;

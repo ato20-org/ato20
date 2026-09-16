@@ -13,6 +13,7 @@ import { OnAirControl } from "@/components/mestre/on-air-control";
 import { MestreStage } from "@/components/mestre/mestre-stage";
 import { MestreToolbar } from "@/components/mestre/mestre-toolbar";
 import { PinIndex } from "@/components/mestre/pin-index";
+import { HandoutMestre } from "@/components/mestre/handout-mestre";
 import { SaquinhoDados } from "@/components/mestre/saquinho-dados";
 import { SpotlightChip } from "@/components/mestre/spotlight-chip";
 import { StageContextMenu } from "@/components/mestre/stage-context-menu";
@@ -42,6 +43,7 @@ import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
 import { useLeitorStore } from "@/lib/store/use-leitor-store";
 import { useDadosStore } from "@/lib/store/use-dados-store";
+import { useHandoutStore } from "@/lib/store/use-handout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
@@ -80,6 +82,7 @@ export function MestreShell() {
   const restorePanels = usePanelsStore((state) => state.restore);
   const restorePinNotes = usePinWindowStore((state) => state.restaurar);
   const restoreSaquinho = useDadosStore((state) => state.restaurar);
+  const restoreHandout = useHandoutStore((state) => state.restaurar);
   const restoreLayout = useLayoutStore((state) => state.restaurar);
   const restoreWindows = useWindowStore((state) => state.restaurar);
   const restoreLeitor = useLeitorStore((state) => state.restaurar);
@@ -120,6 +123,7 @@ export function MestreShell() {
     restoreWindows();
     restoreLayout();
     restoreSaquinho();
+    restoreHandout();
     restoreLeitor();
   }, [
     restorePanels,
@@ -127,6 +131,7 @@ export function MestreShell() {
     restoreWindows,
     restoreLayout,
     restoreSaquinho,
+    restoreHandout,
     restoreLeitor,
   ]);
 
@@ -429,6 +434,9 @@ function StageBoundary({
           Só com cena: o dado cai SOBRE o mapa, e sem mapa a jogada não teria
           onde pousar -- a camada que a desenha vive dentro do palco. */}
       {scene ? <SaquinhoDados /> : null}
+
+      {/* A carta na manga, irmã do saquinho: mesma bolinha, e por cena. */}
+      {scene ? <HandoutMestre scene={scene} /> : null}
     </div>
   );
 }
