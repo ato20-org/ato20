@@ -632,6 +632,19 @@ export type Scene = {
    */
   postits?: Postit[];
   /**
+   * O handout da cena: ids de imagem do acervo que o mestre separou para
+   * esta cena — o mapa do calabouço, a carta do vilão, o retrato da testemunha.
+   * Ausente = vazio. Sem repetição: é um conjunto, gravado como lista.
+   *
+   * É a carta na manga. Pôr uma imagem na mesa NÃO a tira daqui: ela
+   * continua guardada, e a bolinha só a mostra esmaecida enquanto está no
+   * palco. Arrastar o item de volta à bolinha tira da cena e a reacende.
+   *
+   * NUNCA chega à mesa, pela mesma razão dos pontos: `sceneForTable` remove
+   * este campo antes de publicar.
+   */
+  handout?: string[];
+  /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.
    */
@@ -759,6 +772,9 @@ export function cloneScene(source: Scene, name: string): Scene {
     // não para a cópia dela. É o que se quer — duplicar uma cena não duplica o
     // porão a que ela leva.
     postits: source.postits?.map((postit) => ({ ...postit, id: novoId() })),
+    // Mesma regra dos anexos: são ids do acervo, e a cópia aponta para os
+    // mesmos arquivos.
+    handout: source.handout ? [...source.handout] : undefined,
     createdAt: now,
     updatedAt: now,
   };
