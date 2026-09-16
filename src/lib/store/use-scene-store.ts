@@ -923,7 +923,14 @@ useSceneStore.subscribe((state, previous) => {
   const { board } = state;
 
   clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => void persistir(board), PERSIST_DEBOUNCE_MS);
+  persistTimer = setTimeout(() => {
+    // Era rejeição sem ninguém ouvindo: um erro de disco na gravação sumia no
+    // console. A pasta apagada já é tratada em `call` -- ver `aoSumirCampanha`
+    // --, então aqui é só não deixar os outros passarem calados.
+    persistir(board).catch((cause: unknown) => {
+      console.error("falha ao gravar o board", cause);
+    });
+  }, PERSIST_DEBOUNCE_MS);
 });
 
 /**

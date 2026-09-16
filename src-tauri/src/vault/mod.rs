@@ -115,6 +115,31 @@ impl Vault {
         self.root.join(".ato20")
     }
 
+    /// A pasta ainda esta no disco.
+    ///
+    /// O `Vault` e um caminho guardado na memoria, e nada o revalida sozinho:
+    /// com a pasta apagada por fora, `read_json` devolvia `None` para tudo -- a
+    /// mesa aparecia VAZIA, como campanha nova -- e a primeira gravacao
+    /// recriava a pasta pela metade, sem `config.json`, porque `write_atomic`
+    /// cria o diretorio-pai. Um esqueleto que a proxima abertura recusa.
+    ///
+    /// Chamada em toda entrada -- `com_vault` nos comandos, as rotas do daemon
+    /// -- e nao dentro de cada leitura e escrita: um `stat` por operacao, ao
+    /// lado do I/O que a operacao ja faz, e nenhuma escrita chega a acontecer
+    /// numa campanha morta. A janela que sobra e apagar a pasta DURANTE um
+    /// comando, e ela nao paga um `create_dir_all` condicional em cada funcao
+    /// de escrita.
+    ///
+    /// Olha o `config.json` e nao a raiz: uma raiz que existe sem ele e
+    /// justamente o esqueleto descrito acima.
+    pub fn verificar(&self) -> AppResult<()> {
+        if Self::config_path(&self.root).is_file() {
+            return Ok(());
+        }
+
+        Err(AppError::CampanhaSumiu(self.root.display().to_string()))
+    }
+
     pub fn info(&self) -> CampaignInfo {
         CampaignInfo {
             path: self.root.display().to_string(),

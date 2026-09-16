@@ -12,6 +12,14 @@ pub enum AppError {
     NoCampaign,
     /// A pasta existe mas nao e uma campanha, ou esta com o `config.json` ilegivel.
     NotACampaign(String),
+    /// A campanha estava aberta e a pasta dela deixou de existir no disco.
+    ///
+    /// Apagada, movida ou num volume que foi desconectado, com o Mestre ainda
+    /// na mesa. Variante propria, e nao `NoCampaign`, porque a providencia e
+    /// outra: ali nao ha campanha e a tela mostra a porta; aqui ha uma, com a
+    /// cena inteira ainda na memoria, e a tela tem de dizer QUAL pasta sumiu
+    /// para o mestre ir atras dela. Ver `Vault::verificar`.
+    CampanhaSumiu(String),
     Io(std::io::Error),
     /// Arquivo do vault que existe mas nao decodifica.
     Malformed { file: String, cause: String },
@@ -40,6 +48,9 @@ impl std::fmt::Display for AppError {
             Self::NoCampaign => write!(f, "Nenhuma campanha aberta."),
             Self::NotACampaign(path) => {
                 write!(f, "A pasta {path} nao e uma campanha do ATO20.")
+            }
+            Self::CampanhaSumiu(path) => {
+                write!(f, "A pasta da campanha sumiu do disco: {path}")
             }
             Self::Io(cause) => write!(f, "Falha de disco: {cause}"),
             Self::Malformed { file, cause } => {
@@ -85,6 +96,7 @@ impl Serialize for AppError {
         let code = match self {
             Self::NoCampaign => "sem-campanha",
             Self::NotACampaign(_) => "nao-e-campanha",
+            Self::CampanhaSumiu(_) => "campanha-sumiu",
             Self::Io(_) => "disco",
             Self::Malformed { .. } => "ilegivel",
             Self::Db(_) => "banco",

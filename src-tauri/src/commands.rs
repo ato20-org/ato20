@@ -51,6 +51,11 @@ fn com_vault<T>(shared: &SharedVault, run: impl FnOnce(&Vault) -> AppResult<T>) 
     let guard = shared.read().expect("vault envenenado");
     let vault = guard.as_ref().ok_or(AppError::NoCampaign)?;
 
+    // Antes de qualquer leitura ou escrita: ver `Vault::verificar`. O vault
+    // FICA na caixa mesmo com a pasta sumida -- a cena continua na memoria da
+    // tela, e e ela que uma futura "salvar em outra pasta" vai querer.
+    vault.verificar()?;
+
     run(vault)
 }
 
@@ -1468,6 +1473,45 @@ pub fn extensao_habilitar(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A pasta apagada com a campanha aberta tem de virar erro proprio -- e
+    /// nao uma mesa vazia, que era o que `read_json` devolvendo `None` para
+    /// tudo produzia. Ver `Vault::verificar`.
+    #[test]
+    fn pasta_apagada_com_a_campanha_aberta_e_campanha_sumiu() {
+        let dir = tempfile::tempdir().unwrap();
+        let raiz = dir.path().join("campanha");
+        let vault = Vault::create(&raiz, "Campanha").unwrap();
+        let shared: SharedVault = std::sync::Arc::new(std::sync::RwLock::new(Some(vault)));
+
+        // Com a pasta no lugar, o comando roda.
+        assert!(com_vault(&shared, |_| Ok(())).is_ok());
+
+        std::fs::remove_dir_all(&raiz).unwrap();
+
+        let erro = com_vault(&shared, |_| Ok(())).unwrap_err();
+        assert!(matches!(erro, AppError::CampanhaSumiu(ref p) if p.contains("campanha")), "{erro:?}");
+
+        // E a guarda fica ANTES do trabalho: o fechamento nunca roda, entao
+        // nenhuma escrita chega a recriar a pasta.
+        assert!(!raiz.exists());
+
+        // O vault continua na caixa: a cena esta na memoria da tela, e e ela
+        // que "salvar em outra pasta" vai querer.
+        assert!(shared.read().unwrap().is_some());
+    }
+
+    /// Raiz que existe sem `config.json` e o esqueleto que a gravacao cega
+    /// deixava. Tambem conta como sumida.
+    #[test]
+    fn raiz_sem_config_conta_como_sumida() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::create(dir.path().join("campanha"), "Campanha").unwrap();
+
+        std::fs::remove_file(Vault::config_path(&vault.root)).unwrap();
+
+        assert!(matches!(vault.verificar(), Err(AppError::CampanhaSumiu(_))));
+    }
 
     fn vault() -> (tempfile::TempDir, Vault, String) {
         let dir = tempfile::tempdir().unwrap();

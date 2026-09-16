@@ -38,6 +38,40 @@ export function isNoCampaign(cause: unknown): boolean {
 }
 
 /**
+ * A campanha estava aberta e a pasta dela sumiu do disco.
+ *
+ * O segundo erro que é estado e não falha. Diferente de `sem-campanha`: há uma
+ * campanha, com a cena inteira ainda na tela, e o que o mestre precisa é saber
+ * QUAL pasta procurar. Ver `Vault::verificar` no Rust.
+ */
+export function isCampanhaSumiu(cause: unknown): boolean {
+  return cause instanceof VaultError && cause.code === "campanha-sumiu";
+}
+
+type AoSumir = (mensagem: string) => void;
+
+const ouvintesDeSumico = new Set<AoSumir>();
+
+/**
+ * Avisa quando qualquer comando descobrir que a pasta da campanha sumiu.
+ *
+ * Aqui, e não em cada store: todo erro do Rust atravessa `call`, então este é
+ * o único ponto por onde a notícia passa com certeza. A alternativa era o
+ * store de cenas checar o código e avisar o de campanha -- e o de campanha já
+ * importa o de cenas para o `flushBoard`. Seria um ciclo por uma linha.
+ *
+ * O board grava com 400ms de atraso e vai continuar tentando enquanto a pasta
+ * não voltar; quem ouve tem de aguentar o mesmo aviso muitas vezes.
+ */
+export function aoSumirCampanha(ouvinte: AoSumir): () => void {
+  ouvintesDeSumico.add(ouvinte);
+
+  return () => {
+    ouvintesDeSumico.delete(ouvinte);
+  };
+}
+
+/**
  * Roda dentro do aplicativo, e não numa aba de browser.
  *
  * O mesmo bundle serve as três telas: o Mestre só existe no aplicativo,
@@ -72,7 +106,13 @@ export async function call<T>(
       "code" in cause &&
       "message" in cause
     ) {
-      throw new VaultError(String(cause.code), String(cause.message));
+      const erro = new VaultError(String(cause.code), String(cause.message));
+
+      if (isCampanhaSumiu(erro)) {
+        for (const ouvinte of ouvintesDeSumico) ouvinte(erro.message);
+      }
+
+      throw erro;
     }
 
     throw new VaultError(

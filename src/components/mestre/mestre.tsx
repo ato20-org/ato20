@@ -7,6 +7,7 @@ import { WindowChrome } from "@/components/desktop/window-chrome";
 import { CampaignBadge } from "@/components/mestre/campaign-badge";
 import { PanelsMenu } from "@/components/mestre/panels-menu";
 import { CampaignBoot } from "@/components/mestre/campaign-boot";
+import { CampanhaPerdida } from "@/components/mestre/campanha-perdida";
 import { CampaignSplash } from "@/components/mestre/campaign-splash";
 import { MestreGate } from "@/components/mestre/mestre-gate";
 import { Button } from "@/components/ui/button";
@@ -171,6 +172,14 @@ function Conteudo({
         ]}
       />
     );
+  }
+
+  // A pasta sumiu com a mesa aberta. Não é a porta: a porta zera a campanha, e
+  // aqui o que o mestre precisa ler é justamente QUAL pasta procurar. E não é o
+  // `error` acima, porque "tentar de novo" não é a saída -- o `boot` só leva à
+  // lista.
+  if (status === "perdida" && campaign) {
+    return <CampanhaPerdida campaign={campaign} />;
   }
 
   // `ready` sem campanha não deveria acontecer -- quem põe `ready` põe as duas
