@@ -501,8 +501,9 @@ async fn require_player(
 
     let found = {
         let guard = state.vault.read().expect("vault envenenado");
-        let Some(vault) = guard.as_ref() else {
-            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        let vault = match vault_vivo(&guard) {
+            Ok(vault) => vault,
+            Err(resposta) => return resposta,
         };
 
         players::by_token(vault, &token)
@@ -528,6 +529,31 @@ async fn require_player(
 /// resposta HTTP e visivel na rede, e caminho de disco nao precisa estar nele.
 fn fail(status: StatusCode, message: &str) -> Response {
     (status, message.to_string()).into_response()
+}
+
+/// A campanha aberta, ou a resposta que diz por que nao ha uma.
+///
+/// Toda rota que toca o DISCO da campanha passa por aqui, e nao so pelo
+/// `as_ref()`: o vault e um caminho na memoria, e com a pasta apagada por fora
+/// as rotas do Jogador seguiriam gravando -- e `players::open` recriaria o
+/// `.ato20/estado.db` num esqueleto sem `config.json`. Ver `Vault::verificar`.
+///
+/// `503` nos dois casos, com textos diferentes: para o celular a mesa esta
+/// igualmente indisponivel, e o texto e para quem le o log.
+///
+/// `code_matches` nao passa por aqui de proposito: o codigo da mesa e a cena
+/// por SSE vivem na memoria e continuam de pe com a pasta sumida -- e isso que
+/// mantem a TV mostrando a cena enquanto o mestre corre atras da pasta.
+fn vault_vivo(guard: &Option<Vault>) -> Result<&Vault, Response> {
+    let Some(vault) = guard.as_ref() else {
+        return Err(fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta"));
+    };
+
+    vault
+        .verificar()
+        .map_err(|e| fail(StatusCode::SERVICE_UNAVAILABLE, &e.to_string()))?;
+
+    Ok(vault)
 }
 
 
@@ -886,8 +912,9 @@ async fn join_table(
     }
 
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     match players::join(vault, &body.nome) {
@@ -937,8 +964,9 @@ async fn update_me(
     axum::Json(body): axum::Json<UpdateMe>,
 ) -> Response {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     match players::update_self(vault, &player.id, body.nome.as_deref()) {
@@ -955,8 +983,9 @@ async fn my_attachments(
     axum::Extension(player): axum::Extension<players::Player>,
 ) -> Response {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     match players::list_attachments(vault, &player.id) {
@@ -978,9 +1007,7 @@ async fn my_attachments(
 /// adivinhavel de distancia da preparacao do mestre.
 fn ligado(state: &Arc<Daemon>, jogador: &str, personagem: &str) -> Result<Vault, Response> {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return Err(fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta"));
-    };
+    let vault = vault_vivo(&guard)?;
 
     match players::is_linked(vault, jogador, personagem) {
         Ok(true) => Ok(vault.clone()),
@@ -1000,8 +1027,9 @@ async fn my_characters(
     axum::Extension(player): axum::Extension<players::Player>,
 ) -> Response {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     let (Ok(ids), Ok(todos)) = (
@@ -1336,8 +1364,9 @@ async fn my_notes(
     axum::Extension(player): axum::Extension<players::Player>,
 ) -> Response {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     match players::notes(vault, &player.id) {
@@ -1361,8 +1390,9 @@ async fn new_note(
     axum::Json(body): axum::Json<CorpoNota>,
 ) -> Response {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     let criada = players::create_note(
@@ -1401,8 +1431,9 @@ async fn edit_note(
     axum::Json(body): axum::Json<CorpoNota>,
 ) -> Response {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     let mudada = players::update_note(
@@ -1433,8 +1464,9 @@ async fn drop_note(
     AxumPath(id): AxumPath<String>,
 ) -> Response {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     match players::delete_note(vault, &player.id, &id) {
@@ -1478,8 +1510,9 @@ async fn table_characters(
     axum::Extension(player): axum::Extension<players::Player>,
 ) -> Response {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     let (Ok(vinculos), Ok(jogadores), Ok(todos)) = (
@@ -1703,8 +1736,9 @@ async fn read_attachment(
 ) -> Response {
     let found = {
         let guard = state.vault.read().expect("vault envenenado");
-        let Some(vault) = guard.as_ref() else {
-            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        let vault = match vault_vivo(&guard) {
+            Ok(vault) => vault,
+            Err(resposta) => return resposta,
         };
 
         players::attachment_path(vault, &player.id, &arquivo)
@@ -1832,8 +1866,9 @@ async fn upload_attachment(
 ) -> Response {
     let temp = {
         let guard = state.vault.read().expect("vault envenenado");
-        let Some(vault) = guard.as_ref() else {
-            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        let vault = match vault_vivo(&guard) {
+            Ok(vault) => vault,
+            Err(resposta) => return resposta,
         };
 
         if let Err(cause) = std::fs::create_dir_all(players::attachments_dir(vault, &player.id)) {
@@ -1852,9 +1887,12 @@ async fn upload_attachment(
 
     let result = {
         let guard = state.vault.read().expect("vault envenenado");
-        let Some(vault) = guard.as_ref() else {
-            let _ = std::fs::remove_file(&temp);
-            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        let vault = match vault_vivo(&guard) {
+            Ok(vault) => vault,
+            Err(resposta) => {
+                let _ = std::fs::remove_file(&temp);
+                return resposta;
+            }
         };
 
         players::adopt_attachment(vault, &player.id, &temp, &nome)
@@ -1878,8 +1916,9 @@ async fn remove_attachment(
     AxumPath(arquivo): AxumPath<String>,
 ) -> Response {
     let guard = state.vault.read().expect("vault envenenado");
-    let Some(vault) = guard.as_ref() else {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
     };
 
     match players::delete_attachment(vault, &player.id, &arquivo) {
@@ -2086,8 +2125,9 @@ async fn serve_asset(
 ) -> Response {
     let found = {
         let guard = state.vault.read().expect("vault envenenado");
-        let Some(vault) = guard.as_ref() else {
-            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        let vault = match vault_vivo(&guard) {
+            Ok(vault) => vault,
+            Err(resposta) => return resposta,
         };
 
         match assets::find(vault, &id) {
@@ -2141,8 +2181,9 @@ async fn serve_variante(
 
     let found = {
         let guard = state.vault.read().expect("vault envenenado");
-        let Some(vault) = guard.as_ref() else {
-            return fail(StatusCode::SERVICE_UNAVAILABLE, "nenhuma campanha aberta");
+        let vault = match vault_vivo(&guard) {
+            Ok(vault) => vault,
+            Err(resposta) => return resposta,
         };
 
         match assets::find(vault, &id) {
@@ -2182,6 +2223,7 @@ async fn serve_variante(
         match tokio::task::spawn_blocking(move || {
             let guard = vault.read().expect("vault envenenado");
             let vault = guard.as_ref().ok_or(crate::error::AppError::NoCampaign)?;
+            vault.verificar()?;
 
             variantes::ensure(vault, variante, &alvo)
         })
