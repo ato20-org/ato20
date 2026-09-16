@@ -44,6 +44,16 @@ const CANTO_TRACO_PX = 3;
 /** A alça lateral e o botão de transmitir abaixo dela. */
 const ALCA_PX = 30;
 const ALCA_GAP_PX = 8;
+/**
+ * Larguras da moldura NA TELA abaixo das quais o rótulo encolhe.
+ *
+ * O rótulo é medido em pixel de tela e a moldura em unidades de cena: afastando
+ * o palco, ela encolhe e ele não, e a 20% o texto cobria a câmera inteira. Acima
+ * de `ROTULO_CHEIO_PX` cabe tudo; entre os dois, só o nome; abaixo de
+ * `ROTULO_MINIMO_PX`, só o REC quando ela está no ar, e nada quando não está.
+ */
+const ROTULO_CHEIO_PX = 220;
+const ROTULO_MINIMO_PX = 110;
 
 /** Quanto do fora fica escuro. Clareia enquanto o mestre arrasta. */
 const MASCARA_PARADA = 0.35;
@@ -174,6 +184,18 @@ export function CameraFrame({
   }
 
   const grip = px(GRIP_PX);
+
+  /** Quanto a moldura ocupa na tela, em px. É o que decide o tamanho do rótulo. */
+  const larguraNaTela = camera.width * scale;
+  const rotulo: "cheio" | "nome" | "rec" | "nada" =
+    larguraNaTela >= ROTULO_CHEIO_PX
+      ? "cheio"
+      : larguraNaTela >= ROTULO_MINIMO_PX
+        ? "nome"
+        : transmitindo
+          ? "rec"
+          : "nada";
+
   const gripClass = onChange
     ? "pointer-events-auto absolute touch-none"
     : "pointer-events-none absolute";
@@ -265,8 +287,9 @@ export function CameraFrame({
             ))
           : null}
 
+        {rotulo === "nada" ? null : (
         <span
-          className={`${transmitindo ? "bg-primary/85 text-primary-foreground" : "bg-background/90 text-foreground border"} flex items-center font-medium tabular-nums ${gripClass}`}
+          className={`${transmitindo ? "bg-primary/85 text-primary-foreground" : "bg-background/90 text-foreground border"} flex max-w-full items-center font-medium tabular-nums ${gripClass}`}
           // Conteúdo em PIXEL DE TELA via `emPixelDeTela`, e não dividido
           // pela escala: sob `zoom` o traço do ícone calculado abaixo de um
           // pixel sobe para um pixel antes de multiplicar, e o REC saía três
@@ -278,6 +301,9 @@ export function CameraFrame({
             gap: 6,
             padding: "2px 6px",
             cursor: onChange ? "move" : undefined,
+            // Em pixel de tela, como o resto do rótulo: a moldura tem
+            // `larguraNaTela` px, e o texto não passa dela.
+            maxWidth: larguraNaTela,
             ...emPixelDeTela(scale),
           }}
           onPointerDown={startMove}
@@ -287,20 +313,25 @@ export function CameraFrame({
           {transmitindo ? (
             <CircleDot className="text-red-400" style={{ width: 11, height: 11 }} />
           ) : null}
-          {selecionada.nome}
+          {rotulo === "rec" ? null : (
+            <span className="truncate">{selecionada.nome}</span>
+          )}
           {/* A ampliação desta câmera, na mesma régua dos 100% do palco: o
               mestre sabe se está fechado num corredor ou aberto na sala sem
               ter de olhar a TV. */}
-          <span className="opacity-80">
-            {Math.round(viewportZoom(camera) * 100)}%
-          </span>
-          {presaEm > 0 ? (
+          {rotulo === "cheio" ? (
+            <span className="opacity-80">
+              {Math.round(viewportZoom(camera) * 100)}%
+            </span>
+          ) : null}
+          {rotulo === "cheio" && presaEm > 0 ? (
             <span className="flex items-center" style={{ gap: 3 }}>
               <Lock style={{ width: 11, height: 11 }} />
               {presaEm > 1 ? presaEm : null}
             </span>
           ) : null}
         </span>
+        )}
 
         {onChange ? (
           <Alca
