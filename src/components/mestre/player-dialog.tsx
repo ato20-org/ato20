@@ -18,11 +18,29 @@ import { toast } from "sonner";
 import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -37,8 +55,12 @@ import { shareAttachment } from "@/lib/vault/evidence";
 // unidades dependendo de quem olha.
 import { formatBytes } from "@/lib/player/session";
 import { DadoParado } from "@/components/playground/dado-parado";
-import { useCharacterNames } from "@/hooks/use-character-names";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import { useCharacters } from "@/hooks/use-characters";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
+import { desde } from "@/lib/tempo";
+import { characterLinks, linkCharacter } from "@/lib/vault/characters";
 import { valorDaRolagem } from "@/types/dado";
 import {
   playerAttachments,
@@ -113,8 +135,43 @@ function Ficha({
   onVoltar: () => void;
   onChanged: () => void;
 }) {
-  /** Os personagens dele. Substituiu o apelido — ver a seção abaixo. */
-  const nomes = useCharacterNames();
+  /**
+   * Os personagens dele, e os que estão sem dono.
+   *
+   * Pelo id e não só pelo nome, como fazia o `useCharacterNames`: o chip agora
+   * abre a ficha, e o select entrega um personagem daqui mesmo. Ir à ficha do
+   * personagem para vincular obrigava a fechar isto, achar o personagem na
+   * lista, abrir e rolar até a última seção.
+   */
+  const { personagens, recarregar } = useCharacters();
+  const [pares, setPares] = useState<Array<[string, string]>>([]);
+  const versao = useCharactersStore((state) => state.versao);
+
+  useEffect(() => {
+    let ativo = true;
+
+    void characterLinks().then(
+      (lidos) => {
+        if (ativo) setPares(lidos);
+      },
+      () => {
+        if (ativo) setPares([]);
+      },
+    );
+
+    return () => {
+      ativo = false;
+    };
+  }, [versao]);
+
+  const dele = (personagens ?? []).filter((personagem) =>
+    pares.some(([j, p]) => j === player.id && p === personagem.id),
+  );
+  const semDono = (personagens ?? []).filter(
+    (personagem) => !pares.some(([, p]) => p === personagem.id),
+  );
+
+  const abrirJanela = useAbrirJanela();
 
   /**
    * O que este jogador tirou nesta sessão.
@@ -330,8 +387,12 @@ function Ficha({
             />
             <span className="truncate">{player.nome}</span>
           </DialogTitle>
+          {/* Quanto, e não "há um tempo": o dado existe, e é o que o mestre
+              quer saber quando o jogador sumiu — se foi a conexão ou a noite. */}
           <DialogDescription className="mt-1">
-            {presente ? "Na mesa agora." : "Não aparece há um tempo."}
+            {presente ? "Na mesa agora" : `Visto ${desde(player.vistoEm)}`}
+            {" · entrou "}
+            {desde(player.entrouEm)}
           </DialogDescription>
         </div>
       </div>
@@ -344,41 +405,70 @@ function Ficha({
           deixou de ser anotação e passou a ser vínculo: acompanha quando o
           mestre troca o personagem de mãos, e não vira mentira quando ele
           esquece de atualizar. Quem vincula é o diálogo de personagens. */}
-      <section className="space-y-1.5">
-        <p className="text-muted-foreground text-xs">Personagens</p>
-        {(nomes.get(player.id) ?? []).length === 0 ? (
-          <p className="text-muted-foreground text-xs">
-            Nenhum. Entregue um a ele pelo canto de personagens do palco — é o
-            que dá acesso à ficha e às notas.
-          </p>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {(nomes.get(player.id) ?? []).map((nome) => (
-              <li
-                key={nome}
-                className="bg-muted/40 rounded-md border px-2 py-0.5 text-xs"
+      <Secao titulo="Personagens" vazio={dele.length === 0 ? "nenhum" : null}
+        dica="É o vínculo que dá a ele acesso à ficha, aos arquivos e às notas do personagem."
+        acao={
+          semDono.length > 0 ? (
+            <Select<string>
+              value={null}
+              onValueChange={(personagemId) => {
+                if (!personagemId) return;
+                void linkCharacter(player.id, personagemId).then(
+                  // O store relê os dois e sobe a `versao`, que é o que faz
+                  // esta lista, a ficha do personagem e a lista de jogadores
+                  // verem o vínculo novo.
+                  () => recarregar(),
+                  () => toast.error("Não foi possível entregar o personagem."),
+                );
+              }}
+            >
+              <SelectTrigger
+                className="h-6 text-[11px]"
+                aria-label="Entregar um personagem"
               >
-                {nome}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                <SelectValue placeholder="Entregar…" />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                {semDono.map((personagem) => (
+                  <SelectItem
+                    key={personagem.id}
+                    value={personagem.id}
+                    className="text-xs"
+                  >
+                    {personagem.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null
+        }
+      >
+        <ul className="flex flex-wrap gap-1.5">
+          {dele.map((personagem) => (
+            <li key={personagem.id}>
+              {/* Abre a ficha e fecha isto: são duas janelas sobre o mesmo
+                  vínculo, e a ficha já tem o caminho de volta pelo nome dele. */}
+              <button
+                type="button"
+                className="bg-muted/40 hover:bg-muted focus-visible:ring-ring rounded-md border px-2 py-0.5 text-xs focus-visible:ring-2 focus-visible:outline-none"
+                onClick={() => {
+                  abrirJanela({ tipo: "personagem", personagemId: personagem.id });
+                  onVoltar();
+                }}
+              >
+                {personagem.nome}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Secao>
 
-      <section className="space-y-1.5">
-        <p className="text-muted-foreground text-xs">Arquivos</p>
-
-        {anexos === null ? (
-          <Loader2
-            className="text-muted-foreground size-4 animate-spin"
-            aria-label="Carregando"
-          />
-        ) : anexos.length === 0 ? (
-          <p className="text-muted-foreground text-xs">
-            Nada anexado. Retrato, ficha, mapa rabiscado — ele anexa na aba
-            Personagem.
-          </p>
-        ) : (
+      <Secao
+        titulo="Arquivos"
+        vazio={anexos === null ? "lendo…" : anexos.length === 0 ? "nenhum" : null}
+        dica="Retrato, ficha, mapa rabiscado: o que ele anexa na aba Personagem do celular."
+      >
+        {anexos && anexos.length > 0 ? (
           <div className="space-y-2">
             {/* As imagens como miniatura, aqui mesmo: o retrato do personagem
                 é a coisa que o mestre mais olha nesta ficha, e uma linha
@@ -506,25 +596,23 @@ function Ficha({
               </ul>
             ) : null}
           </div>
-        )}
-      </section>
+        ) : null}
+      </Secao>
 
-      <section className="space-y-1.5">
-        <p className="text-muted-foreground text-xs">O que ele tirou</p>
-
-        {/* Da sessão, e só dela: o histórico da mesa vive na memória desta
-            janela, não no cofre. Ver `useRolagensStore`. */}
-        {rolagens.length === 0 ? (
-          <p className="text-muted-foreground text-xs">
-            Nenhum dado nesta sessão.
-          </p>
-        ) : (
+      {/* Da sessão, e só dela: o histórico da mesa vive na memória desta
+          janela, não no cofre. Ver `useRolagensStore`. */}
+      <Secao
+        titulo="O que ele tirou"
+        vazio={rolagens.length === 0 ? "nenhum dado nesta sessão" : null}
+        dica="Só desta sessão. O daemon sorteia, não o celular."
+      >
+        {rolagens.length > 0 ? (
           <ul className="flex flex-wrap gap-1">
             {rolagens.map((rolagem) => (
               <li
                 key={rolagem.id}
                 className="flex items-center gap-1 rounded border px-1.5 py-0.5"
-                title={`d${rolagem.faces}`}
+                title={`d${rolagem.faces} · ${desde(rolagem.quando)}`}
               >
                 <DadoParado
                   faces={rolagem.faces}
@@ -534,23 +622,28 @@ function Ficha({
                 <span className="text-xs font-medium tabular-nums">
                   {valorDaRolagem(rolagem.faces, rolagem.valor)}
                 </span>
+                <span className="text-muted-foreground text-[10px]">
+                  {desde(rolagem.quando)}
+                </span>
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        ) : null}
+      </Secao>
 
-      <section className="space-y-1.5">
-        <p className="text-muted-foreground text-xs">Caderno dele</p>
+      {/* O caderno é dele, mas o mestre é dono do disco: não faz sentido
+          esconder na tela o que está em texto no SQLite ao lado. O que o
+          token protege é o acesso de OUTRO jogador.
 
-        {/* O caderno é dele, mas o mestre é dono do disco: não faz sentido
-            esconder na tela o que está em texto no SQLite ao lado. O que o
-            token protege é o acesso de OUTRO jogador.
-
-            Só leitura, e não um campo editável: escrever na anotação alheia é
-            outra coisa, e não é uma que o mestre precise fazer. */}
-        <Caderno notas={caderno} />
-      </section>
+          Só leitura, e não um campo editável: escrever na anotação alheia é
+          outra coisa, e não é uma que o mestre precise fazer. */}
+      <Secao
+        titulo="Caderno dele"
+        vazio={caderno.length === 0 ? "nada escrito" : null}
+        dica="Só leitura. O que ele escreveu no celular, em texto cru."
+      >
+        {caderno.length > 0 ? <Caderno notas={caderno} /> : null}
+      </Secao>
 
       {/* O mesmo visualizador do Jogador, com o zoom que ele já traz: a
           pergunta "que retrato é esse?" é a mesma dos dois lados da mesa. */}
@@ -561,23 +654,45 @@ function Ficha({
         onClose={() => setVendo(null)}
       />
 
-      <Button
-        variant="destructive"
-        size="sm"
-        className="w-full"
-        onClick={() => {
-          void removePlayer(player.id).then(
-            () => {
-              onChanged();
-              onVoltar();
-            },
-            () => toast.error("Não foi possível tirar o jogador da mesa."),
-          );
-        }}
-      >
-        <Trash2 />
-        Tirar {player.nome} da mesa, com os arquivos
-      </Button>
+      {/* Confirma: era um clique só, vermelho, no fim de uma lista que rola, e
+          apagava arquivos e caderno sem volta. */}
+      <AlertDialog>
+        <AlertDialogTrigger
+          render={
+            <Button variant="destructive" size="sm" className="w-full">
+              <Trash2 />
+              Tirar {player.nome} da mesa
+            </Button>
+          }
+        />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tirar {player.nome} da mesa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vão com ele {contar(anexos?.length ?? 0, "arquivo")},{" "}
+              {contar(caderno.length, "nota")} do caderno e o acesso pelo
+              celular. Os personagens ficam, sem dono. Não tem como desfazer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                void removePlayer(player.id).then(
+                  () => {
+                    onChanged();
+                    onVoltar();
+                  },
+                  () =>
+                    toast.error("Não foi possível tirar o jogador da mesa."),
+                );
+              }}
+            >
+              Tirar da mesa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -604,9 +719,14 @@ function Caderno({ notas }: { notas: Nota[] }) {
     <ul className="scroll-fade max-h-56 space-y-2 overflow-y-auto">
       {notas.map((nota) => (
         <li key={nota.id} className="rounded border px-2 py-1.5">
-          <p className="truncate text-xs font-medium">
-            {nota.titulo || "Sem título"}
-          </p>
+          <div className="flex items-baseline gap-2">
+            <p className="min-w-0 flex-1 truncate text-xs font-medium">
+              {nota.titulo || "Sem título"}
+            </p>
+            <span className="text-muted-foreground shrink-0 text-[10px]">
+              {desde(nota.atualizadoEm)}
+            </span>
+          </div>
 
           {nota.tags.length > 0 ? (
             <p className="text-muted-foreground mt-0.5 text-[10px]">
@@ -621,4 +741,58 @@ function Caderno({ notas }: { notas: Nota[] }) {
       ))}
     </ul>
   );
+}
+
+/**
+ * Uma seção da ficha do jogador.
+ *
+ * Vazia, ocupa uma linha: título e "nenhum" lado a lado. Um jogador que acabou
+ * de entrar tem as quatro vazias, e quatro blocos de duas linhas explicando o
+ * que cada um teria era mais texto que ficha. A explicação foi para o tooltip
+ * do título, que só aparece para quem quer saber.
+ */
+function Secao({
+  titulo,
+  vazio,
+  dica,
+  acao,
+  children,
+}: {
+  titulo: string;
+  /** Texto curto no lugar do conteúdo. `null` quando há conteúdo. */
+  vazio: string | null;
+  dica: string;
+  acao?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <p className="text-muted-foreground cursor-help text-xs underline decoration-dotted underline-offset-2" />
+            }
+          >
+            {titulo}
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p className="max-w-56">{dica}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        {vazio ? (
+          <span className="text-muted-foreground/70 text-xs italic">{vazio}</span>
+        ) : null}
+
+        {acao ? <div className="ml-auto">{acao}</div> : null}
+      </div>
+
+      {vazio ? null : children}
+    </section>
+  );
+}
+
+function contar(n: number, singular: string): string {
+  return n === 1 ? `1 ${singular}` : `${n} ${singular}s`;
 }
