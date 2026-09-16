@@ -46,13 +46,29 @@ const NITIDO_MS = 90;
  * existe para não fazer.
  *
  * Dois canvas, frente e fundo. Trocar o zoom pede um desenho novo, e antes ele
- * era feito NO canvas visível: `width = …` apaga o bitmap na hora, e o worker
+ * era feito no canvas visível: `width = …` apaga o bitmap na hora, e o worker
  * leva centenas de milissegundos para devolver o próximo — medido no cenário
  * `leitor` do `/perf`, 350 ms de página branca a cada degrau. Agora o degrau
- * novo é pintado no canvas de fundo, enquanto o da frente segue mostrando o
- * bitmap antigo esticado por CSS; pronto, os dois trocam de papel, e o que saiu
- * da frente encolhe a 0×0 para devolver a memória — sem isso o teto de doze
- * páginas do `useRolagemDoLivro` valeria o dobro.
+ * novo é pintado no canvas de trás, escondido, enquanto o da frente segue
+ * mostrando o bitmap antigo esticado por CSS; pronto, os dois trocam de papel,
+ * e o que foi para trás encolhe a 0×0 para devolver a memória — sem isso o
+ * teto de doze páginas do `useRolagemDoLivro` valeria o dobro.
+ *
+ * Quatro formas de fazer isso foram medidas no `/perf`, "todas" a 300%, oito
+ * folhas: canvas de trás com `visibility: hidden`, 701 ms; um canvas novo por
+ * pedido trocado no DOM, 874 ms; desenho num canvas fora do DOM copiado por
+ * `drawImage`, 1026 ms; os dois canvas visíveis trocando `z-index`, 1145 ms
+ * (dois compositados por quadro). A escondida ficou. `invisible` e não
+ * `hidden`, porque `display: none` num canvas descarta o contexto em algumas
+ * webviews, e é nele que o worker está desenhando.
+ *
+ * Compartilhar o canvas de trás entre um pedido cancelado e o seguinte é
+ * seguro: o `cancel()` do pdf.js chama `endDrawing()` e libera o canvas antes
+ * de rejeitar a promessa. Conferido em `InternalRenderTask.cancel`.
+ *
+ * Cada canvas anuncia o bitmap que tem em `data-bitmap` e a escala de tela em
+ * `data-dpr`: é o que se lê no Inspector quando a folha sai errada, e separa
+ * "o bitmap está errado" de "o CSS ou a camada está errada".
  *
  * O pedido ao worker passa por `filaDoLeitor`, com a distância até a página
  * lida como prioridade: o worker é sequencial, e sem a fila a página sob os
@@ -87,7 +103,7 @@ export function PaginaFolha({
 }) {
   const canvasA = useRef<HTMLCanvasElement | null>(null);
   const canvasB = useRef<HTMLCanvasElement | null>(null);
-  /** Qual dos dois está visível. O outro é onde se pinta o próximo. */
+  /** Qual dos dois está na frente. O outro é onde se pinta o próximo. */
   const [frente, setFrente] = useState<"a" | "b">("a");
   // Espelho do estado para o pedido assíncrono ler o valor vivo: a closure do
   // efeito congela o `frente` do render em que nasceu.
@@ -96,7 +112,17 @@ export function PaginaFolha({
     frenteRef.current = frente;
   }, [frente]);
   const daFrente = () => (frenteRef.current === "a" ? canvasA.current : canvasB.current);
-  const doFundo = () => (frenteRef.current === "a" ? canvasB.current : canvasA.current);
+  const deTras = () => (frenteRef.current === "a" ? canvasB.current : canvasA.current);
+
+  /**
+   * O pedido que o canvas da frente tem de fato.
+   *
+   * É o cache: voltar a um zoom já desenhado não pede nada ao worker, porque o
+   * bitmap ainda está lá -- render cancelado no meio nunca troca de canvas,
+   * então o da frente sempre guarda o último COMPLETO. Zerado quando a folha
+   * sai do cache do leitor, porque aí os canvas desmontam.
+   */
+  const completo = useRef<string | null>(null);
 
   // A prioridade muda toda vez que o mestre rola, e não pode reiniciar o
   // pedido: só reordena quem ainda espera na fila.
@@ -148,8 +174,22 @@ export function PaginaFolha({
     [registrar],
   );
 
+  // A folha saiu do cache do leitor: os canvas desmontam, e o que foi
+  // desenhado não existe mais. Na limpeza, e não no corpo, para não ser um
+  // `setState` síncrono dentro do efeito.
+  useEffect(() => {
+    if (!desenhar) return;
+
+    return () => {
+      completo.current = null;
+      setDesenhada(null);
+    };
+  }, [desenhar]);
+
   useEffect(() => {
     if (!desenhar || largura <= 0) return;
+    // O canvas da frente já tem exatamente isto: nada a pedir.
+    if (completo.current === pedido) return;
 
     let ativo = true;
     let tarefa: RenderTask | null = null;
@@ -167,18 +207,20 @@ export function PaginaFolha({
 
         const viewport = page.getViewport({ scale: largura / natural.width });
 
-        const alvo = doFundo();
+        const alvo = deTras();
         const contexto = alvo?.getContext("2d");
         if (!alvo || !contexto) return;
 
         const dpr = Math.min(window.devicePixelRatio || 1, DPR_MAX);
 
-        // O atributo é a resolução em que se desenha; o tamanho que ele ocupa
-        // é do CSS (`inset-0`), e é o mesmo para os dois canvas. Sem essa
+        // O atributo é a resolução em que se desenha; o tamanho que o canvas
+        // ocupa é do CSS (`inset-0`), e é o mesmo para os dois. Sem essa
         // separação, a página sai borrada em tela de alta densidade.
         alvo.width = Math.floor(viewport.width * dpr);
         alvo.height = Math.floor(viewport.height * dpr);
-
+        alvo.dataset.bitmap = `${alvo.width}x${alvo.height}`;
+        alvo.dataset.dpr = String(dpr);
+        alvo.dataset.pedido = pedido;
         contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         tarefa = page.render({
@@ -190,19 +232,28 @@ export function PaginaFolha({
 
         if (!ativo) return;
 
-        // A troca. O que estava na frente vai para o fundo e encolhe: um
-        // canvas de 0×0 não segura bitmap. Encolhido AQUI e não num efeito
-        // sobre `frente`, porque entre o `setState` e o efeito há um quadro
-        // em que os dois estariam cheios — para doze folhas, o dobro do teto.
+        // A troca de `z-index`. O que estava na frente encolhe DEPOIS do
+        // commit: entre o `setState` e o quadro seguinte os dois têm bitmap, e
+        // encolher antes mostraria a folha vazia por um quadro.
         const antigo = daFrente();
-        setFrente(alvo === canvasA.current ? "a" : "b");
+        const novaFrente = alvo === canvasA.current ? "a" : "b";
+        // O ref AGORA, e não no efeito depois do commit: o pedido seguinte pode
+        // começar neste mesmo tick (a fila avança na resolução da promessa), e
+        // com o ref atrasado ele lia `deTras()` errado -- pintava por cima do
+        // canvas que acabou de virar frente, apagando o bitmap completo. Se
+        // esse pedido fosse cancelado, o parcial dele ficava na tela até o
+        // próximo render completo.
+        frenteRef.current = novaFrente;
+        completo.current = pedido;
+        setFrente(novaFrente);
         setDesenhada(pedido);
         if (antigo && antigo !== alvo) {
-          // Depois do commit, para o quadro da troca já mostrar o novo.
           requestAnimationFrame(() => {
-            if (frenteRef.current !== (antigo === canvasA.current ? "a" : "b")) {
+            // Só se a troca de fato aconteceu e ninguém voltou atrás.
+            if (frenteRef.current === novaFrente) {
               antigo.width = 0;
               antigo.height = 0;
+              antigo.dataset.bitmap = "0x0";
             }
           });
         }
@@ -405,9 +456,8 @@ export function PaginaFolha({
       onPointerCancel={() => setFoco(null)}
     >
       {/* Os dois ocupam a caixa inteira por CSS: o da frente estica o bitmap
-          antigo enquanto o de fundo pinta o novo. `invisible` e não `hidden`,
-          porque `display: none` num canvas em algumas webviews descarta o
-          contexto -- e é justamente nele que o worker está desenhando. */}
+          antigo enquanto o de trás, escondido, pinta o novo. Ver o comentário
+          do componente. */}
       {desenhar ? (
         <>
           <canvas
