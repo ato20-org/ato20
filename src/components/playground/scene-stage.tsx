@@ -367,6 +367,13 @@ export function SceneStage({
    * Nos DOIS planos: o de cima leva os controles do mestre, o de baixo leva o
    * mapa. Com cadências diferentes eles se descolariam no meio do voo.
    *
+   * E nos DOIS níveis de cada plano. O envelope leva o `translate`; o interno
+   * leva o `scale`. Só o envelope interpolava, e redimensionar a moldura da
+   * câmera mexe nos dois: a TV deslizava o deslocamento e saltava a escala a
+   * cada amostra de 100 ms -- a imagem tremia enquanto a moldura crescia ou
+   * encolhia. Na TV o interno está sempre em `transform` (ver
+   * `conteudoNoLayout`), então a mesma transição alcança o `scale`.
+   *
    * Só depois do primeiro paint já medido, e imperativo de propósito: se a
    * classe entrasse no mesmo quadro em que a escala deixa de ser zero, a
    * abertura de toda tela começaria com a cena vindo do canto -- o `translate`
@@ -385,12 +392,17 @@ export function SceneStage({
     const fluxo = agora - anterior < FLUXO_MS;
     emFluxo.current = fluxo;
 
-    for (const plano of [planeRef.current, envelopeDoConteudoRef.current]) {
+    for (const plano of [
+      planeRef.current,
+      envelopeDoConteudoRef.current,
+      controlesNo,
+      conteudoNo,
+    ]) {
       plano?.classList.toggle("scene-smooth-camera", !fluxo);
       plano?.classList.toggle("scene-smooth-camera-fluxo", fluxo);
     }
     // `camera` já carrega `scale`; ele entra à parte porque o corpo o lê.
-  }, [camera, smooth, scale]);
+  }, [camera, smooth, scale, controlesNo, conteudoNo]);
 
   useEffect(() => {
     // Mais longo com a transição ligada: ali a câmera continua andando depois
