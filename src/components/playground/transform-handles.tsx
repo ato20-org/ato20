@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Blend, Drama, FlipHorizontal, RotateCw, Trash2 } from "lucide-react";
+import { Blend, Drama, FlipHorizontal, Trash2 } from "lucide-react";
 
 import { Slider } from "@/components/ui/slider";
 import {
@@ -13,10 +13,12 @@ import { cn } from "@/lib/utils";
 import {
   angleTo,
   handleCursor,
+  handleDirection,
   itemCenter,
   normalizeAngle,
   resizeItem,
   RESIZE_HANDLES,
+  rotateVec,
   snapAngle,
   type ResizeHandle,
   type TransformBox,
@@ -29,7 +31,51 @@ const GIZMO_Z = 10_000;
 // controles com o mesmo tamanho aparente em qualquer zoom.
 const HANDLE_PX = 10;
 const OUTLINE_PX = 1.5;
+/** Altura da fileira de botões acima da caixa. */
 const ROTATE_OFFSET_PX = 30;
+/**
+ * Lado da zona de giro que fica do lado de FORA de cada canto.
+ *
+ * Não há botão de girar: como no Figma, encostar o mouse perto do canto, mas
+ * fora da alça, mostra o cursor de giro e arrasta o ângulo. A zona é maior que
+ * a alça porque ninguém mira num quadrado de 10 pixels para começar um giro.
+ */
+const ROTATE_ZONE_PX = 24;
+
+const CORNER_HANDLES = ["nw", "ne", "se", "sw"] as const satisfies readonly ResizeHandle[];
+
+/**
+ * Cursor de giro: uma seta curva, apontada na direção em que o canto empurra.
+ *
+ * CSS não tem cursor de rotação, então o desenho vai em SVG inline. O ângulo
+ * já soma a rotação do item, assim como `handleCursor` faz para as setas de
+ * redimensionar.
+ */
+function rotateCursor(handle: ResizeHandle, rotation: number): string {
+  const world = rotateVec(handleDirection(handle), rotation);
+  // O desenho base aponta para o canto nordeste (-45deg); gira até o canto real.
+  const degrees = (Math.atan2(world.y, world.x) * 180) / Math.PI + 45;
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>` +
+    `<g transform='rotate(${degrees.toFixed(1)} 12 12)' fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'>` +
+    `<path d='M6 16a6 6 0 0 1 12-4'/><path d='M18 8v4h-4'/></g>` +
+    `<g transform='rotate(${degrees.toFixed(1)} 12 12)' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>` +
+    `<path d='M6 16a6 6 0 0 1 12-4'/><path d='M18 8v4h-4'/></g></svg>`;
+
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 12 12, grab`;
+}
+
+/**
+ * Onde a zona de giro de cada canto se ancora: o canto da CAIXA é o canto
+ * interno da zona, e ela cresce para fora. Assim a parte de dentro da caixa
+ * continua sendo arrastar, e a alça, desenhada depois, fica por cima.
+ */
+const ROTATE_ZONE_POSITION: Record<(typeof CORNER_HANDLES)[number], { left: string; top: string; translate: string }> = {
+  nw: { left: "0%", top: "0%", translate: "translate(-100%, -100%)" },
+  ne: { left: "100%", top: "0%", translate: "translate(0, -100%)" },
+  se: { left: "100%", top: "100%", translate: "translate(0, 0)" },
+  sw: { left: "0%", top: "100%", translate: "translate(-100%, 0)" },
+};
 /** Folga entre a borda direita da caixa e o painel de opacidade. */
 const PAINEL_GAP_PX = 12;
 
@@ -150,8 +196,8 @@ type TransformHandlesProps = {
 };
 
 /**
- * Gizmo de seleção: contorno, alças de redimensionamento e um botão de
- * rotação. Vive no mesmo referencial rotacionado do item, então as alças
+ * Gizmo de seleção: contorno, alças de redimensionamento e zonas de giro fora
+ * dos cantos. Vive no mesmo referencial rotacionado do item, então as alças
  * acompanham o giro.
  */
 export function TransformHandles({
@@ -247,10 +293,9 @@ export function TransformHandles({
         />
       ) : null}
 
-      {/* Fileira acima da caixa. Girar e excluir moram juntos porque nenhum
-          dos dois é redimensionamento, e ficariam competindo com as alças se
-          fossem postos nas bordas. */}
-      {rotatable || onFlip || onOpenSheet || opacidade || onDelete ? (
+      {/* Fileira acima da caixa. Botões moram aqui porque nenhum deles é
+          redimensionamento, e ficariam competindo com as alças nas bordas. */}
+      {onFlip || onOpenSheet || opacidade || onDelete ? (
         <div
           className="pointer-events-none absolute flex items-center"
           // A POSIÇÃO continua em unidade de cena -- ela acompanha o item. O
@@ -265,25 +310,6 @@ export function TransformHandles({
             transform: `translate(-50%, calc(-100% - ${ROTATE_OFFSET_PX - HANDLE_PX * 2}px))`,
           }}
         >
-          {rotatable ? (
-            <button
-              type="button"
-              aria-label="Rotacionar"
-              className={cn(
-                "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
-                cor.botao,
-              )}
-              style={{
-                width: HANDLE_PX * 2,
-                height: HANDLE_PX * 2,
-                cursor: "grab",
-              }}
-              onPointerDown={startRotate}
-            >
-              <RotateCw style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
-            </button>
-          ) : null}
-
           {onFlip ? (
             <button
               type="button"
@@ -424,6 +450,28 @@ export function TransformHandles({
           </div>
         </div>
       ) : null}
+
+      {/* Antes das alças, de propósito: a alça fica por cima onde as duas se
+          tocam, e em cima do ponto continua sendo redimensionar. */}
+      {rotatable
+        ? CORNER_HANDLES.map((handle) => (
+            <div
+              key={`rotate-${handle}`}
+              role="button"
+              aria-label={`Rotacionar pelo canto ${handle}`}
+              className="pointer-events-auto absolute touch-none"
+              style={{
+                left: ROTATE_ZONE_POSITION[handle].left,
+                top: ROTATE_ZONE_POSITION[handle].top,
+                width: px(ROTATE_ZONE_PX),
+                height: px(ROTATE_ZONE_PX),
+                transform: ROTATE_ZONE_POSITION[handle].translate,
+                cursor: rotateCursor(handle, item.rotation),
+              }}
+              onPointerDown={startRotate}
+            />
+          ))
+        : null}
 
       {handles.map((handle) => (
         <button
