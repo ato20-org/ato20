@@ -127,6 +127,36 @@ export function CharactersBody() {
     );
   }, [personagens, donos, busca]);
 
+  /**
+   * Jogadores em cima, PNJs embaixo.
+   *
+   * A tag é DERIVADA do vínculo, e não um campo do personagem: quem tem alguém
+   * da mesa jogando por ele é jogador, quem não tem é PNJ. Um campo teria de
+   * viajar no zip, ter espelho em Rust e ser mantido à mão -- e erraria assim
+   * que o mestre entregasse um PNJ a um jogador e esquecesse de trocar.
+   *
+   * Dois grupos e não uma ordenação: a pergunta na mesa é "onde estão os meus
+   * jogadores" e o bestiário de trinta PNJs não pode se misturar com os cinco
+   * que importam. O cabeçalho é a tag; um selo repetido em cada linha viraria
+   * o mesmo ruído que o "sem dono" virou.
+   */
+  const grupos = useMemo(() => {
+    if (!achados) return null;
+
+    const jogadores: Personagem[] = [];
+    const pnjs: Personagem[] = [];
+    for (const personagem of achados) {
+      ((donos.get(personagem.id) ?? []).length > 0 ? jogadores : pnjs).push(
+        personagem,
+      );
+    }
+
+    return [
+      { tag: "Players", personagens: jogadores },
+      { tag: "NPCs", personagens: pnjs },
+    ].filter((grupo) => grupo.personagens.length > 0);
+  }, [achados, donos]);
+
   const abertas = useWindowStore((state) => state.janelas);
   const escolhidos = new Set(
     abertas
@@ -147,6 +177,92 @@ export function CharactersBody() {
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Falha ao criar.");
     }
+  }
+
+  /** Uma linha da lista. Função e não componente: partilha `donos`, `assets` e os gestos daqui. */
+  function linha(personagem: Personagem) {
+    const quem = donos.get(personagem.id) ?? [];
+    const miniatura = assets.find(
+      (asset) => asset.id === personagem.miniatura,
+    );
+
+    return (
+      <li
+        key={personagem.id}
+        className={cn(
+          "flex items-center gap-1 rounded-md pr-1",
+          // Marcado é "a ficha dele está aberta", e não "foi o
+          // último clicado": com várias fichas na tela, o destaque
+          // tem de dizer quais são elas. Subiu do botão para a linha
+          // porque agora há dois alvos nela.
+          escolhidos.has(personagem.id)
+            ? "bg-accent"
+            : "hover:bg-accent/50",
+          // Só quem pode ir ao mapa ganha a mão de arrastar: uma
+          // linha que promete o gesto e não o cumpre é pior que uma
+          // que não o promete.
+          miniatura
+            ? "cursor-grab select-none active:cursor-grabbing"
+            : null,
+          noAr === personagem.id && "opacity-40",
+        )}
+        // Arrastável inteira, e não só o rosto: o quadrado de 28px
+        // seria o menor alvo da tela.
+        //
+        // Gesto próprio e não o arrasto do navegador, ao contrário da
+        // linha do acervo: é o que permite a sombra do token no mapa e
+        // a roda escolhendo o tamanho no ar -- ver `useTokenDrag`.
+        //
+        // O clique no nome continua abrindo a ficha: o token só é
+        // levantado depois que o ponteiro anda, e a partir daí o
+        // clique do fim do gesto é engolido.
+        onPointerDown={(event) => {
+          if (!miniatura) return;
+
+          const tamanho = tamanhoDoToken(miniatura);
+
+          arrastarToken(event, {
+            fonte: {
+              tipo: "personagem",
+              personagemId: personagem.id,
+              assetId: miniatura.id,
+            },
+            largura: tamanho.x,
+            altura: tamanho.y,
+          });
+        }}
+      >
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left"
+          onClick={() =>
+            abrir({ tipo: "personagem", personagemId: personagem.id })
+          }
+        >
+          <Rosto personagem={personagem} />
+
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs">
+              {personagem.nome}
+            </span>
+
+            {/* Quem joga, embaixo do nome do personagem — o espelho da
+              lista de jogadores, que mostra o personagem embaixo do
+              nome da pessoa. Sem dono não sobra linha em branco: o
+              que importa ali é distinguir o PNJ de quem foi
+              entregue, e um rótulo "sem dono" repetido em vinte
+              linhas de bestiário viraria ruído. */}
+            {quem.length > 0 ? (
+              <span className="text-muted-foreground block truncate text-[10px]">
+                {quem.join(", ")}
+              </span>
+            ) : null}
+          </span>
+        </button>
+
+        <PorNoMapa personagem={personagem} miniatura={miniatura} />
+      </li>
+    );
   }
 
   return (
@@ -198,92 +314,19 @@ export function CharactersBody() {
             Nenhum personagem com esse nome.
           </p>
         ) : (
-          <ul className="space-y-0.5 p-2 pt-0">
-            {achados.map((personagem) => {
-              const quem = donos.get(personagem.id) ?? [];
-              const miniatura = assets.find(
-                (asset) => asset.id === personagem.miniatura,
-              );
-
-              return (
-                <li
-                  key={personagem.id}
-                  className={cn(
-                    "flex items-center gap-1 rounded-md pr-1",
-                    // Marcado é "a ficha dele está aberta", e não "foi o
-                    // último clicado": com várias fichas na tela, o destaque
-                    // tem de dizer quais são elas. Subiu do botão para a linha
-                    // porque agora há dois alvos nela.
-                    escolhidos.has(personagem.id)
-                      ? "bg-accent"
-                      : "hover:bg-accent/50",
-                    // Só quem pode ir ao mapa ganha a mão de arrastar: uma
-                    // linha que promete o gesto e não o cumpre é pior que uma
-                    // que não o promete.
-                    miniatura
-                      ? "cursor-grab select-none active:cursor-grabbing"
-                      : null,
-                    noAr === personagem.id && "opacity-40",
-                  )}
-                  // Arrastável inteira, e não só o rosto: o quadrado de 28px
-                  // seria o menor alvo da tela.
-                  //
-                  // Gesto próprio e não o arrasto do navegador, ao contrário da
-                  // linha do acervo: é o que permite a sombra do token no mapa e
-                  // a roda escolhendo o tamanho no ar -- ver `useTokenDrag`.
-                  //
-                  // O clique no nome continua abrindo a ficha: o token só é
-                  // levantado depois que o ponteiro anda, e a partir daí o
-                  // clique do fim do gesto é engolido.
-                  onPointerDown={(event) => {
-                    if (!miniatura) return;
-
-                    const tamanho = tamanhoDoToken(miniatura);
-
-                    arrastarToken(event, {
-                      fonte: {
-                        tipo: "personagem",
-                        personagemId: personagem.id,
-                        assetId: miniatura.id,
-                      },
-                      largura: tamanho.x,
-                      altura: tamanho.y,
-                    });
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left"
-                    onClick={() =>
-                      abrir({ tipo: "personagem", personagemId: personagem.id })
-                    }
-                  >
-                    <Rosto personagem={personagem} />
-
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs">
-                        {personagem.nome}
-                      </span>
-
-                      {/* Quem joga, embaixo do nome do personagem — o espelho da
-                        lista de jogadores, que mostra o personagem embaixo do
-                        nome da pessoa. Sem dono não sobra linha em branco: o
-                        que importa ali é distinguir o PNJ de quem foi
-                        entregue, e um rótulo "sem dono" repetido em vinte
-                        linhas de bestiário viraria ruído. */}
-                      {quem.length > 0 ? (
-                        <span className="text-muted-foreground block truncate text-[10px]">
-                          {quem.join(", ")}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-
-                  <PorNoMapa personagem={personagem} miniatura={miniatura} />
-                </li>
-              );
-            })}
-          </ul>
+          <div className="space-y-2 p-2 pt-0">
+            {grupos?.map((grupo) => (
+              <section key={grupo.tag} aria-label={grupo.tag}>
+                <h3 className="text-muted-foreground flex items-center gap-1.5 px-2 pt-1 pb-1 text-[10px] font-medium tracking-wide uppercase">
+                  {grupo.tag}
+                  <span className="tabular-nums opacity-70">
+                    {grupo.personagens.length}
+                  </span>
+                </h3>
+                <ul className="space-y-0.5">{grupo.personagens.map(linha)}</ul>
+              </section>
+            ))}
+          </div>
         )}
       </ScrollArea>
     </>
