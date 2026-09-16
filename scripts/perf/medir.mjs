@@ -31,14 +31,26 @@
  *   node scripts/perf/medir.mjs --cenario arrasto --segundos 6
  *   node scripts/perf/medir.mjs --url http://127.0.0.1:3000  # já servido
  *   node scripts/perf/medir.mjs --pular-build       # reaproveita o out/
+ *   node scripts/perf/medir.mjs --cenario leitor --pdf ~/manual.pdf --pagina 21
+ *
+ * ## O cenario `leitor`
+ *
+ * Mede outra coisa: nao quadro por segundo, e sim quanto tempo a pagina sob os
+ * olhos leva para ficar pronta a cada degrau de zoom, quanto tempo TODAS as
+ * mantidas levam, e quantos megapixels foram pintados. O PDF vem de `--pdf`;
+ * sem ele, o maior da estante desta maquina. Nenhum manual vai para o repo --
+ * e material de terceiro. Capturas de tela no MEIO e no FIM de cada degrau vao
+ * para `--capturas` (padrao: uma pasta temporaria, impressa no fim).
  */
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { statSync } from "node:fs";
-import { extname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { deflateSync } from "node:zlib";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readdir, stat, mkdir } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { homedir } from "node:os";
 import { tmpdir } from "node:os";
 
 const RAIZ = resolve(import.meta.dirname, "..", "..");
@@ -78,6 +90,11 @@ const LAZY = temFlag("sem-lazy") ? "0" : "1";
 /** `biblioteca`: percorre a lista durante a medida. */
 const ROLAR = temFlag("rolar") ? "1" : "0";
 const CHROME = opcao("chrome", process.env.CHROME ?? "google-chrome-stable");
+/** `leitor`: o PDF servido em `/livro/perf`, a pagina de partida e os degraus. */
+const PDF = opcao("pdf", null);
+const PAGINA = opcao("pagina", "20");
+const DEGRAUS = opcao("degraus", "0.5,1,2,3,1");
+const CAPTURAS = opcao("capturas", null);
 /**
  * Janela de verdade, e nao `--headless`.
  *
@@ -174,13 +191,64 @@ const TIPOS = {
   ".ico": "image/x-icon",
   ".txt": "text/plain; charset=utf-8",
   ".woff2": "font/woff2",
+  // O runtime do pdf.js: o worker e um modulo, e sem o tipo certo o browser
+  // recusa carrega-lo; o wasm e o dos decodificadores de imagem.
+  ".mjs": "text/javascript",
+  ".wasm": "application/wasm",
+  ".bcmap": "application/octet-stream",
+  ".pfb": "application/octet-stream",
 };
 
-function servir(porta) {
+/**
+ * O PDF que o cenario `leitor` abre.
+ *
+ * `--pdf`, ou o maior arquivo da estante desta maquina -- que e o manual que
+ * motivou a medida. Resolvido uma vez, na subida do servidor.
+ */
+async function pdfDoLeitor() {
+  if (PDF) return resolve(PDF);
+
+  const estante = join(homedir(), ".local", "share", "show.rpg.ato20", "estante");
+  const nomes = await readdir(estante).catch(() => []);
+  const pdfs = [];
+  for (const nome of nomes) {
+    if (!nome.endsWith(".pdf")) continue;
+    const caminho = join(estante, nome);
+    pdfs.push({ caminho, tamanho: (await stat(caminho)).size });
+  }
+  pdfs.sort((a, b) => b.tamanho - a.tamanho);
+
+  return pdfs[0]?.caminho ?? null;
+}
+
+function servir(porta, pdf) {
   const cache = new Map();
 
   const servidor = createServer(async (req, res) => {
     const caminho = decodeURIComponent(new URL(req.url, "http://x").pathname);
+
+    if (caminho === "/livro/perf") {
+      // Como o daemon serve `/livro/{id}`: com `Range`, porque o pdf.js pede
+      // faixas do arquivo e desenha a pagina 20 sem baixar as outras 35.
+      if (!pdf) {
+        res.writeHead(404).end("sem PDF: passe --pdf");
+        return;
+      }
+      const { size } = await stat(pdf);
+      const faixa = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
+      const inicio = faixa && faixa[1] ? Number(faixa[1]) : 0;
+      const fim = faixa && faixa[2] ? Math.min(Number(faixa[2]), size - 1) : size - 1;
+      res.writeHead(faixa ? 206 : 200, {
+        "content-type": "application/pdf",
+        "accept-ranges": "bytes",
+        "content-length": fim - inicio + 1,
+        ...(faixa ? { "content-range": `bytes ${inicio}-${fim}/${size}` } : {}),
+        "cache-control": "no-store",
+      });
+      createReadStream(pdf, { start: inicio, end: fim }).pipe(res);
+
+      return;
+    }
 
     if (caminho.startsWith("/asset/")) {
       // `/asset/{id}/{variante}` responde reduzido, como o daemon: e a rota
@@ -404,6 +472,43 @@ async function medir(cdp, url) {
 
   await cdp.enviar("Page.navigate", { url }, sessionId);
 
+  /**
+   * As capturas do `leitor`: a pagina anuncia a fase em `window.__leitorFase`
+   * ("0.5:meio", "0.5:fim", ...), e cada fase nova vira um PNG. O "meio" e
+   * lido logo depois do degrau mudar, e e o que responde se o bloco pixelado
+   * do print e pintura parcial ou resultado final.
+   */
+  const capturas = [];
+  let faseVista = null;
+  // O console e as excecoes da pagina, para o estouro de prazo dizer POR QUE.
+  const console_ = [];
+  await cdp.enviar("Runtime.enable", {}, sessionId);
+  const pararConsole = cdp.ouvir((msg) => {
+    if (msg.sessionId !== sessionId) return;
+    if (msg.method === "Runtime.consoleAPICalled") {
+      console_.push(`${msg.params.type}: ${msg.params.args.map((a) => a.value ?? a.description ?? "").join(" ")}`);
+    }
+    if (msg.method === "Runtime.exceptionThrown") {
+      const d = msg.params.exceptionDetails;
+      console_.push(`EXCECAO: ${d.exception?.description ?? d.text}`);
+    }
+  });
+  const capturar = async () => {
+    const { result } = await cdp.enviar(
+      "Runtime.evaluate",
+      { expression: "window.__leitorFase ?? null", returnByValue: true },
+      sessionId,
+    );
+    const fase = result.value;
+    if (!fase || fase === faseVista || !pastaDeCapturas) return;
+    faseVista = fase;
+
+    const { data } = await cdp.enviar("Page.captureScreenshot", { format: "png" }, sessionId);
+    const arquivo = join(pastaDeCapturas, `leitor-${fase.replace(/[^\w.-]/g, "_")}.png`);
+    await writeFile(arquivo, Buffer.from(data, "base64"));
+    capturas.push(arquivo);
+  };
+
   const metricas = async () => {
     const { metrics } = await cdp.enviar("Performance.getMetrics", {}, sessionId);
 
@@ -414,8 +519,12 @@ async function medir(cdp, url) {
   let perfilLigado = false;
   const limite = Date.now() + (SEGUNDOS + 40) * 1000;
 
+  const leitor = url.includes("cenario=leitor");
+
   while (Date.now() < limite) {
-    await new Promise((r) => setTimeout(r, 500));
+    // O leitor e sondado depressa: a fase "meio" dura o que um render dura.
+    await new Promise((r) => setTimeout(r, leitor ? 40 : 500));
+    if (leitor) await capturar();
 
     // A primeira leitura vai depois de a página existir, senão o delta de
     // script incluiria o parse do bundle em vez do custo do cenário.
@@ -440,12 +549,14 @@ async function medir(cdp, url) {
     const depois = await metricas();
     const perfil = PERFIL ? await cdp.enviar("Profiler.stop", {}, sessionId) : null;
     pararDeOuvir();
+    pararConsole();
     await cdp.enviar("Target.closeTarget", { targetId });
 
     return {
       ...bruto,
       bytes,
       imagens,
+      capturas,
       perfil: perfil ? ondeFoiOTempo(perfil.profile) : null,
       // Tempo que o renderizador passou em JavaScript, em estilo e em layout
       // durante a corrida. É aqui que React e zustand aparecem: `perf.html`
@@ -459,9 +570,17 @@ async function medir(cdp, url) {
   }
 
   pararDeOuvir();
+  pararConsole();
+  const { result: estado } = await cdp.enviar(
+    "Runtime.evaluate",
+    { expression: "JSON.stringify({ fase: window.__leitorFase ?? null, estado: window.__leitorEstado?.() ?? null })", returnByValue: true },
+    sessionId,
+  );
   await cdp.enviar("Target.closeTarget", { targetId });
 
-  throw new Error(`sem resultado em ${url}`);
+  throw new Error(
+    `sem resultado em ${url}\n  pagina: ${estado.value}\n  console:\n    ${console_.slice(-15).join("\n    ") || "(vazio)"}`,
+  );
 }
 
 /**
@@ -516,8 +635,29 @@ function mediana(corridas) {
     return valores.length % 2 ? valores[i] : Number(((valores[i - 1] + valores[i]) / 2).toFixed(2));
   };
 
+  // `leitor`: mediana degrau a degrau, campo a campo.
+  const passos = corridas[0].passos
+    ? corridas[0].passos.map((_, i) => {
+        const meioDe = (campo) => {
+          const valores = corridas.map((c) => c.passos[i][campo]).sort((a, b) => a - b);
+          const k = Math.floor(valores.length / 2);
+
+          return valores.length % 2 ? valores[k] : Number(((valores[k - 1] + valores[k]) / 2).toFixed(2));
+        };
+
+        return {
+          zoom: corridas[0].passos[i].zoom,
+          atualMs: meioDe("atualMs"),
+          todasMs: meioDe("todasMs"),
+          mp: meioDe("mp"),
+          mantidas: meioDe("mantidas"),
+        };
+      })
+    : undefined;
+
   return {
     ...corridas[0],
+    passos,
     corridas: corridas.length,
     fps: meio("fps"),
     p50: meio("p50"),
@@ -549,7 +689,16 @@ async function principal() {
     process.exit(1);
   }
 
-  const servidor = externo ? null : await servir(0);
+  const comLeitor = CENARIOS.includes("leitor");
+  const pdf = comLeitor ? await pdfDoLeitor() : null;
+  if (comLeitor && !pdf) {
+    console.error("cenario leitor sem PDF: passe --pdf caminho.pdf");
+    process.exit(1);
+  }
+  pastaDeCapturas = comLeitor ? (CAPTURAS ? resolve(CAPTURAS) : await mkdtemp(join(tmpdir(), "ato20-leitor-"))) : null;
+  if (pastaDeCapturas) await mkdir(pastaDeCapturas, { recursive: true });
+
+  const servidor = externo ? null : await servir(0, pdf);
   const base = externo ?? `http://127.0.0.1:${servidor.address().port}`;
 
   const { processo, endereco, perfil } = await abrirChrome();
@@ -560,8 +709,9 @@ async function principal() {
 
   try {
     for (const cenario of CENARIOS) {
-      for (const n of NS) {
-        const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&rotulo=chrome`;
+      // `leitor` nao tem N: o que varia e a pagina de partida.
+      for (const n of cenario === "leitor" ? [Number(PAGINA)] : NS) {
+        const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&pagina=${PAGINA}&degraus=${DEGRAUS}&rotulo=chrome`;
         const corridas = [];
 
         for (let i = 1; i <= REPETICOES; i++) {
@@ -587,9 +737,23 @@ async function principal() {
   const largura = [18, 5, 6, 7, 7, 7, 9, 8, 8, 8, 10, 9, 8, 7];
   const fmt = (celulas) => celulas.map((c, i) => String(c).padStart(largura[i])).join("");
 
+  // O leitor tem tabela propria: degrau a degrau, o que ele mede nao e quadro.
+  for (const l of linhas.filter((l) => l.passos)) {
+    const cabL = ["zoom", "atual", "todas", "pintado", "mantidas"];
+    const largL = [8, 10, 10, 10, 10];
+    const fmtL = (c) => c.map((v, i) => String(v).padStart(largL[i])).join("");
+    console.log(`\nleitor -- pagina ${l.n}, ${l.paginas} paginas, dpr ${l.dpr}${l.corridas > 1 ? `, mediana de ${l.corridas}` : ""}`);
+    console.log(fmtL(cabL));
+    for (const passo of l.passos) {
+      console.log(fmtL([`${Math.round(passo.zoom * 100)}%`, `${passo.atualMs}ms`, `${passo.todasMs}ms`, `${passo.mp}MP`, passo.mantidas ?? ""]));
+    }
+    console.log(`script ${l.scriptMs}ms, heap ${l.heapMb}MB, rede ${(l.bytes / 1024 / 1024).toFixed(1)}MB`);
+    if (l.capturas?.length) console.log(`capturas: ${dirname(l.capturas[0])}`);
+  }
+
   console.log(`\n${fmt(cab)}`);
 
-  for (const l of linhas) {
+  for (const l of linhas.filter((l) => !l.passos)) {
     console.log(
       fmt([
         l.cenario,
@@ -630,5 +794,7 @@ async function principal() {
 }
 
 const AQUECIMENTO_NOTA = "2,5s de aquecimento descartados";
+/** Onde as capturas do `leitor` caem. Definida em `principal`. */
+let pastaDeCapturas = null;
 
 await principal();
