@@ -38,6 +38,16 @@ type CharactersStore = {
   recarregar: () => void;
   /** A campanha passou a ser outra: esqueça o que foi lido. */
   esquecer: () => void;
+  /**
+   * A sondagem de presença leu a mesa de novo: aceite a lista se ela mudou.
+   *
+   * Quem entra na mesa não mexe em personagem nenhum, então nada chamava
+   * `recarregar`, e a ficha seguia dizendo "ninguém entrou" enquanto o chip do
+   * canto já mostrava o jogador. O chip sonda o disco de qualquer jeito; em vez
+   * de uma segunda ida ao IPC, ele entrega o que leu. Só grava se a composição
+   * mudou, senão cada sondagem re-renderizaria toda ficha aberta.
+   */
+  receberJogadores: (mesa: Player[]) => void;
 };
 
 /**
@@ -67,6 +77,17 @@ export const useCharactersStore = create<CharactersStore>((set, get) => ({
 
   recarregar() {
     buscar(set, get);
+  },
+
+  receberJogadores(mesa) {
+    const atual = get().jogadores;
+    const igual =
+      atual.length === mesa.length &&
+      atual.every(
+        (jogador, i) =>
+          jogador.id === mesa[i]?.id && jogador.nome === mesa[i]?.nome,
+      );
+    if (!igual) set({ jogadores: mesa });
   },
 
   esquecer() {
