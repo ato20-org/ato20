@@ -96,6 +96,16 @@ const PAGINA = opcao("pagina", "20");
 const DEGRAUS = opcao("degraus", "0.5,1,2,3,1");
 const CAPTURAS = opcao("capturas", null);
 /**
+ * `leitor`: escala de tela do Chrome, e troca de degrau SEM esperar o anterior.
+ *
+ * As duas existem para reproduzir a webview: com o zoom da interface a 125%
+ * ela reporta `devicePixelRatio` acima de 1, e o mestre troca o zoom do livro
+ * no meio de um render -- o roteiro padrao espera tudo pronto antes do
+ * proximo degrau, entao nunca cancela nada no meio.
+ */
+const DPR = Number(opcao("dpr", "1"));
+const RAJADA = temFlag("rajada");
+/**
  * Janela de verdade, e nao `--headless`.
  *
  * Sem tela o Chrome nao tem vsync: ele entrega quadro quando quer, e a medida
@@ -340,6 +350,7 @@ async function abrirChrome() {
       "--no-default-browser-check",
       "--disable-extensions",
       "--window-size=1920,1080",
+      ...(DPR !== 1 ? [`--force-device-scale-factor=${DPR}`] : []),
       ...(JANELA ? ["--window-position=0,0", "--new-window"] : []),
       // Sem isto o Chrome economiza quadro em aba que ele julga invisível, e a
       // medida sairia sempre ótima por não ter acontecido.
@@ -711,7 +722,7 @@ async function principal() {
     for (const cenario of CENARIOS) {
       // `leitor` nao tem N: o que varia e a pagina de partida.
       for (const n of cenario === "leitor" ? [Number(PAGINA)] : NS) {
-        const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&pagina=${PAGINA}&degraus=${DEGRAUS}&rotulo=chrome`;
+        const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&rotulo=chrome`;
         const corridas = [];
 
         for (let i = 1; i <= REPETICOES; i++) {

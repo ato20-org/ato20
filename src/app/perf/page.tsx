@@ -754,7 +754,16 @@ function PalcoComCamadas({ n }: { n: number }) {
  * da folha: e o que a tela mostra que se quer cronometrar. `window.__leitorFase`
  * anuncia "meio" e "fim" de cada degrau para o `medir.mjs` fotografar.
  */
-function PalcoLeitor({ pagina, degraus }: { pagina: number; degraus: number[] }) {
+function PalcoLeitor({
+  pagina,
+  degraus,
+  rajada,
+}: {
+  pagina: number;
+  degraus: number[];
+  /** Troca de degrau a cada 150 ms sem esperar o anterior, e mede so o fim. */
+  rajada: boolean;
+}) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [natural, setNatural] = useState<{ largura: number; razao: number } | null>(null);
   const paginas = doc?.numPages ?? 0;
@@ -888,6 +897,26 @@ function PalcoLeitor({ pagina, degraus }: { pagina: number; degraus: number[] })
       inicio = performance.now();
       setZoom(degraus[proximo]);
       fase(`${degraus[proximo]}:meio`);
+
+      // Rajada: o proximo degrau vem por relogio, no meio do render deste. So
+      // o ULTIMO degrau e medido ate "todas"; os outros registram o que
+      // conseguiram em 150 ms, que e o que interessa -- foram cancelados.
+      if (rajada && proximo < degraus.length - 1) {
+        espera = window.setTimeout(() => {
+          if (!vivo || estado !== "medindo") return;
+          const { atualPronta, todas, mp } = prontas(alvo);
+          const agora = performance.now() - inicio;
+          passos.push({
+            zoom: degraus[proximo],
+            atualMs: atualPronta ? (atualMs ?? Math.round(agora)) : -1,
+            todasMs: todas ? Math.round(agora) : -1,
+            mp,
+            mantidas: alvo.length,
+          });
+          proximo += 1;
+          iniciarDegrau();
+        }, 150);
+      }
     };
 
     const passo = () => {
@@ -935,7 +964,7 @@ function PalcoLeitor({ pagina, degraus }: { pagina: number; degraus: number[] })
     // `largura > 0` e nao `largura`: o proprio roteiro muda a largura a cada
     // degrau, e reiniciar o efeito nisso zeraria a medida no meio.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, largura > 0, degraus, pagina, paginas, caixa]);
+  }, [doc, largura > 0, degraus, pagina, paginas, caixa, rajada]);
 
   return (
     <div ref={caixa} className="flex-1 overflow-y-auto bg-neutral-800 p-4">
@@ -1015,6 +1044,7 @@ function Medida({ params }: { params: URLSearchParams }) {
     () => (params.get("degraus") ?? "0.5,1,2,3,1").split(",").map(Number),
     [params],
   );
+  const rajada = params.get("rajada") === "1";
 
   const { resultado, decorrido } = useMedida(cenario, n, segundos, rotulo);
 
@@ -1058,7 +1088,7 @@ function Medida({ params }: { params: URLSearchParams }) {
   return (
     <main className="flex h-dvh flex-col bg-black">
       {cenario === "leitor" ? (
-        <PalcoLeitor pagina={pagina} degraus={degraus} />
+        <PalcoLeitor pagina={pagina} degraus={degraus} rajada={rajada} />
       ) : cenario === "arrasto" ? (
         <PalcoMestre n={n} />
       ) : cenario === "camera" ? (
