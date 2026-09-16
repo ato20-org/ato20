@@ -27,11 +27,15 @@ export function createPublisher(): SceneChannel {
 }
 
 /**
- * Espectador. `base` vazio é mesma origem, e é sempre o caso: quem serviu esta
- * página foi o próprio daemon.
+ * Espectador. `base` vazio é mesma origem, e é o caso da TV e do celular: quem
+ * serviu essas páginas foi o próprio daemon.
+ *
+ * A exceção é o Mestre assistindo à própria mesa -- o miniplayer. A webview dele
+ * não veio do daemon, então o endereço vem por fora, do `daemonAddr`. O daemon
+ * aceita qualquer origem no `/sala/live`; o que protege a mesa é o código.
  */
-export function createSubscriber(codigo: string): SceneChannel {
-  return createSubscriberChannel("", codigo);
+export function createSubscriber(codigo: string, base = ""): SceneChannel {
+  return createSubscriberChannel(base, codigo);
 }
 
 export type { LiveState, SceneChannel } from "@/lib/sync/channel";
