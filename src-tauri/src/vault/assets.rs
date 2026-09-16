@@ -64,13 +64,18 @@ pub struct AssetMeta {
     pub peaks: Option<Vec<u8>>,
 }
 
-/// Pasta do acervo. So raiz, sem aninhamento.
+/// Pasta do acervo. Pasta dentro de pasta pelo `parent_id`; ausente = raiz.
+///
+/// Um campo e nao uma arvore: a lista continua plana em `pastas.json`, e a
+/// pasta antiga sem o campo le como raiz. Migracao zero.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssetFolder {
     pub id: String,
     pub name: String,
     pub created_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
 }
 
 fn kind_for(mime: &str) -> AppResult<&'static str> {
@@ -456,11 +461,16 @@ pub fn folders(vault: &Vault) -> AppResult<Vec<AssetFolder>> {
     Ok(folders)
 }
 
-pub fn create_folder(vault: &Vault, name: &str) -> AppResult<AssetFolder> {
+pub fn create_folder(
+    vault: &Vault,
+    name: &str,
+    parent_id: Option<String>,
+) -> AppResult<AssetFolder> {
     let folder = AssetFolder {
         id: uuid::Uuid::new_v4().to_string(),
         name: name.trim().to_string(),
         created_at: now_ms(),
+        parent_id,
     };
 
     let mut all = folders(vault)?;
@@ -482,20 +492,68 @@ pub fn rename_folder(vault: &Vault, id: &str, name: &str) -> AppResult<()> {
     write_json(&vault.folders_path(), &all)
 }
 
-/// Apaga a pasta e devolve o conteudo a raiz.
+/// A pasta e todas as descendentes dela, por id.
+fn descendentes(all: &[AssetFolder], id: &str) -> Vec<String> {
+    let mut ids = vec![id.to_string()];
+    let mut cresceu = true;
+
+    // Fecha o conjunto: a lista e plana com `parent_id`, entao nao ha arvore
+    // para percorrer, so filhos a somar ate nao sobrar nenhum.
+    while cresceu {
+        cresceu = false;
+        for folder in all {
+            let dentro = folder
+                .parent_id
+                .as_deref()
+                .is_some_and(|parent| ids.iter().any(|conhecido| conhecido == parent));
+            if dentro && !ids.contains(&folder.id) {
+                ids.push(folder.id.clone());
+                cresceu = true;
+            }
+        }
+    }
+
+    ids
+}
+
+/// Poe a pasta dentro de outra, ou na raiz.
+///
+/// Recusa ciclo em silencio: uma pasta nao entra em si mesma nem numa
+/// descendente sua. Devolver erro aqui faria a tela explicar um estado que
+/// ela mesma nao deveria oferecer.
+pub fn move_folder(vault: &Vault, id: &str, parent_id: Option<String>) -> AppResult<()> {
+    let mut all = folders(vault)?;
+
+    if let Some(destino) = parent_id.as_deref() {
+        if descendentes(&all, id).iter().any(|d| d == destino) {
+            return Ok(());
+        }
+    }
+
+    let Some(folder) = all.iter_mut().find(|folder| folder.id == id) else {
+        return Ok(());
+    };
+
+    folder.parent_id = parent_id;
+
+    write_json(&vault.folders_path(), &all)
+}
+
+/// Apaga a pasta, as de dentro dela, e devolve o conteudo de todas a raiz.
 ///
 /// Nunca apaga arquivo: perder um mapa por um clique em "apagar pasta" seria
 /// dano desproporcional ao gesto, e o arquivo e o que custou trabalho.
 pub fn delete_folder(vault: &Vault, id: &str) -> AppResult<()> {
     let mut all = folders(vault)?;
-    all.retain(|folder| folder.id != id);
+    let apagadas = descendentes(&all, id);
+    all.retain(|folder| !apagadas.contains(&folder.id));
     write_json(&vault.folders_path(), &all)?;
 
     let mut assets = index(vault)?;
     let mut touched = false;
 
     for asset in assets.iter_mut() {
-        if asset.folder_id.as_deref() == Some(id) {
+        if asset.folder_id.as_ref().is_some_and(|f| apagadas.contains(f)) {
             asset.folder_id = None;
             touched = true;
         }
@@ -716,7 +774,7 @@ mod tests {
     fn apagar_pasta_devolve_o_conteudo_a_raiz() {
         let (dir, vault) = campanha();
 
-        let pasta = create_folder(&vault, "Mapas").expect("folder");
+        let pasta = create_folder(&vault, "Mapas", None).expect("folder");
         let origem = de_fora(dir.path(), "mapa.png", &png(10, 10));
         let (aceitos, _) = import(&vault, &[origem], None).expect("import");
         let id = aceitos[0].id.clone();
@@ -738,12 +796,55 @@ mod tests {
     }
 
     #[test]
+    fn apagar_pasta_leva_as_de_dentro_e_devolve_tudo_a_raiz() {
+        let (dir, vault) = campanha();
+
+        let mae = create_folder(&vault, "Mapas", None).expect("folder");
+        let filha = create_folder(&vault, "Cidades", Some(mae.id.clone())).expect("folder");
+        let origem = de_fora(dir.path(), "cidade.png", &png(10, 10));
+        let (aceitos, _) = import(&vault, &[origem], None).expect("import");
+        let id = aceitos[0].id.clone();
+        set_folder(&vault, &id, Some(filha.id.clone())).expect("move");
+
+        delete_folder(&vault, &mae.id).expect("delete folder");
+
+        // A filha vai junto: uma pasta sem mae apontaria para um id que nao
+        // existe mais. O arquivo de dentro dela sobe para a raiz, e continua.
+        assert!(folders(&vault).expect("folders").is_empty());
+        let ainda = find(&vault, &id).expect("find").expect("meta");
+        assert_eq!(ainda.folder_id, None);
+        assert!(asset_path(&vault, &ainda).exists());
+    }
+
+    #[test]
+    fn mover_pasta_para_dentro_de_descendente_e_recusado() {
+        let (_dir, vault) = campanha();
+
+        let mae = create_folder(&vault, "Mapas", None).expect("folder");
+        let filha = create_folder(&vault, "Cidades", Some(mae.id.clone())).expect("folder");
+
+        // Mae dentro da filha seria um ciclo: nenhuma das duas alcancaria a raiz.
+        move_folder(&vault, &mae.id, Some(filha.id.clone())).expect("move");
+        let depois = folders(&vault).expect("folders");
+        let mae_depois = depois.iter().find(|f| f.id == mae.id).expect("mae");
+        assert_eq!(mae_depois.parent_id, None);
+
+        // Para a raiz, e para outra pasta que nao e descendente, pode.
+        let outra = create_folder(&vault, "Outra", None).expect("folder");
+        move_folder(&vault, &filha.id, Some(outra.id.clone())).expect("move");
+        move_folder(&vault, &mae.id, None).expect("move");
+        let depois = folders(&vault).expect("folders");
+        let filha_depois = depois.iter().find(|f| f.id == filha.id).expect("filha");
+        assert_eq!(filha_depois.parent_id, Some(outra.id));
+    }
+
+    #[test]
     fn pastas_saem_em_ordem_alfabetica() {
         let (_dir, vault) = campanha();
 
-        create_folder(&vault, "Retratos").expect("f");
-        create_folder(&vault, "mapas").expect("f");
-        create_folder(&vault, "Fichas").expect("f");
+        create_folder(&vault, "Retratos", None).expect("f");
+        create_folder(&vault, "mapas", None).expect("f");
+        create_folder(&vault, "Fichas", None).expect("f");
 
         let nomes: Vec<String> =
             folders(&vault).expect("folders").into_iter().map(|f| f.name).collect();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -17,8 +17,15 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import { create } from "zustand";
 
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -97,10 +104,28 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
     folders,
     create,
     rename,
+    move: moveFolder,
     remove: removeFolder,
   } = useFolderList(refresh);
   const [creating, setCreating] = useState(false);
+  /** A pasta que nascer leva os selecionados para dentro. Ver o menu. */
+  const [creatingComSelecao, setCreatingComSelecao] = useState(false);
+
+  /**
+   * Seleção de arquivos, só deste painel e só para arrumar: Ctrl soma, Shift
+   * pega o trecho, arrastar um selecionado leva todos, e o botão direito faz
+   * uma pasta com eles. Não é a seleção do palco -- arquivo do acervo não está
+   * em cena -- e não persiste: fechar o painel esquece.
+   */
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const ancora = useRef<string | null>(null);
+  const selecionadosRef = useRef(selecionados);
+  useEffect(() => {
+    selecionadosRef.current = selecionados;
+  }, [selecionados]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  /** Pasta que ganha uma subpasta agora: o campo de nome nasce dentro dela. */
+  const [creatingIn, setCreatingIn] = useState<string | null>(null);
 
   /**
    * O arquivo largado do gerenciador de arquivos SOBRE este painel.
@@ -131,7 +156,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
     ]);
   }
 
-  /** Move e é chamado tanto pelo arrasto quanto pelo menu da linha. */
+  /** Move. Só o arrasto chama: mudar de pasta saiu do menu da linha. */
   const handleMove = useCallback(
     (assetId: string, folderId: string | undefined) =>
       void move(assetId, folderId),
@@ -153,10 +178,64 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
             return;
           }
 
-          handleMove(arrasto.fonte.assetId, destino.folderId);
+          // Arrastou um dos selecionados: vão todos. Arrastou outro: só ele,
+          // e a seleção fica onde estava.
+          const { assetId } = arrasto.fonte;
+          const juntos = selecionadosRef.current.includes(assetId)
+            ? selecionadosRef.current
+            : [assetId];
+          for (const id of juntos) handleMove(id, destino.folderId);
         }),
     [handleMove],
   );
+
+  /** Os arquivos na ordem em que a lista os mostra: pastas primeiro, depois os soltos. */
+  const ordemVisivel = useCallback((): string[] => {
+    const ids: string[] = [];
+    const nivel = (parentId: string | undefined) => {
+      for (const folder of folders.filter((f) => f.parentId === parentId)) {
+        nivel(folder.id);
+        for (const asset of assets)
+          if (asset.folderId === folder.id) ids.push(asset.id);
+      }
+    };
+    nivel(undefined);
+    for (const asset of assets) if (!asset.folderId) ids.push(asset.id);
+    return ids;
+  }, [folders, assets]);
+
+  const ordemRef = useRef(ordemVisivel);
+  useEffect(() => {
+    ordemRef.current = ordemVisivel;
+  }, [ordemVisivel]);
+
+  /**
+   * Clique numa linha, com as convenções de qualquer lista de arquivos:
+   * simples troca a seleção, Ctrl soma ou tira, Shift pega o trecho desde o
+   * último clicado. Estável, para a linha não redesenhar por causa dele.
+   */
+  const onSelect = useCallback((assetId: string, event: React.MouseEvent) => {
+    setSelecionados((atuais) => {
+      if (event.shiftKey && ancora.current) {
+        const ordem = ordemRef.current();
+        const a = ordem.indexOf(ancora.current);
+        const b = ordem.indexOf(assetId);
+        if (a !== -1 && b !== -1) {
+          const trecho = ordem.slice(Math.min(a, b), Math.max(a, b) + 1);
+          return [...new Set([...atuais, ...trecho])];
+        }
+      }
+
+      ancora.current = assetId;
+
+      if (event.ctrlKey || event.metaKey)
+        return atuais.includes(assetId)
+          ? atuais.filter((id) => id !== assetId)
+          : [...atuais, assetId];
+
+      return [assetId];
+    });
+  }, []);
 
   const loose = assets.filter((asset) => !asset.folderId);
 
@@ -173,13 +252,66 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
       <AssetRow
         key={asset.id}
         asset={asset}
-        folders={folders}
+        selected={selecionados.includes(asset.id)}
         usageCount={countAssetUsage(scenes ?? [], asset.id)}
         onAdd={() => handleAddToScene(asset)}
-        onMove={(folderId) => handleMove(asset.id, folderId)}
+        onSelect={onSelect}
         onRemove={() => void remove(asset.id)}
       />
     );
+  }
+
+  /**
+   * As pastas de um nível, cada uma com as de dentro. Recursivo pela mesma
+   * razão de `renderRow` ser função e não componente: identidade estável.
+   *
+   * O total conta os arquivos das subpastas também: "Mapas · 12" tem de dizer
+   * quanto há em Mapas, não quanto está solto no primeiro nível dela.
+   */
+  function renderFolders(parentId: string | undefined): React.ReactNode {
+    return folders
+      .filter((folder) => folder.parentId === parentId)
+      .map((folder) => {
+        const inside = assets.filter((asset) => asset.folderId === folder.id);
+        const dentroDe = new Set(descendentes(folders, folder.id));
+        const total = assets.filter(
+          (asset) => asset.folderId && dentroDe.has(asset.folderId),
+        ).length;
+
+        return (
+          <FolderGroup
+            key={folder.id}
+            folder={folder}
+            folders={folders}
+            count={total}
+            renaming={renamingId === folder.id}
+            onRename={() => setRenamingId(folder.id)}
+            onRenameCommit={(name) => {
+              void rename(folder.id, name);
+              setRenamingId(null);
+            }}
+            onRenameCancel={() => setRenamingId(null)}
+            onNewChild={() => setCreatingIn(folder.id)}
+            onMove={(parent) => void moveFolder(folder.id, parent)}
+            onDelete={() => void removeFolder(folder.id)}
+          >
+            {creatingIn === folder.id ? (
+              <li>
+                <FolderNameInput
+                  placeholder="Nome da subpasta"
+                  onCommit={(name) => {
+                    void create(name, folder.id);
+                    setCreatingIn(null);
+                  }}
+                  onCancel={() => setCreatingIn(null)}
+                />
+              </li>
+            ) : null}
+            {renderFolders(folder.id)}
+            {inside.map(renderRow)}
+          </FolderGroup>
+        );
+      });
   }
 
   return (
@@ -217,10 +349,17 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
           <FolderNameInput
             placeholder="Nome da pasta"
             onCommit={(name) => {
-              void create(name);
+              const levar = creatingComSelecao ? selecionadosRef.current : [];
+              void create(name).then((pasta) => {
+                for (const id of levar) handleMove(id, pasta.id);
+              });
               setCreating(false);
+              setCreatingComSelecao(false);
             }}
-            onCancel={() => setCreating(false)}
+            onCancel={() => {
+              setCreating(false);
+              setCreatingComSelecao(false);
+            }}
           />
         ) : (
           <Button variant="ghost" size="sm" onClick={() => setCreating(true)}>
@@ -231,54 +370,65 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        {assets.length === 0 && folders.length === 0 ? (
-          <p className="text-muted-foreground p-3 text-xs">
-            Nenhuma imagem ainda. Importe mapas, tokens e retratos.
-          </p>
-        ) : (
-          <div className="space-y-2 p-2">
-            {/* Pastas primeiro, e a raiz embaixo: arquivo novo cai na raiz, e é
-                de lá que ele é distribuído. */}
-            {folders.map((folder) => {
-              const inside = assets.filter(
-                (asset) => asset.folderId === folder.id,
-              );
+        {/* O fundo da lista, e SÓ ele, é o gatilho do menu de contexto.
+            Envolver as linhas fazia o menu de três pontos de cada pasta parar
+            de funcionar: um `Menu.Root` dentro de um `ContextMenu.Trigger`
+            passa a se achar filho do menu de contexto, e os itens dele deixam
+            de disparar. O próprio base-ui tem uma guarda com esse nome. */}
+        <div className="relative min-h-full">
+          <ContextMenu>
+            <ContextMenuTrigger
+              render={<div className="absolute inset-0" aria-hidden />}
+            />
 
-              return (
-                <FolderGroup
-                  key={folder.id}
-                  folder={folder}
-                  count={inside.length}
-                  renaming={renamingId === folder.id}
-                  onRename={() => setRenamingId(folder.id)}
-                  onRenameCommit={(name) => {
-                    void rename(folder.id, name);
-                    setRenamingId(null);
+            <ContextMenuContent>
+              <ContextMenuItem onClick={() => setCreating(true)}>
+                <FolderPlus />
+                Nova pasta
+              </ContextMenuItem>
+              {selecionados.length > 0 ? (
+                <ContextMenuItem
+                  onClick={() => {
+                    setCreatingComSelecao(true);
+                    setCreating(true);
                   }}
-                  onRenameCancel={() => setRenamingId(null)}
-                  onDelete={() => void removeFolder(folder.id)}
                 >
-                  {inside.map(renderRow)}
-                </FolderGroup>
-              );
-            })}
+                  <FolderPlus />
+                  {selecionados.length === 1
+                    ? "Nova pasta com a selecionada"
+                    : `Nova pasta com as ${selecionados.length} selecionadas`}
+                </ContextMenuItem>
+              ) : null}
+              <ContextMenuItem
+                disabled={importando}
+                onClick={() => void importar()}
+              >
+                <Upload />
+                Importar imagens
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
 
-            {folders.length > 0 ? (
-              <RootDrop>
-                {loose.length > 0 ? (
-                  loose.map(renderRow)
-                ) : (
-                  <p className="text-muted-foreground px-1 py-2 text-xs">
-                    Nada fora de pasta. Solte um arquivo aqui para tirá-lo da
-                    pasta.
-                  </p>
-                )}
-              </RootDrop>
-            ) : (
-              <ul className="space-y-1">{loose.map(renderRow)}</ul>
-            )}
-          </div>
-        )}
+          {assets.length === 0 && folders.length === 0 ? (
+            <p className="text-muted-foreground relative z-10 p-3 text-xs">
+              Nenhuma imagem ainda. Importe mapas, tokens e retratos.
+            </p>
+          ) : (
+            <div className="relative z-10 space-y-2 p-2">
+              {/* Pastas primeiro, e a raiz embaixo: arquivo novo cai na raiz, e
+                  é de lá que ele é distribuído. */}
+              {renderFolders(undefined)}
+
+              {folders.length > 0 ? (
+                <RootDrop vazio={loose.length === 0}>
+                  {loose.map(renderRow)}
+                </RootDrop>
+              ) : (
+                <ul className="space-y-1">{loose.map(renderRow)}</ul>
+              )}
+            </div>
+          )}
+        </div>
       </ScrollArea>
     </div>
   );
@@ -303,6 +453,137 @@ function avisarOsSons(aceitos: AssetMeta[]) {
 }
 
 /**
+ * O arrasto de uma PASTA sobre outra, no próprio painel.
+ *
+ * Não passa pelo `useTokenDragStore`: aquele gesto é "leva esta imagem ao
+ * mapa", com prévia, roda de tamanho e três telas que sabem receber. Pasta não
+ * vai ao mapa. O que ela precisa é achar sob o cursor outro `data-pasta-acervo`
+ * -- o mesmo atributo que o gesto da imagem já lê -- e soltar. Um store
+ * pequeno, para a pasta sob o cursor acender sem redesenhar as outras.
+ *
+ * `alvo` é `SEM_ALVO` fora de qualquer pasta; `undefined` é a raiz.
+ */
+const SEM_ALVO = Symbol("sem alvo");
+
+type PastaDragStore = {
+  pastaId: string | null;
+  alvo: string | undefined | typeof SEM_ALVO;
+  comecar: (pastaId: string) => void;
+  mirar: (alvo: string | undefined | typeof SEM_ALVO) => void;
+  terminar: () => void;
+};
+
+const usePastaDragStore = create<PastaDragStore>((set) => ({
+  pastaId: null,
+  alvo: SEM_ALVO,
+  comecar: (pastaId) => set({ pastaId, alvo: SEM_ALVO }),
+  mirar: (alvo) => set((state) => (state.alvo === alvo ? state : { alvo })),
+  terminar: () => set({ pastaId: null, alvo: SEM_ALVO }),
+}));
+
+/** Quanto o ponteiro anda antes de o toque no cabeçalho virar arrasto. */
+const LIMIAR_PASTA_PX = 5;
+
+/**
+ * Pega a pasta pelo cabeçalho e larga sobre outra, ou sobre a raiz.
+ *
+ * Limiar antes de virar arrasto, e sem `preventDefault`: o cabeçalho tem
+ * clique (abre e fecha) e duplo clique (renomeia), e os dois têm de continuar
+ * sendo o que eram.
+ */
+function useArrastoDePasta(
+  folderId: string,
+  onDrop: (parentId: string | undefined) => void,
+) {
+  return useCallback(
+    (event: React.PointerEvent) => {
+      if (event.button !== 0) return;
+
+      const target = event.currentTarget as HTMLElement;
+      // Pointerdown vindo do menu de três pontos, que é portal: borbulha pelo
+      // React até o cabeçalho sem estar dentro dele no DOM. Não é pegar a
+      // pasta. Mesma guarda do `useListReorder`.
+      if (!target.contains(event.target as Node)) return;
+
+      const { pointerId, clientX: x0, clientY: y0 } = event;
+      let arrastando = false;
+
+      const alvoEm = (x: number, y: number) => {
+        const sob = document.elementFromPoint(x, y);
+        const pasta = sob?.closest<HTMLElement>("[data-pasta-acervo]");
+        if (!pasta) return SEM_ALVO;
+        return pasta.dataset.folderId || undefined;
+      };
+
+      const mover = (native: PointerEvent) => {
+        if (native.pointerId !== pointerId) return;
+        if (!arrastando) {
+          if (
+            Math.hypot(native.clientX - x0, native.clientY - y0) <
+            LIMIAR_PASTA_PX
+          )
+            return;
+          arrastando = true;
+          target.setPointerCapture(pointerId);
+          usePastaDragStore.getState().comecar(folderId);
+        }
+        usePastaDragStore
+          .getState()
+          .mirar(alvoEm(native.clientX, native.clientY));
+      };
+
+      const soltar = (native: PointerEvent) => {
+        if (native.pointerId !== pointerId) return;
+        target.removeEventListener("pointermove", mover);
+        target.removeEventListener("pointerup", soltar);
+        target.removeEventListener("pointercancel", soltar);
+
+        if (arrastando) {
+          target.releasePointerCapture(pointerId);
+          const alvo = alvoEm(native.clientX, native.clientY);
+          usePastaDragStore.getState().terminar();
+          if (native.type === "pointerup" && alvo !== SEM_ALVO) onDrop(alvo);
+        }
+      };
+
+      target.addEventListener("pointermove", mover);
+      target.addEventListener("pointerup", soltar);
+      target.addEventListener("pointercancel", soltar);
+    },
+    [folderId, onDrop],
+  );
+}
+
+/** Esta pasta (ou a raiz, com `undefined`) está sob uma PASTA arrastada? */
+function useSobPastaArrastada(folderId: string | undefined): boolean {
+  return usePastaDragStore(
+    (state) => state.pastaId !== null && state.alvo === folderId,
+  );
+}
+
+/** A pasta e todas as descendentes dela, por id. Espelha o Rust. */
+function descendentes(folders: AssetFolder[], id: string): string[] {
+  const ids = [id];
+  let cresceu = true;
+
+  while (cresceu) {
+    cresceu = false;
+    for (const folder of folders) {
+      if (
+        folder.parentId &&
+        ids.includes(folder.parentId) &&
+        !ids.includes(folder.id)
+      ) {
+        ids.push(folder.id);
+        cresceu = true;
+      }
+    }
+  }
+
+  return ids;
+}
+
+/**
  * Uma pasta está sob o ponteiro de um arrasto agora?
  *
  * Booleano, e não o destino inteiro: um seletor que devolvesse o arrasto faria
@@ -322,7 +603,7 @@ function useSobOPonteiro(folderId: string | undefined): boolean {
 }
 
 /**
- * Uma pasta e o que está dentro.
+ * Uma pasta e o que está dentro, subpastas incluídas.
  *
  * O cabeçalho é o alvo do arrasto: soltar a linha de um arquivo sobre ele
  * move. Aceita solto mesmo colapsada — é o caso de guardar sem querer ver.
@@ -333,27 +614,54 @@ function useSobOPonteiro(folderId: string | undefined): boolean {
  */
 function FolderGroup({
   folder,
+  folders,
   count,
   renaming,
   onRename,
   onRenameCommit,
   onRenameCancel,
+  onNewChild,
+  onMove,
   onDelete,
   children,
 }: {
   folder: AssetFolder;
+  /** Todas, para o "Mover para" listar destinos. */
+  folders: AssetFolder[];
   count: number;
   renaming: boolean;
   onRename: () => void;
   onRenameCommit: (name: string) => void;
   onRenameCancel: () => void;
+  onNewChild: () => void;
+  /** Para dentro de outra pasta, ou para a raiz com `undefined`. */
+  onMove: (parentId: string | undefined) => void;
   onDelete: () => void;
   children: React.ReactNode;
 }) {
   // Fechada por padrão: o painel tem 288px de largura, e três pastas abertas
   // empurram a raiz — de onde sai o arquivo recém-enviado — para fora da vista.
   const [open, setOpen] = useState(false);
-  const receiving = useSobOPonteiro(folder.id);
+  const recebeImagem = useSobOPonteiro(folder.id);
+  const recebePasta = useSobPastaArrastada(folder.id);
+  const receiving = recebeImagem || recebePasta;
+  const naMao = usePastaDragStore((state) => state.pastaId === folder.id);
+
+  // Destinos que o gesto recusa: ela mesma, a mãe atual, e as descendentes --
+  // essas o Rust recusaria em silêncio, e é melhor não acender.
+  const pegar = useArrastoDePasta(folder.id, (parentId) => {
+    if (parentId === folder.id || parentId === folder.parentId) return;
+    if (parentId && descendentes(folders, folder.id).includes(parentId)) return;
+    onMove(parentId);
+  });
+
+  // Destinos válidos: nem ela, nem quem já é a mãe, nem descendente dela —
+  // esse último o Rust recusaria em silêncio, e um item que não faz nada é
+  // pior que um item que não existe.
+  const proibidos = new Set(descendentes(folders, folder.id));
+  const destinos = folders.filter(
+    (outra) => !proibidos.has(outra.id) && outra.id !== folder.parentId,
+  );
 
   // O campo de nome só nasce depois de o menu fechar: a troca desmonta o menu,
   // e o foco devolvido ao gatilho que sumiu matava o campo no mesmo quadro. É a
@@ -366,17 +674,22 @@ function FolderGroup({
         data-pasta-acervo
         data-folder-id={folder.id}
         className={cn(
-          "group flex items-center gap-1 rounded-md px-1 py-1",
+          "group flex cursor-grab touch-none items-center gap-1 rounded-md px-1 py-1",
           receiving
             ? "bg-primary/15 ring-primary/60 ring-1"
             : "hover:bg-accent/50",
+          naMao && "opacity-40",
         )}
+        // O cabeçalho inteiro arrasta a pasta para dentro de outra. Botões e
+        // campo param a propagação para o toque neles não virar arrasto.
+        onPointerDown={pegar}
       >
         <Button
           variant="ghost"
           size="icon-xs"
           aria-label={open ? `Fechar ${folder.name}` : `Abrir ${folder.name}`}
           aria-expanded={open}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={() => setOpen(!open)}
         >
           {open ? <ChevronDown /> : <ChevronRight />}
@@ -388,11 +701,16 @@ function FolderGroup({
         />
 
         {renaming ? (
-          <FolderNameInput
-            defaultValue={folder.name}
-            onCommit={onRenameCommit}
-            onCancel={onRenameCancel}
-          />
+          <div
+            className="min-w-0 flex-1"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <FolderNameInput
+              defaultValue={folder.name}
+              onCommit={onRenameCommit}
+              onCancel={onRenameCancel}
+            />
+          </div>
         ) : (
           <>
             <button
@@ -414,6 +732,7 @@ function FolderGroup({
                     variant="ghost"
                     size="icon-xs"
                     aria-label={`Opções de ${folder.name}`}
+                    onPointerDown={(event) => event.stopPropagation()}
                     // Escondido até o ponteiro chegar ou o foco entrar: renomear
                     // e apagar pasta são gestos raros, e três pontos em cada
                     // linha viram ruído numa lista que se lê de relance.
@@ -424,11 +743,43 @@ function FolderGroup({
                   </Button>
                 }
               />
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setOpen(true);
+                    onNewChild();
+                  }}
+                >
+                  <FolderPlus />
+                  Nova subpasta
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={renomear.pedir}>
                   <Pencil />
                   Renomear
                 </DropdownMenuItem>
+
+                {destinos.length > 0 || folder.parentId ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    {folder.parentId ? (
+                      <DropdownMenuItem onClick={() => onMove(undefined)}>
+                        <FolderClosed />
+                        Tirar para a raiz
+                      </DropdownMenuItem>
+                    ) : null}
+                    {destinos.map((outra) => (
+                      <DropdownMenuItem
+                        key={outra.id}
+                        onClick={() => onMove(outra.id)}
+                      >
+                        <FolderClosed />
+                        <span className="truncate">Mover para {outra.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                ) : null}
+
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onDelete}>
                   <Trash2 />
                   Apagar pasta
@@ -451,21 +802,38 @@ function FolderGroup({
  *
  * Sem `data-folder-id`, e é isso que a distingue: o gesto lê o atributo ausente
  * como "sem pasta", que é exatamente o que mover para cá significa.
+ *
+ * Sem rótulo nem moldura própria: os arquivos soltos são só a continuação da
+ * lista, abaixo das pastas. Tinha um título "Fora de pasta" com borda
+ * tracejada, e ele dividia o painel em dois quando o que há é uma lista só. A
+ * área se anuncia só enquanto um arrasto passa por cima, que é quando importa
+ * saber que soltar aqui tira da pasta.
  */
-function RootDrop({ children }: { children: React.ReactNode }) {
-  const receiving = useSobOPonteiro(undefined);
+function RootDrop({
+  vazio,
+  children,
+}: {
+  vazio: boolean;
+  children: React.ReactNode;
+}) {
+  const recebeImagem = useSobOPonteiro(undefined);
+  const recebePasta = useSobPastaArrastada(undefined);
+  const receiving = recebeImagem || recebePasta;
 
   return (
     <section
       data-pasta-acervo
       className={cn(
-        "rounded-md border border-dashed p-1",
-        receiving ? "border-primary/60 bg-primary/10" : "border-transparent",
+        // Altura mínima para haver onde soltar quando não há arquivo solto.
+        "min-h-10 rounded-md p-1",
+        receiving && "bg-primary/10 ring-primary/60 ring-1",
       )}
     >
-      <p className="text-muted-foreground px-1 pb-1 text-[10px] uppercase">
-        Fora de pasta
-      </p>
+      {vazio && receiving ? (
+        <p className="text-muted-foreground px-1 py-2 text-xs">
+          Solte aqui para tirar da pasta.
+        </p>
+      ) : null}
       <ul className="space-y-1">{children}</ul>
     </section>
   );
@@ -506,19 +874,19 @@ function FolderNameInput({
 
 type AssetRowProps = {
   asset: AssetMeta;
-  folders: AssetFolder[];
+  selected: boolean;
   usageCount: number;
   onAdd: () => void;
-  onMove: (folderId: string | undefined) => void;
+  onSelect: (assetId: string, event: React.MouseEvent) => void;
   onRemove: () => void;
 };
 
 function AssetRow({
   asset,
-  folders,
+  selected,
   usageCount,
   onAdd,
-  onMove,
+  onSelect,
   onRemove,
 }: AssetRowProps) {
   const url = useAssetUrl(asset.id, "mini");
@@ -548,9 +916,13 @@ function AssetRow({
     // aceita a imagem no centro por ele.
     <li
       className={cn(
-        "hover:bg-accent/50 group flex cursor-grab items-center gap-1 rounded-md p-1 select-none active:cursor-grabbing",
+        "group flex cursor-grab items-center gap-1 rounded-md p-1 select-none active:cursor-grabbing",
+        selected ? "bg-accent" : "hover:bg-accent/50",
         naMao && "opacity-40",
       )}
+      // Clique seleciona; o arrasto começa no pointerdown abaixo e só vira
+      // arrasto depois do limiar, então os dois convivem. Ver `useTokenDrag`.
+      onClick={(event) => onSelect(asset.id, event)}
       // Gesto próprio e não o arrasto do navegador: é o que permite a sombra da
       // imagem no mapa e a roda escolhendo o tamanho no ar -- ver `useTokenDrag`.
       // O mesmo gesto alcança as pastas, que o arrasto nativo servia antes.
@@ -625,30 +997,10 @@ function AssetRow({
             {noAr ? "Tirar da evidência" : "Transmitir para a mesa"}
           </DropdownMenuItem>
 
+          {/* Mover de pasta saiu deste menu: é arrasto, e só arrasto. Com
+              pastas dentro de pastas a lista de destinos crescia até cobrir o
+              painel, para um gesto que a linha já faz ao ser puxada. */}
           <DropdownMenuSeparator />
-
-          {asset.folderId ? (
-            <DropdownMenuItem onClick={() => onMove(undefined)}>
-              <FolderClosed />
-              Tirar da pasta
-            </DropdownMenuItem>
-          ) : null}
-
-          {folders
-            .filter((folder) => folder.id !== asset.folderId)
-            .map((folder) => (
-              <DropdownMenuItem
-                key={folder.id}
-                onClick={() => onMove(folder.id)}
-              >
-                <FolderClosed />
-                <span className="truncate">Mover para {folder.name}</span>
-              </DropdownMenuItem>
-            ))}
-
-          {folders.length > 0 || asset.folderId ? (
-            <DropdownMenuSeparator />
-          ) : null}
 
           <DropdownMenuItem
             // Apagar um arquivo em uso deixaria a cena apontando para um id que
