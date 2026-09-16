@@ -97,6 +97,17 @@ export function removerLivro(id: string): Promise<void> {
 }
 
 /**
+ * Abre o PDF no programa da máquina, fora do aplicativo.
+ *
+ * É o clique da estante na porta: ali não há campanha aberta, e montar o leitor
+ * fora da mesa é outra feature. O leitor interno continua sendo o da janela
+ * Estante, dentro da mesa.
+ */
+export function abrirLivroNoSistema(id: string): Promise<void> {
+  return call("estante_abrir", { id });
+}
+
+/**
  * Os marcadores da campanha aberta neste livro.
  *
  * Falha com `sem-campanha` quando não há mesa aberta, e isso é o contrato: o

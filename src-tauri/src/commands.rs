@@ -1320,6 +1320,37 @@ pub fn estante_remover(state: State<'_, AppState>, id: String) -> AppResult<()> 
     estante::remove(&state.estante, &id)
 }
 
+/// Abre o PDF de um livro no programa que a maquina usa para PDF.
+///
+/// Pelo plugin `opener` do lado Rust, e nao pela capability `allow-open-path`
+/// da webview: a capability abriria qualquer caminho dentro do escopo que a
+/// webview mandasse, e aqui o unico argumento que atravessa a ponte e o ID.
+/// O caminho e derivado dele, e `id_valido` e a mesma cerca da rota do daemon.
+///
+/// Arquivo que sumiu do disco cai em `Io`, e nao em "abriu": `open_path` de um
+/// caminho inexistente em alguns desktops abre o gerenciador de arquivos na
+/// pasta, o que pareceria sucesso para quem clicou num livro.
+#[tauri::command]
+pub fn estante_abrir(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    if !estante::id_valido(&id) {
+        return Err(AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "id de livro invalido",
+        )));
+    }
+
+    let caminho = estante::path_for(&state.estante, &id);
+    if !caminho.is_file() {
+        return Err(AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "o arquivo deste livro nao esta mais na estante",
+        )));
+    }
+
+    tauri_plugin_opener::open_path(&caminho, None::<&str>)
+        .map_err(|cause| AppError::SemNavegador(format!("{}: {cause}", caminho.display())))
+}
+
 // --- marcadores -------------------------------------------------------------
 
 /// Os marcadores da campanha aberta neste livro.
