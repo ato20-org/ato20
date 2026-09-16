@@ -93,6 +93,39 @@ export function removeSelection(): void {
   useSelectionStore.getState().clear();
 }
 
+/**
+ * Leva itens da mesa de volta para a manga: o asset entra no handout da cena
+ * (se já não estiver) e o item sai do palco.
+ *
+ * Tokens de personagem ficam de fora. O handout guarda imagens do acervo, e a
+ * miniatura de um personagem já é dele -- guardá-la aqui faria a bolinha
+ * mostrar um retrato que só volta à mesa como imagem solta, sem o personagem.
+ */
+export function guardarNoHandout(itemIds: string[]): void {
+  const { scene } = read();
+  if (!scene) return;
+
+  const itens = scene.items.filter(
+    (item) => itemIds.includes(item.id) && !item.personagemId,
+  );
+  if (itens.length === 0) return;
+
+  const { guardarNoHandout: guardar, removeItems } = useSceneStore.getState();
+  guardar(
+    scene.id,
+    itens.map((item) => item.assetId),
+  );
+  removeItems(
+    scene.id,
+    itens.map((item) => item.id),
+  );
+  useSelectionStore.getState().clear();
+}
+
+export function guardarSelecaoNoHandout(): void {
+  guardarNoHandout(read().selectedIds);
+}
+
 export function cutSelection(): void {
   copySelection();
   removeSelection();
