@@ -5,6 +5,11 @@ import { Blend, Drama, FlipHorizontal, Trash2 } from "lucide-react";
 
 import { Slider } from "@/components/ui/slider";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   emPixelDeTela,
   useSceneScale,
 } from "@/components/playground/scene-stage";
@@ -311,86 +316,114 @@ export function TransformHandles({
           }}
         >
           {onFlip ? (
-            <button
-              type="button"
-              aria-label="Espelhar na horizontal"
-              className={cn(
-                "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
-                cor.botao,
-              )}
-              style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onFlip();
-              }}
-            >
-              <FlipHorizontal
-                style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Espelhar na horizontal"
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onFlip();
+                    }}
+                  >
+                    <FlipHorizontal
+                      style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                    />
+                  </button>
+                }
               />
-            </button>
+              <TooltipContent>Espelhar na horizontal</TooltipContent>
+            </Tooltip>
           ) : null}
 
           {/* Antes do excluir, de propósito: o destrutivo fica na ponta da
               fileira, longe do que se clica sem medo. */}
           {onOpenSheet ? (
-            <button
-              type="button"
-              aria-label="Abrir a ficha do personagem"
-              className={cn(
-                "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
-                cor.botao,
-              )}
-              style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onOpenSheet();
-              }}
-            >
-              <Drama style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
-            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Abrir a ficha do personagem"
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onOpenSheet();
+                    }}
+                  >
+                    <Drama style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
+                  </button>
+                }
+              />
+              <TooltipContent>Abrir a ficha do personagem</TooltipContent>
+            </Tooltip>
           ) : null}
 
           {opacidade ? (
-            <button
-              type="button"
-              aria-label="Opacidade da imagem"
-              aria-expanded={painelAberto}
-              className={cn(
-                "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
-                cor.botao,
-                // Aberto some o botão do fundo e deixa só o ícone: é o que
-                // conta que o painel à direita é deste item, e não do palco.
-                painelAberto && "ring-2 ring-white/70",
-              )}
-              style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setPainelAberto((aberto) => !aberto);
-              }}
-            >
-              <Blend style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
-            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Opacidade da imagem"
+                    aria-expanded={painelAberto}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      cor.botao,
+                      // Aberto some o botão do fundo e deixa só o ícone: é o que
+                      // conta que o painel à direita é deste item, e não do palco.
+                      painelAberto && "ring-2 ring-white/70",
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setPainelAberto((aberto) => !aberto);
+                    }}
+                  >
+                    <Blend style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
+                  </button>
+                }
+              />
+              <TooltipContent>Opacidade da imagem</TooltipContent>
+            </Tooltip>
           ) : null}
 
           {onDelete ? (
-            <button
-              type="button"
-              aria-label="Excluir"
-              className="pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full bg-red-600 text-white"
-              style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
-              // `pointerdown` e não `click`: o palco inteiro reage a
-              // pointerdown, e esperar o clique deixaria a seleção mudar antes.
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onDelete();
-              }}
-            >
-              <Trash2 style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
-            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Excluir"
+                    className="pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full bg-red-600 text-white"
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    // `pointerdown` e não `click`: o palco inteiro reage a
+                    // pointerdown, e esperar o clique deixaria a seleção mudar antes.
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
+                  </button>
+                }
+              />
+              <TooltipContent>Excluir da cena</TooltipContent>
+            </Tooltip>
           ) : null}
         </div>
       ) : null}
