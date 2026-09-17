@@ -59,6 +59,7 @@ import {
   type Viewport,
   type Medidor,
   type NewDocumento,
+  type Nota,
   type NewMedidor,
   type NewTexto,
   type Pasta,
@@ -142,6 +143,18 @@ type SceneStore = {
   removerPasta: (pastaId: string) => void;
   /** Leva um quadro para uma pasta. `undefined` é a raiz. */
   moverParaPasta: (sceneId: string, pastaId: string | undefined) => void;
+
+  /**
+   * As notas `.md`. O arquivo já existe quando a nota entra -- quem o cria é
+   * `criarDocumento`, assíncrono. Apagar a nota tira também os cartões dela de
+   * todos os quadros; o arquivo é do chamador.
+   */
+  addNota: (nota: Omit<Nota, "id">) => string;
+  renomearNota: (notaId: string, titulo: string) => void;
+  moverNotaParaPasta: (notaId: string, pastaId: string | undefined) => void;
+  removerNota: (notaId: string) => void;
+  /** Toca `atualizadoEm` nos cartões de um arquivo, em todos os quadros. Sem histórico. */
+  tocarDocumentos: (arquivo: string) => void;
   /** Primitiva única de mutação de cena. Toda operação de item usa isto. */
   updateScene: (sceneId: string, updater: (scene: Scene) => Scene) => void;
 
@@ -423,7 +436,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         // daqui: o formato de `Scene` é da tela, e o Rust trata cena como JSON
         // opaco justamente para o formato não ter duas fontes de verdade.
         const carregado = await loadBoard();
-        const board = carregado ?? createEmptyBoard();
+        const board = comNotasDosCartoes(carregado ?? createEmptyBoard());
 
         // Board que veio do disco JÁ está no disco: a primeira gravação depois de
         // abrir a campanha pode ser um patch. Board criado aqui — campanha sem
@@ -472,7 +485,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         board?.scenes.filter((scene) => ehQuadro(scene) === (tipo === "quadro"))
           .length ?? 0;
       const scene = createScene(
-        name ?? `${tipo === "quadro" ? "Quadro" : "Cena"} ${iguais + 1}`,
+        name ?? `${tipo === "quadro" ? "Quadro" : "Mapa"} ${iguais + 1}`,
         tipo,
       );
       const base = board ?? {
@@ -603,6 +616,103 @@ export const useSceneStore = create<SceneStore>((set, get) => {
             : scene,
         ),
       });
+    },
+
+    addNota(nota) {
+      const { board } = get();
+      const id = novoId();
+      if (!board) return id;
+      commit({ ...board, notas: [...(board.notas ?? []), { ...nota, id }] });
+      return id;
+    },
+
+    renomearNota(notaId, titulo) {
+      const { board } = get();
+      const nota = board?.notas?.find((atual) => atual.id === notaId);
+      if (!board || !nota) return;
+      const limpo = titulo.trim();
+      if (!limpo || limpo === nota.titulo) return;
+
+      commit({
+        ...board,
+        notas: board.notas?.map((atual) =>
+          atual.id === notaId ? { ...atual, titulo: limpo } : atual,
+        ),
+        // A cópia nos cartões, para a mesa. Ver `Documento.titulo`.
+        scenes: board.scenes.map((scene) =>
+          scene.documentos?.some((documento) => documento.notaId === notaId)
+            ? {
+                ...scene,
+                documentos: scene.documentos.map((documento) =>
+                  documento.notaId === notaId
+                    ? { ...documento, titulo: limpo }
+                    : documento,
+                ),
+              }
+            : scene,
+        ),
+      });
+    },
+
+    moverNotaParaPasta(notaId, pastaId) {
+      const { board } = get();
+      if (!board) return;
+      commit({
+        ...board,
+        notas: board.notas?.map((nota) => {
+          if (nota.id !== notaId) return nota;
+          const proxima = { ...nota };
+          if (pastaId) proxima.pastaId = pastaId;
+          else delete proxima.pastaId;
+          return proxima;
+        }),
+      });
+    },
+
+    removerNota(notaId) {
+      const { board } = get();
+      if (!board) return;
+      const notas = (board.notas ?? []).filter((nota) => nota.id !== notaId);
+
+      commit({
+        ...board,
+        notas: notas.length > 0 ? notas : undefined,
+        scenes: board.scenes.map((scene) => {
+          const mortos = (scene.documentos ?? [])
+            .filter((documento) => documento.notaId === notaId)
+            .map((documento) => documento.id);
+          if (mortos.length === 0) return scene;
+          const restantes = scene.documentos!.filter(
+            (documento) => documento.notaId !== notaId,
+          );
+          return {
+            ...scene,
+            documentos: restantes.length > 0 ? restantes : undefined,
+            ligacoes: semReferencia(scene.ligacoes, mortos),
+          };
+        }),
+      });
+    },
+
+    tocarDocumentos(arquivo) {
+      const { board } = get();
+      if (!board) return;
+      const agora = Date.now();
+      let mudou = false;
+      const scenes = board.scenes.map((scene) => {
+        if (!scene.documentos?.some((documento) => documento.arquivo === arquivo))
+          return scene;
+        mudou = true;
+        return {
+          ...scene,
+          documentos: scene.documentos.map((documento) =>
+            documento.arquivo === arquivo
+              ? { ...documento, atualizadoEm: agora }
+              : documento,
+          ),
+        };
+      });
+      if (mudou) set({ board: { ...board, scenes } });
     },
 
     moverParaPasta(sceneId, pastaId) {
@@ -1344,6 +1454,47 @@ let salvo: Board | null = null;
  * caminho de antes, e ele continua sendo o certo quando não há do que
  * diferenciar.
  */
+/**
+ * Cartão gravado antes de existir `Nota` -- com arquivo próprio e sem
+ * `notaId` -- ganha uma nota com o mesmo arquivo, para aparecer na árvore e
+ * abrir no editor. Só a primeira campanha de teste tem isso, mas um cartão
+ * sem nota seria um cartão que não abre.
+ */
+function comNotasDosCartoes(board: Board): Board {
+  const orfaos = board.scenes.flatMap((scene) =>
+    (scene.documentos ?? []).filter((documento) => !documento.notaId),
+  );
+  if (orfaos.length === 0) return board;
+
+  const notas = [...(board.notas ?? [])];
+  const notaDe = new Map<string, string>();
+  for (const documento of orfaos) {
+    let id = notaDe.get(documento.arquivo);
+    if (!id) {
+      id = novoId();
+      notaDe.set(documento.arquivo, id);
+      notas.push({ id, titulo: documento.titulo, arquivo: documento.arquivo });
+    }
+  }
+
+  return {
+    ...board,
+    notas,
+    scenes: board.scenes.map((scene) =>
+      scene.documentos?.some((documento) => !documento.notaId)
+        ? {
+            ...scene,
+            documentos: scene.documentos.map((documento) =>
+              documento.notaId
+                ? documento
+                : { ...documento, notaId: notaDe.get(documento.arquivo) },
+            ),
+          }
+        : scene,
+    ),
+  };
+}
+
 async function persistir(board: Board): Promise<void> {
   const base = salvo;
 
@@ -1365,6 +1516,7 @@ async function persistir(board: Board): Promise<void> {
     editingSceneId: board.editingSceneId,
     liveSceneId: board.liveSceneId,
     pastas: board.pastas,
+    notas: board.notas,
   });
 
   salvo = board;

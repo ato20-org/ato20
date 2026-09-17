@@ -34,6 +34,10 @@ pub struct Order {
     /// lado para o outro. Ausente em vault antigo e quando nao ha nenhuma.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pastas: Option<serde_json::Value>,
+    /// As notas `.md` da campanha -- titulo, arquivo, pasta --, opacas como as
+    /// pastas. O texto de cada uma mora em `documentos/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notas: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +60,8 @@ pub struct Board {
     pub live_scene_id: Option<String>,
     #[serde(default)]
     pub pastas: Option<serde_json::Value>,
+    #[serde(default)]
+    pub notas: Option<serde_json::Value>,
 }
 
 /// O board como o TypeScript o manda quando SO ALGUMAS cenas mudaram.
@@ -85,6 +91,8 @@ pub struct BoardPatch {
     pub live_scene_id: Option<String>,
     #[serde(default)]
     pub pastas: Option<serde_json::Value>,
+    #[serde(default)]
+    pub notas: Option<serde_json::Value>,
 }
 
 fn scene_id(scene: &SceneJson) -> AppResult<String> {
@@ -136,6 +144,7 @@ pub fn load(vault: &Vault) -> AppResult<Option<Board>> {
         editing_scene_id: order.editando.filter(|id| present.contains(id)),
         live_scene_id: order.no_ar.filter(|id| present.contains(id)),
         pastas: order.pastas,
+        notas: order.notas,
     }))
 }
 
@@ -234,6 +243,7 @@ pub fn save(vault: &Vault, board: &Board) -> AppResult<()> {
             editando: board.editing_scene_id.clone(),
             no_ar: board.live_scene_id.clone(),
             pastas: board.pastas.clone(),
+            notas: board.notas.clone(),
         },
     )
 }
@@ -335,6 +345,7 @@ pub fn save_patch(vault: &Vault, patch: &BoardPatch) -> AppResult<()> {
             editando: patch.editing_scene_id.clone(),
             no_ar: patch.live_scene_id.clone(),
             pastas: patch.pastas.clone(),
+            notas: patch.notas.clone(),
         },
     )
 }
@@ -380,6 +391,7 @@ mod tests {
             editing_scene_id: Some("s1".into()),
             live_scene_id: Some("s2".into()),
             pastas: None,
+            notas: None,
         };
 
         save(&vault, &board).expect("save");
@@ -401,6 +413,7 @@ mod tests {
                 editing_scene_id: None,
                 live_scene_id: None,
                 pastas: None,
+                notas: None,
             },
         )
         .expect("save");
@@ -419,6 +432,7 @@ mod tests {
             editing_scene_id: None,
             live_scene_id: None,
             pastas: None,
+            notas: None,
         };
 
         save(&vault, &board).expect("save");
@@ -446,6 +460,7 @@ mod tests {
             editing_scene_id: None,
             live_scene_id: None,
             pastas: None,
+            notas: None,
         };
         save(&vault, &board).expect("save");
 
@@ -472,6 +487,7 @@ mod tests {
                 editing_scene_id: None,
                 live_scene_id: None,
                 pastas: None,
+                notas: None,
             },
         )
         .expect("save");
@@ -496,6 +512,7 @@ mod tests {
                 editing_scene_id: None,
                 live_scene_id: None,
                 pastas: None,
+                notas: None,
             },
         )
         .expect("save");
@@ -507,6 +524,7 @@ mod tests {
                 editing_scene_id: None,
                 live_scene_id: None,
                 pastas: None,
+                notas: None,
             },
         )
         .expect("save 2");
@@ -523,6 +541,7 @@ mod tests {
             editing_scene_id: editando.map(str::to_string),
             live_scene_id: None,
             pastas: None,
+            notas: None,
         }
     }
 
@@ -540,6 +559,7 @@ mod tests {
                 editing_scene_id: Some("s1".into()),
                 live_scene_id: None,
                 pastas: None,
+                notas: None,
             },
         )
         .expect("save inicial");
@@ -593,6 +613,7 @@ mod tests {
                 editing_scene_id: Some("s2".into()),
                 live_scene_id: Some("s3".into()),
                 pastas: None,
+                notas: None,
             },
         )
         .expect("patch");
@@ -691,6 +712,7 @@ mod tests {
                 editing_scene_id: Some("s2".into()),
                 live_scene_id: None,
                 pastas: None,
+                notas: None,
             },
         )
         .expect("save inteiro");
@@ -714,6 +736,7 @@ mod tests {
                 editing_scene_id: Some("s1".into()),
                 live_scene_id: Some("fantasma".into()),
                 pastas: None,
+                notas: None,
             },
         )
         .expect("save");

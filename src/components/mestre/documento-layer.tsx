@@ -1,28 +1,24 @@
 "use client";
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
-import { FileText, Trash2 } from "lucide-react";
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { AArrowDown, AArrowUp, FileText, Trash2 } from "lucide-react";
 
-import { LinhaMarkdown } from "@/components/playground/markdown-view";
+import { MarkdownView, VinculosContext } from "@/components/playground/markdown-view";
+import { useMencoesDoMestre } from "@/hooks/use-mencoes-do-mestre";
 import {
   emPixelDeTela,
   useSceneScale,
 } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { postitNaArea } from "@/lib/geometry/postit";
+import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
-import { apagarDocumento } from "@/lib/vault/documentos";
 import { cn } from "@/lib/utils";
 import {
+  DOCUMENTO_FONTE,
+  DOCUMENTO_FONTES,
   DOCUMENTO_MINIMO,
   SCENE_HEIGHT,
   SCENE_WIDTH,
@@ -32,26 +28,25 @@ import {
 
 /** Acima do postit (8 500), abaixo da seta (8 600): a seta chega a ele. */
 const DOCUMENTO_Z = 8_550;
-/** Fonte do corpo, em unidades de cena. Maior que a do postit: é para ler longo. */
-const FONTE = 16;
+/** Ver o comentário no `style` do cartão. */
+const FUNDO_DO_CARTAO = "color-mix(in oklch, var(--card), var(--foreground) 7%)";
 const MARGEM = 12;
-/** Altura da barra de título, em unidades de cena. */
+/** Altura da barra de título e do rodapé, em unidades de cena. */
 const BARRA = 26;
+const RODAPE = 22;
 /** Lado da alça de redimensionar, em unidades de cena. */
 const ALCA = 16;
 
 /**
- * Os cartões de documento do quadro: Markdown de verdade, editado no lugar,
- * com prévia ao vivo.
+ * Os cartões de nota do quadro: a prévia de um `.md`, só leitura.
  *
- * Irmão do `PostitLayer`, fora do `SceneLayer` pela mesma razão. O que muda é
- * o corpo: em vez de um `<textarea>` sobre o papel inteiro, uma lista de
- * LINHAS em que só a que está sob o cursor mostra o Markdown cru -- as outras
- * aparecem desenhadas. É o modo de edição do Obsidian, e o que faz um
- * documento de duas telas continuar legível enquanto se escreve nele.
+ * Leve de propósito: o quadro pode ter vinte cartões, e vinte editores seriam
+ * vinte campos de texto vivos numa tela que já desenha imagens e setas. O
+ * cartão desenha o Markdown e mais nada; duplo clique abre a nota no editor,
+ * no lugar do palco. Ver `NotaEditor`.
  *
- * O texto vem do arquivo `.md`, pelo `useDocumentoStore`; a cena só tem o
- * cartão. Ver `Documento`.
+ * Irmão do `PostitLayer`, fora do `SceneLayer` pela mesma razão. O texto vem
+ * do `useDocumentoStore`, o mesmo do editor: escrever lá aparece aqui.
  */
 export function DocumentoLayer({
   scene,
@@ -63,14 +58,36 @@ export function DocumentoLayer({
   const documentos = scene.documentos;
   if (!documentos || documentos.length === 0) return null;
 
-  return documentos.map((documento) => (
-    <CartaoDeDocumento
-      key={documento.id}
-      sceneId={scene.id}
-      documento={documento}
-      panMode={panMode}
-    />
-  ));
+  return <Cartoes sceneId={scene.id} documentos={documentos} panMode={panMode} />;
+}
+
+/**
+ * Separado do de cima pelo hook: quadro sem cartão não deve ler personagens,
+ * sondar jogadores nem listar o acervo. Mesmo desenho do `PostitLayer`.
+ */
+function Cartoes({
+  sceneId,
+  documentos,
+  panMode,
+}: {
+  sceneId: string;
+  documentos: Documento[];
+  panMode: boolean;
+}) {
+  const { vinculos } = useMencoesDoMestre();
+
+  return (
+    <VinculosContext value={vinculos}>
+      {documentos.map((documento) => (
+        <CartaoDeDocumento
+          key={documento.id}
+          sceneId={sceneId}
+          documento={documento}
+          panMode={panMode}
+        />
+      ))}
+    </VinculosContext>
+  );
 }
 
 function CartaoDeDocumento({
@@ -88,16 +105,14 @@ function CartaoDeDocumento({
 
   const updateDocumento = useSceneStore((state) => state.updateDocumento);
   const removeDocumento = useSceneStore((state) => state.removeDocumento);
+  const abrirNota = useArquivoAbertoStore((state) => state.abrirNota);
 
   const texto = useDocumentoStore((state) => state.textos[documento.arquivo]);
   const carregar = useDocumentoStore((state) => state.carregar);
-  const escrever = useDocumentoStore((state) => state.escrever);
 
   useEffect(() => {
     carregar(documento.arquivo);
   }, [documento.arquivo, carregar]);
-
-  const [renomeando, setRenomeando] = useState(false);
 
   /**
    * A roda sobre o documento rola o texto, e não dá zoom no quadro. Ouvinte
@@ -121,11 +136,14 @@ function CartaoDeDocumento({
   // 9px do WebKit. Ver `PostitPapel.medidaDoCorpo`.
   const fator = ampliacaoNoLayout ? scale : 1;
   const medidaDoCorpo = ampliacaoNoLayout ? emPixelDeTela(scale) : undefined;
-  const tipografia = {
-    fontSize: FONTE * fator,
-    lineHeight: 1.5,
-    padding: MARGEM * fator,
-  };
+  const fonte = documento.fonte ?? DOCUMENTO_FONTE;
+
+  function mudarFonte(sentido: 1 | -1) {
+    const indice = DOCUMENTO_FONTES.findIndex((f) => f >= fonte);
+    const atual = indice === -1 ? DOCUMENTO_FONTES.length - 1 : indice;
+    const proximo = Math.min(Math.max(atual + sentido, 0), DOCUMENTO_FONTES.length - 1);
+    updateDocumento(sceneId, documento.id, { fonte: DOCUMENTO_FONTES[proximo] });
+  }
 
   function arrastar(event: ReactPointerEvent) {
     if (panMode || tool === "ligacao") return;
@@ -152,26 +170,15 @@ function CartaoDeDocumento({
     });
   }
 
-  function remover() {
-    removeDocumento(sceneId, documento.id);
-    // O arquivo vai junto: um `.md` órfão na pasta da campanha é um arquivo
-    // pesado para apagar depois, como o fundo que sai da campanha com a cena.
-    void apagarDocumento(documento.arquivo).catch((cause: unknown) => {
-      console.error("falha ao apagar o documento", cause);
-    });
-  }
-
-  function confirmarTitulo(valor: string) {
-    const titulo = valor.trim();
-    if (titulo && titulo !== documento.titulo)
-      updateDocumento(sceneId, documento.id, { titulo });
-    setRenomeando(false);
+  function abrir() {
+    if (panMode || tool === "ligacao" || !documento.notaId) return;
+    abrirNota(documento.notaId);
   }
 
   return (
     <div
       className={cn(
-        "bg-card text-card-foreground pointer-events-auto absolute flex flex-col overflow-hidden rounded-md shadow-lg ring-1 ring-black/15",
+        "text-card-foreground ring-foreground/20 pointer-events-auto absolute flex flex-col overflow-hidden rounded-md shadow-xl ring-1",
         tool === "ligacao" && "cursor-crosshair",
       )}
       style={{
@@ -181,16 +188,20 @@ function CartaoDeDocumento({
         height: documento.altura,
         zIndex: DOCUMENTO_Z,
         touchAction: "none",
+        // Deslocado do plano, que também é `--card`: 7% de `--foreground`
+        // clareia no escuro e escurece no claro, e o cartão aparece nos dois.
+        background: FUNDO_DO_CARTAO,
       }}
       // O cartão inteiro para o clique no vazio do palco: com uma ferramenta
       // de mira na mão, clicar no documento não pode colar um postit nele.
       onPointerDown={(event) => event.stopPropagation()}
+      onDoubleClick={abrir}
+      title={documento.notaId ? "Duplo clique abre a nota" : undefined}
     >
       <div
-        className="group bg-foreground/5 flex shrink-0 cursor-move items-center gap-1 px-1.5"
+        className="group bg-foreground/10 flex shrink-0 cursor-move items-center gap-1 px-1.5"
         style={{ height: BARRA }}
         onPointerDown={arrastar}
-        onDoubleClick={() => setRenomeando(true)}
       >
         <FileText
           className="text-muted-foreground shrink-0"
@@ -198,44 +209,22 @@ function CartaoDeDocumento({
           strokeWidth={Math.min(2.5, 2.5 / scale)}
           aria-hidden
         />
-        {renomeando ? (
-          <input
-            autoFocus
-            defaultValue={documento.titulo}
-            className="bg-background min-w-0 flex-1 rounded px-1 outline-none"
-            style={{ fontSize: BARRA * 0.5, height: BARRA * 0.8 }}
-            aria-label="Título do documento"
-            onPointerDown={(event) => event.stopPropagation()}
-            onFocus={(event) => event.currentTarget.select()}
-            onBlur={(event) => confirmarTitulo(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") confirmarTitulo(event.currentTarget.value);
-              if (event.key === "Escape") setRenomeando(false);
-              event.stopPropagation();
-            }}
-          />
-        ) : (
-          <span
-            className="min-w-0 flex-1 truncate font-medium"
-            style={{ fontSize: BARRA * 0.5 }}
-            title="Duplo clique renomeia"
-          >
-            {documento.titulo}
-          </span>
-        )}
+        <span
+          className="min-w-0 flex-1 truncate font-medium"
+          style={{ fontSize: BARRA * 0.5 }}
+        >
+          {documento.titulo}
+        </span>
         <button
           type="button"
-          aria-label="Apagar este documento"
-          title="Apaga o cartão e o arquivo .md"
+          aria-label="Tirar este cartão do quadro"
+          title="Tira o cartão. A nota continua em Arquivos."
           className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
           style={{ width: BARRA * 0.7, height: BARRA * 0.7 }}
           onPointerDown={(event) => event.stopPropagation()}
-          onClick={remover}
+          onClick={() => removeDocumento(sceneId, documento.id)}
         >
-          <Trash2
-            className="size-full"
-            strokeWidth={Math.min(2.5, 2.5 / scale)}
-          />
+          <Trash2 className="size-full" strokeWidth={Math.min(2.5, 2.5 / scale)} />
         </button>
       </div>
 
@@ -243,22 +232,58 @@ function CartaoDeDocumento({
         <div
           ref={corpo}
           className="absolute inset-0 overflow-y-auto"
-          style={{ ...medidaDoCorpo, ...tipografia }}
+          style={{
+            ...medidaDoCorpo,
+            fontSize: fonte * fator,
+            lineHeight: 1.5,
+            padding: MARGEM * fator,
+          }}
         >
           {texto === undefined ? (
             <span className="text-muted-foreground italic">Abrindo…</span>
+          ) : texto.trim() === "" ? (
+            <span className="text-muted-foreground italic">
+              Vazia. Duplo clique para escrever.
+            </span>
           ) : (
-            <EditorAoVivo
-              texto={texto}
-              onChange={(novo) =>
-                escrever(documento.arquivo, novo, {
-                  sceneId,
-                  documentoId: documento.id,
-                })
-              }
-            />
+            <MarkdownView texto={texto} />
           )}
         </div>
+      </div>
+
+      <div
+        className="bg-foreground/10 text-muted-foreground flex shrink-0 items-center gap-1 px-1.5"
+        style={{ height: RODAPE, fontSize: RODAPE * 0.45 }}
+        onPointerDown={(event) => event.stopPropagation()}
+        onDoubleClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          aria-label="Diminuir a fonte"
+          className="hover:text-foreground disabled:opacity-40"
+          style={{ width: RODAPE * 0.7, height: RODAPE * 0.7 }}
+          disabled={fonte <= DOCUMENTO_FONTES[0]}
+          onClick={() => mudarFonte(-1)}
+        >
+          <AArrowDown className="size-full" strokeWidth={Math.min(2.5, 2.5 / scale)} />
+        </button>
+        <span className="tabular-nums" style={{ minWidth: RODAPE * 0.9 }}>
+          {fonte}
+        </span>
+        <button
+          type="button"
+          aria-label="Aumentar a fonte"
+          className="hover:text-foreground disabled:opacity-40"
+          style={{ width: RODAPE * 0.7, height: RODAPE * 0.7 }}
+          disabled={fonte >= DOCUMENTO_FONTES[DOCUMENTO_FONTES.length - 1]!}
+          onClick={() => mudarFonte(1)}
+        >
+          <AArrowUp className="size-full" strokeWidth={Math.min(2.5, 2.5 / scale)} />
+        </button>
+        <span className="min-w-0 flex-1 truncate text-right">
+          {documento.arquivo}
+        </span>
+        <span style={{ width: ALCA }} aria-hidden />
       </div>
 
       <button
@@ -274,170 +299,4 @@ function CartaoDeDocumento({
       />
     </div>
   );
-}
-
-/**
- * O editor de prévia ao vivo: uma linha crua, as outras desenhadas.
- *
- * O texto é UMA string, e a linha ativa é um índice nela. Cada tecla reescreve
- * a string inteira -- é o que mantém o texto uma coisa só para o arquivo e
- * para a mesa --, e um documento de mestre cabe nisso com folga.
- *
- * As teclas que atravessam linhas são as de qualquer editor: Enter divide a
- * linha no cursor, Backspace no começo junta com a de cima, Delete no fim junta
- * com a de baixo, seta para cima na primeira linha do campo sobe, seta para
- * baixo na última desce. Esc larga o cursor e desenha tudo.
- */
-function EditorAoVivo({
-  texto,
-  onChange,
-}: {
-  texto: string;
-  onChange: (texto: string) => void;
-}) {
-  const linhas = texto.split("\n");
-
-  const [ativa, setAtiva] = useState<{ indice: number; cursor: number } | null>(null);
-  const campo = useRef<HTMLTextAreaElement | null>(null);
-
-  // Foco e cursor DEPOIS do campo trocar de linha: o `<textarea>` é um só e
-  // muda de valor, então o cursor tem de ser reposto a cada troca.
-  useLayoutEffect(() => {
-    if (!ativa) return;
-    const alvo = campo.current;
-    if (!alvo) return;
-    alvo.focus();
-    const pos = Math.min(ativa.cursor, alvo.value.length);
-    alvo.setSelectionRange(pos, pos);
-    alvo.style.height = "0px";
-    alvo.style.height = `${alvo.scrollHeight}px`;
-  }, [ativa, texto]);
-
-  function trocar(indice: number, valor: string) {
-    const proximas = [...linhas];
-    proximas[indice] = valor;
-    onChange(proximas.join("\n"));
-  }
-
-  function teclas(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    if (!ativa) return;
-    const alvo = event.currentTarget;
-    const { selectionStart, selectionEnd, value } = alvo;
-    const indice = ativa.indice;
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setAtiva(null);
-    } else if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      const antes = value.slice(0, selectionStart);
-      const depois = value.slice(selectionEnd);
-      // Continua a lista: Enter no fim de um item começa outro; num item vazio,
-      // sai da lista. É o gesto que todo editor de Markdown faz.
-      const marca = /^(\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+))/.exec(antes)?.[1] ?? "";
-      const vazio = marca !== "" && antes.trim() === marca.trim();
-      const proximas = [...linhas];
-      if (vazio) {
-        proximas.splice(indice, 1, "", depois);
-        onChange(proximas.join("\n"));
-        setAtiva({ indice: indice + 1, cursor: 0 });
-        return;
-      }
-      const continuacao = marca.replace(/\[[xX]\]/, "[ ]").replace(/^(\s*)(\d+)/, (_, s: string, n: string) => `${s}${Number(n) + 1}`);
-      proximas.splice(indice, 1, antes, continuacao + depois);
-      onChange(proximas.join("\n"));
-      setAtiva({ indice: indice + 1, cursor: continuacao.length });
-    } else if (event.key === "Backspace" && selectionStart === 0 && selectionEnd === 0 && indice > 0) {
-      event.preventDefault();
-      const anterior = linhas[indice - 1] ?? "";
-      const proximas = [...linhas];
-      proximas.splice(indice - 1, 2, anterior + value);
-      onChange(proximas.join("\n"));
-      setAtiva({ indice: indice - 1, cursor: anterior.length });
-    } else if (
-      event.key === "Delete" &&
-      selectionStart === value.length &&
-      selectionEnd === value.length &&
-      indice < linhas.length - 1
-    ) {
-      event.preventDefault();
-      const proxima = linhas[indice + 1] ?? "";
-      const proximas = [...linhas];
-      proximas.splice(indice, 2, value + proxima);
-      onChange(proximas.join("\n"));
-      setAtiva({ indice, cursor: value.length });
-    } else if (event.key === "ArrowUp" && indice > 0 && naPrimeiraLinhaVisual(alvo)) {
-      event.preventDefault();
-      setAtiva({ indice: indice - 1, cursor: selectionStart });
-    } else if (
-      event.key === "ArrowDown" &&
-      indice < linhas.length - 1 &&
-      naUltimaLinhaVisual(alvo)
-    ) {
-      event.preventDefault();
-      setAtiva({ indice: indice + 1, cursor: selectionStart });
-    }
-    // Ctrl+Z e os outros atalhos do palco não chegam aqui: `isTyping` os barra.
-    event.stopPropagation();
-  }
-
-  return (
-    <div
-      className="min-h-full cursor-text"
-      // Clique abaixo da última linha: cursor no fim do documento.
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        const ultima = linhas.length - 1;
-        setAtiva({ indice: ultima, cursor: (linhas[ultima] ?? "").length });
-      }}
-    >
-      {linhas.map((linha, indice) =>
-        ativa?.indice === indice ? (
-          <textarea
-            key="ativa"
-            ref={campo}
-            rows={1}
-            value={linha}
-            aria-label="Linha em edição"
-            className="text-foreground block w-full resize-none overflow-hidden bg-transparent font-mono text-[0.95em] outline-none"
-            onChange={(event) => trocar(indice, event.target.value)}
-            onKeyDown={teclas}
-            onBlur={() => setAtiva(null)}
-            onPointerDown={(event) => event.stopPropagation()}
-          />
-        ) : (
-          <div
-            key={indice}
-            className="hover:bg-foreground/5 -mx-1 rounded px-1"
-            onClick={(event) => {
-              event.stopPropagation();
-              setAtiva({ indice, cursor: linha.length });
-            }}
-          >
-            <LinhaMarkdown linha={linha} />
-          </div>
-        ),
-      )}
-    </div>
-  );
-}
-
-/**
- * O cursor está na primeira (ou última) linha VISUAL do campo. O campo é uma
- * linha do documento, sem `\n`, mas ela pode dobrar na largura do cartão -- e
- * seta para cima numa linha dobrada tem de subir DENTRO dela antes de trocar
- * de linha do documento. Com o campo em uma linha só, qualquer posição vale.
- */
-function naPrimeiraLinhaVisual(alvo: HTMLTextAreaElement): boolean {
-  return linhasVisuais(alvo) <= 1 || alvo.selectionStart === 0;
-}
-
-function naUltimaLinhaVisual(alvo: HTMLTextAreaElement): boolean {
-  return linhasVisuais(alvo) <= 1 || alvo.selectionStart === alvo.value.length;
-}
-
-/** Quantas linhas o campo ocupa na tela, pela altura. */
-function linhasVisuais(alvo: HTMLTextAreaElement): number {
-  const altura = parseFloat(getComputedStyle(alvo).lineHeight) || 1;
-  return Math.round(alvo.scrollHeight / altura);
 }

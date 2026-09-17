@@ -59,6 +59,8 @@ import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { ehQuadro, type Scene } from "@/types/scene";
+import { NotaEditor } from "@/components/mestre/editor-markdown";
+import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 
 /**
  * A mesa.
@@ -73,6 +75,9 @@ export function MestreShell() {
   const error = useSceneStore((state) => state.error);
   // Duas cenas distintas: a que o mestre edita e a que a mesa vê.
   const editingScene = useSceneStore(selectEditingScene);
+  // Com nota aberta o palco não está na tela: índice de pontos e chip de
+  // jogadores são do palco, e sobre um editor de texto seriam mobília.
+  const lendoNota = useArquivoAbertoStore((state) => state.notaId !== null);
   const liveScene = useSceneStore(selectLiveScene);
 
   const leftOpen = usePanelsStore((state) => state.left);
@@ -239,7 +244,10 @@ export function MestreShell() {
                 />
               )}
 
-              {editingScene ? <PinIndex scene={editingScene} /> : null}
+              {/* Quadro não tem ponto de anotação: o índice deles some com ele. */}
+              {editingScene && !lendoNota && !ehQuadro(editingScene) ? (
+                <PinIndex scene={editingScene} />
+              ) : null}
             </div>
 
             {/* Quem está na mesa fica aqui, e não no cabeçalho: é consulta, como
@@ -259,9 +267,11 @@ export function MestreShell() {
               {/* Rolagens não tem mais chip aqui: a janela abre sozinha quando
                   chega dado (ver `useJanelaDeRolagens`) e vive no catálogo do
                   dock. Um botão para o que já se abre era mobília. */}
-              <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-                <PlayersChip />
-              </div>
+              {lendoNota ? null : (
+                <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+                  <PlayersChip />
+                </div>
+              )}
               {rightOpen ? null : (
                 <FloatingPanelToggle
                   onToggle={toggleRight}
@@ -358,6 +368,13 @@ function StageBoundary({
   // A mesma resposta que o `MestreStage` usa para soltar os itens.
   const panMode = usePanMode();
 
+  const notaAbertaId = useArquivoAbertoStore((state) => state.notaId);
+  const notaAberta = useSceneStore((state) =>
+    notaAbertaId
+      ? (state.board?.notas?.find((nota) => nota.id === notaAbertaId) ?? null)
+      : null,
+  );
+
   // Recalculado a cada versão da cena, o que durante um arrasto é a cada
   // quadro. Medido numa cena de 80 itens e 12 mil pontos de risco: 0,4% de um
   // quadro de 60fps. O que precisava de cuidado não era a conta, era propagar
@@ -389,7 +406,7 @@ function StageBoundary({
         <MestreStage scene={scene} />
       ) : (
         <p className="text-muted-foreground absolute inset-0 grid place-items-center text-xl">
-          {status === "ready" ? "Nenhuma cena selecionada" : "Carregando…"}
+          {status === "ready" ? "Nenhum mapa selecionado" : "Carregando…"}
         </p>
       )}
     </SceneStage>
@@ -397,7 +414,13 @@ function StageBoundary({
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      {scene ? (
+      {/* Nota aberta ocupa o lugar do palco, como o Obsidian abre um arquivo
+          no painel principal. O palco continua montado por baixo? Não: uma
+          nota por vez, e o palco volta ao abrir uma cena. Ver
+          `useArquivoAbertoStore`. */}
+      {notaAberta ? (
+        <NotaEditor key={notaAberta.id} nota={notaAberta} />
+      ) : scene ? (
         <StageContextMenu scene={scene}>{stage}</StageContextMenu>
       ) : (
         stage
@@ -415,13 +438,15 @@ function StageBoundary({
           grupo. Estavam juntas à esquerda, e o lápis com a borracha levaram a
           fila a seis alvos: com o zoom emendado, a barra atravessava metade do
           palco e as duas pontas dela não tinham relação nenhuma. */}
-      {scene ? (
+      {/* Com uma nota aberta o palco não está na tela, e ferramenta de palco
+          sobre um editor de texto seria botão para o nada. */}
+      {scene && !notaAberta ? (
         <div className="absolute bottom-3 left-3 flex items-center gap-2">
           <MestreToolbar scene={scene} />
         </div>
       ) : null}
 
-      {scene ? (
+      {scene && !notaAberta ? (
         <div className="absolute right-3 bottom-3 flex items-center gap-2">
           <CamerasSalvas scene={scene} />
           <ViewportControls />
@@ -433,10 +458,10 @@ function StageBoundary({
 
           Só com cena: o dado cai SOBRE o mapa, e sem mapa a jogada não teria
           onde pousar -- a camada que a desenha vive dentro do palco. */}
-      {scene ? <SaquinhoDados /> : null}
+      {scene && !notaAberta ? <SaquinhoDados /> : null}
 
       {/* A carta na manga, irmã do saquinho: mesma bolinha, e por cena. */}
-      {scene ? <HandoutMestre scene={scene} /> : null}
+      {scene && !notaAberta ? <HandoutMestre scene={scene} /> : null}
     </div>
   );
 }

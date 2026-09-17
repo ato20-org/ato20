@@ -1,7 +1,7 @@
 "use client";
 
 import { call } from "@/lib/vault/bridge";
-import type { Board, Pasta, Scene } from "@/types/scene";
+import type { Board, Nota, Pasta, Scene } from "@/types/scene";
 
 /**
  * Carrega o board do disco. `null` = campanha sem board ainda.
@@ -46,6 +46,7 @@ export type BoardPatch = {
   liveSceneId: string | null;
   /** Inteira, como a `ordem`: é pequena, e é o Rust quem grava o índice. */
   pastas?: Pasta[];
+  notas?: Nota[];
 };
 
 /**

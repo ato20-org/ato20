@@ -74,6 +74,16 @@ type SceneScale = {
    * gesto sem nada transbordar do plano de conteúdo. Ver `fundoNo`.
    */
   fundoDoPalco: HTMLElement | null;
+  /**
+   * A MOLDURA do palco, e onde o plano começa dentro dela, em pixels de tela.
+   * Para quem precisa desenhar sobre o palco inteiro, fora dos planos -- a
+   * máscara da câmera no quadro --, e por isso não pode ficar dentro deles:
+   * um filho maior que o plano infla a camada composta e derruba a pintura
+   * (ver `debug-do-palco` §3). Em pixels de tela: `x_px = offsetX + x × scale`.
+   */
+  moldura: HTMLElement | null;
+  offsetX: number;
+  offsetY: number;
 };
 
 const SceneScaleContext = createContext<SceneScale | null>(null);
@@ -518,8 +528,21 @@ export function SceneStage({
       viewport,
       planoDeConteudo: conteudoNo,
       fundoDoPalco: fundoNo,
+      moldura: frameNo,
+      offsetX,
+      offsetY,
     }),
-    [scale, conteudoNoLayout, toScene, viewport, conteudoNo, fundoNo],
+    [
+      scale,
+      conteudoNoLayout,
+      toScene,
+      viewport,
+      conteudoNo,
+      fundoNo,
+      frameNo,
+      offsetX,
+      offsetY,
+    ],
   );
 
   // Guardados em ref porque os listeners nativos abaixo são registrados uma

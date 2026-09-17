@@ -16,7 +16,8 @@ export const SCENE_HEIGHT = 1080;
  * `pdf` saiu junto com o material de regras: era o unico caminho que criava
  * arquivo desse tipo.
  */
-export type AssetKind = "image" | "audio";
+/** `file` é tudo o que não é imagem nem som: PDF, texto, o que vier. */
+export type AssetKind = "image" | "audio" | "file";
 
 /**
  * Metadados de um arquivo enviado pelo mestre. O binário fica em `assets/`.
@@ -365,15 +366,47 @@ export type Documento = {
   y: number;
   largura: number;
   altura: number;
+  /**
+   * A nota que este cartão mostra. Ver `Nota`. Ausente só em cartão gravado
+   * antes de existirem notas; `carregar` cria a nota dele e preenche.
+   */
+  notaId?: string;
+  /**
+   * Cópia do título e do arquivo da nota, para a MESA: ela recebe a cena e não
+   * o board, então não tem onde resolver `notaId`. Quem renomeia a nota
+   * reescreve os dois em todos os cartões dela.
+   */
   titulo: string;
-  /** Nome do arquivo em `documentos/`, sem diretório. Não muda com o título. */
   arquivo: string;
   /** Época em ms da última gravação do texto. Ausente = nunca escrito. */
   atualizadoEm?: number;
+  /** Fonte do corpo, em unidades de cena. Ausente = `DOCUMENTO_FONTE`. */
+  fonte?: number;
 };
 
-export type NewDocumento = Pick<Documento, "x" | "y" | "titulo" | "arquivo"> &
+export const DOCUMENTO_FONTE = 16;
+/** Os degraus do A− e A+, em unidades de cena. */
+export const DOCUMENTO_FONTES = [11, 13, 16, 20, 24, 30, 38] as const;
+
+export type NewDocumento = Pick<
+  Documento,
+  "x" | "y" | "titulo" | "arquivo" | "notaId"
+> &
   Partial<Pick<Documento, "largura" | "altura">>;
+
+/**
+ * Uma nota: um arquivo `.md` da campanha, como no Obsidian. Vive na mesma
+ * árvore de pastas dos quadros, abre num editor no lugar do palco, e entra num
+ * quadro como cartão (`Documento`) quantas vezes se quiser. O texto mora em
+ * `documentos/<arquivo>`; aqui é só o índice.
+ */
+export type Nota = {
+  id: string;
+  titulo: string;
+  /** Nome do arquivo em `documentos/`, sem diretório. Não muda com o título. */
+  arquivo: string;
+  pastaId?: string;
+};
 
 export const DOCUMENTO_LARGURA = 420;
 export const DOCUMENTO_ALTURA = 320;
@@ -902,8 +935,10 @@ export type Board = {
    * `null` = nada no ar.
    */
   liveSceneId: string | null;
-  /** As pastas dos quadros. Ausente = nenhuma. Ver `Pasta`. */
+  /** As pastas dos quadros e das notas. Ausente = nenhuma. Ver `Pasta`. */
   pastas?: Pasta[];
+  /** As notas `.md` da campanha. Ausente = nenhuma. Ver `Nota`. */
+  notas?: Nota[];
 };
 
 /**
@@ -999,6 +1034,6 @@ export function cloneScene(source: Scene, name: string): Scene {
 }
 
 export function createEmptyBoard(): Board {
-  const first = createScene("Cena 1");
+  const first = createScene("Mapa 1");
   return { scenes: [first], editingSceneId: first.id, liveSceneId: first.id };
 }

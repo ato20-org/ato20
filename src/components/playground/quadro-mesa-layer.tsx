@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useState } from "react";
 
-import { PostitTextoView, type Vinculos } from "@/components/mestre/postit-texto-view";
-import { MarkdownView } from "@/components/playground/markdown-view";
+import { PostitTextoView } from "@/components/mestre/postit-texto-view";
+import { MarkdownView, SEM_VINCULOS } from "@/components/playground/markdown-view";
 import { documentoUrl } from "@/lib/vault/documentos";
 import {
   emPixelDeTela,
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
+  DOCUMENTO_FONTE,
   type CorPostit,
   type Documento,
   type Postit,
@@ -53,17 +54,6 @@ const PAPEL: Record<CorPostit, string> = {
 const FONTE_POSTIT = 15;
 const MARGEM_POSTIT = 6;
 
-/**
- * Sem vínculo nenhum: na mesa a menção é só o nome. `@Edgar` sai como texto,
- * sem ficha atrás, sem retrato, sem pular de cena -- nada disso existe na TV.
- */
-const SEM_VINCULOS: Vinculos = {
-  personagem: () => null,
-  arquivo: () => null,
-  cena: () => null,
-  irParaCena: () => undefined,
-  abrirJanela: () => undefined,
-};
 
 function PostitDaMesa({ postit }: { postit: Postit }) {
   const { scale, ampliacaoNoLayout } = useSceneScale();
@@ -330,7 +320,8 @@ function SetasDaMesa({ scene }: { scene: Scene }) {
 // --- documento --------------------------------------------------------------
 
 const DOCUMENTO_Z = 8_550;
-const FONTE_DOCUMENTO = 16;
+/** Ver o comentário no `style` do cartão. */
+const FUNDO_DO_CARTAO = "color-mix(in oklch, var(--card), var(--foreground) 7%)";
 const MARGEM_DOCUMENTO = 12;
 const BARRA_DOCUMENTO = 26;
 
@@ -361,17 +352,18 @@ function DocumentoDaMesa({ documento }: { documento: Documento }) {
 
   return (
     <div
-      className="bg-card text-card-foreground pointer-events-none absolute flex flex-col overflow-hidden rounded-md shadow-lg ring-1 ring-black/15"
+      className="text-card-foreground ring-foreground/20 pointer-events-none absolute flex flex-col overflow-hidden rounded-md shadow-xl ring-1"
       style={{
         left: documento.x,
         top: documento.y,
         width: documento.largura,
         height: documento.altura,
         zIndex: DOCUMENTO_Z,
+        background: FUNDO_DO_CARTAO,
       }}
     >
       <div
-        className="bg-foreground/5 flex shrink-0 items-center px-1.5 font-medium"
+        className="bg-foreground/10 flex shrink-0 items-center px-1.5 font-medium"
         style={{ height: BARRA_DOCUMENTO, fontSize: BARRA_DOCUMENTO * 0.5 }}
       >
         <span className="truncate">{documento.titulo}</span>
@@ -380,7 +372,7 @@ function DocumentoDaMesa({ documento }: { documento: Documento }) {
         className="min-h-0 flex-1 overflow-hidden"
         style={{
           ...(ampliacaoNoLayout ? emPixelDeTela(scale) : undefined),
-          fontSize: FONTE_DOCUMENTO * fator,
+          fontSize: (documento.fonte ?? DOCUMENTO_FONTE) * fator,
           lineHeight: 1.5,
           padding: MARGEM_DOCUMENTO * fator,
         }}

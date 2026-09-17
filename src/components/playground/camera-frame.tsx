@@ -13,6 +13,8 @@ import {
   useSceneScale,
 } from "@/components/playground/scene-stage";
 import { TransformHandles } from "@/components/playground/transform-handles";
+import { createPortal } from "react-dom";
+
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
 import {
@@ -43,6 +45,12 @@ const HANDLES_Z = 12_500;
  * Era 11 000, acima de tudo menos a moldura.
  */
 const MASCARA_Z = 7_000;
+/**
+ * A máscara do quadro vive na moldura, acima dos dois planos, e o `z` é o da
+ * moldura: as tarjas da mesa usam 10. Abaixo dos controles flutuantes da
+ * bancada, que são irmãos do palco e vêm depois no DOM.
+ */
+const MASCARA_MOLDURA_Z = 10;
 
 // Tamanhos em pixels de tela: divididos pelo scale, ficam iguais em todo zoom.
 /** Espessura da faixa de arraste nas bordas. */
@@ -79,6 +87,8 @@ type CameraFrameProps = {
   onChange?: (viewport: Viewport) => void;
   /** V segurado: a câmera está seguindo o mouse. A moldura se acende. */
   cinegrafista?: boolean;
+  /** Quadro: escurece a TELA inteira fora da câmera, e não só o conteúdo. */
+  tudoEscuro?: boolean;
 };
 
 /**
@@ -105,11 +115,12 @@ export function CameraFrame({
   transmitindo,
   onChange,
   cinegrafista = false,
+  tudoEscuro = false,
 }: CameraFrameProps) {
   // O recorte, com o nome curto que o resto do arquivo sempre usou.
   const camera = selecionada.viewport;
   const presaEm = selecionada.alvoIds?.length ?? 0;
-  const { scale } = useSceneScale();
+  const { scale, moldura, offsetX, offsetY } = useSceneScale();
   const startDrag = useSceneDrag();
   const [arrastando, setArrastando] = useState(false);
 
@@ -241,17 +252,62 @@ export function CameraFrame({
   const corBorda =
     arrastando || cinegrafista ? "border-primary" : "border-primary/80";
 
+  /**
+   * No QUADRO a máscara é outra: a tela inteira, e não a caixa do conteúdo.
+   *
+   * Um quadro não tem chão -- fora do conteúdo é folha, não preto --, e a
+   * máscara presa ao conteúdo virava um retângulo escuro no meio da folha,
+   * lendo como "um mapa que está errado". E no quadro TUDO vai para a mesa, o
+   * postit inclusive, então a escada de `z` que poupa a anotação do mestre
+   * não se aplica: o que está fora da câmera está fora, e ponto.
+   *
+   * Por isso ela sai dos planos e vai para a MOLDURA, em pixels de tela, por
+   * portal: os planos não podem ter filho maior que o conteúdo (§3), mas a
+   * moldura pode ter o que quiser, e é onde a mesa já desenha as tarjas.
+   * Quatro caixas presas às bordas da moldura, com o buraco onde a câmera
+   * está, sem precisar medir a moldura.
+   */
+  const mascaraNaMoldura =
+    tudoEscuro && moldura
+      ? (() => {
+          const esq = offsetX + camera.x * scale;
+          const topo = offsetY + camera.y * scale;
+          const dir = esq + camera.width * scale;
+          const base = topo + camera.height * scale;
+          const caixas = [
+            { left: 0, right: 0, top: 0, height: Math.max(0, topo) },
+            { left: 0, right: 0, top: base, bottom: 0 },
+            { left: 0, width: Math.max(0, esq), top: topo, height: base - topo },
+            { left: dir, right: 0, top: topo, height: base - topo },
+          ];
+          return createPortal(
+            caixas.map((caixa, index) => (
+              <div
+                key={index}
+                aria-hidden
+                className="pointer-events-none absolute bg-black"
+                style={{ ...caixa, opacity: opacidadeMascara, zIndex: MASCARA_MOLDURA_Z }}
+              />
+            )),
+            moldura,
+          );
+        })()
+      : null;
+
   return (
     <>
-      {mascara.map((caixa, index) =>
-        caixa.width > 0 && caixa.height > 0 ? (
-          <div
-            key={index}
-            className="pointer-events-none absolute bg-black"
-            style={{ ...caixa, opacity: opacidadeMascara, zIndex: MASCARA_Z }}
-          />
-        ) : null,
-      )}
+      {mascaraNaMoldura}
+      {tudoEscuro
+        ? null
+        : mascara.map((caixa, index) =>
+            caixa.width > 0 && caixa.height > 0 ? (
+              <div
+                key={index}
+                className="pointer-events-none absolute bg-black"
+                style={{ ...caixa, opacity: opacidadeMascara, zIndex: MASCARA_Z }}
+              />
+            ) : null,
+          )}
 
       <div
         className={`${corBorda} pointer-events-none absolute border-solid`}
@@ -456,7 +512,7 @@ function Alca({ transmitindo, scale, arrastando, onMove }: AlcaProps) {
         aria-label={transmitindo ? "Tirar do ar" : "Transmitir esta câmera"}
         title={
           transmitindo
-            ? "No ar. Clique tira do ar: a mesa vê a cena inteira."
+            ? "No ar. Clique tira do ar: a mesa vê o mapa inteiro."
             : "Transmitir: a mesa passa a ver esta câmera."
         }
         onPointerDown={(event) => event.stopPropagation()}

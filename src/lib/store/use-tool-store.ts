@@ -45,8 +45,6 @@ export type Tool =
   // amarra duas coisas com uma seta em dois cliques -- de onde, para onde.
   | "texto"
   | "ligacao"
-  // Cartão de documento com Markdown, no clique.
-  | "documento"
   // A de uma EXTENSAO, no formato `ext:{extensaoId}/{ferramentaId}`.
   //
   // Prefixo e nao um campo separado no store porque a ferramenta e UM valor em

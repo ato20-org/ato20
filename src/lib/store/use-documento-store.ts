@@ -22,28 +22,20 @@ type DocumentoStore = {
   lendo: Record<string, true>;
   carregar: (arquivo: string) => void;
   /** Troca o texto na tela agora e grava daqui a pouco. */
-  escrever: (
-    arquivo: string,
-    texto: string,
-    cartao: { sceneId: string; documentoId: string },
-  ) => void;
+  escrever: (arquivo: string, texto: string) => void;
   /** Grava o que estiver pendente, já. Chamado antes de trocar de campanha. */
   descarregar: () => Promise<void>;
 };
 
-const pendentes = new Map<
-  string,
-  { timer: ReturnType<typeof setTimeout>; cartao: { sceneId: string; documentoId: string } }
->();
+const pendentes = new Map<string, ReturnType<typeof setTimeout>>();
 
-async function gravar(arquivo: string, cartao: { sceneId: string; documentoId: string }) {
+async function gravar(arquivo: string) {
   const texto = useDocumentoStore.getState().textos[arquivo];
   if (texto === undefined) return;
   await gravarDocumento(arquivo, texto);
-  // Só o carimbo, sem histórico: gravar não é editar a cena.
-  useSceneStore.getState().updateDocumento(cartao.sceneId, cartao.documentoId, {
-    atualizadoEm: Date.now(),
-  });
+  // Só o carimbo, sem histórico: gravar não é editar a cena. Em TODOS os
+  // cartões do arquivo, em todos os quadros: a nota é uma, os cartões são N.
+  useSceneStore.getState().tocarDocumentos(arquivo);
 }
 
 export const useDocumentoStore = create<DocumentoStore>((set, get) => ({
@@ -77,26 +69,26 @@ export const useDocumentoStore = create<DocumentoStore>((set, get) => ({
     );
   },
 
-  escrever(arquivo, texto, cartao) {
+  escrever(arquivo, texto) {
     set((state) => ({ textos: { ...state.textos, [arquivo]: texto } }));
 
     const pendente = pendentes.get(arquivo);
-    if (pendente) clearTimeout(pendente.timer);
-    pendentes.set(arquivo, {
-      cartao,
-      timer: setTimeout(() => {
+    if (pendente) clearTimeout(pendente);
+    pendentes.set(
+      arquivo,
+      setTimeout(() => {
         pendentes.delete(arquivo);
-        gravar(arquivo, cartao).catch((cause: unknown) => {
+        gravar(arquivo).catch((cause: unknown) => {
           console.error("falha ao gravar o documento", cause);
         });
       }, GRAVAR_MS),
-    });
+    );
   },
 
   async descarregar() {
     const agora = [...pendentes.entries()];
     pendentes.clear();
-    for (const [, { timer }] of agora) clearTimeout(timer);
-    await Promise.all(agora.map(([arquivo, { cartao }]) => gravar(arquivo, cartao)));
+    for (const [, timer] of agora) clearTimeout(timer);
+    await Promise.all(agora.map(([arquivo]) => gravar(arquivo)));
   },
 }));

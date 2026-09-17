@@ -2,7 +2,6 @@
 
 import {
   Eraser,
-  FileText,
   Hand,
   Map,
   MapPin,
@@ -59,7 +58,7 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
   },
   {
     tool: "hand",
-    label: "Deslocar a cena",
+    label: "Deslocar o mapa",
     hint: "Arraste para percorrer o mapa. Segurar espaço faz o mesmo sem trocar de ferramenta.",
     icon: Hand,
   },
@@ -92,13 +91,13 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
   {
     tool: "postit",
     label: "Postit",
-    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou cena; ** dos dois lados deixa em negrito; # e - no começo da linha dão título e lista. Só você vê — nem a TV nem os celulares recebem.",
+    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou mapa; ** dos dois lados deixa em negrito; # e - no começo da linha dão título e lista. Só você vê — nem a TV nem os celulares recebem.",
     icon: StickyNote,
   },
   {
     tool: "fog",
     label: "Área escondida",
-    hint: "Arraste sobre a cena para cobrir uma região. A mesa vê preto sólido.",
+    hint: "Arraste sobre o mapa para cobrir uma região. A mesa vê preto sólido.",
     icon: SquareDashedBottom,
   },
 ];
@@ -114,12 +113,6 @@ const FERRAMENTAS_QUADRO: Ferramenta[] = [
     label: "Texto",
     hint: "Clique no quadro para escrever direto na folha, sem papel. Duplo clique edita, arrasto move; selecionado, os cantos aumentam e a alça de cima gira, como na imagem.",
     icon: Type,
-  },
-  {
-    tool: "documento",
-    label: "Documento",
-    hint: "Clique no quadro para abrir um cartão de Markdown, editado no lugar com prévia ao vivo. O texto vive num .md na pasta da campanha.",
-    icon: FileText,
   },
   {
     tool: "ligacao",
@@ -197,7 +190,10 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   const quadro = ehQuadro(scene);
   const doChao = quadro
     ? [
-        ...FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog"),
+        // Sem névoa nem ponto de anotação: os dois são do mapa. O quadro é
+        // todo anotação, e o ponto -- nota fechada atrás de um alfinete --
+        // não faz sentido onde a nota já é o cartão.
+        ...FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog" && f.tool !== "pin"),
         ...FERRAMENTAS_QUADRO,
       ]
     : FERRAMENTAS_MAPA;
@@ -209,11 +205,12 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   // Trocar de um mapa para um quadro com a névoa na mão deixaria a ferramenta
   // ativa sem botão na barra -- e o clique seguinte cobriria o quadro de preto.
   useEffect(() => {
-    if (quadro && (tool === "fog" || tool === "regua")) setTool("select");
+    if (quadro && (tool === "fog" || tool === "regua" || tool === "pin"))
+      setTool("select");
     // E o inverso: texto e seta são do quadro, e um mapa não tem onde mostrá-las.
     if (
       !quadro &&
-      (tool === "texto" || tool === "ligacao" || tool === "documento")
+      (tool === "texto" || tool === "ligacao")
     )
       setTool("select");
   }, [quadro, tool, setTool]);
@@ -274,7 +271,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
         nome={quadro ? "Ferramentas do quadro" : "Ferramentas do mapa"}
         dica={
           quadro
-            ? "Ponto, postit, texto, documento e seta."
+            ? "Postit, texto e seta."
             : "Ponto, postit, área escondida, grade e régua."
         }
         aberta={aberta === "mapa"}
