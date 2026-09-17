@@ -34,6 +34,7 @@ import {
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
+import { useToolStore } from "@/lib/store/use-tool-store";
 import { executarComando } from "@/lib/extensoes/carregar";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -477,11 +478,15 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Seleção",
     tecla: "Esc",
-    rotulo: "Largar a seleção e soltar a câmera",
+    rotulo: "Largar a ferramenta e a seleção, soltar a câmera",
     // Sem exigir a ausência do comando, como estava antes: Ctrl+Esc também
     // larga, e é o comportamento que já existia.
     combina: (evento) => evento.key === "Escape",
     executar: () => {
+      // A ferramenta primeiro: com o postit ou a névoa na mão e sem querer
+      // mais, não havia como largar sem abrir a bolsa e clicar na seta. Esc é
+      // a convenção de todo editor para "desisto do que eu ia fazer".
+      useToolStore.getState().setTool("select");
       useSelectionStore.getState().clear();
       // E solta a mesa: Esc é "para tudo o que está acontecendo", e uma TV
       // seguindo um token é algo que está acontecendo.

@@ -6,6 +6,7 @@ import {
   Map,
   MapPin,
   MousePointer2,
+  X,
   Pencil,
   Puzzle,
   Ruler,
@@ -239,6 +240,29 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
           sozinhos. */}
       <PencilControl />
       <PostitControl />
+
+      {/* Largar a ferramenta, para quem escolheu e desistiu. O Esc faz o mesmo,
+          mas um botão à vista é o que diz que dá para desistir: a seta está
+          dentro da bolsa, e chegar nela pedia dois cliques e saber onde ela
+          mora. Só aparece com algo na mão -- sem ferramenta não há o que
+          largar, e um X permanente na barra leria como "fechar a barra". */}
+      {tool !== "select" ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Largar a ferramenta"
+                onClick={() => escolher("select")}
+              >
+                <X />
+              </Button>
+            }
+          />
+          <TooltipContent>Largar a ferramenta (Esc)</TooltipContent>
+        </Tooltip>
+      ) : null}
     </div>
   );
 }
