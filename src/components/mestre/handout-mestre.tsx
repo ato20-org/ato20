@@ -6,7 +6,15 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { ImagePlus, Images, MoveDownLeft, Radio, RadioTower, X } from "lucide-react";
+import {
+  ImagePlus,
+  Images,
+  MoveDownLeft,
+  Plus,
+  Radio,
+  RadioTower,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,13 +33,18 @@ import { useAssetList } from "@/hooks/use-asset-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
 import { useTokenDrag } from "@/hooks/use-token-drag";
-import { importarCaminhosNoAcervo } from "@/lib/mestre/importar-arquivos";
+import {
+  absorverImportacao,
+  importarCaminhosNoAcervo,
+} from "@/lib/mestre/importar-arquivos";
 import { MINIATURA } from "@/lib/miniatura";
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { useHandoutStore } from "@/lib/store/use-handout-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { cn } from "@/lib/utils";
+import { importAssets } from "@/lib/vault/assets";
 import type { AssetMeta, Scene } from "@/types/scene";
 
 const BOLINHA = 44;
@@ -41,6 +54,28 @@ const LIMIAR = 4;
 
 /** A bolinha e o painel aberto: os dois recebem. Ver `useTokenDrag`. */
 const ZONA_DO_HANDOUT = "[data-handout]";
+
+/**
+ * O `+` do painel: abre o seletor nativo e o que entrar cai direto no handout.
+ *
+ * Mesmo caminho do arquivo solto na bolinha -- acervo primeiro, handout em
+ * seguida --, só que perguntando quais. `null` é o diálogo fechado sem
+ * escolher, e aí nada muda nem avisa.
+ */
+async function escolherParaHandout(
+  sceneId: string,
+  guardar: (sceneId: string, assetIds: string[]) => void,
+) {
+  const resultado = await importAssets("image", undefined, () =>
+    invalidarAcervo("image"),
+  );
+  if (!resultado) return;
+
+  guardar(
+    sceneId,
+    absorverImportacao(resultado).map((asset) => asset.id),
+  );
+}
 
 /**
  * O handout da cena: a carta na manga do mestre.
@@ -262,6 +297,16 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
         data-handout
         className="w-64"
       >
+        {/* O título diz o que é a caixa antes de a primeira imagem entrar: um
+            painel só com miniaturas não se apresenta. */}
+        <div className="mb-2 flex items-baseline justify-between">
+          <h3 className="text-sm font-medium">Handout da cena</h3>
+          {quantos > 0 ? (
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {quantos} {quantos === 1 ? "imagem" : "imagens"}
+            </span>
+          ) : null}
+        </div>
         <ConteudoDoHandout scene={scene} arquivoNoAr={arquivoNoAr !== null} />
       </PopoverContent>
     </Popover>
@@ -277,7 +322,10 @@ function ConteudoDoHandout({
   arquivoNoAr: boolean;
 }) {
   const { assets } = useAssetList("image");
+  const guardar = useSceneStore((state) => state.guardarNoHandout);
   const ids = scene.handout ?? [];
+
+  const escolher = () => void escolherParaHandout(scene.id, guardar);
 
   // Esmaece o que já está no palco. Deriva dos itens da cena, e não de uma
   // marca gravada: tirar o item da mesa pelo Del reacende a imagem sozinho.
@@ -299,10 +347,14 @@ function ConteudoDoHandout({
     // Uma zona de soltar desenhada, e não só um parágrafo: texto em painel
     // vazio não é lido. A caixa tracejada com a imagem entrando é o mesmo
     // desenho que todo upload usa, e diz sozinha o que fazer.
+    // E é botão: clicar abre o seletor, como o `+` do inventário. Quem não
+    // arrasta não fica sem porta.
     return (
-      <div
+      <button
+        type="button"
+        onClick={escolher}
         className={cn(
-          "text-muted-foreground flex flex-col items-center gap-2 rounded-md border-2 border-dashed px-3 py-5 text-center transition-colors",
+          "text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex w-full flex-col items-center gap-2 rounded-md border-2 border-dashed px-3 py-5 text-center transition-colors focus-visible:ring-2 focus-visible:outline-none",
           recebendo && "border-primary text-primary bg-primary/5",
         )}
       >
@@ -316,9 +368,9 @@ function ConteudoDoHandout({
         <p className="text-xs leading-snug">
           Arraste imagens para cá
           <br />
-          do acervo ou do computador
+          ou clique para escolher do computador
         </p>
-      </div>
+      </button>
     );
   }
 
@@ -338,6 +390,18 @@ function ConteudoDoHandout({
           naMesa={naMesa.has(assetId)}
         />
       ))}
+
+      {/* A caixinha de `+` do inventário: a grade sempre termina numa porta. */}
+      <li>
+        <button
+          type="button"
+          onClick={escolher}
+          aria-label="Escolher imagens do computador"
+          className="text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex aspect-square w-full items-center justify-center rounded-md border border-dashed focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <Plus className="size-4" aria-hidden />
+        </button>
+      </li>
     </ul>
   );
 }
