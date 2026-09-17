@@ -15,7 +15,13 @@
  * o relógio; este arquivo não sabe que React existe.
  */
 
-import { rotulosDoDado, TIPOS_DADO, type FacesDado, type Quat } from "@/types/dado";
+import {
+  rotulosDoDado,
+  textoDaFace,
+  TIPOS_DADO,
+  type FacesDado,
+  type Quat,
+} from "@/types/dado";
 import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
 
 const PHI = (1 + Math.sqrt(5)) / 2;
@@ -127,7 +133,8 @@ function quatEntre(de: Vec3, para: Vec3): Quat {
   // justamente aqui. Sem este caso, virar uma face que está de costas para a
   // câmera devolvia um quaternion degenerado e o dado sumia.
   if (cos < -0.999999) {
-    const eixo = Math.abs(de.x) < 0.9 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
+    const eixo =
+      Math.abs(de.x) < 0.9 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
     return quatDoEixo(cruz(de, eixo), Math.PI);
   }
 
@@ -256,7 +263,10 @@ export type Solido = {
  * local: `polygon` do SVG liga na ordem que recebe, e fora de ordem o polígono
  * sai como uma gravata.
  */
-function poliedro(brutos: readonly Vec3[]): { vertices: Vec3[]; faces: Face[] } {
+function poliedro(brutos: readonly Vec3[]): {
+  vertices: Vec3[];
+  faces: Face[];
+} {
   // Normalizados pelo circunraio, para que `raio`, do lado de quem chama,
   // signifique raio em unidades de cena em todos os seis sólidos.
   const circunraio = Math.max(...brutos.map((v) => Math.hypot(v.x, v.y, v.z)));
@@ -279,7 +289,10 @@ function poliedro(brutos: readonly Vec3[]): { vertices: Vec3[]; faces: Face[] } 
         if (Math.hypot(bruta.x, bruta.y, bruta.z) < EPS) continue;
 
         let normal = normalizar(bruta);
-        let d = normal.x * vertices[i].x + normal.y * vertices[i].y + normal.z * vertices[i].z;
+        let d =
+          normal.x * vertices[i].x +
+          normal.y * vertices[i].y +
+          normal.z * vertices[i].z;
 
         // Aponta para fora: com o sólido centrado na origem, o plano de uma
         // face tem `d > 0`. Virar aqui poupa o teste de sentido depois.
@@ -307,7 +320,9 @@ function poliedro(brutos: readonly Vec3[]): { vertices: Vec3[]; faces: Face[] } 
         const repetido = planos.some(
           (plano) =>
             Math.abs(plano.d - d) < 1e-5 &&
-            plano.normal.x * normal.x + plano.normal.y * normal.y + plano.normal.z * normal.z >
+            plano.normal.x * normal.x +
+              plano.normal.y * normal.y +
+              plano.normal.z * normal.z >
               1 - 1e-5,
         );
         if (!repetido) planos.push({ normal, d });
@@ -320,7 +335,10 @@ function poliedro(brutos: readonly Vec3[]): { vertices: Vec3[]; faces: Face[] } 
   for (const { normal, d } of planos) {
     const noPlano = vertices
       .map((v, indice) => ({ v, indice }))
-      .filter(({ v }) => Math.abs(normal.x * v.x + normal.y * v.y + normal.z * v.z - d) < 1e-5);
+      .filter(
+        ({ v }) =>
+          Math.abs(normal.x * v.x + normal.y * v.y + normal.z * v.z - d) < 1e-5,
+      );
 
     const centro = {
       x: noPlano.reduce((s, { v }) => s + v.x, 0) / noPlano.length,
@@ -369,7 +387,10 @@ function poliedro(brutos: readonly Vec3[]): { vertices: Vec3[]; faces: Face[] } 
     const indices = noPlano.map(({ indice }) => indice);
     const plano = (p: Vec3) => {
       const r = subtrair(p, centro);
-      return { x: r.x * u.x + r.y * u.y + r.z * u.z, y: r.x * v.x + r.y * v.y + r.z * v.z };
+      return {
+        x: r.x * u.x + r.y * u.y + r.z * u.z,
+        y: r.x * v.x + r.y * v.y + r.z * v.z,
+      };
     };
 
     let raioInterno = Infinity;
@@ -378,7 +399,10 @@ function poliedro(brutos: readonly Vec3[]): { vertices: Vec3[]; faces: Face[] } 
       const b = plano(vertices[indices[(i + 1) % indices.length]]);
       const comprimento = Math.hypot(b.x - a.x, b.y - a.y) || 1;
       // Distância do centro (a origem da base local) à reta da aresta.
-      raioInterno = Math.min(raioInterno, Math.abs(a.x * b.y - a.y * b.x) / comprimento);
+      raioInterno = Math.min(
+        raioInterno,
+        Math.abs(a.x * b.y - a.y * b.x) / comprimento,
+      );
     }
 
     faces.push({ indices, normal, centro, u, v, raioInterno });
@@ -421,12 +445,17 @@ function numerarOpostas(faces: Face[], rotulos: number[]) {
   for (const face of faces) {
     if (postos.has(face)) continue;
 
-    const oposta = faces.reduce((melhor, outra) => {
-      if (outra === face) return melhor;
-      const cos = (f: Face) =>
-        f.normal.x * face.normal.x + f.normal.y * face.normal.y + f.normal.z * face.normal.z;
-      return melhor && cos(melhor) <= cos(outra) ? melhor : outra;
-    }, undefined as Face | undefined);
+    const oposta = faces.reduce(
+      (melhor, outra) => {
+        if (outra === face) return melhor;
+        const cos = (f: Face) =>
+          f.normal.x * face.normal.x +
+          f.normal.y * face.normal.y +
+          f.normal.z * face.normal.z;
+        return melhor && cos(melhor) <= cos(outra) ? melhor : outra;
+      },
+      undefined as Face | undefined,
+    );
 
     const rotulo = rotulos[proximo++];
     postos.set(face, rotulo);
@@ -461,7 +490,8 @@ function verticesDoDado(faces: FacesDado): Vec3[] {
 
   if (faces === 6) {
     const saida: Vec3[] = [];
-    for (const x of [1, -1]) for (const y of [1, -1]) for (const z of [1, -1]) saida.push({ x, y, z });
+    for (const x of [1, -1])
+      for (const y of [1, -1]) for (const z of [1, -1]) saida.push({ x, y, z });
     return saida;
   }
 
@@ -476,7 +506,27 @@ function verticesDoDado(faces: FacesDado): Vec3[] {
     ];
   }
 
-  if (faces === 10) {
+  if (faces === 2) {
+    // A moeda: um disco, que aqui é um prisma de vinte lados e pouca altura.
+    // Vinte e não mais porque a dedução de faces é cúbica no número de
+    // vértices -- quarenta vértices são dez mil trios, e cabem na carga do
+    // módulo; oitenta seriam oitenta mil. Vinte lados já não se vê como
+    // polígono no tamanho em que a moeda aparece.
+    //
+    // A altura é a de uma moeda grossa. Fina demais e a lateral some no pouso
+    // tombado, e o disco vira um papel; grossa demais e vira uma pastilha.
+    const meiaAltura = 0.09;
+    const saida: Vec3[] = [];
+    for (let i = 0; i < 20; i++) {
+      const a = (i * 2 * Math.PI) / 20;
+      saida.push({ x: Math.cos(a), y: Math.sin(a), z: meiaAltura });
+      saida.push({ x: Math.cos(a), y: Math.sin(a), z: -meiaAltura });
+    }
+    return saida;
+  }
+
+  // O d% é o MESMO trapezoedro do d10: dez faces, só o que está gravado muda.
+  if (faces === 10 || faces === 100) {
     const anel = 0.105;
     const apice = apiceDoTrapezoedro(anel);
     const saida: Vec3[] = [
@@ -487,7 +537,11 @@ function verticesDoDado(faces: FacesDado): Vec3[] {
     for (let i = 0; i < 5; i++) {
       const a = (i * 2 * Math.PI) / 5;
       saida.push({ x: Math.cos(a), y: Math.sin(a), z: anel });
-      saida.push({ x: Math.cos(a + Math.PI / 5), y: Math.sin(a + Math.PI / 5), z: -anel });
+      saida.push({
+        x: Math.cos(a + Math.PI / 5),
+        y: Math.sin(a + Math.PI / 5),
+        z: -anel,
+      });
     }
 
     return saida;
@@ -495,7 +549,8 @@ function verticesDoDado(faces: FacesDado): Vec3[] {
 
   if (faces === 12) {
     const saida: Vec3[] = [];
-    for (const x of [1, -1]) for (const y of [1, -1]) for (const z of [1, -1]) saida.push({ x, y, z });
+    for (const x of [1, -1])
+      for (const y of [1, -1]) for (const z of [1, -1]) saida.push({ x, y, z });
     for (const s of [1, -1]) {
       for (const t of [1, -1]) {
         saida.push({ x: 0, y: s * PHI_INV, z: t * PHI });
@@ -552,7 +607,29 @@ export const SOLIDOS: Record<FacesDado, Solido> = (() => {
   for (const tipo of TIPOS_DADO) {
     const { vertices, faces } = poliedro(verticesDoDado(tipo.faces));
     const rotulos = rotulosDoDado(tipo.faces);
-    const digitos = Math.max(...rotulos.map((rotulo) => String(rotulo).length));
+    // Pelo TEXTO gravado e não pelo número: o `00` do d% tem dois algarismos, e
+    // a moeda escreve palavra.
+    const digitos = Math.max(
+      ...rotulos.map((rotulo) => textoDaFace(tipo.faces, rotulo).length),
+    );
+
+    if (tipo.faces === 2) {
+      // Só as duas faces grandes recebem texto; as vinte laterais são o canto
+      // da moeda. E é das grandes que sai o corpo da fonte -- pela menor face
+      // do sólido, como nos dados, a palavra sairia do tamanho da lateral.
+      const grandes = faces.filter((face) => Math.abs(face.normal.z) > 0.9);
+      for (const face of grandes) face.numero = face.normal.z > 0 ? 1 : 2;
+
+      montados[tipo.faces] = {
+        vertices,
+        faces,
+        leitura: "face",
+        tamanhoNumero: tamanhoQueCabe(grandes, digitos),
+        limiarNumero: 0.34,
+        sublinha: false,
+      };
+      continue;
+    }
 
     if (tipo.faces === 4) {
       montados[tipo.faces] = {
@@ -802,7 +879,10 @@ export function desenharDado({
     for (let i = 0; i < vertices.length; i += 2) {
       pontos.push(`${vertices[i]},${vertices[i + 1]}`);
     }
-    const luz = Math.max(0, normal.x * LUZ.x + normal.y * LUZ.y + normal.z * LUZ.z);
+    const luz = Math.max(
+      0,
+      normal.x * LUZ.x + normal.y * LUZ.y + normal.z * LUZ.z,
+    );
 
     const numeros: NumeroDesenhado[] = [];
 
@@ -889,9 +969,10 @@ export function desenharDado({
         const v = girar(orientacao, face.v);
 
         numeros.push({
-          texto: String(face.numero),
+          texto: textoDaFace(quantasFaces, face.numero),
           matriz: afim(centro, u, v, solido.tamanhoNumero),
-          sublinhado: solido.sublinha && (face.numero === 6 || face.numero === 9),
+          sublinhado:
+            solido.sublinha && (face.numero === 6 || face.numero === 9),
         });
       }
     }
@@ -971,11 +1052,17 @@ const IMPULSO_CHEIO = 1600;
  * outra, e o teto que o comentário prometia não existia na metade que mais se
  * nota.
  */
-function impulsoLimitado(impulso: { x: number; y: number }): { x: number; y: number } {
+function impulsoLimitado(impulso: { x: number; y: number }): {
+  x: number;
+  y: number;
+} {
   const forte = Math.hypot(impulso.x, impulso.y);
   if (forte <= IMPULSO_CHEIO) return impulso;
 
-  return { x: (impulso.x / forte) * IMPULSO_CHEIO, y: (impulso.y / forte) * IMPULSO_CHEIO };
+  return {
+    x: (impulso.x / forte) * IMPULSO_CHEIO,
+    y: (impulso.y / forte) * IMPULSO_CHEIO,
+  };
 }
 
 /**
@@ -1027,13 +1114,16 @@ function forcaDoImpulso(impulso: { x: number; y: number }): number {
  *
  * Quem anima usa isto para saber quando largar o `requestAnimationFrame`.
  */
-export function duracaoDaQueda(dado: { impulso: { x: number; y: number } }): number {
+export function duracaoDaQueda(dado: {
+  impulso: { x: number; y: number };
+}): number {
   const forca = forcaDoImpulso(dado.impulso);
   const subida = ARREMESSO_ALTO * forca;
 
   // Tempo até tocar o chão: `h0 + v0·t − g·t²/2 = 0`, raiz positiva.
   let total =
-    (subida + Math.sqrt(subida * subida + 2 * GRAVIDADE * ALTURA_DA_MAO)) / GRAVIDADE;
+    (subida + Math.sqrt(subida * subida + 2 * GRAVIDADE * ALTURA_DA_MAO)) /
+    GRAVIDADE;
 
   let v = GRAVIDADE * total - subida;
   for (let i = 0; i < batidasDoImpulso(forca); i++) {
@@ -1064,10 +1154,14 @@ function batidasDoImpulso(forca: number): number {
  * estado. Com a fórmula fechada, desenhar o instante `t` não depende de ter
  * desenhado `t - 1`.
  */
-function alturaEm(t: number, forca: number): { altura: number; batida: number } {
+function alturaEm(
+  t: number,
+  forca: number,
+): { altura: number; batida: number } {
   const subida = ARREMESSO_ALTO * forca;
   const primeira =
-    (subida + Math.sqrt(subida * subida + 2 * GRAVIDADE * ALTURA_DA_MAO)) / GRAVIDADE;
+    (subida + Math.sqrt(subida * subida + 2 * GRAVIDADE * ALTURA_DA_MAO)) /
+    GRAVIDADE;
 
   if (t < primeira) {
     return {
@@ -1085,7 +1179,10 @@ function alturaEm(t: number, forca: number): { altura: number; batida: number } 
 
     if (t < inicio + arco) {
       const dt = t - inicio;
-      return { altura: Math.max(0, v * dt - 0.5 * GRAVIDADE * dt * dt), batida: inicio };
+      return {
+        altura: Math.max(0, v * dt - 0.5 * GRAVIDADE * dt * dt),
+        batida: inicio,
+      };
     }
 
     inicio += arco;
@@ -1184,7 +1281,11 @@ export function quadroDaQueda(
 ): QuadroDaQueda {
   const rnd = semeado(dado.semente);
 
-  const eixo = normalizar({ x: rnd() * 2 - 1, y: rnd() * 2 - 1, z: rnd() * 2 - 1 });
+  const eixo = normalizar({
+    x: rnd() * 2 - 1,
+    y: rnd() * 2 - 1,
+    z: rnd() * 2 - 1,
+  });
   const inicial = quatDoEixo(
     { x: rnd() * 2 - 1, y: rnd() * 2 - 1, z: rnd() * 2 - 1 },
     rnd() * Math.PI * 2,
@@ -1246,7 +1347,10 @@ export function quadroDaQueda(
     // O giro continua, mais lento: `1 - p` derruba a velocidade angular junto
     // com a mistura, então nos últimos quadros o alvo domina sem freada visível.
     const livre = quatMul(
-      quatDoEixo(eixo, (inicioAssento + (decorrido - inicioAssento) * (1 - p)) * velocidade),
+      quatDoEixo(
+        eixo,
+        (inicioAssento + (decorrido - inicioAssento) * (1 - p)) * velocidade,
+      ),
       inicial,
     );
     orientacao = quatSlerp(livre, alvo, suavizarSaida(p));
@@ -1255,7 +1359,8 @@ export function quadroDaQueda(
   // Trinta e cinco milésimos depois da batida: tempo de um quadro e meio a
   // sessenta, que é o mínimo para o olho registrar o impacto.
   const desdeBatida = batida >= 0 ? agora - batida : Infinity;
-  const esmaga = desdeBatida < 0.035 && !parado ? 1 - (1 - desdeBatida / 0.035) * 0.14 : 1;
+  const esmaga =
+    desdeBatida < 0.035 && !parado ? 1 - (1 - desdeBatida / 0.035) * 0.14 : 1;
 
   /**
    * Os números aparecem só na reta final do assentamento.
@@ -1264,7 +1369,9 @@ export function quadroDaQueda(
    * —, e em rampa: dez algarismos surgindo de uma vez num estalo se nota, e o
    * que se quer é a sensação de o borrão resolvendo conforme o dado perde giro.
    */
-  const assentando = parado ? 1 : Math.max(0, (decorrido - inicioAssento) / ASSENTO);
+  const assentando = parado
+    ? 1
+    : Math.max(0, (decorrido - inicioAssento) / ASSENTO);
   const nitidez = Math.min(1, Math.max(0, (assentando - 0.55) / 0.45)) ** 2;
 
   return {
@@ -1324,7 +1431,11 @@ export function quadroNaMao({
   t: number;
 }): { orientacao: Quat; escala: number; sombra: QuadroDaQueda["sombra"] } {
   const rnd = semeado(semente);
-  const eixo = normalizar({ x: rnd() * 2 - 1, y: rnd() * 2 - 1, z: rnd() * 2 - 1 });
+  const eixo = normalizar({
+    x: rnd() * 2 - 1,
+    y: rnd() * 2 - 1,
+    z: rnd() * 2 - 1,
+  });
   const inicial = quatDoEixo(
     { x: rnd() * 2 - 1, y: rnd() * 2 - 1, z: rnd() * 2 - 1 },
     rnd() * Math.PI * 2,
@@ -1446,7 +1557,11 @@ export function quadroDaSuccao(
 
   // O eixo da tombada é o mesmo da queda: é o segundo número da semente, e o
   // dado não troca de eixo entre pousar e ser recolhido.
-  const eixo = normalizar({ x: rnd() * 2 - 1, y: rnd() * 2 - 1, z: rnd() * 2 - 1 });
+  const eixo = normalizar({
+    x: rnd() * 2 - 1,
+    y: rnd() * 2 - 1,
+    z: rnd() * 2 - 1,
+  });
   // Umas três voltas, quase todas no fim: `p³` é o giro de quem acelera para
   // dentro. O dado entra no saquinho rodando, não parado.
   const orientacao = quatMul(quatDoEixo(eixo, p ** 3 * 18), dado.orientacao);
@@ -1521,7 +1636,8 @@ export function corDaFace(hex: string, luz: number): string {
   const intensidade = 0.4 + 0.6 * luz;
   const brilho = luz ** 3 * 0.16;
 
-  const canal = (valor: number) => Math.round(Math.min(255, valor * intensidade + 255 * brilho));
+  const canal = (valor: number) =>
+    Math.round(Math.min(255, valor * intensidade + 255 * brilho));
 
   return `rgb(${canal((n >> 16) & 255)} ${canal((n >> 8) & 255)} ${canal(n & 255)})`;
 }
