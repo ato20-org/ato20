@@ -224,6 +224,7 @@ pub fn run() {
             commands::estante_import,
             commands::estante_pagina,
             commands::estante_remover,
+            commands::estante_abrir,
             commands::marcador_list,
             commands::marcador_add,
             commands::marcador_rotulo,
