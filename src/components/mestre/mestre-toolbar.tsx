@@ -111,7 +111,7 @@ const FERRAMENTAS_QUADRO: Ferramenta[] = [
   {
     tool: "texto",
     label: "Texto",
-    hint: "Clique no quadro para escrever direto na folha, sem papel. Duplo clique edita, arrasto move, Delete apaga.",
+    hint: "Clique no quadro para escrever direto na folha, sem papel. Duplo clique edita, arrasto move; selecionado, a pílula acima aumenta, diminui e apaga.",
     icon: Type,
   },
   {

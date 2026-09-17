@@ -1,12 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { AArrowDown, AArrowUp, Trash2 } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 
 import {
   TextoView,
   tipografiaDoTexto,
 } from "@/components/playground/quadro-mesa-layer";
-import { useSceneScale } from "@/components/playground/scene-stage";
+import {
+  emPixelDeTela,
+  useSceneScale,
+} from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { useQuadroStore, TEXTO_Z } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -41,6 +47,19 @@ export function TextoLayer({
       panMode={panMode}
     />
   ));
+}
+
+/**
+ * Os tamanhos que o A− e o A+ percorrem, em unidades de cena. Degraus e não um
+ * campo numérico: o que se quer é "maior" e "menor", não 43.
+ */
+const TAMANHOS = [16, 20, 24, 32, 40, 56, 72, 96, 128, 160] as const;
+
+function vizinho(tamanho: number, sentido: 1 | -1): number {
+  const indice = TAMANHOS.findIndex((t) => t >= tamanho);
+  const atual = indice === -1 ? TAMANHOS.length - 1 : indice;
+  const proximo = Math.min(Math.max(atual + sentido, 0), TAMANHOS.length - 1);
+  return TAMANHOS[proximo]!;
 }
 
 function TextoSolto({
@@ -89,8 +108,15 @@ function TextoSolto({
 
     // Texto que ficou vazio some: uma caixa invisível no quadro seria um alvo
     // de seta que ninguém vê.
-    if (!atual?.texto.trim()) removeTexto(sceneId, texto.id);
+    if (!atual?.texto.trim()) {
+      removeTexto(sceneId, texto.id);
+      quadro.editarTexto(null);
+      return;
+    }
+    // Sai da edição mas FICA selecionado: apertar A+ na pílula tira o foco do
+    // campo, e a pílula sumir junto deixaria o segundo A+ sem alvo.
     quadro.editarTexto(null);
+    quadro.selecionarTexto(texto.id);
   }, [sceneId, texto.id, removeTexto]);
 
   const raiz = useRef<HTMLDivElement | null>(null);
@@ -199,6 +225,62 @@ function TextoSolto({
         ) : null}
       </div>
       {editando ? null : <TextoView texto={texto} />}
+
+      {/* A pílula de tamanho, acima do texto enquanto ele está na mão. Em
+          pixel de tela: um botão que encolhesse com o zoom sumiria justo
+          quando o mestre afasta o quadro para ver o título inteiro. */}
+      {(editando || selecionado) && tool !== "ligacao" ? (
+        <div
+          className="absolute bottom-full left-0 mb-1"
+          style={ampliacaoNoLayout ? emPixelDeTela(scale) : undefined}
+          onPointerDown={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+        >
+          <div
+            className="bg-background/90 flex items-center gap-0.5 rounded-md border p-0.5 shadow backdrop-blur"
+            style={ampliacaoNoLayout ? undefined : { zoom: 1 / scale }}
+          >
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Diminuir o texto"
+              disabled={texto.tamanho <= TAMANHOS[0]}
+              onClick={() =>
+                updateTexto(sceneId, texto.id, {
+                  tamanho: vizinho(texto.tamanho, -1),
+                })
+              }
+            >
+              <AArrowDown />
+            </Button>
+            <span className="text-muted-foreground min-w-6 text-center text-[10px] tabular-nums">
+              {texto.tamanho}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Aumentar o texto"
+              disabled={texto.tamanho >= TAMANHOS[TAMANHOS.length - 1]!}
+              onClick={() =>
+                updateTexto(sceneId, texto.id, {
+                  tamanho: vizinho(texto.tamanho, 1),
+                })
+              }
+            >
+              <AArrowUp />
+            </Button>
+            <span className="bg-border mx-0.5 h-4 w-px" />
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Apagar o texto"
+              onClick={() => removeTexto(sceneId, texto.id)}
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
