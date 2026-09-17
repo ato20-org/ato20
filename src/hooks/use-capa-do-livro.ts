@@ -20,15 +20,65 @@ const LARGURA_PX = 192;
 /**
  * Uma promessa por livro, por sessão.
  *
- * Em memória e não em disco, de propósito: gerar custa abrir o documento pelo
- * daemon e desenhar uma página, meio segundo por livro, e a estante tem meia
- * dúzia. Gravar PNG no daemon seria uma rota e um comando para poupar meio
- * segundo na segunda abertura. Se incomodar, vem depois.
- *
  * `null` guardado = já tentou e falhou; a caixa desenha sem imagem e não tenta
  * de novo a cada render.
  */
 const capas = new Map<string, Promise<Capa | null>>();
+
+/**
+ * A capa pronta, guardada entre aberturas do aplicativo.
+ *
+ * Gerar custa abrir o documento pelo daemon e desenhar a primeira página: num
+ * manual de 90 MB isso passa de um segundo, e a porta abria com uma caixa
+ * cinza que só depois virava capa -- o livro grande "chegava atrasado" a
+ * cada abertura. A capa não muda: o arquivo é copiado para a estante e o id é
+ * dele. Então o JPEG de 192 px, uns 20 KB, fica no `localStorage`, e da
+ * segunda abertura em diante o livro nasce com a capa, sem passar pelo
+ * estado de carregando.
+ *
+ * `localStorage` e não uma rota do daemon: são uns poucos livros de uns
+ * poucos KB, e uma gravação no disco pelo Rust seria comando e rota para o
+ * que um `setItem` resolve. Toda leitura e escrita em `try/catch`: modo
+ * privado, storage cheio ou bloqueado só voltam ao caminho de gerar.
+ */
+const PREFIXO = "ato20.capa-do-livro.";
+
+function lerGuardada(livroId: string): Capa | null {
+  try {
+    const bruto = window.localStorage.getItem(PREFIXO + livroId);
+    if (!bruto) return null;
+
+    const capa = JSON.parse(bruto) as Partial<Capa>;
+    if (
+      typeof capa.url !== "string" ||
+      typeof capa.proporcao !== "number" ||
+      typeof capa.cor !== "string"
+    )
+      return null;
+
+    return { url: capa.url, proporcao: capa.proporcao, cor: capa.cor };
+  } catch {
+    return null;
+  }
+}
+
+function guardar(livroId: string, capa: Capa): void {
+  try {
+    window.localStorage.setItem(PREFIXO + livroId, JSON.stringify(capa));
+  } catch {
+    // Sem espaço ou sem storage: a próxima abertura gera de novo, como antes.
+  }
+}
+
+/** Some com a capa guardada quando o livro sai da estante. */
+export function esquecerCapa(livroId: string): void {
+  capas.delete(livroId);
+  try {
+    window.localStorage.removeItem(PREFIXO + livroId);
+  } catch {
+    // Nada a apagar.
+  }
+}
 
 async function gerar(livroId: string): Promise<Capa | null> {
   const [mod, fonte] = await Promise.all([pdfjs(), livroFonte(livroId)]);
@@ -92,18 +142,34 @@ function corMedia(
  * A capa de um livro da estante: `undefined` enquanto gera, `null` se falhou.
  */
 export function useCapaDoLivro(livroId: string): Capa | null | undefined {
-  const [capa, setCapa] = useState<Capa | null | undefined>(undefined);
+  // A guardada entra já no primeiro render: é o que faz o livro nascer com a
+  // capa, sem um quadro de caixa vazia antes.
+  const [capa, setCapa] = useState<Capa | null | undefined>(() =>
+    lerGuardada(livroId) ?? undefined,
+  );
 
   useEffect(() => {
     let ativo = true;
 
+    const guardada = lerGuardada(livroId);
+    if (guardada) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCapa(guardada);
+      return;
+    }
+
     let promessa = capas.get(livroId);
     if (!promessa) {
-      promessa = gerar(livroId).catch(() => null);
+      promessa = gerar(livroId)
+        .then((pronta) => {
+          if (pronta) guardar(livroId, pronta);
+          return pronta;
+        })
+        .catch(() => null);
       capas.set(livroId, promessa);
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setCapa(undefined);
     void promessa.then((pronta) => {
       if (ativo) setCapa(pronta);

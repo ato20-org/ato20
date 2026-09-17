@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { esquecerCapa } from "@/hooks/use-capa-do-livro";
+
 import {
   importarLivros,
   importarLivrosDe,
@@ -97,6 +99,7 @@ export function useEstante(): EstanteApi {
     async (id: string) => {
       try {
         await removerLivro(id);
+        esquecerCapa(id);
         refresh();
       } catch (cause) {
         toast.error(cause instanceof Error ? cause.message : "Falha ao remover o livro.");

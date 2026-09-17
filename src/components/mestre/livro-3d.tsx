@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Loader2 } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
 import { useCapaDoLivro } from "@/hooks/use-capa-do-livro";
 import { formatBytes } from "@/lib/player/session";
@@ -68,20 +68,28 @@ export function Livro3D({
             style={{ backfaceVisibility: "hidden" }}
           >
             {capa ? (
+              // Entra em fade: da segunda abertura em diante a capa vem do
+              // cache e já está no primeiro quadro; na primeira, ela chega
+              // depois de gerar, e aparecer de uma vez sobre a caixa vazia era
+              // o que fazia o livro grande parecer "chegar atrasado".
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={capa.url}
                 alt=""
-                className="block h-full w-full object-cover"
+                className="animate-in fade-in-0 block h-full w-full object-cover duration-300 motion-reduce:animate-none"
                 draggable={false}
+              />
+            ) : capa === undefined ? (
+              // Gerando: um pulso quieto no tom da caixa, sem spinner. O
+              // spinner dizia "espere aqui", e a estante não é o que a pessoa
+              // veio fazer na porta -- a capa chega quando chegar.
+              <span
+                className="block h-full w-full animate-pulse bg-neutral-700/60 motion-reduce:animate-none"
+                aria-hidden
               />
             ) : (
               <span className="text-muted-foreground grid h-full w-full place-items-center">
-                {capa === undefined ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : (
-                  <BookOpen className="size-5" aria-hidden />
-                )}
+                <BookOpen className="size-5" aria-hidden />
               </span>
             )}
             {/* Brilho da dobra, onde a capa encosta na lombada. */}
