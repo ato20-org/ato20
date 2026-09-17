@@ -12,6 +12,7 @@ import { WindowLayer } from "@/components/mestre/window-layer";
 import { OnAirControl } from "@/components/mestre/on-air-control";
 import { MestreStage } from "@/components/mestre/mestre-stage";
 import { MestreToolbar } from "@/components/mestre/mestre-toolbar";
+import { PaletaDeComandos } from "@/components/mestre/paleta-de-comandos";
 import { PinIndex } from "@/components/mestre/pin-index";
 import { HandoutMestre } from "@/components/mestre/handout-mestre";
 import { SaquinhoDados } from "@/components/mestre/saquinho-dados";
@@ -173,6 +174,9 @@ export function MestreShell() {
   useSpacePan();
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Ctrl+K. Vive aqui, e não em `mestre.tsx`, porque lista cenas, livros e
+          acervo: só existe com a campanha aberta. */}
+      <PaletaDeComandos />
       {/* `flex-wrap`: abaixo de ~1000px a barra quebra em duas linhas em vez
           de comprimir os controles ou vazar para fora da tela. Duas linhas em
           janela estreita é honesto; controle inalcançável não é. */}
