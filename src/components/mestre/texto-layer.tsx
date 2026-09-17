@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import {
   TextoView,
@@ -75,21 +75,58 @@ function TextoSolto({
     ampliacaoNoLayout,
   );
 
-  useEffect(() => {
-    if (!editando) return;
-    const alvo = campo.current;
-    if (!alvo) return;
-    alvo.focus();
-    // Cursor no fim: quem reabre um texto quer continuar, não reescrever.
-    alvo.setSelectionRange(alvo.value.length, alvo.value.length);
-  }, [editando]);
+  // Lê o texto atual do store, e não da prop: o ouvinte do documento abaixo
+  // é instalado uma vez por edição, e a prop que ele fechou seria a do
+  // primeiro render.
+  const fechar = useCallback(() => {
+    const quadro = useQuadroStore.getState();
+    if (quadro.textoEditandoId !== texto.id) return;
 
-  function fechar() {
+    const atual = useSceneStore
+      .getState()
+      .board?.scenes.find((cena) => cena.id === sceneId)
+      ?.textos?.find((candidato) => candidato.id === texto.id);
+
     // Texto que ficou vazio some: uma caixa invisível no quadro seria um alvo
     // de seta que ninguém vê.
-    if (!texto.texto.trim()) removeTexto(sceneId, texto.id);
-    useQuadroStore.getState().editarTexto(null);
-  }
+    if (!atual?.texto.trim()) removeTexto(sceneId, texto.id);
+    quadro.editarTexto(null);
+  }, [sceneId, texto.id, removeTexto]);
+
+  const raiz = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!editando) return;
+    // No quadro seguinte, e não já: o texto nasce no MESMO pointerdown que o
+    // criou, e o foco pedido dentro desse gesto era desfeito pelo padrão do
+    // clique, que leva o foco para onde o mouse desceu.
+    const quadro = requestAnimationFrame(() => {
+      const alvo = campo.current;
+      if (!alvo) return;
+      alvo.focus();
+      // Cursor no fim: quem reabre um texto quer continuar, não reescrever.
+      alvo.setSelectionRange(alvo.value.length, alvo.value.length);
+    });
+    return () => cancelAnimationFrame(quadro);
+  }, [editando]);
+
+  /**
+   * Clique fora fecha, como no postit: na captura e no documento, porque o
+   * `blur` sozinho não vem quando o clique cai em algo que não toma foco, e o
+   * palco é exatamente isso.
+   */
+  useEffect(() => {
+    if (!editando) return;
+
+    function foraDaqui(event: PointerEvent) {
+      const alvo = event.target;
+      if (alvo instanceof Node && raiz.current?.contains(alvo)) return;
+      fechar();
+    }
+
+    document.addEventListener("pointerdown", foraDaqui, true);
+    return () => document.removeEventListener("pointerdown", foraDaqui, true);
+  }, [editando, fechar]);
 
   function arrastar(event: React.PointerEvent) {
     // Com a seta na mão, o clique é do palco: é ele que descobre o alvo.
@@ -114,12 +151,15 @@ function TextoSolto({
 
   return (
     <div
+      ref={raiz}
       className={cn(
         // `pointer-events-auto` porque o plano dos controles desliga o ponteiro.
         // Ver `PostitPapel`.
         "pointer-events-auto absolute",
         tool === "ligacao" ? "cursor-crosshair" : "cursor-move",
-        !editando && selecionado && "ring-primary/60 rounded-sm ring-1",
+        // Contorno enquanto edita ou selecionado: um texto vazio em edição
+        // não tem letra nenhuma para mostrar onde está.
+        (editando || selecionado) && "ring-primary/60 rounded-sm ring-1",
       )}
       style={{ left: texto.x, top: texto.y, zIndex: TEXTO_Z, touchAction: "none" }}
       onPointerDown={arrastar}
@@ -135,8 +175,11 @@ function TextoSolto({
             className="text-foreground block resize-none overflow-hidden bg-transparent whitespace-pre outline-none"
             style={tipografia}
             aria-label="Texto solto"
+            placeholder="Escreva…"
             rows={linhas.length}
-            cols={Math.max(1, maior)}
+            // Nunca menor que o placeholder: vazio, a caixa de uma coluna
+            // cortaria a dica e o texto pareceria não ter nascido.
+            cols={Math.max(8, maior)}
             value={texto.texto}
             onChange={(event) =>
               updateTexto(sceneId, texto.id, { texto: event.target.value })
