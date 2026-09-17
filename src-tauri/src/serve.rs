@@ -764,7 +764,7 @@ pub struct Rolagem {
 
 /// Os solidos que existem. Recusar o resto e o que impede um `faces: 1000000`
 /// vindo de um celular de virar um dado que nenhuma tela sabe desenhar.
-const FACES_VALIDAS: [u32; 6] = [20, 12, 10, 8, 6, 4];
+const FACES_VALIDAS: [u32; 8] = [100, 20, 12, 10, 8, 6, 4, 2];
 
 /// `POST /eu/rolagens` -- o jogador joga um dado na mesa.
 ///
@@ -862,7 +862,16 @@ async fn rolls(
 /// `None` quando o sistema nao tem aleatoriedade a dar. Quem chama recusa a
 /// rolagem; nao ha atalho aceitavel aqui.
 fn sortear_face(faces: u32) -> Option<u32> {
-    let limite = (u32::MAX / faces) * faces;
+    // O d% (`100`) e dez faces gravadas de dez em dez, e nao cem: e o dado de
+    // dezenas, o mesmo trapezoedro do d10. Sortear entre cem numeros aqui daria
+    // um valor que nenhuma face dele tem. Ver `rotulosDoDado` em `types/dado.ts`.
+    let (inicio, passo, lados) = match faces {
+        10 => (0, 1, 10),
+        100 => (0, 10, 10),
+        _ => (1, 1, faces),
+    };
+
+    let limite = (u32::MAX / lados) * lados;
 
     let mut bytes = [0u8; 4];
     let bruto = loop {
@@ -873,10 +882,7 @@ fn sortear_face(faces: u32) -> Option<u32> {
         }
     };
 
-    // O d10 e gravado de zero a nove; todo o resto comeca em um.
-    let inicio = if faces == 10 { 0 } else { 1 };
-
-    Some(inicio + bruto % faces)
+    Some(inicio + (bruto % lados) * passo)
 }
 
 // --- a ficha do jogador -----------------------------------------------------
@@ -3835,6 +3841,34 @@ mod tests {
 
         let valor = json["valor"].as_i64().expect("valor");
         assert!((1..=20).contains(&valor), "{valor} fora da faixa do d20");
+    }
+
+    #[tokio::test]
+    async fn o_dado_de_dezenas_sai_de_dez_em_dez_e_a_moeda_em_dois() {
+        // O d% tem dez faces, `00` a `90`: um valor que nao seja multiplo de
+        // dez e uma face que o dado nao tem. A moeda e um e dois, cara e coroa.
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        for _ in 0..30 {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token, "POST", "/eu/rolagens", Some(r#"{"faces":100}"#)))
+                .await
+                .expect("resposta");
+            let json: serde_json::Value =
+                serde_json::from_str(&corpo(response).await).expect("json");
+            let valor = json["valor"].as_i64().expect("valor");
+            assert!((0..=90).contains(&valor) && valor % 10 == 0, "{valor} nao e face do d%");
+
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token, "POST", "/eu/rolagens", Some(r#"{"faces":2}"#)))
+                .await
+                .expect("resposta");
+            let json: serde_json::Value =
+                serde_json::from_str(&corpo(response).await).expect("json");
+            let valor = json["valor"].as_i64().expect("valor");
+            assert!((1..=2).contains(&valor), "{valor} nao e face da moeda");
+        }
     }
 
     #[tokio::test]

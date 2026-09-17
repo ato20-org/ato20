@@ -18,7 +18,13 @@ import { useDadosNaMesa } from "@/hooks/use-dados-na-mesa";
 import { useGestoDeArremesso } from "@/hooks/use-gesto-de-arremesso";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { cn } from "@/lib/utils";
-import { TIPOS_DADO, valorDaRolagem, type TipoDado } from "@/types/dado";
+import {
+  entraNaSoma,
+  rotulosDoDado,
+  TIPOS_DADO,
+  valorDaRolagem,
+  type TipoDado,
+} from "@/types/dado";
 
 /** Diâmetro da bolinha, em pixel de tela. */
 const BOLINHA = 64;
@@ -241,10 +247,9 @@ export function ConteudoDoSaquinho({
   }
 
   /** O que já pousou, e quanto vale. O zero do d10 vale dez. */
-  const soma = dados.reduce(
-    (total, dado) => total + valorDaRolagem(dado.faces, dado.valor),
-    0,
-  );
+  const soma = dados
+    .filter((dado) => entraNaSoma(dado.faces))
+    .reduce((total, dado) => total + valorDaRolagem(dado.faces, dado.valor), 0);
 
   return (
     <div className="space-y-3">
@@ -272,7 +277,7 @@ export function ConteudoDoSaquinho({
                 `20` só existe no d20 -- e é o que a mesa quer ver. */}
             <DadoParado
               faces={tipo.faces}
-              valor={tipo.faces === 10 ? 9 : tipo.faces}
+              valor={rotulosDoDado(tipo.faces).at(-1) ?? tipo.faces}
               tamanho={48}
             />
             <span className="text-muted-foreground text-[11px] leading-none">

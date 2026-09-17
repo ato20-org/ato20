@@ -7,8 +7,19 @@
  * `useDadosStore`.
  */
 
-/** Quantas faces. Não é `number`: só existem estes seis sólidos. */
-export type FacesDado = 20 | 12 | 10 | 8 | 6 | 4;
+/**
+ * Quantas faces. Não é `number`: só existem estes oito.
+ *
+ * `100` é o dado de DEZENAS, o d% de qualquer jogo de porcentagem: dez faces
+ * gravadas `00` a `90`, o mesmo trapezoedro do d10. Não há sólido de cem faces
+ * aqui, e não haveria como ler um -- na mesa real o d100 são dois dados, e é o
+ * que ele é aqui: o d% e um d10 caem juntos e a soma que o saquinho já mostra
+ * dá de um a cem. Ver `valorDaRolagem`.
+ *
+ * `2` é a moeda. Não é dado, mas mora no saquinho e cai como um: duas faces
+ * grandes, CARA e COROA, num disco. Ver `textoDaFace`.
+ */
+export type FacesDado = 100 | 20 | 12 | 10 | 8 | 6 | 4 | 2;
 
 /**
  * Um dado do jogo: quantas faces, e a cor dele.
@@ -63,9 +74,15 @@ export const TIPOS_DADO: readonly TipoDado[] = [
   { faces: 20, nome: "d20", hex: "#b91c1c", tinta: "#fee2e2", escala: 1 },
   { faces: 12, nome: "d12", hex: "#7e22ce", tinta: "#f3e8ff", escala: 0.98 },
   { faces: 10, nome: "d10", hex: "#1d4ed8", tinta: "#dbeafe", escala: 1.02 },
+  // Ao lado do d10, e não no topo pela conta de faces: é o par dele, e quem
+  // pega um pega o outro. A cor é irmã do azul do d10 pelo mesmo motivo.
+  { faces: 100, nome: "d%", hex: "#0f766e", tinta: "#ccfbf1", escala: 1.02 },
   { faces: 8, nome: "d8", hex: "#15803d", tinta: "#dcfce7", escala: 0.92 },
   { faces: 6, nome: "d6", hex: "#b45309", tinta: "#fef3c7", escala: 0.82 },
   { faces: 4, nome: "d4", hex: "#e7e5e4", tinta: "#44403c", escala: 1.22 },
+  // Por último, porque não é dado. Dourada, com a tinta escura: moeda é a
+  // única coisa do saquinho que a mesa reconhece pelo brilho antes da forma.
+  { faces: 2, nome: "Moeda", hex: "#ca8a04", tinta: "#422006", escala: 1.1 },
 ];
 
 export function tipoDado(faces: FacesDado): TipoDado {
@@ -87,15 +104,58 @@ export function tipoDado(faces: FacesDado): TipoDado {
  * Quanto a face VALE é outra pergunta. Ver `valorDaRolagem`.
  */
 export function rotulosDoDado(faces: FacesDado): number[] {
+  // O d% é dez faces, de dez em dez: `0`, `10`, ..., `90`. Guardado como o
+  // número que a face VALE na soma, e escrito com dois algarismos na hora de
+  // gravar -- ver `textoDaFace`.
+  if (faces === 100) return Array.from({ length: 10 }, (_, i) => i * 10);
+
   const inicio = faces === 10 ? 0 : 1;
   return Array.from({ length: faces }, (_, i) => inicio + i);
+}
+
+/**
+ * O que está ESCRITO na face, que nem sempre é o número.
+ *
+ * O d% grava `00` e não `0`: é assim que todo dado de dezenas vem, e é o que
+ * diz de longe que aquele não é um d10. A moeda não grava número nenhum --
+ * CARA de um lado, COROA do outro. Todo o resto escreve o próprio rótulo.
+ *
+ * Aqui e não na geometria, porque a geometria não sabe o que é moeda: ela sabe
+ * que há uma face com o `1` e outra com o `2`, e pede o texto a quem sabe.
+ */
+export function textoDaFace(faces: FacesDado, gravado: number): string {
+  if (faces === 100) return String(gravado).padStart(2, "0");
+  if (faces === 2) return gravado === 1 ? "CARA" : "COROA";
+  return String(gravado);
+}
+
+/**
+ * O resultado como a mesa o LÊ: "Coroa", e não "2".
+ *
+ * A moeda é a única em que o valor não se lê como número. Para os dados é o
+ * `valorDaRolagem` escrito -- então o d10 no zero aparece como dez aqui também.
+ */
+export function textoDoResultado(faces: FacesDado, gravado: number): string {
+  if (faces === 2) return gravado === 1 ? "Cara" : "Coroa";
+  return String(valorDaRolagem(faces, gravado));
+}
+
+/**
+ * Se o que caiu entra na soma da mesa.
+ *
+ * A moeda não: "cara mais quatro" não é conta que exista. Um d% sozinho entra
+ * -- vale o que está gravado, e com um d10 ao lado a soma é a porcentagem.
+ */
+export function entraNaSoma(faces: FacesDado): boolean {
+  return faces !== 2;
 }
 
 /**
  * Quanto a face vale, que não é sempre o que está gravado nela.
  *
  * O zero do d10 vale DEZ. É a leitura da mesa, e é a única face de todo o jogo
- * em que o gravado e o valor divergem — o d10 é numerado de zero a nove porque
+ * em que o gravado e o valor divergem -- o `00` do d% vale zero mesmo, porque
+ * a soma com um d10 (que vale de um a dez) já dá de um a cem sem dobra — o d10 é numerado de zero a nove porque
  * dois deles dão uma porcentagem, mas jogado sozinho ele é um dado de dez.
  *
  * Existe como função e não como campo guardado porque o gravado é o que a
@@ -208,7 +268,12 @@ export type RolagemDaMesa = Rolagem & {
  * exatamente o tipo de defeito que não se quer ter de defender.
  */
 export function sortearValor(faces: FacesDado): number {
-  const limite = Math.floor(0x1_0000_0000 / faces) * faces;
+  // Entre os RÓTULOS, e não entre `faces` números: o d% tem dez faces e não
+  // cem. Indexar pelas faces saía da lista e o dado nascia sem valor.
+  const rotulos = rotulosDoDado(faces);
+  const lados = rotulos.length;
+
+  const limite = Math.floor(0x1_0000_0000 / lados) * lados;
   const buffer = new Uint32Array(1);
 
   let bruto = 0;
@@ -217,5 +282,5 @@ export function sortearValor(faces: FacesDado): number {
     bruto = buffer[0];
   } while (bruto >= limite);
 
-  return rotulosDoDado(faces)[bruto % faces];
+  return rotulos[bruto % lados];
 }

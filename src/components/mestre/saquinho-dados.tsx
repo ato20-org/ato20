@@ -37,6 +37,8 @@ import {
   TIPOS_DADO,
   tipoDado,
   valorDaRolagem,
+  entraNaSoma,
+  textoDoResultado,
   type Dado,
   type TipoDado,
 } from "@/types/dado";
@@ -191,7 +193,9 @@ export function SaquinhoDados() {
                   ref={bolinha}
                   type="button"
                   onPointerDown={pegarBolinha}
-                  aria-label={aberto ? "Fechar o saquinho" : "Saquinho de dados"}
+                  aria-label={
+                    aberto ? "Fechar o saquinho" : "Saquinho de dados"
+                  }
                   aria-expanded={aberto}
                   className={cn(
                     "bg-background/85 pointer-events-auto absolute z-30 grid place-items-center rounded-full border shadow-lg backdrop-blur transition-transform",
@@ -326,7 +330,7 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
    * conta como zero está errada para a mesa que jogou. Ver `valorDaRolagem`.
    */
   const pousados = dados
-    .filter((dado) => !noAr.has(dado.id))
+    .filter((dado) => !noAr.has(dado.id) && entraNaSoma(dado.faces))
     .map((dado) => valorDaRolagem(dado.faces, dado.valor));
   const soma = pousados.reduce((total, valor) => total + valor, 0);
 
@@ -476,7 +480,7 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
                   >
                     {caindo
                       ? "…"
-                      : valorDaRolagem(rolagem.faces, rolagem.valor)}
+                      : textoDoResultado(rolagem.faces, rolagem.valor)}
                   </span>
                   <span className="text-muted-foreground/70 tabular-nums">
                     {new Date(rolagem.quando).toLocaleTimeString(undefined, {
