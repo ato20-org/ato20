@@ -91,7 +91,7 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
   {
     tool: "postit",
     label: "Postit",
-    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou cena; ** dos dois lados deixa em negrito. Só você vê — nem a TV nem os celulares recebem.",
+    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou cena; ** dos dois lados deixa em negrito; # e - no começo da linha dão título e lista. Só você vê — nem a TV nem os celulares recebem.",
     icon: StickyNote,
   },
   {
