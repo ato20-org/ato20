@@ -38,6 +38,8 @@ import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
+import { useQuadroStore } from "@/lib/store/use-quadro-store";
+import { selectEditingScene } from "@/lib/store/use-scene-store";
 import { executarComando } from "@/lib/extensoes/carregar";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -496,6 +498,8 @@ export const ATALHOS_BASE: Atalho[] = [
       // a convenção de todo editor para "desisto do que eu ia fazer".
       useToolStore.getState().setTool("select");
       useSelectionStore.getState().clear();
+      // O quadro também: a ponta de seta já clicada e o texto selecionado.
+      useQuadroStore.getState().limpar();
       // E solta a mesa: Esc é "para tudo o que está acontecendo", e uma TV
       // seguindo um token é algo que está acontecendo.
       useCameraLockStore.getState().soltar();
@@ -536,8 +540,20 @@ export const ATALHOS_BASE: Atalho[] = [
       // o retrato ganha do item da cena. É a ordem de quem está "por cima" na
       // atenção do mestre quando as duas coisas estão selecionadas.
       const selecao = useSelectionStore.getState();
+      const quadro = useQuadroStore.getState();
+      const cena = selectEditingScene(useSceneStore.getState());
 
-      if (selecao.selectedFogId) removeFogSelection();
+      // Seta e texto do quadro primeiro: são a seleção mais recente quando
+      // existem, porque selecionar um deles limpa o outro e nada mais.
+      if (cena && quadro.ligacaoSelecionadaId) {
+        useSceneStore
+          .getState()
+          .removeLigacao(cena.id, quadro.ligacaoSelecionadaId);
+        quadro.selecionarLigacao(null);
+      } else if (cena && quadro.textoSelecionadoId && !quadro.textoEditandoId) {
+        useSceneStore.getState().removeTexto(cena.id, quadro.textoSelecionadoId);
+        quadro.selecionarTexto(null);
+      } else if (selecao.selectedFogId) removeFogSelection();
       else if (selecao.selectedMedidorId) removeMedidorSelection();
       else if (selecao.selectedPortraitIds.length > 0)
         removePortraitSelection();

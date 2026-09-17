@@ -62,7 +62,9 @@ export function sceneForTable(scene: Scene | null): Scene | null {
     !scene.handout &&
     !scene.extensoes &&
     !scene.cameras &&
-    !scene.grupos
+    !scene.grupos &&
+    !scene.textos &&
+    !scene.ligacoes
   )
     return scene;
 
@@ -79,6 +81,9 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // `useCorteDeCamera`.
   delete paraMesa.cameras;
   delete paraMesa.grupos;
+  // Anotação do mestre, como o postit. O quadro no ar vai abrir isto.
+  delete paraMesa.textos;
+  delete paraMesa.ligacoes;
 
   return paraMesa;
 }

@@ -25,6 +25,7 @@ import {
   reorderByZ,
   type ZDirection,
 } from "@/lib/mestre/z-order";
+import { mesmaRef, semReferencia } from "@/lib/mestre/ligacoes";
 import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
   cloneScene,
@@ -53,7 +54,12 @@ import {
   type Viewport,
   type Medidor,
   type NewMedidor,
+  type NewTexto,
   type Pasta,
+  type RefLigacao,
+  type Texto,
+  type Ligacao,
+  TEXTO_TAMANHO,
 } from "@/types/scene";
 
 type HydrationStatus = "idle" | "loading" | "ready" | "error";
@@ -277,6 +283,32 @@ type SceneStore = {
     patch: Partial<Postit>,
   ) => void;
   removePostit: (sceneId: string, postitId: string) => void;
+
+  /** Texto solto do quadro. Ver `Texto`. Devolve o id. */
+  addTexto: (sceneId: string, texto: NewTexto) => string;
+  updateTexto: (
+    sceneId: string,
+    textoId: string,
+    patch: Partial<Omit<Texto, "id">>,
+  ) => void;
+  removeTexto: (sceneId: string, textoId: string) => void;
+
+  /**
+   * Seta entre duas coisas do quadro. Recusa ponta igual à outra e seta
+   * repetida entre as mesmas duas, no mesmo sentido. Devolve o id, ou `null`
+   * quando recusou.
+   */
+  addLigacao: (
+    sceneId: string,
+    de: RefLigacao,
+    para: RefLigacao,
+  ) => string | null;
+  updateLigacao: (
+    sceneId: string,
+    ligacaoId: string,
+    patch: Partial<Pick<Ligacao, "rotulo">>,
+  ) => void;
+  removeLigacao: (sceneId: string, ligacaoId: string) => void;
 };
 
 export const useSceneStore = create<SceneStore>((set, get) => {
@@ -667,6 +699,8 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       get().updateScene(sceneId, (scene) => ({
         ...scene,
         items: scene.items.filter((item) => !doomed.has(item.id)),
+        // A seta amarrada a uma imagem apagada morre com ela.
+        ligacoes: semReferencia(scene.ligacoes, doomed),
       }));
     },
 
@@ -910,7 +944,11 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         // Volta a `undefined` quando esvazia, em vez de deixar `[]` no arquivo:
         // é o mesmo estado, e `sceneForTable` decide por identidade da
         // referência quando o campo está ausente.
-        return { ...scene, pins: restantes.length > 0 ? restantes : undefined };
+        return {
+          ...scene,
+          pins: restantes.length > 0 ? restantes : undefined,
+          ligacoes: semReferencia(scene.ligacoes, [pinId]),
+        };
       });
     },
 
@@ -1020,6 +1058,91 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         return {
           ...scene,
           postits: restantes.length > 0 ? restantes : undefined,
+          ligacoes: semReferencia(scene.ligacoes, [postitId]),
+        };
+      });
+    },
+
+    addTexto(sceneId, texto) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        textos: [
+          ...(scene.textos ?? []),
+          { texto: "", tamanho: TEXTO_TAMANHO, ...texto, id },
+        ],
+      }));
+
+      return id;
+    },
+
+    updateTexto(sceneId, textoId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        textos: (scene.textos ?? []).map((texto) =>
+          texto.id === textoId ? { ...texto, ...patch } : texto,
+        ),
+      }));
+    },
+
+    removeTexto(sceneId, textoId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.textos ?? []).filter(
+          (texto) => texto.id !== textoId,
+        );
+
+        return {
+          ...scene,
+          textos: restantes.length > 0 ? restantes : undefined,
+          ligacoes: semReferencia(scene.ligacoes, [textoId]),
+        };
+      });
+    },
+
+    addLigacao(sceneId, de, para) {
+      if (mesmaRef(de, para)) return null;
+
+      const scene = get().board?.scenes.find((atual) => atual.id === sceneId);
+      if (!scene) return null;
+      if (
+        scene.ligacoes?.some(
+          (ligacao) => mesmaRef(ligacao.de, de) && mesmaRef(ligacao.para, para),
+        )
+      )
+        return null;
+
+      const id = novoId();
+      get().updateScene(sceneId, (atual) => ({
+        ...atual,
+        ligacoes: [...(atual.ligacoes ?? []), { id, de, para }],
+      }));
+
+      return id;
+    },
+
+    updateLigacao(sceneId, ligacaoId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        ligacoes: (scene.ligacoes ?? []).map((ligacao) => {
+          if (ligacao.id !== ligacaoId) return ligacao;
+          const proxima = { ...ligacao, ...patch };
+          // Rótulo vazio é ausência, como as listas vazias da cena.
+          if (!proxima.rotulo?.trim()) delete proxima.rotulo;
+          return proxima;
+        }),
+      }));
+    },
+
+    removeLigacao(sceneId, ligacaoId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.ligacoes ?? []).filter(
+          (ligacao) => ligacao.id !== ligacaoId,
+        );
+
+        return {
+          ...scene,
+          ligacoes: restantes.length > 0 ? restantes : undefined,
         };
       });
     },

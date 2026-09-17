@@ -11,8 +11,10 @@ import {
   Pencil,
   Puzzle,
   Ruler,
+  Spline,
   SquareDashedBottom,
   StickyNote,
+  Type,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -101,6 +103,26 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
 ];
 
 /**
+ * As do QUADRO, além do ponto e do postit: letra na folha e seta entre coisas.
+ * Só aparecem no quadro -- num mapa, título solto e seta entre tokens seriam
+ * anotação que a mesa não vê e que o mestre já faz com o postit.
+ */
+const FERRAMENTAS_QUADRO: Ferramenta[] = [
+  {
+    tool: "texto",
+    label: "Texto",
+    hint: "Clique no quadro para escrever direto na folha, sem papel. Duplo clique edita, arrasto move, Delete apaga.",
+    icon: Type,
+  },
+  {
+    tool: "ligacao",
+    label: "Seta",
+    hint: "Clique de onde e depois para onde: postit, texto, imagem ou ponto. Duplo clique na seta dá um rótulo. Esc larga.",
+    icon: Spline,
+  },
+];
+
+/**
  * As ferramentas, em duas BOLSAS no canto do palco.
  *
  * Como pasta de aplicativos no celular: dois botões à vista, e cada um abre a
@@ -167,7 +189,10 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
    */
   const quadro = ehQuadro(scene);
   const doChao = quadro
-    ? FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog")
+    ? [
+        ...FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog"),
+        ...FERRAMENTAS_QUADRO,
+      ]
     : FERRAMENTAS_MAPA;
 
   const doMapa = quadro
@@ -178,6 +203,8 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   // ativa sem botão na barra -- e o clique seguinte cobriria o quadro de preto.
   useEffect(() => {
     if (quadro && (tool === "fog" || tool === "regua")) setTool("select");
+    // E o inverso: texto e seta são do quadro, e um mapa não tem onde mostrá-las.
+    if (!quadro && (tool === "texto" || tool === "ligacao")) setTool("select");
   }, [quadro, tool, setTool]);
 
   // A ferramenta ativa de cada bolsa, para o botão dela mostrar. `select` é
@@ -236,7 +263,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
         nome={quadro ? "Ferramentas do quadro" : "Ferramentas do mapa"}
         dica={
           quadro
-            ? "Ponto e postit."
+            ? "Ponto, postit, texto e seta."
             : "Ponto, postit, área escondida, grade e régua."
         }
         aberta={aberta === "mapa"}

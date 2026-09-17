@@ -1,5 +1,6 @@
 import { boundsOfItems, boxBounds, unionBounds, type Bounds } from "@/lib/geometry/bounds";
 import { PLANO } from "@/lib/geometry/viewport";
+import { caixaDoTexto } from "@/lib/mestre/ligacoes";
 import type { Scene } from "@/types/scene";
 
 /**
@@ -49,6 +50,8 @@ export function limitesDoConteudo(scene: Scene): Bounds {
 
   const riscos = limitesDosTracos(scene.tracos);
   if (riscos) caixas.push(riscos);
+
+  for (const texto of scene.textos ?? []) caixas.push(caixaDoTexto(texto));
 
   // Nunca `null`: o PLANO está sempre na lista.
   return unionBounds(caixas)!;

@@ -315,6 +315,51 @@ export type NewPostit = Pick<Postit, "x" | "y"> &
   Partial<Pick<Postit, "largura" | "altura" | "texto" | "cor">>;
 
 /**
+ * Texto solto sobre o quadro: título, rótulo, uma frase. Sem papel, sem
+ * caixa -- o postit é o cartão, este é a letra direto na folha.
+ *
+ * Mora na cena como o postit, e é do mestre até a cena ir ao ar como quadro.
+ * Não tem largura: o texto quebra onde o mestre pôs Enter, e a caixa que a
+ * ligação mira é estimada a partir da fonte. Ver `caixaDoTexto`.
+ */
+export type Texto = {
+  id: string;
+  /** Canto superior esquerdo, em coordenadas de cena. */
+  x: number;
+  y: number;
+  texto: string;
+  /** Tamanho da fonte, em unidades de cena. */
+  tamanho: number;
+};
+
+export type NewTexto = Pick<Texto, "x" | "y"> &
+  Partial<Pick<Texto, "texto" | "tamanho">>;
+
+/** Tamanho de fonte de um texto novo, em unidades de cena. */
+export const TEXTO_TAMANHO = 40;
+
+/** O que uma ligação pode amarrar. */
+export type TipoLigavel = "item" | "postit" | "texto" | "pin";
+
+/** Uma ponta de ligação: o que ela amarra, por tipo e id. */
+export type RefLigacao = { tipo: TipoLigavel; id: string };
+
+/**
+ * Uma seta entre duas coisas do quadro.
+ *
+ * Guarda as REFERÊNCIAS, e não pontos: mover o postit leva a seta junto, que é
+ * o que faz dela um vínculo e não um risco. A ponta que perde o alvo -- postit
+ * apagado -- leva a ligação com ela; ver `semReferencia`.
+ */
+export type Ligacao = {
+  id: string;
+  de: RefLigacao;
+  para: RefLigacao;
+  /** O que a seta diz, no meio dela. Ausente = nada. */
+  rotulo?: string;
+};
+
+/**
  * A imagem em evidência: o que o mestre mandou a mesa olhar agora.
  *
  * Nível de sessão, como a trilha, e não da cena: transmitir um retrato de PNJ
@@ -684,6 +729,13 @@ export type Scene = {
   tipo?: TipoDeCena;
   /** A pasta em que um quadro está. Ausente = raiz. Só faz sentido em quadro. */
   pastaId?: string;
+  /**
+   * Textos soltos e setas do quadro. Ausente = nenhum. Nascem no quadro, mas
+   * a cena de mapa também os aceita: são só mais duas listas. Ver `Texto` e
+   * `Ligacao`.
+   */
+  textos?: Texto[];
+  ligacoes?: Ligacao[];
   backgroundAssetId?: string;
   items: CanvasItem[];
   fog: FogRegion[];
@@ -839,24 +891,43 @@ export function createScene(name: string, tipo?: TipoDeCena): Scene {
 export function cloneScene(source: Scene, name: string): Scene {
   const now = Date.now();
 
+  // Id antigo -> id novo, para as ligações continuarem amarradas às cópias e
+  // não aos originais.
+  const novos = new Map<string, string>();
+  const renovar = <T extends { id: string }>(coisa: T): T => {
+    const id = novoId();
+    novos.set(coisa.id, id);
+    return { ...coisa, id };
+  };
+
   return {
     ...source,
     id: novoId(),
     name,
-    items: source.items.map((item) => ({ ...item, id: novoId() })),
+    items: source.items.map(renovar),
     fog: source.fog.map((region) => ({ ...region, id: novoId() })),
     // Os anexos continuam apontando para os MESMOS assets: o arquivo é do
     // acervo da campanha, não do ponto, e copiá-lo duplicaria um mapa de 8 MB
     // por duplicar a cena.
-    pins: source.pins?.map((pin) => ({ ...pin, id: novoId() })),
+    pins: source.pins?.map(renovar),
     // O texto vem junto com os marcadores dentro dele, e os marcadores são por
     // nome: um `>Porão` copiado continua apontando para a MESMA cena de porão,
     // não para a cópia dela. É o que se quer — duplicar uma cena não duplica o
     // porão a que ela leva.
-    postits: source.postits?.map((postit) => ({ ...postit, id: novoId() })),
+    postits: source.postits?.map(renovar),
     // Mesma regra dos anexos: são ids do acervo, e a cópia aponta para os
     // mesmos arquivos.
     handout: source.handout ? [...source.handout] : undefined,
+    textos: source.textos?.map(renovar),
+    ligacoes: source.ligacoes?.map((ligacao) => ({
+      ...ligacao,
+      id: novoId(),
+      de: { ...ligacao.de, id: novos.get(ligacao.de.id) ?? ligacao.de.id },
+      para: {
+        ...ligacao.para,
+        id: novos.get(ligacao.para.id) ?? ligacao.para.id,
+      },
+    })),
     createdAt: now,
     updatedAt: now,
   };
