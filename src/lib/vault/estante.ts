@@ -77,6 +77,17 @@ export async function importarLivros(): Promise<EstanteImport | null> {
   const paths = Array.isArray(escolhidos) ? escolhidos : [escolhidos];
   if (paths.length === 0) return null;
 
+  return importarLivrosDe(paths);
+}
+
+/**
+ * Traz PDFs para a estante por CAMINHO, sem diálogo.
+ *
+ * É o que o arquivo solto na porta usa: o sistema já entregou os caminhos, e
+ * abrir um seletor para confirmar o que a mão acabou de largar seria perguntar
+ * duas vezes. O diálogo acima desagua aqui.
+ */
+export function importarLivrosDe(paths: string[]): Promise<EstanteImport> {
   return call<EstanteImport>("estante_import", { paths });
 }
 

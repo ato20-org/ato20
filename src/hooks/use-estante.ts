@@ -3,12 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { importarLivros, listarLivros, removerLivro, type Livro } from "@/lib/vault/estante";
+import {
+  importarLivros,
+  importarLivrosDe,
+  listarLivros,
+  removerLivro,
+  type EstanteImport,
+  type Livro,
+} from "@/lib/vault/estante";
 
 type EstanteApi = {
   livros: Livro[];
   /** Abre o seletor nativo e copia os PDFs escolhidos para a estante. */
   importar: () => Promise<void>;
+  /** Copia estes caminhos para a estante, sem diálogo: o arquivo solto. */
+  adicionar: (paths: string[]) => Promise<void>;
   remover: (id: string) => Promise<void>;
   refresh: () => void;
 };
@@ -45,6 +54,21 @@ export function useEstante(): EstanteApi {
 
   const refresh = useCallback(() => setVersion((atual) => atual + 1), []);
 
+  /**
+   * O que fazer com o que o Rust devolveu, pelos dois caminhos de entrada.
+   *
+   * Um motivo por arquivo, como no acervo: quem escolheu três manuais e teve
+   * um recusado quer os dois e quer saber qual ficou fora.
+   */
+  const acolher = useCallback(
+    (resultado: EstanteImport) => {
+      for (const motivo of resultado.recusados) toast.error(motivo);
+
+      if (resultado.aceitos.length > 0) refresh();
+    },
+    [refresh],
+  );
+
   const importar = useCallback(async () => {
     try {
       const resultado = await importarLivros();
@@ -52,15 +76,22 @@ export function useEstante(): EstanteApi {
       // `null` é o diálogo fechado sem escolher: não muda nada, e não avisa.
       if (!resultado) return;
 
-      // Um motivo por arquivo, como no acervo: quem escolheu três manuais e
-      // teve um recusado quer os dois e quer saber qual ficou fora.
-      for (const motivo of resultado.recusados) toast.error(motivo);
-
-      if (resultado.aceitos.length > 0) refresh();
+      acolher(resultado);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
     }
-  }, [refresh]);
+  }, [acolher]);
+
+  const adicionar = useCallback(
+    async (paths: string[]) => {
+      try {
+        acolher(await importarLivrosDe(paths));
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+      }
+    },
+    [acolher],
+  );
 
   const remover = useCallback(
     async (id: string) => {
@@ -74,7 +105,7 @@ export function useEstante(): EstanteApi {
     [refresh],
   );
 
-  return { livros, importar, remover, refresh };
+  return { livros, importar, adicionar, remover, refresh };
 }
 
 /**

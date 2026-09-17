@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { ConfiguracoesDialog } from "@/components/desktop/configuracoes-dialog";
+import { NovidadesDialog } from "@/components/desktop/versoes-lista";
 import { WindowChrome } from "@/components/desktop/window-chrome";
 import { CampaignBadge } from "@/components/mestre/campaign-badge";
 import { PanelsMenu } from "@/components/mestre/panels-menu";
@@ -88,7 +89,14 @@ export function Mestre() {
         // Sem condicionar ao status: configuração é da máquina, e o mestre tem
         // de alcançar o zoom na porta e na tela de erro -- justamente onde a
         // campanha não abriu e ele ainda precisa ler a interface.
-        acoes={<ConfiguracoesDialog />}
+        // Novidades ao lado, pela mesma razão: o que mudou nesta versão se lê
+        // na porta, onde não há campanha.
+        acoes={
+          <>
+            <NovidadesDialog />
+            <ConfiguracoesDialog />
+          </>
+        }
         subtitulo={status === "ready" ? editando : undefined}
       />
       <Conteudo

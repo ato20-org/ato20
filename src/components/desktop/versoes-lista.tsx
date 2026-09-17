@@ -1,10 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, Sparkles, Wrench } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { ChevronRight, ExternalLink, Sparkles, Wrench } from "lucide-react";
+import { toast } from "sonner";
 
+import { ChromeButton } from "@/components/desktop/window-chrome";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { VERSOES, type Mudanca } from "@/lib/versoes";
+
+/** A página de releases do repositório. Permitida em `capabilities/default.json`. */
+const RELEASES_URL = "https://github.com/ato20-org/desktop.ato20/releases";
 
 /**
  * O que mudou, em dois lugares e com a mesma voz.
@@ -240,28 +253,19 @@ function VersaoAnterior({ versao }: { versao: VersaoPronta }) {
 }
 
 /**
- * As novidades, no painel da direita da porta.
+ * "O que mudou", no botão ao lado das Configurações.
  *
- * Colado na borda da janela e de altura cheia, com a divisa à esquerda -- e não
- * um cartão flutuando no meio do vão. Flutuando ele ficava ancorado na vertical
- * pelo tamanho da lista de campanhas ao lado, o que deixava um vazio grande em
- * cima e outro embaixo e não lia como painel nenhum.
+ * Era uma coluna fixa na porta, ao lado da lista de campanhas. Saiu de lá por
+ * duas razões: a coluna disputava largura com a lista, que é o que a pessoa
+ * veio fazer; e as novidades interessam UMA vez por versão, não a cada
+ * abertura. Um botão na barra da janela fica alcançável de qualquer tela --
+ * porta, mesa, erro -- e fora do caminho o resto do tempo.
  *
- * A versão que está rodando vem aberta e com moldura; as anteriores vêm abaixo,
- * fechadas numa linha cada. Sem essa diferença a coluna era uma pilha de
- * números em que a versão instalada não se distinguia das que já passaram.
- *
- * O `aside` é DAQUI, e não de quem chama: quando `VERSOES` está vazia isto
- * devolve `null` e o painel não existe -- a porta volta a ser uma coluna só. Um
- * `aside` montado do lado de fora continuaria reservando a largura dele para
- * receber nada.
- *
- * Sem estado de "já vi": a escolha foi deixá-lo sempre à mostra, e um painel que
- * some depois da primeira leitura precisaria de uma preferência gravada. Ao
- * lado, e não no meio da coluna, ele não custa nada a quem só veio abrir a
- * campanha.
+ * O link para as releases no GitHub mora aqui e não nas Configurações: quem
+ * está lendo o que mudou é quem quer ver o que vem, baixar outra versão ou
+ * ler a nota completa.
  */
-export function NovidadesLaterais() {
+export function NovidadesDialog() {
   // A cabeça da lista é a versão que está rodando -- a mesma que `versaoAtual`
   // devolve, e pela mesma razão, que está documentada lá. Aqui é desmontada em
   // vez de chamada porque o painel precisa das duas metades: a atual e o resto.
@@ -269,68 +273,77 @@ export function NovidadesLaterais() {
   if (!atual) return null;
 
   return (
-    <aside
-      aria-label="Novidades das versões"
-      // `border-t` embaixo de `lg` e `border-l` a partir dele: nessa faixa o
-      // painel deixa de ser coluna e vira o rodapé da porta, e a divisa tem de
-      // acompanhar o lado por onde ele encosta.
-      //
-      // Fundo próprio, e não só a divisa: encostado na borda da janela, um
-      // painel da mesma cor do fundo lê como um traço solto com texto ao lado.
-      //
-      // Mais largo a partir de `xl`: os títulos são frases, e em 20rem uma
-      // frase de dez palavras quebra em quatro linhas. Só a partir de `xl`
-      // porque abaixo disso a largura sai da coluna das campanhas, que é o que
-      // a pessoa veio fazer aqui.
-      className="bg-muted/20 flex shrink-0 flex-col border-t lg:w-80 lg:overflow-hidden lg:border-t-0 lg:border-l xl:w-96"
-    >
-      {/* O cabeçalho fica FORA da área que rola, e não `sticky` dentro dela:
-          grudado por dentro ele precisaria de fundo próprio para tapar o texto
-          que passa por baixo, e dois fundos translúcidos empilhados nunca dão a
-          mesma cor do painel. Assim o título simplesmente não se move.
+    <Dialog>
+      <DialogTrigger
+        render={
+          <ChromeButton
+            label="O que mudou"
+            icon={<Sparkles className="size-3.5" />}
+          />
+        }
+      />
 
-          "O que mudou" e não "Novidades": dentro do painel, "Novidades" agora é
-          o nome de um dos dois grupos, e o mesmo rótulo em dois níveis fazia
-          parecer que o painel inteiro era só a metade nova. */}
-      <header className="flex shrink-0 items-baseline gap-2 border-b px-5 py-3">
-        <h2 className="text-sm font-medium">O que mudou</h2>
-        <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
-          {atual.data}
-        </span>
-      </header>
-
-      {/* A rolagem só existe a partir de `lg`, junto com o corte no `aside`:
-          empilhado, o painel é o fim da página e rola com ela. */}
-      <div className="flex flex-col gap-4 px-4 py-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-        <section className="border-primary/25 bg-primary/5 flex flex-col gap-2.5 rounded-lg border p-2.5">
-          <header className="flex items-baseline gap-2 px-1.5">
-            <h3 className="text-base font-semibold tabular-nums">
-              {atual.versao}
-            </h3>
-            <span className="bg-primary/15 text-primary rounded-full px-2 py-0.5 text-[0.65rem] font-medium">
-              atual
-            </span>
-            <span className="text-muted-foreground ml-auto shrink-0 text-xs">
-              {atual.resumo}
+      <DialogContent className="gap-0 p-0 sm:max-w-[min(36rem,calc(100%-2rem))]">
+        <div className="flex h-[min(32rem,80vh)] min-h-0 flex-col">
+          {/* `pr-12`: o X do diálogo mora no canto de cima à direita, por cima
+              do cabeçalho, e sem a folga a data ficava embaixo dele. */}
+          <header className="flex shrink-0 items-baseline gap-2 border-b py-3 pr-12 pl-5">
+            <DialogTitle className="text-sm font-medium">O que mudou</DialogTitle>
+            <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
+              {atual.data}
             </span>
           </header>
 
-          <MudancasDaVersao versao={atual} />
-        </section>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+            <section className="border-primary/25 bg-primary/5 flex flex-col gap-2.5 rounded-lg border p-2.5">
+              <header className="flex items-baseline gap-2 px-1.5">
+                <h3 className="text-base font-semibold tabular-nums">
+                  {atual.versao}
+                </h3>
+                <span className="text-muted-foreground text-xs">
+                  esta versão
+                </span>
+                <span className="text-muted-foreground ml-auto shrink-0 text-xs">
+                  {atual.resumo}
+                </span>
+              </header>
 
-        {anteriores.length > 0 ? (
-          <div className="flex flex-col gap-0.5">
-            <h3 className="text-muted-foreground px-1.5 text-[0.65rem] tracking-wide uppercase">
-              Antes disso
-            </h3>
+              <MudancasDaVersao versao={atual} />
+            </section>
 
-            {anteriores.map((versao) => (
-              <VersaoAnterior key={versao.versao} versao={versao} />
-            ))}
+            {anteriores.length > 0 ? (
+              <div className="flex flex-col gap-0.5">
+                <h3 className="text-muted-foreground px-1.5 text-[0.65rem] tracking-wide uppercase">
+                  Antes disso
+                </h3>
+
+                {anteriores.map((versao) => (
+                  <VersaoAnterior key={versao.versao} versao={versao} />
+                ))}
+              </div>
+            ) : null}
           </div>
-        ) : null}
-      </div>
-    </aside>
+
+          {/* Fora da área que rola, para estar sempre à mão. Abre no navegador
+              da máquina, e não numa janela do aplicativo: a página do GitHub
+              tem download, discussão e histórico, e é lá que se usa. */}
+          <footer className="flex shrink-0 justify-end border-t px-4 py-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void openUrl(RELEASES_URL).catch(() =>
+                  toast.error("Não foi possível abrir o navegador."),
+                );
+              }}
+            >
+              <ExternalLink />
+              Releases no GitHub
+            </Button>
+          </footer>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
