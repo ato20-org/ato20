@@ -38,6 +38,7 @@ import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
+import { useClipboardStore } from "@/lib/store/use-clipboard-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import {
   colarTexto,
@@ -193,10 +194,16 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+V",
     rotulo: "Colar",
     combina: (evento) => comando(evento) && letra(evento) === "v",
-    executar: () => {
+    // Barra o browser só quando há algo NOSSO para colar. Sem nada interno, a
+    // tecla segue e vira o evento `paste`, que é por onde o texto do sistema
+    // entra no quadro -- ver `colarTextoDoSistema` e `useMestreShortcuts`.
+    executar: (evento) => {
+      const { drafts, texto } = useClipboardStore.getState();
+      if (drafts.length === 0 && !texto) return;
+      evento.preventDefault();
       if (!colarTexto()) pasteClipboard();
     },
-    impedirPadrao: true,
+    impedirPadrao: false,
   },
   {
     grupo: "Área de transferência",

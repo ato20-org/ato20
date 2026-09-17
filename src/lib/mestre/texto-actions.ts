@@ -2,6 +2,8 @@ import { PASTE_OFFSET } from "@/lib/mestre/item-actions";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
+import { ehQuadro } from "@/types/scene";
 import type { Texto } from "@/types/scene";
 
 /**
@@ -68,5 +70,29 @@ export function duplicarTexto(): boolean {
     .getState()
     .addTexto(alvo.scene.id, copiaDeslocada(alvo.texto));
   useQuadroStore.getState().selecionarTexto(novo);
+  return true;
+}
+
+/**
+ * Texto vindo de FORA do app -- do editor, do navegador, do PDF -- vira um
+ * texto solto no meio da vista. Só no quadro: no mapa, texto colado do nada
+ * seria anotação que a toolbar não oferece e que a mesa não vê.
+ *
+ * Chega pelo evento `paste`, e não por `navigator.clipboard.readText()`: o
+ * evento traz o texto de graça e na hora, sem permissão nem promessa, e é o
+ * caminho que o WebKitGTK sempre teve.
+ */
+export function colarTextoDoSistema(bruto: string): boolean {
+  const texto = bruto.replace(/\r\n?/g, "\n").trimEnd();
+  const scene = selectEditingScene(useSceneStore.getState());
+  if (!texto.trim() || !scene || !ehQuadro(scene)) return false;
+
+  const { viewport } = useViewportStore.getState();
+  const id = useSceneStore.getState().addTexto(scene.id, {
+    texto,
+    x: Math.round(viewport.x + viewport.width / 2),
+    y: Math.round(viewport.y + viewport.height / 2),
+  });
+  useQuadroStore.getState().selecionarTexto(id);
   return true;
 }
