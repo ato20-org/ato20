@@ -132,7 +132,7 @@ export type Subscription = {
  * O código da mesa vem da porta, já conferido — ver `checkRoom`. Ele entra na
  * URL do SSE porque é o daemon que decide quem pode ouvir.
  */
-export function useSubscription(codigo: string): Subscription {
+export function useSubscription(codigo: string, base = ""): Subscription {
   const [live, setLive] = useState<LiveState>({
     scene: null,
     track: null,
@@ -146,7 +146,7 @@ export function useSubscription(codigo: string): Subscription {
   const [stalled, setStalled] = useState(false);
 
   useEffect(() => {
-    const channel = createSubscriber(codigo);
+    const channel = createSubscriber(codigo, base);
 
     let answered = false;
 
@@ -168,7 +168,7 @@ export function useSubscription(codigo: string): Subscription {
       unsubscribe();
       channel.close();
     };
-  }, [codigo]);
+  }, [codigo, base]);
 
   return {
     scene: live.scene,
