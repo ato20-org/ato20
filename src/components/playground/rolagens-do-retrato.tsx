@@ -6,7 +6,7 @@ import {
   instanteDaQueda,
   useQuedaDasRolagens,
 } from "@/hooks/use-queda-das-rolagens";
-import { valorDaRolagem, type RolagemDaMesa } from "@/types/dado";
+import { textoDoResultado, type RolagemDaMesa } from "@/types/dado";
 
 /** Quantas rolagens antigas a coluna mostra. O resto está no histórico do mestre. */
 const TETO = 4;
@@ -132,7 +132,11 @@ export function RolagensDoRetrato({
             const t = instanteDaQueda(chegada.get(rolagem.id), agora);
 
             return (
-              <div key={rolagem.id} className="flex items-center" style={{ gap: mini * 0.45 }}>
+              <div
+                key={rolagem.id}
+                className="flex items-center"
+                style={{ gap: mini * 0.45 }}
+              >
                 <DadoRolando
                   id={rolagem.id}
                   faces={rolagem.faces}
@@ -165,7 +169,7 @@ export function RolagensDoRetrato({
                     opacity: t < DURACAO_DA_CHEGADA ? 0 : 1,
                   }}
                 >
-                  {valorDaRolagem(rolagem.faces, rolagem.valor)}
+                  {textoDoResultado(rolagem.faces, rolagem.valor)}
                 </span>
               </div>
             );
@@ -183,7 +187,9 @@ export function RolagensDoRetrato({
           ou um dado que ficou preso. */}
       <div
         className="relative"
-        style={{ filter: `drop-shadow(0 ${lado * 0.02}px ${lado * 0.06}px rgba(0,0,0,0.8))` }}
+        style={{
+          filter: `drop-shadow(0 ${lado * 0.02}px ${lado * 0.06}px rgba(0,0,0,0.8))`,
+        }}
       >
         <DadoRolando
           id={atual.id}

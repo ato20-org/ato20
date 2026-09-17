@@ -61,7 +61,7 @@ import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { desde } from "@/lib/tempo";
 import { characterLinks, linkCharacter } from "@/lib/vault/characters";
-import { valorDaRolagem } from "@/types/dado";
+import { textoDoResultado, tipoDado } from "@/types/dado";
 import {
   playerAttachments,
   playerAttachmentUrl,
@@ -405,7 +405,9 @@ function Ficha({
           deixou de ser anotação e passou a ser vínculo: acompanha quando o
           mestre troca o personagem de mãos, e não vira mentira quando ele
           esquece de atualizar. Quem vincula é o diálogo de personagens. */}
-      <Secao titulo="Personagens" vazio={dele.length === 0 ? "nenhum" : null}
+      <Secao
+        titulo="Personagens"
+        vazio={dele.length === 0 ? "nenhum" : null}
         dica="É o vínculo que dá a ele acesso à ficha, aos arquivos e às notas do personagem."
         acao={
           semDono.length > 0 ? (
@@ -452,7 +454,10 @@ function Ficha({
                 type="button"
                 className="bg-muted/40 hover:bg-muted focus-visible:ring-ring rounded-md border px-2 py-0.5 text-xs focus-visible:ring-2 focus-visible:outline-none"
                 onClick={() => {
-                  abrirJanela({ tipo: "personagem", personagemId: personagem.id });
+                  abrirJanela({
+                    tipo: "personagem",
+                    personagemId: personagem.id,
+                  });
                   onVoltar();
                 }}
               >
@@ -465,7 +470,9 @@ function Ficha({
 
       <Secao
         titulo="Arquivos"
-        vazio={anexos === null ? "lendo…" : anexos.length === 0 ? "nenhum" : null}
+        vazio={
+          anexos === null ? "lendo…" : anexos.length === 0 ? "nenhum" : null
+        }
         dica="Retrato, ficha, mapa rabiscado: o que ele anexa na aba Personagem do celular."
       >
         {anexos && anexos.length > 0 ? (
@@ -612,7 +619,7 @@ function Ficha({
               <li
                 key={rolagem.id}
                 className="flex items-center gap-1 rounded border px-1.5 py-0.5"
-                title={`d${rolagem.faces} · ${desde(rolagem.quando)}`}
+                title={`${tipoDado(rolagem.faces).nome} · ${desde(rolagem.quando)}`}
               >
                 <DadoParado
                   faces={rolagem.faces}
@@ -620,7 +627,7 @@ function Ficha({
                   tamanho={18}
                 />
                 <span className="text-xs font-medium tabular-nums">
-                  {valorDaRolagem(rolagem.faces, rolagem.valor)}
+                  {textoDoResultado(rolagem.faces, rolagem.valor)}
                 </span>
                 <span className="text-muted-foreground text-[10px]">
                   {desde(rolagem.quando)}
@@ -782,7 +789,9 @@ function Secao({
         </Tooltip>
 
         {vazio ? (
-          <span className="text-muted-foreground/70 text-xs italic">{vazio}</span>
+          <span className="text-muted-foreground/70 text-xs italic">
+            {vazio}
+          </span>
         ) : null}
 
         {acao ? <div className="ml-auto">{acao}</div> : null}

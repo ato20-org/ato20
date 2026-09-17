@@ -13,7 +13,7 @@ import {
   useQuedaDasRolagens,
 } from "@/hooks/use-queda-das-rolagens";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
-import { valorDaRolagem, type RolagemDaMesa } from "@/types/dado";
+import { textoDoResultado, tipoDado, type RolagemDaMesa } from "@/types/dado";
 
 /**
  * O que a mesa tirou, como janela da bancada.
@@ -192,7 +192,7 @@ function NaMesa({
           className="text-sm leading-tight font-semibold tabular-nums transition-opacity duration-200 [grid-area:1/1]"
           style={{ opacity: assentou ? 1 : 0 }}
         >
-          {valorDaRolagem(rolagem.faces, rolagem.valor)}
+          {textoDoResultado(rolagem.faces, rolagem.valor)}
         </span>
 
         <span
@@ -212,10 +212,10 @@ function NaMesa({
         className="opacity-0 transition-opacity group-hover/rolagem:opacity-100 group-focus-within/rolagem:opacity-100"
         // O nome inteiro no rótulo: a linha o trunca quando o jogador escolheu
         // um nome comprido, e quem lê por voz precisa do todo.
-        aria-label={`Tirar da mesa: ${rolagem.jogador} tirou ${valorDaRolagem(
+        aria-label={`Tirar da mesa: ${rolagem.jogador} tirou ${textoDoResultado(
           rolagem.faces,
           rolagem.valor,
-        )} no d${rolagem.faces}`}
+        )} no ${tipoDado(rolagem.faces).nome}`}
         onClick={onTirar}
       >
         <X />
@@ -229,7 +229,7 @@ function Nome({ rolagem }: { rolagem: RolagemDaMesa }) {
     <>
       <span className="min-w-0 flex-1 truncate text-xs">{rolagem.jogador}</span>
       <span className="text-muted-foreground text-[10px] tabular-nums">
-        d{rolagem.faces}
+        {tipoDado(rolagem.faces).nome}
       </span>
     </>
   );
@@ -237,8 +237,8 @@ function Nome({ rolagem }: { rolagem: RolagemDaMesa }) {
 
 function Resultado({ rolagem }: { rolagem: RolagemDaMesa }) {
   return (
-    <span className="w-6 text-right text-sm font-semibold tabular-nums">
-      {valorDaRolagem(rolagem.faces, rolagem.valor)}
+    <span className="min-w-6 text-right text-sm font-semibold tabular-nums">
+      {textoDoResultado(rolagem.faces, rolagem.valor)}
     </span>
   );
 }
