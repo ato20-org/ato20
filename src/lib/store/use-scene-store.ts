@@ -53,6 +53,7 @@ import {
   type Viewport,
   type Medidor,
   type NewMedidor,
+  type Pasta,
 } from "@/types/scene";
 
 type HydrationStatus = "idle" | "loading" | "ready" | "error";
@@ -113,6 +114,19 @@ type SceneStore = {
   /** Posição na lista de cenas. É o que o arrasto da lista emite. */
   moveSceneToIndex: (sceneId: string, index: number) => void;
   removeScene: (sceneId: string) => void;
+
+  /**
+   * As pastas dos quadros. Espelham as do grupo de itens -- criar, renomear,
+   * recolher, mover, desfazer -- mas moram no board, porque atravessam cenas.
+   * Desfazer solta o que há dentro um nível acima; nunca apaga quadro.
+   */
+  criarPasta: (nome: string, parentId?: string) => string;
+  atualizarPasta: (pastaId: string, patch: Partial<Omit<Pasta, "id">>) => void;
+  /** Recusa ciclo: pasta dentro de descendente dela. */
+  moverPasta: (pastaId: string, parentId: string | undefined) => void;
+  removerPasta: (pastaId: string) => void;
+  /** Leva um quadro para uma pasta. `undefined` é a raiz. */
+  moverParaPasta: (sceneId: string, pastaId: string | undefined) => void;
   /** Primitiva única de mutação de cena. Toda operação de item usa isto. */
   updateScene: (sceneId: string, updater: (scene: Scene) => Scene) => void;
 
@@ -432,6 +446,88 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       if (!board) return;
 
       commit(removeSceneFromBoard(board, sceneId));
+    },
+
+    criarPasta(nome, parentId) {
+      const { board } = get();
+      const id = novoId();
+      if (!board) return id;
+
+      commit({
+        ...board,
+        pastas: [...(board.pastas ?? []), { id, nome: nome.trim(), parentId }],
+      });
+
+      return id;
+    },
+
+    atualizarPasta(pastaId, patch) {
+      const { board } = get();
+      if (!board) return;
+
+      commit({
+        ...board,
+        pastas: (board.pastas ?? []).map((pasta) =>
+          pasta.id === pastaId ? { ...pasta, ...patch } : pasta,
+        ),
+      });
+    },
+
+    moverPasta(pastaId, parentId) {
+      const { board } = get();
+      if (!board) return;
+      const pastas = board.pastas ?? [];
+
+      // Sobe do destino até a raiz; se passar pela própria pasta, é ciclo.
+      let cursor = parentId;
+      while (cursor) {
+        if (cursor === pastaId) return;
+        cursor = pastas.find((pasta) => pasta.id === cursor)?.parentId;
+      }
+
+      commit({
+        ...board,
+        pastas: pastas.map((pasta) =>
+          pasta.id === pastaId ? { ...pasta, parentId } : pasta,
+        ),
+      });
+    },
+
+    removerPasta(pastaId) {
+      const { board } = get();
+      const alvo = board?.pastas?.find((pasta) => pasta.id === pastaId);
+      if (!board || !alvo) return;
+
+      const pastas = (board.pastas ?? [])
+        .filter((pasta) => pasta.id !== pastaId)
+        .map((pasta) =>
+          pasta.parentId === pastaId
+            ? { ...pasta, parentId: alvo.parentId }
+            : pasta,
+        );
+
+      commit({
+        ...board,
+        // Lista vazia sai do objeto, como `grupos` na cena.
+        pastas: pastas.length > 0 ? pastas : undefined,
+        scenes: board.scenes.map((scene) =>
+          scene.pastaId === pastaId
+            ? { ...scene, pastaId: alvo.parentId }
+            : scene,
+        ),
+      });
+    },
+
+    moverParaPasta(sceneId, pastaId) {
+      get().updateScene(sceneId, (scene) => {
+        if ((scene.pastaId ?? undefined) === pastaId) return scene;
+        // Cópia e `delete`, como em `sceneForTable`: raiz é a AUSÊNCIA do
+        // campo, e não `undefined` gravado no JSON.
+        const proxima = { ...scene };
+        if (pastaId) proxima.pastaId = pastaId;
+        else delete proxima.pastaId;
+        return proxima;
+      });
     },
 
     updateScene(sceneId, updater) {
@@ -1009,6 +1105,7 @@ async function persistir(board: Board): Promise<void> {
     scenes: board.scenes.filter((scene) => noDisco.get(scene.id) !== scene),
     editingSceneId: board.editingSceneId,
     liveSceneId: board.liveSceneId,
+    pastas: board.pastas,
   });
 
   salvo = board;

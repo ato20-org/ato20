@@ -663,11 +663,27 @@ export type Grupo = {
  */
 export type TipoDeCena = "quadro";
 
+/**
+ * Uma pasta de quadros. Só quadros: cena de mapa é fila de sessão, e uma
+ * campanha tem dez; quadro é caderno, e um caderno cresce em capítulos.
+ *
+ * Mesma forma do `Grupo` da cena, e de propósito: a lista já sabe desenhar
+ * essa árvore. Vive no board, e não na cena, porque atravessa cenas.
+ */
+export type Pasta = {
+  id: string;
+  nome: string;
+  parentId?: string;
+  recolhido?: boolean;
+};
+
 export type Scene = {
   id: string;
   name: string;
   /** Ausente = mapa. Ver `TipoDeCena`. */
   tipo?: TipoDeCena;
+  /** A pasta em que um quadro está. Ausente = raiz. Só faz sentido em quadro. */
+  pastaId?: string;
   backgroundAssetId?: string;
   items: CanvasItem[];
   fog: FogRegion[];
@@ -777,6 +793,8 @@ export type Board = {
    * `null` = nada no ar.
    */
   liveSceneId: string | null;
+  /** As pastas dos quadros. Ausente = nenhuma. Ver `Pasta`. */
+  pastas?: Pasta[];
 };
 
 /**
