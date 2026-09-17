@@ -110,21 +110,98 @@ export function PostitTextoView({
   vinculos: Vinculos;
   className?: string;
 }) {
-  const tokens = parsePostit(texto);
+  const linhas = emLinhas(parsePostit(texto));
 
   return (
     <div className={cn("break-words whitespace-pre-wrap", className)}>
-      {tokens.map((token, indice) => (
+      {linhas.map((linha, indice) => (
         // Índice como chave: a lista é derivada do texto e inteira refeita a
         // cada tecla, então não há identidade estável para preservar — e não há
         // estado dentro de um token que uma remontagem perderia.
-        <TokenView key={indice} token={token} vinculos={vinculos} />
+        <LinhaView key={indice} linha={linha} vinculos={vinculos} />
       ))}
     </div>
   );
 }
 
-function TokenView({
+/** O que o começo de uma linha diz sobre ela. Ver `emLinhas`. */
+type Bloco = "titulo" | "subtitulo" | "item" | "texto";
+
+type Linha = { bloco: Bloco; tokens: Array<Token<TipoNoPostit>> };
+
+/**
+ * Os prefixos de linha, do mais longo para o mais curto: `##` tem de ser
+ * testado antes de `#`, ou todo subtítulo viraria título com um `#` sobrando.
+ */
+const PREFIXOS: Array<[string, Bloco]> = [
+  ["## ", "subtitulo"],
+  ["# ", "titulo"],
+  ["- ", "item"],
+  ["* ", "item"],
+];
+
+/**
+ * Os tokens agrupados por linha, com o bloco de cada uma.
+ *
+ * O Markdown do postit é o mínimo que um caderno pede -- título, subtítulo e
+ * lista -- e é decidido pelo COMEÇO da linha, sem mexer no parser das menções:
+ * um `#` no meio da frase continua sendo um `#`. O prefixo sai do primeiro
+ * token de texto da linha; se a linha começa por uma menção, é texto comum.
+ */
+function emLinhas(tokens: Array<Token<TipoNoPostit>>): Linha[] {
+  const linhas: Linha[] = [{ bloco: "texto", tokens: [] }];
+
+  for (const token of tokens) {
+    if (token.tipo === "quebra") {
+      linhas.push({ bloco: "texto", tokens: [] });
+      continue;
+    }
+    linhas[linhas.length - 1]!.tokens.push(token);
+  }
+
+  for (const linha of linhas) {
+    const primeiro = linha.tokens[0];
+    if (!primeiro || primeiro.tipo !== "texto") continue;
+    const prefixo = PREFIXOS.find(([marca]) => primeiro.valor.startsWith(marca));
+    if (!prefixo) continue;
+    linha.bloco = prefixo[1];
+    linha.tokens[0] = { ...primeiro, valor: primeiro.valor.slice(prefixo[0].length) };
+  }
+
+  return linhas;
+}
+
+/**
+ * Tamanhos em `em`, e não em classe de fonte: o corpo do postit já escolhe o
+ * tamanho em pixel de tela conforme o zoom, e o título tem de escalar junto.
+ */
+const BLOCO: Record<Bloco, string> = {
+  titulo: "block text-[1.45em] leading-tight font-bold",
+  subtitulo: "block text-[1.2em] leading-snug font-semibold",
+  item: "block pl-[1.1em] before:absolute before:-ml-[1.1em] before:content-['•'] relative",
+  texto: "",
+};
+
+function LinhaView({ linha, vinculos }: { linha: Linha; vinculos: Vinculos }) {
+  const conteudo = linha.tokens.map((token, indice) => (
+    <TokenView key={indice} token={token} vinculos={vinculos} />
+  ));
+
+  // Linha comum é o texto solto seguido do `<br />`, como sempre foi: o
+  // `whitespace-pre-wrap` do pai é quem quebra. Bloco é `display: block`, e a
+  // própria caixa quebra a linha -- um `<br />` a mais deixaria um vão.
+  if (linha.bloco === "texto")
+    return (
+      <>
+        {conteudo}
+        <br />
+      </>
+    );
+
+  return <span className={BLOCO[linha.bloco]}>{conteudo}</span>;
+}
+
+export function TokenView({
   token,
   vinculos,
 }: {

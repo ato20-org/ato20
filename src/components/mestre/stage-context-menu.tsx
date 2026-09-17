@@ -62,6 +62,7 @@ import {
   agruparSelecao,
   desagruparSelecao,
 } from "@/lib/mestre/item-actions";
+import { colarTexto } from "@/lib/mestre/texto-actions";
 import {
   alternarTransmissao,
   enquadrarAqui,
@@ -88,7 +89,9 @@ export function StageContextMenu({
 }) {
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
-  const hasClipboard = useClipboardStore((state) => state.drafts.length > 0);
+  const hasClipboard = useClipboardStore(
+    (state) => state.drafts.length > 0 || state.texto !== null,
+  );
 
   const selectedItems = scene.items.filter((item) =>
     selectedIds.includes(item.id),
@@ -279,7 +282,13 @@ export function StageContextMenu({
           </>
         ) : null}
 
-        <ContextMenuItem disabled={!hasClipboard} onClick={pasteClipboard}>
+        {/* Texto solto copiado ganha do item, como no Ctrl+V. */}
+        <ContextMenuItem
+          disabled={!hasClipboard}
+          onClick={() => {
+            if (!colarTexto()) pasteClipboard();
+          }}
+        >
           <ClipboardPaste />
           Colar
           <ContextMenuShortcut>Ctrl+V</ContextMenuShortcut>

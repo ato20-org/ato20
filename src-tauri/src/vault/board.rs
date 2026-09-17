@@ -30,6 +30,14 @@ pub struct Order {
     /// Cena que a mesa esta vendo. `None` = nada no ar.
     #[serde(rename = "noAr")]
     pub no_ar: Option<String>,
+    /// As pastas dos quadros, opacas como a cena: o Rust so as carrega de um
+    /// lado para o outro. Ausente em vault antigo e quando nao ha nenhuma.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pastas: Option<serde_json::Value>,
+    /// As notas `.md` da campanha -- titulo, arquivo, pasta --, opacas como as
+    /// pastas. O texto de cada uma mora em `documentos/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notas: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +58,10 @@ pub struct Board {
     pub scenes: Vec<SceneJson>,
     pub editing_scene_id: Option<String>,
     pub live_scene_id: Option<String>,
+    #[serde(default)]
+    pub pastas: Option<serde_json::Value>,
+    #[serde(default)]
+    pub notas: Option<serde_json::Value>,
 }
 
 /// O board como o TypeScript o manda quando SO ALGUMAS cenas mudaram.
@@ -77,6 +89,10 @@ pub struct BoardPatch {
     pub scenes: Vec<SceneJson>,
     pub editing_scene_id: Option<String>,
     pub live_scene_id: Option<String>,
+    #[serde(default)]
+    pub pastas: Option<serde_json::Value>,
+    #[serde(default)]
+    pub notas: Option<serde_json::Value>,
 }
 
 fn scene_id(scene: &SceneJson) -> AppResult<String> {
@@ -127,6 +143,8 @@ pub fn load(vault: &Vault) -> AppResult<Option<Board>> {
         // explicacao. `None` e o estado honesto, e a tela sabe lidar com ele.
         editing_scene_id: order.editando.filter(|id| present.contains(id)),
         live_scene_id: order.no_ar.filter(|id| present.contains(id)),
+        pastas: order.pastas,
+        notas: order.notas,
     }))
 }
 
@@ -224,6 +242,8 @@ pub fn save(vault: &Vault, board: &Board) -> AppResult<()> {
             cenas: entries,
             editando: board.editing_scene_id.clone(),
             no_ar: board.live_scene_id.clone(),
+            pastas: board.pastas.clone(),
+            notas: board.notas.clone(),
         },
     )
 }
@@ -324,6 +344,8 @@ pub fn save_patch(vault: &Vault, patch: &BoardPatch) -> AppResult<()> {
             cenas: entries,
             editando: patch.editing_scene_id.clone(),
             no_ar: patch.live_scene_id.clone(),
+            pastas: patch.pastas.clone(),
+            notas: patch.notas.clone(),
         },
     )
 }
@@ -368,6 +390,8 @@ mod tests {
             scenes: vec![scene("s1", "A Taverna", 10), scene("s2", "Ação na Ponte", 20)],
             editing_scene_id: Some("s1".into()),
             live_scene_id: Some("s2".into()),
+            pastas: None,
+            notas: None,
         };
 
         save(&vault, &board).expect("save");
@@ -388,6 +412,8 @@ mod tests {
                 scenes: vec![scene("s1", "Ação na Ponte", 0)],
                 editing_scene_id: None,
                 live_scene_id: None,
+                pastas: None,
+                notas: None,
             },
         )
         .expect("save");
@@ -405,6 +431,8 @@ mod tests {
             scenes: vec![scene("s1", "Taverna", 0), scene("s2", "Ponte", 0)],
             editing_scene_id: None,
             live_scene_id: None,
+            pastas: None,
+            notas: None,
         };
 
         save(&vault, &board).expect("save");
@@ -431,6 +459,8 @@ mod tests {
             scenes: vec![scene("s1", "Taverna", 0)],
             editing_scene_id: None,
             live_scene_id: None,
+            pastas: None,
+            notas: None,
         };
         save(&vault, &board).expect("save");
 
@@ -456,6 +486,8 @@ mod tests {
                 scenes: vec![scene("s1", "Floresta", 1), scene("s2", "Floresta", 2)],
                 editing_scene_id: None,
                 live_scene_id: None,
+                pastas: None,
+                notas: None,
             },
         )
         .expect("save");
@@ -479,6 +511,8 @@ mod tests {
                 scenes: vec![scene("s1", "Taverna", 0), scene("s2", "Ponte", 0)],
                 editing_scene_id: None,
                 live_scene_id: None,
+                pastas: None,
+                notas: None,
             },
         )
         .expect("save");
@@ -489,6 +523,8 @@ mod tests {
                 scenes: vec![scene("s1", "Taverna", 0)],
                 editing_scene_id: None,
                 live_scene_id: None,
+                pastas: None,
+                notas: None,
             },
         )
         .expect("save 2");
@@ -504,6 +540,8 @@ mod tests {
             scenes: corpos,
             editing_scene_id: editando.map(str::to_string),
             live_scene_id: None,
+            pastas: None,
+            notas: None,
         }
     }
 
@@ -520,6 +558,8 @@ mod tests {
                 ],
                 editing_scene_id: Some("s1".into()),
                 live_scene_id: None,
+                pastas: None,
+                notas: None,
             },
         )
         .expect("save inicial");
@@ -572,6 +612,8 @@ mod tests {
                 scenes: vec![],
                 editing_scene_id: Some("s2".into()),
                 live_scene_id: Some("s3".into()),
+                pastas: None,
+                notas: None,
             },
         )
         .expect("patch");
@@ -669,6 +711,8 @@ mod tests {
                 ],
                 editing_scene_id: Some("s2".into()),
                 live_scene_id: None,
+                pastas: None,
+                notas: None,
             },
         )
         .expect("save inteiro");
@@ -691,6 +735,8 @@ mod tests {
                 scenes: vec![scene("s1", "Taverna", 0)],
                 editing_scene_id: Some("s1".into()),
                 live_scene_id: Some("fantasma".into()),
+                pastas: None,
+                notas: None,
             },
         )
         .expect("save");

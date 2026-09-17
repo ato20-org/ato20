@@ -45,7 +45,11 @@ export type FonteDoArrasto =
    * asset quando é solto no mapa — ver `promoverImagemDoItem`, que é ida ao
    * disco e não cabe num `pointerdown`, que é síncrono.
    */
-  | { tipo: "item"; personagemId: string; itemId: string; url: string };
+  | { tipo: "item"; personagemId: string; itemId: string; url: string }
+  // Uma nota `.md` da árvore de Arquivos, que vira cartão no quadro.
+  | { tipo: "nota"; notaId: string; arquivo: string; titulo: string }
+  // Um mapa da lista de Mapas. Só vira menção `>mapa` numa nota.
+  | { tipo: "cena"; sceneId: string; nome: string };
 
 /**
  * Onde o ponteiro está AGORA, entre os lugares que aceitam o que está na mão.
@@ -61,7 +65,11 @@ export type DestinoDoArrasto =
   /** A grade de inventário de outro personagem. */
   | { tipo: "inventario"; personagemId: string }
   /** A bolinha do handout da cena em edição. */
-  | { tipo: "handout" };
+  | { tipo: "handout" }
+  // Uma pasta da árvore de Arquivos. `undefined` é a raiz.
+  | { tipo: "pasta-arquivos"; pastaId: string | undefined }
+  // O editor de uma nota: o que cai vira menção no texto.
+  | { tipo: "nota" };
 
 export type ArrastoDeToken = {
   fonte: FonteDoArrasto;
@@ -78,7 +86,9 @@ export type ArrastoDeToken = {
 
 /** O arquivo do acervo que está sendo arrastado, quando há um. */
 export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
-  return fonte.tipo === "item" ? undefined : fonte.assetId;
+  return fonte.tipo === "item" || fonte.tipo === "nota" || fonte.tipo === "cena"
+    ? undefined
+    : fonte.assetId;
 }
 
 /**
@@ -97,6 +107,10 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
       return `inventario:${destino.personagemId}`;
     case "handout":
       return "handout";
+    case "pasta-arquivos":
+      return "arquivos";
+    case "nota":
+      return "nota";
   }
 }
 
@@ -120,9 +134,20 @@ export function aceita(
 ): boolean {
   switch (destino.tipo) {
     case "palco":
-      return true;
+      // Mapa não cai no palco: ele É um palco. Só vira menção.
+      return fonte.tipo !== "cena";
+    case "nota":
+      // O que tem nome para ser mencionado: `/arquivo`, `@personagem`, `>mapa`.
+      return (
+        fonte.tipo === "acervo" ||
+        fonte.tipo === "handout" ||
+        fonte.tipo === "personagem" ||
+        fonte.tipo === "cena"
+      );
     case "pasta":
       return fonte.tipo === "acervo";
+    case "pasta-arquivos":
+      return fonte.tipo === "nota";
     case "inventario":
       return (
         fonte.tipo === "item" && fonte.personagemId !== destino.personagemId

@@ -46,6 +46,8 @@ export type ConteudoJanela =
   // à mão para uma tela só. Ver `RolagensBody`.
   | { tipo: "rolagens" }
   | { tipo: "cenas" }
+  // A mesma lista, filtrada pelo outro tipo de cena. Ver `TipoDeCena`.
+  | { tipo: "quadros" }
   | { tipo: "areas" }
   | { tipo: "retratos" }
   | { tipo: "imagens" }
@@ -88,6 +90,7 @@ export function chaveDe(conteudo: ConteudoJanela): string {
     // mostrarem a mesma lista de cenas.
     case "rolagens":
     case "cenas":
+    case "quadros":
     case "areas":
     case "retratos":
     case "imagens":

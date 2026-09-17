@@ -77,6 +77,13 @@ pub fn extension_for(mime: &str) -> &'static str {
         "audio/mp4" | "audio/aac" | "audio/x-m4a" => "m4a",
         "audio/opus" => "opus",
         "audio/webm" => "weba",
+        // O que a biblioteca guarda alem de imagem e som. `bin` e o resto: o
+        // nome que o mestre ve continua sendo o original, no indice.
+        "application/pdf" => "pdf",
+        "text/plain" => "txt",
+        "application/json" => "json",
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
         _ => "bin",
     }
 }
@@ -106,7 +113,8 @@ mod tests {
 
     #[test]
     fn charset_nao_confunde_a_extensao() {
-        assert_eq!(extension_for("text/plain; charset=utf-8"), "bin");
+        assert_eq!(extension_for("text/plain; charset=utf-8"), "txt");
+        assert_eq!(extension_for("application/x-desconhecido"), "bin");
         assert_eq!(extension_for("image/png"), "png");
     }
 

@@ -12,6 +12,10 @@ import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
 import { PostitFantasma } from "@/components/mestre/postit-fantasma";
 import { PostitLayer } from "@/components/mestre/postit-layer";
+import { LigacaoLayer } from "@/components/mestre/ligacao-layer";
+import { TextoLayer } from "@/components/mestre/texto-layer";
+import { pontaEm } from "@/lib/mestre/ligacoes";
+import { DocumentoLayer } from "@/components/mestre/documento-layer";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
 import type { PontaDoMedidor } from "@/components/playground/medidor-layer";
@@ -88,15 +92,18 @@ import { CORNER_HANDLES, MIN_ITEM_SIZE } from "@/lib/geometry/transform";
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
+import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
 import {
+  ehQuadro,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   SCENE_HEIGHT,
   SCENE_WIDTH,
+  TEXTO_TAMANHO,
   type AncoraRetrato,
   type CanvasItem,
   type FogRegion,
@@ -183,6 +190,9 @@ function distanciaAoSegmento(
  * Camada interativa do Mestre. Precisa viver dentro de `SceneStage` para ter
  * acesso ao fator de escala do palco.
  */
+/** Menor arrasto que vira seta, em unidades de cena. Abaixo disso é clique. */
+const ARRASTO_MINIMO_DA_SETA = 8;
+
 export function MestreStage({ scene }: { scene: Scene }) {
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
@@ -252,6 +262,15 @@ export function MestreStage({ scene }: { scene: Scene }) {
   const removeTracos = useSceneStore((state) => state.removeTracos);
   const addPin = useSceneStore((state) => state.addPin);
   const addPostit = useSceneStore((state) => state.addPostit);
+  const addTexto = useSceneStore((state) => state.addTexto);
+  const addLigacao = useSceneStore((state) => state.addLigacao);
+
+  // A seta em andamento e a seleção de texto/seta são desta cena: trocar de
+  // cena ou largar a ferramenta de seta desfaz a primeira ponta clicada.
+  const limparQuadro = useQuadroStore((state) => state.limpar);
+  useEffect(() => {
+    limparQuadro();
+  }, [scene.id, limparQuadro]);
   // A câmera que o mestre está editando. Ver `useCameraLockStore`.
   const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
   const espelhoMestre = useCameraLockStore((state) => state.espelhoMestre);
@@ -981,6 +1000,15 @@ export function MestreStage({ scene }: { scene: Scene }) {
     // contém o ponto, para a de dentro ganhar da de fora. Só com a ferramenta
     // de seleção: com lápis ou névoa na mão o clique é um traço.
     if (tool === "select") {
+      // Clique no vazio larga também o texto e a seta selecionados, como
+      // larga os itens.
+      const quadro = useQuadroStore.getState();
+      if (quadro.textoSelecionadoId || quadro.ligacaoSelecionadaId)
+        useQuadroStore.setState({
+          textoSelecionadoId: null,
+          ligacaoSelecionadaId: null,
+        });
+
       const dentro = (scene.cameras ?? [])
         .filter(({ viewport: v }) =>
           anchor.x >= v.x && anchor.x <= v.x + v.width &&
@@ -1033,6 +1061,46 @@ export function MestreStage({ scene }: { scene: Scene }) {
       // ferramenta presa cobriria um pedaço do mapa.
       setTool("select");
 
+      return;
+    }
+
+    // Clique, como o postit: o texto nasce onde o mestre apontou e já em
+    // edição, porque texto vazio não é nada. Volta ao modo normal pela mesma
+    // razão do alfinete.
+    if (tool === "texto") {
+      const id = addTexto(scene.id, {
+        x: Math.round(anchor.x),
+        y: Math.round(anchor.y - TEXTO_TAMANHO / 2),
+      });
+      useQuadroStore.getState().editarTexto(id);
+      setTool("select");
+      return;
+    }
+
+    // Arrasto, como no Excalidraw: de onde o botão descer até onde soltar.
+    // Cada ponta prende-se ao que houver embaixo, ou fica solta na folha. A
+    // ferramenta FICA na mão depois da seta pronta -- amarrar cinco ideias
+    // seguidas é o gesto normal num quadro, e Esc larga. Um clique sem
+    // arrasto não cria nada: seta de comprimento zero é um ponto.
+    if (tool === "ligacao") {
+      const de = pontaEm(scene, anchor);
+      const quadro = useQuadroStore.getState();
+      quadro.setPrevia({ de, ate: { x: anchor.x, y: anchor.y } });
+
+      startDrag(event, {
+        onMove: (_delta, native) =>
+          useQuadroStore
+            .getState()
+            .setPrevia({ de, ate: toScene(native.clientX, native.clientY) }),
+        onEnd: (native) => {
+          useQuadroStore.getState().setPrevia(null);
+          const fim = toScene(native.clientX, native.clientY);
+          if (Math.hypot(fim.x - anchor.x, fim.y - anchor.y) < ARRASTO_MINIMO_DA_SETA)
+            return;
+          const id = addLigacao(scene.id, de, pontaEm(scene, fim));
+          if (id) useQuadroStore.getState().selecionarLigacao(id);
+        },
+      });
       return;
     }
 
@@ -1235,6 +1303,8 @@ export function MestreStage({ scene }: { scene: Scene }) {
     (!panMode &&
       (tool === "pin" ||
         tool === "postit" ||
+        tool === "texto" ||
+        tool === "ligacao" ||
         tool === "lapis" ||
         tool === "borracha" ||
         tool === "regua" ||
@@ -1337,13 +1407,20 @@ export function MestreStage({ scene }: { scene: Scene }) {
         <PostitFantasma cor={corPostit} />
       ) : null}
 
+      {/* As duas do quadro, irmãs do postit e fora do `SceneLayer` pela mesma
+          razão. Cada uma devolve `null` sem conteúdo, e a de seta só ouve o
+          mouse enquanto uma ponta está clicada: mapa sem nada disto não paga. */}
+      <TextoLayer scene={scene} panMode={panMode} />
+      <DocumentoLayer scene={scene} panMode={panMode} />
+      <LigacaoLayer scene={scene} />
+
       {/* Fora do `SceneLayer` pela mesma razão do `PinLayer`: hoje o dado é só
           do mestre. Dentro dele, os dados apareceriam na TV — e a decisão de
           mostrar a rolagem para a mesa é do mestre, não deste arquivo.
 
           Dentro do plano, porém: o dado é jogado SOBRE o mapa, e tem de
           acompanhar zoom e deslocamento como a névoa e os riscos acompanham. */}
-      <DadoLayer />
+      <DadoLayer quadro={ehQuadro(scene)} />
 
       {/* A sombra do que está sendo arrastado para o mapa: o personagem, a
           imagem do acervo ou o item de inventário. Irmã das três acima, e fora
@@ -1645,6 +1722,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
           camera={selecionada}
           transmitindo={scene.cameraNoArId === selecionada.id}
           cinegrafista={cinegrafista}
+          tudoEscuro={ehQuadro(scene)}
           // Com espaço segurado a moldura vira só informativa: o gesto pertence
           // ao deslocamento da cena.
           onChange={

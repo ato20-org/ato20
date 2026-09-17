@@ -69,7 +69,7 @@ export function GridControl({ scene }: { scene: Scene }) {
           <p className="text-muted-foreground max-w-52">
             {ligada
               ? "A TV e os celulares veem a mesma grade. Clique na seta para ajustar."
-              : "Desenha quadrados sobre a cena, e a mesa vê os mesmos."}
+              : "Desenha quadrados sobre o mapa, e a mesa vê os mesmos."}
           </p>
         </TooltipContent>
       </Tooltip>

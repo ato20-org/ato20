@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { atalhos } from "@/lib/mestre/atalhos";
+import { colarTextoDoSistema } from "@/lib/mestre/texto-actions";
 
 function isTyping(target: EventTarget | null): boolean {
   return Boolean(
@@ -40,8 +41,21 @@ export function useMestreShortcuts(): void {
       atalho.executar(event);
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    // O texto do sistema entra por aqui, e não pelo Ctrl+V da tabela: o
+    // atalho deixa a tecla passar quando não tem nada interno, e o browser
+    // dispara `paste` com o texto pronto. Ver `colarTextoDoSistema`.
+    const handlePaste = (event: ClipboardEvent) => {
+      if (isTyping(event.target)) return;
+      const texto = event.clipboardData?.getData("text/plain");
+      if (texto && colarTextoDoSistema(texto)) event.preventDefault();
+    };
 
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("paste", handlePaste);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("paste", handlePaste);
+    };
   }, []);
 }

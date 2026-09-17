@@ -38,6 +38,15 @@ import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
+import { useClipboardStore } from "@/lib/store/use-clipboard-store";
+import { useQuadroStore } from "@/lib/store/use-quadro-store";
+import {
+  colarTexto,
+  copiarTexto,
+  cortarTexto,
+  duplicarTexto,
+} from "@/lib/mestre/texto-actions";
+import { selectEditingScene } from "@/lib/store/use-scene-store";
 import { executarComando } from "@/lib/extensoes/carregar";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -167,7 +176,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Área de transferência",
     tecla: "Ctrl+A",
-    rotulo: "Selecionar tudo na cena",
+    rotulo: "Selecionar tudo no mapa",
     combina: (evento) => comando(evento) && letra(evento) === "a",
     executar: selectAllItems,
     impedirPadrao: true,
@@ -177,7 +186,10 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+C",
     rotulo: "Copiar",
     combina: (evento) => comando(evento) && letra(evento) === "c",
-    executar: copySelection,
+    // Texto solto na mão ganha do item: ver `texto-actions`.
+    executar: () => {
+      if (!copiarTexto()) copySelection();
+    },
     impedirPadrao: true,
   },
   {
@@ -185,7 +197,9 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+X",
     rotulo: "Cortar",
     combina: (evento) => comando(evento) && letra(evento) === "x",
-    executar: cutSelection,
+    executar: () => {
+      if (!cortarTexto()) cutSelection();
+    },
     impedirPadrao: true,
   },
   {
@@ -193,15 +207,25 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+V",
     rotulo: "Colar",
     combina: (evento) => comando(evento) && letra(evento) === "v",
-    executar: pasteClipboard,
-    impedirPadrao: true,
+    // Barra o browser só quando há algo NOSSO para colar. Sem nada interno, a
+    // tecla segue e vira o evento `paste`, que é por onde o texto do sistema
+    // entra no quadro -- ver `colarTextoDoSistema` e `useMestreShortcuts`.
+    executar: (evento) => {
+      const { drafts, texto } = useClipboardStore.getState();
+      if (drafts.length === 0 && !texto) return;
+      evento.preventDefault();
+      if (!colarTexto()) pasteClipboard();
+    },
+    impedirPadrao: false,
   },
   {
     grupo: "Área de transferência",
     tecla: "Ctrl+D",
     rotulo: "Duplicar",
     combina: (evento) => comando(evento) && letra(evento) === "d",
-    executar: duplicateSelection,
+    executar: () => {
+      if (!duplicarTexto()) duplicateSelection();
+    },
     impedirPadrao: true,
   },
 
@@ -230,7 +254,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Ctrl+0",
-    rotulo: "Enquadrar a cena",
+    rotulo: "Enquadrar o mapa",
     combina: (evento) => comando(evento) && evento.key === "0",
     executar: () => useViewportStore.getState().fit(),
     impedirPadrao: true,
@@ -324,7 +348,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Shift+C",
-    rotulo: "Tirar do ar: a mesa vê a cena inteira",
+    rotulo: "Tirar do ar: a mesa vê o mapa inteiro",
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -509,6 +533,8 @@ export const ATALHOS_BASE: Atalho[] = [
       // a convenção de todo editor para "desisto do que eu ia fazer".
       useToolStore.getState().setTool("select");
       useSelectionStore.getState().clear();
+      // O quadro também: a ponta de seta já clicada e o texto selecionado.
+      useQuadroStore.getState().limpar();
       // E solta a mesa: Esc é "para tudo o que está acontecendo", e uma TV
       // seguindo um token é algo que está acontecendo.
       useCameraLockStore.getState().soltar();
@@ -549,8 +575,20 @@ export const ATALHOS_BASE: Atalho[] = [
       // o retrato ganha do item da cena. É a ordem de quem está "por cima" na
       // atenção do mestre quando as duas coisas estão selecionadas.
       const selecao = useSelectionStore.getState();
+      const quadro = useQuadroStore.getState();
+      const cena = selectEditingScene(useSceneStore.getState());
 
-      if (selecao.selectedFogId) removeFogSelection();
+      // Seta e texto do quadro primeiro: são a seleção mais recente quando
+      // existem, porque selecionar um deles limpa o outro e nada mais.
+      if (cena && quadro.ligacaoSelecionadaId) {
+        useSceneStore
+          .getState()
+          .removeLigacao(cena.id, quadro.ligacaoSelecionadaId);
+        quadro.selecionarLigacao(null);
+      } else if (cena && quadro.textoSelecionadoId && !quadro.textoEditandoId) {
+        useSceneStore.getState().removeTexto(cena.id, quadro.textoSelecionadoId);
+        quadro.selecionarTexto(null);
+      } else if (selecao.selectedFogId) removeFogSelection();
       else if (selecao.selectedMedidorId) removeMedidorSelection();
       else if (selecao.selectedPortraitIds.length > 0)
         removePortraitSelection();

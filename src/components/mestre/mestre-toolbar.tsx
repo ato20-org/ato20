@@ -6,14 +6,17 @@ import {
   Map,
   MapPin,
   MousePointer2,
+  Presentation,
   X,
   Pencil,
   Puzzle,
   Ruler,
+  Spline,
   SquareDashedBottom,
   StickyNote,
+  Type,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { GridControl } from "@/components/mestre/grid-control";
 import { PencilControl } from "@/components/mestre/pencil-control";
@@ -33,7 +36,7 @@ import {
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
-import type { Scene } from "@/types/scene";
+import { ehQuadro, type Scene } from "@/types/scene";
 
 type Ferramenta = {
   tool: Tool;
@@ -55,7 +58,7 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
   },
   {
     tool: "hand",
-    label: "Deslocar a cena",
+    label: "Deslocar o mapa",
     hint: "Arraste para percorrer o mapa. Segurar espaço faz o mesmo sem trocar de ferramenta.",
     icon: Hand,
   },
@@ -88,14 +91,34 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
   {
     tool: "postit",
     label: "Postit",
-    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou cena; ** dos dois lados deixa em negrito. Só você vê — nem a TV nem os celulares recebem.",
+    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou mapa; ** dos dois lados deixa em negrito; # e - no começo da linha dão título e lista. Só você vê — nem a TV nem os celulares recebem.",
     icon: StickyNote,
   },
   {
     tool: "fog",
     label: "Área escondida",
-    hint: "Arraste sobre a cena para cobrir uma região. A mesa vê preto sólido.",
+    hint: "Arraste sobre o mapa para cobrir uma região. A mesa vê preto sólido.",
     icon: SquareDashedBottom,
+  },
+];
+
+/**
+ * As do QUADRO, além do ponto e do postit: letra na folha e seta entre coisas.
+ * Só aparecem no quadro -- num mapa, título solto e seta entre tokens seriam
+ * anotação que a mesa não vê e que o mestre já faz com o postit.
+ */
+const FERRAMENTAS_QUADRO: Ferramenta[] = [
+  {
+    tool: "texto",
+    label: "Texto",
+    hint: "Clique no quadro para escrever direto na folha, sem papel. Duplo clique edita, arrasto move; selecionado, os cantos aumentam e a alça de cima gira, como na imagem.",
+    icon: Type,
+  },
+  {
+    tool: "ligacao",
+    label: "Seta",
+    hint: "Arraste de onde até onde, como no Excalidraw. A ponta solta sobre postit, texto, imagem ou ponto prende-se nele; no vazio fica livre. Selecionada, as alças movem as pontas; duplo clique dá rótulo. Esc larga.",
+    icon: Spline,
   },
 ];
 
@@ -160,7 +183,37 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     icon: Ruler,
   };
 
-  const doMapa = [...FERRAMENTAS_MAPA, regua, ...dasExtensoes];
+  /**
+   * Quadro não tem chão: sem névoa, grade nem régua. O que sobra da bolsa do
+   * mapa -- ponto e postit -- é o que anota, e é isso que um quadro é.
+   */
+  const quadro = ehQuadro(scene);
+  const doChao = quadro
+    ? [
+        // Sem névoa nem ponto de anotação: os dois são do mapa. O quadro é
+        // todo anotação, e o ponto -- nota fechada atrás de um alfinete --
+        // não faz sentido onde a nota já é o cartão.
+        ...FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog" && f.tool !== "pin"),
+        ...FERRAMENTAS_QUADRO,
+      ]
+    : FERRAMENTAS_MAPA;
+
+  const doMapa = quadro
+    ? [...doChao, ...dasExtensoes]
+    : [...doChao, regua, ...dasExtensoes];
+
+  // Trocar de um mapa para um quadro com a névoa na mão deixaria a ferramenta
+  // ativa sem botão na barra -- e o clique seguinte cobriria o quadro de preto.
+  useEffect(() => {
+    if (quadro && (tool === "fog" || tool === "regua" || tool === "pin"))
+      setTool("select");
+    // E o inverso: texto e seta são do quadro, e um mapa não tem onde mostrá-las.
+    if (
+      !quadro &&
+      (tool === "texto" || tool === "ligacao")
+    )
+      setTool("select");
+  }, [quadro, tool, setTool]);
 
   // A ferramenta ativa de cada bolsa, para o botão dela mostrar. `select` é
   // sempre do palco; então a bolsa do mapa só tem ativa quando é dela.
@@ -215,19 +268,27 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
       </Bolsa>
 
       <Bolsa
-        nome="Ferramentas do mapa"
-        dica="Ponto, postit, área escondida, grade e régua."
+        nome={quadro ? "Ferramentas do quadro" : "Ferramentas do mapa"}
+        dica={
+          quadro
+            ? "Postit, texto e seta."
+            : "Ponto, postit, área escondida, grade e régua."
+        }
         aberta={aberta === "mapa"}
         onAberta={(v) => setAberta(v ? "mapa" : null)}
         ativa={ativaDoMapa}
-        icone={Map}
+        icone={quadro ? Presentation : Map}
       >
-        {FERRAMENTAS_MAPA.map(botao)}
+        {doChao.map(botao)}
 
-        <span className="bg-border mx-1 h-5 w-px" />
+        {quadro ? null : (
+          <>
+            <span className="bg-border mx-1 h-5 w-px" />
 
-        <GridControl scene={scene} />
-        {botao(regua)}
+            <GridControl scene={scene} />
+            {botao(regua)}
+          </>
+        )}
 
         {dasExtensoes.length > 0 ? (
           <>

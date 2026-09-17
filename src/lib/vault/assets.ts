@@ -138,29 +138,32 @@ export async function importAssets(
   escopo?: EscopoAsset,
   aoEntrar?: (asset: AssetMeta) => void,
 ): Promise<ImportResult | null> {
+  // `file` é a Biblioteca: qualquer arquivo, sem filtro. O Rust classifica
+  // pelo tipo -- imagem vira imagem, som vira som, o resto vira arquivo.
   const escolhidos = await open({
     multiple: true,
-    title: kind === "image" ? "Escolha as imagens" : "Escolha os sons",
-    filters: [
+    title:
       kind === "image"
-        ? {
-            name: "Imagens",
-            extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"],
-          }
-        : {
-            name: "Sons",
-            extensions: [
-              "mp3",
-              "ogg",
-              "oga",
-              "opus",
-              "wav",
-              "flac",
-              "m4a",
-              "aac",
-            ],
-          },
-    ],
+        ? "Escolha as imagens"
+        : kind === "audio"
+          ? "Escolha os sons"
+          : "Escolha os arquivos",
+    filters:
+      kind === "image"
+        ? [
+            {
+              name: "Imagens",
+              extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"],
+            },
+          ]
+        : kind === "audio"
+          ? [
+              {
+                name: "Sons",
+                extensions: ["mp3", "ogg", "oga", "opus", "wav", "flac", "m4a", "aac"],
+              },
+            ]
+          : undefined,
   });
 
   if (!escolhidos) return null;

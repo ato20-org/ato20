@@ -422,7 +422,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Excluir da cena</TooltipContent>
+              <TooltipContent>Excluir do mapa</TooltipContent>
             </Tooltip>
           ) : null}
         </div>

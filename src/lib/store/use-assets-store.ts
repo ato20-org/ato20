@@ -17,6 +17,7 @@ type Acervo = {
 type AssetsStore = {
   image: Acervo;
   audio: Acervo;
+  file: Acervo;
 
   /** Lê se ninguém leu ainda. É o que cada tela chama ao montar. */
   garantir: (kind: AssetKind) => void;
@@ -62,6 +63,7 @@ const VAZIO: Acervo = { assets: null, pedido: 0, emVoo: false };
 export const useAssetsStore = create<AssetsStore>((set, get) => ({
   image: VAZIO,
   audio: VAZIO,
+  file: VAZIO,
 
   garantir(kind) {
     const atual = get()[kind];
@@ -97,13 +99,13 @@ export const useAssetsStore = create<AssetsStore>((set, get) => ({
   },
 }));
 
-const TIPOS = ["image", "audio"] as const;
+const TIPOS = ["image", "audio", "file"] as const;
 
 type Set = (parcial: Partial<AssetsStore>) => void;
 type Get = () => AssetsStore;
 
 function guardar(set: Set, kind: AssetKind, acervo: Acervo) {
-  set(kind === "image" ? { image: acervo } : { audio: acervo });
+  set({ [kind]: acervo });
 }
 
 /**

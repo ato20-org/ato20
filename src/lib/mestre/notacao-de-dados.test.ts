@@ -23,7 +23,13 @@ describe("lerNotacaoDeDados", () => {
 
   it("recusa faces que o saquinho não tem", () => {
     expect(lerNotacaoDeDados("2d7")).toBeNull();
-    expect(lerNotacaoDeDados("d100")).toBeNull();
+    expect(lerNotacaoDeDados("d3")).toBeNull();
+  });
+
+  it("d100 é o d% do saquinho, e entra", () => {
+    // Os dois PRs nasceram juntos: a paleta achava que d100 não existia, e o
+    // saquinho ganhou o d% no mesmo dia. Quem chegou por último acerta o teste.
+    expect(lerNotacaoDeDados("d100")).toEqual({ quantidade: 1, faces: 100 });
   });
 
   it("recusa zero, excesso e o que não é notação", () => {

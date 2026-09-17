@@ -274,6 +274,13 @@ function ler(sob: Element): DestinoDoArrasto | null {
   // A bolinha do handout também fica por cima do mapa, e o painel dela idem.
   if (sob.closest("[data-handout]")) return { tipo: "handout" };
 
+  // Antes do palco: o editor da nota ocupa o lugar dele e não é palco.
+  if (sob.closest("[data-nota-editor]")) return { tipo: "nota" };
+
+  const arquivos = sob.closest<HTMLElement>("[data-pasta-arquivos]");
+  if (arquivos)
+    return { tipo: "pasta-arquivos", pastaId: arquivos.dataset.pastaId || undefined };
+
   const inventario = sob.closest<HTMLElement>("[data-inventario]");
   if (inventario?.dataset.personagemId) {
     return {

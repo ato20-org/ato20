@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   CopyPlus,
   GripVertical,
@@ -16,6 +16,7 @@ import {
 
 import { toast } from "sonner";
 
+import { NovoMapaDialog } from "@/components/mestre/novo-mapa-dialog";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useListReorder } from "@/hooks/use-list-reorder";
+import { useTokenDrag } from "@/hooks/use-token-drag";
 import {
   aoApertarF2,
   useRenomearPeloMenu,
@@ -46,10 +48,14 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { cn } from "@/lib/utils";
-import type { Scene } from "@/types/scene";
+import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
+import { ehQuadro, type Scene } from "@/types/scene";
 
 export function SceneList({ ready }: { ready: boolean }) {
-  const scenes = useSceneStore((state) => state.board?.scenes);
+  const todas = useSceneStore((state) => state.board?.scenes);
+  // Só os mapas: os quadros moram na aba Arquivos. Ver `ArquivosList`.
+  const scenes = useMemo(() => todas?.filter((scene) => !ehQuadro(scene)), [todas]);
+  const fecharNota = useArquivoAbertoStore((state) => state.fechar);
   const editingSceneId = useSceneStore((state) => state.board?.editingSceneId);
   const liveSceneId = useSceneStore((state) => state.board?.liveSceneId);
   const setEditingSceneId = useSceneStore((state) => state.setEditingSceneId);
@@ -59,10 +65,20 @@ export function SceneList({ ready }: { ready: boolean }) {
   const fitViewport = useViewportStore((state) => state.fit);
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [novoMapaId, setNovoMapaId] = useState<string | null>(null);
 
   const moveSceneToIndex = useSceneStore((state) => state.moveSceneToIndex);
   const { listRef, dropIndex, startReorder } = useListReorder<string>(
-    (sceneId, index) => moveSceneToIndex(sceneId, index),
+    (sceneId, index) => {
+      // O índice é desta lista, só de mapas; o board tem os quadros no meio.
+      // O destino é o lugar de quem está nessa linha, e o fim quando cai no fim.
+      if (!todas || !scenes) return;
+      const antesDe = scenes[index]?.id;
+      const destino = antesDe
+        ? todas.findIndex((scene) => scene.id === antesDe)
+        : todas.length - 1;
+      moveSceneToIndex(sceneId, destino);
+    },
   );
 
   return (
@@ -72,13 +88,16 @@ export function SceneList({ ready }: { ready: boolean }) {
           className="w-full"
           variant="outline"
           size="sm"
-          onClick={() => addScene()}
+          // O mapa nasce e pergunta de onde vem o chão. Ver `NovoMapaDialog`.
+          onClick={() => setNovoMapaId(addScene())}
           disabled={!ready}
         >
           <Plus />
-          Nova cena
+          Novo mapa
         </Button>
       </div>
+
+      <NovoMapaDialog sceneId={novoMapaId} onFechar={() => setNovoMapaId(null)} />
 
       <ScrollArea className="min-h-0 flex-1">
         <ul ref={listRef} className="space-y-1 p-2 pt-0">
@@ -88,7 +107,6 @@ export function SceneList({ ready }: { ready: boolean }) {
               scene={scene}
               onStage={scene.id === editingSceneId}
               live={scene.id === liveSceneId}
-              onlyScene={scenes.length === 1}
               dropTarget={dropIndex === index}
               onReorderStart={(event) => startReorder(event, scene.id)}
               renaming={renamingId === scene.id}
@@ -96,6 +114,8 @@ export function SceneList({ ready }: { ready: boolean }) {
               onRenameDone={() => setRenamingId(null)}
               onGoLive={() => setLiveSceneId(scene.id)}
               onOpen={() => {
+                // Abrir uma cena volta ao palco, se havia nota aberta.
+                fecharNota();
                 setEditingSceneId(scene.id);
                 // Seleção é por cena: manter itens da cena anterior
                 // selecionados deixaria o gizmo apontando pro vazio.
@@ -117,7 +137,6 @@ type SceneRowProps = {
   onStage: boolean;
   /** Sendo exibida para a mesa. */
   live: boolean;
-  onlyScene: boolean;
   /** Linha onde a cena arrastada cairia. */
   dropTarget: boolean;
   onReorderStart: (event: ReactPointerEvent) => void;
@@ -132,7 +151,6 @@ function SceneRow({
   scene,
   onStage,
   live,
-  onlyScene,
   dropTarget,
   onReorderStart,
   renaming,
@@ -151,6 +169,7 @@ function SceneRow({
   const renomear = useRenomearPeloMenu(onRename);
 
   const fundoEmVoo = useFundoEmVoo((state) => state.cenas.includes(scene.id));
+  const arrastarParaNota = useTokenDrag();
 
   function commitRename(value: string) {
     const name = value.trim();
@@ -181,6 +200,15 @@ function SceneRow({
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
         aria-current={onStage}
         onClick={onOpen}
+        // Arrastar o mapa para uma nota vira `>mapa`. A alça à esquerda
+        // continua sendo o reordenar; aqui é o gesto de apontar.
+        onPointerDown={(event) =>
+          arrastarParaNota(event, {
+            fonte: { tipo: "cena", sceneId: scene.id, nome: scene.name },
+            largura: 1,
+            altura: 1,
+          })
+        }
         onDoubleClick={onRename}
         // F2 renomeia, como no gerenciador de arquivos. Ver `aoApertarF2`.
         onKeyDown={aoApertarF2(onRename)}
@@ -251,7 +279,7 @@ function SceneRow({
               />
               <TooltipContent>
                 <p className="max-w-48">
-                  Passa a mesa para esta cena, sem sair da que tu edita.
+                  Passa a mesa para este mapa, sem sair do que tu edita.
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -326,8 +354,6 @@ function SceneRow({
 
               <DropdownMenuItem
                 variant="destructive"
-                // Board sem cena nenhuma deixaria o palco vazio sem saída.
-                disabled={onlyScene}
                 onClick={() => removeScene(scene.id)}
               >
                 <Trash2 />

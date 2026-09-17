@@ -1249,6 +1249,29 @@ export type QuadroDaQueda = {
  * repente no meio do ar e o dado descer reto, que é o defeito clássico de dado
  * digital — parece decidido de antemão, porque foi.
  */
+/**
+ * As bordas da mesa, na unidade em que o dado vive. `x`/`y` é o canto de cima
+ * e à esquerda; ausente = zero, que é o plano da cena e a tela do celular. O
+ * quadro do mestre tem canto negativo: a mesa dele é a área de trabalho, que
+ * cresce para todos os lados a partir do plano.
+ */
+export type LimitesDaMesa = {
+  largura: number;
+  altura: number;
+  x?: number;
+  y?: number;
+};
+
+/** O valor preso entre as duas bordas, com a folga de um raio de cada lado. */
+export function presoNaMesa(
+  valor: number,
+  inicio: number,
+  tamanho: number,
+  folga: number,
+): number {
+  return Math.min(inicio + tamanho - folga, Math.max(inicio + folga, valor));
+}
+
 export function quadroDaQueda(
   dado: {
     faces: FacesDado;
@@ -1274,7 +1297,7 @@ export function quadroDaQueda(
    * ficava grudado na folga do topo. A queda acontecia inteira, num lugar que
    * ninguém via.
    */
-  limites: { largura: number; altura: number } = {
+  limites: LimitesDaMesa = {
     largura: SCENE_WIDTH,
     altura: SCENE_HEIGHT,
   },
@@ -1330,8 +1353,8 @@ export function quadroDaQueda(
   // forte para a beirada mandava o dado para fora, onde ele fica recortado e a
   // jogada se perde sem deixar pista.
   const folga = dado.raio * 1.15;
-  const x = Math.min(limites.largura - folga, Math.max(folga, bruto.x));
-  const y = Math.min(limites.altura - folga, Math.max(folga, bruto.y));
+  const x = presoNaMesa(bruto.x, limites.x ?? 0, limites.largura, folga);
+  const y = presoNaMesa(bruto.y, limites.y ?? 0, limites.altura, folga);
 
   const inicioAssento = duracao - ASSENTO;
   const alvo = orientacaoParaValor(dado.faces, dado.valor);

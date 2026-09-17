@@ -16,7 +16,8 @@ export const SCENE_HEIGHT = 1080;
  * `pdf` saiu junto com o material de regras: era o unico caminho que criava
  * arquivo desse tipo.
  */
-export type AssetKind = "image" | "audio";
+/** `file` é tudo o que não é imagem nem som: PDF, texto, o que vier. */
+export type AssetKind = "image" | "audio" | "file";
 
 /**
  * Metadados de um arquivo enviado pelo mestre. O binário fica em `assets/`.
@@ -313,6 +314,138 @@ export type Postit = {
 /** O que o chamador informa ao colar um postit; o resto é do store. */
 export type NewPostit = Pick<Postit, "x" | "y"> &
   Partial<Pick<Postit, "largura" | "altura" | "texto" | "cor">>;
+
+/**
+ * Texto solto sobre o quadro: título, rótulo, uma frase. Sem papel, sem
+ * caixa -- o postit é o cartão, este é a letra direto na folha.
+ *
+ * Mora na cena como o postit, e é do mestre até a cena ir ao ar como quadro.
+ * Não tem largura: o texto quebra onde o mestre pôs Enter, e a caixa que a
+ * ligação mira é estimada a partir da fonte. Ver `caixaDoTexto`.
+ */
+export type Texto = {
+  id: string;
+  /** Canto superior esquerdo, em coordenadas de cena. */
+  x: number;
+  y: number;
+  texto: string;
+  /** Tamanho da fonte, em unidades de cena. */
+  tamanho: number;
+  /** Giro em graus, em volta do centro da caixa, como o item. Ausente = 0. */
+  rotation?: number;
+  /**
+   * A caixa MEDIDA na tela do mestre, em unidades de cena, sem o giro.
+   * Ausente até o primeiro render: aí vale a estimativa de `caixaRetaDoTexto`.
+   * Gravada porque a mesa também precisa dela para a seta encostar no lugar
+   * certo, e a mesa não tem como medir antes de desenhar.
+   */
+  largura?: number;
+  altura?: number;
+};
+
+export type NewTexto = Pick<Texto, "x" | "y"> &
+  Partial<Pick<Texto, "texto" | "tamanho" | "rotation">>;
+
+/** Tamanho de fonte de um texto novo, em unidades de cena. */
+export const TEXTO_TAMANHO = 40;
+
+/**
+ * Um documento do quadro: um cartão com Markdown de verdade, editado no
+ * lugar com prévia ao vivo, como uma nota do Obsidian.
+ *
+ * O TEXTO não mora aqui: mora em `documentos/<arquivo>.md` na pasta da
+ * campanha, para ser Markdown que se abre em qualquer editor. A cena guarda
+ * o cartão -- onde está, que tamanho tem, como se chama -- e o nome do
+ * arquivo. `atualizadoEm` muda a cada gravação, e é o que faz a mesa reler o
+ * arquivo quando o mestre escreve.
+ */
+export type Documento = {
+  id: string;
+  /** Canto superior esquerdo, em coordenadas de cena. */
+  x: number;
+  y: number;
+  largura: number;
+  altura: number;
+  /**
+   * A nota que este cartão mostra. Ver `Nota`. Ausente só em cartão gravado
+   * antes de existirem notas; `carregar` cria a nota dele e preenche.
+   */
+  notaId?: string;
+  /**
+   * Cópia do título e do arquivo da nota, para a MESA: ela recebe a cena e não
+   * o board, então não tem onde resolver `notaId`. Quem renomeia a nota
+   * reescreve os dois em todos os cartões dela.
+   */
+  titulo: string;
+  arquivo: string;
+  /** Época em ms da última gravação do texto. Ausente = nunca escrito. */
+  atualizadoEm?: number;
+  /** Fonte do corpo, em unidades de cena. Ausente = `DOCUMENTO_FONTE`. */
+  fonte?: number;
+};
+
+export const DOCUMENTO_FONTE = 16;
+/** Os degraus do A− e A+, em unidades de cena. */
+export const DOCUMENTO_FONTES = [11, 13, 16, 20, 24, 30, 38] as const;
+
+export type NewDocumento = Pick<
+  Documento,
+  "x" | "y" | "titulo" | "arquivo" | "notaId"
+> &
+  Partial<Pick<Documento, "largura" | "altura">>;
+
+/**
+ * Uma nota: um arquivo `.md` da campanha, como no Obsidian. Vive na mesma
+ * árvore de pastas dos quadros, abre num editor no lugar do palco, e entra num
+ * quadro como cartão (`Documento`) quantas vezes se quiser. O texto mora em
+ * `documentos/<arquivo>`; aqui é só o índice.
+ */
+export type Nota = {
+  id: string;
+  titulo: string;
+  /** Nome do arquivo em `documentos/`, sem diretório. Não muda com o título. */
+  arquivo: string;
+  pastaId?: string;
+};
+
+export const DOCUMENTO_LARGURA = 420;
+export const DOCUMENTO_ALTURA = 320;
+export const DOCUMENTO_MINIMO = 160;
+
+/** O que uma ligação pode amarrar. */
+export type TipoLigavel = "item" | "postit" | "texto" | "pin" | "documento";
+
+/** Uma ponta de ligação: o que ela amarra, por tipo e id. */
+export type RefLigacao = { tipo: TipoLigavel; id: string };
+
+/**
+ * Uma ponta de seta: ANCORADA numa coisa do quadro, ou LIVRE num ponto.
+ *
+ * Ancorada, a seta acompanha a coisa e encosta na borda dela. Livre, é um
+ * ponto na folha, como uma seta desenhada à mão. As duas formas se distinguem
+ * pelo campo `tipo`, e só a ancorada tem id: ver `ancorada`.
+ */
+export type PontaDeLigacao = RefLigacao | Vec2;
+
+/** Um ponto em coordenadas de cena. */
+export type Vec2 = { x: number; y: number };
+
+/**
+ * Uma seta no quadro, como no Excalidraw: pode existir sozinha, apontando
+ * para o nada, e prende-se a uma coisa quando a ponta é solta sobre ela.
+ *
+ * A ponta ancorada guarda a REFERÊNCIA, e não o ponto: mover o postit leva a
+ * seta junto, que é o que faz dela um vínculo e não um risco. A ponta que
+ * perde o alvo -- postit apagado -- leva a ligação com ela; ver
+ * `semReferencia`.
+ */
+export type Ligacao = {
+  id: string;
+  de: PontaDeLigacao;
+  para: PontaDeLigacao;
+  /** O que a seta diz, no meio dela. Ausente = nada. */
+  rotulo?: string;
+};
 
 /**
  * A imagem em evidência: o que o mestre mandou a mesa olhar agora.
@@ -647,9 +780,52 @@ export type Grupo = {
   recolhido?: boolean;
 };
 
+/**
+ * O que uma cena é para o mestre.
+ *
+ * `undefined` é mapa: a cena de sempre, com fundo, grade, névoa e régua, feita
+ * para a mesa olhar. `"quadro"` é a mesa de trabalho do mestre -- brainstorm,
+ * história, notas ligadas por setas --, sem chão nem escala. As duas dividem
+ * o mesmo tipo de propósito: o palco, o histórico, a gravação por diferença e
+ * o canal para a mesa já existem para a cena, e um quadro é uma cena sem chão
+ * com uma barra de ferramentas própria. Ver `ehQuadro`.
+ *
+ * Decidido na criação e nunca trocado: um mapa que virasse quadro carregaria
+ * névoa e grade que o quadro não sabe mostrar, e cada caso desses seria um
+ * bug para alguém.
+ */
+export type TipoDeCena = "quadro";
+
+/**
+ * Uma pasta de quadros. Só quadros: cena de mapa é fila de sessão, e uma
+ * campanha tem dez; quadro é caderno, e um caderno cresce em capítulos.
+ *
+ * Mesma forma do `Grupo` da cena, e de propósito: a lista já sabe desenhar
+ * essa árvore. Vive no board, e não na cena, porque atravessa cenas.
+ */
+export type Pasta = {
+  id: string;
+  nome: string;
+  parentId?: string;
+  recolhido?: boolean;
+};
+
 export type Scene = {
   id: string;
   name: string;
+  /** Ausente = mapa. Ver `TipoDeCena`. */
+  tipo?: TipoDeCena;
+  /** A pasta em que um quadro está. Ausente = raiz. Só faz sentido em quadro. */
+  pastaId?: string;
+  /**
+   * Textos soltos e setas do quadro. Ausente = nenhum. Nascem no quadro, mas
+   * a cena de mapa também os aceita: são só mais duas listas. Ver `Texto` e
+   * `Ligacao`.
+   */
+  textos?: Texto[];
+  ligacoes?: Ligacao[];
+  /** Os cartões de documento do quadro. Ausente = nenhum. Ver `Documento`. */
+  documentos?: Documento[];
   backgroundAssetId?: string;
   items: CanvasItem[];
   fog: FogRegion[];
@@ -759,6 +935,10 @@ export type Board = {
    * `null` = nada no ar.
    */
   liveSceneId: string | null;
+  /** As pastas dos quadros e das notas. Ausente = nenhuma. Ver `Pasta`. */
+  pastas?: Pasta[];
+  /** As notas `.md` da campanha. Ausente = nenhuma. Ver `Nota`. */
+  notas?: Nota[];
 };
 
 /**
@@ -774,11 +954,18 @@ export const DEFAULT_GRID: SceneGrid = {
   opacity: 0.35,
 };
 
-export function createScene(name: string): Scene {
+/** Um quadro, e não um mapa. Ver `TipoDeCena`. */
+export function ehQuadro(scene: Pick<Scene, "tipo">): boolean {
+  return scene.tipo === "quadro";
+}
+
+export function createScene(name: string, tipo?: TipoDeCena): Scene {
   const now = Date.now();
   return {
     id: novoId(),
     name,
+    // Só quando é quadro: mapa não ganha `tipo: undefined` gravado no JSON.
+    ...(tipo ? { tipo } : {}),
     items: [],
     fog: [],
     createdAt: now,
@@ -796,30 +983,57 @@ export function createScene(name: string): Scene {
 export function cloneScene(source: Scene, name: string): Scene {
   const now = Date.now();
 
+  // Id antigo -> id novo, para as ligações continuarem amarradas às cópias e
+  // não aos originais.
+  const novos = new Map<string, string>();
+  const renovar = <T extends { id: string }>(coisa: T): T => {
+    const id = novoId();
+    novos.set(coisa.id, id);
+    return { ...coisa, id };
+  };
+
   return {
     ...source,
     id: novoId(),
     name,
-    items: source.items.map((item) => ({ ...item, id: novoId() })),
+    items: source.items.map(renovar),
     fog: source.fog.map((region) => ({ ...region, id: novoId() })),
     // Os anexos continuam apontando para os MESMOS assets: o arquivo é do
     // acervo da campanha, não do ponto, e copiá-lo duplicaria um mapa de 8 MB
     // por duplicar a cena.
-    pins: source.pins?.map((pin) => ({ ...pin, id: novoId() })),
+    pins: source.pins?.map(renovar),
     // O texto vem junto com os marcadores dentro dele, e os marcadores são por
     // nome: um `>Porão` copiado continua apontando para a MESMA cena de porão,
     // não para a cópia dela. É o que se quer — duplicar uma cena não duplica o
     // porão a que ela leva.
-    postits: source.postits?.map((postit) => ({ ...postit, id: novoId() })),
+    postits: source.postits?.map(renovar),
     // Mesma regra dos anexos: são ids do acervo, e a cópia aponta para os
     // mesmos arquivos.
     handout: source.handout ? [...source.handout] : undefined,
+    textos: source.textos?.map(renovar),
+    // O cartão é copiado com o MESMO arquivo por enquanto: copiar o arquivo é
+    // assíncrono e é do store, que troca o `arquivo` da cópia logo depois.
+    // Ver `duplicateScene`.
+    documentos: source.documentos?.map(renovar),
+    // Ponta ancorada aponta para a cópia; ponta livre é só um ponto e vem igual.
+    ligacoes: source.ligacoes?.map((ligacao) => {
+      const renovada = (ponta: PontaDeLigacao): PontaDeLigacao =>
+        "tipo" in ponta
+          ? { ...ponta, id: novos.get(ponta.id) ?? ponta.id }
+          : ponta;
+      return {
+        ...ligacao,
+        id: novoId(),
+        de: renovada(ligacao.de),
+        para: renovada(ligacao.para),
+      };
+    }),
     createdAt: now,
     updatedAt: now,
   };
 }
 
 export function createEmptyBoard(): Board {
-  const first = createScene("Cena 1");
+  const first = createScene("Mapa 1");
   return { scenes: [first], editingSceneId: first.id, liveSceneId: first.id };
 }

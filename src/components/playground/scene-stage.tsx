@@ -74,6 +74,16 @@ type SceneScale = {
    * gesto sem nada transbordar do plano de conteúdo. Ver `fundoNo`.
    */
   fundoDoPalco: HTMLElement | null;
+  /**
+   * A MOLDURA do palco, e onde o plano começa dentro dela, em pixels de tela.
+   * Para quem precisa desenhar sobre o palco inteiro, fora dos planos -- a
+   * máscara da câmera no quadro --, e por isso não pode ficar dentro deles:
+   * um filho maior que o plano infla a camada composta e derruba a pintura
+   * (ver `debug-do-palco` §3). Em pixels de tela: `x_px = offsetX + x × scale`.
+   */
+  moldura: HTMLElement | null;
+  offsetX: number;
+  offsetY: number;
 };
 
 const SceneScaleContext = createContext<SceneScale | null>(null);
@@ -139,6 +149,13 @@ type SceneStageProps = {
    */
   panOnDrag?: boolean;
   /**
+   * A cor do vazio. `"mapa"` é o preto de sempre: o mapa é a luz, e o que
+   * está fora dele é sala escura. `"quadro"` é papel, na cor da superfície do
+   * tema: um quadro sem chão sobre preto lia como cena sem fundo, e o que se
+   * quer é uma folha.
+   */
+  plano?: "mapa" | "quadro";
+  /**
    * A área que a cena ocupa: o plano mais o que foi colocado fora dele.
    *
    * Presente = o palco desenha o contorno dela e navega dentro dela, o que é o
@@ -186,6 +203,7 @@ export function SceneStage({
   viewport = FULL_VIEWPORT,
   onViewportChange,
   panOnDrag = false,
+  plano = "mapa",
   limites,
   smooth = false,
   corte = 0,
@@ -357,7 +375,12 @@ export function SceneStage({
     while (passo * scale < 24) passo *= 2;
     while (passo * scale > 48) passo /= 2;
 
-    const ponto = "radial-gradient(circle, rgba(255,255,255,0.13) 1px, transparent 1.5px)";
+    // No papel a cor vem do tema: branco a 13% some numa folha clara.
+    const tinta =
+      plano === "quadro"
+        ? "color-mix(in oklch, var(--foreground) 18%, transparent)"
+        : "rgba(255,255,255,0.13)";
+    const ponto = `radial-gradient(circle, ${tinta} 1px, transparent 1.5px)`;
 
     return {
       fora: {
@@ -370,7 +393,7 @@ export function SceneStage({
         backgroundSize: `${passo}px ${passo}px`,
       },
     };
-  }, [onViewportChange, scale, offsetX, offsetY]);
+  }, [onViewportChange, plano, scale, offsetX, offsetY]);
 
   /** A câmera, resumida a uma string: mudou isto, mudou o enquadramento. */
   const camera = `${scale}|${offsetX}|${offsetY}`;
@@ -505,8 +528,21 @@ export function SceneStage({
       viewport,
       planoDeConteudo: conteudoNo,
       fundoDoPalco: fundoNo,
+      moldura: frameNo,
+      offsetX,
+      offsetY,
     }),
-    [scale, conteudoNoLayout, toScene, viewport, conteudoNo, fundoNo],
+    [
+      scale,
+      conteudoNoLayout,
+      toScene,
+      viewport,
+      conteudoNo,
+      fundoNo,
+      frameNo,
+      offsetX,
+      offsetY,
+    ],
   );
 
   // Guardados em ref porque os listeners nativos abaixo são registrados uma
@@ -679,7 +715,11 @@ export function SceneStage({
         frameRef.current = no;
         setFrameNo(no);
       }}
-      className={cn("relative flex-1 overflow-hidden bg-black", className)}
+      className={cn(
+        "relative flex-1 overflow-hidden",
+        plano === "quadro" ? "bg-card" : "bg-black",
+        className,
+      )}
       // Sem isto o browser rouba o gesto de duas mãos para dar zoom na página.
       style={onViewportChange ? { touchAction: "none" } : undefined}
     >
@@ -726,7 +766,10 @@ export function SceneStage({
           // parava.
           // `pointer-events-auto`: o pai desligou o ponteiro por ter a caixa sem
           // escala; este tem a caixa certa, e é aqui que o mapa recebe o gesto.
-          className="pointer-events-auto relative bg-black"
+          className={cn(
+            "pointer-events-auto relative",
+            plano === "quadro" ? "bg-card" : "bg-black",
+          )}
           style={{
             width: SCENE_WIDTH,
             height: SCENE_HEIGHT,
@@ -821,7 +864,10 @@ export function SceneStage({
             <div
               key={indice}
               aria-hidden
-              className="pointer-events-none absolute bg-black"
+              className={cn(
+                "pointer-events-none absolute",
+                plano === "quadro" ? "bg-card" : "bg-black",
+              )}
               style={{ ...tarja, zIndex: 10 }}
             />
           ))

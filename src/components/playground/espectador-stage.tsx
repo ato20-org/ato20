@@ -71,7 +71,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
       {!scene ? (
         <p className="text-muted-foreground absolute inset-0 grid place-items-center px-8 text-center text-xl">
           {synced
-            ? "O mestre não colocou nenhuma cena no ar."
+            ? "O mestre não colocou nada no ar."
             : stalled
               ? // A mesa foi encontrada — o código passou —, então o que falta
                 // é o Mestre publicar. Dizer isso poupa procurar problema na

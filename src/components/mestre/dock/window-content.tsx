@@ -3,10 +3,11 @@
 import {
   BookOpen,
   Clapperboard,
+  Files,
   Dices,
   EyeOff,
   Image,
-  Images,
+  LibraryBig,
   Layers,
   Library,
   MonitorPlay,
@@ -31,6 +32,7 @@ import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
 import { LayerList } from "@/components/mestre/layer-list";
 import { PortraitList } from "@/components/mestre/portrait-list";
 import { RolagensBody } from "@/components/mestre/rolagens-window";
+import { ArquivosList } from "@/components/mestre/arquivos-list";
 import { SceneList } from "@/components/mestre/scene-list";
 import { useCharacters } from "@/hooks/use-characters";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
@@ -39,6 +41,7 @@ import { useMemo } from "react";
 import { PainelDeExtensao } from "@/components/mestre/dock/painel-de-extensao";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import type { ConteudoJanela } from "@/lib/store/use-window-store";
+import { ehQuadro } from "@/types/scene";
 
 /**
  * O que cada tipo de janela mostra, e como se chama.
@@ -76,6 +79,9 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
       return Dices;
     case "cenas":
       return Clapperboard;
+    case "quadros":
+      // Arquivos, como no Obsidian: quadros e notas na mesma árvore.
+      return Files;
     case "areas":
       // A área é o que a mesa NÃO vê -- o olho cortado é o que ela faz.
       return EyeOff;
@@ -84,7 +90,7 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
     case "camadas":
       return Layers;
     case "imagens":
-      return Images;
+      return LibraryBig;
     case "sons":
       return Music;
     case "personagens":
@@ -127,11 +133,12 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
  * uma lista de livros abertos é a Estante, não um menu de painéis.
  */
 export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
-  { conteudo: { tipo: "cenas" }, titulo: "Cenas" },
+  { conteudo: { tipo: "cenas" }, titulo: "Mapas" },
+  { conteudo: { tipo: "quadros" }, titulo: "Arquivos" },
   { conteudo: { tipo: "areas" }, titulo: "Áreas" },
   { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
   { conteudo: { tipo: "camadas" }, titulo: "Camadas" },
-  { conteudo: { tipo: "imagens" }, titulo: "Imagens" },
+  { conteudo: { tipo: "imagens" }, titulo: "Biblioteca" },
   { conteudo: { tipo: "sons" }, titulo: "Sons" },
   { conteudo: { tipo: "personagens" }, titulo: "Personagens" },
   { conteudo: { tipo: "rolagens" }, titulo: "Rolagens" },
@@ -219,13 +226,15 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
     case "rolagens":
       return { titulo: "Rolagens", subtitulo: "O que a mesa tirou" };
     case "cenas":
-      return { titulo: "Cenas" };
+      return { titulo: "Mapas" };
+    case "quadros":
+      return { titulo: "Arquivos", subtitulo: "Quadros e notas da campanha" };
     case "areas":
       return { titulo: "Áreas" };
     case "retratos":
       return { titulo: "Retratos" };
     case "imagens":
-      return { titulo: "Imagens" };
+      return { titulo: "Biblioteca", subtitulo: "Imagens e arquivos da campanha" };
     case "sons":
       return { titulo: "Sons" };
     case "camadas":
@@ -349,25 +358,25 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
       );
     case "cenas":
       return <SceneList ready={pronta} />;
+    case "quadros":
+      return <ArquivosList ready={pronta} />;
     case "areas":
-      return scene ? (
+      // Quadro não tem névoa: a lista vazia diria "nenhuma área" como se
+      // faltasse desenhar uma, e o que falta é abrir um mapa.
+      return scene && !ehQuadro(scene) ? (
         <FogList scene={scene} />
       ) : (
         <p className="text-muted-foreground p-3 text-xs">
-          Crie uma cena primeiro.
+          {scene ? "Quadro não tem áreas escondidas." : "Crie um mapa primeiro."}
         </p>
       );
     // Retrato não depende de cena: ele é da sessão e atravessa a troca.
     case "retratos":
       return <PortraitList />;
+    // Acervo é da campanha, não da cena: lista sem cena nenhuma, e a cena
+    // aberta só decide se o `+` de "pôr na cena" aparece.
     case "imagens":
-      return scene ? (
-        <AssetLibrary scene={scene} />
-      ) : (
-        <p className="text-muted-foreground p-3 text-xs">
-          Crie uma cena primeiro.
-        </p>
-      );
+      return <AssetLibrary scene={scene} />;
     // Som também não: a trilha é da sessão.
     case "sons":
       return <AudioLibrary />;
@@ -380,7 +389,7 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
         <LayerList scene={scene} />
       ) : (
         <p className="text-muted-foreground p-3 text-xs">
-          Crie uma cena primeiro.
+          Crie um mapa primeiro.
         </p>
       );
   }

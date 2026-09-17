@@ -15,7 +15,7 @@ use crate::error::{AppError, AppResult};
 #[serde(rename_all = "camelCase")]
 pub struct AssetMeta {
     pub id: String,
-    /// `image` ou `audio`.
+    /// `image`, `audio` ou `file`.
     pub kind: String,
     pub name: String,
     pub mime_type: String,
@@ -78,13 +78,16 @@ pub struct AssetFolder {
     pub parent_id: Option<String>,
 }
 
+/// `image`, `audio` ou `file`: a biblioteca aceita qualquer arquivo. Imagem e
+/// som tem tratamento proprio -- medida, variante, trilha --; o resto e um
+/// arquivo que a campanha guarda e o mestre abre por fora.
 fn kind_for(mime: &str) -> AppResult<&'static str> {
     if mime.starts_with("image/") {
         Ok("image")
     } else if mime.starts_with("audio/") {
         Ok("audio")
     } else {
-        Err(AppError::UnsupportedKind(mime.to_string()))
+        Ok("file")
     }
 }
 
@@ -683,7 +686,9 @@ mod tests {
         let (dir, vault) = campanha();
 
         let bom = de_fora(dir.path(), "mapa.png", &png(100, 100));
-        let ruim = de_fora(dir.path(), "livro.pdf", b"%PDF");
+        // Caminho que nao existe: a unica recusa que sobrou, agora que qualquer
+        // tipo de arquivo entra.
+        let ruim = dir.path().join("sumiu.pdf");
         let som = de_fora(dir.path(), "trilha.mp3", b"som");
 
         let (aceitos, recusados) = import(&vault, &[bom, ruim, som], None).expect("import");
@@ -691,8 +696,23 @@ mod tests {
         // Quem escolheu tres e teve um recusado quer os dois e quer saber qual.
         assert_eq!(aceitos.len(), 2);
         assert_eq!(recusados.len(), 1);
-        assert!(recusados[0].contains("livro.pdf"), "{recusados:?}");
+        assert!(recusados[0].contains("sumiu.pdf"), "{recusados:?}");
         assert_eq!(list(&vault, None).expect("list").len(), 2);
+    }
+
+    #[test]
+    fn qualquer_arquivo_entra_como_file() {
+        let (dir, vault) = campanha();
+
+        let pdf = de_fora(dir.path(), "livro.pdf", b"%PDF");
+        let (aceitos, recusados) = import(&vault, &[pdf], None).expect("import");
+
+        assert!(recusados.is_empty(), "{recusados:?}");
+        assert_eq!(aceitos[0].kind, "file");
+        assert_eq!(aceitos[0].mime_type, "application/pdf");
+        assert!(asset_path(&vault, &aceitos[0]).to_string_lossy().ends_with(".pdf"));
+        assert_eq!(list(&vault, Some("file")).expect("list").len(), 1);
+        assert_eq!(list(&vault, Some("image")).expect("list").len(), 0);
     }
 
     #[test]

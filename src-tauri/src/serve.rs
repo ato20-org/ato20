@@ -27,9 +27,9 @@ use tower_http::services::{ServeDir, ServeFile};
 
 mod page;
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::estante;
-use crate::vault::{assets, characters, inventory, players, variantes, Vault};
+use crate::vault::{assets, characters, documentos, inventory, players, variantes, Vault};
 use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
@@ -325,6 +325,7 @@ pub fn router(state: Arc<Daemon>) -> Router {
         .route("/asset/{id}", get(serve_asset))
         .route("/asset/{id}/{variante}", get(serve_variante))
         .route("/evidencia/{id}", get(serve_evidence))
+        .route("/documento/{arquivo}", get(serve_documento))
         .route(
             "/livro/{id}",
             get(serve_livro).layer(middleware::from_fn_with_state(
@@ -2124,6 +2125,34 @@ async fn serve_livro(
 /// Sem token de proposito: no passo seguinte e daqui que a TV e o celular do
 /// jogador buscam mapa e trilha, e exigir segredo por arquivo faria cada
 /// `<img>` da cena carregar um cabecalho que o HTML nao sabe mandar.
+/// O texto de um documento do quadro, para a TV e o celular desenharem o
+/// cartao que o mestre pos no ar. `text/plain`: quem renderiza Markdown e a
+/// tela, a mesma que renderiza para o mestre.
+async fn serve_documento(
+    State(state): State<Arc<Daemon>>,
+    AxumPath(arquivo): AxumPath<String>,
+) -> Response {
+    let guard = state.vault.read().expect("vault envenenado");
+    let vault = match vault_vivo(&guard) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
+    };
+
+    match documentos::read(vault, &arquivo) {
+        Ok(texto) => (
+            StatusCode::OK,
+            [(CONTENT_TYPE, HeaderValue::from_static("text/plain; charset=utf-8"))],
+            texto,
+        )
+            .into_response(),
+        Err(AppError::Malformed { .. }) => fail(StatusCode::NOT_FOUND, "documento invalido"),
+        Err(cause) => {
+            log::error!("documento {arquivo}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o documento")
+        }
+    }
+}
+
 async fn serve_asset(
     State(state): State<Arc<Daemon>>,
     AxumPath(id): AxumPath<String>,

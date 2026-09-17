@@ -236,7 +236,7 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
                   type="button"
                   data-handout
                   onPointerDown={pegarBolinha}
-                  aria-label={aberto ? "Fechar o handout" : "Handout da cena"}
+                  aria-label={aberto ? "Fechar o handout" : "Handout do mapa"}
                   aria-expanded={aberto}
                   className={cn(
                     "bg-background/85 pointer-events-auto absolute z-30 grid place-items-center rounded-full border shadow-lg backdrop-blur transition-transform",

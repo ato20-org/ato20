@@ -107,6 +107,7 @@ function padrao(): Layout {
           // deriva dos tokens.
           abas: [
             { tipo: "cenas" },
+            { tipo: "quadros" },
             { tipo: "areas" },
             { tipo: "retratos" },
             { tipo: "personagens" },
@@ -167,7 +168,10 @@ function ler(): Layout {
     const { esquerda, direita } = lido as Layout;
     if (!eColuna(esquerda) || !eColuna(direita)) return padrao();
 
-    return { esquerda: semRetratos(esquerda), direita: semRetratos(direita) };
+    return comQuadros({
+      esquerda: semRetratos(esquerda),
+      direita: semRetratos(direita),
+    });
   } catch {
     return padrao();
   }
@@ -190,6 +194,60 @@ function semRetratos(coluna: Coluna): Coluna {
       grupo.ativa === "retratos" ? { ...grupo, ativa: chaveDe(grupo.abas[0]) } : grupo,
     ),
   };
+}
+
+/**
+ * A aba Quadros entra no layout que voltou do disco sem ela.
+ *
+ * O layout é gravado inteiro, então uma tela nova de fábrica não aparece para
+ * quem já tinha a bancada arrumada -- ela existiria só no menu "Abas", e
+ * ninguém abre o menu para descobrir o que não sabe que existe. Entra ao lado
+ * de Cenas, que é onde o padrão a põe; se Cenas também sumiu, no primeiro
+ * grupo da esquerda. Não mexe em quem já a tem, nem em quem a fechou de
+ * propósito depois desta migração -- para isso a chave abaixo.
+ */
+const MIGRACAO_QUADROS = "ato20:layout:quadros";
+
+function comQuadros(layout: Layout): Layout {
+  try {
+    if (localStorage.getItem(MIGRACAO_QUADROS)) return layout;
+    localStorage.setItem(MIGRACAO_QUADROS, "1");
+  } catch {
+    return layout;
+  }
+
+  const colunas = [layout.esquerda, layout.direita];
+  const jaTem = colunas.some((coluna) =>
+    coluna.grupos.some((grupo) =>
+      grupo.abas.some((aba) => aba.tipo === "quadros"),
+    ),
+  );
+  if (jaTem) return layout;
+
+  const inserir = (coluna: Coluna, obrigatorio: boolean): Coluna | null => {
+    const indice = coluna.grupos.findIndex((grupo) =>
+      grupo.abas.some((aba) => aba.tipo === "cenas"),
+    );
+    const alvo = indice >= 0 ? indice : obrigatorio ? 0 : -1;
+    if (alvo < 0 || !coluna.grupos[alvo]) return null;
+
+    return {
+      ...coluna,
+      grupos: coluna.grupos.map((grupo, i) => {
+        if (i !== alvo) return grupo;
+        const depois = grupo.abas.findIndex((aba) => aba.tipo === "cenas") + 1;
+        const abas = [...grupo.abas];
+        abas.splice(depois, 0, { tipo: "quadros" });
+        return { ...grupo, abas };
+      }),
+    };
+  };
+
+  const esquerda = inserir(layout.esquerda, false);
+  if (esquerda) return { ...layout, esquerda };
+  const direita = inserir(layout.direita, false);
+  if (direita) return { ...layout, direita };
+  return { ...layout, esquerda: inserir(layout.esquerda, true) ?? layout.esquerda };
 }
 
 function gravar(layout: Layout) {
