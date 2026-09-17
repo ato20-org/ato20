@@ -97,6 +97,7 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
 import {
+  ehQuadro,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   SCENE_HEIGHT,
@@ -1403,7 +1404,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
 
           Dentro do plano, porém: o dado é jogado SOBRE o mapa, e tem de
           acompanhar zoom e deslocamento como a névoa e os riscos acompanham. */}
-      <DadoLayer />
+      <DadoLayer quadro={ehQuadro(scene)} />
 
       {/* A sombra do que está sendo arrastado para o mapa: o personagem, a
           imagem do acervo ou o item de inventário. Irmã das três acima, e fora

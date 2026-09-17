@@ -17,13 +17,17 @@ import {
   duracaoDaQueda,
   DURACAO_DA_SUCCAO,
   impulsoDeRelance,
+  presoNaMesa,
   quadroDaQueda,
   quadroDaSuccao,
   quadroNaMao,
+  type LimitesDaMesa,
 } from "@/lib/geometry/dado";
 import type { Vec } from "@/lib/geometry/transform";
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import { DADO_Z, RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
+import { comFolga } from "@/lib/geometry/viewport";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
 import { tipoDado, valorDaRolagem, type Dado } from "@/types/dado";
 
@@ -144,6 +148,15 @@ export type EspacoDoDado = {
   largura: number;
   altura: number;
   /**
+   * As bordas em que o dado para, quando não são as do próprio espaço.
+   *
+   * No mapa e no celular, ausente: a mesa é o espaço. No QUADRO do mestre é a
+   * área de trabalho com folga -- um quadro não tem chão de 1920 por 1080, e
+   * o dado jogado ao lado de um postit fora do plano tem de cair ali, não ser
+   * puxado para o centro. Ver `LimitesDaMesa`.
+   */
+  mesa?: LimitesDaMesa;
+  /**
    * Quantos pixels de tela vale uma unidade do espaço.
    *
    * É por ela que a VELOCIDADE do arremesso é traduzida: o gesto acontece em
@@ -173,6 +186,11 @@ export type Jogada = {
   daMesa?: string;
 };
 
+/** As bordas em que o dado para: a mesa declarada, ou o espaço inteiro. */
+function mesaDe(espaco: EspacoDoDado): LimitesDaMesa {
+  return espaco.mesa ?? { largura: espaco.largura, altura: espaco.altura };
+}
+
 /**
  * Os dados sobre o MAPA, no palco do mestre.
  *
@@ -180,18 +198,29 @@ export type Jogada = {
  * fica onde caiu no mapa. Quem sorteia é o próprio `lancar` — o dado do mestre
  * não viaja para lugar nenhum, então não há o que conferir com ninguém.
  */
-export function DadoLayer() {
+export function DadoLayer({ quadro = false }: { quadro?: boolean }) {
   const { scale, toScene } = useSceneScale();
+  // A área de trabalho, o que o mestre já espalhou mais o plano. Só o quadro a
+  // usa como mesa; a assinatura fica em todo caso porque hook não é opcional.
+  const conteudo = useViewportStore((state) => state.conteudo);
 
-  const espaco = useMemo<EspacoDoDado>(
-    () => ({
+  const espaco = useMemo<EspacoDoDado>(() => {
+    const folga = quadro ? comFolga(conteudo) : null;
+    return {
       largura: SCENE_WIDTH,
       altura: SCENE_HEIGHT,
       escala: scale,
       paraEspaco: toScene,
-    }),
-    [scale, toScene],
-  );
+      mesa: folga
+        ? {
+            x: folga.minX,
+            y: folga.minY,
+            largura: folga.maxX - folga.minX,
+            altura: folga.maxY - folga.minY,
+          }
+        : undefined,
+    };
+  }, [quadro, conteudo, scale, toScene]);
 
   return <DadosNoEspaco espaco={espaco} />;
 }
@@ -254,6 +283,7 @@ export function DadosNoEspaco({
 
     const ponto = toScene(arremesso.clientX, arremesso.clientY);
     const folga = RAIO_DADO * 1.4;
+    const mesa = mesaDe(espaco);
 
     /**
      * A velocidade do gesto, traduzida para a unidade do espaço -- e nada além
@@ -274,8 +304,8 @@ export function DadosNoEspaco({
      */
     const jogada: Jogada = {
       faces: arremesso.faces,
-      x: Math.min(espaco.largura - folga, Math.max(folga, ponto.x)),
-      y: Math.min(espaco.altura - folga, Math.max(folga, ponto.y)),
+      x: presoNaMesa(ponto.x, mesa.x ?? 0, mesa.largura, folga),
+      y: presoNaMesa(ponto.y, mesa.y ?? 0, mesa.altura, folga),
       impulso: { x: arremesso.vx / scale, y: arremesso.vy / scale },
       semente: arremesso.semente,
       daMesa: arremesso.daMesa,
@@ -303,8 +333,7 @@ export function DadosNoEspaco({
     arremesso,
     scale,
     toScene,
-    espaco.largura,
-    espaco.altura,
+    espaco,
     lancar,
     guardar,
     consumirArremesso,
@@ -498,7 +527,7 @@ function DadosEmCena({
 }) {
   // As bordas da mesa, na unidade do espaço. É o que a queda usa para parar o
   // dado na beirada em vez de deixá-lo sair do quadro. Ver `quadroDaQueda`.
-  const limites = { largura: espaco.largura, altura: espaco.altura };
+  const limites = mesaDe(espaco);
 
   return (
     <svg
@@ -770,10 +799,7 @@ function AlcanceDoDado({
   // A pose final, e só ela: este elemento não acompanha a queda. Com os MESMOS
   // limites do desenho -- com outros, o alvo de clique pousaria num lugar e o
   // dado noutro.
-  const quadro = quadroDaQueda(dado, duracaoDaQueda(dado), {
-    largura: espaco.largura,
-    altura: espaco.altura,
-  });
+  const quadro = quadroDaQueda(dado, duracaoDaQueda(dado), mesaDe(espaco));
 
   /*
    * Fica montado ENQUANTO o dado está na mão, e isto não é detalhe.
