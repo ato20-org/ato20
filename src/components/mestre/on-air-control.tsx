@@ -57,7 +57,7 @@ export function OnAirControl({ editing }: { editing: Scene | null }) {
           <p className="max-w-52">
             {live
               ? `A mesa está vendo "${live.name}".`
-              : "A mesa não está vendo cena nenhuma."}
+              : "A mesa não está vendo mapa nenhum."}
           </p>
         </TooltipContent>
       </Tooltip>

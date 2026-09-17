@@ -409,7 +409,7 @@ function PorNoMapa({
   const impedimento = !personagem.miniatura
     ? "Sem miniatura. Anexe uma na ficha dele."
     : !scene
-      ? "Nenhuma cena aberta."
+      ? "Nenhum mapa aberto."
       : // Sem o registro do acervo nao se sabe a proporcao da imagem, e por o
         // token com tamanho chutado o deixa esticado PARA SEMPRE: o gizmo do
         // item trava a proporcao, entao nem redimensionando se corrige.

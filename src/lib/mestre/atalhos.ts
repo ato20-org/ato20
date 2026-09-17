@@ -176,7 +176,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Área de transferência",
     tecla: "Ctrl+A",
-    rotulo: "Selecionar tudo na cena",
+    rotulo: "Selecionar tudo no mapa",
     combina: (evento) => comando(evento) && letra(evento) === "a",
     executar: selectAllItems,
     impedirPadrao: true,
@@ -254,7 +254,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Ctrl+0",
-    rotulo: "Enquadrar a cena",
+    rotulo: "Enquadrar o mapa",
     combina: (evento) => comando(evento) && evento.key === "0",
     executar: () => useViewportStore.getState().fit(),
     impedirPadrao: true,
@@ -348,7 +348,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Shift+C",
-    rotulo: "Tirar do ar: a mesa vê a cena inteira",
+    rotulo: "Tirar do ar: a mesa vê o mapa inteiro",
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&

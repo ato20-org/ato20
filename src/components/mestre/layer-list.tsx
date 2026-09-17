@@ -854,7 +854,7 @@ const LayerRow = memo(function LayerRow({
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label="Remover da cena"
+        aria-label="Remover do mapa"
         onPointerDown={(event) => event.stopPropagation()}
         onClick={() => useSceneStore.getState().removeItems(sceneId, [item.id])}
       >

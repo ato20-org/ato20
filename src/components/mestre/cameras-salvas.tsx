@@ -157,7 +157,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
           </p>
           <p className="text-muted-foreground max-w-52">
             {transmitindo
-              ? "A mesa volta a ver a cena inteira."
+              ? "A mesa volta a ver o mapa inteiro."
               : "A mesa passa a ver a câmera selecionada."}
           </p>
         </TooltipContent>

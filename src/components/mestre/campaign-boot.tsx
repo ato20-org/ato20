@@ -32,7 +32,7 @@ const MINIMO_MS = 500;
 type Fase = "board" | "sessao" | "acervo" | "pronto";
 
 const ROTULOS: Record<Exclude<Fase, "pronto">, string> = {
-  board: "Lendo as cenas",
+  board: "Lendo os mapas",
   sessao: "Retratos e trilha",
   acervo: "Acervo de imagens e sons",
 };

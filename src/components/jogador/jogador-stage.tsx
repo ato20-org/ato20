@@ -106,7 +106,7 @@ export function JogadorStage({
         {!scene ? (
           <p className="text-muted-foreground absolute inset-0 grid place-items-center px-6 text-center text-sm">
             {synced
-              ? "O mestre não colocou nenhuma cena no ar."
+              ? "O mestre não colocou nada no ar."
               : stalled
                 ? // Silêncio longo não é espera: é problema. Dizer o que fazer
                   // vale mais que reticências que nunca terminam.
