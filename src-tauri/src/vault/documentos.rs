@@ -62,6 +62,55 @@ pub fn read(vault: &Vault, arquivo: &str) -> AppResult<String> {
     }
 }
 
+/// As medidas de um documento, para a lista de Arquivos.
+///
+/// Contadas aqui e nao no TypeScript porque a lista quer tres numeros por
+/// nota, e mandar o texto inteiro de cada `.md` pelo IPC so para contar
+/// palavras na tela custaria a campanha toda a cada abertura do painel.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Medida {
+    pub arquivo: String,
+    /// Bytes no disco, como o acervo mostra o tamanho do arquivo.
+    pub bytes: u64,
+    pub linhas: usize,
+    pub palavras: usize,
+}
+
+/// Mede TODOS os `.md` da pasta de uma vez. Pasta que ainda nao existe devolve
+/// lista vazia: campanha nova nao tem documento nenhum.
+pub fn medir(vault: &Vault) -> AppResult<Vec<Medida>> {
+    let pasta = dir(vault);
+    let entradas = match fs::read_dir(&pasta) {
+        Ok(entradas) => entradas,
+        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(cause) => return Err(cause.into()),
+    };
+
+    let mut medidas = Vec::new();
+    for entrada in entradas.filter_map(|entrada| entrada.ok()) {
+        let Ok(arquivo) = entrada.file_name().into_string() else {
+            continue;
+        };
+        if !arquivo.ends_with(".md") {
+            continue;
+        }
+        // Arquivo que sumiu ou nao e texto nao derruba a lista: as outras
+        // notas continuam com as medidas delas.
+        let Ok(texto) = fs::read_to_string(entrada.path()) else {
+            continue;
+        };
+        medidas.push(Medida {
+            arquivo,
+            bytes: texto.len() as u64,
+            linhas: texto.lines().count(),
+            palavras: texto.split_whitespace().count(),
+        });
+    }
+
+    Ok(medidas)
+}
+
 pub fn write(vault: &Vault, arquivo: &str, texto: &str) -> AppResult<()> {
     let path = caminho(vault, arquivo)?;
     write_atomic(&path, texto.as_bytes())
@@ -113,6 +162,22 @@ mod tests {
         delete(&vault, &arquivo).unwrap();
         assert_eq!(read(&vault, &arquivo).unwrap(), "");
         delete(&vault, &arquivo).unwrap();
+    }
+
+    #[test]
+    fn mede_bytes_linhas_e_palavras() {
+        let (_dir, vault) = vault();
+        assert!(medir(&vault).unwrap().is_empty());
+
+        let arquivo = create(&vault, "Rede").unwrap();
+        write(&vault, &arquivo, "# Titulo\numa linha com cinco palavras\n").unwrap();
+
+        let medidas = medir(&vault).unwrap();
+        assert_eq!(medidas.len(), 1);
+        assert_eq!(medidas[0].arquivo, arquivo);
+        assert_eq!(medidas[0].bytes, 38);
+        assert_eq!(medidas[0].linhas, 2);
+        assert_eq!(medidas[0].palavras, 7);
     }
 
     #[test]

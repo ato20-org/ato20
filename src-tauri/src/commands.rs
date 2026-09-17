@@ -1755,6 +1755,11 @@ pub fn documento_read(state: State<'_, AppState>, arquivo: String) -> AppResult<
 }
 
 #[tauri::command]
+pub fn documento_medir(state: State<'_, AppState>) -> AppResult<Vec<documentos::Medida>> {
+    state.with_vault(documentos::medir)
+}
+
+#[tauri::command]
 pub fn documento_write(
     state: State<'_, AppState>,
     arquivo: String,

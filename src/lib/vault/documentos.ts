@@ -33,3 +33,22 @@ export async function documentoUrl(arquivo: string): Promise<string> {
   const { url } = await daemonAddr();
   return `${url}${caminho}`;
 }
+
+/** As medidas de uma nota, como o Rust as conta. Ver `documentos::Medida`. */
+export type MedidaDeDocumento = {
+  arquivo: string;
+  bytes: number;
+  linhas: number;
+  palavras: number;
+};
+
+/**
+ * Mede todos os documentos da campanha de uma vez.
+ *
+ * Uma chamada para a lista inteira, e não uma por nota: o painel de Arquivos
+ * mostra tamanho, linhas e palavras de cada linha, e ler N arquivos pelo IPC
+ * só para contar palavras na tela custaria a campanha toda a cada abertura.
+ */
+export function medirDocumentos(): Promise<MedidaDeDocumento[]> {
+  return call<MedidaDeDocumento[]>("documento_medir", {});
+}

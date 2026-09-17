@@ -171,6 +171,7 @@ pub fn run() {
             commands::board_save_patch,
             commands::documento_create,
             commands::documento_read,
+            commands::documento_medir,
             commands::documento_write,
             commands::documento_delete,
             commands::asset_list,
