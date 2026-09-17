@@ -101,6 +101,25 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
         ]);
       };
 
+      // Mapa não entra no palco; só vira menção na nota. `aceita` já barra.
+      if (solto.fonte.tipo === "cena") return;
+
+      // Nota: vira cartão de documento, centrado onde soltou. O tamanho é o
+      // que a sombra mostrou, como o token.
+      if (solto.fonte.tipo === "nota") {
+        const { notaId, arquivo, titulo } = solto.fonte;
+        useSceneStore.getState().addDocumento(sceneId, {
+          x: Math.round(centro.x - largura / 2),
+          y: Math.round(centro.y - altura / 2),
+          largura,
+          altura,
+          notaId,
+          arquivo,
+          titulo,
+        });
+        return;
+      }
+
       if (solto.fonte.tipo === "item") {
         // A imagem do item pode ser um anexo, que não tem id de acervo. O
         // objeto de cena é GRAVADO e tem de resolver depois de reabrir o
@@ -158,6 +177,18 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
         // virar uma moldura que esconde o token.
         style={{ borderWidth: 2 / scale }}
       />
+
+      {arrasto.fonte.tipo === "nota" ? (
+        // A sombra de uma nota é o cartão que ela vai virar: barra e título.
+        <div className="bg-card/70 absolute inset-0 flex flex-col overflow-hidden rounded-md">
+          <div
+            className="bg-foreground/10 flex items-center px-2 font-medium"
+            style={{ height: 26, fontSize: 13 }}
+          >
+            {arrasto.fonte.titulo}
+          </div>
+        </div>
+      ) : null}
 
       {url ? (
         // next/image não serve aqui: a fonte é uma URL do daemon do acervo.
