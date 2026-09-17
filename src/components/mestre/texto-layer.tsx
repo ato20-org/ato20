@@ -1,18 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { AArrowDown, AArrowUp, Trash2 } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
 
 import {
+  giroDoTexto,
   TextoView,
   tipografiaDoTexto,
 } from "@/components/playground/quadro-mesa-layer";
-import {
-  emPixelDeTela,
-  useSceneScale,
-} from "@/components/playground/scene-stage";
+import { useSceneScale } from "@/components/playground/scene-stage";
+import { TransformHandles } from "@/components/playground/transform-handles";
+import { boundsToBox } from "@/lib/geometry/bounds";
+import { CORNER_HANDLES } from "@/lib/geometry/transform";
+import { ALTURA_DA_LINHA, caixaRetaDoTexto } from "@/lib/mestre/ligacoes";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { useQuadroStore, TEXTO_Z } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -47,19 +46,6 @@ export function TextoLayer({
       panMode={panMode}
     />
   ));
-}
-
-/**
- * Os tamanhos que o A− e o A+ percorrem, em unidades de cena. Degraus e não um
- * campo numérico: o que se quer é "maior" e "menor", não 43.
- */
-const TAMANHOS = [16, 20, 24, 32, 40, 56, 72, 96, 128, 160] as const;
-
-function vizinho(tamanho: number, sentido: 1 | -1): number {
-  const indice = TAMANHOS.findIndex((t) => t >= tamanho);
-  const atual = indice === -1 ? TAMANHOS.length - 1 : indice;
-  const proximo = Math.min(Math.max(atual + sentido, 0), TAMANHOS.length - 1);
-  return TAMANHOS[proximo]!;
 }
 
 function TextoSolto({
@@ -175,7 +161,12 @@ function TextoSolto({
   const linhas = texto.texto.split("\n");
   const maior = Math.max(1, ...linhas.map((linha) => linha.length));
 
+  /** Menor fonte que ainda se lê no quadro, em unidades de cena. */
+  const TAMANHO_MINIMO = 8;
+  const linhasDoTexto = Math.max(1, linhas.length);
+
   return (
+    <>
     <div
       ref={raiz}
       className={cn(
@@ -187,7 +178,13 @@ function TextoSolto({
         // não tem letra nenhuma para mostrar onde está.
         (editando || selecionado) && "ring-primary/60 rounded-sm ring-1",
       )}
-      style={{ left: texto.x, top: texto.y, zIndex: TEXTO_Z, touchAction: "none" }}
+      style={{
+        left: texto.x,
+        top: texto.y,
+        zIndex: TEXTO_Z,
+        touchAction: "none",
+        ...giroDoTexto(texto),
+      }}
       onPointerDown={arrastar}
       onDoubleClick={(event) => {
         event.stopPropagation();
@@ -225,62 +222,49 @@ function TextoSolto({
         ) : null}
       </div>
       {editando ? null : <TextoView texto={texto} />}
-
-      {/* A pílula de tamanho, acima do texto enquanto ele está na mão. Em
-          pixel de tela: um botão que encolhesse com o zoom sumiria justo
-          quando o mestre afasta o quadro para ver o título inteiro. */}
-      {(editando || selecionado) && tool !== "ligacao" ? (
-        <div
-          className="absolute bottom-full left-0 mb-1"
-          style={ampliacaoNoLayout ? emPixelDeTela(scale) : undefined}
-          onPointerDown={(event) => event.stopPropagation()}
-          onDoubleClick={(event) => event.stopPropagation()}
-        >
-          <div
-            className="bg-background/90 flex items-center gap-0.5 rounded-md border p-0.5 shadow backdrop-blur"
-            style={ampliacaoNoLayout ? undefined : { zoom: 1 / scale }}
-          >
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Diminuir o texto"
-              disabled={texto.tamanho <= TAMANHOS[0]}
-              onClick={() =>
-                updateTexto(sceneId, texto.id, {
-                  tamanho: vizinho(texto.tamanho, -1),
-                })
-              }
-            >
-              <AArrowDown />
-            </Button>
-            <span className="text-muted-foreground min-w-6 text-center text-[10px] tabular-nums">
-              {texto.tamanho}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Aumentar o texto"
-              disabled={texto.tamanho >= TAMANHOS[TAMANHOS.length - 1]!}
-              onClick={() =>
-                updateTexto(sceneId, texto.id, {
-                  tamanho: vizinho(texto.tamanho, 1),
-                })
-              }
-            >
-              <AArrowUp />
-            </Button>
-            <span className="bg-border mx-0.5 h-4 w-px" />
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Apagar o texto"
-              onClick={() => removeTexto(sceneId, texto.id)}
-            >
-              <Trash2 />
-            </Button>
-          </div>
-        </div>
-      ) : null}
     </div>
+
+      {/* As mesmas alças da imagem: cantos escalam a fonte, a alça de cima
+          gira. Só cantos e proporção travada, porque um texto não tem largura
+          própria -- ela vem da fonte --, e esticar um eixo só seria deformar
+          a letra. Fora do envelope girado, porque o gizmo recebe o giro à
+          parte e desenha o dele. */}
+      {selecionado && !editando && !panMode && tool !== "ligacao" ? (
+        <TransformHandles
+          key={texto.id}
+          box={{
+            ...boundsToBox(caixaRetaDoTexto(texto)),
+            rotation: texto.rotation ?? 0,
+          }}
+          handles={CORNER_HANDLES}
+          keepAspect
+          onChange={(patch) => {
+            if (patch.rotation !== undefined) {
+              updateTexto(sceneId, texto.id, {
+                rotation: patch.rotation || undefined,
+              });
+              return;
+            }
+            // A altura da caixa é linhas × fonte × altura de linha: é dela
+            // que sai o tamanho novo. `x`/`y` vêm junto porque escalar por um
+            // canto move o oposto.
+            const altura = patch.height;
+            updateTexto(sceneId, texto.id, {
+              ...(patch.x !== undefined ? { x: Math.round(patch.x) } : {}),
+              ...(patch.y !== undefined ? { y: Math.round(patch.y) } : {}),
+              ...(altura !== undefined
+                ? {
+                    tamanho: Math.max(
+                      TAMANHO_MINIMO,
+                      Math.round(altura / (linhasDoTexto * ALTURA_DA_LINHA)),
+                    ),
+                  }
+                : {}),
+            });
+          }}
+          onDelete={() => removeTexto(sceneId, texto.id)}
+        />
+      ) : null}
+    </>
   );
 }

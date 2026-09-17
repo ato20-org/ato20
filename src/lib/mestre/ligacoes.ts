@@ -1,5 +1,5 @@
 import { itemBounds, type Bounds } from "@/lib/geometry/bounds";
-import type { Vec } from "@/lib/geometry/transform";
+import { rotateVec, type Vec } from "@/lib/geometry/transform";
 import type {
   Ligacao,
   RefLigacao,
@@ -23,10 +23,37 @@ import type {
  * tamanho certo.
  */
 export function caixaDoTexto(texto: Texto): Bounds {
+  const reta = caixaRetaDoTexto(texto);
+  if (!texto.rotation) return reta;
+
+  // Girada: a caixa que contém os quatro cantos girados, como `itemBounds`.
+  const centro = centroDe(reta);
+  const meiaLargura = (reta.maxX - reta.minX) / 2;
+  const meiaAltura = (reta.maxY - reta.minY) / 2;
+  const cantos = [
+    { x: -meiaLargura, y: -meiaAltura },
+    { x: meiaLargura, y: -meiaAltura },
+    { x: meiaLargura, y: meiaAltura },
+    { x: -meiaLargura, y: meiaAltura },
+  ].map((canto) => rotateVec(canto, texto.rotation ?? 0));
+
+  return {
+    minX: centro.x + Math.min(...cantos.map((c) => c.x)),
+    minY: centro.y + Math.min(...cantos.map((c) => c.y)),
+    maxX: centro.x + Math.max(...cantos.map((c) => c.x)),
+    maxY: centro.y + Math.max(...cantos.map((c) => c.y)),
+  };
+}
+
+/**
+ * A caixa do texto SEM o giro: é a que o gizmo de transformação recebe, com a
+ * rotação à parte, e a que o `<textarea>` ocupa.
+ */
+export function caixaRetaDoTexto(texto: Texto): Bounds {
   const linhas = texto.texto.split("\n");
   const maior = Math.max(1, ...linhas.map((linha) => linha.length));
-  const largura = maior * texto.tamanho * 0.55;
-  const altura = linhas.length * texto.tamanho * 1.25;
+  const largura = maior * texto.tamanho * LARGURA_POR_LETRA;
+  const altura = linhas.length * texto.tamanho * ALTURA_DA_LINHA;
 
   return {
     minX: texto.x,
@@ -35,6 +62,10 @@ export function caixaDoTexto(texto: Texto): Bounds {
     maxY: texto.y + altura,
   };
 }
+
+/** Largura média de uma letra e altura de linha, em fração do tamanho da fonte. */
+export const LARGURA_POR_LETRA = 0.55;
+export const ALTURA_DA_LINHA = 1.25;
 
 /** A caixa de uma ponta. `null` quando o alvo não existe mais na cena. */
 export function caixaDe(scene: Scene, ref: RefLigacao): Bounds | null {

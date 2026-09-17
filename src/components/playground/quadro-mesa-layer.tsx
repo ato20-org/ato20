@@ -156,6 +156,16 @@ export function tipografiaDoTexto(
   };
 }
 
+/**
+ * O giro de um texto, em volta do centro da caixa dele, como o item. No
+ * envelope posicionado, e não no texto: é a caixa inteira que gira.
+ */
+export function giroDoTexto(texto: Texto): React.CSSProperties | undefined {
+  return texto.rotation
+    ? { transform: `rotate(${texto.rotation}deg)`, transformOrigin: "50% 50%" }
+    : undefined;
+}
+
 /** Um texto solto, só para ler. O mestre usa este mesmo desenho fora da edição. */
 export function TextoView({ texto }: { texto: Texto }) {
   const { scale, ampliacaoNoLayout } = useSceneScale();
@@ -175,7 +185,7 @@ function TextosDaMesa({ scene }: { scene: Scene }) {
     <div
       key={texto.id}
       className="pointer-events-none absolute"
-      style={{ left: texto.x, top: texto.y, zIndex: TEXTO_Z }}
+      style={{ left: texto.x, top: texto.y, zIndex: TEXTO_Z, ...giroDoTexto(texto) }}
     >
       <TextoView texto={texto} />
     </div>

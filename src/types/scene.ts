@@ -330,10 +330,12 @@ export type Texto = {
   texto: string;
   /** Tamanho da fonte, em unidades de cena. */
   tamanho: number;
+  /** Giro em graus, em volta do centro da caixa, como o item. Ausente = 0. */
+  rotation?: number;
 };
 
 export type NewTexto = Pick<Texto, "x" | "y"> &
-  Partial<Pick<Texto, "texto" | "tamanho">>;
+  Partial<Pick<Texto, "texto" | "tamanho" | "rotation">>;
 
 /** Tamanho de fonte de um texto novo, em unidades de cena. */
 export const TEXTO_TAMANHO = 40;
