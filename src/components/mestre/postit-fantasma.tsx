@@ -24,6 +24,7 @@ const PAPEL: Record<CorPostit, string> = {
   rosa: "bg-pink-200/45 border-pink-600/70",
   azul: "bg-sky-200/45 border-sky-600/70",
   verde: "bg-emerald-200/45 border-emerald-600/70",
+  branco: "bg-neutral-50/45 border-neutral-400/80",
 };
 
 /**

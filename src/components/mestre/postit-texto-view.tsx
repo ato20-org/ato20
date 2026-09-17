@@ -1,27 +1,21 @@
 "use client";
 
-import {
-  Camera,
-  Image as ImageIcon,
-  Music,
-  Radio,
-  RadioTower,
-  VenetianMask,
-} from "lucide-react";
+import { Camera, Image as ImageIcon, Music, VenetianMask } from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
+import { ScenePreview } from "@/components/playground/scene-preview";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { MINIATURA } from "@/lib/miniatura";
 import type { Token } from "@/lib/mencoes/texto";
 import { parsePostit, type TipoNoPostit } from "@/lib/mestre/postit-mencoes";
-import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
+import type { ConteudoJanela } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
-import type { AssetMeta } from "@/types/scene";
+import type { AssetMeta, Scene } from "@/types/scene";
 
 /**
  * Quem resolve nome em coisa.
@@ -61,14 +55,24 @@ export type Vinculos = {
    * agora. Os dois vêm do personagem e não são o personagem: o vínculo pode não
    * existir — PNJ, ou personagem que ainda não foi entregue a ninguém —, e aí a
    * menção continua valendo com o nome sozinho.
+   *
+   * `retrato` é o id no acervo do retrato ou, na falta dele, da miniatura: é o
+   * que a prévia mostra ao passar o mouse.
    */
-  personagem: (
-    nome: string,
-  ) => { nome: string; dono?: string; presente: boolean } | null;
+  personagem: (nome: string) => {
+    id: string;
+    nome: string;
+    dono?: string;
+    presente: boolean;
+    retrato?: string;
+  } | null;
   arquivo: (nome: string) => AssetMeta | null;
-  cena: (nome: string) => { id: string; name: string } | null;
+  /** A cena inteira, e não só nome e id: a prévia desenha o mapa dela. */
+  cena: (nome: string) => Scene | null;
   /** Abre a cena na bancada do mestre. Não põe nada no ar para a mesa. */
   irParaCena: (sceneId: string) => void;
+  /** Abre uma janela da bancada: a ficha do personagem, a imagem do acervo. */
+  abrirJanela: (conteudo: ConteudoJanela) => void;
 };
 
 /**
@@ -79,6 +83,23 @@ export type Vinculos = {
  * foco é deliberado — um editor que formata enquanto se digita esconderia
  * justamente os caracteres que o mestre precisa ver para saber se escreveu
  * `@Thalor` ou `@ Thalor`.
+ *
+ * ## Clique abre, mouse em cima mostra
+ *
+ * Cada referência resolvida é um botão que abre a coisa referida onde ela
+ * mora: a ficha do personagem e a imagem numa janela da bancada, a cena na
+ * própria bancada. E cada uma tem uma prévia ao passar o mouse — o retrato, a
+ * miniatura, o mapa — porque num postit com três nomes a pergunta antes de
+ * clicar é "qual destes é o que eu quero?", e responder abrindo três janelas é
+ * o gesto errado.
+ *
+ * A prévia é `Tooltip`, e não `Popover`: abre no hover, some ao sair, não tem
+ * botão dentro. Sai do palco por portal, como a lista de sugestões, porque o
+ * conteúdo do postit escala com o zoom e uma prévia a 40% seria um selo.
+ *
+ * Nenhum clique aqui TRANSMITE. Pôr uma imagem na frente de tudo na TV é o
+ * gesto mais visível que o aplicativo tem, e num papel que se arrasta ele
+ * estaria a um clique acidental de distância. Transmitir continua no acervo.
  */
 export function PostitTextoView({
   texto,
@@ -119,72 +140,233 @@ function TokenView({
     const achado = vinculos.personagem(token.valor);
     if (!achado) return <NaoResolvido bruto={token.bruto} tipo="personagem" />;
 
-    return (
-      // Não é clicável de propósito: mencionar um personagem na preparação do
-      // mestre não é um gesto sobre ele. Não há o que abrir — a ficha vive na
-      // janela de personagens, e mandar recado para o celular de quem o joga é
-      // outra feature que não existe.
-      <span
-        className="inline-flex items-baseline gap-[0.2em] font-medium text-sky-900 underline decoration-sky-900/40"
-        // Quem joga fica no title, e não escrito ao lado: dentro do papel o que
-        // importa é o personagem, e o nome da pessoa em cada menção gastaria
-        // duas palavras de um espaço que tem quatro linhas.
-        title={achado.dono ? `${achado.nome} — ${achado.dono}` : achado.nome}
-      >
-        <VenetianMask
-          className={cn(
-            ICONE,
-            // A COR do ícone é a presença, e ela substituiu a bolinha que ficava
-            // aqui antes. Dois glifos na frente de cada nome — bolinha e máscara
-            // — encheriam de cromo uma linha de texto de quinze unidades; e o
-            // que a bolinha dizia cabe na cor de um ícone que já tem de estar
-            // ali.
-            //
-            // Verde é quem joga este personagem na mesa AGORA, e é a informação
-            // que muda o que o mestre faz com a menção: "@Thalor sabe do
-            // alçapão" não serve de nada se quem joga o Thalor não está na
-            // sessão de hoje.
-            //
-            // Personagem sem dono — PNJ, ou ficha que ainda não foi entregue —
-            // fica na cor do texto: "ausente" mentiria sobre uma pessoa que não
-            // existe.
-            achado.dono
-              ? achado.presente
-                ? "text-emerald-700"
-                : "text-neutral-500"
-              : undefined,
-          )}
-        />
-        {achado.nome}
-      </span>
-    );
+    return <PersonagemChip achado={achado} abrirJanela={vinculos.abrirJanela} />;
   }
 
   if (token.tipo === "arquivo") {
     const asset = vinculos.arquivo(token.valor);
     if (!asset) return <NaoResolvido bruto={token.bruto} tipo="arquivo" />;
 
-    return <ArquivoChip asset={asset} />;
+    return <ArquivoChip asset={asset} abrirJanela={vinculos.abrirJanela} />;
   }
 
   const cena = vinculos.cena(token.valor);
   if (!cena) return <NaoResolvido bruto={token.bruto} tipo="cena" />;
 
+  return <CenaChip cena={cena} irParaCena={vinculos.irParaCena} />;
+}
+
+/**
+ * O botão que toda referência resolvida usa.
+ *
+ * Um só desenho para três tipos, com a cor por tipo: a forma diz "isto abre",
+ * a cor diz o que. O `stopPropagation` é obrigatório: o papel está sobre o
+ * mapa e o mapa reage a clique — sem ele, abrir a ficha também contaria como
+ * clique no vazio do palco, e o próprio postit leria o gesto como "editar".
+ */
+function Referencia({
+  className,
+  title,
+  aoClicar,
+  children,
+  ...resto
+}: ComponentProps<"button"> & {
+  className: string;
+  title: string;
+  /** `aoClicar` e não `onClick`: o `onClick` chega do `TooltipTrigger`. */
+  aoClicar?: () => void;
+  children: ReactNode;
+}) {
   return (
+    // `...resto` primeiro, e é obrigatório: o `TooltipTrigger` entrega por
+    // `render` a `ref` e os ouvintes de mouse e foco que abrem a prévia, e um
+    // botão que não os repassasse teria a prévia declarada e nunca aberta.
     <button
+      {...resto}
       type="button"
-      title={`Abrir a cena ${cena.name} na bancada`}
-      className="inline-flex items-baseline gap-[0.2em] font-medium text-violet-900 underline decoration-violet-900/40 hover:decoration-violet-900"
+      title={title}
+      className={cn(
+        "inline-flex items-baseline gap-[0.2em] font-medium underline decoration-dotted",
+        aoClicar ? "cursor-pointer hover:decoration-solid" : "cursor-default",
+        className,
+      )}
       onClick={(event) => {
-        // O papel está sobre o mapa e o mapa reage a clique: sem isto, abrir a
-        // cena vinculada também contaria como clique no vazio do palco.
         event.stopPropagation();
-        vinculos.irParaCena(cena.id);
+        resto.onClick?.(event);
+        aoClicar?.();
       }}
     >
-      <Camera className={ICONE} />
-      {cena.name}
+      {children}
     </button>
+  );
+}
+
+/** A caixa da prévia: fundo escuro do tooltip, conteúdo em coluna. */
+const PREVIA = "flex-col items-stretch gap-1.5 p-1.5";
+
+function PersonagemChip({
+  achado,
+  abrirJanela,
+}: {
+  achado: NonNullable<ReturnType<Vinculos["personagem"]>>;
+  abrirJanela: Vinculos["abrirJanela"];
+}) {
+  const url = useAssetUrl(achado.retrato, "mini");
+
+  // Quem joga, e se está na mesa. Personagem sem dono — PNJ, ou ficha que ainda
+  // não foi entregue — não ganha "ausente": mentiria sobre uma pessoa que não
+  // existe.
+  const legenda = achado.dono
+    ? `${achado.dono} · ${achado.presente ? "na mesa" : "ausente"}`
+    : "Sem jogador";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Referencia
+            title={`Abrir a ficha de ${achado.nome}`}
+            className="text-sky-900 decoration-sky-900/40"
+            aoClicar={() =>
+              abrirJanela({ tipo: "personagem", personagemId: achado.id })
+            }
+          >
+            <VenetianMask
+              className={cn(
+                ICONE,
+                // A COR do ícone é a presença. Verde é quem joga este personagem
+                // na mesa AGORA, e é a informação que muda o que o mestre faz
+                // com a menção: "@Thalor sabe do alçapão" não serve de nada se
+                // quem joga o Thalor não está na sessão de hoje.
+                achado.dono
+                  ? achado.presente
+                    ? "text-emerald-700"
+                    : "text-neutral-500"
+                  : undefined,
+              )}
+            />
+            {achado.nome}
+          </Referencia>
+        }
+      />
+      <TooltipContent className={PREVIA}>
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt=""
+            draggable={false}
+            // Fora do palco, por portal: a miniatura tem 160px de qualquer
+            // forma, e não passa por `caberEm`.
+            // eslint-disable-next-line no-restricted-syntax
+            className="size-24 rounded object-cover"
+            {...MINIATURA}
+          />
+        ) : null}
+        <p className="font-medium">{achado.nome}</p>
+        <p className="opacity-70">{legenda}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * Um `/arquivo` que existe: imagem abre numa janela da bancada, som só mostra.
+ *
+ * Som não abre nada porque não há onde: som na mesa é a trilha, com faixa,
+ * volume e continuidade, e não um disparo de dentro de uma anotação. O nome
+ * resolvido já diz que o arquivo existe, e é isso que a referência promete.
+ */
+function ArquivoChip({
+  asset,
+  abrirJanela,
+}: {
+  asset: AssetMeta;
+  abrirJanela: Vinculos["abrirJanela"];
+}) {
+  const imagem = asset.kind === "image";
+  const url = useAssetUrl(imagem ? asset.id : undefined, "mini");
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Referencia
+            title={imagem ? `Abrir ${asset.name}` : asset.name}
+            className="text-teal-900 decoration-teal-900/40"
+            aoClicar={
+              imagem
+                ? () =>
+                    abrirJanela({
+                      tipo: "asset",
+                      assetId: asset.id,
+                      nome: asset.name,
+                    })
+                : undefined
+            }
+          >
+            {/* Imagem e som têm ícones diferentes, e não um "arquivo" genérico:
+                o tipo é o que decide o que dá para fazer com ele — imagem abre,
+                som não —, e é a pergunta que o mestre faz ao ver a referência. */}
+            {imagem ? (
+              <ImageIcon className={ICONE} />
+            ) : (
+              <Music className={ICONE} />
+            )}
+            {asset.name}
+          </Referencia>
+        }
+      />
+      <TooltipContent className={PREVIA}>
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt=""
+            draggable={false}
+            // eslint-disable-next-line no-restricted-syntax
+            className="h-24 w-40 rounded object-cover"
+            {...MINIATURA}
+          />
+        ) : null}
+        <p className="max-w-40 truncate font-medium">{asset.name}</p>
+        {imagem ? null : (
+          <p className="opacity-70">Som é da trilha. Aqui é referência.</p>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function CenaChip({
+  cena,
+  irParaCena,
+}: {
+  cena: Scene;
+  irParaCena: Vinculos["irParaCena"];
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Referencia
+            title={`Abrir a cena ${cena.name} na bancada`}
+            className="text-violet-900 decoration-violet-900/40"
+            aoClicar={() => irParaCena(cena.id)}
+          >
+            <Camera className={ICONE} />
+            {cena.name}
+          </Referencia>
+        }
+      />
+      <TooltipContent className={PREVIA}>
+        {/* O mapa da cena em miniatura, o mesmo desenho da lista de cenas. Só
+            monta com a prévia aberta: é um palco inteiro, e um por referência
+            em cada postit da cena seria caro à toa. */}
+        <ScenePreview scene={cena} className="aspect-video w-40" />
+        <p className="max-w-40 truncate font-medium">{cena.name}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -206,121 +388,12 @@ function NaoResolvido({
   bruto: string;
   tipo: "personagem" | "arquivo" | "cena";
 }) {
-  const alvo =
-    tipo === "personagem"
-      ? "personagem"
-      : tipo === "arquivo"
-        ? "arquivo"
-        : "cena";
-
   return (
     <span
       className="text-neutral-600/80 underline decoration-dotted"
-      title={`Nenhum ${alvo} com esse nome na campanha`}
+      title={`Nenhum ${tipo} com esse nome na campanha`}
     >
       {bruto}
     </span>
-  );
-}
-
-/**
- * Um `/arquivo` que existe: mostra o nome e abre a miniatura no clique.
- *
- * O clique NÃO transmite. Pôr uma imagem na frente de tudo na TV e nos
- * celulares é o gesto mais visível que o aplicativo tem, e num postit ele
- * estaria a um clique de distância do gesto vizinho — arrastar o papel. O
- * caminho é o mesmo do anexo do ponto de anotação: abre, confere qual imagem é,
- * e transmite num botão só para isso.
- *
- * Áudio resolve o nome e mostra o arquivo, mas não tem botão: som na mesa é a
- * trilha, com faixa, volume e continuidade, e não um disparo de dentro de uma
- * anotação.
- */
-function ArquivoChip({ asset }: { asset: AssetMeta }) {
-  const url = useAssetUrl(
-    asset.kind === "image" ? asset.id : undefined,
-    "mini",
-  );
-
-  const spotlight = useSpotlightStore((state) => state.spotlight);
-  const transmit = useSpotlightStore((state) => state.transmit);
-  const clear = useSpotlightStore((state) => state.clear);
-
-  const noAr = spotlight?.assetId === asset.id;
-
-  return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            title={asset.name}
-            className={cn(
-              "inline-flex items-baseline gap-[0.2em] font-medium underline decoration-dotted",
-              noAr
-                ? "text-emerald-800 decoration-emerald-800"
-                : "text-teal-900 decoration-teal-900/40",
-            )}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {/* Imagem e som têm ícones diferentes, e não um "arquivo" genérico:
-                o tipo é o que decide o que dá para fazer com ele — imagem
-                transmite para a mesa, som não —, e é a pergunta que o mestre
-                faz ao ver a referência. O dado já está na mão em `kind`. */}
-            {asset.kind === "image" ? (
-              <ImageIcon className={ICONE} />
-            ) : (
-              <Music className={ICONE} />
-            )}
-            {asset.name}
-          </button>
-        }
-      />
-
-      {/* Fora do palco, em portal: o conteúdo do postit escala com o zoom, e
-          este painel tem botão para clicar — a 40% ele seria um alvo de sete
-          pixels. */}
-      <PopoverContent align="start" className="w-56 space-y-2 p-2" side="top">
-        {url ? (
-          <span className="bg-muted block h-24 w-full overflow-hidden rounded">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt=""
-              draggable={false}
-              // Este painel sai do palco por portal -- ver o comentario
-              // acima --, e a miniatura tem 160px de qualquer forma.
-              // eslint-disable-next-line no-restricted-syntax
-              className="size-full object-cover"
-              {...MINIATURA}
-            />
-          </span>
-        ) : null}
-
-        <p className="truncate text-xs font-medium" title={asset.name}>
-          {asset.name}
-        </p>
-
-        {asset.kind === "image" ? (
-          <Button
-            variant={noAr ? "default" : "secondary"}
-            size="sm"
-            className="w-full"
-            aria-pressed={noAr}
-            // Clicar de novo no que já está no ar TIRA, como no anexo do ponto:
-            // o botão é o mesmo alvo, e procurar onde desligar com a imagem
-            // cobrindo a TV é o pior momento para procurar um botão.
-            onClick={() => (noAr ? clear() : transmit(asset.id))}
-          >
-            {noAr ? <RadioTower /> : <Radio />}
-            {noAr ? "No ar — clique para tirar" : "Transmitir para a mesa"}
-          </Button>
-        ) : (
-          <p className="text-muted-foreground text-[10px] leading-snug">
-            Som é da trilha. Este arquivo está aqui como referência.
-          </p>
-        )}
-      </PopoverContent>
-    </Popover>
   );
 }
