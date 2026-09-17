@@ -31,6 +31,7 @@ import {
   CORES_POSTIT,
   createEmptyBoard,
   createScene,
+  ehQuadro,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   type Board,
@@ -48,6 +49,7 @@ import {
   type Postit,
   type Scene,
   type SceneGrid,
+  type TipoDeCena,
   type Viewport,
   type Medidor,
   type NewMedidor,
@@ -100,7 +102,12 @@ type SceneStore = {
   setEditingSceneId: (sceneId: string | null) => void;
   /** Coloca a cena no ar. `null` deixa a mesa sem nada. */
   setLiveSceneId: (sceneId: string | null) => void;
-  addScene: (name?: string) => string;
+  /**
+   * Cria e abre no palco. `tipo` ausente é mapa; `"quadro"` é a mesa de
+   * trabalho do mestre. O nome de fábrica conta só as do mesmo tipo: "Quadro 1"
+   * numa campanha de trinta mapas, e não "Quadro 31".
+   */
+  addScene: (name?: string, tipo?: TipoDeCena) => string;
   renameScene: (sceneId: string, name: string) => void;
   duplicateScene: (sceneId: string) => string | null;
   /** Posição na lista de cenas. É o que o arrasto da lista emite. */
@@ -378,10 +385,14 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       set({ board: { ...board, liveSceneId: sceneId } });
     },
 
-    addScene(name) {
+    addScene(name, tipo) {
       const { board } = get();
+      const iguais =
+        board?.scenes.filter((scene) => ehQuadro(scene) === (tipo === "quadro"))
+          .length ?? 0;
       const scene = createScene(
-        name ?? `Cena ${(board?.scenes.length ?? 0) + 1}`,
+        name ?? `${tipo === "quadro" ? "Quadro" : "Cena"} ${iguais + 1}`,
+        tipo,
       );
       const base = board ?? {
         scenes: [],

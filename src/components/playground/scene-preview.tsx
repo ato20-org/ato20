@@ -3,7 +3,7 @@
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { cn } from "@/lib/utils";
-import type { Scene } from "@/types/scene";
+import { ehQuadro, type Scene } from "@/types/scene";
 
 /**
  * Miniatura da cena.
@@ -29,11 +29,15 @@ export function ScenePreview({
   return (
     <div
       className={cn(
-        "pointer-events-none relative overflow-hidden rounded bg-black",
+        "pointer-events-none relative overflow-hidden rounded",
+        ehQuadro(scene) ? "bg-card" : "bg-black",
         className,
       )}
     >
-      <SceneStage className="size-full">
+      <SceneStage
+        className="size-full"
+        plano={ehQuadro(scene) ? "quadro" : "mapa"}
+      >
         <SceneLayer scene={scene} variante="mini" />
       </SceneStage>
     </div>

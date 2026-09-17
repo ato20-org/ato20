@@ -647,9 +647,27 @@ export type Grupo = {
   recolhido?: boolean;
 };
 
+/**
+ * O que uma cena é para o mestre.
+ *
+ * `undefined` é mapa: a cena de sempre, com fundo, grade, névoa e régua, feita
+ * para a mesa olhar. `"quadro"` é a mesa de trabalho do mestre -- brainstorm,
+ * história, notas ligadas por setas --, sem chão nem escala. As duas dividem
+ * o mesmo tipo de propósito: o palco, o histórico, a gravação por diferença e
+ * o canal para a mesa já existem para a cena, e um quadro é uma cena sem chão
+ * com uma barra de ferramentas própria. Ver `ehQuadro`.
+ *
+ * Decidido na criação e nunca trocado: um mapa que virasse quadro carregaria
+ * névoa e grade que o quadro não sabe mostrar, e cada caso desses seria um
+ * bug para alguém.
+ */
+export type TipoDeCena = "quadro";
+
 export type Scene = {
   id: string;
   name: string;
+  /** Ausente = mapa. Ver `TipoDeCena`. */
+  tipo?: TipoDeCena;
   backgroundAssetId?: string;
   items: CanvasItem[];
   fog: FogRegion[];
@@ -774,11 +792,18 @@ export const DEFAULT_GRID: SceneGrid = {
   opacity: 0.35,
 };
 
-export function createScene(name: string): Scene {
+/** Um quadro, e não um mapa. Ver `TipoDeCena`. */
+export function ehQuadro(scene: Pick<Scene, "tipo">): boolean {
+  return scene.tipo === "quadro";
+}
+
+export function createScene(name: string, tipo?: TipoDeCena): Scene {
   const now = Date.now();
   return {
     id: novoId(),
     name,
+    // Só quando é quadro: mapa não ganha `tipo: undefined` gravado no JSON.
+    ...(tipo ? { tipo } : {}),
     items: [],
     fog: [],
     createdAt: now,

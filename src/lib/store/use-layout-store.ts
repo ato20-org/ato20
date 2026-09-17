@@ -107,6 +107,7 @@ function padrao(): Layout {
           // deriva dos tokens.
           abas: [
             { tipo: "cenas" },
+            { tipo: "quadros" },
             { tipo: "areas" },
             { tipo: "retratos" },
             { tipo: "personagens" },

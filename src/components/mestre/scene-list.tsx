@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   CopyPlus,
   GripVertical,
@@ -46,10 +46,29 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { cn } from "@/lib/utils";
-import type { Scene } from "@/types/scene";
+import { ehQuadro, type Scene } from "@/types/scene";
 
-export function SceneList({ ready }: { ready: boolean }) {
-  const scenes = useSceneStore((state) => state.board?.scenes);
+/**
+ * A lista de cenas de UM tipo: os mapas numa aba, os quadros na outra.
+ *
+ * Uma lista só no board e duas telas, e não duas listas: o palco, o histórico
+ * e a gravação já sabem lidar com `board.scenes`, e separar os quadros num
+ * campo próprio duplicaria os três. O que separa as abas é o filtro. Ver
+ * `TipoDeCena`.
+ */
+export function SceneList({
+  tipo,
+  ready,
+}: {
+  tipo: "mapa" | "quadro";
+  ready: boolean;
+}) {
+  const todas = useSceneStore((state) => state.board?.scenes);
+  const quadro = tipo === "quadro";
+  const scenes = useMemo(
+    () => todas?.filter((scene) => ehQuadro(scene) === quadro),
+    [todas, quadro],
+  );
   const editingSceneId = useSceneStore((state) => state.board?.editingSceneId);
   const liveSceneId = useSceneStore((state) => state.board?.liveSceneId);
   const setEditingSceneId = useSceneStore((state) => state.setEditingSceneId);
@@ -62,7 +81,17 @@ export function SceneList({ ready }: { ready: boolean }) {
 
   const moveSceneToIndex = useSceneStore((state) => state.moveSceneToIndex);
   const { listRef, dropIndex, startReorder } = useListReorder<string>(
-    (sceneId, index) => moveSceneToIndex(sceneId, index),
+    (sceneId, index) => {
+      // O índice é desta lista, filtrada; o board tem as duas misturadas. O
+      // destino é "antes de quem está nessa posição aqui", e depois de todas
+      // quando cai no fim.
+      if (!todas || !scenes) return;
+      const antesDe = scenes[index]?.id;
+      const destino = antesDe
+        ? todas.findIndex((scene) => scene.id === antesDe)
+        : todas.length - 1;
+      moveSceneToIndex(sceneId, destino);
+    },
   );
 
   return (
@@ -72,11 +101,11 @@ export function SceneList({ ready }: { ready: boolean }) {
           className="w-full"
           variant="outline"
           size="sm"
-          onClick={() => addScene()}
+          onClick={() => addScene(undefined, quadro ? "quadro" : undefined)}
           disabled={!ready}
         >
           <Plus />
-          Nova cena
+          {quadro ? "Novo quadro" : "Nova cena"}
         </Button>
       </div>
 
@@ -88,7 +117,6 @@ export function SceneList({ ready }: { ready: boolean }) {
               scene={scene}
               onStage={scene.id === editingSceneId}
               live={scene.id === liveSceneId}
-              onlyScene={scenes.length === 1}
               dropTarget={dropIndex === index}
               onReorderStart={(event) => startReorder(event, scene.id)}
               renaming={renamingId === scene.id}
@@ -117,7 +145,6 @@ type SceneRowProps = {
   onStage: boolean;
   /** Sendo exibida para a mesa. */
   live: boolean;
-  onlyScene: boolean;
   /** Linha onde a cena arrastada cairia. */
   dropTarget: boolean;
   onReorderStart: (event: ReactPointerEvent) => void;
@@ -132,7 +159,6 @@ function SceneRow({
   scene,
   onStage,
   live,
-  onlyScene,
   dropTarget,
   onReorderStart,
   renaming,
@@ -215,7 +241,9 @@ function SceneRow({
                 {live ? <span className="text-red-500"> · no ar</span> : null}
               </span>
               <span className="text-muted-foreground block text-[10px]">
-                {scene.items.length} itens · {scene.fog.length} áreas
+                {ehQuadro(scene)
+                  ? `${scene.items.length} imagens · ${scene.postits?.length ?? 0} postits`
+                  : `${scene.items.length} itens · ${scene.fog.length} áreas`}
               </span>
             </>
           )}
@@ -283,6 +311,10 @@ function SceneRow({
                 Duplicar
               </DropdownMenuItem>
 
+              {/* Quadro não tem fundo: é folha, não mapa. Os dois itens do
+                  fundo e o separador deles saem juntos. */}
+              {ehQuadro(scene) ? null : (
+                <>
               <DropdownMenuSeparator />
 
               {/* O fundo mora aqui e não na biblioteca de imagens: ele é da
@@ -321,13 +353,13 @@ function SceneRow({
                   Tirar o fundo
                 </DropdownMenuItem>
               ) : null}
+                </>
+              )}
 
               <DropdownMenuSeparator />
 
               <DropdownMenuItem
                 variant="destructive"
-                // Board sem cena nenhuma deixaria o palco vazio sem saída.
-                disabled={onlyScene}
                 onClick={() => removeScene(scene.id)}
               >
                 <Trash2 />

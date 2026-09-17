@@ -6,6 +6,7 @@ import {
   Map,
   MapPin,
   MousePointer2,
+  Presentation,
   X,
   Pencil,
   Puzzle,
@@ -13,7 +14,7 @@ import {
   SquareDashedBottom,
   StickyNote,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { GridControl } from "@/components/mestre/grid-control";
 import { PencilControl } from "@/components/mestre/pencil-control";
@@ -33,7 +34,7 @@ import {
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
-import type { Scene } from "@/types/scene";
+import { ehQuadro, type Scene } from "@/types/scene";
 
 type Ferramenta = {
   tool: Tool;
@@ -160,7 +161,24 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     icon: Ruler,
   };
 
-  const doMapa = [...FERRAMENTAS_MAPA, regua, ...dasExtensoes];
+  /**
+   * Quadro não tem chão: sem névoa, grade nem régua. O que sobra da bolsa do
+   * mapa -- ponto e postit -- é o que anota, e é isso que um quadro é.
+   */
+  const quadro = ehQuadro(scene);
+  const doChao = quadro
+    ? FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog")
+    : FERRAMENTAS_MAPA;
+
+  const doMapa = quadro
+    ? [...doChao, ...dasExtensoes]
+    : [...doChao, regua, ...dasExtensoes];
+
+  // Trocar de um mapa para um quadro com a névoa na mão deixaria a ferramenta
+  // ativa sem botão na barra -- e o clique seguinte cobriria o quadro de preto.
+  useEffect(() => {
+    if (quadro && (tool === "fog" || tool === "regua")) setTool("select");
+  }, [quadro, tool, setTool]);
 
   // A ferramenta ativa de cada bolsa, para o botão dela mostrar. `select` é
   // sempre do palco; então a bolsa do mapa só tem ativa quando é dela.
@@ -215,19 +233,27 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
       </Bolsa>
 
       <Bolsa
-        nome="Ferramentas do mapa"
-        dica="Ponto, postit, área escondida, grade e régua."
+        nome={quadro ? "Ferramentas do quadro" : "Ferramentas do mapa"}
+        dica={
+          quadro
+            ? "Ponto e postit."
+            : "Ponto, postit, área escondida, grade e régua."
+        }
         aberta={aberta === "mapa"}
         onAberta={(v) => setAberta(v ? "mapa" : null)}
         ativa={ativaDoMapa}
-        icone={Map}
+        icone={quadro ? Presentation : Map}
       >
-        {FERRAMENTAS_MAPA.map(botao)}
+        {doChao.map(botao)}
 
-        <span className="bg-border mx-1 h-5 w-px" />
+        {quadro ? null : (
+          <>
+            <span className="bg-border mx-1 h-5 w-px" />
 
-        <GridControl scene={scene} />
-        {botao(regua)}
+            <GridControl scene={scene} />
+            {botao(regua)}
+          </>
+        )}
 
         {dasExtensoes.length > 0 ? (
           <>
