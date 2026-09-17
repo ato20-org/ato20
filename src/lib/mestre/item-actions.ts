@@ -1,12 +1,17 @@
 "use client";
 
-import { offsetInsideScene } from "@/lib/geometry/transform";
+import {
+  MIN_ITEM_SIZE,
+  normalizeAngle,
+  offsetInsideScene,
+} from "@/lib/geometry/transform";
 import { flipPatches, type FlipAxis } from "@/lib/mestre/flip";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
   selectEditingScene,
   useSceneStore,
+  type ItemPatch,
   type ZDirection,
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -368,6 +373,73 @@ export function opacidadeDaSelecao(items: CanvasItem[]): number | undefined {
   return items.every((item) => (item.opacity ?? 1) === primeira)
     ? primeira
     : undefined;
+}
+
+/** De quanto a seleção gira por passo: uma tecla, um entalhe da roda. */
+export const PASSO_DE_GIRO = 15;
+/** De quanto a seleção cresce ou encolhe por entalhe da roda. */
+export const PASSO_DE_TAMANHO = 1.1;
+
+/**
+ * Gira cada item em torno do próprio centro.
+ *
+ * Do PRÓPRIO centro, e não do centro da seleção: girar um grupo em bloco
+ * mudaria a posição de cada peça, e a seta é um ajuste fino -- o mestre quer
+ * a estátua um pouco mais torta, não a sala inteira rodando.
+ */
+export function girarPatches(items: CanvasItem[], graus: number): ItemPatch[] {
+  return items
+    .filter((item) => !item.locked)
+    .map((item) => ({
+      id: item.id,
+      patch: { rotation: normalizeAngle(item.rotation + graus) },
+    }));
+}
+
+/**
+ * Amplia ou encolhe os itens em torno de um centro comum.
+ *
+ * Nada muda se algum item ficaria abaixo do mínimo: encolher só uma parte do
+ * grupo desalinharia o que estava alinhado.
+ */
+export function escalarPatches(
+  items: CanvasItem[],
+  fator: number,
+  centro: { x: number; y: number },
+): ItemPatch[] {
+  const livres = items.filter((item) => !item.locked);
+  const cabe = livres.every(
+    (item) =>
+      item.width * fator >= MIN_ITEM_SIZE &&
+      item.height * fator >= MIN_ITEM_SIZE,
+  );
+  if (!cabe) return [];
+
+  return livres.map((item) => {
+    const width = item.width * fator;
+    const height = item.height * fator;
+    const cx = centro.x + (item.x + item.width / 2 - centro.x) * fator;
+    const cy = centro.y + (item.y + item.height / 2 - centro.y) * fator;
+
+    return {
+      id: item.id,
+      patch: {
+        x: Math.round(cx - width / 2),
+        y: Math.round(cy - height / 2),
+        width: Math.round(width),
+        height: Math.round(height),
+      },
+    };
+  });
+}
+
+export function rotateSelection(graus: number): void {
+  const { scene, selectedItems } = read();
+  if (!scene || selectedItems.length === 0) return;
+
+  useSceneStore
+    .getState()
+    .updateItems(scene.id, girarPatches(selectedItems, graus));
 }
 
 export function nudgeSelection(dx: number, dy: number): void {
