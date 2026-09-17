@@ -56,3 +56,15 @@ describe("moeda", () => {
     }
   });
 });
+
+describe("sortearValor", () => {
+  it("só devolve faces que o dado tem", async () => {
+    const { sortearValor, rotulosDoDado } = await import("@/types/dado");
+    for (const faces of [100, 2, 10] as const) {
+      const rotulos = rotulosDoDado(faces);
+      for (let i = 0; i < 200; i++) {
+        expect(rotulos).toContain(sortearValor(faces));
+      }
+    }
+  });
+});

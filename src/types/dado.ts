@@ -268,7 +268,12 @@ export type RolagemDaMesa = Rolagem & {
  * exatamente o tipo de defeito que não se quer ter de defender.
  */
 export function sortearValor(faces: FacesDado): number {
-  const limite = Math.floor(0x1_0000_0000 / faces) * faces;
+  // Entre os RÓTULOS, e não entre `faces` números: o d% tem dez faces e não
+  // cem. Indexar pelas faces saía da lista e o dado nascia sem valor.
+  const rotulos = rotulosDoDado(faces);
+  const lados = rotulos.length;
+
+  const limite = Math.floor(0x1_0000_0000 / lados) * lados;
   const buffer = new Uint32Array(1);
 
   let bruto = 0;
@@ -277,5 +282,5 @@ export function sortearValor(faces: FacesDado): number {
     bruto = buffer[0];
   } while (bruto >= limite);
 
-  return rotulosDoDado(faces)[bruto % faces];
+  return rotulos[bruto % lados];
 }
