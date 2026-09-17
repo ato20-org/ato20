@@ -14,10 +14,14 @@ type SelectionStore = {
    * gesto que mantém os rostos coerentes entre si, e ele exige grupo.
    */
   selectedPortraitIds: string[];
+  /** Medidor selecionado. Um por vez, como a área escondida. */
+  selectedMedidorId: string | null;
 
   select: (itemIds: string[]) => void;
   toggle: (itemId: string) => void;
   selectFog: (fogId: string | null) => void;
+  /** `null` limpa. */
+  selectMedidor: (medidorId: string | null) => void;
   /** `null` limpa. Substitui a seleção de retratos inteira. */
   selectPortrait: (portraitId: string | null) => void;
   selectPortraits: (portraitIds: string[]) => void;
@@ -37,9 +41,10 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
   selectedIds: [],
   selectedFogId: null,
   selectedPortraitIds: [],
+  selectedMedidorId: null,
 
   select(itemIds) {
-    set({ selectedIds: itemIds, selectedFogId: null, selectedPortraitIds: [] });
+    set({ selectedIds: itemIds, selectedFogId: null, selectedPortraitIds: [], selectedMedidorId: null });
   },
 
   toggle(itemId) {
@@ -51,11 +56,21 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
         : [...selectedIds, itemId],
       selectedFogId: null,
       selectedPortraitIds: [],
+      selectedMedidorId: null,
     });
   },
 
   selectFog(fogId) {
-    set({ selectedIds: [], selectedFogId: fogId, selectedPortraitIds: [] });
+    set({ selectedIds: [], selectedFogId: fogId, selectedPortraitIds: [], selectedMedidorId: null });
+  },
+
+  selectMedidor(medidorId) {
+    set({
+      selectedIds: [],
+      selectedFogId: null,
+      selectedPortraitIds: [],
+      selectedMedidorId: medidorId,
+    });
   },
 
   selectPortrait(portraitId) {
@@ -67,6 +82,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedIds: [],
       selectedFogId: null,
       selectedPortraitIds: portraitIds,
+      selectedMedidorId: null,
     });
   },
 
@@ -79,19 +95,27 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: selectedPortraitIds.includes(portraitId)
         ? selectedPortraitIds.filter((id) => id !== portraitId)
         : [...selectedPortraitIds, portraitId],
+      selectedMedidorId: null,
     });
   },
 
   clear() {
-    const { selectedIds, selectedFogId, selectedPortraitIds } = get();
+    const { selectedIds, selectedFogId, selectedPortraitIds, selectedMedidorId } =
+      get();
     if (
       selectedIds.length === 0 &&
       selectedFogId === null &&
-      selectedPortraitIds.length === 0
+      selectedPortraitIds.length === 0 &&
+      selectedMedidorId === null
     ) {
       return;
     }
 
-    set({ selectedIds: [], selectedFogId: null, selectedPortraitIds: [] });
+    set({
+      selectedIds: [],
+      selectedFogId: null,
+      selectedPortraitIds: [],
+      selectedMedidorId: null,
+    });
   },
 }));

@@ -7,7 +7,6 @@ import {
   CortinaDeCorte,
   useCorteDeCamera,
 } from "@/components/playground/corte-de-camera";
-import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { useSubscription } from "@/hooks/use-scene-broadcast";
@@ -92,7 +91,7 @@ export function MiniplayerBody() {
  * fechar uma conexão à toa.
  */
 function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
-  const { scene, portraits, spotlight, medida, rolagens, synced, stalled } =
+  const { scene, portraits, spotlight, rolagens, synced, stalled } =
     useSubscription(codigo, base);
 
   // Mesmo corte da TV: trocar de câmera fecha a cortina; a mesma câmera andando
@@ -119,14 +118,6 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
               variante="tela"
               smooth
             />
-
-            {medida && cena.grid ? (
-              <RulerOverlay
-                de={medida.de}
-                para={medida.para}
-                grid={cena.grid}
-              />
-            ) : null}
           </div>
         ) : null}
       </SceneStage>

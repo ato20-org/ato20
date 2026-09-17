@@ -296,6 +296,16 @@ export function toggleFogRevealed(fogId?: string): void {
     .updateFog(scene.id, region.id, { revealed: !region.revealed });
 }
 
+/** Apaga o medidor selecionado. */
+export function removeMedidorSelection(): void {
+  const { scene } = read();
+  const medidorId = useSelectionStore.getState().selectedMedidorId;
+  if (!scene || !medidorId) return;
+
+  useSceneStore.getState().removeMedidores(scene.id, [medidorId]);
+  useSelectionStore.getState().clear();
+}
+
 export function removeFogSelection(): void {
   const { scene } = read();
   const fogId = useSelectionStore.getState().selectedFogId;

@@ -12,11 +12,21 @@ import { useSceneScale } from "@/components/playground/scene-stage";
 import { FogLayer } from "@/components/playground/fog-layer";
 import { FundoDaCena } from "@/components/playground/fundo-da-cena";
 import { GridLayer } from "@/components/playground/grid-layer";
+import {
+  MedidorLayer,
+  type PontaDoMedidor,
+} from "@/components/playground/medidor-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
 import type { Variante } from "@/lib/vault/assets";
 import type { RolagemDaMesa } from "@/types/dado";
-import type { CanvasItem, FogRegion, Portrait, Scene } from "@/types/scene";
+import type {
+  CanvasItem,
+  FogRegion,
+  Medidor,
+  Portrait,
+  Scene,
+} from "@/types/scene";
 
 type SceneLayerProps = {
   scene: Scene;
@@ -80,6 +90,14 @@ type SceneLayerProps = {
     event: ReactPointerEvent,
     portrait: Portrait,
   ) => void;
+  /** Só o Mestre: o medidor selecionado e os gestos de mover e redimensionar. */
+  medidorSelecionadoId?: string | null;
+  onMedidorPointerDown?: (event: ReactPointerEvent, medidor: Medidor) => void;
+  onMedidorAlcaPointerDown?: (
+    event: ReactPointerEvent,
+    medidor: Medidor,
+    ponta: PontaDoMedidor,
+  ) => void;
   /**
    * O envelope que o Mestre põe em volta do conteúdo: a marca `data-palco`, o
    * cursor da ferramenta, o clique no vazio e o `drop` do acervo.
@@ -109,6 +127,9 @@ export function SceneLayer({
   onItemPointerDown,
   onFogPointerDown,
   onPortraitPointerDown,
+  medidorSelecionadoId,
+  onMedidorPointerDown,
+  onMedidorAlcaPointerDown,
   apagando,
   palco,
 }: SceneLayerProps) {
@@ -169,6 +190,19 @@ export function SceneLayer({
         smooth={smooth}
         onFogPointerDown={onFogPointerDown}
       />
+
+      {/* Depois da névoa: o medidor é instrumento sobre o mapa, e medir por
+          cima da névoa é justamente o caso -- "quantos metros até a porta que
+          eles ainda não viram". Só com a grade: é ela que dá o metro. */}
+      {scene.grid && scene.medidores && scene.medidores.length > 0 ? (
+        <MedidorLayer
+          medidores={scene.medidores}
+          grid={scene.grid}
+          selecionadoId={medidorSelecionadoId}
+          onMedidorPointerDown={onMedidorPointerDown}
+          onAlcaPointerDown={onMedidorAlcaPointerDown}
+        />
+      ) : null}
 
       {portraits && portraits.length > 0 ? (
         <PortraitLayer

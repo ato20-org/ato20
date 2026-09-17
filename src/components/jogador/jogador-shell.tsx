@@ -258,7 +258,6 @@ function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
       <JogadorStage
         scene={live.scene}
         portraits={live.portraits}
-        medida={live.medida}
         rolagens={live.rolagens}
         synced={live.synced}
         stalled={live.stalled}
@@ -326,7 +325,6 @@ function StackedLayout({ codigo, live, emCena }: LayoutProps) {
         <JogadorStage
           scene={live.scene}
           portraits={live.portraits}
-          medida={live.medida}
           rolagens={live.rolagens}
           synced={live.synced}
           stalled={live.stalled}

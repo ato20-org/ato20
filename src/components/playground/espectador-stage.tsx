@@ -1,7 +1,6 @@
 "use client";
 
 import { SessionAudio } from "@/components/playground/session-audio";
-import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import {
   CortinaDeCorte,
@@ -26,7 +25,6 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
     volume,
     portraits,
     spotlight,
-    medida,
     rolagens,
     synced,
     stalled,
@@ -52,17 +50,6 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
               rolagens={rolagens}
               smooth
             />
-
-            {/* A régua do mestre, enquanto ele mede. Dentro do palco porque as
-                pontas são coordenadas de cena, e fora do `SceneLayer` porque
-                ela não é conteúdo do mapa -- some quando ele solta. */}
-            {medida && cena.grid ? (
-              <RulerOverlay
-                de={medida.de}
-                para={medida.para}
-                grid={cena.grid}
-              />
-            ) : null}
           </div>
         ) : null}
       </SceneStage>

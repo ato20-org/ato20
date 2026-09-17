@@ -396,20 +396,47 @@ export type Traco = {
 
 export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura">;
 
+/** As formas de medidor. Ver `Medidor`. */
+export const FORMAS_MEDIDOR = ["linha", "circulo", "cone", "retangulo"] as const;
+
+export type FormaMedidor = (typeof FORMAS_MEDIDOR)[number];
+
+/** Abertura do cone, em graus, quando o medidor não diz. */
+export const ABERTURA_CONE_PADRAO = 60;
+
 /**
- * A medida em curso da regua, em unidades de cena.
+ * Um medidor colocado sobre o mapa: régua, círculo, cone ou retângulo, com a
+ * conta em metros escrita nele.
  *
- * Viaja FORA da cena, como o retrato e a evidencia: ela nao pertence ao mapa --
- * nao viaja no zip, nao entra no desfazer -- e existe so enquanto o dedo esta
- * no botao. A mesa ve para acompanhar a conta: "cabe o carro nessa viela?" e
- * pergunta que todo mundo na mesa quer ver respondida.
+ * Mora na CENA, como o risco e a névoa: antes a régua era um gesto que sumia ao
+ * soltar, e a pergunta "cabe o carro nessa viela?" tinha de ser refeita a cada
+ * vez que alguém duvidava. Colocado, o medidor fica, anda com o dedo, e sai
+ * quando o mestre o apaga. Viaja no zip, entra no desfazer, e a mesa vê --
+ * medir é apontar para ela.
  *
- * `null` = ninguem medindo.
+ * Todas as formas cabem em DOIS pontos, e é por isso que mover e redimensionar
+ * são o mesmo gesto para as quatro: `x, y` é a origem -- começo da régua,
+ * centro do círculo, vértice do cone, um canto do retângulo -- e `x2, y2` é o
+ * fim -- a outra ponta, um ponto na borda que dá o raio, a ponta do cone, o
+ * canto oposto.
+ *
+ * A grade é quem dá o metro: sem ela o medidor não é criado. Ver
+ * `METROS_POR_QUADRADO`.
  */
-export type Medida = {
-  de: { x: number; y: number };
-  para: { x: number; y: number };
+export type Medidor = {
+  id: string;
+  forma: FormaMedidor;
+  x: number;
+  y: number;
+  x2: number;
+  y2: number;
+  /** Cor CSS, como o mestre escolheu. */
+  cor: string;
+  /** Só o cone: abertura total em graus. Ausente = `ABERTURA_CONE_PADRAO`. */
+  abertura?: number;
 };
+
+export type NewMedidor = Omit<Medidor, "id">;
 
 /**
  * Recorte do plano de cena. Sempre na proporção do plano, para toda visão
@@ -652,6 +679,11 @@ export type Scene = {
    * este campo antes de publicar.
    */
   handout?: string[];
+  /**
+   * Medidores colocados sobre o mapa. Ausente = nenhum. A mesa vê. Ver
+   * `Medidor`.
+   */
+  medidores?: Medidor[];
   /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.

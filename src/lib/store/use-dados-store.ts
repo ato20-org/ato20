@@ -76,7 +76,7 @@ type DadosStore = {
   /**
    * Os dados no tabuleiro. Vazio = tabuleiro limpo.
    *
-   * FORA da cena, como a medida da régua e a evidência: dado não é conteúdo de
+   * FORA da cena, como a evidência: dado não é conteúdo de
    * mapa. Não viaja no zip, não entra no Ctrl+Z, e trocar de cena não troca os
    * dados — a jogada é do momento da mesa, não do lugar onde ela aconteceu.
    */
@@ -251,7 +251,7 @@ function limitar(valor: number): number {
 /**
  * O saquinho de dados.
  *
- * Store de sessão, no mesmo desenho do `useReguaStore`: fora da cena, fora do
+ * Store de sessão, no mesmo desenho do `useSpotlightStore`: fora da cena, fora do
  * vault, fora do histórico de desfazer. A ÚNICA coisa que sobrevive ao
  * fechamento é onde a bolinha foi deixada, e isso porque é mobília — o mestre
  * escolheu um canto que não atrapalha o mapa dele, e devolvê-la ao meio da tela

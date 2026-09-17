@@ -12,6 +12,7 @@ import {
   PASSO_DE_GIRO,
   pasteClipboard,
   removeFogSelection,
+  removeMedidorSelection,
   removePortraitSelection,
   removeSelection,
   rotateSelection,
@@ -537,6 +538,7 @@ export const ATALHOS_BASE: Atalho[] = [
       const selecao = useSelectionStore.getState();
 
       if (selecao.selectedFogId) removeFogSelection();
+      else if (selecao.selectedMedidorId) removeMedidorSelection();
       else if (selecao.selectedPortraitIds.length > 0)
         removePortraitSelection();
       else removeSelection();

@@ -12,7 +12,6 @@ import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
 import {
   DEFAULT_SESSION_VOLUME,
-  type Medida,
   type Portrait,
   type Scene,
   type SessionTrack,
@@ -78,14 +77,13 @@ export function usePublisher(state: LiveState): void {
       volume: state.volume,
       portraits: state.portraits,
       spotlight: state.spotlight,
-      medida: state.medida,
       rolagens: state.rolagens,
     };
 
     stateRef.current = paraMesa;
     channelRef.current?.publish(paraMesa);
     // Dependências nos campos, não no objeto `state`: quem chama monta
-    // `{ scene, track, volume, portraits, spotlight, medida }` a cada render, e
+    // `{ scene, track, volume, portraits, spotlight, rolagens }` a cada render, e
     // comparar essa embalagem fazia o Mestre publicar enquanto montava a
     // PRÓXIMA cena — uma publicação por uma mudança que a mesa não vê.
   }, [
@@ -94,7 +92,6 @@ export function usePublisher(state: LiveState): void {
     state.volume,
     state.portraits,
     state.spotlight,
-    state.medida,
     state.rolagens,
   ]);
 
@@ -116,8 +113,6 @@ export type Subscription = {
   portraits: Portrait[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
-  /** A medida em curso da régua, que a mesa acompanha. */
-  medida: Medida | null;
   /** Os dados que os jogadores jogaram na mesa há pouco. Ver `LiveState`. */
   rolagens: RolagemDaMesa[];
   /** Já chegou alguma coisa do daemon. */
@@ -139,7 +134,6 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     volume: DEFAULT_SESSION_VOLUME,
     portraits: [],
     spotlight: null,
-    medida: null,
     rolagens: [],
   });
   const [synced, setSynced] = useState(false);
@@ -176,7 +170,6 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     volume: live.volume,
     portraits: live.portraits,
     spotlight: live.spotlight,
-    medida: live.medida,
     // O quadro de uma versão anterior não tem o campo: a lista vazia evita que
     // a tela caia enquanto o daemon ainda serve um bundle velho.
     rolagens: live.rolagens ?? [],

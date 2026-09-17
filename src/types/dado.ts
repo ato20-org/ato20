@@ -1,9 +1,8 @@
 /**
  * Os dados de mesa.
  *
- * Arquivo próprio, e não dentro de `scene.ts`: dado não é conteúdo de mapa. A
- * `Medida` da régua também não é e mora lá, mas ela é um par de pontos — aqui
- * há geometria, orientação e histórico, e enfiar isso na cena daria a entender
+ * Arquivo próprio, e não dentro de `scene.ts`: dado não é conteúdo de mapa.
+ * Aqui há geometria, orientação e histórico, e enfiar isso na cena daria a entender
  * que dado viaja no zip junto com a névoa e os riscos. Não viaja. Ver
  * `useDadosStore`.
  */
