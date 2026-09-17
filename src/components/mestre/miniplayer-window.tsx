@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, MonitorPlay } from "lucide-react";
+import { Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -10,24 +10,11 @@ import {
 import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useAbrirJanela } from "@/hooks/use-abrir-janela";
-import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { useSubscription } from "@/hooks/use-scene-broadcast";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
-import { useLayoutStore } from "@/lib/store/use-layout-store";
-import { chaveDe, useWindowStore } from "@/lib/store/use-window-store";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { Spotlight } from "@/types/scene";
-
-const CONTEUDO = { tipo: "miniplayer" } as const;
-const CHAVE = chaveDe(CONTEUDO);
 
 /**
  * O miniplayer: o que a mesa está vendo, numa janela do Mestre.
@@ -185,56 +172,5 @@ function EvidenciaEmMiniatura({ spotlight }: { spotlight: Spotlight | null }) {
         Em evidência
       </span>
     </div>
-  );
-}
-
-/**
- * O botão do cabeçalho: mostra ou esconde o miniplayer.
- *
- * Alterna, e não só abre, porque a pergunta que o mestre faz é "quero ver a
- * mesa agora?" -- e a resposta muda ao longo da sessão. O mesmo interruptor
- * existe no menu "Abas"; este fica ao lado de "Abrir Espectador" porque as
- * duas são a mesma pergunta em escalas diferentes: uma TV inteira, ou um
- * canto dela aqui.
- */
-export function MiniplayerToggle() {
-  const layout = useLayoutStore((state) => state.layout);
-  const flutuantes = useWindowStore((state) => state.janelas);
-  const abrir = useAbrirJanela();
-  const fechar = useFecharJanela();
-
-  const aberto =
-    flutuantes.some((janela) => janela.chave === CHAVE) ||
-    layout.esquerda.grupos.some((grupo) =>
-      grupo.abas.some((aba) => chaveDe(aba) === CHAVE),
-    ) ||
-    layout.direita.grupos.some((grupo) =>
-      grupo.abas.some((aba) => chaveDe(aba) === CHAVE),
-    );
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant={aberto ? "secondary" : "outline"}
-            size="sm"
-            aria-pressed={aberto}
-            aria-label={aberto ? "Esconder a visão da mesa" : "Ver o que a mesa vê"}
-            onClick={() => (aberto ? fechar(CHAVE) : abrir(CONTEUDO))}
-          >
-            <MonitorPlay />
-            <span className="hidden xl:inline">Mesa</span>
-          </Button>
-        }
-      />
-      <TooltipContent>
-        <p className="max-w-52">
-          {aberto
-            ? "Esconde a janela com o que a mesa está vendo."
-            : "Abre uma janela com o que a mesa está vendo, em miniatura."}
-        </p>
-      </TooltipContent>
-    </Tooltip>
   );
 }
