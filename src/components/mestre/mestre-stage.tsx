@@ -999,6 +999,15 @@ export function MestreStage({ scene }: { scene: Scene }) {
     // contém o ponto, para a de dentro ganhar da de fora. Só com a ferramenta
     // de seleção: com lápis ou névoa na mão o clique é um traço.
     if (tool === "select") {
+      // Clique no vazio larga também o texto e a seta selecionados, como
+      // larga os itens.
+      const quadro = useQuadroStore.getState();
+      if (quadro.textoSelecionadoId || quadro.ligacaoSelecionadaId)
+        useQuadroStore.setState({
+          textoSelecionadoId: null,
+          ligacaoSelecionadaId: null,
+        });
+
       const dentro = (scene.cameras ?? [])
         .filter(({ viewport: v }) =>
           anchor.x >= v.x && anchor.x <= v.x + v.width &&

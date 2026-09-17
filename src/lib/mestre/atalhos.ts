@@ -39,6 +39,12 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
+import {
+  colarTexto,
+  copiarTexto,
+  cortarTexto,
+  duplicarTexto,
+} from "@/lib/mestre/texto-actions";
 import { selectEditingScene } from "@/lib/store/use-scene-store";
 import { executarComando } from "@/lib/extensoes/carregar";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
@@ -166,7 +172,10 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+C",
     rotulo: "Copiar",
     combina: (evento) => comando(evento) && letra(evento) === "c",
-    executar: copySelection,
+    // Texto solto na mão ganha do item: ver `texto-actions`.
+    executar: () => {
+      if (!copiarTexto()) copySelection();
+    },
     impedirPadrao: true,
   },
   {
@@ -174,7 +183,9 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+X",
     rotulo: "Cortar",
     combina: (evento) => comando(evento) && letra(evento) === "x",
-    executar: cutSelection,
+    executar: () => {
+      if (!cortarTexto()) cutSelection();
+    },
     impedirPadrao: true,
   },
   {
@@ -182,7 +193,9 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+V",
     rotulo: "Colar",
     combina: (evento) => comando(evento) && letra(evento) === "v",
-    executar: pasteClipboard,
+    executar: () => {
+      if (!colarTexto()) pasteClipboard();
+    },
     impedirPadrao: true,
   },
   {
@@ -190,7 +203,9 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+D",
     rotulo: "Duplicar",
     combina: (evento) => comando(evento) && letra(evento) === "d",
-    executar: duplicateSelection,
+    executar: () => {
+      if (!duplicarTexto()) duplicateSelection();
+    },
     impedirPadrao: true,
   },
 

@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 
+import { useSelectionStore } from "@/lib/store/use-selection-store";
 import type { PontaDeLigacao, Vec2 } from "@/types/scene";
 
 /** Abaixo do postit (8 500) e acima das imagens: letra na folha, sob o papel. */
@@ -56,3 +57,17 @@ export const useQuadroStore = create<QuadroStore>((set) => ({
       previa: null,
     }),
 }));
+
+/**
+ * Selecionar um item do palco larga o texto e a seta: as duas seleções não
+ * coexistem, e é isso que deixa Ctrl+C e Delete decidirem pelo que está na
+ * mão sem perguntar. O caminho inverso já é feito por quem seleciona texto e
+ * seta, que limpa a seleção de itens ao ser clicado.
+ */
+useSelectionStore.subscribe((state, previous) => {
+  if (state.selectedIds === previous.selectedIds || state.selectedIds.length === 0)
+    return;
+  const quadro = useQuadroStore.getState();
+  if (quadro.textoSelecionadoId || quadro.ligacaoSelecionadaId)
+    useQuadroStore.setState({ textoSelecionadoId: null, ligacaoSelecionadaId: null });
+});
