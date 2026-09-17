@@ -167,3 +167,26 @@ export function semReferencia(
   );
   return vivas.length > 0 ? vivas : undefined;
 }
+
+/** Uma seta pronta para desenhar: a ligação e as duas pontas na borda. */
+export type Seta = { ligacao: Ligacao; a: Vec; b: Vec };
+
+/**
+ * As setas da cena, com as pontas resolvidas. Ponta sem alvo não deveria
+ * existir -- `semReferencia` cuida --, mas um arquivo editado à mão não pode
+ * derrubar o quadro: a seta órfã só não desenha.
+ */
+export function setasDe(scene: Scene): Seta[] {
+  return (scene.ligacoes ?? []).flatMap((ligacao) => {
+    const de = caixaDe(scene, ligacao.de);
+    const para = caixaDe(scene, ligacao.para);
+    if (!de || !para) return [];
+    return [
+      {
+        ligacao,
+        a: ancoraNaBorda(de, centroDe(para)),
+        b: ancoraNaBorda(para, centroDe(de)),
+      },
+    ];
+  });
+}

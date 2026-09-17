@@ -17,15 +17,17 @@ import {
   type PontaDoMedidor,
 } from "@/components/playground/medidor-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
+import { QuadroMesaLayer } from "@/components/playground/quadro-mesa-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
 import type { Variante } from "@/lib/vault/assets";
 import type { RolagemDaMesa } from "@/types/dado";
-import type {
-  CanvasItem,
-  FogRegion,
-  Medidor,
-  Portrait,
-  Scene,
+import {
+  ehQuadro,
+  type CanvasItem,
+  type FogRegion,
+  type Medidor,
+  type Portrait,
+  type Scene,
 } from "@/types/scene";
 
 type SceneLayerProps = {
@@ -202,6 +204,14 @@ export function SceneLayer({
           onMedidorPointerDown={onMedidorPointerDown}
           onAlcaPointerDown={onMedidorAlcaPointerDown}
         />
+      ) : null}
+
+      {/* O quadro no ar mostra TUDO: postit, alfinete, texto e seta são o
+          conteúdo dele. Só na mesa -- o mestre tem as camadas dele, com
+          arrasto e edição, fora deste componente -- e só em quadro: um mapa no
+          ar continua sem nada disto, e `sceneForTable` já nem manda. */}
+      {variant === "mesa" && ehQuadro(scene) ? (
+        <QuadroMesaLayer scene={scene} />
       ) : null}
 
       {portraits && portraits.length > 0 ? (

@@ -3,9 +3,10 @@
 import { useEffect, useRef } from "react";
 
 import {
-  emPixelDeTela,
-  useSceneScale,
-} from "@/components/playground/scene-stage";
+  TextoView,
+  tipografiaDoTexto,
+} from "@/components/playground/quadro-mesa-layer";
+import { useSceneScale } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { useQuadroStore, TEXTO_Z } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -67,22 +68,12 @@ function TextoSolto({
 
   const campo = useRef<HTMLTextAreaElement | null>(null);
 
-  /**
-   * Mesma conta do corpo do postit: sob `zoom`, o WebKit tem um piso de 9px
-   * para fonte que encolheu por `zoom`, e um título de 40 unidades a 20%
-   * pararia de encolher enquanto o resto do quadro continua. Desfaz o `zoom`
-   * do plano e mede a fonte em pixel de tela; no `transform` o tamanho em
-   * unidades de cena já sai certo.
-   */
-  const fator = ampliacaoNoLayout ? scale : 1;
-  const medida = ampliacaoNoLayout ? emPixelDeTela(scale) : undefined;
-  const tipografia = {
-    fontSize: texto.tamanho * fator,
-    lineHeight: 1.25,
-    // A mesma estimativa de `caixaDoTexto`: é o que faz a seta encostar onde
-    // o texto realmente termina, e não onde a fonte quiser.
-    minWidth: texto.tamanho * 0.55 * fator,
-  };
+  // Ver `tipografiaDoTexto`: pixel de tela sob `zoom`, pelo piso de 9px do WebKit.
+  const { medida, estilo: tipografia } = tipografiaDoTexto(
+    texto,
+    scale,
+    ampliacaoNoLayout,
+  );
 
   useEffect(() => {
     if (!editando) return;
@@ -137,7 +128,7 @@ function TextoSolto({
         if (!panMode && tool !== "ligacao") editar(texto.id);
       }}
     >
-      <div style={medida}>
+      <div style={editando ? medida : undefined}>
         {editando ? (
           <textarea
             ref={campo}
@@ -162,15 +153,9 @@ function TextoSolto({
               event.stopPropagation();
             }}
           />
-        ) : (
-          <div
-            className="text-foreground whitespace-pre select-none"
-            style={tipografia}
-          >
-            {texto.texto}
-          </div>
-        )}
+        ) : null}
       </div>
+      {editando ? null : <TextoView texto={texto} />}
     </div>
   );
 }

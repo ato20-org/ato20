@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import {
-  ancoraNaBorda,
-  caixaDe,
-  centroDe,
-} from "@/lib/mestre/ligacoes";
+  PontaDeSeta,
+  SETA_TRACO_PX,
+  SETA_ROTULO_PX,
+  SetaSvg,
+} from "@/components/playground/quadro-mesa-layer";
+import { ancoraNaBorda, caixaDe, setasDe } from "@/lib/mestre/ligacoes";
 import type { Vec } from "@/lib/geometry/transform";
 import { LIGACAO_Z, useQuadroStore } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -20,14 +22,8 @@ import {
   type Scene,
 } from "@/types/scene";
 
-/** Espessura da seta, em pixels de tela. Dividida pela escala para não engordar no zoom. */
-const TRACO_PX = 2;
 /** Largura da faixa invisível que recebe o clique, em pixels de tela. */
 const ALVO_PX = 14;
-/** Tamanho da ponta da seta, em pixels de tela. */
-const PONTA_PX = 10;
-/** Fonte do rótulo, em pixels de tela. */
-const ROTULO_PX = 12;
 
 /**
  * As setas do quadro, e a que está sendo puxada.
@@ -71,6 +67,9 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
   }, [origem, tool, toScene]);
   const cursor = amostra && amostra.origem === origem ? amostra.ponto : null;
 
+  // Antes do retorno cedo: hook não pode ficar atrás de `return null`.
+  const pontaComum = useId();
+  const pontaViva = useId();
   const [editandoRotuloId, setEditandoRotuloId] = useState<string | null>(null);
   const campo = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
@@ -85,17 +84,7 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
 
   const px = (valor: number) => valor / scale;
 
-  const setas = ligacoes.flatMap((ligacao) => {
-    const de = caixaDe(scene, ligacao.de);
-    const para = caixaDe(scene, ligacao.para);
-    // Ponta sem alvo não deveria existir -- `semReferencia` cuida --, mas um
-    // arquivo editado à mão não pode derrubar o quadro.
-    if (!de || !para) return [];
-    const a = ancoraNaBorda(de, centroDe(para));
-    const b = ancoraNaBorda(para, centroDe(de));
-    return [{ ligacao, a, b }];
-  });
-
+  const setas = setasDe(scene);
   const editando = setas.find(({ ligacao }) => ligacao.id === editandoRotuloId);
 
   return (
@@ -108,42 +97,15 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
         aria-hidden
       >
         <defs>
-          {/* Duas pontas: a cor da seta e a da selecionada. `markerUnits`
-              em `userSpaceOnUse` para o tamanho ser o que se pede, e não um
-              múltiplo da espessura. */}
-          <marker
-            id="ligacao-ponta"
-            markerUnits="userSpaceOnUse"
-            markerWidth={px(PONTA_PX)}
-            markerHeight={px(PONTA_PX)}
-            refX={px(PONTA_PX) * 0.9}
-            refY={px(PONTA_PX) / 2}
-            orient="auto"
-          >
-            <path
-              d={`M 0 0 L ${px(PONTA_PX)} ${px(PONTA_PX) / 2} L 0 ${px(PONTA_PX)} z`}
-              className="fill-foreground/70"
-            />
-          </marker>
-          <marker
-            id="ligacao-ponta-selecionada"
-            markerUnits="userSpaceOnUse"
-            markerWidth={px(PONTA_PX)}
-            markerHeight={px(PONTA_PX)}
-            refX={px(PONTA_PX) * 0.9}
-            refY={px(PONTA_PX) / 2}
-            orient="auto"
-          >
-            <path
-              d={`M 0 0 L ${px(PONTA_PX)} ${px(PONTA_PX) / 2} L 0 ${px(PONTA_PX)} z`}
-              className="fill-primary"
-            />
-          </marker>
+          {/* Duas pontas: a da seta comum e a da selecionada. Ids únicos por
+              `<svg>`: a prévia da mesa pode estar montada ao lado. */}
+          <PontaDeSeta id={pontaComum} escala={scale} className="fill-foreground/70" />
+          <PontaDeSeta id={pontaViva} escala={scale} className="fill-primary" />
         </defs>
 
-        {setas.map(({ ligacao, a, b }) => {
+        {setas.map((seta) => {
+          const { ligacao, a, b } = seta;
           const selecionada = ligacao.id === selecionadaId;
-          const meio = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 
           return (
             <g key={ligacao.id}>
@@ -174,60 +136,38 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
                   setEditandoRotuloId(ligacao.id);
                 }}
               />
-              <line
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
+              <SetaSvg
+                seta={seta}
+                escala={scale}
+                ponta={selecionada ? pontaViva : pontaComum}
                 className={selecionada ? "stroke-primary" : "stroke-foreground/70"}
-                strokeWidth={px(TRACO_PX)}
-                strokeLinecap="round"
-                markerEnd={
-                  selecionada
-                    ? "url(#ligacao-ponta-selecionada)"
-                    : "url(#ligacao-ponta)"
-                }
+                // O rótulo some enquanto o campo dele está aberto no mesmo lugar.
+                rotulo={editandoRotuloId !== ligacao.id}
               />
-              {ligacao.rotulo && editandoRotuloId !== ligacao.id ? (
-                <text
-                  x={meio.x}
-                  y={meio.y}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={px(ROTULO_PX)}
-                  // Contorno na cor do papel, por baixo da letra: o rótulo
-                  // cruza a própria seta, e sem isto a linha risca as letras.
-                  className="fill-foreground stroke-card"
-                  strokeWidth={px(4)}
-                  style={{ paintOrder: "stroke" }}
-                >
-                  {ligacao.rotulo}
-                </text>
-              ) : null}
             </g>
           );
         })}
 
         {/* A seta sendo puxada: da borda da origem até o cursor, tracejada
             porque ainda não é. */}
-        {puxando && cursor ? (
-          (() => {
-            const a = ancoraNaBorda(puxando, cursor);
-            return (
-              <line
-                x1={a.x}
-                y1={a.y}
-                x2={cursor.x}
-                y2={cursor.y}
-                className="stroke-primary/70"
-                strokeWidth={px(TRACO_PX)}
-                strokeDasharray={`${px(6)} ${px(6)}`}
-                strokeLinecap="round"
-                markerEnd="url(#ligacao-ponta-selecionada)"
-              />
-            );
-          })()
-        ) : null}
+        {puxando && cursor
+          ? (() => {
+              const a = ancoraNaBorda(puxando, cursor);
+              return (
+                <line
+                  x1={a.x}
+                  y1={a.y}
+                  x2={cursor.x}
+                  y2={cursor.y}
+                  className="stroke-primary/70"
+                  strokeWidth={px(SETA_TRACO_PX)}
+                  strokeDasharray={`${px(6)} ${px(6)}`}
+                  strokeLinecap="round"
+                  markerEnd={`url(#${pontaViva})`}
+                />
+              );
+            })()
+          : null}
       </svg>
 
       {/* O campo do rótulo, em HTML e não em `<foreignObject>`: o WebKitGTK
@@ -246,7 +186,7 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
           <input
             ref={campo}
             className="bg-card text-foreground rounded border px-1 py-0.5 shadow outline-none"
-            style={{ fontSize: px(ROTULO_PX), width: px(160) }}
+            style={{ fontSize: px(SETA_ROTULO_PX), width: px(160) }}
             aria-label="Rótulo da seta"
             placeholder="o que esta seta diz"
             defaultValue={editando.ligacao.rotulo ?? ""}
