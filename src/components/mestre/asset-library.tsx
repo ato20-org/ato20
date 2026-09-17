@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ChevronDown,
   ChevronRight,
+  ExternalLink,
+  File,
   FileImage,
   FolderClosed,
   FolderPlus,
@@ -41,6 +44,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useAssetList } from "@/hooks/use-asset-list";
+import { assetUrl } from "@/lib/vault/assets";
 import { useFolderList } from "@/hooks/use-folder-list";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useTokenDrag } from "@/hooks/use-token-drag";
@@ -80,15 +84,38 @@ export function tamanhoNaCena(asset: AssetMeta): { x: number; y: number } {
     : FALLBACK_SIZE;
 }
 
-export function AssetLibrary({ scene }: { scene: Scene }) {
+/**
+ * A Biblioteca: tudo o que a campanha guarda, menos o som, que tem aba
+ * própria. Imagem entra na cena e vai ao ar; o resto -- PDF, texto, o que
+ * vier -- fica guardado e abre por fora. Não depende de cena: acervo é da
+ * campanha, e a cena é só um dos destinos do que está aqui.
+ */
+export function AssetLibrary({ scene }: { scene?: Scene | null }) {
   const {
-    assets: todos,
-    importar,
-    importando,
+    assets: imagens,
     remove,
     move,
-    refresh,
+    refresh: refreshImagens,
   } = useAssetList("image");
+  // A importação sai da lista de ARQUIVOS: é a que aceita qualquer coisa, e o
+  // Rust separa o que é imagem. `absorverImportacao` acorda as duas listas.
+  const {
+    assets: arquivos,
+    importar,
+    importando,
+    remove: removeArquivo,
+    move: moveArquivo,
+    refresh: refreshArquivos,
+  } = useAssetList("file");
+  const todos = useMemo(() => [...imagens, ...arquivos], [imagens, arquivos]);
+  const refresh = useCallback(() => {
+    refreshImagens();
+    refreshArquivos();
+  }, [refreshImagens, refreshArquivos]);
+  const removerQualquer = useCallback(
+    (asset: AssetMeta) => (asset.kind === "image" ? remove(asset.id) : removeArquivo(asset.id)),
+    [remove, removeArquivo],
+  );
 
   /**
    * Só o que não tem dono.
@@ -153,6 +180,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
   const select = useSelectionStore((state) => state.select);
 
   function handleAddToScene(asset: AssetMeta) {
+    if (!scene || asset.kind !== "image") return;
     const size = tamanhoNaCena(asset);
 
     select([
@@ -162,9 +190,11 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
 
   /** Move. Só o arrasto chama: mudar de pasta saiu do menu da linha. */
   const handleMove = useCallback(
-    (assetId: string, folderId: string | undefined) =>
-      void move(assetId, folderId),
-    [move],
+    (assetId: string, folderId: string | undefined) => {
+      const asset = todos.find((atual) => atual.id === assetId);
+      void (asset?.kind === "image" ? move : moveArquivo)(assetId, folderId);
+    },
+    [todos, move, moveArquivo],
   );
 
   /**
@@ -258,9 +288,9 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
         asset={asset}
         selected={selecionados.includes(asset.id)}
         usageCount={countAssetUsage(scenes ?? [], asset.id)}
-        onAdd={() => handleAddToScene(asset)}
+        onAdd={scene && asset.kind === "image" ? () => handleAddToScene(asset) : undefined}
         onSelect={onSelect}
-        onRemove={() => void remove(asset.id)}
+        onRemove={() => void removerQualquer(asset)}
       />
     );
   }
@@ -337,7 +367,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
           onClick={() => void importar()}
         >
           {importando ? <Loader2 className="animate-spin" /> : <Upload />}
-          {importando ? "Importando…" : "Importar imagens"}
+          {importando ? "Importando…" : "Importar arquivos"}
         </Button>
 
         {/* O que está vindo, no mesmo rótulo que a sombra do mapa escreve. A
@@ -408,7 +438,7 @@ export function AssetLibrary({ scene }: { scene: Scene }) {
                 onClick={() => void importar()}
               >
                 <Upload />
-                Importar imagens
+                Importar arquivos
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
@@ -880,7 +910,8 @@ type AssetRowProps = {
   asset: AssetMeta;
   selected: boolean;
   usageCount: number;
-  onAdd: () => void;
+  /** Ausente = não entra na cena: não há cena aberta, ou não é imagem. */
+  onAdd?: () => void;
   onSelect: (assetId: string, event: React.MouseEvent) => void;
   onRemove: () => void;
 };
@@ -893,7 +924,8 @@ function AssetRow({
   onSelect,
   onRemove,
 }: AssetRowProps) {
-  const url = useAssetUrl(asset.id, "mini");
+  const imagem = asset.kind === "image";
+  const url = useAssetUrl(imagem ? asset.id : undefined, "mini");
 
   // Boolean, e não o objeto: seletor que devolve o `spotlight` inteiro
   // redesenharia toda linha da lista a cada troca de evidência. Assim só as
@@ -931,7 +963,9 @@ function AssetRow({
       // imagem no mapa e a roda escolhendo o tamanho no ar -- ver `useTokenDrag`.
       // O mesmo gesto alcança as pastas, que o arrasto nativo servia antes.
       onPointerDown={(event) => {
-        const tamanho = tamanhoNaCena(asset);
+        // Arquivo que não é imagem não vai para a cena: o arrasto dele é só
+        // entre pastas, e o `useTokenDrag` cuida disso com o mesmo gesto.
+        const tamanho = imagem ? tamanhoNaCena(asset) : { x: 1, y: 1 };
 
         arrastar(event, {
           fonte: { tipo: "acervo", assetId: asset.id },
@@ -940,7 +974,7 @@ function AssetRow({
         });
       }}
     >
-      <span className="bg-muted size-10 shrink-0 overflow-hidden rounded">
+      <span className="bg-muted text-muted-foreground grid size-10 shrink-0 place-items-center overflow-hidden rounded">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -950,7 +984,9 @@ function AssetRow({
             draggable={false}
             {...MINIATURA}
           />
-        ) : null}
+        ) : imagem ? null : (
+          <File className="size-5" aria-hidden />
+        )}
       </span>
 
       <span className="min-w-0 flex-1">
@@ -959,14 +995,16 @@ function AssetRow({
         </span>
       </span>
 
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={`Adicionar ${asset.name} à cena`}
-        onClick={onAdd}
-      >
-        <Plus />
-      </Button>
+      {onAdd ? (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Adicionar ${asset.name} à cena`}
+          onClick={onAdd}
+        >
+          <Plus />
+        </Button>
+      ) : null}
       {/* Menu com o resto: transmitir para a mesa, mover entre pastas — que
           também se faz arrastando, mas o arrasto não alcança pasta rolada fora
           de vista — e apagar. Só o `+` fica solto na linha; ícones lado a lado
@@ -996,10 +1034,26 @@ function AssetRow({
               fica, evidência é "olha isto" — o retrato do PNJ, o documento, a
               carta. Antes disto, mostrar um handout obrigava a jogá-lo no mapa
               e depois apagá-lo de lá. */}
-          <DropdownMenuItem onClick={noAr ? clear : () => transmit(asset.id)}>
-            {noAr ? <RadioTower /> : <Radio />}
-            {noAr ? "Tirar da evidência" : "Transmitir para a mesa"}
-          </DropdownMenuItem>
+          {imagem ? (
+            <DropdownMenuItem onClick={noAr ? clear : () => transmit(asset.id)}>
+              {noAr ? <RadioTower /> : <Radio />}
+              {noAr ? "Tirar da evidência" : "Transmitir para a mesa"}
+            </DropdownMenuItem>
+          ) : (
+            // Arquivo que não é imagem abre por fora, no programa do sistema:
+            // PDF no leitor, texto no editor. A biblioteca guarda; quem lê é
+            // quem já sabe ler.
+            <DropdownMenuItem
+              onClick={() =>
+                void assetUrl(asset.id)
+                  .then((url) => openUrl(url))
+                  .catch(() => toast.error("Não deu para abrir o arquivo."))
+              }
+            >
+              <ExternalLink />
+              Abrir
+            </DropdownMenuItem>
+          )}
 
           {/* Mover de pasta saiu deste menu: é arrasto, e só arrasto. Com
               pastas dentro de pastas a lista de destinos crescia até cobrir o
