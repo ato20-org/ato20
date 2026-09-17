@@ -4,11 +4,12 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
+  BookPlus,
   CalendarDays,
   Clock,
   FileArchive,
-  FolderOpen,
   FolderPlus,
+  FolderSearch,
   Hourglass,
   Loader2,
   MonitorOff,
@@ -26,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { useAtualizacao } from "@/hooks/use-atualizacao";
 import { useCaminhoCurto } from "@/hooks/use-caminho-curto";
 import { useCapaDaCampanha } from "@/hooks/use-capa-da-campanha";
+import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useEstante } from "@/hooks/use-estante";
 import { Livro3D } from "@/components/mestre/livro-3d";
 import { abrirLivroNoSistema } from "@/lib/vault/estante";
@@ -35,7 +37,7 @@ import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
 import type { RecentEntry } from "@/lib/vault/campaign";
-import { NovidadesLaterais } from "@/components/desktop/versoes-lista";
+import type { Livro } from "@/lib/vault/estante";
 
 /**
  * Porta do Mestre: qual pasta abrir.
@@ -117,8 +119,29 @@ function CampaignDoor() {
   const openFolder = useCampaignStore((state) => state.openFolder);
   const forget = useCampaignStore((state) => state.forget);
   const importar = useCampaignStore((state) => state.importar);
+  const importarZip = useCampaignStore((state) => state.importarZip);
+
+  const estante = useEstante();
 
   const [creating, setCreating] = useState(false);
+
+  /**
+   * O que cai na porta, vindo do sistema: PDF vai para a estante, zip vira
+   * campanha. Os dois são os únicos arquivos que fazem sentido antes de haver
+   * campanha aberta, e cada um já tem o próprio botão aqui; soltar é o mesmo
+   * gesto sem o seletor. Um zip só por vez: importar abre a campanha, e duas
+   * abrindo ao mesmo tempo não é um estado que exista.
+   */
+  const noAr = useArrastoDeArquivo("[data-porta]", (caminhos) => {
+    const pdfs = caminhos.filter((c) => /\.pdf$/i.test(c));
+    const zips = caminhos.filter((c) => /\.zip$/i.test(c));
+
+    if (pdfs.length > 0) void estante.adicionar(pdfs);
+    if (zips[0]) void importarZip(zips[0]);
+
+    if (pdfs.length === 0 && zips.length === 0)
+      toast.error("Aqui entram PDF, para a estante, e zip de campanha.");
+  });
 
   if (creating) return <CreateForm onCancel={() => setCreating(false)} />;
 
@@ -129,7 +152,7 @@ function CampaignDoor() {
   const [ultima, ...outras] = recents;
 
   return (
-    <Porta lateral={<NovidadesLaterais />}>
+    <Porta arrastando={noAr !== null}>
       <header className="flex flex-col items-center gap-3 text-center">
         {/* A logo com o NOME ao lado, e não um ícone de pasta.
             Esta é a primeira tela do aplicativo -- antes dela não há nada --,
@@ -158,6 +181,47 @@ function CampaignDoor() {
         </h1>
       </header>
 
+      {/* As três em linha logo abaixo do título, antes da lista: são as portas
+          de entrada, e ficavam no pé, atrás de doze campanhas e da estante --
+          quem chegava com um zip na mão rolava até o fim para achar onde
+          usá-lo. O mesmo peso nas três, com lista ou sem ela.
+
+          "Encontrar campanha" e não "Abrir uma pasta": o que a pessoa procura é
+          uma campanha que já existe no disco; a pasta é como o sistema a
+          guarda, e nomear o gesto pela pasta fazia a porta parecer um seletor
+          de arquivos. */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() => void openFolder()}
+        >
+          {busy ? <Loader2 className="animate-spin" /> : <FolderSearch />}
+          Encontrar campanha
+        </Button>
+
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() => setCreating(true)}
+        >
+          <FolderPlus />
+          Criar campanha
+        </Button>
+
+        {/* Importar mora aqui, e não atrás da campanha aberta: quem recebeu um
+            zip de outro mestre ainda não tem campanha nenhuma, e a porta é a
+            primeira tela que ele vê. Soltar o zip na porta faz o mesmo. */}
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() => void importar()}
+        >
+          <FileArchive />
+          Importar de um zip
+        </Button>
+      </div>
+
       {ultima ? (
         <Secao titulo="Continuar">
           <CampanhaLinha
@@ -184,42 +248,11 @@ function CampaignDoor() {
         </Secao>
       ) : null}
 
-      <Estante />
-
-      {/* As três em linha, e não empilhadas ocupando a largura: com a lista
-          acima elas são saída secundária, e três botões de largura cheia
-          competiam com as campanhas pelo mesmo peso visual.
-
-          O mesmo peso nas três, com lista ou sem ela. Antes "Criar campanha"
-          virava botão cheio na primeira abertura, e era metade do que fazia a
-          porta vazia parecer outra tela. */}
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button
-          variant="ghost"
-          disabled={busy}
-          onClick={() => void openFolder()}
-        >
-          {busy ? <Loader2 className="animate-spin" /> : <FolderOpen />}
-          Abrir uma pasta
-        </Button>
-
-        <Button
-          variant="ghost"
-          disabled={busy}
-          onClick={() => setCreating(true)}
-        >
-          <FolderPlus />
-          Criar campanha
-        </Button>
-
-        {/* Importar mora aqui, e não atrás da campanha aberta: quem recebeu um
-            zip de outro mestre ainda não tem campanha nenhuma, e a porta é a
-            primeira tela que ele vê. */}
-        <Button variant="ghost" disabled={busy} onClick={() => void importar()}>
-          <FileArchive />
-          Importar de um zip
-        </Button>
-      </div>
+      <Estante
+        livros={estante.livros}
+        onAdicionar={() => void estante.importar()}
+        onRemover={(id) => void estante.remover(id)}
+      />
 
       {error ? (
         <p className="text-destructive text-center text-sm">{error}</p>
@@ -241,27 +274,67 @@ function CampaignDoor() {
  * da mesa, que é outra feature. O que esta faixa faz é lembrar que os livros
  * estão lá, e em que página cada um parou.
  *
- * Some quando está vazia, em vez de convidar a importar: a porta já tem três
- * ações, e uma quarta competindo por atenção na primeira abertura é ruído.
+ * Sempre à vista, com o botão de adicionar no título: a estante vazia é onde
+ * o manual entra, e a primeira abertura é justamente quando ele ainda não
+ * entrou. Soltar um PDF em qualquer lugar da porta faz o mesmo que o botão.
+ *
+ * Os livros vêm de fora, e não de um `useEstante` próprio: a porta já tem um,
+ * porque o arquivo solto nela precisa da mesma lista para recarregar.
  */
-function Estante() {
-  const { livros } = useEstante();
-
-  if (livros.length === 0) return null;
-
+function Estante({
+  livros,
+  onAdicionar,
+  onRemover,
+}: {
+  livros: Livro[];
+  onAdicionar: () => void;
+  onRemover: (id: string) => void;
+}) {
   return (
     <section className="space-y-1.5">
-      <h2 className="text-muted-foreground px-1 text-xs font-medium tracking-wide uppercase">
-        Na estante
-      </h2>
+      <div className="flex items-center gap-2 px-1">
+        <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+          Na estante
+        </h2>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-foreground ml-auto h-6 px-2 text-xs"
+          onClick={onAdicionar}
+        >
+          <BookPlus />
+          Adicionar livro
+        </Button>
+      </div>
+
+      {livros.length === 0 ? (
+        <p className="text-muted-foreground px-1 text-xs">
+          Nenhum livro ainda. Só PDF entra, e ele fica nesta máquina, fora do
+          zip da campanha. Dá para soltar o arquivo aqui.
+        </p>
+      ) : null}
 
       {/* Prateleira, e não lista: com capa, cada livro é uma caixa em pé, e
           caixas ficam lado a lado. Rola na horizontal quando não cabem, em vez
           de empurrar a lista de campanhas para baixo. Abre no programa de PDF
           da máquina -- ver `abrirLivroNoSistema`. */}
       <ul className="-mx-2 flex gap-1 overflow-x-auto px-2 pt-2 pb-1">
-        {livros.map((livro) => (
-          <li key={livro.id} className="shrink-0">
+        {livros.map((livro: Livro) => (
+          // `group` no `li` e não no livro: o `Livro3D` já é um `<button>`, e
+          // botão dentro de botão é marcação inválida. O X fica ao lado, por
+          // cima do canto da capa, e só aparece com o mouse em cima ou o foco
+          // nele -- uma prateleira com um X permanente em cada livro parece
+          // uma lista de coisas para apagar.
+          <li key={livro.id} className="group relative shrink-0">
+            <Button
+              variant="secondary"
+              size="icon-xs"
+              aria-label={`Tirar ${livro.arquivo} da estante`}
+              className="absolute top-1 right-1 z-10 rounded-full opacity-0 shadow group-hover:opacity-100 focus-visible:opacity-100"
+              onClick={() => onRemover(livro.id)}
+            >
+              <X />
+            </Button>
             <Livro3D
               livro={livro}
               onAbrir={() => {
@@ -483,48 +556,52 @@ function Numero({
  * é apresentação e não escolha.
  */
 /**
- * O corpo da porta: a coluna do mestre e, encostado na borda, o painel lateral.
+ * A moldura da porta: uma coluna centrada, com rolagem quando não cabe.
  *
- * Em duas colunas a rolagem é de CADA UMA, e o `lg:overflow-hidden` aqui é o que
- * garante isso: sem ele as duas rolariam juntas na página, e o painel deixaria
- * de ser painel -- descer para ler uma versão antiga levaria a lista de
- * campanhas embora.
- *
- * Empilhado, o contrário: a rolagem volta a ser da página. Com o corte aqui e a
- * área de rolagem lá dentro, o painel que vem depois da coluna ficaria fora do
- * quadro e sem como ser alcançado -- a altura que ele precisaria para rolar por
- * dentro só existe quando ele é uma COLUNA ao lado, esticada pela linha.
- *
- * O painel traz a própria largura, a própria divisa e o próprio `aside`; aqui
- * ele é só o segundo filho da linha. É o que permite não desenhar nada quando
- * não há o que mostrar, em vez de deixar uma coluna vazia ocupando espaço.
- *
- * Linha só a partir de `lg`. Abaixo disso o painel empilha embaixo: a janela do
- * aplicativo tem `minWidth: 1024` e nunca chega lá, mas as mesmas telas abrem no
- * navegador em `pnpm dev`, e 20rem espremidas ao lado da lista de campanhas não
- * servem a ninguém.
+ * Já teve uma coluna lateral com as novidades da versão. Saiu para o botão ao
+ * lado das Configurações, na barra da janela -- ver `NovidadesDialog` --, e a
+ * porta voltou a ser uma coluna só, com a largura inteira para as campanhas.
  */
 function Porta({
   children,
-  lateral,
+  arrastando = false,
 }: {
   children: React.ReactNode;
-  lateral?: React.ReactNode;
+  /** Há arquivo do sistema pairando sobre a porta. */
+  arrastando?: boolean;
 }) {
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+    // `data-porta` é a zona do arquivo solto -- ver `useArrastoDeArquivo` no
+    // `CampaignDoor`. A coluna inteira, e não só a estante: quem larga um zip
+    // não sabe que ele "pertence" a um pedaço da tela.
+    <div
+      data-porta
+      className="relative flex flex-1 flex-col overflow-y-auto"
+    >
       {/* `my-auto` no filho em vez de `items-center` no pai, e rolagem no pai:
           a lista guarda doze campanhas, e numa janela baixa a coluna passa da
           tela. Centralizar por `items-center` com estouro corta o topo -- o
           conteúdo sobe acima do início da área rolável e vira inalcançável.
           Assim ela centraliza quando cabe e rola quando não cabe. */}
-      <div className="flex flex-1 justify-center p-6 lg:min-h-0 lg:overflow-y-auto">
+      <div className="flex flex-1 justify-center p-6">
         <div className="my-auto flex w-full max-w-xl flex-col gap-6">
           {children}
         </div>
       </div>
 
-      {lateral}
+      {/* A moldura do arrasto: tracejada por cima de tudo, dizendo o que vai
+          acontecer ao soltar. `pointer-events-none` para o `elementFromPoint`
+          do arrasto continuar achando a zona embaixo dela. */}
+      {arrastando ? (
+        <div
+          aria-hidden
+          className="border-primary/70 bg-primary/5 pointer-events-none absolute inset-3 flex items-center justify-center rounded-xl border-2 border-dashed"
+        >
+          <p className="bg-background/90 rounded-md border px-3 py-1.5 text-sm shadow">
+            Solte: PDF vai para a estante, zip vira campanha
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
