@@ -41,6 +41,7 @@ import { useToolStore } from "@/lib/store/use-tool-store";
 import { executarComando } from "@/lib/extensoes/carregar";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
+import { usePaletaStore } from "@/lib/store/use-paleta-store";
 
 /**
  * De quanto o empurrão anda por tecla.
@@ -65,6 +66,7 @@ const SETAS: Record<string, { x: number; y: number }> = {
  * mando isto para trás", não "o que o Ctrl faz".
  */
 export type GrupoAtalho =
+  | "Paleta"
   | "Desfazer"
   | "Área de transferência"
   | "Câmera"
@@ -123,6 +125,17 @@ function letra(evento: KeyboardEvent): string {
  * ser montado uma vez e nunca mais.
  */
 export const ATALHOS_BASE: Atalho[] = [
+  {
+    grupo: "Paleta",
+    tecla: "Ctrl+K",
+    rotulo: "Abrir a paleta de comandos",
+    combina: (evento) => comando(evento) && letra(evento) === "k",
+    // Primeira da tabela de propósito: a paleta é o caminho para todo o resto,
+    // e nenhum outro atalho pode tomar o Ctrl+K dela por precedência.
+    executar: () => usePaletaStore.getState().alternar(),
+    // Ctrl+K no WebKitGTK foca a barra de busca do browser.
+    impedirPadrao: true,
+  },
   // Desfazer no alto da tabela: Ctrl+Z é o atalho que não pode falhar.
   {
     grupo: "Desfazer",
