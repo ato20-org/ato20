@@ -30,8 +30,19 @@ import type { CameraSalva, Viewport } from "@/types/scene";
 /** Acima do gizmo de seleção: a câmera é a camada de enquadramento. */
 const FRAME_Z = 12_000;
 const HANDLES_Z = 12_500;
-/** Abaixo da moldura e de todo item: a máscara só escurece, nunca cobre. */
-const MASCARA_Z = 11_000;
+/**
+ * A máscara escurece o que a MESA vê, e nada do que é só do mestre.
+ *
+ * Acima dos itens, da névoa (5000), dos retratos e dos dados (6000): tudo isso
+ * vai para a TV, e o escuro diz "isto está fora do enquadramento". Abaixo do
+ * laço do alfinete (8000), do postit (8500), do contorno de seleção, do
+ * alfinete e do gizmo: nenhum deles chega à mesa -- `sceneForTable` os tira do
+ * quadro -- e escurecê-los dizia o contrário do que é. O caso que doeu foi o
+ * postit: papel amarelo estacionado na margem, fora da câmera, ficava cinza e
+ * ilegível justamente onde o mestre o pôs para ler enquanto a mesa não vê.
+ * Era 11 000, acima de tudo menos a moldura.
+ */
+const MASCARA_Z = 7_000;
 
 // Tamanhos em pixels de tela: divididos pelo scale, ficam iguais em todo zoom.
 /** Espessura da faixa de arraste nas bordas. */
