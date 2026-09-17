@@ -6,6 +6,8 @@ import {
   ancoraNaBorda,
   caixaDe,
   ligavelEm,
+  pontaEm,
+  pontasDe,
   semReferencia,
 } from "./ligacoes";
 
@@ -104,5 +106,46 @@ describe("semReferencia", () => {
 
   it("deixa a lista ausente em paz", () => {
     expect(semReferencia(undefined, ["a"])).toBeUndefined();
+  });
+});
+
+describe("pontasDe", () => {
+  it("ponta livre fica onde está, e a ancorada encosta na borda virada para ela", () => {
+    const scene = cenaComTudo();
+    const pontas = pontasDe(scene, { tipo: "item", id: "img" }, { x: 1000, y: 150 })!;
+    // A imagem vai de 100 a 300 em x; a borda direita é 300, na altura do alvo.
+    expect(pontas.a).toEqual({ x: 300, y: 150 });
+    expect(pontas.b).toEqual({ x: 1000, y: 150 });
+  });
+
+  it("duas pontas livres é um risco: os dois pontos como estão", () => {
+    const scene = cenaComTudo();
+    expect(pontasDe(scene, { x: 1, y: 2 }, { x: 3, y: 4 })).toEqual({
+      a: { x: 1, y: 2 },
+      b: { x: 3, y: 4 },
+    });
+  });
+
+  it("âncora que perdeu o alvo derruba a seta", () => {
+    const scene = cenaComTudo();
+    expect(pontasDe(scene, { tipo: "postit", id: "nada" }, { x: 0, y: 0 })).toBeNull();
+  });
+});
+
+describe("pontaEm", () => {
+  it("ancora no que há sob o ponto, e fica livre no vazio", () => {
+    const scene = cenaComTudo();
+    expect(pontaEm(scene, { x: 150, y: 150 })).toEqual({ tipo: "item", id: "img" });
+    expect(pontaEm(scene, { x: 10.4, y: 10.6 })).toEqual({ x: 10, y: 11 });
+  });
+});
+
+describe("semReferencia com ponta livre", () => {
+  it("ponta livre não morre com ninguém", () => {
+    const ligacoes = [
+      { id: "l1", de: { x: 0, y: 0 }, para: { tipo: "postit" as const, id: "a" } },
+      { id: "l2", de: { x: 0, y: 0 }, para: { x: 5, y: 5 } },
+    ];
+    expect(semReferencia(ligacoes, ["a"])?.map((l) => l.id)).toEqual(["l2"]);
   });
 });

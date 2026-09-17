@@ -25,7 +25,7 @@ import {
   reorderByZ,
   type ZDirection,
 } from "@/lib/mestre/z-order";
-import { mesmaRef, semReferencia } from "@/lib/mestre/ligacoes";
+import { ancorada, mesmaPonta, semReferencia } from "@/lib/mestre/ligacoes";
 import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
   cloneScene,
@@ -56,7 +56,7 @@ import {
   type NewMedidor,
   type NewTexto,
   type Pasta,
-  type RefLigacao,
+  type PontaDeLigacao,
   type Texto,
   type Ligacao,
   TEXTO_TAMANHO,
@@ -305,19 +305,20 @@ type SceneStore = {
   ) => void;
 
   /**
-   * Seta entre duas coisas do quadro. Recusa ponta igual à outra e seta
-   * repetida entre as mesmas duas, no mesmo sentido. Devolve o id, ou `null`
-   * quando recusou.
+   * Seta no quadro, com cada ponta ancorada numa coisa ou livre num ponto.
+   * Recusa as duas pontas na mesma coisa e seta repetida entre as mesmas
+   * duas âncoras, no mesmo sentido. Devolve o id, ou `null` quando recusou.
    */
   addLigacao: (
     sceneId: string,
-    de: RefLigacao,
-    para: RefLigacao,
+    de: PontaDeLigacao,
+    para: PontaDeLigacao,
   ) => string | null;
+  /** Rótulo, ou uma ponta movida -- para outro ponto, ou para outra âncora. */
   updateLigacao: (
     sceneId: string,
     ligacaoId: string,
-    patch: Partial<Pick<Ligacao, "rotulo">>,
+    patch: Partial<Pick<Ligacao, "rotulo" | "de" | "para">>,
   ) => void;
   removeLigacao: (sceneId: string, ligacaoId: string) => void;
 };
@@ -1146,13 +1147,16 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     },
 
     addLigacao(sceneId, de, para) {
-      if (mesmaRef(de, para)) return null;
+      if (mesmaPonta(de, para)) return null;
 
       const scene = get().board?.scenes.find((atual) => atual.id === sceneId);
       if (!scene) return null;
       if (
+        ancorada(de) &&
+        ancorada(para) &&
         scene.ligacoes?.some(
-          (ligacao) => mesmaRef(ligacao.de, de) && mesmaRef(ligacao.para, para),
+          (ligacao) =>
+            mesmaPonta(ligacao.de, de) && mesmaPonta(ligacao.para, para),
         )
       )
         return null;
@@ -1174,6 +1178,8 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           const proxima = { ...ligacao, ...patch };
           // Rótulo vazio é ausência, como as listas vazias da cena.
           if (!proxima.rotulo?.trim()) delete proxima.rotulo;
+          // Ponta movida para cima da outra âncora: fica onde estava.
+          if (mesmaPonta(proxima.de, proxima.para)) return ligacao;
           return proxima;
         }),
       }));

@@ -14,7 +14,7 @@ import { PostitFantasma } from "@/components/mestre/postit-fantasma";
 import { PostitLayer } from "@/components/mestre/postit-layer";
 import { LigacaoLayer } from "@/components/mestre/ligacao-layer";
 import { TextoLayer } from "@/components/mestre/texto-layer";
-import { ligavelEm } from "@/lib/mestre/ligacoes";
+import { pontaEm } from "@/lib/mestre/ligacoes";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
 import type { PontaDoMedidor } from "@/components/playground/medidor-layer";
@@ -189,6 +189,9 @@ function distanciaAoSegmento(
  * Camada interativa do Mestre. Precisa viver dentro de `SceneStage` para ter
  * acesso ao fator de escala do palco.
  */
+/** Menor arrasto que vira seta, em unidades de cena. Abaixo disso é clique. */
+const ARRASTO_MINIMO_DA_SETA = 8;
+
 export function MestreStage({ scene }: { scene: Scene }) {
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
@@ -264,13 +267,9 @@ export function MestreStage({ scene }: { scene: Scene }) {
   // A seta em andamento e a seleção de texto/seta são desta cena: trocar de
   // cena ou largar a ferramenta de seta desfaz a primeira ponta clicada.
   const limparQuadro = useQuadroStore((state) => state.limpar);
-  const setOrigem = useQuadroStore((state) => state.setOrigem);
   useEffect(() => {
     limparQuadro();
   }, [scene.id, limparQuadro]);
-  useEffect(() => {
-    if (tool !== "ligacao") setOrigem(null);
-  }, [tool, setOrigem]);
   // A câmera que o mestre está editando. Ver `useCameraLockStore`.
   const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
   const espelhoMestre = useCameraLockStore((state) => state.espelhoMestre);
@@ -1068,24 +1067,30 @@ export function MestreStage({ scene }: { scene: Scene }) {
       return;
     }
 
-    // Dois cliques: de onde, para onde. A ferramenta FICA na mão depois da
-    // seta pronta -- amarrar cinco ideias seguidas é o gesto normal num
-    // quadro, e Esc larga. Clique no vazio sem ponta ainda não faz nada;
-    // com uma ponta, desiste dela.
+    // Arrasto, como no Excalidraw: de onde o botão descer até onde soltar.
+    // Cada ponta prende-se ao que houver embaixo, ou fica solta na folha. A
+    // ferramenta FICA na mão depois da seta pronta -- amarrar cinco ideias
+    // seguidas é o gesto normal num quadro, e Esc larga. Um clique sem
+    // arrasto não cria nada: seta de comprimento zero é um ponto.
     if (tool === "ligacao") {
-      const alvo = ligavelEm(scene, anchor);
-      const origem = useQuadroStore.getState().origem;
+      const de = pontaEm(scene, anchor);
+      const quadro = useQuadroStore.getState();
+      quadro.setPrevia({ de, ate: { x: anchor.x, y: anchor.y } });
 
-      if (!origem) {
-        if (alvo) setOrigem(alvo);
-        return;
-      }
-
-      if (alvo) {
-        const id = addLigacao(scene.id, origem, alvo);
-        if (id) useQuadroStore.getState().selecionarLigacao(id);
-      }
-      setOrigem(null);
+      startDrag(event, {
+        onMove: (_delta, native) =>
+          useQuadroStore
+            .getState()
+            .setPrevia({ de, ate: toScene(native.clientX, native.clientY) }),
+        onEnd: (native) => {
+          useQuadroStore.getState().setPrevia(null);
+          const fim = toScene(native.clientX, native.clientY);
+          if (Math.hypot(fim.x - anchor.x, fim.y - anchor.y) < ARRASTO_MINIMO_DA_SETA)
+            return;
+          const id = addLigacao(scene.id, de, pontaEm(scene, fim));
+          if (id) useQuadroStore.getState().selecionarLigacao(id);
+        },
+      });
       return;
     }
 

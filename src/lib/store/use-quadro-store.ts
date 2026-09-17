@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import type { RefLigacao } from "@/types/scene";
+import type { PontaDeLigacao, Vec2 } from "@/types/scene";
 
 /** Abaixo do postit (8 500) e acima das imagens: letra na folha, sob o papel. */
 export const TEXTO_Z = 8_000;
@@ -21,13 +21,16 @@ type QuadroStore = {
   textoEditandoId: string | null;
   textoSelecionadoId: string | null;
   ligacaoSelecionadaId: string | null;
-  /** A primeira ponta já clicada com a ferramenta de seta. */
-  origem: RefLigacao | null;
+  /**
+   * A seta sendo puxada: de onde o arrasto começou e onde o cursor está.
+   * `null` fora do gesto. Só a camada desenha; quem escreve é o palco.
+   */
+  previa: { de: PontaDeLigacao; ate: Vec2 } | null;
 
   editarTexto: (textoId: string | null) => void;
   selecionarTexto: (textoId: string | null) => void;
   selecionarLigacao: (ligacaoId: string | null) => void;
-  setOrigem: (origem: RefLigacao | null) => void;
+  setPrevia: (previa: { de: PontaDeLigacao; ate: Vec2 } | null) => void;
   /** Larga tudo: Esc, troca de cena, troca de ferramenta. */
   limpar: () => void;
 };
@@ -36,7 +39,7 @@ export const useQuadroStore = create<QuadroStore>((set) => ({
   textoEditandoId: null,
   textoSelecionadoId: null,
   ligacaoSelecionadaId: null,
-  origem: null,
+  previa: null,
 
   editarTexto: (textoEditandoId) =>
     set({ textoEditandoId, textoSelecionadoId: textoEditandoId, ligacaoSelecionadaId: null }),
@@ -44,12 +47,12 @@ export const useQuadroStore = create<QuadroStore>((set) => ({
     set({ textoSelecionadoId, ligacaoSelecionadaId: null }),
   selecionarLigacao: (ligacaoSelecionadaId) =>
     set({ ligacaoSelecionadaId, textoSelecionadoId: null }),
-  setOrigem: (origem) => set({ origem }),
+  setPrevia: (previa) => set({ previa }),
   limpar: () =>
     set({
       textoEditandoId: null,
       textoSelecionadoId: null,
       ligacaoSelecionadaId: null,
-      origem: null,
+      previa: null,
     }),
 }));

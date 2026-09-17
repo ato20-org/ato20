@@ -2,6 +2,7 @@ import { itemBounds, type Bounds } from "@/lib/geometry/bounds";
 import { rotateVec, type Vec } from "@/lib/geometry/transform";
 import type {
   Ligacao,
+  PontaDeLigacao,
   RefLigacao,
   Scene,
   Texto,
@@ -180,6 +181,16 @@ export function mesmaRef(a: RefLigacao, b: RefLigacao): boolean {
   return a.tipo === b.tipo && a.id === b.id;
 }
 
+/** A ponta está presa a uma coisa do quadro, e não solta na folha? */
+export function ancorada(ponta: PontaDeLigacao): ponta is RefLigacao {
+  return "tipo" in ponta;
+}
+
+/** As duas pontas ancoradas na mesma coisa. Seta de um postit para ele mesmo. */
+export function mesmaPonta(a: PontaDeLigacao, b: PontaDeLigacao): boolean {
+  return ancorada(a) && ancorada(b) && mesmaRef(a, b);
+}
+
 /**
  * As ligações que sobrevivem quando `ids` somem da cena. Por id só, sem tipo:
  * os ids são únicos entre todas as listas, e conferir o tipo aqui obrigaria
@@ -194,8 +205,9 @@ export function semReferencia(
 ): Ligacao[] | undefined {
   if (!ligacoes?.length) return ligacoes;
   const mortos = new Set(ids);
+  const morta = (ponta: PontaDeLigacao) => ancorada(ponta) && mortos.has(ponta.id);
   const vivas = ligacoes.filter(
-    (ligacao) => !mortos.has(ligacao.de.id) && !mortos.has(ligacao.para.id),
+    (ligacao) => !morta(ligacao.de) && !morta(ligacao.para),
   );
   return vivas.length > 0 ? vivas : undefined;
 }
@@ -210,15 +222,38 @@ export type Seta = { ligacao: Ligacao; a: Vec; b: Vec };
  */
 export function setasDe(scene: Scene): Seta[] {
   return (scene.ligacoes ?? []).flatMap((ligacao) => {
-    const de = caixaDe(scene, ligacao.de);
-    const para = caixaDe(scene, ligacao.para);
-    if (!de || !para) return [];
-    return [
-      {
-        ligacao,
-        a: ancoraNaBorda(de, centroDe(para)),
-        b: ancoraNaBorda(para, centroDe(de)),
-      },
-    ];
+    const pontas = pontasDe(scene, ligacao.de, ligacao.para);
+    return pontas ? [{ ligacao, ...pontas }] : [];
   });
+}
+
+/**
+ * Onde as duas pontas de uma seta ficam de fato. Ponta livre é o próprio
+ * ponto; ponta ancorada encosta na borda da caixa, virada para a outra ponta
+ * -- para o centro da outra caixa quando ela também é ancorada, e para o ponto
+ * quando é livre. `null` quando uma âncora perdeu o alvo.
+ */
+export function pontasDe(
+  scene: Scene,
+  de: PontaDeLigacao,
+  para: PontaDeLigacao,
+): { a: Vec; b: Vec } | null {
+  const caixaDe_ = ancorada(de) ? caixaDe(scene, de) : null;
+  const caixaPara = ancorada(para) ? caixaDe(scene, para) : null;
+  if ((ancorada(de) && !caixaDe_) || (ancorada(para) && !caixaPara)) return null;
+
+  const miraDe = caixaPara ? centroDe(caixaPara) : (para as Vec);
+  const miraPara = caixaDe_ ? centroDe(caixaDe_) : (de as Vec);
+
+  return {
+    a: caixaDe_ ? ancoraNaBorda(caixaDe_, miraDe) : (de as Vec),
+    b: caixaPara ? ancoraNaBorda(caixaPara, miraPara) : (para as Vec),
+  };
+}
+
+/** A ponta que um solte neste ponto cria: ancorada no que há ali, ou livre. */
+export function pontaEm(scene: Scene, ponto: Vec): PontaDeLigacao {
+  return (
+    ligavelEm(scene, ponto) ?? { x: Math.round(ponto.x), y: Math.round(ponto.y) }
+  );
 }

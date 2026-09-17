@@ -9,8 +9,15 @@ import {
   SETA_ROTULO_PX,
   SetaSvg,
 } from "@/components/playground/quadro-mesa-layer";
-import { ancoraNaBorda, caixaDe, setasDe } from "@/lib/mestre/ligacoes";
+import { useSceneDrag } from "@/hooks/use-scene-drag";
 import type { Vec } from "@/lib/geometry/transform";
+import {
+  ancorada,
+  pontaEm,
+  pontasDe,
+  setasDe,
+  type Seta,
+} from "@/lib/mestre/ligacoes";
 import { LIGACAO_Z, useQuadroStore } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
@@ -18,20 +25,28 @@ import { cn } from "@/lib/utils";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
-  type RefLigacao,
+  type Ligacao,
+  type PontaDeLigacao,
   type Scene,
 } from "@/types/scene";
 
 /** Largura da faixa invisível que recebe o clique, em pixels de tela. */
 const ALVO_PX = 14;
+/** Diâmetro da alça de cada ponta, em pixels de tela. */
+const ALCA_PX = 10;
 
 /**
- * As setas do quadro, e a que está sendo puxada.
+ * As setas do quadro, a que está sendo puxada, e as alças da selecionada.
  *
  * Um `<svg>` só, em coordenadas de cena, como o `PinTethers`: dentro do palco
  * uma unidade do `viewBox` é uma unidade de cena, e a seta acompanha zoom e
- * deslocamento sem conta de projeção. As pontas saem de `caixaDe`, lidas da
- * cena a cada render -- mover o postit já move a seta.
+ * deslocamento sem conta de projeção. As pontas saem de `pontasDe`, lidas da
+ * cena a cada render -- mover o postit já move a seta ancorada nele.
+ *
+ * Como no Excalidraw: a seta selecionada mostra uma alça em cada ponta, e
+ * arrastar a alça leva a ponta; soltar sobre uma coisa do quadro ancora nela,
+ * soltar no vazio deixa a ponta livre ali. A alça ancorada é cheia, a livre é
+ * vazada -- é o que diz de relance quem acompanha o postit e quem não.
  *
  * Ponta e espessura em pixel de tela, divididos pela escala: uma seta que
  * engordasse no zoom viraria faixa; uma que afinasse sumiria.
@@ -39,33 +54,12 @@ const ALVO_PX = 14;
 export function LigacaoLayer({ scene }: { scene: Scene }) {
   const { scale, toScene } = useSceneScale();
   const tool = useToolStore((state) => state.tool);
-  const origem = useQuadroStore((state) => state.origem);
+  const previa = useQuadroStore((state) => state.previa);
   const selecionadaId = useQuadroStore((state) => state.ligacaoSelecionadaId);
   const selecionar = useQuadroStore((state) => state.selecionarLigacao);
 
   const updateLigacao = useSceneStore((state) => state.updateLigacao);
-
-  /**
-   * Onde o cursor está, enquanto a primeira ponta já foi clicada. Só então:
-   * ouvir o mouse o tempo todo custaria um render por movimento num quadro
-   * que não está puxando nada.
-   *
-   * Guarda a origem junto, e não limpa no efeito: a amostra de uma seta
-   * anterior é ignorada por identidade quando a origem muda, sem `setState`
-   * dentro do efeito.
-   */
-  const [amostra, setAmostra] = useState<{
-    origem: RefLigacao;
-    ponto: Vec;
-  } | null>(null);
-  useEffect(() => {
-    if (!origem || tool !== "ligacao") return;
-    const mover = (native: PointerEvent) =>
-      setAmostra({ origem, ponto: toScene(native.clientX, native.clientY) });
-    window.addEventListener("pointermove", mover);
-    return () => window.removeEventListener("pointermove", mover);
-  }, [origem, tool, toScene]);
-  const cursor = amostra && amostra.origem === origem ? amostra.ponto : null;
+  const startDrag = useSceneDrag();
 
   // Antes do retorno cedo: hook não pode ficar atrás de `return null`.
   const pontaComum = useId();
@@ -76,16 +70,53 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
     if (editandoRotuloId) campo.current?.focus();
   }, [editandoRotuloId]);
 
+  /**
+   * A ponta em arrasto, enquanto o mestre a leva: qual seta, qual lado e onde
+   * está. Local, e não na cena: a cena só recebe a ponta quando ela é solta,
+   * e é aí que se decide se ancora ou fica livre.
+   */
+  const [levando, setLevando] = useState<{
+    ligacaoId: string;
+    lado: "de" | "para";
+    ate: Vec;
+  } | null>(null);
+
   const ligacoes = scene.ligacoes ?? [];
   const puxando =
-    origem && cursor && tool === "ligacao" ? caixaDe(scene, origem) : null;
+    previa && tool === "ligacao" ? pontasDe(scene, previa.de, previa.ate) : null;
 
   if (ligacoes.length === 0 && !puxando) return null;
 
   const px = (valor: number) => valor / scale;
 
-  const setas = setasDe(scene);
+  const setas = setasDe(scene).map((seta) =>
+    levando && seta.ligacao.id === levando.ligacaoId
+      ? comPontaLevada(scene, seta, levando.lado, levando.ate)
+      : seta,
+  );
   const editando = setas.find(({ ligacao }) => ligacao.id === editandoRotuloId);
+  const selecionada = setas.find(({ ligacao }) => ligacao.id === selecionadaId);
+
+  function levarPonta(
+    event: React.PointerEvent,
+    ligacao: Ligacao,
+    lado: "de" | "para",
+  ) {
+    if (event.button !== 0) return;
+    startDrag(event, {
+      onMove: (_delta, native) =>
+        setLevando({
+          ligacaoId: ligacao.id,
+          lado,
+          ate: toScene(native.clientX, native.clientY),
+        }),
+      onEnd: (native) => {
+        setLevando(null);
+        const ponto = toScene(native.clientX, native.clientY);
+        updateLigacao(scene.id, ligacao.id, { [lado]: pontaEm(scene, ponto) });
+      },
+    });
+  }
 
   return (
     <>
@@ -105,7 +136,7 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
 
         {setas.map((seta) => {
           const { ligacao, a, b } = seta;
-          const selecionada = ligacao.id === selecionadaId;
+          const viva = ligacao.id === selecionadaId;
 
           return (
             <g key={ligacao.id}>
@@ -125,8 +156,8 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
                 )}
                 style={{ pointerEvents: "stroke" }}
                 onPointerDown={(event) => {
-                  // Com a seta na mão o clique é do palco, que procura um alvo
-                  // debaixo; uma seta não é alvo de seta.
+                  // Com a seta na mão o clique é do palco, que começa outra
+                  // seta dali; uma seta não é âncora de seta.
                   if (tool === "ligacao") return;
                   event.stopPropagation();
                   selecionar(ligacao.id);
@@ -139,8 +170,8 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
               <SetaSvg
                 seta={seta}
                 escala={scale}
-                ponta={selecionada ? pontaViva : pontaComum}
-                className={selecionada ? "stroke-primary" : "stroke-foreground/70"}
+                ponta={viva ? pontaViva : pontaComum}
+                className={viva ? "stroke-primary" : "stroke-foreground/70"}
                 // O rótulo some enquanto o campo dele está aberto no mesmo lugar.
                 rotulo={editandoRotuloId !== ligacao.id}
               />
@@ -148,26 +179,45 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
           );
         })}
 
-        {/* A seta sendo puxada: da borda da origem até o cursor, tracejada
-            porque ainda não é. */}
-        {puxando && cursor
-          ? (() => {
-              const a = ancoraNaBorda(puxando, cursor);
+        {/* As alças da selecionada, por cima de todas as setas. Cheia quando a
+            ponta está ancorada, vazada quando está livre. */}
+        {selecionada && tool !== "ligacao"
+          ? (["de", "para"] as const).map((lado) => {
+              const ponto = lado === "de" ? selecionada.a : selecionada.b;
+              const presa = ancorada(selecionada.ligacao[lado]);
               return (
-                <line
-                  x1={a.x}
-                  y1={a.y}
-                  x2={cursor.x}
-                  y2={cursor.y}
-                  className="stroke-primary/70"
-                  strokeWidth={px(SETA_TRACO_PX)}
-                  strokeDasharray={`${px(6)} ${px(6)}`}
-                  strokeLinecap="round"
-                  markerEnd={`url(#${pontaViva})`}
+                <circle
+                  key={lado}
+                  cx={ponto.x}
+                  cy={ponto.y}
+                  r={px(ALCA_PX) / 2}
+                  className={cn(
+                    "pointer-events-auto cursor-move stroke-primary",
+                    presa ? "fill-primary" : "fill-card",
+                  )}
+                  strokeWidth={px(2)}
+                  onPointerDown={(event) =>
+                    levarPonta(event, selecionada.ligacao, lado)
+                  }
                 />
               );
-            })()
+            })
           : null}
+
+        {/* A seta sendo puxada: tracejada porque ainda não é. */}
+        {puxando ? (
+          <line
+            x1={puxando.a.x}
+            y1={puxando.a.y}
+            x2={puxando.b.x}
+            y2={puxando.b.y}
+            className="stroke-primary/70"
+            strokeWidth={px(SETA_TRACO_PX)}
+            strokeDasharray={`${px(6)} ${px(6)}`}
+            strokeLinecap="round"
+            markerEnd={`url(#${pontaViva})`}
+          />
+        ) : null}
       </svg>
 
       {/* O campo do rótulo, em HTML e não em `<foreignObject>`: o WebKitGTK
@@ -209,4 +259,23 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
       ) : null}
     </>
   );
+}
+
+/**
+ * A seta com uma ponta no cursor, enquanto a alça é arrastada. A outra ponta
+ * continua onde a cena diz, mas recalculada virada para o cursor -- uma ponta
+ * ancorada encosta na borda do lado de quem a puxa.
+ */
+function comPontaLevada(
+  scene: Scene,
+  seta: Seta,
+  lado: "de" | "para",
+  ate: Vec,
+): Seta {
+  const livre: PontaDeLigacao = { x: ate.x, y: ate.y };
+  const pontas =
+    lado === "de"
+      ? pontasDe(scene, livre, seta.ligacao.para)
+      : pontasDe(scene, seta.ligacao.de, livre);
+  return pontas ? { ...seta, ...pontas } : seta;
 }

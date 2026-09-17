@@ -117,7 +117,7 @@ const FERRAMENTAS_QUADRO: Ferramenta[] = [
   {
     tool: "ligacao",
     label: "Seta",
-    hint: "Clique de onde e depois para onde: postit, texto, imagem ou ponto. Duplo clique na seta dá um rótulo. Esc larga.",
+    hint: "Arraste de onde até onde, como no Excalidraw. A ponta solta sobre postit, texto, imagem ou ponto prende-se nele; no vazio fica livre. Selecionada, as alças movem as pontas; duplo clique dá rótulo. Esc larga.",
     icon: Spline,
   },
 ];

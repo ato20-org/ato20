@@ -355,16 +355,30 @@ export type TipoLigavel = "item" | "postit" | "texto" | "pin";
 export type RefLigacao = { tipo: TipoLigavel; id: string };
 
 /**
- * Uma seta entre duas coisas do quadro.
+ * Uma ponta de seta: ANCORADA numa coisa do quadro, ou LIVRE num ponto.
  *
- * Guarda as REFERÊNCIAS, e não pontos: mover o postit leva a seta junto, que é
- * o que faz dela um vínculo e não um risco. A ponta que perde o alvo -- postit
- * apagado -- leva a ligação com ela; ver `semReferencia`.
+ * Ancorada, a seta acompanha a coisa e encosta na borda dela. Livre, é um
+ * ponto na folha, como uma seta desenhada à mão. As duas formas se distinguem
+ * pelo campo `tipo`, e só a ancorada tem id: ver `ancorada`.
+ */
+export type PontaDeLigacao = RefLigacao | Vec2;
+
+/** Um ponto em coordenadas de cena. */
+export type Vec2 = { x: number; y: number };
+
+/**
+ * Uma seta no quadro, como no Excalidraw: pode existir sozinha, apontando
+ * para o nada, e prende-se a uma coisa quando a ponta é solta sobre ela.
+ *
+ * A ponta ancorada guarda a REFERÊNCIA, e não o ponto: mover o postit leva a
+ * seta junto, que é o que faz dela um vínculo e não um risco. A ponta que
+ * perde o alvo -- postit apagado -- leva a ligação com ela; ver
+ * `semReferencia`.
  */
 export type Ligacao = {
   id: string;
-  de: RefLigacao;
-  para: RefLigacao;
+  de: PontaDeLigacao;
+  para: PontaDeLigacao;
   /** O que a seta diz, no meio dela. Ausente = nada. */
   rotulo?: string;
 };
@@ -929,15 +943,19 @@ export function cloneScene(source: Scene, name: string): Scene {
     // mesmos arquivos.
     handout: source.handout ? [...source.handout] : undefined,
     textos: source.textos?.map(renovar),
-    ligacoes: source.ligacoes?.map((ligacao) => ({
-      ...ligacao,
-      id: novoId(),
-      de: { ...ligacao.de, id: novos.get(ligacao.de.id) ?? ligacao.de.id },
-      para: {
-        ...ligacao.para,
-        id: novos.get(ligacao.para.id) ?? ligacao.para.id,
-      },
-    })),
+    // Ponta ancorada aponta para a cópia; ponta livre é só um ponto e vem igual.
+    ligacoes: source.ligacoes?.map((ligacao) => {
+      const renovada = (ponta: PontaDeLigacao): PontaDeLigacao =>
+        "tipo" in ponta
+          ? { ...ponta, id: novos.get(ponta.id) ?? ponta.id }
+          : ponta;
+      return {
+        ...ligacao,
+        id: novoId(),
+        de: renovada(ligacao.de),
+        para: renovada(ligacao.para),
+      };
+    }),
     createdAt: now,
     updatedAt: now,
   };
