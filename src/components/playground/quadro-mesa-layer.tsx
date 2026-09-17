@@ -166,14 +166,28 @@ export function giroDoTexto(texto: Texto): React.CSSProperties | undefined {
     : undefined;
 }
 
-/** Um texto solto, só para ler. O mestre usa este mesmo desenho fora da edição. */
-export function TextoView({ texto }: { texto: Texto }) {
+/**
+ * Um texto solto, só para ler. O mestre usa este mesmo desenho fora da edição,
+ * e mede a caixa dele por `ref` -- é o `<div>` de dentro, o que tem a fonte,
+ * porque o de fora só desfaz o `zoom` do plano.
+ */
+export function TextoView({
+  texto,
+  ref,
+}: {
+  texto: Texto;
+  ref?: React.Ref<HTMLDivElement>;
+}) {
   const { scale, ampliacaoNoLayout } = useSceneScale();
   const { medida, estilo } = tipografiaDoTexto(texto, scale, ampliacaoNoLayout);
 
   return (
     <div style={medida}>
-      <div className="text-foreground whitespace-pre select-none" style={estilo}>
+      <div
+        ref={ref}
+        className="text-foreground inline-block whitespace-pre select-none"
+        style={estilo}
+      >
         {texto.texto}
       </div>
     </div>

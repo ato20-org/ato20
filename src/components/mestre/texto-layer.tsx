@@ -106,6 +106,37 @@ function TextoSolto({
   }, [sceneId, texto.id, removeTexto]);
 
   const raiz = useRef<HTMLDivElement | null>(null);
+  const desenho = useRef<HTMLDivElement | null>(null);
+  const medirTexto = useSceneStore((state) => state.medirTexto);
+
+  /**
+   * Mede o texto desenhado e guarda a caixa na cena. É o que faz o gizmo e a
+   * seta encostarem onde a letra termina, e não onde a estimativa achou.
+   *
+   * `offsetWidth` e não `getBoundingClientRect`: o `offset*` ignora o giro e o
+   * `transform` do plano. Sob `zoom`, o `<div>` medido tem a fonte em pixel de
+   * tela e um `zoom` de 1/escala por cima -- a medida sai em pixel, e dividir
+   * pela escala devolve unidades de cena. Sob `transform`, a fonte já está em
+   * unidades de cena e a medida também.
+   */
+  useEffect(() => {
+    if (editando) return;
+    const alvo = desenho.current;
+    if (!alvo || scale === 0) return;
+
+    const medir = () => {
+      const fator = ampliacaoNoLayout ? 1 / scale : 1;
+      medirTexto(sceneId, texto.id, {
+        largura: Math.round(alvo.offsetWidth * fator * 10) / 10,
+        altura: Math.round(alvo.offsetHeight * fator * 10) / 10,
+      });
+    };
+
+    medir();
+    const observador = new ResizeObserver(medir);
+    observador.observe(alvo);
+    return () => observador.disconnect();
+  }, [editando, scale, ampliacaoNoLayout, sceneId, texto.id, texto.texto, texto.tamanho, medirTexto]);
 
   useEffect(() => {
     if (!editando) return;
@@ -221,7 +252,7 @@ function TextoSolto({
           />
         ) : null}
       </div>
-      {editando ? null : <TextoView texto={texto} />}
+      {editando ? null : <TextoView ref={desenho} texto={texto} />}
     </div>
 
       {/* As mesmas alças da imagem: cantos escalam a fonte, a alça de cima

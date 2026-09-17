@@ -52,8 +52,9 @@ export function caixaDoTexto(texto: Texto): Bounds {
 export function caixaRetaDoTexto(texto: Texto): Bounds {
   const linhas = texto.texto.split("\n");
   const maior = Math.max(1, ...linhas.map((linha) => linha.length));
-  const largura = maior * texto.tamanho * LARGURA_POR_LETRA;
-  const altura = linhas.length * texto.tamanho * ALTURA_DA_LINHA;
+  // A medida real quando o mestre já desenhou o texto; a estimativa antes.
+  const largura = texto.largura ?? maior * texto.tamanho * LARGURA_POR_LETRA;
+  const altura = texto.altura ?? linhas.length * texto.tamanho * ALTURA_DA_LINHA;
 
   return {
     minX: texto.x,

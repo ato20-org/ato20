@@ -332,6 +332,14 @@ export type Texto = {
   tamanho: number;
   /** Giro em graus, em volta do centro da caixa, como o item. Ausente = 0. */
   rotation?: number;
+  /**
+   * A caixa MEDIDA na tela do mestre, em unidades de cena, sem o giro.
+   * Ausente até o primeiro render: aí vale a estimativa de `caixaRetaDoTexto`.
+   * Gravada porque a mesa também precisa dela para a seta encostar no lugar
+   * certo, e a mesa não tem como medir antes de desenhar.
+   */
+  largura?: number;
+  altura?: number;
 };
 
 export type NewTexto = Pick<Texto, "x" | "y"> &

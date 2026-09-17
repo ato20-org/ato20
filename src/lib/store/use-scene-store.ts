@@ -292,6 +292,17 @@ type SceneStore = {
     patch: Partial<Omit<Texto, "id">>,
   ) => void;
   removeTexto: (sceneId: string, textoId: string) => void;
+  /**
+   * Guarda a caixa medida de um texto. Sem histórico: medir não é edição, e
+   * um Ctrl+Z que desfizesse uma medida seria um Ctrl+Z que não faz nada.
+   * Ignora diferença abaixo de meia unidade, para o observador não gravar
+   * o board a cada quadro por ruído de arredondamento.
+   */
+  medirTexto: (
+    sceneId: string,
+    textoId: string,
+    caixa: { largura: number; altura: number },
+  ) => void;
 
   /**
    * Seta entre duas coisas do quadro. Recusa ponta igual à outra e seta
@@ -1097,6 +1108,40 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           textos: restantes.length > 0 ? restantes : undefined,
           ligacoes: semReferencia(scene.ligacoes, [textoId]),
         };
+      });
+    },
+
+    medirTexto(sceneId, textoId, caixa) {
+      const { board } = get();
+      if (!board) return;
+
+      const scene = board.scenes.find((atual) => atual.id === sceneId);
+      const texto = scene?.textos?.find((atual) => atual.id === textoId);
+      if (!scene || !texto) return;
+      if (
+        texto.largura !== undefined &&
+        texto.altura !== undefined &&
+        Math.abs(texto.largura - caixa.largura) < 0.5 &&
+        Math.abs(texto.altura - caixa.altura) < 0.5
+      )
+        return;
+
+      set({
+        board: {
+          ...board,
+          scenes: board.scenes.map((atual) =>
+            atual.id !== sceneId
+              ? atual
+              : {
+                  ...atual,
+                  textos: (atual.textos ?? []).map((candidato) =>
+                    candidato.id === textoId
+                      ? { ...candidato, ...caixa }
+                      : candidato,
+                  ),
+                },
+          ),
+        },
       });
     },
 
