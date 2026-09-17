@@ -149,7 +149,12 @@ export function PinWindow({
         // clique que o traz para a frente só chegava quando se acertava um
         // campo. É o mesmo `pointer-events-auto` que o papel do postit declara,
         // pela mesma razão.
-        className="bg-popover text-popover-foreground pointer-events-auto rounded-lg border p-3 shadow-lg"
+        // O mesmo cromo da janela da bancada (`InnerWindow`): fundo, borda,
+        // canto e sombra iguais, sem padding aqui -- o cabeçalho colado na
+        // borda e o corpo com o próprio recuo são do `PinNote`. O cartão do
+        // ponto já era uma janela em tudo menos na cara, e duas caras para a
+        // mesma coisa faziam o mestre procurar o X em lugares diferentes.
+        className="bg-popover text-popover-foreground pointer-events-auto flex flex-col overflow-hidden rounded-lg border shadow-2xl"
         style={{
           width: LARGURA_PX,
           // A partir do canto de cima quando é `transform`: com a origem no
