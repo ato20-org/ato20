@@ -1,7 +1,32 @@
 "use client";
 
+import { createContext, useContext } from "react";
+
+import { TokenView, type Vinculos } from "@/components/mestre/postit-texto-view";
 import { bloco, trechos, type Bloco, type Trecho } from "@/lib/markdown/linha";
 import { cn } from "@/lib/utils";
+
+/**
+ * Sem vínculo nenhum: a menção é só o nome. `@Edgar` sai como texto, sem
+ * ficha atrás, sem retrato, sem pular de cena. É o padrão da mesa, que não
+ * tem nada disso, e do que quer que desenhe Markdown sem fornecer os seus.
+ */
+export const SEM_VINCULOS: Vinculos = {
+  personagem: () => null,
+  arquivo: () => null,
+  cena: () => null,
+  irParaCena: () => undefined,
+  abrirJanela: () => undefined,
+};
+
+/**
+ * Os vínculos das menções, por contexto e não por prop: a linha de Markdown é
+ * desenhada por três camadas (editor, cartão, mesa) e por dentro de blocos,
+ * e passar `vinculos` por cinco níveis para cada `@` seria o mesmo objeto em
+ * toda assinatura. O mestre fornece os dele -- ver `useMencoesDoMestre` --
+ * uma vez, na raiz de cada camada.
+ */
+export const VinculosContext = createContext<Vinculos>(SEM_VINCULOS);
 
 /**
  * Uma linha de Markdown desenhada. É o mesmo desenho no editor do mestre --
@@ -101,9 +126,13 @@ function Trechos({ conteudo }: { conteudo: string }) {
 }
 
 function TrechoView({ trecho }: { trecho: Trecho }) {
+  const vinculos = useContext(VinculosContext);
+
   switch (trecho.tipo) {
     case "texto":
       return <>{trecho.valor}</>;
+    case "mencao":
+      return <TokenView token={trecho.token} vinculos={vinculos} />;
     case "negrito":
       return <strong className="font-semibold">{trecho.valor}</strong>;
     case "italico":

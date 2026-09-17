@@ -201,7 +201,7 @@ function LinhaView({ linha, vinculos }: { linha: Linha; vinculos: Vinculos }) {
   return <span className={BLOCO[linha.bloco]}>{conteudo}</span>;
 }
 
-function TokenView({
+export function TokenView({
   token,
   vinculos,
 }: {

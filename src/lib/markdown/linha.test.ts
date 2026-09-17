@@ -49,3 +49,29 @@ describe("trechos", () => {
     expect(trechos("")).toEqual([]);
   });
 });
+
+describe("trechos com menção", () => {
+  it("@personagem, /arquivo e >cena saem como menção, com o resto em volta", () => {
+    const saida = trechos("fala com @Edgar sobre /mapa.jpg em >Porão, *rápido*");
+    expect(saida.map((t) => t.tipo)).toEqual([
+      "texto",
+      "mencao",
+      "texto",
+      "mencao",
+      "texto",
+      "mencao",
+      "texto",
+      "italico",
+    ]);
+    const primeira = saida[1];
+    expect(primeira.tipo === "mencao" && primeira.token.tipo).toBe("personagem");
+  });
+
+  it("negrito continua vindo do parser do postit", () => {
+    expect(trechos("a **b** c")).toEqual([
+      { tipo: "texto", valor: "a " },
+      { tipo: "negrito", valor: "b" },
+      { tipo: "texto", valor: " c" },
+    ]);
+  });
+});

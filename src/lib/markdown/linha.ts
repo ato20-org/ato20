@@ -13,6 +13,9 @@
  * biblioteca de Markdown inteira pesaria no pacote que a TV também carrega.
  */
 
+import type { Token } from "@/lib/mencoes/texto";
+import { parsePostit, type TipoNoPostit } from "@/lib/mestre/postit-mencoes";
+
 export type Bloco =
   | { tipo: "titulo"; nivel: 1 | 2 | 3; conteudo: string }
   | { tipo: "item"; conteudo: string }
@@ -57,27 +60,46 @@ export type Trecho =
   | { tipo: "negrito"; valor: string }
   | { tipo: "italico"; valor: string }
   | { tipo: "codigo"; valor: string }
-  | { tipo: "link"; valor: string; url: string };
+  | { tipo: "link"; valor: string; url: string }
+  /**
+   * `@personagem`, `/arquivo` ou `>cena`: as mesmas menções do postit, com o
+   * mesmo parser. É o que faz a nota apontar para o que existe na campanha.
+   */
+  | { tipo: "mencao"; token: Token<TipoNoPostit> };
 
 /**
- * Os trechos de dentro de uma linha: `**negrito**`, `*itálico*`, `` `código` ``
- * e `[texto](url)`. Sem aninhar: negrito com itálico dentro sai como negrito
- * com asteriscos, e é o custo aceito de um analisador que cabe numa tela.
+ * Os trechos de dentro de uma linha: as menções e o `**negrito**` pelo parser
+ * do postit, e por cima dos pedaços de texto que sobram, `*itálico*`,
+ * `` `código` `` e `[texto](url)`. Sem aninhar: negrito com itálico dentro sai
+ * como negrito com asteriscos, e é o custo aceito de um analisador que cabe
+ * numa tela.
  */
 export function trechos(conteudo: string): Trecho[] {
   const saida: Trecho[] = [];
-  const re = /(\*\*(.+?)\*\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)\s]+)\))|((?<![*\w])\*(?!\s)(.+?)(?<!\s)\*(?![*\w]))|((?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w))/g;
+
+  for (const token of parsePostit(conteudo)) {
+    if (token.tipo === "texto") saida.push(...trechosSimples(token.valor));
+    else if (token.tipo === "bold") saida.push({ tipo: "negrito", valor: token.valor });
+    else if (token.tipo === "quebra") continue;
+    else saida.push({ tipo: "mencao", token });
+  }
+
+  return saida;
+}
+
+function trechosSimples(conteudo: string): Trecho[] {
+  const saida: Trecho[] = [];
+  const re = /(`([^`]+)`)|(\[([^\]]+)\]\(([^)\s]+)\))|((?<![*\w])\*(?!\s)(.+?)(?<!\s)\*(?![*\w]))|((?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w))/g;
   let cursor = 0;
 
   for (const m of conteudo.matchAll(re)) {
     const inicio = m.index ?? 0;
     if (inicio > cursor) saida.push({ tipo: "texto", valor: conteudo.slice(cursor, inicio) });
 
-    if (m[2] !== undefined) saida.push({ tipo: "negrito", valor: m[2] });
-    else if (m[4] !== undefined) saida.push({ tipo: "codigo", valor: m[4] });
-    else if (m[6] !== undefined) saida.push({ tipo: "link", valor: m[6], url: m[7]! });
+    if (m[2] !== undefined) saida.push({ tipo: "codigo", valor: m[2] });
+    else if (m[4] !== undefined) saida.push({ tipo: "link", valor: m[4], url: m[5]! });
+    else if (m[7] !== undefined) saida.push({ tipo: "italico", valor: m[7] });
     else if (m[9] !== undefined) saida.push({ tipo: "italico", valor: m[9] });
-    else if (m[11] !== undefined) saida.push({ tipo: "italico", valor: m[11] });
 
     cursor = inicio + m[0].length;
   }

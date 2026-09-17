@@ -44,7 +44,7 @@ export const SINAIS_EM_ORDEM = Object.keys(SINAIS_DO_POSTIT) as SinalDoPostit[];
 export const TITULO_DO_POSTIT: Record<SinalDoPostit, string> = {
   "@": "Personagens da campanha",
   "/": "Arquivos da campanha",
-  ">": "Cenas do board",
+  ">": "Mapas e quadros",
 };
 
 export function parsePostit(texto: string): Array<Token<TipoNoPostit>> {
