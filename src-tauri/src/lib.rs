@@ -162,6 +162,7 @@ pub fn run() {
             commands::daemon_addr,
             commands::abrir_no_navegador,
             commands::campaign_recents,
+            commands::campaign_capa,
             commands::campaign_forget,
             commands::campaign_open,
             commands::campaign_create,

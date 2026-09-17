@@ -17,7 +17,9 @@ use crate::vault::session::Json;
 use crate::vault::characters::{Anexo, Autor, Campo, Personagem};
 use crate::vault::players::{Attachment, Player};
 use crate::vault::inventory::{self, Item};
-use crate::vault::{assets, board, characters, players, session, zip, CampaignInfo, Vault};
+use crate::vault::{
+    assets, board, characters, players, session, variantes, zip, CampaignInfo, Vault,
+};
 
 pub struct AppState {
     pub vault: SharedVault,
@@ -253,6 +255,61 @@ pub fn campaign_recents(state: State<'_, AppState>) -> AppResult<Vec<RecentEntry
             }
         })
         .collect())
+}
+
+/// A capa de uma campanha da lista: a miniatura do fundo da cena em edicao.
+///
+/// Para a porta de entrada, com a campanha FECHADA -- nao ha daemon servindo
+/// este vault, e por isso o desenho e o dos anexos: bytes crus pelo canal
+/// binario do IPC, e a webview faz uma blob URL. A miniatura (160px) e
+/// suficiente porque a tela a desenha desfocada, de fundo.
+///
+/// Prefere a cena em edicao, depois a que estava no ar, depois a primeira que
+/// tenha fundo: e "onde o mestre parou", que e o que o cartao quer lembrar.
+///
+/// Resposta VAZIA, e nao erro, quando nao ha o que mostrar -- campanha sem
+/// cena, cena sem fundo, fundo apagado do acervo. A lista de recentes nao pode
+/// cair por causa de uma capa.
+#[tauri::command]
+pub fn campaign_capa(path: String) -> AppResult<tauri::ipc::Response> {
+    let vault = Vault::open(&path)?;
+
+    let Some(board) = board::load(&vault)? else {
+        return Ok(tauri::ipc::Response::new(Vec::new()));
+    };
+
+    let fundo_de = |id: &Option<String>| -> Option<String> {
+        let id = id.as_deref()?;
+        board
+            .scenes
+            .iter()
+            .find(|scene| scene.get("id").and_then(|v| v.as_str()) == Some(id))
+            .and_then(|scene| scene.get("backgroundAssetId"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+    };
+
+    let asset_id = fundo_de(&board.editing_scene_id)
+        .or_else(|| fundo_de(&board.live_scene_id))
+        .or_else(|| {
+            board
+                .scenes
+                .iter()
+                .find_map(|scene| scene.get("backgroundAssetId").and_then(|v| v.as_str()))
+                .map(str::to_string)
+        });
+
+    let Some(asset_id) = asset_id else {
+        return Ok(tauri::ipc::Response::new(Vec::new()));
+    };
+
+    let Some(meta) = assets::find(&vault, &asset_id)? else {
+        return Ok(tauri::ipc::Response::new(Vec::new()));
+    };
+
+    let caminho = variantes::ensure(&vault, variantes::Variante::Mini, &meta)?;
+
+    Ok(tauri::ipc::Response::new(std::fs::read(caminho)?))
 }
 
 #[tauri::command]

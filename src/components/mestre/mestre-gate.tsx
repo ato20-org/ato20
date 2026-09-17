@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAtualizacao } from "@/hooks/use-atualizacao";
 import { useCaminhoCurto } from "@/hooks/use-caminho-curto";
+import { useCapaDaCampanha } from "@/hooks/use-capa-da-campanha";
 import { useEstante } from "@/hooks/use-estante";
 import { Livro3D } from "@/components/mestre/livro-3d";
 import { abrirLivroNoSistema } from "@/lib/vault/estante";
@@ -328,6 +329,7 @@ function CampanhaLinha({
   onForget: (path: string) => Promise<void> | void;
 }) {
   const encurtar = useCaminhoCurto();
+  const capa = useCapaDaCampanha(entry.path, entry.existe);
 
   return (
     <li className="group flex items-center gap-1">
@@ -337,7 +339,7 @@ function CampanhaLinha({
           // `h-auto` porque o tamanho do botão crava `h-8`, e `min-w-0` porque
           // `truncate` só corta dentro de largura definida -- sem ele um
           // caminho longo estica a porta inteira.
-          "h-auto min-w-0 flex-1 flex-col items-start gap-0.5 px-3 text-left",
+          "relative h-auto min-w-0 flex-1 flex-col items-start gap-0.5 overflow-hidden px-3 text-left",
           destaque ? "py-3" : "py-2",
         )}
         // Pasta que não está no disco continua na lista de propósito: o volume
@@ -346,19 +348,44 @@ function CampanhaLinha({
         disabled={busy || !entry.existe}
         onClick={() => void onOpen(entry.path)}
       >
+        {/* O mapa da cena onde o mestre parou, desfocado, sumindo para a
+            direita: lembra QUAL campanha é esta antes de o nome ser lido, e
+            não disputa com o texto, que fica na metade limpa. A miniatura é
+            de 160px e o blur esconde o resto. */}
+        {capa ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={capa}
+            alt=""
+            aria-hidden
+            draggable={false}
+            className={cn(
+              "pointer-events-none absolute inset-y-0 left-0 w-1/2 scale-110 object-cover blur-sm",
+              destaque ? "opacity-45" : "opacity-30",
+            )}
+            style={{
+              maskImage:
+                "linear-gradient(to right, black 0%, black 30%, transparent 100%)",
+            }}
+          />
+        ) : null}
+
         <span
-          className={cn("w-full truncate", destaque ? "text-base" : "text-sm")}
+          className={cn(
+            "relative w-full truncate",
+            destaque ? "text-base" : "text-sm",
+          )}
         >
           {entry.nome}
         </span>
-        <span className="text-muted-foreground w-full truncate text-xs font-normal">
+        <span className="text-muted-foreground relative w-full truncate text-xs font-normal">
           {entry.existe
             ? encurtar(entry.path)
             : `${encurtar(entry.path)} — não encontrada`}
         </span>
 
         {destaque && entry.existe ? (
-          <span className="mt-3 grid w-full grid-cols-3 gap-3 border-t border-border/60 pt-3">
+          <span className="relative mt-3 grid w-full grid-cols-3 gap-3 border-t border-border/60 pt-3">
             <Numero
               icone={Clock}
               rotulo="Última sessão"

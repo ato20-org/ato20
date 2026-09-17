@@ -37,6 +37,20 @@ export function recentCampaigns(): Promise<RecentEntry[]> {
   return call<RecentEntry[]>("campaign_recents");
 }
 
+/**
+ * A capa de uma campanha da lista: o fundo da cena em que o mestre parou.
+ *
+ * `null` quando não há o que mostrar, ou quando a pasta não responde. Blob
+ * URL, e não endereço do daemon: a campanha está FECHADA, e nada a serve.
+ * Ver `campaign_capa` no Rust.
+ */
+export async function campaignCapaUrl(path: string): Promise<string | null> {
+  const bytes = await call<ArrayBuffer>("campaign_capa", { path });
+  if (bytes.byteLength === 0) return null;
+
+  return URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+}
+
 export function forgetCampaign(path: string): Promise<void> {
   return call("campaign_forget", { path });
 }
