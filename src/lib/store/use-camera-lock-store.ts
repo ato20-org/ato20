@@ -3,11 +3,7 @@
 import { create } from "zustand";
 
 import { boundsOfItems, type Bounds } from "@/lib/geometry/bounds";
-import {
-  clampViewport,
-  FULL_VIEWPORT,
-  viewportQueCabe,
-} from "@/lib/geometry/viewport";
+import { clampViewport, viewportQueCabe } from "@/lib/geometry/viewport";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -42,8 +38,10 @@ type CameraLockStore = {
 
   selecionar: (cameraId: string) => void;
   /**
-   * Garante que a cena tenha ao menos uma câmera e que a selecionada exista
-   * nela. Chamado pelo palco do Mestre a cada cena aberta.
+   * Garante que a selecionada exista na cena, e migra a cena antiga que tinha
+   * recorte sem câmeras. Chamado pelo palco do Mestre a cada cena aberta.
+   * Cena nova fica SEM câmera: a mesa vê o mapa inteiro até o mestre criar
+   * uma, e criar já transmite.
    */
   garantirCameraInicial: (scene: Scene) => void;
   /** Prende a selecionada no que está selecionado agora. Sem seleção, nada. */
@@ -95,17 +93,21 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
 
   garantirCameraInicial: (scene) => {
     const store = useSceneStore.getState();
-    let cameras = scene.cameras ?? [];
+    // Do store, e não da prop: o efeito que chama isto pode rodar duas vezes
+    // com a mesma cena em mãos, e a segunda chamada via a lista vazia de antes
+    // da primeira ter gravado -- e a cena nascia com duas câmeras iguais.
+    const atual =
+      store.board?.scenes.find((cena) => cena.id === scene.id) ?? scene;
+    let cameras = atual.cameras ?? [];
 
-    if (cameras.length === 0) {
+    if (cameras.length === 0 && atual.camera) {
       // Cena antiga com recorte e sem câmeras: o recorte vira a Câmera 1 e
-      // continua no ar, para a TV não pular ao abrir o app novo. Sem recorte,
-      // a Câmera 1 nasce no plano inteiro, sem transmitir.
+      // continua no ar, para a TV não pular ao abrir o app novo.
       const id = store.salvarCamera(scene.id, {
         nome: "Câmera 1",
-        viewport: scene.camera ?? FULL_VIEWPORT,
+        viewport: atual.camera,
       });
-      if (scene.camera) store.transmitirCamera(scene.id, id);
+      store.transmitirCamera(scene.id, id);
 
       cameras = selectEditingScene(useSceneStore.getState())?.cameras ?? [];
     }

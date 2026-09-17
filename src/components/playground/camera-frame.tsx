@@ -456,7 +456,7 @@ function Alca({ transmitindo, scale, arrastando, onMove }: AlcaProps) {
         aria-label={transmitindo ? "Tirar do ar" : "Transmitir esta câmera"}
         title={
           transmitindo
-            ? "No ar. Clique tira do ar: a mesa fica escura."
+            ? "No ar. Clique tira do ar: a mesa vê a cena inteira."
             : "Transmitir: a mesa passa a ver esta câmera."
         }
         onPointerDown={(event) => event.stopPropagation()}

@@ -310,7 +310,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Shift+C",
-    rotulo: "Tirar do ar: a mesa fica escura",
+    rotulo: "Tirar do ar: a mesa vê a cena inteira",
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&

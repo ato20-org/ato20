@@ -255,7 +255,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
     (camera) => camera.id === selecionadaId,
   );
 
-  // Toda cena começa com a Câmera 1, e a selecionada tem de existir nela.
+  // Cena nova começa sem câmera; a selecionada, se houver, tem de existir nela.
   // Efeito e não render: cria câmera no store, e isso é escrita.
   useEffect(() => {
     garantirCameraInicial(scene);

@@ -121,9 +121,9 @@ type SceneStore = {
     cameraId: string,
     patch: Partial<Omit<CameraSalva, "id">>,
   ) => void;
-  /** Remove. Se era a que estava no ar, a mesa fica escura. */
+  /** Remove. Se era a que estava no ar, a mesa volta à cena inteira. */
   removerCamera: (sceneId: string, cameraId: string) => void;
-  /** Põe uma câmera no ar, ou nenhuma: aí a mesa fica escura. */
+  /** Põe uma câmera no ar, ou nenhuma: aí a mesa vê a cena inteira. */
   transmitirCamera: (sceneId: string, cameraId: string | undefined) => void;
   /**
    * Liga, ajusta ou desliga a grade da cena. `undefined` desliga.

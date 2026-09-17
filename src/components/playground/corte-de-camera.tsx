@@ -48,10 +48,9 @@ export function useCorteDeCamera(scene: Scene | null): {
   viewport: Viewport | undefined;
   corte: number;
   /**
-   * A cortina fechada: no meio de um corte, ou sem câmera no ar. Sem câmera
-   * a mesa fica escura -- mostrar a cena inteira revelaria o que o mestre
-   * ainda não pôs em quadro. A cena continua montada por baixo, para a
-   * câmera que entrar aparecer em fade e não estalar.
+   * A cortina fechada: só no meio de um corte. Sem câmera no ar a mesa vê a
+   * cena inteira, com a névoa que o mestre deixou; a câmera é recorte, não
+   * permissão.
    */
   cortando: boolean;
 } {
@@ -96,7 +95,7 @@ export function useCorteDeCamera(scene: Scene | null): {
     cena: cortando && sceneId !== exibido.sceneId ? null : scene,
     viewport: cortando ? congelado : camera,
     corte: exibido.corte,
-    cortando: cortando || (Boolean(scene) && !cameraId),
+    cortando,
   };
 }
 

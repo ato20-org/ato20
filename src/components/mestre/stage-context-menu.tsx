@@ -303,7 +303,7 @@ export function StageContextMenu({
           Trazer a câmera para aqui
           <ContextMenuShortcut>C</ContextMenuShortcut>
         </ContextMenuItem>
-        <ContextMenuItem disabled={!cameraSelecionada} onClick={() => void novaCamera()}>
+        <ContextMenuItem onClick={() => void novaCamera()}>
           <Plus />
           Nova câmera
           <ContextMenuShortcut>N</ContextMenuShortcut>
@@ -321,7 +321,7 @@ export function StageContextMenu({
         {scene.cameraNoArId ? (
           <ContextMenuItem onClick={mostrarCenaInteira}>
             <Maximize />
-            Tirar do ar
+            Mostrar a cena inteira
             <ContextMenuShortcut>Shift+C</ContextMenuShortcut>
           </ContextMenuItem>
         ) : null}

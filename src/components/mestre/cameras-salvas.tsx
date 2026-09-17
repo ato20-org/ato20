@@ -125,8 +125,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
         <TooltipContent>
           <p className="font-medium">Nova câmera</p>
           <p className="text-muted-foreground max-w-52">
-            Nasce sobre a selecionada, fora do ar. Ajusta e aperta T quando
-            quiser que a mesa a veja.
+            Nasce sobre a selecionada, ou sobre o que você vê, e já no ar.
           </p>
         </TooltipContent>
       </Tooltip>
@@ -158,7 +157,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
           </p>
           <p className="text-muted-foreground max-w-52">
             {transmitindo
-              ? "A mesa fica escura até outra câmera entrar."
+              ? "A mesa volta a ver a cena inteira."
               : "A mesa passa a ver a câmera selecionada."}
           </p>
         </TooltipContent>
@@ -228,7 +227,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={mostrarCenaInteira}>
                 <Maximize />
-                Tirar do ar
+                Mostrar a cena inteira
                 <DropdownMenuShortcut>Shift+C</DropdownMenuShortcut>
               </DropdownMenuItem>
             </>

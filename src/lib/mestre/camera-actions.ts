@@ -120,7 +120,7 @@ export function alternarTransmissao(): void {
     );
 }
 
-/** Tira qualquer câmera do ar: a mesa fica escura. */
+/** Tira qualquer câmera do ar: a mesa volta a ver a cena inteira. */
 export function mostrarCenaInteira(): void {
   const scene = lerCena();
   if (scene) useSceneStore.getState().transmitirCamera(scene.id, undefined);
@@ -208,7 +208,8 @@ export function irParaCamera(): void {
  *
  * Nome numerado por padrão: o mestre no meio da sessão não vai parar para
  * batizar, e "Câmera 3" já diz em que ordem nasceu. Renomeia depois, pelo
- * chip. Nasce fora do ar: criar é preparar, e transmitir é outro toque.
+ * chip. Nasce NO AR: quem cria uma câmera quer que a mesa a veja, e a cena
+ * inteira que a mesa via até então já era o recorte de partida.
  */
 export function novaCamera(nome?: string): string | undefined {
   const scene = lerCena();
@@ -221,6 +222,7 @@ export function novaCamera(nome?: string): string | undefined {
     viewport: base,
   });
 
+  useSceneStore.getState().transmitirCamera(scene.id, id);
   useCameraLockStore.getState().selecionar(id);
 
   return id;

@@ -678,9 +678,8 @@ export type Scene = {
    */
   cameras?: CameraSalva[];
   /**
-   * Qual câmera está transmitindo. Ausente = a mesa fica ESCURA: sem câmera
-   * no ar não há nada a mostrar, e mostrar a cena inteira revelaria o que o
-   * mestre ainda não quis revelar.
+   * Qual câmera está transmitindo. Ausente = a mesa vê a cena INTEIRA: o que
+   * o mestre não quer revelar fica atrás da névoa, não fora do quadro.
    *
    * Persistido e não derivado de `camera` porque duas câmeras podem ter o
    * mesmo recorte, e reabrir o app tem de acender o chip certo.
