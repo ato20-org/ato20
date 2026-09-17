@@ -9,10 +9,12 @@ import {
   flipSelection,
   moveSelectionZ,
   nudgeSelection,
+  PASSO_DE_GIRO,
   pasteClipboard,
   removeFogSelection,
   removePortraitSelection,
   removeSelection,
+  rotateSelection,
   selectAllItems,
 } from "@/lib/mestre/item-actions";
 import {
@@ -39,9 +41,14 @@ import { executarComando } from "@/lib/extensoes/carregar";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 
-/** De quanto o empurrão anda, e de quanto ele anda com Shift. */
-const EMPURRAO = 1;
-const EMPURRAO_LARGO = 10;
+/**
+ * De quanto o empurrão anda por tecla.
+ *
+ * Era 1, e um item a cem unidades de distância pedia cem toques. Passo de um
+ * fica para o mouse, que já tem o pixel; a seta é para andar. Shift+Setas
+ * deixou de ser o empurrão largo e virou giro -- ver `PASSO_DE_GIRO`.
+ */
+const EMPURRAO = 5;
 
 const SETAS: Record<string, { x: number; y: number }> = {
   ArrowLeft: { x: -1, y: 0 },
@@ -538,13 +545,14 @@ export const ATALHOS_BASE: Atalho[] = [
     impedirPadrao: true,
   },
 
+  // Esquerda e cima giram contra o relógio; direita e baixo, a favor.
   {
     grupo: "Seleção",
     tecla: "Shift+Setas",
-    rotulo: `Empurrar ${EMPURRAO_LARGO} de cada vez`,
+    rotulo: `Girar ${PASSO_DE_GIRO}° de cada vez`,
     combina: (evento) =>
       !comando(evento) && evento.shiftKey && evento.key in SETAS,
-    executar: (evento) => empurrar(evento, EMPURRAO_LARGO),
+    executar: (evento) => girar(evento, PASSO_DE_GIRO),
     impedirPadrao: true,
   },
   {
@@ -655,6 +663,13 @@ function moverMesa(evento: KeyboardEvent, passo: number): void {
   if (!seta) return;
 
   moverCamera(seta.x * passo, seta.y * passo);
+}
+
+function girar(evento: KeyboardEvent, passo: number): void {
+  const seta = SETAS[evento.key];
+  if (!seta) return;
+
+  rotateSelection((seta.x + seta.y) * passo);
 }
 
 function empurrar(evento: KeyboardEvent, passo: number): void {
