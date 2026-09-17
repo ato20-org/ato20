@@ -45,7 +45,7 @@ como ficou" em número.
 
 ## 2. O modo de depuração (use antes de teorizar)
 
-**Na tela:** `Ctrl+Alt+D` (Mestre, Espectador, Jogador; persiste). Mostra um
+**Na tela:** `Ctrl+Alt+D` ou `Ctrl+Shift+D` (Mestre, Espectador, Jogador; persiste — `Ctrl+Alt+D` é engolido pelo GNOME/KDE como "mostrar área de trabalho"). Mostra um
 HUD e duas **miras** no centro do plano: ciano (plano de controles) e magenta
 (plano de conteúdo). Alinhadas = os planos concordam. Separadas = um foi
 **pintado** fora do lugar, e a distância diz quanto.
@@ -58,8 +58,14 @@ python3 scripts/debug/ler-palco.py --todas    # tudo (anel de 300)
 curl -s http://127.0.0.1:20200/debug/palco | python3 -m json.tool | tail -60
 ```
 
+Se o atalho não responder e não der para ler a tela, force `lerLigado()` em
+`debug-palco.tsx` a devolver `true` por um instante e reabra o app: o HUD nasce
+ligado e um print basta.
+
 Cada amostra traz: `zoom`, `scale`, `dpr`, `modo` (zoom|transform), `raster`
 (`1920×scale×dpr`, px físicos), `viewport`, `esperado` (origem do plano),
+`sob` (o nó que `elementFromPoint` devolve sob o mouse, e se `[data-palco]`
+está na cadeia dele),
 `conteudo`/`controles` (retângulo medido no DOM), `miras` (centro medido de
 cada uma + **cadeia** de ancestrais com a origem de cada um), `stall` (maior
 buraco entre quadros).
@@ -72,6 +78,7 @@ buraco entre quadros).
 | DOM das miras coincide, tela mostra separadas | **pintura** do motor, não layout | o que infla/altera a camada composta (§3) |
 | `cadeia` com ancestral fora de `(0,0)` | um elemento entre a mira e o plano carrega deslocamento | esse elemento |
 | `transbordo ≠ 0` em qualquer plano | um filho passa da caixa do plano (§3, armadilha 1); o `pior` nomeia | esse elemento: encolha para o conteúdo |
+| `sob o ponteiro` sem `[data-palco]` na cadeia | o gesto no vazio está caindo em outro nó; a linha nomeia tag, classes, caixa e cadeia | esse nó: `pointer-events-none` nele, ou encolher a caixa (foi o envelope sem escala do plano de conteúdo, 1920×1080 cobrindo o `fundoDoPalco`) |
 | `stall` de centenas de ms | thread principal presa em raster | raster grande demais nesse `modo` |
 | bug só em `modo=zoom` | forma de ampliar por layout | `conteudoNoLayout` e o que está dentro do plano |
 | bug só depois de `pnpm build` / só na TV | código da TV é o `out/` | build primeiro |
