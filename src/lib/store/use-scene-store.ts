@@ -25,12 +25,14 @@ import {
   reorderByZ,
   type ZDirection,
 } from "@/lib/mestre/z-order";
+import { mesmaRef, semReferencia } from "@/lib/mestre/ligacoes";
 import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
   cloneScene,
   CORES_POSTIT,
   createEmptyBoard,
   createScene,
+  ehQuadro,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   type Board,
@@ -48,9 +50,16 @@ import {
   type Postit,
   type Scene,
   type SceneGrid,
+  type TipoDeCena,
   type Viewport,
   type Medidor,
   type NewMedidor,
+  type NewTexto,
+  type Pasta,
+  type RefLigacao,
+  type Texto,
+  type Ligacao,
+  TEXTO_TAMANHO,
 } from "@/types/scene";
 
 type HydrationStatus = "idle" | "loading" | "ready" | "error";
@@ -100,12 +109,30 @@ type SceneStore = {
   setEditingSceneId: (sceneId: string | null) => void;
   /** Coloca a cena no ar. `null` deixa a mesa sem nada. */
   setLiveSceneId: (sceneId: string | null) => void;
-  addScene: (name?: string) => string;
+  /**
+   * Cria e abre no palco. `tipo` ausente é mapa; `"quadro"` é a mesa de
+   * trabalho do mestre. O nome de fábrica conta só as do mesmo tipo: "Quadro 1"
+   * numa campanha de trinta mapas, e não "Quadro 31".
+   */
+  addScene: (name?: string, tipo?: TipoDeCena) => string;
   renameScene: (sceneId: string, name: string) => void;
   duplicateScene: (sceneId: string) => string | null;
   /** Posição na lista de cenas. É o que o arrasto da lista emite. */
   moveSceneToIndex: (sceneId: string, index: number) => void;
   removeScene: (sceneId: string) => void;
+
+  /**
+   * As pastas dos quadros. Espelham as do grupo de itens -- criar, renomear,
+   * recolher, mover, desfazer -- mas moram no board, porque atravessam cenas.
+   * Desfazer solta o que há dentro um nível acima; nunca apaga quadro.
+   */
+  criarPasta: (nome: string, parentId?: string) => string;
+  atualizarPasta: (pastaId: string, patch: Partial<Omit<Pasta, "id">>) => void;
+  /** Recusa ciclo: pasta dentro de descendente dela. */
+  moverPasta: (pastaId: string, parentId: string | undefined) => void;
+  removerPasta: (pastaId: string) => void;
+  /** Leva um quadro para uma pasta. `undefined` é a raiz. */
+  moverParaPasta: (sceneId: string, pastaId: string | undefined) => void;
   /** Primitiva única de mutação de cena. Toda operação de item usa isto. */
   updateScene: (sceneId: string, updater: (scene: Scene) => Scene) => void;
 
@@ -256,6 +283,43 @@ type SceneStore = {
     patch: Partial<Postit>,
   ) => void;
   removePostit: (sceneId: string, postitId: string) => void;
+
+  /** Texto solto do quadro. Ver `Texto`. Devolve o id. */
+  addTexto: (sceneId: string, texto: NewTexto) => string;
+  updateTexto: (
+    sceneId: string,
+    textoId: string,
+    patch: Partial<Omit<Texto, "id">>,
+  ) => void;
+  removeTexto: (sceneId: string, textoId: string) => void;
+  /**
+   * Guarda a caixa medida de um texto. Sem histórico: medir não é edição, e
+   * um Ctrl+Z que desfizesse uma medida seria um Ctrl+Z que não faz nada.
+   * Ignora diferença abaixo de meia unidade, para o observador não gravar
+   * o board a cada quadro por ruído de arredondamento.
+   */
+  medirTexto: (
+    sceneId: string,
+    textoId: string,
+    caixa: { largura: number; altura: number },
+  ) => void;
+
+  /**
+   * Seta entre duas coisas do quadro. Recusa ponta igual à outra e seta
+   * repetida entre as mesmas duas, no mesmo sentido. Devolve o id, ou `null`
+   * quando recusou.
+   */
+  addLigacao: (
+    sceneId: string,
+    de: RefLigacao,
+    para: RefLigacao,
+  ) => string | null;
+  updateLigacao: (
+    sceneId: string,
+    ligacaoId: string,
+    patch: Partial<Pick<Ligacao, "rotulo">>,
+  ) => void;
+  removeLigacao: (sceneId: string, ligacaoId: string) => void;
 };
 
 export const useSceneStore = create<SceneStore>((set, get) => {
@@ -378,10 +442,14 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       set({ board: { ...board, liveSceneId: sceneId } });
     },
 
-    addScene(name) {
+    addScene(name, tipo) {
       const { board } = get();
+      const iguais =
+        board?.scenes.filter((scene) => ehQuadro(scene) === (tipo === "quadro"))
+          .length ?? 0;
       const scene = createScene(
-        name ?? `Cena ${(board?.scenes.length ?? 0) + 1}`,
+        name ?? `${tipo === "quadro" ? "Quadro" : "Cena"} ${iguais + 1}`,
+        tipo,
       );
       const base = board ?? {
         scenes: [],
@@ -421,6 +489,88 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       if (!board) return;
 
       commit(removeSceneFromBoard(board, sceneId));
+    },
+
+    criarPasta(nome, parentId) {
+      const { board } = get();
+      const id = novoId();
+      if (!board) return id;
+
+      commit({
+        ...board,
+        pastas: [...(board.pastas ?? []), { id, nome: nome.trim(), parentId }],
+      });
+
+      return id;
+    },
+
+    atualizarPasta(pastaId, patch) {
+      const { board } = get();
+      if (!board) return;
+
+      commit({
+        ...board,
+        pastas: (board.pastas ?? []).map((pasta) =>
+          pasta.id === pastaId ? { ...pasta, ...patch } : pasta,
+        ),
+      });
+    },
+
+    moverPasta(pastaId, parentId) {
+      const { board } = get();
+      if (!board) return;
+      const pastas = board.pastas ?? [];
+
+      // Sobe do destino até a raiz; se passar pela própria pasta, é ciclo.
+      let cursor = parentId;
+      while (cursor) {
+        if (cursor === pastaId) return;
+        cursor = pastas.find((pasta) => pasta.id === cursor)?.parentId;
+      }
+
+      commit({
+        ...board,
+        pastas: pastas.map((pasta) =>
+          pasta.id === pastaId ? { ...pasta, parentId } : pasta,
+        ),
+      });
+    },
+
+    removerPasta(pastaId) {
+      const { board } = get();
+      const alvo = board?.pastas?.find((pasta) => pasta.id === pastaId);
+      if (!board || !alvo) return;
+
+      const pastas = (board.pastas ?? [])
+        .filter((pasta) => pasta.id !== pastaId)
+        .map((pasta) =>
+          pasta.parentId === pastaId
+            ? { ...pasta, parentId: alvo.parentId }
+            : pasta,
+        );
+
+      commit({
+        ...board,
+        // Lista vazia sai do objeto, como `grupos` na cena.
+        pastas: pastas.length > 0 ? pastas : undefined,
+        scenes: board.scenes.map((scene) =>
+          scene.pastaId === pastaId
+            ? { ...scene, pastaId: alvo.parentId }
+            : scene,
+        ),
+      });
+    },
+
+    moverParaPasta(sceneId, pastaId) {
+      get().updateScene(sceneId, (scene) => {
+        if ((scene.pastaId ?? undefined) === pastaId) return scene;
+        // Cópia e `delete`, como em `sceneForTable`: raiz é a AUSÊNCIA do
+        // campo, e não `undefined` gravado no JSON.
+        const proxima = { ...scene };
+        if (pastaId) proxima.pastaId = pastaId;
+        else delete proxima.pastaId;
+        return proxima;
+      });
     },
 
     updateScene(sceneId, updater) {
@@ -560,6 +710,8 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       get().updateScene(sceneId, (scene) => ({
         ...scene,
         items: scene.items.filter((item) => !doomed.has(item.id)),
+        // A seta amarrada a uma imagem apagada morre com ela.
+        ligacoes: semReferencia(scene.ligacoes, doomed),
       }));
     },
 
@@ -803,7 +955,11 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         // Volta a `undefined` quando esvazia, em vez de deixar `[]` no arquivo:
         // é o mesmo estado, e `sceneForTable` decide por identidade da
         // referência quando o campo está ausente.
-        return { ...scene, pins: restantes.length > 0 ? restantes : undefined };
+        return {
+          ...scene,
+          pins: restantes.length > 0 ? restantes : undefined,
+          ligacoes: semReferencia(scene.ligacoes, [pinId]),
+        };
       });
     },
 
@@ -913,6 +1069,125 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         return {
           ...scene,
           postits: restantes.length > 0 ? restantes : undefined,
+          ligacoes: semReferencia(scene.ligacoes, [postitId]),
+        };
+      });
+    },
+
+    addTexto(sceneId, texto) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        textos: [
+          ...(scene.textos ?? []),
+          { texto: "", tamanho: TEXTO_TAMANHO, ...texto, id },
+        ],
+      }));
+
+      return id;
+    },
+
+    updateTexto(sceneId, textoId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        textos: (scene.textos ?? []).map((texto) =>
+          texto.id === textoId ? { ...texto, ...patch } : texto,
+        ),
+      }));
+    },
+
+    removeTexto(sceneId, textoId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.textos ?? []).filter(
+          (texto) => texto.id !== textoId,
+        );
+
+        return {
+          ...scene,
+          textos: restantes.length > 0 ? restantes : undefined,
+          ligacoes: semReferencia(scene.ligacoes, [textoId]),
+        };
+      });
+    },
+
+    medirTexto(sceneId, textoId, caixa) {
+      const { board } = get();
+      if (!board) return;
+
+      const scene = board.scenes.find((atual) => atual.id === sceneId);
+      const texto = scene?.textos?.find((atual) => atual.id === textoId);
+      if (!scene || !texto) return;
+      if (
+        texto.largura !== undefined &&
+        texto.altura !== undefined &&
+        Math.abs(texto.largura - caixa.largura) < 0.5 &&
+        Math.abs(texto.altura - caixa.altura) < 0.5
+      )
+        return;
+
+      set({
+        board: {
+          ...board,
+          scenes: board.scenes.map((atual) =>
+            atual.id !== sceneId
+              ? atual
+              : {
+                  ...atual,
+                  textos: (atual.textos ?? []).map((candidato) =>
+                    candidato.id === textoId
+                      ? { ...candidato, ...caixa }
+                      : candidato,
+                  ),
+                },
+          ),
+        },
+      });
+    },
+
+    addLigacao(sceneId, de, para) {
+      if (mesmaRef(de, para)) return null;
+
+      const scene = get().board?.scenes.find((atual) => atual.id === sceneId);
+      if (!scene) return null;
+      if (
+        scene.ligacoes?.some(
+          (ligacao) => mesmaRef(ligacao.de, de) && mesmaRef(ligacao.para, para),
+        )
+      )
+        return null;
+
+      const id = novoId();
+      get().updateScene(sceneId, (atual) => ({
+        ...atual,
+        ligacoes: [...(atual.ligacoes ?? []), { id, de, para }],
+      }));
+
+      return id;
+    },
+
+    updateLigacao(sceneId, ligacaoId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        ligacoes: (scene.ligacoes ?? []).map((ligacao) => {
+          if (ligacao.id !== ligacaoId) return ligacao;
+          const proxima = { ...ligacao, ...patch };
+          // Rótulo vazio é ausência, como as listas vazias da cena.
+          if (!proxima.rotulo?.trim()) delete proxima.rotulo;
+          return proxima;
+        }),
+      }));
+    },
+
+    removeLigacao(sceneId, ligacaoId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.ligacoes ?? []).filter(
+          (ligacao) => ligacao.id !== ligacaoId,
+        );
+
+        return {
+          ...scene,
+          ligacoes: restantes.length > 0 ? restantes : undefined,
         };
       });
     },
@@ -998,6 +1273,7 @@ async function persistir(board: Board): Promise<void> {
     scenes: board.scenes.filter((scene) => noDisco.get(scene.id) !== scene),
     editingSceneId: board.editingSceneId,
     liveSceneId: board.liveSceneId,
+    pastas: board.pastas,
   });
 
   salvo = board;

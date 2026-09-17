@@ -3,6 +3,7 @@
 import {
   BookOpen,
   Clapperboard,
+  Presentation,
   Dices,
   EyeOff,
   Image,
@@ -39,6 +40,7 @@ import { useMemo } from "react";
 import { PainelDeExtensao } from "@/components/mestre/dock/painel-de-extensao";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import type { ConteudoJanela } from "@/lib/store/use-window-store";
+import { ehQuadro } from "@/types/scene";
 
 /**
  * O que cada tipo de janela mostra, e como se chama.
@@ -76,6 +78,10 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
       return Dices;
     case "cenas":
       return Clapperboard;
+    case "quadros":
+      // Lousa, e não claquete: o quadro é onde o mestre pensa, não o que a
+      // mesa assiste.
+      return Presentation;
     case "areas":
       // A área é o que a mesa NÃO vê -- o olho cortado é o que ela faz.
       return EyeOff;
@@ -128,6 +134,7 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
  */
 export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "cenas" }, titulo: "Cenas" },
+  { conteudo: { tipo: "quadros" }, titulo: "Quadros" },
   { conteudo: { tipo: "areas" }, titulo: "Áreas" },
   { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
   { conteudo: { tipo: "camadas" }, titulo: "Camadas" },
@@ -220,6 +227,8 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: "Rolagens", subtitulo: "O que a mesa tirou" };
     case "cenas":
       return { titulo: "Cenas" };
+    case "quadros":
+      return { titulo: "Quadros", subtitulo: "Onde a história se escreve" };
     case "areas":
       return { titulo: "Áreas" };
     case "retratos":
@@ -348,13 +357,17 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
         />
       );
     case "cenas":
-      return <SceneList ready={pronta} />;
+      return <SceneList tipo="mapa" ready={pronta} />;
+    case "quadros":
+      return <SceneList tipo="quadro" ready={pronta} />;
     case "areas":
-      return scene ? (
+      // Quadro não tem névoa: a lista vazia diria "nenhuma área" como se
+      // faltasse desenhar uma, e o que falta é abrir um mapa.
+      return scene && !ehQuadro(scene) ? (
         <FogList scene={scene} />
       ) : (
         <p className="text-muted-foreground p-3 text-xs">
-          Crie uma cena primeiro.
+          {scene ? "Quadro não tem áreas escondidas." : "Crie uma cena primeiro."}
         </p>
       );
     // Retrato não depende de cena: ele é da sessão e atravessa a troca.

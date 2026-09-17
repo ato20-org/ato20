@@ -1,4 +1,4 @@
-import type { Scene } from "@/types/scene";
+import { ehQuadro, type Scene } from "@/types/scene";
 
 /**
  * A cena como a mesa pode vê-la.
@@ -46,6 +46,11 @@ import type { Scene } from "@/types/scene";
 export function sceneForTable(scene: Scene | null): Scene | null {
   if (!scene) return null;
 
+  // O quadro vai INTEIRO: ele é o que o mestre quer mostrar -- a rede de
+  // PNJs, a linha do tempo --, e postit, texto e seta são o conteúdo dele, não
+  // anotação sobre ele. Cena de mapa continua filtrando abaixo.
+  if (ehQuadro(scene)) return scene;
+
   // Cena sem nada do mestre devolve a MESMA referência, e não uma cópia.
   //
   // Não é economia de memória: o `usePublisher` compara a cena por
@@ -62,7 +67,9 @@ export function sceneForTable(scene: Scene | null): Scene | null {
     !scene.handout &&
     !scene.extensoes &&
     !scene.cameras &&
-    !scene.grupos
+    !scene.grupos &&
+    !scene.textos &&
+    !scene.ligacoes
   )
     return scene;
 
@@ -79,6 +86,9 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // `useCorteDeCamera`.
   delete paraMesa.cameras;
   delete paraMesa.grupos;
+  // Anotação do mestre, como o postit. O quadro no ar vai abrir isto.
+  delete paraMesa.textos;
+  delete paraMesa.ligacoes;
 
   return paraMesa;
 }

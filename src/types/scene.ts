@@ -315,6 +315,61 @@ export type NewPostit = Pick<Postit, "x" | "y"> &
   Partial<Pick<Postit, "largura" | "altura" | "texto" | "cor">>;
 
 /**
+ * Texto solto sobre o quadro: título, rótulo, uma frase. Sem papel, sem
+ * caixa -- o postit é o cartão, este é a letra direto na folha.
+ *
+ * Mora na cena como o postit, e é do mestre até a cena ir ao ar como quadro.
+ * Não tem largura: o texto quebra onde o mestre pôs Enter, e a caixa que a
+ * ligação mira é estimada a partir da fonte. Ver `caixaDoTexto`.
+ */
+export type Texto = {
+  id: string;
+  /** Canto superior esquerdo, em coordenadas de cena. */
+  x: number;
+  y: number;
+  texto: string;
+  /** Tamanho da fonte, em unidades de cena. */
+  tamanho: number;
+  /** Giro em graus, em volta do centro da caixa, como o item. Ausente = 0. */
+  rotation?: number;
+  /**
+   * A caixa MEDIDA na tela do mestre, em unidades de cena, sem o giro.
+   * Ausente até o primeiro render: aí vale a estimativa de `caixaRetaDoTexto`.
+   * Gravada porque a mesa também precisa dela para a seta encostar no lugar
+   * certo, e a mesa não tem como medir antes de desenhar.
+   */
+  largura?: number;
+  altura?: number;
+};
+
+export type NewTexto = Pick<Texto, "x" | "y"> &
+  Partial<Pick<Texto, "texto" | "tamanho" | "rotation">>;
+
+/** Tamanho de fonte de um texto novo, em unidades de cena. */
+export const TEXTO_TAMANHO = 40;
+
+/** O que uma ligação pode amarrar. */
+export type TipoLigavel = "item" | "postit" | "texto" | "pin";
+
+/** Uma ponta de ligação: o que ela amarra, por tipo e id. */
+export type RefLigacao = { tipo: TipoLigavel; id: string };
+
+/**
+ * Uma seta entre duas coisas do quadro.
+ *
+ * Guarda as REFERÊNCIAS, e não pontos: mover o postit leva a seta junto, que é
+ * o que faz dela um vínculo e não um risco. A ponta que perde o alvo -- postit
+ * apagado -- leva a ligação com ela; ver `semReferencia`.
+ */
+export type Ligacao = {
+  id: string;
+  de: RefLigacao;
+  para: RefLigacao;
+  /** O que a seta diz, no meio dela. Ausente = nada. */
+  rotulo?: string;
+};
+
+/**
  * A imagem em evidência: o que o mestre mandou a mesa olhar agora.
  *
  * Nível de sessão, como a trilha, e não da cena: transmitir um retrato de PNJ
@@ -647,9 +702,50 @@ export type Grupo = {
   recolhido?: boolean;
 };
 
+/**
+ * O que uma cena é para o mestre.
+ *
+ * `undefined` é mapa: a cena de sempre, com fundo, grade, névoa e régua, feita
+ * para a mesa olhar. `"quadro"` é a mesa de trabalho do mestre -- brainstorm,
+ * história, notas ligadas por setas --, sem chão nem escala. As duas dividem
+ * o mesmo tipo de propósito: o palco, o histórico, a gravação por diferença e
+ * o canal para a mesa já existem para a cena, e um quadro é uma cena sem chão
+ * com uma barra de ferramentas própria. Ver `ehQuadro`.
+ *
+ * Decidido na criação e nunca trocado: um mapa que virasse quadro carregaria
+ * névoa e grade que o quadro não sabe mostrar, e cada caso desses seria um
+ * bug para alguém.
+ */
+export type TipoDeCena = "quadro";
+
+/**
+ * Uma pasta de quadros. Só quadros: cena de mapa é fila de sessão, e uma
+ * campanha tem dez; quadro é caderno, e um caderno cresce em capítulos.
+ *
+ * Mesma forma do `Grupo` da cena, e de propósito: a lista já sabe desenhar
+ * essa árvore. Vive no board, e não na cena, porque atravessa cenas.
+ */
+export type Pasta = {
+  id: string;
+  nome: string;
+  parentId?: string;
+  recolhido?: boolean;
+};
+
 export type Scene = {
   id: string;
   name: string;
+  /** Ausente = mapa. Ver `TipoDeCena`. */
+  tipo?: TipoDeCena;
+  /** A pasta em que um quadro está. Ausente = raiz. Só faz sentido em quadro. */
+  pastaId?: string;
+  /**
+   * Textos soltos e setas do quadro. Ausente = nenhum. Nascem no quadro, mas
+   * a cena de mapa também os aceita: são só mais duas listas. Ver `Texto` e
+   * `Ligacao`.
+   */
+  textos?: Texto[];
+  ligacoes?: Ligacao[];
   backgroundAssetId?: string;
   items: CanvasItem[];
   fog: FogRegion[];
@@ -759,6 +855,8 @@ export type Board = {
    * `null` = nada no ar.
    */
   liveSceneId: string | null;
+  /** As pastas dos quadros. Ausente = nenhuma. Ver `Pasta`. */
+  pastas?: Pasta[];
 };
 
 /**
@@ -774,11 +872,18 @@ export const DEFAULT_GRID: SceneGrid = {
   opacity: 0.35,
 };
 
-export function createScene(name: string): Scene {
+/** Um quadro, e não um mapa. Ver `TipoDeCena`. */
+export function ehQuadro(scene: Pick<Scene, "tipo">): boolean {
+  return scene.tipo === "quadro";
+}
+
+export function createScene(name: string, tipo?: TipoDeCena): Scene {
   const now = Date.now();
   return {
     id: novoId(),
     name,
+    // Só quando é quadro: mapa não ganha `tipo: undefined` gravado no JSON.
+    ...(tipo ? { tipo } : {}),
     items: [],
     fog: [],
     createdAt: now,
@@ -796,24 +901,43 @@ export function createScene(name: string): Scene {
 export function cloneScene(source: Scene, name: string): Scene {
   const now = Date.now();
 
+  // Id antigo -> id novo, para as ligações continuarem amarradas às cópias e
+  // não aos originais.
+  const novos = new Map<string, string>();
+  const renovar = <T extends { id: string }>(coisa: T): T => {
+    const id = novoId();
+    novos.set(coisa.id, id);
+    return { ...coisa, id };
+  };
+
   return {
     ...source,
     id: novoId(),
     name,
-    items: source.items.map((item) => ({ ...item, id: novoId() })),
+    items: source.items.map(renovar),
     fog: source.fog.map((region) => ({ ...region, id: novoId() })),
     // Os anexos continuam apontando para os MESMOS assets: o arquivo é do
     // acervo da campanha, não do ponto, e copiá-lo duplicaria um mapa de 8 MB
     // por duplicar a cena.
-    pins: source.pins?.map((pin) => ({ ...pin, id: novoId() })),
+    pins: source.pins?.map(renovar),
     // O texto vem junto com os marcadores dentro dele, e os marcadores são por
     // nome: um `>Porão` copiado continua apontando para a MESMA cena de porão,
     // não para a cópia dela. É o que se quer — duplicar uma cena não duplica o
     // porão a que ela leva.
-    postits: source.postits?.map((postit) => ({ ...postit, id: novoId() })),
+    postits: source.postits?.map(renovar),
     // Mesma regra dos anexos: são ids do acervo, e a cópia aponta para os
     // mesmos arquivos.
     handout: source.handout ? [...source.handout] : undefined,
+    textos: source.textos?.map(renovar),
+    ligacoes: source.ligacoes?.map((ligacao) => ({
+      ...ligacao,
+      id: novoId(),
+      de: { ...ligacao.de, id: novos.get(ligacao.de.id) ?? ligacao.de.id },
+      para: {
+        ...ligacao.para,
+        id: novos.get(ligacao.para.id) ?? ligacao.para.id,
+      },
+    })),
     createdAt: now,
     updatedAt: now,
   };

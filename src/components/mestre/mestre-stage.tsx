@@ -12,6 +12,9 @@ import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
 import { PostitFantasma } from "@/components/mestre/postit-fantasma";
 import { PostitLayer } from "@/components/mestre/postit-layer";
+import { LigacaoLayer } from "@/components/mestre/ligacao-layer";
+import { TextoLayer } from "@/components/mestre/texto-layer";
+import { ligavelEm } from "@/lib/mestre/ligacoes";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
 import type { PontaDoMedidor } from "@/components/playground/medidor-layer";
@@ -88,6 +91,7 @@ import { CORNER_HANDLES, MIN_ITEM_SIZE } from "@/lib/geometry/transform";
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
+import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -97,6 +101,7 @@ import {
   POSTIT_LARGURA,
   SCENE_HEIGHT,
   SCENE_WIDTH,
+  TEXTO_TAMANHO,
   type AncoraRetrato,
   type CanvasItem,
   type FogRegion,
@@ -252,6 +257,19 @@ export function MestreStage({ scene }: { scene: Scene }) {
   const removeTracos = useSceneStore((state) => state.removeTracos);
   const addPin = useSceneStore((state) => state.addPin);
   const addPostit = useSceneStore((state) => state.addPostit);
+  const addTexto = useSceneStore((state) => state.addTexto);
+  const addLigacao = useSceneStore((state) => state.addLigacao);
+
+  // A seta em andamento e a seleção de texto/seta são desta cena: trocar de
+  // cena ou largar a ferramenta de seta desfaz a primeira ponta clicada.
+  const limparQuadro = useQuadroStore((state) => state.limpar);
+  const setOrigem = useQuadroStore((state) => state.setOrigem);
+  useEffect(() => {
+    limparQuadro();
+  }, [scene.id, limparQuadro]);
+  useEffect(() => {
+    if (tool !== "ligacao") setOrigem(null);
+  }, [tool, setOrigem]);
   // A câmera que o mestre está editando. Ver `useCameraLockStore`.
   const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
   const espelhoMestre = useCameraLockStore((state) => state.espelhoMestre);
@@ -1036,6 +1054,40 @@ export function MestreStage({ scene }: { scene: Scene }) {
       return;
     }
 
+    // Clique, como o postit: o texto nasce onde o mestre apontou e já em
+    // edição, porque texto vazio não é nada. Volta ao modo normal pela mesma
+    // razão do alfinete.
+    if (tool === "texto") {
+      const id = addTexto(scene.id, {
+        x: Math.round(anchor.x),
+        y: Math.round(anchor.y - TEXTO_TAMANHO / 2),
+      });
+      useQuadroStore.getState().editarTexto(id);
+      setTool("select");
+      return;
+    }
+
+    // Dois cliques: de onde, para onde. A ferramenta FICA na mão depois da
+    // seta pronta -- amarrar cinco ideias seguidas é o gesto normal num
+    // quadro, e Esc larga. Clique no vazio sem ponta ainda não faz nada;
+    // com uma ponta, desiste dela.
+    if (tool === "ligacao") {
+      const alvo = ligavelEm(scene, anchor);
+      const origem = useQuadroStore.getState().origem;
+
+      if (!origem) {
+        if (alvo) setOrigem(alvo);
+        return;
+      }
+
+      if (alvo) {
+        const id = addLigacao(scene.id, origem, alvo);
+        if (id) useQuadroStore.getState().selecionarLigacao(id);
+      }
+      setOrigem(null);
+      return;
+    }
+
     if (tool === "regua") {
       medir(event, anchor);
       return;
@@ -1235,6 +1287,8 @@ export function MestreStage({ scene }: { scene: Scene }) {
     (!panMode &&
       (tool === "pin" ||
         tool === "postit" ||
+        tool === "texto" ||
+        tool === "ligacao" ||
         tool === "lapis" ||
         tool === "borracha" ||
         tool === "regua" ||
@@ -1336,6 +1390,12 @@ export function MestreStage({ scene }: { scene: Scene }) {
       {tool === "postit" && !panMode ? (
         <PostitFantasma cor={corPostit} />
       ) : null}
+
+      {/* As duas do quadro, irmãs do postit e fora do `SceneLayer` pela mesma
+          razão. Cada uma devolve `null` sem conteúdo, e a de seta só ouve o
+          mouse enquanto uma ponta está clicada: mapa sem nada disto não paga. */}
+      <TextoLayer scene={scene} panMode={panMode} />
+      <LigacaoLayer scene={scene} />
 
       {/* Fora do `SceneLayer` pela mesma razão do `PinLayer`: hoje o dado é só
           do mestre. Dentro dele, os dados apareceriam na TV — e a decisão de

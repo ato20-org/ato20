@@ -41,6 +41,10 @@ export type Tool =
   | "lapis"
   | "borracha"
   | "regua"
+  // As duas do QUADRO: `texto` escreve direto na folha no clique, e `ligacao`
+  // amarra duas coisas com uma seta em dois cliques -- de onde, para onde.
+  | "texto"
+  | "ligacao"
   // A de uma EXTENSAO, no formato `ext:{extensaoId}/{ferramentaId}`.
   //
   // Prefixo e nao um campo separado no store porque a ferramenta e UM valor em

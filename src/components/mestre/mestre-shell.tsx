@@ -57,7 +57,7 @@ import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import type { Scene } from "@/types/scene";
+import { ehQuadro, type Scene } from "@/types/scene";
 
 /**
  * A mesa.
@@ -378,6 +378,7 @@ function StageBoundary({
       viewport={viewport}
       onViewportChange={setViewport}
       panOnDrag={panMode}
+      plano={scene && ehQuadro(scene) ? "quadro" : "mapa"}
       limites={conteudo}
     >
       {scene ? (

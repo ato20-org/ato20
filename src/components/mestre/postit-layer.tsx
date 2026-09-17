@@ -979,6 +979,8 @@ const COMANDOS: Array<[string, string]> = [
   ["/arquivo", "Imagem ou som do acervo. Imagem abre numa janela ao clicar."],
   [">cena", "Cena do board. Clique leva para ela; mouse em cima mostra o mapa."],
   ["**texto**", "Negrito."],
+  ["# Título, ## Sub", "No começo da linha: título e subtítulo."],
+  ["- item", "No começo da linha: item de lista."],
   ["Tab, →", "Aceita a sugestão em cinza enquanto digita."],
   ["↑ ↓, Enter", "Anda na lista de sugestões e escolhe."],
   ["Esc", "Fecha a lista; de novo, sai da edição."],
