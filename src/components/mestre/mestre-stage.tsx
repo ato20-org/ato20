@@ -29,7 +29,14 @@ import { useCharacters } from "@/hooks/use-characters";
 import { useModoCinegrafista } from "@/hooks/use-modo-cinegrafista";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { gravarCameraManual } from "@/lib/mestre/camera-actions";
-import { alvoDoClique, guardarNoHandout } from "@/lib/mestre/item-actions";
+import {
+  alvoDoClique,
+  escalarPatches,
+  girarPatches,
+  guardarNoHandout,
+  PASSO_DE_GIRO,
+  PASSO_DE_TAMANHO,
+} from "@/lib/mestre/item-actions";
 import { naBoca, useHandoutStore } from "@/lib/store/use-handout-store";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
@@ -454,11 +461,17 @@ export function MestreStage({ scene }: { scene: Scene }) {
     ];
   }
 
-  /** Move uma caixa aplicando snap, e devolve a posição corrigida. */
+  /**
+   * Move uma caixa aplicando snap, e devolve a posição corrigida.
+   *
+   * `targets` nulo desliga o alinhamento de vez: a caixa vai exatamente onde a
+   * mão a leva, sem guia nem atração. É o caso da imagem no mapa -- ver
+   * `handleItemPointerDown`.
+   */
   function dragBox(
     event: ReactPointerEvent,
     origin: Bounds,
-    targets: Bounds[],
+    targets: Bounds[] | null,
     apply: (dx: number, dy: number) => void,
     /** A que se alinhar além dos alvos. Padrão: o plano. Ver `computeSnap`. */
     frame?: Bounds,
@@ -481,7 +494,9 @@ export function MestreStage({ scene }: { scene: Scene }) {
 
         // Alt desliga a atração: às vezes o mestre quer a peça exatamente onde
         // soltou, encostada mas não alinhada.
-        if (native.altKey) {
+        if (targets === null) {
+          // Sem alinhamento: nada a limpar, nada a atrair.
+        } else if (native.altKey) {
           clearGuides();
         } else {
           const snap = computeSnap(
@@ -534,23 +549,84 @@ export function MestreStage({ scene }: { scene: Scene }) {
     const movingBounds = boundsOfItems(moving);
     if (!movingBounds) return;
 
-    const origins = moving.map(({ id, x, y }) => ({ id, x, y }));
+    /**
+     * O retrato do que está na mão, MUTÁVEL: a roda, durante o arrasto, muda
+     * tamanho e ângulo, e o movimento seguinte precisa partir do retrato novo
+     * e não do de quando a mão pegou -- senão cada empurrão desfaria a roda.
+     */
+    let origins: CanvasItem[] = moving.map((item) => ({ ...item }));
+    const bounds = { ...movingBounds };
+    let ultimo = { dx: 0, dy: 0 };
 
+    const aplicar = () =>
+      updateItems(
+        scene.id,
+        origins.map((origin) => ({
+          id: origin.id,
+          patch: {
+            x: Math.round(origin.x + ultimo.dx),
+            y: Math.round(origin.y + ultimo.dy),
+            width: origin.width,
+            height: origin.height,
+            rotation: origin.rotation,
+          },
+        })),
+      );
+
+    /**
+     * A roda, com o item na mão: tamanho, e com Shift o ângulo. Na captura e
+     * com `stopPropagation` porque o palco também escuta a roda, e lá ela é
+     * zoom -- sem barrar, o item cresceria e o mapa saltaria debaixo dele.
+     */
+    const aoRodar = (native: WheelEvent) => {
+      native.preventDefault();
+      native.stopPropagation();
+      // Com Shift o browser vira a roda de lado: o entalhe chega em `deltaX`
+      // e `deltaY` fica zero. Lê-se o eixo que andou, seja qual for.
+      const delta =
+        Math.abs(native.deltaX) > Math.abs(native.deltaY)
+          ? native.deltaX
+          : native.deltaY;
+      if (delta === 0) return;
+      const sinal = delta < 0 ? 1 : -1;
+
+      const patches = native.shiftKey
+        ? girarPatches(origins, sinal * PASSO_DE_GIRO)
+        : escalarPatches(
+            origins,
+            sinal > 0 ? PASSO_DE_TAMANHO : 1 / PASSO_DE_TAMANHO,
+            {
+              x: (bounds.minX + bounds.maxX) / 2,
+              y: (bounds.minY + bounds.maxY) / 2,
+            },
+          );
+      if (patches.length === 0) return;
+
+      const porId = new Map(patches.map(({ id, patch }) => [id, patch]));
+      origins = origins.map((origin) => ({
+        ...origin,
+        ...porId.get(origin.id),
+      }));
+      // O centro do próximo entalhe é o da caixa que acabou de crescer.
+      Object.assign(bounds, boundsOfItems(origins) ?? bounds);
+      aplicar();
+    };
+    window.addEventListener("wheel", aoRodar, {
+      capture: true,
+      passive: false,
+    });
+
+    // Sem snap para imagem: as guias tipo Figma atrapalhavam mais do que
+    // ajudavam num mapa -- token não precisa alinhar borda com estátua. A
+    // névoa e o retrato continuam alinhando, porque ali borda é o que importa.
     dragBox(
       event,
-      movingBounds,
-      snapTargets((id) => draggedIds.includes(id)),
-      (dx, dy) =>
-        updateItems(
-          scene.id,
-          origins.map((origin) => ({
-            id: origin.id,
-            patch: {
-              x: Math.round(origin.x + dx),
-              y: Math.round(origin.y + dy),
-            },
-          })),
-        ),
+      bounds,
+      null,
+      (dx, dy) => {
+        ultimo = { dx, dy };
+        aplicar();
+      },
       undefined,
       {
         // A bolinha do handout incha quando o item passa por cima, e engole
@@ -559,6 +635,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
         onMove: (native) =>
           useHandoutStore.getState().apontar(native.clientX, native.clientY),
         onEnd: (native) => {
+          window.removeEventListener("wheel", aoRodar, true);
           useHandoutStore.getState().largar();
           if (naBoca(native.clientX, native.clientY)) {
             guardarNoHandout(origins.map((origin) => origin.id));
