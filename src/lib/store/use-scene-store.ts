@@ -231,6 +231,13 @@ type SceneStore = {
   attachToPin: (sceneId: string, pinId: string, assetIds: string[]) => void;
   detachFromPin: (sceneId: string, pinId: string, assetId: string) => void;
 
+  /**
+   * Guarda imagens do acervo no handout da cena. Repetidas não entram.
+   * Ver `Scene.handout`.
+   */
+  guardarNoHandout: (sceneId: string, assetIds: string[]) => void;
+  tirarDoHandout: (sceneId: string, assetId: string) => void;
+
   /** Cola um postit. Devolve o id, para já abrir o texto dele para digitar. */
   addPostit: (sceneId: string, postit: NewPostit) => string;
   updatePostit: (
@@ -783,6 +790,36 @@ export const useSceneStore = create<SceneStore>((set, get) => {
             : pin,
         ),
       }));
+    },
+
+    guardarNoHandout(sceneId, assetIds) {
+      const atual = get().board?.scenes.find((scene) => scene.id === sceneId);
+      if (!atual) return;
+
+      const guardados = new Set(atual.handout ?? []);
+      const novos = [...new Set(assetIds)].filter((id) => !guardados.has(id));
+
+      // Nada novo, nada gravado: `updateScene` alimenta o histórico, e um
+      // passo de desfazer que não muda nada confunde quem desfaz.
+      if (novos.length === 0) return;
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        handout: [...(scene.handout ?? []), ...novos],
+      }));
+    },
+
+    tirarDoHandout(sceneId, assetId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.handout ?? []).filter((id) => id !== assetId);
+
+        // `undefined` quando esvazia, como `removePin`: `sceneForTable`
+        // decide por ausência do campo.
+        return {
+          ...scene,
+          handout: restantes.length > 0 ? restantes : undefined,
+        };
+      });
     },
 
     addPostit(sceneId, postit) {

@@ -35,6 +35,8 @@ export type FonteDoArrasto =
   | { tipo: "personagem"; personagemId: string; assetId: string }
   /** Uma imagem da biblioteca. */
   | { tipo: "acervo"; assetId: string }
+  /** Uma imagem do handout da cena, que é id de acervo. Ver `Scene.handout`. */
+  | { tipo: "handout"; assetId: string }
   /**
    * Um item de inventário.
    *
@@ -57,7 +59,9 @@ export type DestinoDoArrasto =
   /** Uma pasta do acervo. `folderId` ausente é a raiz, "Fora de pasta". */
   | { tipo: "pasta"; folderId: string | undefined }
   /** A grade de inventário de outro personagem. */
-  | { tipo: "inventario"; personagemId: string };
+  | { tipo: "inventario"; personagemId: string }
+  /** A bolinha do handout da cena em edição. */
+  | { tipo: "handout" };
 
 export type ArrastoDeToken = {
   fonte: FonteDoArrasto;
@@ -91,6 +95,8 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
       return "acervo";
     case "inventario":
       return `inventario:${destino.personagemId}`;
+    case "handout":
+      return "handout";
   }
 }
 
@@ -121,6 +127,10 @@ export function aceita(
       return (
         fonte.tipo === "item" && fonte.personagemId !== destino.personagemId
       );
+    case "handout":
+      // Só do acervo: o handout guarda ids de acervo, e retrato de personagem
+      // e imagem de item já têm dono. Ver `Scene.handout`.
+      return fonte.tipo === "acervo";
   }
 }
 

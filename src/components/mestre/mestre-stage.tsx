@@ -29,7 +29,8 @@ import { useCharacters } from "@/hooks/use-characters";
 import { useModoCinegrafista } from "@/hooks/use-modo-cinegrafista";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { gravarCameraManual } from "@/lib/mestre/camera-actions";
-import { alvoDoClique } from "@/lib/mestre/item-actions";
+import { alvoDoClique, guardarNoHandout } from "@/lib/mestre/item-actions";
+import { naBoca, useHandoutStore } from "@/lib/store/use-handout-store";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
@@ -461,9 +462,20 @@ export function MestreStage({ scene }: { scene: Scene }) {
     apply: (dx: number, dy: number) => void,
     /** A que se alinhar além dos alvos. Padrão: o plano. Ver `computeSnap`. */
     frame?: Bounds,
+    /**
+     * Quem mais quer saber por onde o ponteiro passa e onde ele solta, em
+     * coordenadas de TELA. Existe para a bolinha do handout, que fica fora do
+     * plano e recebe o item que o mestre larga sobre ela.
+     */
+    fora?: {
+      onMove?: (native: PointerEvent) => void;
+      onEnd?: (native: PointerEvent) => void;
+    },
   ) {
     startDrag(event, {
       onMove: (delta, native) => {
+        fora?.onMove?.(native);
+
         let dx = delta.x;
         let dy = delta.y;
 
@@ -486,7 +498,10 @@ export function MestreStage({ scene }: { scene: Scene }) {
 
         apply(dx, dy);
       },
-      onEnd: clearGuides,
+      onEnd: (native) => {
+        clearGuides();
+        fora?.onEnd?.(native);
+      },
     });
   }
 
@@ -536,6 +551,20 @@ export function MestreStage({ scene }: { scene: Scene }) {
             },
           })),
         ),
+      undefined,
+      {
+        // A bolinha do handout incha quando o item passa por cima, e engole
+        // o que for solto nela: sai da mesa, volta para a manga. Ver
+        // `guardarNoHandout`.
+        onMove: (native) =>
+          useHandoutStore.getState().apontar(native.clientX, native.clientY),
+        onEnd: (native) => {
+          useHandoutStore.getState().largar();
+          if (naBoca(native.clientX, native.clientY)) {
+            guardarNoHandout(origins.map((origin) => origin.id));
+          }
+        },
+      },
     );
   }
 

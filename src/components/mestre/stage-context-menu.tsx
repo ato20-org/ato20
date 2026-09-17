@@ -17,6 +17,7 @@ import {
   FlipVertical,
   Focus,
   Group,
+  Images,
   Lock,
   LockOpen,
   Maximize,
@@ -52,6 +53,7 @@ import {
   opacidadeDaSelecao,
   pasteClipboard,
   removeFogSelection,
+  guardarSelecaoNoHandout,
   removeSelection,
   selectAllItems,
   setSelectionOpacity,
@@ -257,6 +259,15 @@ export function StageContextMenu({
             <ContextMenuItem onClick={toggleSelectionLock}>
               {allLocked ? <LockOpen /> : <Lock />}
               {allLocked ? "Destravar" : "Travar"}
+            </ContextMenuItem>
+            {/* Atalho do arrasto até a bolinha: sai da mesa, fica na manga.
+                Token de personagem não vai -- ver `guardarNoHandout`. */}
+            <ContextMenuItem
+              disabled={selectedItems.every((item) => item.personagemId)}
+              onClick={guardarSelecaoNoHandout}
+            >
+              <Images />
+              Guardar no handout
             </ContextMenuItem>
             <ContextMenuItem variant="destructive" onClick={removeSelection}>
               <Trash2 />

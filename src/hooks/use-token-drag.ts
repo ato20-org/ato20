@@ -271,6 +271,9 @@ function ler(sob: Element): DestinoDoArrasto | null {
     return { tipo: "pasta", folderId: pasta.dataset.folderId || undefined };
   }
 
+  // A bolinha do handout também fica por cima do mapa, e o painel dela idem.
+  if (sob.closest("[data-handout]")) return { tipo: "handout" };
+
   const inventario = sob.closest<HTMLElement>("[data-inventario]");
   if (inventario?.dataset.personagemId) {
     return {

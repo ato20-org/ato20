@@ -125,6 +125,9 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
         return;
       }
 
+      // Do acervo ou do handout, o mesmo caminho: o handout guarda ids de
+      // acervo, e a imagem entra na mesa como qualquer outra. Ela continua no
+      // handout, só esmaecida -- ver `HandoutMestre`.
       por(
         solto.fonte.assetId,
         solto.fonte.tipo === "personagem" ? solto.fonte.personagemId : undefined,
