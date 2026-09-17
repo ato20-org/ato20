@@ -2,8 +2,12 @@
 
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
+  ChevronDown,
+  ChevronUp,
+  GripHorizontal,
   Loader2,
   Paperclip,
+  Pencil,
   Radio,
   RadioTower,
   Trash2,
@@ -67,6 +71,24 @@ export function PinNote({
   const [importando, setImportando] = useState(false);
 
   /**
+   * O título só vira campo quando se pede.
+   *
+   * Um `<input>` permanente no cabeçalho lia como campo de formulário, e não
+   * como título de janela: o cursor de texto aparecia ao passar o mouse na
+   * alça de arrasto, e clicar para pegar o cartão punha o foco no título. O
+   * lápis é o gesto explícito; Enter, Esc e perder o foco voltam ao texto.
+   */
+  const [editandoTitulo, setEditandoTitulo] = useState(false);
+
+  /**
+   * Recolhida: só o cabeçalho, como a janela da bancada com o `^`.
+   *
+   * Estado do cartão e não do ponto: fechar e reabrir volta expandida, e o
+   * que persiste entre aberturas é só a posição, em `usePinWindowStore`.
+   */
+  const [recolhida, setRecolhida] = useState(false);
+
+  /**
    * Traz arquivos de fora e os anexa.
    *
    * Chama `importAssets` direto, em vez do `importar` do `useAssetList`: aquele
@@ -104,37 +126,106 @@ export function PinNote({
     // solta na CENA — a imagem entraria no mapa, atrás do cartão. Por
     // enquanto anexa-se por arquivo, e uma imagem já importada é importada de
     // novo.
-    <div className="space-y-3">
-      {/* O cabeçalho é também a alça de arrasto. Uma barra de título separada
-          duplicaria o número e o nome do ponto que já estão aqui, e o cartão
-          tem 320 pixels de largura para gastar com conteúdo, não com cromo. */}
+    <div className="flex flex-col">
+      {/* O cabeçalho é também a alça de arrasto, e tem a cara do cabeçalho de
+          toda janela da bancada (`InnerWindow`): a mesma alça riscada, o
+          mesmo recuo, a mesma linha embaixo, os mesmos botões pequenos. O que
+          é do ponto continua: o número, e o título editável no lugar do
+          título fixo. O subtítulo diz o que a nota de rodapé dizia, em menos
+          palavras e onde toda janela põe a sua. */}
       <div
-        className={cn("flex items-center gap-2", onArrastar && "cursor-move")}
+        className={cn(
+          "flex shrink-0 items-center gap-2 border-b px-2 py-1.5 select-none",
+          onArrastar && "cursor-grab active:cursor-grabbing",
+        )}
         onPointerDown={onArrastar}
+        // Duplo clique recolhe, como na janela da bancada: mesmo gesto, mesma
+        // janela aos olhos de quem usa.
+        onDoubleClick={(event) => {
+          if ((event.target as HTMLElement).closest("button, input")) return;
+
+          setRecolhida((atual) => !atual);
+        }}
       >
+        <GripHorizontal
+          className="text-muted-foreground size-3.5 shrink-0"
+          aria-hidden
+        />
+
         <span
-          className="grid size-5 shrink-0 place-items-center rounded-full bg-amber-400 text-[10px] font-semibold text-amber-950 tabular-nums"
+          className="grid size-4 shrink-0 place-items-center rounded-full bg-amber-400 text-[9px] font-semibold text-amber-950 tabular-nums"
           aria-hidden
         >
           {indice}
         </span>
 
-        <Input
-          className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-sm font-medium shadow-none focus-visible:ring-0"
-          placeholder="Sem título"
-          aria-label="Título do ponto"
-          value={pin.title}
-          onChange={(event) =>
-            updatePin(sceneId, pin.id, { title: event.target.value })
-          }
-        />
+        <span className="min-w-0 flex-1">
+          {editandoTitulo ? (
+            <Input
+              autoFocus
+              className="h-5 w-full min-w-0 rounded-none border-0 bg-transparent px-0 text-xs font-medium shadow-none focus-visible:ring-0"
+              placeholder="Sem título"
+              aria-label="Título do ponto"
+              value={pin.title}
+              onChange={(event) =>
+                updatePin(sceneId, pin.id, { title: event.target.value })
+              }
+              onBlur={() => setEditandoTitulo(false)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== "Escape") return;
+
+                // A janela também escuta Esc para fechar; aqui a tecla é do
+                // título, e só sai da edição.
+                event.stopPropagation();
+                event.currentTarget.blur();
+              }}
+            />
+          ) : (
+            <span
+              className={cn(
+                "block h-5 truncate text-xs leading-5 font-medium",
+                !pin.title && "text-muted-foreground italic",
+              )}
+            >
+              {pin.title || "Sem título"}
+            </span>
+          )}
+          {/* O subtítulo sai quando recolhida, como na janela da bancada. */}
+          {recolhida ? null : (
+            <span className="text-muted-foreground block truncate text-[10px]">
+              Só você vê. A mesa recebe o que você transmitir.
+            </span>
+          )}
+        </span>
+
+        {editandoTitulo ? null : (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Editar o título do ponto"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => setEditandoTitulo(true)}
+          >
+            <Pencil />
+          </Button>
+        )}
+
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={recolhida ? "Expandir a nota" : "Recolher a nota"}
+          aria-expanded={!recolhida}
+          onClick={() => setRecolhida((atual) => !atual)}
+        >
+          {recolhida ? <ChevronDown /> : <ChevronUp />}
+        </Button>
 
         <Tooltip>
           <TooltipTrigger
             render={
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="icon-xs"
                 aria-label="Tirar esta nota da tela"
                 // Um X, e não o alfinete cortado: o `PinOff` desenhava um
                 // alfinete de 16 pixels com uma barra por cima, e nesse tamanho
@@ -161,62 +252,69 @@ export function PinNote({
           </TooltipContent>
         </Tooltip>
 
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Apagar este ponto"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={() => {
-            // Fecha antes de apagar, e a ordem importa: o cartão se posiciona a
-            // partir do alfinete, e apagar primeiro o deixaria um quadro sem
-            // ponto de onde se ancorar.
-            onClose();
-            removePin(sceneId, pin.id);
-          }}
-        >
-          <Trash2 />
-        </Button>
       </div>
 
-      <Textarea
-        className="min-h-24 resize-y text-sm"
-        placeholder="O que tem aqui, o que acontece, o que os jogadores não sabem."
-        aria-label="Nota do ponto"
-        value={pin.note}
-        onChange={(event) =>
-          updatePin(sceneId, pin.id, { note: event.target.value })
-        }
-      />
+      {/* Recolhida não renderiza o corpo, como a janela da bancada: os anexos
+          resolvem blob de imagem, e mantê-los vivos atrás de `display: none`
+          seria trabalho para um cartão que ninguém está olhando. */}
+      {recolhida ? null : (
+        <div className="space-y-3 p-3">
+          <Textarea
+            className="min-h-24 resize-y text-sm"
+            placeholder="O que tem aqui, o que acontece, o que os jogadores não sabem."
+            aria-label="Nota do ponto"
+            value={pin.note}
+            onChange={(event) =>
+              updatePin(sceneId, pin.id, { note: event.target.value })
+            }
+          />
 
-      {pin.attachments.length > 0 ? (
-        <ul className="space-y-1.5">
-          {pin.attachments.map((assetId) => (
-            <Anexo
-              key={assetId}
-              sceneId={sceneId}
-              pinId={pin.id}
-              assetId={assetId}
-              nome={assets.find((asset) => asset.id === assetId)?.name}
-            />
-          ))}
-        </ul>
-      ) : null}
+          {pin.attachments.length > 0 ? (
+            <ul className="space-y-1.5">
+              {pin.attachments.map((assetId) => (
+                <Anexo
+                  key={assetId}
+                  sceneId={sceneId}
+                  pinId={pin.id}
+                  assetId={assetId}
+                  nome={assets.find((asset) => asset.id === assetId)?.name}
+                />
+              ))}
+            </ul>
+          ) : null}
 
-      <Button
-        variant="secondary"
-        size="sm"
-        className="w-full"
-        disabled={importando}
-        onClick={() => void anexarDeFora()}
-      >
-        {importando ? <Loader2 className="animate-spin" /> : <Paperclip />}
-        Anexar imagens
-      </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            disabled={importando}
+            onClick={() => void anexarDeFora()}
+          >
+            {importando ? <Loader2 className="animate-spin" /> : <Paperclip />}
+            Anexar imagens
+          </Button>
 
-      <p className="text-muted-foreground text-[10px] leading-snug">
-        Só você vê este ponto. A TV e os celulares recebem apenas o que você
-        transmitir.
-      </p>
+          {/* Apagar fica no pé, longe do X: no cabeçalho os dois ícones
+              encostados, um que tira da tela e outro que tira do mapa, pediam
+              uma diferença antes do clique. Embaixo, e vermelho no hover, ele
+              não se confunde com fechar. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive w-full"
+            onClick={() => {
+              // Fecha antes de apagar, e a ordem importa: o cartão se posiciona
+              // a partir do alfinete, e apagar primeiro o deixaria um quadro sem
+              // ponto de onde se ancorar.
+              onClose();
+              removePin(sceneId, pin.id);
+            }}
+          >
+            <Trash2 />
+            Apagar este ponto
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
