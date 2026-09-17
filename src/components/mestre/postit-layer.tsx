@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -8,14 +9,22 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Trash2 } from "lucide-react";
+import { Info, Trash2 } from "lucide-react";
 
 import { ListaDeSugestoes, MARCA_LISTA } from "@/components/mencoes/sugestoes";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   PostitTextoView,
   type Vinculos,
 } from "@/components/mestre/postit-texto-view";
-import { useSceneScale } from "@/components/playground/scene-stage";
+import {
+  emPixelDeTela,
+  useSceneScale,
+} from "@/components/playground/scene-stage";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useCharacterOwners } from "@/hooks/use-character-owners";
 import { useCharacters } from "@/hooks/use-characters";
@@ -36,6 +45,7 @@ import {
 import { normaliza } from "@/lib/search";
 import { POSTIT_Z, usePostitStore } from "@/lib/store/use-postit-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useWindowStore } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
 import {
   CORES_POSTIT,
@@ -63,14 +73,34 @@ const SONDAGEM_MS = 30_000;
  * Unidades de cena, e não pixels de tela: o postit escala com o zoom, e é essa
  * decisão que o faz parecer papel colado no mapa em vez de janela flutuando
  * sobre ele. Afastar o mapa afasta o papel junto, com o texto dentro.
+ *
+ * Só que "escala com o zoom" não pode ser deixado ao `zoom` do plano. Ver
+ * `medidaDoCorpo`, no `PostitPapel`.
  */
 const FONTE = 15;
+
+/** Margem interna do corpo do postit, em unidades de cena (era `p-1.5`). */
+const MARGEM = 6;
 
 /** Altura da faixa de arrasto, em unidades de cena. */
 const FAIXA = 22;
 
 /** Lado da alça de redimensionar, em unidades de cena. */
 const ALCA = 16;
+
+/**
+ * Espessura do traço dos ícones da faixa, em unidades do SVG (24 por ícone).
+ *
+ * O ícone mede em unidades de cena e escala com o papel, como deve — mas o
+ * TRAÇO não pode: a 708% um traço de 2 vira oito pixels, e a lixeira vira uma
+ * mancha. Dividir pela escala mantém o traço em torno de um pixel e meio na
+ * tela em qualquer zoom. É atributo do SVG, não comprimento CSS, então não
+ * cai no piso de um pixel do `zoom` (ver `emPixelDeTela`). Teto em 2,5 para o
+ * mapa afastado não engrossar o ícone além do desenho original.
+ */
+function tracoDoIcone(scale: number): number {
+  return Math.min(2.5, 2.5 / scale);
+}
 
 /**
  * O papel de cada cor.
@@ -85,6 +115,8 @@ const PAPEL: Record<CorPostit, string> = {
   rosa: "bg-pink-200 ring-pink-500/60",
   azul: "bg-sky-200 ring-sky-500/60",
   verde: "bg-emerald-200 ring-emerald-500/60",
+  // Anel cinza e não branco: sobre mapa claro, branco no branco some.
+  branco: "bg-neutral-50 ring-neutral-400/70",
 };
 
 /** A bolinha de escolha de cor, na faixa. */
@@ -93,6 +125,7 @@ const TINTA: Record<CorPostit, string> = {
   rosa: "bg-pink-400",
   azul: "bg-sky-400",
   verde: "bg-emerald-400",
+  branco: "bg-white",
 };
 
 /**
@@ -140,6 +173,7 @@ function PostitCamada({
   const removePostit = useSceneStore((state) => state.removePostit);
   const setEditingSceneId = useSceneStore((state) => state.setEditingSceneId);
   const scenes = useSceneStore((state) => state.board?.scenes);
+  const abrirJanela = useWindowStore((state) => state.abrir);
 
   /**
    * Os personagens vêm do store compartilhado, e os jogadores da sondagem.
@@ -235,22 +269,22 @@ function PostitCamada({
         if (!personagem) return null;
 
         return {
+          id: personagem.id,
           nome: personagem.nome,
           // O primeiro dono, quando há mais de um: o papel tem uma linha de
           // texto para isto, e a janela de personagens é onde se vê a lista
           // inteira.
           dono: donos.get(personagem.id)?.[0],
           presente: presencaPorPersonagem.get(personagem.id) ?? false,
+          // Retrato antes da miniatura, como na janela de personagens: a prévia
+          // é a cara dele, e a miniatura é a peça no mapa.
+          retrato: personagem.retrato ?? personagem.miniatura,
         };
       },
       arquivo: (nome) => porArquivo.get(normaliza(nome)) ?? null,
-      cena(nome) {
-        const scene = porCena.get(normaliza(nome));
-        if (!scene) return null;
-
-        return { id: scene.id, name: scene.name };
-      },
+      cena: (nome) => porCena.get(normaliza(nome)) ?? null,
       irParaCena: setEditingSceneId,
+      abrirJanela,
     }),
     [
       porPersonagem,
@@ -259,6 +293,7 @@ function PostitCamada({
       porArquivo,
       porCena,
       setEditingSceneId,
+      abrirJanela,
     ],
   );
 
@@ -352,6 +387,39 @@ function PostitPapel({
   onChange: (patch: Partial<Postit>) => void;
   onRemove: () => void;
 }) {
+  const { scale, ampliacaoNoLayout } = useSceneScale();
+
+  /**
+   * O corpo do papel medido em PIXEL DE TELA enquanto o plano amplia por `zoom`.
+   *
+   * O texto é 15 unidades de cena, e sob `zoom` isso viraria 15 × scale pixels
+   * -- até o WebKit intervir: ele tem um piso de tamanho lógico de fonte (9px)
+   * que vale só para tamanho que veio de `zoom`, e leva para o piso qualquer
+   * texto que o `zoom` tenha deixado menor. Abaixo de 60% o texto do postit
+   * parava de encolher enquanto o papel continuava, e o mestre via as letras
+   * CRESCEREM dentro do papel ao afastar o mapa -- a 30%, quatro palavras
+   * cobriam o postit inteiro. Durante o gesto, com o plano em `transform`, nada
+   * disso acontece; e o texto trocava de tamanho no instante em que a roda
+   * parava.
+   *
+   * Aqui o corpo desfaz o `zoom` do plano com `emPixelDeTela` e mede o texto
+   * ele mesmo: `FONTE × scale` pixels, que é exatamente o que 15 unidades de
+   * cena valem na tela. Como o zoom efetivo do corpo é 1, o piso não se aplica.
+   * A margem entra na mesma conta pela mesma razão -- ela é papel, e tem de
+   * encolher junto.
+   *
+   * Só no `zoom`: no `transform` o tamanho em unidades de cena já sai certo, e
+   * é a alternância entre as duas formas que tem de dar a MESMA geometria.
+   * Mesmo desenho do cartão do alfinete, em `PinWindow`.
+   */
+  const fator = ampliacaoNoLayout ? scale : 1;
+  const medidaDoCorpo = ampliacaoNoLayout ? emPixelDeTela(scale) : undefined;
+  const tipografia = {
+    fontSize: FONTE * fator,
+    lineHeight: 1.35,
+    padding: MARGEM * fator,
+  };
+
   /**
    * O arrasto em unidades de cena.
    *
@@ -646,6 +714,8 @@ function PostitPapel({
           ))}
         </div>
 
+        <AjudaDoPostit traco={tracoDoIcone(scale)} />
+
         <button
           type="button"
           aria-label="Tirar este postit do mapa"
@@ -671,7 +741,10 @@ function PostitPapel({
             onRemove();
           }}
         >
-          <Trash2 style={{ width: FAIXA * 0.6, height: FAIXA * 0.6 }} />
+          <Trash2
+            style={{ width: FAIXA * 0.6, height: FAIXA * 0.6 }}
+            strokeWidth={tracoDoIcone(scale)}
+          />
         </button>
       </div>
 
@@ -679,184 +752,206 @@ function PostitPapel({
         // `relative` para o espelho poder cobrir exatamente a mesma caixa do
         // campo. Sem o embrulho, o campo é filho direto da coluna do papel e o
         // espelho não teria a que se ancorar.
-        <div className="relative flex-1">
-          {/*
-            O espelho: o mesmo texto, a mesma tipografia, a mesma caixa.
+        <div className="relative min-h-0 flex-1">
+          {/* O corpo em pixel de tela. Ver `medidaDoCorpo`. */}
+          <div className="absolute inset-0" style={medidaDoCorpo}>
+            {/*
+              O espelho: o mesmo texto, a mesma tipografia, a mesma caixa.
 
-            Ele desenha o texto INTEIRO, invisível, e não só o pedaço até o
-            cursor. Duas razões: a marca do cursor só cai no lugar certo se o
-            que vem antes dela ocupar o mesmo espaço que ocupa no campo, e o
-            espelho precisa ter a mesma altura rolável do campo para a rolagem
-            de um valer para o outro.
+              Ele desenha o texto INTEIRO, invisível, e não só o pedaço até o
+              cursor. Duas razões: a marca do cursor só cai no lugar certo se o
+              que vem antes dela ocupar o mesmo espaço que ocupa no campo, e o
+              espelho precisa ter a mesma altura rolável do campo para a rolagem
+              de um valer para o outro.
 
-            `aria-hidden` porque é geometria, não conteúdo: o texto de verdade
-            está no campo ao lado, e um leitor de tela que lesse os dois leria
-            o postit duas vezes.
-          */}
-          <div
-            ref={espelho}
-            aria-hidden
-            className="pointer-events-none absolute inset-0 overflow-hidden p-1.5 whitespace-pre-wrap wrap-break-word"
-            style={{ fontSize: FONTE, lineHeight: 1.35 }}
-          >
-            <span className="invisible">{postit.texto.slice(0, cursor)}</span>
+              `aria-hidden` porque é geometria, não conteúdo: o texto de verdade
+              está no campo ao lado, e um leitor de tela que lesse os dois leria
+              o postit duas vezes.
+            */}
+            <div
+              ref={espelho}
+              aria-hidden
+              className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap wrap-break-word"
+              style={tipografia}
+            >
+              <span className="invisible">{postit.texto.slice(0, cursor)}</span>
 
-            {/* Largura zero: é só um lugar no texto, e qualquer largura aqui
-                empurraria o resto do espelho para a direita e desalinharia a
-                medida do que ela mesma existe para medir. */}
-            <span ref={marca} className="inline-block w-0" />
+              {/* Largura zero: é só um lugar no texto, e qualquer largura aqui
+                  empurraria o resto do espelho para a direita e desalinharia a
+                  medida do que ela mesma existe para medir. */}
+              <span ref={marca} className="inline-block w-0" />
 
-            {fantasma ? (
-              <span className="text-neutral-900/35">{fantasma}</span>
-            ) : null}
+              {fantasma ? (
+                <span className="text-neutral-900/35">{fantasma}</span>
+              ) : null}
 
-            <span className="invisible">{postit.texto.slice(cursor)}</span>
-          </div>
+              <span className="invisible">{postit.texto.slice(cursor)}</span>
+            </div>
 
-          <textarea
-            ref={campo}
-            className="absolute inset-0 size-full resize-none bg-transparent p-1.5 text-neutral-900 outline-none"
-            style={{ fontSize: FONTE, lineHeight: 1.35 }}
-            aria-label="Texto do postit"
-            placeholder="@personagem  /arquivo  >cena  **negrito**"
-            value={postit.texto}
-            onChange={(event) => {
-              onChange({ texto: event.target.value });
-              setCursor(event.target.selectionStart);
-            }}
-            // Cobre seta, clique e arrasto de seleção de uma vez: `select`
-            // dispara em qualquer mudança de posição do cursor, e é ela que a
-            // lista precisa acompanhar.
-            onSelect={(event) => setCursor(event.currentTarget.selectionStart)}
-            // O gesto de texto é do campo: sem isto, selecionar uma palavra com
-            // o mouse arrastaria o papel por baixo da seleção.
-            onPointerDown={(event) => event.stopPropagation()}
-            // A rolagem do campo é a do espelho, escrita direto no DOM: um
-            // postit cheio rola por dentro, e sem isto a marca do cursor e o
-            // fantasma ficariam parados enquanto o texto corre por baixo.
-            onScroll={(event) => {
-              const alvo = espelho.current;
-              if (alvo) alvo.scrollTop = event.currentTarget.scrollTop;
-            }}
-            // Perder o foco também sai da edição, e isto NÃO é redundante com o
-            // ouvinte de `pointerdown` acima: aqui entra o que o mouse não
-            // fez — Tab para o próximo controle, a janela indo para trás. O de
-            // cima cobre o contrário, o gesto de mouse que não move o foco
-            // porque alguém chamou `preventDefault`. Os dois chamam a mesma
-            // função, e chamá-la duas vezes não custa nada.
-            onBlur={fechar}
-            onKeyDown={(event) => {
-              const lista = sugestoes.length > 0;
+            <textarea
+              ref={campo}
+              // Cor do realce explícita: o padrão do WebKit sobre papel amarelo
+              // e verde some, e a seleção parecia não existir.
+              className="absolute inset-0 size-full resize-none bg-transparent text-neutral-900 outline-none selection:bg-sky-400/50"
+              style={tipografia}
+              aria-label="Texto do postit"
+              placeholder="@personagem  /arquivo  >cena  **negrito**"
+              value={postit.texto}
+              onChange={(event) => {
+                onChange({ texto: event.target.value });
+                setCursor(event.target.selectionStart);
+              }}
+              // Cobre seta, clique e arrasto de seleção de uma vez: `select`
+              // dispara em qualquer mudança de posição do cursor, e é ela que a
+              // lista precisa acompanhar.
+              onSelect={(event) => setCursor(event.currentTarget.selectionStart)}
+              // O gesto de texto é do campo: sem isto, selecionar uma palavra com
+              // o mouse arrastaria o papel por baixo da seleção.
+              onPointerDown={(event) => event.stopPropagation()}
+              // A rolagem do campo é a do espelho, escrita direto no DOM: um
+              // postit cheio rola por dentro, e sem isto a marca do cursor e o
+              // fantasma ficariam parados enquanto o texto corre por baixo.
+              onScroll={(event) => {
+                const alvo = espelho.current;
+                if (alvo) alvo.scrollTop = event.currentTarget.scrollTop;
+              }}
+              // Perder o foco também sai da edição, e isto NÃO é redundante com o
+              // ouvinte de `pointerdown` acima: aqui entra o que o mouse não
+              // fez — Tab para o próximo controle, a janela indo para trás. O de
+              // cima cobre o contrário, o gesto de mouse que não move o foco
+              // porque alguém chamou `preventDefault`. Os dois chamam a mesma
+              // função, e chamá-la duas vezes não custa nada.
+              onBlur={fechar}
+              onKeyDown={(event) => {
+                const lista = sugestoes.length > 0;
 
-              // Tab e seta-direita confirmam o fantasma, como no VS Code: com
-              // o cursor no fim da linha a seta não tem para onde ir, e é o
-              // gesto que a mão já faz para "aceitar isso".
-              if (fantasma && event.key === "ArrowRight") {
-                event.preventDefault();
-                aplicar(sugestoes[escolhido].nome);
+                // Tab e seta-direita confirmam o fantasma, como no VS Code: com
+                // o cursor no fim da linha a seta não tem para onde ir, e é o
+                // gesto que a mão já faz para "aceitar isso".
+                if (fantasma && event.key === "ArrowRight") {
+                  event.preventDefault();
+                  aplicar(sugestoes[escolhido].nome);
 
-                return;
-              }
+                  return;
+                }
 
-              // Com a lista aberta, as setas andam nela em vez de andar no
-              // texto: é o contrato de qualquer completar, e o cursor não tem
-              // para onde ir dentro de um nome que ainda está sendo escolhido.
-              if (
-                lista &&
-                (event.key === "ArrowDown" || event.key === "ArrowUp")
-              ) {
-                event.preventDefault();
+                // Com a lista aberta, as setas andam nela em vez de andar no
+                // texto: é o contrato de qualquer completar, e o cursor não tem
+                // para onde ir dentro de um nome que ainda está sendo escolhido.
+                if (
+                  lista &&
+                  (event.key === "ArrowDown" || event.key === "ArrowUp")
+                ) {
+                  event.preventDefault();
 
-                const passo = event.key === "ArrowDown" ? 1 : -1;
-                // Circular: da última volta para a primeira. Numa lista de até
-                // seis itens, bater no fim e parar é mais irritante que útil.
-                setIndice((atual) => {
-                  const proximo =
-                    (Math.min(atual, sugestoes.length - 1) + passo) %
-                    sugestoes.length;
-                  return proximo < 0 ? sugestoes.length - 1 : proximo;
-                });
+                  const passo = event.key === "ArrowDown" ? 1 : -1;
+                  // Circular: da última volta para a primeira. Numa lista de até
+                  // seis itens, bater no fim e parar é mais irritante que útil.
+                  setIndice((atual) => {
+                    const proximo =
+                      (Math.min(atual, sugestoes.length - 1) + passo) %
+                      sugestoes.length;
+                    return proximo < 0 ? sugestoes.length - 1 : proximo;
+                  });
 
-                return;
-              }
+                  return;
+                }
 
-              // Enter e Tab confirmam a escolha. Enter só quando a lista está
-              // aberta — fora dela ele é quebra de linha, e a anotação de três
-              // linhas é o caso comum.
-              if (lista && (event.key === "Enter" || event.key === "Tab")) {
-                event.preventDefault();
-                aplicar(sugestoes[escolhido].nome);
+                // Enter e Tab confirmam a escolha. Enter só quando a lista está
+                // aberta — fora dela ele é quebra de linha, e a anotação de três
+                // linhas é o caso comum.
+                if (lista && (event.key === "Enter" || event.key === "Tab")) {
+                  event.preventDefault();
+                  aplicar(sugestoes[escolhido].nome);
 
-                return;
-              }
+                  return;
+                }
 
-              if (event.key === "Escape") {
-                // O palco também escuta Escape; em qualquer um dos dois
-                // sentidos, a tecla é desta edição.
-                event.stopPropagation();
+                if (event.key === "Escape") {
+                  // O palco também escuta Escape; em qualquer um dos dois
+                  // sentidos, a tecla é desta edição.
+                  event.stopPropagation();
 
-                // Primeiro Esc fecha a lista, segundo sai do postit. Ver
-                // `dispensadoEm`.
-                if (lista && fragmento) setDispensadoEm(fragmento.inicio);
-                else fechar();
-              }
-            }}
-          />
-
-          {sugestoes.length > 0 && fragmento ? (
-            <ListaDeSugestoes
-              titulo={TITULO_DO_POSTIT[fragmento.sinal]}
-              itens={sugestoes}
-              indice={escolhido}
-              // Na marca do cursor, e não no campo: a lista abre embaixo da
-              // LINHA que está sendo escrita, como num editor de código. Presa
-              // ao rodapé do papel, ela ficava a quatro linhas de distância do
-              // que o mestre estava digitando.
-              ancora={marca}
-              onEscolher={aplicar}
+                  // Primeiro Esc fecha a lista, segundo sai do postit. Ver
+                  // `dispensadoEm`.
+                  if (lista && fragmento) setDispensadoEm(fragmento.inicio);
+                  else fechar();
+                }
+              }}
             />
-          ) : null}
+
+            {sugestoes.length > 0 && fragmento ? (
+              <ListaDeSugestoes
+                titulo={TITULO_DO_POSTIT[fragmento.sinal]}
+                itens={sugestoes}
+                indice={escolhido}
+                // Na marca do cursor, e não no campo: a lista abre embaixo da
+                // LINHA que está sendo escrita, como num editor de código. Presa
+                // ao rodapé do papel, ela ficava a quatro linhas de distância do
+                // que o mestre estava digitando.
+                ancora={marca}
+                onEscolher={aplicar}
+              />
+            ) : null}
+          </div>
         </div>
       ) : (
         // `div` com papel de botão, e não um `<button>`: o texto renderizado
         // tem botões DENTRO dele — o `/arquivo` e o `>cena` —, e botão dentro
         // de botão é marcação inválida que o navegador desmancha, levando com
         // ela o clique dos dois. O foco e o Enter vêm à mão logo abaixo.
-        <div
-          role="button"
-          tabIndex={0}
-          className="flex-1 cursor-text overflow-hidden p-1.5 text-left text-neutral-900"
-          style={{ fontSize: FONTE, lineHeight: 1.35 }}
-          aria-label="Escrever neste postit"
-          onPointerDown={(event) => {
-            // Impede o palco de ler este pointerdown como clique no vazio —
-            // que, com uma ferramenta de mira na mão, colaria outro postit por
-            // cima deste.
-            event.stopPropagation();
-          }}
-          onClick={(event) => {
-            // Clique que veio de um marcador é do marcador: sem esta guarda,
-            // abrir a cena vinculada ou a miniatura do arquivo também poria o
-            // postit em edição, e o painel abriria já coberto pelo campo.
-            //
-            // `closest` e não comparar com o alvo: clicar no texto comum acerta
-            // um `<span>` ou um `<strong>` filho, e esse clique É para editar.
-            if ((event.target as HTMLElement).closest("button")) return;
+        <div className="relative min-h-0 flex-1">
+          <div
+            role="button"
+            tabIndex={0}
+            // Em pixel de tela, como o campo de edição. Ver `medidaDoCorpo`.
+            // `select-text` contra o `select-none` da raiz: ler um postit
+            // inclui copiar um nome dele. O clique abaixo respeita a seleção.
+            className="absolute inset-0 cursor-text overflow-hidden text-left text-neutral-900 select-text selection:bg-sky-400/50"
+            style={{ ...medidaDoCorpo, ...tipografia }}
+            aria-label="Escrever neste postit"
+            onPointerDown={(event) => {
+              // Impede o palco de ler este pointerdown como clique no vazio —
+              // que, com uma ferramenta de mira na mão, colaria outro postit por
+              // cima deste.
+              event.stopPropagation();
+            }}
+            onClick={(event) => {
+              // Clique que veio de um marcador é do marcador: sem esta guarda,
+              // abrir a cena vinculada ou a miniatura do arquivo também poria o
+              // postit em edição, e o painel abriria já coberto pelo campo.
+              //
+              // `closest` e não comparar com o alvo: clicar no texto comum acerta
+              // um `<span>` ou um `<strong>` filho, e esse clique É para editar.
+              if ((event.target as HTMLElement).closest("button")) return;
 
-            editar(postit.id);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
+              // Arrastar para selecionar termina num `click`, e abrir a edição
+              // aqui trocaria o texto pintado pelo campo e perderia a seleção
+              // que a pessoa acabou de fazer. Com texto selecionado dentro do
+              // papel, o clique é da seleção; sem, é para editar.
+              const selecao = window.getSelection();
+              if (
+                selecao &&
+                !selecao.isCollapsed &&
+                event.currentTarget.contains(selecao.anchorNode)
+              )
+                return;
 
-            event.preventDefault();
-            editar(postit.id);
-          }}
-        >
-          {postit.texto ? (
-            <PostitTextoView texto={postit.texto} vinculos={vinculos} />
-          ) : (
-            <span className="text-neutral-500 italic">Escrever…</span>
-          )}
+              editar(postit.id);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+
+              event.preventDefault();
+              editar(postit.id);
+            }}
+          >
+            {postit.texto ? (
+              <PostitTextoView texto={postit.texto} vinculos={vinculos} />
+            ) : (
+              <span className="text-neutral-500 italic">Escrever…</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -875,5 +970,68 @@ function PostitPapel({
         onPointerDown={redimensionar}
       />
     </div>
+  );
+}
+
+/** Uma linha da ajuda: o gesto ou o sinal, e o que ele faz. */
+const COMANDOS: Array<[string, string]> = [
+  ["@nome", "Personagem. Clique abre a ficha; mouse em cima mostra o retrato."],
+  ["/arquivo", "Imagem ou som do acervo. Imagem abre numa janela ao clicar."],
+  [">cena", "Cena do board. Clique leva para ela; mouse em cima mostra o mapa."],
+  ["**texto**", "Negrito."],
+  ["Tab, →", "Aceita a sugestão em cinza enquanto digita."],
+  ["↑ ↓, Enter", "Anda na lista de sugestões e escolhe."],
+  ["Esc", "Fecha a lista; de novo, sai da edição."],
+  ["Faixa", "Arrasta o papel. As bolinhas trocam a cor."],
+  ["Canto", "O triângulo de baixo à direita redimensiona."],
+];
+
+/**
+ * O botão de ajuda da faixa: lista os sinais e os gestos do postit.
+ *
+ * Existe porque os sinais são invisíveis até alguém os conhecer: um papel em
+ * branco não sugere que `@` complete um personagem, e o placeholder do campo
+ * some na primeira letra. Sempre à vista, como o botão de tirar ao lado, e pela
+ * mesma razão: com o mapa afastado a faixa é uma tira de três pixels, e um
+ * botão que só aparece no hover ali é um botão que não existe.
+ *
+ * `Popover` e não `Tooltip`: é texto para ler, com nove linhas, e some ao
+ * clicar fora. Sai do palco por portal, como a lista de sugestões: o conteúdo
+ * do postit escala com o zoom, e a 40% a ajuda seria um selo ilegível.
+ */
+function AjudaDoPostit({ traco }: { traco: number }) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Como escrever neste postit"
+            className="shrink-0 text-neutral-900/50 transition-colors hover:text-neutral-900"
+            // O pointerdown daqui chega antes do arrasto da faixa: sem isto,
+            // abrir a ajuda arrastaria o papel alguns pixels no mesmo gesto.
+            onPointerDown={(event) => event.stopPropagation()}
+            // E o clique não pode virar clique no vazio do palco nem "editar".
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Info
+              style={{ width: FAIXA * 0.6, height: FAIXA * 0.6 }}
+              strokeWidth={traco}
+            />
+          </button>
+        }
+      />
+      <PopoverContent align="start" className="w-72 p-3" side="top">
+        <p className="mb-2 text-xs font-medium">O que dá para escrever aqui</p>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+          {COMANDOS.map(([sinal, faz]) => (
+            <Fragment key={sinal}>
+              <dt className="font-mono font-medium whitespace-nowrap">{sinal}</dt>
+              <dd className="text-muted-foreground">{faz}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      </PopoverContent>
+    </Popover>
   );
 }

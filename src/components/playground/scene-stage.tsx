@@ -334,6 +334,44 @@ export function SceneStage({
    */
   const conteudoNoLayout = !smooth && parada && scale !== 0;
 
+  /**
+   * A malha de pontos do vazio, só onde se navega (o Mestre).
+   *
+   * Um palco vazio é preto em toda ampliação e em todo deslocamento: a Cena 3
+   * sem mapa dava zoom de 100% a 400% sem nenhum pixel mudar, e o mestre não
+   * sabia se a roda tinha feito algo. Os pontos são a referência que o mapa
+   * dá quando existe. Dois fundos CSS e nenhum nó a mais dentro dos planos
+   * (ver `debug-do-palco` §3): a moldura desenha o lado de fora em pixel de
+   * tela, deslocado por `offset`; o plano desenha o lado de dentro em unidade
+   * de cena e deixa o `zoom`/`transform` escalar. As duas malhas têm o mesmo
+   * passo em cena e a mesma origem, então emendam na borda do plano.
+   *
+   * O passo em cena dobra ou cai pela metade para o espaçamento na tela ficar
+   * entre 24 e 48 px: a 400% um ponto a cada 32 unidades seria uma parede de
+   * bolinhas, e a 25% seria um ponto a cada oito pixels.
+   */
+  const malha = useMemo(() => {
+    if (!onViewportChange || scale === 0) return null;
+
+    let passo = 32;
+    while (passo * scale < 24) passo *= 2;
+    while (passo * scale > 48) passo /= 2;
+
+    const ponto = "radial-gradient(circle, rgba(255,255,255,0.13) 1px, transparent 1.5px)";
+
+    return {
+      fora: {
+        backgroundImage: ponto,
+        backgroundSize: `${passo * scale}px ${passo * scale}px`,
+        backgroundPosition: `${offsetX}px ${offsetY}px`,
+      },
+      dentro: {
+        backgroundImage: ponto,
+        backgroundSize: `${passo}px ${passo}px`,
+      },
+    };
+  }, [onViewportChange, scale, offsetX, offsetY]);
+
   /** A câmera, resumida a uma string: mudou isto, mudou o enquadramento. */
   const camera = `${scale}|${offsetX}|${offsetY}`;
   const [ultima, setUltima] = useState(camera);
@@ -647,14 +685,30 @@ export function SceneStage({
     >
       {/* O fundo: PRIMEIRO filho, então tudo desenha por cima e ele só recebe o
           gesto que sobra -- o clique no vazio, fora do plano. Ver `fundoNo`. */}
-      <div ref={setFundoNo} className="absolute inset-0" />
+      <div
+        ref={setFundoNo}
+        className="absolute inset-0"
+        style={malha?.fora}
+      />
 
       {/* O plano de BAIXO: o conteúdo da cena, e o único que troca de forma de
           ampliar. Quem desenha nele chega por portal -- ver `planoDeConteudo`. */}
       <div
         ref={envelopeDoConteudoRef}
         aria-hidden={scale === 0}
-        className={cn("absolute top-0 left-0", scale === 0 && "invisible")}
+        // `pointer-events-none` porque esta caixa tem 1920×1080 SEM escala: a
+        // ampliação está no filho, e este só desloca. Na tela o plano ocupa
+        // `1920 × scale` pixels, mas a caixa transparente do pai continua com o
+        // tamanho cheio -- a 39% ela passa 1166 px do plano para a direita e
+        // 656 para baixo -- e era ela quem recebia o clique fora do mapa, antes
+        // de ele chegar ao `fundoDoPalco`. O sintoma: cravar ponto, colar postit,
+        // soltar imagem e desmarcar só funcionavam sobre a imagem do mapa.
+        // Medido pelo HUD: `sob o ponteiro: div.absolute.top-0.left-0 1920x1080`,
+        // sem `data-palco` na cadeia. O filho religa o ponteiro logo abaixo.
+        className={cn(
+          "pointer-events-none absolute top-0 left-0",
+          scale === 0 && "invisible",
+        )}
         style={{
           width: SCENE_WIDTH,
           height: SCENE_HEIGHT,
@@ -670,10 +724,13 @@ export function SceneStage({
           // elemento de fora quando a forma vira `zoom`, que não cria. O
           // sintoma era o mapa saltando e sumindo no instante em que a câmera
           // parava.
-          className="relative bg-black"
+          // `pointer-events-auto`: o pai desligou o ponteiro por ter a caixa sem
+          // escala; este tem a caixa certa, e é aqui que o mapa recebe o gesto.
+          className="pointer-events-auto relative bg-black"
           style={{
             width: SCENE_WIDTH,
             height: SCENE_HEIGHT,
+            ...malha?.dentro,
             // As duas formas produzem a MESMA geometria: é o que deixa alternar
             // entre elas sem a cena saltar.
             ...(conteudoNoLayout
@@ -725,27 +782,6 @@ export function SceneStage({
       >
 
         {debug ? <MiraDebug cor="cyan" /> : null}
-
-        {/* O contorno da área, desenhado como FILHO e não como `outline` do
-            plano: a caixa acompanha o conteúdo, e conteúdo largado à esquerda
-            do plano tem canto negativo -- que um contorno do próprio plano não
-            teria como representar, porque ele começa na origem por definição.
-
-            Mede em unidade de cena e herda a escala do plano, como todo o
-            resto: a linha engrossa e afina com o zoom sem ninguém dividir por
-            `scale`. */}
-        {limites ? (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute outline outline-white/10"
-            style={{
-              left: limites.minX,
-              top: limites.minY,
-              width: limites.maxX - limites.minX,
-              height: limites.maxY - limites.minY,
-            }}
-          />
-        ) : null}
 
         {/* Sem escala, sem filhos.
             Treze lugares no palco convertem pixel de tela em unidade de cena

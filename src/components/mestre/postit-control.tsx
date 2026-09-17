@@ -21,6 +21,7 @@ const AMOSTRA: Record<CorPostit, string> = {
   rosa: "bg-pink-200 ring-pink-500/60",
   azul: "bg-sky-200 ring-sky-500/60",
   verde: "bg-emerald-200 ring-emerald-500/60",
+  branco: "bg-neutral-50 ring-neutral-400/70",
 };
 
 /**

@@ -61,8 +61,10 @@ export function useDebugDoPalco(): boolean {
 
   useEffect(() => {
     const aoTeclar = (evento: KeyboardEvent) => {
-      if (!(evento.ctrlKey && evento.altKey && evento.key.toLowerCase() === "d"))
-        return;
+      // `Ctrl+Shift+D` também: `Ctrl+Alt+D` é "mostrar área de trabalho" no
+      // GNOME e no KDE, e o sistema engole a tecla antes de ela chegar aqui.
+      const d = evento.key.toLowerCase() === "d";
+      if (!(evento.ctrlKey && (evento.altKey || evento.shiftKey) && d)) return;
       evento.preventDefault();
       alternar();
     };
@@ -113,6 +115,13 @@ export type AmostraDoPalco = {
     conteudo: Transbordo | null;
     controles: Transbordo | null;
   };
+  /**
+   * O que está SOB O PONTEIRO, e se o envelope do palco (`[data-palco]`) está
+   * na cadeia dele. É a pergunta "por que o clique no vazio não faz nada?"
+   * respondida por medida: o nó de cima que o `elementFromPoint` devolve, com
+   * tag, classes e caixa, e a cadeia de ancestrais até o `body`.
+   */
+  sob: string;
   /** Centro medido da mira de cada plano, contra o centro esperado. */
   miras: {
     esperado: { x: number; y: number };
@@ -173,6 +182,34 @@ export function DebugPalco({
     let piorGap = 0;
     let n = 0;
     let ultimoEnvio = 0;
+
+    // O último ponto do mouse, para o `elementFromPoint` de cada amostra.
+    const ponteiro = { x: -1, y: -1 };
+    const mover = (event: PointerEvent) => {
+      ponteiro.x = event.clientX;
+      ponteiro.y = event.clientY;
+    };
+    document.addEventListener("pointermove", mover);
+
+    const descreve = (el: Element | null): string => {
+      if (!el) return "—";
+      const r = el.getBoundingClientRect();
+      const cls = (el.getAttribute("class") ?? "").split(/\s+/).slice(0, 4).join(".");
+      const marca = el.hasAttribute("data-palco") ? "[data-palco]" : "";
+      return `${el.tagName.toLowerCase()}${cls ? "." + cls : ""}${marca} ${r.width.toFixed(0)}x${r.height.toFixed(0)}@(${r.left.toFixed(0)},${r.top.toFixed(0)})`;
+    };
+    const sobOPonteiro = (): string => {
+      if (ponteiro.x < 0) return "—";
+      const alvo = document.elementFromPoint(ponteiro.x, ponteiro.y);
+      if (!alvo) return "nada";
+      const cadeia: string[] = [];
+      for (let el: Element | null = alvo.parentElement; el && el !== document.body; el = el.parentElement)
+        cadeia.push(
+          `${el.tagName.toLowerCase()}${el.hasAttribute("data-palco") ? "[data-palco]" : ""}${(el as HTMLElement).style.zoom ? "{zoom}" : ""}`,
+        );
+      const envelope = alvo.closest("[data-palco]");
+      return `${descreve(alvo)}\n   palco na cadeia: ${envelope ? "SIM " + descreve(envelope) : "NÃO"}\n   cadeia: ${cadeia.slice(0, 8).join(" > ")}`;
+    };
 
     const tick = (t: number) => {
       if (!vivo) return;
@@ -272,6 +309,7 @@ export function DebugPalco({
           conteudo: rel(conteudo),
           controles: rel(controles),
           transbordo: { conteudo: transbordo(conteudo), controles: transbordo(controles) },
+          sob: sobOPonteiro(),
           miras: { esperado: centro, magenta: mira(conteudo), cyan: mira(controles) },
         };
         piorGap = 0;
@@ -290,6 +328,7 @@ export function DebugPalco({
 
     return () => {
       vivo = false;
+      document.removeEventListener("pointermove", mover);
     };
   }, [tela, frame, conteudo, controles, scale, offsetX, offsetY, modoZoom, viewport]);
 
@@ -325,6 +364,7 @@ transbordo conteudo  ${transTxt(m?.transbordo.conteudo ?? null)}
 transbordo controles ${transTxt(m?.transbordo.controles ?? null)}
 magenta ${miraTxt(m?.miras.magenta ?? null)}
 cyan    ${miraTxt(m?.miras.cyan ?? null)}
+sob o ponteiro: ${m?.sob ?? "—"}
 (as duas miras marcam o CENTRO do plano; separadas = os planos se descolaram na pintura)`}
     </pre>
   );

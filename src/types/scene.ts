@@ -245,11 +245,19 @@ export type NewMapPin = Pick<MapPin, "x" | "y"> &
  * quanto no escuro. Um `#fde047` no arquivo travaria os três de uma vez, e o
  * papel amarelo do tema escuro ficaria a mesma mancha berrante do claro.
  *
- * Quatro, e não seis como o lápis: aqui a cor separa ASSUNTO — o que é pista, o
- * que é regra, o que é fala de PNJ, o que é lembrete — e uma mesa não sustenta
- * seis assuntos combinados de cabeça.
+ * Quatro coloridas, e não seis como o lápis: aqui a cor separa ASSUNTO — o que
+ * é pista, o que é regra, o que é fala de PNJ, o que é lembrete — e uma mesa
+ * não sustenta seis assuntos combinados de cabeça. O branco é o quinto e não
+ * conta como assunto: é o papel sem cor, para quem não quer classificar nada
+ * ou quer uma nota neutra sobre um mapa que já tem amarelo demais.
  */
-export const CORES_POSTIT = ["amarelo", "rosa", "azul", "verde"] as const;
+export const CORES_POSTIT = [
+  "amarelo",
+  "rosa",
+  "azul",
+  "verde",
+  "branco",
+] as const;
 
 export type CorPostit = (typeof CORES_POSTIT)[number];
 
