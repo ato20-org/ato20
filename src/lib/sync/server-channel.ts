@@ -132,7 +132,6 @@ export function createSubscriberChannel(
             // da faixa: o padrão é o estado certo, e não silêncio.
             volume: state.volume ?? DEFAULT_SESSION_VOLUME,
             spotlight: state.spotlight ?? null,
-            medida: state.medida ?? null,
             // Mesma razão dos retratos: quadro de uma versão sem dados de
             // jogador é quadro válido, e não motivo para a tela cair.
             rolagens: state.rolagens ?? [],

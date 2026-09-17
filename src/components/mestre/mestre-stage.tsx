@@ -13,12 +13,13 @@ import { PinLayer } from "@/components/mestre/pin-layer";
 import { PostitFantasma } from "@/components/mestre/postit-fantasma";
 import { PostitLayer } from "@/components/mestre/postit-layer";
 import { postitNaArea } from "@/lib/geometry/postit";
+import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
+import type { PontaDoMedidor } from "@/components/playground/medidor-layer";
 import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
 import { CamerasFantasma } from "@/components/playground/camera-fantasma";
 import { MarqueeBox } from "@/components/playground/marquee-box";
 import { PortraitAnchors } from "@/components/playground/portrait-anchors";
-import { RulerOverlay } from "@/components/playground/ruler-overlay";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { useSceneScale } from "@/components/playground/scene-stage";
@@ -87,7 +88,6 @@ import { CORNER_HANDLES, MIN_ITEM_SIZE } from "@/lib/geometry/transform";
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
-import { useReguaStore } from "@/lib/store/use-regua-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -100,6 +100,7 @@ import {
   type AncoraRetrato,
   type CanvasItem,
   type FogRegion,
+  type Medidor,
   type Portrait,
   type Scene,
   type Traco,
@@ -203,6 +204,8 @@ export function MestreStage({ scene }: { scene: Scene }) {
   const cor = useToolStore((state) => state.cor);
   const espessura = useToolStore((state) => state.espessura);
   const corPostit = useToolStore((state) => state.corPostit);
+  const formaMedidor = useToolStore((state) => state.formaMedidor);
+  const corMedidor = useToolStore((state) => state.corMedidor);
   const setTool = useToolStore((state) => state.setTool);
 
   const editarPostit = usePostitStore((state) => state.editar);
@@ -229,6 +232,10 @@ export function MestreStage({ scene }: { scene: Scene }) {
   const select = useSelectionStore((state) => state.select);
   const toggle = useSelectionStore((state) => state.toggle);
   const selectFog = useSelectionStore((state) => state.selectFog);
+  const selectedMedidorId = useSelectionStore(
+    (state) => state.selectedMedidorId,
+  );
+  const selectMedidor = useSelectionStore((state) => state.selectMedidor);
   const selectPortrait = useSelectionStore((state) => state.selectPortrait);
   const selectPortraits = useSelectionStore((state) => state.selectPortraits);
   const togglePortrait = useSelectionStore((state) => state.togglePortrait);
@@ -237,6 +244,9 @@ export function MestreStage({ scene }: { scene: Scene }) {
   const updateItem = useSceneStore((state) => state.updateItem);
   const updateItems = useSceneStore((state) => state.updateItems);
   const addFog = useSceneStore((state) => state.addFog);
+  const addMedidor = useSceneStore((state) => state.addMedidor);
+  const updateMedidor = useSceneStore((state) => state.updateMedidor);
+  const removeMedidores = useSceneStore((state) => state.removeMedidores);
   const updateFog = useSceneStore((state) => state.updateFog);
   const addTraco = useSceneStore((state) => state.addTraco);
   const removeTracos = useSceneStore((state) => state.removeTracos);
@@ -421,19 +431,6 @@ export function MestreStage({ scene }: { scene: Scene }) {
    */
   const [riscando, setRiscando] = useState(false);
 
-  /**
-   * A medida em curso, no store porque ela é PUBLICADA.
-   *
-   * A mesa acompanha a conta enquanto o mestre mede, e um estado local do palco
-   * não chegaria ao `MestreShell`, que monta o quadro publicado.
-   *
-   * No estado e não no DOM como a prévia do risco: a régua emite um par de
-   * pontos por quadro, e não uma lista que cresce -- e a etiqueta recalcula o
-   * número, que é React de qualquer jeito.
-   */
-  const medindo = useReguaStore((state) => state.medida);
-  const medirNoStore = useReguaStore((state) => state.medir);
-  const limparMedida = useReguaStore((state) => state.limpar);
   const previa = useRef<SVGPolylineElement | null>(null);
 
   const [apagando, setApagando] = useState<ReadonlySet<string>>(NADA_APAGANDO);
@@ -762,17 +759,74 @@ export function MestreStage({ scene }: { scene: Scene }) {
   function medir(event: ReactPointerEvent, anchor: { x: number; y: number }) {
     if (!scene.grid) return;
 
-    medirNoStore({ de: anchor, para: anchor });
+    // Nasce na cena já no primeiro toque, e cresce no arrasto: a mesa vê a
+    // conta acontecendo, como via antes, e o que sobra ao soltar é um medidor
+    // colocado. Um clique sem arrasto não deixa nada -- ver `medidorVazio`.
+    const id = addMedidor(scene.id, {
+      forma: formaMedidor,
+      cor: corMedidor,
+      x: anchor.x,
+      y: anchor.y,
+      x2: anchor.x,
+      y2: anchor.y,
+    });
+    selectMedidor(id);
 
     startDrag(event, {
-      onMove: (_delta, native) =>
-        medirNoStore({
-          de: anchor,
-          para: toScene(native.clientX, native.clientY),
-        }),
-      // Solta e some: medida é pergunta, não anotação. O que se quer registrar
-      // tem lápis e ponto de anotação.
-      onEnd: limparMedida,
+      onMove: (_delta, native) => {
+        const ponta = toScene(native.clientX, native.clientY);
+        updateMedidor(scene.id, id, { x2: ponta.x, y2: ponta.y });
+      },
+      onEnd: (native) => {
+        const ponta = toScene(native.clientX, native.clientY);
+        if (medidorVazio({ ...anchor, x2: ponta.x, y2: ponta.y })) {
+          removeMedidores(scene.id, [id]);
+          clear();
+        }
+      },
+    });
+  }
+
+  /** Clique num medidor: seleciona e, se arrastar, move inteiro. */
+  function onMedidorPointerDown(event: ReactPointerEvent, medidor: Medidor) {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+
+    selectMedidor(medidor.id);
+
+    startDrag(event, {
+      onMove: (delta) => {
+        const movido = moverMedidor(medidor, delta);
+        updateMedidor(scene.id, medidor.id, {
+          x: movido.x,
+          y: movido.y,
+          x2: movido.x2,
+          y2: movido.y2,
+        });
+      },
+    });
+  }
+
+  /** Alça numa ponta: só aquela ponta anda. */
+  function onMedidorAlcaPointerDown(
+    event: ReactPointerEvent,
+    medidor: Medidor,
+    ponta: PontaDoMedidor,
+  ) {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+
+    startDrag(event, {
+      onMove: (_delta, native) => {
+        const onde = toScene(native.clientX, native.clientY);
+        updateMedidor(
+          scene.id,
+          medidor.id,
+          ponta === "origem"
+            ? { x: onde.x, y: onde.y }
+            : { x2: onde.x, y2: onde.y },
+        );
+      },
     });
   }
 
@@ -1256,6 +1310,13 @@ export function MestreStage({ scene }: { scene: Scene }) {
           onPortraitPointerDown={
             panMode || aiming ? undefined : onPortraitPointerDown
           }
+          medidorSelecionadoId={selectedMedidorId}
+          onMedidorPointerDown={
+            panMode || aiming ? undefined : onMedidorPointerDown
+          }
+          onMedidorAlcaPointerDown={
+            panMode || aiming ? undefined : onMedidorAlcaPointerDown
+          }
         />
 
       {/* Irmão do `SceneLayer`, e de propósito FORA dele: o `SceneLayer` é o
@@ -1564,10 +1625,6 @@ export function MestreStage({ scene }: { scene: Scene }) {
             strokeLinejoin="round"
           />
         </svg>
-      ) : null}
-
-      {medindo && scene.grid ? (
-        <RulerOverlay de={medindo.de} para={medindo.para} grid={scene.grid} />
       ) : null}
 
       {marquee ? <MarqueeBox bounds={marquee} /> : null}

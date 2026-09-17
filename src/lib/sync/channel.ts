@@ -1,6 +1,5 @@
 import type { RolagemDaMesa } from "@/types/dado";
 import type {
-  Medida,
   Portrait,
   Scene,
   SessionTrack,
@@ -34,8 +33,6 @@ export type LiveState = {
   portraits: Portrait[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
-  /** A medida em curso da régua. `null` = ninguém medindo. */
-  medida: Medida | null;
   /**
    * Os dados que os jogadores jogaram na mesa, ainda quentes.
    *

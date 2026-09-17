@@ -17,6 +17,7 @@ import { useMemo, useState } from "react";
 
 import { GridControl } from "@/components/mestre/grid-control";
 import { PencilControl } from "@/components/mestre/pencil-control";
+import { ReguaControl } from "@/components/mestre/regua-control";
 import { PostitControl } from "@/components/mestre/postit-control";
 import { Button } from "@/components/ui/button";
 import {
@@ -154,7 +155,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     tool: "regua",
     label: "Régua",
     hint: scene.grid
-      ? `Arraste para medir. Cada quadrado da grade vale ${METROS_POR_QUADRADO} m.`
+      ? `Arraste para colocar um medidor: régua, círculo, cone ou retângulo. Cada quadrado da grade vale ${METROS_POR_QUADRADO} m.`
       : "Ligue a grade primeiro: é o quadrado dela que diz quanto vale um metro.",
     icon: Ruler,
   };
@@ -240,6 +241,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
           sozinhos. */}
       <PencilControl />
       <PostitControl />
+      <ReguaControl />
 
       {/* Largar a ferramenta, para quem escolheu e desistiu. O Esc faz o mesmo,
           mas um botão à vista é o que diz que dá para desistir: a seta está

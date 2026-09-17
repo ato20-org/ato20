@@ -49,6 +49,8 @@ import {
   type Scene,
   type SceneGrid,
   type Viewport,
+  type Medidor,
+  type NewMedidor,
 } from "@/types/scene";
 
 type HydrationStatus = "idle" | "loading" | "ready" | "error";
@@ -216,6 +218,14 @@ type SceneStore = {
    * por um daria três entradas no desfazer para um gesto só.
    */
   removeTracos: (sceneId: string, tracoIds: string[]) => void;
+  /** Coloca um medidor. Passa pelo histórico: medir e deixar é edição da cena. */
+  addMedidor: (sceneId: string, medidor: NewMedidor) => string;
+  updateMedidor: (
+    sceneId: string,
+    medidorId: string,
+    patch: Partial<Omit<Medidor, "id">>,
+  ) => void;
+  removeMedidores: (sceneId: string, medidorIds: string[]) => void;
   updateFog: (
     sceneId: string,
     fogId: string,
@@ -706,6 +716,45 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         ...scene,
         tracos: (scene.tracos ?? []).filter((traco) => !apagar.has(traco.id)),
       }));
+    },
+
+    addMedidor(sceneId, medidor) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        medidores: [...(scene.medidores ?? []), { ...medidor, id }],
+      }));
+
+      return id;
+    },
+
+    updateMedidor(sceneId, medidorId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        medidores: (scene.medidores ?? []).map((medidor) =>
+          medidor.id === medidorId ? { ...medidor, ...patch } : medidor,
+        ),
+      }));
+    },
+
+    removeMedidores(sceneId, medidorIds) {
+      if (medidorIds.length === 0) return;
+
+      const apagar = new Set(medidorIds);
+
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.medidores ?? []).filter(
+          (medidor) => !apagar.has(medidor.id),
+        );
+
+        // `undefined` quando esvazia, como `removePostit`: é a AUSÊNCIA do
+        // campo que mantém a cena sem nada do mestre na mesma referência.
+        return {
+          ...scene,
+          medidores: restantes.length > 0 ? restantes : undefined,
+        };
+      });
     },
 
     updateFog(sceneId, fogId, patch) {

@@ -53,7 +53,6 @@ import {
   selectLiveScene,
   useSceneStore,
 } from "@/lib/store/use-scene-store";
-import { useReguaStore } from "@/lib/store/use-regua-store";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
@@ -110,7 +109,6 @@ export function MestreShell() {
   );
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
-  const medida = useReguaStore((state) => state.medida);
   const rolagens = useRolagensStore((state) => state.bandeja);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
@@ -143,8 +141,6 @@ export function MestreShell() {
   //
   // O volume viaja FORA da faixa: é da sessão, e trocar de música não mexe
   // nele.
-  // A medida entra no quadro publicado: a mesa acompanha a conta enquanto o
-  // mestre mede. Ver `useReguaStore`.
   // As rolagens dos jogadores entram no quadro publicado, e é a única coisa
   // dele que não nasceu nesta janela: ela chega do daemon, pelo fluxo que
   // `useRolagensDaMesa` escuta, e sai daqui com o personagem já resolvido. O
@@ -155,7 +151,6 @@ export function MestreShell() {
     volume: trackVolume,
     portraits,
     spotlight,
-    medida,
     rolagens,
   });
 
