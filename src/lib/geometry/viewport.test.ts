@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Bounds } from "@/lib/geometry/bounds";
 import {
+  AFASTAR_EXTRA,
   cabeTudo,
   clampViewport,
   comFolga,
@@ -30,7 +31,7 @@ function clampComoEraAntes({ x, y, width }: Viewport): Viewport {
   const preso = (valor: number, min: number, max: number) =>
     Math.min(max, Math.max(min, valor));
 
-  const largura = preso(width, MIN_WIDTH, SCENE_WIDTH);
+  const largura = preso(width, MIN_WIDTH, SCENE_WIDTH * AFASTAR_EXTRA);
   const altura = largura * ASPECT;
 
   return {
@@ -92,9 +93,23 @@ describe("com tudo dentro do plano, nada mudou", () => {
     expect(viewportZoom(FULL_VIEWPORT)).toBe(1);
   });
 
-  it("só diz que cabe tudo a partir da largura do plano", () => {
-    expect(cabeTudo({ ...FULL_VIEWPORT, width: 1919 }, PLANO)).toBe(false);
-    expect(cabeTudo(FULL_VIEWPORT, PLANO)).toBe(true);
+  it("só diz que chegou ao fim do afastar a duas larguras do plano", () => {
+    expect(cabeTudo(FULL_VIEWPORT, PLANO)).toBe(false);
+    expect(
+      cabeTudo(
+        { ...FULL_VIEWPORT, width: SCENE_WIDTH * AFASTAR_EXTRA - 1 },
+        PLANO,
+      ),
+    ).toBe(false);
+    expect(
+      cabeTudo({ ...FULL_VIEWPORT, width: SCENE_WIDTH * AFASTAR_EXTRA }, PLANO),
+    ).toBe(true);
+  });
+
+  it("afasta até metade do plano e para lá", () => {
+    const longe = clampViewport({ ...FULL_VIEWPORT, width: 99_999 }, PLANO);
+
+    expect(viewportZoom(longe)).toBeCloseTo(1 / AFASTAR_EXTRA);
   });
 
   it("é o padrão quando ninguém informa área", () => {
@@ -120,13 +135,13 @@ describe("conteúdo que passou das bordas do plano", () => {
     expect(viewportZoom(viewportQueCabe(vazouParaDireita))).toBeLessThan(1);
   });
 
-  it("não deixa afastar depois que tudo já cabe", () => {
+  it("deixa afastar até o dobro do encaixe, e não mais", () => {
     const encaixado = viewportQueCabe(vazouParaDireita);
+    const longe = zoomViewport(encaixado, 0.1, { x: 0, y: 0 }, vazouParaDireita);
 
-    expect(cabeTudo(encaixado, vazouParaDireita)).toBe(true);
-    expect(
-      zoomViewport(encaixado, 0.5, { x: 0, y: 0 }, vazouParaDireita).width,
-    ).toBeCloseTo(encaixado.width);
+    expect(cabeTudo(encaixado, vazouParaDireita)).toBe(false);
+    expect(longe.width).toBeCloseTo(encaixado.width * AFASTAR_EXTRA);
+    expect(cabeTudo(longe, vazouParaDireita)).toBe(true);
   });
 
   it("deixa o deslocamento chegar à folga, depois do fim e antes do começo", () => {

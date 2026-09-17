@@ -54,6 +54,22 @@ const ASPECT = SCENE_HEIGHT / SCENE_WIDTH;
 const MIN_WIDTH = SCENE_WIDTH / MAX_ZOOM;
 
 /**
+ * Quanto dá para afastar ALÉM do encaixe, como fator sobre a largura que faz
+ * tudo caber.
+ *
+ * Antes o encaixe era o fim: com tudo à vista, a roda parava. Mas o mestre
+ * quer ver o mapa pequeno com vazio em volta -- para arrastar uma imagem para
+ * fora dele, para olhar a cena de longe enquanto arruma -- e o encaixe cola o
+ * mapa nas bordas da tela. Dobrar a largura é ler 50% quando o plano lê 100%.
+ *
+ * Dois, e não mais, porque a folga navegável é de um plano para cada lado
+ * (ver `FOLGA_X`): um recorte de duas larguras ainda cabe nela com sobra para
+ * deslocar. Mais largo que a folga, e o clamp passaria a centrar em vez de
+ * deslocar.
+ */
+export const AFASTAR_EXTRA = 2;
+
+/**
  * Quanto o recorte pode passar das bordas do conteúdo, em unidades de cena.
  *
  * Antes não podia nada: o deslocamento parava na beirada do mapa, e o preto em
@@ -115,6 +131,11 @@ function larguraQueCabe(conteudo: Bounds): number {
   return Math.max(largura, altura / ASPECT, MIN_WIDTH);
 }
 
+/** A largura no fim do afastar: o encaixe vezes `AFASTAR_EXTRA`. */
+function larguraMaxima(conteudo: Bounds): number {
+  return larguraQueCabe(conteudo) * AFASTAR_EXTRA;
+}
+
 /**
  * O recorte que mostra a caixa inteira, centrado nela. É o que o botão de
  * porcentagem faz.
@@ -150,7 +171,7 @@ export function clampViewport(
   { x, y, width }: Viewport,
   conteudo: Bounds = PLANO,
 ): Viewport {
-  const clampedWidth = clamp(width, MIN_WIDTH, larguraQueCabe(conteudo));
+  const clampedWidth = clamp(width, MIN_WIDTH, larguraMaxima(conteudo));
   const clampedHeight = clampedWidth * ASPECT;
 
   // A folga entra nas duas pontas, antes do começo do conteúdo e depois do fim
@@ -175,7 +196,7 @@ export function zoomViewport(
   const width = clamp(
     viewport.width / factor,
     MIN_WIDTH,
-    larguraQueCabe(conteudo),
+    larguraMaxima(conteudo),
   );
   const height = width * ASPECT;
 
@@ -220,14 +241,14 @@ export function viewportZoom(viewport: Viewport): number {
 }
 
 /**
- * O recorte já mostra tudo o que existe — não há para onde afastar.
+ * O recorte já está no fim do afastar — mais longe que isto não vai.
  *
  * A margem de meio pixel de cena existe porque a largura passa por divisões e
  * volta com sobra binária: comparar cru deixaria o botão de afastar aceso num
  * recorte que já está no limite, e clicá-lo não faria nada.
  */
 export function cabeTudo(viewport: Viewport, conteudo: Bounds = PLANO): boolean {
-  return viewport.width >= larguraQueCabe(conteudo) - 0.5;
+  return viewport.width >= larguraMaxima(conteudo) - 0.5;
 }
 
 /**
