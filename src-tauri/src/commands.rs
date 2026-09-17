@@ -18,7 +18,8 @@ use crate::vault::characters::{Anexo, Autor, Campo, Personagem};
 use crate::vault::players::{Attachment, Player};
 use crate::vault::inventory::{self, Item};
 use crate::vault::{
-    assets, board, characters, players, session, variantes, zip, CampaignInfo, Vault,
+    assets,
+    documentos, board, characters, players, session, variantes, zip, CampaignInfo, Vault,
 };
 
 pub struct AppState {
@@ -1739,4 +1740,30 @@ mod tests {
         assert!(!e_do_daemon("http://127.0.0.1:45231/a b"));
         assert!(!e_do_daemon("http://127.0.0.1:45231/a\nb"));
     }
+}
+
+// --- documentos do quadro ------------------------------------------------
+
+#[tauri::command]
+pub fn documento_create(state: State<'_, AppState>, titulo: String) -> AppResult<String> {
+    state.with_vault(|vault| documentos::create(vault, &titulo))
+}
+
+#[tauri::command]
+pub fn documento_read(state: State<'_, AppState>, arquivo: String) -> AppResult<String> {
+    state.with_vault(|vault| documentos::read(vault, &arquivo))
+}
+
+#[tauri::command]
+pub fn documento_write(
+    state: State<'_, AppState>,
+    arquivo: String,
+    texto: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| documentos::write(vault, &arquivo, &texto))
+}
+
+#[tauri::command]
+pub fn documento_delete(state: State<'_, AppState>, arquivo: String) -> AppResult<()> {
+    state.with_vault(|vault| documentos::delete(vault, &arquivo))
 }

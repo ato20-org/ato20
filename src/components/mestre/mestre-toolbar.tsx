@@ -2,6 +2,7 @@
 
 import {
   Eraser,
+  FileText,
   Hand,
   Map,
   MapPin,
@@ -115,6 +116,12 @@ const FERRAMENTAS_QUADRO: Ferramenta[] = [
     icon: Type,
   },
   {
+    tool: "documento",
+    label: "Documento",
+    hint: "Clique no quadro para abrir um cartão de Markdown, editado no lugar com prévia ao vivo. O texto vive num .md na pasta da campanha.",
+    icon: FileText,
+  },
+  {
     tool: "ligacao",
     label: "Seta",
     hint: "Arraste de onde até onde, como no Excalidraw. A ponta solta sobre postit, texto, imagem ou ponto prende-se nele; no vazio fica livre. Selecionada, as alças movem as pontas; duplo clique dá rótulo. Esc larga.",
@@ -204,7 +211,11 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   useEffect(() => {
     if (quadro && (tool === "fog" || tool === "regua")) setTool("select");
     // E o inverso: texto e seta são do quadro, e um mapa não tem onde mostrá-las.
-    if (!quadro && (tool === "texto" || tool === "ligacao")) setTool("select");
+    if (
+      !quadro &&
+      (tool === "texto" || tool === "ligacao" || tool === "documento")
+    )
+      setTool("select");
   }, [quadro, tool, setTool]);
 
   // A ferramenta ativa de cada bolsa, para o botão dela mostrar. `select` é
@@ -263,7 +274,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
         nome={quadro ? "Ferramentas do quadro" : "Ferramentas do mapa"}
         dica={
           quadro
-            ? "Ponto, postit, texto e seta."
+            ? "Ponto, postit, texto, documento e seta."
             : "Ponto, postit, área escondida, grade e régua."
         }
         aberta={aberta === "mapa"}

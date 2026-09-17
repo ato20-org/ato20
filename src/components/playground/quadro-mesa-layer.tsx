@@ -1,8 +1,10 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { PostitTextoView, type Vinculos } from "@/components/mestre/postit-texto-view";
+import { MarkdownView } from "@/components/playground/markdown-view";
+import { documentoUrl } from "@/lib/vault/documentos";
 import {
   emPixelDeTela,
   useSceneScale,
@@ -13,6 +15,7 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type CorPostit,
+  type Documento,
   type Postit,
   type Scene,
   type Texto,
@@ -324,6 +327,70 @@ function SetasDaMesa({ scene }: { scene: Scene }) {
   );
 }
 
+// --- documento --------------------------------------------------------------
+
+const DOCUMENTO_Z = 8_550;
+const FONTE_DOCUMENTO = 16;
+const MARGEM_DOCUMENTO = 12;
+const BARRA_DOCUMENTO = 26;
+
+/**
+ * O cartão de documento como a mesa o vê: título e o Markdown desenhado, só
+ * leitura. O texto vem do daemon, e é relido quando `atualizadoEm` muda --
+ * cada gravação do mestre toca esse carimbo na cena, e a cena chega pelo canal.
+ */
+function DocumentoDaMesa({ documento }: { documento: Documento }) {
+  const { scale, ampliacaoNoLayout } = useSceneScale();
+  const [texto, setTexto] = useState<string>("");
+
+  useEffect(() => {
+    let vivo = true;
+    void documentoUrl(documento.arquivo)
+      .then((url) => fetch(url, { cache: "no-store" }))
+      .then((resposta) => (resposta.ok ? resposta.text() : ""))
+      .then((corpo) => {
+        if (vivo) setTexto(corpo);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [documento.arquivo, documento.atualizadoEm]);
+
+  const fator = ampliacaoNoLayout ? scale : 1;
+
+  return (
+    <div
+      className="bg-card text-card-foreground pointer-events-none absolute flex flex-col overflow-hidden rounded-md shadow-lg ring-1 ring-black/15"
+      style={{
+        left: documento.x,
+        top: documento.y,
+        width: documento.largura,
+        height: documento.altura,
+        zIndex: DOCUMENTO_Z,
+      }}
+    >
+      <div
+        className="bg-foreground/5 flex shrink-0 items-center px-1.5 font-medium"
+        style={{ height: BARRA_DOCUMENTO, fontSize: BARRA_DOCUMENTO * 0.5 }}
+      >
+        <span className="truncate">{documento.titulo}</span>
+      </div>
+      <div
+        className="min-h-0 flex-1 overflow-hidden"
+        style={{
+          ...(ampliacaoNoLayout ? emPixelDeTela(scale) : undefined),
+          fontSize: FONTE_DOCUMENTO * fator,
+          lineHeight: 1.5,
+          padding: MARGEM_DOCUMENTO * fator,
+        }}
+      >
+        <MarkdownView texto={texto} />
+      </div>
+    </div>
+  );
+}
+
 // --- tudo -------------------------------------------------------------------
 
 /** As quatro camadas do quadro na mesa. Ver o cabeçalho do arquivo. */
@@ -333,6 +400,9 @@ export function QuadroMesaLayer({ scene }: { scene: Scene }) {
       <TextosDaMesa scene={scene} />
       {(scene.postits ?? []).map((postit) => (
         <PostitDaMesa key={postit.id} postit={postit} />
+      ))}
+      {(scene.documentos ?? []).map((documento) => (
+        <DocumentoDaMesa key={documento.id} documento={documento} />
       ))}
       <SetasDaMesa scene={scene} />
       <AlfinetesDaMesa scene={scene} />

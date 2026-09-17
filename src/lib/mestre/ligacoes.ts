@@ -91,6 +91,17 @@ export function caixaDe(scene: Scene, ref: RefLigacao): Bounds | null {
       const texto = scene.textos?.find((atual) => atual.id === ref.id);
       return texto ? caixaDoTexto(texto) : null;
     }
+    case "documento": {
+      const documento = scene.documentos?.find((atual) => atual.id === ref.id);
+      return documento
+        ? {
+            minX: documento.x,
+            minY: documento.y,
+            maxX: documento.x + documento.largura,
+            maxY: documento.y + documento.altura,
+          }
+        : null;
+    }
     case "pin": {
       const pin = scene.pins?.find((atual) => atual.id === ref.id);
       // O alfinete é um ponto: caixa de tamanho zero, e a seta chega nele.
@@ -165,6 +176,20 @@ export function ligavelEm(scene: Scene, ponto: Vec): RefLigacao | null {
       )
     )
       return { tipo: "postit", id: postit.id };
+
+  for (const documento of [...(scene.documentos ?? [])].reverse())
+    if (
+      dentro(
+        {
+          minX: documento.x,
+          minY: documento.y,
+          maxX: documento.x + documento.largura,
+          maxY: documento.y + documento.altura,
+        },
+        ponto,
+      )
+    )
+      return { tipo: "documento", id: documento.id };
 
   for (const pin of scene.pins ?? [])
     if (Math.hypot(pin.x - ponto.x, pin.y - ponto.y) <= RAIO_DO_PIN)

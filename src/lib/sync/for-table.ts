@@ -69,7 +69,8 @@ export function sceneForTable(scene: Scene | null): Scene | null {
     !scene.cameras &&
     !scene.grupos &&
     !scene.textos &&
-    !scene.ligacoes
+    !scene.ligacoes &&
+    !scene.documentos
   )
     return scene;
 
@@ -89,6 +90,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // Anotação do mestre, como o postit. O quadro no ar vai abrir isto.
   delete paraMesa.textos;
   delete paraMesa.ligacoes;
+  delete paraMesa.documentos;
 
   return paraMesa;
 }

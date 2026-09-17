@@ -28,6 +28,11 @@ import {
 import { ancorada, mesmaPonta, semReferencia } from "@/lib/mestre/ligacoes";
 import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
+  criarDocumento,
+  gravarDocumento,
+  lerDocumento,
+} from "@/lib/vault/documentos";
+import {
   cloneScene,
   CORES_POSTIT,
   createEmptyBoard,
@@ -53,12 +58,16 @@ import {
   type TipoDeCena,
   type Viewport,
   type Medidor,
+  type NewDocumento,
   type NewMedidor,
   type NewTexto,
   type Pasta,
   type PontaDeLigacao,
   type Texto,
   type Ligacao,
+  type Documento,
+  DOCUMENTO_ALTURA,
+  DOCUMENTO_LARGURA,
   TEXTO_TAMANHO,
 } from "@/types/scene";
 
@@ -292,6 +301,20 @@ type SceneStore = {
     patch: Partial<Omit<Texto, "id">>,
   ) => void;
   removeTexto: (sceneId: string, textoId: string) => void;
+
+  /**
+   * Cartão de documento. O arquivo já existe quando o cartão entra: quem cria
+   * o arquivo é `criarDocumento`, assíncrono, e o cartão só nasce com o nome
+   * dele na mão. Apagar o cartão NÃO apaga o arquivo aqui -- isso é do
+   * chamador, que sabe se está desfazendo ou removendo de verdade.
+   */
+  addDocumento: (sceneId: string, documento: NewDocumento) => string;
+  updateDocumento: (
+    sceneId: string,
+    documentoId: string,
+    patch: Partial<Omit<Documento, "id" | "arquivo">>,
+  ) => void;
+  removeDocumento: (sceneId: string, documentoId: string) => void;
   /**
    * Guarda a caixa medida de um texto. Sem histórico: medir não é edição, e
    * um Ctrl+Z que desfizesse uma medida seria um Ctrl+Z que não faz nada.
@@ -474,6 +497,26 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
       const copy = cloneScene(source, `${source.name} (cópia)`);
       commit(insertSceneAfter(board, sceneId, copy));
+
+      // Cada documento da cópia ganha o próprio arquivo, com o mesmo texto:
+      // dois cartões no mesmo `.md` fariam escrever num aparecer no outro.
+      // Assíncrono e depois do commit, porque criar arquivo passa pela ponte;
+      // até chegar, a cópia lê o arquivo original, que é o texto certo.
+      for (const documento of copy.documentos ?? []) {
+        void (async () => {
+          const texto = await lerDocumento(documento.arquivo);
+          const arquivo = await criarDocumento(documento.titulo);
+          await gravarDocumento(arquivo, texto);
+          get().updateScene(copy.id, (scene) => ({
+            ...scene,
+            documentos: scene.documentos?.map((atual) =>
+              atual.id === documento.id ? { ...atual, arquivo } : atual,
+            ),
+          }));
+        })().catch((cause: unknown) => {
+          console.error("falha ao copiar o documento", cause);
+        });
+      }
 
       return copy.id;
     },
@@ -1143,6 +1186,48 @@ export const useSceneStore = create<SceneStore>((set, get) => {
                 },
           ),
         },
+      });
+    },
+
+    addDocumento(sceneId, documento) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        documentos: [
+          ...(scene.documentos ?? []),
+          {
+            largura: DOCUMENTO_LARGURA,
+            altura: DOCUMENTO_ALTURA,
+            ...documento,
+            id,
+          },
+        ],
+      }));
+
+      return id;
+    },
+
+    updateDocumento(sceneId, documentoId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        documentos: (scene.documentos ?? []).map((documento) =>
+          documento.id === documentoId ? { ...documento, ...patch } : documento,
+        ),
+      }));
+    },
+
+    removeDocumento(sceneId, documentoId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.documentos ?? []).filter(
+          (documento) => documento.id !== documentoId,
+        );
+
+        return {
+          ...scene,
+          documentos: restantes.length > 0 ? restantes : undefined,
+          ligacoes: semReferencia(scene.ligacoes, [documentoId]),
+        };
       });
     },
 

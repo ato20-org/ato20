@@ -15,6 +15,8 @@ import { PostitLayer } from "@/components/mestre/postit-layer";
 import { LigacaoLayer } from "@/components/mestre/ligacao-layer";
 import { TextoLayer } from "@/components/mestre/texto-layer";
 import { pontaEm } from "@/lib/mestre/ligacoes";
+import { criarDocumento } from "@/lib/vault/documentos";
+import { DocumentoLayer } from "@/components/mestre/documento-layer";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
 import type { PontaDoMedidor } from "@/components/playground/medidor-layer";
@@ -98,6 +100,8 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
 import {
   ehQuadro,
+  DOCUMENTO_ALTURA,
+  DOCUMENTO_LARGURA,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   SCENE_HEIGHT,
@@ -263,6 +267,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
   const addPostit = useSceneStore((state) => state.addPostit);
   const addTexto = useSceneStore((state) => state.addTexto);
   const addLigacao = useSceneStore((state) => state.addLigacao);
+  const addDocumento = useSceneStore((state) => state.addDocumento);
 
   // A seta em andamento e a seleção de texto/seta são desta cena: trocar de
   // cena ou largar a ferramenta de seta desfaz a primeira ponta clicada.
@@ -1076,6 +1081,28 @@ export function MestreStage({ scene }: { scene: Scene }) {
       return;
     }
 
+    // Clique, como o postit: o cartão nasce centrado no clique, no tamanho
+    // padrão, e o arquivo `.md` é criado antes dele -- por isso o `await`.
+    // Volta ao modo normal pela mesma razão do postit: um cartão de 420 por
+    // 320 por clique acidental cobriria o quadro.
+    if (tool === "documento") {
+      setTool("select");
+      const numero = (scene.documentos?.length ?? 0) + 1;
+      const titulo = `Documento ${numero}`;
+      const onde = postitNaArea(
+        anchor.x - DOCUMENTO_LARGURA / 2,
+        anchor.y - DOCUMENTO_ALTURA / 2,
+        DOCUMENTO_LARGURA,
+        DOCUMENTO_ALTURA,
+      );
+      void criarDocumento(titulo)
+        .then((arquivo) => addDocumento(scene.id, { ...onde, titulo, arquivo }))
+        .catch((cause: unknown) => {
+          console.error("falha ao criar o documento", cause);
+        });
+      return;
+    }
+
     // Arrasto, como no Excalidraw: de onde o botão descer até onde soltar.
     // Cada ponta prende-se ao que houver embaixo, ou fica solta na folha. A
     // ferramenta FICA na mão depois da seta pronta -- amarrar cinco ideias
@@ -1304,6 +1331,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
         tool === "postit" ||
         tool === "texto" ||
         tool === "ligacao" ||
+        tool === "documento" ||
         tool === "lapis" ||
         tool === "borracha" ||
         tool === "regua" ||
@@ -1410,6 +1438,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
           razão. Cada uma devolve `null` sem conteúdo, e a de seta só ouve o
           mouse enquanto uma ponta está clicada: mapa sem nada disto não paga. */}
       <TextoLayer scene={scene} panMode={panMode} />
+      <DocumentoLayer scene={scene} panMode={panMode} />
       <LigacaoLayer scene={scene} />
 
       {/* Fora do `SceneLayer` pela mesma razão do `PinLayer`: hoje o dado é só

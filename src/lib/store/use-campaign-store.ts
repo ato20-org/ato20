@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import { flushPortraits } from "@/lib/store/use-portrait-store";
 import { flushBoard } from "@/lib/store/use-scene-store";
+import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { aoSumirCampanha, isDesktop, VaultError } from "@/lib/vault/bridge";
 import {
   createCampaign,
@@ -130,7 +131,11 @@ function describe(cause: unknown): string {
  */
 async function fecharOAnterior(): Promise<void> {
   try {
-    await Promise.all([flushBoard(), flushPortraits()]);
+    await Promise.all([
+      flushBoard(),
+      flushPortraits(),
+      useDocumentoStore.getState().descarregar(),
+    ]);
   } catch {
     // Ver acima.
   }

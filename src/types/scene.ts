@@ -348,8 +348,39 @@ export type NewTexto = Pick<Texto, "x" | "y"> &
 /** Tamanho de fonte de um texto novo, em unidades de cena. */
 export const TEXTO_TAMANHO = 40;
 
+/**
+ * Um documento do quadro: um cartão com Markdown de verdade, editado no
+ * lugar com prévia ao vivo, como uma nota do Obsidian.
+ *
+ * O TEXTO não mora aqui: mora em `documentos/<arquivo>.md` na pasta da
+ * campanha, para ser Markdown que se abre em qualquer editor. A cena guarda
+ * o cartão -- onde está, que tamanho tem, como se chama -- e o nome do
+ * arquivo. `atualizadoEm` muda a cada gravação, e é o que faz a mesa reler o
+ * arquivo quando o mestre escreve.
+ */
+export type Documento = {
+  id: string;
+  /** Canto superior esquerdo, em coordenadas de cena. */
+  x: number;
+  y: number;
+  largura: number;
+  altura: number;
+  titulo: string;
+  /** Nome do arquivo em `documentos/`, sem diretório. Não muda com o título. */
+  arquivo: string;
+  /** Época em ms da última gravação do texto. Ausente = nunca escrito. */
+  atualizadoEm?: number;
+};
+
+export type NewDocumento = Pick<Documento, "x" | "y" | "titulo" | "arquivo"> &
+  Partial<Pick<Documento, "largura" | "altura">>;
+
+export const DOCUMENTO_LARGURA = 420;
+export const DOCUMENTO_ALTURA = 320;
+export const DOCUMENTO_MINIMO = 160;
+
 /** O que uma ligação pode amarrar. */
-export type TipoLigavel = "item" | "postit" | "texto" | "pin";
+export type TipoLigavel = "item" | "postit" | "texto" | "pin" | "documento";
 
 /** Uma ponta de ligação: o que ela amarra, por tipo e id. */
 export type RefLigacao = { tipo: TipoLigavel; id: string };
@@ -760,6 +791,8 @@ export type Scene = {
    */
   textos?: Texto[];
   ligacoes?: Ligacao[];
+  /** Os cartões de documento do quadro. Ausente = nenhum. Ver `Documento`. */
+  documentos?: Documento[];
   backgroundAssetId?: string;
   items: CanvasItem[];
   fog: FogRegion[];
@@ -943,6 +976,10 @@ export function cloneScene(source: Scene, name: string): Scene {
     // mesmos arquivos.
     handout: source.handout ? [...source.handout] : undefined,
     textos: source.textos?.map(renovar),
+    // O cartão é copiado com o MESMO arquivo por enquanto: copiar o arquivo é
+    // assíncrono e é do store, que troca o `arquivo` da cópia logo depois.
+    // Ver `duplicateScene`.
+    documentos: source.documentos?.map(renovar),
     // Ponta ancorada aponta para a cópia; ponta livre é só um ponto e vem igual.
     ligacoes: source.ligacoes?.map((ligacao) => {
       const renovada = (ponta: PontaDeLigacao): PontaDeLigacao =>
