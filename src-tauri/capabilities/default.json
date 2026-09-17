@@ -17,6 +17,9 @@
         },
         {
           "url": "http://localhost:*/*"
+        },
+        {
+          "url": "https://github.com/ato20-org/desktop.ato20/*"
         }
       ]
     },
