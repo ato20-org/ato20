@@ -49,6 +49,11 @@
     },
     "resources": {
       "../out": "out"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
     }
   },
   "plugins": {
