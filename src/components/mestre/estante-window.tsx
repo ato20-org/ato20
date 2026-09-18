@@ -49,9 +49,7 @@ export function EstanteBody() {
       <ScrollArea className="min-h-0 flex-1">
         {livros.length === 0 ? (
           <p className="text-muted-foreground p-3 text-xs">
-            Nenhum livro ainda. Só PDF entra, e ele é copiado para a máquina: o
-            arquivo pode sair do pendrive depois. Os livros não viajam no zip da
-            campanha.
+            Nenhum livro encontrado na estante.
           </p>
         ) : (
           <ul className="space-y-1 p-2">

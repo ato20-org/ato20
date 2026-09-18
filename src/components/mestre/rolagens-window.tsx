@@ -66,9 +66,7 @@ export function RolagensBody() {
   if (historico.length === 0) {
     return (
       <p className="text-muted-foreground p-3 text-xs leading-snug">
-        Ninguém rolou ainda. Quem entrou pelo Jogador tem o saquinho na tela do
-        celular — e o dado é sorteado aqui, nesta máquina, não no aparelho de
-        quem joga.
+        Nenhum dado de jogador rolado na mesa.
       </p>
     );
   }

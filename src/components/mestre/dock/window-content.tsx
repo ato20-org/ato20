@@ -389,7 +389,7 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
         <LayerList scene={scene} />
       ) : (
         <p className="text-muted-foreground p-3 text-xs">
-          Crie um mapa primeiro.
+          Nenhuma camada encontrada na tela.
         </p>
       );
   }

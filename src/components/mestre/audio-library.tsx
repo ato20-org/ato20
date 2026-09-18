@@ -48,8 +48,7 @@ export function AudioLibrary() {
       <ScrollArea className="min-h-0 flex-1">
         {assets.length === 0 ? (
           <p className="text-muted-foreground p-3 text-xs">
-            Nenhum som ainda. A trilha escolhida aqui toca durante a sessão
-            inteira, independente da cena no ar.
+            Nenhum som enconrado.
           </p>
         ) : (
           <ul className="space-y-1 p-2">
