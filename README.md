@@ -12,14 +12,14 @@ continua vendo a atual na TV, e cada jogador acompanha pelo próprio celular.
 No Linux, o AppImage roda sem instalar nada:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v0.1.0/ato20_0.1.0_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v0.1.1/ato20_0.1.1_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 No Windows, pelo PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v0.1.0/ato20_0.1.0_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v0.1.1/ato20_0.1.1_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -28,7 +28,7 @@ e não `-O`. O apelido existe no Windows PowerShell 5.1, que é o que vem na má
 PowerShell 7 ele foi removido; lá o comando é `curl.exe` na mesma forma do Linux:
 
 ```powershell
-curl.exe -fL -o ato20-setup.exe https://github.com/ato20-org/ato20/releases/download/v0.1.0/ato20_0.1.0_x64-setup.exe
+curl.exe -fL -o ato20-setup.exe https://github.com/ato20-org/ato20/releases/download/v0.1.1/ato20_0.1.1_x64-setup.exe
 ```
 
 O `.exe` no final não é enfeite: sem ele o PowerShell 5.1 resolve `curl` para o mesmo
@@ -37,7 +37,7 @@ O `.exe` no final não é enfeite: sem ele o PowerShell 5.1 resolve `curl` para 
 **As URLs acima fixam a versão porque o nome do arquivo a carrega dentro.** O atalho
 `releases/latest/download/` do GitHub voltou a funcionar na 0.1.0 — ele ignora
 pré-lançamento, e até a 0.0.6 toda release era uma —, mas o que ele resolve é a release, não
-o nome do pacote: `ato20_0.1.0_amd64.AppImage` deixa de existir na versão seguinte. Para um
+o nome do pacote: `ato20_0.1.1_amd64.AppImage` deixa de existir na versão seguinte. Para um
 comando que não envelhece, peça o nome à API:
 
 ```bash

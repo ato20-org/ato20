@@ -56,6 +56,18 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.1.1",
+    data: "2026-09-18",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "O ATO20 começa a ser empacotado para as lojas do Linux",
+        detalhe:
+          "Esta versão não muda nada no que você já usa — ela existe porque o pacote do Flathub precisa ser construído a partir de uma versão publicada, e não do código do dia. O que mudou por dentro só aparece lá: as fontes deixaram de ser baixadas durante o empacotamento, e o aviso de versão nova some no pacote de loja, onde quem atualiza é a própria loja. Quem baixou o AppImage ou o instalador do Windows continua sendo avisado como antes.",
+      },
+    ],
+  },
+  {
     versao: "0.1.0",
     data: "2026-09-18",
     mudancas: [
