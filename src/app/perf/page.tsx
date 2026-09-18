@@ -13,6 +13,8 @@ import { LayerList } from "@/components/mestre/layer-list";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
+import { MestreStage } from "@/components/mestre/mestre-stage";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { PaginaFolha } from "@/components/mestre/leitor/pagina-folha";
 import { useRolagemDoLivro } from "@/hooks/use-rolagem-do-livro";
 import { pdfjs, RUNTIME } from "@/lib/leitor/pdfjs";
@@ -133,6 +135,7 @@ type Cenario =
   | "lista-mesmo-mapa"
   | "camadas"
   | "camera"
+  | "mestre-camera"
   | "jogador";
 
 /** Um degrau do `leitor`: o que custou trocar o zoom para ele. */
@@ -527,6 +530,73 @@ function PalcoCamera({ n }: { n: number }) {
   return (
     <SceneStage viewport={viewport} limites={PLANO}>
       <SceneLayer scene={cena} variant="mestre" />
+    </SceneStage>
+  );
+}
+
+/**
+ * O palco do MESTRE com a câmera andando a cada quadro, N itens na cena.
+ *
+ * `camera` mede só o `SceneStage`: dois planos e o conteúdo. O que o mestre
+ * sente ao dar zoom passa por cima disso: o `StageBoundary` assina o
+ * `useViewportStore`, recria o `MestreStage` a cada quadro, e ele -- mil e
+ * oitocentas linhas, quarenta hooks, todas as camadas de controle e o
+ * `SceneLayer` -- renderiza de novo. Este cenário monta exatamente esse
+ * caminho: o store do viewport anda, e a árvore real do mestre responde.
+ *
+ * Leia `script`: é a coluna que o `camera` não tem como mostrar.
+ */
+function PalcoMestreCamera({ n }: { n: number }) {
+  const cena = useSceneStore(selectEditingScene);
+  const viewport = useViewportStore((state) => state.viewport);
+  const setViewport = useViewportStore((state) => state.setViewport);
+
+  useEffect(() => {
+    const base = montarCena(n);
+
+    useSceneStore.setState({
+      board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
+      status: "ready",
+      campaignPath: "/perf",
+    });
+
+    let quadro = 0;
+    const comecou = performance.now();
+
+    const passo = () => {
+      const a = (performance.now() - comecou) / 1000;
+      // A mesma faixa do `camera`, mais um deslocamento: zoom e arrasto juntos,
+      // que é o gesto que pesava na mão.
+      const fator = 2.5 + Math.cos(a) * 1.5;
+
+      useViewportStore.getState().setViewport(
+        zoomViewport(FULL_VIEWPORT, fator, {
+          x: SCENE_WIDTH / 2 + Math.sin(a) * 300,
+          y: SCENE_HEIGHT / 2 + Math.cos(a * 0.7) * 200,
+        }),
+      );
+
+      quadro = requestAnimationFrame(passo);
+    };
+
+    quadro = requestAnimationFrame(passo);
+
+    return () => {
+      cancelAnimationFrame(quadro);
+      useViewportStore.getState().setViewport(FULL_VIEWPORT);
+      useSceneStore.setState({
+        board: null,
+        status: "idle",
+        campaignPath: null,
+      });
+    };
+  }, [n]);
+
+  if (!cena) return null;
+
+  return (
+    <SceneStage viewport={viewport} onViewportChange={setViewport} limites={PLANO}>
+      <MestreStage scene={cena} />
     </SceneStage>
   );
 }
@@ -1093,6 +1163,8 @@ function Medida({ params }: { params: URLSearchParams }) {
         <PalcoMestre n={n} />
       ) : cenario === "camera" ? (
         <PalcoCamera n={n} />
+      ) : cenario === "mestre-camera" ? (
+        <PalcoMestreCamera n={n} />
       ) : cenario === "dados" ? (
         <PalcoDados n={n} zoom={zoomDoPalco} />
       ) : cenario === "lista" || cenario === "lista-mesmo-mapa" ? (
