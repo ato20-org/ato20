@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import Image from "next/image";
 import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
+
+import logo from "@/assets/logo-white.png";
 
 import { AbrirEspectador } from "@/components/mestre/abrir-espectador";
 import { PlayersChip } from "@/components/mestre/players-chip";
@@ -402,13 +405,7 @@ function StageBoundary({
       plano={scene && ehQuadro(scene) ? "quadro" : "mapa"}
       limites={conteudo}
     >
-      {scene ? (
-        <MestreStage scene={scene} />
-      ) : (
-        <p className="text-muted-foreground absolute inset-0 grid place-items-center text-xl">
-          {status === "ready" ? "Nenhum mapa selecionado" : "Carregando…"}
-        </p>
-      )}
+      {scene ? <MestreStage scene={scene} /> : null}
     </SceneStage>
   );
 
@@ -423,7 +420,17 @@ function StageBoundary({
       ) : scene ? (
         <StageContextMenu scene={scene}>{stage}</StageContextMenu>
       ) : (
-        stage
+        /* Sem cena, o palco NÃO é montado: o vazio ocupa o lugar dele.
+
+           O `SceneStage` vazio desenhava a grade de bolinhas e respondia à
+           roda e ao espaço -- zoom e arrasto de um plano sem nada em cima, e
+           o aviso flutuando por cima dele ficava parado enquanto o fundo se
+           mexia. Nada dependia do palco montado aqui: o menu de contexto e o
+           arquivo solto do sistema já exigiam cena. O aviso em pixel de tela,
+           fora de qualquer plano escalado, continua a valer -- ver a §3 da
+           `debug-do-palco`, que é o motivo de ele nunca ter sido filho do
+           palco. */
+        <PalcoVazio carregando={status !== "ready"} />
       )}
 
       {/* Fora do gatilho do menu de contexto, e independente de haver cena: uma
@@ -462,6 +469,82 @@ function StageBoundary({
 
       {/* A carta na manga, irmã do saquinho: mesma bolinha, e por cena. */}
       {scene && !notaAberta ? <HandoutMestre scene={scene} /> : null}
+    </div>
+  );
+}
+
+/**
+ * Os atalhos que valem antes de haver cena.
+ *
+ * Cinco, e não a tabela inteira: a lista completa mora em Configurações >
+ * Teclado, e o palco vazio não é lugar de estudar teclado -- é o primeiro
+ * quadro depois de abrir a campanha, e o que ele deve ensinar é como sair
+ * dele. Por isso a paleta vem primeiro: é o caminho para todo o resto.
+ *
+ * Escritos aqui e não lidos de `ATALHOS_BASE`: a tabela é ordenada por
+ * PRECEDÊNCIA de captura, não por importância, e filtrar cinco dela por
+ * `tecla` seria uma lista que se desfaz no dia em que alguém remapear uma. O
+ * preço é lembrar deste arquivo ao trocar uma tecla -- e é por isso que os
+ * rótulos são os mesmos da tabela.
+ */
+const ATALHOS_DO_VAZIO = [
+  { tecla: "Ctrl+K", rotulo: "Abrir a paleta de comandos" },
+  { tecla: "Espaço + arrastar", rotulo: "Mover o palco" },
+  { tecla: "Ctrl+0", rotulo: "Enquadrar o mapa" },
+  { tecla: "= / -", rotulo: "Aproximar e afastar a câmera" },
+  { tecla: "T", rotulo: "Transmitir a câmera selecionada" },
+] as const;
+
+/**
+ * O lugar do palco enquanto não há cena aberta.
+ *
+ * Era uma frase solta no meio de um retângulo preto. A marca em cima dá um
+ * centro à tela vazia, e os atalhos embaixo transformam a espera em leitura
+ * útil: quem acabou de abrir a campanha ainda não sabe que existe paleta.
+ *
+ * Fundo preto liso, sem grade nem câmera: é uma tela de espera, e não um
+ * mapa sem conteúdo. `bg-black` e não o fundo do tema, o mesmo que o palco de
+ * mapa usa, para a troca por uma cena não piscar de cor.
+ *
+ * Enquanto carrega, só a marca e "Carregando...": os atalhos ainda não valem --
+ * não há mesa onde usá-los -- e uma lista que aparece por meio segundo e é
+ * substituída pisca.
+ */
+function PalcoVazio({ carregando }: { carregando: boolean }) {
+  return (
+    <div className="text-muted-foreground flex min-h-0 flex-1 flex-col items-center justify-center gap-6 bg-black p-6 select-none">
+      <div className="flex flex-col items-center gap-3">
+        <Image
+          src={logo}
+          alt=""
+          aria-hidden
+          className="h-12 w-auto opacity-40"
+        />
+        <p className="text-base">
+          {carregando
+            ? "Carregando\u2026"
+            : "Abra um mapa ou um arquivo para visualizar aqui"}
+        </p>
+      </div>
+
+      {carregando ? null : (
+        <ul className="flex flex-col gap-1.5">
+          {ATALHOS_DO_VAZIO.map((atalho) => (
+            <li
+              key={atalho.tecla}
+              className="flex items-center justify-between gap-6 text-xs"
+            >
+              <span className="min-w-0">{atalho.rotulo}</span>
+              {/* Mesma pastilha da lista de Configurações > Teclado: ali ela é
+                  `Tecla`, e duplicar seis classes custa menos que exportar um
+                  componente de um diálogo para o palco. */}
+              <kbd className="bg-muted/60 text-muted-foreground shrink-0 rounded border px-1.5 py-0.5 font-mono text-[11px] leading-none">
+                {atalho.tecla}
+              </kbd>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
