@@ -117,6 +117,24 @@ melhoria, não urgência — e custa um build inteiro para testar.
 
 ## Submeter
 
+**Quem submete é a pessoa, não o agente.** A política de IA generativa do Flathub
+é explícita: *"AI tools or agents must not open or automate Flathub submission
+pull requests, or generate their commit messages, descriptions, review comments,
+or replies."* E o template do PR tem uma caixa que afirma exatamente isso. Um
+assistente pode preparar manifesto e sources — e isso **tem de ser declarado**
+no PR, com as partes afetadas —, mas o commit no fork, o texto do PR e cada
+resposta ao revisor são da pessoa.
+
+O que este empacotamento teve de assistência de IA, para a declaração: o
+manifesto, o metainfo, o `.desktop`, os dois scripts, a feature `updater` e o
+comando `updater_embutido` no Rust, a troca de `next/font/google` por `geist`,
+e a chave das Configurações que some no pacote de loja. Tudo revisado e
+testado em build local antes de entrar.
+
+O template também exige um **vídeo** do aplicativo rodando pelo Flatpak no
+Linux.
+
+
 PR na branch `new-pr` de [flathub/flathub](https://github.com/flathub/flathub),
 com o título `Add io.github.ato20_org.ato20`. Revisão por voluntários, sem prazo. Aceito,
 o Flathub cria um repositório próprio e a partir dali versão nova é PR lá — que
