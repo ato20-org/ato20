@@ -4,9 +4,29 @@ version = "0.1.0"
 description = "Ferramenta para organizar e exibir cenas de RPG de mesa"
 authors = ["valb-mig"]
 license = "MIT"
-repository = "https://github.com/ato20-org/desktop.ato20"
+repository = "https://github.com/ato20-org/ato20"
 edition = "2021"
 rust-version = "1.77.2"
+
+[features]
+# `updater` liga a atualizacao automatica, e sai nas versoes de LOJA.
+#
+# Flathub e Snap instalam num diretorio somente-leitura e atualizam por conta
+# propria: um updater embutido ali tentaria sobrescrever um binario que nao lhe
+# pertence, e brigaria com a loja pelo mesmo trabalho. Nos dois, quem atualiza e
+# a loja.
+#
+# Feature de compilacao, e nao um `if` em tempo de execucao, porque o que se
+# quer e que o codigo NAO ESTEJA no pacote da loja -- o updater arrasta cliente
+# HTTP e verificacao de assinatura atras dele.
+#
+# AO DESLIGAR, `capabilities/updater.json` TAMBEM precisa sair: o `tauri-build`
+# le a pasta inteira e falha com "Permission updater:default not found" se a
+# permissao apontar para um plugin que nao e mais dependencia. O manifesto do
+# Flatpak apaga esse arquivo antes de compilar. Ver `empacotar/`.
+
+default = ["updater"]
+updater = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
 
 [lib]
 # O binario e uma casca de tres linhas; tudo vive na lib para o alvo mobile do
@@ -130,11 +150,11 @@ tauri-plugin-opener = "2.5.5"
 # releases, ou de alguem no meio do caminho. A chave publica esta no
 # `tauri.conf.json`; a privada vive nos segredos do repositorio e em lugar
 # nenhum do codigo.
-tauri-plugin-updater = "2"
+tauri-plugin-updater = { version = "2", optional = true }
 # Reiniciar depois de instalar a atualizacao. Sozinho o updater baixa e aplica,
 # mas quem estava com o aplicativo aberto continuaria na versao velha ate
 # fechar na mao.
-tauri-plugin-process = "2"
+tauri-plugin-process = { version = "2", optional = true }
 
 [dev-dependencies]
 # Cada teste do vault precisa de uma campanha propria num diretorio que se

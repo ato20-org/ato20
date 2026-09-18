@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "updater",
+  "description": "Atualizacao automatica. SAI nas versoes de loja, junto com a feature `updater` do Cargo.toml -- o tauri-build le esta pasta inteira e falha se a permissao apontar para um plugin que nao e mais dependencia.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "updater:default",
+    "process:allow-restart"
+  ]
+}

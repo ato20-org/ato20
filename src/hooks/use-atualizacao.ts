@@ -5,6 +5,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 import { toast } from "sonner";
 
+import { useUpdaterEmbutido } from "@/hooks/use-updater-embutido";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { isDesktop } from "@/lib/vault/bridge";
 
@@ -26,14 +27,25 @@ import { isDesktop } from "@/lib/vault/bridge";
  * jogar, e um toast vermelho dizendo "não consegui verificar atualizações" na
  * primeira tela seria ruído por um serviço que ninguém pediu. Vai para o
  * console, que é onde quem procura vai olhar.
+ *
+ * ## No pacote de loja não roda
+ *
+ * Flathub e Snap instalam num diretório somente-leitura e atualizam por conta
+ * própria, então lá o updater nem foi compilado. Perguntar ao Rust ANTES de
+ * chamar o plugin evita um erro no console a cada abertura por um serviço que
+ * naquele pacote não existe de propósito.
  */
 export function useAtualizacao(): void {
   const avisar = usePreferenciasStore((state) => state.avisarAtualizacao);
+  const embutido = useUpdaterEmbutido();
 
   useEffect(() => {
     // Numa aba de navegador não há aplicativo para atualizar, e chamar o plugin
     // fora do Tauri lança.
     if (!isDesktop()) return;
+
+    // `null` é "ainda não sei": o efeito roda de novo quando a resposta chegar.
+    if (!embutido) return;
 
     // Desligado nas Configurações: nem a PERGUNTA é feita. Checar e engolir a
     // resposta ainda contaria à rede que esta máquina abriu o aplicativo, e
@@ -78,5 +90,5 @@ export function useAtualizacao(): void {
     return () => {
       vivo = false;
     };
-  }, [avisar]);
+  }, [avisar, embutido]);
 }

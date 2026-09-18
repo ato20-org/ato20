@@ -88,6 +88,24 @@ pub fn daemon_addr(state: State<'_, AppState>) -> DaemonAddr {
     state.daemon.clone()
 }
 
+/// Este pacote sabe se atualizar sozinho.
+///
+/// Falso nas versoes de loja -- Flathub, Snap --, onde quem atualiza e a loja e
+/// o updater nem foi compilado. Ver a feature `updater` no `Cargo.toml`.
+///
+/// Existe para a INTERFACE, e nao para o Rust: sem isto, a chave "Avisar quando
+/// sair versao nova" nas Configuracoes continuaria ligavel num pacote onde ela
+/// nao faz nada, e o aviso prometido nunca chegaria. Uma chave que mente e pior
+/// que uma chave ausente.
+///
+/// Uma pergunta ao Rust, e nao uma variavel de ambiente no build do front: o
+/// front e o MESMO `out/` estatico nos dois pacotes, e so o binario sabe com
+/// que features foi compilado.
+#[tauri::command]
+pub fn updater_embutido() -> bool {
+    cfg!(feature = "updater")
+}
+
 // --- abrir no navegador -----------------------------------------------------
 
 /// Os programas que abrem um endereco, em ordem de preferencia.

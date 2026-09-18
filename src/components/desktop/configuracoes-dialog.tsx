@@ -29,6 +29,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { HistoricoDeVersoes } from "@/components/desktop/versoes-lista";
+import { useUpdaterEmbutido } from "@/hooks/use-updater-embutido";
 import { versaoAtual } from "@/lib/versoes";
 import { atalhosPorGrupo } from "@/lib/mestre/atalhos";
 import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
@@ -287,6 +288,7 @@ function PainelVersao() {
   const definirAvisar = usePreferenciasStore(
     (state) => state.definirAvisarAtualizacao,
   );
+  const embutido = useUpdaterEmbutido();
 
   return (
     <>
@@ -294,23 +296,42 @@ function PainelVersao() {
         Versão {versao?.versao ?? ""}
       </TituloSecao>
 
-      <label className="flex items-start gap-3">
-        <Switch
-          checked={avisar}
-          onCheckedChange={definirAvisar}
-          aria-label="Avisar quando sair versão nova"
-        />
-        <span className="min-w-0">
-          <span className="block text-sm">Avisar quando sair versão nova</span>
-          {/* Diz o que o desligado GARANTE, e não só o que ele evita: quem
-              desliga isto quer ficar na versão que tem, e a frase é o que
-              confirma que ficar é uma opção sustentada. */}
-          <span className="text-muted-foreground block text-xs">
-            Desligado, o aplicativo não procura atualização nenhuma e você fica
-            nesta versão até baixar outra por conta própria.
+      {/* A chave só existe onde ela faz alguma coisa.
+
+          No pacote de loja -- Flathub, Snap -- o updater não foi compilado, e
+          quem atualiza é a loja. Deixar a chave ali ligável faria o aplicativo
+          prometer um aviso que nunca chegaria, e quem não fosse avisado
+          concluiria que não saiu versão nova. No lugar dela vai a frase que
+          responde a MESMA pergunta: e quando sair uma?
+
+          `null` é "ainda não sei", e não mostra nenhum dos dois -- ver
+          `useUpdaterEmbutido`. */}
+      {embutido === true && (
+        <label className="flex items-start gap-3">
+          <Switch
+            checked={avisar}
+            onCheckedChange={definirAvisar}
+            aria-label="Avisar quando sair versão nova"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm">Avisar quando sair versão nova</span>
+            {/* Diz o que o desligado GARANTE, e não só o que ele evita: quem
+                desliga isto quer ficar na versão que tem, e a frase é o que
+                confirma que ficar é uma opção sustentada. */}
+            <span className="text-muted-foreground block text-xs">
+              Desligado, o aplicativo não procura atualização nenhuma e você
+              fica nesta versão até baixar outra por conta própria.
+            </span>
           </span>
-        </span>
-      </label>
+        </label>
+      )}
+
+      {embutido === false && (
+        <p className="text-muted-foreground text-xs">
+          Este pacote é atualizado pela loja onde você o instalou. O ATO20 não
+          procura versão nova por conta própria.
+        </p>
+      )}
 
       <Separator />
 

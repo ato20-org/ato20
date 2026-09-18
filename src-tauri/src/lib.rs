@@ -23,11 +23,23 @@ pub fn run() {
     // thread, nem janela, nem banco.
     appimage::corrigir_wayland();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+
+    // A atualizacao automatica, que SO existe fora das lojas.
+    //
+    // A cadeia se quebra aqui porque `#[cfg]` nao se prende a uma chamada no
+    // meio de um encadeamento -- ele precisa de um item, e `let` e um.
+    //
+    // Ver a feature `updater` no `Cargo.toml`: numa versao de loja estes dois
+    // plugins nem sao dependencia, e quem avisa de versao nova e a loja.
+    #[cfg(feature = "updater")]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+
+    builder
         // O que faz uma extensao existir para a webview.
         //
         // Protocolo proprio, e nao `blob:` com o texto do arquivo dentro: com
@@ -160,6 +172,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::daemon_addr,
+            commands::updater_embutido,
             commands::abrir_no_navegador,
             commands::campaign_recents,
             commands::campaign_capa,
