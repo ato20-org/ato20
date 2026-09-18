@@ -1,7 +1,7 @@
 ---
 name: twitter-release-writer
 description: >
-  Skill DO PROJETO desktop.ato20 (ATO20). Use quando o usuário quiser o texto
+  Skill DO PROJETO ato20 (ATO20). Use quando o usuário quiser o texto
   de anúncio de uma versão no Twitter/X. Dispara em "cria a thread do twitter",
   "post da release pro twitter", "tweeta essa versão", "anuncia no X", "faz o
   update #N", "escreve o post do twitter dessa release", "monta a thread de
@@ -143,7 +143,7 @@ Mais OITO correções: abrir o app entrava direto na última campanha, trocar de
 **Tweet 5** (79/280)
 Baixa aqui 👇 (like + rt ajuda demais rs)
 
-github.com/ato20-org/desktop.ato20/releases
+github.com/ato20-org/ato20/releases
 
 #rpg #ttrpg
 ```

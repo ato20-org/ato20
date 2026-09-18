@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { VERSOES, type Mudanca } from "@/lib/versoes";
 
 /** A página de releases do repositório. Permitida em `capabilities/default.json`. */
-const RELEASES_URL = "https://github.com/ato20-org/desktop.ato20/releases";
+const RELEASES_URL = "https://github.com/ato20-org/ato20/releases";
 
 /**
  * O que mudou, em dois lugares e com a mesma voz.
