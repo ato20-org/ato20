@@ -122,6 +122,26 @@ export async function call<T>(
   }
 }
 
+/**
+ * Este pacote traz o updater embutido.
+ *
+ * Resolvida UMA vez por aba, como o `daemonAddr`, e pelo mesmo motivo: a
+ * resposta não muda enquanto o processo vive. Ela é uma feature de compilação
+ * do binário — ver `updater` no `Cargo.toml` —, e não um estado.
+ *
+ * `false` fora do aplicativo, e `false` se a chamada falhar: num pacote antigo,
+ * anterior a este comando, o `invoke` rejeita, e a resposta honesta ali é a
+ * mesma que na loja — não prometer aviso nenhum.
+ */
+let updaterPromise: Promise<boolean> | null = null;
+
+export function updaterEmbutido(): Promise<boolean> {
+  if (!isDesktop()) return Promise.resolve(false);
+
+  updaterPromise ??= call<boolean>("updater_embutido").catch(() => false);
+  return updaterPromise;
+}
+
 export type DaemonAddr = {
   /** Loopback. É por aqui que a janela do Mestre fala com o daemon. */
   url: string;

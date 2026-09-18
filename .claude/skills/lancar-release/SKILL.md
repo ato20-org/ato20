@@ -1,7 +1,7 @@
 ---
 name: lancar-release
 description: >
-  Skill DO PROJETO desktop.ato20 (next.rpg.show). Dispara quando o usuário pede
+  Skill DO PROJETO ato20 (next.rpg.show). Dispara quando o usuário pede
   para lançar uma versão nova — "lança uma release", "sobe uma versão nova",
   "publica a 0.0.5", "manda pra production", "faz o release", "empacota e
   publica". Conduz o ritual inteiro: decide o número, escreve as novidades em
@@ -158,7 +158,7 @@ sem autenticação:
 
 ```
 curl -s -o /dev/null -w "%{http_code}\n" \
-  https://github.com/ato20-org/desktop.ato20/releases/latest/download/latest.json
+  https://github.com/ato20-org/ato20/releases/latest/download/latest.json
 ```
 
 Desde a 0.1.0 ele responde 302, e é o que faz o updater existir. Se voltar a

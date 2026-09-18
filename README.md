@@ -12,14 +12,14 @@ continua vendo a atual na TV, e cada jogador acompanha pelo próprio celular.
 No Linux, o AppImage roda sem instalar nada:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/desktop.ato20/releases/download/v0.1.0/ato20_0.1.0_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v0.1.0/ato20_0.1.0_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 No Windows, pelo PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/desktop.ato20/releases/download/v0.1.0/ato20_0.1.0_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v0.1.0/ato20_0.1.0_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -28,7 +28,7 @@ e não `-O`. O apelido existe no Windows PowerShell 5.1, que é o que vem na má
 PowerShell 7 ele foi removido; lá o comando é `curl.exe` na mesma forma do Linux:
 
 ```powershell
-curl.exe -fL -o ato20-setup.exe https://github.com/ato20-org/desktop.ato20/releases/download/v0.1.0/ato20_0.1.0_x64-setup.exe
+curl.exe -fL -o ato20-setup.exe https://github.com/ato20-org/ato20/releases/download/v0.1.0/ato20_0.1.0_x64-setup.exe
 ```
 
 O `.exe` no final não é enfeite: sem ele o PowerShell 5.1 resolve `curl` para o mesmo
@@ -41,7 +41,7 @@ o nome do pacote: `ato20_0.1.0_amd64.AppImage` deixa de existir na versão segui
 comando que não envelhece, peça o nome à API:
 
 ```bash
-curl -fL -o ato20.AppImage "$(curl -fsSL https://api.github.com/repos/ato20-org/desktop.ato20/releases/latest \
+curl -fL -o ato20.AppImage "$(curl -fsSL https://api.github.com/repos/ato20-org/ato20/releases/latest \
   | grep -o 'https://[^"]*amd64\.AppImage')" && chmod +x ato20.AppImage
 ```
 
@@ -52,7 +52,7 @@ Quem já tem o aplicativo instalado não precisa de nada disso: **da 0.1.0 em di
 sozinho** quando sai versão nova.
 
 Os outros formatos — `.deb`, `.rpm` e `.msi` — estão em
-[releases](https://github.com/ato20-org/desktop.ato20/releases), com o que mudou em cada
+[releases](https://github.com/ato20-org/ato20/releases), com o que mudou em cada
 versão.
 
 ## Uma campanha é uma pasta
@@ -149,6 +149,8 @@ endereço mais adivinhável da rede não é lugar para descobrir isso. O daemon 
   lugar da RLS que fazia esse trabalho antes.
 - **Exportar e importar zip: pronto.** A campanha cabe num arquivo, e o arquivo abre em
   qualquer outra máquina — com a mesa continuando a valer.
+- **Flathub: o pacote já constrói, e ainda não foi submetido.** O manifesto está em
+  `empacotar/flatpak/` e monta um Flatpak que abre e roda; o que falta é a submissão.
 
 ## Rodar
 
@@ -559,6 +561,51 @@ rede local — o `index.html` era sobrescrito a cada build, mas o arquivo da rot
 ficava lá para sempre. E não é sujeira de desenvolvimento: a cópia de `target/release/` é a
 que entra no `.deb` e no AppImage, então a rota apagada viajaria dentro do pacote. O
 `beforeDevCommand` e o `beforeBuildCommand` apagam essas cópias antes de cada build.
+
+### Flatpak
+
+O manifesto e os metadados da loja moram em `empacotar/flatpak/`. Para construir a partir
+da árvore de trabalho, e não da tag publicada:
+
+```bash
+flatpak install -y flathub org.flatpak.Builder
+./empacotar/flatpak/construir-local.sh
+flatpak run io.github.ato20_org.ato20
+```
+
+**A regra que explica quase tudo nesse diretório: a sandbox de build do Flathub não tem
+rede.** Nem `cargo` nem `pnpm` podem buscar nada lá dentro, então cada dependência entra no
+manifesto como uma URL com hash, gerada antes por `gerar-fontes.sh`. Rodar esse script a
+cada mudança de `pnpm-lock.yaml` ou `Cargo.lock` — esquecer não quebra nenhum outro build,
+só o da loja, e só quando alguém tentar publicar.
+
+Duas consequências vazaram para fora do diretório, e vale saber por quê:
+
+**`src/app/layout.tsx` usa o pacote `geist`, e não `next/font/google`.** O
+`next/font/google` **baixa o arquivo da fonte durante o `next build`** — invisível na
+máquina de quem desenvolve, e fatal onde não há rede. Para conferir que o front sobrevive a
+isso, sem montar o Flatpak inteiro:
+
+```bash
+rm -rf .next
+unshare -rn sh -c 'ip link set lo up; pnpm pdfjs && pnpm build'
+```
+
+O `ip link set lo up` não é enfeite: sem loopback os workers do Turbopack não se conectam
+entre si, e o build falha por um motivo que nada tem a ver com rede externa.
+
+**A feature `updater` do `Cargo.toml` sai nas versões de loja.** Flathub e Snap instalam num
+diretório somente-leitura e atualizam por conta própria; um updater embutido ali brigaria
+com a loja pelo mesmo trabalho. É feature de compilação, e não um `if` em tempo de execução,
+porque o que se quer é que o código **não esteja** no pacote — o updater arrasta cliente
+HTTP e verificação de assinatura atrás dele. Quem pergunta pela interface é o comando
+`updater_embutido`: nas Configurações, a chave "Avisar quando sair versão nova" some no
+pacote de loja e dá lugar à frase que diz quem atualiza. Uma chave que mente é pior que uma
+chave ausente.
+
+O `empacotar/flatpak/README.md` tem o resto: o que regerar quando algo muda, como rodar o
+linter do Flathub, e as armadilhas que já custaram build — entre elas um comando de
+manifesto que o YAML lê como mapa e o `flatpak-builder` pula calado.
 
 ## Como o vault grava
 

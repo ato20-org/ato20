@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Name=ATO20
+GenericName=Tabletop RPG scene tool
+Comment=Tabletop RPG scenes on your TV
+Exec=ato20
+Icon=io.github.ato20_org.ato20
+Terminal=false
+Categories=Game;RolePlaying;
+Keywords=rpg;tabletop;ttrpg;vtt;dnd;map;scene;campaign;
+# O que casa a JANELA com este arquivo -- e, por tabela, com o icone na barra de
+# tarefas e no alt-tab.
+#
+# Sem isto o ambiente grafico ve uma janela cuja classe nao bate com nenhum
+# `.desktop` instalado, e desenha o icone generico ao lado do nome. E o defeito
+# classico de aplicativo empacotado com ID diferente do nome do binario: aqui o
+# arquivo se chama `io.github.ato20_org.ato20.desktop` e a janela se apresenta como
+# `ato20`, que e o `productName` do `tauri.conf.json`.
+#
+# CONFERIR no pacote montado, e nao no codigo: `xprop WM_CLASS` clicando na
+# janela. O valor da direita e o que vai aqui.
+StartupWMClass=ato20

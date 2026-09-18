@@ -54,7 +54,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/ato20-org/desktop.ato20/releases/latest/download/latest.json"
+        "https://github.com/ato20-org/ato20/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxRDRCQ0IzMTk4NkRGQkYKUldTLzM0WVpzN3pVc1R5TFVUcnZEa3RBQWpXYlM1Wk13NThHUEowOTJiUnhSb2FqWVpBdlBWdUEK"
     }

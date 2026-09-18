@@ -19,7 +19,7 @@
           "url": "http://localhost:*/*"
         },
         {
-          "url": "https://github.com/ato20-org/desktop.ato20/*"
+          "url": "https://github.com/ato20-org/ato20/*"
         }
       ]
     },
@@ -29,8 +29,6 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-is-maximized",
     "core:window:allow-close",
-    "core:webview:allow-set-webview-zoom",
-    "updater:default",
-    "process:allow-restart"
+    "core:webview:allow-set-webview-zoom"
   ]
 }
