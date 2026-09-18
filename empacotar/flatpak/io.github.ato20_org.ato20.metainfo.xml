@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  O que a LOJA mostra. Em ingles de proposito: e a exigencia do Flathub, e
+  tambem a unica lingua em que a pagina da loja alcanca alguem fora do Brasil.
+  A interface do aplicativo continua em portugues.
+
+  O <releases> abaixo envelhece a cada versao, e uma loja com release velha
+  anuncia "atualizado ha um ano". Ele nasce de `src/lib/versoes.ts`, traduzido.
+  Ver `empacotar/flatpak/README.md`.
+-->
+<component type="desktop-application">
+  <id>io.github.ato20_org.ato20</id>
+
+  <name>ATO20</name>
+  <summary>Tabletop RPG scenes on your TV</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <developer id="io.github.ato20_org">
+    <name>Ivalber Souza</name>
+  </developer>
+
+  <description>
+    <p>
+      ATO20 runs the visual side of a tabletop RPG session played around a real
+      table. You build the next scene on your laptop while the table keeps
+      watching the current one on the TV, and each player follows their own
+      character sheet on their phone.
+    </p>
+    <p>
+      A campaign is a folder on your disk, like a vault in Obsidian. Maps,
+      portraits, handouts, notes and audio live in it as ordinary files, so you
+      can back it up, sync it or move it to another machine without exporting
+      anything.
+    </p>
+    <p>
+      Scenes hold maps with tokens, hidden areas, saved camera framings and
+      measuring tools. Boards are scenes without a floor, for planning: free
+      text, arrows that stay anchored to what you move, sticky notes and live
+      Markdown cards. What the table sees is whatever you choose to put on air.
+    </p>
+    <p>
+      Everything runs on your own machine. The phones and the TV reach it over
+      the local network, so a session works with no internet connection and
+      without an account.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.ato20_org.ato20.desktop</launchable>
+
+  <categories>
+    <category>Game</category>
+    <category>RolePlaying</category>
+  </categories>
+
+  <!--
+    O site de divulgacao, que hoje mora na Vercel. Ele NAO precisa ser o mesmo
+    dominio do <id>: o id identifica o aplicativo, e a verificacao de posse do
+    Flathub se faz por TXT no DNS, sem exigir pagina nenhuma no ar.
+  -->
+  <url type="homepage">https://ato20.vercel.app</url>
+  <url type="bugtracker">https://github.com/ato20-org/ato20/issues</url>
+  <url type="vcs-browser">https://github.com/ato20-org/ato20</url>
+
+  <!--
+    A ordem importa: a primeira e a que vira o card na listagem da loja.
+
+    As URLs so respondem depois que estes arquivos estiverem na `main` do
+    GitHub. Ate la o `appstreamcli validate` avisa `screenshot-image-not-found`,
+    e o aviso e verdadeiro.
+
+    A interface nelas esta em portugues, que e a lingua do aplicativo. Ver o
+    README ao lado.
+  -->
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/ato20-org/ato20/main/empacotar/flatpak/capturas/mesa.png</image>
+      <caption>A scene with tokens, a saved camera and the handouts panel</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ato20-org/ato20/main/empacotar/flatpak/capturas/quadro.png</image>
+      <caption>A board for planning, with notes, arrows and loose text</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ato20-org/ato20/main/empacotar/flatpak/capturas/documento.png</image>
+      <caption>A Markdown document with live preview, beside a character sheet</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ato20-org/ato20/main/empacotar/flatpak/capturas/jogador.png</image>
+      <caption>What a player sees on their own screen</caption>
+    </screenshot>
+  </screenshots>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#d9d2ef</color>
+    <color type="primary" scheme_preference="dark">#2b2545</color>
+  </branding>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.0" date="2026-09-18">
+      <description>
+        <p>
+          First beta. Campaigns gain boards: a floorless sheet with free text,
+          anchored arrows and live Markdown cards. Files, notes and images now
+          share one folder tree, dice can be rolled by notation, the ruler
+          became a measuring shape placed on the map, and the bookshelf shows
+          covers.
+        </p>
+      </description>
+    </release>
+  </releases>
+</component>

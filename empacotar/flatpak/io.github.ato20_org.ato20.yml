@@ -1,0 +1,217 @@
+# O manifesto do Flatpak. Ele NAO empacota um binario pronto: descreve como
+# construir o ATO20 do zero, e quem constroi e a infraestrutura do Flathub.
+#
+# A consequencia que manda em tudo aqui: a sandbox de build NAO TEM REDE. Nem o
+# cargo nem o pnpm podem buscar nada, entao as dependencias entram como listas
+# de URL com hash, geradas ANTES por `gerar-fontes.sh`. Regerar a cada mudanca
+# de `pnpm-lock.yaml` ou `Cargo.lock` -- esquecer disso quebra o build da loja e
+# nao quebra nenhum outro.
+#
+# Ver `README.md` ao lado para construir e validar isto localmente.
+
+id: io.github.ato20_org.ato20
+
+runtime: org.gnome.Platform
+# O runtime traz o WebKitGTK, que e a webview do Tauri no Linux. Fixado, e nao
+# no mais novo por padrao: subir de runtime troca a versao do WebKit debaixo do
+# aplicativo, e isso e mudanca que se testa.
+#
+# CONFERIR que nao esta perto do fim de vida antes de submeter -- o Flathub
+# recusa runtime EOL. `flatpak remote-ls flathub --runtime | grep org.gnome.Sdk`
+runtime-version: '50'
+sdk: org.gnome.Sdk
+
+# O branch destas duas TEM de casar com a base freedesktop do runtime do GNOME
+# acima. Se nao casar, o `flatpak-builder` reclama logo no inicio -- e essa e a
+# hora barata de descobrir.
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node24
+
+command: ato20
+
+finish-args:
+  # A janela.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+
+  # A trilha sonora da cena.
+  - --socket=pulseaudio
+
+  # O daemon. Ele escuta em `0.0.0.0` numa porta efemera, e e por ele que a TV
+  # e os celulares dos jogadores alcancam a mesa -- ver `src-tauri/src/serve.rs`.
+  # Sem isto o aplicativo ainda abre, mas deixa de ser o que ele e: a tela do
+  # espectador e a ficha no celular param de existir.
+  - --share=network
+
+  # A campanha e uma PASTA QUALQUER do disco, no modelo do Obsidian: o dialogo
+  # nativo escolhe, e depois o Rust rele e reescreve essa pasta por fora de
+  # qualquer dialogo. So o portal de arquivos nao basta.
+  #
+  # `home` e o caso comum. Os tres seguintes existem porque campanha em HD
+  # externo e comum numa mesa que roda em notebook: sem eles a pasta abre no
+  # dialogo e falha na leitura, e o erro que a pessoa ve e "pasta nao
+  # encontrada", que e a pior forma de falhar.
+  #
+  # `--filesystem=host` resolveria os quatro de uma vez e e o que a revisao do
+  # Flathub questiona primeiro. Comecar pelo menor conjunto que funciona.
+  - --filesystem=home
+  - --filesystem=/media
+  - --filesystem=/run/media
+  - --filesystem=/mnt
+
+modules:
+  - name: ato20
+    buildsystem: simple
+
+    build-options:
+      # `flatpak-pnpm/bin` entra no PATH porque o pnpm CHAMA A SI MESMO pelo
+      # nome: antes de `pnpm run`, ele roda um check de dependencias que faz
+      # `spawnSync('pnpm')`. Invocado so por `node .../pnpm.cjs`, esse check
+      # morre com `ENOENT` e leva o build junto.
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node24/bin:/run/build/ato20/flatpak-pnpm/bin
+      env:
+        # O `flatpak-cargo-generator` escreve `cargo/config` esperando o
+        # CARGO_HOME exatamente aqui -- `/run/build/<nome do modulo>/cargo`.
+        CARGO_HOME: /run/build/ato20/cargo
+        CARGO_NET_OFFLINE: 'true'
+        # Compilar 1145 crates com um rustc por CPU derrubou a maquina de
+        # desenvolvimento uma vez: 16 nucleos para 15 GiB da menos de 1 GiB por
+        # rustc, e os crates grandes passam disso sozinhos. A CI do Flathub tem
+        # folga e nao precisa, mas o numero fixo custa tempo e nao custa build.
+        CARGO_BUILD_JOBS: '6'
+        # O `next build` tenta reportar telemetria, e aqui nao ha rede para
+        # isso. Desligar evita a tentativa e o aviso no log.
+        NEXT_TELEMETRY_DISABLED: '1'
+        # O pnpm nao pode nem tentar falar com o registry.
+        npm_config_offline: 'true'
+
+    build-commands:
+      # 1. A versao de loja NAO se atualiza sozinha.
+      #
+      # Sao dois passos, e os dois sao obrigatorios: a feature `updater` sai do
+      # cargo, e o arquivo de capability que aponta para o plugin sai do disco.
+      # Deixar o arquivo faz o `tauri-build` falhar com "Permission
+      # updater:default not found" -- ele le a pasta `capabilities/` inteira,
+      # sem saber de feature nenhuma.
+      - rm -f src-tauri/capabilities/updater.json
+
+      # 2. O proprio pnpm, que NAO vem nas sources geradas.
+      #
+      # O `flatpak-node-generator` vendoriza as DEPENDENCIAS, e nao o
+      # gerenciador. A extensao node do SDK traz npm, e o corepack precisaria de
+      # rede para buscar o pnpm -- entao ele entra como mais um tarball.
+      - mkdir -p flatpak-pnpm
+      - tar -xzf pnpm.tgz -C flatpak-pnpm --strip-components=1
+      # O tarball traz `bin/pnpm.mjs`, e quem cria o nome `pnpm` seria o npm ao
+      # instalar o pacote -- o que aqui nao acontece. O link e o que faz o PATH
+      # acima valer.
+      - ln -sf pnpm.mjs flatpak-pnpm/bin/pnpm
+
+      # 3. Apontar o store pelo caminho DE DENTRO do sandbox.
+      #
+      # A source `shell` gerada acrescenta `storeDir:` ao `pnpm-workspace.yaml`
+      # com o caminho do HOSPEDEIRO -- fontes `type: shell` do flatpak-builder
+      # rodam FORA do sandbox, e o `$PWD` que elas enxergam nao e `/run/build`.
+      #
+      # O estrago nao e um erro claro: o pnpm nao acha o store naquele caminho,
+      # abre um vazio do lado e, apesar do `--offline`, vai a rede buscar os 765
+      # pacotes um a um, com retry exponencial. Como o sandbox nao tem DNS, o
+      # build fica UMA HORA em `EAI_AGAIN` antes de desistir.
+      #
+      # `sed` e nao `>`: o `pnpm-workspace.yaml` e do repositorio, e nele mora o
+      # `allowBuilds` que proibe `sharp` e `unrs-resolver` de compilar. Reescrever
+      # o arquivo inteiro levaria os dois junto.
+      #
+      # As ASPAS em volta do comando inteiro nao sao estilo: sem elas o YAML ve
+      # o `: ` dentro de `storeDir: ` e le a linha como um MAPA, nao como um
+      # comando. O flatpak-builder entao PULA a linha, calado -- e o `sed` acima
+      # ja tinha apagado a linha errada, deixando o arquivo sem store nenhum.
+      - "sed -i '/^storeDir:/d' pnpm-workspace.yaml"
+      - 'echo "storeDir: $PWD/flatpak-node/pnpm-store" >> pnpm-workspace.yaml'
+
+      # 4. As dependencias.
+      #
+      # `--trust-lockfile` e o que faz isto funcionar sem rede, e merece a nota:
+      # o pnpm 11 reaplica as politicas de supply-chain (`minimumReleaseAge`,
+      # `trustPolicy`) a CADA entrada do lockfile no inicio do install, e para
+      # isso consulta a data de publicacao de cada pacote no registry. O
+      # `--offline` nao cobre esse passo. Sem a flag o build para em "Verifying
+      # lockfile against supply-chain policies" e depois passa uma hora em
+      # `EAI_AGAIN`, um pacote por vez, sem dizer o porque.
+      #
+      # Pular a verificacao aqui NAO afrouxa a seguranca: ela ja aconteceu antes,
+      # e mais forte. O lockfile e versionado e foi gerado com rede, e cada
+      # tarball entra por `node-sources.json` com um sha512 proprio que o
+      # flatpak-builder confere antes de o build comecar. O que a flag dispensa e
+      # reconsultar o registry sobre decisoes que o lockfile ja registrou.
+      #
+      # `--reporter=append-only` porque o padrao redesenha a tela com escape de
+      # terminal, e num log isso vira lixo ilegivel.
+      - pnpm install --offline --frozen-lockfile --ignore-scripts --trust-lockfile --reporter=append-only
+
+      # 5. O front. `pdfjs` copia o leitor para `public/` e precisa vir antes.
+      #
+      # As fontes NAO sao baixadas aqui: o `layout.tsx` usa o pacote `geist`, e
+      # nao `next/font/google`, justamente porque aqui nao ha rede.
+      - pnpm run pdfjs
+      - pnpm run build
+
+      # 6. O binario. `--no-default-features` e o que tira o updater.
+      #
+      # `cargo build` direto, e nao `tauri build`: o `tauri build` geraria .deb
+      # e .rpm que ninguem aqui vai usar, e o `beforeBuildCommand` dele
+      # refaria o passo 5.
+      - cargo --offline fetch --manifest-path src-tauri/Cargo.toml
+      #
+      # `--features tauri/custom-protocol` e OBRIGATORIO, e a falta dele nao da
+      # erro nenhum: o build passa, o pacote instala, o aplicativo abre -- e a
+      # janela mostra "Could not connect to localhost: Connection refused".
+      #
+      # O `build.rs` do crate `tauri` faz `let dev = !has_feature("custom-protocol")`,
+      # e em modo dev o binario NAO embute o `out/`: vai buscar o front no
+      # `devUrl` do `tauri.conf.json`, que e `http://localhost:3000`. Quem liga
+      # essa feature normalmente e a CLI do Tauri, e aqui nao ha CLI -- o
+      # `cargo build` e chamado direto de proposito, para nao gerar .deb e .rpm
+      # que ninguem vai usar.
+      #
+      # `tauri/custom-protocol` e nao uma feature nossa: assim o `tauri dev` e o
+      # `tauri build` continuam decidindo isso sozinhos, como sempre fizeram.
+      - cargo --offline build --release --no-default-features --features tauri/custom-protocol --manifest-path src-tauri/Cargo.toml
+      - install -Dm755 src-tauri/target/release/ato20 /app/bin/ato20
+
+      # 7. O que a loja e o ambiente grafico leem.
+      - install -Dm644 empacotar/flatpak/io.github.ato20_org.ato20.desktop /app/share/applications/io.github.ato20_org.ato20.desktop
+      - install -Dm644 empacotar/flatpak/io.github.ato20_org.ato20.metainfo.xml /app/share/metainfo/io.github.ato20_org.ato20.metainfo.xml
+      - install -Dm644 src-tauri/icons/icon.png /app/share/icons/hicolor/512x512/apps/io.github.ato20_org.ato20.png
+      - install -Dm644 src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/io.github.ato20_org.ato20.png
+      - install -Dm644 src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/io.github.ato20_org.ato20.png
+
+      # O Flathub exige a licenca instalada sob o ID do aplicativo.
+      - install -Dm644 LICENSE /app/share/licenses/io.github.ato20_org.ato20/LICENSE
+
+    sources:
+      - type: git
+        url: https://github.com/ato20-org/ato20.git
+        tag: v0.1.0
+        commit: 0e34d1776233b3fa5d2554f32280e627f7a9c883
+        # O robo do Flathub segue as tags novas por aqui e abre o PR de
+        # atualizacao sozinho. `^v([\d.]+)$` casa `v0.1.0` e NAO casaria
+        # `v0.0.6-alpha` -- que e mais um motivo de a tag ter perdido o sufixo
+        # na 0.1.0.
+        x-checker-data:
+          type: git
+          tag-pattern: '^v([\d.]+)$'
+
+      # O gerenciador de pacotes, que nao vem nas sources geradas. A versao tem
+      # de bater com o `packageManager` do `package.json`.
+      - type: file
+        url: https://registry.npmjs.org/pnpm/-/pnpm-11.3.0.tgz
+        sha512: 2c403d6594527287672b1f7056343a1f7c3634036a67ffabfcc2b3d7595d843768f8787148d1b57cf7956c90606bbd192857c363af19e96d2d0ec9ec5741d215
+        dest-filename: pnpm.tgz
+
+      # Gerados. NAO editar a mao -- ver `gerar-fontes.sh`.
+      - cargo-sources.json
+      - node-sources.json
