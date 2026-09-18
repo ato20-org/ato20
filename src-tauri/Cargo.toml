@@ -1,6 +1,6 @@
 [package]
 name = "ato20"
-version = "0.1.3"
+version = "0.1.4"
 description = "Ferramenta para organizar e exibir cenas de RPG de mesa"
 authors = ["valb-mig"]
 license = "MIT"

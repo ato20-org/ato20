@@ -56,6 +56,18 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.1.4",
+    data: "2026-09-18",
+    mudancas: [
+      {
+        tipo: "correcao",
+        titulo: "No Windows, o arquivo do instalador também mostra o ícone do ATO20",
+        detalhe:
+          "A 0.1.3 trocou o ícone do aplicativo instalado e do atalho, mas o instalador que você baixa — o ato20_x64-setup.exe — continuava aparecendo no Explorer com o ícone genérico da ferramenta que o empacota, um globo azul. Agora é a mesma marca em tudo.",
+      },
+    ],
+  },
+  {
     versao: "0.1.3",
     data: "2026-09-18",
     mudancas: [
