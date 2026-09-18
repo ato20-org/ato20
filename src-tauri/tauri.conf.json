@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ato20",
-  "version": "0.0.6",
+  "version": "0.1.0",
   "identifier": "show.rpg.ato20",
   "build": {
     "frontendDist": "../out",

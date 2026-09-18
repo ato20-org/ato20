@@ -41,7 +41,7 @@ export type Mudanca = {
 };
 
 export type Versao = {
-  /** Sem o `v` e sem o `-alpha`: é o número do `tauri.conf.json`. */
+  /** Sem o `v`: é o número do `tauri.conf.json`, e a tag é ele com `v` na frente. */
   versao: string;
   /** `AAAA-MM-DD`. Ordenável como texto, que é o que a lista precisa. */
   data: string;
@@ -55,6 +55,174 @@ export type Versao = {
  * e é ela que a porta mostra.
  */
 export const VERSOES: Versao[] = [
+  {
+    versao: "0.1.0",
+    data: "2026-09-18",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "O aplicativo passa a avisar sozinho quando existe versão nova",
+        detalhe:
+          "Até aqui toda versão saiu marcada como pré-lançamento, e o endereço que o aplicativo consulta ignora pré-lançamento — quem baixou a 0.0.1 ficou na 0.0.1 sem nunca saber que havia seis versões depois. Desta em diante o aviso chega sozinho.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A campanha ganha quadros: uma folha sem chão para o mestre pensar",
+        detalhe:
+          "O quadro fica na aba ao lado de Cenas, com pastas dentro de pastas. Nele você escreve texto direto na folha, liga as coisas com setas — de ponta solta ou grudada no que você mover — e mistura post-it, imagem, dado e cartão no mesmo lugar. Pôr o quadro no ar mostra a folha inteira na TV e no celular.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Documento: um cartão de Markdown com prévia ao vivo",
+        detalhe:
+          "Você escreve de um lado e vê formatado do outro. No começo da linha, # dá título, ## subtítulo e - item de lista; @, / e > chamam referência, comando e citação, tanto na nota quanto no cartão.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A aba Arquivos põe quadros, notas e imagens na mesma árvore de pastas",
+        detalhe:
+          "Qualquer arquivo entra no acervo agora, e a aba Imagens virou Biblioteca. A nota passou a ser arquivo da campanha: o cartão no quadro só aponta para ela, então a mesma nota pode aparecer em dois quadros sem virar duas cópias. Arrastar a nota da árvore até o quadro funciona como com imagem.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Ctrl+K abre uma paleta de comandos",
+        detalhe:
+          "Ela acha janela, cena, livro, imagem e atalho pelo nome, sem você ter de lembrar em que painel aquilo estava.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Dá para jogar dados por notação, como \"2d6\", sem pegar no saquinho",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O saquinho ganha o d% de dezenas e a moeda de cara ou coroa",
+        detalhe:
+          "O celular do jogador também pede os dois, e a mesa passa a ler \"Coroa\" e \"d%\" em vez de \"2\" e \"d2\".",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A régua virou medidor que fica no mapa, com círculo, cone e retângulo",
+        detalhe:
+          "Antes a medida sumia quando você soltava o mouse. Agora ela fica posta na cena, e a forma diz o que você está medindo.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A estante mostra os livros com capa, em caixa 2.5D, e o clique abre o PDF",
+        detalhe:
+          "Há também um comando para abrir o livro no leitor de PDF da máquina. A capa fica guardada depois da primeira vez, então a estante não pisca ao reabrir.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A cena guarda um handout: imagens do acervo que você manda à mesa uma a uma",
+        detalhe:
+          "A bolinha recebe imagens arrastadas e as leva à TV; o que já está na mesa volta para a manga pela mesma bolinha ou pelo menu. O painel ganhou título e uma caixinha de + que escolhe imagens do computador.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A janela \"Mesa\" mostra o que a TV está vendo, em miniatura, na sua tela",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Girar pelos cantos do gizmo, como no Figma",
+        detalhe:
+          "O botão de rotacionar saiu. A roda do mouse redimensiona a imagem na mão e Shift gira; as setas do teclado andam cinco de cada vez, e com Shift giram a seleção. Segurando a alça da câmera, a roda dá zoom nela.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Dá para afastar até 50%, com vazio em volta do mapa",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A cena nasce sem câmera, e a mesa vê tudo até a primeira entrar",
+        detalhe:
+          "Antes a cena nova já vinha com um enquadramento que você não escolheu. O botão \"Mesa\" também saiu da barra de cima.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A lista de personagens separa Players em cima e NPCs embaixo",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A ficha mostra quem está jogando com ela, e o diálogo do jogador diz há quanto tempo",
+        detalhe:
+          "Dá para entregar o personagem a outra pessoa dali, e tirar alguém da mesa passa a pedir confirmação. A nota fechada do personagem fica guardada.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A porta mudou: botões no alto, \"Encontrar campanha\" e o mapa da cena ao fundo do cartão",
+        detalhe:
+          "A estante ganhou botão e aceita arquivo solto, \"O que mudou\" virou botão ao lado das Configurações, e a estante vazia virou um alvo tracejado em vez de um espaço em branco.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Esc larga a ferramenta, e um X na barra faz o mesmo",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O palco vazio mostra a marca e os atalhos principais",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A tela diz qual pasta da campanha sumiu, em vez de abrir uma mesa vazia",
+      },
+      {
+        tipo: "correcao",
+        titulo:
+          "Apagar a pasta da campanha com a mesa aberta virava mesa vazia, e a gravação recriava a pasta pela metade",
+      },
+      {
+        tipo: "correcao",
+        titulo: "No leitor, dar zoom deixava a folha branca por um instante",
+        detalhe:
+          "A página que você está lendo passa na frente das vizinhas, e trocar de página depressa não deixa mais um desenho cancelado na tela.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "A máscara escura da câmera cobria o post-it e os controles do mestre",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O clique fora do mapa tinha deixado de valer",
+        detalhe: "A borda saiu e o vazio em volta ganhou pontos.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O token achatava ao encolher, em vez de parar no piso",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O d% nascia sem valor, e a soma da mesa dava NaN",
+      },
+      {
+        tipo: "correcao",
+        titulo: "A ficha só via quem entrou na mesa depois de reabrir o programa",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O diálogo de Configurações prendia o foco e matava a barra da janela",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O rótulo da câmera não cabia quando a moldura ficava pequena na tela",
+      },
+      {
+        tipo: "correcao",
+        titulo: "No quadro, o dado caía puxado para o plano, e não onde a mão soltou",
+      },
+      {
+        tipo: "correcao",
+        titulo: "No quadro, o texto novo nascia invisível e sem foco",
+      },
+      {
+        tipo: "correcao",
+        titulo: "A bancada já arrumada não ganhava a aba Quadros ao lado de Cenas",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O arquivo da extensão se chama manifest.json, e não manifesto.json",
+      },
+    ],
+  },
   {
     versao: "0.0.6",
     data: "2026-09-16",
