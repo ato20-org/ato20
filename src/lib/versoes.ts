@@ -56,6 +56,18 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.1.2",
+    data: "2026-09-18",
+    mudancas: [
+      {
+        tipo: "correcao",
+        titulo: "A página da loja anunciava as novidades da versão anterior",
+        detalhe:
+          "Detalhe de bastidor, e só aparece para quem instalar pela loja: o arquivo que descreve o ATO20 para o Flathub ficou uma versão atrás na 0.1.1, então a loja mostrava o que mudou na 0.1.0. Nada muda para quem baixou o AppImage ou o instalador do Windows.",
+      },
+    ],
+  },
+  {
     versao: "0.1.1",
     data: "2026-09-18",
     mudancas: [
@@ -468,6 +480,11 @@ export const VERSOES: Versao[] = [
  *
  * Quem garante que os dois não divergem é a skill de release, que sobe o número
  * e escreve a entrada no mesmo passo.
+ *
+ * E são TRÊS lugares, não dois: o `<releases>` do metainfo do Flatpak conta a
+ * mesma notícia em inglês, e o pacote da loja o instala a partir do checkout da
+ * TAG. Escrever lá depois de taguear não alcança o pacote — ver o passo 4b da
+ * skill `lancar-release`.
  */
 export function versaoAtual(): Versao | undefined {
   return VERSOES[0];

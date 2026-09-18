@@ -100,6 +100,24 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.1.2" date="2026-09-18">
+      <description>
+        <p>
+          Fixes the store page announcing the previous version's changes. Behind
+          the scenes only: nothing changes for people running the AppImage or the
+          Windows installer.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.1" date="2026-09-18">
+      <description>
+        <p>
+          Groundwork for the Linux stores. Nothing changes in the app itself:
+          fonts are no longer downloaded while packaging, and the update notice
+          steps aside in store builds, where the store is what updates you.
+        </p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-09-18">
       <description>
         <p>

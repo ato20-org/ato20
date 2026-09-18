@@ -83,6 +83,21 @@ Nos três arquivos, e rode `cargo update -p ato20 --manifest-path
 src-tauri/Cargo.toml` para o `Cargo.lock` acompanhar. Confira que sobrou só o
 `127.0.0.1` quando procurar pelo número antigo.
 
+### 4b. O metainfo da loja, ANTES da tag
+
+`empacotar/flatpak/io.github.ato20_org.ato20.metainfo.xml` ganha um
+`<release version="X.Y.Z" date="AAAA-MM-DD">` no topo da lista, com o mesmo
+texto do `versoes.ts` **traduzido para o inglês**.
+
+**A ordem não é detalhe, é a razão deste passo existir.** O manifesto do Flatpak
+instala esse arquivo a partir do checkout da TAG. Se a entrada entrar depois de
+taguear, ela não chega no pacote — e tag não se altera. Foi o que aconteceu na
+0.1.1: o binário saiu 0.1.1 e a loja anunciou 0.1.0, e consertar custou uma
+release inteira só para isso.
+
+O `versoes.ts` e o metainfo são a mesma notícia em duas línguas e dois lugares.
+Nenhum dos dois pode sair sem o outro.
+
 ### 5. Rodar os portões ANTES de empurrar
 
 Os mesmos de `verificar.yml`:
