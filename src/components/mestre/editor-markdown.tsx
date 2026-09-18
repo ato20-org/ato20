@@ -39,6 +39,12 @@ import { aoApertarF2 } from "@/hooks/use-renomear-pelo-menu";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
+import {
+  deslocamentoDe,
+  posicaoDe,
+  useHistoricoDeTexto,
+} from "@/lib/mestre/historico-de-texto";
+import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { useTokenDragStore, type FonteDoArrasto } from "@/lib/store/use-token-drag-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -75,6 +81,8 @@ export function NotaEditor({ nota }: { nota: Nota }) {
   const conteudo = texto ?? "";
   const palavras = conteudo.trim() ? conteudo.trim().split(/\s+/).length : 0;
   const linhas = conteudo ? conteudo.split("\n").length : 0;
+
+  const [confirmando, setConfirmando] = useState(false);
 
   function apagar() {
     fechar();
@@ -123,10 +131,17 @@ export function NotaEditor({ nota }: { nota: Nota }) {
           size="icon-sm"
           aria-label="Apagar esta nota"
           title="Apaga a nota, o arquivo .md e os cartões dela nos quadros"
-          onClick={apagar}
+          onClick={() => setConfirmando(true)}
         >
           <Trash2 />
         </Button>
+        <ConfirmarRemocao
+          aberto={confirmando}
+          onAberto={setConfirmando}
+          titulo={`Apagar "${nota.titulo}"?`}
+          descricao="Vão junto o arquivo .md e os cartões desta nota nos quadros. Ctrl+Z não traz de volta."
+          onConfirmar={apagar}
+        />
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -345,6 +360,12 @@ export function EditorAoVivo({
 
   const [ativa, setAtiva] = useState<{ indice: number; cursor: number } | null>(null);
   const campo = useRef<HTMLTextAreaElement | null>(null);
+  // O cursor no DOCUMENTO, e não na linha: é o que o desfazer guarda, porque
+  // a linha em que ele estava pode nem existir depois de voltar um passo.
+  const historico = useHistoricoDeTexto(
+    texto,
+    ativa ? deslocamentoDe(texto, ativa.indice, ativa.cursor) : texto.length,
+  );
   const caixa = useRef<HTMLDivElement | null>(null);
 
   // O sumário pediu uma linha: ativa e leva o cursor ao começo dela. Estado
@@ -455,6 +476,18 @@ export function EditorAoVivo({
 
   function teclas(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
     if (!ativa) return;
+
+    // Ctrl+Z / Ctrl+Y: o texto inteiro volta um passo, e o cursor vai para a
+    // linha em que estava. Ver `useHistoricoDeTexto`.
+    const volta = historico.tratarTecla(event);
+    if (volta !== false) {
+      if (volta) {
+        onChange(volta.texto);
+        setAtiva(posicaoDe(volta.texto, volta.cursor));
+      }
+      return;
+    }
+
     const alvo = event.currentTarget;
     const { selectionStart, selectionEnd, value } = alvo;
     const indice = ativa.indice;
@@ -734,12 +767,22 @@ function TextoCru({
   onSair: () => void;
 }) {
   const campo = useRef<HTMLTextAreaElement | null>(null);
+  const [cursor, setCursor] = useState(texto.length);
+  const historico = useHistoricoDeTexto(texto, cursor);
+  /** Cursor a repor depois que um desfazer trocar o valor. */
+  const repor = useRef<number | null>(null);
   useLayoutEffect(() => {
     const alvo = campo.current;
     if (!alvo) return;
     alvo.focus();
     alvo.select();
   }, []);
+  useLayoutEffect(() => {
+    const alvo = campo.current;
+    if (!alvo || repor.current === null) return;
+    alvo.setSelectionRange(repor.current, repor.current);
+    repor.current = null;
+  }, [texto]);
   useLayoutEffect(() => {
     const alvo = campo.current;
     if (!alvo) return;
@@ -753,8 +796,21 @@ function TextoCru({
       value={texto}
       aria-label="Texto cru da nota"
       className="text-foreground block min-h-[60vh] w-full resize-none bg-transparent font-mono text-[0.95em] outline-none"
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(event) => {
+        onChange(event.target.value);
+        setCursor(event.target.selectionStart);
+      }}
+      onSelect={(event) => setCursor(event.currentTarget.selectionStart)}
       onKeyDown={(event) => {
+        const volta = historico.tratarTecla(event);
+        if (volta !== false) {
+          if (volta) {
+            repor.current = volta.cursor;
+            setCursor(volta.cursor);
+            onChange(volta.texto);
+          }
+          return;
+        }
         if (event.key === "Escape") {
           event.preventDefault();
           onSair();

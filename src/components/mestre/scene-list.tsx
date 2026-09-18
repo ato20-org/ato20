@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { NovoMapaDialog } from "@/components/mestre/novo-mapa-dialog";
 import { ScenePreview } from "@/components/playground/scene-preview";
+import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -162,6 +163,7 @@ function SceneRow({
   const renameScene = useSceneStore((state) => state.renameScene);
   const duplicateScene = useSceneStore((state) => state.duplicateScene);
   const removeScene = useSceneStore((state) => state.removeScene);
+  const [confirmando, setConfirmando] = useState(false);
 
   // O item do menu não renomeia na hora: ele PEDE, e o campo nasce quando o
   // menu termina de fechar. Ver `useRenomearPeloMenu` — era isto que fazia o
@@ -354,13 +356,21 @@ function SceneRow({
 
               <DropdownMenuItem
                 variant="destructive"
-                onClick={() => removeScene(scene.id)}
+                onClick={() => setConfirmando(true)}
               >
                 <Trash2 />
                 Remover
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <ConfirmarRemocao
+            aberto={confirmando}
+            onAberto={setConfirmando}
+            titulo={`Remover "${scene.name}"?`}
+            descricao="A cena sai da campanha com tudo o que está nela. Ctrl+Z não traz de volta."
+            acao="Remover"
+            onConfirmar={() => removeScene(scene.id)}
+          />
         </>
       )}
     </li>

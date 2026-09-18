@@ -359,6 +359,36 @@ type SceneStore = {
   removeLigacao: (sceneId: string, ligacaoId: string) => void;
 };
 
+/**
+ * O que o desfazer pode tocar: o CONTEÚDO das cenas, e só.
+ *
+ * O histórico guarda o board inteiro por passo, e voltar um passo inteiro
+ * desfazia também o que não é edição: criar um quadro, apagar uma nota, mover
+ * uma cena de pasta. Um Ctrl+Z a mais depois de criar um quadro apagava o
+ * quadro -- e a nota, que é arquivo em disco, sumia da lista sem o arquivo
+ * voltar. Estrutura não é gesto; não volta por Ctrl+Z.
+ *
+ * Então o passo restaurado é montado assim: o conjunto, a ordem, o nome e a
+ * pasta de cada cena são os de AGORA; o conteúdo de cada cena é o do passo,
+ * quando ela existia lá. Cena que nasceu depois do passo fica como está.
+ * Notas, pastas e o que está aberto ou no ar também ficam como estão.
+ */
+export function soConteudo(atual: Board, alvo: Board): Board {
+  const doPasso = new Map(alvo.scenes.map((scene) => [scene.id, scene]));
+
+  return {
+    ...atual,
+    scenes: atual.scenes.map((scene) => {
+      const antiga = doPasso.get(scene.id);
+      if (!antiga) return scene;
+      const restaurada: Scene = { ...antiga, name: scene.name };
+      if (scene.pastaId !== undefined) restaurada.pastaId = scene.pastaId;
+      else delete restaurada.pastaId;
+      return restaurada;
+    }),
+  };
+}
+
 export const useSceneStore = create<SceneStore>((set, get) => {
   /**
    * Toda alteração de conteúdo passa por aqui, e é o único lugar que alimenta
@@ -396,7 +426,11 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
       // Zera o relógio de fusão: a próxima edição abre passo novo em vez de se
       // grudar no que existia antes do desfazer.
-      set({ board: step.value, history: step.history, lastCommitAt: 0 });
+      set({
+        board: soConteudo(board, step.value),
+        history: step.history,
+        lastCommitAt: 0,
+      });
     },
 
     redo() {
@@ -406,7 +440,11 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       const step = redoStep(history, board);
       if (!step) return;
 
-      set({ board: step.value, history: step.history, lastCommitAt: 0 });
+      set({
+        board: soConteudo(board, step.value),
+        history: step.history,
+        lastCommitAt: 0,
+      });
     },
 
     async hydrate(campaignPath) {
