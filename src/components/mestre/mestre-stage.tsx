@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -44,6 +45,14 @@ import {
 } from "@/lib/mestre/item-actions";
 import { naBoca, useHandoutStore } from "@/lib/store/use-handout-store";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import {
+  aplicarGesto,
+  moverCameraNoGesto,
+  moverNoGesto,
+  terminarGesto,
+  terminarGestoDaCamera,
+  useGestoStore,
+} from "@/lib/store/use-gesto-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
   flipSelection,
@@ -94,7 +103,7 @@ import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
-import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useSceneStore, type ItemPatch } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
 import {
@@ -193,9 +202,26 @@ function distanciaAoSegmento(
 /** Menor arrasto que vira seta, em unidades de cena. Abaixo disso é clique. */
 const ARRASTO_MINIMO_DA_SETA = 8;
 
-export function MestreStage({ scene }: { scene: Scene }) {
+export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
+
+  // A cena que o palco DESENHA: a do board com o gesto em curso por cima.
+  // Tudo abaixo -- `SceneLayer`, alças, setas, caixa de seleção -- lê `scene`
+  // como sempre leu; o que mudou é que mover um token não grava no board a
+  // cada quadro. Ver `useGestoStore`.
+  const gestoSceneId = useGestoStore((state) => state.sceneId);
+  const gestoPatches = useGestoStore((state) => state.patches);
+  const gestoCamera = useGestoStore((state) => state.camera);
+  const scene = useMemo(
+    () =>
+      aplicarGesto(cenaDoBoard, {
+        sceneId: gestoSceneId,
+        patches: gestoPatches,
+        camera: gestoCamera,
+      }),
+    [cenaDoBoard, gestoSceneId, gestoPatches, gestoCamera],
+  );
 
   const [marquee, setMarquee] = useState<Bounds | null>(null);
   const [guides, setGuides] = useState<Guide[]>(NO_GUIDES);
@@ -251,8 +277,6 @@ export function MestreStage({ scene }: { scene: Scene }) {
   const togglePortrait = useSelectionStore((state) => state.togglePortrait);
   const clear = useSelectionStore((state) => state.clear);
 
-  const updateItem = useSceneStore((state) => state.updateItem);
-  const updateItems = useSceneStore((state) => state.updateItems);
   const addFog = useSceneStore((state) => state.addFog);
   const addMedidor = useSceneStore((state) => state.addMedidor);
   const updateMedidor = useSceneStore((state) => state.updateMedidor);
@@ -574,20 +598,20 @@ export function MestreStage({ scene }: { scene: Scene }) {
     const bounds = { ...movingBounds };
     let ultimo = { dx: 0, dy: 0 };
 
-    const aplicar = () =>
-      updateItems(
-        scene.id,
-        origins.map((origin) => ({
-          id: origin.id,
-          patch: {
-            x: Math.round(origin.x + ultimo.dx),
-            y: Math.round(origin.y + ultimo.dy),
-            width: origin.width,
-            height: origin.height,
-            rotation: origin.rotation,
-          },
-        })),
-      );
+    const patchesDoGesto = (): ItemPatch[] =>
+      origins.map((origin) => ({
+        id: origin.id,
+        patch: {
+          x: Math.round(origin.x + ultimo.dx),
+          y: Math.round(origin.y + ultimo.dy),
+          width: origin.width,
+          height: origin.height,
+          rotation: origin.rotation,
+        },
+      }));
+
+    // No gesto, e não no board: o board só recebe no soltar. Ver `useGestoStore`.
+    const aplicar = () => moverNoGesto(scene.id, patchesDoGesto());
 
     /**
      * A roda, com o item na mão: tamanho, e com Shift o ângulo. Na captura e
@@ -652,6 +676,9 @@ export function MestreStage({ scene }: { scene: Scene }) {
           useHandoutStore.getState().apontar(native.clientX, native.clientY),
         onEnd: (native) => {
           window.removeEventListener("wheel", aoRodar, true);
+          // Um commit, um passo de desfazer. Antes do handout: guardar na manga
+          // remove o item do board, e remover o que não foi gravado não é nada.
+          terminarGesto(scene.id, patchesDoGesto());
           useHandoutStore.getState().largar();
           if (naBoca(native.clientX, native.clientY)) {
             guardarNoHandout(origins.map((origin) => origin.id));
@@ -1489,7 +1516,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
             // Girar e escalar chegam pelo mesmo callback: `rotation` só vem no
             // gesto de rotação, e a caixa só no de redimensionamento.
             if (patch.rotation !== undefined) {
-              updateItems(
+              moverNoGesto(
                 scene.id,
                 rotateGroup(
                   frozen.items,
@@ -1502,7 +1529,7 @@ export function MestreStage({ scene }: { scene: Scene }) {
 
             if (patch.x === undefined || patch.width === undefined) return;
 
-            updateItems(
+            moverNoGesto(
               scene.id,
               scaleGroup(
                 frozen.items,
@@ -1516,6 +1543,9 @@ export function MestreStage({ scene }: { scene: Scene }) {
               ),
             );
           }}
+          onGestureEnd={() =>
+            terminarGesto(scene.id, useGestoStore.getState().patches ?? [])
+          }
           onDelete={removeSelection}
         />
       ) : null}
@@ -1536,7 +1566,10 @@ export function MestreStage({ scene }: { scene: Scene }) {
           // saber que a caixa em volta é de uma PESSOA muda o que o mestre vai
           // fazer com ela.
           tom={personagemDoItem ? "personagem" : "default"}
-          onChange={(patch) => updateItem(scene.id, single.id, patch)}
+          onChange={(patch) => moverNoGesto(scene.id, [{ id: single.id, patch }])}
+          onGestureEnd={() =>
+            terminarGesto(scene.id, useGestoStore.getState().patches ?? [])
+          }
           onFlip={() => flipSelection("x")}
           // `setSelectionOpacity` e não `updateItem`: a seleção aqui é este
           // item só, e a regra de que 100% APAGA o campo mora numa função só.
@@ -1725,11 +1758,15 @@ export function MestreStage({ scene }: { scene: Scene }) {
           tudoEscuro={ehQuadro(scene)}
           // Com espaço segurado a moldura vira só informativa: o gesto pertence
           // ao deslocamento da cena.
+          // No gesto, e não no board: a moldura anda leve e o board recebe no
+          // soltar -- ou no ritmo do canal, se esta câmera está no ar.
           onChange={
             panMode
               ? undefined
-              : (viewport) => gravarCameraManual(selecionada.id, viewport)
+              : (viewport) =>
+                  moverCameraNoGesto(scene.id, selecionada.id, viewport)
           }
+          onGestureEnd={terminarGestoDaCamera}
         />
       ) : null}
 
