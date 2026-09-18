@@ -462,7 +462,7 @@ fn migrate(conn: &Connection) -> AppResult<()> {
 
     if current < 4 {
         // As extensoes desta maquina. UMA coluna de estado, e e o ponto: o que
-        // a extensao E vive no `manifesto.json` dentro da pasta dela, e copiar
+        // a extensao E vive no `manifest.json` dentro da pasta dela, e copiar
         // a pasta para outra maquina tem de bastar para instalar. O que nao
         // viaja com a pasta e a decisao de quem usa -- ligada ou desligada --,
         // e e so isso que o banco guarda.

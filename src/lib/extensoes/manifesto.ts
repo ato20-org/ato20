@@ -39,7 +39,7 @@ export const API_VERSAO = 1;
 /**
  * O que uma extensão diz de si.
  *
- * Espelho de `extensoes::Manifesto` em Rust, que é quem lê o `manifesto.json`
+ * Espelho de `extensoes::Manifesto` em Rust, que é quem lê o `manifest.json`
  * e valida. Campo novo lá precisa de campo novo aqui.
  *
  * `tema` e `principal` são os dois caminhos que ela pode oferecer, e os dois
@@ -186,7 +186,7 @@ export function listarExtensoes(): Promise<Extensao[]> {
  * `null` quando o usuário fecha o diálogo sem escolher — cancelar não é falha,
  * e tratá-lo como erro poria um aviso na tela de quem só mudou de ideia.
  *
- * Pasta e não zip nesta etapa: uma extensão é uma pasta com `manifesto.json`
+ * Pasta e não zip nesta etapa: uma extensão é uma pasta com `manifest.json`
  * dentro, e quem clona do GitHub já tem exatamente isso. O zip entra quando
  * houver de onde baixar sem clonar.
  */

@@ -678,7 +678,7 @@ mapa por causa de um clique em "apagar pasta" seria dano desproporcional ao gest
 
 ## Extensões
 
-Uma extensão é uma **pasta com `manifesto.json` dentro**. Instalar é copiá-la
+Uma extensão é uma **pasta com `manifest.json` dentro**. Instalar é copiá-la
 para a máquina, por Configurações → Plugins. É o mesmo formato que se publica
 no GitHub: quem clona o repositório já tem exatamente o que o diálogo pede.
 

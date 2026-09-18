@@ -10,7 +10,7 @@ import type { FerramentaRegistrada } from "@/lib/extensoes/api";
  *
  * Duas tabelas, e a distinção é o ponto do sistema:
  *
- * O que a extensão DECLARA vive no `manifesto.json` e é conhecido sem executar
+ * O que a extensão DECLARA vive no `manifest.json` e é conhecido sem executar
  * nada — é dele que saem a lista de telas, a lista de atalhos e a barra de
  * ferramentas. O que ela REGISTRA vive aqui, e só existe depois de o módulo ser
  * importado.

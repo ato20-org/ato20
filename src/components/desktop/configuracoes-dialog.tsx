@@ -368,7 +368,7 @@ function Tecla({ children }: { children: string }) {
  *
  * A seção continua se chamando "Plugins" na barra lateral porque é a palavra
  * que quem procura isto tem na cabeça, e o código diz "extensão" porque é o
- * que o Rust e o `manifesto.json` dizem. Vale a divergência: renomear a barra
+ * que o Rust e o `manifest.json` dizem. Vale a divergência: renomear a barra
  * lateral custaria o termo que o usuário reconhece, e renomear o código
  * custaria o termo que o autor de extensão vai ler na documentação.
  *
@@ -390,7 +390,7 @@ function PainelPlugins() {
 
   return (
     <>
-      <TituloSecao ajuda="Uma extensão é uma pasta com manifesto.json dentro. Instalar é copiá-la para cá.">
+      <TituloSecao ajuda="Uma extensão é uma pasta com manifest.json dentro. Instalar é copiá-la para cá.">
         Plugins
       </TituloSecao>
 
@@ -536,7 +536,7 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm">{extensao.nome}</p>
         <p className="text-muted-foreground truncate text-xs">
-          {/* A versão sempre, o autor quando há. O `manifesto.json` pode vir
+          {/* A versão sempre, o autor quando há. O `manifest.json` pode vir
               sem autor, e "por undefined" seria pior que só a versão. */}
           {extensao.versao}
           {extensao.autor ? ` · ${extensao.autor}` : ""}

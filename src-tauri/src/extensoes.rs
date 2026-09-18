@@ -6,7 +6,7 @@
 //! um tema serve todas as mesas, e exportar uma campanha nao leva o tema de
 //! quem a montou.
 //!
-//! O que a extensao E fica no `manifesto.json` dentro da pasta dela, e nao no
+//! O que a extensao E fica no `manifest.json` dentro da pasta dela, e nao no
 //! banco. O banco guarda uma coisa so -- se esta habilitada --, porque essa e a
 //! unica que o usuario decide e que nao viaja junto com a pasta. Copiar a pasta
 //! para outra maquina tem de bastar para instalar.
@@ -29,7 +29,7 @@ use crate::error::{AppError, AppResult};
 pub const API_VERSAO: u32 = 1;
 
 /// O nome do arquivo que faz de uma pasta uma extensao.
-const MANIFESTO: &str = "manifesto.json";
+const MANIFESTO: &str = "manifest.json";
 
 /// Onde as extensoes ficam, dado o diretorio de dados do aplicativo.
 pub fn dir(base: &Path) -> PathBuf {
@@ -644,7 +644,7 @@ mod tests {
         assert!(caminho_relativo_seguro("tema.css"));
         assert!(caminho_relativo_seguro("css/tema.css"));
 
-        assert!(!caminho_relativo_seguro("../manifesto.json"));
+        assert!(!caminho_relativo_seguro("../manifest.json"));
         assert!(!caminho_relativo_seguro("css/../../ato20.db"));
         assert!(!caminho_relativo_seguro("/etc/passwd"));
         assert!(!caminho_relativo_seguro("..\\ato20.db"));
