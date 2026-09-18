@@ -29,6 +29,10 @@ uma versão quebrada publicada — a `0.0.1` saiu sem os artefatos do updater, e
   `Cargo.lock` acompanha. A tag sai do `tauri.conf.json`.
 - **A tag já existente não é reaproveitada.** Republicar no mesmo número não
   cria release nenhuma — daí subir o número ser obrigatório, nunca opcional.
+- **A tag é `vX.Y.Z`, sem sufixo, e a release NÃO é pré-lançamento.** As duas
+  coisas mudaram na 0.1.0 (issue #58): `prerelease: true` fazia
+  `releases/latest` responder 404, e o aplicativo instalado nunca descobria
+  versão nova. Marcar pré-lançamento de novo desliga a atualização automática.
 - **O histórico viaja dentro do pacote**, em `src/lib/versoes.ts`. Ele é lido na
   porta e nas Configurações, e é a única fonte que quem baixou tem.
 - **Commitar direto na `main` é autorizado neste repositório.** Sem branch, sem
@@ -40,7 +44,7 @@ uma versão quebrada publicada — a `0.0.1` saiu sem os artefatos do updater, e
 ### 1. Ver o que entrou
 
 ```
-git log --oneline v<ULTIMA>-alpha..main
+git log --oneline v<ULTIMA>..main
 ```
 
 Leia os commits. Eles explicam decisão de implementação; o que você precisa
@@ -48,7 +52,8 @@ extrair é outra coisa: **o que mudou para quem abre o programa para jogar**.
 
 ### 2. Escolher o número
 
-Alpha, então `0.0.N+1` para qualquer coisa. Se houver mudança que quebre
+Beta desde a 0.1.0. Novidade que muda o que a pessoa faz sobe a minor
+(`0.N+1.0`); só correção sobe a patch (`0.1.N+1`). Se houver mudança que quebre
 campanha existente, pare e pergunte ao usuário antes de escolher — um formato
 de campanha incompatível não é assunto de numeração, é assunto de migração.
 
@@ -97,7 +102,7 @@ Dois commits, e nesta ordem: o que o usuário vai ler primeiro no histórico é 
 mudança, não a numeração.
 
 1. o que a versão carrega, se ainda não estiver commitado;
-2. `chore(release): 0.0.N` com a versão nos três arquivos e as novidades.
+2. `chore(release): X.Y.Z` com a versão nos três arquivos e as novidades.
 
 Empurre a `main` e **espere `verificar` passar**. Não mescle na `production`
 antes disso — publicar o que a CI reprova é publicar duas vezes.
@@ -118,7 +123,7 @@ A action cria a release com um corpo genérico. Depois que ela existir, ponha
 nela o mesmo texto de `versoes.ts`:
 
 ```
-gh release edit v0.0.N-alpha --notes-file <arquivo>
+gh release edit vX.Y.Z --notes-file <arquivo>
 ```
 
 Mesmo texto nos dois lugares, porque são a mesma pergunta feita em dois lugares
@@ -130,7 +135,7 @@ Mesmo texto nos dois lugares, porque são a mesma pergunta feita em dois lugares
 passar.** Baixe da release, como faria quem baixa:
 
 ```
-gh release download v0.0.N-alpha --pattern '*.AppImage'
+gh release download vX.Y.Z --pattern '*.AppImage'
 chmod +x ato20_*.AppImage
 ```
 
@@ -156,21 +161,19 @@ curl -s -o /dev/null -w "%{http_code}\n" \
   https://github.com/ato20-org/desktop.ato20/releases/latest/download/latest.json
 ```
 
-**404 tem duas causas, e a segunda engana.** A primeira é repositório privado,
-que esconde os ativos de quem baixou. A segunda é o `prerelease: true` do
-workflow: `releases/latest` do GitHub IGNORA pré-lançamento, então enquanto toda
-release for alpha não existe "latest" nenhum para o endpoint achar -- e o 404
-continua mesmo com o repositório público.
-
-Isso é decisão de produto, não defeito: enquanto for alpha, ninguém se atualiza
-sozinho. Mas não anuncie que a atualização automática funciona sem ter visto
-este `curl` responder 302. Para conferir qual das duas causas é:
+Desde a 0.1.0 ele responde 302, e é o que faz o updater existir. Se voltar a
+dar 404, **são duas causas e a segunda engana.** A primeira é repositório
+privado, que esconde os ativos de quem baixou. A segunda é `prerelease: true`
+no `empacotar.yml`: `releases/latest` do GitHub IGNORA pré-lançamento, e aí o
+404 continua mesmo com o repositório público. Para saber qual das duas:
 
 ```
 gh release list --json tagName,isPrerelease,isLatest
 ```
 
-`isLatest=false` em todas quer dizer que é o flag, e não a visibilidade.
+`isLatest=false` em todas quer dizer que é o flag, e não a visibilidade. E não
+anuncie que a atualização automática funciona sem ter visto este `curl`
+responder 302.
 
 ## Armadilhas já pagas
 

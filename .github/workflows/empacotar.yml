@@ -97,9 +97,12 @@ jobs:
       # justamente a URL que o endpoint do updater aponta -- uma release em
       # rascunho deixaria o `latest.json` inalcançável.
       #
-      # `prerelease: true` enquanto for alpha. Ele não muda o que o updater vê:
-      # `releases/latest/download` ignora pré-lançamento, então nenhuma versão
-      # instalada vai se atualizar sozinha para uma alpha.
+      # `prerelease: false`, e é ELE que liga o updater. O endpoint do
+      # aplicativo é `releases/latest/download/latest.json`, e o atalho `latest`
+      # do GitHub IGNORA pré-lançamento: enquanto toda release foi alpha, esse
+      # endereço respondeu 404 e ninguém que instalou se atualizou. Marcar
+      # pré-lançamento de novo desliga a atualização automática outra vez -- não
+      # é rótulo, é chave. Ver a issue #58.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -108,12 +111,17 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v${{ needs.versao.outputs.numero }}-alpha
-          releaseName: ATO20 v${{ needs.versao.outputs.numero }} alpha
+          # A tag é só o número, sem sufixo. O `-alpha` saiu junto com o
+          # `prerelease`, e não por enfeite: o sufixo na tag não dizia nada ao
+          # GitHub, e atrapalhava quem casa a tag com um empacotador de loja.
+          tagName: v${{ needs.versao.outputs.numero }}
+          releaseName: ATO20 v${{ needs.versao.outputs.numero }}
           # Genérico de propósito: um texto que diga "primeira versão" deixa de
-          # ser verdade na segunda, e ninguém lembra de voltar aqui.
+          # ser verdade na segunda, e ninguém lembra de voltar aqui. O que
+          # mudou na versão vai nas notas, escritas a cada release a partir de
+          # `src/lib/versoes.ts` -- ver a skill `lancar-release`.
           releaseBody: |
-            Ainda é alpha: espere coisa quebrada.
+            Beta: dá para jogar com ele, e ainda há aresta.
 
             **Linux** — `.AppImage` roda sem instalar, e na primeira abertura
             ele mesmo põe o atalho no menu (rofi, wofi e afins). Basta dar
@@ -123,4 +131,4 @@ jobs:
             assinatura de código, então o SmartScreen vai avisar: "Mais
             informações" e "Executar mesmo assim".
           releaseDraft: false
-          prerelease: true
+          prerelease: false
