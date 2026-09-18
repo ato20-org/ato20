@@ -56,6 +56,18 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.1.3",
+    data: "2026-09-18",
+    mudancas: [
+      {
+        tipo: "correcao",
+        titulo: "O ATO20 passa a ter o próprio ícone na barra de tarefas e no atalho",
+        detalhe:
+          "Até aqui todo pacote — AppImage, instalador do Windows, .deb e .rpm — saía com o ícone padrão da ferramenta que empacota o aplicativo, dois anéis ciano e amarelo. Agora é a marca do ATO20: a tenda com o d20, sobre fundo escuro.",
+      },
+    ],
+  },
+  {
     versao: "0.1.2",
     data: "2026-09-18",
     mudancas: [
