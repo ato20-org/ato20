@@ -43,13 +43,16 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  overlayClassName,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  /** Ajusta o fundo -- por exemplo `top-8`, para nao borrar a barra da janela. */
+  overlayClassName?: string
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       {/* Centralizado por FLEX, e nao por `translate(-50%,-50%)`.
           O transform promovia o dialogo a camada composta propria, que era
           rasterizada e so entao colocada na posicao -- e com a webview num

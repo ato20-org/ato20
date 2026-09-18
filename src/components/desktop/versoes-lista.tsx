@@ -273,7 +273,10 @@ export function NovidadesDialog() {
   if (!atual) return null;
 
   return (
-    <Dialog>
+    // `modal="trap-focus"` e `top-8` no fundo pela mesma razao do dialogo das
+    // Configuracoes: a barra da janela mora fora do dialogo, e o modal cheio a
+    // deixava borrada e com os botoes mortos.
+    <Dialog modal="trap-focus">
       <DialogTrigger
         render={
           <ChromeButton
@@ -283,7 +286,10 @@ export function NovidadesDialog() {
         }
       />
 
-      <DialogContent className="gap-0 p-0 sm:max-w-[min(36rem,calc(100%-2rem))]">
+      <DialogContent
+        className="gap-0 p-0 sm:max-w-[min(36rem,calc(100%-2rem))]"
+        overlayClassName="top-8"
+      >
         <div className="flex h-[min(32rem,80vh)] min-h-0 flex-col">
           {/* `pr-12`: o X do diálogo mora no canto de cima à direita, por cima
               do cabeçalho, e sem a folga a data ficava embaixo dele. */}

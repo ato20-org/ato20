@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   Blocks,
+  Box,
   Keyboard,
   Minus,
   History,
@@ -76,7 +77,12 @@ export function ConfiguracoesDialog() {
   const [secao, setSecao] = useState<Chave>("geral");
 
   return (
-    <Dialog>
+    // `modal="trap-focus"` e nao o modal cheio: com ele o base-ui desliga o
+    // ponteiro em tudo que esta fora do dialogo, e fora dele mora a barra da
+    // janela -- minimizar, maximizar e fechar ficavam mortos, e o proprio
+    // gatilho congelava com o realce de passagem do mouse, parecendo ligado.
+    // Assim o foco continua preso dentro do dialogo e a barra volta a atender.
+    <Dialog modal="trap-focus">
       <DialogTrigger
         render={
           <ChromeButton
@@ -90,7 +96,13 @@ export function ConfiguracoesDialog() {
           a variante venceria o `max-w-[calc(100%-2rem)]` da base, e numa janela
           de 700px o diálogo encostaria nas duas beiradas. Assim a folga de
           1rem sobrevive em qualquer largura. */}
-      <DialogContent className="gap-0 p-0 sm:max-w-[min(48rem,calc(100%-2rem))]">
+      {/* `top-8` no fundo: a barra da janela tem `h-8` e fica no fluxo, logo
+          um fundo em `inset-0` a cobriria -- e o blur apagava os botoes de
+          janela, que continuam clicaveis com o dialogo aberto. */}
+      <DialogContent
+        className="gap-0 p-0 sm:max-w-[min(48rem,calc(100%-2rem))]"
+        overlayClassName="top-8"
+      >
         <div className="flex h-[min(32rem,80vh)] min-h-0">
           {/* `min-w-36` embaixo dos 30%: num gerenciador de janelas de mosaico
               a janela do aplicativo fica estreita de verdade, e 30% de pouco é
@@ -99,7 +111,7 @@ export function ConfiguracoesDialog() {
             <div className="px-1.5 pt-1">
               <DialogTitle>Configurações</DialogTitle>
               <DialogDescription className="mt-1 text-xs">
-                Desta máquina, não da campanha.
+                Configurações gerais do ATO20.
               </DialogDescription>
             </div>
 
@@ -278,7 +290,7 @@ function PainelVersao() {
 
   return (
     <>
-      <TituloSecao ajuda="O histórico vem dentro do pacote, e termina nesta versão.">
+      <TituloSecao ajuda="Histórico de versões do ATO20">
         Versão {versao?.versao ?? ""}
       </TituloSecao>
 
@@ -318,7 +330,7 @@ function PainelTeclado() {
 
   return (
     <>
-      <TituloSecao ajuda="Ainda não dá para trocar as teclas. Esta é a lista do que existe.">
+      <TituloSecao ajuda="Lista dos atalhos existentes no sistema.">
         Teclado
       </TituloSecao>
 
@@ -390,7 +402,7 @@ function PainelPlugins() {
 
   return (
     <>
-      <TituloSecao ajuda="Uma extensão é uma pasta com manifest.json dentro. Instalar é copiá-la para cá.">
+      <TituloSecao ajuda="Plugins customizados para personalizar o sistema, e melhorar a experiência.">
         Plugins
       </TituloSecao>
 
@@ -415,10 +427,20 @@ function PainelPlugins() {
           vira lista cheia um quadro depois diz "você não tem nenhum" para
           quem tem. */}
       {!carregada ? null : extensoes.length === 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Nenhum plugin instalado. Por ora eles trocam o tema — cores, cantos e
-          a fonte da interface.
-        </p>
+        /* Centrado e com ícone, e não uma linha de texto encostada na margem.
+           Vazia, esta seção era um painel inteiro em branco com cinco palavras
+           no canto de cima -- lia como se a lista tivesse falhado ao carregar.
+           Sem moldura: aqui não se solta arquivo nenhum, e o tracejado é o
+           desenho de quem recebe arrasto -- prometeria um gesto que a seção
+           não tem. */
+        <div className="text-muted-foreground flex flex-col items-center gap-1.5 px-4 py-10 text-center">
+          <Box className="size-5 shrink-0" aria-hidden />
+          <p className="text-foreground text-sm">Nenhum plugin instalado</p>
+          <p className="text-muted-foreground/70 text-xs">
+            Um plugin é uma pasta com <code>manifest.json</code> dentro.
+            Importar é copiá-la para cá.
+          </p>
+        </div>
       ) : (
         <Grupos extensoes={extensoes} />
       )}
