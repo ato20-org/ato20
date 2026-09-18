@@ -562,6 +562,22 @@ ficava lá para sempre. E não é sujeira de desenvolvimento: a cópia de `targe
 que entra no `.deb` e no AppImage, então a rota apagada viajaria dentro do pacote. O
 `beforeDevCommand` e o `beforeBuildCommand` apagam essas cópias antes de cada build.
 
+### O ícone
+
+Os arquivos de `src-tauri/icons/` são **gerados**, e a fonte é
+`src-tauri/icons/fonte-1024.png`: a marca branca de `src/assets/logo-white.png`
+sobre um tile `#141414` arredondado, com 18% de margem — ícone de sistema precisa
+respirar, senão encosta na borda da barra de tarefas. Para regerar tudo, `.ico`
+do Windows incluído:
+
+```bash
+pnpm tauri icon src-tauri/icons/fonte-1024.png -o src-tauri/icons
+rm -rf src-tauri/icons/android src-tauri/icons/ios   # alvos que este projeto não tem
+```
+
+Até a 0.1.2 os pacotes saíam com o **logo padrão do Tauri** — ninguém tinha
+trocado. Se o ícone voltar a ser um par de anéis ciano e amarelo, foi isso.
+
 ### Flatpak
 
 O manifesto e os metadados da loja moram em `empacotar/flatpak/`. Para construir a partir
