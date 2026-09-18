@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -124,6 +124,34 @@ function CampaignDoor() {
   const estante = useEstante();
 
   const [creating, setCreating] = useState(false);
+
+  /**
+   * O erro da porta passa como TOAST, e não como linha fixa no pé da coluna.
+   *
+   * Ele nasce de um GESTO -- escolher uma pasta que não é campanha, importar um
+   * zip que falhou --, e a resposta de um gesto se lê na hora e vai embora. Ali
+   * embaixo ele ficava até o gesto seguinte: o mestre escolhia outra pasta, a
+   * campanha abria, e a frase vermelha continuava na tela dizendo que algo
+   * deu errado. Pior, ela nascia longe de onde o olho estava -- no rodapé,
+   * abaixo da estante --, e num erro rápido ninguém a via nascer.
+   *
+   * Zera o erro no estado ao mostrar: quem o guardava era essa linha, e sem
+   * ninguém para desenhá-lo um erro velho só voltaria a aparecer na próxima
+   * montagem da porta.
+   *
+   * `id` fixo porque o erro saía DUPLICADO na tela: em desenvolvimento o React
+   * monta, desmonta e remonta cada componente, e o efeito roda duas vezes com o
+   * mesmo erro na mão -- a limpeza do estado acontece depois, e não alcança a
+   * segunda passada, que ainda enxerga o valor da primeira. Com `id` o segundo
+   * `toast` atualiza o primeiro em vez de empilhar outro. De quebra, dois erros
+   * seguidos na porta também passam a se substituir, que é o certo: só o último
+   * gesto interessa.
+   */
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error, { id: "porta-erro" });
+    useCampaignStore.setState({ error: null });
+  }, [error]);
 
   /**
    * O que cai na porta, vindo do sistema: PDF vai para a estante, zip vira
@@ -253,10 +281,6 @@ function CampaignDoor() {
         onAdicionar={() => void estante.importar()}
         onRemover={(id) => void estante.remover(id)}
       />
-
-      {error ? (
-        <p className="text-destructive text-center text-sm">{error}</p>
-      ) : null}
     </Porta>
   );
 }
@@ -307,11 +331,30 @@ function Estante({
         </Button>
       </div>
 
+      {/* A estante vazia é uma ÁREA TRACEJADA, e não uma frase.
+          A frase dizia "dá para soltar o arquivo aqui" sem desenhar nenhum
+          "aqui": o espaço abaixo dela era vazio liso, igual ao resto da porta,
+          e nada indicava que ele recebia arquivo. O tracejado é a forma que
+          todo mundo já leu como alvo de arrasto, e dá ao texto um lugar.
+
+          É um `<button>`, e não uma `div` enfeitada: o alvo do arrasto agora
+          parece clicável, e alvo que parece clicável tem de clicar -- faz o
+          mesmo que "Adicionar livro" no título. Também põe o gesto no teclado,
+          que arrastar arquivo nunca tem. */}
       {livros.length === 0 ? (
-        <p className="text-muted-foreground px-1 text-xs">
-          Nenhum livro ainda. Só PDF entra, e ele fica nesta máquina, fora do
-          zip da campanha. Dá para soltar o arquivo aqui.
-        </p>
+        <button
+          type="button"
+          onClick={onAdicionar}
+          className="border-border/70 text-muted-foreground hover:border-primary/60 hover:bg-primary/5 hover:text-foreground focus-visible:ring-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <BookPlus className="size-5 shrink-0" aria-hidden />
+          <span className="text-sm">
+            Solte um PDF aqui, ou clique para achar
+          </span>
+          <span className="text-xs text-muted-foreground/70">
+            Só PDF entra, e ele fica nesta máquina, fora do zip da campanha.
+          </span>
+        </button>
       ) : null}
 
       {/* Prateleira, e não lista: com capa, cada livro é uma caixa em pé, e
@@ -574,10 +617,7 @@ function Porta({
     // `data-porta` é a zona do arquivo solto -- ver `useArrastoDeArquivo` no
     // `CampaignDoor`. A coluna inteira, e não só a estante: quem larga um zip
     // não sabe que ele "pertence" a um pedaço da tela.
-    <div
-      data-porta
-      className="relative flex flex-1 flex-col overflow-y-auto"
-    >
+    <div data-porta className="relative flex flex-1 flex-col overflow-y-auto">
       {/* `my-auto` no filho em vez de `items-center` no pai, e rolagem no pai:
           a lista guarda doze campanhas, e numa janela baixa a coluna passa da
           tela. Centralizar por `items-center` com estouro corta o topo -- o
@@ -643,7 +683,7 @@ function CreateForm({ onCancel }: { onCancel: () => void }) {
             onChange={(event) => setNome(event.target.value)}
             autoComplete="off"
             spellCheck={false}
-            placeholder="A Marca do Javali"
+            placeholder="Ex.: Ato 1 — A Cidade do Medo"
           />
         </div>
 
