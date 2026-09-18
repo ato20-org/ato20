@@ -46,4 +46,4 @@ next-env.d.ts
 # competir com o `tauri dev` aberto no tree principal. O conteudo e uma copia
 # de trabalho, nao fonte. O `eslint.config.mjs` ignora `.claude/**` pela mesma
 # razao, e la e mais largo: o `.next/` de um worktree rendia 36 mil avisos.
-/.claude/worktrees/
+/.claude/
