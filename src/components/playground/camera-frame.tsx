@@ -17,11 +17,7 @@ import { createPortal } from "react-dom";
 
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
-import {
-  clampViewport,
-  viewportZoom,
-  zoomViewportCentered,
-} from "@/lib/geometry/viewport";
+import { PLANO, clampViewport, viewportZoom, zoomViewportCentered } from "@/lib/geometry/viewport";
 import {
   alternarTransmissao,
   ZOOM_CAMERA_STEP,
@@ -85,6 +81,8 @@ type CameraFrameProps = {
   transmitindo: boolean;
   /** Ausente = moldura só informativa, sem arraste nem alças. */
   onChange?: (viewport: Viewport) => void;
+  /** A mão soltou a alça ou o canto. Quem separa gesto de documento grava aqui. */
+  onGestureEnd?: () => void;
   /** V segurado: a câmera está seguindo o mouse. A moldura se acende. */
   cinegrafista?: boolean;
   /** Quadro: escurece a TELA inteira fora da câmera, e não só o conteúdo. */
@@ -114,6 +112,7 @@ export function CameraFrame({
   camera: selecionada,
   transmitindo,
   onChange,
+  onGestureEnd,
   cinegrafista = false,
   tudoEscuro = false,
 }: CameraFrameProps) {
@@ -164,11 +163,40 @@ export function CameraFrame({
      * palco. Na captura e com `stopPropagation`, como o arrasto de token, porque
      * o `SceneStage` também escuta a roda e um notch faria as duas coisas.
      */
+    /**
+     * Um commit por quadro, somando roda E arrasto.
+     *
+     * A roda dispara fora do `requestAnimationFrame` do `useSceneDrag`, e cada
+     * notch virava um commit do board por conta própria -- dois commits no
+     * mesmo quadro quando a mão anda e rola junto, cada um re-renderizando o
+     * palco do mestre inteiro. Aqui os dois escrevem em `proxima` e o quadro
+     * grava uma vez. O `cameraAtual` acompanha na hora, para o incremento
+     * seguinte partir do que já foi pedido e não do que já foi gravado.
+     */
+    let proxima: Viewport | null = null;
+    let quadro: number | undefined;
+    const pedir = (viewport: Viewport) => {
+      cameraAtual.current = viewport;
+      proxima = viewport;
+      if (quadro !== undefined) return;
+      quadro = requestAnimationFrame(() => {
+        quadro = undefined;
+        if (proxima) onChange(proxima);
+        proxima = null;
+      });
+    };
+    const despejar = () => {
+      if (quadro !== undefined) cancelAnimationFrame(quadro);
+      quadro = undefined;
+      if (proxima) onChange(proxima);
+      proxima = null;
+    };
+
     const aoRodar = (native: WheelEvent) => {
       native.preventDefault();
       native.stopPropagation();
 
-      onChange(
+      pedir(
         zoomViewportCentered(
           cameraAtual.current,
           native.deltaY < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP,
@@ -186,7 +214,7 @@ export function CameraFrame({
       onMove: (delta) => {
         const atual = cameraAtual.current;
 
-        onChange(
+        pedir(
           clampViewport(
             {
               ...atual,
@@ -200,7 +228,9 @@ export function CameraFrame({
       },
       onEnd: () => {
         window.removeEventListener("wheel", aoRodar, true);
+        despejar();
         setArrastando(false);
+        onGestureEnd?.();
       },
     });
   }
@@ -222,22 +252,33 @@ export function CameraFrame({
     ? "pointer-events-auto absolute touch-none"
     : "pointer-events-none absolute";
 
-  // Até o CONTEÚDO, e nunca a folga em volta dele. A máscara cobria a área
-  // navegável inteira -- três planos por três, com `left/top` negativos -- e
-  // isso é a armadilha número um do WebKitGTK (ver `debug-do-palco` §3): um
-  // filho que transborda o plano infla a camada composta, o motor pinta o
-  // mapa deslocado e, ampliado, preto. Foi o "bug da câmera no zoom" voltando
-  // pela terceira porta. O que fica fora do conteúdo já é preto por natureza;
-  // não há nada ali a escurecer.
-  const fora = conteudo;
+  // Até o PLANO, e nem um pixel além dele. Nem a folga, nem o `conteudo`.
+  //
+  // A máscara vive no plano de controles, e no WebKitGTK um filho que passa
+  // da caixa do plano infla a camada composta inteira: o motor pinta o plano
+  // deslocado e o Mestre vê a moldura tremer a cada notch de zoom (ver
+  // `debug-do-palco` §3, armadilha 1). Foi o "bug da câmera no zoom" três
+  // vezes. Na terceira a máscara encolheu de `comFolga(conteudo)` para
+  // `conteudo` -- e não bastou: `conteudo` é o plano MAIS o que o mestre
+  // largou fora dele, e um token ou nota na margem já esticava a máscara para
+  // fora (o HUD acusava `pior: div.pointer-events-none absolute bg-` com
+  // centenas de px acima do plano). O que fica fora do plano já é preto por
+  // natureza; não há nada ali a escurecer.
+  const fora = PLANO;
   const opacidadeMascara =
     arrastando || cinegrafista ? MASCARA_ARRASTANDO : MASCARA_PARADA;
+  // As quatro tarjas em volta da moldura, cada uma RECORTADA ao plano: a
+  // câmera pode estar meio fora dele (`clampViewport` prende ao `conteudo`,
+  // não ao plano), e uma tarja com `top: camera.y` negativo transbordaria do
+  // mesmo jeito.
+  const cy0 = Math.max(fora.minY, camera.y);
+  const cy1 = Math.min(fora.maxY, camera.y + camera.height);
   const mascara = [
     // Acima, abaixo, esquerda, direita da moldura.
-    { left: fora.minX, top: fora.minY, width: fora.maxX - fora.minX, height: camera.y - fora.minY },
-    { left: fora.minX, top: camera.y + camera.height, width: fora.maxX - fora.minX, height: fora.maxY - camera.y - camera.height },
-    { left: fora.minX, top: camera.y, width: camera.x - fora.minX, height: camera.height },
-    { left: camera.x + camera.width, top: camera.y, width: fora.maxX - camera.x - camera.width, height: camera.height },
+    { left: fora.minX, top: fora.minY, width: fora.maxX - fora.minX, height: cy0 - fora.minY },
+    { left: fora.minX, top: cy1, width: fora.maxX - fora.minX, height: fora.maxY - cy1 },
+    { left: fora.minX, top: cy0, width: Math.min(fora.maxX, camera.x) - fora.minX, height: cy1 - cy0 },
+    { left: Math.max(fora.minX, camera.x + camera.width), top: cy0, width: fora.maxX - Math.max(fora.minX, camera.x + camera.width), height: cy1 - cy0 },
   ];
 
   const canto = px(CANTO_PX);
@@ -426,6 +467,7 @@ export function CameraFrame({
           // gesto, sempre para o mesmo lado.
           round={false}
           zIndex={HANDLES_Z}
+          onGestureEnd={onGestureEnd}
           onChange={({ x, y, width, height }) =>
             onChange(
               clampViewport(

@@ -4,6 +4,7 @@ import { useCallback, type PointerEvent as ReactPointerEvent } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import type { Vec } from "@/lib/geometry/transform";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
 
 type DragHandlers = {
   /** `delta` é acumulado desde o pointerdown, em unidades de cena. */
@@ -53,6 +54,10 @@ export function useSceneDrag() {
 
       target.setPointerCapture(pointerId);
 
+      // O palco fica sabendo que há gesto: com isso o plano de conteúdo desce
+      // para o compositor enquanto o ponteiro anda. Ver `gestos` no store.
+      useViewportStore.getState().comecarGesto();
+
       /**
        * Um commit por frame, no máximo.
        *
@@ -95,6 +100,8 @@ export function useSceneDrag() {
         if (pending) apply(pending);
         frame = undefined;
         pending = null;
+
+        useViewportStore.getState().terminarGesto();
 
         target.releasePointerCapture(pointerId);
         target.removeEventListener("pointermove", handleMove);

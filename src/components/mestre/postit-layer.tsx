@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import {
   Fragment,
   useEffect,
@@ -150,15 +151,18 @@ function PostitCamada({
   postits: Postit[];
   panMode: boolean;
 }) {
-  const { scale } = useSceneScale();
+  const { scale, planoDaMargem } = useSceneScale();
 
   const updatePostit = useSceneStore((state) => state.updatePostit);
   const removePostit = useSceneStore((state) => state.removePostit);
   const { vinculos, candidatos } = useMencoesDoMestre();
 
-  if (scale === 0) return null;
+  // Na MARGEM, e não no plano de controles onde este layer é montado: o papel
+  // pode estar fora do mapa, e filho fora da caixa do plano derruba o palco
+  // (ver `planoDaMargem` no `SceneStage`). Sem o nó ainda, nada a desenhar.
+  if (scale === 0 || !planoDaMargem) return null;
 
-  return (
+  return createPortal(
     <>
       {postits.map((postit) => (
         <PostitPapel
@@ -171,7 +175,8 @@ function PostitCamada({
           onRemove={() => removePostit(sceneId, postit.id)}
         />
       ))}
-    </>
+    </>,
+    planoDaMargem,
   );
 }
 
