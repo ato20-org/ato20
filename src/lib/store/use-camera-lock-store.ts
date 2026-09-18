@@ -198,7 +198,10 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
         .getState()
         .atualizarCamera(scene.id, selecionada.id, { alvoIds: undefined });
 
-    set({ espelhoMestre: false });
+    // Só escreve se há o que soltar: `gravarCameraManual` chama isto a cada
+    // quadro de arrasto da moldura, e um `set` com o mesmo valor ainda acorda
+    // todo assinante do store.
+    if (get().espelhoMestre) set({ espelhoMestre: false });
   },
 }));
 

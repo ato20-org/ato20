@@ -34,8 +34,24 @@ type ViewportStore = {
    * sobre quem trata o gesto.
    */
   panMode: boolean;
+  /**
+   * Quantos arrastos estão em curso no palco -- item, alça, postit, moldura.
+   *
+   * Existe para o `SceneStage` saber que há GESTO mesmo com a câmera parada.
+   * O plano de conteúdo assenta em `zoom` (layout, nítido) quando a câmera
+   * para; mover um item dentro de um plano em `zoom` paga layout e re-raster
+   * do plano inteiro a cada quadro, e era isso que fazia um token já no mapa
+   * pesar na mão enquanto o fantasma da aba -- fora do plano -- corria leve.
+   * Com um gesto em curso o plano volta ao `transform`, e o compositor cuida.
+   *
+   * Contador e não booleano: dois ponteiros (toque) podem se sobrepor, e o
+   * segundo a soltar é quem encerra.
+   */
+  gestos: number;
 
   setViewport: (viewport: Viewport) => void;
+  comecarGesto: () => void;
+  terminarGesto: () => void;
   setConteudo: (conteudo: Bounds) => void;
   setPanMode: (panMode: boolean) => void;
   zoomIn: () => void;
@@ -62,8 +78,11 @@ export const useViewportStore = create<ViewportStore>((set, get) => ({
   viewport: FULL_VIEWPORT,
   conteudo: PLANO,
   panMode: false,
+  gestos: 0,
 
   setViewport: (viewport) => set({ viewport }),
+  comecarGesto: () => set((state) => ({ gestos: state.gestos + 1 })),
+  terminarGesto: () => set((state) => ({ gestos: Math.max(0, state.gestos - 1) })),
 
   // Devolver o estado intocado quando a caixa não mudou é o que deixa o palco
   // chamar isto a cada quadro de arrasto de graça: o zustand não avisa ninguém

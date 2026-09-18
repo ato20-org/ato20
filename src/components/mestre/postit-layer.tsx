@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import {
   Fragment,
   useEffect,
@@ -27,6 +28,7 @@ import {
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { useMencoesDoMestre } from "@/hooks/use-mencoes-do-mestre";
 import { postitNaArea, postitNoTamanho } from "@/lib/geometry/postit";
+import { useHistoricoDeTexto } from "@/lib/mestre/historico-de-texto";
 import {
   aplicaSugestao,
   fantasmaDe,
@@ -150,15 +152,18 @@ function PostitCamada({
   postits: Postit[];
   panMode: boolean;
 }) {
-  const { scale } = useSceneScale();
+  const { scale, planoDaMargem } = useSceneScale();
 
   const updatePostit = useSceneStore((state) => state.updatePostit);
   const removePostit = useSceneStore((state) => state.removePostit);
   const { vinculos, candidatos } = useMencoesDoMestre();
 
-  if (scale === 0) return null;
+  // Na MARGEM, e não no plano de controles onde este layer é montado: o papel
+  // pode estar fora do mapa, e filho fora da caixa do plano derruba o palco
+  // (ver `planoDaMargem` no `SceneStage`). Sem o nó ainda, nada a desenhar.
+  if (scale === 0 || !planoDaMargem) return null;
 
-  return (
+  return createPortal(
     <>
       {postits.map((postit) => (
         <PostitPapel
@@ -171,7 +176,8 @@ function PostitCamada({
           onRemove={() => removePostit(sceneId, postit.id)}
         />
       ))}
-    </>
+    </>,
+    planoDaMargem,
   );
 }
 
@@ -285,6 +291,15 @@ function PostitPapel({
    * lista ficaria parada no marcador anterior.
    */
   const [cursor, setCursor] = useState(0);
+  const historico = useHistoricoDeTexto(postit.texto, cursor);
+  /** Cursor a repor depois que um desfazer trocar o texto. */
+  const repor = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const alvo = campo.current;
+    if (!alvo || repor.current === null) return;
+    alvo.setSelectionRange(repor.current, repor.current);
+    repor.current = null;
+  }, [postit.texto]);
 
   /** Qual sugestão está sob as setas. */
   const [indice, setIndice] = useState(0);
@@ -641,6 +656,17 @@ function PostitPapel({
               // função, e chamá-la duas vezes não custa nada.
               onBlur={fechar}
               onKeyDown={(event) => {
+                // Ctrl+Z / Ctrl+Y do TEXTO do papel. Ver `useHistoricoDeTexto`.
+                const volta = historico.tratarTecla(event);
+                if (volta !== false) {
+                  if (volta) {
+                    repor.current = volta.cursor;
+                    setCursor(volta.cursor);
+                    onChange({ texto: volta.texto });
+                  }
+                  return;
+                }
+
                 const lista = sugestoes.length > 0;
 
                 // Tab e seta-direita confirmam o fantasma, como no VS Code: com

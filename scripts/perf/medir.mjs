@@ -122,6 +122,8 @@ const JANELA = temFlag("janela");
  * desenho e a reconciliacao do React por palpite.
  */
 const PERFIL = temFlag("perfil");
+/** Imprime o console da pagina de cada medida. */
+const CONSOLE = temFlag("console");
 
 // ---------------------------------------------------------------------------
 // PNG de ruído, sem dependência.
@@ -577,6 +579,10 @@ async function medir(cdp, url) {
       estiloMs: Math.round((depois.RecalcStyleDuration - antes.RecalcStyleDuration) * 1000),
       layoutMs: Math.round((depois.LayoutDuration - antes.LayoutDuration) * 1000),
       nodes: depois.Nodes,
+      // `--console`: o que a pagina disse durante a corrida, para saber se a
+      // arvore que se queria medir montou de fato (uma excecao engolida pelo
+      // React mede um palco vazio e a tabela nao conta).
+      console: CONSOLE ? console_.slice(-20) : null,
     };
   }
 
@@ -788,6 +794,11 @@ async function principal() {
   console.log(
     `\n${SEGUNDOS}s por medida${REPETICOES > 1 ? `, mediana de ${REPETICOES} corridas` : ""}, ${AQUECIMENTO_NOTA}.`,
   );
+  for (const l of linhas) {
+    if (!l.console) continue;
+    console.log(`\nconsole ${l.cenario} n=${l.n}:\n    ${l.console.join("\n    ") || "(vazio)"}`);
+  }
+
   for (const l of linhas) {
     if (!l.perfil || l.perfil.length === 0) continue;
 

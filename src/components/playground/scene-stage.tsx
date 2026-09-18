@@ -26,6 +26,7 @@ import {
   panViewport,
   zoomViewport,
 } from "@/lib/geometry/viewport";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { cn } from "@/lib/utils";
 import { SCENE_HEIGHT, SCENE_WIDTH, type Viewport } from "@/types/scene";
 
@@ -68,6 +69,23 @@ type SceneScale = {
    * `SceneLayer`, onde está por que os dois planos existem.
    */
   planoDeConteudo: HTMLElement | null;
+  /**
+   * Onde vive o que pode ser estacionado FORA do mapa -- postit, cartão de
+   * documento.
+   *
+   * Um envelope irmão dos dois planos, com a mesma geometria e SEM caixa
+   * própria (0x0). Existe pela armadilha 1 de `debug-do-palco` §3: um filho
+   * que passa da caixa de um plano infla a camada composta dele, e o motor
+   * pinta o plano deslocado -- a moldura da câmera tremia a cada notch de
+   * zoom porque um postit estava 222px acima do plano de controles. Prender o
+   * papel ao plano resolvia o tremor e matava a margem, que é uso legítimo.
+   * Aqui o papel fica fora dos planos: não há caixa a transbordar, e o que a
+   * camada dele pinta é só ele mesmo.
+   *
+   * Sempre em `transform`, como o plano de controles: o papel se mede com
+   * `emPixelDeTela`, e as duas formas têm de bater.
+   */
+  planoDaMargem: HTMLElement | null;
   /**
    * O fundo do palco, atrás dos planos e do tamanho da moldura. É onde o
    * envelope de gesto do mestre é montado, para o lado de fora do plano aceitar
@@ -236,9 +254,13 @@ export function SceneStage({
    */
   const envelopeDoConteudoRef = useRef<HTMLDivElement>(null);
   const [conteudoNo, setConteudoNo] = useState<HTMLDivElement | null>(null);
+  const [margemNo, setMargemNo] = useState<HTMLDivElement | null>(null);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
   /** A câmera está parada há tempo bastante para valer redesenhar nítido. */
   const [parada, setParada] = useState(false);
+  // Só no Mestre: na TV nada arrasta, e o plano dela nunca sai do `transform`.
+  const emGesto = useViewportStore((state) => !smooth && state.gestos > 0);
+
 
   useEffect(() => {
     const element = frameRef.current;
@@ -350,7 +372,9 @@ export function SceneStage({
    * Com a camada do tamanho do plano, o `zoom` nítido volta a valer em toda a
    * faixa em que sempre valeu. Ver `zona` em `SceneLayer`.
    */
-  const conteudoNoLayout = !smooth && parada && scale !== 0;
+  // `!emGesto`: item, alça ou moldura andando é gesto tanto quanto a câmera, e
+  // gesto é coisa de compositor. Ver `gestos` em `useViewportStore`.
+  const conteudoNoLayout = !smooth && parada && !emGesto && scale !== 0;
 
   /**
    * A malha de pontos do vazio, só onde se navega (o Mestre).
@@ -382,21 +406,44 @@ export function SceneStage({
         : "rgba(255,255,255,0.13)";
     const ponto = `radial-gradient(circle, ${tinta} 1px, transparent 1.5px)`;
 
+    // O fundo é um azulejo MAIOR que a janela e anda por `translate`, em vez
+    // de mudar `backgroundPosition`: mudar a posição do padrão repintava o
+    // fundo inteiro -- a janela toda -- a cada quadro de arrasto, no mapa e no
+    // quadro. Um `translate` dentro de um azulejo o compositor resolve sem
+    // repintar. O tamanho do azulejo ainda muda no zoom, e aí repinta; é um
+    // por notch, não um por quadro. O deslocamento fica em (-azulejo, 0] para
+    // a peça continuar cobrindo a janela e recebendo o gesto no vazio.
+    const azulejo = passo * scale;
+    const resto = (v: number) => (((v % azulejo) + azulejo) % azulejo) - azulejo;
+
     return {
       fora: {
         backgroundImage: ponto,
-        backgroundSize: `${passo * scale}px ${passo * scale}px`,
-        backgroundPosition: `${offsetX}px ${offsetY}px`,
+        backgroundSize: `${azulejo}px ${azulejo}px`,
+        width: `calc(100% + ${azulejo}px)`,
+        height: `calc(100% + ${azulejo}px)`,
+        transform: `translate(${resto(offsetX)}px, ${resto(offsetY)}px)`,
       },
-      dentro: {
-        backgroundImage: ponto,
-        backgroundSize: `${passo}px ${passo}px`,
-      },
+      // O quadro NÃO tem malha própria no plano: a dele é a do fundo, que
+      // atravessa o plano transparente. Ver o plano de conteúdo abaixo.
+      dentro:
+        plano === "quadro"
+          ? undefined
+          : {
+              backgroundImage: ponto,
+              backgroundSize: `${passo}px ${passo}px`,
+            },
     };
   }, [onViewportChange, plano, scale, offsetX, offsetY]);
 
-  /** A câmera, resumida a uma string: mudou isto, mudou o enquadramento. */
-  const camera = `${scale}|${offsetX}|${offsetY}`;
+  /**
+   * A câmera, resumida a uma string: mudou isto, mudou o enquadramento.
+   *
+   * O gesto entra na chave de propósito: soltar um item é "a câmera parou"
+   * outra vez -- a espera recomeça e o plano só volta ao `zoom` nítido depois
+   * dela, em vez de pagar o re-raster no mesmo quadro do `pointerup`.
+   */
+  const camera = `${scale}|${offsetX}|${offsetY}|${emGesto}`;
   const [ultima, setUltima] = useState(camera);
 
   // Ajuste de estado no próprio render, que é o caminho que o React documenta
@@ -497,9 +544,15 @@ export function SceneStage({
     // da última mudança de `viewport`, e trocar de forma no meio do voo faria a
     // cena saltar -- `zoom` não interpola. A espera segue a transição em curso:
     // 450 ms no salto, 150 ms no fluxo, mais a folga de um quadro de rede.
+    //
+    // No Mestre, 350 ms e não 180: cada troca de forma abre a janela de
+    // corrida compositor x layout do notch (ver "segurar o notch" acima), e
+    // uma roda com pausas curtas entre notches cruzava os 180 ms e pagava a
+    // corrida a cada retomada -- a 500% isso é um quadro preto de 5 mil px.
+    // Nitidez chega 170 ms mais tarde; ninguém olha nitidez com a mão na roda.
     const espera = window.setTimeout(
       () => setParada(true),
-      smooth ? (emFluxo.current ? 320 : 620) : 180,
+      smooth ? (emFluxo.current ? 320 : 620) : 350,
     );
 
     return () => window.clearTimeout(espera);
@@ -527,6 +580,7 @@ export function SceneStage({
       toScene,
       viewport,
       planoDeConteudo: conteudoNo,
+      planoDaMargem: margemNo,
       fundoDoPalco: fundoNo,
       moldura: frameNo,
       offsetX,
@@ -537,6 +591,7 @@ export function SceneStage({
       conteudoNoLayout,
       toScene,
       viewport,
+      margemNo,
       conteudoNo,
       fundoNo,
       frameNo,
@@ -727,7 +782,7 @@ export function SceneStage({
           gesto que sobra -- o clique no vazio, fora do plano. Ver `fundoNo`. */}
       <div
         ref={setFundoNo}
-        className="absolute inset-0"
+        className="absolute top-0 left-0 h-full w-full"
         style={malha?.fora}
       />
 
@@ -766,9 +821,18 @@ export function SceneStage({
           // parava.
           // `pointer-events-auto`: o pai desligou o ponteiro por ter a caixa sem
           // escala; este tem a caixa certa, e é aqui que o mapa recebe o gesto.
+          // Quadro: TRANSPARENTE, sem cor nem malha própria. Um quadro não tem
+          // chão, e a caixa 1920x1080 não é informação nenhuma nele. Pintada
+          // -- mesma cor do fundo, malha própria --, ela aparecia como um
+          // retângulo no meio da folha sempre que a câmera andava: em
+          // `transform` os pontos de dentro viram bitmap esticado e os de fora
+          // continuam nítidos, e a fronteira entre os dois é a borda do plano.
+          // Transparente, a malha do fundo atravessa e a folha é uma só.
+          // O mapa continua preto: fora do mapa é sala escura, e a imagem cobre
+          // o plano de qualquer forma.
           className={cn(
             "pointer-events-auto relative",
-            plano === "quadro" ? "bg-card" : "bg-black",
+            plano === "quadro" ? "" : "bg-black",
           )}
           style={{
             width: SCENE_WIDTH,
@@ -843,6 +907,27 @@ export function SceneStage({
         </SceneScaleContext.Provider>
       </div>
       </div>
+
+      {/* A MARGEM: postit e cartão, por portal. Ver `planoDaMargem`.
+          Depois do plano de controles no DOM, logo por cima dele: o papel
+          sempre ficou acima da máscara escura da câmera, e é isso que se
+          mantém. 0x0 de propósito -- sem caixa não há transbordo. Só no
+          Mestre: a mesa não recebe postit (`sceneForTable`). */}
+      {!smooth ? (
+        <div
+          ref={setMargemNo}
+          className={cn(
+            "pointer-events-none absolute top-0 left-0",
+            scale === 0 && "invisible",
+          )}
+          style={{
+            width: 0,
+            height: 0,
+            transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
+            transformOrigin: "0 0",
+          }}
+        />
+      ) : null}
 
       {/* O que sobra em volta do recorte, tarjado de preto.
 

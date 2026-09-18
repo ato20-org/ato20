@@ -23,6 +23,7 @@ import {
   Ungroup,
 } from "lucide-react";
 
+import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -806,6 +807,7 @@ function QuadroRow({
   onReorderStart: (event: ReactPointerEvent) => void;
 }) {
   const [renomeando, setRenomeando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const renomear = useRenomearPeloMenu(() => setRenomeando(true));
   const store = () => useSceneStore.getState();
   const elementos = elementosDoQuadro(scene);
@@ -846,7 +848,7 @@ function QuadroRow({
           onMover={(destino) => store().moverParaPasta(scene.id, destino)}
         />
         <Separator />
-        <Item variant="destructive" onClick={() => store().removeScene(scene.id)}>
+        <Item variant="destructive" onClick={() => setConfirmando(true)}>
           <Trash2 />
           Remover o quadro
         </Item>
@@ -855,6 +857,7 @@ function QuadroRow({
   };
 
   return (
+    <>
     <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
       <ContextMenuTrigger
         render={
@@ -911,6 +914,15 @@ function QuadroRow({
 
       <ContextMenuContent className="w-52">{itens(KIT_CONTEXTO)}</ContextMenuContent>
     </ContextMenu>
+    <ConfirmarRemocao
+      aberto={confirmando}
+      onAberto={setConfirmando}
+      titulo={`Remover "${scene.name}"?`}
+      descricao={`O quadro e os ${elementos} elementos dele saem da campanha. Ctrl+Z não traz de volta.`}
+      acao="Remover"
+      onConfirmar={() => store().removeScene(scene.id)}
+    />
+    </>
   );
 }
 
@@ -946,6 +958,7 @@ function NotaRow({
   const numeros = textoVivo !== undefined ? medirTexto(textoVivo) : medida;
 
   const abrir = () => useArquivoAbertoStore.getState().abrirNota(nota.id);
+  const [confirmando, setConfirmando] = useState(false);
 
   function apagar() {
     useArquivoAbertoStore.getState().fechar();
@@ -975,7 +988,7 @@ function NotaRow({
           onMover={(destino) => store().moverNotaParaPasta(nota.id, destino)}
         />
         <Separator />
-        <Item variant="destructive" onClick={apagar}>
+        <Item variant="destructive" onClick={() => setConfirmando(true)}>
           <Trash2 />
           Apagar a nota
         </Item>
@@ -984,6 +997,7 @@ function NotaRow({
   };
 
   return (
+    <>
     <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
       <ContextMenuTrigger
         render={
@@ -1044,5 +1058,13 @@ function NotaRow({
 
       <ContextMenuContent className="w-52">{itens(KIT_CONTEXTO)}</ContextMenuContent>
     </ContextMenu>
+    <ConfirmarRemocao
+      aberto={confirmando}
+      onAberto={setConfirmando}
+      titulo={`Apagar "${nota.titulo}"?`}
+      descricao="Vão junto o arquivo .md e os cartões desta nota nos quadros. Ctrl+Z não traz de volta."
+      onConfirmar={apagar}
+    />
+    </>
   );
 }

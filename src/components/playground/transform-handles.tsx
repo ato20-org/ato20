@@ -197,6 +197,8 @@ type TransformHandlesProps = {
    * — aplicar cada frame sobre o resultado do frame anterior comporia a escala.
    */
   onGestureStart?: () => void;
+  /** A mão soltou a alça. É quando quem separa gesto de documento grava. */
+  onGestureEnd?: () => void;
   onChange: (patch: Partial<TransformBox>) => void;
 };
 
@@ -218,6 +220,7 @@ export function TransformHandles({
   onFlip,
   onOpenSheet,
   onGestureStart,
+  onGestureEnd,
   onChange,
   opacidade,
 }: TransformHandlesProps) {
@@ -258,6 +261,7 @@ export function TransformHandles({
             round,
           }),
         ),
+      onEnd: () => onGestureEnd?.(),
     });
   };
 
@@ -276,6 +280,7 @@ export function TransformHandles({
 
         onChange({ rotation: native.shiftKey ? snapAngle(rotation) : Math.round(rotation) });
       },
+      onEnd: () => onGestureEnd?.(),
     });
   };
 

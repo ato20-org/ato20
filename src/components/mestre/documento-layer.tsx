@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { AArrowDown, AArrowUp, FileText, Trash2 } from "lucide-react";
 
@@ -75,8 +76,13 @@ function Cartoes({
   panMode: boolean;
 }) {
   const { vinculos } = useMencoesDoMestre();
+  const { planoDaMargem } = useSceneScale();
 
-  return (
+  // Na margem, pelo mesmo motivo do `PostitLayer`: o cartão também estaciona
+  // fora do mapa.
+  if (!planoDaMargem) return null;
+
+  return createPortal(
     <VinculosContext value={vinculos}>
       {documentos.map((documento) => (
         <CartaoDeDocumento
@@ -86,7 +92,8 @@ function Cartoes({
           panMode={panMode}
         />
       ))}
-    </VinculosContext>
+    </VinculosContext>,
+    planoDaMargem,
   );
 }
 
