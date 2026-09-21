@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { AttachmentBody } from "@/components/attachments/attachment-body";
 import { useAssetUrl } from "@/hooks/use-asset-url";
-import { imageMimeByName } from "@/lib/attachments/kind";
+import { attachmentKind, imageMimeByName } from "@/lib/attachments/kind";
 import { characterAttachmentUrl } from "@/lib/vault/characters";
 import type { AnexoPersonagem } from "@/types/character";
 
@@ -30,8 +30,20 @@ export function AnexoBody({
 }) {
   const url = useAnexoUrl(personagemId, anexo);
 
+  // O PDF abre no leitor, que tem barra de ferramentas e rola por dentro: um
+  // pai com `overflow-auto` e `p-3` lhe daria uma segunda barra de rolagem e
+  // uma margem em volta da própria barra de botões. O resto -- imagem, som,
+  // texto -- continua sendo conteúdo solto que a janela rola.
+  const leitor = attachmentKind(anexo.arquivo, anexo.mimeType) === "pdf";
+
   return (
-    <div className="min-h-0 flex-1 overflow-auto p-3">
+    <div
+      className={
+        leitor
+          ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+          : "min-h-0 flex-1 overflow-auto p-3"
+      }
+    >
       <AttachmentBody attachment={anexo} url={url} />
     </div>
   );
