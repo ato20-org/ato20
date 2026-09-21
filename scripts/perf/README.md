@@ -149,6 +149,48 @@ número já está medido — falta a validação com a mão.
 
 ---
 
+## O segundo achado: o modo cinegrafista
+
+Mesmo dia, reclamação seguinte: "usar o V para controlar a câmera, quando usa o
+scroll, tudo fica muito travado". Medido, era o pior gesto do palco — **20,3 fps**
+contra 33 do arrasto da moldura, na mesma tela.
+
+Duas causas, as duas no `use-modo-cinegrafista.ts`:
+
+1. **Cada quadro era um commit de board.** O `onChange` do visor chamava
+   `gravarCameraManual`, que é o caminho de DOCUMENTO: cópia do board, passo de
+   histórico, gravação agendada, todo assinante do store acordado e o
+   `MestreShell` re-renderizado. O arrasto da moldura já tinha deixado de fazer
+   isso (`moverCameraNoGesto`, que só toca o board no ritmo do canal e apenas
+   quando a câmera está no ar); o visor tinha ficado para trás.
+2. **A roda não era agrupada por quadro.** O movimento do mouse tinha
+   `requestAnimationFrame` desde sempre; a roda chamava `onChange` a cada
+   evento. Um mouse de alta resolução ou um trackpad entregam vários por quadro.
+
+O conserto passou o visor pelo `useGestoStore` (com `onGestureStart` soltando a
+trava uma vez no começo, que antes saía de graça a cada `gravarCameraManual`) e
+juntou roda e movimento num pedido por quadro — guardando o recorte **já
+pedido**, porque a roda é incremental e agrupar sem guardar faria todos os
+notches do mesmo quadro partirem da mesma câmera.
+
+| eventos de roda por quadro | antes | depois |
+|---|---|---|
+| 1 | 20,1 fps | **35,0 fps** |
+| 5 | 20,0 | 33,2 |
+| 15 | 19,5 | 32,3 |
+
+O eixo `--roda` existe para essa linha: sem ele a medida testaria um notch por
+quadro, que não é o mouse de ninguém. E o agrupamento tem um efeito colateral
+visível — o zoom passou a **acumular** de verdade, porque antes os notches do
+mesmo quadro se anulavam.
+
+A lição que se repete: quando um gesto do palco pesa, a primeira pergunta é se
+ele está gravando no BOARD a cada quadro ou passando pelo `useGestoStore`. Foi a
+causa aqui, foi a causa no arrasto de token (commit `1564add`), e o visor mostra
+que a correção não se propaga sozinha para o gesto seguinte.
+
+---
+
 ## Como medir: o passo a passo
 
 ### O cenário certo
@@ -162,11 +204,17 @@ número já está medido — falta a validação com a mão.
 
 Os eixos do `bancada`, todos listas separadas por vírgula, que viram células da
 matriz: `--cameras`, `--mapas`, `--painel` (`ambos,esquerdo,direito,nenhum`),
-`--gesto` (`nenhum,mover,redimensionar,zoom,fantasma`), mais `--sem-no-ar`.
+`--gesto` (`nenhum,mover,redimensionar,zoom,fantasma,cinegrafista`), `--roda`,
+mais `--sem-no-ar`.
 
 `--gesto nenhum` é a linha de base: a bancada montada, viva, e a mão parada. Sem
 ela não dá para separar "a tela custa caro" de "o gesto custa caro", e as duas
 pedem conserto em lugares diferentes.
+
+`--gesto cinegrafista` é o V segurado: nada é apertado, o mouse passeia e a roda
+aproxima. `--roda N` diz quantos eventos de roda o robô despacha por quadro —
+um mouse de verdade emite vários, e quem escuta a roda sem agrupar paga por
+cada um.
 
 ### Replicar a tela de quem reclamou
 
@@ -291,7 +339,11 @@ pnpm perf:webview -- --cenario mestre-camera --n 60 --cameras 1,3,5,8
 
 # a tela do mestre, gesto a gesto, com as imagens de verdade
 pnpm perf:webview -- --cenario bancada --cameras 7 --mapas 7 \
-  --gesto nenhum,mover,redimensionar,zoom --imagens ~/medidas --repetir 3
+  --gesto nenhum,mover,redimensionar,zoom,cinegrafista \
+  --imagens ~/medidas --repetir 3
+
+# o visor com roda de alta resolucao, que e onde ele travava
+pnpm perf:webview -- --cenario bancada --gesto cinegrafista --roda 1,5,15
 
 # quem custa: cada coluna lateral, no mesmo gesto
 pnpm perf:webview -- --cenario bancada --painel ambos,esquerdo,direito,nenhum
