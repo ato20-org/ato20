@@ -224,26 +224,37 @@ export function PinLayer({
 
       {/* Por último: os cartões ficam por cima dos alfinetes e do resto do
           palco. Cada um carrega o próprio `zIndex`, para o empilhamento entre
-          eles seguir a ordem em que foram tocados. */}
-      {abertas.map((nota, index) => {
-        const indice = pins.findIndex((pin) => pin.id === nota.pinId);
+          eles seguir a ordem em que foram tocados.
 
-        // Ponto apagado, ou nota de outra cena: não desenha, e a entrada morre
-        // sozinha quando a campanha fechar.
-        if (indice < 0) return null;
+          E a ordem DA MARCAÇÃO é outra, a do ponto: `trazerPraFrente` roda no
+          pointerdown, e desenhar na ordem da pilha fazia o React mover o
+          cartão entre os irmãos no meio do clique -- um nó movido perde o
+          `click`, porque o motor o desconecta para reinseri-lo e o `pointerup`
+          já não acha o alvo do `pointerdown` no mesmo lugar da árvore. O X de
+          um cartão que estivesse atrás precisava de dois cliques: o primeiro
+          só o trazia para a frente. Mesma correção da bancada, ver
+          `WindowLayer`. */}
+      {[...abertas]
+        .sort((uma, outra) => uma.pinId.localeCompare(outra.pinId))
+        .map((nota) => {
+          const indice = pins.findIndex((pin) => pin.id === nota.pinId);
 
-        return (
-          <PinWindow
-            key={nota.pinId}
-            sceneId={scene.id}
-            pin={pins[indice]}
-            indice={indice + 1}
-            nota={nota}
-            escala={scale}
-            ordem={index}
-          />
-        );
-      })}
+          // Ponto apagado, ou nota de outra cena: não desenha, e a entrada
+          // morre sozinha quando a campanha fechar.
+          if (indice < 0) return null;
+
+          return (
+            <PinWindow
+              key={nota.pinId}
+              sceneId={scene.id}
+              pin={pins[indice]}
+              indice={indice + 1}
+              nota={nota}
+              escala={scale}
+              ordem={abertas.indexOf(nota)}
+            />
+          );
+        })}
     </>
   );
 }
