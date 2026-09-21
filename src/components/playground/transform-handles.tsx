@@ -288,11 +288,20 @@ export function TransformHandles({
     <div
       className="pointer-events-none absolute"
       style={{
-        left: item.x,
-        top: item.y,
+        // A posição entra no `transform` junto com o giro, e não em
+        // `left`/`top`. O gizmo acompanha o que ele controla quadro a quadro
+        // -- token arrastado, moldura de câmera puxada pelo canto --, e em
+        // caixa isso marcava o documento inteiro para refazer o layout a cada
+        // quadro. Ver `Tarja`, em `camera-frame`, onde está a medida.
+        //
+        // `translate` ANTES de `rotate` na lista, que é o mesmo que posicionar
+        // e depois girar em torno do centro: a origem continua no meio da
+        // caixa, e as alças ficam onde estavam.
+        left: 0,
+        top: 0,
         width: item.width,
         height: item.height,
-        transform: `rotate(${item.rotation}deg)`,
+        transform: `translate(${item.x}px, ${item.y}px) rotate(${item.rotation}deg)`,
         zIndex,
       }}
     >

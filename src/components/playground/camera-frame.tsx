@@ -342,10 +342,11 @@ export function CameraFrame({
         ? null
         : mascara.map((caixa, index) =>
             caixa.width > 0 && caixa.height > 0 ? (
-              <div
+              <Tarja
                 key={index}
-                className="pointer-events-none absolute bg-black"
-                style={{ ...caixa, opacity: opacidadeMascara, zIndex: MASCARA_Z }}
+                caixa={caixa}
+                opacidade={opacidadeMascara}
+                z={MASCARA_Z}
               />
             ) : null,
           )}
@@ -353,8 +354,18 @@ export function CameraFrame({
       <div
         className={`${corBorda} pointer-events-none absolute border-solid`}
         style={{
-          left: camera.x,
-          top: camera.y,
+          // A POSIÇÃO por `transform`, e não por `left`/`top`: arrastar a
+          // moldura mexe só nela, e mexer em caixa marca o DOCUMENTO INTEIRO
+          // para refazer o layout -- colunas laterais, lista de mapas e tudo
+          // o mais que estiver na tela, que não têm nada com este gesto. Ver
+          // a nota em `Tarja`, onde está a medida.
+          //
+          // `width` e `height` continuam sendo caixa porque a borda é borda:
+          // esticada por `scale` ela engordaria junto. Elas só mudam quando o
+          // mestre puxa um canto, e não quando ele arrasta.
+          left: 0,
+          top: 0,
+          transform: `translate(${camera.x}px, ${camera.y}px)`,
           width: camera.width,
           height: camera.height,
           borderWidth: px(BORDA_PX),
@@ -484,6 +495,63 @@ export function CameraFrame({
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Um retângulo preto posicionado e dimensionado por `transform`, e não por
+ * caixa.
+ *
+ * As quatro tarjas da máscara mudam de tamanho a CADA QUADRO em que o mestre
+ * arrasta ou redimensiona a câmera. Escritas como `left/top/width/height`,
+ * cada quadro marcava o documento para refazer o layout -- e layout é do
+ * documento INTEIRO, não do palco. Medido na webview: o mesmo arrasto custava
+ * 54 quadros por segundo com as colunas laterais recolhidas e 33 com elas à
+ * vista, sem o React tocar em nada dentro delas. As mutações de DOM por quadro
+ * eram as mesmas nos dois casos; o que mudava era o tamanho da árvore que o
+ * reflow percorria.
+ *
+ * Uma caixa de um pixel esticada por `scale` não mexe em caixa nenhuma: o
+ * compositor resolve, e o custo deixa de depender do resto da tela. É a mesma
+ * troca que o plano de conteúdo já faz entre `zoom` e `transform` durante o
+ * gesto, pela mesma razão.
+ *
+ * A caixa de LAYOUT continua sendo um ponto dentro do plano, o que mantém a
+ * armadilha 1 de `debug-do-palco` §3 fora do caminho: não há filho maior que o
+ * plano para inflar a camada composta dele.
+ */
+function Tarja({
+  caixa,
+  opacidade,
+  z,
+}: {
+  caixa: { left: number; top: number; width: number; height: number };
+  opacidade: number;
+  z: number;
+}) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute top-0 left-0 bg-black"
+      style={{
+        width: 1,
+        height: 1,
+        // Do canto, para `scale` multiplicar a partir do ponto transladado --
+        // com a origem no centro, o retângulo cresceria para os dois lados.
+        transformOrigin: "0 0",
+        transform: `translate(${caixa.left}px, ${caixa.top}px) scale(${caixa.width}, ${caixa.height})`,
+        // Camada própria, para o motor RE-COMPOR em vez de re-pintar: o
+        // conteúdo é preto chapado e nunca muda, só a matriz. Medido na
+        // webview, arrastar a moldura com a bancada cheia: 32,3 quadros por
+        // segundo sem esta linha, 37,5 com ela. No redimensionar dá no mesmo,
+        // porque ali o `scale` muda de valor e a camada re-rasteriza -- e um
+        // `will-change` condicional ao gesto custaria mais do que os dois
+        // quadros que ele pouparia.
+        willChange: "transform",
+        opacity: opacidade,
+        zIndex: z,
+      }}
+    />
   );
 }
 
