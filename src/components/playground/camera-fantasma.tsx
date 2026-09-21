@@ -132,7 +132,6 @@ function Fantasma({
     });
   }
 
-  const grip = px(GRIP_PX);
   const gripClass = editavel
     ? "pointer-events-auto absolute touch-none"
     : "pointer-events-none absolute";
@@ -154,10 +153,43 @@ function Fantasma({
         {editavel
           ? (
               [
-                { left: 0, top: 0, width: "100%", height: grip },
-                { left: 0, bottom: 0, width: "100%", height: grip },
-                { left: 0, top: 0, width: grip, height: "100%" },
-                { right: 0, top: 0, width: grip, height: "100%" },
+                // Tamanho FIXO com a ampliação desfeita por `transform`, e a
+                // origem na borda em que a faixa encosta. Era `px(GRIP_PX)`,
+                // que divide pelo `scale` -- e o `scale` muda a cada notch da
+                // roda, então cada faixa reescrevia caixa e marcava o
+                // DOCUMENTO INTEIRO para refazer o layout. Ver `Tarja`.
+                {
+                  left: 0,
+                  top: 0,
+                  width: "100%",
+                  height: GRIP_PX,
+                  transformOrigin: "0 0",
+                  transform: `scaleY(${1 / scale})`,
+                },
+                {
+                  left: 0,
+                  bottom: 0,
+                  width: "100%",
+                  height: GRIP_PX,
+                  transformOrigin: "0 100%",
+                  transform: `scaleY(${1 / scale})`,
+                },
+                {
+                  left: 0,
+                  top: 0,
+                  width: GRIP_PX,
+                  height: "100%",
+                  transformOrigin: "0 0",
+                  transform: `scaleX(${1 / scale})`,
+                },
+                {
+                  right: 0,
+                  top: 0,
+                  width: GRIP_PX,
+                  height: "100%",
+                  transformOrigin: "100% 0",
+                  transform: `scaleX(${1 / scale})`,
+                },
               ] as const
             ).map((position, index) => (
               <span
