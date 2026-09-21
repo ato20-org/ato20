@@ -75,11 +75,17 @@ function rotateCursor(handle: ResizeHandle, rotation: number): string {
  * interno da zona, e ela cresce para fora. Assim a parte de dentro da caixa
  * continua sendo arrastar, e a alça, desenhada depois, fica por cima.
  */
-const ROTATE_ZONE_POSITION: Record<(typeof CORNER_HANDLES)[number], { left: string; top: string; translate: string }> = {
-  nw: { left: "0%", top: "0%", translate: "translate(-100%, -100%)" },
-  ne: { left: "100%", top: "0%", translate: "translate(0, -100%)" },
-  se: { left: "100%", top: "100%", translate: "translate(0, 0)" },
-  sw: { left: "0%", top: "100%", translate: "translate(-100%, 0)" },
+const ROTATE_ZONE_POSITION: Record<
+  (typeof CORNER_HANDLES)[number],
+  { left: string; top: string; translate: string; origin: string }
+> = {
+  // `origin` é o ponto da ZONA que encosta no canto da caixa, e é o que fica
+  // parado quando o `scale` desfaz a ampliação do plano. Sem ele, o `scale`
+  // encolheria em volta do centro e a zona sairia de junto do canto.
+  nw: { left: "0%", top: "0%", translate: "translate(-100%, -100%)", origin: "100% 100%" },
+  ne: { left: "100%", top: "0%", translate: "translate(0, -100%)", origin: "0% 100%" },
+  se: { left: "100%", top: "100%", translate: "translate(0, 0)", origin: "0% 0%" },
+  sw: { left: "0%", top: "100%", translate: "translate(-100%, 0)", origin: "100% 0%" },
 };
 /** Folga entre a borda direita da caixa e o painel de opacidade. */
 const PAINEL_GAP_PX = 12;
@@ -288,11 +294,20 @@ export function TransformHandles({
     <div
       className="pointer-events-none absolute"
       style={{
-        left: item.x,
-        top: item.y,
+        // A posição entra no `transform` junto com o giro, e não em
+        // `left`/`top`. O gizmo acompanha o que ele controla quadro a quadro
+        // -- token arrastado, moldura de câmera puxada pelo canto --, e em
+        // caixa isso marcava o documento inteiro para refazer o layout a cada
+        // quadro. Ver `Tarja`, em `camera-frame`, onde está a medida.
+        //
+        // `translate` ANTES de `rotate` na lista, que é o mesmo que posicionar
+        // e depois girar em torno do centro: a origem continua no meio da
+        // caixa, e as alças ficam onde estavam.
+        left: 0,
+        top: 0,
         width: item.width,
         height: item.height,
-        transform: `rotate(${item.rotation}deg)`,
+        transform: `translate(${item.x}px, ${item.y}px) rotate(${item.rotation}deg)`,
         zIndex,
       }}
     >
@@ -501,9 +516,12 @@ export function TransformHandles({
               style={{
                 left: ROTATE_ZONE_POSITION[handle].left,
                 top: ROTATE_ZONE_POSITION[handle].top,
-                width: px(ROTATE_ZONE_PX),
-                height: px(ROTATE_ZONE_PX),
-                transform: ROTATE_ZONE_POSITION[handle].translate,
+                // Fixo mais `scale`, pela mesma razão das alças abaixo: a zona
+                // de giro acompanha cada canto e mudava de caixa por notch.
+                width: ROTATE_ZONE_PX,
+                height: ROTATE_ZONE_PX,
+                transformOrigin: ROTATE_ZONE_POSITION[handle].origin,
+                transform: `${ROTATE_ZONE_POSITION[handle].translate} scale(${1 / scale})`,
                 cursor: rotateCursor(handle, item.rotation),
               }}
               onPointerDown={startRotate}
@@ -522,10 +540,24 @@ export function TransformHandles({
           )}
           style={{
             ...HANDLE_POSITION[handle],
-            width: px(HANDLE_PX),
-            height: px(HANDLE_PX),
-            borderWidth: px(OUTLINE_PX),
-            transform: "translate(-50%, -50%)",
+            // Tamanho FIXO, e a ampliação do plano desfeita por `transform`.
+            //
+            // Era `px(HANDLE_PX)`, que divide pelo `scale` -- e o `scale` muda
+            // a cada notch da roda. Cada alça reescrevia `width`, `height` e
+            // `border-width`, que são caixa, e caixa marca o DOCUMENTO INTEIRO
+            // para refazer o layout. Com sete câmeras na tela são vinte e oito
+            // alças fazendo isso por notch: medido na webview, o campeão
+            // absoluto do zoom do palco, com mais de doze mil mudanças de
+            // layout numa corrida de oito segundos.
+            //
+            // Do jeito de agora as três medidas são constantes e só a matriz
+            // muda, que é trabalho de compositor. O tamanho na tela é o mesmo:
+            // `HANDLE_PX × (1 / scale) × scale`. E o centro continua no ponto,
+            // porque as duas operações preservam o centro do elemento.
+            width: HANDLE_PX,
+            height: HANDLE_PX,
+            borderWidth: OUTLINE_PX,
+            transform: `translate(-50%, -50%) scale(${1 / scale})`,
             // Compensa o giro: a seta aponta para onde a alça de fato empurra.
             cursor: handleCursor(handle, item.rotation),
           }}

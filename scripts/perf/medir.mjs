@@ -83,6 +83,39 @@ const REPETICOES = Number(opcao("repetir", 1));
 const MOVIDOS = opcao("movidos", "1");
 /** `dados`: ampliacao do palco. E ela que estoura o backing de um canvas grande. */
 const ZOOM = opcao("zoom", "1");
+/**
+ * `mestre-camera`: quantas cameras salvas a cena tem, como eixo da matriz.
+ *
+ * Lista e nao numero porque a pergunta e a CURVA: uma camera custa X, cinco
+ * custam quanto? Uma celula por (n, cameras), e a tabela ganha a coluna.
+ */
+const CAMERAS = opcao("cameras", "1").split(",").map(Number);
+/** `camera-gesto`: qual gesto sobre a moldura o robo repete. Lista. */
+const GESTOS = opcao("gesto", "mover").split(",");
+/** `bancada`: quantas cenas o board tem, e portanto quantas previas a lista tem. */
+const MAPAS = opcao("mapas", "7");
+/** `bancada`: que colunas laterais ficam a vista. Lista: e um eixo da matriz. */
+const PAINEIS = opcao("painel", "ambos").split(",");
+/**
+ * A pasta com as imagens DE VERDADE que `/asset/*` deve responder.
+ *
+ * O bitmap de ruido sintetico mede a composicao e nao mente sobre ela -- N
+ * texturas distintas compoem como N texturas distintas. O que ele nao tem e o
+ * que um arquivo de verdade traz junto: decodificar JPEG e WebP custa, e custa
+ * de novo a cada variante pedida; um PNG de ruido nao comprime e chega inteiro
+ * na memoria de uma vez. Com `--imagens` a medida passa pelo caminho que a
+ * sessao do mestre passa.
+ *
+ * Por caminho e nao no repositorio: as imagens sao material de quem esta
+ * medindo, como o PDF do cenario `leitor`.
+ *
+ * Convencao dos nomes, para a pasta poder ser de qualquer um:
+ *   `bg.*`    o mapa de fundo da cena
+ *   `bg2.*`   o fundo das OUTRAS cenas da lista, para cada previa decodificar
+ *             um arquivo proprio -- que e o caso da campanha real
+ *   `char.*`  o token e o retrato
+ */
+const IMAGENS = opcao("imagens", null);
 /** `jogador`: `--sem-variante` mede o celular baixando o arquivo inteiro. */
 const VARIANTE = temFlag("sem-variante") ? "0" : "1";
 /** `biblioteca`: `--sem-lazy` mede a lista sem os atributos de `MINIATURA`. */
@@ -199,6 +232,13 @@ const TIPOS = {
   ".css": "text/css",
   ".json": "application/json",
   ".png": "image/png",
+  // Os formatos que as imagens de `--imagens` costumam ter. Sem o tipo certo a
+  // webview recusa a imagem, e a medida desenharia divs vazias.
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".gif": "image/gif",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
   ".txt": "text/plain; charset=utf-8",
@@ -233,7 +273,53 @@ async function pdfDoLeitor() {
   return pdfs[0]?.caminho ?? null;
 }
 
-function servir(porta, pdf) {
+/**
+ * As imagens de verdade da pasta `--imagens`, por papel, lidas uma vez.
+ *
+ * `null` quando a pasta nao foi passada ou nao tem nada com esses nomes: a
+ * medida cai no bitmap sintetico de sempre, e a tabela continua valendo contra
+ * as corridas antigas.
+ */
+async function lerImagens(pasta) {
+  if (!pasta) return null;
+
+  const raiz = resolve(pasta);
+  const achar = async (base) => {
+    for (const arquivo of await readdir(raiz).catch(() => [])) {
+      if (arquivo.replace(extname(arquivo), "") !== base) continue;
+
+      return {
+        bytes: await readFile(join(raiz, arquivo)),
+        tipo: TIPOS[extname(arquivo)] ?? "application/octet-stream",
+        nome: arquivo,
+      };
+    }
+
+    return null;
+  };
+
+  const papeis = {
+    fundo: await achar("bg"),
+    fundo2: await achar("bg2"),
+    token: await achar("char"),
+  };
+
+  if (!papeis.fundo && !papeis.token) {
+    console.error(`--imagens ${raiz}: nenhum bg.* nem char.* ali. Usando o bitmap sintetico.`);
+
+    return null;
+  }
+
+  const visto = Object.entries(papeis)
+    .filter(([, v]) => v)
+    .map(([papel, v]) => `${papel}=${v.nome}`)
+    .join(" ");
+  console.log(`imagens de verdade: ${visto}`);
+
+  return papeis;
+}
+
+function servir(porta, pdf, imagens) {
   const cache = new Map();
 
   const servidor = createServer(async (req, res) => {
@@ -272,6 +358,29 @@ function servir(porta, pdf) {
       // Mesmos lados do Rust. Ver `Variante::lado`.
       const ladoDaVariante = variante === "mini" ? 160 : variante === "tela" ? 1920 : null;
       const id = partes[0] + (variante ? `#${variante}` : "");
+
+      // Com `--imagens`, o arquivo de verdade, no papel que o id pede. Sem
+      // reduzir por variante: reduzir aqui exigiria um decodificador, e o que
+      // se quer medir e justamente o custo de a tela receber e decodificar o
+      // que o acervo guarda.
+      if (imagens) {
+        const papel = partes[0].startsWith("perf-fundo-")
+          ? imagens.fundo2 ?? imagens.fundo
+          : partes[0].startsWith("perf-fundo")
+            ? imagens.fundo
+            : imagens.token ?? imagens.fundo;
+
+        if (papel) {
+          res.writeHead(200, {
+            "content-type": papel.tipo,
+            "cache-control": "no-store",
+          });
+          res.end(papel.bytes);
+
+          return;
+        }
+      }
+
       if (!cache.has(id)) {
         const fundo = id === "perf-fundo";
         // `mapa-*` responde grande de proposito: e o cenario `biblioteca`, e o
@@ -715,7 +824,23 @@ async function principal() {
   pastaDeCapturas = comLeitor ? (CAPTURAS ? resolve(CAPTURAS) : await mkdtemp(join(tmpdir(), "ato20-leitor-"))) : null;
   if (pastaDeCapturas) await mkdir(pastaDeCapturas, { recursive: true });
 
-  const servidor = externo ? null : await servir(0, pdf);
+  const servidor = externo ? null : await servir(0, pdf, await lerImagens(IMAGENS));
+
+  /**
+   * `--servir`: sobe so o servidor e fica de pe, sem dirigir browser nenhum.
+   *
+   * Existe para a medida NA WEBVIEW: `scripts/perf/webview.py` abre um
+   * WebKitGTK de verdade -- o mesmo motor do aplicativo -- e precisa do mesmo
+   * `out/` servido com o mesmo `/asset/*` sintetico. Reimplementar o servidor
+   * em Python seria manter duas verdades sobre o que a medida serve, e a
+   * primeira vez que uma delas mudasse as duas bancadas mediriam cenas
+   * diferentes com o mesmo nome.
+   */
+  if (temFlag("servir")) {
+    const { port } = servidor.address();
+    console.log(`http://127.0.0.1:${port}`);
+    await new Promise(() => {});
+  }
   const base = externo ?? `http://127.0.0.1:${servidor.address().port}`;
 
   const { processo, endereco, perfil } = await abrirChrome();
@@ -728,15 +853,29 @@ async function principal() {
     for (const cenario of CENARIOS) {
       // `leitor` nao tem N: o que varia e a pagina de partida.
       for (const n of cenario === "leitor" ? [Number(PAGINA)] : NS) {
-        const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&rotulo=chrome`;
-        const corridas = [];
+        // So o palco do mestre desenha camera; nos outros o eixo nao existe e
+        // varre-lo multiplicaria a matriz por celulas identicas.
+        const comCamera = ["mestre-camera", "camera-gesto", "bancada"].includes(cenario);
+        const eixo = comCamera ? CAMERAS : [CAMERAS[0]];
 
-        for (let i = 1; i <= REPETICOES; i++) {
-          process.stderr.write(`medindo ${cenario} n=${n} (${i}/${REPETICOES})...\r`);
-          corridas.push(await medir(cdp, url));
+        const gestos = ["camera-gesto", "bancada"].includes(cenario) ? GESTOS : [GESTOS[0]];
+        const paineis = cenario === "bancada" ? PAINEIS : [PAINEIS[0]];
+
+        for (const cameras of eixo) {
+          for (const gesto of gestos) {
+            for (const painel of paineis) {
+              const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&cameras=${cameras}&gesto=${gesto}&mapas=${MAPAS}&painel=${painel}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&rotulo=chrome`;
+              const corridas = [];
+
+              for (let i = 1; i <= REPETICOES; i++) {
+                process.stderr.write(`medindo ${cenario} n=${n} cam=${cameras} ${gesto} ${painel} (${i}/${REPETICOES})...\r`);
+                corridas.push(await medir(cdp, url));
+              }
+
+              linhas.push({ ...mediana(corridas), cameras, gesto, painel });
+            }
+          }
         }
-
-        linhas.push(mediana(corridas));
       }
     }
   } finally {
@@ -750,8 +889,8 @@ async function principal() {
     await rm(perfil, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => {});
   }
 
-  const cab = ["cenario", "n", "fps", "p50", "p95", "pior", "perdidos", "script", "estilo", "layout", "rede", "imagens", "heap", "nos"];
-  const largura = [18, 5, 6, 7, 7, 7, 9, 8, 8, 8, 10, 9, 8, 7];
+  const cab = ["cenario", "n", "cam", "gesto", "painel", "fps", "p50", "p95", "perdidos", "script", "estilo", "layout", "heap", "nos"];
+  const largura = [13, 4, 4, 14, 9, 6, 7, 7, 9, 8, 8, 8, 8, 7];
   const fmt = (celulas) => celulas.map((c, i) => String(c).padStart(largura[i])).join("");
 
   // O leitor tem tabela propria: degrau a degrau, o que ele mede nao e quadro.
@@ -775,16 +914,16 @@ async function principal() {
       fmt([
         l.cenario,
         l.n,
+        l.cameras ?? "",
+        l.gesto ?? "",
+        l.painel ?? "",
         l.fps,
         `${l.p50}ms`,
         `${l.p95}ms`,
-        `${l.pior}ms`,
         `${l.perdidosPct}%`,
         `${l.scriptMs}ms`,
         `${l.estiloMs}ms`,
         `${l.layoutMs}ms`,
-        `${(l.bytes / 1024 / 1024).toFixed(1)}MB`,
-        l.imagens,
         `${l.heapMb}MB`,
         l.nodes,
       ]),

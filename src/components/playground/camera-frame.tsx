@@ -235,7 +235,6 @@ export function CameraFrame({
     });
   }
 
-  const grip = px(GRIP_PX);
 
   /** Quanto a moldura ocupa na tela, em px. É o que decide o tamanho do rótulo. */
   const larguraNaTela = camera.width * scale;
@@ -281,13 +280,59 @@ export function CameraFrame({
     { left: Math.max(fora.minX, camera.x + camera.width), top: cy0, width: fora.maxX - Math.max(fora.minX, camera.x + camera.width), height: cy1 - cy0 },
   ];
 
-  const canto = px(CANTO_PX);
-  const traco = px(CANTO_TRACO_PX);
+  /**
+   * Os quatro cantos em L, em medida FIXA, com a ampliação do plano desfeita
+   * por `transform`.
+   *
+   * Eram `px(CANTO_PX)` e `px(CANTO_TRACO_PX)`, que dividem pelo `scale` -- e
+   * o `scale` muda a cada notch da roda. Cada canto reescrevia `width`,
+   * `height`, `border-width` e o próprio deslocamento, tudo caixa, e caixa
+   * marca o DOCUMENTO INTEIRO para refazer o layout. Medido na webview, o
+   * campeão do zoom do palco: oito mil mudanças de layout numa corrida de oito
+   * segundos, com UMA câmera na tela.
+   *
+   * `origem` é o ponto do L que encosta no canto da moldura, e é ele que fica
+   * parado quando o `scale` encolhe o desenho. O deslocamento para fora entra
+   * no `translate`, à direita do `scale`, para ser medido no espaço do
+   * elemento e escalar junto -- em `scale(s) translate(t)` o translate vale
+   * `t × s` na tela, que é exatamente o que a versão antiga escrevia em
+   * `left`/`top`.
+   */
+  const desfazer = 1 / scale;
+  const t = CANTO_TRACO_PX;
   const cantos = [
-    { left: -traco, top: -traco, borderLeftWidth: traco, borderTopWidth: traco },
-    { right: -traco, top: -traco, borderRightWidth: traco, borderTopWidth: traco },
-    { right: -traco, bottom: -traco, borderRightWidth: traco, borderBottomWidth: traco },
-    { left: -traco, bottom: -traco, borderLeftWidth: traco, borderBottomWidth: traco },
+    {
+      left: 0,
+      top: 0,
+      borderLeftWidth: t,
+      borderTopWidth: t,
+      transformOrigin: "0 0",
+      transform: `scale(${desfazer}) translate(${-t}px, ${-t}px)`,
+    },
+    {
+      right: 0,
+      top: 0,
+      borderRightWidth: t,
+      borderTopWidth: t,
+      transformOrigin: "100% 0",
+      transform: `scale(${desfazer}) translate(${t}px, ${-t}px)`,
+    },
+    {
+      right: 0,
+      bottom: 0,
+      borderRightWidth: t,
+      borderBottomWidth: t,
+      transformOrigin: "100% 100%",
+      transform: `scale(${desfazer}) translate(${t}px, ${t}px)`,
+    },
+    {
+      left: 0,
+      bottom: 0,
+      borderLeftWidth: t,
+      borderBottomWidth: t,
+      transformOrigin: "0 100%",
+      transform: `scale(${desfazer}) translate(${-t}px, ${t}px)`,
+    },
   ];
 
   const corBorda =
@@ -342,10 +387,11 @@ export function CameraFrame({
         ? null
         : mascara.map((caixa, index) =>
             caixa.width > 0 && caixa.height > 0 ? (
-              <div
+              <Tarja
                 key={index}
-                className="pointer-events-none absolute bg-black"
-                style={{ ...caixa, opacity: opacidadeMascara, zIndex: MASCARA_Z }}
+                caixa={caixa}
+                opacidade={opacidadeMascara}
+                z={MASCARA_Z}
               />
             ) : null,
           )}
@@ -353,8 +399,18 @@ export function CameraFrame({
       <div
         className={`${corBorda} pointer-events-none absolute border-solid`}
         style={{
-          left: camera.x,
-          top: camera.y,
+          // A POSIÇÃO por `transform`, e não por `left`/`top`: arrastar a
+          // moldura mexe só nela, e mexer em caixa marca o DOCUMENTO INTEIRO
+          // para refazer o layout -- colunas laterais, lista de mapas e tudo
+          // o mais que estiver na tela, que não têm nada com este gesto. Ver
+          // a nota em `Tarja`, onde está a medida.
+          //
+          // `width` e `height` continuam sendo caixa porque a borda é borda:
+          // esticada por `scale` ela engordaria junto. Elas só mudam quando o
+          // mestre puxa um canto, e não quando ele arrasta.
+          left: 0,
+          top: 0,
+          transform: `translate(${camera.x}px, ${camera.y}px)`,
           width: camera.width,
           height: camera.height,
           borderWidth: px(BORDA_PX),
@@ -371,7 +427,12 @@ export function CameraFrame({
           <span
             key={index}
             className="border-primary pointer-events-none absolute border-solid"
-            style={{ width: canto, height: canto, borderWidth: 0, ...posicao }}
+            style={{
+              width: CANTO_PX,
+              height: CANTO_PX,
+              borderWidth: 0,
+              ...posicao,
+            }}
           />
         ))}
 
@@ -380,10 +441,43 @@ export function CameraFrame({
         {onChange
           ? (
               [
-                { left: 0, top: 0, width: "100%", height: grip },
-                { left: 0, bottom: 0, width: "100%", height: grip },
-                { left: 0, top: 0, width: grip, height: "100%" },
-                { right: 0, top: 0, width: grip, height: "100%" },
+                // Tamanho FIXO com a ampliação desfeita por `transform`, e a
+                // origem na borda em que a faixa encosta. Era `px(GRIP_PX)`,
+                // que divide pelo `scale` -- e o `scale` muda a cada notch da
+                // roda, então cada faixa reescrevia caixa e marcava o
+                // DOCUMENTO INTEIRO para refazer o layout. Ver `Tarja`.
+                {
+                  left: 0,
+                  top: 0,
+                  width: "100%",
+                  height: GRIP_PX,
+                  transformOrigin: "0 0",
+                  transform: `scaleY(${1 / scale})`,
+                },
+                {
+                  left: 0,
+                  bottom: 0,
+                  width: "100%",
+                  height: GRIP_PX,
+                  transformOrigin: "0 100%",
+                  transform: `scaleY(${1 / scale})`,
+                },
+                {
+                  left: 0,
+                  top: 0,
+                  width: GRIP_PX,
+                  height: "100%",
+                  transformOrigin: "0 0",
+                  transform: `scaleX(${1 / scale})`,
+                },
+                {
+                  right: 0,
+                  top: 0,
+                  width: GRIP_PX,
+                  height: "100%",
+                  transformOrigin: "100% 0",
+                  transform: `scaleX(${1 / scale})`,
+                },
               ] as const
             ).map((position, index) => (
               <span
@@ -411,6 +505,10 @@ export function CameraFrame({
             cursor: onChange ? "move" : undefined,
             // Em pixel de tela, como o resto do rótulo: a moldura tem
             // `larguraNaTela` px, e o texto não passa dela.
+            //
+            // Medido e mantido: trocar por `100%` tira uma escrita de caixa por
+            // notch da roda, e não mudou um quadro por segundo -- o custo do
+            // zoom do palco não está aqui. Ver `scripts/perf/README.md`.
             maxWidth: larguraNaTela,
             ...emPixelDeTela(scale),
           }}
@@ -484,6 +582,63 @@ export function CameraFrame({
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Um retângulo preto posicionado e dimensionado por `transform`, e não por
+ * caixa.
+ *
+ * As quatro tarjas da máscara mudam de tamanho a CADA QUADRO em que o mestre
+ * arrasta ou redimensiona a câmera. Escritas como `left/top/width/height`,
+ * cada quadro marcava o documento para refazer o layout -- e layout é do
+ * documento INTEIRO, não do palco. Medido na webview: o mesmo arrasto custava
+ * 54 quadros por segundo com as colunas laterais recolhidas e 33 com elas à
+ * vista, sem o React tocar em nada dentro delas. As mutações de DOM por quadro
+ * eram as mesmas nos dois casos; o que mudava era o tamanho da árvore que o
+ * reflow percorria.
+ *
+ * Uma caixa de um pixel esticada por `scale` não mexe em caixa nenhuma: o
+ * compositor resolve, e o custo deixa de depender do resto da tela. É a mesma
+ * troca que o plano de conteúdo já faz entre `zoom` e `transform` durante o
+ * gesto, pela mesma razão.
+ *
+ * A caixa de LAYOUT continua sendo um ponto dentro do plano, o que mantém a
+ * armadilha 1 de `debug-do-palco` §3 fora do caminho: não há filho maior que o
+ * plano para inflar a camada composta dele.
+ */
+function Tarja({
+  caixa,
+  opacidade,
+  z,
+}: {
+  caixa: { left: number; top: number; width: number; height: number };
+  opacidade: number;
+  z: number;
+}) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute top-0 left-0 bg-black"
+      style={{
+        width: 1,
+        height: 1,
+        // Do canto, para `scale` multiplicar a partir do ponto transladado --
+        // com a origem no centro, o retângulo cresceria para os dois lados.
+        transformOrigin: "0 0",
+        transform: `translate(${caixa.left}px, ${caixa.top}px) scale(${caixa.width}, ${caixa.height})`,
+        // Camada própria, para o motor RE-COMPOR em vez de re-pintar: o
+        // conteúdo é preto chapado e nunca muda, só a matriz. Medido na
+        // webview, arrastar a moldura com a bancada cheia: 32,3 quadros por
+        // segundo sem esta linha, 37,5 com ela. No redimensionar dá no mesmo,
+        // porque ali o `scale` muda de valor e a camada re-rasteriza -- e um
+        // `will-change` condicional ao gesto custaria mais do que os dois
+        // quadros que ele pouparia.
+        willChange: "transform",
+        opacity: opacidade,
+        zIndex: z,
+      }}
+    />
   );
 }
 

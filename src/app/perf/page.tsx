@@ -13,13 +13,22 @@ import { LayerList } from "@/components/mestre/layer-list";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
+import { MestreShell } from "@/components/mestre/mestre-shell";
 import { MestreStage } from "@/components/mestre/mestre-stage";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { PaginaFolha } from "@/components/mestre/leitor/pagina-folha";
 import { useRolagemDoLivro } from "@/hooks/use-rolagem-do-livro";
 import { pdfjs, RUNTIME } from "@/lib/leitor/pdfjs";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { FULL_VIEWPORT, PLANO, zoomViewport } from "@/lib/geometry/viewport";
+import {
+  clampViewport,
+  FULL_VIEWPORT,
+  PLANO,
+  zoomViewport,
+} from "@/lib/geometry/viewport";
 import { MINIATURA } from "@/lib/miniatura";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { useDadosStore } from "@/lib/store/use-dados-store";
@@ -27,6 +36,7 @@ import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
+  type CameraSalva,
   type CanvasItem,
   type Scene,
 } from "@/types/scene";
@@ -127,6 +137,8 @@ const QUADRO_PERDIDO_MS = 20;
 type Cenario =
   | "leitor"
   | "arrasto"
+  | "camera-gesto"
+  | "bancada"
   | "amostras"
   | "amostras-id"
   | "dados"
@@ -150,7 +162,7 @@ type Passo = {
   mantidas: number;
 };
 
-function montarCena(n: number): Scene {
+function montarCena(n: number, cameras = 0, noAr = true): Scene {
   const agora = Date.now();
 
   const items: CanvasItem[] = Array.from({ length: n }, (_, i) => {
@@ -174,15 +186,57 @@ function montarCena(n: number): Scene {
     };
   });
 
+  const salvas = montarCameras(cameras);
+
   return {
     id: "perf-cena",
     name: "medida",
     backgroundAssetId: "perf-fundo",
     items,
     fog: [],
+    cameras: salvas,
+    // No ar por padrão porque é assim que o mestre trabalha: ele mexe na
+    // câmera que a mesa está vendo. E é o que faz o gesto gravar no board no
+    // ritmo do canal em vez de ficar só no `useGestoStore` -- a diferença que
+    // `?noar=0` existe para medir.
+    cameraNoArId: noAr ? salvas[0]?.id : undefined,
     createdAt: agora,
     updatedAt: agora,
   };
+}
+
+/**
+ * N câmeras salvas espalhadas pelo plano, sobrepostas, em ampliações
+ * diferentes -- que é como a bancada de uma sessão de verdade fica.
+ *
+ * Não em grade e não todas do mesmo tamanho de propósito: o custo de uma
+ * moldura depende de quanto dela está na tela, e uma fileira certinha fora do
+ * recorte mediria molduras que o mestre não está vendo. Estas se cruzam no
+ * meio do plano, como as cinco da captura que motivou a medida.
+ *
+ * A primeira é a que nasce no ar e a que o `useCameraLockStore` seleciona; as
+ * outras viram fantasma. É a divisão que importa: uma moldura de verdade e
+ * N-1 fantasmas, e não N iguais.
+ */
+function montarCameras(quantas: number): CameraSalva[] {
+  return Array.from({ length: quantas }, (_, i) => {
+    // 16:9 sempre -- `clampViewport` re-deriva a altura da largura, e um
+    // recorte fora da proporção seria corrigido no primeiro gesto e a cena
+    // deixaria de ser a mesma entre corridas.
+    const width = Math.round(SCENE_WIDTH / (1.6 + ((i * 0.45) % 1.8)));
+    const height = Math.round((width * SCENE_HEIGHT) / SCENE_WIDTH);
+
+    return {
+      id: `perf-camera-${i}`,
+      nome: `Câmera ${i + 1}`,
+      viewport: {
+        x: Math.round(((i * 337) % Math.max(1, SCENE_WIDTH - width))),
+        y: Math.round(((i * 211) % Math.max(1, SCENE_HEIGHT - height))),
+        width,
+        height,
+      },
+    };
+  });
 }
 
 /**
@@ -546,18 +600,30 @@ function PalcoCamera({ n }: { n: number }) {
  *
  * Leia `script`: é a coluna que o `camera` não tem como mostrar.
  */
-function PalcoMestreCamera({ n }: { n: number }) {
+function PalcoMestreCamera({ n, cameras }: { n: number; cameras: number }) {
   const cena = useSceneStore(selectEditingScene);
   const viewport = useViewportStore((state) => state.viewport);
   const setViewport = useViewportStore((state) => state.setViewport);
 
   useEffect(() => {
-    const base = montarCena(n);
+    const base = montarCena(n, cameras);
 
     useSceneStore.setState({
       board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
       status: "ready",
       campaignPath: "/perf",
+    });
+
+    // A primeira câmera selecionada à mão, e não pelo `garantirCameraInicial`:
+    // ele roda num efeito do `MestreStage`, um quadro depois, e o primeiro
+    // quadro da medida montaria N fantasmas e nenhuma moldura -- que não é a
+    // bancada de ninguém. Com `null` a moldura nunca aparece: o
+    // `useCameraLockStore` guarda a seleção entre cenas, e a cena anterior da
+    // matriz deixou um id que não existe nesta.
+    useCameraLockStore.setState({
+      selecionadaId: base.cameras?.[0]?.id ?? null,
+      espelhoMestre: false,
+      fantasmasVisiveis: true,
     });
 
     let quadro = 0;
@@ -590,7 +656,7 @@ function PalcoMestreCamera({ n }: { n: number }) {
         campaignPath: null,
       });
     };
-  }, [n]);
+  }, [n, cameras]);
 
   if (!cena) return null;
 
@@ -599,6 +665,873 @@ function PalcoMestreCamera({ n }: { n: number }) {
       <MestreStage scene={cena} />
     </SceneStage>
   );
+}
+
+/**
+ * O GESTO SOBRE A MOLDURA, que é outro caminho e outra conta.
+ *
+ * O `mestre-camera` move o palco: o mestre dá zoom e arrasta a CENA. Este move
+ * a CÂMERA: pegar a moldura pela borda, puxar um canto, rodar a roda com a
+ * alça na mão -- e arrastar uma das outras, a que está desenhada apagada. São
+ * quatro gestos que passam por lugares diferentes do código, e só um deles é o
+ * que o `mestre-camera` já media:
+ *
+ * `mover`         a borda da moldura selecionada. Vai pelo `useGestoStore`,
+ *                 que não toca o board -- exceto se a câmera estiver no ar, e
+ *                 aí grava no ritmo do canal. A cena de medida põe a primeira
+ *                 no ar, porque é assim que o mestre trabalha.
+ * `redimensionar` o canto da moldura selecionada, pelo `TransformHandles`.
+ *                 Mesmo caminho do `mover`, mas refaz a geometria por quadro.
+ * `zoom`          a alça segurada mais a roda: o caminho que junta dois
+ *                 emissores num commit só (ver `pedir` em `camera-frame`).
+ * `fantasma`      arrastar UMA DAS OUTRAS. Este não passa pelo gesto: o
+ *                 `Fantasma` chama `atualizarCamera` direto, e cada quadro é
+ *                 um commit de board inteiro. É a suspeita que a medida existe
+ *                 para confirmar ou desmentir.
+ *
+ * O ponteiro é sintético, e é a única concessão: no Wayland não há como
+ * injetar mouse de verdade numa janela, e sem gesto nenhum destes caminhos
+ * roda. O resto é o de sempre -- o robô mira em COORDENADAS DE TELA, pergunta
+ * ao `elementFromPoint` quem está lá e despacha nele, então alvo coberto ou
+ * fora do recorte reprova aqui como reprovaria na mão.
+ */
+function PalcoGestoDeCamera({
+  n,
+  cameras,
+  gesto,
+  sonda,
+  roda,
+}: {
+  n: number;
+  cameras: number;
+  gesto: Gesto;
+  sonda: boolean;
+  roda: number;
+}) {
+  const cena = useSceneStore(selectEditingScene);
+  const viewport = useViewportStore((state) => state.viewport);
+  const setViewport = useViewportStore((state) => state.setViewport);
+
+  useEffect(() => {
+    const base = montarCena(n, cameras);
+
+    useSceneStore.setState({
+      board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
+      status: "ready",
+      campaignPath: "/perf",
+    });
+    useCameraLockStore.setState({
+      selecionadaId: base.cameras?.[0]?.id ?? null,
+      espelhoMestre: false,
+      fantasmasVisiveis: true,
+    });
+
+    // O palco enquadra a câmera que o robô vai pegar, com folga -- que é onde
+    // o mestre está quando mexe numa delas. Um zoom fixo no meio do plano
+    // deixava a moldura pela metade fora da tela, e o robô mirava no vazio:
+    // a medida saía com sessenta quadros por segundo de tela PARADA, que é o
+    // pior resultado possível porque parece o melhor.
+    const alvo =
+      (gesto === "fantasma" ? base.cameras?.[1] : base.cameras?.[0])?.viewport ??
+      FULL_VIEWPORT;
+    const folga = 1.45;
+    useViewportStore.getState().setViewport(
+      clampViewport(
+        {
+          x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
+          y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
+          width: alvo.width * folga,
+          height: alvo.height * folga,
+        },
+        PLANO,
+      ),
+    );
+
+    return () => {
+      useViewportStore.getState().setViewport(FULL_VIEWPORT);
+      useSceneStore.setState({ board: null, status: "idle", campaignPath: null });
+    };
+  }, [n, cameras, gesto]);
+
+  if (!cena) return null;
+
+  return (
+    <SceneStage viewport={viewport} onViewportChange={setViewport} limites={PLANO}>
+      <MestreStage scene={cena} />
+      <MaoSintetica gesto={gesto} sonda={sonda} roda={roda} />
+    </SceneStage>
+  );
+}
+
+/**
+ * A BANCADA INTEIRA: o `MestreShell` de verdade, com o gesto do robô por cima.
+ *
+ * O `camera-gesto` monta o palco e mais nada, e diz que arrastar a moldura com
+ * cinco câmeras custa sessenta quadros por segundo -- o que é verdade e não é
+ * a tela de ninguém. A tela do mestre tem a lista de mapas à esquerda, cada
+ * linha com uma prévia que é um `SceneStage` completo; tem a biblioteca e os
+ * personagens à direita; tem a régua de câmeras embaixo e a barra de sessão em
+ * cima. Todos eles assinam o board -- e o gesto sobre uma câmera grava no
+ * board.
+ *
+ * É por isso que este cenário existe e por que ele monta o `MestreShell` em
+ * vez de uma aproximação: o que se quer medir é justamente o que uma
+ * aproximação deixa de fora. Sem IPC os nomes vêm vazios e o acervo vem
+ * vazio; o que conta -- quantos componentes acordam a cada commit -- é o
+ * mesmo.
+ *
+ * `?mapas=` é quantas cenas o board tem, e portanto quantas linhas com prévia
+ * a lista desenha. Sete é o que a captura que motivou a medida mostrava.
+ */
+function PalcoBancada({
+  n,
+  cameras,
+  gesto,
+  mapas,
+  noAr,
+  painel,
+  sonda,
+  roda,
+}: {
+  n: number;
+  cameras: number;
+  gesto: Gesto;
+  mapas: number;
+  noAr: boolean;
+  painel: "ambos" | "esquerdo" | "direito" | "nenhum";
+  sonda: boolean;
+  roda: number;
+}) {
+  const status = useSceneStore((state) => state.status);
+
+  useEffect(() => {
+    const primeira = montarCena(n, cameras, noAr);
+    // As outras cenas entram VAZIAS e com mapa próprio: é a lista que se quer
+    // pesar, não o conteúdo delas -- e uma cena de fundo distinto por linha é
+    // o que faz cada prévia decodificar o bitmap dela, como na campanha real.
+    const outras = Array.from({ length: Math.max(0, mapas - 1) }, (_, i) => ({
+      ...montarCena(0),
+      id: `perf-mapa-${i}`,
+      name: `Mapa ${i + 2}`,
+      backgroundAssetId: `perf-fundo-${i}`,
+    }));
+
+    useSceneStore.setState({
+      board: {
+        scenes: [primeira, ...outras],
+        editingSceneId: primeira.id,
+        liveSceneId: primeira.id,
+      },
+      status: "ready",
+      campaignPath: "/perf",
+    });
+    useCameraLockStore.setState({
+      selecionadaId: primeira.cameras?.[0]?.id ?? null,
+      espelhoMestre: false,
+      fantasmasVisiveis: true,
+    });
+
+    // As colunas laterais, para a medida poder perguntar o que cada uma custa
+    // no gesto. `restored` é o que impede o `restore()` do shell de ler o
+    // `localStorage` por cima -- sem ele a medida herdaria a bancada de quem
+    // abriu a página por último, e duas corridas mediriam telas diferentes.
+    usePanelsStore.setState({
+      left: painel === "ambos" || painel === "esquerdo",
+      right: painel === "ambos" || painel === "direito",
+      restored: true,
+    });
+
+    // Os perfis de zoom do palco partem do plano INTEIRO: é de onde a roda
+    // começa a subir, e enquadrar uma câmera antes deixaria o `profundo` sem
+    // caminho para percorrer -- ele já estaria a meio do teto.
+    if ((ZOOM_DO_PALCO as readonly string[]).includes(gesto)) {
+      useViewportStore.getState().setViewport(FULL_VIEWPORT);
+    } else {
+      const alvo =
+        (gesto === "fantasma" ? primeira.cameras?.[1] : primeira.cameras?.[0])
+          ?.viewport ?? FULL_VIEWPORT;
+      const folga = 1.45;
+      useViewportStore.getState().setViewport(
+        clampViewport(
+          {
+            x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
+            y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
+            width: alvo.width * folga,
+            height: alvo.height * folga,
+          },
+          PLANO,
+        ),
+      );
+    }
+
+    return () => {
+      useViewportStore.getState().setViewport(FULL_VIEWPORT);
+      useSceneStore.setState({ board: null, status: "idle", campaignPath: null });
+    };
+  }, [n, cameras, gesto, mapas, noAr, painel]);
+
+  if (status !== "ready") return null;
+
+  return (
+    <TooltipProvider>
+      <MestreShell />
+      {/* Fora do `SceneStage`, e sem nada a mudar por isso: a projeção sai do
+          DOM nos dois cenários. Ver `projecaoDoDom`. */}
+      <MaoSintetica gesto={gesto} sonda={sonda} roda={roda} />
+    </TooltipProvider>
+  );
+}
+
+/**
+ * O RETÂNGULO, na tela, da moldura que este gesto vai pegar.
+ *
+ * Do DOM e não de conta nenhuma: a primeira versão projetava o recorte da
+ * câmera em pixels de tela pela escala do palco, e errava -- a webview estava
+ * com `devicePixelRatio` 0,7, o plano aplica a ampliação ora em `zoom` ora em
+ * `transform`, e reimplementar a projeção do `SceneStage` aqui era manter uma
+ * segunda verdade sobre onde as coisas estão. O robô agora faz o que a mão
+ * faz: olha onde a moldura ESTÁ desenhada e encosta na borda dela.
+ *
+ * A moldura selecionada e as apagadas se distinguem pelo `z` que cada uma
+ * declara -- `FRAME_Z` em `camera-frame` e `FANTASMA_Z` em `camera-fantasma`.
+ * Se um dia mudarem, a medida sai com zero movimentos e a bancada recusa a
+ * linha em voz alta, que é o comportamento certo para uma sonda que perdeu o
+ * alvo.
+ */
+function molduraNaTela(gesto: Gesto): DOMRect | null {
+  const z = gesto === "fantasma" ? 11_800 : 12_000;
+  const caixas = Array.from(
+    document.querySelectorAll<HTMLElement>(`div[style*="z-index: ${z}"]`),
+  )
+    .map((el) => el.getBoundingClientRect())
+    // A maior: com várias apagadas na tela, a que dá mais borda para pegar é
+    // a que o robô alcança com mais folga.
+    .sort((a, b) => b.width * b.height - a.width * a.height);
+
+  return caixas[0] ?? null;
+}
+
+/**
+ * `nenhum` é a linha de base: a bancada montada, viva, e a mão parada.
+ *
+ * Sem ela não há como separar "a tela custa caro" de "o gesto custa caro", e
+ * as duas pedem conserto em lugares diferentes.
+ */
+type Gesto =
+  | "nenhum"
+  | "mover"
+  | "redimensionar"
+  | "zoom"
+  | "fantasma"
+  | "cinegrafista"
+  | "palco-rapido"
+  | "palco-profundo"
+  | "palco-variado";
+
+/** Os três são a roda sobre o MAPA, e não sobre a câmera. Ver `PROGRAMA`. */
+const ZOOM_DO_PALCO = [
+  "palco-rapido",
+  "palco-profundo",
+  "palco-variado",
+] as const;
+
+/**
+ * O que a roda faz, segmento a segmento, em cada perfil de zoom do palco.
+ *
+ * `notches` é quantos passos da roda o segmento tem e para que lado; `pausaMs`
+ * é quanto a mão fica parada depois dele. A pausa não é enfeite: o plano de
+ * conteúdo volta do `transform` para o `zoom` 350 ms depois da última mudança
+ * de recorte, e essa volta é um layout de `1920 × scale` pixels -- a 16x, uma
+ * caixa de trinta mil. Um perfil sem pausa nunca paga isso e mediria só metade
+ * do que o mestre sente; um perfil só de pausas mediria só a outra metade.
+ *
+ * `rapido`    vaivém curto e contínuo perto de onde se trabalha. Sem pausa: é
+ *             o compositor sozinho, esticando a textura que já tem.
+ * `profundo`  do afastado ao teto de 16x e de volta, sem parar no meio. É onde
+ *             o raster fica grande o bastante para o motor pintar em pedaços.
+ * `variado`   rajadas de tamanhos diferentes com pausas entre elas, em
+ *             profundidades diferentes. É o gesto de verdade -- aproxima,
+ *             olha, corrige, afasta -- e o único que paga as duas contas.
+ */
+const PROGRAMA: Record<
+  (typeof ZOOM_DO_PALCO)[number],
+  { notches: number; pausaMs: number }[]
+> = {
+  "palco-rapido": [
+    { notches: 8, pausaMs: 0 },
+    { notches: -8, pausaMs: 0 },
+  ],
+  // Vinte notches de 1,15 levam de uma vez a dezesseis: `1.15 ** 20` = 16,4.
+  "palco-profundo": [
+    { notches: 20, pausaMs: 0 },
+    { notches: -20, pausaMs: 0 },
+  ],
+  "palco-variado": [
+    { notches: 6, pausaMs: 400 },
+    { notches: -3, pausaMs: 400 },
+    { notches: 12, pausaMs: 600 },
+    { notches: -15, pausaMs: 400 },
+    { notches: 4, pausaMs: 0 },
+    { notches: -4, pausaMs: 500 },
+  ],
+};
+
+/**
+ * A mão sintética: mira num ponto da tela, pergunta quem está lá e arrasta.
+ *
+ * A mesma nos dois cenários -- o palco sozinho e a bancada inteira --, porque
+ * a comparação entre eles só significa alguma coisa se o gesto for o mesmo.
+ * Um robô que arrastasse diferente em cada um mediria duas coisas e as
+ * apresentaria como uma.
+ *
+ * O ponteiro é sintético, e é a única concessão: no Wayland não há como
+ * injetar mouse de verdade numa janela, e sem gesto nenhum dos caminhos que
+ * interessam roda. O resto é o de sempre -- o robô mira em COORDENADAS DE
+ * TELA, pergunta ao `elementFromPoint` quem está lá e despacha nele, então
+ * alvo coberto ou fora do recorte reprova aqui como reprovaria na mão.
+ */
+function MaoSintetica({
+  gesto,
+  sonda,
+  roda,
+}: {
+  gesto: Gesto;
+  sonda: boolean;
+  /**
+   * Quantos eventos de roda o robô despacha por quadro.
+   *
+   * Um mouse não emite um notch por quadro: roda de alta resolução e trackpad
+   * entregam vários, e quem escuta a roda sem agrupar paga por cada um. Este
+   * eixo existe para a medida poder mostrar isso em vez de supor -- e para
+   * provar que um agrupamento por quadro segura o caso ruim, que é justamente
+   * o que o mestre descreveu ("quando uso o scroll tudo fica muito travado").
+   */
+  roda: number;
+}) {
+  useEffect(() => {
+    if (gesto === "nenhum") return;
+
+    let vivo = true;
+    let quadro = 0;
+    let limpar: (() => void) | null = null;
+
+    /**
+     * O diário do robô, alcançável de fora.
+     *
+     * Existe pela mesma razão do `--console` da bancada: um roteiro que não
+     * pega a moldura mede uma tela PARADA, e tela parada dá sessenta quadros
+     * por segundo e zero por cento de perdidos -- a tabela mais bonita da
+     * matriz, dizendo nada. Quem lê a medida tem de conseguir perguntar
+     * quantos arrastos o robô de fato completou e em que ele estava mirando,
+     * e recusar a célula em que `movimentos` for zero.
+     */
+    const diario = {
+      gesto,
+      gestos: 0,
+      movimentos: 0,
+      /** `tag.classe` do que estava sob a mira. Vazio = nunca achou nada. */
+      alvo: "",
+      /**
+       * A projeção e o ponto do último gesto, para o erro de mira dizer ONDE.
+       *
+       * "o robô mirou no `main`" não conserta nada sozinho: ou o ponto caiu
+       * fora da moldura, ou a moldura não está onde a conta diz. Com a escala,
+       * o canto e o ponto em mãos a diferença se lê de relance.
+       */
+      vista: "",
+      ponto: "",
+      /** Quanto a câmera andou na cena desde o início, em unidades. */
+      andou: 0,
+      /**
+       * Quantas MUTAÇÕES de DOM o gesto provocou, e onde.
+       *
+       * É a sonda que separa as duas explicações possíveis para "com os
+       * painéis abertos o gesto pesa". Ou o React está mexendo neles a cada
+       * quadro -- e aí `fora` sobe junto com o custo, e o conserto é parar de
+       * acordá-los --, ou eles não são tocados e o que pesa é o motor compor
+       * uma tela com mais coisa -- e aí `fora` fica parado, o conserto é
+       * outro, e procurar render seria procurar no lugar errado.
+       *
+       * Um `MutationObserver` e não contagem de render porque o `Profiler` do
+       * React não reporta em build de produção, e é o build de produção que o
+       * mestre roda.
+       */
+      mutacoes: { palco: 0, fora: 0 },
+      /**
+       * O que muda por quadro, do que mais muda para o que menos muda.
+       *
+       * Saber QUANTAS mutações há não diz onde mexer; saber que são sempre os
+       * mesmos quinze elementos, e que o que muda neles é `style`, diz. E
+       * separa as duas famílias de mudança que o motor cobra de forma
+       * completamente diferente: `transform` e `opacity` o compositor resolve
+       * sozinho, enquanto `left`, `top`, `width` e `height` marcam o documento
+       * para refazer o layout -- e layout é do DOCUMENTO INTEIRO, o que
+       * explica uma tela com mais painéis pagar mais caro pelo mesmo gesto.
+       */
+      quemMuda: [] as string[],
+    };
+    (window as unknown as { __robo?: typeof diario }).__robo = diario;
+
+    /** Por `tag.classe#atributo`, quantas vezes mudou, e se força layout. */
+    const contagem = new Map<string, number>();
+    /** As propriedades de estilo que marcam o documento para refazer layout. */
+    const DE_LAYOUT =
+      /(?:^|;)\s*(left|top|right|bottom|width|height|margin|padding|border-width|inset|zoom|font-size|gap)\s*:\s*([^;]*)/g;
+
+    /**
+     * As propriedades de layout de um `style`, como texto comparável.
+     *
+     * A sonda marca LAYOUT quando elas MUDARAM, e não quando existem: uma
+     * tarja escrita como caixa de 1px esticada por `transform` tem `width` e
+     * `height` no estilo e não mexe em layout nenhum -- e a primeira versão
+     * desta sonda a acusava do mesmo crime que ela tinha acabado de deixar de
+     * cometer. Uma ferramenta que não distingue o antes do depois não serve
+     * para dizer se uma correção funcionou.
+     */
+    const layoutDe = (estilo: string): string =>
+      [...estilo.matchAll(DE_LAYOUT)]
+        .map(([, prop, valor]) => `${prop}:${valor.trim()}`)
+        .sort()
+        .join(";");
+
+    const olheiro = new MutationObserver((registros) => {
+      for (const registro of registros) {
+        const no =
+          registro.target instanceof Element
+            ? registro.target
+            : registro.target.parentElement;
+        // O palco é tudo que está sob o envelope que o Mestre marca; o resto
+        // da tela -- colunas, barras, réguas -- é `fora`.
+        if (no?.closest("[data-palco]")) diario.mutacoes.palco += 1;
+        else diario.mutacoes.fora += 1;
+
+        if (!no) continue;
+
+        const mudouLayout =
+          registro.attributeName === "style" &&
+          layoutDe(no.getAttribute("style") ?? "") !==
+            layoutDe(registro.oldValue ?? "");
+        const chave =
+          `${no.tagName.toLowerCase()}.${(no.className || "").toString().slice(0, 56)}` +
+          ` [${registro.type === "attributes" ? registro.attributeName : registro.type}]` +
+          (mudouLayout ? " LAYOUT" : "");
+        contagem.set(chave, (contagem.get(chave) ?? 0) + 1);
+      }
+
+      diario.quemMuda = [...contagem.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([chave, vezes]) => `${String(vezes).padStart(5)}x ${chave}`);
+    });
+    // Desligada por padrão, e essa é a diferença entre uma sonda e um viés:
+    // ela roda uma regex sobre o `style` de cada mutação, milhares por medida,
+    // e esse trabalho entra no mesmo thread que se está cronometrando. Serve
+    // para descobrir ONDE mexer; o número que se leva para a tabela sai da
+    // corrida sem ela.
+    if (sonda)
+      olheiro.observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+        // Sem o valor ANTIGO não há como saber se a mudança mexeu em layout ou
+        // só em `transform`, que é toda a pergunta desta sonda.
+        attributeOldValue: true,
+      });
+
+    const doPalco = (ZOOM_DO_PALCO as readonly string[]).includes(gesto);
+
+    const ondeEsta = () => {
+      // Nos perfis de zoom do palco quem se mexe é o RECORTE DA VISTA, e não
+      // nenhuma câmera: perguntar à câmera daria zero e a bancada reprovaria
+      // uma medida que estava correndo bem.
+      if (doPalco) return useViewportStore.getState().viewport;
+
+      const scene = selectEditingScene(useSceneStore.getState());
+      const selecionadaId = useCameraLockStore.getState().selecionadaId;
+      const camera =
+        gesto === "fantasma"
+          ? scene?.cameras?.find((c) => c.id !== selecionadaId)
+          : scene?.cameras?.find((c) => c.id === selecionadaId);
+
+      return camera?.viewport ?? null;
+    };
+    const partida = ondeEsta();
+
+    /**
+     * O único ponto em que a medida difere do ponteiro de verdade.
+     *
+     * `setPointerCapture` recusa um `pointerId` que não pertence a um ponteiro
+     * ativo, e o `useSceneDrag` chama isso antes de qualquer coisa: sem o
+     * remendo o gesto morre na primeira linha e a medida cronometraria uma
+     * tela parada. O que a captura faz é entregar o movimento quando o cursor
+     * sai do elemento -- e o robô nunca sai, porque despacha no próprio alvo.
+     * Nada do que ela custa entra na conta de nenhum dos dois motores.
+     */
+    const original = Element.prototype.setPointerCapture;
+    const originalSolta = Element.prototype.releasePointerCapture;
+    Element.prototype.setPointerCapture = function () {};
+    Element.prototype.releasePointerCapture = function () {};
+
+    /**
+     * Onde pegar, conforme o gesto -- em ordem de preferência.
+     *
+     * Uma LISTA e não um ponto: a moldura pode estar com um lado fora da
+     * janela, e insistir num único ponto é o que fazia a medida cronometrar
+     * uma tela parada sem dizer nada. O robô tenta na ordem e fica no primeiro
+     * que esteja dentro da janela e tenha alguém debaixo.
+     */
+    const mira = (): { x: number; y: number }[] => {
+      const caixa = molduraNaTela(gesto);
+      if (!caixa) return [];
+
+      // Três pixels para dentro da borda: a faixa de arraste tem catorze, e a
+      // mão de verdade encosta aí.
+      const d = 3;
+
+      if (gesto === "redimensionar")
+        // Os cantos, onde o `TransformHandles` põe as alças de escala.
+        return [
+          { x: caixa.right, y: caixa.bottom },
+          { x: caixa.left, y: caixa.bottom },
+          { x: caixa.right, y: caixa.top },
+          { x: caixa.left, y: caixa.top },
+        ];
+
+      // `mover`, `zoom` e `fantasma` pegam pela borda: qualquer uma das
+      // quatro serve.
+      return [
+        { x: caixa.left + caixa.width / 2, y: caixa.top + d },
+        { x: caixa.left + caixa.width / 2, y: caixa.bottom - d },
+        { x: caixa.left + d, y: caixa.top + caixa.height / 2 },
+        { x: caixa.right - d, y: caixa.top + caixa.height / 2 },
+      ];
+    };
+
+    const despachar = (
+      alvo: Element,
+      tipo: string,
+      x: number,
+      y: number,
+      extra: PointerEventInit = {},
+    ) => {
+      alvo.dispatchEvent(
+        new PointerEvent(tipo, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          button: tipo === "pointermove" ? -1 : 0,
+          buttons: tipo === "pointerup" ? 0 : 1,
+          clientX: x,
+          clientY: y,
+          ...extra,
+        }),
+      );
+    };
+
+    /** Um gesto completo: pega, arrasta por `PASSOS` quadros, solta. */
+    const PASSOS = 90;
+    /**
+     * O modo cinegrafista: V segurado, o mouse passeia e a roda aproxima.
+     *
+     * Roteiro próprio porque ele não é um arrasto: nada é apertado, nada é
+     * solto, e o `useModoCinegrafista` recusa o movimento se algum botão
+     * estiver pressionado (`evento.buttons !== 0`) -- no meio de um arrasto o
+     * gesto é do item. Os eventos vão na JANELA, com captura, que é onde ele
+     * escuta para ganhar da roda do `SceneStage`.
+     *
+     * A roda dispara junto com o movimento de propósito: é o que o mestre faz
+     * -- aponta para o beco e aproxima -- e é onde ele disse que trava.
+     */
+    const cinegrafar = () => {
+      if (!vivo) return;
+
+      const caixa = molduraNaTela(gesto);
+      if (!caixa) {
+        quadro = requestAnimationFrame(cinegrafar);
+        return;
+      }
+
+      diario.gestos += 1;
+      diario.vista = `moldura ${caixa.width.toFixed(0)}x${caixa.height.toFixed(0)}@(${caixa.left.toFixed(0)},${caixa.top.toFixed(0)})`;
+
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "v", bubbles: true }),
+      );
+
+      let passo = 0;
+      const centro = {
+        x: caixa.left + caixa.width / 2,
+        y: caixa.top + caixa.height / 2,
+      };
+
+      const passear = () => {
+        if (!vivo) return;
+
+        passo += 1;
+        const a = (passo / PASSOS) * Math.PI * 2;
+        const x = centro.x + Math.cos(a) * 150;
+        const y = centro.y + Math.sin(a) * 100;
+
+        const sob = document.elementFromPoint(x, y);
+        if (sob) {
+          diario.alvo = `${sob.tagName.toLowerCase()}.${(sob.className || "").toString().slice(0, 40)}`;
+          diario.ponto = `(${x.toFixed(0)},${y.toFixed(0)}) de ${window.innerWidth}x${window.innerHeight}`;
+
+          sob.dispatchEvent(
+            new PointerEvent("pointermove", {
+              bubbles: true,
+              composed: true,
+              pointerId: 1,
+              pointerType: "mouse",
+              isPrimary: true,
+              // Sem botão: com qualquer um apertado o cinegrafista não segue.
+              button: -1,
+              buttons: 0,
+              clientX: x,
+              clientY: y,
+            }),
+          );
+          diario.movimentos += 1;
+
+          // A roda a cada quadro, vaivém, como a mão que aproxima e recua.
+          for (let i = 0; i < roda; i += 1)
+            sob.dispatchEvent(
+              new WheelEvent("wheel", {
+                bubbles: true,
+                cancelable: true,
+                composed: true,
+                deltaY: passo % 20 < 10 ? -100 : 100,
+                clientX: x,
+                clientY: y,
+              }),
+            );
+
+          const agora = ondeEsta();
+          if (partida && agora)
+            diario.andou = Math.max(
+              diario.andou,
+              Math.hypot(agora.x - partida.x, agora.y - partida.y) +
+                Math.abs(agora.width - partida.width),
+            );
+        }
+
+        if (passo < PASSOS) {
+          quadro = requestAnimationFrame(passear);
+          return;
+        }
+
+        window.dispatchEvent(
+          new KeyboardEvent("keyup", { key: "v", bubbles: true }),
+        );
+        quadro = requestAnimationFrame(cinegrafar);
+      };
+
+      quadro = requestAnimationFrame(passear);
+      limpar = () =>
+        window.dispatchEvent(
+          new KeyboardEvent("keyup", { key: "v", bubbles: true }),
+        );
+    };
+
+    /**
+     * A roda sobre o MAPA, seguindo o programa do perfil.
+     *
+     * Despacha no que estiver no meio do palco, e não na janela: o
+     * `SceneStage` escuta a roda na moldura dele, e um evento na janela não
+     * borbulha para lá. Mirar no meio também é o que garante que o zoom tem
+     * âncora estável -- a roda amplia em volta do cursor.
+     */
+    const rodarNoPalco = () => {
+      if (!vivo) return;
+
+      const caixa = molduraNaTela("mover");
+      const alvoPonto = caixa
+        ? { x: caixa.left + caixa.width / 2, y: caixa.top + caixa.height / 2 }
+        : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+
+      const sob = document.elementFromPoint(alvoPonto.x, alvoPonto.y);
+      if (!sob) {
+        quadro = requestAnimationFrame(rodarNoPalco);
+        return;
+      }
+
+      diario.gestos += 1;
+      diario.alvo = `${sob.tagName.toLowerCase()}.${(sob.className || "").toString().slice(0, 40)}`;
+      diario.ponto = `(${alvoPonto.x.toFixed(0)},${alvoPonto.y.toFixed(0)}) de ${window.innerWidth}x${window.innerHeight}`;
+
+      const programa = PROGRAMA[gesto as (typeof ZOOM_DO_PALCO)[number]];
+      let segmento = 0;
+      let dados = 0;
+
+      const passar = () => {
+        if (!vivo) return;
+
+        const atual = programa[segmento];
+        if (!atual) {
+          quadro = requestAnimationFrame(rodarNoPalco);
+          return;
+        }
+
+        const total = Math.abs(atual.notches);
+        const sentido = atual.notches < 0 ? 1 : -1;
+        // `deltaY` negativo aproxima, no `SceneStage` como na roda de verdade.
+
+        for (let i = 0; i < roda && dados < total; i += 1, dados += 1)
+          sob.dispatchEvent(
+            new WheelEvent("wheel", {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              deltaY: sentido * 100,
+              clientX: alvoPonto.x,
+              clientY: alvoPonto.y,
+            }),
+          );
+
+        diario.movimentos += 1;
+
+        const agora = ondeEsta();
+        if (partida && agora)
+          diario.andou = Math.max(
+            diario.andou,
+            Math.abs(agora.width - partida.width),
+          );
+
+        if (dados < total) {
+          quadro = requestAnimationFrame(passar);
+          return;
+        }
+
+        // Segmento cumprido: a mão para pelo tempo do perfil. É a pausa que
+        // faz o plano voltar para o `zoom` e pagar o layout -- ver `PROGRAMA`.
+        segmento += 1;
+        dados = 0;
+        if (atual.pausaMs > 0) {
+          window.setTimeout(() => {
+            if (vivo) quadro = requestAnimationFrame(passar);
+          }, atual.pausaMs);
+          return;
+        }
+
+        quadro = requestAnimationFrame(passar);
+      };
+
+      quadro = requestAnimationFrame(passar);
+    };
+
+    const comecar = () => {
+      if (!vivo) return;
+
+
+      let ponto: { x: number; y: number } | null = null;
+      let alvo: Element | null = null;
+
+      for (const candidato of mira()) {
+        const naJanela =
+          candidato.x >= 0 &&
+          candidato.y >= 0 &&
+          candidato.x < window.innerWidth &&
+          candidato.y < window.innerHeight;
+        if (!naJanela) continue;
+
+        const achado = document.elementFromPoint(candidato.x, candidato.y);
+        if (!achado) continue;
+
+        ponto = candidato;
+        alvo = achado;
+        break;
+      }
+
+      if (!ponto || !alvo) {
+        // Nenhuma borda alcançável neste quadro. Tenta no próximo em vez de
+        // desistir -- e se nunca der, o diário fica com zero movimentos e a
+        // bancada recusa a linha em voz alta.
+        quadro = requestAnimationFrame(comecar);
+        return;
+      }
+
+      diario.gestos += 1;
+      diario.alvo = `${alvo.tagName.toLowerCase()}.${(alvo.className || "").toString().slice(0, 40)}`;
+      const caixa = molduraNaTela(gesto);
+      diario.vista = caixa
+        ? `moldura ${caixa.width.toFixed(0)}x${caixa.height.toFixed(0)}@(${caixa.left.toFixed(0)},${caixa.top.toFixed(0)})`
+        : "moldura nao encontrada";
+      diario.ponto = `(${ponto.x.toFixed(0)},${ponto.y.toFixed(0)}) de ${window.innerWidth}x${window.innerHeight}`;
+      despachar(alvo, "pointerdown", ponto.x, ponto.y);
+
+      let passo = 0;
+      const andar = () => {
+        if (!vivo) return;
+
+        passo += 1;
+        const a = (passo / PASSOS) * Math.PI * 2;
+        const x = ponto.x + Math.cos(a) * 120;
+        const y = ponto.y + Math.sin(a) * 80;
+
+        despachar(alvo, "pointermove", x, y);
+        diario.movimentos += 1;
+
+        // O que o gesto MOVEU, e não o que ele despachou: um `pointermove`
+        // que o palco recusou conta como movimento e não muda nada, e a
+        // diferença entre os dois é a que distingue medir o gesto de medir a
+        // tela parada.
+        const agora = ondeEsta();
+        if (partida && agora)
+          diario.andou = Math.max(
+            diario.andou,
+            Math.hypot(agora.x - partida.x, agora.y - partida.y) +
+              Math.abs(agora.width - partida.width),
+          );
+
+        // O zoom soma a roda ao arrasto, que é o caso que junta dois emissores
+        // no mesmo quadro -- o que o `pedir` da moldura existe para agrupar.
+        if (gesto === "zoom")
+          for (let i = 0; i < roda; i += 1)
+            window.dispatchEvent(
+              new WheelEvent("wheel", {
+                bubbles: true,
+                cancelable: true,
+                deltaY: passo % 20 < 10 ? -100 : 100,
+                clientX: x,
+                clientY: y,
+              }),
+            );
+
+        if (passo < PASSOS) {
+          quadro = requestAnimationFrame(andar);
+          return;
+        }
+
+        despachar(alvo, "pointerup", x, y);
+        // Sem pausa entre um gesto e o outro: a medida quer a mão em
+        // movimento pelos oito segundos, e um intervalo parado entraria na
+        // média como quadro barato que o mestre não está vivendo.
+        quadro = requestAnimationFrame(comecar);
+      };
+
+      quadro = requestAnimationFrame(andar);
+      limpar = () => despachar(alvo, "pointerup", ponto.x, ponto.y);
+    };
+
+    quadro = requestAnimationFrame(
+      doPalco ? rodarNoPalco : gesto === "cinegrafista" ? cinegrafar : comecar,
+    );
+
+    return () => {
+      vivo = false;
+      cancelAnimationFrame(quadro);
+      limpar?.();
+      olheiro.disconnect();
+      Element.prototype.setPointerCapture = original;
+      Element.prototype.releasePointerCapture = originalSolta;
+    };
+  }, [gesto, sonda, roda]);
+
+  return null;
 }
 
 /**
@@ -1115,6 +2048,28 @@ function Medida({ params }: { params: URLSearchParams }) {
     [params],
   );
   const rajada = params.get("rajada") === "1";
+  /** `mestre-camera`: quantas câmeras salvas a cena tem. Uma é a moldura. */
+  const cameras = Number(params.get("cameras") ?? 1);
+  /** `camera-gesto` e `bancada`: qual gesto sobre a moldura o robô repete. */
+  const gesto = (params.get("gesto") ?? "mover") as Gesto;
+  /** `bancada`: quantas cenas o board tem, e portanto quantas linhas na lista. */
+  const mapas = Number(params.get("mapas") ?? 7);
+  /** `bancada`: a câmera que o robô pega está transmitindo? Padrão: está. */
+  const noAr = params.get("noar") !== "0";
+  /**
+   * Liga o `MutationObserver` que conta o que muda por quadro.
+   *
+   * Desligado por padrão: ele custa, e o custo cai dentro da medida.
+   */
+  const sonda = params.get("sonda") === "1";
+  /** Quantos eventos de roda por quadro o robô despacha. Ver `MaoSintetica`. */
+  const roda = Math.max(1, Number(params.get("roda") ?? 1));
+  /** `bancada`: que colunas laterais ficam à vista. */
+  const painel = (params.get("painel") ?? "ambos") as
+    | "ambos"
+    | "esquerdo"
+    | "direito"
+    | "nenhum";
 
   const { resultado, decorrido } = useMedida(cenario, n, segundos, rotulo);
 
@@ -1164,7 +2119,26 @@ function Medida({ params }: { params: URLSearchParams }) {
       ) : cenario === "camera" ? (
         <PalcoCamera n={n} />
       ) : cenario === "mestre-camera" ? (
-        <PalcoMestreCamera n={n} />
+        <PalcoMestreCamera n={n} cameras={cameras} />
+      ) : cenario === "camera-gesto" ? (
+        <PalcoGestoDeCamera
+          n={n}
+          cameras={cameras}
+          gesto={gesto}
+          sonda={sonda}
+          roda={roda}
+        />
+      ) : cenario === "bancada" ? (
+        <PalcoBancada
+          n={n}
+          cameras={cameras}
+          gesto={gesto}
+          mapas={mapas}
+          noAr={noAr}
+          painel={painel}
+          sonda={sonda}
+          roda={roda}
+        />
       ) : cenario === "dados" ? (
         <PalcoDados n={n} zoom={zoomDoPalco} />
       ) : cenario === "lista" || cenario === "lista-mesmo-mapa" ? (

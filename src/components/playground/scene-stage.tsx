@@ -148,6 +148,17 @@ export function emPixelDeTela(scale: number): { zoom: number } {
 /** Passo de zoom por notch da roda. */
 const WHEEL_ZOOM_STEP = 1.15;
 
+/**
+ * Entre que larguras NA TELA o azulejo da malha de pontos se mantém.
+ *
+ * O passo em cena dobra ou cai pela metade para caber nesta faixa: a 400% um
+ * ponto a cada 32 unidades seria uma parede de bolinhas, e a 25% seria um
+ * ponto a cada oito pixels. O teto também é a folga fixa da peça do fundo --
+ * ver `malha`.
+ */
+const MALHA_MIN_PX = 24;
+const MALHA_MAX_PX = 48;
+
 type SceneStageProps = {
   children?: ReactNode;
   className?: string;
@@ -396,8 +407,8 @@ export function SceneStage({
     if (!onViewportChange || scale === 0) return null;
 
     let passo = 32;
-    while (passo * scale < 24) passo *= 2;
-    while (passo * scale > 48) passo /= 2;
+    while (passo * scale < MALHA_MIN_PX) passo *= 2;
+    while (passo * scale > MALHA_MAX_PX) passo /= 2;
 
     // No papel a cor vem do tema: branco a 13% some numa folha clara.
     const tinta =
@@ -420,8 +431,20 @@ export function SceneStage({
       fora: {
         backgroundImage: ponto,
         backgroundSize: `${azulejo}px ${azulejo}px`,
-        width: `calc(100% + ${azulejo}px)`,
-        height: `calc(100% + ${azulejo}px)`,
+        // A folga é CONSTANTE, e não do tamanho do azulejo.
+        //
+        // Era `calc(100% + ${azulejo}px)`, e `azulejo` muda a cada notch da
+        // roda -- então a peça do fundo reescrevia `width` e `height` por
+        // notch, e caixa marca o documento inteiro para refazer o layout. Este
+        // é o elemento que cobre a janela toda, então ele estava na conta de
+        // todo zoom do palco.
+        //
+        // `MALHA_MAX_PX` basta porque o `while` acima prende o azulejo entre
+        // `MALHA_MIN_PX` e `MALHA_MAX_PX`, e o `resto` prende o deslocamento a
+        // (-azulejo, 0]: a peça nunca precisa de mais folga que um azulejo, e
+        // nenhum azulejo passa do teto.
+        width: `calc(100% + ${MALHA_MAX_PX}px)`,
+        height: `calc(100% + ${MALHA_MAX_PX}px)`,
         transform: `translate(${resto(offsetX)}px, ${resto(offsetY)}px)`,
       },
       // O quadro NÃO tem malha própria no plano: a dele é a do fundo, que
@@ -627,6 +650,24 @@ export function SceneStage({
     const element = frameRef.current;
     if (!element) return;
 
+    /**
+     * Um recorte por quadro, somando os notches que chegarem.
+     *
+     * A roda não entrega um evento por quadro: roda de alta resolução e
+     * trackpad entregam vários, e cada um virava um `setViewport` -- logo um
+     * render do palco do mestre inteiro, e com ele um layout, porque os
+     * controles se medem em pixel de tela e reescrevem caixa quando o `scale`
+     * muda. Era o mesmo buraco do visor e do arrasto de moldura, no terceiro
+     * lugar em que ele aparece.
+     *
+     * `pedido` guarda o recorte JÁ calculado, e é ele que serve de base para o
+     * notch seguinte: a roda é multiplicativa, e todos os notches do mesmo
+     * quadro partindo do mesmo recorte dariam um degrau em vez de cinco.
+     */
+    let pedido: Viewport | null = null;
+    let proximo: Viewport | null = null;
+    let quadroDaRoda: number | undefined;
+
     function handleWheel(event: WheelEvent) {
       const { onViewportChange: notify, toScene: project } = stateRef.current;
       if (!notify) return;
@@ -636,19 +677,36 @@ export function SceneStage({
       event.preventDefault();
 
       const factor = event.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP;
-      notify(
-        zoomViewport(
-          stateRef.current.viewport,
-          factor,
-          project(event.clientX, event.clientY),
-          stateRef.current.limites,
-        ),
+      const base = pedido ?? stateRef.current.viewport;
+      const alvo = zoomViewport(
+        base,
+        factor,
+        project(event.clientX, event.clientY),
+        stateRef.current.limites,
       );
+
+      pedido = alvo;
+      proximo = alvo;
+      if (quadroDaRoda !== undefined) return;
+
+      quadroDaRoda = requestAnimationFrame(() => {
+        quadroDaRoda = undefined;
+        const entregar = proximo;
+        proximo = null;
+        // O pedido só vale dentro do quadro: o recorte pode mudar por outro
+        // caminho -- botão de zoom, encaixar, espelho -- entre uma rolagem e a
+        // seguinte, e partir de um valor velho desfaria o que eles fizeram.
+        pedido = null;
+        if (entregar) stateRef.current.onViewportChange?.(entregar);
+      });
     }
 
     element.addEventListener("wheel", handleWheel, { passive: false });
 
-    return () => element.removeEventListener("wheel", handleWheel);
+    return () => {
+      if (quadroDaRoda !== undefined) cancelAnimationFrame(quadroDaRoda);
+      element.removeEventListener("wheel", handleWheel);
+    };
   }, []);
 
   useEffect(() => {
