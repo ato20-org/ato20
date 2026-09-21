@@ -191,6 +191,76 @@ que a correção não se propaga sozinha para o gesto seguinte.
 
 ---
 
+## O terceiro achado, e o que ele NÃO resolveu: o zoom do palco
+
+Reclamação seguinte: "zoom no mapa mesmo, algo tão banal, mas pesa e muito".
+Três perfis foram medidos (`--gesto palco-rapido,palco-profundo,palco-variado`,
+ver `PROGRAMA` em `src/app/perf/page.tsx`). Esta seção fica no arquivo porque o
+que ela ensina é onde o custo **não** está — e isso vale tanto quanto o resto.
+
+### O que foi achado, e consertado
+
+A roda do `SceneStage` não agrupava por quadro, o mesmo buraco do visor. Com um
+mouse que entrega quatro notches por quadro, o resultado não era lentidão — era
+**perda de zoom**: a coluna `andou` da bancada mostrou o código antigo
+entregando 26 % a 49 % do zoom pedido, porque todos os notches do mesmo quadro
+partiam do mesmo recorte e se anulavam. O mestre gira mais para compensar, e
+girar mais é justamente o que pesa.
+
+| perfil (4 notches/quadro) | antes | depois |
+|---|---|---|
+| rápido | 29,9 fps, entregando 36 % | 30,5 fps, entregando **100 %** |
+| profundo | 24,9 fps, 54 % | 26,8 fps, **100 %** |
+| variado | 46,8 fps, 49 % | 45,5 fps, **100 %** |
+
+Por unidade de zoom entregue, é cerca do dobro. Em quadros por segundo, quase
+nada.
+
+Junto saíram as escritas de caixa que o zoom fazia por notch — alças e zonas de
+giro do gizmo, faixas de arraste, cantos em L da moldura, e a folga da malha de
+pontos, que era do tamanho do azulejo e mudava com o `scale`. A sonda saiu de
+mais de vinte mil mudanças de layout por corrida para **zero** na configuração
+de uma câmera.
+
+### O que isso NÃO resolveu, e é a parte importante
+
+**Zerar o layout não devolveu quadro nenhum.** Com uma câmera e as colunas
+fechadas o ganho foi de 8 %; com sete câmeras e as colunas abertas, nada. A
+hipótese que funcionou para o gesto de câmera não funcionou aqui, e a medida
+disse isso antes de a intuição dizer.
+
+O que o custo do zoom do palco **é**, pelo que foi possível estreitar:
+
+| configuração | nós | fps |
+|---|---|---|
+| palco sozinho (`camera-gesto`), 7 câmeras | 161 | **59,4** |
+| bancada, colunas fechadas, 1 mapa | 298 | 39,4 |
+| bancada, colunas abertas, 7 mapas | 714 | 25,7 |
+
+Proporcional ao tamanho da árvore, com o mesmo gesto e os mesmos controles. E o
+que ele **não é**, cada um descartado por medida:
+
+- **não é layout** — zerado, sem ganho;
+- **não é render do React** — as mutações de DOM por quadro não mudam com as
+  colunas abertas ou fechadas, e nenhum painel é tocado;
+- **não é `backdrop-filter`** — removidos todos os `backdrop-blur` dos controles
+  sobre o palco, 26,3 contra 25,7 fps;
+- **não é decodificação de imagem** — imagens reais deram o mesmo que o bitmap
+  sintético;
+- **não é o número de câmeras** — uma câmera 29 fps, sete 24,7.
+
+No Chrome a assinatura é `estilo` dez vezes maior que no arrasto da moldura
+(705 ms contra 67 ms) com `layout` baixo. Sobra a hipótese de **composição**: o
+plano do palco troca de `transform` a cada notch, e o compositor do WebKitGTK
+recompõe uma tela com mais camadas quando há mais coisa nela. Não foi provada, e
+por isso está escrita aqui como hipótese e não como conclusão.
+
+Quem retomar tem um caminho pronto: `--gesto palco-profundo --sonda` mostra o
+que ainda muda por quadro, e a comparação `camera-gesto` contra `bancada` isola
+o palco do resto da tela em duas corridas.
+
+---
+
 ## Como medir: o passo a passo
 
 ### O cenário certo
@@ -215,6 +285,13 @@ pedem conserto em lugares diferentes.
 aproxima. `--roda N` diz quantos eventos de roda o robô despacha por quadro —
 um mouse de verdade emite vários, e quem escuta a roda sem agrupar paga por
 cada um.
+
+`--gesto palco-rapido,palco-profundo,palco-variado` são a roda sobre o MAPA, e
+não sobre a câmera: vaivém curto e contínuo, ida ao teto de 16x e volta, e
+rajadas com pausas entre elas. As pausas do `variado` não são enfeite — o plano
+de conteúdo volta do `transform` para o `zoom` 350 ms depois da última mudança,
+e essa volta é um layout de `1920 × scale` pixels. Um perfil sem pausa mede
+metade do que o mestre sente; um perfil só de pausas, a outra metade.
 
 ### Replicar a tela de quem reclamou
 
@@ -344,6 +421,14 @@ pnpm perf:webview -- --cenario bancada --cameras 7 --mapas 7 \
 
 # o visor com roda de alta resolucao, que e onde ele travava
 pnpm perf:webview -- --cenario bancada --gesto cinegrafista --roda 1,5,15
+
+# o zoom do mapa, nos tres perfis, com a roda emitindo como um mouse de verdade
+pnpm perf:webview -- --cenario bancada --roda 1,4 \
+  --gesto palco-rapido,palco-profundo,palco-variado --repetir 3
+
+# o palco isolado contra a tela inteira: separa o custo do gesto do da arvore
+pnpm perf:webview -- --cenario camera-gesto --gesto palco-profundo --cameras 7
+pnpm perf:webview -- --cenario bancada      --gesto palco-profundo --cameras 7
 
 # quem custa: cada coluna lateral, no mesmo gesto
 pnpm perf:webview -- --cenario bancada --painel ambos,esquerdo,direito,nenhum
