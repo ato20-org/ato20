@@ -1052,27 +1052,44 @@ function Slot({
   const enderecoAsset = useAssetUrl(campo === "ficha" ? undefined : valor);
 
   /**
-   * A ficha como anexo, quando ela é imagem.
-   *
-   * Ficha imagem existe — um print da ficha de papel, um card de personagem —,
-   * e nesse caso ela é evidência como qualquer outra imagem: cabe na TV e cabe
-   * no quadradinho. Ficha PDF continua só ícone, porque o Espectador não
-   * renderiza PDF.
+   * A ficha como registro de anexo, qualquer que seja o tipo dela.
    *
    * O registro é montado do NOME, e não procurado na lista de anexos: o campo
    * guarda o nome, e a lista é outra leitura, que pode não ter chegado ainda —
    * ou não ter o arquivo, se ele foi apagado por fora. Procurar ali fazia a
    * miniatura e o transmitir simplesmente não aparecerem, sem dizer por quê.
    * `tamanho` fica em zero porque só a lista de arquivos o mostra.
+   *
+   * O tipo sai do nome também: imagem tem o dela, PDF é o outro que o app sabe
+   * exibir, e o resto vai sem tipo. Blob sem tipo deixa a decisão de renderizar
+   * para o palpite do navegador — e é o que faz "Abrir no navegador" virar o
+   * download de um arquivo desconhecido.
    */
-  const fichaImagem: AnexoPersonagem | null = (() => {
+  const fichaAnexo: AnexoPersonagem | null = (() => {
     if (campo !== "ficha" || !valor) return null;
 
-    const mimeType = imageMimeByName(valor);
-    if (!mimeType) return null;
+    const mimeType =
+      imageMimeByName(valor) ??
+      (attachmentKind(valor, "") === "pdf" ? "application/pdf" : "");
 
     return { arquivo: valor, mimeType, tamanho: 0, autor: "mestre" };
   })();
+
+  /**
+   * A ficha quando ela é IMAGEM.
+   *
+   * Ficha imagem existe — um print da ficha de papel, um card de personagem —,
+   * e nesse caso ela é evidência como qualquer outra imagem: cabe na TV e cabe
+   * no quadradinho. Ficha PDF não tem miniatura, porque o que o daemon reduz é
+   * imagem, nem vai para a TV, porque o Espectador não renderiza PDF.
+   */
+  const fichaImagem: AnexoPersonagem | null =
+    fichaAnexo && imageMimeByName(fichaAnexo.arquivo) ? fichaAnexo : null;
+
+  /** O ícone do quadro da ficha: o do tipo dela, ou o genérico se não há ficha. */
+  const IconeDaFicha = fichaAnexo
+    ? ICONE[attachmentKind(fichaAnexo.arquivo, "")]
+    : FileText;
 
   // Ficha guarda nome de arquivo; retrato e miniatura guardam id do acervo, e
   // o nome sai da lista de imagens. Ver `Personagem`.
@@ -1154,15 +1171,27 @@ function Slot({
             onAbrir={() => onAbrirAnexo(fichaImagem)}
             className="absolute inset-0 size-full rounded-none border-0"
           />
+        ) : fichaAnexo ? (
+          // Ficha PDF: ícone, e clicável. O ícone é o do TIPO, como no celular,
+          // e o clique abre o arquivo no leitor -- ver `AnexoBody`. Era um
+          // `<span>` inerte, e o efeito era o mestre não ter caminho nenhum
+          // para a ficha em PDF de dentro do aplicativo: aqui ela não abria, e
+          // na lista de arquivos abaixo ela é escondida de propósito, porque
+          // tem lugar próprio. Ver `Files`.
+          <button
+            type="button"
+            // O nome vive no `title` do quadro e no cabeçalho da janela: em
+            // oitenta pixels ele viraria três letras e reticências.
+            aria-label={`Abrir ${fichaAnexo.arquivo}`}
+            onClick={() => onAbrirAnexo(fichaAnexo)}
+            className="hover:bg-accent focus-visible:ring-ring absolute inset-0 grid size-full place-items-center focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <IconeDaFicha className="text-muted-foreground size-5" aria-hidden />
+          </button>
         ) : (
           <span className="absolute inset-0 flex items-center justify-center">
-            <FileText
-              className={cn(
-                "size-5",
-                preenchido
-                  ? "text-muted-foreground"
-                  : "text-muted-foreground/40",
-              )}
+            <IconeDaFicha
+              className="text-muted-foreground/40 size-5"
               aria-hidden
             />
           </span>
