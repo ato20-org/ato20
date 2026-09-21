@@ -309,7 +309,9 @@ def imprimir(linhas, args):
     for rotulo, corridas in por_celula.items():
         c = corridas[0]
         cam = re.search(r"cam=(\d+)", rotulo)
-        g = re.search(r"gesto=(\w+)", rotulo)
+        # Com hifen: `palco-profundo` truncava em `palco` e as tres celulas de
+        # zoom do palco saiam com o mesmo nome na tabela.
+        g = re.search(r"gesto=([\w-]+)", rotulo)
         pnl = re.search(r"painel=(\w+)", rotulo)
         rd = re.search(r"roda=(\d+)", rotulo)
         print(

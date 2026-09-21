@@ -841,21 +841,28 @@ function PalcoBancada({
       restored: true,
     });
 
-    const alvo =
-      (gesto === "fantasma" ? primeira.cameras?.[1] : primeira.cameras?.[0])
-        ?.viewport ?? FULL_VIEWPORT;
-    const folga = 1.45;
-    useViewportStore.getState().setViewport(
-      clampViewport(
-        {
-          x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
-          y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
-          width: alvo.width * folga,
-          height: alvo.height * folga,
-        },
-        PLANO,
-      ),
-    );
+    // Os perfis de zoom do palco partem do plano INTEIRO: é de onde a roda
+    // começa a subir, e enquadrar uma câmera antes deixaria o `profundo` sem
+    // caminho para percorrer -- ele já estaria a meio do teto.
+    if ((ZOOM_DO_PALCO as readonly string[]).includes(gesto)) {
+      useViewportStore.getState().setViewport(FULL_VIEWPORT);
+    } else {
+      const alvo =
+        (gesto === "fantasma" ? primeira.cameras?.[1] : primeira.cameras?.[0])
+          ?.viewport ?? FULL_VIEWPORT;
+      const folga = 1.45;
+      useViewportStore.getState().setViewport(
+        clampViewport(
+          {
+            x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
+            y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
+            width: alvo.width * folga,
+            height: alvo.height * folga,
+          },
+          PLANO,
+        ),
+      );
+    }
 
     return () => {
       useViewportStore.getState().setViewport(FULL_VIEWPORT);
@@ -916,7 +923,58 @@ type Gesto =
   | "redimensionar"
   | "zoom"
   | "fantasma"
-  | "cinegrafista";
+  | "cinegrafista"
+  | "palco-rapido"
+  | "palco-profundo"
+  | "palco-variado";
+
+/** Os três são a roda sobre o MAPA, e não sobre a câmera. Ver `PROGRAMA`. */
+const ZOOM_DO_PALCO = [
+  "palco-rapido",
+  "palco-profundo",
+  "palco-variado",
+] as const;
+
+/**
+ * O que a roda faz, segmento a segmento, em cada perfil de zoom do palco.
+ *
+ * `notches` é quantos passos da roda o segmento tem e para que lado; `pausaMs`
+ * é quanto a mão fica parada depois dele. A pausa não é enfeite: o plano de
+ * conteúdo volta do `transform` para o `zoom` 350 ms depois da última mudança
+ * de recorte, e essa volta é um layout de `1920 × scale` pixels -- a 16x, uma
+ * caixa de trinta mil. Um perfil sem pausa nunca paga isso e mediria só metade
+ * do que o mestre sente; um perfil só de pausas mediria só a outra metade.
+ *
+ * `rapido`    vaivém curto e contínuo perto de onde se trabalha. Sem pausa: é
+ *             o compositor sozinho, esticando a textura que já tem.
+ * `profundo`  do afastado ao teto de 16x e de volta, sem parar no meio. É onde
+ *             o raster fica grande o bastante para o motor pintar em pedaços.
+ * `variado`   rajadas de tamanhos diferentes com pausas entre elas, em
+ *             profundidades diferentes. É o gesto de verdade -- aproxima,
+ *             olha, corrige, afasta -- e o único que paga as duas contas.
+ */
+const PROGRAMA: Record<
+  (typeof ZOOM_DO_PALCO)[number],
+  { notches: number; pausaMs: number }[]
+> = {
+  "palco-rapido": [
+    { notches: 8, pausaMs: 0 },
+    { notches: -8, pausaMs: 0 },
+  ],
+  // Vinte notches de 1,15 levam de uma vez a dezesseis: `1.15 ** 20` = 16,4.
+  "palco-profundo": [
+    { notches: 20, pausaMs: 0 },
+    { notches: -20, pausaMs: 0 },
+  ],
+  "palco-variado": [
+    { notches: 6, pausaMs: 400 },
+    { notches: -3, pausaMs: 400 },
+    { notches: 12, pausaMs: 600 },
+    { notches: -15, pausaMs: 400 },
+    { notches: 4, pausaMs: 0 },
+    { notches: -4, pausaMs: 500 },
+  ],
+};
 
 /**
  * A mão sintética: mira num ponto da tela, pergunta quem está lá e arrasta.
@@ -1018,7 +1076,7 @@ function MaoSintetica({
     const contagem = new Map<string, number>();
     /** As propriedades de estilo que marcam o documento para refazer layout. */
     const DE_LAYOUT =
-      /(?:^|;)\s*(left|top|right|bottom|width|height|margin|padding|border-width|inset)\s*:\s*([^;]*)/g;
+      /(?:^|;)\s*(left|top|right|bottom|width|height|margin|padding|border-width|inset|zoom|font-size|gap)\s*:\s*([^;]*)/g;
 
     /**
      * As propriedades de layout de um `style`, como texto comparável.
@@ -1081,7 +1139,14 @@ function MaoSintetica({
         attributeOldValue: true,
       });
 
+    const doPalco = (ZOOM_DO_PALCO as readonly string[]).includes(gesto);
+
     const ondeEsta = () => {
+      // Nos perfis de zoom do palco quem se mexe é o RECORTE DA VISTA, e não
+      // nenhuma câmera: perguntar à câmera daria zero e a bancada reprovaria
+      // uma medida que estava correndo bem.
+      if (doPalco) return useViewportStore.getState().viewport;
+
       const scene = selectEditingScene(useSceneStore.getState());
       const selecionadaId = useCameraLockStore.getState().selecionadaId;
       const camera =
@@ -1272,6 +1337,92 @@ function MaoSintetica({
         );
     };
 
+    /**
+     * A roda sobre o MAPA, seguindo o programa do perfil.
+     *
+     * Despacha no que estiver no meio do palco, e não na janela: o
+     * `SceneStage` escuta a roda na moldura dele, e um evento na janela não
+     * borbulha para lá. Mirar no meio também é o que garante que o zoom tem
+     * âncora estável -- a roda amplia em volta do cursor.
+     */
+    const rodarNoPalco = () => {
+      if (!vivo) return;
+
+      const caixa = molduraNaTela("mover");
+      const alvoPonto = caixa
+        ? { x: caixa.left + caixa.width / 2, y: caixa.top + caixa.height / 2 }
+        : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+
+      const sob = document.elementFromPoint(alvoPonto.x, alvoPonto.y);
+      if (!sob) {
+        quadro = requestAnimationFrame(rodarNoPalco);
+        return;
+      }
+
+      diario.gestos += 1;
+      diario.alvo = `${sob.tagName.toLowerCase()}.${(sob.className || "").toString().slice(0, 40)}`;
+      diario.ponto = `(${alvoPonto.x.toFixed(0)},${alvoPonto.y.toFixed(0)}) de ${window.innerWidth}x${window.innerHeight}`;
+
+      const programa = PROGRAMA[gesto as (typeof ZOOM_DO_PALCO)[number]];
+      let segmento = 0;
+      let dados = 0;
+
+      const passar = () => {
+        if (!vivo) return;
+
+        const atual = programa[segmento];
+        if (!atual) {
+          quadro = requestAnimationFrame(rodarNoPalco);
+          return;
+        }
+
+        const total = Math.abs(atual.notches);
+        const sentido = atual.notches < 0 ? 1 : -1;
+        // `deltaY` negativo aproxima, no `SceneStage` como na roda de verdade.
+
+        for (let i = 0; i < roda && dados < total; i += 1, dados += 1)
+          sob.dispatchEvent(
+            new WheelEvent("wheel", {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              deltaY: sentido * 100,
+              clientX: alvoPonto.x,
+              clientY: alvoPonto.y,
+            }),
+          );
+
+        diario.movimentos += 1;
+
+        const agora = ondeEsta();
+        if (partida && agora)
+          diario.andou = Math.max(
+            diario.andou,
+            Math.abs(agora.width - partida.width),
+          );
+
+        if (dados < total) {
+          quadro = requestAnimationFrame(passar);
+          return;
+        }
+
+        // Segmento cumprido: a mão para pelo tempo do perfil. É a pausa que
+        // faz o plano voltar para o `zoom` e pagar o layout -- ver `PROGRAMA`.
+        segmento += 1;
+        dados = 0;
+        if (atual.pausaMs > 0) {
+          window.setTimeout(() => {
+            if (vivo) quadro = requestAnimationFrame(passar);
+          }, atual.pausaMs);
+          return;
+        }
+
+        quadro = requestAnimationFrame(passar);
+      };
+
+      quadro = requestAnimationFrame(passar);
+    };
+
     const comecar = () => {
       if (!vivo) return;
 
@@ -1366,7 +1517,9 @@ function MaoSintetica({
       limpar = () => despachar(alvo, "pointerup", ponto.x, ponto.y);
     };
 
-    quadro = requestAnimationFrame(gesto === "cinegrafista" ? cinegrafar : comecar);
+    quadro = requestAnimationFrame(
+      doPalco ? rodarNoPalco : gesto === "cinegrafista" ? cinegrafar : comecar,
+    );
 
     return () => {
       vivo = false;
