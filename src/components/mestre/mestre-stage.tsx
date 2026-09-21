@@ -34,7 +34,6 @@ import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useModoCinegrafista } from "@/hooks/use-modo-cinegrafista";
 import { usePanMode } from "@/hooks/use-pan-mode";
-import { gravarCameraManual } from "@/lib/mestre/camera-actions";
 import {
   alvoDoClique,
   escalarPatches,
@@ -304,6 +303,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const garantirCameraInicial = useCameraLockStore(
     (state) => state.garantirCameraInicial,
   );
+  const soltarTrava = useCameraLockStore((state) => state.soltar);
   const selecionada = scene.cameras?.find(
     (camera) => camera.id === selecionadaId,
   );
@@ -318,9 +318,25 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const cinegrafista = useModoCinegrafista({
     camera: selecionada?.viewport,
     ativo: !panMode,
+    // No GESTO, e não no board, pelo mesmo motivo do arrasto da moldura: cada
+    // quadro do visor chamava `gravarCameraManual`, que é um commit inteiro --
+    // cópia do board, passo de histórico, gravação agendada, todo assinante do
+    // store acordado e o `MestreShell` re-renderizado. Sessenta vezes por
+    // segundo, com a roda somando mais alguns por quadro por cima. Medido na
+    // webview com a bancada cheia, era o gesto mais caro do palco: 20,3 quadros
+    // por segundo, contra 33 do arrasto da moldura, que já passava por aqui.
+    //
+    // O board continua recebendo no ritmo do canal enquanto esta câmera está no
+    // ar -- quem assiste precisa ver a TV passear junto --, e o resto espera o
+    // V ser solto. Ver `moverCameraNoGesto`.
     onChange: (viewport) => {
-      if (selecionada) gravarCameraManual(selecionada.id, viewport);
+      if (selecionada) moverCameraNoGesto(scene.id, selecionada.id, viewport);
     },
+    // A trava sai no COMEÇO, e uma vez. Ela saía de graça quando cada quadro
+    // passava por `gravarCameraManual`; sem isto, uma câmera presa a tokens
+    // seguiria o mouse e o seguidor a puxaria de volta dez vezes por segundo.
+    onGestureStart: soltarTrava,
+    onGestureEnd: terminarGestoDaCamera,
   });
 
   const guardados = usePortraitStore((state) => state.portraits);
