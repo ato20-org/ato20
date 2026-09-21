@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Download, ExternalLink, FileQuestion, Loader2 } from "lucide-react";
 
 import { ImageZoom } from "@/components/attachments/image-zoom";
+import { PdfBody } from "@/components/attachments/pdf-body";
 import { Button } from "@/components/ui/button";
 import { attachmentKind } from "@/lib/attachments/kind";
 import type { Attachment } from "@/lib/player/session";
@@ -36,13 +37,27 @@ export function AttachmentBody({ attachment, url }: { attachment: Attachment; ur
   }
 
   if (kind === "pdf") {
+    // O leitor do aplicativo, e não um `<iframe>`. O iframe era o visualizador
+    // do navegador dentro da janela: barra de ferramentas que não é a daqui,
+    // zoom que não é o dos degraus, e no celular um PDF em iframe que o iOS
+    // Safari costuma recusar de todo -- era por isso que a saída para outra aba
+    // ficava sempre visível. Agora a ficha em PDF abre com o mesmo zoom, a
+    // mesma lupa e a mesma busca no texto do manual da estante, que é o que uma
+    // ficha escaneada de papel pede; a saída só aparece se o leitor recusar o
+    // arquivo. Ver `PdfBody`.
+    //
+    // O que se perdeu foi a pinça do celular, que o iframe dava de graça. Os
+    // degraus da barra e a lupa cobrem o caso, e zoom contínuo aqui significaria
+    // repintar o canvas a cada quadro do gesto -- ver `PaginaFolha`.
+    //
+    // `key` na URL, como na imagem: trocar de anexo remonta o leitor, e o
+    // documento aberto é do arquivo, não da moldura.
     return (
-      <div className="space-y-2">
-        <iframe src={url} title={attachment.arquivo} className="h-[70dvh] w-full rounded-md border" />
-        {/* iOS Safari costuma recusar PDF em iframe. Em vez de detectar
-            navegador, deixo a saída sempre visível. */}
-        <ExternalButton url={url} label="Abrir o PDF no navegador" />
-      </div>
+      <PdfBody
+        key={url}
+        url={url}
+        saida={<ExternalButton url={url} label="Abrir o PDF no navegador" />}
+      />
     );
   }
 

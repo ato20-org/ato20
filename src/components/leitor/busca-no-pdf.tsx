@@ -6,18 +6,18 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useBuscaLivro } from "@/hooks/use-busca-livro";
+import { useBuscaNoPdf } from "@/hooks/use-busca-no-pdf";
 
 /**
- * A busca no texto do livro, como tira lateral.
+ * A busca no texto do documento, como tira lateral.
  *
  * O resultado é PÁGINA e trecho, e clicar salta para lá. O termo não é
  * destacado dentro da página: a página é um canvas, e pintar o achado sobre ela
  * pediria a camada de texto do pdf.js posicionada por cima — outra estrutura,
  * que num manual de duas colunas costuma sair torta. O trecho na lista já diz
- * o que foi encontrado, e o mestre acha na página com o olho.
+ * o que foi encontrado, e quem lê acha na página com o olho.
  */
-export function BuscaLivro({
+export function BuscaNoPdf({
   doc,
   paginaAtual,
   aoEscolher,
@@ -27,7 +27,7 @@ export function BuscaLivro({
   aoEscolher: (pagina: number) => void;
 }) {
   const [termo, setTermo] = useState("");
-  const { resultados, progresso, buscar, limpar } = useBuscaLivro(doc);
+  const { resultados, progresso, buscar, limpar } = useBuscaNoPdf(doc);
 
   // Espera a digitação parar. Varrer trezentas páginas por tecla apertada seria
   // trezentas leituras de texto para um termo que ainda está sendo escrito.
@@ -45,9 +45,9 @@ export function BuscaLivro({
           <Input
             value={termo}
             onChange={(evento) => setTermo(evento.target.value)}
-            placeholder="Buscar no livro"
+            placeholder="Buscar no texto"
             className="pl-7"
-            aria-label="Buscar no livro"
+            aria-label="Buscar no texto"
           />
         </div>
 
@@ -75,7 +75,8 @@ export function BuscaLivro({
 
       {!progresso && termo.trim().length >= 2 && resultados.length === 0 ? (
         <p className="text-muted-foreground text-xs">
-          Nada encontrado. Manual escaneado sem OCR não tem texto para buscar.
+          Nada encontrado. Arquivo escaneado sem OCR não tem texto para
+          buscar.
         </p>
       ) : null}
 

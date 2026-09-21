@@ -29,7 +29,7 @@ const LENTE_PX = 260;
 const NITIDO_MS = 90;
 
 /**
- * Uma folha do livro: a caixa sempre, o desenho quando pedido.
+ * Uma folha do documento: a caixa sempre, o desenho quando pedido.
  *
  * A caixa existe desde o começo com a ALTURA RESERVADA, e é o que dá uma barra
  * de rolagem do tamanho do manual sem ter aberto uma página. Só quando

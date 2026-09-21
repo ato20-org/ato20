@@ -19,7 +19,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import { PaginaFolha } from "@/components/mestre/leitor/pagina-folha";
+import { PaginaFolha } from "@/components/leitor/pagina-folha";
 import { useRolagemDoLivro } from "@/hooks/use-rolagem-do-livro";
 import { pdfjs, RUNTIME } from "@/lib/leitor/pdfjs";
 import type { PDFDocumentProxy } from "pdfjs-dist";
@@ -1747,8 +1747,9 @@ function PalcoComCamadas({ n }: { n: number }) {
  * Leitor: um livro aberto, e os degraus de zoom em sequencia.
  *
  * Monta as pecas de baixo do leitor -- `useRolagemDoLivro` e `PaginaFolha` --,
- * e nao o `LeitorLivro`: ele depende da estante e do daemon pelo IPC do Tauri,
- * que nao existe aqui. O documento vem de `/livro/perf`, que o `medir.mjs`
+ * e nao o `LeitorPdf`: a barra dele mediria o mesmo custo com um render a mais
+ * no meio, e o `LeitorLivro` ainda depende da estante e do IPC do Tauri, que
+ * nao existe aqui. O documento vem de `/livro/perf`, que o `medir.mjs`
  * serve com `Range` como o daemon faz.
  *
  * O roteiro: abre na pagina pedida, espera tudo pronto, e a cada degrau mede
