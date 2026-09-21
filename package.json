@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "perf": "node scripts/perf/medir.mjs",
     "perf:webview": "python3 scripts/perf/webview.py",
+    "production": "node scripts/palco-de-producao.mjs",
     "banco": "node scripts/banco.mjs",
     "tauri": "tauri",
     "clean:web-resources": "node scripts/clean-web-resources.mjs",
