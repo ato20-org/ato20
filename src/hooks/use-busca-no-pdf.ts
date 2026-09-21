@@ -36,18 +36,19 @@ type BuscaApi = {
 };
 
 /**
- * Busca no texto do livro.
+ * Busca no texto de um PDF aberto.
  *
  * Varredura página por página com o texto do próprio pdf.js, e não índice
  * gravado no disco: um índice pede tabela, invalidação e um momento para ser
  * construído — e a pergunta que ele responderia mais rápido é feita uma ou duas
  * vezes por sessão. O texto de cada página fica guardado em memória enquanto o
- * livro está aberto, então a segunda busca não relê nada.
+ * documento está aberto, então a segunda busca não relê nada.
  *
- * Manual escaneado sem OCR não tem texto nenhum, e aí a busca não acha nada.
- * Isso é honesto: o que não existe no arquivo não pode ser encontrado.
+ * Arquivo escaneado sem OCR não tem texto nenhum, e aí a busca não acha nada.
+ * Isso é honesto: o que não existe no arquivo não pode ser encontrado. Vale
+ * para o manual fotografado e para a ficha de papel que o jogador digitalizou.
  */
-export function useBuscaLivro(doc: PDFDocumentProxy | null): BuscaApi {
+export function useBuscaNoPdf(doc: PDFDocumentProxy | null): BuscaApi {
   const [resultados, setResultados] = useState<Ocorrencia[]>([]);
   const [progresso, setProgresso] = useState<{ lidas: number; total: number } | null>(null);
 
@@ -73,7 +74,7 @@ export function useBuscaLivro(doc: PDFDocumentProxy | null): BuscaApi {
     async (termo: string) => {
       const alvo = simplificar(termo.trim());
 
-      // Uma letra acha metade do manual. Duas ainda é pouco, mas é a menor
+      // Uma letra acha metade do documento. Duas ainda é pouco, mas é a menor
       // busca útil ("d6", "PV") e o teto de ocorrências protege a lista.
       if (!doc || alvo.length < 2) {
         limpar();
@@ -113,7 +114,7 @@ export function useBuscaLivro(doc: PDFDocumentProxy | null): BuscaApi {
         for (let de = simples.indexOf(alvo); de !== -1; de = simples.indexOf(alvo, de + 1)) {
           // O trecho sai do texto ORIGINAL, com acento e maiúscula: a
           // simplificação preserva as posições, e mostrar o texto simplificado
-          // devolveria ao mestre um manual sem acentos.
+          // devolveria um documento sem acentos a quem está lendo.
           const inicio = Math.max(0, de - CONTEXTO);
           const fim = Math.min(texto.length, de + alvo.length + CONTEXTO);
 
