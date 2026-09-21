@@ -700,11 +700,13 @@ function PalcoGestoDeCamera({
   cameras,
   gesto,
   sonda,
+  roda,
 }: {
   n: number;
   cameras: number;
   gesto: Gesto;
   sonda: boolean;
+  roda: number;
 }) {
   const cena = useSceneStore(selectEditingScene);
   const viewport = useViewportStore((state) => state.viewport);
@@ -756,7 +758,7 @@ function PalcoGestoDeCamera({
   return (
     <SceneStage viewport={viewport} onViewportChange={setViewport} limites={PLANO}>
       <MestreStage scene={cena} />
-      <MaoSintetica gesto={gesto} sonda={sonda} />
+      <MaoSintetica gesto={gesto} sonda={sonda} roda={roda} />
     </SceneStage>
   );
 }
@@ -789,6 +791,7 @@ function PalcoBancada({
   noAr,
   painel,
   sonda,
+  roda,
 }: {
   n: number;
   cameras: number;
@@ -797,6 +800,7 @@ function PalcoBancada({
   noAr: boolean;
   painel: "ambos" | "esquerdo" | "direito" | "nenhum";
   sonda: boolean;
+  roda: number;
 }) {
   const status = useSceneStore((state) => state.status);
 
@@ -866,7 +870,7 @@ function PalcoBancada({
       <MestreShell />
       {/* Fora do `SceneStage`, e sem nada a mudar por isso: a projeção sai do
           DOM nos dois cenários. Ver `projecaoDoDom`. */}
-      <MaoSintetica gesto={gesto} sonda={sonda} />
+      <MaoSintetica gesto={gesto} sonda={sonda} roda={roda} />
     </TooltipProvider>
   );
 }
@@ -906,7 +910,13 @@ function molduraNaTela(gesto: Gesto): DOMRect | null {
  * Sem ela não há como separar "a tela custa caro" de "o gesto custa caro", e
  * as duas pedem conserto em lugares diferentes.
  */
-type Gesto = "nenhum" | "mover" | "redimensionar" | "zoom" | "fantasma";
+type Gesto =
+  | "nenhum"
+  | "mover"
+  | "redimensionar"
+  | "zoom"
+  | "fantasma"
+  | "cinegrafista";
 
 /**
  * A mão sintética: mira num ponto da tela, pergunta quem está lá e arrasta.
@@ -922,7 +932,24 @@ type Gesto = "nenhum" | "mover" | "redimensionar" | "zoom" | "fantasma";
  * TELA, pergunta ao `elementFromPoint` quem está lá e despacha nele, então
  * alvo coberto ou fora do recorte reprova aqui como reprovaria na mão.
  */
-function MaoSintetica({ gesto, sonda }: { gesto: Gesto; sonda: boolean }) {
+function MaoSintetica({
+  gesto,
+  sonda,
+  roda,
+}: {
+  gesto: Gesto;
+  sonda: boolean;
+  /**
+   * Quantos eventos de roda o robô despacha por quadro.
+   *
+   * Um mouse não emite um notch por quadro: roda de alta resolução e trackpad
+   * entregam vários, e quem escuta a roda sem agrupar paga por cada um. Este
+   * eixo existe para a medida poder mostrar isso em vez de supor -- e para
+   * provar que um agrupamento por quadro segura o caso ruim, que é justamente
+   * o que o mestre descreveu ("quando uso o scroll tudo fica muito travado").
+   */
+  roda: number;
+}) {
   useEffect(() => {
     if (gesto === "nenhum") return;
 
@@ -1142,6 +1169,109 @@ function MaoSintetica({ gesto, sonda }: { gesto: Gesto; sonda: boolean }) {
 
     /** Um gesto completo: pega, arrasta por `PASSOS` quadros, solta. */
     const PASSOS = 90;
+    /**
+     * O modo cinegrafista: V segurado, o mouse passeia e a roda aproxima.
+     *
+     * Roteiro próprio porque ele não é um arrasto: nada é apertado, nada é
+     * solto, e o `useModoCinegrafista` recusa o movimento se algum botão
+     * estiver pressionado (`evento.buttons !== 0`) -- no meio de um arrasto o
+     * gesto é do item. Os eventos vão na JANELA, com captura, que é onde ele
+     * escuta para ganhar da roda do `SceneStage`.
+     *
+     * A roda dispara junto com o movimento de propósito: é o que o mestre faz
+     * -- aponta para o beco e aproxima -- e é onde ele disse que trava.
+     */
+    const cinegrafar = () => {
+      if (!vivo) return;
+
+      const caixa = molduraNaTela(gesto);
+      if (!caixa) {
+        quadro = requestAnimationFrame(cinegrafar);
+        return;
+      }
+
+      diario.gestos += 1;
+      diario.vista = `moldura ${caixa.width.toFixed(0)}x${caixa.height.toFixed(0)}@(${caixa.left.toFixed(0)},${caixa.top.toFixed(0)})`;
+
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "v", bubbles: true }),
+      );
+
+      let passo = 0;
+      const centro = {
+        x: caixa.left + caixa.width / 2,
+        y: caixa.top + caixa.height / 2,
+      };
+
+      const passear = () => {
+        if (!vivo) return;
+
+        passo += 1;
+        const a = (passo / PASSOS) * Math.PI * 2;
+        const x = centro.x + Math.cos(a) * 150;
+        const y = centro.y + Math.sin(a) * 100;
+
+        const sob = document.elementFromPoint(x, y);
+        if (sob) {
+          diario.alvo = `${sob.tagName.toLowerCase()}.${(sob.className || "").toString().slice(0, 40)}`;
+          diario.ponto = `(${x.toFixed(0)},${y.toFixed(0)}) de ${window.innerWidth}x${window.innerHeight}`;
+
+          sob.dispatchEvent(
+            new PointerEvent("pointermove", {
+              bubbles: true,
+              composed: true,
+              pointerId: 1,
+              pointerType: "mouse",
+              isPrimary: true,
+              // Sem botão: com qualquer um apertado o cinegrafista não segue.
+              button: -1,
+              buttons: 0,
+              clientX: x,
+              clientY: y,
+            }),
+          );
+          diario.movimentos += 1;
+
+          // A roda a cada quadro, vaivém, como a mão que aproxima e recua.
+          for (let i = 0; i < roda; i += 1)
+            sob.dispatchEvent(
+              new WheelEvent("wheel", {
+                bubbles: true,
+                cancelable: true,
+                composed: true,
+                deltaY: passo % 20 < 10 ? -100 : 100,
+                clientX: x,
+                clientY: y,
+              }),
+            );
+
+          const agora = ondeEsta();
+          if (partida && agora)
+            diario.andou = Math.max(
+              diario.andou,
+              Math.hypot(agora.x - partida.x, agora.y - partida.y) +
+                Math.abs(agora.width - partida.width),
+            );
+        }
+
+        if (passo < PASSOS) {
+          quadro = requestAnimationFrame(passear);
+          return;
+        }
+
+        window.dispatchEvent(
+          new KeyboardEvent("keyup", { key: "v", bubbles: true }),
+        );
+        quadro = requestAnimationFrame(cinegrafar);
+      };
+
+      quadro = requestAnimationFrame(passear);
+      limpar = () =>
+        window.dispatchEvent(
+          new KeyboardEvent("keyup", { key: "v", bubbles: true }),
+        );
+    };
+
     const comecar = () => {
       if (!vivo) return;
 
@@ -1209,15 +1339,16 @@ function MaoSintetica({ gesto, sonda }: { gesto: Gesto; sonda: boolean }) {
         // O zoom soma a roda ao arrasto, que é o caso que junta dois emissores
         // no mesmo quadro -- o que o `pedir` da moldura existe para agrupar.
         if (gesto === "zoom")
-          window.dispatchEvent(
-            new WheelEvent("wheel", {
-              bubbles: true,
-              cancelable: true,
-              deltaY: passo % 20 < 10 ? -100 : 100,
-              clientX: x,
-              clientY: y,
-            }),
-          );
+          for (let i = 0; i < roda; i += 1)
+            window.dispatchEvent(
+              new WheelEvent("wheel", {
+                bubbles: true,
+                cancelable: true,
+                deltaY: passo % 20 < 10 ? -100 : 100,
+                clientX: x,
+                clientY: y,
+              }),
+            );
 
         if (passo < PASSOS) {
           quadro = requestAnimationFrame(andar);
@@ -1235,7 +1366,7 @@ function MaoSintetica({ gesto, sonda }: { gesto: Gesto; sonda: boolean }) {
       limpar = () => despachar(alvo, "pointerup", ponto.x, ponto.y);
     };
 
-    quadro = requestAnimationFrame(comecar);
+    quadro = requestAnimationFrame(gesto === "cinegrafista" ? cinegrafar : comecar);
 
     return () => {
       vivo = false;
@@ -1245,7 +1376,7 @@ function MaoSintetica({ gesto, sonda }: { gesto: Gesto; sonda: boolean }) {
       Element.prototype.setPointerCapture = original;
       Element.prototype.releasePointerCapture = originalSolta;
     };
-  }, [gesto, sonda]);
+  }, [gesto, sonda, roda]);
 
   return null;
 }
@@ -1778,6 +1909,8 @@ function Medida({ params }: { params: URLSearchParams }) {
    * Desligado por padrão: ele custa, e o custo cai dentro da medida.
    */
   const sonda = params.get("sonda") === "1";
+  /** Quantos eventos de roda por quadro o robô despacha. Ver `MaoSintetica`. */
+  const roda = Math.max(1, Number(params.get("roda") ?? 1));
   /** `bancada`: que colunas laterais ficam à vista. */
   const painel = (params.get("painel") ?? "ambos") as
     | "ambos"
@@ -1840,6 +1973,7 @@ function Medida({ params }: { params: URLSearchParams }) {
           cameras={cameras}
           gesto={gesto}
           sonda={sonda}
+          roda={roda}
         />
       ) : cenario === "bancada" ? (
         <PalcoBancada
@@ -1850,6 +1984,7 @@ function Medida({ params }: { params: URLSearchParams }) {
           noAr={noAr}
           painel={painel}
           sonda={sonda}
+          roda={roda}
         />
       ) : cenario === "dados" ? (
         <PalcoDados n={n} zoom={zoomDoPalco} />

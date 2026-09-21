@@ -114,6 +114,9 @@ def argumentos():
     # Liga a contagem de `o que muda por quadro`. Custa, e o custo cai dentro
     # da medida: use para achar onde mexer, não para tirar o número final.
     p.add_argument("--sonda", action="store_true")
+    # Eventos de roda por quadro. Um mouse de verdade emite varios, e quem
+    # escuta a roda sem agrupar paga por cada um. Lista: e um eixo da matriz.
+    p.add_argument("--roda", default="1")
     p.add_argument("--repetir", type=int, default=1)
     p.add_argument("--url", default=None, help="servidor já de pé")
     p.add_argument("--pular-build", action="store_true")
@@ -292,8 +295,8 @@ def mediana(valores):
 
 
 def imprimir(linhas, args):
-    cab = ["cenario", "n", "cam", "gesto", "painel", "fps", "p95", "perdidos", "nos", "andou", "mut/palco", "mut/fora"]
-    larg = [12, 4, 4, 14, 9, 7, 8, 10, 7, 7, 11, 10]
+    cab = ["cenario", "n", "cam", "gesto", "painel", "roda", "fps", "p95", "perdidos", "nos", "andou"]
+    larg = [12, 4, 4, 14, 9, 6, 7, 8, 10, 7, 8]
     fmt = lambda cs: "".join(str(c).rjust(w) for c, w in zip(cs, larg))  # noqa: E731
 
     # Agrupa as repetições da mesma célula e mostra a mediana, como o `medir.mjs`.
@@ -308,6 +311,7 @@ def imprimir(linhas, args):
         cam = re.search(r"cam=(\d+)", rotulo)
         g = re.search(r"gesto=(\w+)", rotulo)
         pnl = re.search(r"painel=(\w+)", rotulo)
+        rd = re.search(r"roda=(\d+)", rotulo)
         print(
             fmt(
                 [
@@ -316,6 +320,7 @@ def imprimir(linhas, args):
                     cam.group(1) if cam else "",
                     g.group(1) if g else "",
                     pnl.group(1) if pnl else "",
+                    rd.group(1) if rd else "",
                     mediana([x["fps"] for x in corridas]),
                     f"{mediana([x['p95'] for x in corridas])}ms",
                     f"{mediana([x['perdidosPct'] for x in corridas])}%",
@@ -323,8 +328,6 @@ def imprimir(linhas, args):
                     # Zero aqui reprova a célula: o robô despachou e o palco
                     # não se mexeu, então o que foi medido é uma tela parada.
                     round(c.get("robo", {}).get("andou", 0)) if c.get("robo") else "",
-                    (c.get("robo") or {}).get("mutacoes", {}).get("palco", ""),
-                    (c.get("robo") or {}).get("mutacoes", {}).get("fora", ""),
                 ]
             )
         )
@@ -387,6 +390,7 @@ def main():
             for cam in eixo:
                 for g in gestos:
                     for painel in paineis:
+                      for r in [int(x) for x in args.roda.split(",")]:
                         for i in range(args.repetir):
                             url = (
                                 f"{base}/perf?cenario={cenario}&n={n}"
@@ -394,6 +398,7 @@ def main():
                                 f"&zoom={args.zoom}&cameras={cam}&gesto={g}"
                                 f"&mapas={args.mapas}&painel={painel}"
                                 f"&sonda={'1' if args.sonda else '0'}"
+                                f"&roda={r}"
                                 f"&noar={'0' if args.sem_no_ar else '1'}"
                                 f"&rotulo={args.rotulo}"
                             )
@@ -402,6 +407,8 @@ def main():
                                 rotulo += f" gesto={g}"
                             if cenario == "bancada":
                                 rotulo += f" painel={painel}"
+                            if len(args.roda.split(",")) > 1:
+                                rotulo += f" roda={r}"
                             urls.append((rotulo, url))
 
     try:
