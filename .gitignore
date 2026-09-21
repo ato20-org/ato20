@@ -47,3 +47,11 @@ next-env.d.ts
 # de trabalho, nao fonte. O `eslint.config.mjs` ignora `.claude/**` pela mesma
 # razao, e la e mais largo: o `.next/` de um worktree rendia 36 mil avisos.
 /.claude/
+
+# As imagens que a bancada de medida serve em `/asset/*` com `--imagens`.
+# Material de quem esta medindo -- mapa, fundo das outras cenas e token --, como
+# o PDF do cenario `leitor`: fica na maquina, nao no repositorio. Ver
+# `scripts/perf/README.md`.
+/bg.*
+/bg2.*
+/char.*
