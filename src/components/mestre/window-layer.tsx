@@ -53,6 +53,24 @@ export function WindowLayer() {
     return () => observer.disconnect();
   }, [acomodar]);
 
+  // A pilha do store diz QUEM ESTÁ NA FRENTE; ela não pode ditar a ordem da
+  // marcação. `trazerPraFrente` roda no pointerdown, e desenhar na ordem da
+  // pilha fazia o React mover o `<section>` da janela entre os irmãos no meio
+  // do clique — e um nó movido perde o `click`, porque o motor o desconecta
+  // para reinseri-lo e o `pointerup` já não acha o alvo do `pointerdown` no
+  // mesmo lugar da árvore. Era o X da janela de trás que não fechava de
+  // primeira: o clique só a trazia para a frente, e o segundo funcionava
+  // porque aí não havia mais nada a reordenar. Valia para qualquer botão de
+  // qualquer janela que não estivesse na frente, não só para o X.
+  //
+  // Por chave, e não pela pilha: a ordenação é estável, então abrir uma janela
+  // nova INSERE uma irmã e não desloca nenhuma das que já estão na tela. Quem
+  // empilha é o `z-index`, que o `InnerWindow` já declara a partir de `ordem`.
+  const montadas = [...janelas].sort((uma, outra) =>
+    uma.chave.localeCompare(outra.chave),
+  );
+  const pilha = new Map(janelas.map((janela, ordem) => [janela.chave, ordem]));
+
   return (
     <div
       ref={area}
@@ -61,8 +79,12 @@ export function WindowLayer() {
       data-dock-camada
       className="pointer-events-none absolute inset-0 overflow-hidden"
     >
-      {janelas.map((janela, ordem) => (
-        <Conteudo key={janela.chave} janela={janela} ordem={ordem} />
+      {montadas.map((janela) => (
+        <Conteudo
+          key={janela.chave}
+          janela={janela}
+          ordem={pilha.get(janela.chave) ?? 0}
+        />
       ))}
 
       <DockOverlay />
