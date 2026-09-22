@@ -2,19 +2,24 @@
 
 import { create } from "zustand";
 
-import type { CanvasItem, ItemDraft, Texto } from "@/types/scene";
+import { semIdDaForma } from "@/types/scene";
+import type { CanvasItem, Forma, ItemDraft, Texto } from "@/types/scene";
 
 type ClipboardStore = {
   /** Rascunhos sem `id`/`z`: colar sempre cria itens novos, nunca ressuscita. */
   drafts: ItemDraft[];
   /**
-   * Um texto solto copiado, sem id. Exclusivo com `drafts`: copiar um texto
-   * esvazia os itens e vice-versa, como uma área de transferência de verdade
-   * -- o último Ctrl+C é o que vale.
+   * Os textos soltos copiados, sem id. AO LADO dos itens e não no lugar deles:
+   * a área do quadro marca frase e imagem no mesmo laço, e um Ctrl+C que
+   * escolhesse um dos dois perderia metade do que estava na mão.
+   *
+   * Cada Ctrl+C substitui as duas listas, como uma área de transferência de
+   * verdade -- o último é o que vale.
    */
-  texto: Omit<Texto, "id"> | null;
-  copy: (items: CanvasItem[]) => void;
-  copyTexto: (texto: Texto) => void;
+  textos: Omit<Texto, "id">[];
+  /** E as formas do quadro, pela mesma razão: a seleção mistura as três. */
+  formas: Omit<Forma, "id">[];
+  copy: (items: CanvasItem[], textos?: Texto[], formas?: Forma[]) => void;
 };
 
 /**
@@ -25,20 +30,21 @@ type ClipboardStore = {
  */
 export const useClipboardStore = create<ClipboardStore>((set) => ({
   drafts: [],
-  texto: null,
+  textos: [],
+  formas: [],
 
-  copyTexto(texto) {
-    // Sem id -- a cópia ganha o dela -- e sem a caixa medida, que é do render.
-    const copia = { ...texto } as Partial<Texto>;
-    delete copia.id;
-    delete copia.largura;
-    delete copia.altura;
-    set({ drafts: [], texto: copia as Omit<Texto, "id"> });
-  },
-
-  copy(items) {
+  copy(items, textos = [], formas = []) {
     set({
-      texto: null,
+      formas: formas.map(semIdDaForma),
+      // Campo a campo como os itens: fica de fora o id -- a cópia ganha o dela
+      // -- e a caixa medida, que é do render e não do conteúdo.
+      textos: textos.map(({ x, y, texto, tamanho, rotation }) => ({
+        x,
+        y,
+        texto,
+        tamanho,
+        rotation,
+      })),
       drafts: items.map(
         ({ assetId, x, y, width, height, rotation, locked, flipX, flipY, opacity }) => ({
           assetId,

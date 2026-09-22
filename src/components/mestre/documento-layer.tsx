@@ -185,8 +185,16 @@ function CartaoDeDocumento({
   return (
     <div
       className={cn(
-        "text-card-foreground ring-foreground/20 pointer-events-auto absolute flex flex-col overflow-hidden rounded-md shadow-xl ring-1",
-        tool === "ligacao" && "cursor-crosshair",
+        "text-card-foreground ring-foreground/20 absolute flex flex-col overflow-hidden rounded-md shadow-xl ring-1",
+        // Com a seta na mão o ponteiro é DESLIGADO aqui, e não apenas
+        // ignorado: o clique precisa ATRAVESSAR até o envelope do palco, que
+        // vive no plano de baixo e é quem trata o gesto da seta. Um tratador
+        // que só retornava deixava o pointerdown morrer neste `<div>` -- e a
+        // seta não começava em cima de um postit, de um texto nem de um
+        // cartão, que é justamente onde ela quer começar.
+        tool === "ligacao"
+          ? "pointer-events-none cursor-crosshair"
+          : "pointer-events-auto",
       )}
       style={{
         left: documento.x,

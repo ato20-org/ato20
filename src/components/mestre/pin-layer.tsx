@@ -15,6 +15,7 @@ import {
   usePinWindowStore,
 } from "@/lib/store/use-pin-window-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import { SCENE_HEIGHT, SCENE_WIDTH, type Scene } from "@/types/scene";
 
@@ -79,6 +80,7 @@ export function PinLayer({
 }) {
   const { scale } = useSceneScale();
   const startDrag = useSceneDrag();
+  const tool = useToolStore((state) => state.tool);
   const updatePin = useSceneStore((state) => state.updatePin);
 
   const abertas = usePinWindowStore((state) => state.notas);
@@ -170,6 +172,11 @@ export function PinLayer({
             aria-pressed={aberta}
             className={cn(
               "absolute grid place-items-center rounded-full bg-amber-400 font-semibold text-amber-950 tabular-nums shadow-md select-none",
+              // Com a seta na mão o alfinete deixa o clique passar: quem trata
+              // o gesto é o envelope do palco, no plano de baixo, e aqui ele
+              // morreria -- abrindo a nota em vez de amarrar a seta. Mesma
+              // regra do postit e do texto solto.
+              tool === "ligacao" && "pointer-events-none",
               // Anel escuro: sobre mapa claro um círculo âmbar sem contorno
               // some, e é a única coisa na tela que o mestre precisa achar
               // rápido.

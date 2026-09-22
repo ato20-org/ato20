@@ -14,7 +14,10 @@ import { TrackBar } from "@/components/mestre/track-bar";
 import { WindowLayer } from "@/components/mestre/window-layer";
 import { OnAirControl } from "@/components/mestre/on-air-control";
 import { MestreStage } from "@/components/mestre/mestre-stage";
-import { MestreToolbar } from "@/components/mestre/mestre-toolbar";
+import {
+  FerramentasDoQuadro,
+  MestreToolbar,
+} from "@/components/mestre/mestre-toolbar";
 import { PaletaDeComandos } from "@/components/mestre/paleta-de-comandos";
 import { PinIndex } from "@/components/mestre/pin-index";
 import { HandoutMestre } from "@/components/mestre/handout-mestre";
@@ -110,11 +113,26 @@ export function MestreShell() {
    * a cena subir. Ver `retratosDaCena`, que o painel usa com a outra cena.
    */
   const fontes = useFontesDeRetrato();
-  const portraits = retratosDaCena(
-    guardados,
-    liveScene?.items ?? [],
-    personagens ?? [],
-    fontes,
+  /**
+   * `useMemo`, e isto é um conserto de LAÇO, não uma economia.
+   *
+   * `retratosDaCena` constrói uma lista nova a cada chamada, e ela vai para o
+   * `usePublisher`, cujo efeito tem `portraits` nas dependências. Sem memo, a
+   * lista era nova em todo render, o efeito disparava em todo render, e a cena
+   * inteira ia para a mesa de novo -- o que acorda esta árvore outra vez. O
+   * resultado, medido com a bancada PARADA: o `MestreShell` renderizando 28
+   * vezes por segundo, o palco e as trinta camadas de texto do quadro junto
+   * com ele, e uma publicação por volta. Ver o comentário de `usePublisher`
+   * sobre "dependências nos campos, não no objeto": ele evita o mesmo laço um
+   * nível acima, e esta lista escapava por baixo.
+   *
+   * As quatro entradas são estáveis: o store dá `guardados` e `personagens`,
+   * `items` é a lista imutável da cena e `useFontesDeRetrato` já memoiza.
+   */
+  const portraits = useMemo(
+    () =>
+      retratosDaCena(guardados, liveScene?.items ?? [], personagens ?? [], fontes),
+    [guardados, liveScene?.items, personagens, fontes],
   );
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
@@ -180,6 +198,7 @@ export function MestreShell() {
   useJanelaDeRolagens();
   useMestreShortcuts();
   useSpacePan();
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Ctrl+K. Vive aqui, e não em `mestre.tsx`, porque lista cenas, livros e
@@ -368,6 +387,7 @@ function StageBoundary({
   const viewport = useViewportStore((state) => state.viewport);
   const setViewport = useViewportStore((state) => state.setViewport);
   const setConteudo = useViewportStore((state) => state.setConteudo);
+  const definirMesaDeDados = useDadosStore((state) => state.definirMesa);
   // A mesma resposta que o `MestreStage` usa para soltar os itens.
   const panMode = usePanMode();
 
@@ -387,6 +407,21 @@ function StageBoundary({
     () => (scene ? limitesDoConteudo(scene) : PLANO),
     [scene],
   );
+
+  /**
+   * Qual mesa de dados está na tela: a do mapa, ou a do quadro.
+   *
+   * Aqui e não na camada que desenha, porque quem sabe o que está no palco é
+   * esta: o saquinho pergunta a mesma coisa para contar o que há para recolher
+   * e para listar as últimas rolagens, e ele vive FORA do palco.
+   *
+   * Sem cena a mesa fica como estava: o palco vazio é passagem -- fechar uma
+   * nota, trocar de campanha --, e recolher os dados nesse intervalo seria
+   * perder a jogada que está em cima do mapa. Ver `Mesa`.
+   */
+  useEffect(() => {
+    if (scene) definirMesaDeDados(ehQuadro(scene) ? "quadro" : "mapa");
+  }, [scene, definirMesaDeDados]);
 
   // No efeito e não no render: `setConteudo` escreve num store que outros
   // componentes leem, e escrever durante o render de um deles é o que o React
@@ -453,6 +488,24 @@ function StageBoundary({
         </div>
       ) : null}
 
+      {/* A régua do quadro, encostada na borda esquerda e no meio da altura.
+
+          À vista, e não numa bolsa do rodapé: montar uma rede de pistas é
+          trocar de ferramenta a cada gesto, e a bolsa cobrava dois cliques por
+          troca. À esquerda porque é a borda que todo editor de desenho usa
+          para isto, porque fica longe do zoom e das câmeras da direita, e
+          porque deixa o rodapé inteiro para o que é do PALCO -- selecionar,
+          deslocar, riscar --, que vale nos dois tipos de cena.
+
+          Só em quadro: no mapa as mesmas ferramentas continuam na bolsa, que é
+          o desenho certo para quem passa a sessão com a seleção na mão e crava
+          um alfinete de vez em quando. */}
+      {scene && !notaAberta && ehQuadro(scene) ? (
+        <div className="absolute top-1/2 left-3 -translate-y-1/2">
+          <FerramentasDoQuadro />
+        </div>
+      ) : null}
+
       {scene && !notaAberta ? (
         <div className="absolute right-3 bottom-3 flex items-center gap-2">
           <CamerasSalvas scene={scene} />
@@ -467,8 +520,16 @@ function StageBoundary({
           onde pousar -- a camada que a desenha vive dentro do palco. */}
       {scene && !notaAberta ? <SaquinhoDados /> : null}
 
-      {/* A carta na manga, irmã do saquinho: mesma bolinha, e por cena. */}
-      {scene && !notaAberta ? <HandoutMestre scene={scene} /> : null}
+      {/* A carta na manga, irmã do saquinho: mesma bolinha, e por cena.
+
+          Só em MAPA. O handout é o que o mestre separou para MOSTRAR à mesa --
+          a carta do vilão, o retrato da testemunha --, e o quadro é a mesa de
+          trabalho dele: lá a imagem que ele quer à mão já entra como cartão ou
+          como token, à vista, e a bolinha só somava um alvo permanente sobre a
+          folha que ele está montando. */}
+      {scene && !notaAberta && !ehQuadro(scene) ? (
+        <HandoutMestre scene={scene} />
+      ) : null}
     </div>
   );
 }

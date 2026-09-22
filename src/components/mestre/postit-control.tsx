@@ -39,7 +39,16 @@ const AMOSTRA: Record<CorPostit, string> = {
  * se cola um por vez, com texto escrito à mão dentro. Um botão que apaga a
  * anotação de uma sessão inteira num clique não vale a conveniência.
  */
-export function PostitControl() {
+export function PostitControl({
+  lado = "top",
+}: {
+  /**
+   * De que lado o painel abre. `top` é o do rodapé, onde o controle nasceu;
+   * `right` é o da régua do quadro, encostada na borda esquerda -- para cima,
+   * dali, o painel subiria por cima das próprias ferramentas.
+   */
+  lado?: "top" | "right";
+} = {}) {
   const tool = useToolStore((state) => state.tool);
   const corPostit = useToolStore((state) => state.corPostit);
   const setCorPostit = useToolStore((state) => state.setCorPostit);
@@ -74,7 +83,7 @@ export function PostitControl() {
         </TooltipContent>
       </Tooltip>
 
-      <PopoverContent align="start" className="w-52 space-y-2 p-3" side="top">
+      <PopoverContent align="start" className="w-52 space-y-2 p-3" side={lado}>
         <span className="text-muted-foreground text-[10px]">
           Cor do próximo postit
         </span>

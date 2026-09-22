@@ -9,7 +9,12 @@ import {
   emPixelDeTela,
   useSceneScale,
 } from "@/components/playground/scene-stage";
-import { setasDe, type Seta } from "@/lib/mestre/ligacoes";
+import {
+  caminhoDaSeta,
+  pontoNaSeta,
+  setasDe,
+  type Seta,
+} from "@/lib/mestre/ligacoes";
 import { cn } from "@/lib/utils";
 import {
   SCENE_HEIGHT,
@@ -17,6 +22,7 @@ import {
   DOCUMENTO_FONTE,
   type CorPostit,
   type Documento,
+  type NewForma,
   type Postit,
   type Scene,
   type Texto,
@@ -36,6 +42,7 @@ import {
  */
 
 /** Escada de `z` da mesa: acima das imagens e dos riscos, abaixo do retrato. */
+const FORMA_Z = 7_800;
 const TEXTO_Z = 8_000;
 const POSTIT_Z = 8_500;
 const SETA_Z = 8_600;
@@ -145,7 +152,19 @@ export function tipografiaDoTexto(
       lineHeight: 1.25,
       // A mesma estimativa de `caixaDoTexto`.
       minWidth: texto.tamanho * 0.55 * fator,
-    },
+      // A formatação vai no MESMO objeto que o campo de edição recebe: com o
+      // fundo e o negrito só no desenho, a letra pularia de lugar no instante
+      // em que o mestre entra para reescrever.
+      color: texto.cor,
+      fontWeight: texto.negrito ? 700 : undefined,
+      fontStyle: texto.italico ? "italic" : undefined,
+      textDecoration: texto.sublinhado ? "underline" : undefined,
+      background: texto.fundo,
+      // Em `em` e não em pixel: a folga do marca-texto tem de crescer junto com
+      // a fonte, e ela entra na caixa medida, que é a que o gizmo cerca.
+      padding: texto.fundo ? "0 0.15em" : undefined,
+      borderRadius: texto.fundo ? "0.1em" : undefined,
+    } satisfies React.CSSProperties,
   };
 }
 
@@ -185,6 +204,150 @@ export function TextoView({
       </div>
     </div>
   );
+}
+
+// --- forma ------------------------------------------------------------------
+
+/**
+ * Onde a caixa de uma forma fica e para que lado ela está virada. No envelope,
+ * como no texto: é a caixa inteira que gira.
+ *
+ * `NewForma` e não `Forma`: desenhar não precisa do id, e é isso que deixa a
+ * PRÉVIA -- a forma ainda em arrasto, que ainda não entrou na cena -- passar
+ * pelo mesmo caminho do desenho de verdade. Ver `FormaFantasma`.
+ */
+export function caixaDaForma(forma: NewForma): React.CSSProperties {
+  return {
+    left: forma.x,
+    top: forma.y,
+    width: forma.width,
+    height: forma.height,
+    ...(forma.rotation
+      ? { transform: `rotate(${forma.rotation}deg)`, transformOrigin: "50% 50%" }
+      : undefined),
+  };
+}
+
+/** Folga do alvo invisível da forma, em pixels de tela. A mesma da borracha. */
+const ALVO_DA_FORMA_PX = 10;
+
+/**
+ * Uma forma do quadro -- retângulo, elipse ou linha --, desenhada dentro da
+ * caixa que o envelope já posicionou.
+ *
+ * SVG e não `<div>` com `border`, apesar de retângulo e elipse caberem num
+ * `border-radius`: é o SVG que sabe dizer "o clique só conta no TRAÇO"
+ * (`pointer-events`), e sem isso um retângulo vazado em volta de três postits
+ * engoliria todo clique nos três. Vazada pega na linha; com fundo, pega no
+ * meio também -- que é o que o desenho promete em cada caso.
+ *
+ * O traço fica DENTRO da caixa (meia espessura de recuo em cada lado), para o
+ * gizmo cercar o que se vê e não sobrar meia linha para fora dele.
+ */
+export function FormaView({
+  forma,
+  /** No palco do mestre: acrescenta o traço invisível que recebe o clique. */
+  interativa = false,
+}: {
+  /** Sem id, pela mesma razão de `caixaDaForma`. */
+  forma: NewForma;
+  interativa?: boolean;
+}) {
+  const { scale } = useSceneScale();
+  const { width, height, espessura, cor, fundo } = forma;
+  // Um alvo de traço fino é impossível de acertar: o invisível tem pelo menos
+  // a folga da borracha, em pixel de tela, como o resto da mira do palco.
+  const alvo = Math.max(espessura, scale > 0 ? ALVO_DA_FORMA_PX / scale : espessura);
+  const recuo = Math.min(espessura / 2, width / 2, height / 2);
+
+  const traco = {
+    fill: fundo ?? "none",
+    // `currentColor` e não uma cor fixa: sem escolha, a forma é da cor da
+    // letra do tema -- ver `Forma`. Quem herda é o envelope, que carrega
+    // `text-foreground` nos dois lados.
+    stroke: cor ?? "currentColor",
+    strokeWidth: espessura,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  } as const;
+
+  const mira = {
+    fill: fundo ? "transparent" : "none",
+    stroke: "transparent",
+    strokeWidth: alvo,
+    // Vazada, só a linha pega; com fundo, o meio também. É a regra do
+    // Excalidraw, e é a que não rouba clique do que está por baixo.
+    //
+    // No ELEMENTO e não no envelope: `pointer-events` é herdado, e um `<div>`
+    // do tamanho da caixa com o ponteiro ligado capturaria o clique no vazio
+    // do meio antes de o SVG ter chance de recusá-lo. Ver `FormaLayer`.
+    pointerEvents: (fundo ? "all" : "stroke") as "all" | "stroke",
+    cursor: "move",
+  } as const;
+
+  const desenho = (pintura: typeof traco | typeof mira) => {
+    if (forma.tipo === "linha") {
+      const sobe = forma.diagonal === "secundaria";
+      return (
+        <line
+          x1={0}
+          y1={sobe ? height : 0}
+          x2={width}
+          y2={sobe ? 0 : height}
+          {...pintura}
+          fill="none"
+        />
+      );
+    }
+
+    if (forma.tipo === "elipse")
+      return (
+        <ellipse
+          cx={width / 2}
+          cy={height / 2}
+          rx={Math.max(0, width / 2 - recuo)}
+          ry={Math.max(0, height / 2 - recuo)}
+          {...pintura}
+        />
+      );
+
+    return (
+      <rect
+        x={recuo}
+        y={recuo}
+        width={Math.max(0, width - recuo * 2)}
+        height={Math.max(0, height - recuo * 2)}
+        {...pintura}
+      />
+    );
+  };
+
+  return (
+    <svg
+      aria-hidden
+      className="absolute inset-0 overflow-visible"
+      width={width}
+      height={height}
+      // Desligado no todo e religado só na mira: o retângulo do SVG é a caixa
+      // inteira, e ela não é a figura.
+      style={{ pointerEvents: "none" }}
+    >
+      {desenho(traco)}
+      {interativa ? desenho(mira) : null}
+    </svg>
+  );
+}
+
+function FormasDaMesa({ scene }: { scene: Scene }) {
+  return (scene.formas ?? []).map((forma) => (
+    <div
+      key={forma.id}
+      className="text-foreground pointer-events-none absolute"
+      style={{ ...caixaDaForma(forma), zIndex: FORMA_Z }}
+    >
+      <FormaView forma={forma} />
+    </div>
+  ));
 }
 
 function TextosDaMesa({ scene }: { scene: Scene }) {
@@ -237,7 +400,18 @@ export function PontaDeSeta({
   );
 }
 
-/** A linha de uma seta pronta, com o rótulo no meio. */
+/**
+ * A curva de uma seta pronta, com o rótulo no meio dela.
+ *
+ * Um `<path>` e não uma `<line>`: a seta sai perpendicular à borda em que está
+ * presa e chega perpendicular à outra, e pode ter sido dobrada à mão. Ver
+ * `tracadoDe`. A ponta continua sendo um `<marker>` com `orient="auto"`, que
+ * num caminho se vira sozinho pela tangente do fim -- é de graça.
+ *
+ * O rótulo vai no meio da CURVA, e não no meio da reta entre as pontas: numa
+ * seta dobrada os dois são lugares bem diferentes, e o de fora ficaria
+ * boiando ao lado dela.
+ */
 export function SetaSvg({
   seta,
   escala,
@@ -252,16 +426,14 @@ export function SetaSvg({
   className: string;
   rotulo?: boolean;
 }) {
-  const { a, b, ligacao } = seta;
-  const meio = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const { ligacao } = seta;
+  const meio = pontoNaSeta(seta, 0.5);
 
   return (
     <>
-      <line
-        x1={a.x}
-        y1={a.y}
-        x2={b.x}
-        y2={b.y}
+      <path
+        d={caminhoDaSeta(seta)}
+        fill="none"
         className={className}
         strokeWidth={SETA_TRACO_PX / escala}
         strokeLinecap="round"
@@ -389,6 +561,9 @@ function DocumentoDaMesa({ documento }: { documento: Documento }) {
 export function QuadroMesaLayer({ scene }: { scene: Scene }) {
   return (
     <>
+      {/* Antes do texto e do postit: a forma é o que CERCA, e cercar por cima
+          taparia justamente o que ela aponta. */}
+      <FormasDaMesa scene={scene} />
       <TextosDaMesa scene={scene} />
       {(scene.postits ?? []).map((postit) => (
         <PostitDaMesa key={postit.id} postit={postit} />

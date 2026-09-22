@@ -43,6 +43,7 @@ import {
 import { normaliza } from "@/lib/search";
 import { POSTIT_Z, usePostitStore } from "@/lib/store/use-postit-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
   CORES_POSTIT,
@@ -212,6 +213,7 @@ function PostitPapel({
   onRemove: () => void;
 }) {
   const { scale, ampliacaoNoLayout } = useSceneScale();
+  const tool = useToolStore((state) => state.tool);
 
   /**
    * O corpo do papel medido em PIXEL DE TELA enquanto o plano amplia por `zoom`.
@@ -496,7 +498,16 @@ function PostitPapel({
         // para não cobrir o mapa, que agora mora num plano abaixo -- ver
         // `plano-de-controles` no `SceneStage`. O papel é pegável, então ele
         // liga de volta.
-        "pointer-events-auto absolute flex flex-col overflow-hidden rounded-[3px] shadow-lg ring-1",
+        "absolute flex flex-col overflow-hidden rounded-[3px] shadow-lg ring-1",
+        // Com a seta na mão o ponteiro é DESLIGADO aqui, e não apenas
+        // ignorado: o clique precisa ATRAVESSAR até o envelope do palco, que
+        // vive no plano de baixo e é quem trata o gesto da seta. Um tratador
+        // que só retornava deixava o pointerdown morrer neste `<div>` -- e a
+        // seta não começava em cima de um postit, de um texto nem de um
+        // cartão, que é justamente onde ela quer começar.
+        tool === "ligacao"
+          ? "pointer-events-none cursor-crosshair"
+          : "pointer-events-auto",
         PAPEL[postit.cor],
         editando && "ring-2 ring-offset-1",
       )}

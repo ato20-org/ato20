@@ -1,8 +1,17 @@
-import type { Bounds } from "@/lib/geometry/bounds";
+import type { Bounds, CaixaGirada } from "@/lib/geometry/bounds";
 import { itemCenter, normalizeAngle, rotateVec, type Vec } from "@/lib/geometry/transform";
 import type { CanvasItem } from "@/types/scene";
 
 export type ItemPatch = { id: string; patch: Partial<CanvasItem> };
+
+/**
+ * O que entra nas contas de grupo: id mais caixa girada.
+ *
+ * Genérico porque o grupo passou a misturar imagem e FORMA do quadro -- as duas
+ * têm `x`, `y`, `width`, `height` e `rotation`, e o que muda é só a lista da
+ * cena em que cada uma mora. O patch devolvido serve às duas.
+ */
+export type PecaDoGrupo = CaixaGirada & { id: string };
 
 /**
  * Escala uma seleção inteira de `from` para `to`.
@@ -15,7 +24,11 @@ export type ItemPatch = { id: string; patch: Partial<CanvasItem> };
  * Como tudo escala uniformemente em torno do canto de `from`, a caixa
  * envolvente do grupo escala junto — é o que faz o gizmo bater com o conteúdo.
  */
-export function scaleGroup(items: CanvasItem[], from: Bounds, to: Bounds): ItemPatch[] {
+export function scaleGroup(
+  items: PecaDoGrupo[],
+  from: Bounds,
+  to: Bounds,
+): ItemPatch[] {
   const width = from.maxX - from.minX;
   const height = from.maxY - from.minY;
   // Grupo sem área não tem como definir fator; devolver vazio é melhor que
@@ -42,7 +55,11 @@ export function scaleGroup(items: CanvasItem[], from: Bounds, to: Bounds): ItemP
  * dele aumenta no mesmo ângulo. Só orbitar deixaria as peças apontando para o
  * lado errado; só girar cada uma no lugar não moveria o grupo.
  */
-export function rotateGroup(items: CanvasItem[], center: Vec, degrees: number): ItemPatch[] {
+export function rotateGroup(
+  items: PecaDoGrupo[],
+  center: Vec,
+  degrees: number,
+): ItemPatch[] {
   return items.map((item) => {
     const own = itemCenter(item);
     const orbit = rotateVec({ x: own.x - center.x, y: own.y - center.y }, degrees);
@@ -56,6 +73,20 @@ export function rotateGroup(items: CanvasItem[], center: Vec, degrees: number): 
       },
     };
   });
+}
+
+/**
+ * Desloca um conjunto por um delta fixo -- o arrasto e as setas do teclado.
+ *
+ * Aqui e não repetido em cada chamador porque agora são duas listas de cena com
+ * a mesma geometria (imagem e forma), e o arredondamento tem de ser o mesmo nas
+ * duas: meio pixel de diferença entre o que anda junto é visível.
+ */
+export function moveGroup(pecas: PecaDoGrupo[], dx: number, dy: number): ItemPatch[] {
+  return pecas.map((peca) => ({
+    id: peca.id,
+    patch: { x: Math.round(peca.x + dx), y: Math.round(peca.y + dy) },
+  }));
 }
 
 export function boundsCenter(bounds: Bounds): Vec {

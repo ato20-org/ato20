@@ -40,12 +40,6 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
-import {
-  colarTexto,
-  copiarTexto,
-  cortarTexto,
-  duplicarTexto,
-} from "@/lib/mestre/texto-actions";
 import { selectEditingScene } from "@/lib/store/use-scene-store";
 import { executarComando } from "@/lib/extensoes/carregar";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
@@ -186,10 +180,8 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+C",
     rotulo: "Copiar",
     combina: (evento) => comando(evento) && letra(evento) === "c",
-    // Texto solto na mão ganha do item: ver `texto-actions`.
-    executar: () => {
-      if (!copiarTexto()) copySelection();
-    },
+    // Imagem e texto solto vão juntos: é uma seleção só. Ver `copySelection`.
+    executar: copySelection,
     impedirPadrao: true,
   },
   {
@@ -197,9 +189,7 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+X",
     rotulo: "Cortar",
     combina: (evento) => comando(evento) && letra(evento) === "x",
-    executar: () => {
-      if (!cortarTexto()) cutSelection();
-    },
+    executar: cutSelection,
     impedirPadrao: true,
   },
   {
@@ -211,10 +201,10 @@ export const ATALHOS_BASE: Atalho[] = [
     // tecla segue e vira o evento `paste`, que é por onde o texto do sistema
     // entra no quadro -- ver `colarTextoDoSistema` e `useMestreShortcuts`.
     executar: (evento) => {
-      const { drafts, texto } = useClipboardStore.getState();
-      if (drafts.length === 0 && !texto) return;
+      const { drafts, textos } = useClipboardStore.getState();
+      if (drafts.length === 0 && textos.length === 0) return;
       evento.preventDefault();
-      if (!colarTexto()) pasteClipboard();
+      pasteClipboard();
     },
     impedirPadrao: false,
   },
@@ -223,9 +213,7 @@ export const ATALHOS_BASE: Atalho[] = [
     tecla: "Ctrl+D",
     rotulo: "Duplicar",
     combina: (evento) => comando(evento) && letra(evento) === "d",
-    executar: () => {
-      if (!duplicarTexto()) duplicateSelection();
-    },
+    executar: duplicateSelection,
     impedirPadrao: true,
   },
 
@@ -578,16 +566,14 @@ export const ATALHOS_BASE: Atalho[] = [
       const quadro = useQuadroStore.getState();
       const cena = selectEditingScene(useSceneStore.getState());
 
-      // Seta e texto do quadro primeiro: são a seleção mais recente quando
-      // existem, porque selecionar um deles limpa o outro e nada mais.
+      // A seta do quadro primeiro: é a seleção mais recente quando existe,
+      // porque selecioná-la limpa o palco inteiro. O texto solto não aparece
+      // aqui -- ele sai junto com as imagens, em `removeSelection`.
       if (cena && quadro.ligacaoSelecionadaId) {
         useSceneStore
           .getState()
           .removeLigacao(cena.id, quadro.ligacaoSelecionadaId);
         quadro.selecionarLigacao(null);
-      } else if (cena && quadro.textoSelecionadoId && !quadro.textoEditandoId) {
-        useSceneStore.getState().removeTexto(cena.id, quadro.textoSelecionadoId);
-        quadro.selecionarTexto(null);
       } else if (selecao.selectedFogId) removeFogSelection();
       else if (selecao.selectedMedidorId) removeMedidorSelection();
       else if (selecao.selectedPortraitIds.length > 0)

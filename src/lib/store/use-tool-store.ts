@@ -4,8 +4,10 @@ import { create } from "zustand";
 
 import {
   CORES_POSTIT,
+  FORMA_ESPESSURA,
   type CorPostit,
   type FormaMedidor,
+  type TipoDeForma,
 } from "@/types/scene";
 
 /**
@@ -41,10 +43,13 @@ export type Tool =
   | "lapis"
   | "borracha"
   | "regua"
-  // As duas do QUADRO: `texto` escreve direto na folha no clique, e `ligacao`
-  // amarra duas coisas com uma seta em dois cliques -- de onde, para onde.
+  // As três do QUADRO: `texto` escreve direto na folha no clique, `ligacao`
+  // amarra duas coisas com uma seta em dois cliques -- de onde, para onde --, e
+  // `forma` desenha retângulo, elipse ou linha no arrasto, conforme
+  // `tipoDeForma`.
   | "texto"
   | "ligacao"
+  | "forma"
   // A de uma EXTENSAO, no formato `ext:{extensaoId}/{ferramentaId}`.
   //
   // Prefixo e nao um campo separado no store porque a ferramenta e UM valor em
@@ -129,6 +134,31 @@ type ToolStore = {
   formaMedidor: FormaMedidor;
   corMedidor: string;
   setMedidor: (medidor: { formaMedidor?: FormaMedidor; corMedidor?: string }) => void;
+
+  /**
+   * O tipo, a cor, a espessura e o fundo da PRÓXIMA forma do quadro.
+   *
+   * Aqui pelas mesmas razões do lápis: é preferência de quem desenha, vale para
+   * a cena seguinte, e cada forma guarda a cópia do que estava escolhido quando
+   * nasceu. As cores são as do lápis -- é o mesmo gesto de marcar, e duas
+   * paletas diferentes para a mesma folha seriam duas linguagens.
+   *
+   * Sem fundo por padrão: uma caixa cheia sobre o quadro esconderia o que está
+   * atrás dela, e o uso normal é CERCAR. Ver `Forma`.
+   */
+  tipoDeForma: TipoDeForma;
+  /** Ausente = a cor do tema. Ver `Forma`. */
+  corForma?: string;
+  espessuraForma: number;
+  fundoForma?: string;
+  setForma: (forma: {
+    tipoDeForma?: TipoDeForma;
+    /** `null` volta à cor do tema, como `fundoForma` volta ao vazado. */
+    corForma?: string | null;
+    espessuraForma?: number;
+    /** `null` tira o fundo -- `undefined` deixaria o valor como está. */
+    fundoForma?: string | null;
+  }) => void;
 };
 
 export const useToolStore = create<ToolStore>((set) => ({
@@ -145,4 +175,15 @@ export const useToolStore = create<ToolStore>((set) => ({
   formaMedidor: "linha",
   corMedidor: CORES_LAPIS[5],
   setMedidor: (medidor) => set(medidor),
+
+  tipoDeForma: "retangulo",
+  corForma: undefined,
+  espessuraForma: FORMA_ESPESSURA,
+  fundoForma: undefined,
+  setForma: ({ corForma, fundoForma, ...resto }) =>
+    set({
+      ...resto,
+      ...(corForma !== undefined ? { corForma: corForma ?? undefined } : {}),
+      ...(fundoForma !== undefined ? { fundoForma: fundoForma ?? undefined } : {}),
+    }),
 }));

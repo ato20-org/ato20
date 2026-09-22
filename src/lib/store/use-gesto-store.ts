@@ -3,7 +3,12 @@
 import { create } from "zustand";
 
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
-import { useSceneStore, type ItemPatch } from "@/lib/store/use-scene-store";
+import {
+  useSceneStore,
+  type FormaPatch,
+  type ItemPatch,
+  type TextoPatch,
+} from "@/lib/store/use-scene-store";
 import { gravarCameraManual } from "@/lib/mestre/camera-actions";
 import type { Scene, Viewport } from "@/types/scene";
 
@@ -12,10 +17,30 @@ type GestoStore = {
   sceneId: string | null;
   /** O que o gesto já fez com cada item, por cima do board. */
   patches: ItemPatch[] | null;
+  /**
+   * O mesmo para os textos soltos que vieram junto na seleção.
+   *
+   * Lista à parte e não misturada aos itens porque são duas listas na cena, e
+   * o texto escala pela FONTE e não por largura e altura -- ver
+   * `grupo-de-textos`. Anda pelo mesmo caminho pela mesma razão: arrastar uma
+   * frase gravava o board a cada quadro, com cópia, passo de histórico e o
+   * `MestreShell` inteiro re-renderizado atrás.
+   */
+  textos: TextoPatch[] | null;
+  /**
+   * E as formas do quadro. Lista própria pela mesma razão: outra lista na cena.
+   * A geometria é a do item, então o patch é o mesmo -- ver `Forma`.
+   */
+  formas: FormaPatch[] | null;
   /** A moldura da câmera sendo arrastada, com o recorte que ela já tem. */
   camera: { cameraId: string; viewport: Viewport } | null;
 
-  mover: (sceneId: string, patches: ItemPatch[]) => void;
+  mover: (
+    sceneId: string,
+    patches: ItemPatch[],
+    textos: TextoPatch[],
+    formas: FormaPatch[],
+  ) => void;
   moverCamera: (sceneId: string, cameraId: string, viewport: Viewport) => void;
   terminar: () => void;
 };
@@ -48,12 +73,30 @@ type GestoStore = {
 export const useGestoStore = create<GestoStore>((set) => ({
   sceneId: null,
   patches: null,
+  textos: null,
+  formas: null,
   camera: null,
 
-  mover: (sceneId, patches) => set({ sceneId, patches }),
+  // Lista vazia vira `null`: um gesto só de texto não tem por que devolver uma
+  // lista de itens nova a cada quadro, e é a identidade dela que faz os
+  // quarenta tokens do mapa ficarem parados. Ver `aplicarGesto`.
+  mover: (sceneId, patches, textos, formas) =>
+    set({
+      sceneId,
+      patches: patches.length > 0 ? patches : null,
+      textos: textos.length > 0 ? textos : null,
+      formas: formas.length > 0 ? formas : null,
+    }),
   moverCamera: (sceneId, cameraId, viewport) =>
     set({ sceneId, camera: { cameraId, viewport } }),
-  terminar: () => set({ sceneId: null, patches: null, camera: null }),
+  terminar: () =>
+    set({
+      sceneId: null,
+      patches: null,
+      textos: null,
+      formas: null,
+      camera: null,
+    }),
 }));
 
 /**
@@ -66,10 +109,14 @@ export const useGestoStore = create<GestoStore>((set) => ({
  */
 export function aplicarGesto(
   scene: Scene,
-  gesto: Pick<GestoStore, "sceneId" | "patches" | "camera">,
+  gesto: Pick<
+    GestoStore,
+    "sceneId" | "patches" | "textos" | "formas" | "camera"
+  >,
 ): Scene {
   if (gesto.sceneId !== scene.id) return scene;
-  if (!gesto.patches && !gesto.camera) return scene;
+  if (!gesto.patches && !gesto.textos && !gesto.formas && !gesto.camera)
+    return scene;
 
   let vista = scene;
 
@@ -80,6 +127,28 @@ export function aplicarGesto(
       items: vista.items.map((item) => {
         const patch = porId.get(item.id);
         return patch ? { ...item, ...patch } : item;
+      }),
+    };
+  }
+
+  if (gesto.textos) {
+    const porId = new Map(gesto.textos.map(({ id, patch }) => [id, patch]));
+    vista = {
+      ...vista,
+      textos: vista.textos?.map((texto) => {
+        const patch = porId.get(texto.id);
+        return patch ? { ...texto, ...patch } : texto;
+      }),
+    };
+  }
+
+  if (gesto.formas) {
+    const porId = new Map(gesto.formas.map(({ id, patch }) => [id, patch]));
+    vista = {
+      ...vista,
+      formas: vista.formas?.map((forma) => {
+        const patch = porId.get(forma.id);
+        return patch ? { ...forma, ...patch } : forma;
       }),
     };
   }
@@ -106,10 +175,16 @@ let ultimaGravacaoAoVivo = 0;
  * Um quadro do gesto: guarda os patches, e grava no board só se a mesa está
  * vendo esta cena e já passou um intervalo do canal desde a última gravação.
  */
-export function moverNoGesto(sceneId: string, patches: ItemPatch[]): void {
-  useGestoStore.getState().mover(sceneId, patches);
+export function moverNoGesto(
+  sceneId: string,
+  patches: ItemPatch[],
+  textos: TextoPatch[] = [],
+  formas: FormaPatch[] = [],
+): void {
+  useGestoStore.getState().mover(sceneId, patches, textos, formas);
 
-  const { board, updateItems } = useSceneStore.getState();
+  const { board, updateItems, updateTextos, updateFormas } =
+    useSceneStore.getState();
   if (board?.liveSceneId !== sceneId) return;
 
   const agora = performance.now();
@@ -117,6 +192,8 @@ export function moverNoGesto(sceneId: string, patches: ItemPatch[]): void {
 
   ultimaGravacaoAoVivo = agora;
   updateItems(sceneId, patches);
+  updateTextos(sceneId, textos);
+  updateFormas(sceneId, formas);
 }
 
 /**
@@ -126,8 +203,15 @@ export function moverNoGesto(sceneId: string, patches: ItemPatch[]): void {
  * estados num render, e o palco não mostra um quadro com o item de volta ao
  * lugar de antes do gesto.
  */
-export function terminarGesto(sceneId: string, patches: ItemPatch[]): void {
+export function terminarGesto(
+  sceneId: string,
+  patches: ItemPatch[],
+  textos: TextoPatch[] = [],
+  formas: FormaPatch[] = [],
+): void {
   if (patches.length > 0) useSceneStore.getState().updateItems(sceneId, patches);
+  if (textos.length > 0) useSceneStore.getState().updateTextos(sceneId, textos);
+  if (formas.length > 0) useSceneStore.getState().updateFormas(sceneId, formas);
   useGestoStore.getState().terminar();
   ultimaGravacaoAoVivo = 0;
 }

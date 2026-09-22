@@ -1,15 +1,23 @@
 import { itemCenter, rotateVec, type ItemBox, type Vec } from "@/lib/geometry/transform";
-import type { CanvasItem } from "@/types/scene";
 
 /** Retângulo alinhado aos eixos, em coordenadas de cena. */
 export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
+
+/**
+ * Qualquer coisa com caixa e giro: o item de cena e a forma do quadro.
+ *
+ * Estrutural e não `CanvasItem`, porque a forma tem a mesma geometria e nenhum
+ * dos campos de imagem -- e é isso que a deixa passar pelas mesmas contas de
+ * seleção, gizmo e grupo.
+ */
+export type CaixaGirada = ItemBox & { rotation: number };
 
 /**
  * Caixa alinhada aos eixos que envolve o item **já rotacionado**. Usar
  * `x/y/width/height` cru daria a caixa antes do giro, e a área de seleção
  * erraria em qualquer item torto.
  */
-export function itemBounds(item: CanvasItem): Bounds {
+export function itemBounds(item: CaixaGirada): Bounds {
   const center = itemCenter(item);
   const halfWidth = item.width / 2;
   const halfHeight = item.height / 2;
@@ -53,7 +61,7 @@ export function unionBounds(list: Bounds[]): Bounds | null {
   }));
 }
 
-export function boundsOfItems(items: CanvasItem[]): Bounds | null {
+export function boundsOfItems(items: CaixaGirada[]): Bounds | null {
   return unionBounds(items.map(itemBounds));
 }
 

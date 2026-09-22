@@ -11,11 +11,26 @@ import {
 
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
+import {
+  AncorasDeSeta,
+  RAIO_DE_ENCAIXE_PX,
+} from "@/components/mestre/ancoras-de-seta";
 import { PostitFantasma } from "@/components/mestre/postit-fantasma";
 import { PostitLayer } from "@/components/mestre/postit-layer";
 import { LigacaoLayer } from "@/components/mestre/ligacao-layer";
+import {
+  FormaFantasma,
+  FormaLayer,
+} from "@/components/mestre/forma-layer";
 import { TextoLayer } from "@/components/mestre/texto-layer";
-import { pontaEm } from "@/lib/mestre/ligacoes";
+import { ancorada, caixaDoTexto, pontaEm } from "@/lib/mestre/ligacoes";
+import {
+  empurrarTextos,
+  escalarCaixa,
+  escalarTextos,
+  girarTextos,
+  girarTextosNoLugar,
+} from "@/lib/mestre/grupo-de-textos";
 import { DocumentoLayer } from "@/components/mestre/documento-layer";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
@@ -63,16 +78,17 @@ import {
 import {
   boundsFromPoints,
   boundsIntersect,
-  boundsOfItems,
   boundsToBox,
   boxBounds,
   itemBounds,
   translateBounds,
+  unionBounds,
   type Bounds,
 } from "@/lib/geometry/bounds";
 import {
   boundsCenter,
   boundsFromBox,
+  moveGroup,
   rotateGroup,
   scaleGroup,
 } from "@/lib/geometry/group";
@@ -95,14 +111,19 @@ import {
   SNAP_THRESHOLD_PX,
   type Guide,
 } from "@/lib/geometry/snap";
-import { CORNER_HANDLES, MIN_ITEM_SIZE } from "@/lib/geometry/transform";
+import { CORNER_HANDLES, MIN_ITEM_SIZE, type Vec } from "@/lib/geometry/transform";
 
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
-import { useSceneStore, type ItemPatch } from "@/lib/store/use-scene-store";
+import {
+  useSceneStore,
+  type FormaPatch,
+  type ItemPatch,
+  type TextoPatch,
+} from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
 import {
@@ -115,9 +136,13 @@ import {
   type AncoraRetrato,
   type CanvasItem,
   type FogRegion,
+  type Forma,
   type Medidor,
+  type NewForma,
+  type PontaDeLigacao,
   type Portrait,
   type Scene,
+  type Texto,
   type Traco,
 } from "@/types/scene";
 
@@ -211,18 +236,35 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   // cada quadro. Ver `useGestoStore`.
   const gestoSceneId = useGestoStore((state) => state.sceneId);
   const gestoPatches = useGestoStore((state) => state.patches);
+  const gestoTextos = useGestoStore((state) => state.textos);
+  const gestoFormas = useGestoStore((state) => state.formas);
   const gestoCamera = useGestoStore((state) => state.camera);
   const scene = useMemo(
     () =>
       aplicarGesto(cenaDoBoard, {
         sceneId: gestoSceneId,
         patches: gestoPatches,
+        textos: gestoTextos,
+        formas: gestoFormas,
         camera: gestoCamera,
       }),
-    [cenaDoBoard, gestoSceneId, gestoPatches, gestoCamera],
+    [
+      cenaDoBoard,
+      gestoSceneId,
+      gestoPatches,
+      gestoTextos,
+      gestoFormas,
+      gestoCamera,
+    ],
   );
 
   const [marquee, setMarquee] = useState<Bounds | null>(null);
+
+  /**
+   * A forma que está sendo desenhada agora, com tudo o que ela vai ter. `null`
+   * fora do gesto. Ver `FormaFantasma`.
+   */
+  const [rascunhoDaForma, setRascunhoDaForma] = useState<NewForma | null>(null);
   const [guides, setGuides] = useState<Guide[]>(NO_GUIDES);
   /**
    * Abrir a nota de um ponto.
@@ -241,6 +283,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const corPostit = useToolStore((state) => state.corPostit);
   const formaMedidor = useToolStore((state) => state.formaMedidor);
   const corMedidor = useToolStore((state) => state.corMedidor);
+  const tipoDeForma = useToolStore((state) => state.tipoDeForma);
+  const corForma = useToolStore((state) => state.corForma);
+  const espessuraForma = useToolStore((state) => state.espessuraForma);
+  const fundoForma = useToolStore((state) => state.fundoForma);
   const setTool = useToolStore((state) => state.setTool);
 
   const editarPostit = usePostitStore((state) => state.editar);
@@ -260,12 +306,23 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const bandeja = useRolagensStore((state) => state.bandeja);
 
   const selectedIds = useSelectionStore((state) => state.selectedIds);
+  const selectedTextoIds = useSelectionStore(
+    (state) => state.selectedTextoIds,
+  );
+  const selectedFormaIds = useSelectionStore(
+    (state) => state.selectedFormaIds,
+  );
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const selectedPortraitIds = useSelectionStore(
     (state) => state.selectedPortraitIds,
   );
   const select = useSelectionStore((state) => state.select);
   const toggle = useSelectionStore((state) => state.toggle);
+  const selectTextos = useSelectionStore((state) => state.selectTextos);
+  const toggleTexto = useSelectionStore((state) => state.toggleTexto);
+  const selectFormas = useSelectionStore((state) => state.selectFormas);
+  const toggleForma = useSelectionStore((state) => state.toggleForma);
+  const selectMisto = useSelectionStore((state) => state.selectMisto);
   const selectFog = useSelectionStore((state) => state.selectFog);
   const selectedMedidorId = useSelectionStore(
     (state) => state.selectedMedidorId,
@@ -286,6 +343,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const addPin = useSceneStore((state) => state.addPin);
   const addPostit = useSceneStore((state) => state.addPostit);
   const addTexto = useSceneStore((state) => state.addTexto);
+  const addForma = useSceneStore((state) => state.addForma);
   const addLigacao = useSceneStore((state) => state.addLigacao);
 
   // A seta em andamento e a seleção de texto/seta são desta cena: trocar de
@@ -379,7 +437,22 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const selectedItems = scene.items.filter((item) =>
     selectedIds.includes(item.id),
   );
-  const single = selectedItems.length === 1 ? selectedItems[0] : undefined;
+  const selectedTextos = (scene.textos ?? []).filter((texto) =>
+    selectedTextoIds.includes(texto.id),
+  );
+  const selectedFormas = (scene.formas ?? []).filter((forma) =>
+    selectedFormaIds.includes(forma.id),
+  );
+  /**
+   * Quantas coisas o palco tem na mão. Imagem, texto e forma contam igual: é o
+   * que decide entre o gizmo de UM e o gizmo do grupo, e uma frase marcada
+   * junto com um retângulo já são duas.
+   */
+  const naMao =
+    selectedItems.length + selectedTextos.length + selectedFormas.length;
+  // `undefined` quando o único selecionado é um texto: as alças dele são da
+  // própria camada, que sabe escalar fonte. Ver `TextoLayer`.
+  const single = naMao === 1 ? selectedItems[0] : undefined;
 
   /**
    * De quem é o item selecionado, quando ele é um token de personagem que
@@ -446,8 +519,21 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     bounds: Bounds;
   } | null>(null);
 
+  /**
+   * A caixa que cerca o que está na mão, quando é mais de um.
+   *
+   * Itens e textos na mesma união: a área do quadro laça os dois, e um gizmo
+   * que só cercasse as imagens deixaria metade da seleção do lado de fora das
+   * alças.
+   */
   const groupBounds =
-    selectedItems.length > 1 ? boundsOfItems(selectedItems) : null;
+    naMao > 1
+      ? unionBounds([
+          ...selectedItems.map(itemBounds),
+          ...selectedTextos.map(caixaDoTexto),
+          ...selectedFormas.map(itemBounds),
+        ])
+      : null;
 
   /**
    * Retrato do grupo no início do gesto.
@@ -456,9 +542,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * arrasto. Aplicar isso sobre os itens já transformados comporia a escala —
    * dois segundos de arrasto multiplicariam o tamanho várias vezes.
    */
-  const groupSnapshot = useRef<{ items: CanvasItem[]; bounds: Bounds } | null>(
-    null,
-  );
+  const groupSnapshot = useRef<{
+    items: CanvasItem[];
+    textos: Texto[];
+    formas: Forma[];
+    bounds: Bounds;
+  } | null>(null);
 
   // Item travado ganha contorno em vez de alças: sem gizmo não há como
   // redimensionar ou girar por acidente, mas ele fica visivelmente selecionado.
@@ -467,8 +556,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const outlineBounds =
     // Grupo ganha gizmo próprio abaixo; aqui fica só o contorno de quem não
     // pode ser transformado.
-    selectedItems.length > 1 && panMode
-      ? boundsOfItems(selectedItems)
+    groupBounds && panMode
+      ? groupBounds
       : single && (single.locked || panMode)
         ? itemBounds(single)
         : selectedFog && panMode
@@ -597,12 +686,24 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     }
 
     const draggedIds = alreadySelected ? selectedIds : alvo;
+    /**
+     * Os textos do quadro vêm junto quando o item clicado JÁ estava na mão: a
+     * área laça frase e imagem no mesmo gesto, e pegar uma tem de levar as
+     * duas. Clicar numa imagem de fora da seleção é um gesto novo -- aí
+     * `select` já limpou os textos, e não há passageiro.
+     */
+    const textosArrastados = alreadySelected ? selectedTextos : [];
+    const formasArrastadas = alreadySelected ? selectedFormas : [];
     if (!alreadySelected) select(alvo);
 
     const moving = scene.items.filter(
       (candidate) => draggedIds.includes(candidate.id) && !candidate.locked,
     );
-    const movingBounds = boundsOfItems(moving);
+    const movingBounds = unionBounds([
+      ...moving.map(itemBounds),
+      ...textosArrastados.map(caixaDoTexto),
+      ...formasArrastadas.map(itemBounds),
+    ]);
     if (!movingBounds) return;
 
     /**
@@ -611,6 +712,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
      * e não do de quando a mão pegou -- senão cada empurrão desfaria a roda.
      */
     let origins: CanvasItem[] = moving.map((item) => ({ ...item }));
+    let origensDeTexto: Texto[] = textosArrastados.map((texto) => ({
+      ...texto,
+    }));
+    let origensDeForma: Forma[] = formasArrastadas.map((forma) => ({
+      ...forma,
+    }));
     const bounds = { ...movingBounds };
     let ultimo = { dx: 0, dy: 0 };
 
@@ -626,8 +733,30 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         },
       }));
 
+    const patchesDeTexto = (): TextoPatch[] =>
+      empurrarTextos(origensDeTexto, ultimo.dx, ultimo.dy);
+    // Como o item, e não pelo `moveGroup`: a roda muda tamanho e ângulo no
+    // meio do arrasto, e um patch só de posição desfaria a roda ao soltar.
+    const patchesDeForma = (): FormaPatch[] =>
+      origensDeForma.map((origem) => ({
+        id: origem.id,
+        patch: {
+          x: Math.round(origem.x + ultimo.dx),
+          y: Math.round(origem.y + ultimo.dy),
+          width: origem.width,
+          height: origem.height,
+          rotation: origem.rotation,
+        },
+      }));
+
     // No gesto, e não no board: o board só recebe no soltar. Ver `useGestoStore`.
-    const aplicar = () => moverNoGesto(scene.id, patchesDoGesto());
+    const aplicar = () =>
+      moverNoGesto(
+        scene.id,
+        patchesDoGesto(),
+        patchesDeTexto(),
+        patchesDeForma(),
+      );
 
     /**
      * A roda, com o item na mão: tamanho, e com Shift o ângulo. Na captura e
@@ -646,25 +775,57 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       if (delta === 0) return;
       const sinal = delta < 0 ? 1 : -1;
 
+      const centro = {
+        x: (bounds.minX + bounds.maxX) / 2,
+        y: (bounds.minY + bounds.maxY) / 2,
+      };
+      const fator = sinal > 0 ? PASSO_DE_TAMANHO : 1 / PASSO_DE_TAMANHO;
+
+      // A forma entra na MESMA conta do item: ela tem a geometria dele, e é
+      // por isso que `girarPatches` e `escalarPatches` servem às duas.
       const patches = native.shiftKey
-        ? girarPatches(origins, sinal * PASSO_DE_GIRO)
-        : escalarPatches(
-            origins,
-            sinal > 0 ? PASSO_DE_TAMANHO : 1 / PASSO_DE_TAMANHO,
-            {
-              x: (bounds.minX + bounds.maxX) / 2,
-              y: (bounds.minY + bounds.maxY) / 2,
-            },
+        ? girarPatches([...origins, ...origensDeForma], sinal * PASSO_DE_GIRO)
+        : escalarPatches([...origins, ...origensDeForma], fator, centro);
+      // Nada cabe no passo? Nada anda, nem o texto: encolher metade do que
+      // está na mão desalinharia o que o mestre acabou de alinhar. Ver
+      // `escalarPatches`.
+      if (origins.length + origensDeForma.length > 0 && patches.length === 0)
+        return;
+
+      const patchesDeTextoDaRoda = native.shiftKey
+        ? girarTextosNoLugar(origensDeTexto, sinal * PASSO_DE_GIRO)
+        : escalarTextos(
+            origensDeTexto,
+            bounds,
+            escalarCaixa(bounds, fator, centro),
           );
-      if (patches.length === 0) return;
+      if (patches.length === 0 && patchesDeTextoDaRoda.length === 0) return;
 
       const porId = new Map(patches.map(({ id, patch }) => [id, patch]));
       origins = origins.map((origin) => ({
         ...origin,
         ...porId.get(origin.id),
       }));
+      origensDeForma = origensDeForma.map((origem) => ({
+        ...origem,
+        ...porId.get(origem.id),
+      }));
+      const textoPorId = new Map(
+        patchesDeTextoDaRoda.map(({ id, patch }) => [id, patch]),
+      );
+      origensDeTexto = origensDeTexto.map((origem) => ({
+        ...origem,
+        ...textoPorId.get(origem.id),
+      }));
       // O centro do próximo entalhe é o da caixa que acabou de crescer.
-      Object.assign(bounds, boundsOfItems(origins) ?? bounds);
+      Object.assign(
+        bounds,
+        unionBounds([
+          ...origins.map(itemBounds),
+          ...origensDeTexto.map(caixaDoTexto),
+          ...origensDeForma.map(itemBounds),
+        ]) ?? bounds,
+      );
       aplicar();
     };
     window.addEventListener("wheel", aoRodar, {
@@ -694,7 +855,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           window.removeEventListener("wheel", aoRodar, true);
           // Um commit, um passo de desfazer. Antes do handout: guardar na manga
           // remove o item do board, e remover o que não foi gravado não é nada.
-          terminarGesto(scene.id, patchesDoGesto());
+          terminarGesto(
+            scene.id,
+            patchesDoGesto(),
+            patchesDeTexto(),
+            patchesDeForma(),
+          );
           useHandoutStore.getState().largar();
           if (naBoca(native.clientX, native.clientY)) {
             guardarNoHandout(origins.map((origin) => origin.id));
@@ -702,6 +868,103 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         },
       },
     );
+  }
+
+  /**
+   * Clique num texto solto do quadro. Irmão de `handleItemPointerDown`, e aqui
+   * pelo mesmo motivo: o gesto é da SELEÇÃO, e só o palco sabe o que MAIS está
+   * na mão -- a camada do texto conhece um texto de cada vez.
+   *
+   * Shift soma, como no item. Sem Shift, um texto que já estava marcado leva o
+   * bando inteiro junto; um texto de fora começa uma seleção nova.
+   */
+  function handleTextoPointerDown(event: ReactPointerEvent, texto: Texto) {
+    const jaSelecionado = selectedTextoIds.includes(texto.id);
+
+    if (event.button === 2) {
+      // Como no item: o botão direito aponta para este texto, mas não desfaz
+      // uma seleção múltipla que já o inclua.
+      if (!jaSelecionado) selectTextos([texto.id]);
+      return;
+    }
+
+    if (event.button !== 0) return;
+
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      toggleTexto(texto.id);
+      return;
+    }
+
+    if (!jaSelecionado) selectTextos([texto.id]);
+
+    arrastarBando(event, {
+      itens: jaSelecionado ? selectedItems.filter((item) => !item.locked) : [],
+      textos: jaSelecionado ? selectedTextos : [texto],
+      formas: jaSelecionado ? selectedFormas : [],
+    });
+  }
+
+  /**
+   * Clique numa forma do quadro. O mesmo desenho do texto: Shift soma, uma
+   * forma já marcada leva o bando junto, uma de fora começa seleção nova.
+   */
+  function handleFormaPointerDown(event: ReactPointerEvent, forma: Forma) {
+    const jaSelecionada = selectedFormaIds.includes(forma.id);
+
+    if (event.button === 2) {
+      if (!jaSelecionada) selectFormas([forma.id]);
+      return;
+    }
+
+    if (event.button !== 0) return;
+
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      toggleForma(forma.id);
+      return;
+    }
+
+    if (!jaSelecionada) selectFormas([forma.id]);
+
+    arrastarBando(event, {
+      itens: jaSelecionada ? selectedItems.filter((item) => !item.locked) : [],
+      textos: jaSelecionada ? selectedTextos : [],
+      formas: jaSelecionada ? selectedFormas : [forma],
+    });
+  }
+
+  /**
+   * Arrastar o que está na mão, a partir de um texto ou de uma forma.
+   *
+   * Sem roda e sem a bolinha do handout, ao contrário do arrasto que começa
+   * numa imagem: os dois extras são de imagem -- redimensionar com a roda e
+   * guardar na manga --, e o gesto aqui é mover.
+   */
+  function arrastarBando(
+    event: ReactPointerEvent,
+    bando: { itens: CanvasItem[]; textos: Texto[]; formas: Forma[] },
+  ) {
+    const origensDeItem = bando.itens.map((item) => ({ ...item }));
+    const origensDeTexto = bando.textos.map((texto) => ({ ...texto }));
+    const origensDeForma = bando.formas.map((forma) => ({ ...forma }));
+    let ultimo = { dx: 0, dy: 0 };
+
+    const patches = () =>
+      [
+        moveGroup(origensDeItem, ultimo.dx, ultimo.dy),
+        empurrarTextos(origensDeTexto, ultimo.dx, ultimo.dy),
+        moveGroup(origensDeForma, ultimo.dx, ultimo.dy),
+      ] as const;
+
+    startDrag(event, {
+      // O clique nativo sobrevive: é o duplo clique que abre a edição do
+      // texto, e matá-lo aqui deixaria o texto sem como ser reescrito.
+      mantemClique: true,
+      onMove: (delta) => {
+        ultimo = { dx: delta.x, dy: delta.y };
+        moverNoGesto(scene.id, ...patches());
+      },
+      onEnd: () => terminarGesto(scene.id, ...patches()),
+    });
   }
 
   function handleFogPointerDown(event: ReactPointerEvent, region: FogRegion) {
@@ -1030,6 +1293,65 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     });
   }
 
+  /**
+   * Duplo clique no vazio do quadro escreve ali, como no Excalidraw.
+   *
+   * O caminho da ferramenta de texto continua existindo -- ela é o que ANUNCIA
+   * que dá para escrever --, e este é o atalho de quem já sabe: no meio de um
+   * quadro, a distância entre pensar a frase e ter o cursor piscando passa a
+   * ser um gesto.
+   *
+   * Só no vazio: `target === currentTarget` é o que separa o duplo clique no
+   * envelope do duplo clique numa imagem, que é filha dele. O texto e a forma
+   * têm camadas próprias, fora deste envelope, e nem chegam aqui.
+   *
+   * Só com a seleção na mão: com uma ferramenta de mira escolhida, o segundo
+   * clique é do gesto dela -- dois postits colados, dois riscos.
+   */
+  function handleCanvasDoubleClick(event: React.MouseEvent) {
+    if (tool !== "select" || event.target !== event.currentTarget) return;
+
+    const ponto = toScene(event.clientX, event.clientY);
+    // Meia linha acima do ponto: o cursor nasce onde o mouse está, e não com o
+    // topo da letra nele -- é onde a pessoa está olhando.
+    const id = addTexto(scene.id, {
+      x: Math.round(ponto.x),
+      y: Math.round(ponto.y - TEXTO_TAMANHO / 2),
+    });
+    useQuadroStore.getState().editarTexto(id);
+  }
+
+  /**
+   * Fecha a seta em curso na ponta que este ponto der: o encaixe mirado, o que
+   * houver embaixo, ou um ponto solto na folha.
+   *
+   * Recusada -- duas pontas na mesma coisa, ou seta idêntica a uma que já
+   * existe --, a ferramenta FICA na mão: nada foi colocado, e largá-la aqui
+   * puniria o mestre por um gesto que não chegou a acontecer.
+   */
+  function fecharSeta(de: PontaDeLigacao, fim: Vec) {
+    const quadro = useQuadroStore.getState();
+    quadro.largarSeta();
+
+    const para = pontaEm(scene, fim, RAIO_DE_ENCAIXE_PX / scale);
+
+    // Duas pontas soltas quase no mesmo lugar não são uma seta, são um ponto.
+    // Só quando as DUAS estão soltas: uma seta curtinha entre dois postits
+    // vizinhos é legítima, e o que se quer barrar é o clique repetido no vazio.
+    if (
+      !ancorada(de) &&
+      !ancorada(para) &&
+      Math.hypot(para.x - de.x, para.y - de.y) < ARRASTO_MINIMO_DA_SETA
+    )
+      return;
+
+    const id = addLigacao(scene.id, de, para);
+    if (!id) return;
+
+    quadro.selecionarLigacao(id);
+    setTool("select");
+  }
+
   /** Arrasto no vazio: desenha área escondida (ferramenta névoa) ou marca vários. */
   function handleCanvasPointerDown(event: ReactPointerEvent) {
     if (event.button !== 0) {
@@ -1043,14 +1365,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     // contém o ponto, para a de dentro ganhar da de fora. Só com a ferramenta
     // de seleção: com lápis ou névoa na mão o clique é um traço.
     if (tool === "select") {
-      // Clique no vazio larga também o texto e a seta selecionados, como
-      // larga os itens.
+      // Clique no vazio larga também a seta selecionada, como larga os itens.
+      // O texto sai junto com eles: agora é seleção de palco, e quem a limpa é
+      // o `clear` lá embaixo.
       const quadro = useQuadroStore.getState();
-      if (quadro.textoSelecionadoId || quadro.ligacaoSelecionadaId)
-        useQuadroStore.setState({
-          textoSelecionadoId: null,
-          ligacaoSelecionadaId: null,
-        });
+      if (quadro.ligacaoSelecionadaId)
+        useQuadroStore.setState({ ligacaoSelecionadaId: null });
 
       const dentro = (scene.cameras ?? [])
         .filter(({ viewport: v }) =>
@@ -1120,28 +1440,59 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
-    // Arrasto, como no Excalidraw: de onde o botão descer até onde soltar.
-    // Cada ponta prende-se ao que houver embaixo, ou fica solta na folha. A
-    // ferramenta FICA na mão depois da seta pronta -- amarrar cinco ideias
-    // seguidas é o gesto normal num quadro, e Esc larga. Um clique sem
-    // arrasto não cria nada: seta de comprimento zero é um ponto.
+    /**
+     * Dois gestos para a mesma seta, e o mestre não precisa escolher entre
+     * eles: ARRASTAR de um ponto até o outro faz a seta de uma vez, como
+     * sempre fez, e CLICAR num ponto a deixa pendurada no cursor até o clique
+     * da outra ponta. A única diferença entre os dois é quanto o ponteiro
+     * andou antes de soltar.
+     *
+     * O clique existe porque o arrasto não cabe no quadro. A segunda ponta
+     * costuma estar do outro lado da folha -- é isso que uma seta faz num
+     * quadro, amarrar coisas distantes --, e um arrasto de ponta a ponta obriga
+     * a atravessar a mesa com o botão preso, sem poder deslocar a cena no
+     * meio. Com a seta pendurada, o caminho até a outra ponta é livre.
+     *
+     * Cada ponta prende-se ao PONTO DE ENCAIXE mirado, ao que houver embaixo,
+     * ou fica solta na folha. É a mesma pergunta que a sombra respondeu
+     * enquanto o ponteiro andava (ver `AncorasDeSeta`), refeita aqui no ponto
+     * em que o botão desceu: as duas têm de concordar, e a única maneira de
+     * garantir isso é a conta ser a mesma.
+     *
+     * Feita a seta, a ferramenta SE LARGA, como todas as outras do palco.
+     * Ficava na mão, com o argumento de que amarrar cinco ideias seguidas é o
+     * gesto normal num quadro -- e o argumento caiu na prática: o gesto
+     * seguinte a puxar uma seta é quase sempre mexer no que ela liga, e com a
+     * ferramenta presa esse arrasto virava outra seta por cima. É a regra do
+     * Excalidraw, e agora vale para as cinco: alfinete, postit, texto, forma e
+     * seta.
+     */
     if (tool === "ligacao") {
-      const de = pontaEm(scene, anchor);
       const quadro = useQuadroStore.getState();
-      quadro.setPrevia({ de, ate: { x: anchor.x, y: anchor.y } });
+
+      // A seta já estava pendurada no cursor: este clique é o da outra ponta.
+      if (quadro.setaEmCurso) {
+        fecharSeta(quadro.setaEmCurso.de, anchor);
+        return;
+      }
+
+      const de = pontaEm(scene, anchor, RAIO_DE_ENCAIXE_PX / scale);
+      quadro.comecarSeta(de);
 
       startDrag(event, {
-        onMove: (_delta, native) =>
-          useQuadroStore
-            .getState()
-            .setPrevia({ de, ate: toScene(native.clientX, native.clientY) }),
+        // Quem desenha a seta enquanto ela procura a outra ponta é a camada
+        // das âncoras, que ouve o ponteiro no documento e escreve direto no
+        // `<line>`. Daqui só interessa onde o botão subiu.
+        onMove: () => undefined,
         onEnd: (native) => {
-          useQuadroStore.getState().setPrevia(null);
           const fim = toScene(native.clientX, native.clientY);
-          if (Math.hypot(fim.x - anchor.x, fim.y - anchor.y) < ARRASTO_MINIMO_DA_SETA)
+          // Clique, e não arrasto: a seta FICA na mão, esperando o próximo.
+          if (
+            Math.hypot(fim.x - anchor.x, fim.y - anchor.y) <
+            ARRASTO_MINIMO_DA_SETA
+          )
             return;
-          const id = addLigacao(scene.id, de, pontaEm(scene, fim));
-          if (id) useQuadroStore.getState().selecionarLigacao(id);
+          fecharSeta(de, fim);
         },
       });
       return;
@@ -1192,6 +1543,92 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           );
           // Volta ao modo normal: desenhar duas áreas seguidas é raro, e ficar
           // preso na ferramenta faz o mestre cobrir a cena por acidente.
+          setTool("select");
+        },
+      });
+
+      return;
+    }
+
+    /**
+     * A forma do quadro: arrasto de canto a canto, como a névoa -- ela tem
+     * tamanho, e pedir um clique deixaria o mestre sem dizer qual.
+     *
+     * Shift iguala os lados, e é assim que saem o quadrado e o círculo: a
+     * ferramenta oferece retângulo e elipse porque a caixa livre é o caso
+     * comum, e travar a proporção é a exceção que o teclado resolve -- mesmo
+     * gesto do Excalidraw e do Figma.
+     */
+    if (tool === "forma") {
+      const travado = (ponto: { x: number; y: number }, shift: boolean) => {
+        if (!shift) return ponto;
+        const lado = Math.max(
+          Math.abs(ponto.x - anchor.x),
+          Math.abs(ponto.y - anchor.y),
+        );
+        return {
+          x: anchor.x + Math.sign(ponto.x - anchor.x) * lado,
+          y: anchor.y + Math.sign(ponto.y - anchor.y) * lado,
+        };
+      };
+
+      /**
+       * A forma que este arrasto produz, do começo ao fim.
+       *
+       * Uma função só, e é o que garante que a PRÉVIA seja a forma: o gesto
+       * mostrava a área de seleção enquanto o botão estava preso e só montava
+       * a forma no soltar, então quem ia desenhar um círculo via um retângulo
+       * azul até o fim -- sem a cor, sem a espessura e sem saber se a linha
+       * descia ou subia. Agora as duas saem daqui.
+       */
+      const rascunho = (fim: { x: number; y: number }): NewForma => {
+        const box = boundsToBox(boundsFromPoints(anchor, fim));
+        return {
+          tipo: tipoDeForma,
+          x: Math.round(box.x),
+          y: Math.round(box.y),
+          width: Math.round(box.width),
+          height: Math.round(box.height),
+          rotation: 0,
+          cor: corForma,
+          espessura: espessuraForma,
+          fundo: fundoForma,
+          // A linha desce ou sobe conforme o arrasto: é a única coisa que a
+          // caixa sozinha não conta. Ver `Forma`.
+          ...((fim.x - anchor.x) * (fim.y - anchor.y) < 0
+            ? { diagonal: "secundaria" as const }
+            : {}),
+        };
+      };
+
+      startDrag(event, {
+        onMove: (delta, native) =>
+          setRascunhoDaForma(
+            rascunho(
+              travado(
+                { x: anchor.x + delta.x, y: anchor.y + delta.y },
+                native.shiftKey,
+              ),
+            ),
+          ),
+        onEnd: (native) => {
+          setRascunhoDaForma(null);
+
+          const fim = travado(
+            toScene(native.clientX, native.clientY),
+            native.shiftKey,
+          );
+          const forma = rascunho(fim);
+          // Pela DIAGONAL, e não pelos dois lados: uma linha horizontal tem
+          // altura zero e é uma forma legítima; o que não é forma é o clique
+          // sem arrasto.
+          if (Math.hypot(forma.width, forma.height) < MIN_ITEM_SIZE) return;
+
+          selectFormas([addForma(scene.id, forma)]);
+
+          // Volta ao modo normal, como a névoa: desenhar duas formas seguidas é
+          // raro, e ficar preso na ferramenta faz o mestre riscar o quadro por
+          // acidente ao tentar mover o que acabou de desenhar.
           setTool("select");
         },
       });
@@ -1258,6 +1695,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     // Retrato da seleção antes do arrasto: com Shift a área soma ao que já
     // estava marcado, sem Shift começa do zero.
     const baseIds = additive ? selectedIds : [];
+    const baseTextoIds = additive ? selectedTextoIds : [];
+    const baseFormaIds = additive ? selectedFormaIds : [];
     if (!additive) clear();
 
     startDrag(event, {
@@ -1274,7 +1713,24 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           )
           .map((item) => item.id);
 
-        select([...new Set([...baseIds, ...hits])]);
+        // O texto solto entra no mesmo laço: no quadro, o que está dentro da
+        // área é quase sempre letra, e uma seleção que pulasse as frases
+        // deixaria o gesto sem uso justo onde ele mais serve. A caixa é a
+        // MEDIDA, a mesma que a seta mira -- encostar já inclui.
+        const textosDentro = (scene.textos ?? [])
+          .filter((texto) => boundsIntersect(caixaDoTexto(texto), area))
+          .map((texto) => texto.id);
+
+        // E as formas, pela caixa girada delas -- a mesma conta do item.
+        const formasDentro = (scene.formas ?? [])
+          .filter((forma) => boundsIntersect(itemBounds(forma), area))
+          .map((forma) => forma.id);
+
+        selectMisto({
+          itens: [...new Set([...baseIds, ...hits])],
+          textos: [...new Set([...baseTextoIds, ...textosDentro])],
+          formas: [...new Set([...baseFormaIds, ...formasDentro])],
+        });
       },
       onEnd: () => setMarquee(null),
     });
@@ -1293,6 +1749,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     item: handleItemPointerDown,
     fog: handleFogPointerDown,
     portrait: handlePortraitPointerDown,
+    texto: handleTextoPointerDown,
+    forma: handleFormaPointerDown,
   });
 
   useEffect(() => {
@@ -1300,6 +1758,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       item: handleItemPointerDown,
       fog: handleFogPointerDown,
       portrait: handlePortraitPointerDown,
+      texto: handleTextoPointerDown,
+      forma: handleFormaPointerDown,
     };
   });
 
@@ -1320,6 +1780,23 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const onPortraitPointerDown = useCallback(
     (event: ReactPointerEvent, portrait: Portrait) => {
       handlersRef.current.portrait(event, portrait);
+    },
+    [],
+  );
+
+  // Texto e forma entram no mesmo envelope, e pelo mesmo motivo do item: as
+  // camadas deles são `memo`, e um handler novo por render anularia a memo --
+  // mexer num texto redesenharia os trinta da folha. Ver `TextoSolto`.
+  const onTextoPointerDown = useCallback(
+    (event: ReactPointerEvent, texto: Texto) => {
+      handlersRef.current.texto(event, texto);
+    },
+    [],
+  );
+
+  const onFormaPointerDown = useCallback(
+    (event: ReactPointerEvent, forma: Forma) => {
+      handlersRef.current.forma(event, forma);
     },
     [],
   );
@@ -1348,6 +1825,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         tool === "postit" ||
         tool === "texto" ||
         tool === "ligacao" ||
+        tool === "forma" ||
         tool === "lapis" ||
         tool === "borracha" ||
         tool === "regua" ||
@@ -1385,6 +1863,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
               cursor: canPan ? "grab" : aiming ? "crosshair" : undefined,
             },
             onPointerDown: panMode ? undefined : handleCanvasPointerDown,
+            onDoubleClick:
+              panMode || !ehQuadro(scene)
+                ? undefined
+                : handleCanvasDoubleClick,
             // O cursor fica no envelope e a zona o HERDA: `cursor` é herdado, e
             // é o que faz a mira da ferramenta valer também fora do plano.
             // Sem handler de arrasto nativo: as três origens de dentro do
@@ -1453,9 +1935,25 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       {/* As duas do quadro, irmãs do postit e fora do `SceneLayer` pela mesma
           razão. Cada uma devolve `null` sem conteúdo, e a de seta só ouve o
           mouse enquanto uma ponta está clicada: mapa sem nada disto não paga. */}
-      <TextoLayer scene={scene} panMode={panMode} />
+      <FormaLayer
+        scene={scene}
+        panMode={panMode}
+        onFormaPointerDown={onFormaPointerDown}
+      />
+      <TextoLayer
+        scene={scene}
+        panMode={panMode}
+        onTextoPointerDown={onTextoPointerDown}
+      />
       <DocumentoLayer scene={scene} panMode={panMode} />
       <LigacaoLayer scene={scene} />
+
+      {/* Os pontos de encaixe do que está sob o cursor e a sombra da seta em
+          curso. Irmã do fantasma do postit, e pela mesma razão só com a
+          ferramenta na mão e nunca com espaço segurado: aí o gesto é da
+          câmera, e acender quatro pontos no meio de um deslocamento seria
+          ruído. */}
+      {tool === "ligacao" && !panMode ? <AncorasDeSeta scene={scene} /> : null}
 
       {/* Fora do `SceneLayer` pela mesma razão do `PinLayer`: hoje o dado é só
           do mestre. Dentro dele, os dados apareceriam na TV — e a decisão de
@@ -1489,7 +1987,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           via QUEM estava dentro. Tracejado fino, para não brigar com o
           contorno sólido da caixa. */}
       {groupBounds
-        ? selectedItems.map((item) => {
+        ? [...selectedItems, ...selectedFormas].map((item) => {
             const caixa = itemBounds(item);
 
             return (
@@ -1522,6 +2020,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           onGestureStart={() => {
             groupSnapshot.current = {
               items: selectedItems,
+              textos: selectedTextos,
+              formas: selectedFormas,
               bounds: groupBounds,
             };
           }}
@@ -1532,35 +2032,46 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             // Girar e escalar chegam pelo mesmo callback: `rotation` só vem no
             // gesto de rotação, e a caixa só no de redimensionamento.
             if (patch.rotation !== undefined) {
+              const centro = boundsCenter(frozen.bounds);
+
               moverNoGesto(
                 scene.id,
-                rotateGroup(
-                  frozen.items,
-                  boundsCenter(frozen.bounds),
-                  patch.rotation,
-                ),
+                rotateGroup(frozen.items, centro, patch.rotation),
+                // O texto orbita o mesmo centro e vira o mesmo tanto: é o que
+                // mantém a frase legível em relação à imagem ao lado dela.
+                girarTextos(frozen.textos, centro, patch.rotation),
+                // A forma tem a geometria do item: mesma função, outra lista.
+                rotateGroup(frozen.formas, centro, patch.rotation),
               );
               return;
             }
 
             if (patch.x === undefined || patch.width === undefined) return;
 
+            const alvo = boundsFromBox({
+              x: patch.x,
+              y: patch.y ?? frozen.bounds.minY,
+              width: patch.width,
+              height: patch.height ?? 0,
+            });
+
             moverNoGesto(
               scene.id,
-              scaleGroup(
-                frozen.items,
-                frozen.bounds,
-                boundsFromBox({
-                  x: patch.x,
-                  y: patch.y ?? frozen.bounds.minY,
-                  width: patch.width,
-                  height: patch.height ?? 0,
-                }),
-              ),
+              scaleGroup(frozen.items, frozen.bounds, alvo),
+              // A fonte cresce no fator do grupo: um texto não tem largura
+              // própria, e esticá-lo seria deformar a letra. Ver
+              // `escalarTextos`.
+              escalarTextos(frozen.textos, frozen.bounds, alvo),
+              scaleGroup(frozen.formas, frozen.bounds, alvo),
             );
           }}
           onGestureEnd={() =>
-            terminarGesto(scene.id, useGestoStore.getState().patches ?? [])
+            terminarGesto(
+              scene.id,
+              useGestoStore.getState().patches ?? [],
+              useGestoStore.getState().textos ?? [],
+              useGestoStore.getState().formas ?? [],
+            )
           }
           onDelete={removeSelection}
         />
@@ -1754,6 +2265,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       ) : null}
 
       {marquee ? <MarqueeBox bounds={marquee} /> : null}
+
+      {/* A forma em arrasto, desenhada como ela vai ficar. Irmã do fantasma do
+          postit, e pela mesma razão fora do `SceneLayer`: é decisão em
+          andamento do mestre, e a TV só recebe o que foi decidido. */}
+      <FormaFantasma forma={rascunhoDaForma} />
       <AlignmentGuides guides={guides} />
 
       {fantasmasVisiveis && scene.cameras ? (
@@ -1771,7 +2287,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           camera={selecionada}
           transmitindo={scene.cameraNoArId === selecionada.id}
           cinegrafista={cinegrafista}
-          tudoEscuro={ehQuadro(scene)}
           // Com espaço segurado a moldura vira só informativa: o gesto pertence
           // ao deslocamento da cena.
           // No gesto, e não no board: a moldura anda leve e o board recebe no
