@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Package, Plus, Trash2 } from "lucide-react";
+import { ImagePlus, Package, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -123,7 +124,11 @@ export function InventarioJogador({
         open={Boolean(aberto)}
         onOpenChange={(open) => !open && setAberto(null)}
       >
-        <DialogContent className="sm:max-w-md">
+        {/* Sem o X do canto: ele é absoluto no topo do diálogo, e a primeira
+            coisa daqui é o campo de nome -- o botão caía por cima do fim do
+            campo, e mirar no fechar apagava uma letra. O fechar mora na linha
+            do nome. */}
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
           {aberto ? (
             <ItemForm
               key={aberto.id}
@@ -337,13 +342,77 @@ function ItemForm({
           : "O que o mestre pôs no inventário."}
       </DialogDescription>
 
-      {/* O quadro da imagem só aparece quando HÁ imagem. Vazio, ele era um
-          retângulo cinza de 80px ao lado do nome, empurrando o campo para uma
-          faixa estreita e dizendo nada — o item sem foto é a maioria, e a foto
-          se põe pelo botão lá embaixo. */}
+      {/* `capture` ausente de propósito: o jogador tanto tira a foto na hora
+          quanto escolhe uma que já está no rolo, e forçar a câmera tiraria
+          metade dos casos. */}
+      {meu ? (
+        <input
+          ref={entrada}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(event) => void enviarFoto(event.target.files?.[0])}
+        />
+      ) : null}
+
       <div className="flex gap-3">
-        {atual.imagem ? (
-          <div className="bg-muted relative size-20 shrink-0 overflow-hidden rounded border">
+        {/* O quadro É o botão da foto — o mesmo gesto que a janela do mestre.
+            Vazio ele diz o gesto com todas as letras: "+" sobre a foto e a
+            palavra embaixo. No dedo não há hover para descobrir isso depois, e
+            um quadrado tracejado mudo seria decoração. No item do mestre
+            continua só moldura, e só quando há o que mostrar. */}
+        {meu ? (
+          <button
+            type="button"
+            onClick={() => entrada.current?.click()}
+            disabled={enviando}
+            aria-label={
+              atual.imagem
+                ? "Trocar a foto do item"
+                : "Escolher a foto do item"
+            }
+            className={cn(
+              "relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded border disabled:opacity-60",
+              atual.imagem
+                ? "bg-muted"
+                : "text-muted-foreground border-dashed",
+            )}
+          >
+            {atual.imagem ? (
+              <>
+                <ImagemDoItem
+                  key={chaveDaImagem(atual.imagem)}
+                  codigo={codigo}
+                  personagemId={personagemId}
+                  imagem={atual.imagem}
+                  alt={atual.nome}
+                />
+
+                {/* Sempre visível, e não no hover: o dedo não paira. É uma
+                    pastilha no canto para não cobrir a foto que o jogador
+                    acabou de mandar. */}
+                <span className="bg-background/80 absolute right-0.5 bottom-0.5 flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] leading-none font-medium">
+                  <ImagePlus className="size-2.5" aria-hidden />
+                  Trocar
+                </span>
+              </>
+            ) : (
+              <span className="flex flex-col items-center gap-1">
+                <ImagePlus className="size-5" aria-hidden />
+                <span className="text-[10px] leading-none font-medium">
+                  Pôr foto
+                </span>
+              </span>
+            )}
+
+            {enviando ? (
+              <span className="bg-background/70 absolute inset-0 flex items-center justify-center text-[10px]">
+                Enviando…
+              </span>
+            ) : null}
+          </button>
+        ) : atual.imagem ? (
+          <div className="bg-muted relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded border">
             <ImagemDoItem
               key={chaveDaImagem(atual.imagem)}
               codigo={codigo}
@@ -355,19 +424,31 @@ function ItemForm({
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col gap-3">
-          {/* `pr-8` na primeira linha: o X de fechar do diálogo é absoluto no
-              canto, e sem a folga ele ficava POR CIMA do fim do campo de nome —
-              mirar no fechar apagava uma letra. */}
-          {meu ? (
-            <Input
-              defaultValue={atual.nome}
-              aria-label="Nome do item"
-              className="pr-8"
-              onBlur={(event) => void salvar({ nome: event.target.value })}
-            />
-          ) : (
-            <p className="pr-8 text-sm font-medium">{atual.nome}</p>
-          )}
+          <div className="flex items-center gap-1">
+            {meu ? (
+              <Input
+                defaultValue={atual.nome}
+                aria-label="Nome do item"
+                className="flex-1"
+                onBlur={(event) => void salvar({ nome: event.target.value })}
+              />
+            ) : (
+              <p className="flex-1 text-sm font-medium">{atual.nome}</p>
+            )}
+
+            <DialogClose
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Fechar"
+                  className="shrink-0"
+                />
+              }
+            >
+              <X />
+            </DialogClose>
+          </div>
 
           <div className="flex items-center gap-2">
             <Label htmlFor={`qtd-${item.id}`} className="text-xs">
@@ -407,28 +488,7 @@ function ItemForm({
       ) : null}
 
       {meu ? (
-        <DialogFooter className="sm:justify-between">
-          {/* `capture` ausente de propósito: o jogador tanto tira a foto na
-              hora quanto escolhe uma que já está no rolo, e forçar a câmera
-              tiraria metade dos casos. */}
-          <input
-            ref={entrada}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(event) => void enviarFoto(event.target.files?.[0])}
-          />
-
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={enviando}
-            onClick={() => entrada.current?.click()}
-          >
-            <Camera />{" "}
-            {enviando ? "Enviando…" : atual.imagem ? "Trocar foto" : "Foto"}
-          </Button>
-
+        <DialogFooter className="sm:justify-end">
           <Button
             variant="ghost"
             size="sm"
