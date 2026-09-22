@@ -338,7 +338,15 @@ export function FormaView({
   );
 }
 
-function FormasDaMesa({ scene }: { scene: Scene }) {
+/**
+ * As formas da cena, só para ler.
+ *
+ * Exportada porque ela não é mais só do quadro: num MAPA, o `SceneLayer` monta
+ * esta camada e a da letra e mais nenhuma das outras -- postit, cartão e
+ * alfinete continuam sendo anotação que a mesa nunca vê. O que chega aqui num
+ * mapa já veio filtrado por `naMesa`; esta camada desenha o que recebeu.
+ */
+export function FormasDaMesa({ scene }: { scene: Scene }) {
   return (scene.formas ?? []).map((forma) => (
     <div
       key={forma.id}
@@ -350,7 +358,9 @@ function FormasDaMesa({ scene }: { scene: Scene }) {
   ));
 }
 
-function TextosDaMesa({ scene }: { scene: Scene }) {
+/** A letra solta da cena, só para ler. Irmã de `FormasDaMesa`, e exportada
+ * pela mesma razão. */
+export function TextosDaMesa({ scene }: { scene: Scene }) {
   return (scene.textos ?? []).map((texto) => (
     <div
       key={texto.id}

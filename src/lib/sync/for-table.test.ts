@@ -57,6 +57,77 @@ describe("sceneForTable", () => {
     expect(sceneForTable(scene)).toBe(sceneForTable(scene));
   });
 
+  it("num mapa, a letra e a forma fechadas não chegam à mesa", () => {
+    const scene = createScene("Porão");
+    scene.textos = [{ id: "t", x: 0, y: 0, texto: "aqui dorme o dragão", tamanho: 40 }];
+    scene.formas = [
+      { id: "f", tipo: "elipse", x: 0, y: 0, width: 10, height: 10, rotation: 0, espessura: 6 },
+    ];
+
+    const mesa = sceneForTable(scene)!;
+    expect(mesa.textos).toBeUndefined();
+    expect(mesa.formas).toBeUndefined();
+  });
+
+  it("num mapa, sobem só as que o mestre abriu", () => {
+    const scene = createScene("Porão");
+    scene.textos = [
+      { id: "aberto", x: 0, y: 0, texto: "Taverna", tamanho: 40, naMesa: true },
+      { id: "fechado", x: 0, y: 0, texto: "o taverneiro mente", tamanho: 40 },
+    ];
+    scene.formas = [
+      {
+        id: "aberta",
+        tipo: "elipse",
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        rotation: 0,
+        espessura: 6,
+        naMesa: true,
+      },
+      {
+        id: "fechada",
+        tipo: "retangulo",
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        rotation: 0,
+        espessura: 6,
+      },
+    ];
+
+    const mesa = sceneForTable(scene)!;
+    expect(mesa.textos?.map((texto) => texto.id)).toEqual(["aberto"]);
+    expect(mesa.formas?.map((forma) => forma.id)).toEqual(["aberta"]);
+  });
+
+  it("uma cena de mapa com formas não devolve a mesma referência", () => {
+    // O guarda de identidade tem de cobrir todo campo mexido: sem `formas`
+    // nele, uma cena que só tem formas voltaria inteira -- as fechadas junto.
+    const scene = createScene("");
+    scene.formas = [
+      { id: "f", tipo: "linha", x: 0, y: 0, width: 10, height: 10, rotation: 0, espessura: 6 },
+    ];
+
+    expect(sceneForTable(scene)).not.toBe(scene);
+    expect(sceneForTable(scene)!.formas).toBeUndefined();
+  });
+
+  it("no quadro a letra e a forma passam sem precisar de olho nenhum", () => {
+    const scene = createScene("Rede", "quadro");
+    scene.textos = [{ id: "t", x: 0, y: 0, texto: "Edgar", tamanho: 40 }];
+    scene.formas = [
+      { id: "f", tipo: "retangulo", x: 0, y: 0, width: 10, height: 10, rotation: 0, espessura: 6 },
+    ];
+
+    const mesa = sceneForTable(scene)!;
+    expect(mesa.textos).toHaveLength(1);
+    expect(mesa.formas).toHaveLength(1);
+  });
+
   it("deixa o quadro passar inteiro: postit, texto e seta são o conteúdo dele", () => {
     const scene = createScene("Rede de PNJs", "quadro");
     scene.postits = [

@@ -24,11 +24,19 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
-import type { Scene, Texto } from "@/types/scene";
+import { ehQuadro, type Scene, type Texto } from "@/types/scene";
+
+/** Quanto a letra se apaga enquanto a mesa não a vê. A mesma da forma. */
+const APAGADA = 0.45;
 
 /**
- * Os textos soltos do quadro. Irmã do `PostitLayer`, e fora do `SceneLayer`
- * pela mesma razão: é anotação do mestre até a cena ir ao ar como quadro.
+ * Os textos soltos da cena. Irmã do `PostitLayer`, e fora do `SceneLayer` pela
+ * mesma razão: aqui eles recebem clique, arrasto, edição e alças.
+ *
+ * Vale nos DOIS tipos de cena. No quadro a folha inteira vai para a mesa; num
+ * mapa cada letra nasce fechada e o mestre a abre no olho do gizmo -- ver
+ * `naMesa`. É o que faz um rótulo em cima da cidade ser possível sem entregar
+ * junto a anotação da linha de baixo.
  *
  * Bem mais simples que o postit de propósito: sem menção, sem cor, sem alça
  * de tamanho. Um texto é letra na folha -- duplo clique escreve, arrasto
@@ -59,6 +67,7 @@ export function TextoLayer({
       key={texto.id}
       sceneId={scene.id}
       texto={texto}
+      mapa={!ehQuadro(scene)}
       panMode={panMode}
       onTextoPointerDown={onTextoPointerDown}
     />
@@ -78,11 +87,14 @@ export function TextoLayer({
 const TextoSolto = memo(function TextoSolto({
   sceneId,
   texto,
+  mapa,
   panMode,
   onTextoPointerDown,
 }: {
   sceneId: string;
   texto: Texto;
+  /** Cena de mapa: a letra tem olho, e nasce fechada. Ver `naMesa`. */
+  mapa: boolean;
   panMode: boolean;
   onTextoPointerDown: (event: React.PointerEvent, texto: Texto) => void;
 }) {
@@ -257,6 +269,9 @@ const TextoSolto = memo(function TextoSolto({
         zIndex: TEXTO_Z,
         touchAction: "none",
         ...giroDoTexto(texto),
+        // Apagada enquanto a mesa não a vê, como a forma. Nunca em EDIÇÃO: quem
+        // está escrevendo precisa ler o que escreve.
+        ...(mapa && !texto.naMesa && !editando ? { opacity: APAGADA } : {}),
       }}
       onPointerDown={arrastar}
       onDoubleClick={(event) => {
@@ -373,6 +388,18 @@ const TextoSolto = memo(function TextoSolto({
           }}
           onGestureEnd={() =>
             terminarGesto(sceneId, [], useGestoStore.getState().textos ?? [])
+          }
+          // Só no mapa, como na forma: no quadro a folha inteira já vai.
+          mesa={
+            mapa
+              ? {
+                  naMesa: !!texto.naMesa,
+                  onToggle: () =>
+                    updateTexto(sceneId, texto.id, {
+                      naMesa: texto.naMesa ? undefined : true,
+                    }),
+                }
+              : undefined
           }
           onDelete={() => removeTexto(sceneId, texto.id)}
         />
