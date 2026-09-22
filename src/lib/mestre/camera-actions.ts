@@ -13,7 +13,7 @@ import {
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import type { CameraSalva, Scene, Viewport } from "@/types/scene";
+import { ehQuadro, type CameraSalva, type Scene, type Viewport } from "@/types/scene";
 
 /**
  * De quanto a câmera anda por toque de seta, como fração da própria largura.
@@ -50,8 +50,22 @@ const MARGEM_SELECAO = 0.35;
  * Todas leem o estado via `getState()` na hora, para o listener de atalhos
  * poder ser montado uma vez e nunca mais.
  */
+/**
+ * A cena em que a câmera age -- e `null` no QUADRO.
+ *
+ * O quadro não tem câmera. Ele é a folha de trabalho do mestre, e o que a mesa
+ * recebe dele é a folha INTEIRA: recortar a rede de PNJs para mostrar um
+ * pedaço é o contrário do que um quadro serve para fazer, e a moldura só
+ * somava um controle a mais sobre algo que já vai por completo. No mapa nada
+ * muda.
+ *
+ * Um ponto só, e não uma guarda em cada ação: toda função deste arquivo parte
+ * daqui, e é o que faz atalho, chip, alça e menu ficarem mudos no quadro sem
+ * seis lugares para esquecer.
+ */
 function lerCena(): Scene | null {
-  return selectEditingScene(useSceneStore.getState());
+  const scene = selectEditingScene(useSceneStore.getState());
+  return scene && ehQuadro(scene) ? null : scene;
 }
 
 /** A câmera que o mestre está editando, ou nada antes da cena abrir. */

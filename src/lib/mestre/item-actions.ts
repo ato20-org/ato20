@@ -11,6 +11,13 @@ import {
   empurrarTextos,
   girarTextosNoLugar,
 } from "@/lib/mestre/grupo-de-textos";
+import {
+  deslocamentoPreso,
+  empurrarDocumentos,
+  empurrarPostits,
+  empurrarTracos,
+} from "@/lib/mestre/grupo-sem-alca";
+import { usePostitStore } from "@/lib/store/use-postit-store";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
@@ -24,12 +31,15 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ehQuadro, semIdDaForma } from "@/types/scene";
 import type {
   CanvasItem,
+  Documento,
   Forma,
   ItemDraft,
   NewForma,
   NewTexto,
+  Postit,
   Scene,
   Texto,
+  Traco,
 } from "@/types/scene";
 
 /** Deslocamento do "colar" e do "duplicar", para a cópia não sumir sob o original. */
@@ -74,14 +84,31 @@ type ActionContext = {
   selectedFormaIds: string[];
   /** As formas na mão. Mesma história dos textos. Ver `Forma`. */
   selectedFormas: Forma[];
+  /**
+   * Papel, cartão de nota e risco -- os três que a área também laça e que só
+   * ANDAM. Apagar e empurrar tratam os seis; copiar, colar e duplicar ainda
+   * não, e a área de transferência é quem diz por quê. Ver `copySelection`.
+   */
+  selectedPostitIds: string[];
+  selectedPostits: Postit[];
+  selectedDocumentoIds: string[];
+  selectedDocumentos: Documento[];
+  selectedTracoIds: string[];
+  selectedTracos: Traco[];
 };
 
 function read(): ActionContext {
   // Sempre a cena em edição: as ações do mestre agem no palco dele, nunca
   // direto no que a mesa está vendo.
   const scene = selectEditingScene(useSceneStore.getState());
-  const { selectedIds, selectedTextoIds, selectedFormaIds } =
-    useSelectionStore.getState();
+  const {
+    selectedIds,
+    selectedTextoIds,
+    selectedFormaIds,
+    selectedPostitIds,
+    selectedDocumentoIds,
+    selectedTracoIds,
+  } = useSelectionStore.getState();
 
   return {
     scene,
@@ -99,6 +126,24 @@ function read(): ActionContext {
     selectedFormas: scene
       ? (scene.formas ?? []).filter((forma) =>
           selectedFormaIds.includes(forma.id),
+        )
+      : [],
+    selectedPostitIds,
+    selectedPostits: scene
+      ? (scene.postits ?? []).filter((postit) =>
+          selectedPostitIds.includes(postit.id),
+        )
+      : [],
+    selectedDocumentoIds,
+    selectedDocumentos: scene
+      ? (scene.documentos ?? []).filter((documento) =>
+          selectedDocumentoIds.includes(documento.id),
+        )
+      : [],
+    selectedTracoIds,
+    selectedTracos: scene
+      ? (scene.tracos ?? []).filter((traco) =>
+          selectedTracoIds.includes(traco.id),
         )
       : [],
   };
@@ -141,6 +186,19 @@ function offsetDraft(item: CanvasItem): ItemDraft {
   };
 }
 
+/**
+ * Copia o que a área de transferência sabe recriar: imagem, texto e forma.
+ *
+ * Papel, cartão de nota e risco ficam DE FORA, e não por esquecimento. O
+ * cartão aponta um arquivo de `documentos/` -- duas cópias do mesmo cartão
+ * seriam duas janelas para a mesma nota, e uma cópia entre campanhas apontaria
+ * para um arquivo que não existe do outro lado. O risco e o postit caberiam,
+ * mas a área de transferência é gravada em três listas fixas, e acrescentar
+ * mais é trabalho de outro dia -- ver `useClipboardStore`.
+ *
+ * Por isso `cutSelection` não recorta os três: apagar sem ter para onde colar
+ * seria perder, não recortar.
+ */
 export function copySelection(): void {
   const { selectedItems, selectedTextos, selectedFormas } = read();
   if (
@@ -155,24 +213,47 @@ export function copySelection(): void {
     .copy(selectedItems, selectedTextos, selectedFormas);
 }
 
-export function removeSelection(): void {
-  const { scene, selectedIds, selectedTextoIds, selectedFormaIds } = read();
+export function removeSelection(opcoes?: { semMargem?: boolean }): void {
+  const {
+    scene,
+    selectedIds,
+    selectedTextoIds,
+    selectedFormaIds,
+    selectedPostitIds,
+    selectedDocumentoIds,
+    selectedTracoIds,
+  } = read();
   // O texto ABERTO para escrever não sai por aqui: com o campo na tela, Delete
   // é do cursor, e apagar a frase inteira no meio de uma palavra seria a
   // resposta errada. Ele volta a ser apagável assim que a edição fecha.
   const editandoId = useQuadroStore.getState().textoEditandoId;
   const textoIds = selectedTextoIds.filter((id) => id !== editandoId);
+  // O postit ABERTO para digitar fica, pela mesma razão do texto.
+  const postitEditandoId = usePostitStore.getState().editandoId;
+  const postitIds = opcoes?.semMargem
+    ? []
+    : selectedPostitIds.filter((id) => id !== postitEditandoId);
+  const documentoIds = opcoes?.semMargem ? [] : selectedDocumentoIds;
+  const tracoIds = opcoes?.semMargem ? [] : selectedTracoIds;
   if (
     !scene ||
     (selectedIds.length === 0 &&
       textoIds.length === 0 &&
-      selectedFormaIds.length === 0)
+      selectedFormaIds.length === 0 &&
+      postitIds.length === 0 &&
+      documentoIds.length === 0 &&
+      tracoIds.length === 0)
   )
     return;
 
   useSceneStore.getState().removeItems(scene.id, selectedIds);
   useSceneStore.getState().removeTextos(scene.id, textoIds);
   useSceneStore.getState().removeFormas(scene.id, selectedFormaIds);
+  // O cartão sai do quadro; o arquivo `.md` dele continua em Arquivos. É o
+  // mesmo que o botão da barra do cartão sempre fez.
+  useSceneStore.getState().removePostits(scene.id, postitIds);
+  useSceneStore.getState().removeDocumentos(scene.id, documentoIds);
+  useSceneStore.getState().removeTracos(scene.id, tracoIds);
   useSelectionStore.getState().clear();
 }
 
@@ -209,9 +290,16 @@ export function guardarSelecaoNoHandout(): void {
   guardarNoHandout(read().selectedIds);
 }
 
+/**
+ * Recorta: copia o que cabe na área de transferência e apaga SÓ isso.
+ *
+ * Papel, cartão e risco continuam onde estavam -- eles não são copiados (ver
+ * `copySelection`), e apagá-los aqui seria um Ctrl+X que perde o que não
+ * levou.
+ */
 export function cutSelection(): void {
   copySelection();
-  removeSelection();
+  removeSelection({ semMargem: true });
 }
 
 export function pasteClipboard(): void {
@@ -408,7 +496,10 @@ export function selecionarGrupo(grupoId: string): void {
   useSelectionStore.getState().select(itensDoGrupo(scene, grupoId));
 }
 
-/** Tudo o que o palco deixa pegar: as imagens destravadas e os textos soltos. */
+/**
+ * Tudo o que o palco deixa pegar: imagens destravadas, textos soltos, formas,
+ * papéis, cartões de nota e riscos -- as mesmas seis listas que a área laça.
+ */
 export function selectAllItems(): void {
   const { scene } = read();
   if (!scene) return;
@@ -417,6 +508,9 @@ export function selectAllItems(): void {
     itens: scene.items.filter((item) => !item.locked).map((item) => item.id),
     textos: (scene.textos ?? []).map((texto) => texto.id),
     formas: (scene.formas ?? []).map((forma) => forma.id),
+    postits: (scene.postits ?? []).map((postit) => postit.id),
+    documentos: (scene.documentos ?? []).map((documento) => documento.id),
+    tracos: (scene.tracos ?? []).map((traco) => traco.id),
   });
 }
 
@@ -599,26 +693,60 @@ export function rotateSelection(graus: number): void {
 }
 
 export function nudgeSelection(dx: number, dy: number): void {
-  const { scene, selectedItems, selectedTextos, selectedFormas } = read();
-  if (!scene || naoHaNada(selectedItems, selectedTextos, selectedFormas)) return;
+  const {
+    scene,
+    selectedItems,
+    selectedTextos,
+    selectedFormas,
+    selectedPostits,
+    selectedDocumentos,
+    selectedTracos,
+  } = read();
+  if (!scene) return;
+  const papeis = [...selectedPostits, ...selectedDocumentos];
+  if (
+    naoHaNada(selectedItems, selectedTextos, selectedFormas) &&
+    papeis.length === 0 &&
+    selectedTracos.length === 0
+  )
+    return;
+
+  // A cerca do papel prende o passo do conjunto inteiro, como no arrasto: ver
+  // `deslocamentoPreso`. Sem papel na mão, o passo é o que veio.
+  const passo = deslocamentoPreso(papeis, dx, dy);
 
   useSceneStore.getState().updateItems(
     scene.id,
     moveGroup(
       selectedItems.filter((item) => !item.locked),
-      dx,
-      dy,
+      passo.dx,
+      passo.dy,
     ),
   );
   useSceneStore
     .getState()
-    .updateTextos(scene.id, empurrarTextos(selectedTextos, dx, dy));
+    .updateTextos(scene.id, empurrarTextos(selectedTextos, passo.dx, passo.dy));
   useSceneStore
     .getState()
-    .updateFormas(scene.id, moveGroup(selectedFormas, dx, dy));
+    .updateFormas(scene.id, moveGroup(selectedFormas, passo.dx, passo.dy));
+  useSceneStore
+    .getState()
+    .updatePostits(
+      scene.id,
+      empurrarPostits(selectedPostits, passo.dx, passo.dy),
+    );
+  useSceneStore
+    .getState()
+    .updateDocumentos(
+      scene.id,
+      empurrarDocumentos(selectedDocumentos, passo.dx, passo.dy),
+    );
+  useSceneStore
+    .getState()
+    .updateTracos(scene.id, empurrarTracos(selectedTracos, passo.dx, passo.dy));
 }
 
-/** Nada na mão nas três listas do palco. */
+/** Nada na mão nas três listas que escalam e giram. */
 function naoHaNada(
   itens: PecaDoGrupo[],
   textos: Texto[],

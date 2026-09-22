@@ -7,7 +7,7 @@ import { clampViewport, viewportQueCabe } from "@/lib/geometry/viewport";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import type { CameraSalva, Scene } from "@/types/scene";
+import { ehQuadro, type CameraSalva, type Scene } from "@/types/scene";
 
 /**
  * Folga em volta do alvo ao prender pela primeira vez, como fração do maior
@@ -61,8 +61,16 @@ type CameraLockStore = {
   soltar: () => void;
 };
 
+/**
+ * A cena em que a trava age -- `null` no quadro, como em `camera-actions`.
+ *
+ * O quadro não tem câmera: ele vai INTEIRO para a mesa. Sem isto, seguir um
+ * token e espelhar o palco continuariam gravando recorte numa cena que não
+ * tem mais como mostrá-lo nem editá-lo.
+ */
 function cenaEmEdicao(): Scene | null {
-  return selectEditingScene(useSceneStore.getState());
+  const scene = selectEditingScene(useSceneStore.getState());
+  return scene && ehQuadro(scene) ? null : scene;
 }
 
 function selecionadaDe(scene: Scene | null, id: string | null) {
@@ -92,6 +100,10 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
     set({ selecionadaId: cameraId, espelhoMestre: false }),
 
   garantirCameraInicial: (scene) => {
+    // Quadro não ganha câmera nenhuma: nem a Câmera 1 de cena nova, nem a
+    // conversão do recorte antigo. Ver `cenaEmEdicao`.
+    if (ehQuadro(scene)) return;
+
     const store = useSceneStore.getState();
     // Do store, e não da prop: o efeito que chama isto pode rodar duas vezes
     // com a mesma cena em mãos, e a segunda chamada via a lista vazia de antes
@@ -256,7 +268,9 @@ export function recorteSeguindo(
  */
 useSceneStore.subscribe((state) => {
   const scene = selectEditingScene(state);
-  if (!scene?.cameras) return;
+  // Quadro fora: ele não tem câmera, e um quadro antigo com câmera gravada
+  // não pode voltar a andar sozinho atrás de um token.
+  if (!scene?.cameras || ehQuadro(scene)) return;
 
   const conteudo = useViewportStore.getState().conteudo;
 

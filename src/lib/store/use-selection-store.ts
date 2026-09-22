@@ -29,6 +29,25 @@ type SelectionStore = {
    * lista da cena em que ela mora. Ver `Forma`.
    */
   selectedFormaIds: string[];
+  /**
+   * Postits laçados pela área.
+   *
+   * Papel, cartão e risco entraram juntos, e juntos formam o grupo que só
+   * ANDA: nenhum deles escala nem gira pelo gizmo -- o papel e o cartão medem
+   * o texto por dentro em unidades de cena, e o risco é uma nuvem de pontos
+   * sem caixa gravada. Enquanto um deles está na mão, o gizmo de alças sai do
+   * ar e sobra a caixa do grupo, que arrasta. Ver `grupo-sem-alca`.
+   *
+   * Coexistem com as três do palco pela mesma razão que elas coexistem entre
+   * si: o laço pega o que encostar, e um quadro tem postit ao lado de frase ao
+   * lado de imagem. Uma seleção que pulasse o papel deixaria o gesto pela
+   * metade justo onde ele mais serve.
+   */
+  selectedPostitIds: string[];
+  /** Cartões de nota laçados. Irmãos do postit, mesma caixa e mesmo limite. */
+  selectedDocumentoIds: string[];
+  /** Riscos do lápis laçados. A caixa é a dos pontos; ver `caixaDoTraco`. */
+  selectedTracoIds: string[];
   /** Área escondida selecionada. Uma por vez — são poucas e não formam grupo. */
   selectedFogId: string | null;
   /**
@@ -51,14 +70,25 @@ type SelectionStore = {
   selectFormas: (formaIds: string[]) => void;
   /** Soma ou tira uma forma, sem largar o resto. Shift+clique numa forma. */
   toggleForma: (formaId: string) => void;
+  /** Substitui a seleção inteira pelos postits indicados. Clique num papel. */
+  selectPostits: (postitIds: string[]) => void;
+  /** Soma ou tira um postit, sem largar o resto. Shift+clique num papel. */
+  togglePostit: (postitId: string) => void;
+  /** O mesmo para o cartão de nota, que tem a faixa de arrasto do papel. */
+  selectDocumentos: (documentoIds: string[]) => void;
+  toggleDocumento: (documentoId: string) => void;
   /**
-   * As três do palco de uma vez -- o que a área de seleção laçou. Lista
-   * ausente é lista vazia: `selectMisto({ textos })` larga imagens e formas.
+   * As seis do palco de uma vez -- o que a área de seleção laçou. Lista
+   * ausente é lista vazia: `selectMisto({ textos })` larga imagens, formas,
+   * papéis, cartões e riscos.
    */
   selectMisto: (selecao: {
     itens?: string[];
     textos?: string[];
     formas?: string[];
+    postits?: string[];
+    documentos?: string[];
+    tracos?: string[];
   }) => void;
   selectFog: (fogId: string | null) => void;
   /** `null` limpa. */
@@ -75,19 +105,30 @@ type SelectionStore = {
  * no canal. O Jogador e o Espectador nunca sabem o que o mestre tem selecionado.
  *
  * Área escondida, retrato e medidor são seleções mutuamente exclusivas entre si
- * e com as três do palco — imagem, texto solto e forma —, porque cada uma usa o
- * mesmo gizmo na tela. As três do palco são a exceção, e andam juntas: ver
- * `selectedTextoIds` e `selectedFormaIds`.
+ * e com as SEIS do palco — imagem, texto solto, forma, postit, cartão de nota e
+ * risco —, porque cada uma usa o mesmo gizmo na tela. As seis do palco são a
+ * exceção, e andam juntas: ver `selectedTextoIds` e `selectedPostitIds`.
  *
- * Gesto que SUBSTITUI limpa o resto (`select`, `selectTextos`, `selectFormas`);
- * gesto ADITIVO preserva o que já estava do outro lado (`toggle`,
- * `toggleTexto`, `toggleForma`) — é o que faz Shift+clique somar uma imagem a
- * um punhado de frases já marcadas.
+ * Entre as seis há uma divisão que o gizmo respeita: imagem, texto e forma
+ * escalam e giram; postit, cartão e risco só ANDAM. Ver `grupo-sem-alca`.
+ *
+ * Gesto que SUBSTITUI limpa o resto (`select`, `selectTextos`, `selectFormas`,
+ * `selectPostits`, `selectDocumentos`); gesto ADITIVO preserva o que já estava
+ * do outro lado (`toggle`, `toggleTexto`, `toggleForma`, `togglePostit`,
+ * `toggleDocumento`) — é o que faz Shift+clique somar uma imagem a um punhado
+ * de frases já marcadas.
+ *
+ * O risco não tem gesto próprio: ele não ouve o ponteiro (a camada dele é um
+ * SVG atravessável, compartilhado com a mesa), então entra pela área e sai
+ * pela área. Quem o arrasta é a pega da margem.
  */
 export const useSelectionStore = create<SelectionStore>((set, get) => ({
   selectedIds: [],
   selectedTextoIds: [],
   selectedFormaIds: [],
+  selectedPostitIds: [],
+  selectedDocumentoIds: [],
+  selectedTracoIds: [],
   selectedFogId: null,
   selectedPortraitIds: [],
   selectedMedidorId: null,
@@ -143,11 +184,55 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
     });
   },
 
-  selectMisto({ itens = [], textos = [], formas = [] }) {
+  selectPostits(postitIds) {
+    get().selectMisto({ postits: postitIds });
+  },
+
+  togglePostit(postitId) {
+    const { selectedPostitIds } = get();
+
+    set({
+      selectedPostitIds: selectedPostitIds.includes(postitId)
+        ? selectedPostitIds.filter((id) => id !== postitId)
+        : [...selectedPostitIds, postitId],
+      selectedFogId: null,
+      selectedPortraitIds: [],
+      selectedMedidorId: null,
+    });
+  },
+
+  selectDocumentos(documentoIds) {
+    get().selectMisto({ documentos: documentoIds });
+  },
+
+  toggleDocumento(documentoId) {
+    const { selectedDocumentoIds } = get();
+
+    set({
+      selectedDocumentoIds: selectedDocumentoIds.includes(documentoId)
+        ? selectedDocumentoIds.filter((id) => id !== documentoId)
+        : [...selectedDocumentoIds, documentoId],
+      selectedFogId: null,
+      selectedPortraitIds: [],
+      selectedMedidorId: null,
+    });
+  },
+
+  selectMisto({
+    itens = [],
+    textos = [],
+    formas = [],
+    postits = [],
+    documentos = [],
+    tracos = [],
+  }) {
     set({
       selectedIds: itens,
       selectedTextoIds: textos,
       selectedFormaIds: formas,
+      selectedPostitIds: postits,
+      selectedDocumentoIds: documentos,
+      selectedTracoIds: tracos,
       selectedFogId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
@@ -159,6 +244,9 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedIds: [],
       selectedTextoIds: [],
       selectedFormaIds: [],
+      selectedPostitIds: [],
+      selectedDocumentoIds: [],
+      selectedTracoIds: [],
       selectedFogId: fogId,
       selectedPortraitIds: [],
       selectedMedidorId: null,
@@ -170,6 +258,9 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedIds: [],
       selectedTextoIds: [],
       selectedFormaIds: [],
+      selectedPostitIds: [],
+      selectedDocumentoIds: [],
+      selectedTracoIds: [],
       selectedFogId: null,
       selectedPortraitIds: [],
       selectedMedidorId: medidorId,
@@ -185,6 +276,9 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedIds: [],
       selectedTextoIds: [],
       selectedFormaIds: [],
+      selectedPostitIds: [],
+      selectedDocumentoIds: [],
+      selectedTracoIds: [],
       selectedFogId: null,
       selectedPortraitIds: portraitIds,
       selectedMedidorId: null,
@@ -198,6 +292,9 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedIds: [],
       selectedTextoIds: [],
       selectedFormaIds: [],
+      selectedPostitIds: [],
+      selectedDocumentoIds: [],
+      selectedTracoIds: [],
       selectedFogId: null,
       selectedPortraitIds: selectedPortraitIds.includes(portraitId)
         ? selectedPortraitIds.filter((id) => id !== portraitId)
@@ -211,6 +308,9 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedIds,
       selectedTextoIds,
       selectedFormaIds,
+      selectedPostitIds,
+      selectedDocumentoIds,
+      selectedTracoIds,
       selectedFogId,
       selectedPortraitIds,
       selectedMedidorId,
@@ -219,6 +319,9 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedIds.length === 0 &&
       selectedTextoIds.length === 0 &&
       selectedFormaIds.length === 0 &&
+      selectedPostitIds.length === 0 &&
+      selectedDocumentoIds.length === 0 &&
+      selectedTracoIds.length === 0 &&
       selectedFogId === null &&
       selectedPortraitIds.length === 0 &&
       selectedMedidorId === null
@@ -230,6 +333,9 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedIds: [],
       selectedTextoIds: [],
       selectedFormaIds: [],
+      selectedPostitIds: [],
+      selectedDocumentoIds: [],
+      selectedTracoIds: [],
       selectedFogId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,

@@ -72,7 +72,7 @@ import {
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import type { Scene } from "@/types/scene";
+import { ehQuadro, type Scene } from "@/types/scene";
 
 /**
  * Menu de botão direito do palco. Um único menu para a cena inteira em vez de
@@ -89,6 +89,13 @@ export function StageContextMenu({
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const selectedTextoIds = useSelectionStore((state) => state.selectedTextoIds);
   const selectedFormaIds = useSelectionStore((state) => state.selectedFormaIds);
+  const selectedPostitIds = useSelectionStore(
+    (state) => state.selectedPostitIds,
+  );
+  const selectedDocumentoIds = useSelectionStore(
+    (state) => state.selectedDocumentoIds,
+  );
+  const selectedTracoIds = useSelectionStore((state) => state.selectedTracoIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const hasClipboard = useClipboardStore(
     (state) => state.drafts.length > 0 || state.textos.length > 0,
@@ -108,15 +115,35 @@ export function StageContextMenu({
    * área de transferência tratam todas.
    */
   const doQuadro = selectedTextoIds.length + selectedFormaIds.length;
-  const soQuadro = !hasSelection && doQuadro > 0;
+  /**
+   * Papel, cartão e risco na mão -- o que a área laça e a área de
+   * transferência não leva (ver `copySelection`).
+   *
+   * Entram no mesmo bloco curto, mas só na linha de apagar: oferecer "Copiar"
+   * para um risco seria um item de menu que não faz nada.
+   */
+  const daMargem =
+    selectedPostitIds.length +
+    selectedDocumentoIds.length +
+    selectedTracoIds.length;
+  const soQuadro = !hasSelection && doQuadro + daMargem > 0;
   const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
   const prenderNaSelecao = useCameraLockStore(
     (state) => state.prenderNaSelecao,
   );
   const soltar = useCameraLockStore((state) => state.soltar);
-  const cameraSelecionada = scene.cameras?.find(
-    (camera) => camera.id === selecionadaId,
-  );
+  /**
+   * A câmera em edição -- nenhuma no QUADRO, que não tem câmera.
+   *
+   * Com ela indefinida, as entradas de câmera somem do bloco de baixo e as
+   * duas do bloco do item ("segue este", "enquadrar este") ficariam apagadas;
+   * elas também saem por `temCamera`, porque item cinza permanente num menu é
+   * ruído em toda cena de quadro. Ver `lerCena` em `camera-actions`.
+   */
+  const temCamera = !ehQuadro(scene);
+  const cameraSelecionada = temCamera
+    ? scene.cameras?.find((camera) => camera.id === selecionadaId)
+    : undefined;
   const segue = Boolean(cameraSelecionada?.alvoIds);
   const allLocked = hasSelection && selectedItems.every((item) => item.locked);
   const opacidade = opacidadeDaSelecao(selectedItems);
@@ -149,22 +176,33 @@ export function StageContextMenu({
 
         {soQuadro ? (
           <>
-            <ContextMenuItem onClick={copySelection}>
-              <Copy />
-              Copiar
-              <ContextMenuShortcut>Ctrl+C</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={cutSelection}>
-              <Scissors />
-              Recortar
-              <ContextMenuShortcut>Ctrl+X</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={duplicateSelection}>
-              <CopyPlus />
-              Duplicar
-              <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem variant="destructive" onClick={removeSelection}>
+            {/* As três da área de transferência só aparecem com algo que ela
+                saiba recriar: um risco laçado sozinho não copia, não recorta e
+                não duplica -- e um item de menu que não faz nada é pior que
+                item nenhum. Ver `copySelection`. */}
+            {doQuadro > 0 ? (
+              <>
+                <ContextMenuItem onClick={copySelection}>
+                  <Copy />
+                  Copiar
+                  <ContextMenuShortcut>Ctrl+C</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={cutSelection}>
+                  <Scissors />
+                  Recortar
+                  <ContextMenuShortcut>Ctrl+X</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={duplicateSelection}>
+                  <CopyPlus />
+                  Duplicar
+                  <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
+                </ContextMenuItem>
+              </>
+            ) : null}
+            <ContextMenuItem
+              variant="destructive"
+              onClick={() => removeSelection()}
+            >
               <Trash2 />
               Remover
               <ContextMenuShortcut>Del</ContextMenuShortcut>
@@ -261,28 +299,32 @@ export function StageContextMenu({
             {/* Junto das ações DO ITEM, e não lá embaixo com a câmera: quem
                 clica com o botão direito num token está pensando nele, e
                 "a câmera segue este" é uma coisa que se faz com o token. */}
-            <ContextMenuItem
-              disabled={!cameraSelecionada}
-              onClick={segue ? soltar : prenderNaSelecao}
-            >
-              <Crosshair />
-              {segue
-                ? "Câmera deixa de seguir"
-                : selectedItems.length > 1
-                  ? "Câmera segue estes"
-                  : "Câmera segue este"}
-              <ContextMenuShortcut>L</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem
-              disabled={!cameraSelecionada}
-              onClick={enquadrarSelecao}
-            >
-              <Focus />
-              {selectedItems.length > 1
-                ? "Enquadrar estes na câmera"
-                : "Enquadrar este na câmera"}
-              <ContextMenuShortcut>F</ContextMenuShortcut>
-            </ContextMenuItem>
+            {temCamera ? (
+              <>
+                <ContextMenuItem
+                  disabled={!cameraSelecionada}
+                  onClick={segue ? soltar : prenderNaSelecao}
+                >
+                  <Crosshair />
+                  {segue
+                    ? "Câmera deixa de seguir"
+                    : selectedItems.length > 1
+                      ? "Câmera segue estes"
+                      : "Câmera segue este"}
+                  <ContextMenuShortcut>L</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem
+                  disabled={!cameraSelecionada}
+                  onClick={enquadrarSelecao}
+                >
+                  <Focus />
+                  {selectedItems.length > 1
+                    ? "Enquadrar estes na câmera"
+                    : "Enquadrar este na câmera"}
+                  <ContextMenuShortcut>F</ContextMenuShortcut>
+                </ContextMenuItem>
+              </>
+            ) : null}
 
             <ContextMenuSeparator />
 
@@ -311,7 +353,10 @@ export function StageContextMenu({
               <Images />
               Guardar no handout
             </ContextMenuItem>
-            <ContextMenuItem variant="destructive" onClick={removeSelection}>
+            <ContextMenuItem
+              variant="destructive"
+              onClick={() => removeSelection()}
+            >
               <Trash2 />
               Remover
               <ContextMenuShortcut>Del</ContextMenuShortcut>
@@ -340,37 +385,41 @@ export function StageContextMenu({
           <ContextMenuShortcut>Ctrl+A</ContextMenuShortcut>
         </ContextMenuItem>
 
-        <ContextMenuSeparator />
+        {temCamera ? (
+          <>
+            <ContextMenuSeparator />
 
-        <ContextMenuItem
-          disabled={!cameraSelecionada}
-          onClick={enquadrarAqui}
-        >
-          <ScanSearch />
-          Trazer a câmera para aqui
-          <ContextMenuShortcut>C</ContextMenuShortcut>
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => void novaCamera()}>
-          <Plus />
-          Nova câmera
-          <ContextMenuShortcut>N</ContextMenuShortcut>
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={!cameraSelecionada}
-          onClick={alternarTransmissao}
-        >
-          <Radio />
-          {cameraSelecionada && scene.cameraNoArId === cameraSelecionada.id
-            ? "Tirar do ar"
-            : "Transmitir a câmera"}
-          <ContextMenuShortcut>T</ContextMenuShortcut>
-        </ContextMenuItem>
-        {scene.cameraNoArId ? (
-          <ContextMenuItem onClick={mostrarCenaInteira}>
-            <Maximize />
-            Mostrar a cena inteira
-            <ContextMenuShortcut>Shift+C</ContextMenuShortcut>
-          </ContextMenuItem>
+            <ContextMenuItem
+              disabled={!cameraSelecionada}
+              onClick={enquadrarAqui}
+            >
+              <ScanSearch />
+              Trazer a câmera para aqui
+              <ContextMenuShortcut>C</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => void novaCamera()}>
+              <Plus />
+              Nova câmera
+              <ContextMenuShortcut>N</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={!cameraSelecionada}
+              onClick={alternarTransmissao}
+            >
+              <Radio />
+              {cameraSelecionada && scene.cameraNoArId === cameraSelecionada.id
+                ? "Tirar do ar"
+                : "Transmitir a câmera"}
+              <ContextMenuShortcut>T</ContextMenuShortcut>
+            </ContextMenuItem>
+            {scene.cameraNoArId ? (
+              <ContextMenuItem onClick={mostrarCenaInteira}>
+                <Maximize />
+                Mostrar a cena inteira
+                <ContextMenuShortcut>Shift+C</ContextMenuShortcut>
+              </ContextMenuItem>
+            ) : null}
+          </>
         ) : null}
       </ContextMenuContent>
     </ContextMenu>

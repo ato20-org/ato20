@@ -5,12 +5,29 @@ import { create } from "zustand";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import {
   useSceneStore,
+  type DocumentoPatch,
   type FormaPatch,
   type ItemPatch,
+  type PostitPatch,
   type TextoPatch,
+  type TracoPatch,
 } from "@/lib/store/use-scene-store";
 import { gravarCameraManual } from "@/lib/mestre/camera-actions";
 import type { Scene, Viewport } from "@/types/scene";
+
+/**
+ * O que o gesto está fazendo com papel, cartão e risco.
+ *
+ * Um saco com nome e não três parâmetros posicionais a mais: `mover` já levava
+ * quatro listas, e uma quinta, sexta e sétima posição transformariam toda
+ * chamada curta -- `moverNoGesto(id, patches)` -- num rastro de `[]` vazios só
+ * para alcançar a última.
+ */
+export type PatchesSemAlca = {
+  postits?: PostitPatch[];
+  documentos?: DocumentoPatch[];
+  tracos?: TracoPatch[];
+};
 
 type GestoStore = {
   /** A cena em que há um gesto em curso. `null` = mão solta. */
@@ -32,6 +49,22 @@ type GestoStore = {
    * A geometria é a do item, então o patch é o mesmo -- ver `Forma`.
    */
   formas: FormaPatch[] | null;
+  /**
+   * E os três que só ANDAM: papel, cartão de nota e risco.
+   *
+   * Aqui pela mesma razão que os outros, e com um motivo a mais. Arrastar um
+   * postit gravava no board a CADA quadro -- era o gesto mais caro que sobrou
+   * no palco depois que item e texto saíram deste caminho --, e arrastar um
+   * grupo laçado pela área multiplicaria isso pelo tamanho do grupo. O risco é
+   * pior: cada quadro reescreve as duzentas amostras dele, e um commit por
+   * quadro copiaria a cena inteira junto.
+   *
+   * Listas próprias e não uma só porque são três listas na cena. Ver
+   * `grupo-sem-alca`.
+   */
+  postits: PostitPatch[] | null;
+  documentos: DocumentoPatch[] | null;
+  tracos: TracoPatch[] | null;
   /** A moldura da câmera sendo arrastada, com o recorte que ela já tem. */
   camera: { cameraId: string; viewport: Viewport } | null;
 
@@ -40,6 +73,7 @@ type GestoStore = {
     patches: ItemPatch[],
     textos: TextoPatch[],
     formas: FormaPatch[],
+    semAlca?: PatchesSemAlca,
   ) => void;
   moverCamera: (sceneId: string, cameraId: string, viewport: Viewport) => void;
   terminar: () => void;
@@ -75,17 +109,23 @@ export const useGestoStore = create<GestoStore>((set) => ({
   patches: null,
   textos: null,
   formas: null,
+  postits: null,
+  documentos: null,
+  tracos: null,
   camera: null,
 
   // Lista vazia vira `null`: um gesto só de texto não tem por que devolver uma
   // lista de itens nova a cada quadro, e é a identidade dela que faz os
   // quarenta tokens do mapa ficarem parados. Ver `aplicarGesto`.
-  mover: (sceneId, patches, textos, formas) =>
+  mover: (sceneId, patches, textos, formas, semAlca) =>
     set({
       sceneId,
       patches: patches.length > 0 ? patches : null,
       textos: textos.length > 0 ? textos : null,
       formas: formas.length > 0 ? formas : null,
+      postits: semAlca?.postits?.length ? semAlca.postits : null,
+      documentos: semAlca?.documentos?.length ? semAlca.documentos : null,
+      tracos: semAlca?.tracos?.length ? semAlca.tracos : null,
     }),
   moverCamera: (sceneId, cameraId, viewport) =>
     set({ sceneId, camera: { cameraId, viewport } }),
@@ -95,6 +135,9 @@ export const useGestoStore = create<GestoStore>((set) => ({
       patches: null,
       textos: null,
       formas: null,
+      postits: null,
+      documentos: null,
+      tracos: null,
       camera: null,
     }),
 }));
@@ -112,10 +155,22 @@ export function aplicarGesto(
   gesto: Pick<
     GestoStore,
     "sceneId" | "patches" | "textos" | "formas" | "camera"
-  >,
+  > &
+    // Os três que só andam entram como OPCIONAIS: quem não os conhece --
+    // um teste do gesto de câmera, um chamador antigo -- continua passando o
+    // mesmo objeto de antes, e ausente é o mesmo que nenhum.
+    Partial<Pick<GestoStore, "postits" | "documentos" | "tracos">>,
 ): Scene {
   if (gesto.sceneId !== scene.id) return scene;
-  if (!gesto.patches && !gesto.textos && !gesto.formas && !gesto.camera)
+  if (
+    !gesto.patches &&
+    !gesto.textos &&
+    !gesto.formas &&
+    !gesto.postits &&
+    !gesto.documentos &&
+    !gesto.tracos &&
+    !gesto.camera
+  )
     return scene;
 
   let vista = scene;
@@ -153,6 +208,39 @@ export function aplicarGesto(
     };
   }
 
+  if (gesto.postits) {
+    const porId = new Map(gesto.postits.map(({ id, patch }) => [id, patch]));
+    vista = {
+      ...vista,
+      postits: vista.postits?.map((postit) => {
+        const patch = porId.get(postit.id);
+        return patch ? { ...postit, ...patch } : postit;
+      }),
+    };
+  }
+
+  if (gesto.documentos) {
+    const porId = new Map(gesto.documentos.map(({ id, patch }) => [id, patch]));
+    vista = {
+      ...vista,
+      documentos: vista.documentos?.map((documento) => {
+        const patch = porId.get(documento.id);
+        return patch ? { ...documento, ...patch } : documento;
+      }),
+    };
+  }
+
+  if (gesto.tracos) {
+    const porId = new Map(gesto.tracos.map(({ id, patch }) => [id, patch]));
+    vista = {
+      ...vista,
+      tracos: vista.tracos?.map((traco) => {
+        const patch = porId.get(traco.id);
+        return patch ? { ...traco, ...patch } : traco;
+      }),
+    };
+  }
+
   if (gesto.camera) {
     const { cameraId, viewport } = gesto.camera;
     vista = {
@@ -180,11 +268,18 @@ export function moverNoGesto(
   patches: ItemPatch[],
   textos: TextoPatch[] = [],
   formas: FormaPatch[] = [],
+  semAlca?: PatchesSemAlca,
 ): void {
-  useGestoStore.getState().mover(sceneId, patches, textos, formas);
+  useGestoStore.getState().mover(sceneId, patches, textos, formas, semAlca);
 
-  const { board, updateItems, updateTextos, updateFormas } =
-    useSceneStore.getState();
+  const {
+    board,
+    updateItems,
+    updateTextos,
+    updateFormas,
+    updateTracos,
+    updateDocumentos,
+  } = useSceneStore.getState();
   if (board?.liveSceneId !== sceneId) return;
 
   const agora = performance.now();
@@ -194,6 +289,11 @@ export function moverNoGesto(
   updateItems(sceneId, patches);
   updateTextos(sceneId, textos);
   updateFormas(sceneId, formas);
+  // O postit NÃO entra aqui, e é o único do trio que fica de fora: ele não
+  // chega à mesa (`sceneForTable` o corta), então gravar no ritmo do canal
+  // seria pagar o commit para ninguém ver. Ele espera a mão soltar.
+  if (semAlca?.documentos) updateDocumentos(sceneId, semAlca.documentos);
+  if (semAlca?.tracos) updateTracos(sceneId, semAlca.tracos);
 }
 
 /**
@@ -208,10 +308,17 @@ export function terminarGesto(
   patches: ItemPatch[],
   textos: TextoPatch[] = [],
   formas: FormaPatch[] = [],
+  semAlca?: PatchesSemAlca,
 ): void {
   if (patches.length > 0) useSceneStore.getState().updateItems(sceneId, patches);
   if (textos.length > 0) useSceneStore.getState().updateTextos(sceneId, textos);
   if (formas.length > 0) useSceneStore.getState().updateFormas(sceneId, formas);
+  if (semAlca?.postits?.length)
+    useSceneStore.getState().updatePostits(sceneId, semAlca.postits);
+  if (semAlca?.documentos?.length)
+    useSceneStore.getState().updateDocumentos(sceneId, semAlca.documentos);
+  if (semAlca?.tracos?.length)
+    useSceneStore.getState().updateTracos(sceneId, semAlca.tracos);
   useGestoStore.getState().terminar();
   ultimaGravacaoAoVivo = 0;
 }

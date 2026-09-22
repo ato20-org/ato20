@@ -9,14 +9,8 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Info, Trash2 } from "lucide-react";
 
 import { ListaDeSugestoes, MARCA_LISTA } from "@/components/mencoes/sugestoes";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   PostitTextoView,
   type Vinculos,
@@ -25,7 +19,6 @@ import {
   emPixelDeTela,
   useSceneScale,
 } from "@/components/playground/scene-stage";
-import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { useMencoesDoMestre } from "@/hooks/use-mencoes-do-mestre";
 import { postitNaArea, postitNoTamanho } from "@/lib/geometry/postit";
 import { useHistoricoDeTexto } from "@/lib/mestre/historico-de-texto";
@@ -41,52 +34,25 @@ import {
   type SinalDoPostit,
 } from "@/lib/mestre/postit-mencoes";
 import { normaliza } from "@/lib/search";
+import { TransformHandles } from "@/components/playground/transform-handles";
+import { CORNER_HANDLES } from "@/lib/geometry/transform";
 import { POSTIT_Z, usePostitStore } from "@/lib/store/use-postit-store";
+import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
   CORES_POSTIT,
+  DOCUMENTO_FONTES,
+  POSTIT_FONTE,
   type CorPostit,
   type Postit,
   type Scene,
 } from "@/types/scene";
 
 
-/**
- * Tamanho do texto do postit, em unidades de cena.
- *
- * Unidades de cena, e não pixels de tela: o postit escala com o zoom, e é essa
- * decisão que o faz parecer papel colado no mapa em vez de janela flutuando
- * sobre ele. Afastar o mapa afasta o papel junto, com o texto dentro.
- *
- * Só que "escala com o zoom" não pode ser deixado ao `zoom` do plano. Ver
- * `medidaDoCorpo`, no `PostitPapel`.
- */
-const FONTE = 15;
-
 /** Margem interna do corpo do postit, em unidades de cena (era `p-1.5`). */
 const MARGEM = 6;
-
-/** Altura da faixa de arrasto, em unidades de cena. */
-const FAIXA = 22;
-
-/** Lado da alça de redimensionar, em unidades de cena. */
-const ALCA = 16;
-
-/**
- * Espessura do traço dos ícones da faixa, em unidades do SVG (24 por ícone).
- *
- * O ícone mede em unidades de cena e escala com o papel, como deve — mas o
- * TRAÇO não pode: a 708% um traço de 2 vira oito pixels, e a lixeira vira uma
- * mancha. Dividir pela escala mantém o traço em torno de um pixel e meio na
- * tela em qualquer zoom. É atributo do SVG, não comprimento CSS, então não
- * cai no piso de um pixel do `zoom` (ver `emPixelDeTela`). Teto em 2,5 para o
- * mapa afastado não engrossar o ícone além do desenho original.
- */
-function tracoDoIcone(scale: number): number {
-  return Math.min(2.5, 2.5 / scale);
-}
 
 /**
  * O papel de cada cor.
@@ -131,16 +97,31 @@ const TINTA: Record<CorPostit, string> = {
 export function PostitLayer({
   scene,
   panMode,
+  onPostitPointerDown,
 }: {
   scene: Scene;
   /** Espaço segurado: o arrasto pertence ao deslocamento da cena. */
   panMode: boolean;
+  /**
+   * O clique na FAIXA, entregue ao palco.
+   *
+   * A faixa arrastava o papel aqui dentro, e gravava no board a cada quadro.
+   * Quem arrasta agora é o palco, porque só ele sabe o que MAIS está na mão --
+   * a área de seleção laça papel junto com frase e imagem, e pegar um tem de
+   * levar todos. Mesmo desenho de `onTextoPointerDown`.
+   */
+  onPostitPointerDown: (event: ReactPointerEvent, postit: Postit) => void;
 }) {
   const postits = scene.postits;
   if (!postits || postits.length === 0) return null;
 
   return (
-    <PostitCamada sceneId={scene.id} postits={postits} panMode={panMode} />
+    <PostitCamada
+      sceneId={scene.id}
+      postits={postits}
+      panMode={panMode}
+      onPostitPointerDown={onPostitPointerDown}
+    />
   );
 }
 
@@ -148,10 +129,12 @@ function PostitCamada({
   sceneId,
   postits,
   panMode,
+  onPostitPointerDown,
 }: {
   sceneId: string;
   postits: Postit[];
   panMode: boolean;
+  onPostitPointerDown: (event: ReactPointerEvent, postit: Postit) => void;
 }) {
   const { scale, planoDaMargem } = useSceneScale();
 
@@ -175,6 +158,7 @@ function PostitCamada({
           candidatos={candidatos}
           onChange={(patch) => updatePostit(sceneId, postit.id, patch)}
           onRemove={() => removePostit(sceneId, postit.id)}
+          onPapelPointerDown={(event) => onPostitPointerDown(event, postit)}
         />
       ))}
     </>,
@@ -204,6 +188,7 @@ function PostitPapel({
   candidatos,
   onChange,
   onRemove,
+  onPapelPointerDown,
 }: {
   postit: Postit;
   panMode: boolean;
@@ -211,6 +196,7 @@ function PostitPapel({
   candidatos: Record<SinalDoPostit, Sugestao[]>;
   onChange: (patch: Partial<Postit>) => void;
   onRemove: () => void;
+  onPapelPointerDown: (event: ReactPointerEvent) => void;
 }) {
   const { scale, ampliacaoNoLayout } = useSceneScale();
   const tool = useToolStore((state) => state.tool);
@@ -240,21 +226,41 @@ function PostitPapel({
    */
   const fator = ampliacaoNoLayout ? scale : 1;
   const medidaDoCorpo = ampliacaoNoLayout ? emPixelDeTela(scale) : undefined;
+  /**
+   * O tamanho da letra DESTE papel, em unidades de cena.
+   *
+   * Unidades de cena, e não pixels de tela: o postit escala com o zoom, e é
+   * essa decisão que o faz parecer papel colado no mapa em vez de janela
+   * flutuando sobre ele. Afastar o mapa afasta o papel junto, com o texto
+   * dentro. Só que "escala com o zoom" não pode ser deixado ao `zoom` do
+   * plano -- ver `medidaDoCorpo` logo acima.
+   */
+  const fonte = postit.fonte ?? POSTIT_FONTE;
   const tipografia = {
-    fontSize: FONTE * fator,
+    fontSize: fonte * fator,
     lineHeight: 1.35,
     padding: MARGEM * fator,
   };
 
+  const selecionado = useSelectionStore((state) =>
+    state.selectedPostitIds.includes(postit.id),
+  );
   /**
-   * O arrasto em unidades de cena.
+   * Este papel é a ÚNICA coisa na mão?
    *
-   * O `delta` é acumulado desde o pointerdown, e o retrato do postit é tirado
-   * ANTES do gesto: somar incremento a incremento acumularia erro de
-   * arredondamento a cada frame, e um papel arrastado devagar chegaria alguns
-   * pixels longe do cursor.
+   * Mesma pergunta do texto solto e do cartão de nota, pela mesma razão:
+   * sozinho ele traz as próprias alças e os próprios botões; acompanhado, quem
+   * desenha é o gizmo do grupo, no palco.
    */
-  const startDrag = useSceneDrag();
+  const sozinho = useSelectionStore(
+    (state) =>
+      state.selectedPostitIds.length === 1 &&
+      state.selectedIds.length === 0 &&
+      state.selectedTextoIds.length === 0 &&
+      state.selectedFormaIds.length === 0 &&
+      state.selectedDocumentoIds.length === 0 &&
+      state.selectedTracoIds.length === 0,
+  );
 
   const editandoId = usePostitStore((state) => state.editandoId);
   const editar = usePostitStore((state) => state.editar);
@@ -464,33 +470,65 @@ function PostitPapel({
     campo.current?.focus();
   }
 
+  /**
+   * Duplo clique abre para escrever -- e o tratador mora no PAPEL, não no
+   * corpo que desenha o texto.
+   *
+   * Não é gosto: o arrasto do papel chama `setPointerCapture` no papel (ver
+   * `useSceneDrag`), e a partir daí o navegador entrega os eventos de mouse a
+   * quem capturou. O `dblclick` era disparado no papel e nunca chegava ao
+   * corpo, que é descendente -- clicar duas vezes não abria nada.
+   *
+   * Duplo e não simples, como era até a faixa sair: com o papel inteiro
+   * arrastando, um clique só tem de ser "pegar este papel". Abrir o campo a
+   * cada toque punha o cursor dentro de um postit que o mestre só queria
+   * selecionar ou mover, e a primeira tecla depois disso virava texto no papel
+   * errado. É o mesmo gesto do cartão de nota.
+   */
+  function abrirParaEscrever(event: ReactPointerEvent | React.MouseEvent) {
+    if (panMode || tool === "ligacao" || editando) return;
+
+    // O que está SOB o ponteiro, e não `event.target`: com a captura no papel,
+    // o alvo do evento é o papel, e a marcação que estava embaixo do dedo se
+    // perderia. Duplo clique num `@personagem` ou num `/arquivo` é do
+    // marcador -- abrir a ficha e o campo de texto no mesmo gesto deixaria o
+    // painel coberto pelo campo assim que ele aparecesse.
+    const sob = document.elementFromPoint(event.clientX, event.clientY);
+    if (sob?.closest("button")) return;
+
+    editar(postit.id);
+  }
+
+  /**
+   * Um degrau na escada de tamanhos -- a MESMA do cartão de nota.
+   *
+   * O papel colado antes disto existir está em 15, que não é degrau: o
+   * primeiro toque leva para o degrau vizinho e de lá o gesto anda de um em
+   * um. Mesma conta de `mudarFonte` no `CartaoDeDocumento`.
+   */
+  function mudarFonte(sentido: 1 | -1) {
+    const indice = DOCUMENTO_FONTES.findIndex((f) => f >= fonte);
+    const atual = indice === -1 ? DOCUMENTO_FONTES.length - 1 : indice;
+    const proximo = Math.min(
+      Math.max(atual + sentido, 0),
+      DOCUMENTO_FONTES.length - 1,
+    );
+
+    onChange({ fonte: DOCUMENTO_FONTES[proximo] });
+  }
+
   function arrastar(event: ReactPointerEvent) {
     if (panMode) return;
 
-    const { x, y } = postit;
-
-    startDrag(event, {
-      // Preso à ÁREA DE TRABALHO, e não ao plano da cena: o papel pode ser
-      // estacionado na margem, fora do mapa. Ver `postitNaArea`.
-      onMove: (delta) =>
-        onChange(
-          postitNaArea(x + delta.x, y + delta.y, postit.largura, postit.altura),
-        ),
-    });
-  }
-
-  function redimensionar(event: ReactPointerEvent) {
-    if (panMode) return;
-
-    const { largura, altura } = postit;
-
-    startDrag(event, {
-      onMove: (delta) =>
-        onChange(postitNoTamanho(largura + delta.x, altura + delta.y)),
-    });
+    // O gesto é do PALCO: ele seleciona o papel e arrasta o que está na mão,
+    // no caminho leve do gesto -- antes, cada quadro do arrasto era um commit
+    // no board. A cerca da área de trabalho continua valendo, agora sobre o
+    // deslocamento do grupo. Ver `deslocamentoPreso`.
+    onPapelPointerDown(event);
   }
 
   return (
+    <>
     <div
       ref={papel}
       className={cn(
@@ -523,75 +561,16 @@ function PostitPapel({
         // arrastar o papel.
         touchAction: "none",
       }}
+      // O papel INTEIRO arrasta. Antes era a faixa de 22 unidades no topo, e
+      // com o mapa afastado ela era uma tira de três pixels: pegar o papel
+      // virava mirar. O que era da faixa -- cor, ajuda e tirar do mapa -- subiu
+      // para a fileira de botões do gizmo, como no cartão de nota.
+      //
+      // Escrever é o duplo clique, e ele é daqui pela captura do ponteiro. Ver
+      // `abrirParaEscrever`.
+      onPointerDown={arrastar}
+      onDoubleClick={abrirParaEscrever}
     >
-      {/*
-        A faixa é a alça, e ela some quando o mouse sai: um postit com barra de
-        título permanente gastaria um quinto da altura do papel com cromo, e o
-        papel existe para mostrar texto.
-
-        `group-hover` e não estado: nada aqui precisa de render.
-      */}
-      <div
-        className="group flex shrink-0 cursor-move items-center gap-1 bg-black/5 px-1"
-        style={{ height: FAIXA }}
-        onPointerDown={arrastar}
-      >
-        <div className="flex flex-1 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          {CORES_POSTIT.map((cor) => (
-            <button
-              key={cor}
-              type="button"
-              aria-label={`Papel ${cor}`}
-              aria-pressed={cor === postit.cor}
-              className={cn(
-                "rounded-full ring-black/20",
-                TINTA[cor],
-                cor === postit.cor ? "ring-2" : "ring-1",
-              )}
-              style={{ width: FAIXA * 0.5, height: FAIXA * 0.5 }}
-              // No pointerdown, não no clique: o pointerdown daqui chega antes
-              // do arrasto da faixa, e sem o `stopPropagation` escolher a cor
-              // arrastaria o papel alguns pixels no mesmo gesto.
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => onChange({ cor })}
-            />
-          ))}
-        </div>
-
-        <AjudaDoPostit traco={tracoDoIcone(scale)} />
-
-        <button
-          type="button"
-          aria-label="Tirar este postit do mapa"
-          // À vista SEMPRE, ao contrário das bolinhas de cor ao lado.
-          //
-          // Era escondido até o ponteiro entrar na faixa, e isso partia do
-          // princípio errado: a faixa tem 22 unidades de cena de altura, e com
-          // o mapa afastado ela é uma tira de três pixels na tela. Procurar o
-          // botão de tirar o papel virava esfregar o mouse no alto dele até
-          // algo aparecer -- e quem quer tirar um postit quer tirá-lo AGORA,
-          // porque ele está cobrindo o mapa.
-          //
-          // O cinza escuro é do papel, não do tema: o postit é sempre claro,
-          // nas quatro cores, e é sobre ele que este ícone precisa se ler. Ver
-          // `PAPEL`.
-          className="shrink-0 text-neutral-900/50 transition-colors hover:text-red-700"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => {
-            // Fecha a edição antes: sem isto o store ficaria apontando para um
-            // postit que não existe mais, e o próximo postit colado nasceria
-            // sem o cursor dentro dele.
-            if (editando) fechar();
-            onRemove();
-          }}
-        >
-          <Trash2
-            style={{ width: FAIXA * 0.6, height: FAIXA * 0.6 }}
-            strokeWidth={tracoDoIcone(scale)}
-          />
-        </button>
-      </div>
-
       {editando ? (
         // `relative` para o espelho poder cobrir exatamente a mesma caixa do
         // campo. Sem o embrulho, o campo é filho direto da coluna do papel e o
@@ -761,39 +740,22 @@ function PostitPapel({
             tabIndex={0}
             // Em pixel de tela, como o campo de edição. Ver `medidaDoCorpo`.
             // `select-text` contra o `select-none` da raiz: ler um postit
-            // inclui copiar um nome dele. O clique abaixo respeita a seleção.
-            className="absolute inset-0 cursor-text overflow-hidden text-left text-neutral-900 select-text selection:bg-sky-400/50"
+            // inclui copiar um nome dele.
+            //
+            // O cursor é o de MOVER, e não mais o de texto: o clique simples
+            // pega o papel, e uma barra piscando prometeria escrita onde o
+            // gesto é de arrasto.
+            className="absolute inset-0 overflow-hidden text-left text-neutral-900 select-text selection:bg-sky-400/50"
             style={{ ...medidaDoCorpo, ...tipografia }}
             aria-label="Escrever neste postit"
-            onPointerDown={(event) => {
-              // Impede o palco de ler este pointerdown como clique no vazio —
-              // que, com uma ferramenta de mira na mão, colaria outro postit por
-              // cima deste.
-              event.stopPropagation();
-            }}
-            onClick={(event) => {
-              // Clique que veio de um marcador é do marcador: sem esta guarda,
-              // abrir a cena vinculada ou a miniatura do arquivo também poria o
-              // postit em edição, e o painel abriria já coberto pelo campo.
-              //
-              // `closest` e não comparar com o alvo: clicar no texto comum acerta
-              // um `<span>` ou um `<strong>` filho, e esse clique É para editar.
-              if ((event.target as HTMLElement).closest("button")) return;
-
-              // Arrastar para selecionar termina num `click`, e abrir a edição
-              // aqui trocaria o texto pintado pelo campo e perderia a seleção
-              // que a pessoa acabou de fazer. Com texto selecionado dentro do
-              // papel, o clique é da seleção; sem, é para editar.
-              const selecao = window.getSelection();
-              if (
-                selecao &&
-                !selecao.isCollapsed &&
-                event.currentTarget.contains(selecao.anchorNode)
-              )
-                return;
-
-              editar(postit.id);
-            }}
+            title="Duplo clique para escrever"
+            // Sem `stopPropagation` aqui: o pointerdown tem de CHEGAR ao papel,
+            // que é quem arrasta agora. Quem impede o palco de ler o gesto como
+            // clique no vazio -- e colar outro postit por cima deste com uma
+            // ferramenta de mira na mão -- é o `startDrag` lá do palco.
+            //
+            // O duplo clique que abre para escrever também é do PAPEL, e não
+            // deste corpo: ver `abrirParaEscrever`.
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== " ") return;
 
@@ -804,27 +766,88 @@ function PostitPapel({
             {postit.texto ? (
               <PostitTextoView texto={postit.texto} vinculos={vinculos} />
             ) : (
-              <span className="text-neutral-500 italic">Escrever…</span>
+              <span className="text-neutral-500 italic">
+                Duplo clique para escrever
+              </span>
             )}
           </div>
         </div>
       )}
-
-      {/* Canto inferior direito, e só ele: um postit não tem proporção a
-          preservar nem gira, então quatro alças seriam três alvos a mais para o
-          mesmo gesto. */}
-      <button
-        type="button"
-        aria-label="Redimensionar este postit"
-        className="absolute right-0 bottom-0 cursor-nwse-resize bg-black/10"
-        style={{
-          width: ALCA,
-          height: ALCA,
-          clipPath: "polygon(100% 0, 100% 100%, 0 100%)",
-        }}
-        onPointerDown={redimensionar}
-      />
     </div>
+
+      {/* As alças e os botões só com o papel na mão SOZINHO, e fora da edição:
+          acompanhado, quem manda é o gizmo do grupo; escrevendo, o que a mão
+          está fazendo é texto, e uma fileira de botões por cima do campo
+          disputaria o clique com a primeira linha.
+
+          É aqui que mora o que a faixa guardava: cor do papel, ajuda e tirar
+          do mapa. Mesmo desenho do cartão de nota. */}
+      {selecionado && sozinho && !editando && !panMode && tool !== "ligacao" ? (
+        <TransformHandles
+          key={postit.id}
+          box={{
+            x: postit.x,
+            y: postit.y,
+            width: postit.largura,
+            height: postit.altura,
+            rotation: 0,
+          }}
+          // Sem giro: o papel não tem `rotation` no modelo.
+          rotatable={false}
+          handles={CORNER_HANDLES}
+          onChange={({ x, y, width, height }) => {
+            const tamanho =
+              width !== undefined || height !== undefined
+                ? postitNoTamanho(
+                    width ?? postit.largura,
+                    height ?? postit.altura,
+                  )
+                : undefined;
+
+            onChange({
+              // A cerca da área de trabalho vale para a alça como vale para o
+              // arrasto: papel fora do alcance da câmera é papel perdido. Ver
+              // `postitNaArea`.
+              ...postitNaArea(
+                x ?? postit.x,
+                y ?? postit.y,
+                tamanho?.largura ?? postit.largura,
+                tamanho?.altura ?? postit.altura,
+              ),
+              ...tamanho,
+            });
+          }}
+          papel={{
+            escolhida: postit.cor,
+            opcoes: CORES_POSTIT.map((cor) => ({
+              valor: cor,
+              rotulo: `Papel ${cor}`,
+              classe: TINTA[cor],
+            })),
+            onEscolher: (cor) => onChange({ cor: cor as CorPostit }),
+          }}
+          fonte={{
+            valor: fonte,
+            menor:
+              DOCUMENTO_FONTES.findIndex((f) => f >= fonte) > 0
+                ? () => mudarFonte(-1)
+                : undefined,
+            maior:
+              fonte < DOCUMENTO_FONTES[DOCUMENTO_FONTES.length - 1]!
+                ? () => mudarFonte(1)
+                : undefined,
+          }}
+          ajuda={<AjudaDoPostit />}
+          onDelete={() => {
+            // Fecha a edição antes: sem isto o store ficaria apontando para um
+            // postit que não existe mais, e o próximo postit colado nasceria
+            // sem o cursor dentro dele.
+            if (editando) fechar();
+            onRemove();
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -839,56 +862,34 @@ const COMANDOS: Array<[string, string]> = [
   ["Tab, →", "Aceita a sugestão em cinza enquanto digita."],
   ["↑ ↓, Enter", "Anda na lista de sugestões e escolhe."],
   ["Esc", "Fecha a lista; de novo, sai da edição."],
-  ["Faixa", "Arrasta o papel. As bolinhas trocam a cor."],
-  ["Canto", "O triângulo de baixo à direita redimensiona."],
+  ["Papel", "Arrastar em qualquer ponto move; duplo clique abre para escrever."],
+  ["Bolinhas", "Com o papel na mão: tamanho da letra, cor, ajuda e tirar do mapa."],
+  ["Cantos", "Com o papel na mão: as alças redimensionam."],
 ];
 
 /**
- * O botão de ajuda da faixa: lista os sinais e os gestos do postit.
+ * A ajuda do postit: os sinais e os gestos que ele entende.
  *
  * Existe porque os sinais são invisíveis até alguém os conhecer: um papel em
  * branco não sugere que `@` complete um personagem, e o placeholder do campo
- * some na primeira letra. Sempre à vista, como o botão de tirar ao lado, e pela
- * mesma razão: com o mapa afastado a faixa é uma tira de três pixels, e um
- * botão que só aparece no hover ali é um botão que não existe.
+ * some na primeira letra.
  *
- * `Popover` e não `Tooltip`: é texto para ler, com nove linhas, e some ao
- * clicar fora. Sai do palco por portal, como a lista de sugestões: o conteúdo
- * do postit escala com o zoom, e a 40% a ajuda seria um selo ilegível.
+ * Só o CONTEÚDO: quem o abre é o botão redondo da fileira do gizmo, que também
+ * é dono do popover. Antes o botão morava na faixa do papel, e a faixa saiu --
+ * cor, ajuda e lixeira viraram bolinhas, como no cartão de nota.
  */
-function AjudaDoPostit({ traco }: { traco: number }) {
+function AjudaDoPostit() {
   return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            aria-label="Como escrever neste postit"
-            className="shrink-0 text-neutral-900/50 transition-colors hover:text-neutral-900"
-            // O pointerdown daqui chega antes do arrasto da faixa: sem isto,
-            // abrir a ajuda arrastaria o papel alguns pixels no mesmo gesto.
-            onPointerDown={(event) => event.stopPropagation()}
-            // E o clique não pode virar clique no vazio do palco nem "editar".
-            onClick={(event) => event.stopPropagation()}
-          >
-            <Info
-              style={{ width: FAIXA * 0.6, height: FAIXA * 0.6 }}
-              strokeWidth={traco}
-            />
-          </button>
-        }
-      />
-      <PopoverContent align="start" className="w-72 p-3" side="top">
-        <p className="mb-2 text-xs font-medium">O que dá para escrever aqui</p>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
-          {COMANDOS.map(([sinal, faz]) => (
-            <Fragment key={sinal}>
-              <dt className="font-mono font-medium whitespace-nowrap">{sinal}</dt>
-              <dd className="text-muted-foreground">{faz}</dd>
-            </Fragment>
-          ))}
-        </dl>
-      </PopoverContent>
-    </Popover>
+    <>
+      <p className="mb-2 text-xs font-medium">O que dá para escrever aqui</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+        {COMANDOS.map(([sinal, faz]) => (
+          <Fragment key={sinal}>
+            <dt className="font-mono font-medium whitespace-nowrap">{sinal}</dt>
+            <dd className="text-muted-foreground">{faz}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </>
   );
 }

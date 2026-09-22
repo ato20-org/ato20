@@ -1,7 +1,7 @@
 import { boundsOfItems, boxBounds, unionBounds, type Bounds } from "@/lib/geometry/bounds";
 import { PLANO } from "@/lib/geometry/viewport";
 import { caixaDoTexto } from "@/lib/mestre/ligacoes";
-import type { Scene } from "@/types/scene";
+import type { Scene, Traco } from "@/types/scene";
 
 /**
  * A área que a cena OCUPA de fato: o plano mais tudo o que foi colocado fora
@@ -71,34 +71,50 @@ export function limitesDoConteudo(scene: Scene): Bounds {
 }
 
 /**
- * Os riscos, que guardam os pontos ACHATADOS — `x0, y0, x1, y1, ...`.
+ * A caixa de UM risco, que guarda os pontos ACHATADOS — `x0, y0, x1, y1, ...`.
  *
- * Percorridos em laço e não por `Math.min(...pontos)`: um risco de três
- * segundos tem umas duzentas amostras, e espalhar as amostras de uma cena
- * inteira como argumentos é o caminho para estourar a pilha de chamada num
- * lugar onde o laço custa o mesmo.
+ * Percorrida em laço e não por `Math.min(...pontos)`: um risco de três
+ * segundos tem umas duzentas amostras, e espalhar as amostras como argumentos
+ * é o caminho para estourar a pilha de chamada num lugar onde o laço custa o
+ * mesmo.
+ *
+ * `null` no risco sem ponto nenhum: não há o que medir, e uma caixa de
+ * `Infinity` contaminaria a união inteira.
+ *
+ * Exportada porque a ÁREA DE SELEÇÃO mira nela: é por esta caixa que o laço
+ * decide se pegou o risco, do mesmo jeito que `caixaDoTexto` decide pela
+ * frase. Encostar já inclui — a mesma medida do resto do palco.
  */
-function limitesDosTracos(tracos: Scene["tracos"]): Bounds | null {
-  if (!tracos?.length) return null;
-
+export function caixaDoTraco(traco: Traco): Bounds | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
 
-  for (const traco of tracos)
-    for (let i = 0; i + 1 < traco.pontos.length; i += 2) {
-      const x = traco.pontos[i]!;
-      const y = traco.pontos[i + 1]!;
+  for (let i = 0; i + 1 < traco.pontos.length; i += 2) {
+    const x = traco.pontos[i]!;
+    const y = traco.pontos[i + 1]!;
 
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
 
-  // Lista de riscos sem ponto nenhum dentro: nada a medir.
   return minX === Infinity ? null : { minX, minY, maxX, maxY };
+}
+
+/** A união das caixas de todos os riscos da cena. */
+function limitesDosTracos(tracos: Scene["tracos"]): Bounds | null {
+  if (!tracos?.length) return null;
+
+  const caixas: Bounds[] = [];
+  for (const traco of tracos) {
+    const caixa = caixaDoTraco(traco);
+    if (caixa) caixas.push(caixa);
+  }
+
+  return unionBounds(caixas);
 }
 
 /**

@@ -98,13 +98,19 @@ useSelectionStore.subscribe((state, previous) => {
   if (
     state.selectedIds === previous.selectedIds &&
     state.selectedTextoIds === previous.selectedTextoIds &&
-    state.selectedFormaIds === previous.selectedFormaIds
+    state.selectedFormaIds === previous.selectedFormaIds &&
+    state.selectedPostitIds === previous.selectedPostitIds &&
+    state.selectedDocumentoIds === previous.selectedDocumentoIds &&
+    state.selectedTracoIds === previous.selectedTracoIds
   )
     return;
   if (
     state.selectedIds.length === 0 &&
     state.selectedTextoIds.length === 0 &&
-    state.selectedFormaIds.length === 0
+    state.selectedFormaIds.length === 0 &&
+    state.selectedPostitIds.length === 0 &&
+    state.selectedDocumentoIds.length === 0 &&
+    state.selectedTracoIds.length === 0
   )
     return;
   if (useQuadroStore.getState().ligacaoSelecionadaId)

@@ -5,6 +5,10 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { ScenePreview } from "@/components/playground/scene-preview";
 import {
+  tracoDoIcone,
+  useSceneScale,
+} from "@/components/playground/scene-stage";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -46,6 +50,24 @@ import type { AssetMeta, Scene } from "@/types/scene";
  * assenta alto demais em relação às letras minúsculas, porque não tem descida.
  */
 const ICONE = "inline-block size-[1em] shrink-0 translate-y-[0.1em]";
+
+/**
+ * A espessura do traço dos ícones da menção.
+ *
+ * O texto do postit é medido em pixel de tela sob `zoom` (ver `medidaDoCorpo`
+ * no `PostitPapel`), e o `zoom` multiplica o traço do SVG sem que a redução do
+ * envelope o traga de volta: a 30% o selo do personagem vira um quadradinho
+ * cheio. A conta mora em `tracoDoIcone`, junto de `emPixelDeTela`, que é onde
+ * as duas armadilhas do `zoom` estão documentadas.
+ *
+ * É o único lugar do quadro que ainda depende disto: o gizmo saiu do `zoom` e
+ * desfaz a ampliação por `transform`, de uma vez.
+ */
+function useTracoDoIcone(): number {
+  const { scale, ampliacaoNoLayout } = useSceneScale();
+
+  return tracoDoIcone(scale, ampliacaoNoLayout);
+}
 
 export type Vinculos = {
   /**
@@ -289,6 +311,7 @@ function PersonagemChip({
   abrirJanela: Vinculos["abrirJanela"];
 }) {
   const url = useAssetUrl(achado.retrato, "mini");
+  const traco = useTracoDoIcone();
 
   // Quem joga, e se está na mesa. Personagem sem dono — PNJ, ou ficha que ainda
   // não foi entregue — não ganha "ausente": mentiria sobre uma pessoa que não
@@ -309,6 +332,7 @@ function PersonagemChip({
             }
           >
             <VenetianMask
+              strokeWidth={traco}
               className={cn(
                 ICONE,
                 // A COR do ícone é a presença. Verde é quem joga este personagem
@@ -363,6 +387,7 @@ function ArquivoChip({
 }) {
   const imagem = asset.kind === "image";
   const url = useAssetUrl(imagem ? asset.id : undefined, "mini");
+  const traco = useTracoDoIcone();
 
   return (
     <Tooltip>
@@ -386,9 +411,9 @@ function ArquivoChip({
                 o tipo é o que decide o que dá para fazer com ele — imagem abre,
                 som não —, e é a pergunta que o mestre faz ao ver a referência. */}
             {imagem ? (
-              <ImageIcon className={ICONE} />
+              <ImageIcon className={ICONE} strokeWidth={traco} />
             ) : (
-              <Music className={ICONE} />
+              <Music className={ICONE} strokeWidth={traco} />
             )}
             {asset.name}
           </Referencia>
@@ -422,6 +447,8 @@ function CenaChip({
   cena: Scene;
   irParaCena: Vinculos["irParaCena"];
 }) {
+  const traco = useTracoDoIcone();
+
   return (
     <Tooltip>
       <TooltipTrigger
@@ -431,7 +458,7 @@ function CenaChip({
             className="text-violet-900 decoration-violet-900/40"
             aoClicar={() => irParaCena(cena.id)}
           >
-            <Camera className={ICONE} />
+            <Camera className={ICONE} strokeWidth={traco} />
             {cena.name}
           </Referencia>
         }

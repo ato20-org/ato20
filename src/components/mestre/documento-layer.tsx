@@ -2,7 +2,6 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import { AArrowDown, AArrowUp, FileText, Trash2 } from "lucide-react";
 
 import { MarkdownView, VinculosContext } from "@/components/playground/markdown-view";
 import { useMencoesDoMestre } from "@/hooks/use-mencoes-do-mestre";
@@ -10,8 +9,9 @@ import {
   emPixelDeTela,
   useSceneScale,
 } from "@/components/playground/scene-stage";
-import { useSceneDrag } from "@/hooks/use-scene-drag";
-import { postitNaArea } from "@/lib/geometry/postit";
+import { TransformHandles } from "@/components/playground/transform-handles";
+import { CORNER_HANDLES } from "@/lib/geometry/transform";
+import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -32,11 +32,10 @@ const DOCUMENTO_Z = 8_550;
 /** Ver o comentário no `style` do cartão. */
 const FUNDO_DO_CARTAO = "color-mix(in oklch, var(--card), var(--foreground) 7%)";
 const MARGEM = 12;
-/** Altura da barra de título e do rodapé, em unidades de cena. */
-const BARRA = 26;
-const RODAPE = 22;
-/** Lado da alça de redimensionar, em unidades de cena. */
-const ALCA = 16;
+/** Prende um lado do cartão entre o mínimo e o plano. */
+function presoNoTamanho(valor: number, teto: number): number {
+  return Math.round(Math.min(teto, Math.max(DOCUMENTO_MINIMO, valor)));
+}
 
 /**
  * Os cartões de nota do quadro: a prévia de um `.md`, só leitura.
@@ -52,14 +51,35 @@ const ALCA = 16;
 export function DocumentoLayer({
   scene,
   panMode,
+  onDocumentoPointerDown,
 }: {
   scene: Scene;
   panMode: boolean;
+  /**
+   * O clique no CARTÃO, entregue ao palco -- irmão do `onPostitPointerDown`, e
+   * aqui pelo mesmo motivo: a área laça o cartão junto com o resto, e quem
+   * sabe o que mais está na mão é o palco.
+   *
+   * No cartão inteiro, e não numa barra de título: o cartão é só conteúdo, e
+   * uma faixa de arrasto no topo gastava altura de leitura para oferecer o que
+   * a caixa toda já podia oferecer.
+   */
+  onDocumentoPointerDown: (
+    event: ReactPointerEvent,
+    documento: Documento,
+  ) => void;
 }) {
   const documentos = scene.documentos;
   if (!documentos || documentos.length === 0) return null;
 
-  return <Cartoes sceneId={scene.id} documentos={documentos} panMode={panMode} />;
+  return (
+    <Cartoes
+      sceneId={scene.id}
+      documentos={documentos}
+      panMode={panMode}
+      onDocumentoPointerDown={onDocumentoPointerDown}
+    />
+  );
 }
 
 /**
@@ -70,10 +90,15 @@ function Cartoes({
   sceneId,
   documentos,
   panMode,
+  onDocumentoPointerDown,
 }: {
   sceneId: string;
   documentos: Documento[];
   panMode: boolean;
+  onDocumentoPointerDown: (
+    event: ReactPointerEvent,
+    documento: Documento,
+  ) => void;
 }) {
   const { vinculos } = useMencoesDoMestre();
   const { planoDaMargem } = useSceneScale();
@@ -90,6 +115,9 @@ function Cartoes({
           sceneId={sceneId}
           documento={documento}
           panMode={panMode}
+          onCartaoPointerDown={(event) =>
+            onDocumentoPointerDown(event, documento)
+          }
         />
       ))}
     </VinculosContext>,
@@ -101,18 +129,39 @@ function CartaoDeDocumento({
   sceneId,
   documento,
   panMode,
+  onCartaoPointerDown,
 }: {
   sceneId: string;
   documento: Documento;
   panMode: boolean;
+  onCartaoPointerDown: (event: ReactPointerEvent) => void;
 }) {
   const { scale, ampliacaoNoLayout } = useSceneScale();
-  const startDrag = useSceneDrag();
   const tool = useToolStore((state) => state.tool);
 
   const updateDocumento = useSceneStore((state) => state.updateDocumento);
   const removeDocumento = useSceneStore((state) => state.removeDocumento);
   const abrirNota = useArquivoAbertoStore((state) => state.abrirNota);
+
+  const selecionado = useSelectionStore((state) =>
+    state.selectedDocumentoIds.includes(documento.id),
+  );
+  /**
+   * Este cartão é a ÚNICA coisa na mão?
+   *
+   * Mesma pergunta do texto solto, e pela mesma razão: sozinho ele traz as
+   * próprias alças e os próprios botões; acompanhado, quem desenha é o gizmo
+   * do grupo, no palco. Ver `sozinho` em `TextoLayer`.
+   */
+  const sozinho = useSelectionStore(
+    (state) =>
+      state.selectedDocumentoIds.length === 1 &&
+      state.selectedIds.length === 0 &&
+      state.selectedTextoIds.length === 0 &&
+      state.selectedFormaIds.length === 0 &&
+      state.selectedPostitIds.length === 0 &&
+      state.selectedTracoIds.length === 0,
+  );
 
   const texto = useDocumentoStore((state) => state.textos[documento.arquivo]);
   const carregar = useDocumentoStore((state) => state.carregar);
@@ -154,27 +203,9 @@ function CartaoDeDocumento({
 
   function arrastar(event: ReactPointerEvent) {
     if (panMode || tool === "ligacao") return;
-    const { x, y } = documento;
-    startDrag(event, {
-      onMove: (delta) =>
-        updateDocumento(
-          sceneId,
-          documento.id,
-          postitNaArea(x + delta.x, y + delta.y, documento.largura, documento.altura),
-        ),
-    });
-  }
-
-  function redimensionar(event: ReactPointerEvent) {
-    if (panMode) return;
-    const { largura, altura } = documento;
-    startDrag(event, {
-      onMove: (delta) =>
-        updateDocumento(sceneId, documento.id, {
-          largura: Math.min(SCENE_WIDTH, Math.max(DOCUMENTO_MINIMO, largura + delta.x)),
-          altura: Math.min(SCENE_HEIGHT, Math.max(DOCUMENTO_MINIMO, altura + delta.y)),
-        }),
-    });
+    // Como o papel do postit: quem arrasta é o palco, que leva junto o que
+    // mais estiver na mão e passa pelo caminho leve do gesto.
+    onCartaoPointerDown(event);
   }
 
   function abrir() {
@@ -182,68 +213,49 @@ function CartaoDeDocumento({
     abrirNota(documento.notaId);
   }
 
-  return (
-    <div
-      className={cn(
-        "text-card-foreground ring-foreground/20 absolute flex flex-col overflow-hidden rounded-md shadow-xl ring-1",
-        // Com a seta na mão o ponteiro é DESLIGADO aqui, e não apenas
-        // ignorado: o clique precisa ATRAVESSAR até o envelope do palco, que
-        // vive no plano de baixo e é quem trata o gesto da seta. Um tratador
-        // que só retornava deixava o pointerdown morrer neste `<div>` -- e a
-        // seta não começava em cima de um postit, de um texto nem de um
-        // cartão, que é justamente onde ela quer começar.
-        tool === "ligacao"
-          ? "pointer-events-none cursor-crosshair"
-          : "pointer-events-auto",
-      )}
-      style={{
-        left: documento.x,
-        top: documento.y,
-        width: documento.largura,
-        height: documento.altura,
-        zIndex: DOCUMENTO_Z,
-        touchAction: "none",
-        // Deslocado do plano, que também é `--card`: 7% de `--foreground`
-        // clareia no escuro e escurece no claro, e o cartão aparece nos dois.
-        background: FUNDO_DO_CARTAO,
-      }}
-      // O cartão inteiro para o clique no vazio do palco: com uma ferramenta
-      // de mira na mão, clicar no documento não pode colar um postit nele.
-      onPointerDown={(event) => event.stopPropagation()}
-      onDoubleClick={abrir}
-      title={documento.notaId ? "Duplo clique abre a nota" : undefined}
-    >
-      <div
-        className="group bg-foreground/10 flex shrink-0 cursor-move items-center gap-1 px-1.5"
-        style={{ height: BARRA }}
-        onPointerDown={arrastar}
-      >
-        <FileText
-          className="text-muted-foreground shrink-0"
-          style={{ width: BARRA * 0.55, height: BARRA * 0.55 }}
-          strokeWidth={Math.min(2.5, 2.5 / scale)}
-          aria-hidden
-        />
-        <span
-          className="min-w-0 flex-1 truncate font-medium"
-          style={{ fontSize: BARRA * 0.5 }}
-        >
-          {documento.titulo}
-        </span>
-        <button
-          type="button"
-          aria-label="Tirar este cartão do quadro"
-          title="Tira o cartão. A nota continua em Arquivos."
-          className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-          style={{ width: BARRA * 0.7, height: BARRA * 0.7 }}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => removeDocumento(sceneId, documento.id)}
-        >
-          <Trash2 className="size-full" strokeWidth={Math.min(2.5, 2.5 / scale)} />
-        </button>
-      </div>
+  const menorDisponivel = DOCUMENTO_FONTES.findIndex((f) => f >= fonte) > 0;
+  const maiorDisponivel = fonte < DOCUMENTO_FONTES[DOCUMENTO_FONTES.length - 1]!;
 
-      <div className="relative min-h-0 flex-1">
+  return (
+    <>
+      <div
+        className={cn(
+          "text-card-foreground ring-foreground/20 absolute overflow-hidden rounded-md shadow-xl ring-1",
+          // Com a seta na mão o ponteiro é DESLIGADO aqui, e não apenas
+          // ignorado: o clique precisa ATRAVESSAR até o envelope do palco, que
+          // vive no plano de baixo e é quem trata o gesto da seta. Um tratador
+          // que só retornava deixava o pointerdown morrer neste `<div>` -- e a
+          // seta não começava em cima de um postit, de um texto nem de um
+          // cartão, que é justamente onde ela quer começar.
+          tool === "ligacao"
+            ? "pointer-events-none cursor-crosshair"
+            : "pointer-events-auto cursor-move",
+        )}
+        style={{
+          left: documento.x,
+          top: documento.y,
+          width: documento.largura,
+          height: documento.altura,
+          zIndex: DOCUMENTO_Z,
+          touchAction: "none",
+          // Deslocado do plano, que também é `--card`: 7% de `--foreground`
+          // clareia no escuro e escurece no claro, e o cartão aparece nos dois.
+          background: FUNDO_DO_CARTAO,
+        }}
+        // O cartão INTEIRO arrasta, e quem arrasta é o palco: ele leva junto o
+        // que mais estiver na mão e passa pelo caminho leve do gesto. Antes
+        // havia uma faixa de título de 26 unidades só para isto, e ela cobrava
+        // altura de leitura em todo cartão para servir a um gesto que a caixa
+        // toda pode servir.
+        //
+        // O `stopPropagation` de antes não some: ele está dentro de
+        // `startDrag`, e é o que impede o palco de tratar o mesmo gesto como
+        // clique no vazio -- com uma ferramenta de mira na mão, clicar no
+        // cartão não pode colar um postit nele.
+        onPointerDown={arrastar}
+        onDoubleClick={abrir}
+        title={documento.notaId ? "Duplo clique abre a nota" : undefined}
+      >
         <div
           ref={corpo}
           className="absolute inset-0 overflow-y-auto"
@@ -266,52 +278,48 @@ function CartaoDeDocumento({
         </div>
       </div>
 
-      <div
-        className="bg-foreground/10 text-muted-foreground flex shrink-0 items-center gap-1 px-1.5"
-        style={{ height: RODAPE, fontSize: RODAPE * 0.45 }}
-        onPointerDown={(event) => event.stopPropagation()}
-        onDoubleClick={(event) => event.stopPropagation()}
-      >
-        <button
-          type="button"
-          aria-label="Diminuir a fonte"
-          className="hover:text-foreground disabled:opacity-40"
-          style={{ width: RODAPE * 0.7, height: RODAPE * 0.7 }}
-          disabled={fonte <= DOCUMENTO_FONTES[0]}
-          onClick={() => mudarFonte(-1)}
-        >
-          <AArrowDown className="size-full" strokeWidth={Math.min(2.5, 2.5 / scale)} />
-        </button>
-        <span className="tabular-nums" style={{ minWidth: RODAPE * 0.9 }}>
-          {fonte}
-        </span>
-        <button
-          type="button"
-          aria-label="Aumentar a fonte"
-          className="hover:text-foreground disabled:opacity-40"
-          style={{ width: RODAPE * 0.7, height: RODAPE * 0.7 }}
-          disabled={fonte >= DOCUMENTO_FONTES[DOCUMENTO_FONTES.length - 1]!}
-          onClick={() => mudarFonte(1)}
-        >
-          <AArrowUp className="size-full" strokeWidth={Math.min(2.5, 2.5 / scale)} />
-        </button>
-        <span className="min-w-0 flex-1 truncate text-right">
-          {documento.arquivo}
-        </span>
-        <span style={{ width: ALCA }} aria-hidden />
-      </div>
+      {/* As alças e os botões só com o cartão na mão SOZINHO, como no texto
+          solto: acompanhado, quem manda é o gizmo do grupo, e dois conjuntos
+          de alças no mesmo lugar disputariam o clique.
 
-      <button
-        type="button"
-        aria-label="Redimensionar este documento"
-        className="absolute right-0 bottom-0 cursor-nwse-resize bg-black/10"
-        style={{
-          width: ALCA,
-          height: ALCA,
-          clipPath: "polygon(100% 0, 100% 100%, 0 100%)",
-        }}
-        onPointerDown={redimensionar}
-      />
-    </div>
+          O tamanho da letra vira botão redondo na fileira de cima, junto com o
+          excluir -- é onde os outros elementos do quadro já põem o que se faz
+          com eles, e o rodapé que os guardava gastava 22 unidades de altura em
+          todo cartão para dois cliques raros. */}
+      {selecionado && sozinho && !panMode && tool !== "ligacao" ? (
+        <TransformHandles
+          key={documento.id}
+          box={{
+            x: documento.x,
+            y: documento.y,
+            width: documento.largura,
+            height: documento.altura,
+            rotation: 0,
+          }}
+          // Sem giro: o cartão não tem `rotation` no modelo -- ele é uma
+          // janela de leitura, e texto corrido torto não se lê.
+          rotatable={false}
+          handles={CORNER_HANDLES}
+          onChange={({ x, y, width, height }) =>
+            updateDocumento(sceneId, documento.id, {
+              ...(x !== undefined ? { x: Math.round(x) } : {}),
+              ...(y !== undefined ? { y: Math.round(y) } : {}),
+              ...(width !== undefined
+                ? { largura: presoNoTamanho(width, SCENE_WIDTH) }
+                : {}),
+              ...(height !== undefined
+                ? { altura: presoNoTamanho(height, SCENE_HEIGHT) }
+                : {}),
+            })
+          }
+          fonte={{
+            valor: fonte,
+            menor: menorDisponivel ? () => mudarFonte(-1) : undefined,
+            maior: maiorDisponivel ? () => mudarFonte(1) : undefined,
+          }}
+          onDelete={() => removeDocumento(sceneId, documento.id)}
+        />
+      ) : null}
+    </>
   );
 }

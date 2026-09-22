@@ -10,6 +10,7 @@ import { CircleDot, Lock, Move, Radio } from "lucide-react";
 
 import {
   emPixelDeTela,
+  tracoDoIcone,
   useSceneScale,
 } from "@/components/playground/scene-stage";
 import { TransformHandles } from "@/components/playground/transform-handles";
@@ -427,7 +428,7 @@ export function CameraFrame({
           {/* O REC na frente do nome é o único sinal de que esta é a que a
               mesa vê. Sem ele, a selecionada e a transmitida se confundem. */}
           {transmitindo ? (
-            <CircleDot className="text-red-400" style={{ width: 11, height: 11 }} />
+            <CircleDot className="text-red-400" strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
           ) : null}
           {rotulo === "rec" ? null : (
             <span className="truncate">{selecionada.nome}</span>
@@ -442,7 +443,7 @@ export function CameraFrame({
           ) : null}
           {rotulo === "cheio" && presaEm > 0 ? (
             <span className="flex items-center" style={{ gap: 3 }}>
-              <Lock style={{ width: 11, height: 11 }} />
+              <Lock strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
               {presaEm > 1 ? presaEm : null}
             </span>
           ) : null}
