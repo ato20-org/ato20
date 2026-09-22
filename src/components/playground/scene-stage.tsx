@@ -145,6 +145,40 @@ export function emPixelDeTela(scale: number): { zoom: number } {
   return { zoom: 1 / scale };
 }
 
+/**
+ * A espessura do traço de um ícone que vive DENTRO de `emPixelDeTela`, em
+ * unidades do SVG (24 por ícone).
+ *
+ * O `zoom` mexe com medida pequena de duas formas, e as duas já morderam o
+ * palco:
+ *
+ * 1. CAIXA abaixo de um pixel é levada A um pixel antes de ser multiplicada --
+ *    é o que está contado em `emPixelDeTela`, e foi o que engordava a borda da
+ *    alça do gizmo. Contra isso não há compensação: ou a medida sai do `zoom`,
+ *    ou ela deixa de ser caixa. A alça fez as duas -- foi para a margem, que
+ *    amplia por `transform`, e a borda dela virou sombra pintada.
+ * 2. TRAÇO de SVG é multiplicado pelo `zoom` e a redução do envelope não o traz
+ *    de volta. É este caso. A 30% os ícones da fileira viravam quadradinhos
+ *    cheios; medido tirando e repondo esta conta na webview.
+ *
+ * Multiplicar pela escala desfaz o que o `zoom` fez. O teto mantém o desenho
+ * original de 100% para cima -- ampliar já sai certo --, e o piso impede o
+ * traço de sumir num palco muito afastado; se ainda engordar abaixo de 20%, o
+ * piso é o primeiro número a baixar.
+ *
+ * `ampliado` é "este trecho está sob `zoom`". Onde a ampliação é `transform`
+ * -- durante o gesto, e sempre na TV -- não há o que desfazer, e compensar
+ * deixaria o traço fino demais. Ver `conteudoNoLayout`.
+ */
+export function tracoDoIcone(scale: number, ampliado = true): number {
+  if (!ampliado) return TRACO_DO_ICONE;
+
+  return Math.min(TRACO_DO_ICONE, Math.max(0.5, TRACO_DO_ICONE * scale));
+}
+
+/** O traço com que os ícones do `lucide` são desenhados. */
+const TRACO_DO_ICONE = 2;
+
 /** Passo de zoom por notch da roda. */
 const WHEEL_ZOOM_STEP = 1.15;
 

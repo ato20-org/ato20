@@ -5,6 +5,7 @@ import { CircleDot, Crosshair } from "lucide-react";
 
 import {
   emPixelDeTela,
+  tracoDoIcone,
   useSceneScale,
 } from "@/components/playground/scene-stage";
 import { TransformHandles } from "@/components/playground/transform-handles";
@@ -225,11 +226,11 @@ function Fantasma({
         >
           <span className="opacity-60">{posicao}</span>
           {transmitindo ? (
-            <CircleDot className="text-red-400" style={{ width: 11, height: 11 }} />
+            <CircleDot className="text-red-400" strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
           ) : null}
           {camera.nome}
           {segue ? (
-            <Crosshair style={{ width: 11, height: 11 }} />
+            <Crosshair strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
           ) : null}
         </span>
       </div>

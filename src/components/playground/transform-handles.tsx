@@ -5,6 +5,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   AArrowDown,
   AArrowUp,
@@ -30,10 +31,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  emPixelDeTela,
-  useSceneScale,
-} from "@/components/playground/scene-stage";
+import { useSceneScale } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
@@ -132,17 +130,17 @@ const OPACIDADE_MINIMA = 10;
  * seleção comum -- e um segundo item no mesmo tom não seria distinção nenhuma.
  *
  * O traço é uma string de CSS e não classe porque o contorno é `outline`
- * inline: `outline` com espessura em unidade de cena não sai de utilitário.
+ * inline: `outline` com espessura em unidade de cena não sai de utilitário. A
+ * alça usa o mesmo valor na sombra que faz a borda dela -- ver o `boxShadow`
+ * lá embaixo.
  */
 const TOM = {
   default: {
     traco: "var(--primary)",
-    alca: "border-primary",
     botao: "bg-primary text-primary-foreground",
   },
   personagem: {
     traco: "var(--color-sky-400)",
-    alca: "border-sky-400",
     botao: "bg-sky-500 text-white",
   },
 } as const;
@@ -330,7 +328,7 @@ export function TransformHandles({
   papel,
   ajuda,
 }: TransformHandlesProps) {
-  const { scale, toScene } = useSceneScale();
+  const { scale, toScene, planoDaMargem } = useSceneScale();
   const startDrag = useSceneDrag();
 
   /**
@@ -398,7 +396,27 @@ export function TransformHandles({
     });
   };
 
-  return (
+  /**
+   * O gizmo inteiro sai do plano de controles e vai para a MARGEM.
+   *
+   * Os dois envelopes têm a mesma geometria, então nada se move -- o que muda
+   * é a FORMA de ampliar. Com a câmera parada o plano de controles amplia por
+   * `zoom`, que é layout, e ali um valor de caixa abaixo de um pixel é levado
+   * a um pixel inteiro antes de ser multiplicado: a borda de 1,5px da alça
+   * virava 3px a 46%, e o `scale(1/scale)` da própria alça ainda multiplicava
+   * o erro. Era o inchaço que aparecia na forma e no texto e não aparecia no
+   * postit nem no cartão -- esses dois já desenhavam na margem.
+   *
+   * A margem amplia sempre por `transform`, que é pintura: não há piso de
+   * caixa a atropelar medida nenhuma. E ela não tem caixa própria (0x0), então
+   * um gizmo que passe da borda do plano -- alça de um token estacionado fora
+   * do mapa -- não infla camada composta nenhuma. Ver `planoDaMargem` e
+   * `debug-do-palco` §3.
+   *
+   * Sem margem -- a TV, que não a monta --, desenha onde está. Lá não há gizmo
+   * de todo modo: ele é cromo do Mestre.
+   */
+  const conteudo = (
     <div
       className="pointer-events-none absolute"
       style={{
@@ -439,10 +457,21 @@ export function TransformHandles({
       onDelete ? (
         <div
           className="pointer-events-none absolute flex items-center"
-          // A POSIÇÃO continua em unidade de cena -- ela acompanha o item. O
-          // que muda é o conteúdo: `emPixelDeTela` desfaz a ampliação do plano,
-          // e daqui para dentro tudo é medido em pixel de tela, sem sub-pixel
-          // para o piso do `zoom` pegar.
+          // A POSIÇÃO continua em unidade de cena -- ela acompanha o item --, e
+          // a ampliação é desfeita por `transform`, de uma vez, para a fileira
+          // inteira.
+          //
+          // Por `transform` e não por `emPixelDeTela`: o gizmo mora na MARGEM,
+          // que amplia por transform, e desfazer transform com transform
+          // escala tudo junto -- caixa, borda e traço do ícone. Desfazer com
+          // `zoom` misturava as duas formas, e aí cada medida pegava um
+          // caminho: a caixa voltava ao tamanho certo e o traço do SVG saía
+          // multiplicado, que era o ícone virando quadradinho cheio ao afastar
+          // o palco. Ver o cabeçalho de `tracoDoIcone`.
+          //
+          // A origem é o meio da BORDA DE BAIXO: é o ponto que tem de ficar
+          // colado acima da caixa, e escalar em volta dele mantém a fileira
+          // ancorada enquanto ela cresce para cima.
           style={{
             left: "50%",
             top: 0,
@@ -452,8 +481,8 @@ export function TransformHandles({
             // para fora dos cantos, e a zona do canto de cima engolia o clique
             // do primeiro botão. Aqui o botão é o alvo explícito e ganha.
             zIndex: 1,
-            ...emPixelDeTela(scale),
-            transform: `translate(-50%, calc(-100% - ${ROTATE_OFFSET_PX - HANDLE_PX * 2}px))`,
+            transform: `translate(-50%, calc(-100% - ${px(ROTATE_OFFSET_PX - HANDLE_PX * 2)}px)) scale(${1 / scale})`,
+            transformOrigin: "50% 100%",
           }}
         >
           {onFlip ? (
@@ -959,10 +988,7 @@ export function TransformHandles({
           key={handle}
           type="button"
           aria-label={`Redimensionar ${handle}`}
-          className={cn(
-            "bg-background pointer-events-auto absolute touch-none rounded-[1px]",
-            cor.alca,
-          )}
+          className="bg-background pointer-events-auto absolute touch-none rounded-[1px]"
           style={{
             ...HANDLE_POSITION[handle],
             // Tamanho FIXO, e a ampliação do plano desfeita por `transform`.
@@ -981,7 +1007,21 @@ export function TransformHandles({
             // porque as duas operações preservam o centro do elemento.
             width: HANDLE_PX,
             height: HANDLE_PX,
-            borderWidth: OUTLINE_PX,
+            // A borda é PINTADA, e não caixa -- e é o que a impede de inchar
+            // quando o palco afasta.
+            //
+            // Como `border-width`, ela era 1,5px de autor dentro de um plano
+            // sob `zoom: scale`: a 33% o valor usado dá 0,495px, o WebKit leva
+            // sub-pixel de caixa PARA um pixel, e o `scale(1/scale)` desta alça
+            // multiplica o pixel inteiro de volta -- três pixels na tela no
+            // lugar de um e meio, e pior quanto mais longe. É o mesmo piso que
+            // engrossava os ícones (ver `tracoDoIcone`), e aqui ele não tem
+            // como ser desfeito por conta: quem floreia é o plano de cima.
+            //
+            // Sombra interna não é layout: ela é pintada com antialias, atravessa
+            // o `zoom` sem piso, e desenha exatamente onde a borda desenhava --
+            // a caixa é `border-box`, então a borda já ficava por dentro.
+            boxShadow: `inset 0 0 0 ${OUTLINE_PX}px ${cor.traco}`,
             transform: `translate(-50%, -50%) scale(${1 / scale})`,
             // Compensa o giro: a seta aponta para onde a alça de fato empurra.
             cursor: handleCursor(handle, item.rotation),
@@ -991,6 +1031,8 @@ export function TransformHandles({
       ))}
     </div>
   );
+
+  return planoDaMargem ? createPortal(conteudo, planoDaMargem) : conteudo;
 }
 
 /**
