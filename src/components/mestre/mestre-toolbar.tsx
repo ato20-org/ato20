@@ -113,28 +113,28 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
 ];
 
 /**
- * As do QUADRO, além do ponto e do postit: letra na folha e seta entre coisas.
- * Só aparecem no quadro -- num mapa, título solto e seta entre tokens seriam
- * anotação que a mesa não vê e que o mestre já faz com o postit.
+ * As de DESENHAR: letra solta e as três formas. Valem nos dois tipos de cena.
+ *
+ * Eram do quadro e só dele, e a razão dada era que num mapa o título solto
+ * seria anotação que a mesa não vê -- o mestre já tinha o postit para isso.
+ * O que mudou foi justamente isso: a letra e a forma agora PODEM chegar à
+ * mesa, uma a uma, pelo olho do gizmo. Com isso elas passam a ser as únicas
+ * marcas que o mapa sabe mostrar para quem assiste -- um rótulo em cima da
+ * cidade, um círculo em volta da emboscada --, e prendê-las ao quadro seria
+ * guardar a única coisa que resolve isso na cena errada. Ver `naMesa`.
  */
-const FERRAMENTAS_QUADRO: Ferramenta[] = [
+const FERRAMENTAS_DE_DESENHO: Ferramenta[] = [
   {
     tool: "texto",
     label: "Texto",
-    hint: "Clique no quadro para escrever direto na folha, sem papel. Duplo clique edita, arrasto move; selecionado, os cantos aumentam e a alça de cima gira, como na imagem.",
+    hint: "Clique para escrever direto na cena, sem papel. Duplo clique edita, arrasto move; selecionado, os cantos aumentam e a alça de cima gira, como na imagem. Num mapa ele nasce só para você: o olho do gizmo o manda para a mesa.",
     icon: Type,
-  },
-  {
-    tool: "ligacao",
-    label: "Seta",
-    hint: "Passe por cima de qualquer coisa do quadro e os quatro pontos de encaixe dela acendem. Clique num ponto e a seta fica pendurada no cursor até o clique da outra ponta; arrastar de um ponto ao outro também vale. No vazio, a ponta fica livre. Sobre outra seta a ponta vira bifurcação. Selecionada, as alças movem as pontas; duplo clique dá rótulo. Feita a seta, a ferramenta se larga sozinha.",
-    icon: Spline,
   },
   {
     tool: "forma",
     tipoDeForma: "retangulo",
     label: "Quadrado",
-    hint: "Arraste para desenhar um retângulo. Segurar Shift iguala os lados e sai um quadrado. Vazado por padrão; cor, espessura e fundo ficam no botão ao lado.",
+    hint: "Arraste para desenhar um retângulo. Segurar Shift iguala os lados e sai um quadrado. Vazado por padrão; cor, espessura e fundo ficam no botão ao lado. Num mapa ele nasce só para você: o olho do gizmo o manda para a mesa.",
     icon: Square,
   },
   {
@@ -154,16 +154,42 @@ const FERRAMENTAS_QUADRO: Ferramenta[] = [
 ];
 
 /**
- * Tudo o que um QUADRO tem, na ordem da régua de ferramentas.
+ * A do QUADRO e só dele: a seta entre duas coisas.
  *
- * Do mapa sobram as duas que anotam; a névoa e o alfinete ficam de fora --
- * quadro não tem chão para esconder, e o ponto é nota fechada atrás de um
- * alfinete, que não faz sentido onde a nota já é o cartão.
+ * Fica de fora do mapa porque o que ela amarra -- postit a postit, cartão a
+ * cartão -- é justamente o que a mesa nunca recebe de um mapa: uma seta entre
+ * dois papéis invisíveis seria uma seta para lugar nenhum.
  */
-const FERRAMENTAS_DO_QUADRO: Ferramenta[] = [
-  ...FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog" && f.tool !== "pin"),
-  ...FERRAMENTAS_QUADRO,
+const FERRAMENTAS_QUADRO: Ferramenta[] = [
+  {
+    tool: "ligacao",
+    label: "Seta",
+    hint: "Passe por cima de qualquer coisa do quadro e os quatro pontos de encaixe dela acendem. Clique num ponto e a seta fica pendurada no cursor até o clique da outra ponta; arrastar de um ponto ao outro também vale. No vazio, a ponta fica livre. Sobre outra seta a ponta vira bifurcação. Selecionada, as alças movem as pontas; duplo clique dá rótulo. Feita a seta, a ferramenta se larga sozinha.",
+    icon: Spline,
+  },
 ];
+
+/**
+ * O que a régua leva em cada tipo de cena.
+ *
+ * No QUADRO: o postit -- que ali é conteúdo, e não anotação -- mais a letra, as
+ * formas e a seta. A névoa e o alfinete ficam de fora: quadro não tem chão para
+ * esconder, e o ponto é nota fechada atrás de um alfinete, que não faz sentido
+ * onde a nota já é o cartão.
+ *
+ * No MAPA: só as de desenhar. O ponto, o postit e a névoa continuam na bolsa
+ * do rodapé, que é o desenho certo para o que se marca no chão uma vez por
+ * cena -- trazê-los para a régua seria mudar o mapa inteiro de lugar para
+ * acomodar duas ferramentas novas.
+ */
+const DA_REGUA: Record<"quadro" | "mapa", Ferramenta[]> = {
+  quadro: [
+    ...FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog" && f.tool !== "pin"),
+    ...FERRAMENTAS_DE_DESENHO,
+    ...FERRAMENTAS_QUADRO,
+  ],
+  mapa: FERRAMENTAS_DE_DESENHO,
+};
 
 /** Esta ferramenta é a que está na mão? O tipo de forma entra na conta. */
 function ehAtiva(
@@ -260,36 +286,45 @@ function BotaoDeFerramenta({
 }
 
 /**
- * A régua de ferramentas do QUADRO, encostada na borda esquerda do palco.
+ * A régua de DESENHO, encostada na borda esquerda do palco.
  *
- * À vista, e não dentro de uma bolsa. A bolsa é o desenho certo para o mapa,
- * onde a maior parte da sessão passa com a seleção na mão e o alfinete é coisa
- * de uma vez por cena; o quadro é o contrário -- montar uma rede de pistas é
- * trocar de ferramenta a cada gesto, e cada troca custava dois cliques e saber
- * que a régua morava atrás de um ícone.
+ * À vista, e não dentro de uma bolsa: desenhar é trocar de ferramenta a cada
+ * gesto -- escreve o rótulo, cerca a região, risca o eixo --, e a bolsa cobrava
+ * dois cliques por troca e ainda exigia saber que a régua morava atrás de um
+ * ícone.
  *
  * À esquerda e no meio da altura, e não no rodapé junto das outras: é a borda
  * que o editor de desenho usa para isto desde sempre, fica longe do zoom e das
  * câmeras, e deixa o rodapé para o que é do PALCO -- selecionar, deslocar,
  * riscar --, que continua valendo em mapa e em quadro.
  *
+ * Nos DOIS tipos de cena, e o que muda é só o que ela carrega -- ver `DA_REGUA`.
+ * Ela nasceu só no quadro porque só o quadro tinha o que desenhar; com a letra
+ * e a forma valendo também no mapa, deixá-la no quadro obrigaria as mesmas
+ * ferramentas a morar em dois lugares diferentes conforme a cena, que é
+ * exatamente o que faz alguém não achar uma delas.
+ *
  * O controle da ferramenta ativa vem no fim da régua, e não no rodapé: escolher
  * o quadrado e ter de atravessar o palco para trocar a cor dele seria separar
  * duas metades do mesmo gesto.
  */
-export function FerramentasDoQuadro() {
+export function ReguaDeDesenho({ scene }: { scene: Scene }) {
   const dasExtensoes = useFerramentasDeExtensao();
+  const quadro = ehQuadro(scene);
 
   return (
     <div className="bg-background/85 pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-      {FERRAMENTAS_DO_QUADRO.map((ferramenta) => (
+      {DA_REGUA[quadro ? "quadro" : "mapa"].map((ferramenta) => (
         <BotaoDeFerramenta
           key={ferramenta.tipoDeForma ?? ferramenta.tool}
           ferramenta={ferramenta}
         />
       ))}
 
-      {dasExtensoes.length > 0 ? (
+      {/* As de plugin acompanham a régua só no quadro. No mapa elas já estão na
+          bolsa, e o mesmo botão em dois cantos do palco seria duas respostas
+          para a pergunta de onde ele mora. */}
+      {quadro && dasExtensoes.length > 0 ? (
         <>
           <span className="bg-border my-1 h-px w-5" />
           {dasExtensoes.map((ferramenta) => (
@@ -298,23 +333,31 @@ export function FerramentasDoQuadro() {
         </>
       ) : null}
 
-      {/* Os dois se escondem sozinhos quando não é a vez deles, e por isso o
-          separador também precisa saber: sem ele, a régua ficaria com um risco
-          solto no pé metade do tempo. */}
-      <SeparadorDoControle />
+      {/* Os controles se escondem sozinhos quando não é a vez deles, e por isso
+          o separador também precisa saber: sem ele, a régua ficaria com um
+          risco solto no pé metade do tempo. */}
+      <SeparadorDoControle quadro={quadro} />
     </div>
   );
 }
 
-/** O risco e o controle da ferramenta na mão, ou nada. */
-function SeparadorDoControle() {
+/**
+ * O risco e o controle da ferramenta na mão, ou nada.
+ *
+ * O da forma acompanha a régua nos dois tipos de cena, porque é na régua que a
+ * forma é escolhida. O do postit só no quadro: no mapa o papel é escolhido na
+ * bolsa do rodapé, e a cor dele fica ao lado de onde a escolha aconteceu.
+ */
+function SeparadorDoControle({ quadro }: { quadro: boolean }) {
   const tool = useToolStore((state) => state.tool);
-  if (tool !== "postit" && tool !== "forma") return null;
+  const postit = quadro && tool === "postit";
+
+  if (!postit && tool !== "forma") return null;
 
   return (
     <>
       <span className="bg-border my-1 h-px w-5" />
-      <PostitControl lado="right" />
+      {postit ? <PostitControl lado="right" /> : null}
       <FormaControl lado="right" />
     </>
   );
@@ -335,7 +378,11 @@ function SeparadorDoControle() {
  * NO QUADRO a segunda bolsa não existe: as ferramentas dele estão à vista na
  * régua da borda esquerda, porque montar uma rede de pistas é trocar de
  * ferramenta a cada gesto e a bolsa cobrava dois cliques por troca. Ver
- * `FerramentasDoQuadro`. Sobra aqui a bolsa do PALCO, que vale nos dois.
+ * `ReguaDeDesenho`. Sobra aqui a bolsa do PALCO, que vale nos dois.
+ *
+ * NO MAPA as duas convivem, e a divisão é a mesma de sempre: a régua leva o que
+ * se DESENHA -- letra e forma --, a bolsa leva o que se marca no chão -- ponto,
+ * papel, névoa, grade, régua de medir.
  *
  * O botão da bolsa mostra a ferramenta ATIVA dela, e não um ícone fixo: com a
  * bolsa fechada, o que está na mão é a única informação que importa. Escolher
@@ -344,8 +391,9 @@ function SeparadorDoControle() {
  *
  * A cor do lápis fica FORA das bolsas, ao lado dos botões: dentro, sumiria
  * junto com a bolsa no instante em que o mestre escolhesse a ferramenta que a
- * pede. A do postit e a da forma acompanham a régua no quadro, e ficam aqui no
- * mapa, sempre ao lado de onde a ferramenta foi escolhida.
+ * pede. A regra é sempre a mesma -- o controle fica ao lado de onde a
+ * ferramenta foi escolhida --, e é ela que manda a cor da forma para a régua
+ * nos dois tipos de cena e deixa a do postit aqui só no mapa.
  */
 export function MestreToolbar({ scene }: { scene: Scene }) {
   const tool = useToolStore((state) => state.tool);
@@ -372,13 +420,10 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   useEffect(() => {
     if (quadro && (tool === "fog" || tool === "regua" || tool === "pin"))
       setTool("select");
-    // E o inverso: texto, seta e forma são do quadro, e um mapa não tem onde
-    // mostrá-las.
-    if (
-      !quadro &&
-      (tool === "texto" || tool === "ligacao" || tool === "forma")
-    )
-      setTool("select");
+    // E o inverso: só a SETA agora. A letra e a forma atravessam a troca de
+    // cena porque valem nos dois lados -- ver `FERRAMENTAS_DE_DESENHO` --, e
+    // largá-las aqui faria o mestre perder a ferramenta ao ir buscar um mapa.
+    if (!quadro && tool === "ligacao") setTool("select");
   }, [quadro, tool, setTool]);
 
   // A ferramenta ativa de cada bolsa, para o botão dela mostrar. `select` é
@@ -451,16 +496,14 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
       )}
 
       {/* Só com a ferramenta correspondente na mão; todos se escondem sozinhos.
-          Os dois do quadro acompanham a régua da esquerda e não aparecem aqui:
-          um controle em cada canto seria o mesmo botão em dois lugares. */}
+          O da FORMA nunca aparece aqui: a forma é escolhida na régua da
+          esquerda nos dois tipos de cena, e a cor dela acompanha a régua -- um
+          controle em cada canto seria o mesmo botão em dois lugares. O do
+          POSTIT aparece só no mapa, que é onde o papel é escolhido na bolsa
+          logo ao lado. */}
       <PencilControl />
       <ReguaControl />
-      {quadro ? null : (
-        <>
-          <PostitControl />
-          <FormaControl />
-        </>
-      )}
+      {quadro ? null : <PostitControl />}
 
       {/* Largar a ferramenta, para quem escolheu e desistiu. O Esc faz o mesmo,
           mas um botão à vista é o que diz que dá para desistir. Só aparece com
