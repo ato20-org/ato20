@@ -3,6 +3,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
+import { pontosNaCaixa } from "@/lib/geometry/area-escondida";
 import { cn } from "@/lib/utils";
 import type { FogRegion } from "@/types/scene";
 
@@ -21,6 +22,55 @@ type FogLayerProps = {
   smooth?: boolean;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
 };
+
+/**
+ * O recorte de um polígono, desenhado DENTRO da caixa da área.
+ *
+ * SVG e não `clip-path`: o recorte corta tudo que está no elemento, inclusive a
+ * borda, e o mestre ficaria com um bloco escuro sem contorno -- justamente o
+ * que ele usa para saber onde a área começa quando ela já está revelada. Aqui
+ * o preenchimento e o traço são a MESMA figura.
+ *
+ * O `viewBox` é a caixa, então o desenho acompanha qualquer escala dela sem
+ * recontar ponto, e nada aqui passa da caixa: um filho que transborda o plano
+ * é o que já pintou o palco deslocado e preto no zoom três vezes.
+ */
+function PoligonoDaArea({
+  region,
+  preenchimento,
+  contorno,
+  espessura,
+}: {
+  region: FogRegion;
+  preenchimento: string;
+  contorno?: string;
+  espessura: number;
+}) {
+  const pontos = pontosNaCaixa(region, region.pontos ?? [])
+    .map((ponto) => `${ponto.x},${ponto.y}`)
+    .join(" ");
+
+  return (
+    <svg
+      className="pointer-events-none absolute top-0 left-0"
+      width={region.width}
+      height={region.height}
+      viewBox={`0 0 ${region.width} ${region.height}`}
+    >
+      <polygon
+        points={pontos}
+        // O clique é do POLÍGONO, não da caixa: o envelope é retangular, e
+        // deixá-lo pegar o gesto faria os cantos vazios de uma área recortada
+        // roubarem o clique do token que está embaixo deles.
+        className="pointer-events-auto"
+        fill={preenchimento}
+        stroke={contorno}
+        strokeWidth={contorno ? espessura : undefined}
+        strokeDasharray={contorno ? `${espessura * 4} ${espessura * 3}` : undefined}
+      />
+    </svg>
+  );
+}
 
 export function FogLayer({
   fog,
@@ -43,6 +93,14 @@ export function FogLayer({
         const revealedToTable = region.revealed && !isOperator;
         if (revealedToTable && !smooth) return null;
 
+        const formato = region.formato ?? "retangulo";
+        const traco = 1.5 / scale;
+
+        // O polígono pinta a si mesmo: o elemento continua sendo a caixa
+        // inteira, e deixá-lo com fundo mostraria o retângulo por trás do
+        // recorte. Aqui ele é só o envelope que carrega posição e giro.
+        const recortado = formato === "poligono";
+
         return (
           <div
             key={region.id}
@@ -50,22 +108,31 @@ export function FogLayer({
             className={cn(
               "absolute top-0 left-0",
               isOperator && "touch-none",
-              region.revealed
-                ? "border-dashed border-white/25"
-                : isOperator
-                  ? "border-dashed border-white/40 bg-black/70"
-                  : "bg-black",
+              formato === "elipse" && "rounded-[50%]",
+              // Envelope sem clique: quem recebe o gesto de uma área recortada
+              // é o polígono lá dentro, e o evento sobe daqui mesmo assim.
+              recortado && "pointer-events-none",
+              recortado
+                ? null
+                : region.revealed
+                  ? "border-dashed border-white/25"
+                  : isOperator
+                    ? "border-dashed border-white/40 bg-black/70"
+                    : "bg-black",
               smooth && "scene-smooth-fog",
-              revealedToTable && "bg-black opacity-0",
+              revealedToTable && !recortado && "bg-black opacity-0",
+              revealedToTable && recortado && "opacity-0",
             )}
             // `transform` em vez de `left/top`, pelo mesmo motivo do item: mover
-            // a área não deve refazer o layout do plano.
+            // a área não deve refazer o layout do plano. O giro entra no mesmo
+            // `transform`, e é o que permite cobrir um corredor torto sem
+            // cobrir meio mapa junto.
             style={{
-              transform: `translate(${region.x}px, ${region.y}px)`,
+              transform: `translate(${region.x}px, ${region.y}px) rotate(${region.rotation ?? 0}deg)`,
               width: region.width,
               height: region.height,
               zIndex: FOG_Z,
-              borderWidth: isOperator ? 1.5 / scale : 0,
+              borderWidth: isOperator && !recortado ? traco : 0,
               cursor: onFogPointerDown ? "move" : undefined,
             }}
             onPointerDown={
@@ -74,6 +141,27 @@ export function FogLayer({
                 : undefined
             }
           >
+            {recortado ? (
+              <PoligonoDaArea
+                region={region}
+                preenchimento={
+                  region.revealed && isOperator
+                    ? "transparent"
+                    : isOperator
+                      ? "rgb(0 0 0 / 0.7)"
+                      : "#000"
+                }
+                contorno={
+                  isOperator
+                    ? region.revealed
+                      ? "rgb(255 255 255 / 0.25)"
+                      : "rgb(255 255 255 / 0.4)"
+                    : undefined
+                }
+                espessura={traco}
+              />
+            ) : null}
+
             {isOperator ? (
               <span
                 className="absolute font-medium text-white/60"

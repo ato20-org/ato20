@@ -7,12 +7,15 @@ import {
   FORMA_ESPESSURA,
   type CorPostit,
   type FormaMedidor,
+  type FormatoDeArea,
   type TipoDeForma,
 } from "@/types/scene";
 
 /**
  * `select` é o modo normal, `hand` desloca a cena no arrasto, `fog` desenha uma
- * área escondida no arrasto, `pin` crava um ponto de anotação no clique,
+ * área escondida -- no arrasto se ela for retângulo ou elipse, vértice a
+ * vértice se for polígono, conforme `formatoDeArea` --, `pin` crava um ponto de
+ * anotação no clique,
  * `postit` cola um papel de texto no clique, e `lapis`/`borracha` riscam e
  * apagam à mão livre.
  *
@@ -146,6 +149,17 @@ type ToolStore = {
    * Sem fundo por padrão: uma caixa cheia sobre o quadro esconderia o que está
    * atrás dela, e o uso normal é CERCAR. Ver `Forma`.
    */
+  /**
+   * O recorte da PRÓXIMA área escondida.
+   *
+   * Aqui pelas mesmas razões do tipo de forma: é preferência de quem esconde, e
+   * cada área guarda o formato com que nasceu -- trocar este não remodela o que
+   * já está no mapa. O retângulo é o padrão porque é o que a área sempre foi, e
+   * é o que cobre uma sala.
+   */
+  formatoDeArea: FormatoDeArea;
+  setFormatoDeArea: (formato: FormatoDeArea) => void;
+
   tipoDeForma: TipoDeForma;
   /** Ausente = a cor do tema. Ver `Forma`. */
   corForma?: string;
@@ -175,6 +189,9 @@ export const useToolStore = create<ToolStore>((set) => ({
   formaMedidor: "linha",
   corMedidor: CORES_LAPIS[5],
   setMedidor: (medidor) => set(medidor),
+
+  formatoDeArea: "retangulo",
+  setFormatoDeArea: (formatoDeArea) => set({ formatoDeArea }),
 
   tipoDeForma: "retangulo",
   corForma: undefined,

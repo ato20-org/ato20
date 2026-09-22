@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { AlcasDaArea } from "@/components/mestre/alcas-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
 import {
@@ -41,6 +42,7 @@ import {
   empurrarPostits,
   empurrarTracos,
 } from "@/lib/mestre/grupo-sem-alca";
+import { areaDoPoligono } from "@/lib/geometry/area-escondida";
 import { caixaDoTraco } from "@/lib/geometry/limites";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
@@ -185,6 +187,30 @@ const AMOSTRA_PX = 3;
 const ALCANCE_BORRACHA_PX = 6;
 
 /**
+ * Quão perto do PRIMEIRO vértice o clique fecha o laço, em pixels de tela.
+ *
+ * Em pixel de tela, como a borracha e a amostra do risco: fechar é mira, e
+ * mira se faz na tela -- ampliado, o mesmo raio em unidades de cena viraria
+ * uma janela minúscula justamente onde o mestre está detalhando o contorno.
+ */
+const RAIO_DE_FECHO_PX = 12;
+
+/**
+ * O ponto preso ao plano.
+ *
+ * A área escondida cobre o MAPA, e o mestre desenha com a cena afastada, onde
+ * sobra margem em volta dela: sem isto, um vértice cravado na margem daria uma
+ * área maior que o plano -- e um filho maior que o plano é a armadilha que
+ * pinta o palco deslocado e preto no zoom (`debug-do-palco` §3).
+ */
+function noPlano(ponto: Vec): Vec {
+  return {
+    x: Math.round(Math.min(Math.max(ponto.x, 0), SCENE_WIDTH)),
+    y: Math.round(Math.min(Math.max(ponto.y, 0), SCENE_HEIGHT)),
+  };
+}
+
+/**
  * A borracha alcançou este risco?
  *
  * Testa a distância do ponto a cada SEGMENTO, e não aos vértices: com risco
@@ -291,6 +317,30 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * fora do gesto. Ver `FormaFantasma`.
    */
   const [rascunhoDaForma, setRascunhoDaForma] = useState<NewForma | null>(null);
+
+  /**
+   * O laço da área escondida livre: os vértices já cravados, em coordenadas de
+   * cena. `null` quando não há laço em curso.
+   *
+   * Em estado, e não em ref como o risco: aqui cada vértice é um CLIQUE, e não
+   * uma amostra de 60 por segundo -- um render por clique é barato, e é o que
+   * mantém as alças-fantasma e a linha desenhadas sem sincronizar DOM à mão.
+   * Quem anda por quadro é só a ponta que segue o cursor, e essa vai pela ref
+   * abaixo, pelo mesmo motivo do risco.
+   */
+  const [laco, setLaco] = useState<{ sceneId: string; pontos: Vec[] } | null>(
+    null,
+  );
+  const previaDoLaco = useRef<SVGPolygonElement | null>(null);
+
+  /**
+   * Os vértices do laço desta cena, ou `null`.
+   *
+   * A cena dona vai JUNTO do laço, e é o que faz trocar de mapa no meio do
+   * contorno não deixar um laço órfão esperando para ser cravado no mapa
+   * seguinte.
+   */
+  const pontosDoLaco = laco?.sceneId === scene.id ? laco.pontos : null;
   const [guides, setGuides] = useState<Guide[]>(NO_GUIDES);
   /**
    * Abrir a nota de um ponto.
@@ -310,6 +360,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const formaMedidor = useToolStore((state) => state.formaMedidor);
   const corMedidor = useToolStore((state) => state.corMedidor);
   const tipoDeForma = useToolStore((state) => state.tipoDeForma);
+  const formatoDeArea = useToolStore((state) => state.formatoDeArea);
   const corForma = useToolStore((state) => state.corForma);
   const espessuraForma = useToolStore((state) => state.espessuraForma);
   const fundoForma = useToolStore((state) => state.fundoForma);
@@ -704,7 +755,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       : single && (single.locked || panMode)
         ? itemBounds(single)
         : selectedFog && panMode
-          ? boxBounds(selectedFog)
+          ? itemBounds({ ...selectedFog, rotation: selectedFog.rotation ?? 0 })
           : null;
 
   /**
@@ -745,7 +796,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   function snapTargets(exclude: (id: string) => boolean): Bounds[] {
     return [
       ...scene.items.filter((item) => !exclude(item.id)).map(itemBounds),
-      ...scene.fog.filter((region) => !exclude(region.id)).map(boxBounds),
+      // Pela caixa GIRADA, como o item: uma área torta ocupa mais que a caixa
+      // dela, e alinhar pelo retângulo cru daria guia em lugar nenhum.
+      ...scene.fog
+        .filter((region) => !exclude(region.id))
+        .map((region) => itemBounds({ ...region, rotation: region.rotation ?? 0 })),
     ];
   }
 
@@ -1651,6 +1706,46 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     setTool("select");
   }
 
+  /** Fecha o laço numa área da cena. Menos de três vértices não é região. */
+  function fecharLaco(pontos: Vec[]) {
+    setLaco(null);
+    if (pontos.length < 3) return;
+
+    selectFog(addFog(scene.id, areaDoPoligono(pontos)));
+    // Volta ao modo normal, como as outras áreas: o gesto seguinte é conferir
+    // o que se escondeu, e não esconder mais um pedaço.
+    setTool("select");
+  }
+
+  /**
+   * Mais um vértice do laço -- ou o fecho, se o clique voltou ao primeiro.
+   *
+   * Clique a clique, e não arrasto: o contorno de uma sala tem cantos, e um
+   * gesto contínuo obrigaria a mão a fazer o traço inteiro sem errar, de uma
+   * vez só. Aqui cada canto é uma decisão, e Backspace desfaz a última.
+   */
+  function cravarVertice(ponto: Vec) {
+    const novo = noPlano(ponto);
+
+    if (!pontosDoLaco) {
+      setLaco({ sceneId: scene.id, pontos: [novo] });
+      return;
+    }
+
+    const primeiro = pontosDoLaco[0];
+    const fechou =
+      pontosDoLaco.length >= 3 &&
+      Math.hypot(novo.x - primeiro.x, novo.y - primeiro.y) <
+        RAIO_DE_FECHO_PX / scale;
+
+    if (fechou) {
+      fecharLaco(pontosDoLaco);
+      return;
+    }
+
+    setLaco({ sceneId: scene.id, pontos: [...pontosDoLaco, novo] });
+  }
+
   /** Arrasto no vazio: desenha área escondida (ferramenta névoa) ou marca vários. */
   function handleCanvasPointerDown(event: ReactPointerEvent) {
     if (event.button !== 0) {
@@ -1813,20 +1908,46 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     }
 
     if (tool === "fog") {
+      // A área LIVRE não é arrasto: ela se desenha vértice a vértice, e o
+      // gesto todo acontece em cliques. Ver `cravarVertice`.
+      if (formatoDeArea === "poligono") {
+        cravarVertice(anchor);
+        return;
+      }
+
+      // Shift iguala os lados, como na forma do quadro: é assim que saem o
+      // quadrado e o círculo, e é o mesmo teclado de todo editor.
+      const travado = (ponto: Vec, shift: boolean) => {
+        if (!shift) return ponto;
+
+        const lado = Math.max(
+          Math.abs(ponto.x - anchor.x),
+          Math.abs(ponto.y - anchor.y),
+        );
+
+        return {
+          x: anchor.x + Math.sign(ponto.x - anchor.x) * lado,
+          y: anchor.y + Math.sign(ponto.y - anchor.y) * lado,
+        };
+      };
+
       startDrag(event, {
-        onMove: (delta) =>
+        onMove: (delta, native) =>
           setMarquee(
-            boundsFromPoints(anchor, {
-              x: anchor.x + delta.x,
-              y: anchor.y + delta.y,
-            }),
+            boundsFromPoints(
+              anchor,
+              travado(
+                { x: anchor.x + delta.x, y: anchor.y + delta.y },
+                native.shiftKey,
+              ),
+            ),
           ),
         onEnd: (native) => {
           setMarquee(null);
 
           const area = boundsFromPoints(
             anchor,
-            toScene(native.clientX, native.clientY),
+            travado(toScene(native.clientX, native.clientY), native.shiftKey),
           );
           const box = boundsToBox(area);
           // Clique sem arrasto criaria uma área invisível impossível de pegar.
@@ -1838,6 +1959,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
               y: Math.round(box.y),
               width: Math.round(box.width),
               height: Math.round(box.height),
+              formato: formatoDeArea,
             }),
           );
           // Volta ao modo normal: desenhar duas áreas seguidas é raro, e ficar
@@ -2080,6 +2202,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * em efeito, que é o que mantém os handlers sempre atuais.
    */
   const handlersRef = useRef({
+    fecharLaco,
     item: handleItemPointerDown,
     fog: handleFogPointerDown,
     portrait: handlePortraitPointerDown,
@@ -2091,6 +2214,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
   useEffect(() => {
     handlersRef.current = {
+      fecharLaco,
       item: handleItemPointerDown,
       fog: handleFogPointerDown,
       portrait: handlePortraitPointerDown,
@@ -2105,6 +2229,86 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     (event: ReactPointerEvent, item: CanvasItem) => {
       handlersRef.current.item(event, item);
     },
+    [],
+  );
+
+  /**
+   * O laço em curso: a ponta que segue o cursor e as teclas que o terminam.
+   *
+   * A ponta vai pelo DOM, como a prévia do risco: ela anda a cada movimento do
+   * mouse, e um estado por movimento re-renderizaria o palco inteiro -- com o
+   * mapa, os tokens e as camadas dentro -- enquanto o mestre contorna uma sala.
+   *
+   * As teclas são ouvidas na CAPTURA, antes dos atalhos do mestre: com um laço
+   * aberto, Backspace tira o último vértice em vez de apagar o que está
+   * selecionado, e Esc desiste do laço em vez de largar a ferramenta. Sem isso,
+   * as duas teclas fariam duas coisas ao mesmo tempo.
+   */
+  useEffect(() => {
+    if (!pontosDoLaco) return;
+
+    const aoMover = (evento: PointerEvent) => {
+      const ponta = noPlano(toScene(evento.clientX, evento.clientY));
+
+      previaDoLaco.current?.setAttribute(
+        "points",
+        [...pontosDoLaco, ponta]
+          .map((ponto) => `${ponto.x},${ponto.y}`)
+          .join(" "),
+      );
+    };
+
+    const aoTeclar = (evento: KeyboardEvent) => {
+      if (evento.key === "Enter") {
+        evento.preventDefault();
+        evento.stopPropagation();
+        handlersRef.current.fecharLaco(pontosDoLaco);
+        return;
+      }
+
+      if (evento.key === "Escape") {
+        evento.stopPropagation();
+        setLaco(null);
+        return;
+      }
+
+      if (evento.key === "Backspace" || evento.key === "Delete") {
+        evento.preventDefault();
+        evento.stopPropagation();
+        setLaco(
+          pontosDoLaco.length > 1
+            ? { sceneId: scene.id, pontos: pontosDoLaco.slice(0, -1) }
+            : null,
+        );
+      }
+    };
+
+    window.addEventListener("pointermove", aoMover);
+    window.addEventListener("keydown", aoTeclar, true);
+
+    return () => {
+      window.removeEventListener("pointermove", aoMover);
+      window.removeEventListener("keydown", aoTeclar, true);
+    };
+  }, [pontosDoLaco, scene.id, toScene]);
+
+  /**
+   * Trocar de ferramenta ou de formato larga o laço.
+   *
+   * Assinando o store, e não por efeito sobre a ferramenta do render: o que
+   * interessa aqui é o INSTANTE da troca, e um efeito que zera estado a cada
+   * render encadeia renders para dizer "continua nulo". Trocar de cena é outro
+   * caso, e quem resolve é o `sceneId` guardado no laço.
+   */
+  useEffect(
+    () =>
+      useToolStore.subscribe((estado, anterior) => {
+        if (
+          estado.tool !== anterior.tool ||
+          estado.formatoDeArea !== anterior.formatoDeArea
+        )
+          setLaco(null);
+      }),
     [],
   );
 
@@ -2505,15 +2709,24 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       ) : null}
 
       {selectedFog && !panMode ? (
-        <TransformHandles
-          box={{ ...selectedFog, rotation: 0 }}
-          rotatable={false}
-          // Sem alça de rotação, o gizmo só emite caixa — nunca `rotation`.
-          onChange={({ x, y, width, height }) =>
-            updateFog(scene.id, selectedFog.id, { x, y, width, height })
-          }
-          onDelete={removeFogSelection}
-        />
+        <>
+          <TransformHandles
+            box={{ ...selectedFog, rotation: selectedFog.rotation ?? 0 }}
+            // Gira como o item: corredor, mesa e parede raramente correm no
+            // eixo da tela, e sem giro cobrir um deles cobria meio mapa junto.
+            onChange={(patch) => updateFog(scene.id, selectedFog.id, patch)}
+            onDelete={removeFogSelection}
+          />
+
+          {/* As alças de vértice, só da área recortada: nas outras duas o
+              contorno É a caixa, e o gizmo já a controla inteira. */}
+          {selectedFog.formato === "poligono" ? (
+            <AlcasDaArea
+              region={selectedFog}
+              onChange={(patch) => updateFog(scene.id, selectedFog.id, patch)}
+            />
+          ) : null}
+        </>
       ) : null}
 
       {/* Proporção travada: retrato deformado fica grotesco, e a caixa aqui
@@ -2648,7 +2861,58 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         </svg>
       ) : null}
 
-      {marquee ? <MarqueeBox bounds={marquee} /> : null}
+      {marquee ? (
+        <MarqueeBox
+          bounds={marquee}
+          redondo={tool === "fog" && formatoDeArea === "elipse"}
+        />
+      ) : null}
+
+      {/* O laço em curso, antes de virar área da cena. Aqui e não na camada
+          compartilhada pela mesma razão do risco: ele ainda não existe na
+          cena, e a mesa não deve ver o contorno sendo decidido.
+
+          Do tamanho do plano e sem `overflow-visible`, com os vértices presos
+          a ele: o que passa da caixa de um plano infla a camada composta e
+          derruba a pintura do palco. Ver `noPlano`. */}
+      {pontosDoLaco ? (
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          width={SCENE_WIDTH}
+          height={SCENE_HEIGHT}
+          // Acima da névoa (5000): o laço costuma ser desenhado ao lado de
+          // áreas que já existem, e passar por baixo delas esconderia
+          // justamente a linha que o mestre está mirando.
+          style={{ zIndex: 5_500 }}
+        >
+          <polygon
+            ref={previaDoLaco}
+            points={pontosDoLaco
+              .map((ponto) => `${ponto.x},${ponto.y}`)
+              .join(" ")}
+            fill="rgb(0 0 0 / 0.45)"
+            stroke="rgb(255 255 255 / 0.85)"
+            strokeWidth={1.5 / scale}
+            strokeDasharray={`${6 / scale} ${4 / scale}`}
+            strokeLinejoin="round"
+          />
+
+          {/* O PRIMEIRO vértice em destaque: é o alvo que fecha o laço, e sem
+              marca não haveria como saber onde clicar para terminar. */}
+          {pontosDoLaco.map((ponto, indice) => (
+            <circle
+              key={indice}
+              cx={ponto.x}
+              cy={ponto.y}
+              r={(indice === 0 ? RAIO_DE_FECHO_PX / 2 : 3) / scale}
+              fill={indice === 0 ? "var(--primary)" : "#fff"}
+              stroke="rgb(0 0 0 / 0.6)"
+              strokeWidth={1 / scale}
+            />
+          ))}
+        </svg>
+      ) : null}
 
       {/* A forma em arrasto, desenhada como ela vai ficar. Irmã do fantasma do
           postit, e pela mesma razão fora do `SceneLayer`: é decisão em

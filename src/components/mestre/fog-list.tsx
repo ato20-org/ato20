@@ -8,7 +8,14 @@ import { toggleFogRevealed } from "@/lib/mestre/item-actions";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { cn } from "@/lib/utils";
-import type { Scene } from "@/types/scene";
+import type { FormatoDeArea, Scene } from "@/types/scene";
+
+/** Como cada recorte se chama na lista. O retângulo não se anuncia: é o comum. */
+const FORMATO: Record<FormatoDeArea, string> = {
+  retangulo: "",
+  elipse: " · redonda",
+  poligono: " · livre",
+};
 
 /**
  * Painel das áreas escondidas da cena.
@@ -25,8 +32,9 @@ export function FogList({ scene }: { scene: Scene }) {
   if (scene.fog.length === 0) {
     return (
       <p className="text-muted-foreground p-3 text-xs">
-        Nenhuma área escondida. Escolha a ferramenta de área na barra de cima e
-        arraste sobre a cena.
+        Nenhuma área escondida. Escolha uma das ferramentas de área na barra de
+        cima: quadrada e redonda se desenham no arrasto, a livre se contorna
+        clique a clique.
       </p>
     );
   }
@@ -50,6 +58,10 @@ export function FogList({ scene }: { scene: Scene }) {
               <span className="block text-sm">Área {index + 1}</span>
               <span className="text-muted-foreground block text-[10px]">
                 {region.width} × {region.height}
+                {/* O formato entra na linha porque a lista é como o mestre acha
+                    a área certa sem procurá-la no mapa -- e num mapa com seis
+                    áreas o tamanho sozinho não distingue duas parecidas. */}
+                {FORMATO[region.formato ?? "retangulo"]}
                 {region.revealed ? " · revelada" : ""}
               </span>
             </button>
