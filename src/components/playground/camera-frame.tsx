@@ -13,11 +13,10 @@ import {
   useSceneScale,
 } from "@/components/playground/scene-stage";
 import { TransformHandles } from "@/components/playground/transform-handles";
-import { createPortal } from "react-dom";
 
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
-import { PLANO, clampViewport, viewportZoom, zoomViewportCentered } from "@/lib/geometry/viewport";
+import { clampViewport, viewportZoom, zoomViewportCentered } from "@/lib/geometry/viewport";
 import {
   alternarTransmissao,
   ZOOM_CAMERA_STEP,
@@ -28,26 +27,6 @@ import type { CameraSalva, Viewport } from "@/types/scene";
 /** Acima do gizmo de seleção: a câmera é a camada de enquadramento. */
 const FRAME_Z = 12_000;
 const HANDLES_Z = 12_500;
-/**
- * A máscara escurece o que a MESA vê, e nada do que é só do mestre.
- *
- * Acima dos itens, da névoa (5000), dos retratos e dos dados (6000): tudo isso
- * vai para a TV, e o escuro diz "isto está fora do enquadramento". Abaixo do
- * laço do alfinete (8000), do postit (8500), do contorno de seleção, do
- * alfinete e do gizmo: nenhum deles chega à mesa -- `sceneForTable` os tira do
- * quadro -- e escurecê-los dizia o contrário do que é. O caso que doeu foi o
- * postit: papel amarelo estacionado na margem, fora da câmera, ficava cinza e
- * ilegível justamente onde o mestre o pôs para ler enquanto a mesa não vê.
- * Era 11 000, acima de tudo menos a moldura.
- */
-const MASCARA_Z = 7_000;
-/**
- * A máscara do quadro vive na moldura, acima dos dois planos, e o `z` é o da
- * moldura: as tarjas da mesa usam 10. Abaixo dos controles flutuantes da
- * bancada, que são irmãos do palco e vêm depois no DOM.
- */
-const MASCARA_MOLDURA_Z = 10;
-
 // Tamanhos em pixels de tela: divididos pelo scale, ficam iguais em todo zoom.
 /** Espessura da faixa de arraste nas bordas. */
 const GRIP_PX = 14;
@@ -70,10 +49,6 @@ const ALCA_GAP_PX = 8;
 const ROTULO_CHEIO_PX = 220;
 const ROTULO_MINIMO_PX = 110;
 
-/** Quanto do fora fica escuro. Clareia enquanto o mestre arrasta. */
-const MASCARA_PARADA = 0.35;
-const MASCARA_ARRASTANDO = 0.15;
-
 type CameraFrameProps = {
   /** A câmera SELECIONADA: a que o mestre está editando. */
   camera: CameraSalva;
@@ -85,8 +60,6 @@ type CameraFrameProps = {
   onGestureEnd?: () => void;
   /** V segurado: a câmera está seguindo o mouse. A moldura se acende. */
   cinegrafista?: boolean;
-  /** Quadro: escurece a TELA inteira fora da câmera, e não só o conteúdo. */
-  tudoEscuro?: boolean;
 };
 
 /**
@@ -101,12 +74,22 @@ type CameraFrameProps = {
  * ponteiro tornaria todos eles inalcançáveis. O que agarra são as bordas, o
  * rótulo, a alça lateral e os quatro cantos.
  *
- * O que está FORA da moldura escurece. Era uma linha tracejada fina, e em mapa
- * escuro ela sumia: o mestre não distinguia "a mesa vê isto" de "a mesa vê
- * tudo". Com o fora escuro a moldura vira a janela iluminada, e a pergunta
- * "o que a TV está mostrando?" se responde de relance. São quatro retângulos e
- * não um `clip-path`: mais barato de compor, e a webview não tem de recalcular
- * um polígono por quadro de arrasto.
+ * O que está FORA dela não escurece, e isso é decisão e não falta. Escureceu
+ * por um tempo -- quatro tarjas pretas coladas no recorte --, e saiu por duas
+ * razões.
+ *
+ * A primeira é que dizia errado com mais de uma câmera: esta moldura é da
+ * câmera SELECIONADA e a mesa vê a que está NO AR, então quem preparava o beco
+ * via o escuro acender o beco e apagar a taverna, que era o que estava indo
+ * para a TV. A segunda é que o enquadramento já se lê nos cantos em L, no halo
+ * da borda e no REC do rótulo: o escuro repetia, por cima de quase a tela
+ * inteira, o que eles dizem na borda.
+ *
+ * O que ele NÃO era é caro: medido na webview, tirá-lo não devolveu um quadro
+ * por segundo -- devolveu o contrário, até a moldura ganhar a camada própria
+ * que as tarjas seguravam (ver o `will-change` abaixo). A conta está em
+ * `scripts/perf/README.md`, e a lição é a de sempre: o palpite de onde o tempo
+ * está foi errado de novo.
  */
 export function CameraFrame({
   camera: selecionada,
@@ -114,12 +97,11 @@ export function CameraFrame({
   onChange,
   onGestureEnd,
   cinegrafista = false,
-  tudoEscuro = false,
 }: CameraFrameProps) {
   // O recorte, com o nome curto que o resto do arquivo sempre usou.
   const camera = selecionada.viewport;
   const presaEm = selecionada.alvoIds?.length ?? 0;
-  const { scale, moldura, offsetX, offsetY } = useSceneScale();
+  const { scale } = useSceneScale();
   const startDrag = useSceneDrag();
   const [arrastando, setArrastando] = useState(false);
 
@@ -251,35 +233,6 @@ export function CameraFrame({
     ? "pointer-events-auto absolute touch-none"
     : "pointer-events-none absolute";
 
-  // Até o PLANO, e nem um pixel além dele. Nem a folga, nem o `conteudo`.
-  //
-  // A máscara vive no plano de controles, e no WebKitGTK um filho que passa
-  // da caixa do plano infla a camada composta inteira: o motor pinta o plano
-  // deslocado e o Mestre vê a moldura tremer a cada notch de zoom (ver
-  // `debug-do-palco` §3, armadilha 1). Foi o "bug da câmera no zoom" três
-  // vezes. Na terceira a máscara encolheu de `comFolga(conteudo)` para
-  // `conteudo` -- e não bastou: `conteudo` é o plano MAIS o que o mestre
-  // largou fora dele, e um token ou nota na margem já esticava a máscara para
-  // fora (o HUD acusava `pior: div.pointer-events-none absolute bg-` com
-  // centenas de px acima do plano). O que fica fora do plano já é preto por
-  // natureza; não há nada ali a escurecer.
-  const fora = PLANO;
-  const opacidadeMascara =
-    arrastando || cinegrafista ? MASCARA_ARRASTANDO : MASCARA_PARADA;
-  // As quatro tarjas em volta da moldura, cada uma RECORTADA ao plano: a
-  // câmera pode estar meio fora dele (`clampViewport` prende ao `conteudo`,
-  // não ao plano), e uma tarja com `top: camera.y` negativo transbordaria do
-  // mesmo jeito.
-  const cy0 = Math.max(fora.minY, camera.y);
-  const cy1 = Math.min(fora.maxY, camera.y + camera.height);
-  const mascara = [
-    // Acima, abaixo, esquerda, direita da moldura.
-    { left: fora.minX, top: fora.minY, width: fora.maxX - fora.minX, height: cy0 - fora.minY },
-    { left: fora.minX, top: cy1, width: fora.maxX - fora.minX, height: fora.maxY - cy1 },
-    { left: fora.minX, top: cy0, width: Math.min(fora.maxX, camera.x) - fora.minX, height: cy1 - cy0 },
-    { left: Math.max(fora.minX, camera.x + camera.width), top: cy0, width: fora.maxX - Math.max(fora.minX, camera.x + camera.width), height: cy1 - cy0 },
-  ];
-
   /**
    * Os quatro cantos em L, em medida FIXA, com a ampliação do plano desfeita
    * por `transform`.
@@ -338,72 +291,16 @@ export function CameraFrame({
   const corBorda =
     arrastando || cinegrafista ? "border-primary" : "border-primary/80";
 
-  /**
-   * No QUADRO a máscara é outra: a tela inteira, e não a caixa do conteúdo.
-   *
-   * Um quadro não tem chão -- fora do conteúdo é folha, não preto --, e a
-   * máscara presa ao conteúdo virava um retângulo escuro no meio da folha,
-   * lendo como "um mapa que está errado". E no quadro TUDO vai para a mesa, o
-   * postit inclusive, então a escada de `z` que poupa a anotação do mestre
-   * não se aplica: o que está fora da câmera está fora, e ponto.
-   *
-   * Por isso ela sai dos planos e vai para a MOLDURA, em pixels de tela, por
-   * portal: os planos não podem ter filho maior que o conteúdo (§3), mas a
-   * moldura pode ter o que quiser, e é onde a mesa já desenha as tarjas.
-   * Quatro caixas presas às bordas da moldura, com o buraco onde a câmera
-   * está, sem precisar medir a moldura.
-   */
-  const mascaraNaMoldura =
-    tudoEscuro && moldura
-      ? (() => {
-          const esq = offsetX + camera.x * scale;
-          const topo = offsetY + camera.y * scale;
-          const dir = esq + camera.width * scale;
-          const base = topo + camera.height * scale;
-          const caixas = [
-            { left: 0, right: 0, top: 0, height: Math.max(0, topo) },
-            { left: 0, right: 0, top: base, bottom: 0 },
-            { left: 0, width: Math.max(0, esq), top: topo, height: base - topo },
-            { left: dir, right: 0, top: topo, height: base - topo },
-          ];
-          return createPortal(
-            caixas.map((caixa, index) => (
-              <div
-                key={index}
-                aria-hidden
-                className="pointer-events-none absolute bg-black"
-                style={{ ...caixa, opacity: opacidadeMascara, zIndex: MASCARA_MOLDURA_Z }}
-              />
-            )),
-            moldura,
-          );
-        })()
-      : null;
-
   return (
     <>
-      {mascaraNaMoldura}
-      {tudoEscuro
-        ? null
-        : mascara.map((caixa, index) =>
-            caixa.width > 0 && caixa.height > 0 ? (
-              <Tarja
-                key={index}
-                caixa={caixa}
-                opacidade={opacidadeMascara}
-                z={MASCARA_Z}
-              />
-            ) : null,
-          )}
-
       <div
         className={`${corBorda} pointer-events-none absolute border-solid`}
         style={{
           // A POSIÇÃO por `transform`, e não por `left`/`top`: arrastar a
           // moldura mexe só nela, e mexer em caixa marca o DOCUMENTO INTEIRO
           // para refazer o layout -- colunas laterais, lista de mapas e tudo
-          // o mais que estiver na tela, que não têm nada com este gesto. Ver
-          // a nota em `Tarja`, onde está a medida.
+          // o mais que estiver na tela, que não têm nada com este gesto. A
+          // medida está em `scripts/perf/README.md`.
           //
           // `width` e `height` continuam sendo caixa porque a borda é borda:
           // esticada por `scale` ela engordaria junto. Elas só mudam quando o
@@ -417,6 +314,18 @@ export function CameraFrame({
           // Halo escuro por fora: a borda clara some em mapa claro, e o halo
           // some em mapa escuro. Juntos, um dos dois sempre aparece.
           boxShadow: `0 0 0 ${px(HALO_PX)}px rgba(0,0,0,0.6), inset 0 0 0 ${px(HALO_PX)}px rgba(0,0,0,0.35)`,
+          // Camada própria para a moldura, que anda por `transform` a cada
+          // quadro do gesto: com ela o motor RE-COMPÕE, sem ela repinta junto
+          // com o mapa.
+          //
+          // Esta linha não existia enquanto existia a máscara escura, e foi
+          // ela que cobrou a conta quando a máscara saiu: as quatro tarjas
+          // tinham `will-change` e a promoção vinha de brinde. Medido na
+          // webview, bancada cheia, sete câmeras, sete mapas, arrastar a
+          // moldura -- com máscara 31,7 e 32,1 fps; sem máscara e sem esta
+          // linha 24,2 e 26,7; sem máscara e com ela 31,4. Ver
+          // `scripts/perf/README.md`.
+          willChange: "transform",
           zIndex: FRAME_Z,
         }}
       >
@@ -445,7 +354,8 @@ export function CameraFrame({
                 // origem na borda em que a faixa encosta. Era `px(GRIP_PX)`,
                 // que divide pelo `scale` -- e o `scale` muda a cada notch da
                 // roda, então cada faixa reescrevia caixa e marcava o
-                // DOCUMENTO INTEIRO para refazer o layout. Ver `Tarja`.
+                // DOCUMENTO INTEIRO para refazer o layout. Ver
+                // `scripts/perf/README.md`.
                 {
                   left: 0,
                   top: 0,
@@ -582,63 +492,6 @@ export function CameraFrame({
         />
       ) : null}
     </>
-  );
-}
-
-/**
- * Um retângulo preto posicionado e dimensionado por `transform`, e não por
- * caixa.
- *
- * As quatro tarjas da máscara mudam de tamanho a CADA QUADRO em que o mestre
- * arrasta ou redimensiona a câmera. Escritas como `left/top/width/height`,
- * cada quadro marcava o documento para refazer o layout -- e layout é do
- * documento INTEIRO, não do palco. Medido na webview: o mesmo arrasto custava
- * 54 quadros por segundo com as colunas laterais recolhidas e 33 com elas à
- * vista, sem o React tocar em nada dentro delas. As mutações de DOM por quadro
- * eram as mesmas nos dois casos; o que mudava era o tamanho da árvore que o
- * reflow percorria.
- *
- * Uma caixa de um pixel esticada por `scale` não mexe em caixa nenhuma: o
- * compositor resolve, e o custo deixa de depender do resto da tela. É a mesma
- * troca que o plano de conteúdo já faz entre `zoom` e `transform` durante o
- * gesto, pela mesma razão.
- *
- * A caixa de LAYOUT continua sendo um ponto dentro do plano, o que mantém a
- * armadilha 1 de `debug-do-palco` §3 fora do caminho: não há filho maior que o
- * plano para inflar a camada composta dele.
- */
-function Tarja({
-  caixa,
-  opacidade,
-  z,
-}: {
-  caixa: { left: number; top: number; width: number; height: number };
-  opacidade: number;
-  z: number;
-}) {
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute top-0 left-0 bg-black"
-      style={{
-        width: 1,
-        height: 1,
-        // Do canto, para `scale` multiplicar a partir do ponto transladado --
-        // com a origem no centro, o retângulo cresceria para os dois lados.
-        transformOrigin: "0 0",
-        transform: `translate(${caixa.left}px, ${caixa.top}px) scale(${caixa.width}, ${caixa.height})`,
-        // Camada própria, para o motor RE-COMPOR em vez de re-pintar: o
-        // conteúdo é preto chapado e nunca muda, só a matriz. Medido na
-        // webview, arrastar a moldura com a bancada cheia: 32,3 quadros por
-        // segundo sem esta linha, 37,5 com ela. No redimensionar dá no mesmo,
-        // porque ali o `scale` muda de valor e a camada re-rasteriza -- e um
-        // `will-change` condicional ao gesto custaria mais do que os dois
-        // quadros que ele pouparia.
-        willChange: "transform",
-        opacity: opacidade,
-        zIndex: z,
-      }}
-    />
   );
 }
 
