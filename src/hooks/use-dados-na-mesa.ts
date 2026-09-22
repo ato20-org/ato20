@@ -19,7 +19,7 @@ import type { Dado } from "@/types/dado";
  * um botão que não funcionou.
  */
 export function useDadosNaMesa(): Dado[] {
-  const dados = useDadosStore((state) => state.dados);
+  const dados = useDadosDaMesa();
   const succao = useDadosStore((state) => state.succao);
 
   return useMemo(() => {
@@ -29,4 +29,23 @@ export function useDadosNaMesa(): Dado[] {
 
     return dados.filter((dado) => !engolidos.has(dado.id));
   }, [dados, succao]);
+}
+
+/**
+ * Os dados da mesa que está na tela: os do mapa, ou os do quadro.
+ *
+ * Os do outro lado continuam no store, e é isso que se quer -- voltar ao mapa
+ * devolve o combate como ele estava. Ver `Mesa`.
+ *
+ * Inclui os que estão sendo engolidos: quem DESENHA precisa deles para animar a
+ * espiral até a boca do saquinho. Quem CONTA usa `useDadosNaMesa`, que os tira.
+ */
+export function useDadosDaMesa(): Dado[] {
+  const dados = useDadosStore((state) => state.dados);
+  const mesa = useDadosStore((state) => state.mesa);
+
+  return useMemo(
+    () => dados.filter((dado) => dado.mesa === mesa),
+    [dados, mesa],
+  );
 }

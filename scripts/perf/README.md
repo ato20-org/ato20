@@ -112,6 +112,8 @@ Trocar caixa por `transform` em três lugares:
   `translate(...) scale(w, h)`, com `will-change: transform` (componente
   `Tarja`). A caixa de *layout* continua sendo um ponto dentro do plano, o que
   mantém a armadilha 1 de `debug-do-palco` §3 fora do caminho.
+
+  **A máscara não existe mais** — e tirá-la ensinou outra coisa. Ver abaixo.
 - `camera-frame.tsx`: a moldura ganhou `transform: translate(...)` no lugar de
   `left`/`top`. `width`/`height` continuam em caixa de propósito — a borda é
   borda, e esticada por `scale` engordaria junto.
@@ -146,6 +148,40 @@ porque este palco já teve três bugs de camada no WebKitGTK; quatro por cento n
 paga um risco que não dá para validar sem passar por menu de contexto, janelas
 internas, holofote e arrastar arquivo para o mapa. Se alguém for retomá-lo, o
 número já está medido — falta a validação com a mão.
+
+### A máscara saiu, e levou junto a camada composta (21/09/2026)
+
+O escuro em volta do enquadramento foi retirado inteiro: com mais de uma câmera
+ele apontava para a errada — era da câmera SELECIONADA, e a mesa vê a que está
+NO AR —, e o enquadramento já se lê nos cantos em L, no halo da borda e no REC
+do rótulo. A `Tarja` saiu com ele; quem a procurar no código não vai achar.
+
+A expectativa era sobrar quadro por segundo. **Deu o contrário**, na mesma
+célula da tabela acima (bancada cheia, sete câmeras, sete mapas, `--gesto
+mover`):
+
+| build | fps | p95 | nós | andou |
+|---|---|---|---|---|
+| com a máscara | 31,7 e 32,1 | 45 ms | 2368 | 473 |
+| sem a máscara | 24,2 e 26,7 | 52–58 ms | 2364 | 315 |
+| sem a máscara, `will-change` na moldura | 31,4 | 49 ms | 2364 | 473 |
+
+As duas primeiras linhas são duas corridas independentes de cada build, e o
+`antes` repetiu dentro de 1% — o buraco de 20% não é ruído. O que a máscara
+levava embora não era desenho, era **promoção de camada**: as quatro tarjas
+tinham `will-change: transform`, e enquanto existiam o motor recompunha o gesto
+em vez de repintar a moldura junto com o mapa. Sem elas e sem pedir camada para
+ninguém, cada quadro do arrasto voltou a custar pintura.
+
+Uma linha em `camera-frame.tsx` — `will-change: transform` na moldura, que é
+quem de fato anda por quadro — devolve os 31,4. E `andou` conta a mesma
+história de outro jeito: o robô arrasta por quadro, então o build lento moveu a
+câmera 315 unidades no mesmo tempo em que os outros moveram 473.
+
+**A lição:** tirar coisa da tela não é sempre tirar custo. Uma otimização que
+some com um elemento composto pode estar somindo com a camada que segurava o
+resto — e só a medida na webview mostra isso. Foi a terceira vez que o palpite
+sobre onde o tempo estava saiu errado neste mesmo gesto.
 
 ---
 
@@ -386,9 +422,10 @@ Estão espalhadas em comentários pelo código; aqui ficam as que custaram tempo
 
 **Filho maior que o plano infla a camada composta.** No WebKitGTK, um elemento
 que passa da caixa do plano faz o motor pintar o plano deslocado — foi o "bug da
-câmera no zoom", três vezes. Por isso a máscara é recortada ao `PLANO` e por isso
-a `Tarja` mantém a caixa de *layout* de 1×1 dentro dele, mesmo esticando muito
-além pelo `transform`.
+câmera no zoom", três vezes. A máscara pagou por isso duas vezes — era recortada
+ao `PLANO`, e a `Tarja` mantinha a caixa de *layout* de 1×1 dentro dele mesmo
+esticando muito além pelo `transform` —, e a regra sobrevive a ela: quem for
+desenhar por cima do palco tem de caber no plano, ou sair dele.
 
 **O palco tem duas formas de ampliar.** `zoom` (layout, nítido) quando a câmera
 está parada, `transform` (composição) durante o gesto. `getBoundingClientRect`

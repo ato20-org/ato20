@@ -62,7 +62,6 @@ import {
   agruparSelecao,
   desagruparSelecao,
 } from "@/lib/mestre/item-actions";
-import { colarTexto } from "@/lib/mestre/texto-actions";
 import {
   alternarTransmissao,
   enquadrarAqui,
@@ -88,15 +87,28 @@ export function StageContextMenu({
   children: ReactNode;
 }) {
   const selectedIds = useSelectionStore((state) => state.selectedIds);
+  const selectedTextoIds = useSelectionStore((state) => state.selectedTextoIds);
+  const selectedFormaIds = useSelectionStore((state) => state.selectedFormaIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const hasClipboard = useClipboardStore(
-    (state) => state.drafts.length > 0 || state.texto !== null,
+    (state) => state.drafts.length > 0 || state.textos.length > 0,
   );
 
   const selectedItems = scene.items.filter((item) =>
     selectedIds.includes(item.id),
   );
   const hasSelection = selectedItems.length > 0;
+  /**
+   * Só coisa do QUADRO na mão: texto solto, forma, ou os dois.
+   *
+   * Ganha um bloco curto em vez do menu de item inteiro: espelhar, opacidade,
+   * empilhamento, travar e handout são coisas de imagem, e oferecê-las para
+   * uma frase seria um menu de sete itens dos quais cinco não fazem nada. Com
+   * imagem junto, o menu de sempre já leva as três listas -- as quatro ações da
+   * área de transferência tratam todas.
+   */
+  const doQuadro = selectedTextoIds.length + selectedFormaIds.length;
+  const soQuadro = !hasSelection && doQuadro > 0;
   const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
   const prenderNaSelecao = useCameraLockStore(
     (state) => state.prenderNaSelecao,
@@ -128,6 +140,33 @@ export function StageContextMenu({
             <ContextMenuItem variant="destructive" onClick={removeFogSelection}>
               <Trash2 />
               Remover área
+              <ContextMenuShortcut>Del</ContextMenuShortcut>
+            </ContextMenuItem>
+
+            <ContextMenuSeparator />
+          </>
+        ) : null}
+
+        {soQuadro ? (
+          <>
+            <ContextMenuItem onClick={copySelection}>
+              <Copy />
+              Copiar
+              <ContextMenuShortcut>Ctrl+C</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuItem onClick={cutSelection}>
+              <Scissors />
+              Recortar
+              <ContextMenuShortcut>Ctrl+X</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuItem onClick={duplicateSelection}>
+              <CopyPlus />
+              Duplicar
+              <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuItem variant="destructive" onClick={removeSelection}>
+              <Trash2 />
+              Remover
               <ContextMenuShortcut>Del</ContextMenuShortcut>
             </ContextMenuItem>
 
@@ -282,19 +321,18 @@ export function StageContextMenu({
           </>
         ) : null}
 
-        {/* Texto solto copiado ganha do item, como no Ctrl+V. */}
-        <ContextMenuItem
-          disabled={!hasClipboard}
-          onClick={() => {
-            if (!colarTexto()) pasteClipboard();
-          }}
-        >
+        {/* Imagens e textos copiados voltam juntos, como no Ctrl+V. */}
+        <ContextMenuItem disabled={!hasClipboard} onClick={pasteClipboard}>
           <ClipboardPaste />
           Colar
           <ContextMenuShortcut>Ctrl+V</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem
-          disabled={scene.items.length === 0}
+          disabled={
+            scene.items.length === 0 &&
+            !scene.textos?.length &&
+            !scene.formas?.length
+          }
           onClick={selectAllItems}
         >
           <MousePointerSquareDashed />

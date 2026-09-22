@@ -6,14 +6,12 @@ import { create } from "zustand";
  * Onde os postits entram na escada de empilhamento do palco.
  *
  * A escada inteira está documentada em `use-pin-window-store`: item da cena usa
- * o `z` dele (1, 2, 3…), névoa 5000, máscara da câmera 7000, laço do alfinete
- * 8000, contorno de seleção 9000, alfinete 9500, alças de transformação 10000,
- * cartão da nota 12000.
+ * o `z` dele (1, 2, 3…), névoa 5000, laço do alfinete 8000, contorno de
+ * seleção 9000, alfinete 9500, alças de transformação 10000, cartão da nota
+ * 12000.
  *
- * O postit fica em 8500: acima dos itens, da névoa e da máscara escura da
- * câmera, porque é papel COLADO sobre o mapa e um papel atrás da mobília não
- * seria lido -- e um papel escurecido por estar fora da câmera também não, sendo
- * que a câmera nunca o leva para a mesa (ver `MASCARA_Z`); abaixo do alfinete e
+ * O postit fica em 8500: acima dos itens e da névoa, porque é papel COLADO
+ * sobre o mapa e um papel atrás da mobília não seria lido; abaixo do alfinete e
  * do cartão dele, porque o postit tem tamanho e o alfinete não — um papel de
  * 260 unidades por cima de um alfinete de 22 pixels esconderia o alfinete
  * inteiro, e o contrário só encosta um círculo no canto do papel.

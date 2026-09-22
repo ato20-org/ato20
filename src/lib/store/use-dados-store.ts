@@ -7,6 +7,7 @@ import {
   tipoDado,
   type Dado,
   type FacesDado,
+  type Mesa,
   type Rolagem,
 } from "@/types/dado";
 import { novoId } from "@/lib/id";
@@ -74,15 +75,38 @@ const POSICAO_PADRAO = { x: 0.955, y: 0.42 };
 
 type DadosStore = {
   /**
-   * Os dados no tabuleiro. Vazio = tabuleiro limpo.
+   * Os dados no tabuleiro, das DUAS mesas. Vazio = tabuleiro limpo.
    *
    * FORA da cena, como a evidência: dado não é conteúdo de
    * mapa. Não viaja no zip, não entra no Ctrl+Z, e trocar de cena não troca os
    * dados — a jogada é do momento da mesa, não do lugar onde ela aconteceu.
+   *
+   * Uma lista só, com a mesa carimbada em cada dado, e não uma lista por mesa:
+   * tudo o que mexe nesta lista mexe POR ID -- a sucção, o `guardar`, a queda
+   * que anima cada um. Partir a lista obrigaria cada um desses a procurar em
+   * qual metade o dado está, para chegar no mesmo lugar. Quem filtra por mesa é
+   * quem DESENHA e quem CONTA, e para isso o carimbo basta. Ver `useDadosDaMesa`.
    */
   dados: Dado[];
-  /** Últimas rolagens, a mais nova na frente. */
-  historico: Rolagem[];
+  /**
+   * Últimas rolagens de cada mesa, a mais nova na frente.
+   *
+   * Aqui sim uma lista por mesa, e a assimetria com `dados` é deliberada: o
+   * histórico é lido INTEIRO e tem teto. Numa lista só, com carimbo, uma
+   * sequência de rolagens no mapa empurraria para fora as do quadro pelo teto
+   * -- que é exatamente o vazamento que se quis fechar.
+   */
+  historico: Record<Mesa, Rolagem[]>;
+
+  /**
+   * A mesa que está na tela agora: a do mapa, ou a do quadro. Ver `Mesa`.
+   *
+   * Quem a troca é a bancada, ao trocar de cena. No celular do jogador ela
+   * nunca muda de `mapa`, e todo o resto deste store segue funcionando como
+   * sempre funcionou lá.
+   */
+  mesa: Mesa;
+  definirMesa: (mesa: Mesa) => void;
 
   /**
    * Onde a bolinha está, em FRAÇÃO do palco — não em pixel.
@@ -274,7 +298,10 @@ function limitar(valor: number): number {
  */
 export const useDadosStore = create<DadosStore>((set, get) => ({
   dados: [],
-  historico: [],
+  historico: { mapa: [], quadro: [] },
+
+  mesa: "mapa",
+  definirMesa: (mesa) => set({ mesa }),
   posicao: POSICAO_PADRAO,
   restaurado: false,
 
@@ -315,7 +342,12 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
     // Mesa cheia não recebe dado. Devolve `null` em vez de lançar exceção
     // porque encher a mesa não é erro de programa, é a mesa estando cheia --
     // quem chamou avisa quem jogou. Ver `TETO_DA_MESA`.
-    if (get().dados.length >= get().teto) return null;
+    //
+    // O teto é por MESA, e não do store: é a tela que enche, e os dados que
+    // ficaram no mapa não ocupam lugar no quadro.
+    const mesa = get().mesa;
+    if (get().dados.filter((dado) => dado.mesa === mesa).length >= get().teto)
+      return null;
 
     // Sorteia aqui SÓ quando ninguém sorteou antes. Ver o parâmetro.
     const valor = valorDeFora ?? sortearValor(faces);
@@ -324,6 +356,7 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
     const dado: Dado = {
       id: novoId(),
       faces,
+      mesa,
       x,
       y,
       raio: RAIO_DADO * tipoDado(faces).escala,
@@ -339,10 +372,13 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
 
     set((state) => ({
       dados: [...state.dados, dado],
-      historico: [
-        { id: dado.id, faces, valor, quando: agora },
+      historico: {
         ...state.historico,
-      ].slice(0, HISTORICO),
+        [mesa]: [
+          { id: dado.id, faces, valor, quando: agora },
+          ...state.historico[mesa],
+        ].slice(0, HISTORICO),
+      },
     }));
 
     return dado;
@@ -351,20 +387,25 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
   succao: null,
   recolher: (destino) =>
     set((state) => {
+      // Só os DESTA mesa: recolher no quadro não é recolher o combate que ficou
+      // montado no mapa, e o botão que diz "recolher os 3 dados" mostra três.
+      const daMesa = state.dados.filter((dado) => dado.mesa === state.mesa);
+      const daOutra = state.dados.filter((dado) => dado.mesa !== state.mesa);
+
       // Sem boca para onde ir, ou mesa vazia: não há o que animar.
-      if (!destino || state.dados.length === 0)
-        return { dados: [], succao: null };
+      if (!destino || daMesa.length === 0)
+        return { dados: daOutra, succao: null };
 
       // Pedido em cima de um recolhimento que já está acontecendo é impaciência:
       // engole tudo agora, em vez de recomeçar a espiral e fazer os dados que já
       // estavam quase dentro saltarem de volta para o lugar de onde saíram.
-      if (state.succao) return { dados: [], succao: null };
+      if (state.succao) return { dados: daOutra, succao: null };
 
       return {
         succao: {
           desde: Date.now(),
           destino,
-          ids: state.dados.map((dado) => dado.id),
+          ids: daMesa.map((dado) => dado.id),
         },
       };
     }),
@@ -411,9 +452,9 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
  * dado.
  */
 export function mesaCheia(): boolean {
-  const { dados, teto } = useDadosStore.getState();
+  const { dados, mesa, teto } = useDadosStore.getState();
 
-  return dados.length >= teto;
+  return dados.filter((dado) => dado.mesa === mesa).length >= teto;
 }
 
 // Grava fora do React: é preferência de máquina, não estado de render. Mesmo

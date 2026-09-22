@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 
 import {
   giroDoTexto,
@@ -11,10 +11,17 @@ import { useSceneScale } from "@/components/playground/scene-stage";
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { boundsToBox } from "@/lib/geometry/bounds";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
+import { TAMANHO_MINIMO_DO_TEXTO } from "@/lib/mestre/grupo-de-textos";
 import { ALTURA_DA_LINHA, caixaRetaDoTexto } from "@/lib/mestre/ligacoes";
-import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { medidaDoTexto } from "@/lib/mestre/medida-do-texto";
+import {
+  moverNoGesto,
+  terminarGesto,
+  useGestoStore,
+} from "@/lib/store/use-gesto-store";
 import { useQuadroStore, TEXTO_Z } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import type { Scene, Texto } from "@/types/scene";
@@ -30,10 +37,19 @@ import type { Scene, Texto } from "@/types/scene";
 export function TextoLayer({
   scene,
   panMode,
+  onTextoPointerDown,
 }: {
   scene: Scene;
   /** Espaço segurado: o arrasto pertence ao deslocamento da cena. */
   panMode: boolean;
+  /**
+   * Quem trata o clique: o palco, como já trata o do item.
+   *
+   * Aqui dentro só se sabe deste texto, e o gesto é da SELEÇÃO -- pegar uma
+   * frase marcada junto com duas imagens tem de mover as três. Ver
+   * `handleTextoPointerDown` no `MestreStage`.
+   */
+  onTextoPointerDown: (event: React.PointerEvent, texto: Texto) => void;
 }) {
   const textos = scene.textos;
   if (!textos || textos.length === 0) return null;
@@ -44,32 +60,55 @@ export function TextoLayer({
       sceneId={scene.id}
       texto={texto}
       panMode={panMode}
+      onTextoPointerDown={onTextoPointerDown}
     />
   ));
 }
 
-function TextoSolto({
+/**
+ * `memo` pela mesma razão do `CanvasItemView`: a cena é imutável e
+ * `updateTextos` preserva a identidade de quem não mudou, então mexer num
+ * texto -- ou qualquer render da bancada acima -- não precisa redesenhar os
+ * outros vinte e nove. Medido com o contador de renders: sem isto, um render
+ * do `MestreShell` custava trinta renders de texto.
+ *
+ * Só vale com handler ESTÁVEL: ver o envelope de `handlersRef` no
+ * `MestreStage`.
+ */
+const TextoSolto = memo(function TextoSolto({
   sceneId,
   texto,
   panMode,
+  onTextoPointerDown,
 }: {
   sceneId: string;
   texto: Texto;
   panMode: boolean;
+  onTextoPointerDown: (event: React.PointerEvent, texto: Texto) => void;
 }) {
   const { scale, ampliacaoNoLayout } = useSceneScale();
-  const startDrag = useSceneDrag();
   const tool = useToolStore((state) => state.tool);
 
   const updateTexto = useSceneStore((state) => state.updateTexto);
   const removeTexto = useSceneStore((state) => state.removeTexto);
 
   const editando = useQuadroStore((state) => state.textoEditandoId === texto.id);
-  const selecionado = useQuadroStore(
-    (state) => state.textoSelecionadoId === texto.id,
+  const selecionado = useSelectionStore((state) =>
+    state.selectedTextoIds.includes(texto.id),
+  );
+  /**
+   * Este texto é a ÚNICA coisa selecionada no palco?
+   *
+   * É o que decide de quem são as alças: sozinho, ele traz as próprias -- girar
+   * e escalar a fonte por um canto. Acompanhado, quem desenha é o gizmo do
+   * grupo, no palco, e dois conjuntos de alças no mesmo lugar disputariam o
+   * clique.
+   */
+  const sozinho = useSelectionStore(
+    (state) =>
+      state.selectedIds.length === 0 && state.selectedTextoIds.length === 1,
   );
   const editar = useQuadroStore((state) => state.editarTexto);
-  const selecionar = useQuadroStore((state) => state.selecionarTexto);
 
   const campo = useRef<HTMLTextAreaElement | null>(null);
 
@@ -102,41 +141,48 @@ function TextoSolto({
     // Sai da edição mas FICA selecionado: apertar A+ na pílula tira o foco do
     // campo, e a pílula sumir junto deixaria o segundo A+ sem alvo.
     quadro.editarTexto(null);
-    quadro.selecionarTexto(texto.id);
+    useSelectionStore.getState().selectTextos([texto.id]);
   }, [sceneId, texto.id, removeTexto]);
 
   const raiz = useRef<HTMLDivElement | null>(null);
   const desenho = useRef<HTMLDivElement | null>(null);
   const medirTexto = useSceneStore((state) => state.medirTexto);
 
+
+
   /**
-   * Mede o texto desenhado e guarda a caixa na cena. É o que faz o gizmo e a
-   * seta encostarem onde a letra termina, e não onde a estimativa achou.
+   * Mede a caixa do texto e a guarda na cena. É o que faz o gizmo e a seta
+   * encostarem onde a letra termina, e não onde a estimativa achou.
    *
-   * `offsetWidth` e não `getBoundingClientRect`: o `offset*` ignora o giro e o
-   * `transform` do plano. Sob `zoom`, o `<div>` medido tem a fonte em pixel de
-   * tela e um `zoom` de 1/escala por cima -- a medida sai em pixel, e dividir
-   * pela escala devolve unidades de cena. Sob `transform`, a fonte já está em
-   * unidades de cena e a medida também.
+   * Pelo CANVAS, e não pelo `offsetWidth` do desenho: a medida do layout muda
+   * com a ampliação do palco -- o plano alterna `zoom` e `transform`, e a
+   * fonte é rasterizada com outra régua em cada um --, e como toda medida
+   * grava na cena, dar zoom reescrevia o board e mexia o gizmo e as setas de
+   * tudo o que estava na tela. Ver `medidaDoTexto`, onde estão os números.
+   *
+   * A família vem do elemento desenhado, que é onde o CSS do tema resolveu
+   * qual é; o resto da fonte sai do próprio texto. `document.fonts.ready`
+   * porque a primeira medida cai antes de a fonte da interface carregar, e
+   * medir com a de fallback erra a caixa até alguém reescrever a frase.
    */
   useEffect(() => {
     if (editando) return;
     const alvo = desenho.current;
-    if (!alvo || scale === 0) return;
+    if (!alvo) return;
 
+    let vivo = true;
     const medir = () => {
-      const fator = ampliacaoNoLayout ? 1 / scale : 1;
-      medirTexto(sceneId, texto.id, {
-        largura: Math.round(alvo.offsetWidth * fator * 10) / 10,
-        altura: Math.round(alvo.offsetHeight * fator * 10) / 10,
-      });
+      if (!vivo) return;
+      const caixa = medidaDoTexto(texto, getComputedStyle(alvo).fontFamily);
+      if (caixa) medirTexto(sceneId, texto.id, caixa);
     };
 
     medir();
-    const observador = new ResizeObserver(medir);
-    observador.observe(alvo);
-    return () => observador.disconnect();
-  }, [editando, scale, ampliacaoNoLayout, sceneId, texto.id, texto.texto, texto.tamanho, medirTexto]);
+    void document.fonts?.ready.then(medir);
+    return () => {
+      vivo = false;
+    };
+  }, [editando, sceneId, texto, medirTexto]);
 
   useEffect(() => {
     if (!editando) return;
@@ -176,24 +222,12 @@ function TextoSolto({
     if (panMode || editando || tool === "ligacao") return;
     if (event.button !== 0) return;
 
-    const origem = { x: texto.x, y: texto.y };
-    selecionar(texto.id);
-
-    startDrag(event, {
-      mantemClique: true,
-      onMove: (delta) =>
-        updateTexto(sceneId, texto.id, {
-          x: Math.round(origem.x + delta.x),
-          y: Math.round(origem.y + delta.y),
-        }),
-    });
+    onTextoPointerDown(event, texto);
   }
 
   const linhas = texto.texto.split("\n");
   const maior = Math.max(1, ...linhas.map((linha) => linha.length));
 
-  /** Menor fonte que ainda se lê no quadro, em unidades de cena. */
-  const TAMANHO_MINIMO = 8;
   const linhasDoTexto = Math.max(1, linhas.length);
 
   return (
@@ -203,8 +237,16 @@ function TextoSolto({
       className={cn(
         // `pointer-events-auto` porque o plano dos controles desliga o ponteiro.
         // Ver `PostitPapel`.
-        "pointer-events-auto absolute",
-        tool === "ligacao" ? "cursor-crosshair" : "cursor-move",
+        "absolute",
+        // Com a seta na mão o ponteiro é DESLIGADO aqui, e não apenas
+        // ignorado: o clique precisa ATRAVESSAR até o envelope do palco, que
+        // vive no plano de baixo e é quem trata o gesto da seta. Um tratador
+        // que só retornava deixava o pointerdown morrer neste `<div>` -- e a
+        // seta não começava em cima de um postit, de um texto nem de um
+        // cartão, que é justamente onde ela quer começar.
+        tool === "ligacao"
+          ? "pointer-events-none cursor-crosshair"
+          : "pointer-events-auto cursor-move",
         // Contorno enquanto edita ou selecionado: um texto vazio em edição
         // não tem letra nenhuma para mostrar onde está.
         (editando || selecionado) && "ring-primary/60 rounded-sm ring-1",
@@ -260,7 +302,7 @@ function TextoSolto({
           própria -- ela vem da fonte --, e esticar um eixo só seria deformar
           a letra. Fora do envelope girado, porque o gizmo recebe o giro à
           parte e desenha o dele. */}
-      {selecionado && !editando && !panMode && tool !== "ligacao" ? (
+      {selecionado && sozinho && !editando && !panMode && tool !== "ligacao" ? (
         <TransformHandles
           key={texto.id}
           box={{
@@ -269,33 +311,72 @@ function TextoSolto({
           }}
           handles={CORNER_HANDLES}
           keepAspect
+          // A caixa de opções da letra, na mesma fileira em que a imagem mostra
+          // espelhar e excluir: é onde a mão já procura depois de clicar.
+          estilo={{
+            negrito: texto.negrito,
+            italico: texto.italico,
+            sublinhado: texto.sublinhado,
+            onChange: (patch) => updateTexto(sceneId, texto.id, patch),
+          }}
+          paleta={{
+            titulo: "Letra",
+            cor: texto.cor,
+            fundo: texto.fundo,
+            onChange: ({ cor, fundo }) =>
+              updateTexto(sceneId, texto.id, {
+                // `null` é "de volta ao padrão", e no modelo o padrão é o campo
+                // ausente. Ver `Texto`.
+                ...(cor !== undefined ? { cor: cor ?? undefined } : {}),
+                ...(fundo !== undefined ? { fundo: fundo ?? undefined } : {}),
+              }),
+          }}
+          /**
+           * Pelo GESTO, e não pelo board: aumentar a letra arrastando o canto
+           * gravava a cena a cada quadro, e cada gravação é um commit inteiro
+           * -- cópia do board, passo de histórico, todo assinante acordado, a
+           * bancada re-renderizada e, com a cena no ar, uma publicação para a
+           * mesa. Sessenta vezes por segundo, para um gesto que só interessa a
+           * quem está olhando o palco. É o mesmo caminho que o item já fazia:
+           * ver `useGestoStore`.
+           *
+           * O board recebe UMA vez, no soltar -- e um Ctrl+Z só.
+           */
           onChange={(patch) => {
             if (patch.rotation !== undefined) {
-              updateTexto(sceneId, texto.id, {
-                rotation: patch.rotation || undefined,
-              });
+              moverNoGesto(sceneId, [], [
+                { id: texto.id, patch: { rotation: patch.rotation || undefined } },
+              ]);
               return;
             }
             // A altura da caixa é linhas × fonte × altura de linha: é dela
             // que sai o tamanho novo. `x`/`y` vêm junto porque escalar por um
             // canto move o oposto.
             const altura = patch.height;
-            updateTexto(sceneId, texto.id, {
-              ...(patch.x !== undefined ? { x: Math.round(patch.x) } : {}),
-              ...(patch.y !== undefined ? { y: Math.round(patch.y) } : {}),
-              ...(altura !== undefined
-                ? {
-                    tamanho: Math.max(
-                      TAMANHO_MINIMO,
-                      Math.round(altura / (linhasDoTexto * ALTURA_DA_LINHA)),
-                    ),
-                  }
-                : {}),
-            });
+            moverNoGesto(sceneId, [], [
+              {
+                id: texto.id,
+                patch: {
+                  ...(patch.x !== undefined ? { x: Math.round(patch.x) } : {}),
+                  ...(patch.y !== undefined ? { y: Math.round(patch.y) } : {}),
+                  ...(altura !== undefined
+                    ? {
+                        tamanho: Math.max(
+                          TAMANHO_MINIMO_DO_TEXTO,
+                          Math.round(altura / (linhasDoTexto * ALTURA_DA_LINHA)),
+                        ),
+                      }
+                    : {}),
+                },
+              },
+            ]);
           }}
+          onGestureEnd={() =>
+            terminarGesto(sceneId, [], useGestoStore.getState().textos ?? [])
+          }
           onDelete={() => removeTexto(sceneId, texto.id)}
         />
       ) : null}
     </>
   );
-}
+});

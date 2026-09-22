@@ -6,7 +6,13 @@ import {
   offsetInsideScene,
 } from "@/lib/geometry/transform";
 import { flipPatches, type FlipAxis } from "@/lib/mestre/flip";
+import { moveGroup, type PecaDoGrupo } from "@/lib/geometry/group";
+import {
+  empurrarTextos,
+  girarTextosNoLugar,
+} from "@/lib/mestre/grupo-de-textos";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
+import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
   selectEditingScene,
@@ -15,7 +21,16 @@ import {
   type ZDirection,
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import type { CanvasItem, ItemDraft, Scene } from "@/types/scene";
+import { ehQuadro, semIdDaForma } from "@/types/scene";
+import type {
+  CanvasItem,
+  Forma,
+  ItemDraft,
+  NewForma,
+  NewTexto,
+  Scene,
+  Texto,
+} from "@/types/scene";
 
 /** Deslocamento do "colar" e do "duplicar", para a cópia não sumir sob o original. */
 export const PASTE_OFFSET = 32;
@@ -49,13 +64,24 @@ type ActionContext = {
   scene: Scene | null;
   selectedIds: string[];
   selectedItems: CanvasItem[];
+  selectedTextoIds: string[];
+  /**
+   * Os textos soltos na mão, que andam com os itens desde que a área do quadro
+   * passou a laçar os dois. Toda ação de seleção daqui trata as duas listas:
+   * copiar metade do que está marcado seria a pior resposta possível.
+   */
+  selectedTextos: Texto[];
+  selectedFormaIds: string[];
+  /** As formas na mão. Mesma história dos textos. Ver `Forma`. */
+  selectedFormas: Forma[];
 };
 
 function read(): ActionContext {
   // Sempre a cena em edição: as ações do mestre agem no palco dele, nunca
   // direto no que a mesa está vendo.
   const scene = selectEditingScene(useSceneStore.getState());
-  const { selectedIds } = useSelectionStore.getState();
+  const { selectedIds, selectedTextoIds, selectedFormaIds } =
+    useSelectionStore.getState();
 
   return {
     scene,
@@ -63,6 +89,38 @@ function read(): ActionContext {
     selectedItems: scene
       ? scene.items.filter((item) => selectedIds.includes(item.id))
       : [],
+    selectedTextoIds,
+    selectedTextos: scene
+      ? (scene.textos ?? []).filter((texto) =>
+          selectedTextoIds.includes(texto.id),
+        )
+      : [],
+    selectedFormaIds,
+    selectedFormas: scene
+      ? (scene.formas ?? []).filter((forma) =>
+          selectedFormaIds.includes(forma.id),
+        )
+      : [],
+  };
+}
+
+/** A cópia de uma forma, deslocada como a do item e a do texto. */
+function formaDeslocada(forma: Forma): NewForma {
+  return {
+    ...semIdDaForma(forma),
+    x: forma.x + PASTE_OFFSET,
+    y: forma.y + PASTE_OFFSET,
+  };
+}
+
+/** A cópia de um texto, deslocada para não nascer em cima do original. */
+function textoDeslocado(texto: Texto): NewTexto {
+  return {
+    x: texto.x + PASTE_OFFSET,
+    y: texto.y + PASTE_OFFSET,
+    texto: texto.texto,
+    tamanho: texto.tamanho,
+    rotation: texto.rotation,
   };
 }
 
@@ -84,17 +142,37 @@ function offsetDraft(item: CanvasItem): ItemDraft {
 }
 
 export function copySelection(): void {
-  const { selectedItems } = read();
-  if (selectedItems.length === 0) return;
+  const { selectedItems, selectedTextos, selectedFormas } = read();
+  if (
+    selectedItems.length === 0 &&
+    selectedTextos.length === 0 &&
+    selectedFormas.length === 0
+  )
+    return;
 
-  useClipboardStore.getState().copy(selectedItems);
+  useClipboardStore
+    .getState()
+    .copy(selectedItems, selectedTextos, selectedFormas);
 }
 
 export function removeSelection(): void {
-  const { scene, selectedIds } = read();
-  if (!scene || selectedIds.length === 0) return;
+  const { scene, selectedIds, selectedTextoIds, selectedFormaIds } = read();
+  // O texto ABERTO para escrever não sai por aqui: com o campo na tela, Delete
+  // é do cursor, e apagar a frase inteira no meio de uma palavra seria a
+  // resposta errada. Ele volta a ser apagável assim que a edição fecha.
+  const editandoId = useQuadroStore.getState().textoEditandoId;
+  const textoIds = selectedTextoIds.filter((id) => id !== editandoId);
+  if (
+    !scene ||
+    (selectedIds.length === 0 &&
+      textoIds.length === 0 &&
+      selectedFormaIds.length === 0)
+  )
+    return;
 
   useSceneStore.getState().removeItems(scene.id, selectedIds);
+  useSceneStore.getState().removeTextos(scene.id, textoIds);
+  useSceneStore.getState().removeFormas(scene.id, selectedFormaIds);
   useSelectionStore.getState().clear();
 }
 
@@ -138,28 +216,83 @@ export function cutSelection(): void {
 
 export function pasteClipboard(): void {
   const { scene } = read();
-  const { drafts } = useClipboardStore.getState();
-  if (!scene || drafts.length === 0) return;
+  if (!scene) return;
 
-  const ids = useSceneStore.getState().addItems(
+  const guardado = useClipboardStore.getState();
+  const { drafts } = guardado;
+  /**
+   * Texto e forma só colam em QUADRO: num mapa eles apareceriam no palco do
+   * mestre e em lugar nenhum na mesa -- quem os desenha lá é a camada do
+   * quadro. Colar o que só um lado vê é pior do que não colar. Ver
+   * `QuadroMesaLayer`.
+   */
+  const textos = ehQuadro(scene) ? guardado.textos : [];
+  const formas = ehQuadro(scene) ? guardado.formas : [];
+  if (drafts.length === 0 && textos.length === 0 && formas.length === 0) return;
+
+  // Só quem tem o que colar: `addItems` com a lista vazia gravaria o board e
+  // deixaria um passo de desfazer que não desfaz nada.
+  const ids =
+    drafts.length > 0
+      ? useSceneStore.getState().addItems(
+          scene.id,
+          drafts.map((draft) => ({
+            ...draft,
+            ...offsetInsideScene(draft, PASTE_OFFSET),
+          })),
+        )
+      : [];
+
+  // O texto não passa por `offsetInsideScene`: a caixa dele vem da fonte, e
+  // não há largura para segurar dentro do plano antes de ele ser desenhado.
+  const textoIds = useSceneStore.getState().addTextos(
     scene.id,
-    drafts.map((draft) => ({
-      ...draft,
-      ...offsetInsideScene(draft, PASTE_OFFSET),
+    textos.map((texto) => ({
+      ...texto,
+      x: texto.x + PASTE_OFFSET,
+      y: texto.y + PASTE_OFFSET,
     })),
   );
 
-  useSelectionStore.getState().select(ids);
+  const formaIds = useSceneStore.getState().addFormas(
+    scene.id,
+    formas.map((forma) => ({
+      ...forma,
+      x: forma.x + PASTE_OFFSET,
+      y: forma.y + PASTE_OFFSET,
+    })),
+  );
+
+  useSelectionStore
+    .getState()
+    .selectMisto({ itens: ids, textos: textoIds, formas: formaIds });
 }
 
 export function duplicateSelection(): void {
-  const { scene, selectedItems } = read();
-  if (!scene || selectedItems.length === 0) return;
+  const { scene, selectedItems, selectedTextos, selectedFormas } = read();
+  if (
+    !scene ||
+    (selectedItems.length === 0 &&
+      selectedTextos.length === 0 &&
+      selectedFormas.length === 0)
+  )
+    return;
 
-  const ids = useSceneStore
+  const ids =
+    selectedItems.length > 0
+      ? useSceneStore
+          .getState()
+          .addItems(scene.id, selectedItems.map(offsetDraft))
+      : [];
+  const textoIds = useSceneStore
     .getState()
-    .addItems(scene.id, selectedItems.map(offsetDraft));
-  useSelectionStore.getState().select(ids);
+    .addTextos(scene.id, selectedTextos.map(textoDeslocado));
+  const formaIds = useSceneStore
+    .getState()
+    .addFormas(scene.id, selectedFormas.map(formaDeslocada));
+  useSelectionStore
+    .getState()
+    .selectMisto({ itens: ids, textos: textoIds, formas: formaIds });
 }
 
 export function moveSelectionZ(direction: ZDirection): void {
@@ -275,13 +408,16 @@ export function selecionarGrupo(grupoId: string): void {
   useSelectionStore.getState().select(itensDoGrupo(scene, grupoId));
 }
 
+/** Tudo o que o palco deixa pegar: as imagens destravadas e os textos soltos. */
 export function selectAllItems(): void {
   const { scene } = read();
   if (!scene) return;
 
-  useSelectionStore
-    .getState()
-    .select(scene.items.filter((item) => !item.locked).map((item) => item.id));
+  useSelectionStore.getState().selectMisto({
+    itens: scene.items.filter((item) => !item.locked).map((item) => item.id),
+    textos: (scene.textos ?? []).map((texto) => texto.id),
+    formas: (scene.formas ?? []).map((forma) => forma.id),
+  });
 }
 
 /** Alterna revelada/escondida da área selecionada, ou de uma indicada pelo id. */
@@ -397,7 +533,10 @@ export const PASSO_DE_TAMANHO = 1.1;
  * mudaria a posição de cada peça, e a seta é um ajuste fino -- o mestre quer
  * a estátua um pouco mais torta, não a sala inteira rodando.
  */
-export function girarPatches(items: CanvasItem[], graus: number): ItemPatch[] {
+export function girarPatches(
+  items: (PecaDoGrupo & { locked?: boolean })[],
+  graus: number,
+): ItemPatch[] {
   return items
     .filter((item) => !item.locked)
     .map((item) => ({
@@ -413,7 +552,7 @@ export function girarPatches(items: CanvasItem[], graus: number): ItemPatch[] {
  * grupo desalinharia o que estava alinhado.
  */
 export function escalarPatches(
-  items: CanvasItem[],
+  items: (PecaDoGrupo & { locked?: boolean })[],
   fator: number,
   centro: { x: number; y: number },
 ): ItemPatch[] {
@@ -444,25 +583,46 @@ export function escalarPatches(
 }
 
 export function rotateSelection(graus: number): void {
-  const { scene, selectedItems } = read();
-  if (!scene || selectedItems.length === 0) return;
+  const { scene, selectedItems, selectedTextos, selectedFormas } = read();
+  if (!scene || naoHaNada(selectedItems, selectedTextos, selectedFormas)) return;
 
   useSceneStore
     .getState()
     .updateItems(scene.id, girarPatches(selectedItems, graus));
+  // Cada texto vira onde está, como o item: as setas não orbitam nada.
+  useSceneStore
+    .getState()
+    .updateTextos(scene.id, girarTextosNoLugar(selectedTextos, graus));
+  useSceneStore
+    .getState()
+    .updateFormas(scene.id, girarPatches(selectedFormas, graus));
 }
 
 export function nudgeSelection(dx: number, dy: number): void {
-  const { scene, selectedItems } = read();
-  if (!scene || selectedItems.length === 0) return;
+  const { scene, selectedItems, selectedTextos, selectedFormas } = read();
+  if (!scene || naoHaNada(selectedItems, selectedTextos, selectedFormas)) return;
 
   useSceneStore.getState().updateItems(
     scene.id,
-    selectedItems
-      .filter((item) => !item.locked)
-      .map((item) => ({
-        id: item.id,
-        patch: { x: item.x + dx, y: item.y + dy },
-      })),
+    moveGroup(
+      selectedItems.filter((item) => !item.locked),
+      dx,
+      dy,
+    ),
   );
+  useSceneStore
+    .getState()
+    .updateTextos(scene.id, empurrarTextos(selectedTextos, dx, dy));
+  useSceneStore
+    .getState()
+    .updateFormas(scene.id, moveGroup(selectedFormas, dx, dy));
+}
+
+/** Nada na mão nas três listas do palco. */
+function naoHaNada(
+  itens: PecaDoGrupo[],
+  textos: Texto[],
+  formas: PecaDoGrupo[],
+): boolean {
+  return itens.length === 0 && textos.length === 0 && formas.length === 0;
 }

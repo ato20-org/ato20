@@ -334,6 +334,21 @@ export type Texto = {
   /** Giro em graus, em volta do centro da caixa, como o item. Ausente = 0. */
   rotation?: number;
   /**
+   * Como a letra é escrita. Todos ausentes no texto comum, e é de propósito:
+   * o padrão é a cor do tema, sem fundo e sem ênfase, e um texto gravado antes
+   * de isto existir continua válido sem migração nenhuma.
+   *
+   * Cor CSS, como o risco do lápis -- e não um nome de paleta, como o postit:
+   * a paleta do quadro é a mesma do lápis, e guardar o valor deixa o arquivo
+   * legível sem tabela de tradução.
+   */
+  cor?: string;
+  /** Fundo atrás da letra, como um marca-texto. Ausente = sem fundo. */
+  fundo?: string;
+  negrito?: boolean;
+  italico?: boolean;
+  sublinhado?: boolean;
+  /**
    * A caixa MEDIDA na tela do mestre, em unidades de cena, sem o giro.
    * Ausente até o primeiro render: aí vale a estimativa de `caixaRetaDoTexto`.
    * Gravada porque a mesa também precisa dela para a seta encostar no lugar
@@ -344,10 +359,105 @@ export type Texto = {
 };
 
 export type NewTexto = Pick<Texto, "x" | "y"> &
-  Partial<Pick<Texto, "texto" | "tamanho" | "rotation">>;
+  Partial<
+    Pick<
+      Texto,
+      | "texto"
+      | "tamanho"
+      | "rotation"
+      | "cor"
+      | "fundo"
+      | "negrito"
+      | "italico"
+      | "sublinhado"
+    >
+  >;
 
 /** Tamanho de fonte de um texto novo, em unidades de cena. */
 export const TEXTO_TAMANHO = 40;
+
+/** As formas que o quadro desenha. Ver `Forma`. */
+export const TIPOS_DE_FORMA = ["retangulo", "elipse", "linha"] as const;
+
+export type TipoDeForma = (typeof TIPOS_DE_FORMA)[number];
+
+/**
+ * Uma forma desenhada no quadro: retângulo, elipse ou linha reta.
+ *
+ * É o traço geométrico que o lápis não dá -- cercar três postits, ligar duas
+ * colunas, riscar um eixo do tempo. Mora na cena como o texto solto e vai
+ * INTEIRA para a mesa: o quadro é o que o mestre quer mostrar.
+ *
+ * A geometria é a MESMA do item de cena -- `x`, `y`, `width`, `height`,
+ * `rotation` --, e isso não é coincidência: é o que deixa a forma entrar na
+ * seleção do palco ao lado das imagens e dos textos, e ser escalada e girada
+ * pelo mesmo gizmo, com as mesmas funções de grupo. Uma forma com dois pontos
+ * próprios ("de onde até onde", como o medidor) precisaria de um gizmo só
+ * dela.
+ *
+ * A LINHA cabe nessa caixa como uma diagonal dela: `diagonal` diz qual das
+ * duas, e é o que permite desenhar para cima e para a esquerda sem inventar um
+ * segundo par de coordenadas. Escalar a caixa estica a linha; girar a caixa
+ * gira a linha.
+ */
+export type Forma = {
+  id: string;
+  tipo: TipoDeForma;
+  /** Canto superior esquerdo da caixa, em coordenadas de cena. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Graus, no sentido horário, em torno do centro da caixa. */
+  rotation: number;
+  /**
+   * Cor do traço, CSS, como no risco do lápis. Ausente = a cor do TEMA.
+   *
+   * Opcional pela mesma razão do texto solto: o quadro é papel, e o papel é
+   * claro ou escuro conforme o tema de quem olha -- uma cor fixa como padrão
+   * sumiria num dos dois. Escolhida, ela vale nos dois lados.
+   */
+  cor?: string;
+  /** Espessura do traço, em unidades de cena. */
+  espessura: number;
+  /**
+   * Preenchimento. Ausente = vazada, e é o padrão: uma caixa cheia sobre o
+   * quadro esconderia o que está atrás dela, e o uso normal é CERCAR.
+   */
+  fundo?: string;
+  /**
+   * Só a linha: ela corre do canto superior esquerdo ao inferior direito
+   * (ausente) ou do inferior esquerdo ao superior direito (`"secundaria"`).
+   */
+  diagonal?: "secundaria";
+};
+
+export type NewForma = Omit<Forma, "id">;
+
+/**
+ * A forma sem o id, campo a campo -- o que copiar e duplicar guardam.
+ *
+ * Escrito e não `{ id, ...resto }` porque o descarte nomeado é variável não
+ * usada, e a regra que a proíbe está ligada. Mesma razão do rascunho de item
+ * em `use-clipboard-store`.
+ */
+export function semIdDaForma(forma: Forma): NewForma {
+  return {
+    tipo: forma.tipo,
+    x: forma.x,
+    y: forma.y,
+    width: forma.width,
+    height: forma.height,
+    rotation: forma.rotation,
+    cor: forma.cor,
+    espessura: forma.espessura,
+    fundo: forma.fundo,
+    diagonal: forma.diagonal,
+  };
+}
+
+/** Espessura de traço de uma forma nova, em unidades de cena. */
+export const FORMA_ESPESSURA = 6;
 
 /**
  * Um documento do quadro: um cartão com Markdown de verdade, editado no
@@ -412,11 +522,65 @@ export const DOCUMENTO_LARGURA = 420;
 export const DOCUMENTO_ALTURA = 320;
 export const DOCUMENTO_MINIMO = 160;
 
-/** O que uma ligação pode amarrar. */
-export type TipoLigavel = "item" | "postit" | "texto" | "pin" | "documento";
+/**
+ * O que uma ligação pode amarrar.
+ *
+ * `ligacao` é a própria seta, e é ela que traz a BIFURCAÇÃO: uma seta presa a
+ * um ponto no meio de outra, como o galho sai do tronco. Onde nesse meio é o
+ * `t` da referência.
+ */
+export type TipoLigavel =
+  | "item"
+  | "postit"
+  | "texto"
+  | "pin"
+  | "documento"
+  | "forma"
+  | "ligacao";
 
-/** Uma ponta de ligação: o que ela amarra, por tipo e id. */
-export type RefLigacao = { tipo: TipoLigavel; id: string };
+/**
+ * Em qual das quatro bordas a seta encosta.
+ *
+ * A ordem é a do relógio, começando em cima: é a ordem em que os quatro pontos
+ * aparecem sob o cursor, e a ordem em que se fala deles.
+ */
+export type LadoDeAncora = "cima" | "direita" | "baixo" | "esquerda";
+
+/**
+ * Uma ponta de ligação: o que ela amarra, por tipo e id -- e ONDE, quando o
+ * mestre disse onde.
+ *
+ * `lado` e `t` são a mesma ideia em duas geometrias: a caixa tem quatro bordas
+ * e a seta tem comprimento. Os dois são opcionais, e a ausência é o caminho
+ * antigo -- a borda virada para a outra ponta, o meio da seta. Quadro gravado
+ * antes disto continua abrindo igual, e é por isso que eles não são
+ * obrigatórios.
+ */
+export type RefLigacao = {
+  tipo: TipoLigavel;
+  id: string;
+  /**
+   * A borda em que a seta encosta, escolhida no ponto de encaixe. Ausente = a
+   * borda virada para a outra ponta, que é como a seta se comportava antes de
+   * haver pontos de encaixe.
+   *
+   * Escolhido, o lado MANDA: a seta continua saindo do meio daquela borda
+   * mesmo quando o alvo anda para o outro lado da folha. É o que separa "ligue
+   * estes dois" de "saia por cima" -- num organograma, todas as setas descem
+   * pela borda de baixo, e uma delas virando para o lado desalinharia o
+   * desenho inteiro.
+   */
+  lado?: LadoDeAncora;
+  /**
+   * Só com `tipo: "ligacao"`: onde ao longo da seta-mãe a ponta se prende, de
+   * 0 (a ponta `de` dela) a 1 (a ponta `para`). Ausente = 0,5, o meio.
+   *
+   * Fração e não distância: a seta-mãe estica e encolhe quando o que ela
+   * amarra se move, e uma bifurcação a 120 unidades do começo acabaria fora da
+   * seta. A fração acompanha.
+   */
+  t?: number;
+};
 
 /**
  * Uma ponta de seta: ANCORADA numa coisa do quadro, ou LIVRE num ponto.
@@ -445,6 +609,19 @@ export type Ligacao = {
   para: PontaDeLigacao;
   /** O que a seta diz, no meio dela. Ausente = nada. */
   rotulo?: string;
+  /**
+   * Quanto o mestre DOBROU a seta à mão. Ausente = a curva que os lados de
+   * encaixe dão sozinhos, sem barriga nenhuma.
+   *
+   * Fração do vão entre as pontas, e não uma distância: é quanto o meio da
+   * seta saiu do lugar, medido perpendicular à reta que liga as duas pontas.
+   * Positivo dobra para um lado, negativo para o outro.
+   *
+   * Fração porque a seta estica e encolhe quando o que ela amarra se move: uma
+   * dobra de 80 unidades some numa seta que atravessa a folha e vira um laço
+   * numa seta de 100. A fração dobra o mesmo tanto nas duas.
+   */
+  curva?: number;
 };
 
 /**
@@ -824,6 +1001,8 @@ export type Scene = {
    */
   textos?: Texto[];
   ligacoes?: Ligacao[];
+  /** As formas geométricas do quadro. Ausente = nenhuma. Ver `Forma`. */
+  formas?: Forma[];
   /** Os cartões de documento do quadro. Ausente = nenhum. Ver `Documento`. */
   documentos?: Documento[];
   backgroundAssetId?: string;
@@ -1011,19 +1190,25 @@ export function cloneScene(source: Scene, name: string): Scene {
     // mesmos arquivos.
     handout: source.handout ? [...source.handout] : undefined,
     textos: source.textos?.map(renovar),
+    // A forma não referencia nada: id novo e pronto.
+    formas: source.formas?.map(renovar),
     // O cartão é copiado com o MESMO arquivo por enquanto: copiar o arquivo é
     // assíncrono e é do store, que troca o `arquivo` da cópia logo depois.
     // Ver `duplicateScene`.
     documentos: source.documentos?.map(renovar),
     // Ponta ancorada aponta para a cópia; ponta livre é só um ponto e vem igual.
-    ligacoes: source.ligacoes?.map((ligacao) => {
+    //
+    // As setas passam por `renovar` ANTES de as pontas serem reescritas, e não
+    // ganham id no meio do caminho: uma bifurcação é uma ponta presa em OUTRA
+    // SETA, e sem o id novo dela já no mapa a cópia da bifurcação continuaria
+    // pendurada na seta original.
+    ligacoes: source.ligacoes?.map(renovar).map((ligacao) => {
       const renovada = (ponta: PontaDeLigacao): PontaDeLigacao =>
         "tipo" in ponta
           ? { ...ponta, id: novos.get(ponta.id) ?? ponta.id }
           : ponta;
       return {
         ...ligacao,
-        id: novoId(),
         de: renovada(ligacao.de),
         para: renovada(ligacao.para),
       };

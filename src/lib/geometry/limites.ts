@@ -53,6 +53,9 @@ export function limitesDoConteudo(scene: Scene): Bounds {
 
   for (const texto of scene.textos ?? []) caixas.push(caixaDoTexto(texto));
 
+  const formas = boundsOfItems(scene.formas ?? []);
+  if (formas) caixas.push(formas);
+
   for (const documento of scene.documentos ?? [])
     caixas.push(
       boxBounds({

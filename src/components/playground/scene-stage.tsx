@@ -269,6 +269,20 @@ export function SceneStage({
   const [frame, setFrame] = useState({ width: 0, height: 0 });
   /** A câmera está parada há tempo bastante para valer redesenhar nítido. */
   const [parada, setParada] = useState(false);
+  /**
+   * A mesma pergunta feita só sobre a AMPLIAÇÃO, sem o gesto.
+   *
+   * É o que separa os dois planos: o de conteúdo tem de cair para o compositor
+   * enquanto um item anda -- um token dentro de um plano em `zoom` paga layout
+   * e re-raster do plano inteiro por quadro, e é a razão de `gestos` existir
+   * (ver `useViewportStore`). O de CONTROLES não tem token nenhum: ali moram
+   * texto, forma, postit e gizmo, e quem anda no gesto anda pelo `transform`
+   * do próprio elemento. Fazê-lo trocar de forma junto só servia para
+   * redesenhar toda a letra da folha com outra régua a cada vez que a mão
+   * pegava alguma coisa -- que é o quadro "se mexendo" ao mover um elemento.
+   */
+  const [ampliacaoParada, setAmpliacaoParada] = useState(false);
+  const [ultimaAmpliacao, setUltimaAmpliacao] = useState(0);
   // Só no Mestre: na TV nada arrasta, e o plano dela nunca sai do `transform`.
   const emGesto = useViewportStore((state) => !smooth && state.gestos > 0);
 
@@ -386,6 +400,30 @@ export function SceneStage({
   // `!emGesto`: item, alça ou moldura andando é gesto tanto quanto a câmera, e
   // gesto é coisa de compositor. Ver `gestos` em `useViewportStore`.
   const conteudoNoLayout = !smooth && parada && !emGesto && scale !== 0;
+  /**
+   * No QUADRO, o plano de cima sai do layout só enquanto a ampliação muda --
+   * pegar um elemento não o tira mais.
+   *
+   * O que ele ganha com isso é não ser reescrito com outra régua a cada vez
+   * que a mão pega alguma coisa: o conteúdo do quadro mora todo aqui, e trocar
+   * de forma redesenha cada letra com o hinting do tamanho novo. É a metade do
+   * "as coisas se mexem" que sobrava depois de o pan parar de trocar.
+   *
+   * Custa, e o número está medido: no cenário `quadro` da bancada -- 30
+   * textos, 15 formas, 10 postits, um texto arrastado por quadro --, o quadro
+   * perdido na webview vai de 2,1% a 3,3% (mediana de três corridas cada). É o
+   * preço de deixar o plano em layout enquanto algo anda dentro dele, e é o
+   * mesmo motivo que fez `gestos` existir para o plano de conteúdo.
+   *
+   * Só no quadro, e não no mapa: lá embaixo o plano de conteúdo carrega o
+   * bitmap e os tokens, e é dele que veio a medida que criou o `gestos` -- um
+   * token dentro de um plano em `zoom` pesando na mão. No mapa os dois planos
+   * continuam trocando juntos, como sempre.
+   */
+  const controlesNoLayout =
+    plano === "quadro"
+      ? !smooth && ampliacaoParada && scale !== 0
+      : conteudoNoLayout;
 
   /**
    * A malha de pontos do vazio, só onde se navega (o Mestre).
@@ -460,13 +498,23 @@ export function SceneStage({
   }, [onViewportChange, plano, scale, offsetX, offsetY]);
 
   /**
-   * A câmera, resumida a uma string: mudou isto, mudou o enquadramento.
+   * O que obriga o plano a voltar para o compositor: a AMPLIAÇÃO e o gesto.
    *
-   * O gesto entra na chave de propósito: soltar um item é "a câmera parou"
-   * outra vez -- a espera recomeça e o plano só volta ao `zoom` nítido depois
-   * dela, em vez de pagar o re-raster no mesmo quadro do `pointerup`.
+   * O deslocamento saiu da chave, e é um conserto. A troca de forma existe
+   * porque a textura ESTICADA borra, e só a ampliação a estica -- deslocar
+   * move a mesma textura, que o compositor faz sem borrar nada. Com o offset
+   * aqui dentro, arrastar a tela derrubava o plano para `transform` e o trazia
+   * de volta 350 ms depois: layout refeito duas vezes por gesto, e o texto
+   * inteiro redesenhado com outra régua nas duas -- medido na webview, 900
+   * pixels de tela mudavam sem nada ter se movido. Era metade do "as coisas se
+   * mexem quando eu mexo a tela".
+   *
+   * O gesto FICA na chave: soltar um item é "a câmera parou" outra vez -- a
+   * espera recomeça e o plano só volta ao `zoom` nítido depois dela, em vez de
+   * pagar o re-raster no mesmo quadro do `pointerup`. Ver `gestos` em
+   * `useViewportStore`, onde está por que mover item quer o compositor.
    */
-  const camera = `${scale}|${offsetX}|${offsetY}|${emGesto}`;
+  const camera = `${scale}|${emGesto}`;
   const [ultima, setUltima] = useState(camera);
 
   // Ajuste de estado no próprio render, que é o caminho que o React documenta
@@ -475,6 +523,10 @@ export function SceneStage({
   if (ultima !== camera) {
     setUltima(camera);
     setParada(false);
+  }
+  if (ultimaAmpliacao !== scale) {
+    setUltimaAmpliacao(scale);
+    setAmpliacaoParada(false);
   }
 
   /** Quando a última amostra de câmera chegou. `null` = nenhuma medida ainda. */
@@ -581,6 +633,16 @@ export function SceneStage({
     return () => window.clearTimeout(espera);
   }, [camera, smooth]);
 
+  // A mesma espera para a ampliação sozinha. Ver `ampliacaoParada`.
+  useEffect(() => {
+    const espera = window.setTimeout(
+      () => setAmpliacaoParada(true),
+      smooth ? (emFluxo.current ? 320 : 620) : 350,
+    );
+
+    return () => window.clearTimeout(espera);
+  }, [scale, smooth]);
+
   const toScene = useCallback(
     (clientX: number, clientY: number): Vec => {
       // `getBoundingClientRect` já devolve a caixa depois do transform, então o
@@ -599,7 +661,10 @@ export function SceneStage({
   const value = useMemo<SceneScale>(
     () => ({
       scale,
-      ampliacaoNoLayout: conteudoNoLayout,
+      // Dos CONTROLES, e não do conteúdo: quem lê isto desenha lá em cima --
+      // alça, postit, texto, gizmo -- e precisa desfazer a ampliação que está
+      // valendo PARA ELE. Ver `emPixelDeTela`.
+      ampliacaoNoLayout: controlesNoLayout,
       toScene,
       viewport,
       planoDeConteudo: conteudoNo,
@@ -611,7 +676,7 @@ export function SceneStage({
     }),
     [
       scale,
-      conteudoNoLayout,
+      controlesNoLayout,
       toScene,
       viewport,
       margemNo,
@@ -936,11 +1001,13 @@ export function SceneStage({
         style={{
           width: SCENE_WIDTH,
           height: SCENE_HEIGHT,
-          // Mesma alternância do conteúdo, e pelo mesmo motivo: o plano também
-          // borra esticado. O que os controles precisam, e o conteúdo não, é
-          // que as medidas de TELA deles não caiam no piso de um pixel que o
-          // `zoom` aplica -- ver `emPixelDeTela`.
-          ...(conteudoNoLayout
+          // A alternância do conteúdo com UMA diferença: no quadro, o gesto
+          // não conta. O plano também borra esticado, então a ampliação
+          // continua mandando; o que saiu foi trocar de forma porque alguém
+          // está arrastando algo. Ver `controlesNoLayout`. As medidas de TELA
+          // de dentro continuam desfeitas por `emPixelDeTela`, que vale nas
+          // duas formas.
+          ...(controlesNoLayout
             ? { zoom: scale }
             : { transform: `scale(${scale})`, transformOrigin: "0 0" }),
         }}

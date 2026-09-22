@@ -25,7 +25,14 @@ import {
   reorderByZ,
   type ZDirection,
 } from "@/lib/mestre/z-order";
-import { ancorada, mesmaPonta, semReferencia } from "@/lib/mestre/ligacoes";
+import {
+  ancorada,
+  dependeDe,
+  mesmaPonta,
+  pontaIgual,
+  semReferencia,
+  tracadoDe,
+} from "@/lib/mestre/ligacoes";
 import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
   criarDocumento,
@@ -43,12 +50,14 @@ import {
   type Board,
   type CameraSalva,
   type CanvasItem,
+  type Forma,
   type FogRegion,
   type Grupo,
   type ItemDraft,
   type MapPin,
   type NewCanvasItem,
   type NewFogRegion,
+  type NewForma,
   type NewPostit,
   type NewTraco,
   type NewMapPin,
@@ -83,6 +92,12 @@ type HydrationStatus = "idle" | "loading" | "ready" | "error";
 const COALESCE_MS = 400;
 
 export type ItemPatch = { id: string; patch: Partial<CanvasItem> };
+
+/** O mesmo para o texto solto: é o que o gesto de grupo entrega por quadro. */
+export type TextoPatch = { id: string; patch: Partial<Omit<Texto, "id">> };
+
+/** E para a forma do quadro, que anda no mesmo gesto e no mesmo gizmo. */
+export type FormaPatch = { id: string; patch: Partial<Omit<Forma, "id">> };
 
 export type { ZDirection };
 
@@ -308,12 +323,28 @@ type SceneStore = {
 
   /** Texto solto do quadro. Ver `Texto`. Devolve o id. */
   addTexto: (sceneId: string, texto: NewTexto) => string;
+  /** Vários de uma vez, na ordem dada: um commit só para o Ctrl+V de um punhado. */
+  addTextos: (sceneId: string, textos: NewTexto[]) => string[];
   updateTexto: (
     sceneId: string,
     textoId: string,
     patch: Partial<Omit<Texto, "id">>,
   ) => void;
+  /** Vários de uma vez — o grupo arrastado, escalado ou girado. Um Ctrl+Z só. */
+  updateTextos: (sceneId: string, patches: TextoPatch[]) => void;
   removeTexto: (sceneId: string, textoId: string) => void;
+  removeTextos: (sceneId: string, textoIds: string[]) => void;
+
+  /** Forma geométrica do quadro. Ver `Forma`. Devolve o id. */
+  addForma: (sceneId: string, forma: NewForma) => string;
+  addFormas: (sceneId: string, formas: NewForma[]) => string[];
+  updateForma: (
+    sceneId: string,
+    formaId: string,
+    patch: Partial<Omit<Forma, "id">>,
+  ) => void;
+  updateFormas: (sceneId: string, patches: FormaPatch[]) => void;
+  removeFormas: (sceneId: string, formaIds: string[]) => void;
 
   /**
    * Cartão de documento. O arquivo já existe quando o cartão entra: quem cria
@@ -350,11 +381,14 @@ type SceneStore = {
     de: PontaDeLigacao,
     para: PontaDeLigacao,
   ) => string | null;
-  /** Rótulo, ou uma ponta movida -- para outro ponto, ou para outra âncora. */
+  /**
+   * Rótulo, dobra, ou uma ponta movida -- para outro ponto, ou para outra
+   * âncora.
+   */
   updateLigacao: (
     sceneId: string,
     ligacaoId: string,
-    patch: Partial<Pick<Ligacao, "rotulo" | "de" | "para">>,
+    patch: Partial<Pick<Ligacao, "rotulo" | "de" | "para" | "curva">>,
   ) => void;
   removeLigacao: (sceneId: string, ligacaoId: string) => void;
 };
@@ -1267,38 +1301,122 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     },
 
     addTexto(sceneId, texto) {
-      const id = novoId();
+      return get().addTextos(sceneId, [texto])[0];
+    },
+
+    addTextos(sceneId, textos) {
+      if (textos.length === 0) return [];
+
+      const ids = textos.map(() => novoId());
 
       get().updateScene(sceneId, (scene) => ({
         ...scene,
         textos: [
           ...(scene.textos ?? []),
-          { texto: "", tamanho: TEXTO_TAMANHO, ...texto, id },
+          ...textos.map((texto, indice) => ({
+            texto: "",
+            tamanho: TEXTO_TAMANHO,
+            ...texto,
+            id: ids[indice],
+          })),
         ],
       }));
 
-      return id;
+      return ids;
     },
 
     updateTexto(sceneId, textoId, patch) {
+      get().updateTextos(sceneId, [{ id: textoId, patch }]);
+    },
+
+    updateTextos(sceneId, patches) {
+      if (patches.length === 0) return;
+
+      const porId = new Map(patches.map(({ id, patch }) => [id, patch]));
+
       get().updateScene(sceneId, (scene) => ({
         ...scene,
-        textos: (scene.textos ?? []).map((texto) =>
-          texto.id === textoId ? { ...texto, ...patch } : texto,
-        ),
+        textos: (scene.textos ?? []).map((texto) => {
+          const patch = porId.get(texto.id);
+          return patch ? { ...texto, ...patch } : texto;
+        }),
       }));
     },
 
     removeTexto(sceneId, textoId) {
+      get().removeTextos(sceneId, [textoId]);
+    },
+
+    removeTextos(sceneId, textoIds) {
+      if (textoIds.length === 0) return;
+
+      const condenados = new Set(textoIds);
       get().updateScene(sceneId, (scene) => {
         const restantes = (scene.textos ?? []).filter(
-          (texto) => texto.id !== textoId,
+          (texto) => !condenados.has(texto.id),
         );
 
         return {
           ...scene,
           textos: restantes.length > 0 ? restantes : undefined,
-          ligacoes: semReferencia(scene.ligacoes, [textoId]),
+          // A seta amarrada a um texto apagado morre com ele.
+          ligacoes: semReferencia(scene.ligacoes, condenados),
+        };
+      });
+    },
+
+    addForma(sceneId, forma) {
+      return get().addFormas(sceneId, [forma])[0];
+    },
+
+    addFormas(sceneId, formas) {
+      if (formas.length === 0) return [];
+
+      const ids = formas.map(() => novoId());
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        formas: [
+          ...(scene.formas ?? []),
+          ...formas.map((forma, indice) => ({ ...forma, id: ids[indice] })),
+        ],
+      }));
+
+      return ids;
+    },
+
+    updateForma(sceneId, formaId, patch) {
+      get().updateFormas(sceneId, [{ id: formaId, patch }]);
+    },
+
+    updateFormas(sceneId, patches) {
+      if (patches.length === 0) return;
+
+      const porId = new Map(patches.map(({ id, patch }) => [id, patch]));
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        formas: (scene.formas ?? []).map((forma) => {
+          const patch = porId.get(forma.id);
+          return patch ? { ...forma, ...patch } : forma;
+        }),
+      }));
+    },
+
+    removeFormas(sceneId, formaIds) {
+      if (formaIds.length === 0) return;
+
+      const condenadas = new Set(formaIds);
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.formas ?? []).filter(
+          (forma) => !condenadas.has(forma.id),
+        );
+
+        return {
+          ...scene,
+          formas: restantes.length > 0 ? restantes : undefined,
+          // Como o texto: a seta amarrada a uma forma apagada morre com ela.
+          ligacoes: semReferencia(scene.ligacoes, condenadas),
         };
       });
     },
@@ -1384,15 +1502,26 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
       const scene = get().board?.scenes.find((atual) => atual.id === sceneId);
       if (!scene) return null;
+      // Seta repetida: mesmo par E mesmo ponto de encaixe. Com quatro pontos
+      // por caixa, duas setas entre os mesmos dois postits deixaram de ser
+      // engano -- sair por cima e sair pela direita são desenhos diferentes --,
+      // e o que continua valendo a pena barrar é a seta idêntica, que é o
+      // segundo clique sem querer.
       if (
         ancorada(de) &&
         ancorada(para) &&
         scene.ligacoes?.some(
           (ligacao) =>
-            mesmaPonta(ligacao.de, de) && mesmaPonta(ligacao.para, para),
+            pontaIgual(ligacao.de, de) && pontaIgual(ligacao.para, para),
         )
       )
         return null;
+
+      // Ponta que não resolve não vira seta: o postit sumiu enquanto ela
+      // estava pendurada no cursor, ou a cena trocou debaixo do gesto. Ela
+      // nasceria órfã, o desenho a ignoraria, e o que ficaria era uma linha
+      // morta no arquivo.
+      if (!tracadoDe(scene, de, para)) return null;
 
       const id = novoId();
       get().updateScene(sceneId, (atual) => ({
@@ -1411,24 +1540,34 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           const proxima = { ...ligacao, ...patch };
           // Rótulo vazio é ausência, como as listas vazias da cena.
           if (!proxima.rotulo?.trim()) delete proxima.rotulo;
+          // Dobra zero é a curva de fábrica, e ausência é como ela se escreve:
+          // uma seta nunca dobrada e uma desentortada ficam o mesmo arquivo.
+          if (!proxima.curva) delete proxima.curva;
           // Ponta movida para cima da outra âncora: fica onde estava.
           if (mesmaPonta(proxima.de, proxima.para)) return ligacao;
+          // Ponta pendurada numa seta que já depende desta: fica onde estava.
+          // As duas ficariam esperando a outra dizer onde está, e o quadro
+          // perderia as duas de uma vez. Ver `dependeDe`.
+          if (
+            dependeDe(scene, ligacaoId, proxima.de) ||
+            dependeDe(scene, ligacaoId, proxima.para)
+          )
+            return ligacao;
           return proxima;
         }),
       }));
     },
 
     removeLigacao(sceneId, ligacaoId) {
-      get().updateScene(sceneId, (scene) => {
-        const restantes = (scene.ligacoes ?? []).filter(
-          (ligacao) => ligacao.id !== ligacaoId,
-        );
-
-        return {
-          ...scene,
-          ligacoes: restantes.length > 0 ? restantes : undefined,
-        };
-      });
+      // Pelo mesmo caminho de quem apaga um postit: a seta bifurcada desta cai
+      // junto, e a que estava presa nessa também. Ver `semReferencia`.
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        ligacoes: semReferencia(
+          (scene.ligacoes ?? []).filter((ligacao) => ligacao.id !== ligacaoId),
+          [ligacaoId],
+        ),
+      }));
     },
   };
 });

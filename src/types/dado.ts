@@ -184,9 +184,25 @@ export type Quat = { x: number; y: number; z: number; w: number };
  * a simulação inteira e rezar para os dois lados chegarem no mesmo lugar. Com o
  * sorteio na frente, publicar é mandar `{ faces, valor, semente, impulso }`.
  */
+/**
+ * Em que MESA um dado caiu: a das cenas de mapa, ou a do quadro.
+ *
+ * Duas, e não uma por cena. A jogada continua sendo do momento da mesa e não
+ * do lugar onde aconteceu -- trocar de mapa não recolhe os dados, e nunca
+ * recolheu. O que se separou foi outra coisa: o quadro não é a mesa de jogo, é
+ * a mesa de TRABALHO do mestre, e o d20 que caiu no meio do combate não tem o
+ * que fazer por cima da rede de pistas quando ele vai conferir uma anotação.
+ *
+ * Só o Mestre tem as duas: no celular do jogador e na TV não há quadro, e lá a
+ * mesa é sempre `mapa`.
+ */
+export type Mesa = "mapa" | "quadro";
+
 export type Dado = {
   id: string;
   faces: FacesDado;
+  /** Onde ele caiu. Ver `Mesa`. */
+  mesa: Mesa;
   /** Onde ele está pousado, em unidades de cena. */
   x: number;
   y: number;

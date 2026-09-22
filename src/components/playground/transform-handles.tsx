@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Blend, Drama, FlipHorizontal, Trash2 } from "lucide-react";
+import {
+  Blend,
+  Bold,
+  Drama,
+  FlipHorizontal,
+  Italic,
+  Palette,
+  Trash2,
+  Underline,
+} from "lucide-react";
 
 import { Slider } from "@/components/ui/slider";
 import {
@@ -14,6 +23,7 @@ import {
   useSceneScale,
 } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
   angleTo,
@@ -188,6 +198,41 @@ type TransformHandlesProps = {
    */
   opacidade?: { valor: number; onChange: (valor: number) => void };
   /**
+   * Presente = mostra os botões de ênfase da letra, na mesma fileira do
+   * espelhar e do excluir.
+   *
+   * Só o texto solto do quadro passa: negrito num token não quer dizer nada.
+   * Os três são de ALTERNAR, e o botão mostra o estado -- aceso é ligado.
+   */
+  estilo?: {
+    negrito?: boolean;
+    italico?: boolean;
+    sublinhado?: boolean;
+    onChange: (patch: {
+      negrito?: boolean;
+      italico?: boolean;
+      sublinhado?: boolean;
+    }) => void;
+  };
+  /**
+   * Presente = mostra o botão da paleta, que abre cor e fundo no painel ao
+   * lado.
+   *
+   * Serve ao texto ("Letra") e à forma ("Traço") -- as duas coisas do quadro
+   * que têm cor própria. As cores são as do lápis, que é a paleta da casa.
+   *
+   * `null` no callback é "de volta ao padrão": cor do tema na letra, sem fundo
+   * atrás dela. `undefined` não viaja, senão apagar a escolha e não mexer nela
+   * seriam a mesma coisa.
+   */
+  paleta?: {
+    /** O que a primeira fileira pinta: "Letra", "Traço". */
+    titulo: string;
+    cor?: string;
+    fundo?: string;
+    onChange: (patch: { cor?: string | null; fundo?: string | null }) => void;
+  };
+  /**
    * Presente = mostra o botão que abre a ficha de quem este item é.
    *
    * Só aparece em token, que é item com `personagemId`. Uma imagem de mobília
@@ -229,6 +274,8 @@ export function TransformHandles({
   onGestureEnd,
   onChange,
   opacidade,
+  estilo,
+  paleta,
 }: TransformHandlesProps) {
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
@@ -246,6 +293,12 @@ export function TransformHandles({
    * `key` no chamador) começa fechado de novo, que é o certo.
    */
   const [painelAberto, setPainelAberto] = useState(false);
+  /**
+   * A paleta é outro painel e outro estado: o gizmo do texto não tem
+   * opacidade, e o da imagem não tem paleta -- mas um dia ter os dois não pode
+   * significar abrir os dois com um clique só.
+   */
+  const [paletaAberta, setPaletaAberta] = useState(false);
 
   const cor = TOM[tom];
 
@@ -298,7 +351,7 @@ export function TransformHandles({
         // `left`/`top`. O gizmo acompanha o que ele controla quadro a quadro
         // -- token arrastado, moldura de câmera puxada pelo canto --, e em
         // caixa isso marcava o documento inteiro para refazer o layout a cada
-        // quadro. Ver `Tarja`, em `camera-frame`, onde está a medida.
+        // quadro. A medida está em `scripts/perf/README.md`.
         //
         // `translate` ANTES de `rotate` na lista, que é o mesmo que posicionar
         // e depois girar em torno do centro: a origem continua no meio da
@@ -320,7 +373,7 @@ export function TransformHandles({
 
       {/* Fileira acima da caixa. Botões moram aqui porque nenhum deles é
           redimensionamento, e ficariam competindo com as alças nas bordas. */}
-      {onFlip || onOpenSheet || opacidade || onDelete ? (
+      {onFlip || onOpenSheet || opacidade || estilo || paleta || onDelete ? (
         <div
           className="pointer-events-none absolute flex items-center"
           // A POSIÇÃO continua em unidade de cena -- ela acompanha o item. O
@@ -331,6 +384,11 @@ export function TransformHandles({
             left: "50%",
             top: 0,
             gap: 4,
+            // Acima das zonas de giro, que são irmãs e vêm depois no DOM: numa
+            // caixa estreita -- um texto de uma palavra -- a fileira transborda
+            // para fora dos cantos, e a zona do canto de cima engolia o clique
+            // do primeiro botão. Aqui o botão é o alvo explícito e ganha.
+            zIndex: 1,
             ...emPixelDeTela(scale),
             transform: `translate(-50%, calc(-100% - ${ROTATE_OFFSET_PX - HANDLE_PX * 2}px))`,
           }}
@@ -388,6 +446,74 @@ export function TransformHandles({
                 }
               />
               <TooltipContent>Abrir a ficha do personagem</TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {/* Negrito, itálico e sublinhado, na ordem de qualquer editor: é
+              memória motor, e trocá-la aqui não ganharia nada. */}
+          {estilo
+            ? (
+                [
+                  { chave: "negrito", rotulo: "Negrito", Icone: Bold },
+                  { chave: "italico", rotulo: "Itálico", Icone: Italic },
+                  { chave: "sublinhado", rotulo: "Sublinhado", Icone: Underline },
+                ] as const
+              ).map(({ chave, rotulo, Icone }) => (
+                <Tooltip key={chave}>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={rotulo}
+                        aria-pressed={Boolean(estilo[chave])}
+                        className={cn(
+                          "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                          cor.botao,
+                          estilo[chave] && "ring-2 ring-white/70",
+                        )}
+                        style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          estilo.onChange({ [chave]: !estilo[chave] });
+                        }}
+                      >
+                        <Icone
+                          style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                        />
+                      </button>
+                    }
+                  />
+                  <TooltipContent>{rotulo}</TooltipContent>
+                </Tooltip>
+              ))
+            : null}
+
+          {paleta ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Cor e fundo"
+                    aria-expanded={paletaAberta}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      cor.botao,
+                      paletaAberta && "ring-2 ring-white/70",
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setPaletaAberta((aberta) => !aberta);
+                    }}
+                  >
+                    <Palette style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
+                  </button>
+                }
+              />
+              <TooltipContent>Cor e fundo</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -470,6 +596,8 @@ export function TransformHandles({
           style={{
             left: "100%",
             top: "50%",
+            // Acima das zonas de giro, pelo mesmo motivo da fileira de botões.
+            zIndex: 1,
             transform: `translate(${px(PAINEL_GAP_PX)}px, -50%) rotate(${-item.rotation}deg)`,
             transformOrigin: "0 50%",
           }}
@@ -499,6 +627,47 @@ export function TransformHandles({
               onValueChange={(valor) =>
                 opacidade.onChange((Array.isArray(valor) ? (valor[0] ?? 100) : valor) / 100)
               }
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* A paleta, ABAIXO da caixa e não ao lado como o painel de opacidade.
+          Ao lado ela cobria a ponta da fileira de botões -- inclusive o
+          excluir -- em toda caixa estreita, que é o caso comum de um texto de
+          uma palavra. Embaixo, os dois controles do gizmo ficam em andares
+          diferentes. Contra-girada pela mesma razão do outro painel: bolinhas
+          de cabeça para baixo num texto torto pedem o clique errado. */}
+      {paleta && paletaAberta ? (
+        <div
+          className="pointer-events-auto absolute"
+          style={{
+            left: "50%",
+            top: "100%",
+            zIndex: 1,
+            transform: `translate(-50%, ${px(PAINEL_GAP_PX)}px) rotate(${-item.rotation}deg)`,
+            transformOrigin: "50% 0",
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div
+            className="bg-popover ring-foreground/10 flex flex-col gap-2 rounded-lg px-2 py-2 shadow-md ring-1"
+            style={{ transform: `scale(${1 / scale})`, transformOrigin: "50% 0" }}
+          >
+            <Fileira
+              titulo={paleta.titulo}
+              escolhida={paleta.cor}
+              // O padrão volta pelo primeiro botão, e ele existe nas duas
+              // fileiras: sem ele, escolher uma cor seria um caminho sem volta.
+              padrao="A"
+              onEscolher={(valor) => paleta.onChange({ cor: valor })}
+            />
+            <Fileira
+              titulo="Fundo"
+              escolhida={paleta.fundo}
+              padrao="∅"
+              translucido
+              onEscolher={(valor) => paleta.onChange({ fundo: valor })}
             />
           </div>
         </div>
@@ -564,6 +733,68 @@ export function TransformHandles({
           onPointerDown={(event) => startResize(event, handle)}
         />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Uma fileira de cores da paleta do gizmo, com o padrão na frente.
+ *
+ * As mesmas seis do lápis, e o primeiro botão volta ao padrão -- cor do tema
+ * na letra, sem fundo atrás dela. `translucido` desenha as bolinhas do fundo
+ * esmaecidas, que é como elas vão aparecer atrás da letra: fundo chapado
+ * esconderia o que está embaixo, e o que se quer é marca-texto.
+ */
+function Fileira({
+  titulo,
+  escolhida,
+  padrao,
+  translucido = false,
+  onEscolher,
+}: {
+  titulo: string;
+  escolhida?: string;
+  padrao: string;
+  translucido?: boolean;
+  onEscolher: (cor: string | null) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <span className="text-muted-foreground text-[10px]">{titulo}</span>
+
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-label={`${titulo}: padrão`}
+          aria-pressed={escolhida === undefined}
+          className={cn(
+            "grid size-5 place-items-center rounded-full border text-[9px] transition-transform",
+            escolhida === undefined
+              ? "border-foreground scale-110"
+              : "border-white/20 hover:scale-105",
+          )}
+          onClick={() => onEscolher(null)}
+        >
+          {padrao}
+        </button>
+
+        {CORES_LAPIS.map((opcao) => (
+          <button
+            key={opcao}
+            type="button"
+            aria-label={`${titulo} ${opcao}`}
+            aria-pressed={opcao === escolhida}
+            className={cn(
+              "size-5 rounded-full border transition-transform",
+              opcao === escolhida
+                ? "border-foreground scale-110"
+                : "border-white/20 hover:scale-105",
+            )}
+            style={{ background: opcao, opacity: translucido ? 0.35 : 1 }}
+            onClick={() => onEscolher(opcao)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

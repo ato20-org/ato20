@@ -157,7 +157,8 @@ function Fantasma({
                 // origem na borda em que a faixa encosta. Era `px(GRIP_PX)`,
                 // que divide pelo `scale` -- e o `scale` muda a cada notch da
                 // roda, então cada faixa reescrevia caixa e marcava o
-                // DOCUMENTO INTEIRO para refazer o layout. Ver `Tarja`.
+                // DOCUMENTO INTEIRO para refazer o layout. A medida está em
+                // `scripts/perf/README.md`.
                 {
                   left: 0,
                   top: 0,

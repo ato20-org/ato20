@@ -293,7 +293,9 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
   const arremessar = useDadosStore((state) => state.arremessar);
   const recolher = useDadosStore((state) => state.recolher);
   const posicao = useDadosStore((state) => state.posicao);
-  const historico = useDadosStore((state) => state.historico);
+  // Só as desta mesa: as do mapa não entram na lista do quadro, nem o
+  // contrário. Ver `Mesa`.
+  const historico = useDadosStore((state) => state.historico[state.mesa]);
 
   // Fora os que já estão sendo engolidos: eles saíram da mesa no clique, mesmo
   // que o desenho ainda os mostre a caminho. Ver `useDadosNaMesa`.

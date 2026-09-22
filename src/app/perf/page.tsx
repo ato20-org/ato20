@@ -17,6 +17,7 @@ import { MestreShell } from "@/components/mestre/mestre-shell";
 import { MestreStage } from "@/components/mestre/mestre-stage";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { moverNoGesto, useGestoStore } from "@/lib/store/use-gesto-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { PaginaFolha } from "@/components/leitor/pagina-folha";
@@ -37,6 +38,8 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type CameraSalva,
+  POSTIT_ALTURA,
+  POSTIT_LARGURA,
   type CanvasItem,
   type Scene,
 } from "@/types/scene";
@@ -109,6 +112,14 @@ import {
  *               ampliação no layout, com `zoom`, em vez de na composição -- e
  *               ficou: era o custo do gesto de zoom que ninguém tinha medido.
  *
+ * `quadro`     O QUADRO com a mão em cima: um texto arrastado por quadro pelo
+ *               caminho do gesto, numa folha com `?n=` textos, metade em
+ *               formas e um terço em postits. É a tela em que o conteúdo vive
+ *               no plano de CONTROLES, e a única que não tem bitmap nenhum.
+ *               `?gesto=tamanho` troca o arrasto pela ALÇA do gizmo -- aumentar
+ *               e diminuir a letra --, que é outro caminho: ele grava no board
+ *               a cada quadro em vez de passar pelo gesto.
+ *
  * `jogador`    O CELULAR do jogador: as mesmas amostras de 10 Hz, mas com um
  *               mapa de 3537x3750 no fundo e pedindo a variante `tela`.
  *               `--sem-variante` mede o que ele fazia antes -- baixar o
@@ -148,6 +159,7 @@ type Cenario =
   | "camadas"
   | "camera"
   | "mestre-camera"
+  | "quadro"
   | "jogador";
 
 /** Um degrau do `leitor`: o que custou trocar o zoom para ele. */
@@ -340,6 +352,8 @@ function useMedida(
     let quadro = 0;
     let comecou = 0;
     let vivo = true;
+    /** Quando o relógio da tela foi atualizado pela última vez. */
+    let ultimoAviso = 0;
 
     const passo = (t: number) => {
       if (!vivo) return;
@@ -349,7 +363,22 @@ function useMedida(
 
       const elapsed = (t - comecou) / 1000;
       if (elapsed < segundos) {
-        setDecorrido(elapsed);
+        // O relógio da tela avança no MÁXIMO quatro vezes por segundo.
+        //
+        // Era um `setDecorrido` por quadro, e isso media a própria régua: o
+        // estado novo re-renderizava esta página inteira -- e, nos cenários que
+        // montam o `MestreShell`, a bancada e o palco junto -- sessenta vezes
+        // por segundo, em cima do trabalho que se queria cronometrar. Medido
+        // com o contador de renders: o shell renderizava 28 vezes por segundo
+        // com a cena PARADA, e nenhuma das assinaturas dele mudava.
+        //
+        // O número na tela é para quem está olhando a medida correr; um décimo
+        // de segundo de atraso nele não muda nada, e tirar 56 renders por
+        // segundo da conta muda.
+        if (t - ultimoAviso > 250) {
+          ultimoAviso = t;
+          setDecorrido(elapsed);
+        }
         quadro = requestAnimationFrame(passo);
         return;
       }
@@ -478,6 +507,203 @@ function PalcoEspectador({
       <SceneLayer scene={cena} smooth variante={variante} />
     </SceneStage>
   );
+}
+
+/**
+ * O QUADRO com a mão em cima: um texto arrastado por quadro, pelo caminho do
+ * gesto, com a folha cheia de texto, forma e postit.
+ *
+ * Os outros cenários medem o MAPA -- imagem grande, tokens, câmera. O quadro é
+ * outra tela: o conteúdo é texto e vetor, vive no plano de CONTROLES (ver
+ * `scene-stage`) e não tem bitmap nenhum para rasterizar. Esta medida nasceu
+ * para responder se os dois planos precisam trocar de forma de ampliação
+ * juntos quando o mestre arrasta um elemento -- o plano de conteúdo precisa,
+ * porque um item em `zoom` paga layout por quadro; o de controles talvez não,
+ * e é ele que carrega o quadro inteiro.
+ *
+ * O gesto fica LIGADO a corrida toda (`comecarGesto`), que é o que reproduz a
+ * mão no elemento: sem isso o palco assenta em `zoom` e a medida seria de uma
+ * tela parada.
+ */
+function PalcoQuadro({
+  n,
+  gesto,
+  painel,
+  mapas,
+}: {
+  n: number;
+  gesto: string;
+  /** `nenhum` mede o palco sozinho; o resto monta a BANCADA em volta dele. */
+  painel: "ambos" | "esquerdo" | "direito" | "nenhum";
+  /** Quantas cenas na lista. A bancada de uma campanha real nunca tem uma. */
+  mapas: number;
+}) {
+  const cena = useSceneStore(selectEditingScene);
+
+  useEffect(() => {
+    const base = montarQuadro(n);
+    // As outras entram vazias, como no cenário `bancada`: o que se quer pesar
+    // é a LISTA reconciliando a cada commit, não o conteúdo delas.
+    const outras = Array.from({ length: Math.max(0, mapas - 1) }, (_, i) => ({
+      ...montarQuadro(0),
+      id: `perf-quadro-${i}`,
+      name: `Quadro ${i + 2}`,
+    }));
+
+    useSceneStore.setState({
+      board: {
+        scenes: [base, ...outras],
+        editingSceneId: base.id,
+        liveSceneId: base.id,
+      },
+      status: "ready",
+      campaignPath: "/perf",
+    });
+    usePanelsStore.setState({
+      left: painel === "ambos" || painel === "esquerdo",
+      right: painel === "ambos" || painel === "direito",
+      restored: true,
+    });
+    useViewportStore.getState().comecarGesto();
+
+    let quadro = 0;
+    const primeiro = base.textos?.[0];
+    const comecou = performance.now();
+
+    const passo = () => {
+      if (primeiro) {
+        const a = (performance.now() - comecou) / 1000;
+
+        /**
+         * Os dois caminhos da alça do gizmo, para a comparação ser feita no
+         * MESMO binário -- é a única forma de comparar sem o ruído de duas
+         * compilações e duas corridas de máquina.
+         *
+         * `tamanho` é como era: `updateTexto` direto, um commit de board por
+         * quadro. `tamanho-gesto` é como ficou: o patch vai para o
+         * `useGestoStore` e o board só recebe no soltar. `mover` é o arrasto,
+         * que já passava pelo gesto.
+         */
+        if (gesto === "nenhum") {
+          // Nada: a folha parada, para a medida dizer o que a bancada custa
+          // sem ninguém tocar nela.
+        } else if (gesto === "tamanho" || gesto === "tamanho-gesto") {
+          const patch = {
+            tamanho: Math.round(40 + Math.cos(a) * 24),
+            x: Math.round(primeiro.x + Math.cos(a) * 12),
+            y: Math.round(primeiro.y + Math.cos(a) * 12),
+          };
+
+          if (gesto === "tamanho")
+            useSceneStore.getState().updateTexto(base.id, primeiro.id, patch);
+          else moverNoGesto(base.id, [], [{ id: primeiro.id, patch }]);
+        } else {
+          moverNoGesto(
+            base.id,
+            [],
+            [
+              {
+                id: primeiro.id,
+                patch: {
+                  x: Math.round(primeiro.x + Math.cos(a) * 300),
+                  y: Math.round(primeiro.y + Math.sin(a) * 200),
+                },
+              },
+            ],
+          );
+        }
+      }
+
+      quadro = requestAnimationFrame(passo);
+    };
+
+    quadro = requestAnimationFrame(passo);
+
+    return () => {
+      cancelAnimationFrame(quadro);
+      useViewportStore.getState().terminarGesto();
+      useGestoStore.getState().terminar();
+      useSceneStore.setState({
+        board: null,
+        status: "idle",
+        campaignPath: null,
+      });
+    };
+  }, [n, gesto, painel, mapas]);
+
+  if (!cena) return null;
+
+  // Com painel, a BANCADA inteira -- que é onde o mestre trabalha, e onde um
+  // commit por quadro cobra a re-renderização da lista, das camadas e das
+  // prévias. Sem painel, só o palco.
+  if (painel !== "nenhum")
+    return (
+      <TooltipProvider>
+        <MestreShell />
+      </TooltipProvider>
+    );
+
+  return (
+    <SceneStage limites={PLANO} plano="quadro">
+      <MestreStage scene={cena} />
+    </SceneStage>
+  );
+}
+
+/**
+ * Uma folha cheia: `n` textos, metade disso em formas e um terço em postits.
+ *
+ * A proporção é a de um quadro de investigação de verdade -- muita letra,
+ * algumas caixas em volta, uns papéis -- e os ids são derivados do índice pela
+ * mesma razão de `montarCena`: duas corridas têm de montar a mesma folha.
+ */
+function montarQuadro(n: number): Scene {
+  const agora = Date.now();
+
+  return {
+    id: "perf-quadro",
+    name: "medida",
+    tipo: "quadro",
+    items: [],
+    fog: [],
+    textos: Array.from({ length: n }, (_, i) => ({
+      id: `perf-texto-${i}`,
+      x: (i * 173) % (SCENE_WIDTH - 300),
+      y: (i * 291) % (SCENE_HEIGHT - 80),
+      texto: `Pista ${i}`,
+      tamanho: 24 + ((i * 7) % 24),
+    })),
+    formas: Array.from({ length: Math.ceil(n / 2) }, (_, i) => ({
+      id: `perf-forma-${i}`,
+      tipo: (["retangulo", "elipse", "linha"] as const)[i % 3],
+      x: (i * 311) % (SCENE_WIDTH - 400),
+      y: (i * 197) % (SCENE_HEIGHT - 300),
+      width: 200 + ((i * 31) % 200),
+      height: 120 + ((i * 17) % 160),
+      rotation: 0,
+      espessura: 6,
+    })),
+    // Uma seta a cada dois textos, amarrando vizinhos: é a rede de um quadro
+    // de investigação, e é o que faz a geometria das pontas ser refeita quando
+    // a caixa de um texto muda. Sem elas a medida mediria uma folha de avisos,
+    // não um quadro.
+    ligacoes: Array.from({ length: Math.floor(n / 2) }, (_, i) => ({
+      id: `perf-seta-${i}`,
+      de: { tipo: "texto" as const, id: `perf-texto-${i * 2}` },
+      para: { tipo: "texto" as const, id: `perf-texto-${i * 2 + 1}` },
+    })),
+    postits: Array.from({ length: Math.ceil(n / 3) }, (_, i) => ({
+      id: `perf-postit-${i}`,
+      x: (i * 421) % (SCENE_WIDTH - POSTIT_LARGURA),
+      y: (i * 233) % (SCENE_HEIGHT - POSTIT_ALTURA),
+      largura: POSTIT_LARGURA,
+      altura: POSTIT_ALTURA,
+      texto: `Papel ${i}`,
+      cor: "amarelo" as const,
+    })),
+    createdAt: agora,
+    updatedAt: agora,
+  };
 }
 
 /**
@@ -2119,6 +2345,8 @@ function Medida({ params }: { params: URLSearchParams }) {
         <PalcoMestre n={n} />
       ) : cenario === "camera" ? (
         <PalcoCamera n={n} />
+      ) : cenario === "quadro" ? (
+        <PalcoQuadro n={n} gesto={gesto} painel={painel} mapas={mapas} />
       ) : cenario === "mestre-camera" ? (
         <PalcoMestreCamera n={n} cameras={cameras} />
       ) : cenario === "camera-gesto" ? (
