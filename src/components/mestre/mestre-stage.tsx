@@ -32,6 +32,15 @@ import {
   girarTextosNoLugar,
 } from "@/lib/mestre/grupo-de-textos";
 import { DocumentoLayer } from "@/components/mestre/documento-layer";
+import { SelecaoDaMargem } from "@/components/mestre/selecao-da-margem";
+import {
+  caixaDoPapel,
+  deslocamentoPreso,
+  empurrarDocumentos,
+  empurrarPostits,
+  empurrarTracos,
+} from "@/lib/mestre/grupo-sem-alca";
+import { caixaDoTraco } from "@/lib/geometry/limites";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
 import type { PontaDoMedidor } from "@/components/playground/medidor-layer";
@@ -135,9 +144,11 @@ import {
   TEXTO_TAMANHO,
   type AncoraRetrato,
   type CanvasItem,
+  type Documento,
   type FogRegion,
   type Forma,
   type Medidor,
+  type Postit,
   type NewForma,
   type PontaDeLigacao,
   type Portrait,
@@ -147,6 +158,10 @@ import {
 } from "@/types/scene";
 
 const NO_GUIDES: Guide[] = [];
+/** As listas vazias das três seleções que só andam. Ver `selectedPostits`. */
+const NADA_DE_POSTIT: readonly Postit[] = [];
+const NADA_DE_DOCUMENTO: readonly Documento[] = [];
+const NADA_DE_TRACO: readonly Traco[] = [];
 
 /** Identidade estável: um `Set` novo por render reiniciaria a memo da camada. */
 const NADA_APAGANDO: ReadonlySet<string> = new Set<string>();
@@ -238,6 +253,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const gestoPatches = useGestoStore((state) => state.patches);
   const gestoTextos = useGestoStore((state) => state.textos);
   const gestoFormas = useGestoStore((state) => state.formas);
+  const gestoPostits = useGestoStore((state) => state.postits);
+  const gestoDocumentos = useGestoStore((state) => state.documentos);
+  const gestoTracos = useGestoStore((state) => state.tracos);
   const gestoCamera = useGestoStore((state) => state.camera);
   const scene = useMemo(
     () =>
@@ -246,6 +264,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         patches: gestoPatches,
         textos: gestoTextos,
         formas: gestoFormas,
+        postits: gestoPostits,
+        documentos: gestoDocumentos,
+        tracos: gestoTracos,
         camera: gestoCamera,
       }),
     [
@@ -254,6 +275,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       gestoPatches,
       gestoTextos,
       gestoFormas,
+      gestoPostits,
+      gestoDocumentos,
+      gestoTracos,
       gestoCamera,
     ],
   );
@@ -312,6 +336,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const selectedFormaIds = useSelectionStore(
     (state) => state.selectedFormaIds,
   );
+  const selectedPostitIds = useSelectionStore(
+    (state) => state.selectedPostitIds,
+  );
+  const selectedDocumentoIds = useSelectionStore(
+    (state) => state.selectedDocumentoIds,
+  );
+  const selectedTracoIds = useSelectionStore((state) => state.selectedTracoIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const selectedPortraitIds = useSelectionStore(
     (state) => state.selectedPortraitIds,
@@ -322,6 +353,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const toggleTexto = useSelectionStore((state) => state.toggleTexto);
   const selectFormas = useSelectionStore((state) => state.selectFormas);
   const toggleForma = useSelectionStore((state) => state.toggleForma);
+  const selectPostits = useSelectionStore((state) => state.selectPostits);
+  const togglePostit = useSelectionStore((state) => state.togglePostit);
+  const selectDocumentos = useSelectionStore(
+    (state) => state.selectDocumentos,
+  );
+  const toggleDocumento = useSelectionStore((state) => state.toggleDocumento);
   const selectMisto = useSelectionStore((state) => state.selectMisto);
   const selectFog = useSelectionStore((state) => state.selectFog);
   const selectedMedidorId = useSelectionStore(
@@ -444,14 +481,55 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     selectedFormaIds.includes(forma.id),
   );
   /**
-   * Quantas coisas o palco tem na mão. Imagem, texto e forma contam igual: é o
-   * que decide entre o gizmo de UM e o gizmo do grupo, e uma frase marcada
-   * junto com um retângulo já são duas.
+   * Papel, cartão e risco na mão.
+   *
+   * A lista vazia é a MESMA referência, e não um `filter` que devolve array
+   * novo: o palco inteiro re-renderiza a cada quadro de gesto de câmera, e as
+   * três varreduras aconteciam sessenta vezes por segundo em toda cena --
+   * inclusive nas que não têm postit nenhum, que são a maioria dos mapas.
+   * Medido no `mestre-camera`: sem isto, o cenário custava 8% mais script.
+   */
+  const selectedPostits =
+    selectedPostitIds.length === 0
+      ? (NADA_DE_POSTIT as Postit[])
+      : (scene.postits ?? []).filter((postit) =>
+          selectedPostitIds.includes(postit.id),
+        );
+  const selectedDocumentos =
+    selectedDocumentoIds.length === 0
+      ? (NADA_DE_DOCUMENTO as Documento[])
+      : (scene.documentos ?? []).filter((documento) =>
+          selectedDocumentoIds.includes(documento.id),
+        );
+  const selectedTracos =
+    selectedTracoIds.length === 0
+      ? (NADA_DE_TRACO as Traco[])
+      : (scene.tracos ?? []).filter((traco) =>
+          selectedTracoIds.includes(traco.id),
+        );
+  /**
+   * O que a mão pegou e só ANDA: papel, cartão de nota e risco.
+   *
+   * Existe como pergunta única porque a resposta muda o gizmo: com um deles na
+   * mão as alças saem do ar e sobra a caixa do grupo. Não é limitação do
+   * gesto, é do modelo -- ver `grupo-sem-alca`.
+   */
+  const semAlca =
+    selectedPostits.length + selectedDocumentos.length + selectedTracos.length;
+  /**
+   * Quantas coisas o palco tem na mão. As seis contam igual: é o que decide
+   * entre o gizmo de UM e o gizmo do grupo, e uma frase marcada junto com um
+   * postit já são duas.
    */
   const naMao =
-    selectedItems.length + selectedTextos.length + selectedFormas.length;
+    selectedItems.length +
+    selectedTextos.length +
+    selectedFormas.length +
+    semAlca;
   // `undefined` quando o único selecionado é um texto: as alças dele são da
-  // própria camada, que sabe escalar fonte. Ver `TextoLayer`.
+  // própria camada, que sabe escalar fonte. Ver `TextoLayer`. Papel, cartão e
+  // risco também caem no `undefined`, e aí ninguém põe alça: os três têm as
+  // próprias alças de tamanho, ou nenhuma. Ver `grupo-sem-alca`.
   const single = naMao === 1 ? selectedItems[0] : undefined;
 
   /**
@@ -532,7 +610,39 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           ...selectedItems.map(itemBounds),
           ...selectedTextos.map(caixaDoTexto),
           ...selectedFormas.map(itemBounds),
+          ...selectedPostits.map(caixaDoPapel),
+          ...selectedDocumentos.map(caixaDoPapel),
+          // O risco sem ponto nenhum não tem caixa; `unionBounds` ignora nulo.
+          ...selectedTracos.map(caixaDoTraco).filter((caixa) => caixa !== null),
         ])
+      : null;
+  /**
+   * A caixa do que só anda, mesmo sozinho.
+   *
+   * Um risco laçado sozinho não tem onde ser pego: ele é uma linha fina, e a
+   * camada dele não ouve o ponteiro -- é um SVG só para os dois palcos. É esta
+   * caixa que vira a pega, na margem. Ver `SelecaoDaMargem`.
+   */
+  /**
+   * Papel e cartão SOZINHOS não passam por aqui: cada um traz as próprias
+   * alças e os próprios botões, como o texto solto. Ver `PostitPapel` e
+   * `CartaoDeDocumento`.
+   *
+   * O risco continua ganhando o contorno e a pega mesmo sozinho: ele não tem
+   * gizmo próprio nem nada que ouça o ponteiro, e sem a pega não haveria como
+   * movê-lo.
+   */
+  const comGizmoProprio =
+    naMao === 1 &&
+    (selectedDocumentos.length === 1 || selectedPostits.length === 1);
+  const caixaSemAlca =
+    semAlca > 0 && !comGizmoProprio
+      ? (groupBounds ??
+        unionBounds([
+          ...selectedPostits.map(caixaDoPapel),
+          ...selectedDocumentos.map(caixaDoPapel),
+          ...selectedTracos.map(caixaDoTraco).filter((caixa) => caixa !== null),
+        ]))
       : null;
 
   /**
@@ -556,7 +666,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const outlineBounds =
     // Grupo ganha gizmo próprio abaixo; aqui fica só o contorno de quem não
     // pode ser transformado.
-    groupBounds && panMode
+    //
+    // Com papel, cartão ou risco na mão a caixa sai daqui e vai para a MARGEM:
+    // este contorno vive no plano de controles, e um postit estacionado fora
+    // do mapa faria a caixa passar da borda do plano -- que é a armadilha que
+    // pinta o palco deslocado e preto no zoom. Ver `SelecaoDaMargem`.
+    groupBounds && panMode && semAlca === 0
       ? groupBounds
       : single && (single.locked || panMode)
         ? itemBounds(single)
@@ -694,6 +809,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
      */
     const textosArrastados = alreadySelected ? selectedTextos : [];
     const formasArrastadas = alreadySelected ? selectedFormas : [];
+    // Papel, cartão e risco vêm pela mesma porta, e pelo mesmo motivo: a área
+    // laça os seis no mesmo gesto. Eles ANDAM com a imagem, mas não crescem com
+    // ela -- a roda abaixo mexe só no que tem caixa. Ver `grupo-sem-alca`.
+    const postitsArrastados = alreadySelected ? selectedPostits : [];
+    const documentosArrastados = alreadySelected ? selectedDocumentos : [];
+    const tracosArrastados = alreadySelected ? selectedTracos : [];
     if (!alreadySelected) select(alvo);
 
     const moving = scene.items.filter(
@@ -703,6 +824,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       ...moving.map(itemBounds),
       ...textosArrastados.map(caixaDoTexto),
       ...formasArrastadas.map(itemBounds),
+      ...postitsArrastados.map(caixaDoPapel),
+      ...documentosArrastados.map(caixaDoPapel),
+      ...tracosArrastados.map(caixaDoTraco).filter((caixa) => caixa !== null),
     ]);
     if (!movingBounds) return;
 
@@ -749,6 +873,24 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         },
       }));
 
+    /**
+     * Os três que só andam, empurrados pelo mesmo deslocamento.
+     *
+     * Fora da roda de propósito: ela escala e gira o que está na mão, e papel,
+     * cartão e risco não fazem nem uma coisa nem outra. Eles ficam onde o
+     * arrasto os pôs enquanto a imagem cresce ao lado -- que é o mesmo que
+     * acontece hoje quando a roda gira um item com um postit por perto.
+     */
+    const patchesSemAlca = () => ({
+      postits: empurrarPostits(postitsArrastados, ultimo.dx, ultimo.dy),
+      documentos: empurrarDocumentos(
+        documentosArrastados,
+        ultimo.dx,
+        ultimo.dy,
+      ),
+      tracos: empurrarTracos(tracosArrastados, ultimo.dx, ultimo.dy),
+    });
+
     // No gesto, e não no board: o board só recebe no soltar. Ver `useGestoStore`.
     const aplicar = () =>
       moverNoGesto(
@@ -756,6 +898,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         patchesDoGesto(),
         patchesDeTexto(),
         patchesDeForma(),
+        patchesSemAlca(),
       );
 
     /**
@@ -841,7 +984,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       bounds,
       null,
       (dx, dy) => {
-        ultimo = { dx, dy };
+        // A cerca do papel prende o grupo inteiro, imagem incluída: o bloco
+        // para junto em vez de se desmanchar na borda da área de trabalho.
+        ultimo = deslocamentoPreso(
+          [...postitsArrastados, ...documentosArrastados],
+          dx,
+          dy,
+        );
         aplicar();
       },
       undefined,
@@ -860,6 +1009,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             patchesDoGesto(),
             patchesDeTexto(),
             patchesDeForma(),
+            patchesSemAlca(),
           );
           useHandoutStore.getState().largar();
           if (naBoca(native.clientX, native.clientY)) {
@@ -901,6 +1051,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       itens: jaSelecionado ? selectedItems.filter((item) => !item.locked) : [],
       textos: jaSelecionado ? selectedTextos : [texto],
       formas: jaSelecionado ? selectedFormas : [],
+      postits: jaSelecionado ? selectedPostits : [],
+      documentos: jaSelecionado ? selectedDocumentos : [],
+      tracos: jaSelecionado ? selectedTracos : [],
     });
   }
 
@@ -929,6 +1082,90 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       itens: jaSelecionada ? selectedItems.filter((item) => !item.locked) : [],
       textos: jaSelecionada ? selectedTextos : [],
       formas: jaSelecionada ? selectedFormas : [forma],
+      postits: jaSelecionada ? selectedPostits : [],
+      documentos: jaSelecionada ? selectedDocumentos : [],
+      tracos: jaSelecionada ? selectedTracos : [],
+    });
+  }
+
+  /**
+   * Clique na faixa de um postit, ou na barra de um cartão de nota.
+   *
+   * Irmão do de texto e do de forma, e aqui pelo mesmo motivo: a camada do
+   * papel conhece um papel de cada vez, e só o palco sabe o que MAIS está na
+   * mão. Antes disto a faixa arrastava o papel sozinho e gravava no board a
+   * cada quadro; agora ela entra no gesto como todo o resto.
+   *
+   * Sem botão direito: o menu de contexto do palco ainda não fala de papel, e
+   * apontá-lo para um postit prometeria ações que o menu não tem.
+   */
+  function handlePapelPointerDown(
+    event: ReactPointerEvent,
+    papel:
+      | { tipo: "postit"; postit: Postit }
+      | { tipo: "documento"; documento: Documento },
+  ) {
+    if (event.button !== 0) return;
+
+    const id = papel.tipo === "postit" ? papel.postit.id : papel.documento.id;
+    const jaSelecionado =
+      papel.tipo === "postit"
+        ? selectedPostitIds.includes(id)
+        : selectedDocumentoIds.includes(id);
+
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      if (papel.tipo === "postit") togglePostit(id);
+      else toggleDocumento(id);
+      return;
+    }
+
+    if (!jaSelecionado) {
+      if (papel.tipo === "postit") selectPostits([id]);
+      else selectDocumentos([id]);
+    }
+
+    arrastarBando(event, {
+      itens: jaSelecionado ? selectedItems.filter((item) => !item.locked) : [],
+      textos: jaSelecionado ? selectedTextos : [],
+      formas: jaSelecionado ? selectedFormas : [],
+      postits:
+        papel.tipo === "postit"
+          ? jaSelecionado
+            ? selectedPostits
+            : [papel.postit]
+          : jaSelecionado
+            ? selectedPostits
+            : [],
+      documentos:
+        papel.tipo === "documento"
+          ? jaSelecionado
+            ? selectedDocumentos
+            : [papel.documento]
+          : jaSelecionado
+            ? selectedDocumentos
+            : [],
+      tracos: jaSelecionado ? selectedTracos : [],
+    });
+  }
+
+  /**
+   * Arrastar o que está na mão pela PEGA da margem -- a caixa que cerca o que
+   * só anda.
+   *
+   * É o único jeito de mover um risco: a camada dele é um SVG atravessável,
+   * compartilhado com a mesa, e pôr o ponteiro nela faria cada linha do mapa
+   * disputar o clique com os tokens embaixo. Ver `SelecaoDaMargem`.
+   */
+  function handlePegaPointerDown(event: ReactPointerEvent) {
+    if (event.button !== 0 || panMode) return;
+
+    arrastarBando(event, {
+      itens: selectedItems.filter((item) => !item.locked),
+      textos: selectedTextos,
+      formas: selectedFormas,
+      postits: selectedPostits,
+      documentos: selectedDocumentos,
+      tracos: selectedTracos,
     });
   }
 
@@ -941,11 +1178,25 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    */
   function arrastarBando(
     event: ReactPointerEvent,
-    bando: { itens: CanvasItem[]; textos: Texto[]; formas: Forma[] },
+    bando: {
+      itens: CanvasItem[];
+      textos: Texto[];
+      formas: Forma[];
+      postits?: Postit[];
+      documentos?: Documento[];
+      tracos?: Traco[];
+    },
   ) {
     const origensDeItem = bando.itens.map((item) => ({ ...item }));
     const origensDeTexto = bando.textos.map((texto) => ({ ...texto }));
     const origensDeForma = bando.formas.map((forma) => ({ ...forma }));
+    const origensDePostit = (bando.postits ?? []).map((postit) => ({
+      ...postit,
+    }));
+    const origensDeDocumento = (bando.documentos ?? []).map((documento) => ({
+      ...documento,
+    }));
+    const origensDeTraco = bando.tracos ?? [];
     let ultimo = { dx: 0, dy: 0 };
 
     const patches = () =>
@@ -955,15 +1206,35 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         moveGroup(origensDeForma, ultimo.dx, ultimo.dy),
       ] as const;
 
+    // Os três que só andam viajam no saco com nome, e não como quarta e quinta
+    // posição: ver `PatchesSemAlca`. Todos partem das ORIGENS, e não do estado
+    // atual -- somar incremento a incremento acumularia erro de arredondamento
+    // e o grupo chegaria alguns pixels longe do cursor.
+    const semAlcaDoGesto = () => ({
+      postits: empurrarPostits(origensDePostit, ultimo.dx, ultimo.dy),
+      documentos: empurrarDocumentos(
+        origensDeDocumento,
+        ultimo.dx,
+        ultimo.dy,
+      ),
+      tracos: empurrarTracos(origensDeTraco, ultimo.dx, ultimo.dy),
+    });
+
     startDrag(event, {
       // O clique nativo sobrevive: é o duplo clique que abre a edição do
       // texto, e matá-lo aqui deixaria o texto sem como ser reescrito.
       mantemClique: true,
       onMove: (delta) => {
-        ultimo = { dx: delta.x, dy: delta.y };
-        moverNoGesto(scene.id, ...patches());
+        // A cerca do papel prende o GRUPO, e não cada papel: ver
+        // `deslocamentoPreso`. Sem papel na mão, devolve o passo inteiro.
+        ultimo = deslocamentoPreso(
+          [...origensDePostit, ...origensDeDocumento],
+          delta.x,
+          delta.y,
+        );
+        moverNoGesto(scene.id, ...patches(), semAlcaDoGesto());
       },
-      onEnd: () => terminarGesto(scene.id, ...patches()),
+      onEnd: () => terminarGesto(scene.id, ...patches(), semAlcaDoGesto()),
     });
   }
 
@@ -1697,6 +1968,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const baseIds = additive ? selectedIds : [];
     const baseTextoIds = additive ? selectedTextoIds : [];
     const baseFormaIds = additive ? selectedFormaIds : [];
+    const basePostitIds = additive ? selectedPostitIds : [];
+    const baseDocumentoIds = additive ? selectedDocumentoIds : [];
+    const baseTracoIds = additive ? selectedTracoIds : [];
     if (!additive) clear();
 
     startDrag(event, {
@@ -1726,10 +2000,42 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           .filter((forma) => boundsIntersect(itemBounds(forma), area))
           .map((forma) => forma.id);
 
+        // Papel e cartão pela caixa deles, que é a mesma coisa que se vê.
+        const postitsDentro = (scene.postits ?? [])
+          .filter((postit) => boundsIntersect(caixaDoPapel(postit), area))
+          .map((postit) => postit.id);
+
+        const documentosDentro = (scene.documentos ?? [])
+          .filter((documento) =>
+            boundsIntersect(caixaDoPapel(documento), area),
+          )
+          .map((documento) => documento.id);
+
+        /**
+         * O risco pela CAIXA dos pontos, e não ponto a ponto.
+         *
+         * A caixa pega mais do que a linha -- um risco em diagonal é laçado
+         * por uma área que passa longe da tinta --, e é o certo aqui: é a
+         * mesma medida do resto do palco, e um teste segmento a segmento
+         * custaria as duzentas amostras de cada risco a cada quadro do
+         * arrasto, com a área crescendo debaixo da mão.
+         */
+        const tracosDentro = (scene.tracos ?? [])
+          .filter((traco) => {
+            const caixa = caixaDoTraco(traco);
+            return caixa !== null && boundsIntersect(caixa, area);
+          })
+          .map((traco) => traco.id);
+
         selectMisto({
           itens: [...new Set([...baseIds, ...hits])],
           textos: [...new Set([...baseTextoIds, ...textosDentro])],
           formas: [...new Set([...baseFormaIds, ...formasDentro])],
+          postits: [...new Set([...basePostitIds, ...postitsDentro])],
+          documentos: [
+            ...new Set([...baseDocumentoIds, ...documentosDentro]),
+          ],
+          tracos: [...new Set([...baseTracoIds, ...tracosDentro])],
         });
       },
       onEnd: () => setMarquee(null),
@@ -1751,6 +2057,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     portrait: handlePortraitPointerDown,
     texto: handleTextoPointerDown,
     forma: handleFormaPointerDown,
+    papel: handlePapelPointerDown,
+    pega: handlePegaPointerDown,
   });
 
   useEffect(() => {
@@ -1760,6 +2068,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       portrait: handlePortraitPointerDown,
       texto: handleTextoPointerDown,
       forma: handleFormaPointerDown,
+      papel: handlePapelPointerDown,
+      pega: handlePegaPointerDown,
     };
   });
 
@@ -1793,6 +2103,27 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     },
     [],
   );
+
+  // Papel e cartão pelo mesmo envelope: as camadas dos dois moram na margem,
+  // por portal, e um handler novo por render redesenharia os vinte cartões de
+  // um quadro a cada arrasto de token.
+  const onPostitPointerDown = useCallback(
+    (event: ReactPointerEvent, postit: Postit) => {
+      handlersRef.current.papel(event, { tipo: "postit", postit });
+    },
+    [],
+  );
+
+  const onDocumentoPointerDown = useCallback(
+    (event: ReactPointerEvent, documento: Documento) => {
+      handlersRef.current.papel(event, { tipo: "documento", documento });
+    },
+    [],
+  );
+
+  const onPegaPointerDown = useCallback((event: ReactPointerEvent) => {
+    handlersRef.current.pega(event);
+  }, []);
 
   const onFormaPointerDown = useCallback(
     (event: ReactPointerEvent, forma: Forma) => {
@@ -1922,7 +2253,23 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       {/* Irmã do `PinLayer`, e fora do `SceneLayer` pela mesma razão: o texto
           de um postit é preparação do mestre, e o `SceneLayer` é o mesmo
           componente que desenha na TV. */}
-      <PostitLayer scene={scene} panMode={panMode} />
+      <PostitLayer
+        scene={scene}
+        panMode={panMode}
+        onPostitPointerDown={onPostitPointerDown}
+      />
+
+      {/* O que a área laçou e só anda, contornado, com a caixa que o arrasta.
+          Na margem e não aqui: o papel pode estar fora do mapa, e um contorno
+          fora da caixa do plano derruba a pintura do palco. */}
+      <SelecaoDaMargem
+        postits={selectedPostits}
+        documentos={selectedDocumentos}
+        tracos={selectedTracos}
+        caixa={caixaSemAlca}
+        panMode={panMode}
+        onPegaPointerDown={onPegaPointerDown}
+      />
 
       {/* Onde o papel vai cair, enquanto a ferramenta está na mão. Só com ela
           escolhida, e nunca com espaço segurado -- aí o gesto é da câmera, e a
@@ -1945,7 +2292,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         panMode={panMode}
         onTextoPointerDown={onTextoPointerDown}
       />
-      <DocumentoLayer scene={scene} panMode={panMode} />
+      <DocumentoLayer
+        scene={scene}
+        panMode={panMode}
+        onDocumentoPointerDown={onDocumentoPointerDown}
+      />
       <LigacaoLayer scene={scene} />
 
       {/* Os pontos de encaixe do que está sob o cursor e a sombra da seta em
@@ -1986,7 +2337,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           caixa do grupo era quatro cantos soltos num mapa escuro, e não se
           via QUEM estava dentro. Tracejado fino, para não brigar com o
           contorno sólido da caixa. */}
-      {groupBounds
+      {groupBounds && semAlca === 0
         ? [...selectedItems, ...selectedFormas].map((item) => {
             const caixa = itemBounds(item);
 
@@ -2008,7 +2359,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           })
         : null}
 
-      {groupBounds && !panMode ? (
+      {/* Papel, cartão e risco na mão tiram as ALÇAS do ar: nenhum dos três
+          escala nem gira, e um gizmo que só transformasse metade do que está
+          marcado mentiria sobre o que o gesto faz. Sobra a caixa da margem,
+          que arrasta. Ver `grupo-sem-alca`. */}
+      {groupBounds && !panMode && semAlca === 0 ? (
         <TransformHandles
           box={{ ...boundsToBox(groupBounds), rotation: 0 }}
           // Só cantos e escala uniforme: escalar um item girado de forma

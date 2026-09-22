@@ -270,6 +270,16 @@ export const POSTIT_ALTURA = 180;
 export const POSTIT_MINIMO = 120;
 
 /**
+ * Tamanho do texto de um postit recém-colado, em unidades de cena.
+ *
+ * Fora da escada de `DOCUMENTO_FONTES` de propósito: 15 é o tamanho com que
+ * todo postit já colado foi escrito, e mudá-lo para um degrau da escada
+ * reescreveria a aparência de quadros antigos sem ninguém ter pedido. O
+ * primeiro toque nos botões entra na escada e de lá não sai.
+ */
+export const POSTIT_FONTE = 15;
+
+/**
  * Um postit colado na board: texto do mestre em qualquer lugar do mapa.
  *
  * Irmão do ponto de anotação, e separado dele de propósito. O alfinete é uma
@@ -309,11 +319,23 @@ export type Postit = {
    */
   texto: string;
   cor: CorPostit;
+  /**
+   * Tamanho da letra, em unidades de cena. Ausente = `POSTIT_FONTE`.
+   *
+   * Os degraus são os do cartão de nota (`DOCUMENTO_FONTES`), e é deliberado
+   * que sejam os mesmos: papel e cartão são as duas folhas de texto do quadro,
+   * e duas escadas diferentes fariam o mesmo gesto -- clicar em A↑ -- dar
+   * saltos diferentes em cada uma.
+   *
+   * Opcional para não exigir migração: o postit já colado continua com o
+   * tamanho de sempre, sem campo nenhum no arquivo.
+   */
+  fonte?: number;
 };
 
 /** O que o chamador informa ao colar um postit; o resto é do store. */
 export type NewPostit = Pick<Postit, "x" | "y"> &
-  Partial<Pick<Postit, "largura" | "altura" | "texto" | "cor">>;
+  Partial<Pick<Postit, "largura" | "altura" | "texto" | "cor" | "fonte">>;
 
 /**
  * Texto solto sobre o quadro: título, rótulo, uma frase. Sem papel, sem

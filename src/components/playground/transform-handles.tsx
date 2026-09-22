@@ -1,17 +1,29 @@
 "use client";
 
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
+import {
+  AArrowDown,
+  AArrowUp,
   Blend,
   Bold,
   Drama,
   FlipHorizontal,
+  Info,
   Italic,
   Palette,
   Trash2,
   Underline,
 } from "lucide-react";
 
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import {
   Tooltip,
@@ -215,6 +227,44 @@ type TransformHandlesProps = {
     }) => void;
   };
   /**
+   * Presente = mostra o botão que abre as cores do PAPEL, no painel de baixo.
+   *
+   * As opções chegam prontas -- valor, rótulo e a classe que pinta a bolinha
+   * --, e não uma lista de cores CSS como em `paleta`: a cor do papel é um
+   * NOME no modelo (`amarelo`, `rosa`), e o que cada nome vale em fundo, anel
+   * e texto é assunto de quem desenha o papel. Ver `CORES_POSTIT`.
+   */
+  papel?: {
+    escolhida: string;
+    opcoes: { valor: string; rotulo: string; classe: string }[];
+    onEscolher: (valor: string) => void;
+  };
+  /**
+   * Presente = mostra o botão de ajuda, que abre este conteúdo num popover.
+   *
+   * O conteúdo vem de fora porque é do ELEMENTO: os sinais que o postit
+   * entende não têm por que morar no gizmo, que não sabe o que é um postit.
+   */
+  ajuda?: ReactNode;
+  /**
+   * Presente = mostra os dois botões de tamanho da letra, na mesma fileira.
+   *
+   * Só o cartão de nota passa: ele é o único elemento do quadro cujo texto tem
+   * tamanho próprio e não vem da caixa -- redimensionar o cartão muda quanto
+   * texto CABE, e não o tamanho da letra. Os dois gestos são diferentes e por
+   * isso têm controles diferentes.
+   *
+   * Callback ausente = botão apagado, que é como o degrau do fim da escala se
+   * anuncia. `valor` só aparece no rótulo de acessibilidade: um número no meio
+   * da fileira faria os botões redondos deixarem de ser uma fileira de botões
+   * redondos.
+   */
+  fonte?: {
+    valor: number;
+    menor?: () => void;
+    maior?: () => void;
+  };
+  /**
    * Presente = mostra o botão da paleta, que abre cor e fundo no painel ao
    * lado.
    *
@@ -276,6 +326,9 @@ export function TransformHandles({
   opacidade,
   estilo,
   paleta,
+  fonte,
+  papel,
+  ajuda,
 }: TransformHandlesProps) {
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
@@ -299,6 +352,8 @@ export function TransformHandles({
    * significar abrir os dois com um clique só.
    */
   const [paletaAberta, setPaletaAberta] = useState(false);
+  /** As cores do papel: outro painel, outro estado. Ver `paletaAberta`. */
+  const [papelAberto, setPapelAberto] = useState(false);
 
   const cor = TOM[tom];
 
@@ -373,7 +428,15 @@ export function TransformHandles({
 
       {/* Fileira acima da caixa. Botões moram aqui porque nenhum deles é
           redimensionamento, e ficariam competindo com as alças nas bordas. */}
-      {onFlip || onOpenSheet || opacidade || estilo || paleta || onDelete ? (
+      {onFlip ||
+      onOpenSheet ||
+      opacidade ||
+      estilo ||
+      paleta ||
+      fonte ||
+      papel ||
+      ajuda ||
+      onDelete ? (
         <div
           className="pointer-events-none absolute flex items-center"
           // A POSIÇÃO continua em unidade de cena -- ela acompanha o item. O
@@ -412,7 +475,10 @@ export function TransformHandles({
                     }}
                   >
                     <FlipHorizontal
-                      style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
                     />
                   </button>
                 }
@@ -441,7 +507,12 @@ export function TransformHandles({
                       onOpenSheet();
                     }}
                   >
-                    <Drama style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
+                    <Drama
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
                   </button>
                 }
               />
@@ -456,7 +527,11 @@ export function TransformHandles({
                 [
                   { chave: "negrito", rotulo: "Negrito", Icone: Bold },
                   { chave: "italico", rotulo: "Itálico", Icone: Italic },
-                  { chave: "sublinhado", rotulo: "Sublinhado", Icone: Underline },
+                  {
+                    chave: "sublinhado",
+                    rotulo: "Sublinhado",
+                    Icone: Underline,
+                  },
                 ] as const
               ).map(({ chave, rotulo, Icone }) => (
                 <Tooltip key={chave}>
@@ -479,7 +554,61 @@ export function TransformHandles({
                         }}
                       >
                         <Icone
-                          style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                          style={{
+                            width: HANDLE_PX * 1.2,
+                            height: HANDLE_PX * 1.2,
+                          }}
+                        />
+                      </button>
+                    }
+                  />
+                  <TooltipContent>{rotulo}</TooltipContent>
+                </Tooltip>
+              ))
+            : null}
+
+          {/* Menor à esquerda, maior à direita: é a ordem da régua, e a mesma
+              de qualquer editor. */}
+          {fonte
+            ? (
+                [
+                  {
+                    chave: "menor",
+                    rotulo: "Diminuir a fonte",
+                    Icone: AArrowDown,
+                    acao: fonte.menor,
+                  },
+                  {
+                    chave: "maior",
+                    rotulo: "Aumentar a fonte",
+                    Icone: AArrowUp,
+                    acao: fonte.maior,
+                  },
+                ] as const
+              ).map(({ chave, rotulo, Icone, acao }) => (
+                <Tooltip key={chave}>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={`${rotulo} (${fonte.valor})`}
+                        disabled={!acao}
+                        className={cn(
+                          "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full disabled:opacity-40",
+                          cor.botao,
+                        )}
+                        style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          acao?.();
+                        }}
+                      >
+                        <Icone
+                          style={{
+                            width: HANDLE_PX * 1.2,
+                            height: HANDLE_PX * 1.2,
+                          }}
                         />
                       </button>
                     }
@@ -509,7 +638,12 @@ export function TransformHandles({
                       setPaletaAberta((aberta) => !aberta);
                     }}
                   >
-                    <Palette style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
+                    <Palette
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
                   </button>
                 }
               />
@@ -539,12 +673,85 @@ export function TransformHandles({
                       setPainelAberto((aberto) => !aberto);
                     }}
                   >
-                    <Blend style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
+                    <Blend
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
                   </button>
                 }
               />
               <TooltipContent>Opacidade da imagem</TooltipContent>
             </Tooltip>
+          ) : null}
+
+          {papel ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Cor do papel"
+                    aria-expanded={papelAberto}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      cor.botao,
+                      papelAberto && "ring-2 ring-white/70",
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setPapelAberto((aberto) => !aberto);
+                    }}
+                  >
+                    <Palette
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <TooltipContent>Cor do papel</TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {/* A ajuda é `Popover` e não `Tooltip`: é texto para ler, e some ao
+              clicar fora. O conteúdo sai do palco por portal, então não encolhe
+              com o zoom -- a 40% ele seria um selo ilegível. */}
+          {ajuda ? (
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Como escrever aqui"
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    // O pointerdown não pode virar clique no vazio do palco: lá
+                    // ele esvaziaria a seleção, e o gizmo sumiria debaixo da mão
+                    // antes de o popover abrir.
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    <Info
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <PopoverContent align="center" className="w-72 p-3" side="top">
+                {ajuda}
+              </PopoverContent>
+            </Popover>
           ) : null}
 
           {onDelete ? (
@@ -564,7 +771,12 @@ export function TransformHandles({
                       onDelete();
                     }}
                   >
-                    <Trash2 style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }} />
+                    <Trash2
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
                   </button>
                 }
               />
@@ -587,9 +799,10 @@ export function TransformHandles({
           girado é a caixa envolvente -- com o giro anulado, o que sobra na
           conta é só a escala do palco, que se cancela sozinha na razão.
 
-          Contra-escalado pelo mesmo motivo dos `px()` em volta, mas de uma vez
-          só: o slider é um componente de fora, com medidas em pixel de CSS, e
-          dividir cada uma delas pelo scale exigiria uma cópia dele aqui. */}
+          A ampliação do plano é desfeita de uma vez no filho, e não `px()` a
+          `px()`: o slider é um componente de fora, com medidas em pixel de
+          CSS, e dividir cada uma delas pelo scale exigiria uma cópia dele
+          aqui. Ver o comentário no filho sobre por que é `emPixelDeTela`. */}
       {opacidade && painelAberto ? (
         <div
           className="pointer-events-auto absolute"
@@ -606,6 +819,9 @@ export function TransformHandles({
           // o slider precisa do gesto que o `preventDefault` cancelaria.
           onPointerDown={(event) => event.stopPropagation()}
         >
+          {/* Contra-escalado por `transform`, como a fileira de botões e pela
+              mesma razão: uma só forma de desfazer a ampliação em todo o
+              gizmo. Ver o comentário da fileira. */}
           <div
             className="bg-popover ring-foreground/10 flex flex-col items-center gap-2 rounded-lg px-2 py-3 shadow-md ring-1"
             style={{ transform: `scale(${1 / scale})`, transformOrigin: "0 50%" }}
@@ -650,6 +866,7 @@ export function TransformHandles({
           }}
           onPointerDown={(event) => event.stopPropagation()}
         >
+          {/* Contra-escalado como a fileira. Ver o painel de opacidade. */}
           <div
             className="bg-popover ring-foreground/10 flex flex-col gap-2 rounded-lg px-2 py-2 shadow-md ring-1"
             style={{ transform: `scale(${1 / scale})`, transformOrigin: "50% 0" }}
@@ -669,6 +886,45 @@ export function TransformHandles({
               translucido
               onEscolher={(valor) => paleta.onChange({ fundo: valor })}
             />
+          </div>
+        </div>
+      ) : null}
+
+      {/* As cores do papel, embaixo da caixa como a paleta e pela mesma razão:
+          ao lado, elas cobriam a ponta da fileira de botões em todo papel
+          estreito. */}
+      {papel && papelAberto ? (
+        <div
+          className="pointer-events-auto absolute"
+          style={{
+            left: "50%",
+            top: "100%",
+            zIndex: 1,
+            transform: `translate(-50%, ${px(PAINEL_GAP_PX)}px) rotate(${-item.rotation}deg)`,
+            transformOrigin: "50% 0",
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div
+            className="bg-popover ring-foreground/10 flex items-center gap-1 rounded-lg px-2 py-2 shadow-md ring-1"
+            style={{ transform: `scale(${1 / scale})`, transformOrigin: "50% 0" }}
+          >
+            {papel.opcoes.map((opcao) => (
+              <button
+                key={opcao.valor}
+                type="button"
+                aria-label={opcao.rotulo}
+                aria-pressed={opcao.valor === papel.escolhida}
+                className={cn(
+                  "size-5 rounded-full border transition-transform",
+                  opcao.classe,
+                  opcao.valor === papel.escolhida
+                    ? "border-foreground scale-110"
+                    : "border-white/20 hover:scale-105",
+                )}
+                onClick={() => papel.onEscolher(opcao.valor)}
+              />
+            ))}
           </div>
         </div>
       ) : null}

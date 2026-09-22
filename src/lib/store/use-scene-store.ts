@@ -60,6 +60,7 @@ import {
   type NewForma,
   type NewPostit,
   type NewTraco,
+  type Traco,
   type NewMapPin,
   type Postit,
   type Scene,
@@ -98,6 +99,23 @@ export type TextoPatch = { id: string; patch: Partial<Omit<Texto, "id">> };
 
 /** E para a forma do quadro, que anda no mesmo gesto e no mesmo gizmo. */
 export type FormaPatch = { id: string; patch: Partial<Omit<Forma, "id">> };
+
+/**
+ * Os três que a área de seleção passou a laçar e que só ANDAM: papel, cartão
+ * e risco.
+ *
+ * Cada um na própria lista, como o texto e a forma, porque cada um é uma lista
+ * da cena. O que os junta é a limitação: nenhum deles escala nem gira pelo
+ * gizmo -- o papel e o cartão medem o texto por dentro em unidades de cena, e
+ * o risco é uma nuvem de pontos sem caixa própria. Por isso o gizmo de alças
+ * sai do ar quando um deles está na mão. Ver `grupo-sem-alca`.
+ */
+export type PostitPatch = { id: string; patch: Partial<Omit<Postit, "id">> };
+export type DocumentoPatch = {
+  id: string;
+  patch: Partial<Omit<Documento, "id" | "arquivo">>;
+};
+export type TracoPatch = { id: string; patch: Partial<Omit<Traco, "id">> };
 
 export type { ZDirection };
 
@@ -282,6 +300,14 @@ type SceneStore = {
    * por um daria três entradas no desfazer para um gesto só.
    */
   removeTracos: (sceneId: string, tracoIds: string[]) => void;
+  /**
+   * Move riscos: o patch traz os pontos JÁ deslocados, e não um `dx/dy`.
+   *
+   * O risco não tem canto nem caixa gravada -- ele é a nuvem de pontos --,
+   * então o store não teria como aplicar um deslocamento sem refazer a conta
+   * que quem arrasta já fez. Ver `empurrarTracos`.
+   */
+  updateTracos: (sceneId: string, patches: TracoPatch[]) => void;
   /** Coloca um medidor. Passa pelo histórico: medir e deixar é edição da cena. */
   addMedidor: (sceneId: string, medidor: NewMedidor) => string;
   updateMedidor: (
@@ -319,7 +345,10 @@ type SceneStore = {
     postitId: string,
     patch: Partial<Postit>,
   ) => void;
+  /** Vários de uma vez -- o grupo que a área laçou, num Ctrl+Z só. */
+  updatePostits: (sceneId: string, patches: PostitPatch[]) => void;
   removePostit: (sceneId: string, postitId: string) => void;
+  removePostits: (sceneId: string, postitIds: string[]) => void;
 
   /** Texto solto do quadro. Ver `Texto`. Devolve o id. */
   addTexto: (sceneId: string, texto: NewTexto) => string;
@@ -358,7 +387,10 @@ type SceneStore = {
     documentoId: string,
     patch: Partial<Omit<Documento, "id" | "arquivo">>,
   ) => void;
+  /** Vários de uma vez, como os postits. */
+  updateDocumentos: (sceneId: string, patches: DocumentoPatch[]) => void;
   removeDocumento: (sceneId: string, documentoId: string) => void;
+  removeDocumentos: (sceneId: string, documentoIds: string[]) => void;
   /**
    * Guarda a caixa medida de um texto. Sem histórico: medir não é edição, e
    * um Ctrl+Z que desfizesse uma medida seria um Ctrl+Z que não faz nada.
@@ -1096,6 +1128,20 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       }));
     },
 
+    updateTracos(sceneId, patches) {
+      if (patches.length === 0) return;
+
+      const porId = new Map(patches.map(({ id, patch }) => [id, patch]));
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        tracos: (scene.tracos ?? []).map((traco) => {
+          const patch = porId.get(traco.id);
+          return patch ? { ...traco, ...patch } : traco;
+        }),
+      }));
+    },
+
     addMedidor(sceneId, medidor) {
       const id = novoId();
 
@@ -1275,18 +1321,34 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     },
 
     updatePostit(sceneId, postitId, patch) {
+      get().updatePostits(sceneId, [{ id: postitId, patch }]);
+    },
+
+    updatePostits(sceneId, patches) {
+      if (patches.length === 0) return;
+
+      const porId = new Map(patches.map(({ id, patch }) => [id, patch]));
+
       get().updateScene(sceneId, (scene) => ({
         ...scene,
-        postits: (scene.postits ?? []).map((postit) =>
-          postit.id === postitId ? { ...postit, ...patch } : postit,
-        ),
+        postits: (scene.postits ?? []).map((postit) => {
+          const patch = porId.get(postit.id);
+          return patch ? { ...postit, ...patch } : postit;
+        }),
       }));
     },
 
     removePostit(sceneId, postitId) {
+      get().removePostits(sceneId, [postitId]);
+    },
+
+    removePostits(sceneId, postitIds) {
+      if (postitIds.length === 0) return;
+
+      const condenados = new Set(postitIds);
       get().updateScene(sceneId, (scene) => {
         const restantes = (scene.postits ?? []).filter(
-          (postit) => postit.id !== postitId,
+          (postit) => !condenados.has(postit.id),
         );
 
         // Volta a `undefined` quando esvazia, como `removePin`: é o mesmo estado,
@@ -1295,7 +1357,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         return {
           ...scene,
           postits: restantes.length > 0 ? restantes : undefined,
-          ligacoes: semReferencia(scene.ligacoes, [postitId]),
+          ligacoes: semReferencia(scene.ligacoes, condenados),
         };
       });
     },
@@ -1475,24 +1537,40 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     },
 
     updateDocumento(sceneId, documentoId, patch) {
+      get().updateDocumentos(sceneId, [{ id: documentoId, patch }]);
+    },
+
+    updateDocumentos(sceneId, patches) {
+      if (patches.length === 0) return;
+
+      const porId = new Map(patches.map(({ id, patch }) => [id, patch]));
+
       get().updateScene(sceneId, (scene) => ({
         ...scene,
-        documentos: (scene.documentos ?? []).map((documento) =>
-          documento.id === documentoId ? { ...documento, ...patch } : documento,
-        ),
+        documentos: (scene.documentos ?? []).map((documento) => {
+          const patch = porId.get(documento.id);
+          return patch ? { ...documento, ...patch } : documento;
+        }),
       }));
     },
 
     removeDocumento(sceneId, documentoId) {
+      get().removeDocumentos(sceneId, [documentoId]);
+    },
+
+    removeDocumentos(sceneId, documentoIds) {
+      if (documentoIds.length === 0) return;
+
+      const condenados = new Set(documentoIds);
       get().updateScene(sceneId, (scene) => {
         const restantes = (scene.documentos ?? []).filter(
-          (documento) => documento.id !== documentoId,
+          (documento) => !condenados.has(documento.id),
         );
 
         return {
           ...scene,
           documentos: restantes.length > 0 ? restantes : undefined,
-          ligacoes: semReferencia(scene.ligacoes, [documentoId]),
+          ligacoes: semReferencia(scene.ligacoes, condenados),
         };
       });
     },

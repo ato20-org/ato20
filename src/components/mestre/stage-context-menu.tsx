@@ -89,6 +89,13 @@ export function StageContextMenu({
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const selectedTextoIds = useSelectionStore((state) => state.selectedTextoIds);
   const selectedFormaIds = useSelectionStore((state) => state.selectedFormaIds);
+  const selectedPostitIds = useSelectionStore(
+    (state) => state.selectedPostitIds,
+  );
+  const selectedDocumentoIds = useSelectionStore(
+    (state) => state.selectedDocumentoIds,
+  );
+  const selectedTracoIds = useSelectionStore((state) => state.selectedTracoIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const hasClipboard = useClipboardStore(
     (state) => state.drafts.length > 0 || state.textos.length > 0,
@@ -108,7 +115,18 @@ export function StageContextMenu({
    * área de transferência tratam todas.
    */
   const doQuadro = selectedTextoIds.length + selectedFormaIds.length;
-  const soQuadro = !hasSelection && doQuadro > 0;
+  /**
+   * Papel, cartão e risco na mão -- o que a área laça e a área de
+   * transferência não leva (ver `copySelection`).
+   *
+   * Entram no mesmo bloco curto, mas só na linha de apagar: oferecer "Copiar"
+   * para um risco seria um item de menu que não faz nada.
+   */
+  const daMargem =
+    selectedPostitIds.length +
+    selectedDocumentoIds.length +
+    selectedTracoIds.length;
+  const soQuadro = !hasSelection && doQuadro + daMargem > 0;
   const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
   const prenderNaSelecao = useCameraLockStore(
     (state) => state.prenderNaSelecao,
@@ -149,22 +167,33 @@ export function StageContextMenu({
 
         {soQuadro ? (
           <>
-            <ContextMenuItem onClick={copySelection}>
-              <Copy />
-              Copiar
-              <ContextMenuShortcut>Ctrl+C</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={cutSelection}>
-              <Scissors />
-              Recortar
-              <ContextMenuShortcut>Ctrl+X</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={duplicateSelection}>
-              <CopyPlus />
-              Duplicar
-              <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem variant="destructive" onClick={removeSelection}>
+            {/* As três da área de transferência só aparecem com algo que ela
+                saiba recriar: um risco laçado sozinho não copia, não recorta e
+                não duplica -- e um item de menu que não faz nada é pior que
+                item nenhum. Ver `copySelection`. */}
+            {doQuadro > 0 ? (
+              <>
+                <ContextMenuItem onClick={copySelection}>
+                  <Copy />
+                  Copiar
+                  <ContextMenuShortcut>Ctrl+C</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={cutSelection}>
+                  <Scissors />
+                  Recortar
+                  <ContextMenuShortcut>Ctrl+X</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={duplicateSelection}>
+                  <CopyPlus />
+                  Duplicar
+                  <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
+                </ContextMenuItem>
+              </>
+            ) : null}
+            <ContextMenuItem
+              variant="destructive"
+              onClick={() => removeSelection()}
+            >
               <Trash2 />
               Remover
               <ContextMenuShortcut>Del</ContextMenuShortcut>
@@ -311,7 +340,10 @@ export function StageContextMenu({
               <Images />
               Guardar no handout
             </ContextMenuItem>
-            <ContextMenuItem variant="destructive" onClick={removeSelection}>
+            <ContextMenuItem
+              variant="destructive"
+              onClick={() => removeSelection()}
+            >
               <Trash2 />
               Remover
               <ContextMenuShortcut>Del</ContextMenuShortcut>
@@ -342,10 +374,7 @@ export function StageContextMenu({
 
         <ContextMenuSeparator />
 
-        <ContextMenuItem
-          disabled={!cameraSelecionada}
-          onClick={enquadrarAqui}
-        >
+        <ContextMenuItem disabled={!cameraSelecionada} onClick={enquadrarAqui}>
           <ScanSearch />
           Trazer a câmera para aqui
           <ContextMenuShortcut>C</ContextMenuShortcut>
