@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Eye,
   EyeOff,
-  Image as ImageIcon,
+  ImagePlus,
   Minus,
   MoreHorizontal,
   Package,
@@ -12,13 +12,14 @@ import {
   Radio,
   RadioTower,
   Trash2,
-  Send,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -64,7 +65,6 @@ import type { Personagem } from "@/types/character";
 import type { ImagemItem, ItemInventario } from "@/types/inventory";
 import { chaveDaImagem } from "@/types/inventory";
 
-import { AcervoPicker } from "./acervo-picker";
 import { SecaoFicha } from "./secao-ficha";
 
 /**
@@ -80,18 +80,14 @@ import { SecaoFicha } from "./secao-ficha";
  * celular.
  *
  * É também ALVO de arrasto: um item largado aqui vindo da ficha de outro
- * personagem muda de dono. O caminho de teclado para o mesmo movimento é o
- * "Mover" do diálogo do item, que continua existindo — arrasto não é alcançável
- * por quem não usa mouse.
+ * personagem muda de dono — e, desde que o "Mover" saiu do diálogo, é o único
+ * caminho para essa transferência.
  */
 export function InventarioPersonagem({
   personagem,
-  outros,
   onChangedAnexos,
 }: {
   personagem: Personagem;
-  /** Os demais personagens, destino possível de uma transferência. */
-  outros: Personagem[];
   /**
    * A lista de ARQUIVOS do personagem precisa reler.
    *
@@ -255,7 +251,6 @@ export function InventarioPersonagem({
 
       <ItemDialog
         personagem={personagem}
-        outros={outros}
         item={aberto === "novo" ? null : aberto}
         onFechar={() => setAberto(null)}
         onChanged={mudou}
@@ -776,25 +771,26 @@ function mimeDaImagem(arquivo: string): string {
  */
 function ItemDialog({
   personagem,
-  outros,
   item,
   onFechar,
   onChanged,
 }: {
   personagem: Personagem;
-  outros: Personagem[];
   item: ItemInventario | null;
   onFechar: () => void;
   onChanged: () => void;
 }) {
   return (
     <Dialog open={Boolean(item)} onOpenChange={(open) => !open && onFechar()}>
-      <DialogContent className="sm:max-w-md">
+      {/* Sem o X do canto: ele é absoluto no topo do diálogo, e aqui a primeira
+          coisa do diálogo é o campo de nome -- o botão caía POR CIMA do fim do
+          campo, e mirar no fechar apagava uma letra. O fechar desta janela mora
+          na própria linha do nome, onde tem lugar seu. */}
+      <DialogContent className="sm:max-w-md" showCloseButton={false}>
         {item ? (
           <ItemForm
             key={item.id}
             personagem={personagem}
-            outros={outros}
             item={item}
             onFechar={onFechar}
             onChanged={onChanged}
@@ -805,23 +801,96 @@ function ItemDialog({
   );
 }
 
+/**
+ * O quadro da imagem — que É o botão de escolhê-la.
+ *
+ * A tira de "Do disco / Do acervo" saiu daqui: eram dois botões para dizer o
+ * que o próprio quadro já diz, e clicar na imagem é o gesto que todo mundo
+ * tenta primeiro. Agora é o único, e o acervo entra pelo mesmo arrasto que já
+ * serve para tudo o mais na mesa.
+ *
+ * Vazio, NÃO usa o ícone de caixa de `ImagemDoItem`: caixa é o desenho de
+ * "item", e num quadro clicável ela dizia apenas que ali falta imagem — não que
+ * o clique a põe. O "+" sobre a foto e a palavra embaixo dizem o gesto. Cheio, a
+ * mesma frase volta no hover, por cima da imagem, porque aí o quadro já está
+ * ocupado dizendo outra coisa.
+ */
+function QuadroDaImagem({
+  personagemId,
+  item,
+  onTrocada,
+}: {
+  personagemId: string;
+  item: ItemInventario;
+  onTrocada: (item: ItemInventario) => void;
+}) {
+  const [escolhendo, setEscolhendo] = useState(false);
+
+  async function escolher() {
+    setEscolhendo(true);
+
+    try {
+      const novo = await escolherImagemDoDisco(personagemId, item.id);
+      if (novo) onTrocada(novo);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+    } finally {
+      setEscolhendo(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void escolher()}
+      disabled={escolhendo}
+      aria-label={
+        item.imagem ? "Trocar a imagem do item" : "Escolher a imagem do item"
+      }
+      title={item.imagem ? "Trocar a imagem" : "Escolher uma imagem do disco"}
+      className={cn(
+        "group hover:border-ring focus-visible:ring-ring relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded border focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60",
+        !item.imagem &&
+          "text-muted-foreground hover:text-foreground border-dashed",
+      )}
+    >
+      {item.imagem ? (
+        <>
+          <ImagemDoItem
+            key={chaveDaImagem(item.imagem)}
+            personagemId={personagemId}
+            imagem={item.imagem}
+          />
+
+          <span className="bg-background/80 absolute inset-0 hidden flex-col items-center justify-center gap-0.5 group-hover:flex group-focus-visible:flex">
+            <ImagePlus className="size-4" aria-hidden />
+            <span className="text-[10px] leading-none font-medium">Trocar</span>
+          </span>
+        </>
+      ) : (
+        <span className="flex flex-col items-center gap-1">
+          <ImagePlus className="size-5" aria-hidden />
+          <span className="text-[10px] leading-none font-medium">
+            Pôr imagem
+          </span>
+        </span>
+      )}
+    </button>
+  );
+}
+
 function ItemForm({
   personagem,
-  outros,
   item,
   onFechar,
   onChanged,
 }: {
   personagem: Personagem;
-  outros: Personagem[];
   item: ItemInventario;
   onFechar: () => void;
   onChanged: () => void;
 }) {
   const [atual, setAtual] = useState(item);
-  const [escolhendo, setEscolhendo] = useState(false);
-
-  const invalidar = useInventarioStore((state) => state.invalidar);
 
   async function salvar(patch: Parameters<typeof updateItem>[2]) {
     try {
@@ -846,25 +915,6 @@ function ItemForm({
     }
   }
 
-  async function mover(para: Personagem) {
-    try {
-      await moveItem(personagem.id, para.id, item.id);
-
-      onChanged();
-      // O destino também: se a ficha dele estiver aberta noutra janela, ela não
-      // fica sabendo de nada sozinha. É o mesmo par de avisos que o arrasto
-      // entre inventários dá, do outro lado.
-      invalidar(para.id);
-
-      onFechar();
-      toast.success(`${atual.nome} foi para ${para.nome}.`);
-    } catch (cause) {
-      toast.error(
-        cause instanceof Error ? cause.message : "Falha ao mover o item.",
-      );
-    }
-  }
-
   return (
     <>
       <DialogTitle className="sr-only">{atual.nome}</DialogTitle>
@@ -873,20 +923,37 @@ function ItemForm({
       </DialogDescription>
 
       <div className="flex gap-3">
-        <div className="relative size-20 shrink-0 overflow-hidden rounded border">
-          <ImagemDoItem
-            key={chaveDaImagem(atual.imagem)}
-            personagemId={personagem.id}
-            imagem={atual.imagem}
-          />
-        </div>
+        <QuadroDaImagem
+          personagemId={personagem.id}
+          item={atual}
+          onTrocada={(novo) => {
+            setAtual(novo);
+            onChanged();
+          }}
+        />
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <Input
-            defaultValue={atual.nome}
-            aria-label="Nome do item"
-            onBlur={(event) => void salvar({ nome: event.target.value })}
-          />
+          <div className="flex items-center gap-1">
+            <Input
+              defaultValue={atual.nome}
+              aria-label="Nome do item"
+              className="flex-1"
+              onBlur={(event) => void salvar({ nome: event.target.value })}
+            />
+
+            <DialogClose
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Fechar"
+                  className="shrink-0"
+                />
+              }
+            >
+              <X />
+            </DialogClose>
+          </div>
 
           <div className="flex items-center gap-2">
             <Label htmlFor={`qtd-${item.id}`} className="text-xs">
@@ -914,58 +981,15 @@ function ItemForm({
         onBlur={(event) => void salvar({ descricao: event.target.value })}
       />
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            void escolherImagemDoDisco(personagem.id, item.id).then(
-              (novo) => {
-                if (!novo) return;
-                setAtual(novo);
-                onChanged();
-              },
-              (cause: unknown) =>
-                toast.error(
-                  cause instanceof Error ? cause.message : "Falha ao importar.",
-                ),
-            )
-          }
-        >
-          <ImageIcon /> Do disco
-        </Button>
-
-        {/* Escolher do acervo, e não só importar: a mesma poção serve cinco
-            personagens, e reimportá-la em cada um encheria a biblioteca de
-            cópias do mesmo arquivo. */}
-        <Button variant="outline" size="sm" onClick={() => setEscolhendo(true)}>
-          <Package /> Do acervo
-        </Button>
-
-        <TransmitirItem personagemId={personagem.id} item={atual} />
-
-        {outros.length > 0 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="outline" size="sm">
-                  <Send /> Mover
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="start">
-              {outros.map((destino) => (
-                <DropdownMenuItem
-                  key={destino.id}
-                  onClick={() => void mover(destino)}
-                >
-                  {destino.nome}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
-      </div>
+      {/* Sobrou UM botão nesta tira. "Do disco" e "Do acervo" viraram o clique
+          no próprio quadro da imagem, e "Mover" saiu: o gesto é arrastar o item
+          para a outra ficha. Transmitir fica, porque não é sobre a imagem deste
+          diálogo, e sim sobre a TV. */}
+      {atual.imagem ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <TransmitirItem personagemId={personagem.id} item={atual} />
+        </div>
+      ) : null}
 
       <DialogFooter className="sm:justify-between">
         <label className="flex items-center gap-2 text-xs">
@@ -990,15 +1014,6 @@ function ItemForm({
           <Trash2 /> Remover
         </Button>
       </DialogFooter>
-
-      <AcervoPicker
-        aberto={escolhendo}
-        onFechar={() => setEscolhendo(false)}
-        onEscolher={(assetId) => {
-          setEscolhendo(false);
-          void salvar({ imagem: { tipo: "asset", id: assetId } });
-        }}
-      />
     </>
   );
 }
