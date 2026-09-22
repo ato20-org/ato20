@@ -2,6 +2,7 @@
 
 import { memo, type PointerEvent as ReactPointerEvent } from "react";
 
+import { ContornoDoItem } from "@/components/playground/contorno-do-item";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { Variante } from "@/lib/vault/assets";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,16 @@ type CanvasItemViewProps = {
    * Mestre. Ver `.scene-smooth-item` em `globals.css`.
    */
   smooth?: boolean;
+  /**
+   * A cor do traço em volta da figura, quando ela deve ter um.
+   *
+   * Só o palco do mestre passa: é a leitura "quem é de jogador e quem é meu"
+   * sem clicar em ninguém, e por isso ela não depende de clique nenhum --
+   * seleção não apaga o traço de ninguém, nem do próprio selecionado. Ausente
+   * -- a mesa inteira -- não monta nada. Ver `ContornoDoItem` e
+   * `contornoDosItens`.
+   */
+  contorno?: string;
   onPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
 };
 
@@ -35,6 +46,7 @@ export const CanvasItemView = memo(function CanvasItemView({
   item,
   smooth = false,
   variante,
+  contorno,
   onPointerDown,
 }: CanvasItemViewProps) {
   const url = useAssetUrl(item.assetId, variante);
@@ -88,7 +100,7 @@ export const CanvasItemView = memo(function CanvasItemView({
           draggable={false}
           // `object-fill` é intencional: redimensionar deforma, como no Figma.
           // Quem quer proporção travada arrasta o canto com Shift.
-          className="size-full object-fill select-none"
+          className="relative size-full object-fill select-none"
           // Espelhamento na imagem, não no contêiner: assim a caixa, as alças
           // e o hit-test seguem intactos — virar um token não move nada.
           style={
@@ -98,6 +110,27 @@ export const CanvasItemView = memo(function CanvasItemView({
                 }
               : undefined
           }
+        />
+      ) : null}
+
+      {/* Depois da figura, e por isso POR CIMA dela: os dois estão na mesma
+          pilha, e ali quem vem depois cobre quem veio antes.
+
+          Por cima e não atrás porque muito token traz uma sombra própria
+          pintada no PNG, deslocada para um lado. Atrás, essa sombra caía sobre
+          o traço daquele lado e o pintava de cinza -- o contorno saía torto,
+          nítido de um lado e sumido do outro. O traço nasce fora da silhueta
+          opaca da figura (ver `contornoDaImagem`), então por cima ele não tem
+          figura nenhuma para cobrir: cobre a franja lisa da borda e o começo da
+          sombra, que é o que um adesivo faz. */}
+      {url && contorno ? (
+        <ContornoDoItem
+          assetId={item.assetId}
+          cor={contorno}
+          largura={item.width}
+          altura={item.height}
+          flipX={item.flipX}
+          flipY={item.flipY}
         />
       ) : null}
     </div>

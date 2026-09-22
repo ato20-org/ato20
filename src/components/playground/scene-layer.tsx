@@ -39,6 +39,15 @@ type SceneLayerProps = {
    * meio-apagado — a remoção chega pronta na publicação seguinte.
    */
   apagando?: ReadonlySet<string>;
+  /**
+   * A cor do contorno de cada item que deve ter um, por id de item.
+   *
+   * Só o palco do MESTRE passa, e passa sempre -- seleção não apaga o traço de
+   * ninguém. A mesa nunca recebe: o contorno responde "de quem é esta figura",
+   * e para a mesa saber de fora do jogo quem é NPC é justamente o que não se
+   * quer contar. Ver `contornoDosItens`.
+   */
+  contornos?: ReadonlyMap<string, string>;
   /** `mesa` é o que a mesa vê. `mestre` deixa o mestre atravessar a névoa. */
   variant?: "mestre" | "mesa";
   /**
@@ -133,6 +142,7 @@ export function SceneLayer({
   onMedidorPointerDown,
   onMedidorAlcaPointerDown,
   apagando,
+  contornos,
   palco,
 }: SceneLayerProps) {
   const items = useMemo(
@@ -175,6 +185,10 @@ export function SceneLayer({
           item={item}
           smooth={smooth}
           variante={variante}
+          // Uma string, e não o mapa: o `CanvasItemView` é `memo`, e passar o
+          // mapa inteiro faria os quarenta itens redesenharem a cada quadro em
+          // que qualquer um deles muda.
+          contorno={contornos?.get(item.id)}
           onPointerDown={onItemPointerDown}
         />
       ))}

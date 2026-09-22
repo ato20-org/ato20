@@ -2,6 +2,7 @@
 
 import {
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -438,10 +439,7 @@ export function TransformHandles({
       }}
     >
       {outline ? (
-        <div
-          className="absolute inset-0"
-          style={{ outline: `${px(OUTLINE_PX)}px solid ${cor.traco}` }}
-        />
+        <TracoDaCaixa altura={item.height} cor={cor.traco} scale={scale} />
       ) : null}
 
       {/* Fileira acima da caixa. Botões moram aqui porque nenhum deles é
@@ -483,6 +481,25 @@ export function TransformHandles({
             zIndex: 1,
             transform: `translate(-50%, calc(-100% - ${px(ROTATE_OFFSET_PX - HANDLE_PX * 2)}px)) scale(${1 / scale})`,
             transformOrigin: "50% 100%",
+            // CAMADA PRÓPRIA, e é o que mantém o botão nítido ampliado.
+            //
+            // A margem amplia por `transform`, e o WebKitGTK rasteriza uma
+            // camada transformada no tamanho de LAYOUT para esticar a textura
+            // depois -- é a mesma medida que fez o plano de conteúdo ganhar o
+            // `zoom` (ver `conteudoNoLayout`). Dentro dessa camada esta fileira
+            // é desenhada JÁ encolhida por `scale(1 / scale)`: a 1600% o botão
+            // de 28px ocupa 3,2px de textura, e o compositor estica esses 3,2px
+            // de volta para 28 na tela. Medido na captura do mestre: rampa de
+            // vinte pixels onde devia haver borda de um.
+            //
+            // Promovida, ela é rasterizada na PRÓPRIA caixa -- 28px, porque
+            // `transform` não mexe em layout --, e a matriz que o compositor
+            // aplica depois é `scale × (1 / scale)`, ou seja, um. Textura 1:1.
+            //
+            // Não vale para o plano: promover o PLANO à mão borra sempre, e
+            // está medido no cabeçalho de `SceneStage`. Aqui é o contrário --
+            // o que se promove é justamente quem desfaz a ampliação.
+            willChange: "transform",
           }}
         >
           {onFlip ? (
@@ -853,7 +870,12 @@ export function TransformHandles({
               gizmo. Ver o comentário da fileira. */}
           <div
             className="bg-popover ring-foreground/10 flex flex-col items-center gap-2 rounded-lg px-2 py-3 shadow-md ring-1"
-            style={{ transform: `scale(${1 / scale})`, transformOrigin: "0 50%" }}
+            style={{
+              transform: `scale(${1 / scale})`,
+              transformOrigin: "0 50%",
+              // Camada própria, como a fileira. Ver o comentário lá.
+              willChange: "transform",
+            }}
           >
             <span className="text-muted-foreground text-[10px] tabular-nums">
               {Math.round(opacidade.valor * 100)}%
@@ -898,7 +920,12 @@ export function TransformHandles({
           {/* Contra-escalado como a fileira. Ver o painel de opacidade. */}
           <div
             className="bg-popover ring-foreground/10 flex flex-col gap-2 rounded-lg px-2 py-2 shadow-md ring-1"
-            style={{ transform: `scale(${1 / scale})`, transformOrigin: "50% 0" }}
+            style={{
+              transform: `scale(${1 / scale})`,
+              transformOrigin: "50% 0",
+              // Camada própria, como a fileira. Ver o comentário lá.
+              willChange: "transform",
+            }}
           >
             <Fileira
               titulo={paleta.titulo}
@@ -936,7 +963,12 @@ export function TransformHandles({
         >
           <div
             className="bg-popover ring-foreground/10 flex items-center gap-1 rounded-lg px-2 py-2 shadow-md ring-1"
-            style={{ transform: `scale(${1 / scale})`, transformOrigin: "50% 0" }}
+            style={{
+              transform: `scale(${1 / scale})`,
+              transformOrigin: "50% 0",
+              // Camada própria, como a fileira. Ver o comentário lá.
+              willChange: "transform",
+            }}
           >
             {papel.opcoes.map((opcao) => (
               <button
@@ -1023,6 +1055,10 @@ export function TransformHandles({
             // a caixa é `border-box`, então a borda já ficava por dentro.
             boxShadow: `inset 0 0 0 ${OUTLINE_PX}px ${cor.traco}`,
             transform: `translate(-50%, -50%) scale(${1 / scale})`,
+            // Camada própria, como a fileira de botões: sem isto a alça é
+            // rasterizada encolhida dentro da camada da margem e esticada de
+            // volta. Ver o comentário da fileira.
+            willChange: "transform",
             // Compensa o giro: a seta aponta para onde a alça de fato empurra.
             cursor: handleCursor(handle, item.rotation),
           }}
@@ -1043,6 +1079,104 @@ export function TransformHandles({
  * esmaecidas, que é como elas vão aparecer atrás da letra: fundo chapado
  * esconderia o que está embaixo, e o que se quer é marca-texto.
  */
+/**
+ * O retângulo da caixa, em quatro barras.
+ *
+ * Era um `outline` de `OUTLINE_PX / scale` unidades de cena, e é essa forma que
+ * borra. O gizmo mora na MARGEM, que amplia sempre por `transform`, e o
+ * WebKitGTK rasteriza camada transformada no tamanho de LAYOUT: a 1600% o traço
+ * tinha 0,17px de textura, e o compositor esticava esses 0,17 de volta para 1,5
+ * na tela. Medido na captura do mestre -- rampa de dezessete pixels, sem topo
+ * reto, onde devia haver uma linha.
+ *
+ * Aqui cada barra tem o lado FINO em pixel de layout -- 1,5px, constante -- e
+ * desfaz a ampliação só nesse eixo. Com camada própria ela é rasterizada na
+ * caixa dela, e a matriz que sobra no eixo fino é `scale × (1 / scale)`, ou
+ * seja, um: textura 1:1. O lado comprido é esticado pelo plano, e esticar cor
+ * sólida não custa nitidez nenhuma.
+ *
+ * O lado comprido fica em `100%`, que é unidade de cena e CAIXA CONSTANTE. Em
+ * pixel de tela ele mudaria a cada notch da roda, e caixa que muda marca o
+ * documento inteiro para refazer o layout -- é a medida que tirou `px()` das
+ * alças, doze mil mudanças de layout numa corrida de oito segundos. Aqui o que
+ * muda por notch é só a matriz.
+ *
+ * As barras de pé cobrem os quatro cantos, esticadas por `scaleY` -- matriz, e
+ * não caixa. Sem isso sobra um furo em cada canto, do tamanho do próprio traço.
+ */
+function TracoDaCaixa({
+  altura,
+  cor,
+  scale,
+}: {
+  /** A altura da caixa, em unidades de cena: é o que dá o estico dos cantos. */
+  altura: number;
+  cor: string;
+  scale: number;
+}) {
+  /** A espessura do traço em unidade de cena -- o quanto ele passa da caixa. */
+  const fino = OUTLINE_PX / scale;
+  /** Quanto as barras de pé crescem para alcançar os cantos. */
+  const estico = altura > 0 ? (altura + 2 * fino) / altura : 1;
+
+  const barra: CSSProperties = {
+    position: "absolute",
+    backgroundColor: cor,
+    transformOrigin: "0 0",
+    // Camada própria: é ela que faz o lado fino ser rasterizado com 1,5px em
+    // vez de com 1,5/scale. Ver o cabeçalho.
+    willChange: "transform",
+  };
+
+  return (
+    <>
+      <div
+        style={{
+          ...barra,
+          left: 0,
+          top: 0,
+          width: "100%",
+          height: OUTLINE_PX,
+          // `translateY(-100%)` é o ÚLTIMO da lista, logo o primeiro a valer: a
+          // barra sobe a própria espessura e só depois encolhe, encostando por
+          // fora da borda de cima -- onde o `outline` desenhava.
+          transform: `scaleY(${1 / scale}) translateY(-100%)`,
+        }}
+      />
+      <div
+        style={{
+          ...barra,
+          left: 0,
+          top: "100%",
+          width: "100%",
+          height: OUTLINE_PX,
+          transform: `scaleY(${1 / scale})`,
+        }}
+      />
+      <div
+        style={{
+          ...barra,
+          left: 0,
+          top: 0,
+          width: OUTLINE_PX,
+          height: "100%",
+          transform: `translateY(${-fino}px) scaleY(${estico}) scaleX(${1 / scale}) translateX(-100%)`,
+        }}
+      />
+      <div
+        style={{
+          ...barra,
+          left: "100%",
+          top: 0,
+          width: OUTLINE_PX,
+          height: "100%",
+          transform: `translateY(${-fino}px) scaleY(${estico}) scaleX(${1 / scale})`,
+        }}
+      />
+    </>
+  );
+}
+
 function Fileira({
   titulo,
   escolhida,
