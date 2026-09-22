@@ -17,7 +17,11 @@ import {
   type PontaDoMedidor,
 } from "@/components/playground/medidor-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
-import { QuadroMesaLayer } from "@/components/playground/quadro-mesa-layer";
+import {
+  FormasDaMesa,
+  QuadroMesaLayer,
+  TextosDaMesa,
+} from "@/components/playground/quadro-mesa-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
 import type { Variante } from "@/lib/vault/assets";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -222,11 +226,22 @@ export function SceneLayer({
 
       {/* O quadro no ar mostra TUDO: postit, alfinete, texto e seta são o
           conteúdo dele. Só na mesa -- o mestre tem as camadas dele, com
-          arrasto e edição, fora deste componente -- e só em quadro: um mapa no
-          ar continua sem nada disto, e `sceneForTable` já nem manda. */}
-      {variant === "mesa" && ehQuadro(scene) ? (
+          arrasto e edição, fora deste componente.
+
+          Num MAPA passam DUAS das seis: a letra solta e a forma. As outras
+          quatro continuam sendo anotação que a mesa nunca vê, e `sceneForTable`
+          nem as manda. E o que chega destas duas já veio filtrado por `naMesa`
+          -- num mapa elas nascem fechadas, e é o mestre quem abre uma a uma.
+          Duas barreiras, como no postit: aqui não se decide nada, só se
+          desenha o que chegou. */}
+      {variant !== "mesa" ? null : ehQuadro(scene) ? (
         <QuadroMesaLayer scene={scene} />
-      ) : null}
+      ) : (
+        <>
+          <FormasDaMesa scene={scene} />
+          <TextosDaMesa scene={scene} />
+        </>
+      )}
 
       {portraits && portraits.length > 0 ? (
         <PortraitLayer

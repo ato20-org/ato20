@@ -17,6 +17,13 @@ import { ehQuadro, type Scene } from "@/types/scene";
  * novo que alguém escrever amanhã vaza por esquecimento; dentro do publicador,
  * todo caminho passa por aqui por construção.
  *
+ * A LETRA SOLTA e a FORMA são o caso do meio, e o único: num mapa elas nascem
+ * fechadas como o postit, mas o mestre pode abrir uma delas para a mesa pelo
+ * olho do gizmo -- é o que deixa um rótulo ("Taverna") e um círculo em volta
+ * da emboscada valerem para quem assiste. Aqui isso vira um FILTRO em vez de
+ * um `delete`: passa o que foi aberto, some o que não foi. Num quadro nem
+ * chega a esta altura -- ele volta inteiro lá em cima.
+ *
  * O mesmo vale para os POSTITS, e por eles o vazamento seria pior: a nota de um
  * alfinete está fechada até alguém clicar nele, mas o postit existe para ter o
  * texto à vista — o que se escreve nele é a fala que o PNJ vai dar, o número
@@ -69,6 +76,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
     !scene.cameras &&
     !scene.grupos &&
     !scene.textos &&
+    !scene.formas &&
     !scene.ligacoes &&
     !scene.documentos
   )
@@ -87,8 +95,21 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // `useCorteDeCamera`.
   delete paraMesa.cameras;
   delete paraMesa.grupos;
-  // Anotação do mestre, como o postit. O quadro no ar vai abrir isto.
-  delete paraMesa.textos;
+  // A letra solta e a forma são as DUAS que o mestre abre uma a uma: num mapa
+  // elas nascem fechadas e o olho do gizmo é o que manda cada uma para a mesa.
+  // Filtradas, então, e não apagadas -- ver `naMesa` em `Texto`.
+  //
+  // O campo SOME quando nada foi aberto, e não fica como lista vazia: é a
+  // ausência que o resto do aplicativo lê como "não tem", e uma lista vazia
+  // ainda seria um campo novo no objeto publicado a cada render.
+  paraMesa.textos = scene.textos?.filter((texto) => texto.naMesa);
+  if (!paraMesa.textos?.length) delete paraMesa.textos;
+
+  paraMesa.formas = scene.formas?.filter((forma) => forma.naMesa);
+  if (!paraMesa.formas?.length) delete paraMesa.formas;
+
+  // A seta continua sendo só do quadro: ela amarra postit a postit, e os dois
+  // nunca chegam à mesa a partir de um mapa.
   delete paraMesa.ligacoes;
   delete paraMesa.documentos;
 

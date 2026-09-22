@@ -13,6 +13,8 @@ import {
   Blend,
   Bold,
   Drama,
+  Eye,
+  EyeOff,
   FlipHorizontal,
   Info,
   Italic,
@@ -282,6 +284,19 @@ type TransformHandlesProps = {
     onChange: (patch: { cor?: string | null; fundo?: string | null }) => void;
   };
   /**
+   * Presente = mostra o olho, que decide se a mesa vê este elemento.
+   *
+   * Só a letra solta e a forma passam, e só num MAPA: no quadro a folha vai
+   * inteira para a mesa, e um olho lá seria um botão que não faz nada. Num
+   * mapa elas nascem fechadas -- ver `naMesa` --, e este é o caminho para
+   * abri-las uma a uma.
+   *
+   * Um par estado/ação e não só a ação, como em `opacidade` e ao contrário dos
+   * outros botões: este controle MOSTRA um estado, e um olho que não soubesse
+   * se o elemento está no ar seria um interruptor sem lâmpada.
+   */
+  mesa?: { naMesa: boolean; onToggle: () => void };
+  /**
    * Presente = mostra o botão que abre a ficha de quem este item é.
    *
    * Só aparece em token, que é item com `personagemId`. Uma imagem de mobília
@@ -328,6 +343,7 @@ export function TransformHandles({
   fonte,
   papel,
   ajuda,
+  mesa,
 }: TransformHandlesProps) {
   const { scale, toScene, planoDaMargem } = useSceneScale();
   const startDrag = useSceneDrag();
@@ -452,6 +468,7 @@ export function TransformHandles({
       fonte ||
       papel ||
       ajuda ||
+      mesa ||
       onDelete ? (
         <div
           className="pointer-events-none absolute flex items-center"
@@ -798,6 +815,49 @@ export function TransformHandles({
                 {ajuda}
               </PopoverContent>
             </Popover>
+          ) : null}
+
+          {/* Antes do excluir pela mesma razão do resto: o destrutivo fica na
+              ponta da fileira. Aceso = a mesa vê; apagado = só o mestre. */}
+          {mesa ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={
+                      mesa.naMesa ? "Tirar da mesa" : "Mostrar para a mesa"
+                    }
+                    aria-pressed={mesa.naMesa}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      mesa.naMesa ? "bg-emerald-600 text-white" : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      mesa.onToggle();
+                    }}
+                  >
+                    {mesa.naMesa ? (
+                      <Eye
+                        style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                      />
+                    ) : (
+                      <EyeOff
+                        style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                      />
+                    )}
+                  </button>
+                }
+              />
+              <TooltipContent>
+                {mesa.naMesa
+                  ? "A mesa está vendo. Clique para esconder."
+                  : "Só você vê. Clique para mostrar na TV e nos celulares."}
+              </TooltipContent>
+            </Tooltip>
           ) : null}
 
           {onDelete ? (

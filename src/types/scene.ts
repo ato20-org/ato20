@@ -371,6 +371,21 @@ export type Texto = {
   italico?: boolean;
   sublinhado?: boolean;
   /**
+   * Está na mesa? Ausente = só o mestre vê, e é o padrão.
+   *
+   * Num MAPA a letra solta nasce fechada, e o mestre a abre uma a uma no olho
+   * do gizmo. Escrever "aqui dorme o dragão" sobre o corredor é PREPARAÇÃO, e
+   * um padrão que publicasse entregaria a preparação inteira à mesa no
+   * instante em que ela fosse escrita -- o mesmo motivo pelo qual o postit e o
+   * alfinete nunca chegam lá. A diferença é que aqui o mestre pode mudar de
+   * ideia: é o que faz a letra servir também de rótulo do mapa ("Taverna"),
+   * que é a coisa que faltava.
+   *
+   * Num QUADRO não vale nada: o quadro vai INTEIRO para a mesa, porque ele é o
+   * que o mestre escolheu mostrar. Ver `sceneForTable`.
+   */
+  naMesa?: boolean;
+  /**
    * A caixa MEDIDA na tela do mestre, em unidades de cena, sem o giro.
    * Ausente até o primeiro render: aí vale a estimativa de `caixaRetaDoTexto`.
    * Gravada porque a mesa também precisa dela para a seta encostar no lugar
@@ -392,6 +407,7 @@ export type NewTexto = Pick<Texto, "x" | "y"> &
       | "negrito"
       | "italico"
       | "sublinhado"
+      | "naMesa"
     >
   >;
 
@@ -452,6 +468,8 @@ export type Forma = {
    * (ausente) ou do inferior esquerdo ao superior direito (`"secundaria"`).
    */
   diagonal?: "secundaria";
+  /** Está na mesa? Ausente = só o mestre vê. O mesmo do texto solto. */
+  naMesa?: boolean;
 };
 
 export type NewForma = Omit<Forma, "id">;
@@ -475,6 +493,10 @@ export function semIdDaForma(forma: Forma): NewForma {
     espessura: forma.espessura,
     fundo: forma.fundo,
     diagonal: forma.diagonal,
+    // A decisão de mostrar acompanha a cópia: duplicar uma forma que a mesa
+    // está vendo e ver a cópia sumir seria o gesto desfazendo o que o mestre
+    // acabou de decidir.
+    naMesa: forma.naMesa,
   };
 }
 

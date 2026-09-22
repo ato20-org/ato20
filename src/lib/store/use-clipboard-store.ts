@@ -38,12 +38,14 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
       formas: formas.map(semIdDaForma),
       // Campo a campo como os itens: fica de fora o id -- a cópia ganha o dela
       // -- e a caixa medida, que é do render e não do conteúdo.
-      textos: textos.map(({ x, y, texto, tamanho, rotation }) => ({
+      textos: textos.map(({ x, y, texto, tamanho, rotation, naMesa }) => ({
         x,
         y,
         texto,
         tamanho,
         rotation,
+        // Como na forma: a decisão de mostrar acompanha a cópia.
+        naMesa,
       })),
       drafts: items.map(
         ({ assetId, x, y, width, height, rotation, locked, flipX, flipY, opacity }) => ({

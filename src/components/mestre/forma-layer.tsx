@@ -17,7 +17,17 @@ import { FORMA_Z } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
-import type { Forma, NewForma, Scene } from "@/types/scene";
+import { ehQuadro, type Forma, type NewForma, type Scene } from "@/types/scene";
+
+/**
+ * Quanto uma forma se apaga no palco do Mestre enquanto a mesa não a vê.
+ *
+ * Mesma linguagem das câmeras fora do ar, que também ficam apagadas ali: o que
+ * está no ar é o que se destaca. Sem esta marca o mestre teria de clicar em
+ * cada forma para descobrir quais já publicou -- e a pergunta "o que eles estão
+ * vendo?" é de relance, no meio da cena.
+ */
+const APAGADA = 0.45;
 
 /**
  * As formas geométricas do quadro no palco do MESTRE. Irmã do `TextoLayer`, e
@@ -43,11 +53,16 @@ export function FormaLayer({
   const formas = scene.formas;
   if (!formas || formas.length === 0) return null;
 
+  // Num QUADRO a folha vai inteira para a mesa, e a pergunta "a mesa vê esta
+  // forma?" não existe: nem o olho no gizmo, nem a marca de apagado.
+  const mapa = !ehQuadro(scene);
+
   return formas.map((forma) => (
-    <FormaDoQuadro
+    <FormaDaCena
       key={forma.id}
       sceneId={scene.id}
       forma={forma}
+      mapa={mapa}
       panMode={panMode}
       onFormaPointerDown={onFormaPointerDown}
     />
@@ -93,14 +108,17 @@ export function FormaFantasma({ forma }: { forma: NewForma | null }) {
 
 /** `memo` pela mesma razão do `TextoSolto`, com o mesmo requisito de handler
  * estável. */
-const FormaDoQuadro = memo(function FormaDoQuadro({
+const FormaDaCena = memo(function FormaDaCena({
   sceneId,
   forma,
+  mapa,
   panMode,
   onFormaPointerDown,
 }: {
   sceneId: string;
   forma: Forma;
+  /** Cena de mapa: a forma tem olho, e nasce fechada. Ver `naMesa`. */
+  mapa: boolean;
   panMode: boolean;
   onFormaPointerDown: (event: React.PointerEvent, forma: Forma) => void;
 }) {
@@ -147,6 +165,10 @@ const FormaDoQuadro = memo(function FormaDoQuadro({
           ...caixaDaForma(forma),
           zIndex: FORMA_Z,
           touchAction: "none",
+          // Apagada enquanto a mesa não a vê. No envelope e não na `FormaView`:
+          // é a MESMA view que a TV desenha, e mexer nela apagaria a forma
+          // também lá.
+          ...(mapa && !forma.naMesa ? { opacity: APAGADA } : {}),
         }}
         // Qual botão desceu é decisão do palco: ele trata o direito apontando o
         // menu para esta forma, como faz com a imagem.
@@ -195,6 +217,21 @@ const FormaDoQuadro = memo(function FormaDoQuadro({
               [],
               useGestoStore.getState().formas ?? [],
             )
+          }
+          // Só no mapa: no quadro a folha inteira já vai, e o olho mentiria.
+          mesa={
+            mapa
+              ? {
+                  naMesa: !!forma.naMesa,
+                  onToggle: () =>
+                    updateForma(sceneId, forma.id, {
+                      // De volta ao padrão é a AUSÊNCIA do campo, como na cor e
+                      // no fundo -- e não `false`, que seria um segundo jeito
+                      // de dizer a mesma coisa.
+                      naMesa: forma.naMesa ? undefined : true,
+                    }),
+                }
+              : undefined
           }
           onDelete={() => removeFormas(sceneId, [forma.id])}
         />

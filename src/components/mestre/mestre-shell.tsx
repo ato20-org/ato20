@@ -15,8 +15,8 @@ import { WindowLayer } from "@/components/mestre/window-layer";
 import { OnAirControl } from "@/components/mestre/on-air-control";
 import { MestreStage } from "@/components/mestre/mestre-stage";
 import {
-  FerramentasDoQuadro,
   MestreToolbar,
+  ReguaDeDesenho,
 } from "@/components/mestre/mestre-toolbar";
 import { PaletaDeComandos } from "@/components/mestre/paleta-de-comandos";
 import { PinIndex } from "@/components/mestre/pin-index";
@@ -488,21 +488,19 @@ function StageBoundary({
         </div>
       ) : null}
 
-      {/* A régua do quadro, encostada na borda esquerda e no meio da altura.
+      {/* A régua de desenho, encostada na borda esquerda e no meio da altura.
 
-          À vista, e não numa bolsa do rodapé: montar uma rede de pistas é
-          trocar de ferramenta a cada gesto, e a bolsa cobrava dois cliques por
-          troca. À esquerda porque é a borda que todo editor de desenho usa
-          para isto, porque fica longe do zoom e das câmeras da direita, e
-          porque deixa o rodapé inteiro para o que é do PALCO -- selecionar,
-          deslocar, riscar --, que vale nos dois tipos de cena.
+          À vista, e não numa bolsa do rodapé: desenhar é trocar de ferramenta a
+          cada gesto, e a bolsa cobrava dois cliques por troca. À esquerda
+          porque é a borda que todo editor de desenho usa para isto, porque fica
+          longe do zoom e das câmeras da direita, e porque deixa o rodapé
+          inteiro para o que é do PALCO -- selecionar, deslocar, riscar.
 
-          Só em quadro: no mapa as mesmas ferramentas continuam na bolsa, que é
-          o desenho certo para quem passa a sessão com a seleção na mão e crava
-          um alfinete de vez em quando. */}
-      {scene && !notaAberta && ehQuadro(scene) ? (
+          Nos DOIS tipos de cena: o que muda é o que ela carrega. Ver
+          `ReguaDeDesenho`. */}
+      {scene && !notaAberta ? (
         <div className="absolute top-1/2 left-3 -translate-y-1/2">
-          <FerramentasDoQuadro />
+          <ReguaDeDesenho scene={scene} />
         </div>
       ) : null}
 
