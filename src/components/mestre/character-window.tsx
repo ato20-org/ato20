@@ -148,9 +148,6 @@ export function CharacterBody({ personagemId }: { personagemId: string }) {
     <Ficha
       personagem={personagem}
       jogadores={jogadores}
-      outrosPersonagens={(personagens ?? []).filter(
-        (outro) => outro.id !== personagemId,
-      )}
       onChanged={recarregar}
       onRemoved={() => fecharJanela(chave)}
       onAbrirJanela={abrirJanela}
@@ -168,15 +165,12 @@ export function CharacterBody({ personagemId }: { personagemId: string }) {
 function Ficha({
   personagem,
   jogadores,
-  outrosPersonagens,
   onChanged,
   onRemoved,
   onAbrirJanela,
 }: {
   personagem: Personagem;
   jogadores: Player[];
-  /** Os demais personagens, destino possível de uma transferência de item. */
-  outrosPersonagens: Personagem[];
   onChanged: () => void;
   onRemoved: () => void;
   onAbrirJanela: (conteudo: ConteudoJanela) => void;
@@ -326,7 +320,6 @@ function Ficha({
                 justamente os que o inventário usa. */}
             <InventarioPersonagem
               personagem={personagem}
-              outros={outrosPersonagens}
               onChangedAnexos={relerAnexos}
             />
 
