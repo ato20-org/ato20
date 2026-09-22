@@ -25,6 +25,7 @@ import {
 } from "@/lib/geometry/dado";
 import type { Vec } from "@/lib/geometry/transform";
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
+import { useDadosDaMesa } from "@/hooks/use-dados-na-mesa";
 import { DADO_Z, RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
 import { comFolga } from "@/lib/geometry/viewport";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -245,7 +246,9 @@ export function DadosNoEspaco({
    */
   aoArremessar?: (jogada: Jogada) => void;
 }) {
-  const dados = useDadosStore((state) => state.dados);
+  // Os desta mesa, com os que a sucção está levando: são eles que a espiral
+  // anima. Ver `useDadosDaMesa`.
+  const dados = useDadosDaMesa();
   const naMao = useDadosStore((state) => state.naMao);
   const succao = useDadosStore((state) => state.succao);
   const arremesso = useDadosStore((state) => state.arremesso);
