@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { itemBounds } from "@/lib/geometry/bounds";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
@@ -375,6 +376,18 @@ export function TransformHandles({
   /** Pixels de tela convertidos para unidades de cena. */
   const px = (value: number) => value / scale;
 
+  /**
+   * Metade da altura da caixa ALINHADA AOS EIXOS que envolve o item já girado,
+   * em unidade de cena, contada a partir do centro.
+   *
+   * É o que mantém a fileira de botões em cima do item mesmo torto. A borda de
+   * cima do item girado aponta para o lado -- num item a 45 graus ela vira a
+   * diagonal --, e ancorar a fileira nela levava os botões a passear em volta
+   * do item a cada giro. Do centro para cima nesta medida cai sempre logo
+   * acima do ponto mais alto do item, em qualquer ângulo.
+   */
+  const meiaAlturaDaCaixaGirada = itemCenter(item).y - itemBounds(item).minY;
+
   const startResize = (event: ReactPointerEvent, handle: ResizeHandle) => {
     onGestureStart?.();
 
@@ -484,20 +497,41 @@ export function TransformHandles({
           // multiplicado, que era o ícone virando quadradinho cheio ao afastar
           // o palco. Ver o cabeçalho de `tracoDoIcone`.
           //
-          // A origem é o meio da BORDA DE BAIXO: é o ponto que tem de ficar
-          // colado acima da caixa, e escalar em volta dele mantém a fileira
-          // ancorada enquanto ela cresce para cima.
+          // A origem é o CENTRO da caixa, e não o meio da borda de cima: com o
+          // item torto, "em cima" não é a borda de cima DELE -- é a borda de
+          // cima da caixa alinhada aos eixos que o envolve. Ancorar no centro e
+          // subir `meiaAlturaDaCaixaGirada` deixa a fileira acima do item em
+          // qualquer ângulo, e o contra-giro a deixa em pé: botão de excluir
+          // não pode ficar de cabeça para baixo porque o token está deitado.
           style={{
             left: "50%",
-            top: 0,
+            top: "50%",
             gap: 4,
             // Acima das zonas de giro, que são irmãs e vêm depois no DOM: numa
             // caixa estreita -- um texto de uma palavra -- a fileira transborda
             // para fora dos cantos, e a zona do canto de cima engolia o clique
             // do primeiro botão. Aqui o botão é o alvo explícito e ganha.
             zIndex: 1,
-            transform: `translate(-50%, calc(-100% - ${px(ROTATE_OFFSET_PX - HANDLE_PX * 2)}px)) scale(${1 / scale})`,
-            transformOrigin: "50% 100%",
+            // A lista é lida da direita para a esquerda pelo ponto:
+            //
+            // `translate(-50%, -100%)` encosta o MEIO DA BORDA DE BAIXO da
+            // fileira na origem -- é ele que faz agora o papel do
+            // `transformOrigin: 50% 100%` de antes, que aqui não serve porque a
+            // origem precisa ser o centro da caixa para o giro rodar em volta
+            // dele. `scale(1 / scale)` desfaz a ampliação do palco, em volta
+            // desse mesmo ponto. `translate(0, -altura)` sobe a fileira até
+            // acima do item.
+            //
+            // E `rotate(-giro)` por último na leitura, primeiro na lista, faz
+            // as duas coisas de uma vez: deixa a fileira em pé, e faz o
+            // `translate` de cima andar nos eixos da TELA em vez dos eixos do
+            // item torto -- é o que mantém "subir" sendo subir com o item
+            // deitado.
+            transform:
+              `rotate(${-item.rotation}deg) ` +
+              `translate(0, ${-(meiaAlturaDaCaixaGirada + px(ROTATE_OFFSET_PX - HANDLE_PX * 2))}px) ` +
+              `scale(${1 / scale}) translate(-50%, -100%)`,
+            transformOrigin: "0 0",
             // CAMADA PRÓPRIA, e é o que mantém o botão nítido ampliado.
             //
             // A margem amplia por `transform`, e o WebKitGTK rasteriza uma
