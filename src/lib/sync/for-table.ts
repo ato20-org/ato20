@@ -49,7 +49,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // O quadro vai INTEIRO: ele é o que o mestre quer mostrar -- a rede de
   // PNJs, a linha do tempo --, e postit, texto e seta são o conteúdo dele, não
   // anotação sobre ele. Cena de mapa continua filtrando abaixo.
-  if (ehQuadro(scene)) return scene;
+  if (ehQuadro(scene)) return semCamera(scene);
 
   // Cena sem nada do mestre devolve a MESMA referência, e não uma cópia.
   //
@@ -91,6 +91,37 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   delete paraMesa.textos;
   delete paraMesa.ligacoes;
   delete paraMesa.documentos;
+
+  return paraMesa;
+}
+
+/**
+ * O quadro sem recorte de câmera: a mesa vê a folha inteira.
+ *
+ * O quadro não tem mais câmera (ver `lerCena` em `camera-actions`), mas um
+ * quadro criado antes disso tem o recorte gravado no arquivo -- e ele
+ * continuaria mandando na TV, sem nenhum controle no Mestre para mudá-lo. O
+ * campo sai na saída em vez de ser apagado do arquivo: apagar reescreveria a
+ * cena de quem só abriu o aplicativo, e o dado não atrapalha onde está.
+ *
+ * O resultado é MEMORIZADO por cena, e não é detalhe: o `usePublisher` decide
+ * publicar comparando a identidade da cena, e uma cópia nova por render faria
+ * o Mestre publicar sessenta vezes por segundo com ninguém mexendo em nada.
+ */
+const quadrosSemCamera = new WeakMap<Scene, Scene>();
+
+function semCamera(scene: Scene): Scene {
+  if (!scene.camera && !scene.cameras && !scene.cameraNoArId) return scene;
+
+  const guardado = quadrosSemCamera.get(scene);
+  if (guardado) return guardado;
+
+  const paraMesa = { ...scene };
+  delete paraMesa.camera;
+  delete paraMesa.cameras;
+  delete paraMesa.cameraNoArId;
+
+  quadrosSemCamera.set(scene, paraMesa);
 
   return paraMesa;
 }

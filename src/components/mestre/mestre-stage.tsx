@@ -399,13 +399,21 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     (state) => state.garantirCameraInicial,
   );
   const soltarTrava = useCameraLockStore((state) => state.soltar);
-  const selecionada = scene.cameras?.find(
-    (camera) => camera.id === selecionadaId,
-  );
+  // No quadro, nenhuma: some a moldura, somem os fantasmas e some a marca dos
+  // itens seguidos. O `selecionadaId` continua apontando para a câmera do
+  // MAPA de onde o mestre veio, e é o certo -- voltar para lá reencontra a
+  // mesma câmera aberta.
+  const selecionada = ehQuadro(scene)
+    ? undefined
+    : scene.cameras?.find((camera) => camera.id === selecionadaId);
 
   // Cena nova começa sem câmera; a selecionada, se houver, tem de existir nela.
   // Efeito e não render: cria câmera no store, e isso é escrita.
+  //
+  // O quadro sai fora já aqui, e a própria função também o recusa: ele não tem
+  // câmera nenhuma. Ver `lerCena` em `camera-actions`.
   useEffect(() => {
+    if (ehQuadro(scene)) return;
     garantirCameraInicial(scene);
   }, [scene, garantirCameraInicial]);
 
@@ -2627,7 +2635,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       <FormaFantasma forma={rascunhoDaForma} />
       <AlignmentGuides guides={guides} />
 
-      {fantasmasVisiveis && scene.cameras ? (
+      {fantasmasVisiveis && scene.cameras && !ehQuadro(scene) ? (
         <CamerasFantasma
           scene={scene}
           selecionadaId={selecionadaId}

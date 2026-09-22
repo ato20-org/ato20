@@ -508,7 +508,11 @@ function StageBoundary({
 
       {scene && !notaAberta ? (
         <div className="absolute right-3 bottom-3 flex items-center gap-2">
-          <CamerasSalvas scene={scene} />
+          {/* Os chips de câmera só no MAPA: o quadro vai inteiro para a mesa,
+              e enquadrar um pedaço dele é o contrário do que ele serve para
+              fazer. Os controles de zoom ficam nos dois -- eles são do palco
+              do mestre, e não da mesa. Ver `lerCena` em `camera-actions`. */}
+          {ehQuadro(scene) ? null : <CamerasSalvas scene={scene} />}
           <ViewportControls />
         </div>
       ) : null}

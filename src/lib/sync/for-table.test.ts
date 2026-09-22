@@ -27,6 +27,36 @@ describe("sceneForTable", () => {
     expect(sceneForTable(scene)).toBe(scene);
   });
 
+  it("o quadro vai sem recorte de câmera: a mesa vê a folha inteira", () => {
+    const scene = createScene("Linha do tempo", "quadro");
+    scene.camera = { x: 0, y: 0, width: 960, height: 540 };
+    scene.cameras = [
+      { id: "k", nome: "Câmera 1", viewport: scene.camera },
+    ];
+    scene.cameraNoArId = "k";
+
+    const mesa = sceneForTable(scene)!;
+    expect(mesa.camera).toBeUndefined();
+    expect(mesa.cameras).toBeUndefined();
+    expect(mesa.cameraNoArId).toBeUndefined();
+    // O conteúdo do quadro continua inteiro.
+    expect(mesa.name).toBe(scene.name);
+  });
+
+  it("o quadro sem câmera nenhuma devolve a MESMA referência", () => {
+    const scene = createScene("Rede", "quadro");
+    expect(sceneForTable(scene)).toBe(scene);
+  });
+
+  it("o quadro com câmera antiga devolve sempre a mesma cópia", () => {
+    const scene = createScene("Rede", "quadro");
+    scene.cameraNoArId = "k";
+
+    // Identidade estável: o publicador compara por referência, e uma cópia
+    // nova por render publicaria sessenta vezes por segundo.
+    expect(sceneForTable(scene)).toBe(sceneForTable(scene));
+  });
+
   it("deixa o quadro passar inteiro: postit, texto e seta são o conteúdo dele", () => {
     const scene = createScene("Rede de PNJs", "quadro");
     scene.postits = [
