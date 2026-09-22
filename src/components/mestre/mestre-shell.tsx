@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useCharacters } from "@/hooks/use-characters";
 import { useEscopoDosAssets } from "@/hooks/use-escopo-dos-assets";
-import { useFilaDeRetratos } from "@/hooks/use-fila-de-retratos";
+import { useUnioesDeRetratos } from "@/hooks/use-unioes-de-retratos";
 import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { useMestreShortcuts } from "@/hooks/use-mestre-shortcuts";
 import { limitesDoConteudo } from "@/lib/geometry/limites";
@@ -181,9 +181,10 @@ export function MestreShell() {
     rolagens,
   });
 
-  // A fila arruma o elenco da cena EM EDIÇÃO, que é a que o mestre vê no palco.
-  // A publicação acima usa a que está no ar. Ver `useFilaDeRetratos`.
-  useFilaDeRetratos(editingScene);
+  // As uniões arrumam o elenco da cena EM EDIÇÃO, que é a que o mestre vê no
+  // palco.
+  // A publicação acima usa a que está no ar. Ver `useUnioesDeRetratos`.
+  useUnioesDeRetratos(editingScene);
 
   // Passagem única: marca o dono dos arquivos que entraram antes de o escopo
   // existir, senão eles ficariam na biblioteca para sempre.

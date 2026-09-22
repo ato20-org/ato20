@@ -912,18 +912,6 @@ export type Portrait = {
   visible: boolean;
   /** Virar o retrato para o lado da tela em que ele está. */
   flipX?: boolean;
-  /**
-   * Solto da fila automatica, quando ela esta ligada.
-   *
-   * Excecao e nao regra: o interruptor da fila e um so, no painel, e vale para
-   * todos. Este campo e o que permite tirar UM da fila sem desligar o modo --
-   * o vilao no canto enquanto o grupo se enfileira embaixo.
-   *
-   * Ausente na maioria, e por isso e o campo que existe: `naFila: true` em
-   * todos os registros diria a mesma coisa ocupando mais espaco, e obrigaria a
-   * preencher o padrao a cada retrato novo.
-   */
-  foraDaFila?: boolean;
 };
 
 /**
