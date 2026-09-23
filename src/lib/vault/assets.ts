@@ -8,7 +8,12 @@ import {
   type ProgressoImportacao,
 } from "@/lib/vault/aviso-de-importacao";
 import { call, daemonAddr, isDesktop } from "@/lib/vault/bridge";
-import type { AssetKind, AssetMeta, EscopoAsset } from "@/types/scene";
+import type {
+  AssetKind,
+  AssetMeta,
+  EscopoAsset,
+  TipoDeSom,
+} from "@/types/scene";
 
 /**
  * Endereço de um arquivo do acervo.
@@ -80,6 +85,31 @@ export function deleteAsset(id: string): Promise<void> {
  */
 export function setAssetPeaks(id: string, peaks: number[]): Promise<void> {
   return call("asset_set_peaks", { id, peaks });
+}
+
+/**
+ * Define como um som toca. `undefined` tira o tipo.
+ *
+ * O Rust recusa em silêncio um id que não existe, um arquivo que não é som e um
+ * valor fora dos três: é organização de acervo, e falhar aqui custaria mais do
+ * que ela vale.
+ */
+export function setAssetTipoDeSom(
+  id: string,
+  tipo: TipoDeSom | undefined,
+): Promise<void> {
+  return call("asset_set_tipo_de_som", { id, tipo: tipo ?? null });
+}
+
+/**
+ * Troca o nome de exibição de um arquivo.
+ *
+ * Só metadado: o binário no disco é nomeado pelo id, e o tipo foi medido na
+ * importação. O nome não precisa manter extensão — o Rust recusa em silêncio
+ * um nome vazio ou um id que não existe.
+ */
+export function renameAsset(id: string, name: string): Promise<void> {
+  return call("asset_rename", { id, name });
 }
 
 /** Move para uma pasta. `undefined` devolve à raiz. */

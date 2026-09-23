@@ -8,16 +8,37 @@ import {
   invalidarAcervo,
   useAssetsStore,
 } from "@/lib/store/use-assets-store";
-import { deleteAsset, importAssets, setAssetFolder } from "@/lib/vault/assets";
-import type { AssetKind, AssetMeta } from "@/types/scene";
+import {
+  deleteAsset,
+  importAssets,
+  renameAsset,
+  setAssetFolder,
+  setAssetTipoDeSom,
+} from "@/lib/vault/assets";
+import type { AssetKind, AssetMeta, TipoDeSom } from "@/types/scene";
 
 type AssetListApi = {
   assets: AssetMeta[];
-  /** Abre o seletor nativo e copia o que for escolhido para a campanha. */
-  importar: () => Promise<void>;
+  /**
+   * Abre o seletor nativo e copia o que for escolhido para a campanha.
+   *
+   * `tipoDeSom` marca tudo o que entrar nesta leva — é o botão de importar do
+   * painel de som, que pergunta antes de abrir o seletor. Marcado DEPOIS da
+   * cópia, um a um: a importação também serve o arrasto de pasta com imagem e
+   * som misturados, e levar o campo por ela inteira o poria em todo lugar por
+   * causa de um tipo que só o áudio tem.
+   */
+  importar: (tipoDeSom?: TipoDeSom) => Promise<void>;
   /** Há importação a caminho. O botão mostra o giro e recusa segundo clique. */
   importando: boolean;
   remove: (assetId: string) => Promise<void>;
+  /** Troca o nome de exibição. Nome vazio não muda nada. */
+  rename: (assetId: string, name: string) => Promise<void>;
+  /** Define como um som toca. `undefined` tira o tipo. */
+  definirTipoDeSom: (
+    assetId: string,
+    tipo: TipoDeSom | undefined,
+  ) => Promise<void>;
   /** Move para uma pasta. `undefined` devolve à raiz. */
   move: (assetId: string, folderId: string | undefined) => Promise<void>;
   /** Recarrega a lista. Usado por quem mexe em pasta, que muda os arquivos. */
@@ -65,32 +86,71 @@ export function useAssetList(kind: AssetKind): AssetListApi {
 
   const [importando, setImportando] = useState(false);
 
-  const importar = useCallback(async () => {
-    setImportando(true);
+  const importar = useCallback(
+    async (tipoDeSom?: TipoDeSom) => {
+      setImportando(true);
 
-    try {
-      // Cada arquivo aceito acorda a lista na hora: escolher três imagens
-      // mostra a primeira enquanto a segunda ainda copia.
-      const resultado = await importAssets(kind, undefined, () =>
-        invalidarAcervo(kind),
-      );
+      try {
+        // Cada arquivo aceito acorda a lista na hora: escolher três imagens
+        // mostra a primeira enquanto a segunda ainda copia.
+        const resultado = await importAssets(kind, undefined, () =>
+          invalidarAcervo(kind),
+        );
 
-      // `null` é o diálogo fechado sem escolher: não muda nada, e não avisa.
-      if (!resultado) return;
+        // `null` é o diálogo fechado sem escolher: não muda nada, e não avisa.
+        if (!resultado) return;
 
-      // Avisa o que foi recusado e acorda as listas -- o mesmo que o arquivo
-      // solto do sistema faz, e por isso mora fora daqui.
-      absorverImportacao(resultado);
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
-    } finally {
-      setImportando(false);
-    }
-  }, [kind]);
+        // Avisa o que foi recusado e acorda as listas -- o mesmo que o arquivo
+        // solto do sistema faz, e por isso mora fora daqui.
+        const aceitos = absorverImportacao(resultado);
+
+        if (!tipoDeSom || aceitos.length === 0) return;
+
+        // Em série e não em paralelo: cada chamada reescreve o `assets.json`
+        // inteiro, e dez gravações concorrentes sobre o mesmo arquivo é como se
+        // perde nove delas.
+        for (const asset of aceitos) {
+          if (asset.kind === "audio") {
+            await setAssetTipoDeSom(asset.id, tipoDeSom);
+          }
+        }
+
+        recarregar(kind);
+      } catch (cause) {
+        toast.error(
+          cause instanceof Error ? cause.message : "Falha ao importar.",
+        );
+      } finally {
+        setImportando(false);
+      }
+    },
+    [kind, recarregar],
+  );
 
   const remove = useCallback(
     async (assetId: string) => {
       await deleteAsset(assetId);
+      refresh();
+    },
+    [refresh],
+  );
+
+  const rename = useCallback(
+    async (assetId: string, name: string) => {
+      const limpo = name.trim();
+      // Sem ida ao disco por um nome vazio: o Rust já o recusaria, e o
+      // `refresh` que viria depois piscaria a lista por nada.
+      if (!limpo) return;
+
+      await renameAsset(assetId, limpo);
+      refresh();
+    },
+    [refresh],
+  );
+
+  const definirTipoDeSom = useCallback(
+    async (assetId: string, tipo: TipoDeSom | undefined) => {
+      await setAssetTipoDeSom(assetId, tipo);
       refresh();
     },
     [refresh],
@@ -109,6 +169,8 @@ export function useAssetList(kind: AssetKind): AssetListApi {
     importar,
     importando,
     remove,
+    rename,
+    definirTipoDeSom,
     move,
     refresh,
   };
