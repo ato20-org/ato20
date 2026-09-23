@@ -101,6 +101,7 @@ import type {
   Personagem,
 } from "@/types/character";
 import { doJogador } from "@/types/character";
+import { AparenciasPersonagem } from "@/components/mestre/aparencias-personagem";
 
 const ICONE: Record<AttachmentKind, typeof File> = {
   image: FileImage,
@@ -296,6 +297,15 @@ function Ficha({
                 onAbrirImagem={abrirImagem}
               />
             </SecaoFicha>
+
+            {/* Logo abaixo dos campos, e não numa coluna própria: a aparência é
+                o que aqueles campos mostram, e a distância entre "escolhi
+                Ferido" e "troquei a miniatura" é a distância entre os dois
+                gestos que essa troca sempre pede. */}
+            <AparenciasPersonagem
+              personagem={personagem}
+              onChanged={onChanged}
+            />
 
             <Files
               personagemId={personagem.id}

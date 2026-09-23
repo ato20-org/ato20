@@ -61,12 +61,64 @@ pub struct Personagem {
     /// A miniatura, por id do ACERVO. Mesma razao do retrato.
     ///
     /// Uma, e nao uma lista: o campo responde "qual e a peca deste personagem
-    /// no mapa", e essa pergunta tem uma resposta. Havia uma lista aqui antes,
-    /// e ela pedia ao mestre uma escolha que ele nao tinha por que fazer.
+    /// no mapa AGORA", e essa pergunta tem uma resposta. Houve uma lista aqui,
+    /// removida porque pedia ao mestre uma escolha que ele nao tinha por que
+    /// fazer -- eram miniaturas sem nome, e escolher entre elas nao queria
+    /// dizer nada.
+    ///
+    /// As `aparencias` sao a razao que faltava: la a escolha tem nome
+    /// ("Ferido", "Lobo") e um sentido em cena. Mas elas nao moram aqui --
+    /// este campo continua guardando UMA, a da aparencia ativa.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub miniatura: Option<String>,
+    /// As aparencias deste personagem, a primeira sendo sempre a Padrao.
+    ///
+    /// A lista guarda as ALTERNATIVAS; quem manda continua sendo o trio de
+    /// cima, que E a aparencia ativa. E a razao de nada mais no aplicativo
+    /// precisar saber que aparencia existe: o palco, a TV e o telefone leem
+    /// `retrato` e `miniatura` como sempre leram, e a troca e uma troca de
+    /// lugar entre a linha que sai e o topo.
+    ///
+    /// Vazia no disco de uma campanha antiga, e e o gancho da migracao: quem
+    /// le sem lista ganha uma Padrao montada do trio de cima. Ver `normalizar`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aparencias: Vec<Aparencia>,
+    /// Qual linha da lista esta no topo agora.
+    ///
+    /// Guardado, e nao deduzido comparando o trio com cada linha: duas
+    /// aparencias com as mesmas imagens existem -- "Padrao" e "Disfarcado" com
+    /// o mesmo retrato e miniaturas diferentes -- e a comparacao escolheria a
+    /// errada na metade das vezes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aparencia_ativa: Option<String>,
     #[serde(rename = "criadoEm")]
     pub criado_em: i64,
+}
+
+/// O id da aparencia que todo personagem tem.
+///
+/// Fixo, e nao sorteado: a migracao precisa chegar ao mesmo id em toda maquina
+/// que abrir a mesma campanha antiga, senao o zip que viaja traria uma Padrao
+/// com id diferente do que a outra ponta gravou.
+pub const APARENCIA_PADRAO: &str = "padrao";
+
+/// Uma aparencia: um nome e o que ele troca na cara do personagem.
+///
+/// Troca o RETRATO e a MINIATURA, e nada mais. Nao troca o nome, nao troca a
+/// ficha: o personagem continua sendo o mesmo, e o que muda e como ele se
+/// mostra na mesa. Uma aparencia que trocasse o nome seria outro personagem, e
+/// o token no mapa perderia a amarra com a ficha ao trocar.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Aparencia {
+    pub id: String,
+    pub nome: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrato: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrato_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub miniatura: Option<String>,
 }
 
 /// Quem pos o anexo ali.
@@ -139,7 +191,50 @@ pub fn anexos_dir(vault: &Vault, id: &str, autor: Autor) -> PathBuf {
 }
 
 pub fn load(vault: &Vault) -> AppResult<Vec<Personagem>> {
-    Ok(read_json(&index_path(vault))?.unwrap_or_default())
+    let mut personagens: Vec<Personagem> = read_json(&index_path(vault))?.unwrap_or_default();
+    for personagem in personagens.iter_mut() {
+        normalizar(personagem);
+    }
+
+    Ok(personagens)
+}
+
+/// Da ao personagem a lista de aparencias que ele talvez nao tenha no disco.
+///
+/// Na LEITURA e nao numa migracao que reescreve o arquivo: campanha antiga e
+/// aberta para ser lida, e gravar por causa de uma leitura tornaria abrir uma
+/// campanha em modo consulta um evento que suja o disco. Toda escrita daqui
+/// passa por `load` antes de `save`, entao a forma nova chega ao arquivo na
+/// primeira vez que alguem mexer de verdade.
+fn normalizar(personagem: &mut Personagem) {
+    if personagem.aparencias.is_empty() {
+        personagem.aparencias.push(Aparencia {
+            id: APARENCIA_PADRAO.to_string(),
+            nome: "Padrão".to_string(),
+            retrato: personagem.retrato.clone(),
+            retrato_url: personagem.retrato_url.clone(),
+            miniatura: personagem.miniatura.clone(),
+        });
+    }
+
+    // Ativa que nao existe na lista cai na primeira, que e sempre a Padrao.
+    // Acontece com o arquivo editado a mao e com a aparencia removida por uma
+    // versao mais nova do aplicativo -- em ambos, ficar sem ativa deixaria a
+    // escrita seguinte gravar so no topo e perder a linha.
+    let vale = personagem
+        .aparencia_ativa
+        .as_deref()
+        .is_some_and(|ativa| personagem.aparencias.iter().any(|a| a.id == ativa));
+
+    if !vale {
+        personagem.aparencia_ativa = personagem.aparencias.first().map(|a| a.id.clone());
+    }
+}
+
+/// A linha que esta no topo, para escrever nela.
+fn ativa_mut(personagem: &mut Personagem) -> Option<&mut Aparencia> {
+    let ativa = personagem.aparencia_ativa.clone()?;
+    personagem.aparencias.iter_mut().find(|a| a.id == ativa)
 }
 
 fn save(vault: &Vault, personagens: &[Personagem]) -> AppResult<()> {
@@ -176,6 +271,18 @@ pub fn create(vault: &Vault, nome: &str) -> AppResult<Personagem> {
         retrato: None,
         retrato_url: None,
         miniatura: None,
+        // Ja com a Padrao, em vez de deixar `normalizar` formar depois: o
+        // personagem recem-criado e devolvido a tela ANTES de passar por um
+        // `load`, e sem isto a ficha abriria com a lista de aparencias vazia
+        // ate a primeira releitura.
+        aparencias: vec![Aparencia {
+            id: APARENCIA_PADRAO.to_string(),
+            nome: "Padrão".to_string(),
+            retrato: None,
+            retrato_url: None,
+            miniatura: None,
+        }],
+        aparencia_ativa: Some(APARENCIA_PADRAO.to_string()),
         criado_em: now_ms(),
     };
 
@@ -240,9 +347,201 @@ pub fn set_campo(vault: &Vault, id: &str, campo: Campo, valor: Option<&str>) -> 
             Campo::Miniatura => personagem.miniatura = valor.clone(),
             Campo::RetratoUrl => personagem.retrato_url = valor.clone(),
         }
+
+        // A mesma escrita desce para a aparencia ativa, porque o trio de cima E
+        // ela. Aqui dentro e nao em quem chama: este e o unico ponto de escrita
+        // desses campos, e deixar a copia por conta do chamador seria contar
+        // com todo chamador futuro se lembrar. Esquecer uma vez faz a troca
+        // seguinte ressuscitar a imagem antiga por cima da que o mestre acabou
+        // de anexar.
+        //
+        // A ficha fica de fora de proposito: a aparencia troca a CARA, e a
+        // ficha e o documento da pessoa -- nao muda porque ele se disfarcou.
+        if let Some(ativa) = ativa_mut(personagem) {
+            match campo {
+                Campo::Ficha => {}
+                Campo::Retrato => ativa.retrato = valor.clone(),
+                Campo::Miniatura => ativa.miniatura = valor.clone(),
+                Campo::RetratoUrl => ativa.retrato_url = valor.clone(),
+            }
+        }
     }
 
     save(vault, &personagens)
+}
+
+/// O personagem, ou o erro que diz que ele nao existe.
+///
+/// Devolve o INDICE e nao a referencia: quem chama precisa mexer no personagem
+/// e na lista inteira depois, e o emprestimo mutavel de um item preso ate o
+/// `save` obrigaria cada funcao a um bloco a mais so para solta-lo.
+fn indice(personagens: &[Personagem], id: &str) -> AppResult<usize> {
+    personagens
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| AppError::Malformed {
+            file: "personagens.json".into(),
+            cause: format!("personagem {id} nao existe"),
+        })
+}
+
+fn sem_aparencia(id: &str, aparencia_id: &str) -> AppError {
+    AppError::Malformed {
+        file: "personagens.json".into(),
+        cause: format!("personagem {id} nao tem a aparencia {aparencia_id}"),
+    }
+}
+
+/// Cria uma aparencia, partindo da que esta no ar.
+///
+/// COPIA o trio da ativa em vez de nascer vazia, e a razao e o gesto comum:
+/// quem cria "Ferido" quer o mesmo rosto com outra miniatura, e uma linha vazia
+/// obrigaria a reanexar o retrato que ja estava certo. Quem quiser a linha
+/// limpa limpa os campos, que e um clique -- reanexar um arquivo nao e.
+pub fn criar_aparencia(vault: &Vault, id: &str, nome: &str) -> AppResult<Aparencia> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    let nome = nome.trim();
+    let aparencia = Aparencia {
+        id: uuid::Uuid::new_v4().to_string(),
+        // Mesma razao do personagem sem nome: uma linha em branco na lista e
+        // impossivel de clicar com confianca.
+        nome: if nome.is_empty() {
+            "Sem nome".to_string()
+        } else {
+            nome.to_string()
+        },
+        retrato: personagem.retrato.clone(),
+        retrato_url: personagem.retrato_url.clone(),
+        miniatura: personagem.miniatura.clone(),
+    };
+
+    personagem.aparencias.push(aparencia.clone());
+    save(vault, &personagens)?;
+
+    Ok(aparencia)
+}
+
+/// Renomeia uma aparencia. Nome vazio nao troca nada, como em `rename`.
+pub fn renomear_aparencia(
+    vault: &Vault,
+    id: &str,
+    aparencia_id: &str,
+    nome: &str,
+) -> AppResult<()> {
+    let nome = nome.trim();
+    if nome.is_empty() {
+        return Ok(());
+    }
+
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+
+    let aparencia = personagens[alvo]
+        .aparencias
+        .iter_mut()
+        .find(|a| a.id == aparencia_id)
+        .ok_or_else(|| sem_aparencia(id, aparencia_id))?;
+
+    aparencia.nome = nome.to_string();
+
+    save(vault, &personagens)
+}
+
+/// Tira uma aparencia da lista.
+///
+/// A PADRAO nao sai: ela e o estado de quem nunca criou aparencia nenhuma, e
+/// uma lista sem ela deixaria o personagem sem para onde voltar depois de
+/// remover a que estava no ar.
+///
+/// Remover a ATIVA cai na Padrao, e o trio de cima vem junto -- dai devolver o
+/// personagem inteiro: a tela precisa do retrato e da miniatura novos, e uma
+/// segunda leitura para descobri-los deixaria a lista piscando a cara antiga.
+pub fn remover_aparencia(vault: &Vault, id: &str, aparencia_id: &str) -> AppResult<Personagem> {
+    if aparencia_id == APARENCIA_PADRAO {
+        return Err(AppError::Malformed {
+            file: "personagens.json".into(),
+            cause: "a aparencia padrao nao pode ser removida".into(),
+        });
+    }
+
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    if !personagem.aparencias.iter().any(|a| a.id == aparencia_id) {
+        return Err(sem_aparencia(id, aparencia_id));
+    }
+
+    personagem.aparencias.retain(|a| a.id != aparencia_id);
+
+    // `normalizar` so roda na leitura, e quem ficou sem ativa precisa de uma
+    // agora: e este mesmo `personagem` que volta para a tela.
+    if personagem.aparencia_ativa.as_deref() == Some(aparencia_id) {
+        personagem.aparencia_ativa = Some(APARENCIA_PADRAO.to_string());
+        aplicar_ativa(personagem);
+    }
+
+    let saida = personagem.clone();
+    save(vault, &personagens)?;
+
+    Ok(saida)
+}
+
+/// Poe uma aparencia no ar.
+///
+/// Devolve o personagem ja trocado porque quem chama tem duas coisas a fazer
+/// com o resultado: desenhar a ficha nova e reescrever os tokens do mapa. As
+/// duas precisam da miniatura nova, e pedi-la numa segunda leitura abriria uma
+/// janela em que a lista ja mudou e o mapa ainda nao.
+pub fn ativar_aparencia(vault: &Vault, id: &str, aparencia_id: &str) -> AppResult<Personagem> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    if !personagem.aparencias.iter().any(|a| a.id == aparencia_id) {
+        return Err(sem_aparencia(id, aparencia_id));
+    }
+
+    // Guarda o topo na linha que SAI antes de trocar. `set_campo` ja mantem as
+    // duas iguais, e por isso isto quase nunca muda alguma coisa -- fica pelo
+    // dia em que outro caminho de escrita existir: sem este passo, o que ele
+    // gravou no topo sumiria na primeira troca, e o sintoma apareceria longe
+    // da causa.
+    let saindo = (
+        personagem.retrato.clone(),
+        personagem.retrato_url.clone(),
+        personagem.miniatura.clone(),
+    );
+    if let Some(linha) = ativa_mut(personagem) {
+        linha.retrato = saindo.0;
+        linha.retrato_url = saindo.1;
+        linha.miniatura = saindo.2;
+    }
+
+    personagem.aparencia_ativa = Some(aparencia_id.to_string());
+    aplicar_ativa(personagem);
+
+    let saida = personagem.clone();
+    save(vault, &personagens)?;
+
+    Ok(saida)
+}
+
+/// Sobe o trio da aparencia ativa para o topo do personagem.
+fn aplicar_ativa(personagem: &mut Personagem) {
+    let Some(ativa) = personagem.aparencia_ativa.clone() else {
+        return;
+    };
+    let Some(linha) = personagem.aparencias.iter().find(|a| a.id == ativa) else {
+        return;
+    };
+
+    personagem.retrato = linha.retrato.clone();
+    personagem.retrato_url = linha.retrato_url.clone();
+    personagem.miniatura = linha.miniatura.clone();
 }
 
 /// Remove o personagem e a pasta dele.
@@ -614,6 +913,107 @@ mod tests {
         // resolve, e a tela mostraria imagem quebrada em vez de campo vazio.
         set_campo(&vault, &p.id, Campo::Miniatura, Some("   ")).unwrap();
         assert!(load(&vault).unwrap()[0].miniatura.is_none());
+    }
+
+    /// Campanha gravada antes das aparencias continua abrindo, e ganha a
+    /// Padrao montada do que ja estava no topo.
+    ///
+    /// Se este teste quebrar, abrir uma campanha antiga passou a mostrar
+    /// personagem sem aparencia nenhuma -- e a primeira escrita gravaria essa
+    /// lista vazia por cima do retrato que estava la.
+    #[test]
+    fn ficha_antiga_ganha_padrao() {
+        let (_tmp, vault) = vault();
+
+        // O arquivo como era: sem `aparencias` e sem `aparenciaAtiva`.
+        let antigo = r#"[{"id":"p1","nome":"Edgar","retrato":"a1","miniatura":"a2","criadoEm":1}]"#;
+        std::fs::write(index_path(&vault), antigo).unwrap();
+
+        let lido = &load(&vault).unwrap()[0];
+
+        assert_eq!(lido.aparencias.len(), 1);
+        assert_eq!(lido.aparencias[0].id, APARENCIA_PADRAO);
+        assert_eq!(lido.aparencias[0].retrato.as_deref(), Some("a1"));
+        assert_eq!(lido.aparencias[0].miniatura.as_deref(), Some("a2"));
+        assert_eq!(lido.aparencia_ativa.as_deref(), Some(APARENCIA_PADRAO));
+        // O topo nao se mexeu: quem le `retrato` continua lendo o mesmo.
+        assert_eq!(lido.retrato.as_deref(), Some("a1"));
+    }
+
+    /// Ir e voltar entre duas aparencias preserva as imagens de cada uma.
+    ///
+    /// E a afirmacao central do sistema: a aparencia guarda o que era dela, e o
+    /// trio de cima e so quem esta no ar. Se quebrar, trocar de aparencia
+    /// passou a ser uma via de mao unica que apaga a anterior.
+    #[test]
+    fn troca_de_ida_e_volta_preserva_as_duas() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        set_campo(&vault, &p.id, Campo::Retrato, Some("rosto")).unwrap();
+        set_campo(&vault, &p.id, Campo::Miniatura, Some("peca")).unwrap();
+
+        let ferido = criar_aparencia(&vault, &p.id, "Ferido").unwrap();
+        // Nasce copiando a que estava no ar.
+        assert_eq!(ferido.retrato.as_deref(), Some("rosto"));
+
+        ativar_aparencia(&vault, &p.id, &ferido.id).unwrap();
+        set_campo(&vault, &p.id, Campo::Miniatura, Some("peca-ferida")).unwrap();
+
+        let no_ar = &load(&vault).unwrap()[0];
+        assert_eq!(no_ar.miniatura.as_deref(), Some("peca-ferida"));
+        assert_eq!(no_ar.retrato.as_deref(), Some("rosto"));
+
+        // De volta a Padrao: a miniatura de antes esta inteira.
+        let voltou = ativar_aparencia(&vault, &p.id, APARENCIA_PADRAO).unwrap();
+        assert_eq!(voltou.miniatura.as_deref(), Some("peca"));
+
+        // E a Ferida nao perdeu a dela.
+        let lido = &load(&vault).unwrap()[0];
+        let guardada = lido
+            .aparencias
+            .iter()
+            .find(|a| a.id == ferido.id)
+            .expect("a aparencia continua na lista");
+        assert_eq!(guardada.miniatura.as_deref(), Some("peca-ferida"));
+    }
+
+    /// `set_campo` escreve no topo E na linha ativa.
+    ///
+    /// E o que impede a troca seguinte de ressuscitar a imagem antiga por cima
+    /// da que o mestre acabou de anexar.
+    #[test]
+    fn set_campo_desce_para_a_aparencia_ativa() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        set_campo(&vault, &p.id, Campo::Retrato, Some("rosto")).unwrap();
+
+        let lido = &load(&vault).unwrap()[0];
+        assert_eq!(lido.aparencias[0].retrato.as_deref(), Some("rosto"));
+
+        // A ficha NAO desce: ela e o documento da pessoa, nao a cara dela.
+        set_campo(&vault, &p.id, Campo::Ficha, Some("ficha.pdf")).unwrap();
+        assert!(load(&vault).unwrap()[0].aparencias[0].retrato.as_deref() == Some("rosto"));
+    }
+
+    #[test]
+    fn padrao_nao_sai_e_remover_a_ativa_cai_nela() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        set_campo(&vault, &p.id, Campo::Miniatura, Some("peca")).unwrap();
+        let lobo = criar_aparencia(&vault, &p.id, "Lobo").unwrap();
+        ativar_aparencia(&vault, &p.id, &lobo.id).unwrap();
+        set_campo(&vault, &p.id, Campo::Miniatura, Some("peca-lobo")).unwrap();
+
+        assert!(remover_aparencia(&vault, &p.id, APARENCIA_PADRAO).is_err());
+
+        let sobrou = remover_aparencia(&vault, &p.id, &lobo.id).unwrap();
+        assert_eq!(sobrou.aparencia_ativa.as_deref(), Some(APARENCIA_PADRAO));
+        // O trio de cima voltou junto: a tela nao fica com a cara removida.
+        assert_eq!(sobrou.miniatura.as_deref(), Some("peca"));
+        assert_eq!(sobrou.aparencias.len(), 1);
     }
 
     #[test]

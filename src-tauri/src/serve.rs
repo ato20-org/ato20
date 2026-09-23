@@ -1048,12 +1048,31 @@ async fn my_characters(
 
     // Filtra o indice pelos ids vinculados, mantendo a ordem do VINCULO: e a
     // ordem em que o mestre entregou os personagens a este jogador.
-    let meus: Vec<&characters::Personagem> = ids
+    let meus: Vec<characters::Personagem> = ids
         .iter()
         .filter_map(|id| todos.iter().find(|p| &p.id == id))
+        .map(sem_aparencias)
         .collect();
 
     axum::Json(meus).into_response()
+}
+
+/// O personagem sem a lista de aparencias, para sair na rede.
+///
+/// A lista e informacao DO MESTRE: ela tem a forma verdadeira do vilao e o
+/// disfarce que ainda nao caiu, e mandar tudo ao celular entrega a revelacao
+/// antes da cena. O jogador continua recebendo `retrato` e `miniatura` -- o que
+/// esta no ar agora -- e e tudo o que a tela dele desenha.
+///
+/// Uma funcao na rota, e nao um `skip_serializing_if` no tipo: a decisao e de
+/// QUEM pergunta, nao do campo. O mestre le o mesmo `Personagem` pelo IPC e
+/// precisa da lista inteira para desenhar a ficha.
+fn sem_aparencias(personagem: &characters::Personagem) -> characters::Personagem {
+    characters::Personagem {
+        aparencias: Vec::new(),
+        aparencia_ativa: None,
+        ..personagem.clone()
+    }
 }
 
 /// `GET /eu/personagens/{id}/anexos`

@@ -33,6 +33,7 @@ import {
   semReferencia,
   tracadoDe,
 } from "@/lib/mestre/ligacoes";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
@@ -228,6 +229,19 @@ type SceneStore = {
   ) => void;
   /** Um único update para N itens: arrastar em grupo não pode gravar N vezes por frame. */
   updateItems: (sceneId: string, patches: ItemPatch[]) => void;
+  /**
+   * Troca a imagem dos tokens de um personagem em TODAS as cenas.
+   *
+   * Todas, e não só a que está no ar: o personagem é um só, e o token dele no
+   * mapa do porão não tem por que mostrar a cara de três sessões atrás. Uma
+   * varredura no gesto da troca, e nada por quadro — resolver a imagem do token
+   * ao vivo, como `retratosDaCena` faz com o retrato, custaria trabalho no
+   * desenho do mapa para ganhar o que ninguém vê.
+   *
+   * FORA do histórico: desfazer restaura conteúdo de cena, e trocar de aparência
+   * é estrutura. Desfazer uma troca é trocar de volta, pela lista.
+   */
+  aplicarAparencia: (personagemId: string, miniatura: string | undefined) => void;
   removeItems: (sceneId: string, itemIds: string[]) => void;
   moveItemsZ: (
     sceneId: string,
@@ -456,6 +470,82 @@ export function soConteudo(atual: Board, alvo: Board): Board {
   };
 }
 
+/**
+ * O board com a imagem dos tokens de um personagem trocada.
+ *
+ * Devolve a MESMA referência quando nada muda, e é o que deixa quem chama saber
+ * que não há o que gravar — um board novo idêntico acordaria o `subscribe` e
+ * escreveria o disco por nada.
+ *
+ * Miniatura vazia não apaga o token: uma aparência sem miniatura anexada deixa
+ * a peça como estava, porque um item sem `assetId` não desenha nada e o mestre
+ * veria o personagem sumir do mapa ao escolher uma linha ainda em branco.
+ */
+export function comAAparencia(
+  board: Board,
+  personagemId: string,
+  miniatura: string | undefined,
+): Board {
+  if (!miniatura) return board;
+
+  let mexeu = false;
+
+  const scenes = board.scenes.map((scene) => {
+    let daCena = false;
+
+    const items = scene.items.map((item) => {
+      if (item.personagemId !== personagemId || item.assetId === miniatura) {
+        return item;
+      }
+
+      daCena = true;
+      return { ...item, assetId: miniatura };
+    });
+
+    if (!daCena) return scene;
+
+    mexeu = true;
+    return { ...scene, items, updatedAt: Date.now() };
+  });
+
+  return mexeu ? { ...board, scenes } : board;
+}
+
+/**
+ * O board com TODO token mostrando a aparência ativa do dono.
+ *
+ * Existe por causa do desfazer. A troca de aparência fica fora do histórico, mas
+ * o histórico guarda cenas INTEIRAS: um Ctrl+Z de qualquer gesto anterior à
+ * troca restauraria `scene.items` de um retrato em que o token ainda tinha a
+ * imagem velha — a ficha diria "Ferido" e o mapa mostraria a cara de antes. Sem
+ * este passo, "fora do histórico" valeria só até o primeiro desfazer.
+ *
+ * Só percorre item com `personagemId`, e só no gesto de desfazer. Nada por
+ * quadro.
+ */
+export function comAsAparenciasAtivas(
+  board: Board,
+  personagens: ReadonlyArray<{ id: string; miniatura?: string }>,
+): Board {
+  return personagens.reduce(
+    (atual, personagem) =>
+      comAAparencia(atual, personagem.id, personagem.miniatura),
+    board,
+  );
+}
+
+/**
+ * `comAsAparenciasAtivas` com os personagens que o store já leu.
+ *
+ * Lista ainda não lida (`null`) devolve o board como está: o Mestre acabou de
+ * montar e ninguém trocou aparência nenhuma ainda, então não há o que
+ * reconciliar.
+ */
+function aparenciasEmDia(board: Board): Board {
+  const { personagens } = useCharactersStore.getState();
+  return personagens ? comAsAparenciasAtivas(board, personagens) : board;
+}
+
 export const useSceneStore = create<SceneStore>((set, get) => {
   /**
    * Toda alteração de conteúdo passa por aqui, e é o único lugar que alimenta
@@ -494,7 +584,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       // Zera o relógio de fusão: a próxima edição abre passo novo em vez de se
       // grudar no que existia antes do desfazer.
       set({
-        board: soConteudo(board, step.value),
+        board: aparenciasEmDia(soConteudo(board, step.value)),
         history: step.history,
         lastCommitAt: 0,
       });
@@ -508,7 +598,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       if (!step) return;
 
       set({
-        board: soConteudo(board, step.value),
+        board: aparenciasEmDia(soConteudo(board, step.value)),
         history: step.history,
         lastCommitAt: 0,
       });
@@ -970,6 +1060,21 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           return patch ? { ...item, ...patch } : item;
         }),
       }));
+    },
+
+    aplicarAparencia(personagemId, miniatura) {
+      const { board } = get();
+      if (!board) return;
+
+      const proximo = comAAparencia(board, personagemId, miniatura);
+      // Referência igual = nenhum token daquele personagem no mapa. Gravar
+      // assim mesmo acordaria o `subscribe` e escreveria o board inteiro no
+      // disco por nada.
+      if (proximo === board) return;
+
+      // `set` e não `commit`: ver a declaração. O disco não se perde — quem
+      // grava observa `board`, não o histórico.
+      set({ board: proximo });
     },
 
     removeItems(sceneId, itemIds) {

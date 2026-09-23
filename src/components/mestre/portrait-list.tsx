@@ -54,6 +54,7 @@ import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import type { Personagem } from "@/types/character";
 import type { AncoraRetrato, Portrait, UniaoDeRetratos } from "@/types/scene";
+import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
 
 /** O nome da área, para o cabeçalho de cada união. */
 const LUGAR: Record<AncoraRetrato, string> = {
@@ -298,6 +299,20 @@ function BlocoDaUniao({
 }) {
   const ajustar = usePortraitStore((state) => state.ajustar);
 
+  /**
+   * O nome sendo digitado, antes de virar o nome da união.
+   *
+   * `null` é "ninguém está digitando", e aí o campo mostra o que está guardado.
+   * Antes daqui cada tecla gravava: o nome ia para o store e para o disco letra
+   * a letra, e apagar "Jogadores" para escrever outra coisa passava por oito
+   * uniões chamadas "Jogadore", "Jogador", "Jogado". O nome só vira o nome
+   * quando o gesto termina — mesma ideia do arrasto, que só grava no soltar.
+   */
+  const nomeDaUniao = useCampoDeNome({
+    nome: uniao.nome,
+    aoGravar: (nome) => ajustar(uniao.id, { nome }),
+  });
+
   /** Membros que não têm token NESTA cena. A união é da sessão, a cena não. */
   const foraDaCena = uniao.retratos.length - membros.length;
 
@@ -321,10 +336,9 @@ function BlocoDaUniao({
             clicar nele. Campo de formulário desenhado dentro de cada moldura
             encheria o painel de caixas. */}
         <input
-          value={uniao.nome}
+          {...nomeDaUniao}
           aria-label="Nome da união"
           className="min-w-0 flex-1 truncate bg-transparent text-xs font-medium outline-none"
-          onChange={(event) => ajustar(uniao.id, { nome: event.target.value })}
         />
 
         <span className="text-muted-foreground shrink-0 text-[10px]">
