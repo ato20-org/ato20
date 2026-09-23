@@ -3,6 +3,7 @@
 import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   CopyPlus,
+  EyeOff,
   GripVertical,
   Image as ImageIcon,
   ImageOff,
@@ -19,16 +20,28 @@ import { toast } from "sonner";
 import { NovoMapaDialog } from "@/components/mestre/novo-mapa-dialog";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
+import { FogList } from "@/components/mestre/fog-list";
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -45,7 +58,7 @@ import {
   useFundoEmVoo,
   tirarFundoDaCena,
 } from "@/lib/mestre/scene-background";
-import { useSceneStore } from "@/lib/store/use-scene-store";
+import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { cn } from "@/lib/utils";
@@ -58,6 +71,9 @@ export function SceneList({ ready }: { ready: boolean }) {
   const scenes = useMemo(() => todas?.filter((scene) => !ehQuadro(scene)), [todas]);
   const fecharNota = useArquivoAbertoStore((state) => state.fechar);
   const editingSceneId = useSceneStore((state) => state.board?.editingSceneId);
+  // Para a aba de Áreas: ela mostra a névoa da cena ABERTA, não de uma da
+  // lista -- é o mapa em edição que tem áreas a revelar.
+  const cena = useSceneStore(selectEditingScene);
   const liveSceneId = useSceneStore((state) => state.board?.liveSceneId);
   const setEditingSceneId = useSceneStore((state) => state.setEditingSceneId);
   const setLiveSceneId = useSceneStore((state) => state.setLiveSceneId);
@@ -84,50 +100,112 @@ export function SceneList({ ready }: { ready: boolean }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="p-2">
-        <Button
-          className="w-full"
-          variant="outline"
-          size="sm"
-          // O mapa nasce e pergunta de onde vem o chão. Ver `NovoMapaDialog`.
-          onClick={() => setNovoMapaId(addScene())}
-          disabled={!ready}
+      {/* Áreas como ABA daqui, e não como painel próprio: área escondida é
+          coisa do mapa aberto -- num quadro ela nem existe, e sem mapa
+          nenhum o painel só sabia dizer que faltava um. Como tela separada
+          ela passava a maior parte do tempo ocupando uma aba para não
+          mostrar nada. Aqui ela fica a um clique do mapa que a contém,
+          como Pads e Acervo ficam dentro de Sons.
+
+          `gap-0`: o `Tabs` separa lista e painel por padrão, e aqui a lista
+          é um cabeçalho colado no conteúdo. */}
+      <Tabs defaultValue="mapas" className="min-h-0 flex-1 gap-0">
+        <TabsList
+          variant="line"
+          className="h-7 w-full shrink-0 justify-start gap-2 px-2"
         >
-          <Plus />
-          Novo mapa
-        </Button>
-      </div>
+          <TabsTrigger value="mapas" className="flex-none text-xs">
+            Mapas
+          </TabsTrigger>
+          <TabsTrigger value="areas" className="flex-none text-xs">
+            Áreas
+          </TabsTrigger>
+        </TabsList>
 
-      <NovoMapaDialog sceneId={novoMapaId} onFechar={() => setNovoMapaId(null)} />
+        <TabsContent
+          value="mapas"
+          className="flex min-h-0 flex-col border-t"
+        >
+          {/* Redondo e à direita, como nos outros painéis: de largura cheia ele
+              comia a primeira linha da lista para oferecer uma ação que se usa uma
+              vez por mapa. */}
+          <div className="flex items-center justify-end p-2">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 rounded-full"
+                    aria-label="Novo mapa"
+                    // O mapa nasce e pergunta de onde vem o chão. Ver
+                    // `NovoMapaDialog`.
+                    onClick={() => setNovoMapaId(addScene())}
+                    disabled={!ready}
+                  >
+                    <Plus />
+                  </Button>
+                }
+              />
+              <TooltipContent>Novo mapa</TooltipContent>
+            </Tooltip>
+          </div>
 
-      <ScrollArea className="min-h-0 flex-1">
-        <ul ref={listRef} className="space-y-1 p-2 pt-0">
-          {scenes?.map((scene, index) => (
-            <SceneRow
-              key={scene.id}
-              scene={scene}
-              onStage={scene.id === editingSceneId}
-              live={scene.id === liveSceneId}
-              dropTarget={dropIndex === index}
-              onReorderStart={(event) => startReorder(event, scene.id)}
-              renaming={renamingId === scene.id}
-              onRename={() => setRenamingId(scene.id)}
-              onRenameDone={() => setRenamingId(null)}
-              onGoLive={() => setLiveSceneId(scene.id)}
-              onOpen={() => {
-                // Abrir uma cena volta ao palco, se havia nota aberta.
-                fecharNota();
-                setEditingSceneId(scene.id);
-                // Seleção é por cena: manter itens da cena anterior
-                // selecionados deixaria o gizmo apontando pro vazio.
-                clearSelection();
-                // Zoom também: o recorte de um mapa não diz nada sobre o outro.
-                fitViewport();
-              }}
-            />
-          ))}
-        </ul>
-      </ScrollArea>
+          <NovoMapaDialog sceneId={novoMapaId} onFechar={() => setNovoMapaId(null)} />
+
+          <ScrollArea className="min-h-0 flex-1">
+            {ready && scenes?.length === 0 ? (
+              <PainelVazio conteudo={{ tipo: "cenas" }}>
+                Crie o primeiro mapa
+              </PainelVazio>
+            ) : null}
+
+            <ul ref={listRef} className="space-y-1 p-2 pt-0">
+              {scenes?.map((scene, index) => (
+                <SceneRow
+                  key={scene.id}
+                  scene={scene}
+                  onStage={scene.id === editingSceneId}
+                  live={scene.id === liveSceneId}
+                  dropTarget={dropIndex === index}
+                  onReorderStart={(event) => startReorder(event, scene.id)}
+                  renaming={renamingId === scene.id}
+                  onRename={() => setRenamingId(scene.id)}
+                  onRenameDone={() => setRenamingId(null)}
+                  onGoLive={() => setLiveSceneId(scene.id)}
+                  onOpen={() => {
+                    // Abrir uma cena volta ao palco, se havia nota aberta.
+                    fecharNota();
+                    setEditingSceneId(scene.id);
+                    // Seleção é por cena: manter itens da cena anterior
+                    // selecionados deixaria o gizmo apontando pro vazio.
+                    clearSelection();
+                    // Zoom também: o recorte de um mapa não diz nada sobre o outro.
+                    fitViewport();
+                  }}
+                />
+              ))}
+            </ul>
+          </ScrollArea>
+        </TabsContent>
+
+        {/* Quadro não tem névoa: a lista vazia diria “nenhuma área” como se
+            faltasse desenhar uma, e o que falta é abrir um mapa. */}
+        <TabsContent
+          value="areas"
+          className="flex min-h-0 flex-col border-t"
+        >
+          {cena && !ehQuadro(cena) ? (
+            <FogList scene={cena} />
+          ) : (
+            <PainelVazio icone={EyeOff}>
+              {cena
+                ? "Quadro não tem áreas escondidas"
+                : "Abra um mapa primeiro"}
+            </PainelVazio>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -179,200 +257,231 @@ function SceneRow({
     onRenameDone();
   }
 
+  /**
+   * Os itens da linha, escritos uma vez para as duas portas.
+   *
+   * O botão direito e os três pontos oferecem o MESMO: os três pontos são
+   * o caminho de quem está procurando, o botão direito o de quem já sabe.
+   * Ver `Kit`.
+   */
+  const itens = ({ Item, Separator }: Kit) => (
+    <>
+      <Item disabled={live} onClick={onGoLive}>
+        <Radio />
+        Colocar no ar
+      </Item>
+      <Item onClick={renomear.pedir}>
+        <Pencil />
+        Renomear
+      </Item>
+      <Item onClick={() => duplicateScene(scene.id)}>
+        <CopyPlus />
+        Duplicar
+      </Item>
+
+      <Separator />
+
+      {/* O fundo mora aqui e não na biblioteca de imagens: ele é da
+          CENA. Na biblioteca, ele era mais uma linha entre imagens que
+          ainda não são de ninguém -- e depois de escolhido continuava
+          ali, oferecendo-se de novo. Ver `escolherFundoDaCena`. */}
+      <Item
+        disabled={fundoEmVoo}
+        onClick={() => {
+          void escolherFundoDaCena(scene.id).catch((cause) =>
+            toast.error(
+              cause instanceof Error
+                ? cause.message
+                : "Falha ao importar.",
+            ),
+          );
+        }}
+      >
+        {fundoEmVoo ? (
+          <Loader2 className="animate-spin" />
+        ) : (
+          <ImageIcon />
+        )}
+        {fundoEmVoo
+          ? "Importando o fundo…"
+          : scene.backgroundAssetId
+            ? "Trocar o fundo"
+            : "Escolher o fundo"}
+      </Item>
+
+      {scene.backgroundAssetId ? (
+        <Item
+          onClick={() => void tirarFundoDaCena(scene.id)}
+        >
+          <ImageOff />
+          Tirar o fundo
+        </Item>
+      ) : null}
+
+      <Separator />
+
+      <Item
+        variant="destructive"
+        onClick={() => setConfirmando(true)}
+      >
+        <Trash2 />
+        Remover
+      </Item>
+    </>
+  );
+
   return (
-    <li
-      className={cn(
-        "flex items-center gap-1 rounded-md p-1",
-        onStage ? "bg-accent" : "hover:bg-accent/50",
-        dropTarget && "ring-primary ring-1",
-      )}
-    >
-      {/* A alça, e não a linha toda: a linha inteira já responde ao clique
-          abrindo a cena, e arrastar de qualquer ponto dela deixaria os dois
-          gestos disputando o mesmo alvo. */}
-      <span
-        className="text-muted-foreground hover:text-foreground shrink-0 cursor-grab touch-none px-0.5"
-        aria-hidden
-        onPointerDown={onReorderStart}
-      >
-        <GripVertical className="size-3.5" />
-      </span>
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
-        aria-current={onStage}
-        onClick={onOpen}
-        // Arrastar o mapa para uma nota vira `>mapa`. A alça à esquerda
-        // continua sendo o reordenar; aqui é o gesto de apontar.
-        onPointerDown={(event) =>
-          arrastarParaNota(event, {
-            fonte: { tipo: "cena", sceneId: scene.id, nome: scene.name },
-            largura: 1,
-            altura: 1,
-          })
+    // Os filhos FORA do `render`, como nas linhas de Arquivos: e a forma
+    // que deixa o dropdown dos tres pontos, la dentro, continuar
+    // disparando. Ver a nota em `asset-library`.
+    <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
+      <ContextMenuTrigger
+        render={
+          <li
+            className={cn(
+              "flex items-center gap-1 rounded-md p-1",
+              onStage ? "bg-accent" : "hover:bg-accent/50",
+              dropTarget && "ring-primary ring-1",
+            )}
+          />
         }
-        onDoubleClick={onRename}
-        // F2 renomeia, como no gerenciador de arquivos. Ver `aoApertarF2`.
-        onKeyDown={aoApertarF2(onRename)}
       >
-        <span className="relative shrink-0">
-          <ScenePreview scene={scene} className="h-9 w-16" />
-          {/* O fundo está copiando: o giro na miniatura é o que diz que o
-              clique de há dois segundos ainda está trabalhando. */}
-          {fundoEmVoo ? (
-            <span
-              className="absolute inset-0 flex items-center justify-center rounded bg-black/50"
-              aria-label="Importando o fundo"
-            >
-              <Loader2 className="size-4 animate-spin" />
-            </span>
-          ) : null}
-          {/* Ponto vermelho na miniatura: qual cena a mesa vê precisa ser
-              legível de relance, sem depender de ler o nome. */}
-          {live ? (
-            <span
-              className="absolute top-1 right-1 size-2 rounded-full bg-red-500 shadow-[0_0_6px] shadow-red-500/70"
-              aria-hidden
-            />
-          ) : null}
+        {/* A alça, e não a linha toda: a linha inteira já responde ao clique
+            abrindo a cena, e arrastar de qualquer ponto dela deixaria os dois
+            gestos disputando o mesmo alvo. */}
+        <span
+          className="text-muted-foreground hover:text-foreground shrink-0 cursor-grab touch-none px-0.5"
+          aria-hidden
+          onPointerDown={onReorderStart}
+        >
+          <GripVertical className="size-3.5" />
         </span>
-
-        <span className="min-w-0 flex-1">
-          {renaming ? null : (
-            <>
-              <span className="block truncate text-sm">
-                {scene.name}
-                {live ? <span className="text-red-500"> · no ar</span> : null}
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          aria-current={onStage}
+          onClick={onOpen}
+          // Arrastar o mapa para uma nota vira `>mapa`. A alça à esquerda
+          // continua sendo o reordenar; aqui é o gesto de apontar.
+          onPointerDown={(event) =>
+            arrastarParaNota(event, {
+              fonte: { tipo: "cena", sceneId: scene.id, nome: scene.name },
+              largura: 1,
+              altura: 1,
+            })
+          }
+          onDoubleClick={onRename}
+          // F2 renomeia, como no gerenciador de arquivos. Ver `aoApertarF2`.
+          onKeyDown={aoApertarF2(onRename)}
+        >
+          <span className="relative shrink-0">
+            <ScenePreview scene={scene} className="h-9 w-16" />
+            {/* O fundo está copiando: o giro na miniatura é o que diz que o
+                clique de há dois segundos ainda está trabalhando. */}
+            {fundoEmVoo ? (
+              <span
+                className="absolute inset-0 flex items-center justify-center rounded bg-black/50"
+                aria-label="Importando o fundo"
+              >
+                <Loader2 className="size-4 animate-spin" />
               </span>
-              <span className="text-muted-foreground block text-[10px]">
-                {scene.items.length} itens · {scene.fog.length} áreas
-              </span>
-            </>
-          )}
-        </span>
-      </button>
+            ) : null}
+            {/* Ponto vermelho na miniatura: qual cena a mesa vê precisa ser
+                legível de relance, sem depender de ler o nome. */}
+            {live ? (
+              <span
+                className="absolute top-1 right-1 size-2 rounded-full bg-red-500 shadow-[0_0_6px] shadow-red-500/70"
+                aria-hidden
+              />
+            ) : null}
+          </span>
 
-      {renaming ? (
-        <Input
-          autoFocus
-          defaultValue={scene.name}
-          className="h-7 flex-1 text-sm"
-          onBlur={(event) => commitRename(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") commitRename(event.currentTarget.value);
-            if (event.key === "Escape") onRenameDone();
-          }}
-        />
-      ) : (
-        <>
-          {live ? null : (
-            <Tooltip>
-              <TooltipTrigger
+          <span className="min-w-0 flex-1">
+            {renaming ? null : (
+              <>
+                <span className="block truncate text-sm">
+                  {scene.name}
+                  {live ? <span className="text-red-500"> · no ar</span> : null}
+                </span>
+                <span className="text-muted-foreground block text-[10px]">
+                  {scene.items.length} itens · {scene.fog.length} áreas
+                </span>
+              </>
+            )}
+          </span>
+        </button>
+
+        {renaming ? (
+          <Input
+            autoFocus
+            defaultValue={scene.name}
+            className="h-7 flex-1 text-sm"
+            onBlur={(event) => commitRename(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitRename(event.currentTarget.value);
+              if (event.key === "Escape") onRenameDone();
+            }}
+          />
+        ) : (
+          <>
+            {live ? null : (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Colocar ${scene.name} no ar`}
+                      onClick={onGoLive}
+                    >
+                      <Radio />
+                    </Button>
+                  }
+                />
+                <TooltipContent>
+                  <p className="max-w-48">
+                    Passa a mesa para este mapa, sem sair do que tu edita.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            <DropdownMenu onOpenChangeComplete={renomear.aoFechar}>
+              <DropdownMenuTrigger
                 render={
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Colocar ${scene.name} no ar`}
-                    onClick={onGoLive}
+                    aria-label={`Opções de ${scene.name}`}
                   >
-                    <Radio />
+                    <MoreVertical />
                   </Button>
                 }
               />
-              <TooltipContent>
-                <p className="max-w-48">
-                  Passa a mesa para este mapa, sem sair do que tu edita.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          <DropdownMenu onOpenChangeComplete={renomear.aoFechar}>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={`Opções de ${scene.name}`}
-                >
-                  <MoreVertical />
-                </Button>
-              }
+              <DropdownMenuContent align="end" className="w-48">
+                {itens(KIT_TRES_PONTOS)}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <ConfirmarRemocao
+              aberto={confirmando}
+              onAberto={setConfirmando}
+              titulo={`Deseja remover ${scene.name}?`}
+              itens={[
+                "Tokens e imagens",
+                "Áreas escondidas",
+                "Câmeras salvas",
+                "Postits e anotações",
+              ]}
+              acao="Remover"
+              onConfirmar={() => removeScene(scene.id)}
             />
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem disabled={live} onClick={onGoLive}>
-                <Radio />
-                Colocar no ar
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={renomear.pedir}>
-                <Pencil />
-                Renomear
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => duplicateScene(scene.id)}>
-                <CopyPlus />
-                Duplicar
-              </DropdownMenuItem>
+          </>
+        )}
+      </ContextMenuTrigger>
 
-              <DropdownMenuSeparator />
-
-              {/* O fundo mora aqui e não na biblioteca de imagens: ele é da
-                  CENA. Na biblioteca, ele era mais uma linha entre imagens que
-                  ainda não são de ninguém -- e depois de escolhido continuava
-                  ali, oferecendo-se de novo. Ver `escolherFundoDaCena`. */}
-              <DropdownMenuItem
-                disabled={fundoEmVoo}
-                onClick={() => {
-                  void escolherFundoDaCena(scene.id).catch((cause) =>
-                    toast.error(
-                      cause instanceof Error
-                        ? cause.message
-                        : "Falha ao importar.",
-                    ),
-                  );
-                }}
-              >
-                {fundoEmVoo ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <ImageIcon />
-                )}
-                {fundoEmVoo
-                  ? "Importando o fundo…"
-                  : scene.backgroundAssetId
-                    ? "Trocar o fundo"
-                    : "Escolher o fundo"}
-              </DropdownMenuItem>
-
-              {scene.backgroundAssetId ? (
-                <DropdownMenuItem
-                  onClick={() => void tirarFundoDaCena(scene.id)}
-                >
-                  <ImageOff />
-                  Tirar o fundo
-                </DropdownMenuItem>
-              ) : null}
-
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setConfirmando(true)}
-              >
-                <Trash2 />
-                Remover
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <ConfirmarRemocao
-            aberto={confirmando}
-            onAberto={setConfirmando}
-            titulo={`Remover "${scene.name}"?`}
-            descricao="A cena sai da campanha com tudo o que está nela. Ctrl+Z não traz de volta."
-            acao="Remover"
-            onConfirmar={() => removeScene(scene.id)}
-          />
-        </>
-      )}
-    </li>
+      <ContextMenuContent className="w-48">
+        {itens(KIT_CONTEXTO)}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

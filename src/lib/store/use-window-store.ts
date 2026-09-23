@@ -48,7 +48,6 @@ export type ConteudoJanela =
   | { tipo: "cenas" }
   // A mesma lista, filtrada pelo outro tipo de cena. Ver `TipoDeCena`.
   | { tipo: "quadros" }
-  | { tipo: "areas" }
   | { tipo: "retratos" }
   | { tipo: "imagens" }
   | { tipo: "sons" }
@@ -91,7 +90,6 @@ export function chaveDe(conteudo: ConteudoJanela): string {
     case "rolagens":
     case "cenas":
     case "quadros":
-    case "areas":
     case "retratos":
     case "imagens":
     case "sons":
