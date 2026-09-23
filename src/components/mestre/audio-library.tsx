@@ -6,8 +6,6 @@ import {
   ChevronRight,
   Loader2,
   Music,
-  Pause,
-  Play,
   Trash2,
   Upload,
   Waves,
@@ -26,23 +24,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Slider } from "@/components/ui/slider";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { SomAtual } from "@/components/mestre/som-atual";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { countAssetUsage } from "@/lib/mestre/asset-usage";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
-import {
-  type Ambiente,
-  type AssetMeta,
-  GANHO_PADRAO,
-  type Pad,
-} from "@/types/scene";
+import { type AssetMeta, GANHO_PADRAO, type Pad } from "@/types/scene";
 
 /**
  * A ordem em que os pads aparecem na grade.
@@ -59,13 +52,15 @@ const GRADE = [6, 7, 8, 3, 4, 5, 0, 1, 2];
  *
  * Três secções com ritmos diferentes, na ordem em que a mão as procura. Os
  * PADS são o teclado: consultados de relance no meio da cena, para conferir o
- * que a tecla faz. O que está TOCANDO é regulado durante a sessão inteira. O
- * ACERVO é consultado uma vez, quando se monta a cena.
+ * que a tecla faz. O ATUAL é regulado durante a sessão inteira, e é onde as
+ * camadas no ar aparecem juntas — ver `SomAtual`. O ACERVO é consultado uma
+ * vez, quando se monta a cena.
  *
- * Os controles da TRILHA continuam na barra do pé da janela (`TrackBar`), e não
- * aqui: play, posição e onda são olhados o tempo todo, e tê-los num painel
- * obrigava a abrir a aba de Sons só para ver se a música ainda rodava. Esta
- * tela escolhe a trilha; a barra a opera.
+ * A TRILHA aparece em dois lugares, e de propósito: aqui como mais uma camada
+ * do mixer, e na barra do pé da janela (`TrackBar`) com a onda e a navegação
+ * grossa. A barra existe porque saber se a música ainda roda não pode exigir
+ * abrir uma aba; o painel existe porque equilibrar música com chuva exige ver
+ * as duas ao mesmo tempo.
  *
  * Quem lê o som do disco é o `CampaignBoot`, antes de a mesa aparecer.
  */
@@ -82,9 +77,6 @@ export function AudioLibrary() {
   const start = useTrackStore((state) => state.start);
   const alternar = useTrackStore((state) => state.alternar);
   const disparar = useTrackStore((state) => state.disparar);
-  const apagar = useTrackStore((state) => state.apagar);
-  const setGanho = useTrackStore((state) => state.setGanho);
-  const setTocando = useTrackStore((state) => state.setTocando);
   const definirPad = useTrackStore((state) => state.definirPad);
   const acionarPad = useTrackStore((state) => state.acionarPad);
 
@@ -149,23 +141,12 @@ export function AudioLibrary() {
         </div>
       ) : null}
 
-      {ambientes.length > 0 ? (
-        <>
-          <Titulo>Tocando</Titulo>
-          <ul className="space-y-1 px-2 pb-2">
-            {ambientes.map((ambiente) => (
-              <AmbienteRow
-                key={ambiente.id}
-                ambiente={ambiente}
-                nome={porId.get(ambiente.assetId)?.name ?? "Arquivo removido"}
-                onGanho={(ganho) => setGanho(ambiente.id, ganho)}
-                onTocando={(tocando) => setTocando(ambiente.id, tocando)}
-                onApagar={() => apagar(ambiente.id)}
-              />
-            ))}
-          </ul>
-        </>
-      ) : null}
+      {/* Sempre presente, mesmo em silêncio. A lista de antes aparecia e sumia
+          com os ambientes, e uma secção que vai e vem obriga a procurar onde ela
+          estava toda vez — justamente no meio da cena, que é quando o mestre
+          menos pode procurar. */}
+      <Titulo>Atual</Titulo>
+      <SomAtual porId={porId} />
 
       <Titulo>Acervo</Titulo>
 
@@ -347,60 +328,6 @@ function PadCell({
   );
 }
 
-function AmbienteRow({
-  ambiente,
-  nome,
-  onGanho,
-  onTocando,
-  onApagar,
-}: {
-  ambiente: Ambiente;
-  nome: string;
-  onGanho: (ganho: number) => void;
-  onTocando: (tocando: boolean) => void;
-  onApagar: () => void;
-}) {
-  return (
-    <li className="flex items-center gap-1 rounded-md p-1">
-      <Waves className="text-muted-foreground size-3 shrink-0" />
-
-      <span className="min-w-0 flex-1 truncate text-xs" title={nome}>
-        {nome}
-      </span>
-
-      {/* O ganho DESTE som, que multiplica o volume da mesa. É ele que faz
-          "chuva leve por baixo da música" — com um volume só, abaixar a chuva
-          levaria a trilha junto. Ver `outputVolume`. */}
-      <Slider
-        className="w-16 shrink-0"
-        aria-label={`Volume de ${nome}`}
-        value={[Math.round(ambiente.ganho * 100)]}
-        max={100}
-        step={1}
-        onValueChange={(value) => onGanho(primeiro(value) / 100)}
-      />
-
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={ambiente.tocando ? `Pausar ${nome}` : `Retomar ${nome}`}
-        onClick={() => onTocando(!ambiente.tocando)}
-      >
-        {ambiente.tocando ? <Pause /> : <Play />}
-      </Button>
-
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={`Apagar ${nome}`}
-        onClick={onApagar}
-      >
-        <X />
-      </Button>
-    </li>
-  );
-}
-
 type AudioRowProps = {
   asset: AssetMeta;
   isTrack: boolean;
@@ -518,8 +445,4 @@ function AudioRow({
       </Button>
     </li>
   );
-}
-
-function primeiro(value: number | readonly number[]): number {
-  return Array.isArray(value) ? (value[0] ?? 0) : (value as number);
 }
