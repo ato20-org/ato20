@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Plus, type LucideIcon } from "lucide-react";
+import { Plus, X, type LucideIcon } from "lucide-react";
 
 import { useDockDrag } from "@/components/mestre/dock/dock-drag";
 import {
   JanelaCorpo,
-  iconeDaJanela,
   larguraMinima,
   useTelas,
   useRotuloJanela,
 } from "@/components/mestre/dock/window-content";
+import { iconeDaJanela } from "@/lib/mestre/icone-da-janela";
 import { PanelCollapse } from "@/components/mestre/panel-collapse";
 import { Button } from "@/components/ui/button";
 import {
@@ -230,7 +230,9 @@ function Aba({
   const removerAba = useLayoutStore((state) => state.removerAba);
   const abrirFlutuante = useWindowStore((state) => state.abrir);
 
-  const botao = useRef<HTMLButtonElement | null>(null);
+  // Na CASCA e não no botão do rótulo: ela é quem leva o estilo da aba, e é
+  // ela que precisa entrar na vista e apagar durante o arrasto.
+  const casca = useRef<HTMLSpanElement | null>(null);
 
   // Aba escolhida fora da vista se traz para a vista. Desde que a tira rola em
   // vez de encolher, ativar Camadas pelo menu do `+` podia acender uma aba fora
@@ -241,21 +243,29 @@ function Aba({
   useEffect(() => {
     if (!ativa) return;
 
-    botao.current?.scrollIntoView({
+    casca.current?.scrollIntoView({
       behavior: "smooth",
       block: "nearest",
       inline: "nearest",
     });
   }, [ativa]);
 
+  function fechar() {
+    removerAba(chaveDe(aba));
+  }
+
   return (
-    <button
-      ref={botao}
-      type="button"
-      role="tab"
-      aria-selected={ativa}
+    // Uma CASCA em volta, e não o X dentro do botão da aba: botão dentro de
+    // botão é HTML inválido, e o navegador desmonta o de fora. A casca leva o
+    // desenho da aba; dentro dela, o rótulo e o X são dois alvos irmãos.
+    //
+    // `role="presentation"` para a `tablist` continuar enxergando o `role="tab"`
+    // que está um nível abaixo.
+    <span
+      ref={casca}
+      role="presentation"
       className={cn(
-        "flex shrink-0 cursor-grab items-center gap-1.5 whitespace-nowrap rounded-t-md px-2.5 py-1.5 text-xs transition-all active:cursor-grabbing",
+        "group/aba flex shrink-0 cursor-grab items-center gap-1 whitespace-nowrap rounded-t-md pr-1 pl-2.5 text-xs transition-all active:cursor-grabbing",
         // Arrastando, a aba fica apagada e recuada: é o par visual da etiqueta
         // que saiu dela e está no cursor. Sem isso a aba continuava acesa na
         // tira, e a etiqueta parecia uma segunda cópia em vez de a mesma coisa
@@ -272,51 +282,102 @@ function Aba({
             "bg-muted text-foreground relative z-10 -mb-px border border-b-0"
           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground border border-transparent border-b-0",
       )}
-      title={titulo}
-      onPointerDown={(event) => {
-        aoEscolher();
-
-        const botao = event.currentTarget;
-
-        startDockDrag(event, {
-          conteudo: aba,
-          fantasma: titulo,
-          aoTerminar: () => botao.removeAttribute("data-arrastando"),
-          aoMover: () => botao.setAttribute("data-arrastando", ""),
-          aoSoltarSolto: (ponto) => {
-            const camadaRect = document
-              .querySelector("[data-dock-camada]")
-              ?.getBoundingClientRect();
-
-            removerAba(chaveDe(aba));
-
-            // O canto vai um pouco acima e à esquerda do ponteiro: soltando com
-            // o canto exatamente no cursor, a mão fica sobre o cabeçalho e o
-            // primeiro clique depois de soltar cairia no botão de fechar.
-            //
-            // Limitado à camada, porque `abrir` não limita: soltar rente à
-            // borda de baixo deixaria o cabeçalho fora da vista, e com ele o
-            // único jeito de pegar a janela de novo.
-            const x = ponto.x - (camadaRect?.left ?? 0) - 24;
-            const y = ponto.y - (camadaRect?.top ?? 0) - 12;
-
-            abrirFlutuante(aba, {
-              x: Math.min(
-                Math.max(x, 0),
-                Math.max(0, (camadaRect?.width ?? 0) - 80),
-              ),
-              y: Math.min(
-                Math.max(y, 0),
-                Math.max(0, (camadaRect?.height ?? 0) - 40),
-              ),
-            });
-          },
-        });
-      }}
-      onClick={aoEscolher}
     >
-      <Icone className="size-3.5 shrink-0" aria-hidden />
-      {titulo}
-    </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={ativa}
+        className="flex min-w-0 items-center gap-1.5 py-1.5 outline-none"
+        title={titulo}
+        onPointerDown={(event) => {
+          // Só o botão principal escolhe e arrasta. Sem esta guarda, o clique do
+          // meio -- que fecha, logo abaixo -- primeiro acendia a aba e em
+          // seguida começava a arrastá-la: a aba sumia e a etiqueta ficava
+          // presa ao cursor, sem nada para onde voltar.
+          if (event.button !== 0) {
+            // O clique do meio tem comportamento de navegador a barrar antes do
+            // `auxclick`: rolagem automática, e no Linux o colar da seleção
+            // primária.
+            if (event.button === 1) event.preventDefault();
+            return;
+          }
+
+          aoEscolher();
+
+          const alvo = casca.current;
+
+          startDockDrag(event, {
+            conteudo: aba,
+            fantasma: titulo,
+            aoTerminar: () => alvo?.removeAttribute("data-arrastando"),
+            aoMover: () => alvo?.setAttribute("data-arrastando", ""),
+            aoSoltarSolto: (ponto) => {
+              const camadaRect = document
+                .querySelector("[data-dock-camada]")
+                ?.getBoundingClientRect();
+
+              removerAba(chaveDe(aba));
+
+              // O canto vai um pouco acima e à esquerda do ponteiro: soltando com
+              // o canto exatamente no cursor, a mão fica sobre o cabeçalho e o
+              // primeiro clique depois de soltar cairia no botão de fechar.
+              //
+              // Limitado à camada, porque `abrir` não limita: soltar rente à
+              // borda de baixo deixaria o cabeçalho fora da vista, e com ele o
+              // único jeito de pegar a janela de novo.
+              const x = ponto.x - (camadaRect?.left ?? 0) - 24;
+              const y = ponto.y - (camadaRect?.top ?? 0) - 12;
+
+              abrirFlutuante(aba, {
+                x: Math.min(
+                  Math.max(x, 0),
+                  Math.max(0, (camadaRect?.width ?? 0) - 80),
+                ),
+                y: Math.min(
+                  Math.max(y, 0),
+                  Math.max(0, (camadaRect?.height ?? 0) - 40),
+                ),
+              });
+            },
+          });
+        }}
+        onClick={aoEscolher}
+        // O botão do meio fecha, como na aba do navegador. É o mesmo que o X
+        // ao lado faz; existe porque quem traz o gesto do navegador o tenta
+        // antes de procurar o X, e não achá-lo parece a aba não fechar.
+        //
+        // `auxclick` e não `pointerdown`: fechar no apertar tiraria a aba de
+        // baixo do cursor antes de a mão soltar, e um toque sem querer não
+        // teria como ser desfeito dentro do mesmo gesto. Nada se perde -- o
+        // `+` da tira reabre o que está fora. Ver `Adicionar`.
+        onAuxClick={(event) => {
+          if (event.button !== 1) return;
+
+          event.preventDefault();
+          fechar();
+        }}
+      >
+        <Icone className="size-3.5 shrink-0" aria-hidden />
+        <span className="truncate">{titulo}</span>
+      </button>
+
+      {/* O X guarda o lugar dele o tempo todo e só acende no ponteiro: aparecer
+          e sumir mudaria a largura da aba sob o cursor, e numa tira que rola
+          isso empurra as vizinhas justamente enquanto a mão mira. O preço é
+          uns vinte pixels por aba, que a tira absorve rolando.
+
+          `focus-within` na casca mantém o alcance de quem chega por Tab. */}
+      <button
+        type="button"
+        aria-label={`Fechar ${titulo}`}
+        className="hover:bg-foreground/10 hover:text-foreground focus-visible:ring-ring shrink-0 rounded-sm p-0.5 opacity-0 transition-opacity group-hover/aba:opacity-100 group-focus-within/aba:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
+        // Para antes do arrasto: a casca inteira é alça, e sem isto mirar o X
+        // já levantava a aba para fora da coluna.
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={fechar}
+      >
+        <X className="size-3" />
+      </button>
+    </span>
   );
 }
