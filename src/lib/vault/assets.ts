@@ -226,6 +226,33 @@ export async function importAssets(
  * Em sequência, e não em paralelo: a cópia é do mesmo disco, e o vault tem uma
  * tranca só. Disparar as três juntas só faria as três brigarem por ela.
  */
+/**
+ * Traz para o acervo bytes que esta tela tem na mão.
+ *
+ * É a colagem, e é a única importação em que o arquivo ATRAVESSA a ponte: um
+ * print de tela ou uma imagem copiada do navegador nunca existiu no disco, então
+ * não há caminho para mandar. As outras mandam o endereço justamente para o
+ * arquivo não passar por aqui — ver a nota em `importAssets`.
+ *
+ * Sem progresso e sem cancelar, ao contrário de `importarCaminhos`: é um arquivo
+ * só, e os bytes já estão na memória quando a chamada começa. O que sobra de
+ * espera é a gravação em disco, que não dá tempo de mostrar barra.
+ */
+export function importarBytes(
+  nome: string,
+  bytes: Uint8Array,
+  escopo?: EscopoAsset,
+): Promise<ImportResult> {
+  return call<ImportResult>("asset_import_bytes", {
+    nome,
+    // Array comum e não o `Uint8Array`: o que atravessa a ponte é JSON, e o
+    // tipado sairia daqui como um objeto de índices — `{"0":137,"1":80,…}` —,
+    // que o Rust recusa ao desserializar um `Vec<u8>`.
+    bytes: Array.from(bytes),
+    escopo: escopo ?? null,
+  });
+}
+
 export async function importarCaminhos(
   paths: string[],
   escopo?: EscopoAsset,
