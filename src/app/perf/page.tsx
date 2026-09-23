@@ -35,8 +35,10 @@ import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import {
+  RAIO_DA_LUZ_PADRAO,
   SCENE_HEIGHT,
   SCENE_WIDTH,
+  SOL_PADRAO,
   type CameraSalva,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
@@ -174,6 +176,55 @@ type Passo = {
   mantidas: number;
 };
 
+/**
+ * A sombra que esta corrida liga, lida da URL: `?sol=1&luzes=3&paredes=40`.
+ *
+ * Lida aqui e nao passada por prop porque `montarCena` e chamada de quinze
+ * lugares, e um parametro novo em todos eles trocaria quinze assinaturas para
+ * medir uma coisa. Tudo em zero -- o padrao -- devolve `{}`, e a cena montada
+ * fica identica a de antes de a sombra existir: e o que mantem esta corrida
+ * comparavel com as ja medidas.
+ *
+ * As paredes cruzam o plano na diagonal, e nao em fileira: parede paralela a
+ * borda projeta quadrilatero degenerado de um lado so, e mediria menos area
+ * pintada do que um mapa de verdade.
+ */
+function sombraDaMedida(): Pick<Scene, "sol" | "luzes" | "paredes"> {
+  if (typeof window === "undefined") return {};
+
+  const params = new URLSearchParams(window.location.search);
+  const luzes = Number(params.get("luzes") ?? 0);
+  const paredes = Number(params.get("paredes") ?? 0);
+
+  return {
+    sol: params.get("sol") === "1" ? SOL_PADRAO : undefined,
+    luzes:
+      luzes > 0
+        ? Array.from({ length: luzes }, (_, i) => ({
+            id: `perf-luz-${i}`,
+            x: ((i + 1) * 431) % SCENE_WIDTH,
+            y: ((i + 1) * 277) % SCENE_HEIGHT,
+            raio: RAIO_DA_LUZ_PADRAO,
+          }))
+        : undefined,
+    paredes:
+      paredes > 0
+        ? Array.from({ length: paredes }, (_, i) => ({
+            id: `perf-parede-${i}`,
+            // `retangulo` porque é o que a pílula oferece, e é o caso caro: a
+            // parede é a massa preenchida, e um retângulo são QUATRO segmentos
+            // a projetar contra um da linha. Medir o barato seria medir o que
+            // ninguém desenha.
+            formato: "retangulo" as const,
+            x: (i * 211) % (SCENE_WIDTH - 240),
+            y: (i * 97) % (SCENE_HEIGHT - 160),
+            width: 240,
+            height: 160,
+          }))
+        : undefined,
+  };
+}
+
 function montarCena(n: number, cameras = 0, noAr = true): Scene {
   const agora = Date.now();
 
@@ -206,6 +257,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
     backgroundAssetId: "perf-fundo",
     items,
     fog: [],
+    ...sombraDaMedida(),
     cameras: salvas,
     // No ar por padrão porque é assim que o mestre trabalha: ele mexe na
     // câmera que a mesa está vendo. E é o que faz o gesto gravar no board no

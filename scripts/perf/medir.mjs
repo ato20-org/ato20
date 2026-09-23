@@ -97,6 +97,21 @@ const MAPAS = opcao("mapas", "7");
 /** `bancada`: que colunas laterais ficam a vista. Lista: e um eixo da matriz. */
 const PAINEIS = opcao("painel", "ambos").split(",");
 /**
+ * A SOMBRA da cena de medida: `--sol`, `--luzes N`, `--paredes N`.
+ *
+ * Desligada por padrao, e isso importa: com os tres em zero a cena montada e
+ * byte a byte a de antes de a sombra existir, e a corrida continua comparavel
+ * com tudo o que ja foi medido. Ligada, a mesma cena ganha uma copia preta por
+ * token (`--sol`), o recorte de cada tocha (`--luzes`) e os quadrilateros que
+ * as paredes jogam (`--paredes`).
+ *
+ * A pergunta que estes tres respondem e uma so: quanto custa a sombra por
+ * quadro, no cenario em que o mestre esta arrastando um token.
+ */
+const SOL = temFlag("sol") ? "1" : "0";
+const LUZES = opcao("luzes", "0");
+const PAREDES = opcao("paredes", "0");
+/**
  * A pasta com as imagens DE VERDADE que `/asset/*` deve responder.
  *
  * O bitmap de ruido sintetico mede a composicao e nao mente sobre ela -- N
@@ -864,7 +879,7 @@ async function principal() {
         for (const cameras of eixo) {
           for (const gesto of gestos) {
             for (const painel of paineis) {
-              const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&cameras=${cameras}&gesto=${gesto}&mapas=${MAPAS}&painel=${painel}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&rotulo=chrome`;
+              const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&cameras=${cameras}&gesto=${gesto}&mapas=${MAPAS}&painel=${painel}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&sol=${SOL}&luzes=${LUZES}&paredes=${PAREDES}&rotulo=chrome`;
               const corridas = [];
 
               for (let i = 1; i <= REPETICOES; i++) {
