@@ -45,6 +45,8 @@ import { executarComando } from "@/lib/extensoes/carregar";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { usePaletaStore } from "@/lib/store/use-paleta-store";
+import { useAudioStore } from "@/lib/store/use-audio-store";
+import { useTrackStore } from "@/lib/store/use-track-store";
 
 /**
  * De quanto o empurrão anda por tecla.
@@ -54,6 +56,14 @@ import { usePaletaStore } from "@/lib/store/use-paleta-store";
  * deixou de ser o empurrão largo e virou giro -- ver `PASSO_DE_GIRO`.
  */
 const EMPURRAO = 5;
+
+/**
+ * Quanto o volume da mesa anda por toque de Numpad + ou -.
+ *
+ * Cinco por cento: vinte toques vão do silêncio ao cheio, e é fino o bastante
+ * para acompanhar uma fala baixando a música sem a mesa ouvir o degrau.
+ */
+const PASSO_DE_VOLUME = 0.05;
 
 const SETAS: Record<string, { x: number; y: number }> = {
   ArrowLeft: { x: -1, y: 0 },
@@ -73,6 +83,7 @@ export type GrupoAtalho =
   | "Desfazer"
   | "Área de transferência"
   | "Câmera"
+  | "Som"
   | "Camadas"
   | "Seleção"
   // Extensão declara o grupo dela, ou cai no próprio nome. A união fica aberta
@@ -164,6 +175,83 @@ export const ATALHOS_BASE: Atalho[] = [
     rotulo: "Refazer",
     combina: (evento) => comando(evento) && letra(evento) === "y",
     executar: () => useSceneStore.getState().redo(),
+    impedirPadrao: true,
+  },
+
+  /*
+   * O SOM, no teclado numérico.
+   *
+   * O bloco vem CEDO na tabela, e isso é a correção de uma armadilha, não
+   * arrumação. Com o NumLock desligado o teclado numérico entrega as teclas de
+   * navegação: `Numpad4` chega como `ArrowLeft` e `NumpadAdd` como `+`. Os dois
+   * têm dono mais abaixo -- as setas movem a câmera, o `+` aproxima --, e a
+   * ordem da tabela É a precedência. Embaixo, apertar o 4 para acender a chuva
+   * moveria a câmera da mesa no meio da cena.
+   *
+   * Tudo lido por `event.code`, e não por `event.key`, pela mesma razão das
+   * câmeras por posição: o código é a tecla FÍSICA, igual com NumLock ligado ou
+   * desligado e igual em ABNT, e é o que faz o 7 ser sempre o 7.
+   */
+  {
+    grupo: "Som",
+    tecla: "Numpad 1..9",
+    rotulo: "Acionar o pad: ambiente alterna, efeito dispara",
+    combina: (evento) => !comando(evento) && padDe(evento) !== null,
+    executar: (evento) => {
+      const indice = padDe(evento);
+      if (indice !== null) useTrackStore.getState().acionarPad(indice);
+    },
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Som",
+    tecla: "Numpad 0",
+    rotulo: "Cortar ambiente e efeitos. A trilha fica",
+    combina: (evento) => !comando(evento) && evento.code === "Numpad0",
+    // A trilha fica de propósito: o gesto é "corta o cenário", e levar a
+    // música junto obrigaria a remontá-la do acervo por causa de um susto.
+    executar: () => useTrackStore.getState().cortarSons(),
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Som",
+    tecla: "Numpad +",
+    rotulo: `Subir o volume da mesa ${Math.round(PASSO_DE_VOLUME * 100)}%`,
+    combina: (evento) => !comando(evento) && evento.code === "NumpadAdd",
+    executar: () => mexerNoVolume(PASSO_DE_VOLUME),
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Som",
+    tecla: "Numpad -",
+    rotulo: `Descer o volume da mesa ${Math.round(PASSO_DE_VOLUME * 100)}%`,
+    combina: (evento) => !comando(evento) && evento.code === "NumpadSubtract",
+    executar: () => mexerNoVolume(-PASSO_DE_VOLUME),
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Som",
+    tecla: "Numpad *",
+    rotulo: "Pausar ou retomar a trilha",
+    combina: (evento) => !comando(evento) && evento.code === "NumpadMultiply",
+    executar: () => {
+      const { track, setPlaying } = useTrackStore.getState();
+      if (track) setPlaying(!track.playing);
+    },
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Som",
+    tecla: "Numpad .",
+    rotulo: "Silenciar ESTA tela. A mesa continua ouvindo",
+    combina: (evento) => !comando(evento) && evento.code === "NumpadDecimal",
+    // Do APARELHO, e não da mesa: é o mesmo botão da barra da trilha, e existe
+    // porque Mestre e Espectador na mesma máquina soam como eco.
+    executar: () => {
+      const { enabled, setEnabled, retry } = useAudioStore.getState();
+      setEnabled(!enabled);
+      if (!enabled) retry();
+    },
     impedirPadrao: true,
   },
 
@@ -677,6 +765,25 @@ function combinaCom(tecla: string): (evento: KeyboardEvent) => boolean {
     evento.shiftKey === precisaShift &&
     evento.altKey === precisaAlt &&
     letra(evento) === alvo;
+}
+
+/**
+ * O ÍNDICE do pad da tecla numérica (`Numpad1`..`Numpad9`), ou nada.
+ *
+ * Índice e não número: a lista de pads tem nove posições e o índice é a tecla
+ * menos um. Converter aqui, e não em quem chama, é o que mantém os dois lados
+ * concordando sobre quem é o pad 1.
+ */
+function padDe(evento: KeyboardEvent): number | null {
+  const casa = /^Numpad([1-9])$/.exec(evento.code);
+
+  return casa ? Number(casa[1]) - 1 : null;
+}
+
+function mexerNoVolume(passo: number): void {
+  const { volume, setVolume } = useTrackStore.getState();
+
+  setVolume(volume + passo);
 }
 
 /** 1..9 pela tecla FÍSICA (`Digit1`..`Digit9`), ou nada. */
