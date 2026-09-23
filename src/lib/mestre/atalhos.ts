@@ -46,6 +46,7 @@ import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { usePaletaStore } from "@/lib/store/use-paleta-store";
 import { useAudioStore } from "@/lib/store/use-audio-store";
+import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 
 /**
@@ -195,7 +196,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Som",
     tecla: "Numpad 1..9",
-    rotulo: "Acionar o pad: ambiente alterna, efeito dispara",
+    rotulo: "Acionar o pad: trilha e ambiente alternam, efeito dispara",
     combina: (evento) => !comando(evento) && padDe(evento) !== null,
     executar: (evento) => {
       const indice = padDe(evento);
@@ -781,9 +782,11 @@ function padDe(evento: KeyboardEvent): number | null {
 }
 
 function mexerNoVolume(passo: number): void {
-  const { volume, setVolume } = useTrackStore.getState();
+  // Na preferência da MÁQUINA, e não na campanha: o volume da mesa deixou de
+  // ser gravado com a trilha. Ver `Guardado` em `use-preferencias-store`.
+  const { volumeSistema, definirVolume } = usePreferenciasStore.getState();
 
-  setVolume(volume + passo);
+  definirVolume("volumeSistema", volumeSistema + passo);
 }
 
 /** 1..9 pela tecla FÍSICA (`Digit1`..`Digit9`), ou nada. */

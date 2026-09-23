@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { ConfiguracoesDialog } from "@/components/desktop/configuracoes-dialog";
+import { VolumePopover } from "@/components/desktop/volume-popover";
 import { NovidadesDialog } from "@/components/desktop/versoes-lista";
 import { WindowChrome } from "@/components/desktop/window-chrome";
 import { CampaignBadge } from "@/components/mestre/campaign-badge";
@@ -94,6 +95,7 @@ export function Mestre() {
         acoes={
           <>
             <NovidadesDialog />
+            <VolumePopover />
             <ConfiguracoesDialog />
           </>
         }

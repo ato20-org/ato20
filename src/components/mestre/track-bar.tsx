@@ -1,6 +1,14 @@
 "use client";
 
-import { Pause, Play, Repeat, Square, Volume2, VolumeX } from "lucide-react";
+import {
+  Pause,
+  Play,
+  Repeat,
+  RepeatOff,
+  Square,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -15,6 +23,7 @@ import { useAssetList } from "@/hooks/use-asset-list";
 import { useTrackPeaks } from "@/hooks/use-track-peaks";
 import { mmss } from "@/lib/mestre/tempo";
 import { useAudioStore, useProgresso } from "@/lib/store/use-audio-store";
+import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
 
@@ -39,8 +48,8 @@ export function TrackBar() {
   const track = useTrackStore((state) => state.track);
   const setPlaying = useTrackStore((state) => state.setPlaying);
   const setLoop = useTrackStore((state) => state.setLoop);
-  const volume = useTrackStore((state) => state.volume);
-  const setVolume = useTrackStore((state) => state.setVolume);
+  const volumeTrilha = usePreferenciasStore((state) => state.volumeTrilha);
+  const definirVolume = usePreferenciasStore((state) => state.definirVolume);
   const seek = useTrackStore((state) => state.seek);
   const clear = useTrackStore((state) => state.clear);
 
@@ -101,20 +110,28 @@ export function TrackBar() {
         {conhecida ? mmss(duration) : "--:--"}
       </span>
 
+      {/* Dois DESENHOS e não duas cores do mesmo.
+          O botão era um `Repeat` só, claro quando ligado e apagado quando não,
+          e a diferença entre as duas cores exigia ter visto a outra — num
+          controle que se olha uma vez, sem ponto de comparação ao lado. A barra
+          cortada é a mesma resposta que o `VolumeX` dá dois botões adiante:
+          diz o estado de agora, e não o que o clique fará. */}
       <Tooltip>
         <TooltipTrigger
           render={
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Repetir a faixa"
+              aria-label={
+                track.loop ? "A faixa está repetindo" : "A faixa toca uma vez"
+              }
               aria-pressed={track.loop}
               className={cn(
                 track.loop ? "text-foreground" : "text-muted-foreground/60",
               )}
               onClick={() => setLoop(!track.loop)}
             >
-              <Repeat />
+              {track.loop ? <Repeat /> : <RepeatOff />}
             </Button>
           }
         />
@@ -123,23 +140,31 @@ export function TrackBar() {
         </TooltipContent>
       </Tooltip>
 
-      {/* Único volume do som, e ele viaja: o mestre regula aqui e a TV e os
-          celulares seguem.
+      {/* O volume DESTA CAMADA, e não o da mesa. Era o do sistema, e estava
+          errado pelo mesmo motivo que tudo mais nesta barra está certo: ela é a
+          trilha — a onda é da trilha, o play é da trilha, o repetir é da
+          trilha —, e um slider que abaixava a chuva junto no meio dela era a
+          única coisa aqui que não falava de música. O volume da mesa tem lugar
+          próprio agora, no painel de Sons.
 
-          Da SESSÃO, e não da faixa: trocar de música não mexe nele, e tirar a
-          trilha não perde o ajuste. Guardado por faixa, cada troca trazia o
-          ganho de quando aquela música foi escolhida e o som saltava. */}
+          Da CAMADA e não da faixa: trocar de música não mexe nele, e tirar a
+          trilha não perde o ajuste. O fader da faixa é outro, no Atual, e nasce
+          cheio a cada troca de propósito — ver `volumeTrilha`.
+
+          E ele viaja: o mestre regula aqui, a TV e os celulares seguem. */}
       <div className="flex w-32 shrink-0 items-center gap-2">
         <Slider
           className="flex-1"
-          aria-label="Volume do som, em todas as telas"
-          value={[Math.round(volume * 100)]}
+          aria-label="Volume da trilha, em todas as telas"
+          value={[Math.round(volumeTrilha * 100)]}
           max={100}
           step={1}
-          onValueChange={(value) => setVolume(primeiro(value) / 100)}
+          onValueChange={(value) =>
+            definirVolume("volumeTrilha", primeiro(value) / 100)
+          }
         />
         <span className="text-muted-foreground w-6 text-right text-[10px] tabular-nums">
-          {Math.round(volume * 100)}
+          {Math.round(volumeTrilha * 100)}
         </span>
       </div>
 
