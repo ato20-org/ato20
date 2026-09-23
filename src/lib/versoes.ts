@@ -56,6 +56,116 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.2.0",
+    data: "2026-09-23",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "O painel de sons virou uma mesa de som",
+        detalhe:
+          "Antes era uma trilha por vez. Agora vários sons tocam juntos — a chuva por baixo, a taverna por cima, o trovão disparado na hora —, cada um com a sua barra de volume. O teclado numérico vira os pads: aperte a tecla e o som sai, sem procurar nada na tela. Trocar de ambiente faz fade em vez de cortar.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Os sons ganharam tipo, nome próprio, busca e macros",
+        detalhe:
+          "Cada som diz se é ambiente ou disparo, os pads têm cor, e uma macro acende um conjunto inteiro de uma vez. O volume geral saiu de dentro da campanha e virou um botão na barra da janela, onde a mão o acha no meio da sessão.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A cena lembra que ambiente ela acende",
+        detalhe:
+          "Abrir a taverna acende o som da taverna. Deixou de ser uma coisa a lembrar toda vez que o mapa muda.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Dá para desenhar no mapa, e não só no quadro",
+        detalhe:
+          "Formas geométricas, setas que curvam e texto solto valem nos dois, com a régua de ferramentas na borda. E você escolhe o que a mesa vê: o desenho pode ficar só para você.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A área escondida pode ser quadrada, redonda ou desenhada à mão",
+        detalhe:
+          "Ela também gira, e os vértices se editam depois — a caverna deixa de ser um retângulo em cima de um desenho que não é retangular.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O token de personagem ganhou um contorno que diz de quem ele é",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O personagem pode ter várias aparências",
+        detalhe:
+          "Além da padrão, quantas você quiser: Ferido, Lobo, Encapuzado. Cada uma guarda o próprio retrato e a própria miniatura, e trocar troca os dois de uma vez — inclusive o token que já está no mapa, em todas as cenas. Dá para trocar pela ficha, pelo menu da lista de personagens ou pelo menu do token.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Ctrl+V põe imagem de fora no mapa, no quadro e no acervo",
+        detalhe:
+          "Print de tela, recorte de editor ou imagem copiada do navegador. Com o painel de imagens em foco, a figura só entra no acervo; em qualquer outro lugar, ela também aparece no centro do que você está vendo.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Os retratos podem andar em grupo",
+        detalhe:
+          "Uma união com moldura colorida, nome, ordem própria e o canto da tela onde ela fica. É como se diz de relance quem anda com quem.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A ficha em PDF abre dentro do aplicativo",
+        detalhe:
+          "Num leitor próprio, e não numa janela do navegador embutida — com zoom, páginas e o documento inteiro alcançável. O mesmo leitor serve qualquer documento da campanha.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O item do inventário do jogador ganhou quadro de foto",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Criar personagem pede o nome antes, e F2 renomeia",
+        detalhe:
+          "Desistir no meio não deixa mais um \"Novo personagem\" para trás. A linha ganhou menu no botão direito, com renomear, pôr no mapa, entregar a um jogador e apagar.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Renomear ficou previsível em toda a tela",
+        detalhe:
+          "Clicar fora grava, Enter grava, Escape desiste. Vale para o personagem, a aparência e o grupo de retratos.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Os painéis vazios explicam o que fazer, e as abas fecham no X",
+        detalhe:
+          "Ou no botão do meio do mouse, como no navegador. Áreas virou uma aba dentro de Mapas, e a linha do mapa ganhou menu.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O Ctrl+Z ficou mais seguro",
+        detalhe:
+          "Ele não apaga cena, quadro nem nota — para isso existe a pergunta de confirmação. E dentro de um texto ele desfaz por palavra, em vez de sumir com o parágrafo inteiro.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O mapa parava de tremer ao dar zoom, e o gizmo parava de borrar",
+        detalhe:
+          "Aquele salto para o centro ao aproximar, e as alças que incham quando você afasta o mapa. A roda também ficou mais parecida com a de um mouse de verdade, e o arrasto responde por quadro em vez de engasgar.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O disparo de som toca o arquivo inteiro, e a trilha reacende sem piscar",
+      },
+      {
+        tipo: "correcao",
+        titulo: "A lixeira do acervo passou a ver o som que não está tocando",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O X de uma janela que está atrás deixou de pedir dois cliques",
+      },
+    ],
+  },
+  {
     versao: "0.1.4",
     data: "2026-09-18",
     mudancas: [

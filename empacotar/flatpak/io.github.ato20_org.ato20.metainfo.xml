@@ -100,6 +100,54 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.2.0" date="2026-09-23">
+      <description>
+        <p>
+          The sound panel became a mixing desk. Several sounds now play at
+          once — rain underneath, a tavern on top, thunder fired on cue — each
+          with its own fader. The numeric keypad turns into pads, so a sound
+          starts with a keystroke instead of a hunt across the screen. Sounds
+          declare whether they are ambience or one-shots, carry their own name
+          and colour, can be searched, and a macro lights a whole set at once.
+          Switching ambience fades instead of cutting, and a scene remembers
+          which ambience it lights.
+        </p>
+        <p>
+          Drawing now works on the map, not only on the board: shapes, curving
+          arrows and free text, with the tool rail on the edge, and you choose
+          what the table sees. Hidden areas can be square, round or drawn by
+          hand, they rotate, and their vertices stay editable. Character tokens
+          gained an outline that says whose they are.
+        </p>
+        <p>
+          A character can have several appearances — Wounded, Wolf, Hooded —
+          each holding its own portrait and token image. Switching swaps both at
+          once, including tokens already placed on every map, and can be done
+          from the sheet, the character list or the token itself. Ctrl+V now
+          brings an image in from outside: a screenshot, an editor crop or a
+          picture copied from the browser, landing on the map, on the board or
+          in the library.
+        </p>
+        <p>
+          Portraits can travel as a group, with a coloured frame, a name, their
+          own order and a corner of the screen. PDF character sheets open in the
+          application's own reader instead of an embedded browser window, and
+          player inventory items gained a photo frame. Creating a character asks
+          for the name first, F2 renames, and renaming behaves the same
+          everywhere: clicking away saves, Enter saves, Escape discards. Empty
+          panels now explain what to do, tabs close with the X or the middle
+          mouse button, and Ctrl+Z no longer deletes scenes, boards or notes.
+        </p>
+        <p>
+          Fixes: the map no longer jumps and shimmers when zooming, and the
+          handles stop blurring and swelling as the map moves away; the wheel
+          behaves like a real mouse and dragging answers frame by frame. Sound
+          one-shots play the whole file and the ambience relights without
+          blinking, the library bin can see sounds that are not playing, and
+          closing a window that sits behind another no longer takes two clicks.
+        </p>
+      </description>
+    </release>
     <release version="0.1.4" date="2026-09-18">
       <description>
         <p>
