@@ -1,22 +1,17 @@
 "use client";
 
 import {
-  Circle,
-  CircleDashed,
   Eraser,
+  Flame,
   Hand,
-  Lasso,
   Map,
   MapPin,
-  Minus,
   MousePointer2,
-  Square,
-  X,
   Pencil,
+  X,
   Puzzle,
   Ruler,
   Spline,
-  SquareDashedBottom,
   StickyNote,
   Type,
 } from "lucide-react";
@@ -25,6 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FormaControl } from "@/components/mestre/forma-control";
 import { GridControl } from "@/components/mestre/grid-control";
 import { PencilControl } from "@/components/mestre/pencil-control";
+import { PilulaDeDesenho } from "@/components/mestre/pilula-de-desenho";
 import { ReguaControl } from "@/components/mestre/regua-control";
 import { PostitControl } from "@/components/mestre/postit-control";
 import { Button } from "@/components/ui/button";
@@ -38,6 +34,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { SolControl } from "@/components/mestre/sol-control";
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
@@ -61,8 +58,10 @@ type Ferramenta = {
    */
   tipoDeForma?: TipoDeForma;
   /**
-   * O mesmo truque do tipo de forma, para a área escondida: quadrado, redondo e
-   * livre são três alvos na barra e uma `fog` só no palco.
+   * O mesmo truque do tipo de forma, para a área escondida. Hoje quem faz essa
+   * escolha é a pílula de desenho, e não um botão por formato na barra; o campo
+   * fica porque a régua e a bolsa continuam sabendo desenhar um botão de
+   * ferramenta qualquer.
    */
   formatoDeArea?: FormatoDeArea;
 };
@@ -70,6 +69,11 @@ type Ferramenta = {
 /**
  * As do PALCO: mexem no que está em cena — escolher, arrastar, riscar, apagar.
  * São as da mão, as que o mestre troca a cada minuto.
+ *
+ * O lápis e a borracha ficam aqui e não na pílula de desenho, embora as duas
+ * também marquem o mapa: a pílula faz duas perguntas -- qual o desenho, e o que
+ * ele significa --, e nenhuma das duas cabe no risco à mão livre. Ele não tem
+ * caixa, não tem formato e não vira parede nem névoa.
  */
 const FERRAMENTAS_PALCO: Ferramenta[] = [
   {
@@ -99,9 +103,12 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
 ];
 
 /**
- * As do MAPA: marcam o chão — pontos, papéis, áreas escondidas. Junto delas
- * ficam a grade e a régua, que também são sobre o mapa e não sobre o que anda
- * nele.
+ * As do MAPA: marcam o chão -- pontos, papéis, luz. Junto delas ficam a grade,
+ * o sol e a régua, que também são sobre o mapa e não sobre o que anda nele.
+ *
+ * A área escondida e a parede saíram daqui para a pílula de desenho: as duas
+ * são REGIÕES, e a pergunta "qual o desenho dela" passou a ser a mesma nas
+ * três naturezas. Ver `PilulaDeDesenho`.
  */
 const FERRAMENTAS_MAPA: Ferramenta[] = [
   {
@@ -117,25 +124,10 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
     icon: StickyNote,
   },
   {
-    tool: "fog",
-    formatoDeArea: "retangulo",
-    label: "Área escondida",
-    hint: "Arraste para cobrir uma região. A mesa vê preto sólido.",
-    icon: SquareDashedBottom,
-  },
-  {
-    tool: "fog",
-    formatoDeArea: "elipse",
-    label: "Área escondida redonda",
-    hint: "Cobre uma região arredondada. Shift para um círculo.",
-    icon: CircleDashed,
-  },
-  {
-    tool: "fog",
-    formatoDeArea: "poligono",
-    label: "Área escondida livre",
-    hint: "Contorna a região vértice a vértice. Enter fecha.",
-    icon: Lasso,
+    tool: "luz",
+    label: "Luz",
+    hint: "Crava uma tocha. A sombra de cada figura aponta para longe dela.",
+    icon: Flame,
   },
 ];
 
@@ -156,27 +148,6 @@ const FERRAMENTAS_DE_DESENHO: Ferramenta[] = [
     label: "Texto",
     hint: "Escreve direto na cena, sem papel. Nasce só para você.",
     icon: Type,
-  },
-  {
-    tool: "forma",
-    tipoDeForma: "retangulo",
-    label: "Quadrado",
-    hint: "Arraste para desenhar um retângulo. Shift para um quadrado.",
-    icon: Square,
-  },
-  {
-    tool: "forma",
-    tipoDeForma: "elipse",
-    label: "Círculo",
-    hint: "Arraste para desenhar uma elipse. Shift para um círculo.",
-    icon: Circle,
-  },
-  {
-    tool: "forma",
-    tipoDeForma: "linha",
-    label: "Linha",
-    hint: "Arraste de onde até onde.",
-    icon: Minus,
   },
 ];
 
@@ -211,7 +182,10 @@ const FERRAMENTAS_QUADRO: Ferramenta[] = [
  */
 const DA_REGUA: Record<"quadro" | "mapa", Ferramenta[]> = {
   quadro: [
-    ...FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog" && f.tool !== "pin"),
+    // Do que é do mapa, só o POSTIT sobe para a régua do quadro: ali ele é
+    // conteúdo, e não anotação. O alfinete e a luz não têm o que fazer numa
+    // folha, e a área escondida e a parede saíram para a pílula.
+    ...FERRAMENTAS_MAPA.filter((f) => f.tool === "postit"),
     ...FERRAMENTAS_DE_DESENHO,
     ...FERRAMENTAS_QUADRO,
   ],
@@ -350,6 +324,14 @@ export function ReguaDeDesenho({ scene }: { scene: Scene }) {
 
   return (
     <div className="bg-background/85 pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+      {/* A pílula primeiro, porque ela é a porta do que se DESENHA: quadrado,
+          círculo e traço livre, cada um virando parede, área escondida ou
+          elemento. O que sobra na régua abaixo dela são os alvos diretos, que
+          não têm desenho a escolher. Ver `PilulaDeDesenho`. */}
+      <PilulaDeDesenho quadro={quadro} />
+
+      <span className="bg-border my-1 h-px w-5" />
+
       {DA_REGUA[quadro ? "quadro" : "mapa"].map((ferramenta) => (
         <BotaoDeFerramenta
           key={ferramenta.tipoDeForma ?? ferramenta.formatoDeArea ?? ferramenta.tool}
@@ -455,7 +437,15 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   // Trocar de um mapa para um quadro com a névoa na mão deixaria a ferramenta
   // ativa sem botão na barra -- e o clique seguinte cobriria o quadro de preto.
   useEffect(() => {
-    if (quadro && (tool === "fog" || tool === "regua" || tool === "pin"))
+    if (
+      quadro &&
+      (tool === "fog" ||
+        tool === "regua" ||
+        tool === "pin" ||
+        // Parede e luz são do chão, e quadro não tem chão: ver `Tool`.
+        tool === "parede" ||
+        tool === "luz")
+    )
       setTool("select");
     // E o inverso: só a SETA agora. A letra e a forma atravessam a troca de
     // cena porque valem nos dois lados -- ver `FERRAMENTAS_DE_DESENHO` --, e
@@ -492,7 +482,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
       {quadro ? null : (
         <Bolsa
           nome="Ferramentas do mapa"
-          dica="Ponto, postit, área escondida, grade e régua."
+          dica="Ponto, postit, luz, grade, sol e régua."
           aberta={aberta === "mapa"}
           onAberta={(v) => setAberta(v ? "mapa" : null)}
           ativa={daBolsa(doMapa)}
@@ -509,6 +499,9 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
           <span className="bg-border mx-1 h-5 w-px" />
 
           <GridControl scene={scene} />
+          {/* Ao lado da grade, e pela mesma razão dela: ajuste do chão, feito
+              uma vez por mapa. Ver `SolControl`. */}
+          <SolControl scene={scene} />
           {/* A régua só mede com a grade ligada: é o quadrado que diz quanto
               vale um metro. */}
           <BotaoDeFerramenta

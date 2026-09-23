@@ -172,6 +172,19 @@ export type CanvasItem = {
    * migração, e o caso comum — imagem opaca — continua sem campo nenhum.
    */
   opacity?: number;
+  /**
+   * Este item NÃO lança sombra. Ausente = lança, se a cena tiver luz.
+   *
+   * Existe porque metade do que se põe num mapa está pintado no chão e não em
+   * pé nele: a marca de sangue, o tapete, o mapa dentro do mapa, a área de
+   * efeito. Uma figura deitada que projeta sombra denuncia que é um adesivo, e
+   * é justamente o contrário do que a sombra veio fazer.
+   *
+   * A decisão é do item e não do tipo de arquivo porque o mesmo PNG serve aos
+   * dois papéis: o barril é mobília em pé num mapa e é entulho no chão de
+   * outro.
+   */
+  semSombra?: boolean;
 };
 
 /**
@@ -488,7 +501,12 @@ export type NewTexto = Pick<Texto, "x" | "y"> &
 export const TEXTO_TAMANHO = 40;
 
 /** As formas que o quadro desenha. Ver `Forma`. */
-export const TIPOS_DE_FORMA = ["retangulo", "elipse", "linha"] as const;
+export const TIPOS_DE_FORMA = [
+  "retangulo",
+  "elipse",
+  "linha",
+  "poligono",
+] as const;
 
 export type TipoDeForma = (typeof TIPOS_DE_FORMA)[number];
 
@@ -541,6 +559,15 @@ export type Forma = {
    * (ausente) ou do inferior esquerdo ao superior direito (`"secundaria"`).
    */
   diagonal?: "secundaria";
+  /**
+   * Os vértices do laço, em FRAÇÃO da caixa. Só existem em `poligono`.
+   *
+   * O mesmo campo, com o mesmo significado e a mesma conta, que a área
+   * escondida e a parede: `pontosNaCaixa` serve aos três. O laço entrou nas
+   * três de uma vez porque contornar à mão o que não é retângulo nem elipse é a
+   * mesma necessidade, mude o que a figura SIGNIFICA.
+   */
+  pontos?: number[];
   /** Está na mesa? Ausente = só o mestre vê. O mesmo do texto solto. */
   naMesa?: boolean;
 };
@@ -865,6 +892,142 @@ export type Medidor = {
 };
 
 export type NewMedidor = Omit<Medidor, "id">;
+
+/**
+ * Uma parede: onde a luz para.
+ *
+ * Só geometria, e de propósito. A parede daqui não é a parede DESENHADA do
+ * mapa -- essa já está pintada no arquivo, e é ela que o mestre segue por cima.
+ * Esta é a informação de que ali a luz para. É por isso que a mesa nunca vê a
+ * parede: o que ela vê é o efeito, a sombra.
+ *
+ * A CAIXA é a verdade, nos quatro formatos, exatamente como na área escondida:
+ * `x, y, width, height` é o que o gizmo move, escala e gira, e o `formato` diz
+ * só qual desenho ela tem. É isso que dá giro, laço e alça à parede sem que
+ * snap, limites e desfazer aprendam geometria nova -- e a primeira versão, que
+ * era um segmento cru de quatro números, não tinha nada disso.
+ *
+ * Não para o TOKEN. Trancar a peça no meio do mapa atrapalha a mestragem --
+ * pôr alguém dentro da parede é gesto legítimo numa mesa --, e a parede que
+ * bloqueia o arrasto obrigaria o mestre a apagá-la para poder mestrar.
+ */
+/**
+ * Os formatos que uma parede sabe ter.
+ *
+ * Os mesmos nomes da área escondida e da forma do quadro, porque é o mesmo
+ * vocabulário para a mesma pergunta: qual é o desenho. O que muda entre os três
+ * é o que o desenho SIGNIFICA -- cercar, esconder, parar a luz.
+ *
+ * `linha` é o caso comum e é a diagonal da caixa: a parede de um corredor é um
+ * traço, e obrigar o mestre a fechar um retângulo de dois pixels de altura para
+ * traçá-la seria cobrar um recinto por uma divisória.
+ */
+export const FORMATOS_DE_PAREDE = [
+  "linha",
+  "retangulo",
+  "elipse",
+  "poligono",
+] as const;
+
+export type FormatoDeParede = (typeof FORMATOS_DE_PAREDE)[number];
+
+export type Parede = {
+  id: string;
+  /** Canto superior esquerdo da caixa, em coordenadas de cena. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Graus, no sentido horário, em torno do centro da caixa. Ausente = 0. */
+  rotation?: number;
+  formato: FormatoDeParede;
+  /**
+   * Os vértices do laço, em FRAÇÃO da caixa, como na área recortada. Só existem
+   * em `poligono`. Ver `pontosNaCaixa`.
+   */
+  pontos?: number[];
+  /**
+   * Só a `linha`: ela corre do canto superior esquerdo ao inferior direito
+   * (ausente) ou do inferior esquerdo ao superior direito (`"secundaria"`).
+   * A mesma convenção da forma do quadro.
+   */
+  diagonal?: "secundaria";
+};
+
+export type NewParede = Omit<Parede, "id">;
+
+/**
+ * Uma luz cravada no mapa: a tocha da parede, a fogueira, a fresta da porta.
+ *
+ * Tem POSIÇÃO, e é isso que a separa do `Sol`: a sombra que ela lança aponta
+ * para longe dela, então dois tokens em lados opostos da fogueira têm sombras
+ * em sentidos opostos. Com o sol, as duas sombras seriam paralelas.
+ *
+ * O `raio` não é só alcance: é o que dá fim à sombra. Sem escuridão de
+ * ambiente -- o mapa continua com o brilho cheio --, a sombra de uma parede
+ * precisa acabar em algum lugar, e acaba desmaiando na borda do alcance. Ver
+ * `SombraLayer`.
+ *
+ * Mora na CENA e viaja para a mesa, como a névoa e o risco: a sombra é desenho
+ * do mapa, não anotação do mestre. O que não viaja é o DESENHO da luz -- a
+ * bolinha que o mestre arrasta --, que só existe no palco dele.
+ */
+export type Luz = {
+  id: string;
+  /** Onde a luz está, em coordenadas de cena. */
+  x: number;
+  y: number;
+  /** Até onde ela alcança, em unidades de cena. Fora disso não há sombra. */
+  raio: number;
+  /** Quão escura é a sombra dela, de 0 a 1. Ausente = `FORCA_DA_SOMBRA`. */
+  forca?: number;
+};
+
+export type NewLuz = Omit<Luz, "id">;
+
+/**
+ * O sol da cena: luz sem posição, só direção.
+ *
+ * Uma cena tem no máximo um, e ele é o caso barato: sem posição não há
+ * projeção a calcular por token, e a sombra de todo mundo é a mesma figura
+ * deitada para o mesmo lado. É o que dá volume a um mapa a céu aberto por
+ * quase nada.
+ *
+ * Ausente é o estado normal, e não um esquecimento: mapa de masmorra não tem
+ * sol, e token de pacote quase sempre já traz uma sombra pintada no próprio
+ * PNG -- ligar o sol por padrão daria duas sombras em sentidos diferentes na
+ * primeira cena de todo mundo. O mestre liga quando o mapa pede.
+ */
+export type Sol = {
+  /**
+   * Para onde a sombra VAI, em graus, no sentido horário a partir da direita.
+   *
+   * O ângulo da sombra e não o do sol, porque é a sombra que se vê: o mestre
+   * gira um controle olhando o que acontece na tela, e "o sol está a 305" é
+   * uma conta que ninguém quer fazer no meio da sessão.
+   */
+  angulo: number;
+  /** Comprimento da sombra, em frações da altura do item. */
+  comprimento: number;
+  /** Quão escura ela é, de 0 a 1. */
+  forca: number;
+};
+
+/** Quão escura uma sombra é quando ninguém disse. */
+export const FORCA_DA_SOMBRA = 0.45;
+
+/** O alcance de uma luz recém-cravada, em unidades de cena. */
+export const RAIO_DA_LUZ_PADRAO = 320;
+
+/**
+ * O sol que nasce quando o mestre liga o sol.
+ *
+ * Tarde alta e à esquerda: a sombra cai para a direita e para baixo, que é
+ * para onde a luz de cima de uma sala costuma jogá-la, e é o sentido que a
+ * sombra pintada na maioria dos tokens de pacote já tem. Ligar o sol num mapa
+ * desses soma as duas em vez de cruzá-las.
+ */
+export const SOL_PADRAO: Sol = { angulo: 35, comprimento: 0.42, forca: 0.38 };
 
 /**
  * Recorte do plano de cena. Sempre na proporção do plano, para toda visão
@@ -1355,6 +1518,23 @@ export type Scene = {
    * `Medidor`.
    */
   medidores?: Medidor[];
+  /**
+   * As paredes da cena: onde a luz para. Ausente = nenhuma. Ver `Parede`.
+   *
+   * Viaja para a mesa, mas só o Mestre as DESENHA: a mesa recebe a geometria
+   * porque é ela que calcula a própria sombra -- cada tela projeta a sua, e
+   * assim a sombra não depende de o canal republicar a cena a cada passo.
+   */
+  paredes?: Parede[];
+  /** As luzes cravadas no mapa. Ausente = nenhuma. Ver `Luz`. */
+  luzes?: Luz[];
+  /**
+   * O sol da cena. Ausente = sem sol, que é o normal. Ver `Sol`.
+   *
+   * Um, e não uma lista: dois sóis são duas direções, e duas direções é o que
+   * a luz pontual já faz -- com posição, que é o que dá sentido a elas.
+   */
+  sol?: Sol;
   /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.

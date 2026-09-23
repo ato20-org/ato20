@@ -73,6 +73,11 @@ import {
   type NewDocumento,
   type Nota,
   type NewMedidor,
+  type Luz,
+  type NewLuz,
+  type NewParede,
+  type Parede,
+  type Sol,
   type NewTexto,
   type Pasta,
   type PontaDeLigacao,
@@ -331,6 +336,37 @@ type SceneStore = {
     patch: Partial<Omit<Medidor, "id">>,
   ) => void;
   removeMedidores: (sceneId: string, medidorIds: string[]) => void;
+
+  /**
+   * Traça uma parede: o segmento em que a luz para. Ver `Parede`.
+   *
+   * Passa pelo histórico, como o risco e o medidor: parede é edição da cena, e
+   * traçar dez seguidas e querer a última de volta é o gesto normal de quem
+   * está contornando um mapa.
+   */
+  addParede: (sceneId: string, parede: NewParede) => string;
+  updateParede: (
+    sceneId: string,
+    paredeId: string,
+    patch: Partial<Omit<Parede, "id">>,
+  ) => void;
+  /** Apaga várias de uma vez, como a borracha faz com os riscos. */
+  removeParedes: (sceneId: string, paredeIds: string[]) => void;
+  /** Crava uma luz. Devolve o id, para o palco já deixá-la selecionada. */
+  addLuz: (sceneId: string, luz: NewLuz) => string;
+  updateLuz: (
+    sceneId: string,
+    luzId: string,
+    patch: Partial<Omit<Luz, "id">>,
+  ) => void;
+  removeLuzes: (sceneId: string, luzIds: string[]) => void;
+  /**
+   * Liga, ajusta ou desliga o sol da cena. `undefined` desliga.
+   *
+   * Um só por cena, então não há id nem lista: é uma troca de valor, e não uma
+   * coleção. Ver `Sol`.
+   */
+  setSol: (sceneId: string, sol: Sol | undefined) => void;
   updateFog: (
     sceneId: string,
     fogId: string,
@@ -1295,6 +1331,84 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           medidores: restantes.length > 0 ? restantes : undefined,
         };
       });
+    },
+
+    addParede(sceneId, parede) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        paredes: [...(scene.paredes ?? []), { ...parede, id }],
+      }));
+
+      return id;
+    },
+
+    updateParede(sceneId, paredeId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        paredes: (scene.paredes ?? []).map((parede) =>
+          parede.id === paredeId ? { ...parede, ...patch } : parede,
+        ),
+      }));
+    },
+
+    removeParedes(sceneId, paredeIds) {
+      if (paredeIds.length === 0) return;
+
+      const apagar = new Set(paredeIds);
+
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.paredes ?? []).filter(
+          (parede) => !apagar.has(parede.id),
+        );
+
+        return {
+          ...scene,
+          paredes: restantes.length > 0 ? restantes : undefined,
+        };
+      });
+    },
+
+    addLuz(sceneId, luz) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        luzes: [...(scene.luzes ?? []), { ...luz, id }],
+      }));
+
+      return id;
+    },
+
+    updateLuz(sceneId, luzId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        luzes: (scene.luzes ?? []).map((luz) =>
+          luz.id === luzId ? { ...luz, ...patch } : luz,
+        ),
+      }));
+    },
+
+    removeLuzes(sceneId, luzIds) {
+      if (luzIds.length === 0) return;
+
+      const apagar = new Set(luzIds);
+
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.luzes ?? []).filter(
+          (luz) => !apagar.has(luz.id),
+        );
+
+        return {
+          ...scene,
+          luzes: restantes.length > 0 ? restantes : undefined,
+        };
+      });
+    },
+
+    setSol(sceneId, sol) {
+      get().updateScene(sceneId, (scene) => ({ ...scene, sol }));
     },
 
     updateFog(sceneId, fogId, patch) {

@@ -13,6 +13,8 @@ import {
   pasteClipboard,
   removeFogSelection,
   removeMedidorSelection,
+  removeLuzSelection,
+  removeParedeSelection,
   removePortraitSelection,
   removeSelection,
   rotateSelection,
@@ -665,6 +667,11 @@ export const ATALHOS_BASE: Atalho[] = [
         quadro.selecionarLigacao(null);
       } else if (selecao.selectedFogId) removeFogSelection();
       else if (selecao.selectedMedidorId) removeMedidorSelection();
+      // Antes do retrato e do item, e depois do medidor, pela mesma regra de
+      // atenção: parede e luz só ficam selecionadas quando o mestre acabou de
+      // encostar numa delas.
+      else if (selecao.selectedParedeId) removeParedeSelection();
+      else if (selecao.selectedLuzId) removeLuzSelection();
       else if (selecao.selectedPortraitIds.length > 0)
         removePortraitSelection();
       else removeSelection();

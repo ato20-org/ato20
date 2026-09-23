@@ -8,6 +8,7 @@ import {
   type CorPostit,
   type FormaMedidor,
   type FormatoDeArea,
+  type FormatoDeParede,
   type TipoDeForma,
 } from "@/types/scene";
 
@@ -24,6 +25,10 @@ import {
  * para a preparação que não pode estar à vista o tempo todo —, e o postit é
  * texto ABERTO sobre uma região, que é o que se quer para o que precisa ser
  * lido de relance no meio da sessão.
+ *
+ * `parede` e `luz` são as duas da sombra: a parede diz onde a luz para, a luz
+ * diz de onde ela vem. Nenhuma das duas aparece na mesa -- o que a mesa vê é o
+ * efeito delas, que é a sombra. Ver `SombraLayer`.
  *
  * `regua` coloca um medidor no arrasto -- régua, círculo, cone ou retângulo,
  * conforme `formaMedidor` -- e mora colada na grade, na pílula do mapa: ela só
@@ -46,6 +51,15 @@ export type Tool =
   | "lapis"
   | "borracha"
   | "regua"
+  // As duas da LUZ: `parede` traça o segmento em que a luz para, no arrasto, e
+  // `luz` crava uma fonte no clique. Mesma divisão de gesto das duas de mira:
+  // a parede tem comprimento, a luz não tem tamanho nenhum -- pedir um arrasto
+  // para cravar uma tocha faria o mestre desenhar uma caixa invisível.
+  //
+  // As duas são do MAPA e só dele: num quadro não há chão em que a sombra
+  // caia.
+  | "parede"
+  | "luz"
   // As três do QUADRO: `texto` escreve direto na folha no clique, `ligacao`
   // amarra duas coisas com uma seta em dois cliques -- de onde, para onde --, e
   // `forma` desenha retângulo, elipse ou linha no arrasto, conforme
@@ -127,6 +141,18 @@ type ToolStore = {
   setCorPostit: (cor: CorPostit) => void;
 
   /**
+   * O formato da PRÓXIMA parede. Ver `FormatoDeParede`.
+   *
+   * Irmão do `formatoDeArea` e do `tipoDeForma`, e os três são a mesma pergunta
+   * feita a três naturezas: qual é o desenho. A pílula da barra escolhe a
+   * natureza e o formato no mesmo gesto, mas cada natureza guarda o SEU -- quem
+   * traça paredes em laço e esconde áreas em retângulo não quer que uma troque
+   * a outra.
+   */
+  formatoDaParede: FormatoDeParede;
+  setFormatoDaParede: (formato: FormatoDeParede) => void;
+
+  /**
    * A forma e a cor do PRÓXIMO medidor.
    *
    * Aqui pelas mesmas razões do lápis: preferência de quem mede, vale para a
@@ -185,6 +211,13 @@ export const useToolStore = create<ToolStore>((set) => ({
 
   corPostit: CORES_POSTIT[0],
   setCorPostit: (corPostit) => set({ corPostit }),
+
+
+  // `retangulo` e não `linha`: a pílula oferece quadrado, círculo e traço
+  // livre, e uma parede reta é um retângulo fino -- que ainda por cima é o
+  // desenho mais honesto de uma parede com grossura.
+  formatoDaParede: "retangulo",
+  setFormatoDaParede: (formatoDaParede) => set({ formatoDaParede }),
 
   formaMedidor: "linha",
   corMedidor: CORES_LAPIS[5],

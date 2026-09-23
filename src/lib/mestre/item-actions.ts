@@ -526,6 +526,26 @@ export function toggleFogRevealed(fogId?: string): void {
     .updateFog(scene.id, region.id, { revealed: !region.revealed });
 }
 
+/** Apaga a parede selecionada. */
+export function removeParedeSelection(): void {
+  const { scene } = read();
+  const paredeId = useSelectionStore.getState().selectedParedeId;
+  if (!scene || !paredeId) return;
+
+  useSceneStore.getState().removeParedes(scene.id, [paredeId]);
+  useSelectionStore.getState().clear();
+}
+
+/** Apaga a luz selecionada. */
+export function removeLuzSelection(): void {
+  const { scene } = read();
+  const luzId = useSelectionStore.getState().selectedLuzId;
+  if (!scene || !luzId) return;
+
+  useSceneStore.getState().removeLuzes(scene.id, [luzId]);
+  useSelectionStore.getState().clear();
+}
+
 /** Apaga o medidor selecionado. */
 export function removeMedidorSelection(): void {
   const { scene } = read();
