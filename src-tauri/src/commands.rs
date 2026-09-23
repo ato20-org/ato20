@@ -410,6 +410,22 @@ pub fn asset_delete(state: State<'_, AppState>, id: String) -> AppResult<()> {
     state.with_vault(|vault| assets::delete(vault, &id))
 }
 
+/// Define como um som toca: `trilha`, `ambiente` ou `disparo`.
+#[tauri::command]
+pub fn asset_set_tipo_de_som(
+    state: State<'_, AppState>,
+    id: String,
+    tipo: Option<String>,
+) -> AppResult<()> {
+    state.with_vault(|vault| assets::set_tipo_de_som(vault, &id, tipo.clone()))
+}
+
+/// Troca o nome de exibicao de um arquivo do acervo.
+#[tauri::command]
+pub fn asset_rename(state: State<'_, AppState>, id: String, name: String) -> AppResult<()> {
+    state.with_vault(|vault| assets::rename(vault, &id, &name))
+}
+
 #[tauri::command]
 pub fn asset_set_folder(
     state: State<'_, AppState>,

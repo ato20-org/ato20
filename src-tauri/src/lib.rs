@@ -192,6 +192,8 @@ pub fn run() {
             commands::asset_import_cancelar,
             commands::asset_set_escopo,
             commands::asset_delete,
+            commands::asset_rename,
+            commands::asset_set_tipo_de_som,
             commands::asset_set_folder,
             commands::asset_set_peaks,
             commands::folder_list,

@@ -1,6 +1,14 @@
 "use client";
 
-import { Pause, Play, Repeat, Square, Volume2, VolumeX } from "lucide-react";
+import {
+  Pause,
+  Play,
+  Repeat,
+  RepeatOff,
+  Square,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -10,9 +18,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TrackWave } from "@/components/mestre/track-wave";
+import { chaveDaTrilha } from "@/components/playground/session-audio";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useTrackPeaks } from "@/hooks/use-track-peaks";
-import { useAudioStore } from "@/lib/store/use-audio-store";
+import { mmss } from "@/lib/mestre/tempo";
+import { useAudioStore, useProgresso } from "@/lib/store/use-audio-store";
+import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
 
@@ -25,8 +36,10 @@ import { cn } from "@/lib/utils";
  * sessão inteira. Com o bloco lá, saber se a música ainda estava rodando exigia
  * abrir o painel direito e trocar de aba.
  *
- * Aqui ela é a linha de baixo, sempre à vista, e o painel voltou a ser só o
- * acervo.
+ * Aqui ela é a linha de baixo, sempre à vista. O painel continua tendo a trilha
+ * como uma camada do mixer (`SomAtual`), e as duas não se atrapalham: lá ela é
+ * equilibrada contra a chuva, aqui ela é navegada pela onda sem abrir aba
+ * nenhuma.
  *
  * Só aparece quando há trilha escolhida: uma barra vazia ocupando altura de
  * palco durante uma sessão sem música seria pior que não tê-la.
@@ -35,13 +48,17 @@ export function TrackBar() {
   const track = useTrackStore((state) => state.track);
   const setPlaying = useTrackStore((state) => state.setPlaying);
   const setLoop = useTrackStore((state) => state.setLoop);
-  const volume = useTrackStore((state) => state.volume);
-  const setVolume = useTrackStore((state) => state.setVolume);
+  const volumeTrilha = usePreferenciasStore((state) => state.volumeTrilha);
+  const definirVolume = usePreferenciasStore((state) => state.definirVolume);
   const seek = useTrackStore((state) => state.seek);
   const clear = useTrackStore((state) => state.clear);
 
-  const position = useAudioStore((state) => state.position);
-  const duration = useAudioStore((state) => state.duration);
+  // Pela chave do canal, e não por um par de números global: o painel de sons
+  // acompanha as camadas todas, e a barra do pé quer só a da trilha.
+  const { position, duration } = useProgresso(
+    track ? chaveDaTrilha(track.assetId) : null,
+  );
+
   const enabled = useAudioStore((state) => state.enabled);
   const setEnabled = useAudioStore((state) => state.setEnabled);
   const blocked = useAudioStore((state) => state.blocked);
@@ -75,13 +92,14 @@ export function TrackBar() {
       </span>
 
       <span className="text-muted-foreground w-10 shrink-0 text-right text-[10px] tabular-nums">
-        {formatar(position)}
+        {mmss(position)}
       </span>
 
       {/* A forma da onda, com a parte tocada acesa. Arrastar reescreve
           `startedAt`, então a TV e os celulares acompanham — ver `seek` no
           store. */}
       <TrackWave
+        nome={nome}
         peaks={peaks}
         position={position}
         duration={duration}
@@ -89,23 +107,31 @@ export function TrackBar() {
       />
 
       <span className="text-muted-foreground w-10 shrink-0 text-[10px] tabular-nums">
-        {conhecida ? formatar(duration) : "--:--"}
+        {conhecida ? mmss(duration) : "--:--"}
       </span>
 
+      {/* Dois DESENHOS e não duas cores do mesmo.
+          O botão era um `Repeat` só, claro quando ligado e apagado quando não,
+          e a diferença entre as duas cores exigia ter visto a outra — num
+          controle que se olha uma vez, sem ponto de comparação ao lado. A barra
+          cortada é a mesma resposta que o `VolumeX` dá dois botões adiante:
+          diz o estado de agora, e não o que o clique fará. */}
       <Tooltip>
         <TooltipTrigger
           render={
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Repetir a faixa"
+              aria-label={
+                track.loop ? "A faixa está repetindo" : "A faixa toca uma vez"
+              }
               aria-pressed={track.loop}
               className={cn(
                 track.loop ? "text-foreground" : "text-muted-foreground/60",
               )}
               onClick={() => setLoop(!track.loop)}
             >
-              <Repeat />
+              {track.loop ? <Repeat /> : <RepeatOff />}
             </Button>
           }
         />
@@ -114,23 +140,31 @@ export function TrackBar() {
         </TooltipContent>
       </Tooltip>
 
-      {/* Único volume do som, e ele viaja: o mestre regula aqui e a TV e os
-          celulares seguem.
+      {/* O volume DESTA CAMADA, e não o da mesa. Era o do sistema, e estava
+          errado pelo mesmo motivo que tudo mais nesta barra está certo: ela é a
+          trilha — a onda é da trilha, o play é da trilha, o repetir é da
+          trilha —, e um slider que abaixava a chuva junto no meio dela era a
+          única coisa aqui que não falava de música. O volume da mesa tem lugar
+          próprio agora, no painel de Sons.
 
-          Da SESSÃO, e não da faixa: trocar de música não mexe nele, e tirar a
-          trilha não perde o ajuste. Guardado por faixa, cada troca trazia o
-          ganho de quando aquela música foi escolhida e o som saltava. */}
+          Da CAMADA e não da faixa: trocar de música não mexe nele, e tirar a
+          trilha não perde o ajuste. O fader da faixa é outro, no Atual, e nasce
+          cheio a cada troca de propósito — ver `volumeTrilha`.
+
+          E ele viaja: o mestre regula aqui, a TV e os celulares seguem. */}
       <div className="flex w-32 shrink-0 items-center gap-2">
         <Slider
           className="flex-1"
-          aria-label="Volume do som, em todas as telas"
-          value={[Math.round(volume * 100)]}
+          aria-label="Volume da trilha, em todas as telas"
+          value={[Math.round(volumeTrilha * 100)]}
           max={100}
           step={1}
-          onValueChange={(value) => setVolume(primeiro(value) / 100)}
+          onValueChange={(value) =>
+            definirVolume("volumeTrilha", primeiro(value) / 100)
+          }
         />
         <span className="text-muted-foreground w-6 text-right text-[10px] tabular-nums">
-          {Math.round(volume * 100)}
+          {Math.round(volumeTrilha * 100)}
         </span>
       </div>
 
@@ -185,14 +219,4 @@ export function TrackBar() {
 
 function primeiro(value: number | readonly number[]): number {
   return Array.isArray(value) ? (value[0] ?? 0) : (value as number);
-}
-
-/** `mm:ss`. Faixa de RPG não passa de uma hora, e `1:04:20` na barra só ocuparia espaço. */
-function formatar(segundos: number): string {
-  if (!Number.isFinite(segundos) || segundos < 0) return "--:--";
-
-  const total = Math.floor(segundos);
-  const minutos = Math.floor(total / 60);
-
-  return `${minutos}:${String(total % 60).padStart(2, "0")}`;
 }

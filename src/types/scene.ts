@@ -63,7 +63,38 @@ export type AssetMeta = {
    * uma linha lisa.
    */
   peaks?: number[];
+  /**
+   * Como este som deve tocar. Só para `kind: "audio"`.
+   *
+   * O arquivo passou a declarar o que ele É, e não só o que ele contém. Antes o
+   * acervo oferecia os três destinos em toda linha — a mesma chuva podia ser a
+   * trilha de uma viagem, o fundo de uma taverna e um susto de um segundo — e a
+   * flexibilidade custava a lista: três botões por linha, nenhuma ordem, e a
+   * pergunta "qual era mesmo a música de combate?" respondida lendo nomes.
+   *
+   * Com o tipo no arquivo, acionar é UM gesto e a lista se agrupa sozinha. Quem
+   * quiser a mesma chuva nos dois papéis importa duas vezes, ou troca o tipo —
+   * é um menu, e não uma decisão definitiva.
+   *
+   * Ausente é estado válido e não há migração: som importado antes deste campo,
+   * e som largado na janela sem passar pelo botão, ficam sem tipo até alguém
+   * escolher um. A lista os junta num grupo próprio em vez de chutar.
+   */
+  tipoDeSom?: TipoDeSom;
 };
+
+/**
+ * O que um som é na mesa.
+ *
+ * `trilha` é a música: uma de cada vez, com começo, meio e fim, e navegável.
+ * `ambiente` é o fundo que fica: repete, e vários ao mesmo tempo. `disparo` é o
+ * efeito: toca uma vez e some.
+ *
+ * Mora aqui e não junto das cores porque é do DOMÍNIO: o `AssetMeta` o carrega,
+ * o Rust o grava e o pad o usa. A cor de cada um é uma decisão de tela, e
+ * continua em `CORES_DO_SOM`.
+ */
+export type TipoDeSom = "trilha" | "ambiente" | "disparo";
 
 /**
  * Pasta do acervo.
@@ -863,16 +894,28 @@ export const DEFAULT_SESSION_VOLUME = 0.8;
  * Continua viajando junto da cena no canal, porque a TV e os celulares
  * precisam saber o que tocar.
  *
- * Sem campo de volume: o ganho é da sessão, não da faixa. Guardado por faixa,
- * cada troca de música trocava o volume junto — a escolhida entrava com o
- * ganho de quando foi gravada, e o mestre reajustava o slider a cada troca.
- * O volume da sessão mora no `TrackStore`.
+ * Sem campo de VOLUME, e isso não mudou: o volume é da sessão e mora no
+ * `TrackStore`. Guardado por faixa, cada troca de música o trocava junto — a
+ * escolhida entrava com o número de quando foi gravada, e o mestre reajustava
+ * o slider a cada troca.
  */
 export type SessionTrack = {
   assetId: string;
   loop: boolean;
   /** Pausado é diferente de ausente: a faixa continua escolhida. */
   playing: boolean;
+  /**
+   * Ganho DESTA faixa, de 0 a 1. Ver `Ambiente.ganho`.
+   *
+   * Não é o volume que saiu daqui, e a diferença está em quando ele nasce: o
+   * volume vinha do disco e voltava a cada faixa, e era isso que fazia o som
+   * saltar na troca. Este nasce cheio toda vez que uma faixa entra — ver
+   * `start` —, então nada é restaurado e nada salta.
+   *
+   * Existe porque sem ele a trilha era o único canal sem fader, e abaixar a
+   * música para o mestre falar por cima levava a chuva junto.
+   */
+  ganho: number;
   /**
    * Quando o play atual começou, em epoch ms.
    *
@@ -883,12 +926,160 @@ export type SessionTrack = {
 };
 
 /**
+ * Som de fundo que fica: chuva, fogueira, mercado, vento.
+ *
+ * Toca em loop e não tem barra de posição — ninguém procura o instante 1:12
+ * da chuva. É a diferença que separa ambiente de trilha: a trilha tem começo,
+ * meio e fim, e o mestre navega nela; o ambiente só está aceso ou apagado.
+ *
+ * Vários ao mesmo tempo, de propósito. Chuva com fogueira é duas camadas, e
+ * não um terceiro arquivo que alguém teria de produzir para cada combinação.
+ *
+ * Fica FORA da cena, como a trilha e pela mesma razão: o histórico de desfazer
+ * tira retratos do board, e a chuva não deve voltar por causa de um Ctrl+Z num
+ * token. Que ambientes cada cena acende mora no `TrackStore`, num mapa por id
+ * de cena. Ver `ambientesPorCena`.
+ */
+export type Ambiente = {
+  id: string;
+  assetId: string;
+  /**
+   * Ganho deste canal, de 0 a 1.
+   *
+   * MULTIPLICA o volume da sessão, e é o que torna "chuva leve por baixo da
+   * música" possível: sem ele o mestre só teria o volume geral, e abaixar a
+   * chuva levaria a trilha junto.
+   *
+   * Não confundir com o que a nota de `outputVolume` recusa. Ali o que se
+   * multiplicava era sessão × APARELHO, e o resultado era um número que
+   * ninguém sabia explicar — 5% de 70%. Aqui é sessão × CANAL, que é o que
+   * toda mesa de som faz, e o mestre vê os dois controles lado a lado.
+   */
+  ganho: number;
+  /** Pausado é diferente de ausente, como na trilha. */
+  tocando: boolean;
+  /**
+   * Quando este ambiente acendeu, em epoch ms.
+   *
+   * Mesmo motivo da trilha: quem chega no meio entra na altura em que a mesa
+   * está. Menos crítico aqui — chuva soa igual em qualquer ponto —, mas um
+   * arquivo de ambiente costuma ter um evento no meio, um trovão ou um sino,
+   * e dois aparelhos em pontos diferentes dele soam como eco.
+   */
+  startedAt: number;
+};
+
+/**
  * Efeito disparado agora — porta rangendo, trovão, grito.
  *
- * Também mora na cena, pelo mesmo motivo da trilha. `firedAt` muda a cada
- * disparo, e é o que faz o espectador reconhecer que houve um novo: comparar
- * `assetId` não distinguiria dois disparos do mesmo som.
+ * Viaja no canal pelo mesmo motivo da trilha: quem precisa ouvir é a mesa.
+ * `firedAt` muda a cada disparo, e é o que faz o espectador reconhecer que
+ * houve um novo — comparar `assetId` não distinguiria dois disparos do mesmo
+ * som.
+ *
+ * Separado do ambiente em duas coisas: não repete, e não é estado. Vive numa
+ * bandeja, como as rolagens da mesa, e sai dela quando o arquivo acaba — o
+ * prazo é a duração do próprio som, e não um número fixo: um efeito pode ser
+ * um trovão de dois segundos ou a entrada de um inimigo de dois minutos.
+ * Guardado como estado, o tiro tocaria de novo a cada espectador que
+ * reconectasse — e o batimento do canal republica o quadro inteiro dez vezes
+ * por segundo, o que o tocaria dez vezes por segundo.
  */
+export type Disparo = {
+  id: string;
+  assetId: string;
+  /** Ganho deste disparo, de 0 a 1. Ver `Ambiente.ganho`. */
+  ganho: number;
+  firedAt: number;
+};
+
+/**
+ * Um dos nove slots do numpad.
+ *
+ * Da CAMPANHA e não da cena. A mão decora "tiro é o 7", e um pad que troca de
+ * dono a cada mapa obriga a olhar a tela antes de cada tecla — que é
+ * exatamente o que um atalho existe para evitar.
+ *
+ * `null` = slot vazio. A lista tem sempre nove posições, e o ÍNDICE é a tecla
+ * menos um: um mapa de tecla para som não saberia responder "qual é o 5?"
+ * enquanto o 5 estivesse vazio, e a grade da tela precisa desenhar o buraco.
+ */
+export type Pad = {
+  assetId: string;
+  /**
+   * Ganho com que o pad dispara, de 0 a 1.
+   *
+   * Vale só para o `disparo`. A trilha e o ambiente nascem com o fader cheio e
+   * são regulados no painel depois de acesos: a tecla é o gesto rápido do meio
+   * da cena, e uma tecla que também define volume seria uma decisão a mais
+   * para tomar com a mesa esperando.
+   */
+  ganho: number;
+} | null;
+
+/*
+ * O que a tecla FAZ não mora aqui, e já morou.
+ *
+ * O pad guardava o próprio `tipo`, e escolher um som para a tecla pedia duas
+ * respostas: qual arquivo, e o que ele faz. Desde que o arquivo declara o que
+ * é — ver `AssetMeta.tipoDeSom` — a segunda pergunta tinha uma resposta só, e
+ * fazê-la de novo abria a porta para as duas discordarem: a mesma chuva sendo
+ * ambiente no acervo e disparo no 7.
+ *
+ * Pad antigo continua tendo o campo no `trilha.json`, e ele é simplesmente
+ * ignorado na leitura. Sem passo de migração: o arquivo se regrava sozinho na
+ * primeira alteração, como todo o resto deste registro.
+ */
+
+/** Quantos pads existem: as teclas 1 a 9 do numpad. */
+export const PADS = 9;
+
+/**
+ * Um som na lista de macros.
+ *
+ * O pad sem a tecla, e existe por duas razões que são a mesma: teclado de
+ * portátil não tem numpad, e nove é pouco. Quem joga num notebook não alcança
+ * pad nenhum pelo teclado, e quem tem vinte efeitos de combate não escolhe
+ * quais nove entram.
+ *
+ * Um som por macro, e não uma lista de ações. "Macro" costuma querer dizer
+ * "várias coisas num gesto", e aqui quer dizer só "este som, sem tecla" — o que
+ * ela faz ao ser acionada é o que o TIPO do arquivo manda, exatamente como o
+ * pad. Ver `acionarPad`.
+ *
+ * `id` próprio e não o `assetId` como chave: a lista é reordenável por natureza
+ * e o React precisa de identidade estável, e um dia duas macros do mesmo
+ * arquivo podem fazer sentido — hoje não fazem, e `adicionarMacro` recusa.
+ *
+ * Da CAMPANHA, como o pad: a lista de efeitos de uma campanha de horror não
+ * serve a uma de intriga palaciana.
+ */
+export type Macro = { id: string; assetId: string };
+
+/**
+ * Quantos ambientes podem estar acesos ao mesmo tempo.
+ *
+ * Cada um é um `<audio>`, e no WebKitGTK cada `<audio>` carrega um pipeline
+ * GStreamer inteiro atrás dele. Quatro cobre o que uma cena pede — chuva,
+ * vento, fogueira, multidão — e é um teto, não uma meta: subir sem medir com
+ * `pnpm perf` é o caminho que já derrubou o palco outras vezes.
+ *
+ * A trilha não conta aqui, e os disparos tão pouco: eles duram segundos e
+ * saem sozinhos.
+ */
+export const MAX_AMBIENTES = 4;
+
+/** Ganho de partida de um canal novo. Cheio: quem quiser menos, abaixa. */
+export const GANHO_PADRAO = 1;
+
+/**
+ * Onde um volume de CATEGORIA começa. Ver `volumeAmbiente` no `SessionAudio`.
+ *
+ * Cheio, e é o que faz a conciliação do disco ser uma linha: uma campanha
+ * gravada antes destes faders não os traz, e ler a ausência como "cheio" a
+ * reabre soando igual a como foi fechada. Zero a reabriria muda.
+ */
+export const VOLUME_DE_CATEGORIA_PADRAO = 1;
 
 /**
  * Retrato de personagem sobre a cena.

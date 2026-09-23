@@ -4,6 +4,10 @@ import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 import { isDesktop } from "@/lib/vault/bridge";
+import {
+  DEFAULT_SESSION_VOLUME,
+  VOLUME_DE_CATEGORIA_PADRAO,
+} from "@/types/scene";
 
 /**
  * Onde as preferências desta MÁQUINA sobrevivem ao fechar o aplicativo.
@@ -54,10 +58,44 @@ export function limitarZoom(valor: unknown): number {
   );
 }
 
-/** O que sobrevive ao fechar o aplicativo. */
-type Guardado = { zoom: number; avisarAtualizacao: boolean };
+/** 0 a 1, ou o padrão dado para o que não é número. */
+function limitarVolume(valor: unknown, padrao: number): number {
+  if (typeof valor !== "number" || !Number.isFinite(valor)) return padrao;
 
-const PADRAO: Guardado = { zoom: ZOOM_PADRAO, avisarAtualizacao: true };
+  return Math.max(0, Math.min(1, valor));
+}
+
+/** O que sobrevive ao fechar o aplicativo. */
+type Guardado = {
+  zoom: number;
+  avisarAtualizacao: boolean;
+  /**
+   * Os quatro faders da mesa de som.
+   *
+   * Aqui e não no `trilha.json` da campanha, e a mudança é de dono. Eles
+   * moravam na campanha porque nasceram junto da trilha, mas a pergunta que
+   * respondem não é da campanha: "o som deste aparelho está alto demais" é a
+   * mesma pergunta em qualquer mesa, e trocar de campanha não a muda. Quem
+   * abria a segunda campanha da noite reencontrava o sistema em 30% sem
+   * entender por quê.
+   *
+   * Continuam VIAJANDO: o Mestre publica os quatro no quadro, e a TV e os
+   * celulares seguem. O que mudou é onde o Mestre os guarda entre sessões.
+   */
+  volumeSistema: number;
+  volumeTrilha: number;
+  volumeAmbiente: number;
+  volumeDisparo: number;
+};
+
+const PADRAO: Guardado = {
+  zoom: ZOOM_PADRAO,
+  avisarAtualizacao: true,
+  volumeSistema: DEFAULT_SESSION_VOLUME,
+  volumeTrilha: VOLUME_DE_CATEGORIA_PADRAO,
+  volumeAmbiente: VOLUME_DE_CATEGORIA_PADRAO,
+  volumeDisparo: VOLUME_DE_CATEGORIA_PADRAO,
+};
 
 /**
  * Lê o objeto inteiro, e nunca um campo só.
@@ -75,17 +113,52 @@ function ler(): Guardado {
     const lido: unknown = JSON.parse(cru);
     if (typeof lido !== "object" || lido === null) return PADRAO;
 
-    const objeto = lido as { zoom?: unknown; avisarAtualizacao?: unknown };
+    const objeto = lido as Partial<Record<keyof Guardado, unknown>>;
 
     return {
       zoom: limitarZoom(objeto.zoom),
       // Só `false` desliga. Ausente é o caso de quem já usava o aplicativo
       // antes desta preferência existir, e para essa pessoa nada mudou.
       avisarAtualizacao: objeto.avisarAtualizacao !== false,
+      // Ausente = a máquina é anterior aos faders, ou eles ainda moravam na
+      // campanha. Abre no padrão, e não em silêncio.
+      volumeSistema: limitarVolume(objeto.volumeSistema, DEFAULT_SESSION_VOLUME),
+      volumeTrilha: limitarVolume(
+        objeto.volumeTrilha,
+        VOLUME_DE_CATEGORIA_PADRAO,
+      ),
+      volumeAmbiente: limitarVolume(
+        objeto.volumeAmbiente,
+        VOLUME_DE_CATEGORIA_PADRAO,
+      ),
+      volumeDisparo: limitarVolume(
+        objeto.volumeDisparo,
+        VOLUME_DE_CATEGORIA_PADRAO,
+      ),
     };
   } catch {
     return PADRAO;
   }
+}
+
+/** Qual dos quatro faders. As chaves de volume do estado, e só elas. */
+export type QualVolume =
+  | "volumeSistema"
+  | "volumeTrilha"
+  | "volumeAmbiente"
+  | "volumeDisparo";
+
+/**
+ * O estado inteiro no formato do disco.
+ *
+ * Existe porque quem grava reescreve a chave toda: com seis preferências, montar
+ * o objeto à mão em cada setter era seis lugares para esquecer um campo — e
+ * esquecer um campo o APAGA. Aqui esquecer é impossível.
+ */
+function tudo(estado: Guardado, mudanca?: Partial<Guardado>): Guardado {
+  const { zoom, avisarAtualizacao, ...volumes } = estado;
+
+  return { zoom, avisarAtualizacao, ...volumes, ...mudanca };
 }
 
 /** Grava a chave inteira. Falhar aqui custa a preferência, não a sessão. */
@@ -138,6 +211,12 @@ type PreferenciasStore = {
    */
   avisarAtualizacao: boolean;
 
+  /** Os quatro faders da mesa. Ver `Guardado`. */
+  volumeSistema: number;
+  volumeTrilha: number;
+  volumeAmbiente: number;
+  volumeDisparo: number;
+
   /**
    * Muda o zoom e grava.
    *
@@ -147,6 +226,13 @@ type PreferenciasStore = {
    */
   definirZoom: (zoom: number) => void;
   definirAvisarAtualizacao: (avisar: boolean) => void;
+  /**
+   * Regula um dos faders e grava.
+   *
+   * Um só para os quatro em vez de quatro setters: o gesto é o mesmo, e a
+   * diferença entre eles é qual campo — que é dado, não comportamento.
+   */
+  definirVolume: (qual: QualVolume, valor: number) => void;
   /** Lê o disco e aplica. Chamado na abertura, antes da campanha. */
   restaurar: () => void;
 };
@@ -159,8 +245,7 @@ type PreferenciasStore = {
  * e exportar uma campanha não leva o zoom de quem a montou.
  */
 export const usePreferenciasStore = create<PreferenciasStore>((set, get) => ({
-  zoom: ZOOM_PADRAO,
-  avisarAtualizacao: PADRAO.avisarAtualizacao,
+  ...PADRAO,
 
   definirZoom(zoom) {
     const alvo = limitarZoom(zoom);
@@ -169,22 +254,30 @@ export const usePreferenciasStore = create<PreferenciasStore>((set, get) => ({
     set({ zoom: alvo });
     aplicar(alvo);
 
-    gravar({ zoom: alvo, avisarAtualizacao: get().avisarAtualizacao });
+    gravar(tudo(get()));
   },
 
   definirAvisarAtualizacao(avisar) {
     if (avisar === get().avisarAtualizacao) return;
 
     set({ avisarAtualizacao: avisar });
-    gravar({ zoom: get().zoom, avisarAtualizacao: avisar });
+    gravar(tudo(get(), { avisarAtualizacao: avisar }));
+  },
+
+  definirVolume(qual, valor) {
+    const limitado = limitarVolume(valor, get()[qual]);
+    if (limitado === get()[qual]) return;
+
+    set({ [qual]: limitado });
+    gravar(tudo(get()));
   },
 
   restaurar() {
-    const { zoom, avisarAtualizacao } = ler();
+    const lido = ler();
 
-    set({ zoom, avisarAtualizacao });
+    set(lido);
     // Aplica mesmo no padrão: a webview pode ter guardado o zoom da execução
     // anterior por conta própria, e nesse caso 100% aqui é uma correção.
-    aplicar(zoom);
+    aplicar(lido.zoom);
   },
 }));

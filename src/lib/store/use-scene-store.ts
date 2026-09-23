@@ -33,6 +33,7 @@ import {
   semReferencia,
   tracadoDe,
 } from "@/lib/mestre/ligacoes";
+import { useTrackStore } from "@/lib/store/use-track-store";
 import { loadBoard, saveBoard, saveBoardPatch } from "@/lib/vault/board";
 import {
   criarDocumento,
@@ -615,6 +616,12 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       const copy = cloneScene(source, `${source.name} (cópia)`);
       commit(insertSceneAfter(board, sceneId, copy));
 
+      // Que ambientes a cena acende mora FORA do board, no `TrackStore`, para
+      // o histórico de desfazer não religar a chuva por causa de um Ctrl+Z num
+      // token. O preço é esta linha: sem ela a cópia da taverna abriria sem a
+      // lareira que a taverna tem.
+      useTrackStore.getState().copiarCena(sceneId, copy.id);
+
       // Cada documento da cópia ganha o próprio arquivo, com o mesmo texto:
       // dois cartões no mesmo `.md` fariam escrever num aparecer no outro.
       // Assíncrono e depois do commit, porque criar arquivo passa pela ponte;
@@ -650,6 +657,10 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       if (!board) return;
 
       commit(removeSceneFromBoard(board, sceneId));
+      // O outro lado da memória de ambiente viver fora do board: sem isto o
+      // mapa guardaria a chuva de uma cena que não existe mais, para sempre.
+      // Ver `copiarCena` acima.
+      useTrackStore.getState().esquecerCena(sceneId);
     },
 
     criarPasta(nome, parentId) {

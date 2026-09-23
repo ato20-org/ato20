@@ -125,6 +125,11 @@ export function createSubscriberChannel(
           handler({
             scene: state.scene ?? null,
             track: state.track ?? null,
+            // As camadas de som, pela mesma razão dos retratos abaixo: quadro
+            // de um Mestre anterior a elas é quadro válido, e não motivo para
+            // a TV cair no meio da sessão.
+            ambientes: state.ambientes ?? [],
+            disparos: state.disparos ?? [],
             // Estado gravado por uma versão anterior pode não trazer o campo:
             // lista vazia é o certo, e não uma tela quebrada.
             portraits: state.portraits ?? [],

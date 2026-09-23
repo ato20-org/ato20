@@ -62,6 +62,18 @@ pub struct AssetMeta {
     /// enquanto nao houver picos, e o arquivo continua tocando.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub peaks: Option<Vec<u8>>,
+    /// Como este som deve tocar: `trilha`, `ambiente` ou `disparo`. So `audio`.
+    ///
+    /// Escolhido na importacao e trocavel depois. Serve a duas perguntas que a
+    /// mesa faz em momentos diferentes: o que ACONTECE ao acionar o arquivo, e
+    /// onde ele aparece na lista -- que e agrupada por isto.
+    ///
+    /// Ausente e estado valido, e nao ha migracao: o som importado antes deste
+    /// campo, e o largado na janela sem passar pelo botao, ficam sem tipo ate
+    /// alguem escolher um. A lista os junta num grupo proprio em vez de chutar
+    /// -- chutar `disparo` numa musica de dez minutos seria pior que perguntar.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tipo_de_som: Option<String>,
 }
 
 /// Pasta do acervo. Pasta dentro de pasta pelo `parent_id`; ausente = raiz.
@@ -309,6 +321,12 @@ pub fn import_acompanhado(
             folder_id: None,
             escopo: escopo.map(str::to_string),
             peaks: None,
+            // Sem tipo na entrada, de proposito: quem importa e a TELA, e ela
+            // marca os aceitos logo depois com o que o mestre escolheu no
+            // botao. Um parametro a mais aqui atravessaria a importacao inteira
+            // -- que tambem serve o arrasto de pasta misturando imagem e som --
+            // para um campo que so o audio tem.
+            tipo_de_som: None,
         };
 
         // Binario primeiro, indice depois -- mesma ordem de `adopt`, e pelo
@@ -436,6 +454,58 @@ pub fn set_escopo(vault: &Vault, id: &str, escopo: Option<String>) -> AppResult<
     };
 
     asset.escopo = escopo;
+
+    write_index(vault, &assets)
+}
+
+/// Como o som toca: `trilha`, `ambiente` ou `disparo`. `None` limpa.
+///
+/// Recusa em silencio um valor que nao e um dos tres, um id que nao existe e um
+/// arquivo que nao e som -- e otimizacao de organizacao, e derrubar a tela por
+/// causa dela custaria mais do que ela vale.
+pub fn set_tipo_de_som(vault: &Vault, id: &str, tipo: Option<String>) -> AppResult<()> {
+    if let Some(tipo) = tipo.as_deref() {
+        if !matches!(tipo, "trilha" | "ambiente" | "disparo") {
+            return Ok(());
+        }
+    }
+
+    let mut assets = index(vault)?;
+
+    let Some(asset) = assets.iter_mut().find(|asset| asset.id == id) else {
+        return Ok(());
+    };
+
+    if asset.kind != "audio" {
+        return Ok(());
+    }
+
+    asset.tipo_de_som = tipo;
+
+    write_index(vault, &assets)
+}
+
+/// Troca o nome de exibicao do arquivo.
+///
+/// So metadado. O binario no disco e nomeado pelo `id` mais a extensao do
+/// mime -- ver `asset_path` --, entao o nome novo nao precisa manter extensao
+/// nenhuma: tirar o `.mp3` do fim nao faz o som deixar de tocar.
+///
+/// Nome vazio e recusado em silencio, como um id que nao existe: a linha da
+/// lista E o nome, e uma sem nome seria um arquivo que o mestre nao acha mais.
+pub fn rename(vault: &Vault, id: &str, name: &str) -> AppResult<()> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(());
+    }
+
+    let mut assets = index(vault)?;
+
+    let Some(asset) = assets.iter_mut().find(|asset| asset.id == id) else {
+        return Ok(());
+    };
+
+    asset.name = name.to_string();
 
     write_index(vault, &assets)
 }
