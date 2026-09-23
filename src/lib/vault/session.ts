@@ -3,9 +3,9 @@
 import { call } from "@/lib/vault/bridge";
 import {
   DEFAULT_SESSION_VOLUME,
-  type AncoraRetrato,
   type Portrait,
   type SessionTrack,
+  type UniaoDeRetratos,
 } from "@/types/scene";
 
 /**
@@ -18,19 +18,20 @@ import {
  */
 
 /**
- * Os retratos da sessão, mais a configuração da fila automática.
+ * Os retratos da sessão, mais as uniões que os enfileiram.
  *
- * O arquivo era um array e virou objeto: a fila tem campos que são de TODOS os
- * retratos — se ela está ligada, em que área está ancorada, e quanto espaço vai
- * entre dois vizinhos —, e isso não cabe num item da lista. O Rust guarda JSON
- * opaco, então a mudança de forma é só aqui e na leitura.
+ * O arquivo era um array e virou objeto quando a fila automática trouxe campos
+ * que eram de TODOS os retratos. Com as uniões esses campos passaram a ser de
+ * cada uma delas -- área e folga moram na união --, e o objeto ficou com dois
+ * campos: a geometria de cada figura, e os conjuntos.
+ *
+ * O Rust guarda JSON opaco, então a forma é decidida aqui e conciliada na
+ * leitura. Ver `ler` em `use-portrait-store`, que ainda entende as duas formas
+ * antigas.
  */
 export type RetratosSalvos = {
   retratos: Portrait[];
-  filaAuto: boolean;
-  ancora: AncoraRetrato;
-  /** Espaço entre dois retratos da fila. Negativo sobrepõe — ver `FOLGA_MIN`. */
-  folga: number;
+  unioes: UniaoDeRetratos[];
 };
 
 /**

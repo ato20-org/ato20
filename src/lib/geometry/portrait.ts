@@ -6,6 +6,7 @@ import {
   SCENE_WIDTH,
   type AncoraRetrato,
   type Portrait,
+  type UniaoDeRetratos,
   type Viewport,
 } from "@/types/scene";
 import type { ItemBox } from "@/lib/geometry/transform";
@@ -231,9 +232,10 @@ const MARGEM_FILA = 0.03;
 /**
  * Espaço entre dois retratos da fila, em fração da câmera.
  *
- * É o padrão, e não mais o valor: o mestre ajusta, e o ajuste mora na sessão --
- * ver `usePortraitStore.folga`. Continua existindo como constante porque
- * `filaDeRetratos` precisa de um número quando ninguém escolheu nenhum.
+ * É o padrão, e não o valor: o mestre ajusta, e o ajuste mora em cada união --
+ * ver `UniaoDeRetratos.folga`. Continua existindo como constante porque é com
+ * ele que toda união nasce, e porque `filaDeRetratos` precisa de um número
+ * quando ninguém escolheu nenhum.
  */
 export const FOLGA_PADRAO = 0.015;
 
@@ -295,6 +297,10 @@ const AREAS: Record<
  * alturas diferentes lado a lado precisam de uma linha comum, e no chão é onde
  * uma pessoa em pé encosta.
  *
+ * `deslocamento` afasta a fila inteira da borda em que ela encosta, e é o que
+ * empilha duas uniões na mesma área -- ver `filasDeUnioes`. Zero é a fila
+ * encostada, que é o caso de quem chegou primeiro naquela área.
+ *
  * `escolhida` é o espaço entre dois vizinhos, e pode ser NEGATIVO -- ver
  * `FOLGA_MIN`. Não cabendo, a folga positiva encolhe até zero; ainda não
  * cabendo, eles se sobrepõem o necessário para a fila terminar dentro da
@@ -305,6 +311,7 @@ export function filaDeRetratos(
   fila: ReadonlyArray<Pick<Portrait, "id" | "width" | "height">>,
   ancora: AncoraRetrato,
   escolhida: number = FOLGA_PADRAO,
+  deslocamento: number = 0,
 ): Array<{ id: string; x: number; y: number }> {
   if (fila.length === 0) return [];
 
@@ -345,8 +352,8 @@ export function filaDeRetratos(
       x,
       y:
         area.vertical === "cima"
-          ? MARGEM_FILA
-          : 1 - MARGEM_FILA - retrato.height,
+          ? MARGEM_FILA + deslocamento
+          : 1 - MARGEM_FILA - retrato.height - deslocamento,
     };
 
     x =
@@ -395,6 +402,113 @@ function folgaAplicada(
   );
 
   return Math.max(escolhida, -menor / 2);
+}
+
+/**
+ * O vão entre duas uniões empilhadas na mesma área, em fração da câmera.
+ *
+ * Constante, e não a `folga` de nenhuma das duas: a folga é o respiro DENTRO de
+ * uma união, e duas uniões vizinhas teriam duas opiniões sobre o mesmo vão --
+ * o mesmo motivo que fazia a folga ser global quando havia uma fila só.
+ *
+ * Maior que a folga padrão de propósito: o que separa duas linhas tem de ler
+ * como separação, e não como um espaço um pouco maior entre dois retratos da
+ * mesma linha.
+ */
+export const FOLGA_ENTRE_LINHAS = 0.03;
+
+/** O que a pilha precisa saber de um retrato: tamanho e se está no ar. */
+type MembroDaFila = Pick<Portrait, "id" | "width" | "height" | "visible">;
+
+/**
+ * Onde cada retrato de cada união deve estar.
+ *
+ * Uniões que dividem a mesma área EMPILHAM: a primeira encosta na margem, a
+ * seguinte se afasta a altura da anterior mais `FOLGA_ENTRE_LINHAS`, e assim
+ * por diante. É o que permite heróis embaixo e inimigos logo atrás, no mesmo
+ * canto, sem que uma escolha do mestre seja recusada.
+ *
+ * A ordem do empilhamento é a ordem da lista de uniões, que é a ordem em que
+ * elas foram criadas. Nas áreas de baixo a primeira fica mais perto do chão;
+ * nas de cima, mais perto do topo -- nos dois casos, quem chegou primeiro fica
+ * colado na borda, e quem chegou depois fica atrás.
+ *
+ * Só conta quem está NO AR. Fora do ar não ocupa vaga na linha nem altura na
+ * pilha -- é o que faz tirar alguém do meio fechar o buraco, e o que faz uma
+ * união inteira apagada não empurrar a união de baixo para o meio da tela.
+ *
+ * Retrato que não está em união nenhuma não aparece aqui: solto não tem regra.
+ */
+export function filasDeUnioes(
+  unioes: ReadonlyArray<UniaoDeRetratos>,
+  retratos: ReadonlyArray<MembroDaFila>,
+): Array<{ id: string; x: number; y: number }> {
+  const porId = new Map(retratos.map((retrato) => [retrato.id, retrato]));
+  const saida: Array<{ id: string; x: number; y: number }> = [];
+
+  /** Quanto cada área já tem de pilha, medido a partir da borda. */
+  const ocupado = new Map<AncoraRetrato, number>();
+
+  for (const uniao of unioes) {
+    const membros = uniao.retratos
+      .map((id) => porId.get(id))
+      .filter((membro): membro is MembroDaFila => Boolean(membro?.visible));
+
+    if (membros.length === 0) continue;
+
+    const deslocamento = ocupado.get(uniao.ancora) ?? 0;
+
+    saida.push(
+      ...filaDeRetratos(membros, uniao.ancora, uniao.folga, deslocamento),
+    );
+
+    // A altura da linha é a do MAIOR membro: o chefe é mais alto que os
+    // capangas, e medir pelo menor faria a união de cima passar por dentro
+    // dele.
+    const altura = membros.reduce(
+      (maior, membro) => Math.max(maior, membro.height),
+      0,
+    );
+
+    ocupado.set(uniao.ancora, deslocamento + altura + FOLGA_ENTRE_LINHAS);
+  }
+
+  return saida;
+}
+
+/**
+ * A área das seis mais perto de onde os retratos já estão.
+ *
+ * É o que uma união nova usa ao nascer. Unir três figuras que já estavam no
+ * canto de baixo à direita as enfileira ali mesmo: o gesto de unir não pode
+ * atravessar a tela com o elenco, porque é justamente essa tela que a mesa está
+ * olhando.
+ *
+ * Mede pelo CENTRO da caixa que envolve os unidos, e não pela média dos
+ * centros: dois pequenos de um lado e um grande do outro não devem mudar o
+ * resultado pelo número de figuras.
+ *
+ * Em fração da câmera, então a resposta não depende do enquadramento. Lista
+ * vazia devolve o padrão -- não há onde ela esteja.
+ */
+export function areaMaisProxima(
+  retratos: ReadonlyArray<Pick<Portrait, "x" | "y" | "width" | "height">>,
+): AncoraRetrato {
+  if (retratos.length === 0) return "baixo-centro";
+
+  const xs = retratos.flatMap((retrato) => [retrato.x, retrato.x + retrato.width]);
+  const ys = retratos.flatMap((retrato) => [retrato.y, retrato.y + retrato.height]);
+
+  const x = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const y = (Math.min(...ys) + Math.max(...ys)) / 2;
+
+  // Os limites são o meio do caminho entre os centros das faixas: as três
+  // colunas têm centro em 1/6, 1/2 e 5/6, então a troca acontece em 1/3 e 2/3.
+  // As duas linhas têm centro em 1/6 e 5/6, e a troca em 1/2.
+  const horizontal = x < 1 / 3 ? "esquerda" : x < 2 / 3 ? "centro" : "direita";
+  const vertical = y < 1 / 2 ? "cima" : "baixo";
+
+  return `${vertical}-${horizontal}`;
 }
 
 /**

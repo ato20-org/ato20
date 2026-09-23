@@ -955,18 +955,6 @@ export type Portrait = {
   visible: boolean;
   /** Virar o retrato para o lado da tela em que ele está. */
   flipX?: boolean;
-  /**
-   * Solto da fila automatica, quando ela esta ligada.
-   *
-   * Excecao e nao regra: o interruptor da fila e um so, no painel, e vale para
-   * todos. Este campo e o que permite tirar UM da fila sem desligar o modo --
-   * o vilao no canto enquanto o grupo se enfileira embaixo.
-   *
-   * Ausente na maioria, e por isso e o campo que existe: `naFila: true` em
-   * todos os registros diria a mesma coisa ocupando mais espaco, e obrigaria a
-   * preencher o padrao a cada retrato novo.
-   */
-  foraDaFila?: boolean;
 };
 
 /**
@@ -987,6 +975,56 @@ export type AncoraRetrato =
   | "baixo-esquerda"
   | "baixo-centro"
   | "baixo-direita";
+
+/**
+ * Um conjunto de retratos que se enfileira junto.
+ *
+ * Substitui a fila automática, que era um interruptor só para todos com uma
+ * exceção por retrato. O interruptor não dizia em que grupo cada um estava --
+ * havia exatamente um grupo --, e a mesa com heróis embaixo e inimigos em cima
+ * não tinha como ser dita. A união diz: estes cinco são um conjunto, e este
+ * conjunto encosta ali.
+ *
+ * Retrato que não está em união nenhuma é SOLTO, e solto não tem regra: fica
+ * onde foi largado. É o que o `foraDaFila` de antes queria dizer, agora por
+ * ausência em vez de por campo.
+ *
+ * ## `retratos` é um array, e não um conjunto
+ *
+ * A ordem dele é a ordem da fila -- quem vem primeiro fica à esquerda. Guardar
+ * a união como um `uniaoId` no retrato daria a mesma pertinência, mas a ordem
+ * precisaria de um segundo campo, e dois retratos podem gravar o mesmo número
+ * nele. Aqui não existe empate a resolver.
+ *
+ * Um retrato pertence a UMA união: `unir` tira o id de qualquer outra antes de
+ * criar, e a leitura do disco normaliza o que vier repetido -- ver `ler` em
+ * `use-portrait-store`.
+ *
+ * ## Por que âncora e folga moram aqui
+ *
+ * Eram globais, um valor para todos, porque havia uma fila só. Com várias, a
+ * área é justamente o que distingue uma união da outra, e o respiro entre as
+ * figuras é uma propriedade do conjunto -- o bando de goblins ombro a ombro e
+ * os heróis espaçados são duas uniões na mesma tela.
+ */
+export type UniaoDeRetratos = {
+  id: string;
+  /** O que a barra lateral mostra. Editável, e nasce com um padrão. */
+  nome: string;
+  /**
+   * A cor da borda que envolve o grupo na barra lateral e no palco.
+   *
+   * Da mesma paleta do gizmo, para o mestre não ter uma segunda noção de cor a
+   * aprender. Nasce escolhida e o menu troca.
+   */
+  cor: string;
+  /** Onde esta união encosta. Ver `AncoraRetrato`. */
+  ancora: AncoraRetrato;
+  /** Espaço entre dois vizinhos DESTA união. Negativo sobrepõe. */
+  folga: number;
+  /** Os membros, em ordem de fila. Ver o cabeçalho. */
+  retratos: string[];
+};
 
 /** O que o chamador informa ao criar um item; `id`, `z` e afins são do store. */
 export type NewCanvasItem = Pick<

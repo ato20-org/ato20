@@ -25,6 +25,7 @@ import {
 } from "@/components/mestre/forma-layer";
 import { TextoLayer } from "@/components/mestre/texto-layer";
 import { contornoDosItens } from "@/lib/mestre/contorno-dos-itens";
+import { uniaoDoRetrato } from "@/lib/mestre/unioes";
 import { ancorada, caixaDoTexto, pontaEm } from "@/lib/mestre/ligacoes";
 import {
   empurrarTextos,
@@ -159,6 +160,7 @@ import {
   type Scene,
   type Texto,
   type Traco,
+  type UniaoDeRetratos,
 } from "@/types/scene";
 
 const NO_GUIDES: Guide[] = [];
@@ -497,8 +499,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   });
 
   const guardados = usePortraitStore((state) => state.portraits);
-  const filaAuto = usePortraitStore((state) => state.filaAuto);
-  const ancorar = usePortraitStore((state) => state.ancorar);
+  const unioes = usePortraitStore((state) => state.unioes);
+  const ajustarUniaoDeRetratos = usePortraitStore((state) => state.ajustar);
 
   // As fontes das extensões, para o retrato ao vivo saber em que canvas a
   // página foi desenhada. Ver `useFontesDeRetrato`.
@@ -641,23 +643,33 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const singlePortrait =
     selectedPortraits.length === 1 ? selectedPortraits[0] : undefined;
   /**
-   * Os retratos que a fila governa, na ordem dela.
+   * Os membros de uma união que estão NO AR, na ordem dela.
    *
-   * No ar e não soltos -- os mesmos que `useFilaDeRetratos` posiciona. Fora do
-   * ar não ocupa vaga, e solto tem posição própria.
+   * São os que `useUnioesDeRetratos` posiciona: fora do ar não ocupa vaga na
+   * fila, e retrato solto tem posição própria. A ordem é a da união, e não a
+   * dos tokens -- é ela que diz quem fica à esquerda de quem.
    */
-  const fila = filaAuto
-    ? portraits.filter((retrato) => retrato.visible && !retrato.foraDaFila)
-    : [];
+  const membrosNoAr = (uniao: UniaoDeRetratos): Portrait[] =>
+    uniao.retratos
+      .map((id) => portraits.find((atual) => atual.id === id))
+      .filter((atual): atual is Portrait => Boolean(atual?.visible));
 
-  const naFila = (retrato: Portrait) =>
-    fila.some((atual) => atual.id === retrato.id);
+  /**
+   * A união inteiramente selecionada, se a seleção for exatamente uma.
+   *
+   * Decide o rótulo da caixa e a regra de escala: numa união, o gizmo manda no
+   * tamanho e a união manda na posição.
+   */
+  const uniaoSelecionada =
+    unioes.find((uniao) => {
+      const membros = membrosNoAr(uniao);
 
-  /** A seleção É a fila inteira? É o que decide o rótulo da caixa. */
-  const filaSelecionada =
-    fila.length > 0 &&
-    fila.length === selectedPortraitIds.length &&
-    fila.every((retrato) => selectedPortraitIds.includes(retrato.id));
+      return (
+        membros.length > 0 &&
+        membros.length === selectedPortraitIds.length &&
+        membros.every((retrato) => selectedPortraitIds.includes(retrato.id))
+      );
+    }) ?? null;
 
   const portraitGroupBounds =
     selectedPortraits.length > 1
@@ -784,8 +796,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * tempo: são retângulos sobre o mapa, e à vista o tempo todo poluiriam a
    * imagem que a mesa está olhando.
    */
-  const [areaDaFila, setAreaDaFila] = useState<AncoraRetrato | null>(null);
-  const [arrastandoFila, setArrastandoFila] = useState(false);
+  const [areaDaUniao, setAreaDaUniao] = useState<AncoraRetrato | null>(null);
+  const [arrastandoUniao, setArrastandoUniao] = useState(false);
 
   /** Evita re-render por frame quando não há guia nenhuma para mostrar. */
   function clearGuides() {
@@ -1379,18 +1391,25 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     const camera = scene.camera;
 
-    // Retrato da fila não se mexe sozinho: posição e tamanho dele são da fila.
+    // Retrato de união não se mexe sozinho: a posição dele é da união.
     // Arrastá-lo livremente faria a figura voltar no quadro seguinte, quando o
     // efeito reaplicasse o layout.
     //
-    // Então o clique seleciona a FILA INTEIRA. É o que torna o grupo evidente
+    // Então o clique seleciona A UNIÃO INTEIRA. É o que torna o grupo evidente
     // sem precisar de aviso: aparece a caixa pontilhada em volta dos cinco, com
-    // o rótulo, e o gizmo que sobe é o do grupo -- que escala todos por um
-    // fator só. Selecionar um e mexer nos outros seria o mesmo efeito com
+    // o nome da união, e o gizmo que sobe é o do grupo -- que escala todos por
+    // um fator só. Selecionar um e mexer nos outros seria o mesmo efeito com
     // aparência de defeito.
-    if (naFila(portrait)) {
-      selectPortraits(fila.map((atual) => atual.id));
-      arrastarFila(event);
+    //
+    // Fora do ar não: aí ele é o fantasma que o mestre posiciona à mão, e a
+    // união não governa quem ninguém está vendo.
+    const uniaoDoAlvo = portrait.visible
+      ? uniaoDoRetrato(unioes, portrait.id)
+      : null;
+
+    if (uniaoDoAlvo) {
+      selectPortraits(membrosNoAr(uniaoDoAlvo).map((atual) => atual.id));
+      arrastarUniao(event, uniaoDoAlvo);
       return;
     }
 
@@ -1607,14 +1626,17 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   }
 
   /**
-   * Leva a fila de retratos para outra área.
+   * Leva uma união de retratos para outra área.
    *
-   * A fila não segue o ponteiro: as seis áreas acendem, a de baixo do cursor
+   * A união não segue o ponteiro: as seis áreas acendem, a de baixo do cursor
    * destaca, e soltar troca a âncora. Seguir o ponteiro exigiria um layout por
    * quadro para uma escolha que tem seis respostas possíveis -- movimento a
    * mais para a mesma decisão.
+   *
+   * Largar numa área que já tem outra união não é recusado: as duas empilham,
+   * a que chegou depois atrás da que já estava. Ver `filasDeUnioes`.
    */
-  function arrastarFila(event: ReactPointerEvent) {
+  function arrastarUniao(event: ReactPointerEvent, uniao: UniaoDeRetratos) {
     const areas = areasDeRetrato(scene.camera);
 
     const sob = (clientX: number, clientY: number) => {
@@ -1631,18 +1653,18 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       );
     };
 
-    setArrastandoFila(true);
-    setAreaDaFila(sob(event.clientX, event.clientY));
+    setArrastandoUniao(true);
+    setAreaDaUniao(sob(event.clientX, event.clientY));
 
     startDrag(event, {
       onMove: (_delta, native) =>
-        setAreaDaFila(sob(native.clientX, native.clientY)),
+        setAreaDaUniao(sob(native.clientX, native.clientY)),
       onEnd: (native) => {
         const escolhida = sob(native.clientX, native.clientY);
-        if (escolhida) ancorar(escolhida);
+        if (escolhida) ajustarUniaoDeRetratos(uniao.id, { ancora: escolhida });
 
-        setArrastandoFila(false);
-        setAreaDaFila(null);
+        setArrastandoUniao(false);
+        setAreaDaUniao(null);
       },
     });
   }
@@ -2796,12 +2818,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
               scene.camera,
             );
 
-            // Sendo a fila, o gizmo só manda no TAMANHO: a posição é dela, e
-            // deixar os dois escreverem no mesmo quadro faz o retrato pular --
-            // o gizmo o põe onde a escala calculou, e o efeito o traz de volta
-            // para a fila no quadro seguinte.
+            // Sendo uma união, o gizmo só manda no TAMANHO: a posição é dela,
+            // e deixar os dois escreverem no mesmo quadro faz o retrato pular
+            // -- o gizmo o põe onde a escala calculou, e o efeito o traz de
+            // volta para a fila no quadro seguinte.
             updatePortraits(
-              filaSelecionada
+              uniaoSelecionada
                 ? escalados.map(({ id, patch: mudanca }) => ({
                     id,
                     patch: { width: mudanca.width, height: mudanca.height },
@@ -2820,15 +2842,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         <SelectionBox
           bounds={portraitGroupBounds}
           rotulo={
-            filaSelecionada
-              ? `fila · ${fila.length}`
+            uniaoSelecionada
+              ? `${uniaoSelecionada.nome} · ${selectedPortraitIds.length}`
               : `${selectedPortraitIds.length} retratos`
           }
         />
       ) : null}
 
-      {arrastandoFila ? (
-        <PortraitAnchors camera={scene.camera} alvo={areaDaFila} />
+      {arrastandoUniao ? (
+        <PortraitAnchors camera={scene.camera} alvo={areaDaUniao} />
       ) : null}
 
       {/* O risco em curso, antes de virar traço da cena. Desenhado aqui e não
