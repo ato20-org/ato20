@@ -14,6 +14,7 @@ import {
   Radio,
   RadioTower,
   Trash2,
+  TriangleAlert,
   X,
   Zap,
 } from "lucide-react";
@@ -149,7 +150,13 @@ export function CharacterBody({ personagemId }: { personagemId: string }) {
       personagem={personagem}
       jogadores={jogadores}
       onChanged={recarregar}
-      onRemoved={() => fecharJanela(chave)}
+      // `recarregar` junto, e nao so fechar: quem apaga mexeu na LISTA, e o
+      // store so rele quando alguem pede. Sem isto o personagem sumia da
+      // pasta mas continuava na barra ate a janela ser recarregada.
+      onRemoved={() => {
+        fecharJanela(chave);
+        recarregar();
+      }}
       onAbrirJanela={abrirJanela}
     />
   );
@@ -365,6 +372,54 @@ function Ficha({
  * botao nenhum: dois lugares para trocar a mesma imagem foi o problema que a
  * lista de arquivos e a linha da ficha ja tinham -- ver `Files`.
  */
+/**
+ * O que a pessoa perde ao apagar um personagem.
+ *
+ * Exportado porque a pergunta e feita em DOIS lugares -- a lixeira da ficha e a
+ * lista de personagens -- e um aviso de coisa irreversivel que diverge entre as
+ * duas portas e pior que nenhum: a pessoa leria um dos textos e decidiria pelo
+ * outro.
+ *
+ * LISTA e nao paragrafo. Era um bloco de cinco linhas corridas, e ninguem le
+ * texto denso com o dedo ja no botao vermelho -- o que se lia era o titulo e o
+ * "Apagar". Em itens, o preco se conta de relance, e cada linha e uma coisa
+ * so. O aviso de que nao tem volta sai do fim do paragrafo, onde era a sexta
+ * informacao seguida, e vira a ultima linha com um simbolo ao lado.
+ *
+ * Componente e nao string por causa disso: o que importa aqui e a forma.
+ */
+export function OQueVaiJunto() {
+  return (
+    <>
+      <p>
+        Ao apagar você vai <strong className="text-foreground">remover</strong>
+      </p>
+
+      {/* Substantivo solto, sem artigo e sem oracao. A lista responde "o que
+          vai embora", e "a ficha dele", "os que o jogador mandou" faziam cada
+          item comecar por uma palavra que nao carrega informacao nenhuma --
+          quatro linhas para ler quatro coisas. Aqui o olho bate na primeira
+          palavra de cada uma e ja sabe. */}
+      <ul className="text-foreground marker:text-muted-foreground/40 list-disc space-y-0.5 pl-4">
+        <li>Ficha</li>
+        <li>Arquivos em anexo</li>
+        <li>Arquivos do jogador</li>
+        <li>Anotações</li>
+      </ul>
+
+      {/* O que NAO vai junto, e a pergunta que se faz no meio da sessao: o
+          token ja posto no mapa nao some com o personagem. Fica fora da lista
+          de proposito -- a lista e do que se perde. */}
+      <p>O token no mapa continua lá, como imagem.</p>
+
+      <p className="text-foreground flex items-center gap-1.5 font-medium">
+        <TriangleAlert className="size-4 shrink-0 text-amber-400" aria-hidden />
+        Não tem como desfazer isso
+      </p>
+    </>
+  );
+}
+
 function Identidade({
   personagem,
   donos,
@@ -494,12 +549,14 @@ function Identidade({
 
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Apagar {personagem.nome}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Vão com ele a ficha, os arquivos que você anexou, os que o
-                  jogador mandou, e as notas que cada um escreveu sobre ele. O
-                  token que estiver no mapa continua lá, como imagem. Não tem
-                  como desfazer.
+                <AlertDialogTitle>
+                  Deseja apagar {personagem.nome}?
+                </AlertDialogTitle>
+                {/* `render` de `div`: a descricao nasce `<p>`, e uma `<ul>`
+                    dentro de um `<p>` o navegador fecha sozinho antes da
+                    lista -- o texto saia do lugar sem erro nenhum no console. */}
+                <AlertDialogDescription render={<div className="space-y-2" />}>
+                  <OQueVaiJunto />
                 </AlertDialogDescription>
               </AlertDialogHeader>
 
