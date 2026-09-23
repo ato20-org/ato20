@@ -23,7 +23,12 @@ const CHAVE_DISCO = "ato20:secoes-ficha";
  * uma ficha sem nome nem retrato seria uma janela sem título dentro de uma
  * janela com título.
  */
-export type SecaoFicha = "campos" | "inventario" | "arquivos" | "nota";
+export type SecaoFicha =
+  | "campos"
+  | "aparencias"
+  | "inventario"
+  | "arquivos"
+  | "nota";
 
 /**
  * O que é gravado são as FECHADAS, e não as abertas.

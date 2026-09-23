@@ -60,6 +60,7 @@ import {
   aoApertarF2,
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
+import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
 import { OQueVaiJunto } from "@/components/mestre/character-window";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { useTokenDrag } from "@/hooks/use-token-drag";
@@ -78,6 +79,7 @@ import {
 import type { Personagem } from "@/types/character";
 import type { AssetMeta } from "@/types/scene";
 import { cn } from "@/lib/utils";
+import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 
 /**
  * Tamanho de um token cuja imagem nao declara dimensao.
@@ -126,6 +128,35 @@ function tamanhoDoToken(miniatura: AssetMeta | undefined) {
  * O que este caminho escreve é conteúdo de campanha: vai para `personagens/` no
  * vault e viaja no zip.
  */
+/**
+ * O campo que renomeia a linha.
+ *
+ * Componente, e nao JSX solto dentro de `linha`: aquela e uma FUNCAO, chamada
+ * durante o desenho, e hook nao entra ali. As tres saidas do renome -- clicar
+ * fora grava, Enter grava, Escape desiste -- vem de `useCampoDeNome`, que e o
+ * mesmo das outras telas que renomeiam.
+ */
+function CampoDoNome({
+  personagem,
+  aoGravar,
+  aoSair,
+}: {
+  personagem: Personagem;
+  aoGravar: (nome: string) => void;
+  aoSair: () => void;
+}) {
+  const campo = useCampoDeNome({ nome: personagem.nome, aoGravar, aoSair });
+
+  return (
+    <Input
+      autoFocus
+      {...campo}
+      className="h-7 flex-1 text-xs"
+      aria-label={`Novo nome de ${personagem.nome}`}
+    />
+  );
+}
+
 export function CharactersBody() {
   const { personagens, jogadores, recarregar } = useCharacters();
   const abrir = useAbrirJanela();
@@ -325,15 +356,12 @@ export function CharactersBody() {
     renomear.pedir();
   }
 
-  function confirmarRenome(personagem: Personagem, nome: string) {
-    setRenomeando(null);
-
-    const limpo = nome.trim();
-    // Nome vazio ou igual ao que ja era: sair sem escrever. Um personagem sem
-    // nome nao se acha na lista nem na busca.
-    if (!limpo || limpo === personagem.nome) return;
-
-    void renameCharacter(personagem.id, limpo).then(recarregar, (cause) =>
+  /**
+   * Grava o nome novo. Sair do campo e o vazio sao tratados em
+   * `useCampoDeNome`, que e o mesmo das outras telas que renomeiam.
+   */
+  function gravarRenome(personagem: Personagem, nome: string) {
+    void renameCharacter(personagem.id, nome).then(recarregar, (cause) =>
       toast.error(cause instanceof Error ? cause.message : "Falha ao renomear."),
     );
   }
@@ -368,7 +396,10 @@ export function CharactersBody() {
      * vezes aqui, e duas listas irmas e o comeco de uma porta ganhar uma acao
      * que a outra nao tem. Ver `Kit`.
      */
-    const itens = ({ Item, Separator, Sub, SubTrigger, SubContent }: Kit) => (
+    const itens = (kit: Kit) => {
+      const { Item, Separator, Sub, SubTrigger, SubContent } = kit;
+
+      return (
       <>
         <Item onClick={() => pedirRenome(personagem)}>
           <Pencil />
@@ -379,6 +410,14 @@ export function CharactersBody() {
           <PersonStanding />
           Pôr no mapa
         </Item>
+
+        {/* Ao lado de "Pôr no mapa" porque os dois falam da peça: um a põe lá,
+            o outro troca a cara dela. */}
+        <SubmenuDeAparencias
+          kit={kit}
+          personagem={personagem}
+          onChanged={recarregar}
+        />
 
         <Sub>
           <SubTrigger>
@@ -412,7 +451,8 @@ export function CharactersBody() {
           Apagar personagem
         </Item>
       </>
-    );
+      );
+    };
 
     function porNoMapa() {
       if (!scene || !personagem.miniatura) return;
@@ -499,23 +539,10 @@ export function CharactersBody() {
             // sendo editado e a unica coisa que interessa enquanto o
             // campo existe, e os dois botoes da direita so dariam
             // alvo para o clique que confirma sem querer.
-            <Input
-              autoFocus
-              defaultValue={personagem.nome}
-              className="h-7 flex-1 text-xs"
-              aria-label={`Novo nome de ${personagem.nome}`}
-              // Clicar fora confirma, como na lista de cenas: o gesto
-              // de quem terminou e sair, e perder o que se digitou por
-              // isso seria a surpresa mais cara da tela.
-              onBlur={(event) =>
-                confirmarRenome(personagem, event.target.value)
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  confirmarRenome(personagem, event.currentTarget.value);
-                }
-                if (event.key === "Escape") setRenomeando(null);
-              }}
+            <CampoDoNome
+              personagem={personagem}
+              aoGravar={(nome) => gravarRenome(personagem, nome)}
+              aoSair={() => setRenomeando(null)}
             />
           ) : (
             <>

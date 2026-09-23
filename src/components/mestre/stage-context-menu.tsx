@@ -73,6 +73,9 @@ import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ehQuadro, type Scene } from "@/types/scene";
+import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
+import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 
 /**
  * Menu de botão direito do palco. Um único menu para a cena inteira em vez de
@@ -105,6 +108,22 @@ export function StageContextMenu({
     selectedIds.includes(item.id),
   );
   const hasSelection = selectedItems.length > 0;
+  /**
+   * O personagem do token na mão, quando há UM só e ele é de alguém.
+   *
+   * Um só de propósito: trocar a aparência de cinco tokens de uma vez pediria
+   * uma lista de aparências que nenhum deles tem igual -- são personagens
+   * diferentes, com estados diferentes. O gesto que existe é "este aqui está
+   * ferido".
+   */
+  const personagens = useCharactersStore((state) => state.personagens);
+  const recarregarPersonagens = useCharactersStore(
+    (state) => state.recarregar,
+  );
+  const doToken =
+    selectedItems.length === 1 && selectedItems[0]?.personagemId
+      ? personagens?.find((p) => p.id === selectedItems[0]?.personagemId)
+      : undefined;
   /**
    * Só coisa do QUADRO na mão: texto solto, forma, ou os dois.
    *
@@ -214,6 +233,20 @@ export function StageContextMenu({
 
         {hasSelection ? (
           <>
+            {/* Antes de copiar porque é a ação do token COMO personagem, e as
+                de baixo o tratam como imagem. Some quando o token não é de
+                ninguém, que é a maioria deles. */}
+            {doToken ? (
+              <>
+                <SubmenuDeAparencias
+                  kit={KIT_CONTEXTO}
+                  personagem={doToken}
+                  onChanged={recarregarPersonagens}
+                />
+                <ContextMenuSeparator />
+              </>
+            ) : null}
+
             <ContextMenuItem onClick={copySelection}>
               <Copy />
               Copiar
