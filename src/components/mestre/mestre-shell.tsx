@@ -30,6 +30,7 @@ import { SessionAudio } from "@/components/playground/session-audio";
 import { useSomDaMesa } from "@/hooks/use-som-da-mesa";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import {
   Tooltip,
   TooltipContent,
@@ -626,12 +627,7 @@ function PalcoVazio({ carregando }: { carregando: boolean }) {
               className="flex items-center justify-between gap-6 text-xs"
             >
               <span className="min-w-0">{atalho.rotulo}</span>
-              {/* Mesma pastilha da lista de Configurações > Teclado: ali ela é
-                  `Tecla`, e duplicar seis classes custa menos que exportar um
-                  componente de um diálogo para o palco. */}
-              <kbd className="bg-muted/60 text-muted-foreground shrink-0 rounded border px-1.5 py-0.5 font-mono text-[11px] leading-none">
-                {atalho.tecla}
-              </kbd>
+              <Kbd>{atalho.tecla}</Kbd>
             </li>
           ))}
         </ul>

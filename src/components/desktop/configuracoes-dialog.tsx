@@ -25,6 +25,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -38,7 +39,6 @@ import {
   DEGRAUS_ZOOM,
   usePreferenciasStore,
 } from "@/lib/store/use-preferencias-store";
-import { cn } from "@/lib/utils";
 
 /**
  * As seções, na ordem da barra lateral.
@@ -369,7 +369,7 @@ function PainelTeclado() {
                   className="flex items-center justify-between gap-3 border-b py-1.5 last:border-b-0"
                 >
                   <span className="min-w-0 text-sm">{atalho.rotulo}</span>
-                  <Tecla>{atalho.tecla}</Tecla>
+                  <Kbd>{atalho.tecla}</Kbd>
                 </li>
               ))}
             </ul>
@@ -377,22 +377,6 @@ function PainelTeclado() {
         ))}
       </div>
     </>
-  );
-}
-
-/** Uma combinação de teclas, como ela se escreve. */
-function Tecla({ children }: { children: string }) {
-  return (
-    <kbd
-      className={cn(
-        "bg-muted text-muted-foreground shrink-0 rounded border px-1.5 py-0.5",
-        // `font-mono` e não a fonte do texto: a lista se lê em varredura
-        // vertical, e largura fixa alinha os modificadores.
-        "font-mono text-[11px] leading-none",
-      )}
-    >
-      {children}
-    </kbd>
   );
 }
 
