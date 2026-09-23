@@ -1,4 +1,10 @@
-import { boundsOfItems, boxBounds, unionBounds, type Bounds } from "@/lib/geometry/bounds";
+import {
+  boundsOfItems,
+  boxBounds,
+  itemBounds,
+  unionBounds,
+  type Bounds,
+} from "@/lib/geometry/bounds";
 import { PLANO } from "@/lib/geometry/viewport";
 import { caixaDoTexto } from "@/lib/mestre/ligacoes";
 import type { Scene, Traco } from "@/types/scene";
@@ -33,7 +39,11 @@ export function limitesDoConteudo(scene: Scene): Bounds {
   const itens = boundsOfItems(scene.items);
   if (itens) caixas.push(itens);
 
-  for (const regiao of scene.fog) caixas.push(boxBounds(regiao));
+  // Pela caixa GIRADA, como os itens e pela mesma razão: uma área torta ocupa
+  // mais que o retângulo cru dela, e o que se mede aqui é até onde o mestre
+  // precisa alcançar.
+  for (const regiao of scene.fog)
+    caixas.push(itemBounds({ ...regiao, rotation: regiao.rotation ?? 0 }));
 
   for (const pin of scene.pins ?? [])
     caixas.push({ minX: pin.x, minY: pin.y, maxX: pin.x, maxY: pin.y });

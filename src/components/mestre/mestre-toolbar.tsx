@@ -2,8 +2,10 @@
 
 import {
   Circle,
+  CircleDashed,
   Eraser,
   Hand,
+  Lasso,
   Map,
   MapPin,
   Minus,
@@ -39,7 +41,12 @@ import {
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
-import { ehQuadro, type Scene, type TipoDeForma } from "@/types/scene";
+import {
+  ehQuadro,
+  type FormatoDeArea,
+  type Scene,
+  type TipoDeForma,
+} from "@/types/scene";
 
 type Ferramenta = {
   tool: Tool;
@@ -53,6 +60,11 @@ type Ferramenta = {
    * primeira esquecida deixaria uma delas agindo como seleção.
    */
   tipoDeForma?: TipoDeForma;
+  /**
+   * O mesmo truque do tipo de forma, para a área escondida: quadrado, redondo e
+   * livre são três alvos na barra e uma `fog` só no palco.
+   */
+  formatoDeArea?: FormatoDeArea;
 };
 
 /**
@@ -106,9 +118,24 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
   },
   {
     tool: "fog",
+    formatoDeArea: "retangulo",
     label: "Área escondida",
-    hint: "Arraste sobre o mapa para cobrir uma região. A mesa vê preto sólido.",
+    hint: "Arraste sobre o mapa para cobrir uma região. A mesa vê preto sólido. Selecionada, os cantos redimensionam e a alça de cima gira — um corredor torto se cobre torto.",
     icon: SquareDashedBottom,
+  },
+  {
+    tool: "fog",
+    formatoDeArea: "elipse",
+    label: "Área escondida redonda",
+    hint: "Arraste para cobrir uma região arredondada — a clareira, a torre, o raio de um desabamento. Segurar Shift iguala os lados e sai um círculo.",
+    icon: CircleDashed,
+  },
+  {
+    tool: "fog",
+    formatoDeArea: "poligono",
+    label: "Área escondida livre",
+    hint: "Clique vértice a vértice contornando a região. Fecha clicando no primeiro ponto ou com Enter; Backspace desfaz o último vértice e Esc cancela. Depois, as alças de cada vértice remodelam o contorno.",
+    icon: Lasso,
   },
 ];
 
@@ -191,15 +218,20 @@ const DA_REGUA: Record<"quadro" | "mapa", Ferramenta[]> = {
   mapa: FERRAMENTAS_DE_DESENHO,
 };
 
-/** Esta ferramenta é a que está na mão? O tipo de forma entra na conta. */
+/**
+ * Esta ferramenta é a que está na mão? O tipo de forma e o formato de área
+ * entram na conta — são eles que separam botões que compartilham a ferramenta.
+ */
 function ehAtiva(
   ferramenta: Ferramenta,
   tool: Tool,
   tipoDeForma: TipoDeForma,
+  formatoDeArea: FormatoDeArea,
 ): boolean {
   return (
     ferramenta.tool === tool &&
-    (!ferramenta.tipoDeForma || ferramenta.tipoDeForma === tipoDeForma)
+    (!ferramenta.tipoDeForma || ferramenta.tipoDeForma === tipoDeForma) &&
+    (!ferramenta.formatoDeArea || ferramenta.formatoDeArea === formatoDeArea)
   );
 }
 
@@ -250,11 +282,13 @@ function BotaoDeFerramenta({
 }) {
   const tool = useToolStore((state) => state.tool);
   const tipoDeForma = useToolStore((state) => state.tipoDeForma);
+  const formatoDeArea = useToolStore((state) => state.formatoDeArea);
   const setTool = useToolStore((state) => state.setTool);
   const setForma = useToolStore((state) => state.setForma);
+  const setFormatoDeArea = useToolStore((state) => state.setFormatoDeArea);
 
   const { tool: value, label, hint, icon: Icon } = ferramenta;
-  const ativa = ehAtiva(ferramenta, tool, tipoDeForma);
+  const ativa = ehAtiva(ferramenta, tool, tipoDeForma, formatoDeArea);
 
   return (
     <Tooltip>
@@ -269,6 +303,8 @@ function BotaoDeFerramenta({
             onClick={() => {
               if (ferramenta.tipoDeForma)
                 setForma({ tipoDeForma: ferramenta.tipoDeForma });
+              if (ferramenta.formatoDeArea)
+                setFormatoDeArea(ferramenta.formatoDeArea);
               setTool(value);
               aoEscolher?.();
             }}
@@ -316,7 +352,7 @@ export function ReguaDeDesenho({ scene }: { scene: Scene }) {
     <div className="bg-background/85 pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
       {DA_REGUA[quadro ? "quadro" : "mapa"].map((ferramenta) => (
         <BotaoDeFerramenta
-          key={ferramenta.tipoDeForma ?? ferramenta.tool}
+          key={ferramenta.tipoDeForma ?? ferramenta.formatoDeArea ?? ferramenta.tool}
           ferramenta={ferramenta}
         />
       ))}
@@ -399,6 +435,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   const tool = useToolStore((state) => state.tool);
   const setTool = useToolStore((state) => state.setTool);
   const tipoDeForma = useToolStore((state) => state.tipoDeForma);
+  const formatoDeArea = useToolStore((state) => state.formatoDeArea);
   const dasExtensoes = useFerramentasDeExtensao();
 
   const [aberta, setAberta] = useState<"palco" | "mapa" | null>(null);
@@ -429,7 +466,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   // A ferramenta ativa de cada bolsa, para o botão dela mostrar. `select` é
   // sempre do palco; então a bolsa do mapa só tem ativa quando é dela.
   const daBolsa = (lista: Ferramenta[]) =>
-    lista.find((f) => ehAtiva(f, tool, tipoDeForma));
+    lista.find((f) => ehAtiva(f, tool, tipoDeForma, formatoDeArea));
 
   const fechar = () => setAberta(null);
 
@@ -463,7 +500,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
         >
           {FERRAMENTAS_MAPA.map((ferramenta) => (
             <BotaoDeFerramenta
-              key={ferramenta.tool}
+              key={ferramenta.formatoDeArea ?? ferramenta.tool}
               ferramenta={ferramenta}
               aoEscolher={fechar}
             />

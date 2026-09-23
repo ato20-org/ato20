@@ -144,8 +144,26 @@ export type CanvasItem = {
 };
 
 /**
+ * Os recortes que uma área escondida sabe ter.
+ *
+ * Os mesmos nomes das formas do quadro -- `retangulo`, `elipse` --, porque é o
+ * mesmo vocabulário para a mesma coisa: a diferença entre uma forma e uma área
+ * é o que ela FAZ (cercar × esconder), não o desenho dela.
+ */
+export const FORMATOS_DE_AREA = ["retangulo", "elipse", "poligono"] as const;
+
+export type FormatoDeArea = (typeof FORMATOS_DE_AREA)[number];
+
+/**
  * Área escondida. Opaca no Jogador e no Espectador, semi-transparente no
  * Mestre — o mestre vê o que tem embaixo, a mesa não.
+ *
+ * A CAIXA é a verdade da área, nos três formatos: `x, y, width, height` é o
+ * que o gizmo move, escala e gira, o que o alinhamento usa como alvo e o que
+ * `limitesDoConteudo` mede. O `formato` diz só como essa caixa é PINTADA --
+ * cheia, arredondada ou recortada pelos vértices --, e é isso que deixa o
+ * polígono entrar sem que snap, limites e desfazer aprendam uma geometria
+ * nova.
  */
 export type FogRegion = {
   id: string;
@@ -155,6 +173,30 @@ export type FogRegion = {
   height: number;
   /** Revelada deixa de esconder em todas as visões. */
   revealed: boolean;
+  /**
+   * Ausente = retângulo.
+   *
+   * Opcional pela mesma razão do espelhamento do item: toda área gravada antes
+   * disto era um retângulo, e o caso comum continua sem campo nenhum.
+   */
+  formato?: FormatoDeArea;
+  /**
+   * Graus, no sentido horário, em torno do centro da caixa. Ausente = 0.
+   *
+   * Existe porque corredor, mesa e parede raramente correm no eixo da tela, e
+   * sem giro esconder um deles obrigava a cobrir metade do que está em volta.
+   */
+  rotation?: number;
+  /**
+   * Só o polígono: os vértices ACHATADOS -- `x0, y0, x1, y1, ...` --, cada um
+   * em FRAÇÃO da caixa, de 0 a 1.
+   *
+   * Fração e não unidade de cena: assim mover, escalar e girar a área são o
+   * gesto de sempre sobre a caixa, sem tocar num vértice sequer, e nenhum
+   * ponto pode cair fora dela -- que é o que mantém o `transbordo` do plano em
+   * zero. Ver `poligonoEmCena` e `normalizarPoligono`.
+   */
+  pontos?: number[];
 };
 
 /**
@@ -719,7 +761,8 @@ export type Spotlight = {
 };
 
 /** O que o chamador informa ao desenhar uma área; `id` e `revealed` são do store. */
-export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height">;
+export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height"> &
+  Partial<Pick<FogRegion, "formato" | "rotation" | "pontos">>;
 
 /**
  * Um risco a mao livre sobre o mapa.
