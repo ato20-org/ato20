@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Os itens que SAÍRAM da lista há pouco, para eles poderem se despedir.
@@ -72,5 +72,31 @@ export function useSaindo<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assinatura, prazoMs]);
 
-  return saindo;
+  /**
+   * A fila, menos quem voltou.
+   *
+   * O efeito acima já tira da fila quem reapareceu, mas ele roda DEPOIS do
+   * render — e é um quadro tarde demais. Um som que sai e volta dentro do
+   * prazo (o pad da trilha apertado duas vezes) é desenhado uma vez estando
+   * nas duas listas, e quem chama as junta com a mesma chave nas duas. O React
+   * avisa de chave repetida, e o aviso está certo.
+   *
+   * Então o filtro é feito aqui, no render: o efeito continua sendo quem
+   * esvazia a fila com o tempo, e isto garante que ela nunca seja LIDA com um
+   * item que já está vivo. Num `useMemo` porque a lista devolvida alimenta os
+   * `useMemo` de quem chama — um array novo a cada render remontaria a conta
+   * dos canais sessenta vezes por segundo.
+   */
+  return useMemo(() => {
+    const presentes = new Set(itens.map(chave));
+    const voltou = saindo.filter((item) => presentes.has(chave(item)));
+
+    // Mesma referência quando ninguém voltou, que é o caso quase sempre.
+    return voltou.length === 0
+      ? saindo
+      : saindo.filter((item) => !presentes.has(chave(item)));
+    // `itens` e `chave` fora pela mesma razão do efeito: a assinatura já
+    // responde "a lista mudou?".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saindo, assinatura]);
 }

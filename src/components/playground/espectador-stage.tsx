@@ -25,6 +25,9 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
     ambientes,
     disparos,
     volume,
+    volumeTrilha,
+    volumeAmbiente,
+    volumeDisparo,
     portraits,
     spotlight,
     rolagens,
@@ -63,6 +66,9 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
         ambientes={ambientes}
         disparos={disparos}
         volume={volume}
+        volumeTrilha={volumeTrilha}
+        volumeAmbiente={volumeAmbiente}
+        volumeDisparo={volumeDisparo}
       />
 
       {/* Sem `dismissable`: não há ninguém na TV para fechar nada, e um botão

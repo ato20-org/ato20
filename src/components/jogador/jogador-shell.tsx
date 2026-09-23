@@ -172,6 +172,9 @@ export function JogadorShell({
             ambientes={live.ambientes}
             disparos={live.disparos}
             volume={live.volume}
+            volumeTrilha={live.volumeTrilha}
+            volumeAmbiente={live.volumeAmbiente}
+            volumeDisparo={live.volumeDisparo}
           />
         </>
       ) : null}

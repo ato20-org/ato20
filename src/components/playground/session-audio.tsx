@@ -48,6 +48,7 @@ const PASSO_DA_RAMPA_MS = 40;
  */
 export const chaveDaTrilha = (assetId: string) => `trilha:${assetId}`;
 export const chaveDoAmbiente = (id: string) => `ambiente:${id}`;
+export const chaveDoDisparo = (id: string) => `disparo:${id}`;
 
 /**
  * Um canal de som: a trilha, um ambiente ou um disparo.
@@ -76,9 +77,12 @@ type Canal = {
   /**
    * Escreve posição e duração no store, sob `chave`.
    *
-   * Trilha e ambiente, não o disparo: o painel acompanha os dois, e um tiro de
-   * dois segundos não tem barra que valha a pena desenhar. Falso também em quem
-   * está saindo — a linha dele já sumiu do painel.
+   * Os três, agora inclusive o disparo. Ele reportava nada porque dois segundos
+   * de barra pareciam não valer o desenho — mas a bandeja o segura por quinze
+   * segundos para o espectador que reconecta, e sem posição o painel não tinha
+   * como saber que o tiro já tinha soado. Ver `LinhaDoDisparo`.
+   *
+   * Falso só em quem está saindo: a linha dele já sumiu do painel.
    */
   reportaProgresso: boolean;
   /** Está se despedindo: desce o ganho e cala. */
@@ -107,11 +111,26 @@ export function SessionAudio({
   ambientes = [],
   disparos = [],
   volume,
+  volumeTrilha = 1,
+  volumeAmbiente = 1,
+  volumeDisparo = 1,
 }: {
   track: SessionTrack | null;
   ambientes?: Ambiente[];
   disparos?: Disparo[];
   volume: number;
+  /**
+   * Os barramentos: a trilha, todos os ambientes, todos os disparos.
+   *
+   * Entram DENTRO do ganho de cada canal, e não como um terceiro fator em
+   * `outputVolume`. É o que mantém a conta de lá com dois números — mesa vezes
+   * canal —, e é verdade: o barramento é do canal, e não do aparelho.
+   *
+   * Cheios por omissão, para o quadro de uma versão anterior não chegar mudo.
+   */
+  volumeTrilha?: number;
+  volumeAmbiente?: number;
+  volumeDisparo?: number;
 }) {
   /**
    * Os canais que somem em rampa: trilha e ambiente.
@@ -128,7 +147,7 @@ export function SessionAudio({
         assetId: track.assetId,
         // O fader da própria faixa, que multiplica o volume da mesa. Era fixo
         // em 1 quando a trilha não tinha um. Ver `SessionTrack.ganho`.
-        ganho: track.ganho,
+        ganho: track.ganho * volumeTrilha,
         loop: track.loop,
         tocando: track.playing,
         startedAt: track.startedAt,
@@ -141,7 +160,7 @@ export function SessionAudio({
       canais.push({
         chave: chaveDoAmbiente(ambiente.id),
         assetId: ambiente.assetId,
-        ganho: ambiente.ganho,
+        ganho: ambiente.ganho * volumeAmbiente,
         // Ambiente repete sempre: um som de fundo que acaba no meio da cena
         // deixa um silêncio que ninguém pediu.
         loop: true,
@@ -153,7 +172,7 @@ export function SessionAudio({
     }
 
     return canais;
-  }, [track, ambientes]);
+  }, [track, volumeTrilha, ambientes, volumeAmbiente]);
 
   const saindo = useSaindo(comFade, (canal) => canal.chave, FADE_MS);
 
@@ -174,17 +193,17 @@ export function SessionAudio({
         reportaProgresso: false,
       })),
       ...disparos.map((disparo) => ({
-        chave: `disparo:${disparo.id}`,
+        chave: chaveDoDisparo(disparo.id),
         assetId: disparo.assetId,
-        ganho: disparo.ganho,
+        ganho: disparo.ganho * volumeDisparo,
         loop: false,
         tocando: true,
         startedAt: disparo.firedAt,
         fade: false,
-        reportaProgresso: false,
+        reportaProgresso: true,
       })),
     ],
-    [comFade, saindo, disparos],
+    [comFade, saindo, disparos, volumeDisparo],
   );
 
   return (
@@ -366,12 +385,17 @@ function CanalAudio({ canal, volume }: { canal: Canal; volume: number }) {
     element.addEventListener("loadedmetadata", report);
     element.addEventListener("durationchange", report);
     element.addEventListener("seeked", report);
+    // `ended` e não só `timeupdate`: a última batida do `timeupdate` cai antes
+    // do fim, e sem esta linha a posição parava uns décimos aquém da duração —
+    // que é justamente a comparação que diz ao painel que o som acabou.
+    element.addEventListener("ended", report);
 
     return () => {
       element.removeEventListener("timeupdate", report);
       element.removeEventListener("loadedmetadata", report);
       element.removeEventListener("durationchange", report);
       element.removeEventListener("seeked", report);
+      element.removeEventListener("ended", report);
       // Canal que saiu não deixa a linha dele parada no último instante.
       esquecerProgresso(chave);
     };
