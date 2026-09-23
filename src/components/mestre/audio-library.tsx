@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -42,6 +43,11 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SomAtual } from "@/components/mestre/som-atual";
 import { useAssetList } from "@/hooks/use-asset-list";
 import {
@@ -394,9 +400,16 @@ export function AudioLibrary() {
             </div>
 
             {macros.length === 0 ? (
-              <p className="text-muted-foreground text-xs">
-                Nenhuma macro. Elas são os mesmos sons dos pads, sem tecla — para
-                teclado sem numpad, ou para quando nove não bastam.
+              // O que a macro E ja esta no comentario acima, para quem mexe no
+              // codigo. Aqui embaixo do titulo "Macros" e de um `+`, o que
+              // falta dizer e so o que a separa dos pads de cima -- a tecla --,
+              // e isso cabe em quatro palavras.
+              //
+              // Mais apagado que o resto: e uma linha que so quem parou para
+              // olhar a secao vai ler, e no peso normal ela disputava atencao
+              // com a grade de pads logo acima, que e o que a aba veio mostrar.
+              <p className="text-muted-foreground/60 text-xs select-none">
+                Adicione um som sem tecla
               </p>
             ) : (
               <ul className="space-y-1">
@@ -461,7 +474,11 @@ export function AudioLibrary() {
 
         <TabsContent
           value="atual"
-          className="min-h-0 overflow-y-auto border-t pt-2"
+          // Sem `pt-2`, ao contrario das irmas: o vazio desta aba ocupa a
+          // altura toda para se centralizar, e um respiro imposto pelo painel
+          // somava oito pixels a esses cem por cento -- barra de rolagem por
+          // causa do proprio padding. Quem desenha o conteudo e quem o da.
+          className="min-h-0 overflow-y-auto border-t"
         >
           <SomAtual porId={porId} />
         </TabsContent>
@@ -476,25 +493,36 @@ export function AudioLibrary() {
               se dava, com o destino junto. Quem importa som costuma importar
               uma leva do mesmo tipo — cinco ambientes de floresta, oito
               efeitos de combate. */}
-          <div className="px-2 pb-2">
+          <div className="flex items-center justify-end px-2 pb-2">
             <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    size="sm"
-                    disabled={importando}
-                  >
-                    {importando ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Upload />
-                    )}
-                    {importando ? "Importando…" : "Importar sons"}
-                  </Button>
-                }
-              />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="shrink-0 rounded-full"
+                          aria-label={
+                            importando ? "Importando sons" : "Importar sons"
+                          }
+                          disabled={importando}
+                        >
+                          {importando ? (
+                            <Loader2 className="animate-spin" />
+                          ) : (
+                            <Upload />
+                          )}
+                        </Button>
+                      }
+                    />
+                  }
+                />
+                <TooltipContent>
+                  {importando ? "Importando…" : "Importar sons"}
+                </TooltipContent>
+              </Tooltip>
               <DropdownMenuContent align="start" className="w-56">
                 {TIPOS.map(({ tipo, rotulo, explicacao }) => {
                   const Icone = ICONE_DO_TIPO[tipo];
@@ -533,9 +561,9 @@ export function AudioLibrary() {
           ) : null}
 
           {assets.length === 0 ? (
-            <p className="text-muted-foreground p-3 text-xs">
-              Nenhum som encontrado.
-            </p>
+            <PainelVazio conteudo={{ tipo: "sons" }}>
+              Importe trilhas, ambientes e efeitos
+            </PainelVazio>
           ) : achados.length === 0 ? (
             <p className="text-muted-foreground p-3 text-xs">
               Nada com “{busca.trim()}”.
@@ -647,8 +675,8 @@ function SeletorDeSom({
       <PopoverTrigger render={gatilho} />
       <PopoverContent side="bottom" align="start" className="w-64 p-0">
         {assets.length === 0 ? (
-          <p className="text-muted-foreground p-3 text-xs">
-            Nenhum som no acervo.
+          <p className="text-muted-foreground/60 p-3 text-xs">
+            Importe sons na aba Acervo
           </p>
         ) : (
           <>

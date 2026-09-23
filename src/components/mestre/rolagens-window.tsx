@@ -5,6 +5,7 @@ import { Eraser, Trash2, X } from "lucide-react";
 
 import { DadoParado } from "@/components/playground/dado-parado";
 import { DadoRolando } from "@/components/playground/dado-rolando";
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -65,9 +66,9 @@ export function RolagensBody() {
 
   if (historico.length === 0) {
     return (
-      <p className="text-muted-foreground p-3 text-xs leading-snug">
-        Nenhum dado de jogador rolado na mesa.
-      </p>
+      <PainelVazio conteudo={{ tipo: "rolagens" }}>
+        Nenhum dado rolado ainda
+      </PainelVazio>
     );
   }
 

@@ -283,8 +283,7 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
         <TooltipContent side="left">
           <p className="font-medium">Handout da cena</p>
           <p className="text-muted-foreground max-w-48">
-            Arraste imagens do acervo ou do computador para cá. Da bolinha,
-            arraste para a mesa. Da mesa, arraste de volta para a bolinha.
+            As imagens que a mesa pode receber.
           </p>
         </TooltipContent>
       </Tooltip>
@@ -365,11 +364,7 @@ function ConteudoDoHandout({
             aria-hidden
           />
         </span>
-        <p className="text-xs leading-snug">
-          Arraste imagens para cá
-          <br />
-          ou clique para escolher do computador
-        </p>
+        <p className="text-xs leading-snug">Arraste imagens para cá</p>
       </button>
     );
   }

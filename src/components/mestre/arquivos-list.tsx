@@ -24,25 +24,18 @@ import {
 } from "lucide-react";
 
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
+import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -162,8 +155,13 @@ export function ArquivosList({ ready }: { ready: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Três botões iguais: criar é criar, seja o que for. O que cada um cria
-          está no ícone e na dica; o título da aba já diz "Arquivos". */}
-      <div className="flex gap-1 p-2">
+          está no ícone e na dica; o título da aba já diz "Arquivos".
+
+          Redondos e encostados à direita, e não três barras dividindo a
+          largura: esticados, cada um virava um retângulo grande com um ícone
+          perdido no meio, e os três juntos pesavam mais que a árvore que eles
+          servem. Mesmo arranjo da Biblioteca e de Personagens. */}
+      <div className="flex items-center justify-end gap-2 p-2">
         <BotaoDeCriar
           rotulo="Novo quadro"
           dica="Um quadro: folha para imagens, notas e setas."
@@ -211,6 +209,16 @@ export function ArquivosList({ ready }: { ready: boolean }) {
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
+
+          {/* `pointer-events-none`: o aviso cobre a area toda, e o gatilho do
+              menu do vazio esta DEBAIXO dele -- sem isto, o botao direito no
+              meio do painel vazio nao abriria mais "Novo quadro / Nova nota /
+              Nova pasta", que e justamente o que se quer ali. */}
+          {ready && linhas.length === 0 ? (
+            <PainelVazio conteudo={{ tipo: "quadros" }} className="pointer-events-none absolute inset-0">
+              Crie um quadro ou uma nota
+            </PainelVazio>
+          ) : null}
 
           <ul ref={listRef} className="relative z-10 space-y-0.5 p-2 pt-0">
             {linhas.map((linha, index) =>
@@ -289,9 +297,9 @@ function BotaoDeCriar({
       <TooltipTrigger
         render={
           <Button
-            className="flex-1"
+            className="shrink-0 rounded-full"
             variant="outline"
-            size="sm"
+            size="icon"
             aria-label={rotulo}
             disabled={disabled}
             onClick={onClick}
@@ -545,35 +553,6 @@ function CampoDeNome({
     />
   );
 }
-
-/**
- * As peças de um menu. O botão direito e os três pontos são dois menus
- * diferentes (contexto e dropdown), mas os itens têm de ser os MESMOS; cada
- * linha escreve os itens uma vez, recebendo o kit de quem os desenha.
- */
-type Kit = {
-  Item: typeof ContextMenuItem;
-  Separator: typeof ContextMenuSeparator;
-  Sub: typeof ContextMenuSub;
-  SubTrigger: typeof ContextMenuSubTrigger;
-  SubContent: typeof ContextMenuSubContent;
-};
-
-const KIT_CONTEXTO: Kit = {
-  Item: ContextMenuItem,
-  Separator: ContextMenuSeparator,
-  Sub: ContextMenuSub,
-  SubTrigger: ContextMenuSubTrigger,
-  SubContent: ContextMenuSubContent,
-};
-
-const KIT_TRES_PONTOS: Kit = {
-  Item: DropdownMenuItem as Kit["Item"],
-  Separator: DropdownMenuSeparator as Kit["Separator"],
-  Sub: DropdownMenuSub as Kit["Sub"],
-  SubTrigger: DropdownMenuSubTrigger as Kit["SubTrigger"],
-  SubContent: DropdownMenuSubContent as Kit["SubContent"],
-};
 
 /**
  * Os três pontos de uma linha, com o mesmo menu do botão direito. Escondidos
@@ -917,8 +896,11 @@ function QuadroRow({
     <ConfirmarRemocao
       aberto={confirmando}
       onAberto={setConfirmando}
-      titulo={`Remover "${scene.name}"?`}
-      descricao={`O quadro e os ${elementos} elementos dele saem da campanha. Ctrl+Z não traz de volta.`}
+      titulo={`Deseja remover ${scene.name}?`}
+      itens={[
+        "O quadro",
+        `Os ${elementos} elementos dentro dele`,
+      ]}
       acao="Remover"
       onConfirmar={() => store().removeScene(scene.id)}
     />
@@ -1061,8 +1043,8 @@ function NotaRow({
     <ConfirmarRemocao
       aberto={confirmando}
       onAberto={setConfirmando}
-      titulo={`Apagar "${nota.titulo}"?`}
-      descricao="Vão junto o arquivo .md e os cartões desta nota nos quadros. Ctrl+Z não traz de volta."
+      titulo={`Deseja apagar ${nota.titulo}?`}
+      itens={["O arquivo .md", "Os cartões desta nota nos quadros"]}
       onConfirmar={apagar}
     />
     </>

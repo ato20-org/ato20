@@ -138,8 +138,8 @@ export function NotaEditor({ nota }: { nota: Nota }) {
         <ConfirmarRemocao
           aberto={confirmando}
           onAberto={setConfirmando}
-          titulo={`Apagar "${nota.titulo}"?`}
-          descricao="Vão junto o arquivo .md e os cartões desta nota nos quadros. Ctrl+Z não traz de volta."
+          titulo={`Deseja apagar ${nota.titulo}?`}
+          itens={["O arquivo .md", "Os cartões desta nota nos quadros"]}
           onConfirmar={apagar}
         />
       </div>

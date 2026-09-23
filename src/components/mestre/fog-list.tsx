@@ -2,6 +2,7 @@
 
 import { Eye, EyeOff, Trash2 } from "lucide-react";
 
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toggleFogRevealed } from "@/lib/mestre/item-actions";
@@ -31,11 +32,9 @@ export function FogList({ scene }: { scene: Scene }) {
 
   if (scene.fog.length === 0) {
     return (
-      <p className="text-muted-foreground p-3 text-xs">
-        Nenhuma área escondida. Escolha uma das ferramentas de área na barra de
-        cima: quadrada e redonda se desenham no arrasto, a livre se contorna
-        clique a clique.
-      </p>
+      <PainelVazio icone={EyeOff}>
+        Nenhuma área escondida
+      </PainelVazio>
     );
   }
 

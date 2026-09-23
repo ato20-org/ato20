@@ -108,7 +108,6 @@ function padrao(): Layout {
           abas: [
             { tipo: "cenas" },
             { tipo: "quadros" },
-            { tipo: "areas" },
             { tipo: "retratos" },
             { tipo: "personagens" },
           ],
@@ -169,8 +168,8 @@ function ler(): Layout {
     if (!eColuna(esquerda) || !eColuna(direita)) return padrao();
 
     return comQuadros({
-      esquerda: semRetratos(esquerda),
-      direita: semRetratos(direita),
+      esquerda: semAreas(semRetratos(esquerda)),
+      direita: semAreas(semRetratos(direita)),
     });
   } catch {
     return padrao();
@@ -248,6 +247,58 @@ function comQuadros(layout: Layout): Layout {
   const direita = inserir(layout.direita, false);
   if (direita) return { ...layout, direita };
   return { ...layout, esquerda: inserir(layout.esquerda, true) ?? layout.esquerda };
+}
+
+/**
+ * A aba Áreas sai do layout que voltou do disco com ela.
+ *
+ * Áreas virou aba DENTRO de Mapas -- ver `SceneList`. Quem já tinha a bancada
+ * arrumada guardou no disco uma aba de um tipo que não existe mais, e o painel
+ * dela desenharia o vazio: o `JanelaCorpo` não tem mais caso para ela.
+ *
+ * Sem chave de migração, ao contrário de `comQuadros`: aquela pergunta "já
+ * ofereci isto uma vez?", e uma aba que some não pode voltar por engano. Esta
+ * aqui é idempotente -- roda toda leitura e não acha nada depois da primeira.
+ *
+ * Um grupo que ficasse SEM abas some junto: o `eColuna` recusa grupo vazio, e
+ * uma coluna recusada derruba o layout inteiro para o padrão. Quem tinha Áreas
+ * sozinha num grupo perde o grupo, não a bancada.
+ */
+function semAreas(coluna: Coluna): Coluna {
+  // Índice preservado junto: a fração de um grupo mora numa lista paralela, e
+  // filtrar as duas separadamente as desalinharia -- o grupo que sobrou
+  // herdaria a altura do que saiu.
+  const sobrando = coluna.grupos
+    .map((grupo, indice) => ({
+      grupo: {
+        ...grupo,
+        abas: grupo.abas.filter((aba) => aba.tipo !== ("areas" as ConteudoJanela["tipo"])),
+      },
+      fracao: coluna.fracoes[indice] ?? 1,
+    }))
+    .filter(({ grupo }) => grupo.abas.length > 0);
+
+  const mexeu =
+    sobrando.length !== coluna.grupos.length ||
+    sobrando.some(({ grupo }, i) => grupo.abas.length !== coluna.grupos[i]?.abas.length);
+  if (!mexeu) return coluna;
+
+  // Nenhum grupo sobrou: devolve a coluna intacta e deixa o `eColuna` recusá-la
+  // para o padrão. Uma coluna sem grupo nenhum é pior que uma bancada perdida.
+  if (sobrando.length === 0) return coluna;
+
+  return {
+    ...coluna,
+    grupos: sobrando.map(({ grupo }) =>
+      // A ativa apontava para a aba que saiu: cai na primeira que sobrou.
+      grupo.abas.some((aba) => chaveDe(aba) === grupo.ativa)
+        ? grupo
+        : { ...grupo, ativa: chaveDe(grupo.abas[0]!) },
+    ),
+    // Renormaliza: tirar um grupo deixa as frações somando menos que 1, e a
+    // coluna abriria com uma faixa vazia embaixo.
+    fracoes: normalizaFracoes(sobrando.map(({ fracao }) => fracao)),
+  };
 }
 
 function gravar(layout: Layout) {

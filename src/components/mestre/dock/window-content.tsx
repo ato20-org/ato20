@@ -1,32 +1,11 @@
 "use client";
 
-import {
-  BookOpen,
-  Clapperboard,
-  Files,
-  Dices,
-  EyeOff,
-  Image,
-  LibraryBig,
-  Layers,
-  Library,
-  MonitorPlay,
-  Music,
-  Paperclip,
-  PersonStanding,
-  Puzzle,
-  ScrollText,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
-
 import { AssetLibrary } from "@/components/mestre/asset-library";
 import { AudioLibrary } from "@/components/mestre/audio-library";
 import { AnexoBody, AssetBody } from "@/components/mestre/attachment-window";
 import { CharacterBody } from "@/components/mestre/character-window";
 import { CharactersBody } from "@/components/mestre/characters-window";
 import { EstanteBody } from "@/components/mestre/estante-window";
-import { FogList } from "@/components/mestre/fog-list";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
 import { LayerList } from "@/components/mestre/layer-list";
@@ -41,7 +20,6 @@ import { useMemo } from "react";
 import { PainelDeExtensao } from "@/components/mestre/dock/painel-de-extensao";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import type { ConteudoJanela } from "@/lib/store/use-window-store";
-import { ehQuadro } from "@/types/scene";
 
 /**
  * O que cada tipo de janela mostra, e como se chama.
@@ -57,64 +35,6 @@ import { ehQuadro } from "@/types/scene";
 
 /** O título e a linha de baixo, quando há. */
 export type Rotulo = { titulo: string; subtitulo?: string };
-
-/**
- * O ícone de cada tela.
- *
- * Existe porque a aba encolheu: no formato de aba de navegador o rótulo é o
- * que ocupa, e numa coluna de 288 pixels três abas já disputam espaço. O ícone
- * é o que deixa a aba ativa reconhecível antes de o olho ler a palavra, e o que
- * identifica as inativas quando a tira rola.
- *
- * Função pura, e separada de `useRotuloJanela`: o ícone não depende de dado
- * nenhum -- a ficha do Victor e a do Edgar têm o mesmo --, então cobrá-lo de um
- * hook obrigaria quem só quer desenhar um menu a montar o índice de personagens.
- *
- * Sem `default` no `switch`, de propósito: é ele que faz o TypeScript apontar a
- * tela nova que entrou em `ConteudoJanela` e não escolheu ícone.
- */
-export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
-  switch (conteudo.tipo) {
-    case "rolagens":
-      return Dices;
-    case "cenas":
-      return Clapperboard;
-    case "quadros":
-      // Arquivos, como no Obsidian: quadros e notas na mesma árvore.
-      return Files;
-    case "areas":
-      // A área é o que a mesa NÃO vê -- o olho cortado é o que ela faz.
-      return EyeOff;
-    case "retratos":
-      return PersonStanding;
-    case "camadas":
-      return Layers;
-    case "imagens":
-      return LibraryBig;
-    case "sons":
-      return Music;
-    case "personagens":
-      return Users;
-    case "personagem":
-      // Ficha, e não pessoa: `Users` já é a lista, e duas telas com o mesmo
-      // ícone na mesma tira não distinguem nada.
-      return ScrollText;
-    case "estante":
-      return Library;
-    case "livro":
-      return BookOpen;
-    case "miniplayer":
-      return MonitorPlay;
-    case "anexo":
-      return Paperclip;
-    case "asset":
-      return Image;
-    case "extensao":
-      // Um ícone só para todas: o manifesto não declara um, e inventar por
-      // extensão seria escolher pelo autor dela.
-      return Puzzle;
-  }
-}
 
 /**
  * As telas que existem, na ordem em que aparecem nos menus.
@@ -135,7 +55,6 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
 export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "cenas" }, titulo: "Mapas" },
   { conteudo: { tipo: "quadros" }, titulo: "Arquivos" },
-  { conteudo: { tipo: "areas" }, titulo: "Áreas" },
   { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
   { conteudo: { tipo: "camadas" }, titulo: "Camadas" },
   { conteudo: { tipo: "imagens" }, titulo: "Biblioteca" },
@@ -229,8 +148,6 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: "Mapas" };
     case "quadros":
       return { titulo: "Arquivos", subtitulo: "Quadros e notas da campanha" };
-    case "areas":
-      return { titulo: "Áreas" };
     case "retratos":
       return { titulo: "Retratos" };
     case "imagens":
@@ -360,16 +277,6 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
       return <SceneList ready={pronta} />;
     case "quadros":
       return <ArquivosList ready={pronta} />;
-    case "areas":
-      // Quadro não tem névoa: a lista vazia diria "nenhuma área" como se
-      // faltasse desenhar uma, e o que falta é abrir um mapa.
-      return scene && !ehQuadro(scene) ? (
-        <FogList scene={scene} />
-      ) : (
-        <p className="text-muted-foreground p-3 text-xs">
-          {scene ? "Quadro não tem áreas escondidas." : "Crie um mapa primeiro."}
-        </p>
-      );
     // Retrato não depende de cena: ele é da sessão e atravessa a troca.
     case "retratos":
       return <PortraitList />;
