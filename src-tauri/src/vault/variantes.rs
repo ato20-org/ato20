@@ -736,6 +736,7 @@ mod tests {
             folder_id: None,
             escopo: None,
             peaks: None,
+            tipo_de_som: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -768,6 +769,7 @@ mod tests {
             folder_id: None,
             escopo: None,
             peaks: None,
+            tipo_de_som: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -908,6 +910,7 @@ mod tests {
             folder_id: None,
             escopo: None,
             peaks: None,
+            tipo_de_som: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -948,6 +951,7 @@ mod tests {
             folder_id: None,
             escopo: None,
             peaks: None,
+            tipo_de_som: None,
         };
 
         // A "miniatura" de som e `AssetMeta::peaks`, e quem a calcula e a
@@ -974,6 +978,7 @@ mod tests {
             folder_id: None,
             escopo: None,
             peaks: None,
+            tipo_de_som: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -1135,6 +1140,7 @@ mod tests {
             folder_id: None,
             escopo: None,
             peaks: None,
+            tipo_de_som: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
