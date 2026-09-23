@@ -14,7 +14,7 @@ use crate::serve::{DaemonAddr, Evidence, SharedEvidence, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
 use crate::vault::board::{Board, BoardPatch};
 use crate::vault::session::Json;
-use crate::vault::characters::{Anexo, Autor, Campo, Personagem};
+use crate::vault::characters::{Anexo, Aparencia, Autor, Campo, Personagem};
 use crate::vault::players::{Attachment, Player};
 use crate::vault::inventory::{self, Item};
 use crate::vault::{
@@ -907,6 +907,55 @@ pub fn character_set_campo(
     valor: Option<String>,
 ) -> AppResult<()> {
     state.with_vault(|vault| characters::set_campo(vault, &id, campo, valor.as_deref()))
+}
+
+/// Cria uma aparencia para o personagem, copiando a que esta no ar.
+#[tauri::command]
+pub fn character_aparencia_criar(
+    state: State<'_, AppState>,
+    id: String,
+    nome: String,
+) -> AppResult<Aparencia> {
+    state.with_vault(|vault| characters::criar_aparencia(vault, &id, &nome))
+}
+
+#[tauri::command]
+pub fn character_aparencia_renomear(
+    state: State<'_, AppState>,
+    id: String,
+    aparencia_id: String,
+    nome: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| characters::renomear_aparencia(vault, &id, &aparencia_id, &nome))
+}
+
+/// Tira uma aparencia da lista e devolve o personagem como ele ficou.
+///
+/// Devolve o personagem, e nao `()`, porque remover a que esta no ar troca o
+/// retrato e a miniatura do topo -- a tela precisa dos novos para nao ficar
+/// mostrando a cara que acabou de sair.
+#[tauri::command]
+pub fn character_aparencia_remover(
+    state: State<'_, AppState>,
+    id: String,
+    aparencia_id: String,
+) -> AppResult<Personagem> {
+    state.with_vault(|vault| characters::remover_aparencia(vault, &id, &aparencia_id))
+}
+
+/// Poe uma aparencia no ar e devolve o personagem ja trocado.
+///
+/// Quem chama tem duas coisas a fazer com a resposta: redesenhar a ficha e
+/// reescrever a imagem dos tokens daquele personagem no mapa. As duas precisam
+/// da miniatura nova, e uma segunda leitura para busca-la abriria uma janela em
+/// que a ficha ja trocou e o mapa ainda nao.
+#[tauri::command]
+pub fn character_aparencia_ativar(
+    state: State<'_, AppState>,
+    id: String,
+    aparencia_id: String,
+) -> AppResult<Personagem> {
+    state.with_vault(|vault| characters::ativar_aparencia(vault, &id, &aparencia_id))
 }
 
 /// Os arquivos do personagem, MENOS os que sao imagem de item.

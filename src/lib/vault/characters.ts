@@ -8,6 +8,7 @@ import { call } from "@/lib/vault/bridge";
 import type {
   AnexoAutor,
   AnexoPersonagem,
+  Aparencia,
   CampoPersonagem,
   Personagem,
 } from "@/types/character";
@@ -107,6 +108,58 @@ export async function preencherCampoComArquivo(
   invalidarAcervo("image");
 
   return primeiro.id;
+}
+
+// --- aparências -------------------------------------------------------------
+
+/**
+ * Cria uma aparência, já copiando a que está no ar.
+ *
+ * Copia em vez de nascer vazia porque é o gesto comum: quem cria "Ferido" quer
+ * o mesmo rosto com outra miniatura, e uma linha vazia obrigaria a reanexar o
+ * retrato que já estava certo. Limpar um campo é um clique; reanexar um arquivo
+ * não é.
+ */
+export function criarAparencia(id: string, nome: string): Promise<Aparencia> {
+  return call<Aparencia>("character_aparencia_criar", { id, nome });
+}
+
+export function renomearAparencia(
+  id: string,
+  aparenciaId: string,
+  nome: string,
+): Promise<void> {
+  return call("character_aparencia_renomear", { id, aparenciaId, nome });
+}
+
+/**
+ * Tira uma aparência da lista. A Padrão não sai.
+ *
+ * Devolve o personagem como ficou: remover a que está no ar troca o retrato e a
+ * miniatura do topo, e a tela precisa dos novos para não seguir mostrando a
+ * cara que acabou de sair.
+ */
+export function removerAparencia(
+  id: string,
+  aparenciaId: string,
+): Promise<Personagem> {
+  return call<Personagem>("character_aparencia_remover", { id, aparenciaId });
+}
+
+/**
+ * Põe uma aparência no ar.
+ *
+ * Devolve o personagem já trocado porque quem chama tem duas coisas a fazer com
+ * a resposta: redesenhar a ficha e reescrever a imagem dos tokens daquele
+ * personagem no mapa — ver `aplicarAparencia` no store de cenas. As duas
+ * precisam da miniatura nova, e buscá-la numa segunda leitura abriria uma janela
+ * em que a ficha já trocou e o mapa ainda não.
+ */
+export function ativarAparencia(
+  id: string,
+  aparenciaId: string,
+): Promise<Personagem> {
+  return call<Personagem>("character_aparencia_ativar", { id, aparenciaId });
 }
 
 export function characterAttachments(id: string): Promise<AnexoPersonagem[]> {

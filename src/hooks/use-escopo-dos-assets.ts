@@ -7,6 +7,7 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { listAssets, setAssetEscopo } from "@/lib/vault/assets";
 import type { EscopoAsset } from "@/types/scene";
+import { imagensDoPersonagem } from "@/types/character";
 
 /**
  * Acerta o dono dos arquivos que entraram antes de o escopo existir.
@@ -45,9 +46,14 @@ export function useEscopoDosAssets(pronto: boolean): void {
     // Personagem depois da cena, e é escolha arbitrária: o mesmo arquivo servir
     // de fundo e de retrato é raro o bastante para não merecer regra própria, e
     // esconder da lista é o que as duas marcas fazem igual.
+    // Todas as aparências, e não só o que está no ar: a imagem da linha guardada
+    // é tão do personagem quanto a da ativa, e deixá-la de fora faria a cara
+    // que ele não está usando reaparecer na biblioteca de imagens — de novo
+    // misturando o que se escolhe com o que já foi escolhido.
     for (const personagem of personagens) {
-      if (personagem.retrato) donos.set(personagem.retrato, "personagem");
-      if (personagem.miniatura) donos.set(personagem.miniatura, "personagem");
+      for (const asset of imagensDoPersonagem(personagem)) {
+        donos.set(asset, "personagem");
+      }
     }
 
     if (donos.size === 0) return;

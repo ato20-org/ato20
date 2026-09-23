@@ -9,6 +9,7 @@ import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { deleteAsset, importAssets, setAssetEscopo } from "@/lib/vault/assets";
 import type { Scene } from "@/types/scene";
+import { imagensDoPersonagem } from "@/types/character";
 
 /**
  * Escolhe o fundo da cena, a partir de um arquivo do disco.
@@ -157,8 +158,10 @@ function usadoForaDoFundo(assetId: string, cenas: Scene[]): boolean {
   const personagens = useCharactersStore.getState().personagens;
   if (personagens === null) return true;
 
-  return personagens.some(
-    (personagem) =>
-      personagem.retrato === assetId || personagem.miniatura === assetId,
+  // Todas as aparências: apagar a imagem de uma linha guardada deixaria o
+  // personagem com a cara quebrada na próxima vez que o mestre a escolhesse, e
+  // o rastro do porquê estaria três sessões atrás.
+  return personagens.some((personagem) =>
+    imagensDoPersonagem(personagem).includes(assetId),
   );
 }
