@@ -11,7 +11,9 @@ import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
 import {
+  type Ambiente,
   DEFAULT_SESSION_VOLUME,
+  type Disparo,
   type Portrait,
   type Scene,
   type SessionTrack,
@@ -74,6 +76,8 @@ export function usePublisher(state: LiveState): void {
     const paraMesa: LiveState = {
       scene,
       track: state.track,
+      ambientes: state.ambientes,
+      disparos: state.disparos,
       volume: state.volume,
       portraits: state.portraits,
       spotlight: state.spotlight,
@@ -82,13 +86,15 @@ export function usePublisher(state: LiveState): void {
 
     stateRef.current = paraMesa;
     channelRef.current?.publish(paraMesa);
-    // Dependências nos campos, não no objeto `state`: quem chama monta
-    // `{ scene, track, volume, portraits, spotlight, rolagens }` a cada render, e
-    // comparar essa embalagem fazia o Mestre publicar enquanto montava a
-    // PRÓXIMA cena — uma publicação por uma mudança que a mesa não vê.
+    // Dependências nos campos, não no objeto `state`: quem chama monta a
+    // embalagem a cada render, e compará-la fazia o Mestre publicar enquanto
+    // montava a PRÓXIMA cena — uma publicação por uma mudança que a mesa não
+    // vê.
   }, [
     scene,
     state.track,
+    state.ambientes,
+    state.disparos,
     state.volume,
     state.portraits,
     state.spotlight,
@@ -108,6 +114,10 @@ export type Subscription = {
   /** A cena como a mesa pode vê-la: sem os pontos de anotação do mestre. */
   scene: Scene | null;
   track: SessionTrack | null;
+  /** Os ambientes acesos. Ver `Ambiente`. */
+  ambientes: Ambiente[];
+  /** Os efeitos que soaram há pouco. Ver `Disparo`. */
+  disparos: Disparo[];
   /** Volume do som para esta tela, de 0 a 1. Quem regula é a mesa. */
   volume: number;
   portraits: Portrait[];
@@ -131,6 +141,8 @@ export function useSubscription(codigo: string, base = ""): Subscription {
   const [live, setLive] = useState<LiveState>({
     scene: null,
     track: null,
+    ambientes: [],
+    disparos: [],
     volume: DEFAULT_SESSION_VOLUME,
     portraits: [],
     spotlight: null,
@@ -167,11 +179,14 @@ export function useSubscription(codigo: string, base = ""): Subscription {
   return {
     scene: live.scene,
     track: live.track,
+    // Mesmo `?? []` de `rolagens`, e pela mesma razão: o quadro de uma versão
+    // anterior não traz estes campos, e a TV não pode cair porque o daemon
+    // ainda serve um bundle velho.
+    ambientes: live.ambientes ?? [],
+    disparos: live.disparos ?? [],
     volume: live.volume,
     portraits: live.portraits,
     spotlight: live.spotlight,
-    // O quadro de uma versão anterior não tem o campo: a lista vazia evita que
-    // a tela caia enquanto o daemon ainda serve um bundle velho.
     rolagens: live.rolagens ?? [],
     synced,
     stalled,

@@ -1,5 +1,7 @@
 import type { RolagemDaMesa } from "@/types/dado";
 import type {
+  Ambiente,
+  Disparo,
   Portrait,
   Scene,
   SessionTrack,
@@ -23,10 +25,27 @@ export type LiveState = {
   /** `null` = nenhuma trilha escolhida. */
   track: SessionTrack | null;
   /**
+   * Os ambientes acesos: chuva, fogueira, mercado. Ver `Ambiente`.
+   *
+   * Viajam ao lado da trilha e não dentro dela porque são outra camada: a
+   * música troca sem a chuva parar, e a chuva apaga sem a música parar.
+   */
+  ambientes: Ambiente[];
+  /**
+   * Os efeitos disparados agora — tiro, trovão, porta. Ver `Disparo`.
+   *
+   * Lista curta e efêmera, como `rolagens`: o Mestre tira cada um da bandeja
+   * quinze segundos depois de ele soar. Quem recebe guarda os ids que já
+   * tocou, porque este quadro é republicado dez vezes por segundo — sem essa
+   * memória, um tiro viraria uma metralhadora.
+   */
+  disparos: Disparo[];
+  /**
    * Volume do som, de 0 a 1, para todas as telas.
    *
    * Viaja fora da faixa porque é da sessão: o mestre regula de um lugar, a TV
-   * e os celulares seguem, e trocar de música não mexe no ganho.
+   * e os celulares seguem, e trocar de música não mexe no ganho. É o MESTRE
+   * da mesa: o ganho de cada ambiente multiplica este número.
    */
   volume: number;
   /** Retratos sobre a cena, ancorados na câmera. */
