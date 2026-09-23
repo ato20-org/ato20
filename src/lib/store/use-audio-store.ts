@@ -20,24 +20,46 @@ type AudioStore = {
   nudge: number;
 
   /**
-   * Onde a faixa está, em segundos, e quanto ela tem.
+   * Onde cada canal está, por chave de canal. Ver `Canal` no `SessionAudio`.
    *
-   * Vem do elemento `<audio>` desta tela — é o único que sabe. `duration` é 0
-   * até os metadados chegarem, e a barra mostra `--:--` nesse intervalo em vez
-   * de fingir um número.
+   * Vem dos elementos `<audio>` desta tela — são os únicos que sabem. Um MAPA
+   * e não um par de números porque a mesa toca em camadas: a trilha, a chuva e
+   * a fogueira andam ao mesmo tempo, e o painel mostra as três.
+   *
+   * Cada escrita troca só a entrada do canal que mexeu, e as outras mantêm a
+   * referência. É isso que faz a linha da chuva não re-renderizar quatro vezes
+   * por segundo por causa da música — ver `useProgresso`.
    *
    * Mora aqui, e não no `use-track-store`, porque não é da SESSÃO: é o estado
    * do reprodutor deste aparelho. O que viaja para a TV e para os celulares é
    * `startedAt`, e cada um calcula a própria posição a partir dele.
    */
-  position: number;
-  duration: number;
+  progresso: Record<string, Progresso>;
 
   setEnabled: (enabled: boolean) => void;
   setBlocked: (blocked: boolean) => void;
   retry: () => void;
-  setProgress: (position: number, duration: number) => void;
+  setProgress: (chave: string, position: number, duration: number) => void;
+  /** O canal saiu do ar: a linha dele não fica parada no último instante. */
+  esquecerProgresso: (chave: string) => void;
 };
+
+/**
+ * Onde um canal está, em segundos, e quanto ele tem.
+ *
+ * `duration` é 0 até os metadados chegarem, e a barra mostra `--:--` nesse
+ * intervalo em vez de fingir um número.
+ */
+export type Progresso = { position: number; duration: number };
+
+/**
+ * O que um canal que ainda não se reportou vale.
+ *
+ * Constante de módulo, e não um objeto novo a cada leitura: `useProgresso`
+ * devolve isto quando não há entrada, e um literal ali daria um valor
+ * diferente a cada render — que é o laço infinito clássico do `useSyncExternalStore`.
+ */
+const SEM_PROGRESSO: Progresso = { position: 0, duration: 0 };
 
 /**
  * Saída de som deste aparelho.
@@ -49,14 +71,47 @@ export const useAudioStore = create<AudioStore>((set) => ({
   enabled: true,
   blocked: false,
   nudge: 0,
-  position: 0,
-  duration: 0,
+  progresso: {},
 
   setEnabled: (enabled) => set({ enabled }),
   setBlocked: (blocked) => set({ blocked }),
   retry: () => set((state) => ({ nudge: state.nudge + 1 })),
-  setProgress: (position, duration) => set({ position, duration }),
+
+  setProgress: (chave, position, duration) =>
+    set((state) => {
+      const atual = state.progresso[chave];
+
+      // Mesma referência quando nada mudou: `timeupdate` continua chegando com
+      // o canal pausado, e devolver um mapa novo a cada batida acordaria todas
+      // as linhas do painel para redesenhar o mesmo número.
+      if (atual?.position === position && atual.duration === duration) {
+        return state;
+      }
+
+      return { progresso: { ...state.progresso, [chave]: { position, duration } } };
+    }),
+
+  esquecerProgresso: (chave) =>
+    set((state) => {
+      if (!(chave in state.progresso)) return state;
+
+      const { [chave]: saiu, ...resto } = state.progresso;
+
+      return { progresso: resto };
+    }),
 }));
+
+/**
+ * Onde este canal está. Re-renderiza só quem o lê.
+ *
+ * Hook e não seletor solto porque o `?? SEM_PROGRESSO` é a parte que importa:
+ * ele tem de devolver SEMPRE o mesmo objeto enquanto o canal não se reportou.
+ */
+export function useProgresso(chave: string | null): Progresso {
+  return useAudioStore((state) =>
+    chave === null ? SEM_PROGRESSO : (state.progresso[chave] ?? SEM_PROGRESSO),
+  );
+}
 
 /**
  * Ganho final aplicado a um elemento.

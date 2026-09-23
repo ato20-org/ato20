@@ -10,9 +10,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TrackWave } from "@/components/mestre/track-wave";
+import { chaveDaTrilha } from "@/components/playground/session-audio";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useTrackPeaks } from "@/hooks/use-track-peaks";
-import { useAudioStore } from "@/lib/store/use-audio-store";
+import { mmss } from "@/lib/mestre/tempo";
+import { useAudioStore, useProgresso } from "@/lib/store/use-audio-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
 
@@ -25,8 +27,10 @@ import { cn } from "@/lib/utils";
  * sessão inteira. Com o bloco lá, saber se a música ainda estava rodando exigia
  * abrir o painel direito e trocar de aba.
  *
- * Aqui ela é a linha de baixo, sempre à vista, e o painel voltou a ser só o
- * acervo.
+ * Aqui ela é a linha de baixo, sempre à vista. O painel continua tendo a trilha
+ * como uma camada do mixer (`SomAtual`), e as duas não se atrapalham: lá ela é
+ * equilibrada contra a chuva, aqui ela é navegada pela onda sem abrir aba
+ * nenhuma.
  *
  * Só aparece quando há trilha escolhida: uma barra vazia ocupando altura de
  * palco durante uma sessão sem música seria pior que não tê-la.
@@ -40,8 +44,12 @@ export function TrackBar() {
   const seek = useTrackStore((state) => state.seek);
   const clear = useTrackStore((state) => state.clear);
 
-  const position = useAudioStore((state) => state.position);
-  const duration = useAudioStore((state) => state.duration);
+  // Pela chave do canal, e não por um par de números global: o painel de sons
+  // acompanha as camadas todas, e a barra do pé quer só a da trilha.
+  const { position, duration } = useProgresso(
+    track ? chaveDaTrilha(track.assetId) : null,
+  );
+
   const enabled = useAudioStore((state) => state.enabled);
   const setEnabled = useAudioStore((state) => state.setEnabled);
   const blocked = useAudioStore((state) => state.blocked);
@@ -75,13 +83,14 @@ export function TrackBar() {
       </span>
 
       <span className="text-muted-foreground w-10 shrink-0 text-right text-[10px] tabular-nums">
-        {formatar(position)}
+        {mmss(position)}
       </span>
 
       {/* A forma da onda, com a parte tocada acesa. Arrastar reescreve
           `startedAt`, então a TV e os celulares acompanham — ver `seek` no
           store. */}
       <TrackWave
+        nome={nome}
         peaks={peaks}
         position={position}
         duration={duration}
@@ -89,7 +98,7 @@ export function TrackBar() {
       />
 
       <span className="text-muted-foreground w-10 shrink-0 text-[10px] tabular-nums">
-        {conhecida ? formatar(duration) : "--:--"}
+        {conhecida ? mmss(duration) : "--:--"}
       </span>
 
       <Tooltip>
@@ -185,14 +194,4 @@ export function TrackBar() {
 
 function primeiro(value: number | readonly number[]): number {
   return Array.isArray(value) ? (value[0] ?? 0) : (value as number);
-}
-
-/** `mm:ss`. Faixa de RPG não passa de uma hora, e `1:04:20` na barra só ocuparia espaço. */
-function formatar(segundos: number): string {
-  if (!Number.isFinite(segundos) || segundos < 0) return "--:--";
-
-  const total = Math.floor(segundos);
-  const minutos = Math.floor(total / 60);
-
-  return `${minutos}:${String(total % 60).padStart(2, "0")}`;
 }

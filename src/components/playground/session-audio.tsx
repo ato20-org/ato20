@@ -35,6 +35,21 @@ const FADE_MS = 700;
 const PASSO_DA_RAMPA_MS = 40;
 
 /**
+ * A chave de um canal, que também é o endereço do progresso dele.
+ *
+ * Exportadas porque quem DESENHA precisa da mesma chave que quem toca: a barra
+ * do pé e o painel de sons leem `progresso[chave]`, e montar a string à mão nos
+ * três lugares deixaria a linha da chuva em branco ao primeiro `:` fora do
+ * lugar. Ver `useProgresso`.
+ *
+ * A da trilha é o ASSET, e não um id da faixa: é o que faz a troca de música
+ * ser "uma saindo e outra entrando" em vez de "a mesma mudou de arquivo" — e
+ * sem isso não há duas para cruzar no fade.
+ */
+export const chaveDaTrilha = (assetId: string) => `trilha:${assetId}`;
+export const chaveDoAmbiente = (id: string) => `ambiente:${id}`;
+
+/**
  * Um canal de som: a trilha, um ambiente ou um disparo.
  *
  * A forma é a mesma para os três de propósito. O que muda entre eles é
@@ -58,7 +73,13 @@ type Canal = {
    * deixa de ser um tiro. Verdadeiro na trilha e no ambiente, que são fundo.
    */
   fade: boolean;
-  /** Escreve posição e duração no store. Só a trilha: a barra é dela. */
+  /**
+   * Escreve posição e duração no store, sob `chave`.
+   *
+   * Trilha e ambiente, não o disparo: o painel acompanha os dois, e um tiro de
+   * dois segundos não tem barra que valha a pena desenhar. Falso também em quem
+   * está saindo — a linha dele já sumiu do painel.
+   */
   reportaProgresso: boolean;
   /** Está se despedindo: desce o ganho e cala. */
   saindo?: boolean;
@@ -103,12 +124,11 @@ export function SessionAudio({
 
     if (track) {
       canais.push({
-        // A chave é o ASSET, e não um id da faixa: é o que faz a troca de
-        // música ser "uma saindo e outra entrando" em vez de "a mesma mudou de
-        // arquivo" — e sem isso não há duas para cruzar.
-        chave: `trilha:${track.assetId}`,
+        chave: chaveDaTrilha(track.assetId),
         assetId: track.assetId,
-        ganho: 1,
+        // O fader da própria faixa, que multiplica o volume da mesa. Era fixo
+        // em 1 quando a trilha não tinha um. Ver `SessionTrack.ganho`.
+        ganho: track.ganho,
         loop: track.loop,
         tocando: track.playing,
         startedAt: track.startedAt,
@@ -119,7 +139,7 @@ export function SessionAudio({
 
     for (const ambiente of ambientes) {
       canais.push({
-        chave: `ambiente:${ambiente.id}`,
+        chave: chaveDoAmbiente(ambiente.id),
         assetId: ambiente.assetId,
         ganho: ambiente.ganho,
         // Ambiente repete sempre: um som de fundo que acaba no meio da cena
@@ -128,7 +148,7 @@ export function SessionAudio({
         tocando: ambiente.tocando,
         startedAt: ambiente.startedAt,
         fade: true,
-        reportaProgresso: false,
+        reportaProgresso: true,
       });
     }
 
@@ -198,7 +218,8 @@ function CanalAudio({ canal, volume }: { canal: Canal; volume: number }) {
   /** Cancela a rampa viva. `null` = o ganho está em regime. */
   const rampaRef = useRef<(() => void) | null>(null);
 
-  const { ganho, fade, saindo, loop, startedAt, reportaProgresso } = canal;
+  const { chave, ganho, fade, saindo, loop, startedAt, reportaProgresso } =
+    canal;
   const alvo = outputVolume(volume, ganho);
   const shouldPlay = Boolean(url) && canal.tocando && !saindo;
 
@@ -315,23 +336,28 @@ function CanalAudio({ canal, volume }: { canal: Canal; volume: number }) {
   }, [url, shouldPlay, loop, startedAt, saindo, fade, nudge, setBlocked]);
 
   /**
-   * Informa onde a faixa está. Só a trilha.
+   * Informa onde este canal está, sob a chave dele.
    *
    * Escrito por `getState()` e não por um hook, de propósito: `timeupdate`
    * dispara ~4 vezes por segundo, e assinar isso aqui re-renderizaria este
    * componente nessa cadência — junto com o `<audio>`, que é a última coisa que
    * se quer remontando. Quem re-renderiza é só quem lê a barra.
+   *
+   * Com N canais reportando, essa conta vira 4N escritas por segundo. Elas
+   * continuam baratas porque cada uma troca só a entrada do próprio canal, e
+   * quem assina lê uma entrada só: a linha da chuva não acorda porque a música
+   * andou. Ver `progresso` no store.
    */
   useEffect(() => {
     const element = elementRef.current;
     if (!element || !reportaProgresso) return;
 
-    const { setProgress } = useAudioStore.getState();
+    const { setProgress, esquecerProgresso } = useAudioStore.getState();
 
     const report = () => {
       const { currentTime, duration } = element;
 
-      setProgress(currentTime, Number.isFinite(duration) ? duration : 0);
+      setProgress(chave, currentTime, Number.isFinite(duration) ? duration : 0);
     };
 
     report();
@@ -346,10 +372,10 @@ function CanalAudio({ canal, volume }: { canal: Canal; volume: number }) {
       element.removeEventListener("loadedmetadata", report);
       element.removeEventListener("durationchange", report);
       element.removeEventListener("seeked", report);
-      // Faixa que saiu não deixa a barra parada no último instante dela.
-      setProgress(0, 0);
+      // Canal que saiu não deixa a linha dele parada no último instante.
+      esquecerProgresso(chave);
     };
-  }, [url, reportaProgresso]);
+  }, [url, chave, reportaProgresso]);
 
   useEffect(() => {
     if (!blocked || !enabled) return;
