@@ -5,7 +5,7 @@ import {
   countAssetUsage,
   type SomEmUso,
 } from "@/lib/mestre/asset-usage";
-import type { Ambiente, Scene } from "@/types/scene";
+import type { Ambiente, Scene, SessionTrack } from "@/types/scene";
 
 const cena = {
   id: "c1",
@@ -15,6 +15,10 @@ const cena = {
 
 function ambiente(assetId: string): Ambiente {
   return { id: `a-${assetId}`, assetId, ganho: 1, tocando: true, startedAt: 0 };
+}
+
+function trilha(assetId: string): SessionTrack {
+  return { assetId, loop: true, playing: true, ganho: 1, startedAt: 0 };
 }
 
 /**
@@ -28,7 +32,7 @@ function ambiente(assetId: string): Ambiente {
 describe("countAssetUsage", () => {
   it("conta a trilha, como sempre contou", () => {
     const som: SomEmUso = {
-      track: { assetId: "musica", loop: true, playing: true, startedAt: 0 },
+      track: trilha("musica"),
     };
 
     expect(countAssetUsage([cena], "musica", som)).toBe(1);
@@ -59,7 +63,7 @@ describe("countAssetUsage", () => {
 
   it("soma os lugares quando o mesmo arquivo serve a vários", () => {
     const som: SomEmUso = {
-      track: { assetId: "chuva", loop: true, playing: true, startedAt: 0 },
+      track: trilha("chuva"),
       ambientes: [ambiente("chuva")],
       ambientesPorCena: { c1: [ambiente("chuva")] },
       pads: [{ assetId: "chuva", ganho: 1, tipo: "ambiente" }],
@@ -77,7 +81,7 @@ describe("countAssetUsage", () => {
 describe("collectUsedAssetIds", () => {
   it("recolhe toda camada de som, e não só a trilha", () => {
     const usados = collectUsedAssetIds([cena], [], {
-      track: { assetId: "musica", loop: true, playing: true, startedAt: 0 },
+      track: trilha("musica"),
       ambientes: [ambiente("chuva")],
       ambientesPorCena: { c1: [ambiente("lareira")] },
       pads: [{ assetId: "tiro", ganho: 1, tipo: "disparo" }, null],

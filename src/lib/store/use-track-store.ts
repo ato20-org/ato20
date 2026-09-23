@@ -72,6 +72,13 @@ type TrackStore = SessionAudio & {
   /** Regula o som da sessão. Vale com ou sem trilha escolhida. */
   setVolume: (volume: number) => void;
   /**
+   * Regula só a trilha, por baixo do volume da mesa.
+   *
+   * Separado de `setVolume` porque são perguntas diferentes: "a mesa está
+   * alta" e "a música está por cima da fala". Ver `SessionTrack.ganho`.
+   */
+  setGanhoDaTrilha: (ganho: number) => void;
+  /**
    * Move a faixa para um instante.
    *
    * Reescreve `startedAt` em vez de mandar um comando de "buscar": é assim que
@@ -169,8 +176,18 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   start(assetId) {
     // Sem volume no argumento: a faixa nova entra no volume em que a mesa já
     // está. Passar um padrão aqui era o que fazia o som saltar a cada troca.
+    //
+    // O GANHO é outra coisa e nasce cheio: ele é o fader deste canal, e herdar
+    // o da faixa anterior faria a música nova entrar abafada porque a de antes
+    // estava baixa durante uma conversa que já acabou.
     gravar(set, get, {
-      track: { assetId, loop: true, playing: true, startedAt: Date.now() },
+      track: {
+        assetId,
+        loop: true,
+        playing: true,
+        ganho: GANHO_PADRAO,
+        startedAt: Date.now(),
+      },
     });
   },
 
@@ -188,6 +205,16 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     // valer para a próxima faixa que entrar. Vale também para os ambientes, que
     // multiplicam o ganho deles por este.
     gravar(set, get, { volume: limitar(volume) });
+  },
+
+  setGanhoDaTrilha(ganho) {
+    const { track } = get();
+    if (!track) return;
+
+    // Sem mexer em `startedAt`: mudar o ganho não é recomeçar a faixa, e
+    // reescrevê-lo mandaria a TV e os celulares buscarem a posição de novo a
+    // cada passo do slider.
+    gravar(set, get, { track: { ...track, ganho: limitar(ganho) } });
   },
 
   seek(seconds) {

@@ -820,16 +820,28 @@ export const DEFAULT_SESSION_VOLUME = 0.8;
  * Continua viajando junto da cena no canal, porque a TV e os celulares
  * precisam saber o que tocar.
  *
- * Sem campo de volume: o ganho é da sessão, não da faixa. Guardado por faixa,
- * cada troca de música trocava o volume junto — a escolhida entrava com o
- * ganho de quando foi gravada, e o mestre reajustava o slider a cada troca.
- * O volume da sessão mora no `TrackStore`.
+ * Sem campo de VOLUME, e isso não mudou: o volume é da sessão e mora no
+ * `TrackStore`. Guardado por faixa, cada troca de música o trocava junto — a
+ * escolhida entrava com o número de quando foi gravada, e o mestre reajustava
+ * o slider a cada troca.
  */
 export type SessionTrack = {
   assetId: string;
   loop: boolean;
   /** Pausado é diferente de ausente: a faixa continua escolhida. */
   playing: boolean;
+  /**
+   * Ganho DESTA faixa, de 0 a 1. Ver `Ambiente.ganho`.
+   *
+   * Não é o volume que saiu daqui, e a diferença está em quando ele nasce: o
+   * volume vinha do disco e voltava a cada faixa, e era isso que fazia o som
+   * saltar na troca. Este nasce cheio toda vez que uma faixa entra — ver
+   * `start` —, então nada é restaurado e nada salta.
+   *
+   * Existe porque sem ele a trilha era o único canal sem fader, e abaixar a
+   * música para o mestre falar por cima levava a chuva junto.
+   */
+  ganho: number;
   /**
    * Quando o play atual começou, em epoch ms.
    *

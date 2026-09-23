@@ -4,6 +4,7 @@ import { call } from "@/lib/vault/bridge";
 import {
   type Ambiente,
   DEFAULT_SESSION_VOLUME,
+  GANHO_PADRAO,
   type Pad,
   PADS,
   type Portrait,
@@ -85,12 +86,20 @@ export type SessionAudio = {
   pads: Pad[];
 };
 
-/** As duas formas anteriores do arquivo, que a leitura ainda aceita. */
+/**
+ * As formas anteriores do arquivo, que a leitura ainda aceita.
+ *
+ * `ganho` opcional na faixa porque ele é o campo mais novo: toda campanha
+ * gravada antes do fader da trilha vem sem ele, e exigi-lo faria a música
+ * dessas campanhas abrir muda em vez de abrir cheia.
+ */
+type FaixaGravada = Omit<SessionTrack, "ganho"> & { ganho?: number };
+
 type TrilhaGravada =
   // A primeira: o arquivo ERA a faixa, com o volume dentro dela.
-  | (SessionTrack & { volume?: number })
+  | (FaixaGravada & { volume?: number })
   // A segunda: envelope de dois campos, antes das camadas.
-  | (Partial<SessionAudio> & { track: SessionTrack | null })
+  | (Omit<Partial<SessionAudio>, "track"> & { track: FaixaGravada | null })
   | null;
 
 /** Nove slots vazios. O ÍNDICE é a tecla menos um. Ver `Pad`. */
@@ -119,11 +128,15 @@ export async function loadAudio(): Promise<SessionAudio> {
   if (!("track" in gravado)) {
     const { volume, ...track } = gravado;
 
-    return { ...vazio(), track, volume: volume ?? DEFAULT_SESSION_VOLUME };
+    return {
+      ...vazio(),
+      track: comGanho(track),
+      volume: volume ?? DEFAULT_SESSION_VOLUME,
+    };
   }
 
   return {
-    track: gravado.track,
+    track: comGanho(gravado.track),
     volume: gravado.volume ?? DEFAULT_SESSION_VOLUME,
     // `?? []` e não um campo obrigatório: o envelope de duas camadas atrás não
     // os traz, e exigi-los faria toda campanha anterior a esta versão abrir
@@ -134,6 +147,19 @@ export async function loadAudio(): Promise<SessionAudio> {
     // deixaria as teclas do fim sem célula para mostrar o buraco.
     pads: completar(gravado.pads),
   };
+}
+
+/**
+ * A faixa com o fader que ela talvez não tenha.
+ *
+ * Cheio e não mudo: a faixa gravada antes do fader tocava no volume da sessão,
+ * e é nele que ela tem de voltar a tocar. Regravado no formato novo na primeira
+ * alteração, como o resto — sem passo de migração.
+ */
+function comGanho(faixa: FaixaGravada | null): SessionTrack | null {
+  if (!faixa) return null;
+
+  return { ...faixa, ganho: faixa.ganho ?? GANHO_PADRAO };
 }
 
 function completar(pads: Pad[] | undefined): Pad[] {
