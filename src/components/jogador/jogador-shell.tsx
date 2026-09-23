@@ -167,7 +167,12 @@ export function JogadorShell({
           {/* Fora das abas: a trilha não pode parar porque o jogador foi
               consultar a própria ficha. Música cortada no meio quebra a imersão
               que ela existe para criar. */}
-          <SessionAudio track={live.track} volume={live.volume} />
+          <SessionAudio
+            track={live.track}
+            ambientes={live.ambientes}
+            disparos={live.disparos}
+            volume={live.volume}
+          />
         </>
       ) : null}
 

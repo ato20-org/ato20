@@ -22,6 +22,8 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
   const {
     scene,
     track,
+    ambientes,
+    disparos,
     volume,
     portraits,
     spotlight,
@@ -56,7 +58,12 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
 
       <CortinaDeCorte fechada={cortando} />
 
-      <SessionAudio track={track} volume={volume} />
+      <SessionAudio
+        track={track}
+        ambientes={ambientes}
+        disparos={disparos}
+        volume={volume}
+      />
 
       {/* Sem `dismissable`: não há ninguém na TV para fechar nada, e um botão
           ali só criaria a chance de alguém encostar. Quem tira do ar é o
