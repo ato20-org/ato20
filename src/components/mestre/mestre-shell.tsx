@@ -27,6 +27,7 @@ import { StageContextMenu } from "@/components/mestre/stage-context-menu";
 import { CamerasSalvas } from "@/components/mestre/cameras-salvas";
 import { ViewportControls } from "@/components/mestre/viewport-controls";
 import { SessionAudio } from "@/components/playground/session-audio";
+import { useSomDaMesa } from "@/hooks/use-som-da-mesa";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,6 +101,12 @@ export function MestreShell() {
 
   const track = useTrackStore((state) => state.track);
   const trackVolume = useTrackStore((state) => state.volume);
+  const ambientes = useTrackStore((state) => state.ambientes);
+  const disparos = useTrackStore((state) => state.disparos);
+
+  // A cena no ar acende o ambiente que ela lembra, e a bandeja de disparos
+  // vence sozinha. Ver `useSomDaMesa`.
+  useSomDaMesa(liveScene?.id);
 
   const guardados = usePortraitStore((state) => state.portraits);
   const { personagens } = useCharacters();
@@ -175,6 +182,8 @@ export function MestreShell() {
   usePublisher({
     scene: liveScene,
     track,
+    ambientes,
+    disparos,
     volume: trackVolume,
     portraits,
     spotlight,
@@ -327,7 +336,12 @@ export function MestreShell() {
 
       {/* A trilha é da sessão, não da cena: trocar de cena não corta a
           música. */}
-      <SessionAudio track={track} volume={trackVolume} />
+      <SessionAudio
+        track={track}
+        ambientes={ambientes}
+        disparos={disparos}
+        volume={trackVolume}
+      />
     </div>
   );
 }
