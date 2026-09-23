@@ -840,12 +840,112 @@ export type SessionTrack = {
 };
 
 /**
+ * Som de fundo que fica: chuva, fogueira, mercado, vento.
+ *
+ * Toca em loop e não tem barra de posição — ninguém procura o instante 1:12
+ * da chuva. É a diferença que separa ambiente de trilha: a trilha tem começo,
+ * meio e fim, e o mestre navega nela; o ambiente só está aceso ou apagado.
+ *
+ * Vários ao mesmo tempo, de propósito. Chuva com fogueira é duas camadas, e
+ * não um terceiro arquivo que alguém teria de produzir para cada combinação.
+ *
+ * Fica FORA da cena, como a trilha e pela mesma razão: o histórico de desfazer
+ * tira retratos do board, e a chuva não deve voltar por causa de um Ctrl+Z num
+ * token. Que ambientes cada cena acende mora no `TrackStore`, num mapa por id
+ * de cena. Ver `ambientesPorCena`.
+ */
+export type Ambiente = {
+  id: string;
+  assetId: string;
+  /**
+   * Ganho deste canal, de 0 a 1.
+   *
+   * MULTIPLICA o volume da sessão, e é o que torna "chuva leve por baixo da
+   * música" possível: sem ele o mestre só teria o volume geral, e abaixar a
+   * chuva levaria a trilha junto.
+   *
+   * Não confundir com o que a nota de `outputVolume` recusa. Ali o que se
+   * multiplicava era sessão × APARELHO, e o resultado era um número que
+   * ninguém sabia explicar — 5% de 70%. Aqui é sessão × CANAL, que é o que
+   * toda mesa de som faz, e o mestre vê os dois controles lado a lado.
+   */
+  ganho: number;
+  /** Pausado é diferente de ausente, como na trilha. */
+  tocando: boolean;
+  /**
+   * Quando este ambiente acendeu, em epoch ms.
+   *
+   * Mesmo motivo da trilha: quem chega no meio entra na altura em que a mesa
+   * está. Menos crítico aqui — chuva soa igual em qualquer ponto —, mas um
+   * arquivo de ambiente costuma ter um evento no meio, um trovão ou um sino,
+   * e dois aparelhos em pontos diferentes dele soam como eco.
+   */
+  startedAt: number;
+};
+
+/**
  * Efeito disparado agora — porta rangendo, trovão, grito.
  *
- * Também mora na cena, pelo mesmo motivo da trilha. `firedAt` muda a cada
- * disparo, e é o que faz o espectador reconhecer que houve um novo: comparar
- * `assetId` não distinguiria dois disparos do mesmo som.
+ * Viaja no canal pelo mesmo motivo da trilha: quem precisa ouvir é a mesa.
+ * `firedAt` muda a cada disparo, e é o que faz o espectador reconhecer que
+ * houve um novo — comparar `assetId` não distinguiria dois disparos do mesmo
+ * som.
+ *
+ * Separado do ambiente em duas coisas: não repete, e não é estado. Vive numa
+ * bandeja curta, como as rolagens da mesa, e sai dela pouco depois de cair.
+ * Guardado como estado, o tiro tocaria de novo a cada espectador que
+ * reconectasse — e o batimento do canal republica o quadro inteiro dez vezes
+ * por segundo, o que o tocaria dez vezes por segundo.
  */
+export type Disparo = {
+  id: string;
+  assetId: string;
+  /** Ganho deste disparo, de 0 a 1. Ver `Ambiente.ganho`. */
+  ganho: number;
+  firedAt: number;
+};
+
+/**
+ * Um dos nove slots do numpad.
+ *
+ * Da CAMPANHA e não da cena. A mão decora "tiro é o 7", e um pad que troca de
+ * dono a cada mapa obriga a olhar a tela antes de cada tecla — que é
+ * exatamente o que um atalho existe para evitar.
+ *
+ * `null` = slot vazio. A lista tem sempre nove posições, e o ÍNDICE é a tecla
+ * menos um: um mapa de tecla para som não saberia responder "qual é o 5?"
+ * enquanto o 5 estivesse vazio, e a grade da tela precisa desenhar o buraco.
+ */
+export type Pad = {
+  assetId: string;
+  ganho: number;
+  /**
+   * O que a tecla faz.
+   *
+   * `ambiente` alterna — apertar de novo apaga. `disparo` toca uma vez a cada
+   * toque, e apertar três vezes dá três tiros sobrepostos.
+   */
+  tipo: "ambiente" | "disparo";
+} | null;
+
+/** Quantos pads existem: as teclas 1 a 9 do numpad. */
+export const PADS = 9;
+
+/**
+ * Quantos ambientes podem estar acesos ao mesmo tempo.
+ *
+ * Cada um é um `<audio>`, e no WebKitGTK cada `<audio>` carrega um pipeline
+ * GStreamer inteiro atrás dele. Quatro cobre o que uma cena pede — chuva,
+ * vento, fogueira, multidão — e é um teto, não uma meta: subir sem medir com
+ * `pnpm perf` é o caminho que já derrubou o palco outras vezes.
+ *
+ * A trilha não conta aqui, e os disparos tão pouco: eles duram segundos e
+ * saem sozinhos.
+ */
+export const MAX_AMBIENTES = 4;
+
+/** Ganho de partida de um canal novo. Cheio: quem quiser menos, abaixa. */
+export const GANHO_PADRAO = 1;
 
 /**
  * Retrato de personagem sobre a cena.

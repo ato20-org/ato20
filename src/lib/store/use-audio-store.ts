@@ -61,15 +61,24 @@ export const useAudioStore = create<AudioStore>((set) => ({
 /**
  * Ganho final aplicado a um elemento.
  *
- * Um volume só, o da sessão, e ele viaja: o mestre regula de um lugar e a TV e
- * os celulares seguem. Nem por faixa, nem por aparelho. Por faixa, cada troca
- * de música trazia o ganho de quando ela foi escolhida e o som saltava; por
- * aparelho, os dois se multiplicariam — sessão a 5% com aparelho a 70% dá
- * 3,5%, e quem arrasta um slider não entende por que o som não sobe. Ajuste
- * fino por aparelho é o volume do próprio sistema, que todo aparelho já tem.
+ * Dois números, e só dois. O VOLUME é da sessão e viaja: o mestre regula de
+ * um lugar e a TV e os celulares seguem. O GANHO é do canal — desta chuva,
+ * deste tiro — e também viaja, porque "chuva leve por baixo da música" é uma
+ * decisão da mesa e não da caixa de som de quem olha.
+ *
+ * Não existe um terceiro por APARELHO, e isso continua sendo de propósito:
+ * sessão a 5% com aparelho a 70% dá 3,5%, e quem arrasta um slider não entende
+ * por que o som não sobe. Ajuste fino por aparelho é o volume do próprio
+ * sistema, que todo aparelho já tem. O que o aparelho decide é só emitir ou
+ * não — `enabled` —, porque Mestre e Espectador na mesma máquina soariam
+ * como eco.
+ *
+ * Multiplicar sessão por canal é outra coisa, e é o que toda mesa de som faz:
+ * os dois controles ficam lado a lado na mesma tela, e quem os move vê o que
+ * cada um faz.
  */
-export function outputVolume(sessionVolume: number): number {
+export function outputVolume(sessionVolume: number, ganho = 1): number {
   if (!useAudioStore.getState().enabled) return 0;
 
-  return Math.max(0, Math.min(1, sessionVolume));
+  return Math.max(0, Math.min(1, sessionVolume)) * Math.max(0, Math.min(1, ganho));
 }
