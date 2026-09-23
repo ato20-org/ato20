@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { create } from "zustand";
 
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -37,11 +38,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
 import {
   aoApertarF2,
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { assetUrl } from "@/lib/vault/assets";
@@ -359,26 +366,12 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
         noAr && "ring-primary/60 bg-primary/5 ring-2 ring-inset",
       )}
     >
+      {/* Dois botoes redondos numa fileira, no lugar de duas barras empilhadas
+          de largura cheia. As duas comiam quase noventa pixels do topo -- num
+          painel que existe para mostrar imagens -- para oferecer acoes que o
+          mestre faz uma vez por sessao. Mesmo arranjo do painel de
+          Personagens; o que cada um faz vive no tooltip e no rotulo. */}
       <div className="flex flex-col gap-2 p-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={importando}
-          onClick={() => void importar()}
-        >
-          {importando ? <Loader2 className="animate-spin" /> : <Upload />}
-          {importando ? "Importando…" : "Importar arquivos"}
-        </Button>
-
-        {/* O que está vindo, no mesmo rótulo que a sombra do mapa escreve. A
-            borda acesa diz que o painel aceita; esta linha diz o quê. */}
-        {noAr ? (
-          <p className="border-primary/60 bg-primary/10 flex items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-[11px]">
-            <FileImage className="size-3.5 shrink-0" aria-hidden />
-            <span className="truncate">{rotuloDoArrasto(noAr.caminhos)}</span>
-          </p>
-        ) : null}
-
         {creating ? (
           <FolderNameInput
             placeholder="Nome da pasta"
@@ -396,11 +389,60 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
             }}
           />
         ) : (
-          <Button variant="ghost" size="sm" onClick={() => setCreating(true)}>
-            <FolderPlus />
-            Nova pasta
-          </Button>
+          <div className="flex items-center justify-end gap-2">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 rounded-full"
+                    aria-label="Nova pasta"
+                    onClick={() => setCreating(true)}
+                  >
+                    <FolderPlus />
+                  </Button>
+                }
+              />
+              <TooltipContent>Nova pasta</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 rounded-full"
+                    aria-label={
+                      importando ? "Importando arquivos" : "Importar arquivos"
+                    }
+                    disabled={importando}
+                    onClick={() => void importar()}
+                  >
+                    {importando ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Upload />
+                    )}
+                  </Button>
+                }
+              />
+              <TooltipContent>
+                {importando ? "Importando…" : "Importar arquivos"}
+              </TooltipContent>
+            </Tooltip>
+          </div>
         )}
+
+        {/* O que está vindo, no mesmo rótulo que a sombra do mapa escreve. A
+            borda acesa diz que o painel aceita; esta linha diz o quê. */}
+        {noAr ? (
+          <p className="border-primary/60 bg-primary/10 flex items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-[11px]">
+            <FileImage className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{rotuloDoArrasto(noAr.caminhos)}</span>
+          </p>
+        ) : null}
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
@@ -444,9 +486,9 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
           </ContextMenu>
 
           {assets.length === 0 && folders.length === 0 ? (
-            <p className="text-muted-foreground relative z-10 p-3 text-xs">
-              Nenhuma imagem ainda. Importe mapas, tokens e retratos.
-            </p>
+            <PainelVazio conteudo={{ tipo: "imagens" }} className="pointer-events-none absolute inset-0">
+              Importe mapas, tokens e retratos
+            </PainelVazio>
           ) : (
             <div className="relative z-10 space-y-2 p-2">
               {/* Pastas primeiro, e a raiz embaixo: arquivo novo cai na raiz, e
@@ -702,127 +744,152 @@ function FolderGroup({
   // mesma correção da lista de cenas. Ver `useRenomearPeloMenu`.
   const renomear = useRenomearPeloMenu(onRename);
 
+  /**
+   * Os itens da pasta, escritos uma vez para as duas portas.
+   *
+   * O botão direito na linha e os três pontos dela oferecem o MESMO -- os três
+   * pontos só aparecem no hover, então quem usa teclado ou quem já sabe onde
+   * clicar chega pelo outro caminho. Ver `Kit`.
+   */
+  const itens = ({ Item, Separator }: Kit) => (
+    <>
+      <Item
+        onClick={() => {
+          setOpen(true);
+          onNewChild();
+        }}
+      >
+        <FolderPlus />
+        Nova subpasta
+      </Item>
+      <Item onClick={renomear.pedir}>
+        <Pencil />
+        Renomear
+      </Item>
+
+      {destinos.length > 0 || folder.parentId ? (
+        <>
+          <Separator />
+          {folder.parentId ? (
+            <Item onClick={() => onMove(undefined)}>
+              <FolderClosed />
+              Tirar para a raiz
+            </Item>
+          ) : null}
+          {destinos.map((outra) => (
+            <Item key={outra.id} onClick={() => onMove(outra.id)}>
+              <FolderClosed />
+              <span className="truncate">Mover para {outra.name}</span>
+            </Item>
+          ))}
+        </>
+      ) : null}
+
+      <Separator />
+      <Item variant="destructive" onClick={onDelete}>
+        <Trash2 />
+        Apagar pasta
+      </Item>
+    </>
+  );
+
   return (
     <section>
-      <div
-        data-pasta-acervo
-        data-folder-id={folder.id}
-        className={cn(
-          "group flex cursor-grab touch-none items-center gap-1 rounded-md px-1 py-1",
-          receiving
-            ? "bg-primary/15 ring-primary/60 ring-1"
-            : "hover:bg-accent/50",
-          naMao && "opacity-40",
-        )}
-        // O cabeçalho inteiro arrasta a pasta para dentro de outra. Botões e
-        // campo param a propagação para o toque neles não virar arrasto.
-        onPointerDown={pegar}
-      >
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={open ? `Fechar ${folder.name}` : `Abrir ${folder.name}`}
-          aria-expanded={open}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => setOpen(!open)}
-        >
-          {open ? <ChevronDown /> : <ChevronRight />}
-        </Button>
-
-        <FolderClosed
-          className="text-muted-foreground size-3.5 shrink-0"
-          aria-hidden
-        />
-
-        {renaming ? (
-          <div
-            className="min-w-0 flex-1"
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <FolderNameInput
-              defaultValue={folder.name}
-              onCommit={onRenameCommit}
-              onCancel={onRenameCancel}
+      {/* O botão direito na linha da pasta, com os mesmos itens dos três
+          pontos. `ContextMenuTrigger` com os filhos FORA do `render`, como nas
+          linhas de Arquivos: é a forma que deixa o dropdown de dentro
+          continuar disparando. */}
+      <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
+        <ContextMenuTrigger
+          render={
+            <div
+              data-pasta-acervo
+              data-folder-id={folder.id}
+              className={cn(
+                "group flex cursor-grab touch-none items-center gap-1 rounded-md px-1 py-1",
+                receiving
+                  ? "bg-primary/15 ring-primary/60 ring-1"
+                  : "hover:bg-accent/50",
+                naMao && "opacity-40",
+              )}
+              // O cabeçalho inteiro arrasta a pasta para dentro de outra.
+              // Botões e campo param a propagação para o toque neles não virar
+              // arrasto.
+              onPointerDown={pegar}
             />
-          </div>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="min-w-0 flex-1 truncate text-left text-xs font-medium"
-              onDoubleClick={onRename}
-              // F2 renomeia, a mesma convenção da lista de cenas.
-              onKeyDown={aoApertarF2(onRename)}
-              onClick={() => setOpen(!open)}
+          }
+        >
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={open ? `Fechar ${folder.name}` : `Abrir ${folder.name}`}
+            aria-expanded={open}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? <ChevronDown /> : <ChevronRight />}
+          </Button>
+
+          <FolderClosed
+            className="text-muted-foreground size-3.5 shrink-0"
+            aria-hidden
+          />
+
+          {renaming ? (
+            <div
+              className="min-w-0 flex-1"
+              onPointerDown={(event) => event.stopPropagation()}
             >
-              {folder.name}
-            </button>
-            <span className="text-muted-foreground text-[10px]">{count}</span>
-
-            <DropdownMenu onOpenChangeComplete={renomear.aoFechar}>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Opções de ${folder.name}`}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    // Escondido até o ponteiro chegar ou o foco entrar: renomear
-                    // e apagar pasta são gestos raros, e três pontos em cada
-                    // linha viram ruído numa lista que se lê de relance.
-                    // `focus-within` mantém o alcance pelo teclado.
-                    className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100"
-                  >
-                    <MoreVertical />
-                  </Button>
-                }
+              <FolderNameInput
+                defaultValue={folder.name}
+                onCommit={onRenameCommit}
+                onCancel={onRenameCancel}
               />
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem
-                  onClick={() => {
-                    setOpen(true);
-                    onNewChild();
-                  }}
-                >
-                  <FolderPlus />
-                  Nova subpasta
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={renomear.pedir}>
-                  <Pencil />
-                  Renomear
-                </DropdownMenuItem>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="min-w-0 flex-1 truncate text-left text-xs font-medium"
+                onDoubleClick={onRename}
+                // F2 renomeia, a mesma convenção da lista de cenas.
+                onKeyDown={aoApertarF2(onRename)}
+                onClick={() => setOpen(!open)}
+              >
+                {folder.name}
+              </button>
+              <span className="text-muted-foreground text-[10px]">{count}</span>
 
-                {destinos.length > 0 || folder.parentId ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    {folder.parentId ? (
-                      <DropdownMenuItem onClick={() => onMove(undefined)}>
-                        <FolderClosed />
-                        Tirar para a raiz
-                      </DropdownMenuItem>
-                    ) : null}
-                    {destinos.map((outra) => (
-                      <DropdownMenuItem
-                        key={outra.id}
-                        onClick={() => onMove(outra.id)}
-                      >
-                        <FolderClosed />
-                        <span className="truncate">Mover para {outra.name}</span>
-                      </DropdownMenuItem>
-                    ))}
-                  </>
-                ) : null}
+              <DropdownMenu onOpenChangeComplete={renomear.aoFechar}>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Opções de ${folder.name}`}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      // Escondido até o ponteiro chegar ou o foco entrar: renomear
+                      // e apagar pasta são gestos raros, e três pontos em cada
+                      // linha viram ruído numa lista que se lê de relance.
+                      // `focus-within` mantém o alcance pelo teclado.
+                      className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100"
+                    >
+                      <MoreVertical />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-52">
+                  {itens(KIT_TRES_PONTOS)}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
+        </ContextMenuTrigger>
 
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onDelete}>
-                  <Trash2 />
-                  Apagar pasta
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        )}
-      </div>
+        <ContextMenuContent className="w-52">
+          {itens(KIT_CONTEXTO)}
+        </ContextMenuContent>
+      </ContextMenu>
 
       {/* Apagar pasta não apaga arquivo, e o aviso vive aqui porque é onde a
           dúvida aparece. */}

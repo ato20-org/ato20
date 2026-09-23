@@ -2,6 +2,7 @@
 
 import { BookOpen, Columns2, Trash2, Upload } from "lucide-react";
 
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -34,23 +35,33 @@ export function EstanteBody() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="p-2">
-        <Button
-          className="w-full"
-          variant="outline"
-          size="sm"
-          onClick={() => void importar()}
-        >
-          <Upload />
-          Importar livros
-        </Button>
+      {/* Redondo e à direita, como nos outros painéis: de largura cheia ele
+          comia a primeira linha da lista para oferecer uma ação que se usa
+          uma vez por manual. */}
+      <div className="flex items-center justify-end p-2">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 rounded-full"
+                aria-label="Importar livros"
+                onClick={() => void importar()}
+              >
+                <Upload />
+              </Button>
+            }
+          />
+          <TooltipContent>Importar livros</TooltipContent>
+        </Tooltip>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
         {livros.length === 0 ? (
-          <p className="text-muted-foreground p-3 text-xs">
-            Nenhum livro encontrado na estante.
-          </p>
+          <PainelVazio conteudo={{ tipo: "estante" }}>
+            Importe o primeiro livro
+          </PainelVazio>
         ) : (
           <ul className="space-y-1 p-2">
             {livros.map((livro) => (

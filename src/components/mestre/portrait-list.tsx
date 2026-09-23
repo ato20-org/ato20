@@ -16,7 +16,9 @@ import {
   UserSquare,
 } from "lucide-react";
 
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -204,21 +206,22 @@ export function PortraitList() {
           Unir
         </Button>
 
-        <span className="text-muted-foreground min-w-0 flex-1 truncate text-[10px]">
-          {selecionados.length > 0
-            ? `${selecionados.length} escolhido${selecionados.length > 1 ? "s" : ""}`
-            : "Shift+clique escolhe vários"}
+        <span className="text-muted-foreground flex min-w-0 flex-1 items-center gap-1 truncate text-[10px]">
+          {selecionados.length > 0 ? (
+            `${selecionados.length} escolhido${selecionados.length > 1 ? "s" : ""}`
+          ) : (
+            <>
+              <Kbd>Shift</Kbd> + clique escolhe vários
+            </>
+          )}
         </span>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
         {elenco.length === 0 ? (
-          <p className="text-muted-foreground p-3 text-xs leading-snug">
-            Ninguém na cena. Ponha o token de um personagem no mapa — arraste-o
-            da lista de Personagens, ou use o botão dela — e ele aparece aqui
-            para entrar na tela da mesa. O retrato fica preso à câmera, então
-            aproximar o mapa não o move.
-          </p>
+          <PainelVazio conteudo={{ tipo: "retratos" }}>
+            Nenhum retrato encontrado
+          </PainelVazio>
         ) : (
           <div className="space-y-2 p-2">
             {unioes.map((uniao) => (

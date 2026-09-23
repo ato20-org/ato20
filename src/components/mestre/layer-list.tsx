@@ -27,6 +27,7 @@ import {
   Ungroup,
 } from "lucide-react";
 
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -254,10 +255,12 @@ export function LayerList({ scene }: { scene: Scene }) {
       </div>
 
       {ordered.length === 0 ? (
-        <p className="text-muted-foreground px-3 pb-3 text-xs">
-          Nada na cena. Importe uma imagem acima e clique no{" "}
-          <span className="font-medium">+</span>.
-        </p>
+        // `flex-1` e nao um paragrafo colado no cabecalho: o vazio ocupava a
+        // primeira linha e deixava o resto do painel morto. Centralizado, ele
+        // e o painel inteiro dizendo que nao ha nada, como nos outros.
+        <PainelVazio conteudo={{ tipo: "camadas" }} className="min-h-0 flex-1">
+          Nenhuma camada encontrada
+        </PainelVazio>
       ) : (
         <ScrollArea className="min-h-0 flex-1">
           {/* O fundo da lista, e SÓ ele, é o gatilho do menu de contexto.

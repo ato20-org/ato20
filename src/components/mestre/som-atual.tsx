@@ -18,6 +18,7 @@ import {
   chaveDoAmbiente,
   chaveDoDisparo,
 } from "@/components/playground/session-audio";
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useProgresso } from "@/lib/store/use-audio-store";
@@ -62,14 +63,14 @@ export function SomAtual({ porId }: { porId: Map<string, AssetMeta> }) {
 
   if (!track && ambientes.length === 0 && disparos.length === 0) {
     return (
-      <p className="text-muted-foreground px-2 pb-2 text-xs">
-        Nada tocando agora.
-      </p>
+      <PainelVazio conteudo={{ tipo: "sons" }}>
+        Nenhum som tocando
+      </PainelVazio>
     );
   }
 
   return (
-    <ul className="space-y-1 px-2 pb-2">
+    <ul className="space-y-1 p-2">
       {/* A trilha em cima, sempre: ela é a camada que se ouve por baixo de tudo,
           e mudá-la de lugar conforme os ambientes acendem faria o mestre
           procurá-la a cada cena. */}
