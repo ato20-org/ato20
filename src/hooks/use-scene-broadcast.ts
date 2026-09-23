@@ -18,6 +18,7 @@ import {
   type Scene,
   type SessionTrack,
   type Spotlight,
+  VOLUME_DE_CATEGORIA_PADRAO,
 } from "@/types/scene";
 
 /**
@@ -79,6 +80,9 @@ export function usePublisher(state: LiveState): void {
       ambientes: state.ambientes,
       disparos: state.disparos,
       volume: state.volume,
+      volumeTrilha: state.volumeTrilha,
+      volumeAmbiente: state.volumeAmbiente,
+      volumeDisparo: state.volumeDisparo,
       portraits: state.portraits,
       spotlight: state.spotlight,
       rolagens: state.rolagens,
@@ -96,6 +100,9 @@ export function usePublisher(state: LiveState): void {
     state.ambientes,
     state.disparos,
     state.volume,
+    state.volumeTrilha,
+    state.volumeAmbiente,
+    state.volumeDisparo,
     state.portraits,
     state.spotlight,
     state.rolagens,
@@ -120,6 +127,10 @@ export type Subscription = {
   disparos: Disparo[];
   /** Volume do som para esta tela, de 0 a 1. Quem regula é a mesa. */
   volume: number;
+  /** Os barramentos de trilha, ambiente e disparo. Ver `LiveState`. */
+  volumeTrilha: number;
+  volumeAmbiente: number;
+  volumeDisparo: number;
   portraits: Portrait[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
@@ -144,6 +155,9 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     ambientes: [],
     disparos: [],
     volume: DEFAULT_SESSION_VOLUME,
+    volumeTrilha: VOLUME_DE_CATEGORIA_PADRAO,
+    volumeAmbiente: VOLUME_DE_CATEGORIA_PADRAO,
+    volumeDisparo: VOLUME_DE_CATEGORIA_PADRAO,
     portraits: [],
     spotlight: null,
     rolagens: [],
@@ -185,6 +199,11 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     ambientes: live.ambientes ?? [],
     disparos: live.disparos ?? [],
     volume: live.volume,
+    // Mesmo `??` dos ambientes: o quadro de uma versão anterior não traz os
+    // barramentos, e lê-los como 0 deixaria a TV muda por causa do bundle.
+    volumeTrilha: live.volumeTrilha ?? VOLUME_DE_CATEGORIA_PADRAO,
+    volumeAmbiente: live.volumeAmbiente ?? VOLUME_DE_CATEGORIA_PADRAO,
+    volumeDisparo: live.volumeDisparo ?? VOLUME_DE_CATEGORIA_PADRAO,
     portraits: live.portraits,
     spotlight: live.spotlight,
     rolagens: live.rolagens ?? [],

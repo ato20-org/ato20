@@ -1,5 +1,6 @@
 import type {
   Ambiente,
+  Macro,
   Pad,
   Portrait,
   Scene,
@@ -18,6 +19,8 @@ export type SomEmUso = {
   ambientes?: Ambiente[];
   ambientesPorCena?: Record<string, Ambiente[]>;
   pads?: Pad[];
+  /** Os sons soltos, sem tecla. Ver `Macro`. */
+  macros?: Macro[];
 };
 
 /**
@@ -28,9 +31,9 @@ export type SomEmUso = {
  * que o mestre não entende de onde veio — ou a trilha apontando para o nada.
  *
  * O som passou a ter camadas, e cada uma é um lugar a mais: a chuva acesa, a
- * chuva que a taverna LEMBRA mesmo apagada, e o pad do numpad. O pior dos três
- * é o pad: ele não está tocando, ninguém o vê, e o mestre só descobre que o
- * arquivo sumiu ao apertar o 7 no meio da cena.
+ * chuva que a taverna LEMBRA mesmo apagada, o pad do numpad e a macro da lista.
+ * O pior deles é o pad: ele não está tocando, ninguém o vê, e o mestre só
+ * descobre que o arquivo sumiu ao apertar o 7 no meio da cena.
  */
 export function countAssetUsage(
   scenes: Scene[],
@@ -56,7 +59,8 @@ function noSom(som: SomEmUso | undefined, assetId: string): number {
     (som.track?.assetId === assetId ? 1 : 0) +
     (som.ambientes ?? []).filter((a) => a.assetId === assetId).length +
     lembrados.filter((a) => a.assetId === assetId).length +
-    (som.pads ?? []).filter((pad) => pad?.assetId === assetId).length
+    (som.pads ?? []).filter((pad) => pad?.assetId === assetId).length +
+    (som.macros ?? []).filter((macro) => macro.assetId === assetId).length
   );
 }
 
@@ -86,6 +90,7 @@ export function collectUsedAssetIds(
   for (const lembrados of Object.values(som.ambientesPorCena ?? {}))
     for (const ambiente of lembrados) used.add(ambiente.assetId);
   for (const pad of som.pads ?? []) if (pad) used.add(pad.assetId);
+  for (const macro of som.macros ?? []) used.add(macro.assetId);
 
   return used;
 }

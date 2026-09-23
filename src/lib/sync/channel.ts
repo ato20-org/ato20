@@ -34,10 +34,13 @@ export type LiveState = {
   /**
    * Os efeitos disparados agora — tiro, trovão, porta. Ver `Disparo`.
    *
-   * Lista curta e efêmera, como `rolagens`: o Mestre tira cada um da bandeja
-   * quinze segundos depois de ele soar. Quem recebe guarda os ids que já
-   * tocou, porque este quadro é republicado dez vezes por segundo — sem essa
-   * memória, um tiro viraria uma metralhadora.
+   * Lista efêmera, como `rolagens`: o Mestre tira cada um da bandeja quando o
+   * arquivo dele termina de tocar — ver `acabados`. Curta quase sempre, porque
+   * quase todo efeito dura segundos, mas não por regra: um efeito pode ser a
+   * entrada de um inimigo e durar minutos, e ele fica na lista esses minutos.
+   *
+   * Quem recebe guarda os ids que já tocou, porque este quadro é republicado
+   * dez vezes por segundo — sem essa memória, um tiro viraria uma metralhadora.
    */
   disparos: Disparo[];
   /**
@@ -48,6 +51,19 @@ export type LiveState = {
    * da mesa: o ganho de cada ambiente multiplica este número.
    */
   volume: number;
+  /**
+   * Os barramentos, de 0 a 1: a trilha, todos os ambientes, todos os disparos.
+   *
+   * Viajam porque a conta tem de dar o mesmo número em toda tela. "Abaixa o
+   * cenário que eu vou falar" é uma decisão da mesa, e resolvê-la só no Mestre
+   * deixaria a TV com a chuva alta enquanto o mestre fala baixo por cima.
+   *
+   * Opcionais: um quadro de uma versão anterior não os traz, e quem recebe lê a
+   * ausência como cheio. Ver o `??` em `useSubscription`.
+   */
+  volumeTrilha?: number;
+  volumeAmbiente?: number;
+  volumeDisparo?: number;
   /** Retratos sobre a cena, ancorados na câmera. */
   portraits: Portrait[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */

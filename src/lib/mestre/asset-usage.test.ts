@@ -55,7 +55,15 @@ describe("countAssetUsage", () => {
 
   it("conta o pad, que é o que ninguém vê", () => {
     const som: SomEmUso = {
-      pads: [null, { assetId: "tiro", ganho: 1, tipo: "disparo" }, null],
+      pads: [null, { assetId: "tiro", ganho: 1 }, null],
+    };
+
+    expect(countAssetUsage([cena], "tiro", som)).toBe(1);
+  });
+
+  it("conta a macro, que também aponta para um id", () => {
+    const som: SomEmUso = {
+      macros: [{ id: "m1", assetId: "tiro" }],
     };
 
     expect(countAssetUsage([cena], "tiro", som)).toBe(1);
@@ -66,10 +74,11 @@ describe("countAssetUsage", () => {
       track: trilha("chuva"),
       ambientes: [ambiente("chuva")],
       ambientesPorCena: { c1: [ambiente("chuva")] },
-      pads: [{ assetId: "chuva", ganho: 1, tipo: "ambiente" }],
+      pads: [{ assetId: "chuva", ganho: 1 }],
+      macros: [{ id: "m1", assetId: "chuva" }],
     };
 
-    expect(countAssetUsage([cena], "chuva", som)).toBe(4);
+    expect(countAssetUsage([cena], "chuva", som)).toBe(5);
   });
 
   it("sem som, conta só as cenas", () => {
@@ -84,11 +93,12 @@ describe("collectUsedAssetIds", () => {
       track: trilha("musica"),
       ambientes: [ambiente("chuva")],
       ambientesPorCena: { c1: [ambiente("lareira")] },
-      pads: [{ assetId: "tiro", ganho: 1, tipo: "disparo" }, null],
+      pads: [{ assetId: "tiro", ganho: 1 }, null],
+      macros: [{ id: "m1", assetId: "porta" }],
     });
 
     expect(usados).toEqual(
-      new Set(["imagem", "musica", "chuva", "lareira", "tiro"]),
+      new Set(["imagem", "musica", "chuva", "lareira", "tiro", "porta"]),
     );
   });
 

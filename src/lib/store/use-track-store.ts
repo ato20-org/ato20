@@ -3,10 +3,10 @@
 import { create } from "zustand";
 
 import { novoId } from "@/lib/id";
+import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { loadAudio, padsVazios, saveAudio, type SessionAudio } from "@/lib/vault/session";
 import {
   type Ambiente,
-  DEFAULT_SESSION_VOLUME,
   type Disparo,
   GANHO_PADRAO,
   MAX_AMBIENTES,
@@ -14,17 +14,24 @@ import {
 } from "@/types/scene";
 
 /**
- * Quanto tempo um disparo fica na bandeja depois de soar.
+ * Quanto tempo fica na bandeja um disparo que não se consegue medir.
  *
- * Quinze segundos cobrem o arquivo mais longo que alguém chama de efeito — um
- * trovão que rola, um portão pesado — com folga para um espectador que
- * reconectou no instante do disparo ainda pegá-lo.
+ * Só esse caso. Havia aqui um prazo fixo de quinze segundos para TODO disparo,
+ * e ele estava errado por uma razão simples: quinze segundos é o que dura um
+ * trovão, não o que dura a entrada de um inimigo. O arquivo passava dos quinze
+ * e era cortado no meio, porque vencer na bandeja é o elemento sair da árvore.
+ *
+ * Agora o prazo de cada disparo é a duração do próprio arquivo, lida do
+ * `<audio>` desta tela — ver `useSomDaMesa`. Este número é o que resta para
+ * quando não há duração nenhuma a ler: o arquivo sumiu do acervo, ou o
+ * elemento nunca montou. Sem ele o registro ficaria eterno, republicando no
+ * batimento do canal para sempre.
  *
  * O prazo mora aqui pela mesma razão que o do dado mora no store dele: quem
  * guarda a bandeja é quem a publica, e um relógio em Rust só para apagar um
  * registro seria o mesmo estado em dois lugares.
  */
-export const PRAZO_DO_DISPARO_MS = 15_000;
+export const PRAZO_SEM_MEDIDA_MS = 15_000;
 
 /**
  * O som da sessão: a trilha, os ambientes acesos, os disparos e os pads.
@@ -69,13 +76,12 @@ type TrackStore = SessionAudio & {
   start: (assetId: string) => void;
   /** Pausa ou retoma, reiniciando a contagem de posição. */
   setPlaying: (playing: boolean) => void;
-  /** Regula o som da sessão. Vale com ou sem trilha escolhida. */
-  setVolume: (volume: number) => void;
   /**
    * Regula só a trilha, por baixo do volume da mesa.
    *
-   * Separado de `setVolume` porque são perguntas diferentes: "a mesa está
-   * alta" e "a música está por cima da fala". Ver `SessionTrack.ganho`.
+   * Separado do fader da camada porque são perguntas diferentes: "a música
+   * está por cima da fala" e "esta faixa em especial está alta". Este morre
+   * com a faixa; aquele atravessa as trocas. Ver `SessionTrack.ganho`.
    */
   setGanhoDaTrilha: (ganho: number) => void;
   /**
@@ -88,6 +94,15 @@ type TrackStore = SessionAudio & {
    */
   seek: (seconds: number) => void;
   setLoop: (loop: boolean) => void;
+  /**
+   * Põe esta faixa como trilha; se já for ela, tira.
+   *
+   * O irmão de `alternar` uma camada acima, e existe pela mesma razão: é o que
+   * a tecla do pad faz. Tirar e não pausar, como no ambiente — o pad é o gesto
+   * de "corta a música", e pausá-la deixaria a faixa escolhida em silêncio,
+   * que é um terceiro estado que a tecla não sabe mostrar.
+   */
+  alternarTrilha: (assetId: string) => void;
   clear: () => void;
 
   // --- os ambientes ---------------------------------------------------------
@@ -104,19 +119,49 @@ type TrackStore = SessionAudio & {
 
   disparar: (assetId: string, ganho?: number) => void;
   /**
-   * Tira da bandeja o que já venceu.
+   * Tira estes disparos da bandeja.
    *
-   * Chamado por um relógio de fora, e não por `setTimeout` por disparo: N
-   * disparos dariam N temporizadores para uma varredura que custa um `filter`,
-   * e um temporizador por disparo é um vazamento esperando a janela fechar no
-   * meio. Mesma escolha da bandeja de dados.
+   * Quem decide QUAIS é de fora: o relógio do `useSomDaMesa`, que roda só no
+   * Mestre e é o único que vê quanto o arquivo dura, e o X do painel, que é o
+   * mestre cortando um efeito longo antes do fim. A bandeja só obedece.
+   *
+   * Um relógio para todos e não um `setTimeout` por disparo: N disparos dariam
+   * N temporizadores para uma varredura que custa um `filter`, e um
+   * temporizador por disparo é um vazamento esperando a janela fechar no meio.
+   * Mesma escolha da bandeja de dados.
    */
-  expirarDisparos: () => void;
+  tirarDisparos: (ids: readonly string[]) => void;
 
   // --- os pads --------------------------------------------------------------
 
+  /**
+   * Põe um som na tecla, ou a esvazia com `null`.
+   *
+   * Recusa um som que já está noutra tecla. Ver a razão no corpo.
+   */
   definirPad: (indice: number, pad: Pad) => void;
-  /** O que a tecla do numpad faz: alterna um ambiente, ou dispara um efeito. */
+
+  // --- as macros ------------------------------------------------------------
+
+  /**
+   * Põe um som na lista solta. Recusa o que já está nela.
+   *
+   * Mesmo motivo do pad repetido: duas linhas do mesmo ambiente seriam uma que
+   * acende e outra que parece quebrada, porque `acender` recusa o que já está
+   * aceso.
+   */
+  adicionarMacro: (assetId: string) => void;
+  removerMacro: (id: string) => void;
+  /** O mesmo que a tecla faz, sem tecla. Ver `acionarPad`. */
+  acionarMacro: (id: string) => void;
+
+  /**
+   * O que a tecla do numpad faz, segundo o TIPO do arquivo que está nela.
+   *
+   * Trilha e ambiente alternam, efeito dispara — a mesma tabela do botão do
+   * acervo, e é o ponto: a tecla e a linha têm de fazer a mesma coisa com o
+   * mesmo som. Arquivo sem tipo não faz nada, e o pad mostra isso.
+   */
   acionarPad: (indice: number) => void;
 
   // --- a cena ---------------------------------------------------------------
@@ -142,10 +187,10 @@ type TrackStore = SessionAudio & {
 
 export const useTrackStore = create<TrackStore>((set, get) => ({
   track: null,
-  volume: DEFAULT_SESSION_VOLUME,
   ambientes: [],
   ambientesPorCena: {},
   pads: padsVazios(),
+  macros: [],
   disparos: [],
   cenaAtual: null,
   hydratedPath: null,
@@ -157,10 +202,10 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     // sobre a nova enquanto o disco respondesse.
     set({
       track: null,
-      volume: DEFAULT_SESSION_VOLUME,
       ambientes: [],
       ambientesPorCena: {},
       pads: padsVazios(),
+      macros: [],
       disparos: [],
       cenaAtual: null,
       hydratedPath: campaignPath,
@@ -200,13 +245,6 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     gravar(set, get, { track: { ...track, playing, startedAt: Date.now() } });
   },
 
-  setVolume(volume) {
-    // Sem `if (track)`: o volume é da sessão, e regular com o som parado tem de
-    // valer para a próxima faixa que entrar. Vale também para os ambientes, que
-    // multiplicam o ganho deles por este.
-    gravar(set, get, { volume: limitar(volume) });
-  },
-
   setGanhoDaTrilha(ganho) {
     const { track } = get();
     if (!track) return;
@@ -231,9 +269,13 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     if (track) gravar(set, get, { track: { ...track, loop } });
   },
 
+  alternarTrilha(assetId) {
+    if (get().track?.assetId === assetId) get().clear();
+    else get().start(assetId);
+  },
+
   clear() {
-    // O volume fica: tirar a música não é abaixar o som. Os ambientes também —
-    // trocar de trilha no meio da chuva não pode parar a chuva.
+    // Os ambientes ficam: trocar de trilha no meio da chuva não para a chuva.
     gravar(set, get, { track: null });
   },
 
@@ -309,12 +351,14 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     }));
   },
 
-  expirarDisparos() {
-    set((state) => {
-      const limite = Date.now() - PRAZO_DO_DISPARO_MS;
-      const viva = state.disparos.filter((disparo) => disparo.firedAt > limite);
+  tirarDisparos(ids) {
+    if (ids.length === 0) return;
 
-      // Mesma referência quando nada venceu: este relógio bate de segundo em
+    set((state) => {
+      const fora = new Set(ids);
+      const viva = state.disparos.filter((disparo) => !fora.has(disparo.id));
+
+      // Mesma referência quando nada saiu: o relógio bate de segundo em
       // segundo, e devolver um array novo a cada batida republicaria o quadro
       // inteiro para nada.
       return viva.length === state.disparos.length ? state : { disparos: viva };
@@ -322,9 +366,26 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   },
 
   definirPad(indice, pad) {
-    if (indice < 0 || indice >= get().pads.length) return;
+    const atuais = get().pads;
+    if (indice < 0 || indice >= atuais.length) return;
 
-    const pads = [...get().pads];
+    // Um som, uma tecla. A mão decora "a chuva é o 7", e o mesmo arquivo em
+    // duas teclas quebra isso de um jeito pior do que parece: sendo ambiente,
+    // apertar o 7 acende e apertar o 5 NÃO acende um segundo — `acender` recusa
+    // o que já está aceso —, então o 5 parece uma tecla quebrada. Sendo trilha,
+    // o 5 tira a música que o 7 acabou de pôr.
+    //
+    // Recusa em vez de mover: mover esvaziaria uma tecla que o mestre não está
+    // olhando. Quem quiser trocar de lugar esvazia a antiga, que é um gesto no
+    // próprio pad. Quem chama já mostra o repetido desligado — ver
+    // `SeletorDeSom` —, então isto é a guarda, e não a mensagem.
+    const repetido =
+      pad !== null &&
+      atuais.some((outro, i) => i !== indice && outro?.assetId === pad.assetId);
+
+    if (repetido) return;
+
+    const pads = [...atuais];
     pads[indice] = pad;
 
     gravar(set, get, { pads });
@@ -332,10 +393,25 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
 
   acionarPad(indice) {
     const pad = get().pads[indice];
-    if (!pad) return;
+    if (pad) acionar(get(), pad.assetId, pad.ganho);
+  },
 
-    if (pad.tipo === "ambiente") get().alternar(pad.assetId);
-    else get().disparar(pad.assetId, pad.ganho);
+  adicionarMacro(assetId) {
+    const { macros } = get();
+    if (macros.some((macro) => macro.assetId === assetId)) return;
+
+    gravar(set, get, { macros: [...macros, { id: novoId(), assetId }] });
+  },
+
+  removerMacro(id) {
+    gravar(set, get, {
+      macros: get().macros.filter((macro) => macro.id !== id),
+    });
+  },
+
+  acionarMacro(id) {
+    const macro = get().macros.find((atual) => atual.id === id);
+    if (macro) acionar(get(), macro.assetId, GANHO_PADRAO);
   },
 
   entrarNaCena(cenaId) {
@@ -393,6 +469,31 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   },
 }));
 
+/**
+ * Aciona um som pelo TIPO do arquivo dele.
+ *
+ * Uma função para o pad e para a macro, e é o ponto: as duas são a mesma coisa
+ * — um som guardado à mão — e a única diferença entre elas é ter tecla. Duas
+ * cópias divergiriam no dia em que a trilha deixasse de alternar.
+ *
+ * O acervo é lido do store de assets, e não guardado no pad: ele tem o id, e o
+ * tipo é do ARQUIVO. Copiá-lo para dentro do pad é o que havia antes, e era o
+ * que deixava os dois discordarem — a mesma chuva sendo ambiente no acervo e
+ * disparo no 7.
+ *
+ * Arquivo sem tipo não faz nada, e quem o guardou já sabe: o acervo e o seletor
+ * mostram o som sem tipo desligado.
+ */
+function acionar(store: TrackStore, assetId: string, ganho: number): void {
+  const tipo = useAssetsStore
+    .getState()
+    .audio.assets?.find((asset) => asset.id === assetId)?.tipoDeSom;
+
+  if (tipo === "trilha") store.alternarTrilha(assetId);
+  else if (tipo === "ambiente") store.alternar(assetId);
+  else if (tipo === "disparo") store.disparar(assetId, ganho);
+}
+
 /** 0 a 1, sempre. */
 function limitar(valor: number): number {
   return Math.max(0, Math.min(1, valor));
@@ -411,8 +512,9 @@ function gravar(
 ): void {
   set(mudanca);
 
-  const { track, volume, ambientes, ambientesPorCena, pads } = get();
-  void saveAudio({ track, volume, ambientes, ambientesPorCena, pads });
+  const { track, ambientes, ambientesPorCena, pads, macros } = get();
+
+  void saveAudio({ track, ambientes, ambientesPorCena, pads, macros });
 }
 
 /**
