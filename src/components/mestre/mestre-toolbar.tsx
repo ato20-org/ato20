@@ -75,25 +75,25 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
   {
     tool: "select",
     label: "Selecionar",
-    hint: "Clique para selecionar, arraste no vazio para marcar vários.",
+    hint: "Clique escolhe. Arraste no vazio para marcar vários.",
     icon: MousePointer2,
   },
   {
     tool: "hand",
-    label: "Deslocar o mapa",
-    hint: "Arraste para percorrer o mapa. Segurar espaço faz o mesmo sem trocar de ferramenta.",
+    label: "Deslocar",
+    hint: "Arraste para percorrer o mapa. Segurar Espaço faz o mesmo.",
     icon: Hand,
   },
   {
     tool: "lapis",
     label: "Lápis",
-    hint: "Arraste para riscar o mapa à mão livre. A mesa vê. Cor e espessura ficam no botão ao lado.",
+    hint: "Risca o mapa à mão livre. A mesa vê.",
     icon: Pencil,
   },
   {
     tool: "borracha",
     label: "Borracha",
-    hint: "Passe sobre um risco para apagá-lo inteiro. Ctrl+Z devolve.",
+    hint: "Passe sobre um risco para apagá-lo inteiro.",
     icon: Eraser,
   },
 ];
@@ -106,35 +106,35 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
 const FERRAMENTAS_MAPA: Ferramenta[] = [
   {
     tool: "pin",
-    label: "Ponto de anotação",
-    hint: "Clique no mapa para cravar um ponto com nota e anexos. Só você vê — nem a TV nem os celulares recebem.",
+    label: "Ponto",
+    hint: "Crava um ponto com nota e anexos. Só você vê.",
     icon: MapPin,
   },
   {
     tool: "postit",
     label: "Postit",
-    hint: "Clique no mapa para colar um papel com texto à vista. Digitar @, / ou > sugere personagem, arquivo da campanha ou mapa; ** dos dois lados deixa em negrito; # e - no começo da linha dão título e lista. Só você vê — nem a TV nem os celulares recebem.",
+    hint: "Cola um papel com texto à vista. Só você vê.",
     icon: StickyNote,
   },
   {
     tool: "fog",
     formatoDeArea: "retangulo",
     label: "Área escondida",
-    hint: "Arraste sobre o mapa para cobrir uma região. A mesa vê preto sólido. Selecionada, os cantos redimensionam e a alça de cima gira — um corredor torto se cobre torto.",
+    hint: "Arraste para cobrir uma região. A mesa vê preto sólido.",
     icon: SquareDashedBottom,
   },
   {
     tool: "fog",
     formatoDeArea: "elipse",
     label: "Área escondida redonda",
-    hint: "Arraste para cobrir uma região arredondada — a clareira, a torre, o raio de um desabamento. Segurar Shift iguala os lados e sai um círculo.",
+    hint: "Cobre uma região arredondada. Shift para um círculo.",
     icon: CircleDashed,
   },
   {
     tool: "fog",
     formatoDeArea: "poligono",
     label: "Área escondida livre",
-    hint: "Clique vértice a vértice contornando a região. Fecha clicando no primeiro ponto ou com Enter; Backspace desfaz o último vértice e Esc cancela. Depois, as alças de cada vértice remodelam o contorno.",
+    hint: "Contorna a região vértice a vértice. Enter fecha.",
     icon: Lasso,
   },
 ];
@@ -154,28 +154,28 @@ const FERRAMENTAS_DE_DESENHO: Ferramenta[] = [
   {
     tool: "texto",
     label: "Texto",
-    hint: "Clique para escrever direto na cena, sem papel. Duplo clique edita, arrasto move; selecionado, os cantos aumentam e a alça de cima gira, como na imagem. Num mapa ele nasce só para você: o olho do gizmo o manda para a mesa.",
+    hint: "Escreve direto na cena, sem papel. Nasce só para você.",
     icon: Type,
   },
   {
     tool: "forma",
     tipoDeForma: "retangulo",
     label: "Quadrado",
-    hint: "Arraste para desenhar um retângulo. Segurar Shift iguala os lados e sai um quadrado. Vazado por padrão; cor, espessura e fundo ficam no botão ao lado. Num mapa ele nasce só para você: o olho do gizmo o manda para a mesa.",
+    hint: "Arraste para desenhar um retângulo. Shift para um quadrado.",
     icon: Square,
   },
   {
     tool: "forma",
     tipoDeForma: "elipse",
     label: "Círculo",
-    hint: "Arraste para desenhar uma elipse. Segurar Shift iguala os lados e sai um círculo.",
+    hint: "Arraste para desenhar uma elipse. Shift para um círculo.",
     icon: Circle,
   },
   {
     tool: "forma",
     tipoDeForma: "linha",
     label: "Linha",
-    hint: "Arraste de onde até onde. A linha corre na diagonal da caixa, e redimensionar a caixa estica a linha.",
+    hint: "Arraste de onde até onde.",
     icon: Minus,
   },
 ];
@@ -191,7 +191,7 @@ const FERRAMENTAS_QUADRO: Ferramenta[] = [
   {
     tool: "ligacao",
     label: "Seta",
-    hint: "Passe por cima de qualquer coisa do quadro e os quatro pontos de encaixe dela acendem. Clique num ponto e a seta fica pendurada no cursor até o clique da outra ponta; arrastar de um ponto ao outro também vale. No vazio, a ponta fica livre. Sobre outra seta a ponta vira bifurcação. Selecionada, as alças movem as pontas; duplo clique dá rótulo. Feita a seta, a ferramenta se larga sozinha.",
+    hint: "Liga duas coisas do quadro. Clique num ponto de encaixe e depois no outro.",
     icon: Spline,
   },
 ];
@@ -444,8 +444,8 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     tool: "regua",
     label: "Régua",
     hint: scene.grid
-      ? `Arraste para colocar um medidor: régua, círculo, cone ou retângulo. Cada quadrado da grade vale ${METROS_POR_QUADRADO} m.`
-      : "Ligue a grade primeiro: é o quadrado dela que diz quanto vale um metro.",
+      ? `Mede distância e área. Cada quadrado vale ${METROS_POR_QUADRADO} m.`
+      : "Ligue a grade primeiro.",
     icon: Ruler,
   };
 

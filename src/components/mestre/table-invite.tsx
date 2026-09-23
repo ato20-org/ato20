@@ -39,9 +39,16 @@ import { cn } from "@/lib/utils";
  * O código vai no endereço nos dois casos, e é por isso que não há nenhum campo
  * de código em lugar nenhum.
  */
+/** As duas portas da mesa: o celular de quem joga, e a TV que todos veem. */
+type Aba = "jogador" | "espectador";
+
 export function TableInvite() {
   const campaign = useCampaignStore((state) => state.campaign);
   const [lanUrl, setLanUrl] = useState<string | null>(null);
+  // A aba escolhida vira estado porque a descrição do diálogo muda com
+  // ela: o `Tabs` sozinho guardaria a escolha, mas não a conta a quem
+  // está fora dele.
+  const [aba, setAba] = useState<Aba>("jogador");
   const [carregado, setCarregado] = useState(false);
 
   useEffect(() => {
@@ -102,11 +109,25 @@ export function TableInvite() {
       />
       <DialogContent className="max-w-sm">
         <DialogTitle>Entrar na mesa</DialogTitle>
+        {/* Uma por aba: o celular tem câmera e um quadrado para apontar, a TV
+            não tem nem uma nem outro -- lá alguém digita o endereço com um
+            controle remoto. Uma frase só serviria a uma das duas e mentiria
+            para a outra.
+
+            E diz o que a tela PEDE, não como o endereço é montado: que o
+            código viaja na URL era resposta para uma pergunta que ninguém faz
+            com o celular na mão. */}
         <DialogDescription>
-          O código já vai no endereço — ninguém precisa digitá-lo à parte.
+          {aba === "jogador"
+            ? "Aponte a câmera do celular para o quadrado."
+            : "Digite este endereço no navegador da TV."}
         </DialogDescription>
 
-        <Tabs defaultValue="jogador" className="min-w-0 gap-3">
+        <Tabs
+          value={aba}
+          onValueChange={(valor) => setAba(valor as Aba)}
+          className="min-w-0 gap-3"
+        >
           <TabsList>
             <TabsTrigger value="jogador">Jogador</TabsTrigger>
             <TabsTrigger value="espectador">TV</TabsTrigger>
@@ -132,9 +153,13 @@ export function TableInvite() {
           </TabsContent>
         </Tabs>
 
-        <p className="text-muted-foreground border-t pt-3 text-xs">
-          Vale só na mesma rede. O código não é senha forte — ele impede a
-          entrada por acaso, não alguém decidido no teu Wi-Fi.
+        {/* Mais apagado que a tela: é a letra miúda do convite, e quem a
+            procura já parou para ler. A segunda frase fica porque é a única
+            ressalva que muda uma decisão -- quem acha que o código protege a
+            mesa de um vizinho precisa saber que não. */}
+        <p className="text-muted-foreground/60 border-t pt-3 text-xs">
+          Vale só na mesma rede. O código evita a entrada por acaso, não alguém
+          decidido no seu Wi-Fi.
         </p>
       </DialogContent>
     </Dialog>
@@ -220,7 +245,10 @@ function Endereco({ url, grande }: { url: string; grande?: boolean }) {
               // por caractere. Quebrando, "espectador" virava "assist" numa linha
               // e "ir" na outra, e quem está copiando isso para o controle da TV
               // lê dois pedaços e digita um deles errado.
-              "bg-muted rolagem-limpa overflow-x-auto rounded-md px-3 py-2 text-left text-sm whitespace-nowrap"
+              // `scroll-fade-x`: a linha não cabe, e cortada a seco ela
+              // parecia um endereço que termina ali. Desbotando na borda,
+              // ela diz que continua -- e continua rolando.
+              "bg-muted rolagem-limpa scroll-fade-x overflow-x-auto rounded-md px-3 py-2 text-left text-sm whitespace-nowrap"
             : "text-muted-foreground text-xs break-all",
         )}
       >

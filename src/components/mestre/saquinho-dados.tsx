@@ -254,8 +254,7 @@ export function SaquinhoDados() {
         <TooltipContent side="left">
           <p className="font-medium">Saquinho de dados</p>
           <p className="text-muted-foreground max-w-48">
-            Clique para abrir e para fechar. Arraste a bolinha para levá-la a
-            outro canto.
+            Os dados desta mesa.
           </p>
         </TooltipContent>
       </Tooltip>
@@ -371,10 +370,9 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <p className="text-sm font-medium">Saquinho</p>
+        <p className="text-sm font-medium">Saquinho de dados</p>
         <p className="text-muted-foreground text-xs">
-          Pegue um dado e arremesse no mapa — quanto mais forte, mais longe ele
-          rola. Clique para jogar no meio. Dado já na mesa também se pega.
+          Arremesse no mapa, ou clique para jogar no meio.
         </p>
       </div>
 
