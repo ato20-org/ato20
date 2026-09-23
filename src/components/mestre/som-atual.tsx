@@ -1,18 +1,29 @@
 "use client";
 
-import { type LucideIcon, Music, Pause, Play, Waves, X, Zap } from "lucide-react";
+import {
+  type LucideIcon,
+  Music,
+  Pause,
+  Play,
+  Repeat,
+  RepeatOff,
+  Waves,
+  X,
+  Zap,
+} from "lucide-react";
 
 import { BarraDeProgresso } from "@/components/mestre/barra-de-progresso";
 import {
   chaveDaTrilha,
   chaveDoAmbiente,
+  chaveDoDisparo,
 } from "@/components/playground/session-audio";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useProgresso } from "@/lib/store/use-audio-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
-import type { AssetMeta } from "@/types/scene";
+import type { AssetMeta, Disparo } from "@/types/scene";
 
 /**
  * O que a mesa está ouvindo AGORA, camada por camada.
@@ -39,12 +50,15 @@ export function SomAtual({ porId }: { porId: Map<string, AssetMeta> }) {
 
   const setPlaying = useTrackStore((state) => state.setPlaying);
   const setGanhoDaTrilha = useTrackStore((state) => state.setGanhoDaTrilha);
+  const setLoop = useTrackStore((state) => state.setLoop);
   const seek = useTrackStore((state) => state.seek);
   const clear = useTrackStore((state) => state.clear);
 
   const apagar = useTrackStore((state) => state.apagar);
   const setGanho = useTrackStore((state) => state.setGanho);
   const setTocando = useTrackStore((state) => state.setTocando);
+
+  const tirarDisparos = useTrackStore((state) => state.tirarDisparos);
 
   if (!track && ambientes.length === 0 && disparos.length === 0) {
     return (
@@ -66,7 +80,11 @@ export function SomAtual({ porId }: { porId: Map<string, AssetMeta> }) {
           chave={chaveDaTrilha(track.assetId)}
           ganho={track.ganho}
           tocando={track.playing}
+          // Só a trilha repete por escolha: o ambiente repete sempre, e um
+          // disparo que repetisse seria um tiro preso num laço.
+          loop={track.loop}
           onGanho={setGanhoDaTrilha}
+          onLoop={() => setLoop(!track.loop)}
           onTocando={() => setPlaying(!track.playing)}
           onTirar={clear}
           // Só ela: a faixa tem começo, meio e fim, e achar a virada da música
@@ -89,16 +107,19 @@ export function SomAtual({ porId }: { porId: Map<string, AssetMeta> }) {
         />
       ))}
 
-      {/* Passageiros e sem controle nenhum: um tiro dura dois segundos, e um
-          botão de pausa nele seria um alvo que some antes de ser acertado. A
-          linha existe para confirmar que o disparo saiu — ver o prazo em
-          `PRAZO_DO_DISPARO_MS`. */}
+      {/* Passageiros, mas não intocáveis. Sem pausa nem fader: o disparo não
+          repete e sai sozinho, e um botão de pausa num tiro de dois segundos
+          seria um alvo que some antes de ser acertado.
+
+          Com X, e isso é novo: agora que o efeito dura o arquivo inteiro, ele
+          pode ser a entrada de um inimigo de dois minutos — e um som longo que
+          entrou na hora errada precisa de uma saída que não seja esperar. */}
       {disparos.map((disparo) => (
-        <LinhaDoCanal
+        <LinhaDoDisparo
           key={disparo.id}
-          icone={Zap}
+          disparo={disparo}
           nome={nomeDe(porId, disparo.assetId)}
-          passageira
+          onTirar={() => tirarDisparos([disparo.id])}
         />
       ))}
     </ul>
@@ -119,8 +140,10 @@ function LinhaDoCanal({
   chave,
   ganho,
   tocando,
+  loop,
   passageira,
   onGanho,
+  onLoop,
   onTocando,
   onTirar,
   onSeek,
@@ -131,9 +154,11 @@ function LinhaDoCanal({
   chave?: string;
   ganho?: number;
   tocando?: boolean;
+  loop?: boolean;
   /** Vai sumir sozinha: entra apagada para não disputar a vista com o resto. */
   passageira?: boolean;
   onGanho?: (ganho: number) => void;
+  onLoop?: () => void;
   onTocando?: () => void;
   onTirar?: () => void;
   onSeek?: (segundos: number) => void;
@@ -143,8 +168,22 @@ function LinhaDoCanal({
   const { position, duration } = useProgresso(chave ?? null);
 
   return (
-    <li className="rounded-md p-1">
+    // Borda e fundo em cada linha, e não texto solto sobre o painel: com três
+    // ou quatro camadas no ar, nome de arquivo e barra de uma viravam nome e
+    // barra da seguinte, e achar "qual delas está alta" virava contar linhas.
+    // O disparo entra tracejado — a moldura diz que aquilo vai embora sozinho.
+    <li
+      className={cn(
+        "rounded-md border px-1.5 py-1",
+        passageira ? "border-dashed" : "bg-muted/40",
+      )}
+    >
       <div className="flex items-center gap-1">
+        {/* Sem cor aqui, e é escolha: quem usa cor para separar tipo é a
+            grade dos pads, que é lida de relance com a mão no numpad. Esta
+            lista já vem separada em linha, e três ícones coloridos numa coluna
+            estreita só disputariam a vista com o que importa nela — qual som
+            está alto demais. */}
         <Icone
           className={cn(
             "size-3 shrink-0",
@@ -166,14 +205,40 @@ function LinhaDoCanal({
             "chuva leve por baixo da música" — com um volume só, abaixar a chuva
             levaria a trilha junto. Ver `outputVolume`. */}
         {onGanho ? (
-          <Slider
-            className="w-16 shrink-0"
-            aria-label={`Volume de ${nome}`}
-            value={[Math.round((ganho ?? 1) * 100)]}
-            max={100}
-            step={1}
-            onValueChange={(value) => onGanho(primeiro(value) / 100)}
-          />
+          // A largura mora na caixa, e não no slider: ele traz um
+          // `data-horizontal:w-full` que vence qualquer `w-16` posto aqui, e
+          // então empurrava os botões para fora do painel e comia o nome da
+          // faixa, que é `flex-1` e encolhe até zero.
+          <div className="w-16 shrink-0">
+            <Slider
+              aria-label={`Volume de ${nome}`}
+              value={[Math.round((ganho ?? 1) * 100)]}
+              max={100}
+              step={1}
+              onValueChange={(value) => onGanho(primeiro(value) / 100)}
+            />
+          </div>
+        ) : null}
+
+        {/* O mesmo interruptor da barra do pé, e de propósito: quem está com o
+            mixer aberto para equilibrar a música com a chuva é quem decide se a
+            faixa emenda sozinha ou acaba, e mandá-lo fechar o painel para
+            alcançar a barra seria o painel devolvendo a pergunta.
+
+            E o mesmo par de desenhos, pela mesma razão: dois lugares mostrando
+            o mesmo estado com símbolos diferentes seriam dois estados. */}
+        {onLoop ? (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={loop ? `${nome} repetindo` : `${nome} toca uma vez`}
+            title={loop ? "Repetindo" : "Toca uma vez"}
+            aria-pressed={loop}
+            className={cn(!loop && "text-muted-foreground/60")}
+            onClick={onLoop}
+          >
+            {loop ? <Repeat /> : <RepeatOff />}
+          </Button>
         ) : null}
 
         {onTocando ? (
@@ -212,6 +277,53 @@ function LinhaDoCanal({
         </div>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * Folga para dizer que o som acabou.
+ *
+ * O `ended` crava a posição na duração, mas um arquivo cuja duração o browser
+ * arredonda por baixo pararia uns centésimos aquém e a linha ficaria eterna.
+ * Cinquenta milissegundos não são audíveis e fecham essa fresta.
+ */
+const FOLGA_DO_FIM_S = 0.05;
+
+/**
+ * Um disparo, enquanto ele está soando.
+ *
+ * A linha sai no instante em que o som acaba, lendo a posição do `<audio>`
+ * desta tela. A bandeja do store também tira o disparo pelo fim do arquivo —
+ * ver `acabados` —, mas ela é varrida de segundo em segundo, e um segundo de
+ * uma linha anunciando um som que já passou é um segundo a mais do que o painel
+ * deveria mentir.
+ *
+ * Sem duração conhecida — arquivo que não carregou — a linha fica, e a
+ * varredura a tira pelo prazo de segurança. Melhor sobrar do que sumir um som
+ * que ainda soa.
+ */
+function LinhaDoDisparo({
+  disparo,
+  nome,
+  onTirar,
+}: {
+  disparo: Disparo;
+  nome: string;
+  onTirar: () => void;
+}) {
+  const chave = chaveDoDisparo(disparo.id);
+  const { position, duration } = useProgresso(chave);
+
+  if (duration > 0 && position >= duration - FOLGA_DO_FIM_S) return null;
+
+  return (
+    <LinhaDoCanal
+      icone={Zap}
+      nome={nome}
+      chave={chave}
+      passageira
+      onTirar={onTirar}
+    />
   );
 }
 
