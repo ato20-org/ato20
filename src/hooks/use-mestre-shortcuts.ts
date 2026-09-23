@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { atalhos } from "@/lib/mestre/atalhos";
+import { colarImagemDoSistema } from "@/lib/mestre/colar-imagem";
 import { colarTextoDoSistema } from "@/lib/mestre/texto-actions";
 
 function isTyping(target: EventTarget | null): boolean {
@@ -46,6 +47,16 @@ export function useMestreShortcuts(): void {
     // dispara `paste` com o texto pronto. Ver `colarTextoDoSistema`.
     const handlePaste = (event: ClipboardEvent) => {
       if (isTyping(event.target)) return;
+
+      // Imagem ANTES do texto, e a ordem é a regra: um endereço de imagem
+      // também é texto, e o ramo de baixo o transformaria numa nota no quadro
+      // em vez de baixar a figura. Ver `colarImagemDoSistema`.
+      if (colarImagemDoSistema(event)) {
+        event.preventDefault();
+
+        return;
+      }
+
       const texto = event.clipboardData?.getData("text/plain");
       if (texto && colarTextoDoSistema(texto)) event.preventDefault();
     };

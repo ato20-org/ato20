@@ -6,7 +6,11 @@ import {
   invalidarAcervo,
   useAssetsStore,
 } from "@/lib/store/use-assets-store";
-import { importarCaminhos, type ImportResult } from "@/lib/vault/assets";
+import {
+  importarBytes,
+  importarCaminhos,
+  type ImportResult,
+} from "@/lib/vault/assets";
 import type { AssetMeta } from "@/types/scene";
 
 /**
@@ -57,6 +61,29 @@ export async function importarCaminhosNoAcervo(
     );
   } catch (cause) {
     toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+
+    return [];
+  }
+}
+
+/**
+ * Traz bytes colados para o acervo, já avisando o que deu errado.
+ *
+ * Irmã de `importarCaminhosNoAcervo`, e pelo mesmo motivo: o depois da
+ * importação — dizer o que foi recusado e acordar as listas — é o mesmo, e é o
+ * que `absorverImportacao` guarda.
+ *
+ * Nunca lança, como a irmã: o gesto é um Ctrl+V no meio da sessão, e derrubar a
+ * tela por disco cheio custaria mais que a imagem que não entrou.
+ */
+export async function importarBytesNoAcervo(
+  nome: string,
+  bytes: Uint8Array,
+): Promise<AssetMeta[]> {
+  try {
+    return absorverImportacao(await importarBytes(nome, bytes));
+  } catch (cause) {
+    toast.error(cause instanceof Error ? cause.message : "Falha ao colar.");
 
     return [];
   }

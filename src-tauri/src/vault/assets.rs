@@ -165,6 +165,76 @@ pub fn import(
     Ok((feito.aceitos, feito.recusados))
 }
 
+/// Traz bytes que a webview tem na mao para o acervo.
+///
+/// E a colagem: um print de tela ou uma imagem copiada do navegador nunca
+/// existiu como arquivo, entao nao ha caminho para mandar -- diferente de toda
+/// outra importacao, onde o arquivo ja esta no disco e o que atravessa a ponte e
+/// o endereco dele.
+///
+/// Os bytes viram um arquivo TEMPORARIO e passam pela `import` de sempre, em vez
+/// de uma importacao propria. Custa escrever os bytes duas vezes; compra que
+/// classificacao, medidas, indice, limite e motivo de recusa continuem escritos
+/// num lugar so. Uma importacao propria seria a terceira copia dessas regras, e
+/// a que um dia esquece uma delas.
+///
+/// O temporario vai numa PASTA e nao com nome sorteado, porque `import` tira o
+/// nome do asset do `file_name()` do que recebe: um arquivo chamado
+/// `.colado-3f9a.png` viraria um asset com esse nome na biblioteca. Dentro da
+/// pasta ele tem o nome bom, e a pasta e que e sorteada.
+pub fn import_bytes(
+    vault: &Vault,
+    nome: &str,
+    bytes: &[u8],
+    escopo: Option<&str>,
+) -> AppResult<(Vec<AssetMeta>, Vec<String>)> {
+    let nome = nome_colado(nome);
+
+    let pasta = vault
+        .assets_dir()
+        .join(format!(".colando-{}", uuid::Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&pasta)?;
+
+    let caminho = pasta.join(&nome);
+    let saida = std::fs::write(&caminho, bytes)
+        .map_err(AppError::from)
+        .and_then(|()| import(vault, &[caminho], escopo));
+
+    // Sai mesmo se a importacao falhou: a pasta nao pode ficar para tras dentro
+    // de `assets/`, e o erro que importa e o da importacao, nao o da limpeza.
+    if let Err(cause) = std::fs::remove_dir_all(&pasta) {
+        log::warn!("acervo: {} ficou para tras: {cause}", pasta.display());
+    }
+
+    saida
+}
+
+/// O nome que o colado leva para a biblioteca.
+///
+/// So o BASENAME, sem separador de caminho e sem os caracteres que nao viram
+/// arquivo. NAO passa pelo `safe_attachment_name` dos anexos, de proposito:
+/// aquele faz slug, e "Colado 2026-09-23 14h32.png" chegaria na lista como
+/// "colado-2026-09-23-14h32.png". O asset que entra por arrasto guarda o nome do
+/// arquivo como ele e, com espacos e maiusculas -- colar seria a unica entrada
+/// torta na mesma lista.
+fn nome_colado(nome: &str) -> String {
+    let base = nome.rsplit(['/', '\\']).next().unwrap_or(nome).trim();
+
+    let limpo: String = base
+        .chars()
+        .filter(|c| !c.is_control() && !matches!(c, ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .take(120)
+        .collect();
+
+    // So pontos, so espacos, ou vazio: nomes que o sistema de arquivos recusa
+    // ou que apontam para a propria pasta.
+    if limpo.trim().trim_matches('.').is_empty() {
+        return "Colado.png".to_string();
+    }
+
+    limpo
+}
+
 /// Quem assiste a copia, bloco a bloco.
 ///
 /// A copia de um mapa de 80 MB leva segundos, e ate aqui a unica noticia dela
@@ -677,6 +747,73 @@ mod tests {
         std::fs::write(&caminho, conteudo).expect("arquivo");
 
         caminho
+    }
+
+    /// Bytes colados entram no acervo como um arquivo entra, com nome e medidas.
+    ///
+    /// E a afirmacao do caminho de colagem: o temporario nao pode sobrar, e o
+    /// nome do asset tem de ser o nome bom e nao o do arquivo sorteado. Se este
+    /// teste quebrar, colar passou a encher a biblioteca de linhas chamadas
+    /// `.colando-3f9a`.
+    #[test]
+    fn colado_entra_com_nome_e_medidas() {
+        let (_tmp, vault) = campanha();
+
+        let (aceitos, recusados) =
+            import_bytes(&vault, "Colado 2026-09-23 14h32.png", &png(640, 480), None)
+                .expect("import_bytes");
+
+        assert!(recusados.is_empty());
+        assert_eq!(aceitos.len(), 1);
+        assert_eq!(aceitos[0].name, "Colado 2026-09-23 14h32.png");
+        assert_eq!(aceitos[0].kind, "image");
+        assert_eq!(aceitos[0].natural_width, Some(640));
+        assert_eq!(aceitos[0].natural_height, Some(480));
+
+        // O binario ficou onde o acervo o procura.
+        assert!(asset_path(&vault, &aceitos[0]).exists());
+
+        // E nenhuma pasta de trabalho sobrou dentro de `assets/`.
+        let sobras: Vec<_> = std::fs::read_dir(vault.assets_dir())
+            .expect("assets dir")
+            .filter_map(|entrada| entrada.ok())
+            .filter(|entrada| {
+                entrada.file_name().to_string_lossy().starts_with(".colando-")
+            })
+            .collect();
+        assert!(sobras.is_empty(), "sobrou pasta de colagem em assets/");
+    }
+
+    /// Sem extensao no nome, o colado entra como ARQUIVO e nao como imagem.
+    ///
+    /// E o motivo de a ponta de TypeScript sempre carimbar uma extensao: o Rust
+    /// classifica pelo NOME, nunca pelos bytes. Sem ela a imagem entra no
+    /// acervo, some da biblioteca de imagens e nao vai para o mapa -- um
+    /// desaparecimento silencioso, pior do que uma recusa com motivo.
+    #[test]
+    fn colado_sem_extensao_vira_arquivo_e_nao_imagem() {
+        let (_tmp, vault) = campanha();
+
+        let (aceitos, _) =
+            import_bytes(&vault, "sem-extensao", &png(10, 10), None).expect("import_bytes");
+
+        assert_eq!(aceitos.len(), 1);
+        assert_eq!(aceitos[0].kind, "file");
+        assert!(aceitos[0].natural_width.is_none());
+    }
+
+    /// O nome chega inteiro: com espaco, acento e maiuscula.
+    #[test]
+    fn colado_guarda_o_nome_como_veio() {
+        let (_tmp, vault) = campanha();
+
+        let (aceitos, _) =
+            import_bytes(&vault, "../../Mapa da Taverna.png", &png(8, 8), None)
+                .expect("import_bytes");
+
+        // A travessia foi cortada, o nome legivel ficou.
+        assert_eq!(aceitos[0].name, "Mapa da Taverna.png");
+        assert_eq!(aceitos[0].kind, "image");
     }
 
     #[test]

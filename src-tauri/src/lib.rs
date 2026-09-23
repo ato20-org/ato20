@@ -189,6 +189,7 @@ pub fn run() {
             commands::documento_delete,
             commands::asset_list,
             commands::asset_import,
+            commands::asset_import_bytes,
             commands::asset_import_cancelar,
             commands::asset_set_escopo,
             commands::asset_delete,

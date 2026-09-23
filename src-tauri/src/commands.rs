@@ -822,6 +822,62 @@ pub async fn asset_import(
     resultado
 }
 
+/// Teto do que entra COLADO, em bytes.
+///
+/// Nao e o limite do acervo, que e bem maior: e sanidade da ponte. Estes bytes
+/// atravessam o IPC, diferente de toda outra importacao, onde so o CAMINHO
+/// viaja e o arquivo vai de disco a disco. Print de tela real fica em poucos
+/// megabytes; quem tem um mapa de 300 MB o arrasta, e ai nada disso se aplica.
+const MAX_COLADO: usize = 64 * 1024 * 1024;
+
+/// Traz para o acervo bytes que a webview tem na mao.
+///
+/// Existe porque a colagem nao tem arquivo: um print de tela ou uma imagem
+/// copiada do navegador nunca existiu no disco, entao nao ha caminho para
+/// mandar. Toda outra importacao manda o ENDERECO e o arquivo nao passa pela
+/// webview -- ver `asset_import`, e a nota em `importAssets` sobre por que esse
+/// desenho existe.
+///
+/// Recusa em vez de falhar quando passa do teto: quem colou uma imagem enorme
+/// quer saber que ela nao entrou e por que, e nao ver a tela cair.
+#[tauri::command]
+pub async fn asset_import_bytes(
+    state: State<'_, AppState>,
+    nome: String,
+    bytes: Vec<u8>,
+    escopo: Option<String>,
+) -> AppResult<ImportResult> {
+    if bytes.len() > MAX_COLADO {
+        return Ok(ImportResult {
+            aceitos: Vec::new(),
+            recusados: vec![format!(
+                "{nome}: passou de {} MB, o teto do que entra colado. Arraste o arquivo.",
+                MAX_COLADO / (1024 * 1024)
+            )],
+            cancelado: false,
+        });
+    }
+
+    let shared = state.vault.clone();
+
+    // Fora da thread principal, como a outra importacao: gravar e copiar sao
+    // disco, e a janela nao pode esperar por eles.
+    em_segundo_plano(move || {
+        com_vault(&shared, |vault| {
+            let (aceitos, recusados) =
+                assets::import_bytes(vault, &nome, &bytes, escopo.as_deref())?;
+
+            Ok(ImportResult {
+                aceitos,
+                recusados,
+                // Colagem e um arquivo so, e nao ha lote para interromper.
+                cancelado: false,
+            })
+        })
+    })
+    .await
+}
+
 /// Pede para uma importacao parar.
 ///
 /// A copia em andamento e descartada e os arquivos seguintes do lote nem
