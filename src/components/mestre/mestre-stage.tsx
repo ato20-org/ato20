@@ -12,7 +12,7 @@ import {
 import { AlcasDaArea } from "@/components/mestre/alcas-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
-import { LuzLayer } from "@/components/mestre/luz-layer";
+import { ParedeLayer } from "@/components/mestre/parede-layer";
 import {
   AncorasDeSeta,
   RAIO_DE_ENCAIXE_PX,
@@ -45,6 +45,11 @@ import {
   empurrarTracos,
 } from "@/lib/mestre/grupo-sem-alca";
 import { areaDoPoligono } from "@/lib/geometry/area-escondida";
+import {
+  alturaDaParede,
+  METROS_DA_PAREDE_PADRAO,
+  UNIDADES_POR_METRO,
+} from "@/lib/geometry/sombra";
 import { caixaDoTraco } from "@/lib/geometry/limites";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
@@ -148,7 +153,6 @@ import {
   POSTIT_LARGURA,
   SCENE_HEIGHT,
   SCENE_WIDTH,
-  RAIO_DA_LUZ_PADRAO,
   TEXTO_TAMANHO,
   type AncoraRetrato,
   type CanvasItem,
@@ -335,7 +339,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    *
    * Uma prévia PRÓPRIA, e não a caixa de seleção que o resto do palco usa: a
    * caixa é um retângulo azul, e ela não conta nada sobre um círculo nem sobre
-   * um contorno à mão. Ver `LuzLayer`.
+   * um contorno à mão. Ver `ParedeLayer`.
    */
   const [rascunhoDaParede, setRascunhoDaParede] = useState<NewParede | null>(
     null,
@@ -444,10 +448,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   );
   const selectMedidor = useSelectionStore((state) => state.selectMedidor);
   const selectParede = useSelectionStore((state) => state.selectParede);
-  const selectedParedeId = useSelectionStore(
-    (state) => state.selectedParedeId,
-  );
-  const selectLuz = useSelectionStore((state) => state.selectLuz);
+  const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
   const selectPortrait = useSelectionStore((state) => state.selectPortrait);
   const selectPortraits = useSelectionStore((state) => state.selectPortraits);
   const togglePortrait = useSelectionStore((state) => state.togglePortrait);
@@ -459,7 +460,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const removeMedidores = useSceneStore((state) => state.removeMedidores);
   const addParede = useSceneStore((state) => state.addParede);
   const updateParede = useSceneStore((state) => state.updateParede);
-  const addLuz = useSceneStore((state) => state.addLuz);
   const updateFog = useSceneStore((state) => state.updateFog);
   const addTraco = useSceneStore((state) => state.addTraco);
   const removeTracos = useSceneStore((state) => state.removeTracos);
@@ -1614,26 +1614,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     });
   }
 
-  /**
-   * Crava uma luz onde o mestre clicou.
-   *
-   * Clique e não arrasto: a luz não tem tamanho, tem alcance -- e o alcance se
-   * ajusta depois, arrastando o pontilhado. Mesma divisão do alfinete contra a
-   * área escondida.
-   *
-   * A ferramenta se larga, como o alfinete: tocha de mapa vem uma ou duas, e
-   * não quatro em fila.
-   */
-  function acenderLuz(anchor: Vec) {
-    const id = addLuz(scene.id, {
-      x: anchor.x,
-      y: anchor.y,
-      raio: RAIO_DA_LUZ_PADRAO,
-    });
-    selectLuz(id);
-    setTool("select");
-  }
-
   /** Clique num medidor: seleciona e, se arrastar, move inteiro. */
   function onMedidorPointerDown(event: ReactPointerEvent, medidor: Medidor) {
     if (event.button !== 0) return;
@@ -1885,8 +1865,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const area = areaDoPoligono(pontos);
 
     // O mesmo gesto, dois destinos: quem decide é a ferramenta na mão. O laço
-    // desenha uma REGIÃO, e o que essa região significa -- esconder ou parar a
-    // luz -- é a pergunta que a pílula já respondeu.
+    // desenha uma REGIÃO, e o que essa região significa -- esconder ou parar o
+    // sol -- é a pergunta que a pílula já respondeu.
     if (tool === "parede") {
       selectParede(
         addParede(scene.id, {
@@ -2103,11 +2083,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     if (tool === "parede") {
       erguerParede(event, anchor);
-      return;
-    }
-
-    if (tool === "luz") {
-      acenderLuz(anchor);
       return;
     }
 
@@ -2614,7 +2589,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         tool === "borracha" ||
         tool === "regua" ||
         tool === "parede" ||
-        tool === "luz" ||
         Boolean(ferramentaDeExtensao(tool))));
   // Mão aberta sempre que o espaço estiver segurado.
   //
@@ -2709,8 +2683,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       {/* Irmã do `PinLayer` e fora do `SceneLayer` pela mesma razão: a parede
           desenhada é preparação do mestre, e o `SceneLayer` é o componente que
           desenha na TV. O que a mesa recebe é a SOMBRA, não a parede que a
-          fez. Ver `LuzLayer` e `SombraLayer`. */}
-      <LuzLayer scene={scene} panMode={panMode} fantasma={rascunhoDaParede} />
+          fez. Ver `ParedeLayer` e `SombraLayer`. */}
+      <ParedeLayer
+        scene={scene}
+        panMode={panMode}
+        fantasma={rascunhoDaParede}
+      />
 
       {/* Irmã do `PinLayer`, e fora do `SceneLayer` pela mesma razão: o texto
           de um postit é preparação do mestre, e o `SceneLayer` é o mesmo
@@ -2947,6 +2925,37 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             box={{ ...selectedParede, rotation: selectedParede.rotation ?? 0 }}
             onChange={(patch) =>
               updateParede(scene.id, selectedParede.id, patch)
+            }
+            // Quão alto o tijolo sobe. Em metros no controle e em unidade de
+            // cena na cena: ver `UNIDADES_POR_METRO`.
+            altura={{
+              metros: alturaDaParede(selectedParede) / UNIDADES_POR_METRO,
+              onChange: (metros) =>
+                updateParede(scene.id, selectedParede.id, {
+                  // `undefined` no valor padrão, como em toda opcional daqui:
+                  // parede de dois metros é a parede de sempre, e não precisa
+                  // de campo na cena.
+                  altura:
+                    metros === METROS_DA_PAREDE_PADRAO
+                      ? undefined
+                      : metros * UNIDADES_POR_METRO,
+                }),
+            }}
+            // O teto, só na parede que cerca uma área: é ele que decide se o
+            // sol entra no miolo dela. Na `linha` não há miolo, e o botão não
+            // aparece. Ver `semTeto`.
+            teto={
+              selectedParede.formato === "linha"
+                ? undefined
+                : {
+                    coberta: !selectedParede.semTeto,
+                    onToggle: () =>
+                      updateParede(scene.id, selectedParede.id, {
+                        // `undefined` e não `false`: coberta é o padrão, e o
+                        // campo ausente é como ele se escreve na cena.
+                        semTeto: selectedParede.semTeto ? undefined : true,
+                      }),
+                  }
             }
             onDelete={removeParedeSelection}
           />

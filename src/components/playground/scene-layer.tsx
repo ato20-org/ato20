@@ -195,8 +195,10 @@ export function SceneLayer({
         <SombraLayer
           items={items}
           paredes={scene.paredes}
-          luzes={scene.luzes}
           sol={scene.sol}
+          // A mesma dos itens: a sombra de uma figura é a figura, e ela lê o
+          // arquivo que o token já baixou. Ver `SombraDaFigura`.
+          variante={variante}
         />
       )}
 

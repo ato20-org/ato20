@@ -536,16 +536,6 @@ export function removeParedeSelection(): void {
   useSelectionStore.getState().clear();
 }
 
-/** Apaga a luz selecionada. */
-export function removeLuzSelection(): void {
-  const { scene } = read();
-  const luzId = useSelectionStore.getState().selectedLuzId;
-  if (!scene || !luzId) return;
-
-  useSceneStore.getState().removeLuzes(scene.id, [luzId]);
-  useSelectionStore.getState().clear();
-}
-
 /** Apaga o medidor selecionado. */
 export function removeMedidorSelection(): void {
   const { scene } = read();

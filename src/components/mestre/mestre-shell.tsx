@@ -7,6 +7,7 @@ import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
 import logo from "@/assets/logo-white.png";
 
 import { AbrirEspectador } from "@/components/mestre/abrir-espectador";
+import { ConfiguracoesDoMapa } from "@/components/mestre/configuracoes-do-mapa";
 import { PlayersChip } from "@/components/mestre/players-chip";
 import { TableInvite } from "@/components/mestre/table-invite";
 import { DockRow } from "@/components/mestre/dock/dock-row";
@@ -17,6 +18,7 @@ import { MestreStage } from "@/components/mestre/mestre-stage";
 import {
   MestreToolbar,
   ReguaDeDesenho,
+  ReguaDoMapa,
 } from "@/components/mestre/mestre-toolbar";
 import { PaletaDeComandos } from "@/components/mestre/paleta-de-comandos";
 import { PinIndex } from "@/components/mestre/pin-index";
@@ -312,6 +314,19 @@ export function MestreShell() {
                   dock. Um botão para o que já se abre era mobília. */}
               {lendoNota ? null : (
                 <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+                  {/* Na mesma moldura do chip, e antes dele: os dois são
+                      consulta e ajuste, não gesto sobre o mapa. O traço entre
+                      eles é o que separa o que é da CENA -- e troca quando o
+                      mestre troca de mapa -- do que é da SESSÃO, que continua
+                      igual a cena toda.
+
+                      Só no mapa: num quadro não há chão para o sol cair. */}
+                  {editingScene && !ehQuadro(editingScene) ? (
+                    <>
+                      <ConfiguracoesDoMapa scene={editingScene} />
+                      <span className="bg-border mx-1 h-5 w-px" />
+                    </>
+                  ) : null}
                   <PlayersChip />
                 </div>
               )}
@@ -530,6 +545,18 @@ function StageBoundary({
       {scene && !notaAberta ? (
         <div className="absolute top-1/2 left-3 -translate-y-1/2">
           <ReguaDeDesenho scene={scene} />
+        </div>
+      ) : null}
+
+      {/* A régua do MAPA, de frente para a de desenho: o que se marca no chão
+          -- ponto, postit, grade, medida -- à vista na borda direita, no
+          lugar da bolsa do rodapé que só dizia o que tinha dentro depois de
+          aberta.
+
+          Só no mapa: quadro não tem chão. Ver `ReguaDoMapa`. */}
+      {scene && !notaAberta && !ehQuadro(scene) ? (
+        <div className="absolute top-1/2 right-3 -translate-y-1/2">
+          <ReguaDoMapa scene={scene} />
         </div>
       ) : null}
 

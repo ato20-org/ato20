@@ -8,10 +8,15 @@
  *   deslocada para o lado oposto ao da luz: a pegada da figura, e não o recorte
  *   dela. O porquê, com os números que o decidiram, está em `ManchaDaSombra`.
  *
- * - **A da PAREDE** -- o vulto que o segmento joga atrás de si. Essa é
- *   geometria de verdade, e é barata do mesmo jeito: duas pontas, dois raios
- *   saindo da luz, um quadrilátero. Nada de varrer pixel, nada de varrer
- *   ângulo.
+ * - **A da PAREDE** -- a faixa que o segmento deita atrás de si. Essa é
+ *   geometria de verdade, e é barata do mesmo jeito: o segmento copiado e
+ *   empurrado pela altura da parede, um quadrilátero. Nada de varrer pixel,
+ *   nada de varrer ângulo.
+ *
+ * A fonte é UMA e é o sol, que está no infinito: toda sombra do mapa cai para
+ * o mesmo lado e todas são paralelas. Houve tocha aqui -- luz com posição e
+ * alcance, sombra que se abre em leque e esmaece com a distância --, e ela
+ * saiu: ver o histórico deste arquivo se for preciso ressuscitá-la.
  *
  * Tudo aqui é função pura sobre números -- o componente só pinta o que sai
  * daqui. É o que torna a sombra testável sem tela, que é o único jeito de um
@@ -20,30 +25,14 @@
 
 import { paraCena, pontosNaCaixa } from "@/lib/geometry/area-escondida";
 import type { Vec } from "@/lib/geometry/transform";
-import type { CanvasItem, Luz, Parede, Sol } from "@/types/scene";
-import { FORCA_DA_SOMBRA, SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
+import type { CanvasItem, Parede, Sol } from "@/types/scene";
+import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
 
 /** O que a conta precisa saber de um item. O resto -- arquivo, z -- não entra. */
 export type CaixaDaFigura = Pick<
   CanvasItem,
   "x" | "y" | "width" | "height" | "rotation"
 >;
-
-/**
- * O quanto a sombra de uma parede passa da borda do alcance da luz.
- *
- * Quase nada, e isso é medida e não estética: quem apaga a sombra é o degradê
- * do preenchimento, que chega a zero exatamente no raio. Cada ponto além dele é
- * pixel transparente que o motor rasteriza à toa, e a área cresce com o
- * QUADRADO da folga -- com 1,6 eram dois pontos e meio de área pintada para
- * cada ponto que aparece. A folga que sobra é só para o quadrilátero não acabar
- * em cima da linha em que o degradê zera.
- */
-const FOLGA_DA_UMBRA = 1.02;
-
-/** Menor e maior comprimento da sombra sob uma luz pontual, perto e longe dela. */
-const COMPRIMENTO_PERTO = 0.18;
-const COMPRIMENTO_LONGE = 0.6;
 
 const GRAU = Math.PI / 180;
 
@@ -74,16 +63,23 @@ function projetarFigura(
     dx: arredondar(Math.cos(angulo) * alcance),
     dy: arredondar(Math.sin(angulo) * alcance),
     forca: arredondar(forca),
+    angulo: arredondar(anguloGraus),
+    comprimento: arredondar(comprimento),
   };
 }
 
 /**
- * A sombra de uma figura: uma MANCHA no chão, e não a silhueta do arquivo.
+ * A sombra RESERVA de uma figura: uma mancha no chão, no lugar da silhueta.
  *
- * Esta foi a decisão cara do arquivo, e ela veio da bancada. Duas versões
- * anteriores desenhavam a figura de verdade, e as duas custaram quadro no motor
- * em que o aplicativo roda -- medido em `scripts/perf/webview.py`, cenário
- * `mestre-camera`, 40 itens, WebKitGTK 2.52.5, três corridas:
+ * Foi o desenho principal por duas versões, e hoje é o que segura a cena
+ * enquanto a silhueta não ficou pronta -- e para sempre no item cuja imagem não
+ * pôde ser lida. O desenho que vale é a figura deitada: ver `vultoDaFigura` e
+ * `silhueta.ts`, que assa a silhueta uma vez e não custou quadro nenhum.
+ *
+ * O que continua valendo aqui é a razão de NÃO filtrar, e ela veio da bancada.
+ * Duas versões desenhavam a figura com filtro, e as duas custaram quadro no
+ * motor em que o aplicativo roda -- medido em `scripts/perf/webview.py`,
+ * cenário `mestre-camera`, 40 itens, WebKitGTK 2.52.5, três corridas:
  *
  * | desenho                              | fps  | perdidos |
  * | ------------------------------------ | ---- | -------- |
@@ -94,11 +90,12 @@ function projetarFigura(
  * O culpado é o mesmo nos dois: filtro. O palco re-rasteriza a cada quadro em
  * que a câmera anda, e um filtro por item é um passe por item por quadro. A
  * mancha não tem filtro nenhum -- é um degradê de fundo num `div`, que o motor
- * pinta como pinta qualquer caixa.
+ * pinta como pinta qualquer caixa. A silhueta que a substituiu também não tem:
+ * o preto e o desfoque dela são pixel assado fora do quadro.
  *
- * E ela não é um consolo: num mapa visto de CIMA, a sombra de um token é a
- * pegada dele deslocada, e a pegada de um token é redonda. A silhueta só teria
- * razão se a mesa visse a figura de lado.
+ * O que esta mancha já foi, e não era: a pegada do token, redonda porque o mapa
+ * é visto de cima. A pegada até é redonda -- mas a sombra de quem está EM PÉ
+ * não é a pegada dele, é a figura dele deitada, e é ela que a mesa reconhece.
  *
  * Ver a memória "leveza acima de arquitetura".
  */
@@ -118,122 +115,233 @@ const ACHATAMENTO = 0.55;
 const ESTREITAMENTO = 0.82;
 
 /**
- * Quantas manchas uma figura acumula, no máximo. Uma: a da fonte mais forte.
+ * A mancha que esta figura deita sob o sol. `null` sem sol na cena.
  *
- * O número saiu da bancada, não do gosto. Cada mancha é uma caixa com degradê a
- * pintar, e é ela -- não o SVG das paredes -- o que custa quando a câmera anda:
- * no cenário `mestre-camera` da webview, 40 itens, três luzes e nenhuma parede,
- * duas manchas por figura (80 caixas) davam 45,7 fps contra 59,4 sem sombra
- * nenhuma. Com uma, o custo para de crescer com o número de luzes -- quarenta
- * figuras são quarenta manchas, haja uma tocha ou cinco.
- *
- * E o desenho não perde quase nada: duas sombras moles sob o mesmo token se
- * somam num cinza sem forma, que a mesa lê como sujeira no mapa e não como duas
- * fontes de luz. A que vale é a mais forte, que é justamente a que se escolhe.
+ * UMA, e não uma lista: com o sol como única fonte, uma figura tem uma sombra.
+ * Houve um tempo de duas ou três, quando as tochas se somavam ao sol, e o
+ * número era da bancada e não do gosto: cada mancha é uma caixa com degradê a
+ * pintar, e duas por figura (80 caixas, 40 itens) davam 45,7 fps contra 59,4
+ * sem sombra nenhuma no cenário `mestre-camera` da webview.
  */
-const SOMBRAS_POR_FIGURA = 1;
-
-/**
- * As manchas que esta figura deita: a do sol e a das luzes que a alcançam, da
- * mais forte para a mais fraca. Vazio quando não há nenhuma.
- */
-export function manchasDaFigura(
+export function manchaDaFigura(
   item: CaixaDaFigura,
   sol: Sol | undefined,
-  luzes: Luz[],
-): ManchaDaSombra[] {
-  const todas: FiltroDaSombra[] = [];
+): ManchaDaSombra | null {
+  if (!sol) return null;
 
-  if (sol) todas.push(sombraDoSol(item, sol));
+  const sombra = sombraDoSol(item, sol);
 
-  for (const luz of luzes) {
-    const sombra = sombraDaLuz(item, luz);
-    if (sombra) todas.push(sombra);
-  }
-
-  if (todas.length === 0) return [];
-
-  const centroX = item.x + item.width / 2;
-  const centroY = item.y + item.height / 2;
-
-  return todas
-    .sort((a, b) => b.forca - a.forca)
-    .slice(0, SOMBRAS_POR_FIGURA)
-    .map((sombra) => ({
-      x: arredondar(centroX + sombra.dx),
-      y: arredondar(centroY + sombra.dy),
-      largura: arredondar(item.width * ESTREITAMENTO),
-      altura: arredondar(item.height * ACHATAMENTO),
-      forca: sombra.forca,
-    }));
+  return {
+    x: arredondar(item.x + item.width / 2 + sombra.dx),
+    y: arredondar(item.y + item.height / 2 + sombra.dy),
+    largura: arredondar(item.width * ESTREITAMENTO),
+    altura: arredondar(item.height * ACHATAMENTO),
+    forca: sombra.forca,
+  };
 }
 
-/** O deslocamento de uma sombra, antes de virar mancha. */
+/**
+ * O VULTO de uma figura: ela mesma, preta, escorrida no chão a partir dos pés.
+ *
+ * É a sombra que a mesa lê como sombra -- a forma de quem está em pé ali, e não
+ * uma bola embaixo dele. A mancha oval continua existindo e continua sendo o
+ * que se desenha enquanto a silhueta não ficou pronta, ou quando não há figura
+ * de onde tirá-la. Ver `ManchaDaSombra` e `silhuetaDaImagem`.
+ *
+ * O que sai daqui é uma transformação, e de propósito: esticar e esmaecer uma
+ * imagem é trabalho de compositor, e o palco já paga por isso em todo token que
+ * anda. O que NÃO sai daqui é pixel -- esse é assado uma vez, longe do quadro.
+ *
+ * ## Por que ela ESCORRE, e não tomba
+ *
+ * A primeira versão girava a silhueta inteira até a direção da sombra, como
+ * quem derruba um boneco de papelão. Parecia certa com o token em pé e desmontou
+ * no primeiro token GIRADO: a figura deitada no mapa continuava com uma sombra
+ * em pé ao lado, porque o giro do item não entrava em lugar nenhum -- e somá-lo
+ * ao tombo girava a figura duas vezes, mandando a sombra para o lado oposto ao
+ * da luz.
+ *
+ * O que uma sombra faz é outra coisa: o PÉ fica onde está -- ele já está no
+ * chão, e o que está no chão não se projeta -- e cada ponto acima dele corre na
+ * direção da luz na medida da própria altura. A cabeça, que é o ponto mais
+ * alto, corre o máximo. É um cisalhamento, e não um giro:
+ *
+ *     x' = x + (pé − y) · kx
+ *     y' = y + (pé − y) · ky
+ *
+ * Com isso o giro do item não é caso especial nenhum: a imagem é girada ANTES,
+ * exatamente como o token é girado, e o que escorre é a figura já na posição em
+ * que a mesa a vê. Ver `matrizDoVulto`.
+ */
+export type VultoDaFigura = {
+  /** O canto da caixa da figura: o vulto nasce em cima dela. */
+  x: number;
+  y: number;
+  largura: number;
+  altura: number;
+  /**
+   * O quanto a sombra corre, nos dois eixos, por unidade de altura na tela.
+   *
+   * É o `comprimento` da fonte aberto na direção dela: quem está uma unidade
+   * acima do pé cai `kx` para o lado e `ky` para baixo.
+   */
+  kx: number;
+  ky: number;
+  /** De 0 a 1. */
+  forca: number;
+};
+
+export function vultoDaFigura(
+  item: CaixaDaFigura,
+  sol: Sol | undefined,
+): VultoDaFigura | null {
+  if (!sol) return null;
+
+  const fonte = sombraDoSol(item, sol);
+  const angulo = fonte.angulo * GRAU;
+
+  return {
+    x: item.x,
+    y: item.y,
+    largura: item.width,
+    altura: item.height,
+    kx: arredondar(Math.cos(angulo) * fonte.comprimento),
+    ky: arredondar(Math.sin(angulo) * fonte.comprimento),
+    forca: fonte.forca,
+  };
+}
+
+/**
+ * A linha do chão de uma figura, em unidades de cena contadas do topo da caixa.
+ *
+ * É o ponto mais BAIXO da figura na tela: com o token em pé, a sola da bota;
+ * com ele girado, o canto do recorte que o giro levou mais para baixo. Sem esta
+ * conta a sombra de um token deitado saía presa na linha em que as botas
+ * estariam SE ele estivesse em pé -- e o que está abaixo de uma linha dessas
+ * escorre para trás, contra a luz, que é a sombra descolada do corpo.
+ *
+ * Os quatro cantos, e não só os de baixo: qualquer um deles pode ser o mais
+ * baixo depois de um giro qualquer. A caixa gira em torno do centro, como o
+ * token (ver `CanvasItemView`).
+ */
+export function peDaFigura(
+  recorte: { esquerda: number; cima: number; direita: number; baixo: number },
+  largura: number,
+  altura: number,
+  rotation: number,
+): number {
+  const meiaL = largura / 2;
+  const meiaA = altura / 2;
+  const angulo = rotation * GRAU;
+  const cos = Math.cos(angulo);
+  const sen = Math.sin(angulo);
+
+  const xs = [recorte.esquerda * largura, recorte.direita * largura];
+  const ys = [recorte.cima * altura, recorte.baixo * altura];
+
+  let baixo = -Infinity;
+
+  for (const x of xs) {
+    for (const y of ys) {
+      // O canto girado em torno do centro da caixa, e só o Y importa: o que se
+      // procura é a altura na TELA em que a figura encosta no chão.
+      baixo = Math.max(baixo, meiaA + (x - meiaL) * sen + (y - meiaA) * cos);
+    }
+  }
+
+  return arredondar(baixo);
+}
+
+/**
+ * A matriz CSS que escorre a figura, dado onde ela pisa.
+ *
+ * O pé vem da SILHUETA e não da caixa -- é o último pixel desenhado do arquivo,
+ * e quase nenhum token encosta na borda de baixo do próprio PNG. Ver `ancoraY`.
+ *
+ * A forma da matriz sai direto das duas linhas do cabeçalho de `VultoDaFigura`,
+ * com `pe` no lugar de `pé`:
+ *
+ *     x' = 1·x + (−kx)·y + kx·pe
+ *     y' = 0·x + (1−ky)·y + ky·pe
+ *
+ * `d` fica negativo quando a sombra passa de uma altura de comprimento, e isso
+ * é a projeção e não um erro: com o sol rente ao chão a cabeça vai parar do
+ * outro lado do pé, e a figura aparece virada porque é isso que uma sombra
+ * comprida faz.
+ */
+export function matrizDoVulto(vulto: VultoDaFigura, pe: number): string {
+  const { kx, ky } = vulto;
+
+  return `matrix(1, 0, ${-kx}, ${arredondar(1 - ky)}, ${arredondar(kx * pe)}, ${arredondar(ky * pe)})`;
+}
+
+/** O deslocamento de uma sombra, antes de virar mancha ou vulto. */
 export type FiltroDaSombra = {
   /** Deslocamento a partir do centro da figura, em unidades de cena. */
   dx: number;
   dy: number;
   forca: number;
+  /**
+   * Para onde a sombra vai, em graus, e o quanto ela estica em frações da
+   * altura da figura.
+   *
+   * O deslocamento acima é os dois já resolvidos, e serve à mancha: ela é uma
+   * elipse, e elipse não tem para onde apontar. O VULTO precisa dos dois
+   * separados -- ele deita a figura inteira, e deitar é girar e encurtar. Ver
+   * `vultoDaFigura`.
+   */
+  angulo: number;
+  comprimento: number;
 };
 
 /**
  * A sombra que o sol joga desta figura.
  *
- * Nunca devolve nada: o sol alcança a cena inteira, e é essa a diferença dele
- * para a tocha. Duas figuras em cantos opostos do mapa têm sombras PARALELAS.
+ * Nunca devolve nada: o sol alcança a cena inteira, e está no infinito. Duas
+ * figuras em cantos opostos do mapa têm sombras PARALELAS, e é isso que faz a
+ * conta ser a mesma para todas.
  */
 export function sombraDoSol(item: CaixaDaFigura, sol: Sol): FiltroDaSombra {
   return projetarFigura(item, sol.angulo, sol.comprimento, sol.forca);
 }
 
-/** O centro da caixa, que é de onde a luz enxerga a figura. */
-function centroDa(item: CaixaDaFigura): { x: number; y: number } {
-  return { x: item.x + item.width / 2, y: item.y + item.height / 2 };
-}
-
 /**
- * A sombra que esta luz joga desta figura, ou nada se a figura está fora do
- * alcance dela.
+ * A altura de uma parede que não tem altura dita, em unidades de cena.
  *
- * Quanto mais longe da luz, mais comprida e mais fraca -- as duas coisas ao
- * mesmo tempo, que é o que faz a sombra parecer que acaba em vez de ser
- * cortada. E é o que responde à pergunta de sempre numa masmorra: de que lado
- * está a tocha.
- */
-export function sombraDaLuz(
-  item: CaixaDaFigura,
-  luz: Luz,
-): FiltroDaSombra | null {
-  const centro = centroDa(item);
-  const dx = centro.x - luz.x;
-  const dy = centro.y - luz.y;
-  const distancia = Math.hypot(dx, dy);
-
-  if (distancia === 0 || distancia >= luz.raio) return null;
-
-  const proporcao = distancia / luz.raio;
-  const comprimento =
-    COMPRIMENTO_PERTO + proporcao * (COMPRIMENTO_LONGE - COMPRIMENTO_PERTO);
-  const forca = (luz.forca ?? FORCA_DA_SOMBRA) * (1 - proporcao);
-  const angulo = Math.atan2(dy, dx) / GRAU;
-
-  return projetarFigura(item, angulo, comprimento, forca);
-}
-
-/**
- * A altura que uma parede FINGE ter, para o sol saber o quanto dela cai no
- * chão.
+ * A parede é geometria, e não um tijolo -- ela é a informação "aqui a luz
+ * para". Mas o sol precisa de um número para saber quanto de sombra deitar, e
+ * este é o que não obriga o mestre a responder mais uma pergunta: a altura de
+ * um token, mais ou menos o lado de um quadrado de grade. Uma parede de dois
+ * metros, que é o que quase toda parede de mapa é.
  *
- * A parede não tem altura nenhuma -- ela é a informação "aqui a luz para", e
- * não um tijolo. Mas o sol precisa de um número para saber quanto de sombra
- * deitar, e o único que não obriga o mestre a responder mais uma pergunta é
- * este: a altura de um token, mais ou menos o lado de um quadrado de grade. Uma
- * parede de dois metros, que é o que quase toda parede de mapa é.
+ * Era o único número possível, e virou o PADRÃO quando a parede ganhou altura
+ * própria: muro de quintal, mureta de jardim e torre de vigia jogam sombras
+ * muito diferentes, e era a mesma para as três. Ver `altura` em `Parede`.
  */
-const ALTURA_FINGIDA_DA_PAREDE = 110;
+export const ALTURA_DA_PAREDE = 110;
 
 /** Em quantos lados uma elipse é quebrada. Ver `verticesDaParede`. */
 const LADOS_DA_ELIPSE = 24;
+
+/**
+ * Quantos metros vale a parede padrão, e quantas unidades de cena vale um
+ * metro de altura.
+ *
+ * A régua da altura, e ela existe para o controle poder dizer "2,5 m" em vez de
+ * "137". O mestre pensa a parede em metros -- uma mureta, um muro, uma torre --,
+ * e o número de unidades de cena não significa nada para ele.
+ *
+ * Não sai da grade de propósito: grade é opcional e ajustável, e a sombra não
+ * pode mudar de tamanho porque alguém recalibrou o quadrado. Esta régua é a
+ * mesma que `ALTURA_DA_PAREDE` sempre fingiu.
+ */
+export const METROS_DA_PAREDE_PADRAO = 2;
+export const UNIDADES_POR_METRO = ALTURA_DA_PAREDE / METROS_DA_PAREDE_PADRAO;
+
+/** A altura desta parede, em unidades de cena. */
+export function alturaDaParede(parede: FormaDaParede): number {
+  return parede.altura ?? ALTURA_DA_PAREDE;
+}
 
 /** Um pedaço reto de parede: é ele que para a luz. */
 export type Segmento = { x1: number; y1: number; x2: number; y2: number };
@@ -279,7 +387,7 @@ function verticesDaParede(parede: FormaDaParede): { pontos: Vec[]; fechado: bool
     );
   } else if (parede.formato === "elipse") {
     // Quebrada em lados porque a umbra é feita de RETAS: uma elipse de verdade
-    // exigiria uma conta de tangente por luz, e vinte e quatro lados já leem
+    // exigiria uma conta de tangente por fonte, e vinte e quatro lados já leem
     // como curva num mapa.
     for (let i = 0; i < LADOS_DA_ELIPSE; i += 1) {
       const angulo = (i / LADOS_DA_ELIPSE) * Math.PI * 2;
@@ -320,9 +428,97 @@ export function segmentosDaParede(parede: FormaDaParede): Segmento[] {
   return segmentos;
 }
 
-/** Todos os segmentos de todas as paredes, que é o que a sombra consome. */
-function segmentosDe(paredes: Parede[]): Segmento[] {
-  return paredes.flatMap(segmentosDaParede);
+/**
+ * Os segmentos de uma parede que jogam sombra para FORA dela, dada a direção em
+ * que a sombra anda.
+ *
+ * A parede é uma máscara posta em cima da parede já pintada no mapa, e sombra
+ * nenhuma entra na pedra: escurecer o miolo seria escurecer o desenho do mapa.
+ *
+ * A primeira tentativa recortava a pedra com uma máscara SVG, e ela custou o
+ * palco. Medido na bancada da webview (`mestre-camera`, 40 itens, 40 paredes,
+ * sol, `next dev`), três corridas cada:
+ *
+ * | desenho                       | fps  | p95   | perdidos |
+ * | ----------------------------- | ---- | ----- | -------- |
+ * | tudo, com máscara da pedra    | 25,9 |  55ms |     100% |
+ * | tudo, sem recorte nenhum      | 53,5 |  30ms |      20% |
+ * | só as bordas que jogam p/fora | 59,7 |  18ms |     2,2% |
+ *
+ * Mascarar obriga o motor a compor um buffer de alfa do tamanho da sombra a
+ * cada re-raster. A conta abaixo não só é de graça como sai na frente das duas:
+ * são metade das faixas a pintar.
+ *
+ * A conta abaixo é de graça, e é a mesma que um motor 3D faz para achar a
+ * silhueta de um volume de sombra: um lado só projeta para fora se a NORMAL
+ * EXTERNA dele aponta a favor da sombra. Numa sala com o sol a nordeste, os
+ * lados de baixo e da direita jogam para o corredor; os de cima e da esquerda
+ * jogariam para dentro da própria sala, e são justamente os que não entram.
+ *
+ * Com os vértices postos no sentido de área positiva, a normal externa de uma
+ * aresta `a -> b` é `(dy, -dx)`. É por isso que a ordem é normalizada aqui: ela
+ * vem do formato -- retângulo, elipse, laço à mão -- e ninguém garante o
+ * sentido.
+ *
+ * A direção é UMA para a parede inteira, e é a do sol: ele está no infinito, e
+ * de lá todos os lados o veem do mesmo ângulo. Já foi uma função por SEGMENTO,
+ * quando havia tocha -- luz com posição é vista de um ângulo diferente por cada
+ * lado, e com ela acesa dentro do cômodo todos projetam para fora.
+ *
+ * ## Quem devolve tudo
+ *
+ * A `linha`, porque uma reta não tem dentro: os dois lados dela são corredor.
+ *
+ * E o PÁTIO -- a parede descoberta --, porque ali o miolo não é pedra, é chão à
+ * vista: o muro pega sol de um lado e deita a sombra dele para dentro do
+ * quintal, como deita para fora. É a única diferença de desenho entre coberta e
+ * descoberta, e é a que o mestre vê ao apagar a bolinha do teto.
+ */
+export function segmentosQueProjetam(
+  parede: FormaDaParede,
+  direcao: Vec,
+): Segmento[] {
+  const { pontos, fechado } = verticesDaParede(parede);
+  if (pontos.length < 2) return [];
+  if (!fechado || parede.semTeto) return segmentosDaParede(parede);
+
+  let dobro = 0;
+  for (let i = 0; i < pontos.length; i += 1) {
+    const atual = pontos[i]!;
+    const proximo = pontos[(i + 1) % pontos.length]!;
+    dobro += atual.x * proximo.y - proximo.x * atual.y;
+  }
+
+  const ordenados = dobro < 0 ? [...pontos].reverse() : pontos;
+  const fora: Segmento[] = [];
+
+  for (let i = 0; i < ordenados.length; i += 1) {
+    const de = ordenados[i]!;
+    const para = ordenados[(i + 1) % ordenados.length]!;
+    const dx = para.x - de.x;
+    const dy = para.y - de.y;
+    if (dx === 0 && dy === 0) continue;
+
+    const segmento = { x1: de.x, y1: de.y, x2: para.x, y2: para.y };
+    const { x: dirX, y: dirY } = direcao;
+
+    // A normal externa contra a direção da sombra.
+    const cruz = dy * dirX - dx * dirY;
+    if (cruz <= 0) continue;
+
+    /**
+     * O lado PARALELO à sombra não entra, e a conta é por seno e não por zero
+     * cravado: um sol a prumo tem cosseno de 6e-17, e não de zero, então o lado
+     * vertical de um retângulo passava raspando e virava uma faixa de área
+     * nula -- um polígono a pintar que não pinta nada.
+     */
+    const escala = (dx * dx + dy * dy) * (dirX * dirX + dirY * dirY);
+    if (cruz * cruz <= 1e-18 * escala) continue;
+
+    fora.push(segmento);
+  }
+
+  return fora;
 }
 
 /**
@@ -369,10 +565,15 @@ const GROSSURA_DA_LINHA = 22;
  * corpo é uma faixa em volta dela, com `GROSSURA_DA_LINHA` de largura.
  *
  * Só o Mestre vê isto. A mesa recebe a parede para calcular a própria sombra e
- * nunca a desenha -- ver `LuzLayer`.
+ * nunca a desenha -- ver `ParedeLayer`.
  */
 export function corpoDaParede(parede: FormaDaParede): string {
-  if (parede.formato !== "linha") return contornoDaParede(parede);
+  if (parede.formato !== "linha") {
+    const { pontos, fechado } = verticesDaParede(parede);
+    if (!fechado || pontos.length < 3) return "";
+
+    return poligonoOrientado(pontos);
+  }
 
   return segmentosDaParede(parede)
     .map((segmento) => {
@@ -387,28 +588,53 @@ export function corpoDaParede(parede: FormaDaParede): string {
       const nx = (-dy / comprimento) * meia;
       const ny = (dx / comprimento) * meia;
 
-      const cantos: [number, number][] = [
-        [segmento.x1 + nx, segmento.y1 + ny],
-        [segmento.x2 + nx, segmento.y2 + ny],
-        [segmento.x2 - nx, segmento.y2 - ny],
-        [segmento.x1 - nx, segmento.y1 - ny],
-      ];
-
-      return `M${cantos.map(([x, y]) => `${arredondar(x)},${arredondar(y)}`).join("L")}Z`;
+      return poligonoOrientado([
+        { x: segmento.x1 + nx, y: segmento.y1 + ny },
+        { x: segmento.x2 + nx, y: segmento.y2 + ny },
+        { x: segmento.x2 - nx, y: segmento.y2 - ny },
+        { x: segmento.x1 - nx, y: segmento.y1 - ny },
+      ]);
     })
     .join("");
 }
 
 /**
- * Um quadrilátero como caminho SVG, sempre no MESMO sentido.
+ * A PEDRA de todas as paredes num caminho só: onde a sombra não entra.
+ *
+ * A parede que o mestre desenha é uma máscara posta em cima da parede já
+ * pintada no mapa. Escurecer o miolo dela seria escurecer o desenho do mapa --
+ * a pedra apareceria na penumbra enquanto o corredor ao lado está no sol --, e
+ * é a razão de a sombra ser recortada por isto antes de chegar à tela. Ver
+ * `SombraLayer`.
+ *
+ * O que a parede continua fazendo é a sombra do lado de FORA: o vulto dela
+ * atravessa o corredor e cai no chão, e é essa a única coisa que a mesa vê
+ * dela. O teto segue decidindo o quanto disso sai -- com ele, a projeção do
+ * miolo inteiro; sem ele, só a das bordas. Ver `tetoAoSol`.
+ *
+ * Um caminho só, e todos os corpos no mesmo sentido: a máscara é preenchida
+ * pela regra de voltas, e dois corpos sobrepostos em sentidos contrários se
+ * anulariam -- um buraco na máscara é um pedaço de pedra que volta a escurecer.
+ */
+export function pedraDasParedes(paredes: Parede[]): string {
+  return paredes.map(corpoDaParede).join("");
+}
+
+/**
+ * Um polígono como caminho SVG, sempre no MESMO sentido.
  *
  * O sentido decide se duas umbras que se cruzam se somam ou se anulam: a regra
  * padrão de preenchimento conta voltas com sinal, e um quadrilátero horário
  * sobre outro anti-horário dá zero -- um BURACO no meio da sombra. Numa parede
  * fechada, cujos lados projetam para lados diferentes, isso acontecia sempre, e
  * era o que fazia a sombra não ter nada a ver com o formato.
+ *
+ * Quase sempre são quatro pontos -- a faixa de um segmento. O teto de uma
+ * parede fechada entra aqui com o contorno INTEIRO, e pela mesma razão: ele se
+ * soma às faixas no mesmo caminho, e um sentido trocado ali abriria justamente
+ * o furo que ele veio tapar.
  */
-function quadrilatero(pontos: { x: number; y: number }[]): string {
+function poligonoOrientado(pontos: { x: number; y: number }[]): string {
   // Área com sinal: negativa quer dizer que este saiu ao contrário dos outros,
   // e basta lê-lo de trás para frente.
   let area = 0;
@@ -428,30 +654,54 @@ function quadrilatero(pontos: { x: number; y: number }[]): string {
 /**
  * A faixa que um segmento joga no chão sob o sol.
  *
- * Sem luz pontual não há projeção que se abre: o sol está no infinito, e os
- * dois raios são PARALELOS. A sombra é o próprio segmento, copiado e empurrado.
+ * Não há projeção que se abre: o sol está no infinito, e os dois raios são
+ * PARALELOS. A sombra é o próprio segmento, copiado e empurrado pela altura da
+ * parede.
  */
-function umbraAoSol(segmento: Segmento, dx: number, dy: number): string {
-  return quadrilatero([
+function umbraAoSol(segmento: Segmento, topo: Vec): string {
+  return poligonoOrientado([
     { x: segmento.x1, y: segmento.y1 },
-    { x: segmento.x1 + dx, y: segmento.y1 + dy },
-    { x: segmento.x2 + dx, y: segmento.y2 + dy },
+    { x: segmento.x1 + topo.x, y: segmento.y1 + topo.y },
+    { x: segmento.x2 + topo.x, y: segmento.y2 + topo.y },
     { x: segmento.x2, y: segmento.y2 },
   ]);
 }
 
-/** Todas as faixas do sol num caminho só. Ver `umbrasDaLuz`. */
+/**
+ * Todas as faixas do sol num caminho SÓ.
+ *
+ * Um caminho e não um por parede porque sombras que se cruzam não podem
+ * escurecer duas vezes: no mesmo `path`, com `fill-rule` padrão, a união é uma
+ * figura só, e o canto onde duas paredes se encontram fica com a mesma cor do
+ * meio do corredor. Em elementos separados, ele ficaria preto.
+ *
+ * Cada parede joga a sua na medida da PRÓPRIA altura: mureta de jardim e torre
+ * de vigia lado a lado deitam sombras diferentes, que é o que faz um mapa ter
+ * relevo. Ver `altura` em `Parede`.
+ */
 export function umbrasDoSol(paredes: Parede[], sol: Sol): string {
   if (sol.comprimento === 0) return "";
 
   const angulo = sol.angulo * GRAU;
-  const alcance = sol.comprimento * ALTURA_FINGIDA_DA_PAREDE;
-  const dx = arredondar(Math.cos(angulo) * alcance);
-  const dy = arredondar(Math.sin(angulo) * alcance);
+  const cos = Math.cos(angulo);
+  const sen = Math.sin(angulo);
+  const aoSol = { x: cos, y: sen };
 
-  return segmentosDe(paredes)
-    .map((segmento) => umbraAoSol(segmento, dx, dy))
-    .join("");
+  const faixas: string[] = [];
+
+  for (const parede of paredes) {
+    const alcance = sol.comprimento * alturaDaParede(parede);
+    const topo = {
+      x: arredondar(cos * alcance),
+      y: arredondar(sen * alcance),
+    };
+
+    for (const segmento of segmentosQueProjetam(parede, aoSol)) {
+      faixas.push(umbraAoSol(segmento, topo));
+    }
+  }
+
+  return faixas.join("");
 }
 
 /**
@@ -460,14 +710,19 @@ export function umbrasDoSol(paredes: Parede[], sol: Sol): string {
  * Existe por medida, e não por elegância: o SVG que pinta as umbras
  * re-rasteriza a cada quadro em que a câmera anda, e um SVG do tamanho do plano
  * são 2,07 milhões de pixels por quadro mesmo quando a sombra ocupa um canto.
- * No cenário `mestre-camera` da webview, com 40 itens, 3 luzes e 40 paredes, o
- * plano inteiro dava 49,2 fps contra 59,4 sem sombra nenhuma.
+ * No cenário `mestre-camera` da webview, com 40 itens e 40 paredes, o plano
+ * inteiro dava 49,2 fps contra 59,4 sem sombra nenhuma.
  *
  * Presa ao plano porque nada pode transbordar dele -- é a regra que já derrubou
  * o Mestre três vezes (`debug-do-palco` §3). O corte também é o que mantém o
- * raster pequeno quando a luz está na beirada do mapa.
+ * raster pequeno quando as paredes estão todas num canto do mapa.
  */
-export type CaixaDaUmbra = { x: number; y: number; width: number; height: number };
+export type CaixaDaUmbra = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 function presaAoPlano(
   x: number,
@@ -512,22 +767,6 @@ export function uniaoDasCaixas(
 }
 
 /**
- * A caixa da sombra de uma luz: o alcance dela, e nada além.
- *
- * O quadrilátero da umbra mal passa do raio (ver `FOLGA_DA_UMBRA`), e o degradê
- * já o apagou na borda -- o que passa do raio não pinta nada, e não precisa de
- * pixel reservado.
- */
-export function caixaDaLuz(luz: Luz): CaixaDaUmbra | null {
-  return presaAoPlano(
-    luz.x - luz.raio,
-    luz.y - luz.raio,
-    luz.x + luz.raio,
-    luz.y + luz.raio,
-  );
-}
-
-/**
  * A caixa das faixas do sol: as paredes, mais o quanto a sombra delas anda.
  */
 export function caixaDoSol(paredes: Parede[], sol: Sol): CaixaDaUmbra | null {
@@ -552,7 +791,10 @@ export function caixaDoSol(paredes: Parede[], sol: Sol): CaixaDaUmbra | null {
   }
 
   const angulo = sol.angulo * GRAU;
-  const alcance = sol.comprimento * ALTURA_FINGIDA_DA_PAREDE;
+  // A parede mais ALTA do mapa decide até onde a sombra pode chegar, e a caixa
+  // tem de caber a maior delas.
+  const maisAlta = Math.max(...paredes.map(alturaDaParede));
+  const alcance = sol.comprimento * maisAlta;
   const dx = Math.cos(angulo) * alcance;
   const dy = Math.sin(angulo) * alcance;
 
@@ -562,129 +804,4 @@ export function caixaDoSol(paredes: Parede[], sol: Sol): CaixaDaUmbra | null {
     Math.max(direita, direita + dx),
     Math.max(baixo, baixo + dy),
   );
-}
-
-/**
- * O pedaço de um segmento que cai DENTRO do alcance da luz. `null` se nenhum.
- *
- * Existe porque projetar uma ponta que está fora do círculo é o que fazia a
- * sombra não bater com a parede. A conta empurra cada ponta para longe da luz
- * até a borda do alcance; numa ponta que já passou dessa borda, "até a borda" é
- * para TRÁS, e o quadrilátero saía virado do avesso -- um vulto atravessando a
- * própria parede, apontando para a luz. A versão anterior tentava contornar
- * isso largando a ponta de fora onde estava e desenhando um triângulo, o que
- * dava uma figura que não é a sombra de nada.
- *
- * Recortando antes, as duas pontas estão sempre dentro, e daí em diante a
- * projeção é a mesma conta simples para todos os casos.
- */
-function recortarNoCirculo(segmento: Segmento, luz: Luz): Segmento | null {
-  const dx = segmento.x2 - segmento.x1;
-  const dy = segmento.y2 - segmento.y1;
-  const fx = segmento.x1 - luz.x;
-  const fy = segmento.y1 - luz.y;
-
-  // |A + t·d - L|² = r², em t.
-  const a = dx * dx + dy * dy;
-  if (a === 0) return null;
-
-  const b = 2 * (fx * dx + fy * dy);
-  const c = fx * fx + fy * fy - luz.raio * luz.raio;
-  const delta = b * b - 4 * a * c;
-
-  // Sem raiz real: a reta inteira passa longe do círculo.
-  if (delta < 0) return null;
-
-  const raiz = Math.sqrt(delta);
-  const entrada = Math.max(0, (-b - raiz) / (2 * a));
-  const saida = Math.min(1, (-b + raiz) / (2 * a));
-
-  // O trecho aceso é vazio: o segmento está todo fora do alcance.
-  if (saida <= entrada) return null;
-
-  return {
-    x1: segmento.x1 + dx * entrada,
-    y1: segmento.y1 + dy * entrada,
-    x2: segmento.x1 + dx * saida,
-    y2: segmento.y1 + dy * saida,
-  };
-}
-
-/**
- * O vulto que um segmento joga para trás, visto desta luz. `null` quando ele
- * não recebe luz nenhuma.
- *
- * Quatro pontos: as duas pontas do trecho ACESO e as duas projeções delas, cada
- * uma empurrada para longe da luz na reta que sai dela. Nenhum ângulo é
- * varrido, e nenhum pixel é lido -- um segmento custa duas raízes quadradas.
- *
- * O quadrilátero passa da borda do alcance de propósito. Ver `FOLGA_DA_UMBRA`,
- * e `quadrilatero` para o porquê de todos saírem no mesmo sentido.
- */
-export function umbraDoSegmento(segmento: Segmento, luz: Luz): string | null {
-  const aceso = recortarNoCirculo(segmento, luz);
-  if (!aceso) return null;
-
-  const raio = (x: number, y: number) => {
-    const dx = x - luz.x;
-    const dy = y - luz.y;
-    const distancia = Math.hypot(dx, dy);
-    // A luz exatamente em cima da ponta: não há direção para onde empurrar.
-    if (distancia === 0) return null;
-    return { dx: dx / distancia, dy: dy / distancia, distancia };
-  };
-
-  const raio1 = raio(aceso.x1, aceso.y1);
-  const raio2 = raio(aceso.x2, aceso.y2);
-  if (!raio1 || !raio2) return null;
-
-  /**
-   * A borda longe da umbra é uma CORDA, e corda entra no círculo.
-   *
-   * Empurrar as duas pontas até a mesma distância deixa o meio da borda mais
-   * perto da luz do que as pontas -- e quanto mais aberto o ângulo que o
-   * segmento abre visto da luz, maior o afundamento. Numa parede perto da
-   * tocha, isso comia a sombra bem no meio dela. Dividir pelo cosseno da metade
-   * do ângulo empurra a corda para fora na medida exata, sem pintar área à toa
-   * nos segmentos estreitos, que são a maioria.
-   */
-  const cosseno = raio1.dx * raio2.dx + raio1.dy * raio2.dy;
-  const metade = Math.sqrt(Math.max(0, (1 + cosseno) / 2));
-  const alcance = (luz.raio * FOLGA_DA_UMBRA) / Math.max(metade, 0.25);
-
-  const projetar = (
-    x: number,
-    y: number,
-    direcao: { dx: number; dy: number; distancia: number },
-  ) => {
-    // Aditivo, e não "até o raio": depois do recorte a ponta está dentro, então
-    // a sobra é positiva e a projeção nunca volta para trás.
-    const sobra = Math.max(0, alcance - direcao.distancia);
-    return { x: x + direcao.dx * sobra, y: y + direcao.dy * sobra };
-  };
-
-  const longe1 = projetar(aceso.x1, aceso.y1, raio1);
-  const longe2 = projetar(aceso.x2, aceso.y2, raio2);
-
-  return quadrilatero([
-    { x: aceso.x1, y: aceso.y1 },
-    longe1,
-    longe2,
-    { x: aceso.x2, y: aceso.y2 },
-  ]);
-}
-
-/**
- * Todas as umbras desta luz num caminho SÓ.
- *
- * Um caminho e não um por parede porque sombras que se cruzam não podem
- * escurecer duas vezes: no mesmo `path`, com `fill-rule` padrão, a união é uma
- * figura só, e o canto onde duas paredes se encontram fica com a mesma cor do
- * meio do corredor. Em elementos separados, ele ficaria preto.
- */
-export function umbrasDaLuz(paredes: Parede[], luz: Luz): string {
-  return segmentosDe(paredes)
-    .map((segmento) => umbraDoSegmento(segmento, luz))
-    .filter((caminho) => caminho !== null)
-    .join("");
 }

@@ -173,7 +173,7 @@ export type CanvasItem = {
    */
   opacity?: number;
   /**
-   * Este item NÃO lança sombra. Ausente = lança, se a cena tiver luz.
+   * Este item NÃO lança sombra. Ausente = lança, se a cena tiver sol.
    *
    * Existe porque metade do que se põe num mapa está pintado no chão e não em
    * pé nele: a marca de sangue, o tapete, o mapa dentro do mapa, a área de
@@ -952,46 +952,48 @@ export type Parede = {
    * A mesma convenção da forma do quadro.
    */
   diagonal?: "secundaria";
+  /**
+   * Quão alta ela é, em unidades de cena. Ausente = `ALTURA_DA_PAREDE`.
+   *
+   * Muda a SOMBRA, e só ela: a parede continua sendo geometria de chão -- onde
+   * a luz para --, e nada no mapa fica mais perto ou mais longe por causa
+   * disto. Mas uma mureta de jardim e uma torre de vigia jogam sombras muito
+   * diferentes, e até aqui as duas jogavam a mesma.
+   *
+   * Em unidade de cena, como todo o resto da geometria, e não em metros: o
+   * controle é que traduz, porque metro é a régua de quem mestra. Ver
+   * `UNIDADES_POR_METRO`.
+   *
+   */
+  altura?: number;
+  /**
+   * A parede é DESCOBERTA: não tem laje em cima. Ausente = é coberta.
+   *
+   * É a diferença entre "esta massa é coberta" e "este muro cerca um quintal", e
+   * o que ela decide é se a sombra entra no MIOLO.
+   *
+   * A parede coberta é uma máscara posta em cima da parede já pintada no mapa, e
+   * escurecer o miolo dela seria escurecer o desenho: ali só as bordas que jogam
+   * para fora projetam. No pátio o miolo é chão à vista, e a sombra do muro cai
+   * dentro dele como cai para fora. Ver `segmentosQueProjetam`.
+   *
+   * Coberta por padrão porque é o que a massa de uma parede é: quem desenha um
+   * pátio diz isso na bolinha do gizmo.
+   *
+   * Não vale para a `linha`, que não tem interior.
+   */
+  semTeto?: boolean;
 };
 
 export type NewParede = Omit<Parede, "id">;
 
 /**
- * Uma luz cravada no mapa: a tocha da parede, a fogueira, a fresta da porta.
- *
- * Tem POSIÇÃO, e é isso que a separa do `Sol`: a sombra que ela lança aponta
- * para longe dela, então dois tokens em lados opostos da fogueira têm sombras
- * em sentidos opostos. Com o sol, as duas sombras seriam paralelas.
- *
- * O `raio` não é só alcance: é o que dá fim à sombra. Sem escuridão de
- * ambiente -- o mapa continua com o brilho cheio --, a sombra de uma parede
- * precisa acabar em algum lugar, e acaba desmaiando na borda do alcance. Ver
- * `SombraLayer`.
- *
- * Mora na CENA e viaja para a mesa, como a névoa e o risco: a sombra é desenho
- * do mapa, não anotação do mestre. O que não viaja é o DESENHO da luz -- a
- * bolinha que o mestre arrasta --, que só existe no palco dele.
- */
-export type Luz = {
-  id: string;
-  /** Onde a luz está, em coordenadas de cena. */
-  x: number;
-  y: number;
-  /** Até onde ela alcança, em unidades de cena. Fora disso não há sombra. */
-  raio: number;
-  /** Quão escura é a sombra dela, de 0 a 1. Ausente = `FORCA_DA_SOMBRA`. */
-  forca?: number;
-};
-
-export type NewLuz = Omit<Luz, "id">;
-
-/**
  * O sol da cena: luz sem posição, só direção.
  *
- * Uma cena tem no máximo um, e ele é o caso barato: sem posição não há
- * projeção a calcular por token, e a sombra de todo mundo é a mesma figura
- * deitada para o mesmo lado. É o que dá volume a um mapa a céu aberto por
- * quase nada.
+ * Uma cena tem no máximo um, e ele é a ÚNICA fonte do mapa. Sem posição não há
+ * projeção a calcular por token: a sombra de todo mundo é a mesma figura
+ * deitada para o mesmo lado. É o que dá volume a um mapa a céu aberto por quase
+ * nada.
  *
  * Ausente é o estado normal, e não um esquecimento: mapa de masmorra não tem
  * sol, e token de pacote quase sempre já traz uma sombra pintada no próprio
@@ -1015,9 +1017,6 @@ export type Sol = {
 
 /** Quão escura uma sombra é quando ninguém disse. */
 export const FORCA_DA_SOMBRA = 0.45;
-
-/** O alcance de uma luz recém-cravada, em unidades de cena. */
-export const RAIO_DA_LUZ_PADRAO = 320;
 
 /**
  * O sol que nasce quando o mestre liga o sol.
@@ -1526,13 +1525,13 @@ export type Scene = {
    * assim a sombra não depende de o canal republicar a cena a cada passo.
    */
   paredes?: Parede[];
-  /** As luzes cravadas no mapa. Ausente = nenhuma. Ver `Luz`. */
-  luzes?: Luz[];
   /**
    * O sol da cena. Ausente = sem sol, que é o normal. Ver `Sol`.
    *
-   * Um, e não uma lista: dois sóis são duas direções, e duas direções é o que
-   * a luz pontual já faz -- com posição, que é o que dá sentido a elas.
+   * Um, e não uma lista: dois sóis são duas direções, e duas direções sobre o
+   * mesmo mapa é o que ninguém sabe ler -- cada figura sairia com duas sombras
+   * cruzadas. Houve tocha aqui, luz com posição e alcance, e ela saiu: o mapa
+   * tem uma fonte, e ela está no céu.
    */
   sol?: Sol;
   /**

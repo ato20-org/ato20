@@ -155,7 +155,7 @@ type Natureza = (typeof NATUREZAS)[number]["chave"];
  * necessidade nas três -- a parede de uma caverna, a mancha de uma clareira.
  * Com o vocabulário compartilhado, ele entrou nas três de uma vez.
  *
- * O que NÃO entrou: alfinete, postit, luz, régua, lápis e borracha. Nenhum
+ * O que NÃO entrou: alfinete, postit, régua, lápis e borracha. Nenhum
  * deles responde às duas perguntas daqui -- são cravar, colar, acender, medir,
  * riscar e apagar, e cada um já é um alvo direto onde está.
  */

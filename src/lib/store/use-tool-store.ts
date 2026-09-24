@@ -51,15 +51,11 @@ export type Tool =
   | "lapis"
   | "borracha"
   | "regua"
-  // As duas da LUZ: `parede` traça o segmento em que a luz para, no arrasto, e
-  // `luz` crava uma fonte no clique. Mesma divisão de gesto das duas de mira:
-  // a parede tem comprimento, a luz não tem tamanho nenhum -- pedir um arrasto
-  // para cravar uma tocha faria o mestre desenhar uma caixa invisível.
-  //
-  // As duas são do MAPA e só dele: num quadro não há chão em que a sombra
-  // caia.
+  // `parede` traça, no arrasto, o segmento em que a luz para. É do MAPA e só
+  // dele: num quadro não há chão em que a sombra caia. Teve uma irmã, a `luz`,
+  // que cravava uma tocha no clique; ela saiu junto com a luz pontual, e a
+  // fonte da cena passou a ser só o sol.
   | "parede"
-  | "luz"
   // As três do QUADRO: `texto` escreve direto na folha no clique, `ligacao`
   // amarra duas coisas com uma seta em dois cliques -- de onde, para onde --, e
   // `forma` desenha retângulo, elipse ou linha no arrasto, conforme

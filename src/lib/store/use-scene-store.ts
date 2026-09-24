@@ -73,8 +73,6 @@ import {
   type NewDocumento,
   type Nota,
   type NewMedidor,
-  type Luz,
-  type NewLuz,
   type NewParede,
   type Parede,
   type Sol,
@@ -352,14 +350,6 @@ type SceneStore = {
   ) => void;
   /** Apaga várias de uma vez, como a borracha faz com os riscos. */
   removeParedes: (sceneId: string, paredeIds: string[]) => void;
-  /** Crava uma luz. Devolve o id, para o palco já deixá-la selecionada. */
-  addLuz: (sceneId: string, luz: NewLuz) => string;
-  updateLuz: (
-    sceneId: string,
-    luzId: string,
-    patch: Partial<Omit<Luz, "id">>,
-  ) => void;
-  removeLuzes: (sceneId: string, luzIds: string[]) => void;
   /**
    * Liga, ajusta ou desliga o sol da cena. `undefined` desliga.
    *
@@ -1366,43 +1356,6 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         return {
           ...scene,
           paredes: restantes.length > 0 ? restantes : undefined,
-        };
-      });
-    },
-
-    addLuz(sceneId, luz) {
-      const id = novoId();
-
-      get().updateScene(sceneId, (scene) => ({
-        ...scene,
-        luzes: [...(scene.luzes ?? []), { ...luz, id }],
-      }));
-
-      return id;
-    },
-
-    updateLuz(sceneId, luzId, patch) {
-      get().updateScene(sceneId, (scene) => ({
-        ...scene,
-        luzes: (scene.luzes ?? []).map((luz) =>
-          luz.id === luzId ? { ...luz, ...patch } : luz,
-        ),
-      }));
-    },
-
-    removeLuzes(sceneId, luzIds) {
-      if (luzIds.length === 0) return;
-
-      const apagar = new Set(luzIds);
-
-      get().updateScene(sceneId, (scene) => {
-        const restantes = (scene.luzes ?? []).filter(
-          (luz) => !apagar.has(luz.id),
-        );
-
-        return {
-          ...scene,
-          luzes: restantes.length > 0 ? restantes : undefined,
         };
       });
     },

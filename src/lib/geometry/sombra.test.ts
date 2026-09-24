@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALTURA_DA_PAREDE,
   contornoDaParede,
+  matrizDoVulto,
+  peDaFigura,
   corpoDaParede,
-  manchasDaFigura,
+  manchaDaFigura,
   segmentosDaParede,
-  sombraDaLuz,
   sombraDoSol,
-  umbraDoSegmento,
-  umbrasDaLuz,
   umbrasDoSol,
+  vultoDaFigura,
 } from "@/lib/geometry/sombra";
 import type { CaixaDaFigura } from "@/lib/geometry/sombra";
-import type { Luz, Parede, Sol } from "@/types/scene";
+import type { Parede, Sol } from "@/types/scene";
 
 const FIGURA: CaixaDaFigura = {
   x: 500,
@@ -40,89 +41,129 @@ describe("sombraDoSol", () => {
   it("alcança qualquer figura: o sol não tem raio", () => {
     expect(sombraDoSol({ ...FIGURA, x: 0, y: 0 }, sol).dx).toBeGreaterThan(0);
   });
-
 });
 
-describe("sombraDaLuz", () => {
-  const luz: Luz = { id: "l1", x: 550, y: 350, raio: 400 };
-
-  it("aponta para longe da luz", () => {
-    // Luz à esquerda da figura: a sombra tem de ir para a direita.
-    const sombra = sombraDaLuz(FIGURA, { ...luz, x: 250, y: 350 });
-    expect(sombra).not.toBeNull();
-    expect(sombra!.dx).toBeGreaterThan(0);
-  });
-
-  it("dois lados da mesma luz dão sentidos opostos", () => {
-    const esquerda = sombraDaLuz({ ...FIGURA, x: 300 }, luz);
-    const direita = sombraDaLuz({ ...FIGURA, x: 800 }, luz);
-
-    expect(esquerda!.dx).toBeLessThan(0);
-    expect(direita!.dx).toBeGreaterThan(0);
-  });
-
-  it("figura fora do alcance não tem sombra nenhuma", () => {
-    expect(sombraDaLuz({ ...FIGURA, x: 5000 }, luz)).toBeNull();
-  });
-
-  it("mais longe da luz é mais comprida e mais fraca", () => {
-    const luzNoCanto: Luz = { ...luz, x: 0, y: 350, raio: 2000 };
-    const perto = sombraDaLuz({ ...FIGURA, x: 200 }, luzNoCanto)!;
-    const longe = sombraDaLuz({ ...FIGURA, x: 1200 }, luzNoCanto)!;
-
-    expect(longe.dx).toBeGreaterThan(perto.dx);
-    expect(longe.forca).toBeLessThan(perto.forca);
-  });
-});
-
-describe("manchasDaFigura", () => {
+describe("manchaDaFigura", () => {
   const sol: Sol = { angulo: 0, comprimento: 0.5, forca: 0.4 };
-  const luz: Luz = { id: "l1", x: 250, y: 350, raio: 400, forca: 0.5 };
 
-  it("sem sol e sem luz, mancha nenhuma", () => {
-    expect(manchasDaFigura(FIGURA, undefined, [])).toEqual([]);
+  it("sem sol, mancha nenhuma", () => {
+    expect(manchaDaFigura(FIGURA, undefined)).toBeNull();
   });
 
   it("a mancha sai do CENTRO da figura, empurrada", () => {
-    const [mancha] = manchasDaFigura(FIGURA, sol, []);
+    const mancha = manchaDaFigura(FIGURA, sol)!;
     // Centro da caixa em 550,350; o sol a 0° empurra para a direita.
     expect(mancha.x).toBeGreaterThan(550);
     expect(mancha.y).toBeCloseTo(350, 1);
   });
 
   it("é mais achatada e mais estreita que a caixa", () => {
-    const [mancha] = manchasDaFigura(FIGURA, sol, []);
+    const mancha = manchaDaFigura(FIGURA, sol)!;
     expect(mancha.largura).toBeLessThan(FIGURA.width);
     expect(mancha.altura).toBeLessThan(mancha.largura);
   });
 
-  it("com sol e luz fica só a MAIS FORTE", () => {
-    const manchas = manchasDaFigura(FIGURA, sol, [luz]);
-    expect(manchas).toHaveLength(1);
-    // A luz aqui é mais forte que o sol, e é a que sobra: a sombra sai para a
-    // direita da figura, que é o lado oposto ao dela.
-    expect(manchas[0].x).toBeGreaterThan(550);
-  });
-
-  it("uma por figura, haja uma tocha ou cinco", () => {
-    const outras: Luz[] = [
-      { ...luz, id: "l2", forca: 0.45 },
-      { ...luz, id: "l3", forca: 0.3 },
-      { ...luz, id: "l4", forca: 0.2 },
-    ];
-    expect(manchasDaFigura(FIGURA, sol, outras)).toHaveLength(1);
-  });
-
-  it("luz fora do alcance não entra", () => {
-    const distante: Luz = { ...luz, x: 5000, y: 5000 };
-    expect(manchasDaFigura(FIGURA, undefined, [distante])).toEqual([]);
-  });
-
-  it("girar o token não gira a sombra: ela cai para onde a luz manda", () => {
-    const reto = manchasDaFigura(FIGURA, sol, [])[0];
-    const torto = manchasDaFigura({ ...FIGURA, rotation: 90 }, sol, [])[0];
+  it("girar o token não gira a sombra: ela cai para onde o sol manda", () => {
+    const reto = manchaDaFigura(FIGURA, sol)!;
+    const torto = manchaDaFigura({ ...FIGURA, rotation: 90 }, sol)!;
     expect(torto.x).toBeCloseTo(reto.x, 1);
     expect(torto.y).toBeCloseTo(reto.y, 1);
+  });
+});
+
+describe("vultoDaFigura", () => {
+  /** Sombra para a DIREITA, de meia altura. */
+  const sol: Sol = { angulo: 0, comprimento: 0.5, forca: 0.4 };
+
+  /** Onde um ponto vai parar depois da matriz. Ver `matrizDoVulto`. */
+  function aplicar(
+    matriz: string,
+    ponto: { x: number; y: number },
+  ): { x: number; y: number } {
+    const [a, b, c, d, e, f] = matriz
+      .slice("matrix(".length, -1)
+      .split(",")
+      .map(Number) as [number, number, number, number, number, number];
+
+    return {
+      x: a * ponto.x + c * ponto.y + e,
+      y: b * ponto.x + d * ponto.y + f,
+    };
+  }
+
+  it("sem sol, vulto nenhum", () => {
+    expect(vultoDaFigura(FIGURA, undefined)).toBeNull();
+  });
+
+  it("nasce em cima da caixa da figura: é ela escorrendo, e não outra coisa", () => {
+    const vulto = vultoDaFigura(FIGURA, sol)!;
+
+    expect(vulto.x).toBe(FIGURA.x);
+    expect(vulto.y).toBe(FIGURA.y);
+    expect(vulto.largura).toBe(FIGURA.width);
+    expect(vulto.altura).toBe(FIGURA.height);
+  });
+
+  it("corre na direção do sol, e na medida do comprimento dele", () => {
+    // Para a direita: tudo no eixo X, nada no Y.
+    expect(vultoDaFigura(FIGURA, sol)).toMatchObject({ kx: 0.5, ky: 0 });
+    // E para baixo: o contrário.
+    const baixo = vultoDaFigura(FIGURA, { ...sol, angulo: 90 })!;
+    expect(baixo.kx).toBeCloseTo(0, 5);
+    expect(baixo.ky).toBe(0.5);
+  });
+
+  it("o pé fica parado: o que já está no chão não se projeta", () => {
+    const vulto = vultoDaFigura(FIGURA, sol)!;
+    const pe = 380;
+
+    expect(aplicar(matrizDoVulto(vulto, pe), { x: 100, y: pe })).toEqual({
+      x: 100,
+      y: pe,
+    });
+  });
+
+  it("a cabeça corre o máximo, porque é o ponto mais alto", () => {
+    const vulto = vultoDaFigura(FIGURA, { ...sol, angulo: 90 })!;
+    const pe = 400;
+    const matriz = matrizDoVulto(vulto, pe);
+
+    // Do alto da caixa até o pé são 400 de altura, e o comprimento é meia
+    // altura: a cabeça desce 200 -- para baixo, que é para onde o sol manda.
+    expect(aplicar(matriz, { x: 50, y: 0 })).toEqual({ x: 50, y: 200 });
+    // O meio do corpo corre metade disso: o escorrido é proporcional à altura.
+    expect(aplicar(matriz, { x: 50, y: 200 })).toEqual({ x: 50, y: 300 });
+  });
+
+  it("a força é a mesma da mancha: as duas saem da mesma fonte", () => {
+    const vulto = vultoDaFigura(FIGURA, sol)!;
+    const mancha = manchaDaFigura(FIGURA, sol)!;
+
+    expect(vulto.forca).toBe(mancha.forca);
+  });
+});
+
+describe("peDaFigura", () => {
+  /** Uma figura na metade de cima da caixa, e estreita: o giro tem o que mexer. */
+  const recorte = { esquerda: 0.25, cima: 0, direita: 0.75, baixo: 0.5 };
+  const largura = 200;
+  const altura = 400;
+
+  it("em pé, o chão é a linha de baixo do recorte", () => {
+    expect(peDaFigura(recorte, largura, altura, 0)).toBe(200);
+  });
+
+  it("de cabeça para baixo, quem encosta no chão é o topo", () => {
+    expect(peDaFigura(recorte, largura, altura, 180)).toBe(400);
+  });
+
+  it("deitado, é o canto lateral que manda", () => {
+    // A um quarto de volta, o lado direito do recorte é o que desceu.
+    expect(peDaFigura(recorte, largura, altura, 90)).toBe(250);
+  });
+
+  it("meia volta e meia volta de novo é a mesma figura", () => {
+    expect(peDaFigura(recorte, largura, altura, 360)).toBeCloseTo(200, 1);
   });
 });
 
@@ -238,8 +279,9 @@ describe("corpoDaParede", () => {
     };
 
     // Quatro cantos em volta da reta, e não a reta: uma parede de espessura
-    // zero não se vê.
-    expect(corpoDaParede(reta)).toBe("M100,111L300,111L300,89L100,89Z");
+    // zero não se vê. A ordem é a normalizada, porque o corpo vira máscara --
+    // ver `pedraDasParedes`.
+    expect(corpoDaParede(reta)).toBe("M100,89L300,89L300,111L100,111Z");
   });
 });
 
@@ -267,7 +309,7 @@ function pontosDe(caminho: string): { x: number; y: number }[] {
     });
 }
 
-/** Positiva = sentido horário na tela. Ver `umbraDoSegmento`. */
+/** Positiva = sentido horário na tela. Ver `poligonoOrientado`. */
 function areaComSinal(pontos: { x: number; y: number }[]): number {
   let area = 0;
   for (let i = 0; i < pontos.length; i += 1) {
@@ -277,126 +319,6 @@ function areaComSinal(pontos: { x: number; y: number }[]): number {
   }
   return area / 2;
 }
-
-describe("umbraDoSegmento", () => {
-  const luz: Luz = { id: "l1", x: 0, y: 0, raio: 500 };
-  const segmento = { x1: 100, y1: 100, x2: 200, y2: 100 };
-
-  it("fecha um quadrilátero: as duas pontas e as duas projeções", () => {
-    const pontos = pontosDe(umbraDoSegmento(segmento, luz)!);
-    expect(pontos).toHaveLength(4);
-  });
-
-  it("projeta as pontas para LONGE da luz", () => {
-    const pontos = pontosDe(umbraDoSegmento(segmento, luz)!);
-    const distancias = pontos
-      .map((ponto) => Math.hypot(ponto.x, ponto.y))
-      .sort((a, b) => a - b);
-
-    // Duas pontas perto (as da parede) e duas longe (as projeções).
-    expect(distancias[0]).toBeCloseTo(Math.hypot(100, 100), 0);
-    expect(distancias[3]).toBeGreaterThan(luz.raio);
-  });
-
-  it("a borda longe fica FORA do alcance inteira, e não só nas pontas", () => {
-    // Um segmento largo visto de perto: é o caso em que a borda afundava no
-    // meio e comia a sombra bem no centro dela.
-    const largo = { x1: -200, y1: 60, x2: 200, y2: 60 };
-    const pontos = pontosDe(umbraDoSegmento(largo, luz)!);
-    const longe = pontos
-      .filter((ponto) => Math.hypot(ponto.x, ponto.y) > luz.raio)
-      .sort((a, b) => a.x - b.x);
-
-    expect(longe).toHaveLength(2);
-
-    // O meio da corda entre as duas projeções também tem de passar do raio.
-    const meio = {
-      x: (longe[0]!.x + longe[1]!.x) / 2,
-      y: (longe[0]!.y + longe[1]!.y) / 2,
-    };
-    expect(Math.hypot(meio.x, meio.y)).toBeGreaterThan(luz.raio);
-  });
-
-  it("segmento fora do alcance não faz sombra", () => {
-    expect(
-      umbraDoSegmento({ x1: 900, y1: 900, x2: 950, y2: 900 }, luz),
-    ).toBeNull();
-  });
-
-  it("uma ponta dentro e outra fora: recorta no círculo e projeta as duas", () => {
-    const atravessa = { x1: 100, y1: 100, x2: 900, y2: 900 };
-    const pontos = pontosDe(umbraDoSegmento(atravessa, luz)!);
-
-    // Quadrilátero, e não o triângulo torto que a versão anterior desenhava.
-    expect(pontos).toHaveLength(4);
-
-    // Nenhuma ponta da parede passa do alcance: o que estava fora foi cortado.
-    const perto = pontos
-      .map((ponto) => Math.hypot(ponto.x, ponto.y))
-      .filter((distancia) => distancia <= luz.raio + 1);
-    expect(perto).toHaveLength(2);
-  });
-
-  it("todas saem no MESMO sentido, senão duas que se cruzam viram buraco", () => {
-    const sala: Parede = {
-      id: "p",
-      x: 100,
-      y: 100,
-      width: 200,
-      height: 150,
-      formato: "retangulo",
-    };
-
-    const areas = segmentosDaParede(sala)
-      .map((segmento) => umbraDoSegmento(segmento, luz))
-      .filter((caminho) => caminho !== null)
-      .map((caminho) => areaComSinal(pontosDe(caminho)));
-
-    expect(areas).toHaveLength(4);
-    // Nenhuma negativa. Zero é legítimo e é geometria: o lado PARALELO ao sol
-    // não joga sombra nenhuma -- ele e a cópia dele ficam na mesma reta.
-    for (const area of areas) expect(area).toBeGreaterThanOrEqual(0);
-    expect(areas.filter((area) => area > 0).length).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe("umbrasDaLuz", () => {
-  const luz: Luz = { id: "l1", x: 0, y: 0, raio: 500 };
-
-  it("junta tudo num caminho só, para o cruzamento não escurecer duas vezes", () => {
-    const paredes: Parede[] = [
-      { id: "p1", x: 100, y: 100, width: 100, height: 0, formato: "linha" },
-      { id: "p2", x: 100, y: 100, width: 0, height: 100, formato: "linha" },
-    ];
-    const caminho = umbrasDaLuz(paredes, luz);
-    expect(caminho.match(/M/g)).toHaveLength(2);
-    expect(caminho.match(/Z/g)).toHaveLength(2);
-  });
-
-  it("um retângulo dá quatro umbras, uma por lado", () => {
-    const sala: Parede = {
-      id: "p",
-      x: 100,
-      y: 100,
-      width: 120,
-      height: 120,
-      formato: "retangulo",
-    };
-    expect(umbrasDaLuz([sala], luz).match(/M/g)).toHaveLength(4);
-  });
-
-  it("sem parede alcançada, caminho vazio", () => {
-    const longe: Parede = {
-      id: "p",
-      x: 800,
-      y: 800,
-      width: 100,
-      height: 100,
-      formato: "linha",
-    };
-    expect(umbrasDaLuz([longe], luz)).toBe("");
-  });
-});
 
 describe("umbrasDoSol", () => {
   const sol: Sol = { angulo: 90, comprimento: 0.5, forca: 0.4 };
@@ -413,10 +335,12 @@ describe("umbrasDoSol", () => {
     // Ângulo 90 = para baixo: as duas pontas descem o MESMO tanto, porque o
     // sol não tem posição de onde os raios se abram. A ordem dos pontos é a
     // normalizada -- ver `quadrilatero`.
-    expect(umbrasDoSol([parede], sol)).toBe("M300,100L300,155L100,155L100,100Z");
+    expect(umbrasDoSol([parede], sol)).toBe(
+      "M300,100L300,155L100,155L100,100Z",
+    );
   });
 
-  it("todas saem no mesmo sentido, como as da luz", () => {
+  it("todas saem no mesmo sentido", () => {
     const sala: Parede = {
       id: "p",
       x: 100,
@@ -431,14 +355,99 @@ describe("umbrasDoSol", () => {
       .filter(Boolean)
       .map((pedaco) => areaComSinal(pontosDe(`M${pedaco}`)));
 
-    expect(areas).toHaveLength(4);
-    // Nenhuma negativa. Zero é legítimo e é geometria: o lado PARALELO ao sol
-    // não joga sombra nenhuma -- ele e a cópia dele ficam na mesma reta.
-    for (const area of areas) expect(area).toBeGreaterThanOrEqual(0);
-    expect(areas.filter((area) => area > 0)).toHaveLength(2);
+    // Uma faixa: dos quatro lados, dois jogariam para dentro da pedra e o
+    // terceiro corre paralelo ao sol. Ver `segmentosQueProjetam`.
+    expect(areas).toHaveLength(1);
+    // Todas pintam: o lado paralelo ao sol não entra mais -- ele e a cópia
+    // dele ficariam na mesma reta. Ver `segmentosQueProjetam`.
+    for (const area of areas) expect(area).toBeGreaterThan(0);
   });
 
   it("sol rente ao chão não desenha faixa nenhuma", () => {
     expect(umbrasDoSol([parede], { ...sol, comprimento: 0 })).toBe("");
+  });
+});
+
+describe("a altura da parede", () => {
+  /** Para baixo, e do tamanho da altura: a sombra mede o que a parede tem. */
+  const sol: Sol = { angulo: 90, comprimento: 1, forca: 0.4 };
+  const muro: Parede = {
+    id: "p",
+    x: 100,
+    y: 100,
+    width: 200,
+    height: 0,
+    formato: "linha",
+  };
+
+  /** O ponto mais baixo do caminho: é até onde a sombra chegou. */
+  function ateOndeDesce(caminho: string): number {
+    return Math.max(...pontosDe(caminho).map((ponto) => ponto.y));
+  }
+
+  it("sem altura dita, a sombra é a da parede padrão", () => {
+    expect(ateOndeDesce(umbrasDoSol([muro], sol))).toBe(100 + ALTURA_DA_PAREDE);
+  });
+
+  it("parede mais alta joga sombra mais longa, na mesma medida", () => {
+    const torre: Parede = { ...muro, altura: ALTURA_DA_PAREDE * 3 };
+
+    expect(ateOndeDesce(umbrasDoSol([torre], sol))).toBe(
+      100 + ALTURA_DA_PAREDE * 3,
+    );
+  });
+
+  it("mureta joga sombra curta", () => {
+    const mureta: Parede = { ...muro, altura: 30 };
+
+    expect(ateOndeDesce(umbrasDoSol([mureta], sol))).toBe(130);
+  });
+});
+
+describe("o teto da parede", () => {
+  /** Para baixo, e curto: o deslocamento não cobre o miolo da torre. */
+  const sol: Sol = { angulo: 90, comprimento: 0.5, forca: 0.4 };
+  const torre: Parede = {
+    id: "p",
+    x: 100,
+    y: 100,
+    width: 200,
+    height: 200,
+    formato: "retangulo",
+  };
+
+  it("coberta, a sombra não entra no miolo: ele é pedra do mapa", () => {
+    // Sol a prumo: dos quatro lados, só o de baixo joga para fora. Os outros
+    // cairiam dentro da própria pedra. Ver `segmentosQueProjetam`.
+    expect(umbrasDoSol([torre], sol).match(/M/g)).toHaveLength(1);
+  });
+
+  it("descoberta, o muro deita a sombra dentro do pátio também", () => {
+    const patio: Parede = { ...torre, semTeto: true };
+
+    // Ali o miolo é chão à vista, e todos os lados projetam -- é o desenho de
+    // antes do teto existir.
+    expect(umbrasDoSol([patio], sol).match(/M/g)).toHaveLength(4);
+  });
+
+  it("a sombra sai só das bordas que jogam para fora", () => {
+    // Sol a prumo, para baixo: quem projeta é o lado de baixo da torre. Os
+    // outros três jogariam para dentro da própria pedra.
+    expect(umbrasDoSol([torre], sol).match(/M/g)).toHaveLength(1);
+  });
+
+  it("a linha projeta dos dois lados: uma reta não tem dentro", () => {
+    const reta: Parede = {
+      id: "p",
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 0,
+      formato: "linha",
+    };
+
+    expect(umbrasDoSol([reta], sol)).toBe(
+      umbrasDoSol([{ ...reta, semTeto: true }], sol),
+    );
   });
 });
