@@ -6,10 +6,11 @@ const STORAGE_KEY = "ato20:handout";
 
 /**
  * Abaixo do saquinho, na mesma margem: as duas bolinhas nascem empilhadas
- * numa coluna à direita, e o mestre leva cada uma para onde quiser. Ver
- * `POSICAO_PADRAO` em `useDadosStore`.
+ * numa coluna à direita, e o mestre leva cada uma para onde quiser. A coluna é
+ * um palmo para dentro da borda, que é da régua do mapa. Ver `POSICAO_PADRAO`
+ * em `useDadosStore`.
  */
-const POSICAO_PADRAO = { x: 0.955, y: 0.52 };
+const POSICAO_PADRAO = { x: 0.88, y: 0.52 };
 
 type Posicao = { x: number; y: number };
 
