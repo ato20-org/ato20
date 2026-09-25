@@ -100,4 +100,39 @@ describe("destinoAceito", () => {
       destinoAceito(mapaCom(token()), { ...movimento, x: 100, y: 100 }),
     ).toBeNull();
   });
+
+  it("gira o token no lugar: o gesto de girar repete o x e o y", () => {
+    expect(
+      destinoAceito(mapaCom(token()), { ...movimento, x: 100, y: 100, rotation: 90 }),
+    ).toEqual({ x: 100, y: 100, rotation: 90 });
+  });
+
+  it("normaliza o ângulo: -30 e 720 são 330 e 0", () => {
+    const parado = { ...movimento, x: 100, y: 100 };
+
+    expect(destinoAceito(mapaCom(token()), { ...parado, rotation: -30 })).toEqual({
+      x: 100,
+      y: 100,
+      rotation: 330,
+    });
+    // 720 normaliza para 0, que é o ângulo em que o token já está: nada muda.
+    expect(destinoAceito(mapaCom(token()), { ...parado, rotation: 720 })).toBeNull();
+  });
+
+  it("não devolve ângulo quando o gesto foi só de arrastar", () => {
+    // Ausente é diferente de zero: um arrasto não endireita token torto.
+    const scene = mapaCom(token({ rotation: 45 }));
+    expect(destinoAceito(scene, movimento)).toEqual({ x: 300, y: 200 });
+  });
+
+  it("recusa o movimento inteiro quando o ângulo não é número", () => {
+    expect(
+      destinoAceito(mapaCom(token()), { ...movimento, rotation: Number.NaN }),
+    ).toBeNull();
+  });
+
+  it("recusa girar token travado, como recusa arrastá-lo", () => {
+    const scene = mapaCom(token({ locked: true }));
+    expect(destinoAceito(scene, { ...movimento, x: 100, y: 100, rotation: 90 })).toBeNull();
+  });
 });

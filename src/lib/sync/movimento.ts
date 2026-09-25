@@ -1,3 +1,4 @@
+import { normalizeAngle } from "@/lib/geometry/transform";
 import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
 import { ehQuadro, type CanvasItem, type Scene, type Viewport } from "@/types/scene";
 
@@ -16,6 +17,18 @@ export type MovimentoDoJogador = {
   /** O canto do item, em unidades de cena, como em `CanvasItem`. */
   x: number;
   y: number;
+  /**
+   * O giro do token, em graus, quando o gesto foi de GIRAR.
+   *
+   * Ausente quando o jogador só arrastou -- e ausente é diferente de zero:
+   * mandar `0` em toda amostra de arrasto endireitaria um token que o mestre
+   * deixou torto, a cada passo, sem ninguém pedir.
+   *
+   * Viaja junto de `x` e `y` porque é o mesmo gesto do ponto de vista da mesa:
+   * uma amostra do token, dez por segundo. Girando, `x` e `y` repetem o lugar
+   * em que ele já está.
+   */
+  rotation?: number;
 };
 
 /**
@@ -87,15 +100,24 @@ export function podePegar(
  * O destino é preso ao limite de novo, mesmo que o celular já o tenha preso:
  * a regra tem de valer para quem não é o celular deste aplicativo.
  *
- * `null` também quando o item já está lá -- um movimento que não muda nada não
- * deve acordar o histórico nem o disco.
+ * `null` também quando o item já está lá, no lugar E no ângulo -- um movimento
+ * que não muda nada não deve acordar o histórico nem o disco.
  */
 export function destinoAceito(
   scene: Scene,
-  movimento: Pick<MovimentoDoJogador, "personagemId" | "itemId" | "x" | "y">,
-): { x: number; y: number } | null {
+  movimento: Pick<
+    MovimentoDoJogador,
+    "personagemId" | "itemId" | "x" | "y" | "rotation"
+  >,
+): { x: number; y: number; rotation?: number } | null {
   if (ehQuadro(scene)) return null;
   if (!Number.isFinite(movimento.x) || !Number.isFinite(movimento.y)) return null;
+  // Presente e sem valor de ângulo derruba o movimento inteiro, como `x` e `y`:
+  // aceitar o resto e descartar o giro faria o token andar obedecendo metade de
+  // um pedido que já se sabe quebrado.
+  if (movimento.rotation !== undefined && !Number.isFinite(movimento.rotation)) {
+    return null;
+  }
 
   const item = scene.items.find((candidato) => candidato.id === movimento.itemId);
   if (!item || item.locked || item.personagemId !== movimento.personagemId) {
@@ -109,7 +131,20 @@ export function destinoAceito(
     limiteDoMovimento(scene),
   );
 
-  if (destino.x === item.x && destino.y === item.y) return null;
+  // Normalizado aqui também, e não só no celular: 720 graus e -30 desenham o
+  // mesmo token, e guardar o número cru faria a volta comparar diferente do que
+  // foi mandado -- o celular esperaria um eco que nunca chegaria igual.
+  const giro =
+    movimento.rotation === undefined
+      ? undefined
+      : normalizeAngle(movimento.rotation);
 
-  return destino;
+  const parado =
+    destino.x === item.x &&
+    destino.y === item.y &&
+    (giro === undefined || giro === normalizeAngle(item.rotation));
+
+  if (parado) return null;
+
+  return giro === undefined ? destino : { ...destino, rotation: giro };
 }
