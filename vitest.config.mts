@@ -25,7 +25,9 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   test: {
-    include: ["src/lib/**/*.test.ts"],
+    // `types` junto com `lib`: o contrato da cena guarda função pura também --
+    // o que cada tipo de cena sabe fazer, e o que a cópia dela não leva junto.
+    include: ["src/{lib,types}/**/*.test.ts"],
     // Sem DOM: nada aqui toca em `window`, e pedir jsdom só cobraria segundos
     // de arranque a cada rodada.
     environment: "node",

@@ -37,9 +37,10 @@ export function PainelVazio({
   /**
    * O ícone, para o vazio que não é de uma janela.
    *
-   * Existe para as ABAS de dentro de um painel -- Áreas, dentro de Mapas. Elas
-   * não têm janela própria, então não têm ícone em `iconeDaJanela`, e o
-   * desenho que serve ali é outro que não o da janela que as hospeda.
+   * Existe para o vazio que não mora numa janela do catálogo -- uma aba de
+   * dentro de um painel, uma seção de Configurações. Esses não têm ícone em
+   * `iconeDaJanela`, e o desenho que serve ali é outro que não o da janela
+   * que os hospeda.
    */
   icone?: LucideIcon;
   /**

@@ -37,6 +37,10 @@ import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
 import {
   ehQuadro,
+  temAnotacao,
+  temMedida,
+  temNevoa,
+  temSol,
   type FormatoDeArea,
   type Scene,
   type TipoDeForma,
@@ -324,9 +328,13 @@ function reguaDeMedir(scene: Scene): Ferramenta {
  * esta, "o que eu marco no chão". Um canto para cada, e nenhuma delas atravessa
  * o rodapé, que continua sendo do PALCO.
  *
- * Só no MAPA. Quadro não tem chão: nem ponto, nem grade, nem medida.
- * O postit dele é conteúdo, e por isso mora na régua da esquerda -- ver
- * `DA_REGUA`.
+ * Fora do QUADRO, que não tem chão: nem ponto, nem grade, nem medida. O postit
+ * dele é conteúdo, e por isso mora na régua da esquerda -- ver `DA_REGUA`.
+ *
+ * No FUNDO ela aparece pela metade: ponto e postit ficam -- anotar sobre a
+ * imagem é o mesmo gesto de anotar sobre o mapa --, e a grade e a medida saem
+ * com o separador. A régua inteira sumir no fundo tiraria do mestre o único
+ * lugar onde ele guarda o que a mesa não vê.
  */
 export function ReguaDoMapa({ scene }: { scene: Scene }) {
   const dasExtensoes = useFerramentasDeExtensao();
@@ -344,15 +352,20 @@ export function ReguaDoMapa({ scene }: { scene: Scene }) {
 
       {/* A grade e a medida depois do risco: as duas são sobre o CHÃO e não
           sobre o que se crava nele, e a régua só mede porque a grade diz
-          quanto vale um quadrado. */}
-      <span className="bg-border my-1 h-px w-5" />
+          quanto vale um quadrado. O separador vai junto com elas: sem isso o
+          fundo ficaria com um risco solto no pé da régua. */}
+      {temMedida(scene) ? (
+        <>
+          <span className="bg-border my-1 h-px w-5" />
 
-      <GridControl scene={scene} lado="left" />
-      <BotaoDeFerramenta
-        ferramenta={regua}
-        desabilitada={!scene.grid}
-        dica="left"
-      />
+          <GridControl scene={scene} lado="left" />
+          <BotaoDeFerramenta
+            ferramenta={regua}
+            desabilitada={!scene.grid}
+            dica="left"
+          />
+        </>
+      ) : null}
 
       {dasExtensoes.length > 0 ? (
         <>
@@ -429,7 +442,7 @@ export function ReguaDeDesenho({ scene }: { scene: Scene }) {
           círculo e traço livre, cada um virando parede, área escondida ou
           elemento. O que sobra na régua abaixo dela são os alvos diretos, que
           não têm desenho a escolher. Ver `PilulaDeDesenho`. */}
-      <PilulaDeDesenho quadro={quadro} />
+      <PilulaDeDesenho scene={scene} />
 
       <span className="bg-border my-1 h-px w-5" />
 
@@ -517,25 +530,24 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
 
   const [aberta, setAberta] = useState<"palco" | null>(null);
 
-  const quadro = ehQuadro(scene);
-
   // Trocar de um mapa para um quadro com a névoa na mão deixaria a ferramenta
   // ativa sem botão na barra -- e o clique seguinte cobriria o quadro de preto.
+  //
+  // Uma linha por FERRAMENTA, e cada uma pergunta pela capacidade que ela usa.
+  // Era uma condição só, com as quatro do mapa de um lado e a seta do outro, e
+  // ela dizia a verdade enquanto os tipos eram dois: no fundo, a névoa e a
+  // medida caem mas o alfinete FICA, e a lista única largaria os três juntos.
   useEffect(() => {
-    if (
-      quadro &&
-      (tool === "fog" ||
-        tool === "regua" ||
-        tool === "pin" ||
-        // Parede é do chão, e quadro não tem chão: ver `Tool`.
-        tool === "parede")
-    )
-      setTool("select");
-    // E o inverso: só a SETA agora. A letra e a forma atravessam a troca de
-    // cena porque valem nos dois lados -- ver `FERRAMENTAS_DE_DESENHO` --, e
-    // largá-las aqui faria o mestre perder a ferramenta ao ir buscar um mapa.
-    if (!quadro && tool === "ligacao") setTool("select");
-  }, [quadro, tool, setTool]);
+    if (tool === "fog" && !temNevoa(scene)) setTool("select");
+    if (tool === "regua" && !temMedida(scene)) setTool("select");
+    // Parede é do chão, e o chão que a tem é o do mapa: ver `Tool`.
+    if (tool === "parede" && !temSol(scene)) setTool("select");
+    if (tool === "pin" && !temAnotacao(scene)) setTool("select");
+    // A letra e a forma atravessam a troca de cena porque valem nos três --
+    // ver `FERRAMENTAS_DE_DESENHO` --, e largá-las aqui faria o mestre perder
+    // a ferramenta ao ir buscar um mapa.
+    if (tool === "ligacao" && !ehQuadro(scene)) setTool("select");
+  }, [scene, tool, setTool]);
 
   // A ferramenta ativa da bolsa, para o botão dela mostrar.
   const daBolsa = (lista: Ferramenta[]) =>

@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import type * as React from "react";
 import { ChevronDown, FolderSymlink, PackageOpen } from "lucide-react";
 import { toast } from "sonner";
 
+import { CapaDaCampanha } from "@/components/mestre/capa-da-campanha";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,6 +38,14 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
   const close = useCampaignStore((state) => state.close);
   const exportar = useCampaignStore((state) => state.exportar);
 
+  /**
+   * Controlado só para o submenu da capa não existir com o menu fechado.
+   *
+   * Ele assina a lista de cenas, e a barra de título não pode redesenhar a
+   * cada mutação do board. Ver `CapaDaCampanha`.
+   */
+  const [aberto, setAberto] = useState(false);
+
   if (!campaign) return null;
 
   function exportarCampanha() {
@@ -50,7 +60,7 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
 
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      <DropdownMenu>
+      <DropdownMenu open={aberto} onOpenChange={setAberto}>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -77,6 +87,10 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
         </Tooltip>
 
         <DropdownMenuContent align="start" className="w-56">
+          {aberto ? <CapaDaCampanha /> : null}
+
+          <DropdownMenuSeparator />
+
           <DropdownMenuItem onClick={exportarCampanha}>
             <PackageOpen />
             Exportar campanha

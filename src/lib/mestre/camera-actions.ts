@@ -13,7 +13,7 @@ import {
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import { ehQuadro, type CameraSalva, type Scene, type Viewport } from "@/types/scene";
+import { temCamera, type CameraSalva, type Scene, type Viewport } from "@/types/scene";
 
 /**
  * De quanto a câmera anda por toque de seta, como fração da própria largura.
@@ -65,7 +65,7 @@ const MARGEM_SELECAO = 0.35;
  */
 function lerCena(): Scene | null {
   const scene = selectEditingScene(useSceneStore.getState());
-  return scene && ehQuadro(scene) ? null : scene;
+  return scene && temCamera(scene) ? scene : null;
 }
 
 /** A câmera que o mestre está editando, ou nada antes da cena abrir. */

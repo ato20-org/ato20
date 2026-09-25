@@ -21,6 +21,7 @@ import {
   ReguaDoMapa,
 } from "@/components/mestre/mestre-toolbar";
 import { PaletaDeComandos } from "@/components/mestre/paleta-de-comandos";
+import { AreasIndex } from "@/components/mestre/areas-index";
 import { PinIndex } from "@/components/mestre/pin-index";
 import { HandoutMestre } from "@/components/mestre/handout-mestre";
 import { SaquinhoDados } from "@/components/mestre/saquinho-dados";
@@ -61,7 +62,7 @@ import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { retratosDaCena } from "@/lib/geometry/portrait";
 import {
   selectEditingScene,
-  selectLiveScene,
+  selectCenaParaMesa,
   useSceneStore,
 } from "@/lib/store/use-scene-store";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
@@ -69,7 +70,14 @@ import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import { ehQuadro, type Scene } from "@/types/scene";
+import {
+  ehQuadro,
+  temAnotacao,
+  temCamera,
+  temNevoa,
+  temSol,
+  type Scene,
+} from "@/types/scene";
 import { NotaEditor } from "@/components/mestre/editor-markdown";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 
@@ -89,7 +97,9 @@ export function MestreShell() {
   // Com nota aberta o palco não está na tela: índice de pontos e chip de
   // jogadores são do palco, e sobre um editor de texto seriam mobília.
   const lendoNota = useArquivoAbertoStore((state) => state.notaId !== null);
-  const liveScene = useSceneStore(selectLiveScene);
+  // A que a mesa vê, e não a que o mestre pôs no ar: sem nada no ar, é a capa
+  // da campanha que sobe. Ver `selectCenaParaMesa`.
+  const cenaParaMesa = useSceneStore(selectCenaParaMesa);
 
   const leftOpen = usePanelsStore((state) => state.left);
   const rightOpen = usePanelsStore((state) => state.right);
@@ -116,7 +126,7 @@ export function MestreShell() {
 
   // A cena no ar acende o ambiente que ela lembra, e a bandeja de disparos
   // vence sozinha. Ver `useSomDaMesa`.
-  useSomDaMesa(liveScene?.id);
+  useSomDaMesa(cenaParaMesa?.id);
 
   const guardados = usePortraitStore((state) => state.portraits);
   const { personagens } = useCharacters();
@@ -148,8 +158,13 @@ export function MestreShell() {
    */
   const portraits = useMemo(
     () =>
-      retratosDaCena(guardados, liveScene?.items ?? [], personagens ?? [], fontes),
-    [guardados, liveScene?.items, personagens, fontes],
+      retratosDaCena(
+        guardados,
+        cenaParaMesa?.items ?? [],
+        personagens ?? [],
+        fontes,
+      ),
+    [guardados, cenaParaMesa?.items, personagens, fontes],
   );
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
@@ -190,7 +205,7 @@ export function MestreShell() {
   // `useRolagensDaMesa` escuta, e sai daqui com o personagem já resolvido. O
   // Mestre continua sendo quem publica -- aqui ele é mensageiro.
   usePublisher({
-    scene: liveScene,
+    scene: cenaParaMesa,
     track,
     ambientes,
     disparos,
@@ -281,8 +296,8 @@ export function MestreShell() {
               {leftOpen ? null : (
                 <FloatingPanelToggle
                   onToggle={toggleLeft}
-                  // "o painel esquerdo", e não "Cenas e áreas": o que mora na
-                  // coluna agora é escolha do mestre, e o rótulo mentiria no
+                  // "o painel esquerdo", e não o nome do que está nele: o que
+                  // mora na coluna é escolha do mestre, e o rótulo mentiria no
                   // dia em que ele arrastasse Cenas para o outro lado.
                   label="o painel esquerdo"
                   icon={<PanelLeftOpen />}
@@ -290,8 +305,15 @@ export function MestreShell() {
               )}
 
               {/* Quadro não tem ponto de anotação: o índice deles some com ele. */}
-              {editingScene && !lendoNota && !ehQuadro(editingScene) ? (
+              {editingScene && !lendoNota && temAnotacao(editingScene) ? (
                 <PinIndex scene={editingScene} />
+              ) : null}
+
+              {/* E ao lado dele as áreas, que eram uma aba do painel de Cenas.
+                  Os dois são consulta sobre a cena ABERTA, e revelar área é
+                  gesto de mesa -- acontece olhando o mapa. Ver `AreasIndex`. */}
+              {editingScene && !lendoNota && temNevoa(editingScene) ? (
+                <AreasIndex scene={editingScene} />
               ) : null}
             </div>
 
@@ -321,7 +343,7 @@ export function MestreShell() {
                       igual a cena toda.
 
                       Só no mapa: num quadro não há chão para o sol cair. */}
-                  {editingScene && !ehQuadro(editingScene) ? (
+                  {editingScene && temSol(editingScene) ? (
                     <>
                       <ConfiguracoesDoMapa scene={editingScene} />
                       <span className="bg-border mx-1 h-5 w-px" />
@@ -554,7 +576,7 @@ function StageBoundary({
           aberta.
 
           Só no mapa: quadro não tem chão. Ver `ReguaDoMapa`. */}
-      {scene && !notaAberta && !ehQuadro(scene) ? (
+      {scene && !notaAberta && temAnotacao(scene) ? (
         <div className="absolute top-1/2 right-3 -translate-y-1/2">
           <ReguaDoMapa scene={scene} />
         </div>
@@ -566,7 +588,7 @@ function StageBoundary({
               e enquadrar um pedaço dele é o contrário do que ele serve para
               fazer. Os controles de zoom ficam nos dois -- eles são do palco
               do mestre, e não da mesa. Ver `lerCena` em `camera-actions`. */}
-          {ehQuadro(scene) ? null : <CamerasSalvas scene={scene} />}
+          {temCamera(scene) ? <CamerasSalvas scene={scene} /> : null}
           <ViewportControls />
         </div>
       ) : null}
@@ -585,7 +607,7 @@ function StageBoundary({
           trabalho dele: lá a imagem que ele quer à mão já entra como cartão ou
           como token, à vista, e a bolinha só somava um alvo permanente sobre a
           folha que ele está montando. */}
-      {scene && !notaAberta && !ehQuadro(scene) ? (
+      {scene && !notaAberta && temAnotacao(scene) ? (
         <HandoutMestre scene={scene} />
       ) : null}
     </div>
