@@ -1407,6 +1407,27 @@ export type Parede = {
    */
   diagonal?: "secundaria";
   /**
+   * De que cor a face dela sobe, quando o mapa é visto de esguelha.
+   *
+   * Ausente = LIDA DO MAPA, e esse é o caso comum: a parede já está pintada no
+   * arquivo, e a cor dominante do topo dela acerta na maioria das vezes sem que
+   * ninguém escolha nada. Ver `cor-do-mapa.ts`.
+   *
+   * Existe porque a leitura não tem como acertar sempre, e quando erra só o
+   * mestre sabe o que era: um muro tomado de hera devolve verde, um tapete
+   * vermelho encostado numa divisória a pinta de vermelho, e um mapa em que a
+   * parede é só um traço preto não tem cor de pedra nenhuma para ler. A conta é
+   * um bom palpite, e o palpite é do desenho -- a última palavra é de quem
+   * mestra.
+   *
+   * Só a FACE. O topo continua sendo o pedaço de mapa que estava ali, sempre:
+   * ele é o desenho do autor, e repintá-lo seria apagar o mapa.
+   *
+   * Não vale no mapa chapado, onde parede não tem face -- é geometria de
+   * esguelha, como a `altura`.
+   */
+  cor?: string;
+  /**
    * Quão alta ela é, em unidades de cena. Ausente = `ALTURA_DA_PAREDE`.
    *
    * Muda a SOMBRA, e só ela: a parede continua sendo geometria de chão -- onde
