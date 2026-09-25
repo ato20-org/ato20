@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createScene, type CanvasItem } from "@/types/scene";
+import { createScene, DEFAULT_GRID, type CanvasItem } from "@/types/scene";
 
 import { destinoAceito, podePegar, prenderNoLimite } from "./movimento";
 
@@ -134,5 +134,54 @@ describe("destinoAceito", () => {
   it("recusa girar token travado, como recusa arrastá-lo", () => {
     const scene = mapaCom(token({ locked: true }));
     expect(destinoAceito(scene, { ...movimento, x: 100, y: 100, rotation: 90 })).toBeNull();
+  });
+
+  describe("com a grade imantada", () => {
+    /** O mesmo mapa de sempre, com a grade padrão de 96 e o ímã ligado. */
+    function mapaImantado(...items: CanvasItem[]) {
+      const scene = mapaCom(...items);
+      scene.grid = { ...DEFAULT_GRID, snap: true };
+      return scene;
+    }
+
+    it("encaixa o destino na casa, mesmo que o celular não tenha encaixado", () => {
+      // Um aparelho de versão antiga não sabe da grade e manda o ponto cru.
+      // Token de 80 largado em 300: o centro cai na quarta casa, e o canto da
+      // casa dele é 296.
+      expect(destinoAceito(mapaImantado(token()), movimento)).toEqual({
+        x: 296,
+        y: 200,
+      });
+    });
+
+    it("não encaixa nada com o ímã desligado", () => {
+      const scene = mapaImantado(token());
+      scene.grid = DEFAULT_GRID;
+      expect(destinoAceito(scene, movimento)).toEqual({ x: 300, y: 200 });
+    });
+
+    it("a câmera vence a casa: na beira o token para encostado na moldura", () => {
+      const scene = mapaImantado(token());
+      scene.camera = { x: 0, y: 0, width: 960, height: 540 };
+      expect(destinoAceito(scene, { ...movimento, x: 9000, y: 200 })).toEqual({
+        x: 920,
+        y: 200,
+      });
+    });
+
+    it("andar dentro da mesma casa não é andar", () => {
+      // O token já está encaixado, e o dedo o arrastou dois pixels: o destino
+      // volta para onde ele está, e um movimento que não muda nada não acorda
+      // o histórico nem o disco.
+      const scene = mapaImantado(token({ x: 8, y: 8 }));
+      expect(destinoAceito(scene, { ...movimento, x: 10, y: 10 })).toBeNull();
+    });
+
+    it("o giro no lugar continua passando com a grade ligada", () => {
+      const scene = mapaImantado(token({ x: 8, y: 8 }));
+      expect(
+        destinoAceito(scene, { ...movimento, x: 8, y: 8, rotation: 90 }),
+      ).toEqual({ x: 8, y: 8, rotation: 90 });
+    });
   });
 });

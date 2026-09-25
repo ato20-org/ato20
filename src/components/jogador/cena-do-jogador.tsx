@@ -12,6 +12,7 @@ import { SceneLayer } from "@/components/playground/scene-layer";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useMeusPersonagens } from "@/hooks/use-meus-personagens";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { encaixarNaGrade, gradeDoEncaixe } from "@/lib/geometry/grid";
 import {
   angleTo,
   cursorDeGiro,
@@ -283,6 +284,9 @@ export function CenaDoJogador({
     clearTimeout(esperaRef.current);
 
     const limite = limiteDoMovimento(cena);
+    // A grade que imanta, lida uma vez no comeco do gesto: ela e da cena, e o
+    // mestre nao a desliga no meio de um arrasto de dez segundos.
+    const grade = gradeDoEncaixe(cena);
     const origem = { x: item.x, y: item.y };
     const rotation = item.rotation;
     let atual: NaMao = {
@@ -298,12 +302,14 @@ export function CenaDoJogador({
 
     startDrag(event, {
       onMove: (delta) => {
-        const destino = prenderNoLimite(
-          item,
-          origem.x + delta.x,
-          origem.y + delta.y,
-          limite,
-        );
+        const solto = { x: origem.x + delta.x, y: origem.y + delta.y };
+        // Encaixa e SO ENTAO prende, na mesma ordem de `destinoAceito`: o que o
+        // dedo ve aqui tem de ser o que o mestre aceita la, senao o token anda
+        // uma casa e volta quando o eco chega.
+        const naCasa = grade
+          ? encaixarNaGrade(item, solto.x, solto.y, grade)
+          : solto;
+        const destino = prenderNoLimite(item, naCasa.x, naCasa.y, limite);
         andou = true;
         atual = { ...atual, ...destino };
 

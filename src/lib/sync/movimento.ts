@@ -1,3 +1,4 @@
+import { encaixarNaGrade, gradeDoEncaixe } from "@/lib/geometry/grid";
 import { normalizeAngle } from "@/lib/geometry/transform";
 import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
 import { ehQuadro, type CanvasItem, type Scene, type Viewport } from "@/types/scene";
@@ -97,8 +98,9 @@ export function podePegar(
  * Cena de quadro não aceita movimento nenhum: ali o token é ilustração na
  * mesa de trabalho do mestre, e não uma peça num mapa.
  *
- * O destino é preso ao limite de novo, mesmo que o celular já o tenha preso:
- * a regra tem de valer para quem não é o celular deste aplicativo.
+ * O destino é preso ao limite -- e encaixado na grade, quando ela imanta -- de
+ * novo, mesmo que o celular já o tenha feito: a regra tem de valer para quem
+ * não é o celular deste aplicativo.
  *
  * `null` também quando o item já está lá, no lugar E no ângulo -- um movimento
  * que não muda nada não deve acordar o histórico nem o disco.
@@ -124,10 +126,24 @@ export function destinoAceito(
     return null;
   }
 
+  // O encaixe ANTES do limite, e o limite por cima dele: a borda da camera e a
+  // regra dura -- token fora do que a mesa ve some de todas as telas --, e a
+  // casa da grade e preferencia. Na beira do mapa o token para encostado na
+  // moldura, meio quadrado fora da casa, que e onde a mao tambem o deixaria.
+  //
+  // Refeito aqui mesmo que o celular ja o tenha feito, como o limite e pela
+  // mesma razao: a regra tem de valer para quem NAO e o celular deste
+  // aplicativo -- um aparelho de versao antiga, que nao sabe da grade, largaria
+  // o token torto na TV enquanto o mestre ve o ima ligado.
+  const grade = gradeDoEncaixe(scene);
+  const encaixado = grade
+    ? encaixarNaGrade(item, movimento.x, movimento.y, grade)
+    : { x: movimento.x, y: movimento.y };
+
   const destino = prenderNoLimite(
     item,
-    movimento.x,
-    movimento.y,
+    encaixado.x,
+    encaixado.y,
     limiteDoMovimento(scene),
   );
 
