@@ -1514,7 +1514,17 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         if (medidorVazio({ ...anchor, x2: ponta.x, y2: ponta.y })) {
           removeMedidores(scene.id, [id]);
           clear();
+          // A ferramenta FICA na mão, como na seta recusada: nada foi colocado,
+          // e largá-la aqui puniria o mestre por um gesto que não chegou a
+          // acontecer.
+          return;
         }
+
+        // Volta ao modo normal, como a forma e a névoa: o gesto seguinte a
+        // medir é mexer no que se mediu -- arrastar o medidor, ou levar o token
+        // até onde ele chega --, e com a ferramenta presa esse arrasto virava
+        // outra régua por cima.
+        setTool("select");
       },
     });
   }
