@@ -55,6 +55,14 @@ import { cn } from "@/lib/utils";
 import type { Personagem } from "@/types/character";
 import type { AncoraRetrato, Portrait, UniaoDeRetratos } from "@/types/scene";
 import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
+import { LayoutDoRetratoPainel } from "@/components/mestre/layout-do-retrato";
+import { PosicaoDosRetratos } from "@/components/mestre/posicao-dos-retratos";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 /** O nome da área, para o cabeçalho de cada união. */
 const LUGAR: Record<AncoraRetrato, string> = {
@@ -189,8 +197,56 @@ export function PortraitList() {
     setMenuAberto,
   };
 
+  /**
+   * O retrato que a aba Layout edita.
+   *
+   * Um só. Com vários escolhidos a aba volta para a sessão, e é a leitura
+   * honesta do que está na tela: "estes três" não é um retrato, e aplicar a
+   * troca aos três seria um gesto que o mestre não pediu -- ele escolheu vários
+   * para UNIR, que é o que o botão ao lado faz.
+   */
+  const paraLayout =
+    selecionados.length === 1 ? retratoDe(selecionados[0] ?? "") : null;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <Tabs defaultValue="elenco" className="flex min-h-0 flex-1 flex-col gap-0">
+      <TabsList
+        variant="line"
+        className="h-auto w-full justify-start rounded-none border-b px-2 py-1"
+      >
+        <TabsTrigger value="elenco" className="flex-none text-xs">
+          Elenco
+        </TabsTrigger>
+        <TabsTrigger value="layout" className="flex-none text-xs">
+          Layout
+        </TabsTrigger>
+        <TabsTrigger value="posicao" className="flex-none text-xs">
+          Posição
+        </TabsTrigger>
+      </TabsList>
+
+      {/* `overflow-x-hidden` junto com o `y`, e não por zelo: o CSS promove um
+          eixo `visible` a `auto` quando o outro deixa de ser visível, então
+          `overflow-y-auto` sozinho já liga a barra horizontal -- e qualquer
+          peça da prévia passando um pixel da borda a fazia aparecer. */}
+      <TabsContent
+        value="layout"
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-2"
+      >
+        <LayoutDoRetratoPainel selecionado={paraLayout} />
+      </TabsContent>
+
+      <TabsContent
+        value="posicao"
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-2"
+      >
+        <PosicaoDosRetratos />
+      </TabsContent>
+
+      <TabsContent
+        value="elenco"
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
       {/* Unir fica FORA da rolagem, e é um botão com a palavra escrita.
           O gesto tinha de ser descobrível: o botão direito e o Shift+clique
           fazem o mesmo, mas quem nunca uniu nada não adivinha nenhum dos dois
@@ -278,7 +334,8 @@ export function PortraitList() {
           </div>
         )}
       </ScrollArea>
-    </div>
+      </TabsContent>
+    </Tabs>
   );
 }
 
