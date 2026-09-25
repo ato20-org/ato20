@@ -2,7 +2,9 @@
 
 import { Fragment, memo, useId, useMemo } from "react";
 
+import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useCoresDasParedes } from "@/hooks/use-cores-das-paredes";
+import type { Variante } from "@/lib/vault/assets";
 import { escurecerCor } from "@/lib/cor-do-mapa";
 import {
   alturaDaParede,
@@ -15,7 +17,7 @@ import {
 import {
   caixaDaFace,
   caixaDaPeca,
-  encaixeDoChao,
+  correnteDeEsguelha,
   facesDaParede,
   profundidadeNaVista,
   tapa,
@@ -125,6 +127,78 @@ const VIDRO = 0.26;
 /** O que se desenha no chão: uma caixa já com a profundidade em que ela entra. */
 type Desenho = { chave: string; profundidade: number; no: React.ReactNode };
 
+/** A forma de uma peça no chão de esguelha. */
+type PecaDoChao = {
+  id: string;
+  x: number;
+  y: number;
+  /** A largura da peça: a base que ela ocupa no chão. */
+  lado: number;
+  /**
+   * Quanto a figura sobe na tela. Ausente = `lado`, que é o token chapado
+   * visto de cima.
+   *
+   * Separado da largura porque miniatura em pé é alta e estreita, e a arte de
+   * um sujeito de pé costuma vir bem mais alta que larga. Forçá-la no quadrado
+   * da base é o que a achatava.
+   */
+  altura?: number;
+  url?: string;
+  assetId?: string;
+};
+
+/**
+ * Uma peça de pé no chão deitado.
+ *
+ * Componente, e não um `<img>` montado no laço, por uma razão só: `useAssetUrl`
+ * é um hook, é assíncrono e vale por asset. Resolver vinte tokens no chamador
+ * seria um laço de hooks, que o React proíbe; resolver aqui é cada peça
+ * cuidando do próprio arquivo, como o `CanvasItemView` já faz no mapa de prumo.
+ *
+ * Sem imagem não desenha nada -- nem enquanto o daemon responde, nem se ele
+ * falhar. É a mesma escolha do resto da casa: a cena sai sem a figura em vez de
+ * sair com um buraco branco do tamanho dela.
+ */
+function PecaEmPe({
+  peca,
+  alta,
+  variante,
+  transform,
+  onPointerDown,
+}: {
+  peca: PecaDoChao;
+  alta: number;
+  variante?: Variante;
+  transform: string;
+  onPointerDown?: (
+    event: React.PointerEvent<HTMLImageElement>,
+    id: string,
+  ) => void;
+}) {
+  const doAcervo = useAssetUrl(peca.assetId, variante);
+  const src = peca.url ?? doAcervo;
+
+  if (!src) return null;
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      data-peca={peca.id}
+      className="absolute top-0 left-0 select-none"
+      onPointerDown={(event) => onPointerDown?.(event, peca.id)}
+      style={{
+        width: peca.lado,
+        height: alta,
+        transformOrigin: "0 0",
+        transform,
+      }}
+    />
+  );
+}
+
 export const ChaoInclinado = memo(function ChaoInclinado({
   paredes,
   mapaUrl,
@@ -135,6 +209,8 @@ export const ChaoInclinado = memo(function ChaoInclinado({
   sol,
   vidro = true,
   selecionada,
+  semChao,
+  variante,
   grade,
   passoDaGrade,
   pegadas = true,
@@ -179,6 +255,20 @@ export const ChaoInclinado = memo(function ChaoInclinado({
    * usa para mirar.
    */
   selecionada?: string | null;
+  /**
+   * Não desenhe o piso: mapa, sombra e grade vêm de fora.
+   *
+   * É o que o Espectador liga. Lá o piso inteiro é uma `SceneLayer` deitada
+   * pela mesma corrente -- e ela traz de brinde a névoa, os riscos e o medidor,
+   * que este renderizador nunca soube desenhar. Sobra para cá o que se ERGUE do
+   * chão, que é o que só ele sabe fazer.
+   *
+   * A pegada das paredes NÃO entra nesta conta: ela é desenho de autoria, do
+   * mestre traçando a planta, e não existe na `SceneLayer`.
+   */
+  semChao?: boolean;
+  /** Que tamanho de imagem pedir para as peças. Ver `useAssetUrl`. */
+  variante?: Variante;
   grade: boolean;
   passoDaGrade: number;
   /** Desenha o rastro das paredes no chão. Ver o comentário no JSX. */
@@ -188,23 +278,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
    * paredes para o token atrás do muro ficar atrás do muro. Como `children`
    * elas seriam pintadas depois de tudo, sempre por cima.
    */
-  pecas: {
-    id: string;
-    x: number;
-    y: number;
-    /** A largura da peça: a base que ela ocupa no chão. */
-    lado: number;
-    /**
-     * Quanto a figura sobe na tela. Ausente = `lado`, que é o token chapado
-     * visto de cima.
-     *
-     * Separado da largura porque miniatura em pé é alta e estreita, e a arte de
-     * um sujeito de pé costuma vir bem mais alta que larga. Forçá-la no
-     * quadrado da base é o que a achatava.
-     */
-    altura?: number;
-    url: string;
-  }[];
+  pecas: PecaDoChao[];
   /**
    * O pega-gesto do chão, devolvido a quem monta.
    *
@@ -241,33 +315,20 @@ export const ChaoInclinado = memo(function ChaoInclinado({
    * `transform-origin` porque cada elemento tem a origem no próprio canto para
    * poder se posicionar depois, e os dois não cabem no mesmo atributo.
    */
-  const cena = useMemo(() => {
-    const cx = SCENE_WIDTH / 2;
-    const cy = SCENE_HEIGHT / 2;
-
-    return `translate(${cx}px, ${cy}px) rotateX(${inclinacao}deg) rotateZ(${giro}deg) translate(${-cx}px, ${-cy}px)`;
-  }, [giro, inclinacao]);
-
   /**
-   * O encaixe, aplicado POR FORA da perspectiva.
+   * A corrente que deita a cena, montada num lugar só.
    *
-   * Age sobre o resultado já projetado: é uma escala 2D da imagem que saiu, e
-   * não um recuo da câmera. É o que mantém a cena deitada DENTRO da caixa do
-   * plano -- sem ele, a 52° com o olho a 2600 o chão passa 20% para fora, e
-   * filho que transborda infla a camada composta do WebKitGTK (ver
-   * `debug-do-palco` §3).
+   * Vem de `correnteDeEsguelha` e não é escrita aqui porque a `SceneLayer`
+   * precisa da MESMA -- no Espectador o mapa, a grade e a sombra vêm dela, e as
+   * duas árvores chegam ao mesmo plano por caminhos diferentes. Um décimo de
+   * grau de diferença põe a parede fora do próprio rastro.
    */
-  const encaixe = useMemo(
-    () => encaixeDoChao(inclinacao, giro, perspectiva),
+  const corrente = useMemo(
+    () => correnteDeEsguelha(giro, inclinacao, perspectiva),
     [giro, inclinacao, perspectiva],
   );
+  const cena = corrente.cena;
 
-  /**
-   * De que cor é cada parede, lida do próprio mapa.
-   *
-   * Fora do `useMemo` de baixo porque assar o retrato do mapa é um `fetch` e um
-   * decode, e aquele memo refaz a cada giro da câmera. Ver `useCoresDasParedes`.
-   */
   const cores = useCoresDasParedes(paredes, mapaUrl);
 
   // `useId` traz dois-pontos, e dois-pontos dentro de um `url(#...)` não é
@@ -541,24 +602,16 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         chave: `peca-${peca.id}`,
         profundidade: profundidadeNaVista(centroX, pe, giro),
         no: (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={peca.url}
-            alt=""
-            draggable={false}
-            data-peca={peca.id}
-            className="absolute top-0 left-0 select-none"
-            onPointerDown={(event) => onPecaPointerDown?.(event, peca.id)}
-            style={{
-              width: peca.lado,
-              height: alta,
-              transformOrigin: "0 0",
-              // Desfaz o giro e a inclinação, nesta ordem: o que sobra é uma
-              // figura no lugar certo do chão que encara quem olha, como uma
-              // miniatura numa mesa. O último `translate` põe o PÉ dela no
-              // ponto -- girar em torno do canto afundaria metade no piso.
-              transform: `${cena} translate3d(${centroX}px, ${pe}px, 0) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)`,
-            }}
+          <PecaEmPe
+            peca={peca}
+            alta={alta}
+            variante={variante}
+            onPointerDown={onPecaPointerDown}
+            // Desfaz o giro e a inclinação, nesta ordem: o que sobra é uma
+            // figura no lugar certo do chão que encara quem olha, como uma
+            // miniatura numa mesa. O último `translate` põe o PÉ dela no
+            // ponto -- girar em torno do canto afundaria metade no piso.
+            transform={`${cena} translate3d(${centroX}px, ${pe}px, 0) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)`}
           />
         ),
       });
@@ -577,6 +630,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     paredes,
     pecas,
     sol,
+    variante,
     vidro,
   ]);
 
@@ -587,7 +641,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         width: SCENE_WIDTH,
         height: SCENE_HEIGHT,
         transformOrigin: `${SCENE_WIDTH / 2}px ${SCENE_HEIGHT / 2}px`,
-        transform: `translate(${encaixe.dx}px, ${encaixe.dy}px) scale(${encaixe.escala})`,
+        transform: corrente.encaixe,
       }}
     >
       <div
@@ -600,7 +654,12 @@ export const ChaoInclinado = memo(function ChaoInclinado({
           perspectiveOrigin: "50% 50%",
         }}
       >
-        {/* O chão. */}
+        {/* O chão -- e ele some quando alguém já o está desenhando.
+            No Espectador o piso inteiro vem da `SceneLayer` deitada: mapa,
+            grade, sombra e névoa de uma vez, com a mesma corrente. Desenhá-lo
+            aqui também seria o mapa duas vezes, e a de baixo sem a névoa. */}
+        {semChao ? null : (
+          <>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={mapaUrl}
@@ -653,6 +712,8 @@ export const ChaoInclinado = memo(function ChaoInclinado({
             }}
           />
         ) : null}
+          </>
+        )}
 
         {/* A pegada de cada parede, desenhada NO CHÃO.
             Não é enfeite: é a única referência que diz se a parede está em pé

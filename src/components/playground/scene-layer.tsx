@@ -30,6 +30,7 @@ import { TracoLayer } from "@/components/playground/traco-layer";
 import type { EfeitoPedido, EfeitosDoPersonagem } from "@/lib/condicao";
 import { quadroDaMesa } from "@/lib/geometry/viewport";
 import type { Variante } from "@/lib/vault/assets";
+import type { CorrenteDeEsguelha } from "@/lib/geometry/volume";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { Ping } from "@/types/ping";
 import {
@@ -165,7 +166,7 @@ type SceneLayerProps = {
    */
   palco?: ComponentProps<"div"> & Record<`data-${string}`, unknown>;
   /**
-   * A corrente de `transform` que DEITA a cena inteira, no modo de esguelha.
+   * A corrente que DEITA a cena inteira, no modo de esguelha.
    *
    * Uma superfície só, e não onze camadas portadas uma a uma. Tudo o que esta
    * camada desenha -- mapa, grade, sombra, névoa, risco, medidor -- é CHÃO, e
@@ -176,9 +177,15 @@ type SceneLayerProps = {
    * não é o tombo -- é quantas SUPERFÍCIES o compositor recebe. Um envelope
    * tombado é uma; onze camadas tombadas por conta própria seriam onze.
    *
+   * As TRÊS peças, e não só o tombo, porque a corrente tem três níveis e
+   * empilhá-los diferente muda o desenho -- ver `CorrenteDeEsguelha`. E ela vem
+   * pronta de fora porque quem ergue as paredes usa a mesma: as duas árvores
+   * chegam ao plano por caminhos diferentes, e um décimo de grau entre elas põe
+   * a parede fora do próprio rastro.
+   *
    * Ausente = de prumo, que é o mapa de sempre e não custa um nó a mais.
    */
-  tombo?: string;
+  esguelha?: CorrenteDeEsguelha;
   /**
    * Não desenhe os itens: quem os desenha é o chão inclinado.
    *
@@ -217,7 +224,7 @@ export function SceneLayer({
   apagando,
   contornos,
   palco,
-  tombo,
+  esguelha,
   semItens,
 }: SceneLayerProps) {
   // Sem os escondidos, que a mesa já recebe sem eles: aqui é o palco do
@@ -433,17 +440,42 @@ export function SceneLayer({
    * coordenadas o motor devolve `offsetX/offsetY`, que é o que dá a posição de
    * chão exata sem inverter homografia nenhuma. Ver `ChaoInclinado`.
    */
-  const deitado = tombo ? (
+  const deitado = esguelha ? (
+    // Três níveis, na ordem que `CorrenteDeEsguelha` documenta: o encaixe por
+    // FORA, porque ele age sobre o resultado já projetado; a perspectiva no
+    // meio, porque é o pai que cria o contexto 3D; e a corrente da cena em cada
+    // elemento, que aqui é o envelope inteiro.
     <div
       className="absolute top-0 left-0"
       style={{
         width: SCENE_WIDTH,
         height: SCENE_HEIGHT,
-        transformOrigin: "0 0",
-        transform: tombo,
+        transformOrigin: `${SCENE_WIDTH / 2}px ${SCENE_HEIGHT / 2}px`,
+        transform: esguelha.encaixe,
       }}
     >
-      {envelopado}
+      <div
+        className="absolute top-0 left-0"
+        style={{
+          width: SCENE_WIDTH,
+          height: SCENE_HEIGHT,
+          perspective:
+            esguelha.perspectiva > 0 ? `${esguelha.perspectiva}px` : "none",
+          perspectiveOrigin: "50% 50%",
+        }}
+      >
+        <div
+          className="absolute top-0 left-0"
+          style={{
+            width: SCENE_WIDTH,
+            height: SCENE_HEIGHT,
+            transformOrigin: "0 0",
+            transform: esguelha.cena,
+          }}
+        >
+          {envelopado}
+        </div>
+      </div>
     </div>
   ) : (
     envelopado

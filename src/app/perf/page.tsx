@@ -10,6 +10,7 @@ import {
 
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { LayerList } from "@/components/mestre/layer-list";
+import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
 import { ChaoInclinado } from "@/components/playground/chao-inclinado";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
@@ -1425,7 +1426,7 @@ function PalcoChao25d({
   girando,
 }: {
   n: number;
-  modo: "2d" | "relevo" | "chao";
+  modo: "2d" | "relevo" | "chao" | "composta";
   girando: boolean;
 }) {
   const cena = useSceneStore(selectEditingScene);
@@ -1436,7 +1437,11 @@ function PalcoChao25d({
   useEffect(() => {
     // Sem câmeras salvas e sem nada no ar: o que se mede aqui é o CHÃO, e uma
     // moldura na tela somaria o custo dela ao número que decide outra coisa.
-    const base = montarCena(n, 0, false);
+    const cru = montarCena(n, 0, false);
+    // `composta` mede o caminho DE VERDADE -- o que o Espectador monta --, e
+    // para isso a cena precisa da vista gravada nela, como uma cena real teria.
+    const base: Scene =
+      modo === "composta" ? { ...cru, vista: { giro: 0, inclinacao: 52 } } : cru;
 
     useSceneStore.setState({
       board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
@@ -1473,7 +1478,7 @@ function PalcoChao25d({
       useViewportStore.getState().setViewport(FULL_VIEWPORT);
       useSceneStore.setState({ board: null, status: "idle", campaignPath: null });
     };
-  }, [girando, n]);
+  }, [girando, modo, n]);
 
   /**
    * Os itens da cena como PEÇAS do chão inclinado.
@@ -1502,7 +1507,12 @@ function PalcoChao25d({
 
   return (
     <SceneStage viewport={viewport} onViewportChange={setViewport} limites={PLANO}>
-      {modo === "chao" ? (
+      {modo === "composta" ? (
+        // O caminho que o Espectador usa: piso da `SceneLayer` deitado, mais o
+        // que se ergue. É o único modo desta bancada que mede o produto, e não
+        // uma montagem feita só para medir.
+        <CenaDeEsguelha scene={cena} />
+      ) : modo === "chao" ? (
         <ChaoInclinado
           paredes={cena.paredes ?? []}
           mapaUrl={mapa}
@@ -2916,7 +2926,11 @@ function Medida({ params }: { params: URLSearchParams }) {
   );
   const rajada = params.get("rajada") === "1";
   /** `chao-25d`: qual renderizador medir, e se a vista gira durante a corrida. */
-  const modo25d = (params.get("modo") ?? "chao") as "2d" | "relevo" | "chao";
+  const modo25d = (params.get("modo") ?? "chao") as
+    | "2d"
+    | "relevo"
+    | "chao"
+    | "composta";
   const girando = params.get("girando") === "1";
   /** `mestre-camera`: quantas câmeras salvas a cena tem. Uma é a moldura. */
   const cameras = Number(params.get("cameras") ?? 1);

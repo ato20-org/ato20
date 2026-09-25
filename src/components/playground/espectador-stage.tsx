@@ -1,7 +1,7 @@
 "use client";
 
 import { SessionAudio } from "@/components/playground/session-audio";
-import { SceneLayer } from "@/components/playground/scene-layer";
+import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
 import {
   CortinaDeCorte,
   useCorteDeCamera,
@@ -61,7 +61,11 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
             que dispara a entrada em fade. */}
         {cena ? (
           <div key={cena.id} className="scene-fade-in absolute inset-0">
-            <SceneLayer
+            {/* `CenaDeEsguelha` e não `SceneLayer` direto: com a cena de
+                prumo ela devolve exatamente a mesma camada, e com a cena
+                deitada ela compõe o piso com o que se ergue dele. A TV é quem
+                o modo veio servir. */}
+            <CenaDeEsguelha
               scene={cena}
               portraits={portraits}
               fichas={fichas}

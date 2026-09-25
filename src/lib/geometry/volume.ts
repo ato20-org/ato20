@@ -693,3 +693,65 @@ export function tapa(frente: CaixaNaTela, atras: CaixaNaTela): boolean {
     frente.y2 > atras.y1
   );
 }
+
+/**
+ * As três peças de `transform` que deitam uma cena, num lugar só.
+ *
+ * Existe porque duas árvores precisam da MESMA corrente e não podem
+ * compartilhar um envelope. O chão de esguelha desenha as paredes e as peças;
+ * o mapa, a grade, a sombra e a névoa vêm da `SceneLayer` -- que se entrega por
+ * PORTAL ao plano de conteúdo e portanto escapa de qualquer `div` posto em
+ * volta dela. As duas chegam ao mesmo plano por caminhos diferentes, e um
+ * décimo de grau de diferença entre elas põe a parede fora do próprio rastro.
+ *
+ * Então a corrente sai daqui, uma vez, e as duas a recebem pronta.
+ *
+ * ## Por que são três e não uma
+ *
+ * `encaixe` é 2D e age sobre o resultado JÁ projetado -- é uma escala da imagem
+ * que saiu, não um recuo da câmera --, então mora fora do contexto 3D.
+ * `perspectiva` é o que cria esse contexto, e é propriedade do PAI.
+ * `cena` é a corrente que cada elemento carrega por conta própria, porque nesta
+ * webview ninguém pode ser filho 3D de ninguém (ver `ChaoInclinado`).
+ *
+ * Empilhar diferente não é estilo: com o encaixe dentro da perspectiva, ele
+ * passaria a valer como afastamento do olho e a cena mudaria de abertura ao ser
+ * encaixada.
+ */
+export type CorrenteDeEsguelha = {
+  /** `transform` do envelope de fora. Encolhe o que foi projetado para caber. */
+  encaixe: string;
+  /** `perspective` do envelope de dentro, em pixels. 0 = projeção paralela. */
+  perspectiva: number;
+  /** A corrente que cada elemento leva na frente da sua própria. */
+  cena: string;
+};
+
+/**
+ * Monta a corrente de uma vista, em graus.
+ *
+ * `inclinacao` em ZERO devolve a corrente identidade e encaixe neutro: o modo
+ * some sem nenhum caso especial em quem desenha, que é a propriedade que este
+ * renderizador tem desde o começo.
+ */
+export function correnteDeEsguelha(
+  giro: number,
+  inclinacao: number,
+  perspectiva: number,
+): CorrenteDeEsguelha {
+  const cx = SCENE_WIDTH / 2;
+  const cy = SCENE_HEIGHT / 2;
+
+  // Centraliza, deita, gira e volta -- por `translate` e não por
+  // `transform-origin` porque cada elemento tem a origem no próprio canto para
+  // poder se posicionar depois, e os dois não cabem no mesmo atributo.
+  const cena = `translate(${cx}px, ${cy}px) rotateX(${inclinacao}deg) rotateZ(${giro}deg) translate(${-cx}px, ${-cy}px)`;
+
+  const encaixe = encaixeDoChao(inclinacao, giro, perspectiva);
+
+  return {
+    encaixe: `translate(${encaixe.dx}px, ${encaixe.dy}px) scale(${encaixe.escala})`,
+    perspectiva,
+    cena,
+  };
+}
