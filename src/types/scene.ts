@@ -1543,6 +1543,53 @@ export const FORCA_DA_SOMBRA = 0.45;
  * sombra pintada na maioria dos tokens de pacote já tem. Ligar o sol num mapa
  * desses soma as duas em vez de cruzá-las.
  */
+/**
+ * De onde o mapa é visto, quando ele é visto de esguelha.
+ *
+ * Dois números, e do mesmo formato que `Sol` -- que também é direção sem
+ * posição. É de propósito: o sol já provou que a mesa entende um mostrador de
+ * ângulo, e já provou que uma direção só, válida para o mapa inteiro, é o que
+ * torna a conta barata o bastante para rodar em toda tela sem o canal
+ * republicar nada a cada passo.
+ *
+ * ## Os dois números são GRAUS, os dois
+ *
+ * E isto é o que evita o bug que quase entrou: existe uma `VistaDoRelevo` em
+ * `volume.ts` cujo `inclinacao` é uma FRAÇÃO de 0 a 1 -- quanto da altura da
+ * parede vira face no baixo-relevo. São coisas diferentes com o mesmo nome, e
+ * guardar a fração aqui faria o chão tombar meio grau onde o mestre pediu
+ * cinquenta. O tipo de lá foi renomeado para que este nome ficasse livre.
+ */
+export type Vista = {
+  /**
+   * Onde o observador está, em graus, no sentido horário a partir da direita.
+   *
+   * A posição de QUEM OLHA, e não para onde a parede tomba -- é a pergunta que
+   * quem mestra faz ("de que lado eu estou vendo a sala"), e é a que o gesto do
+   * botão direito responde. Quem traduz para o tombo do relevo é
+   * `leandoDaCamera`, e são um quarto de volta de diferença.
+   */
+  giro: number;
+  /**
+   * Quanto o chão deita, em graus.
+   *
+   * 0 é o mapa de prumo, e é o desligamento do modo: sem inclinação a parede
+   * não sobe, a grade não encurta e o que sobra é o mapa de sempre, sem nenhum
+   * caso especial no desenho. O teto útil fica por volta de 72 -- rasante, o
+   * chão vira um fio e o encaixe encolhe a cena inteira para caber na caixa.
+   */
+  inclinacao: number;
+};
+
+/**
+ * Onde a vista começa quando o mestre liga o modo de esguelha.
+ *
+ * 52 graus é o que a bancada mostrou ler como sala sem virar maquete, e `giro`
+ * em zero é olhar o mapa do mesmo lado em que ele foi desenhado -- ninguém quer
+ * que ligar o modo também gire o mapa.
+ */
+export const VISTA_PADRAO: Vista = { giro: 0, inclinacao: 52 };
+
 export const SOL_PADRAO: Sol = { angulo: 35, comprimento: 0.42, forca: 0.38 };
 
 /**
@@ -2401,6 +2448,15 @@ export type Scene = {
    * buraco nela como abrem no preto.
    */
   corDoEscuro?: string;
+  /**
+   * De onde a cena é vista. Ausente = de prumo, que é o normal. Ver `Vista`.
+   *
+   * Viaja para a mesa como as paredes e o sol viajam, e sem nada de especial no
+   * canal: `sceneForTable` só TIRA coisas da cena, então um campo novo chega à
+   * TV por não ser tirado. É a TV que precisa dele -- o modo existe para a mesa
+   * olhar --, e o Mestre o usa para conferir o que ela está vendo.
+   */
+  vista?: Vista;
   /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.

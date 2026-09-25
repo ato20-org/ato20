@@ -12,8 +12,8 @@ import {
   leandoDaCamera,
   tapa,
   volumeDasParedes,
-  VISTA_PADRAO,
-  type Vista,
+  RELEVO_PADRAO,
+  type VistaDoRelevo,
 } from "@/lib/geometry/volume";
 import {
   SCENE_HEIGHT,
@@ -59,11 +59,11 @@ describe("volumeDasParedes", () => {
   });
 
   it("sem parede não há volume nenhum", () => {
-    expect(volumeDasParedes([], VISTA_PADRAO)).toEqual([]);
+    expect(volumeDasParedes([], RELEVO_PADRAO)).toEqual([]);
   });
 
   it("uma parede sobe pela própria altura vezes a inclinação", () => {
-    const vista: Vista = { giro: 270, inclinacao: 1 };
+    const vista: VistaDoRelevo = { giro: 270, inclinacao: 1 };
     const [faixa] = volumeDasParedes([MURO], vista);
 
     expect(faixa).toBeDefined();
@@ -74,7 +74,7 @@ describe("volumeDasParedes", () => {
 
   it("uma torre sobe mais que um muro, na mesma vista", () => {
     const torre: Parede = { ...MURO, id: "t", altura: ALTURA_DA_PAREDE * 3 };
-    const vista: Vista = { giro: 270, inclinacao: 1 };
+    const vista: VistaDoRelevo = { giro: 270, inclinacao: 1 };
 
     const [doMuro] = volumeDasParedes([MURO], vista);
     const [daTorre] = volumeDasParedes([torre], vista);
@@ -86,8 +86,8 @@ describe("volumeDasParedes", () => {
     const outro: Parede = { ...MURO, id: "o", x: 900 };
     const alta: Parede = { ...MURO, id: "a", x: 1200, altura: 300 };
 
-    expect(volumeDasParedes([MURO, outro], VISTA_PADRAO)).toHaveLength(1);
-    expect(volumeDasParedes([MURO, outro, alta], VISTA_PADRAO)).toHaveLength(2);
+    expect(volumeDasParedes([MURO, outro], RELEVO_PADRAO)).toHaveLength(1);
+    expect(volumeDasParedes([MURO, outro, alta], RELEVO_PADRAO)).toHaveLength(2);
   });
 
   it("o topo sai no chão, sem o empurrão: quem o aplica é a tela", () => {

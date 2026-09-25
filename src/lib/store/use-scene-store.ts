@@ -79,6 +79,7 @@ import {
   type Luz,
   type Parede,
   type Sol,
+  type Vista,
   type NewTexto,
   type Pasta,
   type PontaDeLigacao,
@@ -398,6 +399,17 @@ type SceneStore = {
   setEscuridao: (sceneId: string, escuridao: number) => void;
   /** Liga nome e medidores acima dos tokens. Ver `Scene.infoDosTokens`. */
   setInfoDosTokens: (sceneId: string, ligado: boolean) => void;
+  /**
+   * Liga, ajusta ou desliga a vista de esguelha. `undefined` volta ao prumo.
+   *
+   * Uma só por cena, como o sol, e pelo mesmo motivo: é a direção de quem olha,
+   * e duas direções sobre o mesmo mapa é o que ninguém sabe ler. Ver `Vista`.
+   *
+   * Desligar é APAGAR o campo, e não gravar `inclinacao: 0`: os dois desenham
+   * igual, mas o campo ausente é o que diz que esta cena nunca pediu o modo --
+   * e é o que faz uma cena antiga abrir de prumo sem migração nenhuma.
+   */
+  setVista: (sceneId: string, vista: Vista | undefined) => void;
   updateFog: (
     sceneId: string,
     fogId: string,
@@ -1467,6 +1479,17 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
     setSol(sceneId, sol) {
       get().updateScene(sceneId, (scene) => ({ ...scene, sol }));
+    },
+    setVista(sceneId, vista) {
+      get().updateScene(sceneId, (scene) => {
+        if (vista) return { ...scene, vista };
+        // Apagado, e não posto em `undefined`: a cena é serializada para o
+        // disco e para o canal, e uma chave com `undefined` some no JSON de um
+        // lado e fica como chave vazia no outro.
+        const semVista = { ...scene };
+        delete semVista.vista;
+        return semVista;
+      });
     },
 
     addLuz(sceneId, luz) {

@@ -87,7 +87,7 @@ function arredondar(valor: number): number {
  * torna a conta barata o bastante para rodar em toda tela sem o canal
  * republicar nada.
  */
-export type Vista = {
+export type VistaDoRelevo = {
   /**
    * Para onde as paredes se inclinam, em graus, no sentido horário a partir da
    * direita.
@@ -108,7 +108,7 @@ export type Vista = {
 };
 
 /** Onde a vista começa quando o mestre liga o relevo. */
-export const VISTA_PADRAO: Vista = { giro: 270, inclinacao: 0.45 };
+export const RELEVO_PADRAO: VistaDoRelevo = { giro: 270, inclinacao: 0.45 };
 
 /**
  * Uma faixa do volume: tudo o que se ergue pelo MESMO empurrão.
@@ -149,7 +149,7 @@ export type FaixaDoVolume = {
  * O empurrão de uma altura, dada a vista. Exportado porque a tela precisa dele
  * para deslocar a textura das faces.
  */
-export function empurraoDaVista(altura: number, vista: Vista): Vec {
+export function empurraoDaVista(altura: number, vista: VistaDoRelevo): Vec {
   const angulo = vista.giro * GRAU;
   const alcance = altura * vista.inclinacao;
 
@@ -177,7 +177,7 @@ export function empurraoDaVista(altura: number, vista: Vista): Vec {
  */
 export function volumeDasParedes(
   paredes: Parede[],
-  vista: Vista,
+  vista: VistaDoRelevo,
 ): FaixaDoVolume[] {
   if (vista.inclinacao <= 0 || paredes.length === 0) return [];
 

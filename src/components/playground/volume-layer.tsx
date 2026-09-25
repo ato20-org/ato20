@@ -2,7 +2,7 @@
 
 import { memo, useId, useMemo } from "react";
 
-import { volumeDasParedes, type Vista } from "@/lib/geometry/volume";
+import { volumeDasParedes, type VistaDoRelevo } from "@/lib/geometry/volume";
 import { SCENE_HEIGHT, SCENE_WIDTH, type Parede } from "@/types/scene";
 
 /**
@@ -59,7 +59,7 @@ export const VolumeLayer = memo(function VolumeLayer({
   contorno = true,
 }: {
   paredes: Parede[];
-  vista: Vista;
+  vista: VistaDoRelevo;
   /** A imagem do chão. Sem ela as faces saem lisas, na cor do contorno. */
   mapaUrl?: string;
   escurecer?: number;

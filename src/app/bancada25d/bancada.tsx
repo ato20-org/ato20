@@ -28,8 +28,8 @@ import type { Vec } from "@/lib/geometry/transform";
 import { clampViewport, PLANO } from "@/lib/geometry/viewport";
 import {
   leandoDaCamera,
-  VISTA_PADRAO,
-  type Vista,
+  RELEVO_PADRAO,
+  type VistaDoRelevo,
 } from "@/lib/geometry/volume";
 import {
   SCENE_HEIGHT,
@@ -222,9 +222,9 @@ export function BancadaDoRelevo() {
    * tombo, é `leandoDaCamera`. Com o mesmo número nos dois, trocar de modo
    * girava a cena um quarto de volta.
    */
-  const [vista, setVista] = useState<Vista>(() => ({
+  const [vista, setVista] = useState<VistaDoRelevo>(() => ({
     giro: numeroDaUrl("giro", 0),
-    inclinacao: numeroDaUrl("relevo", VISTA_PADRAO.inclinacao),
+    inclinacao: numeroDaUrl("relevo", RELEVO_PADRAO.inclinacao),
   }));
   const [inclinacaoChao, setInclinacaoChao] = useState(() =>
     numeroDaUrl("inclinacao", 52),
@@ -453,7 +453,7 @@ function ConteudoDaBancada({
   pecas: Peca[];
   setPecas: (fn: (atual: Peca[]) => Peca[]) => void;
   modo: Modo;
-  vista: Vista;
+  vista: VistaDoRelevo;
   inclinacaoChao: number;
   perspectiva: number;
   grade: boolean;
@@ -467,7 +467,7 @@ function ConteudoDaBancada({
   viewport: Viewport;
   setViewport: (viewport: Viewport) => void;
   panMode: boolean;
-  setVista: (vista: Vista) => void;
+  setVista: (vista: VistaDoRelevo) => void;
   setInclinacaoChao: (graus: number) => void;
   proporcaoDaPeca: number;
   sol?: Sol;
@@ -903,8 +903,8 @@ function ConteudoDaBancada({
 function Painel(props: {
   modo: Modo;
   setModo: (modo: Modo) => void;
-  vista: Vista;
-  setVista: (vista: Vista) => void;
+  vista: VistaDoRelevo;
+  setVista: (vista: VistaDoRelevo) => void;
   inclinacaoChao: number;
   setInclinacaoChao: (valor: number) => void;
   perspectiva: number;
