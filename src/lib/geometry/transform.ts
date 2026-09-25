@@ -63,6 +63,32 @@ export function handleCursor(handle: ResizeHandle, rotation: number): string {
   return CURSOR_BY_SECTOR[Math.round(degrees / 45) % 8]!;
 }
 
+/**
+ * Cursor de giro: uma seta curva, apontada na direção pedida.
+ *
+ * CSS não tem cursor de rotação, então o desenho vai em SVG inline. O desenho
+ * base aponta para o canto nordeste, e `graus` o gira a partir dali.
+ *
+ * Mora aqui, junto de `handleCursor`, porque duas telas o desenham: os cantos
+ * do gizmo do Mestre, cada um com a rotação do item somada, e o anel de giro
+ * do token no celular do jogador, que não tem canto e usa o desenho base.
+ */
+export function cursorDeGiro(graus: number): string {
+  const seta = (stroke: string, width: number) =>
+    `<g transform='rotate(${graus.toFixed(1)} 12 12)' fill='none' stroke='${stroke}' stroke-width='${width}' stroke-linecap='round' stroke-linejoin='round'>` +
+    `<path d='M6 16a6 6 0 0 1 12-4'/><path d='M18 8v4h-4'/></g>`;
+
+  // Branco grosso por baixo, preto fino por cima: o cursor aparece sobre mapa
+  // claro e sobre mapa escuro.
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>` +
+    seta("white", 4) +
+    seta("black", 2) +
+    `</svg>`;
+
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 12 12, grab`;
+}
+
 /** Direção de cada alça no referencial local do item: -1, 0 ou 1 por eixo. */
 const HANDLE_DIRECTION: Record<ResizeHandle, Vec> = {
   nw: { x: -1, y: -1 },
