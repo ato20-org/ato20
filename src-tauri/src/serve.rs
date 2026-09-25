@@ -103,6 +103,26 @@ const DEBUG_AMOSTRA_MAX: usize = 8 * 1024;
 /// com a janela do mestre ocupada por um instante.
 const ROLAGENS_BUFFER: usize = 32;
 
+/// Quantas amostras de movimento o canal guarda para quem esta lendo devagar.
+///
+/// Movimento e o caso do meio entre estado e rolagem. Cada amostra e uma
+/// posicao, e a posicao que vale e a ultima -- perder uma do meio do arrasto
+/// nao apaga nada, a seguinte leva o token ao mesmo lugar. Mas elas chegam de
+/// varios celulares ao mesmo tempo, dez por segundo cada, e um buffer do tamanho
+/// do `live` faria o soltar de um jogador ser atropelado pelo arrasto de outro.
+/// Sessenta e quatro sao seis jogadores arrastando por um segundo inteiro com a
+/// janela do mestre parada.
+const MOVIMENTOS_BUFFER: usize = 64;
+
+/// O maior valor de coordenada que um movimento pode trazer, em unidades de
+/// cena. O plano tem 1920 de largura; isto e folga para mapa que cresceu para
+/// os lados, e teto para um `x: 1e308` que nenhuma tela sabe desenhar.
+const COORDENADA_MAX: f64 = 1_000_000.0;
+
+/// Teto do id de um item. Os ids do aplicativo tem 21 caracteres; o teto so
+/// impede que um corpo de dez megas vire uma string repassada a janela.
+const ID_MAX: usize = 128;
+
 pub struct Daemon {
     vault: SharedVault,
     token: String,
@@ -133,6 +153,14 @@ pub struct Daemon {
     /// O daemon nao acumula bandeja: quem guarda os dados na tela, e por quanto
     /// tempo, e o Mestre. Aqui e so o cano.
     rolagens_tx: broadcast::Sender<String>,
+    /// Os tokens que os jogadores estao arrastando, a caminho da janela do
+    /// mestre.
+    ///
+    /// Canal proprio, e nao o das rolagens com um campo de tipo: as duas
+    /// naturezas pedem buffers diferentes (ver `MOVIMENTOS_BUFFER`), e a janela
+    /// trata cada uma num lugar diferente. Como nas rolagens, o daemon nao aplica
+    /// nada -- quem move o token no board, e republica, e o Mestre.
+    movimentos_tx: broadcast::Sender<String>,
     /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
     evidence: SharedEvidence,
     /// Onde estao os livros de regras desta maquina.
@@ -164,6 +192,7 @@ impl Daemon {
     ) -> Self {
         let (live_tx, _) = broadcast::channel(LIVE_BUFFER);
         let (rolagens_tx, _) = broadcast::channel(ROLAGENS_BUFFER);
+        let (movimentos_tx, _) = broadcast::channel(MOVIMENTOS_BUFFER);
 
         Self {
             vault,
@@ -173,6 +202,7 @@ impl Daemon {
             live_tx,
             debug: Mutex::new(VecDeque::new()),
             rolagens_tx,
+            movimentos_tx,
             evidence: Arc::new(RwLock::new(None)),
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
@@ -337,6 +367,7 @@ pub fn router(state: Arc<Daemon>) -> Router {
         .route("/sala/entrar", post(join_table))
         .route("/sala/live", get(live))
         .route("/sala/rolagens", get(rolls))
+        .route("/sala/movimentos", get(moves))
         .nest("/eu", player_routes(Arc::clone(&state)))
         .route(
             "/sala/publicar",
@@ -414,6 +445,9 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
         )
         .route("/anexos/{arquivo}", get(read_attachment).delete(remove_attachment))
         .route("/rolagens", post(roll))
+        // O token do proprio personagem. Confere o vinculo como as rotas de
+        // personagem abaixo -- ver `move_token`.
+        .route("/movimentos", post(move_token))
         // Personagens: so os VINCULADOS a este jogador. Token valido nao basta,
         // e cada rota confere -- ver `ligado`.
         .route("/personagens", get(my_characters))
@@ -849,6 +883,116 @@ async fn rolls(
     });
 
     Ok(Sse::new(updates.map(|rolagem| Ok(Event::default().data(rolagem))))
+        .keep_alive(KeepAlive::default()))
+}
+
+// --- o token do jogador -----------------------------------------------------
+
+/// O que o celular manda enquanto arrasta: qual token, de qual personagem, e
+/// para onde. `x` e `y` sao o canto do item, em unidades de cena, como em
+/// `CanvasItem`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveBody {
+    personagem_id: String,
+    item_id: String,
+    x: f64,
+    y: f64,
+}
+
+/// Um movimento de jogador, como ele viaja ate a janela do mestre.
+///
+/// Leva o `jogador_id` que o TOKEN resolveu, e nao um que o corpo informou: e o
+/// que deixa a janela saber de quem foi o gesto sem confiar no celular.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Movimento {
+    jogador_id: String,
+    personagem_id: String,
+    item_id: String,
+    x: f64,
+    y: f64,
+}
+
+/// `POST /eu/movimentos` -- o jogador arrasta o token do proprio personagem.
+///
+/// Duas barreiras, e esta e a primeira: o personagem tem de estar vinculado a
+/// quem arrasta. O daemon para por ai porque o board nao e dele -- o estado
+/// publicado e JSON opaco, e ler a cena aqui para achar o item seria ter duas
+/// fontes de verdade sobre o formato de `Scene`. A segunda barreira mora na
+/// janela, que tem o board: o item precisa estar na cena no ar, ser DESTE
+/// personagem e nao estar travado. Ver `useMovimentosDaMesa`.
+///
+/// 404 para personagem que nao e dele, como nas rotas de personagem: e a
+/// resposta que o celular le como "o mestre tirou este personagem de voce", e
+/// ele para de arrastar.
+///
+/// Sem corpo na resposta. O celular ja sabe onde soltou; o que confirma que a
+/// mesa aceitou e o token andando no estado publicado.
+async fn move_token(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    axum::Json(body): axum::Json<MoveBody>,
+) -> Response {
+    let fora = |v: f64| !v.is_finite() || v.abs() > COORDENADA_MAX;
+    if fora(body.x) || fora(body.y) {
+        return fail(StatusCode::BAD_REQUEST, "posicao fora do mapa");
+    }
+
+    if body.item_id.is_empty() || body.item_id.len() > ID_MAX {
+        return fail(StatusCode::BAD_REQUEST, "item invalido");
+    }
+
+    if let Err(resposta) = ligado(&state, &player.id, &body.personagem_id) {
+        return resposta;
+    }
+
+    let movimento = Movimento {
+        jogador_id: player.id,
+        personagem_id: body.personagem_id,
+        item_id: body.item_id,
+        x: body.x,
+        y: body.y,
+    };
+
+    let corpo = match serde_json::to_string(&movimento) {
+        Ok(corpo) => corpo,
+        Err(cause) => {
+            log::error!("movimento: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao anunciar o movimento");
+        }
+    };
+
+    // Sem receptor = janela do mestre fechada. O token nao anda, e o celular ve
+    // isso: o estado publicado nao muda, e a tela dele devolve o token ao lugar
+    // quando a espera acaba.
+    let _ = state.movimentos_tx.send(corpo);
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// `GET /sala/movimentos` -- o fluxo de movimentos, para a janela do mestre.
+///
+/// Restrito a LOOPBACK pelo mesmo motivo de `/sala/rolagens`: a TV e os
+/// celulares veem o token andar no estado publicado, depois de a janela aceitar
+/// o movimento. Sem replay, como as rolagens -- uma janela que reabre nao quer
+/// o arrasto de um minuto atras.
+async fn moves(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
+    if !addr.ip().is_loopback() {
+        return Err(fail(StatusCode::FORBIDDEN, "os movimentos sao desta maquina"));
+    }
+
+    let receiver = state.movimentos_tx.subscribe();
+
+    // Receptor lento perde amostras do meio, e tudo bem: a seguinte leva o
+    // token ao lugar. Ver `MOVIMENTOS_BUFFER`.
+    let updates =
+        tokio_stream::wrappers::BroadcastStream::new(receiver).filter_map(|item| item.ok());
+
+    Ok(Sse::new(updates.map(|movimento| Ok(Event::default().data(movimento))))
         .keep_alive(KeepAlive::default()))
 }
 
@@ -3979,6 +4123,135 @@ mod tests {
             .await
             .expect("resposta");
 
+        assert_eq!(aceito.status(), StatusCode::OK);
+    }
+
+    // --- o token do jogador -------------------------------------------------
+
+    fn movimento(personagem: &str, x: f64) -> String {
+        serde_json::json!({ "personagemId": personagem, "itemId": "item-1", "x": x, "y": 40.0 })
+            .to_string()
+    }
+
+    #[tokio::test]
+    async fn mover_exige_credencial_de_jogador() {
+        let (_dir, state, _codigo) = daemon();
+
+        // O codigo da mesa deixa assistir, e so: quem nao se nomeou nao tem
+        // personagem a mover.
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .method("POST")
+                    .uri("/eu/movimentos")
+                    .header("content-type", "application/json")
+                    .body(Body::from(movimento("qualquer", 10.0)))
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn o_token_de_personagem_alheio_nao_anda() {
+        let (_dir, state, codigo) = daemon();
+        let (_, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let mut fluxo = state.movimentos_tx.subscribe();
+
+        // Mira tem token valido e o Corvo e do Edgar. 404, como nas rotas de
+        // personagem: dizer "existe mas nao e seu" confirmaria o id chutado.
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token_b, "POST", "/eu/movimentos", Some(&movimento(&personagem, 10.0))))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(fluxo.try_recv().is_err(), "o movimento recusado chegou a janela");
+    }
+
+    #[tokio::test]
+    async fn o_movimento_chega_a_janela_com_quem_arrastou() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let edgar = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            let jogadores = players::list(vault).expect("jogadores");
+            jogadores.into_iter().find(|j| j.nome == "Edgar").expect("edgar").id
+        };
+
+        let mut fluxo = state.movimentos_tx.subscribe();
+
+        // Um `jogadorId` no corpo e ignorado: quem arrastou e quem o token diz.
+        let corpo = serde_json::json!({
+            "personagemId": personagem,
+            "itemId": "item-1",
+            "x": 120.5,
+            "y": 40.0,
+            "jogadorId": "outro",
+        })
+        .to_string();
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "POST", "/eu/movimentos", Some(&corpo)))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let chegou: serde_json::Value =
+            serde_json::from_str(&fluxo.try_recv().expect("movimento no fluxo")).expect("json");
+
+        assert_eq!(chegou["jogadorId"], edgar.as_str());
+        assert_eq!(chegou["personagemId"], personagem.as_str());
+        assert_eq!(chegou["itemId"], "item-1");
+        assert_eq!(chegou["x"], 120.5);
+        assert_eq!(chegou["y"], 40.0);
+    }
+
+    #[tokio::test]
+    async fn posicao_fora_do_mapa_e_recusada() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "POST", "/eu/movimentos", Some(&movimento(&personagem, 1e308))))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let sem_item = serde_json::json!({ "personagemId": personagem, "itemId": "", "x": 1.0, "y": 1.0 })
+            .to_string();
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "POST", "/eu/movimentos", Some(&sem_item)))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn o_fluxo_de_movimentos_e_desta_maquina() {
+        let (_dir, state, _codigo) = daemon();
+
+        let pedir = |ip: &str| {
+            from_ip(
+                HttpRequest::builder()
+                    .uri("/sala/movimentos")
+                    .body(Body::empty())
+                    .expect("request"),
+                ip,
+            )
+        };
+
+        let recusado =
+            router(Arc::clone(&state)).oneshot(pedir("192.168.7.99")).await.expect("resposta");
+        assert_eq!(recusado.status(), StatusCode::FORBIDDEN);
+
+        let aceito = router(state).oneshot(pedir("127.0.0.1")).await.expect("resposta");
         assert_eq!(aceito.status(), StatusCode::OK);
     }
 
