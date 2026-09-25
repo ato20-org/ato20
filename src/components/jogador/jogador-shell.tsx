@@ -264,6 +264,7 @@ function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
     // que está acontecendo no mapa.
     <div className="relative min-h-0 min-w-0 flex-1 p-2">
       <JogadorStage
+        codigo={codigo}
         scene={live.scene}
         portraits={live.portraits}
         rolagens={live.rolagens}
@@ -331,6 +332,7 @@ function StackedLayout({ codigo, live, emCena }: LayoutProps) {
     <>
       <div className="shrink-0 p-2">
         <JogadorStage
+          codigo={codigo}
           scene={live.scene}
           portraits={live.portraits}
           rolagens={live.rolagens}

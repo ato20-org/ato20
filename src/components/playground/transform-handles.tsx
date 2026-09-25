@@ -44,6 +44,7 @@ import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
   angleTo,
+  cursorDeGiro,
   handleCursor,
   handleDirection,
   itemCenter,
@@ -77,24 +78,17 @@ const ROTATE_ZONE_PX = 24;
 const CORNER_HANDLES = ["nw", "ne", "se", "sw"] as const satisfies readonly ResizeHandle[];
 
 /**
- * Cursor de giro: uma seta curva, apontada na direção em que o canto empurra.
+ * Cursor de giro do canto: a seta curva, apontada na direção em que ele empurra.
  *
- * CSS não tem cursor de rotação, então o desenho vai em SVG inline. O ângulo
- * já soma a rotação do item, assim como `handleCursor` faz para as setas de
- * redimensionar.
+ * O ângulo já soma a rotação do item, assim como `handleCursor` faz para as
+ * setas de redimensionar. O desenho é o de `cursorDeGiro` -- o mesmo que o anel
+ * do token no celular do jogador usa.
  */
 function rotateCursor(handle: ResizeHandle, rotation: number): string {
   const world = rotateVec(handleDirection(handle), rotation);
-  // O desenho base aponta para o canto nordeste (-45deg); gira até o canto real.
-  const degrees = (Math.atan2(world.y, world.x) * 180) / Math.PI + 45;
-  const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>` +
-    `<g transform='rotate(${degrees.toFixed(1)} 12 12)' fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'>` +
-    `<path d='M6 16a6 6 0 0 1 12-4'/><path d='M18 8v4h-4'/></g>` +
-    `<g transform='rotate(${degrees.toFixed(1)} 12 12)' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>` +
-    `<path d='M6 16a6 6 0 0 1 12-4'/><path d='M18 8v4h-4'/></g></svg>`;
 
-  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 12 12, grab`;
+  // O desenho base aponta para o canto nordeste (-45deg); gira até o canto real.
+  return cursorDeGiro((Math.atan2(world.y, world.x) * 180) / Math.PI + 45);
 }
 
 /**

@@ -1,21 +1,11 @@
 "use client";
 
-import { Grid3x3, RotateCcw } from "lucide-react";
+import { Grid3x3, Magnet, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import {
@@ -28,25 +18,21 @@ import {
 /**
  * Grade da cena: liga, desliga e ajusta.
  *
- * Na régua das ferramentas do MAPA, junto do alfinete e do postit: é marcação
- * sobre o chão, como elas. E a grade é da cena, então ela viaja: a TV e os
- * celulares mostram a mesma, o que é o ponto de contar movimento em voz alta.
+ * Nas CONFIGURAÇÕES do mapa, ao lado do sol, e não na régua das ferramentas: a
+ * grade não é gesto sobre o mapa. Ela se liga uma vez, no começo, e depois fica
+ * ligada a sessão toda -- como o sol, e ao contrário do alfinete e do papel,
+ * que se pegam e se largam a cada minuto. Ela morou na régua da direita porque
+ * é marcação sobre o chão, mas morar junto do que se PEGA custava um alvo
+ * permanente na barra para algo que ninguém toca duas vezes na mesma sessão.
  *
- * Clique liga e desliga; o ajuste fica atrás da seta. Ligar é o gesto de toda
- * sessão, e configurar é o de uma vez por mapa — cobrar o segundo para fazer o
- * primeiro seria cobrar sempre pelo que se faz raramente.
+ * E a grade é da cena, então ela viaja: a TV e os celulares mostram a mesma, o
+ * que é o ponto de contar movimento em voz alta.
+ *
+ * Só quem ficou na régua foi a RÉGUA de medir, que é gesto: ela continua lá,
+ * apagada enquanto não houver grade -- é o quadrado que diz quanto vale um
+ * metro. Ver `ReguaDoMapa`.
  */
-export function GridControl({
-  scene,
-  lado = "top",
-}: {
-  scene: Scene;
-  /**
-   * De que lado o ajuste abre. `left` é o da régua do mapa, encostada na borda
-   * direita do palco; `top` é o do rodapé, de onde a grade veio.
-   */
-  lado?: "top" | "left";
-}) {
+export function GridControl({ scene }: { scene: Scene }) {
   const setSceneGrid = useSceneStore((state) => state.setSceneGrid);
 
   const grid = scene.grid;
@@ -57,158 +43,156 @@ export function GridControl({
   }
 
   return (
-    <>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant={ligada ? "secondary" : "ghost"}
-              size="icon-sm"
-              aria-label="Grade sobre o mapa"
-              aria-pressed={ligada}
-              onClick={() =>
-                setSceneGrid(scene.id, ligada ? undefined : DEFAULT_GRID)
-              }
-            >
-              <Grid3x3 />
-            </Button>
+    <section className="space-y-3">
+      {/* O interruptor na LINHA do título, como o do sol: aqui a grade não é
+          uma ferramenta que se pega, é um estado da cena. */}
+      <div className="flex items-center justify-between gap-2">
+        <Label
+          className="flex items-center gap-2 text-xs font-normal"
+          htmlFor="grade-da-cena"
+        >
+          <Grid3x3 className="text-muted-foreground size-3.5" />
+          Grade sobre o mapa
+        </Label>
+        <Switch
+          id="grade-da-cena"
+          checked={ligada}
+          onCheckedChange={(ligar) =>
+            setSceneGrid(scene.id, ligar ? DEFAULT_GRID : undefined)
           }
         />
-        <TooltipContent>
-          <p className="font-medium">Grade sobre o mapa</p>
-          <p className="text-muted-foreground max-w-52">
-            {ligada
-              ? "A TV e os celulares veem a mesma grade. Clique na seta para ajustar."
-              : "Desenha quadrados sobre o mapa, e a mesa vê os mesmos."}
-          </p>
-        </TooltipContent>
-      </Tooltip>
+      </div>
 
-      {/* O ajuste só existe com a grade ligada: um painel de tamanho e
-          deslocamento de algo invisível não teria o que mostrar. */}
+      {/* A convenção, dita de uma vez: sem ela, "20 colunas" é um número de
+          layout, e com ela é a escala do mapa -- é o que faz casar a grade com
+          o desenho valer a pena, e é de onde a régua tira o metro. Ver
+          `METROS_POR_QUADRADO`. */}
+      <p className="text-muted-foreground text-[10px] leading-snug">
+        Cada quadrado vale {METROS_POR_QUADRADO} m — um metro quadrado de chão.
+        Case a grade com o desenho do mapa e a régua mede certo.
+      </p>
+
+      {/* O ajuste só existe com a grade ligada: réguas de tamanho e
+          deslocamento de algo invisível não teriam o que mostrar. */}
       {ligada && grid ? (
-        <Popover>
-          <PopoverTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Ajustar a grade"
-                className="text-muted-foreground w-5"
-              >
-                {/* A seta aponta para onde o painel abre: no rodapé ele sobe,
-                    na régua da direita ele sai pela esquerda. Um triângulo
-                    para cima numa coluna vertical apontaria para o botão da
-                    própria grade. */}
-                <span aria-hidden className="text-[10px]">
-                  {lado === "left" ? "◀" : "▲"}
-                </span>
-              </Button>
-            }
-          />
-          <PopoverContent align="start" className="space-y-4" side={lado}>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-medium">Grade</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground h-7 px-2 text-xs"
-                onClick={() => ajustar(DEFAULT_GRID)}
-              >
-                <RotateCcw className="size-3" />
-                Padrão
-              </Button>
-            </div>
-
-            {/* A convenção, dita de uma vez: sem ela, "20 colunas" é um número
-                de layout, e com ela é a escala do mapa -- é o que faz casar a
-                grade com o desenho valer a pena, e é de onde a régua tira o
-                metro. Ver `METROS_POR_QUADRADO`. */}
-            <p className="text-muted-foreground text-[10px] leading-snug">
-              Cada quadrado vale {METROS_POR_QUADRADO} m — um metro quadrado de
-              chão. Case a grade com o desenho do mapa e a régua mede certo.
-            </p>
-
-            <Campo
-              rotulo="Tamanho do quadrado"
-              // Em unidades de cena, e mostrado como fração do plano: "96" não
-              // diz nada sozinho, "20 colunas" diz.
-              valor={`${Math.round(SCENE_WIDTH / Math.max(8, grid.size))} colunas`}
+        <div className="space-y-4">
+          {/* O ímã PRIMEIRO, antes das réguas de tamanho: ligar o encaixe é
+              decisão de cada mesa e se troca no meio da sessão -- "hoje a gente
+              conta quadrado" --, e casar a grade com o desenho do mapa se faz
+              uma vez e não se toca mais. */}
+          <div className="flex items-center justify-between gap-2">
+            <Label
+              className="flex items-center gap-2 text-xs font-normal"
+              htmlFor="grade-encaixe"
             >
-              <Slider
-                aria-label="Tamanho do quadrado"
-                value={[grid.size]}
-                min={24}
-                max={320}
-                step={2}
-                onValueChange={(value) => ajustar({ size: primeiro(value) })}
-              />
-            </Campo>
+              <Magnet className="text-muted-foreground size-3.5" />
+              Encaixar na grade
+            </Label>
+            <Switch
+              id="grade-encaixe"
+              checked={Boolean(grid.snap)}
+              onCheckedChange={(snap) => ajustar({ snap })}
+            />
+          </div>
 
-            {/* Deslocamento porque mapa comprado já vem com grade desenhada, e
-                ela quase nunca começa no canto exato da imagem. Meia célula
-                para cada lado cobre qualquer alinhamento — além disso repete. */}
-            <Campo
-              rotulo="Deslocar na horizontal"
-              valor={`${Math.round(grid.offsetX)}`}
-            >
-              <Slider
-                aria-label="Deslocar na horizontal"
-                value={[grid.offsetX]}
-                min={0}
-                max={Math.max(8, grid.size)}
-                step={1}
-                onValueChange={(value) => ajustar({ offsetX: primeiro(value) })}
-              />
-            </Campo>
+          <p className="text-muted-foreground text-[10px] leading-snug">
+            O token vai para o meio do quadrado — no seu arrasto e no dedo dos
+            jogadores. Alt solta a peça exatamente onde ela está.
+          </p>
 
-            <Campo
-              rotulo="Deslocar na vertical"
-              valor={`${Math.round(grid.offsetY)}`}
-            >
-              <Slider
-                aria-label="Deslocar na vertical"
-                value={[grid.offsetY]}
-                min={0}
-                max={Math.max(8, grid.size)}
-                step={1}
-                onValueChange={(value) => ajustar({ offsetY: primeiro(value) })}
-              />
-            </Campo>
+          <Campo
+            rotulo="Tamanho do quadrado"
+            // Em unidades de cena, e mostrado como fração do plano: "96" não
+            // diz nada sozinho, "20 colunas" diz.
+            valor={`${Math.round(SCENE_WIDTH / Math.max(8, grid.size))} colunas`}
+          >
+            <Slider
+              aria-label="Tamanho do quadrado"
+              value={[grid.size]}
+              min={24}
+              max={320}
+              step={2}
+              onValueChange={(value) => ajustar({ size: primeiro(value) })}
+            />
+          </Campo>
 
-            <Campo
-              rotulo="Força da linha"
-              valor={`${Math.round(grid.opacity * 100)}%`}
-            >
-              <Slider
-                aria-label="Força da linha"
-                value={[Math.round(grid.opacity * 100)]}
-                min={5}
-                max={100}
-                step={5}
-                onValueChange={(value) =>
-                  ajustar({ opacity: primeiro(value) / 100 })
-                }
-              />
-            </Campo>
+          {/* Deslocamento porque mapa comprado já vem com grade desenhada, e
+              ela quase nunca começa no canto exato da imagem. Meia célula para
+              cada lado cobre qualquer alinhamento — além disso repete. */}
+          <Campo
+            rotulo="Deslocar na horizontal"
+            valor={`${Math.round(grid.offsetX)}`}
+          >
+            <Slider
+              aria-label="Deslocar na horizontal"
+              value={[grid.offsetX]}
+              min={0}
+              max={Math.max(8, grid.size)}
+              step={1}
+              onValueChange={(value) => ajustar({ offsetX: primeiro(value) })}
+            />
+          </Campo>
 
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs font-normal" htmlFor="grid-dark">
-                Linha escura
-              </Label>
-              <Switch
-                id="grid-dark"
-                checked={Boolean(grid.dark)}
-                onCheckedChange={(dark) => ajustar({ dark })}
-              />
-            </div>
-            <p className="text-muted-foreground text-[10px]">
-              Mapa claro pede linha escura; caverna e noite pedem clara.
-            </p>
-          </PopoverContent>
-        </Popover>
+          <Campo
+            rotulo="Deslocar na vertical"
+            valor={`${Math.round(grid.offsetY)}`}
+          >
+            <Slider
+              aria-label="Deslocar na vertical"
+              value={[grid.offsetY]}
+              min={0}
+              max={Math.max(8, grid.size)}
+              step={1}
+              onValueChange={(value) => ajustar({ offsetY: primeiro(value) })}
+            />
+          </Campo>
+
+          <Campo
+            rotulo="Força da linha"
+            valor={`${Math.round(grid.opacity * 100)}%`}
+          >
+            <Slider
+              aria-label="Força da linha"
+              value={[Math.round(grid.opacity * 100)]}
+              min={5}
+              max={100}
+              step={5}
+              onValueChange={(value) =>
+                ajustar({ opacity: primeiro(value) / 100 })
+              }
+            />
+          </Campo>
+
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs font-normal" htmlFor="grid-dark">
+              Linha escura
+            </Label>
+            <Switch
+              id="grid-dark"
+              checked={Boolean(grid.dark)}
+              onCheckedChange={(dark) => ajustar({ dark })}
+            />
+          </div>
+          <p className="text-muted-foreground text-[10px]">
+            Mapa claro pede linha escura; caverna e noite pedem clara.
+          </p>
+
+          {/* Volta o DESENHO da grade, e não o ímã: `DEFAULT_GRID` não fala
+              de encaixe, então o interruptor acima atravessa o botão. É o que
+              se quer -- endireitar a grade sobre um mapa novo não é dizer que
+              a mesa parou de contar quadrado. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground h-7 w-full px-2 text-xs"
+            onClick={() => ajustar(DEFAULT_GRID)}
+          >
+            <RotateCcw className="size-3" />
+            Voltar à grade padrão
+          </Button>
+        </div>
       ) : null}
-    </>
+    </section>
   );
 }
 
