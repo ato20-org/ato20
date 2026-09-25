@@ -19,7 +19,8 @@ use crate::vault::players::{Attachment, Player};
 use crate::vault::inventory::{self, Item};
 use crate::vault::{
     assets,
-    documentos, board, characters, players, session, variantes, zip, CampaignInfo, Vault,
+    documentos, board, characters, modelos, players, session, variantes, zip, CampaignInfo,
+    Vault,
 };
 
 pub struct AppState {
@@ -924,7 +925,29 @@ pub fn characters_list(state: State<'_, AppState>) -> AppResult<Vec<Personagem>>
 
 #[tauri::command]
 pub fn character_create(state: State<'_, AppState>, nome: String) -> AppResult<Personagem> {
-    state.with_vault(|vault| characters::create(vault, &nome))
+    state.with_vault(|vault| {
+        let personagem = characters::create(vault, &nome)?;
+
+        // Nasce com os medidores de fabrica da campanha. Aqui e nao dentro de
+        // `characters::create` para o vault de personagens seguir ignorando que
+        // modelo existe -- a dependencia anda num sentido so, e o zip e os
+        // testes de `characters` nao precisam de um `medidores.json` na pasta.
+        let lista = modelos::load(vault)?;
+        if !lista.is_empty() {
+            let novos = lista.iter().map(|modelo| modelo.materializar()).collect();
+            characters::acrescentar_medidores(vault, &personagem.id, novos)?;
+        }
+
+        // Relido, e nao o `personagem` de cima: a tela desenha a ficha com o que
+        // volta daqui, e o de cima ainda esta sem medidor nenhum.
+        characters::load(vault)?
+            .into_iter()
+            .find(|p| p.id == personagem.id)
+            .ok_or_else(|| crate::error::AppError::Malformed {
+                file: "personagens.json".into(),
+                cause: "o personagem recem-criado sumiu".into(),
+            })
+    })
 }
 
 #[tauri::command]
@@ -1012,6 +1035,164 @@ pub fn character_aparencia_ativar(
     aparencia_id: String,
 ) -> AppResult<Personagem> {
     state.with_vault(|vault| characters::ativar_aparencia(vault, &id, &aparencia_id))
+}
+
+// --- modelos de medidor da campanha ------------------------------------------
+
+/// Os medidores de fabrica desta campanha. Ver `vault::modelos`.
+#[tauri::command]
+pub fn modelos_list(state: State<'_, AppState>) -> AppResult<Vec<modelos::Modelo>> {
+    state.with_vault(|vault| modelos::load(vault))
+}
+
+/// Cria um modelo e o materializa em TODO personagem que ja existe.
+///
+/// Os dois no mesmo comando porque e um pedido so -- "esta mesa tem Sanidade"
+/// --, e porque a alternativa deixaria a campanha num estado que ninguem pediu:
+/// um modelo criado e nenhuma ficha com ele, ate o mestre achar o segundo
+/// botao. Ver `aplicar` para o que acontece com quem esta cheio.
+#[tauri::command]
+pub fn modelo_criar(
+    state: State<'_, AppState>,
+    nome: String,
+    cor: String,
+    estilo: characters::Estilo,
+    maximo: i64,
+) -> AppResult<Aplicacao> {
+    state.with_vault(|vault| {
+        let modelo = modelos::criar(vault, &nome, &cor, estilo, maximo)?;
+        let alcancados = aplicar(vault, &[modelo.clone()])?;
+
+        Ok(Aplicacao {
+            modelo: Some(modelo),
+            alcancados,
+        })
+    })
+}
+
+/// Edita um modelo. NAO empurra a mudanca para as fichas -- ver `vault::modelos`.
+#[tauri::command]
+pub fn modelo_editar(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+    patch: modelos::PatchModelo,
+) -> AppResult<modelos::Modelo> {
+    state.with_vault(|vault| modelos::editar(vault, &modeloId, patch))
+}
+
+/// Tira o modelo da campanha. Os medidores que ele produziu ficam nas fichas.
+#[tauri::command]
+pub fn modelo_remover(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| modelos::remover(vault, &modeloId))
+}
+
+/// Materializa TODOS os modelos em TODOS os personagens, de novo.
+///
+/// O gesto explicito que falta ao modelo por ele nao ser um vinculo vivo: o
+/// mestre criou "Sanidade" depois de a mesa ja existir, ou importou uma campanha
+/// e quer o sistema dela em todo mundo.
+///
+/// IDEMPOTENTE pelo nome: quem ja tem um medidor chamado assim nao ganha outro
+/// -- ver `acrescentar_medidores`. E o que permite apertar duas vezes sem
+/// pensar, e o que impede o mestre de duplicar a coluna inteira da mesa com um
+/// clique. O que ele NAO faz e reescrever o que ja existe: trocar a cor do
+/// modelo nao troca a cor do medidor que a ficha ja tem, porque aquele medidor
+/// e dela desde que nasceu.
+#[tauri::command]
+pub fn modelos_aplicar_em_todos(state: State<'_, AppState>) -> AppResult<Aplicacao> {
+    state.with_vault(|vault| {
+        let lista = modelos::load(vault)?;
+        let alcancados = aplicar(vault, &lista)?;
+
+        Ok(Aplicacao {
+            modelo: None,
+            alcancados,
+        })
+    })
+}
+
+/// O resultado de materializar modelos: o que foi criado, e onde entrou.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Aplicacao {
+    /// O modelo recem-criado, quando houve um. Ver `modelo_criar`.
+    pub modelo: Option<modelos::Modelo>,
+    /// Quantos personagens receberam ao menos um medidor.
+    pub alcancados: usize,
+}
+
+/// Poe estes modelos em toda ficha da campanha.
+///
+/// Personagem cheio recebe zero e nao derruba a volta -- ver
+/// `acrescentar_medidores`. Por isso a conta e de personagens ALCANCADOS, e nao
+/// de medidores criados: o que a tela precisa dizer e "entrou em 7 de 9".
+fn aplicar(vault: &Vault, lista: &[modelos::Modelo]) -> AppResult<usize> {
+    if lista.is_empty() {
+        return Ok(0);
+    }
+
+    let mut alcancados = 0;
+
+    for id in characters::todos_os_ids(vault)? {
+        let novos = lista.iter().map(|modelo| modelo.materializar()).collect();
+
+        if characters::acrescentar_medidores(vault, &id, novos)? > 0 {
+            alcancados += 1;
+        }
+    }
+
+    Ok(alcancados)
+}
+
+// --- medidores ---------------------------------------------------------------
+
+/// Cria um medidor no personagem, ja cheio.
+#[tauri::command]
+pub fn character_medidor_criar(
+    state: State<'_, AppState>,
+    id: String,
+    nome: String,
+    cor: String,
+    estilo: characters::Estilo,
+    maximo: i64,
+) -> AppResult<characters::Medidor> {
+    state.with_vault(|vault| characters::criar_medidor(vault, &id, &nome, &cor, estilo, maximo))
+}
+
+/// Edita um medidor e devolve como ele ficou DEPOIS do clamp.
+///
+/// O retorno nao e cerimonia: baixar o maximo abaixo do atual puxa o atual
+/// junto, e a tela que mandou o pedido nao tem como saber disso sozinha.
+#[tauri::command]
+pub fn character_medidor_editar(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] medidorId: String,
+    patch: characters::PatchMedidor,
+) -> AppResult<characters::Medidor> {
+    state.with_vault(|vault| characters::editar_medidor(vault, &id, &medidorId, patch))
+}
+
+#[tauri::command]
+pub fn character_medidor_remover(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] medidorId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| characters::remover_medidor(vault, &id, &medidorId))
+}
+
+/// Poe os medidores na ordem pedida e devolve a lista arrumada.
+#[tauri::command]
+pub fn character_medidores_reordenar(
+    state: State<'_, AppState>,
+    id: String,
+    ordem: Vec<String>,
+) -> AppResult<Vec<characters::Medidor>> {
+    state.with_vault(|vault| characters::reordenar_medidores(vault, &id, &ordem))
 }
 
 /// Os arquivos do personagem, MENOS os que sao imagem de item.

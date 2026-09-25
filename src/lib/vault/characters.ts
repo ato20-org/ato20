@@ -8,8 +8,14 @@ import { call } from "@/lib/vault/bridge";
 import type {
   AnexoAutor,
   AnexoPersonagem,
+  AplicacaoDeModelos,
   Aparencia,
   CampoPersonagem,
+  EstiloMedidor,
+  Medidor,
+  ModeloDeMedidor,
+  PatchMedidor,
+  PatchModelo,
   Personagem,
 } from "@/types/character";
 
@@ -160,6 +166,97 @@ export function ativarAparencia(
   aparenciaId: string,
 ): Promise<Personagem> {
   return call<Personagem>("character_aparencia_ativar", { id, aparenciaId });
+}
+
+// --- medidores --------------------------------------------------------------
+
+/**
+ * Cria um medidor, já cheio.
+ *
+ * `atual` igual ao `maximo` é o único estado inicial que não pede um segundo
+ * gesto: ninguém cria a vida de um personagem para deixá-la em zero.
+ */
+export function criarMedidor(
+  id: string,
+  nome: string,
+  cor: string,
+  estilo: EstiloMedidor,
+  maximo: number,
+): Promise<Medidor> {
+  return call<Medidor>("character_medidor_criar", {
+    id,
+    nome,
+    cor,
+    estilo,
+    maximo,
+  });
+}
+
+/**
+ * Edita um medidor e devolve como ele ficou DEPOIS do clamp.
+ *
+ * O retorno não é cerimônia: baixar o máximo abaixo do atual puxa o atual
+ * junto, e a tela que mandou o pedido não teria como saber disso sozinha —
+ * mostraria 18/10 até a releitura seguinte.
+ */
+export function editarMedidor(
+  id: string,
+  medidorId: string,
+  patch: PatchMedidor,
+): Promise<Medidor> {
+  return call<Medidor>("character_medidor_editar", { id, medidorId, patch });
+}
+
+export function removerMedidor(id: string, medidorId: string): Promise<void> {
+  return call("character_medidor_remover", { id, medidorId });
+}
+
+/** Põe os medidores na ordem pedida e devolve a lista arrumada. */
+export function reordenarMedidores(
+  id: string,
+  ordem: string[],
+): Promise<Medidor[]> {
+  return call<Medidor[]>("character_medidores_reordenar", { id, ordem });
+}
+
+// --- modelos de medidor da campanha -----------------------------------------
+
+export function listarModelos(): Promise<ModeloDeMedidor[]> {
+  return call<ModeloDeMedidor[]>("modelos_list");
+}
+
+/**
+ * Cria um modelo e o materializa em TODO personagem que já existe.
+ *
+ * Os dois no mesmo comando porque é um pedido só — "esta mesa tem Sanidade" —,
+ * e porque a alternativa deixaria a campanha num estado que ninguém pediu: um
+ * modelo criado e nenhuma ficha com ele, até o mestre achar o segundo botão.
+ */
+export function criarModelo(
+  nome: string,
+  cor: string,
+  estilo: EstiloMedidor,
+  maximo: number,
+): Promise<AplicacaoDeModelos> {
+  return call<AplicacaoDeModelos>("modelo_criar", { nome, cor, estilo, maximo });
+}
+
+/** Edita um modelo. NÃO empurra a mudança para as fichas. */
+export function editarModelo(
+  modeloId: string,
+  patch: PatchModelo,
+): Promise<ModeloDeMedidor> {
+  return call<ModeloDeMedidor>("modelo_editar", { modeloId, patch });
+}
+
+/** Tira o modelo da campanha. Os medidores que ele produziu ficam nas fichas. */
+export function removerModelo(modeloId: string): Promise<void> {
+  return call("modelo_remover", { modeloId });
+}
+
+/** Materializa todos os modelos em todos os personagens, de novo. */
+export function aplicarModelosEmTodos(): Promise<AplicacaoDeModelos> {
+  return call<AplicacaoDeModelos>("modelos_aplicar_em_todos");
 }
 
 export function characterAttachments(id: string): Promise<AnexoPersonagem[]> {

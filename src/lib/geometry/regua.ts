@@ -2,7 +2,7 @@ import { formatarMetros, METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import type { Vec } from "@/lib/geometry/transform";
 import {
   ABERTURA_CONE_PADRAO,
-  type Medidor,
+  type Regua,
   type SceneGrid,
 } from "@/types/scene";
 
@@ -17,7 +17,7 @@ import {
  * mesma pergunta com unidade diferente, e o quadrado vale um metro quadrado.
  * Ver `METROS_POR_QUADRADO`.
  */
-export function rotuloDoMedidor(medidor: Medidor, grid: SceneGrid): string {
+export function rotuloDoMedidor(medidor: Regua, grid: SceneGrid): string {
   const metro = grid.size / METROS_POR_QUADRADO;
   const dx = medidor.x2 - medidor.x;
   const dy = medidor.y2 - medidor.y;
@@ -53,12 +53,12 @@ function formatarLado(metros: number): string {
   return metros < 10 ? metros.toFixed(1) : String(Math.round(metros));
 }
 
-export function aberturaDoCone(medidor: Pick<Medidor, "abertura">): number {
+export function aberturaDoCone(medidor: Pick<Regua, "abertura">): number {
   return medidor.abertura ?? ABERTURA_CONE_PADRAO;
 }
 
 /** O medidor inteiro deslocado. Mover é o mesmo gesto para as quatro formas. */
-export function moverMedidor(medidor: Medidor, delta: Vec): Medidor {
+export function moverRegua(medidor: Regua, delta: Vec): Regua {
   return {
     ...medidor,
     x: medidor.x + delta.x,
@@ -74,7 +74,7 @@ export function moverMedidor(medidor: Medidor, delta: Vec): Medidor {
  */
 export const MEDIDOR_MINIMO = 4;
 
-export function medidorVazio(medidor: Pick<Medidor, "x" | "y" | "x2" | "y2">): boolean {
+export function reguaVazia(medidor: Pick<Regua, "x" | "y" | "x2" | "y2">): boolean {
   return Math.hypot(medidor.x2 - medidor.x, medidor.y2 - medidor.y) < MEDIDOR_MINIMO;
 }
 
@@ -82,7 +82,7 @@ export function medidorVazio(medidor: Pick<Medidor, "x" | "y" | "x2" | "y2">): b
  * A caixa do retângulo, normalizada: o mestre pode arrastar para qualquer
  * lado, e `x2 < x` é um retângulo tão bom quanto o outro.
  */
-export function caixaDoRetangulo(medidor: Medidor): {
+export function caixaDoRetangulo(medidor: Regua): {
   x: number;
   y: number;
   width: number;

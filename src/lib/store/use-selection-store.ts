@@ -57,7 +57,7 @@ type SelectionStore = {
    * gesto que mantém os rostos coerentes entre si, e ele exige grupo.
    */
   selectedPortraitIds: string[];
-  /** Medidor selecionado. Um por vez, como a área escondida. */
+  /** Regua selecionado. Um por vez, como a área escondida. */
   selectedMedidorId: string | null;
   /**
    * Parede selecionada. Uma por vez, como a área escondida e o medidor: elas

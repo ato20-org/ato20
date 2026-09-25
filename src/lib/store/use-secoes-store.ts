@@ -26,6 +26,7 @@ const CHAVE_DISCO = "ato20:secoes-ficha";
 export type SecaoFicha =
   | "campos"
   | "aparencias"
+  | "medidores"
   | "inventario"
   | "arquivos"
   | "nota";

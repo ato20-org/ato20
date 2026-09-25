@@ -91,8 +91,79 @@ pub struct Personagem {
     /// errada na metade das vezes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aparencia_ativa: Option<String>,
+    /// Os medidores deste personagem: vida, sanidade, tochas, municao.
+    ///
+    /// No INDICE, e nao num `_medidores.json` como o inventario, e a razao e a
+    /// publicacao: o Mestre manda o estado da mesa dez vezes por segundo, e o
+    /// medidor tem de ir junto para a barra descer na TV no instante em que o
+    /// mestre a desce. O indice ja esta inteiro na memoria do aplicativo e ja e
+    /// lido por quem monta os retratos; um arquivo por personagem obrigaria a
+    /// carregar todos eles no boot e a reler a cada troca de cena, para
+    /// economizar a regravacao de alguns kilobytes por golpe.
+    ///
+    /// Lista e nao mapa: a ordem e a que a coluna ao lado do retrato desenha, e
+    /// o mestre a reordena. Um mapa pediria um campo de ordem, e dois medidores
+    /// podem gravar o mesmo numero nele.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub medidores: Vec<Medidor>,
     #[serde(rename = "criadoEm")]
     pub criado_em: i64,
+}
+
+/// Um medidor: um numero entre zero e um teto, com nome, cor e forma.
+///
+/// Generico de proposito. "Vital" amarraria em vida, e o mesmo desenho serve
+/// para sanidade, municao, carga, moral e tocha acesa -- o que o mestre precisa
+/// dizer e "este personagem tem um numero que sobe e desce, e a mesa o ve
+/// assim".
+///
+/// `atual` e `maximo` sao inteiros. Meio ponto de vida existe em algum sistema,
+/// mas fracionario pagaria arredondamento em tres telas para um caso que o
+/// mestre resolve dobrando a escala -- vinte em vez de dez.
+///
+/// O espelho em TypeScript e `Medidor`, em `types/character.ts`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Medidor {
+    pub id: String,
+    pub nome: String,
+    /// A cor da barra, da mesma paleta do lapis e das unioes de retrato.
+    ///
+    /// Guardada como a string que a tela desenha, e nao um indice da paleta:
+    /// a paleta e do TypeScript, e o vault nao tem por que conhece-la para
+    /// gravar uma cor.
+    pub cor: String,
+    pub estilo: Estilo,
+    pub atual: i64,
+    pub maximo: i64,
+    /// A mesa nao ve.
+    ///
+    /// O relogio da desgraca, a corrupcao que ainda nao se manifestou. Filtrado
+    /// no DAEMON antes de responder -- ver `sem_ocultos` em `serve` -- e no
+    /// Mestre antes de publicar. Um medidor escondido que chegasse ao celular e
+    /// sumisse no React ja teria vazado: estaria no JSON que o navegador
+    /// guardou.
+    pub escondido: bool,
+}
+
+/// Como a mesa le o medidor.
+///
+/// Tres, e cada um responde uma pergunta diferente. `Barra` e a leitura de
+/// relance, para vida num combate; `Pontos` conta unidades discretas, para
+/// tres cargas de magia ou duas tochas; `Porcentagem` diz o numero sem
+/// prometer uma escala, para moral e progresso.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Estilo {
+    Barra,
+    Pontos,
+    Porcentagem,
+}
+
+impl Default for Estilo {
+    fn default() -> Self {
+        Self::Barra
+    }
 }
 
 /// O id da aparencia que todo personagem tem.
@@ -283,6 +354,7 @@ pub fn create(vault: &Vault, nome: &str) -> AppResult<Personagem> {
             miniatura: None,
         }],
         aparencia_ativa: Some(APARENCIA_PADRAO.to_string()),
+        medidores: Vec::new(),
         criado_em: now_ms(),
     };
 
@@ -542,6 +614,303 @@ fn aplicar_ativa(personagem: &mut Personagem) {
     personagem.retrato = linha.retrato.clone();
     personagem.retrato_url = linha.retrato_url.clone();
     personagem.miniatura = linha.miniatura.clone();
+}
+
+// --- medidores ---------------------------------------------------------------
+
+/// Quantos medidores cabem num personagem.
+///
+/// Seis. O limite e de LAYOUT e nao de disco: os medidores desenham numa coluna
+/// ao lado do retrato, e passando disso a coluna fica mais alta que o rosto que
+/// ela acompanha -- a figura vira apendice do painel em vez do contrario.
+pub const MAX_MEDIDORES: usize = 6;
+
+/// O teto do nome de um medidor.
+///
+/// Curto porque ele e um rotulo ao lado de uma barra, lido de longe numa TV, e
+/// nao um campo de texto. "Pontos de Vida Temporarios" ja nao cabe.
+const MAX_NOME_MEDIDOR: usize = 24;
+
+/// O teto do valor.
+///
+/// Existe para o arquivo editado a mao nao produzir uma barra com um numero
+/// que nenhuma tela desenha. Um milhao e folgado para qualquer sistema de mesa
+/// e ainda cabe num `i64` multiplicado por qualquer coisa que a tela faca.
+const MAX_VALOR: i64 = 1_000_000;
+
+fn sem_medidor(id: &str, medidor_id: &str) -> AppError {
+    AppError::Malformed {
+        file: "personagens.json".into(),
+        cause: format!("personagem {id} nao tem o medidor {medidor_id}"),
+    }
+}
+
+/// Poe o medidor em forma: teto no maximo, e `atual` preso entre zero e ele.
+///
+/// Aqui e nao na tela, e pelo motivo de sempre neste projeto: a tela e onde o
+/// valor e digitado, nao onde ele e decidido. Sao tres telas e um IPC, e a
+/// unica delas por onde todo valor passa e esta.
+///
+/// `maximo` nunca abaixo de um: zero deixaria a barra dividindo por zero e a
+/// porcentagem sem resposta, e um medidor que nao pode subir nao e um medidor.
+fn ajustar(medidor: &mut Medidor) {
+    medidor.nome = texto_curto(&medidor.nome, MAX_NOME_MEDIDOR);
+    if medidor.nome.is_empty() {
+        medidor.nome = "Medidor".to_string();
+    }
+
+    medidor.maximo = medidor.maximo.clamp(1, MAX_VALOR);
+    medidor.atual = medidor.atual.clamp(0, medidor.maximo);
+}
+
+/// Corta um texto no numero de CARACTERES, e nao de bytes.
+///
+/// `&texto[..teto]` entra em panico no meio de um acento, e nome de medidor em
+/// portugues tem acento na primeira palavra.
+fn texto_curto(valor: &str, teto: usize) -> String {
+    valor.trim().chars().take(teto).collect()
+}
+
+/// Cria um medidor no fim da lista.
+///
+/// Nasce cheio -- `atual` igual ao `maximo` --, que e o unico estado inicial
+/// que nao precisa de um segundo gesto: ninguem cria a vida de um personagem
+/// para deixa-la em zero.
+pub fn criar_medidor(
+    vault: &Vault,
+    id: &str,
+    nome: &str,
+    cor: &str,
+    estilo: Estilo,
+    maximo: i64,
+) -> AppResult<Medidor> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    if personagem.medidores.len() >= MAX_MEDIDORES {
+        return Err(AppError::Malformed {
+            file: "personagens.json".into(),
+            cause: format!("o personagem ja tem {MAX_MEDIDORES} medidores"),
+        });
+    }
+
+    let mut medidor = Medidor {
+        id: uuid::Uuid::new_v4().to_string(),
+        nome: nome.to_string(),
+        cor: cor.to_string(),
+        estilo,
+        atual: maximo,
+        maximo,
+        escondido: false,
+    };
+    ajustar(&mut medidor);
+
+    personagem.medidores.push(medidor.clone());
+    save(vault, &personagens)?;
+
+    Ok(medidor)
+}
+
+/// O que se pode trocar num medidor.
+///
+/// Campos opcionais e nao o medidor inteiro: o gesto mais comum da mesa e
+/// mexer so no `atual`, e mandar o registro completo a cada golpe faria uma
+/// tela desatualizada reescrever por cima do nome que outra acabou de trocar.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchMedidor {
+    pub nome: Option<String>,
+    pub cor: Option<String>,
+    pub estilo: Option<Estilo>,
+    pub atual: Option<i64>,
+    pub maximo: Option<i64>,
+    pub escondido: Option<bool>,
+}
+
+/// Edita um medidor e devolve como ele ficou depois do clamp.
+///
+/// Devolve o registro, e nao `()`, porque o valor que a tela mandou e o valor
+/// que ela grava podem diferir: baixar o `maximo` abaixo do `atual` puxa o
+/// `atual` junto, e a tela que nao soubesse disso mostraria 18/10 ate a
+/// releitura seguinte.
+pub fn editar_medidor(
+    vault: &Vault,
+    id: &str,
+    medidor_id: &str,
+    patch: PatchMedidor,
+) -> AppResult<Medidor> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+
+    let medidor = personagens[alvo]
+        .medidores
+        .iter_mut()
+        .find(|m| m.id == medidor_id)
+        .ok_or_else(|| sem_medidor(id, medidor_id))?;
+
+    if let Some(nome) = patch.nome {
+        medidor.nome = nome;
+    }
+    if let Some(cor) = patch.cor {
+        medidor.cor = cor;
+    }
+    if let Some(estilo) = patch.estilo {
+        medidor.estilo = estilo;
+    }
+    // O `maximo` ANTES do `atual`: subir o teto e encher na mesma chamada e um
+    // gesto real, e na ordem inversa o `atual` seria preso ao teto velho.
+    if let Some(maximo) = patch.maximo {
+        medidor.maximo = maximo;
+    }
+    if let Some(atual) = patch.atual {
+        medidor.atual = atual;
+    }
+    if let Some(escondido) = patch.escondido {
+        medidor.escondido = escondido;
+    }
+
+    ajustar(medidor);
+    let saida = medidor.clone();
+
+    save(vault, &personagens)?;
+
+    Ok(saida)
+}
+
+/// Tira um medidor da lista.
+pub fn remover_medidor(vault: &Vault, id: &str, medidor_id: &str) -> AppResult<()> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    if !personagem.medidores.iter().any(|m| m.id == medidor_id) {
+        return Err(sem_medidor(id, medidor_id));
+    }
+
+    personagem.medidores.retain(|m| m.id != medidor_id);
+
+    save(vault, &personagens)
+}
+
+/// Poe os medidores na ordem pedida.
+///
+/// O que NAO esta na ordem recebida fica no fim, na ordem em que estava. E o
+/// que faz um pedido montado numa tela desatualizada -- sem o medidor que outra
+/// acabou de criar -- reordenar sem apagar nada.
+pub fn reordenar_medidores(vault: &Vault, id: &str, ordem: &[String]) -> AppResult<Vec<Medidor>> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    let mut restantes = std::mem::take(&mut personagem.medidores);
+    let mut arrumados: Vec<Medidor> = Vec::with_capacity(restantes.len());
+
+    for pedido in ordem {
+        if let Some(posicao) = restantes.iter().position(|m| &m.id == pedido) {
+            arrumados.push(restantes.remove(posicao));
+        }
+    }
+    arrumados.append(&mut restantes);
+
+    personagem.medidores = arrumados.clone();
+    save(vault, &personagens)?;
+
+    Ok(arrumados)
+}
+
+/// Acrescenta medidores prontos a um personagem, respeitando o teto.
+///
+/// Devolve quantos ENTRARAM. Quem ja esta cheio recebe zero e nao vira erro: o
+/// chamador esta aplicando um modelo em toda a mesa, e uma ficha cheia nao pode
+/// derrubar a aplicacao nas outras trinta.
+///
+/// ## Nome repetido nao entra
+///
+/// Quem ja tem um "Vida" nao ganha um segundo. Este caminho e o dos MODELOS da
+/// campanha, e ele roda de novo toda vez que o mestre aperta "aplicar em todos"
+/// -- sem esta guarda, cada toque duplicaria a coluna inteira de quem ja estava
+/// em dia, e desfazer isso seria apagar de ficha em ficha.
+///
+/// Sem diferenciar maiuscula de minuscula, e depois do `trim` que `ajustar` ja
+/// faz: "Vida" e "vida" sao a mesma linha para quem olha a TV, e deixar as duas
+/// passarem transformaria a guarda num detalhe de digitacao.
+///
+/// A comparacao vale tambem DENTRO de `novos`: dois modelos com o mesmo nome
+/// deixam so o primeiro entrar. E o mesmo caso, visto do outro lado.
+pub fn acrescentar_medidores(vault: &Vault, id: &str, novos: Vec<Medidor>) -> AppResult<usize> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    let cabem = MAX_MEDIDORES.saturating_sub(personagem.medidores.len());
+    if cabem == 0 {
+        return Ok(0);
+    }
+
+    let mut tomados: Vec<String> = personagem
+        .medidores
+        .iter()
+        .map(|medidor| chave_do_nome(&medidor.nome))
+        .collect();
+
+    let mut entrando: Vec<Medidor> = Vec::new();
+
+    for mut medidor in novos {
+        if entrando.len() >= cabem {
+            break;
+        }
+
+        ajustar(&mut medidor);
+
+        let chave = chave_do_nome(&medidor.nome);
+        if tomados.contains(&chave) {
+            continue;
+        }
+
+        tomados.push(chave);
+        entrando.push(medidor);
+    }
+
+    let quantos = entrando.len();
+    if quantos == 0 {
+        return Ok(0);
+    }
+
+    personagem.medidores.extend(entrando);
+    save(vault, &personagens)?;
+
+    Ok(quantos)
+}
+
+/// O nome de um medidor como ele e comparado: sem caixa e sem espaco nas pontas.
+fn chave_do_nome(nome: &str) -> String {
+    nome.trim().to_lowercase()
+}
+
+/// Os ids de todos os personagens, para quem precisa percorrer a mesa inteira.
+pub fn todos_os_ids(vault: &Vault) -> AppResult<Vec<String>> {
+    Ok(load(vault)?.into_iter().map(|p| p.id).collect())
+}
+
+/// O personagem sem os medidores que a mesa nao ve.
+///
+/// Uma funcao, e nao um `skip_serializing_if` no campo: a decisao e de QUEM
+/// pergunta, como em `sem_aparencias`. O mestre le o mesmo `Personagem` pelo
+/// IPC e precisa da lista inteira para desenhar a ficha.
+///
+/// Mora aqui e nao em `serve` porque os dois lados a chamam: o daemon antes de
+/// responder ao celular, e o Mestre antes de publicar o estado da mesa.
+pub fn sem_ocultos(personagem: &Personagem) -> Personagem {
+    Personagem {
+        medidores: personagem
+            .medidores
+            .iter()
+            .filter(|m| !m.escondido)
+            .cloned()
+            .collect(),
+        ..personagem.clone()
+    }
 }
 
 /// Remove o personagem e a pasta dele.
@@ -1136,5 +1505,232 @@ mod tests {
 
         assert!(load(&vault).unwrap().is_empty());
         assert!(!dir(&vault, &p.id).exists());
+    }
+
+    // --- medidores -----------------------------------------------------------
+
+    fn com_medidor(vault: &Vault, maximo: i64) -> (String, Medidor) {
+        let p = create(vault, "Edgar").unwrap();
+        let m = criar_medidor(vault, &p.id, "Vida", "#ef4444", Estilo::Barra, maximo).unwrap();
+
+        (p.id, m)
+    }
+
+    #[test]
+    fn medidor_nasce_cheio() {
+        let (_tmp, vault) = vault();
+        let (_, m) = com_medidor(&vault, 20);
+
+        assert_eq!(m.atual, 20);
+        assert_eq!(m.maximo, 20);
+        assert!(!m.escondido);
+    }
+
+    #[test]
+    fn atual_nao_passa_do_maximo_nem_fica_negativo() {
+        let (_tmp, vault) = vault();
+        let (id, m) = com_medidor(&vault, 10);
+
+        let acima = editar_medidor(
+            &vault,
+            &id,
+            &m.id,
+            PatchMedidor {
+                atual: Some(99),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(acima.atual, 10);
+
+        let abaixo = editar_medidor(
+            &vault,
+            &id,
+            &m.id,
+            PatchMedidor {
+                atual: Some(-5),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(abaixo.atual, 0);
+    }
+
+    #[test]
+    fn baixar_o_maximo_puxa_o_atual_junto() {
+        // E por isso que `editar_medidor` devolve o registro: a tela mandou
+        // `maximo: 4` e nao teria como saber que o `atual` virou 4 tambem.
+        let (_tmp, vault) = vault();
+        let (id, m) = com_medidor(&vault, 20);
+
+        let apertado = editar_medidor(
+            &vault,
+            &id,
+            &m.id,
+            PatchMedidor {
+                maximo: Some(4),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(apertado.maximo, 4);
+        assert_eq!(apertado.atual, 4);
+    }
+
+    #[test]
+    fn subir_o_teto_e_encher_na_mesma_chamada() {
+        // O `maximo` e aplicado ANTES do `atual`. Na ordem inversa o valor novo
+        // seria preso ao teto velho, e o medidor subiria pela metade.
+        let (_tmp, vault) = vault();
+        let (id, m) = com_medidor(&vault, 5);
+
+        let subido = editar_medidor(
+            &vault,
+            &id,
+            &m.id,
+            PatchMedidor {
+                maximo: Some(30),
+                atual: Some(30),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(subido.atual, 30);
+    }
+
+    #[test]
+    fn maximo_zero_vira_um() {
+        let (_tmp, vault) = vault();
+        let (id, m) = com_medidor(&vault, 10);
+
+        let zerado = editar_medidor(
+            &vault,
+            &id,
+            &m.id,
+            PatchMedidor {
+                maximo: Some(0),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(zerado.maximo, 1);
+    }
+
+    #[test]
+    fn nome_vazio_nao_deixa_linha_em_branco() {
+        let (_tmp, vault) = vault();
+        let (id, m) = com_medidor(&vault, 10);
+
+        let sem_nome = editar_medidor(
+            &vault,
+            &id,
+            &m.id,
+            PatchMedidor {
+                nome: Some("   ".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(sem_nome.nome, "Medidor");
+    }
+
+    #[test]
+    fn nome_longo_e_cortado_sem_quebrar_acento() {
+        let (_tmp, vault) = vault();
+        let (id, m) = com_medidor(&vault, 10);
+
+        let cortado = editar_medidor(
+            &vault,
+            &id,
+            &m.id,
+            PatchMedidor {
+                nome: Some("á".repeat(200)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(cortado.nome.chars().count(), MAX_NOME_MEDIDOR);
+    }
+
+    #[test]
+    fn o_setimo_medidor_e_recusado() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        for _ in 0..MAX_MEDIDORES {
+            criar_medidor(&vault, &p.id, "Vida", "#ef4444", Estilo::Barra, 10).unwrap();
+        }
+
+        assert!(criar_medidor(&vault, &p.id, "Vida", "#ef4444", Estilo::Barra, 10).is_err());
+        assert_eq!(load(&vault).unwrap()[0].medidores.len(), MAX_MEDIDORES);
+    }
+
+    #[test]
+    fn sem_ocultos_tira_o_escondido_e_mantem_o_resto() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        let visivel = criar_medidor(&vault, &p.id, "Vida", "#ef4444", Estilo::Barra, 10).unwrap();
+        let secreto =
+            criar_medidor(&vault, &p.id, "Corrupção", "#a855f7", Estilo::Pontos, 6).unwrap();
+        editar_medidor(
+            &vault,
+            &p.id,
+            &secreto.id,
+            PatchMedidor {
+                escondido: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let inteiro = &load(&vault).unwrap()[0];
+        assert_eq!(inteiro.medidores.len(), 2);
+
+        let filtrado = sem_ocultos(inteiro);
+        assert_eq!(filtrado.medidores.len(), 1);
+        assert_eq!(filtrado.medidores[0].id, visivel.id);
+        // O resto do personagem atravessa intacto: e um filtro, nao uma copia
+        // parcial.
+        assert_eq!(filtrado.nome, "Edgar");
+        assert_eq!(filtrado.aparencias.len(), inteiro.aparencias.len());
+    }
+
+    #[test]
+    fn reordenar_poe_na_ordem_e_nao_perde_quem_faltou() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        let a = criar_medidor(&vault, &p.id, "A", "#ef4444", Estilo::Barra, 10).unwrap();
+        let b = criar_medidor(&vault, &p.id, "B", "#f59e0b", Estilo::Barra, 10).unwrap();
+        let c = criar_medidor(&vault, &p.id, "C", "#22c55e", Estilo::Barra, 10).unwrap();
+
+        // O pedido nao menciona `c` -- e o que acontece com uma tela que montou
+        // a ordem antes de outra criar o terceiro. Ele fica no fim, nao some.
+        let ordem = reordenar_medidores(&vault, &p.id, &[c.id.clone(), a.id.clone()]).unwrap();
+
+        assert_eq!(
+            ordem.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+            vec![c.id.as_str(), a.id.as_str(), b.id.as_str()]
+        );
+    }
+
+    #[test]
+    fn campanha_antiga_abre_sem_medidor_nenhum() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        // O campo nao e gravado quando esta vazio, entao o arquivo de uma
+        // versao anterior e exatamente este: sem a chave.
+        let cru = std::fs::read_to_string(index_path(&vault)).unwrap();
+        assert!(!cru.contains("medidores"));
+
+        assert!(load(&vault).unwrap()[0].medidores.is_empty());
+        assert_eq!(load(&vault).unwrap()[0].id, p.id);
     }
 }

@@ -8,6 +8,7 @@
  */
 
 import { novoId } from "@/lib/id";
+import type { Medidor } from "@/types/character";
 
 export const SCENE_WIDTH = 1920;
 export const SCENE_HEIGHT = 1080;
@@ -864,23 +865,31 @@ export type Traco = {
 
 export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura">;
 
-/** As formas de medidor. Ver `Medidor`. */
-export const FORMAS_MEDIDOR = ["linha", "circulo", "cone", "retangulo"] as const;
+/** As formas de régua. Ver `Regua`. */
+export const FORMAS_DE_REGUA = ["linha", "circulo", "cone", "retangulo"] as const;
 
-export type FormaMedidor = (typeof FORMAS_MEDIDOR)[number];
+export type FormaDaRegua = (typeof FORMAS_DE_REGUA)[number];
 
-/** Abertura do cone, em graus, quando o medidor não diz. */
+/** Abertura do cone, em graus, quando a régua não diz. */
 export const ABERTURA_CONE_PADRAO = 60;
 
 /**
- * Um medidor colocado sobre o mapa: régua, círculo, cone ou retângulo, com a
- * conta em metros escrita nele.
+ * Uma régua colocada sobre o mapa: linha, círculo, cone ou retângulo, com a
+ * conta em metros escrita nela.
+ *
+ * O tipo se chamava `Medidor`, e o campo da cena ainda se chama `medidores` --
+ * ele está gravado em toda cena no disco, e renomeá-lo cobraria uma migração
+ * por uma palavra. A palavra importou quando o personagem ganhou os DELE: dois
+ * `Medidor` no mesmo arquivo, um que mede o mapa e outro que mede a vida, é a
+ * confusão que o primeiro leitor apanha. A ferramenta já se chamava Régua na
+ * barra -- era o tipo que estava com o outro nome. Ver `Medidor`, em
+ * `types/character`.
  *
  * Mora na CENA, como o risco e a névoa: antes a régua era um gesto que sumia ao
  * soltar, e a pergunta "cabe o carro nessa viela?" tinha de ser refeita a cada
- * vez que alguém duvidava. Colocado, o medidor fica, anda com o dedo, e sai
- * quando o mestre o apaga. Viaja no zip, entra no desfazer, e a mesa vê --
- * medir é apontar para ela.
+ * vez que alguém duvidava. Colocada, ela fica, anda com o dedo, e sai quando o
+ * mestre a apaga. Viaja no zip, entra no desfazer, e a mesa vê -- medir é
+ * apontar para ela.
  *
  * Todas as formas cabem em DOIS pontos, e é por isso que mover e redimensionar
  * são o mesmo gesto para as quatro: `x, y` é a origem -- começo da régua,
@@ -888,12 +897,12 @@ export const ABERTURA_CONE_PADRAO = 60;
  * fim -- a outra ponta, um ponto na borda que dá o raio, a ponta do cone, o
  * canto oposto.
  *
- * A grade é quem dá o metro: sem ela o medidor não é criado. Ver
+ * A grade é quem dá o metro: sem ela a régua não é criada. Ver
  * `METROS_POR_QUADRADO`.
  */
-export type Medidor = {
+export type Regua = {
   id: string;
-  forma: FormaMedidor;
+  forma: FormaDaRegua;
   x: number;
   y: number;
   x2: number;
@@ -904,7 +913,7 @@ export type Medidor = {
   abertura?: number;
 };
 
-export type NewMedidor = Omit<Medidor, "id">;
+export type NovaRegua = Omit<Regua, "id">;
 
 /**
  * Uma parede: onde a luz para.
@@ -1313,6 +1322,32 @@ export type Portrait = {
    */
   urlLargura?: number;
   urlAltura?: number;
+  /**
+   * Os medidores deste personagem, para a coluna ao lado da figura.
+   *
+   * Resolvidos da ficha pelo mesmo caminho que o `assetId` e a `url` -- ver
+   * `retratosDaCena`. Viajam no payload publicado porque a barra tem de descer
+   * na TV no instante em que o mestre a desce, e porque a TV não tem índice de
+   * personagens: ela tem este quadro e mais nada.
+   *
+   * Chegam **sem os escondidos** por padrão. O palco do Mestre é o único que
+   * pede a lista inteira, e ele desenha os ocultos apagados -- ver
+   * `incluirOcultos`.
+   */
+  medidores?: Medidor[];
+  /**
+   * O que este retrato mostra, e onde.
+   *
+   * GUARDADO, ele é parcial: o campo que falta segue o layout da sessão, e é
+   * assim que "este chefe mostra só as barras" convive com "o resto segue o
+   * padrão". PUBLICADO, ele chega inteiro -- `retratosDaCena` resolve os dois
+   * níveis antes de a cena sair. Ver `LayoutDoRetrato`.
+   *
+   * Ausente nos dois casos quer dizer coisas diferentes, e é de propósito: no
+   * registro guardado é "não diverge em nada", e no payload é uma cena de uma
+   * versão anterior -- quem desenha lê a ausência como `LAYOUT_PADRAO`.
+   */
+  layout?: Partial<LayoutDoRetrato>;
   x: number;
   y: number;
   width: number;
@@ -1321,6 +1356,119 @@ export type Portrait = {
   visible: boolean;
   /** Virar o retrato para o lado da tela em que ele está. */
   flipX?: boolean;
+};
+
+/**
+ * O que a mesa precisa saber de um personagem para desenhar sobre o token dele.
+ *
+ * Um terceiro caminho ao lado do `Portrait`, e não um campo dele, porque as
+ * duas listas respondem a perguntas diferentes e têm elencos diferentes:
+ * retrato existe para quem tem IMAGEM e foi armado, e o token no mapa existe
+ * para todo mundo -- inclusive o goblin sem rosto. Pendurar a informação do
+ * mapa no retrato deixaria justamente a horda sem nome.
+ *
+ * Só viaja com `Scene.infoDosTokens` ligado. Ver `fichasDaCena`.
+ */
+export type FichaNaCena = {
+  id: string;
+  nome: string;
+  /** Já sem os escondidos, quando o destino é a mesa. */
+  medidores: Medidor[];
+};
+
+/**
+ * Onde uma peça do retrato fica, em fração da CAIXA do retrato.
+ *
+ * O canto superior esquerdo da peça, e não o centro dela: o centro obrigaria
+ * quem posiciona a conhecer o tamanho da peça, e o número de medidores muda
+ * essa altura a cada golpe do mestre.
+ *
+ * Em fração da caixa, e não da câmera, e é o que faz a peça acompanhar o
+ * retrato: escalar a figura leva as barras junto, sem uma segunda conta. `x: 1`
+ * é a borda direita da figura; valores fora de `0..1` põem a peça para fora
+ * dela, que é o caso comum.
+ */
+export type LugarDaPeca = { x: number; y: number };
+
+/**
+ * O que aparece num retrato e onde.
+ *
+ * O retrato deixou de ser "uma figura" e virou uma COMPOSIÇÃO: a figura, a
+ * coluna de medidores e a fileira de dados. Este tipo é o que diz quais das
+ * três estão no ar e onde cada uma cai.
+ *
+ * ## Ausência quer dizer automático
+ *
+ * `lugarDosMedidores` e `lugarDosDados` ausentes não são "no canto zero": são
+ * o comportamento que já existia -- ao lado e embaixo, virando de lado quando
+ * não cabe no recorte. Gravar uma coordenada de saída perderia essa virada, e é
+ * ela que impede a peça de sair do plano, que é o que derruba o palco no
+ * WebKitGTK. Posição livre é o DESVIO do automático, não o substituto dele.
+ *
+ * ## Dois níveis
+ *
+ * A sessão tem um layout inteiro, e cada retrato pode divergir em parte dele --
+ * ver `Portrait.layout`, que é parcial. O terceiro estado de um interruptor
+ * ("segue a sessão") é a AUSÊNCIA do campo, e não um enum de três valores: o
+ * enum obrigaria toda leitura a traduzir, e a ausência já é o que o disco de uma
+ * campanha antiga traz.
+ *
+ * No payload publicado ele chega RESOLVIDO e completo. A TV não sabe que existe
+ * padrão de sessão, pela mesma razão que não sabe que existe medidor escondido.
+ */
+export type LayoutDoRetrato = {
+  /** A figura em si. Desligada, a caixa continua existindo para as peças. */
+  retrato: boolean;
+  medidores: boolean;
+  dados: boolean;
+  /** Ausente = automático: ao lado, virando quando não cabe. */
+  lugarDosMedidores?: LugarDaPeca;
+  /** Ausente = automático: embaixo, virando para cima quando não cabe. */
+  lugarDosDados?: LugarDaPeca;
+  /**
+   * Quanto a coluna de medidores cresce ou encolhe. 1 é o tamanho de fábrica.
+   *
+   * Um fator e não uma largura: a coluna se mede contra a ALTURA do retrato --
+   * ver `larguraDaColuna` --, e uma largura cravada aqui deixaria de valer no
+   * primeiro retrato de tamanho diferente, que é o caso normal numa fila.
+   *
+   * O corpo do texto anda junto, porque ele é derivado da coluna. Aumentar a
+   * escala não faz caber mais caractere: faz a mesma leitura ficar maior, que é
+   * o pedido -- ler a vida do outro lado da sala.
+   *
+   * Preso entre `ESCALA_MIN` e `ESCALA_MAX` na hora de usar, e não na hora de
+   * gravar: o número entra por dois caminhos que ninguém controla -- o
+   * `retratos.json` de uma versão futura e o quadro que chega pelo canal.
+   */
+  escalaMedidores: number;
+  /**
+   * Quanto a fileira de dados cresce ou encolhe. 1 é o tamanho de fábrica.
+   *
+   * Irmã de `escalaMedidores`, e separada dela de propósito: as duas peças
+   * respondem a perguntas diferentes na mesa. O medidor se lê a sessão inteira
+   * e quer corpo; o dado aparece por dez segundos e grande demais cobre o mapa
+   * justo na hora em que a mesa olha para ele.
+   *
+   * Multiplica a caixa inteira da fileira -- o dado de agora, os do histórico e
+   * o texto --, porque tudo lá é derivado da largura do retrato. Ver
+   * `RolagensDoRetrato`.
+   */
+  escalaDados: number;
+};
+
+/**
+ * O layout com que a sessão começa, e o que a campanha antiga ganha ao abrir.
+ *
+ * As três peças no ar e as duas no automático: é exatamente a tela de antes de
+ * o layout existir. Uma conciliação que mudasse a imagem de uma campanha só por
+ * ela ter sido aberta numa versão nova seria uma surpresa no meio da sessão.
+ */
+export const LAYOUT_PADRAO: LayoutDoRetrato = {
+  retrato: true,
+  medidores: true,
+  dados: true,
+  escalaMedidores: 1,
+  escalaDados: 1,
 };
 
 /**
@@ -1553,10 +1701,30 @@ export type Scene = {
    */
   handout?: string[];
   /**
-   * Medidores colocados sobre o mapa. Ausente = nenhum. A mesa vê. Ver
-   * `Medidor`.
+   * Nome, dados e medidores acima da cabeça de cada token. Ausente = desligado.
+   *
+   * Da CENA e não da sessão, como o sol e a grade: o mapa de combate quer a
+   * vida de todo mundo à vista, e o mapa da taverna não quer nada por cima dos
+   * rostos. É o mesmo mapa aberto com duas intenções, e quem as separa é a
+   * cena.
+   *
+   * Um interruptor só para as três coisas, e não três. A pergunta que o mestre
+   * faz é "esta cena é de combate?", e respondê-la em três cliques seria pedir
+   * a ele que a traduzisse.
+   *
+   * O que a mesa vê depende deste campo E de `LiveState.fichas`, que só viaja
+   * com ele ligado -- ver `fichasDaCena`. O nome de um PNJ que o mestre não
+   * apresentou não pode atravessar a rede porque a cena tem um interruptor
+   * desligado na tela.
    */
-  medidores?: Medidor[];
+  infoDosTokens?: boolean;
+  /**
+   * Réguas colocadas sobre o mapa. Ausente = nenhuma. A mesa vê. Ver `Regua`.
+   *
+   * O campo guarda o nome antigo do tipo porque ele está em toda cena gravada
+   * no disco -- ver o cabeçalho de `Regua`.
+   */
+  medidores?: Regua[];
   /**
    * As paredes da cena: onde a luz para. Ausente = nenhuma. Ver `Parede`.
    *

@@ -6,7 +6,7 @@ import {
   CORES_POSTIT,
   FORMA_ESPESSURA,
   type CorPostit,
-  type FormaMedidor,
+  type FormaDaRegua,
   type FormatoDeArea,
   type FormatoDeParede,
   type TipoDeForma,
@@ -33,7 +33,7 @@ import {
  * `regua` coloca um medidor no arrasto -- régua, círculo, cone ou retângulo,
  * conforme `formaMedidor` -- e mora colada na grade, na pílula do mapa: ela só
  * significa algo com a grade ligada, porque é o quadrado que diz quanto vale
- * um metro. Ver `METROS_POR_QUADRADO` e `Medidor`.
+ * um metro. Ver `METROS_POR_QUADRADO` e `Regua`.
  *
  * As duas de mira são de gesto diferente de propósito: área é arrasto, porque
  * ela tem tamanho; ponto é clique, porque ele não tem — pedir um arrasto para
@@ -156,9 +156,9 @@ type ToolStore = {
    * régua reta é o padrão porque é a pergunta mais comum -- "quanto tem daqui
    * até ali". As cores são as do lápis: o medidor vive sobre o mesmo mapa.
    */
-  formaMedidor: FormaMedidor;
+  formaMedidor: FormaDaRegua;
   corMedidor: string;
-  setMedidor: (medidor: { formaMedidor?: FormaMedidor; corMedidor?: string }) => void;
+  setMedidor: (medidor: { formaMedidor?: FormaDaRegua; corMedidor?: string }) => void;
 
   /**
    * O tipo, a cor, a espessura e o fundo da PRÓXIMA forma do quadro.

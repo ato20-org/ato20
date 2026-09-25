@@ -1,10 +1,14 @@
 import { canvasDaUrl, type FonteRetrato } from "@/lib/extensoes/fontes";
 import { boxBounds, unionBounds, type Bounds } from "@/lib/geometry/bounds";
 import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
+import { medidoresVisiveis } from "@/lib/medidor";
+import type { Medidor } from "@/types/character";
 import {
+  LAYOUT_PADRAO,
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type AncoraRetrato,
+  type LayoutDoRetrato,
   type Portrait,
   type UniaoDeRetratos,
   type Viewport,
@@ -165,6 +169,17 @@ export function scalePortraitGroup(
  * `fontes` sao as fontes de retrato das extensoes habilitadas, e entram so para
  * responder em que CANVAS a pagina foi desenhada. Lista vazia e estado valido --
  * quem colou a URL a mao, sem extensao nenhuma, cai no `CANVAS_PADRAO`.
+ *
+ * Os `medidores` vem pelo mesmo caminho, e por isso o quinto parametro. Eles
+ * saem FILTRADOS por padrao: dos tres consumidores, um publica na rede, e o
+ * default seguro e o que faz um chamador novo nascer certo. `incluirOcultos` e
+ * do palco do Mestre, o unico que precisa ver o que a mesa nao ve -- ele
+ * desenha os escondidos apagados, para o mestre saber que estao la.
+ *
+ * `layoutPadrao` e o da SESSAO, e aqui os dois niveis viram um: o que sai tem
+ * `layout` inteiro, com o que o retrato escolheu por cima do que a mesa
+ * escolheu. E o mesmo servico que a funcao ja presta ao `assetId` -- quem
+ * recebe o quadro nao precisa saber que havia dois lugares onde procurar.
  */
 export function retratosDaCena(
   guardados: Portrait[],
@@ -173,8 +188,11 @@ export function retratosDaCena(
     id: string;
     retrato?: string;
     retratoUrl?: string;
+    medidores?: Medidor[];
   }>,
   fontes: FonteRetrato[] = [],
+  incluirOcultos = false,
+  layoutPadrao: LayoutDoRetrato = LAYOUT_PADRAO,
 ): Portrait[] {
   const porId = new Map(
     guardados.map((retrato) => [retrato.personagemId, retrato]),
@@ -211,6 +229,17 @@ export function retratosDaCena(
       // pagina viva nao tem asset nenhum para apontar. `useAssetUrl` devolve
       // nada para id vazio, que e o que faz a imagem de tras nao existir.
       assetId: retratoAsset ?? "",
+      // Resolvidos da ficha como o resto, e nao do registro guardado: o
+      // medidor muda a cada golpe, e uma copia cravada no retrato mostraria a
+      // vida de quando ele foi armado.
+      //
+      // O filtro e o PADRAO, e nao uma opcao que cada chamador lembra de
+      // ligar: tres telas leem esta funcao e uma delas publica na rede. O
+      // default seguro e o que faz um chamador novo nascer certo.
+      medidores: incluirOcultos
+        ? (ficha?.medidores ?? [])
+        : medidoresVisiveis(ficha?.medidores),
+      layout: { ...layoutPadrao, ...guardado.layout },
       ...(url && canvas
         ? { url, urlLargura: canvas.largura, urlAltura: canvas.altura }
         : {}),
@@ -253,6 +282,222 @@ export const FOLGA_PADRAO = 0.015;
  */
 export const FOLGA_MIN = -0.06;
 export const FOLGA_MAX = 0.06;
+
+/**
+ * A largura da coluna de medidores, em fração da ALTURA do retrato.
+ *
+ * Da altura e não da largura, com a proporção do plano na conta — o mesmo
+ * caminho de `createPortrait`. Retrato deitado e retrato em pé têm larguras
+ * muito diferentes e alturas parecidas, porque a fila alinha rostos: medida
+ * pela largura, a coluna de uma figura panorâmica ficaria três vezes maior que
+ * a da vizinha, para escrever as mesmas duas palavras.
+ *
+ * O número saiu da TELA, em duas correções. 0,4 dava uma tira de uns 70px num
+ * palco de mil, e o nome era cortado em "Vi…". 0,6 não consertou: o corpo do
+ * texto é derivado DESTA largura, então os dois cresciam juntos e a proporção
+ * ficava a mesma -- "Medidor 10/10" continuava virando "Med… 10/10". Quem
+ * conserta é o par: esta sobe e a razão do corpo desce, em `MedidoresDoRetrato`.
+ *
+ * 0,8 põe a coluna um pouco acima da largura de um retrato em pé. É o teto
+ * útil: a fila promete três personagens lado a lado (ver `INITIAL_HEIGHT`), e
+ * com a coluna somada eles ocupam 0,92 da faixa contra os 0,94 disponíveis.
+ * Passando disso, a folga entre os vizinhos começa a ser comida.
+ */
+export const LARGURA_DOS_MEDIDORES = 0.8;
+
+/**
+ * Quanto um retrato ocupa NA FILA, contando a coluna de medidores.
+ *
+ * Separado de `width` de propósito: são duas perguntas diferentes sobre o mesmo
+ * retrato. `width` é o tamanho da FIGURA — é dela que o gizmo pega, é ela que o
+ * mestre estica, e a coluna não pode entrar aí ou arrastar a alça esticaria as
+ * barras junto. Esta é o tamanho do LUGAR que o retrato pede na fileira, e é o
+ * que impede o vizinho de encostar em cima das barras.
+ *
+ * Sem medidor não há coluna, e a conta volta a ser a largura de sempre: uma
+ * fila de retratos sem barra nenhuma se enfileira exatamente como antes.
+ *
+ * Retrato que só tem medidor ESCONDIDO não reserva coluna para a mesa, e
+ * reserva no palco do Mestre — que é quem recebe a lista inteira. A divergência
+ * é um VÃO a mais na TV, nunca uma sobreposição, que é o lado certo de errar:
+ * é a mesma preferência que `folgaAplicada` já tem.
+ */
+export function larguraNaFila(
+  retrato: Pick<Portrait, "width" | "height" | "medidores" | "layout">,
+): number {
+  return caixaDaComposicao(retrato).largura;
+}
+
+/**
+ * A largura da coluna de medidores de um retrato desta altura.
+ *
+ * Exportada porque duas peças precisam do MESMO número: a fila, que reserva o
+ * lugar, e a coluna, que se desenha nele. Divergindo, o vizinho encosta por um
+ * fio ou sobra um vão que ninguém pediu.
+ *
+ * O número de medidores não entra: eles empilham para baixo, e é isso que faz
+ * a largura não depender de quantos são -- nem da lista que cada tela recebeu.
+ */
+export function larguraDaColuna(altura: number, escala = 1): number {
+  return altura * LARGURA_DOS_MEDIDORES * PLANE_ASPECT * limitarEscala(escala);
+}
+
+/**
+ * Os limites do ajuste de tamanho da coluna.
+ *
+ * Metade e o dobro. Abaixo de metade o nome não se lê nem de perto; acima do
+ * dobro a coluna fica mais larga que dois retratos, e a fila deixa de caber --
+ * `LARGURA_DOS_MEDIDORES` já está no teto do que os três personagens lado a
+ * lado permitem, e a escala multiplica justamente aquilo.
+ */
+export const ESCALA_MIN = 0.5;
+export const ESCALA_MAX = 2;
+
+/**
+ * Prende a escala aos limites, ou devolve 1 para o que não é número.
+ *
+ * Irmã de `limitarFolga`, e existe pelo mesmo motivo: o valor entra por dois
+ * caminhos que ninguém controla -- o `retratos.json` de uma versão futura ou
+ * corrompido, e o quadro que chega pelo canal. A régua da tela já não deixa
+ * sair do intervalo; é dos outros dois que este guarda protege.
+ */
+export function limitarEscala(escala: unknown): number {
+  return typeof escala === "number" && Number.isFinite(escala)
+    ? Math.min(ESCALA_MAX, Math.max(ESCALA_MIN, escala))
+    : 1;
+}
+
+/**
+ * A largura da fileira de dados, em fração da LARGURA do retrato.
+ *
+ * A fileira é a coluna do histórico mais o dado de agora, e os dois saem da
+ * largura do retrato em `RolagensDoRetrato`: o dado grande vale 0,34, o
+ * histórico com o número ao lado fica perto de 0,26, e o vão entre eles 0,05.
+ *
+ * Só entra na conta da fila quando o mestre deu um LUGAR aos dados. No
+ * automático eles caem embaixo da figura, e reservar largura para um dado que
+ * não está rolando deixaria um vão permanente ao lado de todo retrato da mesa.
+ */
+const LARGURA_DOS_DADOS = 0.65;
+
+/** A largura da fileira de dados de um retrato desta largura, já com a escala. */
+export function larguraDosDados(largura: number, escala = 1): number {
+  return largura * LARGURA_DOS_DADOS * limitarEscala(escala);
+}
+
+/**
+ * A caixa que envolve o retrato e as peças dele, em fração da câmera.
+ *
+ * Devolve o quanto ela passa da figura para cada lado, e não um retângulo: quem
+ * chama é a fila, e o que ela precisa saber é onde o vizinho pode encostar. O
+ * `recuo` é o que sobra à ESQUERDA da figura, e entra como deslocamento; a
+ * `largura` é a da composição inteira.
+ *
+ * Só o eixo horizontal. A fila alinha pela base ou pelo topo e empilha uniões
+ * pela altura do maior membro -- é conta de largura que decide se um rosto
+ * encosta no outro, e é ela que a coluna de medidores mudou.
+ *
+ * Peça DESLIGADA não ocupa nada, e peça no automático ocupa do lado em que o
+ * automático a põe: a coluna de medidores conta sempre (ela cabe de um lado ou
+ * do outro, e nos dois casos rouba a mesma largura do vizinho), e os dados não
+ * contam, porque embaixo eles não disputam largura com ninguém.
+ */
+export function caixaDaComposicao(
+  retrato: Pick<Portrait, "width" | "height" | "medidores" | "layout">,
+): { recuo: number; largura: number } {
+  const layout = { ...LAYOUT_PADRAO, ...retrato.layout };
+
+  let esquerda = 0;
+  let direita = retrato.width;
+
+  const temMedidor = (retrato.medidores?.length ?? 0) > 0;
+  if (layout.medidores && temMedidor) {
+    const coluna = larguraDaColuna(retrato.height, layout.escalaMedidores);
+    const lugar = layout.lugarDosMedidores;
+
+    if (lugar) {
+      // Em fração da CAIXA: `x: 1.08` é logo depois da borda direita dela.
+      const inicio = lugar.x * retrato.width;
+      esquerda = Math.min(esquerda, inicio);
+      direita = Math.max(direita, inicio + coluna);
+    } else {
+      // No automático ela fica de um lado ou do outro, conforme o recorte.
+      // Reservar do lado direito é arbitrário e é o certo: o que a fila precisa
+      // é que a largura roubada do vizinho seja a mesma nos dois casos.
+      direita += coluna;
+    }
+  }
+
+  const lugarDosDados = layout.lugarDosDados;
+  if (layout.dados && lugarDosDados) {
+    const largura = larguraDosDados(retrato.width, layout.escalaDados);
+    const inicio = lugarDosDados.x * retrato.width;
+
+    esquerda = Math.min(esquerda, inicio);
+    direita = Math.max(direita, inicio + largura);
+  }
+
+  // `esquerda < 0` e nao `-esquerda`: sem peca para fora, a negacao de zero e
+  // `-0`, que passa em `===` e falha em `toEqual` -- e um dia vira um `-0px`
+  // num estilo. `esquerda` nunca e positiva, entao o ramo cobre os dois casos.
+  return {
+    recuo: esquerda < 0 ? -esquerda : 0,
+    largura: direita - esquerda,
+  };
+}
+
+/**
+ * Onde uma peça do retrato começa, garantido dentro do recorte.
+ *
+ * Tudo na unidade de quem chama, com a origem no canto do retrato: o recorte
+ * vai de `-folgaEsquerda` a `largura + folgaDireita`. É a mesma função no plano
+ * do Mestre, em unidade de cena, e no overlay da mesa, em pixel.
+ *
+ * ## Por que ela existe
+ *
+ * Porque **filho que transborda a caixa de um plano infla a camada composta**,
+ * e o WebKitGTK então pinta o mapa deslocado e depois preto -- só no Mestre, só
+ * com a câmera parada, só ao dar zoom. Já derrubou o palco três vezes, sempre
+ * com alguém pondo elemento novo dentro de um plano, e o sintoma lê como bug de
+ * câmera. Ver a skill `debug-do-palco`, §3.
+ *
+ * Escolher o lado com mais espaço resolve o caso comum, e esta prende o que
+ * sobra dele: com o retrato ampliado até ocupar a câmera inteira não há lado
+ * bom, e sem a trava a coluna sairia do recorte dos dois jeitos. Encostar sobre
+ * a borda da figura é o pior que acontece aqui, e é melhor que o que acontece
+ * lá fora.
+ *
+ * O feed de dados aceita sumir nesse caso ("trocar de lado só trocaria qual
+ * metade some"), e a diferença é de EIXO: o que sai por baixo do retrato sai
+ * pela borda de baixo do plano, e o que sai pelo lado sai justamente pela borda
+ * em que o mestre encosta a fila de propósito -- a posição mais comum da tela,
+ * não a exceção.
+ */
+export function pecaNoRecorte({
+  desejado,
+  coluna,
+  largura,
+  folgaDireita,
+  folgaEsquerda,
+}: {
+  /** Onde ela ficaria sem trava nenhuma. */
+  desejado: number;
+  /** A largura da peça. */
+  coluna: number;
+  /** A largura da caixa do retrato. */
+  largura: number;
+  folgaDireita: number;
+  folgaEsquerda: number;
+}): number {
+  const minimo = -folgaEsquerda;
+  const maximo = largura + folgaDireita - coluna;
+
+  // Coluna mais larga que o recorte inteiro: não há posição que caiba, e
+  // encostar na borda esquerda ao menos mantém o começo do nome legível.
+  if (maximo < minimo) return minimo;
+
+  return Math.min(Math.max(desejado, minimo), maximo);
+}
 
 /**
  * Prende a folga aos limites, ou devolve o padrão para o que não é número.
@@ -308,7 +553,9 @@ const AREAS: Record<
  * única tela em que o retrato aparece. Ver `folgaAplicada`.
  */
 export function filaDeRetratos(
-  fila: ReadonlyArray<Pick<Portrait, "id" | "width" | "height">>,
+  fila: ReadonlyArray<
+    Pick<Portrait, "id" | "width" | "height" | "medidores" | "layout">
+  >,
   ancora: AncoraRetrato,
   escolhida: number = FOLGA_PADRAO,
   deslocamento: number = 0,
@@ -318,7 +565,12 @@ export function filaDeRetratos(
   const area = AREAS[ancora];
   const disponivel = 1 - 2 * MARGEM_FILA;
 
-  const larguras = fila.reduce((soma, retrato) => soma + retrato.width, 0);
+  // `larguraNaFila` e nao `width`: o que se enfileira e a COMPOSICAO -- o
+  // retrato mais as pecas que passam da borda dele. Ver `caixaDaComposicao`.
+  const larguras = fila.reduce(
+    (soma, retrato) => soma + larguraNaFila(retrato),
+    0,
+  );
   const vaos = fila.length - 1;
 
   const folga =
@@ -334,7 +586,7 @@ export function filaDeRetratos(
    */
   const passoFixo =
     total > disponivel
-      ? (disponivel - (fila[fila.length - 1]?.width ?? 0)) / Math.max(1, vaos)
+      ? (disponivel - ultima(fila)) / Math.max(1, vaos)
       : null;
 
   const inicio =
@@ -347,9 +599,13 @@ export function filaDeRetratos(
   let x = inicio;
 
   return fila.map((retrato, indice) => {
+    // O passo anda pela CAIXA, e a figura fica dentro dela: peca jogada para a
+    // esquerda empurra o retrato para a direita, e e isso que impede a barra de
+    // um sair por baixo do vizinho. Sem o recuo, o `x` da fila seria o canto da
+    // figura e a caixa comecaria antes dela.
     const posicao = {
       id: retrato.id,
-      x,
+      x: x + caixaDaComposicao(retrato).recuo,
       y:
         area.vertical === "cima"
           ? MARGEM_FILA + deslocamento
@@ -358,11 +614,22 @@ export function filaDeRetratos(
 
     x =
       passoFixo === null
-        ? x + retrato.width + folga
+        ? x + larguraNaFila(retrato) + folga
         : inicio + passoFixo * (indice + 1);
 
     return posicao;
   });
+}
+
+/** A largura de fila do ultimo da fileira, zero se ela estiver vazia. */
+function ultima(
+  fila: ReadonlyArray<
+    Pick<Portrait, "width" | "height" | "medidores" | "layout">
+  >,
+): number {
+  const fim = fila[fila.length - 1];
+
+  return fim ? larguraNaFila(fim) : 0;
 }
 
 /**
@@ -392,12 +659,12 @@ function folgaAplicada(
   escolhida: number,
   sobra: number,
   vaos: number,
-  fila: ReadonlyArray<Pick<Portrait, "width">>,
+  fila: ReadonlyArray<Pick<Portrait, "width" | "height" | "medidores" | "layout">>,
 ): number {
   if (escolhida >= 0) return Math.min(escolhida, Math.max(0, sobra / vaos));
 
   const menor = fila.reduce(
-    (menor, retrato) => Math.min(menor, retrato.width),
+    (menor, retrato) => Math.min(menor, larguraNaFila(retrato)),
     Infinity,
   );
 
@@ -418,7 +685,10 @@ function folgaAplicada(
 export const FOLGA_ENTRE_LINHAS = 0.03;
 
 /** O que a pilha precisa saber de um retrato: tamanho e se está no ar. */
-type MembroDaFila = Pick<Portrait, "id" | "width" | "height" | "visible">;
+type MembroDaFila = Pick<
+  Portrait,
+  "id" | "width" | "height" | "visible" | "medidores" | "layout"
+>;
 
 /**
  * Onde cada retrato de cada união deve estar.

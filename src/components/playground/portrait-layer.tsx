@@ -12,13 +12,15 @@ import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { CANVAS_PADRAO } from "@/lib/extensoes/fontes";
 import { usePaginaVivaSuportada } from "@/lib/motor";
+import { MedidoresDoRetrato } from "@/components/playground/medidores-do-retrato";
 import { RolagensDoRetrato } from "@/components/playground/rolagens-do-retrato";
 import { caberEm } from "@/lib/geometry/caber";
 import { portraitBox } from "@/lib/geometry/portrait";
 import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
 import { cn } from "@/lib/utils";
+import type { Medidor } from "@/types/character";
 import type { RolagemDaMesa } from "@/types/dado";
-import type { Portrait, Viewport } from "@/types/scene";
+import { LAYOUT_PADRAO, type Portrait, type Viewport } from "@/types/scene";
 
 /**
  * Acima da névoa.
@@ -35,6 +37,9 @@ const PORTRAIT_Z = 6_000;
  * quebraria o `memo` da `PortraitView` a cada quadro recebido.
  */
 const SEM_ROLAGENS: RolagemDaMesa[] = [];
+
+/** O retrato sem medidor nenhum. Mesma razão da constante acima. */
+const SEM_MEDIDORES: Medidor[] = [];
 
 type PortraitLayerProps = {
   portraits: Portrait[];
@@ -348,6 +353,16 @@ const PortraitView = memo(function PortraitView({
   // seria a página de erro do serviço. Ver `usePaginaVivaSuportada`.
   const paginaVivaOk = usePaginaVivaSuportada();
 
+  /**
+   * O que este retrato mostra.
+   *
+   * O quadro publicado já traz o layout resolvido -- ver `retratosDaCena` --, e
+   * o `LAYOUT_PADRAO` aqui é para a cena de uma versão anterior, que não traz
+   * o campo. Ler a ausência como "mostra tudo" é o que faz uma sessão gravada
+   * antes desta feature reabrir igual.
+   */
+  const layout = { ...LAYOUT_PADRAO, ...portrait.layout };
+
   return (
     <div
       data-portrait-id={portrait.id}
@@ -381,7 +396,7 @@ const PortraitView = memo(function PortraitView({
           existindo se a internet cair no meio da sessão — sem aviso, sem
           buraco, sem a mesa ficar olhando um retângulo vazio. Quem tem só um
           dos dois vê aquele. */}
-      {url ? (
+      {url && layout.retrato ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={url}
@@ -414,7 +429,7 @@ const PortraitView = memo(function PortraitView({
         />
       ) : null}
 
-      {portrait.url && paginaVivaOk ? (
+      {portrait.url && paginaVivaOk && layout.retrato ? (
         <PaginaViva
           url={portrait.url}
           largura={portrait.urlLargura ?? CANVAS_PADRAO.largura}
@@ -430,8 +445,24 @@ const PortraitView = memo(function PortraitView({
           vai mostrar -- que é justamente o trabalho dele neste palco.
           Só no Mestre: no celular de um jogador isto seria um aviso sobre
           uma limitação que não é dele e que ele não pode resolver. */}
-      {portrait.url && !paginaVivaOk && !url && mestre ? (
+      {portrait.url && !paginaVivaOk && !url && mestre && layout.retrato ? (
         <MarcaPaginaViva escala={escala} />
+      ) : null}
+
+      {/* A figura desligada pelo layout.
+          A caixa CONTINUA existindo -- é dela que as peças penduram, é ela que
+          o mestre arrasta e escala, e é ela que reserva lugar na fila. O que
+          sai é o rosto, e é um pedido real: o chefe que a mesa vê só pela barra
+          de vida descendo.
+          Só no Mestre, e pontilhada como o fantasma: sem nenhuma marca ele
+          arrastaria um retângulo invisível. Na mesa não desenha nada, que é o
+          ponto de ter desligado. */}
+      {!layout.retrato && mestre ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded outline-dashed outline-white/25"
+          style={{ outlineWidth: 1.5 / escala }}
+        />
       ) : null}
 
       {/* Fora do ar, o retrato não desenha para a mesa -- e o dado pendurado
@@ -443,7 +474,9 @@ const PortraitView = memo(function PortraitView({
           tem como saber que aquele dado é novo -- ele apareceria assentado, sem
           queda. Quem não desenha nada é ele, por dentro. */}
       <RolagensDoRetrato
-        rolagens={rolagens ?? SEM_ROLAGENS}
+        rolagens={layout.dados ? (rolagens ?? SEM_ROLAGENS) : SEM_ROLAGENS}
+        lugar={layout.lugarDosDados}
+        escala={layout.escalaDados}
         largura={box.width}
         altura={box.height}
         // Quanto sobra do RECORTE para cada lado do retrato, e não do plano: o
@@ -451,6 +484,25 @@ const PortraitView = memo(function PortraitView({
         // perdido quanto um desenhado fora da cena.
         folgaAbaixo={recorte.y + recorte.height - (box.y + box.height)}
         folgaAcima={box.y - recorte.y}
+      />
+
+      {/* A coluna de medidores, do lado. Fora do ar ela não desenha para a
+          mesa pela mesma razão do dado: o retrato não está lá, e uma barra
+          flutuando sozinha sobre o mapa não diria de quem é.
+
+          As folgas saem do RECORTE, como as do dado: o que a mesa vê é a
+          câmera, e uma barra desenhada fora dela está tão perdida quanto uma
+          desenhada fora da cena. Ver `MedidoresDoRetrato`. */}
+      <MedidoresDoRetrato
+        medidores={
+          layout.medidores ? (portrait.medidores ?? SEM_MEDIDORES) : SEM_MEDIDORES
+        }
+        lugar={layout.lugarDosMedidores}
+        escala={layout.escalaMedidores}
+        largura={box.width}
+        altura={box.height}
+        folgaDireita={recorte.x + recorte.width - (box.x + box.width)}
+        folgaEsquerda={box.x - recorte.x}
       />
     </div>
   );
