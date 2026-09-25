@@ -10,9 +10,13 @@ import {
 
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { LayerList } from "@/components/mestre/layer-list";
+import { ChaoInclinado } from "@/components/playground/chao-inclinado";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
+import { VolumeLayer } from "@/components/playground/volume-layer";
+import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
+import { leandoDaCamera } from "@/lib/geometry/volume";
 import { MestreShell } from "@/components/mestre/mestre-shell";
 import { MestreStage } from "@/components/mestre/mestre-stage";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -187,6 +191,7 @@ type Cenario =
   | "camadas"
   | "camera"
   | "mestre-camera"
+  | "chao-25d"
   | "quadro"
   | "jogador"
   | "selecao";
@@ -1368,6 +1373,160 @@ function PalcoMestreCamera({ n, cameras }: { n: number; cameras: number }) {
   return (
     <SceneStage viewport={viewport} onViewportChange={setViewport} limites={PLANO}>
       <MestreStage scene={cena} />
+    </SceneStage>
+  );
+}
+
+/**
+ * O MAPA DE ESGUELHA, e quanto ele custa contra o mapa de prumo.
+ *
+ * É a medida que decide qual renderizador 2.5D entra na aplicação, e ela vem
+ * ANTES da integração de propósito: adaptar as onze camadas do `SceneLayer` a
+ * um chão que tomba é trabalho grande, e fazê-lo para o renderizador errado é
+ * trabalho grande jogado fora.
+ *
+ * Três modos, o mesmo mapa, as mesmas paredes e as mesmas peças:
+ *
+ * `2d`      o palco de hoje. A base de comparação, e a única das três em que o
+ *           plano de conteúdo continua em `zoom`.
+ * `relevo`  `VolumeLayer`: as paredes sobem, o chão fica de prumo. Nada gira,
+ *           então o `zoom` e o conserto de nitidez do `conteudoNoLayout`
+ *           sobrevivem. É a opção barata.
+ * `chao`    `ChaoInclinado`: a cena inteira deita. Custa `transform` PERMANENTE
+ *           no plano de conteúdo, e é exatamente esse preço que esta medida
+ *           existe para cobrar.
+ *
+ * ## O que a corrida move, e por quê
+ *
+ * A câmera, como no `mestre-camera` -- é o gesto em que o palco re-rasteriza
+ * quadro a quadro. E, com `?girando=1`, o GIRO da vista junto: girar refaz a
+ * lista do pintor inteira a cada quadro, porque a profundidade de cada parede e
+ * de cada peça muda. É o pior caso do modo e o único jeito de saber se a
+ * ordenação cabe no orçamento.
+ *
+ * ## O número que decide
+ *
+ * `fps` e `perdidos`, como sempre. Mas aqui o HUD do palco (`Ctrl+Alt+D`) tem
+ * um segundo: `transbordo`. O chão deitado ocupa uma caixa MAIOR que o plano, e
+ * filho que transborda infla a camada composta do WebKitGTK -- o mapa passa a
+ * ser pintado deslocado e fica preto ampliado. `encaixeDoChao` existe para que
+ * isso dê zero; se a medida mostrar transbordo, o encaixe está errado e nenhum
+ * fps salva o modo.
+ *
+ * Exemplos:
+ *
+ *     pnpm perf --cenario chao-25d --paredes 40 --sol 1
+ *     # e à mão, na webview, trocando o modo:
+ *     /perf?cenario=chao-25d&modo=chao&n=40&paredes=40&sol=1&girando=1
+ */
+function PalcoChao25d({
+  n,
+  modo,
+  girando,
+}: {
+  n: number;
+  modo: "2d" | "relevo" | "chao";
+  girando: boolean;
+}) {
+  const cena = useSceneStore(selectEditingScene);
+  const viewport = useViewportStore((state) => state.viewport);
+  const setViewport = useViewportStore((state) => state.setViewport);
+  const [giro, setGiro] = useState(0);
+
+  useEffect(() => {
+    // Sem câmeras salvas e sem nada no ar: o que se mede aqui é o CHÃO, e uma
+    // moldura na tela somaria o custo dela ao número que decide outra coisa.
+    const base = montarCena(n, 0, false);
+
+    useSceneStore.setState({
+      board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
+      status: "ready",
+      campaignPath: "/perf",
+    });
+
+    let quadro = 0;
+    const comecou = performance.now();
+
+    const passo = () => {
+      const a = (performance.now() - comecou) / 1000;
+      const fator = 2.5 + Math.cos(a) * 1.5;
+
+      useViewportStore.getState().setViewport(
+        zoomViewport(FULL_VIEWPORT, fator, {
+          x: SCENE_WIDTH / 2 + Math.sin(a) * 300,
+          y: SCENE_HEIGHT / 2 + Math.cos(a * 0.7) * 200,
+        }),
+      );
+
+      // Uma volta a cada vinte segundos. Devagar de propósito: o custo está em
+      // a lista do pintor mudar de ordem, e isso acontece em qualquer
+      // velocidade -- girar depressa só embaralharia o que o olho confere.
+      if (girando) setGiro((((a * 18) % 360) + 360) % 360);
+
+      quadro = requestAnimationFrame(passo);
+    };
+
+    quadro = requestAnimationFrame(passo);
+
+    return () => {
+      cancelAnimationFrame(quadro);
+      useViewportStore.getState().setViewport(FULL_VIEWPORT);
+      useSceneStore.setState({ board: null, status: "idle", campaignPath: null });
+    };
+  }, [girando, n]);
+
+  /**
+   * Os itens da cena como PEÇAS do chão inclinado.
+   *
+   * A forma é outra -- o chão pede base e altura, a cena guarda caixa e giro --
+   * e converter aqui é o que esta medida tem de honesto: é exatamente a
+   * conversão que a integração vai precisar escrever, e medi-la agora é medir o
+   * que vai rodar.
+   */
+  const pecas = useMemo(
+    () =>
+      (cena?.items ?? []).map((item) => ({
+        id: item.id,
+        x: item.x,
+        y: item.y,
+        lado: item.width,
+        altura: item.height,
+        url: `/asset/${item.assetId}`,
+      })),
+    [cena?.items],
+  );
+
+  if (!cena) return null;
+
+  const mapa = `/asset/${cena.backgroundAssetId}`;
+
+  return (
+    <SceneStage viewport={viewport} onViewportChange={setViewport} limites={PLANO}>
+      {modo === "chao" ? (
+        <ChaoInclinado
+          paredes={cena.paredes ?? []}
+          mapaUrl={mapa}
+          giro={giro}
+          inclinacao={52}
+          perspectiva={2600}
+          escurecer={0.42}
+          sol={cena.sol}
+          grade
+          passoDaGrade={Math.round(UNIDADES_POR_METRO)}
+          pecas={pecas}
+        />
+      ) : (
+        <>
+          <SceneLayer scene={cena} />
+          {modo === "relevo" ? (
+            <VolumeLayer
+              paredes={cena.paredes ?? []}
+              vista={{ giro: leandoDaCamera(giro), inclinacao: 0.45 }}
+              mapaUrl={mapa}
+            />
+          ) : null}
+        </>
+      )}
     </SceneStage>
   );
 }
@@ -2756,6 +2915,9 @@ function Medida({ params }: { params: URLSearchParams }) {
     [params],
   );
   const rajada = params.get("rajada") === "1";
+  /** `chao-25d`: qual renderizador medir, e se a vista gira durante a corrida. */
+  const modo25d = (params.get("modo") ?? "chao") as "2d" | "relevo" | "chao";
+  const girando = params.get("girando") === "1";
   /** `mestre-camera`: quantas câmeras salvas a cena tem. Uma é a moldura. */
   const cameras = Number(params.get("cameras") ?? 1);
   /** `camera-gesto` e `bancada`: qual gesto sobre a moldura o robô repete. */
@@ -2839,6 +3001,8 @@ function Medida({ params }: { params: URLSearchParams }) {
           mapas={mapas}
           noAr={noAr}
         />
+      ) : cenario === "chao-25d" ? (
+        <PalcoChao25d n={n} modo={modo25d} girando={girando} />
       ) : cenario === "mestre-camera" ? (
         <PalcoMestreCamera n={n} cameras={cameras} />
       ) : cenario === "camera-gesto" ? (
