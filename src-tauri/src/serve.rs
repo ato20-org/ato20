@@ -891,6 +891,11 @@ async fn rolls(
 /// O que o celular manda enquanto arrasta: qual token, de qual personagem, e
 /// para onde. `x` e `y` sao o canto do item, em unidades de cena, como em
 /// `CanvasItem`.
+///
+/// `rotation` so vem quando o gesto foi de GIRAR, e ausente e diferente de
+/// zero: um arrasto que mandasse `0` em toda amostra endireitaria sozinho um
+/// token que o mestre deixou torto. Quem decide se o giro vale e a janela, como
+/// no resto -- aqui so se confere que e numero.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MoveBody {
@@ -898,6 +903,8 @@ pub struct MoveBody {
     item_id: String,
     x: f64,
     y: f64,
+    #[serde(default)]
+    rotation: Option<f64>,
 }
 
 /// Um movimento de jogador, como ele viaja ate a janela do mestre.
@@ -912,6 +919,9 @@ pub struct Movimento {
     item_id: String,
     x: f64,
     y: f64,
+    /// Omitido quando o gesto foi de arrastar. Ver `MoveBody`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rotation: Option<f64>,
 }
 
 /// `POST /eu/movimentos` -- o jogador arrasta o token do proprio personagem.
@@ -939,6 +949,13 @@ async fn move_token(
         return fail(StatusCode::BAD_REQUEST, "posicao fora do mapa");
     }
 
+    // Angulo nao tem teto -- 720 graus e uma volta a mais, e a janela normaliza
+    // --, mas tem de ser numero: `NaN` atravessaria ate o board e o token
+    // sumiria da tela de todo mundo.
+    if body.rotation.is_some_and(|giro| !giro.is_finite()) {
+        return fail(StatusCode::BAD_REQUEST, "giro invalido");
+    }
+
     if body.item_id.is_empty() || body.item_id.len() > ID_MAX {
         return fail(StatusCode::BAD_REQUEST, "item invalido");
     }
@@ -953,6 +970,7 @@ async fn move_token(
         item_id: body.item_id,
         x: body.x,
         y: body.y,
+        rotation: body.rotation,
     };
 
     let corpo = match serde_json::to_string(&movimento) {
