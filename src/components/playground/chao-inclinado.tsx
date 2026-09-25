@@ -70,12 +70,41 @@ import {
  * muro. A oclusão que parecia cara (ver o cabeçalho de `volume.ts`) sai de uma
  * ordenação que a falta de `preserve-3d` já obrigava a escrever.
  *
- * ## O que isto custa
+ * ## O que isto custa -- medido, e não suposto
  *
  * Um `transform` 3D é incompatível com `zoom`, que é layout: ligado este modo,
  * o plano de conteúdo fica em `transform` para sempre e perde o conserto de
- * nitidez do `conteudoNoLayout`. Continua sendo o preço, e continua sendo
- * afirmação sobre a webview -- ligue o HUD com `Ctrl+Alt+D` antes de acreditar.
+ * nitidez do `conteudoNoLayout`. Isso era a suspeita, e era a razão de este
+ * modo ter sido tratado como o caro dos dois.
+ *
+ * A medida desmentiu. Cenário `chao-25d` na webview (WebKitGTK 2.52.5, janela
+ * 1440x900, build de produção, cinco corridas por célula, máquina quieta):
+ *
+ * | modo    | fps  | p95  | perdidos | nós |
+ * | ------- | ---- | ---- | -------- | --- |
+ * | 2d      |   60 | 19ms |     0,5% | 253 |
+ * | relevo  |   60 | 18ms |       1% | 265 |
+ * | chão    |   60 | 18ms |       1% | 181 |
+ *
+ * Empate, com este modo desenhando MENOS nós que o mapa de prumo. O `transform`
+ * permanente não é o que pesa -- com quarenta paredes e quarenta peças ele
+ * entrega o quadro inteiro.
+ *
+ * O que pesava era outra coisa, e ela custou três medidas para aparecer: o
+ * número de SUPERFÍCIES que o compositor recebe. A primeira versão dava 31,6
+ * fps com 98,2% dos quadros perdidos, e o conserto foi uma laje por ALTURA em
+ * vez de uma por parede, mais o descarte das faces de costas. Ver
+ * `facesDaParede` e o laço das lajes aqui embaixo -- e não desfaça nenhum dos
+ * dois achando que é microotimização: são 457 nós contra 181.
+ *
+ * ## Onde ainda dói
+ *
+ * Girar a vista sem parar: 49,2 fps com 15,2% perdidos. A lista do pintor se
+ * refaz inteira a cada quadro, porque a profundidade de tudo muda. É gesto
+ * transitório e parado volta a 60, então fica como está até alguém reclamar.
+ *
+ * E a escala é boa: 80 paredes dão 60,1 fps, 160 dão 54,1. Um mapa de mesa tem
+ * dezenas, não centenas.
  */
 
 /**
