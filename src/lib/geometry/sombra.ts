@@ -340,7 +340,12 @@ export const UNIDADES_POR_METRO = ALTURA_DA_PAREDE / METROS_DA_PAREDE_PADRAO;
 
 /** A altura desta parede, em unidades de cena. */
 export function alturaDaParede(parede: FormaDaParede): number {
-  return parede.altura ?? ALTURA_DA_PAREDE;
+  // Pelo número e não só pela ausência: esta altura entra num `Math.max` de
+  // todas as paredes do mapa, e ali um valor podre não fica na parede dele --
+  // ele vira o alcance de TODAS. Ver `paredeDeVerdade`.
+  return typeof parede.altura === "number" && Number.isFinite(parede.altura)
+    ? parede.altura
+    : ALTURA_DA_PAREDE;
 }
 
 /** Um pedaço reto de parede: é ele que para a luz. */
@@ -355,6 +360,32 @@ export type Segmento = { x1: number; y1: number; x2: number; y2: number };
  * `FogRegion`.
  */
 export type FormaDaParede = Omit<Parede, "id"> & { id?: string };
+
+/**
+ * Esta parede é geometria de verdade?
+ *
+ * A cena é um arquivo, e arquivo velho traz o que a versão que o escreveu
+ * sabia: a parede já foi um segmento cru -- `x1, y1, x2, y2` e uma grossura --,
+ * e um registro desses ainda mora em campanha de quem acompanhou o
+ * desenvolvimento. Sem caixa, `Math.hypot(undefined, undefined)` é `NaN`.
+ *
+ * E o `NaN` não fica na parede torta. A caixa das umbras é UMA para o mapa
+ * inteiro, e o SVG que a usa é um só: uma linha podre apagava a sombra de TODAS
+ * as paredes da cena e ainda pedia `width="NaN"` ao DOM. Daí a guarda ser aqui,
+ * na entrada da conta, e não lá no fim.
+ *
+ * Ignorada, e não convertida: o formato de segmento nunca saiu numa versão
+ * publicada, e carregar uma migração para sempre por causa de um arquivo de
+ * teste é peso que a sombra não deve pagar.
+ */
+function paredeDeVerdade(parede: FormaDaParede): boolean {
+  return (
+    Number.isFinite(parede.x) &&
+    Number.isFinite(parede.y) &&
+    Number.isFinite(parede.width) &&
+    Number.isFinite(parede.height)
+  );
+}
 
 /**
  * Os vértices do contorno de uma parede, em coordenadas de CENA e já girados.
@@ -690,6 +721,8 @@ export function umbrasDoSol(paredes: Parede[], sol: Sol): string {
   const faixas: string[] = [];
 
   for (const parede of paredes) {
+    if (!paredeDeVerdade(parede)) continue;
+
     const alcance = sol.comprimento * alturaDaParede(parede);
     const topo = {
       x: arredondar(cos * alcance),
@@ -730,6 +763,10 @@ function presaAoPlano(
   direita: number,
   baixo: number,
 ): CaixaDaUmbra | null {
+  // O segundo cinto, e ele é preciso porque a comparação abaixo não pega `NaN`:
+  // `NaN <= NaN` é falso, e a caixa saía daqui com `width: NaN` em vez de nula.
+  if (![x, y, direita, baixo].every(Number.isFinite)) return null;
+
   const x1 = Math.max(0, Math.floor(x));
   const y1 = Math.max(0, Math.floor(y));
   const x2 = Math.min(SCENE_WIDTH, Math.ceil(direita));
@@ -770,14 +807,16 @@ export function uniaoDasCaixas(
  * A caixa das faixas do sol: as paredes, mais o quanto a sombra delas anda.
  */
 export function caixaDoSol(paredes: Parede[], sol: Sol): CaixaDaUmbra | null {
-  if (paredes.length === 0) return null;
+  // As mesmas que pintam, e pela mesma razão: ver `paredeDeVerdade`.
+  const reais = paredes.filter(paredeDeVerdade);
+  if (reais.length === 0) return null;
 
   let esquerda = Infinity;
   let cima = Infinity;
   let direita = -Infinity;
   let baixo = -Infinity;
 
-  for (const parede of paredes) {
+  for (const parede of reais) {
     // A caixa girada pode passar da caixa declarada; a diagonal cobre qualquer
     // giro sem uma conta de canto por parede.
     const folga = Math.hypot(parede.width, parede.height) / 2;
@@ -793,7 +832,7 @@ export function caixaDoSol(paredes: Parede[], sol: Sol): CaixaDaUmbra | null {
   const angulo = sol.angulo * GRAU;
   // A parede mais ALTA do mapa decide até onde a sombra pode chegar, e a caixa
   // tem de caber a maior delas.
-  const maisAlta = Math.max(...paredes.map(alturaDaParede));
+  const maisAlta = Math.max(...reais.map(alturaDaParede));
   const alcance = sol.comprimento * maisAlta;
   const dx = Math.cos(angulo) * alcance;
   const dy = Math.sin(angulo) * alcance;
