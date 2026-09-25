@@ -1001,7 +1001,7 @@ export function pedraDasParedes(paredes: Parede[]): string {
  * soma às faixas no mesmo caminho, e um sentido trocado ali abriria justamente
  * o furo que ele veio tapar.
  */
-function poligonoOrientado(pontos: { x: number; y: number }[]): string {
+export function poligonoOrientado(pontos: { x: number; y: number }[]): string {
   // Área com sinal: negativa quer dizer que este saiu ao contrário dos outros,
   // e basta lê-lo de trás para frente.
   let area = 0;
