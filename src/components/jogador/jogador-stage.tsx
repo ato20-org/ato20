@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { Maximize, Minimize } from "lucide-react";
 
-import { SceneLayer } from "@/components/playground/scene-layer";
+import { CenaDoJogador } from "@/components/jogador/cena-do-jogador";
 import {
   CortinaDeCorte,
   useCorteDeCamera,
@@ -16,11 +16,16 @@ import type { RolagemDaMesa } from "@/types/dado";
 import type { Portrait, Scene } from "@/types/scene";
 
 /**
- * A cena no celular do jogador. Só recebe — nenhum controle sobre nada.
+ * A cena no celular do jogador.
  *
- * Sem zoom nem arraste de propósito: quem enquadra é o mestre. Um jogador que
- * se perde ampliado num canto do mapa vira suporte técnico no meio da sessão,
- * e o mestre não tem como saber que aquele aparelho está olhando outra coisa.
+ * Um controle só, e é sobre o que é dele: o token do próprio personagem anda
+ * com o dedo, e a mesa vê o movimento ao vivo. Ver `CenaDoJogador`.
+ *
+ * Sem zoom nem arraste do mapa de propósito: quem enquadra é o mestre. Um
+ * jogador que se perde ampliado num canto do mapa vira suporte técnico no meio
+ * da sessão, e o mestre não tem como saber que aquele aparelho está olhando
+ * outra coisa. Pelo mesmo motivo o token não sai do quadro da câmera -- ver
+ * `limiteDoMovimento`.
  *
  * Tela cheia é a exceção, e não conflita: ela só aumenta o que já está sendo
  * mostrado, sem mudar o enquadramento que o mestre escolheu.
@@ -33,12 +38,15 @@ import type { Portrait, Scene } from "@/types/scene";
  * jogador fosse ver a própria ficha.
  */
 export function JogadorStage({
+  codigo,
   scene,
   portraits,
   rolagens,
   synced,
   stalled,
 }: {
+  /** A mesa, para o arrasto do token falar com ela. */
+  codigo: string;
   scene: Scene | null;
   portraits: Portrait[];
   /**
@@ -83,16 +91,11 @@ export function JogadorStage({
               troca de cena entra em fade em vez de estalar. */}
           {cena ? (
             <div key={cena.id} className="scene-fade-in absolute inset-0">
-              {/* `tela`: o celular recebe a mesma cena que a TV, e desenha
-                  numa tela de 400px de largura. Sem a variante ele baixava os
-                  8 MB do mapa para decodificar 51 MB de bitmap -- por celular,
-                  e são N na mesa. Ver `SceneLayer.variante`. */}
-              <SceneLayer
-                scene={cena}
+              <CenaDoJogador
+                codigo={codigo}
+                cena={cena}
                 portraits={portraits}
                 rolagens={rolagens}
-                smooth
-                variante="tela"
               />
             </div>
           ) : null}

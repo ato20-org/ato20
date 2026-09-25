@@ -63,6 +63,14 @@ type SceneLayerProps = {
    */
   smooth?: boolean;
   /**
+   * O item que o dedo do jogador está segurando, por id.
+   *
+   * Só o celular passa. Ali a cena é `smooth` -- o resto do mapa só chega em
+   * amostras --, mas o token que o próprio jogador arrasta é manipulação direta,
+   * como o arrasto do mestre, e interpolado ele correria 150ms atrás do dedo.
+   */
+  naMao?: string;
+  /**
    * Qual tamanho dos arquivos desenhar. Ausente = os arquivos -- com uma
    * exceção, o FUNDO, que passou a escolher sozinho entre a redução de palco e
    * o original conforme o zoom. Ver `useVarianteDoFundo`.
@@ -136,6 +144,7 @@ export function SceneLayer({
   scene,
   variant = "mesa",
   smooth = false,
+  naMao,
   variante,
   portraits,
   rolagens,
@@ -188,6 +197,7 @@ export function SceneLayer({
           key={item.id}
           item={item}
           smooth={smooth}
+          naMao={item.id === naMao}
           variante={variante}
           // Uma string, e não o mapa: o `CanvasItemView` é `memo`, e passar o
           // mapa inteiro faria os quarenta itens redesenharem a cada quadro em
