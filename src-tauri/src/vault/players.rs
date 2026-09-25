@@ -39,7 +39,7 @@ pub struct Player {
 }
 
 /// Versao do schema do banco da campanha, em `PRAGMA user_version`.
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 /// Abre o banco da campanha.
 ///
@@ -156,6 +156,27 @@ fn migrate(conn: &Connection) -> AppResult<()> {
                  on jogador_notas (jogador_id, atualizado_em desc);
 
              alter table jogadores drop column notas;",
+        )?;
+    }
+
+    if current < 5 {
+        // Varre o vinculo que aponta para um jogador que nao existe mais.
+        //
+        // Ate agora o `remove` apagava o jogador e deixava o vinculo dele: toda
+        // campanha em que o mestre tirou alguem da mesa tem linha podre aqui
+        // dentro, e o efeito aparecia no palco -- personagem embaixo de "NPCs"
+        // na lista e com contorno de jogador no mapa. O `remove` foi corrigido,
+        // mas isso so vale dali para a frente; o que ja esta gravado precisa
+        // desta passada.
+        //
+        // Sem `foreign key` com cascata no lugar da varredura, de proposito. A
+        // tabela nasceu na v2 sem ela e ligar `foreign_keys` agora valeria para
+        // TODA operacao do banco, incluindo o `personagem_id`, que aponta para
+        // um arquivo do vault e nao para tabela nenhuma -- ver a nota da v2. A
+        // cascata compraria uma garantia num campo e uma recusa nova no outro.
+        conn.execute_batch(
+            "delete from jogador_personagem
+             where jogador_id not in (select id from jogadores);",
         )?;
     }
 
@@ -386,6 +407,14 @@ pub fn remove(vault: &Vault, id: &str) -> AppResult<()> {
     // `jogador_id` que nao resolve mais para ninguem, e nenhuma tela o
     // alcancaria para apagar.
     conn.execute("delete from jogador_notas where jogador_id = ?1", [id])?;
+    // O vinculo tambem, e pela mesma razao -- mas este ja custou um bug visivel
+    // antes de alguem notar. O orfao nao ficava so ocupando espaco: a lista de
+    // personagens cruza o vinculo com a mesa e descartava o dono que nao
+    // existia, enquanto o contorno do token lia o vinculo cru e pintava de
+    // azul. O mesmo personagem embaixo de "NPCs" na lista e azul no mapa. O
+    // gemeo disto e o `forget_character`, que ja levava vinculo e nota quando
+    // quem sai e o PERSONAGEM; faltava o lado do jogador.
+    conn.execute("delete from jogador_personagem where jogador_id = ?1", [id])?;
 
     let dir = attachments_dir(vault, id);
     if dir.exists() {
@@ -1379,4 +1408,39 @@ mod tests {
         assert_eq!(note(&vault, "p1", "j1").unwrap(), "");
     }
 
+    #[test]
+    fn remover_jogador_leva_o_vinculo() {
+        let (_tmp, vault) = campanha();
+        let (jogador, _token) = join(&vault, "Edgar").expect("join");
+        link(&vault, &jogador.id, "p1").unwrap();
+
+        remove(&vault, &jogador.id).unwrap();
+
+        // O espelho do `remover_personagem_leva_vinculo_e_nota`. Sem isto o par
+        // ficava no banco apontando para um jogador que nao existe, e o palco
+        // pintava o personagem de azul enquanto a lista o chamava de NPC.
+        assert!(all_links(&vault).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_migracao_varre_o_vinculo_orfao_que_ja_estava_gravado() {
+        let (_tmp, vault) = campanha();
+        let (jogador, _token) = join(&vault, "Edgar").expect("join");
+        link(&vault, &jogador.id, "p1").unwrap();
+        link(&vault, "quem-nao-existe", "p2").unwrap();
+
+        // Volta o banco para antes da v5: e o estado de toda campanha em que o
+        // mestre tirou alguem da mesa com a versao velha do `remove`.
+        {
+            let conn = Connection::open(vault.state_dir().join("estado.db")).expect("db");
+            conn.pragma_update(None, "user_version", 4).expect("voltar");
+        }
+
+        // Qualquer leitura reabre o banco, e reabrir migra.
+        let vivos = all_links(&vault).unwrap();
+
+        assert_eq!(vivos.len(), 1, "o orfao devia ter saido");
+        assert_eq!(vivos[0].0, jogador.id);
+        assert_eq!(vivos[0].1, "p1");
+    }
 }
