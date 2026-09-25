@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { donosPorPersonagem } from "@/lib/mestre/vinculos";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { characterLinks } from "@/lib/vault/characters";
 import type { Player } from "@/lib/vault/players";
@@ -21,6 +22,10 @@ import type { Player } from "@/lib/vault/players";
  *
  * Relê quando o contador compartilhado muda — vincular um jogador na ficha tem
  * de aparecer na lista, que é outra janela. Ver `useCharactersStore`.
+ *
+ * O cruzamento em si mora no `donosPorPersonagem`, e não aqui, porque o
+ * contorno do token faz a mesma pergunta e as duas respostas já discordaram uma
+ * vez. Ver o cabeçalho de lá.
  *
  * Devolve mapa vazio em qualquer falha: a lista de personagens continua útil
  * sem os donos, e não vale derrubá-la por causa da linha de baixo.
@@ -47,17 +52,5 @@ export function useCharacterOwners(jogadores: Player[]): Map<string, string[]> {
     };
   }, [versao]);
 
-  const porId = new Map(jogadores.map((jogador) => [jogador.id, jogador.nome]));
-  const mapa = new Map<string, string[]>();
-
-  for (const [jogadorId, personagemId] of pares) {
-    const nome = porId.get(jogadorId);
-    // Vínculo de um jogador que já saiu da mesa: some da lista em vez de virar
-    // uma linha em branco embaixo do nome do personagem.
-    if (!nome) continue;
-
-    mapa.set(personagemId, [...(mapa.get(personagemId) ?? []), nome]);
-  }
-
-  return mapa;
+  return donosPorPersonagem(pares, jogadores);
 }
