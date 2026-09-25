@@ -53,7 +53,7 @@ export type Rotulo = { titulo: string; subtitulo?: string };
  * uma lista de livros abertos é a Estante, não um menu de painéis.
  */
 export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
-  { conteudo: { tipo: "cenas" }, titulo: "Mapas" },
+  { conteudo: { tipo: "cenas" }, titulo: "Cenas" },
   { conteudo: { tipo: "quadros" }, titulo: "Arquivos" },
   { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
   { conteudo: { tipo: "camadas" }, titulo: "Camadas" },
@@ -145,7 +145,9 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
     case "rolagens":
       return { titulo: "Rolagens", subtitulo: "O que a mesa tirou" };
     case "cenas":
-      return { titulo: "Mapas" };
+      // "Cenas" e não "Mapas": o painel passou a ter as duas naturezas, e o
+      // nome antigo escondia os fundos atrás da palavra do vizinho.
+      return { titulo: "Cenas", subtitulo: "Mapas e fundos da campanha" };
     case "quadros":
       return { titulo: "Arquivos", subtitulo: "Quadros e notas da campanha" };
     case "retratos":

@@ -46,7 +46,7 @@ import {
   CORES_POSTIT,
   createEmptyBoard,
   createScene,
-  ehQuadro,
+  NOME_DO_TIPO,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   type Board,
@@ -155,8 +155,15 @@ type SceneStore = {
   hydrate: (campaignPath: string) => Promise<void>;
   /** Abre a cena no palco do Mestre. Não muda o que a mesa vê. */
   setEditingSceneId: (sceneId: string | null) => void;
-  /** Coloca a cena no ar. `null` deixa a mesa sem nada. */
+  /** Coloca a cena no ar. `null` deixa a mesa sem nada -- ou mostra a capa. */
   setLiveSceneId: (sceneId: string | null) => void;
+  /**
+   * Marca a capa da campanha. `null` tira a que houver e não põe outra.
+   *
+   * Uma só: marcar desmarca a anterior no mesmo commit, para não haver o
+   * instante em que duas cenas se dizem capa. Ver `Scene.capa`.
+   */
+  definirCapa: (sceneId: string | null) => void;
   /**
    * Cria e abre no palco. `tipo` ausente é mapa; `"quadro"` é a mesa de
    * trabalho do mestre. O nome de fábrica conta só as do mesmo tipo: "Quadro 1"
@@ -491,6 +498,11 @@ export function soConteudo(atual: Board, alvo: Board): Board {
       const restaurada: Scene = { ...antiga, name: scene.name };
       if (scene.pastaId !== undefined) restaurada.pastaId = scene.pastaId;
       else delete restaurada.pastaId;
+      // A capa acompanha o nome e a pasta: é escolha de CAMPANHA, e não
+      // conteúdo da cena. Desfazer um token movido não pode tirar da TV o que
+      // a mesa vê entre uma cena e outra. Ver `Scene.capa`.
+      if (scene.capa) restaurada.capa = scene.capa;
+      else delete restaurada.capa;
       return restaurada;
     }),
   };
@@ -700,13 +712,35 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       set({ board: { ...board, liveSceneId: sceneId } });
     },
 
+    definirCapa(sceneId) {
+      const { board } = get();
+      if (!board) return;
+
+      // Uma passada só sobre a lista, marcando uma e desmarcando as outras.
+      // Quem não muda devolve a MESMA cena: a gravação por diferença compara
+      // identidade, e uma cópia por cena reescreveria a campanha inteira no
+      // disco para mexer numa marca. Ver `persistir`.
+      const scenes = board.scenes.map((scene) => {
+        const deve = scene.id === sceneId || undefined;
+        if (scene.capa === deve) return scene;
+
+        const proxima = { ...scene, capa: deve };
+        // `capa: undefined` gravaria a chave no JSON de toda cena que já foi
+        // capa um dia. A ausência é o estado, e ela some do objeto.
+        if (!deve) delete proxima.capa;
+
+        return proxima;
+      });
+
+      commit({ ...board, scenes });
+    },
+
     addScene(name, tipo) {
       const { board } = get();
       const iguais =
-        board?.scenes.filter((scene) => ehQuadro(scene) === (tipo === "quadro"))
-          .length ?? 0;
+        board?.scenes.filter((scene) => scene.tipo === tipo).length ?? 0;
       const scene = createScene(
-        name ?? `${tipo === "quadro" ? "Quadro" : "Mapa"} ${iguais + 1}`,
+        name ?? `${NOME_DO_TIPO[tipo ?? "mapa"]} ${iguais + 1}`,
         tipo,
       );
       const base = board ?? {
@@ -1855,9 +1889,34 @@ export function selectEditingScene(state: SceneStore): Scene | null {
   return findScene(state, state.board?.editingSceneId);
 }
 
-/** A cena que a mesa está vendo. É esta que o canal publica. */
+/**
+ * A cena que o MESTRE pôs no ar. É a que acende o ponto vermelho na lista.
+ *
+ * Não é necessariamente o que a mesa está vendo: sem nada no ar, a mesa vê a
+ * capa. Ver `selectCenaParaMesa`.
+ */
 export function selectLiveScene(state: SceneStore): Scene | null {
   return findScene(state, state.board?.liveSceneId);
+}
+
+/** A capa da campanha, se alguma cena foi marcada. Ver `Scene.capa`. */
+export function selectCapa(state: SceneStore): Scene | null {
+  return state.board?.scenes.find((scene) => scene.capa) ?? null;
+}
+
+/**
+ * O que a mesa VÊ: a cena no ar, ou a capa quando não há nenhuma.
+ *
+ * É esta que o canal publica, e é ela que acende o som e os retratos. A queda
+ * para a capa mora aqui, e não no espectador, porque daqui ela vale para os
+ * três de uma vez -- a TV, o celular e o daemon --, e porque a capa passa pelo
+ * `sceneForTable` como qualquer outra cena.
+ *
+ * `liveSceneId` continua `null` enquanto a capa está na tela, e é o certo: o
+ * mestre não pôs nada no ar, e nenhum chip da lista deve dizer que pôs.
+ */
+export function selectCenaParaMesa(state: SceneStore): Scene | null {
+  return selectLiveScene(state) ?? selectCapa(state);
 }
 
 /**

@@ -9,9 +9,17 @@ import type { Board, Scene } from "@/types/scene";
  * ninguém pedir.
  */
 
-/** Nasce no palco do mestre. A mesa não muda de cena por causa disso. */
+/**
+ * Nasce no palco do mestre. A mesa não muda de cena por causa disso.
+ *
+ * `...board` e não um objeto montado do zero: as pastas dos quadros e as notas
+ * da campanha moram no board ao lado da lista de cenas, e sem o espalhamento
+ * elas sumiam -- não só da tela, porque `ordem.json` é gravado a partir deste
+ * objeto. Criar um mapa apagava a árvore de Arquivos inteira.
+ */
 export function appendScene(board: Board, scene: Scene): Board {
   return {
+    ...board,
     scenes: [...board.scenes, scene],
     editingSceneId: scene.id,
     liveSceneId: board.liveSceneId,
@@ -28,6 +36,7 @@ export function insertSceneAfter(
   const position = at < 0 ? board.scenes.length : at + 1;
 
   return {
+    ...board,
     scenes: [
       ...board.scenes.slice(0, position),
       scene,
@@ -73,6 +82,7 @@ export function removeScene(board: Board, sceneId: string): Board {
   const scenes = board.scenes.filter((scene) => scene.id !== sceneId);
 
   return {
+    ...board,
     scenes,
     editingSceneId:
       board.editingSceneId === sceneId

@@ -1451,18 +1451,23 @@ export type Grupo = {
 /**
  * O que uma cena é para o mestre.
  *
- * `undefined` é mapa: a cena de sempre, com fundo, grade, névoa e régua, feita
+ * `undefined` é MAPA: a cena de sempre, com fundo, grade, névoa e régua, feita
  * para a mesa olhar. `"quadro"` é a mesa de trabalho do mestre -- brainstorm,
- * história, notas ligadas por setas --, sem chão nem escala. As duas dividem
- * o mesmo tipo de propósito: o palco, o histórico, a gravação por diferença e
- * o canal para a mesa já existem para a cena, e um quadro é uma cena sem chão
- * com uma barra de ferramentas própria. Ver `ehQuadro`.
+ * história, notas ligadas por setas --, sem chão nem escala. `"fundo"` é a
+ * imagem e nada mais: a taverna, a floresta, a sala do trono, com um token ou
+ * outro por cima se o mestre quiser. É para quem joga SEM mapa -- e era o que
+ * essa mesa fazia criando um mapa e depois desligando a grade, o sol e a
+ * câmera um a um.
+ *
+ * Os três dividem o mesmo tipo de propósito: o palco, o histórico, a gravação
+ * por diferença e o canal para a mesa já existem para a cena, e o que muda de
+ * um para o outro é só o que ele SABE fazer -- ver `temChao` e as irmãs dela.
  *
  * Decidido na criação e nunca trocado: um mapa que virasse quadro carregaria
  * névoa e grade que o quadro não sabe mostrar, e cada caso desses seria um
- * bug para alguém.
+ * bug para alguém. Vale igual para o fundo, e pelo mesmo motivo.
  */
-export type TipoDeCena = "quadro";
+export type TipoDeCena = "quadro" | "fundo";
 
 /**
  * Uma pasta de quadros. Só quadros: cena de mapa é fila de sessão, e uma
@@ -1485,6 +1490,28 @@ export type Scene = {
   tipo?: TipoDeCena;
   /** A pasta em que um quadro está. Ausente = raiz. Só faz sentido em quadro. */
   pastaId?: string;
+  /**
+   * Esta é a CAPA da campanha: o que a mesa vê quando não há nada no ar.
+   *
+   * Uma por campanha, e a marca anda -- marcar outra desmarca esta. Ver
+   * `definirCapa`.
+   *
+   * Mora na cena, e não num campo do board, por duas razões. A primeira é o
+   * dia em que a capa for apagada: o `id` guardado no board apontaria para uma
+   * cena que não existe mais, e alguém teria de lembrar de limpá-lo -- como já
+   * é preciso fazer com `editingSceneId` e `liveSceneId`. A marca na cena
+   * some junto com ela, de graça. A segunda é o Rust: cena é JSON opaco para
+   * ele (ver `SceneJson`), e campo de board é estrutura espelhada dos dois
+   * lados -- um campo novo lá custaria `ordem.json`, `Board`, `BoardPatch` e
+   * a fixture de cada teste.
+   *
+   * Só `true` aparece no arquivo: `false` seria a mesma informação que a
+   * ausência, gravada em toda cena da campanha.
+   *
+   * CHEGA à mesa, e não faz mal: é um booleano que diz o que a própria cena
+   * no ar já demonstra.
+   */
+  capa?: true;
   /**
    * Textos soltos e setas do quadro. Ausente = nenhum. Nascem no quadro, mas
    * a cena de mapa também os aceita: são só mais duas listas. Ver `Texto` e
@@ -1646,6 +1673,129 @@ export function ehQuadro(scene: Pick<Scene, "tipo">): boolean {
   return scene.tipo === "quadro";
 }
 
+/** Um fundo: a imagem, e quase nada além dela. Ver `TipoDeCena`. */
+export function ehFundo(scene: Pick<Scene, "tipo">): boolean {
+  return scene.tipo === "fundo";
+}
+
+/**
+ * O mapa: a cena com todas as ferramentas.
+ *
+ * `undefined` e não uma string, para não gravar `tipo: "mapa"` em toda cena
+ * que já existe -- o arquivo de quem só abriu o aplicativo não muda.
+ */
+export function ehMapa(scene: Pick<Scene, "tipo">): boolean {
+  return scene.tipo === undefined;
+}
+
+/**
+ * O que a cena SABE fazer, uma pergunta por vez.
+ *
+ * As funções abaixo respondiam todas por `ehQuadro`: a câmera, a grade, o sol
+ * e o handout sumiam do quadro pela mesma condição, e quem lia `!ehQuadro(cena)`
+ * no meio de um painel tinha de adivinhar qual das razões era aquela. São
+ * cinquenta lugares, e cada um perguntava o que a cena É para decidir o que ela
+ * TEM -- o que só funciona enquanto os tipos forem dois.
+ *
+ * Perguntar pela capacidade em vez do tipo tem um segundo efeito, e é o que
+ * paga a troca: o FUNDO tem chão e não tem câmera, e nenhuma das cinquenta
+ * linhas precisou saber que ele passou a existir.
+ *
+ * A tabela inteira, para quem quiser ler de uma vez:
+ *
+ * |               | mapa | fundo | quadro |
+ * | ------------- | ---- | ----- | ------ |
+ * | `temChao`     | sim  | sim   | não    |
+ * | `temAnotacao` | sim  | sim   | não    |
+ * | `temCamera`   | sim  | não   | não    |
+ * | `temGrade`    | sim  | não   | não    |
+ * | `temNevoa`    | sim  | não   | não    |
+ * | `temSol`      | sim  | não   | não    |
+ * | `temMedida`   | sim  | não   | não    |
+ */
+
+/**
+ * A cena tem CHÃO: uma imagem por baixo, e o que se põe nela pousa.
+ *
+ * O quadro não tem. Ele é folha, e o que entra nele flutua sobre papel -- por
+ * isso a miniatura dele é clara e a do mapa é preta.
+ */
+export function temChao(scene: Pick<Scene, "tipo">): boolean {
+  return !ehQuadro(scene);
+}
+
+/**
+ * A cena ENQUADRA: câmeras salvas, o recorte que vai ao ar, o corte em fade.
+ *
+ * O quadro vai INTEIRO para a mesa, e recortar um pedaço dele é o contrário do
+ * que ele serve para fazer. Ver `lerCena` em `camera-actions`.
+ *
+ * O fundo também vai inteiro, e por um motivo próprio: ele É o enquadramento.
+ * Quem escolheu a imagem já escolheu o que a mesa vê, e uma câmera por cima
+ * seria recortar de novo o que já foi recortado.
+ */
+export function temCamera(scene: Pick<Scene, "tipo">): boolean {
+  return ehMapa(scene);
+}
+
+/** A cena tem grade. Só o mapa: é ela que dá escala ao chão. Ver `SceneGrid`. */
+export function temGrade(scene: Pick<Scene, "tipo">): boolean {
+  return ehMapa(scene);
+}
+
+/**
+ * A cena tem área escondida, e a aba que as lista. Ver `FogRegion`.
+ *
+ * Fora do fundo: esconder pedaço de uma imagem para revelar depois é o gesto
+ * de quem explora um mapa, e o fundo existe para ser visto de uma vez.
+ */
+export function temNevoa(scene: Pick<Scene, "tipo">): boolean {
+  return ehMapa(scene);
+}
+
+/**
+ * A cena tem sol e paredes. Ver `Sol` e `Parede`.
+ *
+ * Sem chão não há onde a sombra cair, e uma parede que não para luz nenhuma
+ * seria um risco a mais na tela. O fundo tem chão, mas o chão dele já vem com
+ * a luz pintada na imagem: um segundo sol por cima brigaria com o primeiro.
+ */
+export function temSol(scene: Pick<Scene, "tipo">): boolean {
+  return ehMapa(scene);
+}
+
+/**
+ * A cena MEDE: a régua e o medidor.
+ *
+ * Separada de `temGrade` de propósito, embora as duas respondam junto: a régua
+ * fica DESABILITADA sem grade, e não escondida -- são duas perguntas diferentes
+ * sobre a mesma cena, e juntá-las numa só apagaria essa diferença.
+ */
+export function temMedida(scene: Pick<Scene, "tipo">): boolean {
+  return ehMapa(scene);
+}
+
+/**
+ * A cena guarda o que SÓ O MESTRE vê: ponto, postit e handout.
+ *
+ * Uma pergunta e não três, porque as consequências são as mesmas duas em todo
+ * lugar: esses campos saem em `sceneForTable`, e cada letra e forma da cena
+ * passa a carregar a pergunta "a mesa vê esta?" no olho do gizmo.
+ *
+ * No quadro nenhuma das duas existe. A folha vai inteira, e o postit dela é
+ * conteúdo, não anotação sobre outra coisa.
+ */
+export function temAnotacao(scene: Pick<Scene, "tipo">): boolean {
+  return !ehQuadro(scene);
+}
+
+/** Como cada tipo se chama quando o mestre não batiza a cena. */
+export const NOME_DO_TIPO: Record<"mapa" | TipoDeCena, string> = {
+  mapa: "Mapa",
+  fundo: "Fundo",
+  quadro: "Quadro",
+};
+
 export function createScene(name: string, tipo?: TipoDeCena): Scene {
   const now = Date.now();
   return {
@@ -1679,7 +1829,7 @@ export function cloneScene(source: Scene, name: string): Scene {
     return { ...coisa, id };
   };
 
-  return {
+  const copia: Scene = {
     ...source,
     id: novoId(),
     name,
@@ -1724,6 +1874,13 @@ export function cloneScene(source: Scene, name: string): Scene {
     createdAt: now,
     updatedAt: now,
   };
+
+  // A marca de capa NÃO se copia: é uma por campanha, e duplicar o fundo da
+  // taverna deixaria duas cenas dizendo que são a capa -- com a que a mesa vê
+  // decidida pela ordem da lista.
+  delete copia.capa;
+
+  return copia;
 }
 
 export function createEmptyBoard(): Board {

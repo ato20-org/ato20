@@ -72,7 +72,7 @@ import {
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { ehQuadro, type Scene } from "@/types/scene";
+import { temCamera, type Scene } from "@/types/scene";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
@@ -159,8 +159,8 @@ export function StageContextMenu({
    * elas também saem por `temCamera`, porque item cinza permanente num menu é
    * ruído em toda cena de quadro. Ver `lerCena` em `camera-actions`.
    */
-  const temCamera = !ehQuadro(scene);
-  const cameraSelecionada = temCamera
+  const comCamera = temCamera(scene);
+  const cameraSelecionada = comCamera
     ? scene.cameras?.find((camera) => camera.id === selecionadaId)
     : undefined;
   const segue = Boolean(cameraSelecionada?.alvoIds);
@@ -332,7 +332,7 @@ export function StageContextMenu({
             {/* Junto das ações DO ITEM, e não lá embaixo com a câmera: quem
                 clica com o botão direito num token está pensando nele, e
                 "a câmera segue este" é uma coisa que se faz com o token. */}
-            {temCamera ? (
+            {comCamera ? (
               <>
                 <ContextMenuItem
                   disabled={!cameraSelecionada}
@@ -418,7 +418,7 @@ export function StageContextMenu({
           <ContextMenuShortcut>Ctrl+A</ContextMenuShortcut>
         </ContextMenuItem>
 
-        {temCamera ? (
+        {comCamera ? (
           <>
             <ContextMenuSeparator />
 

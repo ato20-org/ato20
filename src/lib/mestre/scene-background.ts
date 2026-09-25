@@ -91,6 +91,53 @@ async function trocarFundo(sceneId: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Importa uma imagem e faz dela a capa da campanha.
+ *
+ * A capa É um fundo -- ver `Scene.capa` --, e até aqui só dava para promover um
+ * fundo que já existisse. Numa campanha sem nenhum, o menu só sabia dizer onde
+ * criar um: o mestre fechava, ia à aba Fundos, criava, escolhia a imagem e
+ * voltava à barra de título. Cinco passos para escolher um arquivo.
+ *
+ * A ORDEM aqui é o contrário da de `trocarFundo`, e de propósito: o arquivo
+ * entra antes de a cena existir. Criar a cena primeiro e fechar o seletor
+ * deixaria um fundo vazio na lista, marcado como capa, e um passo de desfazer
+ * que ninguém pediu.
+ *
+ * Devolve `false` quando o mestre fechou o seletor, que não é erro.
+ */
+export async function importarCapaDaCampanha(): Promise<boolean> {
+  const resultado = await importAssets("image", "cena");
+
+  if (!resultado || resultado.cancelado) return false;
+
+  const primeiro = resultado.aceitos[0];
+  if (!primeiro)
+    throw new Error(resultado.recusados[0] ?? "Nada foi importado.");
+
+  // Mesma razão do `trocarFundo`: o registro do arquivo é quem sabe a dimensão
+  // natural dele, e a linha do fundo a mostra.
+  invalidarAcervo("image");
+
+  const store = useSceneStore.getState();
+
+  /**
+   * Onde o mestre estava.
+   *
+   * Cena nova nasce ABERTA no palco -- ver `appendScene` --, e a capa se
+   * escolhe da barra de título, longe do palco. Sem devolvê-lo, escolher uma
+   * capa tiraria da tela o mapa que ele está montando.
+   */
+  const antes = store.board?.editingSceneId ?? null;
+
+  const sceneId = store.addScene(undefined, "fundo");
+  store.setBackground(sceneId, primeiro.id);
+  store.definirCapa(sceneId);
+  store.setEditingSceneId(antes);
+
+  return true;
+}
+
 /** Tira o fundo da cena, e leva o arquivo junto. */
 export async function tirarFundoDaCena(sceneId: string): Promise<void> {
   const anterior = fundoAtual(sceneId);

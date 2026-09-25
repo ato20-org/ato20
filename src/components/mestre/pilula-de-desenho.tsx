@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
+import { temNevoa, temSol, type Scene } from "@/types/scene";
 
 /**
  * O DESENHO de uma coisa desenhada: o primeiro passo da pílula.
@@ -159,7 +160,7 @@ type Natureza = (typeof NATUREZAS)[number]["chave"];
  * deles responde às duas perguntas daqui -- são cravar, colar, acender, medir,
  * riscar e apagar, e cada um já é um alvo direto onde está.
  */
-export function PilulaDeDesenho({ quadro = false }: { quadro?: boolean }) {
+export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
   const tool = useToolStore((state) => state.tool);
   const setTool = useToolStore((state) => state.setTool);
   const tipoDeForma = useToolStore((state) => state.tipoDeForma);
@@ -173,12 +174,29 @@ export function PilulaDeDesenho({ quadro = false }: { quadro?: boolean }) {
   const [aberta, setAberta] = useState<Geometria["chave"] | null>(null);
 
   /**
-   * Num QUADRO não há chão: nem parede para a luz parar, nem região do mapa
-   * para esconder da mesa. Sobra o elemento, que vale nos dois.
+   * Cada natureza pergunta pela capacidade que ela usa, e não pelo tipo da
+   * cena. No QUADRO não há chão: nem parede para a luz parar, nem região do
+   * mapa para esconder da mesa. No FUNDO há chão, mas a luz já vem pintada na
+   * imagem e a imagem existe para ser vista de uma vez -- as mesmas duas caem,
+   * por duas razões diferentes. Sobra o elemento, que vale nos três.
    */
-  const naturezas = quadro
-    ? NATUREZAS.filter((natureza) => natureza.chave === "elemento")
-    : NATUREZAS;
+  const naturezas = NATUREZAS.filter(
+    (natureza) =>
+      (natureza.chave !== "parede" || temSol(scene)) &&
+      (natureza.chave !== "area" || temNevoa(scene)),
+  );
+
+  /**
+   * Sobrou UMA natureza: a pílula deixa de ter dois passos.
+   *
+   * No mapa a pergunta "o que isto vai ser" é real -- parede, área escondida
+   * ou elemento. No fundo e no quadro sobra o elemento, e a fileira abria com
+   * um botão só: um clique para escolher o que já estava escolhido, e a
+   * resposta da régua atravessada por uma tira que não decide nada.
+   *
+   * Com uma, o botão da geometria É a ferramenta, e a fileira não abre.
+   */
+  const unica = naturezas.length === 1 ? naturezas[0]! : null;
 
   /** O par que está na mão AGORA, lido do store -- não de estado local. */
   const naMao: { geometria: Geometria["chave"]; natureza: Natureza } | null =
@@ -223,8 +241,8 @@ export function PilulaDeDesenho({ quadro = false }: { quadro?: boolean }) {
 
     // A fileira FICA aberta: trocar de natureza sem redesenhar é o gesto de
     // quem está decidindo, e fechá-la a cada escolha custaria um clique para
-    // voltar.
-    setAberta(geometria.chave);
+    // voltar. Com uma natureza só não há fileira, e não há o que manter aberto.
+    setAberta(unica ? null : geometria.chave);
   }
 
   return (
@@ -246,12 +264,14 @@ export function PilulaDeDesenho({ quadro = false }: { quadro?: boolean }) {
                     variant={escolhida ? "secondary" : "ghost"}
                     size="icon-sm"
                     aria-label={geometria.label}
-                    aria-expanded={aberta === geometria.chave}
+                    aria-expanded={unica ? undefined : aberta === geometria.chave}
                     className={cn(!escolhida && "text-muted-foreground")}
                     onClick={() =>
-                      setAberta(
-                        aberta === geometria.chave ? null : geometria.chave,
-                      )
+                      unica
+                        ? pegar(geometria, unica.chave)
+                        : setAberta(
+                            aberta === geometria.chave ? null : geometria.chave,
+                          )
                     }
                   >
                     {/* O botão da régua já mostra o MATERIAL quando esta
@@ -272,7 +292,7 @@ export function PilulaDeDesenho({ quadro = false }: { quadro?: boolean }) {
               </TooltipContent>
             </Tooltip>
 
-            {aberta === geometria.chave ? (
+            {!unica && aberta === geometria.chave ? (
               <div
                 role="toolbar"
                 aria-label={`${geometria.label}: o que desenhar`}

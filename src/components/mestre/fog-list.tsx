@@ -2,7 +2,6 @@
 
 import { Eye, EyeOff, Trash2 } from "lucide-react";
 
-import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toggleFogRevealed } from "@/lib/mestre/item-actions";
@@ -19,24 +18,20 @@ const FORMATO: Record<FormatoDeArea, string> = {
 };
 
 /**
- * Painel das áreas escondidas da cena.
+ * A lista das áreas escondidas da cena.
  *
  * É a interação de mesa: quando os jogadores chegam na sala 3, o mestre clica
  * no olho da área 3. Fazer isso pelo palco exigiria achar e selecionar o bloco
  * certo no meio do mapa.
+ *
+ * Era um painel e hoje mora dentro do índice de áreas, no palco. Cena SEM área
+ * não chega aqui: quem responde por ela é o `AreasIndex`, e ele diz como criar
+ * a primeira -- coisa que uma lista vazia não sabe dizer.
  */
 export function FogList({ scene }: { scene: Scene }) {
   const removeFog = useSceneStore((state) => state.removeFog);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const selectFog = useSelectionStore((state) => state.selectFog);
-
-  if (scene.fog.length === 0) {
-    return (
-      <PainelVazio icone={EyeOff}>
-        Nenhuma área escondida
-      </PainelVazio>
-    );
-  }
 
   return (
     <ScrollArea className="min-h-0 flex-1">

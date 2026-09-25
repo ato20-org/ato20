@@ -150,6 +150,7 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
 import {
   ehQuadro,
+  temCamera,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   SCENE_HEIGHT,
@@ -492,9 +493,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   // itens seguidos. O `selecionadaId` continua apontando para a câmera do
   // MAPA de onde o mestre veio, e é o certo -- voltar para lá reencontra a
   // mesma câmera aberta.
-  const selecionada = ehQuadro(scene)
-    ? undefined
-    : scene.cameras?.find((camera) => camera.id === selecionadaId);
+  const selecionada = temCamera(scene)
+    ? scene.cameras?.find((camera) => camera.id === selecionadaId)
+    : undefined;
 
   // Cena nova começa sem câmera; a selecionada, se houver, tem de existir nela.
   // Efeito e não render: cria câmera no store, e isso é escrita.
@@ -502,7 +503,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   // O quadro sai fora já aqui, e a própria função também o recusa: ele não tem
   // câmera nenhuma. Ver `lerCena` em `camera-actions`.
   useEffect(() => {
-    if (ehQuadro(scene)) return;
+    if (!temCamera(scene)) return;
     garantirCameraInicial(scene);
   }, [scene, garantirCameraInicial]);
 
@@ -3251,7 +3252,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       <FormaFantasma forma={rascunhoDaForma} />
       <AlignmentGuides guides={guides} />
 
-      {fantasmasVisiveis && scene.cameras && !ehQuadro(scene) ? (
+      {fantasmasVisiveis && scene.cameras && temCamera(scene) ? (
         <CamerasFantasma
           scene={scene}
           selecionadaId={selecionadaId}

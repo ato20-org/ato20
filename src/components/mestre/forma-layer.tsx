@@ -17,7 +17,7 @@ import { FORMA_Z } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
-import { ehQuadro, type Forma, type NewForma, type Scene } from "@/types/scene";
+import { temAnotacao, type Forma, type NewForma, type Scene } from "@/types/scene";
 
 /**
  * Quanto uma forma se apaga no palco do Mestre enquanto a mesa não a vê.
@@ -55,7 +55,7 @@ export function FormaLayer({
 
   // Num QUADRO a folha vai inteira para a mesa, e a pergunta "a mesa vê esta
   // forma?" não existe: nem o olho no gizmo, nem a marca de apagado.
-  const mapa = !ehQuadro(scene);
+  const mapa = temAnotacao(scene);
 
   return formas.map((forma) => (
     <FormaDaCena

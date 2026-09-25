@@ -1,4 +1,4 @@
-import { ehQuadro, type Scene } from "@/types/scene";
+import { temAnotacao, type Scene } from "@/types/scene";
 
 /**
  * A cena como a mesa pode vê-la.
@@ -56,7 +56,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // O quadro vai INTEIRO: ele é o que o mestre quer mostrar -- a rede de
   // PNJs, a linha do tempo --, e postit, texto e seta são o conteúdo dele, não
   // anotação sobre ele. Cena de mapa continua filtrando abaixo.
-  if (ehQuadro(scene)) return semCamera(scene);
+  if (!temAnotacao(scene)) return semCamera(scene);
 
   // Cena sem nada do mestre devolve a MESMA referência, e não uma cópia.
   //

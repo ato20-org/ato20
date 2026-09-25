@@ -7,7 +7,7 @@ import { clampViewport, viewportQueCabe } from "@/lib/geometry/viewport";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import { ehQuadro, type CameraSalva, type Scene } from "@/types/scene";
+import { temCamera, type CameraSalva, type Scene } from "@/types/scene";
 
 /**
  * Folga em volta do alvo ao prender pela primeira vez, como fração do maior
@@ -70,7 +70,7 @@ type CameraLockStore = {
  */
 function cenaEmEdicao(): Scene | null {
   const scene = selectEditingScene(useSceneStore.getState());
-  return scene && ehQuadro(scene) ? null : scene;
+  return scene && temCamera(scene) ? scene : null;
 }
 
 function selecionadaDe(scene: Scene | null, id: string | null) {
@@ -102,7 +102,7 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
   garantirCameraInicial: (scene) => {
     // Quadro não ganha câmera nenhuma: nem a Câmera 1 de cena nova, nem a
     // conversão do recorte antigo. Ver `cenaEmEdicao`.
-    if (ehQuadro(scene)) return;
+    if (!temCamera(scene)) return;
 
     const store = useSceneStore.getState();
     // Do store, e não da prop: o efeito que chama isto pode rodar duas vezes
@@ -270,7 +270,7 @@ useSceneStore.subscribe((state) => {
   const scene = selectEditingScene(state);
   // Quadro fora: ele não tem câmera, e um quadro antigo com câmera gravada
   // não pode voltar a andar sozinho atrás de um token.
-  if (!scene?.cameras || ehQuadro(scene)) return;
+  if (!scene?.cameras || !temCamera(scene)) return;
 
   const conteudo = useViewportStore.getState().conteudo;
 

@@ -24,7 +24,7 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
-import { ehQuadro, type Scene, type Texto } from "@/types/scene";
+import { temAnotacao, type Scene, type Texto } from "@/types/scene";
 
 /** Quanto a letra se apaga enquanto a mesa não a vê. A mesma da forma. */
 const APAGADA = 0.45;
@@ -67,7 +67,7 @@ export function TextoLayer({
       key={texto.id}
       sceneId={scene.id}
       texto={texto}
-      mapa={!ehQuadro(scene)}
+      mapa={temAnotacao(scene)}
       panMode={panMode}
       onTextoPointerDown={onTextoPointerDown}
     />
