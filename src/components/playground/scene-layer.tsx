@@ -268,6 +268,11 @@ export function SceneLayer({
           camera={scene.camera}
           variant={variant}
           smooth={smooth}
+          // Na mesa o retrato é OVERLAY: ninguém o manipula ali, e o que se
+          // pede dele é que fique parado enquanto a câmera passa por baixo.
+          // No Mestre ele continua no plano, porque lá ele é arrastado,
+          // escalado e enfileirado -- tudo em coordenada de cena. Ver `espaco`.
+          espaco={variant === "mesa" ? "tela" : "cena"}
           rolagens={rolagens}
           onPortraitPointerDown={onPortraitPointerDown}
         />
