@@ -24,6 +24,7 @@ import type { Vec } from "@/lib/geometry/transform";
 import {
   FULL_VIEWPORT,
   panViewport,
+  recorteNaTela,
   zoomViewport,
 } from "@/lib/geometry/viewport";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -100,6 +101,30 @@ type SceneScale = {
    * (ver `debug-do-palco` §3). Em pixels de tela: `x_px = offsetX + x × scale`.
    */
   moldura: HTMLElement | null;
+  /**
+   * O OVERLAY: o que fica SOBRE a cena sem fazer parte dela -- hoje, o retrato.
+   *
+   * Um nó do tamanho do recorte, em pixels de tela, fora dos dois planos e sem
+   * transform nenhum. Quem desenha nele entra por portal e se posiciona em
+   * porcentagem, que é a mesma fração da câmera que o registro já guarda.
+   *
+   * É a terceira saída do mesmo problema, depois do `fundoDoPalco` e do
+   * `planoDaMargem`, e a razão aqui é outra: não é transbordo, é MOVIMENTO.
+   * Dentro do plano, a caixa do retrato é recalculada no instante em que a
+   * câmera nova chega, mas o plano leva 450 ms interpolando até ela (ver
+   * `.scene-smooth-camera`). Nesse intervalo o retrato está no lugar certo de
+   * um plano que ainda está no errado: ele nada pela tela e só pousa no fim.
+   * Aqui não há de onde tremer -- nada o move.
+   *
+   * O retângulo não muda com a ampliação da câmera, e isso é uma propriedade,
+   * não uma coincidência: ver `recorteNaTela`, que tem a conta e o teste.
+   *
+   * Existe nas DUAS telas, ao contrário do `planoDaMargem`: quem mais precisa
+   * dele é a TV, que é onde a câmera se mexe sozinha.
+   */
+  planoDaTela: HTMLElement | null;
+  /** O recorte em pixels de tela, para quem desenha no `planoDaTela`. */
+  recorteDaCamera: { left: number; top: number; width: number; height: number };
   offsetX: number;
   offsetY: number;
 };
@@ -300,6 +325,7 @@ export function SceneStage({
   const envelopeDoConteudoRef = useRef<HTMLDivElement>(null);
   const [conteudoNo, setConteudoNo] = useState<HTMLDivElement | null>(null);
   const [margemNo, setMargemNo] = useState<HTMLDivElement | null>(null);
+  const [telaNo, setTelaNo] = useState<HTMLDivElement | null>(null);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
   /** A câmera está parada há tempo bastante para valer redesenhar nítido. */
   const [parada, setParada] = useState(false);
@@ -349,6 +375,17 @@ export function SceneStage({
     (frame.width - viewport.width * scale) / 2 - viewport.x * scale;
   const offsetY =
     (frame.height - viewport.height * scale) / 2 - viewport.y * scale;
+
+  /**
+   * Onde o recorte pousa na moldura, em pixels de tela. É a caixa do overlay.
+   *
+   * Memoizado porque entra no contexto: um objeto novo a cada render derrubaria
+   * o `memo` de tudo o que lê `useSceneScale` -- e a TV re-renderiza a 10 Hz.
+   */
+  const recorte = useMemo(
+    () => recorteNaTela(frame, viewport, scale),
+    [frame, viewport, scale],
+  );
 
   /**
    * A câmera parou, e o CONTEÚDO pode ser redesenhado em resolução cheia.
@@ -705,6 +742,8 @@ export function SceneStage({
       planoDaMargem: margemNo,
       fundoDoPalco: fundoNo,
       moldura: frameNo,
+      planoDaTela: telaNo,
+      recorteDaCamera: recorte,
       offsetX,
       offsetY,
     }),
@@ -717,6 +756,8 @@ export function SceneStage({
       conteudoNo,
       fundoNo,
       frameNo,
+      telaNo,
+      recorte,
       offsetX,
       offsetY,
     ],
@@ -1088,6 +1129,33 @@ export function SceneStage({
         />
       ) : null}
 
+      {/* O OVERLAY: o retrato, e o que mais não for cenário. Ver `planoDaTela`.
+
+          ANTES das tarjas no DOM e sem `zIndex` próprio: as tarjas carregam
+          `zIndex: 10` e continuam cobrindo, então nada aqui dentro vaza para
+          cima do preto. O `overflow-hidden` fecha a mesma porta pelo outro
+          lado, para o caso de alguém empilhar `zIndex` aqui dentro.
+
+          Sem transform e sem transição: a caixa não muda quando a câmera anda
+          nem quando amplia -- ela só acompanha a JANELA. É o ponto inteiro.
+
+          `invisible` e não desmontado, como o `planoDaMargem`: o portal precisa
+          do nó já existindo, e desmontar no primeiro paint faria o primeiro
+          quadro de retrato chegar tarde. */}
+      <div
+        ref={setTelaNo}
+        className={cn(
+          "pointer-events-none absolute overflow-hidden",
+          scale === 0 && "invisible",
+        )}
+        style={{
+          left: recorte.left,
+          top: recorte.top,
+          width: recorte.width,
+          height: recorte.height,
+        }}
+      />
+
       {/* O que sobra em volta do recorte, tarjado de preto.
 
           A moldura da câmera é 16:9 e a tela que assiste raramente é: uma
@@ -1147,8 +1215,10 @@ function tarjas(
   viewport: Viewport,
   scale: number,
 ): Array<{ left: number; top: number; width: number; height: number }> {
-  const sobraX = (frame.width - viewport.width * scale) / 2;
-  const sobraY = (frame.height - viewport.height * scale) / 2;
+  // A MESMA conta do `planoDaTela`, e não uma cópia: as duas dividem a moldura
+  // entre recorte e sobra, e duas contas divergiriam na primeira mudança --
+  // tarja por cima do overlay, ou uma fresta de cena entre os dois.
+  const { left: sobraX, top: sobraY } = recorteNaTela(frame, viewport, scale);
   const faixas = [];
 
   if (sobraY > 0.5) {

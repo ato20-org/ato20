@@ -6,6 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
@@ -41,6 +42,22 @@ type PortraitLayerProps = {
   camera?: Viewport;
   /** `mestre` mostra os que estão fora do ar, em fantasma. */
   variant: "mestre" | "mesa";
+  /**
+   * Em que espaço o retrato se desenha.
+   *
+   * `"cena"` é dentro do plano, em unidade de cena, com a posição derivada da
+   * câmera a cada quadro. É o do Mestre, e é obrigatório lá: ele ARRASTA o
+   * retrato, e o arrasto, o gizmo, o encaixe e a fila vivem todos em
+   * coordenada de cena.
+   *
+   * `"tela"` é o overlay -- `planoDaTela`, em pixel, fora dos planos. É o da
+   * mesa, e existe porque lá o retrato não é manipulado por ninguém: ele só
+   * tem de ficar quieto enquanto a câmera passa por baixo. Dentro do plano ele
+   * não ficava: a caixa nova chega de uma vez e o plano leva 450 ms
+   * interpolando até ela, então o retrato nadava pela tela a cada movimento de
+   * câmera. Ver `planoDaTela`.
+   */
+  espaco?: "cena" | "tela";
   smooth?: boolean;
   /**
    * Os dados que os jogadores jogaram há pouco, para pendurar nos retratos.
@@ -71,10 +88,12 @@ export function PortraitLayer({
   camera,
   variant,
   smooth = false,
+  espaco = "cena",
   rolagens,
   onPortraitPointerDown,
 }: PortraitLayerProps) {
   const isOperator = variant === "mestre";
+  const { planoDaTela } = useSceneScale();
 
   /**
    * Os dados por personagem, montados uma vez.
@@ -97,7 +116,7 @@ export function PortraitLayer({
     return mapa;
   }, [rolagens]);
 
-  return (
+  const conteudo = (
     <>
       {portraits.map((portrait, index) => {
         // Fora do ar, a mesa não vê nada. O mestre continua vendo, apagado,
@@ -115,6 +134,7 @@ export function PortraitLayer({
             mestre={isOperator}
             interactive={Boolean(onPortraitPointerDown)}
             smooth={smooth}
+            espaco={espaco}
             // Agrupado uma vez, e não filtrado aqui dentro: a `PortraitView`
             // é `memo`, e um `filter` no corpo do `map` devolveria um array
             // novo a cada quadro recebido -- o retrato inteiro redesenharia a
@@ -126,6 +146,13 @@ export function PortraitLayer({
       })}
     </>
   );
+
+  if (espaco === "cena") return conteudo;
+
+  // Sem o nó ainda -- primeiro paint --, nada. Desenhar no plano enquanto ele
+  // não existe poria o retrato em coordenada de cena dentro de uma caixa que
+  // não é a dele, e o quadro seguinte o teleportaria.
+  return planoDaTela ? createPortal(conteudo, planoDaTela) : null;
 }
 
 /**
@@ -246,6 +273,8 @@ type PortraitViewProps = {
   mestre: boolean;
   interactive: boolean;
   smooth: boolean;
+  /** Ver `PortraitLayerProps.espaco`. */
+  espaco: "cena" | "tela";
   /** Os dados deste personagem. Ausente = nenhum na mesa agora. */
   rolagens?: RolagemDaMesa[];
   onPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
@@ -259,13 +288,41 @@ const PortraitView = memo(function PortraitView({
   mestre,
   interactive,
   smooth,
+  espaco,
   rolagens,
   onPointerDown,
 }: PortraitViewProps) {
   const url = useAssetUrl(portrait.assetId);
-  const { scale } = useSceneScale();
-  const recorte = camera ?? FULL_VIEWPORT;
+  const { scale, recorteDaCamera } = useSceneScale();
+  /**
+   * A régua deste retrato.
+   *
+   * No overlay a câmera é o próprio recorte em PIXEL, ancorado na origem: o
+   * `planoDaTela` já É esse retângulo, então a fração que o registro guarda
+   * vira pixel dele pela mesma `portraitBox` de sempre. Nenhuma geometria
+   * nova, e nenhum segundo caminho para manter de acordo com o primeiro -- o
+   * que muda é a unidade em que a conta é feita, e tudo abaixo continua lendo
+   * `box`.
+   */
+  const recorte =
+    espaco === "tela"
+      ? {
+          x: 0,
+          y: 0,
+          width: recorteDaCamera.width,
+          height: recorteDaCamera.height,
+        }
+      : (camera ?? FULL_VIEWPORT);
   const box = portraitBox(portrait, recorte);
+  /**
+   * O que desfaz a ampliação, para quem se mede em pixel de tela.
+   *
+   * No plano é `1 / scale`: é assim que o contorno do fantasma guarda a mesma
+   * grossura aparente em qualquer zoom. No overlay não há ampliação para
+   * desfazer -- um pixel é um pixel --, e dividir por `scale` ali deixaria o
+   * traço fino a 500% e grosso a 39%, que é o inverso do que se quer.
+   */
+  const escala = espaco === "tela" ? 1 : scale;
   /** Tamanho do arquivo, medido no `load` da imagem. Ver o `onLoad` abaixo. */
   const [natural, setNatural] = useState<{
     largura: number;
@@ -300,7 +357,11 @@ const PortraitView = memo(function PortraitView({
         // Apagado e pontilhado: diz "existe, mas a mesa não está vendo" sem
         // precisar de legenda.
         ghost && "opacity-40 outline-dashed outline-white/40",
-        smooth && "scene-smooth-item scene-item-in",
+        // No overlay não há o que interpolar: o retrato não anda. O que fica
+        // é a APARIÇÃO, que é dele e não da câmera.
+        espaco === "tela"
+          ? "scene-item-in"
+          : smooth && "scene-smooth-item scene-item-in",
       )}
       style={{
         transform: `translate(${box.x}px, ${box.y}px)`,
@@ -309,7 +370,7 @@ const PortraitView = memo(function PortraitView({
         zIndex: PORTRAIT_Z + depth,
         // Espessura em pixel de tela: dividida pelo scale, o contorno tem a
         // mesma grossura aparente em qualquer zoom.
-        outlineWidth: ghost ? 1.5 / scale : undefined,
+        outlineWidth: ghost ? 1.5 / escala : undefined,
       }}
       onPointerDown={
         onPointerDown ? (event) => onPointerDown(event, portrait) : undefined
@@ -370,7 +431,7 @@ const PortraitView = memo(function PortraitView({
           Só no Mestre: no celular de um jogador isto seria um aviso sobre
           uma limitação que não é dele e que ele não pode resolver. */}
       {portrait.url && !paginaVivaOk && !url && mestre ? (
-        <MarcaPaginaViva escala={scale} />
+        <MarcaPaginaViva escala={escala} />
       ) : null}
 
       {/* Fora do ar, o retrato não desenha para a mesa -- e o dado pendurado

@@ -42,10 +42,15 @@ const TETO = 4;
  * existir. Com a queda, as telas resolvem o borrão no mesmo beat. Ver
  * `DadoRolando` e `DURACAO_DA_CHEGADA`.
  *
- * Medido em unidades de CENA, derivadas da largura do retrato — não em pixel.
- * Dado de tamanho fixo em pixel encolheria até sumir na TV ampliada e cobriria
- * o retrato no celular; derivado da caixa, ele guarda a mesma proporção com o
- * rosto em qualquer tela e em qualquer zoom.
+ * Tudo aqui é derivado da CAIXA DO RETRATO — nenhum número fixo. Dado de
+ * tamanho cravado encolheria até sumir na TV ampliada e cobriria o retrato no
+ * celular; derivado da caixa, ele guarda a mesma proporção com o rosto em
+ * qualquer tela e em qualquer zoom.
+ *
+ * Qual UNIDADE é essa depende de onde o retrato está desenhado, e este
+ * componente não precisa saber: unidade de cena no plano do Mestre, pixel de
+ * tela no overlay da mesa. Ver `espaco`, em `PortraitLayer`. É por ser tudo
+ * proporcional à caixa que a troca de régua não mexeu em nenhuma conta daqui.
  */
 export function RolagensDoRetrato({
   rolagens,
@@ -56,13 +61,13 @@ export function RolagensDoRetrato({
 }: {
   /** A mais nova na frente, como vem da bandeja. Ver `useRolagensStore`. */
   rolagens: RolagemDaMesa[];
-  /** A largura da caixa do retrato, em unidades de cena. */
+  /** A largura da caixa do retrato. Ver a nota sobre unidade, acima. */
   largura: number;
-  /** A altura da caixa do retrato, em unidades de cena. */
+  /** A altura da caixa do retrato, na mesma unidade. */
   altura: number;
-  /** Quanto do recorte sobra abaixo da base do retrato, em unidades de cena. */
+  /** Quanto do recorte sobra abaixo da base do retrato, na mesma unidade. */
   folgaAbaixo: number;
-  /** Quanto do recorte sobra acima do topo do retrato, em unidades de cena. */
+  /** Quanto do recorte sobra acima do topo do retrato, na mesma unidade. */
   folgaAcima: number;
 }) {
   const { chegada, agora } = useQuedaDasRolagens(rolagens);
