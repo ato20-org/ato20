@@ -13,7 +13,7 @@ import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { cn } from "@/lib/utils";
 import type { RolagemDaMesa } from "@/types/dado";
-import type { Portrait, Scene } from "@/types/scene";
+import type { FichaNaCena, Portrait, Scene } from "@/types/scene";
 
 /**
  * A cena no celular do jogador.
@@ -41,6 +41,7 @@ export function JogadorStage({
   codigo,
   scene,
   portraits,
+  fichas,
   rolagens,
   synced,
   stalled,
@@ -49,6 +50,8 @@ export function JogadorStage({
   codigo: string;
   scene: Scene | null;
   portraits: Portrait[];
+  /** Nome e medidores sobre os tokens. Ver `Scene.infoDosTokens`. */
+  fichas: FichaNaCena[];
   /**
    * Os dados que a mesa jogou há pouco, pendurados nos retratos.
    *
@@ -95,6 +98,7 @@ export function JogadorStage({
                 codigo={codigo}
                 cena={cena}
                 portraits={portraits}
+                fichas={fichas}
                 rolagens={rolagens}
               />
             </div>

@@ -2,6 +2,7 @@ import type { RolagemDaMesa } from "@/types/dado";
 import type {
   Ambiente,
   Disparo,
+  FichaNaCena,
   Portrait,
   Scene,
   SessionTrack,
@@ -66,6 +67,21 @@ export type LiveState = {
   volumeDisparo?: number;
   /** Retratos sobre a cena, ancorados na câmera. */
   portraits: Portrait[];
+  /**
+   * Nome e medidores para desenhar sobre a cabeça dos tokens.
+   *
+   * Viaja porque a TV não tem índice de personagens: ela tem este quadro e mais
+   * nada, e o token só carrega um `personagemId`.
+   *
+   * VAZIA com o interruptor da cena desligado, e é a diferença que importa: o
+   * nome de um PNJ que o mestre não apresentou não atravessa a rede por causa
+   * de uma tela. Filtrar no desenho deixaria o nome no JSON que o navegador
+   * guardou. Ver `fichasDaCena` e `Scene.infoDosTokens`.
+   *
+   * Opcional: um quadro de uma versão anterior não a traz, e quem recebe lê a
+   * ausência como lista vazia.
+   */
+  fichas?: FichaNaCena[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
   /**

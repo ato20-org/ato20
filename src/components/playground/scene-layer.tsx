@@ -13,9 +13,10 @@ import { FogLayer } from "@/components/playground/fog-layer";
 import { FundoDaCena } from "@/components/playground/fundo-da-cena";
 import { GridLayer } from "@/components/playground/grid-layer";
 import {
-  MedidorLayer,
+  ReguaLayer,
   type PontaDoMedidor,
-} from "@/components/playground/medidor-layer";
+} from "@/components/playground/regua-layer";
+import { InfoDoToken } from "@/components/playground/info-do-token";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { SombraLayer } from "@/components/playground/sombra-layer";
 import {
@@ -29,8 +30,9 @@ import type { RolagemDaMesa } from "@/types/dado";
 import {
   ehQuadro,
   type CanvasItem,
+  type FichaNaCena,
   type FogRegion,
-  type Medidor,
+  type Regua,
   type Portrait,
   type Scene,
 } from "@/types/scene";
@@ -107,6 +109,14 @@ type SceneLayerProps = {
    * lugar próprio, fora do plano da cena.
    */
   rolagens?: RolagemDaMesa[];
+  /**
+   * Nome e medidores para desenhar sobre a cabeça dos tokens.
+   *
+   * Vazia com o interruptor da cena desligado, e é assim que ela chega às telas
+   * da mesa: quem a monta é `fichasDaCena`, e o nome de um PNJ que o mestre não
+   * apresentou não atravessa a rede. Ver `Scene.infoDosTokens`.
+   */
+  fichas?: FichaNaCena[];
   /** Ausente = camada só de leitura, que é o caso do Espectador. */
   onItemPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
@@ -116,10 +126,10 @@ type SceneLayerProps = {
   ) => void;
   /** Só o Mestre: o medidor selecionado e os gestos de mover e redimensionar. */
   medidorSelecionadoId?: string | null;
-  onMedidorPointerDown?: (event: ReactPointerEvent, medidor: Medidor) => void;
+  onMedidorPointerDown?: (event: ReactPointerEvent, medidor: Regua) => void;
   onMedidorAlcaPointerDown?: (
     event: ReactPointerEvent,
-    medidor: Medidor,
+    medidor: Regua,
     ponta: PontaDoMedidor,
   ) => void;
   /**
@@ -149,6 +159,7 @@ export function SceneLayer({
   variante,
   portraits,
   rolagens,
+  fichas,
   onItemPointerDown,
   onFogPointerDown,
   onPortraitPointerDown,
@@ -246,7 +257,7 @@ export function SceneLayer({
           cima da névoa é justamente o caso -- "quantos metros até a porta que
           eles ainda não viram". Só com a grade: é ela que dá o metro. */}
       {scene.grid && scene.medidores && scene.medidores.length > 0 ? (
-        <MedidorLayer
+        <ReguaLayer
           medidores={scene.medidores}
           grid={scene.grid}
           selecionadoId={medidorSelecionadoId}
@@ -273,6 +284,12 @@ export function SceneLayer({
           <TextosDaMesa scene={scene} />
         </>
       )}
+
+      {/* Depois dos itens e antes do retrato: ela desenha SOBRE as peças, e o
+          retrato é HUD e fica acima de tudo. Ver `INFO_Z`. */}
+      {fichas && fichas.length > 0 ? (
+        <InfoDoToken itens={items} fichas={fichas} />
+      ) : null}
 
       {portraits && portraits.length > 0 ? (
         <PortraitLayer
