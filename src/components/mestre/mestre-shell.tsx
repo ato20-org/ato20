@@ -47,6 +47,7 @@ import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useJanelaDeRolagens } from "@/hooks/use-janela-de-rolagens";
 import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
+import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
@@ -213,6 +214,9 @@ export function MestreShell() {
   // O outro sentido do fluxo: o que os celulares jogam na mesa. Só esta janela
   // escuta -- a rota é de loopback. Ver `useRolagensDaMesa`.
   useRolagensDaMesa();
+  // E os tokens que eles arrastam. Mesma rota de loopback, mesmo desenho: o
+  // celular pede, esta janela confere e move. Ver `useMovimentosDaMesa`.
+  useMovimentosDaMesa();
   // E a janela que as mostra, que aparece sozinha quando alguém rola: o dado
   // chega do outro lado da mesa, e ninguém desta bancada pediu por ele. Ver
   // `useJanelaDeRolagens`.
