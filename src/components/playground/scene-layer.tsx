@@ -191,7 +191,9 @@ export function SceneLayer({
       {/* Depois do fundo e ANTES dos itens: a grade é do mapa, e um token em
           cima dela é o que se conta. Por cima dos itens ela riscaria os
           personagens. */}
-      {scene.grid ? <GridLayer grid={scene.grid} /> : null}
+      {scene.grid ? (
+        <GridLayer grid={scene.grid} items={scene.items} />
+      ) : null}
 
       {/* Depois da grade e ANTES dos itens: a sombra de parede é chão. Ela
           cobre a grade -- um quadrado atrás da parede tem de escurecer junto --

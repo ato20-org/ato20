@@ -100,8 +100,39 @@ function encaixarEixo(
   deslocamento: number,
   passo: number,
 ): number {
-  const centro = canto + lado / 2;
-  const casa = Math.round((centro - deslocamento) / passo - 0.5);
+  const casa = casaNoEixo(canto + lado / 2, deslocamento, passo);
 
   return deslocamento + (casa + 0.5) * passo - lado / 2;
+}
+
+/** Em que quadrado cai este ponto, contado a partir do deslocamento. */
+function casaNoEixo(ponto: number, deslocamento: number, passo: number): number {
+  return Math.floor((ponto - deslocamento) / passo);
+}
+
+/**
+ * O quadrado em que o item ESTA -- o que contem o centro dele.
+ *
+ * Pelo centro, como o encaixe: um token maior que a casa cobre varias, e a que
+ * conta e aquela em que a peca esta plantada. Com o ima ligado a resposta e a
+ * casa em que o encaixe a pos; com ele desligado, ainda e a casa que qualquer
+ * pessoa apontaria olhando o mapa.
+ *
+ * Devolve o canto e o lado, que e o que um retangulo precisa. Ver `GridLayer`.
+ */
+export function casaDoItem(
+  item: Pick<CanvasItem, "x" | "y" | "width" | "height">,
+  grid: SceneGrid,
+): { x: number; y: number; lado: number } {
+  const lado = passoDaGrade(grid);
+
+  return {
+    x:
+      grid.offsetX +
+      casaNoEixo(item.x + item.width / 2, grid.offsetX, lado) * lado,
+    y:
+      grid.offsetY +
+      casaNoEixo(item.y + item.height / 2, grid.offsetY, lado) * lado,
+    lado,
+  };
 }

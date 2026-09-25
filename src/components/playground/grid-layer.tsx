@@ -1,8 +1,14 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useMemo } from "react";
 
-import { SCENE_HEIGHT, SCENE_WIDTH, type SceneGrid } from "@/types/scene";
+import { casaDoItem } from "@/lib/geometry/grid";
+import {
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  type CanvasItem,
+  type SceneGrid,
+} from "@/types/scene";
 
 /** Espessura da linha, em unidades de cena. */
 const LINHA = 1.5;
@@ -34,8 +40,32 @@ const LINHA = 1.5;
  *
  * Em unidades de cena, como todo o resto do plano: a grade acompanha o zoom do
  * palco e é a mesma na TV de 1920 e no celular de 390.
+ *
+ * ## A casa de quem está no mapa
+ *
+ * Os quadrados ocupados por personagem saem realçados -- fundo na cor da linha,
+ * com pouca tinta, e as quatro linhas da casa mais fortes. É o que responde
+ * "de onde eu saio" sem ninguém precisar apontar o dedo na TV, e é o par
+ * natural do ímã: com o encaixe ligado, o realce mostra a casa em que a peça
+ * acabou de pousar.
+ *
+ * DENTRO do mesmo `svg` da grade, e não em `div`s ao lado: o `svg` recorta o
+ * que passa da caixa dele, então um token na beira do mapa não faz a casa
+ * transbordar o plano -- e transbordo dentro do plano é o que já derrubou o
+ * palco três vezes. Ver a §3 de `debug-do-palco`.
  */
-export function GridLayer({ grid }: { grid: SceneGrid }) {
+export function GridLayer({
+  grid,
+  items = [],
+}: {
+  grid: SceneGrid;
+  /**
+   * O que está no mapa. Só quem tem personagem ganha casa realçada: mobília,
+   * porta e mancha de sangue também são itens, e realçar a casa de cada um
+   * pintaria o mapa inteiro.
+   */
+  items?: CanvasItem[];
+}) {
   /**
    * Um id por instância: dois palcos na mesma página — o do mestre e a
    * pré-visualização — teriam padrões de nomes iguais, e o segundo venceria.
@@ -49,10 +79,35 @@ export function GridLayer({ grid }: { grid: SceneGrid }) {
 
   const cor = grid.dark ? "0 0 0" : "255 255 255";
   const linha = `rgb(${cor} / ${grid.opacity})`;
+  // A mesma cor da linha, nas duas doses do realce: o fundo com pouco mais da
+  // metade da tinta -- forte o bastante para a casa se achar de relance na TV,
+  // e ainda fraco o bastante para o mapa aparecer por baixo --, e a borda com o
+  // dobro, com teto em 1, que é o que faz a casa "acender".
+  const fundoDaCasa = `rgb(${cor} / ${grid.opacity * 0.6})`;
+  const bordaDaCasa = `rgb(${cor} / ${Math.min(1, grid.opacity * 2)})`;
 
   // `size` mínimo de 8: abaixo disso a grade vira um borrão cinza, e um valor
   // acidental de 0 travaria o browser tentando repetir infinitamente.
   const passo = Math.max(8, grid.size);
+
+  /**
+   * As casas a realçar, uma por personagem no mapa.
+   *
+   * Por chave e não por posição na lista: dois tokens na mesma casa -- o que
+   * acontece quando a mesa se amontoa numa porta -- pintariam o mesmo quadrado
+   * duas vezes, e o segundo escureceria o primeiro.
+   */
+  const casas = useMemo(() => {
+    const porCasa = new Map<string, { x: number; y: number; lado: number }>();
+
+    for (const item of items) {
+      if (!item.personagemId) continue;
+      const casa = casaDoItem(item, grid);
+      porCasa.set(`${casa.x}:${casa.y}`, casa);
+    }
+
+    return [...porCasa];
+  }, [items, grid]);
 
   return (
     <svg
@@ -84,6 +139,28 @@ export function GridLayer({ grid }: { grid: SceneGrid }) {
       </defs>
 
       <rect width="100%" height="100%" fill={`url(#${id})`} />
+
+      {/*
+        Depois do padrão, por cima dele: a casa acende, não apaga.
+
+        Meia linha de deslocamento, e a caixa do tamanho do passo: a linha do
+        padrão nasce DENTRO do quadrado (um retângulo de 1,5 a partir do canto)
+        e a borda do realce fica centrada no caminho. Sem o meio traço de folga
+        as duas ficariam lado a lado em vez de sobrepostas, e a 500% a casa
+        apareceria com linha dupla.
+      */}
+      {casas.map(([chave, casa]) => (
+        <rect
+          key={chave}
+          x={casa.x + LINHA / 2}
+          y={casa.y + LINHA / 2}
+          width={casa.lado}
+          height={casa.lado}
+          fill={fundoDaCasa}
+          stroke={bordaDaCasa}
+          strokeWidth={LINHA}
+        />
+      ))}
     </svg>
   );
 }

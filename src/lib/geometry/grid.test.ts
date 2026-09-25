@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  casaDoItem,
   encaixarNaGrade,
   gradeDoEncaixe,
   passoDaGrade,
@@ -76,5 +77,41 @@ describe("encaixarNaGrade", () => {
     // Sem o mínimo, a conta dividiria por zero e o token sumiria do mapa.
     expect(encaixarNaGrade({ width: 8, height: 8 }, 3, 3, grade({ size: 0 })))
       .toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe("casaDoItem", () => {
+  it("a casa é a que contém o CENTRO do token", () => {
+    // Token de 80 largado em 10: o centro cai em 50, dentro da primeira casa.
+    expect(casaDoItem({ ...token, x: 10, y: 10 }, grade())).toEqual({
+      x: 0,
+      y: 0,
+      lado: 96,
+    });
+  });
+
+  it("token maior que o quadrado ocupa a casa em que está plantado", () => {
+    const gigante = { width: 300, height: 300, x: 0, y: 0 };
+    // Centro em 150: a segunda casa da grade de 96, que vai de 96 a 192.
+    expect(casaDoItem(gigante, grade())).toEqual({ x: 96, y: 96, lado: 96 });
+  });
+
+  it("segue o deslocamento da grade, como o encaixe", () => {
+    const g = grade({ size: 100, offsetX: 20, offsetY: 35 });
+    expect(casaDoItem({ width: 100, height: 100, x: 0, y: 0 }, g)).toEqual({
+      x: 20,
+      y: 35,
+      lado: 100,
+    });
+  });
+
+  it("a casa do que foi encaixado é a casa em que ele pousou", () => {
+    const g = grade({ snap: true });
+    const pousado = encaixarNaGrade(token, 137, 42, g);
+    const casa = casaDoItem({ ...token, ...pousado }, g);
+
+    // O centro do token pousado é o centro da casa.
+    expect(pousado.x + token.width / 2).toBe(casa.x + casa.lado / 2);
+    expect(pousado.y + token.height / 2).toBe(casa.y + casa.lado / 2);
   });
 });
