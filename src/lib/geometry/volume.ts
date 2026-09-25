@@ -410,7 +410,23 @@ export type FaceDaParede = Segmento & {
  * dois. É menos informação, e é toda a que existe -- inventar um lado de fora
  * para um traço seria escolher um por sorteio.
  */
-export function facesDaParede(parede: Parede, sol: Sol | null): FaceDaParede[] {
+export function facesDaParede(
+  parede: Parede,
+  sol: Sol | null,
+  /**
+   * De onde se olha, em graus. Dado, descarta as faces de costas.
+   *
+   * Descartar não é economia de enfeite: cada face é um `div` com transformação
+   * 3D, e no WebKit toda transformação 3D ganha uma camada composta própria.
+   * Quarenta paredes davam cento e sessenta camadas, e a medida na webview
+   * cobrou 36 fps com 91,3% dos quadros perdidos contra 60 do mesmo mapa de
+   * prumo. Metade delas está virada para o lado de lá e nunca foi vista.
+   *
+   * Ausente = devolve todas, que é o que a conta de oclusão quer quando ela
+   * pergunta por uma parede específica.
+   */
+  giroDaVista?: number,
+): FaceDaParede[] {
   const segmentos = segmentosDaParede(parede);
   if (segmentos.length === 0) return [];
 
@@ -435,7 +451,28 @@ export function facesDaParede(parede: Parede, sol: Sol | null): FaceDaParede[] {
   }
   const sentido = dobro < 0 ? -1 : 1;
 
-  return segmentos.map((segmento) => {
+  /**
+   * Para onde o observador está, como vetor.
+   *
+   * O mesmo par que `profundidadeNaVista` usa: ali a profundidade é
+   * `x*sen(g) + y*cos(g)`, e maior quer dizer mais perto. Então este é o
+   * sentido em que a cena se aproxima de quem olha.
+   */
+  const olhoX = giroDaVista === undefined ? 0 : Math.sin(giroDaVista * GRAU);
+  const olhoY = giroDaVista === undefined ? 0 : Math.cos(giroDaVista * GRAU);
+
+  /**
+   * Só a parede FECHADA e COBERTA esconde as próprias costas.
+   *
+   * A `linha` não tem dentro -- os dois lados dela são corredor. E o pátio tem
+   * o miolo à vista, então a face de dentro é parede que alguém vê de pé no
+   * quintal. É a mesma ressalva que `segmentosQueProjetam` faz, e pelo mesmo
+   * motivo.
+   */
+  const escondeCostas =
+    giroDaVista !== undefined && !aberta && !parede.semTeto;
+
+  return segmentos.flatMap((segmento) => {
     const dx = segmento.x2 - segmento.x1;
     const dy = segmento.y2 - segmento.y1;
     const comprimento = Math.hypot(dx, dy) || 1;
@@ -443,15 +480,20 @@ export function facesDaParede(parede: Parede, sol: Sol | null): FaceDaParede[] {
     const nx = (dy / comprimento) * sentido;
     const ny = (-dx / comprimento) * sentido;
 
+    // De costas para quem olha: a massa da própria parede está na frente dela.
+    if (escondeCostas && nx * olhoX + ny * olhoY <= 0) return [];
+
     const lambert = nx * luzX + ny * luzY;
     // Sem lado de fora, o que se sabe é o quanto a face está DE TRAVÉS para a
     // luz, e isso é o módulo.
     const luz = aberta ? Math.abs(lambert) : Math.max(0, lambert);
 
-    return {
-      ...segmento,
-      brilho: arredondar(PISO_DA_FACE + (1 - PISO_DA_FACE) * luz),
-    };
+    return [
+      {
+        ...segmento,
+        brilho: arredondar(PISO_DA_FACE + (1 - PISO_DA_FACE) * luz),
+      },
+    ];
   });
 }
 

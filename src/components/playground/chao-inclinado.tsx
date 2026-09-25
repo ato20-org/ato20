@@ -1,13 +1,16 @@
 "use client";
 
-import { Fragment, memo, useMemo } from "react";
+import { Fragment, memo, useId, useMemo } from "react";
 
 import { useCoresDasParedes } from "@/hooks/use-cores-das-paredes";
 import { escurecerCor } from "@/lib/cor-do-mapa";
 import {
   alturaDaParede,
+  caixaDaParede,
   corpoDaParede,
   umbrasDoSol,
+  uniaoDasCaixas,
+  type CaixaDaUmbra,
 } from "@/lib/geometry/sombra";
 import {
   caixaDaFace,
@@ -238,6 +241,11 @@ export const ChaoInclinado = memo(function ChaoInclinado({
    */
   const cores = useCoresDasParedes(paredes, mapaUrl);
 
+  // `useId` traz dois-pontos, e dois-pontos dentro de um `url(#...)` não é
+  // seletor válido. Mesma raspagem da `ParedeLayer`. Prefixo por instância
+  // porque dois palcos na mesma página colidiriam nos ids dos padrões.
+  const base = useId().replace(/:/g, "");
+
   /**
    * Tudo o que se ergue do chão, do mais longe para o mais perto.
    *
@@ -247,6 +255,20 @@ export const ChaoInclinado = memo(function ChaoInclinado({
    */
   const desenhos = useMemo(() => {
     const lista: Desenho[] = [];
+
+    /**
+     * As paredes agrupadas pela altura delas.
+     *
+     * Montado antes do laço porque a laje de cada grupo é UMA camada só, e uma
+     * camada não se monta no meio da iteração das paredes que a compõem.
+     */
+    const lajes = new Map<number, Parede[]>();
+    for (const parede of paredes) {
+      const altura = alturaDaParede(parede);
+      const grupo = lajes.get(altura);
+      if (grupo) grupo.push(parede);
+      else lajes.set(altura, [parede]);
+    }
 
     /**
      * Onde cada peça cai na tela, para saber quem a parede está tapando.
@@ -270,12 +292,12 @@ export const ChaoInclinado = memo(function ChaoInclinado({
 
     for (const parede of paredes) {
       const altura = alturaDaParede(parede);
-      const corpo = corpoDaParede(parede);
       let i = 0;
 
       const corDaParede = cores.get(parede.id);
 
-      for (const segmento of facesDaParede(parede, sol ?? null)) {
+      // Com o giro: as faces de costas não são montadas. Ver `facesDaParede`.
+      for (const segmento of facesDaParede(parede, sol ?? null, giro)) {
         const dx = segmento.x2 - segmento.x1;
         const dy = segmento.y2 - segmento.y1;
         const comprimento = Math.hypot(dx, dy);
@@ -374,36 +396,89 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         i += 1;
       }
 
-      if (!corpo) continue;
+    }
 
-      // A laje, no alto: o mesmo pedaço de mapa que estava sob a parede, agora
-      // em cima dela. `translateZ` DEPOIS da corrente da cena -- ali o eixo já
-      // é a normal do chão, que é para onde a parede cresce.
+    /**
+     * As lajes, UMA CAMADA POR ALTURA -- e não uma por parede.
+     *
+     * Aqui está a medida mais cara desta bancada. Uma laje por parede dava, na
+     * webview com quarenta paredes, 33,4 fps e 99,1% dos quadros perdidos,
+     * contra 60 fps e 0% do mesmo mapa sem parede nenhuma: o chão tombado é de
+     * graça, e quem custava era a repetição. Recortar cada SVG na caixa da sua
+     * parede NÃO resolveu -- piorou a ponto de a corrida não terminar --, e o
+     * motivo estava escrito ao lado de `uniaoDasCaixas`: quatro SVGs com as
+     * suas caixas mediram pior que um do tamanho do plano, porque cada SVG é
+     * uma camada a compor. O tamanho do raster é o segundo problema; o primeiro
+     * é quantas superfícies o compositor recebe.
+     *
+     * Por ALTURA porque é o que não dá para juntar: cada laje sobe pelo próprio
+     * `translateZ`, e `translateZ` é transformação 3D de CSS -- um `<g>` de SVG
+     * não a carrega. Um mapa tem duas ou três alturas, então são duas ou três
+     * camadas. É a mesma economia que a `VolumeLayer` faz com as faces dela e
+     * que a `ParedeLayer` faz com a hachura.
+     *
+     * ## O que se perde, e por que cabe
+     *
+     * A laje deixa de ter profundidade própria: o grupo inteiro entra na lista
+     * pela parede mais PERTO dele. Dentro do grupo a ordem é honesta -- os
+     * caminhos são pintados do fundo para a frente, e SVG pinta em ordem de
+     * documento --, mas entre grupos uma laje pode cair sobre a face de uma
+     * parede mais perto que ela, de outra altura.
+     *
+     * É a troca que a medida pagou: um caso raro de ordem -- duas paredes de
+     * alturas diferentes cujas massas se cruzam na tela -- contra metade da
+     * cadência do palco. Se algum dia aparecer numa mesa, o conserto é separar
+     * só as paredes que de fato se cruzam, e não todas.
+     */
+    for (const [altura, doGrupo] of lajes) {
+      // Do fundo para a frente DENTRO do grupo: SVG pinta em ordem de
+      // documento, então ordenar os caminhos é ordenar a oclusão entre eles.
+      const ordenadas = [...doGrupo].sort(
+        (a, b) =>
+          profundidadeNaVista(a.x + a.width / 2, a.y + a.height / 2, giro) -
+          profundidadeNaVista(b.x + b.width / 2, b.y + b.height / 2, giro),
+      );
+
+      let caixa: CaixaDaUmbra | null = null;
+      for (const parede of ordenadas) {
+        caixa = uniaoDasCaixas(caixa, caixaDaParede(parede));
+      }
+      if (!caixa) continue;
+
+      const maisPerto = ordenadas[ordenadas.length - 1]!;
+
       lista.push({
-        chave: `${parede.id}-laje`,
+        chave: `laje-${altura}`,
         profundidade:
           profundidadeNaVista(
-            parede.x + parede.width / 2,
-            parede.y + parede.height / 2,
+            maisPerto.x + maisPerto.width / 2,
+            maisPerto.y + maisPerto.height / 2,
             giro,
           ) + 0.5,
         no: (
           <svg
-            // Inerte, e aqui importa o dobro: este SVG tem o tamanho do PLANO
-            // INTEIRO, e só o corpo da parede é pintado. Ativo, ele cobriria o
-            // chão inteiro e nenhum clique chegaria ao pega-gesto.
+            // Inerte: ele fica entre o cursor e o chão, e um clique nele não
+            // chegaria ao pega-gesto.
             className="pointer-events-none absolute top-0 left-0"
-            width={SCENE_WIDTH}
-            height={SCENE_HEIGHT}
-            viewBox={`0 0 ${SCENE_WIDTH} ${SCENE_HEIGHT}`}
+            // Recortado na união das caixas do grupo -- a segunda economia,
+            // depois de serem poucas camadas. Ver `caixaDaParede`.
+            width={caixa.width}
+            height={caixa.height}
+            // O `viewBox` carrega a origem, então os caminhos continuam em
+            // coordenada de CENA e o `pattern` de `userSpaceOnUse` anda junto:
+            // o pedaço de mapa que sobe segue sendo o que estava sob a parede.
+            viewBox={`${caixa.x} ${caixa.y} ${caixa.width} ${caixa.height}`}
             style={{
               transformOrigin: "0 0",
-              transform: `${cena} translateZ(${altura}px)`,
+              // O `translate` põe o recorte no lugar dele no plano; a corrente
+              // da cena deita o conjunto; o `translateZ` o ergue pela normal do
+              // chão, que é para onde a parede cresce.
+              transform: `${cena} translate(${caixa.x}px, ${caixa.y}px) translateZ(${altura}px)`,
             }}
           >
             <defs>
               <pattern
-                id={`laje-${parede.id}`}
+                id={`laje-${base}-${altura}`}
                 patternUnits="userSpaceOnUse"
                 width={SCENE_WIDTH}
                 height={SCENE_HEIGHT}
@@ -416,7 +491,13 @@ export const ChaoInclinado = memo(function ChaoInclinado({
                 />
               </pattern>
             </defs>
-            <path d={corpo} fill={`url(#laje-${parede.id})`} />
+            {ordenadas.map((parede) => (
+              <path
+                key={parede.id}
+                d={corpoDaParede(parede)}
+                fill={`url(#laje-${base}-${altura})`}
+              />
+            ))}
           </svg>
         ),
       });
@@ -463,6 +544,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     inclinacao,
     mapaUrl,
     onPecaPointerDown,
+    base,
     paredes,
     pecas,
     sol,

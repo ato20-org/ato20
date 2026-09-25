@@ -1121,6 +1121,27 @@ function presaAoPlano(
  * 49,2 --, porque cada SVG é uma camada a compor. Um só, do tamanho do que de
  * fato pinta, é o que junta as duas economias.
  */
+/**
+ * A caixa que UMA parede ocupa no plano, já contando o giro dela.
+ *
+ * Existe pela mesma razão de `caixaDoSol`, e o preço de não tê-la foi medido:
+ * a laje de cada parede no chão inclinado era um SVG do tamanho do PLANO, e
+ * quarenta paredes davam quarenta superfícies de 2,07 megapixels. Na webview
+ * isso levou o palco de 60 fps para 33,4, com 99,1% dos quadros perdidos --
+ * enquanto o mesmo mapa sem parede nenhuma corria a 60 com folga.
+ *
+ * A folga é a meia-diagonal, como lá: a caixa girada passa da caixa declarada,
+ * e a diagonal cobre qualquer giro sem uma conta de canto por parede. Sobra um
+ * pouco de área, e sobrar é o lado certo de errar -- faltar corta o desenho.
+ */
+export function caixaDaParede(parede: FormaDaParede): CaixaDaUmbra | null {
+  const folga = Math.hypot(parede.width, parede.height) / 2;
+  const cx = parede.x + parede.width / 2;
+  const cy = parede.y + parede.height / 2;
+
+  return presaAoPlano(cx - folga, cy - folga, cx + folga, cy + folga);
+}
+
 export function uniaoDasCaixas(
   a: CaixaDaUmbra | null,
   b: CaixaDaUmbra | null,
