@@ -2,10 +2,16 @@
 
 import { useState } from "react";
 import type * as React from "react";
-import { ChevronDown, FolderSymlink, PackageOpen } from "lucide-react";
+import {
+  ChevronDown,
+  FolderSymlink,
+  PackageOpen,
+  SlidersHorizontal,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { CapaDaCampanha } from "@/components/mestre/capa-da-campanha";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -45,6 +51,8 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
    * cada mutação do board. Ver `CapaDaCampanha`.
    */
   const [aberto, setAberto] = useState(false);
+
+  const abrirJanela = useAbrirJanela();
 
   if (!campaign) return null;
 
@@ -88,6 +96,16 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
 
         <DropdownMenuContent align="start" className="w-56">
           {aberto ? <CapaDaCampanha /> : null}
+
+          {/* Logo abaixo da capa, e antes do separador: as duas são o que se
+              ajusta NA campanha, e o que vem depois do traço é o que se faz
+              COM ela -- exportar, trocar. */}
+          <DropdownMenuItem
+            onClick={() => abrirJanela({ tipo: "configuracao" })}
+          >
+            <SlidersHorizontal />
+            Configuração da campanha
+          </DropdownMenuItem>
 
           <DropdownMenuSeparator />
 

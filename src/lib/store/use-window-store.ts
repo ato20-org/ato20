@@ -34,6 +34,10 @@ export type ConteudoJanela =
   // manual de um sistema serve todas as mesas dele --, e é por isso que o livro
   // guarda só o id: o título vem do banco, e renomear o livro um dia não pode
   // criar uma segunda janela do mesmo PDF. Ver `chaveDe`.
+  // O que vale para a campanha inteira, e não para uma cena nem um personagem:
+  // hoje os medidores de fábrica, e é o lugar do que vier depois. Sem campo,
+  // como a estante -- só existe UMA campanha aberta.
+  | { tipo: "configuracao" }
   | { tipo: "estante" }
   | { tipo: "livro"; livroId: string; titulo: string }
   // O que a MESA está vendo, em miniatura. Assina o mesmo fluxo que a TV, e é
@@ -77,6 +81,8 @@ export function chaveDe(conteudo: ConteudoJanela): string {
       return `anexo:${conteudo.personagemId}/${conteudo.anexo.autor}/${conteudo.anexo.arquivo}`;
     case "asset":
       return `asset:${conteudo.assetId}`;
+    case "configuracao":
+      return "configuracao";
     case "estante":
       return "estante";
     case "miniplayer":

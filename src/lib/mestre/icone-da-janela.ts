@@ -13,6 +13,7 @@ import {
   PersonStanding,
   Puzzle,
   ScrollText,
+  SlidersHorizontal,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -62,6 +63,8 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
       // Ficha, e não pessoa: `Users` já é a lista, e duas telas com o mesmo
       // ícone na mesma tira não distinguem nada.
       return ScrollText;
+    case "configuracao":
+      return SlidersHorizontal;
     case "estante":
       return Library;
     case "livro":
