@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ALTURA_DA_PAREDE,
+  caixaDoSol,
   contornoDaParede,
   matrizDoVulto,
   peDaFigura,
@@ -449,5 +450,44 @@ describe("o teto da parede", () => {
     expect(umbrasDoSol([reta], sol)).toBe(
       umbrasDoSol([{ ...reta, semTeto: true }], sol),
     );
+  });
+});
+
+describe("a parede que veio de um arquivo antigo", () => {
+  const sol: Sol = { angulo: 35, comprimento: 0.42, forca: 0.38 };
+
+  /**
+   * Como a parede era escrita antes de virar caixa: segmento cru, com grossura
+   * e sem `width`. Ainda mora em campanha de quem acompanhou o desenvolvimento,
+   * e a conta tem de atravessá-la sem se sujar. Ver `paredeDeVerdade`.
+   */
+  const velha = {
+    id: "velha",
+    x1: 681.83,
+    y1: 564.86,
+    x2: 792.02,
+    y2: 479.17,
+    grossura: 72,
+  } as unknown as Parede;
+
+  const muro: Parede = {
+    id: "p",
+    x: 100,
+    y: 100,
+    width: 200,
+    height: 0,
+    formato: "linha",
+  };
+
+  it("não pinta faixa nenhuma, e não apaga a das outras", () => {
+    expect(umbrasDoSol([velha, muro], sol)).toBe(umbrasDoSol([muro], sol));
+  });
+
+  it("não contamina a caixa das umbras, que é uma só para o mapa", () => {
+    expect(caixaDoSol([velha, muro], sol)).toEqual(caixaDoSol([muro], sol));
+  });
+
+  it("sozinha, não há caixa: não há o que pintar", () => {
+    expect(caixaDoSol([velha], sol)).toBeNull();
   });
 });

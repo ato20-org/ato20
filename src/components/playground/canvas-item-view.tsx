@@ -24,6 +24,14 @@ type CanvasItemViewProps = {
    */
   smooth?: boolean;
   /**
+   * O dedo do jogador está segurando este item, no celular dele.
+   *
+   * Desliga a interpolação só da posição, e não o `smooth` inteiro: tirar a
+   * classe tiraria junto o `scene-item-in`, e devolvê-la ao soltar repetiria a
+   * entrada -- o token piscaria ao ser largado. Ver `SceneLayer.naMao`.
+   */
+  naMao?: boolean;
+  /**
    * A cor do traço em volta da figura, quando ela deve ter um.
    *
    * Só o palco do mestre passa: é a leitura "quem é de jogador e quem é meu"
@@ -45,6 +53,7 @@ type CanvasItemViewProps = {
 export const CanvasItemView = memo(function CanvasItemView({
   item,
   smooth = false,
+  naMao = false,
   variante,
   contorno,
   onPointerDown,
@@ -85,6 +94,8 @@ export const CanvasItemView = memo(function CanvasItemView({
         // Não mexe no hit-test: um item a 10% continua clicável no palco, que
         // é o que permite desfazer o exagero sem caçar o item na lista.
         opacity: item.opacity,
+        // Por cima do `.scene-smooth-item`: ver `naMao`.
+        transition: naMao ? "none" : undefined,
       }}
       onPointerDown={
         onPointerDown ? (event) => onPointerDown(event, item) : undefined

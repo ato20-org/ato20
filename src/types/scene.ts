@@ -284,6 +284,19 @@ export type SceneGrid = {
    * cada cena.
    */
   dark?: boolean;
+  /**
+   * O token se encaixa no quadrado ao ser arrastado.
+   *
+   * Campo da grade e nao do aplicativo: e decisao de MAPA -- a planta da
+   * masmorra quer a peca na casa, e o mapa de viagem desenhado a mao quer a
+   * peca onde a mao a largou. Dentro de `SceneGrid` ele tambem viaja de graca
+   * para a TV e para os celulares, que e o que faz o dedo do jogador obedecer
+   * a mesma regra do mestre.
+   *
+   * Ausente = desligado: a grade sempre foi so desenho, e ligar o ima em todo
+   * mapa que ja existe mudaria o lugar das pecas sem ninguem pedir.
+   */
+  snap?: boolean;
 };
 
 /**

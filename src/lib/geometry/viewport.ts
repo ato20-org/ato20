@@ -293,3 +293,38 @@ export function zoomViewportCentered(
     conteudo,
   );
 }
+
+/**
+ * Onde o recorte pousa DENTRO da moldura, em pixels de tela.
+ *
+ * O retângulo 16:9 que a moldura letterboxa. O que sobra em volta dele são as
+ * tarjas pretas -- ver `tarjas`, no `SceneStage`, que sai desta mesma conta.
+ *
+ * ## Por que ele é chão firme
+ *
+ * Não depende da AMPLIAÇÃO da câmera, e é isso que o torna o lugar de tudo o
+ * que não é cenário. `scale` é `moldura / recorte`, e a largura do recorte
+ * aparece nos DOIS lados da multiplicação: ela cancela, e o que resta é a
+ * moldura e a proporção. Aproximar a câmera dezesseis vezes devolve o mesmo
+ * retângulo -- o que muda é o mapa dentro dele, que é justamente o que se
+ * quer.
+ *
+ * A proporção nunca vem da entrada: `clampViewport` deriva a altura da
+ * largura. Sem essa garantia esta conta dependeria do recorte, e o retângulo
+ * mudaria de forma a cada câmera.
+ */
+export function recorteNaTela(
+  frame: { width: number; height: number },
+  viewport: Viewport,
+  scale: number,
+): { left: number; top: number; width: number; height: number } {
+  const width = viewport.width * scale;
+  const height = viewport.height * scale;
+
+  return {
+    left: (frame.width - width) / 2,
+    top: (frame.height - height) / 2,
+    width,
+    height,
+  };
+}

@@ -16,7 +16,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { FormaControl } from "@/components/mestre/forma-control";
-import { GridControl } from "@/components/mestre/grid-control";
 import { PencilControl } from "@/components/mestre/pencil-control";
 import { PilulaDeDesenho } from "@/components/mestre/pilula-de-desenho";
 import { ReguaControl } from "@/components/mestre/regua-control";
@@ -104,8 +103,8 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
 ];
 
 /**
- * As do MAPA: marcam o chão -- pontos e papéis. Junto delas ficam a grade e a
- * régua, que também são sobre o mapa e não sobre o que anda nele.
+ * As do MAPA: marcam o chão -- pontos e papéis. Junto delas fica a régua, que
+ * também é sobre o mapa e não sobre o que anda nele.
  *
  * A área escondida e a parede saíram daqui para a pílula de desenho: as duas
  * são REGIÕES, e a pergunta "qual o desenho dela" passou a ser a mesma nas
@@ -311,7 +310,9 @@ function reguaDeMedir(scene: Scene): Ferramenta {
     label: "Régua",
     hint: scene.grid
       ? `Mede distância e área. Cada quadrado vale ${METROS_POR_QUADRADO} m.`
-      : "Ligue a grade primeiro.",
+      : // Onde ela mora agora, e não só "ligue a grade": o botão que a ligava
+        // era o vizinho de cima, e quem o procurar aqui não vai achar.
+        "Ligue a grade nas configurações do mapa, no canto de cima.",
     icon: Ruler,
   };
 }
@@ -319,7 +320,7 @@ function reguaDeMedir(scene: Scene): Ferramenta {
 /**
  * A régua do MAPA, encostada na borda direita do palco.
  *
- * O que se marca no chão e fica: ponto, papel, grade, medida. Estava numa bolsa
+ * O que se marca no chão e fica: ponto, papel, medida. Estava numa bolsa
  * do rodapé, atrás de dois cliques, e a bolsa dizia o que tinha dentro só
  * depois de aberta -- num mapa novo, ninguém descobre o que nunca viu.
  *
@@ -328,13 +329,13 @@ function reguaDeMedir(scene: Scene): Ferramenta {
  * esta, "o que eu marco no chão". Um canto para cada, e nenhuma delas atravessa
  * o rodapé, que continua sendo do PALCO.
  *
- * Fora do QUADRO, que não tem chão: nem ponto, nem grade, nem medida. O postit
- * dele é conteúdo, e por isso mora na régua da esquerda -- ver `DA_REGUA`.
+ * Fora do QUADRO, que não tem chão: nem ponto, nem medida. O postit dele é
+ * conteúdo, e por isso mora na régua da esquerda -- ver `DA_REGUA`.
  *
  * No FUNDO ela aparece pela metade: ponto e postit ficam -- anotar sobre a
- * imagem é o mesmo gesto de anotar sobre o mapa --, e a grade e a medida saem
- * com o separador. A régua inteira sumir no fundo tiraria do mestre o único
- * lugar onde ele guarda o que a mesa não vê.
+ * imagem é o mesmo gesto de anotar sobre o mapa --, e a medida sai com o
+ * separador. A régua inteira sumir no fundo tiraria do mestre o único lugar
+ * onde ele guarda o que a mesa não vê.
  */
 export function ReguaDoMapa({ scene }: { scene: Scene }) {
   const dasExtensoes = useFerramentasDeExtensao();
@@ -350,15 +351,20 @@ export function ReguaDoMapa({ scene }: { scene: Scene }) {
         />
       ))}
 
-      {/* A grade e a medida depois do risco: as duas são sobre o CHÃO e não
-          sobre o que se crava nele, e a régua só mede porque a grade diz
-          quanto vale um quadrado. O separador vai junto com elas: sem isso o
-          fundo ficaria com um risco solto no pé da régua. */}
+      {/* A medida depois do ponto e do papel: ela é sobre o CHÃO e não sobre
+          o que se crava nele.
+
+          A grade estava aqui ao lado dela e foi para as configurações do mapa:
+          ligar a grade não é pegar uma ferramenta, é um estado da cena, como o
+          sol. A régua ficou porque ela É gesto -- e continua apagada sem grade,
+          que é quem diz quanto vale um quadrado. Ver `GridControl`.
+
+          O separador vem junto com ela: o fundo não mede, e sem isso ele
+          ficaria com um risco solto no pé da régua. */}
       {temMedida(scene) ? (
         <>
           <span className="bg-border my-1 h-px w-5" />
 
-          <GridControl scene={scene} lado="left" />
           <BotaoDeFerramenta
             ferramenta={regua}
             desabilitada={!scene.grid}
@@ -392,8 +398,7 @@ export function ReguaDoMapa({ scene }: { scene: Scene }) {
  * O risco e o controle da ferramenta do mapa que está na mão, ou nada.
  *
  * Postit e régua de medir são as duas do mapa com preferência antes do gesto --
- * a cor do papel, a forma do medidor. Ponto e grade não têm o que perguntar
- * antes.
+ * a cor do papel, a forma do medidor. O ponto não tem o que perguntar antes.
  */
 function ControleDoMapa() {
   const tool = useToolStore((state) => state.tool);

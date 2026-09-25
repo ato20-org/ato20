@@ -10,6 +10,7 @@ import {
   MAX_ZOOM,
   panViewport,
   PLANO,
+  recorteNaTela,
   viewportQueCabe,
   viewportZoom,
   zoomViewport,
@@ -215,5 +216,70 @@ describe("regras que valem em qualquer área", () => {
 
       expect(clampViewport(uma, conteudo)).toEqual(uma);
     }
+  });
+});
+
+describe("recorteNaTela", () => {
+  const moldura = { width: 1000, height: 800 };
+
+  /** O mesmo recorte em cinco ampliações, todas 16:9 como o clamp garante. */
+  const ampliacoes = [1, 2, 4, 8, MAX_ZOOM].map((fator) =>
+    clampViewport({
+      x: 300,
+      y: 200,
+      width: SCENE_WIDTH / fator,
+      height: 0,
+    }),
+  );
+
+  function naTela(viewport: Viewport) {
+    return recorteNaTela(
+      moldura,
+      viewport,
+      Math.min(
+        moldura.width / viewport.width,
+        moldura.height / viewport.height,
+      ),
+    );
+  }
+
+  it("é o mesmo retângulo em qualquer ampliação da câmera", () => {
+    // A promessa que sustenta o overlay: aproximar não mexe na caixa. Se isto
+    // quebrar, o retrato do jogador volta a andar com o zoom.
+    const primeiro = naTela(ampliacoes[0]);
+
+    for (const viewport of ampliacoes) {
+      expect(naTela(viewport)).toEqual(primeiro);
+    }
+  });
+
+  it("é o mesmo retângulo em qualquer deslocamento da câmera", () => {
+    const parado = naTela(clampViewport({ x: 0, y: 0, width: 960, height: 0 }));
+
+    for (const x of [-5_000, 0, 137, 5_000]) {
+      for (const y of [-5_000, 0, 42, 5_000]) {
+        expect(naTela(clampViewport({ x, y, width: 960, height: 0 }))).toEqual(
+          parado,
+        );
+      }
+    }
+  });
+
+  it("letterboxa: encosta no eixo apertado e centra a sobra no outro", () => {
+    // Moldura 1000x800 é mais alta que 16:9, então a largura manda e a sobra
+    // vai para cima e para baixo, dividida em duas.
+    const caixa = naTela(ampliacoes[0]);
+
+    expect(caixa.left).toBeCloseTo(0);
+    expect(caixa.width).toBeCloseTo(moldura.width);
+    expect(caixa.height).toBeCloseTo(moldura.width * ASPECT);
+    expect(caixa.top).toBeCloseTo((moldura.height - caixa.height) / 2);
+  });
+
+  it("moldura ainda não medida devolve caixa sem área", () => {
+    // `scale` zero é o primeiro paint. Nada a desenhar, e nenhum NaN.
+    const caixa = recorteNaTela({ width: 0, height: 0 }, FULL_VIEWPORT, 0);
+
+    expect(caixa).toEqual({ left: 0, top: 0, width: 0, height: 0 });
   });
 });

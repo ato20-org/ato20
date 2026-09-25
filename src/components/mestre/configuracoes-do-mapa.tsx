@@ -3,6 +3,7 @@
 import { RotateCcw, Settings2, Sun } from "lucide-react";
 
 import { CeuDoSol } from "@/components/mestre/ceu-do-sol";
+import { GridControl } from "@/components/mestre/grid-control";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -73,7 +74,13 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
         </TooltipContent>
       </Tooltip>
 
-      <PopoverContent align="end" className="w-72 space-y-4" side="bottom">
+      {/* Rola quando não couber: são dois assuntos com régua cada um, e num
+          portátil de tela baixa o fim do painel ficava fora da janela. */}
+      <PopoverContent
+        align="end"
+        className="max-h-[min(70vh,34rem)] w-72 space-y-4 overflow-y-auto"
+        side="bottom"
+      >
         <p className="text-sm font-medium">Configurações do mapa</p>
 
         <section className="space-y-3">
@@ -158,6 +165,14 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
             </div>
           ) : null}
         </section>
+
+        {/* O traço entre os dois: sol e grade valem os dois para a cena
+            inteira, mas são assuntos diferentes -- um pinta sombra, o outro
+            mede chão -- e sem a linha as duas fileiras de réguas viravam uma
+            lista só. */}
+        <span className="bg-border block h-px w-full" />
+
+        <GridControl scene={scene} />
       </PopoverContent>
     </Popover>
   );

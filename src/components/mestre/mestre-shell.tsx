@@ -50,6 +50,7 @@ import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useJanelaDeRolagens } from "@/hooks/use-janela-de-rolagens";
 import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
+import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
@@ -74,6 +75,7 @@ import {
   ehQuadro,
   temAnotacao,
   temCamera,
+  temGrade,
   temNevoa,
   temSol,
   type Scene,
@@ -230,6 +232,9 @@ export function MestreShell() {
   // O outro sentido do fluxo: o que os celulares jogam na mesa. Só esta janela
   // escuta -- a rota é de loopback. Ver `useRolagensDaMesa`.
   useRolagensDaMesa();
+  // E os tokens que eles arrastam. Mesma rota de loopback, mesmo desenho: o
+  // celular pede, esta janela confere e move. Ver `useMovimentosDaMesa`.
+  useMovimentosDaMesa();
   // E a janela que as mostra, que aparece sozinha quando alguém rola: o dado
   // chega do outro lado da mesa, e ninguém desta bancada pediu por ele. Ver
   // `useJanelaDeRolagens`.
@@ -342,8 +347,14 @@ export function MestreShell() {
                       mestre troca de mapa -- do que é da SESSÃO, que continua
                       igual a cena toda.
 
-                      Só no mapa: num quadro não há chão para o sol cair. */}
-                  {editingScene && temSol(editingScene) ? (
+                      As DUAS capacidades, porque o painel guarda as duas: a
+                      grade veio da régua para cá, onde ela é estado da cena e
+                      não ferramenta na mão. Hoje mapa tem as duas e os outros
+                      não têm nenhuma, então a pergunta dobrada não muda nada
+                      -- e é justamente por isso que ela deve estar escrita
+                      agora, e não no dia em que um tipo tiver só uma. */}
+                  {editingScene &&
+                  (temSol(editingScene) || temGrade(editingScene)) ? (
                     <>
                       <ConfiguracoesDoMapa scene={editingScene} />
                       <span className="bg-border mx-1 h-5 w-px" />

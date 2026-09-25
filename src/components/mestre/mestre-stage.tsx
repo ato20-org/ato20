@@ -127,6 +127,7 @@ import {
   retratosDaCena,
   scalePortraitGroup,
 } from "@/lib/geometry/portrait";
+import { encaixarNaGrade, gradeDoEncaixe } from "@/lib/geometry/grid";
 import {
   computeSnap,
   SNAP_THRESHOLD_PX,
@@ -167,6 +168,7 @@ import {
   type PontaDeLigacao,
   type Portrait,
   type Scene,
+  type SceneGrid,
   type Texto,
   type Traco,
   type UniaoDeRetratos,
@@ -854,9 +856,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   /**
    * Move uma caixa aplicando snap, e devolve a posição corrigida.
    *
-   * `targets` nulo desliga o alinhamento de vez: a caixa vai exatamente onde a
-   * mão a leva, sem guia nem atração. É o caso da imagem no mapa -- ver
-   * `handleItemPointerDown`.
+   * `targets` nulo desliga o alinhamento de vez: a caixa vai onde a mão a
+   * leva, sem guia nem atração de borda. É o caso da imagem no mapa -- ver
+   * `handleItemPointerDown` --, que em troca é a única que encaixa na GRADE,
+   * quando o mestre ligou o ímã.
    */
   function dragBox(
     event: ReactPointerEvent,
@@ -865,6 +868,16 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     apply: (dx: number, dy: number) => void,
     /** A que se alinhar além dos alvos. Padrão: o plano. Ver `computeSnap`. */
     frame?: Bounds,
+    /**
+     * A grade que imanta, quando o mestre a ligou. Ver `gradeDoEncaixe`.
+     *
+     * Separada dos `targets` de propósito: alinhar a outro item é atração
+     * FRACA -- vale dentro de seis pixels de tela e some no resto do arrasto
+     * --, e o encaixe na grade vale sempre, em qualquer ponto do mapa. Um par
+     * de regras numa só faria a casa da grade competir com a borda da estátua
+     * ao lado.
+     */
+    grade?: SceneGrid,
     /**
      * Quem mais quer saber por onde o ponteiro passa e onde ele solta, em
      * coordenadas de TELA. Existe para a bolinha do handout, que fica fora do
@@ -899,6 +912,29 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           dx += snap.dx;
           dy += snap.dy;
           setGuides(snap.guides);
+        }
+
+        // A grade por último, e sobre a caixa JÁ corrigida: o encaixe é a
+        // regra mais forte das duas -- com o ímã ligado, a peça mora na casa
+        // --, e deixá-lo antes faria o alinhamento tirá-la de lá.
+        //
+        // Alt escapa dos dois no mesmo gesto: é a tecla que já dizia "a peça
+        // exatamente onde eu soltei", e uma segunda tecla para dizer o mesmo
+        // do outro ímã seria duas respostas para a mesma pergunta.
+        if (grade && !native.altKey) {
+          const caixa = translateBounds(origin, dx, dy);
+          const encaixe = encaixarNaGrade(
+            {
+              width: caixa.maxX - caixa.minX,
+              height: caixa.maxY - caixa.minY,
+            },
+            caixa.minX,
+            caixa.minY,
+            grade,
+          );
+
+          dx += encaixe.x - caixa.minX;
+          dy += encaixe.y - caixa.minY;
         }
 
         apply(dx, dy);
@@ -1109,6 +1145,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     // Sem snap para imagem: as guias tipo Figma atrapalhavam mais do que
     // ajudavam num mapa -- token não precisa alinhar borda com estátua. A
     // névoa e o retrato continuam alinhando, porque ali borda é o que importa.
+    //
+    // A GRADE é outra conversa, e por isso entra mesmo aqui: ela não é alinhar
+    // a peça à estátua ao lado, é a casa em que a peça mora -- e só existe se
+    // o mestre ligou o ímã. Com vários na mão é a caixa do grupo que encaixa,
+    // e não cada um: o bloco anda inteiro, como em qualquer arrasto múltiplo.
     dragBox(
       event,
       bounds,
@@ -1124,6 +1165,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         aplicar();
       },
       undefined,
+      gradeDoEncaixe(scene),
       {
         // A bolinha do handout incha quando o item passa por cima, e engole
         // o que for solto nela: sai da mesa, volta para a manga. Ver
@@ -1515,7 +1557,17 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         if (medidorVazio({ ...anchor, x2: ponta.x, y2: ponta.y })) {
           removeMedidores(scene.id, [id]);
           clear();
+          // A ferramenta FICA na mão, como na seta recusada: nada foi colocado,
+          // e largá-la aqui puniria o mestre por um gesto que não chegou a
+          // acontecer.
+          return;
         }
+
+        // Volta ao modo normal, como a forma e a névoa: o gesto seguinte a
+        // medir é mexer no que se mediu -- arrastar o medidor, ou levar o token
+        // até onde ele chega --, e com a ferramenta presa esse arrasto virava
+        // outra régua por cima.
+        setTool("select");
       },
     });
   }
