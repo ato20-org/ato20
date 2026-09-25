@@ -28,7 +28,7 @@ import {
 /**
  * Grade da cena: liga, desliga e ajusta.
  *
- * Na pílula das ferramentas do MAPA, junto do alfinete e do postit: é marcação
+ * Na régua das ferramentas do MAPA, junto do alfinete e do postit: é marcação
  * sobre o chão, como elas. E a grade é da cena, então ela viaja: a TV e os
  * celulares mostram a mesma, o que é o ponto de contar movimento em voz alta.
  *
@@ -36,7 +36,17 @@ import {
  * sessão, e configurar é o de uma vez por mapa — cobrar o segundo para fazer o
  * primeiro seria cobrar sempre pelo que se faz raramente.
  */
-export function GridControl({ scene }: { scene: Scene }) {
+export function GridControl({
+  scene,
+  lado = "top",
+}: {
+  scene: Scene;
+  /**
+   * De que lado o ajuste abre. `left` é o da régua do mapa, encostada na borda
+   * direita do palco; `top` é o do rodapé, de onde a grade veio.
+   */
+  lado?: "top" | "left";
+}) {
   const setSceneGrid = useSceneStore((state) => state.setSceneGrid);
 
   const grid = scene.grid;
@@ -86,13 +96,17 @@ export function GridControl({ scene }: { scene: Scene }) {
                 aria-label="Ajustar a grade"
                 className="text-muted-foreground w-5"
               >
+                {/* A seta aponta para onde o painel abre: no rodapé ele sobe,
+                    na régua da direita ele sai pela esquerda. Um triângulo
+                    para cima numa coluna vertical apontaria para o botão da
+                    própria grade. */}
                 <span aria-hidden className="text-[10px]">
-                  ▲
+                  {lado === "left" ? "◀" : "▲"}
                 </span>
               </Button>
             }
           />
-          <PopoverContent align="start" className="space-y-4">
+          <PopoverContent align="start" className="space-y-4" side={lado}>
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">Grade</p>
               <Button

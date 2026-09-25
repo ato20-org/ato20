@@ -118,6 +118,12 @@ def argumentos():
     # escuta a roda sem agrupar paga por cada um. Lista: e um eixo da matriz.
     p.add_argument("--roda", default="1")
     p.add_argument("--repetir", type=int, default=1)
+    # A SOMBRA da cena de medida. Desligada por padrao: com os tres em zero a
+    # cena montada e a de antes de a sombra existir, e a corrida continua
+    # comparavel com tudo o que ja foi medido. Ver `sombraDaMedida` na pagina.
+    p.add_argument("--sol", action="store_true")
+    p.add_argument("--luzes", default="0")
+    p.add_argument("--paredes", default="0")
     p.add_argument("--url", default=None, help="servidor já de pé")
     p.add_argument("--pular-build", action="store_true")
     # A janela do `tauri.conf.json`. Medir noutro tamanho mede outra área de
@@ -402,6 +408,8 @@ def main():
                                 f"&sonda={'1' if args.sonda else '0'}"
                                 f"&roda={r}"
                                 f"&noar={'0' if args.sem_no_ar else '1'}"
+                                f"&sol={'1' if args.sol else '0'}"
+                                f"&luzes={args.luzes}&paredes={args.paredes}"
                                 f"&rotulo={args.rotulo}"
                             )
                             rotulo = f"{cenario} n={n} cam={cam}"

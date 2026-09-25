@@ -70,8 +70,15 @@ export const RAIO_DADO = 46;
  */
 export const DADO_Z = 6_000;
 
-/** Posição da bolinha, em fração do palco. Canto livre à direita, meia altura. */
-const POSICAO_PADRAO = { x: 0.955, y: 0.42 };
+/**
+ * Posição da bolinha, em fração do palco. À direita, meia altura.
+ *
+ * Um palmo para DENTRO da borda, e não colada nela: a margem direita virou a
+ * régua do mapa, exposta e no meio da altura (ver `ReguaDoMapa`), e a bolinha
+ * nascia exatamente por cima dela. Quem já arrastou a sua não sente nada --
+ * posição movida é guardada e volta como estava.
+ */
+const POSICAO_PADRAO = { x: 0.88, y: 0.42 };
 
 type DadosStore = {
   /**

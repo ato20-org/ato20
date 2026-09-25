@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 
 import { PostitTextoView } from "@/components/mestre/postit-texto-view";
 import { MarkdownView, SEM_VINCULOS } from "@/components/playground/markdown-view";
+import { pontosNaCaixa } from "@/lib/geometry/area-escondida";
 import { documentoUrl } from "@/lib/vault/documentos";
 import {
   emPixelDeTela,
@@ -299,6 +300,16 @@ export function FormaView({
         />
       );
     }
+
+    if (forma.tipo === "poligono")
+      return (
+        <polygon
+          points={pontosNaCaixa(forma, forma.pontos ?? [])
+            .map((ponto) => `${ponto.x},${ponto.y}`)
+            .join(" ")}
+          {...pintura}
+        />
+      );
 
     if (forma.tipo === "elipse")
       return (

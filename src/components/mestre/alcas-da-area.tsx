@@ -10,7 +10,21 @@ import {
   pontosNaCaixa,
 } from "@/lib/geometry/area-escondida";
 import { rotateVec, type Vec } from "@/lib/geometry/transform";
-import type { FogRegion } from "@/types/scene";
+/**
+ * O que estas alças precisam saber: a caixa e os vértices dentro dela.
+ *
+ * Estrutural e não `FogRegion`, porque a PAREDE em laço tem a mesma geometria e
+ * o mesmo gesto -- e o que a distingue da área (esconder × parar a luz) não
+ * chega aqui. Era `FogRegion` enquanto a área era a única coisa com vértices.
+ */
+export type CaixaComVertices = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  pontos?: number[];
+};
 
 /** Acima do gizmo: os vértices são o que se pega numa área recortada. */
 const ALCAS_Z = 10_100;
@@ -43,10 +57,10 @@ export function AlcasDaArea({
   region,
   onChange,
 }: {
-  region: FogRegion;
+  region: CaixaComVertices;
   /** Chamado UMA vez, ao fim do gesto. */
   onChange: (
-    patch: Pick<FogRegion, "x" | "y" | "width" | "height" | "pontos">,
+    patch: Pick<CaixaComVertices, "x" | "y" | "width" | "height" | "pontos">,
   ) => void;
 }) {
   const { scale, planoDaMargem } = useSceneScale();

@@ -29,7 +29,7 @@ const AMOSTRA: Record<CorPostit, string> = {
  *
  * Só aparece com o POSTIT escolhido, como o painel do lápis: são as duas
  * ferramentas com preferência antes do gesto, e uma paleta à vista o tempo todo
- * seria mobília numa barra que já tem sete alvos.
+ * seria mobília numa barra que já tem meia dúzia de alvos.
  *
  * O gatilho mostra a cor atual em vez de um ícone genérico — com o painel
  * fechado, é a única informação que importa antes de colar.
@@ -44,10 +44,11 @@ export function PostitControl({
 }: {
   /**
    * De que lado o painel abre. `top` é o do rodapé, onde o controle nasceu;
-   * `right` é o da régua do quadro, encostada na borda esquerda -- para cima,
-   * dali, o painel subiria por cima das próprias ferramentas.
+   * `right` é o da régua do quadro, encostada na borda esquerda, e `left` o da
+   * régua do mapa, encostada na direita -- para cima, das duas, o painel
+   * subiria por cima das próprias ferramentas.
    */
-  lado?: "top" | "right";
+  lado?: "top" | "right" | "left";
 } = {}) {
   const tool = useToolStore((state) => state.tool);
   const corPostit = useToolStore((state) => state.corPostit);
