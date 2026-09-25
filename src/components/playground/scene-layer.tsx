@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useMemo,
   type ComponentProps,
   type PointerEvent as ReactPointerEvent,
@@ -31,6 +32,7 @@ import type { EfeitoPedido, EfeitosDoPersonagem } from "@/lib/condicao";
 import { quadroDaMesa } from "@/lib/geometry/viewport";
 import type { Variante } from "@/lib/vault/assets";
 import type { CorrenteDeEsguelha } from "@/lib/geometry/volume";
+import { useChaoStore } from "@/lib/store/use-chao-store";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { Ping } from "@/types/ping";
 import {
@@ -284,6 +286,17 @@ export function SceneLayer({
    */
   const { planoDeConteudo, fundoDoPalco } = useSceneScale();
 
+  /**
+   * Anuncia o chão enquanto esta camada estiver deitada, e o apaga ao sair.
+   *
+   * Por `ref` de função e não por efeito: a ref roda na montagem e na
+   * desmontagem do nó, que é exatamente a vida do chão. Num efeito, o primeiro
+   * gesto depois de ligar o modo poderia pegar o store ainda vazio.
+   */
+  const anunciarChao = useCallback((no: HTMLDivElement | null) => {
+    useChaoStore.getState().anunciarChao(no);
+  }, []);
+
   const conteudo = (
     <>
       <FundoDaCena assetId={scene.backgroundAssetId} variante={variante} />
@@ -465,6 +478,13 @@ export function SceneLayer({
         }}
       >
         <div
+          // O CHÃO, e é por isso que ele se anuncia: o sistema de coordenadas
+          // deste `div` é o da cena deitada, e um evento que cai nele traz
+          // `offsetX/offsetY` já com a rotação, a inclinação e a perspectiva
+          // desfeitas pelo motor. É o que faz um arrasto continuar valendo
+          // quando o mapa tomba, sem inverter homografia nenhuma. Ver
+          // `useChaoStore`.
+          ref={anunciarChao}
           className="absolute top-0 left-0"
           style={{
             width: SCENE_WIDTH,
