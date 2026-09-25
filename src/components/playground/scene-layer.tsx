@@ -35,6 +35,8 @@ import type { Ping } from "@/types/ping";
 import {
   ehQuadro,
   itensVisiveis,
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
   type CanvasItem,
   type FichaNaCena,
   type FogRegion,
@@ -162,6 +164,31 @@ type SceneLayerProps = {
    * clique no vazio. Ele desce junto.
    */
   palco?: ComponentProps<"div"> & Record<`data-${string}`, unknown>;
+  /**
+   * A corrente de `transform` que DEITA a cena inteira, no modo de esguelha.
+   *
+   * Uma superfície só, e não onze camadas portadas uma a uma. Tudo o que esta
+   * camada desenha -- mapa, grade, sombra, névoa, risco, medidor -- é CHÃO, e
+   * chão tomba junto: aplicar o tombo aqui em cima é dizer isso numa linha em
+   * vez de ensinar a cada uma a se inclinar sozinha.
+   *
+   * E é o desenho barato. Medido em `chao-25d` na webview, o que pesa no modo
+   * não é o tombo -- é quantas SUPERFÍCIES o compositor recebe. Um envelope
+   * tombado é uma; onze camadas tombadas por conta própria seriam onze.
+   *
+   * Ausente = de prumo, que é o mapa de sempre e não custa um nó a mais.
+   */
+  tombo?: string;
+  /**
+   * Não desenhe os itens: quem os desenha é o chão inclinado.
+   *
+   * Existe por causa do tombo. Deitados com o chão, os tokens ficariam
+   * estampados no piso; no modo de esguelha eles se ERGUEM e encaram quem olha,
+   * e para isso precisam entrar na mesma lista ordenada das paredes -- é essa
+   * lista que põe o token atrás do muro atrás do muro. Desenhá-los aqui
+   * também os mostraria duas vezes, um em pé e outro deitado.
+   */
+  semItens?: boolean;
 };
 
 /**
@@ -190,6 +217,8 @@ export function SceneLayer({
   apagando,
   contornos,
   palco,
+  tombo,
+  semItens,
 }: SceneLayerProps) {
   // Sem os escondidos, que a mesa já recebe sem eles: aqui é o palco do
   // mestre e a miniatura da lista, que têm a cena inteira. Ver `itensVisiveis`.
@@ -277,7 +306,7 @@ export function SceneLayer({
         />
       )}
 
-      {items.map((item) => (
+      {(semItens ? [] : items).map((item) => (
         <CanvasItemView
           key={item.id}
           item={item}
@@ -396,6 +425,31 @@ export function SceneLayer({
   const envelopado = palco ? <div {...palco}>{conteudo}</div> : conteudo;
 
   /**
+   * O tombo vai POR FORA do envelope do mestre, e não por dentro.
+   *
+   * Por dentro, o envelope ficaria de prumo sobre uma cena deitada: o clique no
+   * vazio cairia numa régua e o desenho em outra. Por fora, o gesto e o desenho
+   * tombam juntos -- e o `div` do tombo vira o elemento de cujo sistema de
+   * coordenadas o motor devolve `offsetX/offsetY`, que é o que dá a posição de
+   * chão exata sem inverter homografia nenhuma. Ver `ChaoInclinado`.
+   */
+  const deitado = tombo ? (
+    <div
+      className="absolute top-0 left-0"
+      style={{
+        width: SCENE_WIDTH,
+        height: SCENE_HEIGHT,
+        transformOrigin: "0 0",
+        transform: tombo,
+      }}
+    >
+      {envelopado}
+    </div>
+  ) : (
+    envelopado
+  );
+
+  /**
    * O mesmo envelope, sem filhos, no FUNDO do palco.
    *
    * O envelope cobre o plano e só ele, porque é o plano que ele emoldura. Mas
@@ -418,7 +472,7 @@ export function SceneLayer({
   return (
     <>
       {fundo}
-      {planoDeConteudo ? createPortal(envelopado, planoDeConteudo) : envelopado}
+      {planoDeConteudo ? createPortal(deitado, planoDeConteudo) : deitado}
     </>
   );
 }
