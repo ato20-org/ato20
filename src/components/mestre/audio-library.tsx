@@ -493,7 +493,37 @@ export function AudioLibrary() {
               se dava, com o destino junto. Quem importa som costuma importar
               uma leva do mesmo tipo — cinco ambientes de floresta, oito
               efeitos de combate. */}
-          <div className="flex items-center justify-end px-2 pb-2">
+          <div className="flex items-center justify-end gap-2 px-2 pb-2">
+            {/* A busca DIVIDE a linha com o botão de importar, como na lista de
+                personagens: são as duas coisas que se fazem no cabeçalho de um
+                acervo, e empilhá-las gastava uma linha inteira de altura com um
+                campo que não ocupa nem metade dela.
+
+                Some com o acervo vazio: um campo para filtrar nada é um campo
+                que só ocupa a altura da primeira linha da lista. O botão fica
+                onde estava, encostado na direita, porque é ele que resolve o
+                vazio. */}
+            {assets.length > 0 ? (
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+                  aria-hidden
+                />
+                {/* Sem fundo, ao contrário do resto dos campos, e pela mesma
+                    razão da busca de personagens: aqui ele divide a linha com o
+                    botão redondo, e duas caixas preenchidas lado a lado
+                    competiam pelo olho. A borda sozinha já diz que se digita
+                    aqui. */}
+                <Input
+                  value={busca}
+                  placeholder="Buscar som ou tipo"
+                  aria-label="Buscar som ou tipo"
+                  className="h-8 bg-transparent pl-8 text-xs dark:bg-transparent"
+                  onChange={(evento) => setBusca(evento.target.value)}
+                />
+              </div>
+            ) : null}
+
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger
@@ -545,20 +575,6 @@ export function AudioLibrary() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-
-          {/* A busca some com o acervo vazio: um campo para filtrar nada é um
-              campo que só ocupa a altura da primeira linha da lista. */}
-          {assets.length > 0 ? (
-            <div className="relative px-2 pb-2">
-              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 size-3 -translate-y-1/2" />
-              <Input
-                value={busca}
-                placeholder="Buscar som ou tipo"
-                className="h-7 pl-7 text-xs"
-                onChange={(evento) => setBusca(evento.target.value)}
-              />
-            </div>
-          ) : null}
 
           {assets.length === 0 ? (
             <PainelVazio conteudo={{ tipo: "sons" }}>
