@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { donosPorPersonagem } from "@/lib/mestre/vinculos";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { characterLinks } from "@/lib/vault/characters";
 
 /** Ninguém vinculado, e sempre o MESMO conjunto: um `new Set()` por render
  *  quebraria o `useMemo` de quem o recebe. */
 const VAZIO: ReadonlySet<string> = new Set();
+
+/** Nenhum vínculo lido, e sempre o MESMO array: uma falha que gravasse `[]`
+ *  novo faria o `useMemo` abaixo recalcular sem nada ter mudado. */
+const SEM_PARES: Array<[string, string]> = [];
 
 /**
  * Os personagens que alguém na mesa interpreta, por id.
@@ -19,10 +24,16 @@ const VAZIO: ReadonlySet<string> = new Set();
  * mapa de nomes mantém a identidade estável enquanto ninguém vincula nada, e é
  * isso que impede o mapa de recalcular contorno a cada quadro.
  *
- * Fica com o vínculo mesmo quando o jogador não está na mesa agora, ao
- * contrário do `useCharacterOwners`, que precisa do nome de quem está. O
- * contorno diz de quem é o personagem, e um jogador que fechou o celular não
- * transforma o personagem dele em NPC no meio da sessão.
+ * Cruza com a mesa pelo `donosPorPersonagem`, o MESMO cruzamento da lista de
+ * personagens. Antes lia o vínculo cru, e isso foi um bug de verdade: um
+ * jogador removido deixava o vínculo para trás, e o personagem aparecia
+ * embaixo de "NPCs" na lista e com contorno azul no mapa ao mesmo tempo.
+ *
+ * O que NÃO muda com o cruzamento: quem fechou o celular continua contando. A
+ * lista de jogadores é quem a campanha conhece, e não quem está conectado agora
+ * -- ver `players::list`. O contorno diz de quem é o personagem, e um jogador
+ * que largou o celular na mochila não transforma o personagem dele em NPC no
+ * meio da sessão.
  *
  * Relê quando o contador compartilhado muda -- vincular na ficha é outra
  * janela. Conjunto vazio em qualquer falha: o mapa desenha sem contorno, que é
@@ -30,18 +41,19 @@ const VAZIO: ReadonlySet<string> = new Set();
  */
 export function usePersonagensDeJogador(): ReadonlySet<string> {
   const versao = useCharactersStore((state) => state.versao);
+  const jogadores = useCharactersStore((state) => state.jogadores);
 
-  const [comJogador, setComJogador] = useState<ReadonlySet<string>>(VAZIO);
+  const [pares, setPares] = useState<Array<[string, string]>>(SEM_PARES);
 
   useEffect(() => {
     let ativo = true;
 
     void characterLinks().then(
-      (pares) => {
-        if (ativo) setComJogador(new Set(pares.map(([, personagemId]) => personagemId)));
+      (lidos) => {
+        if (ativo) setPares(lidos);
       },
       () => {
-        if (ativo) setComJogador(VAZIO);
+        if (ativo) setPares(SEM_PARES);
       },
     );
 
@@ -50,5 +62,11 @@ export function usePersonagensDeJogador(): ReadonlySet<string> {
     };
   }, [versao]);
 
-  return comJogador;
+  return useMemo(() => {
+    const donos = donosPorPersonagem(pares, jogadores);
+
+    // O `VAZIO` de volta quando não sobrou ninguém: um `Set` vazio novo teria
+    // identidade nova, e é essa identidade que segura o `useMemo` do contorno.
+    return donos.size === 0 ? VAZIO : new Set(donos.keys());
+  }, [pares, jogadores]);
 }
