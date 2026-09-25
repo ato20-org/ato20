@@ -58,7 +58,15 @@ const FORMAS: Record<
  * vista o tempo todo seriam mobília na barra. O gatilho mostra a forma atual
  * na cor atual, que é o que importa antes de arrastar.
  */
-export function ReguaControl() {
+export function ReguaControl({
+  lado = "top",
+}: {
+  /**
+   * De que lado o painel abre. `left` é o da régua do mapa, encostada na borda
+   * direita do palco; `top` é o do rodapé, onde o controle nasceu.
+   */
+  lado?: "top" | "left";
+} = {}) {
   const tool = useToolStore((state) => state.tool);
   const forma = useToolStore((state) => state.formaMedidor);
   const cor = useToolStore((state) => state.corMedidor);
@@ -91,7 +99,7 @@ export function ReguaControl() {
         </TooltipContent>
       </Tooltip>
 
-      <PopoverContent align="start" className="w-56 space-y-3 p-3" side="top">
+      <PopoverContent align="start" className="w-56 space-y-3 p-3" side={lado}>
         <div className="space-y-1.5">
           <span className="text-muted-foreground text-[10px]">Forma</span>
 

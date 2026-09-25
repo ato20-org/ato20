@@ -17,6 +17,7 @@ import {
   type PontaDoMedidor,
 } from "@/components/playground/medidor-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
+import { SombraLayer } from "@/components/playground/sombra-layer";
 import {
   FormasDaMesa,
   QuadroMesaLayer,
@@ -191,6 +192,24 @@ export function SceneLayer({
           cima dela é o que se conta. Por cima dos itens ela riscaria os
           personagens. */}
       {scene.grid ? <GridLayer grid={scene.grid} /> : null}
+
+      {/* Depois da grade e ANTES dos itens: a sombra de parede é chão. Ela
+          cobre a grade -- um quadrado atrás da parede tem de escurecer junto --
+          e passa por baixo de todo mundo.
+
+          Fora da prévia: a lista desenha trinta cenas num quadrado de 56x32, e
+          um SVG de plano inteiro por linha é raster que ninguém está olhando.
+          Ver `variante`. */}
+      {variante === "mini" ? null : (
+        <SombraLayer
+          items={items}
+          paredes={scene.paredes}
+          sol={scene.sol}
+          // A mesma dos itens: a sombra de uma figura é a figura, e ela lê o
+          // arquivo que o token já baixou. Ver `SombraDaFigura`.
+          variante={variante}
+        />
+      )}
 
       {items.map((item) => (
         <CanvasItemView

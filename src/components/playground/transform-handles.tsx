@@ -18,7 +18,10 @@ import {
   FlipHorizontal,
   Info,
   Italic,
+  MoveVertical,
   Palette,
+  PanelTop,
+  PanelTopDashed,
   Trash2,
   Underline,
 } from "lucide-react";
@@ -106,13 +109,43 @@ const ROTATE_ZONE_POSITION: Record<
   // `origin` é o ponto da ZONA que encosta no canto da caixa, e é o que fica
   // parado quando o `scale` desfaz a ampliação do plano. Sem ele, o `scale`
   // encolheria em volta do centro e a zona sairia de junto do canto.
-  nw: { left: "0%", top: "0%", translate: "translate(-100%, -100%)", origin: "100% 100%" },
-  ne: { left: "100%", top: "0%", translate: "translate(0, -100%)", origin: "0% 100%" },
-  se: { left: "100%", top: "100%", translate: "translate(0, 0)", origin: "0% 0%" },
-  sw: { left: "0%", top: "100%", translate: "translate(-100%, 0)", origin: "100% 0%" },
+  nw: {
+    left: "0%",
+    top: "0%",
+    translate: "translate(-100%, -100%)",
+    origin: "100% 100%",
+  },
+  ne: {
+    left: "100%",
+    top: "0%",
+    translate: "translate(0, -100%)",
+    origin: "0% 100%",
+  },
+  se: {
+    left: "100%",
+    top: "100%",
+    translate: "translate(0, 0)",
+    origin: "0% 0%",
+  },
+  sw: {
+    left: "0%",
+    top: "100%",
+    translate: "translate(-100%, 0)",
+    origin: "100% 0%",
+  },
 };
 /** Folga entre a borda direita da caixa e o painel de opacidade. */
 const PAINEL_GAP_PX = 12;
+
+/**
+ * O menor e o maior tijolo que a régua da parede alcança, em metros.
+ *
+ * Meio metro é uma mureta de jardim, e é o mínimo que ainda joga sombra que se
+ * vê. Oito é uma muralha de castelo: acima disso a sombra atravessa o mapa
+ * inteiro e a pergunta deixa de ser a altura da parede.
+ */
+const ALTURA_MINIMA_M = 0.5;
+const ALTURA_MAXIMA_M = 8;
 
 /**
  * O mínimo que o slider de opacidade alcança, em porcento.
@@ -298,6 +331,33 @@ type TransformHandlesProps = {
    */
   mesa?: { naMesa: boolean; onToggle: () => void };
   /**
+   * Presente = mostra a bolinha do teto, que decide se esta parede tem LAJE.
+   *
+   * Só a parede FECHADA passa: numa `linha` não há interior para cobrir, e um
+   * botão apagado ali seria um controle que não controla nada. Ver `semTeto` em
+   * `Parede`.
+   *
+   * Um par estado/ação como o olho, e pela mesma razão: o teto é um estado do
+   * desenho -- coberto ou a céu aberto --, e um botão que não soubesse em qual
+   * dos dois a parede está seria um interruptor sem lâmpada.
+   */
+  teto?: { coberta: boolean; onToggle: () => void };
+  /**
+   * Presente = mostra o botão da ALTURA, que abre a régua ao lado da caixa.
+   *
+   * Só a parede passa. Altura aqui não é o tamanho do desenho -- esse é o
+   * gizmo, e o mestre já o arrasta pelos cantos --, é quão alto o tijolo sobe:
+   * o que decide o comprimento da sombra e o degrau de quem for desenhado em
+   * cima. Ver `altura` em `Parede`.
+   *
+   * Em METROS, porque é a régua de quem mestra: "dois metros" é uma parede, e
+   * "110 unidades de cena" não é nada. Quem traduz é o chamador.
+   */
+  altura?: {
+    metros: number;
+    onChange: (metros: number) => void;
+  };
+  /**
    * Presente = mostra o botão que abre a ficha de quem este item é.
    *
    * Só aparece em token, que é item com `personagemId`. Uma imagem de mobília
@@ -345,6 +405,8 @@ export function TransformHandles({
   papel,
   ajuda,
   mesa,
+  teto,
+  altura,
 }: TransformHandlesProps) {
   const { scale, toScene, planoDaMargem } = useSceneScale();
   const startDrag = useSceneDrag();
@@ -370,6 +432,8 @@ export function TransformHandles({
   const [paletaAberta, setPaletaAberta] = useState(false);
   /** As cores do papel: outro painel, outro estado. Ver `paletaAberta`. */
   const [papelAberto, setPapelAberto] = useState(false);
+  /** E a régua da altura da parede, pela mesma razão dos outros três. */
+  const [alturaAberta, setAlturaAberta] = useState(false);
 
   const cor = TOM[tom];
 
@@ -482,6 +546,8 @@ export function TransformHandles({
       papel ||
       ajuda ||
       mesa ||
+      teto ||
+      altura ||
       onDelete ? (
         <div
           className="pointer-events-none absolute flex items-center"
@@ -894,6 +960,100 @@ export function TransformHandles({
             </Tooltip>
           ) : null}
 
+          {/* A altura, antes do teto: primeiro quão alta é a parede, depois se
+              ela é coberta. O botão fica aceso enquanto a régua está aberta,
+              como o da opacidade. */}
+          {altura ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Altura da parede"
+                    aria-pressed={alturaAberta}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      alturaAberta
+                        ? "bg-amber-500 text-neutral-950"
+                        : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setAlturaAberta((aberta) => !aberta);
+                    }}
+                  >
+                    <MoveVertical
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <TooltipContent>
+                <p className="font-medium">Altura da parede</p>
+                <p className="text-muted-foreground max-w-52">
+                  Quanto ela sobe. É o que decide o comprimento da sombra que
+                  ela joga no mapa.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {/* O teto, na mesma fileira e antes do excluir. Aceso = tem laje;
+              apagado = a céu aberto. O desenho é o mesmo nos dois, com a tampa
+              cheia ou tracejada: trocar de ícone faria o olho procurar o que
+              mudou em vez de ler o estado. */}
+          {teto ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={teto.coberta ? "Tirar o teto" : "Pôr um teto"}
+                    aria-pressed={teto.coberta}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      teto.coberta
+                        ? "bg-amber-500 text-neutral-950"
+                        : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      teto.onToggle();
+                    }}
+                  >
+                    {teto.coberta ? (
+                      <PanelTop
+                        style={{
+                          width: HANDLE_PX * 1.2,
+                          height: HANDLE_PX * 1.2,
+                        }}
+                      />
+                    ) : (
+                      <PanelTopDashed
+                        style={{
+                          width: HANDLE_PX * 1.2,
+                          height: HANDLE_PX * 1.2,
+                        }}
+                      />
+                    )}
+                  </button>
+                }
+              />
+              <TooltipContent>
+                {teto.coberta
+                  ? "Coberta: a sombra não entra nela, porque o miolo é a pedra do mapa."
+                  : "A céu aberto: a sombra dos muros cai dentro dela, como cai para fora."}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
           {onDelete ? (
             <Tooltip>
               <TooltipTrigger
@@ -986,7 +1146,51 @@ export function TransformHandles({
               // que o conteúdo.
               className="h-40"
               onValueChange={(valor) =>
-                opacidade.onChange((Array.isArray(valor) ? (valor[0] ?? 100) : valor) / 100)
+                opacidade.onChange(
+                  (Array.isArray(valor) ? (valor[0] ?? 100) : valor) / 100,
+                )
+              }
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* A régua da altura, no mesmo lugar do painel de opacidade e pelas
+          mesmas razões -- ver o comentário lá. Os dois nunca aparecem juntos:
+          parede não tem opacidade, e item não tem altura. */}
+      {altura && alturaAberta ? (
+        <div
+          className="pointer-events-auto absolute"
+          style={{
+            left: "100%",
+            top: "50%",
+            zIndex: 1,
+            transform: `translate(${px(PAINEL_GAP_PX)}px, -50%) rotate(${-item.rotation}deg)`,
+            transformOrigin: "0 50%",
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div
+            className="bg-popover ring-foreground/10 flex flex-col items-center gap-2 rounded-lg px-2 py-3 shadow-md ring-1"
+            style={{
+              transform: `scale(${1 / scale})`,
+              transformOrigin: "0 50%",
+              willChange: "transform",
+            }}
+          >
+            <span className="text-muted-foreground text-[10px] tabular-nums">
+              {altura.metros.toFixed(1).replace(".", ",")} m
+            </span>
+            <Slider
+              aria-label="Altura da parede, em metros"
+              orientation="vertical"
+              value={[altura.metros]}
+              min={ALTURA_MINIMA_M}
+              max={ALTURA_MAXIMA_M}
+              step={0.5}
+              className="h-40"
+              onValueChange={(valor) =>
+                altura.onChange(Array.isArray(valor) ? (valor[0] ?? 2) : valor)
               }
             />
           </div>

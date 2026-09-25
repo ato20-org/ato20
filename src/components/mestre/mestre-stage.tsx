@@ -12,6 +12,7 @@ import {
 import { AlcasDaArea } from "@/components/mestre/alcas-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
+import { ParedeLayer } from "@/components/mestre/parede-layer";
 import {
   AncorasDeSeta,
   RAIO_DE_ENCAIXE_PX,
@@ -44,6 +45,11 @@ import {
   empurrarTracos,
 } from "@/lib/mestre/grupo-sem-alca";
 import { areaDoPoligono } from "@/lib/geometry/area-escondida";
+import {
+  alturaDaParede,
+  METROS_DA_PAREDE_PADRAO,
+  UNIDADES_POR_METRO,
+} from "@/lib/geometry/sombra";
 import { caixaDoTraco } from "@/lib/geometry/limites";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
@@ -85,6 +91,7 @@ import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
   flipSelection,
   removeFogSelection,
+  removeParedeSelection,
   removePortraitSelection,
   removeSelection,
   setSelectionOpacity,
@@ -155,6 +162,7 @@ import {
   type Medidor,
   type Postit,
   type NewForma,
+  type NewParede,
   type PontaDeLigacao,
   type Portrait,
   type Scene,
@@ -271,6 +279,13 @@ function distanciaAoSegmento(
 /** Menor arrasto que vira seta, em unidades de cena. Abaixo disso é clique. */
 const ARRASTO_MINIMO_DA_SETA = 8;
 
+/**
+ * Menor parede que fica de pé, em unidades de cena. Abaixo disso o gesto foi um
+ * clique, e o que ele deixaria é uma caixa invisível que não para luz nenhuma e
+ * que ninguém consegue pegar de volta para apagar.
+ */
+const PAREDE_MINIMA = 8;
+
 export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
@@ -319,6 +334,16 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * fora do gesto. Ver `FormaFantasma`.
    */
   const [rascunhoDaForma, setRascunhoDaForma] = useState<NewForma | null>(null);
+  /**
+   * A parede que o arrasto está desenhando, antes de entrar na cena.
+   *
+   * Uma prévia PRÓPRIA, e não a caixa de seleção que o resto do palco usa: a
+   * caixa é um retângulo azul, e ela não conta nada sobre um círculo nem sobre
+   * um contorno à mão. Ver `ParedeLayer`.
+   */
+  const [rascunhoDaParede, setRascunhoDaParede] = useState<NewParede | null>(
+    null,
+  );
 
   /**
    * O laço da área escondida livre: os vértices já cravados, em coordenadas de
@@ -367,6 +392,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const espessuraForma = useToolStore((state) => state.espessuraForma);
   const fundoForma = useToolStore((state) => state.fundoForma);
   const setTool = useToolStore((state) => state.setTool);
+  const formatoDaParede = useToolStore((state) => state.formatoDaParede);
 
   const editarPostit = usePostitStore((state) => state.editar);
 
@@ -421,6 +447,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     (state) => state.selectedMedidorId,
   );
   const selectMedidor = useSelectionStore((state) => state.selectMedidor);
+  const selectParede = useSelectionStore((state) => state.selectParede);
+  const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
   const selectPortrait = useSelectionStore((state) => state.selectPortrait);
   const selectPortraits = useSelectionStore((state) => state.selectPortraits);
   const togglePortrait = useSelectionStore((state) => state.togglePortrait);
@@ -430,6 +458,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const addMedidor = useSceneStore((state) => state.addMedidor);
   const updateMedidor = useSceneStore((state) => state.updateMedidor);
   const removeMedidores = useSceneStore((state) => state.removeMedidores);
+  const addParede = useSceneStore((state) => state.addParede);
+  const updateParede = useSceneStore((state) => state.updateParede);
   const updateFog = useSceneStore((state) => state.updateFog);
   const addTraco = useSceneStore((state) => state.addTraco);
   const removeTracos = useSceneStore((state) => state.removeTracos);
@@ -437,6 +467,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const addPostit = useSceneStore((state) => state.addPostit);
   const addTexto = useSceneStore((state) => state.addTexto);
   const addForma = useSceneStore((state) => state.addForma);
+  const updateForma = useSceneStore((state) => state.updateForma);
   const addLigacao = useSceneStore((state) => state.addLigacao);
 
   // A seta em andamento e a seleção de texto/seta são desta cena: trocar de
@@ -637,6 +668,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       ? single.personagemId
       : undefined;
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
+  const selectedParede = scene.paredes?.find(
+    (parede) => parede.id === selectedParedeId,
+  );
   const selectedPortraits = portraits.filter((portrait) =>
     selectedPortraitIds.includes(portrait.id),
   );
@@ -1485,6 +1519,101 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     });
   }
 
+  /**
+   * Traça uma parede: arrasto de canto a canto, como a névoa.
+   *
+   * O mesmo gesto dos quatro formatos, e é o que a caixa comprou: `linha` usa a
+   * diagonal do arrasto, `retangulo` e `elipse` usam a caixa inteira, e o laço
+   * cai no caminho de vértices da área escondida -- ver `cravarVertice`.
+   *
+   * Feita a parede, a ferramenta SE LARGA, como todas as outras do palco. Ela
+   * ficava na mão, com o argumento de que contornar uma masmorra são dez
+   * paredes seguidas -- e o argumento caiu na prática, pelo mesmo motivo da
+   * seta: o gesto seguinte a erguer uma parede é quase sempre mexer nela ou
+   * conferir a sombra que ela fez, e com a ferramenta presa esse arrasto virava
+   * outra parede por cima.
+   */
+  function erguerParede(event: ReactPointerEvent, anchor: Vec) {
+    // O laço não é arrasto: ele se desenha vértice a vértice. É o mesmo caminho
+    // da área livre, e é o `tool` que decide o que nasce no fecho.
+    if (formatoDaParede === "poligono") {
+      cravarVertice(anchor);
+      return;
+    }
+
+    // Shift iguala os lados, como na névoa e na forma: é assim que saem o
+    // quadrado e o círculo, e é o mesmo teclado de todo editor.
+    const travado = (ponto: Vec, shift: boolean) => {
+      if (!shift) return ponto;
+
+      const lado = Math.max(
+        Math.abs(ponto.x - anchor.x),
+        Math.abs(ponto.y - anchor.y),
+      );
+
+      return {
+        x: anchor.x + Math.sign(ponto.x - anchor.x) * lado,
+        y: anchor.y + Math.sign(ponto.y - anchor.y) * lado,
+      };
+    };
+
+    /** A parede que este arrasto produz, do começo ao fim. Ver `rascunho` na
+        forma: uma função só, e é o que garante que a prévia SEJA a parede. */
+    const rascunho = (fim: Vec): NewParede => {
+      const box = boundsToBox(boundsFromPoints(anchor, fim));
+
+      return {
+        x: Math.round(box.x),
+        y: Math.round(box.y),
+        width: Math.round(box.width),
+        height: Math.round(box.height),
+        formato: formatoDaParede,
+        // A linha desce ou sobe conforme o arrasto: é a única coisa que a
+        // caixa sozinha não conta. Ver `Parede`.
+        ...(formatoDaParede === "linha" &&
+        (fim.x - anchor.x) * (fim.y - anchor.y) < 0
+          ? { diagonal: "secundaria" as const }
+          : {}),
+      };
+    };
+
+    startDrag(event, {
+      onMove: (delta, native) =>
+        setRascunhoDaParede(
+          rascunho(
+            travado(
+              { x: anchor.x + delta.x, y: anchor.y + delta.y },
+              native.shiftKey,
+            ),
+          ),
+        ),
+      onEnd: (native) => {
+        setRascunhoDaParede(null);
+
+        const fim = travado(
+          toScene(native.clientX, native.clientY),
+          native.shiftKey,
+        );
+        const box = boundsToBox(boundsFromPoints(anchor, fim));
+
+        // Clique sem arrasto deixaria uma parede invisível impossível de pegar.
+        // A `linha` passa com um lado só: uma parede na horizontal tem altura
+        // zero, e é a parede mais comum que existe.
+        const magra =
+          formatoDaParede === "linha"
+            ? box.width < PAREDE_MINIMA && box.height < PAREDE_MINIMA
+            : box.width < PAREDE_MINIMA || box.height < PAREDE_MINIMA;
+        if (magra) return;
+
+        selectParede(addParede(scene.id, rascunho(fim)));
+        // Volta ao modo normal, como todas as outras do palco: o gesto seguinte
+        // a erguer uma parede é conferir a sombra que ela fez, e não erguer
+        // outra por cima. É a regra do Excalidraw, e agora vale para as seis.
+        setTool("select");
+      },
+    });
+  }
+
   /** Clique num medidor: seleciona e, se arrastar, move inteiro. */
   function onMedidorPointerDown(event: ReactPointerEvent, medidor: Medidor) {
     if (event.button !== 0) return;
@@ -1733,7 +1862,40 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     setLaco(null);
     if (pontos.length < 3) return;
 
-    selectFog(addFog(scene.id, areaDoPoligono(pontos)));
+    const area = areaDoPoligono(pontos);
+
+    // O mesmo gesto, dois destinos: quem decide é a ferramenta na mão. O laço
+    // desenha uma REGIÃO, e o que essa região significa -- esconder ou parar o
+    // sol -- é a pergunta que a pílula já respondeu.
+    if (tool === "parede") {
+      selectParede(
+        addParede(scene.id, {
+          ...area,
+          formato: "poligono",
+        }),
+      );
+      setTool("select");
+      return;
+    }
+
+    if (tool === "forma") {
+      selectFormas([
+        addForma(scene.id, {
+          ...area,
+          tipo: "poligono",
+          rotation: 0,
+          cor: corForma,
+          espessura: espessuraForma,
+          fundo: fundoForma,
+        }),
+      ]);
+      // Larga a ferramenta, como as outras formas: a regra do Excalidraw, e a
+      // razão dela está no cabeçalho da seta.
+      setTool("select");
+      return;
+    }
+
+    selectFog(addFog(scene.id, area));
     // Volta ao modo normal, como as outras áreas: o gesto seguinte é conferir
     // o que se escondeu, e não esconder mais um pedaço.
     setTool("select");
@@ -1919,6 +2081,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
+    if (tool === "parede") {
+      erguerParede(event, anchor);
+      return;
+    }
+
     if (tool === "lapis") {
       riscar(event, anchor);
       return;
@@ -2003,6 +2170,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
      * gesto do Excalidraw e do Figma.
      */
     if (tool === "forma") {
+      // O laço não é arrasto, nas três naturezas: ele se desenha vértice a
+      // vértice. Ver `cravarVertice`.
+      if (tipoDeForma === "poligono") {
+        cravarVertice(anchor);
+        return;
+      }
+
       const travado = (ponto: { x: number; y: number }, shift: boolean) => {
         if (!shift) return ponto;
         const lado = Math.max(
@@ -2414,6 +2588,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         tool === "lapis" ||
         tool === "borracha" ||
         tool === "regua" ||
+        tool === "parede" ||
         Boolean(ferramentaDeExtensao(tool))));
   // Mão aberta sempre que o espaço estiver segurado.
   //
@@ -2504,6 +2679,16 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           mesmo componente do Espectador e do Jogador, e um ponto de anotação
           desenhado lá apareceria na TV virada para a mesa. */}
       <PinLayer scene={scene} panMode={panMode} />
+
+      {/* Irmã do `PinLayer` e fora do `SceneLayer` pela mesma razão: a parede
+          desenhada é preparação do mestre, e o `SceneLayer` é o componente que
+          desenha na TV. O que a mesa recebe é a SOMBRA, não a parede que a
+          fez. Ver `ParedeLayer` e `SombraLayer`. */}
+      <ParedeLayer
+        scene={scene}
+        panMode={panMode}
+        fantasma={rascunhoDaParede}
+      />
 
       {/* Irmã do `PinLayer`, e fora do `SceneLayer` pela mesma razão: o texto
           de um postit é preparação do mestre, e o `SceneLayer` é o mesmo
@@ -2727,6 +2912,78 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
               : undefined
           }
           onDelete={removeSelection}
+        />
+      ) : null}
+
+      {/* O gizmo da PAREDE, irmão do da área e pela mesma razão: a caixa é a
+          verdade dela nos quatro formatos, então mover, escalar e girar são o
+          mesmo controle que já existe. Foi o que a caixa comprou -- a primeira
+          versão da parede era um segmento cru, e não tinha gizmo nenhum. */}
+      {selectedParede && !panMode ? (
+        <>
+          <TransformHandles
+            box={{ ...selectedParede, rotation: selectedParede.rotation ?? 0 }}
+            onChange={(patch) =>
+              updateParede(scene.id, selectedParede.id, patch)
+            }
+            // Quão alto o tijolo sobe. Em metros no controle e em unidade de
+            // cena na cena: ver `UNIDADES_POR_METRO`.
+            altura={{
+              metros: alturaDaParede(selectedParede) / UNIDADES_POR_METRO,
+              onChange: (metros) =>
+                updateParede(scene.id, selectedParede.id, {
+                  // `undefined` no valor padrão, como em toda opcional daqui:
+                  // parede de dois metros é a parede de sempre, e não precisa
+                  // de campo na cena.
+                  altura:
+                    metros === METROS_DA_PAREDE_PADRAO
+                      ? undefined
+                      : metros * UNIDADES_POR_METRO,
+                }),
+            }}
+            // O teto, só na parede que cerca uma área: é ele que decide se o
+            // sol entra no miolo dela. Na `linha` não há miolo, e o botão não
+            // aparece. Ver `semTeto`.
+            teto={
+              selectedParede.formato === "linha"
+                ? undefined
+                : {
+                    coberta: !selectedParede.semTeto,
+                    onToggle: () =>
+                      updateParede(scene.id, selectedParede.id, {
+                        // `undefined` e não `false`: coberta é o padrão, e o
+                        // campo ausente é como ele se escreve na cena.
+                        semTeto: selectedParede.semTeto ? undefined : true,
+                      }),
+                  }
+            }
+            onDelete={removeParedeSelection}
+          />
+
+          {/* As alças de vértice, só do laço: nos outros três o contorno É a
+              caixa, e o gizmo já a controla inteira. */}
+          {selectedParede.formato === "poligono" ? (
+            <AlcasDaArea
+              region={selectedParede}
+              onChange={(patch) =>
+                updateParede(scene.id, selectedParede.id, patch)
+              }
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {/* As alças de vértice da forma em LAÇO. A caixa dela já é governada
+          pelo gizmo do palco, junto com o resto da seleção; o que falta é
+          mexer num canto, e é a mesma camada das outras duas. */}
+      {selectedFormas.length === 1 &&
+      selectedFormas[0]!.tipo === "poligono" &&
+      !panMode ? (
+        <AlcasDaArea
+          region={selectedFormas[0]!}
+          onChange={(patch) =>
+            updateForma(scene.id, selectedFormas[0]!.id, patch)
+          }
         />
       ) : null}
 

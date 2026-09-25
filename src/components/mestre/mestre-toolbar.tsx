@@ -1,22 +1,15 @@
 "use client";
 
 import {
-  Circle,
-  CircleDashed,
   Eraser,
   Hand,
-  Lasso,
-  Map,
   MapPin,
-  Minus,
   MousePointer2,
-  Square,
-  X,
   Pencil,
+  X,
   Puzzle,
   Ruler,
   Spline,
-  SquareDashedBottom,
   StickyNote,
   Type,
 } from "lucide-react";
@@ -25,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FormaControl } from "@/components/mestre/forma-control";
 import { GridControl } from "@/components/mestre/grid-control";
 import { PencilControl } from "@/components/mestre/pencil-control";
+import { PilulaDeDesenho } from "@/components/mestre/pilula-de-desenho";
 import { ReguaControl } from "@/components/mestre/regua-control";
 import { PostitControl } from "@/components/mestre/postit-control";
 import { Button } from "@/components/ui/button";
@@ -61,8 +55,10 @@ type Ferramenta = {
    */
   tipoDeForma?: TipoDeForma;
   /**
-   * O mesmo truque do tipo de forma, para a área escondida: quadrado, redondo e
-   * livre são três alvos na barra e uma `fog` só no palco.
+   * O mesmo truque do tipo de forma, para a área escondida. Hoje quem faz essa
+   * escolha é a pílula de desenho, e não um botão por formato na barra; o campo
+   * fica porque a régua e a bolsa continuam sabendo desenhar um botão de
+   * ferramenta qualquer.
    */
   formatoDeArea?: FormatoDeArea;
 };
@@ -70,6 +66,11 @@ type Ferramenta = {
 /**
  * As do PALCO: mexem no que está em cena — escolher, arrastar, riscar, apagar.
  * São as da mão, as que o mestre troca a cada minuto.
+ *
+ * O lápis e a borracha ficam aqui e não na pílula de desenho, embora as duas
+ * também marquem o mapa: a pílula faz duas perguntas -- qual o desenho, e o que
+ * ele significa --, e nenhuma das duas cabe no risco à mão livre. Ele não tem
+ * caixa, não tem formato e não vira parede nem névoa.
  */
 const FERRAMENTAS_PALCO: Ferramenta[] = [
   {
@@ -99,9 +100,15 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
 ];
 
 /**
- * As do MAPA: marcam o chão — pontos, papéis, áreas escondidas. Junto delas
- * ficam a grade e a régua, que também são sobre o mapa e não sobre o que anda
- * nele.
+ * As do MAPA: marcam o chão -- pontos e papéis. Junto delas ficam a grade e a
+ * régua, que também são sobre o mapa e não sobre o que anda nele.
+ *
+ * A área escondida e a parede saíram daqui para a pílula de desenho: as duas
+ * são REGIÕES, e a pergunta "qual o desenho dela" passou a ser a mesma nas
+ * três naturezas. Ver `PilulaDeDesenho`.
+ *
+ * Moram na régua da borda direita, à vista -- ver `ReguaDoMapa`. No quadro só o
+ * postit sobrevive, e sobe para a régua da esquerda: ver `DA_REGUA`.
  */
 const FERRAMENTAS_MAPA: Ferramenta[] = [
   {
@@ -115,27 +122,6 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
     label: "Postit",
     hint: "Cola um papel com texto à vista. Só você vê.",
     icon: StickyNote,
-  },
-  {
-    tool: "fog",
-    formatoDeArea: "retangulo",
-    label: "Área escondida",
-    hint: "Arraste para cobrir uma região. A mesa vê preto sólido.",
-    icon: SquareDashedBottom,
-  },
-  {
-    tool: "fog",
-    formatoDeArea: "elipse",
-    label: "Área escondida redonda",
-    hint: "Cobre uma região arredondada. Shift para um círculo.",
-    icon: CircleDashed,
-  },
-  {
-    tool: "fog",
-    formatoDeArea: "poligono",
-    label: "Área escondida livre",
-    hint: "Contorna a região vértice a vértice. Enter fecha.",
-    icon: Lasso,
   },
 ];
 
@@ -156,27 +142,6 @@ const FERRAMENTAS_DE_DESENHO: Ferramenta[] = [
     label: "Texto",
     hint: "Escreve direto na cena, sem papel. Nasce só para você.",
     icon: Type,
-  },
-  {
-    tool: "forma",
-    tipoDeForma: "retangulo",
-    label: "Quadrado",
-    hint: "Arraste para desenhar um retângulo. Shift para um quadrado.",
-    icon: Square,
-  },
-  {
-    tool: "forma",
-    tipoDeForma: "elipse",
-    label: "Círculo",
-    hint: "Arraste para desenhar uma elipse. Shift para um círculo.",
-    icon: Circle,
-  },
-  {
-    tool: "forma",
-    tipoDeForma: "linha",
-    label: "Linha",
-    hint: "Arraste de onde até onde.",
-    icon: Minus,
   },
 ];
 
@@ -204,14 +169,16 @@ const FERRAMENTAS_QUADRO: Ferramenta[] = [
  * esconder, e o ponto é nota fechada atrás de um alfinete, que não faz sentido
  * onde a nota já é o cartão.
  *
- * No MAPA: só as de desenhar. O ponto, o postit e a névoa continuam na bolsa
- * do rodapé, que é o desenho certo para o que se marca no chão uma vez por
- * cena -- trazê-los para a régua seria mudar o mapa inteiro de lugar para
- * acomodar duas ferramentas novas.
+ * No MAPA: só as de desenhar. O ponto e o postit são do CHÃO, e o chão tem
+ * régua própria na borda oposta -- ver `ReguaDoMapa`. Uma barra para cada
+ * pergunta: à esquerda o que eu desenho, à direita o que eu marco.
  */
 const DA_REGUA: Record<"quadro" | "mapa", Ferramenta[]> = {
   quadro: [
-    ...FERRAMENTAS_MAPA.filter((f) => f.tool !== "fog" && f.tool !== "pin"),
+    // Do que é do mapa, só o POSTIT sobe para a régua do quadro: ali ele é
+    // conteúdo, e não anotação. O alfinete não tem o que fazer numa folha, e a
+    // área escondida e a parede saíram para a pílula.
+    ...FERRAMENTAS_MAPA.filter((f) => f.tool === "postit"),
     ...FERRAMENTAS_DE_DESENHO,
     ...FERRAMENTAS_QUADRO,
   ],
@@ -266,17 +233,24 @@ function useFerramentasDeExtensao(): Ferramenta[] {
  * Um botão de ferramenta, com o nome e o que ela faz no `tooltip`.
  *
  * Lê o store por conta própria em vez de receber "está ativa?" de fora: ele
- * aparece na bolsa do rodapé E na régua do quadro, e a versão que recebia a
+ * aparece nas duas réguas e na bolsa do rodapé, e a versão que recebia a
  * resposta pronta obrigava cada dono a repetir a mesma comparação -- que é
  * justamente onde o tipo de forma seria esquecido.
  */
 function BotaoDeFerramenta({
   ferramenta,
   desabilitada = false,
+  dica,
   aoEscolher,
 }: {
   ferramenta: Ferramenta;
   desabilitada?: boolean;
+  /**
+   * De que lado a dica abre. Ausente = em cima, que é o do rodapé. A régua do
+   * mapa pede `left`: encostada na borda direita, a dica em cima cobriria o
+   * botão de cima da própria régua.
+   */
+  dica?: "top" | "left";
   /** Depois de escolher. É por aqui que a bolsa se fecha. */
   aoEscolher?: () => void;
 }) {
@@ -313,11 +287,112 @@ function BotaoDeFerramenta({
           </Button>
         }
       />
-      <TooltipContent>
+      <TooltipContent side={dica}>
         <p className="font-medium">{label}</p>
         <p className="text-muted-foreground max-w-48">{hint}</p>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/**
+ * A régua de medir, que depende da grade para saber quanto vale um metro.
+ *
+ * Montada a cada desenho e não posta na tabela: a dica dela muda com a cena --
+ * sem grade, o que o botão tem a dizer é que falta ligar a grade.
+ */
+function reguaDeMedir(scene: Scene): Ferramenta {
+  return {
+    tool: "regua",
+    label: "Régua",
+    hint: scene.grid
+      ? `Mede distância e área. Cada quadrado vale ${METROS_POR_QUADRADO} m.`
+      : "Ligue a grade primeiro.",
+    icon: Ruler,
+  };
+}
+
+/**
+ * A régua do MAPA, encostada na borda direita do palco.
+ *
+ * O que se marca no chão e fica: ponto, papel, grade, medida. Estava numa bolsa
+ * do rodapé, atrás de dois cliques, e a bolsa dizia o que tinha dentro só
+ * depois de aberta -- num mapa novo, ninguém descobre o que nunca viu.
+ *
+ * À DIREITA, de frente para a régua de desenho: as duas são barras expostas e
+ * as duas respondem perguntas diferentes -- a da esquerda, "o que eu desenho";
+ * esta, "o que eu marco no chão". Um canto para cada, e nenhuma delas atravessa
+ * o rodapé, que continua sendo do PALCO.
+ *
+ * Só no MAPA. Quadro não tem chão: nem ponto, nem grade, nem medida.
+ * O postit dele é conteúdo, e por isso mora na régua da esquerda -- ver
+ * `DA_REGUA`.
+ */
+export function ReguaDoMapa({ scene }: { scene: Scene }) {
+  const dasExtensoes = useFerramentasDeExtensao();
+  const regua = reguaDeMedir(scene);
+
+  return (
+    <div className="bg-background/85 pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+      {FERRAMENTAS_MAPA.map((ferramenta) => (
+        <BotaoDeFerramenta
+          key={ferramenta.tool}
+          ferramenta={ferramenta}
+          dica="left"
+        />
+      ))}
+
+      {/* A grade e a medida depois do risco: as duas são sobre o CHÃO e não
+          sobre o que se crava nele, e a régua só mede porque a grade diz
+          quanto vale um quadrado. */}
+      <span className="bg-border my-1 h-px w-5" />
+
+      <GridControl scene={scene} lado="left" />
+      <BotaoDeFerramenta
+        ferramenta={regua}
+        desabilitada={!scene.grid}
+        dica="left"
+      />
+
+      {dasExtensoes.length > 0 ? (
+        <>
+          <span className="bg-border my-1 h-px w-5" />
+          {dasExtensoes.map((ferramenta) => (
+            <BotaoDeFerramenta
+              key={ferramenta.tool}
+              ferramenta={ferramenta}
+              dica="left"
+            />
+          ))}
+        </>
+      ) : null}
+
+      {/* O controle da ferramenta na mão vem no pé da régua, pela regra de
+          sempre: ele fica ao lado de onde a escolha aconteceu. Os dois se
+          escondem sozinhos, e por isso o risco pergunta antes de aparecer. */}
+      <ControleDoMapa />
+    </div>
+  );
+}
+
+/**
+ * O risco e o controle da ferramenta do mapa que está na mão, ou nada.
+ *
+ * Postit e régua de medir são as duas do mapa com preferência antes do gesto --
+ * a cor do papel, a forma do medidor. Ponto e grade não têm o que perguntar
+ * antes.
+ */
+function ControleDoMapa() {
+  const tool = useToolStore((state) => state.tool);
+
+  if (tool !== "postit" && tool !== "regua") return null;
+
+  return (
+    <>
+      <span className="bg-border my-1 h-px w-5" />
+      {tool === "postit" ? <PostitControl lado="left" /> : null}
+      <ReguaControl lado="left" />
+    </>
   );
 }
 
@@ -350,16 +425,28 @@ export function ReguaDeDesenho({ scene }: { scene: Scene }) {
 
   return (
     <div className="bg-background/85 pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+      {/* A pílula primeiro, porque ela é a porta do que se DESENHA: quadrado,
+          círculo e traço livre, cada um virando parede, área escondida ou
+          elemento. O que sobra na régua abaixo dela são os alvos diretos, que
+          não têm desenho a escolher. Ver `PilulaDeDesenho`. */}
+      <PilulaDeDesenho quadro={quadro} />
+
+      <span className="bg-border my-1 h-px w-5" />
+
       {DA_REGUA[quadro ? "quadro" : "mapa"].map((ferramenta) => (
         <BotaoDeFerramenta
-          key={ferramenta.tipoDeForma ?? ferramenta.formatoDeArea ?? ferramenta.tool}
+          key={
+            ferramenta.tipoDeForma ??
+            ferramenta.formatoDeArea ??
+            ferramenta.tool
+          }
           ferramenta={ferramenta}
         />
       ))}
 
       {/* As de plugin acompanham a régua só no quadro. No mapa elas já estão na
-          bolsa, e o mesmo botão em dois cantos do palco seria duas respostas
-          para a pergunta de onde ele mora. */}
+          régua da direita, e o mesmo botão em dois cantos do palco seria duas
+          respostas para a pergunta de onde ele mora. */}
       {quadro && dasExtensoes.length > 0 ? (
         <>
           <span className="bg-border my-1 h-px w-5" />
@@ -382,7 +469,7 @@ export function ReguaDeDesenho({ scene }: { scene: Scene }) {
  *
  * O da forma acompanha a régua nos dois tipos de cena, porque é na régua que a
  * forma é escolhida. O do postit só no quadro: no mapa o papel é escolhido na
- * bolsa do rodapé, e a cor dele fica ao lado de onde a escolha aconteceu.
+ * régua da direita, e a cor dele fica ao lado de onde a escolha aconteceu.
  */
 function SeparadorDoControle({ quadro }: { quadro: boolean }) {
   const tool = useToolStore((state) => state.tool);
@@ -400,62 +487,49 @@ function SeparadorDoControle({ quadro }: { quadro: boolean }) {
 }
 
 /**
- * As ferramentas do RODAPÉ, em bolsas no canto do palco.
+ * As ferramentas do RODAPÉ: a bolsa do PALCO, e só ela.
  *
- * Como pasta de aplicativos no celular: um ou dois botões à vista, e cada um
- * abre a fileira do grupo por cima. Eram nove alvos numa fileira só, e a
- * fileira não dizia por que o lápis ficava ao lado do alfinete — nem precisava
- * estar toda à vista o tempo todo, porque a maior parte da sessão no mapa é
- * com uma ferramenta na mão. Palco é o que se faz com a mão a cada minuto;
- * Mapa é o que se marca no chão uma vez e fica. A grade e a régua vieram do
- * zoom para a bolsa do mapa: são sobre o mapa, e moravam longe das outras que
- * também são.
+ * Como pasta de aplicativos no celular: um botão à vista, e ele abre a fileira
+ * do grupo por cima. O que mora aqui é o que se faz com a MÃO a cada minuto --
+ * escolher, deslocar, riscar, apagar --, e vale nos dois tipos de cena.
  *
- * NO QUADRO a segunda bolsa não existe: as ferramentas dele estão à vista na
- * régua da borda esquerda, porque montar uma rede de pistas é trocar de
- * ferramenta a cada gesto e a bolsa cobrava dois cliques por troca. Ver
- * `ReguaDeDesenho`. Sobra aqui a bolsa do PALCO, que vale nos dois.
- *
- * NO MAPA as duas convivem, e a divisão é a mesma de sempre: a régua leva o que
- * se DESENHA -- letra e forma --, a bolsa leva o que se marca no chão -- ponto,
- * papel, névoa, grade, régua de medir.
+ * As outras duas famílias saíram para as bordas, cada uma numa barra exposta: o
+ * que se DESENHA à esquerda (`ReguaDeDesenho`) e o que se marca no CHÃO à
+ * direita (`ReguaDoMapa`). A bolsa do mapa era a última que sobrava, e ela
+ * cobrava dois cliques por troca e só dizia o que tinha dentro depois de
+ * aberta.
  *
  * O botão da bolsa mostra a ferramenta ATIVA dela, e não um ícone fixo: com a
  * bolsa fechada, o que está na mão é a única informação que importa. Escolher
- * uma ferramenta fecha a bolsa — escolheu, vai usar. Ligar a grade não fecha,
- * porque o ajuste dela fica logo ao lado.
+ * uma ferramenta fecha a bolsa — escolheu, vai usar.
  *
- * A cor do lápis fica FORA das bolsas, ao lado dos botões: dentro, sumiria
- * junto com a bolsa no instante em que o mestre escolhesse a ferramenta que a
- * pede. A regra é sempre a mesma -- o controle fica ao lado de onde a
- * ferramenta foi escolhida --, e é ela que manda a cor da forma para a régua
- * nos dois tipos de cena e deixa a do postit aqui só no mapa.
+ * A cor do lápis fica FORA da bolsa, ao lado dos botões: dentro, sumiria junto
+ * com ela no instante em que o mestre escolhesse a ferramenta que a pede. A
+ * regra é sempre a mesma -- o controle fica ao lado de onde a ferramenta foi
+ * escolhida --, e é ela que leva a cor da forma para a régua da esquerda e a do
+ * postit e do medidor para a régua do mapa.
  */
 export function MestreToolbar({ scene }: { scene: Scene }) {
   const tool = useToolStore((state) => state.tool);
   const setTool = useToolStore((state) => state.setTool);
   const tipoDeForma = useToolStore((state) => state.tipoDeForma);
   const formatoDeArea = useToolStore((state) => state.formatoDeArea);
-  const dasExtensoes = useFerramentasDeExtensao();
 
-  const [aberta, setAberta] = useState<"palco" | "mapa" | null>(null);
-
-  const regua: Ferramenta = {
-    tool: "regua",
-    label: "Régua",
-    hint: scene.grid
-      ? `Mede distância e área. Cada quadrado vale ${METROS_POR_QUADRADO} m.`
-      : "Ligue a grade primeiro.",
-    icon: Ruler,
-  };
+  const [aberta, setAberta] = useState<"palco" | null>(null);
 
   const quadro = ehQuadro(scene);
-  const doMapa = [...FERRAMENTAS_MAPA, regua, ...dasExtensoes];
 
   // Trocar de um mapa para um quadro com a névoa na mão deixaria a ferramenta
   // ativa sem botão na barra -- e o clique seguinte cobriria o quadro de preto.
   useEffect(() => {
-    if (quadro && (tool === "fog" || tool === "regua" || tool === "pin"))
+    if (
+      quadro &&
+      (tool === "fog" ||
+        tool === "regua" ||
+        tool === "pin" ||
+        // Parede é do chão, e quadro não tem chão: ver `Tool`.
+        tool === "parede")
+    )
       setTool("select");
     // E o inverso: só a SETA agora. A letra e a forma atravessam a troca de
     // cena porque valem nos dois lados -- ver `FERRAMENTAS_DE_DESENHO` --, e
@@ -463,8 +537,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     if (!quadro && tool === "ligacao") setTool("select");
   }, [quadro, tool, setTool]);
 
-  // A ferramenta ativa de cada bolsa, para o botão dela mostrar. `select` é
-  // sempre do palco; então a bolsa do mapa só tem ativa quando é dela.
+  // A ferramenta ativa da bolsa, para o botão dela mostrar.
   const daBolsa = (lista: Ferramenta[]) =>
     lista.find((f) => ehAtiva(f, tool, tipoDeForma, formatoDeArea));
 
@@ -489,58 +562,11 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
         ))}
       </Bolsa>
 
-      {quadro ? null : (
-        <Bolsa
-          nome="Ferramentas do mapa"
-          dica="Ponto, postit, área escondida, grade e régua."
-          aberta={aberta === "mapa"}
-          onAberta={(v) => setAberta(v ? "mapa" : null)}
-          ativa={daBolsa(doMapa)}
-          icone={Map}
-        >
-          {FERRAMENTAS_MAPA.map((ferramenta) => (
-            <BotaoDeFerramenta
-              key={ferramenta.formatoDeArea ?? ferramenta.tool}
-              ferramenta={ferramenta}
-              aoEscolher={fechar}
-            />
-          ))}
-
-          <span className="bg-border mx-1 h-5 w-px" />
-
-          <GridControl scene={scene} />
-          {/* A régua só mede com a grade ligada: é o quadrado que diz quanto
-              vale um metro. */}
-          <BotaoDeFerramenta
-            ferramenta={regua}
-            desabilitada={!scene.grid}
-            aoEscolher={fechar}
-          />
-
-          {dasExtensoes.length > 0 ? (
-            <>
-              <span className="bg-border mx-1 h-5 w-px" />
-              {dasExtensoes.map((ferramenta) => (
-                <BotaoDeFerramenta
-                  key={ferramenta.tool}
-                  ferramenta={ferramenta}
-                  aoEscolher={fechar}
-                />
-              ))}
-            </>
-          ) : null}
-        </Bolsa>
-      )}
-
-      {/* Só com a ferramenta correspondente na mão; todos se escondem sozinhos.
-          O da FORMA nunca aparece aqui: a forma é escolhida na régua da
-          esquerda nos dois tipos de cena, e a cor dela acompanha a régua -- um
-          controle em cada canto seria o mesmo botão em dois lugares. O do
-          POSTIT aparece só no mapa, que é onde o papel é escolhido na bolsa
-          logo ao lado. */}
+      {/* Só com o LÁPIS na mão, e ele se esconde sozinho. É o único controle
+          que sobrou no rodapé, pela regra de sempre: o lápis é escolhido aqui.
+          A cor da forma acompanha a régua da esquerda; a do postit e a do
+          medidor, a régua do mapa. */}
       <PencilControl />
-      <ReguaControl />
-      {quadro ? null : <PostitControl />}
 
       {/* Largar a ferramenta, para quem escolheu e desistiu. O Esc faz o mesmo,
           mas um botão à vista é o que diz que dá para desistir. Só aparece com

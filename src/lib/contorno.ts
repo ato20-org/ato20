@@ -52,6 +52,8 @@
  *    interpola, e a borda dura volta a ser degradê.
  */
 
+import { carregarImagem, corteDoAlfa } from "@/lib/imagem";
+
 /**
  * A grossura do traço, em unidades de cena -- a mesma régua de `item.width`.
  *
@@ -108,29 +110,6 @@ export const CONTORNO_DE_NPC = "#ffffff";
  * decodificado ao lado do outro.
  */
 const LADO_MAX = 768;
-
-/**
- * A partir de que alfa o pixel é figura, de 0 a 255.
- *
- * Quase 255 de propósito: é o corte que deixa a sombra pintada do próprio PNG
- * de fora -- ver o cabeçalho. Não é 255 cravado porque compressão com perda e
- * conversão de perfil raspam um ou dois pontos do alfa cheio.
- */
-const ALFA_DA_FIGURA = 250;
-
-/**
- * O corte de reserva, para o arquivo que não tem alfa cheio em lugar nenhum.
- *
- * Existe token exportado inteiro a 90% de opacidade, e para ele o corte alto
- * devolveria silhueta vazia -- isto é, token sem contorno, sem ninguém saber
- * por quê. Quando quase nada passa no corte alto, o corte cai para meio alfa e
- * o traço volta; o arquivo sem sombra pintada, que é o caso desse tipo de
- * exportação, não perde nada com isso.
- */
-const ALFA_DE_RESERVA = 128;
-
-/** Abaixo de que fração da tela a silhueta opaca conta como vazia. */
-const PISO_DA_FIGURA = 0.002;
 
 /** O que sai do forno: a imagem e o quanto dela sobra para fora da caixa. */
 export type Contorno = {
@@ -198,7 +177,7 @@ async function assar(
   cx: number,
   cy: number,
 ): Promise<Contorno | null> {
-  const fonte = await carregar(url);
+  const fonte = await carregarImagem(url);
 
   const largura = fonte.naturalWidth;
   const altura = fonte.naturalHeight;
@@ -279,7 +258,7 @@ function silhueta(
   const quadro = ctx.getImageData(0, 0, w, h);
   const px = quadro.data;
 
-  const limiar = corte(px, w * h);
+  const limiar = corteDoAlfa(px, w * h);
 
   for (let i = 0; i < px.length; i += 4) {
     const dentro = px[i + 3] >= limiar;
@@ -293,17 +272,6 @@ function silhueta(
   ctx.putImageData(quadro, 0, 0);
 
   return tela;
-}
-
-/** Qual corte de alfa usar neste arquivo. Ver `ALFA_DE_RESERVA`. */
-function corte(px: Uint8ClampedArray, pixels: number): number {
-  let opacos = 0;
-
-  for (let i = 3; i < px.length; i += 4) {
-    if (px[i] >= ALFA_DA_FIGURA) opacos++;
-  }
-
-  return opacos >= pixels * PISO_DA_FIGURA ? ALFA_DA_FIGURA : ALFA_DE_RESERVA;
 }
 
 /**
@@ -381,39 +349,4 @@ function separar(cor: string): { r: number; g: number; b: number } {
   const n = Number.parseInt(cor.slice(1), 16);
 
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-}
-
-/**
- * A imagem carregada de um jeito que o canvas aceite ler de volta.
- *
- * Pelos BYTES, e não apontando a `<img>` para o daemon. A janela do mestre e o
- * daemon são origens diferentes, e uma imagem cross-origin CONTAMINA o canvas:
- * `getImageData` e `toDataURL` jogam em vez de devolver. `crossOrigin` resolveria
- * no papel -- o daemon responde `Access-Control-Allow-Origin: *` em tudo, ver
- * `serve.rs` --, mas o mesmo arquivo já foi buscado SEM CORS pelo próprio
- * palco, e um acerto de cache do modo errado faz o pedido falhar por um motivo
- * que não aparece em lugar nenhum. Um blob local não tem origem para discordar.
- *
- * A blob URL é revogada assim que a imagem carrega: quem guarda cópia daqui
- * para a frente é o `assados`, e o endereço não serve mais para nada. A imagem
- * já decodificada continua desenhável depois da revogação.
- */
-async function carregar(url: string): Promise<HTMLImageElement> {
-  const resposta = await fetch(url);
-  if (!resposta.ok) {
-    throw new Error(`contorno sem imagem: ${url} (${resposta.status})`);
-  }
-
-  const endereco = URL.createObjectURL(await resposta.blob());
-
-  try {
-    return await new Promise<HTMLImageElement>((resolver, recusar) => {
-      const img = new Image();
-      img.onload = () => resolver(img);
-      img.onerror = () => recusar(new Error(`contorno ilegível: ${url}`));
-      img.src = endereco;
-    });
-  } finally {
-    URL.revokeObjectURL(endereco);
-  }
 }
