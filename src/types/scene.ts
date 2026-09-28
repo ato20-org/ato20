@@ -226,6 +226,17 @@ export type LuzCarregada = {
    * a da parede, e é por isso que o efeito vale para as duas. Ver `EfeitoDaLuz`.
    */
   efeito?: EfeitoDaLuz;
+  /**
+   * O facho, quando ela aponta: a lanterna de foco, o farol do capacete.
+   * Ausente = círculo, a lanterna de sempre.
+   *
+   * O `angulo` é RELATIVO À FIGURA, e não ao mapa, e é a diferença para o
+   * cone da luz cravada. O mestre aponta uma vez para onde o rosto do
+   * desenho olha, e dali em diante girar o token gira o facho -- quem vira a
+   * cabeça no corredor leva a luz junto, sem ninguém mirar de novo. Espelhar
+   * a figura espelha o facho pela mesma razão. Ver `anguloDoFacho`.
+   */
+  cone?: ConeDaLuz;
 };
 
 /**
@@ -262,6 +273,16 @@ export type ConeDaLuz = {
  * direita -- onde estava a alça do alcance do círculo, que vira a ponta dele.
  */
 export const CONE_PADRAO: ConeDaLuz = { angulo: 0, abertura: 60 };
+
+/**
+ * O cone com que a lanterna de um token vira cone: para BAIXO da figura.
+ *
+ * Para baixo, e não para a direita como o da luz cravada, porque o ângulo aqui
+ * é da figura (ver `LuzCarregada.cone`), e a figura de token que se compra
+ * quase sempre olha para quem a vê -- o rosto está embaixo. Quem desenha
+ * olhando para cima troca uma vez, no menu.
+ */
+export const CONE_DA_LANTERNA: ConeDaLuz = { angulo: 90, abertura: 60 };
 
 /**
  * Os limites da abertura, em graus.

@@ -128,6 +128,32 @@ export function coneDe(cone: unknown): ConeDaLuz | undefined {
   };
 }
 
+/**
+ * Para onde o facho de uma lanterna aponta NO MAPA, dado o ângulo na figura.
+ *
+ * O ângulo guardado é da figura -- ver `LuzCarregada.cone` --, e a figura
+ * chega ao mapa espelhada e depois girada, nessa ordem: é a ordem do
+ * `CanvasItemView`, que espelha a imagem dentro do contêiner que gira. A conta
+ * segue a mesma ordem. Espelhar na horizontal troca a direita pela esquerda
+ * (`180 - a`); na vertical, cima por baixo (`-a`); o giro soma, no mesmo
+ * sentido horário do `rotate` do CSS e do `Sol.angulo`.
+ *
+ * Devolvido entre 0 e 360, para a chave da luz não ver dois números
+ * diferentes para o mesmo facho.
+ */
+export function anguloDoFacho(
+  item: Pick<CanvasItem, "rotation" | "flipX" | "flipY">,
+  naFigura: number,
+): number {
+  let angulo = naFigura;
+  if (item.flipX) angulo = 180 - angulo;
+  if (item.flipY) angulo = -angulo;
+
+  const giro = Number.isFinite(item.rotation) ? item.rotation : 0;
+
+  return (((angulo + giro) % 360) + 360) % 360;
+}
+
 /** O efeito, se for um que existe. O de uma versão futura acende fixo. */
 export function efeitoDe(valor: unknown): EfeitoDaLuz | undefined {
   return (EFEITOS_DA_LUZ as readonly unknown[]).includes(valor)
@@ -142,8 +168,8 @@ export function efeitoDe(valor: unknown): EfeitoDaLuz | undefined {
  * marcador do Mestre, que lê a cena, e não esta lista.
  *
  * A carregada acende do CENTRO da caixa do token, e não do canto: é de onde a
- * mesa lê que o personagem está. Girar o token não mexe no centro, então não
- * mexe na luz.
+ * mesa lê que o personagem está. Girar o token não mexe no centro, e só mexe
+ * na luz quando ela é um facho: aí ele gira junto. Ver `anguloDoFacho`.
  *
  * O que não é número some aqui, na entrada, e não lá no desenho: uma fonte com
  * `NaN` pede um degradê inválido ao canvas, e o `createRadialGradient` joga
@@ -179,6 +205,7 @@ export function fontesDaCena(
     if (!item.luz) continue;
 
     const efeito = efeitoDe(item.luz.efeito);
+    const facho = coneDe(item.luz.cone);
 
     fontes.push({
       id: item.id,
@@ -188,6 +215,14 @@ export function fontesDaCena(
       raioIntenso: raioIntensoDe(item.luz.raio, undefined),
       cor: item.luz.cor,
       intensidade: 1,
+      ...(facho
+        ? {
+            cone: {
+              angulo: anguloDoFacho(item, facho.angulo),
+              abertura: facho.abertura,
+            },
+          }
+        : {}),
       ...(efeito ? { efeito } : {}),
     });
   }
