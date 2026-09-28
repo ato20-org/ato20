@@ -27,6 +27,7 @@ import {
   Ungroup,
 } from "lucide-react";
 
+import { MiniaturaDoAcervo, useAnimada } from "@/components/mestre/miniatura-do-acervo";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,14 +48,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { aoApertarF2, useRenomearPeloMenu } from "@/hooks/use-renomear-pelo-menu";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useCharacters } from "@/hooks/use-characters";
-import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import {
   agruparSelecao,
   itensDoGrupo,
   selecionarGrupo,
 } from "@/lib/mestre/item-actions";
-import { MINIATURA } from "@/lib/miniatura";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -760,7 +759,7 @@ const LayerRow = memo(function LayerRow({
   onReorderStart,
   onSelect,
 }: LayerRowProps) {
-  const url = useAssetUrl(item.assetId, "mini");
+  const animada = useAnimada(item.assetId);
 
   return (
     <li
@@ -783,25 +782,19 @@ const LayerRow = memo(function LayerRow({
         aria-current={selected}
         onClick={(event) => onSelect(item.id, event)}
       >
-        <span className="bg-muted size-8 shrink-0 overflow-hidden rounded">
-          {url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={url}
-              alt=""
-              className="size-full object-cover"
-              draggable={false}
-              {...MINIATURA}
-              // Mesmo espelho do palco, para a miniatura bater com o que se vê.
-              style={
-                item.flipX || item.flipY
-                  ? {
-                      transform: `scale(${item.flipX ? -1 : 1}, ${item.flipY ? -1 : 1})`,
-                    }
-                  : undefined
-              }
-            />
-          ) : null}
+        <span className="bg-muted relative size-8 shrink-0 overflow-hidden rounded">
+          <MiniaturaDoAcervo
+            assetId={item.assetId}
+            animada={animada}
+            // Mesmo espelho do palco, para a miniatura bater com o que se vê.
+            style={
+              item.flipX || item.flipY
+                ? {
+                    transform: `scale(${item.flipX ? -1 : 1}, ${item.flipY ? -1 : 1})`,
+                  }
+                : undefined
+            }
+          />
         </span>
 
         <span className="min-w-0 flex-1">

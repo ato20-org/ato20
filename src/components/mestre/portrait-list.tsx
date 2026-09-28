@@ -16,6 +16,7 @@ import {
   UserSquare,
 } from "lucide-react";
 
+import { MiniaturaDoAcervo, useAnimada } from "@/components/mestre/miniatura-do-acervo";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -43,10 +44,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
-import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useCharacters } from "@/hooks/use-characters";
 import { FOLGA_MAX, FOLGA_MIN, FOLGA_PADRAO } from "@/lib/geometry/portrait";
-import { MINIATURA } from "@/lib/miniatura";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -544,7 +543,7 @@ function PortraitRow({
   indice: number;
   total: number;
 }) {
-  const url = useAssetUrl(personagem.retrato, "mini");
+  const animada = useAnimada(personagem.retrato);
   const update = usePortraitStore((state) => state.update);
   const armar = usePortraitStore((state) => state.armar);
   const desarmar = usePortraitStore((state) => state.desarmar);
@@ -687,7 +686,7 @@ function PortraitRow({
               aria-label={`Selecionar retrato de ${personagem.nome}`}
               aria-pressed={selected}
               disabled={!retrato}
-              className="bg-muted size-10 shrink-0 overflow-hidden rounded"
+              className="bg-muted relative size-10 shrink-0 overflow-hidden rounded"
               // Continua sendo o controle acessível da escolha -- é ele que
               // tem `aria-pressed` e recebe o foco do teclado. O clique de
               // ponteiro é tratado pela linha, então aqui ele só não pode
@@ -697,14 +696,10 @@ function PortraitRow({
                 escolher(event);
               }}
             >
-              {url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={url}
-                  alt=""
-                  className="size-full object-cover"
-                  draggable={false}
-                  {...MINIATURA}
+              {personagem.retrato ? (
+                <MiniaturaDoAcervo
+                  assetId={personagem.retrato}
+                  animada={animada}
                 />
               ) : (
                 // Sem imagem no acervo — o caso de quem só tem página viva. O

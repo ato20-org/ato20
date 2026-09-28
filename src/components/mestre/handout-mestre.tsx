@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 
+import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -30,14 +31,12 @@ import {
 import { tamanhoNaCena } from "@/components/mestre/asset-library";
 import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useAssetList } from "@/hooks/use-asset-list";
-import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
 import { useTokenDrag } from "@/hooks/use-token-drag";
 import {
   absorverImportacao,
   importarCaminhosNoAcervo,
 } from "@/lib/mestre/importar-arquivos";
-import { MINIATURA } from "@/lib/miniatura";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { useHandoutStore } from "@/lib/store/use-handout-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -413,7 +412,6 @@ function CelulaDoHandout({
   asset: AssetMeta | undefined;
   naMesa: boolean;
 }) {
-  const url = useAssetUrl(asset ? assetId : undefined, "mini");
   const tirar = useSceneStore((state) => state.tirarDoHandout);
   const arrastar = useTokenDrag();
 
@@ -447,16 +445,11 @@ function CelulaDoHandout({
         });
       }}
     >
-      {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt={nome}
-          className="size-full object-cover"
-          draggable={false}
-          {...MINIATURA}
-        />
-      ) : null}
+      <MiniaturaDoAcervo
+        assetId={asset ? assetId : undefined}
+        animada={asset?.animada}
+        alt={nome}
+      />
 
       {/* Os dois botões só ao passar o mouse: a célula é a imagem, e ícones
           fixos em cima de nove miniaturas viravam uma grade de botões. */}

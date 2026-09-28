@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { MiniaturaDoAcervo, useAnimada } from "@/components/mestre/miniatura-do-acervo";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,7 +53,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
-import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
 import { useCharacterOwners } from "@/hooks/use-character-owners";
@@ -64,7 +64,6 @@ import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
 import { OQueVaiJunto } from "@/components/mestre/character-window";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { useTokenDrag } from "@/hooks/use-token-drag";
-import { MINIATURA } from "@/lib/miniatura";
 import { normaliza } from "@/lib/search";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -823,20 +822,14 @@ export function CharactersBody() {
  * viraria ruído do mesmo jeito que o rótulo "sem dono" virava.
  */
 function Rosto({ personagem }: { personagem: Personagem }) {
-  const url = useAssetUrl(personagem.retrato ?? personagem.miniatura, "mini");
+  const rosto = personagem.retrato ?? personagem.miniatura;
+  const animada = useAnimada(rosto);
 
   return (
-    <span className="bg-muted/60 size-7 shrink-0 overflow-hidden rounded border">
-      {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt=""
-          draggable={false}
-          className="size-full object-cover"
-          {...MINIATURA}
-        />
-      ) : null}
+    <span className="bg-muted/60 relative size-7 shrink-0 overflow-hidden rounded border">
+      {/* Sem selo: num quadrado de 28px ele cobriria o rosto. O hover na
+          linha continua animando. */}
+      <MiniaturaDoAcervo assetId={rosto} animada={animada} selo={false} />
     </span>
   );
 }
