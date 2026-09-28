@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactElement } from "react";
+
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,17 +49,23 @@ const NOME: Record<EstiloMedidor, string> = {
  *
  * Juntas num popover só porque são a mesma pergunta, e porque a linha não tem
  * largura para um seletor de forma aberto ao lado do nome.
+ *
+ * `gatilho` troca o botão, e só ele. A configuração da campanha desenha o
+ * medidor inteiro logo abaixo do nome, e ali a amostra repetiria em miniatura o
+ * que já está na tela em tamanho cheio.
  */
 export function CorEForma({
   cor,
   estilo,
   onCor,
   onEstilo,
+  gatilho,
 }: {
   cor: string;
   estilo: EstiloMedidor;
   onCor: (cor: string) => void;
   onEstilo: (estilo: EstiloMedidor) => void;
+  gatilho?: ReactElement;
 }) {
   return (
     <Popover>
@@ -66,13 +74,15 @@ export function CorEForma({
           render={
             <PopoverTrigger
               render={
-                <button
-                  type="button"
-                  aria-label={`Cor e forma: ${NOME[estilo]}`}
-                  className="border-border hover:border-foreground/40 focus-visible:ring-ring grid size-6 shrink-0 place-items-center rounded border bg-black/40 focus-visible:ring-2 focus-visible:outline-none"
-                >
-                  <Amostra cor={cor} estilo={estilo} />
-                </button>
+                gatilho ?? (
+                  <button
+                    type="button"
+                    aria-label={`Cor e forma: ${NOME[estilo]}`}
+                    className="border-border hover:border-foreground/40 focus-visible:ring-ring grid size-6 shrink-0 place-items-center rounded border bg-black/40 focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    <Amostra cor={cor} estilo={estilo} />
+                  </button>
+                )
               }
             />
           }

@@ -208,6 +208,30 @@ pub fn remover(vault: &Vault, modelo_id: &str) -> AppResult<()> {
     )
 }
 
+/// Poe os modelos na ordem pedida e devolve a lista arrumada.
+///
+/// A ordem e a que a ficha nova recebe: `aplicar` materializa na ordem do
+/// arquivo. As fichas que ja existem nao se mexem -- o medidor e delas.
+///
+/// O que NAO esta na ordem recebida fica no fim, na ordem em que estava. Mesma
+/// regra de `reordenar_medidores`, e pela mesma razao: um pedido montado numa
+/// tela desatualizada reordena sem apagar o modelo que outra acabou de criar.
+pub fn reordenar(vault: &Vault, ordem: &[String]) -> AppResult<Vec<Modelo>> {
+    let mut restantes = load(vault)?;
+    let mut arrumados: Vec<Modelo> = Vec::with_capacity(restantes.len());
+
+    for pedido in ordem {
+        if let Some(posicao) = restantes.iter().position(|m| &m.id == pedido) {
+            arrumados.push(restantes.remove(posicao));
+        }
+    }
+    arrumados.append(&mut restantes);
+
+    save(vault, &arrumados)?;
+
+    Ok(arrumados)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,6 +307,22 @@ mod tests {
 
         assert!(criar(&vault, "Vida", "#ef4444", Estilo::Barra, 10).is_err());
         assert_eq!(load(&vault).unwrap().len(), MAX_MODELOS);
+    }
+
+    #[test]
+    fn reordenar_poe_na_ordem_e_nao_perde_quem_faltou() {
+        let (_tmp, vault) = vault();
+
+        let a = criar(&vault, "A", "#ef4444", Estilo::Barra, 10).unwrap();
+        let b = criar(&vault, "B", "#f59e0b", Estilo::Barra, 10).unwrap();
+        let c = criar(&vault, "C", "#22c55e", Estilo::Barra, 10).unwrap();
+
+        // O pedido nao menciona `b`. Ele fica no fim, nao some.
+        let ordem = reordenar(&vault, &[c.id.clone(), a.id.clone()]).unwrap();
+
+        let ids = |lista: &[Modelo]| lista.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&ordem), vec![c.id.clone(), a.id.clone(), b.id.clone()]);
+        assert_eq!(ids(&load(&vault).unwrap()), ids(&ordem));
     }
 
     #[test]

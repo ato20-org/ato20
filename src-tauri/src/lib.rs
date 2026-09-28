@@ -231,6 +231,7 @@ pub fn run() {
             commands::modelo_criar,
             commands::modelo_editar,
             commands::modelo_remover,
+            commands::modelos_reordenar,
             commands::modelos_aplicar_em_todos,
             commands::character_attachments,
             commands::character_attach,

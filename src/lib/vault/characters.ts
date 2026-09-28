@@ -254,6 +254,11 @@ export function removerModelo(modeloId: string): Promise<void> {
   return call("modelo_remover", { modeloId });
 }
 
+/** Põe os modelos na ordem pedida. As fichas que já existem não se mexem. */
+export function reordenarModelos(ordem: string[]): Promise<ModeloDeMedidor[]> {
+  return call<ModeloDeMedidor[]>("modelos_reordenar", { ordem });
+}
+
 /** Materializa todos os modelos em todos os personagens, de novo. */
 export function aplicarModelosEmTodos(): Promise<AplicacaoDeModelos> {
   return call<AplicacaoDeModelos>("modelos_aplicar_em_todos");

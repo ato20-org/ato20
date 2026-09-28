@@ -1,27 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, EyeOff, Minus, Plus, Trash2 } from "lucide-react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
-import { CorEForma } from "@/components/mestre/cor-e-forma";
+import {
+  LinhaDeMedidor,
+  SeloDoMedidor,
+  useArrastoDoAtual,
+} from "@/components/mestre/linha-de-medidor";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
-import { medidoresVisiveis } from "@/lib/medidor";
+import { useListReorder } from "@/hooks/use-list-reorder";
+import { textoDoMedidor } from "@/lib/medidor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
   criarMedidor,
   editarMedidor,
   removerMedidor,
+  reordenarMedidores,
 } from "@/lib/vault/characters";
 import {
   MAX_MEDIDORES,
@@ -32,9 +34,6 @@ import {
 
 /** O teto com que um medidor nasce. Dez é a escala da maioria das mesas. */
 const MAXIMO_INICIAL = 10;
-
-/** A largura da prévia, em pixels. Aproxima a coluna ao lado de um retrato. */
-const LARGURA_DA_PREVIA = 150;
 
 /**
  * Os medidores do personagem: os números que sobem e descem na sessão.
@@ -51,13 +50,11 @@ const LARGURA_DA_PREVIA = 150;
  * vinte de vida" — e um diálogo entre o pensamento e a barra é um passo a mais
  * por goblin. Ele nasce com nome e teto plausíveis e se corrige na linha.
  *
- * ## A prévia é uma só, no fim
+ * ## A linha é a mesma da configuração da campanha
  *
- * Não uma por linha. A pergunta que ela responde é "como isto fica na mesa", e
- * a mesa mostra os medidores empilhados numa coluna, um sob o outro — uma
- * prévia por linha responderia sobre cada um isolado, que é a única forma em
- * que eles nunca aparecem. E ela mostra só o que a mesa vê: é ali que o mestre
- * confere que o relógio da desgraça não está no ar.
+ * Ver `LinhaDeMedidor`. A forma de cada linha vai cheia até o valor atual, e a
+ * ordem da lista é a ordem da coluna ao lado do retrato — arrastar pela alça é
+ * como o mestre a arruma. O olho riscado marca o que a mesa não vê.
  */
 export function MedidoresPersonagem({
   personagem,
@@ -66,9 +63,45 @@ export function MedidoresPersonagem({
   personagem: Personagem;
   onChanged: () => void;
 }) {
-  const lista = personagem.medidores ?? [];
-  const naMesa = medidoresVisiveis(lista);
+  /**
+   * A ordem depois de um arrasto, até a ficha relida chegar.
+   *
+   * Presa à lista de onde saiu: quando o `personagem` relido traz outra, esta
+   * perde a validade sozinha, sem efeito para limpar. Sem ela, a linha solta
+   * voltava ao lugar antigo pelo tempo da volta do IPC.
+   */
+  const [arrastada, setArrastada] = useState<{
+    de: Medidor[] | undefined;
+    lista: Medidor[];
+  } | null>(null);
+
+  const lista =
+    arrastada && arrastada.de === personagem.medidores
+      ? arrastada.lista
+      : (personagem.medidores ?? []);
   const cheio = lista.length >= MAX_MEDIDORES;
+
+  const { listRef, dropIndex, startReorder } = useListReorder<string>(
+    (medidorId, index) => {
+      const de = lista.findIndex((medidor) => medidor.id === medidorId);
+      if (de < 0 || de === index) return;
+
+      const arrumada = [...lista];
+      const [movido] = arrumada.splice(de, 1);
+      arrumada.splice(index, 0, movido!);
+
+      setArrastada({ de: personagem.medidores, lista: arrumada });
+      reordenarMedidores(
+        personagem.id,
+        arrumada.map((medidor) => medidor.id),
+      ).then(onChanged, (cause: unknown) => {
+        setArrastada(null);
+        toast.error(
+          cause instanceof Error ? cause.message : "Falha ao reordenar.",
+        );
+      });
+    },
+  );
 
   async function criar() {
     try {
@@ -130,59 +163,54 @@ export function MedidoresPersonagem({
           ao lado do retrato de {personagem.nome} na mesa.
         </p>
       ) : (
-        <ul className="space-y-2.5">
-          {lista.map((medidor) => (
-            <LinhaDeMedidor
+        <ul ref={listRef} className="space-y-1">
+          {lista.map((medidor, index) => (
+            <LinhaDaFicha
               key={medidor.id}
               personagemId={personagem.id}
               medidor={medidor}
+              dropTarget={dropIndex === index}
+              onReorderStart={(event) => startReorder(event, medidor.id)}
               onChanged={onChanged}
             />
           ))}
         </ul>
       )}
-
-      {naMesa.length > 0 ? (
-        <div className="space-y-1.5 pt-1">
-          <Label className="text-muted-foreground text-[10px] font-normal">
-            Na mesa
-          </Label>
-          {/* Fundo escuro, e não o do painel: a coluna desenha sobre o MAPA, e
-              o branco e o preto do texto foram escolhidos para isso. Numa
-              prévia clara, a mesma peça pareceria ilegível sem ser. */}
-          <div className="w-fit space-y-1.5 rounded bg-neutral-900 p-2">
-            {naMesa.map((medidor) => (
-              <DesenhoDoMedidor
-                key={medidor.id}
-                medidor={medidor}
-                largura={LARGURA_DA_PREVIA}
-                corpo={11}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
     </SecaoFicha>
   );
 }
 
-function LinhaDeMedidor({
+/** Um medidor do personagem na linha compartilhada. Ver `LinhaDeMedidor`. */
+function LinhaDaFicha({
   personagemId,
   medidor,
+  dropTarget,
+  onReorderStart,
   onChanged,
 }: {
   personagemId: string;
   medidor: Medidor;
+  dropTarget: boolean;
+  onReorderStart: (event: ReactPointerEvent) => void;
   onChanged: () => void;
 }) {
-  async function editar(patch: PatchMedidor) {
+  /** Devolve se gravou: o arrasto da barra desfaz o rascunho quando não. */
+  async function editar(patch: PatchMedidor): Promise<boolean> {
     try {
       await editarMedidor(personagemId, medidor.id, patch);
       onChanged();
+      return true;
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Falha ao gravar.");
+      return false;
     }
   }
+
+  // O que a linha desenha é o `mostrado`: no meio de um arrasto, a forma e o
+  // selo andam juntos com o ponteiro, antes de o disco responder.
+  const { mostrado, arrasto } = useArrastoDoAtual(medidor, (atual) =>
+    editar({ atual }),
+  );
 
   async function apagar() {
     try {
@@ -193,160 +221,56 @@ function LinhaDeMedidor({
     }
   }
 
-  const nome = useCampoDeNome({
-    nome: medidor.nome,
-    aoGravar: (valor) => void editar({ nome: valor }),
-  });
-
   return (
-    <li className="space-y-1">
-      <div className="flex items-center gap-1">
-        <CorEForma
-          cor={medidor.cor}
-          estilo={medidor.estilo}
-          onCor={(cor) => void editar({ cor })}
-          onEstilo={(estilo) => void editar({ estilo })}
-        />
-
-        {/* Campo sempre aberto, e não um modo de renome atrás do menu: esta
-            seção é um formulário, e a lista de aparências ao lado é uma lista
-            de escolhas. Num formulário, um clique para poder digitar é um
-            clique a mais em toda linha. */}
-        <Input
-          {...nome}
-          aria-label="Nome do medidor"
-          className="h-7 min-w-0 flex-1 px-2 text-xs"
-        />
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={
-                  medidor.escondido ? "Mostrar para a mesa" : "Esconder da mesa"
-                }
-                aria-pressed={medidor.escondido}
-                onClick={() => void editar({ escondido: !medidor.escondido })}
-              >
-                {medidor.escondido ? <EyeOff /> : <Eye />}
-              </Button>
-            }
-          />
-          <TooltipContent>
-            <p className="font-medium">
-              {medidor.escondido ? "Só você vê" : "A mesa vê"}
-            </p>
-            <p className="text-muted-foreground max-w-48">
-              Escondido não sai do aplicativo — nem para o celular do dono do
-              personagem.
-            </p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Apagar medidor"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={() => void apagar()}
-        >
-          <Trash2 />
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-1 pl-7">
-        {/* Os passos de um em um, e não uma régua: o dano da mesa é dito em
-            números inteiros ("leva sete"), e o campo aceita o número direto.
-            Os botões existem para o um a mais e o um a menos, que é o gesto
-            repetido — carga gasta, tocha apagada. */}
-        <Button
-          variant="outline"
-          size="icon-sm"
-          aria-label="Menos um"
-          disabled={medidor.atual <= 0}
-          onClick={() => void editar({ atual: medidor.atual - 1 })}
-        >
-          <Minus />
-        </Button>
-
-        <CampoNumero
-          rotulo="Valor atual"
-          valor={medidor.atual}
-          onGravar={(atual) => void editar({ atual })}
-        />
-
-        <span className="text-muted-foreground text-xs">/</span>
-
-        <CampoNumero
-          rotulo="Valor máximo"
-          valor={medidor.maximo}
-          onGravar={(maximo) => void editar({ maximo })}
-        />
-
-        <Button
-          variant="outline"
-          size="icon-sm"
-          aria-label="Mais um"
-          disabled={medidor.atual >= medidor.maximo}
-          onClick={() => void editar({ atual: medidor.atual + 1 })}
-        >
-          <Plus />
-        </Button>
-      </div>
-    </li>
-  );
-}
-
-/**
- * Um número que grava ao sair do campo.
- *
- * Rascunho local porque o campo passa por estados que não são número: apagar
- * "20" para digitar "8" passa pelo vazio, e gravar a cada tecla mandaria um
- * zero ao disco no meio da digitação — com o clamp do Rust puxando o `atual`
- * junto, o que some com o valor que estava lá.
- *
- * O que não é número sai sem gravar, como o nome vazio em `useCampoDeNome`: um
- * campo limpo por engano não é um pedido.
- */
-function CampoNumero({
-  rotulo,
-  valor,
-  onGravar,
-}: {
-  rotulo: string;
-  valor: number;
-  onGravar: (valor: number) => void;
-}) {
-  const [rascunho, setRascunho] = useState<string | null>(null);
-
-  function terminar() {
-    const atual = rascunho;
-    setRascunho(null);
-    if (atual === null) return;
-
-    const numero = Number.parseInt(atual, 10);
-    if (Number.isNaN(numero) || numero === valor) return;
-
-    onGravar(numero);
-  }
-
-  return (
-    <Input
-      aria-label={rotulo}
-      inputMode="numeric"
-      value={rascunho ?? String(valor)}
-      className="h-7 w-14 px-2 text-center text-xs tabular-nums"
-      onChange={(evento) => setRascunho(evento.target.value)}
-      onBlur={terminar}
-      onKeyDown={(evento) => {
-        if (evento.key === "Enter") evento.currentTarget.blur();
-        if (evento.key === "Escape") {
-          setRascunho(null);
-          evento.currentTarget.blur();
-        }
+    <LinhaDeMedidor
+      medidor={mostrado}
+      arrasto={arrasto}
+      dropTarget={dropTarget}
+      onReorderStart={onReorderStart}
+      onEditar={(patch) => void editar(patch)}
+      onApagar={() => void apagar()}
+      dicaDoOlho={{
+        titulo: medidor.escondido ? "Só você vê" : "A mesa vê",
+        texto:
+          "Escondido não sai do aplicativo — nem para o celular do dono do personagem.",
       }}
+      valores={
+        // Os passos de um em um, e não uma régua: o dano da mesa é dito em
+        // números inteiros ("leva sete"), e o selo aceita o número direto. Os
+        // botões existem para o um a mais e o um a menos, que é o gesto
+        // repetido — carga gasta, tocha apagada.
+        <SeloDoMedidor
+          texto={textoDoMedidor(mostrado)}
+          dica={{
+            titulo: `${mostrado.atual} de ${mostrado.maximo}`,
+            texto:
+              mostrado.estilo === "porcentagem"
+                ? "A porcentagem é contada sobre o máximo. Clique para trocar."
+                : "Clique para trocar o atual e o máximo.",
+          }}
+          campos={[
+            {
+              rotulo: "Valor atual",
+              valor: mostrado.atual,
+              onGravar: (atual) => void editar({ atual }),
+            },
+            {
+              rotulo: "Valor máximo",
+              valor: medidor.maximo,
+              onGravar: (maximo) => void editar({ maximo }),
+            },
+          ]}
+          // Pelo mesmo caminho do arrasto, e não direto ao disco: dois
+          // cliques mais rápidos que a volta do IPC liam o mesmo `atual`, e o
+          // segundo se perdia.
+          passos={{
+            onMenos: () => arrasto.onSoltar(mostrado.atual - 1),
+            onMais: () => arrasto.onSoltar(mostrado.atual + 1),
+            podeMenos: mostrado.atual > 0,
+            podeMais: mostrado.atual < mostrado.maximo,
+          }}
+        />
+      }
     />
   );
 }

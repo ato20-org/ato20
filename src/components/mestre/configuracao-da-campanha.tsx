@@ -1,17 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Eye, EyeOff, Gauge, Plus, Trash2, Wand2 } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
+import { Gauge, Plus, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { CorEForma } from "@/components/mestre/cor-e-forma";
 import { LayoutDoRetratoPainel } from "@/components/mestre/layout-do-retrato";
+import {
+  LinhaDeMedidor,
+  SeloDoMedidor,
+} from "@/components/mestre/linha-de-medidor";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { PosicaoDosRetratos } from "@/components/mestre/posicao-dos-retratos";
-import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -20,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useCharacters } from "@/hooks/use-characters";
+import { useListReorder } from "@/hooks/use-list-reorder";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
   aplicarModelosEmTodos,
@@ -27,6 +34,7 @@ import {
   editarModelo,
   listarModelos,
   removerModelo,
+  reordenarModelos,
 } from "@/lib/vault/characters";
 import {
   MAX_MODELOS,
@@ -36,9 +44,6 @@ import {
 
 /** O teto com que um modelo nasce. Dez é a escala da maioria das mesas. */
 const MAXIMO_INICIAL = 10;
-
-/** A largura da prévia, em pixels. Aproxima a coluna ao lado de um retrato. */
-const LARGURA_DA_PREVIA = 150;
 
 /**
  * O que vale para a campanha inteira.
@@ -149,6 +154,29 @@ function MedidoresDaCampanha() {
   const lista = modelos ?? [];
   const cheio = lista.length >= MAX_MODELOS;
 
+  /**
+   * Arrastar pela alça reordena. A ordem é a que a ficha NOVA recebe; as que já
+   * existem não se mexem, porque o medidor é delas. Ver `reordenar` no Rust.
+   */
+  const { listRef, dropIndex, startReorder } = useListReorder<string>(
+    (modeloId, index) => {
+      const de = lista.findIndex((modelo) => modelo.id === modeloId);
+      if (de < 0 || de === index) return;
+
+      const arrumada = [...lista];
+      const [movido] = arrumada.splice(de, 1);
+      arrumada.splice(index, 0, movido!);
+
+      // A linha fica onde foi solta já, sem esperar o disco: a volta do IPC
+      // deixaria um quadro com ela no lugar antigo. O `reler` confirma depois.
+      setModelos(arrumada);
+      void mexer(
+        () => reordenarModelos(arrumada.map((modelo) => modelo.id)),
+        "Falha ao reordenar.",
+      );
+    },
+  );
+
   async function criar() {
     await mexer(async () => {
       const { alcancados } = await criarModelo(
@@ -216,12 +244,14 @@ function MedidoresDaCampanha() {
       ) : lista.length === 0 ? (
         <PainelVazio icone={Gauge}>Nenhum medidor registrado</PainelVazio>
       ) : (
-        <ul className="space-y-2.5">
-          {lista.map((modelo) => (
+        <ul ref={listRef} className="space-y-1">
+          {lista.map((modelo, index) => (
             <LinhaDeModelo
               key={modelo.id}
               modelo={modelo}
               ocupado={ocupado}
+              dropTarget={dropIndex === index}
+              onReorderStart={(event) => startReorder(event, modelo.id)}
               onEditar={(patch) =>
                 void mexer(
                   () => editarModelo(modelo.id, patch),
@@ -239,195 +269,95 @@ function MedidoresDaCampanha() {
         </ul>
       )}
 
+      {/* O gesto que falta ao molde por ele não ser um vínculo vivo. O aviso
+          está no tooltip e não numa linha de texto: ele é a exceção, e quem já
+          entendeu não precisa relê-lo a cada abertura. */}
       {lista.length > 0 ? (
-        <>
-          <div className="space-y-1.5 pt-1">
-            <Label className="text-muted-foreground text-[10px] font-normal">
-              Na mesa
-            </Label>
-            {/* Fundo escuro, e não o do painel: a coluna desenha sobre o MAPA,
-                e o branco e o preto do texto foram escolhidos para isso. */}
-            <div className="w-fit space-y-1.5 rounded bg-neutral-900 p-2">
-              {lista
-                .filter((modelo) => !modelo.escondido)
-                .map((modelo) => (
-                  <DesenhoDoMedidor
-                    key={modelo.id}
-                    // Cheio, que é como ele nasce numa ficha.
-                    medidor={{ ...modelo, atual: modelo.maximo }}
-                    largura={LARGURA_DA_PREVIA}
-                    corpo={11}
-                  />
-                ))}
-            </div>
-          </div>
-
-          {/* O gesto que falta ao molde por ele não ser um vínculo vivo. O
-              aviso está no tooltip e não numa linha de texto: ele é a exceção,
-              e quem já entendeu não precisa relê-lo a cada abertura. */}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={ocupado || quantos === 0}
-                  className="h-7 w-full px-2 text-xs"
-                  onClick={() => void aplicar()}
-                >
-                  <Wand2 className="size-3" />
-                  Aplicar em todos os personagens
-                </Button>
-              }
-            />
-            <TooltipContent>
-              <p className="max-w-56">
-                Quem já tem um medidor com o mesmo nome não ganha outro.
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={ocupado || quantos === 0}
+                className="h-7 w-full px-2 text-xs"
+                onClick={() => void aplicar()}
+              >
+                <Wand2 className="size-3" />
+                Aplicar em todos os personagens
+              </Button>
+            }
+          />
+          <TooltipContent>
+            <p className="max-w-56">
+              Quem já tem um medidor com o mesmo nome não ganha outro.
+            </p>
+          </TooltipContent>
+        </Tooltip>
       ) : null}
     </section>
   );
 }
 
+/**
+ * Um modelo na linha compartilhada com a ficha. Ver `LinhaDeMedidor`.
+ *
+ * Entra cheio, que é como ele nasce numa ficha.
+ */
 function LinhaDeModelo({
   modelo,
   ocupado,
+  dropTarget,
+  onReorderStart,
   onEditar,
   onApagar,
 }: {
   modelo: ModeloDeMedidor;
   ocupado: boolean;
+  dropTarget: boolean;
+  onReorderStart: (event: ReactPointerEvent) => void;
   onEditar: (patch: PatchModelo) => void;
   onApagar: () => void;
 }) {
-  /**
-   * O nome, com rascunho local.
-   *
-   * Sem `useCampoDeNome` aqui: aquele grava no `blur` e é o certo numa lista de
-   * escolhas. Este campo vive numa janela que relê a lista inteira a cada
-   * gravação, e o remonte no meio da digitação devolveria o cursor ao fim da
-   * palavra. Gravar no Enter e no sair resolve os dois.
-   */
-  const [nome, setNome] = useState<string | null>(null);
-  const [maximo, setMaximo] = useState<string | null>(null);
-
-  function gravarNome() {
-    const valor = nome;
-    setNome(null);
-    if (valor === null) return;
-
-    const limpo = valor.trim();
-    if (!limpo || limpo === modelo.nome) return;
-
-    onEditar({ nome: limpo });
-  }
-
-  function gravarMaximo() {
-    const valor = maximo;
-    setMaximo(null);
-    if (valor === null) return;
-
-    const numero = Number.parseInt(valor, 10);
-    if (Number.isNaN(numero) || numero === modelo.maximo) return;
-
-    onEditar({ maximo: numero });
-  }
+  const porcentagem = modelo.estilo === "porcentagem";
 
   return (
-    <li className="space-y-1">
-      <div className="flex items-center gap-1">
-        <CorEForma
-          cor={modelo.cor}
-          estilo={modelo.estilo}
-          onCor={(cor) => onEditar({ cor })}
-          onEstilo={(estilo) => onEditar({ estilo })}
-        />
-
-        <Input
-          aria-label="Nome do medidor"
-          value={nome ?? modelo.nome}
-          disabled={ocupado}
-          className="h-7 min-w-0 flex-1 px-2 text-xs"
-          onChange={(evento) => setNome(evento.target.value)}
-          onBlur={gravarNome}
-          onKeyDown={(evento) => {
-            if (evento.key === "Enter") evento.currentTarget.blur();
-            if (evento.key === "Escape") {
-              setNome(null);
-              evento.currentTarget.blur();
-            }
+    <LinhaDeMedidor
+      medidor={{ ...modelo, atual: modelo.maximo }}
+      ocupado={ocupado}
+      dropTarget={dropTarget}
+      onReorderStart={onReorderStart}
+      onEditar={onEditar}
+      onApagar={onApagar}
+      dicaDoOlho={{
+        titulo: modelo.escondido ? "Começa escondido" : "Começa à vista",
+        texto: "Não muda as fichas que já têm este medidor.",
+      }}
+      valores={
+        // Só o MÁXIMO, sem valor atual. O atual é do personagem -- é o que
+        // distingue o goblin com três de vida do goblin com vinte --, e um
+        // campo aqui pediria ao mestre uma escolha que não quer dizer nada.
+        // Ver `ModeloDeMedidor`.
+        <SeloDoMedidor
+          ocupado={ocupado}
+          // A porcentagem mostra o que a mesa verá com ele cheio. O máximo
+          // ainda existe, e é a escala da conta: o campo abre com ele.
+          texto={porcentagem ? "100%" : modelo.maximo}
+          dica={{
+            titulo: `Máximo: ${modelo.maximo}`,
+            texto: porcentagem
+              ? "A porcentagem é contada sobre ele. Clique para trocar."
+              : "Começa cheio. Clique para trocar.",
           }}
+          campos={[
+            {
+              rotulo: "Valor máximo",
+              valor: modelo.maximo,
+              onGravar: (maximo) => onEditar({ maximo }),
+            },
+          ]}
         />
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={
-                  modelo.escondido ? "Mostrar para a mesa" : "Esconder da mesa"
-                }
-                aria-pressed={modelo.escondido}
-                disabled={ocupado}
-                onClick={() => onEditar({ escondido: !modelo.escondido })}
-              >
-                {modelo.escondido ? <EyeOff /> : <Eye />}
-              </Button>
-            }
-          />
-          <TooltipContent>
-            <p className="font-medium">
-              {modelo.escondido ? "Começa escondido" : "Começa à vista"}
-            </p>
-            <p className="text-muted-foreground max-w-48">
-              Não muda as fichas que já têm este medidor.
-            </p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Apagar medidor"
-          disabled={ocupado}
-          className="text-muted-foreground hover:text-destructive"
-          onClick={onApagar}
-        >
-          <Trash2 />
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-1 pl-7">
-        <Label className="text-muted-foreground text-[10px] font-normal">
-          Máximo
-        </Label>
-        <Input
-          aria-label="Valor máximo"
-          inputMode="numeric"
-          value={maximo ?? String(modelo.maximo)}
-          disabled={ocupado}
-          className="h-7 w-16 px-2 text-center text-xs tabular-nums"
-          onChange={(evento) => setMaximo(evento.target.value)}
-          onBlur={gravarMaximo}
-          onKeyDown={(evento) => {
-            if (evento.key === "Enter") evento.currentTarget.blur();
-            if (evento.key === "Escape") {
-              setMaximo(null);
-              evento.currentTarget.blur();
-            }
-          }}
-        />
-        {/* Sem valor ATUAL. Ele é do personagem -- é o que distingue o goblin
-            com três de vida do goblin com vinte --, e um campo aqui pediria ao
-            mestre uma escolha que não quer dizer nada. Ver `ModeloDeMedidor`. */}
-        <span className="text-muted-foreground text-[10px] leading-snug">
-          começa cheio
-        </span>
-      </div>
-    </li>
+      }
+    />
   );
 }

@@ -1089,6 +1089,15 @@ pub fn modelo_remover(
     state.with_vault(|vault| modelos::remover(vault, &modeloId))
 }
 
+/// Poe os modelos na ordem pedida. NAO reordena as fichas -- ver `vault::modelos`.
+#[tauri::command]
+pub fn modelos_reordenar(
+    state: State<'_, AppState>,
+    ordem: Vec<String>,
+) -> AppResult<Vec<modelos::Modelo>> {
+    state.with_vault(|vault| modelos::reordenar(vault, &ordem))
+}
+
 /// Materializa TODOS os modelos em TODOS os personagens, de novo.
 ///
 /// O gesto explicito que falta ao modelo por ele nao ser um vinculo vivo: o
