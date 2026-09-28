@@ -56,6 +56,48 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.5.0",
+    data: "2026-09-28",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "O mapa pode ficar escuro, e o escuro tem tom",
+        detalhe:
+          "A régua de Escuridão fica nas Configurações do mapa, ao lado do sol, com os tons Breu, Noite, Caverna e Abismo, ou uma cor sua. A mesa vê o escuro inteiro; você vê mais fraco, para conseguir trabalhar dentro dele.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A tocha volta: a ferramenta Luz crava uma luz no mapa",
+        detalhe:
+          "Seis climas prontos — chama, vela, lua, magia, veneno e sangue —, cor livre e intensidade. São dois alcances: onde dá para ler o mapa, e até onde se enxerga algum vulto.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O token pode carregar uma lanterna",
+        detalhe:
+          "Pelo botão direito, em três alcances. Ela anda com o personagem, na TV e no celular também.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A parede corta a luz, e o token faz sombra e ganha volume nela",
+        detalhe:
+          "Atrás de uma parede continua escuro. Cada token deita uma silhueta para longe de cada chama e fica mais claro do lado virado para ela: três tochas numa sala dão três vultos por goblin.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A luz liga e desliga, vira cone e tremula",
+        detalhe:
+          "Desligada, ela guarda a cor e o alcance para quando voltar. O cone aponta e abre pelas alças. Os efeitos Fogo, Pulsando e Piscando valem também para a lanterna, e quem pediu menos movimento no sistema recebe a luz parada.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A imagem que se mexe anima também na TV e no celular",
+        detalhe:
+          "GIF, WebP animado e APNG chegam inteiros à mesa, inclusive os que já estavam na campanha. Nas listas, um selo de play marca o que é animado, e passar o mouse anima.",
+      },
+    ],
+  },
+  {
     versao: "0.4.0",
     data: "2026-09-28",
     mudancas: [

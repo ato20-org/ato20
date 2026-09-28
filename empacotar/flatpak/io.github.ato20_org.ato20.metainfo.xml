@@ -100,6 +100,34 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.5.0" date="2026-09-28">
+      <description>
+        <p>
+          Maps can go dark, and the dark has a tone: pitch, night, cave, abyss
+          or a colour of your own. The table sees the full darkness; you see
+          it dimmer, so you can work inside it. The Light tool brings the torch
+          back: one click pins a light with six ready moods — flame, candle,
+          moon, magic, poison, blood —, a free colour, an intensity and two
+          reaches: where the map can be read, and how far a shape can still be
+          made out. Tokens can carry a lantern from the right-click menu, and
+          it walks with the character on the TV and the phones too.
+        </p>
+        <p>
+          Walls block the light, and each token casts a silhouette away from
+          every flame and turns lighter on the side facing it: three torches in
+          a room give each goblin three shadows. Lights switch off and on while
+          keeping their colour and reach, can become a cone aimed and opened by
+          its handles, and can flicker like fire, pulse or blink — lanterns
+          included. If your system asks for reduced motion, lights hold still.
+        </p>
+        <p>
+          Moving images now move on the TV and the phones as well: GIF,
+          animated WebP and APNG reach the table whole, including those already
+          in the campaign. In the lists, a play badge marks what is animated,
+          and hovering plays it.
+        </p>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-09-28">
       <description>
         <p>
