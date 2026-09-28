@@ -16,7 +16,7 @@ import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { MedidoresDoRetrato } from "@/components/playground/medidores-do-retrato";
 import { NomeDoRetrato } from "@/components/playground/nome-do-retrato";
 import { RolagensDoRetrato } from "@/components/playground/rolagens-do-retrato";
-import { SelosDaCondicao } from "@/components/playground/selos-da-condicao";
+import { SelosDoRetrato } from "@/components/playground/selos-do-retrato";
 import type { EfeitoPedido } from "@/lib/condicao";
 import { caberEm } from "@/lib/geometry/caber";
 import { portraitBox } from "@/lib/geometry/portrait";
@@ -47,15 +47,6 @@ const SEM_MEDIDORES: Medidor[] = [];
 
 /** O retrato sem condição nenhuma. Mesma razão das constantes acima. */
 const SEM_CONDICOES: Condicao[] = [];
-
-/**
- * O diâmetro de um selo, em fração da ALTURA da figura.
- *
- * Da altura pela razão da coluna de medidores: a fila alinha rostos, e medido
- * pela largura o selo do retrato panorâmico sairia três vezes maior que o do
- * vizinho.
- */
-const SELO_DO_RETRATO = 0.075;
 
 type PortraitLayerProps = {
   portraits: Portrait[];
@@ -515,20 +506,24 @@ const PortraitView = memo(function PortraitView({
         />
       ) : null}
 
-      {/* Os selos, no alto da figura e DENTRO da caixa: a fileira é baixa, e
-          dentro ela não disputa a fila com o vizinho nem precisa virar de
-          lado como a coluna de medidores. Com a figura desligada continua,
-          como a legenda -- o chefe que a mesa vê pela barra também é visto
-          envenenado. Só chega aqui com a peça ligada: ver `retratosDaCena`. */}
+      {/* Os selos. No automático, no alto da figura e DENTRO da caixa; com
+          lugar escolhido, onde o mestre os pôs, presos ao recorte como o nome.
+          Com a figura desligada continuam, como a legenda -- o chefe que a
+          mesa vê pela barra também é visto envenenado. Só chegam aqui com a
+          peça ligada: ver `retratosDaCena`. */}
       {layout.condicoes ? (
-        <SelosDaCondicao
+        <SelosDoRetrato
           condicoes={portrait.condicoes ?? SEM_CONDICOES}
-          tamanho={box.height * SELO_DO_RETRATO}
-          className="pointer-events-none absolute left-0"
-          style={{
-            top: (lugar?.y ?? 0) + box.height * SELO_DO_RETRATO * 0.3,
-            width: box.width,
-          }}
+          largura={box.width}
+          altura={box.height}
+          topoDaFigura={lugar?.y ?? 0}
+          lugar={layout.lugarDasCondicoes}
+          escala={layout.escalaCondicoes}
+          // As folgas do RECORTE, como as do nome, do dado e da coluna.
+          folgaDireita={recorte.x + recorte.width - (box.x + box.width)}
+          folgaEsquerda={box.x - recorte.x}
+          folgaAcima={box.y - recorte.y}
+          folgaAbaixo={recorte.y + recorte.height - (box.y + box.height)}
         />
       ) : null}
 

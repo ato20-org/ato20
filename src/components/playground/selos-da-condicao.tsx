@@ -37,6 +37,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { VAO_DO_SELO } from "@/lib/geometry/portrait";
 import { cn } from "@/lib/utils";
 import type { Condicao } from "@/types/character";
 
@@ -178,7 +179,7 @@ export function SelosDaCondicao({
   return (
     <div
       className={cn("flex flex-wrap items-center justify-center", className)}
-      style={{ gap: tamanho * 0.18, ...style }}
+      style={{ gap: tamanho * VAO_DO_SELO, ...style }}
     >
       {condicoes.map((condicao) => (
         <SeloDaCondicao
