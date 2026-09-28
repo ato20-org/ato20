@@ -297,6 +297,58 @@ o palco do resto da tela em duas corridas.
 
 ---
 
+## A luz e o escuro (28/09/2026)
+
+A luz pontual com escuridão (issue #98) é, por definição, uma máscara do plano
+inteiro: escuro em volta, furos de luz, e as paredes cortando cada furo. As
+três saídas óbvias já estavam medidas e reprovadas neste palco -- máscara SVG
+(25,9 fps), filtro por item (37,3) e SVG do tamanho do plano (49,2). A
+`LuzLayer` pinta tudo num `<canvas>` só, em meia resolução, e só quando a luz
+muda: com a câmera andando ele é textura, e arrastar um token SEM lanterna não
+repinta nada (`chaveDasFontes`).
+
+A bancada ganhou `--carregadas K` (os K primeiros tokens com lanterna, e o
+primeiro é o que o arrasto move) e `--escuridao X`. Com `--luzes` ou
+`--carregadas` e sem `--escuridao`, a cena escurece a 0,8 -- o caminho caro.
+
+Medido na webview, build de produção, 40 tokens, 8 paredes (32 segmentos),
+`--repetir 3`. "Com luz" = 3 luzes soltas e a lanterna no token que se move,
+redesenhada a cada quadro:
+
+| cenário | sem luz | com luz |
+| --- | --- | --- |
+| `arrasto` (o mestre arrasta o token da lanterna) | 60 fps, 0% | 60 fps, 0% |
+| `mestre-camera` | 60 fps, 0,3% | 60 fps, 0% |
+| `amostras` (a TV, com a lanterna deslizando) | 60 fps, 0% | 60 fps, 0,3% |
+| `mestre-camera --zoom 3` | 60 fps, 0% | 59,5 fps, 1,2% |
+
+O custo aparece só ampliado, e pequeno. As duas corridas com `--zoom 3`
+terminaram com `free(): corrupted ...` ao fechar a webview, com e sem luz: é da
+bancada, não do palco.
+
+Depois os TOKENS passaram a tapar luz: uma sombra curta atrás do pé de cada
+um, no mesmo canvas (`sombraDoToken`). Com isso arrastar um token SEM lanterna
+perto de uma tocha também repinta a cada quadro -- a chave passou a incluir os
+tokens que alguma luz alcança (`chaveDosOclusores`). Mesma bancada:
+
+| cenário | com sombra de token |
+| --- | --- |
+| `arrasto --carregadas 1` (o token da lanterna) | 60 fps, 0% |
+| `amostras --carregadas 1` (a TV) | 60 fps, 0% |
+| `arrasto --carregadas 0` (token sem lanterna perto das luzes) | 60 fps, 0% |
+
+E a sombra do pé virou a SILHUETA do token, a mesma do sol, deitada para
+longe de cada luz (`vultoNaLuz`): um `drawImage` do vulto num rascunho do
+tamanho dele, menos a figura em pé, por token e por luz. Mesma bancada:
+
+| cenário | com silhueta |
+| --- | --- |
+| `arrasto --carregadas 1` | 60 fps, 0% |
+| `amostras --carregadas 1` | 59,8 fps, 0,3% |
+| `arrasto --carregadas 0` | 60 fps, 0,3% |
+
+---
+
 ## Como medir: o passo a passo
 
 ### O cenário certo
@@ -469,6 +521,10 @@ pnpm perf:webview -- --cenario bancada      --gesto palco-profundo --cameras 7
 
 # quem custa: cada coluna lateral, no mesmo gesto
 pnpm perf:webview -- --cenario bancada --painel ambos,esquerdo,direito,nenhum
+
+# a luz: o mestre arrastando o token da lanterna, com o mapa no escuro
+pnpm perf:webview -- --cenario arrasto,mestre-camera --n 40 --paredes 8 \
+  --luzes 3 --carregadas 1 --repetir 3
 
 # o que muda por quadro (para achar, não para publicar o número)
 pnpm perf:webview -- --cenario bancada --sonda

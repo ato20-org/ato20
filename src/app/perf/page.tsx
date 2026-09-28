@@ -35,6 +35,8 @@ import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import {
+  CORES_DA_LUZ,
+  RAIO_DA_LUZ_PADRAO,
   SCENE_HEIGHT,
   SCENE_WIDTH,
   SOL_PADRAO,
@@ -188,14 +190,37 @@ type Passo = {
  * borda projeta quadrilatero degenerado de um lado so, e mediria menos area
  * pintada do que um mapa de verdade.
  */
-function sombraDaMedida(): Pick<Scene, "sol" | "paredes"> {
+function sombraDaMedida(): Pick<
+  Scene,
+  "sol" | "paredes" | "luzes" | "escuridao"
+> {
   if (typeof window === "undefined") return {};
 
   const params = new URLSearchParams(window.location.search);
   const paredes = Number(params.get("paredes") ?? 0);
+  const luzes = Number(params.get("luzes") ?? 0);
+  // Com luz, escuro por padrão: é o caminho caro -- o canvas inteiro com um
+  // buraco por luz. Sem escuro a mesma luz é só o véu da cor, e mediria o
+  // barato. `?escuridao=0` mede esse outro caso.
+  const escuridao = Number(
+    params.get("escuridao") ?? (luzes > 0 || lanternasDaMedida() > 0 ? 0.8 : 0),
+  );
 
   return {
     sol: params.get("sol") === "1" ? SOL_PADRAO : undefined,
+    // Espalhadas pelo plano, e nao empilhadas: luz em cima de luz pinta a
+    // mesma area duas vezes e mediria menos do que um mapa de verdade.
+    luzes:
+      luzes > 0
+        ? Array.from({ length: luzes }, (_, i) => ({
+            id: `perf-luz-${i}`,
+            x: (i * 389 + 160) % SCENE_WIDTH,
+            y: (i * 233 + 120) % SCENE_HEIGHT,
+            raio: RAIO_DA_LUZ_PADRAO,
+            cor: CORES_DA_LUZ[i % CORES_DA_LUZ.length]!,
+          }))
+        : undefined,
+    escuridao: escuridao > 0 ? escuridao : undefined,
     paredes:
       paredes > 0
         ? Array.from({ length: paredes }, (_, i) => ({
@@ -214,8 +239,25 @@ function sombraDaMedida(): Pick<Scene, "sol" | "paredes"> {
   };
 }
 
+/**
+ * Quantos tokens carregam lanterna, lido da URL: `?carregadas=K`.
+ *
+ * Os PRIMEIROS K, e o primeiro é o que os cenários de arrasto movem: com K a
+ * partir de um, a luz é redesenhada a cada quadro do gesto, que é o custo que
+ * a lanterna põe no palco. Com K em zero o arrasto não repinta nada -- ver
+ * `chaveDasFontes`.
+ */
+function lanternasDaMedida(): number {
+  if (typeof window === "undefined") return 0;
+
+  return Number(
+    new URLSearchParams(window.location.search).get("carregadas") ?? 0,
+  );
+}
+
 function montarCena(n: number, cameras = 0, noAr = true): Scene {
   const agora = Date.now();
+  const lanternas = lanternasDaMedida();
 
   const items: CanvasItem[] = Array.from({ length: n }, (_, i) => {
     const lado = 180 + ((i * 37) % 140);
@@ -235,6 +277,9 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
       rotation: (i * 23) % 360,
       z: i + 1,
       locked: false,
+      ...(i < lanternas
+        ? { luz: { raio: 260, cor: CORES_DA_LUZ[i % CORES_DA_LUZ.length]! } }
+        : {}),
     };
   });
 
