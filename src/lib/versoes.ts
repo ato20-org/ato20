@@ -56,6 +56,156 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.5.0",
+    data: "2026-09-28",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "O mapa pode ficar escuro, e o escuro tem tom",
+        detalhe:
+          "A régua de Escuridão fica nas Configurações do mapa, ao lado do sol, com os tons Breu, Noite, Caverna e Abismo, ou uma cor sua. A mesa vê o escuro inteiro; você vê mais fraco, para conseguir trabalhar dentro dele.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A tocha volta: a ferramenta Luz crava uma luz no mapa",
+        detalhe:
+          "Seis climas prontos — chama, vela, lua, magia, veneno e sangue —, cor livre e intensidade. São dois alcances: onde dá para ler o mapa, e até onde se enxerga algum vulto.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O token pode carregar uma lanterna",
+        detalhe:
+          "Pelo botão direito, em três alcances. Ela anda com o personagem, na TV e no celular também.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A parede corta a luz, e o token faz sombra e ganha volume nela",
+        detalhe:
+          "Atrás de uma parede continua escuro. Cada token deita uma silhueta para longe de cada chama e fica mais claro do lado virado para ela: três tochas numa sala dão três vultos por goblin.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A luz liga e desliga, vira cone e tremula",
+        detalhe:
+          "Desligada, ela guarda a cor e o alcance para quando voltar. O cone aponta e abre pelas alças. Os efeitos Fogo, Pulsando e Piscando valem também para a lanterna, e quem pediu menos movimento no sistema recebe a luz parada.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A imagem que se mexe anima também na TV e no celular",
+        detalhe:
+          "GIF, WebP animado e APNG chegam inteiros à mesa, inclusive os que já estavam na campanha. Nas listas, um selo de play marca o que é animado, e passar o mouse anima.",
+      },
+    ],
+  },
+  {
+    versao: "0.4.0",
+    data: "2026-09-28",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "O personagem ganhou medidores",
+        detalhe:
+          "Vida, sanidade, munição, carga ou tocha: um número até um teto, com nome, cor e forma de barra, pontos ou porcentagem. Só o mestre escreve, pela ficha, onde a barra se arrasta para mudar o valor. A mesa e o dono do personagem leem, e um medidor escondido não sai do seu computador.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "Os medidores aparecem ao lado do retrato, e podem ir para cima do token",
+        detalhe:
+          "Na mesa, eles ficam numa coluna junto do retrato. Para o mapa de combate, um interruptor nas Configurações do mapa põe nome e medidores sobre a cabeça dos tokens.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A campanha ganhou uma janela de configuração",
+        detalhe:
+          "Pelo menu da campanha. Nela ficam os medidores de fábrica, que todo personagem começa tendo, e o layout e a posição dos retratos, que saíram da janela de Retratos.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O retrato pode mostrar o nome",
+        detalhe:
+          "Começa desligado, para não apresentar um PNJ antes da hora. Liga no layout dos retratos, e o nome se arrasta e cresce como as outras peças.",
+      },
+      {
+        tipo: "correcao",
+        titulo:
+          "Ao abrir uma campanha, a TV e os celulares não apagam mais os retratos por alguns segundos",
+      },
+    ],
+  },
+  {
+    versao: "0.3.0",
+    data: "2026-09-28",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "O mapa ganha sol e paredes",
+        detalhe:
+          "O sol não acende nada: ele só diz para onde a sombra cai, e se aponta num céu visto de cima, nas Configurações do mapa. A parede tem altura, então a mureta e a torre jogam sombras diferentes. A sombra do token é a silhueta dele — o cajado, a capa e a montaria aparecem nela. A mesa vê a sombra, mas não as paredes que a fazem.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O jogador move e gira o token do próprio personagem pelo celular",
+        detalhe:
+          "Dedo no meio anda com a peça; dedo no anel de fora a gira no lugar.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A grade virou configuração do mapa, com ímã de encaixe",
+        detalhe:
+          "Com o ímã ligado, o token pousa no meio da casa, no arrasto do mestre e no dedo do jogador. Segure Alt para soltá-lo onde a mão largou. A casa ocupada por um personagem acende nas três telas.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Além de mapas, a campanha tem fundos",
+        detalhe:
+          "Um fundo é a imagem de um cenário com figuras por cima, sem câmera, grade, névoa nem sol. O painel virou Cenas, com uma aba para mapas e outra para fundos.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A campanha ganhou capa",
+        detalhe:
+          "É o que a TV mostra quando não há nada no ar. Escolha pelo menu do nome da campanha, que também importa a imagem.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "As ferramentas do mapa ficam expostas na borda direita, e as áreas escondidas viraram um botão no palco",
+        detalhe:
+          "Ponto, postit e régua de medir sem abrir a bolsa do rodapé; depois de medir, a régua volta para a seleção. As áreas ficam ao lado do índice de pontos, com quantas já foram reveladas.",
+      },
+      {
+        tipo: "correcao",
+        titulo:
+          "Criar ou apagar uma cena não apaga mais as pastas e as notas de Arquivos",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O botão direito no token mostra as ações dele",
+        detalhe:
+          "Aparência, Opacidade e o resto sumiam do menu, porque o clique desfazia a seleção.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "A TV e o celular seguem os volumes da mesa de som",
+        detalhe:
+          "Cada categoria tocava no volume padrão, fosse qual fosse o fader. Se algum estiver baixo, a TV vai soar mais baixa que antes.",
+      },
+      {
+        tipo: "correcao",
+        titulo:
+          "O retrato fica parado na TV e no celular enquanto a câmera anda",
+      },
+      {
+        tipo: "correcao",
+        titulo:
+          "O contorno azul deixa de marcar o personagem de um jogador que saiu da mesa",
+        detalhe:
+          "Ele aparecia como NPC na lista e como jogador no mapa ao mesmo tempo. Uma campanha que já tinha o problema se conserta ao abrir.",
+      },
+    ],
+  },
+  {
     versao: "0.2.0",
     data: "2026-09-23",
     mudancas: [

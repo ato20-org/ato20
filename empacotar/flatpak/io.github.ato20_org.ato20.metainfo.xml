@@ -100,6 +100,95 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.5.0" date="2026-09-28">
+      <description>
+        <p>
+          Maps can go dark, and the dark has a tone: pitch, night, cave, abyss
+          or a colour of your own. The table sees the full darkness; you see
+          it dimmer, so you can work inside it. The Light tool brings the torch
+          back: one click pins a light with six ready moods — flame, candle,
+          moon, magic, poison, blood —, a free colour, an intensity and two
+          reaches: where the map can be read, and how far a shape can still be
+          made out. Tokens can carry a lantern from the right-click menu, and
+          it walks with the character on the TV and the phones too.
+        </p>
+        <p>
+          Walls block the light, and each token casts a silhouette away from
+          every flame and turns lighter on the side facing it: three torches in
+          a room give each goblin three shadows. Lights switch off and on while
+          keeping their colour and reach, can become a cone aimed and opened by
+          its handles, and can flicker like fire, pulse or blink — lanterns
+          included. If your system asks for reduced motion, lights hold still.
+        </p>
+        <p>
+          Moving images now move on the TV and the phones as well: GIF,
+          animated WebP and APNG reach the table whole, including those already
+          in the campaign. In the lists, a play badge marks what is animated,
+          and hovering plays it.
+        </p>
+      </description>
+    </release>
+    <release version="0.4.0" date="2026-09-28">
+      <description>
+        <p>
+          Characters gained meters: a number up to a ceiling, with a name, a
+          colour and a shape — bar, pips or percentage — for hit points,
+          sanity, ammunition, load or a torch. Only the game master writes
+          them, from the sheet, where the bar can be dragged to change the
+          value. The table and the character's owner read them, and a hidden
+          meter never leaves your computer.
+        </p>
+        <p>
+          At the table, meters sit in a column next to the portrait, and a
+          switch in the map settings puts names and meters above the tokens
+          for combat maps. The campaign gained its own settings window,
+          holding the default meters every character starts with and the
+          layout and position of the portraits. Portraits can also show the
+          character's name; it starts switched off, so no one is introduced
+          before their time.
+        </p>
+        <p>
+          Fix: opening a campaign no longer blanks the portraits on the TV and
+          the phones for a few seconds.
+        </p>
+      </description>
+    </release>
+    <release version="0.3.0" date="2026-09-28">
+      <description>
+        <p>
+          Maps gained a sun and walls. The sun lights nothing: it only says
+          where shadows fall, and you aim it on a sky seen from above, in the
+          map settings. Walls have a height, so a garden wall and a watchtower
+          cast different shadows, and each token's shadow is its own
+          silhouette — staff, cloak and mount included. The table sees the
+          shadows, never the walls that cast them.
+        </p>
+        <p>
+          Players can move and rotate their own character's token from the
+          phone: a finger in the middle carries it, a finger on the outer ring
+          turns it. The grid became a map setting with snapping, so tokens land
+          in the middle of a square for the game master and the player alike;
+          hold Alt to drop one exactly where it was released. The square a
+          character stands on lights up on all three screens.
+        </p>
+        <p>
+          Besides maps, a campaign now has backdrops: the image of a setting
+          with a few figures on top, without camera, grid, fog or sun. The
+          panel is now called Scenes, with a tab for each. A campaign can also
+          have a cover, which is what the TV shows when nothing is on air. Map
+          tools sit exposed on the right edge, the ruler lets go after
+          measuring, and hidden areas moved to a button on the stage.
+        </p>
+        <p>
+          Fixes: creating or deleting a scene no longer wipes the folders and
+          notes in Files. Right-clicking a token now shows the token's own
+          actions. The TV and the phones follow the sound desk's category
+          faders. Portraits stay still on the TV and phones while the camera
+          moves, and a character whose player left the table loses the blue
+          player outline.
+        </p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-09-23">
       <description>
         <p>
