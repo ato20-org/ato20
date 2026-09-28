@@ -185,7 +185,95 @@ export type CanvasItem = {
    * outro.
    */
   semSombra?: boolean;
+  /**
+   * A lanterna que este token carrega. Ausente = nenhuma, que é o normal.
+   *
+   * No token, e não uma luz solta amarrada a ele por id: o personagem anda, e
+   * a luz tem de andar junto sem ninguém atualizar duas coisas. O centro é o
+   * do token -- só o alcance e a cor são dela. Viaja para a mesa como o resto
+   * do item: é assim que a TV e o celular do jogador acendem em volta dele.
+   * Ver `Luz`, que é a luz sem dono.
+   */
+  luz?: LuzCarregada;
 };
+
+/**
+ * O que uma lanterna carregada guarda: até onde ela alcança e de que cor.
+ *
+ * Sem posição: quem a carrega dá o centro. Ver `CanvasItem.luz`.
+ */
+export type LuzCarregada = {
+  /** Em unidade de cena, do centro até onde a luz acaba. */
+  raio: number;
+  /** Em `#rrggbb`. A paleta é `CORES_DA_LUZ`, mas qualquer cor vale. */
+  cor: string;
+};
+
+/**
+ * Uma luz cravada no mapa: a tocha na parede, a fogueira, o braseiro.
+ *
+ * ## A luz acende, a parede a para, e o token a tapa
+ *
+ * Ela reduz a escuridão da cena em volta de si, na cor dela. Atrás de uma
+ * parede, vista desta luz, continua escuro até a borda do alcance. Atrás de um
+ * TOKEN fica a SILHUETA dele deitada para longe da luz -- a mesma do sol, mais
+ * curta perto da chama e mais comprida longe dela. Três tochas numa sala dão
+ * três vultos por goblin, e é o que três tochas fazem. Ver `cisalhamentoDaLuz`
+ * e, para enquanto a silhueta não fica pronta, `sombraDoToken`.
+ *
+ * Sem escuridão (`Scene.escuridao` zero ou ausente), a luz é só um brilho da
+ * cor dela. É o que permite pôr luz num mapa que já veio bonito sem apagá-lo.
+ */
+export type Luz = {
+  id: string;
+  /** O centro, em unidade de cena. */
+  x: number;
+  y: number;
+  /** A ÁREA: até onde a luz chega, já quase apagada na borda. */
+  raio: number;
+  /**
+   * Até onde a luz é FORTE. Ausente = metade do `raio`.
+   *
+   * Dois raios, e não um só com a queda fixa, porque são duas perguntas da
+   * mesa: "onde dá para ler o mapa" e "até onde se enxerga algum vulto". A
+   * tocha clareia a sala e deixa o corredor na penumbra; a vela clareia a mesa
+   * e mal chega à porta. Ver `paradasDaLuz`.
+   */
+  raioIntenso?: number;
+  cor: string;
+  /**
+   * O quanto ela acende, de 0 a 1. Ausente = 1, a luz inteira.
+   *
+   * Metade apaga metade do escuro onde ela alcança, e o véu da cor dela vem
+   * pela metade junto: é a brasa quase apagada ao lado da fogueira acesa, e
+   * não uma luz menor. Para luz menor existe o `raio`.
+   */
+  intensidade?: number;
+};
+
+/**
+ * O alcance com que uma luz nasce: um terço da largura do plano.
+ *
+ * O bastante para a tocha de uma sala iluminar a sala, e não o mapa inteiro.
+ */
+export const RAIO_DA_LUZ_PADRAO = 320;
+
+/**
+ * As cores que uma luz oferece de cara.
+ *
+ * Uma paleta curta na frente, e a cor livre atrás dela: a luz se lê pelo CLIMA
+ * -- o fogo, a lua, a magia, o veneno --, e seis climas cobrem quase toda
+ * mesa. O resto -- o verde exato da lanterna élfica -- vem do seletor do
+ * sistema. A primeira é a da chama, que é a luz que quase toda mesa acende.
+ */
+export const CORES_DA_LUZ = [
+  "#fb923c",
+  "#fde68a",
+  "#93c5fd",
+  "#c4b5fd",
+  "#86efac",
+  "#fca5a5",
+] as const;
 
 /**
  * Os recortes que uma área escondida sabe ter.
@@ -1000,10 +1088,13 @@ export type Parede = {
 
 export type NewParede = Omit<Parede, "id">;
 
+export type NewLuz = Omit<Luz, "id">;
+
 /**
  * O sol da cena: luz sem posição, só direção.
  *
- * Uma cena tem no máximo um, e ele é a ÚNICA fonte do mapa. Sem posição não há
+ * Uma cena tem no máximo um. As `Luz` também deitam a silhueta, cada uma para
+ * longe de si -- ver `cisalhamentoDaLuz`. Sem posição não há
  * projeção a calcular por token: a sombra de todo mundo é a mesma figura
  * deitada para o mesmo lado. É o que dá volume a um mapa a céu aberto por quase
  * nada.
@@ -1570,10 +1661,25 @@ export type Scene = {
    *
    * Um, e não uma lista: dois sóis são duas direções, e duas direções sobre o
    * mesmo mapa é o que ninguém sabe ler -- cada figura sairia com duas sombras
-   * cruzadas. Houve tocha aqui, luz com posição e alcance, e ela saiu: o mapa
-   * tem uma fonte, e ela está no céu.
+   * cruzadas. As `luzes` são outra coisa: cada uma tem posição, e a sombra
+   * que cada uma deita aponta para longe DELA, o que a mesa lê sem esforço.
    */
   sol?: Sol;
+  /**
+   * As luzes cravadas no mapa. Ausente = nenhuma. Ver `Luz`.
+   *
+   * As que os tokens carregam não moram aqui -- ver `CanvasItem.luz`. As duas
+   * listas se juntam na hora de desenhar, em `fontesDaCena`.
+   */
+  luzes?: Luz[];
+  /**
+   * O quanto o mapa escurece onde não há luz, de 0 a 1. Ausente = 0.
+   *
+   * Zero é o mapa como sempre foi, e é o padrão: uma campanha antiga reabre
+   * igual, e a luz num mapa claro é só um brilho. Um é breu, e só o que alguma
+   * luz alcança aparece. O mestre vê mais fraco que a mesa -- ver `LuzLayer`.
+   */
+  escuridao?: number;
   /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.
@@ -1711,6 +1817,7 @@ export function ehMapa(scene: Pick<Scene, "tipo">): boolean {
  * | `temGrade`    | sim  | não   | não    |
  * | `temNevoa`    | sim  | não   | não    |
  * | `temSol`      | sim  | não   | não    |
+ * | `temLuz`      | sim  | não   | não    |
  * | `temMedida`   | sim  | não   | não    |
  */
 
@@ -1761,6 +1868,16 @@ export function temNevoa(scene: Pick<Scene, "tipo">): boolean {
  * a luz pintada na imagem: um segundo sol por cima brigaria com o primeiro.
  */
 export function temSol(scene: Pick<Scene, "tipo">): boolean {
+  return ehMapa(scene);
+}
+
+/**
+ * A cena tem luz e escuridão. Ver `Luz` e `Scene.escuridao`.
+ *
+ * As mesmas cenas do sol, e pela mesma razão: o fundo já traz a luz pintada na
+ * imagem, e o quadro não tem chão para acender.
+ */
+export function temLuz(scene: Pick<Scene, "tipo">): boolean {
   return ehMapa(scene);
 }
 

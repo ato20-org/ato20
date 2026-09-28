@@ -73,7 +73,9 @@ import {
   type NewDocumento,
   type Nota,
   type NewMedidor,
+  type NewLuz,
   type NewParede,
+  type Luz,
   type Parede,
   type Sol,
   type NewTexto,
@@ -364,6 +366,22 @@ type SceneStore = {
    * coleção. Ver `Sol`.
    */
   setSol: (sceneId: string, sol: Sol | undefined) => void;
+  /**
+   * Crava uma luz no mapa. Ver `Luz`.
+   *
+   * Pelo histórico, como a parede: acender dez tochas numa masmorra e querer a
+   * última de volta é o gesto normal. A lanterna de um token não passa por
+   * aqui -- ela é campo do item, e anda por `updateItem`.
+   */
+  addLuz: (sceneId: string, luz: NewLuz) => string;
+  updateLuz: (
+    sceneId: string,
+    luzId: string,
+    patch: Partial<Omit<Luz, "id">>,
+  ) => void;
+  removeLuzes: (sceneId: string, luzIds: string[]) => void;
+  /** O quanto o mapa escurece onde não há luz. Zero guarda como ausente. */
+  setEscuridao: (sceneId: string, escuridao: number) => void;
   updateFog: (
     sceneId: string,
     fogId: string,
@@ -1396,6 +1414,54 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
     setSol(sceneId, sol) {
       get().updateScene(sceneId, (scene) => ({ ...scene, sol }));
+    },
+
+    addLuz(sceneId, luz) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        luzes: [...(scene.luzes ?? []), { ...luz, id }],
+      }));
+
+      return id;
+    },
+
+    updateLuz(sceneId, luzId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        luzes: (scene.luzes ?? []).map((luz) =>
+          luz.id === luzId ? { ...luz, ...patch } : luz,
+        ),
+      }));
+    },
+
+    removeLuzes(sceneId, luzIds) {
+      if (luzIds.length === 0) return;
+
+      const apagar = new Set(luzIds);
+
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.luzes ?? []).filter(
+          (luz) => !apagar.has(luz.id),
+        );
+
+        return {
+          ...scene,
+          luzes: restantes.length > 0 ? restantes : undefined,
+        };
+      });
+    },
+
+    setEscuridao(sceneId, escuridao) {
+      // Zero guarda como AUSENTE: é o mapa de sempre, e o arquivo de uma
+      // campanha que nunca escureceu nada não deve ganhar um campo por isso.
+      const valor = Math.min(1, Math.max(0, escuridao));
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        escuridao: valor > 0 ? valor : undefined,
+      }));
     },
 
     updateFog(sceneId, fogId, patch) {

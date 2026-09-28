@@ -378,7 +378,7 @@ export type FormaDaParede = Omit<Parede, "id"> & { id?: string };
  * publicada, e carregar uma migração para sempre por causa de um arquivo de
  * teste é peso que a sombra não deve pagar.
  */
-function paredeDeVerdade(parede: FormaDaParede): boolean {
+export function paredeDeVerdade(parede: FormaDaParede): boolean {
   return (
     Number.isFinite(parede.x) &&
     Number.isFinite(parede.y) &&
