@@ -1,3 +1,4 @@
+import { normalizarHex } from "@/lib/cor";
 import {
   paredeDeVerdade,
   segmentosDaParede,
@@ -910,6 +911,22 @@ export function caixaDaFonte(
   if (x2 <= x1 || y2 <= y1) return null;
 
   return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+}
+
+/** A cor do escuro quando ninguém escolheu: o breu. */
+export const COR_DO_ESCURO_PADRAO = "#000000";
+
+/**
+ * A cor do escuro, ou o breu para o que não é cor. Ver `Scene.corDoEscuro`.
+ *
+ * Pela mesma razão de `limitarEscuridao`: o valor chega pelo canal e pelo
+ * disco, e um `fillStyle` inválido o canvas ignora em silêncio -- o escuro
+ * sairia na cor do último desenho, e não em preto.
+ */
+export function corDoEscuroDe(valor: unknown): string {
+  return (
+    (typeof valor === "string" && normalizarHex(valor)) || COR_DO_ESCURO_PADRAO
+  );
 }
 
 /**

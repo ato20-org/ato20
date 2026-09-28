@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 
+import { COR_DO_ESCURO_PADRAO, corDoEscuroDe } from "@/lib/geometry/luz";
 import { novoId } from "@/lib/id";
 
 import {
@@ -380,6 +381,8 @@ type SceneStore = {
     patch: Partial<Omit<Luz, "id">>,
   ) => void;
   removeLuzes: (sceneId: string, luzIds: string[]) => void;
+  /** A cor do escuro. O preto guarda como ausente. Ver `Scene.corDoEscuro`. */
+  setCorDoEscuro: (sceneId: string, cor: string | undefined) => void;
   /** O quanto o mapa escurece onde não há luz. Zero guarda como ausente. */
   setEscuridao: (sceneId: string, escuridao: number) => void;
   /** Liga nome e medidores acima dos tokens. Ver `Scene.infoDosTokens`. */
@@ -1453,6 +1456,18 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           luzes: restantes.length > 0 ? restantes : undefined,
         };
       });
+    },
+
+    setCorDoEscuro(sceneId, cor) {
+      // O breu guarda como AUSENTE, pela razão da escuridão em zero: é o
+      // escuro de sempre, e o arquivo não ganha um campo por isso.
+      const valor = cor === undefined ? undefined : corDoEscuroDe(cor);
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        corDoEscuro:
+          valor && valor !== COR_DO_ESCURO_PADRAO ? valor : undefined,
+      }));
     },
 
     setEscuridao(sceneId, escuridao) {

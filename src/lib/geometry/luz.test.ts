@@ -5,6 +5,7 @@ import {
   caixaDaFonte,
   chaveDasFontes,
   coneDe,
+  corDoEscuroDe,
   fatorDoEfeito,
   FUNDO_DO_PULSO,
   fontesDaCena,
@@ -828,5 +829,19 @@ describe("limitarEscuridao", () => {
     expect(limitarEscuridao(undefined)).toBe(0);
     expect(limitarEscuridao(Number.NaN)).toBe(0);
     expect(limitarEscuridao("0.5")).toBe(0);
+  });
+});
+
+describe("corDoEscuroDe", () => {
+  it("devolve a cor escolhida, normalizada", () => {
+    expect(corDoEscuroDe("#0B1330")).toBe("#0b1330");
+  });
+
+  it("o que não é cor vira o breu, e não some", () => {
+    // Um `fillStyle` inválido o canvas ignora em silêncio, e o escuro sairia
+    // na cor do último desenho.
+    expect(corDoEscuroDe(undefined)).toBe("#000000");
+    expect(corDoEscuroDe("azul")).toBe("#000000");
+    expect(corDoEscuroDe(42)).toBe("#000000");
   });
 });

@@ -14,6 +14,7 @@ import {
   chaveDasFontes,
   chaveDosOclusores,
   cisalhamentoDaLuz,
+  corDoEscuroDe,
   fatorDoEfeito,
   FORCA_DA_SOMBRA_DA_FIGURA,
   fontesDaCena,
@@ -146,6 +147,7 @@ export function LuzLayer({
   luzes,
   paredes,
   escuridao,
+  corDoEscuro,
   variant,
   smooth = false,
   naMao,
@@ -155,6 +157,8 @@ export function LuzLayer({
   luzes?: Luz[];
   paredes?: Parede[];
   escuridao?: number;
+  /** Ausente = o breu. Ver `Scene.corDoEscuro`. */
+  corDoEscuro?: string;
   variant: "mestre" | "mesa";
   smooth?: boolean;
   /**
@@ -179,6 +183,7 @@ export function LuzLayer({
   const escuro =
     limitarEscuridao(escuridao) *
     (variant === "mestre" ? ESCURIDAO_DO_MESTRE : 1);
+  const cor = corDoEscuroDe(corDoEscuro);
 
   // Parede não se mexe quando um token anda: o quadro do arrasto não
   // recalcula segmento nenhum.
@@ -208,8 +213,8 @@ export function LuzLayer({
         // no breu esperando a primeira tocha, e cor chapada é o mais barato
         // que o compositor sabe desenhar.
         <div
-          className="absolute inset-0 bg-black"
-          style={{ opacity: escuro }}
+          className="absolute inset-0"
+          style={{ backgroundColor: cor, opacity: escuro }}
         />
       ) : (
         <CanvasDaLuz
@@ -219,6 +224,7 @@ export function LuzLayer({
           chave={chave}
           segmentos={segmentos}
           escuro={escuro}
+          cor={cor}
           smooth={smooth}
           naMao={naMao}
         />
@@ -234,6 +240,7 @@ function CanvasDaLuz({
   chave,
   segmentos,
   escuro,
+  cor,
   smooth,
   naMao,
 }: {
@@ -248,6 +255,8 @@ function CanvasDaLuz({
   chave: string;
   segmentos: Segmento[];
   escuro: number;
+  /** A cor do escuro, já validada. Ver `corDoEscuroDe`. */
+  cor: string;
   smooth: boolean;
   naMao?: string;
 }) {
@@ -278,7 +287,7 @@ function CanvasDaLuz({
       tapados.current = new Map(corpos.map((corpo) => [corpo.id, corpo]));
     };
     const compor = (agora: number) =>
-      comporLuzes(contexto, prontas, escuro, anima ? agora / 1000 : null);
+      comporLuzes(contexto, prontas, escuro, cor, anima ? agora / 1000 : null);
 
     // No Mestre a luz vai direto: é manipulação direta, e ela correndo atrás
     // do token seria o contrário. O mesmo vale para a do token na mão do
@@ -333,7 +342,7 @@ function CanvasDaLuz({
 
     return () => cancelAnimationFrame(quadro);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a chave É a lista: ela muda quando, e só quando, alguma fonte muda
-  }, [chave, silhuetas, segmentos, escuro, smooth, naMao]);
+  }, [chave, silhuetas, segmentos, escuro, cor, smooth, naMao]);
 
   return (
     <canvas
@@ -532,6 +541,7 @@ function comporLuzes(
   contexto: CanvasRenderingContext2D,
   prontas: ReadonlyArray<LuzPronta>,
   escuro: number,
+  cor: string,
   segundos: number | null,
 ) {
   contexto.setTransform(1, 0, 0, 1, 0, 0);
@@ -542,8 +552,13 @@ function comporLuzes(
   contexto.setTransform(RESOLUCAO, 0, 0, RESOLUCAO, 0, 0);
 
   if (escuro > 0) {
-    contexto.fillStyle = `rgba(0,0,0,${escuro})`;
+    // A cor pelo `fillStyle` e a força pelo alfa global: a cor chega em
+    // `#rrggbb`, e montar um `rgba` dela a cada quadro da animação seria
+    // converter a mesma string trinta vezes por segundo.
+    contexto.globalAlpha = escuro;
+    contexto.fillStyle = cor;
     contexto.fillRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT);
+    contexto.globalAlpha = 1;
   }
 
   for (const luz of prontas) {
