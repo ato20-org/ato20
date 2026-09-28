@@ -2,6 +2,7 @@
 
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { SelosDaCondicao } from "@/components/playground/selos-da-condicao";
+import { VAO_DO_SELO } from "@/lib/geometry/portrait";
 import { LARGURA_DA_INFO, lugarDaInfo } from "@/lib/mestre/fichas-da-cena";
 import { cn } from "@/lib/utils";
 import type { CanvasItem, FichaNaCena } from "@/types/scene";
@@ -20,9 +21,6 @@ const TETO = 3;
 
 /** O diâmetro de um selo, em fração do corpo do nome. Pouco menor que a letra. */
 const SELO = 0.95;
-
-/** O vão entre dois selos, em fração do diâmetro. O mesmo de `SelosDaCondicao`. */
-const VAO_DO_SELO = 0.18;
 
 /**
  * Nome, selos e medidores sobre a cabeça de cada token.

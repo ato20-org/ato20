@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Medidor } from "@/types/character";
+import type { Condicao, Medidor } from "@/types/character";
 import type { Portrait, UniaoDeRetratos } from "@/types/scene";
 
 import {
@@ -11,6 +11,7 @@ import {
   pecaNoRecorte,
   LARGURA_DOS_MEDIDORES,
   larguraDaColuna,
+  larguraDosSelos,
   larguraNaFila,
   retratosDaCena,
 } from "./portrait";
@@ -328,6 +329,25 @@ describe("larguraDaColuna", () => {
   });
 });
 
+function selo(id: string): Condicao {
+  return { id, nome: id, cor: "#22c55e", icone: "frasco", escondido: false };
+}
+
+describe("larguraDosSelos", () => {
+  it("sem selo não há fileira", () => {
+    expect(larguraDosSelos(0, 1)).toBe(0);
+  });
+
+  it("é cada selo mais o vão entre eles, numa linha só", () => {
+    // Três selos de 0,075 da altura, com dois vãos de 18% do selo.
+    expect(larguraDosSelos(3, 1)).toBeCloseTo(3 * 0.075 + 2 * 0.075 * 0.18);
+  });
+
+  it("a escala cresce a fileira inteira", () => {
+    expect(larguraDosSelos(2, 1, 2)).toBeCloseTo(2 * larguraDosSelos(2, 1));
+  });
+});
+
 describe("caixaDaComposicao", () => {
   it("sem medidor, a composição é a figura", () => {
     expect(caixaDaComposicao(retrato("a"))).toEqual({
@@ -383,6 +403,34 @@ describe("caixaDaComposicao", () => {
 
     // 1,1 de início mais 0,65 de fileira, tudo em larguras de figura.
     expect(caixaDaComposicao(com).largura).toBeCloseTo(0.2 * (1.1 + 0.65));
+  });
+
+  it("selos no automático ficam dentro da figura e não reservam nada", () => {
+    const com = retrato("a", { condicoes: [selo("c1"), selo("c2")] });
+
+    expect(caixaDaComposicao(com)).toEqual({ recuo: 0, largura: 0.2 });
+  });
+
+  it("selos com lugar escolhido reservam onde foram postos", () => {
+    const com = retrato("a", {
+      condicoes: [selo("c1"), selo("c2")],
+      layout: { lugarDasCondicoes: { x: 1.1, y: 0 } },
+    });
+
+    // A altura da figura em fração da câmera, posta na unidade da largura
+    // pela proporção do plano: é o selo que a mesa vê, e não um quadrado.
+    const fileira = larguraDosSelos(2, 0.3 * (1080 / 1920));
+
+    expect(caixaDaComposicao(com).largura).toBeCloseTo(0.2 * 1.1 + fileira);
+  });
+
+  it("selos desligados não reservam, mesmo com lugar", () => {
+    const com = retrato("a", {
+      condicoes: [selo("c1")],
+      layout: { condicoes: false, lugarDasCondicoes: { x: 1.5, y: 0 } },
+    });
+
+    expect(caixaDaComposicao(com).largura).toBeCloseTo(0.2);
   });
 
   it("nome no automático fica dentro da figura e não reserva nada", () => {
@@ -476,6 +524,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaMedidores: 1,
       escalaDados: 1,
       escalaNome: 1,
+      escalaCondicoes: 1,
     });
   });
 
@@ -491,6 +540,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaMedidores: 1,
       escalaDados: 1,
       escalaNome: 1,
+      escalaCondicoes: 1,
     });
 
     // `retrato` veio do registro, `medidores` da sessão, `dados` de nenhum dos
@@ -504,6 +554,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaMedidores: 1,
       escalaDados: 1,
       escalaNome: 1,
+      escalaCondicoes: 1,
     });
   });
 
@@ -518,6 +569,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaMedidores: 1,
       escalaDados: 1,
       escalaNome: 1,
+      escalaCondicoes: 1,
     });
 
     expect(saida?.layout).toEqual({
@@ -529,6 +581,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaMedidores: 1,
       escalaDados: 1,
       escalaNome: 1,
+      escalaCondicoes: 1,
     });
   });
 });

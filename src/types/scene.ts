@@ -1637,12 +1637,15 @@ export type LayoutDoRetrato = {
   medidores: boolean;
   dados: boolean;
   /**
-   * A fileira de selos das condições, no alto da figura.
+   * A fileira de selos das condições.
    *
-   * Dentro da caixa, e sem lugar livre por enquanto: a fileira é baixa e
-   * cabe sobre a cabeça sem disputar a fila com o vizinho, que é o que obriga
-   * as outras peças a virar de lado. Ligada de fábrica: o layout de uma
-   * versão anterior não a traz, e quem lê põe `LAYOUT_PADRAO` por baixo.
+   * No automático fica no alto da figura, DENTRO da caixa e centrada: a
+   * fileira é baixa, e ali ela não disputa a fila com o vizinho. Com
+   * `lugarDasCondicoes` ela vai para onde foi posta, e aí conta na fila como o
+   * nome. Nos dois casos fica presa ao recorte. Ver `SelosDoRetrato`.
+   *
+   * Ligada de fábrica: o layout de uma versão anterior não a traz, e quem lê
+   * põe `LAYOUT_PADRAO` por baixo.
    */
   condicoes: boolean;
   /** Ausente = automático: ao lado, virando quando não cabe. */
@@ -1651,6 +1654,8 @@ export type LayoutDoRetrato = {
   lugarDosDados?: LugarDaPeca;
   /** Ausente = automático: embaixo, dentro da figura, centrado. */
   lugarDoNome?: LugarDaPeca;
+  /** Ausente = automático: no alto, dentro da figura, centrada. */
+  lugarDasCondicoes?: LugarDaPeca;
   /**
    * Quanto a coluna de medidores cresce ou encolhe. 1 é o tamanho de fábrica.
    *
@@ -1688,6 +1693,14 @@ export type LayoutDoRetrato = {
    * caixa fixa cortaria o nome antes, que é o contrário do pedido.
    */
   escalaNome: number;
+  /**
+   * Quanto a fileira de selos cresce ou encolhe. 1 é o tamanho de fábrica.
+   *
+   * Um fator, como o dos medidores: o selo se mede pela ALTURA da figura (ver
+   * `tamanhoDoSelo`), e um diâmetro cravado aqui deixaria de valer no primeiro
+   * retrato de outro tamanho.
+   */
+  escalaCondicoes: number;
 };
 
 /**
@@ -1708,6 +1721,7 @@ export const LAYOUT_PADRAO: LayoutDoRetrato = {
   escalaMedidores: 1,
   escalaDados: 1,
   escalaNome: 1,
+  escalaCondicoes: 1,
 };
 
 /**

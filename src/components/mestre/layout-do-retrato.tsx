@@ -11,6 +11,7 @@ import { Dices, Gauge, Minus, Plus, RotateCcw, Sparkles, Type, User } from "luci
 import { DadoParado } from "@/components/playground/dado-parado";
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { TextoDoNome } from "@/components/playground/nome-do-retrato";
+import { SelosDaCondicao } from "@/components/playground/selos-da-condicao";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -27,11 +28,14 @@ import {
   larguraDaColuna,
   larguraDoNome,
   larguraDosDados,
+  larguraDosSelos,
+  tamanhoDoSelo,
 } from "@/lib/geometry/portrait";
+import { condicoesVisiveis } from "@/lib/condicao";
 import { medidoresVisiveis } from "@/lib/medidor";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { cn } from "@/lib/utils";
-import type { Medidor } from "@/types/character";
+import type { Condicao, Medidor } from "@/types/character";
 import {
   LAYOUT_PADRAO,
   type LayoutDoRetrato,
@@ -99,6 +103,30 @@ const EXEMPLO: Medidor[] = [
 ];
 
 /**
+ * As condições de exemplo, pela razão dos medidores de exemplo logo acima: um
+ * retângulo escrito "Condições" não diz onde os selos vão cair.
+ *
+ * Duas, em cores diferentes: uma só esconderia que a fileira cresce para o
+ * lado.
+ */
+const EXEMPLO_DE_CONDICOES: Condicao[] = [
+  {
+    id: "exemplo-veneno",
+    nome: "Envenenado",
+    cor: "#22c55e",
+    icone: "frasco",
+    escondido: false,
+  },
+  {
+    id: "exemplo-caido",
+    nome: "Caído",
+    cor: "#ef4444",
+    icone: "cama",
+    escondido: false,
+  },
+];
+
+/**
  * O layout dos retratos: o que cada um mostra, e onde.
  *
  * Mora na configuração da campanha e edita o padrão da MESA. Já foi uma aba da
@@ -156,6 +184,11 @@ export function LayoutDoRetratoPainel({
       nome: "Dados",
       solta: efetivo.lugarDosDados !== undefined,
       limpar: () => trocar({ lugarDosDados: null }),
+    },
+    {
+      nome: "Condições",
+      solta: efetivo.lugarDasCondicoes !== undefined,
+      limpar: () => trocar({ lugarDasCondicoes: null }),
     },
   ].filter((peca) => peca.solta);
 
@@ -249,7 +282,9 @@ export function LayoutDoRetratoPainel({
                 ? { lugarDosMedidores: lugar }
                 : peca === "dados"
                   ? { lugarDosDados: lugar }
-                  : { lugarDoNome: lugar },
+                  : peca === "condicoes"
+                    ? { lugarDasCondicoes: lugar }
+                    : { lugarDoNome: lugar },
             )
           }
           onRedimensionar={(peca, escala) =>
@@ -258,7 +293,9 @@ export function LayoutDoRetratoPainel({
                 ? { escalaMedidores: escala }
                 : peca === "dados"
                   ? { escalaDados: escala }
-                  : { escalaNome: escala },
+                  : peca === "condicoes"
+                    ? { escalaCondicoes: escala }
+                    : { escalaNome: escala },
             )
           }
         />
@@ -353,7 +390,7 @@ function Peca({
 }
 
 /** As peças que se arrasta. A figura fica parada — ela É a referência. */
-type PecaArrastavel = "medidores" | "dados" | "nome";
+type PecaArrastavel = "medidores" | "dados" | "nome" | "condicoes";
 
 /**
  * O retrato e as peças dele, desenhados como a mesa os verá.
@@ -440,6 +477,13 @@ function MiniPalco({
     return proprios.length > 0 ? proprios : EXEMPLO;
   })();
 
+  /** As condições da prévia, pela regra dos medidores: as de verdade ou o exemplo. */
+  const condicoesDaPrevia = (() => {
+    const proprias = condicoesVisiveis(selecionado?.condicoes);
+
+    return proprias.length > 0 ? proprias : EXEMPLO_DE_CONDICOES;
+  })();
+
   function mover(evento: ReactPointerEvent, peca: PecaArrastavel) {
     const no = caixa.current;
     if (!no) return;
@@ -474,6 +518,23 @@ function MiniPalco({
         layout.lugarDoNome ?? {
           x: (1 - larguraDoNome(1, layout.escalaNome)) / 2,
           y: 1 - alturaDoNome(1, layout.escalaNome),
+        }
+      );
+    }
+
+    if (peca === "condicoes") {
+      // O automático do palco: centrada, no alto da figura. O selo se mede
+      // pela altura, e a figura do mini tem uma caixa de altura.
+      const largura = larguraDosSelos(
+        condicoesDaPrevia.length,
+        1,
+        layout.escalaCondicoes,
+      );
+
+      return (
+        layout.lugarDasCondicoes ?? {
+          x: (1 - largura) / 2,
+          y: tamanhoDoSelo(1, layout.escalaCondicoes) * 0.3,
         }
       );
     }
@@ -568,6 +629,37 @@ function MiniPalco({
           <TextoDoNome
             nome={selecionado?.nome ?? "Nome"}
             largura={larguraDoNome(umaCaixa, layout.escalaNome)}
+          />
+        </Peso>
+      ) : null}
+
+      {layout.condicoes && umaCaixa > 0 ? (
+        <Peso
+          rotulo="Condições"
+          left={emX(lugarDe("condicoes").x)}
+          top={emY(lugarDe("condicoes").y)}
+          largura={larguraDosSelos(
+            condicoesDaPrevia.length,
+            umaCaixa,
+            layout.escalaCondicoes,
+          )}
+          automatico={layout.lugarDasCondicoes === undefined}
+          ativa={arrastando === "condicoes"}
+          escolhida={escolhida === "condicoes"}
+          escala={layout.escalaCondicoes}
+          onEscala={(escala) => onRedimensionar("condicoes", escala)}
+          onPegar={(evento) => {
+            evento.stopPropagation();
+            evento.currentTarget.setPointerCapture(evento.pointerId);
+            setEscolhida("condicoes");
+            setArrastando("condicoes");
+            mover(evento, "condicoes");
+          }}
+        >
+          <SelosDaCondicao
+            condicoes={condicoesDaPrevia}
+            tamanho={tamanhoDoSelo(umaCaixa, layout.escalaCondicoes)}
+            className="flex-nowrap justify-start"
           />
         </Peso>
       ) : null}

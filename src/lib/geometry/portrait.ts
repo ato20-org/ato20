@@ -396,6 +396,53 @@ export function limitarEscala(escala: unknown): number {
  */
 const LARGURA_DOS_DADOS = 0.65;
 
+/**
+ * O diâmetro de um selo de condição, em fração da ALTURA da figura.
+ *
+ * Da altura pela razão da coluna de medidores: a fila alinha rostos, e medido
+ * pela largura o selo do retrato panorâmico sairia três vezes maior que o do
+ * vizinho.
+ */
+export const SELO_DO_RETRATO = 0.075;
+
+/**
+ * O vão entre dois selos, em fração do diâmetro.
+ *
+ * Tem de bater com o `SelosDaCondicao`, que desenha a fileira: é com este
+ * número que o recorte e a fila sabem quanto ela ocupa.
+ */
+export const VAO_DO_SELO = 0.18;
+
+/**
+ * O diâmetro de um selo num retrato desta altura, já com a escala.
+ *
+ * A altura na MESMA unidade da largura -- a da caixa desenhada, cena ou
+ * pixel. Quem tem a altura em fração da câmera multiplica pela proporção do
+ * plano antes, como `caixaDaComposicao` faz.
+ */
+export function tamanhoDoSelo(altura: number, escala = 1): number {
+  return altura * SELO_DO_RETRATO * limitarEscala(escala);
+}
+
+/**
+ * A largura da fileira com `quantos` selos, numa linha só.
+ *
+ * Numa linha, e não quebrando: a peça tem de ter UMA largura para o recorte a
+ * prender e para a fila a reservar, e uma fileira que às vezes vira duas faria
+ * o vizinho pular quando o mestre marcasse a quinta condição. O limite de oito
+ * (`MAX_CONDICOES`) já é o que cabe sobre uma figura em pé.
+ */
+export function larguraDosSelos(
+  quantos: number,
+  altura: number,
+  escala = 1,
+): number {
+  if (quantos <= 0) return 0;
+
+  const selo = tamanhoDoSelo(altura, escala);
+  return quantos * selo + (quantos - 1) * selo * VAO_DO_SELO;
+}
+
 /** A largura da fileira de dados de um retrato desta largura, já com a escala. */
 export function larguraDosDados(largura: number, escala = 1): number {
   return largura * LARGURA_DOS_DADOS * limitarEscala(escala);
@@ -450,7 +497,10 @@ export function alturaDoNome(largura: number, escala = 1): number {
  * conta no que passar da figura.
  */
 export function caixaDaComposicao(
-  retrato: Pick<Portrait, "width" | "height" | "medidores" | "layout" | "nome">,
+  retrato: Pick<
+    Portrait,
+    "width" | "height" | "medidores" | "layout" | "nome" | "condicoes"
+  >,
 ): { recuo: number; largura: number } {
   const layout = { ...LAYOUT_PADRAO, ...retrato.layout };
 
@@ -491,6 +541,25 @@ export function caixaDaComposicao(
     const largura = larguraDoNome(retrato.width, layout.escalaNome);
     const inicio = layout.lugarDoNome
       ? layout.lugarDoNome.x * retrato.width
+      : (retrato.width - largura) / 2;
+
+    esquerda = Math.min(esquerda, inicio);
+    direita = Math.max(direita, inicio + largura);
+  }
+
+  // Os selos, pela regra do nome: no automático ficam dentro da figura e só
+  // ocupam o que a escala os fizer passar dela, igual dos dois lados; com
+  // lugar escolhido, ocupam onde foram postos. A altura vem em fração da
+  // câmera, e a proporção do plano a põe na unidade da largura.
+  const quantos = retrato.condicoes?.length ?? 0;
+  if (layout.condicoes && quantos > 0) {
+    const largura = larguraDosSelos(
+      quantos,
+      retrato.height * PLANE_ASPECT,
+      layout.escalaCondicoes,
+    );
+    const inicio = layout.lugarDasCondicoes
+      ? layout.lugarDasCondicoes.x * retrato.width
       : (retrato.width - largura) / 2;
 
     esquerda = Math.min(esquerda, inicio);
