@@ -2,6 +2,7 @@ export type AttachmentKind = "image" | "pdf" | "audio" | "video" | "text" | "oth
 
 const BY_EXTENSION: Record<string, AttachmentKind> = {
   png: "image",
+  apng: "image",
   jpg: "image",
   jpeg: "image",
   gif: "image",
@@ -33,6 +34,7 @@ const BY_EXTENSION: Record<string, AttachmentKind> = {
  */
 const IMAGE_MIME: Record<string, string> = {
   png: "image/png",
+  apng: "image/apng",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   gif: "image/gif",

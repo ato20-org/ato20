@@ -347,37 +347,39 @@ tamanho dele, menos a figura em pé, por token e por luz. Mesma bancada:
 | `amostras --carregadas 1` | 59,8 fps, 0,3% |
 | `arrasto --carregadas 0` | 60 fps, 0,3% |
 
-### A luz que se mexe
+## A imagem que se mexe (28/09/2026)
 
-O fogo, o pulso e o pisca (`EfeitoDaLuz`) mexem na luz o tempo todo, mesmo com
-a mesa parada -- o canvas que só repintava quando a luz mudava passa a repintar
-a trinta quadros por segundo. Para isso não custar o desenho inteiro, a
-`LuzLayer` separou dois tempos: FORMAR cada luz num rascunho próprio (o
-degradê, o cone, as sombras), só quando a chave muda, e COMPOR os rascunhos no
-canvas, que é o que o laço repete: o escuro e dois `drawImage` por luz, com a
-força do efeito no `globalAlpha`.
+O GIF, o WebP animado e o APNG passaram a chegar inteiros à TV e ao celular:
+a redução de tela e de palco guardava um quadro só, e o arquivo animado agora
+não ganha essa redução (`vault/animacao.rs`). No palco do mestre e na TV os
+tokens já eram o original; o que muda é o FUNDO animado com o mapa afastado, e
+tudo no celular.
 
-A bancada ganhou `--efeito X`, que põe o mesmo efeito em todas as luzes, soltas
-e carregadas. Webview, build de produção, 40 tokens, 8 paredes, 3 luzes e a
-lanterna no token que se move. `mestre-camera` e `amostras` com `--repetir 3`,
-o resto com `--repetir 2`:
+A bancada não reduz nada -- ela serve o arquivo de `--imagens` em toda rota --,
+então medir com GIF em `--imagens` é medir exatamente o caso novo. Três pastas:
+`bg.png` e `char.png` parados; só o fundo animado (`bg.gif`, 1920x1080, 12
+quadros a 100 ms, 1 MB); e fundo e token animados (`char.gif`, 256px com
+transparência, 8 quadros). Webview, build de produção, 40 tokens, `--repetir 3`:
 
-| cenário | fixa | `--efeito fogo` | `--efeito piscando` |
+| cenário | tudo parado | fundo animado | tudo animado |
 | --- | --- | --- | --- |
-| `arrasto` | 60 fps, 0,6% | 60 fps, 0,3% | 60 fps, 0,3% |
-| `mestre-camera` | 60 fps, 0% | 60 fps, 0% | -- |
-| `amostras` (a TV) | 60 fps, 0% | 60 fps, 0,3% | 60 fps, 0,9% |
-| `mestre-camera --zoom 3` | 60 fps, 0,3% | 60 fps, 0% | -- |
-| `arrasto --zoom 3` | 60 fps, 0,3% | 60 fps, 0,6% | -- |
+| `arrasto` | 60 fps, 0% | 60 fps, 0% | 60 fps, 0% |
+| `mestre-camera` | 60 fps, 0,3% | 58,7 fps, 4,7% | 58,4 fps, 6,9% |
+| `amostras` (a TV) | 60 fps, 0% | 60 fps, 6,7% | 60 fps, 0,3% |
+| `camera` (a TV) | 60 fps, 0,3% | 59,8 fps, 2,4% | 59,8 fps, 0,6% |
+| `jogador` | 60 fps, 0% | 60 fps, 0% | 60 fps, 0,3% |
 
-Uma primeira corrida da TV com fogo deu 1,2%; repetida três vezes, 0,3%. É a
-faixa em que a própria bancada oscila sem luz nenhuma.
+O custo aparece com a CÂMERA andando sobre um fundo animado; com a câmera
+parada, ou arrastando token, não aparece. A hipótese -- não medida -- é que
+cada quadro novo do GIF repinta a camada do fundo, e com o plano em movimento
+parte dessas repinturas passa do orçamento do quadro. É o preço da animação, e
+só existe na cena que tem uma.
 
-Uma sonda temporária no laço confirmou, dentro da webview, que ele roda (cerca
-de trinta composições por segundo no `mestre-camera`) e que cada composição
-custa 0,14 ms de JavaScript. No `arrasto` o laço quase não compõe sozinho: a
-lanterna muda a cada quadro, e cada render já forma e compõe na hora, com o
-efeito daquele instante.
+Uma primeira corrida, na ordem parado-fundo-animado e com `--repetir 2`, deu o
+contrário -- 24% a 30% de quadros perdidos na TV e no celular com tudo PARADO.
+Não se repetiu na ordem inversa com três repetições, e não há mecanismo que a
+explique: foi a máquina, e não a imagem. Fica anotado porque é o tipo de número
+que, sozinho, faria alguém "otimizar" o caso errado.
 
 ---
 

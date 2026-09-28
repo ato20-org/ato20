@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { MiniaturaDoAcervo, useAnimada } from "@/components/mestre/miniatura-do-acervo";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -33,7 +34,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
-import { useAssetUrl } from "@/hooks/use-asset-url";
 import {
   aoApertarF2,
   useRenomearPeloMenu,
@@ -328,7 +328,8 @@ function LinhaDeAparencia({
    */
   const renomear = useRenomearPeloMenu(() => setRenomeando(true));
 
-  const url = useAssetUrl(aparencia.miniatura ?? aparencia.retrato, "mini");
+  const imagem = aparencia.miniatura ?? aparencia.retrato;
+  const animada = useAnimada(imagem);
 
   async function ativar() {
     if (noAr) return;
@@ -395,14 +396,8 @@ function LinhaDeAparencia({
           aria-pressed={noAr}
         >
           <span className="bg-muted relative size-8 shrink-0 overflow-hidden rounded">
-            {url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={url}
-                alt=""
-                className="size-full object-cover"
-                draggable={false}
-              />
+            {imagem ? (
+              <MiniaturaDoAcervo assetId={imagem} animada={animada} />
             ) : (
               <User
                 className="text-muted-foreground/40 absolute inset-0 m-auto size-4"

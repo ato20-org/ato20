@@ -601,6 +601,21 @@ pub fn ensure_arquivo(
         return Ok(destino);
     }
 
+    // A reducao de tela e de palco e UM quadro em JPEG, e a do GIF da fogueira
+    // chegava parada na TV e no celular. O arquivo que se mexe nao ganha essa
+    // reducao: quem pede recebe o ORIGINAL, que e a mesma saida do recorte com
+    // transparencia. A miniatura continua sendo o primeiro quadro -- e o que a
+    // lista quer mostrar, e a biblioteca anima no hover. Ver `animacao`.
+    //
+    // Aqui, e nao so em quem serve o acervo, porque o anexo de personagem
+    // passa por esta mesma funcao e nao tem metadado onde guardar a resposta.
+    if variante != Variante::Mini && super::animacao::animada(origem).unwrap_or(false) {
+        return Err(AppError::UnsupportedKind(format!(
+            "{nome} se mexe, e a variante {} guardaria um quadro so",
+            variante.nome()
+        )));
+    }
+
     limpar_versoes_antigas(vault, variante);
     std::fs::create_dir_all(dir(vault, variante))?;
 
@@ -737,6 +752,7 @@ mod tests {
             escopo: None,
             peaks: None,
             tipo_de_som: None,
+            animada: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -770,6 +786,7 @@ mod tests {
             escopo: None,
             peaks: None,
             tipo_de_som: None,
+            animada: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -911,6 +928,7 @@ mod tests {
             escopo: None,
             peaks: None,
             tipo_de_som: None,
+            animada: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -952,6 +970,7 @@ mod tests {
             escopo: None,
             peaks: None,
             tipo_de_som: None,
+            animada: None,
         };
 
         // A "miniatura" de som e `AssetMeta::peaks`, e quem a calcula e a
@@ -979,6 +998,7 @@ mod tests {
             escopo: None,
             peaks: None,
             tipo_de_som: None,
+            animada: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -1141,6 +1161,7 @@ mod tests {
             escopo: None,
             peaks: None,
             tipo_de_som: None,
+            animada: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -1228,5 +1249,27 @@ mod tests {
 
         assert_eq!((saida.width(), saida.height()), (64, 80));
     }
-}
 
+    #[test]
+    fn imagem_que_se_mexe_nao_ganha_reducao_de_tela_nem_de_palco() {
+        // O JPEG de tela ou de palco seria o primeiro quadro, e a fogueira
+        // chegaria parada na TV. Quem pede recebe o original -- o erro aqui e
+        // o que faz o daemon servi-lo.
+        let (_dir, vault) = campanha();
+        let meta = com_imagem(&vault, 8, 8);
+        std::fs::write(asset_path(&vault, &meta), crate::vault::animacao::testes::gif(3))
+            .expect("gif no lugar do png");
+
+        for variante in [Variante::Tela, Variante::Palco] {
+            assert!(
+                matches!(ensure(&vault, variante, &meta), Err(AppError::UnsupportedKind(_))),
+                "{}",
+                variante.nome()
+            );
+            assert!(!path(&vault, variante, &meta.id).exists());
+        }
+
+        // A miniatura continua existindo: e o primeiro quadro, de proposito.
+        assert!(ensure(&vault, Variante::Mini, &meta).is_ok());
+    }
+}

@@ -1,3 +1,4 @@
+pub mod animacao;
 pub mod assets;
 pub mod atomic;
 pub mod board;

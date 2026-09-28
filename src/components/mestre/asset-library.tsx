@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { create } from "zustand";
 
+import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,9 +54,7 @@ import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { assetUrl } from "@/lib/vault/assets";
 import { useFolderList } from "@/hooks/use-folder-list";
-import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useTokenDrag } from "@/hooks/use-token-drag";
-import { MINIATURA } from "@/lib/miniatura";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { countAssetUsage } from "@/lib/mestre/asset-usage";
 import {
@@ -992,7 +991,6 @@ function AssetRow({
   onRemove,
 }: AssetRowProps) {
   const imagem = asset.kind === "image";
-  const url = useAssetUrl(imagem ? asset.id : undefined, "mini");
 
   // Boolean, e não o objeto: seletor que devolve o `spotlight` inteiro
   // redesenharia toda linha da lista a cada troca de evidência. Assim só as
@@ -1041,17 +1039,10 @@ function AssetRow({
         });
       }}
     >
-      <span className="bg-muted text-muted-foreground grid size-10 shrink-0 place-items-center overflow-hidden rounded">
-        {url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={url}
-            alt=""
-            className="size-full object-cover"
-            draggable={false}
-            {...MINIATURA}
-          />
-        ) : imagem ? null : (
+      <span className="bg-muted text-muted-foreground relative grid size-10 shrink-0 place-items-center overflow-hidden rounded">
+        {imagem ? (
+          <MiniaturaDoAcervo assetId={asset.id} animada={asset.animada} />
+        ) : (
           <File className="size-5" aria-hidden />
         )}
       </span>

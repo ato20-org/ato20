@@ -74,6 +74,20 @@ pub struct AssetMeta {
     /// -- chutar `disparo` numa musica de dez minutos seria pior que perguntar.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tipo_de_som: Option<String>,
+    /// A imagem se mexe: GIF, WebP ou APNG com mais de um quadro.
+    ///
+    /// Existe por duas perguntas. A de quem SERVE: a reducao de tela e de
+    /// palco guardaria um quadro so, e o arquivo animado vai inteiro -- ver
+    /// `serve_variante`. E a da BIBLIOTECA, que marca o arquivo que se mexe e o
+    /// anima quando o mouse passa, porque a miniatura e sempre o primeiro
+    /// quadro.
+    ///
+    /// Gravado tambem quando e `false`, e so para os tres formatos que admitem
+    /// animacao (`animacao::pode_animar`): ausente quer dizer "ninguem olhou
+    /// ainda", e e o que a primeira listagem depois desta versao preenche nos
+    /// arquivos que ja existiam. Ver `preencher_animadas`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub animada: Option<bool>,
 }
 
 /// Pasta do acervo. Pasta dentro de pasta pelo `parent_id`; ausente = raiz.
@@ -120,8 +134,20 @@ fn write_index(vault: &Vault, assets: &[AssetMeta]) -> AppResult<()> {
 }
 
 /// O acervo, do mais novo para o mais velho.
+///
+/// A primeira listagem de uma campanha que ja existia antes de
+/// `AssetMeta::animada` tambem responde essa pergunta para cada GIF, WebP e
+/// PNG dela, e grava. Ver `preencher_animadas`.
 pub fn list(vault: &Vault, kind: Option<&str>) -> AppResult<Vec<AssetMeta>> {
     let mut assets = index(vault)?;
+
+    if preencher_animadas(vault, &mut assets) {
+        // Falhar aqui nao pode esconder o acervo: a resposta vale para esta
+        // listagem, e a proxima tenta gravar de novo.
+        if let Err(cause) = write_index(vault, &assets) {
+            log::warn!("acervo: nao gravou quais imagens se mexem: {cause}");
+        }
+    }
 
     if let Some(kind) = kind {
         assets.retain(|asset| asset.kind == kind);
@@ -130,6 +156,52 @@ pub fn list(vault: &Vault, kind: Option<&str>) -> AppResult<Vec<AssetMeta>> {
     assets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     Ok(assets)
+}
+
+/// Responde `animada` em quem ainda nao tem. `true` se mudou alguma linha.
+///
+/// Uma vez por arquivo e por campanha: depois disto o campo existe, `false`
+/// inclusive, e a listagem seguinte nao abre arquivo nenhum. O custo da
+/// primeira e ler o cabecalho de cada PNG e WebP do acervo, e decodificar os
+/// dois primeiros quadros de cada GIF.
+///
+/// Arquivo ilegivel fica sem resposta, e nao com `false`: a pergunta volta na
+/// proxima listagem, e quem serve continua reduzindo como antes.
+pub fn preencher_animadas(vault: &Vault, assets: &mut [AssetMeta]) -> bool {
+    let mut mudou = false;
+
+    for asset in assets.iter_mut() {
+        if asset.animada.is_some()
+            || asset.kind != "image"
+            || !super::animacao::pode_animar(&asset.mime_type)
+        {
+            continue;
+        }
+
+        match super::animacao::animada(&asset_path(vault, asset)) {
+            Ok(animada) => {
+                asset.animada = Some(animada);
+                mudou = true;
+            }
+            Err(cause) => log::warn!("acervo: {} sem resposta de animacao: {cause}", asset.name),
+        }
+    }
+
+    mudou
+}
+
+/// Grava se o arquivo se mexe. Quem chama e o daemon, quando serve antes de a
+/// listagem ter passado -- ver `serve_variante`. Silencioso como `set_peaks`.
+pub fn set_animada(vault: &Vault, id: &str, animada: bool) -> AppResult<()> {
+    let mut assets = index(vault)?;
+
+    let Some(asset) = assets.iter_mut().find(|asset| asset.id == id) else {
+        return Ok(());
+    };
+
+    asset.animada = Some(animada);
+
+    write_index(vault, &assets)
 }
 
 pub fn find(vault: &Vault, id: &str) -> AppResult<Option<AssetMeta>> {
@@ -379,7 +451,7 @@ pub fn import_acompanhado(
             (None, None)
         };
 
-        let meta = AssetMeta {
+        let mut meta = AssetMeta {
             id: uuid::Uuid::new_v4().to_string(),
             kind: kind.to_string(),
             name: nome.clone(),
@@ -397,6 +469,8 @@ pub fn import_acompanhado(
             // -- que tambem serve o arrasto de pasta misturando imagem e som --
             // para um campo que so o audio tem.
             tipo_de_som: None,
+            // Respondido depois da copia, do arquivo que ja esta no acervo.
+            animada: None,
         };
 
         // Binario primeiro, indice depois -- mesma ordem de `adopt`, e pelo
@@ -413,6 +487,13 @@ pub fn import_acompanhado(
                 recusados.push(format!("{nome}: {cause}"));
                 continue;
             }
+        }
+
+        // Se ela se mexe, do arquivo que acabou de entrar -- e no mesmo disco
+        // quente da miniatura. Ilegivel fica sem resposta, e a listagem tenta
+        // de novo. Ver `AssetMeta::animada`.
+        if meta.kind == "image" && super::animacao::pode_animar(&meta.mime_type) {
+            meta.animada = super::animacao::animada(&asset_path(vault, &meta)).ok();
         }
 
         // Aquece a MINIATURA aqui, e nao so sob demanda: o arquivo acabou de
@@ -747,6 +828,62 @@ mod tests {
         std::fs::write(&caminho, conteudo).expect("arquivo");
 
         caminho
+    }
+
+    /// Um PNG inteiro, com os quadros e o fim: o de `png` e so o cabecalho, e
+    /// para dizer se ele se mexe o leitor precisa chegar ao primeiro `IDAT`.
+    fn png_inteiro() -> Vec<u8> {
+        use image::ImageEncoder;
+
+        let mut bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(&[255; 64], 4, 4, image::ExtendedColorType::Rgba8)
+            .expect("png");
+
+        bytes
+    }
+
+    #[test]
+    fn gif_que_se_mexe_entra_marcado_e_o_png_parado_tambem() {
+        let (dir, vault) = campanha();
+        let fogo = de_fora(dir.path(), "fogo.gif", &crate::vault::animacao::testes::gif(3));
+        let tocha = de_fora(dir.path(), "tocha.png", &crate::vault::animacao::testes::apng());
+        let mapa = de_fora(dir.path(), "mapa.png", &png_inteiro());
+
+        let (aceitos, recusados) = import(&vault, &[fogo, tocha, mapa], None).expect("import");
+
+        assert!(recusados.is_empty(), "{recusados:?}");
+        assert_eq!(
+            aceitos.iter().map(|asset| asset.animada).collect::<Vec<_>>(),
+            [Some(true), Some(true), Some(false)]
+        );
+    }
+
+    #[test]
+    fn jpeg_e_som_nem_chegam_a_pergunta() {
+        let (dir, vault) = campanha();
+        let foto = de_fora(dir.path(), "foto.jpg", b"jpeg");
+        let som = de_fora(dir.path(), "chuva.ogg", b"ogg");
+
+        let (aceitos, _) = import(&vault, &[foto, som], None).expect("import");
+
+        assert!(aceitos.iter().all(|asset| asset.animada.is_none()));
+    }
+
+    #[test]
+    fn a_primeira_listagem_responde_quem_se_mexe_nos_arquivos_antigos() {
+        // O acervo de antes desta versao: o GIF entrou sem a resposta.
+        let (dir, vault) = campanha();
+        let fogo = de_fora(dir.path(), "fogo.gif", &crate::vault::animacao::testes::gif(3));
+        import(&vault, &[fogo], None).expect("import");
+
+        let mut antigo = index(&vault).expect("indice");
+        antigo[0].animada = None;
+        write_index(&vault, &antigo).expect("gravar");
+
+        assert_eq!(list(&vault, None).expect("lista")[0].animada, Some(true));
+        // E gravou: a proxima listagem nao abre o arquivo de novo.
+        assert_eq!(index(&vault).expect("indice")[0].animada, Some(true));
     }
 
     /// Bytes colados entram no acervo como um arquivo entra, com nome e medidas.

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { MiniaturaDoAcervo, useAnimada } from "@/components/mestre/miniatura-do-acervo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,8 +25,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
-import { useAssetUrl } from "@/hooks/use-asset-url";
-import { MINIATURA } from "@/lib/miniatura";
 import { cn } from "@/lib/utils";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
@@ -337,7 +336,7 @@ function Anexo({
   assetId: string;
   nome: string | undefined;
 }) {
-  const url = useAssetUrl(assetId, "mini");
+  const animada = useAnimada(assetId);
 
   const detachFromPin = useSceneStore((state) => state.detachFromPin);
   const spotlight = useSpotlightStore((state) => state.spotlight);
@@ -350,21 +349,16 @@ function Anexo({
     <li className="bg-muted/40 flex items-center gap-2 rounded-md border p-1.5">
       {/* `h-10 w-14`: proporção de mapa, e alto o bastante para reconhecer a
           imagem sem roubar a largura do cartão. */}
-      <span className="bg-background h-10 w-14 shrink-0 overflow-hidden rounded">
-        {url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={url}
-            alt=""
-            draggable={false}
-            // A miniatura tem 160px, e arquivo desse tamanho nao alcanca o
-            // teto em que o `cover` erra sob `zoom`: ate 800%, que e o limite
-            // do palco, ele passa. Ver a tabela em `caberEm`.
-            // eslint-disable-next-line no-restricted-syntax
-            className="size-full object-cover"
-            {...MINIATURA}
-          />
-        ) : null}
+      {/* A miniatura tem 160px, e arquivo desse tamanho nao alcanca o teto em
+          que o `cover` erra sob `zoom`: ate 800%, que e o limite do palco, ele
+          passa. Ver a tabela em `caberEm`. O original do GIF nao passaria, e
+          por isso o cartao mostra o selo e nao anima no hover. */}
+      <span className="bg-background relative h-10 w-14 shrink-0 overflow-hidden rounded">
+        <MiniaturaDoAcervo
+          assetId={assetId}
+          animada={animada}
+          animaNoHover={false}
+        />
       </span>
 
       <span className="min-w-0 flex-1 truncate text-xs" title={nome ?? assetId}>
