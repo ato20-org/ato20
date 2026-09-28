@@ -1,15 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, Plus, Trash2, Wand2 } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Eye, EyeOff, Gauge, Plus, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CorEForma } from "@/components/mestre/cor-e-forma";
+import { LayoutDoRetratoPainel } from "@/components/mestre/layout-do-retrato";
+import { PainelVazio } from "@/components/mestre/painel-vazio";
+import { PosicaoDosRetratos } from "@/components/mestre/posicao-dos-retratos";
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
@@ -43,18 +47,59 @@ const LARGURA_DA_PREVIA = 150;
  * sistema da mesa aqui e vai conferindo o resultado nas fichas abertas ao lado.
  * Um modal cobriria justamente o que ele quer olhar enquanto ajusta.
  *
- * Nasce com uma seção só. Ela é o lugar do que vier depois — o que decide se
- * algo mora aqui é uma pergunta só: isto vale para a CAMPANHA, ou para uma cena
- * ou um personagem? Sol e grade são da cena e ficam no palco; retrato é da
- * sessão e fica no painel dele.
+ * O que decide se algo mora aqui é uma pergunta só: isto vale para a CAMPANHA,
+ * ou para uma cena ou um personagem? Sol e grade são da cena e ficam no palco.
+ * O layout e a posição dos retratos valem para a mesa inteira e são gravados
+ * por campanha, então moram aqui; a janela de Retratos fica com o elenco.
  */
 export function ConfiguracaoDaCampanhaBody() {
   return (
     <ScrollArea className="min-h-0 flex-1">
       <div className="space-y-4 p-3">
         <MedidoresDaCampanha />
+
+        <Separator />
+
+        <Secao
+          titulo="Layout dos retratos"
+          descricao="O que cada retrato mostra na mesa, e onde."
+        >
+          <LayoutDoRetratoPainel selecionado={null} />
+        </Secao>
+
+        <Separator />
+
+        <Secao
+          titulo="Posição dos retratos"
+          descricao="Apertar arruma os retratos soltos e faz os novos nascerem ali."
+        >
+          <PosicaoDosRetratos />
+        </Secao>
       </div>
     </ScrollArea>
+  );
+}
+
+/** Uma seção com título e uma linha de descrição, como a dos medidores. */
+function Secao({
+  titulo,
+  descricao,
+  children,
+}: {
+  titulo: string;
+  descricao: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-2">
+      <div>
+        <h3 className="text-sm font-medium">{titulo}</h3>
+        <p className="text-muted-foreground text-[11px] leading-snug">
+          {descricao}
+        </p>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -80,7 +125,7 @@ function MedidoresDaCampanha() {
     listarModelos().then(setModelos, (cause: unknown) => {
       setModelos([]);
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao ler os modelos.",
+        cause instanceof Error ? cause.message : "Falha ao ler os medidores.",
       );
     });
   }, []);
@@ -115,10 +160,10 @@ function MedidoresDaCampanha() {
 
       toast.success(
         alcancados === 0
-          ? "Modelo criado."
-          : `Modelo criado e posto em ${alcancados} ${alcancados === 1 ? "personagem" : "personagens"}.`,
+          ? "Medidor criado."
+          : `Medidor criado em ${alcancados} ${alcancados === 1 ? "personagem" : "personagens"}.`,
       );
-    }, "Falha ao criar o modelo.");
+    }, "Falha ao criar o medidor.");
   }
 
   async function aplicar() {
@@ -137,8 +182,7 @@ function MedidoresDaCampanha() {
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium">Medidores da campanha</h3>
           <p className="text-muted-foreground text-[11px] leading-snug">
-            Todo personagem novo nasce com estes. Criar um agora põe em quem já
-            existe também.
+            Todo personagem começa com estes.
           </p>
         </div>
 
@@ -160,9 +204,7 @@ function MedidoresDaCampanha() {
             <p className="font-medium">Criar medidor da campanha</p>
             {cheio ? (
               <p className="text-muted-foreground max-w-48">
-                {MAX_MODELOS} é o limite — é o mesmo teto de medidores de uma
-                ficha, e passar dele criaria personagem que nasce já recusando
-                parte deles.
+                Limite de {MAX_MODELOS} medidores.
               </p>
             ) : null}
           </TooltipContent>
@@ -172,11 +214,7 @@ function MedidoresDaCampanha() {
       {modelos === null ? (
         <p className="text-muted-foreground text-[11px]">Lendo…</p>
       ) : lista.length === 0 ? (
-        <p className="text-muted-foreground text-[11px] leading-snug">
-          Nenhum ainda. O que se põe aqui é o que a mesa inteira tem — vida,
-          sanidade, munição —, para não recriar os mesmos três campos em cada
-          goblin.
-        </p>
+        <PainelVazio icone={Gauge}>Nenhum medidor registrado</PainelVazio>
       ) : (
         <ul className="space-y-2.5">
           {lista.map((modelo) => (
@@ -193,7 +231,7 @@ function MedidoresDaCampanha() {
               onApagar={() =>
                 void mexer(
                   () => removerModelo(modelo.id),
-                  "Falha ao apagar o modelo.",
+                  "Falha ao apagar o medidor.",
                 )
               }
             />
@@ -243,11 +281,8 @@ function MedidoresDaCampanha() {
               }
             />
             <TooltipContent>
-              <p className="font-medium">Põe estes medidores em toda a mesa</p>
-              <p className="text-muted-foreground max-w-56">
-                Quem já tem um medidor com o mesmo nome não ganha outro. Serve
-                para alcançar os personagens que ficaram de fora — e pode ser
-                apertado quantas vezes quiser.
+              <p className="max-w-56">
+                Quem já tem um medidor com o mesmo nome não ganha outro.
               </p>
             </TooltipContent>
           </Tooltip>
@@ -346,11 +381,10 @@ function LinhaDeModelo({
           />
           <TooltipContent>
             <p className="font-medium">
-              {modelo.escondido ? "Nasce escondido" : "Nasce à vista"}
+              {modelo.escondido ? "Começa escondido" : "Começa à vista"}
             </p>
             <p className="text-muted-foreground max-w-48">
-              Vale para os medidores que este modelo criar. Nos que já existem,
-              quem manda é a ficha.
+              Não muda as fichas que já têm este medidor.
             </p>
           </TooltipContent>
         </Tooltip>
@@ -358,7 +392,7 @@ function LinhaDeModelo({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Apagar modelo"
+          aria-label="Apagar medidor"
           disabled={ocupado}
           className="text-muted-foreground hover:text-destructive"
           onClick={onApagar}
@@ -391,7 +425,7 @@ function LinhaDeModelo({
             com três de vida do goblin com vinte --, e um campo aqui pediria ao
             mestre uma escolha que não quer dizer nada. Ver `ModeloDeMedidor`. */}
         <span className="text-muted-foreground text-[10px] leading-snug">
-          nasce cheio em cada ficha
+          começa cheio
         </span>
       </div>
     </li>

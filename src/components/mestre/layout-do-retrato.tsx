@@ -61,7 +61,7 @@ const ALCANCE = { x: [-0.35, 2.65], y: [-0.4, 1.6] } as const;
  */
 const PASSO = 0.1;
 
-/** A proporção do retrato de mentira, quando a aba edita a sessão. */
+/** A proporção do retrato de mentira, quando o painel edita a mesa. */
 const FIGURA_PADRAO = { width: 0.75, height: 1 };
 
 /**
@@ -96,13 +96,14 @@ const EXEMPLO: Medidor[] = [
 ];
 
 /**
- * A aba Layout: o que um retrato mostra, e onde.
+ * O layout dos retratos: o que cada um mostra, e onde.
  *
- * Edita o retrato SELECIONADO, e a sessão quando não há seleção. Usa o
- * `selectedPortraitIds` que o palco e a lista já escrevem, em vez de um seletor
- * próprio: o mestre clica na figura que quer mexer, que é o gesto que ele já
- * faz — e um segundo seletor aqui dentro poderia discordar do que está
- * destacado no palco.
+ * Mora na configuração da campanha e edita o padrão da MESA. Já foi uma aba da
+ * janela de Retratos, seguindo o retrato selecionado, mas o layout é decisão da
+ * campanha inteira, e a janela de Retratos voltou a ser só o elenco.
+ *
+ * `selecionado` continua aqui para o layout próprio de um retrato
+ * (`Portrait.layout`). Hoje nenhuma tela o passa.
  *
  * ## Os três estados de um interruptor
  *
@@ -152,11 +153,11 @@ export function LayoutDoRetratoPainel({
 
   return (
     <div className="space-y-4">
-      <p className="text-muted-foreground text-[11px] leading-snug">
-        {selecionado
-          ? "Só deste retrato. O que não for mexido aqui segue o padrão da mesa."
-          : "O padrão da mesa. Selecione um retrato para dar a ele um layout próprio."}
-      </p>
+      {selecionado ? (
+        <p className="text-muted-foreground text-[11px] leading-snug">
+          Só deste retrato. O resto segue o padrão da mesa.
+        </p>
+      ) : null}
 
       <div className="space-y-1">
         <Peca
@@ -399,7 +400,7 @@ function MiniPalco({
    * Os medidores que a prévia mostra.
    *
    * Os de verdade quando o retrato tem algum; o exemplo quando não tem, e
-   * quando a aba edita a mesa inteira. Prévia vazia não ensina nada, e é
+   * quando o painel edita a mesa inteira. Prévia vazia não ensina nada, e é
    * justamente o mestre que ainda não criou medidor nenhum quem mais precisa
    * ver onde eles vão cair.
    */

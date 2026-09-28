@@ -1,6 +1,5 @@
 "use client";
 
-import { Label } from "@/components/ui/label";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { cn } from "@/lib/utils";
 import type { AncoraRetrato } from "@/types/scene";
@@ -26,12 +25,13 @@ const LUGAR: Record<AncoraRetrato, string> = {
 };
 
 /**
- * A aba Posição: onde os retratos ficam por padrão.
+ * A posição dos retratos: onde eles ficam por padrão. Mora na configuração da
+ * campanha, junto do layout.
  *
  * Um retângulo 16:9 com as seis áreas, e não uma lista de seis nomes: a
  * pergunta é sobre um canto da tela, e um canto se aponta. É o mesmo desenho do
  * seletor de área de uma união, agora com a proporção da mesa — aqui ele é o
- * assunto da aba inteira, e tem espaço para parecer o que é.
+ * assunto da seção inteira, e tem espaço para parecer o que é.
  *
  * ## O que apertar faz, e o que não faz
  *
@@ -44,7 +44,7 @@ const LUGAR: Record<AncoraRetrato, string> = {
  * cada um estava, e a mesa com heróis embaixo e inimigos em cima não tinha como
  * ser dita. Quem resolve isso são as uniões. O que falta a elas é o caso simples
  * — "quero os quatro ali e pronto, sem criar grupo nenhum" —, e é esse caso que
- * esta aba atende.
+ * esta seção atende.
  *
  * Quem está numa união não é tocado: ele já obedece à área dela, e mexer aqui
  * seria um gesto desfazendo outro na frente da mesa.
@@ -54,10 +54,8 @@ export function PosicaoDosRetratos() {
   const escolher = usePortraitStore((state) => state.escolherAreaPadrao);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="space-y-1.5">
-        <Label className="text-xs font-normal">Onde os retratos ficam</Label>
-
         {/* 16:9 porque é a proporção do recorte que a mesa vê -- ver
             `clampViewport`. Um quadrado mentiria sobre a forma da tela, e o
             canto de cima à direita de um quadrado não é o mesmo lugar. */}
@@ -87,15 +85,8 @@ export function PosicaoDosRetratos() {
         </div>
       </div>
 
-      <p className="text-muted-foreground text-[11px] leading-snug">
-        Apertar arruma os retratos soltos que estão no ar e faz os próximos
-        nascerem ali. Depois disso eles continuam livres — arraste à vontade,
-        nada os puxa de volta.
-      </p>
-
       <p className="text-muted-foreground text-[10px] leading-snug">
-        Quem está numa união segue a área dela, e não esta. Para mudar um grupo,
-        use o menu da união na aba Elenco.
+        Quem está numa união segue a área dela.
       </p>
     </div>
   );
