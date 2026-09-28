@@ -61,6 +61,18 @@ import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { retratosDaCena } from "@/lib/geometry/portrait";
+import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
+import type { Personagem } from "@/types/character";
+
+/**
+ * Nenhum personagem, como constante.
+ *
+ * Um array literal nasceria novo a cada render e quebraria o memo do elenco,
+ * que vira uma publicação por quadro -- o laço que o `useMemo` existe para
+ * cortar. Só aparece com o índice ainda por ler, e nesse caso a publicação nem
+ * acontece: ver `pronto`, abaixo.
+ */
+const SEM_PERSONAGENS: Personagem[] = [];
 import {
   selectEditingScene,
   selectCenaParaMesa,
@@ -131,6 +143,7 @@ export function MestreShell() {
   useSomDaMesa(cenaParaMesa?.id);
 
   const guardados = usePortraitStore((state) => state.portraits);
+  const layoutDaSessao = usePortraitStore((state) => state.layout);
   const { personagens } = useCharacters();
 
   /**
@@ -163,10 +176,34 @@ export function MestreShell() {
       retratosDaCena(
         guardados,
         cenaParaMesa?.items ?? [],
-        personagens ?? [],
+        personagens ?? SEM_PERSONAGENS,
         fontes,
+        // Sem os escondidos: isto é o que vai para a rede.
+        false,
+        layoutDaSessao,
       ),
-    [guardados, cenaParaMesa?.items, personagens, fontes],
+    [guardados, cenaParaMesa?.items, personagens, fontes, layoutDaSessao],
+  );
+
+  /**
+   * Nome e medidores sobre a cabeça dos tokens, para a mesa.
+   *
+   * Vazia com o interruptor da cena desligado -- e é ele que decide, não a
+   * tela: o nome de um PNJ que o mestre não apresentou não atravessa a rede.
+   * Ver `fichasDaCena`.
+   *
+   * `useMemo` pela mesma razão do elenco de retratos logo acima: a lista entra
+   * nas dependências do publicador, e uma nova a cada render publicaria a cena
+   * inteira sessenta vezes por segundo.
+   */
+  const fichas = useMemo(
+    () =>
+      fichasDaCena(
+        Boolean(cenaParaMesa?.infoDosTokens),
+        cenaParaMesa?.items ?? [],
+        personagens ?? SEM_PERSONAGENS,
+      ),
+    [cenaParaMesa?.infoDosTokens, cenaParaMesa?.items, personagens],
   );
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
@@ -206,19 +243,34 @@ export function MestreShell() {
   // dele que não nasceu nesta janela: ela chega do daemon, pelo fluxo que
   // `useRolagensDaMesa` escuta, e sai daqui com o personagem já resolvido. O
   // Mestre continua sendo quem publica -- aqui ele é mensageiro.
-  usePublisher({
-    scene: cenaParaMesa,
-    track,
-    ambientes,
-    disparos,
-    volume: trackVolume,
-    volumeTrilha,
-    volumeAmbiente,
-    volumeDisparo,
-    portraits,
-    spotlight,
-    rolagens,
-  });
+  usePublisher(
+    {
+      scene: cenaParaMesa,
+      track,
+      ambientes,
+      disparos,
+      volume: trackVolume,
+      volumeTrilha,
+      volumeAmbiente,
+      volumeDisparo,
+      portraits,
+      fichas,
+      spotlight,
+      rolagens,
+    },
+    // `null` é "o índice de personagens ainda não foi lido", e não "a campanha
+    // não tem personagem" -- ver `useCharactersStore`. A diferença importa
+    // porque quem recebe o quadro não sabe ler "carregando": elenco vazio é
+    // "nenhum retrato", e a TV e os celulares APAGAM os rostos que estavam
+    // mostrando. Calar é a resposta honesta enquanto não se sabe, e ela dura o
+    // que a leitura durar.
+    //
+    // O boot já espera pelo índice -- ver `carregarPersonagens` em
+    // `CampaignBoot` --, então no caminho normal isto nunca segura nada. Fica
+    // para os outros dois: a troca de campanha, que zera o índice com o palco
+    // montado, e o recarregamento de módulo em desenvolvimento.
+    personagens !== null,
+  );
 
   // As uniões arrumam o elenco da cena EM EDIÇÃO, que é a que o mestre vê no
   // palco.

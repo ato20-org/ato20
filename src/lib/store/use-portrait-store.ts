@@ -2,7 +2,11 @@
 
 import { create } from "zustand";
 
-import { createPortrait } from "@/lib/geometry/portrait";
+import {
+  areaMaisProxima,
+  createPortrait,
+  filaDeRetratos,
+} from "@/lib/geometry/portrait";
 import {
   ajustarUniao,
   desfazerUniao,
@@ -14,7 +18,21 @@ import {
   unirRetratos,
 } from "@/lib/mestre/unioes";
 import { loadPortraits, savePortraits, type RetratosSalvos } from "@/lib/vault/session";
-import type { AncoraRetrato, Portrait, UniaoDeRetratos } from "@/types/scene";
+import {
+  LAYOUT_PADRAO,
+  type AncoraRetrato,
+  type LayoutDoRetrato,
+  type Portrait,
+  type UniaoDeRetratos,
+} from "@/types/scene";
+
+/**
+ * A área em que retrato novo nasce quando ninguém escolheu nenhuma.
+ *
+ * Baixo à esquerda, que é onde `createPortrait` sempre pôs o primeiro: a
+ * campanha que abre numa versão nova não pode ver o elenco trocar de canto.
+ */
+const ANCORA_PADRAO: AncoraRetrato = "baixo-esquerda";
 
 /**
  * Gravação atrasada, como a do board.
@@ -38,6 +56,24 @@ type PortraitStore = {
    * mesma área da tela — ver `filasDeUnioes`.
    */
   unioes: UniaoDeRetratos[];
+  /**
+   * O layout com que todo retrato desta sessão começa. Ver `LayoutDoRetrato`.
+   *
+   * Um só para a mesa, e cada retrato diverge no que quiser -- é `Portrait.layout`,
+   * parcial, e o campo que falta cai aqui. Sem este nível, desligar os dados de
+   * oito PNJs seria oito gestos iguais.
+   */
+  layout: LayoutDoRetrato;
+  /**
+   * A área em que retrato novo nasce. Ver `AncoraRetrato`.
+   *
+   * NÃO é uma fila automática. Ela governa só o nascimento, e o gesto que a
+   * escolhe arruma os soltos UMA vez -- depois disso o mestre arrasta à vontade
+   * e nada o traz de volta. A fila que ficava puxando todo mundo existiu e foi
+   * removida; as uniões são o que a substituiu, e ressuscitá-la por baixo de um
+   * nome novo desfaria a escolha.
+   */
+  ancoraPadrao: AncoraRetrato;
   /** Qual campanha estes retratos pertencem. Ver `use-scene-store`. */
   hydratedPath: string | null;
 
@@ -71,6 +107,26 @@ type PortraitStore = {
   soltar: (retratoId: string) => void;
   /** Move um membro dentro da união, ou para outra. É o arrasto da lista. */
   mover: (retratoId: string, uniaoId: string, destino: number) => void;
+  /** Troca o layout da sessão inteira. */
+  ajustarLayout: (patch: Partial<LayoutDoRetrato>) => void;
+  /**
+   * Troca o layout DESTE retrato. `null` num campo volta a seguir a sessão.
+   *
+   * `null` e não `undefined`: o patch é espalhado sobre o que já existe, e um
+   * `undefined` espalhado não apaga a chave -- "voltar a seguir a sessão" seria
+   * indistinguível de "não mexer neste campo".
+   */
+  ajustarLayoutDoRetrato: (
+    retratoId: string,
+    patch: Partial<{ [K in keyof LayoutDoRetrato]: LayoutDoRetrato[K] | null }>,
+  ) => void;
+  /**
+   * Escolhe a área padrão e enfileira os soltos que estão no ar, uma vez.
+   *
+   * Os dois efeitos no mesmo gesto porque é um pedido só -- "os retratos ficam
+   * ali" --, e nenhum dos dois se repete depois.
+   */
+  escolherAreaPadrao: (ancora: AncoraRetrato) => void;
   /** Troca nome, cor, área ou folga de uma união. */
   ajustar: (
     uniaoId: string,
@@ -98,6 +154,8 @@ type PortraitStore = {
 export const usePortraitStore = create<PortraitStore>((set, get) => ({
   portraits: [],
   unioes: [],
+  layout: LAYOUT_PADRAO,
+  ancoraPadrao: ANCORA_PADRAO,
   hydratedPath: null,
 
   async hydrate(campaignPath) {
@@ -105,10 +163,16 @@ export const usePortraitStore = create<PortraitStore>((set, get) => ({
 
     // Zera antes de ler: elenco da campanha anterior na tela seria pior que
     // palco vazio por um instante.
-    set({ portraits: [], unioes: [], hydratedPath: campaignPath });
+    set({
+      portraits: [],
+      unioes: [],
+      layout: LAYOUT_PADRAO,
+      ancoraPadrao: ANCORA_PADRAO,
+      hydratedPath: campaignPath,
+    });
 
     try {
-      set(ler(await loadPortraits()));
+      set(lerRetratosSalvos(await loadPortraits()));
     } catch {
       // Sessão sem retrato guardado é estado válido; não derruba a tela.
     }
@@ -122,10 +186,15 @@ export const usePortraitStore = create<PortraitStore>((set, get) => ({
       return;
     }
 
+    const novo = createPortrait(personagemId, assetId, naturalWidth, naturalHeight);
+
     // No fim da lista: o mais novo fica na frente, como acontece ao empilhar
     // qualquer coisa numa mesa.
     persist(
-      [...get().portraits, createPortrait(personagemId, assetId, naturalWidth, naturalHeight)],
+      [
+        ...get().portraits,
+        { ...novo, ...nascimento(novo, get().portraits, get().unioes, get().ancoraPadrao) },
+      ],
       set,
     );
   },
@@ -196,6 +265,47 @@ export const usePortraitStore = create<PortraitStore>((set, get) => ({
     aplicar(ajustarUniao(get().unioes, uniaoId, patch), set, get);
   },
 
+  ajustarLayout(patch) {
+    const layout = { ...get().layout, ...patch };
+
+    set({ layout });
+    persist(get().portraits, set, { layout });
+  },
+
+  ajustarLayoutDoRetrato(retratoId, patch) {
+    persist(
+      get().portraits.map((retrato) =>
+        retrato.id === retratoId
+          ? { ...retrato, layout: semNulos({ ...retrato.layout, ...patch }) }
+          : retrato,
+      ),
+      set,
+    );
+  },
+
+  escolherAreaPadrao(ancora) {
+    set({ ancoraPadrao: ancora });
+
+    // Só os SOLTOS e só os no ar. Quem está numa união já obedece à área dela,
+    // e mexer neles aqui seria um gesto desfazendo outro.
+    const emUniao = new Set(get().unioes.flatMap((uniao) => uniao.retratos));
+    const soltos = get().portraits.filter(
+      (retrato) => retrato.visible && !emUniao.has(retrato.id),
+    );
+
+    const posicoes = filaDeRetratos(soltos, ancora);
+
+    persist(
+      get().portraits.map((retrato) => {
+        const posicao = posicoes.find((atual) => atual.id === retrato.id);
+
+        return posicao ? { ...retrato, x: posicao.x, y: posicao.y } : retrato;
+      }),
+      set,
+      { ancoraPadrao: ancora },
+    );
+  },
+
   receive(portraits) {
     // Espectador não grava: o disco pertence a quem opera.
     //
@@ -235,7 +345,7 @@ function aplicar(
 function persist(
   portraits: Portrait[],
   set: (partial: Partial<PortraitStore>) => void,
-  extra?: Partial<Pick<RetratosSalvos, "unioes">>,
+  extra?: Partial<Pick<RetratosSalvos, "unioes" | "layout" | "ancoraPadrao">>,
 ) {
   set({ portraits });
 
@@ -244,10 +354,63 @@ function persist(
 }
 
 /** O objeto que vai para o disco. */
-function tudo(extra?: Partial<Pick<RetratosSalvos, "unioes">>): RetratosSalvos {
-  const { portraits, unioes } = usePortraitStore.getState();
+function tudo(
+  extra?: Partial<Pick<RetratosSalvos, "unioes" | "layout" | "ancoraPadrao">>,
+): RetratosSalvos {
+  const { portraits, unioes, layout, ancoraPadrao } =
+    usePortraitStore.getState();
 
-  return { retratos: portraits, unioes, ...extra };
+  return { retratos: portraits, unioes, layout, ancoraPadrao, ...extra };
+}
+
+/**
+ * Tira do patch os campos que voltaram a seguir a sessão.
+ *
+ * O `null` é o pedido de "esqueça o que eu tinha escolhido aqui", e ele não
+ * pode ser gravado: no registro, a AUSÊNCIA é o que quer dizer "segue a
+ * sessão". Ver `Portrait.layout`.
+ */
+function semNulos(
+  patch: Partial<{ [K in keyof LayoutDoRetrato]: LayoutDoRetrato[K] | null }>,
+): Partial<LayoutDoRetrato> {
+  const saida: Record<string, unknown> = {};
+
+  for (const [chave, valor] of Object.entries(patch)) {
+    if (valor !== null && valor !== undefined) saida[chave] = valor;
+  }
+
+  return saida as Partial<LayoutDoRetrato>;
+}
+
+/**
+ * Onde um retrato recém-armado nasce.
+ *
+ * No fim da fila da área padrão, contando só os soltos que ainda ESTÃO nela --
+ * quem o mestre já arrastou para outro canto não é puxado de volta, e nem conta
+ * vaga. É o que faz a área padrão ser um padrão e não uma regra: ela decide
+ * onde a figura aparece, e para de mandar no instante seguinte.
+ *
+ * Sem ninguém na área, a fila de um devolve a primeira vaga dela, que é o canto
+ * pedido -- e é por isso que não há caso especial aqui.
+ */
+function nascimento(
+  novo: Portrait,
+  existentes: ReadonlyArray<Portrait>,
+  unioes: ReadonlyArray<UniaoDeRetratos>,
+  ancora: AncoraRetrato,
+): Pick<Portrait, "x" | "y"> {
+  const emUniao = new Set(unioes.flatMap((uniao) => uniao.retratos));
+  const vizinhos = existentes.filter(
+    (retrato) =>
+      retrato.visible &&
+      !emUniao.has(retrato.id) &&
+      areaMaisProxima([retrato]) === ancora,
+  );
+
+  const posicoes = filaDeRetratos([...vizinhos, novo], ancora);
+  const minha = posicoes.find((posicao) => posicao.id === novo.id);
+
+  return minha ? { x: minha.x, y: minha.y } : { x: novo.x, y: novo.y };
 }
 
 /**
@@ -271,8 +434,15 @@ function tudo(extra?: Partial<Pick<RetratosSalvos, "unioes">>): RetratosSalvos {
  * conjunto nenhum e ninguém é unido — a área e a folga gravadas se perdem, e é
  * de propósito: elas não governavam nada.
  */
-function ler(cru: unknown): Pick<PortraitStore, "portraits" | "unioes"> {
-  const padrao = { portraits: [], unioes: [] };
+export function lerRetratosSalvos(
+  cru: unknown,
+): Pick<PortraitStore, "portraits" | "unioes" | "layout" | "ancoraPadrao"> {
+  const padrao = {
+    portraits: [],
+    unioes: [],
+    layout: LAYOUT_PADRAO,
+    ancoraPadrao: ANCORA_PADRAO,
+  };
 
   const objeto =
     typeof cru === "object" && cru !== null && !Array.isArray(cru)
@@ -291,9 +461,18 @@ function ler(cru: unknown): Pick<PortraitStore, "portraits" | "unioes"> {
     (retrato) => Boolean(retrato?.personagemId),
   );
 
+  // O layout e a area padrao entram nos tres ramos abaixo, e nao so no de
+  // agora: uma campanha gravada na forma da fila automatica tambem pode ter
+  // sido reaberta desde entao. `sessao` os le uma vez e o resto so espalha.
+  const sessao = {
+    layout: { ...LAYOUT_PADRAO, ...(objeto?.layout ?? {}) },
+    ancoraPadrao: objeto?.ancoraPadrao ?? ANCORA_PADRAO,
+  };
+
   if (objeto?.unioes) {
     return {
       portraits,
+      ...sessao,
       unioes: normalizarUnioes(
         objeto.unioes,
         portraits.map((retrato) => retrato.id),
@@ -301,10 +480,11 @@ function ler(cru: unknown): Pick<PortraitStore, "portraits" | "unioes"> {
     };
   }
 
-  if (objeto?.filaAuto !== true) return { portraits, unioes: [] };
+  if (objeto?.filaAuto !== true) return { portraits, ...sessao, unioes: [] };
 
   return {
     portraits,
+    ...sessao,
     unioes: uniaoDaFilaAntiga(
       portraits,
       portraits.filter((retrato) => retrato.foraDaFila).map((retrato) => retrato.id),
@@ -327,6 +507,8 @@ type FormatoAntigo = {
   filaAuto?: boolean;
   ancora?: AncoraRetrato;
   folga?: number;
+  layout?: Partial<LayoutDoRetrato>;
+  ancoraPadrao?: AncoraRetrato;
 };
 
 /**

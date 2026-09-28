@@ -5,6 +5,7 @@ import { AudioLibrary } from "@/components/mestre/audio-library";
 import { AnexoBody, AssetBody } from "@/components/mestre/attachment-window";
 import { CharacterBody } from "@/components/mestre/character-window";
 import { CharactersBody } from "@/components/mestre/characters-window";
+import { ConfiguracaoDaCampanhaBody } from "@/components/mestre/configuracao-da-campanha";
 import { EstanteBody } from "@/components/mestre/estante-window";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
@@ -133,6 +134,11 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       };
     case "asset":
       return { titulo: conteudo.nome, subtitulo: "Imagem do acervo" };
+    case "configuracao":
+      return {
+        titulo: "Configuração da campanha",
+        subtitulo: "O que vale para a campanha inteira",
+      };
     case "estante":
       return {
         titulo: "Estante",
@@ -259,6 +265,10 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
     // A estante e o leitor não dependem de cena nem de campanha: o mestre
     // consulta uma regra na porta do aplicativo, antes de escolher a mesa da
     // noite. Ver `estante.rs` e a rota `/livro/{id}`.
+    // Da CAMPANHA, e não da cena nem de um personagem: o que se ajusta aqui
+    // vale para a mesa inteira e sobrevive a trocar de mapa.
+    case "configuracao":
+      return <ConfiguracaoDaCampanhaBody />;
     case "estante":
       return <EstanteBody />;
     case "livro":

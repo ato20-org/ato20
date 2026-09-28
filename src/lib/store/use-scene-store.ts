@@ -69,10 +69,10 @@ import {
   type SceneGrid,
   type TipoDeCena,
   type Viewport,
-  type Medidor,
+  type Regua,
   type NewDocumento,
   type Nota,
-  type NewMedidor,
+  type NovaRegua,
   type NewLuz,
   type NewParede,
   type Luz,
@@ -336,11 +336,11 @@ type SceneStore = {
    */
   updateTracos: (sceneId: string, patches: TracoPatch[]) => void;
   /** Coloca um medidor. Passa pelo histórico: medir e deixar é edição da cena. */
-  addMedidor: (sceneId: string, medidor: NewMedidor) => string;
+  addMedidor: (sceneId: string, medidor: NovaRegua) => string;
   updateMedidor: (
     sceneId: string,
     medidorId: string,
-    patch: Partial<Omit<Medidor, "id">>,
+    patch: Partial<Omit<Regua, "id">>,
   ) => void;
   removeMedidores: (sceneId: string, medidorIds: string[]) => void;
 
@@ -382,6 +382,8 @@ type SceneStore = {
   removeLuzes: (sceneId: string, luzIds: string[]) => void;
   /** O quanto o mapa escurece onde não há luz. Zero guarda como ausente. */
   setEscuridao: (sceneId: string, escuridao: number) => void;
+  /** Liga nome e medidores acima dos tokens. Ver `Scene.infoDosTokens`. */
+  setInfoDosTokens: (sceneId: string, ligado: boolean) => void;
   updateFog: (
     sceneId: string,
     fogId: string,
@@ -1461,6 +1463,16 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       get().updateScene(sceneId, (scene) => ({
         ...scene,
         escuridao: valor > 0 ? valor : undefined,
+      }));
+    },
+
+    setInfoDosTokens(sceneId, ligado) {
+      // `undefined` e nao `false` no desligado: e o valor que a cena tinha
+      // antes de o campo existir, e gravar `false` poria uma chave em toda cena
+      // que o mestre abrir e fechar o painel.
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        infoDosTokens: ligado ? true : undefined,
       }));
     },
 

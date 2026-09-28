@@ -68,8 +68,7 @@ export function GridControl({ scene }: { scene: Scene }) {
           o desenho valer a pena, e é de onde a régua tira o metro. Ver
           `METROS_POR_QUADRADO`. */}
       <p className="text-muted-foreground text-[10px] leading-snug">
-        Cada quadrado vale {METROS_POR_QUADRADO} m — um metro quadrado de chão.
-        Case a grade com o desenho do mapa e a régua mede certo.
+        Cada quadrado vale {METROS_POR_QUADRADO} m na régua.
       </p>
 
       {/* O ajuste só existe com a grade ligada: réguas de tamanho e
@@ -96,8 +95,7 @@ export function GridControl({ scene }: { scene: Scene }) {
           </div>
 
           <p className="text-muted-foreground text-[10px] leading-snug">
-            O token vai para o meio do quadrado — no seu arrasto e no dedo dos
-            jogadores. Alt solta a peça exatamente onde ela está.
+            O token cai no meio do quadrado. Alt solta livre.
           </p>
 
           <Campo
@@ -173,9 +171,6 @@ export function GridControl({ scene }: { scene: Scene }) {
               onCheckedChange={(dark) => ajustar({ dark })}
             />
           </div>
-          <p className="text-muted-foreground text-[10px]">
-            Mapa claro pede linha escura; caverna e noite pedem clara.
-          </p>
 
           {/* Volta o DESENHO da grade, e não o ímã: `DEFAULT_GRID` não fala
               de encaixe, então o interruptor acima atravessa o botão. É o que

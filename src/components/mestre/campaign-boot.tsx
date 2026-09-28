@@ -11,7 +11,7 @@ import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { esquecerAcervo } from "@/lib/store/use-assets-store";
-import { esquecerPersonagens } from "@/lib/store/use-characters-store";
+import { carregarPersonagens, esquecerPersonagens } from "@/lib/store/use-characters-store";
 import { listAssets } from "@/lib/vault/assets";
 import { listFolders } from "@/lib/vault/folders";
 import type { CampaignInfo } from "@/lib/vault/campaign";
@@ -93,7 +93,20 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
         // O acervo é lido aqui só para o disco já ter respondido quando os
         // painéis montarem — eles releem, e reler um JSON que acabou de ser
         // lido é grátis. O que se evita é o painel aparecer vazio e piscar.
+        //
+        // O ELENCO é outra história, e não é sobre piscar: o `MestreShell`
+        // publica para a mesa assim que monta, e quem monta os retratos precisa
+        // da FICHA de cada personagem para saber a imagem dele — ver
+        // `retratosDaCena`. Com o índice ainda por ler, `personagens` é `null`,
+        // a lista de retratos sai vazia, e a mesa recebe "nenhum retrato": a TV
+        // e os celulares APAGAM o elenco que estavam mostrando e só o
+        // recuperam alguns segundos depois. Medido no traço do daemon: nove
+        // segundos de tela sem retrato a cada abertura de campanha.
+        //
+        // `esquecerPersonagens`, lá em cima, é quem zera; esta linha é quem
+        // espera o novo. As duas andam juntas.
         await Promise.all([
+          carregarPersonagens(),
           listAssets("image"),
           listAssets("audio"),
           listFolders(),

@@ -191,7 +191,7 @@ export function PortraitList() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Unir fica FORA da rolagem, e é um botão com a palavra escrita.
+      {/* O botão de unir (Grid) fica FORA da rolagem, e tem a palavra escrita.
           O gesto tinha de ser descobrível: o botão direito e o Shift+clique
           fazem o mesmo, mas quem nunca uniu nada não adivinha nenhum dos dois
           a partir de um ícone. */}
@@ -204,7 +204,7 @@ export function PortraitList() {
           onClick={() => unir(selecionados)}
         >
           <Group className="size-3.5" />
-          Unir
+          Grid
         </Button>
 
         <span className="text-muted-foreground flex min-w-0 flex-1 items-center gap-1 truncate text-[10px]">

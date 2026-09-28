@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MINIATURA } from "@/lib/miniatura";
 
+import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { InventarioJogador } from "./inventario-jogador";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
 import {
@@ -328,6 +329,45 @@ function CharacterCard({
     ) : null;
 
   /**
+   * Os medidores deste personagem, como a mesa os vê.
+   *
+   * SÓ LEITURA, e não é limitação de tela: quem escreve é o mestre. A mesa
+   * inteira olha para os mesmos números, e uma segunda mão mexendo neles
+   * pediria uma rota de escrita numa porta aberta na rede — a única coisa que
+   * hoje sobe do celular é a rolagem e o movimento do token.
+   *
+   * O que o mestre escondeu não chega aqui. O daemon o tira antes de responder,
+   * e não há nada na tela para filtrar — ver `sem_ocultos`.
+   *
+   * Acima dos arquivos porque é o que se consulta a cada turno; arquivo se abre
+   * uma vez por sessão.
+   */
+  const medidores = personagem.medidores ?? [];
+  const blocoDeMedidores =
+    medidores.length > 0 ? (
+      <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
+        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+          Medidores
+        </p>
+
+        {/* A mesma peça que desenha ao lado do retrato na TV, e é o ponto:
+            o jogador confere o próprio número na forma em que a mesa o vê.
+            Sem sombra — aqui não há mapa por baixo, e o contorno só sujaria um
+            texto que já tem contraste. */}
+        <div className="space-y-1.5">
+          {medidores.map((medidor) => (
+            <DesenhoDoMedidor
+              key={medidor.id}
+              medidor={medidor}
+              largura={180}
+              corpo={12}
+            />
+          ))}
+        </div>
+      </section>
+    ) : null;
+
+  /**
    * Os três campos que o mestre nomeou: ficha, retrato e miniatura.
    *
    * A ficha sai da lista de arquivos abaixo, onde estava antes: ela tem lugar
@@ -551,6 +591,7 @@ function CharacterCard({
               {personagem.nome}
             </h3>
             {retratoGrande("block w-full")}
+            {blocoDeMedidores}
             {blocoDeArquivos}
           </>
         ) : null}
@@ -574,22 +615,28 @@ function CharacterCard({
           nome, os arquivos e o inventário do lado.
 
           Em grade e não em dois `flex`: é o que deixa o token ATRAVESSAR as
-          linhas. A quarta linha, vazia, segura o espaçamento — sem ela a altura
+          linhas. A ÚLTIMA linha, vazia, segura o espaçamento — sem ela a altura
           que sobra da imagem era repartida entre as linhas ocupadas, e o nome
-          ficava boiando a uma mão de distância dos arquivos. */}
+          ficava boiando a uma mão de distância dos arquivos.
+
+          Cinco linhas desde que os medidores entraram: as `auto` que ninguém
+          ocupa somem sozinhas, e é isso que mantém o cartão de um personagem
+          sem medidor igual ao que ele era. */}
       <div
         className={cn(
           "grid items-start gap-x-3 gap-y-2",
           heroi
-            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
+            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
             : "grid-cols-1",
         )}
       >
-        {retratoGrande("row-span-4 h-full")}
+        {retratoGrande("row-span-5 h-full")}
 
         <h3 className="min-w-0 truncate text-2xl leading-tight font-semibold">
           {personagem.nome}
         </h3>
+
+        {blocoDeMedidores}
 
         {blocoDeArquivos}
 

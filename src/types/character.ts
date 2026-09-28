@@ -73,7 +73,135 @@ export type Personagem = {
   aparencias?: Aparencia[];
   /** Qual linha da lista está no ar. Ver `Aparencia`. */
   aparenciaAtiva?: string;
+  /**
+   * Os medidores deste personagem. Ver `Medidor`.
+   *
+   * Opcional porque o DAEMON tira os escondidos antes de responder, e porque
+   * campanha antiga não traz o campo. Lista vazia e ausência querem dizer a
+   * mesma coisa: nenhum medidor a desenhar.
+   */
+  medidores?: Medidor[];
   criadoEm: number;
+};
+
+/**
+ * Como a mesa lê um medidor.
+ *
+ * Três, e cada um responde uma pergunta diferente. `barra` é leitura de
+ * relance, para vida num combate; `pontos` conta unidades discretas, para três
+ * cargas de magia ou duas tochas; `porcentagem` diz a proporção sem prometer
+ * uma escala, para moral e progresso.
+ *
+ * O espelho em Rust é `vault::characters::Estilo`.
+ */
+export type EstiloMedidor = "barra" | "pontos" | "porcentagem";
+
+/**
+ * Um número entre zero e um teto, com nome, cor e forma.
+ *
+ * "Medidor" e não "vital", e a escolha é do tipo e não da tradução: vital
+ * amarraria em vida, e o mesmo desenho serve para sanidade, munição, carga,
+ * moral e tocha acesa. O que o mestre precisa dizer é "este personagem tem um
+ * número que sobe e desce, e a mesa o vê assim".
+ *
+ * Mora no ÍNDICE (`personagens.json`), ao lado de `aparencias`, e não num
+ * arquivo por personagem como o inventário. A razão é a publicação: o Mestre
+ * manda o estado da mesa dez vezes por segundo, e o medidor vai junto para a
+ * barra descer na TV no instante em que o mestre a desce. O índice já está
+ * inteiro na memória do `useCharactersStore` e já é lido por `retratosDaCena`;
+ * um arquivo por personagem obrigaria a carregar todos no boot e a reler a cada
+ * troca de cena, para poupar a regravação de alguns KB por golpe.
+ *
+ * Inteiros. Meio ponto de vida existe em algum sistema, mas fracionário pagaria
+ * arredondamento em três telas por um caso que o mestre resolve dobrando a
+ * escala — vinte em vez de dez.
+ *
+ * O espelho em Rust é `vault::characters::Medidor`. Campo novo aqui precisa de
+ * campo novo lá.
+ */
+export type Medidor = {
+  id: string;
+  nome: string;
+  /** Da mesma paleta do lápis e das uniões de retrato. Ver `CORES_LAPIS`. */
+  cor: string;
+  estilo: EstiloMedidor;
+  atual: number;
+  maximo: number;
+  /**
+   * A mesa não vê — nem o dono do personagem.
+   *
+   * O relógio da desgraça, a corrupção que ainda não se manifestou. Filtrado no
+   * daemon antes de responder e no Mestre antes de publicar: um medidor
+   * escondido que chegasse ao celular e sumisse no React já teria vazado —
+   * estaria no JSON que o navegador guardou.
+   */
+  escondido: boolean;
+};
+
+/** O que se troca num medidor. Ausente não mexe. Espelha `PatchMedidor`. */
+export type PatchMedidor = {
+  nome?: string;
+  cor?: string;
+  estilo?: EstiloMedidor;
+  atual?: number;
+  maximo?: number;
+  escondido?: boolean;
+};
+
+/**
+ * Quantos medidores cabem num personagem. Espelha `MAX_MEDIDORES`.
+ *
+ * O limite é de LAYOUT: os medidores desenham numa coluna ao lado do retrato, e
+ * passando disso a coluna fica mais alta que o rosto que ela acompanha — a
+ * figura vira apêndice do painel em vez do contrário.
+ */
+export const MAX_MEDIDORES = 6;
+
+/**
+ * Um medidor de fábrica da campanha: tudo que um `Medidor` tem, menos o valor.
+ *
+ * Sem `atual` de propósito. O valor é do PERSONAGEM — é a única coisa que
+ * distingue o goblin com três de vida do goblin com vinte —, e pedi-lo aqui
+ * daria ao mestre um campo para preencher que não quer dizer nada. O medidor
+ * materializado nasce cheio.
+ *
+ * ## Molde, e não vínculo
+ *
+ * Criar um modelo materializa um medidor de verdade em cada ficha, e dali em
+ * diante o medidor é DELA: o mestre renomeia, troca a cor, apaga. Editar o
+ * modelo depois não empurra nada — para isso existe "Aplicar em todos", que é um
+ * gesto com nome. O vínculo vivo seria a outra escolha possível, e ela desfaria
+ * o ajuste que o mestre fez num personagem sem ele ter pedido.
+ *
+ * O espelho em Rust é `vault::modelos::Modelo`.
+ */
+export type ModeloDeMedidor = {
+  id: string;
+  nome: string;
+  cor: string;
+  estilo: EstiloMedidor;
+  maximo: number;
+  escondido: boolean;
+};
+
+/** O que se troca num modelo. Ausente não mexe. Espelha `PatchModelo`. */
+export type PatchModelo = {
+  nome?: string;
+  cor?: string;
+  estilo?: EstiloMedidor;
+  maximo?: number;
+  escondido?: boolean;
+};
+
+/** Quantos modelos cabem numa campanha. Espelha `MAX_MODELOS`. */
+export const MAX_MODELOS = MAX_MEDIDORES;
+
+/** O que voltou de materializar modelos. Espelha `Aplicacao`. */
+export type AplicacaoDeModelos = {
+  /** O modelo recém-criado, quando houve um. */
+  modelo: ModeloDeMedidor | null;
+  /** Quantos personagens receberam ao menos um medidor. */
+  alcancados: number;
 };
 
 /** O id da aparência que todo personagem tem. Espelha `APARENCIA_PADRAO`. */

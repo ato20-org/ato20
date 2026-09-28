@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, RotateCcw, Settings2, Sun } from "lucide-react";
+import { Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
 
 import { CeuDoSol } from "@/components/mestre/ceu-do-sol";
 import { GridControl } from "@/components/mestre/grid-control";
@@ -42,6 +42,7 @@ import { SOL_PADRAO, temLuz, type Scene, type Sol } from "@/types/scene";
 export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
   const setSol = useSceneStore((state) => state.setSol);
   const setEscuridao = useSceneStore((state) => state.setEscuridao);
+  const setInfoDosTokens = useSceneStore((state) => state.setInfoDosTokens);
 
   const sol = scene.sol;
   const ligado = Boolean(sol);
@@ -107,7 +108,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           </div>
 
           <p className="text-muted-foreground text-[10px] leading-snug">
-            O sol não acende nada: só diz para onde a sombra cai.
+            Define para onde a sombra cai.
           </p>
 
           {/* O céu ACIMA da força, e fora do bloco que só existe com o sol
@@ -137,9 +138,8 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           {ligado && sol ? (
             <div className="space-y-4">
               <p className="text-muted-foreground text-[10px] leading-snug">
-                Arraste o sol pelo céu. Perto do meio a sombra encurta; na borda
-                ela se estica. Shift trava de {TRAVA_EM_GRAUS} em{" "}
-                {TRAVA_EM_GRAUS} graus.
+                Arraste o sol. Com Shift, de {TRAVA_EM_GRAUS} em{" "}
+                {TRAVA_EM_GRAUS}°.
               </p>
 
               <Campo rotulo="Força" valor={`${Math.round(sol.forca * 100)}%`}>
@@ -185,6 +185,33 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
         <span className="bg-border block h-px w-full" />
 
         <GridControl scene={scene} />
+
+        <span className="bg-border block h-px w-full" />
+
+        {/* Terceiro assunto da cena, ao lado do sol e da grade: o que vale para
+            ela inteira e se ajusta uma vez. Aqui é o mapa de COMBATE -- a mesa
+            quer a vida de todo mundo à vista sem ligar cada rosto a uma barra
+            no canto da tela. No mapa da taverna, nada por cima das peças. */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label
+              className="flex items-center gap-2 text-xs font-normal"
+              htmlFor="info-dos-tokens"
+            >
+              <Tags className="text-muted-foreground size-3.5" />
+              Nome e medidores nos tokens
+            </Label>
+            <Switch
+              id="info-dos-tokens"
+              checked={Boolean(scene.infoDosTokens)}
+              onCheckedChange={(ligar) => setInfoDosTokens(scene.id, ligar)}
+            />
+          </div>
+
+          <p className="text-muted-foreground text-[10px] leading-snug">
+            Medidores escondidos não aparecem.
+          </p>
+        </section>
       </PopoverContent>
     </Popover>
   );
