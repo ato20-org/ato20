@@ -102,6 +102,7 @@ import type {
 } from "@/types/character";
 import { doJogador } from "@/types/character";
 import { AparenciasPersonagem } from "@/components/mestre/aparencias-personagem";
+import { MedidoresPersonagem } from "@/components/mestre/medidores-personagem";
 
 const ICONE: Record<AttachmentKind, typeof File> = {
   image: FileImage,
@@ -303,6 +304,15 @@ function Ficha({
                 Ferido" e "troquei a miniatura" é a distância entre os dois
                 gestos que essa troca sempre pede. */}
             <AparenciasPersonagem
+              personagem={personagem}
+              onChanged={onChanged}
+            />
+
+            {/* Depois das aparências e antes dos arquivos: os três blocos de
+                cima são o personagem em cena -- a cara dele, o estado dele --,
+                e os de baixo são o que está guardado. Regua muda no meio de
+                uma cena, e arquivo não. */}
+            <MedidoresPersonagem
               personagem={personagem}
               onChanged={onChanged}
             />

@@ -52,14 +52,15 @@ import {
 } from "@/lib/geometry/sombra";
 import { caixaDoTraco } from "@/lib/geometry/limites";
 import { postitNaArea } from "@/lib/geometry/postit";
-import { medidorVazio, moverMedidor } from "@/lib/geometry/medidor";
-import type { PontaDoMedidor } from "@/components/playground/medidor-layer";
+import { reguaVazia, moverRegua } from "@/lib/geometry/regua";
+import type { PontaDoMedidor } from "@/components/playground/regua-layer";
 import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
 import { CamerasFantasma } from "@/components/playground/camera-fantasma";
 import { MarqueeBox } from "@/components/playground/marquee-box";
 import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { SceneLayer } from "@/components/playground/scene-layer";
+import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { SelectionBox } from "@/components/playground/selection-box";
@@ -161,7 +162,7 @@ import {
   type Documento,
   type FogRegion,
   type Forma,
-  type Medidor,
+  type Regua,
   type Postit,
   type NewForma,
   type NewParede,
@@ -533,6 +534,28 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   });
 
   const guardados = usePortraitStore((state) => state.portraits);
+  const layoutDaSessao = usePortraitStore((state) => state.layout);
+
+  /**
+   * Nome e medidores sobre a cabeça dos tokens, no palco do mestre.
+   *
+   * Com os ESCONDIDOS: é o único palco que os mostra, e apagados -- ele precisa
+   * ver que o relógio corre, e que a mesa não o vê. A publicação para a mesa é
+   * montada à parte, em `MestreShell`, e essa sai filtrada.
+   *
+   * Pela cena EM EDIÇÃO, e não pela que está no ar: o interruptor é dela, e o
+   * mestre liga enquanto monta o mapa seguinte.
+   */
+  const fichasNoPalco = useMemo(
+    () =>
+      fichasDaCena(
+        Boolean(scene.infoDosTokens),
+        scene.items,
+        personagens ?? [],
+        true,
+      ),
+    [scene.infoDosTokens, scene.items, personagens],
+  );
   const unioes = usePortraitStore((state) => state.unioes);
   const ajustarUniaoDeRetratos = usePortraitStore((state) => state.ajustar);
 
@@ -553,6 +576,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     scene.items,
     personagens ?? [],
     fontes,
+    // Com os medidores ESCONDIDOS, e este é o único palco que os pede. Eles
+    // desenham apagados na coluna -- o relógio da desgraça está correndo, e o
+    // mestre precisa vê-lo correr sem que a mesa o veja. Ver
+    // `MedidoresDoRetrato`.
+    true,
+    layoutDaSessao,
   );
   // A aba aberta declara a intenção: em Retratos, o mestre está mexendo neles,
   // e ver todos de uma vez é o que torna o ajuste possível. Fora dela, o mapa
@@ -1536,7 +1565,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     // Nasce na cena já no primeiro toque, e cresce no arrasto: a mesa vê a
     // conta acontecendo, como via antes, e o que sobra ao soltar é um medidor
-    // colocado. Um clique sem arrasto não deixa nada -- ver `medidorVazio`.
+    // colocado. Um clique sem arrasto não deixa nada -- ver `reguaVazia`.
     const id = addMedidor(scene.id, {
       forma: formaMedidor,
       cor: corMedidor,
@@ -1554,7 +1583,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       },
       onEnd: (native) => {
         const ponta = toScene(native.clientX, native.clientY);
-        if (medidorVazio({ ...anchor, x2: ponta.x, y2: ponta.y })) {
+        if (reguaVazia({ ...anchor, x2: ponta.x, y2: ponta.y })) {
           removeMedidores(scene.id, [id]);
           clear();
           // A ferramenta FICA na mão, como na seta recusada: nada foi colocado,
@@ -1668,7 +1697,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   }
 
   /** Clique num medidor: seleciona e, se arrastar, move inteiro. */
-  function onMedidorPointerDown(event: ReactPointerEvent, medidor: Medidor) {
+  function onMedidorPointerDown(event: ReactPointerEvent, medidor: Regua) {
     if (event.button !== 0) return;
     event.stopPropagation();
 
@@ -1676,7 +1705,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     startDrag(event, {
       onMove: (delta) => {
-        const movido = moverMedidor(medidor, delta);
+        const movido = moverRegua(medidor, delta);
         updateMedidor(scene.id, medidor.id, {
           x: movido.x,
           y: movido.y,
@@ -1690,7 +1719,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   /** Alça numa ponta: só aquela ponta anda. */
   function onMedidorAlcaPointerDown(
     event: ReactPointerEvent,
-    medidor: Medidor,
+    medidor: Regua,
     ponta: PontaDoMedidor,
   ) {
     if (event.button !== 0) return;
@@ -2701,6 +2730,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // São duas leituras diferentes do mesmo fato, e o mestre precisa das
           // duas -- ele é quem narra o resultado para a mesa.
           rolagens={bandeja}
+          fichas={fichasNoPalco}
           // Todos enquanto a aba Retratos está aberta; fora dela, só o
           // selecionado. Desenhar todos sempre punha cabeça flutuando sobre a
           // moldura da câmera justamente enquanto o mestre monta o mapa.

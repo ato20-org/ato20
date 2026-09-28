@@ -1210,10 +1210,17 @@ async fn my_characters(
 
     // Filtra o indice pelos ids vinculados, mantendo a ordem do VINCULO: e a
     // ordem em que o mestre entregou os personagens a este jogador.
+    //
+    // Os dois filtros em sequencia, e nao um so: eles escondem coisas
+    // diferentes por razoes diferentes. `sem_aparencias` tira a forma
+    // verdadeira do vilao; `sem_ocultos` tira o medidor que so o mestre
+    // acompanha -- inclusive do DONO do personagem, que e o ponto de esconder
+    // um. Ver `characters::sem_ocultos`.
     let meus: Vec<characters::Personagem> = ids
         .iter()
         .filter_map(|id| todos.iter().find(|p| &p.id == id))
         .map(sem_aparencias)
+        .map(|personagem| characters::sem_ocultos(&personagem))
         .collect();
 
     axum::Json(meus).into_response()

@@ -51,12 +51,22 @@ export function useUnioesDeRetratos(scene: Scene | null): void {
 
   const guardados = usePortraitStore((state) => state.portraits);
   const unioes = usePortraitStore((state) => state.unioes);
+  // O layout entra porque a fila mede a COMPOSICAO, e e ele que diz quais pecas
+  // estao no ar -- ver `caixaDaComposicao`.
+  const layout = usePortraitStore((state) => state.layout);
   const updateMany = usePortraitStore((state) => state.updateMany);
 
   useEffect(() => {
     if (unioes.length === 0 || !scene) return;
 
-    const daCena = retratosDaCena(guardados, scene.items, personagens ?? []);
+    const daCena = retratosDaCena(
+      guardados,
+      scene.items,
+      personagens ?? [],
+      [],
+      false,
+      layout,
+    );
     const posicoes = filasDeUnioes(unioes, daCena);
 
     // Só o que saiu de lugar. Sem esta comparação, cada aplicação produziria
@@ -75,5 +85,5 @@ export function useUnioesDeRetratos(scene: Scene | null): void {
       .map(({ id, x, y }) => ({ id, patch: { x, y } }));
 
     if (patches.length > 0) updateMany(patches);
-  }, [unioes, scene, guardados, personagens, updateMany]);
+  }, [unioes, scene, guardados, personagens, layout, updateMany]);
 }

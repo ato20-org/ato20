@@ -7,6 +7,8 @@ import {
   useQuedaDasRolagens,
 } from "@/hooks/use-queda-das-rolagens";
 import { textoDoResultado, type RolagemDaMesa } from "@/types/dado";
+import { limitarEscala } from "@/lib/geometry/portrait";
+import type { LugarDaPeca } from "@/types/scene";
 
 /** Quantas rolagens antigas a coluna mostra. O resto está no histórico do mestre. */
 const TETO = 4;
@@ -58,6 +60,8 @@ export function RolagensDoRetrato({
   altura,
   folgaAbaixo,
   folgaAcima,
+  lugar,
+  escala = 1,
 }: {
   /** A mais nova na frente, como vem da bandeja. Ver `useRolagensStore`. */
   rolagens: RolagemDaMesa[];
@@ -69,6 +73,15 @@ export function RolagensDoRetrato({
   folgaAbaixo: number;
   /** Quanto do recorte sobra acima do topo do retrato, na mesma unidade. */
   folgaAcima: number;
+  /**
+   * Onde o mestre pôs esta fileira, em fração da caixa do retrato.
+   *
+   * Ausente é o AUTOMÁTICO: embaixo, virando para cima quando não cabe. Ver
+   * `LugarDaPeca`.
+   */
+  lugar?: LugarDaPeca;
+  /** Quanto a fileira cresce ou encolhe. Ver `LayoutDoRetrato.escalaDados`. */
+  escala?: number;
 }) {
   const { chegada, agora } = useQuedaDasRolagens(rolagens);
 
@@ -79,8 +92,14 @@ export function RolagensDoRetrato({
 
   const [atual, ...anteriores] = rolagens;
 
-  const lado = largura * 0.34;
-  const mini = largura * 0.08;
+  // A escala multiplica a RÉGUA, e não cada peça: tudo aqui embaixo já era
+  // derivado da largura do retrato, então uma multiplicação no topo cresce o
+  // dado, o histórico, o texto e os vãos na mesma proporção. Mexer em cada um
+  // deixaria a fileira desmontar em algum ponto da régua.
+  const base = largura * limitarEscala(escala);
+
+  const lado = base * 0.34;
+  const mini = base * 0.08;
   const corpo = mini * 0.95;
   // Contorno escuro: o dado claro e o mapa claro existem os dois, e texto
   // branco sobre os dois some.
@@ -89,7 +108,7 @@ export function RolagensDoRetrato({
   /** Há quantos segundos a rolagem de agora está caindo. */
   const emQueda = instanteDaQueda(chegada.get(atual.id), agora);
 
-  const folga = largura * 0.05;
+  const folga = base * 0.05;
 
   /**
    * Quanto o feed ocupa, para caber ou não caber no que sobra da câmera.
@@ -123,11 +142,17 @@ export function RolagensDoRetrato({
 
   return (
     <div
-      className="pointer-events-none absolute left-0 flex items-center"
+      className="pointer-events-none absolute flex items-center"
       style={{
         // Encostado no retrato, com uma folga do tamanho de um vigésimo dele.
-        // Para baixo quando há espaço, para cima quando não há.
-        top: acima ? -(alturaDoFeed + folga) : altura + folga,
+        // Para baixo quando há espaço, para cima quando não há -- ou onde o
+        // mestre apontou, quando ele apontou.
+        left: lugar ? lugar.x * largura : 0,
+        top: lugar
+          ? lugar.y * altura
+          : acima
+            ? -(alturaDoFeed + folga)
+            : altura + folga,
         gap: folga,
       }}
     >

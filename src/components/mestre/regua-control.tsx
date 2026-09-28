@@ -23,10 +23,10 @@ import {
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { CORES_LAPIS, useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
-import { FORMAS_MEDIDOR, type FormaMedidor } from "@/types/scene";
+import { FORMAS_DE_REGUA, type FormaDaRegua } from "@/types/scene";
 
 const FORMAS: Record<
-  FormaMedidor,
+  FormaDaRegua,
   { rotulo: string; dica: string; icone: LucideIcon }
 > = {
   linha: {
@@ -104,7 +104,7 @@ export function ReguaControl({
           <span className="text-muted-foreground text-[10px]">Forma</span>
 
           <div className="flex items-center gap-1">
-            {FORMAS_MEDIDOR.map((opcao) => {
+            {FORMAS_DE_REGUA.map((opcao) => {
               const { rotulo, dica, icone: Icone } = FORMAS[opcao];
 
               return (

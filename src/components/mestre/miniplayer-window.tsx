@@ -91,7 +91,7 @@ export function MiniplayerBody() {
  * fechar uma conexão à toa.
  */
 function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
-  const { scene, portraits, spotlight, rolagens, synced, stalled } =
+  const { scene, portraits, fichas, spotlight, rolagens, synced, stalled } =
     useSubscription(codigo, base);
 
   // Mesmo corte da TV: trocar de câmera fecha a cortina; a mesma câmera andando
@@ -114,6 +114,7 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
             <SceneLayer
               scene={cena}
               portraits={portraits}
+              fichas={fichas}
               rolagens={rolagens}
               variante="tela"
               smooth

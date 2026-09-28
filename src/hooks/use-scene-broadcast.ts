@@ -14,6 +14,7 @@ import {
   type Ambiente,
   DEFAULT_SESSION_VOLUME,
   type Disparo,
+  type FichaNaCena,
   type Portrait,
   type Scene,
   type SessionTrack,
@@ -41,8 +42,14 @@ const STALLED_AFTER_MS = 12_000;
  * guarda o último estado publicado e o entrega na conexão. Uma aba de Espectador
  * aberta no meio da sessão já nasce sincronizada, sem o Mestre saber que ela
  * existe.
+ *
+ * `pronto` falso CALA o Mestre: nada é publicado e o daemon segue entregando o
+ * último quadro que recebeu. Existe porque este canal não tem como dizer
+ * "estou carregando" -- todo campo tem um valor de vazio que a mesa lê como
+ * ausência, e publicar meio estado apaga da TV o que ela estava mostrando. Quem
+ * chama decide quando sabe o suficiente para falar.
  */
-export function usePublisher(state: LiveState): void {
+export function usePublisher(state: LiveState, pronto = true): void {
   const channelRef = useRef<SceneChannel | null>(null);
 
   /**
@@ -65,8 +72,11 @@ export function usePublisher(state: LiveState): void {
     const channel = createPublisher();
     channelRef.current = channel;
 
-    channel.publish(stateRef.current);
-
+    // Sem publicar aqui. O efeito abaixo roda no MESMO commit, logo depois
+    // deste, e manda o quadro montado na hora -- este mandava o mesmo estado
+    // uma vez a mais. Tirá-lo é o que deixa a criação do canal sem depender do
+    // `pronto`: o canal nasce uma vez, e quem decide se há o que dizer é quem
+    // publica.
     return () => {
       channel.close();
       channelRef.current = null;
@@ -84,17 +94,24 @@ export function usePublisher(state: LiveState): void {
       volumeAmbiente: state.volumeAmbiente,
       volumeDisparo: state.volumeDisparo,
       portraits: state.portraits,
+      fichas: state.fichas,
       spotlight: state.spotlight,
       rolagens: state.rolagens,
     };
 
     stateRef.current = paraMesa;
-    channelRef.current?.publish(paraMesa);
+
+    // Calado enquanto `pronto` é falso. Não é atraso: é a diferença entre "a
+    // mesa não tem nada" e "eu ainda não sei o que a mesa tem", e o quadro só
+    // sabe dizer a primeira. O daemon guarda o último que recebeu e continua
+    // entregando ele a quem conectar. Ver quem passa o sinalizador.
+    if (pronto) channelRef.current?.publish(paraMesa);
     // Dependências nos campos, não no objeto `state`: quem chama monta a
     // embalagem a cada render, e compará-la fazia o Mestre publicar enquanto
     // montava a PRÓXIMA cena — uma publicação por uma mudança que a mesa não
     // vê.
   }, [
+    pronto,
     scene,
     state.track,
     state.ambientes,
@@ -104,17 +121,18 @@ export function usePublisher(state: LiveState): void {
     state.volumeAmbiente,
     state.volumeDisparo,
     state.portraits,
+    state.fichas,
     state.spotlight,
     state.rolagens,
   ]);
 
   useEffect(() => {
     const beat = setInterval(() => {
-      channelRef.current?.publish(stateRef.current);
+      if (pronto) channelRef.current?.publish(stateRef.current);
     }, HEARTBEAT_MS);
 
     return () => clearInterval(beat);
-  }, []);
+  }, [pronto]);
 }
 
 export type Subscription = {
@@ -132,6 +150,8 @@ export type Subscription = {
   volumeAmbiente: number;
   volumeDisparo: number;
   portraits: Portrait[];
+  /** Nome e medidores sobre a cabeça dos tokens. Ver `LiveState.fichas`. */
+  fichas: FichaNaCena[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
   /** Os dados que os jogadores jogaram na mesa há pouco. Ver `LiveState`. */
@@ -205,6 +225,8 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     volumeAmbiente: live.volumeAmbiente ?? VOLUME_DE_CATEGORIA_PADRAO,
     volumeDisparo: live.volumeDisparo ?? VOLUME_DE_CATEGORIA_PADRAO,
     portraits: live.portraits,
+    // Mesmo `?? []` dos ambientes: quadro de versão anterior não traz o campo.
+    fichas: live.fichas ?? [],
     spotlight: live.spotlight,
     rolagens: live.rolagens ?? [],
     synced,

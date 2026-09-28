@@ -34,6 +34,7 @@ import type { RolagemDaMesa } from "@/types/dado";
 import {
   ehQuadro,
   type CanvasItem,
+  type FichaNaCena,
   type Portrait,
   type Scene,
 } from "@/types/scene";
@@ -131,11 +132,14 @@ export function CenaDoJogador({
   codigo,
   cena,
   portraits,
+  fichas,
   rolagens,
 }: {
   codigo: string;
   cena: Scene;
   portraits: Portrait[];
+  /** Nome e medidores sobre os tokens. Ver `Scene.infoDosTokens`. */
+  fichas: FichaNaCena[];
   rolagens: RolagemDaMesa[];
 }) {
   const quadro = ehQuadro(cena);
@@ -386,6 +390,7 @@ export function CenaDoJogador({
       <SceneLayer
         scene={exibida}
         portraits={portraits}
+        fichas={fichas}
         rolagens={rolagens}
         smooth
         naMao={naMao?.itemId}

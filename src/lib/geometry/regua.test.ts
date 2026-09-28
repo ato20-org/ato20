@@ -3,16 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   caixaDoRetangulo,
   formatarArea,
-  medidorVazio,
-  moverMedidor,
+  reguaVazia,
+  moverRegua,
   rotuloDoMedidor,
-} from "@/lib/geometry/medidor";
-import type { Medidor, SceneGrid } from "@/types/scene";
+} from "@/lib/geometry/regua";
+import type { Regua, SceneGrid } from "@/types/scene";
 
 /** Um quadrado de 50 unidades: 50 unidades = 1 m. */
 const grid = { size: 50 } as SceneGrid;
 
-function medidor(parcial: Partial<Medidor>): Medidor {
+function medidor(parcial: Partial<Regua>): Regua {
   return {
     id: "m",
     forma: "linha",
@@ -59,7 +59,7 @@ describe("área", () => {
 
 describe("gestos", () => {
   it("mover leva as duas pontas juntas", () => {
-    const movido = moverMedidor(medidor({ x: 1, y: 2, x2: 3, y2: 4 }), {
+    const movido = moverRegua(medidor({ x: 1, y: 2, x2: 3, y2: 4 }), {
       x: 10,
       y: 20,
     });
@@ -68,8 +68,8 @@ describe("gestos", () => {
   });
 
   it("um clique sem arrasto é medidor vazio", () => {
-    expect(medidorVazio({ x: 0, y: 0, x2: 2, y2: 2 })).toBe(true);
-    expect(medidorVazio({ x: 0, y: 0, x2: 10, y2: 0 })).toBe(false);
+    expect(reguaVazia({ x: 0, y: 0, x2: 2, y2: 2 })).toBe(true);
+    expect(reguaVazia({ x: 0, y: 0, x2: 10, y2: 0 })).toBe(false);
   });
 
   it("a caixa do retângulo é normalizada", () => {

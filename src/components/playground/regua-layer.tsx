@@ -8,15 +8,15 @@ import {
   aberturaDoCone,
   caixaDoRetangulo,
   rotuloDoMedidor,
-} from "@/lib/geometry/medidor";
+} from "@/lib/geometry/regua";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
-  type Medidor,
+  type Regua,
   type SceneGrid,
 } from "@/types/scene";
 
-/** Qual das duas pontas a alça segura. Ver `Medidor`. */
+/** Qual das duas pontas a alça segura. Ver `Regua`. */
 export type PontaDoMedidor = "origem" | "fim";
 
 type Ponto = { x: number; y: number };
@@ -50,21 +50,21 @@ const MARCA_MAIOR_A_CADA = 5;
  * medidor pega o clique para mover, e as duas alças para mudar o tamanho. Na
  * mesa nada disso vem, e o SVG inteiro é atravessado pelo ponteiro.
  */
-export function MedidorLayer({
+export function ReguaLayer({
   medidores,
   grid,
   selecionadoId,
   onMedidorPointerDown,
   onAlcaPointerDown,
 }: {
-  medidores: Medidor[];
+  medidores: Regua[];
   /** Sem grade não há metro: quem chama não desenha a camada. */
   grid: SceneGrid;
   selecionadoId?: string | null;
-  onMedidorPointerDown?: (event: ReactPointerEvent, medidor: Medidor) => void;
+  onMedidorPointerDown?: (event: ReactPointerEvent, medidor: Regua) => void;
   onAlcaPointerDown?: (
     event: ReactPointerEvent,
-    medidor: Medidor,
+    medidor: Regua,
     ponta: PontaDoMedidor,
   ) => void;
 }) {
@@ -109,7 +109,7 @@ export function MedidorLayer({
 }
 
 type ViewProps = {
-  medidor: Medidor;
+  medidor: Regua;
   grid: SceneGrid;
   metro: number;
   px: (valor: number) => number;
@@ -159,7 +159,7 @@ function MedidorView(props: ViewProps) {
 }
 
 /** Onde a conta fica escrita: onde a mão solta, ou o meio do que tem área. */
-function pontoDoRotulo(medidor: Medidor): Ponto {
+function pontoDoRotulo(medidor: Regua): Ponto {
   switch (medidor.forma) {
     case "linha":
     case "cone":

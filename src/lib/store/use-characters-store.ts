@@ -34,6 +34,18 @@ type CharactersStore = {
 
   /** Lê se ninguém leu ainda. É o que cada tela chama ao montar. */
   garantir: () => void;
+  /**
+   * Lê agora e RESOLVE quando a resposta chegou.
+   *
+   * Existe para o boot da campanha poder esperar por ela. As outras duas são
+   * disparos sem volta, e é o certo para uma tela que monta -- ela redesenha
+   * quando o estado muda. O boot precisa do contrário: segurar o palco até o
+   * índice existir, porque quem publica para a mesa lê `personagens` UMA vez
+   * por render e manda o resultado pela rede. Com o índice ainda vazio, a mesa
+   * recebe "nenhum retrato" e apaga os que estavam na tela -- ver
+   * `retratosDaCena`, que precisa da ficha para saber a imagem de cada um.
+   */
+  carregar: () => Promise<void>;
   /** Relê agora: alguém mexeu nos personagens. */
   recarregar: () => void;
   /** A campanha passou a ser outra: esqueça o que foi lido. */
@@ -73,6 +85,10 @@ export const useCharactersStore = create<CharactersStore>((set, get) => ({
     // Nunca lido e nada em voo: a primeira tela a montar dispara, as outras
     // pegam o resultado dela.
     if (get().personagens === null && !get().emVoo) buscar(set, get);
+  },
+
+  carregar() {
+    return buscar(set, get);
   },
 
   recarregar() {
@@ -122,6 +138,16 @@ export function esquecerPersonagens(): void {
   useCharactersStore.getState().esquecer();
 }
 
+/**
+ * Lê o elenco agora, e resolve quando ele chegou. Ver `carregar`.
+ *
+ * O gêmeo de `esquecerPersonagens`, e os dois andam juntos no boot: um zera o
+ * que era da campanha anterior, o outro espera o da nova.
+ */
+export function carregarPersonagens(): Promise<void> {
+  return useCharactersStore.getState().carregar();
+}
+
 type Set = (parcial: Partial<CharactersStore>) => void;
 type Get = () => CharactersStore;
 
@@ -136,11 +162,15 @@ type Get = () => CharactersStore;
  * releitura de quem acabou de mexer em algo ser silenciosamente engolida pela
  * leitura que já estava a caminho.
  */
-function buscar(set: Set, get: Get) {
+function buscar(set: Set, get: Get): Promise<void> {
   const meu = get().pedido + 1;
   set({ pedido: meu, emVoo: true });
 
-  void Promise.all([listCharacters(), listPlayers()]).then(
+  // Devolve a promessa em vez de engoli-la com `void`: quem chama de uma tela
+  // continua ignorando o retorno, e quem chama do boot espera. Ela nunca
+  // REJEITA -- o ramo de erro já trata e avisa --, então esperar por ela não
+  // derruba a abertura da campanha.
+  return Promise.all([listCharacters(), listPlayers()]).then(
     ([lista, mesa]) => {
       if (get().pedido !== meu) return;
 

@@ -3,7 +3,9 @@
 import { call } from "@/lib/vault/bridge";
 import {
   type Ambiente,
+  type AncoraRetrato,
   GANHO_PADRAO,
+  type LayoutDoRetrato,
   type Macro,
   type Pad,
   PADS,
@@ -36,6 +38,15 @@ import {
 export type RetratosSalvos = {
   retratos: Portrait[];
   unioes: UniaoDeRetratos[];
+  /**
+   * O layout com que todo retrato desta sessão começa. Ver `LayoutDoRetrato`.
+   *
+   * Opcional porque a campanha gravada antes dele não o traz, e a leitura do
+   * store lê a ausência como `LAYOUT_PADRAO` -- que é a tela de sempre.
+   */
+  layout?: LayoutDoRetrato;
+  /** A área em que retrato novo nasce. Ver `PortraitStore.ancoraPadrao`. */
+  ancoraPadrao?: AncoraRetrato;
 };
 
 /**
