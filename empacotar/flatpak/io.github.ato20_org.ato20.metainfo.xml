@@ -100,6 +100,42 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.3.0" date="2026-09-28">
+      <description>
+        <p>
+          Maps gained a sun and walls. The sun lights nothing: it only says
+          where shadows fall, and you aim it on a sky seen from above, in the
+          map settings. Walls have a height, so a garden wall and a watchtower
+          cast different shadows, and each token's shadow is its own
+          silhouette — staff, cloak and mount included. The table sees the
+          shadows, never the walls that cast them.
+        </p>
+        <p>
+          Players can move and rotate their own character's token from the
+          phone: a finger in the middle carries it, a finger on the outer ring
+          turns it. The grid became a map setting with snapping, so tokens land
+          in the middle of a square for the game master and the player alike;
+          hold Alt to drop one exactly where it was released. The square a
+          character stands on lights up on all three screens.
+        </p>
+        <p>
+          Besides maps, a campaign now has backdrops: the image of a setting
+          with a few figures on top, without camera, grid, fog or sun. The
+          panel is now called Scenes, with a tab for each. A campaign can also
+          have a cover, which is what the TV shows when nothing is on air. Map
+          tools sit exposed on the right edge, the ruler lets go after
+          measuring, and hidden areas moved to a button on the stage.
+        </p>
+        <p>
+          Fixes: creating or deleting a scene no longer wipes the folders and
+          notes in Files. Right-clicking a token now shows the token's own
+          actions. The TV and the phones follow the sound desk's category
+          faders. Portraits stay still on the TV and phones while the camera
+          moves, and a character whose player left the table loses the blue
+          player outline.
+        </p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-09-23">
       <description>
         <p>
