@@ -9,12 +9,16 @@ describe("quadroRecebido", () => {
   it("deixa passar os campos que não precisam de padrão", () => {
     // Os que a lista fixa perdia: a TV e o celular nunca os recebiam, embora
     // o Mestre os publicasse e o daemon os repassasse.
+    const fichas = [{ id: "p1", nome: "Zefer", medidores: [] }];
+
     const quadro = quadroRecebido({
+      fichas,
       volumeTrilha: 0.3,
       volumeAmbiente: 0.5,
       volumeDisparo: 0.7,
     });
 
+    expect(quadro.fichas).toEqual(fichas);
     expect(quadro.volumeTrilha).toBe(0.3);
     expect(quadro.volumeAmbiente).toBe(0.5);
     expect(quadro.volumeDisparo).toBe(0.7);
