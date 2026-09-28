@@ -221,14 +221,17 @@ function lerRascunho(
  * cada gravação, e o remonte no meio da digitação devolveria o cursor ao fim da
  * palavra. `null` é fora de edição.
  */
-function NomeDoMedidor({
+export function NomeDoMedidor({
   nome,
   ocupado,
   onGravar,
+  rotulos = { campo: "Nome do medidor", lapis: "Renomear medidor" },
 }: {
   nome: string;
   ocupado: boolean;
   onGravar: (nome: string) => void;
+  /** O que o leitor de tela ouve. A linha da condição usa o mesmo campo. */
+  rotulos?: { campo: string; lapis: string };
 }) {
   const [rascunho, setRascunho] = useState<string | null>(null);
   const descartar = useRef(false);
@@ -248,7 +251,7 @@ function NomeDoMedidor({
     return (
       <Input
         autoFocus
-        aria-label="Nome do medidor"
+        aria-label={rotulos.campo}
         value={rascunho}
         className="h-6 min-w-0 flex-1 px-1.5 text-sm"
         onFocus={(evento) => evento.currentTarget.select()}
@@ -265,7 +268,7 @@ function NomeDoMedidor({
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label="Renomear medidor"
+        aria-label={rotulos.lapis}
         disabled={ocupado}
         onClick={() => setRascunho(nome)}
       >

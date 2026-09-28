@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MINIATURA } from "@/lib/miniatura";
 
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
+import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
 import { InventarioJogador } from "./inventario-jogador";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
 import {
@@ -368,6 +369,33 @@ function CharacterCard({
     ) : null;
 
   /**
+   * As condições deste personagem, com o nome ao lado do selo.
+   *
+   * Com o NOME, ao contrário da TV: lá o selo é lido de longe, pelo desenho e
+   * pela cor; aqui o jogador tem o celular na mão e quer saber o que aquele
+   * frasco verde quer dizer. As escondidas não chegam -- o daemon as tira,
+   * como os medidores. Só leitura, pela mesma razão deles.
+   */
+  const condicoes = personagem.condicoes ?? [];
+  const blocoDeCondicoes =
+    condicoes.length > 0 ? (
+      <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
+        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+          Condições
+        </p>
+
+        <ul className="flex flex-wrap gap-x-3 gap-y-1.5">
+          {condicoes.map((condicao) => (
+            <li key={condicao.id} className="flex items-center gap-1.5 text-sm">
+              <SeloDaCondicao condicao={condicao} tamanho={22} />
+              {condicao.nome}
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
+
+  /**
    * Os três campos que o mestre nomeou: ficha, retrato e miniatura.
    *
    * A ficha sai da lista de arquivos abaixo, onde estava antes: ela tem lugar
@@ -591,6 +619,7 @@ function CharacterCard({
               {personagem.nome}
             </h3>
             {retratoGrande("block w-full")}
+            {blocoDeCondicoes}
             {blocoDeMedidores}
             {blocoDeArquivos}
           </>
@@ -619,22 +648,25 @@ function CharacterCard({
           que sobra da imagem era repartida entre as linhas ocupadas, e o nome
           ficava boiando a uma mão de distância dos arquivos.
 
-          Cinco linhas desde que os medidores entraram: as `auto` que ninguém
-          ocupa somem sozinhas, e é isso que mantém o cartão de um personagem
-          sem medidor igual ao que ele era. */}
+          Seis linhas desde que as condições entraram, e cinco desde os
+          medidores: as `auto` que ninguém ocupa somem sozinhas, e é isso que
+          mantém o cartão de um personagem sem medidor nem condição igual ao
+          que ele era. */}
       <div
         className={cn(
           "grid items-start gap-x-3 gap-y-2",
           heroi
-            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
+            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
             : "grid-cols-1",
         )}
       >
-        {retratoGrande("row-span-5 h-full")}
+        {retratoGrande("row-span-6 h-full")}
 
         <h3 className="min-w-0 truncate text-2xl leading-tight font-semibold">
           {personagem.nome}
         </h3>
+
+        {blocoDeCondicoes}
 
         {blocoDeMedidores}
 

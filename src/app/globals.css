@@ -227,6 +227,26 @@
     animation: scene-fade-in 200ms ease-out both;
   }
 
+  /* Os efeitos de condição na figura. Ver `FiguraComEfeitos`.
+
+     Os três animam só `opacity` e `transform`, que o compositor anima fora da
+     thread principal -- o que muda de cor já veio assado em pixel, e nada aqui
+     repinta a figura. A fase de cada um vem do id da figura, pelo
+     `animation-delay`: a horda envenenada não respira em uníssono.
+
+     Os períodos espelham `PERIODO`, em `figura-com-efeitos.tsx`. */
+  .efeito-aura {
+    animation: efeito-aura 2.4s ease-in-out infinite;
+  }
+
+  .efeito-translucido {
+    animation: efeito-translucido 3.2s ease-in-out infinite;
+  }
+
+  .efeito-tremendo {
+    animation: efeito-tremendo 0.45s linear infinite;
+  }
+
   /* Rolagem sem a barra à vista.
      A tira de abas do dock tem 26 pixels de altura: uma barra horizontal ali
      come metade do alvo de clique das abas, e a rolagem não é o assunto — o
@@ -283,6 +303,64 @@
 @keyframes scene-fade-in {
   from {
     opacity: 0;
+  }
+}
+
+/* A base dos efeitos de condição, PARADA, fora do `@media`: quem pediu menos
+   movimento continua vendo o halo e o invisível -- só sem respirar. O tremor
+   não tem base, porque tremor parado é figura normal, e a leitura dele fica
+   com o selo.
+
+   Os quadros com as mesmas pontas da base, e sem `both`: quando a animação
+   não corre, vale o valor de cima, e é ele que a animação atravessa. */
+.efeito-aura {
+  opacity: 0.85;
+}
+
+.efeito-translucido {
+  opacity: 0.4;
+}
+
+@keyframes efeito-aura {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes efeito-translucido {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Em porcentagem da própria caixa, que é a do token: o tremor de um dragão e o
+   de um rato saem proporcionais, e não o mesmo número de unidades. */
+@keyframes efeito-tremendo {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+
+  25% {
+    transform: translate(-2%, 0.6%);
+  }
+
+  50% {
+    transform: translate(1.6%, -0.6%);
+  }
+
+  75% {
+    transform: translate(-1%, -0.4%);
   }
 }
 

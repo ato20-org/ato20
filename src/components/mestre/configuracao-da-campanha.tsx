@@ -7,10 +7,11 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { Gauge, Plus, Wand2 } from "lucide-react";
+import { Gauge, Plus, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { LayoutDoRetratoPainel } from "@/components/mestre/layout-do-retrato";
+import { LinhaDeCondicao } from "@/components/mestre/linha-de-condicao";
 import {
   LinhaDeMedidor,
   SeloDoMedidor,
@@ -27,17 +28,25 @@ import {
 } from "@/components/ui/tooltip";
 import { useCharacters } from "@/hooks/use-characters";
 import { useListReorder } from "@/hooks/use-list-reorder";
+import { SUGESTOES } from "@/lib/condicao";
+import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
   aplicarModelosEmTodos,
+  criarCondicaoDaCampanha,
   criarModelo,
+  editarCondicaoDaCampanha,
   editarModelo,
   listarModelos,
+  removerCondicaoDaCampanha,
   removerModelo,
+  reordenarCondicoesDaCampanha,
   reordenarModelos,
 } from "@/lib/vault/characters";
 import {
   MAX_MODELOS,
+  MAX_MODELOS_DE_CONDICAO,
+  type Condicao,
   type ModeloDeMedidor,
   type PatchModelo,
 } from "@/types/character";
@@ -62,6 +71,10 @@ export function ConfiguracaoDaCampanhaBody() {
     <ScrollArea className="min-h-0 flex-1">
       <div className="space-y-4 p-3">
         <MedidoresDaCampanha />
+
+        <Separator />
+
+        <CondicoesDaCampanha />
 
         <Separator />
 
@@ -361,5 +374,172 @@ function LinhaDeModelo({
         />
       }
     />
+  );
+}
+
+/**
+ * O cardápio de condições: o que o menu do token oferece.
+ *
+ * CARDÁPIO, e não molde -- o avesso dos medidores logo acima. Criar uma
+ * condição aqui não toca em ficha nenhuma, porque ninguém nasce envenenado:
+ * ela só passa a estar a um clique no botão direito do token. Quando o mestre
+ * a marca, o personagem ganha uma cópia, e editar o cardápio depois não muda a
+ * cor do veneno que a mesa já está vendo. Ver `vault::condicoes`.
+ */
+function CondicoesDaCampanha() {
+  const { modelos, recarregar } = useCondicoesDaCampanha();
+  const [ocupado, setOcupado] = useState(false);
+  /** A ordem depois de um arrasto, até o cardápio relido chegar. */
+  const [arrastada, setArrastada] = useState<{
+    de: Condicao[] | null;
+    lista: Condicao[];
+  } | null>(null);
+
+  const lista =
+    arrastada && arrastada.de === modelos ? arrastada.lista : (modelos ?? []);
+  const cheio = lista.length >= MAX_MODELOS_DE_CONDICAO;
+
+  async function mexer(acao: () => Promise<unknown>, erro: string) {
+    setOcupado(true);
+    try {
+      await acao();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : erro);
+    } finally {
+      recarregar();
+      setOcupado(false);
+    }
+  }
+
+  const { listRef, dropIndex, startReorder } = useListReorder<string>(
+    (modeloId, index) => {
+      const de = lista.findIndex((modelo) => modelo.id === modeloId);
+      if (de < 0 || de === index) return;
+
+      const arrumada = [...lista];
+      const [movido] = arrumada.splice(de, 1);
+      arrumada.splice(index, 0, movido!);
+
+      setArrastada({ de: modelos, lista: arrumada });
+      void mexer(
+        () => reordenarCondicoesDaCampanha(arrumada.map((modelo) => modelo.id)),
+        "Falha ao reordenar.",
+      );
+    },
+  );
+
+  async function criar() {
+    await mexer(
+      () =>
+        criarCondicaoDaCampanha(
+          "Condição",
+          CORES_LAPIS[lista.length % CORES_LAPIS.length] ?? CORES_LAPIS[0],
+          "circulo",
+          null,
+        ),
+      "Falha ao criar a condição.",
+    );
+  }
+
+  /**
+   * O cardápio de partida, num gesto com nome. Só existe com o cardápio vazio:
+   * no meio de uma lista que o mestre já montou, ele duplicaria "Caído" ao
+   * lado do "Caído" que o mestre recoloriu.
+   */
+  async function sugerir() {
+    await mexer(async () => {
+      for (const sugestao of SUGESTOES) {
+        await criarCondicaoDaCampanha(
+          sugestao.nome,
+          sugestao.cor,
+          sugestao.icone,
+          sugestao.efeito ?? null,
+        );
+      }
+    }, "Falha ao criar as sugestões.");
+  }
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-1">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-medium">Condições da campanha</h3>
+          <p className="text-muted-foreground text-[11px] leading-snug">
+            O que o botão direito do token oferece.
+          </p>
+        </div>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Criar condição da campanha"
+                disabled={cheio || ocupado}
+                onClick={() => void criar()}
+              >
+                <Plus />
+              </Button>
+            }
+          />
+          <TooltipContent>
+            <p className="font-medium">Criar condição da campanha</p>
+            {cheio ? (
+              <p className="text-muted-foreground max-w-48">
+                Limite de {MAX_MODELOS_DE_CONDICAO} condições: mais que isso e
+                o menu do token vira uma lista que se rola.
+              </p>
+            ) : null}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
+      {modelos === null ? (
+        <p className="text-muted-foreground text-[11px]">Lendo…</p>
+      ) : lista.length === 0 ? (
+        <div className="space-y-2">
+          <PainelVazio icone={Sparkles}>Nenhuma condição registrada</PainelVazio>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={ocupado}
+            onClick={() => void sugerir()}
+          >
+            Usar sugestões
+          </Button>
+        </div>
+      ) : (
+        <ul ref={listRef} className="space-y-0.5">
+          {lista.map((modelo, index) => (
+            <LinhaDeCondicao
+              key={modelo.id}
+              condicao={modelo}
+              ocupado={ocupado}
+              dropTarget={dropIndex === index}
+              onReorderStart={(event) => startReorder(event, modelo.id)}
+              onEditar={(patch) =>
+                void mexer(
+                  () => editarCondicaoDaCampanha(modelo.id, patch),
+                  "Falha ao gravar.",
+                )
+              }
+              onApagar={() =>
+                void mexer(
+                  () => removerCondicaoDaCampanha(modelo.id),
+                  "Falha ao apagar a condição.",
+                )
+              }
+              dicaDoOlho={{
+                titulo: modelo.escondido ? "Chega escondida" : "Chega à vista",
+                texto:
+                  "Vale para as próximas vezes que ela for marcada. Não muda quem já a tem.",
+              }}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

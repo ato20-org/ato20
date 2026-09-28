@@ -30,11 +30,13 @@ import {
   PLANO,
   zoomViewport,
 } from "@/lib/geometry/viewport";
+import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import { efeitoDe } from "@/lib/geometry/luz";
 import { MINIATURA } from "@/lib/miniatura";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
+import { EFEITOS_NA_FIGURA } from "@/types/character";
 import {
   CORES_DA_LUZ,
   RAIO_DA_LUZ_PADRAO,
@@ -74,7 +76,10 @@ import {
  *               que faz o `memo` do `CanvasItemView` não valer nada. Quantos
  *               itens de fato se movem é `?movidos=` (padrão 1, `todos` para o
  *               pior caso): o mestre arrasta UM token, e o resto do mapa está
- *               parado.
+ *               parado. `?condicoes=K&figura=aura` dá aos primeiros K
+ *               tokens um efeito de condição -- `aura`, `tingido`,
+ *               `translucido`, `tremendo`, `apagado` ou `misto`, que roda os
+ *               cinco. Ver `condicoesDaMedida`.
  * `amostras-id` A mesma coisa, preservando a identidade dos itens que não
  *               mudaram. Existe para responder por número se vale a pena
  *               reconciliar o quadro recebido antes de entregá-lo à árvore.
@@ -243,6 +248,36 @@ function sombraDaMedida(): Pick<
 }
 
 /**
+ * Os efeitos de condição desta corrida, lidos da URL: `?condicoes=K&figura=aura`.
+ *
+ * Os PRIMEIROS K tokens, pela razão das lanternas: o primeiro é o que o
+ * cenário move. `misto` roda os cinco efeitos, que é a mesa de verdade -- a
+ * horda não é toda envenenada do mesmo jeito. K em zero, o padrão, devolve
+ * lista vazia e a cena montada não ganha nem o `personagemId`: é o que mantém
+ * esta corrida comparável com as já medidas.
+ */
+function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] } {
+  if (typeof window === "undefined") return { quantos: 0, efeitos: [] };
+
+  const params = new URLSearchParams(window.location.search);
+  const quantos = Number(params.get("condicoes") ?? 0);
+  const pedido = params.get("figura") ?? "misto";
+  const efeitos: EfeitosDoPersonagem[] = Array.from({ length: quantos }, (_, i) => {
+    const efeito =
+      pedido === "misto"
+        ? EFEITOS_NA_FIGURA[i % EFEITOS_NA_FIGURA.length]!
+        : (EFEITOS_NA_FIGURA.find((nome) => nome === pedido) ?? "aura");
+
+    return {
+      personagemId: `perf-personagem-${i}`,
+      efeitos: [{ efeito, cor: CORES_DA_LUZ[i % CORES_DA_LUZ.length]! }],
+    };
+  });
+
+  return { quantos, efeitos };
+}
+
+/**
  * Quantos tokens carregam lanterna, lido da URL: `?carregadas=K`.
  *
  * Os PRIMEIROS K, e o primeiro é o que os cenários de arrasto movem: com K a
@@ -278,6 +313,7 @@ function lanternasDaMedida(): number {
 function montarCena(n: number, cameras = 0, noAr = true): Scene {
   const agora = Date.now();
   const lanternas = lanternasDaMedida();
+  const { quantos: comCondicao } = condicoesDaMedida();
 
   const items: CanvasItem[] = Array.from({ length: n }, (_, i) => {
     const lado = 180 + ((i * 37) % 140);
@@ -297,6 +333,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
       rotation: (i * 23) % 360,
       z: i + 1,
       locked: false,
+      ...(i < comCondicao ? { personagemId: `perf-personagem-${i}` } : {}),
       ...(i < lanternas
         ? {
             luz: {
@@ -614,9 +651,15 @@ function PalcoEspectador({
     return () => clearInterval(amostra);
   }, [base, identidade, movidos]);
 
+  // Uma vez, e não por amostra: na mesa o quadro traz os efeitos do mesmo
+  // personagem a cada 100 ms, mas o `SceneLayer` monta o mapa deles por
+  // identidade da lista, e a lista que o `useSubscription` entrega só muda
+  // quando o mestre marca ou tira uma condição.
+  const efeitos = useMemo(() => condicoesDaMedida().efeitos, []);
+
   return (
     <SceneStage viewport={cena.camera} smooth>
-      <SceneLayer scene={cena} smooth variante={variante} />
+      <SceneLayer scene={cena} smooth variante={variante} efeitos={efeitos} />
     </SceneStage>
   );
 }

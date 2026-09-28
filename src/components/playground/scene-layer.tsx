@@ -26,6 +26,7 @@ import {
   TextosDaMesa,
 } from "@/components/playground/quadro-mesa-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
+import type { EfeitoPedido, EfeitosDoPersonagem } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
 import type { RolagemDaMesa } from "@/types/dado";
 import {
@@ -118,6 +119,13 @@ type SceneLayerProps = {
    * apresentou não atravessa a rede. Ver `Scene.infoDosTokens`.
    */
   fichas?: FichaNaCena[];
+  /**
+   * O que as condições fazem com cada figura. Ver `LiveState.efeitos`.
+   *
+   * Ao contrário das `fichas`, chega com o interruptor da cena desligado: o
+   * efeito não tem nome, e é desenhado NA figura, no token e no retrato.
+   */
+  efeitos?: EfeitosDoPersonagem[];
   /** Ausente = camada só de leitura, que é o caso do Espectador. */
   onItemPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
@@ -161,6 +169,7 @@ export function SceneLayer({
   portraits,
   rolagens,
   fichas,
+  efeitos,
   onItemPointerDown,
   onFogPointerDown,
   onPortraitPointerDown,
@@ -174,6 +183,21 @@ export function SceneLayer({
   const items = useMemo(
     () => [...scene.items].sort((a, b) => a.z - b.z),
     [scene.items],
+  );
+
+  /**
+   * Os efeitos por personagem, montados uma vez por lista recebida.
+   *
+   * O token recebe o array DO PERSONAGEM, o mesmo objeto para toda a horda:
+   * o `CanvasItemView` é `memo`, e um array novo por token a cada quadro
+   * redesenharia os quarenta.
+   */
+  const efeitosPorPersonagem = useMemo(
+    () =>
+      new Map<string, ReadonlyArray<EfeitoPedido>>(
+        (efeitos ?? []).map((atual) => [atual.personagemId, atual.efeitos]),
+      ),
+    [efeitos],
   );
 
   /**
@@ -236,6 +260,11 @@ export function SceneLayer({
           // mapa inteiro faria os quarenta itens redesenharem a cada quadro em
           // que qualquer um deles muda.
           contorno={contornos?.get(item.id)}
+          efeitos={
+            item.personagemId
+              ? efeitosPorPersonagem.get(item.personagemId)
+              : undefined
+          }
           onPointerDown={onItemPointerDown}
         />
       ))}
@@ -325,6 +354,7 @@ export function SceneLayer({
           // escalado e enfileirado -- tudo em coordenada de cena. Ver `espaco`.
           espaco={variant === "mesa" ? "tela" : "cena"}
           rolagens={rolagens}
+          efeitos={efeitosPorPersonagem}
           onPortraitPointerDown={onPortraitPointerDown}
         />
       ) : null}

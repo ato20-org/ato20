@@ -61,6 +61,7 @@ import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { retratosDaCena } from "@/lib/geometry/portrait";
+import { efeitosDaCena } from "@/lib/condicao";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
 import type { Personagem } from "@/types/character";
 
@@ -206,6 +207,19 @@ export function MestreShell() {
     [cenaParaMesa?.infoDosTokens, cenaParaMesa?.items, personagens],
   );
 
+  /**
+   * O que as condições fazem com cada figura, para a mesa.
+   *
+   * Sempre, e não só com a informação dos tokens ligada: o efeito não carrega
+   * nome, e o token tingido de verde é o próprio token. Sem as escondidas, que
+   * `efeitosDaFigura` nunca desenha. `useMemo` pela razão das fichas.
+   */
+  const efeitos = useMemo(
+    () =>
+      efeitosDaCena(cenaParaMesa?.items ?? [], personagens ?? SEM_PERSONAGENS),
+    [cenaParaMesa?.items, personagens],
+  );
+
   const spotlight = useSpotlightStore((state) => state.spotlight);
   const rolagens = useRolagensStore((state) => state.bandeja);
 
@@ -255,6 +269,7 @@ export function MestreShell() {
       volumeDisparo,
       portraits,
       fichas,
+      efeitos,
       spotlight,
       rolagens,
     },

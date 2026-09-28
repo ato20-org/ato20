@@ -106,6 +106,16 @@ pub struct Personagem {
     /// podem gravar o mesmo numero nele.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub medidores: Vec<Medidor>,
+    /// As condicoes deste personagem: envenenado, caido, abencoado.
+    ///
+    /// No INDICE, ao lado dos medidores e pela mesma razao: o selo e o efeito
+    /// viajam no quadro que o Mestre publica dez vezes por segundo, e o veneno
+    /// tem de aparecer no token no instante em que o mestre o marca.
+    ///
+    /// Lista, e a ordem vale: e a ordem dos selos na mesa, e quando duas
+    /// condicoes pedem o mesmo efeito na figura, quem vence e a primeira.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub condicoes: Vec<Condicao>,
     #[serde(rename = "criadoEm")]
     pub criado_em: i64,
 }
@@ -164,6 +174,81 @@ impl Default for Estilo {
     fn default() -> Self {
         Self::Barra
     }
+}
+
+/// Uma condicao: um selo com nome, icone e cor, e o que ele faz com a figura.
+///
+/// EXIBICAO, e nada alem. O nucleo mostra que o goblin esta envenenado; quem
+/// conta rodadas, tira vida por turno ou remove a condicao sozinha e extensao.
+/// E a mesma fronteira do medidor: mostrar estado sim, calcular regra nao.
+///
+/// Sem numero. "Exaustao 2" existe, mas um numero que sobe e desce ja tem
+/// lugar -- e o medidor. Dois jeitos de guardar o mesmo numero poriam o mestre
+/// para escolher sem ter por que.
+///
+/// O espelho em TypeScript e `Condicao`, em `types/character.ts`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Condicao {
+    pub id: String,
+    pub nome: String,
+    /// Da mesma paleta dos medidores. Mesma razao de la para ser a string.
+    pub cor: String,
+    /// Qual desenho o selo usa, por NOME de uma lista que so a tela conhece.
+    ///
+    /// String e nao enum: a lista e de icones da interface, e crescer a lista
+    /// nao pode exigir uma versao nova do Rust. Nome desconhecido vira o icone
+    /// de sempre na tela -- ver `iconeDaCondicao`.
+    pub icone: String,
+    /// O que a condicao faz com a figura no mapa e no retrato. Ausente = so o
+    /// selo.
+    #[serde(
+        default,
+        deserialize_with = "efeito_tolerante",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub efeito: Option<EfeitoNaFigura>,
+    /// A mesa nao ve -- nem o selo, nem o efeito.
+    ///
+    /// O mesmo caminho do medidor escondido: filtrado no daemon e no Mestre
+    /// antes de publicar. O EFEITO sai junto, e e o que importa: um veneno
+    /// secreto que tingisse o token de verde contaria o segredo pela imagem.
+    pub escondido: bool,
+}
+
+/// O que uma condicao faz com a figura.
+///
+/// Cinco climas, e nao uma regua de matiz e opacidade: o mestre escolhe
+/// "tingido" na cor do veneno, e nao "hue 120 a 40%". A conta de cada um mora
+/// na tela, que e quem desenha.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EfeitoNaFigura {
+    /// Um halo na cor da condicao, respirando atras da figura.
+    Aura,
+    /// A figura ganha a cor por cima, so onde ha figura.
+    Tingido,
+    /// Meio transparente, tremulando. Invisivel, fantasma.
+    Translucido,
+    /// Treme no lugar. Medo, atordoado.
+    Tremendo,
+    /// Cinza e escura. Morto, inconsciente.
+    Apagado,
+}
+
+/// Le o efeito, e devolve `None` para o que nao conhece.
+///
+/// Ao contrario do `Estilo`, que derruba a leitura: a lista de efeitos e das
+/// que crescem, e um efeito de uma versao futura faria a campanha inteira
+/// deixar de abrir numa versao anterior -- o `personagens.json` e um arquivo
+/// so. Perder o efeito e cair no selo; perder o indice e perder a mesa.
+fn efeito_tolerante<'de, D>(de: D) -> Result<Option<EfeitoNaFigura>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let cru = Option::<serde_json::Value>::deserialize(de)?;
+
+    Ok(cru.and_then(|valor| serde_json::from_value(valor).ok()))
 }
 
 /// O id da aparencia que todo personagem tem.
@@ -355,6 +440,7 @@ pub fn create(vault: &Vault, nome: &str) -> AppResult<Personagem> {
         }],
         aparencia_ativa: Some(APARENCIA_PADRAO.to_string()),
         medidores: Vec::new(),
+        condicoes: Vec::new(),
         criado_em: now_ms(),
     };
 
@@ -884,8 +970,275 @@ pub fn acrescentar_medidores(vault: &Vault, id: &str, novos: Vec<Medidor>) -> Ap
 }
 
 /// O nome de um medidor como ele e comparado: sem caixa e sem espaco nas pontas.
-fn chave_do_nome(nome: &str) -> String {
+///
+/// Vale tambem para a condicao: e por ele que "Envenenado" do menu do token
+/// acha o "envenenado" que a ficha ja tem.
+pub fn chave_do_nome(nome: &str) -> String {
     nome.trim().to_lowercase()
+}
+
+// --- condicoes ---------------------------------------------------------------
+
+/// Quantas condicoes cabem num personagem.
+///
+/// Oito. Limite de LAYOUT, como o dos medidores: os selos desenham numa
+/// fileira sobre a cabeca do token, e passando disso a fileira fica mais larga
+/// que o nome que ela acompanha.
+pub const MAX_CONDICOES: usize = 8;
+
+/// O teto do nome. O mesmo do medidor: e um rotulo, lido de longe.
+pub const MAX_NOME_CONDICAO: usize = 24;
+
+/// O teto do nome do icone. Folgado para qualquer nome da lista da tela, e
+/// curto o bastante para o arquivo editado a mao nao guardar um paragrafo ali.
+const MAX_ICONE: usize = 32;
+
+/// O icone de quem chegou sem nenhum. A tela desenha o mesmo para nome
+/// desconhecido, entao os dois casos se leem igual.
+pub const ICONE_PADRAO: &str = "circulo";
+
+fn sem_condicao(id: &str, condicao_id: &str) -> AppError {
+    AppError::Malformed {
+        file: "personagens.json".into(),
+        cause: format!("personagem {id} nao tem a condicao {condicao_id}"),
+    }
+}
+
+/// Poe a condicao em forma: nome curto e nunca vazio, icone curto e nunca
+/// vazio. A cor e o efeito passam como vieram -- a cor pela razao do medidor,
+/// e o efeito porque o tipo ja so aceita os cinco.
+pub fn ajustar_condicao(condicao: &mut Condicao) {
+    condicao.nome = texto_curto(&condicao.nome, MAX_NOME_CONDICAO);
+    if condicao.nome.is_empty() {
+        condicao.nome = "Condição".to_string();
+    }
+
+    condicao.icone = texto_curto(&condicao.icone, MAX_ICONE);
+    if condicao.icone.is_empty() {
+        condicao.icone = ICONE_PADRAO.to_string();
+    }
+}
+
+/// Cria uma condicao no fim da lista do personagem.
+///
+/// Nome repetido ENTRA, ao contrario do caminho dos modelos: aqui e o mestre
+/// criando uma linha na ficha, e ela nasce com um nome provisorio que ele
+/// corrige na hora. Recusar o segundo "Condicao" o obrigaria a renomear a
+/// primeira antes de criar a segunda.
+pub fn criar_condicao(
+    vault: &Vault,
+    id: &str,
+    nome: &str,
+    cor: &str,
+    icone: &str,
+    efeito: Option<EfeitoNaFigura>,
+) -> AppResult<Condicao> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    if personagem.condicoes.len() >= MAX_CONDICOES {
+        return Err(AppError::Malformed {
+            file: "personagens.json".into(),
+            cause: format!("o personagem ja tem {MAX_CONDICOES} condicoes"),
+        });
+    }
+
+    let mut condicao = Condicao {
+        id: uuid::Uuid::new_v4().to_string(),
+        nome: nome.to_string(),
+        cor: cor.to_string(),
+        icone: icone.to_string(),
+        efeito,
+        escondido: false,
+    };
+    ajustar_condicao(&mut condicao);
+
+    personagem.condicoes.push(condicao.clone());
+    save(vault, &personagens)?;
+
+    Ok(condicao)
+}
+
+/// O que se pode trocar numa condicao. Ausente nao mexe.
+///
+/// `efeito` e `Option<Option<_>>`, como a imagem do item do inventario:
+/// ausente nao mexe, e presente com `null` TIRA o efeito. Um `Option` so nao
+/// conseguiria dizer "volte a ser so o selo".
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchCondicao {
+    #[serde(default)]
+    pub nome: Option<String>,
+    #[serde(default)]
+    pub cor: Option<String>,
+    #[serde(default)]
+    pub icone: Option<String>,
+    #[serde(default, deserialize_with = "efeito_presente")]
+    pub efeito: Option<Option<EfeitoNaFigura>>,
+    #[serde(default)]
+    pub escondido: Option<bool>,
+}
+
+/// Distingue "campo ausente" de "campo com `null`". Ver `inventory::presente`.
+///
+/// Estrito, ao contrario do `efeito_tolerante`: isto e um PEDIDO da tela, e
+/// um efeito que ela nao sabe nomear e erro dela, nao dado antigo a preservar.
+fn efeito_presente<'de, D>(de: D) -> Result<Option<Option<EfeitoNaFigura>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<EfeitoNaFigura>::deserialize(de).map(Some)
+}
+
+impl PatchCondicao {
+    /// Aplica o patch e poe a condicao em forma. Serve a ficha e aos modelos.
+    pub fn aplicar(self, condicao: &mut Condicao) {
+        if let Some(nome) = self.nome {
+            condicao.nome = nome;
+        }
+        if let Some(cor) = self.cor {
+            condicao.cor = cor;
+        }
+        if let Some(icone) = self.icone {
+            condicao.icone = icone;
+        }
+        if let Some(efeito) = self.efeito {
+            condicao.efeito = efeito;
+        }
+        if let Some(escondido) = self.escondido {
+            condicao.escondido = escondido;
+        }
+
+        ajustar_condicao(condicao);
+    }
+}
+
+/// Edita uma condicao e devolve como ela ficou depois do ajuste.
+pub fn editar_condicao(
+    vault: &Vault,
+    id: &str,
+    condicao_id: &str,
+    patch: PatchCondicao,
+) -> AppResult<Condicao> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+
+    let condicao = personagens[alvo]
+        .condicoes
+        .iter_mut()
+        .find(|c| c.id == condicao_id)
+        .ok_or_else(|| sem_condicao(id, condicao_id))?;
+
+    patch.aplicar(condicao);
+    let saida = condicao.clone();
+
+    save(vault, &personagens)?;
+
+    Ok(saida)
+}
+
+/// Tira uma condicao do personagem.
+pub fn remover_condicao(vault: &Vault, id: &str, condicao_id: &str) -> AppResult<()> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    if !personagem.condicoes.iter().any(|c| c.id == condicao_id) {
+        return Err(sem_condicao(id, condicao_id));
+    }
+
+    personagem.condicoes.retain(|c| c.id != condicao_id);
+
+    save(vault, &personagens)
+}
+
+/// Poe as condicoes na ordem pedida. Mesma regra de `reordenar_medidores`: o
+/// que falta no pedido fica no fim, e nada some.
+pub fn reordenar_condicoes(
+    vault: &Vault,
+    id: &str,
+    ordem: &[String],
+) -> AppResult<Vec<Condicao>> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    let mut restantes = std::mem::take(&mut personagem.condicoes);
+    let mut arrumadas: Vec<Condicao> = Vec::with_capacity(restantes.len());
+
+    for pedido in ordem {
+        if let Some(posicao) = restantes.iter().position(|c| &c.id == pedido) {
+            arrumadas.push(restantes.remove(posicao));
+        }
+    }
+    arrumadas.append(&mut restantes);
+
+    personagem.condicoes = arrumadas.clone();
+    save(vault, &personagens)?;
+
+    Ok(arrumadas)
+}
+
+/// Liga ou desliga uma condicao, pelo NOME, em varios personagens de uma vez.
+///
+/// E o gesto do menu do token: o mestre seleciona a horda e marca
+/// "Envenenado". Pelo nome, e nao por um id de modelo guardado na condicao,
+/// pela mesma razao da guarda de `acrescentar_medidores`: o que a mesa le e o
+/// nome, e "Envenenado" que veio do modelo e "envenenado" criado na ficha sao
+/// a mesma coisa para quem olha a TV.
+///
+/// Ligar em quem ja tem nao duplica, e ligar em quem esta cheio nao derruba a
+/// volta -- a horda de trinta nao pode parar no goblin que ja tinha oito.
+/// Desligar tira TODAS as linhas com aquele nome, que e o que "nao esta mais
+/// envenenado" quer dizer.
+///
+/// Devolve quantos personagens MUDARAM, e grava uma vez so: sao trinta
+/// personagens no mesmo arquivo, e trinta regravacoes do indice por um clique
+/// seriam trinta chances de a TV ler o arquivo pela metade.
+pub fn alternar_condicao(
+    vault: &Vault,
+    ids: &[String],
+    modelo: &Condicao,
+    ligar: bool,
+) -> AppResult<usize> {
+    let mut personagens = load(vault)?;
+    let chave = chave_do_nome(&modelo.nome);
+    let mut mudaram = 0;
+
+    for personagem in personagens.iter_mut().filter(|p| ids.contains(&p.id)) {
+        let tem = personagem
+            .condicoes
+            .iter()
+            .any(|c| chave_do_nome(&c.nome) == chave);
+
+        if ligar {
+            if tem || personagem.condicoes.len() >= MAX_CONDICOES {
+                continue;
+            }
+
+            // Id NOVO, como o medidor materializado: dois personagens com o
+            // mesmo id de condicao fariam a ficha editar a linha errada.
+            let mut nova = Condicao {
+                id: uuid::Uuid::new_v4().to_string(),
+                ..modelo.clone()
+            };
+            ajustar_condicao(&mut nova);
+            personagem.condicoes.push(nova);
+            mudaram += 1;
+        } else if tem {
+            personagem
+                .condicoes
+                .retain(|c| chave_do_nome(&c.nome) != chave);
+            mudaram += 1;
+        }
+    }
+
+    if mudaram > 0 {
+        save(vault, &personagens)?;
+    }
+
+    Ok(mudaram)
 }
 
 /// Os ids de todos os personagens, para quem precisa percorrer a mesa inteira.
@@ -893,7 +1246,7 @@ pub fn todos_os_ids(vault: &Vault) -> AppResult<Vec<String>> {
     Ok(load(vault)?.into_iter().map(|p| p.id).collect())
 }
 
-/// O personagem sem os medidores que a mesa nao ve.
+/// O personagem sem os medidores e as condicoes que a mesa nao ve.
 ///
 /// Uma funcao, e nao um `skip_serializing_if` no campo: a decisao e de QUEM
 /// pergunta, como em `sem_aparencias`. O mestre le o mesmo `Personagem` pelo
@@ -907,6 +1260,12 @@ pub fn sem_ocultos(personagem: &Personagem) -> Personagem {
             .medidores
             .iter()
             .filter(|m| !m.escondido)
+            .cloned()
+            .collect(),
+        condicoes: personagem
+            .condicoes
+            .iter()
+            .filter(|c| !c.escondido)
             .cloned()
             .collect(),
         ..personagem.clone()
@@ -1732,5 +2091,197 @@ mod tests {
 
         assert!(load(&vault).unwrap()[0].medidores.is_empty());
         assert_eq!(load(&vault).unwrap()[0].id, p.id);
+    }
+
+    // --- condicoes -----------------------------------------------------------
+
+    fn veneno() -> Condicao {
+        Condicao {
+            id: "modelo-veneno".into(),
+            nome: "Envenenado".into(),
+            cor: "#22c55e".into(),
+            icone: "frasco".into(),
+            efeito: Some(EfeitoNaFigura::Tingido),
+            escondido: false,
+        }
+    }
+
+    #[test]
+    fn condicao_nasce_com_o_que_foi_pedido() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        let c = criar_condicao(
+            &vault,
+            &p.id,
+            "Envenenado",
+            "#22c55e",
+            "frasco",
+            Some(EfeitoNaFigura::Tingido),
+        )
+        .unwrap();
+
+        assert_eq!(c.nome, "Envenenado");
+        assert_eq!(c.efeito, Some(EfeitoNaFigura::Tingido));
+        assert!(!c.escondido);
+        assert_eq!(load(&vault).unwrap()[0].condicoes.len(), 1);
+    }
+
+    #[test]
+    fn condicao_sem_nome_nem_icone_ganha_os_de_sempre() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        let c = criar_condicao(&vault, &p.id, "  ", "#ef4444", "", None).unwrap();
+
+        assert_eq!(c.nome, "Condição");
+        assert_eq!(c.icone, ICONE_PADRAO);
+    }
+
+    #[test]
+    fn a_nona_condicao_e_recusada() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        for _ in 0..MAX_CONDICOES {
+            criar_condicao(&vault, &p.id, "Caído", "#ef4444", "cama", None).unwrap();
+        }
+
+        assert!(criar_condicao(&vault, &p.id, "Caído", "#ef4444", "cama", None).is_err());
+        assert_eq!(load(&vault).unwrap()[0].condicoes.len(), MAX_CONDICOES);
+    }
+
+    #[test]
+    fn patch_com_null_tira_o_efeito_e_ausente_nao_mexe() {
+        // E a razao do `Option<Option<_>>`: sem ele, "volte a ser so o selo" e
+        // "troque so o nome" chegariam iguais.
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+        let c = criar_condicao(
+            &vault,
+            &p.id,
+            "Envenenado",
+            "#22c55e",
+            "frasco",
+            Some(EfeitoNaFigura::Tingido),
+        )
+        .unwrap();
+
+        let so_nome: PatchCondicao = serde_json::from_str(r#"{"nome":"Veneno"}"#).unwrap();
+        let renomeada = editar_condicao(&vault, &p.id, &c.id, so_nome).unwrap();
+        assert_eq!(renomeada.nome, "Veneno");
+        assert_eq!(renomeada.efeito, Some(EfeitoNaFigura::Tingido));
+
+        let sem_efeito: PatchCondicao = serde_json::from_str(r#"{"efeito":null}"#).unwrap();
+        let limpa = editar_condicao(&vault, &p.id, &c.id, sem_efeito).unwrap();
+        assert_eq!(limpa.efeito, None);
+    }
+
+    #[test]
+    fn efeito_desconhecido_no_disco_cai_no_selo_e_nao_derruba_o_indice() {
+        // O caso de uma campanha gravada por uma versao futura, com um efeito
+        // que esta versao nao conhece. O indice e um arquivo so: falhar aqui
+        // seria perder a mesa inteira por um halo.
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+        criar_condicao(&vault, &p.id, "Brilhando", "#f59e0b", "estrela", None).unwrap();
+
+        let cru = std::fs::read_to_string(index_path(&vault)).unwrap();
+        let mut json: serde_json::Value = serde_json::from_str(&cru).unwrap();
+        json[0]["condicoes"][0]["efeito"] = serde_json::json!("cintilando");
+        std::fs::write(index_path(&vault), json.to_string()).unwrap();
+
+        let lido = &load(&vault).unwrap()[0];
+        assert_eq!(lido.condicoes.len(), 1);
+        assert_eq!(lido.condicoes[0].efeito, None);
+    }
+
+    #[test]
+    fn alternar_liga_na_horda_sem_duplicar_e_desliga_pelo_nome() {
+        let (_tmp, vault) = vault();
+        let a = create(&vault, "Goblin 1").unwrap();
+        let b = create(&vault, "Goblin 2").unwrap();
+        let fora = create(&vault, "Edgar").unwrap();
+
+        // O segundo goblin ja estava envenenado, escrito com outra caixa.
+        criar_condicao(&vault, &b.id, "envenenado", "#22c55e", "frasco", None).unwrap();
+
+        let ids = vec![a.id.clone(), b.id.clone()];
+        let ligou = alternar_condicao(&vault, &ids, &veneno(), true).unwrap();
+        assert_eq!(ligou, 1);
+
+        let todos = load(&vault).unwrap();
+        let de = |id: &str| todos.iter().find(|p| p.id == id).unwrap().condicoes.clone();
+        assert_eq!(de(&a.id).len(), 1);
+        assert_eq!(de(&b.id).len(), 1);
+        assert!(de(&fora.id).is_empty());
+        // Id proprio, e nao o do modelo.
+        assert_ne!(de(&a.id)[0].id, veneno().id);
+
+        let desligou = alternar_condicao(&vault, &ids, &veneno(), false).unwrap();
+        assert_eq!(desligou, 2);
+        assert!(load(&vault).unwrap().iter().all(|p| p.condicoes.is_empty()));
+    }
+
+    #[test]
+    fn alternar_pula_quem_esta_cheio_e_segue_a_volta() {
+        let (_tmp, vault) = vault();
+        let cheio = create(&vault, "Cheio").unwrap();
+        let livre = create(&vault, "Livre").unwrap();
+
+        for n in 0..MAX_CONDICOES {
+            criar_condicao(&vault, &cheio.id, &format!("C{n}"), "#ef4444", "cama", None)
+                .unwrap();
+        }
+
+        let ids = vec![cheio.id.clone(), livre.id.clone()];
+        let ligou = alternar_condicao(&vault, &ids, &veneno(), true).unwrap();
+
+        assert_eq!(ligou, 1);
+        let todos = load(&vault).unwrap();
+        assert_eq!(todos[0].condicoes.len(), MAX_CONDICOES);
+        assert_eq!(todos[1].condicoes.len(), 1);
+    }
+
+    #[test]
+    fn sem_ocultos_tira_a_condicao_escondida() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        let visivel = criar_condicao(&vault, &p.id, "Caído", "#ef4444", "cama", None).unwrap();
+        let secreta = criar_condicao(
+            &vault,
+            &p.id,
+            "Amaldiçoado",
+            "#a855f7",
+            "caveira",
+            Some(EfeitoNaFigura::Aura),
+        )
+        .unwrap();
+        editar_condicao(
+            &vault,
+            &p.id,
+            &secreta.id,
+            PatchCondicao {
+                escondido: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let filtrado = sem_ocultos(&load(&vault).unwrap()[0]);
+        assert_eq!(filtrado.condicoes.len(), 1);
+        assert_eq!(filtrado.condicoes[0].id, visivel.id);
+    }
+
+    #[test]
+    fn campanha_antiga_abre_sem_condicao_nenhuma() {
+        let (_tmp, vault) = vault();
+        create(&vault, "Edgar").unwrap();
+
+        let cru = std::fs::read_to_string(index_path(&vault)).unwrap();
+        assert!(!cru.contains("condicoes"));
+
+        assert!(load(&vault).unwrap()[0].condicoes.is_empty());
     }
 }

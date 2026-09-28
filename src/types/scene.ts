@@ -8,7 +8,7 @@
  */
 
 import { novoId } from "@/lib/id";
-import type { Medidor } from "@/types/character";
+import type { Condicao, Medidor } from "@/types/character";
 
 export const SCENE_WIDTH = 1920;
 export const SCENE_HEIGHT = 1080;
@@ -1537,6 +1537,14 @@ export type Portrait = {
    */
   medidores?: Medidor[];
   /**
+   * As condições deste personagem, para a fileira de selos no alto da figura.
+   *
+   * Pelo caminho dos medidores, e com o mesmo filtro: chegam sem as escondidas
+   * por padrão, e só o palco do Mestre pede a lista inteira. Só com
+   * `layout.condicoes` ligado -- desligada a peça, o campo nem viaja.
+   */
+  condicoes?: Condicao[];
+  /**
    * O que este retrato mostra, e onde.
    *
    * GUARDADO, ele é parcial: o campo que falta segue o layout da sessão, e é
@@ -1584,6 +1592,13 @@ export type FichaNaCena = {
   nome: string;
   /** Já sem os escondidos, quando o destino é a mesa. */
   medidores: Medidor[];
+  /**
+   * Os selos, sobre o nome. Já sem os escondidos, quando o destino é a mesa.
+   *
+   * Opcional: um quadro de uma versão anterior não o traz, e quem desenha lê a
+   * ausência como nenhum selo.
+   */
+  condicoes?: Condicao[];
 };
 
 /**
@@ -1642,6 +1657,15 @@ export type LayoutDoRetrato = {
   nome: boolean;
   medidores: boolean;
   dados: boolean;
+  /**
+   * A fileira de selos das condições, no alto da figura.
+   *
+   * Dentro da caixa, e sem lugar livre por enquanto: a fileira é baixa e
+   * cabe sobre a cabeça sem disputar a fila com o vizinho, que é o que obriga
+   * as outras peças a virar de lado. Ligada de fábrica: o layout de uma
+   * versão anterior não a traz, e quem lê põe `LAYOUT_PADRAO` por baixo.
+   */
+  condicoes: boolean;
   /** Ausente = automático: ao lado, virando quando não cabe. */
   lugarDosMedidores?: LugarDaPeca;
   /** Ausente = automático: embaixo, virando para cima quando não cabe. */
@@ -1701,6 +1725,7 @@ export const LAYOUT_PADRAO: LayoutDoRetrato = {
   nome: false,
   medidores: true,
   dados: true,
+  condicoes: true,
   escalaMedidores: 1,
   escalaDados: 1,
   escalaNome: 1,

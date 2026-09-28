@@ -12,6 +12,7 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { esquecerAcervo } from "@/lib/store/use-assets-store";
 import { carregarPersonagens, esquecerPersonagens } from "@/lib/store/use-characters-store";
+import { esquecerCondicoes } from "@/lib/store/use-condicoes-store";
 import { listAssets } from "@/lib/vault/assets";
 import { listFolders } from "@/lib/vault/folders";
 import type { CampaignInfo } from "@/lib/vault/campaign";
@@ -75,6 +76,7 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       // módulo e sobrevivem à troca, então só recarregar a janela consertava.
       esquecerAcervo();
       esquecerPersonagens();
+      esquecerCondicoes();
 
       try {
         await hydrateBoard(campaign.path);

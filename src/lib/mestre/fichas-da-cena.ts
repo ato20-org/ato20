@@ -1,5 +1,6 @@
+import { condicoesVisiveis } from "@/lib/condicao";
 import { medidoresVisiveis } from "@/lib/medidor";
-import type { Medidor } from "@/types/character";
+import type { Condicao, Medidor } from "@/types/character";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
@@ -16,7 +17,7 @@ import {
  */
 
 /**
- * Quem tem token nesta cena, com nome e medidores.
+ * Quem tem token nesta cena, com nome, medidores e selos.
  *
  * A lista SAI VAZIA com o interruptor desligado, e é isso que mantém a promessa
  * do campo: o nome de um PNJ que o mestre não apresentou não atravessa a rede
@@ -34,7 +35,12 @@ import {
 export function fichasDaCena(
   ligado: boolean,
   itens: ReadonlyArray<Pick<CanvasItem, "personagemId">>,
-  personagens: ReadonlyArray<{ id: string; nome: string; medidores?: Medidor[] }>,
+  personagens: ReadonlyArray<{
+    id: string;
+    nome: string;
+    medidores?: Medidor[];
+    condicoes?: Condicao[];
+  }>,
   incluirOcultos = false,
 ): FichaNaCena[] {
   if (!ligado) return [];
@@ -61,6 +67,9 @@ export function fichasDaCena(
       medidores: incluirOcultos
         ? (ficha.medidores ?? [])
         : medidoresVisiveis(ficha.medidores),
+      condicoes: incluirOcultos
+        ? (ficha.condicoes ?? [])
+        : condicoesVisiveis(ficha.condicoes),
     });
   }
 

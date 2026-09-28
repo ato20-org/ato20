@@ -3,7 +3,9 @@
 import { memo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { ContornoDoItem } from "@/components/playground/contorno-do-item";
+import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import type { EfeitoPedido } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
 import { cn } from "@/lib/utils";
 import type { CanvasItem } from "@/types/scene";
@@ -41,6 +43,13 @@ type CanvasItemViewProps = {
    * `contornoDosItens`.
    */
   contorno?: string;
+  /**
+   * O que as condições do personagem fazem com esta figura. Ausente = nada.
+   *
+   * A lista do PERSONAGEM, e não uma cópia por token: a horda de clones recebe
+   * o mesmo array, e é o que mantém o `memo` valendo -- ver `SceneLayer`.
+   */
+  efeitos?: ReadonlyArray<EfeitoPedido>;
   onPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
 };
 
@@ -56,12 +65,17 @@ export const CanvasItemView = memo(function CanvasItemView({
   naMao = false,
   variante,
   contorno,
+  efeitos,
   onPointerDown,
 }: CanvasItemViewProps) {
   const url = useAssetUrl(item.assetId, variante);
   // Item travado continua clicável — é o único jeito de selecioná-lo para
   // destravar. O que o travamento bloqueia é o arrasto, decidido no Mestre.
   const interactive = Boolean(onPointerDown);
+  const espelho =
+    item.flipX || item.flipY
+      ? `scale(${item.flipX ? -1 : 1}, ${item.flipY ? -1 : 1})`
+      : undefined;
 
   return (
     <div
@@ -102,26 +116,31 @@ export const CanvasItemView = memo(function CanvasItemView({
       }
     >
       {url ? (
-        // next/image não serve aqui: a fonte é uma blob URL do IndexedDB, sem
-        // dimensão conhecida no servidor e sem nada para o otimizador fazer.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt=""
-          draggable={false}
-          // `object-fill` é intencional: redimensionar deforma, como no Figma.
-          // Quem quer proporção travada arrasta o canto com Shift.
-          className="relative size-full object-fill select-none"
-          // Espelhamento na imagem, não no contêiner: assim a caixa, as alças
-          // e o hit-test seguem intactos — virar um token não move nada.
-          style={
-            item.flipX || item.flipY
-              ? {
-                  transform: `scale(${item.flipX ? -1 : 1}, ${item.flipY ? -1 : 1})`,
-                }
-              : undefined
-          }
-        />
+        <FiguraComEfeitos
+          efeitos={efeitos}
+          url={url}
+          semente={item.id}
+          espelho={espelho}
+        >
+          {(fonte) => (
+            // next/image não serve aqui: a fonte é uma blob URL do IndexedDB,
+            // sem dimensão conhecida no servidor e sem nada para o otimizador
+            // fazer.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={fonte ?? url}
+              alt=""
+              draggable={false}
+              // `object-fill` é intencional: redimensionar deforma, como no
+              // Figma. Quem quer proporção travada arrasta o canto com Shift.
+              className="relative size-full object-fill select-none"
+              // Espelhamento na imagem, não no contêiner: assim a caixa, as
+              // alças e o hit-test seguem intactos — virar um token não move
+              // nada.
+              style={espelho ? { transform: espelho } : undefined}
+            />
+          )}
+        </FiguraComEfeitos>
       ) : null}
 
       {/* Depois da figura, e por isso POR CIMA dela: os dois estão na mesma

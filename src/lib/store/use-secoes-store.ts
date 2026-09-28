@@ -27,6 +27,7 @@ export type SecaoFicha =
   | "campos"
   | "aparencias"
   | "medidores"
+  | "condicoes"
   | "inventario"
   | "arquivos"
   | "nota";

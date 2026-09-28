@@ -133,6 +133,13 @@ def argumentos():
     # `piscando`. Com efeito o canvas recompõe a trinta quadros por segundo
     # mesmo parado -- é esse o custo que ele mede. Ver `LuzLayer`.
     p.add_argument("--efeito", default=None)
+    # As CONDICOES: quantos tokens (os primeiros) levam um efeito na figura, e
+    # qual -- `aura`, `tingido`, `translucido`, `tremendo`, `apagado` ou
+    # `misto`, que roda os cinco. Aceita lista (`0,40`) para por os dois lados
+    # na mesma tabela. So o cenario `amostras` (e `amostras-id`) desenha os
+    # efeitos. Ver `condicoesDaMedida` na pagina.
+    p.add_argument("--condicoes", default="0")
+    p.add_argument("--figura", default="misto")
     p.add_argument("--url", default=None, help="servidor já de pé")
     p.add_argument("--pular-build", action="store_true")
     # A janela do `tauri.conf.json`. Medir noutro tamanho mede outra área de
@@ -408,6 +415,7 @@ def main():
                 for g in gestos:
                     for painel in paineis:
                       for r in [int(x) for x in args.roda.split(",")]:
+                       for k in args.condicoes.split(","):
                         for i in range(args.repetir):
                             url = (
                                 f"{base}/perf?cenario={cenario}&n={n}"
@@ -420,6 +428,7 @@ def main():
                                 f"&sol={'1' if args.sol else '0'}"
                                 f"&luzes={args.luzes}&paredes={args.paredes}"
                                 f"&carregadas={args.carregadas}"
+                                f"&condicoes={k}&figura={args.figura}"
                                 f"&rotulo={args.rotulo}"
                             )
                             if args.escuridao is not None:
@@ -433,6 +442,8 @@ def main():
                                 rotulo += f" painel={painel}"
                             if len(args.roda.split(",")) > 1:
                                 rotulo += f" roda={r}"
+                            if k != "0" or len(args.condicoes.split(",")) > 1:
+                                rotulo += f" condicoes={k} {args.figura}"
                             urls.append((rotulo, url))
 
     try:

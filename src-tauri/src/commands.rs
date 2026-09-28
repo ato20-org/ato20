@@ -19,7 +19,8 @@ use crate::vault::players::{Attachment, Player};
 use crate::vault::inventory::{self, Item};
 use crate::vault::{
     assets,
-    documentos, board, characters, modelos, players, session, variantes, zip, CampaignInfo,
+    documentos, board, characters, condicoes, modelos, players, session, variantes, zip,
+    CampaignInfo,
     Vault,
 };
 
@@ -1202,6 +1203,120 @@ pub fn character_medidores_reordenar(
     ordem: Vec<String>,
 ) -> AppResult<Vec<characters::Medidor>> {
     state.with_vault(|vault| characters::reordenar_medidores(vault, &id, &ordem))
+}
+
+// --- condicoes ---------------------------------------------------------------
+
+/// Cria uma condicao na ficha do personagem.
+#[tauri::command]
+pub fn character_condicao_criar(
+    state: State<'_, AppState>,
+    id: String,
+    nome: String,
+    cor: String,
+    icone: String,
+    efeito: Option<characters::EfeitoNaFigura>,
+) -> AppResult<characters::Condicao> {
+    state.with_vault(|vault| characters::criar_condicao(vault, &id, &nome, &cor, &icone, efeito))
+}
+
+/// Edita uma condicao e devolve como ela ficou depois do ajuste.
+#[tauri::command]
+pub fn character_condicao_editar(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] condicaoId: String,
+    patch: characters::PatchCondicao,
+) -> AppResult<characters::Condicao> {
+    state.with_vault(|vault| characters::editar_condicao(vault, &id, &condicaoId, patch))
+}
+
+#[tauri::command]
+pub fn character_condicao_remover(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] condicaoId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| characters::remover_condicao(vault, &id, &condicaoId))
+}
+
+/// Poe as condicoes na ordem pedida e devolve a lista arrumada.
+#[tauri::command]
+pub fn character_condicoes_reordenar(
+    state: State<'_, AppState>,
+    id: String,
+    ordem: Vec<String>,
+) -> AppResult<Vec<characters::Condicao>> {
+    state.with_vault(|vault| characters::reordenar_condicoes(vault, &id, &ordem))
+}
+
+/// Liga ou desliga uma condicao do cardapio em varios personagens.
+///
+/// Recebe o id do MODELO, e nao a condicao inteira: quem sabe o que o veneno
+/// e -- nome, cor, efeito -- e o cardapio no disco, e uma tela desatualizada
+/// mandando a copia dela gravaria a cor de antes da ultima edicao.
+///
+/// Devolve quantos personagens mudaram. Ver `characters::alternar_condicao`.
+#[tauri::command]
+pub fn condicao_alternar(
+    state: State<'_, AppState>,
+    ids: Vec<String>,
+    #[allow(non_snake_case)] modeloId: String,
+    ligar: bool,
+) -> AppResult<usize> {
+    state.with_vault(|vault| {
+        let modelo = condicoes::buscar(vault, &modeloId)?;
+        characters::alternar_condicao(vault, &ids, &modelo, ligar)
+    })
+}
+
+// --- cardapio de condicoes da campanha ---------------------------------------
+
+/// As condicoes que a campanha oferece. Ver `vault::condicoes`.
+#[tauri::command]
+pub fn condicoes_list(state: State<'_, AppState>) -> AppResult<Vec<characters::Condicao>> {
+    state.with_vault(condicoes::load)
+}
+
+/// Cria uma condicao no cardapio. NAO poe em ficha nenhuma: ninguem nasce
+/// envenenado.
+#[tauri::command]
+pub fn condicao_modelo_criar(
+    state: State<'_, AppState>,
+    nome: String,
+    cor: String,
+    icone: String,
+    efeito: Option<characters::EfeitoNaFigura>,
+) -> AppResult<characters::Condicao> {
+    state.with_vault(|vault| condicoes::criar(vault, &nome, &cor, &icone, efeito))
+}
+
+/// Edita uma condicao do cardapio. As copias nas fichas nao se mexem.
+#[tauri::command]
+pub fn condicao_modelo_editar(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+    patch: characters::PatchCondicao,
+) -> AppResult<characters::Condicao> {
+    state.with_vault(|vault| condicoes::editar(vault, &modeloId, patch))
+}
+
+/// Tira a condicao do cardapio. As copias nas fichas ficam.
+#[tauri::command]
+pub fn condicao_modelo_remover(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| condicoes::remover(vault, &modeloId))
+}
+
+/// Poe o cardapio na ordem pedida, que e a do submenu do token.
+#[tauri::command]
+pub fn condicoes_modelos_reordenar(
+    state: State<'_, AppState>,
+    ordem: Vec<String>,
+) -> AppResult<Vec<characters::Condicao>> {
+    state.with_vault(|vault| condicoes::reordenar(vault, &ordem))
 }
 
 /// Os arquivos do personagem, MENOS os que sao imagem de item.

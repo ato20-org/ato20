@@ -102,6 +102,7 @@ import type {
 } from "@/types/character";
 import { doJogador } from "@/types/character";
 import { AparenciasPersonagem } from "@/components/mestre/aparencias-personagem";
+import { CondicoesPersonagem } from "@/components/mestre/condicoes-personagem";
 import { MedidoresPersonagem } from "@/components/mestre/medidores-personagem";
 
 const ICONE: Record<AttachmentKind, typeof File> = {
@@ -313,6 +314,13 @@ function Ficha({
                 e os de baixo são o que está guardado. Regua muda no meio de
                 uma cena, e arquivo não. */}
             <MedidoresPersonagem
+              personagem={personagem}
+              onChanged={onChanged}
+            />
+
+            {/* Logo abaixo dos medidores: os dois são o ESTADO do personagem
+                em cena, e é o que o mestre mexe no meio do combate. */}
+            <CondicoesPersonagem
               personagem={personagem}
               onChanged={onChanged}
             />

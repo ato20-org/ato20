@@ -62,6 +62,7 @@ import { CamerasFantasma } from "@/components/playground/camera-fantasma";
 import { MarqueeBox } from "@/components/playground/marquee-box";
 import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { SceneLayer } from "@/components/playground/scene-layer";
+import { efeitosDaCena } from "@/lib/condicao";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { useSceneScale } from "@/components/playground/scene-stage";
@@ -561,6 +562,17 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         true,
       ),
     [scene.infoDosTokens, scene.items, personagens],
+  );
+  /**
+   * O que as condições fazem com cada figura, no palco do mestre.
+   *
+   * SEM as escondidas, ao contrário das fichas logo acima: o selo escondido
+   * aparece apagado para ele, mas o efeito não -- uma figura tingida aqui
+   * diria "a mesa está vendo isto", e ela não está. Ver `efeitosDaFigura`.
+   */
+  const efeitosNoPalco = useMemo(
+    () => efeitosDaCena(scene.items, personagens ?? []),
+    [scene.items, personagens],
   );
   const unioes = usePortraitStore((state) => state.unioes);
   const ajustarUniaoDeRetratos = usePortraitStore((state) => state.ajustar);
@@ -2770,6 +2782,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // duas -- ele é quem narra o resultado para a mesa.
           rolagens={bandeja}
           fichas={fichasNoPalco}
+          efeitos={efeitosNoPalco}
           // Todos enquanto a aba Retratos está aberta; fora dela, só o
           // selecionado. Desenhar todos sempre punha cabeça flutuando sobre a
           // moldura da câmera justamente enquanto o mestre monta o mapa.

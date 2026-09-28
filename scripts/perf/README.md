@@ -401,6 +401,42 @@ arrasto de uma lanterna. O rascunho do vulto passou a só crescer
 antes. A cor do escuro não entra na conta: é o mesmo `fillRect`, com outra
 cor.
 
+## As condições na figura (28/09/2026)
+
+Uma condição pode mexer na figura do token e do retrato: `aura`, `tingido`,
+`translucido`, `tremendo` e `apagado` (`FiguraComEfeitos`). Nenhum usa filtro
+nem máscara de CSS, pela razão do contorno: o que muda de cor é assado em
+pixel uma vez (`efeito-na-figura.ts`), e o que se mexe anima só `opacity` e
+`transform`. `?condicoes=K&figura=aura` dá efeito aos primeiros K tokens do
+cenário `amostras`; no `webview.py`, `--condicoes 0,40 --figura misto`.
+
+A primeira versão desenhava a tinta como uma segunda `<img>`, meio
+transparente, por cima de cada token. Webview, build de produção, TV com 40
+tokens, um se movendo:
+
+| 40 tokens com | tinta por cima | tinta dentro da figura |
+| --- | --- | --- |
+| nenhum efeito | 60 fps, 0% | 60 fps, 0% |
+| `tingido` | 56,9 fps, 22,7% | 60 fps, 0% |
+| `apagado` | 60 fps, 0% | 60 fps, 0% |
+| `aura` | 52,3 fps, 35,8% | 60 fps, 0% |
+| `translucido` | 59,5 fps, 2,1% | 60 fps, 0% |
+| `tremendo` | 60 fps, 0% | 60 fps, 0,9% |
+| `misto` (os cinco) | 60,1 fps, 5,5% | 60 fps, 0,3% |
+| `misto`, os 40 se movendo | -- | 60 fps, 0,9% |
+
+A pista foi o `apagado`: ele já era assado, só que TROCANDO a fonte da figura,
+e custava zero. A tinta custava 22,7% com a mesma conta de pixel -- a diferença
+era a camada a mais. Agora o cinza e a tinta viram uma coisa só, a pele
+(`assarPele`), que entra no lugar do arquivo; o mapa tingido tem os mesmos 132
+nós do mapa sem efeito.
+
+A linha da `aura` na primeira coluna é de uma corrida só, e o código da aura
+não mudou entre as duas colunas. Repetida duas vezes depois, com três
+repetições, deu 0% nas duas. O `next dev` estava de pé e compilando na mesma
+máquina durante a primeira corrida; o número fica anotado pela razão do da
+imagem que se mexe, e não como custo da aura.
+
 ---
 
 ## Como medir: o passo a passo

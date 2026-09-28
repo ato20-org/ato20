@@ -7,6 +7,7 @@ import {
   createSubscriber,
   type SceneChannel,
 } from "@/lib/sync";
+import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -34,6 +35,12 @@ const HEARTBEAT_MS = 20_000;
 
 /** Depois disso, o silêncio deixa de ser espera normal e passa a ser problema. */
 const STALLED_AFTER_MS = 12_000;
+
+/**
+ * Nenhum efeito, numa constante: a TV monta um mapa a partir desta lista, e um
+ * `[]` novo a cada quadro recebido o refaria dez vezes por segundo.
+ */
+const SEM_EFEITOS: EfeitosDoPersonagem[] = [];
 
 /**
  * Lado do Mestre: publica cena, trilha e retratos.
@@ -95,6 +102,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
       volumeDisparo: state.volumeDisparo,
       portraits: state.portraits,
       fichas: state.fichas,
+      efeitos: state.efeitos,
       spotlight: state.spotlight,
       rolagens: state.rolagens,
     };
@@ -122,6 +130,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
     state.volumeDisparo,
     state.portraits,
     state.fichas,
+    state.efeitos,
     state.spotlight,
     state.rolagens,
   ]);
@@ -152,6 +161,8 @@ export type Subscription = {
   portraits: Portrait[];
   /** Nome e medidores sobre a cabeça dos tokens. Ver `LiveState.fichas`. */
   fichas: FichaNaCena[];
+  /** O que as condições fazem com cada figura. Ver `LiveState.efeitos`. */
+  efeitos: EfeitosDoPersonagem[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
   /** Os dados que os jogadores jogaram na mesa há pouco. Ver `LiveState`. */
@@ -227,6 +238,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     portraits: live.portraits,
     // Mesmo `?? []` dos ambientes: quadro de versão anterior não traz o campo.
     fichas: live.fichas ?? [],
+    efeitos: live.efeitos ?? SEM_EFEITOS,
     spotlight: live.spotlight,
     rolagens: live.rolagens ?? [],
     synced,

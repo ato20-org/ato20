@@ -12,6 +12,7 @@ import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { cn } from "@/lib/utils";
+import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { FichaNaCena, Portrait, Scene } from "@/types/scene";
 
@@ -42,6 +43,7 @@ export function JogadorStage({
   scene,
   portraits,
   fichas,
+  efeitos,
   rolagens,
   synced,
   stalled,
@@ -52,6 +54,8 @@ export function JogadorStage({
   portraits: Portrait[];
   /** Nome e medidores sobre os tokens. Ver `Scene.infoDosTokens`. */
   fichas: FichaNaCena[];
+  /** O que as condições fazem com cada figura. Ver `LiveState.efeitos`. */
+  efeitos: EfeitosDoPersonagem[];
   /**
    * Os dados que a mesa jogou há pouco, pendurados nos retratos.
    *
@@ -99,6 +103,7 @@ export function JogadorStage({
                 cena={cena}
                 portraits={portraits}
                 fichas={fichas}
+                efeitos={efeitos}
                 rolagens={rolagens}
               />
             </div>

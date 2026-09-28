@@ -30,6 +30,7 @@ import {
   prenderNoLimite,
 } from "@/lib/sync/movimento";
 import { cn } from "@/lib/utils";
+import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
 import {
   ehQuadro,
@@ -133,6 +134,7 @@ export function CenaDoJogador({
   cena,
   portraits,
   fichas,
+  efeitos,
   rolagens,
 }: {
   codigo: string;
@@ -140,6 +142,8 @@ export function CenaDoJogador({
   portraits: Portrait[];
   /** Nome e medidores sobre os tokens. Ver `Scene.infoDosTokens`. */
   fichas: FichaNaCena[];
+  /** O que as condições fazem com cada figura. Ver `LiveState.efeitos`. */
+  efeitos: EfeitosDoPersonagem[];
   rolagens: RolagemDaMesa[];
 }) {
   const quadro = ehQuadro(cena);
@@ -391,6 +395,7 @@ export function CenaDoJogador({
         scene={exibida}
         portraits={portraits}
         fichas={fichas}
+        efeitos={efeitos}
         rolagens={rolagens}
         smooth
         naMao={naMao?.itemId}
