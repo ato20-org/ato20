@@ -183,7 +183,16 @@ export async function importAssets(
         ? [
             {
               name: "Imagens",
-              extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"],
+              extensions: [
+                "png",
+                "apng",
+                "jpg",
+                "jpeg",
+                "webp",
+                "gif",
+                "avif",
+                "bmp",
+              ],
             },
           ]
         : kind === "audio"

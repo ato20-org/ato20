@@ -21,6 +21,10 @@ pub fn from_name(name: &str) -> &'static str {
 
     match extensao.as_str() {
         "png" => "image/png",
+        // O APNG com a extensao dele. O mais comum e vir como `.png`, e ai ele
+        // entra como PNG -- e anima igual: quem decide e o navegador, que le os
+        // quadros, e nao o tipo. Ver `animacao`.
+        "apng" => "image/apng",
         "jpg" | "jpeg" => "image/jpeg",
         "webp" => "image/webp",
         "gif" => "image/gif",
@@ -65,6 +69,7 @@ pub fn extension_for(mime: &str) -> &'static str {
     match mime {
         "image/webp" => "webp",
         "image/png" => "png",
+        "image/apng" => "apng",
         "image/jpeg" => "jpg",
         "image/gif" => "gif",
         "image/avif" => "avif",
@@ -96,7 +101,7 @@ mod tests {
     fn ida_e_volta_nas_extensoes_que_importam() {
         // O que o acervo aceita tem de sobreviver a viagem: o nome no disco sai
         // do tipo, e o tipo servido sai do nome.
-        for nome in ["mapa.webp", "mapa.png", "retrato.jpg", "trilha.ogg", "trilha.mp3"] {
+        for nome in ["mapa.webp", "mapa.png", "fogo.gif", "tocha.apng", "retrato.jpg", "trilha.ogg", "trilha.mp3"] {
             let mime = from_name(nome);
             let ext = extension_for(mime);
 

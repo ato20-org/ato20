@@ -29,7 +29,7 @@ mod page;
 
 use crate::error::{AppError, AppResult};
 use crate::estante;
-use crate::vault::{assets, characters, documentos, inventory, players, variantes, Vault};
+use crate::vault::{animacao, assets, characters, documentos, inventory, players, variantes, Vault};
 use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
@@ -2430,9 +2430,17 @@ async fn serve_variante(
         return fail(StatusCode::NOT_FOUND, "arquivo nao esta no acervo");
     };
 
-    // Caminho quente primeiro, e sem tomar o semaforo: depois da primeira vez
-    // isto e um `ServeFile` de alguns KB, e nao ha nada para gerar.
-    let caminho = if pronta.exists() {
+    // A imagem que se mexe vai INTEIRA para a TV e o celular: a reducao
+    // guardaria um quadro so. Antes do caminho quente, e nao depois: a campanha
+    // que abriu este GIF antes desta versao tem um JPEG parado dele no cache, e
+    // e ele que o `exists` abaixo serviria. A miniatura fica de fora -- ela e o
+    // primeiro quadro de proposito. Ver `animacao`.
+    let caminho = if variante != variantes::Variante::Mini
+        && animacao::pode_animar(&meta.mime_type)
+        && animada(&state, &meta, &original).await
+    {
+        None
+    } else if pronta.exists() {
         Some(pronta)
     } else {
         // `spawn_blocking` porque decodificar imagem e CPU, e segurar a thread
@@ -2495,6 +2503,39 @@ async fn serve_variante(
             fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o arquivo")
         }
     }
+}
+
+/// O arquivo se mexe? Pelo metadado, e na falta dele pelo arquivo -- gravando a
+/// resposta para a proxima.
+///
+/// Ausente e raro: a primeira listagem do mestre depois desta versao preenche
+/// o acervo inteiro (`assets::preencher_animadas`). Sobra a TV aberta antes de
+/// o mestre abrir a biblioteca, e para ela a pergunta e feita aqui, uma vez.
+///
+/// Em `spawn_blocking`, pela razao do resto desta rota: o GIF e decodificado
+/// nos dois primeiros quadros, e segurar a thread do tokio pararia o SSE.
+/// Sem resposta -- arquivo ilegivel --, `false`, e a rota segue como antes.
+async fn animada(state: &Arc<Daemon>, meta: &assets::AssetMeta, original: &std::path::Path) -> bool {
+    if let Some(animada) = meta.animada {
+        return animada;
+    }
+
+    let (vault, id, origem) = (Arc::clone(&state.vault), meta.id.clone(), original.to_path_buf());
+
+    tokio::task::spawn_blocking(move || {
+        let animada = animacao::animada(&origem).ok()?;
+        let guard = vault.read().expect("vault envenenado");
+        if let Some(vault) = guard.as_ref() {
+            if let Err(cause) = assets::set_animada(vault, &id, animada) {
+                log::warn!("asset {id}: nao gravou se se mexe: {cause}");
+            }
+        }
+        Some(animada)
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(false)
 }
 
 /// `GET /evidencia/{id}`
@@ -2604,6 +2645,85 @@ mod tests {
     }
 
     // --- acervo -------------------------------------------------------------
+
+    /// Pede `/asset/{id}/{variante}` e devolve o tipo que voltou.
+    async fn tipo_da_variante(state: &Arc<Daemon>, id: &str, variante: &str) -> String {
+        let response = router(Arc::clone(state))
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(format!("/asset/{id}/{variante}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::OK, "{variante}");
+        response
+            .headers()
+            .get("content-type")
+            .map(|v| v.to_str().unwrap().to_string())
+            .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn gif_que_se_mexe_chega_inteiro_na_tv_e_no_celular() {
+        let (dir, state, _) = daemon();
+
+        let origem = dir.path().join("fogo.gif");
+        std::fs::write(&origem, crate::vault::animacao::testes::gif(3)).expect("origem");
+
+        let id = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            let (aceitos, _) = assets::import(vault, &[origem], None).expect("import");
+            aceitos[0].id.clone()
+        };
+
+        // Palco e tela vao inteiros, e a miniatura continua o primeiro quadro.
+        assert_eq!(tipo_da_variante(&state, &id, "palco").await, "image/gif");
+        assert_eq!(tipo_da_variante(&state, &id, "tela").await, "image/gif");
+        assert_eq!(tipo_da_variante(&state, &id, "mini").await, "image/png");
+    }
+
+    #[tokio::test]
+    async fn o_jpeg_parado_que_ficou_no_cache_nao_e_servido() {
+        // A campanha que abriu este GIF antes desta versao guardou o palco dele
+        // como um quadro so. Quem serve tem de perguntar antes de olhar o cache.
+        let (dir, state, _) = daemon();
+
+        let origem = dir.path().join("fogo.gif");
+        std::fs::write(&origem, crate::vault::animacao::testes::gif(3)).expect("origem");
+
+        let id = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            let (aceitos, _) = assets::import(vault, &[origem], None).expect("import");
+            let id = aceitos[0].id.clone();
+
+            let velho = variantes::path(vault, variantes::Variante::Palco, &id);
+            std::fs::create_dir_all(velho.parent().expect("pasta")).expect("pasta");
+            std::fs::write(&velho, b"jpeg de um quadro so").expect("cache velho");
+
+            // E sem a resposta no indice, como o acervo de antes.
+            let mut antigo = assets::index(vault).expect("indice");
+            antigo[0].animada = None;
+            std::fs::write(
+                vault.assets_index_path(),
+                serde_json::to_vec(&antigo).expect("json"),
+            )
+            .expect("gravar");
+
+            id
+        };
+
+        assert_eq!(tipo_da_variante(&state, &id, "palco").await, "image/gif");
+
+        // E a resposta ficou gravada para a proxima.
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        assert_eq!(assets::index(vault).expect("indice")[0].animada, Some(true));
+    }
 
     #[tokio::test]
     async fn arquivo_importado_e_servivel_por_http() {

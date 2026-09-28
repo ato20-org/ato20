@@ -82,6 +82,19 @@ export type AssetMeta = {
    * escolher um. A lista os junta num grupo próprio em vez de chutar.
    */
   tipoDeSom?: TipoDeSom;
+  /**
+   * A imagem se mexe: GIF, WebP ou APNG com mais de um quadro. Espelho de
+   * `AssetMeta::animada` no Rust.
+   *
+   * A miniatura das listas é sempre o primeiro quadro, e é este campo que diz
+   * à lista que há mais: ela põe o selo e anima quando o mouse passa. Ver
+   * `MiniaturaDoAcervo`. No palco não muda nada -- o navegador anima sozinho,
+   * e o daemon deixa de achatar o arquivo nas reduções de TV e celular.
+   *
+   * Ausente = não se mexe, ou ninguém perguntou ainda: a primeira listagem da
+   * campanha responde por todo o acervo.
+   */
+  animada?: boolean;
 };
 
 /**

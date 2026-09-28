@@ -77,7 +77,7 @@ export async function escolherImagemDoDisco(
     filters: [
       {
         name: "Imagem",
-        extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif"],
+        extensions: ["png", "apng", "jpg", "jpeg", "webp", "gif", "avif"],
       },
     ],
   });
