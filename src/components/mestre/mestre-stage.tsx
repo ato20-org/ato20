@@ -12,6 +12,8 @@ import {
 import { AlcasDaArea } from "@/components/mestre/alcas-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
+import { LuzMarcadores } from "@/components/mestre/luz-marcadores";
+import { PainelDaLuz } from "@/components/mestre/painel-da-luz";
 import { ParedeLayer } from "@/components/mestre/parede-layer";
 import {
   AncorasDeSeta,
@@ -150,7 +152,9 @@ import {
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
 import {
+  CORES_DA_LUZ,
   ehQuadro,
+  RAIO_DA_LUZ_PADRAO,
   temCamera,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
@@ -452,6 +456,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   );
   const selectMedidor = useSelectionStore((state) => state.selectMedidor);
   const selectParede = useSelectionStore((state) => state.selectParede);
+  const selectLuz = useSelectionStore((state) => state.selectLuz);
   const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
   const selectPortrait = useSelectionStore((state) => state.selectPortrait);
   const selectPortraits = useSelectionStore((state) => state.selectPortraits);
@@ -463,6 +468,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const updateMedidor = useSceneStore((state) => state.updateMedidor);
   const removeMedidores = useSceneStore((state) => state.removeMedidores);
   const addParede = useSceneStore((state) => state.addParede);
+  const addLuz = useSceneStore((state) => state.addLuz);
   const updateParede = useSceneStore((state) => state.updateParede);
   const updateFog = useSceneStore((state) => state.updateFog);
   const addTraco = useSceneStore((state) => state.addTraco);
@@ -2058,6 +2064,24 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
+    // Clique, como o ponto: a luz não tem tamanho, tem alcance, e o alcance se
+    // ajusta no anel dela. Nasce SELECIONADA, e a ferramenta volta à seta --
+    // é com a seta que o anel e o painel da cor respondem, e o gesto que
+    // segue o de acender é justamente escolher a cor. Ver `PainelDaLuz`.
+    if (tool === "luz") {
+      selectLuz(
+        addLuz(scene.id, {
+          x: Math.round(anchor.x),
+          y: Math.round(anchor.y),
+          raio: RAIO_DA_LUZ_PADRAO,
+          cor: CORES_DA_LUZ[0],
+        }),
+      );
+      setTool("select");
+
+      return;
+    }
+
     // Clique também, e não arrasto, embora o postit TENHA tamanho: desenhar a
     // caixa antes de escrever pediria uma decisão — quanto papel isto vai
     // precisar — que o mestre só sabe responder depois de digitar. Nasce no
@@ -2671,6 +2695,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         tool === "borracha" ||
         tool === "regua" ||
         tool === "parede" ||
+        tool === "luz" ||
         Boolean(ferramentaDeExtensao(tool))));
   // Mão aberta sempre que o espaço estiver segurado.
   //
@@ -2772,6 +2797,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         panMode={panMode}
         fantasma={rascunhoDaParede}
       />
+
+      {/* O ponto e o alcance de cada luz cravada. Fora do `SceneLayer` pela
+          razão da parede: a mesa vê a luz, não o marcador dela. */}
+      <LuzMarcadores scene={scene} panMode={panMode} />
+      <PainelDaLuz scene={scene} panMode={panMode} />
 
       {/* Irmã do `PinLayer`, e fora do `SceneLayer` pela mesma razão: o texto
           de um postit é preparação do mestre, e o `SceneLayer` é o mesmo

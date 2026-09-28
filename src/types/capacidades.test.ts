@@ -10,6 +10,7 @@ import {
   temGrade,
   temMedida,
   temNevoa,
+  temLuz,
   temSol,
   type TipoDeCena,
 } from "@/types/scene";
@@ -26,6 +27,7 @@ const TABELA: Record<
     temGrade: true,
     temNevoa: true,
     temSol: true,
+    temLuz: true,
     temMedida: true,
   },
   fundo: {
@@ -35,6 +37,7 @@ const TABELA: Record<
     temGrade: false,
     temNevoa: false,
     temSol: false,
+    temLuz: false,
     temMedida: false,
   },
   quadro: {
@@ -44,6 +47,7 @@ const TABELA: Record<
     temGrade: false,
     temNevoa: false,
     temSol: false,
+    temLuz: false,
     temMedida: false,
   },
 };
@@ -55,6 +59,7 @@ const PERGUNTAS = {
   temGrade,
   temNevoa,
   temSol,
+  temLuz,
   temMedida,
 };
 

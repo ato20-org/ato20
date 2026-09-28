@@ -124,6 +124,11 @@ def argumentos():
     p.add_argument("--sol", action="store_true")
     p.add_argument("--luzes", default="0")
     p.add_argument("--paredes", default="0")
+    # A LUZ: quantos tokens carregam lanterna (os primeiros, e o primeiro e o
+    # que o arrasto move) e o quanto o mapa escurece. Sem `--escuridao`, a
+    # pagina escurece a 0,8 quando ha luz -- o caminho caro. Ver `LuzLayer`.
+    p.add_argument("--carregadas", default="0")
+    p.add_argument("--escuridao", default=None)
     p.add_argument("--url", default=None, help="servidor já de pé")
     p.add_argument("--pular-build", action="store_true")
     # A janela do `tauri.conf.json`. Medir noutro tamanho mede outra área de
@@ -410,8 +415,11 @@ def main():
                                 f"&noar={'0' if args.sem_no_ar else '1'}"
                                 f"&sol={'1' if args.sol else '0'}"
                                 f"&luzes={args.luzes}&paredes={args.paredes}"
+                                f"&carregadas={args.carregadas}"
                                 f"&rotulo={args.rotulo}"
                             )
+                            if args.escuridao is not None:
+                                url += f"&escuridao={args.escuridao}"
                             rotulo = f"{cenario} n={n} cam={cam}"
                             if cenario in ("camera-gesto", "bancada"):
                                 rotulo += f" gesto={g}"

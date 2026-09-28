@@ -112,6 +112,13 @@ const SOL = temFlag("sol") ? "1" : "0";
 const LUZES = opcao("luzes", "0");
 const PAREDES = opcao("paredes", "0");
 /**
+ * A LUZ: `--carregadas K` tokens com lanterna (os primeiros, e o primeiro e o
+ * que o arrasto move) e `--escuridao X`. Sem `--escuridao`, a pagina escurece a
+ * 0,8 quando ha luz -- o caminho caro. Ver `LuzLayer`.
+ */
+const CARREGADAS = opcao("carregadas", "0");
+const ESCURIDAO = opcao("escuridao", "");
+/**
  * A pasta com as imagens DE VERDADE que `/asset/*` deve responder.
  *
  * O bitmap de ruido sintetico mede a composicao e nao mente sobre ela -- N
@@ -879,7 +886,7 @@ async function principal() {
         for (const cameras of eixo) {
           for (const gesto of gestos) {
             for (const painel of paineis) {
-              const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&cameras=${cameras}&gesto=${gesto}&mapas=${MAPAS}&painel=${painel}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&sol=${SOL}&luzes=${LUZES}&paredes=${PAREDES}&rotulo=chrome`;
+              const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&cameras=${cameras}&gesto=${gesto}&mapas=${MAPAS}&painel=${painel}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&sol=${SOL}&luzes=${LUZES}&paredes=${PAREDES}&carregadas=${CARREGADAS}${ESCURIDAO ? `&escuridao=${ESCURIDAO}` : ""}&rotulo=chrome`;
               const corridas = [];
 
               for (let i = 1; i <= REPETICOES; i++) {

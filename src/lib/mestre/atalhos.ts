@@ -13,6 +13,7 @@ import {
   pasteClipboard,
   removeFogSelection,
   removeMedidorSelection,
+  removeLuzSelection,
   removeParedeSelection,
   removePortraitSelection,
   removeSelection,
@@ -670,6 +671,9 @@ export const ATALHOS_BASE: Atalho[] = [
       // atenção: a parede só fica selecionada quando o mestre acabou de
       // encostar nela.
       else if (selecao.selectedParedeId) removeParedeSelection();
+      // A luz, pela mesma regra: só fica selecionada quando o mestre acabou
+      // de encostar no ponto dela.
+      else if (selecao.selectedLuzId) removeLuzSelection();
       else if (selecao.selectedPortraitIds.length > 0)
         removePortraitSelection();
       else removeSelection();

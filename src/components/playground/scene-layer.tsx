@@ -12,6 +12,7 @@ import { useSceneScale } from "@/components/playground/scene-stage";
 import { FogLayer } from "@/components/playground/fog-layer";
 import { FundoDaCena } from "@/components/playground/fundo-da-cena";
 import { GridLayer } from "@/components/playground/grid-layer";
+import { LuzLayer } from "@/components/playground/luz-layer";
 import {
   ReguaLayer,
   type PontaDoMedidor,
@@ -245,6 +246,26 @@ export function SceneLayer({
           escondido não pode ser denunciado por uma marca que o mestre riscou
           antes de esconder. */}
       <TracoLayer tracos={scene.tracos ?? []} apagando={apagando} />
+
+      {/* O escuro e a luz, por cima de todo item e embaixo da névoa. Ver
+          `LuzLayer` para o porquê do lugar e do canvas.
+
+          Fora da prévia, pela razão da sombra: trinta cenas num quadrado de
+          56x32 cada uma com um canvas do plano é textura que ninguém olha. */}
+      {variante === "mini" ? null : (
+        <LuzLayer
+          items={items}
+          luzes={scene.luzes}
+          paredes={scene.paredes}
+          escuridao={scene.escuridao}
+          variant={variant}
+          smooth={smooth}
+          naMao={naMao}
+          // A mesma dos itens e da sombra do sol: a silhueta sai do arquivo
+          // que o token já baixou. Ver `useSilhuetasDosTokens`.
+          variante={variante}
+        />
+      )}
 
       <FogLayer
         fog={scene.fog}

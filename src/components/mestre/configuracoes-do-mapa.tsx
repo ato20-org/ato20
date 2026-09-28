@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCcw, Settings2, Sun, Tags } from "lucide-react";
+import { Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
 
 import { CeuDoSol } from "@/components/mestre/ceu-do-sol";
 import { GridControl } from "@/components/mestre/grid-control";
@@ -19,8 +19,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TRAVA_EM_GRAUS } from "@/lib/geometry/ceu";
+import { limitarEscuridao } from "@/lib/geometry/luz";
 import { useSceneStore } from "@/lib/store/use-scene-store";
-import { SOL_PADRAO, type Scene, type Sol } from "@/types/scene";
+import { SOL_PADRAO, temLuz, type Scene, type Sol } from "@/types/scene";
 
 /**
  * As configurações DESTE mapa, no canto do palco.
@@ -40,6 +41,7 @@ import { SOL_PADRAO, type Scene, type Sol } from "@/types/scene";
  */
 export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
   const setSol = useSceneStore((state) => state.setSol);
+  const setEscuridao = useSceneStore((state) => state.setEscuridao);
   const setInfoDosTokens = useSceneStore((state) => state.setInfoDosTokens);
 
   const sol = scene.sol;
@@ -166,6 +168,16 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           ) : null}
         </section>
 
+        {temLuz(scene) ? (
+          <>
+            <span className="bg-border block h-px w-full" />
+            <Escuridao
+              valor={limitarEscuridao(scene.escuridao)}
+              onChange={(valor) => setEscuridao(scene.id, valor)}
+            />
+          </>
+        ) : null}
+
         {/* O traço entre os dois: sol e grade valem os dois para a cena
             inteira, mas são assuntos diferentes -- um pinta sombra, o outro
             mede chão -- e sem a linha as duas fileiras de réguas viravam uma
@@ -202,6 +214,54 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
         </section>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * O quanto o mapa escurece onde nenhuma luz chega. Ver `Scene.escuridao`.
+ *
+ * Régua e não interruptor: "noite" e "masmorra" são escuros diferentes, e o
+ * mestre acerta o tom olhando a TV. Em zero o mapa é o de sempre, e as luzes
+ * viram só brilho -- é o que deixa pôr uma tocha num mapa claro sem apagá-lo.
+ *
+ * Vizinha do sol, e não uma ferramenta: é estado da cena, como ele.
+ */
+function Escuridao({
+  valor,
+  onChange,
+}: {
+  valor: number;
+  onChange: (valor: number) => void;
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <Label
+          className="flex items-center gap-2 text-xs font-normal"
+          htmlFor="escuridao-da-cena"
+        >
+          <Moon className="text-muted-foreground size-3.5" />
+          Escuridão
+        </Label>
+        <span className="text-muted-foreground text-[10px] tabular-nums">
+          {Math.round(valor * 100)}%
+        </span>
+      </div>
+
+      <Slider
+        id="escuridao-da-cena"
+        aria-label="Escuridão"
+        value={[Math.round(valor * 100)]}
+        min={0}
+        max={100}
+        step={5}
+        onValueChange={(value) => onChange(primeiro(value) / 100)}
+      />
+
+      <p className="text-muted-foreground text-[10px] leading-snug">
+        Onde nenhuma luz chega. Você vê mais fraco que a mesa.
+      </p>
+    </section>
   );
 }
 
