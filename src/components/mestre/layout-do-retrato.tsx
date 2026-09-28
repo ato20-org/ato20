@@ -6,10 +6,11 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Dices, Gauge, Minus, Plus, RotateCcw, User } from "lucide-react";
+import { Dices, Gauge, Minus, Plus, RotateCcw, Type, User } from "lucide-react";
 
 import { DadoParado } from "@/components/playground/dado-parado";
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
+import { TextoDoNome } from "@/components/playground/nome-do-retrato";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -20,9 +21,11 @@ import {
 } from "@/components/ui/tooltip";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import {
+  alturaDoNome,
   ESCALA_MAX,
   ESCALA_MIN,
   larguraDaColuna,
+  larguraDoNome,
   larguraDosDados,
 } from "@/lib/geometry/portrait";
 import { medidoresVisiveis } from "@/lib/medidor";
@@ -111,7 +114,7 @@ const EXEMPLO: Medidor[] = [
  * SEGUE A SESSÃO, que é a ausência do campo no registro. Ele não tem botão
  * próprio — o interruptor mostra o valor que vale, e o ↺ ao lado aparece só
  * quando aquele retrato diverge. Um grupo de três botões por peça encheria a
- * aba de nove alvos para responder três perguntas.
+ * aba de doze alvos para responder quatro perguntas.
  */
 export function LayoutDoRetratoPainel({
   selecionado,
@@ -139,6 +142,11 @@ export function LayoutDoRetratoPainel({
 
   /** As peças que saíram do automático, e por isso têm o que desfazer. */
   const livres = [
+    {
+      nome: "Nome",
+      solta: efetivo.lugarDoNome !== undefined,
+      limpar: () => trocar({ lugarDoNome: null }),
+    },
     {
       nome: "Medidores",
       solta: efetivo.lugarDosMedidores !== undefined,
@@ -168,6 +176,15 @@ export function LayoutDoRetratoPainel({
           diverge={selecionado ? proprio.retrato !== undefined : false}
           onTrocar={(retrato) => trocar({ retrato })}
           onSeguir={() => trocar({ retrato: null })}
+        />
+        <Peca
+          icone={Type}
+          nome="Nome"
+          nota="O nome do personagem, embaixo da figura."
+          valor={efetivo.nome}
+          diverge={selecionado ? proprio.nome !== undefined : false}
+          onTrocar={(nome) => trocar({ nome })}
+          onSeguir={() => trocar({ nome: null })}
         />
         <Peca
           icone={Gauge}
@@ -221,14 +238,18 @@ export function LayoutDoRetratoPainel({
             trocar(
               peca === "medidores"
                 ? { lugarDosMedidores: lugar }
-                : { lugarDosDados: lugar },
+                : peca === "dados"
+                  ? { lugarDosDados: lugar }
+                  : { lugarDoNome: lugar },
             )
           }
           onRedimensionar={(peca, escala) =>
             trocar(
               peca === "medidores"
                 ? { escalaMedidores: escala }
-                : { escalaDados: escala },
+                : peca === "dados"
+                  ? { escalaDados: escala }
+                  : { escalaNome: escala },
             )
           }
         />
@@ -322,8 +343,8 @@ function Peca({
   );
 }
 
-/** As duas peças que se arrasta. A figura fica parada — ela É a referência. */
-type PecaArrastavel = "medidores" | "dados";
+/** As peças que se arrasta. A figura fica parada — ela É a referência. */
+type PecaArrastavel = "medidores" | "dados" | "nome";
 
 /**
  * O retrato e as peças dele, desenhados como a mesa os verá.
@@ -436,6 +457,18 @@ function MiniPalco({
       return layout.lugarDosMedidores ?? { x: 1.05, y: 0.25 };
     }
 
+    if (peca === "nome") {
+      // O automático do palco: centrado, encostado na base da figura. A figura
+      // do mini é um quadrado de uma caixa, então largura e altura saem da
+      // mesma conta.
+      return (
+        layout.lugarDoNome ?? {
+          x: (1 - larguraDoNome(1, layout.escalaNome)) / 2,
+          y: 1 - alturaDoNome(1, layout.escalaNome),
+        }
+      );
+    }
+
     return layout.lugarDosDados ?? { x: 0, y: 1.05 };
   }
 
@@ -504,6 +537,32 @@ function MiniPalco({
       {/* As peças só existem no mini quando existem na mesa: o interruptor
           desligado tira a coisa da prévia, que é a resposta honesta a "como vai
           ficar". */}
+      {layout.nome && umaCaixa > 0 ? (
+        <Peso
+          rotulo="Nome"
+          left={emX(lugarDe("nome").x)}
+          top={emY(lugarDe("nome").y)}
+          largura={larguraDoNome(umaCaixa, layout.escalaNome)}
+          automatico={layout.lugarDoNome === undefined}
+          ativa={arrastando === "nome"}
+          escolhida={escolhida === "nome"}
+          escala={layout.escalaNome}
+          onEscala={(escala) => onRedimensionar("nome", escala)}
+          onPegar={(evento) => {
+            evento.stopPropagation();
+            evento.currentTarget.setPointerCapture(evento.pointerId);
+            setEscolhida("nome");
+            setArrastando("nome");
+            mover(evento, "nome");
+          }}
+        >
+          <TextoDoNome
+            nome={selecionado?.nome ?? "Nome"}
+            largura={larguraDoNome(umaCaixa, layout.escalaNome)}
+          />
+        </Peso>
+      ) : null}
+
       {layout.medidores && umaCaixa > 0 ? (
         <Peso
           rotulo="Medidores"

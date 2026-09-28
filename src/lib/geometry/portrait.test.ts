@@ -384,6 +384,44 @@ describe("caixaDaComposicao", () => {
     // 1,1 de início mais 0,65 de fileira, tudo em larguras de figura.
     expect(caixaDaComposicao(com).largura).toBeCloseTo(0.2 * (1.1 + 0.65));
   });
+
+  it("nome no automático fica dentro da figura e não reserva nada", () => {
+    const com = retrato("a", { nome: "Edgar", layout: { nome: true } });
+
+    expect(caixaDaComposicao(com)).toEqual({ recuo: 0, largura: 0.2 });
+  });
+
+  it("nome maior que a figura passa igual dos dois lados", () => {
+    const com = retrato("a", {
+      nome: "Edgar",
+      layout: { nome: true, escalaNome: 1.5 },
+    });
+
+    const caixa = caixaDaComposicao(com);
+
+    // Meia figura a mais, dividida entre a esquerda e a direita.
+    expect(caixa.recuo).toBeCloseTo(0.05);
+    expect(caixa.largura).toBeCloseTo(0.3);
+  });
+
+  it("nome com lugar escolhido reserva onde foi posto", () => {
+    const com = retrato("a", {
+      nome: "Edgar",
+      layout: { nome: true, lugarDoNome: { x: 1.2, y: 0 } },
+    });
+
+    // 1,2 de início mais uma figura de legenda.
+    expect(caixaDaComposicao(com).largura).toBeCloseTo(0.2 * (1.2 + 1));
+  });
+
+  it("nome desligado não reserva, mesmo com lugar", () => {
+    const com = retrato("a", {
+      nome: "Edgar",
+      layout: { nome: false, lugarDoNome: { x: 1.2, y: 0 } },
+    });
+
+    expect(caixaDaComposicao(com).largura).toBeCloseTo(0.2);
+  });
 });
 
 describe("a fila anda pela caixa, e a figura fica dentro dela", () => {
@@ -431,10 +469,12 @@ describe("retratosDaCena resolve o layout", () => {
 
     expect(saida?.layout).toEqual({
       retrato: true,
+      nome: false,
       medidores: true,
       dados: true,
       escalaMedidores: 1,
       escalaDados: 1,
+      escalaNome: 1,
     });
   });
 
@@ -443,20 +483,24 @@ describe("retratosDaCena resolve o layout", () => {
 
     const [saida] = retratosDaCena([guardado], itens, fichas, [], false, {
       retrato: true,
+      nome: false,
       medidores: false,
       dados: true,
       escalaMedidores: 1,
       escalaDados: 1,
+      escalaNome: 1,
     });
 
     // `retrato` veio do registro, `medidores` da sessão, `dados` de nenhum dos
     // dois -- é o `LAYOUT_PADRAO` por baixo.
     expect(saida?.layout).toEqual({
       retrato: false,
+      nome: false,
       medidores: false,
       dados: true,
       escalaMedidores: 1,
       escalaDados: 1,
+      escalaNome: 1,
     });
   });
 
@@ -464,19 +508,57 @@ describe("retratosDaCena resolve o layout", () => {
     // A TV não sabe que existe padrão de sessão: ela lê o campo e desenha.
     const [saida] = retratosDaCena([retrato("a")], itens, fichas, [], false, {
       retrato: false,
+      nome: false,
       medidores: true,
       dados: false,
       escalaMedidores: 1,
       escalaDados: 1,
+      escalaNome: 1,
     });
 
     expect(saida?.layout).toEqual({
       retrato: false,
+      nome: false,
       medidores: true,
       dados: false,
       escalaMedidores: 1,
       escalaDados: 1,
+      escalaNome: 1,
     });
+  });
+});
+
+describe("retratosDaCena e o nome", () => {
+  const itens = [{ personagemId: "a" }];
+  const fichas = [{ id: "a", nome: "Edgar", retrato: "asset-a" }];
+
+  it("desligado de fábrica, o nome não viaja", () => {
+    // O nome de um PNJ que o mestre não apresentou não pode chegar à TV
+    // escondido no JSON, só porque a peça existe.
+    const [saida] = retratosDaCena([retrato("a")], itens, fichas);
+
+    expect(saida?.layout?.nome).toBe(false);
+    expect(JSON.parse(JSON.stringify(saida))).not.toHaveProperty("nome");
+  });
+
+  it("ligado, o nome vem da ficha", () => {
+    const [saida] = retratosDaCena(
+      [retrato("a", { layout: { nome: true } })],
+      itens,
+      fichas,
+    );
+
+    expect(saida?.nome).toBe("Edgar");
+  });
+
+  it("um nome que foi parar no registro não atravessa com a peça desligada", () => {
+    const [saida] = retratosDaCena(
+      [retrato("a", { nome: "Nome velho" })],
+      itens,
+      fichas,
+    );
+
+    expect(JSON.parse(JSON.stringify(saida))).not.toHaveProperty("nome");
   });
 });
 

@@ -69,10 +69,12 @@ describe("lerRetratosSalvos", () => {
 
     expect(lido.layout).toEqual({
       retrato: true,
+      nome: false,
       medidores: true,
       dados: true,
       escalaMedidores: 1,
       escalaDados: 1,
+      escalaNome: 1,
     });
     expect(lido.ancoraPadrao).toBe("cima-esquerda");
   });
@@ -91,10 +93,12 @@ describe("lerRetratosSalvos", () => {
 
     expect(lido.layout).toEqual({
       retrato: true,
+      nome: false,
       medidores: true,
       dados: true,
       escalaMedidores: 1,
       escalaDados: 1,
+      escalaNome: 1,
     });
   });
 
@@ -107,10 +111,12 @@ describe("lerRetratosSalvos", () => {
 
     expect(lido.layout).toEqual({
       retrato: false,
+      nome: false,
       medidores: true,
       dados: true,
       escalaMedidores: 1,
       escalaDados: 1,
+      escalaNome: 1,
     });
   });
 });

@@ -13,6 +13,7 @@ import { useAssetUrl } from "@/hooks/use-asset-url";
 import { CANVAS_PADRAO } from "@/lib/extensoes/fontes";
 import { usePaginaVivaSuportada } from "@/lib/motor";
 import { MedidoresDoRetrato } from "@/components/playground/medidores-do-retrato";
+import { NomeDoRetrato } from "@/components/playground/nome-do-retrato";
 import { RolagensDoRetrato } from "@/components/playground/rolagens-do-retrato";
 import { caberEm } from "@/lib/geometry/caber";
 import { portraitBox } from "@/lib/geometry/portrait";
@@ -462,6 +463,24 @@ const PortraitView = memo(function PortraitView({
           aria-hidden
           className="pointer-events-none absolute inset-0 rounded outline-dashed outline-white/25"
           style={{ outlineWidth: 1.5 / escala }}
+        />
+      ) : null}
+
+      {/* A legenda. Com a figura desligada ela continua: é o chefe que a
+          mesa conhece pelo nome e pela barra, sem o rosto. O nome só chega
+          aqui com a peça ligada -- ver `retratosDaCena`. */}
+      {layout.nome && portrait.nome ? (
+        <NomeDoRetrato
+          nome={portrait.nome}
+          largura={box.width}
+          altura={box.height}
+          lugar={layout.lugarDoNome}
+          escala={layout.escalaNome}
+          // As folgas do RECORTE, como as do dado e as da coluna.
+          folgaDireita={recorte.x + recorte.width - (box.x + box.width)}
+          folgaEsquerda={box.x - recorte.x}
+          folgaAcima={box.y - recorte.y}
+          folgaAbaixo={recorte.y + recorte.height - (box.y + box.height)}
         />
       ) : null}
 

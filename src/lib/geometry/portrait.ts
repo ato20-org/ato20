@@ -186,6 +186,7 @@ export function retratosDaCena(
   itens: ReadonlyArray<{ personagemId?: string }>,
   personagens: ReadonlyArray<{
     id: string;
+    nome?: string;
     retrato?: string;
     retratoUrl?: string;
     medidores?: Medidor[];
@@ -222,6 +223,7 @@ export function retratosDaCena(
     if (!guardado) continue;
 
     const canvas = url ? canvasDaUrl(url, fontes) : null;
+    const layout = { ...layoutPadrao, ...guardado.layout };
 
     saida.push({
       ...guardado,
@@ -239,7 +241,11 @@ export function retratosDaCena(
       medidores: incluirOcultos
         ? (ficha?.medidores ?? [])
         : medidoresVisiveis(ficha?.medidores),
-      layout: { ...layoutPadrao, ...guardado.layout },
+      layout,
+      // Explícito mesmo desligado, e não só ausente: o `undefined` por cima do
+      // `...guardado` garante que um nome que tenha ido parar no registro não
+      // atravesse a rede por causa de uma peça que o mestre desligou.
+      nome: layout.nome ? ficha?.nome : undefined,
       ...(url && canvas
         ? { url, urlLargura: canvas.largura, urlAltura: canvas.altura }
         : {}),
@@ -386,6 +392,36 @@ export function larguraDosDados(largura: number, escala = 1): number {
 }
 
 /**
+ * O corpo do nome, em fração da largura da legenda.
+ *
+ * Um décimo: "Aldric" cabe inteiro numa figura estreita, e um nome de três
+ * palavras corta com reticências em vez de quebrar em duas linhas -- a altura
+ * da legenda entra na conta do recorte, e uma que às vezes vale o dobro faria
+ * o nome pular quando o mestre o trocasse.
+ */
+export const CORPO_DO_NOME = 0.1;
+
+/**
+ * A altura da legenda, em corpos: a linha (1,25) e a folga de baixo (0,35).
+ *
+ * Tem de bater com o `TextoDoNome`. É com ela que o automático encosta a
+ * legenda na base da figura e que o recorte sabe quanto ela ocupa.
+ */
+const ALTURA_DO_NOME_EM_CORPOS = 1.6;
+
+/** A largura da legenda do nome num retrato desta largura, já com a escala. */
+export function larguraDoNome(largura: number, escala = 1): number {
+  return largura * limitarEscala(escala);
+}
+
+/** A altura da legenda do nome num retrato desta largura, já com a escala. */
+export function alturaDoNome(largura: number, escala = 1): number {
+  return (
+    larguraDoNome(largura, escala) * CORPO_DO_NOME * ALTURA_DO_NOME_EM_CORPOS
+  );
+}
+
+/**
  * A caixa que envolve o retrato e as peças dele, em fração da câmera.
  *
  * Devolve o quanto ela passa da figura para cada lado, e não um retângulo: quem
@@ -399,11 +435,12 @@ export function larguraDosDados(largura: number, escala = 1): number {
  *
  * Peça DESLIGADA não ocupa nada, e peça no automático ocupa do lado em que o
  * automático a põe: a coluna de medidores conta sempre (ela cabe de um lado ou
- * do outro, e nos dois casos rouba a mesma largura do vizinho), e os dados não
- * contam, porque embaixo eles não disputam largura com ninguém.
+ * do outro, e nos dois casos rouba a mesma largura do vizinho), os dados não
+ * contam, porque embaixo eles não disputam largura com ninguém, e o nome só
+ * conta no que passar da figura.
  */
 export function caixaDaComposicao(
-  retrato: Pick<Portrait, "width" | "height" | "medidores" | "layout">,
+  retrato: Pick<Portrait, "width" | "height" | "medidores" | "layout" | "nome">,
 ): { recuo: number; largura: number } {
   const layout = { ...LAYOUT_PADRAO, ...retrato.layout };
 
@@ -432,6 +469,19 @@ export function caixaDaComposicao(
   if (layout.dados && lugarDosDados) {
     const largura = larguraDosDados(retrato.width, layout.escalaDados);
     const inicio = lugarDosDados.x * retrato.width;
+
+    esquerda = Math.min(esquerda, inicio);
+    direita = Math.max(direita, inicio + largura);
+  }
+
+  // O nome no automático fica dentro da figura e não ocupa nada -- a não ser
+  // que a escala o faça mais largo que ela, e aí ele passa igual dos dois
+  // lados. Com lugar escolhido, ocupa onde foi posto, como os dados.
+  if (layout.nome && retrato.nome) {
+    const largura = larguraDoNome(retrato.width, layout.escalaNome);
+    const inicio = layout.lugarDoNome
+      ? layout.lugarDoNome.x * retrato.width
+      : (retrato.width - largura) / 2;
 
     esquerda = Math.min(esquerda, inicio);
     direita = Math.max(direita, inicio + largura);

@@ -1348,6 +1348,15 @@ export type Portrait = {
    * versão anterior -- quem desenha lê a ausência como `LAYOUT_PADRAO`.
    */
   layout?: Partial<LayoutDoRetrato>;
+  /**
+   * O nome do personagem, para a legenda do retrato.
+   *
+   * Só PUBLICADO, e só com `layout.nome` ligado -- ver `retratosDaCena`. Com a
+   * peça desligada o campo nem existe no quadro: o nome de um PNJ que o mestre
+   * ainda não apresentou não pode chegar à TV escondido num JSON. Não é
+   * guardado, pela mesma razão do `assetId`: quem manda é a ficha.
+   */
+  nome?: string;
   x: number;
   y: number;
   width: number;
@@ -1393,9 +1402,9 @@ export type LugarDaPeca = { x: number; y: number };
 /**
  * O que aparece num retrato e onde.
  *
- * O retrato deixou de ser "uma figura" e virou uma COMPOSIÇÃO: a figura, a
- * coluna de medidores e a fileira de dados. Este tipo é o que diz quais das
- * três estão no ar e onde cada uma cai.
+ * O retrato deixou de ser "uma figura" e virou uma COMPOSIÇÃO: a figura, o
+ * nome, a coluna de medidores e a fileira de dados. Este tipo é o que diz quais
+ * delas estão no ar e onde cada uma cai.
  *
  * ## Ausência quer dizer automático
  *
@@ -1419,12 +1428,25 @@ export type LugarDaPeca = { x: number; y: number };
 export type LayoutDoRetrato = {
   /** A figura em si. Desligada, a caixa continua existindo para as peças. */
   retrato: boolean;
+  /**
+   * O nome do personagem, como legenda.
+   *
+   * No automático ele fica embaixo, DENTRO da caixa do retrato, centrado: uma
+   * legenda que não sai da caixa não disputa lugar com o vizinho da fila. Com
+   * `lugarDoNome` ele vai para onde foi posto, e aí conta na fila como os
+   * dados. Nos dois casos fica preso ao recorte. Ver `NomeDoRetrato`.
+   *
+   * Desligado de fábrica, e desligado ele não viaja. Ver `Portrait.nome`.
+   */
+  nome: boolean;
   medidores: boolean;
   dados: boolean;
   /** Ausente = automático: ao lado, virando quando não cabe. */
   lugarDosMedidores?: LugarDaPeca;
   /** Ausente = automático: embaixo, virando para cima quando não cabe. */
   lugarDosDados?: LugarDaPeca;
+  /** Ausente = automático: embaixo, dentro da figura, centrado. */
+  lugarDoNome?: LugarDaPeca;
   /**
    * Quanto a coluna de medidores cresce ou encolhe. 1 é o tamanho de fábrica.
    *
@@ -1454,21 +1476,33 @@ export type LayoutDoRetrato = {
    * `RolagensDoRetrato`.
    */
   escalaDados: number;
+  /**
+   * Quanto a legenda do nome cresce ou encolhe. 1 é a largura da figura.
+   *
+   * A peça inteira escala, e não só a letra: a caixa da legenda é a largura da
+   * figura vezes este fator, e o corpo é um décimo dela. Crescer o corpo numa
+   * caixa fixa cortaria o nome antes, que é o contrário do pedido.
+   */
+  escalaNome: number;
 };
 
 /**
  * O layout com que a sessão começa, e o que a campanha antiga ganha ao abrir.
  *
- * As três peças no ar e as duas no automático: é exatamente a tela de antes de
- * o layout existir. Uma conciliação que mudasse a imagem de uma campanha só por
- * ela ter sido aberta numa versão nova seria uma surpresa no meio da sessão.
+ * A figura, os medidores e os dados no ar, as peças no automático, e o nome
+ * fora: é exatamente a tela de antes de o layout existir. Uma conciliação que
+ * mudasse a imagem de uma campanha só por ela ter sido aberta numa versão nova
+ * seria uma surpresa no meio da sessão -- e o nome, ligado sozinho, poria na TV
+ * quem o mestre ainda não apresentou.
  */
 export const LAYOUT_PADRAO: LayoutDoRetrato = {
   retrato: true,
+  nome: false,
   medidores: true,
   dados: true,
   escalaMedidores: 1,
   escalaDados: 1,
+  escalaNome: 1,
 };
 
 /**
