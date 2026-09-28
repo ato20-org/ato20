@@ -28,8 +28,9 @@ import {
   type ZDirection,
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { ehQuadro, semIdDaForma } from "@/types/scene";
+import { CORES_DA_LUZ, ehQuadro, semIdDaForma } from "@/types/scene";
 import type {
+  LuzCarregada,
   CanvasItem,
   Documento,
   Forma,
@@ -536,6 +537,16 @@ export function removeParedeSelection(): void {
   useSelectionStore.getState().clear();
 }
 
+/** Apaga a luz cravada selecionada. A lanterna de um token sai pelo menu dele. */
+export function removeLuzSelection(): void {
+  const { scene } = read();
+  const luzId = useSelectionStore.getState().selectedLuzId;
+  if (!scene || !luzId) return;
+
+  useSceneStore.getState().removeLuzes(scene.id, [luzId]);
+  useSelectionStore.getState().clear();
+}
+
 /** Apaga o medidor selecionado. */
 export function removeMedidorSelection(): void {
   const { scene } = read();
@@ -607,6 +618,70 @@ export function setSelectionOpacity(opacity: number): void {
     scene.id,
     selectedItems.map((item) => ({ id: item.id, patch })),
   );
+}
+
+/**
+ * Os alcances que a lanterna de um token oferece, em unidade de cena.
+ *
+ * Três degraus, e não uma régua: o menu é o único lugar em que a lanterna do
+ * token se ajusta, e "curta, média, longa" é a pergunta que a mesa faz -- a
+ * vela, a tocha, o lampião. Ajuste fino fica para a luz cravada, que tem anel.
+ */
+export const ALCANCES_DA_LANTERNA = [
+  { raio: 160, rotulo: "Curto" },
+  { raio: 260, rotulo: "Médio" },
+  { raio: 420, rotulo: "Longo" },
+] as const;
+
+/** O alcance com que uma lanterna acende pela primeira vez: o do meio. */
+const ALCANCE_DA_LANTERNA_PADRAO = 260;
+
+/**
+ * Acende, troca ou apaga a lanterna de todos os tokens selecionados.
+ *
+ * `null` apaga. Um patch mexe só no que traz: trocar a cor não pode encurtar a
+ * lanterna que o mestre alongou, e mudar o alcance de uma apagada a acende na
+ * cor que ela teria -- a primeira da paleta.
+ */
+export function setSelectionLanterna(
+  patch: Partial<LuzCarregada> | null,
+): void {
+  const { scene, selectedItems } = read();
+  if (!scene || selectedItems.length === 0) return;
+
+  useSceneStore.getState().updateItems(
+    scene.id,
+    selectedItems.map((item) => {
+      if (patch === null) return { id: item.id, patch: { luz: undefined } };
+
+      const atual: LuzCarregada = item.luz ?? {
+        raio: ALCANCE_DA_LANTERNA_PADRAO,
+        cor: CORES_DA_LUZ[0],
+      };
+
+      return { id: item.id, patch: { luz: { ...atual, ...patch } } };
+    }),
+  );
+}
+
+/**
+ * A lanterna que a seleção INTEIRA tem, quando é uma só.
+ *
+ * `null` = todas apagadas, e o menu marca "Apagada". `undefined` = elas
+ * discordam, e nenhum degrau fica marcado -- a mesma regra da opacidade.
+ */
+export function lanternaDaSelecao(
+  items: CanvasItem[],
+): LuzCarregada | null | undefined {
+  if (items.length === 0) return undefined;
+
+  const primeira = items[0]?.luz ?? null;
+  const igual = (luz: LuzCarregada | undefined) =>
+    primeira === null
+      ? luz === undefined
+      : luz?.cor === primeira.cor && luz.raio === primeira.raio;
+
+  return items.every((item) => igual(item.luz)) ? primeira : undefined;
 }
 
 /**

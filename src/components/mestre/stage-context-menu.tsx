@@ -72,7 +72,8 @@ import {
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useClipboardStore } from "@/lib/store/use-clipboard-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { temCamera, type Scene } from "@/types/scene";
+import { temCamera, temLuz, type Scene } from "@/types/scene";
+import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
@@ -100,6 +101,7 @@ export function StageContextMenu({
   );
   const selectedTracoIds = useSelectionStore((state) => state.selectedTracoIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
+  const selectedLuzId = useSelectionStore((state) => state.selectedLuzId);
   const hasClipboard = useClipboardStore(
     (state) => state.drafts.length > 0 || state.textos.length > 0,
   );
@@ -167,6 +169,7 @@ export function StageContextMenu({
   const allLocked = hasSelection && selectedItems.every((item) => item.locked);
   const opacidade = opacidadeDaSelecao(selectedItems);
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
+  const selectedLuz = scene.luzes?.find((luz) => luz.id === selectedLuzId);
 
   return (
     <ContextMenu>
@@ -175,6 +178,10 @@ export function StageContextMenu({
       </ContextMenuTrigger>
 
       <ContextMenuContent className="w-56">
+        {selectedLuz ? (
+          <BlocoDaLuz sceneId={scene.id} luz={selectedLuz} />
+        ) : null}
+
         {selectedFog ? (
           <>
             <ContextMenuItem onClick={() => toggleFogRevealed()}>
@@ -303,6 +310,12 @@ export function StageContextMenu({
                 </ContextMenuRadioGroup>
               </ContextMenuSubContent>
             </ContextMenuSub>
+
+            {/* Depois da opacidade, pela mesma razão: muda o que a mesa vê
+                do token. Só no mapa, que é a cena que tem escuro. */}
+            {temLuz(scene) ? (
+              <SubmenuDaLanterna itens={selectedItems} />
+            ) : null}
 
             <ContextMenuSeparator />
 

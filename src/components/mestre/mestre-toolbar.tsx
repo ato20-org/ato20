@@ -2,6 +2,7 @@
 
 import {
   Eraser,
+  Flame,
   Hand,
   MapPin,
   MousePointer2,
@@ -37,6 +38,7 @@ import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
 import {
   ehQuadro,
   temAnotacao,
+  temLuz,
   temMedida,
   temNevoa,
   temSol,
@@ -127,6 +129,20 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
     icon: StickyNote,
   },
 ];
+
+/**
+ * A luz: crava uma tocha no clique.
+ *
+ * Na régua do mapa, com o ponto e o papel, e não na pílula de desenho com a
+ * parede: as três CRAVAM no clique, e a parede se desenha no arrasto. Fora da
+ * lista de cima porque só o mapa tem luz -- o fundo fica com o ponto e o papel.
+ */
+const FERRAMENTA_LUZ: Ferramenta = {
+  tool: "luz",
+  label: "Luz",
+  hint: "Crava uma luz. Acende o escuro em volta dela.",
+  icon: Flame,
+};
 
 /**
  * As de DESENHAR: letra solta e as três formas. Valem nos dois tipos de cena.
@@ -351,6 +367,10 @@ export function ReguaDoMapa({ scene }: { scene: Scene }) {
         />
       ))}
 
+      {temLuz(scene) ? (
+        <BotaoDeFerramenta ferramenta={FERRAMENTA_LUZ} dica="left" />
+      ) : null}
+
       {/* A medida depois do ponto e do papel: ela é sobre o CHÃO e não sobre
           o que se crava nele.
 
@@ -547,6 +567,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     if (tool === "regua" && !temMedida(scene)) setTool("select");
     // Parede é do chão, e o chão que a tem é o do mapa: ver `Tool`.
     if (tool === "parede" && !temSol(scene)) setTool("select");
+    if (tool === "luz" && !temLuz(scene)) setTool("select");
     if (tool === "pin" && !temAnotacao(scene)) setTool("select");
     // A letra e a forma atravessam a troca de cena porque valem nos três --
     // ver `FERRAMENTAS_DE_DESENHO` --, e largá-las aqui faria o mestre perder

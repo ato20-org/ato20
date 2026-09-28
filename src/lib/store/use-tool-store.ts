@@ -26,9 +26,9 @@ import {
  * texto ABERTO sobre uma região, que é o que se quer para o que precisa ser
  * lido de relance no meio da sessão.
  *
- * `parede` e `luz` são as duas da sombra: a parede diz onde a luz para, a luz
- * diz de onde ela vem. Nenhuma das duas aparece na mesa -- o que a mesa vê é o
- * efeito delas, que é a sombra. Ver `SombraLayer`.
+ * `parede` e `luz` são as duas do escuro: a parede diz onde a luz para, a luz
+ * crava uma tocha no clique. Nenhuma das duas aparece na mesa como desenho --
+ * o que a mesa vê é o efeito delas, a sombra e a luz. Ver `LuzLayer`.
  *
  * `regua` coloca um medidor no arrasto -- régua, círculo, cone ou retângulo,
  * conforme `formaMedidor` -- e mora colada na grade, na pílula do mapa: ela só
@@ -52,10 +52,12 @@ export type Tool =
   | "borracha"
   | "regua"
   // `parede` traça, no arrasto, o segmento em que a luz para. É do MAPA e só
-  // dele: num quadro não há chão em que a sombra caia. Teve uma irmã, a `luz`,
-  // que cravava uma tocha no clique; ela saiu junto com a luz pontual, e a
-  // fonte da cena passou a ser só o sol.
+  // dele: num quadro não há chão em que a sombra caia.
   | "parede"
+  // `luz` crava uma luz no clique -- a tocha, a fogueira. Clique e não arrasto:
+  // a luz não tem tamanho, tem alcance, e o alcance se ajusta no anel dela.
+  // Também só do mapa. Ver `Luz`.
+  | "luz"
   // As três do QUADRO: `texto` escreve direto na folha no clique, `ligacao`
   // amarra duas coisas com uma seta em dois cliques -- de onde, para onde --, e
   // `forma` desenha retângulo, elipse ou linha no arrasto, conforme
