@@ -2,8 +2,12 @@
 
 import { Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
 
+import { useState } from "react";
+
 import { CeuDoSol } from "@/components/mestre/ceu-do-sol";
 import { GridControl } from "@/components/mestre/grid-control";
+import { ARCO_IRIS } from "@/components/mestre/menu-da-luz";
+import { SeletorDeCor } from "@/components/mestre/seletor-de-cor";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,9 +23,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TRAVA_EM_GRAUS } from "@/lib/geometry/ceu";
-import { limitarEscuridao } from "@/lib/geometry/luz";
+import { corDoEscuroDe, limitarEscuridao } from "@/lib/geometry/luz";
 import { useSceneStore } from "@/lib/store/use-scene-store";
-import { SOL_PADRAO, temLuz, type Scene, type Sol } from "@/types/scene";
+import { cn } from "@/lib/utils";
+import {
+  CORES_DO_ESCURO,
+  SOL_PADRAO,
+  temLuz,
+  type Scene,
+  type Sol,
+} from "@/types/scene";
 
 /**
  * As configurações DESTE mapa, no canto do palco.
@@ -42,6 +53,7 @@ import { SOL_PADRAO, temLuz, type Scene, type Sol } from "@/types/scene";
 export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
   const setSol = useSceneStore((state) => state.setSol);
   const setEscuridao = useSceneStore((state) => state.setEscuridao);
+  const setCorDoEscuro = useSceneStore((state) => state.setCorDoEscuro);
   const setInfoDosTokens = useSceneStore((state) => state.setInfoDosTokens);
 
   const sol = scene.sol;
@@ -174,6 +186,8 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
             <Escuridao
               valor={limitarEscuridao(scene.escuridao)}
               onChange={(valor) => setEscuridao(scene.id, valor)}
+              cor={corDoEscuroDe(scene.corDoEscuro)}
+              onCor={(cor) => setCorDoEscuro(scene.id, cor)}
             />
           </>
         ) : null}
@@ -229,10 +243,19 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
 function Escuridao({
   valor,
   onChange,
+  cor,
+  onCor,
 }: {
   valor: number;
   onChange: (valor: number) => void;
+  /** Já validada: o breu quando não há. Ver `corDoEscuroDe`. */
+  cor: string;
+  onCor: (cor: string) => void;
 }) {
+  /** O seletor da cor livre, aberto dentro do popover. */
+  const [livreAberto, setLivreAberto] = useState(false);
+  const livre = !(CORES_DO_ESCURO as readonly string[]).includes(cor);
+
   return (
     <section className="space-y-2">
       <div className="flex items-baseline justify-between gap-2">
@@ -261,9 +284,61 @@ function Escuridao({
       <p className="text-muted-foreground text-[10px] leading-snug">
         Onde nenhuma luz chega. Você vê mais fraco que a mesa.
       </p>
+
+      {/* O tom do escuro: a luz ambiente pelo avesso. Mesmo desenho da cor
+          da luz no painel dela -- a paleta curta e a cor livre atrás --, e
+          a borda clara em volta de cada bolinha porque são quatro quase
+          pretos num fundo escuro. */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground text-[10px]">Tom</span>
+        <div
+          role="radiogroup"
+          aria-label="Tom do escuro"
+          className="flex items-center gap-1.5"
+        >
+          {CORES_DO_ESCURO.map((opcao) => (
+            <button
+              key={opcao}
+              type="button"
+              role="radio"
+              aria-checked={cor === opcao}
+              aria-label={NOME_DO_ESCURO[opcao]}
+              title={NOME_DO_ESCURO[opcao]}
+              className={cn(
+                "focus-visible:ring-ring size-5 rounded-full border-2 outline-none focus-visible:ring-2",
+                cor === opcao ? "border-foreground" : "border-white/25",
+              )}
+              style={{ backgroundColor: opcao }}
+              onClick={() => onCor(opcao)}
+            />
+          ))}
+          <button
+            type="button"
+            aria-label="Tom personalizado"
+            aria-expanded={livreAberto}
+            title="Tom personalizado"
+            className={cn(
+              "focus-visible:ring-ring size-5 shrink-0 rounded-full border-2 outline-none focus-visible:ring-2",
+              livre || livreAberto ? "border-foreground" : "border-transparent",
+            )}
+            style={{ background: livre ? cor : ARCO_IRIS }}
+            onClick={() => setLivreAberto((aberto) => !aberto)}
+          />
+        </div>
+      </div>
+
+      {livreAberto ? <SeletorDeCor cor={cor} onChange={onCor} /> : null}
     </section>
   );
 }
+
+/** O nome de cada tom, pelo lugar que ele pinta. */
+const NOME_DO_ESCURO: Record<(typeof CORES_DO_ESCURO)[number], string> = {
+  "#000000": "Breu",
+  "#0b1330": "Noite",
+  "#1c130b": "Caverna",
+  "#170a24": "Abismo",
+};
 
 function Campo({
   rotulo,

@@ -258,6 +258,7 @@ export function SceneLayer({
           luzes={scene.luzes}
           paredes={scene.paredes}
           escuridao={scene.escuridao}
+          corDoEscuro={scene.corDoEscuro}
           variant={variant}
           smooth={smooth}
           naMao={naMao}

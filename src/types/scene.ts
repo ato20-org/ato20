@@ -352,6 +352,20 @@ export const CORES_DA_LUZ = [
 ] as const;
 
 /**
+ * Os tons que o escuro oferece de cara. Ver `Scene.corDoEscuro`.
+ *
+ * Escuros de verdade, e não cores: o que se escolhe aqui é a luz AMBIENTE, e
+ * ela aparece por baixo de tudo onde nenhuma tocha chega. Um azul claro de
+ * "noite" lavaria o mapa inteiro de azul. O primeiro é o breu, o de sempre.
+ */
+export const CORES_DO_ESCURO = [
+  "#000000",
+  "#0b1330",
+  "#1c130b",
+  "#170a24",
+] as const;
+
+/**
  * Os recortes que uma área escondida sabe ter.
  *
  * Os mesmos nomes das formas do quadro -- `retangulo`, `elipse` --, porque é o
@@ -1957,6 +1971,15 @@ export type Scene = {
    * luz alcança aparece. O mestre vê mais fraco que a mesa -- ver `LuzLayer`.
    */
   escuridao?: number;
+  /**
+   * A cor do escuro, em `#rrggbb`. Ausente = preto, o breu.
+   *
+   * É a luz ambiente da cena, pelo avesso: a noite de lua é um escuro azulado,
+   * a caverna, um escuro de terra. O quanto ela cobre continua sendo a
+   * `escuridao`; aqui é só o tom de onde nenhuma luz chega, e as luzes abrem
+   * buraco nela como abrem no preto.
+   */
+  corDoEscuro?: string;
   /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.

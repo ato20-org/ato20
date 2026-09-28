@@ -1,3 +1,4 @@
+import { normalizarHex } from "@/lib/cor";
 import {
   paredeDeVerdade,
   segmentosDaParede,
@@ -576,6 +577,58 @@ export const COMPRIMENTO_DA_SOMBRA = 2.5;
 export const FORCA_DA_SOMBRA_DA_FIGURA = 0.85;
 
 /**
+ * O quanto o lado de um token virado para LONGE da luz perde dela, no ponto
+ * mais escuro.
+ *
+ * É o volume que a figura ganha: a tocha à esquerda deixa a metade esquerda
+ * acesa e a direita na penumbra. Metade, e não tudo: a luz de uma chama
+ * contorna um corpo, e o lado de trás todo preto leria como recorte, e não
+ * como sombra. Multiplica o que já chega ali, então a figura na penumbra da
+ * borda do alcance ganha pouco contraste, e a que está colada na tocha, muito.
+ */
+export const FORCA_DO_LADO_ESCURO = 0.5;
+
+/**
+ * O eixo do degradê de volume sobre um token: do lado virado para a luz (`de`)
+ * ao lado oposto (`ate`). `null` quando não há lado -- a luz dentro do pé, que
+ * é a lanterna na mão, ou o token fora do alcance.
+ *
+ * Só pela DIREÇÃO da luz, e não pela forma da figura: vale igual para o token
+ * visto de cima, para a figura em pé e para o rosto num círculo. Cada um tem
+ * um lado virado para a tocha, e é o único que a imagem plana deixa saber sem
+ * adivinhar onde ela é redonda.
+ *
+ * As pontas ficam na borda da caixa, medida na direção da luz e com o giro do
+ * token: é o que faz o degradê atravessar a figura inteira, e não só o meio.
+ */
+export function ladoDaLuz(
+  oclusor: Oclusor,
+  fonte: Pick<FonteDeLuz, "x" | "y" | "raio">,
+): { de: Ponto; ate: Ponto } | null {
+  const dx = oclusor.x - fonte.x;
+  const dy = oclusor.y - fonte.y;
+  const distancia = Math.hypot(dx, dy);
+
+  if (distancia <= oclusor.raio || !alcancaOclusor(fonte, oclusor)) {
+    return null;
+  }
+
+  const rumo = { x: dx / distancia, y: dy / distancia };
+  const angulo = (oclusor.caixa.rotation * Math.PI) / 180;
+  const cos = Math.cos(angulo);
+  const sen = Math.sin(angulo);
+  // A meia largura da caixa girada, projetada no rumo da luz.
+  const meia =
+    (Math.abs(rumo.x * cos + rumo.y * sen) * oclusor.caixa.width) / 2 +
+    (Math.abs(-rumo.x * sen + rumo.y * cos) * oclusor.caixa.height) / 2;
+
+  return {
+    de: { x: oclusor.x - rumo.x * meia, y: oclusor.y - rumo.y * meia },
+    ate: { x: oclusor.x + rumo.x * meia, y: oclusor.y + rumo.y * meia },
+  };
+}
+
+/**
  * Os tokens que tapam luz: todos com caixa de verdade, menos os que o mestre
  * disse que não fazem sombra (`semSombra`), que valem para o sol e para as
  * luzes igual.
@@ -910,6 +963,22 @@ export function caixaDaFonte(
   if (x2 <= x1 || y2 <= y1) return null;
 
   return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+}
+
+/** A cor do escuro quando ninguém escolheu: o breu. */
+export const COR_DO_ESCURO_PADRAO = "#000000";
+
+/**
+ * A cor do escuro, ou o breu para o que não é cor. Ver `Scene.corDoEscuro`.
+ *
+ * Pela mesma razão de `limitarEscuridao`: o valor chega pelo canal e pelo
+ * disco, e um `fillStyle` inválido o canvas ignora em silêncio -- o escuro
+ * sairia na cor do último desenho, e não em preto.
+ */
+export function corDoEscuroDe(valor: unknown): string {
+  return (
+    (typeof valor === "string" && normalizarHex(valor)) || COR_DO_ESCURO_PADRAO
+  );
 }
 
 /**
