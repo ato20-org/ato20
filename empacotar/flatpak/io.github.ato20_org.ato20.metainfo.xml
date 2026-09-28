@@ -100,6 +100,31 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.4.0" date="2026-09-28">
+      <description>
+        <p>
+          Characters gained meters: a number up to a ceiling, with a name, a
+          colour and a shape — bar, pips or percentage — for hit points,
+          sanity, ammunition, load or a torch. Only the game master writes
+          them, from the sheet, where the bar can be dragged to change the
+          value. The table and the character's owner read them, and a hidden
+          meter never leaves your computer.
+        </p>
+        <p>
+          At the table, meters sit in a column next to the portrait, and a
+          switch in the map settings puts names and meters above the tokens
+          for combat maps. The campaign gained its own settings window,
+          holding the default meters every character starts with and the
+          layout and position of the portraits. Portraits can also show the
+          character's name; it starts switched off, so no one is introduced
+          before their time.
+        </p>
+        <p>
+          Fix: opening a campaign no longer blanks the portraits on the TV and
+          the phones for a few seconds.
+        </p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-09-28">
       <description>
         <p>

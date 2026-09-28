@@ -56,6 +56,42 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.4.0",
+    data: "2026-09-28",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "O personagem ganhou medidores",
+        detalhe:
+          "Vida, sanidade, munição, carga ou tocha: um número até um teto, com nome, cor e forma de barra, pontos ou porcentagem. Só o mestre escreve, pela ficha, onde a barra se arrasta para mudar o valor. A mesa e o dono do personagem leem, e um medidor escondido não sai do seu computador.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "Os medidores aparecem ao lado do retrato, e podem ir para cima do token",
+        detalhe:
+          "Na mesa, eles ficam numa coluna junto do retrato. Para o mapa de combate, um interruptor nas Configurações do mapa põe nome e medidores sobre a cabeça dos tokens.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A campanha ganhou uma janela de configuração",
+        detalhe:
+          "Pelo menu da campanha. Nela ficam os medidores de fábrica, que todo personagem começa tendo, e o layout e a posição dos retratos, que saíram da janela de Retratos.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O retrato pode mostrar o nome",
+        detalhe:
+          "Começa desligado, para não apresentar um PNJ antes da hora. Liga no layout dos retratos, e o nome se arrasta e cresce como as outras peças.",
+      },
+      {
+        tipo: "correcao",
+        titulo:
+          "Ao abrir uma campanha, a TV e os celulares não apagam mais os retratos por alguns segundos",
+      },
+    ],
+  },
+  {
     versao: "0.3.0",
     data: "2026-09-28",
     mudancas: [
