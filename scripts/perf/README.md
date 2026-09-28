@@ -560,6 +560,10 @@ pnpm perf:webview -- --cenario bancada --painel ambos,esquerdo,direito,nenhum
 pnpm perf:webview -- --cenario arrasto,mestre-camera --n 40 --paredes 8 \
   --luzes 3 --carregadas 1 --repetir 3
 
+# a luz que se mexe: o mesmo, com todas as luzes tremulando
+pnpm perf:webview -- --cenario arrasto,mestre-camera,amostras --n 40 \
+  --paredes 8 --luzes 3 --carregadas 1 --efeito fogo --repetir 2
+
 # o que muda por quadro (para achar, não para publicar o número)
 pnpm perf:webview -- --cenario bancada --sonda
 

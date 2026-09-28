@@ -221,7 +221,57 @@ export type LuzCarregada = {
   raio: number;
   /** Em `#rrggbb`. A paleta é `CORES_DA_LUZ`, mas qualquer cor vale. */
   cor: string;
+  /**
+   * Como ela se mexe. Ausente = fixa. A tocha na mão do guerreiro tremula como
+   * a da parede, e é por isso que o efeito vale para as duas. Ver `EfeitoDaLuz`.
+   */
+  efeito?: EfeitoDaLuz;
 };
+
+/**
+ * Como uma luz se comporta no tempo. Ausente = fixa, a luz de sempre.
+ *
+ * - `fogo`: tremula sem ritmo, sem nunca apagar. A tocha, a fogueira, a vela.
+ * - `pulsando`: sobe e desce devagar, como quem respira. A runa, o cristal.
+ * - `piscando`: acende e apaga no compasso. O farol, o alarme, a lâmpada que
+ *   avisa.
+ *
+ * Três climas, e não uma régua de velocidade e amplitude: o mestre escolhe
+ * "fogo", e não "4 Hz a 28%". A conta de cada um mora em `fatorDoEfeito`.
+ */
+export const EFEITOS_DA_LUZ = ["fogo", "pulsando", "piscando"] as const;
+
+export type EfeitoDaLuz = (typeof EFEITOS_DA_LUZ)[number];
+
+/**
+ * O cone de uma luz que aponta: a lanterna de foco, o farol, o olho do golem.
+ *
+ * Os graus seguem o sol (`Sol.angulo`): no sentido horário a partir da
+ * direita. O `raio` da luz continua sendo o alcance, agora medido no eixo do
+ * cone.
+ */
+export type ConeDaLuz = {
+  /** Para onde o cone aponta. */
+  angulo: number;
+  /** A abertura inteira, de uma borda à outra. */
+  abertura: number;
+};
+
+/**
+ * O cone com que uma luz vira cone: o facho de uma lanterna, apontando para a
+ * direita -- onde estava a alça do alcance do círculo, que vira a ponta dele.
+ */
+export const CONE_PADRAO: ConeDaLuz = { angulo: 0, abertura: 60 };
+
+/**
+ * Os limites da abertura, em graus.
+ *
+ * Abaixo de dez o cone é um risco, e acima de 270 é um círculo com uma
+ * mordida -- para isso existe o círculo. O teto também guarda a borda macia
+ * longe da volta completa. Ver `paradasDoCone`.
+ */
+export const ABERTURA_MINIMA = 10;
+export const ABERTURA_MAXIMA = 270;
 
 /**
  * Uma luz cravada no mapa: a tocha na parede, a fogueira, o braseiro.
@@ -263,6 +313,18 @@ export type Luz = {
    * não uma luz menor. Para luz menor existe o `raio`.
    */
   intensidade?: number;
+  /**
+   * Desligada: continua no mapa, e não acende nada. Ausente = acesa.
+   *
+   * É a tocha que a mesa apaga para passar escondida, e que acende de novo
+   * duas salas depois. Remover obrigaria o mestre a cravar outra e acertar de
+   * novo a cor, o alcance e o cone.
+   */
+  desligada?: boolean;
+  /** Ausente = círculo, a luz que vai para todo lado. Ver `ConeDaLuz`. */
+  cone?: ConeDaLuz;
+  /** Ausente = fixa. Ver `EfeitoDaLuz`. */
+  efeito?: EfeitoDaLuz;
 };
 
 /**
