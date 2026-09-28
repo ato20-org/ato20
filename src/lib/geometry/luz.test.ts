@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  anguloEntre,
   caixaDaFonte,
   chaveDasFontes,
+  coneDe,
+  fatorDoEfeito,
+  FUNDO_DO_PULSO,
   fontesDaCena,
+  inicioDoCone,
+  paradasDoCone,
+  sementeDaLuz,
+  TREMIDA_DO_FOGO,
   aplicarAfim,
   caixaDaMatriz,
   chaveDosOclusores,
@@ -145,6 +153,53 @@ describe("fontesDaCena", () => {
     expect(fontesDaCena(undefined, [item("t1")])).toEqual([]);
   });
 
+  it("a desligada não acende nada, e as outras continuam", () => {
+    const fontes = fontesDaCena(
+      [solta, { ...solta, id: "l2", desligada: true }],
+      [],
+    );
+
+    expect(fontes.map((fonte) => fonte.id)).toEqual(["l1"]);
+  });
+
+  it("o cone e o efeito passam para a fonte", () => {
+    const [fonte] = fontesDaCena(
+      [{ ...solta, cone: { angulo: 90, abertura: 45 }, efeito: "fogo" }],
+      [],
+    );
+
+    expect(fonte).toMatchObject({
+      cone: { angulo: 90, abertura: 45 },
+      efeito: "fogo",
+    });
+  });
+
+  it("sem cone é círculo, e sem efeito é fixa", () => {
+    const [fonte] = fontesDaCena([solta], []);
+
+    expect(fonte).not.toHaveProperty("cone");
+    expect(fonte).not.toHaveProperty("efeito");
+  });
+
+  it("a lanterna do token também tremula", () => {
+    const [fonte] = fontesDaCena(
+      [],
+      [item("t1", { luz: { raio: 150, cor: "#fb923c", efeito: "fogo" } })],
+    );
+
+    expect(fonte?.efeito).toBe("fogo");
+  });
+
+  it("efeito de uma versão futura acende fixo, e não apaga a luz", () => {
+    const [fonte] = fontesDaCena(
+      [{ ...solta, efeito: "arco-iris" as never }],
+      [],
+    );
+
+    expect(fonte?.id).toBe("l1");
+    expect(fonte).not.toHaveProperty("efeito");
+  });
+
   it("fonte com número podre some, e não derruba as outras", () => {
     // `createRadialGradient` joga exceção com NaN, e o mapa inteiro apagaria.
     const fontes = fontesDaCena(
@@ -241,6 +296,135 @@ describe("chaveDasFontes", () => {
     expect(chaveDasFontes([luz])).not.toBe(
       chaveDasFontes([{ ...luz, cor: "#93c5fd" }]),
     );
+  });
+
+  it("virar cone, e girar o cone, muda a chave", () => {
+    const cone = { ...luz, cone: { angulo: 0, abertura: 60 } };
+
+    expect(chaveDasFontes([luz])).not.toBe(chaveDasFontes([cone]));
+    expect(chaveDasFontes([cone])).not.toBe(
+      chaveDasFontes([{ ...cone, cone: { angulo: 30, abertura: 60 } }]),
+    );
+  });
+
+  it("trocar o efeito muda a chave: é ele que liga o laço", () => {
+    expect(chaveDasFontes([luz])).not.toBe(
+      chaveDasFontes([{ ...luz, efeito: "fogo" as const }]),
+    );
+  });
+});
+
+describe("coneDe", () => {
+  it("prende a abertura entre os limites", () => {
+    expect(coneDe({ angulo: 0, abertura: 2 })?.abertura).toBe(10);
+    expect(coneDe({ angulo: 0, abertura: 359 })?.abertura).toBe(270);
+  });
+
+  it("cone podre vira círculo, e não derruba a luz", () => {
+    // `createConicGradient` joga exceção com NaN, como o radial.
+    expect(coneDe({ angulo: Number.NaN, abertura: 60 })).toBeUndefined();
+    expect(coneDe({ angulo: 0 })).toBeUndefined();
+    expect(coneDe(undefined)).toBeUndefined();
+  });
+});
+
+describe("paradasDoCone", () => {
+  const paradas = paradasDoCone(60);
+
+  it("vai de zero a zero numa volta, sempre crescendo no `onde`", () => {
+    expect(paradas[0]).toEqual([0, 0]);
+    expect(paradas.at(-1)).toEqual([1, 0]);
+    for (let i = 1; i < paradas.length; i += 1) {
+      expect(paradas[i]![0]).toBeGreaterThanOrEqual(paradas[i - 1]![0]);
+    }
+  });
+
+  it("o facho fica no meio da volta, em torno de 0,5", () => {
+    const acesas = paradas.filter(([, forca]) => forca === 1);
+
+    expect(acesas).toHaveLength(2);
+    // A borda nominal, a 30 graus do eixo, cai no meio da borda macia.
+    const [antes, depois] = [paradas[1]!, paradas[2]!];
+    expect((antes[0] + depois[0]) / 2).toBeCloseTo(0.5 - 30 / 360);
+  });
+
+  it("a volta começa do lado oposto ao eixo", () => {
+    expect(inicioDoCone({ angulo: 0 })).toBeCloseTo(-Math.PI);
+    expect(inicioDoCone({ angulo: 90 })).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it("até na abertura máxima a borda macia não cruza a emenda", () => {
+    const larga = paradasDoCone(270);
+
+    expect(larga[1]![0]).toBeGreaterThan(0);
+    expect(larga[4]![0]).toBeLessThan(1);
+  });
+});
+
+describe("fatorDoEfeito", () => {
+  const semente = sementeDaLuz("tocha");
+  const amostras = (efeito: Parameters<typeof fatorDoEfeito>[0]) =>
+    Array.from({ length: 2000 }, (_, i) =>
+      fatorDoEfeito(efeito, i * 0.01, semente),
+    );
+
+  it("a fixa é sempre a luz inteira", () => {
+    expect(new Set(amostras(undefined))).toEqual(new Set([1]));
+  });
+
+  it("o fogo tremula sem nunca apagar", () => {
+    const fogo = amostras("fogo");
+
+    expect(Math.min(...fogo)).toBeGreaterThanOrEqual(1 - TREMIDA_DO_FOGO);
+    expect(Math.max(...fogo)).toBeLessThanOrEqual(1);
+    expect(Math.max(...fogo) - Math.min(...fogo)).toBeGreaterThan(0.1);
+  });
+
+  it("o fogo não salta: um centésimo de segundo muda pouco", () => {
+    const fogo = amostras("fogo");
+    const saltos = fogo.slice(1).map((valor, i) => Math.abs(valor - fogo[i]!));
+
+    expect(Math.max(...saltos)).toBeLessThan(0.05);
+  });
+
+  it("o pulso respira entre o fundo e a luz inteira", () => {
+    const pulso = amostras("pulsando");
+
+    expect(Math.min(...pulso)).toBeCloseTo(FUNDO_DO_PULSO, 2);
+    expect(Math.max(...pulso)).toBeCloseTo(1, 2);
+  });
+
+  it("o pisca apaga de verdade, e acende inteiro", () => {
+    const pisca = amostras("piscando");
+
+    expect(Math.min(...pisca)).toBe(0);
+    expect(Math.max(...pisca)).toBe(1);
+  });
+
+  it("duas tochas não tremem em uníssono", () => {
+    const outra = sementeDaLuz("outra tocha");
+
+    expect(fatorDoEfeito("fogo", 3.21, semente)).not.toBe(
+      fatorDoEfeito("fogo", 3.21, outra),
+    );
+  });
+
+  it("a mesma tocha treme igual, em qualquer tela", () => {
+    expect(fatorDoEfeito("fogo", 7.5, sementeDaLuz("tocha"))).toBe(
+      fatorDoEfeito("fogo", 7.5, sementeDaLuz("tocha")),
+    );
+  });
+});
+
+describe("anguloEntre", () => {
+  it("vai pela volta curta, mesmo cruzando o zero", () => {
+    expect(anguloEntre(350, 10, 0.5) % 360).toBeCloseTo(0);
+    expect(anguloEntre(10, 350, 0.5)).toBeCloseTo(0);
+  });
+
+  it("nas pontas é o de partida e o de chegada", () => {
+    expect(anguloEntre(40, 100, 0)).toBe(40);
+    expect(anguloEntre(40, 100, 1)).toBe(100);
   });
 });
 
@@ -596,6 +780,40 @@ describe("caixaDaFonte", () => {
 
   it("luz inteira fora do plano não tem caixa", () => {
     expect(caixaDaFonte({ x: -500, y: -500, raio: 100 })).toBeNull();
+  });
+
+  it("o cone pede só o retângulo do facho, com a borda macia dentro", () => {
+    // Sessenta graus para a direita, e cinco de borda macia de cada lado: as
+    // bordas a 35 graus do eixo.
+    const meia = Math.sin((35 * Math.PI) / 180) * 100;
+
+    expect(
+      caixaDaFonte({
+        x: 500,
+        y: 500,
+        raio: 100,
+        cone: { angulo: 0, abertura: 60 },
+      }),
+    ).toEqual({
+      x: 500,
+      y: Math.floor(500 - meia),
+      width: 100,
+      height: Math.ceil(500 + meia) - Math.floor(500 - meia),
+    });
+  });
+
+  it("o cone que cruza um eixo alcança o ponto mais longe do arco nele", () => {
+    // Para baixo, cento e vinte graus: o fundo do arco é o ponto mais baixo,
+    // e não uma das pontas.
+    const caixa = caixaDaFonte({
+      x: 500,
+      y: 500,
+      raio: 100,
+      cone: { angulo: 90, abertura: 120 },
+    });
+
+    expect(caixa?.y).toBe(500);
+    expect(caixa!.y + caixa!.height).toBe(600);
   });
 });
 

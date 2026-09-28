@@ -4,9 +4,14 @@ import {
   type Segmento,
 } from "@/lib/geometry/sombra";
 import {
+  ABERTURA_MAXIMA,
+  ABERTURA_MINIMA,
+  EFEITOS_DA_LUZ,
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type CanvasItem,
+  type ConeDaLuz,
+  type EfeitoDaLuz,
   type Luz,
   type Parede,
 } from "@/types/scene";
@@ -45,6 +50,10 @@ export type FonteDeLuz = {
   cor: string;
   /** De 0 a 1, já preso. A lanterna de um token acende sempre inteira. */
   intensidade: number;
+  /** Ausente = círculo. A abertura já vem presa. Ver `coneDe`. */
+  cone?: ConeDaLuz;
+  /** Ausente = fixa. Ver `fatorDoEfeito`. */
+  efeito?: EfeitoDaLuz;
 };
 
 /**
@@ -94,7 +103,42 @@ export function limitarIntensidade(valor: unknown): number {
 }
 
 /**
+ * O cone de uma luz, com a abertura presa, ou `undefined` para o círculo.
+ *
+ * O que não é número vira círculo, e não cone podre: o `createConicGradient`
+ * com `NaN` joga exceção como o radial, e a luz do mapa inteiro apagaria.
+ */
+export function coneDe(cone: unknown): ConeDaLuz | undefined {
+  if (typeof cone !== "object" || cone === null) return undefined;
+
+  const { angulo, abertura } = cone as Partial<ConeDaLuz>;
+  if (
+    typeof angulo !== "number" ||
+    !Number.isFinite(angulo) ||
+    typeof abertura !== "number" ||
+    !Number.isFinite(abertura)
+  ) {
+    return undefined;
+  }
+
+  return {
+    angulo,
+    abertura: Math.min(ABERTURA_MAXIMA, Math.max(ABERTURA_MINIMA, abertura)),
+  };
+}
+
+/** O efeito, se for um que existe. O de uma versão futura acende fixo. */
+export function efeitoDe(valor: unknown): EfeitoDaLuz | undefined {
+  return (EFEITOS_DA_LUZ as readonly unknown[]).includes(valor)
+    ? (valor as EfeitoDaLuz)
+    : undefined;
+}
+
+/**
  * Todas as luzes da cena: as soltas e as que os tokens carregam.
+ *
+ * A DESLIGADA não entra: para a mesa ela não existe. Quem ainda a mostra é o
+ * marcador do Mestre, que lê a cena, e não esta lista.
  *
  * A carregada acende do CENTRO da caixa do token, e não do canto: é de onde a
  * mesa lê que o personagem está. Girar o token não mexe no centro, então não
@@ -112,6 +156,11 @@ export function fontesDaCena(
   const fontes: FonteDeLuz[] = [];
 
   for (const luz of luzes ?? []) {
+    if (luz.desligada) continue;
+
+    const cone = coneDe(luz.cone);
+    const efeito = efeitoDe(luz.efeito);
+
     fontes.push({
       id: luz.id,
       x: luz.x,
@@ -120,11 +169,15 @@ export function fontesDaCena(
       raioIntenso: raioIntensoDe(luz.raio, luz.raioIntenso),
       cor: luz.cor,
       intensidade: limitarIntensidade(luz.intensidade),
+      ...(cone ? { cone } : {}),
+      ...(efeito ? { efeito } : {}),
     });
   }
 
   for (const item of items) {
     if (!item.luz) continue;
+
+    const efeito = efeitoDe(item.luz.efeito);
 
     fontes.push({
       id: item.id,
@@ -134,6 +187,7 @@ export function fontesDaCena(
       raioIntenso: raioIntensoDe(item.luz.raio, undefined),
       cor: item.luz.cor,
       intensidade: 1,
+      ...(efeito ? { efeito } : {}),
     });
   }
 
@@ -152,7 +206,13 @@ export function chaveDasFontes(fontes: ReadonlyArray<FonteDeLuz>): string {
   return fontes
     .map(
       (fonte) =>
-        `${fonte.id}:${fonte.x.toFixed(1)},${fonte.y.toFixed(1)},${fonte.raio.toFixed(1)},${fonte.raioIntenso.toFixed(1)},${fonte.cor},${fonte.intensidade.toFixed(2)}`,
+        `${fonte.id}:${fonte.x.toFixed(1)},${fonte.y.toFixed(1)},${fonte.raio.toFixed(1)},${fonte.raioIntenso.toFixed(1)},${fonte.cor},${fonte.intensidade.toFixed(2)}` +
+        // O efeito entra mesmo sem mudar a forma: é ele que liga e desliga o
+        // laço da animação, e a troca tem de chegar ao efeito do desenho.
+        (fonte.cone
+          ? `,c${fonte.cone.angulo.toFixed(1)}/${fonte.cone.abertura.toFixed(1)}`
+          : "") +
+        (fonte.efeito ? `,${fonte.efeito}` : ""),
     )
     .join("|");
 }
@@ -208,6 +268,86 @@ export function paradasDaLuz(
   }
 
   return paradas;
+}
+
+/**
+ * A borda macia do cone, em graus: metade por dentro da abertura, metade por
+ * fora.
+ *
+ * Um facho de lanterna não termina num fio -- a borda dele esmaece em poucos
+ * graus. Nunca mais que um quarto da abertura: num cone estreito, uma borda
+ * de dez graus comeria o facho inteiro.
+ */
+export function maciezDoCone(abertura: number): number {
+  return Math.min(10, abertura / 4);
+}
+
+/**
+ * O ângulo, em radianos, em que o degradê cônico começa: o lado OPOSTO ao
+ * eixo. Com a volta começando ali, o facho fica no meio dela, em 0,5, e a
+ * borda macia nunca cruza a emenda do zero. Ver `paradasDoCone`.
+ */
+export function inicioDoCone(cone: Pick<ConeDaLuz, "angulo">): number {
+  return (cone.angulo * Math.PI) / 180 - Math.PI;
+}
+
+/**
+ * A máscara do cone, `[onde, força]` numa volta inteira: zero fora do facho,
+ * inteira dentro, e a borda macia entre os dois.
+ *
+ * É o que se multiplica pela forma da luz (`destination-in`): as paredes e os
+ * tokens continuam tapando como no círculo, e a queda do centro até o alcance
+ * também. O cone só diz para ONDE ela vai.
+ */
+export function paradasDoCone(abertura: number): Array<[number, number]> {
+  const meia = abertura / 360 / 2;
+  const borda = maciezDoCone(abertura) / 360 / 2;
+
+  return [
+    [0, 0],
+    [0.5 - meia - borda, 0],
+    [0.5 - meia + borda, 1],
+    [0.5 + meia - borda, 1],
+    [0.5 + meia + borda, 0],
+    [1, 0],
+  ];
+}
+
+/**
+ * Os limites, em cena, do que um cone alcança: o centro, as duas pontas do
+ * arco e o ponto mais distante do arco em cada eixo que ele cruza.
+ */
+function limitesDoCone(
+  fonte: Pick<FonteDeLuz, "x" | "y" | "raio">,
+  cone: ConeDaLuz,
+): { x1: number; y1: number; x2: number; y2: number } {
+  // A borda macia passa da abertura, e a caixa tem de cobri-la.
+  const meia = (cone.abertura + maciezDoCone(cone.abertura)) / 2;
+  const de = cone.angulo - meia;
+  const noArco = (graus: number) => {
+    const radianos = (graus * Math.PI) / 180;
+    return {
+      x: fonte.x + Math.cos(radianos) * fonte.raio,
+      y: fonte.y + Math.sin(radianos) * fonte.raio,
+    };
+  };
+
+  const pontos: Ponto[] = [
+    { x: fonte.x, y: fonte.y },
+    noArco(de),
+    noArco(cone.angulo + meia),
+  ];
+  for (const eixo of [0, 90, 180, 270]) {
+    const depois = (((eixo - de) % 360) + 360) % 360;
+    if (depois <= meia * 2) pontos.push(noArco(eixo));
+  }
+
+  return {
+    x1: Math.min(...pontos.map((ponto) => ponto.x)),
+    y1: Math.min(...pontos.map((ponto) => ponto.y)),
+    x2: Math.max(...pontos.map((ponto) => ponto.x)),
+    y2: Math.max(...pontos.map((ponto) => ponto.y)),
+  };
 }
 
 /**
@@ -743,18 +883,29 @@ export type CaixaDaLuz = {
 
 /**
  * O quadrado que a luz alcança, preso ao plano. `null` se ela cai inteira fora.
+ * No cone, o retângulo do facho, e não o do círculo inteiro.
  *
  * Preso porque é o tamanho da tela de rascunho em que a luz se desenha: um
  * alcance de dois mil numa luz no canto pediria um rascunho quatro vezes maior
  * que o plano para pintar um quarto dele.
  */
 export function caixaDaFonte(
-  fonte: Pick<FonteDeLuz, "x" | "y" | "raio">,
+  fonte: Pick<FonteDeLuz, "x" | "y" | "raio" | "cone">,
 ): CaixaDaLuz | null {
-  const x1 = Math.max(0, Math.floor(fonte.x - fonte.raio));
-  const y1 = Math.max(0, Math.floor(fonte.y - fonte.raio));
-  const x2 = Math.min(SCENE_WIDTH, Math.ceil(fonte.x + fonte.raio));
-  const y2 = Math.min(SCENE_HEIGHT, Math.ceil(fonte.y + fonte.raio));
+  // O cone pede só o pedaço do quadrado que o facho cobre: o de sessenta graus
+  // pinta um quarto dos pixels do círculo de mesmo alcance.
+  const limites = fonte.cone
+    ? limitesDoCone(fonte, fonte.cone)
+    : {
+        x1: fonte.x - fonte.raio,
+        y1: fonte.y - fonte.raio,
+        x2: fonte.x + fonte.raio,
+        y2: fonte.y + fonte.raio,
+      };
+  const x1 = Math.max(0, Math.floor(limites.x1));
+  const y1 = Math.max(0, Math.floor(limites.y1));
+  const x2 = Math.min(SCENE_WIDTH, Math.ceil(limites.x2));
+  const y2 = Math.min(SCENE_HEIGHT, Math.ceil(limites.y2));
 
   if (x2 <= x1 || y2 <= y1) return null;
 
@@ -772,4 +923,118 @@ export function limitarEscuridao(valor: unknown): number {
   return typeof valor === "number" && Number.isFinite(valor)
     ? Math.min(1, Math.max(0, valor))
     : 0;
+}
+
+/**
+ * Uma semente por luz, tirada do id: FNV-1a, 32 bits.
+ *
+ * É o que tira as tochas de uma sala do compasso. Sem ela as três tremeriam
+ * juntas, e fogo que tremula em uníssono lê como lâmpada com mau contato. Do
+ * id, e não sorteada, para a mesma tocha tremer igual depois de reabrir -- e
+ * igual no Mestre e na TV, que não conversam sobre isso.
+ */
+export function sementeDaLuz(id: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < id.length; i += 1) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/** Um número de 0 a 1 para cada inteiro, sempre o mesmo para a mesma semente. */
+function sorteio(i: number, semente: number): number {
+  let h = (Math.imul(i, 0x27d4eb2d) + Math.imul(semente, 0x165667b1)) | 0;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4_294_967_296;
+}
+
+/**
+ * Ruído de valor: um sorteio em cada inteiro de `t`, e a curva suave entre
+ * eles. De 0 a 1, contínuo -- a chama não salta de um brilho para outro.
+ */
+function ruido(t: number, semente: number): number {
+  const i = Math.floor(t);
+  const f = t - i;
+  const suave = f * f * (3 - 2 * f);
+  const a = sorteio(i, semente);
+  return a + (sorteio(i + 1, semente) - a) * suave;
+}
+
+/** Até onde o fogo abaixa a luz, no fundo da tremida: ela nunca apaga. */
+export const TREMIDA_DO_FOGO = 0.3;
+/** O fundo da respiração, em fração da luz inteira, e o fôlego, em segundos. */
+export const FUNDO_DO_PULSO = 0.45;
+const PERIODO_DO_PULSO = 2.4;
+/** O compasso do pisca, em segundos, e quanto dele se leva para acender ou apagar. */
+const PERIODO_DO_PISCA = 1.2;
+const RAMPA_DO_PISCA = 0.08;
+
+/** A parte fracionária, sempre positiva. */
+function fracao(valor: number): number {
+  return ((valor % 1) + 1) % 1;
+}
+
+/**
+ * O quanto a luz acende AGORA, de 0 a 1, pelo efeito dela. Fixa é sempre 1.
+ *
+ * Multiplica a luz inteira -- o buraco no escuro e o véu da cor --, como a
+ * intensidade. Não mexe no alcance: um alcance que respira arrastaria junto a
+ * sombra das paredes, e a parede balançando denuncia que é desenho.
+ *
+ * Conta pura do relógio e da semente, e não um estado que anda: o laço pode
+ * parar e voltar, a luz pode mudar no meio, e a chama continua de onde o
+ * relógio diz, sem soluço.
+ */
+export function fatorDoEfeito(
+  efeito: EfeitoDaLuz | undefined,
+  segundos: number,
+  semente: number,
+): number {
+  switch (efeito) {
+    case "fogo": {
+      // Duas oitavas: a oscilação lenta da chama e o tremor miúdo em cima
+      // dela. Sementes diferentes, senão as duas sobem e descem juntas.
+      const lento = ruido(segundos * 3.5, semente);
+      const miudo = ruido(segundos * 11, semente ^ 0x5bd1e995);
+      return 1 - TREMIDA_DO_FOGO * (0.65 * lento + 0.35 * miudo);
+    }
+    case "pulsando": {
+      const fase = fracao(
+        segundos / PERIODO_DO_PULSO + semente / 4_294_967_296,
+      );
+      return (
+        FUNDO_DO_PULSO +
+        (1 - FUNDO_DO_PULSO) * (0.5 + 0.5 * Math.cos(2 * Math.PI * fase))
+      );
+    }
+    case "piscando": {
+      // Metade do compasso acesa e metade apagada, com uma rampa curta em cada
+      // virada: um corte seco no canvas lê como quadro perdido, e não como luz
+      // que pisca.
+      const fase = fracao(
+        segundos / PERIODO_DO_PISCA + semente / 4_294_967_296,
+      );
+      const rampa = RAMPA_DO_PISCA / PERIODO_DO_PISCA;
+      if (fase < rampa) return fase / rampa;
+      if (fase < 0.5) return 1;
+      if (fase < 0.5 + rampa) return 1 - (fase - 0.5) / rampa;
+      return 0;
+    }
+    default:
+      return 1;
+  }
+}
+
+/**
+ * O ângulo no meio do caminho entre dois, em graus, pela volta CURTA.
+ *
+ * Pela conta direta, o cone que o mestre gira de 350 para 10 graus daria a
+ * volta inteira pelo outro lado na TV.
+ */
+export function anguloEntre(de: number, ate: number, t: number): number {
+  const diferenca = ((((ate - de) % 360) + 540) % 360) - 180;
+  return de + diferenca * t;
 }

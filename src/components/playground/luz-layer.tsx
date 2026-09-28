@@ -8,20 +8,25 @@ import {
 } from "@/hooks/use-silhuetas-dos-tokens";
 import {
   alcancaOclusor,
+  anguloEntre,
   caixaDaFonte,
   caixaDaMatriz,
   chaveDasFontes,
   chaveDosOclusores,
   cisalhamentoDaLuz,
+  fatorDoEfeito,
   FORCA_DA_SOMBRA_DA_FIGURA,
   fontesDaCena,
+  inicioDoCone,
   matrizDaFigura,
   oclusoresDosItens,
   retanguloDaSilhueta,
   sombraDoToken,
   limitarEscuridao,
   paradasDaLuz,
+  paradasDoCone,
   segmentosDasParedes,
+  sementeDaLuz,
   umbrasDaLuz,
   type Afim,
   type CaixaDaLuz,
@@ -34,6 +39,7 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type CanvasItem,
+  type EfeitoDaLuz,
   type Luz,
   type Parede,
 } from "@/types/scene";
@@ -86,6 +92,17 @@ const FORCA_DA_COR = 0.3;
 const DURACAO_DA_CHEGADA = 150;
 
 /**
+ * De quanto em quanto tempo a luz que tem efeito é recomposta, em ms.
+ *
+ * Trinta quadros por segundo, e não os do monitor: a chama tremula a poucos
+ * hertz e ninguém distingue 30 de 60 nela, e cada quadro é uma textura do
+ * plano subindo de novo para o compositor -- na TV e no celular, a noite
+ * inteira. A folga de 4 ms é o que faz um monitor de 60 Hz pintar um quadro
+ * sim, outro não, em vez de pular dois de vez em quando.
+ */
+const INTERVALO_DA_ANIMACAO = 1000 / 30 - 4;
+
+/**
  * A luz e a escuridão da cena.
  *
  * ## Um canvas, e não SVG
@@ -99,6 +116,15 @@ const DURACAO_DA_CHEGADA = 150;
  * anda, o plano se move, e o compositor leva o bitmap junto sem pintar nada.
  * Durante o arrasto de um token SEM lanterna nada é repintado -- ver
  * `chaveDasFontes`.
+ *
+ * ## A luz que se mexe
+ *
+ * O fogo, o pulso e o pisca (`EfeitoDaLuz`) repintam a cada quadro, mas só a
+ * parte barata. O desenho tem dois tempos: FORMAR cada luz -- o degradê, o
+ * cone, as sombras das paredes e dos tokens --, cada uma no seu rascunho, e
+ * COMPOR os rascunhos no canvas. O efeito muda só a força com que cada
+ * rascunho entra (`globalAlpha`), então o laço da animação só compõe: o
+ * escuro e dois `drawImage` por luz. Formar de novo, só quando a chave muda.
  *
  * ## Como se pinta
  *
@@ -240,12 +266,19 @@ function CanvasDaLuz({
 
     rascunhos.current ??= criarRascunhos();
     const papel = rascunhos.current;
+    // Quem pediu menos movimento no sistema recebe a luz parada, na força
+    // inteira -- a mesma regra do deslizar dos tokens, em `globals.css`.
+    const anima =
+      fontes.some((fonte) => fonte.efeito !== undefined) && !menosMovimento();
 
-    const pintar = (quais: FonteDeLuz[], corpos: Oclusor[]) => {
-      desenhar(contexto, quais, corpos, silhuetas, segmentos, escuro, papel);
+    let prontas: LuzPronta[] = [];
+    const formar = (quais: FonteDeLuz[], corpos: Oclusor[]) => {
+      prontas = formarLuzes(quais, corpos, silhuetas, segmentos, papel);
       desenhadas.current = new Map(quais.map((fonte) => [fonte.id, fonte]));
       tapados.current = new Map(corpos.map((corpo) => [corpo.id, corpo]));
     };
+    const compor = (agora: number) =>
+      comporLuzes(contexto, prontas, escuro, anima ? agora / 1000 : null);
 
     // No Mestre a luz vai direto: é manipulação direta, e ela correndo atrás
     // do token seria o contrário. O mesmo vale para a do token na mão do
@@ -260,26 +293,40 @@ function CanvasDaLuz({
     const anda =
       smooth && (fontes.some(desliza) || oclusores.some(deslizaCorpo));
     if (!anda) {
-      pintar(fontes, oclusores);
-      return;
+      formar(fontes, oclusores);
+      compor(performance.now());
+      if (!anima) return;
     }
 
     let quadro = 0;
     const inicio = performance.now();
+    // Enquanto a luz desliza até a amostra nova, cada quadro forma de novo;
+    // depois que chega, e só se alguma tem efeito, cada quadro só compõe.
+    let chegou = !anda;
+    let ultimo = inicio;
 
     const passo = (agora: number) => {
-      const t = Math.min(1, (agora - inicio) / DURACAO_DA_CHEGADA);
-      pintar(
-        fontes.map((fonte) =>
-          fonte.id === naMao ? fonte : entre(partida.get(fonte.id), fonte, t),
-        ),
-        oclusores.map((corpo) =>
-          corpo.id === naMao
-            ? corpo
-            : corpoEntre(partidaDosCorpos.get(corpo.id), corpo, t),
-        ),
-      );
-      if (t < 1) quadro = requestAnimationFrame(passo);
+      if (!chegou) {
+        const t = Math.min(1, (agora - inicio) / DURACAO_DA_CHEGADA);
+        formar(
+          fontes.map((fonte) =>
+            fonte.id === naMao ? fonte : entre(partida.get(fonte.id), fonte, t),
+          ),
+          oclusores.map((corpo) =>
+            corpo.id === naMao
+              ? corpo
+              : corpoEntre(partidaDosCorpos.get(corpo.id), corpo, t),
+          ),
+        );
+        compor(agora);
+        ultimo = agora;
+        chegou = t >= 1;
+      } else if (agora - ultimo >= INTERVALO_DA_ANIMACAO) {
+        compor(agora);
+        ultimo = agora;
+      }
+
+      if (!chegou || anima) quadro = requestAnimationFrame(passo);
     };
 
     quadro = requestAnimationFrame(passo);
@@ -299,6 +346,14 @@ function CanvasDaLuz({
   );
 }
 
+/** O sistema pediu menos movimento? Ver `prefers-reduced-motion`. */
+function menosMovimento(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 /** A luz andou desde o último desenho? Uma que acabou de acender não anda. */
 function mudou(antes: FonteDeLuz | undefined, agora: FonteDeLuz): boolean {
   return (
@@ -306,7 +361,9 @@ function mudou(antes: FonteDeLuz | undefined, agora: FonteDeLuz): boolean {
     (antes.x !== agora.x ||
       antes.y !== agora.y ||
       antes.raio !== agora.raio ||
-      antes.raioIntenso !== agora.raioIntenso)
+      antes.raioIntenso !== agora.raioIntenso ||
+      antes.cone?.angulo !== agora.cone?.angulo ||
+      antes.cone?.abertura !== agora.cone?.abertura)
   );
 }
 
@@ -358,39 +415,128 @@ function entre(
     raio: antes.raio + (depois.raio - antes.raio) * t,
     raioIntenso:
       antes.raioIntenso + (depois.raioIntenso - antes.raioIntenso) * t,
+    // O cone gira pela volta curta. O que acabou de virar cone, ou de deixar
+    // de ser, chega de uma vez: não há meio caminho entre um e outro.
+    ...(antes.cone && depois.cone
+      ? {
+          cone: {
+            angulo: anguloEntre(antes.cone.angulo, depois.cone.angulo, t),
+            abertura:
+              antes.cone.abertura +
+              (depois.cone.abertura - antes.cone.abertura) * t,
+          },
+        }
+      : {}),
   };
 }
 
+/** Os dois rascunhos de uma luz: a forma dela, e a mesma forma na cor dela. */
+type PapeisDaLuz = {
+  forma: HTMLCanvasElement;
+  tinta: HTMLCanvasElement;
+};
+
 /**
- * Os papéis de rascunho: a forma da luz, a mesma forma na cor dela, e o vulto
- * de um token, do tamanho só dele. Ver `vultoNaLuz`.
+ * Os papéis de rascunho: os de cada luz, e o vulto de um token, do tamanho só
+ * dele. Ver `vultoNaLuz`.
+ *
+ * Um par POR LUZ, e não um par que todas reusam: é o que deixa o laço da
+ * animação compor sem formar de novo. Ver `LuzLayer`, "A luz que se mexe".
  */
 type Rascunhos = {
-  forma: HTMLCanvasElement;
-  cor: HTMLCanvasElement;
+  porLuz: Map<string, PapeisDaLuz>;
   vulto: HTMLCanvasElement;
 };
 
 function criarRascunhos(): Rascunhos {
   return {
-    forma: document.createElement("canvas"),
-    cor: document.createElement("canvas"),
+    porLuz: new Map(),
     vulto: document.createElement("canvas"),
   };
 }
 
-/** Pinta o canvas inteiro: o escuro, e cada luz abrindo o seu buraco nele. */
-function desenhar(
-  contexto: CanvasRenderingContext2D,
+/** Uma luz formada, pronta para entrar no canvas. */
+type LuzPronta = PapeisDaLuz & {
+  caixa: CaixaDaLuz;
+  efeito?: EfeitoDaLuz;
+  semente: number;
+};
+
+/**
+ * Forma cada luz no rascunho dela: o degradê, o cone, as sombras. É a parte
+ * cara do desenho, e só roda quando a luz muda.
+ *
+ * O rascunho de uma luz que saiu da cena -- removida ou desligada -- sai
+ * junto: sem isso, cada tocha cravada e removida numa sessão deixaria dois
+ * canvas para trás.
+ */
+function formarLuzes(
   fontes: ReadonlyArray<FonteDeLuz>,
   oclusores: ReadonlyArray<Oclusor>,
   silhuetas: ReadonlyMap<string, SilhuetaPronta>,
   segmentos: ReadonlyArray<Segmento>,
-  escuro: number,
   papel: Rascunhos,
+): LuzPronta[] {
+  const prontas: LuzPronta[] = [];
+  const vistas = new Set<string>();
+
+  for (const fonte of fontes) {
+    const caixa = caixaDaFonte(fonte);
+    if (!caixa) continue;
+
+    let papeis = papel.porLuz.get(fonte.id);
+    if (!papeis) {
+      papeis = {
+        forma: document.createElement("canvas"),
+        tinta: document.createElement("canvas"),
+      };
+      papel.porLuz.set(fonte.id, papeis);
+    }
+    vistas.add(fonte.id);
+
+    luzRecortada(
+      papeis.forma,
+      papel.vulto,
+      fonte,
+      caixa,
+      segmentos,
+      oclusores,
+      silhuetas,
+    );
+    naCorDaLuz(papeis.tinta, papeis.forma, fonte.cor);
+
+    prontas.push({
+      ...papeis,
+      caixa,
+      efeito: fonte.efeito,
+      semente: sementeDaLuz(fonte.id),
+    });
+  }
+
+  for (const id of papel.porLuz.keys()) {
+    if (!vistas.has(id)) papel.porLuz.delete(id);
+  }
+
+  return prontas;
+}
+
+/**
+ * Pinta o canvas inteiro: o escuro, e cada luz abrindo o seu buraco nele.
+ *
+ * `segundos` é o relógio da animação, ou `null` para a luz parada -- sem
+ * efeito nenhum, ou com o sistema pedindo menos movimento. O efeito entra só
+ * aqui, na força com que cada luz entra: é por isso que animar não forma
+ * nada de novo.
+ */
+function comporLuzes(
+  contexto: CanvasRenderingContext2D,
+  prontas: ReadonlyArray<LuzPronta>,
+  escuro: number,
+  segundos: number | null,
 ) {
   contexto.setTransform(1, 0, 0, 1, 0, 0);
   contexto.globalCompositeOperation = "source-over";
+  contexto.globalAlpha = 1;
   contexto.clearRect(0, 0, contexto.canvas.width, contexto.canvas.height);
   // Daqui para baixo tudo em unidade de cena.
   contexto.setTransform(RESOLUCAO, 0, 0, RESOLUCAO, 0, 0);
@@ -400,29 +546,33 @@ function desenhar(
     contexto.fillRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT);
   }
 
-  for (const fonte of fontes) {
-    const caixa = caixaDaFonte(fonte);
-    if (!caixa) continue;
+  for (const luz of prontas) {
+    const fator =
+      segundos === null ? 1 : fatorDoEfeito(luz.efeito, segundos, luz.semente);
+    // O pisca no fundo do compasso: apagada, e não há o que pintar.
+    if (fator <= 0) continue;
 
-    const forma = luzRecortada(
-      papel,
-      fonte,
-      caixa,
-      segmentos,
-      oclusores,
-      silhuetas,
-    );
+    const { caixa } = luz;
+    // A força multiplica o buraco e o véu juntos, como a intensidade: o
+    // `destination-out` com alfa pela metade tira metade do escuro.
+    contexto.globalAlpha = fator;
 
     if (escuro > 0) {
       contexto.globalCompositeOperation = "destination-out";
-      contexto.drawImage(forma, caixa.x, caixa.y, caixa.width, caixa.height);
+      contexto.drawImage(
+        luz.forma,
+        caixa.x,
+        caixa.y,
+        caixa.width,
+        caixa.height,
+      );
     }
 
-    const tinta = naCorDaLuz(papel.cor, forma, fonte.cor);
     contexto.globalCompositeOperation = "source-over";
-    contexto.drawImage(tinta, caixa.x, caixa.y, caixa.width, caixa.height);
+    contexto.drawImage(luz.tinta, caixa.x, caixa.y, caixa.width, caixa.height);
   }
 
+  contexto.globalAlpha = 1;
   contexto.globalCompositeOperation = "source-over";
 }
 
@@ -435,14 +585,14 @@ function desenhar(
  * centro, o personagem com a lanterna já estaria na penumbra a um passo dela.
  */
 function luzRecortada(
-  papel: Rascunhos,
+  rascunho: HTMLCanvasElement,
+  rascunhoDoVulto: HTMLCanvasElement,
   fonte: FonteDeLuz,
   caixa: CaixaDaLuz,
   segmentos: ReadonlyArray<Segmento>,
   oclusores: ReadonlyArray<Oclusor>,
   silhuetas: ReadonlyMap<string, SilhuetaPronta>,
-): HTMLCanvasElement {
-  const rascunho = papel.forma;
+) {
   const contexto = prepararRascunho(rascunho, caixa);
 
   const degrade = contexto.createRadialGradient(
@@ -462,6 +612,25 @@ function luzRecortada(
 
   contexto.fillStyle = degrade;
   contexto.fillRect(caixa.x, caixa.y, caixa.width, caixa.height);
+
+  // O cone: um degradê que dá a volta no centro, inteiro dentro do facho e
+  // zero fora, multiplicado pela forma. Depois as paredes e os tokens tapam
+  // o que sobrou, como no círculo -- a ordem não importa, as três contas
+  // multiplicam. Ver `paradasDoCone`.
+  if (fonte.cone) {
+    const mascara = contexto.createConicGradient(
+      inicioDoCone(fonte.cone),
+      fonte.x,
+      fonte.y,
+    );
+    for (const [onde, forca] of paradasDoCone(fonte.cone.abertura)) {
+      mascara.addColorStop(onde, `rgba(0,0,0,${forca})`);
+    }
+    contexto.globalCompositeOperation = "destination-in";
+    contexto.fillStyle = mascara;
+    contexto.fillRect(caixa.x, caixa.y, caixa.width, caixa.height);
+    contexto.globalCompositeOperation = "source-over";
+  }
 
   const umbras = umbrasDaLuz(segmentos, fonte);
   if (umbras.length > 0) {
@@ -493,7 +662,7 @@ function luzRecortada(
     if (pronta) {
       const cisalhamento = cisalhamentoDaLuz(oclusor, fonte);
       if (cisalhamento) {
-        vultoNaLuz(contexto, papel.vulto, oclusor, pronta, cisalhamento);
+        vultoNaLuz(contexto, rascunhoDoVulto, oclusor, pronta, cisalhamento);
       }
       continue;
     }
@@ -529,8 +698,6 @@ function luzRecortada(
     contexto.fill();
   }
   contexto.globalCompositeOperation = "source-over";
-
-  return rascunho;
 }
 
 /**
@@ -594,7 +761,7 @@ function naCorDaLuz(
   rascunho: HTMLCanvasElement,
   forma: HTMLCanvasElement,
   cor: string,
-): HTMLCanvasElement {
+) {
   rascunho.width = forma.width;
   rascunho.height = forma.height;
 
@@ -606,8 +773,6 @@ function naCorDaLuz(
   contexto.globalCompositeOperation = "destination-in";
   contexto.drawImage(forma, 0, 0);
   contexto.globalCompositeOperation = "source-over";
-
-  return rascunho;
 }
 
 /**
