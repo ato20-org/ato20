@@ -347,6 +347,40 @@ tamanho dele, menos a figura em pé, por token e por luz. Mesma bancada:
 | `amostras --carregadas 1` | 59,8 fps, 0,3% |
 | `arrasto --carregadas 0` | 60 fps, 0,3% |
 
+## A imagem que se mexe (28/09/2026)
+
+O GIF, o WebP animado e o APNG passaram a chegar inteiros à TV e ao celular:
+a redução de tela e de palco guardava um quadro só, e o arquivo animado agora
+não ganha essa redução (`vault/animacao.rs`). No palco do mestre e na TV os
+tokens já eram o original; o que muda é o FUNDO animado com o mapa afastado, e
+tudo no celular.
+
+A bancada não reduz nada -- ela serve o arquivo de `--imagens` em toda rota --,
+então medir com GIF em `--imagens` é medir exatamente o caso novo. Três pastas:
+`bg.png` e `char.png` parados; só o fundo animado (`bg.gif`, 1920x1080, 12
+quadros a 100 ms, 1 MB); e fundo e token animados (`char.gif`, 256px com
+transparência, 8 quadros). Webview, build de produção, 40 tokens, `--repetir 3`:
+
+| cenário | tudo parado | fundo animado | tudo animado |
+| --- | --- | --- | --- |
+| `arrasto` | 60 fps, 0% | 60 fps, 0% | 60 fps, 0% |
+| `mestre-camera` | 60 fps, 0,3% | 58,7 fps, 4,7% | 58,4 fps, 6,9% |
+| `amostras` (a TV) | 60 fps, 0% | 60 fps, 6,7% | 60 fps, 0,3% |
+| `camera` (a TV) | 60 fps, 0,3% | 59,8 fps, 2,4% | 59,8 fps, 0,6% |
+| `jogador` | 60 fps, 0% | 60 fps, 0% | 60 fps, 0,3% |
+
+O custo aparece com a CÂMERA andando sobre um fundo animado; com a câmera
+parada, ou arrastando token, não aparece. A hipótese -- não medida -- é que
+cada quadro novo do GIF repinta a camada do fundo, e com o plano em movimento
+parte dessas repinturas passa do orçamento do quadro. É o preço da animação, e
+só existe na cena que tem uma.
+
+Uma primeira corrida, na ordem parado-fundo-animado e com `--repetir 2`, deu o
+contrário -- 24% a 30% de quadros perdidos na TV e no celular com tudo PARADO.
+Não se repetiu na ordem inversa com três repetições, e não há mecanismo que a
+explique: foi a máquina, e não a imagem. Fica anotado porque é o tipo de número
+que, sozinho, faria alguém "otimizar" o caso errado.
+
 ---
 
 ## Como medir: o passo a passo
