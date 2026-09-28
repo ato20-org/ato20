@@ -56,6 +56,42 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.6.0",
+    data: "2026-09-28",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "O personagem ganhou condições",
+        detalhe:
+          "Envenenado, caído, abençoado: um selo com nome, ícone e cor, na ficha logo abaixo dos medidores. A campanha tem um cardápio delas, e \"Usar sugestões\" cria oito prontas. Uma condição escondida não sai do seu computador.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A condição muda a figura",
+        detalhe:
+          "Aura, tingido, translúcido, tremendo ou apagado, no token e no retrato. Os selos aparecem sobre o token, no alto do retrato e no celular do dono, e se arrastam no layout do retrato como as outras peças.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Dá para envenenar a horda de uma vez",
+        detalhe:
+          "O submenu Condições do botão direito vale para a seleção inteira.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A lanterna do token vira facho, e gira com a figura",
+        detalhe:
+          "Aponte uma vez para onde o rosto do desenho olha; dali em diante, girar o token gira o facho.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O menu do token caiu para a metade das linhas",
+        detalhe:
+          "O que é da cena — colar, selecionar tudo, câmera — mora no botão direito do vazio. Espelhar, Ordem e Câmera viraram submenus.",
+      },
+    ],
+  },
+  {
     versao: "0.5.0",
     data: "2026-09-28",
     mudancas: [

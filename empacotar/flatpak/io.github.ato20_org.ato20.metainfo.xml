@@ -100,6 +100,31 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.6.0" date="2026-09-28">
+      <description>
+        <p>
+          Characters gained conditions: poisoned, prone, blessed — a badge with
+          a name, an icon and a colour, on the sheet right below the meters.
+          The campaign keeps a menu of them, and "Use suggestions" creates
+          eight ready ones. A hidden condition never leaves your computer.
+        </p>
+        <p>
+          A condition changes the figure: an aura, a tint, translucency, a
+          tremble or a fade, on the token and on the portrait. Badges show
+          above the token, at the top of the portrait and on the owner's
+          phone, and they can be dragged in the portrait layout like the other
+          pieces. The right-click Conditions submenu applies to the whole
+          selection, so a horde can be poisoned at once.
+        </p>
+        <p>
+          A token's lantern can become a beam that turns with the figure: aim
+          it once where the drawing faces, and rotating the token rotates the
+          beam. The token's right-click menu is down to half its lines, with
+          what belongs to the scene — paste, select all, camera — moved to a
+          right-click on empty space.
+        </p>
+      </description>
+    </release>
     <release version="0.5.0" date="2026-09-28">
       <description>
         <p>
