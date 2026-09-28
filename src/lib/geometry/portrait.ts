@@ -1,8 +1,9 @@
 import { canvasDaUrl, type FonteRetrato } from "@/lib/extensoes/fontes";
 import { boxBounds, unionBounds, type Bounds } from "@/lib/geometry/bounds";
 import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
+import { condicoesVisiveis } from "@/lib/condicao";
 import { medidoresVisiveis } from "@/lib/medidor";
-import type { Medidor } from "@/types/character";
+import type { Condicao, Medidor } from "@/types/character";
 import {
   LAYOUT_PADRAO,
   SCENE_HEIGHT,
@@ -190,6 +191,7 @@ export function retratosDaCena(
     retrato?: string;
     retratoUrl?: string;
     medidores?: Medidor[];
+    condicoes?: Condicao[];
   }>,
   fontes: FonteRetrato[] = [],
   incluirOcultos = false,
@@ -241,6 +243,14 @@ export function retratosDaCena(
       medidores: incluirOcultos
         ? (ficha?.medidores ?? [])
         : medidoresVisiveis(ficha?.medidores),
+      // O mesmo caminho e o mesmo filtro dos medidores. Com a peça desligada
+      // o campo sai `undefined`, e não uma lista vazia: é o que o `nome` faz
+      // logo abaixo, e pela mesma razão.
+      condicoes: layout.condicoes
+        ? incluirOcultos
+          ? (ficha?.condicoes ?? [])
+          : condicoesVisiveis(ficha?.condicoes)
+        : undefined,
       layout,
       // Explícito mesmo desligado, e não só ausente: o `undefined` por cima do
       // `...guardado` garante que um nome que tenha ido parar no registro não

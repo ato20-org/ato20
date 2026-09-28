@@ -75,6 +75,7 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { temCamera, temLuz, type Scene } from "@/types/scene";
 import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
+import { SubmenuDeCondicoes } from "@/components/mestre/menu-de-condicoes";
 import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 
@@ -126,6 +127,12 @@ export function StageContextMenu({
     selectedItems.length === 1 && selectedItems[0]?.personagemId
       ? personagens?.find((p) => p.id === selectedItems[0]?.personagemId)
       : undefined;
+  /** Algum token da seleção é de um personagem que ainda existe. */
+  const deAlguem = selectedItems.some(
+    (item) =>
+      item.personagemId &&
+      personagens?.some((personagem) => personagem.id === item.personagemId),
+  );
   /**
    * Só coisa do QUADRO na mão: texto solto, forma, ou os dois.
    *
@@ -244,12 +251,17 @@ export function StageContextMenu({
                 de baixo o tratam como imagem. Some quando o token não é de
                 ninguém, que é a maioria deles. */}
             {doToken ? (
+              <SubmenuDeAparencias
+                kit={KIT_CONTEXTO}
+                personagem={doToken}
+                onChanged={recarregarPersonagens}
+              />
+            ) : null}
+            {/* Da seleção inteira, e não só do token único: envenenar a horda
+                de uma vez é o pedido. Some quando nenhum token é de alguém. */}
+            {deAlguem ? (
               <>
-                <SubmenuDeAparencias
-                  kit={KIT_CONTEXTO}
-                  personagem={doToken}
-                  onChanged={recarregarPersonagens}
-                />
+                <SubmenuDeCondicoes itens={selectedItems} />
                 <ContextMenuSeparator />
               </>
             ) : null}

@@ -1,7 +1,8 @@
 "use client";
 
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
-import { lugarDaInfo } from "@/lib/mestre/fichas-da-cena";
+import { SelosDaCondicao } from "@/components/playground/selos-da-condicao";
+import { LARGURA_DA_INFO, lugarDaInfo } from "@/lib/mestre/fichas-da-cena";
 import { cn } from "@/lib/utils";
 import type { CanvasItem, FichaNaCena } from "@/types/scene";
 
@@ -17,8 +18,14 @@ const INFO_Z = 400;
 /** Quantos medidores cabem na caixa antes de ela ficar mais alta que o token. */
 const TETO = 3;
 
+/** O diâmetro de um selo, em fração do corpo do nome. Pouco menor que a letra. */
+const SELO = 0.95;
+
+/** O vão entre dois selos, em fração do diâmetro. O mesmo de `SelosDaCondicao`. */
+const VAO_DO_SELO = 0.18;
+
 /**
- * Nome e medidores sobre a cabeça de cada token.
+ * Nome, selos e medidores sobre a cabeça de cada token.
  *
  * Ligado por cena, em Configurações do mapa. É o mapa de combate: a mesa quer a
  * vida de todo mundo à vista sem ter de ligar cada rosto a uma barra no canto
@@ -82,6 +89,7 @@ function BlocoDoToken({
   ficha: FichaNaCena;
 }) {
   const medidores = ficha.medidores.slice(0, TETO);
+  const condicoes = ficha.condicoes ?? [];
 
   // Tudo em unidade de CENA, derivado da largura da peça. O corpo do texto sai
   // primeiro porque a altura da caixa é feita dele.
@@ -91,8 +99,26 @@ function BlocoDoToken({
   // Cada medidor é o rótulo mais a forma, que é o que `DesenhoDoMedidor`
   // empilha -- a conta segue a peça de lá, e não um palpite daqui.
   const alturaDeUm = corpo * 1.2 + corpo * 0.85;
+  // Os selos numa fileira que quebra: oito cabem em duas linhas sobre o nome
+  // de um token estreito, e a caixa tem de crescer as duas para não empurrar
+  // o nome para dentro do token. Quantos cabem por linha sai da mesma largura
+  // que `lugarDaInfo` vai dar à caixa.
+  const selo = corpo * SELO;
+  const porLinha = Math.max(
+    1,
+    Math.floor(
+      (item.width * LARGURA_DA_INFO + selo * VAO_DO_SELO) /
+        (selo * (1 + VAO_DO_SELO)),
+    ),
+  );
+  const linhasDeSelos = Math.ceil(condicoes.length / porLinha);
+  const alturaDosSelos =
+    linhasDeSelos > 0
+      ? linhasDeSelos * selo + (linhasDeSelos - 1) * selo * VAO_DO_SELO + vao
+      : 0;
   const altura =
     alturaDoNome +
+    alturaDosSelos +
     (medidores.length > 0
       ? medidores.length * (alturaDeUm + vao) + vao
       : 0);
@@ -125,6 +151,15 @@ function BlocoDoToken({
       >
         {ficha.nome}
       </span>
+
+      {/* Entre o nome e as barras: o selo diz o que aconteceu com quem, e é
+          lido junto com o nome -- "o Edgar está caído". As barras são número,
+          e ficam por último, onde o olho vai quando quer contar. */}
+      <SelosDaCondicao
+        condicoes={condicoes}
+        tamanho={selo}
+        style={{ width: largura }}
+      />
 
       {medidores.map((medidor) => (
         <div

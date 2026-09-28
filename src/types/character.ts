@@ -81,6 +81,13 @@ export type Personagem = {
    * mesma coisa: nenhum medidor a desenhar.
    */
   medidores?: Medidor[];
+  /**
+   * As condições deste personagem. Ver `Condicao`.
+   *
+   * Opcional pelas mesmas duas razões dos medidores: o daemon tira as
+   * escondidas antes de responder, e campanha antiga não traz o campo.
+   */
+  condicoes?: Condicao[];
   criadoEm: number;
 };
 
@@ -195,6 +202,95 @@ export type PatchModelo = {
 
 /** Quantos modelos cabem numa campanha. Espelha `MAX_MODELOS`. */
 export const MAX_MODELOS = MAX_MEDIDORES;
+
+/**
+ * O que uma condição faz com a figura, no mapa e no retrato.
+ *
+ * - `aura`: um halo na cor da condição, respirando atrás da figura. Abençoado,
+ *   em fúria, sob um feitiço.
+ * - `tingido`: a figura ganha a cor por cima, só onde há figura. Veneno,
+ *   congelado, petrificado.
+ * - `translucido`: meio transparente, tremulando. Invisível, fantasma.
+ * - `tremendo`: treme no lugar. Com medo, atordoado.
+ * - `apagado`: cinza e escura. Morto, inconsciente.
+ *
+ * Cinco climas, e não uma régua de matiz e opacidade: o mestre escolhe
+ * "tingido" na cor do veneno, e não "hue 120 a 40%". É a mesma escolha que
+ * `EfeitoDaLuz` fez.
+ *
+ * O espelho em Rust é `vault::characters::EfeitoNaFigura`.
+ */
+export const EFEITOS_NA_FIGURA = [
+  "aura",
+  "tingido",
+  "translucido",
+  "tremendo",
+  "apagado",
+] as const;
+
+export type EfeitoNaFigura = (typeof EFEITOS_NA_FIGURA)[number];
+
+/**
+ * Um selo com nome, ícone e cor, e o que ele faz com a figura.
+ *
+ * EXIBIÇÃO, e nada além: o núcleo mostra que o goblin está envenenado. Quem
+ * conta rodadas, tira vida por turno ou remove a condição sozinha é extensão —
+ * a mesma fronteira do `Medidor`.
+ *
+ * Mora no ÍNDICE, ao lado dos medidores, e pela mesma razão: o selo e o efeito
+ * viajam no quadro que o Mestre publica dez vezes por segundo.
+ *
+ * Sem número. "Exaustão 2" existe, mas um número que sobe e desce já tem lugar,
+ * que é o medidor — dois jeitos de guardar o mesmo número poriam o mestre para
+ * escolher sem ter por que.
+ *
+ * O espelho em Rust é `vault::characters::Condicao`. Campo novo aqui precisa de
+ * campo novo lá.
+ */
+export type Condicao = {
+  id: string;
+  nome: string;
+  /** Da mesma paleta dos medidores. Ver `CORES_LAPIS`. */
+  cor: string;
+  /**
+   * O desenho do selo, por nome de uma lista que só a tela conhece. Nome
+   * desconhecido desenha o ícone de sempre. Ver `iconeDaCondicao`.
+   */
+  icone: string;
+  /** Ausente = só o selo. */
+  efeito?: EfeitoNaFigura;
+  /**
+   * A mesa não vê: nem o selo, nem o efeito.
+   *
+   * O efeito sai junto, e é o que importa — um veneno secreto que tingisse o
+   * token de verde contaria o segredo pela imagem. Filtrado no daemon e no
+   * Mestre antes de publicar, como o medidor escondido.
+   */
+  escondido: boolean;
+};
+
+/**
+ * O que se troca numa condição. Ausente não mexe; `efeito: null` TIRA o
+ * efeito. Espelha `PatchCondicao`.
+ */
+export type PatchCondicao = {
+  nome?: string;
+  cor?: string;
+  icone?: string;
+  efeito?: EfeitoNaFigura | null;
+  escondido?: boolean;
+};
+
+/**
+ * Quantas condições cabem num personagem. Espelha `MAX_CONDICOES`.
+ *
+ * Limite de LAYOUT, como o dos medidores: os selos desenham numa fileira sobre
+ * a cabeça do token, e passando disso ela fica mais larga que o nome.
+ */
+export const MAX_CONDICOES = 8;
+
+/** Quantas condições cabem no cardápio da campanha. Espelha `condicoes::MAX_MODELOS`. */
+export const MAX_MODELOS_DE_CONDICAO = 16;
 
 /** O que voltou de materializar modelos. Espelha `Aplicacao`. */
 export type AplicacaoDeModelos = {

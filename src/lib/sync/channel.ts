@@ -1,3 +1,4 @@
+import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
 import type {
   Ambiente,
@@ -82,6 +83,18 @@ export type LiveState = {
    * ausência como lista vazia.
    */
   fichas?: FichaNaCena[];
+  /**
+   * O que as condições fazem com cada figura: aura, tinta, cinza, tremor.
+   *
+   * Um caminho SEPARADO das `fichas`, e é o ponto. Aquela lista sai vazia com a
+   * informação dos tokens desligada, porque carrega o nome. O efeito não conta
+   * nada que a figura já não mostre -- o token tingido é o token --, então ele
+   * viaja sempre, sem nome, e só para quem tem algum. Ver `efeitosDaCena`.
+   *
+   * Opcional: um quadro de uma versão anterior não o traz, e quem recebe lê a
+   * ausência como figura sem efeito nenhum.
+   */
+  efeitos?: EfeitosDoPersonagem[];
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
   /**

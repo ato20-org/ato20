@@ -6,7 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Dices, Gauge, Minus, Plus, RotateCcw, Type, User } from "lucide-react";
+import { Dices, Gauge, Minus, Plus, RotateCcw, Sparkles, Type, User } from "lucide-react";
 
 import { DadoParado } from "@/components/playground/dado-parado";
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
@@ -194,6 +194,15 @@ export function LayoutDoRetratoPainel({
           diverge={selecionado ? proprio.medidores !== undefined : false}
           onTrocar={(medidores) => trocar({ medidores })}
           onSeguir={() => trocar({ medidores: null })}
+        />
+        <Peca
+          icone={Sparkles}
+          nome="Condições"
+          nota="Os selos das condições, no alto da figura."
+          valor={efetivo.condicoes}
+          diverge={selecionado ? proprio.condicoes !== undefined : false}
+          onTrocar={(condicoes) => trocar({ condicoes })}
+          onSeguir={() => trocar({ condicoes: null })}
         />
         <Peca
           icone={Dices}

@@ -30,6 +30,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
     volumeDisparo,
     portraits,
     fichas,
+    efeitos,
     spotlight,
     rolagens,
     synced,
@@ -54,6 +55,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
               scene={cena}
               portraits={portraits}
               fichas={fichas}
+              efeitos={efeitos}
               rolagens={rolagens}
               smooth
             />

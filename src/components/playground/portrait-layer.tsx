@@ -12,14 +12,17 @@ import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { CANVAS_PADRAO } from "@/lib/extensoes/fontes";
 import { usePaginaVivaSuportada } from "@/lib/motor";
+import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { MedidoresDoRetrato } from "@/components/playground/medidores-do-retrato";
 import { NomeDoRetrato } from "@/components/playground/nome-do-retrato";
 import { RolagensDoRetrato } from "@/components/playground/rolagens-do-retrato";
+import { SelosDaCondicao } from "@/components/playground/selos-da-condicao";
+import type { EfeitoPedido } from "@/lib/condicao";
 import { caberEm } from "@/lib/geometry/caber";
 import { portraitBox } from "@/lib/geometry/portrait";
 import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
 import { cn } from "@/lib/utils";
-import type { Medidor } from "@/types/character";
+import type { Condicao, Medidor } from "@/types/character";
 import type { RolagemDaMesa } from "@/types/dado";
 import { LAYOUT_PADRAO, type Portrait, type Viewport } from "@/types/scene";
 
@@ -41,6 +44,18 @@ const SEM_ROLAGENS: RolagemDaMesa[] = [];
 
 /** O retrato sem medidor nenhum. Mesma razão da constante acima. */
 const SEM_MEDIDORES: Medidor[] = [];
+
+/** O retrato sem condição nenhuma. Mesma razão das constantes acima. */
+const SEM_CONDICOES: Condicao[] = [];
+
+/**
+ * O diâmetro de um selo, em fração da ALTURA da figura.
+ *
+ * Da altura pela razão da coluna de medidores: a fila alinha rostos, e medido
+ * pela largura o selo do retrato panorâmico sairia três vezes maior que o do
+ * vizinho.
+ */
+const SELO_DO_RETRATO = 0.075;
 
 type PortraitLayerProps = {
   portraits: Portrait[];
@@ -76,6 +91,11 @@ type PortraitLayerProps = {
    * mestre precisa para narrar o resultado. Ver `RolagensBody`.
    */
   rolagens?: RolagemDaMesa[];
+  /**
+   * O que as condições fazem com cada figura, por personagem. Ver
+   * `SceneLayer`, que monta o mapa uma vez para o token e para o retrato.
+   */
+  efeitos?: ReadonlyMap<string, ReadonlyArray<EfeitoPedido>>;
   onPortraitPointerDown?: (
     event: ReactPointerEvent,
     portrait: Portrait,
@@ -96,6 +116,7 @@ export function PortraitLayer({
   smooth = false,
   espaco = "cena",
   rolagens,
+  efeitos,
   onPortraitPointerDown,
 }: PortraitLayerProps) {
   const isOperator = variant === "mestre";
@@ -146,6 +167,7 @@ export function PortraitLayer({
             // novo a cada quadro recebido -- o retrato inteiro redesenharia a
             // 10 Hz mesmo sem ninguém rolar nada.
             rolagens={porPersonagem.get(portrait.personagemId)}
+            efeitos={efeitos?.get(portrait.personagemId)}
             onPointerDown={onPortraitPointerDown}
           />
         );
@@ -283,6 +305,8 @@ type PortraitViewProps = {
   espaco: "cena" | "tela";
   /** Os dados deste personagem. Ausente = nenhum na mesa agora. */
   rolagens?: RolagemDaMesa[];
+  /** O que as condições fazem com a figura. Ausente = nada. */
+  efeitos?: ReadonlyArray<EfeitoPedido>;
   onPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
 };
 
@@ -296,6 +320,7 @@ const PortraitView = memo(function PortraitView({
   smooth,
   espaco,
   rolagens,
+  efeitos,
   onPointerDown,
 }: PortraitViewProps) {
   const url = useAssetUrl(portrait.assetId);
@@ -398,36 +423,60 @@ const PortraitView = memo(function PortraitView({
           buraco, sem a mesa ficar olhando um retângulo vazio. Quem tem só um
           dos dois vê aquele. */}
       {url && layout.retrato ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt=""
-          draggable={false}
-          // Retrato deformado é pior que retrato pequeno, e a proporção aqui é
-          // a do arquivo, não a da caixa -- o mestre estica a caixa à vontade.
-          // Era `object-contain` quem cuidava disso, e dentro do palco ele erra
-          // a conta: ver `caberEm`, que tem a medida.
-          className={cn("absolute select-none", !natural && "invisible")}
-          // Medido no `load` porque só o arquivo sabe a própria proporção, e
-          // ela não viaja no registro do retrato -- o que viaja é a GEOMETRIA
-          // da caixa. Um quadro invisível é o preço, e ele acontece uma vez por
-          // retrato, atrás da mesma aparição que o `scene-item-in` já anima.
-          onLoad={(event) => medir(event.currentTarget)}
-          // A imagem que já está no cache pode terminar ANTES de o React
-          // pendurar o `onLoad`, e aí o evento não vem -- o retrato ficaria
-          // invisível para sempre. Trocar de retrato reusa o mesmo nó, então a
-          // conferência acontece a cada montagem, e não uma vez só.
-          ref={(node) => {
-            if (node?.complete) medir(node);
-          }}
-          style={{
-            left: lugar?.x,
-            top: lugar?.y,
-            width: lugar?.width,
-            height: lugar?.height,
-            transform: portrait.flipX ? "scaleX(-1)" : undefined,
-          }}
-        />
+        <FiguraComEfeitos
+          // Só com a medida do arquivo: antes dela não se sabe onde a figura
+          // cai dentro da caixa, e a aura sairia do tamanho do retângulo
+          // inteiro por um quadro.
+          efeitos={lugar ? efeitos : undefined}
+          url={url}
+          semente={portrait.id}
+          espelho={portrait.flipX ? "scaleX(-1)" : undefined}
+          lugar={
+            lugar
+              ? {
+                  left: lugar.x,
+                  top: lugar.y,
+                  width: lugar.width,
+                  height: lugar.height,
+                }
+              : null
+          }
+        >
+          {(fonte) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={fonte ?? url}
+              alt=""
+              draggable={false}
+              // Retrato deformado é pior que retrato pequeno, e a proporção
+              // aqui é a do arquivo, não a da caixa -- o mestre estica a caixa
+              // à vontade. Era `object-contain` quem cuidava disso, e dentro do
+              // palco ele erra a conta: ver `caberEm`, que tem a medida.
+              className={cn("absolute select-none", !natural && "invisible")}
+              // Medido no `load` porque só o arquivo sabe a própria proporção,
+              // e ela não viaja no registro do retrato -- o que viaja é a
+              // GEOMETRIA da caixa. Um quadro invisível é o preço, e ele
+              // acontece uma vez por retrato, atrás da mesma aparição que o
+              // `scene-item-in` já anima.
+              onLoad={(event) => medir(event.currentTarget)}
+              // A imagem que já está no cache pode terminar ANTES de o React
+              // pendurar o `onLoad`, e aí o evento não vem -- o retrato
+              // ficaria invisível para sempre. Trocar de retrato reusa o mesmo
+              // nó, então a conferência acontece a cada montagem, e não uma
+              // vez só.
+              ref={(node) => {
+                if (node?.complete) medir(node);
+              }}
+              style={{
+                left: lugar?.x,
+                top: lugar?.y,
+                width: lugar?.width,
+                height: lugar?.height,
+                transform: portrait.flipX ? "scaleX(-1)" : undefined,
+              }}
+            />
+          )}
+        </FiguraComEfeitos>
       ) : null}
 
       {portrait.url && paginaVivaOk && layout.retrato ? (
@@ -463,6 +512,23 @@ const PortraitView = memo(function PortraitView({
           aria-hidden
           className="pointer-events-none absolute inset-0 rounded outline-dashed outline-white/25"
           style={{ outlineWidth: 1.5 / escala }}
+        />
+      ) : null}
+
+      {/* Os selos, no alto da figura e DENTRO da caixa: a fileira é baixa, e
+          dentro ela não disputa a fila com o vizinho nem precisa virar de
+          lado como a coluna de medidores. Com a figura desligada continua,
+          como a legenda -- o chefe que a mesa vê pela barra também é visto
+          envenenado. Só chega aqui com a peça ligada: ver `retratosDaCena`. */}
+      {layout.condicoes ? (
+        <SelosDaCondicao
+          condicoes={portrait.condicoes ?? SEM_CONDICOES}
+          tamanho={box.height * SELO_DO_RETRATO}
+          className="pointer-events-none absolute left-0"
+          style={{
+            top: (lugar?.y ?? 0) + box.height * SELO_DO_RETRATO * 0.3,
+            width: box.width,
+          }}
         />
       ) : null}
 

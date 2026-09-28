@@ -11,9 +11,12 @@ import type {
   AplicacaoDeModelos,
   Aparencia,
   CampoPersonagem,
+  Condicao,
+  EfeitoNaFigura,
   EstiloMedidor,
   Medidor,
   ModeloDeMedidor,
+  PatchCondicao,
   PatchMedidor,
   PatchModelo,
   Personagem,
@@ -262,6 +265,96 @@ export function reordenarModelos(ordem: string[]): Promise<ModeloDeMedidor[]> {
 /** Materializa todos os modelos em todos os personagens, de novo. */
 export function aplicarModelosEmTodos(): Promise<AplicacaoDeModelos> {
   return call<AplicacaoDeModelos>("modelos_aplicar_em_todos");
+}
+
+// --- condições -------------------------------------------------------------
+
+/** Cria uma condição na ficha. Ausente o efeito, ela é só o selo. */
+export function criarCondicao(
+  id: string,
+  nome: string,
+  cor: string,
+  icone: string,
+  efeito: EfeitoNaFigura | null,
+): Promise<Condicao> {
+  return call<Condicao>("character_condicao_criar", {
+    id,
+    nome,
+    cor,
+    icone,
+    efeito,
+  });
+}
+
+/** Edita uma condição e devolve como ela ficou depois do ajuste do Rust. */
+export function editarCondicao(
+  id: string,
+  condicaoId: string,
+  patch: PatchCondicao,
+): Promise<Condicao> {
+  return call<Condicao>("character_condicao_editar", { id, condicaoId, patch });
+}
+
+export function removerCondicao(id: string, condicaoId: string): Promise<void> {
+  return call("character_condicao_remover", { id, condicaoId });
+}
+
+/** Põe as condições na ordem pedida e devolve a lista arrumada. */
+export function reordenarCondicoes(
+  id: string,
+  ordem: string[],
+): Promise<Condicao[]> {
+  return call<Condicao[]>("character_condicoes_reordenar", { id, ordem });
+}
+
+/**
+ * Liga ou desliga uma condição do cardápio em vários personagens, pelo nome.
+ *
+ * Manda o id do MODELO, e não a condição: quem sabe o que o veneno é hoje é o
+ * cardápio no disco. Devolve quantos personagens mudaram.
+ */
+export function alternarCondicao(
+  ids: string[],
+  modeloId: string,
+  ligar: boolean,
+): Promise<number> {
+  return call<number>("condicao_alternar", { ids, modeloId, ligar });
+}
+
+// --- cardápio de condições da campanha --------------------------------------
+
+export function listarCondicoesDaCampanha(): Promise<Condicao[]> {
+  return call<Condicao[]>("condicoes_list");
+}
+
+/** Cria uma condição no cardápio. Não põe em ficha nenhuma. */
+export function criarCondicaoDaCampanha(
+  nome: string,
+  cor: string,
+  icone: string,
+  efeito: EfeitoNaFigura | null,
+): Promise<Condicao> {
+  return call<Condicao>("condicao_modelo_criar", { nome, cor, icone, efeito });
+}
+
+/** Edita uma condição do cardápio. As cópias nas fichas não se mexem. */
+export function editarCondicaoDaCampanha(
+  modeloId: string,
+  patch: PatchCondicao,
+): Promise<Condicao> {
+  return call<Condicao>("condicao_modelo_editar", { modeloId, patch });
+}
+
+/** Tira a condição do cardápio. As cópias nas fichas ficam. */
+export function removerCondicaoDaCampanha(modeloId: string): Promise<void> {
+  return call("condicao_modelo_remover", { modeloId });
+}
+
+/** Põe o cardápio na ordem pedida, que é a do submenu do token. */
+export function reordenarCondicoesDaCampanha(
+  ordem: string[],
+): Promise<Condicao[]> {
+  return call<Condicao[]>("condicoes_modelos_reordenar", { ordem });
 }
 
 export function characterAttachments(id: string): Promise<AnexoPersonagem[]> {
