@@ -1,7 +1,16 @@
 "use client";
 
+import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 import {
   Activity,
+  ArrowDown,
+  ArrowDownLeft,
+  ArrowDownRight,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ArrowUpLeft,
+  ArrowUpRight,
   Circle,
   Flame,
   Lightbulb,
@@ -26,11 +35,16 @@ import {
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu";
 import {
+  ABERTURAS_DA_LANTERNA,
   ALCANCES_DA_LANTERNA,
+  DIRECOES_DA_LANTERNA,
+  apontarLanterna,
+  fachoDaSelecao,
   lanternaDaSelecao,
   removeLuzSelection,
   setSelectionLanterna,
 } from "@/lib/mestre/item-actions";
+import { cn } from "@/lib/utils";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import {
   CONE_PADRAO,
@@ -168,8 +182,32 @@ function OpcaoDeCor({ cor }: { cor: (typeof CORES_DA_LUZ)[number] }) {
   );
 }
 
+/** A seta de cada direção da rosa, pelo ângulo na figura. */
+const SETA: Record<number, { Icone: LucideIcon; rotulo: string }> = {
+  270: { Icone: ArrowUp, rotulo: "Para cima" },
+  315: { Icone: ArrowUpRight, rotulo: "Para cima e à direita" },
+  0: { Icone: ArrowRight, rotulo: "Para a direita" },
+  45: { Icone: ArrowDownRight, rotulo: "Para baixo e à direita" },
+  90: { Icone: ArrowDown, rotulo: "Para baixo" },
+  135: { Icone: ArrowDownLeft, rotulo: "Para baixo e à esquerda" },
+  180: { Icone: ArrowLeft, rotulo: "Para a esquerda" },
+  225: { Icone: ArrowUpLeft, rotulo: "Para cima e à esquerda" },
+};
+
+/** Um rótulo solto, e não `ContextMenuLabel`: aquele só existe dentro de um grupo. */
+function Rotulo({ children }: { children: string }) {
+  return (
+    <p
+      aria-hidden
+      className="text-muted-foreground px-1.5 py-1 text-xs font-medium"
+    >
+      {children}
+    </p>
+  );
+}
+
 /**
- * A lanterna dos tokens selecionados: a cor e o alcance, ou apagada.
+ * A lanterna dos tokens selecionados: a cor, o alcance, a forma e o efeito.
  *
  * Vizinha da opacidade, e não do travar: as duas mudam o que a MESA vê do
  * token. Fica no menu do token porque é dele -- ela anda com ele, e cravar uma
@@ -178,9 +216,15 @@ function OpcaoDeCor({ cor }: { cor: (typeof CORES_DA_LUZ)[number] }) {
  * O submenu não fecha ao escolher, como o da opacidade: acender e ajustar o
  * alcance é olhar a TV e corrigir, e um menu que fecha cobraria dois cliques
  * por tentativa.
+ *
+ * Forma e efeito num nível a mais, como no menu da luz cravada. Com o cone o
+ * efeito aberto aqui somaria doze linhas às dezenove de antes; assim a lista
+ * encurtou, e a cor e o alcance -- o que se troca toda hora -- continuam a um
+ * nível só.
  */
 export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
   const lanterna = lanternaDaSelecao(itens);
+  const facho = fachoDaSelecao(itens);
 
   return (
     <ContextMenuSub>
@@ -214,14 +258,7 @@ export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
         />
 
         <ContextMenuSeparator />
-        {/* Um rótulo solto, e não `ContextMenuLabel`: aquele é o rótulo de um
-            grupo do Base UI e só existe dentro de um. */}
-        <p
-          aria-hidden
-          className="text-muted-foreground px-1.5 py-1 text-xs font-medium"
-        >
-          Alcance
-        </p>
+        <Rotulo>Alcance</Rotulo>
         <ContextMenuRadioGroup
           aria-label="Alcance da lanterna"
           value={lanterna ? lanterna.raio : null}
@@ -235,18 +272,133 @@ export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
         </ContextMenuRadioGroup>
 
         <ContextMenuSeparator />
-        <p
-          aria-hidden
-          className="text-muted-foreground px-1.5 py-1 text-xs font-medium"
-        >
-          Efeito
-        </p>
-        <GrupoDoEfeito
-          valor={lanterna ? (lanterna.efeito ?? "fixa") : null}
-          onChange={(efeito) => setSelectionLanterna({ efeito })}
-        />
+        <SubmenuDaForma facho={facho} />
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Sparkles />
+            Efeito
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="min-w-32">
+            <GrupoDoEfeito
+              valor={lanterna ? (lanterna.efeito ?? "fixa") : null}
+              onChange={(efeito) => setSelectionLanterna({ efeito })}
+            />
+          </ContextMenuSubContent>
+        </ContextMenuSub>
       </ContextMenuSubContent>
     </ContextMenuSub>
+  );
+}
+
+/**
+ * Círculo ou cone, e, sendo cone, para onde ele aponta e quanto abre.
+ *
+ * A direção é uma ROSA de oito setas, e não um ângulo: ela diz para onde o
+ * rosto do DESENHO olha, e o facho gira com o token dali em diante -- ver
+ * `LuzCarregada.cone`. As setas são itens de rádio do menu, só dispostos em
+ * grade, e não botões soltos: continuam alcançáveis pelas setas do teclado.
+ *
+ * A direção e a abertura só aparecem com a seleção inteira em cone. Com um
+ * círculo no meio, marcar uma direção viraria cone quem não pediu.
+ */
+function SubmenuDaForma({
+  facho,
+}: {
+  facho: ReturnType<typeof fachoDaSelecao>;
+}) {
+  return (
+    <ContextMenuSub>
+      <ContextMenuSubTrigger>
+        <Circle />
+        Forma
+      </ContextMenuSubTrigger>
+      <ContextMenuSubContent className="min-w-40">
+        <ContextMenuRadioGroup
+          aria-label="Forma da lanterna"
+          value={facho.forma}
+          onValueChange={(forma: string) =>
+            forma === "cone"
+              ? apontarLanterna({})
+              : setSelectionLanterna({ cone: undefined })
+          }
+        >
+          <ContextMenuRadioItem value="circulo">Círculo</ContextMenuRadioItem>
+          <ContextMenuRadioItem value="cone">Cone</ContextMenuRadioItem>
+        </ContextMenuRadioGroup>
+
+        {facho.forma === "cone" ? (
+          <>
+            <ContextMenuSeparator />
+            <Rotulo>Para onde aponta</Rotulo>
+            <ContextMenuRadioGroup
+              aria-label="Para onde a lanterna aponta"
+              value={facho.angulo}
+              onValueChange={(angulo: number) => apontarLanterna({ angulo })}
+              className="grid w-max grid-cols-3 gap-0.5 px-1.5 pb-1"
+            >
+              {DIRECOES_DA_LANTERNA.map((angulo, indice) =>
+                angulo === null ? (
+                  // O meio da rosa é o token: a luz sai dele.
+                  <span
+                    key={`meio-${indice}`}
+                    aria-hidden
+                    className="grid size-7 place-items-center"
+                  >
+                    <span className="bg-muted-foreground size-1.5 rounded-full" />
+                  </span>
+                ) : (
+                  <SetaDaRosa key={angulo} angulo={angulo} />
+                ),
+              )}
+            </ContextMenuRadioGroup>
+            <p className="text-muted-foreground max-w-40 px-1.5 pb-1 text-[11px] leading-snug">
+              Para onde o desenho olha. Girar o token gira a luz.
+            </p>
+
+            <ContextMenuSeparator />
+            <Rotulo>Abertura</Rotulo>
+            <ContextMenuRadioGroup
+              aria-label="Abertura do facho"
+              value={facho.abertura}
+              onValueChange={(abertura: number) =>
+                apontarLanterna({ abertura })
+              }
+            >
+              {ABERTURAS_DA_LANTERNA.map((opcao) => (
+                <ContextMenuRadioItem key={opcao.abertura} value={opcao.abertura}>
+                  {opcao.rotulo}
+                </ContextMenuRadioItem>
+              ))}
+            </ContextMenuRadioGroup>
+          </>
+        ) : null}
+      </ContextMenuSubContent>
+    </ContextMenuSub>
+  );
+}
+
+/**
+ * Uma seta da rosa: um item de rádio do menu, sem o texto e sem a marca.
+ *
+ * O primitivo, e não o `ContextMenuRadioItem` da interface: aquele reserva a
+ * margem da marca à direita e desenha o nome, e aqui a marca É a célula
+ * acesa. O nome vai para o leitor de tela.
+ */
+function SetaDaRosa({ angulo }: { angulo: number }) {
+  const { Icone, rotulo } = SETA[angulo]!;
+
+  return (
+    <ContextMenuPrimitive.RadioItem
+      value={angulo}
+      aria-label={rotulo}
+      className={cn(
+        "grid size-7 cursor-default place-items-center rounded-md outline-hidden select-none",
+        "focus:bg-accent focus:text-accent-foreground",
+        "data-checked:bg-primary data-checked:text-primary-foreground",
+      )}
+    >
+      <Icone className="size-4" />
+    </ContextMenuPrimitive.RadioItem>
   );
 }
 

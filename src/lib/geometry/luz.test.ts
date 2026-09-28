@@ -8,6 +8,7 @@ import {
   corDoEscuroDe,
   fatorDoEfeito,
   FUNDO_DO_PULSO,
+  anguloDoFacho,
   fontesDaCena,
   inicioDoCone,
   ladoDaLuz,
@@ -94,6 +95,33 @@ function dentro(ponto: Ponto, poligono: Ponto[]): boolean {
   return cruza;
 }
 
+describe("anguloDoFacho", () => {
+  it("sem giro nem espelho, é o ângulo da figura", () => {
+    expect(anguloDoFacho({ rotation: 0 }, 90)).toBe(90);
+  });
+
+  it("o giro soma, e o resultado fica entre 0 e 360", () => {
+    expect(anguloDoFacho({ rotation: 300 }, 90)).toBe(30);
+    expect(anguloDoFacho({ rotation: -45 }, 0)).toBe(315);
+  });
+
+  it("espelhar na horizontal troca direita por esquerda", () => {
+    // O facho para baixo e à direita (45) vira para baixo e à esquerda (135):
+    // a figura espelhada olha para o outro lado, e a luz também.
+    expect(anguloDoFacho({ rotation: 0, flipX: true }, 45)).toBe(135);
+  });
+
+  it("espelhar na vertical troca cima por baixo", () => {
+    expect(anguloDoFacho({ rotation: 0, flipY: true }, 90)).toBe(270);
+  });
+
+  it("espelha ANTES de girar, na ordem do CanvasItemView", () => {
+    // A imagem espelha dentro do contêiner que gira. Na ordem inversa o
+    // resultado seria 180 - (0 + 90) = 90, e o facho sairia para o lado errado.
+    expect(anguloDoFacho({ rotation: 90, flipX: true }, 0)).toBe(270);
+  });
+});
+
 describe("fontesDaCena", () => {
   const solta: Luz = { id: "l1", x: 50, y: 60, raio: 200, cor: "#fb923c" };
 
@@ -104,6 +132,41 @@ describe("fontesDaCena", () => {
     );
 
     expect(fontes.map((fonte) => fonte.id)).toEqual(["l1", "t1"]);
+  });
+
+  it("a lanterna em cone gira com o token", () => {
+    // O ângulo guardado é o da figura. O token girado 30 graus leva o facho
+    // junto: quem vira a cabeça no corredor leva a luz.
+    const [fonte] = fontesDaCena(
+      [],
+      [
+        item("t1", {
+          rotation: 30,
+          luz: { raio: 150, cor: "#93c5fd", cone: { angulo: 90, abertura: 60 } },
+        }),
+      ],
+    );
+
+    expect(fonte?.cone).toEqual({ angulo: 120, abertura: 60 });
+  });
+
+  it("a lanterna com cone podre acende como círculo", () => {
+    // Um `NaN` no cone jogaria exceção no degradê cônico, e a luz do mapa
+    // inteiro apagaria por causa de uma lanterna.
+    const [fonte] = fontesDaCena(
+      [],
+      [
+        item("t1", {
+          luz: {
+            raio: 150,
+            cor: "#93c5fd",
+            cone: { angulo: Number.NaN, abertura: 60 },
+          },
+        }),
+      ],
+    );
+
+    expect(fonte?.cone).toBeUndefined();
   });
 
   it("a luz carregada acende do CENTRO do token, e não do canto", () => {

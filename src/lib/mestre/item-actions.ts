@@ -28,8 +28,14 @@ import {
   type ZDirection,
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { CORES_DA_LUZ, ehQuadro, semIdDaForma } from "@/types/scene";
+import {
+  CONE_DA_LANTERNA,
+  CORES_DA_LUZ,
+  ehQuadro,
+  semIdDaForma,
+} from "@/types/scene";
 import type {
+  ConeDaLuz,
   LuzCarregada,
   CanvasItem,
   Documento,
@@ -637,6 +643,32 @@ export const ALCANCES_DA_LANTERNA = [
 const ALCANCE_DA_LANTERNA_PADRAO = 260;
 
 /**
+ * As aberturas que o facho da lanterna oferece, em graus.
+ *
+ * Três, pela razão do alcance: "estreito, médio, largo" é a pergunta da mesa
+ * -- a lanterna de foco, a de mão, o farol. O do meio é o do cone de sempre.
+ */
+export const ABERTURAS_DA_LANTERNA = [
+  { abertura: 35, rotulo: "Estreito" },
+  { abertura: 60, rotulo: "Médio" },
+  { abertura: 100, rotulo: "Largo" },
+] as const;
+
+/**
+ * As oito direções do facho, em graus NA FIGURA, na ordem da rosa do menu:
+ * linha a linha, de cima para baixo, com o meio vazio. O `null` é o meio.
+ *
+ * Oito, e não um ângulo livre: o facho gira com o token, então o que o mestre
+ * escolhe aqui é só para que lado o rosto do desenho olha -- e desenho de
+ * token olha para um dos oito.
+ */
+export const DIRECOES_DA_LANTERNA: ReadonlyArray<number | null> = [
+  225, 270, 315,
+  180, null, 0,
+  135, 90, 45,
+];
+
+/**
  * Acende, troca ou apaga a lanterna de todos os tokens selecionados.
  *
  * `null` apaga. Um patch mexe só no que traz: trocar a cor não pode encurtar a
@@ -659,12 +691,52 @@ export function setSelectionLanterna(
         cor: CORES_DA_LUZ[0],
       };
       // A fixa grava como AUSENTE, e não como `efeito: undefined`: é a
-      // lanterna de sempre, e o arquivo não ganha um campo por isso.
-      const { efeito, ...resto } = { ...atual, ...patch };
+      // lanterna de sempre, e o arquivo não ganha um campo por isso. O círculo
+      // é a ausência do cone, pela mesma razão.
+      const { efeito, cone, ...resto } = { ...atual, ...patch };
 
       return {
         id: item.id,
-        patch: { luz: { ...resto, ...(efeito ? { efeito } : {}) } },
+        patch: {
+          luz: {
+            ...resto,
+            ...(efeito ? { efeito } : {}),
+            ...(cone ? { cone } : {}),
+          },
+        },
+      };
+    }),
+  );
+}
+
+/**
+ * Aponta ou abre o facho da lanterna de todos os tokens selecionados.
+ *
+ * Por token, e não um cone só para todos: mudar a ABERTURA da horda não pode
+ * virar para o mesmo lado o facho de cada um, que o mestre apontou um a um.
+ * Quem ainda era círculo vira cone, e quem nem tinha lanterna acende -- é o
+ * que o gesto de apontar pede.
+ */
+export function apontarLanterna(parcial: Partial<ConeDaLuz>): void {
+  const { scene, selectedItems } = read();
+  if (!scene || selectedItems.length === 0) return;
+
+  useSceneStore.getState().updateItems(
+    scene.id,
+    selectedItems.map((item) => {
+      const atual: LuzCarregada = item.luz ?? {
+        raio: ALCANCE_DA_LANTERNA_PADRAO,
+        cor: CORES_DA_LUZ[0],
+      };
+
+      return {
+        id: item.id,
+        patch: {
+          luz: {
+            ...atual,
+            cone: { ...(atual.cone ?? CONE_DA_LANTERNA), ...parcial },
+          },
+        },
       };
     }),
   );
@@ -687,9 +759,42 @@ export function lanternaDaSelecao(
       ? luz === undefined
       : luz?.cor === primeira.cor &&
         luz.raio === primeira.raio &&
-        luz.efeito === primeira.efeito;
+        luz.efeito === primeira.efeito &&
+        luz.cone?.angulo === primeira.cone?.angulo &&
+        luz.cone?.abertura === primeira.cone?.abertura;
 
   return items.every((item) => igual(item.luz)) ? primeira : undefined;
+}
+
+/**
+ * A forma da lanterna que a seleção inteira tem, e o facho, quando é um só.
+ *
+ * Cada campo por conta própria, e não tudo ou nada como `lanternaDaSelecao`:
+ * a horda pode concordar que é cone e discordar para onde cada um aponta -- é
+ * o caso comum, porque o facho gira com o token --, e o menu ainda precisa
+ * marcar "Cone" e mostrar a rosa, só sem direção marcada.
+ */
+export function fachoDaSelecao(items: CanvasItem[]): {
+  forma: "circulo" | "cone" | null;
+  angulo: number | null;
+  abertura: number | null;
+} {
+  const luzes = items.map((item) => item.luz);
+  const cones = luzes.map((luz) => luz?.cone);
+
+  const forma =
+    luzes.length > 0 && cones.every(Boolean)
+      ? "cone"
+      : luzes.length > 0 && luzes.every((luz) => luz && !luz.cone)
+        ? "circulo"
+        : null;
+
+  const comum = (campo: keyof ConeDaLuz): number | null =>
+    forma === "cone" && cones.every((cone) => cone![campo] === cones[0]![campo])
+      ? cones[0]![campo]
+      : null;
+
+  return { forma, angulo: comum("angulo"), abertura: comum("abertura") };
 }
 
 /**
