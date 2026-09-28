@@ -989,6 +989,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     if (event.button === 2) {
       // Botão direito aponta o menu para o item clicado, mas não desfaz uma
       // seleção múltipla que já o inclua.
+      //
+      // E PARA aqui. O item mora dentro do envelope do palco, e o clique no
+      // vazio com botão que não é o esquerdo limpa a seleção -- ver
+      // `handleCanvasPointerDown`. O esquerdo nunca chegava lá porque o
+      // `startDrag` corta a subida; o direito sai antes dele, e o menu abria
+      // sobre uma seleção que acabara de ser limpa, sem as ações do token.
+      event.stopPropagation();
       if (!alreadySelected) select(alvo);
       return;
     }
@@ -1240,7 +1247,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     if (event.button === 2) {
       // Como no item: o botão direito aponta para este texto, mas não desfaz
-      // uma seleção múltipla que já o inclua.
+      // uma seleção múltipla que já o inclua -- e para aqui, pela mesma razão.
+      event.stopPropagation();
       if (!jaSelecionado) selectTextos([texto.id]);
       return;
     }
@@ -1272,6 +1280,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const jaSelecionada = selectedFormaIds.includes(forma.id);
 
     if (event.button === 2) {
+      // Para aqui, como o item: ver `handleItemPointerDown`.
+      event.stopPropagation();
       if (!jaSelecionada) selectFormas([forma.id]);
       return;
     }
@@ -1447,6 +1457,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
   function handleFogPointerDown(event: ReactPointerEvent, region: FogRegion) {
     if (event.button === 2) {
+      // Para aqui, como o item: ver `handleItemPointerDown`.
+      event.stopPropagation();
       selectFog(region.id);
       return;
     }
@@ -1484,7 +1496,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     if (event.button === 2) {
       // Botão direito aponta para o retrato clicado, mas não desfaz uma
-      // seleção múltipla que já o inclua.
+      // seleção múltipla que já o inclua -- e para aqui, como o item: ver
+      // `handleItemPointerDown`.
+      event.stopPropagation();
       if (!alreadySelected) selectPortrait(portrait.id);
       return;
     }

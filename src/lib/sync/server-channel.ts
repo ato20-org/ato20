@@ -97,6 +97,44 @@ export function createPublisherChannel(
 }
 
 /**
+ * O quadro como chegou do daemon, com o padrão de cada campo que falta.
+ *
+ * ESPALHA o quadro inteiro, e só depois põe os padrões por cima do que veio
+ * vazio. Era uma lista fixa de campos, remontada à mão, e todo campo novo do
+ * `LiveState` precisava lembrar de entrar nela -- três esqueceram, e a TV e o
+ * celular os perdiam em silêncio: as `fichas` (nome e medidores sobre os
+ * tokens), os barramentos de volume e os `efeitos` das condições. O Mestre
+ * publicava certo, o daemon repassava certo, e o campo morria aqui. Com o
+ * espalhamento, campo novo atravessa sem ninguém lembrar dele; o que esta
+ * função guarda são só os padrões, que continuam sendo decisão de cada campo.
+ *
+ * Função à parte, e não dentro do `onmessage`, para ser conferida sem
+ * `EventSource` nenhum.
+ */
+export function quadroRecebido(state: Partial<LiveState>): LiveState {
+  return {
+    ...state,
+    scene: state.scene ?? null,
+    track: state.track ?? null,
+    // As camadas de som, pela mesma razão dos retratos abaixo: quadro de um
+    // Mestre anterior a elas é quadro válido, e não motivo para a TV cair no
+    // meio da sessão.
+    ambientes: state.ambientes ?? [],
+    disparos: state.disparos ?? [],
+    // Estado gravado por uma versão anterior pode não trazer o campo: lista
+    // vazia é o certo, e não uma tela quebrada.
+    portraits: state.portraits ?? [],
+    // Quadro sem volume é de um Mestre anterior a ele sair de dentro da faixa:
+    // o padrão é o estado certo, e não silêncio.
+    volume: state.volume ?? DEFAULT_SESSION_VOLUME,
+    spotlight: state.spotlight ?? null,
+    // Mesma razão dos retratos: quadro de uma versão sem dados de jogador é
+    // quadro válido, e não motivo para a tela cair.
+    rolagens: state.rolagens ?? [],
+  };
+}
+
+/**
  * Lado do espectador: recebe a cena por SSE.
  *
  * SSE e não WebSocket porque o fluxo é de mão única, o `EventSource` reconecta
@@ -121,26 +159,7 @@ export function createSubscriberChannel(
 
       source.onmessage = (event) => {
         try {
-          const state = JSON.parse(event.data) as LiveState;
-          handler({
-            scene: state.scene ?? null,
-            track: state.track ?? null,
-            // As camadas de som, pela mesma razão dos retratos abaixo: quadro
-            // de um Mestre anterior a elas é quadro válido, e não motivo para
-            // a TV cair no meio da sessão.
-            ambientes: state.ambientes ?? [],
-            disparos: state.disparos ?? [],
-            // Estado gravado por uma versão anterior pode não trazer o campo:
-            // lista vazia é o certo, e não uma tela quebrada.
-            portraits: state.portraits ?? [],
-            // Quadro sem volume é de um Mestre anterior a ele sair de dentro
-            // da faixa: o padrão é o estado certo, e não silêncio.
-            volume: state.volume ?? DEFAULT_SESSION_VOLUME,
-            spotlight: state.spotlight ?? null,
-            // Mesma razão dos retratos: quadro de uma versão sem dados de
-            // jogador é quadro válido, e não motivo para a tela cair.
-            rolagens: state.rolagens ?? [],
-          });
+          handler(quadroRecebido(JSON.parse(event.data) as Partial<LiveState>));
         } catch {
           // O daemon valida que é JSON antes de repassar, então isto só
           // acontece com quadro truncado. O próximo chega em 100ms.
