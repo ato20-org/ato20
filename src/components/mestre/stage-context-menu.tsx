@@ -18,6 +18,7 @@ import {
   Focus,
   Group,
   Images,
+  Layers,
   Lock,
   LockOpen,
   Maximize,
@@ -177,6 +178,8 @@ export function StageContextMenu({
   const opacidade = opacidadeDaSelecao(selectedItems);
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedLuz = scene.luzes?.find((luz) => luz.id === selectedLuzId);
+  /** Nada selecionado: o botão direito foi no vazio. Ver o bloco da cena. */
+  const nadaNaMao = !hasSelection && !soQuadro && !selectedFog && !selectedLuz;
 
   return (
     <ContextMenu>
@@ -184,7 +187,12 @@ export function StageContextMenu({
         {children}
       </ContextMenuTrigger>
 
-      <ContextMenuContent className="w-56">
+      {/* O separador que sobra no fim some. Cada bloco termina com um porque
+          o da cena vinha embaixo de todos; agora ele só aparece no vazio, e
+          com algo na mão o último separador ficaria pendurado no pé do menu.
+          Uma regra aqui, e não um condicional em cada bloco: são quatro, e o
+          próximo que entrar nasceria com o mesmo pé solto. */}
+      <ContextMenuContent className="w-56 [&>[data-slot=context-menu-separator]:last-child]:hidden">
         {selectedLuz ? (
           <BlocoDaLuz sceneId={scene.id} luz={selectedLuz} />
         ) : null}
@@ -284,20 +292,29 @@ export function StageContextMenu({
 
             <ContextMenuSeparator />
 
-            <ContextMenuItem onClick={() => flipSelection("x")}>
-              <FlipHorizontal />
-              Espelhar na horizontal
-              <ContextMenuShortcut>Shift+H</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => flipSelection("y")}>
-              <FlipVertical />
-              Espelhar na vertical
-              <ContextMenuShortcut>Shift+V</ContextMenuShortcut>
-            </ContextMenuItem>
+            {/* Os submenus desta faixa são o que muda como o token APARECE,
+                e a mesa vê os três. Espelhar era duas linhas soltas, e com
+                as duas o menu passava de vinte e cinco: aqui cada família é
+                uma linha, e quem quer o atalho o vê ao abrir. */}
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <FlipHorizontal />
+                Espelhar
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="min-w-40">
+                <ContextMenuItem onClick={() => flipSelection("x")}>
+                  <FlipHorizontal />
+                  Na horizontal
+                  <ContextMenuShortcut>Shift+H</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => flipSelection("y")}>
+                  <FlipVertical />
+                  Na vertical
+                  <ContextMenuShortcut>Shift+V</ContextMenuShortcut>
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
 
-            {/* Vizinho do espelhar, e não do travar: os dois mudam como a
-                imagem APARECE, e a mesa vê os dois. O travar e a ordem de
-                empilhamento são arrumação de bancada. */}
             <ContextMenuSub>
               <ContextMenuSubTrigger>
                 <Blend />
@@ -325,67 +342,79 @@ export function StageContextMenu({
 
             {/* Depois da opacidade, pela mesma razão: muda o que a mesa vê
                 do token. Só no mapa, que é a cena que tem escuro. */}
-            {temLuz(scene) ? (
-              <SubmenuDaLanterna itens={selectedItems} />
-            ) : null}
+            {temLuz(scene) ? <SubmenuDaLanterna itens={selectedItems} /> : null}
 
-            <ContextMenuSeparator />
-
-            <ContextMenuItem onClick={() => moveSelectionZ("front")}>
-              <ChevronsUp />
-              Trazer para frente
-              <ContextMenuShortcut>Ctrl+Shift+]</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => moveSelectionZ("forward")}>
-              <ArrowUp />
-              Avançar
-              <ContextMenuShortcut>Ctrl+]</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => moveSelectionZ("backward")}>
-              <ArrowDown />
-              Recuar
-              <ContextMenuShortcut>Ctrl+[</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => moveSelectionZ("back")}>
-              <ChevronsDown />
-              Enviar para trás
-              <ContextMenuShortcut>Ctrl+Shift+[</ContextMenuShortcut>
-            </ContextMenuItem>
-
-            <ContextMenuSeparator />
-
-            {/* Junto das ações DO ITEM, e não lá embaixo com a câmera: quem
-                clica com o botão direito num token está pensando nele, e
-                "a câmera segue este" é uma coisa que se faz com o token. */}
+            {/* A câmera, junto das ações DO ITEM e não lá embaixo com as da
+                cena: quem clica com o botão direito num token está pensando
+                nele, e "a câmera segue este" é uma coisa que se faz com o
+                token. Num submenu, porque são duas e têm atalho de uma letra. */}
             {comCamera ? (
               <>
-                <ContextMenuItem
-                  disabled={!cameraSelecionada}
-                  onClick={segue ? soltar : prenderNaSelecao}
-                >
-                  <Crosshair />
-                  {segue
-                    ? "Câmera deixa de seguir"
-                    : selectedItems.length > 1
-                      ? "Câmera segue estes"
-                      : "Câmera segue este"}
-                  <ContextMenuShortcut>L</ContextMenuShortcut>
-                </ContextMenuItem>
-                <ContextMenuItem
-                  disabled={!cameraSelecionada}
-                  onClick={enquadrarSelecao}
-                >
-                  <Focus />
-                  {selectedItems.length > 1
-                    ? "Enquadrar estes na câmera"
-                    : "Enquadrar este na câmera"}
-                  <ContextMenuShortcut>F</ContextMenuShortcut>
-                </ContextMenuItem>
+                <ContextMenuSeparator />
+
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger disabled={!cameraSelecionada}>
+                    <Focus />
+                    Câmera
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="min-w-48">
+                    <ContextMenuItem
+                      onClick={segue ? soltar : prenderNaSelecao}
+                    >
+                      <Crosshair />
+                      {segue
+                        ? "Deixar de seguir"
+                        : selectedItems.length > 1
+                          ? "Seguir estes"
+                          : "Seguir este"}
+                      <ContextMenuShortcut>L</ContextMenuShortcut>
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={enquadrarSelecao}>
+                      <Focus />
+                      {selectedItems.length > 1
+                        ? "Enquadrar estes"
+                        : "Enquadrar este"}
+                      <ContextMenuShortcut>F</ContextMenuShortcut>
+                    </ContextMenuItem>
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
               </>
             ) : null}
 
             <ContextMenuSeparator />
 
+            {/* A ordem de empilhamento é arrumação de bancada, como agrupar e
+                travar, e mora com eles. Eram quatro linhas por conta própria;
+                num submenu, a mão que quer só o "para a frente" abre um nível
+                a mais, e quem usa todo dia tem o Ctrl+] . */}
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <Layers />
+                Ordem
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="min-w-56">
+                <ContextMenuItem onClick={() => moveSelectionZ("front")}>
+                  <ChevronsUp />
+                  Trazer para a frente
+                  <ContextMenuShortcut>Ctrl+Shift+]</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => moveSelectionZ("forward")}>
+                  <ArrowUp />
+                  Avançar
+                  <ContextMenuShortcut>Ctrl+]</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => moveSelectionZ("backward")}>
+                  <ArrowDown />
+                  Recuar
+                  <ContextMenuShortcut>Ctrl+[</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => moveSelectionZ("back")}>
+                  <ChevronsDown />
+                  Enviar para trás
+                  <ContextMenuShortcut>Ctrl+Shift+[</ContextMenuShortcut>
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
             <ContextMenuItem onClick={() => void agruparSelecao()}>
               <Group />
               Agrupar
@@ -403,14 +432,16 @@ export function StageContextMenu({
               {allLocked ? "Destravar" : "Travar"}
             </ContextMenuItem>
             {/* Atalho do arrasto até a bolinha: sai da mesa, fica na manga.
-                Token de personagem não vai -- ver `guardarNoHandout`. */}
-            <ContextMenuItem
-              disabled={selectedItems.every((item) => item.personagemId)}
-              onClick={guardarSelecaoNoHandout}
-            >
-              <Images />
-              Guardar no handout
-            </ContextMenuItem>
+                Token de personagem não vai -- ver `guardarNoHandout` --, e
+                com a seleção toda de personagens a linha SOME em vez de ficar
+                cinza: apagada ela aparecia em todo botão direito de token de
+                jogador, dizendo uma coisa que não se pode fazer. */}
+            {selectedItems.some((item) => !item.personagemId) ? (
+              <ContextMenuItem onClick={guardarSelecaoNoHandout}>
+                <Images />
+                Guardar no handout
+              </ContextMenuItem>
+            ) : null}
             <ContextMenuItem
               variant="destructive"
               onClick={() => removeSelection()}
@@ -424,58 +455,68 @@ export function StageContextMenu({
           </>
         ) : null}
 
-        {/* Imagens e textos copiados voltam juntos, como no Ctrl+V. */}
-        <ContextMenuItem disabled={!hasClipboard} onClick={pasteClipboard}>
-          <ClipboardPaste />
-          Colar
-          <ContextMenuShortcut>Ctrl+V</ContextMenuShortcut>
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={
-            scene.items.length === 0 &&
-            !scene.textos?.length &&
-            !scene.formas?.length
-          }
-          onClick={selectAllItems}
-        >
-          <MousePointerSquareDashed />
-          Selecionar tudo
-          <ContextMenuShortcut>Ctrl+A</ContextMenuShortcut>
-        </ContextMenuItem>
-
-        {comCamera ? (
+        {/* O que é da CENA -- colar, selecionar tudo, a câmera -- só no botão
+            direito do vazio. Com algo na mão o menu é daquilo que foi clicado:
+            eram mais sete linhas embaixo das do token, e o menu dele passava
+            de vinte e cinco. O vazio continua a um clique fora, e os atalhos
+            valem com qualquer seleção. */}
+        {nadaNaMao ? (
           <>
-            <ContextMenuSeparator />
+            {/* Imagens e textos copiados voltam juntos, como no Ctrl+V. */}
+            <ContextMenuItem disabled={!hasClipboard} onClick={pasteClipboard}>
+              <ClipboardPaste />
+              Colar
+              <ContextMenuShortcut>Ctrl+V</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={
+                scene.items.length === 0 &&
+                !scene.textos?.length &&
+                !scene.formas?.length
+              }
+              onClick={selectAllItems}
+            >
+              <MousePointerSquareDashed />
+              Selecionar tudo
+              <ContextMenuShortcut>Ctrl+A</ContextMenuShortcut>
+            </ContextMenuItem>
 
-            <ContextMenuItem
-              disabled={!cameraSelecionada}
-              onClick={enquadrarAqui}
-            >
-              <ScanSearch />
-              Trazer a câmera para aqui
-              <ContextMenuShortcut>C</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => void novaCamera()}>
-              <Plus />
-              Nova câmera
-              <ContextMenuShortcut>N</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem
-              disabled={!cameraSelecionada}
-              onClick={alternarTransmissao}
-            >
-              <Radio />
-              {cameraSelecionada && scene.cameraNoArId === cameraSelecionada.id
-                ? "Tirar do ar"
-                : "Transmitir a câmera"}
-              <ContextMenuShortcut>T</ContextMenuShortcut>
-            </ContextMenuItem>
-            {scene.cameraNoArId ? (
-              <ContextMenuItem onClick={mostrarCenaInteira}>
-                <Maximize />
-                Mostrar a cena inteira
-                <ContextMenuShortcut>Shift+C</ContextMenuShortcut>
-              </ContextMenuItem>
+            {comCamera ? (
+              <>
+                <ContextMenuSeparator />
+
+                <ContextMenuItem
+                  disabled={!cameraSelecionada}
+                  onClick={enquadrarAqui}
+                >
+                  <ScanSearch />
+                  Trazer a câmera para aqui
+                  <ContextMenuShortcut>C</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => void novaCamera()}>
+                  <Plus />
+                  Nova câmera
+                  <ContextMenuShortcut>N</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem
+                  disabled={!cameraSelecionada}
+                  onClick={alternarTransmissao}
+                >
+                  <Radio />
+                  {cameraSelecionada &&
+                  scene.cameraNoArId === cameraSelecionada.id
+                    ? "Tirar do ar"
+                    : "Transmitir a câmera"}
+                  <ContextMenuShortcut>T</ContextMenuShortcut>
+                </ContextMenuItem>
+                {scene.cameraNoArId ? (
+                  <ContextMenuItem onClick={mostrarCenaInteira}>
+                    <Maximize />
+                    Mostrar a cena inteira
+                    <ContextMenuShortcut>Shift+C</ContextMenuShortcut>
+                  </ContextMenuItem>
+                ) : null}
+              </>
             ) : null}
           </>
         ) : null}
