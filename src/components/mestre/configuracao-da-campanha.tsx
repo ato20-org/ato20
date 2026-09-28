@@ -214,6 +214,35 @@ function MedidoresDaCampanha() {
           </p>
         </div>
 
+        {/* O gesto que falta ao molde por ele não ser um vínculo vivo. Ícone no
+            cabeçalho, ao lado do criar, e não um botão da largura da seção: é
+            um gesto de vez em quando, e o botão largo pesava mais que a lista
+            que ele aplica. O aviso fica no tooltip -- ele é a exceção, e quem
+            já entendeu não precisa relê-lo a cada abertura. */}
+        {lista.length > 0 ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Aplicar em todos os personagens"
+                  disabled={ocupado || quantos === 0}
+                  onClick={() => void aplicar()}
+                >
+                  <Wand2 />
+                </Button>
+              }
+            />
+            <TooltipContent>
+              <p className="font-medium">Aplicar em todos os personagens</p>
+              <p className="text-muted-foreground max-w-56">
+                Quem já tem um medidor com o mesmo nome não ganha outro.
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+
         <Tooltip>
           <TooltipTrigger
             render={
@@ -268,33 +297,6 @@ function MedidoresDaCampanha() {
           ))}
         </ul>
       )}
-
-      {/* O gesto que falta ao molde por ele não ser um vínculo vivo. O aviso
-          está no tooltip e não numa linha de texto: ele é a exceção, e quem já
-          entendeu não precisa relê-lo a cada abertura. */}
-      {lista.length > 0 ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={ocupado || quantos === 0}
-                className="h-7 w-full px-2 text-xs"
-                onClick={() => void aplicar()}
-              >
-                <Wand2 className="size-3" />
-                Aplicar em todos os personagens
-              </Button>
-            }
-          />
-          <TooltipContent>
-            <p className="max-w-56">
-              Quem já tem um medidor com o mesmo nome não ganha outro.
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      ) : null}
     </section>
   );
 }
