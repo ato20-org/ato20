@@ -3,6 +3,7 @@ pub mod assets;
 pub mod atomic;
 pub mod board;
 pub mod characters;
+pub mod condicoes;
 pub mod documentos;
 pub mod inventory;
 pub mod mime;
