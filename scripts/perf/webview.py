@@ -129,6 +129,10 @@ def argumentos():
     # pagina escurece a 0,8 quando ha luz -- o caminho caro. Ver `LuzLayer`.
     p.add_argument("--carregadas", default="0")
     p.add_argument("--escuridao", default=None)
+    # O EFEITO de todas as luzes, soltas e carregadas: `fogo`, `pulsando` ou
+    # `piscando`. Com efeito o canvas recompõe a trinta quadros por segundo
+    # mesmo parado -- é esse o custo que ele mede. Ver `LuzLayer`.
+    p.add_argument("--efeito", default=None)
     p.add_argument("--url", default=None, help="servidor já de pé")
     p.add_argument("--pular-build", action="store_true")
     # A janela do `tauri.conf.json`. Medir noutro tamanho mede outra área de
@@ -420,6 +424,8 @@ def main():
                             )
                             if args.escuridao is not None:
                                 url += f"&escuridao={args.escuridao}"
+                            if args.efeito is not None:
+                                url += f"&efeito={args.efeito}"
                             rotulo = f"{cenario} n={n} cam={cam}"
                             if cenario in ("camera-gesto", "bancada"):
                                 rotulo += f" gesto={g}"

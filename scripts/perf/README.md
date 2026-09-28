@@ -347,6 +347,38 @@ tamanho dele, menos a figura em pé, por token e por luz. Mesma bancada:
 | `amostras --carregadas 1` | 59,8 fps, 0,3% |
 | `arrasto --carregadas 0` | 60 fps, 0,3% |
 
+### A luz que se mexe
+
+O fogo, o pulso e o pisca (`EfeitoDaLuz`) mexem na luz o tempo todo, mesmo com
+a mesa parada -- o canvas que só repintava quando a luz mudava passa a repintar
+a trinta quadros por segundo. Para isso não custar o desenho inteiro, a
+`LuzLayer` separou dois tempos: FORMAR cada luz num rascunho próprio (o
+degradê, o cone, as sombras), só quando a chave muda, e COMPOR os rascunhos no
+canvas, que é o que o laço repete: o escuro e dois `drawImage` por luz, com a
+força do efeito no `globalAlpha`.
+
+A bancada ganhou `--efeito X`, que põe o mesmo efeito em todas as luzes, soltas
+e carregadas. Webview, build de produção, 40 tokens, 8 paredes, 3 luzes e a
+lanterna no token que se move. `mestre-camera` e `amostras` com `--repetir 3`,
+o resto com `--repetir 2`:
+
+| cenário | fixa | `--efeito fogo` | `--efeito piscando` |
+| --- | --- | --- | --- |
+| `arrasto` | 60 fps, 0,6% | 60 fps, 0,3% | 60 fps, 0,3% |
+| `mestre-camera` | 60 fps, 0% | 60 fps, 0% | -- |
+| `amostras` (a TV) | 60 fps, 0% | 60 fps, 0,3% | 60 fps, 0,9% |
+| `mestre-camera --zoom 3` | 60 fps, 0,3% | 60 fps, 0% | -- |
+| `arrasto --zoom 3` | 60 fps, 0,3% | 60 fps, 0,6% | -- |
+
+Uma primeira corrida da TV com fogo deu 1,2%; repetida três vezes, 0,3%. É a
+faixa em que a própria bancada oscila sem luz nenhuma.
+
+Uma sonda temporária no laço confirmou, dentro da webview, que ele roda (cerca
+de trinta composições por segundo no `mestre-camera`) e que cada composição
+custa 0,14 ms de JavaScript. No `arrasto` o laço quase não compõe sozinho: a
+lanterna muda a cada quadro, e cada render já forma e compõe na hora, com o
+efeito daquele instante.
+
 ---
 
 ## Como medir: o passo a passo
@@ -525,6 +557,10 @@ pnpm perf:webview -- --cenario bancada --painel ambos,esquerdo,direito,nenhum
 # a luz: o mestre arrastando o token da lanterna, com o mapa no escuro
 pnpm perf:webview -- --cenario arrasto,mestre-camera --n 40 --paredes 8 \
   --luzes 3 --carregadas 1 --repetir 3
+
+# a luz que se mexe: o mesmo, com todas as luzes tremulando
+pnpm perf:webview -- --cenario arrasto,mestre-camera,amostras --n 40 \
+  --paredes 8 --luzes 3 --carregadas 1 --efeito fogo --repetir 2
 
 # o que muda por quadro (para achar, não para publicar o número)
 pnpm perf:webview -- --cenario bancada --sonda

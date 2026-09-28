@@ -30,6 +30,7 @@ import {
   PLANO,
   zoomViewport,
 } from "@/lib/geometry/viewport";
+import { efeitoDe } from "@/lib/geometry/luz";
 import { MINIATURA } from "@/lib/miniatura";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { useDadosStore } from "@/lib/store/use-dados-store";
@@ -44,6 +45,7 @@ import {
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   type CanvasItem,
+  type EfeitoDaLuz,
   type Scene,
 } from "@/types/scene";
 
@@ -218,6 +220,7 @@ function sombraDaMedida(): Pick<
             y: (i * 233 + 120) % SCENE_HEIGHT,
             raio: RAIO_DA_LUZ_PADRAO,
             cor: CORES_DA_LUZ[i % CORES_DA_LUZ.length]!,
+            ...efeitoDaMedida(),
           }))
         : undefined,
     escuridao: escuridao > 0 ? escuridao : undefined,
@@ -247,6 +250,23 @@ function sombraDaMedida(): Pick<
  * a lanterna põe no palco. Com K em zero o arrasto não repinta nada -- ver
  * `chaveDasFontes`.
  */
+/**
+ * O efeito de todas as luzes, lido da URL: `?efeito=fogo`. Ausente = fixas,
+ * e a cena montada e a de antes de o efeito existir.
+ *
+ * Todas, soltas e carregadas, e nao so uma: o que o efeito custa e o canvas
+ * recompondo a cada quadro, e isso acontece com uma luz animada ou com dez --
+ * o que muda com o numero e quantos `drawImage` cada quadro faz.
+ */
+function efeitoDaMedida(): { efeito?: EfeitoDaLuz } {
+  if (typeof window === "undefined") return {};
+
+  const efeito = efeitoDe(
+    new URLSearchParams(window.location.search).get("efeito"),
+  );
+  return efeito ? { efeito } : {};
+}
+
 function lanternasDaMedida(): number {
   if (typeof window === "undefined") return 0;
 
@@ -278,7 +298,13 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
       z: i + 1,
       locked: false,
       ...(i < lanternas
-        ? { luz: { raio: 260, cor: CORES_DA_LUZ[i % CORES_DA_LUZ.length]! } }
+        ? {
+            luz: {
+              raio: 260,
+              cor: CORES_DA_LUZ[i % CORES_DA_LUZ.length]!,
+              ...efeitoDaMedida(),
+            },
+          }
         : {}),
     };
   });
