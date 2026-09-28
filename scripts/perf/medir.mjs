@@ -119,6 +119,12 @@ const PAREDES = opcao("paredes", "0");
 const CARREGADAS = opcao("carregadas", "0");
 const ESCURIDAO = opcao("escuridao", "");
 /**
+ * `--efeito X`: o de todas as luzes, soltas e carregadas -- `fogo`, `pulsando`
+ * ou `piscando`. Com efeito o canvas recompoe a trinta quadros por segundo
+ * mesmo com tudo parado. Ver `LuzLayer`.
+ */
+const EFEITO = opcao("efeito", "");
+/**
  * A pasta com as imagens DE VERDADE que `/asset/*` deve responder.
  *
  * O bitmap de ruido sintetico mede a composicao e nao mente sobre ela -- N
@@ -886,7 +892,7 @@ async function principal() {
         for (const cameras of eixo) {
           for (const gesto of gestos) {
             for (const painel of paineis) {
-              const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&cameras=${cameras}&gesto=${gesto}&mapas=${MAPAS}&painel=${painel}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&sol=${SOL}&luzes=${LUZES}&paredes=${PAREDES}&carregadas=${CARREGADAS}${ESCURIDAO ? `&escuridao=${ESCURIDAO}` : ""}&rotulo=chrome`;
+              const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&cameras=${cameras}&gesto=${gesto}&mapas=${MAPAS}&painel=${painel}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&sol=${SOL}&luzes=${LUZES}&paredes=${PAREDES}&carregadas=${CARREGADAS}${ESCURIDAO ? `&escuridao=${ESCURIDAO}` : ""}${EFEITO ? `&efeito=${EFEITO}` : ""}&rotulo=chrome`;
               const corridas = [];
 
               for (let i = 1; i <= REPETICOES; i++) {

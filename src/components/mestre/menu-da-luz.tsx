@@ -1,6 +1,18 @@
 "use client";
 
-import { Flame, Palette, Trash2 } from "lucide-react";
+import {
+  Activity,
+  Circle,
+  Flame,
+  Lightbulb,
+  Palette,
+  Power,
+  PowerOff,
+  Siren,
+  Sparkles,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 
 import { SeletorDeCor } from "@/components/mestre/seletor-de-cor";
 import {
@@ -20,7 +32,13 @@ import {
   setSelectionLanterna,
 } from "@/lib/mestre/item-actions";
 import { useSceneStore } from "@/lib/store/use-scene-store";
-import { CORES_DA_LUZ, type CanvasItem, type Luz } from "@/types/scene";
+import {
+  CONE_PADRAO,
+  CORES_DA_LUZ,
+  type CanvasItem,
+  type EfeitoDaLuz,
+  type Luz,
+} from "@/types/scene";
 
 /**
  * O nome de cada cor, pelo clima que ela faz.
@@ -40,6 +58,65 @@ export const NOME_DA_COR: Record<(typeof CORES_DA_LUZ)[number], string> = {
 /** O arco-íris que diz "qualquer cor" antes de haver uma escolhida. */
 export const ARCO_IRIS =
   "conic-gradient(#f87171, #facc15, #4ade80, #22d3ee, #818cf8, #e879f9, #f87171)";
+
+/** O efeito como o menu o marca: `fixa` é a AUSÊNCIA de efeito. */
+export type ValorDoEfeito = "fixa" | EfeitoDaLuz;
+
+/**
+ * Os efeitos na ordem em que se oferecem, com o nome e o ícone de cada um. A
+ * fixa na frente, porque é o de sempre e é o que se escolhe de volta.
+ */
+export const OPCOES_DE_EFEITO: ReadonlyArray<{
+  valor: ValorDoEfeito;
+  rotulo: string;
+  Icone: LucideIcon;
+}> = [
+  { valor: "fixa", rotulo: "Fixa", Icone: Lightbulb },
+  { valor: "fogo", rotulo: "Fogo", Icone: Flame },
+  { valor: "pulsando", rotulo: "Pulsando", Icone: Activity },
+  { valor: "piscando", rotulo: "Piscando", Icone: Siren },
+];
+
+/** Do valor do menu para o campo da luz: a fixa grava como ausente. */
+export function efeitoDoValor(valor: ValorDoEfeito): EfeitoDaLuz | undefined {
+  return valor === "fixa" ? undefined : valor;
+}
+
+/** A luz vira cone, ou volta a ser círculo. O círculo grava como ausente. */
+export function patchDaForma(cone: boolean): Pick<Luz, "cone"> {
+  return { cone: cone ? CONE_PADRAO : undefined };
+}
+
+/** Liga ou desliga. A ligada grava como ausente: é a luz de sempre. */
+export function patchDoInterruptor(luz: Luz): Pick<Luz, "desligada"> {
+  return { desligada: luz.desligada ? undefined : true };
+}
+
+/** O submenu do efeito, o mesmo para a luz cravada e para a lanterna. */
+function GrupoDoEfeito({
+  valor,
+  onChange,
+}: {
+  valor: ValorDoEfeito | null;
+  onChange: (efeito: EfeitoDaLuz | undefined) => void;
+}) {
+  return (
+    <ContextMenuRadioGroup
+      aria-label="Efeito da luz"
+      value={valor}
+      onValueChange={(escolhido: ValorDoEfeito) =>
+        onChange(efeitoDoValor(escolhido))
+      }
+    >
+      {OPCOES_DE_EFEITO.map(({ valor: opcao, rotulo, Icone }) => (
+        <ContextMenuRadioItem key={opcao} value={opcao}>
+          <Icone />
+          {rotulo}
+        </ContextMenuRadioItem>
+      ))}
+    </ContextMenuRadioGroup>
+  );
+}
 
 function naPaleta(cor: string): boolean {
   return (CORES_DA_LUZ as readonly string[]).includes(cor);
@@ -156,23 +233,46 @@ export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
             </ContextMenuRadioItem>
           ))}
         </ContextMenuRadioGroup>
+
+        <ContextMenuSeparator />
+        <p
+          aria-hidden
+          className="text-muted-foreground px-1.5 py-1 text-xs font-medium"
+        >
+          Efeito
+        </p>
+        <GrupoDoEfeito
+          valor={lanterna ? (lanterna.efeito ?? "fixa") : null}
+          onChange={(efeito) => setSelectionLanterna({ efeito })}
+        />
       </ContextMenuSubContent>
     </ContextMenuSub>
   );
 }
 
 /**
- * O que se faz com a luz cravada que está selecionada: a cor, e apagá-la.
+ * O que se faz com a luz cravada que está selecionada: a cor, a forma, o
+ * efeito, ligar e desligar, e removê-la.
  *
  * No topo do menu, como o bloco da área escondida: a luz só fica selecionada
  * quando o mestre acabou de encostar no ponto dela, e é dela que ele quer
  * falar. O alcance não está aqui porque tem gesto melhor -- o anel.
+ *
+ * "Remover", e não "apagar": apagar é o que se faz com uma tocha, e aqui é o
+ * DESLIGAR. Com os dois verbos no mesmo menu, o mestre que só queria o
+ * corredor no escuro perderia a tocha.
  */
 export function BlocoDaLuz({ sceneId, luz }: { sceneId: string; luz: Luz }) {
   const updateLuz = useSceneStore((state) => state.updateLuz);
 
   return (
     <>
+      <ContextMenuItem
+        onClick={() => updateLuz(sceneId, luz.id, patchDoInterruptor(luz))}
+      >
+        {luz.desligada ? <Power /> : <PowerOff />}
+        {luz.desligada ? "Ligar luz" : "Desligar luz"}
+      </ContextMenuItem>
       <ContextMenuSub>
         <ContextMenuSubTrigger>
           <Palette />
@@ -193,9 +293,38 @@ export function BlocoDaLuz({ sceneId, luz }: { sceneId: string; luz: Luz }) {
           />
         </ContextMenuSubContent>
       </ContextMenuSub>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <Circle />
+          Forma
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent className="min-w-32">
+          <ContextMenuRadioGroup
+            value={luz.cone ? "cone" : "circulo"}
+            onValueChange={(forma: string) =>
+              updateLuz(sceneId, luz.id, patchDaForma(forma === "cone"))
+            }
+          >
+            <ContextMenuRadioItem value="circulo">Círculo</ContextMenuRadioItem>
+            <ContextMenuRadioItem value="cone">Cone</ContextMenuRadioItem>
+          </ContextMenuRadioGroup>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <Sparkles />
+          Efeito
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent className="min-w-32">
+          <GrupoDoEfeito
+            valor={luz.efeito ?? "fixa"}
+            onChange={(efeito) => updateLuz(sceneId, luz.id, { efeito })}
+          />
+        </ContextMenuSubContent>
+      </ContextMenuSub>
       <ContextMenuItem variant="destructive" onClick={removeLuzSelection}>
         <Trash2 />
-        Apagar luz
+        Remover luz
         <ContextMenuShortcut>Del</ContextMenuShortcut>
       </ContextMenuItem>
 

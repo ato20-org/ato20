@@ -43,6 +43,15 @@ describe("lanternaDaSelecao", () => {
     ).toBeUndefined();
   });
 
+  it("mesma cor e alcance com efeito diferente também discordam", () => {
+    expect(
+      lanternaDaSelecao([
+        token("a", chama),
+        token("b", { ...chama, efeito: "fogo" }),
+      ]),
+    ).toBeUndefined();
+  });
+
   it("sem seleção não há o que marcar", () => {
     expect(lanternaDaSelecao([])).toBeUndefined();
   });

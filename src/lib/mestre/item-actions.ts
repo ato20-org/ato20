@@ -641,7 +641,7 @@ const ALCANCE_DA_LANTERNA_PADRAO = 260;
  *
  * `null` apaga. Um patch mexe só no que traz: trocar a cor não pode encurtar a
  * lanterna que o mestre alongou, e mudar o alcance de uma apagada a acende na
- * cor que ela teria -- a primeira da paleta.
+ * cor que ela teria -- a primeira da paleta. `efeito: undefined` a deixa fixa.
  */
 export function setSelectionLanterna(
   patch: Partial<LuzCarregada> | null,
@@ -658,8 +658,14 @@ export function setSelectionLanterna(
         raio: ALCANCE_DA_LANTERNA_PADRAO,
         cor: CORES_DA_LUZ[0],
       };
+      // A fixa grava como AUSENTE, e não como `efeito: undefined`: é a
+      // lanterna de sempre, e o arquivo não ganha um campo por isso.
+      const { efeito, ...resto } = { ...atual, ...patch };
 
-      return { id: item.id, patch: { luz: { ...atual, ...patch } } };
+      return {
+        id: item.id,
+        patch: { luz: { ...resto, ...(efeito ? { efeito } : {}) } },
+      };
     }),
   );
 }
@@ -679,7 +685,9 @@ export function lanternaDaSelecao(
   const igual = (luz: LuzCarregada | undefined) =>
     primeira === null
       ? luz === undefined
-      : luz?.cor === primeira.cor && luz.raio === primeira.raio;
+      : luz?.cor === primeira.cor &&
+        luz.raio === primeira.raio &&
+        luz.efeito === primeira.efeito;
 
   return items.every((item) => igual(item.luz)) ? primeira : undefined;
 }

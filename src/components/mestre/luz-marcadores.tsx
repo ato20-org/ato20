@@ -7,8 +7,16 @@ import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
-import { raioIntensoDe } from "@/lib/geometry/luz";
-import { SCENE_HEIGHT, SCENE_WIDTH, type Luz, type Scene } from "@/types/scene";
+import { coneDe, raioIntensoDe } from "@/lib/geometry/luz";
+import {
+  ABERTURA_MAXIMA,
+  ABERTURA_MINIMA,
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  type ConeDaLuz,
+  type Luz,
+  type Scene,
+} from "@/types/scene";
 
 /**
  * Tudo aqui em pixels de TELA, dividido pelo `scale` na hora de desenhar.
@@ -39,6 +47,40 @@ const RAIO_INTENSO_MINIMO = 30;
  */
 const RAIO_MAXIMO = 2200;
 
+/** O cinza do contorno do ponto, e do miolo dele quando a luz está desligada. */
+const APAGADO = "rgb(23 23 23 / 0.7)";
+
+/** Um ponto a `raio` do centro da luz, no ângulo dado em graus. */
+function naBorda(luz: Luz, graus: number, raio: number) {
+  const radianos = (graus * Math.PI) / 180;
+  return {
+    x: luz.x + Math.cos(radianos) * raio,
+    y: luz.y + Math.sin(radianos) * raio,
+  };
+}
+
+/**
+ * O trecho `A` de um arco que já começa em `de` e vai, no sentido horário, até
+ * `ate` graus. Sem o `M`: quem chama diz de onde ele sai.
+ */
+function trechoDoArco(luz: Luz, raio: number, de: number, ate: number): string {
+  const fim = naBorda(luz, ate, raio);
+  const grande = ate - de > 180 ? 1 : 0;
+  return `A ${raio} ${raio} 0 ${grande} 1 ${fim.x} ${fim.y}`;
+}
+
+/** O arco de `de` até `ate` graus, sozinho, num caminho de SVG. */
+function arco(luz: Luz, raio: number, de: number, ate: number): string {
+  const inicio = naBorda(luz, de, raio);
+  return `M ${inicio.x} ${inicio.y} ${trechoDoArco(luz, raio, de, ate)}`;
+}
+
+/** Para onde o ponteiro está, visto do centro da luz, em graus de 0 a 360. */
+function anguloAte(luz: Luz, ponta: { x: number; y: number }): number {
+  const graus = (Math.atan2(ponta.y - luz.y, ponta.x - luz.x) * 180) / Math.PI;
+  return (graus + 360) % 360;
+}
+
 /**
  * As luzes cravadas, do jeito que só o Mestre as vê: o ponto e o alcance.
  *
@@ -46,8 +88,18 @@ const RAIO_MAXIMO = 2200;
  * marcador de tocha lá entregaria à mesa onde há luz antes de ela acender. A
  * mesa vê a LUZ, desenhada pela `LuzLayer` -- não o ponto de onde ela sai.
  *
- * O anel é tracejado na cor da luz. Sem ele, com a escuridão em zero, o mestre
- * cravaria a tocha e não teria como saber até onde ela vai.
+ * O anel é tracejado na cor da luz, e só na SELECIONADA: sem ele, com a
+ * escuridão em zero, o mestre cravaria a tocha e não teria como saber até onde
+ * ela vai -- mas com o anel de todas à vista, um mapa com seis tochas vira um
+ * alvo de tiro por cima do que o mestre veio olhar. Largada, a luz fica só com
+ * o ponto, e clicar nele traz o anel de volta.
+ *
+ * O cone troca o anel pelo facho: as duas bordas, o arco do alcance, e três
+ * alças -- a ponta, que aponta e alcança; a da borda, que abre; e a de dentro,
+ * o raio forte, como no círculo.
+ *
+ * A luz desligada continua aqui, com o miolo vazio: é o que diz ao mestre que
+ * a tocha existe e está apagada, e é onde ele clica para acendê-la de novo.
  *
  * A lanterna de um token não aparece aqui: quem a mostra é o próprio token, e
  * o alcance dela se escolhe no menu dele. Ver `SubmenuDaLanterna`.
@@ -130,6 +182,58 @@ export function LuzMarcadores({
     });
   }
 
+  /**
+   * A ponta do cone: para onde ele aponta E até onde vai, num gesto só. É o
+   * gesto de quem mira uma lanterna.
+   */
+  function apontar(event: ReactPointerEvent, luz: Luz, cone: ConeDaLuz) {
+    selectLuz(luz.id);
+
+    arrastar(event, {
+      onMove: (_delta, native) => {
+        const ponta = toScene(native.clientX, native.clientY);
+        const raio = Math.round(
+          Math.min(
+            RAIO_MAXIMO,
+            Math.max(RAIO_MINIMO, Math.hypot(ponta.x - luz.x, ponta.y - luz.y)),
+          ),
+        );
+        updateLuz(scene.id, luz.id, {
+          raio,
+          cone: { ...cone, angulo: Math.round(anguloAte(luz, ponta)) },
+          ...(luz.raioIntenso !== undefined && luz.raioIntenso > raio
+            ? { raioIntenso: raio }
+            : {}),
+        });
+      },
+    });
+  }
+
+  /**
+   * A borda do cone: a abertura é o dobro do ângulo entre o ponteiro e o
+   * eixo. O eixo fica onde está -- abrir o facho não pode virá-lo.
+   */
+  function abrir(event: ReactPointerEvent, luz: Luz, cone: ConeDaLuz) {
+    selectLuz(luz.id);
+
+    arrastar(event, {
+      onMove: (_delta, native) => {
+        const ponta = toScene(native.clientX, native.clientY);
+        const desvio = Math.abs(
+          ((((anguloAte(luz, ponta) - cone.angulo) % 360) + 540) % 360) - 180,
+        );
+        updateLuz(scene.id, luz.id, {
+          cone: {
+            ...cone,
+            abertura: Math.round(
+              Math.min(ABERTURA_MAXIMA, Math.max(ABERTURA_MINIMA, desvio * 2)),
+            ),
+          },
+        });
+      },
+    });
+  }
+
   /** O raio forte, arrastando o anel de dentro. Pela mesma conta do alcance. */
   function ajustarRaioIntenso(event: ReactPointerEvent, luz: Luz) {
     selectLuz(luz.id);
@@ -157,23 +261,27 @@ export function LuzMarcadores({
       {luzes.map((luz) => {
         const selecionada = luz.id === selectedLuzId;
         const intenso = raioIntensoDe(luz.raio, luz.raioIntenso);
+        const cone = coneDe(luz.cone);
+        // A desligada mostra o alcance mais fraco: continua ajustável, mas
+        // não finge que está acendendo nada.
+        const traco = luz.desligada ? 0.45 : 0.9;
 
         return (
           <g key={luz.id}>
-            <circle
-              cx={luz.x}
-              cy={luz.y}
-              r={luz.raio}
-              fill="none"
-              stroke={luz.cor}
-              strokeWidth={1.5 / scale}
-              strokeOpacity={selecionada ? 0.9 : 0.35}
-              strokeDasharray={`${8 / scale} ${6 / scale}`}
-              pointerEvents="none"
-            />
-
-            {selecionada ? (
+            {selecionada && !cone ? (
               <>
+                <circle
+                  cx={luz.x}
+                  cy={luz.y}
+                  r={luz.raio}
+                  fill="none"
+                  stroke={luz.cor}
+                  strokeWidth={1.5 / scale}
+                  strokeOpacity={traco}
+                  strokeDasharray={`${8 / scale} ${6 / scale}`}
+                  pointerEvents="none"
+                />
+
                 {/* A pega do alcance: o anel INTEIRO, numa faixa invisível e
                     larga. O tracejado tem um pixel e meio, e pegar um pixel e
                     meio com o mouse é sorte. O anel todo, e não só a alça: a
@@ -211,9 +319,7 @@ export function LuzMarcadores({
                 </circle>
 
                 {/* O raio FORTE, por dentro do da área: traço mais curto, para
-                    os dois anéis não se confundirem quando ficam perto. Só com
-                    a luz escolhida -- com todas mostrando dois anéis, o mapa
-                    viraria um alvo de tiro. */}
+                    os dois anéis não se confundirem quando ficam perto. */}
                 <circle
                   cx={luz.x}
                   cy={luz.y}
@@ -221,7 +327,7 @@ export function LuzMarcadores({
                   fill="none"
                   stroke={luz.cor}
                   strokeWidth={1.5 / scale}
-                  strokeOpacity={0.9}
+                  strokeOpacity={traco}
                   strokeDasharray={`${3 / scale} ${4 / scale}`}
                   pointerEvents="none"
                 />
@@ -262,12 +368,139 @@ export function LuzMarcadores({
               </>
             ) : null}
 
+            {selecionada && cone
+              ? (() => {
+                  const de = cone.angulo - cone.abertura / 2;
+                  const ate = cone.angulo + cone.abertura / 2;
+                  const ponta = naBorda(luz, cone.angulo, luz.raio);
+                  const borda = naBorda(luz, ate, luz.raio);
+                  const miolo = naBorda(luz, de, intenso);
+                  const comeco = naBorda(luz, de, luz.raio);
+
+                  return (
+                    <>
+                      {/* O facho: as duas bordas e o arco do alcance, num
+                          contorno só. */}
+                      <path
+                        d={`M ${luz.x} ${luz.y} L ${comeco.x} ${comeco.y} ${trechoDoArco(luz, luz.raio, de, ate)} Z`}
+                        fill="none"
+                        stroke={luz.cor}
+                        strokeWidth={1.5 / scale}
+                        strokeOpacity={traco}
+                        strokeDasharray={`${8 / scale} ${6 / scale}`}
+                        strokeLinejoin="round"
+                        pointerEvents="none"
+                      />
+                      {/* A pega do alcance é o ARCO, pela razão do anel: a
+                          ponta pode estar fora da tela. */}
+                      <path
+                        d={arco(luz, luz.raio, de, ate)}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth={PEGA_DO_ANEL_PX / scale}
+                        style={{
+                          pointerEvents: aneisInertes ? "none" : "stroke",
+                          cursor: "ew-resize",
+                        }}
+                        onPointerDown={(event) => ajustarRaio(event, luz)}
+                      />
+
+                      {/* O raio forte, o mesmo traço curto do círculo. */}
+                      <path
+                        d={arco(luz, intenso, de, ate)}
+                        fill="none"
+                        stroke={luz.cor}
+                        strokeWidth={1.5 / scale}
+                        strokeOpacity={traco}
+                        strokeDasharray={`${3 / scale} ${4 / scale}`}
+                        pointerEvents="none"
+                      />
+                      <path
+                        d={arco(luz, intenso, de, ate)}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth={PEGA_DO_ANEL_PX / scale}
+                        style={{
+                          pointerEvents: aneisInertes ? "none" : "stroke",
+                          cursor: "ew-resize",
+                        }}
+                        onPointerDown={(event) =>
+                          ajustarRaioIntenso(event, luz)
+                        }
+                      />
+
+                      {/* As três alças em três lugares: a do raio forte na
+                          borda de um lado, a da abertura na ponta do outro, e
+                          a da direção no eixo. Com os dois raios iguais, a
+                          do forte e a da ponta continuam separadas pela
+                          metade da abertura. */}
+                      <circle
+                        cx={miolo.x}
+                        cy={miolo.y}
+                        r={ALCA_PX / scale}
+                        fill={luz.cor}
+                        stroke="#fff"
+                        strokeWidth={2 / scale}
+                        style={{
+                          pointerEvents: aneisInertes ? "none" : "auto",
+                          cursor: "ew-resize",
+                        }}
+                        onPointerDown={(event) =>
+                          ajustarRaioIntenso(event, luz)
+                        }
+                      >
+                        <title>Raio forte</title>
+                      </circle>
+
+                      {/* A da abertura é um losango, e não um círculo: é a
+                          única que gira em vez de afastar, e a forma diferente
+                          avisa antes do arrasto. */}
+                      <rect
+                        x={borda.x - ALCA_PX / scale}
+                        y={borda.y - ALCA_PX / scale}
+                        width={(ALCA_PX * 2) / scale}
+                        height={(ALCA_PX * 2) / scale}
+                        transform={`rotate(45 ${borda.x} ${borda.y})`}
+                        fill="#fff"
+                        stroke={luz.cor}
+                        strokeWidth={2 / scale}
+                        style={{
+                          pointerEvents: aneisInertes ? "none" : "auto",
+                          cursor: "crosshair",
+                        }}
+                        onPointerDown={(event) => abrir(event, luz, cone)}
+                      >
+                        <title>Abertura do cone</title>
+                      </rect>
+
+                      <circle
+                        cx={ponta.x}
+                        cy={ponta.y}
+                        r={ALCA_PX / scale}
+                        fill="#fff"
+                        stroke={luz.cor}
+                        strokeWidth={2 / scale}
+                        style={{
+                          pointerEvents: aneisInertes ? "none" : "auto",
+                          cursor: "grab",
+                        }}
+                        onPointerDown={(event) => apontar(event, luz, cone)}
+                      >
+                        <title>Direção e alcance</title>
+                      </circle>
+                    </>
+                  );
+                })()
+              : null}
+
             <circle
               cx={luz.x}
               cy={luz.y}
               r={PONTO_PX / scale}
-              fill={luz.cor}
-              stroke={selecionada ? "#fff" : "rgb(23 23 23 / 0.7)"}
+              // Desligada, o miolo é o cinza do contorno e a cor vai para a
+              // borda: a lâmpada apagada, que ainda diz de que cor acende.
+              fill={luz.desligada ? APAGADO : luz.cor}
+              stroke={selecionada ? "#fff" : luz.desligada ? luz.cor : APAGADO}
               strokeWidth={2 / scale}
               style={{
                 pointerEvents: pontosInertes ? "none" : "auto",
