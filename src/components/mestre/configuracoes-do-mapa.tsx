@@ -106,7 +106,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           </div>
 
           <p className="text-muted-foreground text-[10px] leading-snug">
-            O sol não acende nada: só diz para onde a sombra cai.
+            Define para onde a sombra cai.
           </p>
 
           {/* O céu ACIMA da força, e fora do bloco que só existe com o sol
@@ -136,9 +136,8 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           {ligado && sol ? (
             <div className="space-y-4">
               <p className="text-muted-foreground text-[10px] leading-snug">
-                Arraste o sol pelo céu. Perto do meio a sombra encurta; na borda
-                ela se estica. Shift trava de {TRAVA_EM_GRAUS} em{" "}
-                {TRAVA_EM_GRAUS} graus.
+                Arraste o sol. Com Shift, de {TRAVA_EM_GRAUS} em{" "}
+                {TRAVA_EM_GRAUS}°.
               </p>
 
               <Campo rotulo="Força" valor={`${Math.round(sol.forca * 100)}%`}>
@@ -198,8 +197,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           </div>
 
           <p className="text-muted-foreground text-[10px] leading-snug">
-            Desligado, nem o nome sai do aplicativo: a mesa não recebe a lista.
-            Medidor escondido continua escondido, e só você o vê aqui.
+            Medidores escondidos não aparecem.
           </p>
         </section>
       </PopoverContent>
