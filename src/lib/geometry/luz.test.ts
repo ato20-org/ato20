@@ -10,6 +10,7 @@ import {
   FUNDO_DO_PULSO,
   fontesDaCena,
   inicioDoCone,
+  ladoDaLuz,
   paradasDoCone,
   sementeDaLuz,
   TREMIDA_DO_FOGO,
@@ -829,6 +830,61 @@ describe("limitarEscuridao", () => {
     expect(limitarEscuridao(undefined)).toBe(0);
     expect(limitarEscuridao(Number.NaN)).toBe(0);
     expect(limitarEscuridao("0.5")).toBe(0);
+  });
+});
+
+describe("ladoDaLuz", () => {
+  const luz = { x: 0, y: 500, raio: 800 };
+
+  it("vai do lado virado para a luz ao lado oposto", () => {
+    const lado = ladoDaLuz(corpo("t", 400, 500, 35), luz)!;
+
+    expect(lado.de.x).toBeLessThan(400);
+    expect(lado.ate.x).toBeGreaterThan(400);
+    expect(lado.de.y).toBeCloseTo(500);
+    expect(lado.ate.y).toBeCloseTo(500);
+  });
+
+  it("atravessa a caixa inteira na direção da luz", () => {
+    // `corpo` monta uma caixa quadrada de lado raio / 0,35: 100 aqui.
+    const lado = ladoDaLuz(corpo("t", 400, 500, 35), luz)!;
+
+    expect(lado.ate.x - lado.de.x).toBeCloseTo(100);
+  });
+
+  it("a luz vindo de cima põe o lado escuro embaixo", () => {
+    const lado = ladoDaLuz(corpo("t", 0, 900, 35), {
+      x: 0,
+      y: 500,
+      raio: 800,
+    })!;
+
+    expect(lado.de.y).toBeLessThan(lado.ate.y);
+  });
+
+  it("girar a caixa muda o quanto ela ocupa na direção da luz", () => {
+    const reto = corpo("t", 400, 500, 35);
+    const deitado = {
+      ...reto,
+      caixa: { ...reto.caixa, width: 200, height: 40 },
+    };
+    const girado = {
+      ...deitado,
+      caixa: { ...deitado.caixa, rotation: 90 },
+    };
+
+    const largura = (o: Oclusor) => {
+      const lado = ladoDaLuz(o, luz)!;
+      return lado.ate.x - lado.de.x;
+    };
+
+    expect(largura(deitado)).toBeCloseTo(200);
+    expect(largura(girado)).toBeCloseTo(40);
+  });
+
+  it("a lanterna na mão e o token fora do alcance não têm lado", () => {
+    expect(ladoDaLuz(corpo("t", 5, 500, 35), luz)).toBeNull();
+    expect(ladoDaLuz(corpo("t", 5000, 500, 35), luz)).toBeNull();
   });
 });
 

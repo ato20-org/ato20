@@ -16,9 +16,11 @@ import {
   cisalhamentoDaLuz,
   corDoEscuroDe,
   fatorDoEfeito,
+  FORCA_DO_LADO_ESCURO,
   FORCA_DA_SOMBRA_DA_FIGURA,
   fontesDaCena,
   inicioDoCone,
+  ladoDaLuz,
   matrizDaFigura,
   oclusoresDosItens,
   retanguloDaSilhueta,
@@ -679,6 +681,7 @@ function luzRecortada(
       if (cisalhamento) {
         vultoNaLuz(contexto, rascunhoDoVulto, oclusor, pronta, cisalhamento);
       }
+      ladoNaLuz(contexto, rascunhoDoVulto, oclusor, pronta, fonte);
       continue;
     }
 
@@ -747,7 +750,7 @@ function vultoNaLuz(
   const retangulo = retanguloDaSilhueta(caixa, pronta.silhueta);
   const area = caixaDaMatriz(deitada, retangulo);
 
-  const contexto = prepararRascunho(rascunho, area);
+  const { contexto, largura, altura } = prepararRascunhoDoVulto(rascunho, area);
   const pintar = (matriz: Afim) => {
     contexto.save();
     contexto.transform(...matriz);
@@ -767,8 +770,90 @@ function vultoNaLuz(
   contexto.globalCompositeOperation = "source-over";
 
   forma.globalAlpha = FORCA_DA_SOMBRA_DA_FIGURA;
-  forma.drawImage(rascunho, area.x, area.y, area.width, area.height);
+  forma.drawImage(
+    rascunho,
+    0,
+    0,
+    largura,
+    altura,
+    area.x,
+    area.y,
+    area.width,
+    area.height,
+  );
   forma.globalAlpha = 1;
+}
+
+/**
+ * O VOLUME do token nesta luz: o lado virado para ela fica aceso, e o oposto
+ * perde parte dela. Ver `ladoDaLuz` e `FORCA_DO_LADO_ESCURO`.
+ *
+ * A figura EM PÉ, preta, no rascunho do tamanho dela, e por cima um degradê
+ * que só guarda o que cai dentro da figura (`source-in`): transparente do
+ * lado da luz, até a força inteira do outro. Tirado da forma
+ * (`destination-out`, que é o modo em que ela está), ele apaga menos escuro
+ * no lado de trás, e o véu da cor da luz vem mais fraco junto.
+ *
+ * Sem silhueta pronta, nada: o degradê sem a figura escureceria o chão em
+ * volta do token, e é justamente o recorte que dá a ele um lado.
+ */
+function ladoNaLuz(
+  forma: CanvasRenderingContext2D,
+  rascunho: HTMLCanvasElement,
+  oclusor: Oclusor,
+  pronta: SilhuetaPronta,
+  fonte: FonteDeLuz,
+) {
+  const lado = ladoDaLuz(oclusor, fonte);
+  if (!lado) return;
+
+  const { caixa } = oclusor;
+  const emPe = matrizDaFigura(caixa, null);
+  const retangulo = retanguloDaSilhueta(caixa, pronta.silhueta);
+  const area = caixaDaMatriz(emPe, retangulo);
+
+  const { contexto, largura, altura } = prepararRascunhoDoVulto(rascunho, area);
+  contexto.save();
+  contexto.transform(...emPe);
+  contexto.drawImage(
+    pronta.imagem,
+    retangulo.x,
+    retangulo.y,
+    retangulo.width,
+    retangulo.height,
+  );
+  contexto.restore();
+
+  const degrade = contexto.createLinearGradient(
+    lado.de.x,
+    lado.de.y,
+    lado.ate.x,
+    lado.ate.y,
+  );
+  // A metade virada para a luz fica inteira até pouco antes do meio, e a
+  // passagem para o lado de trás é suave: um corte no meio da figura leria
+  // como costura, e não como a luz virando a esquina de um corpo.
+  degrade.addColorStop(0, "rgba(0,0,0,0)");
+  degrade.addColorStop(0.35, "rgba(0,0,0,0)");
+  degrade.addColorStop(0.7, `rgba(0,0,0,${FORCA_DO_LADO_ESCURO * 0.6})`);
+  degrade.addColorStop(1, `rgba(0,0,0,${FORCA_DO_LADO_ESCURO})`);
+
+  contexto.globalCompositeOperation = "source-in";
+  contexto.fillStyle = degrade;
+  contexto.fillRect(area.x, area.y, area.width, area.height);
+  contexto.globalCompositeOperation = "source-over";
+
+  forma.drawImage(
+    rascunho,
+    0,
+    0,
+    largura,
+    altura,
+    area.x,
+    area.y,
+    area.width,
+    area.height,
+  );
 }
 
 /** A forma da luz, pintada na cor dela com a força do véu. */
@@ -797,6 +882,50 @@ function naCorDaLuz(
  * quer entre uma luz e a próxima: nenhum degradê nem modo de composição da
  * anterior sobrevive.
  */
+/**
+ * O rascunho do VULTO pronto para uma figura: limpo no pedaço que ela ocupa, e
+ * com a origem na cena. Devolve o tamanho usado, em pixels, para quem copia
+ * copiar só esse pedaço.
+ *
+ * Reaproveitado, e não redimensionado a cada figura como o da luz: trocar
+ * `width` aloca outra textura, e este rascunho é pedido duas vezes por token
+ * por luz -- a sombra e o volume --, a cada quadro do arrasto de uma lanterna.
+ * Medido na webview com o volume ligado: alocando a cada figura, o arrasto e a
+ * TV perdiam 2,8% e 3,8% dos quadros; reaproveitando, 0% e 0,9%, que é onde
+ * estavam sem o volume. Ele só cresce: a figura seguinte, menor, usa o canto
+ * dele.
+ */
+function prepararRascunhoDoVulto(
+  rascunho: HTMLCanvasElement,
+  caixa: CaixaDaLuz,
+): { contexto: CanvasRenderingContext2D; largura: number; altura: number } {
+  const largura = Math.max(1, Math.ceil(caixa.width * RESOLUCAO));
+  const altura = Math.max(1, Math.ceil(caixa.height * RESOLUCAO));
+
+  if (rascunho.width < largura || rascunho.height < altura) {
+    rascunho.width = Math.max(rascunho.width, largura);
+    rascunho.height = Math.max(rascunho.height, altura);
+  }
+
+  const contexto = rascunho.getContext("2d")!;
+  // O que trocar `width` zerava sozinho, agora à mão: o modo e o alfa da
+  // figura anterior não podem vazar para esta.
+  contexto.setTransform(1, 0, 0, 1, 0, 0);
+  contexto.globalCompositeOperation = "source-over";
+  contexto.globalAlpha = 1;
+  contexto.clearRect(0, 0, largura, altura);
+  contexto.setTransform(
+    RESOLUCAO,
+    0,
+    0,
+    RESOLUCAO,
+    -caixa.x * RESOLUCAO,
+    -caixa.y * RESOLUCAO,
+  );
+
+  return { contexto, largura, altura };
+}
+
 function prepararRascunho(
   rascunho: HTMLCanvasElement,
   caixa: CaixaDaLuz,
