@@ -379,6 +379,26 @@ custa 0,14 ms de JavaScript. No `arrasto` o laço quase não compõe sozinho: a
 lanterna muda a cada quadro, e cada render já forma e compõe na hora, com o
 efeito daquele instante.
 
+### O volume do token
+
+Cada token que uma luz alcança ganha um lado aceso e um lado na penumbra
+(`ladoNaLuz`): a silhueta em pé, com um degradê por cima, tirada da forma da
+luz. É um rascunho por token por luz, somado ao da sombra que ele já deitava.
+Mesma bancada da luz, `--repetir 3`:
+
+| cenário | sem volume | volume, rascunho alocado por figura | volume, rascunho reaproveitado |
+| --- | --- | --- | --- |
+| `arrasto` | 60 fps, 0% | 59,8 fps, 2,8% | 60 fps, 0% |
+| `mestre-camera` | 60 fps, 0,3% | 60 fps, 0% | 60 fps, 0% |
+| `amostras` (a TV) | 59,9 fps, 0,3% | 58 fps, 3,8% | 60 fps, 0% |
+
+O custo não era o degradê: era trocar o `width` do rascunho a cada figura, que
+aloca outra textura, agora duas vezes por token por luz a cada quadro do
+arrasto de uma lanterna. O rascunho do vulto passou a só crescer
+(`prepararRascunhoDoVulto`), e o desenho saiu idêntico pixel a pixel ao de
+antes. A cor do escuro não entra na conta: é o mesmo `fillRect`, com outra
+cor.
+
 ---
 
 ## Como medir: o passo a passo
