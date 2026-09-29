@@ -4,6 +4,14 @@ import type { ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import type { Componentes, Experimental } from "@/lib/extensoes/componentes";
+import type { ResultadoDaRolagem } from "@/lib/extensoes/dados";
+import type {
+  MudancaDeCondicaoLida,
+  MudancaDeMedidorLida,
+} from "@/lib/extensoes/diferencas";
+import type { PatchDePlugin } from "@/lib/extensoes/lote-de-medidores";
+import type { Condicao, Personagem } from "@/types/character";
+import type { FacesDado } from "@/types/dado";
 import type { CanvasItem, Scene } from "@/types/scene";
 
 /**
@@ -27,8 +35,10 @@ import type { CanvasItem, Scene } from "@/types/scene";
 /**
  * A versão do contrato. O manifesto declara qual ele fala.
  *
- * A 2 acrescentou `janelas`, `config`, `ui.componentes`, `ui.experimental` e
- * `ui.icones`, e o `parametro` do painel. Nada da 1 saiu: um plugin que pede 1
+ * A 2 acrescentou `janelas`, `config`, `personagens` inteiro, `dados`,
+ * `eventos`, `ui.componentes`, `ui.experimental` e `ui.icones`, e o
+ * `parametro` do painel. `personagens.listar` passou a devolver o personagem
+ * inteiro -- um superconjunto do `{id, nome}` da 1. Nada da 1 saiu: um plugin que pede 1
  * recebe o mesmo objeto, com o novo ao lado.
  */
 export const API_VERSAO_ATUAL = 2;
@@ -103,6 +113,17 @@ export type CamadaRegistrada = {
 /** O que todo `registrar.*` devolve: a função que desfaz. */
 export type Desfazer = () => void;
 
+/** Um dado que caiu, de quem quer que seja. */
+export type RolagemLida = {
+  origem: "mestre" | "jogador";
+  faces: FacesDado;
+  /** O que a mesa soma: no d10 o zero vale dez. */
+  valor: number;
+  /** Só nas do jogador. */
+  jogador?: string;
+  personagemId?: string;
+};
+
 export type Ato20Api = {
   /** A versão do contrato que este aplicativo implementa. */
   versao: number;
@@ -150,8 +171,82 @@ export type Ato20Api = {
     gravarDados: (valor: unknown) => void;
   };
 
+  /**
+   * O elenco: ler, assinar, mexer nos medidores e nas condições, e guardar o
+   * que é do plugin em cada personagem.
+   *
+   * A leitura é a do MESTRE: medidor e condição escondidos vêm junto. O
+   * plugin roda na janela do mestre, e é ele quem decide o que a mesa vê.
+   */
   personagens: {
-    listar: () => ReadonlyArray<{ id: string; nome: string }>;
+    /** Cópias rasas, com medidores e condições. Mexer nelas não mexe em nada. */
+    listar: () => ReadonlyArray<Readonly<Personagem>>;
+    obter: (personagemId: string) => Readonly<Personagem> | null;
+    /** A cada releitura do elenco. Devolve a função que cancela. */
+    assinar: (aviso: (personagens: ReadonlyArray<Readonly<Personagem>>) => void) => Desfazer;
+
+    /**
+     * Muda um medidor. Nome, cor, valor, teto, escondido -- nunca o estilo,
+     * que é assunto do PR dos estilos.
+     *
+     * EM LOTE: dez chamadas no mesmo laço viram uma gravação e uma releitura.
+     * Resolve quando o lote foi gravado e o elenco relido; o valor gravado
+     * pode diferir do pedido (o teto puxa o valor), e é na releitura que ele
+     * aparece. Ver `lote-de-medidores.ts`.
+     */
+    ajustarMedidor: (personagemId: string, medidorId: string, patch: PatchDePlugin) => Promise<void>;
+
+    /** O cardápio de condições da campanha. */
+    cardapioDeCondicoes: () => Promise<ReadonlyArray<Readonly<Condicao>>>;
+    /**
+     * Liga ou desliga uma condição do cardápio em vários personagens de uma
+     * vez, gravando uma vez. Devolve quantos mudaram.
+     */
+    alternarCondicao: (personagemIds: readonly string[], modeloId: string, ligar: boolean) => Promise<number>;
+
+    /**
+     * O guardado DESTE plugin num personagem, em duas metades.
+     *
+     * `privado` nunca sai do Mestre. `publico` é o que o celular do dono do
+     * personagem pode receber. Mora em `personagens/{id}/_extensoes.json`,
+     * viaja no zip, e cabe em 64 KB por plugin. `gravarDados` com uma metade
+     * ausente a deixa como está; `null` apaga.
+     */
+    dados: (personagemId: string) => Promise<{ privado: unknown; publico: unknown }>;
+    gravarDados: (
+      personagemId: string,
+      metades: { privado?: unknown; publico?: unknown },
+    ) => Promise<{ privado: unknown; publico: unknown }>;
+  };
+
+  /**
+   * Joga dados de verdade no palco do Mestre, e resolve quando eles caem.
+   *
+   * `["1d20", "1d4"]` -- a notação da paleta, sem modificador: `+3` é conta
+   * do plugin. `total` soma o que entra na soma (a moeda não). Só o Mestre vê
+   * os dados. Rejeita com notação inválida ou mesa cheia.
+   */
+  dados: {
+    rolar: (notacoes: readonly string[]) => Promise<ResultadoDaRolagem>;
+  };
+
+  /**
+   * O que acontece na mesa, para quem automatiza.
+   *
+   * Saem da RELEITURA do elenco e dos stores, e não de um gancho em cada
+   * escrita: quem escreve é o Rust por dezenas de caminhos, e comparar a
+   * leitura nova com a anterior é o único lugar por onde toda mudança passa.
+   * A primeira leitura da campanha não conta como mudança.
+   */
+  eventos: {
+    aoMudarMedidor: (aviso: (mudanca: MudancaDeMedidorLida) => void) => Desfazer;
+    aoAlternarCondicao: (aviso: (mudanca: MudancaDeCondicaoLida) => void) => Desfazer;
+    /** Todo dado que cai: os do mestre e os que os jogadores rolam no celular. */
+    aoRolar: (aviso: (rolagem: RolagemLida) => void) => Desfazer;
+    /** A cena em edição mudou. `null` quando nenhuma. */
+    aoTrocarCena: (aviso: (cena: CenaResumo | null) => void) => Desfazer;
+    /** A cena no ar mudou -- o que a mesa vê. `null` quando nada no ar. */
+    aoPorNoAr: (aviso: (cena: CenaResumo | null) => void) => Desfazer;
   };
 
   /**
