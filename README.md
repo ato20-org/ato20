@@ -1,8 +1,20 @@
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/assets/logo-white.png">
+  <img src="src/assets/logo-black.png" alt="Logo do ATO20: um d20 entre as cortinas de um palco" width="180">
+</picture>
+
 # ATO20
 
-Ferramenta para organizar e exibir cenas de RPG de mesa.
+O ATO20 é um VTT (*virtual tabletop*) open source, pensado para facilitar a organização e o
+gerenciamento de campanhas de RPG. Na mesa, o controle de câmera avançado traz imersão de
+verdade aos jogadores; fora dela, o mestre mantém os documentos atualizados e a história
+organizada no mesmo lugar.
 
-Feita para jogo presencial: o mestre monta a próxima cena no notebook enquanto a mesa
+</div>
+
+Feito para jogo presencial: o mestre monta a próxima cena no notebook enquanto a mesa
 continua vendo a atual na TV, e cada jogador acompanha pelo próprio celular.
 
 **Projeto pessoal.** Aplicativo de desktop, sem servidor e sem conta.
@@ -34,6 +46,9 @@ sozinho** quando sai versão nova.
 
 ## Por quê
 
+O ATO20 foi criado em retribuição à comunidade de RPG de mesa. A ideia é ser uma solução
+simples, com alcance que vai da mesa mais simples à mais complexa.
+
 A cena **em edição** e a cena **no ar** são separadas — é isso que permite preparar a
 próxima enquanto a mesa segue na atual.
 
@@ -53,6 +68,20 @@ custo não existe, e o teto passa a ser o HD.
 O porquê de o Mestre ser o aplicativo e as outras duas o navegador está em
 [Três telas](docs/telas.md).
 
+## Além da mesa
+
+A campanha não é só o que vai para a TV. O **quadro** é uma folha sem chão para o mestre
+pensar: texto direto na folha, setas que seguem o que você move, post-it, imagem, dado e
+cartão no mesmo lugar. A **nota** é Markdown com prévia ao vivo, e `@`, `/` e `>` chamam
+referência, comando e citação.
+
+A aba **Arquivos** põe quadros, notas e imagens na mesma árvore de pastas, e a nota é
+arquivo da campanha: o cartão no quadro só aponta para ela, então a mesma nota aparece em
+dois quadros sem virar duas cópias. Pôr o quadro no ar mostra a folha inteira na TV e no
+celular.
+
+![A nota fixada no mapa, depois o Quadro 1 aberto pela aba Arquivos: a Frente de Ferro, com Bruno, o Inimigo, a granada, setas e post-it](docs/midia/arquivos.gif)
+
 ## O que já funciona
 
 - **Mestre: completo.** Abre a pasta, grava as cenas, envia imagens e sons.
@@ -69,6 +98,10 @@ O porquê de o Mestre ser o aplicativo e as outras duas o navegador está em
   `empacotar/flatpak/` e monta um Flatpak que abre e roda; o que falta é a submissão.
 
 ## Filosofia
+
+**A câmera é de quem narra.** Cada cena guarda câmeras com nome, e pôr no ar é escolher uma:
+a TV troca em fade e acompanha o movimento sem solavanco, e segurando V o mouse do mestre
+vira cinegrafista. A mesa vê o enquadramento, e o mestre vê também o que ela ainda não viu.
 
 **Uma campanha é uma pasta.** O modelo é o do Obsidian: você aponta o aplicativo para uma
 pasta, e ela é a campanha. Trocar de máquina é copiar a pasta.
