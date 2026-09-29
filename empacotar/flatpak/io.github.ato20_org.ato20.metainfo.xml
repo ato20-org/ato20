@@ -100,6 +100,24 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.7.1" date="2026-09-29">
+      <description>
+        <p>
+          The map turned black in the viewer window after undoing a background
+          change. Changing or removing a background deletes the old map from
+          the campaign, and Ctrl+Z pointed the scene back at it. The screen kept
+          showing the cached image, and the viewer window went black later.
+          Ctrl+Z no longer touches the background: to go back to the previous
+          map, change it again from the scene menu.
+        </p>
+        <p>
+          The section of a disabled plugin stayed on the player's phone, with a
+          button that no longer did anything. It now goes away when the plugin
+          is disabled or uninstalled, and comes back with what was stored if
+          the plugin returns.
+        </p>
+      </description>
+    </release>
     <release version="0.7.0" date="2026-09-29">
       <description>
         <p>

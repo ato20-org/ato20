@@ -56,6 +56,24 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.7.1",
+    data: "2026-09-29",
+    mudancas: [
+      {
+        tipo: "correcao",
+        titulo: "O mapa ficava preto na janela do espectador depois de desfazer uma troca de fundo",
+        detalhe:
+          "Trocar ou tirar o fundo apaga o mapa antigo da campanha, e o Ctrl+Z devolvia a cena para ele. A tela seguia mostrando a imagem guardada, e a janela do espectador ficava preta mais tarde. O Ctrl+Z não mexe mais no fundo: para voltar ao mapa anterior, troque de novo pelo menu da cena.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "A seção de um plugin desligado continuava no celular do jogador",
+        detalhe:
+          "Com um botão que não fazia mais nada. Agora ela some quando o plugin é desligado ou desinstalado, e volta com o que estava guardado se ele voltar.",
+      },
+    ],
+  },
+  {
     versao: "0.7.0",
     data: "2026-09-29",
     mudancas: [
