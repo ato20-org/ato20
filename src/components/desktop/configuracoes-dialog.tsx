@@ -12,10 +12,12 @@ import {
   Plus,
   Puzzle,
   Settings,
+  Settings2,
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
 
+import { ListaDeConfiguracoes } from "@/components/desktop/lista-de-configuracoes";
 import { ChromeButton } from "@/components/desktop/window-chrome";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +50,7 @@ import {
  */
 const SECOES = [
   { chave: "geral", titulo: "Geral", icone: SlidersHorizontal },
+  { chave: "ajustes", titulo: "Ajustes", icone: Settings2 },
   { chave: "versao", titulo: "Versão", icone: History },
   { chave: "teclado", titulo: "Teclado", icone: Keyboard },
   { chave: "plugins", titulo: "Plugins", icone: Puzzle },
@@ -142,6 +145,7 @@ export function ConfiguracoesDialog() {
                 diálogo e cairia sobre o título da seção. */}
             <div className="flex flex-col gap-4 p-4 pr-10">
               {secao === "geral" ? <PainelGeral /> : null}
+              {secao === "ajustes" ? <PainelAjustes /> : null}
               {secao === "versao" ? <PainelVersao /> : null}
               {secao === "teclado" ? <PainelTeclado /> : null}
               {secao === "plugins" ? <PainelPlugins /> : null}
@@ -176,6 +180,25 @@ function PainelGeral() {
       <SecaoZoom />
       <Separator />
       <SecaoTema />
+    </>
+  );
+}
+
+/**
+ * Tudo que o ATO20 e os plugins deixam ajustar, gerado do registro.
+ *
+ * Seção própria, ao lado de Geral e não no lugar dela: Geral tem os controles
+ * desenhados à mão para o que se mexe todo dia -- o zoom em degraus, o tema
+ * --, e a lista gerada é o catálogo inteiro, com busca e o arquivo cru. É o
+ * par "UI / JSON" do VSCode.
+ */
+function PainelAjustes() {
+  return (
+    <>
+      <TituloSecao ajuda="O que o ATO20 e os plugins deixam ajustar, por máquina e por campanha. A campanha vence.">
+        Ajustes
+      </TituloSecao>
+      <ListaDeConfiguracoes />
     </>
   );
 }

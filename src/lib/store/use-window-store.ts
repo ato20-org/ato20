@@ -62,7 +62,21 @@ export type ConteudoJanela =
   //
   // Unica variante que o aplicativo nao sabe desenhar sozinho -- ver
   // `PainelDeExtensao`, que carrega o modulo e mostra o que faltar.
-  | { tipo: "extensao"; extensaoId: string; painelId: string };
+  //
+  // `parametro` e o que deixa o MESMO painel abrir mais de uma vez, com
+  // identidades diferentes: a ficha de iniciativa do Edgar e a da Mira sao o
+  // painel `ficha` com dois parametros, e duas janelas. Sem ele a chave era o
+  // painel, e um plugin so alcancava uma instancia. String e nao objeto porque
+  // a chave e texto e o layout vai ao `localStorage`; o plugin serializa o que
+  // precisar. `titulo` e o rotulo dessa instancia -- "Edgar" --, e quando
+  // falta vale o do manifesto.
+  | {
+      tipo: "extensao";
+      extensaoId: string;
+      painelId: string;
+      parametro?: string;
+      titulo?: string;
+    };
 
 /**
  * A chave de uma janela, derivada do conteúdo.
@@ -103,8 +117,11 @@ export function chaveDe(conteudo: ConteudoJanela): string {
       return conteudo.tipo;
     // A extensao entra na chave: dois plugins podem chamar o painel de `notas`,
     // e sem o dono os dois disputariam a mesma janela.
+    // O parametro tambem: e ele que separa duas instancias do mesmo painel.
     case "extensao":
-      return `extensao:${conteudo.extensaoId}/${conteudo.painelId}`;
+      return `extensao:${conteudo.extensaoId}/${conteudo.painelId}${
+        conteudo.parametro !== undefined ? `?${conteudo.parametro}` : ""
+      }`;
   }
 }
 

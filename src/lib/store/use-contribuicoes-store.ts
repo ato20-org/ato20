@@ -28,11 +28,21 @@ import type { FerramentaRegistrada } from "@/lib/extensoes/api";
 export type EstadoCarga = "ausente" | "carregando" | "pronta" | "falhou";
 
 type Registros = {
-  paineis: Record<string, ComponentType>;
+  /** O corpo recebe `parametro` quando a janela foi aberta com um. */
+  paineis: Record<string, ComponentType<{ parametro?: string }>>;
   comandos: Record<string, () => void | Promise<void>>;
   ferramentas: Record<string, FerramentaRegistrada>;
   camadas: Record<string, ComponentType>;
 };
+
+/**
+ * As tabelas, para quem precisa passar por todas.
+ *
+ * Uma lista escrita uma vez, e não a repetição das chaves em cada lugar: o
+ * `esquecer` limpava as quatro à mão, e a quinta tabela que entrasse ficaria
+ * de fora dele -- um plugin desligado deixaria a contribuição nova viva.
+ */
+const TIPOS = ["paineis", "comandos", "ferramentas", "camadas"] as const satisfies ReadonlyArray<keyof Registros>;
 
 type ContribuicoesStore = Registros & {
   /** Por id de extensão. `erro` só existe em `falhou`. */
@@ -91,13 +101,17 @@ export const useContribuicoesStore = create<ContribuicoesStore>((set) => ({
       const carga = { ...atual.carga };
       delete carga[extensaoId];
 
-      return {
-        paineis: semAsDaExtensao(atual.paineis, extensaoId),
-        comandos: semAsDaExtensao(atual.comandos, extensaoId),
-        ferramentas: semAsDaExtensao(atual.ferramentas, extensaoId),
-        camadas: semAsDaExtensao(atual.camadas, extensaoId),
-        carga,
-      };
+      const limpas: Partial<Registros> = {};
+      for (const tipo of TIPOS) {
+        // Uma tabela por vez, com o tipo dela: a união dos quatro `Record`
+        // não cabe num único `semAsDaExtensao<V>`.
+        (limpas as Record<string, unknown>)[tipo] = semAsDaExtensao(
+          atual[tipo] as Record<string, unknown>,
+          extensaoId,
+        );
+      }
+
+      return { ...limpas, carga };
     });
   },
 }));

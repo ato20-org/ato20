@@ -8,13 +8,23 @@ import {
   resumoDaCena,
   type Ato20Api,
   type Desfazer,
+  type JanelaDeExtensao,
   type ModuloExtensao,
 } from "@/lib/extensoes/api";
+import {
+  assinarConfiguracao,
+  useConfiguracoesStore,
+  valorDe,
+} from "@/lib/configuracoes/registro";
+import { COMPONENTES, EXPERIMENTAL } from "@/lib/extensoes/componentes";
+import { ICONES } from "@/lib/extensoes/icones";
+import { abrirJanela, fecharJanela } from "@/lib/extensoes/janelas";
 import {
   chaveContribuicao,
   urlDaExtensao,
   type Extensao,
 } from "@/lib/extensoes/manifesto";
+import { chaveDe, type ConteudoJanela } from "@/lib/store/use-window-store";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
@@ -178,6 +188,30 @@ export function descarregar(extensaoId: string): void {
 }
 
 /**
+ * Traduz o pedido do plugin para o descritor de janela do aplicativo.
+ *
+ * O painel é sempre DESTE plugin: o id da extensão entra aqui, e não vem do
+ * plugin, para um não conseguir abrir nem fechar a janela de outro.
+ */
+function conteudoDe(extensaoId: string, janela: JanelaDeExtensao): ConteudoJanela {
+  if ("painel" in janela) {
+    return {
+      tipo: "extensao",
+      extensaoId,
+      painelId: janela.painel,
+      parametro: janela.parametro,
+      titulo: janela.titulo,
+    };
+  }
+
+  if (janela.tela === "personagem") {
+    return { tipo: "personagem", personagemId: janela.personagemId };
+  }
+
+  return { tipo: janela.tela };
+}
+
+/**
  * Monta o objeto que o plugin recebe.
  *
  * Cada `registrar.*` devolve a função que desfaz E a empilha na lista da
@@ -278,12 +312,40 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
         ),
     },
 
+    config: {
+      ler: (chave) => valorDe(chave),
+
+      gravar(chave, valor, escopo) {
+        // A cerca: só o que começa com o id deste plugin. Não é `ui.erro`
+        // porque é erro de quem escreveu o plugin, não do mestre -- e o
+        // `false` chega a quem pode consertar.
+        if (!chave.startsWith(`${extensao.id}.`)) return false;
+
+        return useConfiguracoesStore.getState().gravar(chave, valor, escopo);
+      },
+
+      assinar(chave, aviso) {
+        const desfazer = assinarConfiguracao(chave, aviso);
+        registrados.push(desfazer);
+
+        return desfazer;
+      },
+    },
+
+    janelas: {
+      abrir: (janela) => abrirJanela(conteudoDe(extensao.id, janela)),
+      fechar: (janela) => fecharJanela(chaveDe(conteudoDe(extensao.id, janela))),
+    },
+
     ui: {
       // Prefixado com o nome da extensão: um aviso sem dono, no meio da
       // sessão, manda o mestre procurar no aplicativo um problema que é de um
       // plugin que ele instalou.
       aviso: (texto) => toast(texto, { description: extensao.nome }),
       erro: (texto) => toast.error(texto, { description: extensao.nome }),
+      componentes: COMPONENTES,
+      experimental: EXPERIMENTAL,
+      icones: ICONES,
     },
 
     registrar: {

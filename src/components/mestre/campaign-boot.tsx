@@ -13,6 +13,7 @@ import { useTrackStore } from "@/lib/store/use-track-store";
 import { esquecerAcervo } from "@/lib/store/use-assets-store";
 import { carregarPersonagens, esquecerPersonagens } from "@/lib/store/use-characters-store";
 import { esquecerCondicoes } from "@/lib/store/use-condicoes-store";
+import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { listAssets } from "@/lib/vault/assets";
 import { listFolders } from "@/lib/vault/folders";
 import type { CampaignInfo } from "@/lib/vault/campaign";
@@ -77,6 +78,9 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       esquecerAcervo();
       esquecerPersonagens();
       esquecerCondicoes();
+      // As configurações da campanha anterior também: sem isto, o zoom que a
+      // outra mesa pedia continuaria valendo nesta até o arquivo dela chegar.
+      useConfiguracoesStore.getState().esquecer("campanha");
 
       try {
         await hydrateBoard(campaign.path);
@@ -85,9 +89,13 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
 
         // Retratos e trilha em paralelo: são dois arquivos independentes, e
         // nenhum depende do outro.
+        // As configurações da campanha vão junto: outro arquivo independente,
+        // e um que nunca falha a abertura -- ilegível vira erro na tela de
+        // Configurações e os padrões seguem valendo.
         await Promise.all([
           hydratePortraits(campaign.path),
           hydrateTrack(campaign.path),
+          useConfiguracoesStore.getState().carregar("campanha"),
         ]);
         if (!ativo) return;
         setFase("acervo");
