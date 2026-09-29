@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::configuracoes::{self, Escopo};
 use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
 use crate::estante;
@@ -34,6 +35,9 @@ pub struct AppState {
     pub estante: PathBuf,
     /// Onde as extensoes moram. O mesmo que o protocolo `ato20-ext` serve.
     pub extensoes: PathBuf,
+    /// O diretorio de configuracao do app: o `ato20.db` e o
+    /// `configuracoes.json` da maquina.
+    pub config_dir: PathBuf,
 }
 
 impl AppState {
@@ -2001,6 +2005,57 @@ pub fn extensao_habilitar(
     }
 
     state.db.extensao_marcar(&id, habilitada)
+}
+
+/// O caminho do `configuracoes.json` de um escopo.
+///
+/// O da campanha passa por `with_vault`: sem campanha aberta nao ha arquivo, e
+/// o erro e `NoCampaign`, que a tela ja sabe mostrar.
+fn caminho_das_configuracoes(state: &AppState, escopo: Escopo) -> AppResult<PathBuf> {
+    match escopo {
+        Escopo::Maquina => Ok(configuracoes::caminho_da_maquina(&state.config_dir)),
+        Escopo::Campanha => {
+            state.with_vault(|vault| Ok(configuracoes::caminho_da_campanha(vault)))
+        }
+    }
+}
+
+/// Le o `configuracoes.json` de um escopo, inteiro. Ausente e `{}`.
+#[tauri::command]
+pub fn configuracoes_ler(state: State<'_, AppState>, escopo: Escopo) -> AppResult<Json> {
+    configuracoes::ler(&caminho_das_configuracoes(&state, escopo)?)
+}
+
+/// Grava o `configuracoes.json` de um escopo, inteiro.
+///
+/// Inteiro e nao uma chave: quem sabe o que vale e a tela, que junta os
+/// padroes com o que o mestre mudou e manda o objeto pronto. Uma rota por
+/// chave obrigaria o Rust a ler-modificar-gravar a cada mudanca, com a
+/// janela classica entre duas mudancas seguidas.
+#[tauri::command]
+pub fn configuracoes_gravar(
+    state: State<'_, AppState>,
+    escopo: Escopo,
+    valor: Json,
+) -> AppResult<()> {
+    configuracoes::gravar(&caminho_das_configuracoes(&state, escopo)?, &valor)
+}
+
+/// Abre o `configuracoes.json` no editor da maquina.
+///
+/// E o "Open Settings (JSON)" do VSCode: o arquivo existe para ser editado a
+/// mao, e quem prefere o editor a uma lista de campos tem por onde. Cria o
+/// arquivo vazio se ainda nao houver, senao o editor abriria nada.
+#[tauri::command]
+pub fn configuracoes_abrir_arquivo(
+    state: State<'_, AppState>,
+    escopo: Escopo,
+) -> AppResult<()> {
+    let caminho = caminho_das_configuracoes(&state, escopo)?;
+    configuracoes::garantir(&caminho)?;
+
+    tauri_plugin_opener::open_path(&caminho, None::<&str>)
+        .map_err(|cause| AppError::Io(std::io::Error::other(cause.to_string())))
 }
 
 #[cfg(test)]

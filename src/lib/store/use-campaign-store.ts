@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import { flushPortraits } from "@/lib/store/use-portrait-store";
 import { flushBoard } from "@/lib/store/use-scene-store";
+import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { aoSumirCampanha, isDesktop, VaultError } from "@/lib/vault/bridge";
 import {
@@ -346,6 +347,8 @@ export const useCampaignStore = create<CampaignStore>((set, get) => {
       // campanha aberta, e é isso que faz o daemon seguir servindo os arquivos
       // para a TV e para os celulares enquanto o mestre olha a lista.
       set({ campaign: null, status: "escolhendo", error: null });
+      // As configurações da campanha saem com ela: na porta vale o da máquina.
+      useConfiguracoesStore.getState().esquecer("campanha");
       void refreshRecents().then((recents) => set({ recents }));
     },
   };

@@ -11,6 +11,11 @@ import {
   type JanelaDeExtensao,
   type ModuloExtensao,
 } from "@/lib/extensoes/api";
+import {
+  assinarConfiguracao,
+  useConfiguracoesStore,
+  valorDe,
+} from "@/lib/configuracoes/registro";
 import { COMPONENTES, EXPERIMENTAL } from "@/lib/extensoes/componentes";
 import { ICONES } from "@/lib/extensoes/icones";
 import { abrirJanela, fecharJanela } from "@/lib/extensoes/janelas";
@@ -305,6 +310,26 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
         (useCharactersStore.getState().personagens ?? []).map(
           ({ id, nome }) => ({ id, nome }),
         ),
+    },
+
+    config: {
+      ler: (chave) => valorDe(chave),
+
+      gravar(chave, valor, escopo) {
+        // A cerca: só o que começa com o id deste plugin. Não é `ui.erro`
+        // porque é erro de quem escreveu o plugin, não do mestre -- e o
+        // `false` chega a quem pode consertar.
+        if (!chave.startsWith(`${extensao.id}.`)) return false;
+
+        return useConfiguracoesStore.getState().gravar(chave, valor, escopo);
+      },
+
+      assinar(chave, aviso) {
+        const desfazer = assinarConfiguracao(chave, aviso);
+        registrados.push(desfazer);
+
+        return desfazer;
+      },
     },
 
     janelas: {

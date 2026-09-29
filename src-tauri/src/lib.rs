@@ -1,5 +1,6 @@
 mod appimage;
 mod commands;
+mod configuracoes;
 mod db;
 mod error;
 mod estante;
@@ -116,8 +117,8 @@ pub fn run() {
             // O banco da maquina fica no diretorio de configuracao do app, e
             // nao dentro de campanha nenhuma: ele guarda a lista de campanhas,
             // e uma lista nao pode morar num dos itens que lista.
-            let db_path = app.path().app_config_dir()?.join("ato20.db");
-            let db = AppDb::open(&db_path)?;
+            let config_dir = app.path().app_config_dir()?;
+            let db = AppDb::open(&config_dir.join("ato20.db"))?;
 
             // A estante fica no diretorio de DADOS, e nao junto do banco: um
             // manual de trezentas paginas nao e preferencia de maquina. Ver
@@ -164,6 +165,7 @@ pub fn run() {
                 evidence: started.evidence,
                 estante,
                 extensoes,
+                config_dir,
             });
 
             relogio_da_mesa(app.handle().clone());
@@ -279,6 +281,9 @@ pub fn run() {
             commands::extensao_importar,
             commands::extensao_remover,
             commands::extensao_habilitar,
+            commands::configuracoes_ler,
+            commands::configuracoes_gravar,
+            commands::configuracoes_abrir_arquivo,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

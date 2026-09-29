@@ -73,6 +73,7 @@ minha-campanha/
   pastas.json
   retratos.json        quem está no ar, em que canto, de que tamanho
   trilha.json
+  configuracoes.json   o que vale só nesta campanha; vence o da máquina
   jogadores/
     a8b9.../
       historico-ana.txt   o que cada jogador anexou
@@ -904,6 +905,47 @@ painel do plugin aceita um **`parametro`**: é o que faz o mesmo painel abrir
 como "Edgar" e como "Mira", em duas janelas, cada uma lembrando a própria
 posição. O corpo o recebe como prop. E um plugin só abre e fecha as janelas
 **dele**: o id da extensão entra na chave pelo aplicativo, não pelo plugin.
+
+### Configurações, como no VSCode
+
+Um registro só para o aplicativo e para os plugins, em dois arquivos:
+`{config do app}/configuracoes.json` para a **máquina** e
+`{campanha}/configuracoes.json` para a **campanha**, que viaja no zip. A
+campanha vence a máquina, e a máquina vence o padrão — é o par User/Workspace.
+O arquivo guarda só o que difere do padrão, então um padrão que muda numa
+versão nova não reescreve o arquivo de ninguém.
+
+O plugin declara as dele no manifesto, sem uma linha de JS:
+
+```json
+"configuracoes": [
+  { "chave": "meu-plugin.cor", "titulo": "Cor", "tipo": "escolha",
+    "padrao": "azul", "opcoes": ["azul", "rubi"], "escopo": "campanha" }
+]
+```
+
+Quatro tipos — `booleano`, `numero`, `texto`, `escolha` — e a **chave começa
+com o id do plugin**: é o que impede dois plugins de disputarem `cor`, e um
+plugin de redefinir `ato20.zoom`. O Rust valida a declaração na importação (o
+padrão é do tipo, a escolha tem opções, o número cabe no intervalo); a tela
+valida o valor gravado na leitura, e um valor que não serve é pulado em vez de
+quebrar — o arquivo pode ter sido editado à mão.
+
+Configurações → Ajustes desenha a lista a partir do que foi declarado, com
+busca, agrupada por dono, e um botão **JSON** para editar o arquivo cru no
+lugar. JSON inválido não salva, e a linha do erro aparece embaixo. O ícone ao
+lado abre o arquivo no editor da máquina. É um `textarea`, e não um editor de
+código: o projeto não tem nenhum, e trazer um pela primeira vez para um arquivo
+de dez linhas pesaria no bundle do Mestre para todo mundo.
+
+Na API: `api.config.ler(chave)` lê qualquer chave declarada, inclusive as do
+aplicativo; `gravar(chave, valor)` só as do próprio plugin, e devolve `false`
+para chave alheia ou valor do tipo errado; `assinar(chave, aviso)` acorda
+quando o valor que **vale** muda, pela tela, pelo editor ou por outra gravação.
+
+**O zoom, o aviso de versão e os quatro faders saíram do `localStorage`** e
+viraram `ato20.*` no mesmo registro. A chave antiga é lida uma vez na primeira
+abertura desta versão, copiada para o arquivo e apagada.
 
 ### Atalho de plugin não rouba atalho do aplicativo
 
