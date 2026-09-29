@@ -4,6 +4,7 @@ pub mod atomic;
 pub mod board;
 pub mod characters;
 pub mod condicoes;
+pub mod dados_de_extensao;
 pub mod documentos;
 pub mod inventory;
 pub mod mime;
