@@ -18,11 +18,13 @@ import { daemonAddr } from "@/lib/vault/bridge";
  *
  * Um arquivo que não lê, ou que não sobra nada depois do filtro, simplesmente
  * não entra: o medidor que o pedia desenha a barra de fábrica, que é o que ele
- * desenharia numa TV que não tem o plugin.
+ * desenharia numa TV que não tem o plugin. *
+ * Leva junto a lista dos plugins habilitados, que é o que o celular usa para
+ * não mostrar a seção de quem foi desligado. Ver `Declarativo.plugins`.
  */
 
 type DeclarativoStore = Declarativo & {
-  /** Relê os estilos das extensões habilitadas e publica se algo mudou. */
+  /** Relê os estilos e a lista das extensões habilitadas, e publica se algo mudou. */
   sincronizar: (extensoes: Extensao[]) => Promise<void>;
 };
 
@@ -74,18 +76,30 @@ async function publicar(declarativo: Declarativo): Promise<void> {
 export const useDeclarativoStore = create<DeclarativoStore>((set, get) => ({
   versao: 0,
   estilos: {},
+  plugins: [],
 
   async sincronizar(extensoes) {
     const meu = ++pedido;
     const estilos = await lerEstilos(extensoes);
     if (meu !== pedido) return;
 
+    // Em ordem: a lista vem na ordem da tela, e reordenar não é mudança.
+    const plugins = extensoes
+      .filter((extensao) => extensao.habilitada)
+      .map((extensao) => extensao.id)
+      .sort();
+
     // Comparado pelo texto: é o que vai no fio, e é a única pergunta que
     // importa -- a TV precisa de outro conjunto ou não?
-    if (JSON.stringify(estilos) === JSON.stringify(get().estilos)) return;
+    const { estilos: antes, plugins: antesPlugins } = get();
+    if (
+      JSON.stringify(estilos) === JSON.stringify(antes) &&
+      JSON.stringify(plugins) === JSON.stringify(antesPlugins)
+    )
+      return;
 
     const versao = get().versao + 1;
-    set({ estilos, versao });
-    void publicar({ versao, estilos });
+    set({ estilos, plugins, versao });
+    void publicar({ versao, estilos, plugins });
   },
 }));

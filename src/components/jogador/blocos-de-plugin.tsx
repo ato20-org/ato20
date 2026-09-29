@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { useDeclarativo } from "@/components/playground/declarativo";
 import { Button } from "@/components/ui/button";
 import { iconeDeExtensao } from "@/lib/extensoes/icones";
 import { dadosPublicos, enviarAcao } from "@/lib/player/extensoes";
@@ -16,6 +17,11 @@ import { cn } from "@/lib/utils";
  * Uma por plugin que escreveu `secao` na metade pública. Lida a cada mudança
  * do elenco (`fichasVersao`): é o que faz o número que o botão gastou
  * aparecer atualizado no aparelho de quem apertou.
+ *
+ * Só de plugin habilitado no Mestre: o guardado de um plugin desligado ou
+ * desinstalado continua no personagem, e o daemon o entrega como qualquer
+ * outro. Quem sabe quem está ligado é o declarativo -- ver
+ * `Declarativo.plugins`.
  *
  * O botão manda a ação e mais nada. O que ele "fez" o jogador vê no quadro --
  * o medidor que baixou, o dado que caiu ao lado do retrato --, não numa
@@ -33,6 +39,7 @@ export function BlocosDePlugin({
   className?: string;
 }) {
   const versao = useFichasVersaoStore((state) => state.versao);
+  const { plugins } = useDeclarativo();
   const [secoes, setSecoes] = useState<Array<{ extensaoId: string; secao: SecaoPublica }>>([]);
 
   useEffect(() => {
@@ -58,13 +65,17 @@ export function BlocosDePlugin({
     };
   }, [codigo, personagemId, versao]);
 
-  if (secoes.length === 0) return null;
+  // Na hora de desenhar, e não na leitura: ligar o plugin de volta muda o
+  // declarativo, não a ficha, e a seção tem de voltar sem nova ida ao daemon.
+  const ligadas = secoes.filter(({ extensaoId }) => plugins.includes(extensaoId));
+
+  if (ligadas.length === 0) return null;
 
   // UM item da grade do cartão, com as seções empilhadas dentro: cada seção
   // como item próprio quebraria a conta de linhas que o retrato atravessa.
   return (
     <div className={cn("space-y-2", className)}>
-      {secoes.map(({ extensaoId, secao }) => (
+      {ligadas.map(({ extensaoId, secao }) => (
         <section
           key={extensaoId}
           className="bg-muted/20 space-y-1.5 rounded-lg border p-2"
