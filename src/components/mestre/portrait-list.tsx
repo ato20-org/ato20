@@ -30,6 +30,8 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
+import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -852,6 +854,16 @@ function PortraitRow({
               </ContextMenuItem>
             </>
           ) : null}
+
+          <ItensDeExtensao
+            alvo="linha.retrato"
+            contexto={{
+              alvo: "linha.retrato",
+              personagemId: personagem.id,
+              retratoId: retrato.id,
+            }}
+            kit={KIT_CONTEXTO}
+          />
         </ContextMenuContent>
       ) : null}
     </ContextMenu>

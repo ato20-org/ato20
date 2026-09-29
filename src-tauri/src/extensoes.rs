@@ -139,6 +139,116 @@ pub struct Contribuicoes {
     /// O que a extensao deixa o mestre ajustar. Ver `Configuracao`.
     #[serde(default)]
     pub configuracoes: Vec<Configuracao>,
+    /// Opcoes novas nos menus que ja existem. Ver `ItemDeMenu`.
+    #[serde(default)]
+    pub itens_de_menu: Vec<ItemDeMenu>,
+    /// Secoes novas na ficha do personagem. Ver `Secao`.
+    #[serde(default)]
+    pub secoes: Vec<Secao>,
+    /// Corpos que substituem os de fabrica. Ver `Substituto`.
+    #[serde(default)]
+    pub substitutos: Vec<Substituto>,
+}
+
+/// Um item que a extensao poe num menu do aplicativo.
+///
+/// O `alvo` diz QUAL menu: o botao direito no token, na luz, na area escondida,
+/// no vazio do palco, ou a linha de uma lista. A lista de alvos e fechada e
+/// vive aqui, porque o item que aponta para um menu que nao existe nunca
+/// apareceria -- e o autor descobriria isso no meio da mesa.
+///
+/// O titulo e declarado para o item aparecer ANTES do modulo ser importado; o
+/// clique e o que importa o modulo, como o comando.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemDeMenu {
+    pub id: String,
+    pub titulo: String,
+    pub alvo: String,
+    /// Nome de icone da lista do aplicativo -- ver `lib/extensoes/icones.ts`.
+    #[serde(default)]
+    pub icone: Option<String>,
+}
+
+/// Os menus em que uma extensao pode por item.
+///
+/// `palco.*` e o botao direito no palco, pelo que esta na mao; `linha.*` e o
+/// menu de uma linha de lista, botao direito e tres pontos.
+pub const ALVOS_DE_MENU: &[&str] = &[
+    "palco.token",
+    "palco.luz",
+    "palco.area",
+    "palco.quadro",
+    "palco.parede",
+    "palco.retrato",
+    "palco.vazio",
+    "linha.cena",
+    "linha.personagem",
+    "linha.retrato",
+    "linha.imagem",
+    "linha.quadro",
+    "linha.nota",
+];
+
+/// Uma secao nova na ficha do personagem.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Secao {
+    pub id: String,
+    pub titulo: String,
+    /// So `ficha` por ora. O campo existe para a proxima nao pedir migracao.
+    pub alvo: String,
+}
+
+pub const ALVOS_DE_SECAO: &[&str] = &["ficha"];
+
+/// Um corpo de fabrica que a extensao troca pelo dela.
+///
+/// `secao:medidores` troca o miolo de uma secao da ficha; `janela:personagem`
+/// troca uma janela inteira. Desligar o plugin devolve o de fabrica. Dois
+/// plugins no mesmo alvo: vale o primeiro por ordem de nome, e a tela de
+/// Plugins diz quem venceu.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Substituto {
+    pub alvo: String,
+}
+
+pub const SECOES_DE_FABRICA: &[&str] = &[
+    "campos",
+    "aparencias",
+    "medidores",
+    "condicoes",
+    "inventario",
+    "arquivos",
+    "nota",
+];
+
+pub const JANELAS_DE_FABRICA: &[&str] = &[
+    "personagens",
+    "personagem",
+    "configuracao",
+    "estante",
+    "miniplayer",
+    "rolagens",
+    "cenas",
+    "quadros",
+    "retratos",
+    "imagens",
+    "sons",
+    "camadas",
+];
+
+/// O alvo de um substituto existe?
+pub fn alvo_de_substituto_valido(alvo: &str) -> bool {
+    if let Some(secao) = alvo.strip_prefix("secao:") {
+        return SECOES_DE_FABRICA.contains(&secao);
+    }
+    if let Some(janela) = alvo.strip_prefix("janela:") {
+        return JANELAS_DE_FABRICA.contains(&janela);
+    }
+
+    false
 }
 
 /// Uma configuracao que a extensao declara, como as `contributes.configuration`
@@ -365,7 +475,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
     let declarou_algo = !c.paineis.is_empty()
         || !c.comandos.is_empty()
         || !c.ferramentas.is_empty()
-        || !c.camadas.is_empty();
+        || !c.camadas.is_empty()
+        || !c.itens_de_menu.is_empty()
+        || !c.secoes.is_empty()
+        || !c.substitutos.is_empty();
 
     // Quem implementa contribuicao e o modulo. Declarar sem `principal` daria
     // uma aba na lista de telas que abre vazia, e um comando no menu que nao
@@ -395,6 +508,14 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
         (
             "camadas",
             c.camadas.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "itensDeMenu",
+            c.itens_de_menu.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "secoes",
+            c.secoes.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
     ];
 
@@ -440,6 +561,7 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
     }
 
     validar_configuracoes(manifesto)?;
+    validar_encaixes(manifesto)?;
 
     // Icone de ferramenta e caminho dentro da pasta, e vale a mesma guarda do
     // `tema` e do `principal`.
@@ -452,6 +574,65 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
                 )));
             }
         }
+    }
+
+    Ok(())
+}
+
+/// Os encaixes apontam para lugares que existem?
+///
+/// Item de menu para um menu que nao existe, secao para um alvo que nao e a
+/// ficha, substituto para uma janela que nao ha: nenhum deles apareceria, e o
+/// autor descobriria no meio da mesa. Recusar aqui e dizer o nome certo.
+fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
+    let c = &manifesto.contribui;
+
+    for item in &c.itens_de_menu {
+        if !ALVOS_DE_MENU.contains(&item.alvo.as_str()) {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "o item de menu {:?} aponta para {:?}; os alvos sao {}",
+                item.id,
+                item.alvo,
+                ALVOS_DE_MENU.join(", ")
+            )));
+        }
+    }
+
+    for secao in &c.secoes {
+        if !ALVOS_DE_SECAO.contains(&secao.alvo.as_str()) {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "a secao {:?} aponta para {:?}; os alvos sao {}",
+                secao.id,
+                secao.alvo,
+                ALVOS_DE_SECAO.join(", ")
+            )));
+        }
+    }
+
+    if c.substitutos.len() > MAX_CONTRIBUICOES {
+        return Err(AppError::ExtensaoInvalida(format!(
+            "`substitutos` declara {} itens; o teto e {MAX_CONTRIBUICOES}",
+            c.substitutos.len()
+        )));
+    }
+
+    let mut vistos: Vec<&str> = Vec::new();
+    for substituto in &c.substitutos {
+        if !alvo_de_substituto_valido(&substituto.alvo) {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "o substituto aponta para {:?}; use `secao:{{{}}}` ou `janela:{{{}}}`",
+                substituto.alvo,
+                SECOES_DE_FABRICA.join("|"),
+                JANELAS_DE_FABRICA.join("|")
+            )));
+        }
+        if vistos.contains(&substituto.alvo.as_str()) {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "o substituto {:?} aparece duas vezes",
+                substituto.alvo
+            )));
+        }
+        vistos.push(&substituto.alvo);
     }
 
     Ok(())
@@ -1259,6 +1440,46 @@ mod tests {
             .unwrap_err(),
             AppError::ExtensaoInvalida(_)
         ));
+    }
+
+    #[test]
+    fn encaixes_entram_inteiros() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_contrib(
+                r#"{"itensDeMenu":[{"id":"atacar","titulo":"Atacar","alvo":"palco.token","icone":"espadas"}],
+                    "secoes":[{"id":"habilidades","titulo":"Habilidades","alvo":"ficha"}],
+                    "substitutos":[{"alvo":"secao:medidores"},{"alvo":"janela:rolagens"}]}"#,
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(m.contribui.itens_de_menu[0].alvo, "palco.token");
+        assert_eq!(m.contribui.secoes[0].alvo, "ficha");
+        assert_eq!(m.contribui.substitutos.len(), 2);
+    }
+
+    #[test]
+    fn encaixe_para_lugar_que_nao_existe_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        for corpo in [
+            r#"{"itensDeMenu":[{"id":"x","titulo":"X","alvo":"palco.chao"}]}"#,
+            r#"{"secoes":[{"id":"x","titulo":"X","alvo":"janela"}]}"#,
+            r#"{"substitutos":[{"alvo":"secao:vida"}]}"#,
+            r#"{"substitutos":[{"alvo":"janela:mestre"}]}"#,
+            r#"{"substitutos":[{"alvo":"medidores"}]}"#,
+            r#"{"substitutos":[{"alvo":"secao:medidores"},{"alvo":"secao:medidores"}]}"#,
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_contrib(corpo)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{corpo} devia ser recusado"
+            );
+        }
     }
 
     #[test]

@@ -7,6 +7,7 @@ import {
   API_VERSAO_ATUAL,
   resumoDaCena,
   type Ato20Api,
+  type ContextoDeMenu,
   type Desfazer,
   type JanelaDeExtensao,
   type ModuloExtensao,
@@ -190,6 +191,43 @@ export async function executarComando(
   }
 }
 
+/**
+ * Dispara um item de menu de extensão, importando o módulo se preciso.
+ *
+ * O irmão de `executarComando`: o item aparece pelo manifesto, e o clique é o
+ * que importa o módulo. Se o módulo não registrou o item, é erro de quem
+ * escreveu o plugin, e o aviso diz isso.
+ */
+export async function executarItemDeMenu(
+  extensao: Extensao,
+  itemId: string,
+  contexto: ContextoDeMenu,
+): Promise<void> {
+  if (!extensao.habilitada) return;
+
+  await garantirCarregada(extensao);
+
+  const item =
+    useContribuicoesStore.getState().itensDeMenu[chaveContribuicao(extensao.id, itemId)];
+
+  if (!item) {
+    const { estado } = useContribuicoesStore.getState().carga[extensao.id] ?? {};
+    if (estado === "pronta") {
+      toast.error(`${extensao.nome} não registrou o item de menu ${itemId}.`);
+    }
+
+    return;
+  }
+
+  try {
+    await item.executar(contexto);
+  } catch (causa) {
+    toast.error(`O item de menu de ${extensao.nome} falhou.`, {
+      description: causa instanceof Error ? causa.message : String(causa),
+    });
+  }
+}
+
 /** Desliga uma extensão: desfaz o que ela registrou e esquece o resto. */
 export function descarregar(extensaoId: string): void {
   for (const desfazer of desfazeres.get(extensaoId) ?? []) {
@@ -241,7 +279,14 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
   const { guardar, soltar } = useContribuicoesStore.getState();
 
   function registrar<
-    T extends "paineis" | "comandos" | "ferramentas" | "camadas",
+    T extends
+      | "paineis"
+      | "comandos"
+      | "ferramentas"
+      | "camadas"
+      | "itensDeMenu"
+      | "secoes"
+      | "substitutos",
   >(tipo: T, id: string, valor: Parameters<typeof guardar<T>>[2]): Desfazer {
     const chave = chaveContribuicao(extensao.id, id);
     guardar(tipo, chave, valor);
@@ -487,6 +532,10 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
       ferramenta: (ferramenta) =>
         registrar("ferramentas", ferramenta.id, ferramenta),
       camada: ({ id, corpo }) => registrar("camadas", id, corpo),
+      itemDeMenu: (item) => registrar("itensDeMenu", item.id, item),
+      secao: ({ id, corpo }) => registrar("secoes", id, corpo),
+      // A chave e o ALVO, e nao um id: um plugin so tem um corpo por alvo.
+      substituto: ({ alvo, corpo }) => registrar("substitutos", alvo, corpo),
     },
   };
 }

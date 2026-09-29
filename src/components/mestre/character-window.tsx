@@ -76,7 +76,8 @@ import { PlayerDialog } from "@/components/mestre/player-dialog";
 import { presente } from "@/hooks/use-players";
 import { desde } from "@/lib/tempo";
 import { InventarioPersonagem } from "./inventario-personagem";
-import { SecaoFicha } from "./secao-ficha";
+import { PersonagemDaFichaContext, SecaoFicha } from "./secao-ficha";
+import { SecoesDeExtensao } from "@/components/mestre/secoes-de-extensao";
 import { formatBytes } from "@/lib/player/session";
 import {
   attachToCharacter,
@@ -271,6 +272,7 @@ function Ficha({
           com a da tela, e um `md:` aqui quebraria em duas colunas uma ficha de
           360 pixels so porque o monitor e grande. */}
       <div className="@container/ficha space-y-4 p-3">
+        <PersonagemDaFichaContext.Provider value={personagem.id}>
         <Identidade
           personagem={personagem}
           donos={donosNomes}
@@ -325,6 +327,11 @@ function Ficha({
               onChanged={onChanged}
             />
 
+            {/* As seções que os plugins trouxeram, depois do estado e antes
+                dos arquivos: uma aba de habilidades é do personagem em cena,
+                como medidor e condição. Sem plugin, nada. */}
+            <SecoesDeExtensao personagemId={personagem.id} />
+
             <Files
               personagemId={personagem.id}
               anexos={anexos}
@@ -372,7 +379,7 @@ function Ficha({
             />
           </div>
         </div>
-
+        </PersonagemDaFichaContext.Provider>
       </div>
     </ScrollArea>
   );

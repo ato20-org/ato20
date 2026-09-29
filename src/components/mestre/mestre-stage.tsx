@@ -1325,8 +1325,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * mão. Antes disto a faixa arrastava o papel sozinho e gravava no board a
    * cada quadro; agora ela entra no gesto como todo o resto.
    *
-   * Sem botão direito: o menu de contexto do palco ainda não fala de papel, e
-   * apontá-lo para um postit prometeria ações que o menu não tem.
+   * O botão direito aponta o menu para o papel, como faz com o item: o bloco
+   * do quadro já fala de papel (remover) e é onde os plugins põem item para
+   * ele. Antes o papel não selecionava com o direito e o menu abria no vazio.
    */
   function handlePapelPointerDown(
     event: ReactPointerEvent,
@@ -1334,13 +1335,24 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       | { tipo: "postit"; postit: Postit }
       | { tipo: "documento"; documento: Documento },
   ) {
-    if (event.button !== 0) return;
-
     const id = papel.tipo === "postit" ? papel.postit.id : papel.documento.id;
     const jaSelecionado =
       papel.tipo === "postit"
         ? selectedPostitIds.includes(id)
         : selectedDocumentoIds.includes(id);
+
+    if (event.button === 2) {
+      // E PARA aqui, pela mesma razão do item: o clique no vazio com botão que
+      // não é o esquerdo limpa a seleção. Ver `handleItemPointerDown`.
+      event.stopPropagation();
+      if (!jaSelecionado) {
+        if (papel.tipo === "postit") selectPostits([id]);
+        else selectDocumentos([id]);
+      }
+      return;
+    }
+
+    if (event.button !== 0) return;
 
     if (event.shiftKey || event.ctrlKey || event.metaKey) {
       if (papel.tipo === "postit") togglePostit(id);
@@ -2401,18 +2413,33 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       // usando outra coisa.
       if (!registrada) return;
 
+      // As teclas do começo do gesto, e não de cada quadro: é como o Shift do
+      // marquee funciona, e o plugin lê uma coisa só.
+      const teclas = {
+        shift: event.shiftKey,
+        ctrl: event.ctrlKey || event.metaKey,
+        alt: event.altKey,
+      };
+
       // As duas formas, e o plugin escolhe qual implementa. Arrasto vence
       // quando ele oferece os dois: `aoClicar` dispararia no começo do gesto e
       // o mestre veria a ação acontecer antes de soltar.
       if (registrada.aoArrastar) {
         startDrag(event, {
-          onMove: (delta) =>
-            setMarquee(
-              boundsFromPoints(anchor, {
-                x: anchor.x + delta.x,
-                y: anchor.y + delta.y,
-              }),
-            ),
+          onMove: (delta) => {
+            const ponto = { x: anchor.x + delta.x, y: anchor.y + delta.y };
+            setMarquee(boundsFromPoints(anchor, ponto));
+            // A prévia do plugin, se ele quiser desenhar a dele. Contido: um
+            // `aoMover` que estoura não pode derrubar o gesto do mestre.
+            try {
+              registrada.aoMover?.(
+                { x: Math.round(ponto.x), y: Math.round(ponto.y) },
+                teclas,
+              );
+            } catch {
+              // O erro é do plugin, e aparece no `aoArrastar` se persistir.
+            }
+          },
           onEnd: (native) => {
             setMarquee(null);
 
@@ -2420,22 +2447,28 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
               boundsFromPoints(anchor, toScene(native.clientX, native.clientY)),
             );
 
-            registrada.aoArrastar?.({
-              x: Math.round(box.x),
-              y: Math.round(box.y),
-              largura: Math.round(box.width),
-              altura: Math.round(box.height),
-            });
+            registrada.aoArrastar?.(
+              {
+                x: Math.round(box.x),
+                y: Math.round(box.y),
+                largura: Math.round(box.width),
+                altura: Math.round(box.height),
+              },
+              teclas,
+            );
           },
         });
 
         return;
       }
 
-      registrada.aoClicar?.({
-        x: Math.round(anchor.x),
-        y: Math.round(anchor.y),
-      });
+      registrada.aoClicar?.(
+        {
+          x: Math.round(anchor.x),
+          y: Math.round(anchor.y),
+        },
+        teclas,
+      );
 
       return;
     }

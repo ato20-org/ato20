@@ -3,7 +3,10 @@
 import type { ComponentType } from "react";
 import { create } from "zustand";
 
-import type { FerramentaRegistrada } from "@/lib/extensoes/api";
+import type {
+  FerramentaRegistrada,
+  ItemDeMenuRegistrado,
+} from "@/lib/extensoes/api";
 
 /**
  * O que as extensões de código acrescentaram, de verdade.
@@ -33,6 +36,11 @@ type Registros = {
   comandos: Record<string, () => void | Promise<void>>;
   ferramentas: Record<string, FerramentaRegistrada>;
   camadas: Record<string, ComponentType>;
+  itensDeMenu: Record<string, ItemDeMenuRegistrado>;
+  /** O corpo de uma seção da ficha recebe o personagem. */
+  secoes: Record<string, ComponentType<{ personagemId: string }>>;
+  /** Chave `${extensaoId}/${alvo}`. O personagem só nos alvos da ficha. */
+  substitutos: Record<string, ComponentType<{ personagemId?: string }>>;
 };
 
 /**
@@ -42,7 +50,15 @@ type Registros = {
  * `esquecer` limpava as quatro à mão, e a quinta tabela que entrasse ficaria
  * de fora dele -- um plugin desligado deixaria a contribuição nova viva.
  */
-const TIPOS = ["paineis", "comandos", "ferramentas", "camadas"] as const satisfies ReadonlyArray<keyof Registros>;
+const TIPOS = [
+  "paineis",
+  "comandos",
+  "ferramentas",
+  "camadas",
+  "itensDeMenu",
+  "secoes",
+  "substitutos",
+] as const satisfies ReadonlyArray<keyof Registros>;
 
 type ContribuicoesStore = Registros & {
   /** Por id de extensão. `erro` só existe em `falhou`. */
@@ -75,6 +91,9 @@ export const useContribuicoesStore = create<ContribuicoesStore>((set) => ({
   comandos: {},
   ferramentas: {},
   camadas: {},
+  itensDeMenu: {},
+  secoes: {},
+  substitutos: {},
   carga: {},
 
   marcar(extensaoId, estado, erro) {

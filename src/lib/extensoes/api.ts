@@ -96,12 +96,88 @@ export type ComandoRegistrado = {
   executar: () => void | Promise<void>;
 };
 
+/** As teclas segurada durante o gesto. */
+export type Modificadores = { shift: boolean; ctrl: boolean; alt: boolean };
+
 export type FerramentaRegistrada = {
   id: string;
   /** Clique no palco, em coordenadas de CENA — o plano fixo de 1920x1080. */
-  aoClicar?: (ponto: { x: number; y: number }) => void;
+  aoClicar?: (ponto: { x: number; y: number }, teclas: Modificadores) => void;
   /** Arrasto terminado, também em coordenadas de cena. */
-  aoArrastar?: (area: { x: number; y: number; largura: number; altura: number }) => void;
+  aoArrastar?: (
+    area: { x: number; y: number; largura: number; altura: number },
+    teclas: Modificadores,
+  ) => void;
+  /**
+   * O ponteiro andando durante o arrasto, em coordenadas de cena. Só com
+   * `aoArrastar`: é o que deixa a ferramenta desenhar a prévia do que vai
+   * criar. Chega a cada quadro do gesto -- faça pouco aqui.
+   */
+  aoMover?: (ponto: { x: number; y: number }, teclas: Modificadores) => void;
+  /**
+   * As opções da ferramenta -- a cor, a espessura, o que ela pede antes do
+   * gesto. Um componente que aparece ao lado do botão dela enquanto ela está
+   * na mão, como a pílula do lápis. Sem props: leia o que precisar de
+   * `config` ou do próprio módulo.
+   */
+  opcoes?: ComponentType;
+};
+
+/**
+ * O que o item de menu recebe: em que menu foi clicado, e o que estava na
+ * mão. Só ids e cópias -- o plugin lê o resto por `cena.atual()` e
+ * `personagens.obter()`.
+ */
+export type ContextoDeMenu =
+  | { alvo: "palco.token"; itens: ReadonlyArray<Readonly<CanvasItem>>; personagemIds: string[] }
+  | { alvo: "palco.luz"; luzId: string }
+  | { alvo: "palco.area"; areaId: string }
+  | {
+      alvo: "palco.quadro";
+      textoIds: string[];
+      formaIds: string[];
+      postitIds: string[];
+      documentoIds: string[];
+      tracoIds: string[];
+    }
+  | { alvo: "palco.parede"; paredeId: string }
+  | { alvo: "palco.retrato"; retratoIds: string[] }
+  | { alvo: "palco.vazio" }
+  | { alvo: "linha.cena"; cenaId: string }
+  | { alvo: "linha.personagem"; personagemId: string }
+  | { alvo: "linha.retrato"; personagemId: string; retratoId: string | null }
+  | { alvo: "linha.imagem"; assetId: string }
+  | { alvo: "linha.quadro"; cenaId: string }
+  | { alvo: "linha.nota"; notaId: string };
+
+/**
+ * O que `registrar.itemDeMenu` recebe. O título e o alvo vêm do manifesto,
+ * para o item aparecer antes do módulo ser importado; aqui entra o que ele
+ * FAZ. `quando` esconde o item para um contexto em que ele não se aplica --
+ * um token sem personagem, por exemplo. Ausente = sempre aparece.
+ */
+export type ItemDeMenuRegistrado = {
+  id: string;
+  executar: (contexto: ContextoDeMenu) => void | Promise<void>;
+  quando?: (contexto: ContextoDeMenu) => boolean;
+};
+
+/** Uma seção nova na ficha. O corpo recebe o personagem aberto. */
+export type SecaoRegistrada = {
+  id: string;
+  corpo: ComponentType<{ personagemId: string }>;
+};
+
+/**
+ * Um corpo de fábrica trocado pelo do plugin.
+ *
+ * `alvo` é o mesmo do manifesto: `secao:medidores`, `janela:personagem`. O
+ * corpo recebe `personagemId` nos alvos da ficha. Desligar o plugin, ou o
+ * corpo estourar, devolve o de fábrica.
+ */
+export type SubstitutoRegistrado = {
+  alvo: string;
+  corpo: ComponentType<{ personagemId?: string }>;
 };
 
 /** Uma camada é um componente desenhado sobre o mapa, no palco do mestre. */
@@ -301,6 +377,10 @@ export type Ato20Api = {
     comando: (comando: ComandoRegistrado) => Desfazer;
     ferramenta: (ferramenta: FerramentaRegistrada) => Desfazer;
     camada: (camada: CamadaRegistrada) => Desfazer;
+    /** Os três do manifesto: `itensDeMenu`, `secoes`, `substitutos`. */
+    itemDeMenu: (item: ItemDeMenuRegistrado) => Desfazer;
+    secao: (secao: SecaoRegistrada) => Desfazer;
+    substituto: (substituto: SubstitutoRegistrado) => Desfazer;
   };
 };
 

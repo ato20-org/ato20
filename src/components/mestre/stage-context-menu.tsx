@@ -78,6 +78,10 @@ import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 import { SubmenuDeCondicoes } from "@/components/mestre/menu-de-condicoes";
 import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
+import {
+  ItensDeExtensao,
+  useTemItensDeExtensao,
+} from "@/components/mestre/itens-de-extensao";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 
 /**
@@ -104,6 +108,16 @@ export function StageContextMenu({
   const selectedTracoIds = useSelectionStore((state) => state.selectedTracoIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const selectedLuzId = useSelectionStore((state) => state.selectedLuzId);
+  const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
+  const selectedPortraitIds = useSelectionStore((state) => state.selectedPortraitIds);
+  /**
+   * Parede e retrato não têm menu de fábrica, e o botão direito neles caía no
+   * menu do vazio. Ganham um bloco SÓ quando algum plugin declarou item para
+   * eles: sem plugin, nada muda -- e é o que separa "abrir o encaixe" de
+   * "decidir que parede tem menu", que é outra decisão.
+   */
+  const paredeComItens = useTemItensDeExtensao("palco.parede");
+  const retratoComItens = useTemItensDeExtensao("palco.retrato");
   const hasClipboard = useClipboardStore(
     (state) => state.drafts.length > 0 || state.textos.length > 0,
   );
@@ -178,8 +192,16 @@ export function StageContextMenu({
   const opacidade = opacidadeDaSelecao(selectedItems);
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedLuz = scene.luzes?.find((luz) => luz.id === selectedLuzId);
+  const paredeNaMao = Boolean(selectedParedeId) && paredeComItens;
+  const retratoNaMao = selectedPortraitIds.length > 0 && retratoComItens;
   /** Nada selecionado: o botão direito foi no vazio. Ver o bloco da cena. */
-  const nadaNaMao = !hasSelection && !soQuadro && !selectedFog && !selectedLuz;
+  const nadaNaMao =
+    !hasSelection &&
+    !soQuadro &&
+    !selectedFog &&
+    !selectedLuz &&
+    !paredeNaMao &&
+    !retratoNaMao;
 
   return (
     <ContextMenu>
@@ -194,7 +216,14 @@ export function StageContextMenu({
           próximo que entrar nasceria com o mesmo pé solto. */}
       <ContextMenuContent className="w-56 [&>[data-slot=context-menu-separator]:last-child]:hidden">
         {selectedLuz ? (
-          <BlocoDaLuz sceneId={scene.id} luz={selectedLuz} />
+          <>
+            <BlocoDaLuz sceneId={scene.id} luz={selectedLuz} />
+            <ItensDeExtensao
+              alvo="palco.luz"
+              contexto={{ alvo: "palco.luz", luzId: selectedLuz.id }}
+              kit={KIT_CONTEXTO}
+            />
+          </>
         ) : null}
 
         {selectedFog ? (
@@ -210,6 +239,11 @@ export function StageContextMenu({
               Remover área
               <ContextMenuShortcut>Del</ContextMenuShortcut>
             </ContextMenuItem>
+            <ItensDeExtensao
+              alvo="palco.area"
+              contexto={{ alvo: "palco.area", areaId: selectedFog.id }}
+              kit={KIT_CONTEXTO}
+            />
 
             <ContextMenuSeparator />
           </>
@@ -248,6 +282,18 @@ export function StageContextMenu({
               Remover
               <ContextMenuShortcut>Del</ContextMenuShortcut>
             </ContextMenuItem>
+            <ItensDeExtensao
+              alvo="palco.quadro"
+              contexto={{
+                alvo: "palco.quadro",
+                textoIds: selectedTextoIds,
+                formaIds: selectedFormaIds,
+                postitIds: selectedPostitIds,
+                documentoIds: selectedDocumentoIds,
+                tracoIds: selectedTracoIds,
+              }}
+              kit={KIT_CONTEXTO}
+            />
 
             <ContextMenuSeparator />
           </>
@@ -450,7 +496,40 @@ export function StageContextMenu({
               Remover
               <ContextMenuShortcut>Del</ContextMenuShortcut>
             </ContextMenuItem>
+            <ItensDeExtensao
+              alvo="palco.token"
+              contexto={{
+                alvo: "palco.token",
+                itens: selectedItems,
+                personagemIds: selectedItems
+                  .map((item) => item.personagemId)
+                  .filter((id): id is string => Boolean(id)),
+              }}
+              kit={KIT_CONTEXTO}
+            />
 
+            <ContextMenuSeparator />
+          </>
+        ) : null}
+
+        {/* Parede e retrato: só o que os plugins trouxeram. Ver `paredeComItens`. */}
+        {paredeNaMao && selectedParedeId ? (
+          <>
+            <ItensDeExtensao
+              alvo="palco.parede"
+              contexto={{ alvo: "palco.parede", paredeId: selectedParedeId }}
+              kit={KIT_CONTEXTO}
+            />
+            <ContextMenuSeparator />
+          </>
+        ) : null}
+        {retratoNaMao ? (
+          <>
+            <ItensDeExtensao
+              alvo="palco.retrato"
+              contexto={{ alvo: "palco.retrato", retratoIds: selectedPortraitIds }}
+              kit={KIT_CONTEXTO}
+            />
             <ContextMenuSeparator />
           </>
         ) : null}
@@ -518,6 +597,11 @@ export function StageContextMenu({
                 ) : null}
               </>
             ) : null}
+            <ItensDeExtensao
+              alvo="palco.vazio"
+              contexto={{ alvo: "palco.vazio" }}
+              kit={KIT_CONTEXTO}
+            />
           </>
         ) : null}
       </ContextMenuContent>

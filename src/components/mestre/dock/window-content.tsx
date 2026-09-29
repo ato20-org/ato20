@@ -19,6 +19,7 @@ import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useMemo } from "react";
 
 import { PainelDeExtensao } from "@/components/mestre/dock/painel-de-extensao";
+import { Substituto } from "@/components/mestre/substituto";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import type { ConteudoJanela } from "@/lib/store/use-window-store";
 
@@ -248,6 +249,41 @@ export function larguraMinima(conteudo: ConteudoJanela): number {
  * prop enquanto os painéis eram markup fixo no shell, que já a tinha na mão.
  */
 export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
+  const corpo = <CorpoDeFabrica conteudo={conteudo} />;
+
+  // Um plugin pode trocar a janela inteira -- `janela:personagem` no
+  // manifesto -- e é aqui, no único ponto por onde todo corpo passa, flutuante
+  // ou atracado, que a troca acontece. Só as de fábrica sem identidade externa:
+  // anexo, asset e livro apontam para arquivos, e o painel de plugin já é dele.
+  if (!SUBSTITUIVEIS.has(conteudo.tipo)) return corpo;
+
+  return (
+    <Substituto
+      alvo={`janela:${conteudo.tipo}`}
+      personagemId={conteudo.tipo === "personagem" ? conteudo.personagemId : undefined}
+    >
+      {corpo}
+    </Substituto>
+  );
+}
+
+/** As janelas que um plugin pode substituir. Espelho de `JANELAS_DE_FABRICA`. */
+const SUBSTITUIVEIS = new Set<ConteudoJanela["tipo"]>([
+  "personagens",
+  "personagem",
+  "configuracao",
+  "estante",
+  "miniplayer",
+  "rolagens",
+  "cenas",
+  "quadros",
+  "retratos",
+  "imagens",
+  "sons",
+  "camadas",
+]);
+
+function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
   const scene = useSceneStore(selectEditingScene);
   const pronta = useSceneStore((state) => state.status === "ready");
 

@@ -82,7 +82,47 @@ export type Contribuicoes = {
   camadas: CamadaDeclarada[];
   /** Ausente em lista lida por um Rust anterior a ela. */
   configuracoes?: ConfiguracaoDeclarada[];
+  itensDeMenu?: ItemDeMenuDeclarado[];
+  secoes?: SecaoDeclarada[];
+  substitutos?: SubstitutoDeclarado[];
 };
+
+/**
+ * Os menus em que um plugin pode pôr item. Espelho de `ALVOS_DE_MENU`.
+ *
+ * `palco.*` é o botão direito no palco, pelo que está na mão; `linha.*` é o
+ * menu de uma linha de lista -- botão direito e três pontos, os dois.
+ */
+export const ALVOS_DE_MENU = [
+  "palco.token",
+  "palco.luz",
+  "palco.area",
+  "palco.quadro",
+  "palco.parede",
+  "palco.retrato",
+  "palco.vazio",
+  "linha.cena",
+  "linha.personagem",
+  "linha.retrato",
+  "linha.imagem",
+  "linha.quadro",
+  "linha.nota",
+] as const;
+
+export type AlvoDeMenu = (typeof ALVOS_DE_MENU)[number];
+
+export type ItemDeMenuDeclarado = {
+  id: string;
+  titulo: string;
+  alvo: AlvoDeMenu;
+  /** Nome da lista de `icones.ts`. */
+  icone: string | null;
+};
+
+export type SecaoDeclarada = { id: string; titulo: string; alvo: "ficha" };
+
+/** `secao:{medidores|...}` ou `janela:{personagem|...}`. O Rust valida. */
+export type SubstitutoDeclarado = { alvo: string };
 
 /**
  * Uma configuração que a extensão declara, como as `contributes.configuration`
