@@ -3,6 +3,11 @@
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
+import {
+  useConfiguracoesStore,
+  valorDe,
+} from "@/lib/configuracoes/registro";
+import type { Definicao } from "@/lib/configuracoes/valor";
 import { isDesktop } from "@/lib/vault/bridge";
 import {
   DEFAULT_SESSION_VOLUME,
@@ -10,18 +15,22 @@ import {
 } from "@/types/scene";
 
 /**
- * Onde as preferências desta MÁQUINA sobrevivem ao fechar o aplicativo.
+ * As preferências desta MÁQUINA, como o resto do aplicativo as lê.
  *
- * Uma chave com um objeto dentro, e não uma chave por preferência: o painel de
- * Configurações vai crescer, e cada campo novo com chave própria seria uma
- * leitura, uma escrita e um guarda de entrada a mais para o mesmo assunto.
+ * Este store é a FACHADA: os valores moram no registro de configurações
+ * (`lib/configuracoes/registro.ts`), gravados em
+ * `{config do app}/configuracoes.json` ao lado dos de qualquer plugin, e é lá
+ * que a tela de Configurações e o editor JSON os mostram. O store existe para
+ * quem já lia `zoom` ou `volumeTrilha` daqui não precisar aprender o registro,
+ * e para os dois efeitos que uma preferência tem fora do arquivo: aplicar o
+ * zoom na webview e responder ao dedo antes de o disco responder.
  *
- * Em `localStorage` como o layout, as posições de janela e a divisão do leitor
- * — é arrumação de bancada, e é onde as outras cinco já moram. Não no
- * `ato20.db`: o banco existe para o que o RUST precisa ler, e o Rust não tem
- * nada a fazer com o zoom da webview.
+ * Elas moravam no `localStorage`, numa chave só. Saíram porque o pedido era
+ * "como o VSCode": um arquivo que se abre no editor e se edita à mão, e que um
+ * plugin possa estender. A chave antiga é lida UMA vez, na primeira abertura
+ * desta versão, copiada para o arquivo e apagada -- ver `restaurar`.
  */
-const CHAVE_DISCO = "ato20:preferencias";
+const CHAVE_LEGADA = "ato20:preferencias";
 
 /**
  * Os degraus do zoom da interface.
@@ -65,23 +74,26 @@ function limitarVolume(valor: unknown, padrao: number): number {
   return Math.max(0, Math.min(1, valor));
 }
 
-/** O que sobrevive ao fechar o aplicativo. */
+/** Qual dos quatro faders. As chaves de volume do estado, e só elas. */
+export type QualVolume =
+  | "volumeSistema"
+  | "volumeTrilha"
+  | "volumeAmbiente"
+  | "volumeDisparo";
+
+/** A chave de cada preferência no registro. */
+const CHAVE = {
+  zoom: "ato20.zoom",
+  avisarAtualizacao: "ato20.avisarAtualizacao",
+  volumeSistema: "ato20.volume.sistema",
+  volumeTrilha: "ato20.volume.trilha",
+  volumeAmbiente: "ato20.volume.ambiente",
+  volumeDisparo: "ato20.volume.disparo",
+} as const;
+
 type Guardado = {
   zoom: number;
   avisarAtualizacao: boolean;
-  /**
-   * Os quatro faders da mesa de som.
-   *
-   * Aqui e não no `trilha.json` da campanha, e a mudança é de dono. Eles
-   * moravam na campanha porque nasceram junto da trilha, mas a pergunta que
-   * respondem não é da campanha: "o som deste aparelho está alto demais" é a
-   * mesma pergunta em qualquer mesa, e trocar de campanha não a muda. Quem
-   * abria a segunda campanha da noite reencontrava o sistema em 30% sem
-   * entender por quê.
-   *
-   * Continuam VIAJANDO: o Mestre publica os quatro no quadro, e a TV e os
-   * celulares seguem. O que mudou é onde o Mestre os guarda entre sessões.
-   */
   volumeSistema: number;
   volumeTrilha: number;
   volumeAmbiente: number;
@@ -98,76 +110,82 @@ const PADRAO: Guardado = {
 };
 
 /**
- * Lê o objeto inteiro, e nunca um campo só.
+ * O que o aplicativo declara no registro. Só da MÁQUINA: trocar de campanha
+ * não muda o tamanho da interface, e exportar uma não leva o zoom de quem a
+ * montou.
  *
- * Era uma função que devolvia o zoom, e com uma preferência só isso bastava. Na
- * segunda, não: quem grava reescreve a chave inteira, então gravar o zoom
- * sabendo apenas o zoom APAGARIA o aviso de atualização. Ler tudo e gravar tudo
- * é o que mantém as duas de pé.
+ * Os faders continuam VIAJANDO: o Mestre publica os quatro no quadro, e a TV e
+ * os celulares seguem. O que se guarda aqui é onde o Mestre os lembra.
  */
-function ler(): Guardado {
-  try {
-    const cru = localStorage.getItem(CHAVE_DISCO);
-    if (!cru) return PADRAO;
+const volume = (chave: string, titulo: string, padrao: number): Definicao => ({
+  chave,
+  titulo,
+  tipo: "numero",
+  padrao,
+  minimo: 0,
+  maximo: 1,
+  passo: 0.05,
+  escopo: "maquina",
+  dono: "ato20",
+});
 
-    const lido: unknown = JSON.parse(cru);
-    if (typeof lido !== "object" || lido === null) return PADRAO;
+export const DEFINICOES_ATO20: Definicao[] = [
+  {
+    chave: CHAVE.zoom,
+    titulo: "Zoom da interface",
+    descricao: "Escala a janela inteira, o palco incluído. Um dos degraus: 0.8 a 1.5.",
+    tipo: "numero",
+    padrao: ZOOM_PADRAO,
+    minimo: DEGRAUS_ZOOM[0],
+    maximo: DEGRAUS_ZOOM[DEGRAUS_ZOOM.length - 1],
+    passo: 0.1,
+    escopo: "maquina",
+    dono: "ato20",
+  },
+  {
+    chave: CHAVE.avisarAtualizacao,
+    titulo: "Avisar quando sair versão nova",
+    descricao: "Procura versão nova ao abrir. Desligado, o aplicativo não pergunta nada à rede sobre si.",
+    tipo: "booleano",
+    padrao: true,
+    escopo: "maquina",
+    dono: "ato20",
+  },
+  volume(CHAVE.volumeSistema, "Volume do sistema", DEFAULT_SESSION_VOLUME),
+  volume(CHAVE.volumeTrilha, "Volume da trilha", VOLUME_DE_CATEGORIA_PADRAO),
+  volume(CHAVE.volumeAmbiente, "Volume do ambiente", VOLUME_DE_CATEGORIA_PADRAO),
+  volume(CHAVE.volumeDisparo, "Volume dos disparos", VOLUME_DE_CATEGORIA_PADRAO),
+];
 
-    const objeto = lido as Partial<Record<keyof Guardado, unknown>>;
+useConfiguracoesStore.getState().definir(DEFINICOES_ATO20);
 
-    return {
-      zoom: limitarZoom(objeto.zoom),
-      // Só `false` desliga. Ausente é o caso de quem já usava o aplicativo
-      // antes desta preferência existir, e para essa pessoa nada mudou.
-      avisarAtualizacao: objeto.avisarAtualizacao !== false,
-      // Ausente = a máquina é anterior aos faders, ou eles ainda moravam na
-      // campanha. Abre no padrão, e não em silêncio.
-      volumeSistema: limitarVolume(objeto.volumeSistema, DEFAULT_SESSION_VOLUME),
-      volumeTrilha: limitarVolume(
-        objeto.volumeTrilha,
-        VOLUME_DE_CATEGORIA_PADRAO,
-      ),
-      volumeAmbiente: limitarVolume(
-        objeto.volumeAmbiente,
-        VOLUME_DE_CATEGORIA_PADRAO,
-      ),
-      volumeDisparo: limitarVolume(
-        objeto.volumeDisparo,
-        VOLUME_DE_CATEGORIA_PADRAO,
-      ),
-    };
-  } catch {
-    return PADRAO;
-  }
+/** O que vale agora, lido do registro e preso aos limites de cada campo. */
+function doRegistro(): Guardado {
+  return {
+    zoom: limitarZoom(valorDe(CHAVE.zoom)),
+    avisarAtualizacao: valorDe(CHAVE.avisarAtualizacao) !== false,
+    volumeSistema: limitarVolume(valorDe(CHAVE.volumeSistema), DEFAULT_SESSION_VOLUME),
+    volumeTrilha: limitarVolume(valorDe(CHAVE.volumeTrilha), VOLUME_DE_CATEGORIA_PADRAO),
+    volumeAmbiente: limitarVolume(valorDe(CHAVE.volumeAmbiente), VOLUME_DE_CATEGORIA_PADRAO),
+    volumeDisparo: limitarVolume(valorDe(CHAVE.volumeDisparo), VOLUME_DE_CATEGORIA_PADRAO),
+  };
 }
-
-/** Qual dos quatro faders. As chaves de volume do estado, e só elas. */
-export type QualVolume =
-  | "volumeSistema"
-  | "volumeTrilha"
-  | "volumeAmbiente"
-  | "volumeDisparo";
 
 /**
- * O estado inteiro no formato do disco.
- *
- * Existe porque quem grava reescreve a chave toda: com seis preferências, montar
- * o objeto à mão em cada setter era seis lugares para esquecer um campo — e
- * esquecer um campo o APAGA. Aqui esquecer é impossível.
+ * A chave antiga do `localStorage`, se ainda existir. `null` depois da
+ * migração, ou em máquina que nunca teve a versão anterior.
  */
-function tudo(estado: Guardado, mudanca?: Partial<Guardado>): Guardado {
-  const { zoom, avisarAtualizacao, ...volumes } = estado;
-
-  return { zoom, avisarAtualizacao, ...volumes, ...mudanca };
-}
-
-/** Grava a chave inteira. Falhar aqui custa a preferência, não a sessão. */
-function gravar(estado: Guardado): void {
+function lerLegado(): Partial<Guardado> | null {
   try {
-    localStorage.setItem(CHAVE_DISCO, JSON.stringify(estado));
+    const cru = localStorage.getItem(CHAVE_LEGADA);
+    if (!cru) return null;
+
+    const lido: unknown = JSON.parse(cru);
+    if (typeof lido !== "object" || lido === null) return null;
+
+    return lido as Partial<Guardado>;
   } catch {
-    // Cota cheia ou armazenamento bloqueado: vale nesta sessão e volta ao
-    // padrão na próxima. Não vale um aviso.
+    return null;
   }
 }
 
@@ -195,10 +213,15 @@ function aplicar(zoom: number): void {
     .catch(() => {});
 }
 
-type PreferenciasStore = {
-  /** O fator do zoom da interface. Sempre um dos `DEGRAUS_ZOOM`. */
-  zoom: number;
-
+type PreferenciasStore = Guardado & {
+  /**
+   * Muda o zoom e grava.
+   *
+   * Grava a cada mudança, ao contrário da divisão do leitor, que espera o fim
+   * do gesto: aqui não há gesto contínuo — cada clique num degrau é uma
+   * decisão inteira.
+   */
+  definirZoom: (zoom: number) => void;
   /**
    * Procurar versão nova ao abrir.
    *
@@ -209,22 +232,6 @@ type PreferenciasStore = {
    *
    * Ligado por padrão -- correção de falha não chega a quem não é avisado.
    */
-  avisarAtualizacao: boolean;
-
-  /** Os quatro faders da mesa. Ver `Guardado`. */
-  volumeSistema: number;
-  volumeTrilha: number;
-  volumeAmbiente: number;
-  volumeDisparo: number;
-
-  /**
-   * Muda o zoom e grava.
-   *
-   * Grava a cada mudança, ao contrário da divisão do leitor, que espera o fim
-   * do gesto: aqui não há gesto contínuo — cada clique num degrau é uma
-   * decisão inteira.
-   */
-  definirZoom: (zoom: number) => void;
   definirAvisarAtualizacao: (avisar: boolean) => void;
   /**
    * Regula um dos faders e grava.
@@ -237,13 +244,6 @@ type PreferenciasStore = {
   restaurar: () => void;
 };
 
-/**
- * As preferências da máquina, e não da mesa.
- *
- * Store próprio porque este é o primeiro dado do aplicativo que não pertence
- * nem à cena nem à sessão: trocar de campanha não muda o tamanho da interface,
- * e exportar uma campanha não leva o zoom de quem a montou.
- */
 export const usePreferenciasStore = create<PreferenciasStore>((set, get) => ({
   ...PADRAO,
 
@@ -251,17 +251,18 @@ export const usePreferenciasStore = create<PreferenciasStore>((set, get) => ({
     const alvo = limitarZoom(zoom);
     if (alvo === get().zoom) return;
 
+    // O estado local primeiro, e a webview junto: o botão tem de responder
+    // ao dedo, e o registro grava 400 ms depois.
     set({ zoom: alvo });
     aplicar(alvo);
-
-    gravar(tudo(get()));
+    useConfiguracoesStore.getState().gravar(CHAVE.zoom, alvo, "maquina");
   },
 
   definirAvisarAtualizacao(avisar) {
     if (avisar === get().avisarAtualizacao) return;
 
     set({ avisarAtualizacao: avisar });
-    gravar(tudo(get(), { avisarAtualizacao: avisar }));
+    useConfiguracoesStore.getState().gravar(CHAVE.avisarAtualizacao, avisar, "maquina");
   },
 
   definirVolume(qual, valor) {
@@ -269,15 +270,84 @@ export const usePreferenciasStore = create<PreferenciasStore>((set, get) => ({
     if (limitado === get()[qual]) return;
 
     set({ [qual]: limitado });
-    gravar(tudo(get()));
+    useConfiguracoesStore.getState().gravar(CHAVE[qual], limitado, "maquina");
   },
 
   restaurar() {
-    const lido = ler();
-
-    set(lido);
-    // Aplica mesmo no padrão: a webview pode ter guardado o zoom da execução
-    // anterior por conta própria, e nesse caso 100% aqui é uma correção.
-    aplicar(lido.zoom);
+    void restaurar(set);
   },
 }));
+
+let assinado = false;
+
+/**
+ * A abertura: o legado na hora, o arquivo quando chegar, e dali em diante o
+ * registro manda.
+ *
+ * O `localStorage` é síncrono e o IPC não. Aplicar o zoom antigo no primeiro
+ * quadro e trocar pelo do arquivo depois é o que evita a porta nascer em 100%
+ * e saltar -- que era o que já acontecia antes desta versão, pelo `setZoom`
+ * ser IPC. Depois do arquivo lido, o legado é copiado para ele (só o que o
+ * arquivo ainda não tem) e apagado: a migração acontece uma vez, e a chave
+ * antiga deixa de existir para a versão seguinte não ter o que migrar.
+ */
+async function restaurar(set: (parcial: Partial<Guardado>) => void): Promise<void> {
+  const registro = useConfiguracoesStore.getState();
+  const legado = lerLegado();
+
+  if (legado) {
+    const imediato = {
+      zoom: limitarZoom(legado.zoom),
+      avisarAtualizacao: legado.avisarAtualizacao !== false,
+    };
+    set(imediato);
+    aplicar(imediato.zoom);
+  }
+
+  await registro.carregar("maquina");
+
+  if (legado && !useConfiguracoesStore.getState().erro.maquina) {
+    const noArquivo = useConfiguracoesStore.getState().valores.maquina;
+    const copiar = (chave: string, valor: unknown) => {
+      if (noArquivo[chave] === undefined && valor !== undefined)
+        registro.gravar(chave, valor, "maquina");
+    };
+
+    copiar(CHAVE.zoom, limitarZoom(legado.zoom));
+    if (typeof legado.avisarAtualizacao === "boolean")
+      copiar(CHAVE.avisarAtualizacao, legado.avisarAtualizacao);
+    for (const qual of ["volumeSistema", "volumeTrilha", "volumeAmbiente", "volumeDisparo"] as const) {
+      if (typeof legado[qual] === "number") copiar(CHAVE[qual], limitarVolume(legado[qual], PADRAO[qual]));
+    }
+
+    try {
+      localStorage.removeItem(CHAVE_LEGADA);
+    } catch {
+      // Sem permissão para apagar: a próxima abertura tenta de novo, e o
+      // `noArquivo` já cheio faz a cópia não repetir nada.
+    }
+  }
+
+  const lido = doRegistro();
+  set(lido);
+  // Aplica mesmo no padrão: a webview pode ter guardado o zoom da execução
+  // anterior por conta própria, e nesse caso 100% aqui é uma correção.
+  aplicar(lido.zoom);
+
+  // Dali em diante o registro manda: o editor JSON e a lista gerada gravam
+  // lá, e o que muda lá tem de chegar a quem lê daqui -- e à webview.
+  if (!assinado) {
+    assinado = true;
+    useConfiguracoesStore.subscribe(() => {
+      const atual = doRegistro();
+      const antes = usePreferenciasStore.getState();
+      const mudou = (Object.keys(atual) as Array<keyof Guardado>).some(
+        (chave) => atual[chave] !== antes[chave],
+      );
+      if (!mudou) return;
+
+      if (atual.zoom !== antes.zoom) aplicar(atual.zoom);
+      usePreferenciasStore.setState(atual);
+    });
+  }
+}
