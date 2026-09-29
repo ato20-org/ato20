@@ -15,11 +15,12 @@ organizada no mesmo lugar.
 </div>
 
 Feito para jogo presencial: o mestre monta a próxima cena no notebook enquanto a mesa
-continua vendo a atual na TV, e cada jogador acompanha pelo próprio celular.
+continua vendo a atual na janela do espectador, e cada jogador acompanha pelo próprio
+celular.
 
 **Projeto pessoal.** Aplicativo de desktop, sem servidor e sem conta.
 
-![Da lista de campanhas à mesa: o mestre abre a Floresta Brutal, o mapa aparece com os tokens e a luz, e a câmera se afasta até o recorte que a TV vê](docs/midia/intro.gif)
+![Da lista de campanhas à mesa: o mestre abre a Floresta Brutal, o mapa aparece com os tokens e a luz, e a câmera se afasta até o recorte que a janela do espectador vê](docs/midia/intro.gif)
 
 ## Baixar
 
@@ -62,7 +63,7 @@ custo não existe, e o teto passa a ser o HD.
 | Tela | Onde roda | O que é |
 | --- | --- | --- |
 | Mestre | **no aplicativo** | A tela do mestre: monta cenas, arrasta imagens, esconde regiões, decide o que entra no ar |
-| Espectador | navegador | Só o palco, sem controle. Vai na TV atrás do mestre |
+| Espectador | navegador | Só o palco, sem controle. Abre em qualquer tela com navegador: TV, monitor, projetor, outro notebook |
 | Jogador | navegador | O celular de cada jogador |
 
 O porquê de o Mestre ser o aplicativo e as outras duas o navegador está em
@@ -70,15 +71,15 @@ O porquê de o Mestre ser o aplicativo e as outras duas o navegador está em
 
 ## Além da mesa
 
-A campanha não é só o que vai para a TV. O **quadro** é uma folha sem chão para o mestre
-pensar: texto direto na folha, setas que seguem o que você move, post-it, imagem, dado e
-cartão no mesmo lugar. A **nota** é Markdown com prévia ao vivo, e `@`, `/` e `>` chamam
+A campanha não é só o que vai para a janela do espectador. O **quadro** é uma folha sem
+chão para o mestre pensar: texto direto na folha, setas que seguem o que você move,
+post-it, imagem, dado e cartão no mesmo lugar. A **nota** é Markdown com prévia ao vivo, e `@`, `/` e `>` chamam
 referência, comando e citação.
 
 A aba **Arquivos** põe quadros, notas e imagens na mesma árvore de pastas, e a nota é
 arquivo da campanha: o cartão no quadro só aponta para ela, então a mesma nota aparece em
-dois quadros sem virar duas cópias. Pôr o quadro no ar mostra a folha inteira na TV e no
-celular.
+dois quadros sem virar duas cópias. Pôr o quadro no ar mostra a folha inteira na janela do
+espectador e no celular.
 
 ![A nota fixada no mapa, depois o Quadro 1 aberto pela aba Arquivos: a Frente de Ferro, com Bruno, o Inimigo, a granada, setas e post-it](docs/midia/arquivos.gif)
 
@@ -86,7 +87,8 @@ celular.
 
 - **Mestre: completo.** Abre a pasta, grava as cenas, envia imagens e sons.
 - **Espectador e Jogador: na rede local.** O daemon serve as duas telas e publica a cena por
-  SSE, então qualquer aparelho da casa serve de TV e cada jogador acompanha pelo celular.
+  SSE, então qualquer aparelho da casa serve de janela do espectador e cada jogador
+  acompanha pelo celular.
 - **Ficha do personagem: no Jogador.** Nome, caderno de notas e anexos, com um token por jogador no
   lugar da RLS que fazia esse trabalho antes.
 - **O celular joga.** O jogador vê o personagem vinculado a ele — inventário, anexos e os
@@ -100,8 +102,9 @@ celular.
 ## Filosofia
 
 **A câmera é de quem narra.** Cada cena guarda câmeras com nome, e pôr no ar é escolher uma:
-a TV troca em fade e acompanha o movimento sem solavanco, e segurando V o mouse do mestre
-vira cinegrafista. A mesa vê o enquadramento, e o mestre vê também o que ela ainda não viu.
+a janela do espectador troca em fade e acompanha o movimento sem solavanco, e segurando V o
+mouse do mestre vira cinegrafista. A mesa vê o enquadramento, e o mestre vê também o que ela
+ainda não viu.
 
 **Uma campanha é uma pasta.** O modelo é o do Obsidian: você aponta o aplicativo para uma
 pasta, e ela é a campanha. Trocar de máquina é copiar a pasta.
@@ -112,8 +115,8 @@ campanhas moram, e uma senha ali só protegeria o disco de si mesmo.
 **Texto onde dá.** `git diff` numa cena mostra o token que andou, e um `config.json` aberto
 no editor diz o que a campanha é.
 
-**A mesa é a rede da casa.** A TV e os celulares abrem no navegador, servidos pelo daemon
-que roda dentro do aplicativo. Nenhum servidor de fora participa da sessão.
+**A mesa é a rede da casa.** A janela do espectador e os celulares abrem no navegador,
+servidos pelo daemon que roda dentro do aplicativo. Nenhum servidor de fora participa da sessão.
 
 **O que a mesa não vê não sai da máquina.** Medidor escondido, item escondido e o vilão que
 ninguém viu são filtrados no daemon, e não na tela: nenhuma filtragem na tela conserta o que
