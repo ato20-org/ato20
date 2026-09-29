@@ -32,6 +32,7 @@ import {
   DeclarativoProvider,
   useDeclarativoDaMesa,
 } from "@/components/playground/declarativo";
+import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
 
 /**
  * As abas da tela em pé, na ordem em que o arraste lateral navega.
@@ -95,6 +96,13 @@ export function JogadorShell({
   const live = useSubscription(codigo);
   // Os estilos de medidor dos plugins, buscados quando a versão do quadro muda.
   const declarativo = useDeclarativoDaMesa(codigo, live.declarativoVersao);
+
+  // A versão do elenco vai para um store, e não por prop: a ficha mora seis
+  // camadas abaixo, em duas disposições de tela. Ver `useFichasVersaoStore`.
+  const definirFichasVersao = useFichasVersaoStore((state) => state.definir);
+  useEffect(() => {
+    definirFichasVersao(live.fichasVersao);
+  }, [definirFichasVersao, live.fichasVersao]);
 
   /**
    * Quem está com o retrato NO AR agora, por id de personagem.

@@ -23,6 +23,8 @@ import { MINIATURA } from "@/lib/miniatura";
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
 import { InventarioJogador } from "./inventario-jogador";
+import { BlocosDePlugin } from "./blocos-de-plugin";
+import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
 import {
   characterFileThumbUrl,
@@ -89,6 +91,9 @@ export function MyCharacters({
   secao?: SecaoPersonagem;
 }) {
   const [personagens, setPersonagens] = useState<Personagem[] | null>(null);
+  // Relê quando o Mestre avisa que o elenco mudou -- o medidor que um botão
+  // de plugin gastou tem de aparecer no aparelho de quem apertou.
+  const versao = useFichasVersaoStore((state) => state.versao);
 
   useEffect(() => {
     let ativo = true;
@@ -107,7 +112,7 @@ export function MyCharacters({
     return () => {
       ativo = false;
     };
-  }, [codigo]);
+  }, [codigo, versao]);
 
   if (personagens === null) {
     return <p className="text-muted-foreground text-xs">Lendo…</p>;
@@ -621,6 +626,7 @@ function CharacterCard({
             {retratoGrande("block w-full")}
             {blocoDeCondicoes}
             {blocoDeMedidores}
+            <BlocosDePlugin codigo={codigo} personagemId={personagem.id} />
             {blocoDeArquivos}
           </>
         ) : null}
@@ -656,11 +662,12 @@ function CharacterCard({
         className={cn(
           "grid items-start gap-x-3 gap-y-2",
           heroi
-            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
+            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
             : "grid-cols-1",
         )}
       >
-        {retratoGrande("row-span-6 h-full")}
+        {/* Sete linhas desde as seções de plugin -- ver a nota acima. */}
+        {retratoGrande("row-span-7 h-full")}
 
         <h3 className="min-w-0 truncate text-2xl leading-tight font-semibold">
           {personagem.nome}
@@ -669,6 +676,15 @@ function CharacterCard({
         {blocoDeCondicoes}
 
         {blocoDeMedidores}
+
+        {/* As seções dos plugins, entre os medidores e os arquivos: são o
+            personagem em cena, como eles. Sem plugin o componente devolve
+            `null`, e a grade não ganha item nem linha. */}
+        <BlocosDePlugin
+          codigo={codigo}
+          personagemId={personagem.id}
+          className={cn(heroi && "col-start-2")}
+        />
 
         {blocoDeArquivos}
 

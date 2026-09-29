@@ -107,6 +107,16 @@ export type LiveState = {
    */
   declarativoVersao?: number;
   /**
+   * A versão do ELENCO no Mestre -- o contador do `useCharactersStore`.
+   *
+   * O celular lê a ficha por `/eu/personagens` uma vez ao montar, e nada o
+   * avisava de que ela mudou. Com o número no quadro ele rebusca quando o
+   * número muda: é o que faz o recurso que um botão de plugin gastou aparecer
+   * atualizado no aparelho de quem apertou. Só o número; a ficha continua
+   * vindo pela rota, atrás do token e do vínculo.
+   */
+  fichasVersao?: number;
+  /**
    * Os dados que os jogadores jogaram na mesa, ainda quentes.
    *
    * O único campo deste quadro que NÃO nasce no Mestre: a rolagem vem do
