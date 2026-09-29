@@ -1,11 +1,36 @@
 "use client";
 
+import { DesenhoSvg, useDeclarativo } from "@/components/playground/declarativo";
+import { preencher } from "@/lib/extensoes/svg-modelo";
 import {
   fracaoDoMedidor,
   pontosDoMedidor,
   textoDoMedidor,
 } from "@/lib/medidor";
+import type { EstiloDeMedidorPublicado } from "@/lib/sync/declarativo";
 import type { Medidor } from "@/types/character";
+
+/**
+ * A altura da FORMA de um medidor, na unidade de quem chama.
+ *
+ * Exportada porque a caixa sobre o token é medida antes de a forma desenhar
+ * (ver `InfoDoToken`), e um estilo de plugin tem a altura que declarou -- não
+ * a da barra. Sem isto a caixa seria calculada para uma barra e o SVG do
+ * plugin transbordaria o plano, que é a armadilha que derruba o palco.
+ */
+export function alturaDaForma(
+  medidor: Medidor,
+  largura: number,
+  corpo: number,
+  estilos: Record<string, EstiloDeMedidorPublicado>,
+): number {
+  const estilo = medidor.estiloExtensao ? estilos[medidor.estiloExtensao] : undefined;
+  if (estilo) return largura * estilo.altura;
+
+  if (medidor.estilo === "porcentagem") return corpo * 1.5 * 1.1;
+
+  return corpo * 0.85;
+}
 
 /**
  * Um medidor desenhado, sem saber onde está.
@@ -97,6 +122,42 @@ function Forma({
   corpo: number;
   risco?: string;
 }) {
+  // O estilo de um PLUGIN, quando o medidor pede um e a mesa o tem. Sem os
+  // dois, cai no de fábrica -- é a reserva que faz o campo poder existir.
+  const { estilos } = useDeclarativo();
+  const doPlugin = medidor.estiloExtensao ? estilos[medidor.estiloExtensao] : undefined;
+
+  if (doPlugin) {
+    const altura = largura * doPlugin.altura;
+    const cheio = preencher(doPlugin.modelo, {
+      fracao: fracaoDoMedidor(medidor),
+      atual: Math.max(0, Math.trunc(medidor.atual)),
+      maximo: Math.max(1, Math.trunc(medidor.maximo)),
+      cor: medidor.cor,
+      largura,
+      altura,
+    });
+
+    // O `svg` de fora é NOSSO: largura e altura vêm daqui, e o `viewBox` do
+    // modelo -- ou o plano da largura declarada -- diz como o desenho cabe.
+    return (
+      <svg
+        width={largura}
+        height={altura}
+        viewBox={cheio.atributos.viewbox ?? `0 0 ${largura} ${altura}`}
+        preserveAspectRatio={cheio.atributos.preserveaspectratio ?? "none"}
+        className="block overflow-visible"
+        aria-hidden
+      >
+        {cheio.filhos.map((filho, indice) =>
+          typeof filho === "string" ? null : (
+            <DesenhoSvg key={indice} no={filho} chave={`${medidor.id}.${indice}`} />
+          ),
+        )}
+      </svg>
+    );
+  }
+
   if (medidor.estilo === "porcentagem") {
     // Sem forma nenhuma: o número É a leitura. É o estilo de quem quer moral e
     // progresso na tela sem a mesa contando quantos golpes faltam, e uma barra

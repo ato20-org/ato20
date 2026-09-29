@@ -10,6 +10,10 @@ import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { SpotlightLayer } from "@/components/playground/spotlight-layer";
 import { useSubscription } from "@/hooks/use-scene-broadcast";
+import {
+  DeclarativoProvider,
+  useDeclarativoDaMesa,
+} from "@/components/playground/declarativo";
 
 /**
  * Visão Espectador: recebe a cena e não emite nada. Nenhum controle, nenhum
@@ -33,15 +37,20 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
     efeitos,
     spotlight,
     rolagens,
+    declarativoVersao,
     synced,
     stalled,
   } = useSubscription(codigo);
+
+  // Os estilos de medidor dos plugins, buscados quando a versão do quadro muda.
+  const declarativo = useDeclarativoDaMesa(codigo, declarativoVersao);
 
   // Trocar de câmera corta em fade; a mesma câmera andando interpola.
   const { cena, viewport, corte, cortando } = useCorteDeCamera(scene);
 
   return (
-    // `relative` porque o aviso de estado é posicionado absoluto sobre o palco.
+    <DeclarativoProvider valor={declarativo}>
+    {/* `relative` porque o aviso de estado é posicionado absoluto sobre o palco. */}
     <main className="relative flex flex-1 flex-col bg-black">
       {/* A TV não tem quem opere: enquadramento vem só da câmera da cena.
           `smooth` porque aqui ninguém manipula nada — o que chega são amostras
@@ -98,5 +107,6 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
         </p>
       ) : null}
     </main>
+    </DeclarativoProvider>
   );
 }

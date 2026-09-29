@@ -80,6 +80,7 @@ import {
   useSceneStore,
 } from "@/lib/store/use-scene-store";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
+import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
@@ -222,6 +223,8 @@ export function MestreShell() {
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
   const rolagens = useRolagensStore((state) => state.bandeja);
+  // Só o número viaja no quadro; o conjunto vai por `/sala/declarativo`.
+  const declarativoVersao = useDeclarativoStore((state) => state.versao);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale
@@ -271,6 +274,7 @@ export function MestreShell() {
       fichas,
       efeitos,
       spotlight,
+      declarativoVersao,
       rolagens,
     },
     // `null` é "o índice de personagens ainda não foi lido", e não "a campanha

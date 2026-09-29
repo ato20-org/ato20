@@ -6,7 +6,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import {
   tracoDoIcone,
-  useSceneScale,
+  useSceneScaleSeHouver,
 } from "@/components/playground/scene-stage";
 import {
   Tooltip,
@@ -62,11 +62,14 @@ const ICONE = "inline-block size-[1em] shrink-0 translate-y-[0.1em]";
  *
  * É o único lugar do quadro que ainda depende disto: o gizmo saiu do `zoom` e
  * desfaz a ampliação por `transform`, de uma vez.
+ *
+ * Fora do palco -- a nota, o cartão de documento -- não há `zoom` a desfazer, e
+ * o traço é o de sempre.
  */
 function useTracoDoIcone(): number {
-  const { scale, ampliacaoNoLayout } = useSceneScale();
+  const palco = useSceneScaleSeHouver();
 
-  return tracoDoIcone(scale, ampliacaoNoLayout);
+  return tracoDoIcone(palco?.scale ?? 1, palco?.ampliacaoNoLayout ?? false);
 }
 
 export type Vinculos = {

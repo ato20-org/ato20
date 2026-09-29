@@ -384,8 +384,20 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
         return desfazer;
       },
 
-      ajustarMedidor: (personagemId, medidorId, patch) =>
-        ajustarMedidorEmLote(personagemId, medidorId, patch),
+      ajustarMedidor(personagemId, medidorId, patch) {
+        // O estilo de plugin que um medidor pode pedir é o DESTE plugin: a
+        // chave começa com o id dele. Vazio limpa; alheio é ignorado.
+        const { estiloExtensao, ...resto } = patch;
+        const proprio =
+          estiloExtensao === undefined ||
+          estiloExtensao === "" ||
+          estiloExtensao.startsWith(`${extensao.id}/`);
+
+        return ajustarMedidorEmLote(personagemId, medidorId, {
+          ...resto,
+          ...(proprio ? { estiloExtensao } : {}),
+        });
+      },
 
       cardapioDeCondicoes: () => listarCondicoesDaCampanha(),
 

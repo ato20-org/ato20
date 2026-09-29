@@ -28,6 +28,10 @@ import { usePlayerStore } from "@/lib/store/use-player-store";
 import { cn } from "@/lib/utils";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
+import {
+  DeclarativoProvider,
+  useDeclarativoDaMesa,
+} from "@/components/playground/declarativo";
 
 /**
  * As abas da tela em pé, na ordem em que o arraste lateral navega.
@@ -89,6 +93,8 @@ export function JogadorShell({
   // e o jogador que fosse ver a ficha sairia do fluxo e perderia as trocas de
   // cena até voltar.
   const live = useSubscription(codigo);
+  // Os estilos de medidor dos plugins, buscados quando a versão do quadro muda.
+  const declarativo = useDeclarativoDaMesa(codigo, live.declarativoVersao);
 
   /**
    * Quem está com o retrato NO AR agora, por id de personagem.
@@ -144,11 +150,13 @@ export function JogadorShell({
       </header>
 
       {dentro ? (
-        tabbed ? (
-          <LandscapeLayout codigo={codigo} live={live} emCena={emCena} />
-        ) : (
-          <StackedLayout codigo={codigo} live={live} emCena={emCena} />
-        )
+        <DeclarativoProvider valor={declarativo}>
+          {tabbed ? (
+            <LandscapeLayout codigo={codigo} live={live} emCena={emCena} />
+          ) : (
+            <StackedLayout codigo={codigo} live={live} emCena={emCena} />
+          )}
+        </DeclarativoProvider>
       ) : (
         <PlayerEntrada codigo={codigo} />
       )}
