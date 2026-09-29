@@ -100,6 +100,55 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.7.0" date="2026-09-29">
+      <description>
+        <p>
+          The map grid can now be hexagonal, pointy or flat, set in the grid
+          settings. Snapping puts the token at the centre of the cell, and the
+          cell under the token lights up.
+        </p>
+        <p>
+          Settings gained an Adjustments section with search and a JSON
+          editor: everything ATO20 and the plugins let you tweak, in one list,
+          per machine and per campaign (the campaign wins). Zoom, the update
+          notice and the volumes moved into that file.
+        </p>
+        <p>
+          Plugins can change the interface: items in the right-click menus of
+          the token, the light, the hidden area and the lists; new sections on
+          the character sheet; replacing the body of a section or a whole
+          window with their own (disabling the plugin brings the stock one
+          back); and plugin tools with an icon, an options pill and a drag
+          preview.
+        </p>
+        <p>
+          Plugins reach meters, conditions and dice: read the whole cast,
+          adjust meters in a batch, toggle a condition on the horde, roll real
+          dice on the stage and get notified when something changes. Each
+          plugin stores its own data per character, with a part only the GM
+          sees. Initiative, attack buttons and abilities can now exist as
+          plugins.
+        </p>
+        <p>
+          A meter can wear the plugin's drawing, on the TV and on the phone: a
+          heart that empties, a bar that pulses, as an SVG with variables. No
+          plugin code runs outside your computer; a TV without the plugin
+          shows the usual bar.
+        </p>
+        <p>
+          A plugin can put a section with buttons on the player's phone.
+          Tapping sends the action to the GM and the plugin decides what it
+          does; the result shows up on the table. The player's sheet now
+          refreshes by itself when the GM changes it.
+        </p>
+        <p>
+          Fixes: a broken plugin no longer takes down the GM's screen (the
+          error shows inside its panel); choosing a plugin tool works without
+          opening one of its panels first; a board no longer leaks plugin
+          data to the table; sticky notes and cards accept the right click.
+        </p>
+      </description>
+    </release>
     <release version="0.6.0" date="2026-09-28">
       <description>
         <p>

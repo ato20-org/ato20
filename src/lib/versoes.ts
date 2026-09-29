@@ -56,6 +56,64 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.7.0",
+    data: "2026-09-29",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "A grade do mapa pode ser de hexágonos",
+        detalhe:
+          "Em pé ou deitados, nas configurações da grade. O ímã encaixa o token no centro da casa, e a casa embaixo do token fica acesa.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Configurações ganhou a seção Ajustes, com busca e editor JSON",
+        detalhe:
+          "Tudo que o ATO20 e os plugins deixam ajustar, numa lista só, por máquina e por campanha — a campanha vence. O botão JSON edita o arquivo cru, como no VSCode, e o ícone ao lado o abre no seu editor. O zoom, o aviso de versão e os volumes passaram a morar nesse arquivo.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Plugins podem mudar a interface: menus, ficha, janelas e ferramentas",
+        detalhe:
+          "Um plugin põe opções no botão direito do token, da luz, da área escondida e das listas; acrescenta seções na ficha do personagem; troca o miolo de uma seção ou uma janela inteira pela dele (desligar o plugin devolve a de fábrica); e a ferramenta dele ganha ícone, pílula de opções e prévia no arrasto.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Plugins alcançam medidores, condições e dados",
+        detalhe:
+          "Um plugin lê o elenco inteiro, ajusta medidores em lote, liga condições na horda, rola dados de verdade no palco e recebe aviso quando algo muda. Cada plugin guarda o que é dele em cada personagem, com uma parte que só o mestre vê. É o que faltava para iniciativa, botão de ataque e habilidades existirem como plugin.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O medidor pode ter o desenho do plugin, na TV e no celular",
+        detalhe:
+          "Um coração que esvazia, uma barra que pulsa: o plugin traz um SVG com variáveis e a mesa inteira o desenha. Sem código do plugin rodando fora do seu computador; a TV que não tem o plugin mostra a barra de sempre.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O plugin pode pôr uma seção com botões no celular do jogador",
+        detalhe:
+          "Texto, valores e botões. Apertar manda a ação ao mestre, e é o plugin que decide o que ela faz; o resultado aparece na mesa. A ficha do jogador passou a se atualizar sozinha quando o mestre mexe nela.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "Um plugin com defeito não derruba mais a tela do mestre",
+        detalhe:
+          "O erro aparece dentro do painel dele, com o motivo, e o resto continua. Escolher a ferramenta de um plugin passou a funcionar sem antes abrir um painel dele.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "O quadro não levava para a mesa o que um plugin guardou nele",
+        detalhe:
+          "Cena de mapa já escondia; o quadro passava tudo. Agora os dois escondem.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "Postit e cartão passaram a aceitar o botão direito",
+      },
+    ],
+  },
+  {
     versao: "0.6.0",
     data: "2026-09-28",
     mudancas: [
