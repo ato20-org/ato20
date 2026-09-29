@@ -114,6 +114,17 @@ const ROLAGENS_BUFFER: usize = 32;
 /// janela do mestre parada.
 const MOVIMENTOS_BUFFER: usize = 64;
 
+/// Quantas acoes de jogador cabem no canal antes de a janela ler.
+///
+/// Acao e clique, nao arrasto: um por gesto, e a mesa inteira apertando ao
+/// mesmo tempo sao poucas dezenas. Perder uma e perder um ataque, entao o
+/// buffer e folgado.
+const ACOES_BUFFER: usize = 64;
+
+/// O maior corpo de uma acao. `dados` e o que o plugin pos no botao, e um
+/// botao nao carrega um mapa.
+const ACAO_MAX_BYTES: usize = 8 * 1024;
+
 /// O maior valor de coordenada que um movimento pode trazer, em unidades de
 /// cena. O plano tem 1920 de largura; isto e folga para mapa que cresceu para
 /// os lados, e teto para um `x: 1e308` que nenhuma tela sabe desenhar.
@@ -170,6 +181,10 @@ pub struct Daemon {
     /// trata cada uma num lugar diferente. Como nas rolagens, o daemon nao aplica
     /// nada -- quem move o token no board, e republica, e o Mestre.
     movimentos_tx: broadcast::Sender<String>,
+    /// Os botoes que os jogadores apertam nas secoes dos plugins, a caminho
+    /// da janela do mestre. Mesmo desenho dos movimentos: o daemon confere o
+    /// vinculo e e so o cano; quem executa e o plugin, na janela.
+    acoes_tx: broadcast::Sender<String>,
     /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
     evidence: SharedEvidence,
     /// Onde estao os livros de regras desta maquina.
@@ -202,6 +217,7 @@ impl Daemon {
         let (live_tx, _) = broadcast::channel(LIVE_BUFFER);
         let (rolagens_tx, _) = broadcast::channel(ROLAGENS_BUFFER);
         let (movimentos_tx, _) = broadcast::channel(MOVIMENTOS_BUFFER);
+        let (acoes_tx, _) = broadcast::channel(ACOES_BUFFER);
 
         Self {
             vault,
@@ -213,6 +229,7 @@ impl Daemon {
             debug: Mutex::new(VecDeque::new()),
             rolagens_tx,
             movimentos_tx,
+            acoes_tx,
             evidence: Arc::new(RwLock::new(None)),
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
@@ -395,6 +412,7 @@ pub fn router(state: Arc<Daemon>) -> Router {
         )
         .route("/sala/rolagens", get(rolls))
         .route("/sala/movimentos", get(moves))
+        .route("/sala/acoes", get(actions))
         .nest("/eu", player_routes(Arc::clone(&state)))
         .route(
             "/sala/publicar",
@@ -475,6 +493,10 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
         // O token do proprio personagem. Confere o vinculo como as rotas de
         // personagem abaixo -- ver `move_token`.
         .route("/movimentos", post(move_token))
+        // O botao de uma secao de plugin. Ver `act`.
+        .route("/acoes", post(act).layer(DefaultBodyLimit::max(ACAO_MAX_BYTES)))
+        // A metade PUBLICA do que os plugins guardaram neste personagem.
+        .route("/personagens/{id}/extensoes", get(character_extensoes))
         // Personagens: so os VINCULADOS a este jogador. Token valido nao basta,
         // e cada rota confere -- ver `ligado`.
         .route("/personagens", get(my_characters))
@@ -1060,6 +1082,117 @@ async fn move_token(
     let _ = state.movimentos_tx.send(corpo);
 
     StatusCode::NO_CONTENT.into_response()
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcaoBody {
+    personagem_id: String,
+    extensao_id: String,
+    acao: String,
+    #[serde(default)]
+    dados: Option<serde_json::Value>,
+}
+
+/// Uma acao de jogador, como viaja ate a janela do mestre.
+///
+/// `jogador_id` e `jogador` vem do TOKEN, e nao do corpo: e o que deixa o plugin
+/// saber quem apertou sem confiar no celular.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Acao {
+    jogador_id: String,
+    jogador: String,
+    personagem_id: String,
+    extensao_id: String,
+    acao: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dados: Option<serde_json::Value>,
+}
+
+/// `POST /eu/acoes` -- o jogador aperta um botao de uma secao de plugin.
+///
+/// O mesmo desenho do movimento: o daemon confere que o personagem e deste
+/// jogador e repassa; quem executa e o plugin, na janela do mestre, e o
+/// efeito volta pelo quadro. Sem corpo na resposta -- o celular ve o que
+/// aconteceu na mesa, como todo mundo.
+///
+/// Plugin e acao pela regra do slug: os dois viram chave de registro na janela.
+async fn act(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    axum::Json(body): axum::Json<AcaoBody>,
+) -> Response {
+    if !crate::extensoes::id_valido(&body.extensao_id) || !crate::extensoes::id_valido(&body.acao) {
+        return fail(StatusCode::BAD_REQUEST, "acao invalida");
+    }
+
+    if let Err(resposta) = ligado(&state, &player.id, &body.personagem_id) {
+        return resposta;
+    }
+
+    let acao = Acao {
+        jogador_id: player.id,
+        jogador: player.nome,
+        personagem_id: body.personagem_id,
+        extensao_id: body.extensao_id,
+        acao: body.acao,
+        dados: body.dados,
+    };
+
+    let corpo = match serde_json::to_string(&acao) {
+        Ok(corpo) => corpo,
+        Err(cause) => {
+            log::error!("acao: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao anunciar a acao");
+        }
+    };
+
+    let _ = state.acoes_tx.send(corpo);
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// `GET /sala/acoes` -- o fluxo de acoes, para a janela do mestre. Loopback,
+/// sem replay, como os movimentos.
+async fn actions(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
+    if !addr.ip().is_loopback() {
+        return Err(fail(StatusCode::FORBIDDEN, "as acoes sao desta maquina"));
+    }
+
+    let receiver = state.acoes_tx.subscribe();
+    let updates =
+        tokio_stream::wrappers::BroadcastStream::new(receiver).filter_map(|item| item.ok());
+
+    Ok(Sse::new(updates.map(|acao| Ok(Event::default().data(acao))))
+        .keep_alive(KeepAlive::default()))
+}
+
+/// `GET /eu/personagens/{id}/extensoes` -- a metade PUBLICA de cada plugin.
+///
+/// So a publica, e quem separa e `dados_de_extensao::publicos`, nao esta rota:
+/// e o unico caminho por onde o arquivo chega a rede, e a privada nao pode
+/// depender de quem chamou lembrar de tira-la.
+async fn character_extensoes(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(resposta) => return resposta,
+    };
+
+    match crate::vault::dados_de_extensao::publicos(&vault, &id) {
+        Ok(publicos) => axum::Json(publicos).into_response(),
+        Err(cause) => {
+            log::error!("extensoes de {id}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler os dados dos plugins")
+        }
+    }
 }
 
 /// `GET /sala/movimentos` -- o fluxo de movimentos, para a janela do mestre.
@@ -4440,6 +4573,90 @@ mod tests {
     fn movimento(personagem: &str, x: f64) -> String {
         serde_json::json!({ "personagemId": personagem, "itemId": "item-1", "x": x, "y": 40.0 })
             .to_string()
+    }
+
+    fn acao(personagem: &str, extensao: &str, acao: &str) -> String {
+        serde_json::json!({ "personagemId": personagem, "extensaoId": extensao, "acao": acao, "dados": { "alvo": 1 } })
+            .to_string()
+    }
+
+    #[tokio::test]
+    async fn a_acao_de_personagem_alheio_nao_chega_a_janela() {
+        let (_dir, state, codigo) = daemon();
+        let (_, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let mut fluxo = state.acoes_tx.subscribe();
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token_b, "POST", "/eu/acoes", Some(&acao(&personagem, "plug", "atacar"))))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(fluxo.try_recv().is_err(), "a acao recusada chegou a janela");
+    }
+
+    #[tokio::test]
+    async fn a_acao_chega_a_janela_com_quem_apertou() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let mut fluxo = state.acoes_tx.subscribe();
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "POST", "/eu/acoes", Some(&acao(&personagem, "plug", "atacar"))))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let recebida: serde_json::Value =
+            serde_json::from_str(&fluxo.try_recv().expect("a acao nao chegou")).unwrap();
+        // Quem apertou vem do token, nao do corpo.
+        assert_eq!(recebida["jogador"], "Edgar");
+        assert_eq!(recebida["extensaoId"], "plug");
+        assert_eq!(recebida["acao"], "atacar");
+        assert_eq!(recebida["dados"]["alvo"], 1);
+
+        // Slug invalido e recusado antes do canal.
+        let ruim = router(state)
+            .oneshot(como(&token_a, "POST", "/eu/acoes", Some(&acao(&personagem, "plug", "../x"))))
+            .await
+            .expect("resposta");
+        assert_eq!(ruim.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn o_celular_recebe_so_a_metade_publica_dos_plugins() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        {
+            let guard = state.vault.read().unwrap();
+            let vault = guard.as_ref().unwrap();
+            crate::vault::dados_de_extensao::gravar(
+                vault,
+                &personagem,
+                "plug",
+                Some(serde_json::json!("nota do mestre")),
+                Some(serde_json::json!({ "secao": { "blocos": [] } })),
+            )
+            .unwrap();
+        }
+
+        let uri = format!("/eu/personagens/{personagem}/extensoes");
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "GET", &uri, None))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::OK);
+        let corpo = corpo_de(response).await;
+        assert!(corpo.contains("secao"));
+        assert!(!corpo.contains("nota do mestre"));
+
+        // Quem nao esta vinculado nao ve nem que existe.
+        let alheio = router(state)
+            .oneshot(como(&token_b, "GET", &uri, None))
+            .await
+            .expect("resposta");
+        assert_eq!(alheio.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
