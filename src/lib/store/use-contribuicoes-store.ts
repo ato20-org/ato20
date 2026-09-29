@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 import { create } from "zustand";
 
 import type {
+  AcaoRegistrada,
   FerramentaRegistrada,
   ItemDeMenuRegistrado,
 } from "@/lib/extensoes/api";
@@ -41,6 +42,7 @@ type Registros = {
   secoes: Record<string, ComponentType<{ personagemId: string }>>;
   /** Chave `${extensaoId}/${alvo}`. O personagem só nos alvos da ficha. */
   substitutos: Record<string, ComponentType<{ personagemId?: string }>>;
+  acoes: Record<string, AcaoRegistrada["executar"]>;
 };
 
 /**
@@ -58,6 +60,7 @@ const TIPOS = [
   "itensDeMenu",
   "secoes",
   "substitutos",
+  "acoes",
 ] as const satisfies ReadonlyArray<keyof Registros>;
 
 type ContribuicoesStore = Registros & {
@@ -94,6 +97,7 @@ export const useContribuicoesStore = create<ContribuicoesStore>((set) => ({
   itensDeMenu: {},
   secoes: {},
   substitutos: {},
+  acoes: {},
   carga: {},
 
   marcar(extensaoId, estado, erro) {

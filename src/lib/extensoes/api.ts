@@ -162,6 +162,31 @@ export type ItemDeMenuRegistrado = {
   quando?: (contexto: ContextoDeMenu) => boolean;
 };
 
+/**
+ * Um botão que o jogador apertou no celular, como chega ao plugin.
+ *
+ * Quem apertou vem do TOKEN do jogador, resolvido pelo daemon -- não do que o
+ * celular disse. `dados` é o que o plugin tiver posto no botão, opaco.
+ */
+export type AcaoRecebida = {
+  acao: string;
+  personagemId: string;
+  jogadorId: string;
+  jogador: string;
+  dados?: unknown;
+};
+
+/**
+ * O que `registrar.acao` recebe: o que fazer quando o jogador aperta o botão
+ * `acao` da seção pública deste plugin. Ver `personagens.gravarDados` -- a
+ * metade `publico` com `{ secao: { titulo, blocos } }` é o que desenha o botão
+ * no celular; isto é o que ele faz.
+ */
+export type AcaoRegistrada = {
+  id: string;
+  executar: (acao: AcaoRecebida) => void | Promise<void>;
+};
+
 /** Uma seção nova na ficha. O corpo recebe o personagem aberto. */
 export type SecaoRegistrada = {
   id: string;
@@ -381,6 +406,8 @@ export type Ato20Api = {
     itemDeMenu: (item: ItemDeMenuRegistrado) => Desfazer;
     secao: (secao: SecaoRegistrada) => Desfazer;
     substituto: (substituto: SubstitutoRegistrado) => Desfazer;
+    /** O que um botão da seção pública do celular faz. Sem manifesto. */
+    acao: (acao: AcaoRegistrada) => Desfazer;
   };
 };
 
