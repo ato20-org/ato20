@@ -122,9 +122,9 @@ servidos pelo daemon que roda dentro do aplicativo. Nenhum servidor de fora part
 ninguém viu são filtrados no daemon, e não na tela: nenhuma filtragem na tela conserta o que
 já chegou.
 
-**Extensível como um editor.** Tema é um arquivo de CSS; plugin é uma pasta com
+**Plugins, como num editor.** Tema é um arquivo de CSS; plugin é uma pasta com
 `manifest.json`, que declara o que acrescenta — e a tela de Plugins lista o que cada
-extensão faz sem rodar uma linha do código dela.
+plugin faz sem rodar uma linha do código dela.
 
 **Medido, não deduzido.** Desempenho se decide no motor de verdade, o WebKitGTK incluído, e
 repetindo antes de acreditar.
@@ -139,7 +139,7 @@ repetindo antes de acreditar.
 | [O daemon](docs/daemon.md) | As rotas, o código da mesa, o token de escrita |
 | [Jogadores](docs/jogadores.md) | Mesa e ficha, o token no lugar da RLS, os anexos |
 | [Retratos de personagem](docs/retratos.md) | O retrato preso à câmera, e o retrato ao vivo |
-| [Extensões](docs/extensoes.md) | Temas, plugins e a API |
+| [Plugins](docs/extensoes.md) | Temas, plugins de funcionalidade e a API |
 | [Desenvolvimento](docs/desenvolvimento.md) | Rodar, medir, como está construído, testes |
 | [Empacotar](docs/empacotar.md) | Os pacotes, o ícone e o Flatpak |
 
