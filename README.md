@@ -800,7 +800,7 @@ ESM — **implementa**.
 ```json
 {
   "id": "meu-plugin", "nome": "Meu plugin", "versao": "1.0.0",
-  "apiVersao": 1, "principal": "main.js",
+  "apiVersao": 2, "principal": "main.js",
   "contribui": {
     "paineis":  [{ "id": "notas", "titulo": "Notas da sessão" }],
     "comandos": [{ "id": "rolar", "titulo": "Rolar", "atalho": "Ctrl+Shift+F" }],
@@ -823,6 +823,13 @@ está —, então quem declara camada carrega cedo.
 É o modelo do VSCode, e a razão é a mesma: uma extensão que declara o que faz
 pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
+
+**`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
+mais do que ele tem.** A 2 é a atual; um plugin escrito para a 1 continua
+instalando e recebe o mesmo objeto de antes, com o que a 2 acrescentou ao lado.
+Cada tipo de contribuição aceita até 32 itens: cada um vira uma linha num menu
+ou um botão numa barra, e um manifesto com dez mil painéis travaria a lista de
+telas antes de o mestre alcançar o interruptor.
 
 ### O módulo
 
@@ -870,6 +877,33 @@ para a TV e para os celulares, junto com alfinetes e postits. Não é cautela
 genérica: o formato é do plugin e o aplicativo não lê o que tem dentro, e
 publicar o que não se consegue ler seria apostar que nenhum autor vai guardar
 ali a nota do mestre. Ver `sceneForTable`.
+
+### Janelas e componentes
+
+Um plugin desenha com **os componentes do aplicativo**, e não com os dele:
+`api.ui.componentes` traz botão, campo, número, chave, seleção, deslizador,
+abas, diálogo, menu e dica — os mesmos de `src/components/ui` —, mais os
+desenhos que são deste projeto e que ninguém refaz igual: o seletor de cor, o
+medidor, o dado, a confirmação de remoção e o painel vazio. É o que faz a tela
+de um plugin parecer parte do Mestre, com a mesma fonte, o mesmo foco e o tema
+da campanha alcançando-a. O que está em `componentes` é compromisso: as props
+ficam pelo tempo que a API 2 existir. `api.ui.experimental` funciona e pode
+mudar sem aviso.
+
+`api.ui.icones` dá ícones pelo nome — `icones.caveira`, `icones.ficha` — e só os
+que o aplicativo **já carrega**, os dos selos de condição e os das janelas.
+Expor o `lucide-react` inteiro poria mil ícones no bundle do Mestre para servir
+a plugins que talvez nem estejam instalados. Um desenho que não está na lista
+vem como SVG da pasta do plugin, por `api.extensao.url()`, e pesa só quando
+instalado.
+
+`api.janelas.abrir` e `fechar` alcançam as janelas do plugin e as de fábrica —
+a ficha de um personagem, a lista, a configuração da campanha. Onde a janela já
+estiver, atracada ou flutuando, abrir a traz à vista em vez de duplicar. O
+painel do plugin aceita um **`parametro`**: é o que faz o mesmo painel abrir
+como "Edgar" e como "Mira", em duas janelas, cada uma lembrando a própria
+posição. O corpo o recebe como prop. E um plugin só abre e fecha as janelas
+**dele**: o id da extensão entra na chave pelo aplicativo, não pelo plugin.
 
 ### Atalho de plugin não rouba atalho do aplicativo
 
