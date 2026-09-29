@@ -3,6 +3,7 @@
 import { createElement, useEffect } from "react";
 import { Puzzle } from "lucide-react";
 
+import { BarreiraDeExtensao } from "@/components/mestre/barreira-de-extensao";
 import { garantirCarregada } from "@/lib/extensoes/carregar";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
@@ -84,7 +85,13 @@ export function PainelDeExtensao({
   // compilador do React não tem como saber disso pela forma do JSX, e a regra
   // dele existe para o caso oposto -- componente definido dentro de outro, que
   // perderia o estado a cada quadro.
-  return createElement(Corpo);
+  // A chave é o estado de carga: religar o plugin passa por `ausente` de novo,
+  // e é o que dá ao corpo consertado uma segunda chance de desenhar.
+  return (
+    <BarreiraDeExtensao nome={extensao.nome} chave={carga?.estado}>
+      {createElement(Corpo)}
+    </BarreiraDeExtensao>
+  );
 }
 
 /** A moldura dos quatro casos. Centrada, discreta, sem parecer defeito do app. */

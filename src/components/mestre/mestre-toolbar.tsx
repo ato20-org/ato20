@@ -32,9 +32,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { garantirCarregada } from "@/lib/extensoes/carregar";
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
-import { useToolStore, type Tool } from "@/lib/store/use-tool-store";
+import {
+  ferramentaDeExtensao,
+  useToolStore,
+  type Tool,
+} from "@/lib/store/use-tool-store";
 import {
   ehQuadro,
   temAnotacao,
@@ -299,6 +304,19 @@ function BotaoDeFerramenta({
               if (ferramenta.formatoDeArea)
                 setFormatoDeArea(ferramenta.formatoDeArea);
               setTool(value);
+              // Escolher a ferramenta de um plugin é o terceiro gatilho da
+              // ativação preguiçosa, ao lado de abrir um painel e disparar um
+              // comando. Sem isto, um plugin que só traz ferramenta nunca era
+              // importado: o palco achava a ferramenta declarada e não
+              // registrada, e o clique não fazia nada -- que é o certo para
+              // o palco, e errado para o mestre que acabou de apertar o botão.
+              const daExtensao = ferramentaDeExtensao(value);
+              if (daExtensao) {
+                const extensao = useExtensoesStore
+                  .getState()
+                  .extensoes.find((atual) => atual.id === daExtensao.extensaoId);
+                if (extensao?.habilitada) void garantirCarregada(extensao);
+              }
               aoEscolher?.();
             }}
           >
@@ -574,6 +592,19 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     // a ferramenta ao ir buscar um mapa.
     if (tool === "ligacao" && !ehQuadro(scene)) setTool("select");
   }, [scene, tool, setTool]);
+
+  // A ferramenta de um plugin que foi desligado ou desinstalado cai também. O
+  // botão dela some da barra com o plugin, mas o valor ficava no store: o
+  // palco continuava em modo de mira, com cursor de cruz e sem nenhum botão
+  // aceso dizendo por quê -- e o clique não fazia nada.
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+  useEffect(() => {
+    const daExtensao = ferramentaDeExtensao(tool);
+    if (!daExtensao) return;
+
+    const dona = extensoes.find((atual) => atual.id === daExtensao.extensaoId);
+    if (!dona?.habilitada) setTool("select");
+  }, [extensoes, tool, setTool]);
 
   // A ferramenta ativa da bolsa, para o botão dela mostrar.
   const daBolsa = (lista: Ferramenta[]) =>

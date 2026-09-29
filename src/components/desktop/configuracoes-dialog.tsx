@@ -569,15 +569,6 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
           {extensao.autor ? ` · ${extensao.autor}` : ""}
         </p>
 
-        {/* Só para quem declara `principal`. O plugin aparece habilitado e o
-            que ele declara é lido, mas o módulo não é importado nesta versão —
-            e quem instalou um precisa saber disso aqui, e não procurando na
-            interface o que ele acrescentou. */}
-        {extensao.principal ? (
-          <p className="text-muted-foreground/70 truncate text-[10px]">
-            Código ainda não carregado nesta versão.
-          </p>
-        ) : null}
       </div>
 
       {tambemTema ? (

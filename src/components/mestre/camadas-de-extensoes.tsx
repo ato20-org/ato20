@@ -1,7 +1,9 @@
 "use client";
 
 import { createElement, useEffect } from "react";
+import { toast } from "sonner";
 
+import { BarreiraDeExtensao } from "@/components/mestre/barreira-de-extensao";
 import { garantirCarregada } from "@/lib/extensoes/carregar";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
@@ -22,6 +24,16 @@ import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
  * É uma exceção pequena e contida: só as extensões que DECLARAM camada pagam
  * por ela, e quem só traz painel continua sendo importado tarde.
  */
+/** As camadas já avisadas nesta sessão: a reserva roda a cada render. */
+const camadasAvisadas = new Set<string>();
+
+function avisarCamadaQuebrada(nome: string, chave: string, erro: string) {
+  if (camadasAvisadas.has(chave)) return;
+  camadasAvisadas.add(chave);
+
+  toast.error(`A camada de ${nome} falhou ao desenhar.`, { description: erro });
+}
+
 export function CamadasDeExtensoes() {
   const extensoes = useExtensoesStore((state) => state.extensoes);
   const camadas = useContribuicoesStore((state) => state.camadas);
@@ -44,19 +56,32 @@ export function CamadasDeExtensoes() {
           .map((camada) => ({
             chave: chaveContribuicao(extensao.id, camada.id),
             Corpo: camadas[chaveContribuicao(extensao.id, camada.id)],
+            extensao,
           }))
           // Declarada e ainda não registrada: nada. Uma camada não tem moldura
           // nem lugar reservado no mapa, então não há onde pôr um aviso de
           // "carregando" que não fosse sujeira sobre a cena do mestre.
           .filter(({ Corpo }) => Boolean(Corpo))
-          .map(({ chave, Corpo }) => (
+          .map(({ chave, Corpo, extensao }) => (
             // `pointer-events: none` na moldura, e a camada liga onde precisar:
             // o padrão tem de ser não roubar o clique do mapa, que é o que o
             // mestre faz o tempo todo.
             <div key={chave} className="pointer-events-none absolute inset-0">
-              {/* Referência do registro, posta uma vez quando a extensão
-                  ativou -- ver a nota em `PainelDeExtensao`. */}
-              {createElement(Corpo)}
+              {/* Uma camada que estoura some, e nada mais: sobre o mapa não há
+                  lugar para aviso que não fosse sujeira sobre a cena. O motivo
+                  chega ao mestre pelo `toast`, uma vez, e fica na tela de
+                  Plugins. */}
+              <BarreiraDeExtensao
+                nome={extensao.nome}
+                reserva={(erro) => {
+                  avisarCamadaQuebrada(extensao.nome, chave, erro);
+                  return null;
+                }}
+              >
+                {/* Referência do registro, posta uma vez quando a extensão
+                    ativou -- ver a nota em `PainelDeExtensao`. */}
+                {createElement(Corpo)}
+              </BarreiraDeExtensao>
             </div>
           )),
       )}

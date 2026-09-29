@@ -56,7 +56,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // O quadro vai INTEIRO: ele é o que o mestre quer mostrar -- a rede de
   // PNJs, a linha do tempo --, e postit, texto e seta são o conteúdo dele, não
   // anotação sobre ele. Cena de mapa continua filtrando abaixo.
-  if (!temAnotacao(scene)) return semCamera(scene);
+  if (!temAnotacao(scene)) return quadroParaMesa(scene);
 
   // Cena sem nada do mestre devolve a MESMA referência, e não uma cópia.
   //
@@ -117,7 +117,8 @@ export function sceneForTable(scene: Scene | null): Scene | null {
 }
 
 /**
- * O quadro sem recorte de câmera: a mesa vê a folha inteira.
+ * O quadro como a mesa pode vê-lo: a folha inteira, sem recorte de câmera e
+ * sem o que é só do mestre.
  *
  * O quadro não tem mais câmera (ver `lerCena` em `camera-actions`), mas um
  * quadro criado antes disso tem o recorte gravado no arquivo -- e ele
@@ -125,24 +126,39 @@ export function sceneForTable(scene: Scene | null): Scene | null {
  * campo sai na saída em vez de ser apagado do arquivo: apagar reescreveria a
  * cena de quem só abriu o aplicativo, e o dado não atrapalha onde está.
  *
+ * O guardado das EXTENSÕES e o NOME saem daqui pela mesma razão da cena de
+ * mapa: o contrato da API promete que o que o plugin grava na cena não chega à
+ * mesa, e o quadro é uma cena como qualquer outra para `cena.gravarDados`. Até
+ * aqui essa promessa valia só para o mapa, e um plugin que guardasse a nota do
+ * mestre num quadro a entregaria ao celular. O conteúdo do quadro -- postit,
+ * texto, seta, cartão -- continua passando inteiro.
+ *
  * O resultado é MEMORIZADO por cena, e não é detalhe: o `usePublisher` decide
  * publicar comparando a identidade da cena, e uma cópia nova por render faria
  * o Mestre publicar sessenta vezes por segundo com ninguém mexendo em nada.
  */
-const quadrosSemCamera = new WeakMap<Scene, Scene>();
+const quadrosParaMesa = new WeakMap<Scene, Scene>();
 
-function semCamera(scene: Scene): Scene {
-  if (!scene.camera && !scene.cameras && !scene.cameraNoArId) return scene;
+function quadroParaMesa(scene: Scene): Scene {
+  if (
+    !scene.name &&
+    !scene.extensoes &&
+    !scene.camera &&
+    !scene.cameras &&
+    !scene.cameraNoArId
+  )
+    return scene;
 
-  const guardado = quadrosSemCamera.get(scene);
+  const guardado = quadrosParaMesa.get(scene);
   if (guardado) return guardado;
 
-  const paraMesa = { ...scene };
+  const paraMesa = { ...scene, name: "" };
+  delete paraMesa.extensoes;
   delete paraMesa.camera;
   delete paraMesa.cameras;
   delete paraMesa.cameraNoArId;
 
-  quadrosSemCamera.set(scene, paraMesa);
+  quadrosParaMesa.set(scene, paraMesa);
 
   return paraMesa;
 }

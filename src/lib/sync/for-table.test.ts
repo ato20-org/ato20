@@ -39,17 +39,15 @@ describe("sceneForTable", () => {
     expect(mesa.camera).toBeUndefined();
     expect(mesa.cameras).toBeUndefined();
     expect(mesa.cameraNoArId).toBeUndefined();
-    // O conteúdo do quadro continua inteiro.
-    expect(mesa.name).toBe(scene.name);
   });
 
-  it("o quadro sem câmera nenhuma devolve a MESMA referência", () => {
-    const scene = createScene("Rede", "quadro");
+  it("o quadro sem nada do mestre devolve a MESMA referência", () => {
+    const scene = createScene("", "quadro");
     expect(sceneForTable(scene)).toBe(scene);
   });
 
   it("o quadro com câmera antiga devolve sempre a mesma cópia", () => {
-    const scene = createScene("Rede", "quadro");
+    const scene = createScene("", "quadro");
     scene.cameraNoArId = "k";
 
     // Identidade estável: o publicador compara por referência, e uma cópia
@@ -129,7 +127,7 @@ describe("sceneForTable", () => {
   });
 
   it("deixa o quadro passar inteiro: postit, texto e seta são o conteúdo dele", () => {
-    const scene = createScene("Rede de PNJs", "quadro");
+    const scene = createScene("", "quadro");
     scene.postits = [
       { id: "p", x: 0, y: 0, largura: 1, altura: 1, texto: "Edgar", cor: "azul" },
     ];
@@ -138,5 +136,29 @@ describe("sceneForTable", () => {
     ];
 
     expect(sceneForTable(scene)).toBe(scene);
+  });
+
+  it("no quadro, o guardado das extensões e o nome não chegam à mesa", () => {
+    // A promessa de `cena.gravarDados` -- "o que o plugin grava não chega à
+    // mesa" -- vale para toda cena, e o quadro é uma delas. Até este teste, a
+    // saída inteira do quadro levava o guardado junto.
+    const scene = createScene("O traidor se revela", "quadro");
+    scene.extensoes = { "meu-plugin": { nota: "o Edgar é o traidor" } };
+    scene.postits = [
+      { id: "p", x: 0, y: 0, largura: 1, altura: 1, texto: "Edgar", cor: "azul" },
+    ];
+
+    const mesa = sceneForTable(scene)!;
+    expect(mesa.extensoes).toBeUndefined();
+    expect(mesa.name).toBe("");
+    // O conteúdo do quadro continua inteiro.
+    expect(mesa.postits).toHaveLength(1);
+  });
+
+  it("o quadro com guardado de extensão devolve sempre a mesma cópia", () => {
+    const scene = createScene("", "quadro");
+    scene.extensoes = { "meu-plugin": 1 };
+
+    expect(sceneForTable(scene)).toBe(sceneForTable(scene));
   });
 });
