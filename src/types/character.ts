@@ -143,6 +143,15 @@ export type Medidor = {
    * estaria no JSON que o navegador guardou.
    */
   escondido: boolean;
+  /**
+   * Um estilo que um PLUGIN desenhou, em `{extensaoId}/{estiloId}`.
+   *
+   * Opcional, e ao lado do `estilo` de fábrica, que continua ali como reserva:
+   * a mesa que não tem o modelo -- plugin desinstalado, versão antiga da TV --
+   * desenha a barra. É o que faz o campo poder existir sem quebrar
+   * `personagens.json` em lugar nenhum. Ver `svg-modelo.ts`.
+   */
+  estiloExtensao?: string;
 };
 
 /** O que se troca num medidor. Ausente não mexe. Espelha `PatchMedidor`. */
@@ -153,6 +162,8 @@ export type PatchMedidor = {
   atual?: number;
   maximo?: number;
   escondido?: boolean;
+  /** `""` tira o estilo de plugin e volta ao de fábrica. */
+  estiloExtensao?: string;
 };
 
 /**

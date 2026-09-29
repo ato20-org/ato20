@@ -154,6 +154,15 @@ pub struct Medidor {
     /// sumisse no React ja teria vazado: estaria no JSON que o navegador
     /// guardou.
     pub escondido: bool,
+    /// Um estilo que um PLUGIN desenhou, em `{extensaoId}/{estiloId}`.
+    ///
+    /// Opcional e AO LADO do `estilo`, que continua ali como reserva: a mesa que
+    /// nao tem o modelo -- plugin desinstalado, TV com versao antiga -- desenha
+    /// a barra de fabrica. E o que deixa o campo existir sem quebrar um
+    /// `personagens.json` em lugar nenhum: `Estilo` e estrito, e um valor
+    /// desconhecido ali derrubaria o indice inteiro. Aqui e so texto.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estilo_extensao: Option<String>,
 }
 
 /// Como a mesa le o medidor.
@@ -789,6 +798,7 @@ pub fn criar_medidor(
         atual: maximo,
         maximo,
         escondido: false,
+        estilo_extensao: None,
     };
     ajustar(&mut medidor);
 
@@ -812,6 +822,27 @@ pub struct PatchMedidor {
     pub atual: Option<i64>,
     pub maximo: Option<i64>,
     pub escondido: Option<bool>,
+    /// `Some("")` tira o estilo de plugin e volta ao de fabrica.
+    pub estilo_extensao: Option<String>,
+}
+
+/// O teto da chave de um estilo de plugin. Dois slugs e uma barra.
+const MAX_ESTILO_EXTENSAO: usize = 130;
+
+/// A chave tem a forma `{extensaoId}/{estiloId}`, os dois slugs?
+///
+/// A mesma regra do id de extensao, porque a chave vira indice num mapa que a
+/// TV recebe pela rede e nome de arquivo do lado do plugin.
+fn estilo_extensao_valido(chave: &str) -> bool {
+    if chave.len() > MAX_ESTILO_EXTENSAO {
+        return false;
+    }
+    let mut partes = chave.split('/');
+    let (Some(extensao), Some(estilo), None) = (partes.next(), partes.next(), partes.next()) else {
+        return false;
+    };
+
+    crate::extensoes::id_valido(extensao) && crate::extensoes::id_valido(estilo)
 }
 
 /// Edita um medidor e devolve como ele ficou depois do clamp.
@@ -866,6 +897,16 @@ fn aplicar_patch(medidor: &mut Medidor, patch: PatchMedidor) {
     }
     if let Some(escondido) = patch.escondido {
         medidor.escondido = escondido;
+    }
+    // Vazio limpa; forma errada e IGNORADA em vez de erro: o lote de um plugin
+    // nao pode cair inteiro por uma chave mal escrita, e o medidor continua
+    // desenhando o de fabrica -- que e o que ele desenharia de todo jeito.
+    if let Some(chave) = patch.estilo_extensao {
+        if chave.is_empty() {
+            medidor.estilo_extensao = None;
+        } else if estilo_extensao_valido(&chave) {
+            medidor.estilo_extensao = Some(chave);
+        }
     }
 
     ajustar(medidor);
