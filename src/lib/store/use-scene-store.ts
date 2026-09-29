@@ -206,6 +206,11 @@ type SceneStore = {
   /** Primitiva única de mutação de cena. Toda operação de item usa isto. */
   updateScene: (sceneId: string, updater: (scene: Scene) => Scene) => void;
 
+  /**
+   * FORA do histórico, como `aplicarAparencia`: quem troca ou tira o fundo
+   * apaga o arquivo velho logo depois (`descartarFundo`), e desfazer não tem o
+   * que devolver. Desfazer uma troca é trocar de novo, pelo menu da cena.
+   */
   setBackground: (sceneId: string, assetId: string | undefined) => void;
   /** `undefined` devolve a mesa ao plano inteiro. */
   setSceneCamera: (sceneId: string, camera: Viewport | undefined) => void;
@@ -526,6 +531,14 @@ export function soConteudo(atual: Board, alvo: Board): Board {
       // a mesa vê entre uma cena e outra. Ver `Scene.capa`.
       if (scene.capa) restaurada.capa = scene.capa;
       else delete restaurada.capa;
+      // O fundo também é o de agora: trocar ou tirar o fundo APAGA o arquivo
+      // velho do acervo -- ver `descartarFundo` --, e um Ctrl+Z que devolvesse
+      // o id deixaria a cena apontando para um mapa que não existe. A tela do
+      // mestre e a mesa seguiam mostrando a imagem do cache, e a mesa ficava
+      // preta horas depois, na primeira vez que pedisse o arquivo de novo.
+      if (scene.backgroundAssetId !== undefined)
+        restaurada.backgroundAssetId = scene.backgroundAssetId;
+      else delete restaurada.backgroundAssetId;
       return restaurada;
     }),
   };
@@ -1030,10 +1043,21 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     },
 
     setBackground(sceneId, assetId) {
-      get().updateScene(sceneId, (scene) => ({
-        ...scene,
-        backgroundAssetId: assetId,
-      }));
+      const { board } = get();
+      if (!board) return;
+
+      // `set` e não `commit`: ver a declaração. Um passo no histórico que
+      // `soConteudo` não restaura seria um Ctrl+Z que não muda nada.
+      set({
+        board: {
+          ...board,
+          scenes: board.scenes.map((scene) =>
+            scene.id === sceneId
+              ? { ...scene, backgroundAssetId: assetId, updatedAt: Date.now() }
+              : scene,
+          ),
+        },
+      });
     },
 
     setSceneCamera(sceneId, camera) {
