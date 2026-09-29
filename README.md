@@ -1031,6 +1031,95 @@ pílula ao lado do botão enquanto a ferramenta está na mão, como a cor do lá
 `aoMover` chega a cada quadro do arrasto, para a prévia; e `aoClicar`,
 `aoArrastar` e `aoMover` recebem as teclas seguradas (`shift`, `ctrl`, `alt`).
 
+### Estilo de medidor desenhado pelo plugin, na TV e no celular
+
+Um plugin pode desenhar o medidor — uma barra com brilho, um coração que
+esvazia, um relógio que gira — e a mesa inteira vê o desenho. Sem uma linha de
+código do plugin rodar fora do Mestre: o estilo é um **`.svg` com variáveis**.
+
+```json
+"estilosDeMedidor": [
+  { "id": "coracao", "titulo": "Coração", "arquivo": "coracao.svg", "altura": 0.9 }
+]
+```
+
+```svg
+<svg viewBox="0 0 100 90">
+  <path d="M50 85 ..." fill="rgba(0,0,0,0.45)" />
+  <rect y="{90 - fracao * 90}" width="100" height="{fracao * 90}" fill="{cor}"
+        clip-path="url(#c)" />
+  <text x="50" y="50" text-anchor="middle" fill="white">{atual}/{maximo}</text>
+</svg>
+```
+
+As variáveis são `{fracao}`, `{atual}`, `{maximo}`, `{cor}`, `{largura}` e
+`{altura}`, e aceitam as quatro operações — `{fracao * 90}` — avaliadas à mão,
+sem `eval`. `altura` é a da forma em fração da largura, declarada porque a caixa
+sobre o token é medida **antes** de o desenho existir; sem o número o SVG
+transbordaria o plano, que é a armadilha que derruba o palco.
+
+**O SVG nunca vira HTML.** O Mestre o lê uma vez para uma árvore tipada, por
+uma lista fechada de elementos e atributos (`svg-modelo.ts`): sem `script`,
+`foreignObject`, `on*`, `href`, `style`; `url()` só para `#id` do próprio
+arquivo; animação só em `opacity` e `transform`, que é o que o palco já anima
+sem custar layout. É a árvore que viaja, e a TV a desenha com o React — o
+mesmo caminho do Markdown. Elemento fora da lista some com os filhos.
+
+O conjunto viaja por um **canal próprio**, `/sala/declarativo`, e não dentro do
+quadro de 10 Hz: o quadro leva só `declarativoVersao`, um número, e quem
+assiste busca o conjunto quando ele muda. Um modelo dentro do quadro seria
+serializado dez vezes por segundo para cada aparelho, por um dado que muda
+quando o mestre instala um plugin.
+
+O medidor guarda `estiloExtensao: "meu-plugin/coracao"` **ao lado** do
+`estilo` de fábrica, que continua ali como reserva: a mesa que não tem o modelo
+— plugin desinstalado, TV com versão antiga — desenha a barra. É o que deixa o
+campo existir sem quebrar `personagens.json` em lugar nenhum. Quem o define é o
+plugin, por `ajustarMedidor(..., { estiloExtensao })`, e só com estilo dele
+mesmo; `""` volta ao de fábrica.
+
+### A seção do plugin no celular, e o botão que chega ao Mestre
+
+A metade **pública** do que um plugin guarda no personagem pode virar uma
+seção na tela do jogador. Basta ela ter a chave `secao`:
+
+```js
+api.personagens.gravarDados(id, {
+  publico: {
+    secao: {
+      titulo: "Habilidades",
+      blocos: [
+        { tipo: "valor", rotulo: "PA", valor: 3 },
+        { tipo: "texto", texto: "Guerreiro nível 3" },
+        { tipo: "botao", rotulo: "Atacar", acao: "atacar", icone: "espadas" },
+      ],
+    },
+  },
+});
+api.registrar.acao({ id: "atacar", executar: ({ personagemId, jogador }) => { /* ... */ } });
+```
+
+Três blocos e nada além — texto, rótulo com valor, botão —, validados na
+leitura pelo celular (`secao-publica.ts`): bloco malformado some, os outros
+ficam. É a mesma escolha do estilo de medidor: dado, não código.
+
+O botão **não faz nada no celular**. Ele manda `POST /eu/acoes`, o daemon
+confere que o personagem é daquele jogador e repassa por `/sala/acoes` — o
+mesmo desenho do movimento do token —, e é o `registrar.acao` do plugin, na
+janela do Mestre, que executa. Quem apertou vem do token, não do corpo. O
+efeito volta pela mesa: o medidor que baixou, o dado que caiu ao lado do
+retrato. Não há resposta para um celular específico, de propósito — o Mestre
+não tem esse canal, e criá-lo seria superfície nova de rede para um caso que
+o quadro já cobre.
+
+Para o número gasto aparecer no aparelho de quem apertou, o quadro passou a
+levar `fichasVersao`, o contador do elenco no Mestre: o celular relê a ficha e
+as seções quando ele muda. Antes ele lia a ficha uma vez ao montar, e um botão
+que gastasse um recurso deixaria o número velho na tela.
+
+A rota `GET /eu/personagens/{id}/extensoes` entrega **só** a metade pública, e
+quem separa é o Rust (`publicos`), não a rota. A privada nunca sai do Mestre.
+
 ### Atalho de plugin não rouba atalho do aplicativo
 
 A tabela de `atalhos.ts` é consultada em ordem e os do plugin entram **depois**.

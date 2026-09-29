@@ -13,6 +13,7 @@ import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import type { Definicao } from "@/lib/configuracoes/valor";
 import { descarregar } from "@/lib/extensoes/carregar";
 import { aplicarTemas } from "@/lib/extensoes/tema";
+import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
 
 /**
@@ -155,6 +156,9 @@ useExtensoesStore.subscribe((estado, anterior) => {
 
   aplicarTemas(estado.extensoes);
   sincronizarConfiguracoes(estado.extensoes);
+  // Os estilos de medidor pelo mesmo caminho: a lista muda, o Mestre relê os
+  // SVGs das habilitadas e publica o conjunto para a mesa.
+  void useDeclarativoStore.getState().sincronizar(estado.extensoes);
 });
 
 /**

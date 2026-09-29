@@ -45,8 +45,14 @@ export function juntar(mudancas: MudancaDeMedidor[]): MudancaDeMedidor[] {
   return [...porAlvo.values()];
 }
 
-/** Só os campos do contrato. `estilo` fica de fora: é do PR dos estilos. */
-export type PatchDePlugin = Pick<PatchMedidor, "nome" | "cor" | "atual" | "maximo" | "escondido">;
+/**
+ * Só os campos do contrato. O `estilo` de fábrica fica de fora: o que o plugin
+ * troca é o `estiloExtensao`, o dele.
+ */
+export type PatchDePlugin = Pick<
+  PatchMedidor,
+  "nome" | "cor" | "atual" | "maximo" | "escondido" | "estiloExtensao"
+>;
 
 /**
  * Enfileira uma mudança. Resolve quando o lote dela foi gravado e relido.
@@ -59,7 +65,7 @@ export function ajustarMedidorEmLote(
   medidorId: string,
   patch: PatchDePlugin,
 ): Promise<void> {
-  const { nome, cor, atual, maximo, escondido } = patch;
+  const { nome, cor, atual, maximo, escondido, estiloExtensao } = patch;
   fila.push({
     personagemId,
     medidorId,
@@ -67,6 +73,7 @@ export function ajustarMedidorEmLote(
       nome,
       cor,
       escondido,
+      estiloExtensao,
       atual: atual === undefined ? undefined : Math.round(atual),
       maximo: maximo === undefined ? undefined : Math.round(maximo),
     },

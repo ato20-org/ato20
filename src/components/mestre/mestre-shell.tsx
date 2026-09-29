@@ -51,6 +51,8 @@ import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useJanelaDeRolagens } from "@/hooks/use-janela-de-rolagens";
 import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
 import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
+import { useAcoesDaMesa } from "@/hooks/use-acoes-da-mesa";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
@@ -80,6 +82,7 @@ import {
   useSceneStore,
 } from "@/lib/store/use-scene-store";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
+import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
@@ -222,6 +225,10 @@ export function MestreShell() {
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
   const rolagens = useRolagensStore((state) => state.bandeja);
+  // Só o número viaja no quadro; o conjunto vai por `/sala/declarativo`.
+  const declarativoVersao = useDeclarativoStore((state) => state.versao);
+  // O contador do elenco, para o celular saber quando reler a ficha.
+  const fichasVersao = useCharactersStore((state) => state.versao);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale
@@ -271,6 +278,8 @@ export function MestreShell() {
       fichas,
       efeitos,
       spotlight,
+      declarativoVersao,
+      fichasVersao,
       rolagens,
     },
     // `null` é "o índice de personagens ainda não foi lido", e não "a campanha
@@ -302,6 +311,8 @@ export function MestreShell() {
   // E os tokens que eles arrastam. Mesma rota de loopback, mesmo desenho: o
   // celular pede, esta janela confere e move. Ver `useMovimentosDaMesa`.
   useMovimentosDaMesa();
+  // E os botões que eles apertam nas seções dos plugins. Ver `useAcoesDaMesa`.
+  useAcoesDaMesa();
   // E a janela que as mostra, que aparece sozinha quando alguém rola: o dado
   // chega do outro lado da mesa, e ninguém desta bancada pediu por ele. Ver
   // `useJanelaDeRolagens`.

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { ConfiguracoesDialog } from "@/components/desktop/configuracoes-dialog";
+import { DeclarativoDoMestre } from "@/components/mestre/declarativo-do-mestre";
 import { VolumePopover } from "@/components/desktop/volume-popover";
 import { NovidadesDialog } from "@/components/desktop/versoes-lista";
 import { WindowChrome } from "@/components/desktop/window-chrome";
@@ -101,12 +102,14 @@ export function Mestre() {
         }
         subtitulo={status === "ready" ? editando : undefined}
       />
-      <Conteudo
-        status={status}
-        campaign={campaign}
-        error={error}
-        onRetry={boot}
-      />
+      <DeclarativoDoMestre>
+        <Conteudo
+          status={status}
+          campaign={campaign}
+          error={error}
+          onRetry={boot}
+        />
+      </DeclarativoDoMestre>
     </div>
   );
 }

@@ -148,7 +148,36 @@ pub struct Contribuicoes {
     /// Corpos que substituem os de fabrica. Ver `Substituto`.
     #[serde(default)]
     pub substitutos: Vec<Substituto>,
+    /// Estilos de medidor desenhados em SVG. Ver `EstiloDeMedidor`.
+    #[serde(default)]
+    pub estilos_de_medidor: Vec<EstiloDeMedidor>,
 }
+
+/// Um estilo de medidor que a extensao desenhou: um `.svg` com variaveis.
+///
+/// DECLARATIVO, e e a razao de ele chegar a TV e ao celular: nenhum codigo do
+/// plugin roda fora do Mestre, e um SVG filtrado e dado, nao codigo. Quem le o
+/// arquivo e filtra e a tela do Mestre (`svg-modelo.ts`); o Rust so garante
+/// que o caminho fica dentro da pasta e que a altura faz sentido.
+///
+/// `altura` e a altura da FORMA em fracao da largura do medidor -- 0,2 e uma
+/// barra fina, 1 e um quadrado. Declarada aqui porque a caixa sobre o token e
+/// medida antes de o SVG desenhar, e sem o numero a TV nao saberia quanto
+/// reservar.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EstiloDeMedidor {
+    pub id: String,
+    pub titulo: String,
+    /// O `.svg`, relativo a pasta da extensao.
+    pub arquivo: String,
+    pub altura: f64,
+}
+
+/// Os limites da altura. Abaixo de 0,05 nao se ve; acima de 3 a forma e mais
+/// alta que tres larguras, e a coluna do retrato viraria uma torre.
+pub const ALTURA_MIN: f64 = 0.05;
+pub const ALTURA_MAX: f64 = 3.0;
 
 /// Um item que a extensao poe num menu do aplicativo.
 ///
@@ -517,6 +546,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             "secoes",
             c.secoes.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
+        (
+            "estilosDeMedidor",
+            c.estilos_de_medidor.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
     ];
 
     for (nome, itens) in grupos {
@@ -614,6 +647,23 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
             "`substitutos` declara {} itens; o teto e {MAX_CONTRIBUICOES}",
             c.substitutos.len()
         )));
+    }
+
+    for estilo in &c.estilos_de_medidor {
+        if !caminho_relativo_seguro(&estilo.arquivo)
+            || !estilo.arquivo.to_ascii_lowercase().ends_with(".svg")
+        {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "o estilo {:?} aponta para {:?}; tem de ser um .svg dentro da pasta",
+                estilo.id, estilo.arquivo
+            )));
+        }
+        if !estilo.altura.is_finite() || !(ALTURA_MIN..=ALTURA_MAX).contains(&estilo.altura) {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "a altura do estilo {:?} tem de ficar entre {ALTURA_MIN} e {ALTURA_MAX}",
+                estilo.id
+            )));
+        }
     }
 
     let mut vistos: Vec<&str> = Vec::new();
@@ -1458,6 +1508,35 @@ mod tests {
         assert_eq!(m.contribui.itens_de_menu[0].alvo, "palco.token");
         assert_eq!(m.contribui.secoes[0].alvo, "ficha");
         assert_eq!(m.contribui.substitutos.len(), 2);
+    }
+
+    #[test]
+    fn estilo_de_medidor_exige_svg_dentro_da_pasta_e_altura_sensata() {
+        let base = tempfile::tempdir().unwrap();
+
+        let m = ler(
+            base.path(),
+            &com_contrib(
+                r#"{"estilosDeMedidor":[{"id":"coracao","titulo":"Coracao","arquivo":"estilos/coracao.svg","altura":0.4}]}"#,
+            ),
+        )
+        .unwrap();
+        assert_eq!(m.contribui.estilos_de_medidor[0].altura, 0.4);
+
+        for corpo in [
+            r#"{"estilosDeMedidor":[{"id":"x","titulo":"X","arquivo":"../fora.svg","altura":0.4}]}"#,
+            r#"{"estilosDeMedidor":[{"id":"x","titulo":"X","arquivo":"x.png","altura":0.4}]}"#,
+            r#"{"estilosDeMedidor":[{"id":"x","titulo":"X","arquivo":"x.svg","altura":0}]}"#,
+            r#"{"estilosDeMedidor":[{"id":"x","titulo":"X","arquivo":"x.svg","altura":50}]}"#,
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_contrib(corpo)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{corpo} devia ser recusado"
+            );
+        }
     }
 
     #[test]

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   API_VERSAO_ATUAL,
   resumoDaCena,
+  type AcaoRecebida,
   type Ato20Api,
   type ContextoDeMenu,
   type Desfazer,
@@ -228,6 +229,42 @@ export async function executarItemDeMenu(
   }
 }
 
+/** O botão do celular, como o daemon o entrega. Ver `use-acoes-da-mesa.ts`. */
+export type AcaoDoJogador = AcaoRecebida & { extensaoId: string };
+
+/**
+ * Executa o botão que um jogador apertou, importando o módulo se preciso.
+ *
+ * O irmão de `executarComando` para o outro lado da mesa. Ação que o plugin
+ * não registrou é erro de quem escreveu o plugin, e o aviso diz isso -- na
+ * janela do mestre, que é onde ele está.
+ */
+export async function executarAcao(extensao: Extensao, acao: AcaoDoJogador): Promise<void> {
+  if (!extensao.habilitada) return;
+
+  await garantirCarregada(extensao);
+
+  const executar =
+    useContribuicoesStore.getState().acoes[chaveContribuicao(extensao.id, acao.acao)];
+
+  if (!executar) {
+    const { estado } = useContribuicoesStore.getState().carga[extensao.id] ?? {};
+    if (estado === "pronta") {
+      toast.error(`${extensao.nome} não registrou a ação ${acao.acao}.`);
+    }
+
+    return;
+  }
+
+  try {
+    await executar(acao);
+  } catch (causa) {
+    toast.error(`A ação de ${extensao.nome} falhou.`, {
+      description: causa instanceof Error ? causa.message : String(causa),
+    });
+  }
+}
+
 /** Desliga uma extensão: desfaz o que ela registrou e esquece o resto. */
 export function descarregar(extensaoId: string): void {
   for (const desfazer of desfazeres.get(extensaoId) ?? []) {
@@ -286,7 +323,8 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
       | "camadas"
       | "itensDeMenu"
       | "secoes"
-      | "substitutos",
+      | "substitutos"
+      | "acoes",
   >(tipo: T, id: string, valor: Parameters<typeof guardar<T>>[2]): Desfazer {
     const chave = chaveContribuicao(extensao.id, id);
     guardar(tipo, chave, valor);
@@ -384,8 +422,20 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
         return desfazer;
       },
 
-      ajustarMedidor: (personagemId, medidorId, patch) =>
-        ajustarMedidorEmLote(personagemId, medidorId, patch),
+      ajustarMedidor(personagemId, medidorId, patch) {
+        // O estilo de plugin que um medidor pode pedir é o DESTE plugin: a
+        // chave começa com o id dele. Vazio limpa; alheio é ignorado.
+        const { estiloExtensao, ...resto } = patch;
+        const proprio =
+          estiloExtensao === undefined ||
+          estiloExtensao === "" ||
+          estiloExtensao.startsWith(`${extensao.id}/`);
+
+        return ajustarMedidorEmLote(personagemId, medidorId, {
+          ...resto,
+          ...(proprio ? { estiloExtensao } : {}),
+        });
+      },
 
       cardapioDeCondicoes: () => listarCondicoesDaCampanha(),
 
@@ -399,8 +449,16 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
       // O id da extensão entra aqui, e não vem do plugin: é o que impede um
       // plugin de ler o guardado de outro.
       dados: (personagemId) => lerDadosDeExtensao(personagemId, extensao.id),
-      gravarDados: (personagemId, metades) =>
-        gravarDadosDeExtensao(personagemId, extensao.id, metades),
+      async gravarDados(personagemId, metades) {
+        const gravado = await gravarDadosDeExtensao(personagemId, extensao.id, metades);
+        // A metade PÚBLICA é o que o celular desenha, e ele só relê quando o
+        // `fichasVersao` do quadro muda -- que é o contador do elenco. Uma
+        // releitura aqui sobe o contador, e a seção publicada aparece no
+        // aparelho sem recarregar. A privada não: ninguém fora daqui a lê.
+        if (metades.publico !== undefined) useCharactersStore.getState().recarregar();
+
+        return gravado;
+      },
     },
 
     dados: {
@@ -536,6 +594,7 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
       secao: ({ id, corpo }) => registrar("secoes", id, corpo),
       // A chave e o ALVO, e nao um id: um plugin so tem um corpo por alvo.
       substituto: ({ alvo, corpo }) => registrar("substitutos", alvo, corpo),
+      acao: ({ id, executar }) => registrar("acoes", id, executar),
     },
   };
 }

@@ -70,6 +70,9 @@ impl Modelo {
             atual: self.maximo,
             maximo: self.maximo,
             escondido: self.escondido,
+            // O modelo da campanha e de fabrica; o estilo de plugin se escolhe
+            // no medidor materializado, depois.
+            estilo_extensao: None,
         }
     }
 }

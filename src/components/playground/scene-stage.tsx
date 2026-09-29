@@ -145,6 +145,14 @@ export function useSceneScale(): SceneScale {
 }
 
 /**
+ * O mesmo, para quem desenha dentro E fora do palco -- o texto marcado mora no
+ * postit e também na nota e no cartão de documento. Fora dele, `null`.
+ */
+export function useSceneScaleSeHouver(): SceneScale | null {
+  return useContext(SceneScaleContext);
+}
+
+/**
  * Desfaz a ampliação do plano, para o que estiver dentro ser medido em PIXEL DE
  * TELA -- e não em unidade de cena dividida pela escala.
  *

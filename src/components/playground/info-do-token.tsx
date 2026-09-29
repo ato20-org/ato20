@@ -1,6 +1,10 @@
 "use client";
 
-import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
+import { useDeclarativo } from "@/components/playground/declarativo";
+import {
+  alturaDaForma,
+  DesenhoDoMedidor,
+} from "@/components/playground/desenho-do-medidor";
 import { SelosDaCondicao } from "@/components/playground/selos-da-condicao";
 import { VAO_DO_SELO } from "@/lib/geometry/portrait";
 import { LARGURA_DA_INFO, lugarDaInfo } from "@/lib/mestre/fichas-da-cena";
@@ -88,6 +92,7 @@ function BlocoDoToken({
 }) {
   const medidores = ficha.medidores.slice(0, TETO);
   const condicoes = ficha.condicoes ?? [];
+  const { estilos } = useDeclarativo();
 
   // Tudo em unidade de CENA, derivado da largura da peça. O corpo do texto sai
   // primeiro porque a altura da caixa é feita dele.
@@ -95,8 +100,15 @@ function BlocoDoToken({
   const vao = corpo * 0.25;
   const alturaDoNome = corpo * 1.2;
   // Cada medidor é o rótulo mais a forma, que é o que `DesenhoDoMedidor`
-  // empilha -- a conta segue a peça de lá, e não um palpite daqui.
-  const alturaDeUm = corpo * 1.2 + corpo * 0.85;
+  // empilha -- a conta segue a peça de lá, e não um palpite daqui. A forma
+  // tem a altura DELA: um estilo de plugin declara a própria, e medir a caixa
+  // pela barra faria o SVG transbordar o plano. Ver `alturaDaForma`.
+  const larguraDaInfo = item.width * LARGURA_DA_INFO;
+  const alturaDosMedidores = medidores.reduce(
+    (soma, medidor) =>
+      soma + corpo * 1.2 + alturaDaForma(medidor, larguraDaInfo, corpo, estilos) + vao,
+    0,
+  );
   // Os selos numa fileira que quebra: oito cabem em duas linhas sobre o nome
   // de um token estreito, e a caixa tem de crescer as duas para não empurrar
   // o nome para dentro do token. Quantos cabem por linha sai da mesma largura
@@ -117,9 +129,7 @@ function BlocoDoToken({
   const altura =
     alturaDoNome +
     alturaDosSelos +
-    (medidores.length > 0
-      ? medidores.length * (alturaDeUm + vao) + vao
-      : 0);
+    (medidores.length > 0 ? alturaDosMedidores + vao : 0);
 
   const { x, y, largura } = lugarDaInfo(item, altura);
 

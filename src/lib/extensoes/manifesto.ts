@@ -85,6 +85,18 @@ export type Contribuicoes = {
   itensDeMenu?: ItemDeMenuDeclarado[];
   secoes?: SecaoDeclarada[];
   substitutos?: SubstitutoDeclarado[];
+  estilosDeMedidor?: EstiloDeMedidorDeclarado[];
+};
+
+/**
+ * Um estilo de medidor desenhado em SVG. Espelho de `extensoes::EstiloDeMedidor`.
+ * `altura` é a da forma, em fração da largura do medidor. Ver `svg-modelo.ts`.
+ */
+export type EstiloDeMedidorDeclarado = {
+  id: string;
+  titulo: string;
+  arquivo: string;
+  altura: number;
 };
 
 /**

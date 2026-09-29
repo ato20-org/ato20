@@ -10,6 +10,10 @@ import {
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { useSubscription } from "@/hooks/use-scene-broadcast";
+import {
+  DeclarativoProvider,
+  useDeclarativoDaMesa,
+} from "@/components/playground/declarativo";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { daemonAddr } from "@/lib/vault/bridge";
@@ -91,8 +95,20 @@ export function MiniplayerBody() {
  * fechar uma conexão à toa.
  */
 function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
-  const { scene, portraits, fichas, spotlight, rolagens, synced, stalled } =
-    useSubscription(codigo, base);
+  const {
+    scene,
+    portraits,
+    fichas,
+    spotlight,
+    rolagens,
+    declarativoVersao,
+    synced,
+    stalled,
+  } = useSubscription(codigo, base);
+
+  // Do daemon, e não do store do Mestre: esta janela existe para mostrar o que
+  // a MESA vê, e a mesa lê o conjunto que o daemon serve.
+  const declarativo = useDeclarativoDaMesa(codigo, declarativoVersao, base);
 
   // Mesmo corte da TV: trocar de câmera fecha a cortina; a mesma câmera andando
   // interpola. É o que faz este quadro bater com o da mesa também no tempo.
@@ -107,6 +123,7 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
     //
     // `overflow-hidden` e `isolate`: o palco faz o próprio recorte, mas a
     // cortina e o aviso são `absolute` e não podem sair da janela.
+    <DeclarativoProvider valor={declarativo}>
     <div className="relative isolate flex aspect-video min-h-0 w-full flex-1 flex-col overflow-hidden bg-black">
       <SceneStage viewport={viewport} corte={corte} smooth>
         {cena ? (
@@ -140,6 +157,7 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
         </p>
       ) : null}
     </div>
+    </DeclarativoProvider>
   );
 }
 

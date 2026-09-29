@@ -104,6 +104,8 @@ export function usePublisher(state: LiveState, pronto = true): void {
       fichas: state.fichas,
       efeitos: state.efeitos,
       spotlight: state.spotlight,
+      declarativoVersao: state.declarativoVersao,
+      fichasVersao: state.fichasVersao,
       rolagens: state.rolagens,
     };
 
@@ -132,6 +134,8 @@ export function usePublisher(state: LiveState, pronto = true): void {
     state.fichas,
     state.efeitos,
     state.spotlight,
+    state.declarativoVersao,
+    state.fichasVersao,
     state.rolagens,
   ]);
 
@@ -167,6 +171,10 @@ export type Subscription = {
   spotlight: Spotlight | null;
   /** Os dados que os jogadores jogaram na mesa há pouco. Ver `LiveState`. */
   rolagens: RolagemDaMesa[];
+  /** A versão do declarativo dos plugins. Zero = nada. Ver `LiveState`. */
+  declarativoVersao: number;
+  /** A versão do elenco no Mestre. Ver `LiveState`. */
+  fichasVersao: number;
   /** Já chegou alguma coisa do daemon. */
   synced: boolean;
   /** Passou tempo demais sem nada. */
@@ -241,6 +249,8 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     efeitos: live.efeitos ?? SEM_EFEITOS,
     spotlight: live.spotlight,
     rolagens: live.rolagens ?? [],
+    declarativoVersao: live.declarativoVersao ?? 0,
+    fichasVersao: live.fichasVersao ?? 0,
     synced,
     stalled,
   };
