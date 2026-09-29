@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 
+import { Substituto } from "@/components/mestre/substituto";
 import {
   useSecoesStore,
   type SecaoFicha as Secao,
 } from "@/lib/store/use-secoes-store";
 import { cn } from "@/lib/utils";
+
+/**
+ * O personagem da ficha aberta, para as seções que precisam dele sem o
+ * receber por prop -- o substituto de um plugin, que a `SecaoFicha` desenha
+ * e que não sabe de quem é a ficha. Provido em `Ficha`.
+ */
+export const PersonagemDaFichaContext = createContext<string | undefined>(undefined);
 
 /**
  * Uma seção da ficha, que fecha.
@@ -40,6 +48,7 @@ export function SecaoFicha({
 }) {
   const aberta = useSecaoAberta(secao);
   const alternar = useSecoesStore((state) => state.alternar);
+  const personagemId = useContext(PersonagemDaFichaContext);
 
   const id = `secao-${secao}`;
 
@@ -84,7 +93,16 @@ export function SecaoFicha({
           id={id}
           className="animate-in fade-in-0 duration-100 motion-reduce:animate-none"
         >
-          {children}
+          {/* O miolo de uma seção de fábrica pode ser trocado por um plugin
+              -- é o `secao:medidores` do manifesto. Só as de fábrica: a seção
+              de um plugin já é dele. Sem plugin, isto é `children`. */}
+          {secao.startsWith("ext:") ? (
+            children
+          ) : (
+            <Substituto alvo={`secao:${secao}`} personagemId={personagemId}>
+              {children}
+            </Substituto>
+          )}
         </div>
       ) : null}
     </section>

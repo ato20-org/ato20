@@ -30,7 +30,10 @@ export type SecaoFicha =
   | "condicoes"
   | "inventario"
   | "arquivos"
-  | "nota";
+  | "nota"
+  // A de um plugin: `ext:{extensaoId}/{secaoId}`. O store grava texto, então
+  // ela entra sem migração. Ver `SecoesDeExtensao`.
+  | `ext:${string}`;
 
 /**
  * O que é gravado são as FECHADAS, e não as abertas.

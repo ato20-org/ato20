@@ -222,6 +222,58 @@ export function reordenarMedidores(
   return call<Medidor[]>("character_medidores_reordenar", { id, ordem });
 }
 
+/** Uma mudança num medidor de um personagem, dentro de um lote. */
+export type MudancaDeMedidor = {
+  personagemId: string;
+  medidorId: string;
+  patch: PatchMedidor;
+};
+
+/**
+ * Aplica várias mudanças de medidor, em vários personagens, gravando UMA vez.
+ *
+ * O caminho dos plugins -- ver `lote-de-medidores.ts`. Medidor que já não
+ * existe é pulado, e não erro. Devolve os medidores como ficaram depois do
+ * clamp, na ordem das mudanças aplicadas.
+ */
+export function aplicarMedidores(mudancas: MudancaDeMedidor[]): Promise<Medidor[]> {
+  return call<Medidor[]>("character_medidores_aplicar", { mudancas });
+}
+
+// --- guardado das extensões ---------------------------------------------------
+
+/**
+ * As duas metades do que um plugin guarda num personagem.
+ *
+ * `privado` nunca sai do Mestre; `publico` é o que o celular do DONO do
+ * personagem pode receber. Ver `dados_de_extensao.rs`.
+ */
+export type GuardadoDeExtensao = { privado: unknown; publico: unknown };
+
+export function lerDadosDeExtensao(
+  personagemId: string,
+  extensaoId: string,
+): Promise<GuardadoDeExtensao> {
+  return call<GuardadoDeExtensao>("character_extensao_ler", {
+    id: personagemId,
+    extensaoId,
+  });
+}
+
+/** Ausente deixa a metade como está; `null` a apaga. */
+export function gravarDadosDeExtensao(
+  personagemId: string,
+  extensaoId: string,
+  metades: { privado?: unknown; publico?: unknown },
+): Promise<GuardadoDeExtensao> {
+  return call<GuardadoDeExtensao>("character_extensao_gravar", {
+    id: personagemId,
+    extensaoId,
+    privado: metades.privado,
+    publico: metades.publico,
+  });
+}
+
 // --- modelos de medidor da campanha -----------------------------------------
 
 export function listarModelos(): Promise<ModeloDeMedidor[]> {

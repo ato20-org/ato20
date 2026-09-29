@@ -25,6 +25,7 @@ import {
 
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
 import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
+import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
@@ -831,6 +832,12 @@ function QuadroRow({
           <Trash2 />
           Remover o quadro
         </Item>
+
+        <ItensDeExtensao
+          alvo="linha.quadro"
+          contexto={{ alvo: "linha.quadro", cenaId: scene.id }}
+          kit={kit}
+        />
       </>
     );
   };
@@ -974,6 +981,12 @@ function NotaRow({
           <Trash2 />
           Apagar a nota
         </Item>
+
+        <ItensDeExtensao
+          alvo="linha.nota"
+          contexto={{ alvo: "linha.nota", notaId: nota.id }}
+          kit={kit}
+        />
       </>
     );
   };

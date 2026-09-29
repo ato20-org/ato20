@@ -7,6 +7,7 @@ import {
   API_VERSAO_ATUAL,
   resumoDaCena,
   type Ato20Api,
+  type ContextoDeMenu,
   type Desfazer,
   type JanelaDeExtensao,
   type ModuloExtensao,
@@ -17,8 +18,14 @@ import {
   valorDe,
 } from "@/lib/configuracoes/registro";
 import { COMPONENTES, EXPERIMENTAL } from "@/lib/extensoes/componentes";
+import { rolarParaPlugin } from "@/lib/extensoes/dados";
+import {
+  diferencasDeCondicoes,
+  diferencasDeMedidores,
+} from "@/lib/extensoes/diferencas";
 import { ICONES } from "@/lib/extensoes/icones";
 import { abrirJanela, fecharJanela } from "@/lib/extensoes/janelas";
+import { ajustarMedidorEmLote } from "@/lib/extensoes/lote-de-medidores";
 import {
   chaveContribuicao,
   urlDaExtensao,
@@ -27,7 +34,20 @@ import {
 import { chaveDe, type ConteudoJanela } from "@/lib/store/use-window-store";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
-import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
+import { useDadosStore } from "@/lib/store/use-dados-store";
+import { useRolagensStore } from "@/lib/store/use-rolagens-store";
+import {
+  selectEditingScene,
+  selectLiveScene,
+  useSceneStore,
+} from "@/lib/store/use-scene-store";
+import {
+  alternarCondicao,
+  gravarDadosDeExtensao,
+  lerDadosDeExtensao,
+  listarCondicoesDaCampanha,
+} from "@/lib/vault/characters";
+import { valorDaRolagem } from "@/types/dado";
 
 /**
  * Importa o módulo de uma extensão e deixa ela ativar o que trouxe.
@@ -171,6 +191,43 @@ export async function executarComando(
   }
 }
 
+/**
+ * Dispara um item de menu de extensão, importando o módulo se preciso.
+ *
+ * O irmão de `executarComando`: o item aparece pelo manifesto, e o clique é o
+ * que importa o módulo. Se o módulo não registrou o item, é erro de quem
+ * escreveu o plugin, e o aviso diz isso.
+ */
+export async function executarItemDeMenu(
+  extensao: Extensao,
+  itemId: string,
+  contexto: ContextoDeMenu,
+): Promise<void> {
+  if (!extensao.habilitada) return;
+
+  await garantirCarregada(extensao);
+
+  const item =
+    useContribuicoesStore.getState().itensDeMenu[chaveContribuicao(extensao.id, itemId)];
+
+  if (!item) {
+    const { estado } = useContribuicoesStore.getState().carga[extensao.id] ?? {};
+    if (estado === "pronta") {
+      toast.error(`${extensao.nome} não registrou o item de menu ${itemId}.`);
+    }
+
+    return;
+  }
+
+  try {
+    await item.executar(contexto);
+  } catch (causa) {
+    toast.error(`O item de menu de ${extensao.nome} falhou.`, {
+      description: causa instanceof Error ? causa.message : String(causa),
+    });
+  }
+}
+
 /** Desliga uma extensão: desfaz o que ela registrou e esquece o resto. */
 export function descarregar(extensaoId: string): void {
   for (const desfazer of desfazeres.get(extensaoId) ?? []) {
@@ -222,7 +279,14 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
   const { guardar, soltar } = useContribuicoesStore.getState();
 
   function registrar<
-    T extends "paineis" | "comandos" | "ferramentas" | "camadas",
+    T extends
+      | "paineis"
+      | "comandos"
+      | "ferramentas"
+      | "camadas"
+      | "itensDeMenu"
+      | "secoes"
+      | "substitutos",
   >(tipo: T, id: string, valor: Parameters<typeof guardar<T>>[2]): Desfazer {
     const chave = chaveContribuicao(extensao.id, id);
     guardar(tipo, chave, valor);
@@ -306,10 +370,124 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
     },
 
     personagens: {
-      listar: () =>
-        (useCharactersStore.getState().personagens ?? []).map(
-          ({ id, nome }) => ({ id, nome }),
-        ),
+      listar: () => useCharactersStore.getState().personagens ?? [],
+      obter: (personagemId) =>
+        useCharactersStore.getState().personagens?.find((p) => p.id === personagemId) ?? null,
+
+      assinar(aviso) {
+        const desfazer = useCharactersStore.subscribe((estado, anterior) => {
+          if (estado.personagens !== anterior.personagens && estado.personagens)
+            aviso(estado.personagens);
+        });
+        registrados.push(desfazer);
+
+        return desfazer;
+      },
+
+      ajustarMedidor: (personagemId, medidorId, patch) =>
+        ajustarMedidorEmLote(personagemId, medidorId, patch),
+
+      cardapioDeCondicoes: () => listarCondicoesDaCampanha(),
+
+      async alternarCondicao(personagemIds, modeloId, ligar) {
+        const mudaram = await alternarCondicao([...personagemIds], modeloId, ligar);
+        if (mudaram > 0) useCharactersStore.getState().recarregar();
+
+        return mudaram;
+      },
+
+      // O id da extensão entra aqui, e não vem do plugin: é o que impede um
+      // plugin de ler o guardado de outro.
+      dados: (personagemId) => lerDadosDeExtensao(personagemId, extensao.id),
+      gravarDados: (personagemId, metades) =>
+        gravarDadosDeExtensao(personagemId, extensao.id, metades),
+    },
+
+    dados: {
+      rolar: (notacoes) => rolarParaPlugin(notacoes),
+    },
+
+    eventos: {
+      aoMudarMedidor(aviso) {
+        const desfazer = useCharactersStore.subscribe((estado, anterior) => {
+          if (estado.personagens === anterior.personagens || !estado.personagens) return;
+          for (const mudanca of diferencasDeMedidores(anterior.personagens, estado.personagens))
+            aviso(mudanca);
+        });
+        registrados.push(desfazer);
+
+        return desfazer;
+      },
+
+      aoAlternarCondicao(aviso) {
+        const desfazer = useCharactersStore.subscribe((estado, anterior) => {
+          if (estado.personagens === anterior.personagens || !estado.personagens) return;
+          for (const mudanca of diferencasDeCondicoes(anterior.personagens, estado.personagens))
+            aviso(mudanca);
+        });
+        registrados.push(desfazer);
+
+        return desfazer;
+      },
+
+      aoRolar(aviso) {
+        // O histórico do mestre é por mesa; o novo entra na frente. O dos
+        // jogadores idem. Comparar a cabeça é o bastante: `registrar` e
+        // `lancar` põem UM por vez.
+        const doMestre = useDadosStore.subscribe((estado, anterior) => {
+          for (const mesa of ["mapa", "quadro"] as const) {
+            const novo = estado.historico[mesa][0];
+            if (novo && novo !== anterior.historico[mesa][0])
+              aviso({ origem: "mestre", faces: novo.faces, valor: valorDaRolagem(novo.faces, novo.valor) });
+          }
+        });
+        const dosJogadores = useRolagensStore.subscribe((estado, anterior) => {
+          const novo = estado.historico[0];
+          if (novo && novo !== anterior.historico[0])
+            aviso({
+              origem: "jogador",
+              faces: novo.faces,
+              valor: valorDaRolagem(novo.faces, novo.valor),
+              jogador: novo.jogador,
+              personagemId: novo.personagemId,
+            });
+        });
+        const desfazer = () => {
+          doMestre();
+          dosJogadores();
+        };
+        registrados.push(desfazer);
+
+        return desfazer;
+      },
+
+      aoTrocarCena(aviso) {
+        let anterior = useSceneStore.getState().board?.editingSceneId ?? null;
+        const desfazer = useSceneStore.subscribe((estado) => {
+          const atual = estado.board?.editingSceneId ?? null;
+          if (atual === anterior) return;
+
+          anterior = atual;
+          aviso(resumoDaCena(selectEditingScene(estado)));
+        });
+        registrados.push(desfazer);
+
+        return desfazer;
+      },
+
+      aoPorNoAr(aviso) {
+        let anterior = useSceneStore.getState().board?.liveSceneId ?? null;
+        const desfazer = useSceneStore.subscribe((estado) => {
+          const atual = estado.board?.liveSceneId ?? null;
+          if (atual === anterior) return;
+
+          anterior = atual;
+          aviso(resumoDaCena(selectLiveScene(estado)));
+        });
+        registrados.push(desfazer);
+
+        return desfazer;
+      },
     },
 
     config: {
@@ -354,6 +532,10 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
       ferramenta: (ferramenta) =>
         registrar("ferramentas", ferramenta.id, ferramenta),
       camada: ({ id, corpo }) => registrar("camadas", id, corpo),
+      itemDeMenu: (item) => registrar("itensDeMenu", item.id, item),
+      secao: ({ id, corpo }) => registrar("secoes", id, corpo),
+      // A chave e o ALVO, e nao um id: um plugin so tem um corpo por alvo.
+      substituto: ({ alvo, corpo }) => registrar("substitutos", alvo, corpo),
     },
   };
 }

@@ -947,6 +947,90 @@ quando o valor que **vale** muda, pela tela, pelo editor ou por outra gravação
 viraram `ato20.*` no mesmo registro. A chave antiga é lida uma vez na primeira
 abertura desta versão, copiada para o arquivo e apagada.
 
+### Personagem, medidor, condição e dado
+
+É a parte da API que deixa um plugin ser um sistema: iniciativa, botão de
+ataque que já dá o dano, aba de habilidades que rola e aplica. Nada disso
+existe de fábrica, e é de propósito — o que existe é o alcance.
+
+`api.personagens.listar()` devolve o personagem **inteiro**, medidores e
+condições incluídos, escondidos também: quem lê é o Mestre, e é ele quem decide
+o que a mesa vê. `assinar` avisa a cada releitura do elenco.
+
+**Medidor se ajusta em lote.** `ajustarMedidor(personagemId, medidorId,
+patch)` chamado dez vezes no mesmo laço vira **uma** gravação e **uma**
+releitura. A conta que justifica: cada gravação no índice de personagens é uma
+reescrita inteira com `fsync` na thread da janela, seguida de uma releitura
+que acorda cinco hooks e de uma republicação da cena. Um botão que tira vida
+de dez goblins pagaria isso dez vezes por clique. O Rust recebe o lote
+(`character_medidores_aplicar`), pula o medidor que já não existe em vez de
+derrubar os outros nove, e devolve como cada um ficou depois do teto. O
+estilo do medidor fica de fora do patch: é assunto do estilo declarativo.
+
+`alternarCondicao(ids, modeloId, ligar)` liga ou desliga uma condição do
+cardápio em vários personagens, gravando uma vez, como o menu do token já
+fazia. `cardapioDeCondicoes()` é o cardápio.
+
+**O plugin guarda o que é dele em cada personagem** — em
+`personagens/{id}/_extensoes.json`, e não no índice. O índice é reescrito
+inteiro a cada clique de medidor, e carregar nele o guardado de N plugins faria
+cada `+1` de vida regravar dado alheio. Aqui o plugin lê sob demanda, grava só
+o seu, viaja no zip, e cabe em 64 KB por plugin. Duas metades, e a fronteira é
+a rede: `privado` nunca sai do Mestre; `publico` é o que o celular do **dono**
+do personagem pode receber. Quem separa é o Rust (`publicos`), não quem chama.
+
+`api.dados.rolar(["1d20", "1d4"])` joga dados de verdade no palco e resolve
+quando eles **caem** — a promessa espera a mesma conta que anima a queda, para
+o plugin não dar o dano antes de o d20 parar. Sem modificador: `+3` é conta do
+plugin, e é o que deixa a paleta continuar recusando `2d6+3` de propósito. O
+`total` soma o que entra na soma; a moeda fica de fora. Só o Mestre vê os
+dados, por ora.
+
+`api.eventos` — `aoMudarMedidor`, `aoAlternarCondicao`, `aoRolar`,
+`aoTrocarCena`, `aoPorNoAr` — saem da **releitura** do elenco e dos stores, e
+não de um gancho em cada escrita: quem escreve é o Rust, por dezenas de
+caminhos (a ficha, o menu do token, o celular, outro plugin), e comparar a
+leitura nova com a anterior é o único lugar por onde toda mudança passa. A
+primeira leitura da campanha não conta como mudança, senão todo plugin de
+automação dispararia no boot. `aoRolar` cobre o dado do mestre e o do jogador.
+
+### Encaixes: menus, seções, substitutos e ferramentas
+
+O pedido era que um plugin pudesse criar opções novas nos elementos e
+modificar as janelas que já existem. São três encaixes declarados no manifesto
+e implementados no módulo, e uma ferramenta mais completa.
+
+**Item de menu** — `itensDeMenu: [{ id, titulo, alvo, icone }]`. O `alvo` diz
+qual menu: `palco.token`, `palco.luz`, `palco.area`, `palco.quadro`,
+`palco.parede`, `palco.retrato`, `palco.vazio` para o botão direito no palco
+pelo que está na mão; `linha.cena`, `linha.personagem`, `linha.retrato`,
+`linha.imagem`, `linha.quadro`, `linha.nota` para as linhas das listas — botão
+direito e três pontos, os dois, pelo mesmo `Kit` que as linhas já usam. O item
+aparece pelo manifesto e o clique importa o módulo, como o comando; `quando`
+esconde o item num contexto em que ele não se aplica. **Parede e retrato não
+têm menu de fábrica**: eles ganham um só quando algum plugin declarou item para
+eles, e sem plugin nada muda. Postit e cartão passaram a aceitar o botão
+direito, que antes caía no vazio.
+
+**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra depois
+das condições e antes dos arquivos, com a moldura das de fábrica: fecha,
+lembra que fechou. O corpo recebe `personagemId`.
+
+**Substituto** — `substitutos: [{ alvo }]`, com `secao:medidores` (o miolo de
+uma seção da ficha) ou `janela:personagem` (a janela inteira). É o que deixa
+uma ficha com cara de outro sistema existir. Tudo que pode dar errado devolve o
+de fábrica: plugin desligado, módulo que falhou, corpo não registrado, corpo
+que estourou. Dois plugins no mesmo alvo: vale o **primeiro por ordem de
+nome** — previsível e sem configuração; quem quiser o outro desliga o primeiro.
+O ponto único da janela é `JanelaCorpo`, flutuante e atracada; o da seção é
+`SecaoFicha`. Sem plugin, nenhum dos dois ganha um nó a mais na árvore.
+
+**Ferramenta** — o `icone` do manifesto passa a ser um nome da lista de
+`icones.ts` (antes era ignorado); `opcoes` é um componente que aparece como
+pílula ao lado do botão enquanto a ferramenta está na mão, como a cor do lápis;
+`aoMover` chega a cada quadro do arrasto, para a prévia; e `aoClicar`,
+`aoArrastar` e `aoMover` recebem as teclas seguradas (`shift`, `ctrl`, `alt`).
+
 ### Atalho de plugin não rouba atalho do aplicativo
 
 A tabela de `atalhos.ts` é consultada em ordem e os do plugin entram **depois**.

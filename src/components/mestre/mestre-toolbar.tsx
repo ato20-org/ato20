@@ -8,14 +8,14 @@ import {
   MousePointer2,
   Pencil,
   X,
-  Puzzle,
   Ruler,
   Spline,
   StickyNote,
   Type,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { createElement, useEffect, useMemo, useState } from "react";
 
+import { BarreiraDeExtensao } from "@/components/mestre/barreira-de-extensao";
 import { FormaControl } from "@/components/mestre/forma-control";
 import { PencilControl } from "@/components/mestre/pencil-control";
 import { PilulaDeDesenho } from "@/components/mestre/pilula-de-desenho";
@@ -33,7 +33,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { garantirCarregada } from "@/lib/extensoes/carregar";
+import { iconeDeExtensao } from "@/lib/extensoes/icones";
+import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
+import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import {
   ferramentaDeExtensao,
@@ -229,10 +232,11 @@ function ehAtiva(
 /**
  * As ferramentas que os plugins trouxeram.
  *
- * O ícone é sempre o mesmo desenho, e não o `icone` do manifesto: carregar
- * imagem de extensão aqui pagaria um pedido por ferramenta numa barra que o
- * mestre olha o tempo todo, e uma que falhasse deixaria um buraco no lugar de
- * um botão. O nome aparece no `tooltip`.
+ * O ícone vem pelo NOME, da lista do aplicativo (`icones.ts`), e não por um
+ * arquivo da extensão: carregar imagem aqui pagaria um pedido por ferramenta
+ * numa barra que o mestre olha o tempo todo, e uma que falhasse deixaria um
+ * buraco no lugar de um botão. Nome que não está na lista, ou nenhum, desenha
+ * a peça de quebra-cabeça. O nome da ferramenta aparece no `tooltip`.
  */
 function useFerramentasDeExtensao(): Ferramenta[] {
   const extensoes = useExtensoesStore((state) => state.extensoes);
@@ -246,10 +250,43 @@ function useFerramentasDeExtensao(): Ferramenta[] {
             tool: `ext:${extensao.id}/${ferramenta.id}` as Tool,
             label: ferramenta.titulo,
             hint: extensao.nome,
-            icon: Puzzle,
+            icon: iconeDeExtensao(ferramenta.icone),
           })),
         ),
     [extensoes],
+  );
+}
+
+/**
+ * As opções da ferramenta de plugin que está na mão, ou nada.
+ *
+ * A pílula do plugin, pela regra de sempre: ao lado de onde a ferramenta foi
+ * escolhida. O plugin entrega um componente em `registrar.ferramenta({
+ * opcoes })`, e ele aparece aqui enquanto a ferramenta estiver ativa -- dentro
+ * da barreira, porque é código de terceiro numa barra que o mestre olha o
+ * tempo todo.
+ */
+function ControleDeExtensao() {
+  const tool = useToolStore((state) => state.tool);
+  const daExtensao = ferramentaDeExtensao(tool);
+  const registrada = useContribuicoesStore((state) =>
+    daExtensao
+      ? state.ferramentas[chaveContribuicao(daExtensao.extensaoId, daExtensao.ferramentaId)]
+      : undefined,
+  );
+  const extensao = useExtensoesStore((state) =>
+    daExtensao ? state.extensoes.find((atual) => atual.id === daExtensao.extensaoId) : undefined,
+  );
+
+  if (!registrada?.opcoes || !extensao) return null;
+
+  return (
+    <>
+      <span className="bg-border my-1 h-px w-5" />
+      <BarreiraDeExtensao nome={extensao.nome} reserva={null}>
+        {createElement(registrada.opcoes)}
+      </BarreiraDeExtensao>
+    </>
   );
 }
 
@@ -428,6 +465,7 @@ export function ReguaDoMapa({ scene }: { scene: Scene }) {
           sempre: ele fica ao lado de onde a escolha aconteceu. Os dois se
           escondem sozinhos, e por isso o risco pergunta antes de aparecer. */}
       <ControleDoMapa />
+      <ControleDeExtensao />
     </div>
   );
 }
@@ -516,6 +554,7 @@ export function ReguaDeDesenho({ scene }: { scene: Scene }) {
           o separador também precisa saber: sem ele, a régua ficaria com um
           risco solto no pé metade do tempo. */}
       <SeparadorDoControle quadro={quadro} />
+      {quadro ? <ControleDeExtensao /> : null}
     </div>
   );
 }

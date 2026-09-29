@@ -18,6 +18,7 @@ use crate::vault::session::Json;
 use crate::vault::characters::{Anexo, Aparencia, Autor, Campo, Personagem};
 use crate::vault::players::{Attachment, Player};
 use crate::vault::inventory::{self, Item};
+use crate::vault::dados_de_extensao;
 use crate::vault::{
     assets,
     documentos, board, characters, condicoes, modelos, players, session, variantes, zip,
@@ -1207,6 +1208,55 @@ pub fn character_medidores_reordenar(
     ordem: Vec<String>,
 ) -> AppResult<Vec<characters::Medidor>> {
     state.with_vault(|vault| characters::reordenar_medidores(vault, &id, &ordem))
+}
+
+/// Aplica varias mudancas de medidor, em varios personagens, gravando UMA vez.
+///
+/// O caminho dos plugins: um botao de ataque que tira vida de dez goblins e um
+/// lote, e nao dez chamadas. Ver `characters::aplicar_medidores`.
+#[tauri::command]
+pub fn character_medidores_aplicar(
+    state: State<'_, AppState>,
+    mudancas: Vec<characters::MudancaDeMedidor>,
+) -> AppResult<Vec<characters::Medidor>> {
+    state.with_vault(|vault| characters::aplicar_medidores(vault, mudancas))
+}
+
+// --- guardado das extensoes --------------------------------------------------
+
+/// O que uma extensao guardou num personagem, as duas metades.
+///
+/// So o Mestre chama: o daemon entrega ao celular a metade publica por outro
+/// caminho. Ver `dados_de_extensao`.
+#[tauri::command]
+pub fn character_extensao_ler(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] extensaoId: String,
+) -> AppResult<dados_de_extensao::Guardado> {
+    if !extensoes::id_valido(&extensaoId) {
+        return Err(AppError::ExtensaoInvalida(format!("id invalido: {extensaoId:?}")));
+    }
+
+    state.with_vault(|vault| dados_de_extensao::ler(vault, &id, &extensaoId))
+}
+
+/// Grava uma ou as duas metades. Ausente deixa como esta; `null` apaga.
+#[tauri::command]
+pub fn character_extensao_gravar(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] extensaoId: String,
+    privado: Option<Json>,
+    publico: Option<Json>,
+) -> AppResult<dados_de_extensao::Guardado> {
+    if !extensoes::id_valido(&extensaoId) {
+        return Err(AppError::ExtensaoInvalida(format!("id invalido: {extensaoId:?}")));
+    }
+
+    state.with_vault(|vault| {
+        dados_de_extensao::gravar(vault, &id, &extensaoId, privado, publico)
+    })
 }
 
 // --- condicoes ---------------------------------------------------------------

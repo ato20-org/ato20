@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
+import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -449,6 +450,12 @@ export function CharactersBody() {
           <Trash2 />
           Apagar personagem
         </Item>
+
+        <ItensDeExtensao
+          alvo="linha.personagem"
+          contexto={{ alvo: "linha.personagem", personagemId: personagem.id }}
+          kit={kit}
+        />
       </>
       );
     };
