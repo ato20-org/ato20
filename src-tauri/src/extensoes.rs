@@ -136,6 +136,61 @@ pub struct Contribuicoes {
     /// Camadas sobre o mapa. Do MESTRE -- ver a nota em `Camada`.
     #[serde(default)]
     pub camadas: Vec<Camada>,
+    /// O que a extensao deixa o mestre ajustar. Ver `Configuracao`.
+    #[serde(default)]
+    pub configuracoes: Vec<Configuracao>,
+}
+
+/// Uma configuracao que a extensao declara, como as `contributes.configuration`
+/// do VSCode.
+///
+/// DECLARATIVA: a tela de Configuracoes desenha o campo a partir daqui, sem
+/// importar o modulo. E o que faz um plugin desligado ainda mostrar o que ele
+/// deixaria ajustar, e um plugin so de tema ter configuracao sem ter JS.
+///
+/// A chave e `{id da extensao}.{nome}`, e o prefixo e obrigatorio: e o que
+/// impede dois plugins de disputarem `cor`, e um plugin de escrever em
+/// `ato20.zoom`. Quem valida o valor GRAVADO e a tela, na leitura, contra
+/// `tipo`; o Rust so garante que a declaracao faz sentido -- `padrao` do tipo
+/// declarado, `escolha` com opcoes, `numero` dentro do intervalo.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Configuracao {
+    pub chave: String,
+    pub titulo: String,
+    #[serde(default)]
+    pub descricao: Option<String>,
+    pub tipo: TipoConfiguracao,
+    pub padrao: serde_json::Value,
+    /// Onde ela pode ser gravada. Ausente = nos dois, e a campanha vence.
+    #[serde(default)]
+    pub escopo: EscopoConfiguracao,
+    /// As opcoes de uma `escolha`. Vazio nos outros tipos.
+    #[serde(default)]
+    pub opcoes: Vec<String>,
+    /// O intervalo de um `numero`. Ausente = sem limite.
+    #[serde(default)]
+    pub minimo: Option<f64>,
+    #[serde(default)]
+    pub maximo: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TipoConfiguracao {
+    Booleano,
+    Numero,
+    Texto,
+    Escolha,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum EscopoConfiguracao {
+    Maquina,
+    Campanha,
+    #[default]
+    Ambos,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -384,6 +439,8 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
         }
     }
 
+    validar_configuracoes(manifesto)?;
+
     // Icone de ferramenta e caminho dentro da pasta, e vale a mesma guarda do
     // `tema` e do `principal`.
     for ferramenta in &c.ferramentas {
@@ -394,6 +451,119 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
                     ferramenta.id
                 )));
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// As configuracoes declaradas fazem sentido?
+///
+/// Nao exigem `principal`: sao declarativas, e um tema pode ter uma. Ficam
+/// fora de `declarou_algo` por isso.
+fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
+    let lista = &manifesto.contribui.configuracoes;
+
+    if lista.len() > MAX_CONTRIBUICOES {
+        return Err(AppError::ExtensaoInvalida(format!(
+            "`configuracoes` declara {} itens; o teto e {MAX_CONTRIBUICOES}",
+            lista.len()
+        )));
+    }
+
+    let prefixo = format!("{}.", manifesto.id);
+    let mut vistas: Vec<&str> = Vec::new();
+
+    for c in lista {
+        // O prefixo e a cerca: `cor` viraria disputa entre plugins, e
+        // `ato20.zoom` deixaria um plugin redefinir o padrao do aplicativo.
+        let nome = c.chave.strip_prefix(&prefixo).ok_or_else(|| {
+            AppError::ExtensaoInvalida(format!(
+                "a chave {:?} tem de comecar com {prefixo:?}",
+                c.chave
+            ))
+        })?;
+
+        // O que vem depois do prefixo segue a regra do slug, com o ponto a
+        // mais para agrupar: `meu-plugin.dados.cor`.
+        if nome.is_empty()
+            || !nome
+                .split('.')
+                .all(|parte| !parte.is_empty() && id_valido(parte))
+        {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "a chave {:?} nao serve: depois do prefixo, so minusculas, digitos, hifen e ponto",
+                c.chave
+            )));
+        }
+
+        if c.titulo.trim().is_empty() {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "a configuracao {:?} esta sem titulo",
+                c.chave
+            )));
+        }
+
+        if vistas.contains(&c.chave.as_str()) {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "a chave {:?} aparece duas vezes",
+                c.chave
+            )));
+        }
+        vistas.push(&c.chave);
+
+        // O padrao tem de ser do tipo declarado: e ele que a tela mostra
+        // quando ninguem mexeu, e um `padrao: "sim"` num booleano desenharia
+        // uma chave sem estado.
+        let do_tipo = match c.tipo {
+            TipoConfiguracao::Booleano => c.padrao.is_boolean(),
+            TipoConfiguracao::Numero => c.padrao.is_number(),
+            TipoConfiguracao::Texto => c.padrao.is_string(),
+            TipoConfiguracao::Escolha => c.padrao.is_string(),
+        };
+        if !do_tipo {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "o padrao de {:?} nao e do tipo declarado",
+                c.chave
+            )));
+        }
+
+        match c.tipo {
+            TipoConfiguracao::Escolha => {
+                if c.opcoes.is_empty() {
+                    return Err(AppError::ExtensaoInvalida(format!(
+                        "a escolha {:?} nao tem opcoes",
+                        c.chave
+                    )));
+                }
+                let padrao = c.padrao.as_str().unwrap_or_default();
+                if !c.opcoes.iter().any(|o| o == padrao) {
+                    return Err(AppError::ExtensaoInvalida(format!(
+                        "o padrao de {:?} nao esta entre as opcoes",
+                        c.chave
+                    )));
+                }
+            }
+            TipoConfiguracao::Numero => {
+                let padrao = c.padrao.as_f64().unwrap_or_default();
+                if let (Some(min), Some(max)) = (c.minimo, c.maximo) {
+                    if min > max {
+                        return Err(AppError::ExtensaoInvalida(format!(
+                            "o intervalo de {:?} esta invertido",
+                            c.chave
+                        )));
+                    }
+                }
+                if c.minimo.is_some_and(|min| padrao < min)
+                    || c.maximo.is_some_and(|max| padrao > max)
+                {
+                    return Err(AppError::ExtensaoInvalida(format!(
+                        "o padrao de {:?} esta fora do intervalo",
+                        c.chave
+                    )));
+                }
+            }
+            _ => {}
         }
     }
 
@@ -944,6 +1114,147 @@ mod tests {
             ler(
                 base.path(),
                 &com_contrib(&format!(r#"{{"paineis":[{}]}}"#, paineis.join(",")))
+            )
+            .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    /// Um manifesto SEM `principal` com uma configuracao. Declarativa, entao
+    /// nao precisa de modulo.
+    fn com_config(corpo: &str) -> String {
+        format!(
+            r#"{{"id":"plug","nome":"Plug","versao":"1.0.0","apiVersao":2,"tema":"tema.css","contribui":{{"configuracoes":[{corpo}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn configuracao_entra_inteira_e_sem_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_config(
+                r#"{"chave":"plug.cor","titulo":"Cor","tipo":"escolha","padrao":"azul","opcoes":["azul","rubi"],"escopo":"campanha"}"#,
+            ),
+        )
+        .unwrap();
+
+        let c = &m.contribui.configuracoes[0];
+        assert_eq!(c.chave, "plug.cor");
+        assert_eq!(c.tipo, TipoConfiguracao::Escolha);
+        assert_eq!(c.escopo, EscopoConfiguracao::Campanha);
+        assert_eq!(c.opcoes, vec!["azul", "rubi"]);
+    }
+
+    #[test]
+    fn configuracao_sem_escopo_vale_nos_dois() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_config(
+                r#"{"chave":"plug.ligado","titulo":"Ligado","tipo":"booleano","padrao":true}"#,
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(
+            m.contribui.configuracoes[0].escopo,
+            EscopoConfiguracao::Ambos
+        );
+    }
+
+    #[test]
+    fn configuracao_sem_o_prefixo_da_extensao_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+
+        // Sem o prefixo, `cor` viraria disputa entre plugins e `ato20.zoom`
+        // deixaria um plugin redefinir o padrao do aplicativo.
+        for chave in [
+            "cor",
+            "ato20.zoom",
+            "outro.cor",
+            "plug.",
+            "plug.Cor",
+            "plug.a..b",
+        ] {
+            assert!(
+                matches!(
+                    ler(
+                        base.path(),
+                        &com_config(&format!(
+                            r#"{{"chave":"{chave}","titulo":"X","tipo":"texto","padrao":""}}"#
+                        ))
+                    )
+                    .unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{chave} devia ser recusada"
+            );
+        }
+    }
+
+    #[test]
+    fn configuracao_com_padrao_de_outro_tipo_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+
+        for (tipo, padrao) in [("booleano", "\"sim\""), ("numero", "\"1\""), ("texto", "1")] {
+            assert!(matches!(
+                ler(
+                    base.path(),
+                    &com_config(&format!(
+                        r#"{{"chave":"plug.x","titulo":"X","tipo":"{tipo}","padrao":{padrao}}}"#
+                    ))
+                )
+                .unwrap_err(),
+                AppError::ExtensaoInvalida(_)
+            ));
+        }
+    }
+
+    #[test]
+    fn escolha_exige_opcoes_com_o_padrao_dentro() {
+        let base = tempfile::tempdir().unwrap();
+
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_config(r#"{"chave":"plug.x","titulo":"X","tipo":"escolha","padrao":"a"}"#)
+            )
+            .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_config(
+                    r#"{"chave":"plug.x","titulo":"X","tipo":"escolha","padrao":"c","opcoes":["a","b"]}"#
+                )
+            )
+            .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    #[test]
+    fn numero_respeita_o_intervalo_declarado() {
+        let base = tempfile::tempdir().unwrap();
+
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_config(
+                    r#"{"chave":"plug.x","titulo":"X","tipo":"numero","padrao":11,"minimo":0,"maximo":10}"#
+                )
+            )
+            .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_config(
+                    r#"{"chave":"plug.x","titulo":"X","tipo":"numero","padrao":5,"minimo":10,"maximo":0}"#
+                )
             )
             .unwrap_err(),
             AppError::ExtensaoInvalida(_)
