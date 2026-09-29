@@ -12,14 +12,14 @@ continua vendo a atual na TV, e cada jogador acompanha pelo próprio celular.
 No Linux, o AppImage roda sem instalar nada:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v0.1.4/ato20_0.1.4_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v0.6.0/ato20_0.6.0_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 No Windows, pelo PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v0.1.4/ato20_0.1.4_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v0.6.0/ato20_0.6.0_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -28,7 +28,7 @@ e não `-O`. O apelido existe no Windows PowerShell 5.1, que é o que vem na má
 PowerShell 7 ele foi removido; lá o comando é `curl.exe` na mesma forma do Linux:
 
 ```powershell
-curl.exe -fL -o ato20-setup.exe https://github.com/ato20-org/ato20/releases/download/v0.1.4/ato20_0.1.4_x64-setup.exe
+curl.exe -fL -o ato20-setup.exe https://github.com/ato20-org/ato20/releases/download/v0.6.0/ato20_0.6.0_x64-setup.exe
 ```
 
 O `.exe` no final não é enfeite: sem ele o PowerShell 5.1 resolve `curl` para o mesmo
@@ -37,7 +37,7 @@ O `.exe` no final não é enfeite: sem ele o PowerShell 5.1 resolve `curl` para 
 **As URLs acima fixam a versão porque o nome do arquivo a carrega dentro.** O atalho
 `releases/latest/download/` do GitHub voltou a funcionar na 0.1.0 — ele ignora
 pré-lançamento, e até a 0.0.6 toda release era uma —, mas o que ele resolve é a release, não
-o nome do pacote: `ato20_0.1.4_amd64.AppImage` deixa de existir na versão seguinte. Para um
+o nome do pacote: `ato20_0.6.0_amd64.AppImage` deixa de existir na versão seguinte. Para um
 comando que não envelhece, peça o nome à API:
 
 ```bash
@@ -64,13 +64,25 @@ minha-campanha/
   config.json          nome, código da mesa, versão do formato
   ordem.json           a ordem das cenas, qual está aberta, qual está no ar
   cenas/
-    a-taverna.json     itens, áreas escondidas, câmera
+    a-taverna.json     itens, áreas escondidas, paredes, luzes, câmera
     acao-na-ponte.json
   assets/
     a1b2c3.webp        os binários, nomeados pelo id
     trilha.ogg
   assets.json          nome, tipo, medidas e pasta de cada arquivo
   pastas.json
+  documentos/
+    rumores.md         os cartões de Markdown dos quadros
+  personagens.json     o elenco, com medidores e condições de cada um
+  personagens/
+    c4d5.../
+      _notas.json      a nota do personagem
+      _inventario.json
+      anexos/
+        mestre/        o que o mestre anexou à ficha
+        jogador/       o que o jogador anexou à ficha
+  medidores.json       os modelos de medidor da campanha
+  condicoes.json       o cardápio de condições
   retratos.json        quem está no ar, em que canto, de que tamanho
   trilha.json
   configuracoes.json   o que vale só nesta campanha; vence o da máquina
@@ -81,6 +93,8 @@ minha-campanha/
     estado.db          nome, caderno e credencial de cada jogador
     mini/
       a1b2c3.png       miniatura de 160px, refeita a partir do original
+    tela/              1920px, para o celular
+    palco/             4096px, para o palco do mestre e a TV
 ```
 
 Isso existe por causa de um custo que travou a versão anterior. Ela guardava mapas e
@@ -97,10 +111,17 @@ como 48 MB de bitmap para caber num polegar de tela. Medido em `scripts/perf/med
 cenário `biblioteca`, acervo de 200 mapas: 200 arquivos e 1,9 GB de tráfego contra **47
 arquivos e 464 MB** só com `loading="lazy"`, e alguns KB por linha com a miniatura. Ela é
 derivada, então vive em `.ato20/` e não viaja no zip — apagar a pasta não perde nada, o
-daemon a refaz no primeiro pedido. Quem gera é `vault/mini.rs`, na importação e sob demanda.
+daemon a refaz no primeiro pedido. Quem gera é `vault/variantes.rs`, na importação e sob demanda.
 
-**O que mora no SQLite, e o que isso custa.** Cenas, acervo, retratos, trilha e os anexos
-dos jogadores são arquivos: perder o `.ato20/estado.db` não toca em nenhum deles. O que mora
+As outras duas reduções saem do mesmo módulo, em JPEG e só sob demanda. A `tela` é do
+celular, que recebia os 8 MB de um mapa para mostrar 400px de largura. A `palco` é do Mestre
+e da TV com o plano cheio: medido no WebKitGTK, afastar um mapa de 8192px caía a 19 fps, e
+com a redução de 4096 fica em 55. A partir de 2,1x de ampliação o palco volta ao original,
+que é onde a redução deixaria de ser 1:1 — não há zoom em que se veja menos detalhe do que
+antes.
+
+**O que mora no SQLite, e o que isso custa.** Cenas, acervo, personagens, retratos, trilha e
+os anexos dos jogadores são arquivos: perder o `.ato20/estado.db` não toca em nenhum deles. O que mora
 só lá é o *texto* de cada jogador — o nome e o caderno de notas — porque uma nota grava a
 cada 800 ms de digitação e reescrever um JSON inteiro nesse ritmo, com vários celulares ao
 mesmo tempo, é a receita para escrita perdida. Esse texto é materializado em
@@ -148,6 +169,9 @@ endereço mais adivinhável da rede não é lugar para descobrir isso. O daemon 
   SSE, então qualquer aparelho da casa serve de TV e cada jogador acompanha pelo celular.
 - **Ficha do personagem: no Jogador.** Nome, caderno de notas e anexos, com um token por jogador no
   lugar da RLS que fazia esse trabalho antes.
+- **O celular joga.** O jogador vê o personagem vinculado a ele — inventário, anexos e os
+  medidores que o mestre não escondeu —, rola dado na mesa e move o token do próprio
+  personagem. Quem sorteia o dado é o daemon, e não o aparelho de quem se beneficia dele.
 - **Exportar e importar zip: pronto.** A campanha cabe num arquivo, e o arquivo abre em
   qualquer outra máquina — com a mesa continuando a valer.
 - **Flathub: o pacote já constrói, e ainda não foi submetido.** O manifesto está em
@@ -241,13 +265,24 @@ uma thread `axum`, e não um sidecar Node, porque o Rust já tem fs, sqlite, zip
 sidecar exigiria empacotar um runtime a mais só para não trocar de linguagem.
 
 ```
-GET   /                as telas de espectador, do bundle estatico
-GET   /asset/{id}      o arquivo, com Range e ETag
-GET   /sala?codigo=    confere o codigo, devolve o nome da campanha
-GET   /sala/live?codigo=   a cena, em SSE
-POST  /sala/publicar   o Mestre anuncia; token + loopback
+GET   /                        as telas de espectador, do bundle estatico
+GET   /asset/{id}              o arquivo, com Range e ETag
+GET   /asset/{id}/{variante}   mini, tela ou palco; o que falhar cai no original
+GET   /evidencia/{id}          o anexo que o mestre pos em evidencia
+GET   /documento/{arquivo}     o texto de um documento do quadro
+GET   /livro/{id}              um livro da estante, para o leitor; token
+GET   /sala?codigo=            confere o codigo, devolve o nome da campanha
+GET   /sala/live?codigo=       a cena, em SSE
+GET   /sala/rolagens           os dados que a mesa jogou, em SSE; loopback
+GET   /sala/movimentos         os tokens que os jogadores arrastaram, em SSE; loopback
+POST  /sala/publicar           o Mestre anuncia; token + loopback
+GET   /debug/palco             o que as telas mediram de si; loopback
+POST  /debug/palco
 GET   /saude
 ```
+
+`/assistir` e `/plateia`, os nomes antigos das duas telas, redirecionam com a query junto:
+eles estão no QR que o mestre mostrou na mesa passada e no link que cada jogador salvou.
 
 **A porta é fixa (20200), e isso é por causa do celular.** Com porta sorteada a cada
 abertura, o endereço do Jogador mudaria toda sessão e nenhum jogador conseguiria guardar o
@@ -337,20 +372,21 @@ aparelho já tem.
 
 ### O token de escrita
 
-`POST /sala/publicar` exige o cabeçalho `x-ato20-token`, gerado a cada
+`POST /sala/publicar` e `GET /livro/{id}` exigem o cabeçalho `x-ato20-token`, gerado a cada
 abertura do aplicativo e nunca gravado em disco. Só a janela o recebe, pelo IPC. A porta
-agora está na rede: sem o token, qualquer aparelho do Wi-Fi poderia enviar arquivo para o
-acervo do mestre.
+está na rede: sem o token, qualquer aparelho do Wi-Fi poderia trocar a cena da TV ou baixar
+os livros da estante do mestre.
 
 Publicar cena exige, **além** do token, que a requisição venha de loopback. O token
 sozinho bastaria — ele não sai desta máquina —, mas publicar é a única rota cujo abuso
 apareceria direto na TV da mesa, e a segunda condição custa três linhas.
 
-**Todo `POST` do daemon declara o próprio limite de corpo.** O padrão do axum são 2 MB, e
-herdá-lo em silêncio já custou um bug: o envio de anexo era cortado no meio e o erro
-resultante não mencionava tamanho. Publicar cena aceita 16 MB (é a cena inteira em JSON), e
-o anexo do jogador desliga o limite da camada porque o handler conta os bytes e recusa acima
-de 64 MB com uma mensagem que diz isso.
+**Todo `POST` que carrega cena ou arquivo declara o próprio limite de corpo.** O padrão do
+axum são 2 MB, e herdá-lo em silêncio já custou um bug: o envio de anexo era cortado no meio
+e o erro resultante não mencionava tamanho. Publicar cena aceita 16 MB (é a cena inteira em
+JSON), e o anexo do jogador desliga o limite da camada porque o handler conta os bytes e
+recusa acima de 64 MB com uma mensagem que diz isso. O anexo da ficha e a foto do item do
+inventário seguem o mesmo desenho.
 
 O portão é uma **camada**, e não uma checagem no corpo do handler. Não é estilo: os
 extractors do axum rodam antes do handler, então um `Multipart` inválido era recusado com
@@ -360,6 +396,10 @@ recusar quem não está autorizado é antes do parser — e há teste para isso.
 A leitura (`GET /asset/{id}`) é aberta de propósito: é dela que a TV e o celular do jogador
 vão buscar mapa e trilha, e exigir segredo por arquivo faria cada `<img>` da cena carregar
 um cabeçalho que o HTML não sabe mandar.
+
+O livro é a exceção, e a diferença é de público, não de risco de escrita: o material da
+cena é o que a mesa tem de ver, e um manual de regras é do mestre. Quem pede é o leitor do
+Mestre, que manda o token pelo `httpHeaders` do pdf.js.
 
 ## Jogadores
 
@@ -377,6 +417,20 @@ GET    /eu/anexos
 POST   /eu/anexos          multipart
 GET    /eu/anexos/{arquivo}
 DELETE /eu/anexos/{arquivo}
+POST   /eu/rolagens        o dado que o jogador joga; quem sorteia e o daemon
+POST   /eu/movimentos      o token do proprio personagem
+GET    /eu/personagens     so os vinculados a este jogador
+GET    /eu/personagens/{id}/anexos
+POST   /eu/personagens/{id}/anexos                     multipart
+GET    /eu/personagens/{id}/anexos/{autor}/{arquivo}[/{variante}]
+DELETE /eu/personagens/{id}/anexos/{autor}/{arquivo}
+GET    /eu/personagens/{id}/nota
+PUT    /eu/personagens/{id}/nota
+GET    /eu/personagens/{id}/inventario
+POST   /eu/personagens/{id}/inventario
+PATCH  /eu/personagens/{id}/inventario/{itemId}
+DELETE /eu/personagens/{id}/inventario/{itemId}
+PUT    /eu/personagens/{id}/inventario/{itemId}/imagem
 GET    /eu/notas
 POST   /eu/notas           {titulo?, texto?, tags?} -> nota
 PATCH  /eu/notas/{id}      {titulo?, texto?, tags?}
@@ -392,6 +446,15 @@ sinais trocados (ver `lib/mencoes/`). A diferença que importa está na rota da 
 devolve **só personagem com jogador**. A campanha tem o vilão que ninguém viu e o traidor
 que ainda é aliado, e mandar o índice inteiro para o celular entregaria a preparação do
 mestre na aba de rede do navegador — nenhuma filtragem na tela conserta o que já chegou.
+
+**Personagem é vínculo, e cada rota confere.** Token válido não basta em
+`/eu/personagens`: o personagem tem de estar ligado a quem pede, e o que não está responde
+404 — que o celular lê como "o mestre tirou este personagem de você". A lista de aparências
+fica de fora, porque ela tem a forma verdadeira do vilão e o disfarce que ainda não caiu; o
+jogador recebe só o retrato e a miniatura que estão no ar. Medidor escondido e item escondido
+do inventário saem pelo mesmo caminho, filtrados no daemon e não na tela. Mover o token
+passa por duas barreiras: o daemon confere o vínculo, e a janela do Mestre, que tem o board,
+confere que o item está na cena no ar, é deste personagem e não está travado.
 
 **O token substitui a RLS.** Era o Postgres que impedia a ficha de um jogador de vazar para
 o outro; agora é um token de 32 bytes do CSPRNG do sistema, guardado no `localStorage` do
@@ -1202,6 +1265,7 @@ verificável sem navegador.
 ## Testes
 
 ```bash
+pnpm garantir-out              # clone limpo: sem o out/, o build script do Tauri morre
 cd src-tauri && cargo test
 ```
 
@@ -1216,14 +1280,24 @@ banco, ficha que só o próprio token abre, `rotulo` que o jogador não alcança
 que não é legível nem listável pelo outro, nome de arquivo hostil que não escapa da pasta,
 e token que deixa de valer quando o mestre tira o jogador da mesa.
 
-Sobre o zip: ida e volta preservando cenas e acervo, o `.ato20/` que não viaja, jogadores
-que ficam de fora quando pedido, a mesa que continua valendo depois do import, import que
-não sobrescreve, zip que não é campanha recusado sem sujar o disco, e um zip-slip de
-verdade que não escreve fora do destino.
+Sobre o zip: ida e volta preservando cenas e acervo, o personagem e a nota dele que viajam
+junto, o `.ato20/` que não viaja, o banco ilegível que não derruba o export, a mesa que
+continua valendo depois do import, import que não sobrescreve, zip que não é campanha
+recusado sem sujar o disco, e um zip-slip de verdade que não escreve fora do destino.
 
-O lado TypeScript **ainda não tem runner**. Os módulos puros foram escritos para serem
-testáveis de fora — é o motivo de `reorderByZ`, `clampViewport`, `flipPatches`, `scaleGroup`
-e companhia existirem separados dos componentes — mas portá-los ainda é trabalho pendente.
+O lado TypeScript roda em vitest:
+
+```bash
+pnpm test
+```
+
+Ele cobre `src/lib` e `src/types`, e nada mais, de propósito. Ali mora a conta pura — o
+recorte da câmera que nunca sai de 16:9, grade, luz e sombra, dado e notação de dados,
+régua, histórico de texto, o que `sceneForTable` tira antes de publicar —, onde erro é
+silencioso e só aparece no vigésimo gesto. Componente de React fica fora: os defeitos que o
+palco de fato teve foram do motor real — o `contain` comprimindo sob `zoom`, o mapa sumindo
+quando a forma de ampliar trocava —, e nenhum deles reproduz em jsdom. O porquê inteiro está
+em `vitest.config.mts`.
 
 ### Medir a webview
 
