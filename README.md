@@ -27,14 +27,14 @@ celular.
 No Linux, o AppImage roda sem instalar nada:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v0.7.1/ato20_0.7.1_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v0.7.2/ato20_0.7.2_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 No Windows, pelo PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v0.7.1/ato20_0.7.1_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v0.7.2/ato20_0.7.2_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 

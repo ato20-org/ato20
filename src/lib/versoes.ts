@@ -56,6 +56,24 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "0.7.2",
+    data: "2026-09-29",
+    mudancas: [
+      {
+        tipo: "correcao",
+        titulo: "Criar uma câmera pela tecla N não troca mais o que a mesa está vendo",
+        detalhe:
+          "A câmera nova entrava no ar na hora e cortava a cena da mesa. Agora ela nasce só selecionada, a mesa continua na câmera que estava, e o T põe a nova no ar quando for a hora. O botão + da pílula continua criando já no ar.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A câmera criada pela tecla N nasce onde o mouse está apontando",
+        detalhe:
+          "Com o tamanho da câmera selecionada. Com o mouse fora do mapa, numa coluna ou numa janela por cima, ela nasce onde nascia antes.",
+      },
+    ],
+  },
+  {
     versao: "0.7.1",
     data: "2026-09-29",
     mudancas: [

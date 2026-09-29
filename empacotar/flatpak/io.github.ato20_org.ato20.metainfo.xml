@@ -100,6 +100,23 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.7.2" date="2026-09-29">
+      <description>
+        <p>
+          Creating a camera with the N key no longer changes what the table is
+          watching. The new camera used to go live at once and cut the table's
+          scene. It is now only selected, the table stays on the camera it was
+          on, and T puts the new one live when it is time. The + button on the
+          camera pill still creates it live.
+        </p>
+        <p>
+          A camera created with the N key is placed where the mouse is
+          pointing, with the size of the selected camera. With the mouse off
+          the map, over a column or a window on top, it is placed where it used
+          to be.
+        </p>
+      </description>
+    </release>
     <release version="0.7.1" date="2026-09-29">
       <description>
         <p>
