@@ -6,6 +6,7 @@ import {
   viewportQueCabe,
   zoomViewportCentered,
 } from "@/lib/geometry/viewport";
+import { ponteiroNaCena } from "@/lib/mestre/ponteiro-no-palco";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import {
   selectEditingScene,
@@ -222,21 +223,61 @@ export function irParaCamera(): void {
  *
  * Nome numerado por padrão: o mestre no meio da sessão não vai parar para
  * batizar, e "Câmera 3" já diz em que ordem nasceu. Renomeia depois, pelo
- * chip. Nasce NO AR: quem cria uma câmera quer que a mesa a veja, e a cena
- * inteira que a mesa via até então já era o recorte de partida.
+ * chip. Nasce NO AR: quem cria uma câmera pelo botão ou pelo menu quer que a
+ * mesa a veja, e a cena inteira que a mesa via até então já era o recorte de
+ * partida. A tecla N é a exceção -- ver `novaCameraNoPonteiro`.
  */
 export function novaCamera(nome?: string): string | undefined {
+  const base = cameraAtual() ?? useViewportStore.getState().viewport;
+  return criarCamera(base, { nome, noAr: true });
+}
+
+/**
+ * A câmera do atalho N: nasce centrada onde o mouse aponta, e NÃO vai ao ar.
+ *
+ * O botão e o menu criam no ar porque são gesto de "quero mostrar isto". A
+ * tecla é outro gesto: o mestre está no meio da sessão, com a mesa olhando
+ * uma câmera, e vai espalhando as próximas pelo mapa -- a porta, o porão, o
+ * altar. Trocar o que a mesa vê a cada N cortaria a cena dela toda vez. Ela
+ * fica selecionada, e o T transmite quando for a hora.
+ *
+ * O tamanho é o da selecionada, ou o do que o palco mostra, como no botão; só
+ * o centro muda. Com o mouse fora do palco -- numa coluna, numa janela por
+ * cima --, cai no mesmo lugar do botão.
+ */
+export function novaCameraNoPonteiro(): string | undefined {
+  const base = cameraAtual() ?? useViewportStore.getState().viewport;
+  const centro = ponteiroNaCena();
+
+  const viewport = centro
+    ? clampViewport(
+        {
+          x: centro.x - base.width / 2,
+          y: centro.y - base.height / 2,
+          width: base.width,
+          height: base.height,
+        },
+        conteudo(),
+      )
+    : base;
+
+  return criarCamera(viewport, { noAr: false });
+}
+
+function criarCamera(
+  viewport: Viewport,
+  { nome, noAr }: { nome?: string; noAr: boolean },
+): string | undefined {
   const scene = lerCena();
   if (!scene) return undefined;
 
-  const base = cameraAtual() ?? useViewportStore.getState().viewport;
   const ordem = (scene.cameras?.length ?? 0) + 1;
   const id = useSceneStore.getState().salvarCamera(scene.id, {
     nome: nome ?? `Câmera ${ordem}`,
-    viewport: base,
+    viewport,
   });
 
-  useSceneStore.getState().transmitirCamera(scene.id, id);
+  if (noAr) useSceneStore.getState().transmitirCamera(scene.id, id);
   useCameraLockStore.getState().selecionar(id);
 
   return id;

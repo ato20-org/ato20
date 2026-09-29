@@ -64,6 +64,11 @@ import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { efeitosDaCena } from "@/lib/condicao";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
+import {
+  anotarPonteiro,
+  esquecerPonteiro,
+  registrarConversor,
+} from "@/lib/mestre/ponteiro-no-palco";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { SelectionBox } from "@/components/playground/selection-box";
@@ -298,6 +303,11 @@ const PAREDE_MINIMA = 8;
 export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
+
+  // O N cria a câmera onde o mouse aponta, e o atalho não tem evento de
+  // ponteiro para saber onde é: o palco empresta a própria conversão. Ver
+  // `ponteiro-no-palco.ts`.
+  useEffect(() => registrarConversor(toScene), [toScene]);
 
   // A cena que o palco DESENHA: a do board com o gesto em curso por cima.
   // Tudo abaixo -- `SceneLayer`, alças, setas, caixa de seleção -- lê `scene`
@@ -2790,6 +2800,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
               cursor: canPan ? "grab" : aiming ? "crosshair" : undefined,
             },
             onPointerDown: panMode ? undefined : handleCanvasPointerDown,
+            // Só a posição de tela, sem conta nem estado: é o que o N lê para
+            // nascer a câmera sob o mouse.
+            onPointerMove: (evento) => anotarPonteiro(evento.clientX, evento.clientY),
+            onPointerLeave: esquecerPonteiro,
             onDoubleClick:
               panMode || !ehQuadro(scene)
                 ? undefined

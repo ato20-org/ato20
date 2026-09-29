@@ -30,7 +30,7 @@ import {
   irParaCamera,
   mostrarCenaInteira,
   moverCamera,
-  novaCamera,
+  novaCameraNoPonteiro,
   PASSO_CAMERA,
   PASSO_CAMERA_LARGO,
   zoomCamera,
@@ -530,13 +530,13 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "N",
-    rotulo: "Nova câmera a partir da selecionada",
+    rotulo: "Nova câmera onde o mouse está, sem mudar o que está no ar",
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
       !evento.shiftKey &&
       letra(evento) === "n",
-    executar: () => void novaCamera(),
+    executar: () => void novaCameraNoPonteiro(),
     impedirPadrao: true,
   },
   {
