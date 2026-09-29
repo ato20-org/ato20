@@ -14,6 +14,9 @@ import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 export function DeclarativoDoMestre({ children }: { children: ReactNode }) {
   const versao = useDeclarativoStore((state) => state.versao);
   const estilos = useDeclarativoStore((state) => state.estilos);
+  const plugins = useDeclarativoStore((state) => state.plugins);
 
-  return <DeclarativoProvider valor={{ versao, estilos }}>{children}</DeclarativoProvider>;
+  return (
+    <DeclarativoProvider valor={{ versao, estilos, plugins }}>{children}</DeclarativoProvider>
+  );
 }
