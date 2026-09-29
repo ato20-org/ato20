@@ -1078,6 +1078,48 @@ campo existir sem quebrar `personagens.json` em lugar nenhum. Quem o define é o
 plugin, por `ajustarMedidor(..., { estiloExtensao })`, e só com estilo dele
 mesmo; `""` volta ao de fábrica.
 
+### A seção do plugin no celular, e o botão que chega ao Mestre
+
+A metade **pública** do que um plugin guarda no personagem pode virar uma
+seção na tela do jogador. Basta ela ter a chave `secao`:
+
+```js
+api.personagens.gravarDados(id, {
+  publico: {
+    secao: {
+      titulo: "Habilidades",
+      blocos: [
+        { tipo: "valor", rotulo: "PA", valor: 3 },
+        { tipo: "texto", texto: "Guerreiro nível 3" },
+        { tipo: "botao", rotulo: "Atacar", acao: "atacar", icone: "espadas" },
+      ],
+    },
+  },
+});
+api.registrar.acao({ id: "atacar", executar: ({ personagemId, jogador }) => { /* ... */ } });
+```
+
+Três blocos e nada além — texto, rótulo com valor, botão —, validados na
+leitura pelo celular (`secao-publica.ts`): bloco malformado some, os outros
+ficam. É a mesma escolha do estilo de medidor: dado, não código.
+
+O botão **não faz nada no celular**. Ele manda `POST /eu/acoes`, o daemon
+confere que o personagem é daquele jogador e repassa por `/sala/acoes` — o
+mesmo desenho do movimento do token —, e é o `registrar.acao` do plugin, na
+janela do Mestre, que executa. Quem apertou vem do token, não do corpo. O
+efeito volta pela mesa: o medidor que baixou, o dado que caiu ao lado do
+retrato. Não há resposta para um celular específico, de propósito — o Mestre
+não tem esse canal, e criá-lo seria superfície nova de rede para um caso que
+o quadro já cobre.
+
+Para o número gasto aparecer no aparelho de quem apertou, o quadro passou a
+levar `fichasVersao`, o contador do elenco no Mestre: o celular relê a ficha e
+as seções quando ele muda. Antes ele lia a ficha uma vez ao montar, e um botão
+que gastasse um recurso deixaria o número velho na tela.
+
+A rota `GET /eu/personagens/{id}/extensoes` entrega **só** a metade pública, e
+quem separa é o Rust (`publicos`), não a rota. A privada nunca sai do Mestre.
+
 ### Atalho de plugin não rouba atalho do aplicativo
 
 A tabela de `atalhos.ts` é consultada em ordem e os do plugin entram **depois**.
