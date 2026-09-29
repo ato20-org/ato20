@@ -221,7 +221,7 @@ const CODE_ALPHABET: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 fn new_room_code() -> String {
     // Uuid v4 e a fonte de aleatoriedade que o crate ja fornece; nao e segredo
     // criptografico, e o codigo da mesa nao pretende ser -- ver a nota de
-    // seguranca no README sobre a rede local.
+    // seguranca em docs/daemon.md sobre a rede local.
     let bytes = uuid::Uuid::new_v4().as_bytes().to_owned();
 
     bytes

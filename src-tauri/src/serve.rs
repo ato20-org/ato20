@@ -653,7 +653,7 @@ pub struct CodeQuery {
 /// O codigo nao e senha forte -- seis caracteres, ditados em voz alta no comeco
 /// da sessao. O que ele faz e impedir que um aparelho do mesmo Wi-Fi caia na
 /// cena por acaso ao varrer portas. Contra alguem determinado na tua rede ele
-/// nao defende, e nao ha limite de tentativas: o README diz isso com essas
+/// nao defende, e nao ha limite de tentativas: docs/daemon.md diz isso com essas
 /// palavras, para a decisao ser consciente em vez de parecer protecao.
 fn code_matches(state: &Daemon, provided: Option<&str>) -> Result<(), Response> {
     let Some(expected) = state.code() else {

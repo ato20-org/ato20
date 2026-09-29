@@ -13,7 +13,7 @@ import { CODE_LENGTH, useMesaStore } from "@/lib/store/use-mesa-store";
  *
  * O código volta a existir agora que o daemon está na rede: sem ele, qualquer
  * aparelho do mesmo Wi-Fi que achasse a porta cairia na cena. Ele não é senha
- * forte — seis caracteres ditados em voz alta —, e o README diz isso com essas
+ * forte — seis caracteres ditados em voz alta —, e `docs/daemon.md` diz isso com essas
  * palavras; o que ele faz é impedir a entrada por acaso.
  *
  * A conferência passa por `fetch` antes de o fluxo abrir, e não pelo próprio

@@ -21,7 +21,7 @@ import { DatabaseSync } from "node:sqlite";
  * banco só aponta para elas.
  *
  * O de cada CAMPANHA (`{campanha}/.ato20/estado.db`) guarda o nome, a
- * credencial e o CADERNO de cada jogador. Esse dói: o README diz, e é verdade,
+ * credencial e o CADERNO de cada jogador. Esse dói: `docs/campanha.md` diz, e é verdade,
  * que entre dois exports o texto do caderno é a única coisa da campanha que não
  * tem cópia em arquivo. Apagar não é "recomeçar a sessão", é perder o que os
  * jogadores escreveram.
