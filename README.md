@@ -1031,6 +1031,53 @@ pílula ao lado do botão enquanto a ferramenta está na mão, como a cor do lá
 `aoMover` chega a cada quadro do arrasto, para a prévia; e `aoClicar`,
 `aoArrastar` e `aoMover` recebem as teclas seguradas (`shift`, `ctrl`, `alt`).
 
+### Estilo de medidor desenhado pelo plugin, na TV e no celular
+
+Um plugin pode desenhar o medidor — uma barra com brilho, um coração que
+esvazia, um relógio que gira — e a mesa inteira vê o desenho. Sem uma linha de
+código do plugin rodar fora do Mestre: o estilo é um **`.svg` com variáveis**.
+
+```json
+"estilosDeMedidor": [
+  { "id": "coracao", "titulo": "Coração", "arquivo": "coracao.svg", "altura": 0.9 }
+]
+```
+
+```svg
+<svg viewBox="0 0 100 90">
+  <path d="M50 85 ..." fill="rgba(0,0,0,0.45)" />
+  <rect y="{90 - fracao * 90}" width="100" height="{fracao * 90}" fill="{cor}"
+        clip-path="url(#c)" />
+  <text x="50" y="50" text-anchor="middle" fill="white">{atual}/{maximo}</text>
+</svg>
+```
+
+As variáveis são `{fracao}`, `{atual}`, `{maximo}`, `{cor}`, `{largura}` e
+`{altura}`, e aceitam as quatro operações — `{fracao * 90}` — avaliadas à mão,
+sem `eval`. `altura` é a da forma em fração da largura, declarada porque a caixa
+sobre o token é medida **antes** de o desenho existir; sem o número o SVG
+transbordaria o plano, que é a armadilha que derruba o palco.
+
+**O SVG nunca vira HTML.** O Mestre o lê uma vez para uma árvore tipada, por
+uma lista fechada de elementos e atributos (`svg-modelo.ts`): sem `script`,
+`foreignObject`, `on*`, `href`, `style`; `url()` só para `#id` do próprio
+arquivo; animação só em `opacity` e `transform`, que é o que o palco já anima
+sem custar layout. É a árvore que viaja, e a TV a desenha com o React — o
+mesmo caminho do Markdown. Elemento fora da lista some com os filhos.
+
+O conjunto viaja por um **canal próprio**, `/sala/declarativo`, e não dentro do
+quadro de 10 Hz: o quadro leva só `declarativoVersao`, um número, e quem
+assiste busca o conjunto quando ele muda. Um modelo dentro do quadro seria
+serializado dez vezes por segundo para cada aparelho, por um dado que muda
+quando o mestre instala um plugin.
+
+O medidor guarda `estiloExtensao: "meu-plugin/coracao"` **ao lado** do
+`estilo` de fábrica, que continua ali como reserva: a mesa que não tem o modelo
+— plugin desinstalado, TV com versão antiga — desenha a barra. É o que deixa o
+campo existir sem quebrar `personagens.json` em lugar nenhum. Quem o define é o
+plugin, por `ajustarMedidor(..., { estiloExtensao })`, e só com estilo dele
+mesmo; `""` volta ao de fábrica.
+
 ### Atalho de plugin não rouba atalho do aplicativo
 
 A tabela de `atalhos.ts` é consultada em ordem e os do plugin entram **depois**.
