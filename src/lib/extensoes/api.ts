@@ -1,7 +1,9 @@
 "use client";
 
 import type { ComponentType } from "react";
+import type { LucideIcon } from "lucide-react";
 
+import type { Componentes, Experimental } from "@/lib/extensoes/componentes";
 import type { CanvasItem, Scene } from "@/types/scene";
 
 /**
@@ -22,8 +24,14 @@ import type { CanvasItem, Scene } from "@/types/scene";
  * estar no objeto em vez de ser uma dependência do autor.
  */
 
-/** A versão do contrato. O manifesto declara qual ele fala. */
-export const API_VERSAO_ATUAL = 1;
+/**
+ * A versão do contrato. O manifesto declara qual ele fala.
+ *
+ * A 2 acrescentou `janelas`, `ui.componentes`, `ui.experimental` e
+ * `ui.icones`, e o `parametro` do painel. Nada da 1 saiu: um plugin que pede 1
+ * recebe o mesmo objeto, com o novo ao lado.
+ */
+export const API_VERSAO_ATUAL = 2;
 
 /** O que o plugin sabe da cena sem poder mexer no formato dela. */
 export type CenaResumo = {
@@ -33,11 +41,45 @@ export type CenaResumo = {
   itens: ReadonlyArray<Readonly<CanvasItem>>;
 };
 
-/** O que `registrar.painel` recebe. O corpo é um componente React comum. */
+/**
+ * O que `registrar.painel` recebe. O corpo é um componente React comum.
+ *
+ * `parametro` chega quando a janela foi aberta por `janelas.abrir` com um: é
+ * o que faz o mesmo painel servir para "a ficha do Edgar" e "a ficha da
+ * Mira", em duas janelas. Aberto pelo menu, sem parâmetro, ele vem `undefined`.
+ */
 export type PainelRegistrado = {
   id: string;
-  corpo: ComponentType;
+  corpo: ComponentType<{ parametro?: string }>;
 };
+
+/**
+ * Uma janela que o plugin pede para abrir ou fechar.
+ *
+ * Duas famílias. A do PRÓPRIO plugin é um painel declarado no manifesto, com
+ * `parametro` opcional para abrir mais de uma instância dele, e `titulo` para
+ * a instância ter nome próprio na aba ("Edgar", e não "Ficha"). A de FÁBRICA
+ * são as telas do aplicativo que fazem sentido abrir de fora -- a ficha de um
+ * personagem, a lista de personagens, a configuração da campanha. Anexo, asset
+ * e livro ficam de fora: pedem identidades que a API não entrega ainda.
+ */
+export type JanelaDeExtensao =
+  | { painel: string; parametro?: string; titulo?: string }
+  | { tela: "personagem"; personagemId: string }
+  | {
+      tela:
+        | "personagens"
+        | "configuracao"
+        | "rolagens"
+        | "cenas"
+        | "quadros"
+        | "retratos"
+        | "imagens"
+        | "sons"
+        | "camadas"
+        | "estante"
+        | "miniplayer";
+    };
 
 export type ComandoRegistrado = {
   id: string;
@@ -112,10 +154,35 @@ export type Ato20Api = {
     listar: () => ReadonlyArray<{ id: string; nome: string }>;
   };
 
-  /** Aviso na tela, no mesmo canto em que o aplicativo já avisa. */
+  /**
+   * Abre e fecha janelas, as do plugin e as de fábrica.
+   *
+   * Onde a janela já estiver -- atracada numa coluna ou flutuando --, `abrir`
+   * a traz à vista em vez de duplicar. Ver `abrirJanela`.
+   */
+  janelas: {
+    abrir: (janela: JanelaDeExtensao) => void;
+    fechar: (janela: JanelaDeExtensao) => void;
+  };
+
   ui: {
+    /** Aviso na tela, no mesmo canto em que o aplicativo já avisa. */
     aviso: (texto: string) => void;
     erro: (texto: string) => void;
+    /**
+     * Os componentes do aplicativo, para o plugin parecer parte dele.
+     *
+     * `componentes` é compromisso: as props que estão lá ficam. `experimental`
+     * funciona e pode mudar sem aviso. Ver `lib/extensoes/componentes.ts`.
+     */
+    componentes: Componentes;
+    experimental: Experimental;
+    /**
+     * Ícones pelo nome -- `icones.caveira`, `icones.ficha`. Só os que o
+     * aplicativo já carrega; ver `lib/extensoes/icones.ts` para a lista e para
+     * o motivo de não ser o `lucide-react` inteiro.
+     */
+    icones: Readonly<Record<string, LucideIcon>>;
   };
 
   registrar: {
