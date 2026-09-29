@@ -39,6 +39,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
+import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tabs,
@@ -369,7 +370,9 @@ function SceneRow({
    * o caminho de quem está procurando, o botão direito o de quem já sabe.
    * Ver `Kit`.
    */
-  const itens = ({ Item, Separator }: Kit) => (
+  const itens = (kit: Kit) => {
+    const { Item, Separator } = kit;
+    return (
     <>
       <Item disabled={live} onClick={onGoLive}>
         <Radio />
@@ -442,8 +445,15 @@ function SceneRow({
         <Trash2 />
         Remover
       </Item>
+
+      <ItensDeExtensao
+        alvo="linha.cena"
+        contexto={{ alvo: "linha.cena", cenaId: scene.id }}
+        kit={kit}
+      />
     </>
-  );
+    );
+  };
 
   return (
     // Os filhos FORA do `render`, como nas linhas de Arquivos: e a forma

@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
+import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
 import {
   aoApertarF2,
   useRenomearPeloMenu,
@@ -1127,6 +1128,12 @@ function AssetRow({
             <Trash2 />
             {usageCount > 0 ? `Em uso em ${usageCount} cena(s)` : "Remover"}
           </DropdownMenuItem>
+
+          <ItensDeExtensao
+            alvo="linha.imagem"
+            contexto={{ alvo: "linha.imagem", assetId: asset.id }}
+            kit={KIT_TRES_PONTOS}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
