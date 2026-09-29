@@ -9,6 +9,8 @@ import {
   listarExtensoes,
   removerExtensao,
 } from "@/lib/extensoes/manifesto";
+import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
+import type { Definicao } from "@/lib/configuracoes/valor";
 import { descarregar } from "@/lib/extensoes/carregar";
 import { aplicarTemas } from "@/lib/extensoes/tema";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
@@ -149,5 +151,38 @@ export const useExtensoesStore = create<ExtensoesStore>((set, get) => ({
  * um `subscribe` e não por efeito.
  */
 useExtensoesStore.subscribe((estado, anterior) => {
-  if (estado.extensoes !== anterior.extensoes) aplicarTemas(estado.extensoes);
+  if (estado.extensoes === anterior.extensoes) return;
+
+  aplicarTemas(estado.extensoes);
+  sincronizarConfiguracoes(estado.extensoes);
 });
+
+/**
+ * As configurações declaradas entram no registro pelo mesmo caminho do tema:
+ * a lista muda, o registro recebe a lista inteira do que está habilitado. Só
+ * HABILITADO -- a de um plugin desligado sai da tela, e o valor gravado dela
+ * fica no arquivo, para voltar quando ele religar.
+ *
+ * O `dono` é o id da extensão, e é por ele que a tela agrupa e que o registro
+ * esquece: uma chamada com a lista nova substitui tudo que é de plugin.
+ */
+function sincronizarConfiguracoes(extensoes: Extensao[]): void {
+  const definicoes: Definicao[] = extensoes
+    .filter((extensao) => extensao.habilitada)
+    .flatMap((extensao) =>
+      (extensao.contribui?.configuracoes ?? []).map((c) => ({
+        chave: c.chave,
+        titulo: c.titulo,
+        descricao: c.descricao ?? undefined,
+        tipo: c.tipo,
+        padrao: c.padrao,
+        escopo: c.escopo,
+        opcoes: c.opcoes.length > 0 ? c.opcoes : undefined,
+        minimo: c.minimo ?? undefined,
+        maximo: c.maximo ?? undefined,
+        dono: extensao.id,
+      })),
+    );
+
+  useConfiguracoesStore.getState().definirDeExtensoes(definicoes);
+}

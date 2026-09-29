@@ -27,7 +27,7 @@ import type { CanvasItem, Scene } from "@/types/scene";
 /**
  * A versão do contrato. O manifesto declara qual ele fala.
  *
- * A 2 acrescentou `janelas`, `ui.componentes`, `ui.experimental` e
+ * A 2 acrescentou `janelas`, `config`, `ui.componentes`, `ui.experimental` e
  * `ui.icones`, e o `parametro` do painel. Nada da 1 saiu: um plugin que pede 1
  * recebe o mesmo objeto, com o novo ao lado.
  */
@@ -152,6 +152,22 @@ export type Ato20Api = {
 
   personagens: {
     listar: () => ReadonlyArray<{ id: string; nome: string }>;
+  };
+
+  /**
+   * As configurações, do plugin e do aplicativo.
+   *
+   * `ler` alcança qualquer chave declarada -- a do próprio plugin ou a do
+   * aplicativo (`ato20.zoom`). `gravar` só as do próprio plugin: o prefixo
+   * `{id}.` é a cerca, e um plugin não redefine o zoom de ninguém. O valor
+   * gravado tem de ser do tipo declarado no manifesto; fora disso, `false`.
+   * `assinar` avisa quando o valor que VALE muda, seja pela tela, pelo editor
+   * JSON ou por outra gravação do plugin.
+   */
+  config: {
+    ler: <T = unknown>(chave: string) => T | undefined;
+    gravar: (chave: string, valor: unknown, escopo?: "maquina" | "campanha") => boolean;
+    assinar: (chave: string, aviso: (valor: unknown) => void) => Desfazer;
   };
 
   /**

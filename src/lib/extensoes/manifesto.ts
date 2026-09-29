@@ -80,6 +80,28 @@ export type Contribuicoes = {
   comandos: ComandoDeclarado[];
   ferramentas: FerramentaDeclarada[];
   camadas: CamadaDeclarada[];
+  /** Ausente em lista lida por um Rust anterior a ela. */
+  configuracoes?: ConfiguracaoDeclarada[];
+};
+
+/**
+ * Uma configuração que a extensão declara, como as `contributes.configuration`
+ * do VSCode. Espelho de `extensoes::Configuracao`, que valida: a chave começa
+ * com o id da extensão, o padrão é do tipo, a escolha tem opções.
+ *
+ * Vira uma `Definicao` no registro com `dono` = id da extensão -- ver
+ * `useExtensoesStore`, que sincroniza as duas listas.
+ */
+export type ConfiguracaoDeclarada = {
+  chave: string;
+  titulo: string;
+  descricao: string | null;
+  tipo: "booleano" | "numero" | "texto" | "escolha";
+  padrao: unknown;
+  escopo: "maquina" | "campanha" | "ambos";
+  opcoes: string[];
+  minimo: number | null;
+  maximo: number | null;
 };
 
 export type PainelDeclarado = {
