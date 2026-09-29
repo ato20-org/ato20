@@ -171,9 +171,12 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
 
       // "Plugin" quando o painel declarado sumiu -- extensão desinstalada com a
       // janela aberta. O título some, a janela fica, e o corpo diz o que houve.
+      // O título da INSTÂNCIA vence o do manifesto: é o nome que o plugin deu
+      // a esta janela em particular ("Edgar"), e o manifesto só sabe o do
+      // painel ("Ficha").
       return {
-        titulo: painel?.titulo ?? "Plugin",
-        subtitulo: painel?.subtitulo ?? undefined,
+        titulo: conteudo.titulo ?? painel?.titulo ?? "Plugin",
+        subtitulo: conteudo.titulo ? painel?.titulo : (painel?.subtitulo ?? undefined),
       };
     }
   }
@@ -283,6 +286,7 @@ export function JanelaCorpo({ conteudo }: { conteudo: ConteudoJanela }) {
         <PainelDeExtensao
           extensaoId={conteudo.extensaoId}
           painelId={conteudo.painelId}
+          parametro={conteudo.parametro}
         />
       );
     case "cenas":

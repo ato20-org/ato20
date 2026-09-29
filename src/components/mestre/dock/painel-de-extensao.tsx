@@ -23,9 +23,12 @@ import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 export function PainelDeExtensao({
   extensaoId,
   painelId,
+  parametro,
 }: {
   extensaoId: string;
   painelId: string;
+  /** O da instância, quando a janela foi aberta com um. Ver `ConteudoJanela`. */
+  parametro?: string;
 }) {
   const extensao = useExtensoesStore((state) =>
     state.extensoes.find((atual) => atual.id === extensaoId),
@@ -89,7 +92,7 @@ export function PainelDeExtensao({
   // e é o que dá ao corpo consertado uma segunda chance de desenhar.
   return (
     <BarreiraDeExtensao nome={extensao.nome} chave={carga?.estado}>
-      {createElement(Corpo)}
+      {createElement(Corpo, { parametro })}
     </BarreiraDeExtensao>
   );
 }

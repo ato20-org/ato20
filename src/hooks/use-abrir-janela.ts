@@ -2,9 +2,8 @@
 
 import { useCallback } from "react";
 
-import { useLayoutStore } from "@/lib/store/use-layout-store";
-import { usePanelsStore } from "@/lib/store/use-panels-store";
-import { chaveDe, useWindowStore, type ConteudoJanela } from "@/lib/store/use-window-store";
+import { abrirJanela } from "@/lib/extensoes/janelas";
+import type { ConteudoJanela } from "@/lib/store/use-window-store";
 
 /**
  * Traz uma janela à vista, onde ela já estiver.
@@ -29,38 +28,12 @@ import { chaveDe, useWindowStore, type ConteudoJanela } from "@/lib/store/use-wi
  * justamente o caso comum, o de clicar num nome e ver a ficha que já estava à
  * vista tremer. O que se perde é o aviso quando a janela já está na frente e
  * inteira à mostra, onde clicar de novo de fato não muda nada.
+ *
+ * A lógica mora em `abrirJanela`, que lê os stores por `getState`: a API de
+ * extensão precisa dela fora de um componente, e dois caminhos para "onde esta
+ * janela está?" divergiriam na primeira mudança. O hook é só a referência
+ * estável para quem está num render.
  */
 export function useAbrirJanela(): (conteudo: ConteudoJanela) => void {
-  const layout = useLayoutStore((state) => state.layout);
-  const ativarAba = useLayoutStore((state) => state.ativarAba);
-
-  const mostrarColuna = usePanelsStore((state) => state.show);
-
-  const abrirFlutuante = useWindowStore((state) => state.abrir);
-
-  return useCallback(
-    (conteudo: ConteudoJanela) => {
-      const chave = chaveDe(conteudo);
-
-      for (const lado of ["esquerda", "direita"] as const) {
-        const grupo = layout[lado].grupos.find((atual) =>
-          atual.abas.some((aba) => chaveDe(aba) === chave),
-        );
-
-        if (!grupo) continue;
-
-        // A coluna primeiro: ativar uma aba dentro de uma coluna recolhida
-        // mudaria algo que ninguém vê.
-        mostrarColuna(lado === "esquerda" ? "left" : "right");
-
-        ativarAba(lado, grupo.id, chave);
-        return;
-      }
-
-      // `abrir` já traz para a frente quando a janela existe na pilha, e a
-      // janela nova entra com fade e zoom por conta própria.
-      abrirFlutuante(conteudo);
-    },
-    [layout, ativarAba, mostrarColuna, abrirFlutuante],
-  );
+  return useCallback((conteudo: ConteudoJanela) => abrirJanela(conteudo), []);
 }
