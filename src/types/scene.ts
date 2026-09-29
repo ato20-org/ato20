@@ -496,6 +496,26 @@ export type SceneGrid = {
    * mapa que ja existe mudaria o lugar das pecas sem ninguem pedir.
    */
   snap?: boolean;
+  /**
+   * A forma da casa. Ausente = quadrado.
+   *
+   * Hexágono em duas orientações porque mapa comprado vem nas duas, e girar a
+   * grade não resolve: o hexágono com a ponta para cima e o com o lado para
+   * cima são redes diferentes, e a do desenho só casa com uma delas.
+   *
+   * No hexágono, `size` é a distância entre os centros de duas casas vizinhas
+   * -- a largura dele de lado a lado. É o que mantém um passo valendo um metro
+   * nas duas formas: a régua, o fantasma do token e o encaixe leem o mesmo
+   * `size` sem saber qual forma a casa tem. Ver `METROS_POR_QUADRADO`.
+   *
+   * Um campo com as três respostas, e não um `hex` com uma orientação ao lado:
+   * orientação de quadrado não existe, e dois campos deixariam gravar uma.
+   *
+   * Ausente e não `"quadrado"` pelo mesmo motivo do ímã: toda cena que já
+   * existe tem grade quadrada, e um aparelho de versão antiga que não conhece
+   * o campo continua desenhando a grade de sempre.
+   */
+  forma?: "hex-ponta" | "hex-lado";
 };
 
 /**
