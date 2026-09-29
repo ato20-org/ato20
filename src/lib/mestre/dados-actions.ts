@@ -4,6 +4,7 @@ import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import type { Jogada } from "@/lib/mestre/notacao-de-dados";
 import { RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
+import type { Dado } from "@/types/dado";
 
 /** Velocidade do arremesso sem gesto, em unidades de cena por segundo. */
 const IMPULSO = 400;
@@ -23,8 +24,11 @@ const IMPULSO = 400;
  *
  * Para na primeira recusa: a mesa cheia já avisa uma vez, e insistir com os
  * dados restantes repetiria o aviso sem jogar nenhum.
+ *
+ * Devolve os DADOS, e não só quantos: a API de plugin precisa do valor de
+ * cada um para somar. A paleta continua contando.
  */
-export function rolarNaMesa({ quantidade, faces }: Jogada): number {
+export function lancarNaMesa({ quantidade, faces }: Jogada): Dado[] {
   const { viewport } = useViewportStore.getState();
   const { lancar } = useDadosStore.getState();
 
@@ -37,7 +41,7 @@ export function rolarNaMesa({ quantidade, faces }: Jogada): number {
   // atravessando. Um dado só cai no centro mesmo.
   const roda = quantidade === 1 ? 0 : RAIO_DADO * 1.5;
 
-  let jogados = 0;
+  const jogados: Dado[] = [];
 
   for (let i = 0; i < quantidade; i++) {
     if (recusaPorMesaCheia()) break;
@@ -53,8 +57,13 @@ export function rolarNaMesa({ quantidade, faces }: Jogada): number {
     );
 
     if (!dado) break;
-    jogados++;
+    jogados.push(dado);
   }
 
   return jogados;
+}
+
+/** Quantos dados a paleta conseguiu jogar. Ver `lancarNaMesa`. */
+export function rolarNaMesa(jogada: Jogada): number {
+  return lancarNaMesa(jogada).length;
 }
