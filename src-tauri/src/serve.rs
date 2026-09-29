@@ -135,6 +135,15 @@ pub struct Daemon {
     /// e esperar o Mestre ouvir, o daemon ja tem a resposta na conexao.
     live: Mutex<Option<String>>,
     live_tx: broadcast::Sender<String>,
+    /// O que os plugins DECLARAM para a mesa desenhar -- os estilos de medidor
+    /// --, cru, como o `live`.
+    ///
+    /// Caixa propria, e nao um campo do `live`: o quadro sai dez vezes por
+    /// segundo, e um modelo de SVG dentro dele seria serializado dez vezes por
+    /// segundo para cada aparelho, por um dado que muda quando o mestre instala
+    /// um plugin. O quadro leva so o numero da versao; quem assiste busca isto
+    /// quando o numero muda. Sem canal de broadcast: e ESTADO, e `GET` basta.
+    declarativo: Mutex<Option<String>>,
     /// Amostras do modo de depuracao do palco, cruas, as ultimas `DEBUG_ANEL`.
     ///
     /// O palco mede a propria geometria (`debug-palco.tsx`) e manda para ca;
@@ -200,6 +209,7 @@ impl Daemon {
             web_root,
             live: Mutex::new(None),
             live_tx,
+            declarativo: Mutex::new(None),
             debug: Mutex::new(VecDeque::new()),
             rolagens_tx,
             movimentos_tx,
@@ -366,6 +376,23 @@ pub fn router(state: Arc<Daemon>) -> Router {
         .route("/sala", get(check))
         .route("/sala/entrar", post(join_table))
         .route("/sala/live", get(live))
+        .route(
+            "/sala/declarativo",
+            // O GET e da mesa (codigo); o POST e do Mestre (token). As camadas
+            // ficam so no POST, por isso os dois entram separados e se juntam.
+            get(declarativo).merge(
+                post(publish_declarativo)
+                    // Um megabyte: sao arvores de SVG filtradas, e a maior
+                    // delas cabe em dezenas de KB. O teto e o que impede um
+                    // plugin de fazer cada TV baixar um arquivo de mapa por
+                    // engano.
+                    .layer(DefaultBodyLimit::max(1024 * 1024))
+                    .layer(middleware::from_fn_with_state(
+                        Arc::clone(&state),
+                        require_token,
+                    )),
+            ),
+        )
         .route("/sala/rolagens", get(rolls))
         .route("/sala/movimentos", get(moves))
         .nest("/eu", player_routes(Arc::clone(&state)))
@@ -683,6 +710,52 @@ async fn publish(
     let _ = state.live_tx.send(body);
 
     StatusCode::NO_CONTENT.into_response()
+}
+
+/// `POST /sala/declarativo` -- o Mestre anuncia o que os plugins declaram.
+///
+/// Token E loopback, como `publish`, e pela mesma razao: o que entra aqui a TV
+/// desenha. JSON opaco -- o daemon nao entende o modelo, so o guarda.
+async fn publish_declarativo(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    body: String,
+) -> Response {
+    if !addr.ip().is_loopback() {
+        return fail(StatusCode::FORBIDDEN, "publicar so a partir desta maquina");
+    }
+
+    if serde_json::from_str::<serde_json::Value>(&body).is_err() {
+        return fail(StatusCode::BAD_REQUEST, "corpo nao e JSON");
+    }
+
+    *state.declarativo.lock().expect("declarativo envenenado") = Some(body);
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// `GET /sala/declarativo?codigo=XXXXXX` -- o declarativo atual, ou `{}`.
+///
+/// Exige o codigo da mesa como o `live`: o modelo de um plugin nao e segredo,
+/// mas e da mesa, e a porta esta na rede.
+async fn declarativo(
+    State(state): State<Arc<Daemon>>,
+    Query(query): Query<CodeQuery>,
+) -> Result<Response, Response> {
+    code_matches(&state, query.codigo.as_deref())?;
+
+    let corpo = state
+        .declarativo
+        .lock()
+        .expect("declarativo envenenado")
+        .clone()
+        .unwrap_or_else(|| "{}".to_string());
+
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        corpo,
+    )
+        .into_response())
 }
 
 /// `GET /sala/live?codigo=XXXXXX` -- a cena, em SSE.
@@ -2631,6 +2704,12 @@ mod tests {
         request
     }
 
+    /// O corpo de uma resposta curta, como texto.
+    async fn corpo_de(response: Response) -> String {
+        let bytes = to_bytes(response.into_body(), 1024 * 1024).await.expect("corpo");
+        String::from_utf8(bytes.to_vec()).expect("utf8")
+    }
+
     fn publicar(token: Option<&str>, corpo: &str, ip: &str) -> HttpRequest<Body> {
         let mut request = HttpRequest::builder().method("POST").uri("/sala/publicar");
 
@@ -2916,6 +2995,91 @@ mod tests {
             .expect("resposta");
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    fn publicar_declarativo(token: Option<&str>, corpo: &str, ip: &str) -> HttpRequest<Body> {
+        let mut request = HttpRequest::builder().method("POST").uri("/sala/declarativo");
+
+        if let Some(token) = token {
+            request = request.header(TOKEN_HEADER, token);
+        }
+
+        from_ip(
+            request
+                .header("content-type", "application/json")
+                .body(Body::from(corpo.to_string()))
+                .expect("request"),
+            ip,
+        )
+    }
+
+    #[tokio::test]
+    async fn declarativo_exige_token_e_loopback_para_publicar() {
+        let (_dir, state, _) = daemon();
+
+        let sem_token = router(Arc::clone(&state))
+            .oneshot(publicar_declarativo(None, r#"{"versao":1}"#, "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(sem_token.status(), StatusCode::UNAUTHORIZED);
+
+        let de_fora = router(state)
+            .oneshot(publicar_declarativo(Some("segredo"), r#"{"versao":1}"#, "192.168.7.99"))
+            .await
+            .expect("resposta");
+        assert_eq!(de_fora.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn declarativo_vai_e_volta_com_o_codigo_da_mesa() {
+        let (_dir, state, codigo) = daemon();
+
+        // Antes de qualquer publicacao: `{}`, e nao 404. A TV que abre antes do
+        // Mestre publicar tem de ler "nada declarado", nao "erro".
+        let vazio = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(format!("/sala/declarativo?codigo={codigo}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("resposta");
+        assert_eq!(vazio.status(), StatusCode::OK);
+        assert_eq!(corpo_de(vazio).await, "{}");
+
+        let publicado = router(Arc::clone(&state))
+            .oneshot(publicar_declarativo(
+                Some("segredo"),
+                r#"{"versao":3,"estilos":{}}"#,
+                "127.0.0.1",
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(publicado.status(), StatusCode::NO_CONTENT);
+
+        let lido = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(format!("/sala/declarativo?codigo={codigo}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("resposta");
+        assert_eq!(corpo_de(lido).await, r#"{"versao":3,"estilos":{}}"#);
+
+        // Sem o codigo, nada: a porta esta na rede.
+        let sem_codigo = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/sala/declarativo")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("resposta");
+        assert_eq!(sem_codigo.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

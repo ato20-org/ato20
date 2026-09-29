@@ -98,6 +98,15 @@ export type LiveState = {
   /** Imagem em evidência sobre tudo. `null` = nenhuma. */
   spotlight: Spotlight | null;
   /**
+   * A versão do que os plugins DECLARAM -- os estilos de medidor.
+   *
+   * Só o número. O conjunto viaja por `/sala/declarativo`, e quem assiste o
+   * busca quando este número muda: um modelo de SVG dentro deste quadro seria
+   * serializado dez vezes por segundo para cada aparelho, por um dado que muda
+   * quando o mestre instala um plugin. Ausente ou zero = nada declarado.
+   */
+  declarativoVersao?: number;
+  /**
    * Os dados que os jogadores jogaram na mesa, ainda quentes.
    *
    * O único campo deste quadro que NÃO nasce no Mestre: a rolagem vem do
