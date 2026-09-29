@@ -1,13 +1,18 @@
 "use client";
 
-import { Grid3x3, Magnet, RotateCcw } from "lucide-react";
+import { Grid3x3, Hexagon, Magnet, RotateCcw, Square } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
+import {
+  METROS_POR_QUADRADO,
+  passoDaGrade,
+  periodoDaGrade,
+} from "@/lib/geometry/grid";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { cn } from "@/lib/utils";
 import {
   DEFAULT_GRID,
   SCENE_WIDTH,
@@ -42,6 +47,23 @@ export function GridControl({ scene }: { scene: Scene }) {
     setSceneGrid(scene.id, { ...(grid ?? DEFAULT_GRID), ...patch });
   }
 
+  /**
+   * Troca a forma da casa, com o deslocamento trazido para dentro do período
+   * novo: o do quadrado vai até um lado, e o do hexágono em pé até raiz de três
+   * lados na vertical. Sem isto a régua do deslocamento abriria com o botão
+   * além do fim dela.
+   */
+  function trocarForma(forma: SceneGrid["forma"]) {
+    if (!grid) return;
+    const periodo = periodoDaGrade({ ...grid, forma });
+
+    ajustar({
+      forma,
+      offsetX: grid.offsetX % periodo.x,
+      offsetY: grid.offsetY % periodo.y,
+    });
+  }
+
   return (
     <section className="space-y-3">
       {/* O interruptor na LINHA do título, como o do sol: aqui a grade não é
@@ -68,7 +90,7 @@ export function GridControl({ scene }: { scene: Scene }) {
           o desenho valer a pena, e é de onde a régua tira o metro. Ver
           `METROS_POR_QUADRADO`. */}
       <p className="text-muted-foreground text-[10px] leading-snug">
-        Cada quadrado vale {METROS_POR_QUADRADO} m na régua.
+        Cada casa vale {METROS_POR_QUADRADO} m na régua.
       </p>
 
       {/* O ajuste só existe com a grade ligada: réguas de tamanho e
@@ -95,17 +117,51 @@ export function GridControl({ scene }: { scene: Scene }) {
           </div>
 
           <p className="text-muted-foreground text-[10px] leading-snug">
-            O token cai no meio do quadrado. Alt solta livre.
+            O token cai no meio da casa. Alt solta livre.
           </p>
 
+          {/* A forma antes do tamanho: é a primeira coisa a casar com o desenho
+              do mapa, e trocar de forma depois de acertar o tamanho desacerta
+              o deslocamento. */}
+          <div
+            role="group"
+            aria-label="Forma da casa"
+            className="grid grid-cols-3 gap-1"
+          >
+            {FORMAS.map((opcao) => {
+              const escolhida = grid.forma === opcao.forma;
+
+              return (
+                <button
+                  key={opcao.rotulo}
+                  type="button"
+                  aria-label={opcao.descricao}
+                  aria-pressed={escolhida}
+                  className={cn(
+                    "flex flex-col items-center gap-1 rounded-md border py-1.5 text-[10px] transition-colors",
+                    escolhida
+                      ? "border-primary bg-primary/25 text-foreground"
+                      : "border-border text-muted-foreground hover:bg-primary/10",
+                  )}
+                  onClick={() => trocarForma(opcao.forma)}
+                >
+                  <opcao.Icone
+                    className={cn("size-4", opcao.forma === "hex-lado" && "rotate-90")}
+                  />
+                  {opcao.rotulo}
+                </button>
+              );
+            })}
+          </div>
+
           <Campo
-            rotulo="Tamanho do quadrado"
+            rotulo="Tamanho da casa"
             // Em unidades de cena, e mostrado como fração do plano: "96" não
             // diz nada sozinho, "20 colunas" diz.
-            valor={`${Math.round(SCENE_WIDTH / Math.max(8, grid.size))} colunas`}
+            valor={`${Math.round(SCENE_WIDTH / larguraDaColuna(grid))} colunas`}
           >
             <Slider
-              aria-label="Tamanho do quadrado"
+              aria-label="Tamanho da casa"
               value={[grid.size]}
               min={24}
               max={320}
@@ -115,8 +171,8 @@ export function GridControl({ scene }: { scene: Scene }) {
           </Campo>
 
           {/* Deslocamento porque mapa comprado já vem com grade desenhada, e
-              ela quase nunca começa no canto exato da imagem. Meia célula para
-              cada lado cobre qualquer alinhamento — além disso repete. */}
+              ela quase nunca começa no canto exato da imagem. Um período
+              cobre qualquer alinhamento — além disso repete. */}
           <Campo
             rotulo="Deslocar na horizontal"
             valor={`${Math.round(grid.offsetX)}`}
@@ -125,7 +181,7 @@ export function GridControl({ scene }: { scene: Scene }) {
               aria-label="Deslocar na horizontal"
               value={[grid.offsetX]}
               min={0}
-              max={Math.max(8, grid.size)}
+              max={periodoDaGrade(grid).x}
               step={1}
               onValueChange={(value) => ajustar({ offsetX: primeiro(value) })}
             />
@@ -139,7 +195,7 @@ export function GridControl({ scene }: { scene: Scene }) {
               aria-label="Deslocar na vertical"
               value={[grid.offsetY]}
               min={0}
-              max={Math.max(8, grid.size)}
+              max={periodoDaGrade(grid).y}
               step={1}
               onValueChange={(value) => ajustar({ offsetY: primeiro(value) })}
             />
@@ -172,10 +228,11 @@ export function GridControl({ scene }: { scene: Scene }) {
             />
           </div>
 
-          {/* Volta o DESENHO da grade, e não o ímã: `DEFAULT_GRID` não fala
-              de encaixe, então o interruptor acima atravessa o botão. É o que
-              se quer -- endireitar a grade sobre um mapa novo não é dizer que
-              a mesa parou de contar quadrado. */}
+          {/* Volta o DESENHO da grade, e não o ímã nem a forma: `DEFAULT_GRID`
+              não fala de nenhum dos dois, então eles atravessam o botão. É o
+              que se quer -- endireitar a grade sobre um mapa novo não é dizer
+              que a mesa parou de contar casa, nem que o mapa deixou de ser de
+              hexágonos. */}
           <Button
             variant="ghost"
             size="sm"
@@ -189,6 +246,45 @@ export function GridControl({ scene }: { scene: Scene }) {
       ) : null}
     </section>
   );
+}
+
+/** As três formas da casa, na ordem em que o botão as mostra. */
+const FORMAS: {
+  forma: SceneGrid["forma"];
+  rotulo: string;
+  descricao: string;
+  Icone: typeof Square;
+}[] = [
+  {
+    forma: undefined,
+    rotulo: "Quadrado",
+    descricao: "Casa quadrada",
+    Icone: Square,
+  },
+  {
+    forma: "hex-ponta",
+    rotulo: "Hex ponta",
+    descricao: "Hexágono com a ponta para cima",
+    Icone: Hexagon,
+  },
+  {
+    forma: "hex-lado",
+    rotulo: "Hex lado",
+    descricao: "Hexágono com o lado para cima",
+    Icone: Hexagon,
+  },
+];
+
+/**
+ * De quanto em quanto nasce uma coluna nova.
+ *
+ * Um passo no quadrado e no hexágono em pé. No deitado as colunas se encaixam
+ * pelas pontas, e a seguinte nasce a um raio e meio da anterior, e não a um
+ * passo.
+ */
+function larguraDaColuna(grid: SceneGrid): number {
+  const passo = passoDaGrade(grid);
+  return grid.forma === "hex-lado" ? (passo * Math.sqrt(3)) / 2 : passo;
 }
 
 function Campo({

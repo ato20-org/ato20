@@ -2,7 +2,7 @@
 
 import { useId, useMemo } from "react";
 
-import { casaDoItem } from "@/lib/geometry/grid";
+import { casaDoItem, ehHexagonal, ladrilhoHex } from "@/lib/geometry/grid";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
@@ -40,6 +40,13 @@ const LINHA = 1.5;
  *
  * Em unidades de cena, como todo o resto do plano: a grade acompanha o zoom do
  * palco e é a mesma na TV de 1920 e no celular de 390.
+ *
+ * ## O hexágono é traço, e não retângulo
+ *
+ * Aresta inclinada não sai de retângulo sem girá-lo, e cada giro seria um nó a
+ * mais. O hexágono vai num `path` com traço, e a meia grossura que o traço põe
+ * fora do caminho é resolvida no ladrilho, que desenha também as casas que só
+ * encostam nele. Ver `ladrilhoHex`.
  *
  * ## A casa de quem está no mapa
  *
@@ -89,6 +96,9 @@ export function GridLayer({
   // `size` mínimo de 8: abaixo disso a grade vira um borrão cinza, e um valor
   // acidental de 0 travaria o browser tentando repetir infinitamente.
   const passo = Math.max(8, grid.size);
+  const deslocarRealce = ehHexagonal(grid)
+    ? undefined
+    : `translate(${LINHA / 2} ${LINHA / 2})`;
 
   /**
    * As casas a realçar, uma por personagem no mapa.
@@ -98,16 +108,21 @@ export function GridLayer({
    * duas vezes, e o segundo escureceria o primeiro.
    */
   const casas = useMemo(() => {
-    const porCasa = new Map<string, { x: number; y: number; lado: number }>();
+    const porCasa = new Map<string, string>();
 
     for (const item of items) {
       if (!item.personagemId) continue;
       const casa = casaDoItem(item, grid);
-      porCasa.set(`${casa.x}:${casa.y}`, casa);
+      porCasa.set(
+        `${casa.centro.x}:${casa.centro.y}`,
+        casa.vertices.map((v) => `${v.x},${v.y}`).join(" "),
+      );
     }
 
     return [...porCasa];
   }, [items, grid]);
+
+  const hex = useMemo(() => ladrilhoHex(grid), [grid]);
 
   return (
     <svg
@@ -121,21 +136,39 @@ export function GridLayer({
           O deslocamento move o PADRÃO, não o elemento: mover o elemento
           deixaria uma faixa sem grade na borda oposta.
 
-          O resto da divisão porque deslocar um quadrado inteiro é o mesmo que
-          não deslocar nada, e o controle deixa o mestre arrastar até o tamanho
-          do quadrado.
+          O resto da divisão porque deslocar um período inteiro é o mesmo que
+          não deslocar nada, e o controle deixa o mestre arrastar até um
+          período. Ver `periodoDaGrade`.
         */}
-        <pattern
-          id={id}
-          x={grid.offsetX % passo}
-          y={grid.offsetY % passo}
-          width={passo}
-          height={passo}
-          patternUnits="userSpaceOnUse"
-        >
-          <rect width={LINHA} height={passo} fill={linha} />
-          <rect width={passo} height={LINHA} fill={linha} />
-        </pattern>
+        {hex ? (
+          <pattern
+            id={id}
+            x={hex.x}
+            y={hex.y}
+            width={hex.width}
+            height={hex.height}
+            patternUnits="userSpaceOnUse"
+          >
+            <path
+              d={hex.caminho}
+              fill="none"
+              stroke={linha}
+              strokeWidth={LINHA}
+            />
+          </pattern>
+        ) : (
+          <pattern
+            id={id}
+            x={grid.offsetX % passo}
+            y={grid.offsetY % passo}
+            width={passo}
+            height={passo}
+            patternUnits="userSpaceOnUse"
+          >
+            <rect width={LINHA} height={passo} fill={linha} />
+            <rect width={passo} height={LINHA} fill={linha} />
+          </pattern>
+        )}
       </defs>
 
       <rect width="100%" height="100%" fill={`url(#${id})`} />
@@ -143,19 +176,17 @@ export function GridLayer({
       {/*
         Depois do padrão, por cima dele: a casa acende, não apaga.
 
-        Meia linha de deslocamento, e a caixa do tamanho do passo: a linha do
-        padrão nasce DENTRO do quadrado (um retângulo de 1,5 a partir do canto)
-        e a borda do realce fica centrada no caminho. Sem o meio traço de folga
-        as duas ficariam lado a lado em vez de sobrepostas, e a 500% a casa
-        apareceria com linha dupla.
+        Meia linha de deslocamento no quadrado: a linha do padrão nasce DENTRO
+        dele (um retângulo de 1,5 a partir do canto) e a borda do realce fica
+        centrada no caminho. Sem o meio traço de folga as duas ficariam lado a
+        lado em vez de sobrepostas, e a 500% a casa apareceria com linha dupla.
+        O hexágono não precisa: a linha dele já é traço centrado na aresta.
       */}
-      {casas.map(([chave, casa]) => (
-        <rect
+      {casas.map(([chave, vertices]) => (
+        <polygon
           key={chave}
-          x={casa.x + LINHA / 2}
-          y={casa.y + LINHA / 2}
-          width={casa.lado}
-          height={casa.lado}
+          points={vertices}
+          transform={deslocarRealce}
           fill={fundoDaCasa}
           stroke={bordaDaCasa}
           strokeWidth={LINHA}
