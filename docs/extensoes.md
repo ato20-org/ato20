@@ -1,0 +1,423 @@
+# Extensões
+
+Uma extensão é uma **pasta com `manifest.json` dentro**. Instalar é copiá-la
+para a máquina, por Configurações → Plugins. É o mesmo formato que se publica
+no GitHub: quem clona o repositório já tem exatamente o que o diálogo pede.
+
+Elas ficam em `{dados do app}/extensoes/`, ao lado da estante e pela mesma
+razão: são da MÁQUINA e não da campanha — um tema serve todas as mesas, e
+exportar uma campanha não leva o tema de quem a montou. O banco guarda uma
+coisa só, se está habilitada; o que a extensão *é* vive no manifesto, dentro da
+própria pasta, porque copiar a pasta tem de bastar para instalar.
+
+Só o **Mestre**. Espectador e Jogador rodam no navegador de outro aparelho, e
+servir código de extensão pela rede é outra decisão — ver o fim desta seção.
+
+## Duas naturezas, e a separação importa
+
+Um **tema** é CSS que a cascata aplica: o pior que ele faz é deixar a interface
+feia, e isso se vê e se desliga. Uma **funcionalidade** é código que roda com o
+alcance da janela, e instalar uma é confiar em quem a escreveu — do mesmo jeito
+que se confia numa extensão do VSCode.
+
+A tela de Plugins separa as duas em grupos com cabeçalho, e não com etiqueta na
+ponta direita de cada linha: a etiqueta é lida *depois* do nome, e é o nome que
+a pessoa já decidiu instalar. O cabeçalho vem antes, e é o que impede a segunda
+decisão de se disfarçar da primeira.
+
+## Tema é um arquivo
+
+```css
+/* tema.css */
+:root, .dark {
+  --background: #282a36;
+  --primary: #bd93f9;
+}
+```
+
+Ele não reescreve componente nenhum. Redeclara as variáveis que o
+`src/app/globals.css` define, e vence porque a folha entra no **fim** do
+`<head>` — última declaração da mesma especificidade ganha. A posição na cascata
+é o mecanismo inteiro, e é o que faz um tema custar ao autor dois arquivos e
+nenhuma ferramenta.
+
+`<link>` e não um `<style>` com o texto dentro: o arquivo pode pedir uma fonte
+ou uma imagem ao lado dele, e URL relativa só resolve se a folha tiver endereço
+próprio.
+
+Variável não declarada mantém o valor do aplicativo, então um tema de cor não
+repete o resto. E a variável aceita qualquer cor de CSS, não só `oklch` — uma
+paleta publicada em hexadecimal se transcreve em vez de ser reconvertida, e o
+que se transcreve dá para conferir contra a fonte.
+
+## Declarar e implementar são duas coisas
+
+O manifesto **declara** o que a extensão acrescenta; o `principal` — um módulo
+ESM — **implementa**.
+
+```json
+{
+  "id": "meu-plugin", "nome": "Meu plugin", "versao": "1.0.0",
+  "apiVersao": 2, "principal": "main.js",
+  "contribui": {
+    "paineis":  [{ "id": "notas", "titulo": "Notas da sessão" }],
+    "comandos": [{ "id": "rolar", "titulo": "Rolar", "atalho": "Ctrl+Shift+F" }],
+    "ferramentas": [{ "id": "marcar", "titulo": "Marcar ponto" }],
+    "camadas": [{ "id": "marcas", "titulo": "Marcas" }]
+  }
+}
+```
+
+A separação compra duas coisas. A tela de Plugins lista o que cada extensão faz
+**sem rodar uma linha** do código dela — que é exatamente a informação que
+alguém quer antes de habilitar o plugin de um estranho. E o módulo só é
+importado quando alguém abre o painel ou dispara o comando: dez extensões
+instaladas não custam dez módulos na abertura da janela, que é onde o mestre
+está esperando a mesa abrir.
+
+A exceção é a **camada**: ela não tem gesto de abertura — está no mapa ou não
+está —, então quem declara camada carrega cedo.
+
+É o modelo do VSCode, e a razão é a mesma: uma extensão que declara o que faz
+pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
+app a rodar todas para saber o que existe.
+
+**`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
+mais do que ele tem.** A 2 é a atual; um plugin escrito para a 1 continua
+instalando e recebe o mesmo objeto de antes, com o que a 2 acrescentou ao lado.
+Cada tipo de contribuição aceita até 32 itens: cada um vira uma linha num menu
+ou um botão numa barra, e um manifesto com dez mil painéis travaria a lista de
+telas antes de o mestre alcançar o interruptor.
+
+## O módulo
+
+```js
+const plugin = {
+  ativar(api) {
+    const h = api.react.createElement;
+
+    return api.registrar.painel({
+      id: "notas",
+      corpo: () => h("p", { className: "p-3 text-sm" }, "Olá da extensão."),
+    });
+  },
+};
+
+export default plugin;
+```
+
+Quatro regras que não mudam:
+
+- É um **módulo ESM comum**, lido direto do disco. Sem npm, sem bundler, sem
+  passo de build — o arquivo que você escreve é o arquivo que roda.
+- **Não empacote React.** A interface tem uma instância só, e uma segunda
+  quebraria os hooks dela. Ele chega em `api.react`.
+- **Sem JSX**, porque não há build para compilá-lo.
+- Tudo que se registra **devolve a função de desfazer**. É o que faz desligar o
+  plugin não pedir reinício do aplicativo.
+
+## O que a API dá, e o que ela não dá
+
+Ações **nomeadas**, e nunca os stores. Um plugin não alcança `useSceneStore`: se
+alcançasse, todo plugin passaria a depender do formato interno de `Scene` e dos
+nomes dos métodos do zustand, e mexer neles quebraria o ecossistema — que é
+exatamente o que matou a compatibilidade de plugins do Atom. Uma ação nomeada é
+um contrato que dá para manter enquanto o interior muda. Ver `src/lib/extensoes/api.ts`,
+que é a promessa do projeto para quem escreve plugin: o que está lá vira
+compromisso de compatibilidade, e o que não está pode mudar sem aviso.
+
+`api.cena.ajustarItem` aceita cinco campos — posição, tamanho e giro. Repassar o
+patch cru deixaria um `assetId` trocado por engano apagar a imagem de alguém.
+
+`api.cena.dados()` e `gravarDados()` guardam o que é do plugin dentro da cena,
+em `scene.extensoes[id]`. Viaja no zip da campanha e **sai** do que é publicado
+para a TV e para os celulares, junto com alfinetes e postits. Não é cautela
+genérica: o formato é do plugin e o aplicativo não lê o que tem dentro, e
+publicar o que não se consegue ler seria apostar que nenhum autor vai guardar
+ali a nota do mestre. Ver `sceneForTable`.
+
+## Janelas e componentes
+
+Um plugin desenha com **os componentes do aplicativo**, e não com os dele:
+`api.ui.componentes` traz botão, campo, número, chave, seleção, deslizador,
+abas, diálogo, menu e dica — os mesmos de `src/components/ui` —, mais os
+desenhos que são deste projeto e que ninguém refaz igual: o seletor de cor, o
+medidor, o dado, a confirmação de remoção e o painel vazio. É o que faz a tela
+de um plugin parecer parte do Mestre, com a mesma fonte, o mesmo foco e o tema
+da campanha alcançando-a. O que está em `componentes` é compromisso: as props
+ficam pelo tempo que a API 2 existir. `api.ui.experimental` funciona e pode
+mudar sem aviso.
+
+`api.ui.icones` dá ícones pelo nome — `icones.caveira`, `icones.ficha` — e só os
+que o aplicativo **já carrega**, os dos selos de condição e os das janelas.
+Expor o `lucide-react` inteiro poria mil ícones no bundle do Mestre para servir
+a plugins que talvez nem estejam instalados. Um desenho que não está na lista
+vem como SVG da pasta do plugin, por `api.extensao.url()`, e pesa só quando
+instalado.
+
+`api.janelas.abrir` e `fechar` alcançam as janelas do plugin e as de fábrica —
+a ficha de um personagem, a lista, a configuração da campanha. Onde a janela já
+estiver, atracada ou flutuando, abrir a traz à vista em vez de duplicar. O
+painel do plugin aceita um **`parametro`**: é o que faz o mesmo painel abrir
+como "Edgar" e como "Mira", em duas janelas, cada uma lembrando a própria
+posição. O corpo o recebe como prop. E um plugin só abre e fecha as janelas
+**dele**: o id da extensão entra na chave pelo aplicativo, não pelo plugin.
+
+## Configurações, como no VSCode
+
+Um registro só para o aplicativo e para os plugins, em dois arquivos:
+`{config do app}/configuracoes.json` para a **máquina** e
+`{campanha}/configuracoes.json` para a **campanha**, que viaja no zip. A
+campanha vence a máquina, e a máquina vence o padrão — é o par User/Workspace.
+O arquivo guarda só o que difere do padrão, então um padrão que muda numa
+versão nova não reescreve o arquivo de ninguém.
+
+O plugin declara as dele no manifesto, sem uma linha de JS:
+
+```json
+"configuracoes": [
+  { "chave": "meu-plugin.cor", "titulo": "Cor", "tipo": "escolha",
+    "padrao": "azul", "opcoes": ["azul", "rubi"], "escopo": "campanha" }
+]
+```
+
+Quatro tipos — `booleano`, `numero`, `texto`, `escolha` — e a **chave começa
+com o id do plugin**: é o que impede dois plugins de disputarem `cor`, e um
+plugin de redefinir `ato20.zoom`. O Rust valida a declaração na importação (o
+padrão é do tipo, a escolha tem opções, o número cabe no intervalo); a tela
+valida o valor gravado na leitura, e um valor que não serve é pulado em vez de
+quebrar — o arquivo pode ter sido editado à mão.
+
+Configurações → Ajustes desenha a lista a partir do que foi declarado, com
+busca, agrupada por dono, e um botão **JSON** para editar o arquivo cru no
+lugar. JSON inválido não salva, e a linha do erro aparece embaixo. O ícone ao
+lado abre o arquivo no editor da máquina. É um `textarea`, e não um editor de
+código: o projeto não tem nenhum, e trazer um pela primeira vez para um arquivo
+de dez linhas pesaria no bundle do Mestre para todo mundo.
+
+Na API: `api.config.ler(chave)` lê qualquer chave declarada, inclusive as do
+aplicativo; `gravar(chave, valor)` só as do próprio plugin, e devolve `false`
+para chave alheia ou valor do tipo errado; `assinar(chave, aviso)` acorda
+quando o valor que **vale** muda, pela tela, pelo editor ou por outra gravação.
+
+**O zoom, o aviso de versão e os quatro faders saíram do `localStorage`** e
+viraram `ato20.*` no mesmo registro. A chave antiga é lida uma vez na primeira
+abertura desta versão, copiada para o arquivo e apagada.
+
+## Personagem, medidor, condição e dado
+
+É a parte da API que deixa um plugin ser um sistema: iniciativa, botão de
+ataque que já dá o dano, aba de habilidades que rola e aplica. Nada disso
+existe de fábrica, e é de propósito — o que existe é o alcance.
+
+`api.personagens.listar()` devolve o personagem **inteiro**, medidores e
+condições incluídos, escondidos também: quem lê é o Mestre, e é ele quem decide
+o que a mesa vê. `assinar` avisa a cada releitura do elenco.
+
+**Medidor se ajusta em lote.** `ajustarMedidor(personagemId, medidorId,
+patch)` chamado dez vezes no mesmo laço vira **uma** gravação e **uma**
+releitura. A conta que justifica: cada gravação no índice de personagens é uma
+reescrita inteira com `fsync` na thread da janela, seguida de uma releitura
+que acorda cinco hooks e de uma republicação da cena. Um botão que tira vida
+de dez goblins pagaria isso dez vezes por clique. O Rust recebe o lote
+(`character_medidores_aplicar`), pula o medidor que já não existe em vez de
+derrubar os outros nove, e devolve como cada um ficou depois do teto. O
+estilo do medidor fica de fora do patch: é assunto do estilo declarativo.
+
+`alternarCondicao(ids, modeloId, ligar)` liga ou desliga uma condição do
+cardápio em vários personagens, gravando uma vez, como o menu do token já
+fazia. `cardapioDeCondicoes()` é o cardápio.
+
+**O plugin guarda o que é dele em cada personagem** — em
+`personagens/{id}/_extensoes.json`, e não no índice. O índice é reescrito
+inteiro a cada clique de medidor, e carregar nele o guardado de N plugins faria
+cada `+1` de vida regravar dado alheio. Aqui o plugin lê sob demanda, grava só
+o seu, viaja no zip, e cabe em 64 KB por plugin. Duas metades, e a fronteira é
+a rede: `privado` nunca sai do Mestre; `publico` é o que o celular do **dono**
+do personagem pode receber. Quem separa é o Rust (`publicos`), não quem chama.
+
+`api.dados.rolar(["1d20", "1d4"])` joga dados de verdade no palco e resolve
+quando eles **caem** — a promessa espera a mesma conta que anima a queda, para
+o plugin não dar o dano antes de o d20 parar. Sem modificador: `+3` é conta do
+plugin, e é o que deixa a paleta continuar recusando `2d6+3` de propósito. O
+`total` soma o que entra na soma; a moeda fica de fora. Só o Mestre vê os
+dados, por ora.
+
+`api.eventos` — `aoMudarMedidor`, `aoAlternarCondicao`, `aoRolar`,
+`aoTrocarCena`, `aoPorNoAr` — saem da **releitura** do elenco e dos stores, e
+não de um gancho em cada escrita: quem escreve é o Rust, por dezenas de
+caminhos (a ficha, o menu do token, o celular, outro plugin), e comparar a
+leitura nova com a anterior é o único lugar por onde toda mudança passa. A
+primeira leitura da campanha não conta como mudança, senão todo plugin de
+automação dispararia no boot. `aoRolar` cobre o dado do mestre e o do jogador.
+
+## Encaixes: menus, seções, substitutos e ferramentas
+
+O pedido era que um plugin pudesse criar opções novas nos elementos e
+modificar as janelas que já existem. São três encaixes declarados no manifesto
+e implementados no módulo, e uma ferramenta mais completa.
+
+**Item de menu** — `itensDeMenu: [{ id, titulo, alvo, icone }]`. O `alvo` diz
+qual menu: `palco.token`, `palco.luz`, `palco.area`, `palco.quadro`,
+`palco.parede`, `palco.retrato`, `palco.vazio` para o botão direito no palco
+pelo que está na mão; `linha.cena`, `linha.personagem`, `linha.retrato`,
+`linha.imagem`, `linha.quadro`, `linha.nota` para as linhas das listas — botão
+direito e três pontos, os dois, pelo mesmo `Kit` que as linhas já usam. O item
+aparece pelo manifesto e o clique importa o módulo, como o comando; `quando`
+esconde o item num contexto em que ele não se aplica. **Parede e retrato não
+têm menu de fábrica**: eles ganham um só quando algum plugin declarou item para
+eles, e sem plugin nada muda. Postit e cartão passaram a aceitar o botão
+direito, que antes caía no vazio.
+
+**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra depois
+das condições e antes dos arquivos, com a moldura das de fábrica: fecha,
+lembra que fechou. O corpo recebe `personagemId`.
+
+**Substituto** — `substitutos: [{ alvo }]`, com `secao:medidores` (o miolo de
+uma seção da ficha) ou `janela:personagem` (a janela inteira). É o que deixa
+uma ficha com cara de outro sistema existir. Tudo que pode dar errado devolve o
+de fábrica: plugin desligado, módulo que falhou, corpo não registrado, corpo
+que estourou. Dois plugins no mesmo alvo: vale o **primeiro por ordem de
+nome** — previsível e sem configuração; quem quiser o outro desliga o primeiro.
+O ponto único da janela é `JanelaCorpo`, flutuante e atracada; o da seção é
+`SecaoFicha`. Sem plugin, nenhum dos dois ganha um nó a mais na árvore.
+
+**Ferramenta** — o `icone` do manifesto passa a ser um nome da lista de
+`icones.ts` (antes era ignorado); `opcoes` é um componente que aparece como
+pílula ao lado do botão enquanto a ferramenta está na mão, como a cor do lápis;
+`aoMover` chega a cada quadro do arrasto, para a prévia; e `aoClicar`,
+`aoArrastar` e `aoMover` recebem as teclas seguradas (`shift`, `ctrl`, `alt`).
+
+## Estilo de medidor desenhado pelo plugin, na TV e no celular
+
+Um plugin pode desenhar o medidor — uma barra com brilho, um coração que
+esvazia, um relógio que gira — e a mesa inteira vê o desenho. Sem uma linha de
+código do plugin rodar fora do Mestre: o estilo é um **`.svg` com variáveis**.
+
+```json
+"estilosDeMedidor": [
+  { "id": "coracao", "titulo": "Coração", "arquivo": "coracao.svg", "altura": 0.9 }
+]
+```
+
+```svg
+<svg viewBox="0 0 100 90">
+  <path d="M50 85 ..." fill="rgba(0,0,0,0.45)" />
+  <rect y="{90 - fracao * 90}" width="100" height="{fracao * 90}" fill="{cor}"
+        clip-path="url(#c)" />
+  <text x="50" y="50" text-anchor="middle" fill="white">{atual}/{maximo}</text>
+</svg>
+```
+
+As variáveis são `{fracao}`, `{atual}`, `{maximo}`, `{cor}`, `{largura}` e
+`{altura}`, e aceitam as quatro operações — `{fracao * 90}` — avaliadas à mão,
+sem `eval`. `altura` é a da forma em fração da largura, declarada porque a caixa
+sobre o token é medida **antes** de o desenho existir; sem o número o SVG
+transbordaria o plano, que é a armadilha que derruba o palco.
+
+**O SVG nunca vira HTML.** O Mestre o lê uma vez para uma árvore tipada, por
+uma lista fechada de elementos e atributos (`svg-modelo.ts`): sem `script`,
+`foreignObject`, `on*`, `href`, `style`; `url()` só para `#id` do próprio
+arquivo; animação só em `opacity` e `transform`, que é o que o palco já anima
+sem custar layout. É a árvore que viaja, e a TV a desenha com o React — o
+mesmo caminho do Markdown. Elemento fora da lista some com os filhos.
+
+O conjunto viaja por um **canal próprio**, `/sala/declarativo`, e não dentro do
+quadro de 10 Hz: o quadro leva só `declarativoVersao`, um número, e quem
+assiste busca o conjunto quando ele muda. Um modelo dentro do quadro seria
+serializado dez vezes por segundo para cada aparelho, por um dado que muda
+quando o mestre instala um plugin.
+
+O medidor guarda `estiloExtensao: "meu-plugin/coracao"` **ao lado** do
+`estilo` de fábrica, que continua ali como reserva: a mesa que não tem o modelo
+— plugin desinstalado, TV com versão antiga — desenha a barra. É o que deixa o
+campo existir sem quebrar `personagens.json` em lugar nenhum. Quem o define é o
+plugin, por `ajustarMedidor(..., { estiloExtensao })`, e só com estilo dele
+mesmo; `""` volta ao de fábrica.
+
+## A seção do plugin no celular, e o botão que chega ao Mestre
+
+A metade **pública** do que um plugin guarda no personagem pode virar uma
+seção na tela do jogador. Basta ela ter a chave `secao`:
+
+```js
+api.personagens.gravarDados(id, {
+  publico: {
+    secao: {
+      titulo: "Habilidades",
+      blocos: [
+        { tipo: "valor", rotulo: "PA", valor: 3 },
+        { tipo: "texto", texto: "Guerreiro nível 3" },
+        { tipo: "botao", rotulo: "Atacar", acao: "atacar", icone: "espadas" },
+      ],
+    },
+  },
+});
+api.registrar.acao({ id: "atacar", executar: ({ personagemId, jogador }) => { /* ... */ } });
+```
+
+Três blocos e nada além — texto, rótulo com valor, botão —, validados na
+leitura pelo celular (`secao-publica.ts`): bloco malformado some, os outros
+ficam. É a mesma escolha do estilo de medidor: dado, não código.
+
+O botão **não faz nada no celular**. Ele manda `POST /eu/acoes`, o daemon
+confere que o personagem é daquele jogador e repassa por `/sala/acoes` — o
+mesmo desenho do movimento do token —, e é o `registrar.acao` do plugin, na
+janela do Mestre, que executa. Quem apertou vem do token, não do corpo. O
+efeito volta pela mesa: o medidor que baixou, o dado que caiu ao lado do
+retrato. Não há resposta para um celular específico, de propósito — o Mestre
+não tem esse canal, e criá-lo seria superfície nova de rede para um caso que
+o quadro já cobre.
+
+Para o número gasto aparecer no aparelho de quem apertou, o quadro passou a
+levar `fichasVersao`, o contador do elenco no Mestre: o celular relê a ficha e
+as seções quando ele muda. Antes ele lia a ficha uma vez ao montar, e um botão
+que gastasse um recurso deixaria o número velho na tela.
+
+A rota `GET /eu/personagens/{id}/extensoes` entrega **só** a metade pública, e
+quem separa é o Rust (`publicos`), não a rota. A privada nunca sai do Mestre.
+
+## Atalho de plugin não rouba atalho do aplicativo
+
+A tabela de `atalhos.ts` é consultada em ordem e os do plugin entram **depois**.
+Um `Ctrl+Z` declarado por uma extensão nunca alcança o desfazer. Não há
+conferência de colisão em lugar nenhum — a ordem já decide, e decide a favor do
+aplicativo.
+
+Comando sem tecla continua alcançável: ele aparece numa seção do menu **Abas**,
+que some quando não há nenhum.
+
+## Quando o plugin quebra
+
+Um `ativar` que estoura é contido. A extensão é marcada como falha, o que ela
+chegou a registrar é esquecido, e o motivo aparece no corpo do painel em
+monoespaçada — quem vai consertar é quem escreveu o plugin, e essa pessoa
+precisa do texto exato.
+
+Metade de um plugin na interface é pior que nenhuma. E um plugin que brigasse a
+janela deixaria o mestre sem alcançar o botão que o desliga, que é o pior
+desfecho possível.
+
+## Onde o código da extensão vive
+
+Um protocolo próprio, `ato20-ext://localhost/{id}/{arquivo}`, e não `blob:`:
+com blob, um `import` relativo de dentro da extensão não resolve e o erro
+aparece como `blob:abc-123` sem nome de arquivo. Com URL estável a extensão pode
+ter mais de um módulo e uma fonte ao lado do CSS.
+
+E **não pelo daemon**, que já serve HTTP: ele escuta em `0.0.0.0`, e por ele a
+extensão viraria alcançável por qualquer aparelho da rede. O protocolo só existe
+dentro da webview desta janela — que é também a razão de plugin alcançar só o
+Mestre. Levar isto às telas de espectador é abrir essa superfície, e é uma
+decisão à parte.
+
+## Confiança
+
+Não há loja, não há revisão e não há sandbox. Quem instala um plugin de código
+está executando o código de quem o escreveu, com o alcance da janela. A tela
+avisa o que é tema e o que é funcionalidade, e mostra autor e repositório — o
+resto é a mesma confiança que se dá a uma extensão de editor.
+
+As guardas que existem são contra plugin **malformado**, não contra plugin
+malicioso: travessia de caminho, link simbólico plantado na pasta, molde de URL
+sem `{codigo}`, canvas absurdo. Todas têm teste em `src-tauri/src/extensoes.rs`.
