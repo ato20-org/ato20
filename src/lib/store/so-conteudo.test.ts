@@ -42,4 +42,30 @@ describe("soConteudo", () => {
     expect(volta.editingSceneId).toBe("b");
     expect(volta.liveSceneId).toBe("b");
   });
+
+  // A troca apaga o mapa velho do acervo: devolver o id deixava a mesa preta.
+  it("não devolve um fundo que já foi trocado", () => {
+    const passo = { ...cena("a", "A", 1), backgroundAssetId: "velho" } as Scene;
+    const agora = { ...cena("a", "A", 3), backgroundAssetId: "novo" } as Scene;
+
+    const volta = soConteudo(
+      { scenes: [agora], editingSceneId: "a", liveSceneId: null },
+      { scenes: [passo], editingSceneId: "a", liveSceneId: null },
+    );
+
+    expect(volta.scenes[0]!.items).toHaveLength(1);
+    expect(volta.scenes[0]!.backgroundAssetId).toBe("novo");
+  });
+
+  it("nem ressuscita um fundo que já foi tirado", () => {
+    const passo = { ...cena("a", "A", 1), backgroundAssetId: "velho" } as Scene;
+    const agora = cena("a", "A", 3);
+
+    const volta = soConteudo(
+      { scenes: [agora], editingSceneId: "a", liveSceneId: null },
+      { scenes: [passo], editingSceneId: "a", liveSceneId: null },
+    );
+
+    expect(volta.scenes[0]!).not.toHaveProperty("backgroundAssetId");
+  });
 });
