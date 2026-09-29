@@ -835,6 +835,18 @@ pub fn editar_medidor(
         .find(|m| m.id == medidor_id)
         .ok_or_else(|| sem_medidor(id, medidor_id))?;
 
+    aplicar_patch(medidor, patch);
+    let saida = medidor.clone();
+
+    save(vault, &personagens)?;
+
+    Ok(saida)
+}
+
+/// Poe o patch no medidor e o ajusta. O que `editar_medidor` e
+/// `aplicar_medidores` tem em comum, para os dois nao divergirem na ordem dos
+/// campos.
+fn aplicar_patch(medidor: &mut Medidor, patch: PatchMedidor) {
     if let Some(nome) = patch.nome {
         medidor.nome = nome;
     }
@@ -857,9 +869,58 @@ pub fn editar_medidor(
     }
 
     ajustar(medidor);
-    let saida = medidor.clone();
+}
 
-    save(vault, &personagens)?;
+/// Uma mudanca num medidor de um personagem, dentro de um lote.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MudancaDeMedidor {
+    pub personagem_id: String,
+    pub medidor_id: String,
+    pub patch: PatchMedidor,
+}
+
+/// Aplica varias mudancas de uma vez e grava o indice UMA vez.
+///
+/// E o caminho dos plugins, e existe por causa de uma conta: cada gravacao do
+/// indice e uma releitura, uma reescrita inteira e um `fsync` na thread da
+/// janela, seguidos de uma releitura pelo TypeScript e de uma republicacao da
+/// cena. Um botao de ataque que tira vida de dez goblins pagaria isso dez
+/// vezes por clique; aqui paga uma.
+///
+/// Medidor que nao existe mais e PULADO, e nao erro: o lote vem de um plugin
+/// que leu a lista ha um instante, e um goblin apagado no meio nao pode
+/// derrubar o dano nos outros nove. Devolve os medidores como ficaram depois
+/// do clamp, na ordem das mudancas aplicadas.
+pub fn aplicar_medidores(
+    vault: &Vault,
+    mudancas: Vec<MudancaDeMedidor>,
+) -> AppResult<Vec<Medidor>> {
+    let mut personagens = load(vault)?;
+    let mut saida = Vec::with_capacity(mudancas.len());
+
+    for mudanca in mudancas {
+        let Some(personagem) = personagens
+            .iter_mut()
+            .find(|p| p.id == mudanca.personagem_id)
+        else {
+            continue;
+        };
+        let Some(medidor) = personagem
+            .medidores
+            .iter_mut()
+            .find(|m| m.id == mudanca.medidor_id)
+        else {
+            continue;
+        };
+
+        aplicar_patch(medidor, mudanca.patch);
+        saida.push(medidor.clone());
+    }
+
+    if !saida.is_empty() {
+        save(vault, &personagens)?;
+    }
 
     Ok(saida)
 }
@@ -2027,6 +2088,45 @@ mod tests {
 
         assert!(criar_medidor(&vault, &p.id, "Vida", "#ef4444", Estilo::Barra, 10).is_err());
         assert_eq!(load(&vault).unwrap()[0].medidores.len(), MAX_MEDIDORES);
+    }
+
+    #[test]
+    fn o_lote_aplica_em_varios_personagens_e_pula_o_que_sumiu() {
+        let (_tmp, vault) = vault();
+        let a = create(&vault, "Goblin A").unwrap();
+        let b = create(&vault, "Goblin B").unwrap();
+        let ma = criar_medidor(&vault, &a.id, "Vida", "#ef4444", Estilo::Barra, 10).unwrap();
+        let mb = criar_medidor(&vault, &b.id, "Vida", "#ef4444", Estilo::Barra, 10).unwrap();
+
+        let saida = aplicar_medidores(
+            &vault,
+            vec![
+                MudancaDeMedidor {
+                    personagem_id: a.id.clone(),
+                    medidor_id: ma.id.clone(),
+                    patch: PatchMedidor { atual: Some(7), ..Default::default() },
+                },
+                // O teto puxa o valor: pediu 50 num maximo 10.
+                MudancaDeMedidor {
+                    personagem_id: b.id.clone(),
+                    medidor_id: mb.id.clone(),
+                    patch: PatchMedidor { atual: Some(50), ..Default::default() },
+                },
+                // Um goblin que ja nao existe nao derruba o dano nos outros.
+                MudancaDeMedidor {
+                    personagem_id: "sumiu".into(),
+                    medidor_id: "x".into(),
+                    patch: PatchMedidor { atual: Some(1), ..Default::default() },
+                },
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(saida.iter().map(|m| m.atual).collect::<Vec<_>>(), vec![7, 10]);
+
+        let lidos = load(&vault).unwrap();
+        assert_eq!(lidos[0].medidores[0].atual, 7);
+        assert_eq!(lidos[1].medidores[0].atual, 10);
     }
 
     #[test]
