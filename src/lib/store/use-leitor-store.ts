@@ -29,6 +29,13 @@ type LeitorStore = {
    */
   livroId: string | null;
   fracao: number;
+  /**
+   * A página que cada livro deve mostrar quando puder, pedida de fora: a
+   * menção `!rótulo` de uma nota. O leitor aplica e descarta -- ver `salto` no
+   * `LeitorPdf`. Por livro e não um só, porque o livro pedido pode estar numa
+   * janela enquanto outro ocupa o split.
+   */
+  saltos: Record<string, { pagina: number; vez: number }>;
 
   /** Manda o livro para o split. Já lá, não faz nada. */
   abrirNoSplit: (livroId: string) => void;
@@ -38,7 +45,13 @@ type LeitorStore = {
   /** Grava a fração atual no disco da máquina. Chamado no fim do gesto. */
   guardar: () => void;
   restaurar: () => void;
+  saltar: (livroId: string, pagina: number) => void;
+  /** Tira o salto aplicado. Só se ainda for o mesmo: um mais novo fica. */
+  descartarSalto: (livroId: string, vez: number) => void;
 };
+
+/** Conta os saltos: dois pedidos da mesma página têm de valer os dois. */
+let vezes = 0;
 
 function ler(): number {
   try {
@@ -72,6 +85,7 @@ function ler(): number {
 export const useLeitorStore = create<LeitorStore>((set, get) => ({
   livroId: null,
   fracao: PADRAO,
+  saltos: {},
 
   abrirNoSplit(livroId) {
     if (get().livroId === livroId) return;
@@ -98,5 +112,18 @@ export const useLeitorStore = create<LeitorStore>((set, get) => ({
 
   restaurar() {
     set({ fracao: ler() });
+  },
+
+  saltar(livroId, pagina) {
+    vezes += 1;
+    set({ saltos: { ...get().saltos, [livroId]: { pagina, vez: vezes } } });
+  },
+
+  descartarSalto(livroId, vez) {
+    if (get().saltos[livroId]?.vez !== vez) return;
+
+    const resto = { ...get().saltos };
+    delete resto[livroId];
+    set({ saltos: resto });
   },
 }));

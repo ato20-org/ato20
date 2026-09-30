@@ -40,6 +40,7 @@ import { CORNER_HANDLES } from "@/lib/geometry/transform";
 import { POSTIT_Z, usePostitStore } from "@/lib/store/use-postit-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { repassarCliqueDaMencao } from "@/lib/mestre/clique-da-mencao";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
@@ -540,6 +541,10 @@ const PostitPapel = memo(function PostitPapel({
     // no caminho leve do gesto -- antes, cada quadro do arrasto era um commit
     // no board. A cerca da área de trabalho continua valendo, agora sobre o
     // deslocamento do grupo. Ver `deslocamentoPreso`.
+    //
+    // O clique numa menção do papel volta por aqui: o palco o mata ao
+    // capturar o ponteiro. Antes dele, enquanto o alvo ainda é a menção.
+    repassarCliqueDaMencao(event);
     onPapelPointerDown(event);
   }
 

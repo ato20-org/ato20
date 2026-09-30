@@ -1,8 +1,15 @@
 "use client";
 
-import { Camera, Image as ImageIcon, Music, VenetianMask } from "lucide-react";
+import {
+  BookMarked,
+  Camera,
+  Image as ImageIcon,
+  Music,
+  VenetianMask,
+} from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 
+import { MiniaturaDaPagina } from "@/components/leitor/miniatura-da-pagina";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import {
   tracoDoIcone,
@@ -14,9 +21,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { MARCA_MENCAO } from "@/lib/mestre/clique-da-mencao";
 import { MINIATURA } from "@/lib/miniatura";
 import type { Token } from "@/lib/mencoes/texto";
 import { parsePostit, type TipoNoPostit } from "@/lib/mestre/postit-mencoes";
+import type { MarcadorDoLivro } from "@/lib/store/use-marcadores-store";
 import type { ConteudoJanela } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
 import type { AssetMeta, Scene } from "@/types/scene";
@@ -66,7 +75,7 @@ const ICONE = "inline-block size-[1em] shrink-0 translate-y-[0.1em]";
  * Fora do palco -- a nota, o cartão de documento -- não há `zoom` a desfazer, e
  * o traço é o de sempre.
  */
-function useTracoDoIcone(): number {
+export function useTracoDoIcone(): number {
   const palco = useSceneScaleSeHouver();
 
   return tracoDoIcone(palco?.scale ?? 1, palco?.ampliacaoNoLayout ?? false);
@@ -96,6 +105,14 @@ export type Vinculos = {
   cena: (nome: string) => Scene | null;
   /** Abre a cena na bancada do mestre. Não põe nada no ar para a mesa. */
   irParaCena: (sceneId: string) => void;
+  /**
+   * Uma página marcada de um livro da estante, pelo RÓTULO do marcador. Dois
+   * rótulos iguais em livros diferentes resolvem no primeiro livro: renomear
+   * um deles no leitor é o que os separa.
+   */
+  marcador: (nome: string) => MarcadorDoLivro | null;
+  /** Abre o livro naquela página, onde ele estiver. Ver `abrirLivroNaPagina`. */
+  abrirLivro: (livroId: string, titulo: string, pagina: number) => void;
   /** Abre uma janela da bancada: a ficha do personagem, a imagem do acervo. */
   abrirJanela: (conteudo: ConteudoJanela) => void;
 };
@@ -252,6 +269,13 @@ export function TokenView({
     return <ArquivoChip asset={asset} abrirJanela={vinculos.abrirJanela} />;
   }
 
+  if (token.tipo === "marcador") {
+    const achado = vinculos.marcador(token.valor);
+    if (!achado) return <NaoResolvido bruto={token.bruto} tipo="marcador" />;
+
+    return <MarcadorChip achado={achado} abrirLivro={vinculos.abrirLivro} />;
+  }
+
   const cena = vinculos.cena(token.valor);
   if (!cena) return <NaoResolvido bruto={token.bruto} tipo="cena" />;
 
@@ -286,6 +310,9 @@ function Referencia({
     <button
       {...resto}
       type="button"
+      // O arrasto do papel mata o clique de quem está dentro dele, e é por
+      // esta marca que o clique volta. Ver `repassarCliqueDaMencao`.
+      {...{ [MARCA_MENCAO]: "" }}
       title={title}
       className={cn(
         "inline-flex items-baseline gap-[0.2em] font-medium underline decoration-dotted",
@@ -478,6 +505,48 @@ function CenaChip({
 }
 
 /**
+ * Uma `!página marcada`: abre o livro nela, e a prévia é a própria página.
+ *
+ * A miniatura só monta com a prévia aberta, como o mapa da cena: é um PDF
+ * aberto e uma página desenhada, e um por menção em cada postit da cena seria
+ * o custo inteiro sem ninguém olhando. Ver `pegarDocDoLivro`.
+ */
+function MarcadorChip({
+  achado,
+  abrirLivro,
+}: {
+  achado: MarcadorDoLivro;
+  abrirLivro: Vinculos["abrirLivro"];
+}) {
+  const traco = useTracoDoIcone();
+  const { marcador, livro } = achado;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Referencia
+            title={`Abrir ${livro.titulo} na página ${marcador.pagina}`}
+            className="text-amber-900 decoration-amber-900/40"
+            aoClicar={() => abrirLivro(livro.id, livro.titulo, marcador.pagina)}
+          >
+            <BookMarked className={ICONE} strokeWidth={traco} />
+            {marcador.rotulo}
+          </Referencia>
+        }
+      />
+      <TooltipContent className={PREVIA}>
+        <MiniaturaDaPagina livroId={livro.id} pagina={marcador.pagina} largura={160} />
+        <p className="max-w-40 truncate font-medium">{marcador.rotulo}</p>
+        <p className="max-w-40 truncate opacity-70">
+          {livro.titulo} · p. {marcador.pagina}
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
  * Marcador escrito, mas sem nada com esse nome.
  *
  * Mostra o texto CRU, com o sinal e as aspas. É a diferença entre "não achei" e
@@ -493,7 +562,7 @@ function NaoResolvido({
   tipo,
 }: {
   bruto: string;
-  tipo: "personagem" | "arquivo" | "cena";
+  tipo: "personagem" | "arquivo" | "cena" | "marcador";
 }) {
   return (
     <span

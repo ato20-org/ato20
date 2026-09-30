@@ -17,6 +17,13 @@ import { MestreShell } from "@/components/mestre/mestre-shell";
 import { MestreStage } from "@/components/mestre/mestre-stage";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { useAssetsStore } from "@/lib/store/use-assets-store";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { useMarcadoresStore } from "@/lib/store/use-marcadores-store";
+import { EditorAoVivo } from "@/components/mestre/editor-markdown";
+import { PainelDeMencoes } from "@/components/mestre/mencoes-da-nota";
+import type { Vinculos } from "@/components/mestre/postit-texto-view";
+import { SEM_VINCULOS, VinculosContext } from "@/components/playground/markdown-view";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { moverNoGesto, useGestoStore } from "@/lib/store/use-gesto-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
@@ -50,6 +57,7 @@ import {
   DOCUMENTO_LARGURA,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
+  type AssetMeta,
   type CanvasItem,
   type EfeitoDaLuz,
   type Scene,
@@ -145,6 +153,12 @@ import {
  *               entre as duas corridas é o que eles valem. `?rolar=1` percorre
  *               a lista, que é o outro gesto real.
  *
+ * `selecao`    Não mede: PROVA. O clique e o arrasto no texto desenhado do
+ *               editor de nota, traduzidos para o cru -- dentro do negrito,
+ *               três linhas, de baixo para cima, no meio de uma menção, e o
+ *               que apagar e Tab fazem no trecho aberto. `fps` é quantos
+ *               casos passaram; o detalhe sai com `--console`.
+ *
  * Parâmetros: `?cenario=amostras&n=100&segundos=10`
  *
  * Quem dirige é `scripts/perf/medir.mjs`, que serve o `out/`, responde
@@ -174,7 +188,8 @@ type Cenario =
   | "camera"
   | "mestre-camera"
   | "quadro"
-  | "jogador";
+  | "jogador"
+  | "selecao";
 
 /** Um degrau do `leitor`: o que custou trocar o zoom para ele. */
 type Passo = {
@@ -759,15 +774,26 @@ function PalcoQuadro({
           documento.arquivo,
           // `nota-curta`: uma linha por cartão. Separa "quantos cartões" de
           // "quantos nós de texto" no que o motor paga por quadro.
-          experimento.includes("nota-curta") ? `# Nota ${i + 1}` : notaDeMedida(i),
+          experimento.includes("nota-curta")
+            ? `# Nota ${i + 1}`
+            : experimento.includes("previa")
+              ? comPrevias(notaDeMedida(i))
+              : notaDeMedida(i),
         ]),
       ),
       lendo: {},
     });
 
+    // `previa`: o acervo, o personagem e a cena que as prévias da nota
+    // apontam, para elas RESOLVEREM -- sem isto cada linha cai no parágrafo de
+    // sempre e a medida pesaria o fallback. O número do pedido sobe para
+    // descartar a leitura que a bancada já tenha disparado.
+    const previa = experimento.includes("previa");
+    if (previa) semearPrevias();
+
     useSceneStore.setState({
       board: {
-        scenes: [base, ...outras],
+        scenes: [base, ...outras, ...(previa ? [cenaDaPrevia()] : [])],
         editingSceneId: base.id,
         liveSceneId: noAr ? base.id : null,
         notas: (base.documentos ?? []).map((documento) => ({
@@ -991,6 +1017,90 @@ function montarQuadro(n: number, documentos: number): Scene {
     createdAt: agora,
     updatedAt: agora,
   };
+}
+
+/**
+ * A nota de medida com as prévias logo abaixo do título, onde o cartão as
+ * mostra sem rolar: a imagem com largura, o retrato, o fundo da cena e a
+ * página marcada -- que no cartão é só texto, sem PDF.
+ */
+function comPrevias(nota: string): string {
+  const [titulo, ...resto] = nota.split("\n");
+  return [titulo, "!Agarrar", "@Aldren", "/perf-previa.png|240", ">Porão", ...resto].join("\n");
+}
+
+/** A cena de mapa que `>Porão` aponta, com um fundo de 3537x3750 como o do jogador. */
+function cenaDaPrevia(): Scene {
+  const cena: Scene = {
+    ...montarQuadro(0, 0),
+    id: "perf-porao",
+    name: "Porão",
+    backgroundAssetId: "perf-previa-fundo",
+  };
+  // Sem `tipo` é mapa.
+  delete cena.tipo;
+  return cena;
+}
+
+function semearPrevias() {
+  const imagem = (
+    id: string,
+    name: string,
+    naturalWidth: number,
+    naturalHeight: number,
+  ): AssetMeta => ({
+    id,
+    kind: "image",
+    name,
+    mimeType: "image/png",
+    size: 0,
+    createdAt: 0,
+    naturalWidth,
+    naturalHeight,
+  });
+
+  useAssetsStore.setState({
+    image: {
+      assets: [
+        imagem("perf-previa", "perf-previa.png", 1600, 1000),
+        imagem("perf-previa-fundo", "porao.png", 3537, 3750),
+        imagem("perf-retrato", "aldren.png", 512, 512),
+      ],
+      pedido: useAssetsStore.getState().image.pedido + 1,
+      emVoo: false,
+    },
+  });
+  useMarcadoresStore.setState({
+    lista: [
+      {
+        livro: {
+          id: "perf-livro",
+          titulo: "Livro do Jogador",
+          arquivo: "phb.pdf",
+          tamanho: 0,
+          paginas: 320,
+          pagina: 1,
+          abertoEm: 0,
+        },
+        marcador: {
+          id: "perf-marcador",
+          livroId: "perf-livro",
+          pagina: 192,
+          rotulo: "Agarrar",
+          criadoEm: 0,
+        },
+      },
+    ],
+    pedido: useMarcadoresStore.getState().pedido + 1,
+    emVoo: false,
+  });
+  useCharactersStore.setState({
+    personagens: [
+      { id: "perf-aldren", nome: "Aldren", retrato: "perf-retrato", criadoEm: 0 },
+    ],
+    pedido: useCharactersStore.getState().pedido + 1,
+    emVoo: false,
+  });
 }
 
 /**
@@ -2718,6 +2828,8 @@ function Medida({ params }: { params: URLSearchParams }) {
         <PalcoMestre n={n} />
       ) : cenario === "camera" ? (
         <PalcoCamera n={n} />
+      ) : cenario === "selecao" ? (
+        <PalcoSelecao />
       ) : cenario === "quadro" ? (
         <PalcoQuadro
           n={n}
@@ -2782,5 +2894,375 @@ function Medida({ params }: { params: URLSearchParams }) {
           : `medindo ${cenario} n=${n}\n${decorrido.toFixed(1)}s / ${segundos}s`}
       </pre>
     </main>
+  );
+}
+
+/**
+ * `selecao`: o clique e o arrasto no texto DESENHADO do editor de nota, no
+ * motor de verdade.
+ *
+ * Não mede quadro nenhum: prova que a seleção feita por cima das linhas
+ * formatadas chega ao texto CRU no lugar certo -- ver `pontoNoCru`. Cada caso
+ * seleciona pelo `Selection` do documento, solta o mouse como a mão soltaria,
+ * e confere o que o campo aberto recebeu. Na coluna `fps` sai quantos casos
+ * passaram, e em `perdidos` quantos falharam; o detalhe vai para o console
+ * (`--console`).
+ */
+const TEXTO_DA_SELECAO = [
+  "# Porão",
+  "O **altar** fica no fundo, e @Thalor sabe.",
+  "- item um",
+  "- item dois",
+  "Texto final",
+  "/foto.png|160",
+  "/foto.png|120 /foto.png|80",
+].join("\n");
+
+/** A imagem que `/foto.png` resolve: o servidor da bancada responde qualquer `/asset/*`. */
+const FOTO_DA_SELECAO: AssetMeta = {
+  id: "perf-previa",
+  kind: "image",
+  name: "foto.png",
+  mimeType: "image/png",
+  size: 0,
+  createdAt: 0,
+  naturalWidth: 400,
+  naturalHeight: 300,
+};
+
+function PalcoSelecao() {
+  const [texto, setTexto] = useState(TEXTO_DA_SELECAO);
+  // Os vínculos de verdade pedem campanha; estes resolvem só a foto, e contam
+  // as janelas que o clique abriria.
+  const aberturas = useRef<string[]>([]);
+  const vinculos = useMemo<Vinculos>(
+    () => ({
+      ...SEM_VINCULOS,
+      arquivo: (nome) => (nome === "foto.png" || nome === "foto" ? FOTO_DA_SELECAO : null),
+      personagem: (nome) =>
+        nome.toLowerCase() === "thalor"
+          ? { id: "perf-thalor", nome: "Thalor", dono: "Álvaro", presente: true, retrato: "perf-retrato" }
+          : null,
+      abrirJanela: (conteudo) => {
+        aberturas.current.push(conteudo.tipo);
+      },
+    }),
+    [],
+  );
+  // O documento inteiro à vista dos casos de edição, que conferem o que o
+  // trecho gravou -- e o texto de volta ao começo entre um caso e outro.
+  const documento = useRef(texto);
+  useEffect(() => {
+    documento.current = texto;
+  });
+
+  useEffect(() => {
+    const quadros = () =>
+      new Promise<void>((pronto) => requestAnimationFrame(() => requestAnimationFrame(() => pronto())));
+
+    const noDe = (linha: number, trecho: string, depois = 0): [Text, number] => {
+      const linhaEl = document.querySelector(`[data-nota-editor] [data-linha="${linha}"]`);
+      if (!linhaEl) throw new Error(`linha ${linha} não desenhada`);
+      const andador = document.createTreeWalker(linhaEl, NodeFilter.SHOW_TEXT);
+      for (let no = andador.nextNode(); no; no = andador.nextNode()) {
+        const onde = (no as Text).data.indexOf(trecho);
+        if (onde >= 0) return [no as Text, onde + depois];
+      }
+      throw new Error(`"${trecho}" não está na linha ${linha}`);
+    };
+
+    type Caso = {
+      nome: string;
+      ancora: [number, string, number];
+      foco: [number, string, number];
+      valor: string;
+      selecionado: string;
+      /** Depois de abrir: o que a mão faz no campo, e o documento que tem de sair. */
+      depois?: { fazer: (campo: HTMLTextAreaElement) => void; documento: string };
+    };
+
+    // O `value` pelo setter nativo e um `input`: é como o React vê a tecla.
+    const digitar = (campo: HTMLTextAreaElement, valor: string, cursor: number) => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(campo, valor);
+      campo.setSelectionRange(cursor, cursor);
+      campo.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const linhas = TEXTO_DA_SELECAO.split("\n");
+    const casos: Caso[] = [
+      {
+        nome: "dentro do negrito",
+        ancora: [1, "altar", 1],
+        foco: [1, "altar", 4],
+        valor: linhas[1]!,
+        selecionado: "lta",
+      },
+      {
+        nome: "três linhas, de cima para baixo",
+        ancora: [1, "fica", 0],
+        foco: [3, "item dois", 9],
+        valor: linhas.slice(1, 4).join("\n"),
+        selecionado: "fica no fundo, e @Thalor sabe.\n- item um\n- item dois",
+      },
+      {
+        nome: "de baixo para cima, até o título",
+        ancora: [4, "final", 5],
+        foco: [0, "Porão", 0],
+        valor: linhas.slice(0, 5).join("\n"),
+        selecionado: "Porão\nO **altar** fica no fundo, e @Thalor sabe.\n- item um\n- item dois\nTexto final",
+      },
+      {
+        nome: "clique simples no meio do item",
+        ancora: [2, "item um", 3],
+        foco: [2, "item um", 3],
+        valor: linhas[2]!,
+        selecionado: "",
+      },
+      {
+        // Começar EM CIMA do chip é clicar nele -- abre a ficha --, e não
+        // selecionar. Terminar dentro dele vale, e vale pela metade mais perto.
+        nome: "fim no meio do chip para no começo da menção",
+        ancora: [1, "fica", 0],
+        foco: [1, "Thalor", 2],
+        valor: linhas[1]!,
+        selecionado: "fica no fundo, e ",
+      },
+      {
+        nome: "apagar a seleção de três linhas",
+        ancora: [1, "fica", 0],
+        foco: [3, "item dois", 9],
+        valor: linhas.slice(1, 4).join("\n"),
+        selecionado: "fica no fundo, e @Thalor sabe.\n- item um\n- item dois",
+        depois: {
+          fazer: (campo) => {
+            const { selectionStart, selectionEnd, value } = campo;
+            digitar(campo, value.slice(0, selectionStart) + value.slice(selectionEnd), selectionStart);
+          },
+          documento: ["# Porão", "O **altar** ", "Texto final", linhas[5]!, linhas[6]!].join("\n"),
+        },
+      },
+      {
+        nome: "Tab no trecho recua as linhas",
+        ancora: [2, "item um", 0],
+        foco: [3, "item dois", 9],
+        valor: linhas.slice(2, 4).join("\n"),
+        selecionado: "item um\n- item dois",
+        depois: {
+          fazer: (campo) =>
+            campo.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+          documento: [
+            "# Porão",
+            linhas[1]!,
+            "  - item um",
+            "  - item dois",
+            "Texto final",
+            linhas[5]!,
+            linhas[6]!,
+          ].join("\n"),
+        },
+      },
+    ];
+
+    let vivo = true;
+    void (async () => {
+      await quadros();
+      const resultados: Array<{ nome: string; passou: boolean; detalhe: string }> = [];
+
+      for (const caso of casos) {
+        if (!vivo) return;
+        (document.activeElement as HTMLElement | null)?.blur();
+        await quadros();
+
+        try {
+          const [aNo, aDe] = noDe(...caso.ancora);
+          const [fNo, fDe] = noDe(...caso.foco);
+          window.getSelection()?.setBaseAndExtent(aNo, aDe, fNo, fDe);
+          aNo.parentElement?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+          document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+          await quadros();
+
+          const campo = document.querySelector<HTMLTextAreaElement>("[data-nota-editor] textarea");
+          const valor = campo?.value ?? "(sem campo)";
+          const selecionado = campo ? valor.slice(campo.selectionStart, campo.selectionEnd) : "";
+          let passou = valor === caso.valor && selecionado === caso.selecionado;
+          let detalhe = passou
+            ? "ok"
+            : `campo=${JSON.stringify(valor)} selecionado=${JSON.stringify(selecionado)} cursor=${campo?.selectionStart}`;
+
+          if (passou && caso.depois && campo) {
+            caso.depois.fazer(campo);
+            await quadros();
+            passou = documento.current === caso.depois.documento;
+            detalhe = passou ? "ok" : `documento=${JSON.stringify(documento.current)}`;
+          }
+          resultados.push({ nome: caso.nome, passou, detalhe });
+
+          // O texto volta ao começo para o caso seguinte.
+          if (caso.depois) {
+            (document.activeElement as HTMLElement | null)?.blur();
+            setTexto(TEXTO_DA_SELECAO);
+            await quadros();
+          }
+        } catch (cause) {
+          resultados.push({ nome: caso.nome, passou: false, detalhe: String(cause) });
+        }
+      }
+
+      // A imagem: o clique abre a janela, e o botão de alinhamento grava.
+      const linhaDaFoto = 5;
+      const confere = (nome: string, passou: boolean, detalhe: string) =>
+        resultados.push({ nome, passou, detalhe: passou ? "ok" : detalhe });
+      try {
+        (document.activeElement as HTMLElement | null)?.blur();
+        await quadros();
+        const imagem = document.querySelector<HTMLButtonElement>(
+          `[data-nota-editor] [data-linha="${linhaDaFoto}"] button[data-mencao]`,
+        );
+        imagem?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+        document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+        imagem?.click();
+        await quadros();
+        const aberta = document.querySelector("[data-nota-editor] textarea");
+        confere(
+          "clicar na imagem abre a janela, e não a linha",
+          aberturas.current.join(",") === "asset" && aberta === null,
+          `aberturas=${aberturas.current.join(",")} linha aberta=${aberta !== null}`,
+        );
+
+        document
+          .querySelector<HTMLButtonElement>(
+            `[data-nota-editor] [data-linha="${linhaDaFoto}"] button[aria-label^="Imagem no centro"]`,
+          )
+          ?.click();
+        await quadros();
+        const ultima = documento.current.split("\n")[linhaDaFoto];
+        confere("o botão de centro grava |centro", ultima === "/foto.png|160|centro", `linha=${JSON.stringify(ultima)}`);
+
+        // A fileira: duas imagens na mesma linha, lado a lado.
+        const linhaDaFileira = 6;
+        const imagens = [
+          ...document.querySelectorAll<HTMLElement>(
+            `[data-nota-editor] [data-linha="${linhaDaFileira}"] [data-galeria] button[data-mencao]`,
+          ),
+        ];
+        const [primeira, segunda] = imagens.map((imagem) => imagem.getBoundingClientRect());
+        confere(
+          "duas imagens na linha ficam lado a lado",
+          imagens.length === 2 && !!primeira && !!segunda && Math.abs(primeira.top - segunda.top) < 1 && segunda.left > primeira.right,
+          `imagens=${imagens.length} topos=${primeira?.top},${segunda?.top} esquerda=${segunda?.left} direita=${primeira?.right}`,
+        );
+        document
+          .querySelectorAll<HTMLButtonElement>(
+            `[data-nota-editor] [data-linha="${linhaDaFileira}"] button[aria-label^="Imagem no centro"]`,
+          )[1]
+          ?.click();
+        await quadros();
+        const fileira = documento.current.split("\n")[linhaDaFileira];
+        confere(
+          "o centro na segunda imagem move a fileira",
+          fileira === "/foto.png|120 /foto.png|80|centro",
+          `linha=${JSON.stringify(fileira)}`,
+        );
+      } catch (cause) {
+        confere("imagem", false, String(cause));
+      }
+
+      // Shift: a seleção que atravessa a borda da linha, pela seta e pelo clique.
+      const campoAberto = () => document.querySelector<HTMLTextAreaElement>("[data-nota-editor] textarea");
+      const clicarEm = async (linha: number, trecho: string, depois: number, shift = false) => {
+        // Na ordem do navegador: o `mousedown` chega ANTES de a seleção mudar
+        // -- é nele que o Shift+clique lê a âncora do campo ainda aberto.
+        const [no, de] = noDe(linha, trecho, depois);
+        no.parentElement?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, shiftKey: shift }));
+        window.getSelection()?.setBaseAndExtent(no, de, no, de);
+        document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, shiftKey: shift }));
+        await quadros();
+      };
+      const shift = async (tecla: string) => {
+        campoAberto()?.dispatchEvent(new KeyboardEvent("keydown", { key: tecla, shiftKey: true, bubbles: true }));
+        await quadros();
+      };
+      const selecaoDoCampo = () => {
+        const campo = campoAberto();
+        return campo
+          ? { texto: campo.value.slice(campo.selectionStart, campo.selectionEnd), direcao: campo.selectionDirection, valor: campo.value }
+          : null;
+      };
+      try {
+        (document.activeElement as HTMLElement | null)?.blur();
+        await quadros();
+        await clicarEm(2, "item um", 3);
+        await shift("ArrowDown");
+        const desceu = selecaoDoCampo();
+        confere(
+          "Shift+↓ atravessa para a linha de baixo",
+          desceu?.valor === "- item um\n- item dois" && desceu.texto === "m um\n- ite",
+          JSON.stringify(desceu),
+        );
+
+        (document.activeElement as HTMLElement | null)?.blur();
+        await quadros();
+        await clicarEm(3, "item dois", 3);
+        await shift("ArrowUp");
+        const subiu = selecaoDoCampo();
+        confere(
+          "Shift+↑ sobe, com a seleção para trás",
+          subiu?.valor === "- item um\n- item dois" && subiu.texto === "m um\n- ite" && subiu.direcao === "backward",
+          JSON.stringify(subiu),
+        );
+
+        (document.activeElement as HTMLElement | null)?.blur();
+        await quadros();
+        await clicarEm(1, "fica", 0);
+        await clicarEm(3, "dois", 0, true);
+        const estendeu = selecaoDoCampo();
+        confere(
+          "Shift+clique estende a seleção da linha aberta",
+          estendeu?.texto === "fica no fundo, e @Thalor sabe.\n- item um\n- item ",
+          JSON.stringify(estendeu),
+        );
+      } catch (cause) {
+        confere("shift", false, String(cause));
+      }
+
+      for (const r of resultados) console.log(`selecao ${r.passou ? "PASSOU" : "FALHOU"} -- ${r.nome}: ${r.detalhe}`);
+      const passaram = resultados.filter((r) => r.passou).length;
+      (window as unknown as { __resultado?: unknown }).__resultado = {
+        rotulo: "webview",
+        cenario: "selecao",
+        n: resultados.length,
+        fps: passaram,
+        p50: 0,
+        p95: 0,
+        pior: 0,
+        perdidosPct: resultados.length - passaram,
+        quadros: 0,
+        dpr: window.devicePixelRatio,
+        ua: navigator.userAgent,
+        em: new Date().toISOString(),
+      };
+    })();
+
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  return (
+    <div className="bg-background text-foreground min-h-0 flex-1 overflow-y-auto px-6 py-4" style={{ fontSize: 16, lineHeight: 1.6 }}>
+      <div className="flex gap-4">
+        <div className="mx-auto max-w-3xl flex-1">
+          <VinculosContext value={vinculos}>
+            <EditorAoVivo texto={texto} onChange={setTexto} />
+          </VinculosContext>
+        </div>
+        {/* O painel de menções ao lado, para a captura mostrar as miniaturas. */}
+        <PainelDeMencoes
+          texto={texto}
+          vinculos={vinculos}
+          aoIrParaLinha={() => undefined}
+          aoProcurar={() => undefined}
+        />
+      </div>
+    </div>
   );
 }

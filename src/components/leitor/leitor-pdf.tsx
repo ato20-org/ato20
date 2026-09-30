@@ -68,6 +68,8 @@ const AMPLIACAO_MAX = 8;
 export function LeitorPdf({
   documento,
   paginaInicial,
+  salto,
+  aoSaltar,
   aoMudarPagina,
   marcadores,
   acoes,
@@ -82,6 +84,17 @@ export function LeitorPdf({
    * depois de o mestre já ter rolado seria tirar a página de baixo dele.
    */
   paginaInicial?: number | null;
+  /**
+   * Um pedido de ir a uma página, vindo de fora: a menção `!rótulo` clicada
+   * numa nota. `vez` distingue dois pedidos da mesma página.
+   *
+   * Vence a página lembrada quando chega antes de o documento abrir -- quem
+   * clicou quer a regra, e não onde parou a leitura. Aplicado, `aoSaltar` avisa,
+   * e quem pediu o descarta: sem isso reabrir o livro pela estante voltaria à
+   * página da menção.
+   */
+  salto?: { pagina: number; vez: number } | null;
+  aoSaltar?: (vez: number) => void;
   /**
    * A página que está sob os olhos mudou.
    *
@@ -189,22 +202,42 @@ export function LeitorPdf({
 
   /** A página lembrada só é aplicada UMA vez: depois disso quem manda é quem lê. */
   const retomou = useRef(false);
+  /** A `vez` do último salto aplicado. Ver a prop `salto`. */
+  const saltoAtendido = useRef<number | null>(null);
 
   useEffect(() => {
     // Espera as folhas existirem com altura reservada: saltar antes disso rola
     // uma caixa que ainda não tem para onde rolar.
     if (retomou.current || !natural || largura <= 0 || paginas <= 0) return;
-    // A página lembrada ainda está vindo. Ver a prop.
-    if (paginaInicial === null) return;
+    // A página lembrada ainda está vindo. Ver a prop. Com um salto pedido ela
+    // não importa, e esperar por ela seria atraso à toa.
+    if (paginaInicial === null && !salto) return;
 
     retomou.current = true;
 
+    const destino = salto ? salto.pagina : paginaInicial;
+    if (salto) {
+      saltoAtendido.current = salto.vez;
+      aoSaltar?.(salto.vez);
+    }
+
     // Limitada ao documento: a página gravada pode ser maior que o total se o
     // arquivo foi trocado por uma edição menor com o mesmo nome.
-    if (paginaInicial !== undefined) {
-      irPara(Math.min(Math.max(paginaInicial, 1), paginas));
+    if (destino !== undefined && destino !== null) {
+      irPara(Math.min(Math.max(destino, 1), paginas));
     }
-  }, [paginaInicial, natural, largura, paginas, irPara]);
+  }, [paginaInicial, salto, aoSaltar, natural, largura, paginas, irPara]);
+
+  // O salto que chega com o livro JÁ aberto: a janela veio para a frente, e a
+  // página vai até a regra.
+  useEffect(() => {
+    if (!salto || !retomou.current || paginas <= 0) return;
+    if (saltoAtendido.current === salto.vez) return;
+
+    saltoAtendido.current = salto.vez;
+    irPara(Math.min(Math.max(salto.pagina, 1), paginas));
+    aoSaltar?.(salto.vez);
+  }, [salto, aoSaltar, paginas, irPara]);
 
   useEffect(() => {
     // Só depois de retomar: sem isso a página 1 seria anunciada — e gravada por

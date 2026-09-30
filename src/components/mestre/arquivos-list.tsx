@@ -19,6 +19,7 @@ import {
   MoreVertical,
   Presentation,
   Radio,
+  Search,
   TextCursorInput,
   Trash2,
   Ungroup,
@@ -29,6 +30,7 @@ import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-ki
 import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -52,6 +54,7 @@ import {
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import { useTokenDrag } from "@/hooks/use-token-drag";
+import { buscarArquivos, type Trecho } from "@/lib/mestre/busca-de-arquivos";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -154,6 +157,40 @@ export function ArquivosList({ ready }: { ready: boolean }) {
 
   const criar = useCriar(pastas?.length ?? 0, notas?.length ?? 0);
 
+  /**
+   * A busca: com texto no campo, a árvore dá lugar aos achados. Ver
+   * `buscarArquivos` para o que cada tipo acha e por quê.
+   */
+  const [busca, setBusca] = useState("");
+  const buscando = busca.trim() !== "";
+
+  // O texto das notas entra na PRIMEIRA tecla, e não antes: só a nota aberta e
+  // as que estão em cartão ficam na memória, e ler todas ao montar o painel
+  // seria ler a campanha inteira para uma busca que talvez nunca venha. Lido,
+  // fica -- é o mesmo store dos cartões, e a próxima busca não pede de novo.
+  const carregar = useDocumentoStore((state) => state.carregar);
+  useEffect(() => {
+    if (!buscando) return;
+    for (const nota of notas ?? []) carregar(nota.arquivo);
+  }, [buscando, notas, carregar]);
+
+  // Os textos SÓ durante a busca: fora dela o painel não pode redesenhar a
+  // cada tecla do editor -- ver o comentário em `NotaRow`.
+  const textos = useDocumentoStore((state) => (buscando ? state.textos : null));
+  const lendoNotas = useDocumentoStore(
+    (state) => buscando && Object.keys(state.lendo).length > 0,
+  );
+  const achados = useMemo(
+    () =>
+      buscando
+        ? buscarArquivos(
+            { quadros, pastas: pastas ?? [], notas: notas ?? [], textos: textos ?? {} },
+            busca,
+          )
+        : null,
+    [buscando, busca, quadros, pastas, notas, textos],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Três botões iguais: criar é criar, seja o que for. O que cada um cria
@@ -164,6 +201,32 @@ export function ArquivosList({ ready }: { ready: boolean }) {
           perdido no meio, e os três juntos pesavam mais que a árvore que eles
           servem. Mesmo arranjo da Biblioteca e de Personagens. */}
       <div className="flex items-center justify-end gap-2 p-2">
+        {/* A busca DIVIDE a linha com os botões, como em Sons e Personagens: é
+            o que se faz no cabeçalho de uma lista, e empilhar gastaria uma
+            linha inteira de altura. Some com a lista vazia -- um campo para
+            filtrar nada só ocupa lugar --, mas não enquanto há busca, ou
+            apagar o último achado sumiria com o campo em que se digita. */}
+        {linhas.length > 0 || buscando ? (
+          <div className="relative min-w-0 flex-1">
+            <Search
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+              aria-hidden
+            />
+            <Input
+              value={busca}
+              placeholder="Buscar nome ou texto"
+              aria-label="Buscar nos quadros e nas notas"
+              title="Acha pelo nome e pelo que está escrito: o texto das notas e dos postits. Esc limpa."
+              className="h-8 bg-transparent pl-8 text-xs dark:bg-transparent"
+              onChange={(evento) => setBusca(evento.target.value)}
+              onKeyDown={(evento) => {
+                if (evento.key !== "Escape") return;
+                evento.stopPropagation();
+                setBusca("");
+              }}
+            />
+          </div>
+        ) : null}
         <BotaoDeCriar
           rotulo="Novo quadro"
           dica="Um quadro: folha para imagens, notas e setas."
@@ -216,51 +279,104 @@ export function ArquivosList({ ready }: { ready: boolean }) {
               menu do vazio esta DEBAIXO dele -- sem isto, o botao direito no
               meio do painel vazio nao abriria mais "Novo quadro / Nova nota /
               Nova pasta", que e justamente o que se quer ali. */}
-          {ready && linhas.length === 0 ? (
+          {ready && linhas.length === 0 && !buscando ? (
             <PainelVazio conteudo={{ tipo: "quadros" }} className="pointer-events-none absolute inset-0">
               Crie um quadro ou uma nota
             </PainelVazio>
           ) : null}
 
-          <ul ref={listRef} className="relative z-10 space-y-0.5 p-2 pt-0">
-            {linhas.map((linha, index) =>
-              linha.tipo === "pasta" ? (
-                <PastaRow
-                  key={linha.pasta.id}
-                  pasta={linha.pasta}
-                  pastas={pastas ?? []}
-                  depth={linha.depth}
-                  total={linha.total}
-                  dropTarget={dropIndex === index}
-                  onReorderStart={startReorder}
-                  onCriarNota={() => criar.nota(linha.pasta.id)}
-                  onCriarQuadro={() => criar.quadro(linha.pasta.id)}
-                />
-              ) : linha.tipo === "nota" ? (
-                <NotaRow
-                  key={linha.nota.id}
-                  nota={linha.nota}
-                  pastas={pastas ?? SEM_PASTAS}
-                  depth={linha.depth}
-                  aberta={linha.nota.id === notaAbertaId}
-                  medida={medidas.get(linha.nota.arquivo)}
-                />
-              ) : (
-                <QuadroRow
-                  key={linha.scene.id}
-                  scene={linha.scene}
-                  pastas={pastas ?? []}
-                  depth={linha.depth}
-                  aberto={linha.scene.id === editingSceneId && !notaAbertaId}
-                  noAr={linha.scene.id === liveSceneId}
-                  dropTarget={dropIndex === index}
-                  onReorderStart={(event) =>
-                    startReorder(event, linha.scene.id, LIMIAR_ARRASTO_PX)
-                  }
-                />
-              ),
-            )}
-          </ul>
+          {achados ? (
+            <ul className="relative z-10 space-y-0.5 p-2 pt-0">
+              {lendoNotas ? (
+                <li className="text-muted-foreground px-2 py-1 text-[10px]">Lendo as notas…</li>
+              ) : null}
+              {achados.length === 0 && !lendoNotas ? (
+                <li className="text-muted-foreground px-2 py-2 text-xs">Nada com “{busca.trim()}”.</li>
+              ) : null}
+              {/* Sem reordenar enquanto busca: soltar numa lista filtrada
+                  deixaria o lugar ambíguo -- "depois deste" na lista de
+                  achados não é um lugar da árvore. Arrastar a nota para o
+                  quadro continua valendo, que é o gesto de achar e usar. */}
+              {achados.map((achado) =>
+                achado.tipo === "pasta" ? (
+                  <PastaRow
+                    key={achado.pasta.id}
+                    pasta={achado.pasta}
+                    pastas={pastas ?? []}
+                    depth={achado.depth}
+                    total={achado.total}
+                    dropTarget={false}
+                    aberta
+                    onReorderStart={SEM_REORDENAR}
+                    onCriarNota={() => criar.nota(achado.pasta.id)}
+                    onCriarQuadro={() => criar.quadro(achado.pasta.id)}
+                  />
+                ) : achado.tipo === "nota" ? (
+                  <NotaRow
+                    key={achado.nota.id}
+                    nota={achado.nota}
+                    pastas={pastas ?? SEM_PASTAS}
+                    depth={achado.depth}
+                    aberta={achado.nota.id === notaAbertaId}
+                    medida={medidas.get(achado.nota.arquivo)}
+                    trecho={achado.trecho}
+                  />
+                ) : (
+                  <QuadroRow
+                    key={achado.scene.id}
+                    scene={achado.scene}
+                    pastas={pastas ?? []}
+                    depth={achado.depth}
+                    aberto={achado.scene.id === editingSceneId && !notaAbertaId}
+                    noAr={achado.scene.id === liveSceneId}
+                    dropTarget={false}
+                    onReorderStart={SEM_REORDENAR}
+                    trecho={achado.trecho}
+                  />
+                ),
+              )}
+            </ul>
+          ) : (
+            <ul ref={listRef} className="relative z-10 space-y-0.5 p-2 pt-0">
+              {linhas.map((linha, index) =>
+                linha.tipo === "pasta" ? (
+                  <PastaRow
+                    key={linha.pasta.id}
+                    pasta={linha.pasta}
+                    pastas={pastas ?? []}
+                    depth={linha.depth}
+                    total={linha.total}
+                    dropTarget={dropIndex === index}
+                    onReorderStart={startReorder}
+                    onCriarNota={() => criar.nota(linha.pasta.id)}
+                    onCriarQuadro={() => criar.quadro(linha.pasta.id)}
+                  />
+                ) : linha.tipo === "nota" ? (
+                  <NotaRow
+                    key={linha.nota.id}
+                    nota={linha.nota}
+                    pastas={pastas ?? SEM_PASTAS}
+                    depth={linha.depth}
+                    aberta={linha.nota.id === notaAbertaId}
+                    medida={medidas.get(linha.nota.arquivo)}
+                  />
+                ) : (
+                  <QuadroRow
+                    key={linha.scene.id}
+                    scene={linha.scene}
+                    pastas={pastas ?? []}
+                    depth={linha.depth}
+                    aberto={linha.scene.id === editingSceneId && !notaAbertaId}
+                    noAr={linha.scene.id === liveSceneId}
+                    dropTarget={dropIndex === index}
+                    onReorderStart={(event) =>
+                      startReorder(event, linha.scene.id, LIMIAR_ARRASTO_PX)
+                    }
+                  />
+                ),
+              )}
+            </ul>
+          )}
 
           {/* O vazio abaixo da lista é alvo: soltar aqui tira da pasta. */}
           <div
@@ -449,6 +565,23 @@ function bytesDoQuadro(scene: Scene): number {
 }
 
 /** A linha de números embaixo do nome, cinza e pequena. */
+/**
+ * Onde a busca achou o termo, com ele em destaque. Toma o lugar das medidas na
+ * linha: numa busca, a pergunta é "por que isto apareceu", e não o tamanho.
+ */
+function TrechoAchado({ trecho }: { trecho: Trecho }) {
+  return (
+    <span className="text-muted-foreground max-w-full truncate text-[10px]">
+      {trecho.antes}
+      <mark className="bg-primary/25 text-foreground rounded-sm px-px">{trecho.achado}</mark>
+      {trecho.depois}
+    </span>
+  );
+}
+
+/** A busca não reordena. Ver a lista de achados em `ArquivosList`. */
+const SEM_REORDENAR = () => undefined;
+
 function Detalhe({ children }: { children: ReactNode }) {
   return (
     <span className="text-muted-foreground truncate text-[10px] tabular-nums">
@@ -642,12 +775,19 @@ function PastaRow({
   onReorderStart,
   onCriarNota,
   onCriarQuadro,
+  aberta = false,
 }: {
   pasta: Pasta;
   pastas: Pasta[];
   depth: number;
   total: number;
   dropTarget: boolean;
+  /**
+   * Mostrada aberta, recolhida ou não na árvore: é a busca, que abre as pastas
+   * de quem achou. A seta fica desligada ali -- fechar uma pasta de achados
+   * mexeria na árvore que não está na tela.
+   */
+  aberta?: boolean;
   onReorderStart: (event: ReactPointerEvent, id: string, limiar?: number) => void;
   onCriarNota: () => void;
   onCriarQuadro: () => void;
@@ -727,11 +867,12 @@ function PastaRow({
           variant="ghost"
           size="icon-xs"
           aria-label={pasta.recolhido ? `Abrir ${pasta.nome}` : `Fechar ${pasta.nome}`}
-          aria-expanded={!pasta.recolhido}
+          aria-expanded={aberta || !pasta.recolhido}
+          disabled={aberta}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={alternar}
         >
-          {pasta.recolhido ? <ChevronRight /> : <ChevronDown />}
+          {pasta.recolhido && !aberta ? <ChevronRight /> : <ChevronDown />}
         </Button>
         <FolderClosed className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
         {renomeando ? (
@@ -778,6 +919,7 @@ function QuadroRow({
   noAr,
   dropTarget,
   onReorderStart,
+  trecho,
 }: {
   scene: Scene;
   pastas: Pasta[];
@@ -786,6 +928,8 @@ function QuadroRow({
   noAr: boolean;
   dropTarget: boolean;
   onReorderStart: (event: ReactPointerEvent) => void;
+  /** Onde a busca achou o termo dentro do quadro. No lugar das medidas. */
+  trecho?: Trecho;
 }) {
   const [renomeando, setRenomeando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
@@ -890,10 +1034,14 @@ function QuadroRow({
                 />
               ) : null}
             </span>
-            <Detalhe>
-              {elementos} {elementos === 1 ? "elemento" : "elementos"} ·{" "}
-              {tamanhoCurto(bytesDoQuadro(scene))}
-            </Detalhe>
+            {trecho ? (
+              <TrechoAchado trecho={trecho} />
+            ) : (
+              <Detalhe>
+                {elementos} {elementos === 1 ? "elemento" : "elementos"} ·{" "}
+                {tamanhoCurto(bytesDoQuadro(scene))}
+              </Detalhe>
+            )}
           </button>
         )}
         <TresPontos rotulo={scene.name} aoFechar={renomear.aoFechar} itens={itens} />
@@ -935,12 +1083,15 @@ function NotaRowSemMemo({
   depth,
   aberta,
   medida,
+  trecho,
 }: {
   nota: Nota;
   pastas: Pasta[];
   depth: number;
   aberta: boolean;
   medida: MedidaDeDocumento | undefined;
+  /** Onde a busca achou o termo no texto da nota. No lugar das medidas. */
+  trecho?: Trecho;
 }) {
   const [renomeando, setRenomeando] = useState(false);
   const renomear = useRenomearPeloMenu(() => setRenomeando(true));
@@ -1065,7 +1216,9 @@ function NotaRowSemMemo({
             onKeyDown={aoApertarF2(() => setRenomeando(true))}
           >
             <span className="max-w-full truncate">{nota.titulo}</span>
-            {numeros ? (
+            {trecho ? (
+              <TrechoAchado trecho={trecho} />
+            ) : numeros ? (
               <Detalhe>
                 {tamanhoCurto(numeros.bytes)} · {numeros.linhas}{" "}
                 {numeros.linhas === 1 ? "linha" : "linhas"} · {numeros.palavras}{" "}

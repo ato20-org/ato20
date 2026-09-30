@@ -365,3 +365,18 @@
 }
 
 
+
+/*
+ * O Ctrl+F da nota: todos os achados em amarelo, o atual em laranja. Pela API
+ * de destaque do CSS, que pinta faixas do DOM sem tocar no texto -- ver
+ * `ProcurarNaNota`.
+ */
+::highlight(busca-na-nota) {
+  /* Meio amarelo e não um terço: sobre o fundo escuro, 35% dava um verde-oliva
+     que mal se distinguia do texto em volta. */
+  background-color: rgb(250 204 21 / 0.5);
+}
+::highlight(busca-na-nota-atual) {
+  background-color: rgb(249 115 22 / 0.75);
+  color: black;
+}
