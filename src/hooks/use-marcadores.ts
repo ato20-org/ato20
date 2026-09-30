@@ -11,6 +11,7 @@ import {
   renomearMarcador,
   type Marcador,
 } from "@/lib/vault/estante";
+import { invalidarMarcadores } from "@/lib/store/use-marcadores-store";
 
 type MarcadoresApi = {
   marcadores: Marcador[];
@@ -73,6 +74,8 @@ export function useMarcadores(livroId: string): MarcadoresApi {
     async (pagina: number, rotulo: string) => {
       try {
         const criado = await marcarNoBanco(livroId, pagina, rotulo);
+        // A lista da campanha também: é dela que a menção `!rótulo` resolve.
+        invalidarMarcadores();
 
         // Insere o que voltou em vez de reler a lista: o marcador aparece no
         // mesmo quadro em que o mestre o criou. A ordem é a do banco — página,
@@ -102,6 +105,7 @@ export function useMarcadores(livroId: string): MarcadoresApi {
 
     try {
       await renomearMarcador(id, limpo);
+      invalidarMarcadores();
       setMarcadores((atuais) =>
         atuais.map((marcador) => (marcador.id === id ? { ...marcador, rotulo: limpo } : marcador)),
       );
@@ -113,6 +117,7 @@ export function useMarcadores(livroId: string): MarcadoresApi {
   const remover = useCallback(async (id: string) => {
     try {
       await removerMarcador(id);
+      invalidarMarcadores();
       setMarcadores((atuais) => atuais.filter((marcador) => marcador.id !== id));
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Falha ao remover o marcador.");

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { esquecerCapa } from "@/hooks/use-capa-do-livro";
+import { invalidarMarcadores } from "@/lib/store/use-marcadores-store";
 
 import {
   importarLivros,
@@ -100,6 +101,9 @@ export function useEstante(): EstanteApi {
       try {
         await removerLivro(id);
         esquecerCapa(id);
+        // Os marcadores do livro saem com ele, e a menção que apontava para
+        // um deles deixa de resolver.
+        invalidarMarcadores();
         refresh();
       } catch (cause) {
         toast.error(cause instanceof Error ? cause.message : "Falha ao remover o livro.");

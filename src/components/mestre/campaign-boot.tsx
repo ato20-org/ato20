@@ -11,6 +11,7 @@ import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { esquecerAcervo } from "@/lib/store/use-assets-store";
+import { esquecerMarcadores } from "@/lib/store/use-marcadores-store";
 import { carregarPersonagens, esquecerPersonagens } from "@/lib/store/use-characters-store";
 import { esquecerCondicoes } from "@/lib/store/use-condicoes-store";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
@@ -78,6 +79,9 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       esquecerAcervo();
       esquecerPersonagens();
       esquecerCondicoes();
+      // Os marcadores são da campanha, e a menção `!rótulo` resolveria nas
+      // páginas que a OUTRA mesa marcou.
+      esquecerMarcadores();
       // As configurações da campanha anterior também: sem isto, o zoom que a
       // outra mesa pedia continuaria valendo nesta até o arquivo dela chegar.
       useConfiguracoesStore.getState().esquecer("campanha");
