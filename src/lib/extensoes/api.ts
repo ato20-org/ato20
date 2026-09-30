@@ -1,6 +1,8 @@
 "use client";
 
 import type { ComponentType } from "react";
+import type { DadoNaMesaLido } from "@/lib/extensoes/mesa";
+import type { RetratoParaKit as RetratoLido } from "@/lib/kit-de-retratos";
 import type { LucideIcon } from "lucide-react";
 
 import type { Componentes, Experimental } from "@/lib/extensoes/componentes";
@@ -40,8 +42,12 @@ import type { CanvasItem, Scene } from "@/types/scene";
  * `parametro` do painel. `personagens.listar` passou a devolver o personagem
  * inteiro -- um superconjunto do `{id, nome}` da 1. Nada da 1 saiu: um plugin que pede 1
  * recebe o mesmo objeto, com o novo ao lado.
+ *
+ * A 3 acrescentou `mesa` (o canal para as páginas do plugin, os endereços e o
+ * link pronto), `jogadores`, `retratos`, e `dados.naMesa`/`dados.assinarMesa`; no
+ * manifesto, as `paginas`, a `ativacao` na abertura e o tipo `lista`.
  */
-export const API_VERSAO_ATUAL = 2;
+export const API_VERSAO_ATUAL = 3;
 
 /** O que o plugin sabe da cena sem poder mexer no formato dela. */
 export type CenaResumo = {
@@ -225,6 +231,8 @@ export type RolagemLida = {
   personagemId?: string;
 };
 
+export type { DadoNaMesaLido, RetratoLido };
+
 export type Ato20Api = {
   /** A versão do contrato que este aplicativo implementa. */
   versao: number;
@@ -329,6 +337,67 @@ export type Ato20Api = {
    */
   dados: {
     rolar: (notacoes: readonly string[]) => Promise<ResultadoDaRolagem>;
+    /**
+     * O que está na mesa AGORA: os dados do mestre (mapa e quadro) e a
+     * bandeja dos jogadores. Um dado sai quando é recolhido, ou quando a
+     * bandeja do jogador vence (30 s).
+     */
+    naMesa: () => ReadonlyArray<Readonly<DadoNaMesaLido>>;
+    /**
+     * Avisa quando entra ou sai dado da mesa -- e só então: arrastar um dado
+     * não acorda ninguém. Chama já com a lista atual.
+     */
+    assinarMesa: (aviso: (dados: ReadonlyArray<Readonly<DadoNaMesaLido>>) => void) => Desfazer;
+  };
+
+  /**
+   * A mesa para FORA do Mestre: as páginas do plugin (`paginas` no manifesto)
+   * rodam num navegador de outra máquina -- o OBS, a TV -- e só sabem o que o
+   * plugin publica aqui.
+   *
+   * `publicar` guarda o valor no canal `{canal}` deste plugin, e toda página
+   * aberta que assina `/sala/plugin/{id}/{canal}?codigo=` recebe. Quem tem o
+   * código da mesa consegue assinar: publique só o que pode sair. O mais novo
+   * vence, e valor igual ao último não sai. `false` = nome de canal inválido
+   * (minúsculas, dígitos e hífen).
+   */
+  mesa: {
+    publicar: (canal: string, valor: unknown) => boolean;
+    /** Os endereços do daemon e o código da mesa. `rede`/`codigo` `null` quando não há. */
+    enderecos: () => Promise<{ local: string; rede: string | null; codigo: string | null }>;
+    /**
+     * O link de uma página deste plugin, com o código da mesa. `rede` usa o
+     * endereço do Wi-Fi (para outro computador); `busca` entra na URL.
+     * `null` sem campanha aberta, sem rede, ou página que o manifesto não tem.
+     */
+    linkDaPagina: (
+      paginaId: string,
+      opcoes?: { rede?: boolean; busca?: Record<string, string> },
+    ) => Promise<string | null>;
+  };
+
+  /**
+   * Quem a campanha conhece como jogador. Nome é o que o próprio jogador
+   * escolheu; `personagens` são os ids que o mestre vinculou a ele.
+   */
+  jogadores: {
+    listar: () => Promise<ReadonlyArray<{ id: string; nome: string; personagens: string[] }>>;
+  };
+
+  /**
+   * Os retratos como a MESA os vê: sem medidor nem condição escondidos, e o
+   * nome só com a peça "nome" ligada -- o mesmo corte da janela do espectador.
+   *
+   * O formato é o do kit de retratos (`/kit/retratos`): passe adiante sem
+   * mexer. `personagemId` e `nome` são os campos que valem para o plugin ler.
+   */
+  retratos: {
+    /** Os retratos no ar agora, onde a mesa os pôs. */
+    naMesa: () => ReadonlyArray<Readonly<RetratoLido>>;
+    /** Avisa quando os retratos no ar mudam -- e só então. Chama já com a lista atual. */
+    assinarMesa: (aviso: (retratos: ReadonlyArray<Readonly<RetratoLido>>) => void) => Desfazer;
+    /** O retrato de um personagem, no ar ou não. `null` sem Retrato na ficha. */
+    dePersonagem: (personagemId: string) => Readonly<RetratoLido> | null;
   };
 
   /**

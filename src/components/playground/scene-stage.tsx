@@ -145,6 +145,57 @@ export function useSceneScale(): SceneScale {
 }
 
 /**
+ * Um palco SEM cena: só a camada da tela, do tamanho dado, para desenhar o que
+ * mora no overlay -- o retrato -- fora de um `SceneStage`.
+ *
+ * Existe para o kit de retratos (`/kit/retratos`), a página que o plugin
+ * embute para levar retratos a outro navegador. O `PortraitLayer` lê o
+ * contexto do palco e estouraria fora dele; montar um `SceneStage` inteiro
+ * para isso traria o plano, o fundo e a câmera para uma tela que não tem mapa.
+ *
+ * Só `planoDaTela` e `recorteDaCamera` valem aqui, e são os únicos que o
+ * retrato lê no espaço `tela`. O resto vai neutro: escala um, nenhum plano. Um
+ * componente de CENA montado aqui dentro não teria onde se desenhar, e é o
+ * certo -- não há cena.
+ */
+export function PalcoSoTela({
+  largura,
+  altura,
+  children,
+}: {
+  largura: number;
+  altura: number;
+  children: ReactNode;
+}) {
+  const [tela, setTela] = useState<HTMLDivElement | null>(null);
+
+  const valor = useMemo<SceneScale>(
+    () => ({
+      scale: 1,
+      ampliacaoNoLayout: false,
+      toScene: (clientX, clientY) => ({ x: clientX, y: clientY }),
+      viewport: FULL_VIEWPORT,
+      planoDeConteudo: null,
+      planoDaMargem: null,
+      fundoDoPalco: null,
+      moldura: null,
+      planoDaTela: tela,
+      recorteDaCamera: { left: 0, top: 0, width: largura, height: altura },
+      offsetX: 0,
+      offsetY: 0,
+    }),
+    [tela, largura, altura],
+  );
+
+  return (
+    <SceneScaleContext.Provider value={valor}>
+      <div ref={setTela} className="pointer-events-none absolute top-0 left-0" style={{ width: largura, height: altura }} />
+      {children}
+    </SceneScaleContext.Provider>
+  );
+}
+
+/**
  * O mesmo, para quem desenha dentro E fora do palco -- o texto marcado mora no
  * postit e também na nota e no cartão de documento. Fora dele, `null`.
  */

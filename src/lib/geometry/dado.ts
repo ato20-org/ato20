@@ -1099,6 +1099,65 @@ export function impulsoDeRelance(): { x: number; y: number } {
   return { x: Math.cos(angulo) * forca, y: Math.sin(angulo) * forca };
 }
 
+/**
+ * O arremesso de um dado que chegou SEM o gesto, sorteado pela semente.
+ *
+ * É o dado do jogador visto de outra tela que não a dele: o impulso nasce no
+ * dedo e morre no celular (ver `DURACAO_DA_CHEGADA`), e quem quer mostrá-lo
+ * rolando -- a sobreposição da transmissão -- precisa de um. Semeado, e não
+ * `Math.random`: a página redesenha o dado sessenta vezes por segundo e
+ * recarrega quando quiser, e o dado tem de ir sempre para o mesmo lugar.
+ *
+ * Entre um terço e dois terços de peteleco: forte o bastante para o dado
+ * atravessar um pedaço da tela e quicar, fraco o bastante para não passar a
+ * jogada inteira grudado na beirada.
+ */
+export function impulsoSemeado(semente: number): { x: number; y: number } {
+  // Outra sequência que a da tombada, que também sai desta semente: sem o
+  // desvio, a direção do arremesso andaria junto com o eixo do giro.
+  const sorteio = semeado(semente ^ 0x9e3779b9);
+  const angulo = sorteio() * Math.PI * 2;
+  const forca = IMPULSO_CHEIO * (0.33 + sorteio() * 0.33);
+
+  return { x: Math.cos(angulo) * forca, y: Math.sin(angulo) * forca };
+}
+
+/**
+ * Uma semente estável tirada de um id (FNV-1a).
+ *
+ * Do id e não do relógio: ela decide o EIXO em que o dado gira, e o eixo tem de
+ * ser o mesmo em todos os renders e em todas as telas. Semeado pelo relógio
+ * local, o mesmo dado giraria num eixo na TV e noutro no celular -- e mudaria
+ * de eixo no meio da queda a cada render.
+ */
+export function sementeDoId(id: string): number {
+  let hash = 0x811c9dc5;
+
+  for (let i = 0; i < id.length; i++) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return hash >>> 0;
+}
+
+/**
+ * Até onde o arremesso leva o dado, sem contar o desvio da semente nem a
+ * beirada: `impulso × ATRITO`, o limite do escorregão em `quadroDaQueda`.
+ *
+ * É o que deixa quem lança escolher o ponto de PARTIDA pelo de chegada -- a
+ * sobreposição quer o dado pousando perto do meio da tela, qualquer que seja a
+ * força do gesto.
+ */
+export function alcanceDaQueda(impulso: { x: number; y: number }): {
+  x: number;
+  y: number;
+} {
+  const empurrao = impulsoLimitado(impulso);
+
+  return { x: empurrao.x * ATRITO, y: empurrao.y * ATRITO };
+}
+
 /** A força do arremesso, de 0 (largou parado) a 1 (peteleco cheio). */
 function forcaDoImpulso(impulso: { x: number; y: number }): number {
   return Math.min(1, Math.hypot(impulso.x, impulso.y) / IMPULSO_CHEIO);

@@ -11,7 +11,7 @@ import {
 } from "@/lib/extensoes/manifesto";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import type { Definicao } from "@/lib/configuracoes/valor";
-import { descarregar } from "@/lib/extensoes/carregar";
+import { descarregar, garantirCarregada } from "@/lib/extensoes/carregar";
 import { aplicarTemas } from "@/lib/extensoes/tema";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
@@ -159,6 +159,13 @@ useExtensoesStore.subscribe((estado, anterior) => {
   // Os estilos de medidor pelo mesmo caminho: a lista muda, o Mestre relê os
   // SVGs das habilitadas e publica o conjunto para a mesa.
   void useDeclarativoStore.getState().sincronizar(estado.extensoes);
+  // Quem pediu para subir na abertura sobe agora, sem esperar o painel abrir:
+  // é o plugin que trabalha sozinho -- escuta a mesa e publica para uma
+  // página. `garantirCarregada` é idempotente, então religar a lista não o
+  // importa duas vezes; desligar é `descarregar`, pelo caminho de sempre.
+  for (const extensao of estado.extensoes) {
+    if (extensao.habilitada && extensao.ativacao === "abertura") void garantirCarregada(extensao);
+  }
 });
 
 /**

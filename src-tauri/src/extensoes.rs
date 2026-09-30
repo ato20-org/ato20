@@ -30,7 +30,14 @@ use crate::error::{AppError, AppResult};
 /// A 2 abriu a API para o resto do aplicativo -- janelas, componentes,
 /// personagem, medidor, dado -- sem tirar nada da 1: um plugin que pede 1
 /// recebe o mesmo objeto de antes, com o que a 2 acrescentou ao lado.
-pub const API_VERSAO: u32 = 2;
+///
+/// A 3 acrescentou as `paginas` (o plugin servido na rede, para o OBS e o
+/// que mais abrir um navegador), a `ativacao` na abertura e o tipo `lista` de
+/// configuracao, e e por eles que o numero subiu: um ATO20 anterior leria o
+/// manifesto, ignoraria o campo que nao conhece e aceitaria o plugin -- e a
+/// pagina dele responderia 404 sem aviso nenhum. Pedindo 3, o plugin e
+/// recusado na entrada com "atualize o ATO20".
+pub const API_VERSAO: u32 = 3;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -106,7 +113,21 @@ pub struct Manifesto {
     /// O que ela acrescenta a interface. Ver `Contribuicoes`.
     #[serde(default)]
     pub contribui: Contribuicoes,
+    /// Quando o modulo e importado. Ausente = quando alguem abre o painel ou
+    /// dispara o comando. Ver `ATIVACOES`.
+    #[serde(default)]
+    pub ativacao: Option<String>,
 }
+
+/// Os momentos em que um plugin pode pedir para ser importado.
+///
+/// `abertura` e o que o VSCode chama de `onStartupFinished`: o modulo sobe com
+/// a campanha, sem esperar gesto nenhum. Existe para o plugin que trabalha
+/// SOZINHO -- escuta a mesa e publica para uma pagina, como o do OBS -- e que
+/// no modo preguicoso so comecaria quando o mestre abrisse o painel dele.
+/// Lista fechada, como os alvos de menu: um nome errado seria um plugin que
+/// nunca carrega, e o autor descobriria na live.
+pub const ATIVACOES: &[&str] = &["abertura"];
 
 /// O que uma extensao acrescenta a interface, DECLARADO.
 ///
@@ -151,6 +172,30 @@ pub struct Contribuicoes {
     /// Estilos de medidor desenhados em SVG. Ver `EstiloDeMedidor`.
     #[serde(default)]
     pub estilos_de_medidor: Vec<EstiloDeMedidor>,
+    /// Paginas que o daemon serve na rede. Ver `Pagina`.
+    #[serde(default)]
+    pub paginas: Vec<Pagina>,
+}
+
+/// Uma pagina do plugin, servida pelo daemon em `/plugin/{id}/{arquivo}`.
+///
+/// E o unico caminho por onde codigo de plugin sai do Mestre, e sai para um
+/// NAVEGADOR, nao para a janela: quem abre e o OBS da maquina que transmite,
+/// a TV, qualquer aparelho com o link. La a pagina nao tem IPC nem disco, e o
+/// daemon a entrega com `Content-Security-Policy: sandbox allow-scripts` --
+/// origem opaca, sem `localStorage` nem cookie da origem do daemon. E o que
+/// impede a pagina de um plugin de ler o token de um jogador que a abra no
+/// mesmo navegador do celular. Ver `serve::serve_plugin`.
+///
+/// Declarar a pagina e o que publica a PASTA: plugin sem pagina nao tem
+/// arquivo nenhum alcancavel pela rede.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pagina {
+    pub id: String,
+    pub titulo: String,
+    /// O `.html`, relativo a pasta da extensao.
+    pub arquivo: String,
 }
 
 /// Um estilo de medidor que a extensao desenhou: um `.svg` com variaveis.
@@ -321,6 +366,9 @@ pub enum TipoConfiguracao {
     Numero,
     Texto,
     Escolha,
+    /// Uma lista de textos. Sem controle na tela gerada: quem a edita e o
+    /// painel do proprio plugin, que sabe o que os itens sao (e o editor JSON).
+    Lista,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -490,6 +538,22 @@ pub fn ler_manifesto(pasta: &Path) -> AppResult<Manifesto> {
 
     validar_contribuicoes(&manifesto)?;
 
+    if let Some(ativacao) = &manifesto.ativacao {
+        if !ATIVACOES.contains(&ativacao.as_str()) {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "a ativacao {ativacao:?} nao existe; as ativacoes sao {}",
+                ATIVACOES.join(", ")
+            )));
+        }
+        // Subir na abertura e importar o `principal`. Sem ele, o plugin
+        // pediria para carregar algo que nao existe.
+        if manifesto.principal.is_none() {
+            return Err(AppError::ExtensaoInvalida(
+                "a extensao pede `ativacao` mas nao tem `principal`".to_string(),
+            ));
+        }
+    }
+
     Ok(manifesto)
 }
 
@@ -549,6 +613,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
         (
             "estilosDeMedidor",
             c.estilos_de_medidor.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "paginas",
+            c.paginas.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
     ];
 
@@ -666,6 +734,17 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
         }
     }
 
+    for pagina in &c.paginas {
+        if !caminho_relativo_seguro(&pagina.arquivo)
+            || !pagina.arquivo.to_ascii_lowercase().ends_with(".html")
+        {
+            return Err(AppError::ExtensaoInvalida(format!(
+                "a pagina {:?} aponta para {:?}; tem de ser um .html dentro da pasta",
+                pagina.id, pagina.arquivo
+            )));
+        }
+    }
+
     let mut vistos: Vec<&str> = Vec::new();
     for substituto in &c.substitutos {
         if !alvo_de_substituto_valido(&substituto.alvo) {
@@ -751,6 +830,10 @@ fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
             TipoConfiguracao::Numero => c.padrao.is_number(),
             TipoConfiguracao::Texto => c.padrao.is_string(),
             TipoConfiguracao::Escolha => c.padrao.is_string(),
+            TipoConfiguracao::Lista => c
+                .padrao
+                .as_array()
+                .is_some_and(|itens| itens.iter().all(|item| item.is_string())),
         };
         if !do_tipo {
             return Err(AppError::ExtensaoInvalida(format!(
@@ -1535,6 +1618,73 @@ mod tests {
                     AppError::ExtensaoInvalida(_)
                 ),
                 "{corpo} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn pagina_exige_html_dentro_da_pasta() {
+        let base = tempfile::tempdir().unwrap();
+
+        let m = ler(
+            base.path(),
+            &com_contrib(r#"{"paginas":[{"id":"camera","titulo":"Camera","arquivo":"web/camera.html"}]}"#),
+        )
+        .unwrap();
+        assert_eq!(m.contribui.paginas[0].arquivo, "web/camera.html");
+
+        for corpo in [
+            r#"{"paginas":[{"id":"x","titulo":"X","arquivo":"../fora.html"}]}"#,
+            r#"{"paginas":[{"id":"x","titulo":"X","arquivo":"x.js"}]}"#,
+            r#"{"paginas":[{"id":"x","titulo":"","arquivo":"x.html"}]}"#,
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_contrib(corpo)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{corpo} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn ativacao_so_da_lista_e_com_principal() {
+        let base = tempfile::tempdir().unwrap();
+
+        let com = |ativacao: &str, principal: &str| {
+            format!(
+                r#"{{"id":"plug","nome":"Plug","versao":"1.0.0","apiVersao":3,{principal}"ativacao":"{ativacao}"}}"#
+            )
+        };
+
+        let m = ler(base.path(), &com("abertura", r#""principal":"main.js","#)).unwrap();
+        assert_eq!(m.ativacao.as_deref(), Some("abertura"));
+
+        for json in [com("sempre", r#""principal":"main.js","#), com("abertura", "")] {
+            assert!(
+                matches!(ler(base.path(), &json).unwrap_err(), AppError::ExtensaoInvalida(_)),
+                "{json} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn configuracao_lista_quer_padrao_de_textos() {
+        let base = tempfile::tempdir().unwrap();
+
+        let m = ler(
+            base.path(),
+            &com_config(r#"{"chave":"plug.ocultos","titulo":"Ocultos","tipo":"lista","padrao":["mestre"],"escopo":"campanha"}"#),
+        )
+        .unwrap();
+        assert_eq!(m.contribui.configuracoes[0].tipo, TipoConfiguracao::Lista);
+
+        for padrao in [r#""mestre""#, "[1]"] {
+            let json = format!(r#"{{"chave":"plug.x","titulo":"X","tipo":"lista","padrao":{padrao}}}"#);
+            assert!(
+                matches!(ler(base.path(), &com_config(&json)).unwrap_err(), AppError::ExtensaoInvalida(_)),
+                "{padrao} devia ser recusado"
             );
         }
     }

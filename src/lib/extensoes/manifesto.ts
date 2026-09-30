@@ -34,7 +34,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 2;
+export const API_VERSAO = 3;
 
 /**
  * O que uma extensão diz de si.
@@ -62,6 +62,11 @@ export type Manifesto = {
   retratos: FonteRetrato[];
   /** O que ela acrescenta à interface. Ver `Contribuicoes`. */
   contribui: Contribuicoes;
+  /**
+   * `abertura` = o módulo sobe com o Mestre, sem esperar o painel abrir. Para o
+   * plugin que trabalha sozinho. Ausente em lista lida por um Rust anterior.
+   */
+  ativacao?: "abertura" | null;
 };
 
 /**
@@ -86,6 +91,22 @@ export type Contribuicoes = {
   secoes?: SecaoDeclarada[];
   substitutos?: SubstitutoDeclarado[];
   estilosDeMedidor?: EstiloDeMedidorDeclarado[];
+  paginas?: PaginaDeclarada[];
+};
+
+/**
+ * Uma página do plugin, que o daemon serve na rede em `/plugin/{id}/{arquivo}`.
+ * Espelho de `extensoes::Pagina`.
+ *
+ * É o único código de plugin que sai do Mestre, e sai para um navegador de
+ * outra máquina -- o OBS, a TV --, numa origem opaca (`sandbox`), sem IPC,
+ * sem disco e sem o `localStorage` das telas da mesa. O que ela vê da mesa é o
+ * que o plugin publica por `api.mesa.publicar`. Ver `docs/extensoes.md`.
+ */
+export type PaginaDeclarada = {
+  id: string;
+  titulo: string;
+  arquivo: string;
 };
 
 /**
@@ -148,7 +169,7 @@ export type ConfiguracaoDeclarada = {
   chave: string;
   titulo: string;
   descricao: string | null;
-  tipo: "booleano" | "numero" | "texto" | "escolha";
+  tipo: "booleano" | "numero" | "texto" | "escolha" | "lista";
   padrao: unknown;
   escopo: "maquina" | "campanha" | "ambos";
   opcoes: string[];
