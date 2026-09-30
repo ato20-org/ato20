@@ -50,6 +50,7 @@ import { areaDoPoligono } from "@/lib/geometry/area-escondida";
 import {
   alturaDaParede,
   METROS_DA_PAREDE_PADRAO,
+  pontoNaParede,
   UNIDADES_POR_METRO,
 } from "@/lib/geometry/sombra";
 import { caixaDoTraco } from "@/lib/geometry/limites";
@@ -2508,6 +2509,39 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
+    /**
+     * O clique no vazio que cai dentro de uma parede pega a parede.
+     *
+     * Era o corpo dela que recebia o ponteiro, por cima de tudo -- e a parede
+     * coberta desenhada sobre o prédio inteiro prendia cada token lá dentro.
+     * Agora o corpo é atravessável (ver `ParedeLayer`), o token e a área
+     * pegam o clique primeiro, e só o que chega até aqui pergunta pela parede.
+     * A de cima ganha: é a última da lista, a última desenhada.
+     *
+     * Shift fica com a seleção por área, que é o gesto dele, e ela começa
+     * dentro de uma sala tanto quanto fora.
+     */
+    if (tool === "select" && !event.shiftKey) {
+      const parede = [...(scene.paredes ?? [])]
+        .reverse()
+        .find((candidata) => pontoNaParede(candidata, anchor));
+
+      if (parede) {
+        selectParede(parede.id);
+        const origem = { x: parede.x, y: parede.y };
+
+        startDrag(event, {
+          onMove: (delta) =>
+            updateParede(scene.id, parede.id, {
+              x: origem.x + delta.x,
+              y: origem.y + delta.y,
+            }),
+        });
+
+        return;
+      }
+    }
+
     const additive = event.shiftKey;
     // Retrato da seleção antes do arrasto: com Shift a área soma ao que já
     // estava marcado, sem Shift começa do zero.
@@ -2891,11 +2925,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           desenhada é preparação do mestre, e o `SceneLayer` é o componente que
           desenha na TV. O que a mesa recebe é a SOMBRA, não a parede que a
           fez. Ver `ParedeLayer` e `SombraLayer`. */}
-      <ParedeLayer
-        scene={scene}
-        panMode={panMode}
-        fantasma={rascunhoDaParede}
-      />
+      <ParedeLayer scene={scene} fantasma={rascunhoDaParede} />
 
       {/* O ponto e o alcance de cada luz cravada. Fora do `SceneLayer` pela
           razão da parede: a mesa vê a luz, não o marcador dela. */}
