@@ -3,13 +3,30 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
+  type Dispatch,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type SetStateAction,
 } from "react";
-import { Gauge, Plus, Sparkles, Wand2 } from "lucide-react";
+import {
+  Gauge,
+  LayoutTemplate,
+  Move,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Wand2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AjustesDaCampanha,
+  bateNaBusca,
+} from "@/components/desktop/lista-de-configuracoes";
 import { LayoutDoRetratoPainel } from "@/components/mestre/layout-do-retrato";
 import { LinhaDeCondicao } from "@/components/mestre/linha-de-condicao";
 import {
@@ -19,6 +36,7 @@ import {
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { PosicaoDosRetratos } from "@/components/mestre/posicao-dos-retratos";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -29,6 +47,13 @@ import {
 import { useCharacters } from "@/hooks/use-characters";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import { SUGESTOES } from "@/lib/condicao";
+import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
+import { escoposDe } from "@/lib/configuracoes/valor";
+import {
+  TOPICOS_DA_CAMPANHA,
+  topicosAchados,
+  type TopicoDaCampanha,
+} from "@/lib/mestre/topicos-da-campanha";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
@@ -54,6 +79,15 @@ import {
 /** O teto com que um modelo nasce. Dez é a escala da maioria das mesas. */
 const MAXIMO_INICIAL = 10;
 
+/** O ícone de cada tópico, na barra. Os textos moram em `TOPICOS_DA_CAMPANHA`. */
+const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
+  medidores: Gauge,
+  condicoes: Sparkles,
+  layout: LayoutTemplate,
+  posicao: Move,
+  ajustes: SlidersHorizontal,
+};
+
 /**
  * O que vale para a campanha inteira.
  *
@@ -61,41 +95,211 @@ const MAXIMO_INICIAL = 10;
  * sistema da mesa aqui e vai conferindo o resultado nas fichas abertas ao lado.
  * Um modal cobriria justamente o que ele quer olhar enquanto ajusta.
  *
+ * Arrumada como as Configurações gerais -- tópicos numa barra, um de cada vez
+ * --, porque eram quatro seções empilhadas numa rolagem só, e o que o mestre
+ * queria estava sempre três telas abaixo. A barra fica ao LADO com espaço, e
+ * vira uma fileira no topo quando a janela atraca estreita numa coluna do
+ * dock: `@container`, e não breakpoint de tela, porque quem manda é a largura
+ * da janela. Ver a ficha, que faz o mesmo.
+ *
+ * A busca atravessa os tópicos, como a do VSCode: com termo, a janela mostra
+ * TODOS os que batem, um embaixo do outro, e a barra encolhe para eles. Clicar
+ * num tópico durante a busca a encerra e abre só ele.
+ *
  * O que decide se algo mora aqui é uma pergunta só: isto vale para a CAMPANHA,
  * ou para uma cena ou um personagem? Sol e grade são da cena e ficam no palco.
  * O layout e a posição dos retratos valem para a mesa inteira e são gravados
  * por campanha, então moram aqui; a janela de Retratos fica com o elenco.
  */
 export function ConfiguracaoDaCampanhaBody() {
+  const [aberto, setAberto] = useState<TopicoDaCampanha>("medidores");
+  const [busca, setBusca] = useState("");
+
+  // No alto, e não dentro de cada tópico: a busca precisa dos nomes do que foi
+  // criado -- "Envenenado" acha Condições --, e o tópico fechado não está
+  // montado para contar.
+  const medidores = useModelosDaCampanha();
+  const { modelos: condicoes } = useCondicoesDaCampanha();
+  const definicoes = useConfiguracoesStore((state) => state.definicoes);
+
+  const ajustes = useMemo(
+    () =>
+      Object.values(definicoes).filter((definicao) =>
+        escoposDe(definicao).includes("campanha"),
+      ),
+    [definicoes],
+  );
+
+  const buscando = busca.trim() !== "";
+
+  const topicos = useMemo(() => {
+    const achados = topicosAchados(busca, {
+      medidores: (medidores.modelos ?? []).map((modelo) => modelo.nome),
+      condicoes: (condicoes ?? []).map((condicao) => condicao.nome),
+    });
+    // Ajustes só existe com algo para ajustar -- hoje, só quando um plugin
+    // declara. E acha pelos próprios ajustes, com a MESMA conta da lista.
+    const ajusteAchado = ajustes.some((definicao) =>
+      bateNaBusca(definicao, busca),
+    );
+
+    return TOPICOS_DA_CAMPANHA.map((topico) => topico.chave).filter((chave) =>
+      chave === "ajustes"
+        ? ajustes.length > 0 && (achados.includes(chave) || ajusteAchado)
+        : achados.includes(chave),
+    );
+  }, [busca, medidores.modelos, condicoes, ajustes]);
+
+  // O tópico aberto pode sumir -- o plugin do único ajuste foi desligado.
+  const atual = topicos.includes(aberto) ? aberto : "medidores";
+  const mostrados = buscando ? topicos : [atual];
+
+  function abrir(chave: TopicoDaCampanha) {
+    setBusca("");
+    setAberto(chave);
+  }
+
   return (
-    <ScrollArea className="min-h-0 flex-1">
-      <div className="space-y-4 p-3">
-        <MedidoresDaCampanha />
+    <div className="@container/config flex min-h-0 flex-1 flex-col">
+      <div className="border-b p-2">
+        <div className="relative">
+          <Search
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+            aria-hidden
+          />
+          <Input
+            value={busca}
+            onChange={(evento) => setBusca(evento.target.value)}
+            onKeyDown={(evento) => {
+              // Esc limpa antes de fechar qualquer coisa: é o gesto de quem
+              // desistiu da busca, não da janela.
+              if (evento.key === "Escape" && busca) {
+                evento.stopPropagation();
+                setBusca("");
+              }
+            }}
+            placeholder="Buscar configuração"
+            aria-label="Buscar configuração da campanha"
+            className="h-8 pr-8 pl-8 text-sm"
+          />
+          {busca ? (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Limpar a busca"
+              className="absolute top-1/2 right-1 -translate-y-1/2"
+              onClick={() => setBusca("")}
+            >
+              <X />
+            </Button>
+          ) : null}
+        </div>
+      </div>
 
-        <Separator />
+      <div className="flex min-h-0 flex-1 flex-col @[30rem]/config:flex-row">
+        {/* Estreita, a barra é uma fileira que rola de lado; larga, uma coluna.
+            `rolagem-limpa` porque a barra de rolagem de uma fileira de cinco
+            botões seria mais alta que a vontade de rolá-la. */}
+        <nav
+          aria-label="Tópicos"
+          className="rolagem-limpa bg-muted/30 flex shrink-0 gap-0.5 overflow-x-auto border-b p-1.5 @[30rem]/config:w-44 @[30rem]/config:flex-col @[30rem]/config:overflow-x-visible @[30rem]/config:border-r @[30rem]/config:border-b-0"
+        >
+          {topicos.map((chave) => {
+            const topico = TOPICOS_DA_CAMPANHA.find((t) => t.chave === chave)!;
+            const Icone = ICONE[chave];
+            const ativo = !buscando && chave === atual;
 
-        <CondicoesDaCampanha />
+            return (
+              <Button
+                key={chave}
+                variant={ativo ? "secondary" : "ghost"}
+                size="sm"
+                aria-current={ativo ? "page" : undefined}
+                className="shrink-0 justify-start @[30rem]/config:w-full"
+                onClick={() => abrir(chave)}
+              >
+                <Icone />
+                <span className="truncate">{topico.titulo}</span>
+              </Button>
+            );
+          })}
+        </nav>
 
-        <Separator />
+        {/* `key` para a rolagem voltar ao topo ao trocar de tópico: o tópico
+            novo aberto no meio da altura do anterior começa pela metade. */}
+        <ScrollArea key={buscando ? "busca" : atual} className="min-h-0 flex-1">
+          <div className="space-y-4 p-3">
+            {mostrados.length === 0 ? (
+              <p className="text-muted-foreground px-1 py-6 text-center text-xs">
+                Nada com esse nome
+              </p>
+            ) : (
+              mostrados.map((chave, indice) => (
+                <div key={chave} className="space-y-4">
+                  {indice > 0 ? <Separator /> : null}
+                  <Topico
+                    chave={chave}
+                    busca={busca}
+                    medidores={medidores}
+                  />
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    </div>
+  );
+}
 
+/** O corpo de um tópico. */
+function Topico({
+  chave,
+  busca,
+  medidores,
+}: {
+  chave: TopicoDaCampanha;
+  busca: string;
+  medidores: ModelosDaCampanha;
+}) {
+  switch (chave) {
+    case "medidores":
+      return <MedidoresDaCampanha {...medidores} />;
+    case "condicoes":
+      return <CondicoesDaCampanha />;
+    case "layout":
+      return (
         <Secao
           titulo="Layout dos retratos"
           descricao="O que cada retrato mostra na mesa, e onde."
         >
           <LayoutDoRetratoPainel selecionado={null} />
         </Secao>
-
-        <Separator />
-
+      );
+    case "posicao":
+      return (
         <Secao
           titulo="Posição dos retratos"
           descricao="Apertar arruma os retratos soltos e faz os novos nascerem ali."
         >
           <PosicaoDosRetratos />
         </Secao>
-      </div>
-    </ScrollArea>
-  );
+      );
+    case "ajustes":
+      return (
+        <Secao
+          titulo="Ajustes da campanha"
+          descricao="O que o ATO20 e os plugins deixam ajustar só nesta campanha. Vence o da máquina."
+        >
+          {/* A busca desce para a lista só quando ela não achou o TÓPICO: quem
+              digitou "plugin" quer ver todos os ajustes, e filtrá-los pelo
+              termo não deixaria nenhum. */}
+          <AjustesDaCampanha
+            busca={topicosAchados(busca, {}).includes("ajustes") ? "" : busca}
+          />
+        </Secao>
+      );
+  }
 }
 
 /** Uma seção com título e uma linha de descrição, como a dos medidores. */
@@ -121,23 +325,19 @@ function Secao({
   );
 }
 
-/**
- * Os medidores de fábrica: o que toda ficha desta campanha começa tendo.
- *
- * MOLDE, e não vínculo. Criar um aqui materializa um medidor de verdade em cada
- * personagem, e dali em diante o medidor é dele — o mestre renomeia, troca a
- * cor, apaga. Editar o modelo depois não empurra nada; para isso existe
- * "Aplicar em todos", que é um gesto com nome. Ver `ModeloDeMedidor`.
- */
-function MedidoresDaCampanha() {
-  const [modelos, setModelos] = useState<ModeloDeMedidor[] | null>(null);
-  const [ocupado, setOcupado] = useState(false);
+type ModelosDaCampanha = {
+  /** `null` enquanto a primeira leitura não voltou. */
+  modelos: ModeloDeMedidor[] | null;
+  setModelos: Dispatch<SetStateAction<ModeloDeMedidor[] | null>>;
+  reler: () => void;
+};
 
-  // As fichas abertas releem: materializar um modelo mexe no índice de
-  // personagens, e sem isto elas seguiriam mostrando a lista de medidores de
-  // antes até alguém tocar nelas.
-  const { personagens, recarregar } = useCharacters();
-  const quantos = personagens?.length ?? 0;
+/**
+ * Os medidores da campanha, lidos UMA vez pela janela e não pelo tópico: a
+ * busca procura pelo nome deles com o tópico fechado. Ver o corpo.
+ */
+function useModelosDaCampanha(): ModelosDaCampanha {
+  const [modelos, setModelos] = useState<ModeloDeMedidor[] | null>(null);
 
   const reler = useCallback(() => {
     listarModelos().then(setModelos, (cause: unknown) => {
@@ -149,6 +349,26 @@ function MedidoresDaCampanha() {
   }, []);
 
   useEffect(reler, [reler]);
+
+  return { modelos, setModelos, reler };
+}
+
+/**
+ * Os medidores de fábrica: o que toda ficha desta campanha começa tendo.
+ *
+ * MOLDE, e não vínculo. Criar um aqui materializa um medidor de verdade em cada
+ * personagem, e dali em diante o medidor é dele — o mestre renomeia, troca a
+ * cor, apaga. Editar o modelo depois não empurra nada; para isso existe
+ * "Aplicar em todos", que é um gesto com nome. Ver `ModeloDeMedidor`.
+ */
+function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) {
+  const [ocupado, setOcupado] = useState(false);
+
+  // As fichas abertas releem: materializar um modelo mexe no índice de
+  // personagens, e sem isto elas seguiriam mostrando a lista de medidores de
+  // antes até alguém tocar nelas.
+  const { personagens, recarregar } = useCharacters();
+  const quantos = personagens?.length ?? 0;
 
   /** Roda a chamada, relê os dois lados e destrava. Toda ação passa por aqui. */
   async function mexer(acao: () => Promise<unknown>, erro: string) {
