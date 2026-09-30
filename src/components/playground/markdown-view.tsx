@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, memo, useContext } from "react";
 
 import { TokenView, type Vinculos } from "@/components/mestre/postit-texto-view";
 import { bloco, trechos, type Bloco, type Trecho } from "@/lib/markdown/linha";
@@ -158,8 +158,22 @@ function TrechoView({ trecho }: { trecho: Trecho }) {
   }
 }
 
-/** O documento inteiro desenhado, linha a linha. Só leitura: é o da mesa. */
-export function MarkdownView({ texto, className }: { texto: string; className?: string }) {
+/**
+ * O documento inteiro desenhado, linha a linha. Só leitura: é o da mesa.
+ *
+ * `memo` porque quem o monta re-renderiza por razões que não são o texto: o
+ * cartão do quadro anda, e a cada quadro do gesto o `MarkdownView` dele
+ * recebia o MESMO texto e reanalisava as sessenta linhas -- `bloco()`,
+ * `trechos()` e as menções de cada uma -- para reconciliar uma árvore
+ * idêntica. O texto é uma string, e igual é igual.
+ */
+export const MarkdownView = memo(function MarkdownView({
+  texto,
+  className,
+}: {
+  texto: string;
+  className?: string;
+}) {
   const linhas = texto.split("\n");
   return (
     <div className={cn("break-words whitespace-pre-wrap", className)}>
@@ -168,6 +182,6 @@ export function MarkdownView({ texto, className }: { texto: string; className?: 
       ))}
     </div>
   );
-}
+});
 
 export type { Bloco };

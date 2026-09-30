@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { donosPorPersonagem } from "@/lib/mestre/vinculos";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
@@ -29,6 +29,15 @@ import type { Player } from "@/lib/vault/players";
  *
  * Devolve mapa vazio em qualquer falha: a lista de personagens continua útil
  * sem os donos, e não vale derrubá-la por causa da linha de baixo.
+ *
+ * O mapa é MEMOIZADO, e não é detalhe: ele entra nas dependências do
+ * `vinculos` de `useMencoesDoMestre`, que vira o `VinculosContext` de cada
+ * cartão e de cada postit do quadro. Um `Map` novo por render fazia o contexto
+ * mudar a cada quadro de gesto -- a camada de cartões re-renderiza quando a
+ * cena muda --, e contexto atravessa `memo`: toda menção de toda nota
+ * redesenhava, com chip e tooltip, sessenta vezes por segundo. Medido no
+ * cenário `quadro` da bancada, com trinta cartões e um na mão: era a metade
+ * do JavaScript que sobrava depois de memoizar o cartão.
  */
 export function useCharacterOwners(jogadores: Player[]): Map<string, string[]> {
   const versao = useCharactersStore((state) => state.versao);
@@ -52,5 +61,5 @@ export function useCharacterOwners(jogadores: Player[]): Map<string, string[]> {
     };
   }, [versao]);
 
-  return donosPorPersonagem(pares, jogadores);
+  return useMemo(() => donosPorPersonagem(pares, jogadores), [pares, jogadores]);
 }

@@ -2919,8 +2919,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         panMode={panMode}
         onTextoPointerDown={onTextoPointerDown}
       />
+      {/* A lista do BOARD, e não a da cena com o gesto aplicado: durante o
+          arrasto ela não muda de identidade, e a camada não reconcilia os
+          sessenta cartões a cada quadro -- cada cartão lê o próprio patch
+          do gesto. Ver `DocumentoLayer`. */}
       <DocumentoLayer
-        scene={scene}
+        sceneId={scene.id}
+        documentos={cenaDoBoard.documentos}
         panMode={panMode}
         onDocumentoPointerDown={onDocumentoPointerDown}
       />

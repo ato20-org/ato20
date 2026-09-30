@@ -3,6 +3,7 @@
 import { createPortal } from "react-dom";
 import {
   Fragment,
+  memo,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -138,8 +139,6 @@ function PostitCamada({
 }) {
   const { scale, planoDaMargem } = useSceneScale();
 
-  const updatePostit = useSceneStore((state) => state.updatePostit);
-  const removePostit = useSceneStore((state) => state.removePostit);
   const { vinculos, candidatos } = useMencoesDoMestre();
 
   // Na MARGEM, e não no plano de controles onde este layer é montado: o papel
@@ -152,13 +151,12 @@ function PostitCamada({
       {postits.map((postit) => (
         <PostitPapel
           key={postit.id}
+          sceneId={sceneId}
           postit={postit}
           panMode={panMode}
           vinculos={vinculos}
           candidatos={candidatos}
-          onChange={(patch) => updatePostit(sceneId, postit.id, patch)}
-          onRemove={() => removePostit(sceneId, postit.id)}
-          onPapelPointerDown={(event) => onPostitPointerDown(event, postit)}
+          onPostitPointerDown={onPostitPointerDown}
         />
       ))}
     </>,
@@ -181,25 +179,43 @@ function PostitCamada({
  * duplo clique, e ela cobra dois cliques em cima da coisa mais frequente que se
  * faz com um postit.
  */
-function PostitPapel({
+/**
+ * `memo` pela razão do `TextoSolto` e do cartão de nota: a cena é imutável
+ * e o gesto preserva a identidade do papel que não anda, então arrastar um
+ * elemento qualquer do quadro não precisa redesenhar os trinta papéis -- cada
+ * um com o texto reanalisado e as menções resolvidas de novo.
+ *
+ * As três closures que a camada fechava por papel (`onChange`, `onRemove`,
+ * `onPapelPointerDown`) viraram funções DAQUI: uma função nova por render
+ * anulava o `memo` antes de ele existir. O que entra é o que é estável -- o
+ * id da cena, as funções do store e o handler do palco, que vem pelo
+ * envelope de `handlersRef`.
+ */
+const PostitPapel = memo(function PostitPapel({
+  sceneId,
   postit,
   panMode,
   vinculos,
   candidatos,
-  onChange,
-  onRemove,
-  onPapelPointerDown,
+  onPostitPointerDown,
 }: {
+  sceneId: string;
   postit: Postit;
   panMode: boolean;
   vinculos: Vinculos;
   candidatos: Record<SinalDoPostit, Sugestao[]>;
-  onChange: (patch: Partial<Postit>) => void;
-  onRemove: () => void;
-  onPapelPointerDown: (event: ReactPointerEvent) => void;
+  onPostitPointerDown: (event: ReactPointerEvent, postit: Postit) => void;
 }) {
   const { scale, ampliacaoNoLayout } = useSceneScale();
   const tool = useToolStore((state) => state.tool);
+
+  const updatePostit = useSceneStore((state) => state.updatePostit);
+  const removePostit = useSceneStore((state) => state.removePostit);
+  const onChange = (patch: Partial<Postit>) =>
+    updatePostit(sceneId, postit.id, patch);
+  const onRemove = () => removePostit(sceneId, postit.id);
+  const onPapelPointerDown = (event: ReactPointerEvent) =>
+    onPostitPointerDown(event, postit);
 
   /**
    * O corpo do papel medido em PIXEL DE TELA enquanto o plano amplia por `zoom`.
@@ -550,10 +566,14 @@ function PostitPapel({
         editando && "ring-2 ring-offset-1",
       )}
       style={{
-        left: postit.x,
-        top: postit.y,
+        // Por `transform` e com camada própria quando na mão, pela razão do
+        // cartão de nota: ver `CartaoDeDocumento`.
+        left: 0,
+        top: 0,
+        transform: `translate(${postit.x}px, ${postit.y}px)`,
         width: postit.largura,
         height: postit.altura,
+        willChange: selecionado ? "transform" : undefined,
         // Papel colado sobre o mapa, sob o alfinete. Ver a escada em
         // `use-postit-store`.
         zIndex: POSTIT_Z,
@@ -849,7 +869,7 @@ function PostitPapel({
       ) : null}
     </>
   );
-}
+});
 
 /** Uma linha da ajuda: o gesto ou o sinal, e o que ele faz. */
 const COMANDOS: Array<[string, string]> = [

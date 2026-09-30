@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  memo,
   useEffect,
   useMemo,
   useState,
@@ -239,7 +240,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                 <NotaRow
                   key={linha.nota.id}
                   nota={linha.nota}
-                  pastas={pastas ?? []}
+                  pastas={pastas ?? SEM_PASTAS}
                   depth={linha.depth}
                   aberta={linha.nota.id === notaAbertaId}
                   medida={medidas.get(linha.nota.arquivo)}
@@ -917,7 +918,18 @@ function QuadroRow({
 
 // --- nota -------------------------------------------------------------------
 
-function NotaRow({
+/** A MESMA lista vazia em todo render: um `[]` novo anularia o `memo` da linha. */
+const SEM_PASTAS: Pasta[] = [];
+
+/**
+ * `memo` porque a lista re-renderiza a cada commit do board -- e com o quadro
+ * no ar, um arrasto é um commit a cada 100 ms. As props são estáveis fora de
+ * uma mudança de verdade: a nota e as pastas vêm do board, a medida do mapa
+ * do Rust, e `aberta` só muda ao abrir outra nota.
+ */
+const NotaRow = memo(NotaRowSemMemo);
+
+function NotaRowSemMemo({
   nota,
   pastas,
   depth,
@@ -940,11 +952,25 @@ function NotaRow({
       state.arrasto?.fonte.tipo === "nota" && state.arrasto.fonte.notaId === nota.id,
   );
   const store = () => useSceneStore.getState();
-  // O texto vivo, quando o arquivo já está aberto: contar o que está na tela
-  // é o que faz os números andarem junto com as teclas. Fechado, valem as
-  // medidas do disco.
-  const textoVivo = useDocumentoStore((state) => state.textos[nota.arquivo]);
-  const numeros = textoVivo !== undefined ? medirTexto(textoVivo) : medida;
+  // O texto vivo SÓ da nota aberta no editor: contar o que está na tela é o
+  // que faz os números andarem junto com as teclas. Fechada, valem as
+  // medidas do disco -- mesmo que o texto esteja na memória, porque um cartão
+  // no quadro o carregou. Era "sempre que o texto estiver na memória", e num
+  // quadro com sessenta cartões abertos eram sessenta notas medidas de novo
+  // (TextEncoder e dois `split`) a cada render da bancada -- que, com o
+  // quadro no ar, acontece dez vezes por segundo durante um arrasto. Medido
+  // no cenário `quadro` da bancada, na webview: 3 ms por quadro.
+  //
+  // O seletor devolve `undefined` para a nota fechada, e não o texto dela: é
+  // o que deixa a linha fora dos acordes do store enquanto outra nota é
+  // escrita.
+  const textoVivo = useDocumentoStore((state) =>
+    aberta ? state.textos[nota.arquivo] : undefined,
+  );
+  const numeros = useMemo(
+    () => (textoVivo !== undefined ? medirTexto(textoVivo) : medida),
+    [textoVivo, medida],
+  );
 
   const abrir = () => useArquivoAbertoStore.getState().abrirNota(nota.id);
   const [confirmando, setConfirmando] = useState(false);
