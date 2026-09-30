@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { aplicarGesto } from "@/lib/store/use-gesto-store";
+import { aplicarGesto, moverNoGesto, useGestoStore } from "@/lib/store/use-gesto-store";
+import { useSceneStore } from "@/lib/store/use-scene-store";
 import type { Scene } from "@/types/scene";
 
 const cena = {
@@ -114,5 +115,27 @@ describe("aplicarGesto", () => {
     expect(vista).not.toBe(cena);
     expect(vista.items[0]).toMatchObject({ x: 99, rotation: 45, y: 0 });
     expect(vista.items[1]).toBe(cena.items[1]);
+  });
+});
+
+describe("moverNoGesto", () => {
+  it("no ar, o gesto fica no gesto: o board não muda a cada quadro", () => {
+    useSceneStore.setState({
+      board: { scenes: [cena], editingSceneId: "c1", liveSceneId: "c1" },
+      status: "ready",
+    });
+    const antes = useSceneStore.getState().board;
+
+    moverNoGesto("c1", [{ id: "a", patch: { x: 40 } }]);
+    moverNoGesto("c1", [{ id: "a", patch: { x: 80 } }]);
+
+    // Publicar para a mesa não é gravar: a mesa vê a vista com o gesto
+    // aplicado (ver `publicarGestoAoVivo`), e o board só sabe do gesto ao
+    // soltar. Antes, cada intervalo do canal era um commit.
+    expect(useSceneStore.getState().board).toBe(antes);
+    expect(useGestoStore.getState().patches).toEqual([{ id: "a", patch: { x: 80 } }]);
+
+    useGestoStore.getState().terminar();
+    useSceneStore.setState({ board: null, status: "idle" });
   });
 });

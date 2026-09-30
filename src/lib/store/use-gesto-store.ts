@@ -13,6 +13,7 @@ import {
   type TracoPatch,
 } from "@/lib/store/use-scene-store";
 import { gravarCameraManual } from "@/lib/mestre/camera-actions";
+import { publicarCenaAoVivo } from "@/hooks/use-scene-broadcast";
 import type { Scene, Viewport } from "@/types/scene";
 
 /**
@@ -97,9 +98,12 @@ type GestoStore = {
  * mudou. O board recebe UM `updateItems` no `pointerup`, que é também um
  * passo de desfazer só.
  *
- * A exceção é a mesa no ar: quem assiste precisa ver o token andar. Aí o
- * board é gravado no ritmo do canal (`SCENE_BROADCAST_INTERVAL_MS`), e o
- * histórico funde os commits do mesmo gesto (`COALESCE_MS`).
+ * A mesa no ar não é exceção: quem assiste precisa ver o token andar, e vê,
+ * porque a vista com o gesto aplicado é PUBLICADA no ritmo do canal
+ * (`SCENE_BROADCAST_INTERVAL_MS`) sem passar pelo board -- ver
+ * `publicarGestoAoVivo`. Houve uma versão que gravava o board nesse ritmo e
+ * deixava o histórico fundir os commits (`COALESCE_MS`); saiu porque cada
+ * gravação era o `MestreShell` inteiro re-renderizado.
  *
  * Só o `MestreStage` assina isto. É o que faz o gesto custar um render de um
  * componente, e não da árvore.
@@ -256,12 +260,37 @@ export function aplicarGesto(
   return vista;
 }
 
-/** Quando o board foi gravado pela última vez por um gesto ao vivo. */
-let ultimaGravacaoAoVivo = 0;
+/** Quando a mesa recebeu pela última vez um quadro do gesto em curso. */
+let ultimaPublicacaoAoVivo = 0;
 
 /**
- * Um quadro do gesto: guarda os patches, e grava no board só se a mesa está
- * vendo esta cena e já passou um intervalo do canal desde a última gravação.
+ * A mesa vê o gesto SEM o board saber dele.
+ *
+ * Se a cena do gesto está no ar e já passou um intervalo do canal desde a
+ * última vez, publica a cena do board com o gesto aplicado por cima -- a
+ * mesma vista que o palco desenha. Antes isto era um commit no board a cada
+ * intervalo, e um commit é o `MestreShell` inteiro re-renderizado: medido na
+ * webview, 17 a 24 ms cada, dois ou três quadros perdidos a cada dez
+ * enquanto a mão está fechada. O board continua recebendo um commit só, ao
+ * soltar, que é também um passo de desfazer só.
+ */
+function publicarGestoAoVivo(sceneId: string, alvo?: (scene: Scene) => boolean): void {
+  const { board } = useSceneStore.getState();
+  if (board?.liveSceneId !== sceneId) return;
+
+  const scene = board.scenes.find((atual) => atual.id === sceneId);
+  if (!scene || (alvo && !alvo(scene))) return;
+
+  const agora = performance.now();
+  if (agora - ultimaPublicacaoAoVivo < SCENE_BROADCAST_INTERVAL_MS) return;
+
+  ultimaPublicacaoAoVivo = agora;
+  publicarCenaAoVivo(aplicarGesto(scene, useGestoStore.getState()));
+}
+
+/**
+ * Um quadro do gesto: guarda os patches, e manda a vista à mesa se ela está
+ * vendo esta cena. Ver `publicarGestoAoVivo`.
  */
 export function moverNoGesto(
   sceneId: string,
@@ -271,29 +300,7 @@ export function moverNoGesto(
   semAlca?: PatchesSemAlca,
 ): void {
   useGestoStore.getState().mover(sceneId, patches, textos, formas, semAlca);
-
-  const {
-    board,
-    updateItems,
-    updateTextos,
-    updateFormas,
-    updateTracos,
-    updateDocumentos,
-  } = useSceneStore.getState();
-  if (board?.liveSceneId !== sceneId) return;
-
-  const agora = performance.now();
-  if (agora - ultimaGravacaoAoVivo < SCENE_BROADCAST_INTERVAL_MS) return;
-
-  ultimaGravacaoAoVivo = agora;
-  updateItems(sceneId, patches);
-  updateTextos(sceneId, textos);
-  updateFormas(sceneId, formas);
-  // O postit NÃO entra aqui, e é o único do trio que fica de fora: ele não
-  // chega à mesa (`sceneForTable` o corta), então gravar no ritmo do canal
-  // seria pagar o commit para ninguém ver. Ele espera a mão soltar.
-  if (semAlca?.documentos) updateDocumentos(sceneId, semAlca.documentos);
-  if (semAlca?.tracos) updateTracos(sceneId, semAlca.tracos);
+  publicarGestoAoVivo(sceneId);
 }
 
 /**
@@ -320,11 +327,11 @@ export function terminarGesto(
   if (semAlca?.tracos?.length)
     useSceneStore.getState().updateTracos(sceneId, semAlca.tracos);
   useGestoStore.getState().terminar();
-  ultimaGravacaoAoVivo = 0;
+  ultimaPublicacaoAoVivo = 0;
 }
 
 /**
- * Um quadro do arrasto da moldura. Grava no board só se a mesa está vendo
+ * Um quadro do arrasto da moldura. Manda a vista à mesa só se ela está vendo
  * esta cena E esta câmera está no ar -- fora disso ninguém além do mestre vê
  * a moldura andar, e o board pode esperar a mão soltar.
  */
@@ -334,16 +341,7 @@ export function moverCameraNoGesto(
   viewport: Viewport,
 ): void {
   useGestoStore.getState().moverCamera(sceneId, cameraId, viewport);
-
-  const { board, atualizarCamera } = useSceneStore.getState();
-  const scene = board?.scenes.find((s) => s.id === sceneId);
-  if (board?.liveSceneId !== sceneId || scene?.cameraNoArId !== cameraId) return;
-
-  const agora = performance.now();
-  if (agora - ultimaGravacaoAoVivo < SCENE_BROADCAST_INTERVAL_MS) return;
-
-  ultimaGravacaoAoVivo = agora;
-  atualizarCamera(sceneId, cameraId, { viewport });
+  publicarGestoAoVivo(sceneId, (scene) => scene.cameraNoArId === cameraId);
 }
 
 /**
@@ -354,5 +352,5 @@ export function terminarGestoDaCamera(): void {
   const { camera } = useGestoStore.getState();
   if (camera) gravarCameraManual(camera.cameraId, camera.viewport);
   useGestoStore.getState().terminar();
-  ultimaGravacaoAoVivo = 0;
+  ultimaPublicacaoAoVivo = 0;
 }
