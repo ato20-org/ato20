@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -172,6 +172,37 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
 
   /** Qual geometria está com a fileira de naturezas aberta. `null` = fechada. */
   const [aberta, setAberta] = useState<Geometria["chave"] | null>(null);
+  const pilula = useRef<HTMLDivElement>(null);
+
+  /**
+   * Clique fora da pílula fecha a fileira, e o Esc também.
+   *
+   * Ela FICA aberta ao escolher (ver `pegar`), e sem isto ficava para sempre:
+   * o mestre escolhia a parede, ia desenhar, e a tira seguia pendurada sobre o
+   * palco até alguém clicar de novo no quadrado. O gesto seguinte a escolher é
+   * desenhar, e é ele que fecha.
+   *
+   * Na CAPTURA: o palco, os itens e as alças param a propagação do
+   * pointerdown, e um ouvinte na volta nunca ouviria o clique que mais importa.
+   */
+  useEffect(() => {
+    if (!aberta) return;
+
+    const aoApertar = (evento: PointerEvent) => {
+      if (!pilula.current?.contains(evento.target as Node)) setAberta(null);
+    };
+    const aoTeclar = (evento: KeyboardEvent) => {
+      if (evento.key === "Escape") setAberta(null);
+    };
+
+    window.addEventListener("pointerdown", aoApertar, true);
+    window.addEventListener("keydown", aoTeclar);
+
+    return () => {
+      window.removeEventListener("pointerdown", aoApertar, true);
+      window.removeEventListener("keydown", aoTeclar);
+    };
+  }, [aberta]);
 
   /**
    * Cada natureza pergunta pela capacidade que ela usa, e não pelo tipo da
@@ -246,7 +277,7 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
   }
 
   return (
-    <div className="flex flex-col items-center gap-0.5">
+    <div ref={pilula} className="flex flex-col items-center gap-0.5">
       {GEOMETRIAS.map((geometria) => {
         const escolhida = naMao?.geometria === geometria.chave;
 
