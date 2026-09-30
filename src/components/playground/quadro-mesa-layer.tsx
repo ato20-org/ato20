@@ -71,7 +71,7 @@ function PostitDaMesa({ postit }: { postit: Postit }) {
   return (
     <div
       className={cn(
-        "pointer-events-none absolute overflow-hidden rounded-[3px] shadow-lg ring-1",
+        "font-postit pointer-events-none absolute overflow-hidden rounded-[3px] shadow-lg ring-1",
         PAPEL[postit.cor],
       )}
       style={{

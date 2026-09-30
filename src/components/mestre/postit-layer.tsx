@@ -557,7 +557,11 @@ const PostitPapel = memo(function PostitPapel({
         // para não cobrir o mapa, que agora mora num plano abaixo -- ver
         // `plano-de-controles` no `SceneStage`. O papel é pegável, então ele
         // liga de volta.
-        "absolute flex flex-col overflow-hidden rounded-[3px] shadow-lg ring-1",
+        //
+        // A letra de mão fica no PAPEL, e não em `tipografia`: daqui ela desce
+        // por herança ao corpo, ao campo e ao espelho do cursor de uma vez, e o
+        // espelho só mede certo se usar a mesma letra do campo.
+        "font-postit absolute flex flex-col overflow-hidden rounded-[3px] shadow-lg ring-1",
         // Com a seta na mão o ponteiro é DESLIGADO aqui, e não apenas
         // ignorado: o clique precisa ATRAVESSAR até o envelope do palco, que
         // vive no plano de baixo e é quem trata o gesto da seta. Um tratador
