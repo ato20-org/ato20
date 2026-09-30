@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 
@@ -19,6 +20,29 @@ import "./globals.css";
  * `globals.css`.
  */
 
+/*
+ * A letra de mão do postit.
+ *
+ * Os arquivos moram no repositório, em `fontes/kalam`, e não num pacote npm
+ * como o `geist`: pacote novo muda o `pnpm-lock.yaml`, e lockfile mudado pede
+ * `empacotar/flatpak/gerar-fontes.sh` antes da próxima publicação no Flathub.
+ * São dois arquivos de 22 KB; o resultado offline é o mesmo.
+ *
+ * Só o recorte latino, o do Fontsource: cobre U+0000-00FF, onde moram todos
+ * os acentos do português, e as aspas e reticências de U+2000-206F. O resto
+ * cai na fonte de reserva. Dois pesos porque o postit usa dois: o corpo e o
+ * `**negrito**` e os títulos (`font-semibold` e `font-bold` pegam o 700).
+ *
+ * Quem consome `--font-kalam` é o `--font-postit` do `@theme`.
+ */
+const Kalam = localFont({
+  src: [
+    { path: "./fontes/kalam/kalam-latin-400-normal.woff2", weight: "400" },
+    { path: "./fontes/kalam/kalam-latin-700-normal.woff2", weight: "700" },
+  ],
+  variable: "--font-kalam",
+});
+
 export const metadata: Metadata = {
   title: "ATO20",
   description:
@@ -31,7 +55,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="pt-BR"
-      className={`dark ${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
+      className={`dark ${GeistSans.variable} ${GeistMono.variable} ${Kalam.variable} h-full antialiased`}
     >
       <body className="bg-background text-foreground flex min-h-full flex-col">
         {children}

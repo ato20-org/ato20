@@ -41,6 +41,7 @@ import { POSTIT_Z, usePostitStore } from "@/lib/store/use-postit-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { repassarCliqueDaMencao } from "@/lib/mestre/clique-da-mencao";
+import { degrauDeFonte } from "@/lib/mestre/degrau-de-fonte";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
@@ -516,22 +517,9 @@ const PostitPapel = memo(function PostitPapel({
     editar(postit.id);
   }
 
-  /**
-   * Um degrau na escada de tamanhos -- a MESMA do cartão de nota.
-   *
-   * O papel colado antes disto existir está em 15, que não é degrau: o
-   * primeiro toque leva para o degrau vizinho e de lá o gesto anda de um em
-   * um. Mesma conta de `mudarFonte` no `CartaoDeDocumento`.
-   */
+  /** Um degrau na escada de tamanhos -- a MESMA do cartão. Ver `degrauDeFonte`. */
   function mudarFonte(sentido: 1 | -1) {
-    const indice = DOCUMENTO_FONTES.findIndex((f) => f >= fonte);
-    const atual = indice === -1 ? DOCUMENTO_FONTES.length - 1 : indice;
-    const proximo = Math.min(
-      Math.max(atual + sentido, 0),
-      DOCUMENTO_FONTES.length - 1,
-    );
-
-    onChange({ fonte: DOCUMENTO_FONTES[proximo] });
+    onChange({ fonte: degrauDeFonte(fonte, sentido) });
   }
 
   function arrastar(event: ReactPointerEvent) {
@@ -557,7 +545,11 @@ const PostitPapel = memo(function PostitPapel({
         // para não cobrir o mapa, que agora mora num plano abaixo -- ver
         // `plano-de-controles` no `SceneStage`. O papel é pegável, então ele
         // liga de volta.
-        "absolute flex flex-col overflow-hidden rounded-[3px] shadow-lg ring-1",
+        //
+        // A letra de mão fica no PAPEL, e não em `tipografia`: daqui ela desce
+        // por herança ao corpo, ao campo e ao espelho do cursor de uma vez, e o
+        // espelho só mede certo se usar a mesma letra do campo.
+        "font-postit absolute flex flex-col overflow-hidden rounded-[3px] shadow-lg ring-1",
         // Com a seta na mão o ponteiro é DESLIGADO aqui, e não apenas
         // ignorado: o clique precisa ATRAVESSAR até o envelope do palco, que
         // vive no plano de baixo e é quem trata o gesto da seta. Um tratador
