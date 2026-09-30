@@ -42,7 +42,10 @@ import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
-import { useClipboardStore } from "@/lib/store/use-clipboard-store";
+import {
+  temAlgoParaColar,
+  useClipboardStore,
+} from "@/lib/store/use-clipboard-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { selectEditingScene } from "@/lib/store/use-scene-store";
 import { executarComando } from "@/lib/extensoes/carregar";
@@ -294,8 +297,7 @@ export const ATALHOS_BASE: Atalho[] = [
     // tecla segue e vira o evento `paste`, que é por onde o texto do sistema
     // entra no quadro -- ver `colarTextoDoSistema` e `useMestreShortcuts`.
     executar: (evento) => {
-      const { drafts, textos } = useClipboardStore.getState();
-      if (drafts.length === 0 && textos.length === 0) return;
+      if (!temAlgoParaColar(useClipboardStore.getState())) return;
       evento.preventDefault();
       pasteClipboard();
     },

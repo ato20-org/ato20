@@ -18,7 +18,10 @@ import {
   empurrarTracos,
 } from "@/lib/mestre/grupo-sem-alca";
 import { usePostitStore } from "@/lib/store/use-postit-store";
-import { useClipboardStore } from "@/lib/store/use-clipboard-store";
+import {
+  temAlgoParaColar,
+  useClipboardStore,
+} from "@/lib/store/use-clipboard-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
@@ -32,10 +35,12 @@ import {
   CONE_DA_LANTERNA,
   CORES_DA_LUZ,
   DOCUMENTO_FONTE,
-  ehQuadro,
   POSTIT_FONTE,
   semIdDaForma,
+  semIdDoPostit,
+  semIdDoTexto,
 } from "@/types/scene";
+import { postitNaArea } from "@/lib/geometry/postit";
 import { degrauDeFonte } from "@/lib/mestre/degrau-de-fonte";
 import type {
   ConeDaLuz,
@@ -45,7 +50,9 @@ import type {
   Forma,
   ItemDraft,
   NewForma,
+  NewPostit,
   NewTexto,
+  NewTraco,
   Postit,
   Scene,
   Texto,
@@ -96,8 +103,8 @@ type ActionContext = {
   selectedFormas: Forma[];
   /**
    * Papel, cartão de nota e risco -- os três que a área também laça e que só
-   * ANDAM. Apagar e empurrar tratam os seis; copiar, colar e duplicar ainda
-   * não, e a área de transferência é quem diz por quê. Ver `copySelection`.
+   * ANDAM. Apagar e empurrar tratam os seis; copiar, colar e duplicar tratam
+   * papel e risco, e deixam o cartão de fora. Ver `copySelection`.
    */
   selectedPostitIds: string[];
   selectedPostits: Postit[];
@@ -159,24 +166,42 @@ function read(): ActionContext {
   };
 }
 
-/** A cópia de uma forma, deslocada como a do item e a do texto. */
-function formaDeslocada(forma: Forma): NewForma {
+/**
+ * As cópias deslocadas, para não nascerem em cima do original.
+ *
+ * Recebem a versão SEM id, e é o que as deixa servir ao colar e ao duplicar:
+ * o colar já tem a cópia guardada, e o duplicar a tira do original com o
+ * `semId...` de cada um. Uma conta só para os dois caminhos -- antes eram duas,
+ * e a do duplicar perdia a cor do texto.
+ */
+function formaDeslocada(forma: NewForma): NewForma {
+  return { ...forma, x: forma.x + PASTE_OFFSET, y: forma.y + PASTE_OFFSET };
+}
+
+/**
+ * O texto não passa por `offsetInsideScene`: a caixa dele vem da fonte, e não
+ * há largura para segurar dentro do plano antes de ele ser desenhado.
+ */
+function textoDeslocado(texto: NewTexto): NewTexto {
+  return { ...texto, x: texto.x + PASTE_OFFSET, y: texto.y + PASTE_OFFSET };
+}
+
+/** O papel tem cerca: a cópia fica dentro da área de trabalho. */
+function postitDeslocado(postit: Omit<Postit, "id">): NewPostit {
   return {
-    ...semIdDaForma(forma),
-    x: forma.x + PASTE_OFFSET,
-    y: forma.y + PASTE_OFFSET,
+    ...postit,
+    ...postitNaArea(
+      postit.x + PASTE_OFFSET,
+      postit.y + PASTE_OFFSET,
+      postit.largura,
+      postit.altura,
+    ),
   };
 }
 
-/** A cópia de um texto, deslocada para não nascer em cima do original. */
-function textoDeslocado(texto: Texto): NewTexto {
-  return {
-    x: texto.x + PASTE_OFFSET,
-    y: texto.y + PASTE_OFFSET,
-    texto: texto.texto,
-    tamanho: texto.tamanho,
-    rotation: texto.rotation,
-  };
+/** O risco não tem canto: anda cada ponto, x e y pelo mesmo tanto. */
+function tracoDeslocado(traco: NewTraco): NewTraco {
+  return { ...traco, pontos: traco.pontos.map((valor) => valor + PASTE_OFFSET) };
 }
 
 function offsetDraft(item: CanvasItem): ItemDraft {
@@ -197,33 +222,44 @@ function offsetDraft(item: CanvasItem): ItemDraft {
 }
 
 /**
- * Copia o que a área de transferência sabe recriar: imagem, texto e forma.
+ * Copia o que a área de transferência sabe recriar: imagem, texto, forma,
+ * papel e risco -- cada um com a cor que tem.
  *
- * Papel, cartão de nota e risco ficam DE FORA, e não por esquecimento. O
- * cartão aponta um arquivo de `documentos/` -- duas cópias do mesmo cartão
- * seriam duas janelas para a mesma nota, e uma cópia entre campanhas apontaria
- * para um arquivo que não existe do outro lado. O risco e o postit caberiam,
- * mas a área de transferência é gravada em três listas fixas, e acrescentar
- * mais é trabalho de outro dia -- ver `useClipboardStore`.
+ * O cartão de nota fica DE FORA, e não por esquecimento. Ele aponta um arquivo
+ * de `documentos/`: duas cópias do mesmo cartão seriam duas janelas para a
+ * mesma nota, e uma cópia entre campanhas apontaria para um arquivo que não
+ * existe do outro lado.
  *
- * Por isso `cutSelection` não recorta os três: apagar sem ter para onde colar
+ * Por isso `cutSelection` não recorta o cartão: apagar sem ter para onde colar
  * seria perder, não recortar.
  */
 export function copySelection(): void {
-  const { selectedItems, selectedTextos, selectedFormas } = read();
+  const {
+    selectedItems,
+    selectedTextos,
+    selectedFormas,
+    selectedPostits,
+    selectedTracos,
+  } = read();
   if (
     selectedItems.length === 0 &&
     selectedTextos.length === 0 &&
-    selectedFormas.length === 0
+    selectedFormas.length === 0 &&
+    selectedPostits.length === 0 &&
+    selectedTracos.length === 0
   )
     return;
 
-  useClipboardStore
-    .getState()
-    .copy(selectedItems, selectedTextos, selectedFormas);
+  useClipboardStore.getState().copy({
+    itens: selectedItems,
+    textos: selectedTextos,
+    formas: selectedFormas,
+    postits: selectedPostits,
+    tracos: selectedTracos,
+  });
 }
 
-export function removeSelection(opcoes?: { semMargem?: boolean }): void {
+export function removeSelection(opcoes?: { semCartao?: boolean }): void {
   const {
     scene,
     selectedIds,
@@ -240,11 +276,9 @@ export function removeSelection(opcoes?: { semMargem?: boolean }): void {
   const textoIds = selectedTextoIds.filter((id) => id !== editandoId);
   // O postit ABERTO para digitar fica, pela mesma razão do texto.
   const postitEditandoId = usePostitStore.getState().editandoId;
-  const postitIds = opcoes?.semMargem
-    ? []
-    : selectedPostitIds.filter((id) => id !== postitEditandoId);
-  const documentoIds = opcoes?.semMargem ? [] : selectedDocumentoIds;
-  const tracoIds = opcoes?.semMargem ? [] : selectedTracoIds;
+  const postitIds = selectedPostitIds.filter((id) => id !== postitEditandoId);
+  const documentoIds = opcoes?.semCartao ? [] : selectedDocumentoIds;
+  const tracoIds = selectedTracoIds;
   if (
     !scene ||
     (selectedIds.length === 0 &&
@@ -303,13 +337,12 @@ export function guardarSelecaoNoHandout(): void {
 /**
  * Recorta: copia o que cabe na área de transferência e apaga SÓ isso.
  *
- * Papel, cartão e risco continuam onde estavam -- eles não são copiados (ver
- * `copySelection`), e apagá-los aqui seria um Ctrl+X que perde o que não
- * levou.
+ * O cartão continua onde estava -- ele não é copiado (ver `copySelection`), e
+ * apagá-lo aqui seria um Ctrl+X que perde o que não levou.
  */
 export function cutSelection(): void {
   copySelection();
-  removeSelection({ semMargem: true });
+  removeSelection({ semCartao: true });
 }
 
 export function pasteClipboard(): void {
@@ -317,80 +350,91 @@ export function pasteClipboard(): void {
   if (!scene) return;
 
   const guardado = useClipboardStore.getState();
-  const { drafts } = guardado;
-  /**
-   * Texto e forma só colam em QUADRO: num mapa eles apareceriam no palco do
-   * mestre e em lugar nenhum na mesa -- quem os desenha lá é a camada do
-   * quadro. Colar o que só um lado vê é pior do que não colar. Ver
-   * `QuadroMesaLayer`.
-   */
-  const textos = ehQuadro(scene) ? guardado.textos : [];
-  const formas = ehQuadro(scene) ? guardado.formas : [];
-  if (drafts.length === 0 && textos.length === 0 && formas.length === 0) return;
+  // Em QUALQUER cena, o mapa incluído. O colar recusava texto e forma fora do
+  // quadro porque, num mapa, eles só apareciam no palco do mestre; desde o
+  // `naMesa` o mapa tem os dois, com o olho do gizmo decidindo o que a mesa
+  // vê. A cópia leva o olho junto, e o que veio de um quadro chega fechado.
+  if (!temAlgoParaColar(guardado)) return;
 
-  // Só quem tem o que colar: `addItems` com a lista vazia gravaria o board e
-  // deixaria um passo de desfazer que não desfaz nada.
-  const ids =
-    drafts.length > 0
-      ? useSceneStore.getState().addItems(
-          scene.id,
-          drafts.map((draft) => ({
-            ...draft,
-            ...offsetInsideScene(draft, PASTE_OFFSET),
-          })),
-        )
-      : [];
-
-  // O texto não passa por `offsetInsideScene`: a caixa dele vem da fonte, e
-  // não há largura para segurar dentro do plano antes de ele ser desenhado.
-  const textoIds = useSceneStore.getState().addTextos(
-    scene.id,
-    textos.map((texto) => ({
-      ...texto,
-      x: texto.x + PASTE_OFFSET,
-      y: texto.y + PASTE_OFFSET,
+  colarNaCena(scene.id, {
+    itens: guardado.drafts.map((draft) => ({
+      ...draft,
+      ...offsetInsideScene(draft, PASTE_OFFSET),
     })),
-  );
-
-  const formaIds = useSceneStore.getState().addFormas(
-    scene.id,
-    formas.map((forma) => ({
-      ...forma,
-      x: forma.x + PASTE_OFFSET,
-      y: forma.y + PASTE_OFFSET,
-    })),
-  );
-
-  useSelectionStore
-    .getState()
-    .selectMisto({ itens: ids, textos: textoIds, formas: formaIds });
+    textos: guardado.textos.map(textoDeslocado),
+    formas: guardado.formas.map(formaDeslocada),
+    postits: guardado.postits.map(postitDeslocado),
+    tracos: guardado.tracos.map(tracoDeslocado),
+  });
 }
 
 export function duplicateSelection(): void {
-  const { scene, selectedItems, selectedTextos, selectedFormas } = read();
+  const {
+    scene,
+    selectedItems,
+    selectedTextos,
+    selectedFormas,
+    selectedPostits,
+    selectedTracos,
+  } = read();
   if (
     !scene ||
     (selectedItems.length === 0 &&
       selectedTextos.length === 0 &&
-      selectedFormas.length === 0)
+      selectedFormas.length === 0 &&
+      selectedPostits.length === 0 &&
+      selectedTracos.length === 0)
   )
     return;
 
-  const ids =
-    selectedItems.length > 0
-      ? useSceneStore
-          .getState()
-          .addItems(scene.id, selectedItems.map(offsetDraft))
-      : [];
-  const textoIds = useSceneStore
-    .getState()
-    .addTextos(scene.id, selectedTextos.map(textoDeslocado));
-  const formaIds = useSceneStore
-    .getState()
-    .addFormas(scene.id, selectedFormas.map(formaDeslocada));
+  colarNaCena(scene.id, {
+    itens: selectedItems.map(offsetDraft),
+    textos: selectedTextos.map((texto) => textoDeslocado(semIdDoTexto(texto))),
+    formas: selectedFormas.map((forma) => formaDeslocada(semIdDaForma(forma))),
+    postits: selectedPostits.map((postit) =>
+      postitDeslocado(semIdDoPostit(postit)),
+    ),
+    tracos: selectedTracos.map(({ pontos, cor, espessura }) =>
+      tracoDeslocado({ pontos, cor, espessura }),
+    ),
+  });
+}
+
+/**
+ * Põe as cópias JÁ deslocadas na cena e as deixa na mão.
+ *
+ * O que o colar e o duplicar têm em comum: os dois terminam com a cópia
+ * selecionada, para o próximo gesto -- arrastar, Ctrl+D de novo -- ser nela e
+ * não no original.
+ */
+function colarNaCena(
+  sceneId: string,
+  copias: {
+    itens: ItemDraft[];
+    textos: NewTexto[];
+    formas: NewForma[];
+    postits: NewPostit[];
+    tracos: NewTraco[];
+  },
+): void {
+  const cena = useSceneStore.getState();
+
+  // Só quem tem o que colar: `addItems` com a lista vazia gravaria o board e
+  // deixaria um passo de desfazer que não desfaz nada.
+  const itens =
+    copias.itens.length > 0 ? cena.addItems(sceneId, copias.itens) : [];
+  const textos = cena.addTextos(sceneId, copias.textos);
+  const formas = cena.addFormas(sceneId, copias.formas);
+  // Um a um: papel e risco não têm a versão em lote. São poucos por colagem,
+  // e os commits seguidos se fundem num passo só de desfazer.
+  const postits = copias.postits.map((postit) =>
+    cena.addPostit(sceneId, postit),
+  );
+  const tracos = copias.tracos.map((traco) => cena.addTraco(sceneId, traco));
+
   useSelectionStore
     .getState()
-    .selectMisto({ itens: ids, textos: textoIds, formas: formaIds });
+    .selectMisto({ itens, textos, formas, postits, tracos });
 }
 
 export function moveSelectionZ(direction: ZDirection): void {

@@ -655,6 +655,19 @@ export type Postit = {
 export type NewPostit = Pick<Postit, "x" | "y"> &
   Partial<Pick<Postit, "largura" | "altura" | "texto" | "cor" | "fonte">>;
 
+/** O postit sem o id, com a cor e a letra -- o que copiar e duplicar guardam. */
+export function semIdDoPostit(postit: Postit): Omit<Postit, "id"> {
+  return {
+    x: postit.x,
+    y: postit.y,
+    largura: postit.largura,
+    altura: postit.altura,
+    texto: postit.texto,
+    cor: postit.cor,
+    fonte: postit.fonte,
+  };
+}
+
 /**
  * Texto solto sobre o quadro: título, rótulo, uma frase. Sem papel, sem
  * caixa -- o postit é o cartão, este é a letra direto na folha.
@@ -728,6 +741,32 @@ export type NewTexto = Pick<Texto, "x" | "y"> &
       | "naMesa"
     >
   >;
+
+/**
+ * O texto sem o id, campo a campo -- o que copiar e duplicar guardam.
+ *
+ * Irmão de `semIdDaForma`, e existe pelo mesmo motivo: a cópia escrita à mão
+ * em dois lugares guardava só texto, tamanho e giro, e o texto colado voltava
+ * na cor do tema, sem fundo e sem negrito. Fica de fora a caixa medida
+ * (`largura`, `altura`), que é do render e não do conteúdo: a cópia se mede ao
+ * nascer.
+ */
+export function semIdDoTexto(texto: Texto): NewTexto {
+  return {
+    x: texto.x,
+    y: texto.y,
+    texto: texto.texto,
+    tamanho: texto.tamanho,
+    rotation: texto.rotation,
+    cor: texto.cor,
+    fundo: texto.fundo,
+    negrito: texto.negrito,
+    italico: texto.italico,
+    sublinhado: texto.sublinhado,
+    // Como na forma: a decisão de mostrar acompanha a cópia.
+    naMesa: texto.naMesa,
+  };
+}
 
 /** Tamanho de fonte de um texto novo, em unidades de cena. */
 export const TEXTO_TAMANHO = 40;
@@ -825,6 +864,9 @@ export function semIdDaForma(forma: Forma): NewForma {
     espessura: forma.espessura,
     fundo: forma.fundo,
     diagonal: forma.diagonal,
+    // Sem eles o polígono colado não tinha vértice nenhum: a cópia chegava como
+    // uma caixa vazia, que o mestre via como "o Ctrl+C não pegou".
+    pontos: forma.pontos,
     // A decisão de mostrar acompanha a cópia: duplicar uma forma que a mesa
     // está vendo e ver a cópia sumir seria o gesto desfazendo o que o mestre
     // acabou de decidir.

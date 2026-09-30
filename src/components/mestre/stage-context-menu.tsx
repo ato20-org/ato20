@@ -71,7 +71,10 @@ import {
   novaCamera,
 } from "@/lib/mestre/camera-actions";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
-import { useClipboardStore } from "@/lib/store/use-clipboard-store";
+import {
+  temAlgoParaColar,
+  useClipboardStore,
+} from "@/lib/store/use-clipboard-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { temCamera, temLuz, type Scene } from "@/types/scene";
 import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
@@ -118,9 +121,7 @@ export function StageContextMenu({
    */
   const paredeComItens = useTemItensDeExtensao("palco.parede");
   const retratoComItens = useTemItensDeExtensao("palco.retrato");
-  const hasClipboard = useClipboardStore(
-    (state) => state.drafts.length > 0 || state.textos.length > 0,
-  );
+  const hasClipboard = useClipboardStore(temAlgoParaColar);
 
   const selectedItems = scene.items.filter((item) =>
     selectedIds.includes(item.id),
@@ -159,17 +160,19 @@ export function StageContextMenu({
    */
   const doQuadro = selectedTextoIds.length + selectedFormaIds.length;
   /**
-   * Papel, cartão e risco na mão -- o que a área laça e a área de
-   * transferência não leva (ver `copySelection`).
+   * Papel, cartão e risco na mão -- o que a área laça sem ser imagem.
    *
-   * Entram no mesmo bloco curto, mas só na linha de apagar: oferecer "Copiar"
-   * para um risco seria um item de menu que não faz nada.
+   * Entram no mesmo bloco curto. Papel e risco copiam; o cartão não (ver
+   * `copySelection`), e um cartão sozinho na mão só ganha a linha de apagar:
+   * oferecer "Copiar" para ele seria um item de menu que não faz nada.
    */
   const daMargem =
     selectedPostitIds.length +
     selectedDocumentoIds.length +
     selectedTracoIds.length;
   const soQuadro = !hasSelection && doQuadro + daMargem > 0;
+  const copiavel =
+    doQuadro + selectedPostitIds.length + selectedTracoIds.length;
   const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
   const prenderNaSelecao = useCameraLockStore(
     (state) => state.prenderNaSelecao,
@@ -252,10 +255,10 @@ export function StageContextMenu({
         {soQuadro ? (
           <>
             {/* As três da área de transferência só aparecem com algo que ela
-                saiba recriar: um risco laçado sozinho não copia, não recorta e
-                não duplica -- e um item de menu que não faz nada é pior que
-                item nenhum. Ver `copySelection`. */}
-            {doQuadro > 0 ? (
+                saiba recriar: um cartão sozinho não copia, não recorta e não
+                duplica -- e um item de menu que não faz nada é pior que item
+                nenhum. Ver `copySelection`. */}
+            {copiavel > 0 ? (
               <>
                 <ContextMenuItem onClick={copySelection}>
                   <Copy />
@@ -541,7 +544,7 @@ export function StageContextMenu({
             valem com qualquer seleção. */}
         {nadaNaMao ? (
           <>
-            {/* Imagens e textos copiados voltam juntos, como no Ctrl+V. */}
+            {/* Tudo o que foi copiado volta junto, como no Ctrl+V. */}
             <ContextMenuItem disabled={!hasClipboard} onClick={pasteClipboard}>
               <ClipboardPaste />
               Colar
