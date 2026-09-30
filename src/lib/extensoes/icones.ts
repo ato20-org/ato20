@@ -3,6 +3,7 @@
 import {
   BookOpen,
   Clapperboard,
+  Copy,
   Dices,
   Files,
   Image,
@@ -43,6 +44,7 @@ export const ICONES: Readonly<Record<string, LucideIcon>> = Object.freeze({
   ...Object.fromEntries(ICONES_DA_CONDICAO.map(({ chave, Icone }) => [chave, Icone])),
   livro: BookOpen,
   cena: Clapperboard,
+  copiar: Copy,
   dados: Dices,
   arquivos: Files,
   imagem: Image,

@@ -21,6 +21,15 @@ import {
 import { COMPONENTES, EXPERIMENTAL } from "@/lib/extensoes/componentes";
 import { rolarParaPlugin } from "@/lib/extensoes/dados";
 import {
+  assinaturaDaMesa,
+  dadosNaMesa,
+  montarLinkDaPagina,
+  publicarNoCanal,
+} from "@/lib/extensoes/mesa";
+import { useCampaignStore } from "@/lib/store/use-campaign-store";
+import { daemonAddr } from "@/lib/vault/bridge";
+import { listPlayers } from "@/lib/vault/players";
+import {
   diferencasDeCondicoes,
   diferencasDeMedidores,
 } from "@/lib/extensoes/diferencas";
@@ -463,6 +472,78 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
 
     dados: {
       rolar: (notacoes) => rolarParaPlugin(notacoes),
+
+      naMesa: () =>
+        dadosNaMesa(useDadosStore.getState().dados, useRolagensStore.getState().bandeja),
+
+      assinarMesa(aviso) {
+        let anterior = "";
+        const talvez = () => {
+          const dados = dadosNaMesa(
+            useDadosStore.getState().dados,
+            useRolagensStore.getState().bandeja,
+          );
+          const assinatura = assinaturaDaMesa(dados);
+          if (assinatura === anterior) return;
+
+          anterior = assinatura;
+          aviso(dados);
+        };
+        const doMestre = useDadosStore.subscribe((estado, antes) => {
+          if (estado.dados !== antes.dados) talvez();
+        });
+        const dosJogadores = useRolagensStore.subscribe((estado, antes) => {
+          if (estado.bandeja !== antes.bandeja) talvez();
+        });
+        const desfazer = () => {
+          doMestre();
+          dosJogadores();
+        };
+        registrados.push(desfazer);
+        // Já com a lista atual: o plugin não precisa ler e assinar em dois passos.
+        talvez();
+
+        return desfazer;
+      },
+    },
+
+    mesa: {
+      // O id da extensão entra aqui, e não vem do plugin: um plugin não
+      // publica no canal de outro.
+      publicar: (canal, valor) => publicarNoCanal(extensao.id, canal, valor),
+
+      async enderecos() {
+        const { url, lanUrl } = await daemonAddr();
+
+        return {
+          local: url,
+          rede: lanUrl,
+          codigo: useCampaignStore.getState().campaign?.codigo ?? null,
+        };
+      },
+
+      async linkDaPagina(paginaId, opcoes) {
+        const { url, lanUrl } = await daemonAddr();
+
+        return montarLinkDaPagina({
+          extensao,
+          paginaId,
+          codigo: useCampaignStore.getState().campaign?.codigo ?? null,
+          base: opcoes?.rede ? lanUrl : url,
+          busca: opcoes?.busca,
+        });
+      },
+    },
+
+    jogadores: {
+      async listar() {
+        try {
+          return (await listPlayers()).map(({ id, nome }) => ({ id, nome }));
+        } catch {
+          // Sem campanha aberta não há jogador nenhum.
+          return [];
+        }
+      },
     },
 
     eventos: {
