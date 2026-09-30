@@ -10,8 +10,8 @@ exportar uma campanha não leva o tema de quem a montou. O banco guarda uma
 coisa só, se está habilitada; o que a extensão *é* vive no manifesto, dentro da
 própria pasta, porque copiar a pasta tem de bastar para instalar.
 
-Só o **Mestre**. Espectador e Jogador rodam no navegador de outro aparelho, e
-servir código de extensão pela rede é outra decisão — ver o fim desta seção.
+O código roda só no **Mestre**. A exceção são as **páginas** que o plugin
+declara, servidas na rede numa origem isolada — ver "Páginas na rede".
 
 ## Duas naturezas, e a separação importa
 
@@ -58,7 +58,7 @@ ESM — **implementa**.
 ```json
 {
   "id": "meu-plugin", "nome": "Meu plugin", "versao": "1.0.0",
-  "apiVersao": 2, "principal": "main.js",
+  "apiVersao": 3, "principal": "main.js",
   "contribui": {
     "paineis":  [{ "id": "notas", "titulo": "Notas da sessão" }],
     "comandos": [{ "id": "rolar", "titulo": "Rolar", "atalho": "Ctrl+Shift+F" }],
@@ -83,7 +83,10 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 2 é a atual; um plugin escrito para a 1 continua
+mais do que ele tem.** A 3 é a atual: ela acrescentou as `paginas`, a
+`ativacao` e o tipo `lista` ao manifesto, e `mesa`, `jogadores` e
+`dados.naMesa`/`assinarMesa` à API. Subiu porque um ATO20 anterior ignoraria os
+campos calado e aceitaria um plugin cuja página responderia 404. A 2 um plugin escrito para a 1 continua
 instalando e recebe o mesmo objeto de antes, com o que a 2 acrescentou ao lado.
 Cada tipo de contribuição aceita até 32 itens: cada um vira uma linha num menu
 ou um botão numa barra, e um manifesto com dez mil painéis travaria a lista de
@@ -240,8 +243,8 @@ do personagem pode receber. Quem separa é o Rust (`publicos`), não quem chama.
 quando eles **caem** — a promessa espera a mesma conta que anima a queda, para
 o plugin não dar o dano antes de o d20 parar. Sem modificador: `+3` é conta do
 plugin, e é o que deixa a paleta continuar recusando `2d6+3` de propósito. O
-`total` soma o que entra na soma; a moeda fica de fora. Só o Mestre vê os
-dados, por ora.
+`total` soma o que entra na soma; a moeda fica de fora. Na mesa, só o Mestre vê os dados, por ora; `dados.naMesa` os entrega como do
+mestre, para um plugin levá-los a uma página se quiser.
 
 `api.eventos` — `aoMudarMedidor`, `aoAlternarCondicao`, `aoRolar`,
 `aoTrocarCena`, `aoPorNoAr` — saem da **releitura** do elenco e dos stores, e
@@ -377,6 +380,84 @@ que gastasse um recurso deixaria o número velho na tela.
 A rota `GET /eu/personagens/{id}/extensoes` entrega **só** a metade pública, e
 quem separa é o Rust (`publicos`), não a rota. A privada nunca sai do Mestre.
 
+## Páginas na rede: o plugin fora do Mestre
+
+Um plugin pode levar algo da mesa para **outro navegador** — uma câmera de dados
+para o OBS, um placar de iniciativa na TV da sala. O aplicativo não sabe o que
+é: ele dá quatro peças genéricas, e o plugin monta o específico com elas.
+
+**1. A página.** Declarada no manifesto, servida pelo daemon em
+`/plugin/{id}/{arquivo}`:
+
+```json
+"apiVersao": 3,
+"principal": "main.js",
+"ativacao": "abertura",
+"contribui": {
+  "paginas": [{ "id": "camera", "titulo": "Câmera dos dados", "arquivo": "camera.html" }]
+}
+```
+
+É o único código de plugin que sai do Mestre, e sai com
+`Content-Security-Policy: sandbox allow-scripts`: a página roda JavaScript numa
+**origem opaca**, sem `localStorage`, sem cookie, sem IndexedDB da origem do
+daemon — que é a mesma do celular do jogador, onde mora o token dele. Sem isso,
+a página de um plugin aberta no navegador do celular leria o token e falaria
+com `/eu/...` como o jogador. `allow-same-origin` fica de fora de propósito: os
+dois juntos deixam o script tirar o próprio sandbox. O que a página alcança do
+daemon é o que qualquer origem alcança pelo CORS — as rotas da mesa, com o
+código.
+
+Só sai a pasta de plugin **habilitado** que **declara página** (o daemon sabe
+quem está habilitado pela lista do declarativo). A pasta inteira é servida, para
+a página trazer o próprio JS e CSS; link simbólico que aponta para fora da pasta
+não sai, pela mesma guarda do protocolo `ato20-ext`.
+
+**2. O canal.** No Mestre, `api.mesa.publicar("dados", valor)`; na página,
+`new EventSource("/sala/plugin/{id}/dados?codigo=XXXXXX")`. Estado, como o
+quadro da mesa: quem abre a página no meio da sessão recebe o último valor na
+conexão. O mais novo vence e valor repetido não sai, então publicar a cada
+mudança é barato. Quem tem o código da mesa consegue assinar: **o plugin filtra
+antes de publicar**, e o que não pode ir para a rede não vai.
+
+**3. O que o plugin precisa ler.** `api.dados.naMesa()` e
+`api.dados.assinarMesa(aviso)` — o que está na mesa agora, dos dois lados, com
+face gravada, semente e arremesso; o aviso só vem quando entra ou sai dado, e
+arrastar não acorda ninguém. `api.jogadores.listar()` — quem a campanha
+conhece. `api.mesa.enderecos()` e `api.mesa.linkDaPagina("camera", { rede,
+busca })` — o link pronto, com o código, pelo endereço desta máquina ou pelo da
+rede.
+
+**4. O kit de dados.** A física da queda e os sólidos são código do aplicativo,
+e nenhum plugin deveria copiá-los. A página embute `/kit/dados` num `<iframe>`
+(fundo transparente, `?escala=` de 0,5 a 3) e conversa por `postMessage`, tudo
+com `ato20: "dados"`:
+
+```js
+// kit → página, quando já escuta:        { ato20: "dados", pronto: true }
+kit.contentWindow.postMessage({ ato20: "dados", lancar: [
+  { id, faces, face, semente, impulso, rotulo: "Ana", prazo: 10 },
+] }, "*");
+kit.contentWindow.postMessage({ ato20: "dados", tirar: [id] }, "*");
+kit.contentWindow.postMessage({ ato20: "dados", limpar: true }, "*");
+```
+
+O kit valida o que chega (face que o dado não tem some), põe dados do mesmo lote
+lado a lado, cronometra pela chegada **nesta** página — o OBS pode estar noutro
+computador — e para o relógio quando nada se mexe. O que cai, de quem e por
+quanto tempo é da página.
+
+**A ativação.** Plugin é carregado quando alguém abre o painel dele. O que
+trabalha sozinho — escuta a mesa e publica — pede `"ativacao": "abertura"` e
+sobe com o Mestre. Exige `principal`.
+
+**O tipo `lista`** de configuração guarda uma lista de textos (quem fica de fora
+da live, por exemplo). Não tem controle na tela gerada: quem a edita é o painel
+do plugin, que sabe o que os itens são, e o editor JSON.
+
+O plugin OBS (`ato20-plugin-obs`) é o exemplo completo: `main.js` com o painel
+Transmissão e o filtro, `camera.html`/`camera.js` com a página.
+
 ## Atalho de plugin não rouba atalho do aplicativo
 
 A tabela de `atalhos.ts` é consultada em ordem e os do plugin entram **depois**.
@@ -407,9 +488,9 @@ ter mais de um módulo e uma fonte ao lado do CSS.
 
 E **não pelo daemon**, que já serve HTTP: ele escuta em `0.0.0.0`, e por ele a
 extensão viraria alcançável por qualquer aparelho da rede. O protocolo só existe
-dentro da webview desta janela — que é também a razão de plugin alcançar só o
-Mestre. Levar isto às telas de espectador é abrir essa superfície, e é uma
-decisão à parte.
+dentro da webview desta janela — que é também a razão de o código do plugin
+alcançar só o Mestre. A exceção decidida são as `paginas`: só as de quem as
+declara, e em sandbox. Ver "Páginas na rede".
 
 ## Confiança
 

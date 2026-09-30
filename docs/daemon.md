@@ -13,6 +13,9 @@ GET   /documento/{arquivo}     o texto de um documento do quadro
 GET   /livro/{id}              um livro da estante, para o leitor; token
 GET   /sala?codigo=            confere o codigo, devolve o nome da campanha
 GET   /sala/live?codigo=       a cena, em SSE
+GET   /sala/plugin/{id}/{canal}?codigo=   o canal de um plugin habilitado, em SSE
+POST  /sala/plugin/{id}/{canal}          o plugin publica pelo Mestre; token + loopback
+GET   /plugin/{id}/{arquivo}   a pagina de um plugin que declara pagina; em sandbox
 GET   /sala/rolagens           os dados que a mesa jogou, em SSE; loopback
 GET   /sala/movimentos         os tokens que os jogadores arrastaram, em SSE; loopback
 POST  /sala/publicar           o Mestre anuncia; token + loopback
