@@ -60,8 +60,9 @@ const forma: Forma = {
   width: 100,
   height: 100,
   rotation: 0,
+  espessura: 6,
 };
-const texto: Texto = { id: "t", x: 50, y: 50, texto: "Altar" };
+const texto: Texto = { id: "t", x: 50, y: 50, texto: "Altar", tamanho: 40 };
 
 function montar(mudar: Partial<Scene> = {}) {
   useSceneStore.setState({
