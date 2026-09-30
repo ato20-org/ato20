@@ -1,6 +1,6 @@
 /**
  * Os sinais que um postit do mestre entende: `@personagem`, `/arquivo`,
- * `>cena`.
+ * `>cena` e `!marcador` -- a página marcada de um livro da estante.
  *
  * Arquivo de vinte linhas, e não um par de constantes soltas dentro da camada
  * que desenha: a lista de sinais é CONTRATO entre três lugares que não se
@@ -23,6 +23,10 @@ export const SINAIS_DO_POSTIT = {
   "@": "personagem",
   "/": "arquivo",
   ">": "cena",
+  // `!` e não `§`: está em todo teclado sem tecla morta, e `!Agarrar` lê como
+  // "consulte". O que se escreve depois é o RÓTULO do marcador, como o nome
+  // de um personagem -- ver `useMarcadoresStore`.
+  "!": "marcador",
 } as const;
 
 /** O sinal, como se digita. */
@@ -45,6 +49,7 @@ export const TITULO_DO_POSTIT: Record<SinalDoPostit, string> = {
   "@": "Personagens da campanha",
   "/": "Arquivos da campanha",
   ">": "Mapas e quadros",
+  "!": "Páginas marcadas",
 };
 
 export function parsePostit(texto: string): Array<Token<TipoNoPostit>> {

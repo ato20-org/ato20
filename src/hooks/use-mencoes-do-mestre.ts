@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import type { Vinculos } from "@/components/mestre/postit-texto-view";
 import { useAssetList } from "@/hooks/use-asset-list";
@@ -9,7 +9,9 @@ import { useCharacters } from "@/hooks/use-characters";
 import { usePlayers, presente } from "@/hooks/use-players";
 import type { Sugestao } from "@/lib/mencoes/sugestao";
 import type { SinalDoPostit } from "@/lib/mestre/postit-mencoes";
+import { abrirLivroNaPagina } from "@/lib/leitor/abrir-na-pagina";
 import { normaliza } from "@/lib/search";
+import { useMarcadoresStore } from "@/lib/store/use-marcadores-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useWindowStore } from "@/lib/store/use-window-store";
 
@@ -25,8 +27,8 @@ const SONDAGEM_MS = 30_000;
 
 /**
  * Os vínculos e as sugestões das menções do mestre -- `@personagem`,
- * `/arquivo`, `>cena` -- para quem desenha ou edita texto com elas: o postit e
- * a nota.
+ * `/arquivo`, `>cena`, `!marcador` -- para quem desenha ou edita texto com
+ * elas: o postit e a nota.
  *
  * Saiu de dentro do `PostitLayer` quando a nota passou a ter as mesmas
  * menções. Um hook só, chamado uma vez por camada e não por papel: as listas
@@ -52,6 +54,11 @@ export function useMencoesDoMestre(): {
   const { personagens } = useCharacters();
   const { players, agora } = usePlayers(SONDAGEM_MS);
   const donos = useCharacterOwners(players);
+
+  // As páginas marcadas da campanha, em todos os livros. Ver `useMarcadoresStore`.
+  const marcadores = useMarcadoresStore((state) => state.lista);
+  const garantirMarcadores = useMarcadoresStore((state) => state.garantir);
+  useEffect(() => garantirMarcadores(), [garantirMarcadores]);
 
   const { assets: imagens } = useAssetList("image");
   const { assets: audios } = useAssetList("audio");
@@ -128,6 +135,17 @@ export function useMencoesDoMestre(): {
     [scenes],
   );
 
+  const porMarcador = useMemo(() => {
+    const mapa = new Map<string, NonNullable<typeof marcadores>[number]>();
+    // O primeiro vence: dois "Pagina 192" em livros diferentes resolvem no
+    // livro que vem antes na estante, e a sugestão mostra de qual é cada um.
+    for (const item of marcadores ?? []) {
+      const chave = normaliza(item.marcador.rotulo);
+      if (!mapa.has(chave)) mapa.set(chave, item);
+    }
+    return mapa;
+  }, [marcadores]);
+
   const vinculos = useMemo<Vinculos>(
     () => ({
       personagem(nome) {
@@ -150,9 +168,12 @@ export function useMencoesDoMestre(): {
       arquivo: (nome) => porArquivo.get(normaliza(nome)) ?? null,
       cena: (nome) => porCena.get(normaliza(nome)) ?? null,
       irParaCena: setEditingSceneId,
+      marcador: (nome) => porMarcador.get(normaliza(nome)) ?? null,
+      abrirLivro: abrirLivroNaPagina,
       abrirJanela,
     }),
     [
+      porMarcador,
       porPersonagem,
       donos,
       presencaPorPersonagem,
@@ -200,8 +221,14 @@ export function useMencoesDoMestre(): {
         nome: scene.name,
         detalhe: "cena",
       })),
+      // O livro e a página no detalhe: o rótulo sozinho não diz de onde é, e
+      // "Pagina 192" de dois manuais só se distingue por ele.
+      "!": (marcadores ?? []).map(({ marcador, livro }) => ({
+        nome: marcador.rotulo,
+        detalhe: `${livro.titulo} · p. ${marcador.pagina}`,
+      })),
     }),
-    [personagens, presencaPorPersonagem, donos, imagens, audios, scenes],
+    [personagens, presencaPorPersonagem, donos, imagens, audios, scenes, marcadores],
   );
 
   return { vinculos, candidatos };
