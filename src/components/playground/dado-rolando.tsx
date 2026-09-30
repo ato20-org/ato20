@@ -3,7 +3,7 @@
 import { memo } from "react";
 
 import { DadoFacetas } from "@/components/mestre/dado-facetas";
-import { desenharDado, quadroDaQueda } from "@/lib/geometry/dado";
+import { desenharDado, quadroDaQueda, sementeDoId } from "@/lib/geometry/dado";
 import { tipoDado, type FacesDado } from "@/types/dado";
 
 /**
@@ -18,25 +18,6 @@ import { tipoDado, type FacesDado } from "@/types/dado";
  * lugar que o `DadoParado` ocuparia, e a folga não empurra nada no layout.
  */
 const FOLGA = 1.45;
-
-/**
- * A semente da tombada, tirada do id da rolagem.
- *
- * Do id e não do relógio: ela decide o EIXO em que o dado gira, e o eixo tem de
- * ser o mesmo em todos os renders e em todas as telas. Semeado pelo relógio
- * local, o mesmo dado giraria num eixo na TV e noutro no celular — e mudaria de
- * eixo no meio da queda a cada render.
- */
-function sementeDoId(id: string): number {
-  let hash = 0x811c9dc5;
-
-  for (let i = 0; i < id.length; i++) {
-    hash ^= id.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-
-  return hash >>> 0;
-}
 
 /**
  * Um dado caindo no lugar, mostrando a face que saiu só quando assenta.
