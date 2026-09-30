@@ -151,7 +151,8 @@ pub fn run() {
                 log::warn!("bundle das telas nao encontrado; Espectador e Jogador nao serao servidos");
             }
 
-            let started = serve::spawn(Arc::clone(&vault), web_root, estante.clone())?;
+            let started =
+                serve::spawn(Arc::clone(&vault), web_root, estante.clone(), extensoes.clone())?;
             log::info!(
                 "daemon em {} (rede: {:?})",
                 started.addr.url,

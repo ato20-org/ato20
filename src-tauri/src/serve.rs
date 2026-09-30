@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::net::{IpAddr, SocketAddr, TcpListener, UdpSocket};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
@@ -29,6 +29,7 @@ mod page;
 
 use crate::error::{AppError, AppResult};
 use crate::estante;
+use crate::extensoes;
 use crate::vault::{animacao, assets, characters, documentos, inventory, players, variantes, Vault};
 use page::ErrorPage;
 
@@ -86,6 +87,24 @@ const TOKEN_HEADER: &str = "x-ato20-token";
 /// receptor pular para o mais recente, que e o comportamento certo aqui: cena
 /// velha na TV e pior que cena que saltou.
 const LIVE_BUFFER: usize = 8;
+
+/// Quantos pacotes de um canal de plugin ficam na fila de quem le devagar.
+///
+/// O canal e ESTADO, como o `live`: estourar a fila e pular para o mais
+/// recente, e para quem desenha o que o plugin publicou, e o certo.
+const CANAL_BUFFER: usize = 8;
+
+/// Teto do corpo publicado num canal de plugin. O plugin manda o que quiser, e
+/// o teto e o que impede um erro dele de fazer cada pagina aberta baixar um
+/// mapa a cada publicacao.
+const CANAL_MAX: usize = 256 * 1024;
+
+/// Quantos canais de plugin existem ao mesmo tempo, somados todos os plugins.
+///
+/// O `GET` de um canal que ainda nao existe o CRIA -- a pagina do OBS abre
+/// antes de o plugin publicar a primeira vez --, e a rota esta na rede. Sem
+/// teto, um aparelho do Wi-Fi com o codigo abriria canais ate a memoria acabar.
+const CANAIS_MAX: usize = 64;
 
 /// Quantas amostras de depuracao do palco ficam guardadas. Duas por segundo
 /// por tela: dois minutos e meio de uma tela, ou um pouco menos de duas.
@@ -155,6 +174,17 @@ pub struct Daemon {
     /// um plugin. O quadro leva so o numero da versao; quem assiste busca isto
     /// quando o numero muda. Sem canal de broadcast: e ESTADO, e `GET` basta.
     declarativo: Mutex<Option<String>>,
+    /// Os canais dos plugins: o que cada um publicou para as paginas dele.
+    ///
+    /// Chave `{plugin}/{canal}`. O daemon nao entende o conteudo -- quem decide
+    /// o que vai (e o que NAO vai: o dado do mestre escondido, o nome de quem
+    /// pediu para ficar de fora) e o plugin, no Mestre, antes de publicar.
+    /// Caixa propria, e nao o `live`: o quadro chega a toda tela da mesa a
+    /// 10 Hz, e o que um plugin publica so interessa a pagina dele.
+    canais: Mutex<HashMap<String, CanalDePlugin>>,
+    /// Onde as extensoes desta maquina estao. `None` = paginas de plugin
+    /// desligadas (os testes que nao tratam delas).
+    extensoes: Option<PathBuf>,
     /// Amostras do modo de depuracao do palco, cruas, as ultimas `DEBUG_ANEL`.
     ///
     /// O palco mede a propria geometria (`debug-palco.tsx`) e manda para ca;
@@ -226,6 +256,8 @@ impl Daemon {
             live: Mutex::new(None),
             live_tx,
             declarativo: Mutex::new(None),
+            canais: Mutex::new(HashMap::new()),
+            extensoes: None,
             debug: Mutex::new(VecDeque::new()),
             rolagens_tx,
             movimentos_tx,
@@ -234,6 +266,32 @@ impl Daemon {
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
         }
+    }
+
+    /// Onde o daemon acha as pastas dos plugins, para servir as paginas deles.
+    fn com_extensoes(mut self, dir: PathBuf) -> Self {
+        self.extensoes = Some(dir);
+        self
+    }
+
+    /// O plugin esta habilitado no Mestre?
+    ///
+    /// O daemon nao tem o banco onde isso mora; quem sabe e a janela, e ela ja
+    /// publica a lista dos habilitados no declarativo -- e o que o celular usa
+    /// para esconder a secao de um plugin desligado. A mesma lista decide aqui
+    /// se a pagina e o canal dele existem. Antes de o Mestre publicar, nenhum
+    /// esta: a pagina responde 404 ate a janela abrir.
+    fn plugin_habilitado(&self, id: &str) -> bool {
+        let guardado = self.declarativo.lock().expect("declarativo envenenado");
+        let Some(texto) = guardado.as_deref() else {
+            return false;
+        };
+
+        serde_json::from_str::<serde_json::Value>(texto)
+            .ok()
+            .and_then(|valor| valor.get("plugins").cloned())
+            .and_then(|plugins| plugins.as_array().cloned())
+            .is_some_and(|plugins| plugins.iter().any(|p| p.as_str() == Some(id)))
     }
 
     /// O codigo da campanha aberta, se houver.
@@ -265,7 +323,12 @@ pub struct Started {
     pub evidence: SharedEvidence,
 }
 
-pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>, estante: PathBuf) -> AppResult<Started> {
+pub fn spawn(
+    vault: SharedVault,
+    web_root: Option<PathBuf>,
+    estante: PathBuf,
+    extensoes: PathBuf,
+) -> AppResult<Started> {
     let listener = bind()?;
     let port = listener.local_addr()?.port();
     listener.set_nonblocking(true)?;
@@ -273,7 +336,7 @@ pub fn spawn(vault: SharedVault, web_root: Option<PathBuf>, estante: PathBuf) ->
     let token = uuid::Uuid::new_v4().simple().to_string();
     let lan_url = lan_ip().map(|ip| format!("http://{ip}:{port}"));
 
-    let state = Arc::new(Daemon::new(vault, token.clone(), web_root, estante));
+    let state = Arc::new(Daemon::new(vault, token.clone(), web_root, estante).com_extensoes(extensoes));
     let evidence = Arc::clone(&state.evidence);
 
     std::thread::Builder::new()
@@ -410,6 +473,20 @@ pub fn router(state: Arc<Daemon>) -> Router {
                     )),
             ),
         )
+        .route(
+            "/sala/plugin/{id}/{canal}",
+            // Mesmo desenho do declarativo: o GET e da mesa (codigo), o POST
+            // e do Mestre (token + loopback).
+            get(canal_de_plugin).merge(
+                post(publicar_no_canal)
+                    .layer(DefaultBodyLimit::max(CANAL_MAX))
+                    .layer(middleware::from_fn_with_state(
+                        Arc::clone(&state),
+                        require_token,
+                    )),
+            ),
+        )
+        .route("/plugin/{id}/{*arquivo}", get(serve_plugin))
         .route("/sala/rolagens", get(rolls))
         .route("/sala/movimentos", get(moves))
         .route("/sala/acoes", get(actions))
@@ -778,6 +855,173 @@ async fn declarativo(
         corpo,
     )
         .into_response())
+}
+
+/// O ultimo pacote de um canal de plugin, e o cano para quem assina.
+struct CanalDePlugin {
+    atual: Option<String>,
+    tx: broadcast::Sender<String>,
+}
+
+impl CanalDePlugin {
+    fn novo() -> Self {
+        let (tx, _) = broadcast::channel(CANAL_BUFFER);
+        Self { atual: None, tx }
+    }
+}
+
+/// `POST /sala/plugin/{id}/{canal}` -- o plugin, pelo Mestre, publica.
+///
+/// Token E loopback, como `publish`: quem chama e `api.mesa.publicar`, na
+/// janela, e o id do plugin entra la e nao vem do plugin -- um nao publica no
+/// canal do outro. Opaco: o daemon so confere que e JSON.
+async fn publicar_no_canal(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    AxumPath((id, canal)): AxumPath<(String, String)>,
+    body: String,
+) -> Response {
+    if !addr.ip().is_loopback() {
+        return fail(StatusCode::FORBIDDEN, "publicar so a partir desta maquina");
+    }
+    if !extensoes::id_valido(&id) || !extensoes::id_valido(&canal) {
+        return fail(StatusCode::BAD_REQUEST, "id de plugin ou de canal invalido");
+    }
+    if serde_json::from_str::<serde_json::Value>(&body).is_err() {
+        return fail(StatusCode::BAD_REQUEST, "corpo nao e JSON");
+    }
+
+    let mut canais = state.canais.lock().expect("canais envenenados");
+    let chave = format!("{id}/{canal}");
+    if !canais.contains_key(&chave) && canais.len() >= CANAIS_MAX {
+        return fail(StatusCode::INSUFFICIENT_STORAGE, "canais demais abertos");
+    }
+
+    let entrada = canais.entry(chave).or_insert_with(CanalDePlugin::novo);
+    entrada.atual = Some(body.clone());
+    // Sem receptor = nenhuma pagina aberta. O pacote ja esta guardado.
+    let _ = entrada.tx.send(body);
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// `GET /sala/plugin/{id}/{canal}?codigo=XXXXXX` -- o canal, em SSE.
+///
+/// Atras do codigo da mesa, e nao do loopback: a pagina pode estar no PC que
+/// transmite, do outro lado do Wi-Fi. So de plugin HABILITADO: desligar o
+/// plugin tem de calar a pagina dele, e nao deixa-la com o ultimo pacote.
+async fn canal_de_plugin(
+    State(state): State<Arc<Daemon>>,
+    AxumPath((id, canal)): AxumPath<(String, String)>,
+    Query(query): Query<CodeQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
+    code_matches(&state, query.codigo.as_deref())?;
+
+    if !extensoes::id_valido(&id) || !extensoes::id_valido(&canal) || !state.plugin_habilitado(&id)
+    {
+        return Err(fail(StatusCode::NOT_FOUND, "canal nao existe"));
+    }
+
+    // Assinar e ler o guardado sob a MESMA trava: uma publicacao entre as duas
+    // coisas nao entraria em nenhuma, como no `live`.
+    let (receiver, current) = {
+        let mut canais = state.canais.lock().expect("canais envenenados");
+        let chave = format!("{id}/{canal}");
+        if !canais.contains_key(&chave) && canais.len() >= CANAIS_MAX {
+            return Err(fail(StatusCode::INSUFFICIENT_STORAGE, "canais demais abertos"));
+        }
+        let entrada = canais.entry(chave).or_insert_with(CanalDePlugin::novo);
+        (entrada.tx.subscribe(), entrada.atual.clone())
+    };
+
+    let replay = tokio_stream::iter(current.into_iter());
+    let updates =
+        tokio_stream::wrappers::BroadcastStream::new(receiver).filter_map(|item| item.ok());
+
+    Ok(Sse::new(
+        replay
+            .chain(updates)
+            .map(|pacote| Ok(Event::default().data(pacote))),
+    )
+    // Uma pagina de OBS fica aberta a live inteira, com a mesa parada entre um
+    // pacote e outro. Sem o keep-alive, a rede derruba o socket ocioso.
+    .keep_alive(KeepAlive::default()))
+}
+
+/// A politica das paginas de plugin: script sim, origem nao.
+///
+/// `sandbox allow-scripts` poe o documento numa origem OPACA. A pagina roda
+/// JavaScript, mas nao le `localStorage`, `sessionStorage`, IndexedDB nem
+/// cookie da origem do daemon -- que e a mesma do celular do jogador, onde
+/// mora o token dele. Sem isto, a pagina de um plugin aberta no navegador do
+/// celular leria o token e falaria com `/eu/...` como o jogador.
+///
+/// O que ela alcanca do daemon e o que qualquer origem alcanca pelo CORS: as
+/// rotas da mesa, com o codigo. `allow-scripts` sem `allow-same-origin`, de
+/// proposito: os dois juntos deixariam o script tirar o proprio sandbox.
+const POLITICA_DE_PAGINA: &str = "sandbox allow-scripts";
+
+/// `GET /plugin/{id}/{arquivo}` -- os arquivos de um plugin que tem pagina.
+///
+/// So de plugin HABILITADO que DECLARA pagina. A pasta inteira e servida, e
+/// nao so o `.html`: a pagina traz o proprio JS, o CSS e a fonte ao lado. O
+/// plugin que nao declara pagina nao tem arquivo nenhum na rede.
+///
+/// Sem codigo da mesa, como o bundle do espectador: o arquivo nao e segredo, e
+/// um `<script src>` relativo nao levaria o codigo junto. O que e da mesa -- o
+/// canal -- continua atras dele.
+async fn serve_plugin(
+    State(state): State<Arc<Daemon>>,
+    AxumPath((id, arquivo)): AxumPath<(String, String)>,
+    request: Request<Body>,
+) -> Response {
+    let Some(raiz) = state.extensoes.clone() else {
+        return fail(StatusCode::NOT_FOUND, "paginas de plugin desligadas");
+    };
+    if !extensoes::id_valido(&id) || !state.plugin_habilitado(&id) {
+        return fail(StatusCode::NOT_FOUND, "plugin nao encontrado");
+    }
+    let pasta = raiz.join(&id);
+    match extensoes::ler_manifesto(&pasta) {
+        Ok(manifesto) if !manifesto.contribui.paginas.is_empty() => {}
+        _ => return fail(StatusCode::NOT_FOUND, "plugin sem pagina"),
+    }
+
+    // A mesma guarda do protocolo `ato20-ext`: forma do caminho, e depois o
+    // link simbolico resolvido. Aqui ela pesa mais -- o que passar vai para a
+    // REDE, e um link plantado na pasta do plugin apontando para `~/.ssh`
+    // seria servido a qualquer aparelho do Wi-Fi. E cercada na pasta DESTE
+    // plugin, e nao na de todas: um plugin nao serve arquivo de outro.
+    let dentro = pasta.canonicalize().ok();
+    let Some(real) = extensoes::caminho_do_arquivo(&raiz, &id, &arquivo)
+        .filter(|real| dentro.as_ref().is_some_and(|dentro| real.starts_with(dentro)))
+    else {
+        return fail(StatusCode::NOT_FOUND, "arquivo nao existe");
+    };
+
+    // `ServeFile::new` adivinha o tipo pela extensao, e cuida de Range e ETag.
+    match ServeFile::new(&real).oneshot(request).await {
+        Ok(response) => {
+            let mut response = response.into_response();
+            let headers = response.headers_mut();
+            headers.insert(
+                axum::http::header::CONTENT_SECURITY_POLICY,
+                HeaderValue::from_static(POLITICA_DE_PAGINA),
+            );
+            headers.insert(
+                axum::http::header::X_CONTENT_TYPE_OPTIONS,
+                HeaderValue::from_static("nosniff"),
+            );
+            // Editar o plugin e recarregar a fonte tem de mostrar o arquivo
+            // novo, como o `no-store` do protocolo `ato20-ext`.
+            headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(cause) => {
+            log::error!("plugin {id}/{arquivo}: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o arquivo")
+        }
+    }
 }
 
 /// `GET /sala/live?codigo=XXXXXX` -- a cena, em SSE.
@@ -3213,6 +3457,177 @@ mod tests {
             .await
             .expect("resposta");
         assert_eq!(sem_codigo.status(), StatusCode::FORBIDDEN);
+    }
+
+    fn publicar_no_canal_req(token: Option<&str>, uri: &str, corpo: &str, ip: &str) -> HttpRequest<Body> {
+        let mut request = HttpRequest::builder().method("POST").uri(uri);
+
+        if let Some(token) = token {
+            request = request.header(TOKEN_HEADER, token);
+        }
+
+        from_ip(
+            request
+                .header("content-type", "application/json")
+                .body(Body::from(corpo.to_string()))
+                .expect("request"),
+            ip,
+        )
+    }
+
+    /// O Mestre diz que estes plugins estao habilitados, pelo declarativo.
+    async fn habilitar(state: &Arc<Daemon>, plugins: &[&str]) {
+        let corpo = serde_json::json!({ "versao": 1, "estilos": {}, "plugins": plugins }).to_string();
+        let response = router(Arc::clone(state))
+            .oneshot(publicar_declarativo(Some("segredo"), &corpo, "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn canal_de_plugin_exige_token_e_loopback_para_publicar() {
+        let (_dir, state, _) = daemon();
+        let uri = "/sala/plugin/obs/dados";
+
+        let sem_token = router(Arc::clone(&state))
+            .oneshot(publicar_no_canal_req(None, uri, "{}", "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(sem_token.status(), StatusCode::UNAUTHORIZED);
+
+        let de_fora = router(Arc::clone(&state))
+            .oneshot(publicar_no_canal_req(Some("segredo"), uri, "{}", "192.168.7.99"))
+            .await
+            .expect("resposta");
+        assert_eq!(de_fora.status(), StatusCode::FORBIDDEN);
+
+        let lixo = router(Arc::clone(&state))
+            .oneshot(publicar_no_canal_req(Some("segredo"), uri, "nao e json", "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(lixo.status(), StatusCode::BAD_REQUEST);
+
+        let id_ruim = router(state)
+            .oneshot(publicar_no_canal_req(Some("segredo"), "/sala/plugin/OBS!/dados", "{}", "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(id_ruim.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn canal_de_plugin_entrega_o_pacote_atual_so_de_plugin_habilitado() {
+        let (_dir, state, codigo) = daemon();
+
+        let publicado = router(Arc::clone(&state))
+            .oneshot(publicar_no_canal_req(
+                Some("segredo"),
+                "/sala/plugin/obs/dados",
+                r#"{"dados":[{"id":"d1"}]}"#,
+                "127.0.0.1",
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(publicado.status(), StatusCode::NO_CONTENT);
+
+        let pedir = |uri: String| HttpRequest::builder().uri(uri).body(Body::empty()).expect("request");
+
+        // Plugin desligado: o canal nao existe para a rede, mesmo com pacote.
+        let desligado = router(Arc::clone(&state))
+            .oneshot(pedir(format!("/sala/plugin/obs/dados?codigo={codigo}")))
+            .await
+            .expect("resposta");
+        assert_eq!(desligado.status(), StatusCode::NOT_FOUND);
+
+        habilitar(&state, &["obs"]).await;
+
+        let sse = router(Arc::clone(&state))
+            .oneshot(pedir(format!("/sala/plugin/obs/dados?codigo={codigo}")))
+            .await
+            .expect("resposta");
+        assert_eq!(sse.status(), StatusCode::OK);
+        let mut body = sse.into_body().into_data_stream();
+        let first = body.next().await.expect("quadro").expect("bytes");
+        let text = String::from_utf8_lossy(&first);
+        assert!(text.contains(r#""id":"d1""#), "pacote atual nao veio: {text}");
+
+        // Sem o codigo, nada: a porta esta na rede.
+        let sem_codigo = router(state)
+            .oneshot(pedir("/sala/plugin/obs/dados".to_string()))
+            .await
+            .expect("resposta");
+        assert_eq!(sem_codigo.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn pagina_de_plugin_sai_em_sandbox_e_so_de_quem_declara_pagina() {
+        let (dir, state, _) = daemon();
+        let raiz = dir.path().join("extensoes");
+        let state = Arc::new(
+            Arc::try_unwrap(state)
+                .ok()
+                .expect("sem outras referencias")
+                .com_extensoes(raiz.clone()),
+        );
+
+        let escrever = |id: &str, manifesto: &str| {
+            let pasta = raiz.join(id);
+            std::fs::create_dir_all(&pasta).unwrap();
+            std::fs::write(pasta.join("manifest.json"), manifesto).unwrap();
+            std::fs::write(pasta.join("camera.html"), "<p>ola</p>").unwrap();
+            std::fs::write(pasta.join("camera.js"), "console.log(1)").unwrap();
+        };
+        escrever(
+            "obs",
+            r#"{"id":"obs","nome":"OBS","versao":"1.0.0","apiVersao":3,
+                "contribui":{"paginas":[{"id":"camera","titulo":"Camera","arquivo":"camera.html"}]}}"#,
+        );
+        escrever(
+            "sem-pagina",
+            r#"{"id":"sem-pagina","nome":"X","versao":"1.0.0","apiVersao":3,"tema":"camera.js"}"#,
+        );
+
+        let pedir = |uri: &str| HttpRequest::builder().uri(uri).body(Body::empty()).expect("request");
+
+        // Antes de o Mestre dizer que esta habilitado: nada.
+        let cedo = router(Arc::clone(&state)).oneshot(pedir("/plugin/obs/camera.html")).await.unwrap();
+        assert_eq!(cedo.status(), StatusCode::NOT_FOUND);
+
+        habilitar(&state, &["obs", "sem-pagina"]).await;
+
+        let pagina = router(Arc::clone(&state)).oneshot(pedir("/plugin/obs/camera.html")).await.unwrap();
+        assert_eq!(pagina.status(), StatusCode::OK);
+        assert_eq!(
+            pagina.headers().get("content-security-policy").map(|v| v.to_str().unwrap()),
+            Some("sandbox allow-scripts")
+        );
+        assert_eq!(corpo_de(pagina).await, "<p>ola</p>");
+
+        // O JS ao lado tambem sai: a pagina precisa dele.
+        let script = router(Arc::clone(&state)).oneshot(pedir("/plugin/obs/camera.js")).await.unwrap();
+        assert_eq!(script.status(), StatusCode::OK);
+
+        // Link plantado na pasta depois de instalada, apontando para fora: a
+        // forma do caminho e legitima, e o que barra e o link resolvido.
+        #[cfg(unix)]
+        {
+            std::fs::write(dir.path().join("segredo.txt"), "nao pode vazar").unwrap();
+            std::os::unix::fs::symlink(dir.path().join("segredo.txt"), raiz.join("obs").join("atalho.txt"))
+                .unwrap();
+            let link = router(Arc::clone(&state)).oneshot(pedir("/plugin/obs/atalho.txt")).await.unwrap();
+            assert_eq!(link.status(), StatusCode::NOT_FOUND);
+        }
+
+        // Plugin sem pagina nao tem arquivo na rede, e nada sai da pasta.
+        for uri in [
+            "/plugin/sem-pagina/camera.js",
+            "/plugin/obs/../sem-pagina/camera.js",
+            "/plugin/obs/%2e%2e/sem-pagina/camera.js",
+            "/plugin/desconhecido/camera.html",
+        ] {
+            let response = router(Arc::clone(&state)).oneshot(pedir(uri)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+        }
     }
 
     #[tokio::test]
