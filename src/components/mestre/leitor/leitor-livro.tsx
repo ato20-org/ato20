@@ -49,6 +49,13 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
   const documento = usePdfDoc(livroId, livroFonte);
 
   const noSplit = useLeitorStore((state) => state.livroId === livroId);
+  // A página que uma menção `!rótulo` pediu. Ver `abrirLivroNaPagina`.
+  const salto = useLeitorStore((state) => state.saltos[livroId] ?? null);
+  const descartarSalto = useLeitorStore((state) => state.descartarSalto);
+  const aoSaltar = useCallback(
+    (vez: number) => descartarSalto(livroId, vez),
+    [descartarSalto, livroId],
+  );
   const abrirNoSplit = useLeitorStore((state) => state.abrirNoSplit);
   const fecharSplit = useLeitorStore((state) => state.fecharSplit);
 
@@ -111,6 +118,8 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
       // — leitura que falhou —, `useLivro` fica `null` e o livro abre na 1 sem
       // gravar nada, que é o comportamento honesto.
       paginaInicial={livro ? livro.pagina : null}
+      salto={salto}
+      aoSaltar={aoSaltar}
       aoMudarPagina={aoMudarPagina}
       marcadores={({ paginaAtual, aoEscolher }) => (
         <MarcadoresLivro
