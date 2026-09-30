@@ -21,6 +21,7 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   DOCUMENTO_FONTE,
+  POSTIT_FONTE,
   type CorPostit,
   type Documento,
   type NewForma,
@@ -59,7 +60,6 @@ const PAPEL: Record<CorPostit, string> = {
   verde: "bg-emerald-200 ring-emerald-500/60",
   branco: "bg-neutral-50 ring-neutral-400/70",
 };
-const FONTE_POSTIT = 15;
 const MARGEM_POSTIT = 6;
 
 
@@ -86,7 +86,9 @@ function PostitDaMesa({ postit }: { postit: Postit }) {
         className="absolute inset-0 overflow-hidden text-neutral-900"
         style={{
           ...(ampliacaoNoLayout ? emPixelDeTela(scale) : undefined),
-          fontSize: FONTE_POSTIT * fator,
+          // O tamanho DESTE papel, e não o de fábrica: o A↑ do mestre tem de
+          // chegar à TV. Ausente = `POSTIT_FONTE`, como no `PostitLayer`.
+          fontSize: (postit.fonte ?? POSTIT_FONTE) * fator,
           lineHeight: 1.35,
           padding: MARGEM_POSTIT * fator,
         }}
