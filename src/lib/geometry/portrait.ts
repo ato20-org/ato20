@@ -224,45 +224,77 @@ export function retratosDaCena(
     const guardado = porId.get(personagemId);
     if (!guardado) continue;
 
-    const canvas = url ? canvasDaUrl(url, fontes) : null;
-    const layout = { ...layoutPadrao, ...guardado.layout };
-
-    saida.push({
-      ...guardado,
-      // Vazio e nao `undefined`: o campo e obrigatorio no tipo, e quem so tem
-      // pagina viva nao tem asset nenhum para apontar. `useAssetUrl` devolve
-      // nada para id vazio, que e o que faz a imagem de tras nao existir.
-      assetId: retratoAsset ?? "",
-      // Resolvidos da ficha como o resto, e nao do registro guardado: o
-      // medidor muda a cada golpe, e uma copia cravada no retrato mostraria a
-      // vida de quando ele foi armado.
-      //
-      // O filtro e o PADRAO, e nao uma opcao que cada chamador lembra de
-      // ligar: tres telas leem esta funcao e uma delas publica na rede. O
-      // default seguro e o que faz um chamador novo nascer certo.
-      medidores: incluirOcultos
-        ? (ficha?.medidores ?? [])
-        : medidoresVisiveis(ficha?.medidores),
-      // O mesmo caminho e o mesmo filtro dos medidores. Com a peça desligada
-      // o campo sai `undefined`, e não uma lista vazia: é o que o `nome` faz
-      // logo abaixo, e pela mesma razão.
-      condicoes: layout.condicoes
-        ? incluirOcultos
-          ? (ficha?.condicoes ?? [])
-          : condicoesVisiveis(ficha?.condicoes)
-        : undefined,
-      layout,
-      // Explícito mesmo desligado, e não só ausente: o `undefined` por cima do
-      // `...guardado` garante que um nome que tenha ido parar no registro não
-      // atravesse a rede por causa de uma peça que o mestre desligou.
-      nome: layout.nome ? ficha?.nome : undefined,
-      ...(url && canvas
-        ? { url, urlLargura: canvas.largura, urlAltura: canvas.altura }
-        : {}),
-    });
+    saida.push(retratoPublico(guardado, ficha, fontes, incluirOcultos, layoutPadrao));
   }
 
   return saida;
+}
+
+/** O que `retratoPublico` precisa da ficha. */
+export type FichaDoRetrato = {
+  id: string;
+  nome?: string;
+  retrato?: string;
+  retratoUrl?: string;
+  medidores?: Medidor[];
+  condicoes?: Condicao[];
+};
+
+/**
+ * UM retrato como a mesa o vê: a geometria do registro, e o resto da ficha,
+ * com o filtro dos escondidos.
+ *
+ * Saiu de `retratosDaCena` para existir num lugar só: a cena é um chamador, e
+ * o outro é o plugin que leva o retrato de um personagem para fora do Mestre
+ * mesmo quando ele não está no ar (`api.retratos.dePersonagem`). Dois filtros
+ * escritos em dois lugares divergiriam no primeiro medidor escondido, e o que
+ * divergisse iria para a live.
+ */
+export function retratoPublico(
+  guardado: Portrait,
+  ficha: FichaDoRetrato | undefined,
+  fontes: FonteRetrato[] = [],
+  incluirOcultos = false,
+  layoutPadrao: LayoutDoRetrato = LAYOUT_PADRAO,
+): Portrait {
+  const retratoAsset = ficha?.retrato;
+  const url = ficha?.retratoUrl;
+  const canvas = url ? canvasDaUrl(url, fontes) : null;
+  const layout = { ...layoutPadrao, ...guardado.layout };
+
+  return {
+    ...guardado,
+    // Vazio e nao `undefined`: o campo e obrigatorio no tipo, e quem so tem
+    // pagina viva nao tem asset nenhum para apontar. `useAssetUrl` devolve
+    // nada para id vazio, que e o que faz a imagem de tras nao existir.
+    assetId: retratoAsset ?? "",
+    // Resolvidos da ficha como o resto, e nao do registro guardado: o
+    // medidor muda a cada golpe, e uma copia cravada no retrato mostraria a
+    // vida de quando ele foi armado.
+    //
+    // O filtro e o PADRAO, e nao uma opcao que cada chamador lembra de
+    // ligar: tres telas leem esta funcao e uma delas publica na rede. O
+    // default seguro e o que faz um chamador novo nascer certo.
+    medidores: incluirOcultos
+      ? (ficha?.medidores ?? [])
+      : medidoresVisiveis(ficha?.medidores),
+    // O mesmo caminho e o mesmo filtro dos medidores. Com a peça desligada
+    // o campo sai `undefined`, e não uma lista vazia: é o que o `nome` faz
+    // logo abaixo, e pela mesma razão.
+    condicoes: layout.condicoes
+      ? incluirOcultos
+        ? (ficha?.condicoes ?? [])
+        : condicoesVisiveis(ficha?.condicoes)
+      : undefined,
+    layout,
+    // Explícito mesmo desligado, e não só ausente: o `undefined` por cima do
+    // `...guardado` garante que um nome que tenha ido parar no registro não
+    // atravesse a rede por causa de uma peça que o mestre desligou.
+    nome: layout.nome ? ficha?.nome : undefined,
+    ...(url && canvas
+      ? { url, urlLargura: canvas.largura, urlAltura: canvas.altura }
+      : {}),
+  };
 }
 
 /**
