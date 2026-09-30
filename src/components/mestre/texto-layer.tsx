@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef } from "react";
+import { Signature, Type } from "lucide-react";
 
 import {
   giroDoTexto,
@@ -25,6 +26,7 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import { temAnotacao, type Scene, type Texto } from "@/types/scene";
+import { Chave } from "@/components/mestre/chave-de-estilo";
 
 /** Quanto a letra se apaga enquanto a mesa não a vê. A mesma da forma. */
 const APAGADA = 0.45;
@@ -345,6 +347,21 @@ const TextoSolto = memo(function TextoSolto({
                 ...(cor !== undefined ? { cor: cor ?? undefined } : {}),
                 ...(fundo !== undefined ? { fundo: fundo ?? undefined } : {}),
               }),
+            // A letra de mão do postit, para este texto. O padrão com que ele
+            // nasceu é o da campanha; aqui é a exceção. Ver `padraoDoQuadro`.
+            extras: (
+              <Chave
+                titulo="Letra de mão"
+                ligada={!!texto.aMao}
+                desligada={{ rotulo: "Letra da interface", Icone: Type }}
+                ligadaComo={{ rotulo: "Letra de mão", Icone: Signature }}
+                onMudar={(valor) =>
+                  updateTexto(sceneId, texto.id, {
+                    aMao: valor ? true : undefined,
+                  })
+                }
+              />
+            ),
           }}
           /**
            * Pelo GESTO, e não pelo board: aumentar a letra arrastando o canto

@@ -310,6 +310,21 @@ type TransformHandlesProps = {
     cor?: string;
     fundo?: string;
     onChange: (patch: { cor?: string | null; fundo?: string | null }) => void;
+    /**
+     * Presente = um slider de opacidade embaixo de cada fileira, de 0 a 1.
+     * Só a forma passa: é ela que tem borda e miolo para apagar em separado.
+     */
+    opacidade?: {
+      traco: number;
+      fundo: number;
+      onChange: (patch: { traco?: number; fundo?: number }) => void;
+    };
+    /**
+     * O resto do estilo, que é do ELEMENTO e o gizmo não conhece: a
+     * espessura e os cantos da forma, a letra de mão do texto. Vai no fim do
+     * painel, abaixo das cores.
+     */
+    extras?: ReactNode;
   };
   /**
    * Presente = mostra o olho, que decide se a mesa vê este elemento.
@@ -781,7 +796,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Cor e fundo"
+                    aria-label="Estilo"
                     aria-expanded={paletaAberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -804,7 +819,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Cor e fundo</TooltipContent>
+              <TooltipContent>Estilo</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -1227,6 +1242,13 @@ export function TransformHandles({
               padrao="A"
               onEscolher={(valor) => paleta.onChange({ cor: valor })}
             />
+            {paleta.opacidade ? (
+              <Opacidade
+                rotulo={`Opacidade do ${paleta.titulo.toLowerCase()}`}
+                valor={paleta.opacidade.traco}
+                onChange={(traco) => paleta.opacidade?.onChange({ traco })}
+              />
+            ) : null}
             <Fileira
               titulo="Fundo"
               escolhida={paleta.fundo}
@@ -1234,6 +1256,21 @@ export function TransformHandles({
               translucido
               onEscolher={(valor) => paleta.onChange({ fundo: valor })}
             />
+            {/* Apagado sem fundo: não há miolo para apagar, e um slider que
+                mexe e não muda nada parece quebrado. */}
+            {paleta.opacidade ? (
+              <Opacidade
+                rotulo="Opacidade do fundo"
+                valor={paleta.opacidade.fundo}
+                desligada={paleta.fundo === undefined}
+                onChange={(fundo) => paleta.opacidade?.onChange({ fundo })}
+              />
+            ) : null}
+            {paleta.extras ? (
+              <div className="flex flex-col gap-2 border-t pt-2">
+                {paleta.extras}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -1466,6 +1503,49 @@ function TracoDaCaixa({
         }}
       />
     </>
+  );
+}
+
+/**
+ * Um slider de opacidade, com a porcentagem ao lado do nome.
+ *
+ * De 0 e não de um mínimo, ao contrário da imagem: forma sem borda -- só o
+ * miolo, uma mancha de marca-texto -- é uso de verdade, e o clique continua
+ * pegando pela mira, que não depende do que se vê.
+ */
+function Opacidade({
+  rotulo,
+  valor,
+  desligada = false,
+  onChange,
+}: {
+  rotulo: string;
+  valor: number;
+  desligada?: boolean;
+  onChange: (valor: number) => void;
+}) {
+  const porcento = Math.round(valor * 100);
+
+  return (
+    <div className={cn("space-y-1.5", desligada && "opacity-40")}>
+      <div className="flex items-center justify-between">
+        <span className="text-muted-foreground text-[10px]">{rotulo}</span>
+        <span className="text-muted-foreground text-[10px] tabular-nums">
+          {porcento}%
+        </span>
+      </div>
+      <Slider
+        aria-label={rotulo}
+        value={[porcento]}
+        min={0}
+        max={100}
+        step={5}
+        disabled={desligada}
+        onValueChange={(novo) =>
+          onChange((Array.isArray(novo) ? (novo[0] ?? 100) : novo) / 100)
+        }
+      />
+    </div>
   );
 }
 

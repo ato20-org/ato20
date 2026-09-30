@@ -702,6 +702,11 @@ export type Texto = {
   italico?: boolean;
   sublinhado?: boolean;
   /**
+   * Letra de mão, a do postit (Kalam). Ausente = a letra da interface. O mesmo
+   * `aMao` da forma e da seta: é o traço à mão da campanha chegando ao texto.
+   */
+  aMao?: true;
+  /**
    * Está na mesa? Ausente = só o mestre vê, e é o padrão.
    *
    * Num MAPA a letra solta nasce fechada, e o mestre a abre uma a uma no olho
@@ -738,6 +743,7 @@ export type NewTexto = Pick<Texto, "x" | "y"> &
       | "negrito"
       | "italico"
       | "sublinhado"
+      | "aMao"
       | "naMesa"
     >
   >;
@@ -763,6 +769,7 @@ export function semIdDoTexto(texto: Texto): NewTexto {
     negrito: texto.negrito,
     italico: texto.italico,
     sublinhado: texto.sublinhado,
+    aMao: texto.aMao,
     // Como na forma: a decisão de mostrar acompanha a cópia.
     naMesa: texto.naMesa,
   };
@@ -826,6 +833,35 @@ export type Forma = {
    */
   fundo?: string;
   /**
+   * Opacidade do traço e do fundo, de 0 a 1. Ausente = 1, opaco.
+   *
+   * Separadas, e não uma opacidade da forma inteira: o uso é o do marca-texto
+   * -- a borda firme cercando, o miolo quase sumido para o que está atrás
+   * continuar legível. Uma só apagaria os dois juntos. Ausente é o padrão pela
+   * mesma razão da imagem: gravar o 1 deixaria toda forma velha com um campo a
+   * mais dizendo o óbvio.
+   */
+  opacidadeDoTraco?: number;
+  opacidadeDoFundo?: number;
+  /**
+   * Cantos arredondados. Só vale no retângulo e no polígono, os dois que têm
+   * canto; elipse e linha ignoram.
+   *
+   * Um estado e não um raio: o raio sai do tamanho da forma, ver
+   * `raioDoCanto`. Ausente = reto, e é o padrão -- a forma gravada antes disto
+   * continua exatamente como foi desenhada, sem migração.
+   */
+  arredondado?: true;
+  /**
+   * Traço tremido, como no Excalidraw. Ausente = o traço limpo.
+   *
+   * Como o canto: um estado que o elemento guarda, com o padrão de nascimento
+   * vindo da campanha (ver `padraoDoQuadro`). A tremida sai do id da forma, e
+   * por isso é a mesma no Mestre e na TV sem nada novo viajar -- ver
+   * `rabiscoDaForma`.
+   */
+  aMao?: true;
+  /**
    * Só a linha: ela corre do canto superior esquerdo ao inferior direito
    * (ausente) ou do inferior esquerdo ao superior direito (`"secundaria"`).
    */
@@ -863,6 +899,10 @@ export function semIdDaForma(forma: Forma): NewForma {
     cor: forma.cor,
     espessura: forma.espessura,
     fundo: forma.fundo,
+    opacidadeDoTraco: forma.opacidadeDoTraco,
+    opacidadeDoFundo: forma.opacidadeDoFundo,
+    arredondado: forma.arredondado,
+    aMao: forma.aMao,
     diagonal: forma.diagonal,
     // Sem eles o polígono colado não tinha vértice nenhum: a cópia chegava como
     // uma caixa vazia, que o mestre via como "o Ctrl+C não pegou".
@@ -1040,6 +1080,11 @@ export type Ligacao = {
    * numa seta de 100. A fração dobra o mesmo tanto nas duas.
    */
   curva?: number;
+  /**
+   * Traço tremido, como a forma à mão. Ausente = a curva limpa. A tremida sai
+   * do id da seta, igual nos dois lados da mesa: ver `rabiscoDoCaminho`.
+   */
+  aMao?: true;
 };
 
 /**

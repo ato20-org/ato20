@@ -157,6 +157,7 @@ import {
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
+import { padraoDoQuadro } from "@/lib/configuracoes/quadro";
 import {
   CORES_DA_LUZ,
   ehQuadro,
@@ -175,6 +176,7 @@ import {
   type Regua,
   type Postit,
   type NewForma,
+  type TipoDeForma,
   type NewParede,
   type PontaDeLigacao,
   type Portrait,
@@ -299,6 +301,23 @@ const ARRASTO_MINIMO_DA_SETA = 8;
  * que ninguém consegue pegar de volta para apagar.
  */
 const PAREDE_MINIMA = 8;
+
+/**
+ * O jeito com que uma forma NOVA nasce: o padrão da campanha, lido na hora.
+ *
+ * Canto só onde há canto -- elipse e linha não guardam um campo que não
+ * desenham. Ver `padraoDoQuadro`.
+ */
+function jeitoDaForma(tipo: TipoDeForma): Pick<NewForma, "arredondado" | "aMao"> {
+  const padrao = padraoDoQuadro();
+
+  return {
+    ...(padrao.arredondado && (tipo === "retangulo" || tipo === "poligono")
+      ? { arredondado: true as const }
+      : {}),
+    ...(padrao.aMao ? { aMao: true as const } : {}),
+  };
+}
 
 export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const { scale, toScene } = useSceneScale();
@@ -1958,6 +1977,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const id = addTexto(scene.id, {
       x: Math.round(ponto.x),
       y: Math.round(ponto.y - TEXTO_TAMANHO / 2),
+      ...(padraoDoQuadro().aMao ? { aMao: true as const } : {}),
     });
     useQuadroStore.getState().editarTexto(id);
   }
@@ -1986,7 +2006,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     )
       return;
 
-    const id = addLigacao(scene.id, de, para);
+    const id = addLigacao(scene.id, de, para, {
+      ...(padraoDoQuadro().aMao ? { aMao: true as const } : {}),
+    });
     if (!id) return;
 
     quadro.selecionarLigacao(id);
@@ -2023,6 +2045,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           cor: corForma,
           espessura: espessuraForma,
           fundo: fundoForma,
+          ...jeitoDaForma("poligono"),
         }),
       ]);
       // Larga a ferramenta, como as outras formas: a regra do Excalidraw, e a
@@ -2166,6 +2189,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       const id = addTexto(scene.id, {
         x: Math.round(anchor.x),
         y: Math.round(anchor.y - TEXTO_TAMANHO / 2),
+        ...(padraoDoQuadro().aMao ? { aMao: true as const } : {}),
       });
       useQuadroStore.getState().editarTexto(id);
       setTool("select");
@@ -2364,6 +2388,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           cor: corForma,
           espessura: espessuraForma,
           fundo: fundoForma,
+          ...jeitoDaForma(tipoDeForma),
           // A linha desce ou sobe conforme o arrasto: é a única coisa que a
           // caixa sozinha não conta. Ver `Forma`.
           ...((fim.x - anchor.x) * (fim.y - anchor.y) < 0

@@ -1,5 +1,8 @@
 "use client";
 
+import { Minus, Signature, Square, SquareRoundCorner } from "lucide-react";
+
+import { Chave } from "@/components/mestre/chave-de-estilo";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -17,10 +20,14 @@ import {
   ESPESSURAS_LAPIS,
   useToolStore,
 } from "@/lib/store/use-tool-store";
+import {
+  definirPadraoDoQuadro,
+  usePadraoDoQuadro,
+} from "@/lib/configuracoes/quadro";
 import { cn } from "@/lib/utils";
 
 /**
- * A cor, a espessura e o fundo da próxima forma.
+ * A cor, o fundo, os cantos e a espessura da próxima forma.
  *
  * Irmã do `PencilControl`, e pelas mesmas razões: só aparece com a ferramenta
  * na mão, e o gatilho mostra a cor escolhida em vez de um ícone genérico —
@@ -43,6 +50,10 @@ export function FormaControl({
   const cor = useToolStore((state) => state.corForma);
   const espessura = useToolStore((state) => state.espessuraForma);
   const fundo = useToolStore((state) => state.fundoForma);
+  const tipo = useToolStore((state) => state.tipoDeForma);
+  // Canto e traço não são da sessão, como a cor: são o padrão da CAMPANHA, e
+  // mexer aqui é mexer nele. Ver `padraoDoQuadro`.
+  const { arredondado, aMao } = usePadraoDoQuadro();
   const setForma = useToolStore((state) => state.setForma);
 
   if (tool !== "forma") return null;
@@ -153,6 +164,26 @@ export function FormaControl({
             ))}
           </div>
         </div>
+
+        {/* Só onde há canto: elipse e linha não têm, e a escolha ficaria ali
+            sem efeito nenhum. */}
+        {tipo === "retangulo" || tipo === "poligono" ? (
+          <Chave
+            titulo="Cantos"
+            ligada={arredondado}
+            desligada={{ rotulo: "Cantos retos", Icone: Square }}
+            ligadaComo={{ rotulo: "Cantos arredondados", Icone: SquareRoundCorner }}
+            onMudar={(valor) => definirPadraoDoQuadro({ arredondado: valor })}
+          />
+        ) : null}
+
+        <Chave
+          titulo="Estilo"
+          ligada={aMao}
+          desligada={{ rotulo: "Traço limpo", Icone: Minus }}
+          ligadaComo={{ rotulo: "Traço à mão", Icone: Signature }}
+          onMudar={(valor) => definirPadraoDoQuadro({ aMao: valor })}
+        />
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
