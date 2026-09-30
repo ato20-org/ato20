@@ -2,8 +2,27 @@
 
 import { create } from "zustand";
 
-import { semIdDaForma } from "@/types/scene";
-import type { CanvasItem, Forma, ItemDraft, Texto } from "@/types/scene";
+import { semIdDaForma, semIdDoPostit, semIdDoTexto } from "@/types/scene";
+import type {
+  CanvasItem,
+  Forma,
+  ItemDraft,
+  NewForma,
+  NewTexto,
+  NewTraco,
+  Postit,
+  Texto,
+  Traco,
+} from "@/types/scene";
+
+/** O que um Ctrl+C leva. Cada lista é opcional: a seleção mistura tudo. */
+type Copia = {
+  itens?: CanvasItem[];
+  textos?: Texto[];
+  formas?: Forma[];
+  postits?: Postit[];
+  tracos?: Traco[];
+};
 
 type ClipboardStore = {
   /** Rascunhos sem `id`/`z`: colar sempre cria itens novos, nunca ressuscita. */
@@ -13,14 +32,41 @@ type ClipboardStore = {
    * a área do quadro marca frase e imagem no mesmo laço, e um Ctrl+C que
    * escolhesse um dos dois perderia metade do que estava na mão.
    *
-   * Cada Ctrl+C substitui as duas listas, como uma área de transferência de
+   * Cada Ctrl+C substitui TODAS as listas, como uma área de transferência de
    * verdade -- o último é o que vale.
    */
-  textos: Omit<Texto, "id">[];
-  /** E as formas do quadro, pela mesma razão: a seleção mistura as três. */
-  formas: Omit<Forma, "id">[];
-  copy: (items: CanvasItem[], textos?: Texto[], formas?: Forma[]) => void;
+  textos: NewTexto[];
+  /** E as formas do quadro, pela mesma razão: a seleção mistura tudo. */
+  formas: NewForma[];
+  /** Os papéis, com a cor e a letra de cada um. */
+  postits: Omit<Postit, "id">[];
+  /** Os riscos do lápis, com os pontos onde estavam. */
+  tracos: NewTraco[];
+  copy: (copia: Copia) => void;
 };
+
+/**
+ * Há o que colar?
+ *
+ * Uma pergunta só para os três que a fazem -- o Ctrl+V, o menu do palco e o
+ * próprio colar. Cada um escrevia a sua, e a do atalho esqueceu as formas: um
+ * Ctrl+C só de formas deixava o Ctrl+V passar para o browser, que colava o
+ * texto do SISTEMA no quadro no lugar delas.
+ */
+export function temAlgoParaColar(
+  guardado: Pick<
+    ClipboardStore,
+    "drafts" | "textos" | "formas" | "postits" | "tracos"
+  >,
+): boolean {
+  return (
+    guardado.drafts.length > 0 ||
+    guardado.textos.length > 0 ||
+    guardado.formas.length > 0 ||
+    guardado.postits.length > 0 ||
+    guardado.tracos.length > 0
+  );
+}
 
 /**
  * Área de transferência interna. Não usa a do sistema de propósito: ler o
@@ -32,22 +78,21 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
   drafts: [],
   textos: [],
   formas: [],
+  postits: [],
+  tracos: [],
 
-  copy(items, textos = [], formas = []) {
+  copy({ itens = [], textos = [], formas = [], postits = [], tracos = [] }) {
     set({
       formas: formas.map(semIdDaForma),
-      // Campo a campo como os itens: fica de fora o id -- a cópia ganha o dela
-      // -- e a caixa medida, que é do render e não do conteúdo.
-      textos: textos.map(({ x, y, texto, tamanho, rotation, naMesa }) => ({
-        x,
-        y,
-        texto,
-        tamanho,
-        rotation,
-        // Como na forma: a decisão de mostrar acompanha a cópia.
-        naMesa,
+      // Com a cor, o fundo e a ênfase: ver `semIdDoTexto`.
+      textos: textos.map(semIdDoTexto),
+      postits: postits.map(semIdDoPostit),
+      tracos: tracos.map(({ pontos, cor, espessura }) => ({
+        pontos,
+        cor,
+        espessura,
       })),
-      drafts: items.map(
+      drafts: itens.map(
         ({ assetId, x, y, width, height, rotation, locked, flipX, flipY, opacity }) => ({
           assetId,
           x,
