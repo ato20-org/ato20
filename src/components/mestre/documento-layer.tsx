@@ -22,6 +22,7 @@ import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { useGestoStore } from "@/lib/store/use-gesto-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { MARCA_MENCAO, repassarCliqueDaMencao } from "@/lib/mestre/clique-da-mencao";
+import { degrauDeFonte } from "@/lib/mestre/degrau-de-fonte";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
@@ -248,10 +249,7 @@ const CartaoDeDocumento = memo(function CartaoDeDocumento({
   const fonte = documento.fonte ?? DOCUMENTO_FONTE;
 
   function mudarFonte(sentido: 1 | -1) {
-    const indice = DOCUMENTO_FONTES.findIndex((f) => f >= fonte);
-    const atual = indice === -1 ? DOCUMENTO_FONTES.length - 1 : indice;
-    const proximo = Math.min(Math.max(atual + sentido, 0), DOCUMENTO_FONTES.length - 1);
-    updateDocumento(sceneId, documento.id, { fonte: DOCUMENTO_FONTES[proximo] });
+    updateDocumento(sceneId, documento.id, { fonte: degrauDeFonte(fonte, sentido) });
   }
 
   function arrastar(event: ReactPointerEvent) {

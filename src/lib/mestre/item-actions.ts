@@ -31,9 +31,12 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import {
   CONE_DA_LANTERNA,
   CORES_DA_LUZ,
+  DOCUMENTO_FONTE,
   ehQuadro,
+  POSTIT_FONTE,
   semIdDaForma,
 } from "@/types/scene";
+import { degrauDeFonte } from "@/lib/mestre/degrau-de-fonte";
 import type {
   ConeDaLuz,
   LuzCarregada,
@@ -888,6 +891,46 @@ export function rotateSelection(graus: number): void {
   useSceneStore
     .getState()
     .updateFormas(scene.id, girarPatches(selectedFormas, graus));
+}
+
+/** Há postit ou cartão na mão? É o que tira o Ctrl+= do zoom do palco. */
+export function temPapelNaMao(): boolean {
+  const { selectedPostitIds, selectedDocumentoIds } =
+    useSelectionStore.getState();
+
+  return selectedPostitIds.length > 0 || selectedDocumentoIds.length > 0;
+}
+
+/**
+ * A letra de cada postit e cartão na mão, um degrau para o lado pedido.
+ *
+ * Cada papel anda o PRÓPRIO degrau, e não todos para o mesmo tamanho: um
+ * título em 30 e uma lista em 13 continuam em tamanhos diferentes depois do
+ * toque, como continuariam com o botão A↑ de cada um. O resto da seleção --
+ * imagem, texto solto, forma -- não tem escada e fica como está.
+ */
+export function mudarFonteDaSelecao(sentido: 1 | -1): void {
+  const { scene, selectedPostits, selectedDocumentos } = read();
+  if (!scene) return;
+
+  useSceneStore.getState().updatePostits(
+    scene.id,
+    selectedPostits.map((postit) => ({
+      id: postit.id,
+      patch: {
+        fonte: degrauDeFonte(postit.fonte ?? POSTIT_FONTE, sentido),
+      },
+    })),
+  );
+  useSceneStore.getState().updateDocumentos(
+    scene.id,
+    selectedDocumentos.map((documento) => ({
+      id: documento.id,
+      patch: {
+        fonte: degrauDeFonte(documento.fonte ?? DOCUMENTO_FONTE, sentido),
+      },
+    })),
+  );
 }
 
 export function nudgeSelection(dx: number, dy: number): void {

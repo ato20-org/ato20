@@ -8,6 +8,7 @@ import {
   duplicateSelection,
   flipSelection,
   moveSelectionZ,
+  mudarFonteDaSelecao,
   nudgeSelection,
   PASSO_DE_GIRO,
   pasteClipboard,
@@ -19,6 +20,7 @@ import {
   removeSelection,
   rotateSelection,
   selectAllItems,
+  temPapelNaMao,
 } from "@/lib/mestre/item-actions";
 import {
   alternarTransmissao,
@@ -326,6 +328,33 @@ export const ATALHOS_BASE: Atalho[] = [
     combina: (evento) =>
       comando(evento) && !evento.shiftKey && letra(evento) === "g",
     executar: () => void agruparSelecao(),
+    impedirPadrao: true,
+  },
+
+  // Com postit ou cartão na mão, o zoom do browser vira o zoom da LETRA: é o
+  // que o Ctrl+= faz num editor de texto, e o papel é a folha de texto do
+  // quadro. ANTES do zoom do palco, porque a ordem é a precedência; sem papel
+  // na mão estes não casam e a tecla cai no palco como sempre.
+  {
+    grupo: "Seleção",
+    tecla: "Ctrl+=",
+    rotulo: "Aumentar a letra do postit ou do cartão",
+    combina: (evento) =>
+      comando(evento) &&
+      (evento.key === "=" || evento.key === "+") &&
+      temPapelNaMao(),
+    executar: () => mudarFonteDaSelecao(1),
+    impedirPadrao: true,
+  },
+  {
+    grupo: "Seleção",
+    tecla: "Ctrl+-",
+    rotulo: "Diminuir a letra do postit ou do cartão",
+    combina: (evento) =>
+      comando(evento) &&
+      (evento.key === "-" || evento.key === "_") &&
+      temPapelNaMao(),
+    executar: () => mudarFonteDaSelecao(-1),
     impedirPadrao: true,
   },
 
