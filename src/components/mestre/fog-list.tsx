@@ -76,6 +76,8 @@ export function FogList({ scene }: { scene: Scene }) {
               variant="ghost"
               size="icon-xs"
               aria-label={`Remover área ${index + 1}`}
+              // Travada não sai, como no palco: destrava pelo cadeado dela.
+              disabled={Boolean(region.locked)}
               onClick={() => removeFog(scene.id, region.id)}
             >
               <Trash2 />

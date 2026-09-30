@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import {
   MIN_ITEM_SIZE,
   normalizeAngle,
@@ -36,9 +38,17 @@ import {
   CORES_DA_LUZ,
   DOCUMENTO_FONTE,
   POSTIT_FONTE,
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  semIdDaArea,
   semIdDaForma,
+  semIdDaLuz,
+  semIdDaParede,
   semIdDoPostit,
   semIdDoTexto,
+  temLuz,
+  temNevoa,
+  temSol,
 } from "@/types/scene";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { degrauDeFonte } from "@/lib/mestre/degrau-de-fonte";
@@ -47,12 +57,18 @@ import type {
   LuzCarregada,
   CanvasItem,
   Documento,
+  FogRegion,
   Forma,
   ItemDraft,
+  Luz,
+  NewFogRegion,
   NewForma,
+  NewLuz,
+  NewParede,
   NewPostit,
   NewTexto,
   NewTraco,
+  Parede,
   Postit,
   Scene,
   Texto,
@@ -204,6 +220,59 @@ function tracoDeslocado(traco: NewTraco): NewTraco {
   return { ...traco, pontos: traco.pontos.map((valor) => valor + PASTE_OFFSET) };
 }
 
+/**
+ * O que está na mão do CHÃO do mapa: a parede, a área escondida e a luz
+ * cravada.
+ *
+ * Fora do `read` porque as três não andam com o resto: cada uma se seleciona
+ * sozinha, e selecioná-la larga as imagens, os textos e as formas. No máximo
+ * uma das três listas tem alguém -- e as outras seis de `read`, ninguém.
+ */
+function doChao(scene: Scene | null): {
+  paredes: Parede[];
+  areas: FogRegion[];
+  luzes: Luz[];
+} {
+  const { selectedParedeId, selectedFogId, selectedLuzId } =
+    useSelectionStore.getState();
+
+  return {
+    paredes: (scene?.paredes ?? []).filter(
+      (parede) => parede.id === selectedParedeId,
+    ),
+    areas: (scene?.fog ?? []).filter((area) => area.id === selectedFogId),
+    luzes: (scene?.luzes ?? []).filter((luz) => luz.id === selectedLuzId),
+  };
+}
+
+/** A parede e a área têm caixa, e a cópia fica dentro do plano como o item. */
+function paredeDeslocada(parede: NewParede): NewParede {
+  return { ...parede, ...offsetInsideScene(parede, PASTE_OFFSET) };
+}
+
+function areaDeslocada(area: NewFogRegion): NewFogRegion {
+  return { ...area, ...offsetInsideScene(area, PASTE_OFFSET) };
+}
+
+/**
+ * A luz é um ponto: anda o mesmo tanto, e volta para dentro se o passo a
+ * levaria para fora do plano -- a regra de `offsetInsideScene`, com caixa de
+ * lado zero.
+ */
+function luzDeslocada(luz: NewLuz): NewLuz {
+  const { x, y } = offsetInsideScene(
+    {
+      x: Math.min(Math.max(luz.x, 0), SCENE_WIDTH),
+      y: Math.min(Math.max(luz.y, 0), SCENE_HEIGHT),
+      width: 0,
+      height: 0,
+    },
+    PASTE_OFFSET,
+  );
+
+  return { ...luz, x, y };
+}
+
 function offsetDraft(item: CanvasItem): ItemDraft {
   const { x, y } = offsetInsideScene(item, PASTE_OFFSET);
 
@@ -235,18 +304,23 @@ function offsetDraft(item: CanvasItem): ItemDraft {
  */
 export function copySelection(): void {
   const {
+    scene,
     selectedItems,
     selectedTextos,
     selectedFormas,
     selectedPostits,
     selectedTracos,
   } = read();
+  const { paredes, areas, luzes } = doChao(scene);
   if (
     selectedItems.length === 0 &&
     selectedTextos.length === 0 &&
     selectedFormas.length === 0 &&
     selectedPostits.length === 0 &&
-    selectedTracos.length === 0
+    selectedTracos.length === 0 &&
+    paredes.length === 0 &&
+    areas.length === 0 &&
+    luzes.length === 0
   )
     return;
 
@@ -256,19 +330,49 @@ export function copySelection(): void {
     formas: selectedFormas,
     postits: selectedPostits,
     tracos: selectedTracos,
+    paredes,
+    areas,
+    luzes,
   });
 }
 
+/**
+ * Livre: pode andar, crescer, girar e sair. É a pergunta que todo gesto do
+ * mestre faz antes de mexer -- o travado fica onde está. Ver `locked`.
+ */
+export function livre(coisa: { locked?: boolean }): boolean {
+  return !coisa.locked;
+}
+
+/**
+ * O Delete que caiu só em coisa travada diz por que não fez nada.
+ *
+ * Calado, ele pareceria quebrado: o mestre aperta, a parede fica, e a próxima
+ * tentativa é apertar mais forte. O cadeado aceso no gizmo diz o mesmo, mas só
+ * para quem já está olhando para ele.
+ */
+function avisarTravado(): void {
+  toast("Está travado. Destrave no cadeado para apagar.");
+}
+
 export function removeSelection(opcoes?: { semCartao?: boolean }): void {
-  const {
-    scene,
-    selectedIds,
-    selectedTextoIds,
-    selectedFormaIds,
-    selectedPostitIds,
-    selectedDocumentoIds,
-    selectedTracoIds,
-  } = read();
+  const lido = read();
+  const { scene, selectedPostitIds, selectedDocumentoIds, selectedTracoIds } =
+    lido;
+  // O travado fica: é para isso que ele foi travado. Sai o resto da seleção.
+  const selectedIds = lido.selectedItems.filter(livre).map((item) => item.id);
+  const selectedFormaIds = lido.selectedFormas
+    .filter(livre)
+    .map((forma) => forma.id);
+  const travados =
+    lido.selectedItems.length -
+    selectedIds.length +
+    lido.selectedFormas.length -
+    selectedFormaIds.length +
+    lido.selectedTextos.filter((texto) => texto.locked).length;
+  const selectedTextoIds = lido.selectedTextos
+    .filter(livre)
+    .map((texto) => texto.id);
   // O texto ABERTO para escrever não sai por aqui: com o campo na tela, Delete
   // é do cursor, e apagar a frase inteira no meio de uma palavra seria a
   // resposta errada. Ele volta a ser apagável assim que a edição fecha.
@@ -287,8 +391,10 @@ export function removeSelection(opcoes?: { semCartao?: boolean }): void {
       postitIds.length === 0 &&
       documentoIds.length === 0 &&
       tracoIds.length === 0)
-  )
+  ) {
+    if (travados > 0) avisarTravado();
     return;
+  }
 
   useSceneStore.getState().removeItems(scene.id, selectedIds);
   useSceneStore.getState().removeTextos(scene.id, textoIds);
@@ -341,8 +447,18 @@ export function guardarSelecaoNoHandout(): void {
  * apagá-lo aqui seria um Ctrl+X que perde o que não levou.
  */
 export function cutSelection(): void {
+  // O travado vai para a área de transferência e FICA na cena: Ctrl+X nele
+  // vira Ctrl+C. Quem apaga é cada `remove...`, e todos pulam o travado.
   copySelection();
-  removeSelection({ semCartao: true });
+
+  // Do chão sai só a que estava na mão: `removeSelection` não as conhece, e
+  // cada uma tem o próprio apagar. Selecionar uma delas já largou o resto.
+  const { selectedParedeId, selectedFogId, selectedLuzId } =
+    useSelectionStore.getState();
+  if (selectedParedeId) removeParedeSelection();
+  else if (selectedFogId) removeFogSelection();
+  else if (selectedLuzId) removeLuzSelection();
+  else removeSelection({ semCartao: true });
 }
 
 export function pasteClipboard(): void {
@@ -356,7 +472,7 @@ export function pasteClipboard(): void {
   // vê. A cópia leva o olho junto, e o que veio de um quadro chega fechado.
   if (!temAlgoParaColar(guardado)) return;
 
-  colarNaCena(scene.id, {
+  colarNaCena(scene, {
     itens: guardado.drafts.map((draft) => ({
       ...draft,
       ...offsetInsideScene(draft, PASTE_OFFSET),
@@ -365,6 +481,9 @@ export function pasteClipboard(): void {
     formas: guardado.formas.map(formaDeslocada),
     postits: guardado.postits.map(postitDeslocado),
     tracos: guardado.tracos.map(tracoDeslocado),
+    paredes: guardado.paredes.map(paredeDeslocada),
+    areas: guardado.areas.map(areaDeslocada),
+    luzes: guardado.luzes.map(luzDeslocada),
   });
 }
 
@@ -377,17 +496,21 @@ export function duplicateSelection(): void {
     selectedPostits,
     selectedTracos,
   } = read();
+  const { paredes, areas, luzes } = doChao(scene);
   if (
     !scene ||
     (selectedItems.length === 0 &&
       selectedTextos.length === 0 &&
       selectedFormas.length === 0 &&
       selectedPostits.length === 0 &&
-      selectedTracos.length === 0)
+      selectedTracos.length === 0 &&
+      paredes.length === 0 &&
+      areas.length === 0 &&
+      luzes.length === 0)
   )
     return;
 
-  colarNaCena(scene.id, {
+  colarNaCena(scene, {
     itens: selectedItems.map(offsetDraft),
     textos: selectedTextos.map((texto) => textoDeslocado(semIdDoTexto(texto))),
     formas: selectedFormas.map((forma) => formaDeslocada(semIdDaForma(forma))),
@@ -397,6 +520,9 @@ export function duplicateSelection(): void {
     tracos: selectedTracos.map(({ pontos, cor, espessura }) =>
       tracoDeslocado({ pontos, cor, espessura }),
     ),
+    paredes: paredes.map((parede) => paredeDeslocada(semIdDaParede(parede))),
+    areas: areas.map((area) => areaDeslocada(semIdDaArea(area))),
+    luzes: luzes.map((luz) => luzDeslocada(semIdDaLuz(luz))),
   });
 }
 
@@ -408,16 +534,21 @@ export function duplicateSelection(): void {
  * não no original.
  */
 function colarNaCena(
-  sceneId: string,
+  scene: Scene,
   copias: {
     itens: ItemDraft[];
     textos: NewTexto[];
     formas: NewForma[];
     postits: NewPostit[];
     tracos: NewTraco[];
+    paredes: NewParede[];
+    areas: NewFogRegion[];
+    luzes: NewLuz[];
   },
 ): void {
   const cena = useSceneStore.getState();
+  const sceneId = scene.id;
+
 
   // Só quem tem o que colar: `addItems` com a lista vazia gravaria o board e
   // deixaria um passo de desfazer que não desfaz nada.
@@ -432,9 +563,36 @@ function colarNaCena(
   );
   const tracos = copias.tracos.map((traco) => cena.addTraco(sceneId, traco));
 
-  useSelectionStore
-    .getState()
-    .selectMisto({ itens, textos, formas, postits, tracos });
+  /**
+   * O chão, só onde há chão para ele: parede e luz no mapa, a área onde há
+   * névoa. Colar a parede de um mapa num quadro deixaria na cena uma coisa que
+   * nenhuma camada desenha e nenhum gizmo alcança.
+   */
+  const paredes = temSol(scene)
+    ? copias.paredes.map((parede) => cena.addParede(sceneId, parede))
+    : [];
+  const areas = temNevoa(scene)
+    ? copias.areas.map((area) => cena.addFog(sceneId, area))
+    : [];
+  const luzes = temLuz(scene)
+    ? copias.luzes.map((luz) => cena.addLuz(sceneId, luz))
+    : [];
+
+  const selecao = useSelectionStore.getState();
+  const doResto =
+    itens.length +
+    textos.length +
+    formas.length +
+    postits.length +
+    tracos.length;
+
+  // Parede, área e luz se selecionam SOZINHAS -- escolher uma larga o resto
+  // (ver `selectParede`). O Ctrl+C delas veio sozinho pela mesma razão, e é a
+  // cópia delas que fica na mão quando é só ela que chegou.
+  if (doResto === 0 && paredes[0]) selecao.selectParede(paredes[0]);
+  else if (doResto === 0 && areas[0]) selecao.selectFog(areas[0]);
+  else if (doResto === 0 && luzes[0]) selecao.selectLuz(luzes[0]);
+  else selecao.selectMisto({ itens, textos, formas, postits, tracos });
 }
 
 export function moveSelectionZ(direction: ZDirection): void {
@@ -445,12 +603,54 @@ export function moveSelectionZ(direction: ZDirection): void {
 }
 
 /** Trava tudo se houver algum destravado; só destrava quando todos estão travados. */
+/**
+ * Trava tudo o que está na mão, ou destrava se já estava tudo travado.
+ *
+ * Um só para os seis que travam -- imagem, texto, forma, parede, área e luz --,
+ * porque o cadeado do gizmo, o do menu e o do painel da luz são o mesmo gesto.
+ * Com a mão misturada, basta um livre para o toque TRAVAR: é o caso de quem
+ * laçou a sala para prender tudo e um token tinha ficado de fora.
+ *
+ * O destravado volta a não ter o campo, como toda opcional da cena. A imagem é
+ * a exceção, e só porque o `locked` dela nasceu obrigatório.
+ */
 export function toggleSelectionLock(): void {
-  const { scene, selectedIds, selectedItems } = read();
-  if (!scene || selectedItems.length === 0) return;
+  const { scene, selectedItems, selectedTextos, selectedFormas } = read();
+  const { paredes, areas, luzes } = doChao(scene);
+  const todos = [
+    ...selectedItems,
+    ...selectedTextos,
+    ...selectedFormas,
+    ...paredes,
+    ...areas,
+    ...luzes,
+  ];
+  if (!scene || todos.length === 0) return;
 
-  const locking = selectedItems.some((item) => !item.locked);
-  useSceneStore.getState().setItemsLocked(scene.id, selectedIds, locking);
+  const travar = todos.some(livre);
+  const locked = travar ? true : undefined;
+  const cena = useSceneStore.getState();
+
+  if (selectedItems.length > 0)
+    cena.setItemsLocked(
+      scene.id,
+      selectedItems.map((item) => item.id),
+      travar,
+    );
+  if (selectedTextos.length > 0)
+    cena.updateTextos(
+      scene.id,
+      selectedTextos.map((texto) => ({ id: texto.id, patch: { locked } })),
+    );
+  if (selectedFormas.length > 0)
+    cena.updateFormas(
+      scene.id,
+      selectedFormas.map((forma) => ({ id: forma.id, patch: { locked } })),
+    );
+  for (const parede of paredes)
+    cena.updateParede(scene.id, parede.id, { locked });
+  for (const area of areas) cena.updateFog(scene.id, area.id, { locked });
+  for (const luz of luzes) cena.updateLuz(scene.id, luz.id, { locked });
 }
 
 /**
@@ -560,8 +760,10 @@ export function selectAllItems(): void {
 
   useSelectionStore.getState().selectMisto({
     itens: scene.items.filter((item) => !item.locked).map((item) => item.id),
-    textos: (scene.textos ?? []).map((texto) => texto.id),
-    formas: (scene.formas ?? []).map((forma) => forma.id),
+    // O travado fica de fora, como a imagem travada sempre ficou: selecionar
+    // tudo é para mexer em tudo, e ele não se mexe.
+    textos: (scene.textos ?? []).filter(livre).map((texto) => texto.id),
+    formas: (scene.formas ?? []).filter(livre).map((forma) => forma.id),
     postits: (scene.postits ?? []).map((postit) => postit.id),
     documentos: (scene.documentos ?? []).map((documento) => documento.id),
     tracos: (scene.tracos ?? []).map((traco) => traco.id),
@@ -585,6 +787,8 @@ export function removeParedeSelection(): void {
   const { scene } = read();
   const paredeId = useSelectionStore.getState().selectedParedeId;
   if (!scene || !paredeId) return;
+  if (doChao(scene).paredes.some((parede) => parede.locked))
+    return avisarTravado();
 
   useSceneStore.getState().removeParedes(scene.id, [paredeId]);
   useSelectionStore.getState().clear();
@@ -595,6 +799,7 @@ export function removeLuzSelection(): void {
   const { scene } = read();
   const luzId = useSelectionStore.getState().selectedLuzId;
   if (!scene || !luzId) return;
+  if (doChao(scene).luzes.some((luz) => luz.locked)) return avisarTravado();
 
   useSceneStore.getState().removeLuzes(scene.id, [luzId]);
   useSelectionStore.getState().clear();
@@ -614,6 +819,7 @@ export function removeFogSelection(): void {
   const { scene } = read();
   const fogId = useSelectionStore.getState().selectedFogId;
   if (!scene || !fogId) return;
+  if (doChao(scene).areas.some((area) => area.locked)) return avisarTravado();
 
   useSceneStore.getState().removeFog(scene.id, fogId);
   useSelectionStore.getState().clear();
@@ -931,7 +1137,10 @@ export function rotateSelection(graus: number): void {
   // Cada texto vira onde está, como o item: as setas não orbitam nada.
   useSceneStore
     .getState()
-    .updateTextos(scene.id, girarTextosNoLugar(selectedTextos, graus));
+    .updateTextos(
+      scene.id,
+      girarTextosNoLugar(selectedTextos.filter(livre), graus),
+    );
   useSceneStore
     .getState()
     .updateFormas(scene.id, girarPatches(selectedFormas, graus));
@@ -1010,10 +1219,16 @@ export function nudgeSelection(dx: number, dy: number): void {
   );
   useSceneStore
     .getState()
-    .updateTextos(scene.id, empurrarTextos(selectedTextos, passo.dx, passo.dy));
+    .updateTextos(
+      scene.id,
+      empurrarTextos(selectedTextos.filter(livre), passo.dx, passo.dy),
+    );
   useSceneStore
     .getState()
-    .updateFormas(scene.id, moveGroup(selectedFormas, passo.dx, passo.dy));
+    .updateFormas(
+      scene.id,
+      moveGroup(selectedFormas.filter(livre), passo.dx, passo.dy),
+    );
   useSceneStore
     .getState()
     .updatePostits(

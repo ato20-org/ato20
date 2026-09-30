@@ -19,6 +19,8 @@ import {
   FlipHorizontal,
   Info,
   Italic,
+  Lock,
+  LockOpen,
   MoveVertical,
   Palette,
   PanelTop,
@@ -354,6 +356,20 @@ type TransformHandlesProps = {
    */
   teto?: { coberta: boolean; onToggle: () => void };
   /**
+   * Presente = mostra o CADEADO, que trava a coisa no lugar.
+   *
+   * Travada, a caixa perde as alças e as zonas de giro, e a lixeira some: o
+   * mestre não move, não estica, não gira e não apaga por acidente -- a parede
+   * que ele esbarra ao pegar o token, o boss que tem de ficar no altar. O resto
+   * da fileira fica, porque nada ali tira a coisa do lugar: a ficha, a cor, o
+   * olho, o teto.
+   *
+   * Um par estado/ação como o olho e o teto: o cadeado MOSTRA se está travado,
+   * e é por ele mesmo que se destrava -- por isso a coisa travada continua
+   * selecionável.
+   */
+  trava?: { travada: boolean; onToggle: () => void };
+  /**
    * Presente = mostra o botão da ALTURA, que abre a régua ao lado da caixa.
    *
    * Só a parede passa. Altura aqui não é o tamanho do desenho -- esse é o
@@ -418,7 +434,9 @@ export function TransformHandles({
   mesa,
   teto,
   altura,
+  trava,
 }: TransformHandlesProps) {
+  const travada = trava?.travada ?? false;
   const { scale, toScene, planoDaMargem, moldura } = useSceneScale();
   const startDrag = useSceneDrag();
 
@@ -581,6 +599,7 @@ export function TransformHandles({
       mesa ||
       teto ||
       altura ||
+      trava ||
       onDelete ? (
         <div
           ref={fileiraRef}
@@ -1088,7 +1107,55 @@ export function TransformHandles({
             </Tooltip>
           ) : null}
 
-          {onDelete ? (
+          {/* O cadeado, colado na lixeira e antes dela: os dois são o que
+              protege e o que destrói, e travar é justamente o que tira a
+              lixeira da fileira. Aceso em âmbar, como o teto: é um estado. */}
+          {trava ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={travada ? "Destravar" : "Travar"}
+                    aria-pressed={travada}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      travada ? "bg-amber-500 text-neutral-950" : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      trava.onToggle();
+                    }}
+                  >
+                    {travada ? (
+                      <Lock
+                        style={{
+                          width: HANDLE_PX * 1.2,
+                          height: HANDLE_PX * 1.2,
+                        }}
+                      />
+                    ) : (
+                      <LockOpen
+                        style={{
+                          width: HANDLE_PX * 1.2,
+                          height: HANDLE_PX * 1.2,
+                        }}
+                      />
+                    )}
+                  </button>
+                }
+              />
+              <TooltipContent>
+                {travada
+                  ? "Travado: não move, não muda de tamanho e não apaga. Clique para destravar."
+                  : "Travar no lugar, para não mexer sem querer."}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {onDelete && !travada ? (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -1350,7 +1417,7 @@ export function TransformHandles({
 
       {/* Antes das alças, de propósito: a alça fica por cima onde as duas se
           tocam, e em cima do ponto continua sendo redimensionar. */}
-      {rotatable
+      {rotatable && !travada
         ? CORNER_HANDLES.map((handle) => (
             <div
               key={`rotate-${handle}`}
@@ -1373,7 +1440,7 @@ export function TransformHandles({
           ))
         : null}
 
-      {handles.map((handle) => (
+      {(travada ? [] : handles).map((handle) => (
         <button
           key={handle}
           type="button"

@@ -256,6 +256,14 @@ const FormaDaCena = memo(function FormaDaCena({
                 }
               : undefined
           }
+          // O travado volta a não ter o campo, como a mesa e a cor.
+          trava={{
+            travada: Boolean(forma.locked),
+            onToggle: () =>
+              updateForma(sceneId, forma.id, {
+                locked: forma.locked ? undefined : true,
+              }),
+          }}
           onDelete={() => removeFormas(sceneId, [forma.id])}
         />
       ) : null}

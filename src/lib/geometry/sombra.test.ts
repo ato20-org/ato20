@@ -8,6 +8,7 @@ import {
   peDaFigura,
   corpoDaParede,
   manchaDaFigura,
+  pontoNaParede,
   segmentosDaParede,
   sombraDoSol,
   umbrasDoSol,
@@ -489,5 +490,52 @@ describe("a parede que veio de um arquivo antigo", () => {
 
   it("sozinha, não há caixa: não há o que pintar", () => {
     expect(caixaDoSol([velha], sol)).toBeNull();
+  });
+});
+
+describe("pontoNaParede", () => {
+  const sala: Parede = {
+    id: "sala",
+    x: 100,
+    y: 100,
+    width: 400,
+    height: 200,
+    formato: "retangulo",
+  };
+
+  it("o miolo da parede coberta é dela, e fora não é", () => {
+    expect(pontoNaParede(sala, { x: 300, y: 200 })).toBe(true);
+    expect(pontoNaParede(sala, { x: 50, y: 200 })).toBe(false);
+    expect(pontoNaParede(sala, { x: 300, y: 350 })).toBe(false);
+  });
+
+  it("acompanha o giro da caixa", () => {
+    const girada: Parede = { ...sala, rotation: 90 };
+
+    // Girada em torno do centro (300, 200), a sala fica em pé: 200 de largura
+    // por 400 de altura.
+    expect(pontoNaParede(girada, { x: 300, y: 380 })).toBe(true);
+    expect(pontoNaParede(girada, { x: 480, y: 200 })).toBe(false);
+  });
+
+  it("na elipse, o canto da caixa fica de fora", () => {
+    const redonda: Parede = { ...sala, formato: "elipse" };
+
+    expect(pontoNaParede(redonda, { x: 300, y: 200 })).toBe(true);
+    expect(pontoNaParede(redonda, { x: 110, y: 110 })).toBe(false);
+  });
+
+  it("a linha só pega perto do traço", () => {
+    const reta: Parede = {
+      id: "reta",
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 0,
+      formato: "linha",
+    };
+
+    expect(pontoNaParede(reta, { x: 100, y: 5 })).toBe(true);
+    expect(pontoNaParede(reta, { x: 100, y: 40 })).toBe(false);
   });
 });

@@ -139,6 +139,12 @@ export function LuzMarcadores({
     // O direito para aqui: o `pointerdown` do palco limpa a seleção com o
     // botão direito, e o menu abriria sem a luz que acabou de ser escolhida.
     if (event.button === 2) event.stopPropagation();
+    // Travada, o toque só seleciona -- e para aqui, senão o palco largaria a
+    // luz que acabou de pegar. É o caminho até o cadeado do painel.
+    if (luz.locked) {
+      event.stopPropagation();
+      return;
+    }
     const origem = { x: luz.x, y: luz.y };
 
     arrastar(event, {
@@ -265,6 +271,11 @@ export function LuzMarcadores({
         // A desligada mostra o alcance mais fraco: continua ajustável, mas
         // não finge que está acendendo nada.
         const traco = luz.desligada ? 0.45 : 0.9;
+        // Travada, os anéis continuam dizendo até onde ela chega, mas nenhum
+        // se arrasta, e as alças à vista somem: alça que não responde é
+        // convite a um gesto que não acontece.
+        const presa = Boolean(luz.locked);
+        const pegasInertes = aneisInertes || presa;
 
         return (
           <g key={luz.id}>
@@ -294,7 +305,7 @@ export function LuzMarcadores({
                   stroke="transparent"
                   strokeWidth={PEGA_DO_ANEL_PX / scale}
                   style={{
-                    pointerEvents: aneisInertes ? "none" : "stroke",
+                    pointerEvents: pegasInertes ? "none" : "stroke",
                     cursor: "ew-resize",
                   }}
                   onPointerDown={(event) => ajustarRaio(event, luz)}
@@ -310,7 +321,8 @@ export function LuzMarcadores({
                   stroke={luz.cor}
                   strokeWidth={2 / scale}
                   style={{
-                    pointerEvents: aneisInertes ? "none" : "auto",
+                    pointerEvents: pegasInertes ? "none" : "auto",
+                    display: presa ? "none" : undefined,
                     cursor: "ew-resize",
                   }}
                   onPointerDown={(event) => ajustarRaio(event, luz)}
@@ -339,7 +351,7 @@ export function LuzMarcadores({
                   stroke="transparent"
                   strokeWidth={PEGA_DO_ANEL_PX / scale}
                   style={{
-                    pointerEvents: aneisInertes ? "none" : "stroke",
+                    pointerEvents: pegasInertes ? "none" : "stroke",
                     cursor: "ew-resize",
                   }}
                   onPointerDown={(event) => ajustarRaioIntenso(event, luz)}
@@ -358,7 +370,8 @@ export function LuzMarcadores({
                   stroke="#fff"
                   strokeWidth={2 / scale}
                   style={{
-                    pointerEvents: aneisInertes ? "none" : "auto",
+                    pointerEvents: pegasInertes ? "none" : "auto",
+                    display: presa ? "none" : undefined,
                     cursor: "ew-resize",
                   }}
                   onPointerDown={(event) => ajustarRaioIntenso(event, luz)}
@@ -399,7 +412,7 @@ export function LuzMarcadores({
                         stroke="transparent"
                         strokeWidth={PEGA_DO_ANEL_PX / scale}
                         style={{
-                          pointerEvents: aneisInertes ? "none" : "stroke",
+                          pointerEvents: pegasInertes ? "none" : "stroke",
                           cursor: "ew-resize",
                         }}
                         onPointerDown={(event) => ajustarRaio(event, luz)}
@@ -421,7 +434,7 @@ export function LuzMarcadores({
                         stroke="transparent"
                         strokeWidth={PEGA_DO_ANEL_PX / scale}
                         style={{
-                          pointerEvents: aneisInertes ? "none" : "stroke",
+                          pointerEvents: pegasInertes ? "none" : "stroke",
                           cursor: "ew-resize",
                         }}
                         onPointerDown={(event) =>
@@ -442,7 +455,8 @@ export function LuzMarcadores({
                         stroke="#fff"
                         strokeWidth={2 / scale}
                         style={{
-                          pointerEvents: aneisInertes ? "none" : "auto",
+                          pointerEvents: pegasInertes ? "none" : "auto",
+                          display: presa ? "none" : undefined,
                           cursor: "ew-resize",
                         }}
                         onPointerDown={(event) =>
@@ -465,7 +479,8 @@ export function LuzMarcadores({
                         stroke={luz.cor}
                         strokeWidth={2 / scale}
                         style={{
-                          pointerEvents: aneisInertes ? "none" : "auto",
+                          pointerEvents: pegasInertes ? "none" : "auto",
+                          display: presa ? "none" : undefined,
                           cursor: "crosshair",
                         }}
                         onPointerDown={(event) => abrir(event, luz, cone)}
@@ -481,7 +496,8 @@ export function LuzMarcadores({
                         stroke={luz.cor}
                         strokeWidth={2 / scale}
                         style={{
-                          pointerEvents: aneisInertes ? "none" : "auto",
+                          pointerEvents: pegasInertes ? "none" : "auto",
+                          display: presa ? "none" : undefined,
                           cursor: "grab",
                         }}
                         onPointerDown={(event) => apontar(event, luz, cone)}
@@ -504,7 +520,7 @@ export function LuzMarcadores({
               strokeWidth={2 / scale}
               style={{
                 pointerEvents: pontosInertes ? "none" : "auto",
-                cursor: "move",
+                cursor: luz.locked ? "pointer" : "move",
               }}
               onPointerDown={(event) => mover(event, luz)}
             />

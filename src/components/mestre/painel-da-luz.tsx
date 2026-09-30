@@ -157,6 +157,21 @@ export function PainelDaLuz({
           }
         />
       </label>
+      {/* Logo abaixo do acender, porque é da mesma família: estado da luz, e
+          não aparência. Travada, o ponto não arrasta, os anéis não esticam e
+          o Delete não a apaga -- a tocha da parede fica na parede. */}
+      <label className="flex items-center justify-between gap-2">
+        <span className="text-xs">Travada</span>
+        <Switch
+          size="sm"
+          checked={Boolean(luz.locked)}
+          onCheckedChange={() =>
+            updateLuz(scene.id, luz.id, {
+              locked: luz.locked ? undefined : true,
+            })
+          }
+        />
+      </label>
 
       <div
         role="radiogroup"

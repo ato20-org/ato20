@@ -1,23 +1,15 @@
 "use client";
 
-import { useId, type PointerEvent as ReactPointerEvent } from "react";
+import { useId } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
-import { useSceneDrag } from "@/hooks/use-scene-drag";
-import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { useToolStore } from "@/lib/store/use-tool-store";
 import {
   contornoDaParede,
   corpoDaParede,
   type FormaDaParede,
 } from "@/lib/geometry/sombra";
-import {
-  SCENE_HEIGHT,
-  SCENE_WIDTH,
-  type Parede,
-  type Scene,
-} from "@/types/scene";
+import { SCENE_HEIGHT, SCENE_WIDTH, type Scene } from "@/types/scene";
 
 /**
  * Tudo aqui em pixels de TELA, dividido pelo `scale` na hora de desenhar.
@@ -41,6 +33,17 @@ const HACHURA_PASSO_PX = 26;
 const HACHURA_TRACO_PX = 1;
 
 const COR_DA_PAREDE = "#facc15";
+
+/**
+ * Quanto da pintura a parede PARADA mostra, contra a selecionada.
+ *
+ * Metade, e não a inteira: uma parede coberta que o mestre desenha sobre o
+ * prédio todo pintava de amarelo e riscava cada token lá dentro, e o mapa que
+ * ele prepara ficava atrás de uma grade. A borda continua firme -- é ela que
+ * diz onde a pedra acaba -- e a selecionada volta à pintura cheia, porque é
+ * nela que o mestre está mexendo.
+ */
+const PINTURA_PARADA = 0.5;
 /**
  * As paredes, do jeito que só o Mestre as vê.
  *
@@ -59,11 +62,9 @@ const COR_DA_PAREDE = "#facc15";
  */
 export function ParedeLayer({
   scene,
-  panMode,
   fantasma,
 }: {
   scene: Scene;
-  panMode: boolean;
   /**
    * A parede que o arrasto está desenhando agora, antes de existir na cena.
    *
@@ -77,36 +78,12 @@ export function ParedeLayer({
   // `useId` traz dois-pontos, e dois-pontos dentro de um `url(#...)` não é
   // seletor válido.
   const base = useId().replace(/:/g, "");
-  const arrastar = useSceneDrag();
-  const tool = useToolStore((state) => state.tool);
 
   const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
-  const selectParede = useSelectionStore((state) => state.selectParede);
-
-  const updateParede = useSceneStore((state) => state.updateParede);
 
   const paredes = scene.paredes ?? [];
 
   if (paredes.length === 0 && !fantasma) return null;
-
-  // Com a própria ferramenta na mão o desenho deixa o clique passar: ali o
-  // gesto é CRIAR outra, e não pegar a que já está embaixo do cursor. Mesma
-  // regra do alfinete com a seta na mão. Com espaço segurado idem -- o gesto é
-  // da câmera.
-  const inerte = panMode || tool === "parede";
-
-  function moverParede(event: ReactPointerEvent, parede: Parede) {
-    selectParede(parede.id);
-    const origem = { x: parede.x, y: parede.y };
-
-    arrastar(event, {
-      onMove: (delta) =>
-        updateParede(scene.id, parede.id, {
-          x: origem.x + delta.x,
-          y: origem.y + delta.y,
-        }),
-    });
-  }
 
   return (
     <svg
@@ -145,6 +122,7 @@ export function ParedeLayer({
         const corpo = corpoDaParede(parede);
         const contorno = contornoDaParede(parede);
         const traco = TRACO_PX / scale;
+        const pintura = selecionada ? 1 : PINTURA_PARADA;
 
         if (!corpo) return null;
 
@@ -154,22 +132,24 @@ export function ParedeLayer({
                 parede é MACIÇA -- ela é a massa que o mestre desenhou, e não um
                 contorno com borda grossa. A hachura rala sozinha não diz isso.
 
-                É também quem recebe o gesto -- `all` e não o padrão, porque num
-                `fill` de padrão os vãos entre os riscos não são pintados e o
-                clique cairia através deles como se a parede tivesse buracos. */}
+                NÃO recebe o gesto, e recebia: com `pointer-events: all` o corpo
+                inteiro ficava por cima dos tokens, e o boneco dentro de uma sala
+                coberta não se mexia mais. O clique atravessa, e é o clique no
+                vazio do palco que pergunta se caiu numa parede -- depois de os
+                tokens e as áreas terem tido a vez deles. Ver `pontoNaParede`. */}
             <path
               d={corpo}
               fill={COR_DA_PAREDE}
-              fillOpacity={0.1}
-              style={{
-                pointerEvents: inerte ? "none" : "all",
-                cursor: "move",
-              }}
-              onPointerDown={(event) => moverParede(event, parede)}
+              fillOpacity={0.1 * pintura}
+              pointerEvents="none"
             />
+            {/* `fillOpacity` e não `opacity` num grupo: opacidade de grupo
+                pede ao motor uma camada fora da tela por parede, e o mapa tem
+                dezenas delas. A do preenchimento multiplica o padrão direto. */}
             <path
               d={corpo}
               fill={`url(#${base}-hachura)`}
+              fillOpacity={pintura}
               pointerEvents="none"
             />
 

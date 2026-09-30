@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -19,6 +19,7 @@ import {
   Group,
   Images,
   Layers,
+  LocateFixed,
   Lock,
   LockOpen,
   Maximize,
@@ -67,16 +68,18 @@ import {
   alternarTransmissao,
   enquadrarAqui,
   enquadrarSelecao,
+  irParaCamera,
   mostrarCenaInteira,
   novaCamera,
 } from "@/lib/mestre/camera-actions";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { useSceneStore } from "@/lib/store/use-scene-store";
 import {
   temAlgoParaColar,
   useClipboardStore,
 } from "@/lib/store/use-clipboard-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { temCamera, temLuz, type Scene } from "@/types/scene";
+import { temCamera, temLuz, type CameraSalva, type Scene } from "@/types/scene";
 import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 import { SubmenuDeCondicoes } from "@/components/mestre/menu-de-condicoes";
@@ -122,6 +125,15 @@ export function StageContextMenu({
   const paredeComItens = useTemItensDeExtensao("palco.parede");
   const retratoComItens = useTemItensDeExtensao("palco.retrato");
   const hasClipboard = useClipboardStore(temAlgoParaColar);
+  /**
+   * A moldura de câmera que levou o botão direito, se foi numa.
+   *
+   * Lida do ALVO do evento, e não de um estado que a moldura acende: a moldura
+   * não sabe quando o menu abre, e uma marca esquecida acesa faria o próximo
+   * botão direito no vazio abrir o menu da câmera. Guardada ao abrir e não
+   * limpa ao fechar, para o menu não trocar de conteúdo durante a saída.
+   */
+  const [cameraDoMenuId, setCameraDoMenuId] = useState<string | null>(null);
 
   const selectedItems = scene.items.filter((item) =>
     selectedIds.includes(item.id),
@@ -191,7 +203,27 @@ export function StageContextMenu({
     ? scene.cameras?.find((camera) => camera.id === selecionadaId)
     : undefined;
   const segue = Boolean(cameraSelecionada?.alvoIds);
+  /**
+   * O menu é da moldura pelo id, e não por achar a câmera: removida pelo
+   * próprio menu, ela some da cena enquanto ele ainda está saindo, e o menu do
+   * vazio piscaria no lugar. O id só é guardado quando a moldura existia.
+   */
+  const naCamera = comCamera && cameraDoMenuId !== null;
+  const cameraNoMenu = naCamera
+    ? scene.cameras?.find((camera) => camera.id === cameraDoMenuId)
+    : undefined;
   const allLocked = hasSelection && selectedItems.every((item) => item.locked);
+  /** O texto e a forma da mão, para o bloco curto saber se estão todos presos. */
+  const doQuadroNaMao = [
+    ...(scene.textos ?? []).filter((texto) =>
+      selectedTextoIds.includes(texto.id),
+    ),
+    ...(scene.formas ?? []).filter((forma) =>
+      selectedFormaIds.includes(forma.id),
+    ),
+  ];
+  const quadroTravado =
+    doQuadroNaMao.length > 0 && doQuadroNaMao.every((coisa) => coisa.locked);
   const opacidade = opacidadeDaSelecao(selectedItems);
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedLuz = scene.luzes?.find((luz) => luz.id === selectedLuzId);
@@ -199,6 +231,7 @@ export function StageContextMenu({
   const retratoNaMao = selectedPortraitIds.length > 0 && retratoComItens;
   /** Nada selecionado: o botão direito foi no vazio. Ver o bloco da cena. */
   const nadaNaMao =
+    !naCamera &&
     !hasSelection &&
     !soQuadro &&
     !selectedFog &&
@@ -207,7 +240,18 @@ export function StageContextMenu({
     !retratoNaMao;
 
   return (
-    <ContextMenu>
+    <ContextMenu
+      onOpenChange={(aberto, detalhes) => {
+        if (!aberto) return;
+        const alvo = detalhes.event?.target;
+        setCameraDoMenuId(
+          alvo instanceof Element
+            ? (alvo.closest("[data-camera-id]")?.getAttribute("data-camera-id") ??
+                null)
+            : null,
+        );
+      }}
+    >
       <ContextMenuTrigger className="flex min-h-0 flex-1 flex-col">
         {children}
       </ContextMenuTrigger>
@@ -218,7 +262,11 @@ export function StageContextMenu({
           Uma regra aqui, e não um condicional em cada bloco: são quatro, e o
           próximo que entrar nasceria com o mesmo pé solto. */}
       <ContextMenuContent className="w-56 [&>[data-slot=context-menu-separator]:last-child]:hidden">
-        {selectedLuz ? (
+        {cameraNoMenu ? (
+          <BlocoDaCamera scene={scene} camera={cameraNoMenu} />
+        ) : null}
+
+        {selectedLuz && !naCamera ? (
           <>
             <BlocoDaLuz sceneId={scene.id} luz={selectedLuz} />
             <ItensDeExtensao
@@ -229,7 +277,7 @@ export function StageContextMenu({
           </>
         ) : null}
 
-        {selectedFog ? (
+        {selectedFog && !naCamera ? (
           <>
             <ContextMenuItem onClick={() => toggleFogRevealed()}>
               {selectedFog.revealed ? <EyeOff /> : <Eye />}
@@ -237,7 +285,16 @@ export function StageContextMenu({
                 ? "Esconder de novo"
                 : "Revelar para a mesa"}
             </ContextMenuItem>
-            <ContextMenuItem variant="destructive" onClick={removeFogSelection}>
+            <ContextMenuItem onClick={toggleSelectionLock}>
+              {selectedFog.locked ? <LockOpen /> : <Lock />}
+              {selectedFog.locked ? "Destravar" : "Travar"}
+            </ContextMenuItem>
+            {/* Apagado na travada, e não sumido: ver o da luz. */}
+            <ContextMenuItem
+              variant="destructive"
+              disabled={Boolean(selectedFog.locked)}
+              onClick={removeFogSelection}
+            >
               <Trash2 />
               Remover área
               <ContextMenuShortcut>Del</ContextMenuShortcut>
@@ -252,7 +309,7 @@ export function StageContextMenu({
           </>
         ) : null}
 
-        {soQuadro ? (
+        {soQuadro && !naCamera ? (
           <>
             {/* As três da área de transferência só aparecem com algo que ela
                 saiba recriar: um cartão sozinho não copia, não recorta e não
@@ -277,8 +334,15 @@ export function StageContextMenu({
                 </ContextMenuItem>
               </>
             ) : null}
+            {doQuadroNaMao.length > 0 ? (
+              <ContextMenuItem onClick={toggleSelectionLock}>
+                {quadroTravado ? <LockOpen /> : <Lock />}
+                {quadroTravado ? "Destravar" : "Travar"}
+              </ContextMenuItem>
+            ) : null}
             <ContextMenuItem
               variant="destructive"
+              disabled={quadroTravado && daMargem === 0}
               onClick={() => removeSelection()}
             >
               <Trash2 />
@@ -302,7 +366,7 @@ export function StageContextMenu({
           </>
         ) : null}
 
-        {hasSelection ? (
+        {hasSelection && !naCamera ? (
           <>
             {/* Antes de copiar porque é a ação do token COMO personagem, e as
                 de baixo o tratam como imagem. Some quando o token não é de
@@ -493,6 +557,11 @@ export function StageContextMenu({
             ) : null}
             <ContextMenuItem
               variant="destructive"
+              // Com texto ou forma livres junto, o Remover ainda tem o que
+              // tirar: só apaga quando TUDO na mão está preso.
+              disabled={
+                allLocked && doQuadroNaMao.every((coisa) => coisa.locked)
+              }
               onClick={() => removeSelection()}
             >
               <Trash2 />
@@ -516,7 +585,7 @@ export function StageContextMenu({
         ) : null}
 
         {/* Parede e retrato: só o que os plugins trouxeram. Ver `paredeComItens`. */}
-        {paredeNaMao && selectedParedeId ? (
+        {paredeNaMao && selectedParedeId && !naCamera ? (
           <>
             <ItensDeExtensao
               alvo="palco.parede"
@@ -526,7 +595,7 @@ export function StageContextMenu({
             <ContextMenuSeparator />
           </>
         ) : null}
-        {retratoNaMao ? (
+        {retratoNaMao && !naCamera ? (
           <>
             <ItensDeExtensao
               alvo="palco.retrato"
@@ -609,5 +678,74 @@ export function StageContextMenu({
         ) : null}
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+/**
+ * O botão direito NUMA moldura de câmera: o que se faz com aquela câmera.
+ *
+ * Qualquer uma, e não só a selecionada: a outra câmera do mapa também tem
+ * moldura, e é nela que o mestre clica quando quer se livrar dela. Transmitir e
+ * trazer não pedem que ela seja a selecionada antes -- o menu seleciona, como
+ * o chip faz.
+ *
+ * Remover sem perguntar: a câmera entra no desfazer como qualquer edição da
+ * cena, e o Ctrl+Z a devolve com o nome e o recorte. Ver `removerCamera`.
+ */
+function BlocoDaCamera({
+  scene,
+  camera,
+}: {
+  scene: Scene;
+  camera: CameraSalva;
+}) {
+  const selecionar = useCameraLockStore((state) => state.selecionar);
+  const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
+  const transmitirCamera = useSceneStore((state) => state.transmitirCamera);
+  const removerCamera = useSceneStore((state) => state.removerCamera);
+
+  const noAr = scene.cameraNoArId === camera.id;
+  const selecionada = camera.id === selecionadaId;
+
+  return (
+    <>
+      <ContextMenuItem
+        onClick={() => transmitirCamera(scene.id, noAr ? undefined : camera.id)}
+      >
+        <Radio />
+        {noAr ? "Tirar do ar" : "Transmitir"}
+        {selecionada ? <ContextMenuShortcut>T</ContextMenuShortcut> : null}
+      </ContextMenuItem>
+      <ContextMenuItem
+        onClick={() => {
+          selecionar(camera.id);
+          enquadrarAqui();
+        }}
+      >
+        <ScanSearch />
+        Trazer para onde estou
+        {selecionada ? <ContextMenuShortcut>C</ContextMenuShortcut> : null}
+      </ContextMenuItem>
+      <ContextMenuItem
+        onClick={() => {
+          selecionar(camera.id);
+          irParaCamera();
+        }}
+      >
+        <LocateFixed />
+        Ir até a câmera
+        {selecionada ? <ContextMenuShortcut>Home</ContextMenuShortcut> : null}
+      </ContextMenuItem>
+
+      <ContextMenuSeparator />
+
+      <ContextMenuItem
+        variant="destructive"
+        onClick={() => removerCamera(scene.id, camera.id)}
+      >
+        <Trash2 />
+        Remover câmera
+      </ContextMenuItem>
+    </>
   );
 }

@@ -630,6 +630,69 @@ export function corpoDaParede(parede: FormaDaParede): string {
 }
 
 /**
+ * O ponto cai no CORPO desta parede? É a mesma região que `corpoDaParede`
+ * pinta: o miolo nos formatos fechados, a faixa em volta da reta na `linha`.
+ *
+ * Existe porque o corpo deixou de receber o ponteiro. Ele cobria os tokens: uma
+ * parede coberta desenhada por cima do prédio inteiro engolia o clique de todo
+ * boneco lá dentro. Agora o clique atravessa, e quem pergunta se ele caiu numa
+ * parede é o clique no VAZIO -- o que sobrou depois que os tokens e as áreas
+ * tiveram a vez deles. Ver `ParedeLayer`.
+ */
+export function pontoNaParede(parede: FormaDaParede, ponto: Vec): boolean {
+  if (!paredeDeVerdade(parede)) return false;
+
+  const { pontos, fechado } = verticesDaParede(parede);
+
+  if (!fechado) {
+    const meia = GROSSURA_DA_LINHA / 2;
+
+    return segmentosDaParede(parede).some(
+      (segmento) => distanciaAoSegmento(ponto, segmento) <= meia,
+    );
+  }
+
+  if (pontos.length < 3) return false;
+
+  // Par-ímpar: um raio para a direita cruza a borda um número ímpar de vezes
+  // só se o ponto está dentro. Vale para o laço torto como para o quadrado.
+  let dentro = false;
+  for (let i = 0, j = pontos.length - 1; i < pontos.length; j = i, i += 1) {
+    const a = pontos[i]!;
+    const b = pontos[j]!;
+    if (
+      a.y > ponto.y !== b.y > ponto.y &&
+      ponto.x < ((b.x - a.x) * (ponto.y - a.y)) / (b.y - a.y) + a.x
+    )
+      dentro = !dentro;
+  }
+
+  return dentro;
+}
+
+function distanciaAoSegmento(ponto: Vec, segmento: Segmento): number {
+  const dx = segmento.x2 - segmento.x1;
+  const dy = segmento.y2 - segmento.y1;
+  const quadrado = dx * dx + dy * dy;
+  const t =
+    quadrado === 0
+      ? 0
+      : Math.min(
+          1,
+          Math.max(
+            0,
+            ((ponto.x - segmento.x1) * dx + (ponto.y - segmento.y1) * dy) /
+              quadrado,
+          ),
+        );
+
+  return Math.hypot(
+    ponto.x - (segmento.x1 + t * dx),
+    ponto.y - (segmento.y1 + t * dy),
+  );
+}
+
+/**
  * A PEDRA de todas as paredes num caminho só: onde a sombra não entra.
  *
  * A parede que o mestre desenha é uma máscara posta em cima da parede já

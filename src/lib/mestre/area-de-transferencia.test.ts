@@ -13,7 +13,17 @@ import {
 } from "@/lib/store/use-clipboard-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import type { Documento, Forma, Postit, Scene, Texto, Traco } from "@/types/scene";
+import type {
+  Documento,
+  FogRegion,
+  Forma,
+  Luz,
+  Parede,
+  Postit,
+  Scene,
+  Texto,
+  Traco,
+} from "@/types/scene";
 
 const texto: Texto = {
   id: "t",
@@ -181,5 +191,136 @@ describe("área de transferência", () => {
     expect(postits ?? []).toHaveLength(0);
     expect(tracos ?? []).toHaveLength(0);
     expect(documentos).toHaveLength(1);
+  });
+
+  describe("o chão do mapa", () => {
+    const parede: Parede = {
+      id: "w",
+      x: 100,
+      y: 100,
+      width: 300,
+      height: 200,
+      rotation: 15,
+      formato: "retangulo",
+      altura: 140,
+      semTeto: true,
+    };
+    const area: FogRegion = {
+      id: "a",
+      x: 400,
+      y: 400,
+      width: 120,
+      height: 80,
+      revealed: true,
+      formato: "elipse",
+    };
+    const luz: Luz = {
+      id: "l",
+      x: 500,
+      y: 300,
+      raio: 260,
+      cor: "#93c5fd",
+      intensidade: 0.5,
+      cone: { angulo: 90, abertura: 60 },
+    };
+
+    function montarChao(tipo?: Scene["tipo"]) {
+      useSceneStore.setState({
+        board: {
+          scenes: [
+            {
+              id: "c1",
+              tipo,
+              items: [],
+              fog: [area],
+              paredes: [parede],
+              luzes: [luz],
+            } as unknown as Scene,
+          ],
+          editingSceneId: "c1",
+          liveSceneId: "c1",
+        },
+        status: "ready",
+      } as never);
+    }
+
+    it("copia e cola a parede com a altura e o teto dela, e a cópia fica na mão", () => {
+      montarChao();
+      useSelectionStore.getState().selectParede("w");
+      copySelection();
+      pasteClipboard();
+
+      const { paredes } = atual();
+      expect(paredes).toHaveLength(2);
+      expect(paredes![1]).toMatchObject({
+        formato: "retangulo",
+        rotation: 15,
+        altura: 140,
+        semTeto: true,
+        x: 100 + PASTE_OFFSET,
+        y: 100 + PASTE_OFFSET,
+      });
+      expect(paredes![1]!.id).not.toBe("w");
+      expect(useSelectionStore.getState().selectedParedeId).toBe(
+        paredes![1]!.id,
+      );
+    });
+
+    it("a área colada nasce escondendo, com o formato da original", () => {
+      montarChao();
+      useSelectionStore.getState().selectFog("a");
+      copySelection();
+      pasteClipboard();
+
+      const { fog } = atual();
+      expect(fog).toHaveLength(2);
+      expect(fog[1]).toMatchObject({
+        formato: "elipse",
+        revealed: false,
+        x: 400 + PASTE_OFFSET,
+      });
+      expect(useSelectionStore.getState().selectedFogId).toBe(fog[1]!.id);
+    });
+
+    it("duplica a luz com a cor, o cone e a intensidade", () => {
+      montarChao();
+      useSelectionStore.getState().selectLuz("l");
+      duplicateSelection();
+
+      const { luzes } = atual();
+      expect(luzes).toHaveLength(2);
+      expect(luzes![1]).toMatchObject({
+        cor: "#93c5fd",
+        intensidade: 0.5,
+        cone: { angulo: 90, abertura: 60 },
+        x: 500 + PASTE_OFFSET,
+        y: 300 + PASTE_OFFSET,
+      });
+      expect(useSelectionStore.getState().selectedLuzId).toBe(luzes![1]!.id);
+    });
+
+    it("recortar a parede tira só ela, e o Ctrl+V a devolve", () => {
+      montarChao();
+      useSelectionStore.getState().selectParede("w");
+      cutSelection();
+
+      expect(atual().paredes ?? []).toHaveLength(0);
+      expect(atual().fog).toHaveLength(1);
+      expect(atual().luzes).toHaveLength(1);
+
+      pasteClipboard();
+      expect(atual().paredes).toHaveLength(1);
+    });
+
+    it("não cola parede, área nem luz num quadro", () => {
+      montarChao();
+      useSelectionStore.getState().selectParede("w");
+      copySelection();
+
+      montarChao("quadro");
+      pasteClipboard();
+
+      expect(atual().paredes).toHaveLength(1);
+    });
   });
 });

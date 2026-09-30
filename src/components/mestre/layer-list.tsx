@@ -851,6 +851,8 @@ const LayerRow = memo(function LayerRow({
         variant="ghost"
         size="icon-xs"
         aria-label="Remover do mapa"
+        // Travada não sai, como no palco: o cadeado ao lado destrava.
+        disabled={item.locked}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={() => useSceneStore.getState().removeItems(sceneId, [item.id])}
       >
