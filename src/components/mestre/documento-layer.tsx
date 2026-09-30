@@ -21,6 +21,7 @@ import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { useGestoStore } from "@/lib/store/use-gesto-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { MARCA_MENCAO, repassarCliqueDaMencao } from "@/lib/mestre/clique-da-mencao";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
@@ -257,11 +258,21 @@ const CartaoDeDocumento = memo(function CartaoDeDocumento({
     if (panMode || tool === "ligacao") return;
     // Como o papel do postit: quem arrasta é o palco, que leva junto o que
     // mais estiver na mão e passa pelo caminho leve do gesto.
+    //
+    // A menção e a prévia dentro do cartão recebem o clique por aqui: o palco
+    // o mata ao capturar o ponteiro. Ver `repassarCliqueDaMencao`.
+    repassarCliqueDaMencao(event);
     onDocumentoPointerDown(event, documento);
   }
 
-  function abrir() {
+  function abrir(event: React.MouseEvent) {
     if (panMode || tool === "ligacao" || !documento.notaId) return;
+    // Duplo clique numa menção é da menção, como no postit: abrir a ficha e
+    // trocar o palco pela nota no mesmo gesto esconderia a ficha que abriu.
+    // O que está SOB o ponteiro, porque a captura do arrasto põe o alvo no
+    // cartão.
+    const sob = document.elementFromPoint(event.clientX, event.clientY);
+    if (sob?.closest(`[${MARCA_MENCAO}]`)) return;
     abrirNota(documento.notaId);
   }
 
