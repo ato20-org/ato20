@@ -541,6 +541,28 @@ Na webview, painel inteiro, quadro no ar, mediana de 3:
 E o que o item 7 alcança fora do quadro -- a bancada de sempre, sete câmeras,
 sete mapas, token arrastado com a cena no ar, mediana de 3: **38,6 fps e 32,6 % de quadro perdido antes; 44,3 fps e 13,3 % depois**.
 
+### As prévias na nota (30/09/2026)
+
+A linha que é só uma menção (`/porao.jpg|240`, `@Aldren`, `>Porão`) passou a
+desenhar a coisa: a imagem, o retrato, o fundo da cena. O experimento `previa`
+põe as três no topo de cada nota, com acervo, personagem e cena semeados para
+elas resolverem -- sem isso a medida pesaria o parágrafo de sempre. No cartão a
+cena é só o fundo, e não o `ScenePreview`: seria um palco aninhado por menção.
+
+Trinta cartões, um na mão, painel inteiro, quadro no ar, mediana de 3:
+
+| | fps | perdidos | nós |
+|---|---|---|---|
+| sem prévia | 60 | 6,4 % | 4311 |
+| com prévia | 59,6 | 7 % | 5639 |
+| com prévia e `!Agarrar` | 59,8 | 7,3 % | 5879 |
+
+A página marcada (`!rótulo`) entrou depois, no topo da nota. No cartão ela é só
+texto -- ícone, rótulo, livro e página --, e o PDF só abre no tooltip do chip e
+na nota aberta: um documento por cartão da folha seria o custo inteiro. Nesta
+rodada o navegador aberto ao lado comia um terço da CPU, e células das DUAS
+variantes voltaram "sem resultado"; os números são das que fecharam.
+
 ## Como medir: o passo a passo
 
 ### O cenário certo
@@ -745,7 +767,7 @@ pnpm perf:webview -- --cenario quadro --n 12 --documentos 0,10,30,60 \
 pnpm perf:webview -- --cenario quadro --documentos 60 --gesto cartao --sem-no-ar --console
 
 # uma bateria de variantes num build só: o componente lê `window.__perfExperimento`
-# (`nota-curta` já existe; `a+b` liga duas de uma vez)
+# (`nota-curta` e `previa` já existem; `a+b` liga duas de uma vez)
 pnpm perf:webview -- --cenario quadro --documentos 60 --gesto cartao \
   --experimento nenhum,nota-curta
 
