@@ -29,6 +29,12 @@ import {
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { daemonAddr } from "@/lib/vault/bridge";
 import { listPlayers } from "@/lib/vault/players";
+import { characterLinks } from "@/lib/vault/characters";
+import {
+  assinarRetratosNaMesa,
+  retratoDoPersonagem,
+  retratosNaMesa,
+} from "@/lib/extensoes/retratos";
 import {
   diferencasDeCondicoes,
   diferencasDeMedidores,
@@ -538,11 +544,31 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
     jogadores: {
       async listar() {
         try {
-          return (await listPlayers()).map(({ id, nome }) => ({ id, nome }));
+          const [jogadores, vinculos] = await Promise.all([listPlayers(), characterLinks()]);
+
+          return jogadores.map(({ id, nome }) => ({
+            id,
+            nome,
+            personagens: vinculos
+              .filter(([jogadorId]) => jogadorId === id)
+              .map(([, personagemId]) => personagemId),
+          }));
         } catch {
           // Sem campanha aberta não há jogador nenhum.
           return [];
         }
+      },
+    },
+
+    retratos: {
+      naMesa: () => retratosNaMesa(),
+      dePersonagem: (personagemId) => retratoDoPersonagem(personagemId),
+
+      assinarMesa(aviso) {
+        const desfazer = assinarRetratosNaMesa(aviso);
+        registrados.push(desfazer);
+
+        return desfazer;
       },
     },
 

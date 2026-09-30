@@ -2,6 +2,7 @@
 
 import type { ComponentType } from "react";
 import type { DadoNaMesaLido } from "@/lib/extensoes/mesa";
+import type { RetratoParaKit as RetratoLido } from "@/lib/kit-de-retratos";
 import type { LucideIcon } from "lucide-react";
 
 import type { Componentes, Experimental } from "@/lib/extensoes/componentes";
@@ -43,7 +44,7 @@ import type { CanvasItem, Scene } from "@/types/scene";
  * recebe o mesmo objeto, com o novo ao lado.
  *
  * A 3 acrescentou `mesa` (o canal para as páginas do plugin, os endereços e o
- * link pronto), `jogadores`, e `dados.naMesa`/`dados.assinarMesa`; no
+ * link pronto), `jogadores`, `retratos`, e `dados.naMesa`/`dados.assinarMesa`; no
  * manifesto, as `paginas`, a `ativacao` na abertura e o tipo `lista`.
  */
 export const API_VERSAO_ATUAL = 3;
@@ -230,7 +231,7 @@ export type RolagemLida = {
   personagemId?: string;
 };
 
-export type { DadoNaMesaLido };
+export type { DadoNaMesaLido, RetratoLido };
 
 export type Ato20Api = {
   /** A versão do contrato que este aplicativo implementa. */
@@ -375,9 +376,28 @@ export type Ato20Api = {
     ) => Promise<string | null>;
   };
 
-  /** Quem a campanha conhece como jogador. Nome é o que o próprio jogador escolheu. */
+  /**
+   * Quem a campanha conhece como jogador. Nome é o que o próprio jogador
+   * escolheu; `personagens` são os ids que o mestre vinculou a ele.
+   */
   jogadores: {
-    listar: () => Promise<ReadonlyArray<{ id: string; nome: string }>>;
+    listar: () => Promise<ReadonlyArray<{ id: string; nome: string; personagens: string[] }>>;
+  };
+
+  /**
+   * Os retratos como a MESA os vê: sem medidor nem condição escondidos, e o
+   * nome só com a peça "nome" ligada -- o mesmo corte da janela do espectador.
+   *
+   * O formato é o do kit de retratos (`/kit/retratos`): passe adiante sem
+   * mexer. `personagemId` e `nome` são os campos que valem para o plugin ler.
+   */
+  retratos: {
+    /** Os retratos no ar agora, onde a mesa os pôs. */
+    naMesa: () => ReadonlyArray<Readonly<RetratoLido>>;
+    /** Avisa quando os retratos no ar mudam -- e só então. Chama já com a lista atual. */
+    assinarMesa: (aviso: (retratos: ReadonlyArray<Readonly<RetratoLido>>) => void) => Desfazer;
+    /** O retrato de um personagem, no ar ou não. `null` sem Retrato na ficha. */
+    dePersonagem: (personagemId: string) => Readonly<RetratoLido> | null;
   };
 
   /**
