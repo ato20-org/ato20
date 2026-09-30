@@ -418,6 +418,15 @@ const TextoSolto = memo(function TextoSolto({
                 }
               : undefined
           }
+          // Travado continua escrevível: o cadeado prende a letra no LUGAR, e
+          // corrigir o nome da taverna não a tira de lá.
+          trava={{
+            travada: Boolean(texto.locked),
+            onToggle: () =>
+              updateTexto(sceneId, texto.id, {
+                locked: texto.locked ? undefined : true,
+              }),
+          }}
           onDelete={() => removeTexto(sceneId, texto.id)}
         />
       ) : null}

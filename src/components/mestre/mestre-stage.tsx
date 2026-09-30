@@ -100,11 +100,13 @@ import {
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
   flipSelection,
+  livre,
   removeFogSelection,
   removeParedeSelection,
   removePortraitSelection,
   removeSelection,
   setSelectionOpacity,
+  toggleSelectionLock,
 } from "@/lib/mestre/item-actions";
 import {
   boundsFromPoints,
@@ -304,6 +306,13 @@ const ARRASTO_MINIMO_DA_SETA = 8;
 const PAREDE_MINIMA = 8;
 
 /**
+ * Quanto a mão pode andar, em pixels de TELA, e o gesto sobre um item travado
+ * ainda ser clique nele -- e não o começo de uma seleção por área. Ver
+ * `travadoSobOClique`.
+ */
+const CLIQUE_NO_TRAVADO_PX = 4;
+
+/**
  * O jeito com que uma forma NOVA nasce: o padrão da campanha, lido na hora.
  *
  * Canto só onde há canto -- elipse e linha não guardam um campo que não
@@ -367,6 +376,19 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   );
 
   const [marquee, setMarquee] = useState<Bounds | null>(null);
+  /**
+   * O item TRAVADO sob o último pointerdown, esperando o palco decidir.
+   *
+   * O clique num travado segue para o vazio, como sempre seguiu: o mapa que o
+   * mestre põe como imagem e trava é o chão da seleção por área, e arrastar
+   * sobre ele tem de laçar os tokens em cima. Mas o clique SEM arrasto agora o
+   * seleciona -- é o caminho até o cadeado do gizmo, e o boss travado no altar
+   * precisa ser destravável ali mesmo. Quem decide entre os dois é o fim do
+   * gesto, no `handleCanvasPointerDown`.
+   *
+   * Ref e não estado: vale um pointerdown só, e o palco lê no mesmo evento.
+   */
+  const travadoSobOClique = useRef<string[] | null>(null);
 
   /**
    * A forma que está sendo desenhada agora, com tudo o que ela vai ter. `null`
@@ -878,7 +900,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     // pinta o palco deslocado e preto no zoom. Ver `SelecaoDaMargem`.
     groupBounds && panMode && semAlca === 0
       ? groupBounds
-      : single && (single.locked || panMode)
+      : // O travado ganhou o gizmo de volta, sem alças e com o cadeado: é por
+        // ali que ele destrava. Só o espaço segurado fica com o contorno.
+        single && panMode
         ? itemBounds(single)
         : selectedFog && panMode
           ? itemBounds({ ...selectedFog, rotation: selectedFog.rotation ?? 0 })
@@ -1057,8 +1081,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
      * duas. Clicar numa imagem de fora da seleção é um gesto novo -- aí
      * `select` já limpou os textos, e não há passageiro.
      */
-    const textosArrastados = alreadySelected ? selectedTextos : [];
-    const formasArrastadas = alreadySelected ? selectedFormas : [];
+    // O travado da mão fica onde está, como a imagem travada: ver `livre`.
+    const textosArrastados = alreadySelected
+      ? selectedTextos.filter(livre)
+      : [];
+    const formasArrastadas = alreadySelected
+      ? selectedFormas.filter(livre)
+      : [];
     // Papel, cartão e risco vêm pela mesma porta, e pelo mesmo motivo: a área
     // laça os seis no mesmo gesto. Eles ANDAM com a imagem, mas não crescem com
     // ela -- a roda abaixo mexe só no que tem caixa. Ver `grupo-sem-alca`.
@@ -1078,7 +1107,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       ...documentosArrastados.map(caixaDoPapel),
       ...tracosArrastados.map(caixaDoTraco).filter((caixa) => caixa !== null),
     ]);
-    if (!movingBounds) return;
+    // Nada para andar: é o travado sozinho. O clique segue para o palco, que
+    // laça por área ou, se a mão não andar, o seleciona. Ver
+    // `travadoSobOClique`.
+    if (!movingBounds) {
+      travadoSobOClique.current = alreadySelected ? selectedIds : alvo;
+      return;
+    }
 
     /**
      * O retrato do que está na mão, MUTÁVEL: a roda, durante o arrasto, muda
@@ -1306,8 +1341,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     arrastarBando(event, {
       itens: jaSelecionado ? selectedItems.filter((item) => !item.locked) : [],
-      textos: jaSelecionado ? selectedTextos : [texto],
-      formas: jaSelecionado ? selectedFormas : [],
+      textos: (jaSelecionado ? selectedTextos : [texto]).filter(livre),
+      formas: jaSelecionado ? selectedFormas.filter(livre) : [],
       postits: jaSelecionado ? selectedPostits : [],
       documentos: jaSelecionado ? selectedDocumentos : [],
       tracos: jaSelecionado ? selectedTracos : [],
@@ -1339,8 +1374,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     arrastarBando(event, {
       itens: jaSelecionada ? selectedItems.filter((item) => !item.locked) : [],
-      textos: jaSelecionada ? selectedTextos : [],
-      formas: jaSelecionada ? selectedFormas : [forma],
+      textos: jaSelecionada ? selectedTextos.filter(livre) : [],
+      formas: (jaSelecionada ? selectedFormas : [forma]).filter(livre),
       postits: jaSelecionada ? selectedPostits : [],
       documentos: jaSelecionada ? selectedDocumentos : [],
       tracos: jaSelecionada ? selectedTracos : [],
@@ -1397,8 +1432,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     arrastarBando(event, {
       itens: jaSelecionado ? selectedItems.filter((item) => !item.locked) : [],
-      textos: jaSelecionado ? selectedTextos : [],
-      formas: jaSelecionado ? selectedFormas : [],
+      textos: jaSelecionado ? selectedTextos.filter(livre) : [],
+      formas: jaSelecionado ? selectedFormas.filter(livre) : [],
       postits:
         papel.tipo === "postit"
           ? jaSelecionado
@@ -1520,6 +1555,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     if (event.button !== 0) return;
 
     selectFog(region.id);
+    // Travada, o clique só seleciona: é para chegar ao cadeado.
+    if (region.locked) {
+      event.stopPropagation();
+      return;
+    }
 
     const origin = { x: region.x, y: region.y };
     dragBox(
@@ -2092,6 +2132,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
   /** Arrasto no vazio: desenha área escondida (ferramenta névoa) ou marca vários. */
   function handleCanvasPointerDown(event: ReactPointerEvent) {
+    // Consumido aqui, venha o que vier: é do pointerdown que acabou de passar
+    // pelo item, e só dele.
+    const travadoSob = travadoSobOClique.current;
+    travadoSobOClique.current = null;
+
     if (event.button !== 0) {
       clear();
       return;
@@ -2519,15 +2564,20 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
      * A de cima ganha: é a última da lista, a última desenhada.
      *
      * Shift fica com a seleção por área, que é o gesto dele, e ela começa
-     * dentro de uma sala tanto quanto fora.
+     * dentro de uma sala tanto quanto fora. E com um token travado sob o
+     * clique a parede também não entra: o boss travado dentro do prédio seria
+     * trocado pelo prédio inteiro.
      */
-    if (tool === "select" && !event.shiftKey) {
+    if (tool === "select" && !event.shiftKey && !travadoSob) {
       const parede = [...(scene.paredes ?? [])]
         .reverse()
         .find((candidata) => pontoNaParede(candidata, anchor));
 
       if (parede) {
         selectParede(parede.id);
+        // Travada, só seleciona: o arrasto que a movia é justamente o que o
+        // cadeado existe para impedir.
+        if (parede.locked) return;
         const origem = { x: parede.x, y: parede.y };
 
         startDrag(event, {
@@ -2618,7 +2668,18 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           tracos: [...new Set([...baseTracoIds, ...tracosDentro])],
         });
       },
-      onEnd: () => setMarquee(null),
+      onEnd: (native) => {
+        setMarquee(null);
+
+        // A mão não andou e havia um travado embaixo: foi um clique NELE.
+        if (!travadoSob) return;
+        const fim = toScene(native.clientX, native.clientY);
+        if (
+          Math.hypot(fim.x - anchor.x, fim.y - anchor.y) * scale <
+          CLIQUE_NO_TRAVADO_PX
+        )
+          select(travadoSob);
+      },
     });
   }
 
@@ -3060,10 +3121,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           keepAspect
           // Contorno ligado: era só os cantos, e a área do grupo não se lia.
           onGestureStart={() => {
+            // Só os livres entram no gesto: o travado da mão fica onde está
+            // enquanto o resto cresce e gira em volta dele.
             groupSnapshot.current = {
-              items: selectedItems,
-              textos: selectedTextos,
-              formas: selectedFormas,
+              items: selectedItems.filter(livre),
+              textos: selectedTextos.filter(livre),
+              formas: selectedFormas.filter(livre),
               bounds: groupBounds,
             };
           }}
@@ -3115,6 +3178,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
               useGestoStore.getState().formas ?? [],
             )
           }
+          // Aceso só com TUDO travado: basta um livre para o toque travar o
+          // resto. Ver `toggleSelectionLock`.
+          trava={{
+            travada: [...selectedItems, ...selectedTextos, ...selectedFormas]
+              .every((coisa) => coisa.locked),
+            onToggle: toggleSelectionLock,
+          }}
           onDelete={removeSelection}
         />
       ) : null}
@@ -3122,7 +3192,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       {/* Proporção travada: item de cena é sempre imagem, e esticar um eixo só
           deforma o desenho. Só cantos, pelo mesmo motivo — alça de aresta move
           um eixo, e travar a razão nela faria o item crescer sem o mouse pedir. */}
-      {single && !single.locked && !panMode ? (
+      {single && !panMode ? (
         <TransformHandles
           // Remonta ao trocar de item, e é o que fecha o painel de opacidade
           // junto: o painel é do item que estava selecionado, e deixá-lo aberto
@@ -3139,7 +3209,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           onGestureEnd={() =>
             terminarGesto(scene.id, useGestoStore.getState().patches ?? [])
           }
-          onFlip={() => flipSelection("x")}
+          // Travado não espelha: `flipPatches` já o pulava, e o botão ficaria
+          // mudo na fileira.
+          onFlip={single.locked ? undefined : () => flipSelection("x")}
           // `setSelectionOpacity` e não `updateItem`: a seleção aqui é este
           // item só, e a regra de que 100% APAGA o campo mora numa função só.
           opacidade={{
@@ -3158,6 +3230,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
                   })
               : undefined
           }
+          trava={{ travada: single.locked, onToggle: toggleSelectionLock }}
           onDelete={removeSelection}
         />
       ) : null}
@@ -3204,12 +3277,16 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
                       }),
                   }
             }
+            trava={{
+              travada: Boolean(selectedParede.locked),
+              onToggle: toggleSelectionLock,
+            }}
             onDelete={removeParedeSelection}
           />
 
           {/* As alças de vértice, só do laço: nos outros três o contorno É a
-              caixa, e o gizmo já a controla inteira. */}
-          {selectedParede.formato === "poligono" ? (
+              caixa, e o gizmo já a controla inteira. Travada, nenhuma. */}
+          {selectedParede.formato === "poligono" && !selectedParede.locked ? (
             <AlcasDaArea
               region={selectedParede}
               onChange={(patch) =>
@@ -3225,6 +3302,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           mexer num canto, e é a mesma camada das outras duas. */}
       {selectedFormas.length === 1 &&
       selectedFormas[0]!.tipo === "poligono" &&
+      !selectedFormas[0]!.locked &&
       !panMode ? (
         <AlcasDaArea
           region={selectedFormas[0]!}
@@ -3241,12 +3319,17 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             // Gira como o item: corredor, mesa e parede raramente correm no
             // eixo da tela, e sem giro cobrir um deles cobria meio mapa junto.
             onChange={(patch) => updateFog(scene.id, selectedFog.id, patch)}
+            trava={{
+              travada: Boolean(selectedFog.locked),
+              onToggle: toggleSelectionLock,
+            }}
             onDelete={removeFogSelection}
           />
 
           {/* As alças de vértice, só da área recortada: nas outras duas o
-              contorno É a caixa, e o gizmo já a controla inteira. */}
-          {selectedFog.formato === "poligono" ? (
+              contorno É a caixa, e o gizmo já a controla inteira. Travada,
+              nenhuma. */}
+          {selectedFog.formato === "poligono" && !selectedFog.locked ? (
             <AlcasDaArea
               region={selectedFog}
               onChange={(patch) => updateFog(scene.id, selectedFog.id, patch)}

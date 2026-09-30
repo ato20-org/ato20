@@ -14,6 +14,8 @@ import {
   Circle,
   Flame,
   Lightbulb,
+  Lock,
+  LockOpen,
   Palette,
   Power,
   PowerOff,
@@ -42,6 +44,7 @@ import {
   fachoDaSelecao,
   lanternaDaSelecao,
   removeLuzSelection,
+  toggleSelectionLock,
   setSelectionLanterna,
 } from "@/lib/mestre/item-actions";
 import { cn } from "@/lib/utils";
@@ -474,7 +477,17 @@ export function BlocoDaLuz({ sceneId, luz }: { sceneId: string; luz: Luz }) {
           />
         </ContextMenuSubContent>
       </ContextMenuSub>
-      <ContextMenuItem variant="destructive" onClick={removeLuzSelection}>
+      <ContextMenuItem onClick={toggleSelectionLock}>
+        {luz.locked ? <LockOpen /> : <Lock />}
+        {luz.locked ? "Destravar" : "Travar"}
+      </ContextMenuItem>
+      {/* Apagado, e não sumido, na travada: o mestre procura o remover onde
+          ele sempre esteve, e o cinza diz por que não dá. */}
+      <ContextMenuItem
+        variant="destructive"
+        disabled={Boolean(luz.locked)}
+        onClick={removeLuzSelection}
+      >
         <Trash2 />
         Remover luz
         <ContextMenuShortcut>Del</ContextMenuShortcut>

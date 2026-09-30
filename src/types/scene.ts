@@ -346,6 +346,12 @@ export type Luz = {
   cone?: ConeDaLuz;
   /** Ausente = fixa. Ver `EfeitoDaLuz`. */
   efeito?: EfeitoDaLuz;
+  /**
+   * Travado: o mestre não move, não redimensiona, não gira e não apaga.
+   * Ausente = livre. O mesmo campo do `CanvasItem`, com o mesmo nome, para os
+   * filtros de "quem anda" servirem a todos. Ver `trava` em `TransformHandles`.
+   */
+  locked?: boolean;
 };
 
 /**
@@ -440,6 +446,12 @@ export type FogRegion = {
    * zero. Ver `poligonoEmCena` e `normalizarPoligono`.
    */
   pontos?: number[];
+  /**
+   * Travado: o mestre não move, não redimensiona, não gira e não apaga.
+   * Ausente = livre. O mesmo campo do `CanvasItem`, com o mesmo nome, para os
+   * filtros de "quem anda" servirem a todos. Ver `trava` em `TransformHandles`.
+   */
+  locked?: boolean;
 };
 
 /**
@@ -722,6 +734,12 @@ export type Texto = {
    */
   naMesa?: boolean;
   /**
+   * Travado: o mestre não move, não redimensiona, não gira e não apaga.
+   * Ausente = livre. O mesmo campo do `CanvasItem`, com o mesmo nome, para os
+   * filtros de "quem anda" servirem a todos. Ver `trava` em `TransformHandles`.
+   */
+  locked?: boolean;
+  /**
    * A caixa MEDIDA na tela do mestre, em unidades de cena, sem o giro.
    * Ausente até o primeiro render: aí vale a estimativa de `caixaRetaDoTexto`.
    * Gravada porque a mesa também precisa dela para a seta encostar no lugar
@@ -745,6 +763,7 @@ export type NewTexto = Pick<Texto, "x" | "y"> &
       | "sublinhado"
       | "aMao"
       | "naMesa"
+      | "locked"
     >
   >;
 
@@ -772,6 +791,7 @@ export function semIdDoTexto(texto: Texto): NewTexto {
     aMao: texto.aMao,
     // Como na forma: a decisão de mostrar acompanha a cópia.
     naMesa: texto.naMesa,
+    locked: texto.locked,
   };
 }
 
@@ -877,6 +897,12 @@ export type Forma = {
   pontos?: number[];
   /** Está na mesa? Ausente = só o mestre vê. O mesmo do texto solto. */
   naMesa?: boolean;
+  /**
+   * Travado: o mestre não move, não redimensiona, não gira e não apaga.
+   * Ausente = livre. O mesmo campo do `CanvasItem`, com o mesmo nome, para os
+   * filtros de "quem anda" servirem a todos. Ver `trava` em `TransformHandles`.
+   */
+  locked?: boolean;
 };
 
 export type NewForma = Omit<Forma, "id">;
@@ -911,6 +937,8 @@ export function semIdDaForma(forma: Forma): NewForma {
     // está vendo e ver a cópia sumir seria o gesto desfazendo o que o mestre
     // acabou de decidir.
     naMesa: forma.naMesa,
+    // A trava vai junto, como vai a do item: ver `offsetDraft`.
+    locked: forma.locked,
   };
 }
 
@@ -1139,7 +1167,7 @@ export type Spotlight = {
 
 /** O que o chamador informa ao desenhar uma área; `id` e `revealed` são do store. */
 export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height"> &
-  Partial<Pick<FogRegion, "formato" | "rotation" | "pontos">>;
+  Partial<Pick<FogRegion, "formato" | "rotation" | "pontos" | "locked">>;
 
 /**
  * A área sem o id e sem o `revealed`, campo a campo -- o que copiar guarda.
@@ -1157,6 +1185,7 @@ export function semIdDaArea(area: FogRegion): NewFogRegion {
     formato: area.formato,
     rotation: area.rotation,
     pontos: area.pontos,
+    locked: area.locked,
   };
 }
 
@@ -1329,6 +1358,12 @@ export type Parede = {
    * Não vale para a `linha`, que não tem interior.
    */
   semTeto?: boolean;
+  /**
+   * Travado: o mestre não move, não redimensiona, não gira e não apaga.
+   * Ausente = livre. O mesmo campo do `CanvasItem`, com o mesmo nome, para os
+   * filtros de "quem anda" servirem a todos. Ver `trava` em `TransformHandles`.
+   */
+  locked?: boolean;
 };
 
 export type NewParede = Omit<Parede, "id">;
@@ -1346,6 +1381,7 @@ export function semIdDaParede(parede: Parede): NewParede {
     diagonal: parede.diagonal,
     altura: parede.altura,
     semTeto: parede.semTeto,
+    locked: parede.locked,
   };
 }
 
@@ -1363,6 +1399,7 @@ export function semIdDaLuz(luz: Luz): NewLuz {
     desligada: luz.desligada,
     cone: luz.cone,
     efeito: luz.efeito,
+    locked: luz.locked,
   };
 }
 

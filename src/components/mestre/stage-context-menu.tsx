@@ -213,6 +213,17 @@ export function StageContextMenu({
     ? scene.cameras?.find((camera) => camera.id === cameraDoMenuId)
     : undefined;
   const allLocked = hasSelection && selectedItems.every((item) => item.locked);
+  /** O texto e a forma da mão, para o bloco curto saber se estão todos presos. */
+  const doQuadroNaMao = [
+    ...(scene.textos ?? []).filter((texto) =>
+      selectedTextoIds.includes(texto.id),
+    ),
+    ...(scene.formas ?? []).filter((forma) =>
+      selectedFormaIds.includes(forma.id),
+    ),
+  ];
+  const quadroTravado =
+    doQuadroNaMao.length > 0 && doQuadroNaMao.every((coisa) => coisa.locked);
   const opacidade = opacidadeDaSelecao(selectedItems);
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedLuz = scene.luzes?.find((luz) => luz.id === selectedLuzId);
@@ -274,7 +285,16 @@ export function StageContextMenu({
                 ? "Esconder de novo"
                 : "Revelar para a mesa"}
             </ContextMenuItem>
-            <ContextMenuItem variant="destructive" onClick={removeFogSelection}>
+            <ContextMenuItem onClick={toggleSelectionLock}>
+              {selectedFog.locked ? <LockOpen /> : <Lock />}
+              {selectedFog.locked ? "Destravar" : "Travar"}
+            </ContextMenuItem>
+            {/* Apagado na travada, e não sumido: ver o da luz. */}
+            <ContextMenuItem
+              variant="destructive"
+              disabled={Boolean(selectedFog.locked)}
+              onClick={removeFogSelection}
+            >
               <Trash2 />
               Remover área
               <ContextMenuShortcut>Del</ContextMenuShortcut>
@@ -314,8 +334,15 @@ export function StageContextMenu({
                 </ContextMenuItem>
               </>
             ) : null}
+            {doQuadroNaMao.length > 0 ? (
+              <ContextMenuItem onClick={toggleSelectionLock}>
+                {quadroTravado ? <LockOpen /> : <Lock />}
+                {quadroTravado ? "Destravar" : "Travar"}
+              </ContextMenuItem>
+            ) : null}
             <ContextMenuItem
               variant="destructive"
+              disabled={quadroTravado && daMargem === 0}
               onClick={() => removeSelection()}
             >
               <Trash2 />
@@ -530,6 +557,11 @@ export function StageContextMenu({
             ) : null}
             <ContextMenuItem
               variant="destructive"
+              // Com texto ou forma livres junto, o Remover ainda tem o que
+              // tirar: só apaga quando TUDO na mão está preso.
+              disabled={
+                allLocked && doQuadroNaMao.every((coisa) => coisa.locked)
+              }
               onClick={() => removeSelection()}
             >
               <Trash2 />
