@@ -2,14 +2,27 @@
 
 import { create } from "zustand";
 
-import { semIdDaForma, semIdDoPostit, semIdDoTexto } from "@/types/scene";
+import {
+  semIdDaArea,
+  semIdDaForma,
+  semIdDaLuz,
+  semIdDaParede,
+  semIdDoPostit,
+  semIdDoTexto,
+} from "@/types/scene";
 import type {
   CanvasItem,
+  FogRegion,
   Forma,
   ItemDraft,
+  Luz,
+  NewFogRegion,
   NewForma,
+  NewLuz,
+  NewParede,
   NewTexto,
   NewTraco,
+  Parede,
   Postit,
   Texto,
   Traco,
@@ -22,6 +35,9 @@ type Copia = {
   formas?: Forma[];
   postits?: Postit[];
   tracos?: Traco[];
+  paredes?: Parede[];
+  areas?: FogRegion[];
+  luzes?: Luz[];
 };
 
 type ClipboardStore = {
@@ -42,6 +58,21 @@ type ClipboardStore = {
   postits: Omit<Postit, "id">[];
   /** Os riscos do lápis, com os pontos onde estavam. */
   tracos: NewTraco[];
+  /**
+   * O que é do CHÃO do mapa: parede, área escondida e luz cravada.
+   *
+   * Cada uma se seleciona sozinha no palco, então um Ctrl+C traz uma lista com
+   * um só -- e as outras vazias. Listas mesmo assim, pela forma do resto: o
+   * colar não precisa saber quantas são.
+   */
+  paredes: NewParede[];
+  /**
+   * Sem o `revealed`: a cópia nasce ESCONDENDO, como toda área nova. Copiar a
+   * área de uma sala já aberta é pegar o formato para a próxima que a mesa
+   * ainda não viu, e uma cópia já revelada não esconderia nada.
+   */
+  areas: NewFogRegion[];
+  luzes: NewLuz[];
   copy: (copia: Copia) => void;
 };
 
@@ -56,7 +87,14 @@ type ClipboardStore = {
 export function temAlgoParaColar(
   guardado: Pick<
     ClipboardStore,
-    "drafts" | "textos" | "formas" | "postits" | "tracos"
+    | "drafts"
+    | "textos"
+    | "formas"
+    | "postits"
+    | "tracos"
+    | "paredes"
+    | "areas"
+    | "luzes"
   >,
 ): boolean {
   return (
@@ -64,7 +102,10 @@ export function temAlgoParaColar(
     guardado.textos.length > 0 ||
     guardado.formas.length > 0 ||
     guardado.postits.length > 0 ||
-    guardado.tracos.length > 0
+    guardado.tracos.length > 0 ||
+    guardado.paredes.length > 0 ||
+    guardado.areas.length > 0 ||
+    guardado.luzes.length > 0
   );
 }
 
@@ -80,9 +121,24 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
   formas: [],
   postits: [],
   tracos: [],
+  paredes: [],
+  areas: [],
+  luzes: [],
 
-  copy({ itens = [], textos = [], formas = [], postits = [], tracos = [] }) {
+  copy({
+    itens = [],
+    textos = [],
+    formas = [],
+    postits = [],
+    tracos = [],
+    paredes = [],
+    areas = [],
+    luzes = [],
+  }) {
     set({
+      paredes: paredes.map(semIdDaParede),
+      areas: areas.map(semIdDaArea),
+      luzes: luzes.map(semIdDaLuz),
       formas: formas.map(semIdDaForma),
       // Com a cor, o fundo e a ênfase: ver `semIdDoTexto`.
       textos: textos.map(semIdDoTexto),

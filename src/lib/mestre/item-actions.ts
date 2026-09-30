@@ -36,9 +36,17 @@ import {
   CORES_DA_LUZ,
   DOCUMENTO_FONTE,
   POSTIT_FONTE,
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  semIdDaArea,
   semIdDaForma,
+  semIdDaLuz,
+  semIdDaParede,
   semIdDoPostit,
   semIdDoTexto,
+  temLuz,
+  temNevoa,
+  temSol,
 } from "@/types/scene";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { degrauDeFonte } from "@/lib/mestre/degrau-de-fonte";
@@ -47,12 +55,18 @@ import type {
   LuzCarregada,
   CanvasItem,
   Documento,
+  FogRegion,
   Forma,
   ItemDraft,
+  Luz,
+  NewFogRegion,
   NewForma,
+  NewLuz,
+  NewParede,
   NewPostit,
   NewTexto,
   NewTraco,
+  Parede,
   Postit,
   Scene,
   Texto,
@@ -204,6 +218,59 @@ function tracoDeslocado(traco: NewTraco): NewTraco {
   return { ...traco, pontos: traco.pontos.map((valor) => valor + PASTE_OFFSET) };
 }
 
+/**
+ * O que está na mão do CHÃO do mapa: a parede, a área escondida e a luz
+ * cravada.
+ *
+ * Fora do `read` porque as três não andam com o resto: cada uma se seleciona
+ * sozinha, e selecioná-la larga as imagens, os textos e as formas. No máximo
+ * uma das três listas tem alguém -- e as outras seis de `read`, ninguém.
+ */
+function doChao(scene: Scene | null): {
+  paredes: Parede[];
+  areas: FogRegion[];
+  luzes: Luz[];
+} {
+  const { selectedParedeId, selectedFogId, selectedLuzId } =
+    useSelectionStore.getState();
+
+  return {
+    paredes: (scene?.paredes ?? []).filter(
+      (parede) => parede.id === selectedParedeId,
+    ),
+    areas: (scene?.fog ?? []).filter((area) => area.id === selectedFogId),
+    luzes: (scene?.luzes ?? []).filter((luz) => luz.id === selectedLuzId),
+  };
+}
+
+/** A parede e a área têm caixa, e a cópia fica dentro do plano como o item. */
+function paredeDeslocada(parede: NewParede): NewParede {
+  return { ...parede, ...offsetInsideScene(parede, PASTE_OFFSET) };
+}
+
+function areaDeslocada(area: NewFogRegion): NewFogRegion {
+  return { ...area, ...offsetInsideScene(area, PASTE_OFFSET) };
+}
+
+/**
+ * A luz é um ponto: anda o mesmo tanto, e volta para dentro se o passo a
+ * levaria para fora do plano -- a regra de `offsetInsideScene`, com caixa de
+ * lado zero.
+ */
+function luzDeslocada(luz: NewLuz): NewLuz {
+  const { x, y } = offsetInsideScene(
+    {
+      x: Math.min(Math.max(luz.x, 0), SCENE_WIDTH),
+      y: Math.min(Math.max(luz.y, 0), SCENE_HEIGHT),
+      width: 0,
+      height: 0,
+    },
+    PASTE_OFFSET,
+  );
+
+  return { ...luz, x, y };
+}
+
 function offsetDraft(item: CanvasItem): ItemDraft {
   const { x, y } = offsetInsideScene(item, PASTE_OFFSET);
 
@@ -235,18 +302,23 @@ function offsetDraft(item: CanvasItem): ItemDraft {
  */
 export function copySelection(): void {
   const {
+    scene,
     selectedItems,
     selectedTextos,
     selectedFormas,
     selectedPostits,
     selectedTracos,
   } = read();
+  const { paredes, areas, luzes } = doChao(scene);
   if (
     selectedItems.length === 0 &&
     selectedTextos.length === 0 &&
     selectedFormas.length === 0 &&
     selectedPostits.length === 0 &&
-    selectedTracos.length === 0
+    selectedTracos.length === 0 &&
+    paredes.length === 0 &&
+    areas.length === 0 &&
+    luzes.length === 0
   )
     return;
 
@@ -256,6 +328,9 @@ export function copySelection(): void {
     formas: selectedFormas,
     postits: selectedPostits,
     tracos: selectedTracos,
+    paredes,
+    areas,
+    luzes,
   });
 }
 
@@ -342,7 +417,15 @@ export function guardarSelecaoNoHandout(): void {
  */
 export function cutSelection(): void {
   copySelection();
-  removeSelection({ semCartao: true });
+
+  // Do chão sai só a que estava na mão: `removeSelection` não as conhece, e
+  // cada uma tem o próprio apagar. Selecionar uma delas já largou o resto.
+  const { selectedParedeId, selectedFogId, selectedLuzId } =
+    useSelectionStore.getState();
+  if (selectedParedeId) removeParedeSelection();
+  else if (selectedFogId) removeFogSelection();
+  else if (selectedLuzId) removeLuzSelection();
+  else removeSelection({ semCartao: true });
 }
 
 export function pasteClipboard(): void {
@@ -356,7 +439,7 @@ export function pasteClipboard(): void {
   // vê. A cópia leva o olho junto, e o que veio de um quadro chega fechado.
   if (!temAlgoParaColar(guardado)) return;
 
-  colarNaCena(scene.id, {
+  colarNaCena(scene, {
     itens: guardado.drafts.map((draft) => ({
       ...draft,
       ...offsetInsideScene(draft, PASTE_OFFSET),
@@ -365,6 +448,9 @@ export function pasteClipboard(): void {
     formas: guardado.formas.map(formaDeslocada),
     postits: guardado.postits.map(postitDeslocado),
     tracos: guardado.tracos.map(tracoDeslocado),
+    paredes: guardado.paredes.map(paredeDeslocada),
+    areas: guardado.areas.map(areaDeslocada),
+    luzes: guardado.luzes.map(luzDeslocada),
   });
 }
 
@@ -377,17 +463,21 @@ export function duplicateSelection(): void {
     selectedPostits,
     selectedTracos,
   } = read();
+  const { paredes, areas, luzes } = doChao(scene);
   if (
     !scene ||
     (selectedItems.length === 0 &&
       selectedTextos.length === 0 &&
       selectedFormas.length === 0 &&
       selectedPostits.length === 0 &&
-      selectedTracos.length === 0)
+      selectedTracos.length === 0 &&
+      paredes.length === 0 &&
+      areas.length === 0 &&
+      luzes.length === 0)
   )
     return;
 
-  colarNaCena(scene.id, {
+  colarNaCena(scene, {
     itens: selectedItems.map(offsetDraft),
     textos: selectedTextos.map((texto) => textoDeslocado(semIdDoTexto(texto))),
     formas: selectedFormas.map((forma) => formaDeslocada(semIdDaForma(forma))),
@@ -397,6 +487,9 @@ export function duplicateSelection(): void {
     tracos: selectedTracos.map(({ pontos, cor, espessura }) =>
       tracoDeslocado({ pontos, cor, espessura }),
     ),
+    paredes: paredes.map((parede) => paredeDeslocada(semIdDaParede(parede))),
+    areas: areas.map((area) => areaDeslocada(semIdDaArea(area))),
+    luzes: luzes.map((luz) => luzDeslocada(semIdDaLuz(luz))),
   });
 }
 
@@ -408,16 +501,21 @@ export function duplicateSelection(): void {
  * não no original.
  */
 function colarNaCena(
-  sceneId: string,
+  scene: Scene,
   copias: {
     itens: ItemDraft[];
     textos: NewTexto[];
     formas: NewForma[];
     postits: NewPostit[];
     tracos: NewTraco[];
+    paredes: NewParede[];
+    areas: NewFogRegion[];
+    luzes: NewLuz[];
   },
 ): void {
   const cena = useSceneStore.getState();
+  const sceneId = scene.id;
+
 
   // Só quem tem o que colar: `addItems` com a lista vazia gravaria o board e
   // deixaria um passo de desfazer que não desfaz nada.
@@ -432,9 +530,36 @@ function colarNaCena(
   );
   const tracos = copias.tracos.map((traco) => cena.addTraco(sceneId, traco));
 
-  useSelectionStore
-    .getState()
-    .selectMisto({ itens, textos, formas, postits, tracos });
+  /**
+   * O chão, só onde há chão para ele: parede e luz no mapa, a área onde há
+   * névoa. Colar a parede de um mapa num quadro deixaria na cena uma coisa que
+   * nenhuma camada desenha e nenhum gizmo alcança.
+   */
+  const paredes = temSol(scene)
+    ? copias.paredes.map((parede) => cena.addParede(sceneId, parede))
+    : [];
+  const areas = temNevoa(scene)
+    ? copias.areas.map((area) => cena.addFog(sceneId, area))
+    : [];
+  const luzes = temLuz(scene)
+    ? copias.luzes.map((luz) => cena.addLuz(sceneId, luz))
+    : [];
+
+  const selecao = useSelectionStore.getState();
+  const doResto =
+    itens.length +
+    textos.length +
+    formas.length +
+    postits.length +
+    tracos.length;
+
+  // Parede, área e luz se selecionam SOZINHAS -- escolher uma larga o resto
+  // (ver `selectParede`). O Ctrl+C delas veio sozinho pela mesma razão, e é a
+  // cópia delas que fica na mão quando é só ela que chegou.
+  if (doResto === 0 && paredes[0]) selecao.selectParede(paredes[0]);
+  else if (doResto === 0 && areas[0]) selecao.selectFog(areas[0]);
+  else if (doResto === 0 && luzes[0]) selecao.selectLuz(luzes[0]);
+  else selecao.selectMisto({ itens, textos, formas, postits, tracos });
 }
 
 export function moveSelectionZ(direction: ZDirection): void {

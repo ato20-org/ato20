@@ -1142,6 +1142,25 @@ export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height"> &
   Partial<Pick<FogRegion, "formato" | "rotation" | "pontos">>;
 
 /**
+ * A área sem o id e sem o `revealed`, campo a campo -- o que copiar guarda.
+ *
+ * Sem o `revealed` porque a cópia nasce escondendo, como toda área nova: ver
+ * `useClipboardStore`. Escrito e não `{ id, ...resto }` pela razão de
+ * `semIdDaForma`.
+ */
+export function semIdDaArea(area: FogRegion): NewFogRegion {
+  return {
+    x: area.x,
+    y: area.y,
+    width: area.width,
+    height: area.height,
+    formato: area.formato,
+    rotation: area.rotation,
+    pontos: area.pontos,
+  };
+}
+
+/**
  * Um risco a mao livre sobre o mapa.
  *
  * Mora na CENA, como a nevoa e os pontos, e pelas mesmas razoes: o risco marca
@@ -1314,7 +1333,38 @@ export type Parede = {
 
 export type NewParede = Omit<Parede, "id">;
 
+/** A parede sem o id, campo a campo. Pela razão de `semIdDaForma`. */
+export function semIdDaParede(parede: Parede): NewParede {
+  return {
+    x: parede.x,
+    y: parede.y,
+    width: parede.width,
+    height: parede.height,
+    rotation: parede.rotation,
+    formato: parede.formato,
+    pontos: parede.pontos,
+    diagonal: parede.diagonal,
+    altura: parede.altura,
+    semTeto: parede.semTeto,
+  };
+}
+
 export type NewLuz = Omit<Luz, "id">;
+
+/** A luz sem o id, campo a campo. Pela razão de `semIdDaForma`. */
+export function semIdDaLuz(luz: Luz): NewLuz {
+  return {
+    x: luz.x,
+    y: luz.y,
+    raio: luz.raio,
+    raioIntenso: luz.raioIntenso,
+    cor: luz.cor,
+    intensidade: luz.intensidade,
+    desligada: luz.desligada,
+    cone: luz.cone,
+    efeito: luz.efeito,
+  };
+}
 
 /**
  * O sol da cena: luz sem posição, só direção.
