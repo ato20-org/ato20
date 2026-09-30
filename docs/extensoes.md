@@ -424,7 +424,12 @@ antes de publicar**, e o que não pode ir para a rede não vai.
 `api.dados.assinarMesa(aviso)` — o que está na mesa agora, dos dois lados, com
 face gravada, semente e arremesso; o aviso só vem quando entra ou sai dado, e
 arrastar não acorda ninguém. `api.jogadores.listar()` — quem a campanha
-conhece. `api.mesa.enderecos()` e `api.mesa.linkDaPagina("camera", { rede,
+conhece, com os `personagens` vinculados a cada um. `api.retratos.naMesa()`,
+`assinarMesa(aviso)` e `dePersonagem(id)` — os retratos **como a mesa os vê**,
+pela mesma `retratoPublico` do quadro da TV: sem medidor nem condição
+escondidos, e o nome só com a peça "nome" ligada. `dePersonagem` entrega o de
+quem não está no ar também. O formato é o do kit de retratos: o plugin passa
+adiante sem mexer. `api.mesa.enderecos()` e `api.mesa.linkDaPagina("camera", { rede,
 busca })` — o link pronto, com o código, pelo endereço desta máquina ou pelo da
 rede.
 
@@ -447,6 +452,17 @@ lado a lado, cronometra pela chegada **nesta** página — o OBS pode estar nout
 computador — e para o relógio quando nada se mexe. O que cai, de quem e por
 quanto tempo é da página.
 
+**5. O kit de retratos.** `/kit/retratos` desenha retratos com o mesmo
+`PortraitLayer` da janela do espectador — imagem ou página viva, barras com o
+estilo de fábrica e os de plugin, selos, aura da condição e os dados caindo
+embaixo. A página manda `{ ato20: "retratos", mostrar: [retratos] }` (a lista
+inteira, é estado) e `{ ato20: "retratos", rolagens: [...] }`; o kit responde
+`pronto`. `?code=` deixa o kit ler os estilos de medidor dos plugins;
+`?encaixar=1` arruma os retratos lado a lado com a composição inteira cabendo
+na tela (o card de uma pessoa), e sem ele cada retrato fica onde a mesa o pôs.
+Para desenhar fora do palco, o kit usa `PalcoSoTela`: o contexto do palco só
+com a camada da tela.
+
 **A ativação.** Plugin é carregado quando alguém abre o painel dele. O que
 trabalha sozinho — escuta a mesa e publica — pede `"ativacao": "abertura"` e
 sobe com o Mestre. Exige `principal`.
@@ -455,8 +471,9 @@ sobe com o Mestre. Exige `principal`.
 da live, por exemplo). Não tem controle na tela gerada: quem a edita é o painel
 do plugin, que sabe o que os itens são, e o editor JSON.
 
-O plugin OBS (`ato20-plugin-obs`) é o exemplo completo: `main.js` com o painel
-Transmissão e o filtro, `camera.html`/`camera.js` com a página.
+O plugin OBS ([valb-mig/ato20.obs.plugin](https://github.com/valb-mig/ato20.obs.plugin)) é o exemplo completo: `main.js` com o painel
+Transmissão e o filtro, `camera.html` com os dados e `retratos.html` com os
+retratos (o grupo no ar e o card de cada personagem de jogador).
 
 ## Atalho de plugin não rouba atalho do aplicativo
 
