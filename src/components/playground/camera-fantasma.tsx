@@ -141,6 +141,9 @@ function Fantasma({
   return (
     <>
       <div
+        // O menu do palco lê daqui qual câmera levou o botão direito. Ver
+        // `StageContextMenu`.
+        data-camera-id={camera.id}
         className={`${transmitindo ? "border-red-400/70" : "border-foreground/45"} pointer-events-none absolute border-dashed`}
         style={{
           left: caixa.x,

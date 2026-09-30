@@ -295,6 +295,9 @@ export function CameraFrame({
   return (
     <>
       <div
+        // É por aqui que o menu do palco sabe que o botão direito caiu NESTA
+        // moldura -- na borda, no rótulo ou na alça. Ver `StageContextMenu`.
+        data-camera-id={selecionada.id}
         className={`${corBorda} pointer-events-none absolute border-solid`}
         style={{
           // A POSIÇÃO por `transform`, e não por `left`/`top`: arrastar a

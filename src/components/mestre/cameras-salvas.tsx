@@ -15,6 +15,7 @@ import {
   ScanSearch,
   TextCursorInput,
   Trash2,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
     (state) => state.prenderNaSelecao,
   );
   const soltar = useCameraLockStore((state) => state.soltar);
+  const removerCamera = useSceneStore((state) => state.removerCamera);
   const temSelecao = useSelectionStore(
     (state) => state.selectedIds.length > 0,
   );
@@ -232,6 +234,17 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
               </DropdownMenuItem>
             </>
           ) : null}
+
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => {
+              if (selecionada) removerCamera(scene.id, selecionada.id);
+            }}
+          >
+            <Trash2 />
+            Remover a câmera
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -290,32 +303,47 @@ function Chip({
 
   return (
     <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
+      {/* O chip é DOIS botões lado a lado, e não um com o X dentro: botão
+          dentro de botão não é HTML válido, e o clique no X subiria como um
+          clique de selecionar. O fundo aceso mora no invólucro, para os dois
+          lerem como uma peça só. */}
       <ContextMenuTrigger
-        render={
-          <button
-            type="button"
-            className={cn(
-              "hover:bg-accent flex h-7 max-w-32 items-center gap-1 rounded-md px-2 text-xs",
-              selecionada &&
-                "bg-primary text-primary-foreground hover:bg-primary/90",
-            )}
-            title={`${camera.nome} (Shift+${posicao})`}
-            onClick={() => selecionar(camera.id)}
-            onDoubleClick={() => setRenomeando(true)}
-            onKeyDown={aoApertarF2(() => setRenomeando(true))}
-          >
-            {/* O número É a tecla. Fora do nome para não sumir no corte. */}
-            <span className="tabular-nums opacity-70">{posicao}</span>
-            {transmitindo ? (
-              <CircleDot className="size-3 shrink-0 text-red-400" />
-            ) : null}
-            <span className="truncate">{camera.nome}</span>
-            {/* Segue tokens, e não um lugar: a mira diz isso sem ocupar o
-                nome. */}
-            {segue ? <Crosshair className="size-3 shrink-0 opacity-80" /> : null}
-          </button>
-        }
-      />
+        className={cn(
+          "hover:bg-accent flex h-7 max-w-36 items-center rounded-md text-xs",
+          selecionada &&
+            "bg-primary text-primary-foreground hover:bg-primary/90",
+        )}
+      >
+        <button
+          type="button"
+          className="flex h-full min-w-0 items-center gap-1 pr-1 pl-2"
+          title={`${camera.nome} (Shift+${posicao})`}
+          onClick={() => selecionar(camera.id)}
+          onDoubleClick={() => setRenomeando(true)}
+          onKeyDown={aoApertarF2(() => setRenomeando(true))}
+        >
+          {/* O número É a tecla. Fora do nome para não sumir no corte. */}
+          <span className="tabular-nums opacity-70">{posicao}</span>
+          {transmitindo ? (
+            <CircleDot className="size-3 shrink-0 text-red-400" />
+          ) : null}
+          <span className="truncate">{camera.nome}</span>
+          {/* Segue tokens, e não um lugar: a mira diz isso sem ocupar o
+              nome. */}
+          {segue ? <Crosshair className="size-3 shrink-0 opacity-80" /> : null}
+        </button>
+        {/* Remover a um toque, como fechar uma aba. Sem pergunta: a câmera
+            entra no desfazer, e o Ctrl+Z a devolve com nome e recorte. */}
+        <button
+          type="button"
+          className="mr-1 flex size-4 shrink-0 items-center justify-center rounded-sm opacity-60 hover:bg-black/15 hover:opacity-100"
+          aria-label={`Remover ${camera.nome}`}
+          title="Remover a câmera"
+          onClick={() => removerCamera(sceneId, camera.id)}
+        >
+          <X className="size-3" />
+        </button>
+      </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem
           onClick={() =>
