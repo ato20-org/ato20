@@ -143,11 +143,20 @@ export function SeloDaCondicao({
     >
       {/* Por `createElement`, e não `<Icone />` com uma variável: o componente
           sai de uma consulta, e a regra de componentes estáticos não distingue
-          uma consulta a um mapa fixo de um componente criado no render. */}
+          uma consulta a um mapa fixo de um componente criado no render.
+
+          O traço vai nos FILHOS do SVG, e não no `strokeWidth` da raiz. O
+          WebKitGTK multiplica o `stroke-width` da raiz `<svg>` pelo `zoom` do
+          plano, e os filhos herdam o valor já multiplicado -- que o desenho
+          ainda amplia de novo. Sobre o token, em unidade de cena, a 300% a
+          caveira virava mancha e a 1122% um quadrado cheio. Declarado no
+          filho, o valor não passa pelo `zoom` e fica certo em qualquer
+          ampliação, sem conta e sem ler a escala. Medido na webview com a
+          mesma caveira, raiz contra filho, de 50% a 1122%. */}
       {createElement(iconeDaCondicao(condicao.icone), {
         "aria-hidden": true,
+        className: "[&>*]:[stroke-width:2.4px]",
         style: { width: tamanho * 0.6, height: tamanho * 0.6, color: condicao.cor },
-        strokeWidth: 2.4,
       })}
     </span>
   );
