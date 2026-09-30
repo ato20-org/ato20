@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import { PostitTextoView } from "@/components/mestre/postit-texto-view";
 import { MarkdownView, SEM_VINCULOS } from "@/components/playground/markdown-view";
 import { pontosNaCaixa } from "@/lib/geometry/area-escondida";
+import {
+  caminhoArredondado,
+  raioDoCanto,
+} from "@/lib/geometry/canto-arredondado";
+import {
+  rabiscoDaForma,
+  rabiscoDoCaminho,
+  sementeDe,
+} from "@/lib/geometry/traco-a-mao";
 import { documentoUrl } from "@/lib/vault/documentos";
 import {
   emPixelDeTela,
@@ -161,6 +170,9 @@ export function tipografiaDoTexto(
       color: texto.cor,
       fontWeight: texto.negrito ? 700 : undefined,
       fontStyle: texto.italico ? "italic" : undefined,
+      // A letra do postit. Aqui, e não numa classe do desenho, pela razão do
+      // negrito logo acima: o campo de edição recebe este mesmo objeto.
+      fontFamily: texto.aMao ? "var(--font-postit)" : undefined,
       textDecoration: texto.sublinhado ? "underline" : undefined,
       background: texto.fundo,
       // Em `em` e não em pixel: a folga do marca-texto tem de crescer junto com
@@ -263,6 +275,20 @@ export function FormaView({
   const alvo = Math.max(espessura, scale > 0 ? ALVO_DA_FORMA_PX / scale : espessura);
   const recuo = Math.min(espessura / 2, width / 2, height / 2);
 
+  /**
+   * O traço à mão, quando a forma o tem. A semente é o id: a forma que está no
+   * quadro tem um, e a prévia do gesto -- que ainda não tem -- treme com uma
+   * semente fixa até nascer. Ver `rabiscoDaForma`.
+   *
+   * Só o DESENHO treme. A mira continua na geometria limpa: o clique pega a
+   * figura onde ela está, e não onde a tremida a levou nesse trecho.
+   */
+  const id = "id" in forma && typeof forma.id === "string" ? forma.id : "";
+  const rabisco = useMemo(
+    () => (forma.aMao ? rabiscoDaForma(forma, sementeDe(id)) : null),
+    [forma, id],
+  );
+
   const traco = {
     fill: fundo ?? "none",
     // `currentColor` e não uma cor fixa: sem escolha, a forma é da cor da
@@ -272,6 +298,10 @@ export function FormaView({
     strokeWidth: espessura,
     strokeLinecap: "round",
     strokeLinejoin: "round",
+    // No elemento, e não um `opacity` no `<svg>`: traço e fundo são dois
+    // valores, e o `opacity` de fora apagaria os dois juntos.
+    strokeOpacity: forma.opacidadeDoTraco,
+    fillOpacity: forma.opacidadeDoFundo,
   } as const;
 
   const mira = {
@@ -303,15 +333,25 @@ export function FormaView({
       );
     }
 
-    if (forma.tipo === "poligono")
+    if (forma.tipo === "poligono") {
+      const vertices = pontosNaCaixa(forma, forma.pontos ?? []);
+      // Arredondado vira `<path>`: o `<polygon>` não tem raio. O raio é o da
+      // CAIXA, como no retângulo -- ver `raioDoCanto`.
+      if (forma.arredondado)
+        return (
+          <path
+            d={caminhoArredondado(vertices, raioDoCanto(width, height))}
+            {...pintura}
+          />
+        );
+
       return (
         <polygon
-          points={pontosNaCaixa(forma, forma.pontos ?? [])
-            .map((ponto) => `${ponto.x},${ponto.y}`)
-            .join(" ")}
+          points={vertices.map((ponto) => `${ponto.x},${ponto.y}`).join(" ")}
           {...pintura}
         />
       );
+    }
 
     if (forma.tipo === "elipse")
       return (
@@ -324,12 +364,20 @@ export function FormaView({
         />
       );
 
+    const largura = Math.max(0, width - recuo * 2);
+    const altura = Math.max(0, height - recuo * 2);
+    // Da caixa por DENTRO do recuo: é essa a que se vê, e é nela que o canto
+    // tem de caber.
+    const raio = forma.arredondado ? raioDoCanto(largura, altura) : 0;
+
     return (
       <rect
         x={recuo}
         y={recuo}
-        width={Math.max(0, width - recuo * 2)}
-        height={Math.max(0, height - recuo * 2)}
+        width={largura}
+        height={altura}
+        rx={raio}
+        ry={raio}
         {...pintura}
       />
     );
@@ -345,7 +393,32 @@ export function FormaView({
       // inteira, e ela não é a figura.
       style={{ pointerEvents: "none" }}
     >
-      {desenho(traco)}
+      {rabisco ? (
+        <>
+          {rabisco.miolo ? (
+            <path
+              d={rabisco.miolo}
+              fill={fundo}
+              fillOpacity={traco.fillOpacity}
+              stroke="none"
+            />
+          ) : null}
+          {/* UM caminho com as duas passadas do rabisco, e não dois: a
+              opacidade do traço vale para o caminho inteiro, e onde as
+              passadas se cruzam a borda não escurece. */}
+          <path
+            d={rabisco.contorno}
+            fill="none"
+            stroke={traco.stroke}
+            strokeOpacity={traco.strokeOpacity}
+            strokeWidth={espessura}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      ) : (
+        desenho(traco)
+      )}
       {interativa ? desenho(mira) : null}
     </svg>
   );
@@ -451,11 +524,18 @@ export function SetaSvg({
 }) {
   const { ligacao } = seta;
   const meio = pontoNaSeta(seta, 0.5);
+  const curva = caminhoDaSeta(seta);
+  // Tremida pelo id, como a forma: a mesma nos dois lados da mesa. A ponta
+  // continua o triângulo limpo, preso ao fim do rabisco pelo `markerEnd`.
+  const d = useMemo(
+    () => (ligacao.aMao ? rabiscoDoCaminho(curva, sementeDe(ligacao.id)) : curva),
+    [curva, ligacao.aMao, ligacao.id],
+  );
 
   return (
     <>
       <path
-        d={caminhoDaSeta(seta)}
+        d={d}
         fill="none"
         className={className}
         strokeWidth={SETA_TRACO_PX / escala}

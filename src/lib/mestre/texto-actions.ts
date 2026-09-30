@@ -4,6 +4,7 @@ import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { ehQuadro } from "@/types/scene";
+import { padraoDoQuadro } from "@/lib/configuracoes/quadro";
 
 /**
  * Texto vindo de FORA do app -- do editor, do navegador, do PDF -- vira um
@@ -28,6 +29,7 @@ export function colarTextoDoSistema(bruto: string): boolean {
     texto,
     x: Math.round(viewport.x + viewport.width / 2),
     y: Math.round(viewport.y + viewport.height / 2),
+    ...(padraoDoQuadro().aMao ? { aMao: true as const } : {}),
   });
   useSelectionStore.getState().selectTextos([id]);
   return true;

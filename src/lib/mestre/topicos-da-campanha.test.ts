@@ -5,6 +5,7 @@ import { topicosAchados } from "@/lib/mestre/topicos-da-campanha";
 describe("topicosAchados", () => {
   it("termo vazio acha todos, na ordem da barra", () => {
     expect(topicosAchados("  ", {})).toEqual([
+      "quadro",
       "medidores",
       "condicoes",
       "layout",
@@ -33,6 +34,10 @@ describe("topicosAchados", () => {
 
   it("o plugin se acha pelo nome do tópico que o guarda", () => {
     expect(topicosAchados("plugin", {})).toEqual(["ajustes"]);
+  });
+
+  it("o canto arredondado se acha pela palavra de quem procura", () => {
+    expect(topicosAchados("borda", {})).toEqual(["quadro"]);
   });
 
   it("nada bate, nada volta", () => {

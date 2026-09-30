@@ -1,12 +1,15 @@
 "use client";
 
 import { memo } from "react";
+import { Minus, Signature, Square, SquareRoundCorner } from "lucide-react";
 
 import {
   caixaDaForma,
   FormaView,
 } from "@/components/playground/quadro-mesa-layer";
 import { TransformHandles } from "@/components/playground/transform-handles";
+import { Chave } from "@/components/mestre/chave-de-estilo";
+import { Slider } from "@/components/ui/slider";
 import { RESIZE_HANDLES } from "@/lib/geometry/transform";
 import {
   moverNoGesto,
@@ -16,7 +19,7 @@ import {
 import { FORMA_Z } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { useToolStore } from "@/lib/store/use-tool-store";
+import { ESPESSURAS_LAPIS, useToolStore } from "@/lib/store/use-tool-store";
 import { temAnotacao, type Forma, type NewForma, type Scene } from "@/types/scene";
 
 /**
@@ -204,6 +207,26 @@ const FormaDaCena = memo(function FormaDaCena({
                 ...(cor !== undefined ? { cor: cor ?? undefined } : {}),
                 ...(fundo !== undefined ? { fundo: fundo ?? undefined } : {}),
               }),
+            opacidade: {
+              traco: forma.opacidadeDoTraco ?? 1,
+              fundo: forma.opacidadeDoFundo ?? 1,
+              // Opaco é a AUSÊNCIA do campo, como na imagem: ver `Forma`.
+              onChange: ({ traco, fundo }) =>
+                updateForma(sceneId, forma.id, {
+                  ...(traco !== undefined
+                    ? { opacidadeDoTraco: traco >= 1 ? undefined : traco }
+                    : {}),
+                  ...(fundo !== undefined
+                    ? { opacidadeDoFundo: fundo >= 1 ? undefined : fundo }
+                    : {}),
+                }),
+            },
+            extras: (
+              <EstiloDaForma
+                forma={forma}
+                onChange={(patch) => updateForma(sceneId, forma.id, patch)}
+              />
+            ),
           }}
           // Pelo gesto, como o texto e o item: redimensionar gravava a cena a
           // cada quadro. Ver `useGestoStore`.
@@ -239,3 +262,68 @@ const FormaDaCena = memo(function FormaDaCena({
     </>
   );
 });
+
+/**
+ * O que o painel de Estilo sabe da forma e o gizmo não: a espessura, os
+ * cantos e o traço à mão -- as mesmas escolhas do popover da ferramenta, agora
+ * para ESTA forma. Antes eram dois botões soltos na fileira do gizmo e a
+ * espessura não tinha lugar nenhum depois de a forma nascer.
+ *
+ * Reto e limpo são a AUSÊNCIA do campo, como no resto da forma.
+ */
+function EstiloDaForma({
+  forma,
+  onChange,
+}: {
+  forma: Forma;
+  onChange: (patch: Partial<Omit<Forma, "id">>) => void;
+}) {
+  // A espessura gravada pode não ser um degrau -- forma de antes da escada,
+  // ou vinda de um plugin. O slider mostra o degrau mais perto.
+  const degrau = ESPESSURAS_LAPIS.reduce(
+    (perto, valor, indice) =>
+      Math.abs(valor - forma.espessura) <
+      Math.abs(ESPESSURAS_LAPIS[perto]! - forma.espessura)
+        ? indice
+        : perto,
+    0,
+  );
+
+  return (
+    <>
+      <div className="space-y-1.5">
+        <span className="text-muted-foreground text-[10px]">Espessura</span>
+        <Slider
+          aria-label="Espessura"
+          value={[degrau]}
+          min={0}
+          max={ESPESSURAS_LAPIS.length - 1}
+          step={1}
+          onValueChange={(valor) => {
+            const indice = Array.isArray(valor) ? (valor[0] ?? degrau) : valor;
+            onChange({ espessura: ESPESSURAS_LAPIS[indice] ?? forma.espessura });
+          }}
+        />
+      </div>
+
+      {/* Só onde há canto: elipse e linha não têm. */}
+      {forma.tipo === "retangulo" || forma.tipo === "poligono" ? (
+        <Chave
+          titulo="Cantos"
+          ligada={!!forma.arredondado}
+          desligada={{ rotulo: "Cantos retos", Icone: Square }}
+          ligadaComo={{ rotulo: "Cantos arredondados", Icone: SquareRoundCorner }}
+          onMudar={(valor) => onChange({ arredondado: valor ? true : undefined })}
+        />
+      ) : null}
+
+      <Chave
+        titulo="Traço"
+        ligada={!!forma.aMao}
+        desligada={{ rotulo: "Traço limpo", Icone: Minus }}
+        ligadaComo={{ rotulo: "Traço à mão", Icone: Signature }}
+        onMudar={(valor) => onChange({ aMao: valor ? true : undefined })}
+      />
+    </>
+  );
+}

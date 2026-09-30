@@ -16,6 +16,7 @@ import {
   Move,
   Plus,
   Search,
+  Shapes,
   SlidersHorizontal,
   Sparkles,
   Wand2,
@@ -39,6 +40,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -48,6 +50,10 @@ import { useCharacters } from "@/hooks/use-characters";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import { SUGESTOES } from "@/lib/condicao";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
+import {
+  definirPadraoDoQuadro,
+  usePadraoDoQuadro,
+} from "@/lib/configuracoes/quadro";
 import { escoposDe } from "@/lib/configuracoes/valor";
 import {
   TOPICOS_DA_CAMPANHA,
@@ -81,6 +87,7 @@ const MAXIMO_INICIAL = 10;
 
 /** O ícone de cada tópico, na barra. Os textos moram em `TOPICOS_DA_CAMPANHA`. */
 const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
+  quadro: Shapes,
   medidores: Gauge,
   condicoes: Sparkles,
   layout: LayoutTemplate,
@@ -112,7 +119,7 @@ const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
  * por campanha, então moram aqui; a janela de Retratos fica com o elenco.
  */
 export function ConfiguracaoDaCampanhaBody() {
-  const [aberto, setAberto] = useState<TopicoDaCampanha>("medidores");
+  const [aberto, setAberto] = useState<TopicoDaCampanha>("quadro");
   const [busca, setBusca] = useState("");
 
   // No alto, e não dentro de cada tópico: a busca precisa dos nomes do que foi
@@ -151,7 +158,7 @@ export function ConfiguracaoDaCampanhaBody() {
   }, [busca, medidores.modelos, condicoes, ajustes]);
 
   // O tópico aberto pode sumir -- o plugin do único ajuste foi desligado.
-  const atual = topicos.includes(aberto) ? aberto : "medidores";
+  const atual = topicos.includes(aberto) ? aberto : "quadro";
   const mostrados = buscando ? topicos : [atual];
 
   function abrir(chave: TopicoDaCampanha) {
@@ -263,6 +270,8 @@ function Topico({
   medidores: ModelosDaCampanha;
 }) {
   switch (chave) {
+    case "quadro":
+      return <PadraoDoQuadro />;
     case "medidores":
       return <MedidoresDaCampanha {...medidores} />;
     case "condicoes":
@@ -300,6 +309,67 @@ function Topico({
         </Secao>
       );
   }
+}
+
+/**
+ * O jeito com que os elementos NOVOS do quadro nascem nesta campanha.
+ *
+ * Controles desenhados à mão para os dois padrões, como o zoom nas
+ * Configurações gerais: a lista gerada de Ajustes também os mostra, mas é aqui
+ * que o mestre vem procurar. A frase de baixo é a que responde "e o que já
+ * está no quadro?", que é a primeira pergunta de quem liga.
+ */
+function PadraoDoQuadro() {
+  const { arredondado, aMao } = usePadraoDoQuadro();
+
+  return (
+    <Secao
+      titulo="Quadro"
+      descricao="Como os elementos novos nascem. O que já está no quadro fica como está, e cada um troca o seu no próprio gizmo."
+    >
+      <ul className="divide-y">
+        <LinhaDePadrao
+          titulo="Cantos arredondados"
+          descricao="Retângulos e polígonos nascem com canto redondo."
+          ligada={arredondado}
+          onMudar={(valor) => definirPadraoDoQuadro({ arredondado: valor })}
+        />
+        <LinhaDePadrao
+          titulo="Traço à mão"
+          descricao="Formas e setas saem tremidas, como rabisco a lápis, e o texto solto nasce em letra de mão."
+          ligada={aMao}
+          onMudar={(valor) => definirPadraoDoQuadro({ aMao: valor })}
+        />
+      </ul>
+    </Secao>
+  );
+}
+
+/** Uma chave com o que ela faz ao lado, como as das Configurações gerais. */
+function LinhaDePadrao({
+  titulo,
+  descricao,
+  ligada,
+  onMudar,
+}: {
+  titulo: string;
+  descricao: string;
+  ligada: boolean;
+  onMudar: (ligada: boolean) => void;
+}) {
+  return (
+    <li>
+      <label className="flex items-start gap-3 py-2">
+        <Switch checked={ligada} onCheckedChange={onMudar} aria-label={titulo} />
+        <span className="min-w-0">
+          <span className="block text-sm">{titulo}</span>
+          <span className="text-muted-foreground block text-[11px] leading-snug">
+            {descricao}
+          </span>
+        </span>
+      </label>
+    </li>
+  );
 }
 
 /** Uma seção com título e uma linha de descrição, como a dos medidores. */
