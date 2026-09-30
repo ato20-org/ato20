@@ -439,6 +439,108 @@ imagem que se mexe, e não como custo da aura.
 
 ---
 
+## O quadro com muitos cartões (29/09/2026)
+
+### O sintoma
+
+"Talvez tenha um problema de performance nos arquivos e quadros, especificamente
+quando tem muito documento." A campanha de teste tinha nove notas em cartões num
+quadro, e arrastar um cartão já engasgava.
+
+### O cenário
+
+O `quadro` ganhou o eixo `--documentos` (quantos cartões de nota a folha tem,
+cada um com uma nota de sessenta linhas -- título, lista, tarefa, citação,
+negrito, menção) e o gesto `cartao`: um cartão selecionado e na mão, orbitando
+pelo caminho do gesto, como a mão faz. O texto entra direto no
+`useDocumentoStore`, porque a ponte não existe nesta página e "Abrindo…" mediria
+cartões vazios. O quadro nasce **no ar**, como o cenário sempre montou; `--sem-no-ar`
+tira.
+
+A linha de base, na webview, painel inteiro:
+
+| cartões | folha parada | um cartão na mão |
+|---|---|---|
+| 0 | 54,9 fps · 8,3 % | 60 · 3,8 % |
+| 10 | 54,9 · 9,4 % | **27,5 · 98,9 %** |
+| 30 | 46,4 · 17,8 % | **11 · 100 %** |
+
+### O que a medida disse, na ordem
+
+1. **O cartão redesenhava inteiro, sessenta vezes por segundo.** `CartaoDeDocumento`
+   não era `memo`, e recebia uma closure nova por render; cada quadro do gesto
+   reanalisava o Markdown dos trinta. No Chrome, `script` era 5,5 s dos 6 s.
+   `memo` no cartão e no `MarkdownView`: 11 → 28,9 fps.
+
+2. **Contexto atravessa `memo`.** `useCharacterOwners` devolvia um `Map` novo a
+   cada render; ele entra nas dependências de `vinculos`, que é o
+   `VinculosContext` de cada cartão, e a camada re-renderiza a cada quadro. Toda
+   menção de toda nota redesenhava, com chip e tooltip. `useMemo` ali: 28,9 → 35,4.
+
+3. **`left`/`top` no cartão.** Por `transform`, com `will-change` só no cartão
+   selecionado (o palco seleciona o que pega, então selecionado é o que anda):
+   35,4 → 39,9. Pouco -- e `cartao-livre`, o cartão orbitando longe dos outros,
+   deu o MESMO número. Não era sobreposição nem pintura do que ele cobria.
+
+4. **A bateria de experimentos num build só** (`--experimento`, ver Receitas), com
+   60 cartões: corpo do cartão sem `overflow-y: auto` **26,8 → 43,8 fps**; todos
+   os cartões compostos, `contain: strict` e sem `z-index` não mudaram nada; nota
+   de uma linha, 57,7. Cada corpo rolável é uma **área rolável** para o WebKit, com
+   nó próprio na árvore de rolagem, e a árvore é refeita quando uma camada
+   composta se move. O que sobrava até 60 era o número de nós de texto.
+
+5. **O contorno da seleção forçava layout por quadro.** `SelecaoDaMargem`
+   posicionava contorno e pega por `left`/`top`, e depois de qualquer layout o
+   WebKit percorre todas as camadas da margem -- e era esse layout que
+   disparava a reconstrução da árvore de rolagem do item 4. Por `transform` e
+   com `will-change`; corpo rolável só sob o mouse (`hover:overflow-y-auto`);
+   `content-visibility: auto` no cartão. 60 cartões: 47 fps, 28 % perdidos.
+
+6. **Uma sonda de JavaScript por quadro.** A webview não tem perfil; o cenário
+   mede o tempo do `moverNoGesto` até um microtask (o React 19 descarrega o
+   render síncrono da store num microtask, que entra na fila antes) e imprime
+   com `--console`. JS: 5,1 ms por quadro com 1 cartão, 8,0 com 60. Contadores
+   de render provaram o `memo`: o cartão redesenhava 350 vezes em 6 s com 60
+   cartões (só o da mão). A camada passou a receber a lista do **board**, e cada
+   cartão lê o próprio patch do gesto -- a reconciliação dos sessenta sumiu --,
+   e o JS por quadro NÃO caiu.
+
+7. **Era o commit no ar.** `--sem-no-ar`: 58,5 fps e 3,0 ms de JS por quadro com
+   60 cartões. Com o quadro no ar, o gesto gravava o board a cada 100 ms para a
+   mesa ver o cartão andar, e cada gravação re-renderizava o `MestreShell`
+   inteiro: 17 a 24 ms por commit, dois ou três quadros perdidos a cada dez, com
+   um cartão ou com sessenta. Isso valia para TODO gesto com a cena no ar --
+   token, texto, forma, moldura.
+
+### O conserto
+
+- `documento-layer.tsx`: `memo` no cartão e na camada; a lista vem do board e o
+  patch do gesto é lido por cartão; posição por `transform`, camada própria no
+  selecionado; corpo rolável só sob o mouse; `content-visibility: auto`.
+- `postit-layer.tsx`: `memo` no papel, com as closures viradas funções de dentro;
+  posição por `transform`, camada própria no selecionado.
+- `markdown-view.tsx`: `memo` no `MarkdownView`.
+- `use-character-owners.ts`: o mapa memoizado.
+- `selecao-da-margem.tsx`: contorno e pega por `transform`, com `will-change`.
+- `use-gesto-store.ts` + `use-scene-broadcast.ts`: com a cena no ar, o gesto
+  **publica** a vista com o gesto aplicado (`publicarCenaAoVivo`) em vez de gravar
+  o board; o board recebe um commit ao soltar, que é um passo de desfazer só.
+- `arquivos-list.tsx`: a linha da nota só conta o texto da nota aberta, e é `memo`.
+
+### O resultado
+
+Na webview, painel inteiro, quadro no ar, mediana de 3:
+
+| cartões | folha parada | um cartão na mão | antes |
+|---|---|---|---|
+| 0 | 60 · 5,2 % | 59,7 · 3,4 % | 60 · 3,8 % |
+| 10 | 60 · 4,3 % | 59 · 8,3 % | 27,5 · 98,9 % |
+| 30 | 59,7 · 3,8 % | 58 · 9,3 % | 11 · 100 % |
+| 60 | 60,1 · 3,3 % | 57,7 · 9,4 % | -- |
+
+E o que o item 7 alcança fora do quadro -- a bancada de sempre, sete câmeras,
+sete mapas, token arrastado com a cena no ar, mediana de 3: **38,6 fps e 32,6 % de quadro perdido antes; 44,3 fps e 13,3 % depois**.
+
 ## Como medir: o passo a passo
 
 ### O cenário certo
@@ -580,6 +682,18 @@ borda dele.
 de 1440×900 vira 1951×1010 em pixels de CSS. Qualquer conta de projeção feita à
 mão precisa lidar com isso — outra razão para não fazer conta nenhuma.
 
+**Área rolável é nó na árvore de rolagem.** Um `overflow: auto` por cartão, e
+mover qualquer camada composta reconstrói a árvore com uma entrada por cartão.
+Rolável só sob o mouse: a barra aparece onde serve, e o resto da folha não paga.
+
+**Contexto atravessa `memo`.** Um `Map` novo por render numa dependência de
+`useMemo` vira um valor de contexto novo por quadro, e todo consumidor -- cada
+menção de cada nota -- redesenha por baixo do `memo` que o pai tem.
+
+**Commit no ar é o shell inteiro.** Gravar o board no ritmo do canal custava 17
+a 24 ms por gravação. A mesa precisa da cena, não do commit: publicar a vista
+com o gesto aplicado (`publicarCenaAoVivo`) e commitar ao soltar.
+
 **O modo de depuração do palco existe.** `Ctrl+Shift+D` (ou `Ctrl+Alt+D`) dentro
 do aplicativo liga o HUD que mostra transbordo por plano, o que está sob o
 ponteiro e a mira de cada plano, e manda o mesmo para o daemon. Ver
@@ -622,6 +736,18 @@ pnpm perf:webview -- --cenario arrasto,mestre-camera,amostras --n 40 \
 
 # o que muda por quadro (para achar, não para publicar o número)
 pnpm perf:webview -- --cenario bancada --sonda
+
+# o quadro com a história em cartões: a curva, parado e com um cartão na mão
+pnpm perf:webview -- --cenario quadro --n 12 --documentos 0,10,30,60 \
+  --gesto nenhum,cartao --painel ambos --repetir 3
+
+# o mesmo sem a cena no ar, e o JavaScript por quadro impresso no console
+pnpm perf:webview -- --cenario quadro --documentos 60 --gesto cartao --sem-no-ar --console
+
+# uma bateria de variantes num build só: o componente lê `window.__perfExperimento`
+# (`nota-curta` já existe; `a+b` liga duas de uma vez)
+pnpm perf:webview -- --cenario quadro --documentos 60 --gesto cartao \
+  --experimento nenhum,nota-curta
 
 # onde o JavaScript foi
 pnpm perf -- --cenario bancada --janela --perfil

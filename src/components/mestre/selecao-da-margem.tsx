@@ -74,17 +74,27 @@ export function SelecaoDaMargem({
 
   const traco = 1.5 / scale;
 
+  // A POSIÇÃO por `transform`, e não por `left`/`top`, como a moldura da
+  // câmera e o cartão de nota: o contorno anda a cada quadro do gesto junto
+  // com o que está na mão, e mexer em caixa marca a margem para refazer o
+  // layout -- e depois de um layout o WebKit percorre TODAS as camadas da
+  // margem, uma por cartão e uma por papel. Ver `scripts/perf/README.md`.
   const contorno = (chave: string, alvo: Bounds) => (
     <div
       key={chave}
       className="outline-primary/80 pointer-events-none absolute outline-dashed"
       style={{
-        left: alvo.minX,
-        top: alvo.minY,
+        left: 0,
+        top: 0,
+        transform: `translate(${alvo.minX}px, ${alvo.minY}px)`,
         width: alvo.maxX - alvo.minX,
         height: alvo.maxY - alvo.minY,
         outlineWidth: traco,
         outlineOffset: 2 / scale,
+        // Camada própria, como a moldura: o contorno anda a cada quadro, e
+        // sem ela o motor repinta o que está por baixo dele -- o texto dos
+        // cartões que o gesto atravessa. Só existe enquanto há seleção.
+        willChange: "transform",
         zIndex: CONTORNO_Z,
       }}
     />
@@ -112,12 +122,14 @@ export function SelecaoDaMargem({
             : "outline-primary pointer-events-auto absolute cursor-move outline"
         }
         style={{
-          left: caixa.minX,
-          top: caixa.minY,
+          left: 0,
+          top: 0,
+          transform: `translate(${caixa.minX}px, ${caixa.minY}px)`,
           width: caixa.maxX - caixa.minX,
           height: caixa.maxY - caixa.minY,
           outlineWidth: traco,
           outlineOffset: 4 / scale,
+          willChange: "transform",
           zIndex: PEGA_Z,
           // Sem isto o toque rolaria a tela em vez de arrastar o grupo, como
           // no papel e no alfinete.

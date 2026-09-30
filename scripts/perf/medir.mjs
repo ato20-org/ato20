@@ -94,6 +94,18 @@ const CAMERAS = opcao("cameras", "1").split(",").map(Number);
 const GESTOS = opcao("gesto", "mover").split(",");
 /** `bancada`: quantas cenas o board tem, e portanto quantas previas a lista tem. */
 const MAPAS = opcao("mapas", "7");
+/**
+ * `quadro`: quantos cartoes de nota a folha tem. Lista, como as cameras: a
+ * pergunta e a CURVA -- a campanha com a historia em dez cartoes custa X, em
+ * trinta custa quanto? Zero e a folha de antes de o eixo existir.
+ */
+const DOCUMENTOS = opcao("documentos", "0").split(",").map(Number);
+/**
+ * `--sem-no-ar`: a cena medida NAO esta transmitindo. Separa "o gesto grava
+ * no board no ritmo do canal" de "o gesto fica no `useGestoStore`" -- a mesma
+ * flag do `webview.py`.
+ */
+const NO_AR = !temFlag("sem-no-ar");
 /** `bancada`: que colunas laterais ficam a vista. Lista: e um eixo da matriz. */
 const PAINEIS = opcao("painel", "ambos").split(",");
 /**
@@ -886,21 +898,24 @@ async function principal() {
         const comCamera = ["mestre-camera", "camera-gesto", "bancada"].includes(cenario);
         const eixo = comCamera ? CAMERAS : [CAMERAS[0]];
 
-        const gestos = ["camera-gesto", "bancada"].includes(cenario) ? GESTOS : [GESTOS[0]];
-        const paineis = cenario === "bancada" ? PAINEIS : [PAINEIS[0]];
+        const gestos = ["camera-gesto", "bancada", "quadro"].includes(cenario) ? GESTOS : [GESTOS[0]];
+        const paineis = ["bancada", "quadro"].includes(cenario) ? PAINEIS : [PAINEIS[0]];
+        const docs = cenario === "quadro" ? DOCUMENTOS : [DOCUMENTOS[0]];
 
         for (const cameras of eixo) {
           for (const gesto of gestos) {
             for (const painel of paineis) {
-              const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&cameras=${cameras}&gesto=${gesto}&mapas=${MAPAS}&painel=${painel}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&sol=${SOL}&luzes=${LUZES}&paredes=${PAREDES}&carregadas=${CARREGADAS}${ESCURIDAO ? `&escuridao=${ESCURIDAO}` : ""}${EFEITO ? `&efeito=${EFEITO}` : ""}&rotulo=chrome`;
-              const corridas = [];
+              for (const documentos of docs) {
+                const url = `${base}/perf?cenario=${cenario}&n=${n}&segundos=${SEGUNDOS}&movidos=${MOVIDOS}&lazy=${LAZY}&rolar=${ROLAR}&variante=${VARIANTE}&zoom=${ZOOM}&cameras=${cameras}&gesto=${gesto}&mapas=${MAPAS}&painel=${painel}&documentos=${documentos}&noar=${NO_AR ? "1" : "0"}&pagina=${PAGINA}&degraus=${DEGRAUS}&rajada=${RAJADA ? "1" : "0"}&sol=${SOL}&luzes=${LUZES}&paredes=${PAREDES}&carregadas=${CARREGADAS}${ESCURIDAO ? `&escuridao=${ESCURIDAO}` : ""}${EFEITO ? `&efeito=${EFEITO}` : ""}&rotulo=chrome`;
+                const corridas = [];
 
-              for (let i = 1; i <= REPETICOES; i++) {
-                process.stderr.write(`medindo ${cenario} n=${n} cam=${cameras} ${gesto} ${painel} (${i}/${REPETICOES})...\r`);
-                corridas.push(await medir(cdp, url));
+                for (let i = 1; i <= REPETICOES; i++) {
+                  process.stderr.write(`medindo ${cenario} n=${n} cam=${cameras} ${gesto} ${painel} docs=${documentos} (${i}/${REPETICOES})...\r`);
+                  corridas.push(await medir(cdp, url));
+                }
+
+                linhas.push({ ...mediana(corridas), cameras, gesto, painel, documentos });
               }
-
-              linhas.push({ ...mediana(corridas), cameras, gesto, painel });
             }
           }
         }
@@ -917,8 +932,8 @@ async function principal() {
     await rm(perfil, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => {});
   }
 
-  const cab = ["cenario", "n", "cam", "gesto", "painel", "fps", "p50", "p95", "perdidos", "script", "estilo", "layout", "heap", "nos"];
-  const largura = [13, 4, 4, 14, 9, 6, 7, 7, 9, 8, 8, 8, 8, 7];
+  const cab = ["cenario", "n", "cam", "docs", "gesto", "painel", "fps", "p50", "p95", "perdidos", "script", "estilo", "layout", "heap", "nos"];
+  const largura = [13, 4, 4, 5, 14, 9, 6, 7, 7, 9, 8, 8, 8, 8, 7];
   const fmt = (celulas) => celulas.map((c, i) => String(c).padStart(largura[i])).join("");
 
   // O leitor tem tabela propria: degrau a degrau, o que ele mede nao e quadro.
@@ -943,6 +958,7 @@ async function principal() {
         l.cenario,
         l.n,
         l.cameras ?? "",
+        l.documentos ?? "",
         l.gesto ?? "",
         l.painel ?? "",
         l.fps,

@@ -1,7 +1,12 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  memo,
+  useEffect,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { MarkdownView, VinculosContext } from "@/components/playground/markdown-view";
 import { useMencoesDoMestre } from "@/hooks/use-mencoes-do-mestre";
@@ -14,6 +19,7 @@ import { CORNER_HANDLES } from "@/lib/geometry/transform";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
+import { useGestoStore } from "@/lib/store/use-gesto-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
@@ -24,7 +30,6 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type Documento,
-  type Scene,
 } from "@/types/scene";
 
 /** Acima do postit (8 500), abaixo da seta (8 600): a seta chega a ele. */
@@ -49,11 +54,26 @@ function presoNoTamanho(valor: number, teto: number): number {
  * do `useDocumentoStore`, o mesmo do editor: escrever lá aparece aqui.
  */
 export function DocumentoLayer({
-  scene,
+  sceneId,
+  documentos,
   panMode,
   onDocumentoPointerDown,
 }: {
-  scene: Scene;
+  sceneId: string;
+  /**
+   * Os cartões como estão no BOARD, sem o gesto em curso por cima.
+   *
+   * É a razão de a camada não receber a `scene` como as irmãs: a cena que o
+   * palco desenha é refeita a cada quadro do gesto (`aplicarGesto`), e com
+   * ela a lista de cartões -- e uma lista nova faz o React reconciliar os
+   * sessenta cartões sessenta vezes por segundo para concluir que
+   * cinquenta e nove não mudaram. Medido na bancada (`quadro`, webview): uns
+   * 55 µs por cartão por quadro, 3,5 ms com sessenta -- o que sobrava
+   * depois de memoizar o cartão. A lista do board não muda de identidade
+   * enquanto a mão está fechada, e é cada cartão que lê o próprio patch do
+   * gesto -- ver `CartaoDeDocumento`.
+   */
+  documentos: Documento[] | undefined;
   panMode: boolean;
   /**
    * O clique no CARTÃO, entregue ao palco -- irmão do `onPostitPointerDown`, e
@@ -69,12 +89,11 @@ export function DocumentoLayer({
     documento: Documento,
   ) => void;
 }) {
-  const documentos = scene.documentos;
   if (!documentos || documentos.length === 0) return null;
 
   return (
     <Cartoes
-      sceneId={scene.id}
+      sceneId={sceneId}
       documentos={documentos}
       panMode={panMode}
       onDocumentoPointerDown={onDocumentoPointerDown}
@@ -85,8 +104,12 @@ export function DocumentoLayer({
 /**
  * Separado do de cima pelo hook: quadro sem cartão não deve ler personagens,
  * sondar jogadores nem listar o acervo. Mesmo desenho do `PostitLayer`.
+ *
+ * `memo` porque o palco re-renderiza a cada quadro do gesto e esta camada
+ * recebe as mesmas quatro props: sem ele, cada quadro montava os sessenta
+ * elementos de cartão só para o `memo` de cada um recusá-los.
  */
-function Cartoes({
+const Cartoes = memo(function Cartoes({
   sceneId,
   documentos,
   panMode,
@@ -115,27 +138,56 @@ function Cartoes({
           sceneId={sceneId}
           documento={documento}
           panMode={panMode}
-          onCartaoPointerDown={(event) =>
-            onDocumentoPointerDown(event, documento)
-          }
+          onDocumentoPointerDown={onDocumentoPointerDown}
         />
       ))}
     </VinculosContext>,
     planoDaMargem,
   );
-}
+});
 
-function CartaoDeDocumento({
+/**
+ * `memo` pela razão do `TextoSolto`: a cena é imutável e o board preserva a
+ * identidade do cartão que não mudou, então arrastar UM cartão não precisa
+ * redesenhar os outros vinte e nove -- e cada um deles é uma nota inteira,
+ * sessenta linhas de Markdown reanalisadas e reconciliadas.
+ *
+ * Medido no cenário `quadro` da bancada, com trinta cartões e um na mão, na
+ * webview: 11 fps e 100% de quadro perdido sem isto. Era o custo que o
+ * mestre sentia ao arrumar a história na folha.
+ *
+ * Só vale com handler ESTÁVEL: o palco entrega `onDocumentoPointerDown` pelo
+ * envelope de `handlersRef`, e por isso ele chega aqui inteiro em vez de
+ * fechado numa closure por cartão -- que seria uma função nova por render, e
+ * o `memo` não seguraria nada.
+ */
+const CartaoDeDocumento = memo(function CartaoDeDocumento({
   sceneId,
-  documento,
+  documento: doBoard,
   panMode,
-  onCartaoPointerDown,
+  onDocumentoPointerDown,
 }: {
   sceneId: string;
   documento: Documento;
   panMode: boolean;
-  onCartaoPointerDown: (event: ReactPointerEvent) => void;
+  onDocumentoPointerDown: (
+    event: ReactPointerEvent,
+    documento: Documento,
+  ) => void;
 }) {
+  /**
+   * O gesto em curso sobre ESTE cartão, lido daqui e não aplicado à lista
+   * inteira pelo palco -- ver `DocumentoLayer`. O seletor devolve o patch do
+   * cartão, ou `undefined`: para os que não estão na mão a resposta é a
+   * mesma referência quadro após quadro, e o zustand não os acorda.
+   */
+  const patch = useGestoStore((state) =>
+    state.sceneId === sceneId
+      ? state.documentos?.find((atual) => atual.id === doBoard.id)?.patch
+      : undefined,
+  );
+  const documento = patch ? { ...doBoard, ...patch } : doBoard;
+
   const { scale, ampliacaoNoLayout } = useSceneScale();
   const tool = useToolStore((state) => state.tool);
 
@@ -205,7 +257,7 @@ function CartaoDeDocumento({
     if (panMode || tool === "ligacao") return;
     // Como o papel do postit: quem arrasta é o palco, que leva junto o que
     // mais estiver na mão e passa pelo caminho leve do gesto.
-    onCartaoPointerDown(event);
+    onDocumentoPointerDown(event, documento);
   }
 
   function abrir() {
@@ -215,6 +267,7 @@ function CartaoDeDocumento({
 
   const menorDisponivel = DOCUMENTO_FONTES.findIndex((f) => f >= fonte) > 0;
   const maiorDisponivel = fonte < DOCUMENTO_FONTES[DOCUMENTO_FONTES.length - 1]!;
+
 
   return (
     <>
@@ -232,11 +285,30 @@ function CartaoDeDocumento({
             : "pointer-events-auto cursor-move",
         )}
         style={{
-          left: documento.x,
-          top: documento.y,
+          // A POSIÇÃO por `transform`, como a moldura da câmera: mexer em
+          // `left`/`top` marca o documento inteiro para refazer o layout, e a
+          // folha com trinta cartões é uma folha com quatro mil nós de texto.
+          // Medido no cenário `quadro` da bancada, na webview, trinta cartões
+          // e um na mão: por caixa 35 fps e 64% de quadro perdido; por
+          // `transform` ver `scripts/perf/README.md`. A caixa de layout fica
+          // na origem da margem, que é 0x0 de propósito.
+          left: 0,
+          top: 0,
+          transform: `translate(${documento.x}px, ${documento.y}px)`,
           width: documento.largura,
           height: documento.altura,
+          // Camada própria só para o cartão NA MÃO: o palco seleciona o que
+          // pega, então selecionado é o que anda. Com ela o motor re-compõe
+          // em vez de repintar a folha; em todos os cartões seriam trinta
+          // camadas de texto rasterizadas de novo a cada zoom.
+          willChange: selecionado ? "transform" : undefined,
           zIndex: DOCUMENTO_Z,
+          // O cartão fora da tela não paga estilo, layout nem pintura: num
+          // quadro de verdade a história é maior que o enquadramento, e o
+          // motor só desenha o que a câmera alcança. O tamanho intrínseco é
+          // a própria caixa, para o cartão escondido ocupar o mesmo lugar.
+          contentVisibility: "auto",
+          containIntrinsicSize: `${documento.largura}px ${documento.altura}px`,
           touchAction: "none",
           // Deslocado do plano, que também é `--card`: 7% de `--foreground`
           // clareia no escuro e escurece no claro, e o cartão aparece nos dois.
@@ -258,7 +330,16 @@ function CartaoDeDocumento({
       >
         <div
           ref={corpo}
-          className="absolute inset-0 overflow-y-auto"
+          // Rolável SÓ sob o mouse. Um corpo `overflow-y: auto` é uma área
+          // rolável para o WebKit, com nó próprio na árvore de rolagem, e
+          // a árvore é refeita toda vez que uma camada composta se move:
+          // arrastar um cartão custava uma reconstrução por quadro com uma
+          // entrada por cartão da folha. Medido na bancada (`quadro`, 60
+          // cartões, um na mão, webview): 26,8 fps sempre rolável, 43,8
+          // rolável nenhum. Sob o mouse a área existe, e a roda rola como
+          // sempre; a barra aparece ao passar o ponteiro, que é onde ela
+          // serve.
+          className="absolute inset-0 overflow-hidden hover:overflow-y-auto"
           style={{
             ...medidaDoCorpo,
             fontSize: fonte * fator,
@@ -322,4 +403,4 @@ function CartaoDeDocumento({
       ) : null}
     </>
   );
-}
+});

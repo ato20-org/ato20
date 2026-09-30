@@ -17,8 +17,10 @@ import { MestreShell } from "@/components/mestre/mestre-shell";
 import { MestreStage } from "@/components/mestre/mestre-stage";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { moverNoGesto, useGestoStore } from "@/lib/store/use-gesto-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
+import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { PaginaFolha } from "@/components/leitor/pagina-folha";
 import { useRolagemDoLivro } from "@/hooks/use-rolagem-do-livro";
@@ -44,6 +46,8 @@ import {
   SCENE_WIDTH,
   SOL_PADRAO,
   type CameraSalva,
+  DOCUMENTO_ALTURA,
+  DOCUMENTO_LARGURA,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   type CanvasItem,
@@ -547,6 +551,13 @@ function useMedida(
       const total =
         quentes.length > 1 ? quentes[quentes.length - 1] - quentes[0] : 0;
       const perdidos = deltas.filter((d) => d > QUADRO_PERDIDO_MS).length;
+      // As sondas que o cenário deixou em `__perfContadores` -- hoje o
+      // JavaScript por quadro do `quadro` --, para o `--console` da bancada
+      // da webview, que não tem perfil nenhum. Ver `PalcoQuadro`.
+      const sondas = (window as unknown as { __perfContadores?: unknown })
+        .__perfContadores;
+      if (sondas)
+        console.log("sondas", JSON.stringify(sondas), "quadros", quentes.length);
 
       setResultado({
         rotulo,
@@ -682,34 +693,88 @@ function PalcoEspectador({
  */
 function PalcoQuadro({
   n,
+  documentos,
   gesto,
   painel,
   mapas,
+  noAr,
 }: {
   n: number;
+  /**
+   * Quantos CARTÕES DE NOTA a folha tem, cada um com uma nota de verdade
+   * dentro. Eixo próprio, e não derivado de `n` como o postit: a pergunta que
+   * este eixo responde é a da campanha com a história inteira em cartões, e
+   * ela não escala com o número de frases soltas.
+   */
+  documentos: number;
   gesto: string;
   /** `nenhum` mede o palco sozinho; o resto monta a BANCADA em volta dele. */
   painel: "ambos" | "esquerdo" | "direito" | "nenhum";
   /** Quantas cenas na lista. A bancada de uma campanha real nunca tem uma. */
   mapas: number;
+  /**
+   * O quadro está NO AR. Muda o caminho do cartão: no ar, o gesto grava no
+   * board no ritmo do canal (ver `moverNoGesto`); fora dele, só ao soltar.
+   */
+  noAr: boolean;
 }) {
   const cena = useSceneStore(selectEditingScene);
 
   useEffect(() => {
-    const base = montarQuadro(n);
+    const base = montarQuadro(n, documentos);
+    // `cartao-livre`: o cartão da mão orbita numa região VAZIA da folha, longe
+    // dos outros. É o experimento que separa "o custo é a sobreposição" -- o
+    // motor repintando os cartões que ele cobre -- de "o custo é o número de
+    // cartões", que seria estilo ou árvore de camadas.
+    if (gesto === "cartao-livre" && base.documentos?.[0])
+      base.documentos[0] = { ...base.documentos[0], x: -1500, y: 200 };
     // As outras entram vazias, como no cenário `bancada`: o que se quer pesar
     // é a LISTA reconciliando a cada commit, não o conteúdo delas.
     const outras = Array.from({ length: Math.max(0, mapas - 1) }, (_, i) => ({
-      ...montarQuadro(0),
+      ...montarQuadro(0, 0),
       id: `perf-quadro-${i}`,
       name: `Quadro ${i + 2}`,
     }));
+
+    // O texto de cada nota entra DIRETO no store: o cartão pede o arquivo pela
+    // ponte, e aqui não há aplicativo para responder. Com o texto já lá,
+    // `carregar` devolve antes de chamar ninguém, e o cartão desenha a nota em
+    // vez de "Abrindo…" -- que seria medir cartões vazios.
+    /**
+     * O rótulo do experimento (`?experimento=a+b`), à vista de qualquer
+     * componente em `window.__perfExperimento`.
+     *
+     * Existe para uma investigação ligar uma variante por célula da matriz
+     * sem recompilar entre elas: o componente sob suspeita lê o campo e troca
+     * uma linha. Fora desta página o campo não existe, e ele lê vazio. Escrito
+     * aqui, no efeito que monta o board: os cartões só montam no render
+     * seguinte, então o campo já está lá quando eles leem.
+     */
+    const rotulo = new URLSearchParams(window.location.search).get("experimento") ?? "";
+    (window as unknown as { __perfExperimento?: string }).__perfExperimento = rotulo;
+    const experimento = rotulo.split("+");
+    useDocumentoStore.setState({
+      textos: Object.fromEntries(
+        (base.documentos ?? []).map((documento, i) => [
+          documento.arquivo,
+          // `nota-curta`: uma linha por cartão. Separa "quantos cartões" de
+          // "quantos nós de texto" no que o motor paga por quadro.
+          experimento.includes("nota-curta") ? `# Nota ${i + 1}` : notaDeMedida(i),
+        ]),
+      ),
+      lendo: {},
+    });
 
     useSceneStore.setState({
       board: {
         scenes: [base, ...outras],
         editingSceneId: base.id,
-        liveSceneId: base.id,
+        liveSceneId: noAr ? base.id : null,
+        notas: (base.documentos ?? []).map((documento) => ({
+          id: documento.notaId!,
+          titulo: documento.titulo,
+          arquivo: documento.arquivo,
+        })),
       },
       status: "ready",
       campaignPath: "/perf",
@@ -723,10 +788,53 @@ function PalcoQuadro({
 
     let quadro = 0;
     const primeiro = base.textos?.[0];
+    const cartao = base.documentos?.[0];
     const comecou = performance.now();
 
+    // O cartão na mão está SELECIONADO, como fica na mão de verdade: o palco
+    // seleciona o que pega no `pointerdown`, e é a seleção que promove a
+    // camada do cartão (`willChange`). Sem isto a medida pesaria um caminho
+    // que a mão nunca percorre.
+    const cartaoNaMao = gesto === "cartao" || gesto === "cartao-livre";
+    if (cartaoNaMao && cartao)
+      useSelectionStore.getState().selectDocumentos([cartao.id]);
+
     const passo = () => {
-      if (primeiro) {
+      if (cartaoNaMao && cartao) {
+        // Um CARTÃO na mão, pelo caminho do gesto: é o que o mestre faz
+        // quando arruma a história na folha. O `documentos` da cena vira
+        // uma lista nova a cada quadro (ver `aplicarGesto`), e é isso que
+        // este gesto pesa: o que os OUTROS cartões pagam quando um anda.
+        const a = (performance.now() - comecou) / 1000;
+        // O JavaScript deste quadro, do patch ao commit do React: o render
+        // síncrono da store sai num microtask, que entra na fila ANTES deste.
+        // O que fica de fora é o motor -- estilo, layout, pintura --, e a
+        // diferença para o período do quadro é justamente ele.
+        const t0 = performance.now();
+        moverNoGesto(base.id, [], [], [], {
+          documentos: [
+            {
+              id: cartao.id,
+              patch: {
+                x: Math.round(cartao.x + Math.cos(a) * 300),
+                y: Math.round(cartao.y + Math.sin(a) * 200),
+              },
+            },
+          ],
+        });
+        const t1 = performance.now();
+        queueMicrotask(() => {
+          const w = window as unknown as { __perfContadores?: Record<string, number> };
+          w.__perfContadores ??= {};
+          // `syncMs`: a store e os ouvintes dela; `jsMs`: até o commit do React.
+          w.__perfContadores.syncMs = Math.round(
+            (w.__perfContadores.syncMs ?? 0) + (t1 - t0),
+          );
+          w.__perfContadores.jsMs = Math.round(
+            (w.__perfContadores.jsMs ?? 0) + (performance.now() - t0),
+          );
+        });
+      } else if (primeiro && !cartaoNaMao) {
         const a = (performance.now() - comecou) / 1000;
 
         /**
@@ -778,19 +886,22 @@ function PalcoQuadro({
       cancelAnimationFrame(quadro);
       useViewportStore.getState().terminarGesto();
       useGestoStore.getState().terminar();
+      useSelectionStore.getState().clear();
+      useDocumentoStore.setState({ textos: {}, lendo: {} });
       useSceneStore.setState({
         board: null,
         status: "idle",
         campaignPath: null,
       });
     };
-  }, [n, gesto, painel, mapas]);
+  }, [n, documentos, gesto, painel, mapas, noAr]);
 
   if (!cena) return null;
 
   // Com painel, a BANCADA inteira -- que é onde o mestre trabalha, e onde um
   // commit por quadro cobra a re-renderização da lista, das camadas e das
   // prévias. Sem painel, só o palco.
+  //
   if (painel !== "nenhum")
     return (
       <TooltipProvider>
@@ -812,7 +923,7 @@ function PalcoQuadro({
  * algumas caixas em volta, uns papéis -- e os ids são derivados do índice pela
  * mesma razão de `montarCena`: duas corridas têm de montar a mesma folha.
  */
-function montarQuadro(n: number): Scene {
+function montarQuadro(n: number, documentos: number): Scene {
   const agora = Date.now();
 
   return {
@@ -821,6 +932,27 @@ function montarQuadro(n: number): Scene {
     tipo: "quadro",
     items: [],
     fog: [],
+    // Os cartões em fileiras, como a história de uma campanha fica na folha:
+    // quatro por linha, com uma faixa entre eles. Parte deles cai FORA do
+    // plano de 1920x1080, na margem -- e é assim mesmo num quadro de verdade,
+    // que cresce para onde o mestre arrasta. Ausente com zero, e não uma
+    // lista vazia: é a forma que a cena de sempre tem, e a que a medida
+    // antiga montava.
+    ...(documentos > 0
+      ? {
+          documentos: Array.from({ length: documentos }, (_, i) => ({
+            id: `perf-cartao-${i}`,
+            notaId: `perf-nota-${i}`,
+            titulo: `Nota ${i + 1}`,
+            arquivo: `perf-nota-${i}.md`,
+            x: (i % 4) * (DOCUMENTO_LARGURA + 60),
+            y: Math.floor(i / 4) * (DOCUMENTO_ALTURA + 60),
+            largura: DOCUMENTO_LARGURA,
+            altura: DOCUMENTO_ALTURA,
+            fonte: 13,
+          })),
+        }
+      : {}),
     textos: Array.from({ length: n }, (_, i) => ({
       id: `perf-texto-${i}`,
       x: (i * 173) % (SCENE_WIDTH - 300),
@@ -859,6 +991,88 @@ function montarQuadro(n: number): Scene {
     createdAt: agora,
     updatedAt: agora,
   };
+}
+
+/**
+ * O texto de UM cartão de medida: uma nota de campanha como as de verdade.
+ *
+ * Sessenta e poucas linhas com título, lista, tarefa, citação, negrito e
+ * menção -- a forma de uma cena de aventura escrita para a mesa, e não um
+ * `lorem ipsum`: cada tipo de linha é um ramo diferente em `bloco()` e em
+ * `trechos()`, e é o desenho deles que o cartão paga. As menções apontam para
+ * o que NÃO existe nesta página, e é o caso comum: a nota cita o personagem e
+ * o vínculo resolve para "sem nada" a cada quadro, que é o custo real.
+ *
+ * Determinística no índice, pela mesma razão dos ids em `montarCena`: duas
+ * corridas têm de desenhar o mesmo texto.
+ */
+function notaDeMedida(i: number): string {
+  const salas = ["A Boca", "Salão dos Ossos", "Santuário", "Jardim Azul", "A Ponte"];
+  const sala = salas[i % salas.length];
+  const paragrafos = Array.from(
+    { length: 6 },
+    (_, p) =>
+      `A sala ${p + 1} da ${sala} é quente e úmida e cheira a ferro e cinza. ` +
+      `Quem entrar faz Percepção CD ${10 + ((i + p) % 6)}: com sucesso vê o **altar** ao fundo, ` +
+      `e @Aldren lembra que *aqui* alguém já esteve. Ver >"Caverna Inefável" e a nota ${p}.`,
+  );
+
+  return [
+    `# ${sala} · nota ${i + 1}`,
+    `*Ato ${1 + (i % 3)}, cena ${i + 1}. Cabe em ${20 + (i % 30)} minutos.*`,
+    "",
+    "## O que aconteceu",
+    paragrafos[0],
+    "",
+    "> Chove fino. Alguém bate na porta, baixo, três vezes, como quem não tem força para a quarta.",
+    "> E você vê. Pela primeira vez em quarenta e três anos, você vê.",
+    "",
+    "## Quem está aqui",
+    "- **3 Goblins Chamuscados**, de olhos costurados com linha preta.",
+    "- @\"Chapéu-de-Sapo\" brilha fraco, e é o primeiro alvo.",
+    "- A **Cobra de Fogo** dorme no fundo do abismo. Ver @\"Cobra de Fogo\".",
+    "- Pisca, escondida atrás das caixas (Percepção CD 13).",
+    "",
+    "## Rumores (1d4)",
+    "1. Os goblins sumiram das colinas neste verão. Ninguém reclamou.",
+    "2. O velho já entrou na caverna. Voltou cego e sozinho.",
+    "3. Quem olha para o brilho vermelho acorda com os olhos ardendo.",
+    "4. Lá no fundo corre uma água que nunca esquenta.",
+    "",
+    "## O que cada sala guarda",
+    paragrafos[1],
+    "",
+    paragrafos[2],
+    "",
+    "- **Tocha acesa**: alguém ainda cuida dela. Sabedoria CD 10.",
+    "- **Altar** com tigelas de barro, e nas tigelas, olhos secos.",
+    "- **Poção de resistência ao fogo**, que ele nunca bebeu.",
+    "- `1d6` de frio, dobrado pela vulnerabilidade.",
+    "",
+    "## Antes de jogar",
+    "- [x] Ler as fichas e entregar o PDF a cada jogador.",
+    "- [ ] Deixar a capa no ar enquanto a mesa chega.",
+    "- [ ] Toda a névoa fechada, menos a entrada.",
+    "",
+    "---",
+    "",
+    "## Se der errado",
+    paragrafos[3],
+    "",
+    paragrafos[4],
+    "",
+    "## Quando ela morre",
+    paragrafos[5],
+    "",
+    "> A cobra se enrodilha uma última vez e esfria. Das rachaduras sai a luz que ela comeu.",
+    "",
+    "## XP",
+    "- 700 pela cobra.",
+    "- 150 pelos goblins, vencidos, convencidos ou poupados.",
+    "- 100 por salvar o Jardim.",
+    "Os dois chegam ao 4º nível. [Ficha](https://exemplo.invalid/ficha).",
+    "",
+  ].join("\n");
 }
 
 /**
@@ -1301,6 +1515,9 @@ function molduraNaTela(gesto: Gesto): DOMRect | null {
 type Gesto =
   | "nenhum"
   | "mover"
+  /** `quadro`: um cartão de nota na mão; `-livre` orbita longe dos outros. */
+  | "cartao"
+  | "cartao-livre"
   | "redimensionar"
   | "zoom"
   | "fantasma"
@@ -2435,6 +2652,8 @@ function Medida({ params }: { params: URLSearchParams }) {
   const gesto = (params.get("gesto") ?? "mover") as Gesto;
   /** `bancada`: quantas cenas o board tem, e portanto quantas linhas na lista. */
   const mapas = Number(params.get("mapas") ?? 7);
+  /** `quadro`: quantos cartões de nota a folha tem. Zero é a folha de antes. */
+  const documentos = Number(params.get("documentos") ?? 0);
   /** `bancada`: a câmera que o robô pega está transmitindo? Padrão: está. */
   const noAr = params.get("noar") !== "0";
   /**
@@ -2500,7 +2719,14 @@ function Medida({ params }: { params: URLSearchParams }) {
       ) : cenario === "camera" ? (
         <PalcoCamera n={n} />
       ) : cenario === "quadro" ? (
-        <PalcoQuadro n={n} gesto={gesto} painel={painel} mapas={mapas} />
+        <PalcoQuadro
+          n={n}
+          documentos={documentos}
+          gesto={gesto}
+          painel={painel}
+          mapas={mapas}
+          noAr={noAr}
+        />
       ) : cenario === "mestre-camera" ? (
         <PalcoMestreCamera n={n} cameras={cameras} />
       ) : cenario === "camera-gesto" ? (

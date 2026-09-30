@@ -56,6 +56,29 @@ const SEM_EFEITOS: EfeitosDoPersonagem[] = [];
  * ausência, e publicar meio estado apaga da TV o que ela estava mostrando. Quem
  * chama decide quando sabe o suficiente para falar.
  */
+/**
+ * A porta por onde o GESTO publica sem passar pelo board.
+ *
+ * Mover um token com a cena no ar gravava o board a cada 100 ms para a mesa
+ * ver o token andar -- e cada gravação é um commit: o `MestreShell` inteiro
+ * re-renderizado, listas, prévias, histórico. Medido no cenário `quadro` da
+ * bancada, na webview, com um cartão na mão: 17 a 24 ms por commit, dois ou
+ * três quadros perdidos a cada dez, com um cartão ou com sessenta.
+ *
+ * O que a mesa precisa é da CENA, não do commit. Aqui o `usePublisher`
+ * registra um publicador que pega a última embalagem que ele mesmo mandou --
+ * trilha, retratos, fichas, tudo o que não é a cena -- e troca só a cena.
+ * Quem chama é `moverNoGesto`, com a cena do board e o gesto aplicado por
+ * cima; o board continua recebendo UM commit, ao soltar. `null` fora do
+ * Mestre, ou enquanto o publicador está calado: aí publicar não é com quem
+ * está pedindo.
+ */
+let publicadorAoVivo: ((scene: Scene) => void) | null = null;
+
+export function publicarCenaAoVivo(scene: Scene): void {
+  publicadorAoVivo?.(scene);
+}
+
 export function usePublisher(state: LiveState, pronto = true): void {
   const channelRef = useRef<SceneChannel | null>(null);
 
@@ -74,6 +97,23 @@ export function usePublisher(state: LiveState, pronto = true): void {
   const scene = useMemo(() => sceneForTable(state.scene), [state.scene]);
 
   const stateRef = useRef({ ...state, scene });
+
+  useEffect(() => {
+    publicadorAoVivo = (cena) => {
+      const channel = channelRef.current;
+      if (!channel || !pronto) return;
+
+      // Guardada como a última mandada, e por isso o batimento de 20 s nunca
+      // manda a cena de ANTES do gesto por cima da que a mesa está vendo.
+      const paraMesa: LiveState = { ...stateRef.current, scene: sceneForTable(cena) };
+      stateRef.current = paraMesa;
+      channel.publish(paraMesa);
+    };
+
+    return () => {
+      publicadorAoVivo = null;
+    };
+  }, [pronto]);
 
   useEffect(() => {
     const channel = createPublisher();
