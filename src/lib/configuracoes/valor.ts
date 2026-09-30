@@ -11,7 +11,13 @@ export type { Escopo };
  * não é do tipo declarado é ignorado em vez de quebrar a tela.
  */
 
-export type TipoConfiguracao = "booleano" | "numero" | "texto" | "escolha";
+/**
+ * `lista` é uma lista de textos -- quem fica de fora da live, por exemplo. Não
+ * tem controle na lista gerada, porque um interruptor por item só existe para
+ * quem sabe o que os itens são: quem a edita é o painel do plugin (ou a tela
+ * dona dela), e o editor JSON.
+ */
+export type TipoConfiguracao = "booleano" | "numero" | "texto" | "escolha" | "lista";
 
 /** Onde uma configuração pode ser gravada. `ambos` é o padrão do VSCode. */
 export type EscopoConfiguracao = Escopo | "ambos";
@@ -46,6 +52,8 @@ export function valido(definicao: Definicao, valor: unknown): boolean {
       return typeof valor === "string";
     case "escolha":
       return typeof valor === "string" && (definicao.opcoes ?? []).includes(valor);
+    case "lista":
+      return Array.isArray(valor) && valor.every((item) => typeof item === "string");
     case "numero":
       return (
         typeof valor === "number" &&

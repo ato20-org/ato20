@@ -63,8 +63,10 @@ function useGruposDeAjustes(escopo: Escopo, busca: string) {
   }, [extensoes]);
 
   const grupos = useMemo(() => {
+    // A `lista` fica de fora: não há controle genérico para ela. Ver
+    // `TipoConfiguracao`.
     const visiveis = Object.values(definicoes).filter(
-      (d) => escoposDe(d).includes(escopo) && bateNaBusca(d, busca),
+      (d) => d.tipo !== "lista" && escoposDe(d).includes(escopo) && bateNaBusca(d, busca),
     );
 
     const porDono = new Map<string, Definicao[]>();
@@ -367,6 +369,8 @@ function Controle({
           </SelectContent>
         </Select>
       );
+    case "lista":
+      return null;
   }
 }
 

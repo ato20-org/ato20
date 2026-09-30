@@ -22,6 +22,15 @@ describe("valido", () => {
     expect(valido(texto, 1)).toBe(false);
   });
 
+  it("a lista só aceita textos", () => {
+    const lista: Definicao = { ...base, chave: "plug.l", tipo: "lista", padrao: [] };
+
+    expect(valido(lista, ["a", "b"])).toBe(true);
+    expect(valido(lista, [])).toBe(true);
+    expect(valido(lista, ["a", 1])).toBe(false);
+    expect(valido(lista, "a")).toBe(false);
+  });
+
   it("a escolha só aceita o que está nas opções", () => {
     const escolha: Definicao = {
       ...base,
