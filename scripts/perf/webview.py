@@ -98,6 +98,13 @@ def argumentos():
     # `bancada`: quantas cenas o board tem, e portanto quantas prévias a lista
     # da esquerda desenha. Sete é o que a captura do mestre mostrava.
     p.add_argument("--mapas", default="7")
+    # `quadro`: quantos cartões de nota a folha tem. Lista: é a curva que se
+    # quer -- dez cartões custam X, trinta custam quanto?
+    p.add_argument("--documentos", default="0")
+    # Um rótulo livre que a página expõe em `window.__perfExperimento`, para
+    # um componente em investigação ligar uma variante por célula. Lista: é a
+    # bateria de experimentos num build só, sem recompilar entre eles.
+    p.add_argument("--experimento", default="")
     # `--sem-no-ar`: a câmera que o robô pega NÃO está transmitindo. É o que
     # separa "o gesto grava no board" de "o gesto fica no `useGestoStore`".
     p.add_argument("--sem-no-ar", action="store_true")
@@ -317,8 +324,8 @@ def mediana(valores):
 
 
 def imprimir(linhas, args):
-    cab = ["cenario", "n", "cam", "gesto", "painel", "roda", "fps", "p95", "perdidos", "nos", "andou"]
-    larg = [12, 4, 4, 14, 9, 6, 7, 8, 10, 7, 8]
+    cab = ["cenario", "n", "cam", "docs", "gesto", "painel", "roda", "exp", "fps", "p95", "perdidos", "nos", "andou"]
+    larg = [12, 4, 4, 5, 14, 9, 6, 14, 7, 8, 10, 7, 8]
     fmt = lambda cs: "".join(str(c).rjust(w) for c, w in zip(cs, larg))  # noqa: E731
 
     # Agrupa as repetições da mesma célula e mostra a mediana, como o `medir.mjs`.
@@ -336,15 +343,19 @@ def imprimir(linhas, args):
         g = re.search(r"gesto=([\w-]+)", rotulo)
         pnl = re.search(r"painel=(\w+)", rotulo)
         rd = re.search(r"roda=(\d+)", rotulo)
+        docs = re.search(r"docs=(\d+)", rotulo)
+        exp = re.search(r"exp=([\w-]+)", rotulo)
         print(
             fmt(
                 [
                     c["cenario"],
                     c["n"],
                     cam.group(1) if cam else "",
+                    docs.group(1) if docs else "",
                     g.group(1) if g else "",
                     pnl.group(1) if pnl else "",
                     rd.group(1) if rd else "",
+                    exp.group(1) if exp else "",
                     mediana([x["fps"] for x in corridas]),
                     f"{mediana([x['p95'] for x in corridas])}ms",
                     f"{mediana([x['perdidosPct'] for x in corridas])}%",
@@ -407,21 +418,25 @@ def main():
             )
             gestos = (
                 args.gesto.split(",")
-                if cenario in ("camera-gesto", "bancada")
+                if cenario in ("camera-gesto", "bancada", "quadro")
                 else ["mover"]
             )
-            paineis = args.painel.split(",") if cenario == "bancada" else ["ambos"]
+            paineis = args.painel.split(",") if cenario in ("bancada", "quadro") else ["ambos"]
+            docs = args.documentos.split(",") if cenario == "quadro" else ["0"]
             for cam in eixo:
                 for g in gestos:
                     for painel in paineis:
+                     for d in docs:
                       for r in [int(x) for x in args.roda.split(",")]:
                        for k in args.condicoes.split(","):
-                        for i in range(args.repetir):
+                        for exp in args.experimento.split(","):
+                         for i in range(args.repetir):
                             url = (
                                 f"{base}/perf?cenario={cenario}&n={n}"
                                 f"&segundos={args.segundos}&movidos={args.movidos}"
                                 f"&zoom={args.zoom}&cameras={cam}&gesto={g}"
                                 f"&mapas={args.mapas}&painel={painel}"
+                                f"&documentos={d}&experimento={exp}"
                                 f"&sonda={'1' if args.sonda else '0'}"
                                 f"&roda={r}"
                                 f"&noar={'0' if args.sem_no_ar else '1'}"
@@ -436,10 +451,14 @@ def main():
                             if args.efeito is not None:
                                 url += f"&efeito={args.efeito}"
                             rotulo = f"{cenario} n={n} cam={cam}"
-                            if cenario in ("camera-gesto", "bancada"):
+                            if cenario in ("camera-gesto", "bancada", "quadro"):
                                 rotulo += f" gesto={g}"
-                            if cenario == "bancada":
+                            if cenario in ("bancada", "quadro"):
                                 rotulo += f" painel={painel}"
+                            if cenario == "quadro":
+                                rotulo += f" docs={d}"
+                            if exp:
+                                rotulo += f" exp={exp}"
                             if len(args.roda.split(",")) > 1:
                                 rotulo += f" roda={r}"
                             if k != "0" or len(args.condicoes.split(",")) > 1:
