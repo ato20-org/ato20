@@ -7,6 +7,7 @@ import {
   emPixelDeTela,
   useSceneScale,
 } from "@/components/playground/scene-stage";
+import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import {
   CARTAO_Z,
@@ -75,9 +76,24 @@ export function PinWindow({
   ordem: number;
 }) {
   const startDrag = useSceneDrag();
-  const { ampliacaoNoLayout } = useSceneScale();
+  const { ampliacaoNoLayout, moldura } = useSceneScale();
 
   const cartao = useRef<HTMLDivElement>(null);
+
+  /**
+   * Dentro do palco. LIVRE, e não de um lado: a nota vai para onde o mestre a
+   * arrastou, e pular para o outro lado do alfinete brigaria com a mão -- ela
+   * só volta para dentro quando passa da borda, e por isso também não se
+   * perde arrastada para fora. O PAI é quem desvia: o cartão desfaz o zoom
+   * nele mesmo, e um `translate` ali seria ampliado de novo sob `zoom`.
+   */
+  usePainelNaTela({
+    lado: "livre",
+    scale: escala,
+    moldura,
+    ref: cartao,
+    moverPai: true,
+  });
 
   /**
    * Tocar em qualquer lugar fora do cartão tira o foco dos campos dele.

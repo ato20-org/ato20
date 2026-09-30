@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
@@ -38,6 +39,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSceneScale } from "@/components/playground/scene-stage";
+import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { itemBounds } from "@/lib/geometry/bounds";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
@@ -417,7 +419,7 @@ export function TransformHandles({
   teto,
   altura,
 }: TransformHandlesProps) {
-  const { scale, toScene, planoDaMargem } = useSceneScale();
+  const { scale, toScene, planoDaMargem, moldura } = useSceneScale();
   const startDrag = useSceneDrag();
 
   /**
@@ -443,6 +445,27 @@ export function TransformHandles({
   const [papelAberto, setPapelAberto] = useState(false);
   /** E a régua da altura da parede, pela mesma razão dos outros três. */
   const [alturaAberta, setAlturaAberta] = useState(false);
+
+  /**
+   * A caixa e a fileira de botões: o que um painel que pula de lado não pode
+   * cobrir. Ver `usePainelNaTela`.
+   */
+  const caixaRef = useRef<HTMLDivElement | null>(null);
+  const fileiraRef = useRef<HTMLDivElement | null>(null);
+  const obstaculos = [caixaRef, fileiraRef];
+
+  const lateral = {
+    lado: "direita",
+    scale,
+    moldura,
+    obstaculos,
+    vao: PAINEL_GAP_PX,
+  } as const;
+  const embaixo = { ...lateral, lado: "baixo" } as const;
+  const naTelaOpacidade = usePainelNaTela(lateral);
+  const naTelaAltura = usePainelNaTela(lateral);
+  const naTelaPaleta = usePainelNaTela(embaixo);
+  const naTelaPapel = usePainelNaTela(embaixo);
 
   const cor = TOM[tom];
 
@@ -521,6 +544,7 @@ export function TransformHandles({
    */
   const conteudo = (
     <div
+      ref={caixaRef}
       className="pointer-events-none absolute"
       style={{
         // A posição entra no `transform` junto com o giro, e não em
@@ -559,6 +583,7 @@ export function TransformHandles({
       altura ||
       onDelete ? (
         <div
+          ref={fileiraRef}
           className="pointer-events-none absolute flex items-center"
           // A POSIÇÃO continua em unidade de cena -- ela acompanha o item --, e
           // a ampliação é desfeita por `transform`, de uma vez, para a fileira
@@ -1132,6 +1157,7 @@ export function TransformHandles({
               mesma razão: uma só forma de desfazer a ampliação em todo o
               gizmo. Ver o comentário da fileira. */}
           <div
+            ref={naTelaOpacidade}
             className="bg-popover ring-foreground/10 flex flex-col items-center gap-2 rounded-lg px-2 py-3 shadow-md ring-1"
             style={{
               transform: `scale(${1 / scale})`,
@@ -1180,6 +1206,7 @@ export function TransformHandles({
           onPointerDown={(event) => event.stopPropagation()}
         >
           <div
+            ref={naTelaAltura}
             className="bg-popover ring-foreground/10 flex flex-col items-center gap-2 rounded-lg px-2 py-3 shadow-md ring-1"
             style={{
               transform: `scale(${1 / scale})`,
@@ -1226,6 +1253,7 @@ export function TransformHandles({
         >
           {/* Contra-escalado como a fileira. Ver o painel de opacidade. */}
           <div
+            ref={naTelaPaleta}
             className="bg-popover ring-foreground/10 flex flex-col gap-2 rounded-lg px-2 py-2 shadow-md ring-1"
             style={{
               transform: `scale(${1 / scale})`,
@@ -1291,6 +1319,7 @@ export function TransformHandles({
           onPointerDown={(event) => event.stopPropagation()}
         >
           <div
+            ref={naTelaPapel}
             className="bg-popover ring-foreground/10 flex items-center gap-1 rounded-lg px-2 py-2 shadow-md ring-1"
             style={{
               transform: `scale(${1 / scale})`,
