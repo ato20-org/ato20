@@ -24,8 +24,121 @@ import {
   type Definicao,
   type Escopo,
 } from "@/lib/configuracoes/valor";
+import { normaliza } from "@/lib/search";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { abrirArquivoDeConfiguracoes } from "@/lib/vault/configuracoes";
+
+/**
+ * A configuração bate com o que foi digitado? Pelo título, pela chave ou pela
+ * descrição, sem acento: "condicao" acha "Condição".
+ *
+ * Exportada porque a Configuração da campanha faz a mesma pergunta para saber
+ * se o tópico Ajustes entra no resultado. Duas contas divergiriam no primeiro
+ * ajuste de uma delas.
+ */
+export function bateNaBusca(definicao: Definicao, busca: string): boolean {
+  const termo = normaliza(busca.trim());
+  if (!termo) return true;
+
+  return [definicao.titulo, definicao.chave, definicao.descricao ?? ""].some(
+    (texto) => normaliza(texto).includes(termo),
+  );
+}
+
+/**
+ * As configurações do escopo que batem com a busca, agrupadas por dono.
+ *
+ * ATO20 primeiro, depois os plugins por nome: é a ordem em que se procura, e o
+ * nome do plugin é o índice.
+ */
+function useGruposDeAjustes(escopo: Escopo, busca: string) {
+  const definicoes = useConfiguracoesStore((state) => state.definicoes);
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+
+  const nomeDoDono = useMemo(() => {
+    const nomes = new Map<string, string>([["ato20", "ATO20"]]);
+    for (const extensao of extensoes) nomes.set(extensao.id, extensao.nome);
+
+    return (dono: string) => nomes.get(dono) ?? dono;
+  }, [extensoes]);
+
+  const grupos = useMemo(() => {
+    const visiveis = Object.values(definicoes).filter(
+      (d) => escoposDe(d).includes(escopo) && bateNaBusca(d, busca),
+    );
+
+    const porDono = new Map<string, Definicao[]>();
+    for (const d of visiveis) porDono.set(d.dono, [...(porDono.get(d.dono) ?? []), d]);
+
+    return [...porDono.entries()].sort(([a], [b]) =>
+      a === "ato20" ? -1 : b === "ato20" ? 1 : nomeDoDono(a).localeCompare(nomeDoDono(b)),
+    );
+  }, [definicoes, escopo, busca, nomeDoDono]);
+
+  return { grupos, nomeDoDono };
+}
+
+/** Os grupos, um cabeçalho por dono e uma linha por configuração. */
+function Grupos({
+  grupos,
+  nomeDoDono,
+  escopo,
+}: {
+  grupos: [string, Definicao[]][];
+  nomeDoDono: (dono: string) => string;
+  escopo: Escopo;
+}) {
+  const valores = useConfiguracoesStore((state) => state.valores);
+
+  return grupos.map(([dono, lista]) => (
+    <section key={dono} className="flex flex-col gap-1">
+      <h3 className="text-muted-foreground px-1 pt-1 text-[10px] font-medium tracking-wide uppercase">
+        {nomeDoDono(dono)}
+      </h3>
+      <ul className="flex flex-col divide-y">
+        {lista.map((definicao) => (
+          <Linha
+            key={definicao.chave}
+            definicao={definicao}
+            escopo={escopo}
+            origem={resolver(definicao, valores).origem}
+          />
+        ))}
+      </ul>
+    </section>
+  ));
+}
+
+/**
+ * Só o escopo da CAMPANHA, sem abas nem JSON: o tópico Ajustes da
+ * Configuração da campanha.
+ *
+ * A busca vem de fora porque lá ela é uma só para todos os tópicos. O arquivo
+ * cru continua nas Configurações gerais, que é onde mora a edição à mão dos
+ * dois escopos lado a lado.
+ */
+export function AjustesDaCampanha({ busca }: { busca: string }) {
+  const carregada = useConfiguracoesStore((state) => state.carregado.campanha);
+  const erro = useConfiguracoesStore((state) => state.erro.campanha);
+  const { grupos, nomeDoDono } = useGruposDeAjustes("campanha", busca);
+
+  if (!carregada)
+    return (
+      <p className="text-muted-foreground text-[11px]">Lendo…</p>
+    );
+
+  return (
+    <div className="flex flex-col gap-3">
+      {erro ? (
+        <p className="text-destructive text-xs" role="alert">
+          O arquivo não pôde ser lido, e nada será gravado nele até ser consertado:{" "}
+          <span className="font-mono">{erro}</span>
+        </p>
+      ) : null}
+      <Grupos grupos={grupos} nomeDoDono={nomeDoDono} escopo="campanha" />
+    </div>
+  );
+}
 
 /**
  * Tudo que dá para ajustar, gerado do registro.
@@ -44,42 +157,14 @@ import { abrirArquivoDeConfiguracoes } from "@/lib/vault/configuracoes";
  * está a configuração daquele plugin", e o nome do plugin é o índice.
  */
 export function ListaDeConfiguracoes() {
-  const definicoes = useConfiguracoesStore((state) => state.definicoes);
-  const valores = useConfiguracoesStore((state) => state.valores);
   const carregado = useConfiguracoesStore((state) => state.carregado);
   const erro = useConfiguracoesStore((state) => state.erro);
-  const extensoes = useExtensoesStore((state) => state.extensoes);
 
   const [escopo, setEscopo] = useState<Escopo>("maquina");
   const [busca, setBusca] = useState("");
   const [modoJson, setModoJson] = useState(false);
 
-  const nomeDoDono = useMemo(() => {
-    const nomes = new Map<string, string>([["ato20", "ATO20"]]);
-    for (const extensao of extensoes) nomes.set(extensao.id, extensao.nome);
-
-    return (dono: string) => nomes.get(dono) ?? dono;
-  }, [extensoes]);
-
-  const grupos = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    const visiveis = Object.values(definicoes).filter(
-      (d) =>
-        escoposDe(d).includes(escopo) &&
-        (!termo ||
-          d.titulo.toLowerCase().includes(termo) ||
-          d.chave.toLowerCase().includes(termo) ||
-          d.descricao?.toLowerCase().includes(termo)),
-    );
-
-    const porDono = new Map<string, Definicao[]>();
-    for (const d of visiveis) porDono.set(d.dono, [...(porDono.get(d.dono) ?? []), d]);
-
-    // ATO20 primeiro, depois os plugins por nome: é a ordem em que se procura.
-    return [...porDono.entries()].sort(([a], [b]) =>
-      a === "ato20" ? -1 : b === "ato20" ? 1 : nomeDoDono(a).localeCompare(nomeDoDono(b)),
-    );
-  }, [definicoes, escopo, busca, nomeDoDono]);
+  const { grupos, nomeDoDono } = useGruposDeAjustes(escopo, busca);
 
   const semCampanha = escopo === "campanha" && !carregado.campanha;
 
@@ -151,23 +236,7 @@ export function ListaDeConfiguracoes() {
           {busca ? "Nada com esse nome" : "Nada para ajustar neste escopo"}
         </p>
       ) : (
-        grupos.map(([dono, lista]) => (
-          <section key={dono} className="flex flex-col gap-1">
-            <h3 className="text-muted-foreground px-1 pt-1 text-[10px] font-medium tracking-wide uppercase">
-              {nomeDoDono(dono)}
-            </h3>
-            <ul className="flex flex-col divide-y">
-              {lista.map((definicao) => (
-                <Linha
-                  key={definicao.chave}
-                  definicao={definicao}
-                  escopo={escopo}
-                  origem={resolver(definicao, valores).origem}
-                />
-              ))}
-            </ul>
-          </section>
-        ))
+        <Grupos grupos={grupos} nomeDoDono={nomeDoDono} escopo={escopo} />
       )}
     </div>
   );
