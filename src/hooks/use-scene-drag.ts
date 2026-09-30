@@ -29,6 +29,27 @@ type DragHandlers = {
 };
 
 /**
+ * Devolve o foco ao documento, como o navegador faria sozinho.
+ *
+ * O `preventDefault` do pointerdown existe para o arrasto não arrastar seleção
+ * de texto, e cancela também a troca de FOCO: clicar no mapa com a busca de
+ * personagem focada deixava o cursor piscando nela -- e, com um campo focado,
+ * os atalhos do palco se calam (ver `isTyping`) e o que se digitava ia para a
+ * busca. O cartão do alfinete e o papel do postit já se defendiam disso cada
+ * um por conta própria; aqui é a raiz, e vale para qualquer campo.
+ *
+ * Só o que está FORA do alvo: o gesto que começa dentro de um campo -- o
+ * postit aberto para escrever -- é dele, e tirar o foco ali mataria a escrita.
+ */
+function soltarFoco(alvo: Element) {
+  const ativo = document.activeElement;
+  if (!(ativo instanceof HTMLElement) || ativo === document.body) return;
+  if (alvo.contains(ativo)) return;
+
+  ativo.blur();
+}
+
+/**
  * Arrasto em coordenadas de cena, via pointer capture — o movimento continua
  * sendo entregue mesmo quando o cursor sai do elemento ou da janela.
  *
@@ -43,7 +64,10 @@ export function useSceneDrag() {
     (event: ReactPointerEvent, handlers: DragHandlers) => {
       if (event.button !== 0 || scale === 0) return;
 
-      if (!handlers.mantemClique) event.preventDefault();
+      if (!handlers.mantemClique) {
+        event.preventDefault();
+        soltarFoco(event.currentTarget as Element);
+      }
       // O `stopPropagation` fica em qualquer caso: ele é o que impede o palco
       // de tratar o mesmo gesto como clique no vazio — marcar vários, ou
       // cravar um ponto por cima do que se estava pegando.
