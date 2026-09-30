@@ -13,6 +13,7 @@ import {
 } from "@/components/mestre/menu-da-luz";
 import { SeletorDeCor } from "@/components/mestre/seletor-de-cor";
 import { useSceneScale } from "@/components/playground/scene-stage";
+import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { limitarIntensidade } from "@/lib/geometry/luz";
@@ -89,7 +90,7 @@ export function PainelDaLuz({
   scene: Scene;
   panMode: boolean;
 }) {
-  const { scale, planoDaMargem } = useSceneScale();
+  const { scale, planoDaMargem, moldura, offsetX, offsetY } = useSceneScale();
   const tool = useToolStore((state) => state.tool);
   const selectedLuzId = useSelectionStore((state) => state.selectedLuzId);
   const updateLuz = useSceneStore((state) => state.updateLuz);
@@ -97,20 +98,36 @@ export function PainelDaLuz({
   const [livreAberto, setLivreAberto] = useState(false);
 
   const luz = scene.luzes?.find((candidata) => candidata.id === selectedLuzId);
+  // O cone que aponta para baixo põe o painel ACIMA do ponto: embaixo ele
+  // cobriria o começo do facho, e com ele a alça do raio forte.
+  const acima = luz?.cone
+    ? Math.sin((luz.cone.angulo * Math.PI) / 180) > 0
+    : false;
+
+  /**
+   * Dentro do palco: a luz no rodapé do mapa abria o painel com metade para
+   * fora, atrás da barra da câmera. Do outro lado do PONTO quando não cabe,
+   * como o painel do gizmo. Ver `usePainelNaTela`.
+   */
+  const painel = usePainelNaTela({
+    lado: acima ? "cima" : "baixo",
+    scale,
+    moldura,
+    ancora: luz
+      ? { x: offsetX + luz.x * scale, y: offsetY + luz.y * scale }
+      : undefined,
+    vao: DISTANCIA_PX,
+  });
+
   if (!luz || panMode || tool !== "select" || scale === 0) return null;
 
   const intensidade = Math.round(limitarIntensidade(luz.intensidade) * 100);
   const efeito = luz.efeito ?? "fixa";
   /** A cor da luz está fora da paleta: foi escolhida no seletor livre. */
   const livre = !(CORES_DA_LUZ as readonly string[]).includes(luz.cor);
-  // O cone que aponta para baixo põe o painel ACIMA do ponto: embaixo ele
-  // cobriria o começo do facho, e com ele a alça do raio forte.
-  const acima = luz.cone
-    ? Math.sin((luz.cone.angulo * Math.PI) / 180) > 0
-    : false;
-
   const conteudo = (
     <div
+      ref={painel}
       className="bg-background/95 pointer-events-auto absolute top-0 left-0 flex w-52 flex-col gap-2.5 rounded-lg border p-2 shadow-lg"
       style={{
         transform:
