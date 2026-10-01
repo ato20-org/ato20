@@ -55,6 +55,7 @@ import { usePaletaStore } from "@/lib/store/use-paleta-store";
 import { useAudioStore } from "@/lib/store/use-audio-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
+import { abrirRodaPelaTecla, ehTeclaDoPing } from "@/lib/ping";
 
 /**
  * De quanto o empurrão anda por tecla.
@@ -94,6 +95,7 @@ export type GrupoAtalho =
   | "Som"
   | "Camadas"
   | "Seleção"
+  | "Mesa"
   // Extensão declara o grupo dela, ou cai no próprio nome. A união fica aberta
   // para isso -- fechar obrigaria a tabela do aplicativo a conhecer os nomes
   // que um autor de plugin vai escolher.
@@ -730,6 +732,21 @@ export const ATALHOS_BASE: Atalho[] = [
     combina: (evento) =>
       !comando(evento) && !evento.shiftKey && evento.key in SETAS,
     executar: (evento) => empurrar(evento, EMPURRAO),
+    impedirPadrao: true,
+  },
+  // Segurar abre a roda e apontar escolhe; soltar a tecla marca. Sem a
+  // REPETIÇÃO: a tecla segurada repete o `keydown`, e a segunda batida fecharia
+  // a roda que a primeira abriu. Ver `abrirRodaPelaTecla`.
+  {
+    grupo: "Mesa",
+    tecla: "'",
+    rotulo: "Ping no mapa, onde o mouse está: segure, aponte e solte",
+    combina: (evento) =>
+      !comando(evento) &&
+      !evento.altKey &&
+      !evento.repeat &&
+      ehTeclaDoPing(evento),
+    executar: (evento) => abrirRodaPelaTecla(evento.code),
     impedirPadrao: true,
   },
 ];

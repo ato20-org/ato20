@@ -18,6 +18,7 @@ POST  /sala/plugin/{id}/{canal}          o plugin publica pelo Mestre; token + l
 GET   /plugin/{id}/{arquivo}   a pagina de um plugin que declara pagina; em sandbox
 GET   /sala/rolagens           os dados que a mesa jogou, em SSE; loopback
 GET   /sala/movimentos         os tokens que os jogadores arrastaram, em SSE; loopback
+GET   /sala/pings              os pings que os jogadores marcaram no mapa, em SSE; loopback
 POST  /sala/publicar           o Mestre anuncia; token + loopback
 GET   /debug/palco             o que as telas mediram de si; loopback
 POST  /debug/palco

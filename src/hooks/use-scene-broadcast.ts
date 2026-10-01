@@ -11,6 +11,7 @@ import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { Ping } from "@/types/ping";
 import {
   type Ambiente,
   DEFAULT_SESSION_VOLUME,
@@ -41,6 +42,9 @@ const STALLED_AFTER_MS = 12_000;
  * `[]` novo a cada quadro recebido o refaria dez vezes por segundo.
  */
 const SEM_EFEITOS: EfeitosDoPersonagem[] = [];
+
+/** Nenhum ping, pela mesma razão: o `PingLayer` filtra esta lista por cena. */
+const SEM_PINGS: Ping[] = [];
 
 /**
  * Lado do Mestre: publica cena, trilha e retratos.
@@ -147,6 +151,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
       declarativoVersao: state.declarativoVersao,
       fichasVersao: state.fichasVersao,
       rolagens: state.rolagens,
+      pings: state.pings,
     };
 
     stateRef.current = paraMesa;
@@ -177,6 +182,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
     state.declarativoVersao,
     state.fichasVersao,
     state.rolagens,
+    state.pings,
   ]);
 
   useEffect(() => {
@@ -211,6 +217,8 @@ export type Subscription = {
   spotlight: Spotlight | null;
   /** Os dados que os jogadores jogaram na mesa há pouco. Ver `LiveState`. */
   rolagens: RolagemDaMesa[];
+  /** Os pings no mapa agora. Ver `LiveState.pings`. */
+  pings: Ping[];
   /** A versão do declarativo dos plugins. Zero = nada. Ver `LiveState`. */
   declarativoVersao: number;
   /** A versão do elenco no Mestre. Ver `LiveState`. */
@@ -289,6 +297,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     efeitos: live.efeitos ?? SEM_EFEITOS,
     spotlight: live.spotlight,
     rolagens: live.rolagens ?? [],
+    pings: live.pings ?? SEM_PINGS,
     declarativoVersao: live.declarativoVersao ?? 0,
     fichasVersao: live.fichasVersao ?? 0,
     synced,
