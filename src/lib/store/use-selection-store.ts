@@ -67,6 +67,16 @@ type SelectionStore = {
   selectedParedeId: string | null;
   /** Luz cravada selecionada. Uma por vez, pela razão da parede. */
   selectedLuzId: string | null;
+  /**
+   * Ponto de anotação selecionado. Um por vez, como a luz, que também é uma
+   * coordenada sem caixa.
+   *
+   * Não traz gizmo nem alça: existe para o Delete ter alvo. Sem ela, tocar no
+   * alfinete deixava na mão o que estava selecionado antes -- o arrasto dele
+   * para a propagação, e o palco não chegava a limpar nada --, e o Delete que
+   * o mestre apertava para tirar o ponto apagava o token.
+   */
+  selectedPinId: string | null;
 
   select: (itemIds: string[]) => void;
   toggle: (itemId: string) => void;
@@ -105,6 +115,8 @@ type SelectionStore = {
   selectParede: (paredeId: string | null) => void;
   /** `null` limpa. */
   selectLuz: (luzId: string | null) => void;
+  /** `null` limpa. */
+  selectPin: (pinId: string | null) => void;
   /** `null` limpa. Substitui a seleção de retratos inteira. */
   selectPortrait: (portraitId: string | null) => void;
   selectPortraits: (portraitIds: string[]) => void;
@@ -146,6 +158,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
   selectedMedidorId: null,
   selectedParedeId: null,
   selectedLuzId: null,
+  selectedPinId: null,
 
   select(itemIds) {
     get().selectMisto({ itens: itemIds });
@@ -163,6 +176,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -182,6 +196,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -201,6 +216,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -220,6 +236,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -239,6 +256,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -262,6 +280,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -278,6 +297,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -293,6 +313,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: medidorId,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -309,6 +330,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: paredeId,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -325,6 +347,24 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: luzId,
+      selectedPinId: null,
+    });
+  },
+
+  selectPin(pinId) {
+    set({
+      selectedIds: [],
+      selectedTextoIds: [],
+      selectedFormaIds: [],
+      selectedPostitIds: [],
+      selectedDocumentoIds: [],
+      selectedTracoIds: [],
+      selectedFogId: null,
+      selectedPortraitIds: [],
+      selectedMedidorId: null,
+      selectedParedeId: null,
+      selectedLuzId: null,
+      selectedPinId: pinId,
     });
   },
 
@@ -345,6 +385,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -365,6 +406,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 
@@ -381,6 +423,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId,
       selectedParedeId,
       selectedLuzId,
+      selectedPinId,
     } = get();
     if (
       selectedIds.length === 0 &&
@@ -393,7 +436,8 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds.length === 0 &&
       selectedMedidorId === null &&
       selectedParedeId === null &&
-      selectedLuzId === null
+      selectedLuzId === null &&
+      selectedPinId === null
     ) {
       return;
     }
@@ -410,6 +454,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedMedidorId: null,
       selectedParedeId: null,
       selectedLuzId: null,
+      selectedPinId: null,
     });
   },
 }));

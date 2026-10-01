@@ -15,6 +15,7 @@ import {
   removeFogSelection,
   removeMedidorSelection,
   removeLuzSelection,
+  removePinSelection,
   removeParedeSelection,
   removePortraitSelection,
   removeSelection,
@@ -705,6 +706,9 @@ export const ATALHOS_BASE: Atalho[] = [
       // A luz, pela mesma regra: só fica selecionada quando o mestre acabou
       // de encostar no ponto dela.
       else if (selecao.selectedLuzId) removeLuzSelection();
+      // E o ponto de anotação, que também só fica selecionado quando o mestre
+      // acabou de tocar no alfinete.
+      else if (selecao.selectedPinId) removePinSelection();
       else if (selecao.selectedPortraitIds.length > 0)
         removePortraitSelection();
       else removeSelection();
