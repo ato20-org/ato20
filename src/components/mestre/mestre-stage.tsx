@@ -168,6 +168,7 @@ import { padraoDoQuadro } from "@/lib/configuracoes/quadro";
 import {
   CORES_DA_LUZ,
   ehQuadro,
+  itensVisiveis,
   RAIO_DA_LUZ_PADRAO,
   temCamera,
   POSTIT_ALTURA,
@@ -377,6 +378,18 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       gestoTracos,
       gestoCamera,
     ],
+  );
+
+  /**
+   * Os itens que o palco mostra: sem os de olho apagado na lista de camadas.
+   *
+   * É por esta lista, e não por `scene.items`, que a área laça, que a guia
+   * encaixa e que o gizmo emoldura: o que não se vê não se pega pelo mapa. A
+   * lista de camadas continua alcançando todos -- é por ela que voltam.
+   */
+  const visiveis = useMemo(
+    () => itensVisiveis(scene.items, scene.grupos),
+    [scene.items, scene.grupos],
   );
 
   const [marquee, setMarquee] = useState<Bounds | null>(null);
@@ -615,11 +628,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     () =>
       fichasDaCena(
         Boolean(scene.infoDosTokens),
-        scene.items,
+        visiveis,
         personagens ?? [],
         true,
       ),
-    [scene.infoDosTokens, scene.items, personagens],
+    [scene.infoDosTokens, visiveis, personagens],
   );
   /**
    * O que as condições fazem com cada figura, no palco do mestre.
@@ -629,8 +642,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * diria "a mesa está vendo isto", e ela não está. Ver `efeitosDaFigura`.
    */
   const efeitosNoPalco = useMemo(
-    () => efeitosDaCena(scene.items, personagens ?? []),
-    [scene.items, personagens],
+    () => efeitosDaCena(visiveis, personagens ?? []),
+    [visiveis, personagens],
   );
   const unioes = usePortraitStore((state) => state.unioes);
   const ajustarUniaoDeRetratos = usePortraitStore((state) => state.ajustar);
@@ -649,7 +662,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    */
   const portraits = retratosDaCena(
     guardados,
-    scene.items,
+    visiveis,
     personagens ?? [],
     fontes,
     // Com os medidores ESCONDIDOS, e este é o único palco que os pede. Eles
@@ -674,7 +687,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const updatePortrait = usePortraitStore((state) => state.update);
   const updatePortraits = usePortraitStore((state) => state.updateMany);
 
-  const selectedItems = scene.items.filter((item) =>
+  const selectedItems = visiveis.filter((item) =>
     selectedIds.includes(item.id),
   );
 
@@ -691,8 +704,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * Só aqui: a TV e o celular recebem a cena sem isto. Ver `contornoDosItens`.
    */
   const contornos = useMemo(
-    () => contornoDosItens(scene.items, personagensDeJogador),
-    [scene.items, personagensDeJogador],
+    () => contornoDosItens(visiveis, personagensDeJogador),
+    [visiveis, personagensDeJogador],
   );
   const selectedTextos = (scene.textos ?? []).filter((texto) =>
     selectedTextoIds.includes(texto.id),
@@ -951,7 +964,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   /** Bounds de tudo que não está se movendo — os candidatos a linha guia. */
   function snapTargets(exclude: (id: string) => boolean): Bounds[] {
     return [
-      ...scene.items.filter((item) => !exclude(item.id)).map(itemBounds),
+      ...visiveis.filter((item) => !exclude(item.id)).map(itemBounds),
       // Pela caixa GIRADA, como o item: uma área torta ocupa mais que a caixa
       // dela, e alinhar pelo retângulo cru daria guia em lugar nenhum.
       ...scene.fog
@@ -2617,7 +2630,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         });
         setMarquee(area);
 
-        const hits = scene.items
+        const hits = visiveis
           .filter(
             (item) => !item.locked && boundsIntersect(itemBounds(item), area),
           )

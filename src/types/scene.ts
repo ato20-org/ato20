@@ -167,6 +167,19 @@ export type CanvasItem = {
   /** Item travado não é selecionável nem arrastável no Mestre. */
   locked: boolean;
   /**
+   * O olho da lista de camadas, apagado. Ausente = à vista.
+   *
+   * Escondido é FORA da cena para todo mundo: o palco do mestre não o desenha,
+   * a área não o laça e a mesa nem o recebe -- é o olho do Figma, e não o
+   * "escondido da mesa" dos medidores. Serve aos dois usos que a lista tinha
+   * sem resposta: tirar o telhado da frente para trabalhar o andar de baixo, e
+   * deixar o monstro pronto no lugar até a hora de aparecer.
+   *
+   * Continua na lista, e é por ela que volta. A pasta tem o mesmo olho, e
+   * esconde tudo o que tem dentro -- ver `itensVisiveis`.
+   */
+  escondido?: boolean;
+  /**
    * Espelhamento. Aplicado no referencial do próprio item, depois do giro:
    * espelhar um token é virar o desenho dele, não mover a caixa.
    *
@@ -2062,7 +2075,65 @@ export type Grupo = {
   nome: string;
   parentId?: string;
   recolhido?: boolean;
+  /**
+   * O olho da pasta, apagado: tudo dentro dela some, subpastas incluídas. Ver
+   * `CanvasItem.escondido`.
+   *
+   * Não reescreve os itens: cada um guarda o próprio olho, e reabrir a pasta
+   * devolve a cena como estava -- com o que já estava escondido lá dentro
+   * continuando escondido.
+   */
+  escondido?: boolean;
 };
+
+/**
+ * Os itens que se veem: sem os escondidos, nem os que estão numa pasta
+ * escondida, em qualquer altura da árvore.
+ *
+ * Devolve a MESMA lista quando nada está escondido, e não é economia: o
+ * `sceneForTable` e os `useMemo` do palco comparam por identidade, e uma cópia
+ * nova por chamada publicaria a cena a cada render.
+ */
+export function itensVisiveis(
+  items: CanvasItem[],
+  grupos: Grupo[] | undefined,
+): CanvasItem[] {
+  const fechadas = pastasEscondidas(grupos);
+
+  if (fechadas.size === 0 && !items.some((item) => item.escondido)) return items;
+
+  return items.filter(
+    (item) =>
+      !item.escondido && !(item.grupoId && fechadas.has(item.grupoId)),
+  );
+}
+
+/**
+ * As pastas que estão fora de vista: as de olho apagado e todas as que moram
+ * dentro delas. É o que a lista de camadas usa para apagar a linha de quem
+ * some por causa da mãe.
+ */
+export function pastasEscondidas(grupos: Grupo[] | undefined): Set<string> {
+  const fechadas = new Set<string>();
+  if (!grupos?.some((grupo) => grupo.escondido)) return fechadas;
+
+  for (const grupo of grupos) if (grupo.escondido) fechadas.add(grupo.id);
+
+  // Fecha pelos descendentes. Laço e não recursão pela razão de
+  // `itensDoGrupo`: a lista é plana, com `parentId`.
+  let cresceu = true;
+  while (cresceu) {
+    cresceu = false;
+    for (const grupo of grupos) {
+      if (grupo.parentId && fechadas.has(grupo.parentId) && !fechadas.has(grupo.id)) {
+        fechadas.add(grupo.id);
+        cresceu = true;
+      }
+    }
+  }
+
+  return fechadas;
+}
 
 /**
  * O que uma cena é para o mestre.

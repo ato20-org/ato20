@@ -79,6 +79,9 @@ import type { Personagem } from "@/types/character";
  * acontece: ver `pronto`, abaixo.
  */
 const SEM_PERSONAGENS: Personagem[] = [];
+
+/** Nenhum item, pela mesma razão. Ver `itensNaMesa`. */
+const SEM_ITENS: CanvasItem[] = [];
 import {
   selectEditingScene,
   selectCenaParaMesa,
@@ -93,11 +96,13 @@ import { useTrackStore } from "@/lib/store/use-track-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import {
   ehQuadro,
+  itensVisiveis,
   temAnotacao,
   temCamera,
   temGrade,
   temNevoa,
   temSol,
+  type CanvasItem,
   type Scene,
 } from "@/types/scene";
 import { NotaEditor } from "@/components/mestre/editor-markdown";
@@ -122,6 +127,23 @@ export function MestreShell() {
   // A que a mesa vê, e não a que o mestre pôs no ar: sem nada no ar, é a capa
   // da campanha que sobe. Ver `selectCenaParaMesa`.
   const cenaParaMesa = useSceneStore(selectCenaParaMesa);
+  /**
+   * Os itens que a mesa recebe: sem os de olho apagado, como em
+   * `sceneForTable`. É a lista de que saem os retratos, as fichas e os efeitos
+   * abaixo -- o nome do monstro escondido não pode chegar antes dele.
+   *
+   * Memoizada pelos campos, e a mesma lista quando nada está escondido: as três
+   * abaixo entram nas dependências do publicador.
+   */
+  const itensDaCenaNoAr = cenaParaMesa?.items;
+  const pastasDaCenaNoAr = cenaParaMesa?.grupos;
+  const itensNaMesa = useMemo(
+    () =>
+      itensDaCenaNoAr
+        ? itensVisiveis(itensDaCenaNoAr, pastasDaCenaNoAr)
+        : SEM_ITENS,
+    [itensDaCenaNoAr, pastasDaCenaNoAr],
+  );
 
   const leftOpen = usePanelsStore((state) => state.left);
   const rightOpen = usePanelsStore((state) => state.right);
@@ -183,14 +205,14 @@ export function MestreShell() {
     () =>
       retratosDaCena(
         guardados,
-        cenaParaMesa?.items ?? [],
+        itensNaMesa,
         personagens ?? SEM_PERSONAGENS,
         fontes,
         // Sem os escondidos: isto é o que vai para a rede.
         false,
         layoutDaSessao,
       ),
-    [guardados, cenaParaMesa?.items, personagens, fontes, layoutDaSessao],
+    [guardados, itensNaMesa, personagens, fontes, layoutDaSessao],
   );
 
   /**
@@ -208,10 +230,10 @@ export function MestreShell() {
     () =>
       fichasDaCena(
         Boolean(cenaParaMesa?.infoDosTokens),
-        cenaParaMesa?.items ?? [],
+        itensNaMesa,
         personagens ?? SEM_PERSONAGENS,
       ),
-    [cenaParaMesa?.infoDosTokens, cenaParaMesa?.items, personagens],
+    [cenaParaMesa?.infoDosTokens, itensNaMesa, personagens],
   );
 
   /**
@@ -223,8 +245,8 @@ export function MestreShell() {
    */
   const efeitos = useMemo(
     () =>
-      efeitosDaCena(cenaParaMesa?.items ?? [], personagens ?? SEM_PERSONAGENS),
-    [cenaParaMesa?.items, personagens],
+      efeitosDaCena(itensNaMesa, personagens ?? SEM_PERSONAGENS),
+    [itensNaMesa, personagens],
   );
 
   const spotlight = useSpotlightStore((state) => state.spotlight);

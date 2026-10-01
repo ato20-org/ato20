@@ -15,6 +15,8 @@ import {
   ChevronRight,
   ChevronUp,
   Crosshair,
+  Eye,
+  EyeOff,
   FolderClosed,
   FolderPlus,
   Group,
@@ -58,7 +60,12 @@ import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { cn } from "@/lib/utils";
-import type { CanvasItem, Grupo, Scene } from "@/types/scene";
+import {
+  pastasEscondidas,
+  type CanvasItem,
+  type Grupo,
+  type Scene,
+} from "@/types/scene";
 
 /**
  * As imagens que estão na cena, na ordem em que se sobrepõem.
@@ -302,6 +309,7 @@ export function LayerList({ scene }: { scene: Scene }) {
                   grupos={scene.grupos ?? []}
                   depth={linha.depth}
                   total={linha.total}
+                  apagada={linha.apagada}
                   selected={linha.todosSelecionados}
                   dropTarget={dropIndex === index}
                   onReorderStart={startReorder}
@@ -312,6 +320,7 @@ export function LayerList({ scene }: { scene: Scene }) {
                   sceneId={scene.id}
                   item={linha.item}
                   depth={linha.depth}
+                  apagada={linha.apagada}
                   name={nomeDe(linha.item)}
                   selected={selectedIds.includes(linha.item.id)}
                   atFront={linha.item.id === ordered[0]?.id}
@@ -356,8 +365,16 @@ type Linha =
       /** O item mais à frente dentro dele, para "cair no cabeçalho" saber onde. */
       primeiroItemId: string | undefined;
       todosSelecionados: boolean;
+      /** Alguma pasta acima dela está escondida. Ver `pastasEscondidas`. */
+      apagada: boolean;
     }
-  | { tipo: "item"; item: CanvasItem; depth: number };
+  | {
+      tipo: "item";
+      item: CanvasItem;
+      depth: number;
+      /** A pasta dele, ou uma acima, está escondida. */
+      apagada: boolean;
+    };
 
 /** Ver a nota em `linhas`. `ordered` é frente primeiro. */
 function achatar(
@@ -367,6 +384,7 @@ function achatar(
 ): Linha[] {
   const grupos = scene.grupos ?? [];
   const selecionados = new Set(selectedIds);
+  const fechadas = pastasEscondidas(grupos);
   const linhas: Linha[] = [];
 
   /** Posição na ordem do item mais à frente de um grupo, descendentes incluídos. */
@@ -397,6 +415,7 @@ function achatar(
             primeiroItemId: ordered[pos]?.id,
             todosSelecionados:
               ids.length > 0 && ids.every((id) => selecionados.has(id)),
+            apagada: Boolean(grupo.parentId && fechadas.has(grupo.parentId)),
           });
           if (!grupo.recolhido) nivel(grupo.id, depth + 1);
         },
@@ -410,7 +429,13 @@ function achatar(
         return;
       entradas.push({
         pos,
-        linha: () => linhas.push({ tipo: "item", item, depth }),
+        linha: () =>
+          linhas.push({
+            tipo: "item",
+            item,
+            depth,
+            apagada: Boolean(item.grupoId && fechadas.has(item.grupoId)),
+          }),
       });
     });
 
@@ -419,7 +444,8 @@ function achatar(
         if (item.grupoId && !grupos.some((grupo) => grupo.id === item.grupoId))
           entradas.push({
             pos,
-            linha: () => linhas.push({ tipo: "item", item, depth }),
+            linha: () =>
+              linhas.push({ tipo: "item", item, depth, apagada: false }),
           });
       });
 
@@ -450,6 +476,8 @@ type GroupRowProps = {
   grupos: Grupo[];
   depth: number;
   total: number;
+  /** Uma pasta acima está escondida: a linha apaga, mesmo de olho aberto. */
+  apagada: boolean;
   /** Todos os itens dela estão selecionados: a linha acende. */
   selected: boolean;
   dropTarget: boolean;
@@ -498,12 +526,14 @@ function GroupRow({
   grupos,
   depth,
   total,
+  apagada,
   selected,
   dropTarget,
   onReorderStart,
 }: GroupRowProps) {
   const [renomeando, setRenomeando] = useState(false);
   const renomear = useRenomearPeloMenu(() => setRenomeando(true));
+  const foraDeVista = Boolean(grupo.escondido) || apagada;
 
   // Destinos válidos: nem ela, nem quem já é a mãe, nem descendente dela.
   const proibidos = new Set(descendentes(grupos, grupo.id));
@@ -569,7 +599,10 @@ function GroupRow({
       </Button>
 
       <FolderClosed
-        className="text-muted-foreground size-3.5 shrink-0"
+        className={cn(
+          "text-muted-foreground size-3.5 shrink-0",
+          foraDeVista && "opacity-50",
+        )}
         aria-hidden
       />
 
@@ -592,7 +625,10 @@ function GroupRow({
         <>
           <button
             type="button"
-            className="min-w-0 flex-1 truncate text-left text-xs font-medium"
+            className={cn(
+              "min-w-0 flex-1 truncate text-left text-xs font-medium",
+              foraDeVista && "text-muted-foreground",
+            )}
             aria-current={selected}
             title="Clique seleciona tudo dela no palco. Ctrl soma. Duplo clique renomeia."
             onClick={(event) => {
@@ -616,6 +652,25 @@ function GroupRow({
           <span className="text-muted-foreground text-[10px] tabular-nums">
             {total}
           </span>
+
+          {/* O olho esconde a pasta inteira, subpastas incluídas. Cada item
+              guarda o próprio olho: reabrir devolve a pasta como estava. */}
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={
+              grupo.escondido ? `Mostrar ${grupo.nome}` : `Esconder ${grupo.nome}`
+            }
+            aria-pressed={Boolean(grupo.escondido)}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() =>
+              useSceneStore.getState().atualizarGrupo(sceneId, grupo.id, {
+                escondido: !grupo.escondido || undefined,
+              })
+            }
+          >
+            {grupo.escondido ? <EyeOff /> : <Eye />}
+          </Button>
 
           <DropdownMenu onOpenChangeComplete={renomear.aoFechar}>
             <DropdownMenuTrigger
@@ -710,6 +765,8 @@ type LayerRowProps = {
   item: CanvasItem;
   /** Nível na árvore de grupos. 0 = raiz. */
   depth: number;
+  /** A pasta dele está escondida: a linha apaga, mesmo de olho aberto. */
+  apagada: boolean;
   name: string | undefined;
   selected: boolean;
   atFront: boolean;
@@ -751,6 +808,7 @@ const LayerRow = memo(function LayerRow({
   sceneId,
   item,
   depth,
+  apagada,
   name,
   selected,
   atFront,
@@ -760,6 +818,7 @@ const LayerRow = memo(function LayerRow({
   onSelect,
 }: LayerRowProps) {
   const animada = useAnimada(item.assetId);
+  const foraDeVista = Boolean(item.escondido) || apagada;
 
   return (
     <li
@@ -782,7 +841,12 @@ const LayerRow = memo(function LayerRow({
         aria-current={selected}
         onClick={(event) => onSelect(item.id, event)}
       >
-        <span className="bg-muted relative size-8 shrink-0 overflow-hidden rounded">
+        <span
+          className={cn(
+            "bg-muted relative size-8 shrink-0 overflow-hidden rounded",
+            foraDeVista && "opacity-40",
+          )}
+        >
           <MiniaturaDoAcervo
             assetId={item.assetId}
             animada={animada}
@@ -798,14 +862,22 @@ const LayerRow = memo(function LayerRow({
         </span>
 
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs">
+          <span
+            className={cn(
+              "block truncate text-xs",
+              foraDeVista && "text-muted-foreground",
+            )}
+          >
             {/* Asset apagado deixa o item órfão; o nome some mas a camada continua. */}
             {name ?? "Imagem removida"}
           </span>
-          <span className="text-muted-foreground block text-[10px]">
+          {/* Uma linha só: com o olho e o cadeado, o painel estreito quebrava
+              "travada · escondida" e a linha dobrava de altura. */}
+          <span className="text-muted-foreground block truncate text-[10px]">
             {Math.round(item.width)} × {Math.round(item.height)}
             {item.rotation ? ` · ${Math.round(item.rotation)}°` : ""}
             {item.locked ? " · travada" : ""}
+            {item.escondido ? " · escondida" : ""}
           </span>
         </span>
       </button>
@@ -833,6 +905,26 @@ const LayerRow = memo(function LayerRow({
         }
       >
         <ChevronDown />
+      </Button>
+      {/* O olho e o cadeado juntos, como no Figma: são os dois estados da
+          camada, e não ações sobre ela. Ver `CanvasItem.escondido`. */}
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={
+          item.escondido
+            ? `Mostrar ${name ?? "imagem"}`
+            : `Esconder ${name ?? "imagem"}`
+        }
+        aria-pressed={Boolean(item.escondido)}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() =>
+          useSceneStore
+            .getState()
+            .setItemsEscondidos(sceneId, [item.id], !item.escondido)
+        }
+      >
+        {item.escondido ? <EyeOff /> : <Eye />}
       </Button>
       <Button
         variant="ghost"
