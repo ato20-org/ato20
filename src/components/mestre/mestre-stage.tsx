@@ -151,6 +151,7 @@ import {
   type Guide,
 } from "@/lib/geometry/snap";
 import { CORNER_HANDLES, MIN_ITEM_SIZE, type Vec } from "@/lib/geometry/transform";
+import { quadroDaMesa, temFormatoDaMesa } from "@/lib/geometry/viewport";
 
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
@@ -378,6 +379,19 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       gestoTracos,
       gestoCamera,
     ],
+  );
+
+  /**
+   * Onde o retrato vive: o 16:9 da tela da mesa em volta da câmera no ar.
+   *
+   * Não é o recorte da câmera, desde que ela tem formato próprio. A TV encaixa
+   * a torre em pé com tarja dos lados, e o retrato é HUD da TELA: ele fica
+   * sobre a tarja, e não espremido em cima da torre. Ver `quadroDaMesa`. Com a
+   * câmera 16:9 é a própria câmera, o mesmo objeto.
+   */
+  const telaDaMesa = useMemo(
+    () => (scene.camera ? quadroDaMesa(scene.camera) : undefined),
+    [scene.camera],
   );
 
   const [marquee, setMarquee] = useState<Bounds | null>(null);
@@ -820,7 +834,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
   const portraitGroupBounds =
     selectedPortraits.length > 1
-      ? portraitsBounds(selectedPortraits, scene.camera)
+      ? portraitsBounds(selectedPortraits, telaDaMesa)
       : null;
 
   /**
@@ -1620,8 +1634,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const moving = alreadySelected ? selectedPortraits : [portrait];
     if (!alreadySelected) selectPortrait(portrait.id);
 
-    const camera = scene.camera;
-
     // Retrato de união não se mexe sozinho: a posição dele é da união.
     // Arrastá-lo livremente faria a figura voltar no quadro seguinte, quando o
     // efeito reaplicasse o layout.
@@ -1647,14 +1659,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const origins = moving.map(({ id, x, y }) => ({ id, x, y }));
 
     const movendo = new Set(moving.map((atual) => atual.id));
-    const caixa = portraitsBounds(moving, camera);
+    const caixa = portraitsBounds(moving, telaDaMesa);
 
-    // Alinha aos OUTROS retratos e à câmera, e não aos itens do mapa: retrato é
-    // preso à câmera, e um item do mapa passa por baixo dele quando o mestre
-    // desloca a cena -- grudar num alvo que anda seria pior que não grudar.
+    // Alinha aos OUTROS retratos e à tela da mesa, e não aos itens do mapa:
+    // retrato é preso à câmera, e um item do mapa passa por baixo dele quando o
+    // mestre desloca a cena -- grudar num alvo que anda seria pior que não
+    // grudar.
     const alvos = portraits
       .filter((atual) => !movendo.has(atual.id))
-      .map((atual) => boxBounds(portraitBox(atual, camera)));
+      .map((atual) => boxBounds(portraitBox(atual, telaDaMesa)));
 
     if (!caixa) return;
 
@@ -1667,13 +1680,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           origins.map((origin) => ({
             id: origin.id,
             patch: {
-              // De volta para fração da câmera, que é onde o retrato mora.
-              x: origin.x + dx / (camera?.width ?? SCENE_WIDTH),
-              y: origin.y + dy / (camera?.height ?? SCENE_HEIGHT),
+              // De volta para fração da tela, que é onde o retrato mora.
+              x: origin.x + dx / (telaDaMesa?.width ?? SCENE_WIDTH),
+              y: origin.y + dy / (telaDaMesa?.height ?? SCENE_HEIGHT),
             },
           })),
         ),
-      camera ? boundsFromBox(camera) : undefined,
+      telaDaMesa ? boundsFromBox(telaDaMesa) : undefined,
     );
   }
 
@@ -1973,7 +1986,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * a que chegou depois atrás da que já estava. Ver `filasDeUnioes`.
    */
   function arrastarUniao(event: ReactPointerEvent, uniao: UniaoDeRetratos) {
-    const areas = areasDeRetrato(scene.camera);
+    const areas = areasDeRetrato(telaDaMesa);
 
     const sob = (clientX: number, clientY: number) => {
       const ponto = toScene(clientX, clientY);
@@ -3374,12 +3387,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           mas manter a razão evita o mestre criar uma faixa sem querer. */}
       {singlePortrait && !panMode ? (
         <TransformHandles
-          box={{ ...portraitBox(singlePortrait, scene.camera), rotation: 0 }}
+          box={{ ...portraitBox(singlePortrait, telaDaMesa), rotation: 0 }}
           rotatable={false}
           handles={CORNER_HANDLES}
           keepAspect
           onChange={(patch) => {
-            const current = portraitBox(singlePortrait, scene.camera);
+            const current = portraitBox(singlePortrait, telaDaMesa);
 
             updatePortrait(
               singlePortrait.id,
@@ -3390,7 +3403,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
                   width: patch.width ?? current.width,
                   height: patch.height ?? current.height,
                 },
-                scene.camera,
+                telaDaMesa,
               ),
             );
           }}
@@ -3433,7 +3446,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
                 width: patch.width,
                 height: patch.height ?? 0,
               }),
-              scene.camera,
+              telaDaMesa,
             );
 
             // Sendo uma união, o gizmo só manda no TAMANHO: a posição é dela,
@@ -3468,7 +3481,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       ) : null}
 
       {arrastandoUniao ? (
-        <PortraitAnchors camera={scene.camera} alvo={areaDaUniao} />
+        <PortraitAnchors camera={telaDaMesa} alvo={areaDaUniao} />
       ) : null}
 
       {/* O risco em curso, antes de virar traço da cena. Desenhado aqui e não
@@ -3568,9 +3581,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         />
       ) : null}
 
-      {/* Espelhando o palco, a moldura coincide com a tela: desenhá-la seria
-          uma borda em volta do palco inteiro dizendo nada. */}
-      {selecionada && !espelhoMestre ? (
+      {/* Espelhando o palco, a moldura 16:9 coincide com a tela: desenhá-la
+          seria uma borda em volta do palco inteiro dizendo nada. A de outro
+          formato não coincide -- a torre espelhada é uma faixa no meio da
+          tela --, e sem a moldura o mestre não saberia o que a mesa vê. */}
+      {selecionada &&
+      !(espelhoMestre && temFormatoDaMesa(selecionada.viewport)) ? (
         <CameraFrame
           camera={selecionada}
           transmissao={transmissaoDaCamera(scene, selecionada.id, cenaNoAr)}

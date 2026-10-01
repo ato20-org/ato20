@@ -133,10 +133,10 @@ export type ResizeOptions = {
    * Arredondar a saída para inteiro. Ligado para itens, onde unidade de cena
    * já é ~1px na TV e float longo só engorda o JSON.
    *
-   * Desligado para caixas de proporção fixa como a câmera: quem consome
-   * re-deriva a altura da largura, e o resíduo do arredondamento quebraria a
-   * âncora sempre para o mesmo lado (`Math.round` empurra `.5` para cima),
-   * fazendo a caixa derivar meia unidade por gesto.
+   * Desligado para a câmera: com o Shift a altura sai da largura, e o resíduo
+   * do arredondamento quebraria a âncora sempre para o mesmo lado
+   * (`Math.round` empurra `.5` para cima), fazendo a caixa derivar meia
+   * unidade por gesto.
    */
   round?: boolean;
 };

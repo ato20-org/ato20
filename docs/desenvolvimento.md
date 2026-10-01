@@ -145,11 +145,12 @@ pnpm test
 ```
 
 Ele cobre `src/lib` e `src/types`, e nada mais, de propósito. Ali mora a conta pura — o
-recorte da câmera que nunca sai de 16:9, grade, luz e sombra, dado e notação de dados,
-régua, histórico de texto, o que `sceneForTable` tira antes de publicar —, onde erro é
-silencioso e só aparece no vigésimo gesto. Componente de React fica fora: os defeitos que o
-palco de fato teve foram do motor real — o `contain` comprimindo sob `zoom`, o mapa sumindo
-quando a forma de ampliar trocava —, e nenhum deles reproduz em jsdom. O porquê inteiro está
+recorte do palco que nunca sai de 16:9 e o da câmera que guarda o próprio formato, grade,
+luz e sombra, dado e notação de dados, régua, histórico de texto, o que `sceneForTable` tira
+antes de publicar —, onde erro é silencioso e só aparece no vigésimo gesto. Componente de
+React fica fora: os defeitos que o palco de fato teve foram do motor real — o `contain`
+comprimindo sob `zoom`, o mapa sumindo quando a forma de ampliar trocava —, e nenhum deles
+reproduz em jsdom. O porquê inteiro está
 em `vitest.config.mts`.
 
 ### Medir a webview

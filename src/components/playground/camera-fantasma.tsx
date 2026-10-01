@@ -11,7 +11,7 @@ import {
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
-import { clampViewport } from "@/lib/geometry/viewport";
+import { clampCamera, clampCameraPorEixo } from "@/lib/geometry/viewport";
 import {
   transmissaoDaCamera,
   type Transmissao,
@@ -107,9 +107,16 @@ function Fantasma({
   // pelo seguidor a cada movimento. Ver `useCameraLockStore`.
   const caixa = camera.viewport;
 
-  function gravar(viewport: Viewport) {
+  /**
+   * `prender` é o clamp do gesto: arrastar mantém o formato, e o canto, que
+   * existe para mudá-lo, prende cada eixo por si. Ver `clampCameraPorEixo`.
+   */
+  function gravar(
+    viewport: Viewport,
+    prender: typeof clampCamera = clampCamera,
+  ) {
     atualizarCamera(scene.id, camera.id, {
-      viewport: clampViewport(viewport, conteudo),
+      viewport: prender(viewport, conteudo),
     });
   }
 
@@ -249,18 +256,22 @@ function Fantasma({
         <TransformHandles
           box={{ ...caixa, rotation: 0 }}
           rotatable={false}
+          // Como na moldura de verdade: o canto muda o formato, e o Shift o
+          // mantém. Ver `CameraFrame`.
           handles={CORNER_HANDLES}
-          keepAspect
           outline={false}
           round={false}
           zIndex={ALCAS_Z}
           onChange={({ x, y, width, height }) =>
-            gravar({
-              x: x ?? caixa.x,
-              y: y ?? caixa.y,
-              width: width ?? caixa.width,
-              height: height ?? caixa.height,
-            })
+            gravar(
+              {
+                x: x ?? caixa.x,
+                y: y ?? caixa.y,
+                width: width ?? caixa.width,
+                height: height ?? caixa.height,
+              },
+              clampCameraPorEixo,
+            )
           }
         />
       ) : null}

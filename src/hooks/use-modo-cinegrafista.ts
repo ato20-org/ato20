@@ -3,11 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
-import {
-  centerViewportOn,
-  clampViewport,
-  zoomViewport,
-} from "@/lib/geometry/viewport";
+import { ampliarCamera, centrarCameraEm } from "@/lib/geometry/viewport";
 import { ZOOM_CAMERA_STEP } from "@/lib/mestre/camera-actions";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import type { Viewport } from "@/types/scene";
@@ -146,8 +142,10 @@ export function useModoCinegrafista({
       const camera = base();
       if (!camera) return;
 
+      // Pelo clamp da câmera, e não pelo do palco: o do palco tira a altura da
+      // largura, e a torre em pé viraria 16:9 no primeiro movimento do mouse.
       pedir(
-        centerViewportOn(
+        centrarCameraEm(
           camera,
           atual.current.toScene(evento.clientX, evento.clientY),
           useViewportStore.getState().conteudo,
@@ -170,13 +168,10 @@ export function useModoCinegrafista({
         evento.deltaY < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP;
 
       pedir(
-        clampViewport(
-          zoomViewport(
-            camera,
-            fator,
-            atual.current.toScene(evento.clientX, evento.clientY),
-            conteudo,
-          ),
+        ampliarCamera(
+          camera,
+          fator,
+          atual.current.toScene(evento.clientX, evento.clientY),
           conteudo,
         ),
       );

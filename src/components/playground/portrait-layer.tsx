@@ -50,7 +50,10 @@ const SEM_CONDICOES: Condicao[] = [];
 
 type PortraitLayerProps = {
   portraits: Portrait[];
-  /** Recorte atual da câmera. É o espaço em que o retrato vive. */
+  /**
+   * A tela da mesa em volta da câmera no ar (`quadroDaMesa`). É o espaço em que
+   * o retrato vive, e com a câmera 16:9 é o próprio recorte dela.
+   */
   camera?: Viewport;
   /** `mestre` mostra os que estão fora do ar, em fantasma. */
   variant: "mestre" | "mesa";
@@ -315,11 +318,11 @@ const PortraitView = memo(function PortraitView({
   onPointerDown,
 }: PortraitViewProps) {
   const url = useAssetUrl(portrait.assetId);
-  const { scale, recorteDaCamera } = useSceneScale();
+  const { scale, quadroDaTela } = useSceneScale();
   /**
    * A régua deste retrato.
    *
-   * No overlay a câmera é o próprio recorte em PIXEL, ancorado na origem: o
+   * No overlay a régua é a tela da mesa em PIXEL, ancorada na origem: o
    * `planoDaTela` já É esse retângulo, então a fração que o registro guarda
    * vira pixel dele pela mesma `portraitBox` de sempre. Nenhuma geometria
    * nova, e nenhum segundo caminho para manter de acordo com o primeiro -- o
@@ -331,8 +334,8 @@ const PortraitView = memo(function PortraitView({
       ? {
           x: 0,
           y: 0,
-          width: recorteDaCamera.width,
-          height: recorteDaCamera.height,
+          width: quadroDaTela.width,
+          height: quadroDaTela.height,
         }
       : (camera ?? FULL_VIEWPORT);
   const box = portraitBox(portrait, recorte);
