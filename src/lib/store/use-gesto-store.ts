@@ -77,6 +77,15 @@ type GestoStore = {
     semAlca?: PatchesSemAlca,
   ) => void;
   moverCamera: (sceneId: string, cameraId: string, viewport: Viewport) => void;
+  /**
+   * Larga só a câmera, e deixa o resto do gesto onde está.
+   *
+   * Existe porque a câmera ganhou um gesto que não ocupa a mão: as setas
+   * seguradas (ver `camera-nas-setas`). Com o mouse livre, o mestre pode
+   * arrastar um token enquanto a câmera anda, e soltar a seta pelo `terminar`
+   * devolvia o token ao lugar de antes do arrasto, com a mão ainda fechada.
+   */
+  soltarCamera: () => void;
   terminar: () => void;
 };
 
@@ -133,6 +142,18 @@ export const useGestoStore = create<GestoStore>((set) => ({
     }),
   moverCamera: (sceneId, cameraId, viewport) =>
     set({ sceneId, camera: { cameraId, viewport } }),
+  soltarCamera: () =>
+    set((state) => {
+      const resta =
+        state.patches ||
+        state.textos ||
+        state.formas ||
+        state.postits ||
+        state.documentos ||
+        state.tracos;
+
+      return { camera: null, sceneId: resta ? state.sceneId : null };
+    }),
   terminar: () =>
     set({
       sceneId: null,
@@ -347,10 +368,12 @@ export function moverCameraNoGesto(
 /**
  * A mão soltou a moldura: grava pelo caminho MANUAL, que solta a trava da
  * câmera como o gesto sempre fez (ver `gravarCameraManual`).
+ *
+ * Larga SÓ a câmera. Ver `soltarCamera`.
  */
 export function terminarGestoDaCamera(): void {
   const { camera } = useGestoStore.getState();
   if (camera) gravarCameraManual(camera.cameraId, camera.viewport);
-  useGestoStore.getState().terminar();
+  useGestoStore.getState().soltarCamera();
   ultimaPublicacaoAoVivo = 0;
 }
