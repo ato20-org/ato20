@@ -274,6 +274,12 @@ function ler(sob: Element): DestinoDoArrasto | null {
   // A bolinha do handout também fica por cima do mapa, e o painel dela idem.
   if (sob.closest("[data-handout]")) return { tipo: "handout" };
 
+  // O cartão do ponto idem: mora no plano dos controles, sobre o mapa.
+  const ponto = sob.closest<HTMLElement>("[data-anexos-do-ponto]");
+  if (ponto?.dataset.anexosDoPonto) {
+    return { tipo: "ponto", pinId: ponto.dataset.anexosDoPonto };
+  }
+
   // Antes do palco: o editor da nota ocupa o lugar dele e não é palco.
   if (sob.closest("[data-nota-editor]")) return { tipo: "nota" };
 

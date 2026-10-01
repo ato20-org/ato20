@@ -1572,18 +1572,26 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     },
 
     attachToPin(sceneId, pinId, assetIds) {
-      if (assetIds.length === 0) return;
+      const atual = get()
+        .board?.scenes.find((scene) => scene.id === sceneId)
+        ?.pins?.find((pin) => pin.id === pinId);
+      if (!atual) return;
+
+      // `Set` para o mesmo arquivo anexado duas vezes não render duas
+      // miniaturas iguais com o mesmo botão de transmitir.
+      const anexados = new Set(atual.attachments);
+      const novos = [...new Set(assetIds)].filter((id) => !anexados.has(id));
+
+      // Nada novo, nada gravado, como no handout: soltar de novo uma imagem
+      // que já está no ponto é fácil com o arrasto do acervo, e um passo de
+      // desfazer que não muda nada confunde quem desfaz.
+      if (novos.length === 0) return;
 
       get().updateScene(sceneId, (scene) => ({
         ...scene,
         pins: (scene.pins ?? []).map((pin) =>
           pin.id === pinId
-            ? // `Set` para o mesmo arquivo anexado duas vezes não render duas
-              // miniaturas iguais com o mesmo botão de transmitir.
-              {
-                ...pin,
-                attachments: [...new Set([...pin.attachments, ...assetIds])],
-              }
+            ? { ...pin, attachments: [...pin.attachments, ...novos] }
             : pin,
         ),
       }));

@@ -38,6 +38,12 @@ export type FonteDoArrasto =
   /** Uma imagem do handout da cena, que é id de acervo. Ver `Scene.handout`. */
   | { tipo: "handout"; assetId: string }
   /**
+   * Um anexo de ponto de anotação, que também é id de acervo. O ponto vai junto
+   * para o cartão dele saber que a imagem na mão saiu dali. Ver
+   * `MapPin.attachments`.
+   */
+  | { tipo: "ponto"; pinId: string; assetId: string }
+  /**
    * Um item de inventário.
    *
    * Carrega a URL já resolvida, e não um `assetId`, porque a imagem do item
@@ -66,6 +72,11 @@ export type DestinoDoArrasto =
   | { tipo: "inventario"; personagemId: string }
   /** A bolinha do handout da cena em edição. */
   | { tipo: "handout" }
+  /**
+   * O cartão aberto de um ponto de anotação. Um por ponto, como o inventário
+   * é um por ficha: há mais de uma nota aberta ao mesmo tempo.
+   */
+  | { tipo: "ponto"; pinId: string }
   // Uma pasta da árvore de Arquivos. `undefined` é a raiz.
   | { tipo: "pasta-arquivos"; pastaId: string | undefined }
   // O editor de uma nota: o que cai vira menção no texto.
@@ -107,6 +118,8 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
       return `inventario:${destino.personagemId}`;
     case "handout":
       return "handout";
+    case "ponto":
+      return `ponto:${destino.pinId}`;
     case "pasta-arquivos":
       return "arquivos";
     case "nota":
@@ -141,6 +154,7 @@ export function aceita(
       return (
         fonte.tipo === "acervo" ||
         fonte.tipo === "handout" ||
+        fonte.tipo === "ponto" ||
         fonte.tipo === "personagem" ||
         fonte.tipo === "cena"
       );
@@ -155,6 +169,10 @@ export function aceita(
     case "handout":
       // Só do acervo: o handout guarda ids de acervo, e retrato de personagem
       // e imagem de item já têm dono. Ver `Scene.handout`.
+      return fonte.tipo === "acervo";
+    case "ponto":
+      // Pela mesma razão do handout: o anexo do ponto é id de acervo. Ver
+      // `MapPin.attachments`.
       return fonte.tipo === "acervo";
   }
 }
@@ -177,7 +195,7 @@ type TokenDragStore = {
    * de arquivos do personagem que ela mudou.
    *
    * Quem registra cada um: `TokenFantasma` o palco, `AssetLibrary` o acervo,
-   * `InventarioPersonagem` a própria grade.
+   * `InventarioPersonagem` a própria grade, `PinNote` o cartão do ponto.
    */
   alvos: Record<string, AoSoltar | undefined>;
 

@@ -1492,7 +1492,8 @@ function mencaoDe(fonte: FonteDoArrasto): string | null {
 
   switch (fonte.tipo) {
     case "acervo":
-    case "handout": {
+    case "handout":
+    case "ponto": {
       const acervo = useAssetsStore.getState();
       const asset = [
         ...(acervo.image.assets ?? []),
