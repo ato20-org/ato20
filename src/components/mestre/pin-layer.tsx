@@ -15,6 +15,7 @@ import {
   usePinWindowStore,
 } from "@/lib/store/use-pin-window-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import { SCENE_HEIGHT, SCENE_WIDTH, type Scene } from "@/types/scene";
@@ -48,10 +49,12 @@ const LIMIAR_PX = 4;
  * é a barreira estrutural — a outra é `sceneForTable`, que tira os pontos do
  * quadro publicado. Vazar a preparação do mestre exigiria errar as duas.
  *
- * Não tem alças de redimensionar nem entra na seleção do palco: um ponto é uma
- * coordenada, não uma caixa. É por isso que ele também não usa o
- * `use-selection-store` — lá as seleções são mutuamente exclusivas porque
- * disputam o mesmo gizmo, e nada disso vale aqui.
+ * Não tem alças de redimensionar: um ponto é uma coordenada, não uma caixa.
+ * Mas entra na seleção do palco, como a luz cravada, que também não tem caixa.
+ * Ficar de fora parecia inofensivo e não era: o arrasto do alfinete para a
+ * propagação, então tocar nele deixava na mão o que já estava selecionado, e o
+ * Delete apertado para tirar o ponto apagava o token de antes. Selecionado, o
+ * ponto larga o resto e é ele que o Delete apaga.
  *
  * ## Clicar alterna, arrastar só arrasta
  *
@@ -82,6 +85,8 @@ export function PinLayer({
   const startDrag = useSceneDrag();
   const tool = useToolStore((state) => state.tool);
   const updatePin = useSceneStore((state) => state.updatePin);
+  const selectedPinId = useSelectionStore((state) => state.selectedPinId);
+  const selectPin = useSelectionStore((state) => state.selectPin);
 
   const abertas = usePinWindowStore((state) => state.notas);
   const abrir = usePinWindowStore((state) => state.abrir);
@@ -117,6 +122,11 @@ export function PinLayer({
     // Com espaço segurado o gesto é da cena, não do alfinete. Sem `return`
     // aqui o `stopPropagation` do arrasto comeria o deslocamento.
     if (panMode) return;
+
+    // No pointerdown, como os outros objetos do palco, e só no esquerdo: o
+    // direito chega ao palco -- o arrasto não o para -- e o palco limparia a
+    // seleção no mesmo gesto.
+    if (event.button === 0) selectPin(pinId);
 
     startDrag(event, {
       // O clique tem de sobreviver ao gesto: é ele que abre a nota.
@@ -154,6 +164,7 @@ export function PinLayer({
 
       {pins.map((pin, index) => {
         const aberta = abertas.some((nota) => nota.pinId === pin.id);
+        const selecionado = pin.id === selectedPinId;
 
         return (
           <button
@@ -195,6 +206,14 @@ export function PinLayer({
               // tem ponta que indique onde ele crava.
               transform: "translate(-50%, -50%)",
               fontSize: lado * 0.5,
+              // Selecionado, o contorno tracejado do palco, afastado do anel:
+              // o anel já diz "nota na tela", e as duas coisas costumam vir
+              // juntas -- o toque que abre a nota é o mesmo que seleciona. Em
+              // pixels de tela, como o próprio alfinete.
+              outline: selecionado
+                ? `${1.5 / scale}px dashed var(--primary)`
+                : undefined,
+              outlineOffset: selecionado ? 4 / scale : undefined,
               // A numeração é do desenho, não do texto: sem isto o número
               // herda a altura de linha do palco e sai descentrado.
               lineHeight: 1,

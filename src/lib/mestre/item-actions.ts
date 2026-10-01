@@ -19,6 +19,7 @@ import {
   empurrarPostits,
   empurrarTracos,
 } from "@/lib/mestre/grupo-sem-alca";
+import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
 import {
   temAlgoParaColar,
@@ -803,6 +804,38 @@ export function removeLuzSelection(): void {
 
   useSceneStore.getState().removeLuzes(scene.id, [luzId]);
   useSelectionStore.getState().clear();
+}
+
+/**
+ * Apaga um ponto de anotação, fechando a nota dele antes.
+ *
+ * A ordem importa: o cartão se posiciona a partir do alfinete, e apagar
+ * primeiro o deixaria um quadro sem ponto de onde se ancorar. Por isso o botão
+ * no pé da nota e o Delete passam os dois por aqui.
+ */
+export function removePin(sceneId: string, pinId: string): void {
+  usePinWindowStore.getState().fechar(pinId);
+  useSceneStore.getState().removePin(sceneId, pinId);
+
+  const selecao = useSelectionStore.getState();
+  if (selecao.selectedPinId === pinId) selecao.clear();
+}
+
+/** Apaga o ponto de anotação selecionado. */
+export function removePinSelection(): void {
+  const { scene } = read();
+  const pinId = useSelectionStore.getState().selectedPinId;
+  if (!scene || !pinId) return;
+
+  // Seleção de um ponto que já não existe: o Ctrl+Z desfez a criação dele com
+  // ele na mão. Sem a guarda, o `removePin` do store gravaria no desfazer um
+  // passo que não muda nada.
+  if (!scene.pins?.some((pin) => pin.id === pinId)) {
+    useSelectionStore.getState().clear();
+    return;
+  }
+
+  removePin(scene.id, pinId);
 }
 
 /** Apaga o medidor selecionado. */

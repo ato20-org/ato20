@@ -25,6 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
+import { removePin } from "@/lib/mestre/item-actions";
 import { cn } from "@/lib/utils";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
@@ -59,7 +60,6 @@ export function PinNote({
   onArrastar?: (event: ReactPointerEvent) => void;
 }) {
   const updatePin = useSceneStore((state) => state.updatePin);
-  const removePin = useSceneStore((state) => state.removePin);
   const attachToPin = useSceneStore((state) => state.attachToPin);
 
   // O acervo entra só pelos nomes: o cartão mostra de que arquivo é cada
@@ -301,13 +301,9 @@ export function PinNote({
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:text-destructive w-full"
-            onClick={() => {
-              // Fecha antes de apagar, e a ordem importa: o cartão se posiciona
-              // a partir do alfinete, e apagar primeiro o deixaria um quadro sem
-              // ponto de onde se ancorar.
-              onClose();
-              removePin(sceneId, pin.id);
-            }}
+            // Fecha a nota antes de apagar, e larga a seleção se o ponto era
+            // o selecionado: é o mesmo caminho do Delete. Ver `removePin`.
+            onClick={() => removePin(sceneId, pin.id)}
           >
             <Trash2 />
             Apagar este ponto
