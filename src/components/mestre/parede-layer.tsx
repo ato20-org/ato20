@@ -87,7 +87,11 @@ export function ParedeLayer({
 
   return (
     <svg
-      className="pointer-events-none absolute top-0 left-0"
+      // `overflow-visible`: o SVG tem o tamanho do plano, e cortava o que
+      // passasse da borda. A parede pode ser levada para fora do mapa, e lá
+      // ela sumia inteira, sem onde clicar para trazê-la de volta. A que cruza
+      // a borda também perdia o pedaço de fora.
+      className="pointer-events-none absolute top-0 left-0 overflow-visible"
       width={SCENE_WIDTH}
       height={SCENE_HEIGHT}
       viewBox={`0 0 ${SCENE_WIDTH} ${SCENE_HEIGHT}`}

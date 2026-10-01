@@ -259,7 +259,12 @@ export function LuzMarcadores({
 
   return (
     <svg
-      className="pointer-events-none absolute top-0 left-0"
+      // `overflow-visible`: o SVG tem o tamanho do plano, e cortava o que
+      // passasse da borda. A luz pode ser levada para fora do mapa, e lá ela
+      // sumia -- o ponto, o anel e a alça --, sem onde clicar para trazê-la de
+      // volta. Uma luz encostada na borda também perdia a metade de fora do
+      // anel, e com ela a alça do alcance.
+      className="pointer-events-none absolute top-0 left-0 overflow-visible"
       width={SCENE_WIDTH}
       height={SCENE_HEIGHT}
       viewBox={`0 0 ${SCENE_WIDTH} ${SCENE_HEIGHT}`}
