@@ -101,6 +101,9 @@ export function Mestre() {
           </>
         }
         subtitulo={status === "ready" ? editando : undefined}
+        // Só com a mesa aberta: na porta não há sessão para derrubar, e
+        // perguntar ali seria atrito sem motivo.
+        confirmarFechar={status === "ready"}
       />
       <DeclarativoDoMestre>
         <Conteudo

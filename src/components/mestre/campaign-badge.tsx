@@ -12,6 +12,16 @@ import { toast } from "sonner";
 
 import { CapaDaCampanha } from "@/components/mestre/capa-da-campanha";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -51,6 +61,12 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
    * cada mutação do board. Ver `CapaDaCampanha`.
    */
   const [aberto, setAberto] = useState(false);
+
+  /**
+   * Fora do menu, e não um gatilho dentro dele: o item fecha o menu ao ser
+   * clicado, e o diálogo precisa sobreviver a esse fechamento.
+   */
+  const [trocando, setTrocando] = useState(false);
 
   const abrirJanela = useAbrirJanela();
 
@@ -116,12 +132,31 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
 
           <DropdownMenuSeparator />
 
-          <DropdownMenuItem onClick={close}>
+          <DropdownMenuItem onClick={() => setTrocando(true)}>
             <FolderSymlink />
             Trocar de campanha
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <AlertDialog open={trocando} onOpenChange={setTrocando}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Fechar {campaign.nome}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A mesa sai da tela e você volta para a lista de campanhas. A TV e
+              os celulares continuam conectados enquanto você olha a lista.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={close}>
+              Fechar campanha
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Entre o nome e o código: é onde entra o que quem chama quiser pôr no
           meio do bloco da campanha. O código fica na ponta de propósito -- ele
