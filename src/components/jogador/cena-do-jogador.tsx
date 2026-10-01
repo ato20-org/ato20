@@ -8,6 +8,9 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { toast } from "sonner";
+
+import { RodaDePing } from "@/components/playground/roda-de-ping";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useMeusPersonagens } from "@/hooks/use-meus-personagens";
@@ -24,6 +27,7 @@ import {
   criarEnvioDeMovimentos,
   type EnvioDeMovimentos,
 } from "@/lib/player/movimentos";
+import { marcarPing } from "@/lib/player/pings";
 import {
   limiteDoMovimento,
   podePegar,
@@ -32,6 +36,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { Ping } from "@/types/ping";
 import {
   ehQuadro,
   type CanvasItem,
@@ -136,6 +141,7 @@ export function CenaDoJogador({
   fichas,
   efeitos,
   rolagens,
+  pings,
 }: {
   codigo: string;
   cena: Scene;
@@ -145,6 +151,8 @@ export function CenaDoJogador({
   /** O que as condições fazem com cada figura. Ver `LiveState.efeitos`. */
   efeitos: EfeitosDoPersonagem[];
   rolagens: RolagemDaMesa[];
+  /** Os pings da mesa. Ver `LiveState.pings`. */
+  pings: Ping[];
 }) {
   const quadro = ehQuadro(cena);
 
@@ -397,9 +405,25 @@ export function CenaDoJogador({
         fichas={fichas}
         efeitos={efeitos}
         rolagens={rolagens}
+        pings={pings}
         smooth
         naMao={naMao?.itemId}
         variante="tela"
+      />
+
+      {/* Segurar o dedo no mapa abre os pings. O ping volta pelo quadro, como
+          o de todo mundo: é isso que confirma que a mesa o viu. Ver
+          `marcarPing`. */}
+      <RodaDePing
+        modo="jogador"
+        onEscolher={(tipo, ponto) => {
+          void marcarPing(codigo, {
+            tipo,
+            cenaId: cena.id,
+            x: ponto.x,
+            y: ponto.y,
+          }).catch(() => toast.error("O ping não chegou à mesa."));
+        }}
       />
 
       {pegaveis.map((item) => (
@@ -468,6 +492,8 @@ function AlcaDoToken({
   return (
     <div
       aria-hidden
+      // Segurar o próprio token é pegar o token, e não abrir os pings.
+      data-sem-ping
       className="group pointer-events-auto absolute top-0 left-0 touch-none rounded-full"
       style={{
         width: alcance,

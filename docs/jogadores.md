@@ -16,6 +16,7 @@ GET    /eu/anexos/{arquivo}
 DELETE /eu/anexos/{arquivo}
 POST   /eu/rolagens        o dado que o jogador joga; quem sorteia e o daemon
 POST   /eu/movimentos      o token do proprio personagem
+POST   /eu/pings           {tipo, cenaId, x, y}; o ping no mapa, assinado pelo token
 GET    /eu/personagens     so os vinculados a este jogador
 GET    /eu/personagens/{id}/anexos
 POST   /eu/personagens/{id}/anexos                     multipart
@@ -52,6 +53,15 @@ jogador recebe só o retrato e a miniatura que estão no ar. Medidor escondido e
 do inventário saem pelo mesmo caminho, filtrados no daemon e não na tela. Mover o token
 passa por duas barreiras: o daemon confere o vínculo, e a janela do Mestre, que tem o board,
 confere que o item está na cena no ar, é deste personagem e não está travado.
+
+**O ping é de quem está na mesa, e não de quem tem personagem.** Segurar o dedo no mapa
+abre a roda de pings — olhe aqui, cuidado, perigo, atacar, vou para lá, o que é isso? —, e o
+mestre abre a mesma roda segurando o botão direito (o clique curto continua sendo o menu do
+palco). Nos dois, a tecla `'` abre a roda onde o cursor está: segurar, apontar com o mouse e
+soltar marca — é o caminho do notebook, onde o clique direito do touchpad não se segura. Por isso `/eu/pings` não passa por `ligado`: "tem uma porta ali" vale para quem
+ainda não ganhou ficha. O daemon confere só a forma — tipo conhecido, ponto dentro do que
+uma tela desenha — e assina com o nome do token; o caminho até a TV é o das rolagens, pelo
+Mestre, que guarda três pings por pessoa e tira cada um cinco segundos depois de nascer.
 
 **O token substitui a RLS.** Era o Postgres que impedia a ficha de um jogador de vazar para
 o outro; agora é um token de 32 bytes do CSPRNG do sistema, guardado no `localStorage` do

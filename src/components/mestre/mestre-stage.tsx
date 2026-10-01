@@ -71,6 +71,10 @@ import {
   registrarConversor,
 } from "@/lib/mestre/ponteiro-no-palco";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
+import { usePingsStore } from "@/lib/store/use-pings-store";
+import { RodaDePing } from "@/components/playground/roda-de-ping";
+import { novoId } from "@/lib/id";
+import { AUTOR_MESTRE, type TipoDePing } from "@/types/ping";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { SelectionBox } from "@/components/playground/selection-box";
 import { TransformHandles } from "@/components/playground/transform-handles";
@@ -471,6 +475,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * TV e para os celulares. Ver `useRolagensStore`.
    */
   const bandeja = useRolagensStore((state) => state.bandeja);
+  /** Os pings da mesa, os do mestre e os dos jogadores. Ver `PingLayer`. */
+  const pings = usePingsStore((state) => state.ativos);
 
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const selectedTextoIds = useSelectionStore(
@@ -2948,6 +2954,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // São duas leituras diferentes do mesmo fato, e o mestre precisa das
           // duas -- ele é quem narra o resultado para a mesa.
           rolagens={bandeja}
+          pings={pings}
           fichas={fichasNoPalco}
           efeitos={efeitosNoPalco}
           // Todos enquanto a aba Retratos está aberta; fora dela, só o
@@ -2981,6 +2988,25 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           mesmo componente do Espectador e do Jogador, e um ponto de anotação
           desenhado lá apareceria na TV virada para a mesa. */}
       <PinLayer scene={scene} panMode={panMode} />
+
+      {/* O botão direito SEGURADO abre os pings; o clique curto continua sendo
+          o menu do palco. O ping nasce aqui mesmo, na bandeja que o quadro
+          publica -- sem passar pelo daemon, porque o mestre é quem publica. */}
+      <RodaDePing
+        modo="mestre"
+        onEscolher={(tipo: TipoDePing, ponto: Vec) =>
+          usePingsStore.getState().registrar({
+            id: novoId(),
+            tipo,
+            cenaId: scene.id,
+            x: ponto.x,
+            y: ponto.y,
+            autorId: AUTOR_MESTRE,
+            autor: "Mestre",
+            quando: Date.now(),
+          })
+        }
+      />
 
       {/* Irmã do `PinLayer` e fora do `SceneLayer` pela mesma razão: a parede
           desenhada é preparação do mestre, e o `SceneLayer` é o componente que
