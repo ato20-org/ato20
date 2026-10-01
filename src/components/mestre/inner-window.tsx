@@ -34,9 +34,10 @@ import { cn } from "@/lib/utils";
  *
  * `largura`/`altura` aqui são o PADRÃO do conteúdo; o que vence é o que o
  * mestre deixou na alça, que mora no store. A altura padrão é ausente de
- * propósito: a janela cresce com o que tem dentro até o teto do palco, e uma
- * altura fixa desde o começo deixaria a lista de dois personagens com um vão
- * embaixo.
+ * propósito na maioria: a janela cresce com o que tem dentro até o teto do
+ * palco, e uma altura fixa desde o começo deixaria a lista de dois personagens
+ * com um vão embaixo. Quem tem conteúdo que não acaba — o chat — declara a sua.
+ * Ver `alturaPadrao`.
  */
 export function InnerWindow({
   janela,
@@ -44,6 +45,7 @@ export function InnerWindow({
   titulo,
   subtitulo,
   largura,
+  altura,
   children,
 }: {
   janela: Janela;
@@ -53,6 +55,8 @@ export function InnerWindow({
   subtitulo?: string;
   /** Largura padrão, em pixels, até o mestre mexer na alça. */
   largura: number;
+  /** Altura padrão, em pixels. Ausente = cresce com o conteúdo. */
+  altura?: number;
   children: ReactNode;
 }) {
   const startDrag = useScreenDrag();
@@ -139,7 +143,7 @@ export function InnerWindow({
         width: recolhida ? Math.min(larguraAtual, TAB_PX) : larguraAtual,
         // Sem altura definida a janela cresce com o conteúdo até o `max-h`.
         // Recolhida ela não tem altura nenhuma além do cabeçalho.
-        height: recolhida ? undefined : janela.altura,
+        height: recolhida ? undefined : (janela.altura ?? altura),
         zIndex: 20 + ordem,
       }}
       aria-label={titulo}

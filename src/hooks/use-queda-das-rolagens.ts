@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 
 import { duracaoDaQueda } from "@/lib/geometry/dado";
-import type { RolagemDaMesa } from "@/types/dado";
 
 /**
  * Quanto dura a queda de um dado que ESTA tela não viu ser arremessado.
@@ -81,7 +80,7 @@ const TETO_DE_CHEGADAS = 256;
  * assentado. Um defeito que só aparece depois de editar um arquivo é pior que
  * meia dúzia de dados tombando uma vez na abertura.
  */
-function chegadaDe(id: string): number {
+export function chegadaDe(id: string): number {
   const carimbo = CHEGADAS.get(id);
   if (carimbo !== undefined) return carimbo;
 
@@ -108,7 +107,7 @@ function chegadaDe(id: string): number {
  * Quem desenha faz `instanteDaQueda(chegada.get(id), agora)` e entrega o
  * resultado ao `DadoRolando`. O relógio morre sozinho quando o último assenta.
  */
-export function useQuedaDasRolagens(rolagens: RolagemDaMesa[]): {
+export function useQuedaDasRolagens(rolagens: ReadonlyArray<{ id: string }>): {
   /** Quando cada rolagem desta lista começou a cair NESTA tela. */
   chegada: Map<string, number>;
   /** O instante do quadro. Congela quando a última assenta. */
