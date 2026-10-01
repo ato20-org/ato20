@@ -218,6 +218,16 @@ export function snapAngle(degrees: number, step = ROTATION_SNAP_DEGREES): number
   return Math.round(degrees / step) * step;
 }
 
+/**
+ * O deslocamento preso ao eixo em que a mão mais andou: só na horizontal ou só
+ * na vertical. É o Shift de arrastar a câmera.
+ *
+ * Teve diagonal, a 45 graus, e saiu: a câmera travada anda reta, e só.
+ */
+export function travarNoEixo({ x, y }: Vec): Vec {
+  return Math.abs(y) <= Math.abs(x) ? { x, y: 0 } : { x: 0, y };
+}
+
 /** Fração do plano de cena que uma imagem recém-adicionada pode ocupar. */
 const INITIAL_MAX_RATIO = 0.4;
 
