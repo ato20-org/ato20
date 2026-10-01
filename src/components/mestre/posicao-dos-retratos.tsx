@@ -56,9 +56,11 @@ export function PosicaoDosRetratos() {
   return (
     <div className="space-y-2">
       <div className="space-y-1.5">
-        {/* 16:9 porque é a proporção do recorte que a mesa vê -- ver
-            `clampViewport`. Um quadrado mentiria sobre a forma da tela, e o
-            canto de cima à direita de um quadrado não é o mesmo lugar. */}
+        {/* 16:9 porque é a proporção da tela da mesa, que é onde o retrato
+            vive -- ver `quadroDaMesa`. Vale com a câmera em qualquer formato:
+            a torre em pé tem tarja dos lados, e o retrato do canto fica nela.
+            Um quadrado mentiria sobre a forma da tela, e o canto de cima à
+            direita de um quadrado não é o mesmo lugar. */}
         <div className="bg-muted/30 grid aspect-video grid-cols-3 grid-rows-2 gap-1 rounded-md border p-1">
           {AREAS.map((area) => (
             <button

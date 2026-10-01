@@ -210,8 +210,19 @@ export type CanvasItem = {
    * A decisão é do item e não do tipo de arquivo porque o mesmo PNG serve aos
    * dois papéis: o barril é mobília em pé num mapa e é entulho no chão de
    * outro.
+   *
+   * Continua sendo o interruptor, e o `sombra` abaixo continua gravado com ele
+   * ligado: "Nenhuma" no gizmo apaga a sombra sem esquecer como ela era, e
+   * voltar devolve a linha do chão que o mestre tinha posto.
    */
   semSombra?: boolean;
+  /**
+   * COMO este item deita a sombra. Ausente = em pé, pela base que o forno
+   * acha, que é o desenho de antes de o campo existir.
+   *
+   * Ver `SombraDoItem`.
+   */
+  sombra?: SombraDoItem;
   /**
    * A lanterna que este token carrega. Ausente = nenhuma, que é o normal.
    *
@@ -222,6 +233,61 @@ export type CanvasItem = {
    * Ver `Luz`, que é a luz sem dono.
    */
   luz?: LuzCarregada;
+};
+
+/**
+ * Os dois jeitos de uma figura deitar sombra, e eles existem porque o mapa
+ * mistura dois tipos de desenho que o mesmo PNG não diz qual é:
+ *
+ * - `base`: a figura está EM PÉ no desenho -- o boneco de corpo inteiro, a
+ *   árvore de lado, o poste. O que está acima da linha do chão escorre para
+ *   longe da luz na medida da própria altura, e a linha fica parada.
+ * - `inteira`: a figura é vista DE CIMA -- o token redondo, o barril, o
+ *   caixote, a copa da árvore. Ali o desenho todo é o topo do objeto, e a
+ *   sombra é ele inteiro esticado para longe da luz, a partir da borda virada
+ *   para ela.
+ *
+ * Os dois na mesma conta não davam: o token redondo deitado pela `base` sai
+ * como uma moeda em pé, com a sombra nascendo da borda de baixo do círculo e
+ * nada dela saindo dos lados. É a sombra que não bate com o objeto.
+ */
+export const MODOS_DA_SOMBRA = ["base", "inteira"] as const;
+
+export type ModoDaSombra = (typeof MODOS_DA_SOMBRA)[number];
+
+/**
+ * O jeito de uma figura deitar sombra, e o ajuste de cada jeito.
+ *
+ * Os dois ajustes convivem no mesmo objeto de propósito: trocar de modo e
+ * voltar não pode jogar fora a linha do chão que o mestre arrastou. Cada conta
+ * só lê o seu.
+ */
+export type SombraDoItem = {
+  modo: ModoDaSombra;
+  /**
+   * Só na `base`: a LINHA DO CHÃO, em fração da altura da caixa a partir do
+   * topo -- 1 é a borda de baixo. Ausente = a que o forno acha, que é o último
+   * pixel da figura.
+   *
+   * Existe porque o último pixel quase nunca é onde a figura pisa: o pé que
+   * vai à frente no desenho de três quartos, o pedestal redondo do token de
+   * pacote, a raiz que se espalha. O que fica ABAIXO da linha é chão, e não
+   * projeta nada.
+   *
+   * Na caixa já espelhada, que é a que o mestre vê: a linha é posta olhando a
+   * figura na tela, e não o arquivo.
+   */
+  base?: number;
+  /**
+   * Só na `inteira`: quão alto o objeto sobe, em múltiplos do lado MENOR da
+   * caixa. Ausente = 1, tão alto quanto largo.
+   *
+   * Relativo ao tamanho, e não em metros como a parede: aumentar o token é o
+   * jeito de dizer que a criatura é maior, e ela tem de crescer para cima
+   * junto. A sombra da `base` já se comporta assim, porque ali a altura é o
+   * desenho.
+   */
+  altura?: number;
 };
 
 /**
@@ -2033,7 +2099,16 @@ export type NewCanvasItem = Pick<
  */
 export type ItemDraft = NewCanvasItem &
   Partial<
-    Pick<CanvasItem, "rotation" | "locked" | "flipX" | "flipY" | "opacity">
+    Pick<
+      CanvasItem,
+      | "rotation"
+      | "locked"
+      | "flipX"
+      | "flipY"
+      | "opacity"
+      | "semSombra"
+      | "sombra"
+    >
   >;
 
 /**

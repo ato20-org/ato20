@@ -36,7 +36,7 @@ import {
   type FonteDeLuz,
   type Oclusor,
 } from "@/lib/geometry/luz";
-import { peDaFigura, type Segmento } from "@/lib/geometry/sombra";
+import { deitarDaFigura, type Segmento } from "@/lib/geometry/sombra";
 import type { Variante } from "@/lib/vault/assets";
 import {
   SCENE_HEIGHT,
@@ -739,13 +739,17 @@ function vultoNaLuz(
   cisalhamento: { kx: number; ky: number },
 ) {
   const { caixa } = oclusor;
-  const pe = peDaFigura(
-    pronta.silhueta.recorte,
-    caixa.width,
-    caixa.height,
-    caixa.rotation,
+  // Em pé ou vista de cima, como debaixo do sol: a mesma conta, com a direção
+  // saindo desta luz. Ver `deitarDaFigura`.
+  const deitada = matrizDaFigura(
+    caixa,
+    deitarDaFigura(
+      caixa,
+      pronta.silhueta.recorte,
+      cisalhamento.kx,
+      cisalhamento.ky,
+    ),
   );
-  const deitada = matrizDaFigura(caixa, { ...cisalhamento, pe });
   const emPe = matrizDaFigura(caixa, null);
   const retangulo = retanguloDaSilhueta(caixa, pronta.silhueta);
   const area = caixaDaMatriz(deitada, retangulo);

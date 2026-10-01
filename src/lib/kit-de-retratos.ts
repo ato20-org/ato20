@@ -159,8 +159,9 @@ const TOPO_NO_ENCAIXE = 0.04;
  * figura, a coluna de barras, o nome, os selos -- cabe nela, centrada, no alto;
  * embaixo sobra lugar para os dados caírem.
  *
- * A figura guarda a proporção que tinha na mesa. As frações do registro são de
- * uma câmera 16:9; a da tela do kit é outra, e sem a conversão o retrato
+ * A figura guarda a proporção que tinha na mesa. As frações do registro são da
+ * tela da mesa, que é 16:9 com a câmera em qualquer formato (ver
+ * `quadroDaMesa`); a da tela do kit é outra, e sem a conversão o retrato
  * sairia achatado numa caixa quadrada.
  */
 export function encaixarRetratos<T extends RetratoParaKit>(

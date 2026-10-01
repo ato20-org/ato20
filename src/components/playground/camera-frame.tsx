@@ -16,13 +16,20 @@ import {
 import { TransformHandles } from "@/components/playground/transform-handles";
 
 import { useSceneDrag } from "@/hooks/use-scene-drag";
-import { CORNER_HANDLES } from "@/lib/geometry/transform";
-import { clampViewport, viewportZoom, zoomViewportCentered } from "@/lib/geometry/viewport";
+import { CORNER_HANDLES, travarNoEixo } from "@/lib/geometry/transform";
+import {
+  ampliarCameraNoCentro,
+  clampCamera,
+  clampCameraPorEixo,
+  viewportZoom,
+} from "@/lib/geometry/viewport";
 import {
   alternarTransmissao,
   ZOOM_CAMERA_STEP,
+  type Transmissao,
 } from "@/lib/mestre/camera-actions";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
+import { cn } from "@/lib/utils";
 import type { CameraSalva, Viewport } from "@/types/scene";
 
 /** Acima do gizmo de seleção: a câmera é a camada de enquadramento. */
@@ -53,8 +60,8 @@ const ROTULO_MINIMO_PX = 110;
 type CameraFrameProps = {
   /** A câmera SELECIONADA: a que o mestre está editando. */
   camera: CameraSalva;
-  /** Ela está no ar? Muda o rótulo e o botão de transmitir. */
-  transmitindo: boolean;
+  /** No ar, preparada ou nenhum. Muda o rótulo e o botão de transmitir. */
+  transmissao: Transmissao;
   /** Ausente = moldura só informativa, sem arraste nem alças. */
   onChange?: (viewport: Viewport) => void;
   /** A mão soltou a alça ou o canto. Quem separa gesto de documento grava aqui. */
@@ -94,7 +101,7 @@ type CameraFrameProps = {
  */
 export function CameraFrame({
   camera: selecionada,
-  transmitindo,
+  transmissao,
   onChange,
   onGestureEnd,
   cinegrafista = false,
@@ -179,10 +186,16 @@ export function CameraFrame({
       native.preventDefault();
       native.stopPropagation();
 
+      // Com Shift a roda costuma chegar de lado, em `deltaX` e com `deltaY`
+      // zero -- e zero lido como "não é para cima" só afastava. Shift aqui é a
+      // trava de direção, e rolar com ele apertado é o gesto normal.
+      const giro = native.deltaY || native.deltaX;
+      if (giro === 0) return;
+
       pedir(
-        zoomViewportCentered(
+        ampliarCameraNoCentro(
           cameraAtual.current,
-          native.deltaY < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP,
+          giro < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP,
           conteudo,
         ),
       );
@@ -192,25 +205,56 @@ export function CameraFrame({
       passive: false,
     });
 
+    /**
+     * Shift: a câmera só anda na horizontal ou só na vertical, a partir de
+     * onde a mão pegou. O enquadramento que desliza pela parede da
+     * taverna sem subir nem descer.
+     *
+     * O delta do gesto inteiro é travado, e não o incremento: travar cada
+     * passo deixaria a câmera escorregar para fora da linha a cada quadro
+     * em que a mão tremesse para o outro eixo.
+     */
+    let mao = { x: 0, y: 0 };
+    let travada = false;
+    const andar = () => {
+      const alvo = travada ? travarNoEixo(mao) : mao;
+      const atual = cameraAtual.current;
+
+      pedir(
+        clampCamera(
+          {
+            ...atual,
+            x: atual.x + (alvo.x - anterior.x),
+            y: atual.y + (alvo.y - anterior.y),
+          },
+          conteudo,
+        ),
+      );
+      anterior = alvo;
+    };
+
+    // Apertar ou soltar o Shift com a mão parada também conta: sem isto a
+    // câmera só obedecia no próximo movimento do mouse.
+    const aoShift = (native: KeyboardEvent) => {
+      if (native.key !== "Shift" || native.shiftKey === travada) return;
+
+      travada = native.shiftKey;
+      andar();
+    };
+    window.addEventListener("keydown", aoShift, true);
+    window.addEventListener("keyup", aoShift, true);
+
     setArrastando(true);
     startDrag(event, {
-      onMove: (delta) => {
-        const atual = cameraAtual.current;
-
-        pedir(
-          clampViewport(
-            {
-              ...atual,
-              x: atual.x + (delta.x - anterior.x),
-              y: atual.y + (delta.y - anterior.y),
-            },
-            conteudo,
-          ),
-        );
-        anterior = delta;
+      onMove: (delta, native) => {
+        mao = delta;
+        travada = native.shiftKey;
+        andar();
       },
       onEnd: () => {
         window.removeEventListener("wheel", aoRodar, true);
+        window.removeEventListener("keydown", aoShift, true);
+        window.removeEventListener("keyup", aoShift, true);
         despejar();
         setArrastando(false);
         onGestureEnd?.();
@@ -226,7 +270,7 @@ export function CameraFrame({
       ? "cheio"
       : larguraNaTela >= ROTULO_MINIMO_PX
         ? "nome"
-        : transmitindo
+        : transmissao
           ? "rec"
           : "nada";
 
@@ -405,7 +449,7 @@ export function CameraFrame({
 
         {rotulo === "nada" ? null : (
         <span
-          className={`${transmitindo ? "bg-primary/85 text-primary-foreground" : "bg-background/90 text-foreground border"} flex max-w-full items-center font-medium tabular-nums ${gripClass}`}
+          className={`${transmissao ? "bg-primary/85 text-primary-foreground" : "bg-background/90 text-foreground border"} flex max-w-full items-center font-medium tabular-nums ${gripClass}`}
           // Conteúdo em PIXEL DE TELA via `emPixelDeTela`, e não dividido
           // pela escala: sob `zoom` o traço do ícone calculado abaixo de um
           // pixel sobe para um pixel antes de multiplicar, e o REC saía três
@@ -429,9 +473,10 @@ export function CameraFrame({
           onPointerDown={startMove}
         >
           {/* O REC na frente do nome é o único sinal de que esta é a que a
-              mesa vê. Sem ele, a selecionada e a transmitida se confundem. */}
-          {transmitindo ? (
-            <CircleDot className="text-red-400" strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
+              mesa vê. Sem ele, a selecionada e a transmitida se confundem.
+              Amarelo quando o mapa está fora do ar: é a que a mesa VAI ver. */}
+          {transmissao ? (
+            <CircleDot className={transmissao === "no-ar" ? "text-red-400" : "text-amber-400"} strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
           ) : null}
           {rotulo === "rec" ? null : (
             <span className="truncate">{selecionada.nome}</span>
@@ -455,7 +500,7 @@ export function CameraFrame({
 
         {onChange ? (
           <Alca
-            transmitindo={transmitindo}
+            transmissao={transmissao}
             scale={scale}
             arrastando={arrastando}
             onMove={startMove}
@@ -467,22 +512,27 @@ export function CameraFrame({
         <TransformHandles
           box={{ ...camera, rotation: 0 }}
           rotatable={false}
-          // Só os cantos, e proporção travada por regra: um recorte fora de
-          // 16:9 faria cada visão letterboxar diferente, e o enquadramento
-          // deixaria de ser o que a mesa vê.
+          // Só os cantos, e SEM proporção travada: o canto é o gesto que muda
+          // o formato da câmera -- a torre em pé, o corredor deitado. A TV
+          // encaixa o que vier com tarja em volta. Com Shift o canto mantém a
+          // proporção que ela tem agora, como em todo item do palco: é o
+          // `TransformHandles` que lê a tecla. As bordas não ganham alça
+          // porque já são a faixa por onde a câmera arrasta.
           handles={CORNER_HANDLES}
-          keepAspect
           // A moldura já tem a própria borda.
           outline={false}
-          // Sem arredondar: `clampViewport` re-deriva a altura da largura, e o
-          // resíduo do arredondamento faria a moldura derivar meia unidade por
-          // gesto, sempre para o mesmo lado.
+          // Sem arredondar: com o Shift a altura sai da largura, e o resíduo do
+          // arredondamento faria a moldura derivar meia unidade por gesto,
+          // sempre para o mesmo lado.
           round={false}
           zIndex={HANDLES_Z}
           onGestureEnd={onGestureEnd}
+          // Cada eixo preso por si: o canto está mudando o formato, e escalar a
+          // câmera inteira no limite faria a largura crescer sozinha quando o
+          // mestre encolhe a altura. Ver `clampCameraPorEixo`.
           onChange={({ x, y, width, height }) =>
             onChange(
-              clampViewport(
+              clampCameraPorEixo(
                 {
                   x: x ?? camera.x,
                   y: y ?? camera.y,
@@ -500,7 +550,7 @@ export function CameraFrame({
 }
 
 type AlcaProps = {
-  transmitindo: boolean;
+  transmissao: Transmissao;
   /** A escala do palco, para `emPixelDeTela` desfazer. */
   scale: number;
   arrastando: boolean;
@@ -525,7 +575,7 @@ type AlcaProps = {
  * Fora da moldura, e não dentro: dentro ela cobriria o que a mesa está vendo,
  * que é justamente onde estão os itens que o mestre mexe.
  */
-function Alca({ transmitindo, scale, arrastando, onMove }: AlcaProps) {
+function Alca({ transmissao, scale, arrastando, onMove }: AlcaProps) {
   const lado = ALCA_PX;
   const gap = ALCA_GAP_PX;
 
@@ -548,9 +598,13 @@ function Alca({ transmitindo, scale, arrastando, onMove }: AlcaProps) {
       }}
     >
       <span
-        className={`${botao} touch-none rounded-md ${arrastando ? "bg-primary text-primary-foreground" : ""}`}
+        className={cn(
+          botao,
+          "touch-none rounded-md",
+          arrastando && "bg-primary text-primary-foreground",
+        )}
         style={{ width: lado, height: lado, cursor: "move" }}
-        title="Arrastar move a câmera."
+        title="Arrastar move a câmera. Com Shift, só na horizontal ou só na vertical."
         onPointerDown={onMove}
       >
         <Move style={{ width: lado * 0.55, height: lado * 0.55 }} />
@@ -558,16 +612,36 @@ function Alca({ transmitindo, scale, arrastando, onMove }: AlcaProps) {
 
       {/* Transmitir, colado na alça: é o toque que muda o que a mesa vê, e
           fica ao lado do gesto que prepara o que ela vai ver. Vermelho no
-          ar, como o REC de qualquer câmera. */}
+          ar, como o REC de qualquer câmera; amarelo quando o mapa está fora
+          do ar e esta é a câmera com que ele vai abrir.
+
+          Por `cn`, e não por concatenação: duas cores de fundo na mesma
+          string quem decide é a ordem do CSS, e não a da string. O amarelo
+          perdia para o `bg-background/90` de `botao` e só aparecia no hover;
+          o vermelho ganhava por sorte do alfabeto. */}
       <button
         type="button"
-        className={`${botao} touch-none rounded-md ${transmitindo ? "bg-red-500 text-white hover:bg-red-500/90" : ""}`}
+        className={cn(
+          botao,
+          "touch-none rounded-md",
+          transmissao === "no-ar" && "bg-red-500 text-white hover:bg-red-500/90",
+          transmissao === "preparada" &&
+            "bg-amber-500 text-neutral-950 hover:bg-amber-500/90",
+        )}
         style={{ width: lado, height: lado }}
-        aria-label={transmitindo ? "Tirar do ar" : "Transmitir esta câmera"}
+        aria-label={
+          transmissao === "no-ar"
+            ? "Tirar do ar"
+            : transmissao === "preparada"
+              ? "Desfazer a preparação"
+              : "Transmitir esta câmera"
+        }
         title={
-          transmitindo
+          transmissao === "no-ar"
             ? "No ar. Clique tira do ar: a mesa vê o mapa inteiro."
-            : "Transmitir: a mesa passa a ver esta câmera."
+            : transmissao === "preparada"
+              ? "Preparada: a mesa vê esta câmera quando o mapa for ao ar. Clique desfaz."
+              : "Transmitir: a mesa passa a ver esta câmera."
         }
         onPointerDown={(event) => event.stopPropagation()}
         onClick={alternarTransmissao}

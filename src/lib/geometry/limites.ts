@@ -45,6 +45,15 @@ export function limitesDoConteudo(scene: Scene): Bounds {
   for (const regiao of scene.fog)
     caixas.push(itemBounds({ ...regiao, rotation: regiao.rotation ?? 0 }));
 
+  // A parede e a luz podem sair do mapa como o resto, e ficavam de fora desta
+  // conta: levada para longe da borda, a câmera do mestre não chegava até
+  // elas. A parede pela caixa GIRADA, pela razão da área.
+  for (const parede of scene.paredes ?? [])
+    caixas.push(itemBounds({ ...parede, rotation: parede.rotation ?? 0 }));
+
+  for (const luz of scene.luzes ?? [])
+    caixas.push({ minX: luz.x, minY: luz.y, maxX: luz.x, maxY: luz.y });
+
   for (const pin of scene.pins ?? [])
     caixas.push({ minX: pin.x, minY: pin.y, maxX: pin.x, maxY: pin.y });
 

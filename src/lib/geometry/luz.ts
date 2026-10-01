@@ -2,6 +2,7 @@ import { normalizarHex } from "@/lib/cor";
 import {
   paredeDeVerdade,
   segmentosDaParede,
+  type Afim,
   type Segmento,
 } from "@/lib/geometry/sombra";
 import {
@@ -15,6 +16,7 @@ import {
   type EfeitoDaLuz,
   type Luz,
   type Parede,
+  type SombraDoItem,
 } from "@/types/scene";
 
 /**
@@ -587,6 +589,8 @@ export type CaixaDoToken = {
   rotation: number;
   flipX?: boolean;
   flipY?: boolean;
+  /** Em pé ou vista de cima, e a linha do chão. Ver `deitarDaFigura`. */
+  sombra?: SombraDoItem;
 };
 
 /** O pé do token, em fração do menor lado da caixa. */
@@ -688,6 +692,7 @@ export function oclusoresDosItens(items: ReadonlyArray<CanvasItem>): Oclusor[] {
         rotation: item.rotation,
         ...(item.flipX ? { flipX: true } : {}),
         ...(item.flipY ? { flipY: true } : {}),
+        ...(item.sombra ? { sombra: item.sombra } : {}),
       },
       assetId: item.assetId,
     };
@@ -742,6 +747,11 @@ export function chaveDosOclusores(
         caixa.rotation.toFixed(1),
         caixa.flipX ? "h" : "",
         caixa.flipY ? "v" : "",
+        // Trocar o jeito de deitar, ou arrastar a linha do chão, muda a
+        // sombra sem mexer na caixa.
+        caixa.sombra?.modo ?? "",
+        caixa.sombra?.base ?? "",
+        caixa.sombra?.altura ?? "",
         assetId,
       ].join(","),
     )
@@ -793,8 +803,8 @@ export function cisalhamentoDaLuz(
   };
 }
 
-/** Uma transformação afim, na ordem do `setTransform`: `[a, b, c, d, e, f]`. */
-export type Afim = [number, number, number, number, number, number];
+/** Mora com a conta da sombra, que é quem a monta. Ver `deitarDaFigura`. */
+export type { Afim };
 
 /** `m · n`: aplicar `n` primeiro, e `m` depois. */
 function compor(m: Afim, n: Afim): Afim {
@@ -819,15 +829,12 @@ export function aplicarAfim(m: Afim, ponto: Ponto): Ponto {
  * Da caixa do token (origem no canto dele) para a cena, com ou sem a sombra.
  *
  * A MESMA cadeia que o `SombraDaFigura` monta em CSS para o sol, só que numa
- * matriz para o canvas: a caixa vai para o lugar dela, escorre a partir do pé
- * (`matrizDoVulto`: x' = x − kx·y + kx·pé, y' = (1 − ky)·y + ky·pé), e dentro
- * dela a figura gira em torno do centro e espelha, como o token. Sem
- * `cisalhamento`, é a figura EM PÉ -- a que se recorta da própria sombra.
+ * matriz para o canvas: a caixa vai para o lugar dela, deita do jeito que o
+ * item pede (`deitarDaFigura`: escorrida a partir do chão, ou esticada
+ * inteira), e dentro dela a figura gira em torno do centro e espelha, como o
+ * token. Sem `deitar`, é a figura EM PÉ -- a que se recorta da própria sombra.
  */
-export function matrizDaFigura(
-  caixa: CaixaDoToken,
-  cisalhamento: (CisalhamentoDaLuz & { pe: number }) | null,
-): Afim {
+export function matrizDaFigura(caixa: CaixaDoToken, deitar: Afim | null): Afim {
   const { width: w, height: h } = caixa;
   const angulo = (caixa.rotation * Math.PI) / 180;
   const cos = Math.cos(angulo);
@@ -835,10 +842,7 @@ export function matrizDaFigura(
 
   let m: Afim = [1, 0, 0, 1, caixa.x, caixa.y];
 
-  if (cisalhamento) {
-    const { kx, ky, pe } = cisalhamento;
-    m = compor(m, [1, 0, -kx, 1 - ky, kx * pe, ky * pe]);
-  }
+  if (deitar) m = compor(m, deitar);
 
   m = compor(m, [1, 0, 0, 1, w / 2, h / 2]);
   m = compor(m, [cos, sen, -sen, cos, 0, 0]);

@@ -32,7 +32,7 @@ import {
   type Oclusor,
   type Ponto,
 } from "@/lib/geometry/luz";
-import { segmentosDaParede } from "@/lib/geometry/sombra";
+import { escorrerDaFigura, segmentosDaParede } from "@/lib/geometry/sombra";
 import type { CanvasItem, Luz, Parede } from "@/types/scene";
 
 function item(id: string, extra: Partial<CanvasItem> = {}): CanvasItem {
@@ -782,7 +782,7 @@ describe("a silhueta deitada pela luz", () => {
 
   it("o PÉ fica onde está, e a cabeça corre", () => {
     const caixa = { x: 100, y: 100, width: 50, height: 80, rotation: 0 };
-    const m = matrizDaFigura(caixa, { kx: 0.5, ky: 0, pe: 80 });
+    const m = matrizDaFigura(caixa, escorrerDaFigura(0.5, 0, 80));
 
     // A sola, na base da caixa: não se mexe.
     expect(aplicarAfim(m, { x: 25, y: 80 })).toEqual({ x: 125, y: 180 });
@@ -811,7 +811,7 @@ describe("a silhueta deitada pela luz", () => {
 
   it("a caixa da sombra cobre a figura deitada inteira", () => {
     const caixa = { x: 100, y: 100, width: 50, height: 80, rotation: 0 };
-    const m = matrizDaFigura(caixa, { kx: 0.5, ky: 0, pe: 80 });
+    const m = matrizDaFigura(caixa, escorrerDaFigura(0.5, 0, 80));
     const area = caixaDaMatriz(
       m,
       retanguloDaSilhueta(caixa, { margemX: 0, margemY: 0 }),

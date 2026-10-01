@@ -26,6 +26,7 @@ import {
   MousePointerSquareDashed,
   Plus,
   Radio,
+  RectangleHorizontal,
   ScanSearch,
   Scissors,
   Trash2,
@@ -71,7 +72,10 @@ import {
   irParaCamera,
   mostrarCenaInteira,
   novaCamera,
+  transmissaoDaCamera,
+  voltarAoFormatoDaMesa,
 } from "@/lib/mestre/camera-actions";
+import { temFormatoDaMesa } from "@/lib/geometry/viewport";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import {
@@ -203,6 +207,14 @@ export function StageContextMenu({
     ? scene.cameras?.find((camera) => camera.id === selecionadaId)
     : undefined;
   const segue = Boolean(cameraSelecionada?.alvoIds);
+  const cenaNoAr = useSceneStore(
+    (state) => state.board?.liveSceneId === scene.id,
+  );
+  const transmissao = transmissaoDaCamera(
+    scene,
+    cameraSelecionada?.id,
+    cenaNoAr,
+  );
   /**
    * O menu é da moldura pelo id, e não por achar a câmera: removida pelo
    * próprio menu, ela some da cena enquanto ele ainda está saindo, e o menu do
@@ -654,10 +666,11 @@ export function StageContextMenu({
                   onClick={alternarTransmissao}
                 >
                   <Radio />
-                  {cameraSelecionada &&
-                  scene.cameraNoArId === cameraSelecionada.id
+                  {transmissao === "no-ar"
                     ? "Tirar do ar"
-                    : "Transmitir a câmera"}
+                    : transmissao === "preparada"
+                      ? "Desfazer a preparação"
+                      : "Transmitir a câmera"}
                   <ContextMenuShortcut>T</ContextMenuShortcut>
                 </ContextMenuItem>
                 {scene.cameraNoArId ? (
@@ -704,16 +717,25 @@ function BlocoDaCamera({
   const transmitirCamera = useSceneStore((state) => state.transmitirCamera);
   const removerCamera = useSceneStore((state) => state.removerCamera);
 
-  const noAr = scene.cameraNoArId === camera.id;
+  const cenaNoAr = useSceneStore(
+    (state) => state.board?.liveSceneId === scene.id,
+  );
+  const transmissao = transmissaoDaCamera(scene, camera.id, cenaNoAr);
   const selecionada = camera.id === selecionadaId;
 
   return (
     <>
       <ContextMenuItem
-        onClick={() => transmitirCamera(scene.id, noAr ? undefined : camera.id)}
+        onClick={() =>
+          transmitirCamera(scene.id, transmissao ? undefined : camera.id)
+        }
       >
         <Radio />
-        {noAr ? "Tirar do ar" : "Transmitir"}
+        {transmissao === "no-ar"
+          ? "Tirar do ar"
+          : transmissao === "preparada"
+            ? "Desfazer a preparação"
+            : "Transmitir"}
         {selecionada ? <ContextMenuShortcut>T</ContextMenuShortcut> : null}
       </ContextMenuItem>
       <ContextMenuItem
@@ -736,6 +758,19 @@ function BlocoDaCamera({
         Ir até a câmera
         {selecionada ? <ContextMenuShortcut>Home</ContextMenuShortcut> : null}
       </ContextMenuItem>
+      {/* Só quando há o que desfazer: na câmera 16:9 o item não faria nada, e
+          um item que não faz nada ensina a não confiar no menu. */}
+      {temFormatoDaMesa(camera.viewport) ? null : (
+        <ContextMenuItem
+          onClick={() => {
+            selecionar(camera.id);
+            voltarAoFormatoDaMesa();
+          }}
+        >
+          <RectangleHorizontal />
+          Voltar a 16:9
+        </ContextMenuItem>
+      )}
 
       <ContextMenuSeparator />
 

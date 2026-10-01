@@ -49,8 +49,11 @@ import {
 import { areaDoPoligono } from "@/lib/geometry/area-escondida";
 import {
   alturaDaParede,
+  baseDaSombra,
   METROS_DA_PAREDE_PADRAO,
+  modoDaSombra,
   pontoNaParede,
+  recorteDaSombra,
   UNIDADES_POR_METRO,
 } from "@/lib/geometry/sombra";
 import { caixaDoTraco } from "@/lib/geometry/limites";
@@ -65,6 +68,7 @@ import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { efeitosDaCena } from "@/lib/condicao";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
+import { transmissaoDaCamera } from "@/lib/mestre/camera-actions";
 import {
   anotarPonteiro,
   esquecerPonteiro,
@@ -102,6 +106,8 @@ import {
   useGestoStore,
 } from "@/lib/store/use-gesto-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { useAssetUrl } from "@/hooks/use-asset-url";
+import { useSilhueta } from "@/hooks/use-silhueta";
 import {
   flipSelection,
   livre,
@@ -110,6 +116,7 @@ import {
   removePortraitSelection,
   removeSelection,
   setSelectionOpacity,
+  setSelectionSombra,
   toggleSelectionLock,
 } from "@/lib/mestre/item-actions";
 import {
@@ -150,6 +157,7 @@ import {
   type Guide,
 } from "@/lib/geometry/snap";
 import { CORNER_HANDLES, MIN_ITEM_SIZE, type Vec } from "@/lib/geometry/transform";
+import { quadroDaMesa, temFormatoDaMesa } from "@/lib/geometry/viewport";
 
 import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
@@ -392,6 +400,19 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     [scene.items, scene.grupos],
   );
 
+  /**
+   * Onde o retrato vive: o 16:9 da tela da mesa em volta da câmera no ar.
+   *
+   * Não é o recorte da câmera, desde que ela tem formato próprio. A TV encaixa
+   * a torre em pé com tarja dos lados, e o retrato é HUD da TELA: ele fica
+   * sobre a tarja, e não espremido em cima da torre. Ver `quadroDaMesa`. Com a
+   * câmera 16:9 é a própria câmera, o mesmo objeto.
+   */
+  const telaDaMesa = useMemo(
+    () => (scene.camera ? quadroDaMesa(scene.camera) : undefined),
+    [scene.camera],
+  );
+
   const [marquee, setMarquee] = useState<Bounds | null>(null);
   /**
    * O item TRAVADO sob o último pointerdown, esperando o palco decidir.
@@ -575,6 +596,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const selecionada = temCamera(scene)
     ? scene.cameras?.find((camera) => camera.id === selecionadaId)
     : undefined;
+  // Um booleano, e não o id: o palco só acorda quando ESTA cena entra ou sai.
+  const cenaNoAr = useSceneStore(
+    (state) => state.board?.liveSceneId === cenaDoBoard.id,
+  );
 
   // Cena nova começa sem câmera; a selecionada, se houver, tem de existir nela.
   // Efeito e não render: cria câmera no store, e isso é escrita.
@@ -788,6 +813,40 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       personagens.some((atual) => atual.id === single.personagemId))
       ? single.personagemId
       : undefined;
+
+  /**
+   * A silhueta do item selecionado, para a linha do chão automática do gizmo.
+   *
+   * A MESMA url que o palco já desenha, e por isso a silhueta que o forno já
+   * assou para a sombra: a linha aparece em cima dos pés, e não na borda de
+   * baixo do PNG, e no mesmo lugar de onde a sombra está nascendo.
+   */
+  const silhuetaDoSelecionado = useSilhueta(useAssetUrl(single?.assetId));
+  const sombraDoSelecionado = single
+    ? {
+        modo: single.semSombra ? ("nenhuma" as const) : modoDaSombra(single),
+        base:
+          baseDaSombra(single) ??
+          (silhuetaDoSelecionado
+            ? recorteDaSombra(silhuetaDoSelecionado.recorte, {
+                flipX: single.flipX,
+                flipY: single.flipY,
+              }).baixo
+            : undefined),
+        baseManual: baseDaSombra(single) !== undefined,
+        altura: single.sombra?.altura ?? 1,
+        // Qualquer coisa que deite sombra de token: o sol, uma luz acesa, uma
+        // lanterna na mão de alguém.
+        acesa:
+          Boolean(scene.sol) ||
+          (scene.luzes ?? []).some((luz) => !luz.desligada) ||
+          scene.items.some((item) => item.luz),
+        onModo: (modo: "base" | "inteira" | "nenhuma") =>
+          setSelectionSombra({ modo }),
+        onBase: (base: number | null) => setSelectionSombra({ base }),
+        onAltura: (altura: number) => setSelectionSombra({ altura }),
+      }
+    : undefined;
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedParede = scene.paredes?.find(
     (parede) => parede.id === selectedParedeId,
@@ -828,7 +887,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
   const portraitGroupBounds =
     selectedPortraits.length > 1
-      ? portraitsBounds(selectedPortraits, scene.camera)
+      ? portraitsBounds(selectedPortraits, telaDaMesa)
       : null;
 
   /**
@@ -1628,8 +1687,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const moving = alreadySelected ? selectedPortraits : [portrait];
     if (!alreadySelected) selectPortrait(portrait.id);
 
-    const camera = scene.camera;
-
     // Retrato de união não se mexe sozinho: a posição dele é da união.
     // Arrastá-lo livremente faria a figura voltar no quadro seguinte, quando o
     // efeito reaplicasse o layout.
@@ -1655,14 +1712,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const origins = moving.map(({ id, x, y }) => ({ id, x, y }));
 
     const movendo = new Set(moving.map((atual) => atual.id));
-    const caixa = portraitsBounds(moving, camera);
+    const caixa = portraitsBounds(moving, telaDaMesa);
 
-    // Alinha aos OUTROS retratos e à câmera, e não aos itens do mapa: retrato é
-    // preso à câmera, e um item do mapa passa por baixo dele quando o mestre
-    // desloca a cena -- grudar num alvo que anda seria pior que não grudar.
+    // Alinha aos OUTROS retratos e à tela da mesa, e não aos itens do mapa:
+    // retrato é preso à câmera, e um item do mapa passa por baixo dele quando o
+    // mestre desloca a cena -- grudar num alvo que anda seria pior que não
+    // grudar.
     const alvos = portraits
       .filter((atual) => !movendo.has(atual.id))
-      .map((atual) => boxBounds(portraitBox(atual, camera)));
+      .map((atual) => boxBounds(portraitBox(atual, telaDaMesa)));
 
     if (!caixa) return;
 
@@ -1675,13 +1733,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           origins.map((origin) => ({
             id: origin.id,
             patch: {
-              // De volta para fração da câmera, que é onde o retrato mora.
-              x: origin.x + dx / (camera?.width ?? SCENE_WIDTH),
-              y: origin.y + dy / (camera?.height ?? SCENE_HEIGHT),
+              // De volta para fração da tela, que é onde o retrato mora.
+              x: origin.x + dx / (telaDaMesa?.width ?? SCENE_WIDTH),
+              y: origin.y + dy / (telaDaMesa?.height ?? SCENE_HEIGHT),
             },
           })),
         ),
-      camera ? boundsFromBox(camera) : undefined,
+      telaDaMesa ? boundsFromBox(telaDaMesa) : undefined,
     );
   }
 
@@ -1981,7 +2039,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * a que chegou depois atrás da que já estava. Ver `filasDeUnioes`.
    */
   function arrastarUniao(event: ReactPointerEvent, uniao: UniaoDeRetratos) {
-    const areas = areasDeRetrato(scene.camera);
+    const areas = areasDeRetrato(telaDaMesa);
 
     const sob = (clientX: number, clientY: number) => {
       const ponto = toScene(clientX, clientY);
@@ -3257,6 +3315,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             valor: single.opacity ?? 1,
             onChange: setSelectionOpacity,
           }}
+          // Token e mobília, os dois: para o sol não há diferença entre o
+          // boneco e o barril, só entre o que está em pé e o que é visto de
+          // cima. Ver `SombraDoItem`.
+          sombra={sombraDoSelecionado}
           // Token abre a ficha de quem ele é. É o atalho que faltava no meio da
           // sessão: o mestre clica na figura no mapa, e não na lista de
           // personagens, porque no mapa é onde a mão dele já está.
@@ -3382,12 +3444,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           mas manter a razão evita o mestre criar uma faixa sem querer. */}
       {singlePortrait && !panMode ? (
         <TransformHandles
-          box={{ ...portraitBox(singlePortrait, scene.camera), rotation: 0 }}
+          box={{ ...portraitBox(singlePortrait, telaDaMesa), rotation: 0 }}
           rotatable={false}
           handles={CORNER_HANDLES}
           keepAspect
           onChange={(patch) => {
-            const current = portraitBox(singlePortrait, scene.camera);
+            const current = portraitBox(singlePortrait, telaDaMesa);
 
             updatePortrait(
               singlePortrait.id,
@@ -3398,7 +3460,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
                   width: patch.width ?? current.width,
                   height: patch.height ?? current.height,
                 },
-                scene.camera,
+                telaDaMesa,
               ),
             );
           }}
@@ -3441,7 +3503,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
                 width: patch.width,
                 height: patch.height ?? 0,
               }),
-              scene.camera,
+              telaDaMesa,
             );
 
             // Sendo uma união, o gizmo só manda no TAMANHO: a posição é dela,
@@ -3476,7 +3538,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       ) : null}
 
       {arrastandoUniao ? (
-        <PortraitAnchors camera={scene.camera} alvo={areaDaUniao} />
+        <PortraitAnchors camera={telaDaMesa} alvo={areaDaUniao} />
       ) : null}
 
       {/* O risco em curso, antes de virar traço da cena. Desenhado aqui e não
@@ -3576,12 +3638,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         />
       ) : null}
 
-      {/* Espelhando o palco, a moldura coincide com a tela: desenhá-la seria
-          uma borda em volta do palco inteiro dizendo nada. */}
-      {selecionada && !espelhoMestre ? (
+      {/* Espelhando o palco, a moldura 16:9 coincide com a tela: desenhá-la
+          seria uma borda em volta do palco inteiro dizendo nada. A de outro
+          formato não coincide -- a torre espelhada é uma faixa no meio da
+          tela --, e sem a moldura o mestre não saberia o que a mesa vê. */}
+      {selecionada &&
+      !(espelhoMestre && temFormatoDaMesa(selecionada.viewport)) ? (
         <CameraFrame
           camera={selecionada}
-          transmitindo={scene.cameraNoArId === selecionada.id}
+          transmissao={transmissaoDaCamera(scene, selecionada.id, cenaNoAr)}
           cinegrafista={cinegrafista}
           // Com espaço segurado a moldura vira só informativa: o gesto pertence
           // ao deslocamento da cena.

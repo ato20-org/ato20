@@ -133,10 +133,10 @@ export type ResizeOptions = {
    * Arredondar a saída para inteiro. Ligado para itens, onde unidade de cena
    * já é ~1px na TV e float longo só engorda o JSON.
    *
-   * Desligado para caixas de proporção fixa como a câmera: quem consome
-   * re-deriva a altura da largura, e o resíduo do arredondamento quebraria a
-   * âncora sempre para o mesmo lado (`Math.round` empurra `.5` para cima),
-   * fazendo a caixa derivar meia unidade por gesto.
+   * Desligado para a câmera: com o Shift a altura sai da largura, e o resíduo
+   * do arredondamento quebraria a âncora sempre para o mesmo lado
+   * (`Math.round` empurra `.5` para cima), fazendo a caixa derivar meia
+   * unidade por gesto.
    */
   round?: boolean;
 };
@@ -216,6 +216,16 @@ export function normalizeAngle(degrees: number): number {
 
 export function snapAngle(degrees: number, step = ROTATION_SNAP_DEGREES): number {
   return Math.round(degrees / step) * step;
+}
+
+/**
+ * O deslocamento preso ao eixo em que a mão mais andou: só na horizontal ou só
+ * na vertical. É o Shift de arrastar a câmera.
+ *
+ * Teve diagonal, a 45 graus, e saiu: a câmera travada anda reta, e só.
+ */
+export function travarNoEixo({ x, y }: Vec): Vec {
+  return Math.abs(y) <= Math.abs(x) ? { x, y: 0 } : { x: 0, y };
 }
 
 /** Fração do plano de cena que uma imagem recém-adicionada pode ocupar. */

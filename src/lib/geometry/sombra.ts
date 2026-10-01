@@ -4,9 +4,11 @@
  * Duas sombras diferentes moram aqui, e elas são diferentes porque o que as
  * projeta é diferente:
  *
- * - **A da FIGURA** -- token, mobília, o que está em pé no mapa. É uma MANCHA
- *   deslocada para o lado oposto ao da luz: a pegada da figura, e não o recorte
- *   dela. O porquê, com os números que o decidiram, está em `ManchaDaSombra`.
+ * - **A da FIGURA** -- token, mobília, o que está no mapa. É a SILHUETA dela,
+ *   de um de dois jeitos: em pé, escorrendo a partir da linha do chão, ou
+ *   vista de cima, esticada inteira para longe da luz. Quem decide é o item --
+ *   ver `SombraDoItem` e `deitarDaFigura`. A mancha oval que já foi o desenho
+ *   principal segura a cena enquanto a silhueta assa: ver `ManchaDaSombra`.
  *
  * - **A da PAREDE** -- a faixa que o segmento deita atrás de si. Essa é
  *   geometria de verdade, e é barata do mesmo jeito: o segmento copiado e
@@ -25,14 +27,26 @@
 
 import { paraCena, pontosNaCaixa } from "@/lib/geometry/area-escondida";
 import type { Vec } from "@/lib/geometry/transform";
-import type { CanvasItem, Parede, Sol } from "@/types/scene";
+import type {
+  CanvasItem,
+  ModoDaSombra,
+  Parede,
+  Sol,
+  SombraDoItem,
+} from "@/types/scene";
 import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
 
-/** O que a conta precisa saber de um item. O resto -- arquivo, z -- não entra. */
+/**
+ * O que a conta precisa saber de um item. O resto -- arquivo, z -- não entra.
+ *
+ * O espelho e o jeito de deitar são opcionais porque metade das contas daqui
+ * não os lê: a mancha só quer a caixa, e a parede nem é item.
+ */
 export type CaixaDaFigura = Pick<
   CanvasItem,
   "x" | "y" | "width" | "height" | "rotation"
->;
+> &
+  Partial<Pick<CanvasItem, "flipX" | "flipY" | "sombra">>;
 
 const GRAU = Math.PI / 180;
 
@@ -129,6 +143,23 @@ export function manchaDaFigura(
 ): ManchaDaSombra | null {
   if (!sol) return null;
 
+  // A vista de cima não deita: a mancha é a caixa inteira, alongada até onde
+  // a sombra vai e com o centro no meio do caminho. É o desenho barato do
+  // mesmo esticão de `esticarDaFigura`.
+  if (modoDaSombra(item) === "inteira") {
+    const alcance = sol.comprimento * alturaDaFigura(item);
+    const cos = Math.cos(sol.angulo * GRAU);
+    const sen = Math.sin(sol.angulo * GRAU);
+
+    return {
+      x: arredondar(item.x + item.width / 2 + (cos * alcance) / 2),
+      y: arredondar(item.y + item.height / 2 + (sen * alcance) / 2),
+      largura: arredondar(item.width * ESTREITAMENTO + Math.abs(cos) * alcance),
+      altura: arredondar(item.height * ESTREITAMENTO + Math.abs(sen) * alcance),
+      forca: arredondar(sol.forca),
+    };
+  }
+
   const sombra = sombraDoSol(item, sol);
 
   return {
@@ -171,7 +202,7 @@ export function manchaDaFigura(
  *
  * Com isso o giro do item não é caso especial nenhum: a imagem é girada ANTES,
  * exatamente como o token é girado, e o que escorre é a figura já na posição em
- * que a mesa a vê. Ver `matrizDoVulto`.
+ * que a mesa a vê. Ver `escorrerDaFigura`.
  */
 export type VultoDaFigura = {
   /** O canto da caixa da figura: o vulto nasce em cima dela. */
@@ -253,10 +284,119 @@ export function peDaFigura(
 }
 
 /**
- * A matriz CSS que escorre a figura, dado onde ela pisa.
+ * Uma transformação afim, na ordem do `setTransform` do canvas e do `matrix()`
+ * do CSS: `[a, b, c, d, e, f]`, com x' = a·x + c·y + e e y' = b·x + d·y + f.
+ *
+ * As duas telas que deitam figura -- o sol em CSS, a luz pontual em canvas --
+ * recebem a MESMA matriz daqui. É o que garante que o token tem a mesma sombra
+ * debaixo do sol e debaixo da tocha.
+ */
+export type Afim = [number, number, number, number, number, number];
+
+/**
+ * A afim como `matrix()` do CSS. Quatro casas na parte que estica, porque ali
+ * o erro é multiplicado pelo tamanho do token; duas no deslocamento, que já
+ * está em unidade de cena.
+ */
+export function cssDaAfim(m: Afim): string {
+  const fino = (valor: number) => Math.round(valor * 10_000) / 10_000;
+
+  return `matrix(${fino(m[0])}, ${fino(m[1])}, ${fino(m[2])}, ${fino(m[3])}, ${arredondar(m[4])}, ${arredondar(m[5])})`;
+}
+
+/** O retângulo que a figura ocupa na caixa, em frações dela. Ver `Silhueta`. */
+export type RecorteDaFigura = {
+  esquerda: number;
+  cima: number;
+  direita: number;
+  baixo: number;
+};
+
+/**
+ * O jeito de deitar desta figura. Lido com desconfiança: a cena é um arquivo, e
+ * o que não for um dos dois nomes é a figura em pé de sempre.
+ */
+export function modoDaSombra(item: Pick<CaixaDaFigura, "sombra">): ModoDaSombra {
+  return item.sombra?.modo === "inteira" ? "inteira" : "base";
+}
+
+/** O quanto a `inteira` pode subir, em múltiplos do lado. Ver `SombraDoItem`. */
+export const ALTURA_DA_FIGURA_MIN = 0.1;
+export const ALTURA_DA_FIGURA_MAX = 3;
+
+function numero(valor: unknown): valor is number {
+  return typeof valor === "number" && Number.isFinite(valor);
+}
+
+function prender(valor: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, valor));
+}
+
+/**
+ * Quão alto a figura vista de cima sobe, em unidade de cena: o múltiplo que o
+ * mestre escolheu, do lado MENOR da caixa. Ver `altura` em `SombraDoItem`.
+ */
+export function alturaDaFigura(
+  item: Pick<CaixaDaFigura, "width" | "height" | "sombra">,
+): number {
+  const pedida = item.sombra?.altura;
+  const multiplo = numero(pedida)
+    ? prender(pedida, ALTURA_DA_FIGURA_MIN, ALTURA_DA_FIGURA_MAX)
+    : 1;
+
+  return multiplo * Math.min(item.width, item.height);
+}
+
+/**
+ * A linha do chão que o mestre pôs, presa à caixa. `undefined` quando ele não
+ * pôs nenhuma -- ou quando o que veio do arquivo não é número.
+ */
+export function baseDaSombra(
+  item: Pick<CaixaDaFigura, "sombra">,
+): number | undefined {
+  const base = item.sombra?.base;
+
+  return numero(base) ? prender(base, 0, 1) : undefined;
+}
+
+/**
+ * O recorte que a SOMBRA lê: o da silhueta, espelhado como o token e, na
+ * `base`, cortado na linha do chão que o mestre pôs.
+ *
+ * O espelho entra porque o forno mede o ARQUIVO, e o token na tela pode estar
+ * virado: com `flipY`, o último pixel do arquivo é o topo da figura na tela, e
+ * o pé caía na cabeça. A linha do chão vem depois e já na caixa espelhada,
+ * porque é ali que o mestre a arrastou -- ver `base` em `SombraDoItem`.
+ *
+ * Abaixo do topo da figura ela não desce: uma linha acima da cabeça não deixa
+ * nada em pé, e o recorte de cabeça para baixo faria o `peDaFigura` achar o
+ * chão no lugar errado.
+ */
+export function recorteDaSombra(
+  recorte: RecorteDaFigura,
+  item: Pick<CaixaDaFigura, "flipX" | "flipY" | "sombra">,
+): RecorteDaFigura {
+  const esquerda = item.flipX ? 1 - recorte.direita : recorte.esquerda;
+  const direita = item.flipX ? 1 - recorte.esquerda : recorte.direita;
+  const cima = item.flipY ? 1 - recorte.baixo : recorte.cima;
+  const baixo = item.flipY ? 1 - recorte.cima : recorte.baixo;
+
+  const base = modoDaSombra(item) === "base" ? baseDaSombra(item) : undefined;
+
+  return {
+    esquerda,
+    direita,
+    cima,
+    baixo: base === undefined ? baixo : Math.max(cima, base),
+  };
+}
+
+/**
+ * A matriz que ESCORRE a figura em pé, dado onde ela pisa.
  *
  * O pé vem da SILHUETA e não da caixa -- é o último pixel desenhado do arquivo,
- * e quase nenhum token encosta na borda de baixo do próprio PNG. Ver `ancoraY`.
+ * e quase nenhum token encosta na borda de baixo do próprio PNG -- ou da linha
+ * do chão, quando o mestre pôs uma. Ver `recorteDaSombra`.
  *
  * A forma da matriz sai direto das duas linhas do cabeçalho de `VultoDaFigura`,
  * com `pe` no lugar de `pé`:
@@ -269,10 +409,143 @@ export function peDaFigura(
  * outro lado do pé, e a figura aparece virada porque é isso que uma sombra
  * comprida faz.
  */
-export function matrizDoVulto(vulto: VultoDaFigura, pe: number): string {
-  const { kx, ky } = vulto;
+export function escorrerDaFigura(kx: number, ky: number, pe: number): Afim {
+  return [1, 0, -kx, 1 - ky, kx * pe, ky * pe];
+}
 
-  return `matrix(1, 0, ${-kx}, ${arredondar(1 - ky)}, ${arredondar(kx * pe)}, ${arredondar(ky * pe)})`;
+/**
+ * A matriz que ESTICA a figura vista de cima para longe da luz.
+ *
+ * O objeto visto de cima é um sólido: o desenho é o topo dele, e as paredes
+ * descem até o chão. A sombra de um sólido é o topo arrastado pelo chão -- a
+ * borda virada para a luz fica onde está, e a do outro lado corre o alcance
+ * inteiro. Arrastar de verdade seria pintar a figura dezenas de vezes em fila;
+ * esticar a figura nessa direção, a partir da borda da luz, chega na mesma
+ * forma com UMA imagem, e é o que a matriz faz:
+ *
+ *     p' = p + α · (p·d − s0) · d,   α = alcance / (s1 − s0)
+ *
+ * com `d` a direção da sombra e `s0..s1` a figura medida ao longo dela. Quem
+ * está em `s0` não anda, quem está em `s1` anda o alcance todo.
+ *
+ * O que ela NÃO faz é deslocar a figura inteira, que era o primeiro desenho
+ * óbvio -- o `drop-shadow` de toda ferramenta. Deslocada, a sombra de um
+ * objeto alto descola dele: aparece um vão de chão aceso entre o barril e a
+ * sombra do barril, como se ele flutuasse.
+ *
+ * Os cantos do recorte são girados como o token, porque é a figura NA TELA
+ * que se mede: um caixote deitado de lado tem outra largura na direção do sol.
+ */
+export function esticarDaFigura(
+  recorte: RecorteDaFigura,
+  caixa: Pick<CaixaDaFigura, "width" | "height" | "rotation">,
+  kx: number,
+  ky: number,
+  altura: number,
+): Afim {
+  const forca = Math.hypot(kx, ky);
+  const alcance = forca * altura;
+  if (!(alcance > 1e-6)) return [1, 0, 0, 1, 0, 0];
+
+  const dx = kx / forca;
+  const dy = ky / forca;
+
+  const meiaL = caixa.width / 2;
+  const meiaA = caixa.height / 2;
+  const angulo = caixa.rotation * GRAU;
+  const cos = Math.cos(angulo);
+  const sen = Math.sin(angulo);
+
+  let s0 = Infinity;
+  let s1 = -Infinity;
+
+  for (const x of [recorte.esquerda * caixa.width, recorte.direita * caixa.width]) {
+    for (const y of [recorte.cima * caixa.height, recorte.baixo * caixa.height]) {
+      const gx = meiaL + (x - meiaL) * cos - (y - meiaA) * sen;
+      const gy = meiaA + (x - meiaL) * sen + (y - meiaA) * cos;
+      const s = gx * dx + gy * dy;
+      s0 = Math.min(s0, s);
+      s1 = Math.max(s1, s);
+    }
+  }
+
+  // Figura sem espessura na direção da luz -- um risco paralelo a ela: não há
+  // o que esticar, e a sombra é ela mesma empurrada.
+  if (!(s1 - s0 > 1e-6)) return [1, 0, 0, 1, dx * alcance, dy * alcance];
+
+  const alfa = alcance / (s1 - s0);
+
+  return [
+    1 + alfa * dx * dx,
+    alfa * dx * dy,
+    alfa * dx * dy,
+    1 + alfa * dy * dy,
+    -alfa * s0 * dx,
+    -alfa * s0 * dy,
+  ];
+}
+
+/**
+ * Como esta figura deita, na caixa dela: origem no canto, e antes de ir para o
+ * lugar no mapa. A luz que a deita entra como `kx, ky` -- o quanto um ponto
+ * corre por unidade de altura, e para onde. Ver `VultoDaFigura`.
+ *
+ * É a única pergunta que as duas telas fazem: o sol em CSS e a tocha em canvas
+ * chamam esta função com a direção delas, e o modo do item decide o resto.
+ */
+export function deitarDaFigura(
+  item: Pick<
+    CaixaDaFigura,
+    "width" | "height" | "rotation" | "flipX" | "flipY" | "sombra"
+  >,
+  recorte: RecorteDaFigura,
+  kx: number,
+  ky: number,
+): Afim {
+  const cortado = recorteDaSombra(recorte, item);
+
+  if (modoDaSombra(item) === "inteira") {
+    return esticarDaFigura(cortado, item, kx, ky, alturaDaFigura(item));
+  }
+
+  return escorrerDaFigura(
+    kx,
+    ky,
+    peDaFigura(cortado, item.width, item.height, item.rotation),
+  );
+}
+
+/**
+ * A sombra que se GRAVA: sem o que é o padrão, e `undefined` quando sobra só
+ * ele.
+ *
+ * A regra de toda opcional da cena: a figura em pé, pela base que o forno
+ * acha, é como o item nasce, e gravar `{ modo: "base" }` deixaria toda cena
+ * com um campo a mais dizendo o padrão. A linha do chão e a altura ficam
+ * mesmo quando o modo é o outro -- ver `SombraDoItem`.
+ */
+export function sombraParaGravar(sombra: SombraDoItem): SombraDoItem | undefined {
+  const modo: ModoDaSombra = sombra.modo === "inteira" ? "inteira" : "base";
+  const base = numero(sombra.base)
+    ? Math.round(prender(sombra.base, 0, 1) * 1000) / 1000
+    : undefined;
+  const presa = numero(sombra.altura)
+    ? Math.round(
+        prender(sombra.altura, ALTURA_DA_FIGURA_MIN, ALTURA_DA_FIGURA_MAX) *
+          100,
+      ) / 100
+    : 1;
+  const altura = presa === 1 ? undefined : presa;
+
+  if (modo === "base" && base === undefined && altura === undefined) {
+    return undefined;
+  }
+
+  return {
+    modo,
+    ...(base === undefined ? {} : { base }),
+    ...(altura === undefined ? {} : { altura }),
+  };
 }
 
 /** O deslocamento de uma sombra, antes de virar mancha ou vulto. */

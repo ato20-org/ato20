@@ -3,11 +3,21 @@
 import { create } from "zustand";
 
 import { boundsOfItems, type Bounds } from "@/lib/geometry/bounds";
-import { clampViewport, viewportQueCabe } from "@/lib/geometry/viewport";
+import {
+  clampCamera,
+  formatoDentroDe,
+  proporcaoDe,
+  viewportQueCabe,
+} from "@/lib/geometry/viewport";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import { temCamera, type CameraSalva, type Scene } from "@/types/scene";
+import {
+  temCamera,
+  type CameraSalva,
+  type Scene,
+  type Viewport,
+} from "@/types/scene";
 
 /**
  * Folga em volta do alvo ao prender pela primeira vez, como fração do maior
@@ -152,21 +162,26 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
     const cy = (caixa.minY + caixa.maxY) / 2;
 
     // Com base, a ampliação é a dada e só o centro vai para o alvo. Sem base,
-    // enquadra o alvo com folga uma vez; daí em diante só o centro segue.
+    // enquadra o alvo com folga uma vez; daí em diante só o centro segue. Nos
+    // dois casos no formato da câmera: prender muda o que ela segue, e não a
+    // forma dela.
     const folga =
       Math.max(caixa.maxX - caixa.minX, caixa.maxY - caixa.minY) * MARGEM_ALVO;
     const viewport = base
-      ? clampViewport(
+      ? clampCamera(
           { ...base, x: cx - base.width / 2, y: cy - base.height / 2 },
           conteudo,
         )
-      : clampViewport(
-          viewportQueCabe({
-            minX: caixa.minX - folga,
-            minY: caixa.minY - folga,
-            maxX: caixa.maxX + folga,
-            maxY: caixa.maxY + folga,
-          }),
+      : clampCamera(
+          viewportQueCabe(
+            {
+              minX: caixa.minX - folga,
+              minY: caixa.minY - folga,
+              maxX: caixa.maxX + folga,
+              maxY: caixa.maxY + folga,
+            },
+            proporcaoDe(selecionada.viewport),
+          ),
           conteudo,
         );
 
@@ -192,7 +207,7 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
     // ele está, não esperar o próximo arrasto.
     const { viewport, conteudo } = useViewportStore.getState();
     useSceneStore.getState().atualizarCamera(scene.id, selecionada.id, {
-      viewport: clampViewport(viewport, conteudo),
+      viewport: espelhar(viewport, selecionada, conteudo),
       alvoIds: undefined,
     });
     set({ espelhoMestre: true });
@@ -245,7 +260,7 @@ export function recorteSeguindo(
 ) {
   const { width, height } = camera.viewport;
 
-  return clampViewport(
+  return clampCamera(
     {
       x: (caixa.minX + caixa.maxX) / 2 - width / 2,
       y: (caixa.minY + caixa.maxY) / 2 - height / 2,
@@ -315,9 +330,28 @@ useViewportStore.subscribe((state, anterior) => {
   if (!espelhoMestre || !selecionadaId) return;
 
   const scene = cenaEmEdicao();
-  if (!scene) return;
+  const selecionada = selecionadaDe(scene, selecionadaId);
+  if (!scene || !selecionada) return;
 
   useSceneStore.getState().atualizarCamera(scene.id, selecionadaId, {
-    viewport: clampViewport(state.viewport, state.conteudo),
+    viewport: espelhar(state.viewport, selecionada, state.conteudo),
   });
 });
+
+/**
+ * O recorte da câmera que espelha o palco: o palco, no formato DELA.
+ *
+ * Com a câmera 16:9 é o próprio palco, e a moldura coincide com a tela do
+ * mestre. Com outro formato é o maior recorte dele que cabe no que o mestre
+ * vê, centrado -- espelhar não pode desfazer a torre que ele esticou.
+ */
+function espelhar(
+  palco: Viewport,
+  camera: CameraSalva,
+  conteudo: Bounds,
+): Viewport {
+  return clampCamera(
+    formatoDentroDe(palco, proporcaoDe(camera.viewport)),
+    conteudo,
+  );
+}

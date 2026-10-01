@@ -2,9 +2,13 @@
 
 import { boundsOfItems, type Bounds } from "@/lib/geometry/bounds";
 import {
+  ampliarCameraNoCentro,
+  clampCamera,
   clampViewport,
+  formatoDentroDe,
+  proporcaoDe,
+  quadroDaMesa,
   viewportQueCabe,
-  zoomViewportCentered,
 } from "@/lib/geometry/viewport";
 import { ponteiroNaCena } from "@/lib/mestre/ponteiro-no-palco";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
@@ -22,6 +26,9 @@ import { temCamera, type CameraSalva, type Scene, type Viewport } from "@/types/
  * Fração e não unidades de cena: a câmera fechada num corredor precisa andar
  * menos por toque do que a câmera aberta na sala inteira, e "um vinte avos do
  * que a mesa vê" é o mesmo gesto nos dois casos.
+ *
+ * É o TOQUE. Segurada, a seta anda pelo relógio e não por passos -- ver
+ * `camera-nas-setas`.
  */
 export const PASSO_CAMERA = 0.05;
 export const PASSO_CAMERA_LARGO = 0.25;
@@ -103,7 +110,7 @@ export function gravarCameraManual(cameraId: string, viewport: Viewport): void {
   if (trava.selecionadaId === cameraId) trava.soltar();
 
   useSceneStore.getState().atualizarCamera(scene.id, cameraId, {
-    viewport: clampViewport(viewport, conteudo()),
+    viewport: clampCamera(viewport, conteudo()),
     alvoIds: undefined,
   });
 }
@@ -113,9 +120,35 @@ function gravar(viewport: Viewport): void {
   if (camera) gravarCameraManual(camera.id, viewport);
 }
 
-/** Leva a selecionada para o recorte que o mestre está vendo agora. */
+/**
+ * Leva a selecionada para o recorte que o mestre está vendo agora.
+ *
+ * No formato DELA, e não no do palco: o palco é sempre 16:9, e copiá-lo
+ * inteiro desfaria a torre que o mestre esticou. Ela vem para onde ele está,
+ * do maior tamanho que cabe no que ele vê.
+ */
 export function enquadrarAqui(): void {
-  gravar(useViewportStore.getState().viewport);
+  const camera = cameraAtual();
+  if (!camera) return;
+
+  gravar(
+    formatoDentroDe(useViewportStore.getState().viewport, proporcaoDe(camera)),
+  );
+}
+
+/**
+ * Devolve a selecionada ao 16:9 da tela da mesa.
+ *
+ * Existe porque o Shift no canto mantém a proporção que a câmera TEM, e não a
+ * de origem: depois de esticar um canto, não há gesto que volte ao 16:9 exato.
+ *
+ * Pelo 16:9 EM VOLTA dela, e não pela largura: o que a mesa via continua no
+ * quadro, e o que era tarja passa a ser mapa. Pela largura, a torre em pé
+ * viraria uma faixa baixa e a mesa perderia o topo e o pé dela.
+ */
+export function voltarAoFormatoDaMesa(): void {
+  const camera = cameraAtual();
+  if (camera) gravar(quadroDaMesa(camera));
 }
 
 /**
@@ -133,6 +166,25 @@ export function alternarTransmissao(): void {
       scene.id,
       scene.cameraNoArId === camera.id ? undefined : camera.id,
     );
+}
+
+/**
+ * Em que pé uma câmera está com a mesa: no ar, PREPARADA, ou nenhum dos dois.
+ *
+ * `cameraNoArId` é da cena, e continua gravado com a cena fora do ar: é a
+ * câmera com que a mesa abre quando o mestre puser o mapa no ar. Até lá ela
+ * está preparada, e o vermelho dizia que a TV mostrava o que ela não mostra.
+ * Vermelho é só o que a mesa vê agora; preparada é amarelo.
+ */
+export type Transmissao = "no-ar" | "preparada" | null;
+
+export function transmissaoDaCamera(
+  scene: Scene,
+  cameraId: string | undefined,
+  cenaNoAr: boolean,
+): Transmissao {
+  if (!cameraId || scene.cameraNoArId !== cameraId) return null;
+  return cenaNoAr ? "no-ar" : "preparada";
 }
 
 /** Tira qualquer câmera do ar: a mesa volta a ver a cena inteira. */
@@ -158,7 +210,7 @@ export function zoomCamera(factor: number): void {
   const camera = cameraAtual();
   if (!camera) return;
 
-  gravar(zoomViewportCentered(camera, factor, conteudo()));
+  gravar(ampliarCameraNoCentro(camera, factor, conteudo()));
 }
 
 /** Selecionada com a largura pedida, mantendo o centro. O slider chama isto. */
@@ -179,10 +231,14 @@ export function larguraDaCamera(width: number): void {
  * O gesto que faltava: o mestre seleciona os três tokens da luta e quer a
  * câmera olhando para eles. Antes ele tinha de aproximar o próprio palco,
  * enquadrar, e depois afastar de volta para continuar trabalhando.
+ *
+ * No formato da câmera: enquadrar muda onde ela olha e quanto ela aproxima, e
+ * não a forma que o mestre deu a ela.
  */
 export function enquadrarSelecao(): void {
   const scene = lerCena();
-  if (!scene) return;
+  const camera = cameraAtual();
+  if (!scene || !camera) return;
 
   const { selectedIds } = useSelectionStore.getState();
   const caixa = boundsOfItems(
@@ -195,12 +251,15 @@ export function enquadrarSelecao(): void {
     MARGEM_SELECAO;
 
   gravar(
-    viewportQueCabe({
-      minX: caixa.minX - folga,
-      minY: caixa.minY - folga,
-      maxX: caixa.maxX + folga,
-      maxY: caixa.maxY + folga,
-    }),
+    viewportQueCabe(
+      {
+        minX: caixa.minX - folga,
+        minY: caixa.minY - folga,
+        maxX: caixa.maxX + folga,
+        maxY: caixa.maxY + folga,
+      },
+      proporcaoDe(camera),
+    ),
   );
 }
 
@@ -210,12 +269,17 @@ export function enquadrarSelecao(): void {
  * O contrário de `enquadrarAqui`. Existe porque o mestre ampliado num canto do
  * mapa perde a moldura de vista, e sem isto o único caminho de volta era
  * afastar tudo e procurar o tracejado.
+ *
+ * Pelo 16:9 em volta dela, porque o palco só tem esse formato: pela largura, a
+ * câmera em pé ficaria com o topo e o pé fora da tela do mestre.
  */
 export function irParaCamera(): void {
   const camera = cameraAtual();
   if (!camera) return;
 
-  useViewportStore.getState().setViewport(clampViewport(camera, conteudo()));
+  useViewportStore
+    .getState()
+    .setViewport(clampViewport(quadroDaMesa(camera), conteudo()));
 }
 
 /**
@@ -250,7 +314,7 @@ export function novaCameraNoPonteiro(): string | undefined {
   const centro = ponteiroNaCena();
 
   const viewport = centro
-    ? clampViewport(
+    ? clampCamera(
         {
           x: centro.x - base.width / 2,
           y: centro.y - base.height / 2,

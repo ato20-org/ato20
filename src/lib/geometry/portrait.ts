@@ -16,7 +16,11 @@ import {
 } from "@/types/scene";
 import type { ItemBox } from "@/lib/geometry/transform";
 
-/** Proporção do plano. A câmera sempre a respeita, então vale para o recorte. */
+/**
+ * Proporção do plano. A câmera pode sair dela; a tela da mesa, não, e é na
+ * tela que o retrato vive -- ver `quadroDaMesa`. Por isso a conta continua
+ * valendo com a câmera em qualquer formato.
+ */
 const PLANE_ASPECT = SCENE_HEIGHT / SCENE_WIDTH;
 
 /** Altura inicial do retrato, em fração da câmera. Cabe três lado a lado. */
@@ -29,11 +33,14 @@ const MARGIN = 0.02;
 const FALLBACK_ASPECT = 3 / 4;
 
 /**
- * Onde o retrato cai no plano de cena, dado o recorte atual da câmera.
+ * Onde o retrato cai no plano de cena, dada a tela da mesa em volta da câmera.
  *
  * É a única ponte entre os dois espaços, e existe para as três visões
- * desenharem pelo mesmo caminho: no Espectador a câmera é a tela inteira, no
- * Mestre ela é o retângulo da moldura, e a conta é a mesma.
+ * desenharem pelo mesmo caminho: no Espectador a régua é a tela inteira, no
+ * Mestre ela é o 16:9 em volta da moldura, e a conta é a mesma.
+ *
+ * A régua é o `quadroDaMesa` da câmera, e não o recorte dela: quem chama passa
+ * já convertida. Com a câmera 16:9 as duas são a mesma caixa.
  */
 export function portraitBox(
   portrait: Portrait,

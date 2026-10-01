@@ -149,7 +149,7 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
         espessura,
       })),
       drafts: itens.map(
-        ({ assetId, x, y, width, height, rotation, locked, flipX, flipY, opacity }) => ({
+        ({
           assetId,
           x,
           y,
@@ -160,6 +160,21 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
           flipX,
           flipY,
           opacity,
+          semSombra,
+          sombra,
+        }) => ({
+          assetId,
+          x,
+          y,
+          width,
+          height,
+          rotation,
+          locked,
+          flipX,
+          flipY,
+          opacity,
+          semSombra,
+          sombra,
         }),
       ),
     });

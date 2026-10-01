@@ -24,6 +24,7 @@ import type { Vec } from "@/lib/geometry/transform";
 import {
   FULL_VIEWPORT,
   panViewport,
+  quadroNaTela,
   recorteNaTela,
   zoomViewport,
 } from "@/lib/geometry/viewport";
@@ -104,9 +105,10 @@ type SceneScale = {
   /**
    * O OVERLAY: o que fica SOBRE a cena sem fazer parte dela -- hoje, o retrato.
    *
-   * Um nó do tamanho do recorte, em pixels de tela, fora dos dois planos e sem
-   * transform nenhum. Quem desenha nele entra por portal e se posiciona em
-   * porcentagem, que é a mesma fração da câmera que o registro já guarda.
+   * Um nó do tamanho da tela da mesa (`quadroDaTela`), em pixels de tela, fora
+   * dos dois planos e sem transform nenhum. Quem desenha nele entra por portal
+   * e se posiciona em porcentagem, que é a mesma fração que o registro já
+   * guarda.
    *
    * É a terceira saída do mesmo problema, depois do `fundoDoPalco` e do
    * `planoDaMargem`, e a razão aqui é outra: não é transbordo, é MOVIMENTO.
@@ -116,15 +118,24 @@ type SceneScale = {
    * um plano que ainda está no errado: ele nada pela tela e só pousa no fim.
    * Aqui não há de onde tremer -- nada o move.
    *
-   * O retângulo não muda com a ampliação da câmera, e isso é uma propriedade,
-   * não uma coincidência: ver `recorteNaTela`, que tem a conta e o teste.
+   * O retângulo não muda com a câmera -- nem com a ampliação, nem com o
+   * formato --, e isso é uma propriedade, não uma coincidência: ver
+   * `quadroNaTela`, que tem a conta e o teste.
    *
    * Existe nas DUAS telas, ao contrário do `planoDaMargem`: quem mais precisa
    * dele é a TV, que é onde a câmera se mexe sozinha.
    */
   planoDaTela: HTMLElement | null;
-  /** O recorte em pixels de tela, para quem desenha no `planoDaTela`. */
+  /**
+   * O recorte da câmera em pixels de tela: onde a cena aparece, e fora dele é
+   * tarja. A roda de ping lê daqui o que é mapa e o que é preto.
+   */
   recorteDaCamera: { left: number; top: number; width: number; height: number };
+  /**
+   * A tela da mesa em pixels de tela, para quem desenha no `planoDaTela`. Com
+   * a câmera 16:9 é o `recorteDaCamera`; com outro formato, é maior que ele.
+   */
+  quadroDaTela: { left: number; top: number; width: number; height: number };
   offsetX: number;
   offsetY: number;
 };
@@ -181,6 +192,7 @@ export function PalcoSoTela({
       moldura: null,
       planoDaTela: tela,
       recorteDaCamera: { left: 0, top: 0, width: largura, height: altura },
+      quadroDaTela: { left: 0, top: 0, width: largura, height: altura },
       offsetX: 0,
       offsetY: 0,
     }),
@@ -436,7 +448,7 @@ export function SceneStage({
     (frame.height - viewport.height * scale) / 2 - viewport.y * scale;
 
   /**
-   * Onde o recorte pousa na moldura, em pixels de tela. É a caixa do overlay.
+   * Onde o recorte pousa na moldura, em pixels de tela. Fora dele, tarja.
    *
    * Memoizado porque entra no contexto: um objeto novo a cada render derrubaria
    * o `memo` de tudo o que lê `useSceneScale` -- e a TV re-renderiza a 10 Hz.
@@ -445,6 +457,12 @@ export function SceneStage({
     () => recorteNaTela(frame, viewport, scale),
     [frame, viewport, scale],
   );
+
+  /**
+   * A tela da mesa na moldura: a caixa do overlay. Só a moldura entra, e é o
+   * ponto -- a câmera andando a 10 Hz não a recalcula. Ver `quadroNaTela`.
+   */
+  const quadro = useMemo(() => quadroNaTela(frame), [frame]);
 
   /**
    * A câmera parou, e o CONTEÚDO pode ser redesenhado em resolução cheia.
@@ -699,7 +717,15 @@ export function SceneStage({
    * abertura de toda tela começaria com a cena vindo do canto -- o `translate`
    * calculado com `scale(0)` seria o quadro inicial da animação. A primeira
    * amostra só marca a hora; a transição passa a valer da seguinte em diante.
+   *
+   * Roda a cada AMOSTRA, e não a cada mudança de `camera`. Aquela chave perdeu
+   * o deslocamento quando a troca de forma deixou de reagir a ele, e com razão
+   * -- deslocar não estica textura. Mas este efeito ficou pendurado nela: na TV
+   * a câmera que só andava nunca chegava aqui depois da primeira amostra, o
+   * plano ficava sem classe nenhuma, e todo passeio -- seta, moldura, V --
+   * chegava à mesa em saltos de 10 Hz.
    */
+  const amostraDaCamera = `${scale}|${offsetX}|${offsetY}`;
   const ultimoCorte = useRef(corte);
 
   useLayoutEffect(() => {
@@ -741,8 +767,8 @@ export function SceneStage({
       plano?.classList.toggle("scene-smooth-camera", !fluxo);
       plano?.classList.toggle("scene-smooth-camera-fluxo", fluxo);
     }
-    // `camera` já carrega `scale`; ele entra à parte porque o corpo o lê.
-  }, [camera, smooth, scale, corte, controlesNo, conteudoNo]);
+    // `amostraDaCamera` já carrega `scale`; ele entra à parte porque o corpo o lê.
+  }, [amostraDaCamera, smooth, scale, corte, controlesNo, conteudoNo]);
 
   useEffect(() => {
     // Mais longo com a transição ligada: ali a câmera continua andando depois
@@ -803,6 +829,7 @@ export function SceneStage({
       moldura: frameNo,
       planoDaTela: telaNo,
       recorteDaCamera: recorte,
+      quadroDaTela: quadro,
       offsetX,
       offsetY,
     }),
@@ -817,6 +844,7 @@ export function SceneStage({
       frameNo,
       telaNo,
       recorte,
+      quadro,
       offsetX,
       offsetY,
     ],
@@ -1190,13 +1218,17 @@ export function SceneStage({
 
       {/* O OVERLAY: o retrato, e o que mais não for cenário. Ver `planoDaTela`.
 
-          ANTES das tarjas no DOM e sem `zIndex` próprio: as tarjas carregam
-          `zIndex: 10` e continuam cobrindo, então nada aqui dentro vaza para
-          cima do preto. O `overflow-hidden` fecha a mesma porta pelo outro
-          lado, para o caso de alguém empilhar `zIndex` aqui dentro.
+          Do tamanho da TELA DA MESA, e não do recorte: com a câmera em pé, a
+          torre ocupa o meio e o retrato fica sobre a tarja dos lados, que é
+          onde ele não cobre o que a mesa está olhando. Por isso ACIMA das
+          tarjas (`zIndex: 11` contra `10`): por baixo, o retrato encostado no
+          canto sumiria no preto. Com a câmera 16:9 as duas caixas são a mesma
+          e elas nem se encostam. O `overflow-hidden` segura o que passar da
+          tela da mesa.
 
-          Sem transform e sem transição: a caixa não muda quando a câmera anda
-          nem quando amplia -- ela só acompanha a JANELA. É o ponto inteiro.
+          Sem transform e sem transição: a caixa não muda quando a câmera anda,
+          amplia ou muda de formato -- ela só acompanha a JANELA. É o ponto
+          inteiro.
 
           `invisible` e não desmontado, como o `planoDaMargem`: o portal precisa
           do nó já existindo, e desmontar no primeiro paint faria o primeiro
@@ -1208,17 +1240,19 @@ export function SceneStage({
           scale === 0 && "invisible",
         )}
         style={{
-          left: recorte.left,
-          top: recorte.top,
-          width: recorte.width,
-          height: recorte.height,
+          left: quadro.left,
+          top: quadro.top,
+          width: quadro.width,
+          height: quadro.height,
+          zIndex: 11,
         }}
       />
 
       {/* O que sobra em volta do recorte, tarjado de preto.
 
-          A moldura da câmera é 16:9 e a tela que assiste raramente é: uma
-          janela de navegador, um monitor 16:10. O recorte vai centrado e a
+          O formato da câmera e o da tela que assiste quase nunca batem: a
+          câmera pode ser a torre em pé ou o corredor deitado, e a tela, uma
+          janela de navegador ou um monitor 16:10. O recorte vai centrado e a
           folga, sem isto, mostrava a cena que continua além da moldura -- o
           mestre enquadrava a sala escondida com o personagem fora da câmera,
           e a TV mostrava o personagem. O enquadramento tem de ser o que ele
@@ -1274,9 +1308,9 @@ function tarjas(
   viewport: Viewport,
   scale: number,
 ): Array<{ left: number; top: number; width: number; height: number }> {
-  // A MESMA conta do `planoDaTela`, e não uma cópia: as duas dividem a moldura
-  // entre recorte e sobra, e duas contas divergiriam na primeira mudança --
-  // tarja por cima do overlay, ou uma fresta de cena entre os dois.
+  // A MESMA conta do `recorteDaCamera`, e não uma cópia: a roda de ping lê de
+  // lá o que é mapa e o que é preto, e duas contas divergiriam na primeira
+  // mudança -- um ping aceito em cima da tarja, ou uma fresta de cena sem ping.
   const { left: sobraX, top: sobraY } = recorteNaTela(frame, viewport, scale);
   const faixas = [];
 

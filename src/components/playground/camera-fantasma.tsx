@@ -11,7 +11,11 @@ import {
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
-import { clampViewport } from "@/lib/geometry/viewport";
+import { clampCamera, clampCameraPorEixo } from "@/lib/geometry/viewport";
+import {
+  transmissaoDaCamera,
+  type Transmissao,
+} from "@/lib/mestre/camera-actions";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -54,6 +58,9 @@ export function CamerasFantasma({
   editavel,
 }: CamerasFantasmaProps) {
   const cameras = scene.cameras ?? [];
+  const cenaNoAr = useSceneStore(
+    (state) => state.board?.liveSceneId === scene.id,
+  );
 
   return (
     <>
@@ -64,7 +71,7 @@ export function CamerasFantasma({
             scene={scene}
             camera={camera}
             posicao={index + 1}
-            transmitindo={scene.cameraNoArId === camera.id}
+            transmissao={transmissaoDaCamera(scene, camera.id, cenaNoAr)}
             editavel={editavel}
           />
         ),
@@ -77,7 +84,7 @@ type FantasmaProps = {
   scene: Scene;
   camera: CameraSalva;
   posicao: number;
-  transmitindo: boolean;
+  transmissao: Transmissao;
   editavel: boolean;
 };
 
@@ -85,7 +92,7 @@ function Fantasma({
   scene,
   camera,
   posicao,
-  transmitindo,
+  transmissao,
   editavel,
 }: FantasmaProps) {
   const { scale } = useSceneScale();
@@ -100,9 +107,16 @@ function Fantasma({
   // pelo seguidor a cada movimento. Ver `useCameraLockStore`.
   const caixa = camera.viewport;
 
-  function gravar(viewport: Viewport) {
+  /**
+   * `prender` é o clamp do gesto: arrastar mantém o formato, e o canto, que
+   * existe para mudá-lo, prende cada eixo por si. Ver `clampCameraPorEixo`.
+   */
+  function gravar(
+    viewport: Viewport,
+    prender: typeof clampCamera = clampCamera,
+  ) {
     atualizarCamera(scene.id, camera.id, {
-      viewport: clampViewport(viewport, conteudo),
+      viewport: prender(viewport, conteudo),
     });
   }
 
@@ -144,7 +158,7 @@ function Fantasma({
         // O menu do palco lê daqui qual câmera levou o botão direito. Ver
         // `StageContextMenu`.
         data-camera-id={camera.id}
-        className={`${transmitindo ? "border-red-400/70" : "border-foreground/45"} pointer-events-none absolute border-dashed`}
+        className={`${transmissao === "no-ar" ? "border-red-400/70" : transmissao === "preparada" ? "border-amber-400/70" : "border-foreground/45"} pointer-events-none absolute border-dashed`}
         style={{
           left: caixa.x,
           top: caixa.y,
@@ -228,8 +242,8 @@ function Fantasma({
           onPointerDown={pegar}
         >
           <span className="opacity-60">{posicao}</span>
-          {transmitindo ? (
-            <CircleDot className="text-red-400" strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
+          {transmissao ? (
+            <CircleDot className={transmissao === "no-ar" ? "text-red-400" : "text-amber-400"} strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
           ) : null}
           {camera.nome}
           {segue ? (
@@ -242,18 +256,22 @@ function Fantasma({
         <TransformHandles
           box={{ ...caixa, rotation: 0 }}
           rotatable={false}
+          // Como na moldura de verdade: o canto muda o formato, e o Shift o
+          // mantém. Ver `CameraFrame`.
           handles={CORNER_HANDLES}
-          keepAspect
           outline={false}
           round={false}
           zIndex={ALCAS_Z}
           onChange={({ x, y, width, height }) =>
-            gravar({
-              x: x ?? caixa.x,
-              y: y ?? caixa.y,
-              width: width ?? caixa.width,
-              height: height ?? caixa.height,
-            })
+            gravar(
+              {
+                x: x ?? caixa.x,
+                y: y ?? caixa.y,
+                width: width ?? caixa.width,
+                height: height ?? caixa.height,
+              },
+              clampCameraPorEixo,
+            )
           }
         />
       ) : null}
