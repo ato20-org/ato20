@@ -1,4 +1,4 @@
-import { temAnotacao, type Scene } from "@/types/scene";
+import { itensVisiveis, temAnotacao, type Scene } from "@/types/scene";
 
 /**
  * A cena como a mesa pode vê-la.
@@ -47,6 +47,11 @@ import { temAnotacao, type Scene } from "@/types/scene";
  * sumir do objeto porque `name` é obrigatório no tipo `Scene`, e a mesa não
  * desenha nome nenhum.
  *
+ * As IMAGENS ESCONDIDAS saem pelo mesmo motivo e com mais razão ainda: o
+ * olho apagado da lista de camadas é o monstro esperando a hora de aparecer, e
+ * um item que a TV só deixasse de desenhar estaria no JSON para quem abrir o
+ * inspetor. Vale no mapa e no quadro -- ver `itensVisiveis`.
+ *
  * A regra para campo novo em `Scene` é uma pergunta: se um jogador ler isto,
  * estraga a surpresa? Se sim, ele entra na lista abaixo.
  */
@@ -58,6 +63,9 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // anotação sobre ele. Cena de mapa continua filtrando abaixo.
   if (!temAnotacao(scene)) return quadroParaMesa(scene);
 
+  // Antes de `grupos` sair: é pela pasta que um item some junto com ela.
+  const items = itensVisiveis(scene.items, scene.grupos);
+
   // Cena sem nada do mestre devolve a MESMA referência, e não uma cópia.
   //
   // Não é economia de memória: o `usePublisher` compara a cena por
@@ -68,6 +76,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // aqui esquecido não vaza — o `delete` continua acontecendo —, mas um campo
   // apagado embaixo e esquecido nesta linha faz o Mestre publicar por frame.
   if (
+    items === scene.items &&
     !scene.name &&
     !scene.pins &&
     !scene.postits &&
@@ -85,7 +94,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // Cópia e `delete`, e não desestruturação com um descarte: um descarte
   // nomeado só para ser ignorado é variável não usada, e a regra que a proíbe
   // está ligada aqui.
-  const paraMesa = { ...scene, name: "" };
+  const paraMesa = { ...scene, name: "", items };
   delete paraMesa.pins;
   delete paraMesa.postits;
   delete paraMesa.handout;
@@ -126,6 +135,9 @@ export function sceneForTable(scene: Scene | null): Scene | null {
  * campo sai na saída em vez de ser apagado do arquivo: apagar reescreveria a
  * cena de quem só abriu o aplicativo, e o dado não atrapalha onde está.
  *
+ * As imagens ESCONDIDAS também, e as pastas ficam: a mesa do quadro recebe a
+ * árvore, mas não o que o olho apagou dela.
+ *
  * O guardado das EXTENSÕES e o NOME saem daqui pela mesma razão da cena de
  * mapa: o contrato da API promete que o que o plugin grava na cena não chega à
  * mesa, e o quadro é uma cena como qualquer outra para `cena.gravarDados`. Até
@@ -140,7 +152,10 @@ export function sceneForTable(scene: Scene | null): Scene | null {
 const quadrosParaMesa = new WeakMap<Scene, Scene>();
 
 function quadroParaMesa(scene: Scene): Scene {
+  const items = itensVisiveis(scene.items, scene.grupos);
+
   if (
+    items === scene.items &&
     !scene.name &&
     !scene.extensoes &&
     !scene.camera &&
@@ -152,7 +167,7 @@ function quadroParaMesa(scene: Scene): Scene {
   const guardado = quadrosParaMesa.get(scene);
   if (guardado) return guardado;
 
-  const paraMesa = { ...scene, name: "" };
+  const paraMesa = { ...scene, name: "", items };
   delete paraMesa.extensoes;
   delete paraMesa.camera;
   delete paraMesa.cameras;

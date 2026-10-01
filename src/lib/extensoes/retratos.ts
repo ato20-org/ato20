@@ -8,6 +8,7 @@ import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { selectCenaParaMesa, useSceneStore } from "@/lib/store/use-scene-store";
+import { itensVisiveis } from "@/types/scene";
 
 /**
  * Os retratos como a MESA os vê, para um plugin levá-los para fora do Mestre.
@@ -35,7 +36,10 @@ export function retratosNaMesa(): RetratoParaKit[] {
   const cena = selectCenaParaMesa(useSceneStore.getState());
   const personagens = useCharactersStore.getState().personagens ?? [];
 
-  return retratosDaCena(guardados, cena?.items ?? [], personagens, fontes(), false, layout)
+  // Sem os tokens escondidos, como a mesa: ver `itensNaMesa` no `MestreShell`.
+  const itens = cena ? itensVisiveis(cena.items, cena.grupos) : [];
+
+  return retratosDaCena(guardados, itens, personagens, fontes(), false, layout)
     .filter((retrato) => retrato.visible)
     .map((retrato) => ({
       ...retrato,
@@ -89,7 +93,10 @@ export function assinarRetratosNaMesa(aviso: (retratos: RetratoParaKit[]) => voi
       if (estado.portraits !== antes.portraits || estado.layout !== antes.layout) talvez();
     }),
     useSceneStore.subscribe((estado, antes) => {
-      if (selectCenaParaMesa(estado)?.items !== selectCenaParaMesa(antes)?.items) talvez();
+      const agora = selectCenaParaMesa(estado);
+      const antiga = selectCenaParaMesa(antes);
+      // As pastas também: a de olho apagado tira da mesa os tokens de dentro.
+      if (agora?.items !== antiga?.items || agora?.grupos !== antiga?.grupos) talvez();
     }),
     useCharactersStore.subscribe((estado, antes) => {
       if (estado.personagens !== antes.personagens) talvez();

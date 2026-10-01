@@ -273,6 +273,12 @@ type SceneStore = {
     frontFirstIndex: number,
   ) => void;
   setItemsLocked: (sceneId: string, itemIds: string[], locked: boolean) => void;
+  /** O olho da lista de camadas. Ver `CanvasItem.escondido`. */
+  setItemsEscondidos: (
+    sceneId: string,
+    itemIds: string[],
+    escondido: boolean,
+  ) => void;
 
   /**
    * Cria um grupo com estes itens dentro. Devolve o id. `parentId` presente =
@@ -1221,6 +1227,18 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       );
     },
 
+    setItemsEscondidos(sceneId, itemIds, escondido) {
+      get().updateItems(
+        sceneId,
+        // `undefined` e não `false`: à vista é a AUSÊNCIA do campo, como
+        // `flipX` -- e é ela que deixa `itensVisiveis` devolver a mesma lista.
+        itemIds.map((id) => ({
+          id,
+          patch: { escondido: escondido || undefined },
+        })),
+      );
+    },
+
     criarGrupo(sceneId, nome, itemIds, parentId) {
       const id = novoId();
       const dentro = new Set(itemIds);
@@ -1250,11 +1268,15 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         const alvo = scene.grupos?.find((grupo) => grupo.id === grupoId);
         if (!alvo) return scene;
 
+        // Pasta escondida passa o olho apagado para quem sobe: desfazer é
+        // organização, e não pode pôr na TV o que estava fora de vista.
+        const herda = alvo.escondido ? { escondido: true } : {};
+
         const grupos = (scene.grupos ?? [])
           .filter((grupo) => grupo.id !== grupoId)
           .map((grupo) =>
             grupo.parentId === grupoId
-              ? { ...grupo, parentId: alvo.parentId }
+              ? { ...grupo, ...herda, parentId: alvo.parentId }
               : grupo,
           );
 
@@ -1264,7 +1286,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           grupos: grupos.length > 0 ? grupos : undefined,
           items: scene.items.map((item) =>
             item.grupoId === grupoId
-              ? { ...item, grupoId: alvo.parentId }
+              ? { ...item, ...herda, grupoId: alvo.parentId }
               : item,
           ),
         };

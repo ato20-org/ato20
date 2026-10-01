@@ -34,6 +34,7 @@ import type { RolagemDaMesa } from "@/types/dado";
 import type { Ping } from "@/types/ping";
 import {
   ehQuadro,
+  itensVisiveis,
   type CanvasItem,
   type FichaNaCena,
   type FogRegion,
@@ -190,9 +191,11 @@ export function SceneLayer({
   contornos,
   palco,
 }: SceneLayerProps) {
+  // Sem os escondidos, que a mesa já recebe sem eles: aqui é o palco do
+  // mestre e a miniatura da lista, que têm a cena inteira. Ver `itensVisiveis`.
   const items = useMemo(
-    () => [...scene.items].sort((a, b) => a.z - b.z),
-    [scene.items],
+    () => [...itensVisiveis(scene.items, scene.grupos)].sort((a, b) => a.z - b.z),
+    [scene.items, scene.grupos],
   );
 
   /**
@@ -253,7 +256,7 @@ export function SceneLayer({
           cima dela é o que se conta. Por cima dos itens ela riscaria os
           personagens. */}
       {scene.grid ? (
-        <GridLayer grid={scene.grid} items={scene.items} />
+        <GridLayer grid={scene.grid} items={items} />
       ) : null}
 
       {/* Depois da grade e ANTES dos itens: a sombra de parede é chão. Ela

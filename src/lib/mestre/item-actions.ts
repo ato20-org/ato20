@@ -38,6 +38,7 @@ import {
   CONE_DA_LANTERNA,
   CORES_DA_LUZ,
   DOCUMENTO_FONTE,
+  itensVisiveis,
   POSTIT_FONTE,
   SCENE_HEIGHT,
   SCENE_WIDTH,
@@ -767,9 +768,12 @@ export function selectAllItems(): void {
   if (!scene) return;
 
   useSelectionStore.getState().selectMisto({
-    itens: scene.items.filter((item) => !item.locked).map((item) => item.id),
+    itens: itensVisiveis(scene.items, scene.grupos)
+      .filter((item) => !item.locked)
+      .map((item) => item.id),
     // O travado fica de fora, como a imagem travada sempre ficou: selecionar
-    // tudo é para mexer em tudo, e ele não se mexe.
+    // tudo é para mexer em tudo, e ele não se mexe. O escondido também: é o
+    // que o mapa não mostra, e o Delete logo depois o levaria junto.
     textos: (scene.textos ?? []).filter(livre).map((texto) => texto.id),
     formas: (scene.formas ?? []).filter(livre).map((forma) => forma.id),
     postits: (scene.postits ?? []).map((postit) => postit.id),
