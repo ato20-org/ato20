@@ -17,7 +17,12 @@ import { TransformHandles } from "@/components/playground/transform-handles";
 
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES, travarNoEixo } from "@/lib/geometry/transform";
-import { clampViewport, viewportZoom, zoomViewportCentered } from "@/lib/geometry/viewport";
+import {
+  ampliarCameraNoCentro,
+  clampCamera,
+  clampCameraPorEixo,
+  viewportZoom,
+} from "@/lib/geometry/viewport";
 import {
   alternarTransmissao,
   ZOOM_CAMERA_STEP,
@@ -188,7 +193,7 @@ export function CameraFrame({
       if (giro === 0) return;
 
       pedir(
-        zoomViewportCentered(
+        ampliarCameraNoCentro(
           cameraAtual.current,
           giro < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP,
           conteudo,
@@ -216,7 +221,7 @@ export function CameraFrame({
       const atual = cameraAtual.current;
 
       pedir(
-        clampViewport(
+        clampCamera(
           {
             ...atual,
             x: atual.x + (alvo.x - anterior.x),
@@ -507,22 +512,27 @@ export function CameraFrame({
         <TransformHandles
           box={{ ...camera, rotation: 0 }}
           rotatable={false}
-          // Só os cantos, e proporção travada por regra: um recorte fora de
-          // 16:9 faria cada visão letterboxar diferente, e o enquadramento
-          // deixaria de ser o que a mesa vê.
+          // Só os cantos, e SEM proporção travada: o canto é o gesto que muda
+          // o formato da câmera -- a torre em pé, o corredor deitado. A TV
+          // encaixa o que vier com tarja em volta. Com Shift o canto mantém a
+          // proporção que ela tem agora, como em todo item do palco: é o
+          // `TransformHandles` que lê a tecla. As bordas não ganham alça
+          // porque já são a faixa por onde a câmera arrasta.
           handles={CORNER_HANDLES}
-          keepAspect
           // A moldura já tem a própria borda.
           outline={false}
-          // Sem arredondar: `clampViewport` re-deriva a altura da largura, e o
-          // resíduo do arredondamento faria a moldura derivar meia unidade por
-          // gesto, sempre para o mesmo lado.
+          // Sem arredondar: com o Shift a altura sai da largura, e o resíduo do
+          // arredondamento faria a moldura derivar meia unidade por gesto,
+          // sempre para o mesmo lado.
           round={false}
           zIndex={HANDLES_Z}
           onGestureEnd={onGestureEnd}
+          // Cada eixo preso por si: o canto está mudando o formato, e escalar a
+          // câmera inteira no limite faria a largura crescer sozinha quando o
+          // mestre encolhe a altura. Ver `clampCameraPorEixo`.
           onChange={({ x, y, width, height }) =>
             onChange(
-              clampViewport(
+              clampCameraPorEixo(
                 {
                   x: x ?? camera.x,
                   y: y ?? camera.y,

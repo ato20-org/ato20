@@ -26,6 +26,7 @@ import {
   MousePointerSquareDashed,
   Plus,
   Radio,
+  RectangleHorizontal,
   ScanSearch,
   Scissors,
   Trash2,
@@ -72,7 +73,9 @@ import {
   mostrarCenaInteira,
   novaCamera,
   transmissaoDaCamera,
+  voltarAoFormatoDaMesa,
 } from "@/lib/mestre/camera-actions";
+import { temFormatoDaMesa } from "@/lib/geometry/viewport";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import {
@@ -755,6 +758,19 @@ function BlocoDaCamera({
         Ir até a câmera
         {selecionada ? <ContextMenuShortcut>Home</ContextMenuShortcut> : null}
       </ContextMenuItem>
+      {/* Só quando há o que desfazer: na câmera 16:9 o item não faria nada, e
+          um item que não faz nada ensina a não confiar no menu. */}
+      {temFormatoDaMesa(camera.viewport) ? null : (
+        <ContextMenuItem
+          onClick={() => {
+            selecionar(camera.id);
+            voltarAoFormatoDaMesa();
+          }}
+        >
+          <RectangleHorizontal />
+          Voltar a 16:9
+        </ContextMenuItem>
+      )}
 
       <ContextMenuSeparator />
 

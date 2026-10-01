@@ -28,6 +28,7 @@ import {
 } from "@/components/playground/quadro-mesa-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
 import type { EfeitoPedido, EfeitosDoPersonagem } from "@/lib/condicao";
+import { quadroDaMesa } from "@/lib/geometry/viewport";
 import type { Variante } from "@/lib/vault/assets";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { Ping } from "@/types/ping";
@@ -215,6 +216,16 @@ export function SceneLayer({
   );
 
   /**
+   * O espaço do retrato: o 16:9 da tela da mesa em volta da câmera, e não o
+   * recorte dela. Ver `quadroDaMesa`. Memoizado porque a `PortraitView` é
+   * `memo`, e uma caixa nova por render a redesenharia a cada quadro.
+   */
+  const telaDaMesa = useMemo(
+    () => (scene.camera ? quadroDaMesa(scene.camera) : undefined),
+    [scene.camera],
+  );
+
+  /**
    * O conteúdo desenha no plano DE BAIXO, e não onde ele foi escrito.
    *
    * Os dois planos existem para separar o que precisa de resolução -- mapa,
@@ -363,7 +374,7 @@ export function SceneLayer({
       {portraits && portraits.length > 0 ? (
         <PortraitLayer
           portraits={portraits}
-          camera={scene.camera}
+          camera={telaDaMesa}
           variant={variant}
           smooth={smooth}
           // Na mesa o retrato é OVERLAY: ninguém o manipula ali, e o que se

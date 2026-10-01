@@ -3,14 +3,24 @@ import { describe, expect, it } from "vitest";
 import type { Bounds } from "@/lib/geometry/bounds";
 import {
   AFASTAR_EXTRA,
+  ampliarCamera,
+  ampliarCameraNoCentro,
   cabeTudo,
+  centrarCameraEm,
+  clampCamera,
+  clampCameraPorEixo,
   clampViewport,
   comFolga,
+  formatoDentroDe,
   FULL_VIEWPORT,
   MAX_ZOOM,
   panViewport,
   PLANO,
+  proporcaoDe,
+  quadroDaMesa,
+  quadroNaTela,
   recorteNaTela,
+  temFormatoDaMesa,
   viewportQueCabe,
   viewportZoom,
   zoomViewport,
@@ -281,5 +291,286 @@ describe("recorteNaTela", () => {
     const caixa = recorteNaTela({ width: 0, height: 0 }, FULL_VIEWPORT, 0);
 
     expect(caixa).toEqual({ left: 0, top: 0, width: 0, height: 0 });
+  });
+});
+
+/** A torre em pé: metade da largura do plano, a altura inteira dele. */
+const emPe: Viewport = { x: 400, y: 0, width: 600, height: SCENE_HEIGHT };
+
+/** O corredor deitado: a largura inteira, um quarto da altura. */
+const deitado: Viewport = {
+  x: 0,
+  y: 300,
+  width: SCENE_WIDTH,
+  height: SCENE_HEIGHT / 4,
+};
+
+const MIN_HEIGHT = MIN_WIDTH * ASPECT;
+
+function centro(viewport: Viewport) {
+  return {
+    x: viewport.x + viewport.width / 2,
+    y: viewport.y + viewport.height / 2,
+  };
+}
+
+describe("a câmera tem formato próprio", () => {
+  const areas = [PLANO, vazouParaDireita, vazouParaEsquerda, torre];
+
+  it("dentro dos limites, sai do clamp como entrou", () => {
+    for (const camera of [emPe, deitado])
+      expect(clampCamera(camera)).toEqual(camera);
+  });
+
+  it("pequena demais, cresce inteira e mantém o formato", () => {
+    const miuda = { x: 500, y: 500, width: 30, height: 60 };
+    const presa = clampCamera(miuda);
+
+    expect(proporcaoDe(presa)).toBeCloseTo(proporcaoDe(miuda));
+    expect(presa.width).toBeCloseTo(MIN_WIDTH);
+    // Pelo centro: crescer não pode empurrar a câmera para um lado.
+    expect(centro(presa).x).toBeCloseTo(centro(miuda).x);
+    expect(centro(presa).y).toBeCloseTo(centro(miuda).y);
+  });
+
+  it("nunca passa dos limites em nenhum eixo, em formato nenhum", () => {
+    const proximo = sorteio(11);
+
+    for (const conteudo of areas)
+      for (let i = 0; i < 2_000; i++) {
+        const camera = {
+          x: (proximo() - 0.5) * 20_000,
+          y: (proximo() - 0.5) * 20_000,
+          width: 1 + proximo() * 20_000,
+          height: 1 + proximo() * 20_000,
+        };
+
+        for (const prender of [clampCamera, clampCameraPorEixo]) {
+          const { width, height } = prender(camera, conteudo);
+          const encaixe = viewportQueCabe(conteudo);
+
+          expect(width).toBeGreaterThanOrEqual(MIN_WIDTH - 1e-9);
+          expect(height).toBeGreaterThanOrEqual(MIN_HEIGHT - 1e-9);
+          expect(width).toBeLessThanOrEqual(
+            encaixe.width * AFASTAR_EXTRA + 1e-6,
+          );
+          expect(height).toBeLessThanOrEqual(
+            encaixe.height * AFASTAR_EXTRA + 1e-6,
+          );
+        }
+      }
+  });
+
+  it("prender uma câmera já presa não a move de novo", () => {
+    const proximo = sorteio(13);
+
+    for (const conteudo of areas)
+      for (let i = 0; i < 500; i++) {
+        const uma = clampCamera(
+          {
+            x: (proximo() - 0.5) * 20_000,
+            y: (proximo() - 0.5) * 20_000,
+            width: 1 + proximo() * 20_000,
+            height: 1 + proximo() * 20_000,
+          },
+          conteudo,
+        );
+
+        expect(clampCamera(uma, conteudo)).toEqual(uma);
+        expect(clampCameraPorEixo(uma, conteudo)).toEqual(uma);
+      }
+  });
+
+  it("pelo canto, o eixo que bate no piso para e o outro não se mexe", () => {
+    // O mestre encolhe a altura do corredor até o fim. A largura é dele, e
+    // não pode crescer sozinha para manter uma proporção que ele está mudando.
+    const achatado = clampCameraPorEixo({ ...deitado, height: 5 });
+
+    expect(achatado.height).toBeCloseTo(MIN_HEIGHT);
+    expect(achatado.width).toBe(deitado.width);
+  });
+
+  it("aproxima mantendo o formato, e para quando um eixo chega ao piso", () => {
+    for (const camera of [emPe, deitado]) {
+      const fundo = ampliarCameraNoCentro(camera, 1e6);
+
+      expect(proporcaoDe(fundo)).toBeCloseTo(proporcaoDe(camera));
+      // A torre bate pela largura; o corredor, pela altura.
+      expect(
+        Math.min(fundo.width / MIN_WIDTH, fundo.height / MIN_HEIGHT),
+      ).toBeCloseTo(1);
+    }
+  });
+
+  it("afasta mantendo o formato, e para quando um eixo chega ao teto", () => {
+    for (const camera of [emPe, deitado]) {
+      const longe = ampliarCameraNoCentro(camera, 1e-6);
+      const encaixe = viewportQueCabe(PLANO);
+
+      expect(proporcaoDe(longe)).toBeCloseTo(proporcaoDe(camera));
+      expect(
+        Math.max(
+          longe.width / (encaixe.width * AFASTAR_EXTRA),
+          longe.height / (encaixe.height * AFASTAR_EXTRA),
+        ),
+      ).toBeCloseTo(1);
+    }
+  });
+
+  it("aproxima com a âncora parada", () => {
+    const ancora = { x: 500, y: 700 };
+    const perto = ampliarCamera(emPe, 2, ancora);
+
+    expect((ancora.x - perto.x) / perto.width).toBeCloseTo(
+      (ancora.x - emPe.x) / emPe.width,
+    );
+    expect((ancora.y - perto.y) / perto.height).toBeCloseTo(
+      (ancora.y - emPe.y) / emPe.height,
+    );
+  });
+
+  it("recentrar não muda tamanho nem formato", () => {
+    const ali = centrarCameraEm(deitado, { x: 900, y: 500 });
+
+    expect(ali.width).toBe(deitado.width);
+    expect(ali.height).toBe(deitado.height);
+    expect(centro(ali)).toEqual({ x: 900, y: 500 });
+  });
+
+  it("enquadra uma caixa no formato pedido, com a caixa inteira dentro", () => {
+    const caixa: Bounds = { minX: 100, minY: 100, maxX: 300, maxY: 900 };
+    const enquadrado = viewportQueCabe(caixa, proporcaoDe(deitado));
+
+    expect(proporcaoDe(enquadrado)).toBeCloseTo(proporcaoDe(deitado));
+    expect(enquadrado.x).toBeLessThanOrEqual(caixa.minX);
+    expect(enquadrado.y).toBeLessThanOrEqual(caixa.minY);
+    expect(enquadrado.x + enquadrado.width).toBeGreaterThanOrEqual(caixa.maxX);
+    expect(enquadrado.y + enquadrado.height).toBeGreaterThanOrEqual(
+      caixa.maxY,
+    );
+  });
+
+  it("enquadrar uma caixa minúscula não desce do piso no eixo curto", () => {
+    // Sem o piso da altura, o corredor sairia mais fino que o MAX_ZOOM deixa,
+    // e o clamp depois o esticaria -- mudando o formato.
+    const ponto: Bounds = { minX: 500, minY: 500, maxX: 501, maxY: 501 };
+    const enquadrado = viewportQueCabe(ponto, proporcaoDe(deitado));
+
+    expect(enquadrado.height).toBeGreaterThanOrEqual(MIN_HEIGHT - 1e-9);
+    expect(clampCamera(enquadrado)).toEqual(enquadrado);
+  });
+
+  it("lê a ampliação pelo eixo que aperta", () => {
+    // A torre com a altura do plano mostra o plano em escala um numa TV 16:9.
+    expect(viewportZoom(emPe)).toBeCloseTo(1);
+    expect(viewportZoom(deitado)).toBeCloseTo(1);
+    expect(viewportZoom(FULL_VIEWPORT)).toBe(1);
+  });
+});
+
+describe("trazer a câmera para o palco", () => {
+  const palco = clampViewport({ x: 200, y: 100, width: 960, height: 0 });
+
+  it("a câmera 16:9 recebe o palco ele mesmo", () => {
+    expect(formatoDentroDe(palco, ASPECT)).toBe(palco);
+  });
+
+  it("a câmera em pé encosta em cima e embaixo, centrada nos lados", () => {
+    const dentro = formatoDentroDe(palco, proporcaoDe(emPe));
+
+    expect(dentro.height).toBeCloseTo(palco.height);
+    expect(proporcaoDe(dentro)).toBeCloseTo(proporcaoDe(emPe));
+    expect(centro(dentro).x).toBeCloseTo(centro(palco).x);
+    expect(centro(dentro).y).toBeCloseTo(centro(palco).y);
+  });
+
+  it("o corredor encosta nos lados, centrado em cima e embaixo", () => {
+    const dentro = formatoDentroDe(palco, proporcaoDe(deitado));
+
+    expect(dentro.width).toBeCloseTo(palco.width);
+    expect(centro(dentro).y).toBeCloseTo(centro(palco).y);
+  });
+});
+
+describe("quadroDaMesa", () => {
+  it("devolve a câmera 16:9 ela mesma, e não uma cópia", () => {
+    // O retrato é `memo`; uma caixa nova por render o redesenharia a 10 Hz.
+    const camera = clampViewport({ x: 10, y: 20, width: 800, height: 0 });
+
+    expect(temFormatoDaMesa(camera)).toBe(true);
+    expect(quadroDaMesa(camera)).toBe(camera);
+  });
+
+  it("é o menor 16:9 que contém a câmera, com o mesmo centro", () => {
+    for (const camera of [emPe, deitado]) {
+      const quadro = quadroDaMesa(camera);
+
+      expect(temFormatoDaMesa(quadro)).toBe(true);
+      expect(centro(quadro).x).toBeCloseTo(centro(camera).x);
+      expect(centro(quadro).y).toBeCloseTo(centro(camera).y);
+      // Encosta no eixo que aperta, e sobra no outro.
+      expect(
+        Math.max(
+          camera.width / quadro.width,
+          camera.height / quadro.height,
+        ),
+      ).toBeCloseTo(1);
+    }
+  });
+
+  it("devolver a câmera ao 16:9 não tira nada do que a mesa via", () => {
+    const quadro = quadroDaMesa(emPe);
+
+    expect(quadro.x).toBeLessThanOrEqual(emPe.x);
+    expect(quadro.x + quadro.width).toBeGreaterThanOrEqual(
+      emPe.x + emPe.width,
+    );
+    expect(quadro.height).toBeCloseTo(emPe.height);
+  });
+});
+
+describe("quadroNaTela", () => {
+  const moldura = { width: 1920, height: 1080 };
+  const escala = (viewport: Viewport) =>
+    Math.min(moldura.width / viewport.width, moldura.height / viewport.height);
+
+  it("com a câmera 16:9, é o próprio recorte", () => {
+    const camera = clampViewport({ x: 300, y: 200, width: 700, height: 0 });
+    const recorte = recorteNaTela(moldura, camera, escala(camera));
+    const quadro = quadroNaTela(moldura);
+
+    expect(quadro.left).toBeCloseTo(recorte.left);
+    expect(quadro.top).toBeCloseTo(recorte.top);
+    expect(quadro.width).toBeCloseTo(recorte.width);
+    expect(quadro.height).toBeCloseTo(recorte.height);
+  });
+
+  it("com a câmera em pé, contém o recorte e sobra dos lados", () => {
+    // É o espaço do retrato: ele fica sobre a tarja, e não em cima da torre.
+    const recorte = recorteNaTela(moldura, emPe, escala(emPe));
+    const quadro = quadroNaTela(moldura);
+
+    expect(quadro.width).toBeGreaterThan(recorte.width);
+    expect(quadro.left).toBeLessThan(recorte.left);
+    expect(quadro.height).toBeCloseTo(recorte.height);
+  });
+
+  it("numa moldura fora de 16:9, letterboxa como o recorte de sempre", () => {
+    const alta = { width: 1000, height: 800 };
+    const quadro = quadroNaTela(alta);
+
+    expect(quadro.left).toBeCloseTo(0);
+    expect(quadro.width).toBeCloseTo(alta.width);
+    expect(quadro.height).toBeCloseTo(alta.width * ASPECT);
+    expect(quadro.top).toBeCloseTo((alta.height - quadro.height) / 2);
+  });
+
+  it("moldura ainda não medida devolve caixa sem área", () => {
+    expect(quadroNaTela({ width: 0, height: 0 })).toEqual({
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+    });
   });
 });
