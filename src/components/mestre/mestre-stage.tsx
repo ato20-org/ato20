@@ -65,6 +65,7 @@ import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { efeitosDaCena } from "@/lib/condicao";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
+import { transmissaoDaCamera } from "@/lib/mestre/camera-actions";
 import {
   anotarPonteiro,
   esquecerPonteiro,
@@ -562,6 +563,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const selecionada = temCamera(scene)
     ? scene.cameras?.find((camera) => camera.id === selecionadaId)
     : undefined;
+  // Um booleano, e não o id: o palco só acorda quando ESTA cena entra ou sai.
+  const cenaNoAr = useSceneStore(
+    (state) => state.board?.liveSceneId === cenaDoBoard.id,
+  );
 
   // Cena nova começa sem câmera; a selecionada, se houver, tem de existir nela.
   // Efeito e não render: cria câmera no store, e isso é escrita.
@@ -3568,7 +3573,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       {selecionada && !espelhoMestre ? (
         <CameraFrame
           camera={selecionada}
-          transmitindo={scene.cameraNoArId === selecionada.id}
+          transmissao={transmissaoDaCamera(scene, selecionada.id, cenaNoAr)}
           cinegrafista={cinegrafista}
           // Com espaço segurado a moldura vira só informativa: o gesto pertence
           // ao deslocamento da cena.

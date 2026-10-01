@@ -135,6 +135,25 @@ export function alternarTransmissao(): void {
     );
 }
 
+/**
+ * Em que pé uma câmera está com a mesa: no ar, PREPARADA, ou nenhum dos dois.
+ *
+ * `cameraNoArId` é da cena, e continua gravado com a cena fora do ar: é a
+ * câmera com que a mesa abre quando o mestre puser o mapa no ar. Até lá ela
+ * está preparada, e o vermelho dizia que a TV mostrava o que ela não mostra.
+ * Vermelho é só o que a mesa vê agora; preparada é amarelo.
+ */
+export type Transmissao = "no-ar" | "preparada" | null;
+
+export function transmissaoDaCamera(
+  scene: Scene,
+  cameraId: string | undefined,
+  cenaNoAr: boolean,
+): Transmissao {
+  if (!cameraId || scene.cameraNoArId !== cameraId) return null;
+  return cenaNoAr ? "no-ar" : "preparada";
+}
+
 /** Tira qualquer câmera do ar: a mesa volta a ver a cena inteira. */
 export function mostrarCenaInteira(): void {
   const scene = lerCena();
