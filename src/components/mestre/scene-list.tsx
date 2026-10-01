@@ -235,6 +235,34 @@ function ListaDeCenas({
     );
   }
 
+  function abrir(sceneId: string) {
+    // Abrir uma cena volta ao palco, se havia nota aberta.
+    fecharNota();
+    setEditingSceneId(sceneId);
+    // Seleção é por cena: manter itens da cena anterior
+    // selecionados deixaria o gizmo apontando pro vazio.
+    clearSelection();
+    // Zoom também: o recorte de um mapa não diz nada sobre o outro.
+    fitViewport();
+  }
+
+  /**
+   * Pôr no ar leva o mestre junto: a mesa passa a ver esta cena, e ele também.
+   *
+   * Era "sem sair do que tu edita", e transmitir pedia um segundo toque para
+   * abrir: o que acabou de ir para a TV é o que o mestre precisa ter na mão.
+   * Preparar a próxima cena enquanto a mesa vê a atual continua possível pelo
+   * outro lado: abrir sem transmitir.
+   *
+   * Já aberta, só fecha a nota que cobria o palco: abrir de novo limparia a
+   * seleção e o zoom de quem só pôs no ar o que estava editando.
+   */
+  function transmitir(sceneId: string) {
+    if (sceneId === editingSceneId) fecharNota();
+    else abrir(sceneId);
+    setLiveSceneId(sceneId);
+  }
+
   return (
     <>
       {/* Redondo e à direita, como nos outros painéis: de largura cheia ele
@@ -285,17 +313,8 @@ function ListaDeCenas({
               renaming={renamingId === scene.id}
               onRename={() => setRenamingId(scene.id)}
               onRenameDone={() => setRenamingId(null)}
-              onGoLive={() => setLiveSceneId(scene.id)}
-              onOpen={() => {
-                // Abrir uma cena volta ao palco, se havia nota aberta.
-                fecharNota();
-                setEditingSceneId(scene.id);
-                // Seleção é por cena: manter itens da cena anterior
-                // selecionados deixaria o gizmo apontando pro vazio.
-                clearSelection();
-                // Zoom também: o recorte de um mapa não diz nada sobre o outro.
-                fitViewport();
-              }}
+              onGoLive={() => transmitir(scene.id)}
+              onOpen={() => abrir(scene.id)}
             />
           ))}
         </ul>
@@ -570,7 +589,8 @@ function SceneRow({
                 />
                 <TooltipContent>
                   <p className="max-w-48">
-                    Passa a mesa para este mapa, sem sair do que tu edita.
+                    Abre este {NOME_DO_TIPO[scene.tipo ?? "mapa"].toLowerCase()}{" "}
+                    e passa a mesa para ele.
                   </p>
                 </TooltipContent>
               </Tooltip>
