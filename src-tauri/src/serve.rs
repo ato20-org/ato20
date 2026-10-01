@@ -140,6 +140,14 @@ const MOVIMENTOS_BUFFER: usize = 64;
 /// buffer e folgado.
 const ACOES_BUFFER: usize = 64;
 
+/// Quantos pings cabem no canal antes de a janela ler.
+///
+/// Ping e gesto, como a acao: um por toque, e o dedo leva quase meio segundo
+/// so para abrir a roda. Trinta e dois e a mesa inteira apontando ao mesmo
+/// tempo com folga; perder um e perder um "olha aqui", e quem apontou aponta
+/// de novo.
+const PINGS_BUFFER: usize = 32;
+
 /// O maior corpo de uma acao. `dados` e o que o plugin pos no botao, e um
 /// botao nao carrega um mapa.
 const ACAO_MAX_BYTES: usize = 8 * 1024;
@@ -257,6 +265,10 @@ pub struct Daemon {
     /// ordem, e quem conecta nao perde nem recebe duas vezes a linha escrita no
     /// meio da conexao.
     fio: Mutex<()>,
+    /// Os pings que os jogadores marcam no mapa, a caminho da janela do
+    /// mestre. Evento, como a rolagem: sem par guardado, e quem decide quanto
+    /// tempo o ping fica na mesa e o Mestre, que o republica no quadro.
+    pings_tx: broadcast::Sender<String>,
     /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
     evidence: SharedEvidence,
     /// Onde estao os livros de regras desta maquina.
@@ -291,6 +303,7 @@ impl Daemon {
         let (movimentos_tx, _) = broadcast::channel(MOVIMENTOS_BUFFER);
         let (acoes_tx, _) = broadcast::channel(ACOES_BUFFER);
         let (fio_tx, _) = broadcast::channel(FIO_BUFFER);
+        let (pings_tx, _) = broadcast::channel(PINGS_BUFFER);
 
         Self {
             vault,
@@ -307,6 +320,7 @@ impl Daemon {
             acoes_tx,
             fio_tx,
             fio: Mutex::new(()),
+            pings_tx,
             evidence: Arc::new(RwLock::new(None)),
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
@@ -555,6 +569,7 @@ pub fn router(state: Arc<Daemon>) -> Router {
                 require_token,
             )),
         )
+        .route("/sala/pings", get(pings))
         .nest("/eu", player_routes(Arc::clone(&state)))
         .route(
             "/sala/publicar",
@@ -645,6 +660,9 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
                 .post(fala_do_jogador)
                 .layer(DefaultBodyLimit::max(MENSAGEM_MAX_BYTES)),
         )
+        // O ping no mapa. Sem `ligado`: apontar e de quem esta na mesa, tenha
+        // personagem ou nao -- ver `ping`.
+        .route("/pings", post(ping))
         // A metade PUBLICA do que os plugins guardaram neste personagem.
         .route("/personagens/{id}/extensoes", get(character_extensoes))
         // Personagens: so os VINCULADOS a este jogador. Token valido nao basta,
@@ -1905,6 +1923,119 @@ async fn moves(
         tokio_stream::wrappers::BroadcastStream::new(receiver).filter_map(|item| item.ok());
 
     Ok(Sse::new(updates.map(|movimento| Ok(Event::default().data(movimento))))
+        .keep_alive(KeepAlive::default()))
+}
+
+// --- os pings -----------------------------------------------------------------
+
+/// Os tipos de ping que existem. A mesma lista de `TIPOS_DE_PING` em
+/// `types/ping.ts`: e o que cada tela sabe desenhar, e um tipo fora dela seria
+/// um icone que nenhuma tela tem.
+const TIPOS_DE_PING: [&str; 6] = ["olhe", "perigo", "alerta", "atacar", "ir", "duvida"];
+
+/// O que o celular manda: que ping, em que cena, onde. `x` e `y` sao o ponto
+/// marcado, em unidades de cena.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PingBody {
+    tipo: String,
+    cena_id: String,
+    x: f64,
+    y: f64,
+}
+
+/// Um ping de jogador, como viaja ate a janela do mestre -- e dela, sem mudar
+/// de forma, ate o quadro publicado.
+///
+/// `autor_id` e `autor` vem do TOKEN, como na rolagem: ninguem aponta em nome
+/// de outro, e o nome que a TV escreve embaixo do icone e o que o jogador
+/// escolheu ao entrar.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ping {
+    id: String,
+    tipo: String,
+    cena_id: String,
+    x: f64,
+    y: f64,
+    autor_id: String,
+    autor: String,
+    quando: i64,
+}
+
+/// `POST /eu/pings` -- o jogador aponta um lugar do mapa para a mesa.
+///
+/// Atras do token, mas SEM `ligado`: o ping nao mexe em nada de personagem
+/// nenhum, e o jogador que ainda nao ganhou ficha tambem tem o que apontar --
+/// "tem uma porta ali". O que o daemon confere e so a forma: tipo conhecido,
+/// ponto dentro do que uma tela desenha, cena com id de tamanho sensato.
+///
+/// A cena vem do celular e nao e conferida aqui, pelo motivo do movimento: o
+/// board nao e do daemon. Quem compara com a cena que esta sendo desenhada e
+/// cada tela, que so mostra o ping da cena que ela tem.
+///
+/// Devolve o ping montado, com o id: e o que deixa o celular reconhecer o
+/// proprio ping quando ele voltar pelo quadro.
+async fn ping(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    axum::Json(body): axum::Json<PingBody>,
+) -> Response {
+    if !TIPOS_DE_PING.contains(&body.tipo.as_str()) {
+        return fail(StatusCode::BAD_REQUEST, "este ping nao existe");
+    }
+
+    let fora = |v: f64| !v.is_finite() || v.abs() > COORDENADA_MAX;
+    if fora(body.x) || fora(body.y) {
+        return fail(StatusCode::BAD_REQUEST, "ponto fora do mapa");
+    }
+
+    if body.cena_id.is_empty() || body.cena_id.len() > ID_MAX {
+        return fail(StatusCode::BAD_REQUEST, "cena invalida");
+    }
+
+    let ping = Ping {
+        id: uuid::Uuid::new_v4().to_string(),
+        tipo: body.tipo,
+        cena_id: body.cena_id,
+        x: body.x,
+        y: body.y,
+        autor_id: player.id,
+        autor: player.nome,
+        quando: crate::vault::now_ms(),
+    };
+
+    let corpo = match serde_json::to_string(&ping) {
+        Ok(corpo) => corpo,
+        Err(cause) => {
+            log::error!("ping: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao anunciar o ping");
+        }
+    };
+
+    // Sem receptor = janela do mestre fechada, e o ping nao chega a mesa. O
+    // celular nao trata isso como erro: a mesa muda ja aparece na tela dele.
+    let _ = state.pings_tx.send(corpo);
+
+    (StatusCode::CREATED, axum::Json(ping)).into_response()
+}
+
+/// `GET /sala/pings` -- o fluxo de pings, para a janela do mestre. Loopback e
+/// sem replay, como as rolagens: a TV e os celulares veem o ping no quadro, e
+/// uma janela que reabre nao quer o "olha aqui" de um minuto atras.
+async fn pings(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
+    if !addr.ip().is_loopback() {
+        return Err(fail(StatusCode::FORBIDDEN, "os pings sao desta maquina"));
+    }
+
+    let receiver = state.pings_tx.subscribe();
+    let updates =
+        tokio_stream::wrappers::BroadcastStream::new(receiver).filter_map(|item| item.ok());
+
+    Ok(Sse::new(updates.map(|ping| Ok(Event::default().data(ping))))
         .keep_alive(KeepAlive::default()))
 }
 
@@ -5759,6 +5890,88 @@ mod tests {
         let fio = fio_do_mestre_agora(&state).await;
         assert_eq!(fio.len(), 1);
         assert_eq!(fio[0]["autor"]["nome"], "Edgar");
+    }
+
+    // --- os pings ------------------------------------------------------------
+
+    fn corpo_de_ping(tipo: &str, x: f64) -> String {
+        serde_json::json!({ "tipo": tipo, "cenaId": "cena-1", "x": x, "y": 40.0 }).to_string()
+    }
+
+    #[tokio::test]
+    async fn pingar_exige_credencial_de_jogador() {
+        let (_dir, state, _codigo) = daemon();
+
+        let response = router(state)
+            .oneshot(
+                HttpRequest::builder()
+                    .method("POST")
+                    .uri("/eu/pings")
+                    .header("content-type", "application/json")
+                    .body(Body::from(corpo_de_ping("olhe", 10.0)))
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn ping_que_nao_existe_ou_fora_do_mapa_e_recusado() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        for corpo in [
+            corpo_de_ping("foguete", 10.0),
+            corpo_de_ping("olhe", 1e12),
+            serde_json::json!({ "tipo": "olhe", "cenaId": "", "x": 1.0, "y": 1.0 }).to_string(),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&token, "POST", "/eu/pings", Some(&corpo)))
+                .await
+                .expect("resposta");
+
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{corpo}");
+        }
+    }
+
+    #[tokio::test]
+    async fn o_ping_sai_assinado_e_chega_a_janela() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+        let mut janela = state.pings_tx.subscribe();
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token, "POST", "/eu/pings", Some(&corpo_de_ping("perigo", 120.0))))
+            .await
+            .expect("resposta");
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let chegou: serde_json::Value =
+            serde_json::from_str(&janela.try_recv().expect("o ping chegou")).expect("json");
+
+        // O autor vem do token, e nao do corpo.
+        assert_eq!(chegou["autor"], "Edgar");
+        assert_eq!(chegou["tipo"], "perigo");
+        assert_eq!(chegou["cenaId"], "cena-1");
+        assert_eq!(chegou["x"], 120.0);
+    }
+
+    #[tokio::test]
+    async fn o_fluxo_de_pings_e_desta_maquina() {
+        let (_dir, state, _codigo) = daemon();
+
+        let recusado = router(Arc::clone(&state))
+            .oneshot(from_ip(
+                HttpRequest::builder().uri("/sala/pings").body(Body::empty()).expect("request"),
+                "192.168.7.99",
+            ))
+            .await
+            .expect("resposta");
+
+        assert_eq!(recusado.status(), StatusCode::FORBIDDEN);
     }
 
     // --- o token do jogador -------------------------------------------------

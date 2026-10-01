@@ -44,3 +44,11 @@ export function ponteiroNaCena(): Ponto | null {
   if (!naTela || !conversor) return null;
   return conversor(naTela.clientX, naTela.clientY);
 }
+
+/**
+ * Onde o mouse está, em pixel de TELA, ou `null` fora do palco. Para quem
+ * desenha controle na tela no lugar do cursor -- a roda de pings do `'`.
+ */
+export function ponteiroNaTela(): { x: number; y: number } | null {
+  return naTela ? { x: naTela.clientX, y: naTela.clientY } : null;
+}

@@ -305,6 +305,7 @@ function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
         fichas={live.fichas}
         efeitos={live.efeitos}
         rolagens={live.rolagens}
+        pings={live.pings}
         synced={live.synced}
         stalled={live.stalled}
       />
@@ -386,6 +387,7 @@ function StackedLayout({ codigo, live, emCena }: LayoutProps) {
           fichas={live.fichas}
           efeitos={live.efeitos}
           rolagens={live.rolagens}
+          pings={live.pings}
           synced={live.synced}
           stalled={live.stalled}
         />

@@ -37,6 +37,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
     efeitos,
     spotlight,
     rolagens,
+    pings,
     declarativoVersao,
     synced,
     stalled,
@@ -66,6 +67,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
               fichas={fichas}
               efeitos={efeitos}
               rolagens={rolagens}
+              pings={pings}
               smooth
             />
           </div>

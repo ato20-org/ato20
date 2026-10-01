@@ -14,6 +14,7 @@ import { useFullscreen } from "@/hooks/use-fullscreen";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { Ping } from "@/types/ping";
 import type { FichaNaCena, Portrait, Scene } from "@/types/scene";
 
 /**
@@ -45,6 +46,7 @@ export function JogadorStage({
   fichas,
   efeitos,
   rolagens,
+  pings,
   synced,
   stalled,
 }: {
@@ -64,6 +66,8 @@ export function JogadorStage({
    * que confirma que a mesa recebeu a jogada.
    */
   rolagens: RolagemDaMesa[];
+  /** Os pings da mesa. Ver `LiveState.pings`. */
+  pings: Ping[];
   synced: boolean;
   stalled: boolean;
 }) {
@@ -77,7 +81,9 @@ export function JogadorStage({
       <div
         ref={frameRef}
         className={cn(
-          "relative overflow-hidden bg-black",
+          // Sem seleção de texto e sem o balão do iOS: segurar o dedo no mapa
+          // é abrir os pings. Ver `RodaDePing`.
+          "relative overflow-hidden bg-black select-none [-webkit-touch-callout:none]",
           expanded
             ? // Cobre a viewport por CSS, o que funciona mesmo onde a API
               // nativa de tela cheia não existe.
@@ -105,6 +111,7 @@ export function JogadorStage({
                 fichas={fichas}
                 efeitos={efeitos}
                 rolagens={rolagens}
+                pings={pings}
               />
             </div>
           ) : null}

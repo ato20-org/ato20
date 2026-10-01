@@ -1,5 +1,6 @@
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { Ping } from "@/types/ping";
 import type {
   Ambiente,
   Disparo,
@@ -128,6 +129,18 @@ export type LiveState = {
    * depois de ela cair. Não é histórico; histórico é dele e não viaja.
    */
   rolagens: RolagemDaMesa[];
+  /**
+   * Os pings no mapa: alguém da mesa apontando um lugar. Ver `Ping`.
+   *
+   * Nasce como as `rolagens` -- no celular, passando pelo daemon e por esta
+   * janela -- ou na própria janela, quando quem aponta é o mestre. Lista curta
+   * e efêmera: o Mestre tira cada um cinco segundos depois de nascer, e quem
+   * recebe desenha só os da cena que tem na tela.
+   *
+   * Opcional: um quadro de uma versão anterior não a traz, e quem recebe lê a
+   * ausência como mapa sem ping.
+   */
+  pings?: Ping[];
 };
 
 /**

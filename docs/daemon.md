@@ -21,6 +21,7 @@ GET   /sala/mensagens          o fio da campanha inteiro, em SSE; loopback
 POST  /sala/mensagens          o Mestre (ou um plugin, pela janela) escreve no fio; token + loopback
 DELETE /sala/mensagens/{id}    o Mestre apaga uma linha do fio; token + loopback
 GET   /sala/movimentos         os tokens que os jogadores arrastaram, em SSE; loopback
+GET   /sala/pings              os pings que os jogadores marcaram no mapa, em SSE; loopback
 POST  /sala/publicar           o Mestre anuncia; token + loopback
 GET   /debug/palco             o que as telas mediram de si; loopback
 POST  /debug/palco

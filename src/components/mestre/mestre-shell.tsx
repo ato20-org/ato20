@@ -52,6 +52,7 @@ import { useJanelaDeRolagens } from "@/hooks/use-janela-de-rolagens";
 import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
 import { useFioDaMesa } from "@/hooks/use-fio-da-mesa";
 import { useJanelaDoChat } from "@/hooks/use-janela-do-chat";
+import { usePingsDaMesa } from "@/hooks/use-pings-da-mesa";
 import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
 import { useAcoesDaMesa } from "@/hooks/use-acoes-da-mesa";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
@@ -84,6 +85,7 @@ import {
   useSceneStore,
 } from "@/lib/store/use-scene-store";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
+import { usePingsStore } from "@/lib/store/use-pings-store";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
@@ -227,6 +229,16 @@ export function MestreShell() {
 
   const spotlight = useSpotlightStore((state) => state.spotlight);
   const rolagens = useRolagensStore((state) => state.bandeja);
+  const todosOsPings = usePingsStore((state) => state.ativos);
+  // Só os da cena NO AR viajam: o ping que o mestre marca no mapa que está
+  // montando é dele, e a mesa não tem esse mapa para desenhá-lo. Cada tela
+  // ainda filtra pela cena que tem -- ver `SceneLayer.pings` --, mas o que não
+  // vai ser desenhado não precisa atravessar a rede.
+  const cenaNoArId = cenaParaMesa?.id;
+  const pings = useMemo(
+    () => todosOsPings.filter((ping) => ping.cenaId === cenaNoArId),
+    [todosOsPings, cenaNoArId],
+  );
   // Só o número viaja no quadro; o conjunto vai por `/sala/declarativo`.
   const declarativoVersao = useDeclarativoStore((state) => state.versao);
   // O contador do elenco, para o celular saber quando reler a ficha.
@@ -283,6 +295,7 @@ export function MestreShell() {
       declarativoVersao,
       fichasVersao,
       rolagens,
+      pings,
     },
     // `null` é "o índice de personagens ainda não foi lido", e não "a campanha
     // não tem personagem" -- ver `useCharactersStore`. A diferença importa
@@ -310,6 +323,8 @@ export function MestreShell() {
   // O outro sentido do fluxo: o que os celulares jogam na mesa. Só esta janela
   // escuta -- a rota é de loopback. Ver `useRolagensDaMesa`.
   useRolagensDaMesa();
+  // E os pings que eles marcam no mapa. Mesmo cano. Ver `usePingsDaMesa`.
+  usePingsDaMesa();
   // E os tokens que eles arrastam. Mesma rota de loopback, mesmo desenho: o
   // celular pede, esta janela confere e move. Ver `useMovimentosDaMesa`.
   useMovimentosDaMesa();

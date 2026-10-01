@@ -18,6 +18,7 @@ import {
   type PontaDoMedidor,
 } from "@/components/playground/regua-layer";
 import { InfoDoToken } from "@/components/playground/info-do-token";
+import { PingLayer } from "@/components/playground/ping-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { SombraLayer } from "@/components/playground/sombra-layer";
 import {
@@ -29,6 +30,7 @@ import { TracoLayer } from "@/components/playground/traco-layer";
 import type { EfeitoPedido, EfeitosDoPersonagem } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { Ping } from "@/types/ping";
 import {
   ehQuadro,
   type CanvasItem,
@@ -112,6 +114,12 @@ type SceneLayerProps = {
    */
   rolagens?: RolagemDaMesa[];
   /**
+   * Os pings da mesa. Vêm de TODAS as cenas -- quem filtra pela que está sendo
+   * desenhada é esta camada, para nenhuma tela esquecer de filtrar. Ver
+   * `Ping.cenaId`.
+   */
+  pings?: Ping[];
+  /**
    * Nome e medidores para desenhar sobre a cabeça dos tokens.
    *
    * Vazia com o interruptor da cena desligado, e é assim que ela chega às telas
@@ -168,6 +176,7 @@ export function SceneLayer({
   variante,
   portraits,
   rolagens,
+  pings,
   fichas,
   efeitos,
   onItemPointerDown,
@@ -198,6 +207,11 @@ export function SceneLayer({
         (efeitos ?? []).map((atual) => [atual.personagemId, atual.efeitos]),
       ),
     [efeitos],
+  );
+
+  const pingsDaCena = useMemo(
+    () => (pings ?? []).filter((ping) => ping.cenaId === scene.id),
+    [pings, scene.id],
   );
 
   /**
@@ -341,6 +355,10 @@ export function SceneLayer({
       {fichas && fichas.length > 0 ? (
         <InfoDoToken itens={items} fichas={fichas} />
       ) : null}
+
+      {/* Por cima de tudo que é do mapa -- névoa, medidor, nome --, e embaixo
+          do retrato, que é HUD. Ver `PingLayer`. */}
+      <PingLayer pings={pingsDaCena} />
 
       {portraits && portraits.length > 0 ? (
         <PortraitLayer
