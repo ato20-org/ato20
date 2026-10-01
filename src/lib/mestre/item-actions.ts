@@ -62,6 +62,7 @@ import type {
   Forma,
   ItemDraft,
   Luz,
+  ModoDaSombra,
   NewFogRegion,
   NewForma,
   NewLuz,
@@ -72,9 +73,11 @@ import type {
   Parede,
   Postit,
   Scene,
+  SombraDoItem,
   Texto,
   Traco,
 } from "@/types/scene";
+import { sombraParaGravar } from "@/lib/geometry/sombra";
 
 /** Deslocamento do "colar" e do "duplicar", para a cópia não sumir sob o original. */
 export const PASTE_OFFSET = 32;
@@ -288,6 +291,10 @@ function offsetDraft(item: CanvasItem): ItemDraft {
     flipX: item.flipX,
     flipY: item.flipY,
     opacity: item.opacity,
+    // A cópia do caixote vista de cima continua vista de cima, e a do boneco
+    // com a linha do chão posta continua pisando no mesmo lugar.
+    semSombra: item.semSombra,
+    sombra: item.sombra,
   };
 }
 
@@ -909,6 +916,67 @@ export function setSelectionOpacity(opacity: number): void {
   useSceneStore.getState().updateItems(
     scene.id,
     selectedItems.map((item) => ({ id: item.id, patch })),
+  );
+}
+
+/**
+ * O que o gizmo pede da sombra: trocar de jeito, mexer na linha do chão ou na
+ * altura. Campo ausente fica como está.
+ *
+ * `nenhuma` é o interruptor de sempre (`semSombra`), e não um terceiro modo: o
+ * jeito de deitar continua gravado embaixo dele, e escolher um dos dois de
+ * novo devolve a sombra como ela era.
+ */
+export type PedidoDeSombra = {
+  modo?: ModoDaSombra | "nenhuma";
+  /** `null` devolve a linha do chão ao forno. */
+  base?: number | null;
+  altura?: number;
+};
+
+/** O patch que um pedido de sombra faz neste item. Ver `PedidoDeSombra`. */
+export function patchDaSombra(
+  item: Pick<CanvasItem, "sombra" | "semSombra">,
+  pedido: PedidoDeSombra,
+): Pick<CanvasItem, "sombra" | "semSombra"> {
+  const atual: SombraDoItem = item.sombra ?? { modo: "base" };
+  const modo =
+    pedido.modo === undefined || pedido.modo === "nenhuma"
+      ? atual.modo
+      : pedido.modo;
+
+  return {
+    sombra: sombraParaGravar({
+      ...atual,
+      modo,
+      ...(pedido.base === undefined ? {} : { base: pedido.base ?? undefined }),
+      ...(pedido.altura === undefined ? {} : { altura: pedido.altura }),
+    }),
+    // `undefined` e não `false`, pela regra de toda opcional daqui: lançar
+    // sombra é como o item nasce.
+    semSombra:
+      pedido.modo === undefined
+        ? item.semSombra
+        : pedido.modo === "nenhuma"
+          ? true
+          : undefined,
+  };
+}
+
+/**
+ * Muda a sombra da seleção. Age sobre os travados também, como a opacidade:
+ * travar impede mover, e não repintar.
+ */
+export function setSelectionSombra(pedido: PedidoDeSombra): void {
+  const { scene, selectedItems } = read();
+  if (!scene || selectedItems.length === 0) return;
+
+  useSceneStore.getState().updateItems(
+    scene.id,
+    selectedItems.map((item) => ({
+      id: item.id,
+      patch: patchDaSombra(item, pedido),
+    })),
   );
 }
 

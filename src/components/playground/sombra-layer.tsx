@@ -6,9 +6,9 @@ import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useSilhueta } from "@/hooks/use-silhueta";
 import {
   caixaDoSol,
+  cssDaAfim,
+  deitarDaFigura,
   manchaDaFigura,
-  matrizDoVulto,
-  peDaFigura,
   umbrasDoSol,
   vultoDaFigura,
 } from "@/lib/geometry/sombra";
@@ -101,20 +101,16 @@ const SombraDaFigura = memo(function SombraDaFigura({
           // layout do plano inteiro a cada quadro do gesto. Mesma regra do
           // próprio item.
           //
-          // A matriz deixa o PÉ parado e corre o resto na direção do sol, na
-          // medida da altura de cada ponto -- ver `matrizDoVulto`. O pé sai do
-          // recorte que o forno mediu, já contando o giro do item: ver
-          // `peDaFigura`.
+          // A matriz deita a figura do jeito que o item pede: em pé, ela deixa
+          // a linha do chão parada e corre o resto na direção do sol, na
+          // medida da altura de cada ponto; vista de cima, estica a figura
+          // inteira a partir da borda virada para o sol. Ver `deitarDaFigura`.
+          // O chão sai do recorte que o forno mediu, já contando o giro e o
+          // espelho do item.
           transform:
             `translate(${vulto.x}px, ${vulto.y}px) ` +
-            matrizDoVulto(
-              vulto,
-              peDaFigura(
-                silhueta.recorte,
-                vulto.largura,
-                vulto.altura,
-                item.rotation,
-              ),
+            cssDaAfim(
+              deitarDaFigura(item, silhueta.recorte, vulto.kx, vulto.ky),
             ),
         }}
       >

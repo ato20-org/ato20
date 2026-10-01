@@ -49,8 +49,11 @@ import {
 import { areaDoPoligono } from "@/lib/geometry/area-escondida";
 import {
   alturaDaParede,
+  baseDaSombra,
   METROS_DA_PAREDE_PADRAO,
+  modoDaSombra,
   pontoNaParede,
+  recorteDaSombra,
   UNIDADES_POR_METRO,
 } from "@/lib/geometry/sombra";
 import { caixaDoTraco } from "@/lib/geometry/limites";
@@ -102,6 +105,8 @@ import {
   useGestoStore,
 } from "@/lib/store/use-gesto-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { useAssetUrl } from "@/hooks/use-asset-url";
+import { useSilhueta } from "@/hooks/use-silhueta";
 import {
   flipSelection,
   livre,
@@ -110,6 +115,7 @@ import {
   removePortraitSelection,
   removeSelection,
   setSelectionOpacity,
+  setSelectionSombra,
   toggleSelectionLock,
 } from "@/lib/mestre/item-actions";
 import {
@@ -775,6 +781,40 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       personagens.some((atual) => atual.id === single.personagemId))
       ? single.personagemId
       : undefined;
+
+  /**
+   * A silhueta do item selecionado, para a linha do chão automática do gizmo.
+   *
+   * A MESMA url que o palco já desenha, e por isso a silhueta que o forno já
+   * assou para a sombra: a linha aparece em cima dos pés, e não na borda de
+   * baixo do PNG, e no mesmo lugar de onde a sombra está nascendo.
+   */
+  const silhuetaDoSelecionado = useSilhueta(useAssetUrl(single?.assetId));
+  const sombraDoSelecionado = single
+    ? {
+        modo: single.semSombra ? ("nenhuma" as const) : modoDaSombra(single),
+        base:
+          baseDaSombra(single) ??
+          (silhuetaDoSelecionado
+            ? recorteDaSombra(silhuetaDoSelecionado.recorte, {
+                flipX: single.flipX,
+                flipY: single.flipY,
+              }).baixo
+            : undefined),
+        baseManual: baseDaSombra(single) !== undefined,
+        altura: single.sombra?.altura ?? 1,
+        // Qualquer coisa que deite sombra de token: o sol, uma luz acesa, uma
+        // lanterna na mão de alguém.
+        acesa:
+          Boolean(scene.sol) ||
+          (scene.luzes ?? []).some((luz) => !luz.desligada) ||
+          scene.items.some((item) => item.luz),
+        onModo: (modo: "base" | "inteira" | "nenhuma") =>
+          setSelectionSombra({ modo }),
+        onBase: (base: number | null) => setSelectionSombra({ base }),
+        onAltura: (altura: number) => setSelectionSombra({ altura }),
+      }
+    : undefined;
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedParede = scene.paredes?.find(
     (parede) => parede.id === selectedParedeId,
@@ -3244,6 +3284,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             valor: single.opacity ?? 1,
             onChange: setSelectionOpacity,
           }}
+          // Token e mobília, os dois: para o sol não há diferença entre o
+          // boneco e o barril, só entre o que está em pé e o que é visto de
+          // cima. Ver `SombraDoItem`.
+          sombra={sombraDoSelecionado}
           // Token abre a ficha de quem ele é. É o atalho que faltava no meio da
           // sessão: o mestre clica na figura no mapa, e não na lista de
           // personagens, porque no mapa é onde a mão dele já está.

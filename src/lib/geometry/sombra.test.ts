@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   ALTURA_DA_PAREDE,
+  alturaDaFigura,
   caixaDoSol,
   contornoDaParede,
-  matrizDoVulto,
+  cssDaAfim,
+  deitarDaFigura,
+  escorrerDaFigura,
   peDaFigura,
+  recorteDaSombra,
+  sombraParaGravar,
   corpoDaParede,
   manchaDaFigura,
   pontoNaParede,
@@ -77,7 +82,7 @@ describe("vultoDaFigura", () => {
   /** Sombra para a DIREITA, de meia altura. */
   const sol: Sol = { angulo: 0, comprimento: 0.5, forca: 0.4 };
 
-  /** Onde um ponto vai parar depois da matriz. Ver `matrizDoVulto`. */
+  /** Onde um ponto vai parar depois da matriz. Ver `escorrerDaFigura`. */
   function aplicar(
     matriz: string,
     ponto: { x: number; y: number },
@@ -119,7 +124,7 @@ describe("vultoDaFigura", () => {
     const vulto = vultoDaFigura(FIGURA, sol)!;
     const pe = 380;
 
-    expect(aplicar(matrizDoVulto(vulto, pe), { x: 100, y: pe })).toEqual({
+    expect(aplicar(cssDaAfim(escorrerDaFigura(vulto.kx, vulto.ky, pe)), { x: 100, y: pe })).toEqual({
       x: 100,
       y: pe,
     });
@@ -128,7 +133,7 @@ describe("vultoDaFigura", () => {
   it("a cabeça corre o máximo, porque é o ponto mais alto", () => {
     const vulto = vultoDaFigura(FIGURA, { ...sol, angulo: 90 })!;
     const pe = 400;
-    const matriz = matrizDoVulto(vulto, pe);
+    const matriz = cssDaAfim(escorrerDaFigura(vulto.kx, vulto.ky, pe));
 
     // Do alto da caixa até o pé são 400 de altura, e o comprimento é meia
     // altura: a cabeça desce 200 -- para baixo, que é para onde o sol manda.
@@ -166,6 +171,220 @@ describe("peDaFigura", () => {
 
   it("meia volta e meia volta de novo é a mesma figura", () => {
     expect(peDaFigura(recorte, largura, altura, 360)).toBeCloseTo(200, 1);
+  });
+});
+
+/** Onde um ponto da caixa vai parar depois de uma afim. */
+function aplicarAfim(
+  m: [number, number, number, number, number, number],
+  ponto: { x: number; y: number },
+): { x: number; y: number } {
+  return {
+    x: m[0] * ponto.x + m[2] * ponto.y + m[4],
+    y: m[1] * ponto.x + m[3] * ponto.y + m[5],
+  };
+}
+
+describe("recorteDaSombra", () => {
+  /** A figura no terço de baixo e à esquerda: espelhar tem o que mudar. */
+  const recorte = { esquerda: 0.1, cima: 0.4, direita: 0.5, baixo: 0.9 };
+
+  it("sem espelho nem linha, é o recorte do forno", () => {
+    expect(recorteDaSombra(recorte, {})).toEqual(recorte);
+  });
+
+  it("o espelho vertical troca a cabeça pelo pé: o chão é o da tela", () => {
+    const virado = recorteDaSombra(recorte, { flipY: true });
+
+    expect(virado.cima).toBeCloseTo(0.1);
+    expect(virado.baixo).toBeCloseTo(0.6);
+  });
+
+  it("o horizontal troca os lados", () => {
+    const virado = recorteDaSombra(recorte, { flipX: true });
+
+    expect(virado.esquerda).toBeCloseTo(0.5);
+    expect(virado.direita).toBeCloseTo(0.9);
+  });
+
+  it("a linha do chão do mestre manda no pé", () => {
+    expect(
+      recorteDaSombra(recorte, { sombra: { modo: "base", base: 0.75 } }).baixo,
+    ).toBe(0.75);
+  });
+
+  it("acima da cabeça, a linha para no topo da figura", () => {
+    expect(
+      recorteDaSombra(recorte, { sombra: { modo: "base", base: 0.1 } }).baixo,
+    ).toBe(0.4);
+  });
+
+  it("vista de cima, a linha guardada não corta nada", () => {
+    expect(
+      recorteDaSombra(recorte, { sombra: { modo: "inteira", base: 0.5 } })
+        .baixo,
+    ).toBe(0.9);
+  });
+
+  it("linha podre de arquivo é a linha nenhuma", () => {
+    expect(
+      recorteDaSombra(recorte, {
+        sombra: { modo: "base", base: Number.NaN },
+      }).baixo,
+    ).toBe(0.9);
+  });
+});
+
+describe("deitarDaFigura", () => {
+  const caixa = { width: 100, height: 100, rotation: 0 };
+  const inteiro = { esquerda: 0, cima: 0, direita: 1, baixo: 1 };
+
+  it("sem modo, é a figura em pé de sempre: o pé fica, a cabeça corre", () => {
+    const m = deitarDaFigura(caixa, inteiro, 0.5, 0);
+
+    expect(aplicarAfim(m, { x: 50, y: 100 })).toEqual({ x: 50, y: 100 });
+    expect(aplicarAfim(m, { x: 50, y: 0 })).toEqual({ x: 100, y: 0 });
+  });
+
+  it("na base, quem fica parado é a linha do chão do mestre", () => {
+    const m = deitarDaFigura(
+      { ...caixa, sombra: { modo: "base", base: 0.8 } },
+      inteiro,
+      0.5,
+      0,
+    );
+
+    expect(aplicarAfim(m, { x: 50, y: 80 })).toEqual({ x: 50, y: 80 });
+    // A cabeça está a 80 do chão agora, e não a 100: corre 40.
+    expect(aplicarAfim(m, { x: 50, y: 0 }).x).toBeCloseTo(90);
+  });
+
+  describe("vista de cima", () => {
+    const deCima = { ...caixa, sombra: { modo: "inteira" as const } };
+
+    it("a borda virada para a luz não sai do lugar", () => {
+      // Sombra para a direita: a borda da luz é a da esquerda.
+      const m = deitarDaFigura(deCima, inteiro, 0.5, 0);
+
+      expect(aplicarAfim(m, { x: 0, y: 0 })).toEqual({ x: 0, y: 0 });
+      expect(aplicarAfim(m, { x: 0, y: 100 })).toEqual({ x: 0, y: 100 });
+    });
+
+    it("a borda do outro lado corre o alcance inteiro, e não a altura do desenho", () => {
+      // Tão alto quanto largo -- 100 -- e o sol estica meia altura: 50.
+      const m = deitarDaFigura(deCima, inteiro, 0.5, 0);
+
+      expect(aplicarAfim(m, { x: 100, y: 0 })).toEqual({ x: 150, y: 0 });
+      // E de alto a baixo do mesmo jeito: nada escorre, tudo estica.
+      expect(aplicarAfim(m, { x: 100, y: 100 })).toEqual({ x: 150, y: 100 });
+    });
+
+    it("a sombra não descola do objeto: o meio dele cai dentro dela", () => {
+      const m = deitarDaFigura(deCima, inteiro, 0.5, 0);
+      const meio = aplicarAfim(m, { x: 50, y: 50 });
+
+      expect(meio.x).toBeGreaterThan(50);
+      expect(meio.x).toBeLessThan(150);
+    });
+
+    it("mais alto, mais longe", () => {
+      const alto = deitarDaFigura(
+        { ...caixa, sombra: { modo: "inteira", altura: 2 } },
+        inteiro,
+        0.5,
+        0,
+      );
+
+      expect(aplicarAfim(alto, { x: 100, y: 0 }).x).toBeCloseTo(200);
+    });
+
+    it("na diagonal, o canto da luz fica e o canto oposto corre", () => {
+      const k = 0.5 / Math.SQRT2;
+      const m = deitarDaFigura(deCima, inteiro, k, k);
+
+      const luz = aplicarAfim(m, { x: 0, y: 0 });
+      expect(luz.x).toBeCloseTo(0);
+      expect(luz.y).toBeCloseTo(0);
+
+      const oposto = aplicarAfim(m, { x: 100, y: 100 });
+      expect(oposto.x).toBeCloseTo(100 + 50 / Math.SQRT2);
+      expect(oposto.y).toBeCloseTo(100 + 50 / Math.SQRT2);
+    });
+
+    it("mede só a figura, e não a folga do PNG em volta dela", () => {
+      // A figura é a metade da direita: a borda da luz é o meio da caixa.
+      const metade = { esquerda: 0.5, cima: 0, direita: 1, baixo: 1 };
+      const m = deitarDaFigura(deCima, metade, 0.5, 0);
+
+      expect(aplicarAfim(m, { x: 50, y: 0 }).x).toBeCloseTo(50);
+      expect(aplicarAfim(m, { x: 100, y: 0 }).x).toBeCloseTo(150);
+    });
+
+    it("sem sol que estique, é a figura onde está", () => {
+      expect(deitarDaFigura(deCima, inteiro, 0, 0)).toEqual([1, 0, 0, 1, 0, 0]);
+    });
+  });
+});
+
+describe("alturaDaFigura", () => {
+  it("sem altura dita, é o lado menor da caixa", () => {
+    expect(alturaDaFigura({ width: 200, height: 80 })).toBe(80);
+  });
+
+  it("a altura é um múltiplo do lado, e presa", () => {
+    expect(
+      alturaDaFigura({ width: 50, height: 50, sombra: { modo: "inteira", altura: 2 } }),
+    ).toBe(100);
+    expect(
+      alturaDaFigura({ width: 50, height: 50, sombra: { modo: "inteira", altura: 99 } }),
+    ).toBe(150);
+  });
+});
+
+describe("manchaDaFigura vista de cima", () => {
+  const sol: Sol = { angulo: 0, comprimento: 0.5, forca: 0.4 };
+
+  it("cobre a figura e o caminho da sombra, e não uma pegada achatada", () => {
+    const mancha = manchaDaFigura(
+      { ...FIGURA, sombra: { modo: "inteira" } },
+      sol,
+    )!;
+
+    // O centro anda meio alcance; a largura cresce o alcance inteiro.
+    expect(mancha.x).toBe(FIGURA.x + 50 + 25);
+    expect(mancha.largura).toBeGreaterThan(mancha.altura);
+  });
+});
+
+describe("sombraParaGravar", () => {
+  it("em pé sem linha é o padrão, e o padrão não se grava", () => {
+    expect(sombraParaGravar({ modo: "base" })).toBeUndefined();
+  });
+
+  it("altura 1 é o padrão também", () => {
+    expect(sombraParaGravar({ modo: "inteira", altura: 1 })).toEqual({
+      modo: "inteira",
+    });
+  });
+
+  it("troca de modo não esquece o ajuste do outro", () => {
+    expect(sombraParaGravar({ modo: "base", base: 0.8, altura: 2 })).toEqual({
+      modo: "base",
+      base: 0.8,
+      altura: 2,
+    });
+  });
+
+  it("prende o que passa dos limites e arredonda o ruído", () => {
+    expect(
+      sombraParaGravar({ modo: "base", base: 1.4, altura: 0.123456 }),
+    ).toEqual({ modo: "base", base: 1, altura: 0.12 });
+  });
+
+  it("modo que não existe é a figura em pé", () => {
+    expect(
+      sombraParaGravar({ modo: "deitada" as never, base: 0.5 }),
+    ).toEqual({ modo: "base", base: 0.5 });
   });
 });
 

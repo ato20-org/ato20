@@ -14,6 +14,7 @@ import {
   Blend,
   Bold,
   Drama,
+  Eclipse,
   Eye,
   EyeOff,
   FlipHorizontal,
@@ -41,6 +42,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSceneScale } from "@/components/playground/scene-stage";
+import {
+  LinhaDoChao,
+  PainelDaSombra,
+  type SombraNoGizmo,
+} from "@/components/playground/sombra-do-gizmo";
 import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { itemBounds } from "@/lib/geometry/bounds";
@@ -243,6 +249,14 @@ type TransformHandlesProps = {
    */
   opacidade?: { valor: number; onChange: (valor: number) => void };
   /**
+   * Presente = mostra o botão da SOMBRA, que abre o jeito de deitar embaixo da
+   * caixa e, com o item em pé, a linha do chão por cima dele.
+   *
+   * Só a imagem passa -- token e mobília, que são a mesma coisa para o sol. Ver
+   * `SombraNoGizmo`.
+   */
+  sombra?: SombraNoGizmo;
+  /**
    * Presente = mostra os botões de ênfase da letra, na mesma fileira do
    * espelhar e do excluir.
    *
@@ -426,6 +440,7 @@ export function TransformHandles({
   onGestureEnd,
   onChange,
   opacidade,
+  sombra,
   estilo,
   paleta,
   fonte,
@@ -463,6 +478,8 @@ export function TransformHandles({
   const [papelAberto, setPapelAberto] = useState(false);
   /** E a régua da altura da parede, pela mesma razão dos outros três. */
   const [alturaAberta, setAlturaAberta] = useState(false);
+  /** A sombra: outro painel, outro estado. Ver `paletaAberta`. */
+  const [sombraAberta, setSombraAberta] = useState(false);
 
   /**
    * A caixa e a fileira de botões: o que um painel que pula de lado não pode
@@ -484,6 +501,7 @@ export function TransformHandles({
   const naTelaAltura = usePainelNaTela(lateral);
   const naTelaPaleta = usePainelNaTela(embaixo);
   const naTelaPapel = usePainelNaTela(embaixo);
+  const naTelaSombra = usePainelNaTela(embaixo);
 
   const cor = TOM[tom];
 
@@ -591,6 +609,7 @@ export function TransformHandles({
       {onFlip ||
       onOpenSheet ||
       opacidade ||
+      sombra ||
       estilo ||
       paleta ||
       fonte ||
@@ -899,6 +918,41 @@ export function TransformHandles({
                 }
               />
               <TooltipContent>Opacidade da imagem</TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {/* Ao lado da opacidade: as duas são de como a imagem aparece, e
+              nenhuma tira o item do lugar. */}
+          {sombra ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Sombra"
+                    aria-expanded={sombraAberta}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      cor.botao,
+                      sombraAberta && "ring-2 ring-white/70",
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setSombraAberta((aberta) => !aberta);
+                    }}
+                  >
+                    <Eclipse
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <TooltipContent>Sombra</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -1413,6 +1467,51 @@ export function TransformHandles({
             ))}
           </div>
         </div>
+      ) : null}
+
+      {/* A sombra, embaixo da caixa como a paleta e pela mesma razão: o
+          controle é largo, e ao lado ele cobriria a ponta da fileira. Os dois
+          nunca abrem juntos -- imagem não tem paleta. */}
+      {sombra && sombraAberta ? (
+        <div
+          className="pointer-events-auto absolute"
+          style={{
+            left: "50%",
+            top: "100%",
+            zIndex: 1,
+            transform: `translate(-50%, ${px(PAINEL_GAP_PX)}px) rotate(${-item.rotation}deg)`,
+            transformOrigin: "50% 0",
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div
+            ref={naTelaSombra}
+            className="bg-popover ring-foreground/10 rounded-lg px-2 py-2 shadow-md ring-1"
+            style={{
+              transform: `scale(${1 / scale})`,
+              transformOrigin: "50% 0",
+              // Camada própria, como a fileira. Ver o comentário lá.
+              willChange: "transform",
+            }}
+          >
+            <PainelDaSombra sombra={sombra} />
+          </div>
+        </div>
+      ) : null}
+
+      {/* A linha do chão, por cima da figura e ANTES das zonas de giro e das
+          alças: onde ela encosta num canto, o canto ganha. Ver `LinhaDoChao`. */}
+      {sombra &&
+      sombraAberta &&
+      sombra.modo === "base" &&
+      sombra.base !== undefined ? (
+        <LinhaDoChao
+          base={sombra.base}
+          altura={item.height}
+          rotation={item.rotation}
+          scale={scale}
+          onBase={sombra.onBase}
+        />
       ) : null}
 
       {/* Antes das alças, de propósito: a alça fica por cima onde as duas se
