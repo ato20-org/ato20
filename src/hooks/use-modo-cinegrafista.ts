@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
+import { travarNoEixo, type Vec } from "@/lib/geometry/transform";
 import { ampliarCamera, centrarCameraEm } from "@/lib/geometry/viewport";
 import { ZOOM_CAMERA_STEP } from "@/lib/mestre/camera-actions";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -47,6 +48,10 @@ type Opcoes = {
  *
  * A tecla segurada é estado deste hook, e não lida do evento como o `altKey`
  * era: `pointermove` e `wheel` não sabem se o V está apertado.
+ *
+ * Shift com o V segurado trava o eixo: a câmera só anda na horizontal ou só na
+ * vertical, a partir de onde estava quando o Shift entrou. É o travelling --
+ * passear pela muralha sem a TV balançar junto com a mão.
  *
  * Devolve se o modo está ligado, para a moldura se pintar de acordo.
  */
@@ -105,6 +110,13 @@ export function useModoCinegrafista({
      */
     let pedida: Viewport | null = null;
     let proxima: Viewport | null = null;
+    /**
+     * O centro da câmera quando o Shift entrou: a origem da linha em que ela
+     * fica presa. `null` sem Shift. O centro, e não o ponteiro, porque contra
+     * a borda do conteúdo os dois se separam, e a linha tem de sair de onde a
+     * TV está.
+     */
+    let origemDaTrava: Vec | null = null;
 
     const base = () => pedida ?? atual.current.camera ?? null;
 
@@ -142,14 +154,27 @@ export function useModoCinegrafista({
       const camera = base();
       if (!camera) return;
 
+      const ponteiro = atual.current.toScene(evento.clientX, evento.clientY);
+      let alvo = ponteiro;
+
+      if (evento.shiftKey) {
+        const origem = (origemDaTrava ??= {
+          x: camera.x + camera.width / 2,
+          y: camera.y + camera.height / 2,
+        });
+        const passo = travarNoEixo({
+          x: ponteiro.x - origem.x,
+          y: ponteiro.y - origem.y,
+        });
+        alvo = { x: origem.x + passo.x, y: origem.y + passo.y };
+      } else {
+        origemDaTrava = null;
+      }
+
       // Pelo clamp da câmera, e não pelo do palco: o do palco tira a altura da
       // largura, e a torre em pé viraria 16:9 no primeiro movimento do mouse.
       pedir(
-        centrarCameraEm(
-          camera,
-          atual.current.toScene(evento.clientX, evento.clientY),
-          useViewportStore.getState().conteudo,
-        ),
+        centrarCameraEm(camera, alvo, useViewportStore.getState().conteudo),
       );
     }
 
@@ -163,9 +188,13 @@ export function useModoCinegrafista({
       const camera = base();
       if (!camera) return;
 
+      // Com o Shift da trava a roda chega de lado, em `deltaX`. Ver o mesmo
+      // cuidado no arrasto da moldura, em `CameraFrame`.
+      const giro = evento.deltaY || evento.deltaX;
+      if (giro === 0) return;
+
       const conteudo = useViewportStore.getState().conteudo;
-      const fator =
-        evento.deltaY < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP;
+      const fator = giro < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP;
 
       pedir(
         ampliarCamera(
@@ -191,7 +220,17 @@ export function useModoCinegrafista({
           atual.current.onGestureEnd?.();
         }
         segurando = false;
+        origemDaTrava = null;
         setLigado(false);
+        return;
+      }
+
+      // Com o visor já segurado, a repetição automática do V continua
+      // chegando -- e, com o Shift da trava apertado, chega como Shift+V, que
+      // é espelhar a seleção. Cada repetição viraria o token de ponta-cabeça
+      // de novo. Enquanto o V é do visor, nenhum keydown dele passa adiante.
+      if (segurando) {
+        evento.stopPropagation();
         return;
       }
 
@@ -222,6 +261,7 @@ export function useModoCinegrafista({
         atual.current.onGestureEnd?.();
       }
       segurando = false;
+      origemDaTrava = null;
       setLigado(false);
     }
 

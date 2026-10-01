@@ -16,7 +16,7 @@ import {
 import { TransformHandles } from "@/components/playground/transform-handles";
 
 import { useSceneDrag } from "@/hooks/use-scene-drag";
-import { CORNER_HANDLES } from "@/lib/geometry/transform";
+import { CORNER_HANDLES, travarNoEixo } from "@/lib/geometry/transform";
 import {
   ampliarCameraNoCentro,
   clampCamera,
@@ -186,10 +186,16 @@ export function CameraFrame({
       native.preventDefault();
       native.stopPropagation();
 
+      // Com Shift a roda costuma chegar de lado, em `deltaX` e com `deltaY`
+      // zero -- e zero lido como "não é para cima" só afastava. Shift aqui é a
+      // trava de direção, e rolar com ele apertado é o gesto normal.
+      const giro = native.deltaY || native.deltaX;
+      if (giro === 0) return;
+
       pedir(
         ampliarCameraNoCentro(
           cameraAtual.current,
-          native.deltaY < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP,
+          giro < 0 ? ZOOM_CAMERA_STEP : 1 / ZOOM_CAMERA_STEP,
           conteudo,
         ),
       );
@@ -199,25 +205,56 @@ export function CameraFrame({
       passive: false,
     });
 
+    /**
+     * Shift: a câmera só anda na horizontal ou só na vertical, a partir de
+     * onde a mão pegou. O enquadramento que desliza pela parede da
+     * taverna sem subir nem descer.
+     *
+     * O delta do gesto inteiro é travado, e não o incremento: travar cada
+     * passo deixaria a câmera escorregar para fora da linha a cada quadro
+     * em que a mão tremesse para o outro eixo.
+     */
+    let mao = { x: 0, y: 0 };
+    let travada = false;
+    const andar = () => {
+      const alvo = travada ? travarNoEixo(mao) : mao;
+      const atual = cameraAtual.current;
+
+      pedir(
+        clampCamera(
+          {
+            ...atual,
+            x: atual.x + (alvo.x - anterior.x),
+            y: atual.y + (alvo.y - anterior.y),
+          },
+          conteudo,
+        ),
+      );
+      anterior = alvo;
+    };
+
+    // Apertar ou soltar o Shift com a mão parada também conta: sem isto a
+    // câmera só obedecia no próximo movimento do mouse.
+    const aoShift = (native: KeyboardEvent) => {
+      if (native.key !== "Shift" || native.shiftKey === travada) return;
+
+      travada = native.shiftKey;
+      andar();
+    };
+    window.addEventListener("keydown", aoShift, true);
+    window.addEventListener("keyup", aoShift, true);
+
     setArrastando(true);
     startDrag(event, {
-      onMove: (delta) => {
-        const atual = cameraAtual.current;
-
-        pedir(
-          clampCamera(
-            {
-              ...atual,
-              x: atual.x + (delta.x - anterior.x),
-              y: atual.y + (delta.y - anterior.y),
-            },
-            conteudo,
-          ),
-        );
-        anterior = delta;
+      onMove: (delta, native) => {
+        mao = delta;
+        travada = native.shiftKey;
+        andar();
       },
       onEnd: () => {
         window.removeEventListener("wheel", aoRodar, true);
+        window.removeEventListener("keydown", aoShift, true);
+        window.removeEventListener("keyup", aoShift, true);
         despejar();
         setArrastando(false);
         onGestureEnd?.();
@@ -567,7 +604,7 @@ function Alca({ transmissao, scale, arrastando, onMove }: AlcaProps) {
           arrastando && "bg-primary text-primary-foreground",
         )}
         style={{ width: lado, height: lado, cursor: "move" }}
-        title="Arrastar move a câmera."
+        title="Arrastar move a câmera. Com Shift, só na horizontal ou só na vertical."
         onPointerDown={onMove}
       >
         <Move style={{ width: lado * 0.55, height: lado * 0.55 }} />
