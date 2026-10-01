@@ -49,6 +49,8 @@ import {
   irParaCamera,
   mostrarCenaInteira,
   novaCamera,
+  transmissaoDaCamera,
+  type Transmissao,
 } from "@/lib/mestre/camera-actions";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
@@ -66,7 +68,9 @@ import type { CameraSalva, Scene } from "@/types/scene";
  *
  * O chip aceso é a SELECIONADA, a que o mestre edita. O REC vermelho na
  * frente do nome é a que está NO AR. São coisas diferentes de propósito: o
- * mestre prepara uma enquanto a mesa vê outra, e o T troca.
+ * mestre prepara uma enquanto a mesa vê outra, e o T troca. Com o mapa fora
+ * do ar o REC é amarelo: é a câmera com que ele vai abrir, e a mesa ainda não
+ * a vê. Ver `transmissaoDaCamera`.
  *
  * Depois dos chips: novo, transmitir, e um menu com o resto. Eram nove botões
  * espalhados por duas pílulas; à vista ficam só os dois que se apertam no
@@ -92,11 +96,13 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
     (state) => state.selectedIds.length > 0,
   );
 
+  const cenaNoAr = useSceneStore(
+    (state) => state.board?.liveSceneId === scene.id,
+  );
+
   const selecionada = cameras.find((camera) => camera.id === selecionadaId);
   const segue = Boolean(selecionada?.alvoIds);
-  const transmitindo = Boolean(
-    selecionada && scene.cameraNoArId === selecionada.id,
-  );
+  const transmissao = transmissaoDaCamera(scene, selecionada?.id, cenaNoAr);
 
   return (
     <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
@@ -107,7 +113,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
           camera={camera}
           posicao={index + 1}
           selecionada={camera.id === selecionadaId}
-          transmitindo={camera.id === scene.cameraNoArId}
+          transmissao={transmissaoDaCamera(scene, camera.id, cenaNoAr)}
         />
       ))}
 
@@ -136,15 +142,24 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
 
       {/* Transmitir fica à vista, e é o único que fica: é o toque que muda o
           que a mesa vê, e o mestre precisa achá-lo sem abrir nada. Vermelho
-          no ar. O resto dos comandos da câmera mora no menu ao lado. */}
+          no ar, amarelo preparada. O resto dos comandos da câmera mora no
+          menu ao lado. */}
       <Tooltip>
         <TooltipTrigger
           render={
             <Button
-              variant={transmitindo ? "destructive" : "ghost"}
+              variant={transmissao === "no-ar" ? "destructive" : "ghost"}
               size="icon-sm"
+              className={cn(
+                transmissao === "preparada" &&
+                  "bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 hover:text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 dark:hover:bg-amber-500/30 dark:hover:text-amber-400",
+              )}
               aria-label={
-                transmitindo ? "Tirar do ar" : "Transmitir a câmera selecionada"
+                transmissao === "no-ar"
+                  ? "Tirar do ar"
+                  : transmissao === "preparada"
+                    ? "Desfazer a preparação"
+                    : "Transmitir a câmera selecionada"
               }
               disabled={!selecionada}
               onClick={alternarTransmissao}
@@ -155,12 +170,18 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
         />
         <TooltipContent>
           <p className="font-medium">
-            {transmitindo ? "Tirar do ar" : "Transmitir"}
+            {transmissao === "no-ar"
+              ? "Tirar do ar"
+              : transmissao === "preparada"
+                ? "Preparada"
+                : "Transmitir"}
           </p>
           <p className="text-muted-foreground max-w-52">
-            {transmitindo
+            {transmissao === "no-ar"
               ? "A mesa volta a ver o mapa inteiro."
-              : "A mesa passa a ver a câmera selecionada."}
+              : transmissao === "preparada"
+                ? "A mesa vê esta câmera quando o mapa for ao ar. Clique desfaz."
+                : "A mesa passa a ver a câmera selecionada."}
           </p>
         </TooltipContent>
       </Tooltip>
@@ -256,7 +277,7 @@ type ChipProps = {
   camera: CameraSalva;
   posicao: number;
   selecionada: boolean;
-  transmitindo: boolean;
+  transmissao: Transmissao;
 };
 
 function Chip({
@@ -264,7 +285,7 @@ function Chip({
   camera,
   posicao,
   selecionada,
-  transmitindo,
+  transmissao,
 }: ChipProps) {
   const atualizarCamera = useSceneStore((state) => state.atualizarCamera);
   const removerCamera = useSceneStore((state) => state.removerCamera);
@@ -324,8 +345,13 @@ function Chip({
         >
           {/* O número É a tecla. Fora do nome para não sumir no corte. */}
           <span className="tabular-nums opacity-70">{posicao}</span>
-          {transmitindo ? (
-            <CircleDot className="size-3 shrink-0 text-red-400" />
+          {transmissao ? (
+            <CircleDot
+              className={cn(
+                "size-3 shrink-0",
+                transmissao === "no-ar" ? "text-red-400" : "text-amber-400",
+              )}
+            />
           ) : null}
           <span className="truncate">{camera.nome}</span>
           {/* Segue tokens, e não um lugar: a mira diz isso sem ocupar o
@@ -347,11 +373,15 @@ function Chip({
       <ContextMenuContent>
         <ContextMenuItem
           onClick={() =>
-            transmitirCamera(sceneId, transmitindo ? undefined : camera.id)
+            transmitirCamera(sceneId, transmissao ? undefined : camera.id)
           }
         >
           <Radio />
-          {transmitindo ? "Tirar do ar" : "Transmitir"}
+          {transmissao === "no-ar"
+            ? "Tirar do ar"
+            : transmissao === "preparada"
+              ? "Desfazer a preparação"
+              : "Transmitir"}
           {selecionada ? <ContextMenuShortcut>T</ContextMenuShortcut> : null}
         </ContextMenuItem>
         <ContextMenuItem

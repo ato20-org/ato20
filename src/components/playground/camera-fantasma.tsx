@@ -12,6 +12,10 @@ import { TransformHandles } from "@/components/playground/transform-handles";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
 import { clampViewport } from "@/lib/geometry/viewport";
+import {
+  transmissaoDaCamera,
+  type Transmissao,
+} from "@/lib/mestre/camera-actions";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -54,6 +58,9 @@ export function CamerasFantasma({
   editavel,
 }: CamerasFantasmaProps) {
   const cameras = scene.cameras ?? [];
+  const cenaNoAr = useSceneStore(
+    (state) => state.board?.liveSceneId === scene.id,
+  );
 
   return (
     <>
@@ -64,7 +71,7 @@ export function CamerasFantasma({
             scene={scene}
             camera={camera}
             posicao={index + 1}
-            transmitindo={scene.cameraNoArId === camera.id}
+            transmissao={transmissaoDaCamera(scene, camera.id, cenaNoAr)}
             editavel={editavel}
           />
         ),
@@ -77,7 +84,7 @@ type FantasmaProps = {
   scene: Scene;
   camera: CameraSalva;
   posicao: number;
-  transmitindo: boolean;
+  transmissao: Transmissao;
   editavel: boolean;
 };
 
@@ -85,7 +92,7 @@ function Fantasma({
   scene,
   camera,
   posicao,
-  transmitindo,
+  transmissao,
   editavel,
 }: FantasmaProps) {
   const { scale } = useSceneScale();
@@ -144,7 +151,7 @@ function Fantasma({
         // O menu do palco lê daqui qual câmera levou o botão direito. Ver
         // `StageContextMenu`.
         data-camera-id={camera.id}
-        className={`${transmitindo ? "border-red-400/70" : "border-foreground/45"} pointer-events-none absolute border-dashed`}
+        className={`${transmissao === "no-ar" ? "border-red-400/70" : transmissao === "preparada" ? "border-amber-400/70" : "border-foreground/45"} pointer-events-none absolute border-dashed`}
         style={{
           left: caixa.x,
           top: caixa.y,
@@ -228,8 +235,8 @@ function Fantasma({
           onPointerDown={pegar}
         >
           <span className="opacity-60">{posicao}</span>
-          {transmitindo ? (
-            <CircleDot className="text-red-400" strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
+          {transmissao ? (
+            <CircleDot className={transmissao === "no-ar" ? "text-red-400" : "text-amber-400"} strokeWidth={tracoDoIcone(scale)} style={{ width: 11, height: 11 }} />
           ) : null}
           {camera.nome}
           {segue ? (
