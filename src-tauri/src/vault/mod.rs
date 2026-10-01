@@ -6,6 +6,7 @@ pub mod characters;
 pub mod condicoes;
 pub mod dados_de_extensao;
 pub mod documentos;
+pub mod fio;
 pub mod inventory;
 pub mod mime;
 pub mod modelos;

@@ -15,7 +15,7 @@ use axum::http::{HeaderValue, Request, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, patch, post, put};
+use axum::routing::{delete, get, patch, post, put};
 use axum::Router;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
@@ -30,7 +30,7 @@ mod page;
 use crate::error::{AppError, AppResult};
 use crate::estante;
 use crate::extensoes;
-use crate::vault::{animacao, assets, characters, documentos, inventory, players, variantes, Vault};
+use crate::vault::{animacao, assets, characters, documentos, fio, inventory, players, variantes, Vault};
 use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
@@ -144,6 +144,31 @@ const ACOES_BUFFER: usize = 64;
 /// botao nao carrega um mapa.
 const ACAO_MAX_BYTES: usize = 8 * 1024;
 
+/// Quantos registros do fio cabem no canal antes de quem escuta ler.
+///
+/// O fio e EVENTO, como a rolagem, mas com uma diferenca que muda o que fazer
+/// quando a fila estoura: aqui ha de onde recuperar. O receptor que fica para
+/// tras tem o fluxo ENCERRADO (ver `fluxo_do_fio`), reconecta, e recebe as
+/// ultimas linhas de novo pelo replay -- em vez de seguir com um buraco na
+/// conversa que ninguem ve.
+const FIO_BUFFER: usize = 64;
+
+/// Quantas linhas o fio reenvia a quem conecta.
+///
+/// E o que faz o celular que entrou agora ver a conversa, e o teto do que
+/// qualquer tela desenha de uma vez: a lista nunca renderiza a campanha
+/// inteira, que e o que custaria quadro ao palco do Mestre.
+const FIO_REPLAY: usize = 200;
+
+/// O maior corpo de uma mensagem que sobe do celular. O texto tem teto de
+/// dois mil caracteres (`fio::MAX_TEXTO`); oito KB e esse texto em qualquer
+/// alfabeto, com folga para o JSON em volta. O mesmo teto do `/eu/acoes`.
+const MENSAGEM_MAX_BYTES: usize = 8 * 1024;
+
+/// O maior corpo de uma linha do Mestre. Maior que o do celular porque a linha
+/// do Mestre pode trazer uma rolagem de plugin com cinquenta dados.
+const FALA_DO_MESTRE_MAX_BYTES: usize = 64 * 1024;
+
 /// O maior valor de coordenada que um movimento pode trazer, em unidades de
 /// cena. O plano tem 1920 de largura; isto e folga para mapa que cresceu para
 /// os lados, e teto para um `x: 1e308` que nenhuma tela sabe desenhar.
@@ -215,6 +240,23 @@ pub struct Daemon {
     /// da janela do mestre. Mesmo desenho dos movimentos: o daemon confere o
     /// vinculo e e so o cano; quem executa e o plugin, na janela.
     acoes_tx: broadcast::Sender<String>,
+    /// O fio da campanha, a caminho de quem o assina: a janela do Mestre e
+    /// cada celular.
+    ///
+    /// Leva o registro e nao o texto pronto, ao contrario dos outros canais:
+    /// cada celular le um fio diferente -- o sussurro alheio nao passa --, e
+    /// quem filtra e serializa e o fluxo de cada um. Junto vai o codigo da
+    /// campanha em que o registro foi escrito, para um fluxo aberto na campanha
+    /// de ontem nao receber a conversa da de hoje. Ver `fluxo_do_fio`.
+    fio_tx: broadcast::Sender<(String, fio::Registro)>,
+    /// A ordem do fio.
+    ///
+    /// Gravar no arquivo e anunciar no canal acontecem sob esta trava, e abrir
+    /// um fluxo (assinar e ler o arquivo) tambem. E o que garante as duas
+    /// coisas que importam: o arquivo e o canal contam as linhas na mesma
+    /// ordem, e quem conecta nao perde nem recebe duas vezes a linha escrita no
+    /// meio da conexao.
+    fio: Mutex<()>,
     /// O anexo em evidencia. Quem escreve aqui e a janela, pelo IPC.
     evidence: SharedEvidence,
     /// Onde estao os livros de regras desta maquina.
@@ -248,6 +290,7 @@ impl Daemon {
         let (rolagens_tx, _) = broadcast::channel(ROLAGENS_BUFFER);
         let (movimentos_tx, _) = broadcast::channel(MOVIMENTOS_BUFFER);
         let (acoes_tx, _) = broadcast::channel(ACOES_BUFFER);
+        let (fio_tx, _) = broadcast::channel(FIO_BUFFER);
 
         Self {
             vault,
@@ -262,6 +305,8 @@ impl Daemon {
             rolagens_tx,
             movimentos_tx,
             acoes_tx,
+            fio_tx,
+            fio: Mutex::new(()),
             evidence: Arc::new(RwLock::new(None)),
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
@@ -490,6 +535,26 @@ pub fn router(state: Arc<Daemon>) -> Router {
         .route("/sala/rolagens", get(rolls))
         .route("/sala/movimentos", get(moves))
         .route("/sala/acoes", get(actions))
+        .route(
+            "/sala/mensagens",
+            // O GET e da janela do Mestre (loopback, como `/sala/rolagens`); o
+            // POST tambem, mas escreve na campanha, e por isso leva o token.
+            get(fio_do_mestre).merge(
+                post(fala_do_mestre)
+                    .layer(DefaultBodyLimit::max(FALA_DO_MESTRE_MAX_BYTES))
+                    .layer(middleware::from_fn_with_state(
+                        Arc::clone(&state),
+                        require_token,
+                    )),
+            ),
+        )
+        .route(
+            "/sala/mensagens/{id}",
+            delete(apagar_do_fio).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_token,
+            )),
+        )
         .nest("/eu", player_routes(Arc::clone(&state)))
         .route(
             "/sala/publicar",
@@ -572,6 +637,14 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
         .route("/movimentos", post(move_token))
         // O botao de uma secao de plugin. Ver `act`.
         .route("/acoes", post(act).layer(DefaultBodyLimit::max(ACAO_MAX_BYTES)))
+        // O fio da campanha: o que o jogador diz, e o que ele pode ler. Ver
+        // `fala_do_jogador` e `fio_do_jogador`.
+        .route(
+            "/mensagens",
+            get(fio_do_jogador)
+                .post(fala_do_jogador)
+                .layer(DefaultBodyLimit::max(MENSAGEM_MAX_BYTES)),
+        )
         // A metade PUBLICA do que os plugins guardaram neste personagem.
         .route("/personagens/{id}/extensoes", get(character_extensoes))
         // Personagens: so os VINCULADOS a este jogador. Token valido nao basta,
@@ -1177,6 +1250,34 @@ async fn roll(
         quando: crate::vault::now_ms(),
     };
 
+    // O fio tambem, e AQUI, e nao na janela do Mestre: quem sorteia e o
+    // daemon, e e ele que esta de pe com a janela fechada. Gravado pela janela,
+    // o dado rolado com o Mestre longe do computador sumiria calado, como
+    // sumia antes de o fio existir.
+    //
+    // O mesmo id da rolagem, para a bandeja e o fio saberem que contam a mesma
+    // jogada. Falhar em gravar nao recusa o dado: ele ja caiu na mao do
+    // jogador, e a mesa ve pela bandeja. O que se perde e a memoria, e isso
+    // vai para o log.
+    let linha = fio::Linha {
+        id: rolagem.id.clone(),
+        quando: rolagem.quando,
+        autor: fio::Autor::Jogador {
+            id: rolagem.jogador_id.clone(),
+            nome: rolagem.jogador.clone(),
+        },
+        para: None,
+        texto: None,
+        rolagem: Some(fio::Rolagem {
+            dados: vec![fio::Dado { faces: rolagem.faces, valor: rolagem.valor }],
+            modificador: 0,
+            rotulo: None,
+        }),
+    };
+    if let Err(resposta) = escrever_no_fio(&state, fio::Registro::Linha(linha)) {
+        log::warn!("rolagem {} ficou fora do fio: {}", rolagem.id, resposta.status());
+    }
+
     let corpo = match serde_json::to_string(&rolagem) {
         Ok(corpo) => corpo,
         Err(cause) => {
@@ -1223,6 +1324,349 @@ async fn rolls(
 
     Ok(Sse::new(updates.map(|rolagem| Ok(Event::default().data(rolagem))))
         .keep_alive(KeepAlive::default()))
+}
+
+// --- o fio da campanha -----------------------------------------------------
+
+/// O marcador do fim do replay, no fluxo do fio.
+///
+/// Quem assina recebe primeiro as ultimas linhas, depois isto, depois o que
+/// acontecer. E o que deixa a tela distinguir o que JA estava no fio do que
+/// chegou agora: so o segundo anima o dado, e so o segundo conta como nao lido.
+const FIO_PRONTO: &str = r#"{"tipo":"pronto"}"#;
+
+/// Grava um registro no fio e o anuncia, na mesma trava. Ver `Daemon::fio`.
+fn escrever_no_fio(state: &Daemon, registro: fio::Registro) -> Result<(), Response> {
+    let _ordem = state.fio.lock().expect("fio envenenado");
+
+    let codigo = {
+        let guard = state.vault.read().expect("vault envenenado");
+        let vault = vault_vivo(&guard)?;
+
+        fio::acrescentar(vault, &registro).map_err(|cause| {
+            log::error!("fio: {cause}");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar no fio")
+        })?;
+
+        vault.config.codigo.clone()
+    };
+
+    // Sem receptor = ninguem com o fio aberto. A linha ja esta no arquivo, e
+    // chega a quem abrir pelo replay.
+    let _ = state.fio_tx.send((codigo, registro));
+
+    Ok(())
+}
+
+/// Assina o fio e le o que ja ha nele, sem perder nem repetir a linha do meio.
+fn abrir_o_fio(
+    state: &Daemon,
+) -> Result<(broadcast::Receiver<(String, fio::Registro)>, String, Vec<fio::Linha>), Response> {
+    let _ordem = state.fio.lock().expect("fio envenenado");
+
+    let receiver = state.fio_tx.subscribe();
+    let guard = state.vault.read().expect("vault envenenado");
+    let vault = vault_vivo(&guard)?;
+    let linhas = fio::ler(vault).map_err(|cause| {
+        log::error!("fio: {cause}");
+        fail(StatusCode::INTERNAL_SERVER_ERROR, "fio da campanha ilegivel")
+    })?;
+
+    Ok((receiver, vault.config.codigo.clone(), linhas))
+}
+
+fn em_json<T: Serialize>(valor: &T) -> Option<String> {
+    serde_json::to_string(valor)
+        .map_err(|cause| log::error!("fio: {cause}"))
+        .ok()
+}
+
+/// O fluxo de um fio: o replay, o marcador, e o que vier.
+///
+/// O fluxo TERMINA, e nao segue, em dois casos -- e terminar e o que faz a tela
+/// reconectar e receber o replay de novo:
+///
+/// - O receptor ficou para tras e o canal pulou registros. Seguir deixaria um
+///   buraco na conversa; reconectar o fecha.
+/// - A campanha mudou. O registro carrega o codigo da campanha em que foi
+///   escrito, e o fluxo aberto na de antes nao tem o que fazer com ele.
+///
+/// `ainda_pode` e a pergunta de cada registro que chega, e e o que fecha o fio
+/// do jogador que o Mestre tirou da mesa: sem ela, o celular dele seguiria
+/// lendo a conversa ate a conexao cair sozinha.
+fn fluxo_do_fio(
+    receiver: broadcast::Receiver<(String, fio::Registro)>,
+    codigo: String,
+    passado: Vec<fio::Linha>,
+    visivel: impl Fn(&fio::Registro) -> bool + Send + 'static,
+    ainda_pode: impl Fn() -> bool + Send + 'static,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    let replay = tokio_stream::iter(
+        passado
+            .into_iter()
+            .filter_map(|linha| em_json(&fio::Registro::Linha(linha)))
+            .chain(std::iter::once(FIO_PRONTO.to_string()))
+            .collect::<Vec<_>>(),
+    );
+
+    let updates = tokio_stream::wrappers::BroadcastStream::new(receiver)
+        .take_while(move |item| {
+            matches!(item, Ok((de_onde, _)) if *de_onde == codigo) && ainda_pode()
+        })
+        .filter_map(move |item| match item {
+            Ok((_, registro)) if visivel(&registro) => em_json(&registro),
+            _ => None,
+        });
+
+    Sse::new(replay.chain(updates).map(|texto| Ok(Event::default().data(texto))))
+        // Celular com a tela apagada e conexao ociosa, e a rede local derruba
+        // as duas. Ver `live`.
+        .keep_alive(KeepAlive::default())
+}
+
+/// O que o celular manda: o texto, e se e so para o Mestre.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FalaBody {
+    texto: String,
+    #[serde(default)]
+    so_para_o_mestre: bool,
+}
+
+/// `POST /eu/mensagens` -- o jogador escreve no fio.
+///
+/// Quem fala vem do TOKEN, como em `/eu/rolagens`: o corpo traz o texto e mais
+/// nada, e nao ha campo de autor a trocar para falar em nome de outro. O
+/// sussurro do jogador vai so ao Mestre -- jogador com jogador e conversa que a
+/// mesa tem na mesa, e um canal escondido entre dois celulares e o Discord que
+/// o fio existe para nao ser.
+async fn fala_do_jogador(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    axum::Json(body): axum::Json<FalaBody>,
+) -> Response {
+    let Some(texto) = fio::texto_valido(Some(&body.texto)) else {
+        return fail(StatusCode::BAD_REQUEST, "mensagem vazia");
+    };
+
+    let linha = fio::Linha {
+        id: uuid::Uuid::new_v4().to_string(),
+        quando: crate::vault::now_ms(),
+        autor: fio::Autor::Jogador { id: player.id, nome: player.nome },
+        para: body.so_para_o_mestre.then_some(fio::Destino::Mestre),
+        texto: Some(texto),
+        rolagem: None,
+    };
+
+    match escrever_no_fio(&state, fio::Registro::Linha(linha.clone())) {
+        Ok(()) => (StatusCode::CREATED, axum::Json(linha)).into_response(),
+        Err(resposta) => resposta,
+    }
+}
+
+/// `GET /eu/mensagens` -- o fio, como ESTE jogador o le, em SSE.
+///
+/// Atras do token, e nao do codigo da mesa: o fio tem sussurro, e o codigo e
+/// o mesmo para a mesa inteira. O celular le com `fetch` e nao com
+/// `EventSource`, porque o `EventSource` nao manda cabecalho -- e a alternativa
+/// seria o token na URL, onde ele vaza para historico e log. Ver
+/// `lib/player/fio.ts`.
+async fn fio_do_jogador(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
+    let (receiver, codigo, linhas) = abrir_o_fio(&state)?;
+
+    let passado = fio::ultimas(linhas, FIO_REPLAY, |linha| linha.visivel_para(&player.id));
+
+    let quem = player.id.clone();
+    let daemon = Arc::clone(&state);
+    let id = player.id;
+
+    Ok(fluxo_do_fio(
+        receiver,
+        codigo,
+        passado,
+        move |registro| registro.visivel_para(&quem),
+        // A linha do jogador ainda existe? Uma leitura de banco por registro
+        // que chega, e nao por quadro: o fio anda na velocidade de quem
+        // digita.
+        move || {
+            let guard = daemon.vault.read().expect("vault envenenado");
+            guard
+                .as_ref()
+                .and_then(|vault| players::token_hash_of(vault, &id).ok().flatten())
+                .is_some()
+        },
+    ))
+}
+
+/// `GET /sala/mensagens` -- o fio inteiro, para a janela do Mestre.
+///
+/// Restrito a loopback, como `/sala/rolagens`, e sem filtro: o Mestre le os
+/// sussurros todos, os que mandou e os que recebeu.
+async fn fio_do_mestre(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
+    if !addr.ip().is_loopback() {
+        return Err(fail(StatusCode::FORBIDDEN, "o fio inteiro e desta maquina"));
+    }
+
+    let (receiver, codigo, linhas) = abrir_o_fio(&state)?;
+    let passado = fio::ultimas(linhas, FIO_REPLAY, |_| true);
+
+    Ok(fluxo_do_fio(receiver, codigo, passado, |_| true, || true))
+}
+
+/// Para quem o Mestre fala. Sem campo = a mesa inteira.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "tipo", rename_all = "camelCase")]
+pub enum ParaBody {
+    /// O proprio Mestre: a rolagem escondida, e a nota que ele deixa no fio.
+    Mestre,
+    /// Um jogador. O NOME sai do banco, e nao do corpo -- e e congelado na
+    /// linha. Ver `fio::Autor`.
+    Jogador { id: String },
+}
+
+/// A extensao que assina a linha. Ver `fio::Autor::Plugin`.
+#[derive(Debug, Deserialize)]
+pub struct PluginBody {
+    id: String,
+    nome: String,
+}
+
+/// O que a janela do Mestre manda: texto, rolagem, ou os dois.
+#[derive(Debug, Deserialize)]
+pub struct FalaDoMestreBody {
+    #[serde(default)]
+    texto: Option<String>,
+    #[serde(default)]
+    para: Option<ParaBody>,
+    #[serde(default)]
+    rolagem: Option<fio::Rolagem>,
+    #[serde(default)]
+    plugin: Option<PluginBody>,
+}
+
+/// `POST /sala/mensagens` -- o Mestre, ou um plugin pela janela dele, escreve.
+///
+/// Token E loopback, como `/sala/publicar`: o Mestre nao tem identidade de rede,
+/// e e isso que faz dele o Mestre. A rolagem chega PRONTA -- quem sorteou foi a
+/// janela, onde o dado do Mestre sempre foi sorteado --, e o daemon so confere
+/// que cada face existe no dado dela.
+async fn fala_do_mestre(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    axum::Json(body): axum::Json<FalaDoMestreBody>,
+) -> Response {
+    if !addr.ip().is_loopback() {
+        return fail(StatusCode::FORBIDDEN, "o Mestre fala desta maquina");
+    }
+
+    let texto = fio::texto_valido(body.texto.as_deref());
+    let rolagem = match body.rolagem.map(fio::rolagem_valida).transpose() {
+        Ok(rolagem) => rolagem,
+        Err(motivo) => return fail(StatusCode::BAD_REQUEST, motivo),
+    };
+    if texto.is_none() && rolagem.is_none() {
+        return fail(StatusCode::BAD_REQUEST, "mensagem vazia");
+    }
+
+    let autor = match body.plugin {
+        None => fio::Autor::Mestre,
+        Some(plugin) if extensoes::id_valido(&plugin.id) => fio::Autor::Plugin {
+            nome: fio::nome_valido(&plugin.nome),
+            id: plugin.id,
+        },
+        Some(_) => return fail(StatusCode::BAD_REQUEST, "id de plugin invalido"),
+    };
+
+    let para = match body.para {
+        None => None,
+        Some(ParaBody::Mestre) => Some(fio::Destino::Mestre),
+        Some(ParaBody::Jogador { id }) => {
+            let jogadores = {
+                let guard = state.vault.read().expect("vault envenenado");
+                let vault = match vault_vivo(&guard) {
+                    Ok(vault) => vault,
+                    Err(resposta) => return resposta,
+                };
+                players::list(vault)
+            };
+
+            match jogadores {
+                Ok(jogadores) => match jogadores.into_iter().find(|j| j.id == id) {
+                    Some(jogador) => Some(fio::Destino::Jogador { id: jogador.id, nome: jogador.nome }),
+                    None => return fail(StatusCode::NOT_FOUND, "jogador nao esta na mesa"),
+                },
+                Err(cause) => {
+                    log::error!("jogadores: {cause}");
+                    return fail(StatusCode::INTERNAL_SERVER_ERROR, "banco da campanha ilegivel");
+                }
+            }
+        }
+    };
+
+    let linha = fio::Linha {
+        id: uuid::Uuid::new_v4().to_string(),
+        quando: crate::vault::now_ms(),
+        autor,
+        para,
+        texto,
+        rolagem,
+    };
+
+    match escrever_no_fio(&state, fio::Registro::Linha(linha.clone())) {
+        Ok(()) => (StatusCode::CREATED, axum::Json(linha)).into_response(),
+        Err(resposta) => resposta,
+    }
+}
+
+/// `DELETE /sala/mensagens/{id}` -- o Mestre apaga uma linha.
+///
+/// So o Mestre apaga, e qualquer linha: a mesa e dele, e o jogador que se
+/// arrependeu pede. A confirmacao e da tela. Aqui a linha ganha uma lapide --
+/// ver `fio::Registro::Apagada` -- e todo fio aberto a tira da vista.
+async fn apagar_do_fio(
+    State(state): State<Arc<Daemon>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    if !addr.ip().is_loopback() {
+        return fail(StatusCode::FORBIDDEN, "o Mestre apaga desta maquina");
+    }
+    if id.len() > ID_MAX {
+        return fail(StatusCode::BAD_REQUEST, "id grande demais");
+    }
+
+    // Confere que a linha existe, e ainda esta de pe: uma lapide para linha
+    // nenhuma seria lixo no arquivo, e o 404 diz a tela que ela ja sumiu.
+    let existe = {
+        let guard = state.vault.read().expect("vault envenenado");
+        let vault = match vault_vivo(&guard) {
+            Ok(vault) => vault,
+            Err(resposta) => return resposta,
+        };
+        fio::ler(vault).map(|linhas| linhas.iter().any(|linha| linha.id == id))
+    };
+
+    match existe {
+        Ok(true) => {}
+        Ok(false) => return fail(StatusCode::NOT_FOUND, "a linha nao esta no fio"),
+        Err(cause) => {
+            log::error!("fio: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "fio da campanha ilegivel");
+        }
+    }
+
+    let lapide = fio::Registro::Apagada { alvo: id, quando: crate::vault::now_ms() };
+
+    match escrever_no_fio(&state, lapide) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(resposta) => resposta,
+    }
 }
 
 // --- o token do jogador -----------------------------------------------------
@@ -4981,6 +5425,340 @@ mod tests {
             .expect("resposta");
 
         assert_eq!(aceito.status(), StatusCode::OK);
+    }
+
+    // --- o fio da campanha -------------------------------------------------
+
+    /// Le um fluxo do fio ate o marcador do fim do replay, e devolve o que veio
+    /// antes dele. O fluxo e infinito: ler ate o fim nunca voltaria.
+    async fn replay_do_fio(response: Response) -> Vec<serde_json::Value> {
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let mut body = response.into_body().into_data_stream();
+        let mut eventos = Vec::new();
+
+        loop {
+            let quadro = body.next().await.expect("o fluxo acabou antes do pronto").expect("bytes");
+            for linha in String::from_utf8_lossy(&quadro).lines() {
+                let Some(dado) = linha.strip_prefix("data:") else { continue };
+                let valor: serde_json::Value = serde_json::from_str(dado.trim()).expect("json");
+                if valor["tipo"] == "pronto" {
+                    return eventos;
+                }
+                eventos.push(valor);
+            }
+        }
+    }
+
+    fn como_mestre(token: Option<&str>, method: &str, uri: &str, corpo: Option<&str>, ip: &str) -> HttpRequest<Body> {
+        let mut request = HttpRequest::builder().method(method).uri(uri);
+
+        if let Some(token) = token {
+            request = request.header(TOKEN_HEADER, token);
+        }
+        if corpo.is_some() {
+            request = request.header("content-type", "application/json");
+        }
+
+        from_ip(
+            request
+                .body(corpo.map(|c| Body::from(c.to_string())).unwrap_or_else(Body::empty))
+                .expect("request"),
+            ip,
+        )
+    }
+
+    fn fio_gravado(state: &Arc<Daemon>) -> Vec<fio::Linha> {
+        let guard = state.vault.read().expect("vault");
+        fio::ler(guard.as_ref().expect("campanha")).expect("fio")
+    }
+
+    async fn fio_do_mestre_agora(state: &Arc<Daemon>) -> Vec<serde_json::Value> {
+        let response = router(Arc::clone(state))
+            .oneshot(como_mestre(None, "GET", "/sala/mensagens", None, "127.0.0.1"))
+            .await
+            .expect("resposta");
+
+        replay_do_fio(response).await
+    }
+
+    #[tokio::test]
+    async fn quem_fala_no_fio_vem_do_token_e_nao_do_corpo() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        // O corpo tenta assinar por outro; o campo nao existe, e e ignorado.
+        let corpo = r#"{"texto":"  volto em cinco minutos  ","autor":{"tipo":"mestre"}}"#;
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token, "POST", "/eu/mensagens", Some(corpo)))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let linhas = fio_gravado(&state);
+        assert_eq!(linhas.len(), 1);
+        assert!(matches!(&linhas[0].autor, fio::Autor::Jogador { nome, .. } if nome == "Edgar"));
+        assert_eq!(linhas[0].texto.as_deref(), Some("volto em cinco minutos"));
+        assert_eq!(linhas[0].para, None);
+    }
+
+    #[tokio::test]
+    async fn falar_no_fio_exige_credencial_e_texto() {
+        let (_dir, state, codigo) = daemon();
+
+        let sem_token = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .method("POST")
+                    .uri("/eu/mensagens")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"texto":"oi"}"#))
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+        assert_eq!(sem_token.status(), StatusCode::UNAUTHORIZED);
+
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+        let vazia = router(Arc::clone(&state))
+            .oneshot(como(&token, "POST", "/eu/mensagens", Some(r#"{"texto":"   "}"#)))
+            .await
+            .expect("resposta");
+        assert_eq!(vazia.status(), StatusCode::BAD_REQUEST);
+
+        // O teto do corpo e o de `/eu/acoes`: um recado, e nao um arquivo.
+        let enorme = serde_json::json!({ "texto": "a".repeat(20_000) }).to_string();
+        let grande = router(Arc::clone(&state))
+            .oneshot(como(&token, "POST", "/eu/mensagens", Some(&enorme)))
+            .await
+            .expect("resposta");
+        assert_eq!(grande.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+        assert!(fio_gravado(&state).is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_rolagem_do_jogador_entra_no_fio_com_o_id_da_bandeja() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        // Com a janela do Mestre FECHADA: ninguem assina `/sala/rolagens`. E o
+        // caso que o fio existe para nao perder.
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token, "POST", "/eu/rolagens", Some(r#"{"faces":20}"#)))
+            .await
+            .expect("resposta");
+        let rolagem: serde_json::Value = serde_json::from_str(&corpo(response).await).expect("json");
+
+        let linhas = fio_gravado(&state);
+        assert_eq!(linhas.len(), 1);
+        assert_eq!(linhas[0].id, rolagem["id"].as_str().expect("id"));
+
+        let dados = &linhas[0].rolagem.as_ref().expect("rolagem").dados;
+        assert_eq!(dados[0].faces, 20);
+        assert_eq!(i64::from(dados[0].valor), rolagem["valor"].as_i64().expect("valor"));
+    }
+
+    #[tokio::test]
+    async fn o_sussurro_ao_mestre_nao_chega_ao_outro_celular() {
+        let (_dir, state, codigo) = daemon();
+        let ana = token_de(Arc::clone(&state), &codigo, "Ana").await;
+        let bia = token_de(Arc::clone(&state), &codigo, "Bia").await;
+
+        for corpo in [r#"{"texto":"para a mesa"}"#, r#"{"texto":"so para o Mestre","soParaOMestre":true}"#] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(&ana, "POST", "/eu/mensagens", Some(corpo)))
+                .await
+                .expect("resposta");
+            assert_eq!(response.status(), StatusCode::CREATED);
+        }
+
+        let textos = |eventos: Vec<serde_json::Value>| -> Vec<String> {
+            eventos.iter().map(|e| e["texto"].as_str().unwrap_or_default().to_string()).collect()
+        };
+
+        let de_bia = router(Arc::clone(&state))
+            .oneshot(como(&bia, "GET", "/eu/mensagens", None))
+            .await
+            .expect("resposta");
+        assert_eq!(textos(replay_do_fio(de_bia).await), ["para a mesa"]);
+
+        // Quem sussurrou ve o proprio sussurro.
+        let de_ana = router(Arc::clone(&state))
+            .oneshot(como(&ana, "GET", "/eu/mensagens", None))
+            .await
+            .expect("resposta");
+        assert_eq!(textos(replay_do_fio(de_ana).await), ["para a mesa", "so para o Mestre"]);
+
+        // E o Mestre le tudo.
+        assert_eq!(textos(fio_do_mestre_agora(&state).await), ["para a mesa", "so para o Mestre"]);
+    }
+
+    #[tokio::test]
+    async fn o_mestre_fala_com_token_e_desta_maquina() {
+        let (_dir, state, _codigo) = daemon();
+        let corpo = Some(r#"{"texto":"a ponte cai"}"#);
+
+        let sem_token = router(Arc::clone(&state))
+            .oneshot(como_mestre(None, "POST", "/sala/mensagens", corpo, "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(sem_token.status(), StatusCode::UNAUTHORIZED);
+
+        let de_fora = router(Arc::clone(&state))
+            .oneshot(como_mestre(Some("segredo"), "POST", "/sala/mensagens", corpo, "192.168.7.99"))
+            .await
+            .expect("resposta");
+        assert_eq!(de_fora.status(), StatusCode::FORBIDDEN);
+
+        let aceito = router(Arc::clone(&state))
+            .oneshot(como_mestre(Some("segredo"), "POST", "/sala/mensagens", corpo, "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(aceito.status(), StatusCode::CREATED);
+
+        assert_eq!(fio_gravado(&state)[0].autor, fio::Autor::Mestre);
+
+        // O fio inteiro, com os sussurros, tambem nao sai desta maquina.
+        let leitura_de_fora = router(state)
+            .oneshot(como_mestre(None, "GET", "/sala/mensagens", None, "192.168.7.99"))
+            .await
+            .expect("resposta");
+        assert_eq!(leitura_de_fora.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn o_sussurro_do_mestre_leva_o_nome_do_banco() {
+        let (_dir, state, codigo) = daemon();
+        let ana = token_de(Arc::clone(&state), &codigo, "Ana").await;
+        let id_da_ana = {
+            let guard = state.vault.read().expect("vault");
+            players::list(guard.as_ref().expect("campanha")).expect("list")[0].id.clone()
+        };
+
+        let corpo = serde_json::json!({
+            "texto": "tu ouviste passos",
+            "para": { "tipo": "jogador", "id": id_da_ana, "nome": "Outro Nome" },
+        })
+        .to_string();
+        let response = router(Arc::clone(&state))
+            .oneshot(como_mestre(Some("segredo"), "POST", "/sala/mensagens", Some(&corpo), "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        assert_eq!(
+            fio_gravado(&state)[0].para,
+            Some(fio::Destino::Jogador { id: id_da_ana, nome: "Ana".into() })
+        );
+
+        let de_ana = router(Arc::clone(&state))
+            .oneshot(como(&ana, "GET", "/eu/mensagens", None))
+            .await
+            .expect("resposta");
+        assert_eq!(replay_do_fio(de_ana).await.len(), 1);
+
+        let ninguem = r#"{"texto":"oi","para":{"tipo":"jogador","id":"nao-existe"}}"#;
+        let response = router(state)
+            .oneshot(como_mestre(Some("segredo"), "POST", "/sala/mensagens", Some(ninguem), "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn a_rolagem_do_mestre_tem_de_caber_no_dado() {
+        let (_dir, state, _codigo) = daemon();
+
+        let impossivel = r#"{"rolagem":{"dados":[{"faces":6,"valor":9}]}}"#;
+        let response = router(Arc::clone(&state))
+            .oneshot(como_mestre(Some("segredo"), "POST", "/sala/mensagens", Some(impossivel), "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let de_plugin = r#"{"rolagem":{"dados":[{"faces":20,"valor":14}],"modificador":3,"rotulo":"Ataque"},"plugin":{"id":"dnd5e","nome":"D&D 5e"},"para":{"tipo":"mestre"}}"#;
+        let response = router(Arc::clone(&state))
+            .oneshot(como_mestre(Some("segredo"), "POST", "/sala/mensagens", Some(de_plugin), "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let linha = &fio_gravado(&state)[0];
+        assert_eq!(linha.autor, fio::Autor::Plugin { id: "dnd5e".into(), nome: "D&D 5e".into() });
+        assert_eq!(linha.para, Some(fio::Destino::Mestre));
+        assert_eq!(linha.rolagem.as_ref().and_then(|r| r.rotulo.as_deref()), Some("Ataque"));
+    }
+
+    #[tokio::test]
+    async fn apagar_tira_a_linha_de_todo_fio() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token, "POST", "/eu/mensagens", Some(r#"{"texto":"me arrependi"}"#)))
+            .await
+            .expect("resposta");
+        let id = serde_json::from_str::<serde_json::Value>(&corpo(response).await).expect("json")["id"]
+            .as_str()
+            .expect("id")
+            .to_string();
+
+        let mut fluxo = state.fio_tx.subscribe();
+        let uri = format!("/sala/mensagens/{id}");
+
+        let sem_token = router(Arc::clone(&state))
+            .oneshot(como_mestre(None, "DELETE", &uri, None, "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(sem_token.status(), StatusCode::UNAUTHORIZED);
+
+        let apagada = router(Arc::clone(&state))
+            .oneshot(como_mestre(Some("segredo"), "DELETE", &uri, None, "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(apagada.status(), StatusCode::NO_CONTENT);
+
+        // A lapide vai a quem esta com o fio aberto, e o replay ja nao traz.
+        let (_, lapide) = fluxo.try_recv().expect("a lapide nao foi anunciada");
+        assert!(matches!(lapide, fio::Registro::Apagada { alvo, .. } if alvo == id));
+        assert!(fio_do_mestre_agora(&state).await.is_empty());
+
+        let de_novo = router(state)
+            .oneshot(como_mestre(Some("segredo"), "DELETE", &uri, None, "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(de_novo.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn tirado_da_mesa_o_jogador_continua_tendo_dito() {
+        let (_dir, state, codigo) = daemon();
+        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+
+        router(Arc::clone(&state))
+            .oneshot(como(&token, "POST", "/eu/mensagens", Some(r#"{"texto":"ate a proxima"}"#)))
+            .await
+            .expect("resposta");
+
+        {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            let id = players::list(vault).expect("list")[0].id.clone();
+            players::remove(vault, &id).expect("remove");
+        }
+
+        // O token morreu, e o fio dele junto. A frase, nao: o nome foi
+        // congelado na linha.
+        let response = router(Arc::clone(&state))
+            .oneshot(como(&token, "GET", "/eu/mensagens", None))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let fio = fio_do_mestre_agora(&state).await;
+        assert_eq!(fio.len(), 1);
+        assert_eq!(fio[0]["autor"]["nome"], "Edgar");
     }
 
     // --- o token do jogador -------------------------------------------------

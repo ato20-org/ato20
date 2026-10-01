@@ -571,6 +571,32 @@ mod tests {
     }
 
     #[test]
+    fn o_fio_da_campanha_viaja_no_zip() {
+        use super::super::fio;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = campanha(dir.path(), "A Marca do Javali");
+
+        // O fio mora na raiz, e nao no `.ato20/`, justamente para isto: ele e
+        // a memoria da mesa, e chega do outro lado sem materializacao nenhuma.
+        let linha = fio::Linha {
+            id: "l1".into(),
+            quando: 1,
+            autor: fio::Autor::Mestre,
+            para: None,
+            texto: Some("a ponte caiu".into()),
+            rolagem: None,
+        };
+        fio::acrescentar(&vault, &fio::Registro::Linha(linha.clone())).expect("fio");
+
+        let zip_path = dir.path().join("saida.ato20.zip");
+        export(&vault, &zip_path).expect("export");
+        let importada = import(&zip_path, &dir.path().join("importadas")).expect("import");
+
+        assert_eq!(fio::ler(&importada).expect("ler"), vec![linha]);
+    }
+
+    #[test]
     fn o_estado_da_sessao_nao_viaja() {
         let dir = tempfile::tempdir().expect("tempdir");
         let vault = campanha(dir.path(), "Campanha");
