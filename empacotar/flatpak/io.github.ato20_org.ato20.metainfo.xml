@@ -100,6 +100,217 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.0.0" date="2026-10-01">
+      <description>
+        <p>
+          ATO20 1.0 brings a campaign chat, map pings, cameras of any shape, an
+          eye in the Layers list and per-item shadows, plus a richer note
+          editor and many smaller changes. Fixes close the list.
+        </p>
+        <ul>
+          <li>
+            The campaign has a chat, with the dice rolls inside the
+            conversation. It is stored in the campaign itself and travels with
+            it when exported. On the phone, Chat is a new tab with an "Only to
+            the GM" option; you write to the table, to one player or only to
+            yourself, and can delete any line. @ mentions a character. Your own
+            rolls are visible only to you until you turn on Open dice. The Chat
+            window opens by itself when a player writes, and the Rolls window
+            stays as it was.
+          </li>
+          <li>
+            Pings: anyone at the table points at a spot on the map, and
+            everybody sees it. On the phone, hold a finger still on the map; on
+            your screen, hold the right button, while a short click still opens
+            the menu. The ' (apostrophe) key opens the wheel on both screens,
+            for touchpad users. There are six: Look here, Careful, Danger,
+            Attack, What is this? and On my way. In the scene on air, the ping
+            shows on your screen, on the TV and on the phones.
+          </li>
+          <li>
+            A camera can take any shape: the tower standing up, the corridor
+            lying down. Drag a corner of the frame and width and height change
+            independently; with Shift, the shape is kept. The TV shows the whole
+            crop with black bars around it, and portraits stay in the corner of
+            the screen, over the bar. Moving, zooming, following a token or
+            holding V keep the shape, and "Back to 16:9", in the frame's
+            right-click menu, restores the 16:9 around the camera.
+          </li>
+          <li>
+            The eye in the Layers list takes an image or a folder out of the
+            scene. It disappears from your stage and from the table, as in
+            Figma, and a second click brings it back: the roof in the way while
+            you build the floor below, or the monster waiting for its moment.
+            Hidden items stay out of area selection and Ctrl+A. The row is
+            dimmed in the list, which is where you bring it back from. A folder
+            takes everything inside it, and a hidden token takes its portrait
+            off the table too.
+          </li>
+          <li>
+            Each image and token chooses how it casts a shadow, from a new
+            shadow button on the gizmo. "At the base" is for a standing figure: a
+            yellow line marks where it stands, and the shadow starts there.
+            "Whole" is for things seen from above, like a round token, a barrel or
+            a treetop: the whole figure stretches away from the light without
+            coming loose, and a slider sets the height. "None" turns it off. It
+            works under the sun and under a torch, and a token flipped
+            vertically no longer casts its shadow from its head.
+          </li>
+          <li>
+            A note shows what it mentions: the image, the portrait, the map or
+            the book page. Just leave the mention alone on its line. Several on
+            one line sit side by side, and images get a width handle and
+            alignment buttons. The new ! sign points to a bookmarked page on the
+            bookshelf, by the bookmark's name, and its chip opens the book at
+            that page, in notes and sticky notes. In sticky notes and cards,
+            clicking a mention now opens what it points to.
+          </li>
+          <li>
+            The note editor gained a formatting bar, Ctrl+F and multi-line
+            selection. The bar writes the Markdown for you, as do Ctrl+B and
+            Ctrl+I. Tab indents the line and nests list items. Clicking puts the
+            cursor where you clicked, and dragging or using Shift selects
+            several lines to delete, paste or format. The Mentions panel lists
+            who and what the note mentions, and Ctrl+= and Ctrl+- change the
+            text size. In the Files tab, search now also finds text inside
+            notes, sticky notes and boards.
+          </li>
+          <li>
+            Sticky notes are written in handwriting, a pen-like font, on your
+            screen and on the TV. With a sticky note or a card selected, Ctrl+=
+            and Ctrl+- step the text size up and down, and the TV now respects
+            that size; with nothing selected, the keys still zoom. The new font
+            is wider, so an old, tightly sized sticky note may hide its last
+            line.
+          </li>
+          <li>
+            Shapes and arrows can have rounded corners and a hand-drawn stroke,
+            wobbly like a pencil sketch, with loose text in the sticky-note
+            font. Both switches live in the new Board topic of the campaign
+            settings and apply to what is drawn from then on; what is already
+            drawn does not change. On the gizmo, Colour and fill became Style,
+            which changes one shape's stroke and fill colour and opacity, its
+            thickness, corners and hand-drawn stroke.
+          </li>
+          <li>
+            The gizmo gained a padlock, and walls, hidden areas, shapes, text
+            and lights can now be locked. Before, only images and tokens could,
+            from the Layers list and the menu. Locked, nothing moves by dragging
+            or with the arrow keys, the handles go away and nothing is deleted
+            by accident: the wall no longer comes along when you grab the token
+            beside it, and the boss stays on the altar. Lights can also be
+            locked from the Locked row in their panel.
+          </li>
+          <li>
+            Ctrl+C and Ctrl+V work on walls, hidden areas, lights, sticky notes
+            and pencil strokes, along with cut and duplicate, and copies keep
+            their colour. Copying is complete now: text keeps its colour,
+            background and bold, polygons keep their vertices, and text and
+            shapes paste on maps too. On a board, pasting a copied shape used to
+            bring in whatever text had been copied outside the app instead.
+          </li>
+          <li>
+            The campaign settings gained topics and search. Board, Meters,
+            Conditions and the two portrait topics sit on a bar, one open at a
+            time, which becomes a row along the top when the window is narrow
+            in the dock. Search ignores accents and also finds what you
+            created, such as the name of one of your conditions. Plugin
+            adjustments that apply only to this campaign get an Adjustments
+            topic.
+          </li>
+          <li>
+            Plugins can take the table to another browser, like OBS for a live
+            stream. A plugin serves pages on the network with rolling dice and
+            portraits drawn as on the TV, on a transparent background, and only
+            receives what the table sees. Its code still runs only on your
+            computer. Plugins can also read and post to the campaign chat.
+          </li>
+          <li>
+            Shift locks the camera to one axis, and a held arrow key moves it
+            smoothly. With Shift, while dragging the frame or holding V, the
+            camera moves only sideways or only up and down, to follow a wall or
+            a corridor. A held arrow used to take a step, stop for half a second
+            and carry on in jumps; it now starts at once and eases to a stop, at
+            a steady speed, a little slower than before and faster with Shift.
+            A tap still moves 5%. Along the way, the wheel with Shift zooms the
+            camera in instead of only out, and V with Shift no longer flips the
+            selection.
+          </li>
+          <li>
+            A prepared camera is yellow, no longer red. In a scene that is off
+            air, the camera the table will open on showed red, as if the TV were
+            already showing it. Red now belongs only to the camera on air, and
+            a prepared one offers "Undo preparation" instead of "Take off air".
+          </li>
+          <li>
+            A camera can be removed with the X on its chip, and the frame gained
+            a right-click menu with Remove, Broadcast, Bring to where I am and
+            Go to camera, also on the other cameras drawn on the map. The
+            three-dot menu of the camera bar removes it too. Before, a camera
+            only went away from the chip's right-click menu, and nothing there
+            said so.
+          </li>
+          <li>
+            Putting a scene on air from the Scenes list also opens it for you:
+            what just went to the TV is what you need at hand. If it was already
+            open, the selection and the zoom stay as they were. To prepare the
+            next scene while the table watches the current one, open it without
+            broadcasting.
+          </li>
+          <li>
+            A pin's note accepts dragged images, and Delete removes the pin.
+            Attachments became a grid that takes images from the Library and
+            files from your computer. A thumbnail opens in a window on click and
+            goes onto the map by dragging, without leaving the pin. Clicking a
+            pin now drops the previous selection: before, with a token selected,
+            clicking a pin and pressing Delete deleted the token.
+          </li>
+          <li>
+            Closing the window with a campaign open asks first. Closing drops
+            the TV and the phones in the middle of the session, and the X sits
+            next to maximise. Switching campaigns and removing a campaign from
+            the list on the start screen also ask first. Alt+F4 still closes
+            right away.
+          </li>
+          <li>
+            Fixed: the TV slides smoothly again when the camera moves. Since
+            0.2.0, dragging the frame, moving with the arrow keys or holding V
+            reached the table in jumps, ten per second, and only zoom was
+            smooth.
+          </li>
+          <li>
+            Fixed: walls no longer trap the tokens under them. A wall drawn over
+            a building swallowed the clicks of every token inside it. Tokens now
+            get the click first, and the wall is picked by clicking empty space
+            inside it. At rest it is drawn fainter, so it does not hide the map.
+            Walls and lights dragged off the map also stay visible, so there is
+            something to click to bring them back.
+          </li>
+          <li>
+            Fixed: dragging a card on a board full of notes no longer stutters.
+            With thirty cards, dragging nearly stalled; it is now smooth.
+            Dragging a token with the scene on air got lighter too. A card's
+            scrollbar only shows with the mouse over it.
+          </li>
+          <li>
+            Fixed: the gizmo, light and pin note panels no longer go off screen.
+            Near the edge, a panel opens on the other side or tucks inside. A
+            pin's note stays where you dragged it and stops at the edge instead
+            of getting lost beyond it.
+          </li>
+          <li>
+            Fixed: clicking the map takes the cursor out of a text field, and
+            shortcuts work again. With the character search focused, whatever
+            you typed after clicking the map went into it. Same with sliders:
+            the arrow keys push the selection again.
+          </li>
+          <li>
+            Fixed: a condition's icon on a token no longer turns into a blot at
+            high zoom.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="0.7.2" date="2026-09-29">
       <description>
         <p>

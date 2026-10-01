@@ -56,6 +56,174 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.0.0",
+    data: "2026-10-01",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: "A campanha ganhou chat, com as rolagens no meio da conversa",
+        detalhe:
+          "A conversa fica guardada na própria campanha, e vai junto quando ela é exportada. No celular, o Chat é uma aba nova, com \"Só para o Mestre\"; você escreve para a mesa, para um jogador ou só para si, e apaga o que quiser. O @ cita um personagem. Os seus dados entram só para você, até ligar Dados abertos. A janela de Chat se abre sozinha quando um jogador escreve, e a de Rolagens continua como era.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "Pings: qualquer um da mesa aponta um lugar no mapa, e todo mundo vê",
+        detalhe:
+          "No celular, segure o dedo parado no mapa; no computador, segure o botão direito, e o clique curto continua abrindo o menu. A tecla ' (apóstrofo) abre a roda nas duas telas, para quem usa touchpad. São seis: Olhe aqui, Cuidado, Perigo, Atacar, O que é isso? e Vou para lá. Na cena que está no ar, o ping aparece na sua tela, na TV e nos celulares.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "A câmera pode ter qualquer formato: a torre em pé, o corredor deitado",
+        detalhe:
+          "Puxe o canto da moldura e a largura e a altura mudam cada uma por si; com Shift, o formato se mantém. A TV mostra o recorte inteiro, com faixas pretas no que sobra, e o retrato continua no canto da tela, por cima da faixa. Mover, aproximar, seguir um token ou segurar V não desfazem o formato, e \"Voltar a 16:9\", no botão direito da moldura, devolve o 16:9 em volta da câmera.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "O olho da lista de Camadas tira uma imagem ou uma pasta de cena",
+        detalhe:
+          "Some do seu palco e da mesa, como no Figma, e clicar de novo traz de volta: é o telhado que atrapalha montar o andar de baixo, ou o monstro que espera a hora de entrar. Escondido, ele nem entra na seleção por área ou no Ctrl+A. A linha fica apagada na lista, e é por ela que se volta. A pasta leva o que tem dentro, e um token escondido leva junto o retrato dele na mesa.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Cada imagem e cada token escolhe como faz sombra",
+        detalhe:
+          "Pelo botão novo de sombra no gizmo. \"Na base\" é para a figura em pé: uma linha amarela marca onde ela pisa, e a sombra nasce dali. \"Inteira\" é para a vista de cima, como o token redondo, o barril ou a copa da árvore: a figura toda estica para longe da luz, sem descolar, e uma régua ajusta a altura. \"Nenhuma\" desliga. Vale debaixo do sol e da tocha, e o token espelhado na vertical deixou de fazer sombra pela cabeça.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "A nota mostra o que cita: a imagem, o retrato, o mapa ou a página do livro",
+        detalhe:
+          "Basta deixar a menção sozinha na linha. Várias na mesma linha ficam lado a lado, e a imagem ganha alça de largura e botões de alinhamento. O novo sinal ! cita uma página marcada da estante, pelo nome do marcador, e o chip abre o livro nela, na nota e no postit. No postit e no cartão, clicar numa menção passou a abrir o que ela cita.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "O editor de notas ganhou barra de formatação, Ctrl+F e seleção por várias linhas",
+        detalhe:
+          "A barra escreve o Markdown por você, e Ctrl+B e Ctrl+I também. Tab recua a linha e aninha o item da lista. Clicar põe o cursor onde se clicou, e arrastar ou usar Shift seleciona várias linhas para apagar, colar ou formatar. O painel Menções lista quem e o que a nota cita, e Ctrl+= e Ctrl+- mudam o tamanho da letra. Na aba Arquivos, a busca passou a achar também pelo texto das notas, dos postits e dos quadros.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "O postit escreve com letra de mão",
+        detalhe:
+          "Uma letra de caneta, na sua tela e na TV. Com o postit ou o cartão selecionado, Ctrl+= e Ctrl+- sobem e descem a letra um degrau, e a TV passou a respeitar esse tamanho; sem nada selecionado, as teclas continuam dando zoom. A letra nova é mais larga: um postit antigo bem justo pode esconder a última linha.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Formas e setas podem ter cantos redondos e traço à mão",
+        detalhe:
+          "O traço sai tremido, como rabisco a lápis, e o texto solto vai para a letra do postit. As duas chaves ficam no tópico Quadro, novo na Configuração da campanha, e valem para o que nascer dali; o que já está desenhado não muda. No gizmo, Cor e fundo virou Estilo, que troca de uma forma só a cor e a opacidade do traço e do fundo, a espessura, os cantos e o traço à mão.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "O gizmo ganhou um cadeado, e parede, área, forma, texto e luz passam a travar",
+        detalhe:
+          "Antes só a imagem e o token travavam, pela lista de Camadas e pelo menu. Travado, nada anda pelo arrasto nem pelas setas, perde as alças e não se apaga por engano: a parede não vem junto quando você pega o token ao lado, e o chefe fica no altar. A luz trava também pela linha Travada do painel dela.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "Ctrl+C e Ctrl+V valem para parede, área escondida, luz, postit e risco do lápis",
+        detalhe:
+          "Recortar e duplicar também, e a cópia leva a cor. Copiar ficou inteiro: o texto leva cor, fundo e negrito, o polígono leva os vértices, e texto e forma colam também no mapa. No quadro, colar uma forma copiada trazia, no lugar dela, o texto que estivesse copiado fora do aplicativo.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A Configuração da campanha ganhou tópicos e busca",
+        detalhe:
+          "Quadro, Medidores, Condições e os dois de retratos ficam numa barra, um aberto por vez, que vira fileira no alto quando a janela está estreita no dock. A busca ignora acento e acha também pelo que você criou: \"vida\" leva aos Medidores, e o nome de uma condição sua leva às Condições. Ajuste de plugin que vale só nesta campanha ganha o tópico Ajustes.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "Plugins podem levar a mesa para outro navegador, como o OBS da live",
+        detalhe:
+          "O plugin abre páginas na rede com os dados rolando e os retratos desenhados como na TV, de fundo transparente, e recebe só o que a mesa vê. O código dele continua rodando só no seu computador. Ele também lê e escreve no chat da campanha.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "Shift trava a câmera num eixo, e a seta segurada a leva sem tranco",
+        detalhe:
+          "Com Shift, arrastando a moldura ou segurando V, a câmera anda só de lado ou só na vertical, para seguir uma parede ou um corredor. A seta segurada dava um passo, parava meio segundo e seguia aos pulos; agora arranca na hora e para em curva, numa velocidade constante, um pouco mais lenta que antes e mais rápida com Shift. Um toque continua andando 5%. De quebra, a roda com Shift aproxima a câmera em vez de só afastar, e V com Shift não espelha mais a seleção.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "A câmera preparada fica amarela, e não mais vermelha",
+        detalhe:
+          "Numa cena fora do ar, a câmera com que a mesa vai abrir aparecia em vermelho, como se a TV já a mostrasse. Agora o vermelho é só da câmera no ar, e a preparada oferece \"Desfazer a preparação\" em vez de \"Tirar do ar\".",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "A câmera sai pelo X do chip, e a moldura ganhou menu no botão direito",
+        detalhe:
+          "O menu da moldura tem Remover, Transmitir, Trazer para onde estou e Ir até a câmera, e vale também para as outras câmeras desenhadas no mapa. O menu de três pontos da barra de câmeras também remove. Antes ela só saía pelo botão direito do chip, e nada ali dizia que dava.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Pôr no ar pela lista de Cenas também abre a cena para você",
+        detalhe:
+          "O que acabou de ir para a TV é o que você precisa ter na mão. Se ela já estava aberta, a seleção e o zoom ficam como estavam. Para preparar a próxima enquanto a mesa vê a atual, abra sem transmitir.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "A nota do Ponto recebe imagens arrastadas, e o Delete apaga o Ponto",
+        detalhe:
+          "Os anexos viraram uma grade que aceita imagem da Biblioteca e arquivo do computador. A miniatura abre numa janela ao clique e vai ao mapa pelo arrasto, sem sair do Ponto. Clicar no Ponto passou a largar o que estava selecionado: antes, com um token selecionado, clicar no Ponto e apertar Delete apagava o token.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Fechar a janela com uma campanha aberta pede confirmação",
+        detalhe:
+          "Fechar derruba a TV e os celulares no meio da sessão, e o X mora ao lado do maximizar. Trocar de campanha e tirar uma campanha da lista, na porta, também perguntam antes. O Alt+F4 continua fechando direto.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "A TV voltou a deslizar quando a câmera anda",
+        detalhe:
+          "Desde a 0.2.0, arrastar a moldura, andar pelas setas ou segurar V chegava à mesa aos saltos, dez por segundo, e só o zoom deslizava.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "A parede deixou de prender os tokens que ficam embaixo dela",
+        detalhe:
+          "Uma parede desenhada por cima de um prédio engolia o clique dos tokens lá dentro. Agora o token pega o clique primeiro, e a parede se pega clicando no vazio dentro dela. Parada, ela aparece mais fraca, para não esconder o mapa. E a parede e a luz arrastadas para fora do mapa continuam à vista, para dar onde clicar e trazê-las de volta.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "Arrastar um cartão num quadro cheio de notas não engasga mais",
+        detalhe:
+          "Com trinta cartões, o arrasto quase parava; agora anda liso. Arrastar o token com a cena no ar também ficou mais leve. A barra de rolagem do cartão só aparece com o mouse em cima dele.",
+      },
+      {
+        tipo: "correcao",
+        titulo:
+          "Os painéis do gizmo, da luz e da nota do Ponto não saem mais da tela",
+        detalhe:
+          "Perto da borda, o painel abre do outro lado ou encosta por dentro. A nota do Ponto fica onde você a arrastou, e para na borda em vez de se perder fora dela.",
+      },
+      {
+        tipo: "correcao",
+        titulo:
+          "Clicar no mapa tira o cursor do campo, e os atalhos voltam a valer",
+        detalhe:
+          "Com a busca de personagem focada, o que se digitava depois de clicar no mapa ia para ela. O mesmo com os sliders: as setas voltam a empurrar a seleção.",
+      },
+      {
+        tipo: "correcao",
+        titulo:
+          "O ícone da condição sobre o token não vira mais mancha com zoom alto",
+      },
+    ],
+  },
+  {
     versao: "0.7.2",
     data: "2026-09-29",
     mudancas: [
