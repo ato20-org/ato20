@@ -32,13 +32,13 @@ import {
   enquadrarSelecao,
   irParaCamera,
   mostrarCenaInteira,
-  moverCamera,
   novaCameraNoPonteiro,
   PASSO_CAMERA,
   PASSO_CAMERA_LARGO,
   zoomCamera,
   ZOOM_CAMERA_STEP,
 } from "@/lib/mestre/camera-actions";
+import { segurarSetaDaCamera } from "@/lib/mestre/camera-nas-setas";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -407,30 +407,33 @@ export const ATALHOS_BASE: Atalho[] = [
   // Sem nada selecionado a seta não tem item para empurrar, e a câmera é o
   // único alvo que sobra: aí ela anda sem precisar do Alt. Com seleção, a
   // seta continua empurrando o item, como sempre.
+  //
+  // Segurada, a câmera anda pelo relógio até a seta subir; a repetição da
+  // tecla chega aqui e não faz nada. Ver `camera-nas-setas`.
   {
     grupo: "Câmera",
     tecla: "Shift+Setas (sem seleção)",
-    rotulo: `Mover a câmera ${Math.round(PASSO_CAMERA_LARGO * 100)}% de cada vez`,
+    rotulo: `Andar com a câmera depressa. Um toque anda ${Math.round(PASSO_CAMERA_LARGO * 100)}%`,
     combina: (evento) =>
       !comando(evento) &&
       evento.shiftKey &&
       evento.key in SETAS &&
       semSelecao() &&
       Boolean(cameraAtual()),
-    executar: (evento) => moverMesa(evento, PASSO_CAMERA_LARGO),
+    executar: moverMesa,
     impedirPadrao: true,
   },
   {
     grupo: "Câmera",
     tecla: "Setas (sem seleção)",
-    rotulo: `Mover a câmera ${Math.round(PASSO_CAMERA * 100)}% de cada vez`,
+    rotulo: `Andar com a câmera enquanto segura. Um toque anda ${Math.round(PASSO_CAMERA * 100)}%`,
     combina: (evento) =>
       !comando(evento) &&
       !evento.shiftKey &&
       evento.key in SETAS &&
       semSelecao() &&
       Boolean(cameraAtual()),
-    executar: (evento) => moverMesa(evento, PASSO_CAMERA),
+    executar: moverMesa,
     impedirPadrao: true,
   },
   // Os mesmos sinais do zoom do palco, sem o Ctrl: Ctrl+= é o teu zoom, = é o
@@ -868,11 +871,9 @@ function semSelecao(): boolean {
   );
 }
 
-function moverMesa(evento: KeyboardEvent, passo: number): void {
+function moverMesa(evento: KeyboardEvent): void {
   const seta = SETAS[evento.key];
-  if (!seta) return;
-
-  moverCamera(seta.x * passo, seta.y * passo);
+  if (seta) segurarSetaDaCamera(evento, seta);
 }
 
 function girar(evento: KeyboardEvent, passo: number): void {

@@ -26,6 +26,9 @@ import { temCamera, type CameraSalva, type Scene, type Viewport } from "@/types/
  * Fração e não unidades de cena: a câmera fechada num corredor precisa andar
  * menos por toque do que a câmera aberta na sala inteira, e "um vinte avos do
  * que a mesa vê" é o mesmo gesto nos dois casos.
+ *
+ * É o TOQUE. Segurada, a seta anda pelo relógio e não por passos -- ver
+ * `camera-nas-setas`.
  */
 export const PASSO_CAMERA = 0.05;
 export const PASSO_CAMERA_LARGO = 0.25;
