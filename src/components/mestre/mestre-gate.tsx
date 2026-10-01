@@ -21,6 +21,16 @@ import {
 import { toast } from "sonner";
 
 import logo from "@/assets/logo-white.png";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -447,6 +457,10 @@ function CampanhaLinha({
   const encurtar = useCaminhoCurto();
   const capa = useCapaDaCampanha(entry.path, entry.existe);
 
+  // O X fica ao lado do botão que abre a campanha, e quem erra o alvo leva a
+  // linha embora. A pasta fica, mas o tempo aberta some com a linha.
+  const [tirando, setTirando] = useState(false);
+
   return (
     <li className="group flex items-center gap-1">
       <Button
@@ -538,10 +552,30 @@ function CampanhaLinha({
         size="icon-sm"
         aria-label={`Tirar ${entry.nome} da lista`}
         className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-        onClick={() => void onForget(entry.path)}
+        onClick={() => setTirando(true)}
       >
         <X />
       </Button>
+
+      <AlertDialog open={tirando} onOpenChange={setTirando}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tirar {entry.nome} da lista?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A pasta continua no disco, e a campanha volta à lista quando for
+              aberta por &quot;Encontrar campanha&quot;. O tempo aberta
+              contado até aqui se perde.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void onForget(entry.path)}>
+              Tirar da lista
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </li>
   );
 }

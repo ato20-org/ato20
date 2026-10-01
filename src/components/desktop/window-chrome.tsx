@@ -6,6 +6,16 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Clapperboard, Maximize2, Minimize2, Minus, X } from "lucide-react";
 
 import logo from "@/assets/logo-white.png";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { isDesktop } from "@/lib/vault/bridge";
 import { versaoAtual } from "@/lib/versoes";
 import { cn } from "@/lib/utils";
@@ -61,6 +71,7 @@ export function WindowChrome({
   inicio,
   acoes,
   subtitulo,
+  confirmarFechar,
 }: {
   /** Vai à direita do nome, na ponta esquerda da barra. */
   inicio?: React.ReactNode;
@@ -74,6 +85,14 @@ export function WindowChrome({
    */
   acoes?: React.ReactNode;
   subtitulo?: string;
+  /**
+   * Pergunta antes de fechar a janela.
+   *
+   * Com a campanha aberta, fechar a janela encerra o aplicativo e o daemon
+   * junto: a TV e os celulares caem no meio da sessão. E o botão de fechar é
+   * o vizinho imediato do maximizar, então o clique por engano acontece.
+   */
+  confirmarFechar?: boolean;
 }) {
   const noApp = useIsDesktop();
 
@@ -82,6 +101,7 @@ export function WindowChrome({
   // ele chegasse. Ver `versaoAtual`.
   const versao = versaoAtual()?.versao;
   const [maximizada, setMaximizada] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
 
   useEffect(() => {
     if (!noApp) return;
@@ -104,6 +124,11 @@ export function WindowChrome({
   if (!noApp) return null;
 
   const janela = getCurrentWindow();
+
+  function fechar() {
+    if (confirmarFechar) setConfirmando(true);
+    else void janela.close();
+  }
 
   return (
     <>
@@ -205,11 +230,30 @@ export function WindowChrome({
             // Vermelho só neste: é o único irreversível dos três, e é o vizinho
             // imediato do maximizar.
             className="hover:bg-destructive hover:text-destructive-foreground"
-            onClick={() => void janela.close()}
+            onClick={fechar}
             icon={<X className="size-3.5" />}
           />
         </div>
       </div>
+
+      <AlertDialog open={confirmando} onOpenChange={setConfirmando}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Fechar o ATO20?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A campanha fecha junto, e a TV e os celulares perdem a conexão com
+              a mesa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void janela.close()}>
+              Fechar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
