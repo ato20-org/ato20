@@ -50,6 +50,8 @@ import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useJanelaDeRolagens } from "@/hooks/use-janela-de-rolagens";
 import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
+import { useFioDaMesa } from "@/hooks/use-fio-da-mesa";
+import { useJanelaDoChat } from "@/hooks/use-janela-do-chat";
 import { usePingsDaMesa } from "@/hooks/use-pings-da-mesa";
 import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
 import { useAcoesDaMesa } from "@/hooks/use-acoes-da-mesa";
@@ -328,10 +330,16 @@ export function MestreShell() {
   useMovimentosDaMesa();
   // E os botões que eles apertam nas seções dos plugins. Ver `useAcoesDaMesa`.
   useAcoesDaMesa();
+  // E o fio da campanha: o que a mesa escreve e o que ela rolou, gravado pelo
+  // daemon. Ver `useFioDaMesa`.
+  useFioDaMesa();
   // E a janela que as mostra, que aparece sozinha quando alguém rola: o dado
   // chega do outro lado da mesa, e ninguém desta bancada pediu por ele. Ver
   // `useJanelaDeRolagens`.
   useJanelaDeRolagens();
+  // E a do chat, pelo mesmo motivo, quando um jogador escreve. Ver
+  // `useJanelaDoChat`.
+  useJanelaDoChat();
   useMestreShortcuts();
   useSpacePan();
 

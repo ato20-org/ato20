@@ -17,6 +17,9 @@ GET   /sala/plugin/{id}/{canal}?codigo=   o canal de um plugin habilitado, em SS
 POST  /sala/plugin/{id}/{canal}          o plugin publica pelo Mestre; token + loopback
 GET   /plugin/{id}/{arquivo}   a pagina de um plugin que declara pagina; em sandbox
 GET   /sala/rolagens           os dados que a mesa jogou, em SSE; loopback
+GET   /sala/mensagens          o fio da campanha inteiro, em SSE; loopback
+POST  /sala/mensagens          o Mestre (ou um plugin, pela janela) escreve no fio; token + loopback
+DELETE /sala/mensagens/{id}    o Mestre apaga uma linha do fio; token + loopback
 GET   /sala/movimentos         os tokens que os jogadores arrastaram, em SSE; loopback
 GET   /sala/pings              os pings que os jogadores marcaram no mapa, em SSE; loopback
 POST  /sala/publicar           o Mestre anuncia; token + loopback
@@ -69,6 +72,39 @@ porque um pedido que chegasse antes de o Mestre se inscrever simplesmente não e
 ele. O daemon guarda o último estado publicado e o entrega na conexão, então quem chega no
 meio já nasce sincronizado. Com o pedido foram o reenvio, o `ChannelMessage` e metade do
 `useSubscription`.
+
+## O fio da campanha
+
+O chat da mesa é um arquivo, `chat.jsonl`, na raiz da campanha — ver
+[campanha.md](campanha.md). Quem escreve nele é o **daemon**, e só ele: a mensagem do
+celular (`POST /eu/mensagens`), a do Mestre (`POST /sala/mensagens`) e a rolagem do
+jogador, que o próprio `/eu/rolagens` registra no instante em que sorteia. Gravada pela
+janela do Mestre, a rolagem feita com a janela fechada sumiria calada — os outros canais que
+sobem do celular são de disparo único e continuam assim.
+
+Gravar e anunciar acontecem sob uma trava só, e abrir um fluxo (assinar e ler o arquivo)
+também: o arquivo e o fluxo contam as linhas na mesma ordem, e quem conecta não perde nem
+recebe duas vezes a linha escrita no meio da conexão.
+
+A descida **não** é o `LiveState`. Ele é republicado a 10 Hz, e uma lista que só cresce ali
+pesaria em todo quadro de toda tela. O fio tem SSE próprio, que reenvia as últimas 200 linhas
+ao conectar, manda `{"tipo":"pronto"}` quando o replay acaba, e daí em diante entrega o que
+acontecer. O celular lê o dele em `GET /eu/mensagens`, pelo token — com `fetch`, porque o
+`EventSource` não manda cabeçalho, e o token na URL vazaria para histórico e log.
+
+O fluxo **termina** em vez de seguir com buraco: quando o receptor fica para trás e o canal
+pula registros, quando a campanha muda, e quando o jogador é tirado da mesa (o token deixa de
+resolver). A tela reconecta e recebe o replay de novo.
+
+**O sussurro** é o campo `para` da linha. O jogador manda só ao Mestre; o Mestre manda a um
+jogador, ou a si mesmo — é assim que fica no fio a rolagem escondida. O daemon filtra o fluxo
+de cada celular: a linha só chega a quem a escreveu e a quem ela foi. Não é canal de rede
+novo — é o mesmo fluxo autenticado, com um filtro —, e por isso não reabre a recusa de
+[extensoes.md](extensoes.md) a um canal por celular.
+
+A mensagem do celular tem 8 KB de corpo (o texto, 2.000 caracteres), como o `/eu/acoes`. A
+linha do Mestre aceita 64 KB, porque pode trazer a rolagem de um plugin com 50 dados — e o
+daemon confere cada face contra o dado dela (um "d6: 9" é recusado).
 
 ## O código da mesa
 

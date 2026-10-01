@@ -2,11 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Dices, FolderOpen, NotebookPen, Package, User } from "lucide-react";
+import {
+  Dices,
+  FolderOpen,
+  MessagesSquare,
+  NotebookPen,
+  Package,
+  User,
+} from "lucide-react";
 
 import logo from "@/assets/logo-white.png";
 
 import { AnotacoesJogador } from "@/components/jogador/anotacoes-jogador";
+import { ChatJogador } from "@/components/jogador/chat-jogador";
 import { DadosNaTela } from "@/components/jogador/dados-na-tela";
 import { MyCharacters } from "@/components/jogador/my-characters";
 import { JogadorStage } from "@/components/jogador/jogador-stage";
@@ -24,6 +32,8 @@ import {
   useSubscription,
   type Subscription,
 } from "@/hooks/use-scene-broadcast";
+import { useFioDoJogador } from "@/hooks/use-fio-do-jogador";
+import { useFioStore } from "@/lib/store/use-fio-store";
 import { usePlayerStore } from "@/lib/store/use-player-store";
 import { cn } from "@/lib/utils";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
@@ -41,7 +51,7 @@ import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
  * mesmo tempo, e lá o desenho é outro: trilhas nas bordas e gavetas por cima
  * do mapa — ver `LandscapeLayout`.
  */
-const STACKED_TABS = ["personagem", "anotacoes"] as const;
+const STACKED_TABS = ["personagem", "chat", "anotacoes"] as const;
 
 type StackedTab = (typeof STACKED_TABS)[number];
 
@@ -51,6 +61,7 @@ const FERRAMENTAS = {
   inventario: { lado: "esquerda", rotulo: "Inventário", icone: <Package /> },
   arquivos: { lado: "esquerda", rotulo: "Arquivos", icone: <FolderOpen /> },
   dados: { lado: "direita", rotulo: "Saquinho", icone: <Dices /> },
+  chat: { lado: "direita", rotulo: "Chat", icone: <MessagesSquare /> },
   anotacoes: { lado: "direita", rotulo: "Anotações", icone: <NotebookPen /> },
 } as const;
 
@@ -89,6 +100,12 @@ export function JogadorShell({
   /** Sem nome não há mesa: a tela inteira vira a porta de entrada. */
   const status = usePlayerStore((state) => state.status);
   const dentro = status === "dentro";
+
+  // O fio da campanha, assinado aqui pelo mesmo motivo da cena logo abaixo: a
+  // aba do chat desmontada não pode perder a conversa. Só com ficha — o fio é
+  // do jogador, e não de quem só digitou o código.
+  const eu = usePlayerStore((state) => state.sheet?.id);
+  useFioDoJogador(codigo, dentro ? eu : undefined);
 
   // A inscrição vive aqui, e não dentro da aba Cena: aba inativa é desmontada,
   // e o jogador que fosse ver a ficha sairia do fluxo e perderia as trocas de
@@ -234,6 +251,7 @@ type LayoutProps = {
  */
 function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
   const [aberta, setAberta] = useState<Ferramenta | null>(null);
+  const naoLidas = useFioStore((state) => state.naoLidas);
 
   /**
    * O botão do saquinho na doca — que aqui é a BOCA dele.
@@ -269,6 +287,7 @@ function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
           ativo={aberta === chave}
           rotulo={FERRAMENTAS[chave].rotulo}
           icone={FERRAMENTAS[chave].icone}
+          aviso={chave === "chat" && aberta !== "chat" && naoLidas > 0}
           onClick={() => alternar(chave)}
         />
       ));
@@ -330,6 +349,16 @@ function ConteudoDaFerramenta({
     return <ConteudoDoSaquinho boca={bocaDoSaquinho} />;
   if (ferramenta === "anotacoes")
     return <AnotacoesJogador codigo={codigo} emCena={emCena} />;
+  // Altura FIXA, ao contrário das outras gavetas, que crescem com o conteúdo:
+  // o chat rola por dentro e tem o campo preso embaixo, e uma gaveta do
+  // tamanho da conversa empurraria o campo para fora da tela. A margem negativa
+  // devolve o recuo da gaveta — a lista vai de borda a borda.
+  if (ferramenta === "chat")
+    return (
+      <div className="-m-3 h-[min(28rem,70dvh)]">
+        <ChatJogador codigo={codigo} emCena={emCena} />
+      </div>
+    );
 
   // As três do personagem são o mesmo componente, cada uma pedindo o seu
   // pedaço: a ficha com o retrato, o inventário, os arquivos.
@@ -346,6 +375,7 @@ function ConteudoDaFerramenta({
 function StackedLayout({ codigo, live, emCena }: LayoutProps) {
   const [tab, setTab] = useState<StackedTab>("personagem");
   const swipe = useSwipeTabs(STACKED_TABS, tab, setTab);
+  const naoLidas = useFioStore((state) => state.naoLidas);
 
   return (
     <>
@@ -377,12 +407,21 @@ function StackedLayout({ codigo, live, emCena }: LayoutProps) {
           />
         }
         direita={
-          <ToolbarItem
-            ativo={tab === "anotacoes"}
-            icone={<NotebookPen />}
-            rotulo="Anotações"
-            onClick={() => setTab("anotacoes")}
-          />
+          <>
+            <ToolbarItem
+              ativo={tab === "chat"}
+              icone={<MessagesSquare />}
+              rotulo="Chat"
+              aviso={tab !== "chat" && naoLidas > 0}
+              onClick={() => setTab("chat")}
+            />
+            <ToolbarItem
+              ativo={tab === "anotacoes"}
+              icone={<NotebookPen />}
+              rotulo="Anotações"
+              onClick={() => setTab("anotacoes")}
+            />
+          </>
         }
       />
     </>
@@ -417,6 +456,16 @@ function Painel({
     return (
       <div className="h-full p-3 pb-6">
         <AnotacoesJogador codigo={codigo} emCena={emCena} />
+      </div>
+    );
+  }
+
+  // Sem o recuo das outras abas nas laterais: a lista vai de borda a borda, e
+  // o campo preso embaixo pede a folga da bolinha do saquinho, como o caderno.
+  if (tab === "chat") {
+    return (
+      <div className="h-full pb-6">
+        <ChatJogador codigo={codigo} emCena={emCena} />
       </div>
     );
   }

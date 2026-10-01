@@ -61,11 +61,14 @@ export function ToolbarItem({
   ativo,
   icone,
   rotulo,
+  aviso = false,
   onClick,
 }: {
   ativo: boolean;
   icone: ReactNode;
   rotulo: string;
+  /** Há novidade do outro lado: o chat com linha por ler. Ver `PontoDeAviso`. */
+  aviso?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -75,8 +78,9 @@ export function ToolbarItem({
       // `aria-current`, e não `role="tab"`: os painéis são trocados por estado,
       // sem as setas e o foco que um conjunto de abas de verdade promete.
       aria-current={ativo ? "page" : undefined}
+      aria-label={aviso ? `${rotulo}, há mensagem nova` : undefined}
       className={cn(
-        "flex min-w-16 flex-col items-center gap-0.5 rounded-2xl px-3 py-1.5 text-[11px] font-medium transition-colors",
+        "relative flex min-w-16 flex-col items-center gap-0.5 rounded-2xl px-3 py-1.5 text-[11px] font-medium transition-colors",
         "[&_svg]:size-5 [&_svg]:shrink-0",
         ativo
           ? "bg-accent text-accent-foreground"
@@ -85,6 +89,26 @@ export function ToolbarItem({
     >
       {icone}
       {rotulo}
+      {aviso ? <PontoDeAviso className="top-1 right-4" /> : null}
     </button>
+  );
+}
+
+/**
+ * O ponto de "há o que ler".
+ *
+ * Um ponto, e não o número: o que o jogador precisa saber é que a mesa
+ * escreveu, e não quantas linhas — e um contador que sobe enquanto ele olha a
+ * ficha vira cobrança.
+ */
+export function PontoDeAviso({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "bg-primary ring-card pointer-events-none absolute size-2 rounded-full ring-2",
+        className,
+      )}
+    />
   );
 }

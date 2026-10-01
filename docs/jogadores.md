@@ -16,6 +16,8 @@ GET    /eu/anexos/{arquivo}
 DELETE /eu/anexos/{arquivo}
 POST   /eu/rolagens        o dado que o jogador joga; quem sorteia e o daemon
 POST   /eu/movimentos      o token do proprio personagem
+GET    /eu/mensagens       o fio da campanha como este jogador o le, em SSE
+POST   /eu/mensagens       {texto, soParaOMestre?} -> linha
 POST   /eu/pings           {tipo, cenaId, x, y}; o ping no mapa, assinado pelo token
 GET    /eu/personagens     so os vinculados a este jogador
 GET    /eu/personagens/{id}/anexos
@@ -90,6 +92,43 @@ visíveis para o mestre, que apaga a errada; o contrário não teria remédio.
 requisição seguinte. É a única operação do projeto que apaga arquivo sem o dono pedir, e a
 alternativa — linha removida e pasta órfã — deixaria o disco crescendo com material de quem
 não está mais na mesa e sem nenhuma tela por onde alcançá-lo.
+
+**O que o jogador disse no chat fica.** Tirar da mesa não apaga as linhas dele do
+`chat.jsonl`: o fio é a memória da campanha, e o nome de quem falou é congelado na linha —
+quem trocou de nome disse a frase de ontem com o nome de ontem, e quem saiu da mesa continua
+tendo dito o que disse. O que morre é o fluxo: o celular dele para de receber o fio na linha
+seguinte, porque o token deixou de resolver. Apagar uma frase é gesto do Mestre, linha a
+linha, no chat.
+
+## O chat
+
+O celular tem uma aba **Chat** (ao lado de Anotações, em pé; na doca da direita, deitado):
+o fio da campanha, com as mensagens da mesa e as rolagens de todos entrando como linhas
+próprias. O jogador escreve para a mesa, ou **só para o Mestre** — o sussurro, que nenhum
+outro celular recebe, porque o daemon filtra o fluxo de cada um. Jogador com jogador não tem
+canal escondido: é conversa que a mesa tem na mesa.
+
+A aba não substitui a bandeja embaixo do retrato. Ela continua sendo o agora da mesa (trinta
+segundos); o chat é a memória, e é onde se responde "quanto eu tirei naquele ataque?". O dado
+do jogador entra no fio no instante do sorteio, mas o número só aparece quando ele pousa —
+o mesmo relógio da bandeja. A assinatura vive no shell, e não na aba: aba desmontada não
+perde conversa, e o ponto na aba avisa a mensagem que chegou com ela fechada — mensagem, e
+não dado: o dado dos outros já aparece embaixo do retrato, e contá-lo deixaria o ponto aceso
+a sessão inteira.
+
+**`@personagem` no chat** é o mesmo marcador do caderno e do postit (`lib/mencoes/`): por nome,
+até o espaço, com aspas para nome composto, e guardado como texto — o `chat.jsonl` não sabe
+que ele existe. O que muda é quem resolve. No Mestre o `@` sugere o elenco inteiro e a menção
+abre a ficha; no celular ele sugere só os personagens **com jogador**, pela mesma rota do
+caderno (`/eu/mesa/personagens`), porque o índice inteiro entregaria a preparação do Mestre. O
+`@Aldren` que o Mestre escrever para a mesa chega ao celular como o nome, sem vínculo e sem
+aviso de erro. `/arquivo` e `#nota` não existem no chat: são de cada um, e uma menção que só
+resolve na tela de quem a escreveu é link quebrado na de todos os outros.
+
+No Mestre o chat é uma janela própria, **Chat**, ao lado da de **Rolagens**. As rolagens
+entram no fio para a conversa fazer sentido, mas a janela do dado continua sendo a de
+Rolagens — o que está na mesa agora, e as regras de rolagem da mesa. A de Chat se abre
+sozinha quando um jogador escreve, como a de Rolagens quando um dado cai.
 
 ## Os anexos
 

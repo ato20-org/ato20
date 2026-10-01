@@ -58,7 +58,7 @@ ESM — **implementa**.
 ```json
 {
   "id": "meu-plugin", "nome": "Meu plugin", "versao": "1.0.0",
-  "apiVersao": 3, "principal": "main.js",
+  "apiVersao": 4, "principal": "main.js",
   "contribui": {
     "paineis":  [{ "id": "notas", "titulo": "Notas da sessão" }],
     "comandos": [{ "id": "rolar", "titulo": "Rolar", "atalho": "Ctrl+Shift+F" }],
@@ -83,7 +83,10 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 3 é a atual: ela acrescentou as `paginas`, a
+mais do que ele tem.** A 4 é a atual: ela acrescentou `chat` à API (ver
+[O chat da mesa](#o-chat-da-mesa)), sem mudar o manifesto — subiu porque um
+plugin que chama `api.chat.postar` num ATO20 de API 3 quebraria em runtime,
+longe do gesto de instalar. A 3 acrescentou as `paginas`, a
 `ativacao` e o tipo `lista` ao manifesto, e `mesa`, `jogadores` e
 `dados.naMesa`/`assinarMesa` à API. Subiu porque um ATO20 anterior ignoraria os
 campos calado e aceitaria um plugin cuja página responderia 404. A 2 um plugin escrito para a 1 continua
@@ -243,8 +246,10 @@ do personagem pode receber. Quem separa é o Rust (`publicos`), não quem chama.
 quando eles **caem** — a promessa espera a mesma conta que anima a queda, para
 o plugin não dar o dano antes de o d20 parar. Sem modificador: `+3` é conta do
 plugin, e é o que deixa a paleta continuar recusando `2d6+3` de propósito. O
-`total` soma o que entra na soma; a moeda fica de fora. Na mesa, só o Mestre vê os dados, por ora; `dados.naMesa` os entrega como do
-mestre, para um plugin levá-los a uma página se quiser.
+`total` soma o que entra na soma; a moeda fica de fora. Na mesa, só o Mestre vê os dados;
+`dados.naMesa` os entrega como do mestre, para um plugin levá-los a uma página se quiser, e
+`chat.postar` os põe no fio da campanha, com rótulo — ver abaixo. `rolar` sozinho não escreve
+no chat: quem decide se a rolagem vai à mesa, e com que nome, é o plugin.
 
 `api.eventos` — `aoMudarMedidor`, `aoAlternarCondicao`, `aoRolar`,
 `aoTrocarCena`, `aoPorNoAr` — saem da **releitura** do elenco e dos stores, e
@@ -253,6 +258,40 @@ caminhos (a ficha, o menu do token, o celular, outro plugin), e comparar a
 leitura nova com a anterior é o único lugar por onde toda mudança passa. A
 primeira leitura da campanha não conta como mudança, senão todo plugin de
 automação dispararia no boot. `aoRolar` cobre o dado do mestre e o do jogador.
+
+## O chat da mesa
+
+`api.chat` (API 4) é o fio da campanha — o mesmo chat que a mesa usa no celular e o
+Mestre na janela, gravado no `chat.jsonl`. **Genérico, de propósito**, como decidido no #61:
+o aplicativo registra a linha que o plugin mandar, e a regra fica no plugin.
+
+```js
+const r = await api.dados.rolar(["1d20"]);          // resolve quando o dado CAI
+await api.chat.postar({ rotulo: "Ataque", rolagem: r, modificador: 3 });
+// no fio: "D&D 5e · Ataque · 1d20+3 = 17"
+
+await api.chat.postar({ texto: "A porta range.", privado: true }); // só o Mestre lê
+```
+
+`postar` aceita `texto`, `rolagem` (o que `dados.rolar` devolveu, ou
+`{ dados: [{ faces, valor }] }` com o valor de soma), `modificador`, `rotulo` e `privado`.
+A linha sai assinada pelo plugin — o id e o nome entram na janela, e não vêm dele —, e o
+daemon confere cada face contra o dado dela. O total não é guardado: o fio soma dados e
+modificador na leitura. Poste **depois** de `rolar` resolver; antes, o chat contaria o
+resultado com o dado ainda girando no palco. Rejeita com o motivo quando a linha não serve
+ou não há mesa aberta.
+
+`chat.assinar(aviso)` avisa a cada linha nova — de jogador, do Mestre, de qualquer plugin, a
+do próprio inclusive (`autor` diz de quem é). Só o que acontece agora: a conversa que já
+estava no fio quando o plugin carregou não chega.
+
+O fio não interpreta regra: "1d20+3 contra a CA 15" é conta do plugin, e o que vai ao chat é
+o texto que ele montou.
+
+O chat e as rolagens são janelas diferentes no Mestre, e as duas são de fábrica:
+`janelas.abrir({ tela: "chat" })` e `{ tela: "rolagens" }` as trazem à vista, e
+`janela:chat`/`janela:rolagens` servem de alvo de substituto. A de Rolagens é a do dado — é
+lá que um plugin de regras de rolagem se encaixa.
 
 ## Encaixes: menus, seções, substitutos e ferramentas
 
@@ -368,9 +407,12 @@ confere que o personagem é daquele jogador e repassa por `/sala/acoes` — o
 mesmo desenho do movimento do token —, e é o `registrar.acao` do plugin, na
 janela do Mestre, que executa. Quem apertou vem do token, não do corpo. O
 efeito volta pela mesa: o medidor que baixou, o dado que caiu ao lado do
-retrato. Não há resposta para um celular específico, de propósito — o Mestre
-não tem esse canal, e criá-lo seria superfície nova de rede para um caso que
-o quadro já cobre.
+retrato. Não há resposta para um celular específico, de propósito — criar esse
+canal para o plugin seria superfície nova de rede para um caso que o quadro já
+cobre. O sussurro do chat não mudou isso: ele é uma linha do fio com destino, e
+o filtro mora no fluxo autenticado que cada celular já assina (ver
+[daemon.md](daemon.md)) — não um canal por aparelho. Um plugin que queira falar
+só com o Mestre usa `chat.postar({ privado: true })`.
 
 Para o número gasto aparecer no aparelho de quem apertou, o quadro passou a
 levar `fichasVersao`, o contador do elenco no Mestre: o celular relê a ficha e

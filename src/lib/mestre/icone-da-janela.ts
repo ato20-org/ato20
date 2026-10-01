@@ -7,6 +7,7 @@ import {
   Layers,
   Library,
   LibraryBig,
+  MessagesSquare,
   MonitorPlay,
   Music,
   Paperclip,
@@ -44,6 +45,8 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
   switch (conteudo.tipo) {
     case "rolagens":
       return Dices;
+    case "chat":
+      return MessagesSquare;
     case "cenas":
       return Clapperboard;
     case "quadros":

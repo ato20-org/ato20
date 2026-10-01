@@ -19,6 +19,7 @@ import {
   valorDe,
 } from "@/lib/configuracoes/registro";
 import { COMPONENTES, EXPERIMENTAL } from "@/lib/extensoes/componentes";
+import { assinarFioParaPlugin, postarParaPlugin } from "@/lib/extensoes/chat";
 import { rolarParaPlugin } from "@/lib/extensoes/dados";
 import {
   assinaturaDaMesa,
@@ -538,6 +539,18 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
           base: opcoes?.rede ? lanUrl : url,
           busca: opcoes?.busca,
         });
+      },
+    },
+
+    chat: {
+      // O id e o nome entram aqui, e não vêm do plugin. Ver `postarParaPlugin`.
+      postar: (linha) => postarParaPlugin({ id: extensao.id, nome: extensao.nome }, linha),
+
+      assinar(aviso) {
+        const desfazer = assinarFioParaPlugin(aviso);
+        registrados.push(desfazer);
+
+        return desfazer;
       },
     },
 

@@ -49,6 +49,10 @@ export type ConteudoJanela =
   // escala e posição próprios -- um sistema de janelas paralelo a este, escrito
   // à mão para uma tela só. Ver `RolagensBody`.
   | { tipo: "rolagens" }
+  // O fio da campanha: a conversa da mesa, com as rolagens entrando como
+  // linhas. Janela própria, e não a de Rolagens: lá é o dado e as regras dele,
+  // aqui é a conversa. Ver `ChatBody`.
+  | { tipo: "chat" }
   | { tipo: "cenas" }
   // A mesma lista, filtrada pelo outro tipo de cena. Ver `TipoDeCena`.
   | { tipo: "quadros" }
@@ -108,6 +112,7 @@ export function chaveDe(conteudo: ConteudoJanela): string {
     // Painel é único: o próprio tipo é a chave, e é o que impede dois grupos de
     // mostrarem a mesma lista de cenas.
     case "rolagens":
+    case "chat":
     case "cenas":
     case "quadros":
     case "retratos":

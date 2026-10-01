@@ -11,6 +11,7 @@ import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
 import { LayerList } from "@/components/mestre/layer-list";
 import { PortraitList } from "@/components/mestre/portrait-list";
+import { ChatBody } from "@/components/mestre/chat-window";
 import { RolagensBody } from "@/components/mestre/rolagens-window";
 import { ArquivosList } from "@/components/mestre/arquivos-list";
 import { SceneList } from "@/components/mestre/scene-list";
@@ -63,6 +64,7 @@ export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "sons" }, titulo: "Sons" },
   { conteudo: { tipo: "personagens" }, titulo: "Personagens" },
   { conteudo: { tipo: "rolagens" }, titulo: "Rolagens" },
+  { conteudo: { tipo: "chat" }, titulo: "Chat" },
   { conteudo: { tipo: "estante" }, titulo: "Estante" },
   { conteudo: { tipo: "miniplayer" }, titulo: "Mesa" },
 ];
@@ -151,6 +153,8 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: "Mesa", subtitulo: "O que a mesa está vendo" };
     case "rolagens":
       return { titulo: "Rolagens", subtitulo: "O que a mesa tirou" };
+    case "chat":
+      return { titulo: "Chat", subtitulo: "A conversa da campanha" };
     case "cenas":
       // "Cenas" e não "Mapas": o painel passou a ter as duas naturezas, e o
       // nome antigo escondia os fundos atrás da palavra do vizinho.
@@ -180,6 +184,25 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
         subtitulo: conteudo.titulo ? painel?.titulo : (painel?.subtitulo ?? undefined),
       };
     }
+  }
+}
+
+/**
+ * A altura que a janela tem ao flutuar, até o mestre mexer na alça.
+ * `undefined` = cresce com o conteúdo até o teto do palco, que é o padrão de
+ * quase todas — ver `InnerWindow`.
+ *
+ * O chat é a exceção, porque o conteúdo dele não acaba: são as últimas
+ * duzentas linhas da campanha, e crescer com elas é ocupar o palco inteiro de
+ * cima a baixo na primeira vez que a janela abre sozinha. Com altura, ele nasce
+ * do tamanho de uma conversa, e rola por dentro.
+ */
+export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
+  switch (conteudo.tipo) {
+    case "chat":
+      return 420;
+    default:
+      return undefined;
   }
 }
 
@@ -275,6 +298,7 @@ const SUBSTITUIVEIS = new Set<ConteudoJanela["tipo"]>([
   "estante",
   "miniplayer",
   "rolagens",
+  "chat",
   "cenas",
   "quadros",
   "retratos",
@@ -343,6 +367,9 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
     // enquanto o mestre troca de mapa. Mesma razão de Retratos e Sons.
     case "rolagens":
       return <RolagensBody />;
+    // Da CAMPANHA: o fio sobrevive à sessão, e mais ainda a trocar de mapa.
+    case "chat":
+      return <ChatBody />;
     case "camadas":
       return scene ? (
         <LayerList scene={scene} />

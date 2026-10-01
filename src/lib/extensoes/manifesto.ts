@@ -34,7 +34,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 3;
+export const API_VERSAO = 4;
 
 /**
  * O que uma extensão diz de si.

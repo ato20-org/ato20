@@ -4,6 +4,7 @@ import type { ReactNode, Ref } from "react";
 import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { PontoDeAviso } from "@/components/jogador/jogador-toolbar";
 import { cn } from "@/lib/utils";
 
 /**
@@ -51,12 +52,15 @@ export function DockButton({
   ativo,
   rotulo,
   icone,
+  aviso = false,
   onClick,
   ref,
 }: {
   ativo: boolean;
   rotulo: string;
   icone: ReactNode;
+  /** Há o que ler. Ver `PontoDeAviso`. */
+  aviso?: boolean;
   onClick: () => void;
   /**
    * O elemento do botão, para quem precisa saber ONDE ele está na tela.
@@ -72,15 +76,16 @@ export function DockButton({
       ref={ref}
       variant="ghost"
       size="icon"
-      aria-label={rotulo}
+      aria-label={aviso ? `${rotulo}, há mensagem nova` : rotulo}
       aria-pressed={ativo}
       onClick={onClick}
       className={cn(
-        "size-11 rounded-full [&_svg]:size-5",
+        "relative size-11 rounded-full [&_svg]:size-5",
         ativo && "bg-accent text-accent-foreground",
       )}
     >
       {icone}
+      {aviso ? <PontoDeAviso className="top-2 right-2" /> : null}
     </Button>
   );
 }

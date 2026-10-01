@@ -1,6 +1,7 @@
 "use client";
 
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
+import { anunciarDadosNoFio } from "@/lib/mestre/fio-actions";
 import type { Jogada } from "@/lib/mestre/notacao-de-dados";
 import { RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -63,7 +64,16 @@ export function lancarNaMesa({ quantidade, faces }: Jogada): Dado[] {
   return jogados;
 }
 
-/** Quantos dados a paleta conseguiu jogar. Ver `lancarNaMesa`. */
+/**
+ * Quantos dados a paleta conseguiu jogar. Ver `lancarNaMesa`.
+ *
+ * A paleta põe a jogada no fio, numa linha só; o plugin não passa por aqui —
+ * quem decide se a rolagem dele vai ao fio, e com que rótulo, é ele, por
+ * `api.chat`.
+ */
 export function rolarNaMesa(jogada: Jogada): number {
-  return lancarNaMesa(jogada).length;
+  const dados = lancarNaMesa(jogada);
+  anunciarDadosNoFio(dados);
+
+  return dados.length;
 }

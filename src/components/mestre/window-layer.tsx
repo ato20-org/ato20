@@ -6,6 +6,7 @@ import { DockGhost } from "@/components/mestre/dock/dock-ghost";
 import { DockOverlay } from "@/components/mestre/dock/dock-overlay";
 import {
   JanelaCorpo,
+  alturaPadrao,
   larguraPadrao,
   useRotuloJanela,
 } from "@/components/mestre/dock/window-content";
@@ -111,6 +112,7 @@ function Conteudo({ janela, ordem }: { janela: Janela; ordem: number }) {
       titulo={titulo}
       subtitulo={subtitulo}
       largura={larguraPadrao(janela.conteudo)}
+      altura={alturaPadrao(janela.conteudo)}
     >
       <JanelaCorpo conteudo={janela.conteudo} />
     </InnerWindow>

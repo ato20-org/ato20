@@ -31,6 +31,7 @@ minha-campanha/
   retratos.json        quem está no ar, em que canto, de que tamanho
   trilha.json
   configuracoes.json   o que vale só nesta campanha; vence o da máquina
+  chat.jsonl           o fio da mesa: mensagens e rolagens, uma por linha
   jogadores/
     a8b9.../
       historico-ana.txt   o que cada jogador anexou
@@ -73,12 +74,28 @@ mesmo tempo, é a receita para escrita perdida. Esse texto é materializado em
 `jogadores/{id}/_meta.json` **no export**, e não continuamente: entre dois exports, ele é a
 única coisa da campanha que só existe no banco.
 
+**O chat é arquivo, e não banco.** A pergunta que decide o que mora no `.ato20/` é "se isto
+se perder, a campanha quebra?" — e o fio da mesa é justamente a memória que tem de
+sobreviver à sessão, à troca de máquina e ao zip. Na raiz ele viaja no export sozinho, sem
+materialização, e é texto: a conversa aparece no `git diff` como o resto da campanha. É a
+reversão de uma decisão que o código dizia em voz alta ("rolagem de ontem reaparecendo na
+lista de hoje é lixo"): a lista da sessão continua efêmera, e a memória passou para cá.
+
 ## Como o vault grava
 
 **Escrita atômica, sempre.** Arquivo temporário no mesmo diretório, `sync_all`, `rename`. O
 board é gravado a cada 400 ms de edição, e um `write` direto interrompido no meio — bateria
 acabando, `kill`, disco cheio — deixa o arquivo truncado. Um `cenas/a-taverna.json` pela
 metade não volta a abrir, e a cena está perdida sem nenhum aviso.
+
+**O `chat.jsonl` é a exceção: só de acréscimo, nunca reescrito.** Uma linha por mensagem ou
+rolagem, escrita no fim com um `write` e `sync_data` — reescrever o arquivo inteiro a cada
+frase, como a escrita atômica faria, cobraria a campanha inteira por recado. Um `write`
+interrompido deixa no máximo a última linha pela metade, e a leitura pula linha que não
+decodifica (com aviso no log) em vez de perder o resto da conversa. Apagar também é
+acréscimo: uma linha `{"tipo":"apagada","alvo":…}`, e a original fica no arquivo — nenhuma
+tela a mostra de novo, e quem quiser mesmo sumir com uma frase tem o texto na mão. Quem
+escreve é sempre o daemon; ver [daemon.md](daemon.md).
 
 **Gravação por diferença.** Cada `board_save` reescreve `ordem.json` e só as cenas cujo JSON
 mudou. Sem isso, mover um token dez pixels reescreveria as trinta cenas da campanha: disco

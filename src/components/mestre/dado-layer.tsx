@@ -25,6 +25,7 @@ import {
 } from "@/lib/geometry/dado";
 import type { Vec } from "@/lib/geometry/transform";
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
+import { anunciarDadosNoFio } from "@/lib/mestre/fio-actions";
 import { useDadosDaMesa } from "@/hooks/use-dados-na-mesa";
 import { DADO_Z, RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
 import { comFolga } from "@/lib/geometry/viewport";
@@ -331,7 +332,9 @@ export function DadosNoEspaco({
     if (!jogada.daMesa && recusaPorMesaCheia()) return;
 
     if (jogada.daMesa) guardar(jogada.daMesa);
-    lancar(jogada.faces, jogada.x, jogada.y, jogada.impulso, jogada.semente);
+    const dado = lancar(jogada.faces, jogada.x, jogada.y, jogada.impulso, jogada.semente);
+    // A memória da jogada, depois de ela cair. Ver `anunciarDadosNoFio`.
+    if (dado) anunciarDadosNoFio([dado]);
   }, [
     arremesso,
     scale,
@@ -847,7 +850,8 @@ function AlcanceDoDado({
     }
 
     guardar(dado.id);
-    lancar(jogada.faces, jogada.x, jogada.y, jogada.impulso, jogada.semente);
+    const relancado = lancar(jogada.faces, jogada.x, jogada.y, jogada.impulso, jogada.semente);
+    if (relancado) anunciarDadosNoFio([relancado]);
   }
 
   /**
