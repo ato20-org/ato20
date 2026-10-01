@@ -131,6 +131,7 @@ export function quadroRecebido(state: Partial<LiveState>): LiveState {
     // Mesma razão dos retratos: quadro de uma versão sem dados de jogador é
     // quadro válido, e não motivo para a tela cair.
     rolagens: state.rolagens ?? [],
+    pings: state.pings ?? [],
   };
 }
 

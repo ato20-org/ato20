@@ -248,6 +248,32 @@
     animation: efeito-tremendo 0.45s linear infinite;
   }
 
+  /* O ping no mapa. Ver `PingLayer`.
+
+     O ícone entra com um quique e sai apagando perto do fim do prazo -- 4,3 s
+     de 5 --, porque cada tela conta do instante em que o ping CHEGOU, e o
+     Mestre o tira do quadro contando do instante em que ele nasceu. Sem a
+     folga, a TV cortaria o ícone no meio do apagar.
+
+     As ondas são três círculos que crescem e somem, defasados: é o que puxa o
+     olho da mesa para o ponto, e param sozinhas depois de duas voltas. Quem
+     pediu menos movimento vê o ícone parado, que entra e sai sem animar -- e
+     sai do mesmo jeito, porque o Mestre o tira do quadro. */
+  .ping-no-mapa {
+    animation:
+      ping-entra 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both,
+      ping-sai 600ms ease-in 4.3s forwards;
+  }
+
+  .ping-onda {
+    animation: ping-onda 1.1s ease-out 2 both;
+  }
+
+  /* A roda de escolha, ao abrir sob o dedo. */
+  .roda-de-ping {
+    animation: ping-entra 160ms ease-out both;
+  }
+
   /* Rolagem sem a barra à vista.
      A tira de abas do dock tem 26 pixels de altura: uma barra horizontal ali
      come metade do alvo de clique das abas, e a rolagem não é o assunto — o
@@ -341,6 +367,35 @@
 
   50% {
     opacity: 0.55;
+  }
+}
+
+/* Fora do `@media`, como os outros quadros: animação sem keyframes definidos é
+   ignorada. Os três giram em volta da origem do elemento, que no `PingLayer` é
+   o ponto marcado -- ver `transform-origin` lá. */
+@keyframes ping-entra {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+@keyframes ping-sai {
+  to {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes ping-onda {
+  from {
+    opacity: 0.9;
+    transform: scale(0.4);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(3.2);
   }
 }
 
