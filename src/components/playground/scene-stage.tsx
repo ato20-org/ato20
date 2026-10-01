@@ -717,7 +717,15 @@ export function SceneStage({
    * abertura de toda tela começaria com a cena vindo do canto -- o `translate`
    * calculado com `scale(0)` seria o quadro inicial da animação. A primeira
    * amostra só marca a hora; a transição passa a valer da seguinte em diante.
+   *
+   * Roda a cada AMOSTRA, e não a cada mudança de `camera`. Aquela chave perdeu
+   * o deslocamento quando a troca de forma deixou de reagir a ele, e com razão
+   * -- deslocar não estica textura. Mas este efeito ficou pendurado nela: na TV
+   * a câmera que só andava nunca chegava aqui depois da primeira amostra, o
+   * plano ficava sem classe nenhuma, e todo passeio -- seta, moldura, V --
+   * chegava à mesa em saltos de 10 Hz.
    */
+  const amostraDaCamera = `${scale}|${offsetX}|${offsetY}`;
   const ultimoCorte = useRef(corte);
 
   useLayoutEffect(() => {
@@ -759,8 +767,8 @@ export function SceneStage({
       plano?.classList.toggle("scene-smooth-camera", !fluxo);
       plano?.classList.toggle("scene-smooth-camera-fluxo", fluxo);
     }
-    // `camera` já carrega `scale`; ele entra à parte porque o corpo o lê.
-  }, [camera, smooth, scale, corte, controlesNo, conteudoNo]);
+    // `amostraDaCamera` já carrega `scale`; ele entra à parte porque o corpo o lê.
+  }, [amostraDaCamera, smooth, scale, corte, controlesNo, conteudoNo]);
 
   useEffect(() => {
     // Mais longo com a transição ligada: ali a câmera continua andando depois
