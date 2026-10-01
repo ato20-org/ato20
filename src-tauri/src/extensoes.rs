@@ -37,7 +37,13 @@ use crate::error::{AppError, AppResult};
 /// manifesto, ignoraria o campo que nao conhece e aceitaria o plugin -- e a
 /// pagina dele responderia 404 sem aviso nenhum. Pedindo 3, o plugin e
 /// recusado na entrada com "atualize o ATO20".
-pub const API_VERSAO: u32 = 3;
+///
+/// A 4 acrescentou `chat` -- o plugin escreve no fio da campanha (texto, e
+/// rolagem com rotulo e modificador) e o ouve. Nada no manifesto mudou; o
+/// numero sobe porque um plugin que chama `api.chat.postar` num ATO20 de API 3
+/// quebraria em runtime, longe do gesto de instalar. Pedindo 4, ele e recusado
+/// na entrada.
+pub const API_VERSAO: u32 = 4;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -305,6 +311,7 @@ pub const JANELAS_DE_FABRICA: &[&str] = &[
     "estante",
     "miniplayer",
     "rolagens",
+    "chat",
     "cenas",
     "quadros",
     "retratos",
@@ -1185,7 +1192,7 @@ mod tests {
 
         // O compromisso da API: subir a versao nao pode recusar quem pede a
         // anterior. Um tema escrito para a 1 continua instalando na 2.
-        for versao in [1, 2] {
+        for versao in [1, 2, 3] {
             let pasta = base.path().join(format!("v{versao}"));
             escrever(
                 &pasta,

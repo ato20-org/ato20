@@ -6,6 +6,7 @@ import type { RetratoParaKit as RetratoLido } from "@/lib/kit-de-retratos";
 import type { LucideIcon } from "lucide-react";
 
 import type { Componentes, Experimental } from "@/lib/extensoes/componentes";
+import type { LinhaDePlugin, LinhaLida } from "@/lib/extensoes/chat";
 import type { ResultadoDaRolagem } from "@/lib/extensoes/dados";
 import type {
   MudancaDeCondicaoLida,
@@ -46,8 +47,11 @@ import type { CanvasItem, Scene } from "@/types/scene";
  * A 3 acrescentou `mesa` (o canal para as páginas do plugin, os endereços e o
  * link pronto), `jogadores`, `retratos`, e `dados.naMesa`/`dados.assinarMesa`; no
  * manifesto, as `paginas`, a `ativacao` na abertura e o tipo `lista`.
+ *
+ * A 4 acrescentou `chat`: o fio da campanha, para o plugin escrever a linha
+ * dele ("Ataque: 1d20+3 = 17") e ouvir as dos outros.
  */
-export const API_VERSAO_ATUAL = 3;
+export const API_VERSAO_ATUAL = 4;
 
 /** O que o plugin sabe da cena sem poder mexer no formato dela. */
 export type CenaResumo = {
@@ -87,6 +91,7 @@ export type JanelaDeExtensao =
         | "personagens"
         | "configuracao"
         | "rolagens"
+        | "chat"
         | "cenas"
         | "quadros"
         | "retratos"
@@ -231,7 +236,7 @@ export type RolagemLida = {
   personagemId?: string;
 };
 
-export type { DadoNaMesaLido, RetratoLido };
+export type { DadoNaMesaLido, LinhaDePlugin, LinhaLida, RetratoLido };
 
 export type Ato20Api = {
   /** A versão do contrato que este aplicativo implementa. */
@@ -374,6 +379,26 @@ export type Ato20Api = {
       paginaId: string,
       opcoes?: { rede?: boolean; busca?: Record<string, string> },
     ) => Promise<string | null>;
+  };
+
+  /**
+   * O fio da campanha: o chat da mesa, gravado no `chat.jsonl` (API 4).
+   *
+   * `postar` escreve uma linha assinada pelo plugin: texto, rolagem, ou os
+   * dois. A rolagem é o que `dados.rolar` devolveu, passado adiante, com o
+   * `modificador` e o `rotulo` que o plugin calculou -- o fio soma e escreve
+   * "Ataque: 1d20+3 = 17", e não interpreta regra nenhuma. `privado` manda só
+   * ao Mestre: a rolagem escondida. Poste DEPOIS de `dados.rolar` resolver, que
+   * é quando o dado caiu: antes, o chat contaria o resultado enquanto ele gira.
+   * Rejeita com o motivo quando a linha não serve ou a mesa está fechada.
+   *
+   * `assinar` avisa a cada linha nova -- de qualquer um, a deste plugin
+   * inclusive (`autor` diz de quem é). Só o que acontece agora: a conversa que
+   * já estava no fio não chega.
+   */
+  chat: {
+    postar: (linha: LinhaDePlugin) => Promise<LinhaLida>;
+    assinar: (aviso: (linha: LinhaLida) => void) => Desfazer;
   };
 
   /**
