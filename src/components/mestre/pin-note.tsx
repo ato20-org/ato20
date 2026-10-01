@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   ChevronDown,
   ChevronUp,
   GripHorizontal,
+  ImagePlus,
   Loader2,
-  Paperclip,
   Pencil,
+  Plus,
   Radio,
   RadioTower,
   Trash2,
@@ -15,7 +20,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { MiniaturaDoAcervo, useAnimada } from "@/components/mestre/miniatura-do-acervo";
+import { tamanhoNaCena } from "@/components/mestre/asset-library";
+import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,13 +30,22 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useAssetList } from "@/hooks/use-asset-list";
+import { useTokenDrag } from "@/hooks/use-token-drag";
+import {
+  absorverImportacao,
+  importarCaminhosNoAcervo,
+} from "@/lib/mestre/importar-arquivos";
 import { removePin } from "@/lib/mestre/item-actions";
 import { cn } from "@/lib/utils";
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
+import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { importAssets } from "@/lib/vault/assets";
-import type { MapPin } from "@/types/scene";
+import type { AssetMeta, MapPin } from "@/types/scene";
 
 /**
  * A nota de um ponto de anotação: título, texto e anexos.
@@ -42,6 +57,12 @@ import type { MapPin } from "@/types/scene";
  *
  * Nada aqui chega à mesa. O que sai deste cartão para a TV e para os celulares
  * é só o que o mestre transmite, um anexo por vez.
+ *
+ * Os anexos entram pelos mesmos gestos do handout: a imagem arrastada do
+ * acervo, o arquivo solto vindo do sistema -- que entra no acervo e, na
+ * sequência, no ponto -- e o `+` que abre o seletor. O cartão inteiro recebe,
+ * e não só a grade: ele é pequeno, e mirar a grade dentro dele seria mirar
+ * duas vezes.
  */
 export function PinNote({
   sceneId,
@@ -62,10 +83,9 @@ export function PinNote({
   const updatePin = useSceneStore((state) => state.updatePin);
   const attachToPin = useSceneStore((state) => state.attachToPin);
 
-  // O acervo entra só pelos nomes: o cartão mostra de que arquivo é cada
-  // anexo, e `refresh` é o que faz um arquivo recém-importado aparecer com
-  // nome em vez de "arquivo removido".
-  const { assets, refresh } = useAssetList("image");
+  // O acervo entra pelos nomes e pelo selo de animada. O arquivo recém-importado
+  // aparece sozinho: `absorverImportacao` acorda o store que esta lista lê.
+  const { assets } = useAssetList("image");
 
   const [importando, setImportando] = useState(false);
 
@@ -88,29 +108,29 @@ export function PinNote({
   const [recolhida, setRecolhida] = useState(false);
 
   /**
-   * Traz arquivos de fora e os anexa.
+   * O `+` da grade: abre o seletor nativo e o que entrar cai direto no ponto.
    *
    * Chama `importAssets` direto, em vez do `importar` do `useAssetList`: aquele
    * devolve `void`, e aqui os ids dos aceitos são exatamente o que se precisa —
    * sem eles o mestre escolheria seis imagens e depois teria de encontrá-las no
-   * acervo para anexar uma por uma.
+   * acervo para anexar uma por uma. É o mesmo caminho do `+` do handout.
    */
-  async function anexarDeFora() {
+  async function escolher() {
     setImportando(true);
 
     try {
-      const resultado = await importAssets("image");
+      const resultado = await importAssets("image", undefined, () =>
+        invalidarAcervo("image"),
+      );
 
       // `null` é o diálogo fechado sem escolher: não é erro e não avisa.
       if (!resultado) return;
 
-      for (const motivo of resultado.recusados) toast.error(motivo);
-
-      const ids = resultado.aceitos.map((asset) => asset.id);
-      if (ids.length === 0) return;
-
-      attachToPin(sceneId, pin.id, ids);
-      refresh();
+      attachToPin(
+        sceneId,
+        pin.id,
+        absorverImportacao(resultado).map((asset) => asset.id),
+      );
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Falha ao anexar.");
     } finally {
@@ -118,14 +138,63 @@ export function PinNote({
     }
   }
 
+  /**
+   * Este cartão como destino do gesto que traz imagem do acervo.
+   *
+   * Uma chave por ponto, como o inventário é uma por ficha: há mais de uma
+   * nota aberta ao mesmo tempo, e cada uma anexa no próprio ponto.
+   */
+  useEffect(
+    () =>
+      useTokenDragStore
+        .getState()
+        .registrarAlvo(`ponto:${pin.id}`, (solto) => {
+          if (solto.fonte.tipo !== "acervo") return;
+
+          attachToPin(sceneId, pin.id, [solto.fonte.assetId]);
+        }),
+    [attachToPin, sceneId, pin.id],
+  );
+
+  // Uma imagem do acervo está pairando sobre ESTE cartão: o `useTokenDrag` já
+  // decidiu que é ele quem recebe.
+  const recebendoDoAcervo = useTokenDragStore((state) => {
+    const destino = state.arrasto?.destino;
+
+    return destino?.tipo === "ponto" && destino.pinId === pin.id;
+  });
+
+  // Arquivo do sistema solto no cartão: importa no acervo e anexa no ponto. Os
+  // ids saem ANTES do `then`, pela mesma razão do handout: a importação vai ao
+  // disco, e a imagem tem de cair no ponto onde o mestre soltou.
+  const arquivoNoAr = useArrastoDeArquivo(
+    `[data-anexos-do-ponto="${pin.id}"]`,
+    (caminhos) => {
+      const alvo = { sceneId, pinId: pin.id };
+
+      void importarCaminhosNoAcervo(caminhos).then((aceitos) => {
+        attachToPin(
+          alvo.sceneId,
+          alvo.pinId,
+          aceitos
+            .filter((asset) => asset.kind === "image")
+            .map((asset) => asset.id),
+        );
+      });
+    },
+  );
+
+  const recebendo = recebendoDoAcervo || arquivoNoAr !== null;
+
   return (
-    // Sem soltura de arrasto do acervo aqui, embora fosse o gesto natural para
-    // anexar uma imagem que já está na campanha: o cartão vive dentro do
-    // palco, e uma soltura sobre ele cairia no mesmo alvo que recebe imagem
-    // solta na CENA — a imagem entraria no mapa, atrás do cartão. Por
-    // enquanto anexa-se por arquivo, e uma imagem já importada é importada de
-    // novo.
-    <div className="flex flex-col">
+    // A marca que o arrasto do acervo e o do sistema procuram sob o ponteiro.
+    // O cartão mora no plano dos controles, fora do `[data-palco]`, então
+    // soltar aqui não cai no mapa atrás dele. Recolhido não recebe: a grade não
+    // está à vista, e um anexo entrando onde não se vê não confirma nada.
+    <div
+      className="flex flex-col"
+      data-anexos-do-ponto={recolhida ? undefined : pin.id}
+    >
       {/* O cabeçalho é também a alça de arrasto, e tem a cara do cabeçalho de
           toda janela da bancada (`InnerWindow`): a mesma alça riscada, o
           mesmo recuo, a mesma linha embaixo, os mesmos botões pequenos. O que
@@ -268,30 +337,15 @@ export function PinNote({
             }
           />
 
-          {pin.attachments.length > 0 ? (
-            <ul className="space-y-1.5">
-              {pin.attachments.map((assetId) => (
-                <Anexo
-                  key={assetId}
-                  sceneId={sceneId}
-                  pinId={pin.id}
-                  assetId={assetId}
-                  nome={assets.find((asset) => asset.id === assetId)?.name}
-                />
-              ))}
-            </ul>
-          ) : null}
-
-          <Button
-            variant="secondary"
-            size="sm"
-            className="w-full"
-            disabled={importando}
-            onClick={() => void anexarDeFora()}
-          >
-            {importando ? <Loader2 className="animate-spin" /> : <Paperclip />}
-            Anexar imagens
-          </Button>
+          <AnexosDoPonto
+            sceneId={sceneId}
+            pinId={pin.id}
+            ids={pin.attachments}
+            assets={assets}
+            recebendo={recebendo}
+            importando={importando}
+            onEscolher={() => void escolher()}
+          />
 
           {/* Apagar fica no pé, longe do X: no cabeçalho os dois ícones
               encostados, um que tira da tela e outro que tira do mapa, pediam
@@ -315,96 +369,249 @@ export function PinNote({
 }
 
 /**
- * Um anexo: miniatura, nome e o botão que o joga na mesa.
+ * Os anexos em grade, como o handout e o inventário: a imagem é o quadro, e a
+ * grade termina numa porta.
  *
- * A miniatura é a imagem de verdade, reduzida, e não um ícone de arquivo:
- * numa campanha com trinta mapas o nome do arquivo raramente é o que faz
- * reconhecer qual é, e é do reconhecimento que depende transmitir o certo.
+ * Era uma lista com miniatura, nome e botões em cada linha. Em grade cabem
+ * quatro por fileira no lugar de um, e numa campanha com trinta mapas o nome do
+ * arquivo raramente é o que faz reconhecer qual é -- a imagem é. O nome fica no
+ * `title`, para quando a imagem não basta.
+ */
+function AnexosDoPonto({
+  sceneId,
+  pinId,
+  ids,
+  assets,
+  recebendo,
+  importando,
+  onEscolher,
+}: {
+  sceneId: string;
+  pinId: string;
+  ids: string[];
+  assets: AssetMeta[];
+  /** Uma imagem do acervo, ou um arquivo do sistema, está sobre o cartão. */
+  recebendo: boolean;
+  /** O seletor está aberto ou copiando. A porta gira e recusa outro clique. */
+  importando: boolean;
+  onEscolher: () => void;
+}) {
+  // Uma imagem daqui está na mão, a caminho do mapa: a grade esmaece, como a
+  // do handout. Só a opacidade, sem `pointer-events`: o ponteiro está
+  // capturado pela célula de dentro.
+  const naMao = useTokenDragStore(
+    (state) =>
+      state.arrasto?.fonte.tipo === "ponto" &&
+      state.arrasto.fonte.pinId === pinId,
+  );
+
+  if (ids.length === 0) {
+    // A zona de soltar desenhada do handout vazio, deitada: aqui ela divide o
+    // cartão com a nota, que é o principal. E sem a seta pulando: o handout é
+    // aberto de propósito e fechado em seguida, e este cartão fica aberto a
+    // sessão inteira -- um pulo eterno no canto do olho seria ruído.
+    return (
+      <button
+        type="button"
+        onClick={onEscolher}
+        disabled={importando}
+        className={cn(
+          "text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex w-full items-center justify-center gap-2 rounded-md border-2 border-dashed px-3 py-3 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none",
+          recebendo && "border-primary text-primary bg-primary/5",
+        )}
+      >
+        {importando ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+        ) : (
+          <ImagePlus className="size-4" aria-hidden />
+        )}
+        Arraste imagens para cá
+      </button>
+    );
+  }
+
+  return (
+    <ul
+      className={cn(
+        "grid grid-cols-4 gap-1.5 rounded-md transition-[box-shadow,opacity]",
+        naMao && "opacity-15",
+        // Por anel e não por borda: a borda empurraria a grade a cada vez que
+        // acende, e o anel desenha por fora sem mexer em nada. A borda é do
+        // CONTÊINER, como no inventário: o alvo é o ponto, e não uma posição
+        // dentro da grade.
+        recebendo &&
+          "ring-primary ring-offset-popover bg-primary/5 ring-2 ring-offset-2",
+      )}
+    >
+      {ids.map((assetId) => (
+        <Anexo
+          key={assetId}
+          sceneId={sceneId}
+          pinId={pinId}
+          assetId={assetId}
+          asset={assets.find((asset) => asset.id === assetId)}
+        />
+      ))}
+
+      {/* A caixinha de `+` do inventário e do handout. */}
+      <li>
+        <button
+          type="button"
+          onClick={onEscolher}
+          disabled={importando}
+          aria-label="Escolher imagens do computador"
+          className={cn(
+            "text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex aspect-square w-full items-center justify-center rounded-md border border-dashed focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none",
+            recebendo && "border-primary text-primary",
+          )}
+        >
+          {importando ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Plus className="size-4" aria-hidden />
+          )}
+        </button>
+      </li>
+    </ul>
+  );
+}
+
+/** Os botões da célula, que só aparecem ao passar o mouse. */
+const REVELAR =
+  "opacity-0 transition-opacity group-hover/anexo:opacity-100 focus-visible:opacity-100";
+
+/**
+ * Um anexo: a miniatura, o botão que o joga na mesa e o que o desanexa.
+ *
+ * A miniatura é a imagem de verdade, reduzida, e não um ícone de arquivo: é do
+ * reconhecimento que depende transmitir o certo.
+ *
+ * E ela tem dois gestos, como o quadro do inventário: clicar abre a imagem
+ * numa janela da bancada, arrastar a leva ao mapa. Quem separa um do outro é o
+ * limiar do `useTokenDrag` -- o gesto só levanta depois que o ponteiro anda, e
+ * a partir daí o clique do fim é engolido.
  */
 function Anexo({
   sceneId,
   pinId,
   assetId,
-  nome,
+  asset,
 }: {
   sceneId: string;
   pinId: string;
   assetId: string;
-  nome: string | undefined;
+  /** Ausente quando o arquivo saiu do acervo: a célula fica só com o `X`. */
+  asset: AssetMeta | undefined;
 }) {
-  const animada = useAnimada(assetId);
-
   const detachFromPin = useSceneStore((state) => state.detachFromPin);
-  const spotlight = useSpotlightStore((state) => state.spotlight);
+  const abrirJanela = useAbrirJanela();
+  const arrastar = useTokenDrag();
+  const noAr = useSpotlightStore(
+    (state) => state.spotlight?.assetId === assetId,
+  );
   const transmit = useSpotlightStore((state) => state.transmit);
   const clear = useSpotlightStore((state) => state.clear);
 
-  const noAr = spotlight?.assetId === assetId;
+  const nome = asset?.name ?? "Arquivo que saiu do acervo";
 
   return (
-    <li className="bg-muted/40 flex items-center gap-2 rounded-md border p-1.5">
-      {/* `h-10 w-14`: proporção de mapa, e alto o bastante para reconhecer a
-          imagem sem roubar a largura do cartão. */}
-      {/* A miniatura tem 160px, e arquivo desse tamanho nao alcanca o teto em
-          que o `cover` erra sob `zoom`: ate 800%, que e o limite do palco, ele
-          passa. Ver a tabela em `caberEm`. O original do GIF nao passaria, e
-          por isso o cartao mostra o selo e nao anima no hover. */}
-      <span className="bg-background relative h-10 w-14 shrink-0 overflow-hidden rounded">
-        <MiniaturaDoAcervo
-          assetId={assetId}
-          animada={animada}
-          animaNoHover={false}
-        />
-      </span>
+    <li
+      className={cn(
+        "group/anexo bg-muted relative aspect-square overflow-hidden rounded-md border select-none",
+        asset && "cursor-grab active:cursor-grabbing",
+        // No ar, a célula se marca sem precisar do mouse: é a resposta a "o que
+        // a TV está mostrando?", e ela não pode depender de passar por cima.
+        noAr && "ring-primary ring-2",
+      )}
+      title={noAr ? `${nome} (no ar)` : nome}
+      // O arrasto vai na célula, e não no botão da imagem: é a célula que vai
+      // ao mapa. A imagem continua anexada ao ponto depois de solta, como a do
+      // handout continua no handout.
+      onPointerDown={(event) => {
+        if (!asset) return;
 
-      <span className="min-w-0 flex-1 truncate text-xs" title={nome ?? assetId}>
-        {nome ?? "Arquivo removido do acervo"}
-      </span>
+        const tamanho = tamanhoNaCena(asset);
 
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant={noAr ? "default" : "ghost"}
-              size="icon-sm"
-              aria-label={
-                noAr ? "Tirar da evidência" : "Transmitir para a mesa"
-              }
-              aria-pressed={noAr}
-              // Clicar de novo no que já está no ar TIRA, em vez de
-              // retransmitir: o botão é o mesmo alvo, e ficar preso com uma
-              // imagem cobrindo a TV enquanto se procura onde desligá-la é o
-              // pior momento possível para procurar um botão.
-              onClick={() => (noAr ? clear() : transmit(assetId))}
-            >
-              {noAr ? <RadioTower /> : <Radio />}
-            </Button>
-          }
-        />
-        <TooltipContent>
-          <p className="max-w-48">
-            {noAr
-              ? "No ar agora. Clique para tirar."
-              : "Põe esta imagem na frente de tudo, na TV e nos celulares."}
-          </p>
-        </TooltipContent>
-      </Tooltip>
+        arrastar(event, {
+          fonte: { tipo: "ponto", pinId, assetId },
+          largura: tamanho.x,
+          altura: tamanho.y,
+        });
+      }}
+    >
+      {/* A imagem é um botão, e não a célula com `onClick`: assim o teclado
+          também abre, e os dois botões de cima ficam como irmãos dele -- um
+          clique neles não sobe até aqui abrindo a janela junto.
 
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Tirar o anexo deste ponto"
-        onClick={() => {
-          // Tirar do ar junto: desanexar é dizer que este arquivo não pertence
-          // mais a este ponto, e deixá-lo na TV depois disso separaria o que
-          // está no ar de onde ele foi transmitido. O aviso do palco ainda
-          // desligaria, mas o mestre teria de perceber que precisa.
-          if (noAr) clear();
-          detachFromPin(sceneId, pinId, assetId);
-        }}
+          Janela, e não modal, pelo mesmo motivo da ficha: ver a imagem grande
+          com o mapa e a nota ainda à vista. Abrir de novo a mesma imagem traz
+          a janela que já existe. Ver `useAbrirJanela`. */}
+      <button
+        type="button"
+        disabled={!asset}
+        aria-label={`Abrir ${nome} numa janela`}
+        className="focus-visible:ring-ring absolute inset-0 block size-full cursor-[inherit] focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+        onClick={() => abrirJanela({ tipo: "asset", assetId, nome })}
       >
-        <X />
-      </Button>
+        {/* A miniatura tem 160px, e arquivo desse tamanho nao alcanca o teto
+            em que o `cover` erra sob `zoom`: ate 800%, que e o limite do palco,
+            ele passa. Ver a tabela em `caberEm`. O original do GIF nao
+            passaria, e por isso o cartao mostra o selo e nao anima no hover. */}
+        <MiniaturaDoAcervo
+          assetId={asset ? assetId : undefined}
+          animada={asset?.animada}
+          animaNoHover={false}
+          alt=""
+        />
+      </button>
+
+      {/* Os dois botões só ao passar o mouse, como no handout: a célula é a
+          imagem, e ícones fixos em cima de oito miniaturas viravam uma grade
+          de botões. O de transmitir fica fixo enquanto está no ar. */}
+      <span className="absolute inset-x-0 top-0 flex justify-between p-0.5">
+        {asset ? (
+          <Button
+            variant={noAr ? "default" : "secondary"}
+            size="icon-xs"
+            className={cn(!noAr && REVELAR)}
+            aria-label={
+              noAr ? `Tirar ${nome} da evidência` : `Mostrar ${nome} na TV`
+            }
+            aria-pressed={noAr}
+            // Apertar o botão não levanta a célula: sem isto, o tremor da mão
+            // no clique viraria arrasto ao mapa.
+            onPointerDown={(event) => event.stopPropagation()}
+            // Clicar de novo no que já está no ar TIRA, em vez de
+            // retransmitir: o botão é o mesmo alvo, e ficar preso com uma
+            // imagem cobrindo a TV enquanto se procura onde desligá-la é o
+            // pior momento possível para procurar um botão.
+            onClick={() => (noAr ? clear() : transmit(assetId))}
+          >
+            {noAr ? <RadioTower /> : <Radio />}
+          </Button>
+        ) : (
+          <span />
+        )}
+
+        <Button
+          variant="secondary"
+          size="icon-xs"
+          className={REVELAR}
+          aria-label={`Tirar ${nome} deste ponto`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => {
+            // Tirar do ar junto: desanexar é dizer que este arquivo não
+            // pertence mais a este ponto, e deixá-lo na TV depois disso
+            // separaria o que está no ar de onde ele foi transmitido. O aviso
+            // do palco ainda desligaria, mas o mestre teria de perceber que
+            // precisa.
+            if (noAr) clear();
+            detachFromPin(sceneId, pinId, assetId);
+          }}
+        >
+          <X />
+        </Button>
+      </span>
     </li>
   );
 }
