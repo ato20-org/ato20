@@ -1,18 +1,37 @@
 "use client";
 
-import { memo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { ChevronDown, ChevronUp, Map as IconeDoMapa } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { caberEm } from "@/lib/geometry/caber";
-import { pegadaDoTripe } from "@/lib/geometry/camera-orbital";
+import {
+  pegadaDoTripe,
+  tripeDaOrbital,
+  type CameraOrbital,
+  type Tela,
+} from "@/lib/geometry/camera-orbital";
+import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
+import {
+  moverTripeNoGesto,
+  terminarGestoDoTripe,
+} from "@/lib/store/use-gesto-store";
+import { cn } from "@/lib/utils";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type CanvasItem,
   type CameraTripe,
+  type Tripe,
 } from "@/types/scene";
 
 /** O teto do minimapa na tela: ele cabe nesta caixa, na proporção do que mostra. */
@@ -72,23 +91,134 @@ function enquadrar(tripes: CameraTripe[]): Enquadre {
  * não andam com a câmera.
  */
 export function MiniMapaDaEsguelha({
+  sceneId,
   mapaId,
   itens,
   tripes,
   selecionadaId,
   noArId,
+  olhar,
 }: {
+  sceneId: string;
   mapaId: string | undefined;
   itens: CanvasItem[];
   tripes: CameraTripe[];
   selecionadaId: string | null;
   noArId: string | undefined;
+  /** O olhar do mestre agora, para o marcador de onde ele está. */
+  olhar: {
+    assinar: (aviso: () => void) => () => void;
+    instante: () => { camera: CameraOrbital; tela: Tela } | null;
+  };
 }) {
   const janela = useEsguelhaStore((state) => state.miniMapa);
   const mover = useEsguelhaStore((state) => state.moverMiniMapa);
   const alternar = useEsguelhaStore((state) => state.alternarMiniMapa);
+  const selecionar = useCameraLockStore((state) => state.selecionar);
   const raiz = useRef<HTMLDivElement | null>(null);
-  const enquadre = enquadrar(tripes);
+  const area = useRef<HTMLDivElement | null>(null);
+  const mestre = useRef<SVGGElement | null>(null);
+
+  /**
+   * O enquadre parado enquanto um tripé é arrastado: ele cresce para caber os
+   * tripés, e recalcular a cada quadro do arrasto andaria com o mapa embaixo
+   * da mão.
+   */
+  const [enquadreFixo, setEnquadreFixo] = useState<Enquadre | null>(null);
+  const enquadre = enquadreFixo ?? enquadrar(tripes);
+  const [vista, setVista] = useState<Vista>(VISTA_INTEIRA);
+  const escala = enquadre.escala * vista.zoom;
+  const naJanela = (x: number, y: number) => ({
+    x: (x - enquadre.x) * escala + vista.x,
+    y: (y - enquadre.y) * escala + vista.y,
+  });
+
+  /**
+   * A roda amplia no cursor, de uma a oito vezes. Nativa e não passiva: é o
+   * único jeito de a roda não rolar o que estiver por baixo.
+   */
+  const { largura: larguraVista, altura: alturaVista } = enquadre;
+  useEffect(() => {
+    const elemento = area.current;
+    if (!elemento) return;
+    const largura = larguraVista;
+    const altura = alturaVista;
+    function rodou(evento: WheelEvent) {
+      evento.preventDefault();
+      const caixa = elemento!.getBoundingClientRect();
+      const fator = Math.exp(-evento.deltaY * RODA_POR_PIXEL);
+      setVista((atual) =>
+        ampliarNo(
+          atual,
+          evento.clientX - caixa.left,
+          evento.clientY - caixa.top,
+          fator,
+          largura,
+          altura,
+        ),
+      );
+    }
+    elemento.addEventListener("wheel", rodou, { passive: false });
+    return () => elemento.removeEventListener("wheel", rodou);
+  }, [janela.aberto, larguraVista, alturaVista]);
+
+  /**
+   * Onde o mestre está: o olho dele, o bico para onde olha e a pegada do que
+   * vê. Escrito a cada aviso da câmera, como o gizmo do tripé -- o minimapa
+   * não redesenha a cada quadro da navegação.
+   */
+  useLayoutEffect(() => {
+    const grupo = mestre.current;
+    if (!grupo) return;
+    function escrever() {
+      const agora = olhar.instante();
+      if (!agora || !grupo) return;
+      const olho = tripeDaOrbital(agora.camera, agora.tela);
+      // Preso na borda quando o olho sai do enquadre -- e ele sai sempre que o
+      // mestre olha de esguelha, porque o olho fica ATRÁS do que ele vê. Na
+      // borda, o bico continua dizendo para onde ele olha.
+      const solto = naJanela(olho.x, olho.y);
+      const centro = {
+        x: Math.min(larguraVista - BORDA_DO_MESTRE, Math.max(BORDA_DO_MESTRE, solto.x)),
+        y: Math.min(alturaVista - BORDA_DO_MESTRE, Math.max(BORDA_DO_MESTRE, solto.y)),
+      };
+      const giro = (olho.giro * Math.PI) / 180;
+      const frente = { x: -Math.sin(giro), y: -Math.cos(giro) };
+      const lado = { x: -frente.y, y: frente.x };
+      const pegada = pegadaDoTripe(
+        olho,
+        agora.tela.largura / agora.tela.altura,
+      );
+
+      const [area, bico, ponto] = grupo.children;
+      if (pegada) {
+        area?.removeAttribute("visibility");
+        area?.setAttribute(
+          "points",
+          pegada
+            .map((canto) => {
+              const naTela = naJanela(canto.x, canto.y);
+              return `${naTela.x},${naTela.y}`;
+            })
+            .join(" "),
+        );
+      } else {
+        area?.setAttribute("visibility", "hidden");
+      }
+      bico?.setAttribute(
+        "points",
+        [
+          `${centro.x + frente.x * 10},${centro.y + frente.y * 10}`,
+          `${centro.x + lado.x * 5},${centro.y + lado.y * 5}`,
+          `${centro.x - lado.x * 5},${centro.y - lado.y * 5}`,
+        ].join(" "),
+      );
+      ponto?.setAttribute("cx", `${centro.x}`);
+      ponto?.setAttribute("cy", `${centro.y}`);
+    }
+    escrever();
+    return olhar.assinar(escrever);
+  });
 
   /** Arrasta a janela pela barra, presa dentro do palco. */
   function arrastar(evento: ReactPointerEvent<HTMLDivElement>) {
@@ -119,6 +249,93 @@ export function MiniMapaDaEsguelha({
     window.addEventListener("pointerup", soltou);
   }
 
+  /** Ampliado, arrastar o fundo anda pelo mapa. */
+  function arrastarVista(evento: ReactPointerEvent<HTMLDivElement>) {
+    if (evento.button !== 0 || vista.zoom <= 1) return;
+    evento.preventDefault();
+    const inicio = { x: evento.clientX, y: evento.clientY };
+    const de = vista;
+    const { largura, altura } = enquadre;
+
+    function andou(nativo: PointerEvent) {
+      setVista(
+        prenderVista(
+          {
+            zoom: de.zoom,
+            x: de.x + nativo.clientX - inicio.x,
+            y: de.y + nativo.clientY - inicio.y,
+          },
+          largura,
+          altura,
+        ),
+      );
+    }
+    function soltou() {
+      window.removeEventListener("pointermove", andou);
+      window.removeEventListener("pointerup", soltou);
+    }
+    window.addEventListener("pointermove", andou);
+    window.addEventListener("pointerup", soltou);
+  }
+
+  /**
+   * Arrastar um tripé pelo minimapa: só onde ele está, no chão. Altura, giro e
+   * o resto ficam -- isso é com o gizmo e o painel. O mesmo gesto do gizmo: por
+   * quadro só o gesto, o board ao soltar.
+   */
+  function arrastarTripe(
+    evento: ReactPointerEvent<SVGGElement>,
+    tripe: CameraTripe,
+  ) {
+    if (evento.button !== 0) return;
+    evento.preventDefault();
+    evento.stopPropagation();
+    selecionar(tripe.id);
+
+    const caixa = area.current?.getBoundingClientRect();
+    if (!caixa) return;
+    const congelado = enquadre;
+    const esc = congelado.escala * vista.zoom;
+    const visto = vista;
+    const paraCena = (clientX: number, clientY: number) => ({
+      x: (clientX - caixa.left - visto.x) / esc + congelado.x,
+      y: (clientY - caixa.top - visto.y) / esc + congelado.y,
+    });
+    setEnquadreFixo(congelado);
+
+    const inicio = paraCena(evento.clientX, evento.clientY);
+    const olho: Tripe = {
+      x: tripe.x,
+      y: tripe.y,
+      altura: tripe.altura,
+      giro: tripe.giro,
+      inclinacao: tripe.inclinacao,
+      rolagem: tripe.rolagem,
+      lente: tripe.lente,
+    };
+
+    function andou(nativo: PointerEvent) {
+      const aqui = paraCena(nativo.clientX, nativo.clientY);
+      moverTripeNoGesto(sceneId, tripe.id, {
+        ...olho,
+        x: tripe.x + aqui.x - inicio.x,
+        y: tripe.y + aqui.y - inicio.y,
+      });
+    }
+    function soltou() {
+      window.removeEventListener("pointermove", andou);
+      window.removeEventListener("pointerup", soltou);
+      window.removeEventListener("pointercancel", soltou);
+      terminarGestoDoTripe();
+      setEnquadreFixo(null);
+    }
+    window.addEventListener("pointermove", andou);
+    window.addEventListener("pointerup", soltou);
+    window.addEventListener("pointercancel", soltou);
+  }
+
+  const plano = naJanela(0, 0);
+
   return (
     <div
       ref={raiz}
@@ -136,7 +353,6 @@ export function MiniMapaDaEsguelha({
           size="icon-sm"
           className="size-5"
           aria-label={janela.aberto ? "Recolher o minimapa" : "Abrir o minimapa"}
-          // O botão não arrasta a janela.
           onPointerDown={(evento) => evento.stopPropagation()}
           onClick={alternar}
         >
@@ -146,28 +362,35 @@ export function MiniMapaDaEsguelha({
 
       {janela.aberto ? (
         <div
-          className="relative overflow-hidden bg-black"
+          ref={area}
+          className={cn(
+            "relative overflow-hidden bg-black",
+            vista.zoom > 1 && "cursor-grab active:cursor-grabbing",
+          )}
           style={{ width: enquadre.largura, height: enquadre.altura }}
+          title="Roda: aproximar. Duplo clique: o mapa todo."
+          onPointerDown={arrastarVista}
+          onDoubleClick={() => setVista(VISTA_INTEIRA)}
         >
           {/* O plano, no lugar dele dentro do enquadre: fora dele é o vazio
               em volta da mesa, onde os tripés de fora ficam. */}
           <div
             className="absolute overflow-hidden bg-neutral-900"
             style={{
-              left: -enquadre.x * enquadre.escala,
-              top: -enquadre.y * enquadre.escala,
-              width: SCENE_WIDTH * enquadre.escala,
-              height: SCENE_HEIGHT * enquadre.escala,
+              left: plano.x,
+              top: plano.y,
+              width: SCENE_WIDTH * escala,
+              height: SCENE_HEIGHT * escala,
             }}
           >
             <MapaDeCima
               assetId={mapaId}
-              largura={SCENE_WIDTH * enquadre.escala}
-              altura={SCENE_HEIGHT * enquadre.escala}
+              largura={SCENE_WIDTH * escala}
+              altura={SCENE_HEIGHT * escala}
             />
 
             {itens.map((item) => (
-              <ItemDeCima key={item.id} item={item} escala={enquadre.escala} />
+              <ItemDeCima key={item.id} item={item} escala={escala} />
             ))}
           </div>
 
@@ -180,7 +403,7 @@ export function MiniMapaDaEsguelha({
               <TripeDeCima
                 key={tripe.id}
                 tripe={tripe}
-                enquadre={enquadre}
+                naJanela={naJanela}
                 cor={
                   tripe.id === noArId
                     ? "#f87171"
@@ -188,12 +411,68 @@ export function MiniMapaDaEsguelha({
                       ? "#facc15"
                       : "rgba(255,255,255,0.85)"
                 }
+                onPointerDown={(evento) => arrastarTripe(evento, tripe)}
               />
             ))}
+
+            {/* O mestre: azul, como a mão dele no resto do app. Os filhos na
+                ordem que o efeito escreve -- pegada, bico, ponto. */}
+            <g ref={mestre} style={{ color: "#38bdf8" }}>
+              <polygon
+                fill="currentColor"
+                fillOpacity={0.12}
+                stroke="currentColor"
+                strokeOpacity={0.8}
+                strokeWidth={1}
+                strokeDasharray="3 2"
+              />
+              <polygon fill="currentColor" />
+              <circle r={3.5} fill="#0c4a6e" stroke="white" strokeWidth={1.5}>
+                <title>Você está aqui</title>
+              </circle>
+            </g>
           </svg>
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** A vista do minimapa: quanto ampliou, e onde o canto do conteúdo está. */
+type Vista = { zoom: number; x: number; y: number };
+
+const VISTA_INTEIRA: Vista = { zoom: 1, x: 0, y: 0 };
+/** O marcador do mestre fica a esta distância da borda, em pixels. */
+const BORDA_DO_MESTRE = 7;
+const ZOOM_MAXIMO = 8;
+/** Quanto a roda amplia por pixel de rolagem. */
+const RODA_POR_PIXEL = 0.0015;
+
+/** A vista sem deixar o conteúdo descolar das bordas da janela. */
+function prenderVista(vista: Vista, largura: number, altura: number): Vista {
+  const zoom = Math.min(ZOOM_MAXIMO, Math.max(1, vista.zoom));
+  return {
+    zoom,
+    x: Math.min(0, Math.max(largura - largura * zoom, vista.x)),
+    y: Math.min(0, Math.max(altura - altura * zoom, vista.y)),
+  };
+}
+
+/** Amplia `fator` vezes com o ponto da janela sob o cursor parado. */
+function ampliarNo(
+  vista: Vista,
+  x: number,
+  y: number,
+  fator: number,
+  largura: number,
+  altura: number,
+): Vista {
+  const zoom = Math.min(ZOOM_MAXIMO, Math.max(1, vista.zoom * fator));
+  const k = zoom / vista.zoom;
+  return prenderVista(
+    { zoom, x: x - (x - vista.x) * k, y: y - (y - vista.y) * k },
+    largura,
+    altura,
   );
 }
 
@@ -291,18 +570,16 @@ const ItemDeCima = memo(function ItemDeCima({
  */
 function TripeDeCima({
   tripe,
-  enquadre,
+  naJanela,
   cor,
+  onPointerDown,
 }: {
   tripe: CameraTripe;
-  enquadre: Enquadre;
+  naJanela: (x: number, y: number) => { x: number; y: number };
   cor: string;
+  onPointerDown: (evento: ReactPointerEvent<SVGGElement>) => void;
 }) {
   const pegada = pegadaDoTripe(tripe);
-  const naJanela = (x: number, y: number) => ({
-    x: (x - enquadre.x) * enquadre.escala,
-    y: (y - enquadre.y) * enquadre.escala,
-  });
   const { x: cx, y: cy } = naJanela(tripe.x, tripe.y);
   const giro = (tripe.giro * Math.PI) / 180;
   const frente = { x: -Math.sin(giro), y: -Math.cos(giro) };
@@ -334,6 +611,18 @@ function TripeDeCima({
         fill="currentColor"
       />
       <circle cx={cx} cy={cy} r={3} fill="#18181b" stroke="currentColor" strokeWidth={1.5} />
+      {/* O alvo do arrasto, maior que o ponto: três pixels não se pegam. */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r={8}
+        fill="transparent"
+        className="cursor-move"
+        style={{ pointerEvents: "all" }}
+        onPointerDown={onPointerDown}
+      >
+        <title>{`${tripe.nome}: arraste para mover`}</title>
+      </circle>
     </g>
   );
 }
