@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { cameraNaPosicao } from "@/lib/mestre/camera-actions";
+import {
+  alternarCinegrafista,
+  cameraNaPosicao,
+} from "@/lib/mestre/camera-actions";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -44,7 +47,7 @@ afterEach(() => {
     doOutroModo: null,
     espelhoMestre: false,
   });
-  useEsguelhaStore.setState({ ligada: false });
+  useEsguelhaStore.setState({ ligada: false, cinegrafista: false });
 });
 
 describe("tripés no ar", () => {
@@ -219,5 +222,26 @@ describe("o Shift+L em cada modo", () => {
     useCameraLockStore.getState().alternarEspelho();
 
     expect(useCameraLockStore.getState().espelhoMestre).toBe(false);
+  });
+
+  it("no 2.5D, entra no tripé selecionado, e sai no segundo toque", () => {
+    montar();
+    const tripe = useSceneStore
+      .getState()
+      .salvarTripe("c1", { ...OLHO, nome: "Tripé 1" });
+    useEsguelhaStore.setState({ ligada: true, cinegrafista: false });
+    useCameraLockStore.setState({ selecionadaId: tripe });
+
+    alternarCinegrafista();
+    expect(useEsguelhaStore.getState().cinegrafista).toBe(true);
+
+    alternarCinegrafista();
+    expect(useEsguelhaStore.getState().cinegrafista).toBe(false);
+  });
+
+  it("sair do 2.5D sai do cinegrafista", () => {
+    useEsguelhaStore.setState({ ligada: true, cinegrafista: true });
+    useEsguelhaStore.getState().alternar();
+    expect(useEsguelhaStore.getState().cinegrafista).toBe(false);
   });
 });

@@ -33,6 +33,15 @@ type EsguelhaStore = {
   olhandoPor: string | null;
   olharPor: (tripeId: string | null) => void;
   /**
+   * O modo cinegrafista: o mestre DENTRO do tripé selecionado, andando com ele
+   * como num jogo -- WASD, o mouse preso olhando, Q/E rolando, Espaço e C
+   * subindo e descendo. É o Shift+L do 2.5D, a mesma ideia do espelho do 2D:
+   * o que o mestre faz, a câmera faz. Ver `useCinegrafistaDeEsguelha`.
+   */
+  cinegrafista: boolean;
+  entrarNoCinegrafista: () => void;
+  sairDoCinegrafista: () => void;
+  /**
    * A janela do minimapa: onde ela está, em pixels a partir do canto do palco,
    * e se está aberta. Da sessão, como o olhar: quem a arrastou para um canto
    * a reencontra lá ao voltar ao 2.5D.
@@ -57,12 +66,17 @@ type EsguelhaStore = {
 export const useEsguelhaStore = create<EsguelhaStore>((set) => ({
   ligada: false,
   olhar: { ...OLHAR_PADRAO },
-  alternar: () => set((atual) => ({ ligada: !atual.ligada })),
+  // Sair do 2.5D sai do cinegrafista junto: ele só existe lá.
+  alternar: () =>
+    set((atual) => ({ ligada: !atual.ligada, cinegrafista: false })),
   guardarOlhar: (olhar) => set({ olhar }),
   olhoAgora: null,
   registrarOlho: (olhoAgora) => set({ olhoAgora }),
   olhandoPor: null,
   olharPor: (olhandoPor) => set({ olhandoPor }),
+  cinegrafista: false,
+  entrarNoCinegrafista: () => set({ cinegrafista: true }),
+  sairDoCinegrafista: () => set({ cinegrafista: false }),
   miniMapa: { x: 12, y: 52, aberto: true },
   moverMiniMapa: ({ x, y }) =>
     set((atual) => ({ miniMapa: { ...atual.miniMapa, x, y } })),

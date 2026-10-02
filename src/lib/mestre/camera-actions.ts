@@ -436,6 +436,25 @@ export function novoTripeDaqui(nome?: string): string | undefined {
 }
 
 /**
+ * Entra no modo cinegrafista, ou sai dele: o Shift+L do 2.5D. Ver
+ * `cinegrafista` em `useEsguelhaStore`.
+ *
+ * Sem tripé selecionado, nasce um onde o mestre está olhando -- fora do ar,
+ * como todo tripé novo -- e é nele que se entra. Ficar mudo por falta de
+ * tripé era o defeito do Shift+L do 2D.
+ */
+export function alternarCinegrafista(): void {
+  const esguelha = useEsguelhaStore.getState();
+  if (!esguelha.ligada) return;
+  if (esguelha.cinegrafista) {
+    esguelha.sairDoCinegrafista();
+    return;
+  }
+  if (!tripeSelecionado() && !novoTripeDaqui()) return;
+  esguelha.entrarNoCinegrafista();
+}
+
+/**
  * Leva o tripé selecionado para onde o mestre está olhando no 2.5D. Se ele
  * está no ar, a mesa vai junto -- ver `atualizarTripe`.
  */

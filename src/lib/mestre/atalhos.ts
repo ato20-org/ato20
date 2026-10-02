@@ -24,6 +24,7 @@ import {
   temPapelNaMao,
 } from "@/lib/mestre/item-actions";
 import {
+  alternarCinegrafista,
   alternarTransmissao,
   cameraAtual,
   cameraNaPosicao,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/mestre/camera-actions";
 import { segurarSetaDaCamera } from "@/lib/mestre/camera-nas-setas";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
@@ -502,13 +504,20 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Shift+L",
-    rotulo: "Espelhar teu palco na câmera selecionada",
+    rotulo:
+      "Espelhar teu palco na câmera selecionada (no 2.5D: modo cinegrafista)",
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
       evento.shiftKey &&
       letra(evento) === "l",
-    executar: () => useCameraLockStore.getState().alternarEspelho(),
+    // A mesma ideia nos dois modos -- o que o mestre faz, a câmera faz --, na
+    // espécie de câmera de cada um: no 2D o recorte espelha o palco, no 2.5D o
+    // mestre entra no tripé. Ver `alternarCinegrafista`.
+    executar: () =>
+      useEsguelhaStore.getState().ligada
+        ? alternarCinegrafista()
+        : useCameraLockStore.getState().alternarEspelho(),
     impedirPadrao: true,
   },
   {
