@@ -73,6 +73,7 @@ import { setAssetEscopo } from "@/lib/vault/assets";
 import { shareCharacterAttachment } from "@/lib/vault/evidence";
 
 import { PlayerDialog } from "@/components/mestre/player-dialog";
+import { useRecorte } from "@/components/mestre/recorte-de-imagem";
 import { presente } from "@/hooks/use-players";
 import { desde } from "@/lib/tempo";
 import { InventarioPersonagem } from "./inventario-personagem";
@@ -1131,6 +1132,13 @@ function Slot({
   const valor = personagem[campo];
   const { assets } = useAssetList("image");
 
+  // A miniatura abre no círculo porque é o token redondo de mesa; o retrato,
+  // no quadrado. Os dois trocam com um clique no próprio editor.
+  const { recortar, dialogo } = useRecorte({
+    titulo,
+    formatoInicial: campo === "miniatura" ? "circulo" : "quadrado",
+  });
+
   // O endereço do asset sai daqui, e não de dentro da miniatura: ele é o mesmo
   // que o visualizador usa ao abrir a imagem grande, e resolvê-lo duas vezes
   // faria a linha e o diálogo pedirem o mesmo arquivo ao daemon.
@@ -1187,7 +1195,11 @@ function Slot({
     setOcupado(true);
 
     try {
-      const preenchido = await preencherCampoComArquivo(personagem.id, campo);
+      const preenchido = await preencherCampoComArquivo(
+        personagem.id,
+        campo,
+        campo === "ficha" ? undefined : recortar,
+      );
       if (preenchido) onChanged();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Falha ao anexar.");
@@ -1346,6 +1358,8 @@ function Slot({
       >
         {titulo}
       </p>
+
+      {dialogo}
     </li>
   );
 }

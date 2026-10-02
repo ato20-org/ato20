@@ -3,8 +3,9 @@
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
-import { importAssets } from "@/lib/vault/assets";
+import { deleteAsset, importAssets, importarBytes } from "@/lib/vault/assets";
 import { call } from "@/lib/vault/bridge";
+import type { AssetMeta } from "@/types/scene";
 import type {
   AnexoAutor,
   AnexoPersonagem,
@@ -78,11 +79,16 @@ export function setCharacterCampo(
  * que as duas imagens passam a aparecer na biblioteca de imagens, o que é
  * honesto: são imagens da campanha.
  *
- * `null` = o mestre fechou o seletor, que não é erro.
+ * `recortar` é o editor de recorte, para retrato e miniatura. Sem ele, ou com
+ * imagem animada, o arquivo entra como veio -- recortar no canvas guardaria só o
+ * primeiro quadro, e o GIF pararia de se mexer sem ninguém ter pedido.
+ *
+ * `null` = o mestre fechou o seletor, ou desistiu do recorte, que não é erro.
  */
 export async function preencherCampoComArquivo(
   id: string,
   campo: CampoPersonagem,
+  recortar?: Recortar,
 ): Promise<string | null> {
   if (campo === "ficha") {
     const resultado = await attachToCharacter(id);
@@ -108,7 +114,12 @@ export async function preencherCampoComArquivo(
   if (!primeiro)
     throw new Error(resultado.recusados[0] ?? "Nada foi importado.");
 
-  await setCharacterCampo(id, campo, primeiro.id);
+  const escolhido =
+    recortar && !primeiro.animada
+      ? await passarPeloRecorte(primeiro, recortar)
+      : primeiro.id;
+
+  if (escolhido) await setCharacterCampo(id, campo, escolhido);
 
   // O arquivo entrou no acervo AGORA, e quem o quer não é esta tela: o botão de
   // pôr o token no mapa precisa da dimensão natural da miniatura, e ele lê o
@@ -116,7 +127,86 @@ export async function preencherCampoComArquivo(
   // aplicativo ser reaberto. Ver `useAssetsStore`.
   invalidarAcervo("image");
 
-  return primeiro.id;
+  return escolhido;
+}
+
+/**
+ * O que o editor de recorte responde: os bytes do PNG recortado, `"inteira"`
+ * para usar o arquivo como veio, ou `null` quando o mestre desistiu.
+ */
+export type RespostaDoRecorte = Uint8Array | "inteira" | null;
+
+export type Recortar = (original: AssetMeta) => Promise<RespostaDoRecorte>;
+
+/**
+ * Passa o arquivo recém-importado pelo editor e devolve o id que o campo deve
+ * guardar, ou `null` se o mestre desistiu.
+ *
+ * O original entra no acervo ANTES do editor, e não depois, porque é o único
+ * jeito de a webview ler os pixels sem o arquivo atravessar a ponte: o seletor
+ * nativo dá o caminho, o Rust copia, e o editor busca pelo `/asset/{id}` de
+ * sempre. Ver `importAssets`.
+ *
+ * O preço é que o original sai de novo sempre que não for ele o escolhido. Não
+ * há risco de apagar o que outra coisa usa: toda importação cria um id novo,
+ * mesmo para um arquivo que já estava no acervo.
+ */
+async function passarPeloRecorte(
+  original: AssetMeta,
+  recortar: Recortar,
+): Promise<string | null> {
+  let resposta: RespostaDoRecorte;
+
+  try {
+    resposta = await recortar(original);
+  } catch (causa) {
+    await descartar(original.id);
+    throw causa;
+  }
+
+  if (resposta === "inteira") return original.id;
+
+  if (resposta === null) {
+    await descartar(original.id);
+    return null;
+  }
+
+  try {
+    const recortado = await importarBytes(
+      nomeDoRecorte(original.name),
+      resposta,
+      "personagem",
+    );
+    const novo = recortado.aceitos[0];
+    if (!novo)
+      throw new Error(recortado.recusados[0] ?? "O recorte não entrou no acervo.");
+
+    return novo.id;
+  } finally {
+    await descartar(original.id);
+  }
+}
+
+/**
+ * Tira do acervo o original que não foi escolhido.
+ *
+ * Não lança: a falha deixa um arquivo com dono e sem campo apontando, escondido
+ * da biblioteca, e isso não justifica derrubar o recorte que já deu certo.
+ */
+async function descartar(assetId: string): Promise<void> {
+  try {
+    await deleteAsset(assetId);
+  } catch (causa) {
+    console.warn("o original do recorte ficou no acervo:", causa);
+  }
+}
+
+/** O nome do recorte na biblioteca: o do original, agora PNG. */
+function nomeDoRecorte(nome: string): string {
+  const ponto = nome.lastIndexOf(".");
+  const base = ponto > 0 ? nome.slice(0, ponto) : nome;
+
+  return `${base}.png`;
 }
 
 // --- aparências -------------------------------------------------------------
