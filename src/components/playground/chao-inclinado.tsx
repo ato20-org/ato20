@@ -1,6 +1,14 @@
 "use client";
 
-import { Fragment, memo, useId, useMemo } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useCoresDasParedes } from "@/hooks/use-cores-das-paredes";
@@ -14,6 +22,7 @@ import {
   uniaoDasCaixas,
   type CaixaDaUmbra,
 } from "@/lib/geometry/sombra";
+import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
 import {
   caixaDaFace,
   caixaDaPeca,
@@ -164,12 +173,15 @@ function PecaEmPe({
   alta,
   variante,
   transform,
+  local,
   onPointerDown,
 }: {
   peca: PecaDoChao;
   alta: number;
   variante?: Variante;
   transform: string;
+  /** A parte da corrente que é da peça, para a câmera orbital. Ver `orbital`. */
+  local?: string;
   onPointerDown?: (
     event: React.PointerEvent<HTMLImageElement>,
     id: string,
@@ -187,6 +199,7 @@ function PecaEmPe({
       alt=""
       draggable={false}
       data-peca={peca.id}
+      data-local={local}
       className="absolute top-0 left-0 select-none"
       onPointerDown={(event) => onPointerDown?.(event, peca.id)}
       style={{
@@ -218,6 +231,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
   chaoRef,
   onChaoPointerDown,
   onPecaPointerDown,
+  orbital,
 }: {
   paredes: Parede[];
   mapaUrl: string;
@@ -307,6 +321,37 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     event: React.PointerEvent<HTMLImageElement>,
     id: string,
   ) => void;
+  /**
+   * A câmera de mesa de verdade, no lugar da foto encaixada. Ver
+   * `camera-orbital.ts`.
+   *
+   * Com ela, os envelopes passam a ter o tamanho da TELA, e não do plano: o
+   * olho fica no centro da janela, e o chão continua além da borda em vez de
+   * encolher para caber nela. `perspectiva` é a focal, em pixels de tela.
+   *
+   * ## Por que a corrente não vem por prop
+   *
+   * Andar e aproximar mudam a corrente de TODO elemento a cada quadro, e o
+   * caminho dela decide o quadro. Medido na webview (WebKitGTK 2.52.5, Xvfb,
+   * `chao-25d` com quarenta paredes e quarenta peças, o mesmo passeio):
+   *
+   * | caminho                                  | fps  | p95   | perdidos |
+   * | ---------------------------------------- | ---- | ----- | -------- |
+   * | variável CSS no pai (`var(--camera)`)    |  4,2 | 897ms |     100% |
+   * | corrente por prop, render a cada quadro  |   51 |  26ms |      35% |
+   *
+   * A variável é a armadilha: o WebKit trata a troca de uma propriedade
+   * personalizada herdada como repintura da subárvore inteira, e não como
+   * recomposição. Por prop o motor recompõe, mas o React reconcilia tudo por
+   * quadro.
+   *
+   * Então a corrente é ESCRITA direto no `style.transform` de cada elemento:
+   * `corrente()` diz qual é, `assinar` avisa quando muda, e cada elemento leva
+   * em `data-local` a parte dele -- o que vem depois da câmera. Sem variável e
+   * sem render. Girar e deitar continuam vindo por `giro` e `inclinacao`, porque
+   * a ordem do pintor e as peças em pé dependem deles.
+   */
+  orbital?: CameraAssinavel;
 }) {
   /**
    * A corrente da CENA, que todo elemento carrega na frente da sua.
@@ -327,7 +372,47 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     () => correnteDeEsguelha(giro, inclinacao, perspectiva),
     [giro, inclinacao, perspectiva],
   );
-  const cena = corrente.cena;
+  // Na orbital, a câmera não entra no `style` que o React escreve: ela é posta
+  // na frente de cada `data-local` pelo efeito lá embaixo. Ver `orbital`.
+  const emOrbita = orbital !== undefined;
+  const cena = emOrbita ? "" : corrente.cena;
+  /** O `transform` de um elemento: a corrente da cena na frente da dele. */
+  const comCena = useCallback(
+    (parte: string) => (emOrbita ? parte : `${cena} ${parte}`),
+    [cena, emOrbita],
+  );
+  /** O `data-local` de um elemento, que só a orbital lê. */
+  const local = useCallback(
+    (parte: string) => (emOrbita ? parte : undefined),
+    [emOrbita],
+  );
+
+  const raiz = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Escreve a câmera na frente de cada elemento, e reescreve quando ela muda.
+   *
+   * Sem lista de dependências de propósito: roda depois de TODO commit. O
+   * React escreve no `style` só a parte local, e um commit que mexa num
+   * elemento -- uma peça arrastada, uma parede nova -- o deixaria sem câmera.
+   * Antes da pintura, então ninguém vê o meio do caminho.
+   */
+  useLayoutEffect(() => {
+    if (!orbital || !raiz.current) return;
+
+    const elementos = [
+      ...raiz.current.querySelectorAll<HTMLElement | SVGElement>("[data-local]"),
+    ];
+    function escrever() {
+      const camera = orbital!.corrente();
+      for (const elemento of elementos) {
+        elemento.style.transform = `${camera} ${elemento.dataset.local ?? ""}`;
+      }
+    }
+
+    escrever();
+    return orbital.assinar(escrever);
+  });
 
   const cores = useCoresDasParedes(paredes, mapaUrl);
 
@@ -419,11 +504,14 @@ export const ChaoInclinado = memo(function ChaoInclinado({
           ? caixasDasPecas.some((daPeca) => tapa(caixa, daPeca))
           : false;
 
+        const daFace = `translate3d(${segmento.x1}px, ${segmento.y1}px, 0) rotate(${angulo}deg) rotateX(90deg)`;
+
         lista.push({
           chave: `${parede.id}-f${i}`,
           profundidade: profundidadeNaVista(meioX, meioY, giro),
           no: (
             <div
+              data-local={local(daFace)}
               // Inerte: a face fica ENTRE o cursor e o chão, e um clique nela
               // não chegaria ao pega-gesto -- cairia na conta do plano de
               // prumo, que numa cena deitada aponta para outro lugar. Era o que
@@ -440,7 +528,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
                 // é como o defeito se sentia ao traçar um mapa. Medido em
                 // `scripts/debug/preserve-3d-webkit.html`, seção do sinal: com
                 // `+90` a pegada fica na BASE da massa, com `-90` no topo.
-                transform: `${cena} translate3d(${segmento.x1}px, ${segmento.y1}px, 0) rotate(${angulo}deg) rotateX(90deg)`,
+                transform: comCena(daFace),
                 // A cor da PRÓPRIA parede, lida do topo dela, chapada -- e não
                 // uma tira do mapa esticada pela altura, que era o que havia
                 // aqui. O lado de uma parede não está pintado em lugar nenhum
@@ -536,6 +624,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
       if (!caixa) continue;
 
       const maisPerto = ordenadas[ordenadas.length - 1]!;
+      const daLaje = `translate(${caixa.x}px, ${caixa.y}px) translateZ(${altura}px)`;
 
       lista.push({
         chave: `laje-${altura}`,
@@ -547,6 +636,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
           ) + 0.5,
         no: (
           <svg
+            data-local={local(daLaje)}
             // Inerte: ele fica entre o cursor e o chão, e um clique nele não
             // chegaria ao pega-gesto.
             className="pointer-events-none absolute top-0 left-0"
@@ -563,7 +653,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
               // O `translate` põe o recorte no lugar dele no plano; a corrente
               // da cena deita o conjunto; o `translateZ` o ergue pela normal do
               // chão, que é para onde a parede cresce.
-              transform: `${cena} translate(${caixa.x}px, ${caixa.y}px) translateZ(${altura}px)`,
+              transform: comCena(daLaje),
             }}
           >
             <defs>
@@ -574,7 +664,10 @@ export const ChaoInclinado = memo(function ChaoInclinado({
                 height={SCENE_HEIGHT}
               >
                 <image
-                  href={mapaUrl}
+                  // Vazio enquanto o daemon não responde: sem `href` em vez de
+                  // `href=""`, que o React recusa e o navegador lê como "esta
+                  // página".
+                  href={mapaUrl || undefined}
                   width={SCENE_WIDTH}
                   height={SCENE_HEIGHT}
                   preserveAspectRatio="none"
@@ -597,6 +690,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
       const centroX = peca.x + peca.lado / 2;
       const pe = peca.y + peca.lado;
       const alta = peca.altura ?? peca.lado;
+      const daPeca = `translate3d(${centroX}px, ${pe}px, 0) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)`;
 
       lista.push({
         chave: `peca-${peca.id}`,
@@ -611,7 +705,8 @@ export const ChaoInclinado = memo(function ChaoInclinado({
             // figura no lugar certo do chão que encara quem olha, como uma
             // miniatura numa mesa. O último `translate` põe o PÉ dela no
             // ponto -- girar em torno do canto afundaria metade no piso.
-            transform={`${cena} translate3d(${centroX}px, ${pe}px, 0) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)`}
+            transform={comCena(daPeca)}
+            local={local(daPeca)}
           />
         ),
       });
@@ -619,7 +714,8 @@ export const ChaoInclinado = memo(function ChaoInclinado({
 
     return lista.sort((a, b) => a.profundidade - b.profundidade);
   }, [
-    cena,
+    comCena,
+    local,
     cores,
     escurecer,
     giro,
@@ -636,21 +732,35 @@ export const ChaoInclinado = memo(function ChaoInclinado({
 
   return (
     <div
-      className="absolute top-0 left-0"
-      style={{
-        width: SCENE_WIDTH,
-        height: SCENE_HEIGHT,
-        transformOrigin: `${SCENE_WIDTH / 2}px ${SCENE_HEIGHT / 2}px`,
-        transform: corrente.encaixe,
-      }}
+      ref={raiz}
+      // Na orbital o chão passa da caixa de propósito -- a mesa continua além
+      // da borda --, e o corte fica aqui, na caixa, para nada transbordar o
+      // plano em que ela mora. Ver `debug-do-palco` §3.
+      className={
+        orbital ? "absolute inset-0 overflow-hidden" : "absolute top-0 left-0"
+      }
+      style={
+        orbital
+          ? undefined
+          : {
+              width: SCENE_WIDTH,
+              height: SCENE_HEIGHT,
+              transformOrigin: `${SCENE_WIDTH / 2}px ${SCENE_HEIGHT / 2}px`,
+              transform: corrente.encaixe,
+            }
+      }
     >
       <div
-        className="absolute top-0 left-0"
+        className={orbital ? "absolute inset-0" : "absolute top-0 left-0"}
         style={{
-          width: SCENE_WIDTH,
-          height: SCENE_HEIGHT,
+          width: orbital ? undefined : SCENE_WIDTH,
+          height: orbital ? undefined : SCENE_HEIGHT,
           // Zero desliga: `perspective: none` é projeção paralela.
-          perspective: perspectiva > 0 ? `${perspectiva}px` : "none",
+          perspective: orbital
+            ? `${orbital.perspectiva}px`
+            : perspectiva > 0
+              ? `${perspectiva}px`
+              : "none",
           perspectiveOrigin: "50% 50%",
         }}
       >
@@ -672,6 +782,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
             transformOrigin: "0 0",
             transform: cena,
           }}
+          data-local={local("")}
         />
 
         {/* A sombra das paredes, DEITADA NO CHÃO com ele.
@@ -690,6 +801,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
             width={SCENE_WIDTH}
             height={SCENE_HEIGHT}
             viewBox={`0 0 ${SCENE_WIDTH} ${SCENE_HEIGHT}`}
+            data-local={local("")}
             style={{ transformOrigin: "0 0", transform: cena }}
           >
             <path d={umbrasDoSol(paredes, sol)} fill={`rgba(0,0,0,${sol.forca})`} />
@@ -710,6 +822,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
               transform: cena,
               backgroundImage: `repeating-linear-gradient(to right, rgba(255,255,255,0.16) 0 1px, transparent 1px ${passoDaGrade}px), repeating-linear-gradient(to bottom, rgba(255,255,255,0.16) 0 1px, transparent 1px ${passoDaGrade}px)`,
             }}
+            data-local={local("")}
           />
         ) : null}
           </>
@@ -726,6 +839,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
             width={SCENE_WIDTH}
             height={SCENE_HEIGHT}
             viewBox={`0 0 ${SCENE_WIDTH} ${SCENE_HEIGHT}`}
+            data-local={local("")}
             style={{ transformOrigin: "0 0", transform: cena }}
           >
             <path
@@ -765,6 +879,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
               transformOrigin: "0 0",
               transform: cena,
             }}
+            data-local={local("")}
             onPointerDown={onChaoPointerDown}
           />
         ) : null}

@@ -7,15 +7,18 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
 import { ChaoInclinado } from "@/components/playground/chao-inclinado";
 import { useCameraDeMesa } from "@/hooks/use-camera-de-mesa";
+import { useCameraOrbital } from "@/hooks/use-camera-orbital";
 import {
   SceneStage,
-  useSceneScale,
+  useSceneScaleSeHouver,
 } from "@/components/playground/scene-stage";
 import { VolumeLayer } from "@/components/playground/volume-layer";
 import {
@@ -24,6 +27,12 @@ import {
   corpoDaParede,
   umbrasDoSol,
 } from "@/lib/geometry/sombra";
+import {
+  cameraDoRecorte,
+  LENTE_DA_MESA,
+  type CameraOrbital,
+  type Tela,
+} from "@/lib/geometry/camera-orbital";
 import type { Vec } from "@/lib/geometry/transform";
 import { clampViewport, PLANO } from "@/lib/geometry/viewport";
 import {
@@ -82,6 +91,28 @@ const MAPA = "/bancada/mapa.jpg";
 const TOKEN = "/bancada/token.png";
 
 type Modo = "2d" | "relevo" | "chao";
+
+/**
+ * Como a câmera olha o chão deitado.
+ *
+ * - **foto**: a de antes. A cena deita numa caixa, encolhe para caber, e o palco
+ *   desliza e amplia essa imagem.
+ * - **orbital**: um olho sobre a mesa. Andar move o ponto que se olha, aproximar
+ *   encurta a distância, girar é em volta do centro da tela. Ver
+ *   `camera-orbital.ts`.
+ *
+ * As duas na mesma página, com o mesmo mapa e as mesmas paredes, porque a
+ * pergunta é de sensação -- e sensação só se compara alternando.
+ */
+type Camera = "foto" | "orbital";
+
+/** O que a mesa orbital entrega ao conteúdo: a corrente, a lente e o cursor. */
+type Orbital = {
+  corrente: () => string;
+  assinar: (aviso: () => void) => () => void;
+  perspectiva: number;
+  paraChao: (clientX: number, clientY: number) => Vec | null;
+};
 type Ferramenta = "mover" | "parede" | "linha" | "apagar" | "selecionar";
 
 /**
@@ -153,6 +184,14 @@ function numeroDaUrl(nome: string, padrao: number): number {
   if (bruto === null) return padrao;
   const valor = Number(bruto);
   return Number.isFinite(valor) ? valor : padrao;
+}
+
+/**
+ * A orbital é o padrão: comparada lado a lado, foi a que leu como mesa. A foto
+ * fica a um `?camera=foto` de distância, para a comparação continuar possível.
+ */
+function cameraDaUrl(): Camera {
+  return daUrl().get("camera") === "foto" ? "foto" : "orbital";
 }
 
 function modoDaUrl(): Modo {
@@ -231,6 +270,17 @@ export function BancadaDoRelevo() {
   );
   const [perspectiva, setPerspectiva] = useState(() =>
     numeroDaUrl("perspectiva", 2600),
+  );
+  const [camera, setCamera] = useState<Camera>(cameraDaUrl);
+  /**
+   * A abertura vertical da lente da câmera orbital, em graus. Começa na da
+   * TV (`LENTE_DA_MESA`), para o que se ajusta aqui ser o que a mesa vê.
+   *
+   * Na foto o equivalente era `perspectiva`, uma distância em unidades de cena;
+   * aqui a distância é o zoom, e o que sobra para ajustar é só a lente.
+   */
+  const [lente, setLente] = useState(() =>
+    numeroDaUrl("lente", LENTE_DA_MESA),
   );
   const [grade, setGrade] = useState(true);
   const [pegadas, setPegadas] = useState(true);
@@ -333,48 +383,75 @@ export function BancadaDoRelevo() {
     [solAngulo],
   );
 
+  const comum: Omit<ComponentProps<typeof ConteudoDaBancada>, "orbital"> = {
+    paredes,
+    setParedes,
+    pecas,
+    setPecas,
+    modo,
+    vista,
+    inclinacaoChao,
+    perspectiva,
+    grade,
+    passoGrade,
+    pegadas,
+    escurecer,
+    comTextura,
+    vidro,
+    selecao,
+    setSelecao,
+    viewport,
+    setViewport,
+    panMode,
+    setVista,
+    setInclinacaoChao,
+    proporcaoDaPeca,
+    sol: comSol ? sol : undefined,
+    ferramenta: panMode ? "mover" : ferramenta,
+    alturaNova,
+  };
+
   return (
     <main className="relative flex h-screen w-screen flex-col bg-black">
-      <SceneStage
-        viewport={viewport}
-        onViewportChange={(proximo) =>
-          setViewport(clampViewport(proximo, PLANO))
-        }
-        panOnDrag={panMode}
-        limites={PLANO}
-      >
-        <ConteudoDaBancada
-          paredes={paredes}
-          setParedes={setParedes}
-          pecas={pecas}
-          setPecas={setPecas}
-          modo={modo}
-          vista={vista}
-          inclinacaoChao={inclinacaoChao}
-          perspectiva={perspectiva}
-          grade={grade}
-          passoGrade={passoGrade}
-          pegadas={pegadas}
-          escurecer={escurecer}
-          comTextura={comTextura}
-          vidro={vidro}
-          selecao={selecao}
-          setSelecao={setSelecao}
+      {/* A orbital FORA do palco, e não dentro dele: o palco recorta e amplia
+          o plano de 1920x1080, e é exatamente isso que ela deixa de fazer. A
+          tela inteira vira a janela, e o chão passa da borda dela. */}
+      {modo === "chao" && camera === "orbital" ? (
+        <MesaOrbital
+          lente={lente}
+          giro={vista.giro}
+          inclinacao={inclinacaoChao}
+          onGirar={(proxima) => {
+            setVista((atual) => ({ ...atual, giro: proxima.giro }));
+            setInclinacaoChao(proxima.inclinacao);
+          }}
+          arrastar={panMode}
+          ferramenta={comum.ferramenta}
+          recorte={viewport}
+          onSair={setViewport}
+        >
+          {(orbital) => <ConteudoDaBancada {...comum} orbital={orbital} />}
+        </MesaOrbital>
+      ) : (
+        <SceneStage
           viewport={viewport}
-          setViewport={setViewport}
-          panMode={panMode}
-          setVista={setVista}
-          setInclinacaoChao={setInclinacaoChao}
-          proporcaoDaPeca={proporcaoDaPeca}
-          sol={comSol ? sol : undefined}
-          ferramenta={panMode ? "mover" : ferramenta}
-          alturaNova={alturaNova}
-        />
-      </SceneStage>
+          onViewportChange={(proximo) =>
+            setViewport(clampViewport(proximo, PLANO))
+          }
+          panOnDrag={panMode}
+          limites={PLANO}
+        >
+          <ConteudoDaBancada {...comum} />
+        </SceneStage>
+      )}
 
       <Painel
         modo={modo}
         setModo={setModo}
+        camera={camera}
+        setCamera={setCamera}
+        lente={lente}
+        setLente={setLente}
         vista={vista}
         setVista={setVista}
         inclinacaoChao={inclinacaoChao}
@@ -415,6 +492,75 @@ export function BancadaDoRelevo() {
 }
 
 /**
+ * A mesa da câmera orbital: a tela inteira, e o olho sobre ela.
+ *
+ * O conteúdo entra por função porque é ela quem dá a corrente e o cursor no
+ * chão -- e eles só existem depois de a tela ser medida, que é quando a lente
+ * vira uma focal em pixels.
+ */
+function MesaOrbital({
+  lente,
+  giro,
+  inclinacao,
+  onGirar,
+  arrastar,
+  ferramenta,
+  recorte,
+  onSair,
+  children,
+}: {
+  lente: number;
+  giro: number;
+  inclinacao: number;
+  onGirar: (vista: { giro: number; inclinacao: number }) => void;
+  arrastar: boolean;
+  ferramenta: Ferramenta;
+  /** O recorte da foto, para a orbital abrir olhando o mesmo pedaço. */
+  recorte: Viewport;
+  /** Devolve o lugar à foto, para a troca de câmera não perder a mesa. */
+  onSair: (recorte: Viewport) => void;
+  children: (orbital: Orbital) => ReactNode;
+}) {
+  const { mesa, focal, paraChao, corrente, assinar } = useCameraOrbital({
+    lente,
+    giro,
+    inclinacao,
+    onGirar,
+    arrastar,
+    inicial: (tela) => cameraDoRecorte(recorte, tela, giro, inclinacao),
+    // Com "mover" na mão, o chão vazio é da câmera e a peça é da peça.
+    podeAgarrar: (alvo) =>
+      ferramenta === "mover" &&
+      !(alvo instanceof Element && alvo.closest("[data-peca]")),
+    mapa: PLANO,
+    onSair: (camera: CameraOrbital, tela: Tela) =>
+      onSair(
+        clampViewport(
+          {
+            x: camera.alvo.x - tela.largura / camera.zoom / 2,
+            y: camera.alvo.y - tela.altura / camera.zoom / 2,
+            width: tela.largura / camera.zoom,
+            height: tela.altura / camera.zoom,
+          },
+          PLANO,
+        ),
+      ),
+  });
+
+  return (
+    <div
+      ref={mesa}
+      className="absolute inset-0 overflow-hidden"
+      style={{ cursor: ferramenta === "mover" ? "grab" : undefined }}
+    >
+      {focal > 0
+        ? children({ corrente, assinar, perspectiva: focal, paraChao })
+        : null}
+    </div>
+  );
+}
+
+/**
  * O conteúdo, no plano de BAIXO.
  *
  * Por portal, como o `SceneLayer` faz, e pelo mesmo motivo: é o plano de
@@ -447,6 +593,7 @@ function ConteudoDaBancada({
   sol,
   ferramenta,
   alturaNova,
+  orbital,
 }: {
   paredes: Parede[];
   setParedes: (fn: (atual: Parede[]) => Parede[]) => void;
@@ -473,8 +620,21 @@ function ConteudoDaBancada({
   sol?: Sol;
   ferramenta: Ferramenta;
   alturaNova: number;
+  /**
+   * A câmera orbital, quando é ela que olha. Aí este conteúdo NÃO está num
+   * palco: ele é filho da `MesaOrbital`, do tamanho da tela, e o cursor no chão
+   * sai da conta da câmera e não do recorte.
+   */
+  orbital?: Orbital;
 }) {
-  const { planoDeConteudo, scale, offsetX, offsetY, moldura } = useSceneScale();
+  // Sem palco na orbital: a régua do recorte não existe ali, e quem responde
+  // onde o cursor caiu é `orbital.paraChao`.
+  const palco = useSceneScaleSeHouver();
+  const planoDeConteudo = palco?.planoDeConteudo ?? null;
+  const scale = palco?.scale ?? 1;
+  const offsetX = palco?.offsetX ?? 0;
+  const offsetY = palco?.offsetY ?? 0;
+  const moldura = palco?.moldura ?? null;
   const [fantasma, setFantasma] = useState<Parede | null>(null);
   const proximoId = useRef(0);
   /**
@@ -507,11 +667,26 @@ function ConteudoDaBancada({
     [moldura, offsetX, offsetY, scale],
   );
 
+  /**
+   * O último ponto de chão que a orbital achou.
+   *
+   * Um arrasto que passa do horizonte não encontra chão, e a parede sendo
+   * traçada não pode saltar para a origem por isso: ela para na última borda
+   * que tinha.
+   */
+  const ultimoNoChao = useRef<Vec>({ x: 0, y: 0 });
+
   /** Onde este evento caiu no CHÃO, qualquer que seja o modo. */
   const noChao = useCallback(
     (event: PointerEvent | ReactPointerEvent): Vec => {
       const nativo = "nativeEvent" in event ? event.nativeEvent : event;
       const pega = chaoRef.current;
+
+      if (orbital) {
+        const ponto = orbital.paraChao(nativo.clientX, nativo.clientY);
+        if (ponto) ultimoNoChao.current = ponto;
+        return ultimoNoChao.current;
+      }
 
       if (modo === "chao" && pega && nativo.target === pega) {
         return { x: nativo.offsetX, y: nativo.offsetY };
@@ -519,7 +694,7 @@ function ConteudoDaBancada({
 
       return emCena(nativo.clientX, nativo.clientY);
     },
-    [emCena, modo],
+    [emCena, modo, orbital],
   );
 
   /**
@@ -537,7 +712,8 @@ function ConteudoDaBancada({
    */
   useCameraDeMesa({
     chao: chaoRef,
-    ativo: modo === "chao",
+    // A orbital tem a dela, na mesa inteira.
+    ativo: modo === "chao" && !orbital,
     arrastar: panMode,
     viewport,
     onChange: setViewport,
@@ -753,7 +929,9 @@ function ConteudoDaBancada({
 
   const cursor =
     ferramenta === "mover"
-      ? "default"
+      ? orbital
+        ? "grab"
+        : "default"
       : ferramenta === "apagar"
         ? "not-allowed"
         : ferramenta === "selecionar"
@@ -804,6 +982,15 @@ function ConteudoDaBancada({
             url: TOKEN,
           }))}
           chaoRef={chaoRef}
+          orbital={
+            orbital
+              ? {
+                  corrente: orbital.corrente,
+                  assinar: orbital.assinar,
+                  perspectiva: orbital.perspectiva,
+                }
+              : undefined
+          }
           onChaoPointerDown={(event) => {
             desenhar(event);
             apagar(event);
@@ -894,6 +1081,7 @@ function ConteudoDaBancada({
       </div>
     );
 
+  if (orbital) return conteudo;
   if (!planoDeConteudo) return null;
 
   return createPortal(conteudo, planoDeConteudo);
@@ -903,6 +1091,10 @@ function ConteudoDaBancada({
 function Painel(props: {
   modo: Modo;
   setModo: (modo: Modo) => void;
+  camera: Camera;
+  setCamera: (camera: Camera) => void;
+  lente: number;
+  setLente: (graus: number) => void;
   vista: VistaDoRelevo;
   setVista: (vista: VistaDoRelevo) => void;
   inclinacaoChao: number;
@@ -1002,6 +1194,28 @@ function Painel(props: {
 
       {props.modo === "chao" ? (
         <>
+          <div className="mb-1 text-[11px] text-zinc-400">Câmera</div>
+          <div className="mb-3 grid grid-cols-2 gap-1">
+            {(
+              [
+                ["foto", "Foto"],
+                ["orbital", "Orbital"],
+              ] as const
+            ).map(([valor, rotulo]) => (
+              <button
+                key={valor}
+                type="button"
+                onClick={() => props.setCamera(valor)}
+                className={`rounded px-1 py-1.5 font-medium ${
+                  props.camera === valor
+                    ? "bg-amber-400 text-black"
+                    : "bg-zinc-800 text-zinc-300"
+                }`}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
           <Faixa
             rotulo="Inclinação do chão"
             valor={props.inclinacaoChao}
@@ -1011,16 +1225,32 @@ function Painel(props: {
             sufixo="°"
             onChange={props.setInclinacaoChao}
           />
-          <Faixa
-            rotulo={
-              props.perspectiva === 0 ? "Perspectiva (paralela)" : "Perspectiva"
-            }
-            valor={props.perspectiva}
-            min={0}
-            max={8000}
-            passo={100}
-            onChange={props.setPerspectiva}
-          />
+          {props.camera === "orbital" ? (
+            // A lente e não a distância: na orbital a distância é o zoom, que
+            // a roda já move. Fechar a lente achata, abrir exagera o perto.
+            <Faixa
+              rotulo="Lente"
+              valor={props.lente}
+              min={15}
+              max={80}
+              passo={1}
+              sufixo="°"
+              onChange={props.setLente}
+            />
+          ) : (
+            <Faixa
+              rotulo={
+                props.perspectiva === 0
+                  ? "Perspectiva (paralela)"
+                  : "Perspectiva"
+              }
+              valor={props.perspectiva}
+              min={0}
+              max={8000}
+              passo={100}
+              onChange={props.setPerspectiva}
+            />
+          )}
           <Chave rotulo="Grade" ligado={props.grade} onChange={props.setGrade} />
           <Chave
             rotulo="Pegada das paredes"
@@ -1214,7 +1444,9 @@ function Painel(props: {
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">
-        Roda amplia. Espaço + arraste navega. Ctrl+Alt+D liga o HUD do palco.
+        {props.modo === "chao" && props.camera === "orbital"
+          ? "Mover + arraste no chão anda. Roda aproxima no cursor. Botão direito gira e deita. Espaço ou botão do meio andam com qualquer ferramenta."
+          : "Roda amplia. Espaço + arraste navega. Botão direito gira no chão. Ctrl+Alt+D liga o HUD do palco."}
       </p>
     </div>
   );
