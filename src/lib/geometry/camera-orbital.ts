@@ -494,3 +494,90 @@ export function misturarTripe(de: Tripe, para: Tripe, t: number): Tripe {
   };
 }
 
+/** Um ponto no mundo da cena: o chão e a altura acima dele. */
+export type PontoNoMundo = { x: number; y: number; altura: number };
+
+/**
+ * O caminho de volta de `noOlho`: um ponto no espaço do olho do tripé, de
+ * volta ao mundo. `lado` para a direita da tela, `cima` para BAIXO dela (a
+ * régua do CSS) e `profundidade` para a frente.
+ */
+export function doOlhoAoMundo(
+  tripe: Tripe,
+  lado: number,
+  cima: number,
+  profundidade: number,
+): PontoNoMundo {
+  const g = tripe.giro * GRAU;
+  const t = tripe.inclinacao * GRAU;
+  const rr = tripe.rolagem * GRAU;
+
+  const z2 = -profundidade;
+  const u1 = lado * Math.cos(rr) + cima * Math.sin(rr);
+  const y2 = -lado * Math.sin(rr) + cima * Math.cos(rr);
+
+  const v1 = y2 * Math.cos(t) + z2 * Math.sin(t);
+  const w = -y2 * Math.sin(t) + z2 * Math.cos(t);
+
+  return {
+    x: tripe.x + u1 * Math.cos(g) + v1 * Math.sin(g),
+    y: tripe.y - u1 * Math.sin(g) + v1 * Math.cos(g),
+    altura: tripe.altura + w,
+  };
+}
+
+/**
+ * Os quatro cantos do que o tripé enxerga, a `distancia` do olho: a boca da
+ * pirâmide de visão que o mestre vê desenhada no 2.5D.
+ *
+ * `proporcao` é largura sobre altura da tela que o tripé alimenta -- a da mesa,
+ * 16:9. Em ordem: de cima à esquerda, no sentido do relógio.
+ */
+export function bocaDoTripe(
+  tripe: Tripe,
+  distancia: number,
+  proporcao = 16 / 9,
+): PontoNoMundo[] {
+  const meiaAltura = Math.tan((tripe.lente * GRAU) / 2) * distancia;
+  const meiaLargura = meiaAltura * proporcao;
+
+  return [
+    doOlhoAoMundo(tripe, -meiaLargura, -meiaAltura, distancia),
+    doOlhoAoMundo(tripe, meiaLargura, -meiaAltura, distancia),
+    doOlhoAoMundo(tripe, meiaLargura, meiaAltura, distancia),
+    doOlhoAoMundo(tripe, -meiaLargura, meiaAltura, distancia),
+  ];
+}
+
+/**
+ * O pedaço do chão que o tripé enxerga: onde os raios dos quatro cantos batem
+ * no piso. `null` quando algum canto olha o céu -- aí a pegada não fecha, e o
+ * que o mestre vê é só a pirâmide.
+ *
+ * É o desenho que responde "o que a mesa está vendo", e por isso vale mais que
+ * a pirâmide: ela diz para onde o tripé aponta, a pegada diz o que entra.
+ */
+export function pegadaDoTripe(
+  tripe: Tripe,
+  proporcao = 16 / 9,
+  longe = 8000,
+): PontoNoMundo[] | null {
+  const pontos: PontoNoMundo[] = [];
+
+  for (const canto of bocaDoTripe(tripe, 1, proporcao)) {
+    const descida = tripe.altura - canto.altura;
+    // O raio sobe ou corre paralelo ao chão: nunca encontra o piso.
+    if (descida <= 1e-6) return null;
+    const passos = tripe.altura / descida;
+    if (passos > longe) return null;
+
+    pontos.push({
+      x: tripe.x + (canto.x - tripe.x) * passos,
+      y: tripe.y + (canto.y - tripe.y) * passos,
+      altura: 0,
+    });
+  }
+
+  return pontos;
+}
+

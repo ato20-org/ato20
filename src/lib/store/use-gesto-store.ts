@@ -14,7 +14,7 @@ import {
 } from "@/lib/store/use-scene-store";
 import { gravarCameraManual } from "@/lib/mestre/camera-actions";
 import { publicarCenaAoVivo } from "@/hooks/use-scene-broadcast";
-import type { Scene, Viewport } from "@/types/scene";
+import type { Scene, Tripe, Viewport } from "@/types/scene";
 
 /**
  * O que o gesto está fazendo com papel, cartão e risco.
@@ -68,6 +68,11 @@ type GestoStore = {
   tracos: TracoPatch[] | null;
   /** A moldura da câmera sendo arrastada, com o recorte que ela já tem. */
   camera: { cameraId: string; viewport: Viewport } | null;
+  /**
+   * O tripé sendo arrastado pelo gizmo do 2.5D, com o olho que ele já tem.
+   * Mesmo princípio da moldura: o board só sabe dele ao soltar.
+   */
+  tripe: { tripeId: string; olho: Tripe } | null;
 
   mover: (
     sceneId: string,
@@ -86,6 +91,9 @@ type GestoStore = {
    * devolvia o token ao lugar de antes do arrasto, com a mão ainda fechada.
    */
   soltarCamera: () => void;
+  moverTripe: (sceneId: string, tripeId: string, olho: Tripe) => void;
+  /** Larga só o tripé, como `soltarCamera`. */
+  soltarTripe: () => void;
   terminar: () => void;
 };
 
@@ -126,6 +134,7 @@ export const useGestoStore = create<GestoStore>((set) => ({
   documentos: null,
   tracos: null,
   camera: null,
+  tripe: null,
 
   // Lista vazia vira `null`: um gesto só de texto não tem por que devolver uma
   // lista de itens nova a cada quadro, e é a identidade dela que faz os
@@ -152,7 +161,25 @@ export const useGestoStore = create<GestoStore>((set) => ({
         state.documentos ||
         state.tracos;
 
-      return { camera: null, sceneId: resta ? state.sceneId : null };
+      return {
+        camera: null,
+        sceneId: resta || state.tripe ? state.sceneId : null,
+      };
+    }),
+  moverTripe: (sceneId, tripeId, olho) =>
+    set({ sceneId, tripe: { tripeId, olho } }),
+  soltarTripe: () =>
+    set((state) => {
+      const resta =
+        state.patches ||
+        state.textos ||
+        state.formas ||
+        state.postits ||
+        state.documentos ||
+        state.tracos ||
+        state.camera;
+
+      return { tripe: null, sceneId: resta ? state.sceneId : null };
     }),
   terminar: () =>
     set({
@@ -164,6 +191,7 @@ export const useGestoStore = create<GestoStore>((set) => ({
       documentos: null,
       tracos: null,
       camera: null,
+      tripe: null,
     }),
 }));
 
@@ -184,7 +212,7 @@ export function aplicarGesto(
     // Os três que só andam entram como OPCIONAIS: quem não os conhece --
     // um teste do gesto de câmera, um chamador antigo -- continua passando o
     // mesmo objeto de antes, e ausente é o mesmo que nenhum.
-    Partial<Pick<GestoStore, "postits" | "documentos" | "tracos">>,
+    Partial<Pick<GestoStore, "postits" | "documentos" | "tracos" | "tripe">>,
 ): Scene {
   if (gesto.sceneId !== scene.id) return scene;
   if (
@@ -194,7 +222,8 @@ export function aplicarGesto(
     !gesto.postits &&
     !gesto.documentos &&
     !gesto.tracos &&
-    !gesto.camera
+    !gesto.camera &&
+    !gesto.tripe
   )
     return scene;
 
@@ -275,6 +304,18 @@ export function aplicarGesto(
       ),
       // No ar, o recorte da mesa é o dela -- o mesmo espelho de `atualizarCamera`.
       camera: vista.cameraNoArId === cameraId ? viewport : vista.camera,
+    };
+  }
+
+  if (gesto.tripe) {
+    const { tripeId, olho } = gesto.tripe;
+    vista = {
+      ...vista,
+      tripes: vista.tripes?.map((tripe) =>
+        tripe.id === tripeId ? { ...tripe, ...olho } : tripe,
+      ),
+      // No ar, o olho da mesa é o dele -- o mesmo espelho de `atualizarTripe`.
+      tripeNoAr: vista.cameraNoArId === tripeId ? olho : vista.tripeNoAr,
     };
   }
 
@@ -377,3 +418,30 @@ export function terminarGestoDaCamera(): void {
   useGestoStore.getState().soltarCamera();
   ultimaPublicacaoAoVivo = 0;
 }
+
+/**
+ * Um quadro do arrasto do gizmo do tripé. Manda a vista à mesa só se ela está
+ * vendo esta cena E este tripé está no ar, como `moverCameraNoGesto`.
+ */
+export function moverTripeNoGesto(
+  sceneId: string,
+  tripeId: string,
+  olho: Tripe,
+): void {
+  useGestoStore.getState().moverTripe(sceneId, tripeId, olho);
+  publicarGestoAoVivo(sceneId, (scene) => scene.cameraNoArId === tripeId);
+}
+
+/**
+ * A mão soltou o gizmo: o olho vai para o board de uma vez -- um passo de
+ * desfazer só -- e o gesto do tripé some. Larga SÓ o tripé.
+ */
+export function terminarGestoDoTripe(): void {
+  const { sceneId, tripe } = useGestoStore.getState();
+  if (sceneId && tripe) {
+    useSceneStore.getState().atualizarTripe(sceneId, tripe.tripeId, tripe.olho);
+  }
+  useGestoStore.getState().soltarTripe();
+  ultimaPublicacaoAoVivo = 0;
+}
+

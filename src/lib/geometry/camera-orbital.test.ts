@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   agarrarAte,
   aproximar,
+  bocaDoTripe,
   cameraDoRecorte,
   correnteDaCamera,
   curvaBezier,
   daTelaAoChao,
+  doOlhoAoMundo,
   focalDaLente,
   misturarTripe,
+  pegadaDoTripe,
   prender,
   profundidadeNoTripe,
   projetarNoTripe,
@@ -373,6 +376,56 @@ describe("misturarTripe", () => {
 
   it("a lente anda junto", () => {
     expect(misturarTripe(de, para, 0.5).lente).toBeCloseTo(35, 9);
+  });
+});
+
+describe("o tripé no mundo", () => {
+  const tripe = {
+    x: 600,
+    y: 500,
+    altura: 120,
+    giro: 37,
+    inclinacao: 63,
+    rolagem: 12,
+    lente: 45,
+  };
+
+  it("sair do olho e voltar devolve o mesmo ponto", () => {
+    for (const [lado, cima, profundidade] of [
+      [0, 0, 100],
+      [40, -25, 300],
+      [-80, 60, 50],
+    ] as const) {
+      const mundo = doOlhoAoMundo(tripe, lado, cima, profundidade);
+      expect(profundidadeNoTripe(tripe, mundo, mundo.altura)).toBeCloseTo(
+        profundidade,
+        6,
+      );
+      const naTela = projetarNoTripe(tripe, TELA, mundo, mundo.altura)!;
+      const focal = focalDaLente(TELA.altura, tripe.lente);
+      expect(naTela.x - CENTRO.x).toBeCloseTo((lado * focal) / profundidade, 6);
+      expect(naTela.y - CENTRO.y).toBeCloseTo((cima * focal) / profundidade, 6);
+    }
+  });
+
+  it("a boca da pirâmide cai nos cantos da tela 16:9", () => {
+    const tela = { largura: 1600, altura: 900, focal: focalDaLente(900, 45) };
+    const cantos = bocaDoTripe(tripe, 200).map(
+      (canto) => projetarNoTripe(tripe, tela, canto, canto.altura)!,
+    );
+
+    expect(cantos[0]!.x).toBeCloseTo(0, 4);
+    expect(cantos[0]!.y).toBeCloseTo(0, 4);
+    expect(cantos[2]!.x).toBeCloseTo(1600, 4);
+    expect(cantos[2]!.y).toBeCloseTo(900, 4);
+  });
+
+  it("a pegada fica no chão, e some quando o tripé olha o céu", () => {
+    const pegada = pegadaDoTripe({ ...tripe, inclinacao: 40 })!;
+    expect(pegada).toHaveLength(4);
+    for (const ponto of pegada) expect(ponto.altura).toBe(0);
+
+    expect(pegadaDoTripe({ ...tripe, inclinacao: 89 })).toBeNull();
   });
 });
 
