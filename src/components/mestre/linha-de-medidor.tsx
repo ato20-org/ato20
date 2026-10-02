@@ -14,9 +14,9 @@ import {
   EyeOff,
   LayoutGrid,
   Minus,
+  Palette,
   Pencil,
   Plus,
-  Star,
   Trash2,
 } from "lucide-react";
 
@@ -49,7 +49,13 @@ const SO_SOB_O_CURSOR =
 /** O que a linha troca sozinha. Os números são de quem a usa, por `valores`. */
 export type PatchDaLinha = Pick<
   PatchMedidor,
-  "nome" | "cor" | "estilo" | "escondido"
+  | "nome"
+  | "cor"
+  | "estilo"
+  | "escondido"
+  | "estiloExtensao"
+  | "mostrarNome"
+  | "mostrarValor"
 >;
 
 /** Um título e uma linha, para os tooltips que mudam de tela para tela. */
@@ -120,8 +126,23 @@ export function LinhaDeMedidor({
           <CorEForma
             cor={medidor.cor}
             estilo={medidor.estilo}
+            estiloExtensao={medidor.estiloExtensao}
+            mostrarNome={medidor.mostrarNome}
+            mostrarValor={medidor.mostrarValor}
             onCor={(cor) => onEditar({ cor })}
-            onEstilo={(estilo) => onEditar({ estilo })}
+            // Voltar a uma forma de fábrica tira o estilo de plugin no MESMO
+            // patch: dois seriam duas gravações do índice por um clique.
+            onEstilo={(estilo) =>
+              onEditar(medidor.estiloExtensao ? { estilo, estiloExtensao: "" } : { estilo })
+            }
+            onEstiloExtensao={(estiloExtensao, reserva) =>
+              onEditar(
+                reserva && reserva !== medidor.estilo
+                  ? { estiloExtensao, estilo: reserva }
+                  : { estiloExtensao },
+              )
+            }
+            onLegenda={onEditar}
             gatilho={
               <Button
                 variant="ghost"
@@ -129,7 +150,7 @@ export function LinhaDeMedidor({
                 aria-label="Cor e forma"
                 disabled={ocupado}
               >
-                <Star className="size-3.5" />
+                <Palette className="size-3.5" />
               </Button>
             }
           />

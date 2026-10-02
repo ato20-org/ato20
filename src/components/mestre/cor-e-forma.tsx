@@ -2,7 +2,9 @@
 
 import type { ReactElement } from "react";
 
+import { AmostraDoEstilo } from "@/components/playground/desenho-do-medidor";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -14,6 +16,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
+import { reservaDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
+import { legendaDoMedidor } from "@/lib/medidor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import type { EstiloMedidor } from "@/types/character";
@@ -53,20 +58,57 @@ const NOME: Record<EstiloMedidor, string> = {
  * `gatilho` troca o botão, e só ele. A configuração da campanha desenha o
  * medidor inteiro logo abaixo do nome, e ali a amostra repetiria em miniatura o
  * que já está na tela em tamanho cheio.
+ *
+ * ## Os estilos dos plugins
+ *
+ * Com `onEstiloExtensao`, os estilos que os plugins ligados desenham entram na
+ * MESMA grade das formas de fábrica, cada um com a amostra dele. Escolher um
+ * acerta junto a reserva de fábrica (`reservaDoEstilo`): a gema do plugin tem
+ * pontos por baixo, e a mesa sem o plugin desenha pontos. Lidos do store do
+ * Mestre, e não do contexto do palco: este seletor vive em painéis fora dele.
+ *
+ * ## A legenda
+ *
+ * Com `onLegenda`, dois interruptores escondem o nome e o valor da linha acima
+ * da forma. Mostram o que a mesa vê AGORA -- o que o estilo decide enquanto o
+ * mestre não mexeu --, e o toque grava a escolha dele, que dali em diante
+ * vence o estilo. Ver `legendaDoMedidor`.
  */
 export function CorEForma({
   cor,
   estilo,
+  estiloExtensao,
+  mostrarNome,
+  mostrarValor,
   onCor,
   onEstilo,
+  onEstiloExtensao,
+  onLegenda,
   gatilho,
 }: {
   cor: string;
   estilo: EstiloMedidor;
+  /** `{plugin}/{estilo}`, quando o medidor usa o de um plugin. */
+  estiloExtensao?: string;
+  mostrarNome?: boolean;
+  mostrarValor?: boolean;
   onCor: (cor: string) => void;
   onEstilo: (estilo: EstiloMedidor) => void;
+  /** `reserva` é a forma de fábrica que acompanha o estilo, quando há uma. */
+  onEstiloExtensao?: (chave: string, reserva: EstiloMedidor | null) => void;
+  onLegenda?: (patch: { mostrarNome?: boolean; mostrarValor?: boolean }) => void;
   gatilho?: ReactElement;
 }) {
+  const estilos = useDeclarativoStore((state) => state.estilos);
+  const doPlugin = estiloExtensao ? estilos[estiloExtensao] : undefined;
+  const opcoesDePlugin = onEstiloExtensao
+    ? Object.entries(estilos).sort(([, a], [, b]) => a.titulo.localeCompare(b.titulo))
+    : [];
+  // Plugin desligado: a mesa desenha a reserva, e o seletor diz a verdade.
+  const ausente = Boolean(estiloExtensao) && !doPlugin;
+  const nomeAgora = doPlugin ? doPlugin.titulo : NOME[estilo];
+  const legenda = legendaDoMedidor({ estilo, mostrarNome, mostrarValor }, doPlugin);
+
   return (
     <Popover>
       <Tooltip>
@@ -77,7 +119,7 @@ export function CorEForma({
                 gatilho ?? (
                   <button
                     type="button"
-                    aria-label={`Cor e forma: ${NOME[estilo]}`}
+                    aria-label={`Cor e forma: ${nomeAgora}`}
                     className="border-border hover:border-foreground/40 focus-visible:ring-ring grid size-6 shrink-0 place-items-center rounded border bg-black/40 focus-visible:ring-2 focus-visible:outline-none"
                   >
                     <Amostra cor={cor} estilo={estilo} />
@@ -90,7 +132,7 @@ export function CorEForma({
         <TooltipContent>
           <p className="font-medium">Cor e forma</p>
           <p className="text-muted-foreground max-w-48">
-            Agora: {NOME[estilo]}. Clique para trocar.
+            Agora: {nomeAgora}. Clique para trocar.
           </p>
         </TooltipContent>
       </Tooltip>
@@ -98,13 +140,16 @@ export function CorEForma({
       <PopoverContent align="start" className="w-56 space-y-3" side="bottom">
         <div className="space-y-1.5">
           <Label className="text-xs font-normal">Forma</Label>
-          <div className="grid grid-cols-3 gap-1">
+          {/* Uma grade só, de fábrica e de plugin: as duas respondem a mesma
+              pergunta -- como a mesa vê este medidor --, e o estilo de plugin
+              já traz o tipo dele. Ver `reservaDoEstilo`. */}
+          <div className="grid max-h-56 grid-cols-3 gap-1 overflow-y-auto">
             {ESTILOS.map((opcao) => (
               <Button
                 key={opcao.estilo}
-                variant={estilo === opcao.estilo ? "secondary" : "ghost"}
+                variant={!doPlugin && estilo === opcao.estilo ? "secondary" : "ghost"}
                 size="sm"
-                aria-pressed={estilo === opcao.estilo}
+                aria-pressed={!doPlugin && estilo === opcao.estilo}
                 className="h-auto flex-col gap-1 px-1 py-1.5 text-[10px]"
                 onClick={() => onEstilo(opcao.estilo)}
               >
@@ -115,7 +160,31 @@ export function CorEForma({
                 {opcao.rotulo}
               </Button>
             ))}
+            {opcoesDePlugin.map(([chave, opcao]) => (
+              <Button
+                key={chave}
+                variant={estiloExtensao === chave ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={estiloExtensao === chave}
+                title={opcao.titulo}
+                className="h-auto min-w-0 flex-col gap-1 px-1 py-1.5 text-[10px]"
+                onClick={() => onEstiloExtensao?.(chave, reservaDoEstilo(opcao))}
+              >
+                {/* Na largura da célula e na altura que o estilo declara,
+                    cortada para a grade não virar torre. */}
+                <span className="flex h-6 w-full items-center justify-center overflow-hidden">
+                  <AmostraDoEstilo estilo={opcao} cor={cor} largura={52} />
+                </span>
+                <span className="w-full truncate">{opcao.titulo}</span>
+              </Button>
+            ))}
           </div>
+          {ausente ? (
+            <p className="text-muted-foreground text-[11px] leading-snug">
+              O plugin do estilo escolhido está desligado. A mesa vê esta forma
+              até ele voltar.
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-1.5">
@@ -137,6 +206,30 @@ export function CorEForma({
             ))}
           </div>
         </div>
+
+        {onLegenda ? (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-normal">Legenda</Label>
+            {(
+              [
+                { chave: "mostrarNome", rotulo: "Nome", ligado: legenda.nome },
+                { chave: "mostrarValor", rotulo: "Valor", ligado: legenda.valor },
+              ] as const
+            ).map((opcao) => (
+              <label
+                key={opcao.chave}
+                className="flex items-center justify-between gap-2 text-[11px]"
+              >
+                {opcao.rotulo}
+                <Switch
+                  size="sm"
+                  checked={opcao.ligado}
+                  onCheckedChange={(ligado) => onLegenda({ [opcao.chave]: ligado })}
+                />
+              </label>
+            ))}
+          </div>
+        ) : null}
       </PopoverContent>
     </Popover>
   );
