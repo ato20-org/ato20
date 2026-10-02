@@ -15,6 +15,7 @@ import {
   ScanSearch,
   TextCursorInput,
   Trash2,
+  Video,
   X,
 } from "lucide-react";
 
@@ -54,9 +55,10 @@ import {
 } from "@/lib/mestre/camera-actions";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
-import type { CameraSalva, Scene } from "@/types/scene";
+import type { Scene } from "@/types/scene";
 
 /**
  * As câmeras da cena, como chips numerados ao lado do zoom.
@@ -75,9 +77,18 @@ import type { CameraSalva, Scene } from "@/types/scene";
  * Depois dos chips: novo, transmitir, e um menu com o resto. Eram nove botões
  * espalhados por duas pílulas; à vista ficam só os dois que se apertam no
  * meio da sessão. O resto tem tecla, e o menu é onde se descobre qual.
+ *
+ * Os TRIPÉS (`Scene.tripes`) entram na mesma faixa, depois dos recortes e com
+ * o ícone de câmera: é uma câmera no ar de cada vez, de uma espécie ou de
+ * outra, e o T e o REC valem para as duas. No 2.5D o novo vira "nova câmera
+ * daqui" -- um tripé onde o mestre está olhando. O que só faz sentido com
+ * recorte (seguir, espelhar, ir até, enquadrar a seleção) some do menu quando
+ * o escolhido é um tripé.
  */
 export function CamerasSalvas({ scene }: { scene: Scene }) {
   const cameras = scene.cameras ?? [];
+  const tripes = scene.tripes ?? [];
+  const deEsguelha = useEsguelhaStore((state) => state.ligada);
   const selecionadaId = useCameraLockStore((state) => state.selecionadaId);
   const fantasmasVisiveis = useCameraLockStore(
     (state) => state.fantasmasVisiveis,
@@ -92,6 +103,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
   );
   const soltar = useCameraLockStore((state) => state.soltar);
   const removerCamera = useSceneStore((state) => state.removerCamera);
+  const removerTripe = useSceneStore((state) => state.removerTripe);
   const temSelecao = useSelectionStore(
     (state) => state.selectedIds.length > 0,
   );
@@ -100,8 +112,10 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
     (state) => state.board?.liveSceneId === scene.id,
   );
 
-  const selecionada = cameras.find((camera) => camera.id === selecionadaId);
-  const segue = Boolean(selecionada?.alvoIds);
+  const recorte = cameras.find((camera) => camera.id === selecionadaId);
+  const tripe = tripes.find((cada) => cada.id === selecionadaId);
+  const selecionada = recorte ?? tripe;
+  const segue = Boolean(recorte?.alvoIds);
   const transmissao = transmissaoDaCamera(scene, selecionada?.id, cenaNoAr);
 
   // A rolagem é muda: a barra fica escondida de propósito, e sem ela nada diz
@@ -126,7 +140,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
       faixa.removeEventListener("scroll", medir);
       observador.disconnect();
     };
-  }, [cameras.length]);
+  }, [cameras.length, tripes.length]);
 
   // `#000` é só "opaco aqui": a cor não conta, a máscara lê o canal alfa, e o
   // transparente da ponta revela o fundo da pílula por baixo do chip.
@@ -159,9 +173,25 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
             key={camera.id}
             sceneId={scene.id}
             camera={camera}
+            tipo="recorte"
             posicao={index + 1}
             selecionada={camera.id === selecionadaId}
             transmissao={transmissaoDaCamera(scene, camera.id, cenaNoAr)}
+            podeTrazer
+          />
+        ))}
+        {tripes.map((cada, index) => (
+          <Chip
+            key={cada.id}
+            sceneId={scene.id}
+            camera={cada}
+            tipo="tripe"
+            posicao={cameras.length + index + 1}
+            selecionada={cada.id === selecionadaId}
+            transmissao={transmissaoDaCamera(scene, cada.id, cenaNoAr)}
+            // Trazer um tripé é levá-lo ao olhar do mestre, que só existe no
+            // 2.5D. Ver `trazerTripeParaAqui`.
+            podeTrazer={deEsguelha}
           />
         ))}
       </div>
@@ -173,7 +203,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
               variant="ghost"
               size="icon-sm"
               className="shrink-0"
-              aria-label="Nova câmera"
+              aria-label={deEsguelha ? "Nova câmera daqui" : "Nova câmera"}
               onClick={() => novaCamera()}
             >
               <Plus />
@@ -181,9 +211,13 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
           }
         />
         <TooltipContent>
-          <p className="font-medium">Nova câmera</p>
+          <p className="font-medium">
+            {deEsguelha ? "Nova câmera daqui" : "Nova câmera"}
+          </p>
           <p className="text-muted-foreground max-w-52">
-            Nasce sobre a selecionada, ou sobre o que você vê, e já no ar.
+            {deEsguelha
+              ? "Um tripé no lugar de onde você está olhando, e já no ar: a janela do espectador passa a ver de esguelha por ele."
+              : "Nasce sobre a selecionada, ou sobre o que você vê, e já no ar."}
           </p>
         </TooltipContent>
       </Tooltip>
@@ -254,41 +288,50 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
         {/* Largura fixa: sem ela o menu herda a do botão de três pontos e
             cada rótulo quebra em três linhas. */}
         <DropdownMenuContent align="end" className="w-60">
-          <DropdownMenuItem onClick={enquadrarAqui}>
-            <ScanSearch />
-            Trazer para aqui
-            <DropdownMenuShortcut>C</DropdownMenuShortcut>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={irParaCamera}>
-            <LocateFixed />
-            Ir até a câmera
-            <DropdownMenuShortcut>Home</DropdownMenuShortcut>
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!temSelecao} onClick={enquadrarSelecao}>
-            <Focus />
-            Enquadrar a seleção
-            <DropdownMenuShortcut>F</DropdownMenuShortcut>
-          </DropdownMenuItem>
+          {recorte || deEsguelha ? (
+            <DropdownMenuItem onClick={enquadrarAqui}>
+              <ScanSearch />
+              Trazer para aqui
+              <DropdownMenuShortcut>C</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          ) : null}
+          {recorte ? (
+            <>
+              <DropdownMenuItem onClick={irParaCamera}>
+                <LocateFixed />
+                Ir até a câmera
+                <DropdownMenuShortcut>Home</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!temSelecao}
+                onClick={enquadrarSelecao}
+              >
+                <Focus />
+                Enquadrar a seleção
+                <DropdownMenuShortcut>F</DropdownMenuShortcut>
+              </DropdownMenuItem>
 
-          <DropdownMenuSeparator />
+              <DropdownMenuSeparator />
 
-          <DropdownMenuCheckboxItem
-            checked={segue}
-            disabled={!segue && !temSelecao}
-            onCheckedChange={() => (segue ? soltar() : prenderNaSelecao())}
-          >
-            <Crosshair />
-            Seguir a seleção
-            <DropdownMenuShortcut>L</DropdownMenuShortcut>
-          </DropdownMenuCheckboxItem>
-          <DropdownMenuCheckboxItem
-            checked={espelhoMestre}
-            onCheckedChange={alternarEspelho}
-          >
-            <Eye />
-            Espelhar o palco
-            <DropdownMenuShortcut>Shift+L</DropdownMenuShortcut>
-          </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={segue}
+                disabled={!segue && !temSelecao}
+                onCheckedChange={() => (segue ? soltar() : prenderNaSelecao())}
+              >
+                <Crosshair />
+                Seguir a seleção
+                <DropdownMenuShortcut>L</DropdownMenuShortcut>
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={espelhoMestre}
+                onCheckedChange={alternarEspelho}
+              >
+                <Eye />
+                Espelhar o palco
+                <DropdownMenuShortcut>Shift+L</DropdownMenuShortcut>
+              </DropdownMenuCheckboxItem>
+            </>
+          ) : null}
           <DropdownMenuCheckboxItem
             checked={fantasmasVisiveis}
             onCheckedChange={alternarFantasmas}
@@ -312,7 +355,8 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
           <DropdownMenuItem
             variant="destructive"
             onClick={() => {
-              if (selecionada) removerCamera(scene.id, selecionada.id);
+              if (recorte) removerCamera(scene.id, recorte.id);
+              if (tripe) removerTripe(scene.id, tripe.id);
             }}
           >
             <Trash2 />
@@ -326,21 +370,31 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
 
 type ChipProps = {
   sceneId: string;
-  camera: CameraSalva;
+  camera: { id: string; nome: string; alvoIds?: string[] };
+  /** Recorte (`Scene.cameras`) ou tripé (`Scene.tripes`). */
+  tipo: "recorte" | "tripe";
   posicao: number;
   selecionada: boolean;
   transmissao: Transmissao;
+  /** Se "Trazer para onde estou" vale para esta câmera agora. */
+  podeTrazer: boolean;
 };
 
 function Chip({
   sceneId,
   camera,
+  tipo,
   posicao,
   selecionada,
   transmissao,
+  podeTrazer,
 }: ChipProps) {
-  const atualizarCamera = useSceneStore((state) => state.atualizarCamera);
-  const removerCamera = useSceneStore((state) => state.removerCamera);
+  const atualizarRecorte = useSceneStore((state) => state.atualizarCamera);
+  const atualizarTripe = useSceneStore((state) => state.atualizarTripe);
+  const removerRecorte = useSceneStore((state) => state.removerCamera);
+  const removerTripe = useSceneStore((state) => state.removerTripe);
+  const atualizarCamera = tipo === "tripe" ? atualizarTripe : atualizarRecorte;
+  const removerCamera = tipo === "tripe" ? removerTripe : removerRecorte;
   const transmitirCamera = useSceneStore((state) => state.transmitirCamera);
   const selecionar = useCameraLockStore((state) => state.selecionar);
   const [renomeando, setRenomeando] = useState(false);
@@ -405,6 +459,11 @@ function Chip({
               )}
             />
           ) : null}
+          {/* O tripé leva a câmera na frente do nome: é o que diz que a mesa,
+              com ele no ar, vê de esguelha. */}
+          {tipo === "tripe" ? (
+            <Video className="size-3 shrink-0 opacity-80" />
+          ) : null}
           <span className="truncate">{camera.nome}</span>
           {/* Segue tokens, e não um lugar: a mira diz isso sem ocupar o
               nome. */}
@@ -436,16 +495,18 @@ function Chip({
               : "Transmitir"}
           {selecionada ? <ContextMenuShortcut>T</ContextMenuShortcut> : null}
         </ContextMenuItem>
-        <ContextMenuItem
-          onClick={() => {
-            selecionar(camera.id);
-            enquadrarAqui();
-          }}
-        >
-          <ScanSearch />
-          Trazer para onde estou
-          {selecionada ? <ContextMenuShortcut>C</ContextMenuShortcut> : null}
-        </ContextMenuItem>
+        {podeTrazer ? (
+          <ContextMenuItem
+            onClick={() => {
+              selecionar(camera.id);
+              enquadrarAqui();
+            }}
+          >
+            <ScanSearch />
+            Trazer para onde estou
+            {selecionada ? <ContextMenuShortcut>C</ContextMenuShortcut> : null}
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuItem onClick={renomear.pedir}>
           <TextCursorInput />
           Renomear

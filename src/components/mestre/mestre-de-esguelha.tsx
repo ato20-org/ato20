@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
 import { PalcoSoTela } from "@/components/playground/scene-stage";
@@ -8,6 +8,7 @@ import { useCameraOrbital } from "@/hooks/use-camera-orbital";
 import {
   cameraDoRecorte,
   LENTE_DA_MESA,
+  tripeDaOrbital,
   type CameraAssinavel,
 } from "@/lib/geometry/camera-orbital";
 import { clampViewport, PLANO } from "@/lib/geometry/viewport";
@@ -60,7 +61,7 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
     () => useEsguelhaStore.getState().olhar,
   );
 
-  const { mesa, focal, tamanho, corrente, assinar } = useCameraOrbital({
+  const { mesa, focal, tamanho, corrente, assinar, instante } = useCameraOrbital({
     lente: LENTE_DA_MESA,
     giro: olhar.giro,
     inclinacao: olhar.inclinacao,
@@ -92,6 +93,17 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
         ),
       ),
   });
+
+  // O "nova câmera daqui" pergunta por aqui: o tripé que veria o que o mestre
+  // está vendo agora. Desmontado, ninguém responde. Ver `useEsguelhaStore`.
+  const registrarOlho = useEsguelhaStore((state) => state.registrarOlho);
+  useEffect(() => {
+    registrarOlho(() => {
+      const agora = instante();
+      return agora ? tripeDaOrbital(agora.camera, agora.tela) : null;
+    });
+    return () => registrarOlho(null);
+  }, [instante, registrarOlho]);
 
   const daMesa = useMemo(() => sceneForTable(scene), [scene]);
 

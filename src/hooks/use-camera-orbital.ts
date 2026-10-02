@@ -112,6 +112,13 @@ export function useCameraOrbital({
    */
   corrente: () => string;
   assinar: (aviso: () => void) => () => void;
+  /**
+   * A câmera e a tela de AGORA, lidas na hora. `null` antes da medida.
+   *
+   * Para quem precisa do olhar num instante, e não a cada quadro: o "nova
+   * câmera daqui" grava como tripé o que o mestre está vendo quando aperta.
+   */
+  instante: () => { camera: CameraOrbital; tela: Tela } | null;
   /** A focal em pixels, para o `perspective`. Zero até a tela ser medida. */
   focal: number;
   /** A tela medida, em pixels. `null` até a primeira medida. */
@@ -469,5 +476,13 @@ export function useCameraOrbital({
     };
   }, [aplicar]);
 
-  return { mesa, focal, tamanho, paraChao, corrente, assinar };
+  const instante = useCallback(
+    () =>
+      camera.current && tela.current
+        ? { camera: camera.current, tela: tela.current }
+        : null,
+    [],
+  );
+
+  return { mesa, focal, tamanho, paraChao, corrente, assinar, instante };
 }

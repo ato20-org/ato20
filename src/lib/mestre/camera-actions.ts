@@ -12,13 +12,20 @@ import {
 } from "@/lib/geometry/viewport";
 import { ponteiroNaCena } from "@/lib/mestre/ponteiro-no-palco";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import {
   selectEditingScene,
   useSceneStore,
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import { temCamera, type CameraSalva, type Scene, type Viewport } from "@/types/scene";
+import {
+  temCamera,
+  type CameraSalva,
+  type CameraTripe,
+  type Scene,
+  type Viewport,
+} from "@/types/scene";
 
 /**
  * De quanto a câmera anda por toque de seta, como fração da própria largura.
@@ -84,6 +91,29 @@ export function cameraSelecionada(): CameraSalva | undefined {
   return scene?.cameras?.find((camera) => camera.id === id);
 }
 
+/**
+ * O tripé selecionado, quando a seleção é um tripé. Ver `Scene.tripes`.
+ *
+ * A seleção é UMA para as duas espécies de câmera: o chip aceso pode ser de um
+ * recorte ou de um tripé. As ações de recorte partem de `cameraSelecionada` e
+ * ficam mudas com um tripé escolhido; as de tripé partem daqui.
+ */
+export function tripeSelecionado(): CameraTripe | undefined {
+  const scene = lerCena();
+  const id = useCameraLockStore.getState().selecionadaId;
+
+  return scene?.tripes?.find((tripe) => tripe.id === id);
+}
+
+/**
+ * O tripé que veria o que o mestre vê agora no 2.5D. `undefined` fora dele.
+ * Ver `olhoAgora` em `useEsguelhaStore`.
+ */
+function olhoDoMestre() {
+  const esguelha = useEsguelhaStore.getState();
+  return esguelha.ligada ? (esguelha.olhoAgora?.() ?? undefined) : undefined;
+}
+
 /** O recorte da selecionada. É o que toda ação abaixo parte. */
 export function cameraAtual(): Viewport | undefined {
   return cameraSelecionada()?.viewport;
@@ -128,6 +158,13 @@ function gravar(viewport: Viewport): void {
  * do maior tamanho que cabe no que ele vê.
  */
 export function enquadrarAqui(): void {
+  // Com um tripé escolhido no 2.5D, "trazer para aqui" é o tripé ir para onde
+  // o mestre está olhando -- o mesmo gesto, na espécie de câmera que se tem.
+  if (tripeSelecionado()) {
+    trazerTripeParaAqui();
+    return;
+  }
+
   const camera = cameraAtual();
   if (!camera) return;
 
@@ -157,15 +194,13 @@ export function voltarAoFormatoDaMesa(): void {
  */
 export function alternarTransmissao(): void {
   const scene = lerCena();
-  const camera = cameraSelecionada();
-  if (!scene || !camera) return;
+  // Recorte ou tripé: transmitir é o mesmo toque para as duas espécies.
+  const id = cameraSelecionada()?.id ?? tripeSelecionado()?.id;
+  if (!scene || !id) return;
 
   useSceneStore
     .getState()
-    .transmitirCamera(
-      scene.id,
-      scene.cameraNoArId === camera.id ? undefined : camera.id,
-    );
+    .transmitirCamera(scene.id, scene.cameraNoArId === id ? undefined : id);
 }
 
 /**
@@ -292,6 +327,9 @@ export function irParaCamera(): void {
  * partida. A tecla N é a exceção -- ver `novaCameraNoPonteiro`.
  */
 export function novaCamera(nome?: string): string | undefined {
+  // No 2.5D a câmera nova é um TRIPÉ, no lugar de onde o mestre está olhando.
+  if (olhoDoMestre()) return novoTripeDaqui({ nome, noAr: true });
+
   const base = cameraAtual() ?? useViewportStore.getState().viewport;
   return criarCamera(base, { nome, noAr: true });
 }
@@ -310,6 +348,10 @@ export function novaCamera(nome?: string): string | undefined {
  * cima --, cai no mesmo lugar do botão.
  */
 export function novaCameraNoPonteiro(): string | undefined {
+  // No 2.5D não há ponteiro no chão chapado para centrar: o tripé nasce no
+  // olhar do mestre, e fora do ar, como a câmera do N.
+  if (olhoDoMestre()) return novoTripeDaqui({ noAr: false });
+
   const base = cameraAtual() ?? useViewportStore.getState().viewport;
   const centro = ponteiroNaCena();
 
@@ -350,8 +392,54 @@ function criarCamera(
 /**
  * A n-ésima câmera, para os atalhos `Shift+1..9`. Posição na lista, e não um
  * número guardado: a ordem que o mestre vê nos chips é a ordem que a tecla
- * usa, sem uma segunda numeração para divergir.
+ * usa, sem uma segunda numeração para divergir. Os tripés vêm depois dos
+ * recortes, como nos chips.
  */
-export function cameraNaPosicao(posicao: number): CameraSalva | undefined {
-  return lerCena()?.cameras?.[posicao - 1];
+export function cameraNaPosicao(posicao: number): { id: string } | undefined {
+  const scene = lerCena();
+  return [...(scene?.cameras ?? []), ...(scene?.tripes ?? [])][posicao - 1];
+}
+
+/**
+ * O tripé novo, no lugar de onde o mestre está olhando no 2.5D: o "nova
+ * câmera daqui". Ele enquadra com a navegação, e o tripé nasce vendo exatamente
+ * aquilo -- a mesma conta, sem ajuste. Ver `tripeDaOrbital`.
+ *
+ * `noAr` com o mesmo critério das câmeras de recorte: o botão e o menu
+ * transmitem, a tecla N não. Ver `novaCamera` e `novaCameraNoPonteiro`.
+ */
+export function novoTripeDaqui({
+  nome,
+  noAr,
+}: {
+  nome?: string;
+  noAr: boolean;
+}): string | undefined {
+  const scene = lerCena();
+  const olho = olhoDoMestre();
+  if (!scene || !olho) return undefined;
+
+  const ordem = (scene.tripes?.length ?? 0) + 1;
+  const id = useSceneStore.getState().salvarTripe(scene.id, {
+    ...olho,
+    nome: nome ?? `Tripé ${ordem}`,
+  });
+
+  if (noAr) useSceneStore.getState().transmitirCamera(scene.id, id);
+  useCameraLockStore.getState().selecionar(id);
+
+  return id;
+}
+
+/**
+ * Leva o tripé selecionado para onde o mestre está olhando no 2.5D. Se ele
+ * está no ar, a mesa vai junto -- ver `atualizarTripe`.
+ */
+export function trazerTripeParaAqui(): void {
+  const scene = lerCena();
+  const tripe = tripeSelecionado();
+  const olho = olhoDoMestre();
+  if (!scene || !tripe || !olho) return;
+
+  useSceneStore.getState().atualizarTripe(scene.id, tripe.id, olho);
 }

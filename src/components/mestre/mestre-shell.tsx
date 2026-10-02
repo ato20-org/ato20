@@ -743,14 +743,17 @@ function StageBoundary({
         </div>
       ) : null}
 
-      {scene && comFerramentas ? (
+      {/* As câmeras ficam nos DOIS modos: é no 2.5D que nasce o tripé, e é do
+          2D que o mestre muitas vezes troca o que a mesa vê enquanto edita.
+          O zoom é do palco de prumo, e some no 2.5D. */}
+      {scene && !notaAberta ? (
         <div className="absolute right-3 bottom-3 flex items-center gap-2">
           {/* Os chips de câmera só no MAPA: o quadro vai inteiro para a mesa,
               e enquadrar um pedaço dele é o contrário do que ele serve para
               fazer. Os controles de zoom ficam nos dois -- eles são do palco
               do mestre, e não da mesa. Ver `lerCena` em `camera-actions`. */}
           {temCamera(scene) ? <CamerasSalvas scene={scene} /> : null}
-          <ViewportControls />
+          {deEsguelha ? null : <ViewportControls />}
         </div>
       ) : null}
 

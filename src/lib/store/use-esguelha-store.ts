@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { OLHAR_PADRAO } from "@/lib/geometry/camera-orbital";
+import type { Tripe } from "@/types/scene";
 
 /** De onde o mestre olha a mesa no 2.5D, em graus. */
 export type Olhar = { giro: number; inclinacao: number };
@@ -12,6 +13,16 @@ type EsguelhaStore = {
   olhar: Olhar;
   alternar: () => void;
   guardarOlhar: (olhar: Olhar) => void;
+  /**
+   * O tripé que veria o que o mestre vê agora, ou `null` fora do 2.5D.
+   *
+   * Uma função registrada pela mesa de esguelha enquanto ela está montada, e
+   * não um valor: o olhar anda a cada quadro sem passar pelo React, e só quem
+   * pergunta -- o "nova câmera daqui" -- precisa dele, e só no instante em
+   * que pergunta. Ver `MestreDeEsguelha`.
+   */
+  olhoAgora: (() => Tripe | null) | null;
+  registrarOlho: (olho: (() => Tripe | null) | null) => void;
 };
 
 /**
@@ -31,4 +42,6 @@ export const useEsguelhaStore = create<EsguelhaStore>((set) => ({
   olhar: { ...OLHAR_PADRAO },
   alternar: () => set((atual) => ({ ligada: !atual.ligada })),
   guardarOlhar: (olhar) => set({ olhar }),
+  olhoAgora: null,
+  registrarOlho: (olhoAgora) => set({ olhoAgora }),
 }));
