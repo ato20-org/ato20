@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import {
   bocaDoTripe,
@@ -17,12 +22,25 @@ import {
   moverTripeNoGesto,
   terminarGestoDoTripe,
 } from "@/lib/store/use-gesto-store";
+import { cn } from "@/lib/utils";
 import type { CameraTripe, Tripe } from "@/types/scene";
 
 /** De quanto a boca da pirâmide fica do olho, em unidades de cena. */
 const BOCA = 70;
 /** O tamanho do gizmo NA TELA, em pixels: igual perto e longe, como nas ferramentas 3D. */
 const GIZMO_PX = 64;
+/**
+ * O comprimento das setas, em fração do gizmo. Mais longas que o anel maior
+ * (raio 1), de propósito: com a ponta em cima do anel de giro, quem ia mover
+ * num eixo pegava a rotação sem querer.
+ */
+const COMPRIMENTO_DO_EIXO = 1.75;
+/**
+ * De onde a seta passa a ser pegável, em fração do gizmo: por FORA dos anéis.
+ * Dentro deles quem responde é o anel -- a seta se pega pelo trecho de fora e
+ * pela alça da ponta, onde não há outra coisa por perto.
+ */
+const EIXO_PEGAVEL_DESDE = 1.15;
 /** Quantos lados tem cada anel desenhado. */
 const LADOS_DO_ANEL = 48;
 
@@ -42,6 +60,37 @@ const RAIO_DO_ANEL = { giro: 1, inclinacao: 0.78, rolagem: 0.56 } as const;
 
 type Eixo = keyof typeof COR_DO_EIXO;
 type Anel = keyof typeof COR_DO_ANEL;
+
+/** O que cada parte faz, dito no hover: o mestre sabe o que vai pegar antes de pegar. */
+const ROTULO_DO_EIXO: Record<Eixo, string> = {
+  x: "Mover em X",
+  y: "Mover em Y",
+  z: "Subir e descer",
+};
+const ROTULO_DO_ANEL: Record<Anel, string> = {
+  giro: "Girar",
+  inclinacao: "Inclinar",
+  rolagem: "Rolar",
+};
+
+/**
+ * O realce de uma parte que a mão pode pegar: mais grossa e com brilho na cor
+ * dela, no hover e enquanto ela está sendo arrastada (`data-ativo`).
+ *
+ * Por CSS, pelo `:hover` do grupo, e não por estado: passar o mouse por cima do
+ * gizmo não custa render nenhum. Só o "pegando" passa pelo React, uma vez por
+ * gesto -- é ele que mantém a parte acesa quando o mouse sai dela no meio do
+ * arrasto.
+ */
+/*
+ * O hover é a regra `.group:hover` direta, e não o `group-hover:` do Tailwind:
+ * aquele só vale sob `@media (hover: hover)`, e um aparelho que se declara sem
+ * mouse -- medido no Chrome sem tela -- nunca acenderia nada.
+ */
+const BRILHO =
+  "transition-[stroke-width,filter] duration-100 [.group:hover_&]:[filter:drop-shadow(0_0_3px_currentColor)] group-data-[ativo]:[filter:drop-shadow(0_0_3px_currentColor)]";
+const ROTULO =
+  "pointer-events-none fill-white stroke-black/80 text-[11px] font-medium opacity-0 transition-opacity duration-100 [paint-order:stroke] [stroke-width:3px] [.group:hover_&]:opacity-100 group-data-[ativo]:opacity-100";
 
 /** A câmera do mestre, para quem desenha por cima dela. Ver `useCameraOrbital`. */
 export type OlharDoMestre = {
@@ -90,6 +139,8 @@ export function TripesNoPalco({
   onSelecionar: (id: string) => void;
 }) {
   const raiz = useRef<SVGSVGElement | null>(null);
+  /** A parte que a mão está segurando agora, para ela ficar acesa até soltar. */
+  const [pegando, setPegando] = useState<string | null>(null);
 
   // A projeção, a cada aviso da câmera do mestre e a cada tripé que muda.
   useEffect(() => {
@@ -123,6 +174,12 @@ export function TripesNoPalco({
     evento.stopPropagation();
     evento.preventDefault();
     onSelecionar(tripe.id);
+    setPegando(
+      `${tripe.id}:${parte.tipo === "eixo" ? parte.eixo : parte.tipo === "anel" ? parte.anel : "corpo"}`,
+    );
+    // O cursor de quem segura, na página inteira: o mouse sai da parte no meio
+    // do arrasto, e o cursor dela iria junto.
+    document.body.style.setProperty("cursor", "grabbing");
 
     const agora = olhar.instante();
     const svg = raiz.current;
@@ -220,6 +277,8 @@ export function TripesNoPalco({
       window.removeEventListener("pointermove", andou);
       window.removeEventListener("pointerup", soltou);
       window.removeEventListener("pointercancel", soltou);
+      document.body.style.removeProperty("cursor");
+      setPegando(null);
       terminarGestoDoTripe();
     }
 
@@ -252,48 +311,115 @@ export function TripesNoPalco({
             <path data-parte="piramide" fill="none" stroke="currentColor" strokeWidth={1.25} />
 
             <g
-              data-parte="corpo"
-              data-tripe-alvo
-              className="cursor-move"
-              style={{ pointerEvents: "auto" }}
-              onPointerDown={(evento) => pegar(evento, tripe, { tipo: "corpo" })}
+              className="group"
+              data-ativo={pegando === `${tripe.id}:corpo` || undefined}
             >
-              <rect x={-11} y={-7} width={22} height={14} rx={3} fill="#18181b" stroke="currentColor" strokeWidth={1.5} />
-              <polygon points="11,-4 18,-8 18,8 11,4" fill="currentColor" />
-              {noAr ? <circle cx={-5} cy={-2} r={2} fill="#ef4444" /> : null}
+              <g
+                data-parte="corpo"
+                data-tripe-alvo
+                className={selecionado ? "cursor-move" : "cursor-pointer"}
+                style={{ pointerEvents: "auto" }}
+                onPointerDown={(evento) => pegar(evento, tripe, { tipo: "corpo" })}
+              >
+                <rect
+                  x={-11}
+                  y={-7}
+                  width={22}
+                  height={14}
+                  rx={3}
+                  fill="#18181b"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  className={cn(BRILHO, "[.group:hover_&]:[stroke-width:2.5] group-data-[ativo]:[stroke-width:2.5]")}
+                />
+                <polygon points="11,-4 18,-8 18,8 11,4" fill="currentColor" className={BRILHO} />
+                {noAr ? <circle cx={-5} cy={-2} r={2} fill="#ef4444" /> : null}
+              </g>
+              {/* Sobre o tripé escolhido, o que o corpo faz; sobre os outros,
+                  o nome -- é por ele que o mestre os reconhece nos chips. */}
+              <text data-rotulo="corpo" textAnchor="middle" className={ROTULO}>
+                {selecionado ? "Arrastar pelo chão" : tripe.nome}
+              </text>
             </g>
 
             {selecionado ? (
               <g data-parte="gizmo">
                 {(Object.keys(COR_DO_ANEL) as Anel[]).map((anel) => (
-                  <g key={anel}>
-                    <path data-anel={anel} fill="none" stroke={COR_DO_ANEL[anel]} strokeWidth={1.5} strokeOpacity={0.9} />
+                  <g
+                    key={anel}
+                    className="group"
+                    data-ativo={pegando === `${tripe.id}:${anel}` || undefined}
+                    style={{ color: COR_DO_ANEL[anel] }}
+                  >
+                    <path
+                      data-anel={anel}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      strokeOpacity={0.9}
+                      className={cn(BRILHO, "[.group:hover_&]:[stroke-width:3.5] group-data-[ativo]:[stroke-width:3.5] [.group:hover_&]:[stroke-opacity:1]")}
+                    />
                     {/* O alvo largo e invisível: um anel de 1,5 px não se pega. */}
                     <path
                       data-anel-alvo={anel}
                       data-tripe-alvo
                       fill="none"
                       stroke="transparent"
-                      strokeWidth={10}
+                      strokeWidth={8}
                       className="cursor-grab"
                       style={{ pointerEvents: "stroke" }}
                       onPointerDown={(evento) => pegar(evento, tripe, { tipo: "anel", anel })}
                     />
+                    <text data-rotulo-anel={anel} className={ROTULO}>
+                      {ROTULO_DO_ANEL[anel]}
+                    </text>
                   </g>
                 ))}
                 {(Object.keys(COR_DO_EIXO) as Eixo[]).map((eixo) => (
-                  <g key={eixo}>
-                    <line data-eixo={eixo} stroke={COR_DO_EIXO[eixo]} strokeWidth={2.5} strokeLinecap="round" />
-                    <circle data-eixo-ponta={eixo} r={4.5} fill={COR_DO_EIXO[eixo]} />
+                  <g
+                    key={eixo}
+                    className="group"
+                    data-ativo={pegando === `${tripe.id}:${eixo}` || undefined}
+                    style={{ color: COR_DO_EIXO[eixo] }}
+                  >
+                    <line
+                      data-eixo={eixo}
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                      strokeLinecap="round"
+                      className={cn(BRILHO, "[.group:hover_&]:[stroke-width:4.5] group-data-[ativo]:[stroke-width:4.5]")}
+                    />
+                    {/* A alça da ponta: é por ela que o eixo se pega primeiro. */}
+                    <circle
+                      data-eixo-ponta={eixo}
+                      r={6.5}
+                      fill="currentColor"
+                      stroke="white"
+                      strokeWidth={1.5}
+                      className={cn(BRILHO, "[.group:hover_&]:[r:8.5] group-data-[ativo]:[r:8.5]")}
+                    />
+                    {/* O trecho pegável, só por fora dos anéis. Ver `EIXO_PEGAVEL_DESDE`. */}
                     <line
                       data-eixo-alvo={eixo}
                       data-tripe-alvo
                       stroke="transparent"
-                      strokeWidth={14}
+                      strokeWidth={12}
                       className="cursor-grab"
                       style={{ pointerEvents: "stroke" }}
                       onPointerDown={(evento) => pegar(evento, tripe, { tipo: "eixo", eixo })}
                     />
+                    <circle
+                      data-eixo-alca={eixo}
+                      data-tripe-alvo
+                      r={13}
+                      fill="transparent"
+                      className="cursor-grab"
+                      style={{ pointerEvents: "all" }}
+                      onPointerDown={(evento) => pegar(evento, tripe, { tipo: "eixo", eixo })}
+                    />
+                    <text data-rotulo-eixo={eixo} className={ROTULO}>
+                      {ROTULO_DO_EIXO[eixo]}
+                    </text>
                   </g>
                 ))}
               </g>
@@ -410,6 +536,10 @@ function desenharTripe(
     );
   }
 
+  const rotuloDoCorpo = parte<SVGTextElement>('[data-rotulo="corpo"]');
+  rotuloDoCorpo?.setAttribute("x", `${r(olho.x)}`);
+  rotuloDoCorpo?.setAttribute("y", `${r(olho.y - 16)}`);
+
   // O corpo aponta a lente para onde o tripé olha, na tela.
   const frente = naTelaDoMestre(agora, doOlhoAoMundo(tripe, 0, 0, 20));
   const corpo = parte<SVGGElement>('[data-parte="corpo"]');
@@ -432,25 +562,52 @@ function desenharTripe(
   const tamanho = GIZMO_PX / pxPorUnidade;
 
   for (const eixo of ["x", "y", "z"] as const) {
-    const ponta = naTelaDoMestre(agora, {
-      x: tripe.x + (eixo === "x" ? tamanho : 0),
-      y: tripe.y + (eixo === "y" ? tamanho : 0),
-      altura: tripe.altura + (eixo === "z" ? tamanho : 0),
-    });
-    for (const seletor of [`[data-eixo="${eixo}"]`, `[data-eixo-alvo="${eixo}"]`]) {
-      const linha = parte<SVGLineElement>(seletor);
-      if (!linha) continue;
+    const noEixo = (fracao: number) =>
+      naTelaDoMestre(agora, {
+        x: tripe.x + (eixo === "x" ? tamanho * fracao : 0),
+        y: tripe.y + (eixo === "y" ? tamanho * fracao : 0),
+        altura: tripe.altura + (eixo === "z" ? tamanho * fracao : 0),
+      });
+    const ponta = noEixo(COMPRIMENTO_DO_EIXO);
+    const deFora = noEixo(EIXO_PEGAVEL_DESDE);
+
+    const linha = parte<SVGLineElement>(`[data-eixo="${eixo}"]`);
+    if (linha) {
       linha.style.display = ponta ? "" : "none";
-      if (!ponta) continue;
-      linha.setAttribute("x1", `${r(olho.x)}`);
-      linha.setAttribute("y1", `${r(olho.y)}`);
-      linha.setAttribute("x2", `${r(ponta.x)}`);
-      linha.setAttribute("y2", `${r(ponta.y)}`);
+      if (ponta) {
+        linha.setAttribute("x1", `${r(olho.x)}`);
+        linha.setAttribute("y1", `${r(olho.y)}`);
+        linha.setAttribute("x2", `${r(ponta.x)}`);
+        linha.setAttribute("y2", `${r(ponta.y)}`);
+      }
     }
-    const bolinha = parte<SVGCircleElement>(`[data-eixo-ponta="${eixo}"]`);
-    if (bolinha && ponta) {
-      bolinha.setAttribute("cx", `${r(ponta.x)}`);
-      bolinha.setAttribute("cy", `${r(ponta.y)}`);
+    const alvo = parte<SVGLineElement>(`[data-eixo-alvo="${eixo}"]`);
+    if (alvo) {
+      alvo.style.display = ponta && deFora ? "" : "none";
+      if (ponta && deFora) {
+        alvo.setAttribute("x1", `${r(deFora.x)}`);
+        alvo.setAttribute("y1", `${r(deFora.y)}`);
+        alvo.setAttribute("x2", `${r(ponta.x)}`);
+        alvo.setAttribute("y2", `${r(ponta.y)}`);
+      }
+    }
+    for (const seletor of [`[data-eixo-ponta="${eixo}"]`, `[data-eixo-alca="${eixo}"]`]) {
+      const bolinha = parte<SVGCircleElement>(seletor);
+      if (!bolinha) continue;
+      bolinha.style.display = ponta ? "" : "none";
+      if (ponta) {
+        bolinha.setAttribute("cx", `${r(ponta.x)}`);
+        bolinha.setAttribute("cy", `${r(ponta.y)}`);
+      }
+    }
+    // O rótulo um pouco além da ponta, na direção da seta.
+    const rotulo = parte<SVGTextElement>(`[data-rotulo-eixo="${eixo}"]`);
+    if (rotulo && ponta) {
+      const dx = ponta.x - olho.x;
+      const dy = ponta.y - olho.y;
+      const comprimento = Math.max(Math.hypot(dx, dy), 1);
+      rotulo.setAttribute("x", `${r(ponta.x + (dx / comprimento) * 16 + 4)}`);
+      rotulo.setAttribute("y", `${r(ponta.y + (dy / comprimento) * 16 + 4)}`);
     }
   }
 
@@ -467,6 +624,17 @@ function desenharTripe(
       : "";
     for (const seletor of [`[data-anel="${anel}"]`, `[data-anel-alvo="${anel}"]`]) {
       parte<SVGPathElement>(seletor)?.setAttribute("d", caminho);
+    }
+    // O rótulo no ponto mais alto do anel na tela, por fora dele: é onde ele
+    // menos briga com as setas e com os outros anéis.
+    const rotulo = parte<SVGTextElement>(`[data-rotulo-anel="${anel}"]`);
+    const topo = (pontos.filter(Boolean) as Vec[]).reduce<Vec | null>(
+      (acima, ponto) => (!acima || ponto.y < acima.y ? ponto : acima),
+      null,
+    );
+    if (rotulo && topo) {
+      rotulo.setAttribute("x", `${r(topo.x + 6)}`);
+      rotulo.setAttribute("y", `${r(topo.y - 6)}`);
     }
   }
 }
