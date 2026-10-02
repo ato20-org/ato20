@@ -7,7 +7,9 @@ import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
 import logo from "@/assets/logo-white.png";
 
 import { AbrirEspectador } from "@/components/mestre/abrir-espectador";
+import { BotaoDeEsguelha } from "@/components/mestre/botao-de-esguelha";
 import { ConfiguracoesDoMapa } from "@/components/mestre/configuracoes-do-mapa";
+import { MestreDeEsguelha } from "@/components/mestre/mestre-de-esguelha";
 import { PlayersChip } from "@/components/mestre/players-chip";
 import { TableInvite } from "@/components/mestre/table-invite";
 import { DockRow } from "@/components/mestre/dock/dock-row";
@@ -479,7 +481,17 @@ export function MestreShell() {
                   {editingScene &&
                   (temSol(editingScene) || temGrade(editingScene)) ? (
                     <>
-                      <ConfiguracoesDoMapa scene={editingScene} />
+                      {/* O modo ANTES das configurações, e fora delas: ele
+                          troca o palco inteiro, e é o primeiro gesto de quem
+                          vai conferir a mesa. No 2.5D as configurações somem
+                          -- mapa, luz e parede se ajustam no 2D. Ver
+                          `BotaoDeEsguelha`. */}
+                      {temSol(editingScene) ? (
+                        <BotaoDeEsguelha scene={editingScene} />
+                      ) : null}
+                      {editingScene.vista ? null : (
+                        <ConfiguracoesDoMapa scene={editingScene} />
+                      )}
                       <span className="bg-border mx-1 h-5 w-px" />
                     </>
                   ) : null}
@@ -644,6 +656,16 @@ function StageBoundary({
     </SceneStage>
   );
 
+  /**
+   * O palco do 2.5D: só a mesa, sem ferramenta. Ver `MestreDeEsguelha`.
+   *
+   * Sem as réguas, a barra, as câmeras e o saquinho também -- eles agem sobre
+   * o palco de prumo, e ao lado de uma mesa de esguelha seriam botões para o
+   * nada. Sem o menu de contexto: ali o botão direito gira a mesa.
+   */
+  const deEsguelha = Boolean(scene && temSol(scene) && scene.vista);
+  const comFerramentas = Boolean(scene && !notaAberta && !deEsguelha);
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       {/* Nota aberta ocupa o lugar do palco, como o Obsidian abre um arquivo
@@ -652,6 +674,8 @@ function StageBoundary({
           `useArquivoAbertoStore`. */}
       {notaAberta ? (
         <NotaEditor key={notaAberta.id} nota={notaAberta} />
+      ) : scene && deEsguelha ? (
+        <MestreDeEsguelha scene={scene} />
       ) : scene ? (
         <StageContextMenu scene={scene}>{stage}</StageContextMenu>
       ) : (
@@ -682,7 +706,7 @@ function StageBoundary({
           palco e as duas pontas dela não tinham relação nenhuma. */}
       {/* Com uma nota aberta o palco não está na tela, e ferramenta de palco
           sobre um editor de texto seria botão para o nada. */}
-      {scene && !notaAberta ? (
+      {scene && comFerramentas ? (
         <div className="absolute bottom-3 left-3 flex items-center gap-2">
           <MestreToolbar scene={scene} />
         </div>
@@ -698,7 +722,7 @@ function StageBoundary({
 
           Nos DOIS tipos de cena: o que muda é o que ela carrega. Ver
           `ReguaDeDesenho`. */}
-      {scene && !notaAberta ? (
+      {scene && comFerramentas ? (
         <div className="absolute top-1/2 left-3 -translate-y-1/2">
           <ReguaDeDesenho scene={scene} />
         </div>
@@ -710,13 +734,13 @@ function StageBoundary({
           aberta.
 
           Só no mapa: quadro não tem chão. Ver `ReguaDoMapa`. */}
-      {scene && !notaAberta && temAnotacao(scene) ? (
+      {scene && comFerramentas && temAnotacao(scene) ? (
         <div className="absolute top-1/2 right-3 -translate-y-1/2">
           <ReguaDoMapa scene={scene} />
         </div>
       ) : null}
 
-      {scene && !notaAberta ? (
+      {scene && comFerramentas ? (
         <div className="absolute right-3 bottom-3 flex items-center gap-2">
           {/* Os chips de câmera só no MAPA: o quadro vai inteiro para a mesa,
               e enquadrar um pedaço dele é o contrário do que ele serve para
@@ -732,7 +756,7 @@ function StageBoundary({
 
           Só com cena: o dado cai SOBRE o mapa, e sem mapa a jogada não teria
           onde pousar -- a camada que a desenha vive dentro do palco. */}
-      {scene && !notaAberta ? <SaquinhoDados /> : null}
+      {scene && comFerramentas ? <SaquinhoDados /> : null}
 
       {/* A carta na manga, irmã do saquinho: mesma bolinha, e por cena.
 

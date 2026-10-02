@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
+import { Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
 
 import { useState } from "react";
 
@@ -30,7 +30,6 @@ import {
   CORES_DO_ESCURO,
   SOL_PADRAO,
   temLuz,
-  VISTA_PADRAO,
   type Scene,
   type Sol,
 } from "@/types/scene";
@@ -56,8 +55,6 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
   const setEscuridao = useSceneStore((state) => state.setEscuridao);
   const setCorDoEscuro = useSceneStore((state) => state.setCorDoEscuro);
   const setInfoDosTokens = useSceneStore((state) => state.setInfoDosTokens);
-  const setVista = useSceneStore((state) => state.setVista);
-  const vista = scene.vista;
 
   const sol = scene.sol;
   const ligado = Boolean(sol);
@@ -178,94 +175,6 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
               >
                 <RotateCcw className="size-3" />
                 Voltar ao sol padrão
-              </Button>
-            </div>
-          ) : null}
-        </section>
-
-        <span className="bg-border block h-px w-full" />
-
-        {/* De esguelha, logo depois do sol, porque os dois são a mesma espécie
-            de coisa: um estado da CENA que muda o desenho inteiro, e não uma
-            ferramenta que se pega. E vizinhos porque conversam -- é o sol que
-            decide de que lado cada parede acende quando o chão tomba. */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <Label
-              className="flex items-center gap-2 text-xs font-normal"
-              htmlFor="vista-da-cena"
-            >
-              <Box className="text-muted-foreground size-3.5" />
-              Mapa de esguelha
-            </Label>
-            <Switch
-              id="vista-da-cena"
-              checked={Boolean(vista)}
-              onCheckedChange={(ligar) =>
-                setVista(scene.id, ligar ? VISTA_PADRAO : undefined)
-              }
-            />
-          </div>
-
-          <p className="text-muted-foreground text-[10px] leading-snug">
-            O chão deita e as paredes ficam em pé. É a TV que ganha com isto.
-          </p>
-
-          {vista ? (
-            <div className="space-y-4">
-              <p className="text-muted-foreground text-[10px] leading-snug">
-                Sobre o mapa, o botão direito arrastado gira a mesa: de lado
-                muda o lado de onde se olha, para cima e para baixo levanta e
-                deita o chão.
-              </p>
-
-              {/* Em GRAUS as duas, e não uma em porcento: aqui os dois números
-                  são ângulos de verdade -- de onde se olha e quanto o chão
-                  tomba --, e quem mestra gira o mostrador olhando o mapa. */}
-              <Campo rotulo="De onde se olha" valor={`${Math.round(vista.giro)}°`}>
-                <Slider
-                  aria-label="De onde se olha"
-                  value={[Math.round(vista.giro)]}
-                  min={0}
-                  max={359}
-                  step={1}
-                  onValueChange={(value) =>
-                    setVista(scene.id, { ...vista, giro: primeiro(value) })
-                  }
-                />
-              </Campo>
-
-              {/* O teto é 72 e não 90: rasante, o chão vira um fio e o encaixe
-                  encolhe a cena inteira para caber na caixa. O piso é 0, que é
-                  o mapa de prumo -- e ele fica AQUI, e não só no interruptor,
-                  porque deitar até zero é o jeito de comparar sem desligar. */}
-              <Campo
-                rotulo="Quanto o chão deita"
-                valor={`${Math.round(vista.inclinacao)}°`}
-              >
-                <Slider
-                  aria-label="Quanto o chão deita"
-                  value={[Math.round(vista.inclinacao)]}
-                  min={0}
-                  max={72}
-                  step={1}
-                  onValueChange={(value) =>
-                    setVista(scene.id, {
-                      ...vista,
-                      inclinacao: primeiro(value),
-                    })
-                  }
-                />
-              </Campo>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground h-7 w-full px-2 text-xs"
-                onClick={() => setVista(scene.id, VISTA_PADRAO)}
-              >
-                <RotateCcw className="size-3" />
-                Voltar à vista padrão
               </Button>
             </div>
           ) : null}
