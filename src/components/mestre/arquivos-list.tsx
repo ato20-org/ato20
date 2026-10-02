@@ -9,39 +9,38 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ChevronDown,
-  ChevronRight,
   CopyPlus,
   FilePlus,
   FileText,
-  FolderClosed,
   FolderPlus,
-  MoreVertical,
   Presentation,
   Radio,
-  Search,
   TextCursorInput,
   Trash2,
-  Ungroup,
 } from "lucide-react";
 
+import {
+  CampoDeNome,
+  FimDaLista,
+  ItensDeMover,
+  LIMIAR_ARRASTO_PX,
+  PastaRow,
+  PREFIXO_PASTA,
+  RECUO_PX,
+  TresPontos,
+} from "@/components/mestre/arvore-de-pastas";
+import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
-import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
+import { KIT_CONTEXTO, type Kit } from "@/components/ui/menu-kit";
 import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -54,6 +53,7 @@ import {
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import { useTokenDrag } from "@/hooks/use-token-drag";
+import { achatarArvore, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 import { buscarArquivos, type Trecho } from "@/lib/mestre/busca-de-arquivos";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
@@ -95,7 +95,13 @@ import {
  */
 export function ArquivosList({ ready }: { ready: boolean }) {
   const scenes = useSceneStore((state) => state.board?.scenes);
-  const pastas = useSceneStore((state) => state.board?.pastas);
+  const todasAsPastas = useSceneStore((state) => state.board?.pastas);
+  // Só as do Arquivos: Mapas, Fundos e Personagens têm as deles no mesmo
+  // `board.pastas`. Ver `ListaDePastas`.
+  const pastas = useMemo(
+    () => pastasDaLista(todasAsPastas, undefined),
+    [todasAsPastas],
+  );
   const notas = useSceneStore((state) => state.board?.notas);
   const editingSceneId = useSceneStore((state) => state.board?.editingSceneId);
   const liveSceneId = useSceneStore((state) => state.board?.liveSceneId);
@@ -107,7 +113,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
     [scenes],
   );
   const linhas = useMemo(
-    () => achatar(quadros, pastas ?? [], notas ?? []),
+    () => achatar(quadros, pastas, notas ?? []),
     [quadros, pastas, notas],
   );
 
@@ -155,7 +161,24 @@ export function ArquivosList({ ready }: { ready: boolean }) {
     [],
   );
 
-  const criar = useCriar(pastas?.length ?? 0, notas?.length ?? 0);
+  const criar = useCriar(pastas.length, notas?.length ?? 0);
+
+  /** Os "Novo X aqui" do menu da pasta: o que só o Arquivos cria. */
+  const itensDeCriarNa = (pastaId: string) =>
+    function itensDeCriar({ Item }: Kit) {
+      return (
+        <>
+          <Item onClick={() => criar.quadro(pastaId)}>
+            <Presentation />
+            Novo quadro aqui
+          </Item>
+          <Item onClick={() => criar.nota(pastaId)}>
+            <FilePlus />
+            Nova nota aqui
+          </Item>
+        </>
+      );
+    };
 
   /**
    * A busca: com texto no campo, a árvore dá lugar aos achados. Ver
@@ -184,7 +207,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
     () =>
       buscando
         ? buscarArquivos(
-            { quadros, pastas: pastas ?? [], notas: notas ?? [], textos: textos ?? {} },
+            { quadros, pastas, notas: notas ?? [], textos: textos ?? {} },
             busca,
           )
         : null,
@@ -203,30 +226,16 @@ export function ArquivosList({ ready }: { ready: boolean }) {
       <div className="flex items-center justify-end gap-2 p-2">
         {/* A busca DIVIDE a linha com os botões, como em Sons e Personagens: é
             o que se faz no cabeçalho de uma lista, e empilhar gastaria uma
-            linha inteira de altura. Some com a lista vazia -- um campo para
-            filtrar nada só ocupa lugar --, mas não enquanto há busca, ou
-            apagar o último achado sumiria com o campo em que se digita. */}
-        {linhas.length > 0 || buscando ? (
-          <div className="relative min-w-0 flex-1">
-            <Search
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
-              aria-hidden
-            />
-            <Input
-              value={busca}
-              placeholder="Buscar nome ou texto"
-              aria-label="Buscar nos quadros e nas notas"
-              title="Acha pelo nome e pelo que está escrito: o texto das notas e dos postits. Esc limpa."
-              className="h-8 bg-transparent pl-8 text-xs dark:bg-transparent"
-              onChange={(evento) => setBusca(evento.target.value)}
-              onKeyDown={(evento) => {
-                if (evento.key !== "Escape") return;
-                evento.stopPropagation();
-                setBusca("");
-              }}
-            />
-          </div>
-        ) : null}
+            linha inteira de altura. Sempre, e não só com a lista cheia: um
+            campo que aparece e some conforme a campanha cresce é um campo com
+            que o mestre não conta -- a decisão da busca de Personagens. */}
+        <CampoDeBusca
+          valor={busca}
+          onMudar={setBusca}
+          placeholder="Buscar nome ou texto"
+          rotulo="Buscar nos quadros e nas notas"
+          dica="Acha pelo nome e pelo que está escrito: o texto das notas e dos postits. Esc limpa."
+        />
         <BotaoDeCriar
           rotulo="Novo quadro"
           dica="Um quadro: folha para imagens, notas e setas."
@@ -302,20 +311,19 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                   <PastaRow
                     key={achado.pasta.id}
                     pasta={achado.pasta}
-                    pastas={pastas ?? []}
+                    pastas={pastas}
                     depth={achado.depth}
                     total={achado.total}
                     dropTarget={false}
                     aberta
-                    onReorderStart={SEM_REORDENAR}
-                    onCriarNota={() => criar.nota(achado.pasta.id)}
-                    onCriarQuadro={() => criar.quadro(achado.pasta.id)}
+                    itensDeCriar={itensDeCriarNa(achado.pasta.id)}
+                    alvo={ALVO_DE_NOTA}
                   />
                 ) : achado.tipo === "nota" ? (
                   <NotaRow
                     key={achado.nota.id}
                     nota={achado.nota}
-                    pastas={pastas ?? SEM_PASTAS}
+                    pastas={pastas}
                     depth={achado.depth}
                     aberta={achado.nota.id === notaAbertaId}
                     medida={medidas.get(achado.nota.arquivo)}
@@ -325,7 +333,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                   <QuadroRow
                     key={achado.scene.id}
                     scene={achado.scene}
-                    pastas={pastas ?? []}
+                    pastas={pastas}
                     depth={achado.depth}
                     aberto={achado.scene.id === editingSceneId && !notaAbertaId}
                     noAr={achado.scene.id === liveSceneId}
@@ -343,19 +351,19 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                   <PastaRow
                     key={linha.pasta.id}
                     pasta={linha.pasta}
-                    pastas={pastas ?? []}
+                    pastas={pastas}
                     depth={linha.depth}
                     total={linha.total}
                     dropTarget={dropIndex === index}
                     onReorderStart={startReorder}
-                    onCriarNota={() => criar.nota(linha.pasta.id)}
-                    onCriarQuadro={() => criar.quadro(linha.pasta.id)}
+                    itensDeCriar={itensDeCriarNa(linha.pasta.id)}
+                    alvo={ALVO_DE_NOTA}
                   />
                 ) : linha.tipo === "nota" ? (
                   <NotaRow
                     key={linha.nota.id}
                     nota={linha.nota}
-                    pastas={pastas ?? SEM_PASTAS}
+                    pastas={pastas}
                     depth={linha.depth}
                     aberta={linha.nota.id === notaAbertaId}
                     medida={medidas.get(linha.nota.arquivo)}
@@ -364,7 +372,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                   <QuadroRow
                     key={linha.scene.id}
                     scene={linha.scene}
-                    pastas={pastas ?? []}
+                    pastas={pastas}
                     depth={linha.depth}
                     aberto={linha.scene.id === editingSceneId && !notaAbertaId}
                     noAr={linha.scene.id === liveSceneId}
@@ -379,18 +387,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
           )}
 
           {/* O vazio abaixo da lista é alvo: soltar aqui tira da pasta. */}
-          <div
-            className={cn(
-              "mx-2 mb-2 min-h-8 rounded-md",
-              dropIndex === linhas.length && "ring-primary/60 bg-primary/10 ring-1",
-            )}
-          >
-            {dropIndex === linhas.length ? (
-              <p className="text-muted-foreground px-2 py-2 text-[10px]">
-                Solte aqui para tirar da pasta
-              </p>
-            ) : null}
-          </div>
+          <FimDaLista ativo={dropIndex === linhas.length} />
         </div>
       </ScrollArea>
     </div>
@@ -582,6 +579,9 @@ function TrechoAchado({ trecho }: { trecho: Trecho }) {
 /** A busca não reordena. Ver a lista de achados em `ArquivosList`. */
 const SEM_REORDENAR = () => undefined;
 
+/** A pasta do Arquivos é alvo da nota arrastada. Ver `destinoSob`. */
+const ALVO_DE_NOTA = { "data-pasta-arquivos": "" };
+
 function Detalhe({ children }: { children: ReactNode }) {
   return (
     <span className="text-muted-foreground truncate text-[10px] tabular-nums">
@@ -597,315 +597,25 @@ type Linha =
   | { tipo: "cena"; scene: Scene; depth: number }
   | { tipo: "nota"; nota: Nota; depth: number };
 
-/** Recuo por nível, em pixels. O mesmo da lista de camadas. */
-const RECUO_PX = 14;
-/** Id de arrasto de uma pasta, para não colidir com id de cena. */
-const PREFIXO_PASTA = "pasta:";
-/** Quanto o ponteiro anda antes de a linha virar arrasto. Abaixo é clique. */
-const LIMIAR_ARRASTO_PX = 5;
+type ItemDoArquivo = { tipo: "cena"; scene: Scene } | { tipo: "nota"; nota: Nota };
 
 /**
  * A árvore achatada em linhas, na ordem em que aparecem: em cada nível as
- * pastas, depois os quadros na ordem do board, depois as notas por título.
- * Pasta recolhida esconde as linhas de dentro, mas continua contando. Quem
- * aponta para pasta que sumiu cai na raiz em vez de sumir da lista.
+ * pastas, depois os quadros na ordem do board, depois as notas por título. A
+ * conta da árvore é a de todo painel -- ver `achatarArvore`.
  */
 function achatar(quadros: Scene[], pastas: Pasta[], notas: Nota[]): Linha[] {
-  const linhas: Linha[] = [];
-  const existe = new Set(pastas.map((pasta) => pasta.id));
-  const pastaDe = (coisa: { pastaId?: string }) =>
-    coisa.pastaId && existe.has(coisa.pastaId) ? coisa.pastaId : undefined;
+  const itens: ItemDoArquivo[] = [
+    ...quadros.map((scene) => ({ tipo: "cena" as const, scene })),
+    ...[...notas]
+      .sort((a, b) => a.titulo.localeCompare(b.titulo))
+      .map((nota) => ({ tipo: "nota" as const, nota })),
+  ];
 
-  function contar(pastaId: string): number {
-    let total =
-      quadros.filter((scene) => pastaDe(scene) === pastaId).length +
-      notas.filter((nota) => pastaDe(nota) === pastaId).length;
-    for (const filha of pastas)
-      if (filha.parentId === pastaId) total += contar(filha.id);
-    return total;
-  }
-
-  function nivel(parentId: string | undefined, depth: number) {
-    for (const pasta of pastas) {
-      if (pasta.parentId !== parentId) continue;
-      linhas.push({ tipo: "pasta", pasta, depth, total: contar(pasta.id) });
-      if (!pasta.recolhido) nivel(pasta.id, depth + 1);
-    }
-    for (const scene of quadros)
-      if (pastaDe(scene) === parentId) linhas.push({ tipo: "cena", scene, depth });
-    for (const nota of [...notas].sort((a, b) => a.titulo.localeCompare(b.titulo)))
-      if (pastaDe(nota) === parentId) linhas.push({ tipo: "nota", nota, depth });
-  }
-
-  nivel(undefined, 0);
-  return linhas;
-}
-
-/** A pasta e todas as descendentes dela, por id. */
-function descendentes(pastas: Pasta[], id: string): string[] {
-  const ids = [id];
-  let cresceu = true;
-  while (cresceu) {
-    cresceu = false;
-    for (const pasta of pastas)
-      if (pasta.parentId && ids.includes(pasta.parentId) && !ids.includes(pasta.id)) {
-        ids.push(pasta.id);
-        cresceu = true;
-      }
-  }
-  return ids;
-}
-
-/**
- * O campo de renomear no lugar do nome. Um só para as três linhas: é o mesmo
- * campo, e três cópias seriam três jeitos de ele se comportar.
- */
-function CampoDeNome({
-  valor,
-  rotulo,
-  onConfirmar,
-  onCancelar,
-}: {
-  valor: string;
-  rotulo: string;
-  onConfirmar: (valor: string) => void;
-  onCancelar: () => void;
-}) {
-  return (
-    <input
-      autoFocus
-      defaultValue={valor}
-      className="bg-background h-6 min-w-0 flex-1 rounded px-1.5 text-sm outline-none"
-      aria-label={rotulo}
-      onPointerDown={(event) => event.stopPropagation()}
-      onFocus={(event) => event.currentTarget.select()}
-      onBlur={(event) => onConfirmar(event.currentTarget.value)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") onConfirmar(event.currentTarget.value);
-        if (event.key === "Escape") onCancelar();
-        event.stopPropagation();
-      }}
-    />
-  );
-}
-
-/**
- * Os três pontos de uma linha, com o mesmo menu do botão direito. Escondidos
- * até o ponteiro chegar ou o foco entrar, como no acervo e nas camadas: três
- * pontos em cada linha viram ruído. `stopPropagation` porque a linha começa
- * arrasto no `pointerdown`.
- */
-function TresPontos({
-  rotulo,
-  aoFechar,
-  itens,
-}: {
-  rotulo: string;
-  aoFechar: (aberto: boolean) => void;
-  itens: (kit: Kit) => ReactNode;
-}) {
-  return (
-    <DropdownMenu onOpenChangeComplete={aoFechar}>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Opções de ${rotulo}`}
-            onPointerDown={(event) => event.stopPropagation()}
-            className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100"
-          >
-            <MoreVertical />
-          </Button>
-        }
-      />
-      <DropdownMenuContent align="end" className="w-52">
-        {itens(KIT_TRES_PONTOS)}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-/** Os itens "Mover para" de um menu: raiz e cada pasta permitida. */
-function ItensDeMover({
-  kit: { Item, Separator, Sub, SubTrigger, SubContent },
-  atual,
-  destinos,
-  onMover,
-}: {
-  kit: Kit;
-  atual: string | undefined;
-  destinos: Pasta[];
-  onMover: (pastaId: string | undefined) => void;
-}) {
-  if (destinos.length === 0 && !atual) return null;
-  return (
-    <Sub>
-      <SubTrigger>
-        <FolderClosed />
-        Mover para
-      </SubTrigger>
-      <SubContent className="w-48">
-        <Item disabled={!atual} onClick={() => onMover(undefined)}>
-          Raiz
-        </Item>
-        {destinos.length > 0 ? <Separator /> : null}
-        {destinos.map((pasta) => (
-          <Item
-            key={pasta.id}
-            disabled={pasta.id === atual}
-            onClick={() => onMover(pasta.id)}
-          >
-            <span className="truncate">{pasta.nome}</span>
-          </Item>
-        ))}
-      </SubContent>
-    </Sub>
-  );
-}
-
-// --- pasta ------------------------------------------------------------------
-
-function PastaRow({
-  pasta,
-  pastas,
-  depth,
-  total,
-  dropTarget,
-  onReorderStart,
-  onCriarNota,
-  onCriarQuadro,
-  aberta = false,
-}: {
-  pasta: Pasta;
-  pastas: Pasta[];
-  depth: number;
-  total: number;
-  dropTarget: boolean;
-  /**
-   * Mostrada aberta, recolhida ou não na árvore: é a busca, que abre as pastas
-   * de quem achou. A seta fica desligada ali -- fechar uma pasta de achados
-   * mexeria na árvore que não está na tela.
-   */
-  aberta?: boolean;
-  onReorderStart: (event: ReactPointerEvent, id: string, limiar?: number) => void;
-  onCriarNota: () => void;
-  onCriarQuadro: () => void;
-}) {
-  const [renomeando, setRenomeando] = useState(false);
-  const renomear = useRenomearPeloMenu(() => setRenomeando(true));
-
-  // Destinos válidos: nem ela, nem descendente dela.
-  const proibidos = new Set(descendentes(pastas, pasta.id));
-  const destinos = pastas.filter((outra) => !proibidos.has(outra.id));
-
-  const store = () => useSceneStore.getState();
-  const alternar = () => store().atualizarPasta(pasta.id, { recolhido: !pasta.recolhido });
-
-  const itens = (kit: Kit) => {
-    const { Item, Separator } = kit;
-    return (
-      <>
-        <Item onClick={onCriarQuadro}>
-          <Presentation />
-          Novo quadro aqui
-        </Item>
-        <Item onClick={onCriarNota}>
-          <FilePlus />
-          Nova nota aqui
-        </Item>
-        <Item
-          onClick={() => {
-            store().atualizarPasta(pasta.id, { recolhido: false });
-            store().criarPasta(`Pasta ${pastas.length + 1}`, pasta.id);
-          }}
-        >
-          <FolderPlus />
-          Nova subpasta
-        </Item>
-        <Separator />
-        <Item onClick={renomear.pedir}>
-          <TextCursorInput />
-          Renomear
-        </Item>
-        <ItensDeMover
-          kit={kit}
-          atual={pasta.parentId}
-          destinos={destinos}
-          onMover={(destino) => store().moverPasta(pasta.id, destino)}
-        />
-        <Separator />
-        {/* Desfazer solta o que há dentro um nível acima. Nunca apaga quadro
-            nem nota: é organização, não remoção. */}
-        <Item onClick={() => store().removerPasta(pasta.id)}>
-          <Ungroup />
-          Desfazer pasta
-        </Item>
-      </>
-    );
-  };
-
-  return (
-    <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
-      <ContextMenuTrigger
-        render={
-          <li
-            className={cn(
-              "group hover:bg-accent/50 flex cursor-grab touch-none items-center gap-1 rounded-md p-1",
-              dropTarget && "ring-primary ring-1",
-            )}
-            style={{ paddingLeft: 4 + depth * RECUO_PX }}
-            data-pasta-arquivos=""
-            data-pasta-id={pasta.id}
-            onPointerDown={(event) =>
-              onReorderStart(event, `${PREFIXO_PASTA}${pasta.id}`, LIMIAR_ARRASTO_PX)
-            }
-          />
-        }
-      >
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={pasta.recolhido ? `Abrir ${pasta.nome}` : `Fechar ${pasta.nome}`}
-          aria-expanded={aberta || !pasta.recolhido}
-          disabled={aberta}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={alternar}
-        >
-          {pasta.recolhido && !aberta ? <ChevronRight /> : <ChevronDown />}
-        </Button>
-        <FolderClosed className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-        {renomeando ? (
-          <CampoDeNome
-            valor={pasta.nome}
-            rotulo="Nome da pasta"
-            onConfirmar={(nome) => {
-              const limpo = nome.trim();
-              if (limpo && limpo !== pasta.nome)
-                store().atualizarPasta(pasta.id, { nome: limpo });
-              setRenomeando(false);
-            }}
-            onCancelar={() => setRenomeando(false)}
-          />
-        ) : (
-          <>
-            <button
-              type="button"
-              className="min-w-0 flex-1 truncate text-left text-sm font-medium"
-              onClick={alternar}
-              onDoubleClick={() => setRenomeando(true)}
-              onKeyDown={aoApertarF2(() => setRenomeando(true))}
-            >
-              {pasta.nome}
-            </button>
-            <span className="text-muted-foreground text-[10px] tabular-nums">{total}</span>
-          </>
-        )}
-        <TresPontos rotulo={pasta.nome} aoFechar={renomear.aoFechar} itens={itens} />
-      </ContextMenuTrigger>
-
-      <ContextMenuContent className="w-52">{itens(KIT_CONTEXTO)}</ContextMenuContent>
-    </ContextMenu>
+  return achatarArvore(itens, pastas, (item) =>
+    item.tipo === "cena" ? item.scene.pastaId : item.nota.pastaId,
+  ).map((linha) =>
+    linha.tipo === "pasta" ? linha : { ...linha.item, depth: linha.depth },
   );
 }
 
@@ -1065,9 +775,6 @@ function QuadroRow({
 }
 
 // --- nota -------------------------------------------------------------------
-
-/** A MESMA lista vazia em todo render: um `[]` novo anularia o `memo` da linha. */
-const SEM_PASTAS: Pasta[] = [];
 
 /**
  * `memo` porque a lista re-renderiza a cada commit do board -- e com o quadro
