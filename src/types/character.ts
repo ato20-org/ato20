@@ -152,6 +152,14 @@ export type Medidor = {
    * `personagens.json` em lugar nenhum. Ver `svg-modelo.ts`.
    */
   estiloExtensao?: string;
+  /**
+   * O nome na linha acima da forma, por escolha do mestre. AUSENTE segue o
+   * estilo -- o de fábrica mostra, o de plugin diz no `rotulo` dele --, e
+   * presente vence o estilo. Ver `legendaDoMedidor`.
+   */
+  mostrarNome?: boolean;
+  /** O valor (`12/12`, `70%`) na mesma linha. Mesma regra do `mostrarNome`. */
+  mostrarValor?: boolean;
 };
 
 /** O que se troca num medidor. Ausente não mexe. Espelha `PatchMedidor`. */
@@ -164,6 +172,8 @@ export type PatchMedidor = {
   escondido?: boolean;
   /** `""` tira o estilo de plugin e volta ao de fábrica. */
   estiloExtensao?: string;
+  mostrarNome?: boolean;
+  mostrarValor?: boolean;
 };
 
 /**
@@ -200,6 +210,14 @@ export type ModeloDeMedidor = {
   estilo: EstiloMedidor;
   maximo: number;
   escondido: boolean;
+  /**
+   * O estilo de plugin que o medidor materializado já traz. Ver
+   * `Medidor.estiloExtensao`: o `estilo` acima segue como reserva.
+   */
+  estiloExtensao?: string;
+  /** A legenda que o medidor materializado já traz. Ver `Medidor.mostrarNome`. */
+  mostrarNome?: boolean;
+  mostrarValor?: boolean;
 };
 
 /** O que se troca num modelo. Ausente não mexe. Espelha `PatchModelo`. */
@@ -209,6 +227,10 @@ export type PatchModelo = {
   estilo?: EstiloMedidor;
   maximo?: number;
   escondido?: boolean;
+  /** `""` volta ao de fábrica. */
+  estiloExtensao?: string;
+  mostrarNome?: boolean;
+  mostrarValor?: boolean;
 };
 
 /** Quantos modelos cabem numa campanha. Espelha `MAX_MODELOS`. */

@@ -163,6 +163,16 @@ pub struct Medidor {
     /// desconhecido ali derrubaria o indice inteiro. Aqui e so texto.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub estilo_extensao: Option<String>,
+    /// O nome na linha acima da forma, por escolha do mestre.
+    ///
+    /// AUSENTE segue o estilo -- o de fabrica mostra, o de plugin diz no
+    /// `rotulo` dele. Presente vence o estilo: e o mestre quem sabe que a
+    /// moldura do coracao ja diz "vida", ou que a mesa nao deve ler o numero.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mostrar_nome: Option<bool>,
+    /// O valor (`12/12`, `70%`) na mesma linha. Mesma regra do `mostrar_nome`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mostrar_valor: Option<bool>,
 }
 
 /// Como a mesa le o medidor.
@@ -799,6 +809,8 @@ pub fn criar_medidor(
         maximo,
         escondido: false,
         estilo_extensao: None,
+        mostrar_nome: None,
+        mostrar_valor: None,
     };
     ajustar(&mut medidor);
 
@@ -824,6 +836,8 @@ pub struct PatchMedidor {
     pub escondido: Option<bool>,
     /// `Some("")` tira o estilo de plugin e volta ao de fabrica.
     pub estilo_extensao: Option<String>,
+    pub mostrar_nome: Option<bool>,
+    pub mostrar_valor: Option<bool>,
 }
 
 /// O teto da chave de um estilo de plugin. Dois slugs e uma barra.
@@ -833,7 +847,7 @@ const MAX_ESTILO_EXTENSAO: usize = 130;
 ///
 /// A mesma regra do id de extensao, porque a chave vira indice num mapa que a
 /// TV recebe pela rede e nome de arquivo do lado do plugin.
-fn estilo_extensao_valido(chave: &str) -> bool {
+pub(crate) fn estilo_extensao_valido(chave: &str) -> bool {
     if chave.len() > MAX_ESTILO_EXTENSAO {
         return false;
     }
@@ -907,6 +921,12 @@ fn aplicar_patch(medidor: &mut Medidor, patch: PatchMedidor) {
         } else if estilo_extensao_valido(&chave) {
             medidor.estilo_extensao = Some(chave);
         }
+    }
+    if let Some(mostrar) = patch.mostrar_nome {
+        medidor.mostrar_nome = Some(mostrar);
+    }
+    if let Some(mostrar) = patch.mostrar_valor {
+        medidor.mostrar_valor = Some(mostrar);
     }
 
     ajustar(medidor);
@@ -2217,6 +2237,50 @@ mod tests {
         assert_eq!(
             ordem.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
             vec![c.id.as_str(), a.id.as_str(), b.id.as_str()]
+        );
+    }
+
+    #[test]
+    fn legenda_nasce_seguindo_o_estilo_e_o_mestre_a_escolhe() {
+        let (_tmp, vault) = vault();
+        let (id, m) = com_medidor(&vault, 12);
+
+        // Ausente no arquivo: a ficha antiga e a nova leem igual.
+        assert_eq!((m.mostrar_nome, m.mostrar_valor), (None, None));
+        let cru = std::fs::read_to_string(index_path(&vault)).unwrap();
+        assert!(!cru.contains("mostrarNome") && !cru.contains("mostrarValor"));
+
+        let m = editar_medidor(
+            &vault,
+            &id,
+            &m.id,
+            PatchMedidor {
+                mostrar_valor: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!((m.mostrar_nome, m.mostrar_valor), (None, Some(false)));
+
+        // Outro patch nao mexe no que o mestre escolheu.
+        let m = editar_medidor(
+            &vault,
+            &id,
+            &m.id,
+            PatchMedidor {
+                mostrar_nome: Some(false),
+                atual: Some(3),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            (m.mostrar_nome, m.mostrar_valor),
+            (Some(false), Some(false))
+        );
+        assert_eq!(
+            load(&vault).unwrap()[0].medidores[0].mostrar_nome,
+            Some(false)
         );
     }
 
