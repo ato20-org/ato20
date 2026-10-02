@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { characterLinks } from "@/lib/vault/characters";
+import { enderecoDosFluxos } from "@/lib/sync/fluxos-do-mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { RolagemDaMesa } from "@/types/dado";
 
@@ -91,7 +92,7 @@ export function useRolagensDaMesa(): void {
       ({ url }) => {
         if (cancelado) return;
 
-        source = new EventSource(`${url}/sala/rolagens`);
+        source = new EventSource(`${enderecoDosFluxos(url)}/sala/rolagens`);
 
         source.onmessage = (event) => {
           try {
