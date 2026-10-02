@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CircleDot,
   Crosshair,
@@ -104,18 +104,67 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
   const segue = Boolean(selecionada?.alvoIds);
   const transmissao = transmissaoDaCamera(scene, selecionada?.id, cenaNoAr);
 
+  // A rolagem é muda: a barra fica escondida de propósito, e sem ela nada diz
+  // que há câmera fora da vista. O desbotar nas pontas é esse aviso -- e só do
+  // lado que ainda esconde algo, para não apagar a primeira câmera quando ela
+  // está inteira à mostra. Medido no scroll e a cada câmera que entra ou sai.
+  const faixaRef = useRef<HTMLDivElement>(null);
+  const [borda, setBorda] = useState({ inicio: false, fim: false });
+
+  useEffect(() => {
+    const faixa = faixaRef.current;
+    if (!faixa) return;
+    const medir = () => {
+      const folga = faixa.scrollWidth - faixa.clientWidth - faixa.scrollLeft;
+      setBorda({ inicio: faixa.scrollLeft > 1, fim: folga > 1 });
+    };
+    medir();
+    faixa.addEventListener("scroll", medir, { passive: true });
+    const observador = new ResizeObserver(medir);
+    observador.observe(faixa);
+    return () => {
+      faixa.removeEventListener("scroll", medir);
+      observador.disconnect();
+    };
+  }, [cameras.length]);
+
+  // `#000` é só "opaco aqui": a cor não conta, a máscara lê o canal alfa, e o
+  // transparente da ponta revela o fundo da pílula por baixo do chip.
+  const recuo = "1.5rem";
+  const mascara =
+    borda.inicio && borda.fim
+      ? `linear-gradient(to right, transparent, #000 ${recuo}, #000 calc(100% - ${recuo}), transparent)`
+      : borda.inicio
+        ? `linear-gradient(to right, transparent, #000 ${recuo})`
+        : borda.fim
+          ? `linear-gradient(to right, #000 calc(100% - ${recuo}), transparent)`
+          : undefined;
+
   return (
     <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-      {cameras.map((camera, index) => (
-        <Chip
-          key={camera.id}
-          sceneId={scene.id}
-          camera={camera}
-          posicao={index + 1}
-          selecionada={camera.id === selecionadaId}
-          transmissao={transmissaoDaCamera(scene, camera.id, cenaNoAr)}
-        />
-      ))}
+      {/* A faixa das câmeras rola dentro de uma largura fixa; o novo, o
+          transmitir e o menu ficam à vista ao lado. Sem o teto, a pílula
+          crescia com cada câmera até atravessar a tela. Agora ela para, e as
+          que não cabem esperam na rolagem -- o número no chip é a tecla, e
+          Shift+n chega a elas sem precisar vê-las. */}
+      <div
+        ref={faixaRef}
+        className="rolagem-limpa flex max-w-xl items-center gap-0.5 overflow-x-auto"
+        style={
+          mascara ? { maskImage: mascara, WebkitMaskImage: mascara } : undefined
+        }
+      >
+        {cameras.map((camera, index) => (
+          <Chip
+            key={camera.id}
+            sceneId={scene.id}
+            camera={camera}
+            posicao={index + 1}
+            selecionada={camera.id === selecionadaId}
+            transmissao={transmissaoDaCamera(scene, camera.id, cenaNoAr)}
+          />
+        ))}
+      </div>
 
       <Tooltip>
         <TooltipTrigger
@@ -123,6 +172,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
             <Button
               variant="ghost"
               size="icon-sm"
+              className="shrink-0"
               aria-label="Nova câmera"
               onClick={() => novaCamera()}
             >
@@ -138,7 +188,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
         </TooltipContent>
       </Tooltip>
 
-      <span className="bg-border mx-0.5 h-5 w-px" />
+      <span className="bg-border mx-0.5 h-5 w-px shrink-0" />
 
       {/* Transmitir fica à vista, e é o único que fica: é o toque que muda o
           que a mesa vê, e o mestre precisa achá-lo sem abrir nada. Vermelho
@@ -151,6 +201,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
               variant={transmissao === "no-ar" ? "destructive" : "ghost"}
               size="icon-sm"
               className={cn(
+                "shrink-0",
                 transmissao === "preparada" &&
                   "bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 hover:text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 dark:hover:bg-amber-500/30 dark:hover:text-amber-400",
               )}
@@ -192,6 +243,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
             <Button
               variant="ghost"
               size="icon-sm"
+              className="shrink-0"
               aria-label="Mais comandos da câmera"
               disabled={!selecionada}
             >
@@ -330,7 +382,7 @@ function Chip({
           lerem como uma peça só. */}
       <ContextMenuTrigger
         className={cn(
-          "hover:bg-accent flex h-7 max-w-36 items-center rounded-md text-xs",
+          "hover:bg-accent flex h-7 max-w-36 shrink-0 items-center rounded-md text-xs",
           selecionada &&
             "bg-primary text-primary-foreground hover:bg-primary/90",
         )}
