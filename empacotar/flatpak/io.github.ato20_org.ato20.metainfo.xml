@@ -100,6 +100,63 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.1.0" date="2026-10-02">
+      <description>
+        <p>
+          ATO20 1.1 brings a side-on 2.5D map view in beta, folders and search
+          to Maps, Backgrounds, Characters and Portraits, cropping for portraits
+          and miniatures, opening a sheet with a double click, and image meters
+          for plugins. Fixes close the list.
+        </p>
+        <ul>
+          <li>
+            Side-on map view (2.5D), in beta: the table seen at an angle, with
+            the walls standing up. In the GM window, the 2.5D button next to the
+            map settings shows the table side-on: characters stand and walls
+            rise. For the spectator window to see it that way, create a tripod
+            in the Tripods bar and broadcast it with T. In 2.5D you can select,
+            drag and lay characters down; the map, lights and walls are still
+            edited in 2D. Shift+L steps into the tripod and moves it like in a
+            game.
+          </li>
+          <li>
+            Maps, Backgrounds, Characters and Portraits have folders and search.
+            Drag a map or a character into a folder, or use "Move to" in the
+            row menu. Players and NPCs each have their own tree, and loose
+            portraits show up under the character's folder. Search finds by name
+            and by folder, and shows the path of each result. The Library also
+            has search.
+          </li>
+          <li>
+            Crop the portrait and the miniature when attaching them, as a square
+            or a circle. Drag to frame and use the wheel to zoom in, up to 8x.
+            The miniature opens as a circle, the round token of the table. "Use
+            whole image" keeps the image as it came, for a full-body figure.
+          </li>
+          <li>
+            Double-clicking a character on the map opens their sheet. It also
+            works on a locked token, and the token stays in place.
+          </li>
+          <li>
+            Plugins can draw meters with images: a bar, dots or a sequence of
+            frames, with the value written inside, using only images and a
+            configuration file in the plugin folder. In the meter, the palette
+            puts the built-in shapes and the plugin ones together, and the name
+            and the value can be shown or hidden.
+          </li>
+          <li>
+            Fixed: with the Table tab open, the table stopped following the GM.
+            The spectator window, the phone and the tab itself froze on a frame
+            from minutes before, with no warning.
+          </li>
+          <li>
+            Fixed: with many cameras, the camera bar ran across the screen. It
+            now stops growing and scrolls, with faded edges when a camera is
+            out of view.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-10-01">
       <description>
         <p>

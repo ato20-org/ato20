@@ -56,6 +56,56 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.1.0",
+    data: "2026-10-02",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo:
+          "Mapa de esguelha (2.5D), em beta: a mesa vista de lado, com as paredes em pé",
+        detalhe:
+          "No Mestre, o botão 2.5D ao lado das configurações do mapa mostra a mesa de esguelha: os personagens ficam em pé e as paredes sobem. Para a janela do espectador ver assim, crie um tripé na barra Tripés e transmita com T. No 2.5D dá para marcar, arrastar e deitar os personagens; mapa, luz e paredes continuam se editando no 2D. Shift+L entra no tripé e anda com ele, como num jogo.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Mapas, Fundos, Personagens e Retratos ganharam pastas e busca",
+        detalhe:
+          "Arraste um mapa ou um personagem para dentro de uma pasta, ou use \"Mover para\" no menu da linha. Players e NPCs têm cada um a sua árvore, e os retratos soltos aparecem sob a pasta do personagem. A busca acha pelo nome e pela pasta, e mostra o caminho de cada achado. A Biblioteca também ganhou busca.",
+      },
+      {
+        tipo: "novidade",
+        titulo:
+          "Recorte o retrato e a miniatura ao anexar, em quadrado ou em círculo",
+        detalhe:
+          "Arraste para enquadrar e use a roda para aproximar, até 8 vezes. A miniatura abre no círculo, que é o token redondo da mesa. \"Usar inteira\" grava a imagem como ela veio, para a figura de corpo inteiro.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Duplo clique num personagem no mapa abre a ficha dele",
+        detalhe:
+          "Vale também para o token travado, e o token não sai do lugar junto.",
+      },
+      {
+        tipo: "novidade",
+        titulo: "Plugins podem desenhar medidores com imagens",
+        detalhe:
+          "Barra, pontos ou uma sequência de quadros, com o valor escrito dentro, só com imagens e um arquivo de configuração na pasta do plugin. No medidor, a paleta junta as formas de fábrica e as dos plugins, e dá para mostrar ou esconder o nome e o valor.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "Com a aba Mesa aberta, a mesa parava de acompanhar o Mestre",
+        detalhe:
+          "A janela do espectador, o celular e a própria aba ficavam presos num quadro de minutos antes, sem aviso. Agora seguem a cena e a câmera como antes.",
+      },
+      {
+        tipo: "correcao",
+        titulo: "Com muitas câmeras, a barra de câmeras atravessava a tela",
+        detalhe:
+          "Agora ela para de crescer e rola, e as pontas esmaecem quando há câmera fora da vista.",
+      },
+    ],
+  },
+  {
     versao: "1.0.0",
     data: "2026-10-01",
     mudancas: [
