@@ -23,6 +23,15 @@ type EsguelhaStore = {
    */
   olhoAgora: (() => Tripe | null) | null;
   registrarOlho: (olho: (() => Tripe | null) | null) => void;
+  /**
+   * O tripé por cujo olho o mestre está olhando agora, ou `null`.
+   *
+   * É o "olhar pela câmera": o 2.5D do mestre mostra exatamente o que a mesa
+   * veria por aquele tripé. Só prévia -- a navegação fica parada, e o ajuste
+   * continua sendo pelo gizmo e pelo painel.
+   */
+  olhandoPor: string | null;
+  olharPor: (tripeId: string | null) => void;
 };
 
 /**
@@ -44,4 +53,6 @@ export const useEsguelhaStore = create<EsguelhaStore>((set) => ({
   guardarOlhar: (olhar) => set({ olhar }),
   olhoAgora: null,
   registrarOlho: (olhoAgora) => set({ olhoAgora }),
+  olhandoPor: null,
+  olharPor: (olhandoPor) => set({ olhandoPor }),
 }));

@@ -70,6 +70,7 @@ export function useCameraOrbital({
   mapa,
   onSair,
   onAssentar,
+  travado = false,
 }: {
   /** A câmera do primeiro quadro, já sabendo o tamanho da tela. */
   inicial: (tela: Tela) => CameraOrbital;
@@ -100,6 +101,12 @@ export function useCameraOrbital({
    * envio ao disco por quadro.
    */
   onAssentar?: (camera: CameraOrbital) => void;
+  /**
+   * A navegação parada: nem arrasto, nem roda, nem giro. É o "olhar pela
+   * câmera" do Mestre, em que a tela mostra um tripé e mexer nela seria mexer
+   * num olhar que não está à vista.
+   */
+  travado?: boolean;
 }): {
   /** O `div` do tamanho da tela. */
   mesa: RefObject<HTMLDivElement | null>;
@@ -153,6 +160,7 @@ export function useCameraOrbital({
     mapa,
     onSair,
     onAssentar,
+    travado,
   });
   useEffect(() => {
     agora.current = {
@@ -163,6 +171,7 @@ export function useCameraOrbital({
       mapa,
       onSair,
       onAssentar,
+      travado,
     };
   });
 
@@ -344,6 +353,7 @@ export function useCameraOrbital({
     }
 
     function desceu(evento: PointerEvent) {
+      if (agora.current.travado) return;
       if (evento.button === 2) {
         evento.preventDefault();
         evento.stopPropagation();
@@ -428,6 +438,7 @@ export function useCameraOrbital({
     function rodou(evento: WheelEvent) {
       evento.preventDefault();
       evento.stopPropagation();
+      if (agora.current.travado) return;
       if (!camera.current || !tela.current) return;
       const presa = limites();
       if (!presa) return;
