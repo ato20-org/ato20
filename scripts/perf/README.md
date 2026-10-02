@@ -563,6 +563,33 @@ na nota aberta: um documento por cartão da folha seria o custo inteiro. Nesta
 rodada o navegador aberto ao lado comia um terço da CPU, e células das DUAS
 variantes voltaram "sem resultado"; os números são das que fecharam.
 
+## O medidor em camadas de imagem (02/10/2026)
+
+Um estilo de plugin pode desenhar o medidor com imagens: moldura por cima,
+conteúdo recortado pela fração embaixo, máscara pelo alfa (`FormaEmCamadas`).
+A pergunta era se a imagem, e em especial o GIF, custa quadro no palco em
+`zoom`. `?medidores=K&estilo=fabrica|camadas|animado` dá aos primeiros K tokens
+uma ficha com dois medidores e liga `infoDosTokens`; as imagens são as de
+`scripts/perf/medidor/`, servidas em `/plugin/perf/*` como o daemon serve as de
+um plugin. `mestre-camera`, 40 tokens, `--repetir 3`:
+
+| medidores | fps | perdidos |
+|---|---|---|
+| nenhum | 59,7 | 1,2% |
+| 20 tokens, fábrica | 38,4 | 45,2% |
+| 20 tokens, camadas em PNG | 40,9 | 40% |
+| 20 tokens, camadas com GIF | 39,7 | 40,4% |
+
+**Medido em Xvfb**, sem GPU (`libEGL: DRI3 error`): a rasterização é toda em
+software, e o número absoluto não é o da máquina do mestre. A comparação entre
+as linhas vale, e diz duas coisas. A camada custa o mesmo que a barra de
+fábrica -- um pouco menos, porque não leva o `drop-shadow` que a de fábrica
+leva sobre o mapa (`relevo` em `DesenhoDoMedidor`), e que sobre um GIF seria
+refeito a cada quadro da animação. E o GIF não se separa do PNG acima do ruído.
+O que pesa é ligar nome e medidores em vinte tokens com o palco andando, e isso
+já era assim antes das camadas: é a primeira coisa a medir na webview de
+verdade se a reclamação vier.
+
 ## Como medir: o passo a passo
 
 ### O cenário certo
@@ -755,6 +782,10 @@ pnpm perf:webview -- --cenario arrasto,mestre-camera --n 40 --paredes 8 \
 # a luz que se mexe: o mesmo, com todas as luzes tremulando
 pnpm perf:webview -- --cenario arrasto,mestre-camera,amostras --n 40 \
   --paredes 8 --luzes 3 --carregadas 1 --efeito fogo --repetir 2
+
+# o medidor de plugin em imagem: fábrica contra camadas, parado e animado
+pnpm perf:webview -- --cenario mestre-camera --n 40 --medidores 20 \
+  --estilo fabrica,camadas,animado --repetir 3
 
 # o que muda por quadro (para achar, não para publicar o número)
 pnpm perf:webview -- --cenario bancada --sonda
