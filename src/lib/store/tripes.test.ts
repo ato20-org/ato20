@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { cameraNaPosicao } from "@/lib/mestre/camera-actions";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { sceneForTable } from "@/lib/sync/for-table";
 import { createScene, type Scene, type Tripe } from "@/types/scene";
@@ -37,7 +39,12 @@ function cena(): Scene {
 
 afterEach(() => {
   useSceneStore.setState({ board: null, status: "idle" } as never);
-  useCameraLockStore.setState({ selecionadaId: null, espelhoMestre: false });
+  useCameraLockStore.setState({
+    selecionadaId: null,
+    doOutroModo: null,
+    espelhoMestre: false,
+  });
+  useEsguelhaStore.setState({ ligada: false });
 });
 
 describe("tripés no ar", () => {
@@ -95,16 +102,73 @@ describe("tripés no ar", () => {
     expect("tripeNoAr" in cena()).toBe(false);
   });
 
-  it("um tripé selecionado continua selecionado quando a cena reabre", () => {
+  it("no 2.5D, um tripé selecionado continua selecionado quando a cena reabre", () => {
     montar();
     const id = useSceneStore
       .getState()
       .salvarTripe("c1", { ...OLHO, nome: "Tripé 1" });
+    useEsguelhaStore.setState({ ligada: true });
     useCameraLockStore.setState({ selecionadaId: id });
 
     useCameraLockStore.getState().garantirCameraInicial(cena());
 
     expect(useCameraLockStore.getState().selecionadaId).toBe(id);
+  });
+});
+
+describe("cada modo, a sua lista de câmeras", () => {
+  it("o Shift+n conta só a lista do modo", () => {
+    montar();
+    const tripe = useSceneStore
+      .getState()
+      .salvarTripe("c1", { ...OLHO, nome: "Tripé 1" });
+
+    expect(cameraNaPosicao(1)?.id).toBe("cam1");
+    expect(cameraNaPosicao(2)).toBeUndefined();
+
+    useEsguelhaStore.setState({ ligada: true });
+    expect(cameraNaPosicao(1)?.id).toBe(tripe);
+  });
+
+  it("ir ao 2.5D seleciona um tripé, e voltar devolve a câmera que se preparava", () => {
+    montar({
+      cameras: [
+        { id: "cam1", nome: "Câmera 1", viewport: RECORTE },
+        { id: "cam2", nome: "Câmera 2", viewport: RECORTE },
+      ],
+    });
+    const tripe = useSceneStore
+      .getState()
+      .salvarTripe("c1", { ...OLHO, nome: "Tripé 1" });
+    useCameraLockStore.setState({ selecionadaId: "cam2" });
+
+    useEsguelhaStore.getState().alternar();
+    expect(useCameraLockStore.getState().selecionadaId).toBe(tripe);
+
+    useEsguelhaStore.getState().alternar();
+    expect(useCameraLockStore.getState().selecionadaId).toBe("cam2");
+  });
+
+  it("na troca, a câmera do ar daquela lista vem antes da primeira", () => {
+    montar();
+    const store = useSceneStore.getState();
+    store.salvarTripe("c1", { ...OLHO, nome: "Tripé 1" });
+    const segundo = store.salvarTripe("c1", { ...OLHO, nome: "Tripé 2" });
+    store.transmitirCamera("c1", segundo);
+    useCameraLockStore.setState({ selecionadaId: "cam1" });
+
+    useEsguelhaStore.getState().alternar();
+
+    expect(useCameraLockStore.getState().selecionadaId).toBe(segundo);
+  });
+
+  it("um modo sem câmera nenhuma deixa a seleção onde estava", () => {
+    montar();
+    useCameraLockStore.setState({ selecionadaId: "cam1" });
+
+    useEsguelhaStore.getState().alternar();
+
+    expect(useCameraLockStore.getState().selecionadaId).toBe("cam1");
   });
 });
 

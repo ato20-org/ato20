@@ -20,6 +20,7 @@ import {
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import {
+  camerasDoModo,
   temCamera,
   type CameraSalva,
   type CameraTripe,
@@ -83,10 +84,15 @@ function lerCena(): Scene | null {
   return scene && temCamera(scene) ? scene : null;
 }
 
-/** A câmera que o mestre está editando, ou nada antes da cena abrir. */
+/**
+ * A câmera que o mestre está editando, ou nada antes da cena abrir. Só no 2D:
+ * no 2.5D o recorte não está à vista, e a seta ou o T mexeriam numa câmera que
+ * a barra não mostra. Ver `camerasDoModo`.
+ */
 export function cameraSelecionada(): CameraSalva | undefined {
   const scene = lerCena();
   const id = useCameraLockStore.getState().selecionadaId;
+  if (useEsguelhaStore.getState().ligada) return undefined;
 
   return scene?.cameras?.find((camera) => camera.id === id);
 }
@@ -94,13 +100,14 @@ export function cameraSelecionada(): CameraSalva | undefined {
 /**
  * O tripé selecionado, quando a seleção é um tripé. Ver `Scene.tripes`.
  *
- * A seleção é UMA para as duas espécies de câmera: o chip aceso pode ser de um
- * recorte ou de um tripé. As ações de recorte partem de `cameraSelecionada` e
- * ficam mudas com um tripé escolhido; as de tripé partem daqui.
+ * A seleção é UMA para as duas espécies de câmera, mas cada modo só vê a
+ * sua: o tripé só conta no 2.5D, como o recorte só no 2D. As ações de recorte
+ * partem de `cameraSelecionada`; as de tripé partem daqui.
  */
 export function tripeSelecionado(): CameraTripe | undefined {
   const scene = lerCena();
   const id = useCameraLockStore.getState().selecionadaId;
+  if (!useEsguelhaStore.getState().ligada) return undefined;
 
   return scene?.tripes?.find((tripe) => tripe.id === id);
 }
@@ -393,12 +400,13 @@ function criarCamera(
 /**
  * A n-ésima câmera, para os atalhos `Shift+1..9`. Posição na lista, e não um
  * número guardado: a ordem que o mestre vê nos chips é a ordem que a tecla
- * usa, sem uma segunda numeração para divergir. Os tripés vêm depois dos
- * recortes, como nos chips.
+ * usa, sem uma segunda numeração para divergir. A lista é a do modo -- os
+ * recortes no 2D, os tripés no 2.5D --, como nos chips.
  */
 export function cameraNaPosicao(posicao: number): { id: string } | undefined {
   const scene = lerCena();
-  return [...(scene?.cameras ?? []), ...(scene?.tripes ?? [])][posicao - 1];
+  if (!scene) return undefined;
+  return camerasDoModo(scene, useEsguelhaStore.getState().ligada)[posicao - 1];
 }
 
 /**

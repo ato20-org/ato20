@@ -747,7 +747,9 @@ function StageBoundary({
           2D que o mestre muitas vezes troca o que a mesa vê enquanto edita.
           O zoom é do palco de prumo, e some no 2.5D. */}
       {scene && !notaAberta ? (
-        <div className="absolute right-3 bottom-3 flex items-center gap-2">
+        // `items-end`: com as duas barras de câmera empilhadas, o zoom fica
+        // na linha da de baixo, que é a do modo.
+        <div className="absolute right-3 bottom-3 flex items-end gap-2">
           {/* Os chips de câmera só no MAPA: o quadro vai inteiro para a mesa,
               e enquadrar um pedaço dele é o contrário do que ele serve para
               fazer. Os controles de zoom ficam nos dois -- eles são do palco

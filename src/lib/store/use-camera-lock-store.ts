@@ -9,10 +9,12 @@ import {
   proporcaoDe,
   viewportQueCabe,
 } from "@/lib/geometry/viewport";
+import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import {
+  camerasDoModo,
   temCamera,
   type CameraSalva,
   type Scene,
@@ -36,6 +38,13 @@ type CameraLockStore = {
    */
   selecionadaId: string | null;
   /**
+   * A selecionada do OUTRO modo, guardada na troca 2D/2.5D para voltar a ela.
+   * Cada modo só vê a sua espécie de câmera (ver `camerasDoModo`), e a seleção
+   * é uma só: sem isto, ir ao 2.5D e voltar perdia a câmera que o mestre
+   * preparava no 2D.
+   */
+  doOutroModo: string | null;
+  /**
    * Espelho: cada mudança do palco do mestre vira o recorte da selecionada.
    * O que ele vê, a câmera vê -- e a mesa, se ela estiver no ar.
    */
@@ -48,10 +57,10 @@ type CameraLockStore = {
 
   selecionar: (cameraId: string) => void;
   /**
-   * Garante que a selecionada exista na cena, e migra a cena antiga que tinha
-   * recorte sem câmeras. Chamado pelo palco do Mestre a cada cena aberta.
-   * Cena nova fica SEM câmera: a mesa vê o mapa inteiro até o mestre criar
-   * uma, e criar já transmite.
+   * Garante que a selecionada exista na cena e seja do modo, e migra a cena
+   * antiga que tinha recorte sem câmeras. Chamado pelo palco do Mestre a cada
+   * cena aberta e na troca 2D/2.5D. Cena nova fica SEM câmera: a mesa vê o
+   * mapa inteiro até o mestre criar uma, e criar já transmite.
    */
   garantirCameraInicial: (scene: Scene) => void;
   /** Prende a selecionada no que está selecionado agora. Sem seleção, nada. */
@@ -101,6 +110,7 @@ function selecionadaDe(scene: Scene | null, id: string | null) {
  */
 export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
   selecionadaId: null,
+  doOutroModo: null,
   espelhoMestre: false,
   fantasmasVisiveis: true,
 
@@ -134,10 +144,13 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
       cameras = selectEditingScene(useSceneStore.getState())?.cameras ?? [];
     }
 
-    // Os tripés contam como câmera selecionável: a seleção é uma só para as
-    // duas espécies, e um tripé escolhido não pode voltar a ser a Câmera 1
-    // só porque a cena reabriu. Ver `Scene.tripes`.
-    const todas = [...cameras, ...(atual.tripes ?? [])];
+    // As do modo, e só elas: no 2.5D a selecionada é um tripé, no 2D um
+    // recorte. Uma da outra espécie apagaria todos os chips, e o T e as setas
+    // ficariam sem câmera. Ver `camerasDoModo`.
+    const todas = camerasDoModo(
+      { cameras, tripes: atual.tripes },
+      useEsguelhaStore.getState().ligada,
+    );
     if (!todas.some((camera) => camera.id === get().selecionadaId)) {
       // A que está no ar, se houver: é a que o mestre mais provavelmente quer
       // ajustar ao abrir. Senão a primeira.
@@ -315,6 +328,28 @@ useSceneStore.subscribe((state) => {
       viewport: recorteSeguindo(camera, caixa, conteudo),
     });
   }
+});
+
+/**
+ * A troca 2D/2.5D leva a seleção para a espécie do modo novo: a que o mestre
+ * tinha deixado lá, senão a que está no ar, senão a primeira. A que sai fica
+ * guardada para a volta. Sem câmera nenhuma do modo novo, a seleção fica onde
+ * estava, e muda: `cameraSelecionada` e `tripeSelecionado` já a ignoram.
+ */
+useEsguelhaStore.subscribe((state, anterior) => {
+  if (state.ligada === anterior.ligada) return;
+
+  const scene = cenaEmEdicao();
+  if (!scene) return;
+
+  const trava = useCameraLockStore.getState();
+  const guardada = camerasDoModo(scene, state.ligada).find(
+    (camera) => camera.id === trava.doOutroModo,
+  );
+  useCameraLockStore.setState({ doOutroModo: trava.selecionadaId });
+
+  if (guardada) trava.selecionar(guardada.id);
+  else trava.garantirCameraInicial(scene);
 });
 
 /**

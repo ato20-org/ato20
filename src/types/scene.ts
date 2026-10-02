@@ -2631,6 +2631,21 @@ export function temCamera(scene: Pick<Scene, "tipo">): boolean {
   return ehMapa(scene);
 }
 
+/**
+ * As câmeras de um modo do Mestre: os recortes no 2D, os tripés no 2.5D.
+ *
+ * Cada modo vê a sua espécie, e só ela: é a lista dos chips, a ordem do
+ * `Shift+1..9` e onde a seleção pode morar. Misturadas, o 2.5D mostrava uma
+ * câmera 2D que dali não se vê nem se ajusta. A câmera no ar pode ser da outra
+ * -- a mesa olha pelo tripé enquanto o mestre edita no 2D --, e a barra avisa.
+ */
+export function camerasDoModo(
+  scene: Pick<Scene, "cameras" | "tripes">,
+  deEsguelha: boolean,
+): readonly (CameraSalva | CameraTripe)[] {
+  return (deEsguelha ? scene.tripes : scene.cameras) ?? [];
+}
+
 /** A cena tem grade. Só o mapa: é ela que dá escala ao chão. Ver `SceneGrid`. */
 export function temGrade(scene: Pick<Scene, "tipo">): boolean {
   return ehMapa(scene);
