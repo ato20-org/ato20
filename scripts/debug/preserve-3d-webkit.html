@@ -1,0 +1,129 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>preserve-3d no WebKit: contorno</title>
+<style>
+  body { margin:0; background:#111; color:#eee; font:12px system-ui }
+  .grade { display:grid; grid-template-columns:repeat(4,300px); gap:16px; padding:10px }
+  .cena { width:290px; height:190px; position:relative }
+  .rot { position:absolute; inset:0; background:#4b5563;
+         background-image:repeating-linear-gradient(to right,rgba(255,255,255,.3) 0 1px,transparent 1px 40px),
+                          repeating-linear-gradient(to bottom,rgba(255,255,255,.3) 0 1px,transparent 1px 40px) }
+  .par { position:absolute; left:0; top:0; width:200px; height:60px; transform-origin:0 0; background:#dc2626 }
+</style>
+<body>
+<p style="padding:6px 10px;margin:0">
+  <b>O que esta página mede.</b> Uma parede de pé é um filho girado em
+  <code>rotateX(90deg)</code> dentro de um chão girado em <code>rotateX(55deg)</code>.
+  Num motor que honra <code>transform-style: preserve-3d</code>, ela aparece.
+  <b>No WebKitGTK 2.52.5 ela NÃO aparece</b>: a rotação do filho é achatada no
+  plano do pai, e uma parede achatada no chão tem altura zero.
+  <code>translateZ</code> atravessa; rotação não.
+  <br>
+  I: o caminho natural, e a prova do achatamento (o filho desenha, mas CHAPADO).
+  J a N: o contorno -- a rotação da cena ASSADA em cada elemento, ninguém filho
+  3D de ninguém. É o que <code>ChaoInclinado</code> faz.
+  <br>
+  Abra com <code>python3 scripts/debug/bancada-25d.py --rota /debug/preserve-3d-webkit.html</code>
+  ou em qualquer servidor estático. A variante N usa
+  <code>public/bancada/mapa.jpg</code>, que é material de quem mede e não vem no
+  repositório -- sem ele ela sai lisa, e as outras bastam.
+</p>
+<div class="grade">
+
+  <div><b>I</b> pai girado, filho rotateY(60)
+    <div class="cena" style="perspective:900px">
+      <div style="position:absolute;inset:0;transform-style:preserve-3d;transform-origin:145px 95px;transform:rotateX(55deg)">
+        <div class="rot"></div>
+        <div class="par" style="transform:translate3d(30px,60px,0) rotateY(60deg)"></div>
+      </div>
+    </div>
+  </div>
+
+  <div><b>J</b> ASSADO: pai liso, cada filho leva rotateX(55)
+    <div class="cena" style="perspective:900px">
+      <div style="position:absolute;inset:0;transform-origin:145px 95px">
+        <div class="rot" style="transform-origin:145px 95px;transform:rotateX(55deg)"></div>
+        <div class="par" style="transform-origin:145px 95px;transform:rotateX(55deg) translate3d(-115px,-35px,0) rotateX(90deg)"></div>
+      </div>
+    </div>
+  </div>
+
+  <div><b>K</b> ASSADO sem perspective
+    <div class="cena">
+      <div style="position:absolute;inset:0">
+        <div class="rot" style="transform-origin:145px 95px;transform:rotateX(55deg)"></div>
+        <div class="par" style="transform-origin:145px 95px;transform:rotateX(55deg) translate3d(-115px,-35px,0) rotateX(90deg)"></div>
+      </div>
+    </div>
+  </div>
+
+  <div><b>L</b> ASSADO, parede mais alta e deslocada
+    <div class="cena" style="perspective:900px">
+      <div style="position:absolute;inset:0">
+        <div class="rot" style="transform-origin:145px 95px;transform:rotateX(55deg)"></div>
+        <div class="par" style="height:90px;transform-origin:145px 95px;transform:rotateX(55deg) translate3d(-115px,15px,0) rotateX(90deg)"></div>
+        <div class="par" style="width:120px;height:90px;background:#2563eb;transform-origin:145px 95px;transform:rotateX(55deg) translate3d(-115px,15px,0) rotateZ(90deg) rotateX(90deg)"></div>
+      </div>
+    </div>
+  </div>
+
+  <div><b>M</b> ASSADO, pai com zoom:0.8
+    <div style="zoom:0.8">
+    <div class="cena" style="perspective:900px">
+      <div style="position:absolute;inset:0">
+        <div class="rot" style="transform-origin:145px 95px;transform:rotateX(55deg)"></div>
+        <div class="par" style="transform-origin:145px 95px;transform:rotateX(55deg) translate3d(-115px,-35px,0) rotateX(90deg)"></div>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <div><b>N</b> ASSADO com textura de fundo na parede
+    <div class="cena" style="perspective:900px">
+      <div style="position:absolute;inset:0">
+        <div class="rot" style="transform-origin:145px 95px;transform:rotateX(55deg)"></div>
+        <div class="par" style="background:url(/bancada/mapa.jpg);background-size:1920px 1080px;background-position:-600px -400px;transform-origin:145px 95px;transform:rotateX(55deg) translate3d(-115px,-35px,0) rotateX(90deg)"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<hr style="border:0;border-top:1px solid #333;margin:18px 10px">
+<p style="padding:6px 10px;margin:0">
+  <b>Segunda pergunta: de que lado a parede sobe.</b> Pegada amarela no chão, e a
+  parede tem de ficar EM PÉ SOBRE ela -- a pegada na BASE da massa. Com o sinal
+  trocado ela pendura para baixo do rastro, e no mapa isso se sente como
+  "a parede não nasce onde eu cliquei".
+</p>
+<div style="display:flex;gap:20px;padding:10px">
+  <div>
+    <div style="margin-bottom:6px"><b>rotateX(+90)</b> -- sobe (certo)</div>
+    <div class="cena" style="perspective:1400px"><div class="sinal" id="sa"></div></div>
+  </div>
+  <div>
+    <div style="margin-bottom:6px"><b>rotateX(-90)</b> -- pendura (errado)</div>
+    <div class="cena" style="perspective:1400px"><div class="sinal" id="sb"></div></div>
+  </div>
+</div>
+<script>
+  const CENA = "translate(145px,95px) rotateX(55deg) rotateZ(0deg) translate(-145px,-95px)";
+  const SX = 45, SY = 80;
+
+  for (const [id, sinal, cor] of [["sa", 90, "#dc2626"], ["sb", -90, "#2563eb"]]) {
+    const chao = document.getElementById(id);
+    chao.className = "rot";
+    chao.style.transformOrigin = "0 0";
+    chao.style.transform = CENA;
+
+    const pegada = document.createElement("div");
+    pegada.style.cssText = `position:absolute;left:0;top:0;width:150px;height:14px;transform-origin:0 0;background:rgba(250,204,21,.35);outline:2px solid #facc15;transform:${CENA} translate(${SX}px,${SY}px)`;
+    chao.parentElement.appendChild(pegada);
+
+    const parede = document.createElement("div");
+    parede.style.cssText = `position:absolute;left:0;top:0;width:150px;height:60px;transform-origin:0 0;opacity:.85;background:${cor};transform:${CENA} translate3d(${SX}px,${SY}px,0) rotate(0deg) rotateX(${sinal}deg)`;
+    chao.parentElement.appendChild(parede);
+  }
+</script>
+</body>
+

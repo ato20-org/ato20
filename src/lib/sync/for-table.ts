@@ -83,6 +83,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
     !scene.handout &&
     !scene.extensoes &&
     !scene.cameras &&
+    !scene.tripes &&
     !scene.grupos &&
     !scene.textos &&
     !scene.formas &&
@@ -103,6 +104,8 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   // câmera andando (interpola) de uma câmera trocada (corta). Ver
   // `useCorteDeCamera`.
   delete paraMesa.cameras;
+  // Os tripés idem: só a cópia do que está no ar (`tripeNoAr`) viaja.
+  delete paraMesa.tripes;
   delete paraMesa.grupos;
   // A letra solta e a forma são as DUAS que o mestre abre uma a uma: num mapa
   // elas nascem fechadas e o olho do gizmo é o que manda cada uma para a mesa.
@@ -160,7 +163,9 @@ function quadroParaMesa(scene: Scene): Scene {
     !scene.extensoes &&
     !scene.camera &&
     !scene.cameras &&
-    !scene.cameraNoArId
+    !scene.cameraNoArId &&
+    !scene.tripes &&
+    !scene.tripeNoAr
   )
     return scene;
 
@@ -172,6 +177,8 @@ function quadroParaMesa(scene: Scene): Scene {
   delete paraMesa.camera;
   delete paraMesa.cameras;
   delete paraMesa.cameraNoArId;
+  delete paraMesa.tripes;
+  delete paraMesa.tripeNoAr;
 
   quadrosParaMesa.set(scene, paraMesa);
 

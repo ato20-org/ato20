@@ -53,6 +53,8 @@ import {
   POSTIT_LARGURA,
   type Board,
   type CameraSalva,
+  type CameraTripe,
+  type Tripe,
   type CanvasItem,
   type Forma,
   type FogRegion,
@@ -243,8 +245,27 @@ type SceneStore = {
   ) => void;
   /** Remove. Se era a que estava no ar, a mesa volta à cena inteira. */
   removerCamera: (sceneId: string, cameraId: string) => void;
-  /** Põe uma câmera no ar, ou nenhuma: aí a mesa vê a cena inteira. */
+  /**
+   * Põe uma câmera no ar, ou nenhuma: aí a mesa vê a cena inteira.
+   *
+   * Vale para as duas espécies: o id pode ser de uma câmera 2D ou de um tripé.
+   * Com tripé, a mesa recebe `tripeNoAr` e vê de esguelha; com câmera 2D,
+   * recebe `camera` e vê de prumo. Nunca as duas -- é uma câmera no ar.
+   */
   transmitirCamera: (sceneId: string, cameraId: string | undefined) => void;
+  /** Cria um tripé. Devolve o id. Ver `Tripe`. */
+  salvarTripe: (sceneId: string, tripe: Omit<CameraTripe, "id">) => string;
+  /**
+   * Altera um tripé. Se ele está no ar, o olho novo vai junto para
+   * `tripeNoAr`, como `atualizarCamera` faz com o recorte.
+   */
+  atualizarTripe: (
+    sceneId: string,
+    tripeId: string,
+    patch: Partial<Omit<CameraTripe, "id">>,
+  ) => void;
+  /** Remove. Se era o que estava no ar, a mesa volta à cena inteira. */
+  removerTripe: (sceneId: string, tripeId: string) => void;
   /**
    * Liga, ajusta ou desliga a grade da cena. `undefined` desliga.
    *
@@ -1184,12 +1205,65 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     transmitirCamera(sceneId, cameraId) {
       get().updateScene(sceneId, (scene) => {
         const alvo = scene.cameras?.find((camera) => camera.id === cameraId);
+        const tripe = scene.tripes?.find((cada) => cada.id === cameraId);
+        const proxima: Scene = {
+          ...scene,
+          cameraNoArId: alvo?.id ?? tripe?.id,
+          camera: alvo?.viewport,
+        };
+
+        // Apagado, e não posto em `undefined`: é o campo AUSENTE que a mesa lê
+        // como "de prumo", e a cena é serializada para o disco e para o canal.
+        if (tripe) proxima.tripeNoAr = soOlho(tripe);
+        else delete proxima.tripeNoAr;
+        return proxima;
+      });
+    },
+
+    salvarTripe(sceneId, tripe) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        tripes: [...(scene.tripes ?? []), { ...tripe, id }],
+      }));
+
+      return id;
+    },
+
+    atualizarTripe(sceneId, tripeId, patch) {
+      get().updateScene(sceneId, (scene) => {
+        const tripes = (scene.tripes ?? []).map((tripe) =>
+          tripe.id === tripeId ? { ...tripe, ...patch } : tripe,
+        );
+        const noAr =
+          scene.cameraNoArId === tripeId
+            ? tripes.find((tripe) => tripe.id === tripeId)
+            : undefined;
 
         return {
           ...scene,
-          cameraNoArId: alvo?.id,
-          camera: alvo?.viewport,
+          tripes,
+          tripeNoAr: noAr ? soOlho(noAr) : scene.tripeNoAr,
         };
+      });
+    },
+
+    removerTripe(sceneId, tripeId) {
+      get().updateScene(sceneId, (scene) => {
+        const tripes = (scene.tripes ?? []).filter(
+          (tripe) => tripe.id !== tripeId,
+        );
+        const proxima: Scene = {
+          ...scene,
+          tripes: tripes.length > 0 ? tripes : undefined,
+        };
+
+        if (scene.cameraNoArId === tripeId) {
+          delete proxima.cameraNoArId;
+          delete proxima.tripeNoAr;
+        }
+        return proxima;
       });
     },
 
@@ -2288,4 +2362,20 @@ if (typeof document !== "undefined") {
     clearTimeout(persistTimer);
     void persistir(board);
   });
+}
+
+/**
+ * O olho de um tripé, sem o nome e o id: é o que a mesa recebe em
+ * `tripeNoAr`. O nome do tripé é do mestre, como o nome da cena.
+ */
+function soOlho(tripe: CameraTripe): Tripe {
+  return {
+    x: tripe.x,
+    y: tripe.y,
+    altura: tripe.altura,
+    giro: tripe.giro,
+    inclinacao: tripe.inclinacao,
+    rolagem: tripe.rolagem,
+    lente: tripe.lente,
+  };
 }

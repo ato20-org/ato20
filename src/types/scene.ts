@@ -226,6 +226,15 @@ export type CanvasItem = {
    * Ver `Luz`, que é a luz sem dono.
    */
   luz?: LuzCarregada;
+  /**
+   * DEITADO no chão, no mapa de esguelha. Ausente = em pé, que é o normal.
+   *
+   * De esguelha a figura se ergue e encara quem olha; deitada ela fica no chão
+   * como no mapa de prumo, no giro dela -- o caído, o dormindo, o corpo no
+   * altar. No 2D não muda nada: visto de cima, deitado e em pé são o mesmo
+   * desenho. Ver `CenaDeEsguelha`.
+   */
+  deitado?: boolean;
 };
 
 /**
@@ -1400,6 +1409,27 @@ export type Parede = {
    */
   diagonal?: "secundaria";
   /**
+   * De que cor a face dela sobe, quando o mapa é visto de esguelha.
+   *
+   * Ausente = LIDA DO MAPA, e esse é o caso comum: a parede já está pintada no
+   * arquivo, e a cor dominante do topo dela acerta na maioria das vezes sem que
+   * ninguém escolha nada. Ver `cor-do-mapa.ts`.
+   *
+   * Existe porque a leitura não tem como acertar sempre, e quando erra só o
+   * mestre sabe o que era: um muro tomado de hera devolve verde, um tapete
+   * vermelho encostado numa divisória a pinta de vermelho, e um mapa em que a
+   * parede é só um traço preto não tem cor de pedra nenhuma para ler. A conta é
+   * um bom palpite, e o palpite é do desenho -- a última palavra é de quem
+   * mestra.
+   *
+   * Só a FACE. O topo continua sendo o pedaço de mapa que estava ali, sempre:
+   * ele é o desenho do autor, e repintá-lo seria apagar o mapa.
+   *
+   * Não vale no mapa chapado, onde parede não tem face -- é geometria de
+   * esguelha, como a `altura`.
+   */
+  cor?: string;
+  /**
    * Quão alta ela é, em unidades de cena. Ausente = `ALTURA_DA_PAREDE`.
    *
    * Muda a SOMBRA, e só ela: a parede continua sendo geometria de chão -- onde
@@ -1515,6 +1545,44 @@ export const FORCA_DA_SOMBRA = 0.45;
  * sombra pintada na maioria dos tokens de pacote já tem. Ligar o sol num mapa
  * desses soma as duas em vez de cruzá-las.
  */
+/**
+ * Uma câmera de esguelha parada num lugar: um tripé com a câmera em cima.
+ *
+ * A câmera 2D é um RECORTE do mapa visto de cima. Esta é um OLHO dentro da
+ * cena -- um ponto no chão, uma altura, uma direção e uma lente --, e é ela
+ * que faz a mesa ver o mapa de esguelha: com um tripé no ar a janela do
+ * espectador vira 2.5D, com uma câmera 2D ela volta a ser de prumo. O mestre
+ * pode estar editando no 2D enquanto a mesa olha pelo tripé.
+ *
+ * Posição e direção, e não "alvo e distância" como a navegação orbital do
+ * mestre: é o que o mestre posiciona (o tripé fica onde foi posto) e o que as
+ * setas e os anéis do gizmo movem. A conta que desenha é a mesma da orbital,
+ * generalizada -- ver `correnteDoTripe`.
+ *
+ * Tudo em unidades de cena e graus, como o resto da cena.
+ */
+export type Tripe = {
+  /** Onde o tripé está no chão. */
+  x: number;
+  y: number;
+  /** A altura da lente acima do chão, na régua das paredes. */
+  altura: number;
+  /**
+   * Para onde a câmera aponta no plano, em graus, na régua da navegação do
+   * mestre: 0 olha o mapa do lado em que ele foi desenhado.
+   */
+  giro: number;
+  /** 0 olha reto para baixo; 90 olha o horizonte. */
+  inclinacao: number;
+  /** A câmera virada de lado, em graus. 0 = nivelada. */
+  rolagem: number;
+  /** A abertura vertical da lente, em graus. */
+  lente: number;
+};
+
+/** Um tripé salvo na cena: o olho, com nome. Ver `Tripe`. */
+export type CameraTripe = Tripe & { id: string; nome: string };
+
 export const SOL_PADRAO: Sol = { angulo: 35, comprimento: 0.42, forca: 0.38 };
 
 /**
@@ -2429,6 +2497,24 @@ export type Scene = {
    */
   cameras?: CameraSalva[];
   /**
+   * Os tripés da cena: as câmeras de esguelha. Ausente = nenhum. Ver `Tripe`.
+   *
+   * Uma lista à parte das `cameras`, e não uma variante delas: a moldura, os
+   * fantasmas, o seguir e o espelho iteram `cameras` e assumem um recorte, e
+   * nenhum deles precisa aprender a recusar um tripé. Os ids dividem o mesmo
+   * `cameraNoArId` -- é UMA câmera no ar, de um tipo ou de outro.
+   *
+   * NUNCA chega à mesa: `sceneForTable` remove este campo antes de publicar.
+   */
+  tripes?: CameraTripe[];
+  /**
+   * A cópia do tripé que está no ar, como `camera` é a do recorte. Ausente =
+   * a câmera no ar não é um tripé, e a mesa vê de prumo.
+   *
+   * CHEGA à mesa: é ela que vira o mapa de esguelha na janela do espectador.
+   */
+  tripeNoAr?: Tripe;
+  /**
    * Qual câmera está transmitindo. Ausente = a mesa vê a cena INTEIRA: o que
    * o mestre não quer revelar fica atrás da névoa, não fora do quadro.
    *
@@ -2566,6 +2652,21 @@ export function temChao(scene: Pick<Scene, "tipo">): boolean {
  */
 export function temCamera(scene: Pick<Scene, "tipo">): boolean {
   return ehMapa(scene);
+}
+
+/**
+ * As câmeras de um modo do Mestre: os recortes no 2D, os tripés no 2.5D.
+ *
+ * Cada modo vê a sua espécie, e só ela: é a lista dos chips, a ordem do
+ * `Shift+1..9` e onde a seleção pode morar. Misturadas, o 2.5D mostrava uma
+ * câmera 2D que dali não se vê nem se ajusta. A câmera no ar pode ser da outra
+ * -- a mesa olha pelo tripé enquanto o mestre edita no 2D --, e a barra avisa.
+ */
+export function camerasDoModo(
+  scene: Pick<Scene, "cameras" | "tripes">,
+  deEsguelha: boolean,
+): readonly (CameraSalva | CameraTripe)[] {
+  return (deEsguelha ? scene.tripes : scene.cameras) ?? [];
 }
 
 /** A cena tem grade. Só o mapa: é ela que dá escala ao chão. Ver `SceneGrid`. */

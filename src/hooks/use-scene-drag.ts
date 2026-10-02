@@ -4,6 +4,7 @@ import { useCallback, type PointerEvent as ReactPointerEvent } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import type { Vec } from "@/lib/geometry/transform";
+import { useChaoStore } from "@/lib/store/use-chao-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 
 type DragHandlers = {
@@ -73,8 +74,22 @@ export function useSceneDrag() {
       // cravar um ponto por cima do que se estava pegando.
       event.stopPropagation();
 
-      const target = event.currentTarget as HTMLElement;
       const { pointerId, clientX: startX, clientY: startY } = event;
+
+      /**
+       * Quem captura o ponteiro: o CHÃO quando a cena está deitada, e o próprio
+       * elemento quando ela está de prumo.
+       *
+       * Esta linha é o modo de esguelha inteiro, do ponto de vista do gesto.
+       * Capturando no chão, todo `pointermove` passa a chegar com
+       * `offsetX/offsetY` no sistema DELE -- rotação, inclinação, perspectiva e
+       * escala já desfeitas pelo motor --, e o arrasto volta a ser uma
+       * subtração. Capturando no item, como sempre se fez, o que chega é pixel
+       * de tela, e dividi-lo por `scale` aponta para outro lugar assim que o
+       * chão sai do prumo. Ver `useChaoStore`.
+       */
+      const chao = useChaoStore.getState().chao;
+      const target = chao ?? (event.currentTarget as HTMLElement);
 
       target.setPointerCapture(pointerId);
 
@@ -94,7 +109,31 @@ export function useSceneDrag() {
       let frame: number | undefined;
       let pending: PointerEvent | null = null;
 
+      /**
+       * Onde o gesto começou, em coordenadas de CHÃO -- e só no modo deitado.
+       *
+       * Lido no PRIMEIRO movimento, e não no `pointerdown`: o toque aconteceu
+       * sobre o item, cujo sistema de coordenadas está girado e levantado, e
+       * ali `offsetX` responde sobre a figura, não sobre o chão. Subtrair duas
+       * réguas diferentes é o que fazia a peça saltar ao ser pega.
+       *
+       * O que se perde é o meio pixel andado antes do primeiro `pointermove`,
+       * que ninguém vê.
+       */
+      let inicioNoChao: Vec | null = null;
+
       const apply = (native: PointerEvent) => {
+        if (chao) {
+          const agora = { x: native.offsetX, y: native.offsetY };
+          inicioNoChao ??= agora;
+
+          handlers.onMove(
+            { x: agora.x - inicioNoChao.x, y: agora.y - inicioNoChao.y },
+            native,
+          );
+          return;
+        }
+
         handlers.onMove(
           { x: (native.clientX - startX) / scale, y: (native.clientY - startY) / scale },
           native,

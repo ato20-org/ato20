@@ -147,6 +147,13 @@ def argumentos():
     # efeitos. Ver `condicoesDaMedida` na pagina.
     p.add_argument("--condicoes", default="0")
     p.add_argument("--figura", default="misto")
+    # `chao-25d`: qual renderizador medir. Aceita lista -- e a lista e o ponto,
+    # porque a pergunta nao e "quanto custa o chao inclinado" e sim "quanto ele
+    # custa A MAIS que o relevo e que o mapa de prumo".
+    p.add_argument("--modo", default="chao")
+    # Gira a vista durante a corrida: refaz a lista do pintor a cada quadro,
+    # que e o pior caso do modo.
+    p.add_argument("--girando", action="store_true")
     # `mestre-camera`: os K primeiros tokens com dois medidores sobre a cabeca,
     # e como eles desenham -- `fabrica`, `camadas` (PNG) ou `animado` (GIF).
     # Listas, viram celulas. Ver `medidoresDaMedida` na pagina.
@@ -430,6 +437,7 @@ def main():
             )
             paineis = args.painel.split(",") if cenario in ("bancada", "quadro") else ["ambos"]
             docs = args.documentos.split(",") if cenario == "quadro" else ["0"]
+            modos = args.modo.split(",") if cenario == "chao-25d" else ["chao"]
             for cam in eixo:
                 for g in gestos:
                     for painel in paineis:
@@ -437,12 +445,13 @@ def main():
                       for r in [int(x) for x in args.roda.split(",")]:
                        for k in args.condicoes.split(","):
                         for exp in args.experimento.split(","):
-                         for med, est in [
-                             (m, e)
-                             for m in args.medidores.split(",")
-                             for e in args.estilo.split(",")
-                         ]:
-                          for i in range(args.repetir):
+                         for modo in modos:
+                          for med, est in [
+                              (m, e)
+                              for m in args.medidores.split(",")
+                              for e in args.estilo.split(",")
+                          ]:
+                           for i in range(args.repetir):
                             url = (
                                 f"{base}/perf?cenario={cenario}&n={n}"
                                 f"&segundos={args.segundos}&movidos={args.movidos}"
@@ -456,6 +465,8 @@ def main():
                                 f"&luzes={args.luzes}&paredes={args.paredes}"
                                 f"&carregadas={args.carregadas}"
                                 f"&condicoes={k}&figura={args.figura}"
+                                f"&modo={modo}"
+                                f"&girando={'1' if args.girando else '0'}"
                                 f"&medidores={med}&estilo={est}"
                                 f"&rotulo={args.rotulo}"
                             )
@@ -464,6 +475,10 @@ def main():
                             if args.efeito is not None:
                                 url += f"&efeito={args.efeito}"
                             rotulo = f"{cenario} n={n} cam={cam}"
+                            if cenario == "chao-25d":
+                                rotulo = f"{cenario} n={n} modo={modo}"
+                                if args.girando:
+                                    rotulo += " girando"
                             if cenario in ("camera-gesto", "bancada", "quadro"):
                                 rotulo += f" gesto={g}"
                             if cenario in ("bancada", "quadro"):

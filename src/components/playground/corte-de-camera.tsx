@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import type { Scene, Viewport } from "@/types/scene";
+import type { Scene, Tripe, Viewport } from "@/types/scene";
 
 /** Quanto a cortina leva para fechar. A troca de recorte acontece no escuro. */
 const FECHAR_MS = 180;
@@ -46,6 +46,12 @@ export function useCorteDeCamera(scene: Scene | null): {
    */
   cena: Scene | null;
   viewport: Viewport | undefined;
+  /**
+   * O tripé a olhar, quando a câmera no ar é um tripé. Congelado durante o
+   * corte como o recorte: senão o tripé novo apareceria antes de a cortina
+   * fechar, e é exatamente o pulo que a cortina existe para esconder.
+   */
+  tripe: Tripe | undefined;
   corte: number;
   /**
    * A cortina fechada: só no meio de um corte. Sem câmera no ar a mesa vê a
@@ -56,6 +62,7 @@ export function useCorteDeCamera(scene: Scene | null): {
 } {
   const cameraId = scene?.cameraNoArId;
   const camera = scene?.camera;
+  const tripe = scene?.tripeNoAr;
 
   const [exibido, setExibido] = useState<Exibido>({
     cameraId,
@@ -73,6 +80,8 @@ export function useCorteDeCamera(scene: Scene | null): {
   // acompanha a câmera; dentro dele as amostras novas passam batido.
   const [congelado, setCongelado] = useState(camera);
   if (!cortando && congelado !== camera) setCongelado(camera);
+  const [tripeCongelado, setTripeCongelado] = useState(tripe);
+  if (!cortando && tripeCongelado !== tripe) setTripeCongelado(tripe);
 
   // O corte em si: espera a cortina fechar e então o exibido alcança a cena.
   // Depende só do id, de propósito: a nova câmera pode estar seguindo um token
@@ -94,6 +103,7 @@ export function useCorteDeCamera(scene: Scene | null): {
     // câmera, a cena continua: é a mesma, e sumir com ela piscaria.
     cena: cortando && sceneId !== exibido.sceneId ? null : scene,
     viewport: cortando ? congelado : camera,
+    tripe: cortando ? tripeCongelado : tripe,
     corte: exibido.corte,
     cortando,
   };
