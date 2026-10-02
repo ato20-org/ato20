@@ -327,8 +327,9 @@ export function irParaCamera(): void {
  * partida. A tecla N é a exceção -- ver `novaCameraNoPonteiro`.
  */
 export function novaCamera(nome?: string): string | undefined {
-  // No 2.5D a câmera nova é um TRIPÉ, no lugar de onde o mestre está olhando.
-  if (olhoDoMestre()) return novoTripeDaqui({ nome, noAr: true });
+  // No 2.5D a câmera nova é um TRIPÉ, no lugar de onde o mestre está olhando
+  // -- e fora do ar. Ver `novoTripeDaqui`.
+  if (olhoDoMestre()) return novoTripeDaqui(nome);
 
   const base = cameraAtual() ?? useViewportStore.getState().viewport;
   return criarCamera(base, { nome, noAr: true });
@@ -350,7 +351,7 @@ export function novaCamera(nome?: string): string | undefined {
 export function novaCameraNoPonteiro(): string | undefined {
   // No 2.5D não há ponteiro no chão chapado para centrar: o tripé nasce no
   // olhar do mestre, e fora do ar, como a câmera do N.
-  if (olhoDoMestre()) return novoTripeDaqui({ noAr: false });
+  if (olhoDoMestre()) return novoTripeDaqui();
 
   const base = cameraAtual() ?? useViewportStore.getState().viewport;
   const centro = ponteiroNaCena();
@@ -405,16 +406,12 @@ export function cameraNaPosicao(posicao: number): { id: string } | undefined {
  * câmera daqui". Ele enquadra com a navegação, e o tripé nasce vendo exatamente
  * aquilo -- a mesma conta, sem ajuste. Ver `tripeDaOrbital`.
  *
- * `noAr` com o mesmo critério das câmeras de recorte: o botão e o menu
- * transmitem, a tecla N não. Ver `novaCamera` e `novaCameraNoPonteiro`.
+ * Nasce FORA do ar, pelo botão, pelo menu e pela tecla: pedido do usuário.
+ * Diferente do recorte -- o tripé põe a mesa de esguelha, e transmitir no
+ * instante em que ele nasce virava a janela do espectador antes de o mestre
+ * acertar o enquadre. Fica selecionado, e o T o põe no ar quando for a hora.
  */
-export function novoTripeDaqui({
-  nome,
-  noAr,
-}: {
-  nome?: string;
-  noAr: boolean;
-}): string | undefined {
+export function novoTripeDaqui(nome?: string): string | undefined {
   const scene = lerCena();
   const olho = olhoDoMestre();
   if (!scene || !olho) return undefined;
@@ -425,7 +422,6 @@ export function novoTripeDaqui({
     nome: nome ?? `Tripé ${ordem}`,
   });
 
-  if (noAr) useSceneStore.getState().transmitirCamera(scene.id, id);
   useCameraLockStore.getState().selecionar(id);
 
   return id;
