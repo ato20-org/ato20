@@ -42,6 +42,14 @@ const TOMBO_MAX = 75;
 const RODA_POR_PIXEL = 0.0011;
 
 /** Ampliado até doze vezes o mapa inteiro, e afastado até a metade dele. */
+/**
+ * O WASD da câmera livre, em ALTURAS DE TELA por segundo: perto ou longe, a
+ * tecla atravessa a tela no mesmo tempo. Shift vezes `WASD_DEVAGAR`.
+ */
+const WASD_TELAS_S = 0.9;
+const WASD_DEVAGAR = 0.25;
+const TECLAS_WASD = new Set(["KeyW", "KeyA", "KeyS", "KeyD"]);
+
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 12;
 
@@ -71,6 +79,7 @@ export function useCameraOrbital({
   onSair,
   onAssentar,
   travado = false,
+  wasd = false,
 }: {
   /** A câmera do primeiro quadro, já sabendo o tamanho da tela. */
   inicial: (tela: Tela) => CameraOrbital;
@@ -107,6 +116,12 @@ export function useCameraOrbital({
    * num olhar que não está à vista.
    */
   travado?: boolean;
+  /**
+   * Andar pelo chão com W, A, S e D, na direção em que se olha -- o andar do
+   * modo cinegrafista, só ele, trazido à câmera livre do Mestre. Shift devagar.
+   * Desligado na bancada, que tem as próprias teclas.
+   */
+  wasd?: boolean;
 }): {
   /** O `div` do tamanho da tela. */
   mesa: RefObject<HTMLDivElement | null>;
@@ -161,6 +176,7 @@ export function useCameraOrbital({
     onSair,
     onAssentar,
     travado,
+    wasd,
   });
   useEffect(() => {
     agora.current = {
@@ -172,6 +188,7 @@ export function useCameraOrbital({
       onSair,
       onAssentar,
       travado,
+      wasd,
     };
   });
 
@@ -467,6 +484,80 @@ export function useCameraOrbital({
       if (evento.button === 1) evento.preventDefault();
     }
 
+    /**
+     * O WASD: as teclas seguradas andam o alvo a cada quadro, pelo mesmo
+     * `andar` do arrasto (preso ao mapa). Na CAPTURA da janela, e só a tecla
+     * sem Ctrl -- o Ctrl+A e o Ctrl+D continuam da tabela de atalhos. Parado
+     * com a câmera travada: no cinegrafista as mesmas teclas são dele.
+     */
+    const seguradas = new Set<string>();
+    let devagar = false;
+    let passoDasTeclas: number | undefined;
+    let ultimoPasso = 0;
+    function digitando(alvo: EventTarget | null) {
+      return Boolean(
+        (alvo as HTMLElement | null)?.closest?.(
+          "input, textarea, [contenteditable='true']",
+        ),
+      );
+    }
+    function andarComTeclas(instante: number) {
+      passoDasTeclas = undefined;
+      const atual = camera.current;
+      const medida = tela.current;
+      if (seguradas.size === 0 || !atual || !medida) return;
+      const segundos = Math.min(0.1, (instante - ultimoPasso) / 1000);
+      ultimoPasso = instante;
+
+      const g = (atual.giro * Math.PI) / 180;
+      const frente = { x: -Math.sin(g), y: -Math.cos(g) };
+      const direita = { x: -frente.y, y: frente.x };
+      const adiante =
+        (seguradas.has("KeyW") ? 1 : 0) - (seguradas.has("KeyS") ? 1 : 0);
+      const lado =
+        (seguradas.has("KeyD") ? 1 : 0) - (seguradas.has("KeyA") ? 1 : 0);
+      const norma = Math.hypot(adiante, lado) || 1;
+      const distancia =
+        (medida.altura / atual.zoom) *
+        WASD_TELAS_S *
+        segundos *
+        (devagar ? WASD_DEVAGAR : 1);
+      andar({
+        x: ((frente.x * adiante + direita.x * lado) / norma) * distancia,
+        y: ((frente.y * adiante + direita.y * lado) / norma) * distancia,
+      });
+      passoDasTeclas = requestAnimationFrame(andarComTeclas);
+    }
+    function apertouTecla(evento: KeyboardEvent) {
+      devagar = evento.shiftKey;
+      if (!agora.current.wasd || agora.current.travado) return;
+      if (!TECLAS_WASD.has(evento.code) || digitando(evento.target)) return;
+      if (evento.ctrlKey || evento.metaKey || evento.altKey) return;
+      evento.preventDefault();
+      evento.stopImmediatePropagation();
+      if (seguradas.size === 0) {
+        pararDeslizar();
+        ultimoPasso = performance.now();
+      }
+      seguradas.add(evento.code);
+      if (passoDasTeclas === undefined) {
+        passoDasTeclas = requestAnimationFrame(andarComTeclas);
+      }
+    }
+    function soltouTecla(evento: KeyboardEvent) {
+      devagar = evento.shiftKey;
+      if (!seguradas.delete(evento.code)) return;
+      evento.preventDefault();
+      evento.stopImmediatePropagation();
+    }
+    // Trocar de janela larga as teclas: a segurada andaria sozinha.
+    function largouTeclas() {
+      seguradas.clear();
+    }
+    window.addEventListener("keydown", apertouTecla, true);
+    window.addEventListener("keyup", soltouTecla, true);
+    window.addEventListener("blur", largouTeclas);
+
     elemento.addEventListener("pointerdown", desceu);
     elemento.addEventListener("pointermove", andou);
     elemento.addEventListener("pointerup", soltou);
@@ -477,6 +568,10 @@ export function useCameraOrbital({
 
     return () => {
       pararDeslizar();
+      if (passoDasTeclas !== undefined) cancelAnimationFrame(passoDasTeclas);
+      window.removeEventListener("keydown", apertouTecla, true);
+      window.removeEventListener("keyup", soltouTecla, true);
+      window.removeEventListener("blur", largouTeclas);
       elemento.removeEventListener("pointerdown", desceu);
       elemento.removeEventListener("pointermove", andou);
       elemento.removeEventListener("pointerup", soltou);
