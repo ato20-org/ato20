@@ -9,6 +9,7 @@ import {
 import {
   BookImage,
   CopyPlus,
+  FolderPlus,
   GripVertical,
   Image as ImageIcon,
   ImageOff,
@@ -22,6 +23,15 @@ import {
 
 import { toast } from "sonner";
 
+import {
+  FimDaLista,
+  ItensDeMover,
+  LIMIAR_ARRASTO_PX,
+  PastaRow,
+  PREFIXO_PASTA,
+  RECUO_PX,
+} from "@/components/mestre/arvore-de-pastas";
+import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import { NovoMapaDialog } from "@/components/mestre/novo-mapa-dialog";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
@@ -36,6 +46,7 @@ import { Input } from "@/components/ui/input";
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
@@ -59,6 +70,11 @@ import {
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import {
+  achatarArvore,
+  caminhoDaPasta,
+  pastasDaLista,
+} from "@/lib/mestre/arvore-de-pastas";
+import {
   escolherFundoDaCena,
   useFundoEmVoo,
   tirarFundoDaCena,
@@ -66,7 +82,9 @@ import {
 import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
+import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
+import { normaliza } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import {
@@ -75,6 +93,7 @@ import {
   temCamera,
   temNevoa,
   type AssetMeta,
+  type Pasta,
   type Scene,
   type TipoDeCena,
 } from "@/types/scene";
@@ -158,8 +177,9 @@ function resumoDaCena(scene: Scene, imagem: AssetMeta | undefined): string {
  * board continua sendo uma lista só (ver `Board.scenes`); o que cada aba mostra
  * é a ordem dele filtrada, e reordenar aqui move a cena lá dentro.
  *
- * Os quadros não têm aba aqui: eles moram em Arquivos, numa árvore de pastas.
- * Ver `ArquivosList`.
+ * Os quadros não têm aba aqui: eles moram em Arquivos. Mapas e fundos têm cada
+ * um a sua árvore de pastas -- a mesma do Arquivos, ver `achatarArvore` --, e
+ * a pasta é só organização: a fila continua sendo a ordem do board.
  */
 function ListaDeCenas({
   ready,
@@ -188,6 +208,31 @@ function ListaDeCenas({
 
   const nome = NOME_DO_TIPO[tipo ?? "mapa"].toLowerCase();
 
+  const todasAsPastas = useSceneStore((state) => state.board?.pastas);
+  const lista = tipo === "fundo" ? "fundos" : "mapas";
+  const pastas = useMemo(
+    () => pastasDaLista(todasAsPastas, lista),
+    [todasAsPastas, lista],
+  );
+  const linhas = useMemo(
+    () => achatarArvore(scenes ?? [], pastas, (scene) => scene.pastaId),
+    [scenes, pastas],
+  );
+
+  /**
+   * A busca: com texto no campo, a árvore dá lugar aos achados, com o caminho
+   * da pasta de cada um na linha de baixo. Pelo nome da cena, sem acento e sem
+   * caixa -- ver `normaliza`.
+   */
+  const [busca, setBusca] = useState("");
+  const buscando = busca.trim() !== "";
+  const achados = useMemo(() => {
+    if (!buscando) return null;
+    const termo = normaliza(busca.trim());
+
+    return (scenes ?? []).filter((scene) => normaliza(scene.name).includes(termo));
+  }, [buscando, busca, scenes]);
+
   /**
    * O acervo de imagens, pedido uma vez pela LISTA e não por linha.
    *
@@ -200,19 +245,59 @@ function ListaDeCenas({
     if (tipo === "fundo") garantirAcervo("image");
   }, [tipo, garantirAcervo]);
 
-  const moveSceneToIndex = useSceneStore((state) => state.moveSceneToIndex);
   const { listRef, dropIndex, startReorder } = useListReorder<string>(
-    (sceneId, index) => {
-      // O índice é desta lista, de um tipo só; o board tem os outros no meio.
-      // O destino é o lugar de quem está nessa linha, e o fim quando cai no fim.
-      if (!todas || !scenes) return;
-      const antesDe = scenes[index]?.id;
-      const destino = antesDe
-        ? todas.findIndex((scene) => scene.id === antesDe)
-        : todas.length - 1;
-      moveSceneToIndex(sceneId, destino);
+    (arrastado, index) => {
+      if (!todas) return;
+      const store = useSceneStore.getState();
+      const alvo = linhas[index];
+      const pastaDoAlvo = !alvo
+        ? undefined
+        : alvo.tipo === "pasta"
+          ? alvo.pasta.id
+          : alvo.item.pastaId;
+
+      // Pasta arrastada: só muda de mãe. O store recusa ciclo.
+      if (arrastado.startsWith(PREFIXO_PASTA)) {
+        const pastaId = arrastado.slice(PREFIXO_PASTA.length);
+        if (pastaDoAlvo !== pastaId) store.moverPasta(pastaId, pastaDoAlvo);
+        return;
+      }
+
+      // Cena: assume a pasta de quem está na linha e o lugar dele no board, que
+      // tem os outros tipos no meio. Sobre uma pasta, entra e vai para o fim.
+      store.moverParaPasta(arrastado, pastaDoAlvo);
+      const destino =
+        alvo?.tipo === "item"
+          ? todas.findIndex((scene) => scene.id === alvo.item.id)
+          : todas.length - 1;
+      store.moveSceneToIndex(arrastado, destino);
     },
+    // A linha SOB o cursor, como no Arquivos: soltar em cima da pasta é entrar.
+    "sobre",
   );
+
+  /**
+   * A linha INTEIRA também leva a cena para a pasta: ela já é o arrasto que
+   * vira menção `>mapa` numa nota, e soltar esse mesmo gesto sobre uma pasta da
+   * aba é entrar nela. A alça continua sendo o reordenar. Ver `aceita`.
+   */
+  useEffect(
+    () =>
+      useTokenDragStore.getState().registrarAlvo(`cenas:${lista}`, (solto, destino) => {
+        if (solto.fonte.tipo !== "cena" || destino.tipo !== "pasta-cenas") return;
+        useSceneStore.getState().moverParaPasta(solto.fonte.sceneId, destino.pastaId);
+      }),
+    [lista],
+  );
+
+  /** A pasta sob a cena arrastada pela linha. `""` é a raiz da aba. */
+  const alvoDoArrasto = useTokenDragStore((state) => {
+    const destino = state.arrasto?.destino;
+    return destino?.tipo === "pasta-cenas" && destino.lista === lista
+      ? (destino.pastaId ?? "")
+      : null;
+  });
+  const alvoDaAba = { "data-pasta-cenas": lista };
 
   /**
    * O mapa nasce e PERGUNTA de onde vem o chão -- imagem ou tabuleiro com
@@ -223,8 +308,9 @@ function ListaDeCenas({
    * clique a mais para chegar onde já se ia. Cancelar deixa o fundo preto, e a
    * imagem continua a um menu de distância na linha dele.
    */
-  function criar() {
+  function criar(pastaId?: string) {
     const id = addScene(undefined, tipo);
+    if (pastaId) useSceneStore.getState().moverParaPasta(id, pastaId);
     if (tipo !== "fundo") {
       setNovoMapaId(id);
       return;
@@ -234,6 +320,21 @@ function ListaDeCenas({
       toast.error(cause instanceof Error ? cause.message : "Falha ao importar."),
     );
   }
+
+  function criarPasta() {
+    useSceneStore.getState().criarPasta(`Pasta ${pastas.length + 1}`, undefined, lista);
+  }
+
+  /** O "Novo mapa aqui" do menu da pasta. */
+  const itensDeCriarNa = (pastaId: string) =>
+    function itensDeCriar({ Item }: Kit) {
+      return (
+        <Item onClick={() => criar(pastaId)}>
+          <Plus />
+          Novo {nome} aqui
+        </Item>
+      );
+    };
 
   function abrir(sceneId: string) {
     // Abrir uma cena volta ao palco, se havia nota aberta.
@@ -268,7 +369,35 @@ function ListaDeCenas({
       {/* Redondo e à direita, como nos outros painéis: de largura cheia ele
           comia a primeira linha da lista para oferecer uma ação que se usa uma
           vez por cena. */}
-      <div className="flex items-center justify-end p-2">
+      <div className="flex items-center justify-end gap-2 p-2">
+        {/* Sempre, e não só com a lista cheia: um campo que aparece e some
+            conforme a campanha cresce é um campo com que o mestre não conta.
+            Mesma decisão da busca de Personagens. */}
+        <CampoDeBusca
+          valor={busca}
+          onMudar={setBusca}
+          placeholder={`Buscar ${nome}`}
+          rotulo={`Buscar nos ${nome}s pelo nome`}
+        />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 rounded-full"
+                aria-label="Nova pasta"
+                onClick={criarPasta}
+                disabled={!ready}
+              >
+                <FolderPlus />
+              </Button>
+            }
+          />
+          <TooltipContent>
+            <p className="max-w-48">Nova pasta. Arraste {nome}s para dentro.</p>
+          </TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -277,7 +406,7 @@ function ListaDeCenas({
                 size="icon"
                 className="shrink-0 rounded-full"
                 aria-label={`Novo ${nome}`}
-                onClick={criar}
+                onClick={() => criar()}
                 disabled={!ready}
               >
                 <Plus />
@@ -295,29 +424,113 @@ function ListaDeCenas({
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
-        {ready && scenes?.length === 0 ? (
-          <PainelVazio conteudo={{ tipo: "cenas" }}>
-            Crie o primeiro {nome}
-          </PainelVazio>
-        ) : null}
+        {/* O fundo da lista, e SÓ ele, é o gatilho do menu do vazio, como no
+            Arquivos: envolver as linhas faria os menus delas disputarem o mesmo
+            botão direito. */}
+        <div className="relative min-h-full">
+          <ContextMenu>
+            <ContextMenuTrigger render={<div className="absolute inset-0" aria-hidden />} />
+            <ContextMenuContent className="w-48">
+              <ContextMenuItem disabled={!ready} onClick={() => criar()}>
+                <Plus />
+                Novo {nome}
+              </ContextMenuItem>
+              <ContextMenuItem disabled={!ready} onClick={criarPasta}>
+                <FolderPlus />
+                Nova pasta
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
 
-        <ul ref={listRef} className="space-y-1 p-2 pt-0">
-          {scenes?.map((scene, index) => (
-            <SceneRow
-              key={scene.id}
-              scene={scene}
-              onStage={scene.id === editingSceneId}
-              live={scene.id === liveSceneId}
-              dropTarget={dropIndex === index}
-              onReorderStart={(event) => startReorder(event, scene.id)}
-              renaming={renamingId === scene.id}
-              onRename={() => setRenamingId(scene.id)}
-              onRenameDone={() => setRenamingId(null)}
-              onGoLive={() => transmitir(scene.id)}
-              onOpen={() => abrir(scene.id)}
-            />
-          ))}
-        </ul>
+          {/* `pointer-events-none`: o aviso cobre o vazio, e o menu dele está
+              DEBAIXO -- sem isto o botão direito no painel vazio não abriria. */}
+          {ready && linhas.length === 0 && !buscando ? (
+            <PainelVazio
+              conteudo={{ tipo: "cenas" }}
+              className="pointer-events-none absolute inset-0"
+            >
+              Crie o primeiro {nome}
+            </PainelVazio>
+          ) : null}
+
+          {achados ? (
+            // Sem reordenar enquanto busca: "depois deste" na lista de achados
+            // não é um lugar da árvore. Ver o mesmo no Arquivos.
+            <ul className="relative z-10 space-y-1 p-2 pt-0">
+              {achados.length === 0 ? (
+                <li className="text-muted-foreground px-2 py-2 text-xs">
+                  Nada com “{busca.trim()}”.
+                </li>
+              ) : null}
+              {achados.map((scene) => (
+                <SceneRow
+                  key={scene.id}
+                  scene={scene}
+                  pastas={pastas}
+                  depth={0}
+                  caminho={caminhoDaPasta(pastas, scene.pastaId)}
+                  onStage={scene.id === editingSceneId}
+                  live={scene.id === liveSceneId}
+                  dropTarget={false}
+                  renaming={renamingId === scene.id}
+                  onRename={() => setRenamingId(scene.id)}
+                  onRenameDone={() => setRenamingId(null)}
+                  onGoLive={() => transmitir(scene.id)}
+                  onOpen={() => abrir(scene.id)}
+                />
+              ))}
+            </ul>
+          ) : (
+            <>
+              <ul ref={listRef} className="relative z-10 space-y-1 p-2 pt-0">
+                {linhas.map((linha, index) =>
+                  linha.tipo === "pasta" ? (
+                    <PastaRow
+                      key={linha.pasta.id}
+                      pasta={linha.pasta}
+                      pastas={pastas}
+                      depth={linha.depth}
+                      total={linha.total}
+                      dropTarget={dropIndex === index || alvoDoArrasto === linha.pasta.id}
+                      onReorderStart={startReorder}
+                      itensDeCriar={itensDeCriarNa(linha.pasta.id)}
+                      alvo={alvoDaAba}
+                    />
+                  ) : (
+                    <SceneRow
+                      key={linha.item.id}
+                      scene={linha.item}
+                      pastas={pastas}
+                      depth={linha.depth}
+                      onStage={linha.item.id === editingSceneId}
+                      live={linha.item.id === liveSceneId}
+                      dropTarget={dropIndex === index}
+                      onReorderStart={(event) =>
+                        startReorder(event, linha.item.id, LIMIAR_ARRASTO_PX)
+                      }
+                      renaming={renamingId === linha.item.id}
+                      onRename={() => setRenamingId(linha.item.id)}
+                      onRenameDone={() => setRenamingId(null)}
+                      onGoLive={() => transmitir(linha.item.id)}
+                      onOpen={() => abrir(linha.item.id)}
+                    />
+                  ),
+                )}
+              </ul>
+
+              {/* O vazio abaixo da lista é alvo: soltar aqui tira da pasta. Só
+                  com pasta: sem nenhuma, o aviso falaria de algo que não existe. */}
+              {pastas.length > 0 ? (
+                <div className="relative z-10">
+                  <FimDaLista
+                    ativo={dropIndex === linhas.length || alvoDoArrasto === ""}
+                    alvo={alvoDaAba}
+                  />
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
       </ScrollArea>
     </>
   );
@@ -325,13 +538,20 @@ function ListaDeCenas({
 
 type SceneRowProps = {
   scene: Scene;
+  /** As pastas desta lista, para o "Mover para". */
+  pastas: Pasta[];
+  /** O nível na árvore, para o recuo. */
+  depth: number;
+  /** O caminho da pasta, mostrado no achado da busca. Ver `caminhoDaPasta`. */
+  caminho?: string;
   /** Aberta no palco do Mestre. */
   onStage: boolean;
   /** Sendo exibida para a mesa. */
   live: boolean;
   /** Linha onde a cena arrastada cairia. */
   dropTarget: boolean;
-  onReorderStart: (event: ReactPointerEvent) => void;
+  /** Ausente nos achados da busca, que não reordenam. */
+  onReorderStart?: (event: ReactPointerEvent) => void;
   renaming: boolean;
   onRename: () => void;
   onRenameDone: () => void;
@@ -341,6 +561,9 @@ type SceneRowProps = {
 
 function SceneRow({
   scene,
+  pastas,
+  depth,
+  caminho,
   onStage,
   live,
   dropTarget,
@@ -405,6 +628,12 @@ function SceneRow({
         <CopyPlus />
         Duplicar
       </Item>
+      <ItensDeMover
+        kit={kit}
+        atual={scene.pastaId}
+        destinos={pastas}
+        onMover={(destino) => useSceneStore.getState().moverParaPasta(scene.id, destino)}
+      />
 
       <Separator />
 
@@ -487,19 +716,22 @@ function SceneRow({
               onStage ? "bg-accent" : "hover:bg-accent/50",
               dropTarget && "ring-primary ring-1",
             )}
+            style={depth > 0 ? { paddingLeft: 4 + depth * RECUO_PX } : undefined}
           />
         }
       >
         {/* A alça, e não a linha toda: a linha inteira já responde ao clique
             abrindo a cena, e arrastar de qualquer ponto dela deixaria os dois
             gestos disputando o mesmo alvo. */}
-        <span
-          className="text-muted-foreground hover:text-foreground shrink-0 cursor-grab touch-none px-0.5"
-          aria-hidden
-          onPointerDown={onReorderStart}
-        >
-          <GripVertical className="size-3.5" />
-        </span>
+        {onReorderStart ? (
+          <span
+            className="text-muted-foreground hover:text-foreground shrink-0 cursor-grab touch-none px-0.5"
+            aria-hidden
+            onPointerDown={onReorderStart}
+          >
+            <GripVertical className="size-3.5" />
+          </span>
+        ) : null}
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -509,7 +741,12 @@ function SceneRow({
           // continua sendo o reordenar; aqui é o gesto de apontar.
           onPointerDown={(event) =>
             arrastarParaNota(event, {
-              fonte: { tipo: "cena", sceneId: scene.id, nome: scene.name },
+              fonte: {
+                tipo: "cena",
+                sceneId: scene.id,
+                nome: scene.name,
+                lista: ehFundo(scene) ? "fundos" : "mapas",
+              },
               largura: 1,
               altura: 1,
             })
@@ -552,7 +789,8 @@ function SceneRow({
                     <span className="text-muted-foreground"> · capa</span>
                   ) : null}
                 </span>
-                <span className="text-muted-foreground block text-[10px]">
+                <span className="text-muted-foreground block truncate text-[10px]">
+                  {caminho ? `${caminho} · ` : null}
                   {resumoDaCena(scene, imagem)}
                 </span>
               </>

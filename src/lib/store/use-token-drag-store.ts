@@ -31,8 +31,21 @@ import { MIN_ITEM_SIZE } from "@/lib/geometry/transform";
  * mesmo gesto, e separá-los em três arrastos daria três sombras a manter.
  */
 export type FonteDoArrasto =
-  /** A miniatura do personagem, que já é arquivo do acervo. */
-  | { tipo: "personagem"; personagemId: string; assetId: string }
+  /**
+   * A miniatura do personagem, que já é arquivo do acervo.
+   *
+   * `assetId` vazio é o personagem sem miniatura: ele não vai ao mapa, mas
+   * ainda entra numa pasta e vira menção numa nota.
+   *
+   * `secao` diz de que seção da lista ele saiu, quando saiu de lá: a pasta de
+   * NPCs só recebe NPC. Ver `Pasta.membros`.
+   */
+  | {
+      tipo: "personagem";
+      personagemId: string;
+      assetId: string;
+      secao?: "players" | "npcs";
+    }
   /** Uma imagem da biblioteca. */
   | { tipo: "acervo"; assetId: string }
   /** Uma imagem do handout da cena, que é id de acervo. Ver `Scene.handout`. */
@@ -54,8 +67,9 @@ export type FonteDoArrasto =
   | { tipo: "item"; personagemId: string; itemId: string; url: string }
   // Uma nota `.md` da árvore de Arquivos, que vira cartão no quadro.
   | { tipo: "nota"; notaId: string; arquivo: string; titulo: string }
-  // Um mapa da lista de Mapas. Só vira menção `>mapa` numa nota.
-  | { tipo: "cena"; sceneId: string; nome: string };
+  // Um mapa ou fundo da lista de Cenas. Vira menção `>mapa` numa nota, e entra
+  // numa pasta da MESMA aba -- `lista` diz de qual ela saiu.
+  | { tipo: "cena"; sceneId: string; nome: string; lista?: "mapas" | "fundos" };
 
 /**
  * Onde o ponteiro está AGORA, entre os lugares que aceitam o que está na mão.
@@ -79,6 +93,18 @@ export type DestinoDoArrasto =
   | { tipo: "ponto"; pinId: string }
   // Uma pasta da árvore de Arquivos. `undefined` é a raiz.
   | { tipo: "pasta-arquivos"; pastaId: string | undefined }
+  // Uma pasta de Mapas ou de Fundos. `undefined` é a raiz da aba.
+  | {
+      tipo: "pasta-cenas";
+      lista: "mapas" | "fundos";
+      pastaId: string | undefined;
+    }
+  // Uma pasta de uma seção da lista de personagens. `undefined` é a raiz dela.
+  | {
+      tipo: "pasta-personagens";
+      lista: "players" | "npcs";
+      pastaId: string | undefined;
+    }
   // O editor de uma nota: o que cai vira menção no texto.
   | { tipo: "nota" };
 
@@ -99,7 +125,7 @@ export type ArrastoDeToken = {
 export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
   return fonte.tipo === "item" || fonte.tipo === "nota" || fonte.tipo === "cena"
     ? undefined
-    : fonte.assetId;
+    : fonte.assetId || undefined;
 }
 
 /**
@@ -122,6 +148,12 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
       return `ponto:${destino.pinId}`;
     case "pasta-arquivos":
       return "arquivos";
+    case "pasta-personagens":
+      return "personagens";
+    case "pasta-cenas":
+      // Uma por aba: Mapas e Fundos registram cada uma o seu alvo, e uma chave
+      // só faria a aba que desmonta apagar o alvo da outra.
+      return `cenas:${destino.lista}`;
     case "nota":
       return "nota";
   }
@@ -147,8 +179,11 @@ export function aceita(
 ): boolean {
   switch (destino.tipo) {
     case "palco":
-      // Mapa não cai no palco: ele É um palco. Só vira menção.
-      return fonte.tipo !== "cena";
+      // Mapa não cai no palco: ele É um palco. Só vira menção. E personagem sem
+      // miniatura não tem peça para pôr ali.
+      return (
+        fonte.tipo !== "cena" && !(fonte.tipo === "personagem" && !fonte.assetId)
+      );
     case "nota":
       // O que tem nome para ser mencionado: `/arquivo`, `@personagem`, `>mapa`.
       return (
@@ -162,6 +197,12 @@ export function aceita(
       return fonte.tipo === "acervo";
     case "pasta-arquivos":
       return fonte.tipo === "nota";
+    case "pasta-cenas":
+      return fonte.tipo === "cena" && fonte.lista === destino.lista;
+    case "pasta-personagens":
+      // Da mesma seção: a seção é DERIVADA do vínculo com um jogador, e um
+      // Player largado numa pasta de NPCs continuaria aparecendo em Players.
+      return fonte.tipo === "personagem" && fonte.secao === destino.lista;
     case "inventario":
       return (
         fonte.tipo === "item" && fonte.personagemId !== destino.personagemId
