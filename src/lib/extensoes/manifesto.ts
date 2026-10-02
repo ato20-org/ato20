@@ -34,7 +34,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 4;
+export const API_VERSAO = 5;
 
 /**
  * O que uma extensão diz de si.
@@ -110,15 +110,75 @@ export type PaginaDeclarada = {
 };
 
 /**
- * Um estilo de medidor desenhado em SVG. Espelho de `extensoes::EstiloDeMedidor`.
- * `altura` é a da forma, em fração da largura do medidor. Ver `svg-modelo.ts`.
+ * Um estilo de medidor: um `.svg` com variáveis (`arquivo`) OU camadas de
+ * imagem (`camadas`), nunca os dois -- o Rust recusa na entrada. Espelho de
+ * `extensoes::EstiloDeMedidor`. `altura` é a da forma, em fração da largura
+ * do medidor. Ver `svg-modelo.ts` e `FormaEmCamadas`.
  */
 export type EstiloDeMedidorDeclarado = {
   id: string;
   titulo: string;
-  arquivo: string;
+  arquivo?: string | null;
   altura: number;
+  camadas?: CamadasDoMedidor | null;
+  rotulo?: RotuloDoMedidor | null;
 };
+
+/**
+ * O que a linha acima da forma mostra. Espelho de `ROTULOS`.
+ *
+ * `acima` é o de sempre, nome e valor; `nome` tira o valor, para a moldura que
+ * já escreve o número; `nenhum` tira a linha, para o coração que racha e
+ * dispensa legenda.
+ */
+export type RotuloDoMedidor = "acima" | "nome" | "nenhum";
+
+/**
+ * Um medidor feito de imagens: o conteúdo embaixo, a moldura por cima.
+ * Espelho de `extensoes::Camadas`. Os caminhos são relativos à pasta do
+ * plugin, e o encaixe é FRAÇÃO da forma -- ele escala com a coluna do retrato
+ * sem o autor saber o tamanho de tela nenhuma.
+ */
+export type CamadasDoMedidor = {
+  moldura?: string | null;
+  /** Recorta o conteúdo pelo alfa, para formas que não são retângulo. */
+  mascara?: string | null;
+  /** Ausente é a forma inteira. */
+  encaixe?: EncaixeDoMedidor | null;
+  conteudo: ConteudoDoMedidor;
+  /** O valor escrito dentro da forma, por cima de tudo. */
+  texto?: TextoDoMedidor | null;
+};
+
+/**
+ * O valor (`11/13`) dentro da forma. Espelho de `extensoes::Texto`. Cores só
+ * em hex -- o Rust recusa o resto, porque elas vão parar num `style`.
+ */
+export type TextoDoMedidor = {
+  /** Ausente é o encaixe do conteúdo. */
+  encaixe?: EncaixeDoMedidor | null;
+  cor?: string | null;
+  contorno?: string | null;
+  /** Em fração da altura do encaixe do texto. Ausente é 0,7. */
+  tamanho?: number | null;
+};
+
+export type EncaixeDoMedidor = { x: number; y: number; largura: number; altura: number };
+
+export type DirecaoDaBarra = "direita" | "esquerda" | "cima" | "baixo";
+
+/** Como o valor ocupa o encaixe. Sem imagem, barra e pontos usam a cor do medidor. */
+export type ConteudoDoMedidor =
+  | {
+      modo: "barra";
+      direcao?: DirecaoDaBarra;
+      imagem?: string | null;
+      /** O trecho vazio, desenhado inteiro embaixo do cheio. */
+      vazio?: string | null;
+    }
+  | { modo: "pontos"; cheio?: string | null; vazio?: string | null }
+  /** Do vazio ao cheio. O primeiro só aparece no zero. */
+  | { modo: "sequencia"; quadros: string[] };
 
 /**
  * Os menus em que um plugin pode pôr item. Espelho de `ALVOS_DE_MENU`.

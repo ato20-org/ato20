@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import { COR_DO_ESCURO_PADRAO, corDoEscuroDe } from "@/lib/geometry/luz";
 import { novoId } from "@/lib/id";
+import { pastaDoMembro, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 
 import {
   canRedo,
@@ -82,6 +83,7 @@ import {
   type Parede,
   type Sol,
   type NewTexto,
+  type ListaDePastas,
   type Pasta,
   type PontaDeLigacao,
   type Texto,
@@ -182,17 +184,31 @@ type SceneStore = {
   removeScene: (sceneId: string) => void;
 
   /**
-   * As pastas dos quadros. Espelham as do grupo de itens -- criar, renomear,
+   * As pastas dos painéis. Espelham as do grupo de itens -- criar, renomear,
    * recolher, mover, desfazer -- mas moram no board, porque atravessam cenas.
-   * Desfazer solta o que há dentro um nível acima; nunca apaga quadro.
+   * Desfazer solta o que há dentro um nível acima; nunca apaga quadro, cena
+   * nem personagem.
+   *
+   * `lista` diz o painel, e a subpasta herda a da mãe -- ver `ListaDePastas`.
    */
-  criarPasta: (nome: string, parentId?: string) => string;
+  criarPasta: (nome: string, parentId?: string, lista?: ListaDePastas) => string;
   atualizarPasta: (pastaId: string, patch: Partial<Omit<Pasta, "id">>) => void;
-  /** Recusa ciclo: pasta dentro de descendente dela. */
+  /** Recusa ciclo, e pasta de outra lista como mãe. */
   moverPasta: (pastaId: string, parentId: string | undefined) => void;
   removerPasta: (pastaId: string) => void;
-  /** Leva um quadro para uma pasta. `undefined` é a raiz. */
+  /** Leva uma cena para uma pasta. `undefined` é a raiz. */
   moverParaPasta: (sceneId: string, pastaId: string | undefined) => void;
+  /**
+   * Leva um personagem para uma pasta da seção. `undefined` é a raiz dela.
+   *
+   * Só mexe nas pastas DESTA lista: o NPC que vira Player continua na pasta de
+   * NPCs, e volta para ela se o jogador sair. Ver `Pasta.membros`.
+   */
+  moverPersonagemParaPasta: (
+    personagemId: string,
+    lista: "players" | "npcs",
+    pastaId: string | undefined,
+  ) => void;
 
   /**
    * As notas `.md`. O arquivo já existe quando a nota entra -- quem o cria é
@@ -878,15 +894,19 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       useTrackStore.getState().esquecerCena(sceneId);
     },
 
-    criarPasta(nome, parentId) {
+    criarPasta(nome, parentId, lista) {
       const { board } = get();
       const id = novoId();
       if (!board) return id;
 
-      commit({
-        ...board,
-        pastas: [...(board.pastas ?? []), { id, nome: nome.trim(), parentId }],
-      });
+      const mae = parentId
+        ? board.pastas?.find((pasta) => pasta.id === parentId)
+        : undefined;
+      const pasta: Pasta = { id, nome: nome.trim(), parentId };
+      const daLista = mae ? mae.lista : lista;
+      if (daLista) pasta.lista = daLista;
+
+      commit({ ...board, pastas: [...(board.pastas ?? []), pasta] });
 
       return id;
     },
@@ -907,6 +927,12 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       const { board } = get();
       if (!board) return;
       const pastas = board.pastas ?? [];
+
+      // A árvore de cada painel é uma só: a pasta de Mapas não entra numa de
+      // Fundos, que nenhuma das duas abas mostraria inteira.
+      const pasta = pastas.find((outra) => outra.id === pastaId);
+      const mae = parentId ? pastas.find((outra) => outra.id === parentId) : undefined;
+      if (!pasta || (parentId && mae?.lista !== pasta.lista)) return;
 
       // Sobe do destino até a raiz; se passar pela própria pasta, é ciclo.
       let cursor = parentId;
@@ -930,11 +956,21 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
       const pastas = (board.pastas ?? [])
         .filter((pasta) => pasta.id !== pastaId)
-        .map((pasta) =>
-          pasta.parentId === pastaId
-            ? { ...pasta, parentId: alvo.parentId }
-            : pasta,
-        );
+        .map((pasta) => {
+          const solta =
+            pasta.parentId === pastaId
+              ? { ...pasta, parentId: alvo.parentId }
+              : pasta;
+
+          // Os personagens sobem com o resto: para a mãe, ou para a raiz da
+          // seção quando não há mãe -- e a raiz é não estar em pasta nenhuma.
+          if (solta.id !== alvo.parentId || !alvo.membros?.length) return solta;
+
+          return {
+            ...solta,
+            membros: [...new Set([...(solta.membros ?? []), ...alvo.membros])],
+          };
+        });
 
       commit({
         ...board,
@@ -945,6 +981,36 @@ export const useSceneStore = create<SceneStore>((set, get) => {
             ? { ...scene, pastaId: alvo.parentId }
             : scene,
         ),
+      });
+    },
+
+    moverPersonagemParaPasta(personagemId, lista, pastaId) {
+      const { board } = get();
+      if (!board) return;
+      const pastas = board.pastas ?? [];
+
+      if (pastaId && !pastas.some((pasta) => pasta.id === pastaId && pasta.lista === lista))
+        return;
+
+      const atual = pastaDoMembro(pastasDaLista(pastas, lista), personagemId);
+      if (atual === pastaId) return;
+
+      commit({
+        ...board,
+        pastas: pastas.map((pasta) => {
+          if (pasta.id === atual) {
+            const membros = (pasta.membros ?? []).filter((id) => id !== personagemId);
+            const resto = { ...pasta };
+            if (membros.length > 0) resto.membros = membros;
+            else delete resto.membros;
+            return resto;
+          }
+
+          if (pasta.id === pastaId)
+            return { ...pasta, membros: [...(pasta.membros ?? []), personagemId] };
+
+          return pasta;
+        }),
       });
     },
 

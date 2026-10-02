@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type DragEvent } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 import {
   ChevronLeft,
   ChevronRight,
   Eye,
   EyeOff,
   FlipHorizontal,
+  FolderClosed,
   Group,
   Palette,
   RotateCcw,
@@ -16,6 +17,7 @@ import {
   UserSquare,
 } from "lucide-react";
 
+import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import { MiniaturaDoAcervo, useAnimada } from "@/components/mestre/miniatura-do-acervo";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
@@ -47,7 +49,14 @@ import {
 } from "@/components/ui/tooltip";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useCharacters } from "@/hooks/use-characters";
+import { useCharacterOwners } from "@/hooks/use-character-owners";
 import { FOLGA_MAX, FOLGA_MIN, FOLGA_PADRAO } from "@/lib/geometry/portrait";
+import {
+  caminhoDaPasta,
+  pastaDoMembro,
+  pastasDaLista,
+} from "@/lib/mestre/arvore-de-pastas";
+import { normaliza } from "@/lib/search";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -109,7 +118,7 @@ type Queda = { uniaoId: string | null; indice: number };
  */
 export function PortraitList() {
   const scene = useSceneStore(selectEditingScene);
-  const { personagens } = useCharacters();
+  const { personagens, jogadores } = useCharacters();
   const guardados = usePortraitStore((state) => state.portraits);
   const unioes = usePortraitStore((state) => state.unioes);
   const unir = usePortraitStore((state) => state.unir);
@@ -164,7 +173,54 @@ export function PortraitList() {
 
   const porId = new Map(elenco.map((personagem) => [personagem.id, personagem]));
   const emUniao = new Set(unioes.flatMap((uniao) => uniao.retratos));
-  const soltos = elenco.filter((personagem) => !emUniao.has(personagem.id));
+
+  /**
+   * A pasta de cada um, a da lista de Personagens: o painel não tem pastas
+   * próprias, ele mostra as que o mestre já fez lá. Pela SEÇÃO, como lá -- a
+   * pasta de NPCs não vale para quem virou Player. Ver `Pasta.membros`.
+   */
+  const donos = useCharacterOwners(jogadores);
+  const todasAsPastas = useSceneStore((state) => state.board?.pastas);
+  const caminhoDe = useMemo(() => {
+    const players = pastasDaLista(todasAsPastas, "players");
+    const npcs = pastasDaLista(todasAsPastas, "npcs");
+
+    return (personagem: Personagem) => {
+      const pastas = (donos.get(personagem.id) ?? []).length > 0 ? players : npcs;
+      return caminhoDaPasta(pastas, pastaDoMembro(pastas, personagem.id));
+    };
+  }, [todasAsPastas, donos]);
+
+  /**
+   * A busca, pelo nome do personagem e da pasta. Esconde quem não casa, mas
+   * não tira ninguém da união: o índice de cada membro continua o da fila, e
+   * é ele que o arrastar usa para saber onde largar.
+   */
+  const [busca, setBusca] = useState("");
+  const termo = normaliza(busca.trim());
+  const visivel = (personagem: Personagem) =>
+    !termo ||
+    normaliza(personagem.nome).includes(termo) ||
+    normaliza(caminhoDe(personagem)).includes(termo);
+
+  const soltos = elenco.filter(
+    (personagem) => !emUniao.has(personagem.id) && visivel(personagem),
+  );
+
+  /**
+   * Os soltos por pasta: primeiro quem não está em nenhuma, na ordem da cena;
+   * depois cada pasta, pelo caminho. Só um título por grupo, sem recolher --
+   * recolher é da lista de Personagens, e aqui esconder um token da cena que se
+   * está montando seria esconder o que se veio procurar.
+   */
+  const porCaminho = new Map<string, Personagem[]>();
+  for (const personagem of soltos) {
+    const caminho = caminhoDe(personagem);
+    porCaminho.set(caminho, [...(porCaminho.get(caminho) ?? []), personagem]);
+  }
+  const gruposDeSoltos = [...porCaminho.entries()].sort(([a], [b]) =>
+    a === "" ? -1 : b === "" ? 1 : a.localeCompare(b),
+  );
 
   /** O registro guardado de um personagem, ou `null` se ele nunca foi armado. */
   const retratoDe = (personagemId: string): Portrait | null =>
@@ -219,6 +275,18 @@ export function PortraitList() {
         </span>
       </div>
 
+      {/* Numa linha própria, e não dividindo a do Grid: a dica do Shift é o que
+          ensina a unir, e espremida ao lado de um campo ela some. Sempre, como
+          nos outros painéis. */}
+      <div className="flex border-b px-2 py-1.5">
+        <CampoDeBusca
+          valor={busca}
+          onMudar={setBusca}
+          placeholder="Buscar personagem ou pasta"
+          rotulo="Buscar nos retratos da cena"
+        />
+      </div>
+
       <ScrollArea className="min-h-0 flex-1">
         {elenco.length === 0 ? (
           <PainelVazio conteudo={{ tipo: "retratos" }}>
@@ -226,16 +294,36 @@ export function PortraitList() {
           </PainelVazio>
         ) : (
           <div className="space-y-2 p-2">
-            {unioes.map((uniao) => (
-              <BlocoDaUniao
-                key={uniao.id}
-                uniao={uniao}
-                membros={uniao.retratos
-                  .map((id) => porId.get(id))
-                  .filter((personagem) => personagem !== undefined)}
-                {...comum}
-              />
-            ))}
+            {unioes.map((uniao) => {
+              const membros = uniao.retratos
+                .map((id) => porId.get(id))
+                .filter((personagem) => personagem !== undefined);
+
+              // Na busca, a união sem nenhum achado sai inteira: a moldura
+              // vazia diria "ninguém desta união está nesta cena", que é falso.
+              if (termo && !membros.some(visivel)) return null;
+
+              return (
+                <BlocoDaUniao
+                  key={uniao.id}
+                  uniao={uniao}
+                  membros={membros}
+                  visivel={visivel}
+                  {...comum}
+                />
+              );
+            })}
+
+            {termo && soltos.length === 0 && !unioes.some((uniao) =>
+              uniao.retratos.some((id) => {
+                const personagem = porId.get(id);
+                return personagem ? visivel(personagem) : false;
+              }),
+            ) ? (
+              <p className="text-muted-foreground px-2 py-1 text-xs">
+                Nada com “{busca.trim()}”.
+              </p>
+            ) : null}
 
             {/* Os soltos, sem moldura -- a ausência de borda É o estado.
                 A área recebe o arrasto mesmo vazia: tirar o último de uma união
@@ -262,19 +350,32 @@ export function PortraitList() {
                 </p>
               ) : null}
 
-              <ul className="space-y-1">
-                {soltos.map((personagem) => (
-                  <PortraitRow
-                    key={personagem.id}
-                    personagem={personagem}
-                    retrato={retratoDe(personagem.id)}
-                    uniao={null}
-                    indice={0}
-                    total={0}
-                    {...comum}
-                  />
+              <div className="space-y-2">
+                {gruposDeSoltos.map(([caminho, grupo]) => (
+                  <section key={caminho} aria-label={caminho || undefined}>
+                    {caminho ? (
+                      <h4 className="text-muted-foreground flex items-center gap-1 px-1 pb-1 text-[10px] font-medium">
+                        <FolderClosed className="size-3 shrink-0" aria-hidden />
+                        <span className="truncate">{caminho}</span>
+                        <span className="tabular-nums opacity-70">{grupo.length}</span>
+                      </h4>
+                    ) : null}
+                    <ul className="space-y-1">
+                      {grupo.map((personagem) => (
+                        <PortraitRow
+                          key={personagem.id}
+                          personagem={personagem}
+                          retrato={retratoDe(personagem.id)}
+                          uniao={null}
+                          indice={0}
+                          total={0}
+                          {...comum}
+                        />
+                      ))}
+                    </ul>
+                  </section>
                 ))}
-              </ul>
+              </div>
             </div>
           </div>
         )}
@@ -293,10 +394,13 @@ export function PortraitList() {
 function BlocoDaUniao({
   uniao,
   membros,
+  visivel,
   ...comum
 }: ComumDaLista & {
   uniao: UniaoDeRetratos;
   membros: Personagem[];
+  /** O filtro da busca. Quem não passa não é desenhado, mas guarda o lugar na fila. */
+  visivel: (personagem: Personagem) => boolean;
 }) {
   const ajustar = usePortraitStore((state) => state.ajustar);
 
@@ -356,17 +460,19 @@ function BlocoDaUniao({
         </p>
       ) : (
         <ul className="space-y-1">
-          {membros.map((personagem, indice) => (
-            <PortraitRow
-              key={personagem.id}
-              personagem={personagem}
-              retrato={comum.retratoDe(personagem.id)}
-              uniao={uniao}
-              indice={indice}
-              total={membros.length}
-              {...comum}
-            />
-          ))}
+          {membros.map((personagem, indice) =>
+            visivel(personagem) ? (
+              <PortraitRow
+                key={personagem.id}
+                personagem={personagem}
+                retrato={comum.retratoDe(personagem.id)}
+                uniao={uniao}
+                indice={indice}
+                total={membros.length}
+                {...comum}
+              />
+            ) : null,
+          )}
         </ul>
       )}
 

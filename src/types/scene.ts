@@ -110,13 +110,6 @@ export type AssetMeta = {
  */
 export type TipoDeSom = "trilha" | "ambiente" | "disparo";
 
-/**
- * Pasta do acervo.
- *
- * Só raiz, sem aninhamento: numa campanha o que se quer é separar mapas de
- * retratos e de fichas, e uma árvore profunda cobraria navegação em troca de
- * organização que ninguém pediu.
- */
 /** Pasta do acervo. Pasta dentro de pasta pelo `parentId`; ausente = raiz. */
 export type AssetFolder = {
   id: string;
@@ -2300,8 +2293,20 @@ export function pastasEscondidas(grupos: Grupo[] | undefined): Set<string> {
 export type TipoDeCena = "quadro" | "fundo";
 
 /**
- * Uma pasta de quadros. Só quadros: cena de mapa é fila de sessão, e uma
- * campanha tem dez; quadro é caderno, e um caderno cresce em capítulos.
+ * A que painel uma pasta pertence. Ausente = Arquivos (quadros e notas).
+ *
+ * Mapas e Fundos têm árvores separadas porque são abas separadas, e uma pasta
+ * que aparecesse nas duas mostraria metade vazia em cada uma. Players e NPCs,
+ * pela mesma razão: são as duas seções da lista de personagens.
+ */
+export type ListaDePastas = "mapas" | "fundos" | "players" | "npcs";
+
+/**
+ * Uma pasta de um dos painéis: quadros e notas no Arquivos, mapas, fundos e
+ * personagens nos deles. Ver `ListaDePastas`.
+ *
+ * Nasceu só para quadros, com o argumento de que uma campanha tem dez mapas.
+ * Campanha longa passou disso, e a lista plana virou rolagem.
  *
  * Mesma forma do `Grupo` da cena, e de propósito: a lista já sabe desenhar
  * essa árvore. Vive no board, e não na cena, porque atravessa cenas.
@@ -2311,6 +2316,21 @@ export type Pasta = {
   nome: string;
   parentId?: string;
   recolhido?: boolean;
+  /** Ausente = Arquivos, o que faz a pasta gravada antes das outras listas abrir no lugar. */
+  lista?: ListaDePastas;
+  /**
+   * Os personagens dentro dela, por id. Só nas listas `players` e `npcs`.
+   *
+   * Aqui, e não num `pastaId` do personagem como o da cena: o personagem vive
+   * no índice do vault, tipado em Rust e servido ao celular do jogador, e a
+   * pasta é organização da mesa do mestre. No board ela não chega ao celular --
+   * uma pasta "Traidores" não conta nada a ninguém -- e não pede espelho em
+   * Rust, que guarda `pastas` como JSON opaco.
+   *
+   * Id de personagem apagado fica para trás até a pasta ser gravada de novo, e
+   * ninguém o lê: a árvore só procura membros entre os personagens que existem.
+   */
+  membros?: string[];
 };
 
 export type Scene = {
@@ -2318,7 +2338,10 @@ export type Scene = {
   name: string;
   /** Ausente = mapa. Ver `TipoDeCena`. */
   tipo?: TipoDeCena;
-  /** A pasta em que um quadro está. Ausente = raiz. Só faz sentido em quadro. */
+  /**
+   * A pasta em que a cena está, da lista do tipo dela: quadro nas do Arquivos,
+   * mapa nas de Mapas, fundo nas de Fundos. Ausente = raiz.
+   */
   pastaId?: string;
   /**
    * Esta é a CAPA da campanha: o que a mesa vê quando não há nada no ar.

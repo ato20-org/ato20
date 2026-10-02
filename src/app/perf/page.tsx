@@ -12,6 +12,7 @@ import { DadoLayer } from "@/components/mestre/dado-layer";
 import { LayerList } from "@/components/mestre/layer-list";
 import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
 import { ChaoInclinado } from "@/components/playground/chao-inclinado";
+import { DeclarativoProvider } from "@/components/playground/declarativo";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
@@ -55,9 +56,10 @@ import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import { efeitoDe } from "@/lib/geometry/luz";
 import { MINIATURA } from "@/lib/miniatura";
 import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
+import { DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
-import { EFEITOS_NA_FIGURA } from "@/types/character";
+import { EFEITOS_NA_FIGURA, type Personagem } from "@/types/character";
 import {
   CORES_DA_LUZ,
   RAIO_DA_LUZ_PADRAO,
@@ -337,6 +339,79 @@ function efeitoDaMedida(): { efeito?: EfeitoDaLuz } {
   return efeito ? { efeito } : {};
 }
 
+/**
+ * Os medidores desta corrida, lidos da URL: `?medidores=K&estilo=camadas`.
+ *
+ * Os PRIMEIROS K tokens ganham ficha com dois medidores, e a cena liga o nome
+ * e os medidores sobre a cabeça (`infoDosTokens`). `estilo` diz como eles
+ * desenham: `fabrica` (a barra), `camadas` (moldura, máscara e conteúdo em
+ * PNG, do `scripts/perf/medidor/`) ou `animado` (o mesmo, com o conteúdo em
+ * GIF). É a pergunta da moldura de plugin: quanto a imagem custa no palco em
+ * `zoom`, e quanto a animação custa por cima dela. K em zero, o padrão, deixa
+ * a cena como a das medidas antigas.
+ */
+type EstiloDaMedida = "fabrica" | "camadas" | "animado";
+
+function medidoresDaMedida(): { quantos: number; estilo: EstiloDaMedida } {
+  if (typeof window === "undefined") return { quantos: 0, estilo: "fabrica" };
+
+  const params = new URLSearchParams(window.location.search);
+  const pedido = params.get("estilo");
+  const estilo: EstiloDaMedida =
+    pedido === "camadas" || pedido === "animado" ? pedido : "fabrica";
+
+  return { quantos: Number(params.get("medidores") ?? 0), estilo };
+}
+
+/** O plugin de mentira que a bancada serve em `/plugin/perf/*`. */
+function declarativoDaMedida(estilo: EstiloDaMedida): Declarativo {
+  if (estilo === "fabrica") return DECLARATIVO_VAZIO;
+
+  return {
+    versao: 1,
+    plugins: ["perf"],
+    estilos: {
+      "perf/vida": {
+        tipo: "camadas",
+        titulo: "Vida",
+        altura: 0.22,
+        plugin: "perf",
+        versao: "1",
+        camadas: {
+          moldura: "moldura.png",
+          mascara: "mascara.png",
+          encaixe: { x: 0.06, y: 0.22, largura: 0.88, altura: 0.56 },
+          conteudo: {
+            modo: "barra",
+            imagem: estilo === "animado" ? "sangue.gif" : "sangue.png",
+          },
+        },
+      },
+    },
+  };
+}
+
+/** Dois medidores por ficha, como uma mesa de vida e sanidade. */
+function personagensDaMedida(quantos: number, estilo: EstiloDaMedida): Personagem[] {
+  const estiloExtensao = estilo === "fabrica" ? undefined : "perf/vida";
+
+  return Array.from({ length: quantos }, (_, i) => ({
+    id: `perf-personagem-${i}`,
+    nome: `Figura ${i + 1}`,
+    criadoEm: 0,
+    medidores: ["Vida", "Sanidade"].map((nome, j) => ({
+      id: `perf-medidor-${i}-${j}`,
+      nome,
+      cor: CORES_DA_LUZ[(i + j) % CORES_DA_LUZ.length]!,
+      estilo: "barra" as const,
+      atual: 3 + ((i * 7 + j * 3) % 15),
+      maximo: 20,
+      escondido: false,
+      ...(estiloExtensao ? { estiloExtensao } : {}),
+    })),
+  }));
+}
+
 function lanternasDaMedida(): number {
   if (typeof window === "undefined") return 0;
 
@@ -349,6 +424,8 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
   const agora = Date.now();
   const lanternas = lanternasDaMedida();
   const { quantos: comCondicao } = condicoesDaMedida();
+  const { quantos: comMedidor } = medidoresDaMedida();
+  const comFicha = Math.max(comCondicao, comMedidor);
 
   const items: CanvasItem[] = Array.from({ length: n }, (_, i) => {
     const lado = 180 + ((i * 37) % 140);
@@ -368,7 +445,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
       rotation: (i * 23) % 360,
       z: i + 1,
       locked: false,
-      ...(i < comCondicao ? { personagemId: `perf-personagem-${i}` } : {}),
+      ...(i < comFicha ? { personagemId: `perf-personagem-${i}` } : {}),
       ...(i < lanternas
         ? {
             luz: {
@@ -396,6 +473,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
     // ritmo do canal em vez de ficar só no `useGestoStore` -- a diferença que
     // `?noar=0` existe para medir.
     cameraNoArId: noAr ? salvas[0]?.id : undefined,
+    ...(comMedidor > 0 ? { infoDosTokens: true } : {}),
     createdAt: agora,
     updatedAt: agora,
   };
@@ -1325,9 +1403,18 @@ function PalcoMestreCamera({ n, cameras }: { n: number; cameras: number }) {
   const cena = useSceneStore(selectEditingScene);
   const viewport = useViewportStore((state) => state.viewport);
   const setViewport = useViewportStore((state) => state.setViewport);
+  const [declarativo] = useState(() => declarativoDaMedida(medidoresDaMedida().estilo));
 
   useEffect(() => {
     const base = montarCena(n, cameras);
+    const medidores = medidoresDaMedida();
+    if (medidores.quantos > 0) {
+      useCharactersStore.setState({
+        personagens: personagensDaMedida(medidores.quantos, medidores.estilo),
+        pedido: useCharactersStore.getState().pedido + 1,
+        emVoo: false,
+      });
+    }
 
     useSceneStore.setState({
       board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
@@ -1382,9 +1469,11 @@ function PalcoMestreCamera({ n, cameras }: { n: number; cameras: number }) {
   if (!cena) return null;
 
   return (
-    <SceneStage viewport={viewport} onViewportChange={setViewport} limites={PLANO}>
-      <MestreStage scene={cena} />
-    </SceneStage>
+    <DeclarativoProvider valor={declarativo}>
+      <SceneStage viewport={viewport} onViewportChange={setViewport} limites={PLANO}>
+        <MestreStage scene={cena} />
+      </SceneStage>
+    </DeclarativoProvider>
   );
 }
 

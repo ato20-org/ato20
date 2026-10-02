@@ -154,6 +154,11 @@ def argumentos():
     # Gira a vista durante a corrida: refaz a lista do pintor a cada quadro,
     # que e o pior caso do modo.
     p.add_argument("--girando", action="store_true")
+    # `mestre-camera`: os K primeiros tokens com dois medidores sobre a cabeca,
+    # e como eles desenham -- `fabrica`, `camadas` (PNG) ou `animado` (GIF).
+    # Listas, viram celulas. Ver `medidoresDaMedida` na pagina.
+    p.add_argument("--medidores", default="0")
+    p.add_argument("--estilo", default="fabrica")
     p.add_argument("--url", default=None, help="servidor já de pé")
     p.add_argument("--pular-build", action="store_true")
     # A janela do `tauri.conf.json`. Medir noutro tamanho mede outra área de
@@ -331,8 +336,8 @@ def mediana(valores):
 
 
 def imprimir(linhas, args):
-    cab = ["cenario", "n", "cam", "docs", "gesto", "painel", "roda", "exp", "fps", "p95", "perdidos", "nos", "andou"]
-    larg = [12, 4, 4, 5, 14, 9, 6, 14, 7, 8, 10, 7, 8]
+    cab = ["cenario", "n", "cam", "docs", "gesto", "painel", "roda", "exp", "medidores", "fps", "p95", "perdidos", "nos", "andou"]
+    larg = [12, 4, 4, 5, 14, 9, 6, 14, 13, 7, 8, 10, 7, 8]
     fmt = lambda cs: "".join(str(c).rjust(w) for c, w in zip(cs, larg))  # noqa: E731
 
     # Agrupa as repetições da mesma célula e mostra a mediana, como o `medir.mjs`.
@@ -352,6 +357,7 @@ def imprimir(linhas, args):
         rd = re.search(r"roda=(\d+)", rotulo)
         docs = re.search(r"docs=(\d+)", rotulo)
         exp = re.search(r"exp=([\w-]+)", rotulo)
+        med = re.search(r"medidores=(\d+) (\w+)", rotulo)
         print(
             fmt(
                 [
@@ -363,6 +369,7 @@ def imprimir(linhas, args):
                     pnl.group(1) if pnl else "",
                     rd.group(1) if rd else "",
                     exp.group(1) if exp else "",
+                    f"{med.group(1)} {med.group(2)}" if med else "",
                     mediana([x["fps"] for x in corridas]),
                     f"{mediana([x['p95'] for x in corridas])}ms",
                     f"{mediana([x['perdidosPct'] for x in corridas])}%",
@@ -439,7 +446,12 @@ def main():
                        for k in args.condicoes.split(","):
                         for exp in args.experimento.split(","):
                          for modo in modos:
-                          for i in range(args.repetir):
+                          for med, est in [
+                              (m, e)
+                              for m in args.medidores.split(",")
+                              for e in args.estilo.split(",")
+                          ]:
+                           for i in range(args.repetir):
                             url = (
                                 f"{base}/perf?cenario={cenario}&n={n}"
                                 f"&segundos={args.segundos}&movidos={args.movidos}"
@@ -455,6 +467,7 @@ def main():
                                 f"&condicoes={k}&figura={args.figura}"
                                 f"&modo={modo}"
                                 f"&girando={'1' if args.girando else '0'}"
+                                f"&medidores={med}&estilo={est}"
                                 f"&rotulo={args.rotulo}"
                             )
                             if args.escuridao is not None:
@@ -478,6 +491,8 @@ def main():
                                 rotulo += f" roda={r}"
                             if k != "0" or len(args.condicoes.split(",")) > 1:
                                 rotulo += f" condicoes={k} {args.figura}"
+                            if med != "0" or len(args.medidores.split(",")) > 1:
+                                rotulo += f" medidores={med} {est}"
                             urls.append((rotulo, url))
 
     try:

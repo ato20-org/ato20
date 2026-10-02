@@ -287,6 +287,25 @@ function ler(sob: Element): DestinoDoArrasto | null {
   if (arquivos)
     return { tipo: "pasta-arquivos", pastaId: arquivos.dataset.pastaId || undefined };
 
+  const cenas = sob.closest<HTMLElement>("[data-pasta-cenas]");
+  const abaDaCena = cenas?.dataset.pastaCenas;
+  if (abaDaCena === "mapas" || abaDaCena === "fundos")
+    return {
+      tipo: "pasta-cenas",
+      lista: abaDaCena,
+      pastaId: cenas?.dataset.pastaId || undefined,
+    };
+
+  // A lista de personagens é janela, e fica por cima do mapa como o acervo.
+  const personagens = sob.closest<HTMLElement>("[data-pasta-personagens]");
+  const lista = personagens?.dataset.pastaPersonagens;
+  if (lista === "players" || lista === "npcs")
+    return {
+      tipo: "pasta-personagens",
+      lista,
+      pastaId: personagens?.dataset.pastaId || undefined,
+    };
+
   const inventario = sob.closest<HTMLElement>("[data-inventario]");
   if (inventario?.dataset.personagemId) {
     return {

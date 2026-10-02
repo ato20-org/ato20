@@ -41,14 +41,33 @@ async function lerEstilos(
       .filter((extensao) => extensao.habilitada)
       .flatMap((extensao) =>
         (extensao.contribui?.estilosDeMedidor ?? []).map(async (estilo) => {
+          const chave = `${extensao.id}/${estilo.id}`;
+          const comum = {
+            titulo: estilo.titulo,
+            altura: estilo.altura,
+            ...(estilo.rotulo ? { rotulo: estilo.rotulo } : {}),
+          };
+
+          // Camadas não têm arquivo para ler: são o próprio JSON, que o Rust
+          // já validou ao instalar. As imagens cada tela busca na hora.
+          if (estilo.camadas) {
+            estilos[chave] = {
+              ...comum,
+              tipo: "camadas",
+              plugin: extensao.id,
+              versao: extensao.versao,
+              camadas: estilo.camadas,
+            };
+            return;
+          }
+          if (!estilo.arquivo) return;
+
           try {
             const texto = await (
               await fetch(urlDaExtensao(extensao.id, estilo.arquivo, extensao.versao))
             ).text();
             const modelo = lerModeloSvg(texto);
-            if (modelo) {
-              estilos[`${extensao.id}/${estilo.id}`] = { altura: estilo.altura, modelo };
-            }
+            if (modelo) estilos[chave] = { ...comum, tipo: "svg", modelo };
           } catch {
             // Arquivo apagado por fora, ou SVG ilegível: o estilo some e o
             // medidor volta ao de fábrica. Ver o cabeçalho.

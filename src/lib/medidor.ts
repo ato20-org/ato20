@@ -1,3 +1,4 @@
+import type { RotuloDoMedidor } from "@/lib/extensoes/manifesto";
 import type { Medidor } from "@/types/character";
 
 /**
@@ -74,4 +75,27 @@ export function medidoresVisiveis(
   medidores: ReadonlyArray<Medidor> | undefined,
 ): Medidor[] {
   return (medidores ?? []).filter((medidor) => !medidor.escondido);
+}
+
+/**
+ * O que a linha acima da forma mostra: o nome, o valor, os dois ou nada.
+ *
+ * Três vozes, nesta ordem de força. O MESTRE, quando escolheu no medidor --
+ * ele sabe que a moldura do coração já diz "vida", ou que a mesa não deve ler
+ * o número. O ESTILO de plugin, pelo `rotulo` que o autor declarou. E a
+ * FÁBRICA: nome e valor, menos na porcentagem, em que a forma já é o número e
+ * escrevê-lo duas vezes seria ruído.
+ */
+export function legendaDoMedidor(
+  medidor: Pick<Medidor, "estilo" | "mostrarNome" | "mostrarValor">,
+  estilo?: { rotulo?: RotuloDoMedidor },
+): { nome: boolean; valor: boolean } {
+  const rotulo = estilo?.rotulo ?? "acima";
+
+  return {
+    nome: medidor.mostrarNome ?? rotulo !== "nenhum",
+    valor:
+      medidor.mostrarValor ??
+      (estilo ? rotulo === "acima" : medidor.estilo !== "porcentagem"),
+  };
 }

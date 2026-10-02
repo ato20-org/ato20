@@ -1,18 +1,33 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  FolderPlus,
   MoreVertical,
   Pencil,
   PersonStanding,
   Plus,
-  Search,
   Trash2,
   UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { MiniaturaDoAcervo, useAnimada } from "@/components/mestre/miniatura-do-acervo";
+import {
+  FimDaLista,
+  ItensDeMover,
+  PastaRow,
+  PREFIXO_PASTA,
+  RECUO_PX,
+} from "@/components/mestre/arvore-de-pastas";
+import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,9 +77,16 @@ import {
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
+import { useListReorder } from "@/hooks/use-list-reorder";
 import { OQueVaiJunto } from "@/components/mestre/character-window";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { useTokenDrag } from "@/hooks/use-token-drag";
+import {
+  achatarArvore,
+  caminhoDaPasta,
+  pastaDoMembro,
+  pastasDaLista,
+} from "@/lib/mestre/arvore-de-pastas";
 import { normaliza } from "@/lib/search";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -77,7 +99,19 @@ import {
   renameCharacter,
 } from "@/lib/vault/characters";
 import type { Personagem } from "@/types/character";
-import type { AssetMeta } from "@/types/scene";
+import type { AssetMeta, Pasta } from "@/types/scene";
+
+/** A seção de um personagem na lista, que é também a lista das pastas dela. */
+type Secao = "players" | "npcs";
+
+/** Onde a linha está: a seção, as pastas dela e o nível na árvore. */
+type LugarDaLinha = {
+  secao: Secao;
+  pastas: Pasta[];
+  depth: number;
+  /** O caminho da pasta, mostrado no achado da busca. */
+  caminho?: string;
+};
 import { cn } from "@/lib/utils";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 
@@ -189,6 +223,31 @@ export function CharactersBody() {
   const { assets } = useAssetList("image");
 
   const [busca, setBusca] = useState("");
+  const buscando = busca.trim() !== "";
+
+  const todasAsPastas = useSceneStore((state) => state.board?.pastas);
+  const pastasDe = useMemo(
+    () => ({
+      players: pastasDaLista(todasAsPastas, "players"),
+      npcs: pastasDaLista(todasAsPastas, "npcs"),
+    }),
+    [todasAsPastas],
+  );
+
+  /**
+   * A seção é DERIVADA do vínculo -- ver `grupos` abaixo --, e a pasta é da
+   * seção: o NPC que vira Player sai da pasta de NPCs na tela, e volta para
+   * ela se o jogador sair.
+   */
+  const caminhoDe = useCallback(
+    (personagem: Personagem) => {
+      const secao: Secao =
+        (donos.get(personagem.id) ?? []).length > 0 ? "players" : "npcs";
+      const pastas = pastasDe[secao];
+      return caminhoDaPasta(pastas, pastaDoMembro(pastas, personagem.id));
+    },
+    [donos, pastasDe],
+  );
 
   const achados = useMemo(() => {
     const termo = normaliza(busca.trim());
@@ -198,14 +257,18 @@ export function CharactersBody() {
     // chamam pelo nome do personagem, metade da sala é lembrada pelo outro —
     // "quem era o personagem do Dayvson?" é a pergunta real. Mesmo par da
     // busca de jogadores, pelo lado invertido.
+    //
+    // E no nome da pasta: "taverna" traz quem mora na pasta Taverna, que é o
+    // jeito de achar o dono da estalagem sem lembrar o nome dele.
     return personagens.filter(
       (personagem) =>
         normaliza(personagem.nome).includes(termo) ||
         (donos.get(personagem.id) ?? []).some((nome) =>
           normaliza(nome).includes(termo),
-        ),
+        ) ||
+        normaliza(caminhoDe(personagem)).includes(termo),
     );
-  }, [personagens, donos, busca]);
+  }, [personagens, donos, busca, caminhoDe]);
 
   /**
    * Jogadores em cima, PNJs embaixo.
@@ -231,11 +294,51 @@ export function CharactersBody() {
       );
     }
 
-    return [
-      { tag: "Players", personagens: jogadores },
-      { tag: "NPCs", personagens: pnjs },
-    ].filter((grupo) => grupo.personagens.length > 0);
-  }, [achados, donos]);
+    // A seção sem ninguém continua de pé quando tem pasta, fora da busca: é a
+    // pasta vazia recém-criada, esperando quem entre nela.
+    return (
+      [
+        { tag: "Players", secao: "players", personagens: jogadores },
+        { tag: "NPCs", secao: "npcs", personagens: pnjs },
+      ] as const
+    ).filter(
+      (grupo) =>
+        grupo.personagens.length > 0 ||
+        (!buscando && pastasDe[grupo.secao].length > 0),
+    );
+  }, [achados, donos, buscando, pastasDe]);
+
+  /**
+   * Soltar o personagem sobre uma pasta da seção dele o põe lá dentro. É o
+   * MESMO arrasto que leva o token ao mapa: a linha inteira já é esse gesto, e
+   * um segundo arrasto na mesma linha brigaria com ele. Ver `aceita`.
+   */
+  useEffect(
+    () =>
+      useTokenDragStore.getState().registrarAlvo("personagens", (solto, destino) => {
+        if (solto.fonte.tipo !== "personagem" || destino.tipo !== "pasta-personagens") return;
+        useSceneStore
+          .getState()
+          .moverPersonagemParaPasta(solto.fonte.personagemId, destino.lista, destino.pastaId);
+      }),
+    [],
+  );
+
+  /**
+   * Onde o personagem arrastado cai, como `secao:pastaId` -- `secao:` é a raiz
+   * dela --, para a borda acender só ali.
+   */
+  const alvoDoArrasto = useTokenDragStore((state) =>
+    state.arrasto?.destino?.tipo === "pasta-personagens"
+      ? `${state.arrasto.destino.lista}:${state.arrasto.destino.pastaId ?? ""}`
+      : null,
+  );
+
+  function criarPasta(secao: Secao) {
+    useSceneStore
+      .getState()
+      .criarPasta(`Pasta ${pastasDe[secao].length + 1}`, undefined, secao);
+  }
 
   const abertas = useWindowStore((state) => state.janelas);
   const fecharJanela = useWindowStore((state) => state.fechar);
@@ -373,7 +476,8 @@ export function CharactersBody() {
   }
 
   /** Uma linha da lista. Função e não componente: partilha `donos`, `assets` e os gestos daqui. */
-  function linha(personagem: Personagem) {
+  function linha(personagem: Personagem, lugar: LugarDaLinha) {
+    const pastaAtual = pastaDoMembro(lugar.pastas, personagem.id);
     const quem = donos.get(personagem.id) ?? [];
     const miniatura = assets.find(
       (asset) => asset.id === personagem.miniatura,
@@ -417,6 +521,19 @@ export function CharactersBody() {
           kit={kit}
           personagem={personagem}
           onChanged={recarregar}
+        />
+
+        {/* As pastas da seção dele. É também o caminho de quem não tem
+            miniatura, e por isso não arrasta. */}
+        <ItensDeMover
+          kit={kit}
+          atual={pastaAtual}
+          destinos={lugar.pastas}
+          onMover={(destino) =>
+            useSceneStore
+              .getState()
+              .moverPersonagemParaPasta(personagem.id, lugar.secao, destino)
+          }
         />
 
         <Sub>
@@ -495,14 +612,16 @@ export function CharactersBody() {
                 escolhidos.has(personagem.id)
                   ? "bg-accent"
                   : "hover:bg-accent/50",
-                // Só quem pode ir ao mapa ganha a mão de arrastar: uma
-                // linha que promete o gesto e não o cumpre é pior que uma
-                // que não o promete.
-                miniatura
-                  ? "cursor-grab select-none active:cursor-grabbing"
-                  : null,
+                // Todo personagem arrasta: com miniatura ele vai ao mapa, e
+                // com ou sem ela entra numa pasta e vira menção na nota.
+                "cursor-grab select-none active:cursor-grabbing",
                 noAr === personagem.id && "opacity-40",
               )}
+              style={
+                lugar.depth > 0
+                  ? { paddingLeft: lugar.depth * RECUO_PX }
+                  : undefined
+              }
               // Para aqui, e nao sobe: acima desta linha ha o envelope da
               // lista, cujo menu diz "criar personagem". Deixar subir faria
               // o mesmo botao direito abrir o menu errado em cima do nome.
@@ -523,7 +642,6 @@ export function CharactersBody() {
                 // e o gesto de posicionar o cursor no meio do nome virava um
                 // token largado no mapa.
                 if (renomeando === personagem.id) return;
-                if (!miniatura) return;
 
                 const tamanho = tamanhoDoToken(miniatura);
 
@@ -531,7 +649,10 @@ export function CharactersBody() {
                   fonte: {
                     tipo: "personagem",
                     personagemId: personagem.id,
-                    assetId: miniatura.id,
+                    // Vazio sem miniatura: o palco recusa, a pasta aceita.
+                    // Ver `aceita`.
+                    assetId: miniatura?.id ?? "",
+                    secao: lugar.secao,
                   },
                   largura: tamanho.x,
                   altura: tamanho.y,
@@ -581,9 +702,9 @@ export function CharactersBody() {
                     que importa ali é distinguir o PNJ de quem foi
                     entregue, e um rótulo "sem dono" repetido em vinte
                     linhas de bestiário viraria ruído. */}
-                  {quem.length > 0 ? (
+                  {quem.length > 0 || lugar.caminho ? (
                     <span className="text-muted-foreground block truncate text-[10px]">
-                      {quem.join(", ")}
+                      {[lugar.caminho, quem.join(", ")].filter(Boolean).join(" · ")}
                     </span>
                   ) : null}
                 </span>
@@ -646,22 +767,16 @@ export function CharactersBody() {
             que abre para receber teclado e fecha ao sair. Esta é uma janela que
             FICA, e roubar o foco do palco a cada abertura atrapalharia quem
             abriu a lista para clicar num nome. */}
-        <div className="relative min-w-0 flex-1">
-          <Search
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
-            aria-hidden
-          />
-          {/* Sem fundo, ao contrario do resto dos campos: aqui ele divide a
-              linha com o botao redondo, e duas caixas preenchidas lado a lado
-              competiam pelo olho. A borda sozinha ja diz que se digita aqui. */}
-          <Input
-            value={busca}
-            onChange={(event) => setBusca(event.target.value)}
-            placeholder="Buscar personagem ou jogador"
-            aria-label="Buscar personagem ou jogador"
-            className="h-8 bg-transparent pl-8 text-xs dark:bg-transparent"
-          />
-        </div>
+        {/* Sem fundo, ao contrario do resto dos campos: aqui ele divide a
+            linha com o botao redondo, e duas caixas preenchidas lado a lado
+            competiam pelo olho. A borda sozinha ja diz que se digita aqui. */}
+        <CampoDeBusca
+          valor={busca}
+          onMudar={setBusca}
+          placeholder="Buscar personagem ou jogador"
+          rotulo="Buscar personagem ou jogador"
+          dica="Acha pelo nome do personagem, de quem joga e da pasta. Esc limpa."
+        />
 
         <Tooltip>
           <TooltipTrigger
@@ -704,17 +819,17 @@ export function CharactersBody() {
                 ) : (
                   <div className="space-y-2 p-2 pt-0">
                     {grupos?.map((grupo) => (
-                      <section key={grupo.tag} aria-label={grupo.tag}>
-                        <h3 className="text-muted-foreground flex items-center gap-1.5 px-2 pt-1 pb-1 text-[10px] font-medium tracking-wide uppercase">
-                          {grupo.tag}
-                          <span className="tabular-nums opacity-70">
-                            {grupo.personagens.length}
-                          </span>
-                        </h3>
-                        <ul className="space-y-0.5">
-                          {grupo.personagens.map(linha)}
-                        </ul>
-                      </section>
+                      <SecaoDaLista
+                        key={grupo.tag}
+                        tag={grupo.tag}
+                        secao={grupo.secao}
+                        personagens={grupo.personagens}
+                        pastas={pastasDe[grupo.secao]}
+                        buscando={buscando}
+                        alvoDoArrasto={alvoDoArrasto}
+                        linha={linha}
+                        onCriarPasta={() => criarPasta(grupo.secao)}
+                      />
                     ))}
                   </div>
                 )}
@@ -727,6 +842,16 @@ export function CharactersBody() {
           <ContextMenuItem onClick={abrirCriacao}>
             <Plus />
             Criar personagem
+          </ContextMenuItem>
+          {/* As duas, porque o vazio não é de seção nenhuma: a pasta tem de
+              saber de qual é para nascer no lugar certo. */}
+          <ContextMenuItem onClick={() => criarPasta("npcs")}>
+            <FolderPlus />
+            Nova pasta em NPCs
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => criarPasta("players")}>
+            <FolderPlus />
+            Nova pasta em Players
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -809,6 +934,143 @@ export function CharactersBody() {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/**
+ * Uma seção da lista -- Players ou NPCs -- com a árvore de pastas dela.
+ *
+ * Componente, e não um trecho do `CharactersBody`, porque cada seção tem o seu
+ * `useListReorder`: é ele que arrasta uma PASTA para dentro de outra. A linha
+ * do personagem não passa por ele -- ela já é o arrasto do token, que entra na
+ * pasta pelo alvo `pasta-personagens`.
+ */
+function SecaoDaLista({
+  tag,
+  secao,
+  personagens,
+  pastas,
+  buscando,
+  alvoDoArrasto,
+  linha,
+  onCriarPasta,
+}: {
+  tag: string;
+  secao: Secao;
+  personagens: Personagem[];
+  pastas: Pasta[];
+  buscando: boolean;
+  /** `secao:pastaId` sob o personagem arrastado. Ver `CharactersBody`. */
+  alvoDoArrasto: string | null;
+  linha: (personagem: Personagem, lugar: LugarDaLinha) => ReactNode;
+  onCriarPasta: () => void;
+}) {
+  const linhas = buscando
+    ? null
+    : achatarArvore(personagens, pastas, (personagem) =>
+        pastaDoMembro(pastas, personagem.id),
+      );
+
+  const { listRef, dropIndex, startReorder } = useListReorder<string>(
+    (arrastado, index) => {
+      if (!linhas || !arrastado.startsWith(PREFIXO_PASTA)) return;
+
+      const pastaId = arrastado.slice(PREFIXO_PASTA.length);
+      const alvo = linhas[index];
+      // Sobre uma pasta, entra nela; sobre um personagem, vai para a pasta
+      // dele; no fim da lista, raiz. O store recusa ciclo.
+      const destino = !alvo
+        ? undefined
+        : alvo.tipo === "pasta"
+          ? alvo.pasta.id
+          : pastaDoMembro(pastas, alvo.item.id);
+      if (destino !== pastaId) useSceneStore.getState().moverPasta(pastaId, destino);
+    },
+    "sobre",
+  );
+
+  const alvo = { "data-pasta-personagens": secao };
+
+  return (
+    <section aria-label={tag}>
+      {/* O cabeçalho é a RAIZ da seção para o arrasto: soltar nele tira o
+          personagem da pasta. */}
+      <h3
+        {...alvo}
+        className={cn(
+          "group text-muted-foreground flex items-center gap-1.5 rounded-md px-2 pt-1 pb-1 text-[10px] font-medium tracking-wide uppercase",
+          alvoDoArrasto === `${secao}:` && "ring-primary ring-1",
+        )}
+      >
+        {tag}
+        <span className="tabular-nums opacity-70">{personagens.length}</span>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+                aria-label={`Nova pasta em ${tag}`}
+                onClick={onCriarPasta}
+              >
+                <FolderPlus />
+              </Button>
+            }
+          />
+          <TooltipContent>Nova pasta em {tag}</TooltipContent>
+        </Tooltip>
+      </h3>
+
+      <ul ref={listRef} className="space-y-0.5">
+        {linhas === null
+          ? // Na busca, os achados em lista, com a pasta de cada um embaixo do
+            // nome: abrir a árvore mostraria as pastas sem quem foi achado.
+            personagens.map((personagem) =>
+              linha(personagem, {
+                secao,
+                pastas,
+                depth: 0,
+                caminho: caminhoDaPasta(pastas, pastaDoMembro(pastas, personagem.id)),
+              }),
+            )
+          : linhas.map((linhaDaArvore, index) =>
+              linhaDaArvore.tipo === "pasta" ? (
+                <PastaRow
+                  key={linhaDaArvore.pasta.id}
+                  pasta={linhaDaArvore.pasta}
+                  pastas={pastas}
+                  depth={linhaDaArvore.depth}
+                  total={linhaDaArvore.total}
+                  dropTarget={
+                    dropIndex === index ||
+                    alvoDoArrasto === `${secao}:${linhaDaArvore.pasta.id}`
+                  }
+                  onReorderStart={startReorder}
+                  alvo={alvo}
+                />
+              ) : (
+                linha(linhaDaArvore.item, {
+                  secao,
+                  pastas,
+                  depth: linhaDaArvore.depth,
+                })
+              ),
+            )}
+      </ul>
+
+      {/* O fim da seção também é raiz, para a pasta arrastada e para o
+          personagem. Só com pasta: sem nenhuma, o aviso falaria do que não
+          existe. */}
+      {linhas && pastas.length > 0 ? (
+        <FimDaLista
+          ativo={
+            dropIndex === linhas.length || alvoDoArrasto === `${secao}:`
+          }
+          alvo={alvo}
+        />
+      ) : null}
+    </section>
   );
 }
 

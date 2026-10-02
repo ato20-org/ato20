@@ -83,7 +83,11 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 4 é a atual: ela acrescentou `chat` à API (ver
+mais do que ele tem.** A 5 é a atual: ela acrescentou ao manifesto o estilo de
+medidor em `camadas` de imagem e o `rotulo` (ver
+[Em camadas de imagem](#em-camadas-de-imagem)); um plugin que os usa pede 5,
+para um ATO20 anterior dizer "atualize" em vez de reclamar de um campo que
+falta. A 4 acrescentou `chat` à API (ver
 [O chat da mesa](#o-chat-da-mesa)), sem mudar o manifesto — subiu porque um
 plugin que chama `api.chat.postar` num ATO20 de API 3 quebraria em runtime,
 longe do gesto de instalar. A 3 acrescentou as `paginas`, a
@@ -334,7 +338,8 @@ pílula ao lado do botão enquanto a ferramenta está na mão, como a cor do lá
 
 Um plugin pode desenhar o medidor — uma barra com brilho, um coração que
 esvazia, um relógio que gira — e a mesa inteira vê o desenho. Sem uma linha de
-código do plugin rodar fora do Mestre: o estilo é um **`.svg` com variáveis**.
+código do plugin rodar fora do Mestre: o estilo é um **`.svg` com variáveis**
+ou **camadas de imagem** (ver abaixo).
 
 ```json
 "estilosDeMedidor": [
@@ -363,6 +368,85 @@ uma lista fechada de elementos e atributos (`svg-modelo.ts`): sem `script`,
 arquivo; animação só em `opacity` e `transform`, que é o que o palco já anima
 sem custar layout. É a árvore que viaja, e a TV a desenha com o React — o
 mesmo caminho do Markdown. Elemento fora da lista some com os filhos.
+
+### Em camadas de imagem
+
+Quem desenha num editor de imagem, e não em SVG, declara `camadas` no lugar de
+`arquivo`. A moldura fica **por cima**, o conteúdo **embaixo**, e o encaixe diz
+onde o conteúdo entra:
+
+```json
+"estilosDeMedidor": [
+  {
+    "id": "vida",
+    "titulo": "Vida",
+    "altura": 0.22,
+    "rotulo": "nome",
+    "camadas": {
+      "moldura": "medidores/vida.webp",
+      "mascara": "medidores/vida-mascara.png",
+      "encaixe": { "x": 0.06, "y": 0.22, "largura": 0.88, "altura": 0.56 },
+      "conteudo": { "modo": "barra", "direcao": "direita", "imagem": "medidores/sangue.gif" }
+    }
+  }
+]
+```
+
+- **`encaixe`** é fração da forma, de 0 a 1: `x` e `largura` da largura,
+  `y` e `altura` da altura. Ausente, o conteúdo ocupa a forma inteira. A forma
+  escala com a coluna do retrato e com o token, e o encaixe escala junto: não
+  há pixel nenhum para acertar.
+- **`moldura`** é desenhada sobre a forma inteira. Sem 9-slice: a proporção é
+  a `altura` declarada, então a moldura cresce inteira e nunca estica.
+- **`mascara`** recorta o conteúdo pelo alfa, para formas que não são
+  retângulo. Desenhe-a na mesma tela da moldura (a silhueta do coração sobre o
+  desenho do coração).
+- **`conteudo`** tem três modos:
+  - `barra`: a imagem (ou a cor do medidor, sem `imagem`) é **recortada** pela
+    fração, crescendo para `direcao` (`direita`, `esquerda`, `cima`, `baixo`).
+    Recortada e não esticada: o sangue não amassa quando a vida desce. `vazio`
+    é a imagem do trecho que sobra, desenhada inteira embaixo do cheio (a
+    tinta mais rala à direita da barra).
+  - `pontos`: um ponto por unidade, numa linha que encolhe para caber. `cheio`
+    e `vazio` são imagens; sem `vazio`, o vazio é o `cheio` apagado; sem
+    nenhuma, bolinhas na cor do medidor.
+  - `sequencia`: `quadros`, de 2 a 16, do vazio ao cheio. O primeiro só
+    aparece no zero; os outros dividem o resto em faixas iguais. É o coração
+    que racha conforme a vida cai.
+- **`texto`** escreve o valor (`11/13`, `70%`) **dentro** da forma, por cima
+  da moldura: `{ "cor": "#fff", "contorno": "#140a0a", "tamanho": 0.55 }`.
+  `encaixe` próprio é opcional (ausente, o do conteúdo); `tamanho` é fração da
+  altura desse encaixe, de 0,2 a 1,5. As cores são **hex** e só hex: elas vão
+  para o estilo da página, e o Rust recusa o resto. A fonte é a do aplicativo.
+- **`rotulo`** vale para os dois tipos de estilo: `acima` (o padrão, nome e
+  valor), `nome` (sem o valor, para a moldura que já escreve o número) ou
+  `nenhum` (sem a linha). É o padrão do estilo: o mestre liga e desliga o nome
+  e o valor de cada medidor na legenda, e a escolha dele vence.
+
+As imagens são **raster**: png, webp, gif, jpg ou avif, até 2 MB cada, dentro
+da pasta do plugin. SVG fica de fora de propósito, porque estas imagens vão
+para a rede e um SVG aberto como documento roda script; moldura vetorial
+continua pelo estilo `.svg`, que passa pelo filtro. A importação confere se
+cada imagem existe e cabe no teto, e diz qual faltou.
+
+O daemon serve na rede **só as imagens que o estilo declara**, uma a uma, em
+`/plugin/{id}/{arquivo}`: o resto da pasta continua fora dela. Um plugin que só
+desenha medidor não precisa de `principal`.
+
+Animação é a do próprio arquivo (GIF, WebP ou APNG animado). Medido no palco do
+Mestre com o plano em `zoom`: o GIF custa o mesmo que a imagem parada e que a
+barra de fábrica (ver `scripts/perf/README.md`). Mesmo assim, prefira arquivos
+curtos e pequenos: cada TV e cada celular baixa todos.
+
+### Quem escolhe o estilo
+
+O mestre, no seletor de cor e forma do medidor (a paleta), na ficha do
+personagem e na configuração da campanha: os estilos dos plugins ligados entram
+na mesma grade das formas de fábrica, cada um com a amostra. Escolher um acerta
+junto a forma de fábrica de reserva (`pontos` para os pontos, `barra` para o
+resto), que é o que a mesa sem o plugin desenha. Escolhido num **modelo de medidor da
+campanha**, o estilo nasce em cada ficha nova junto com o medidor. O plugin
+também pode escolher, por código, como antes.
 
 O conjunto viaja por um **canal próprio**, `/sala/declarativo`, e não dentro do
 quadro de 10 Hz: o quadro leva só `declarativoVersao`, um número, e quem

@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { create } from "zustand";
 
+import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ import { useFolderList } from "@/hooks/use-folder-list";
 import { useTokenDrag } from "@/hooks/use-token-drag";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { countAssetUsage } from "@/lib/mestre/asset-usage";
+import { caminhoDaPasta } from "@/lib/mestre/arvore-de-pastas";
 import {
   importarCaminhosNoAcervo,
   rotuloDoArrasto,
@@ -66,6 +68,7 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
+import { normaliza } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import type { AssetFolder, AssetMeta, Scene } from "@/types/scene";
 
@@ -230,8 +233,45 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
     [handleMove],
   );
 
-  /** Os arquivos na ordem em que a lista os mostra: pastas primeiro, depois os soltos. */
+  /**
+   * A busca, pelo nome do arquivo e pelo caminho da pasta. Com texto no campo,
+   * a árvore dá lugar aos achados, agrupados pela pasta de cada um. Arrastar o
+   * achado para o mapa continua valendo: achar e usar é o gesto da busca.
+   */
+  const [busca, setBusca] = useState("");
+  const termo = normaliza(busca.trim());
+  const caminhoDe = useCallback(
+    (asset: AssetMeta) =>
+      caminhoDaPasta(
+        // As pastas do acervo são do Rust, com `name`; a conta é a mesma.
+        folders.map((folder) => ({ id: folder.id, nome: folder.name, parentId: folder.parentId })),
+        asset.folderId,
+      ),
+    [folders],
+  );
+  const achados = termo
+    ? assets.filter(
+        (asset) =>
+          normaliza(asset.name).includes(termo) ||
+          normaliza(caminhoDe(asset)).includes(termo),
+      )
+    : null;
+  const porCaminho = new Map<string, AssetMeta[]>();
+  for (const asset of achados ?? []) {
+    const caminho = caminhoDe(asset);
+    porCaminho.set(caminho, [...(porCaminho.get(caminho) ?? []), asset]);
+  }
+  const gruposDeAchados = [...porCaminho.entries()].sort(([a], [b]) =>
+    a === "" ? -1 : b === "" ? 1 : a.localeCompare(b),
+  );
+  const idsAchados = gruposDeAchados.flatMap(([, grupo]) => grupo.map((asset) => asset.id));
+
+  /**
+   * Os arquivos na ordem em que a lista os mostra: pastas primeiro, depois os
+   * soltos. Na busca, a ordem dos achados -- é ela que o Shift percorre.
+   */
   const ordemVisivel = useCallback((): string[] => {
+    if (termo) return idsAchados;
     const ids: string[] = [];
     const nivel = (parentId: string | undefined) => {
       for (const folder of folders.filter((f) => f.parentId === parentId)) {
@@ -243,7 +283,7 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
     nivel(undefined);
     for (const asset of assets) if (!asset.folderId) ids.push(asset.id);
     return ids;
-  }, [folders, assets]);
+  }, [folders, assets, termo, idsAchados]);
 
   const ordemRef = useRef(ordemVisivel);
   useEffect(() => {
@@ -390,6 +430,14 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
           />
         ) : (
           <div className="flex items-center justify-end gap-2">
+            {/* Sempre, como nos outros painéis: um campo que aparece e some
+                conforme o acervo cresce é um campo com que ninguém conta. */}
+            <CampoDeBusca
+              valor={busca}
+              onMudar={setBusca}
+              placeholder="Buscar arquivo ou pasta"
+              rotulo="Buscar na biblioteca"
+            />
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -485,7 +533,27 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
             </ContextMenuContent>
           </ContextMenu>
 
-          {assets.length === 0 && folders.length === 0 ? (
+          {achados ? (
+            <div className="relative z-10 space-y-2 p-2">
+              {achados.length === 0 ? (
+                <p className="text-muted-foreground px-2 py-2 text-xs">
+                  Nada com “{busca.trim()}”.
+                </p>
+              ) : null}
+              {gruposDeAchados.map(([caminho, grupo]) => (
+                <section key={caminho} aria-label={caminho || "Fora de pasta"}>
+                  {caminho ? (
+                    <h4 className="text-muted-foreground flex items-center gap-1 px-1 pb-1 text-[10px] font-medium">
+                      <FolderClosed className="size-3 shrink-0" aria-hidden />
+                      <span className="truncate">{caminho}</span>
+                      <span className="tabular-nums opacity-70">{grupo.length}</span>
+                    </h4>
+                  ) : null}
+                  <ul className="space-y-1">{grupo.map(renderRow)}</ul>
+                </section>
+              ))}
+            </div>
+          ) : assets.length === 0 && folders.length === 0 ? (
             <PainelVazio conteudo={{ tipo: "imagens" }} className="pointer-events-none absolute inset-0">
               Importe mapas, tokens e retratos
             </PainelVazio>

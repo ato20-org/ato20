@@ -120,17 +120,35 @@ lista.
 
 ## Pastas do acervo
 
-O painel de imagens agrupa por pasta — **só raiz, sem aninhamento**: o que se quer numa
-campanha é separar mapas de retratos e de fichas, e uma árvore profunda cobraria navegação
-em troca de organização que ninguém pediu.
+A Biblioteca agrupa por pasta, com pasta dentro de pasta pelo `parentId`. Mora em
+`pastas.json`, no Rust, porque o arquivo que ela organiza também mora lá.
 
-Arquivo entra na pasta arrastando a linha para o cabeçalho dela, ou pelo menu da linha —
-que existe porque o arrasto não alcança pasta rolada fora de vista, nem funciona por toque.
-Upload novo cai na raiz.
+Arquivo entra na pasta arrastando a linha para o cabeçalho dela. Upload novo cai na raiz.
+A busca acha pelo nome do arquivo e pelo caminho da pasta, e mostra os achados agrupados
+pela pasta de cada um.
 
 Pasta guarda o id e não o nome, para renomear não obrigar a reescrever todos os arquivos
 dentro. E **apagar pasta não apaga arquivo**: o conteúdo volta para a raiz, porque perder um
 mapa por causa de um clique em "apagar pasta" seria dano desproporcional ao gesto.
+
+## Pastas dos painéis
+
+Arquivos, Mapas, Fundos e as duas seções de Personagens (Players e NPCs) têm pastas
+próprias, todas em `board.pastas` com o campo `lista` dizendo de qual painel são. Pasta
+sem `lista` é do Arquivos, que é a forma da pasta gravada antes das outras listas. O Rust
+guarda `pastas` como JSON opaco, então pasta nova de painel não pede mudança lá.
+
+- **Cena** (quadro, mapa, fundo) aponta para a pasta pelo `Scene.pastaId`. A fila da sessão
+  continua sendo a ordem do board: a pasta é só organização.
+- **Personagem** não tem `pastaId`: ele vive no índice do vault, tipado em Rust e servido ao
+  celular do jogador. A pasta guarda os ids dele em `membros`, e o board não chega ao
+  celular, então o nome de uma pasta como "Traidores" não vaza.
+- **A seção é derivada do vínculo com um jogador**, e a pasta é da seção: o NPC que vira
+  Player aparece na raiz de Players, e volta para a pasta de NPCs se o jogador sair.
+- **O painel Retratos não tem pastas próprias.** Ele agrupa os retratos soltos pela pasta do
+  personagem em Personagens.
+
+Desfazer uma pasta solta o que há dentro um nível acima, e nunca apaga cena nem personagem.
 
 ## Exportar e importar
 

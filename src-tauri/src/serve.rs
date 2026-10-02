@@ -1,6 +1,6 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, SocketAddr, TcpListener, UdpSocket};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
 use axum::body::Body;
@@ -289,6 +289,15 @@ pub struct Daemon {
     /// com paralelismo maior e latencia que ninguem ve, e o que se perde e a
     /// maquina inteira.
     mini_gate: tokio::sync::Semaphore,
+    /// As reducoes que NAO existem para um arquivo, lembradas para o pedido
+    /// seguinte. Ver `sem_variante_chave`.
+    ///
+    /// O recorte com transparencia nao tem variante JPEG (`variantes::ensure`
+    /// recusa, e o certo e servir o original). Sem esta lista, cada pedido
+    /// tomava o semaforo, decodificava o PNG inteiro e varria os pixels para
+    /// chegar a mesma recusa -- e o mapa da aba Mesa esperava na fila atras
+    /// dos retratos, que ela pede nessa variante a cada abertura.
+    sem_variante: Mutex<HashSet<String>>,
 }
 
 impl Daemon {
@@ -324,6 +333,7 @@ impl Daemon {
             evidence: Arc::new(RwLock::new(None)),
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
+            sem_variante: Mutex::new(HashSet::new()),
         }
     }
 
@@ -1052,11 +1062,15 @@ async fn canal_de_plugin(
 /// proposito: os dois juntos deixariam o script tirar o proprio sandbox.
 const POLITICA_DE_PAGINA: &str = "sandbox allow-scripts";
 
-/// `GET /plugin/{id}/{arquivo}` -- os arquivos de um plugin que tem pagina.
+/// `GET /plugin/{id}/{arquivo}` -- os arquivos de um plugin que tem pagina, e
+/// as imagens dos estilos de medidor.
 ///
-/// So de plugin HABILITADO que DECLARA pagina. A pasta inteira e servida, e
-/// nao so o `.html`: a pagina traz o proprio JS, o CSS e a fonte ao lado. O
-/// plugin que nao declara pagina nao tem arquivo nenhum na rede.
+/// So de plugin HABILITADO. Quem DECLARA pagina tem a pasta inteira servida, e
+/// nao so o `.html`: a pagina traz o proprio JS, o CSS e a fonte ao lado. Quem
+/// declara estilo de medidor em camadas tem servidas as imagens que o estilo
+/// aponta, uma a uma -- a TV precisa delas para desenhar a moldura, e o resto
+/// da pasta continua fora da rede. O plugin que nao declara nenhum dos dois
+/// nao tem arquivo nenhum na rede.
 ///
 /// Sem codigo da mesa, como o bundle do espectador: o arquivo nao e segredo, e
 /// um `<script src>` relativo nao levaria o codigo junto. O que e da mesa -- o
@@ -1073,9 +1087,20 @@ async fn serve_plugin(
         return fail(StatusCode::NOT_FOUND, "plugin nao encontrado");
     }
     let pasta = raiz.join(&id);
-    match extensoes::ler_manifesto(&pasta) {
-        Ok(manifesto) if !manifesto.contribui.paginas.is_empty() => {}
-        _ => return fail(StatusCode::NOT_FOUND, "plugin sem pagina"),
+    let Ok(manifesto) = extensoes::ler_manifesto(&pasta) else {
+        return fail(StatusCode::NOT_FOUND, "plugin sem pagina");
+    };
+    let tem_pagina = !manifesto.contribui.paginas.is_empty();
+    // Comparado com o caminho como o manifesto o escreve: a lista ja passou
+    // por `caminho_relativo_seguro` e so tem imagem raster (ver
+    // `IMAGENS_DE_MEDIDOR`), entao nada aqui abre um `.svg` ou um `.html`.
+    let de_estilo = manifesto
+            .contribui
+            .estilos_de_medidor
+            .iter()
+            .any(|estilo| estilo.imagens().contains(&arquivo.as_str()));
+    if !tem_pagina && !de_estilo {
+        return fail(StatusCode::NOT_FOUND, "plugin sem pagina");
     }
 
     // A mesma guarda do protocolo `ato20-ext`: forma do caminho, e depois o
@@ -1089,6 +1114,14 @@ async fn serve_plugin(
     else {
         return fail(StatusCode::NOT_FOUND, "arquivo nao existe");
     };
+
+    // O teto da importacao, de novo: a pasta instalada pode ser editada por
+    // fora, e um GIF trocado por um de cem megas sairia para cada TV.
+    if de_estilo
+        && std::fs::metadata(&real).map_or(true, |meta| meta.len() > extensoes::IMAGEM_DE_MEDIDOR_MAX)
+    {
+        return fail(StatusCode::NOT_FOUND, "imagem acima do teto");
+    }
 
     // `ServeFile::new` adivinha o tipo pela extensao, e cuida de Range e ETag.
     match ServeFile::new(&real).oneshot(request).await {
@@ -1104,8 +1137,11 @@ async fn serve_plugin(
                 HeaderValue::from_static("nosniff"),
             );
             // Editar o plugin e recarregar a fonte tem de mostrar o arquivo
-            // novo, como o `no-store` do protocolo `ato20-ext`.
-            headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            // novo, como o `no-store` do protocolo `ato20-ext`. A imagem de
+            // medidor revalida em vez disso: ela volta a cada token que entra
+            // na cena, e o `304` do ETag custa um cabecalho, nao o GIF.
+            let cache = if de_estilo { "no-cache" } else { "no-store" };
+            headers.insert(CACHE_CONTROL, HeaderValue::from_static(cache));
             response
         }
         Err(cause) => {
@@ -2340,6 +2376,61 @@ fn anexo_original(vault: &Vault, id: &str, autor: characters::Autor, arquivo: &s
     ([(axum::http::header::CONTENT_TYPE, mime_type)], bytes).into_response()
 }
 
+/// A chave de uma reducao recusada: a variante, o arquivo e a data da origem.
+///
+/// A data entra porque o ANEXO muda -- o mestre troca o retrato recortado por
+/// um opaco com o mesmo nome --, e a recusa lembrada do arquivo velho serviria
+/// o original para sempre. O acervo nao muda depois de importado, e a data so
+/// repete.
+fn sem_variante_chave(variante: variantes::Variante, chave: &str, origem: &Path) -> String {
+    let quando = std::fs::metadata(origem)
+        .and_then(|meta| meta.modified())
+        .ok();
+
+    format!("{}:{chave}:{quando:?}", variante.nome())
+}
+
+/// A reducao deste arquivo ja foi recusada?
+fn ja_recusada(state: &Daemon, chave: &str) -> bool {
+    state
+        .sem_variante
+        .lock()
+        .expect("sem_variante envenenado")
+        .contains(chave)
+}
+
+/// Uma reducao que nao saiu. A recusa de FORMATO (o recorte com transparencia
+/// na variante JPEG) e lembrada e vai para o log uma vez, como informacao: e o
+/// comportamento certo, e nao uma falha. Qualquer outra -- disco cheio,
+/// arquivo ilegivel -- continua aviso, e e tentada de novo no pedido seguinte.
+fn recusou(
+    state: &Daemon,
+    chave: String,
+    rotulo: &str,
+    variante: variantes::Variante,
+    cause: AppError,
+) {
+    if matches!(cause, AppError::UnsupportedKind(_)) {
+        let nova = state
+            .sem_variante
+            .lock()
+            .expect("sem_variante envenenado")
+            .insert(chave);
+        if nova {
+            log::info!(
+                "{} de {rotulo} nao existe, servindo o original: {cause}",
+                variante.nome()
+            );
+        }
+        return;
+    }
+
+    log::warn!(
+        "{} de {rotulo} nao saiu, servindo o original: {cause}",
+        variante.nome()
+    );
+}
+
 /// `GET /eu/personagens/{id}/anexos/{autor}/{arquivo}/{variante}` -- `mini` ou `tela`.
 ///
 /// A reducao do acervo, aplicada ao anexo do personagem, e existe pelo mesmo
@@ -2385,7 +2476,9 @@ async fn read_character_file_variante(
     // chegar sempre ao mesmo erro.
     let reduzivel = characters::mime_do_anexo(&arquivo).starts_with("image/");
 
-    let caminho = if !reduzivel {
+    let recusa = sem_variante_chave(variante, &chave, &origem);
+
+    let caminho = if !reduzivel || ja_recusada(&state, &recusa) {
         None
     } else if let Some(pronta) = variantes::pronta(&vault, variante, &chave, &origem) {
         // Caminho quente, e sem tomar o semaforo: depois da primeira vez isto e
@@ -2406,10 +2499,7 @@ async fn read_character_file_variante(
         {
             Ok(Ok(caminho)) => Some(caminho),
             Ok(Err(cause)) => {
-                log::warn!(
-                    "{} de {arquivo} nao saiu, servindo o original: {cause}",
-                    variante.nome()
-                );
+                recusou(&state, recusa, &arquivo, variante, cause);
                 None
             }
             Err(cause) => {
@@ -3460,10 +3550,14 @@ async fn serve_variante(
     // que abriu este GIF antes desta versao tem um JPEG parado dele no cache, e
     // e ele que o `exists` abaixo serviria. A miniatura fica de fora -- ela e o
     // primeiro quadro de proposito. Ver `animacao`.
+    let recusa = sem_variante_chave(variante, &meta.id, &original);
+
     let caminho = if variante != variantes::Variante::Mini
         && animacao::pode_animar(&meta.mime_type)
         && animada(&state, &meta, &original).await
     {
+        None
+    } else if ja_recusada(&state, &recusa) {
         None
     } else if pronta.exists() {
         Some(pronta)
@@ -3487,10 +3581,7 @@ async fn serve_variante(
         {
             Ok(Ok(caminho)) => Some(caminho),
             Ok(Err(cause)) => {
-                log::warn!(
-                    "{} de {id} nao saiu, servindo o original: {cause}",
-                    variante.nome()
-                );
+                recusou(&state, recusa, &id, variante, cause);
                 None
             }
             Err(cause) => {
@@ -3695,6 +3786,39 @@ mod tests {
             .get("content-type")
             .map(|v| v.to_str().unwrap().to_string())
             .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn recorte_com_transparencia_serve_o_original_e_nao_tenta_de_novo() {
+        let (dir, state, _) = daemon();
+
+        // O retrato "removebg": PNG com fundo transparente, que a variante de
+        // tela, JPEG, nao tem como guardar.
+        let origem = dir.path().join("juliano-removebg.png");
+        let mut imagem = image::RgbaImage::new(64, 64);
+        for (x, _, pixel) in imagem.enumerate_pixels_mut() {
+            *pixel = image::Rgba([200, 30, 30, if x < 32 { 0 } else { 255 }]);
+        }
+        imagem.save(&origem).expect("origem");
+
+        let id = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            let (aceitos, _) = assets::import(vault, &[origem], None).expect("import");
+            aceitos[0].id.clone()
+        };
+
+        // O original, com a transparencia, nas duas vezes.
+        assert_eq!(tipo_da_variante(&state, &id, "tela").await, "image/png");
+        let lembradas = state.sem_variante.lock().expect("lista").len();
+        assert_eq!(lembradas, 1, "a recusa nao foi lembrada");
+
+        assert_eq!(tipo_da_variante(&state, &id, "tela").await, "image/png");
+        assert_eq!(state.sem_variante.lock().expect("lista").len(), 1);
+
+        // A miniatura e PNG, aceita o alfa, e nao entra na lista.
+        assert_eq!(tipo_da_variante(&state, &id, "mini").await, "image/png");
+        assert_eq!(state.sem_variante.lock().expect("lista").len(), 1);
     }
 
     #[tokio::test]
@@ -4203,6 +4327,68 @@ mod tests {
             let response = router(Arc::clone(&state)).oneshot(pedir(uri)).await.unwrap();
             assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
         }
+    }
+
+    #[tokio::test]
+    async fn imagem_de_medidor_sai_uma_a_uma_e_o_resto_da_pasta_fica() {
+        let (dir, state, _) = daemon();
+        let raiz = dir.path().join("extensoes");
+        let state = Arc::new(
+            Arc::try_unwrap(state)
+                .ok()
+                .expect("sem outras referencias")
+                .com_extensoes(raiz.clone()),
+        );
+
+        let pasta = raiz.join("ordem");
+        std::fs::create_dir_all(pasta.join("m")).unwrap();
+        std::fs::write(
+            pasta.join("manifest.json"),
+            r#"{"id":"ordem","nome":"Ordem","versao":"1.0.0","apiVersao":4,
+                "contribui":{"estilosDeMedidor":[{"id":"vida","titulo":"Vida","altura":0.2,
+                  "camadas":{"moldura":"m/vida.png","conteudo":{"modo":"barra","imagem":"m/sangue.gif"}}}]}}"#,
+        )
+        .unwrap();
+        std::fs::write(pasta.join("m/vida.png"), "png").unwrap();
+        std::fs::write(pasta.join("m/sangue.gif"), "gif").unwrap();
+        std::fs::write(pasta.join("m/rascunho.png"), "nao declarado").unwrap();
+        std::fs::write(pasta.join("notas.txt"), "segredo do autor").unwrap();
+
+        let pedir = |uri: &str| HttpRequest::builder().uri(uri).body(Body::empty()).expect("request");
+
+        let cedo = router(Arc::clone(&state)).oneshot(pedir("/plugin/ordem/m/vida.png")).await.unwrap();
+        assert_eq!(cedo.status(), StatusCode::NOT_FOUND);
+
+        habilitar(&state, &["ordem"]).await;
+
+        for uri in ["/plugin/ordem/m/vida.png", "/plugin/ordem/m/sangue.gif"] {
+            let response = router(Arc::clone(&state)).oneshot(pedir(uri)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            assert_eq!(
+                response.headers().get("cache-control").map(|v| v.to_str().unwrap()),
+                Some("no-cache")
+            );
+        }
+
+        // So o que o estilo aponta: o resto da pasta nao foi publicado.
+        for uri in [
+            "/plugin/ordem/m/rascunho.png",
+            "/plugin/ordem/notas.txt",
+            "/plugin/ordem/manifest.json",
+            "/plugin/ordem/m/../notas.txt",
+        ] {
+            let response = router(Arc::clone(&state)).oneshot(pedir(uri)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+
+        // Trocada por fora por uma acima do teto: nao sai.
+        std::fs::write(
+            pasta.join("m/vida.png"),
+            vec![0u8; extensoes::IMAGEM_DE_MEDIDOR_MAX as usize + 1],
+        )
+        .unwrap();
+        let pesada = router(Arc::clone(&state)).oneshot(pedir("/plugin/ordem/m/vida.png")).await.unwrap();
+        assert_eq!(pesada.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
