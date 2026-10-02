@@ -1,4 +1,5 @@
 import type { Vec } from "@/lib/geometry/transform";
+import type { Tripe } from "@/types/scene";
 
 /**
  * A câmera de mesa de verdade: um olho que olha um ponto do chão.
@@ -88,6 +89,14 @@ const GRAU = Math.PI / 180;
  * vê de outro jeito.
  */
 export const LENTE_DA_MESA = 45;
+
+/**
+ * De onde o mestre olha quando entra no 2.5D pela primeira vez.
+ *
+ * 52 graus é o que a bancada mostrou ler como sala sem virar maquete, e giro
+ * em zero é olhar o mapa do mesmo lado em que ele foi desenhado.
+ */
+export const OLHAR_PADRAO = { giro: 0, inclinacao: 52 } as const;
 
 /**
  * A distância do olho para uma lente de `graus` na vertical.
@@ -348,32 +357,140 @@ export function curvaBezier(
   };
 }
 
-/**
- * O caminho entre duas câmeras, no andamento `t` de 0 a 1.
- *
- * O alvo anda em linha reta no chão. O zoom anda na ESCALA LOGARÍTMICA: dobrar
- * e reduzir à metade têm de levar o mesmo tempo, e em linha reta o afastamento
- * corria e a aproximação se arrastava. Giro e inclinação ficam os de `para`
- * -- quem os anima é quem os desenha, e não a câmera.
- */
-export function misturar(
-  de: CameraOrbital,
-  para: CameraOrbital,
-  t: number,
-): CameraOrbital {
-  return {
-    ...para,
-    alvo: {
-      x: de.alvo.x + (para.alvo.x - de.alvo.x) * t,
-      y: de.alvo.y + (para.alvo.y - de.alvo.y) * t,
-    },
-    zoom: Math.exp(
-      Math.log(de.zoom) + (Math.log(para.zoom) - Math.log(de.zoom)) * t,
-    ),
-  };
-}
-
 function r(valor: number, casas = 3): number {
   const fator = 10 ** casas;
   return Math.round(valor * fator) / fator;
 }
+
+/**
+ * A corrente CSS de um tripé, para ir na frente da de cada elemento do chão.
+ *
+ * É a corrente da orbital generalizada: em vez de tirar o ALVO e ampliar, tira
+ * a POSIÇÃO do olho e o empurra para a distância `focal` da tela, onde o
+ * `perspective` do CSS põe quem olha. A orbital é o caso particular de um tripé
+ * apontado para o alvo -- ver `tripeDaOrbital`, e o teste que confere que as
+ * duas projetam igual.
+ *
+ * A lente entra como ESCALA da imagem (`scale3d(s, s, 1)`, sem tocar a
+ * profundidade), e não como `perspective`: numa câmera de furo, trocar a lente
+ * é ampliar a imagem projetada, e assim o `perspective` da caixa fica o mesmo
+ * para todo tripé. A troca de lente vira uma corrente nova como qualquer outra,
+ * escrita no DOM sem render -- e o voo de um tripé a outro anima a lente junto.
+ */
+export function correnteDoTripe(tripe: Tripe, tela: Tela): string {
+  const escala = focalDaLente(tela.altura, tripe.lente) / tela.focal;
+
+  return `translate(${r(tela.largura / 2)}px, ${r(tela.altura / 2)}px) translateZ(${r(tela.focal)}px) scale3d(${r(escala, 5)}, ${r(escala, 5)}, 1) rotateZ(${r(tripe.rolagem)}deg) rotateX(${r(tripe.inclinacao)}deg) rotateZ(${r(tripe.giro)}deg) translate3d(${r(-tripe.x)}px, ${r(-tripe.y)}px, ${r(-tripe.altura)}px)`;
+}
+
+/** Um ponto da cena no espaço do olho do tripé: lado, cima e profundidade. */
+function noOlho(tripe: Tripe, ponto: Vec, altura: number) {
+  const g = tripe.giro * GRAU;
+  const t = tripe.inclinacao * GRAU;
+  const rr = tripe.rolagem * GRAU;
+
+  const u = ponto.x - tripe.x;
+  const v = ponto.y - tripe.y;
+  const w = altura - tripe.altura;
+
+  const u1 = u * Math.cos(g) - v * Math.sin(g);
+  const v1 = u * Math.sin(g) + v * Math.cos(g);
+
+  const y2 = v1 * Math.cos(t) - w * Math.sin(t);
+  const z2 = v1 * Math.sin(t) + w * Math.cos(t);
+
+  return {
+    lado: u1 * Math.cos(rr) - y2 * Math.sin(rr),
+    cima: u1 * Math.sin(rr) + y2 * Math.cos(rr),
+    // O olho olha para -z: profundidade positiva é o que está À FRENTE.
+    profundidade: -z2,
+  };
+}
+
+/**
+ * Quão à frente do tripé um ponto está, em unidades de cena. Negativo = atrás.
+ *
+ * É o que decide o que sai da lista do chão de esguelha: no WebKit, um
+ * elemento que cruza o plano do olho é desenhado quebrado, e com o tripé baixo,
+ * dentro de um cômodo, a parede de trás cruza sempre.
+ */
+export function profundidadeNoTripe(
+  tripe: Tripe,
+  ponto: Vec,
+  altura = 0,
+): number {
+  return noOlho(tripe, ponto, altura).profundidade;
+}
+
+/**
+ * Onde um ponto da cena cai na tela do tripé, ou `null` se está atrás do olho.
+ *
+ * A mesma conta da corrente, passo a passo. Serve aos testes -- é ela que
+ * prova que tripé e orbital concordam -- e a quem desenha sobre a tela.
+ */
+export function projetarNoTripe(
+  tripe: Tripe,
+  tela: Tela,
+  ponto: Vec,
+  altura = 0,
+): Vec | null {
+  const olho = noOlho(tripe, ponto, altura);
+  if (olho.profundidade <= 0) return null;
+
+  const focal = focalDaLente(tela.altura, tripe.lente);
+  return {
+    x: tela.largura / 2 + (olho.lado * focal) / olho.profundidade,
+    y: tela.altura / 2 + (olho.cima * focal) / olho.profundidade,
+  };
+}
+
+/**
+ * O tripé que vê exatamente o que a câmera orbital está vendo.
+ *
+ * É o "nova câmera daqui": o mestre enquadra no 2.5D, e o tripé nasce onde o
+ * olho dele está. O olho da orbital fica a `focal / zoom` unidades do alvo,
+ * para trás pela direção em que ela olha; desfazer o giro e a inclinação dessa
+ * distância dá a posição no mundo.
+ */
+export function tripeDaOrbital(
+  camera: CameraOrbital,
+  tela: Tela,
+  lente = LENTE_DA_MESA,
+): Tripe {
+  const distancia = tela.focal / camera.zoom;
+  const g = camera.giro * GRAU;
+  const t = camera.inclinacao * GRAU;
+
+  return {
+    x: camera.alvo.x + distancia * Math.sin(t) * Math.sin(g),
+    y: camera.alvo.y + distancia * Math.sin(t) * Math.cos(g),
+    altura: distancia * Math.cos(t),
+    giro: camera.giro,
+    inclinacao: camera.inclinacao,
+    rolagem: 0,
+    lente,
+  };
+}
+
+/**
+ * O caminho entre dois tripés, no andamento `t` de 0 a 1.
+ *
+ * Posição, altura, inclinação, rolagem e lente em linha reta. O giro pelo
+ * caminho CURTO: de 350 a 10 são vinte graus, e não trezentos e quarenta -- a
+ * mesa veria o tripé dar a volta inteira para olhar quase o mesmo lugar.
+ */
+export function misturarTripe(de: Tripe, para: Tripe, t: number): Tripe {
+  const entre = (a: number, b: number) => a + (b - a) * t;
+  const volta = ((((para.giro - de.giro) % 360) + 540) % 360) - 180;
+
+  return {
+    x: entre(de.x, para.x),
+    y: entre(de.y, para.y),
+    altura: entre(de.altura, para.altura),
+    giro: (((de.giro + volta * t) % 360) + 360) % 360,
+    inclinacao: entre(de.inclinacao, para.inclinacao),
+    rolagem: entre(de.rolagem, para.rolagem),
+    lente: entre(de.lente, para.lente),
+  };
+}
+

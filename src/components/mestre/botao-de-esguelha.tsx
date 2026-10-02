@@ -8,9 +8,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { cn } from "@/lib/utils";
-import { VISTA_PADRAO, type Scene } from "@/types/scene";
 
 /**
  * A troca entre o mapa de prumo e o de esguelha: 2D e 2.5D.
@@ -22,13 +21,12 @@ import { VISTA_PADRAO, type Scene } from "@/types/scene";
  * no popover, o modo que muda o palco inteiro ficava atrás de dois cliques e
  * ao lado do sol, como se fosse da mesma espécie.
  *
- * Ligar grava `VISTA_PADRAO` e desligar APAGA a vista (ver `setVista`): a cena
- * que nunca pediu o modo continua sem o campo. O giro e a inclinação são
- * ajustados no próprio 2.5D, com o botão direito sobre a mesa.
+ * O modo é do MESTRE, e não da cena (ver `useEsguelhaStore`): trocar aqui não
+ * mexe no que a mesa vê. Quem põe a mesa de esguelha é um tripé no ar.
  */
-export function BotaoDeEsguelha({ scene }: { scene: Scene }) {
-  const setVista = useSceneStore((state) => state.setVista);
-  const ligado = Boolean(scene.vista);
+export function BotaoDeEsguelha() {
+  const ligado = useEsguelhaStore((state) => state.ligada);
+  const alternar = useEsguelhaStore((state) => state.alternar);
 
   return (
     <Tooltip>
@@ -43,9 +41,7 @@ export function BotaoDeEsguelha({ scene }: { scene: Scene }) {
               "h-7 gap-1.5 px-2 text-xs",
               ligado && "bg-accent text-accent-foreground",
             )}
-            onClick={() =>
-              setVista(scene.id, ligado ? undefined : VISTA_PADRAO)
-            }
+            onClick={alternar}
           >
             <Box className="size-3.5" />
             2.5D
@@ -57,7 +53,7 @@ export function BotaoDeEsguelha({ scene }: { scene: Scene }) {
         <p className="text-muted-foreground max-w-56">
           {ligado
             ? "Mapa, luz e paredes se editam no 2D."
-            : "O chão deita e as paredes ficam de pé, aqui e na janela do espectador. Botão direito sobre o mapa gira e inclina."}
+            : "O chão deita e as paredes ficam de pé. Botão direito sobre o mapa gira e inclina. A janela do espectador só fica assim com um tripé no ar."}
         </p>
       </TooltipContent>
     </Tooltip>

@@ -232,6 +232,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
   onChaoPointerDown,
   onPecaPointerDown,
   orbital,
+  visivel,
 }: {
   paredes: Parede[];
   mapaUrl: string;
@@ -352,6 +353,16 @@ export const ChaoInclinado = memo(function ChaoInclinado({
    * a ordem do pintor e as peças em pé dependem deles.
    */
   orbital?: CameraAssinavel;
+  /**
+   * Se algo com estes cantos ainda aparece. Ausente = tudo aparece.
+   *
+   * É o tripé, na janela do espectador: o que está inteiro atrás do olho sai
+   * da lista -- não muda o desenho e poupa o motor de projetar o que não se vê.
+   * Ver `CenaDeEsguelha`.
+   */
+  visivel?: (
+    cantos: ReadonlyArray<{ x: number; y: number; altura: number }>,
+  ) => boolean;
 }) {
   /**
    * A corrente da CENA, que todo elemento carrega na frente da sua.
@@ -477,6 +488,18 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         const dy = segmento.y2 - segmento.y1;
         const comprimento = Math.hypot(dx, dy);
         if (comprimento < 0.5) continue;
+
+        if (
+          visivel &&
+          !visivel([
+            { x: segmento.x1, y: segmento.y1, altura: 0 },
+            { x: segmento.x2, y: segmento.y2, altura: 0 },
+            { x: segmento.x1, y: segmento.y1, altura },
+            { x: segmento.x2, y: segmento.y2, altura },
+          ])
+        ) {
+          continue;
+        }
 
         const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
         const meioX = (segmento.x1 + segmento.x2) / 2;
@@ -622,6 +645,17 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         caixa = uniaoDasCaixas(caixa, caixaDaParede(parede));
       }
       if (!caixa) continue;
+      if (
+        visivel &&
+        !visivel([
+          { x: caixa.x, y: caixa.y, altura },
+          { x: caixa.x + caixa.width, y: caixa.y, altura },
+          { x: caixa.x, y: caixa.y + caixa.height, altura },
+          { x: caixa.x + caixa.width, y: caixa.y + caixa.height, altura },
+        ])
+      ) {
+        continue;
+      }
 
       const maisPerto = ordenadas[ordenadas.length - 1]!;
       const daLaje = `translate(${caixa.x}px, ${caixa.y}px) translateZ(${altura}px)`;
@@ -690,6 +724,16 @@ export const ChaoInclinado = memo(function ChaoInclinado({
       const centroX = peca.x + peca.lado / 2;
       const pe = peca.y + peca.lado;
       const alta = peca.altura ?? peca.lado;
+      if (
+        visivel &&
+        !visivel([
+          { x: peca.x, y: pe, altura: 0 },
+          { x: peca.x + peca.lado, y: pe, altura: 0 },
+          { x: centroX, y: pe, altura: alta },
+        ])
+      ) {
+        continue;
+      }
       const daPeca = `translate3d(${centroX}px, ${pe}px, 0) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)`;
 
       lista.push({
@@ -728,6 +772,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     sol,
     variante,
     vidro,
+    visivel,
   ]);
 
   return (

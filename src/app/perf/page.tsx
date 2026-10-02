@@ -20,6 +20,8 @@ import {
   cameraDoRecorte,
   correnteDaCamera,
   focalDaLente,
+  LENTE_DA_MESA,
+  tripeDaOrbital,
 } from "@/lib/geometry/camera-orbital";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
 import { leandoDaCamera } from "@/lib/geometry/volume";
@@ -73,6 +75,7 @@ import {
   type Parede,
   type Scene,
   type Sol,
+  type Tripe,
 } from "@/types/scene";
 
 /**
@@ -1445,12 +1448,7 @@ function PalcoChao25d({
     // Sem câmeras salvas e sem nada no ar: o que se mede aqui é o CHÃO, e uma
     // moldura na tela somaria o custo dela ao número que decide outra coisa.
     const cru = montarCena(n, 0);
-    // `composta` mede o caminho DE VERDADE -- o que o Espectador monta --, e
-    // para isso a cena precisa da vista gravada nela, como uma cena real teria.
-    const base: Scene =
-      modo === "composta"
-        ? { ...cru, vista: { giro: 0, inclinacao: 52 } }
-        : cru;
+    const base: Scene = cru;
 
     useSceneStore.setState({
       board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
@@ -1539,7 +1537,7 @@ function PalcoChao25d({
         // O caminho que o Espectador usa: piso da `SceneLayer` deitado, mais o
         // que se ergue. É o único modo desta bancada que mede o produto, e não
         // uma montagem feita só para medir.
-        <CenaDeEsguelha scene={cena} camera={viewport} />
+        <CompostaDeMedida cena={cena} />
       ) : modo === "chao" ? (
         <ChaoInclinado
           paredes={cena.paredes ?? []}
@@ -1567,6 +1565,38 @@ function PalcoChao25d({
       )}
     </SceneStage>
   );
+}
+
+/**
+ * O caminho da janela do espectador com um tripé no ar: a `CenaDeEsguelha`
+ * inteira, piso e volume, sob o voo de `useCameraSuave`.
+ *
+ * O passeio vira um TRIPÉ (o que veria o mesmo recorte de esguelha) e chega a
+ * cada 100 ms, que é o ritmo do canal (`SCENE_BROADCAST_INTERVAL_MS`). É o que a
+ * mesa recebe quando o mestre arrasta um tripé no ar, e o que se mede é o voo
+ * entre as amostras -- e não um render por quadro, que a mesa nunca faz.
+ */
+function CompostaDeMedida({ cena }: { cena: Scene }) {
+  const [tripe, setTripe] = useState<Tripe | undefined>(undefined);
+
+  useEffect(() => {
+    const tela = {
+      largura: SCENE_WIDTH,
+      altura: SCENE_HEIGHT,
+      focal: focalDaLente(SCENE_HEIGHT, LENTE_DA_MESA),
+    };
+    const amostrar = () =>
+      setTripe(
+        tripeDaOrbital(
+          cameraDoRecorte(useViewportStore.getState().viewport, tela, 0, 52),
+          tela,
+        ),
+      );
+    const relogio = window.setInterval(amostrar, 100);
+    return () => window.clearInterval(relogio);
+  }, []);
+
+  return <CenaDeEsguelha scene={cena} tripe={tripe} />;
 }
 
 /**

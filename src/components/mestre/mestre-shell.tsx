@@ -10,6 +10,7 @@ import { AbrirEspectador } from "@/components/mestre/abrir-espectador";
 import { BotaoDeEsguelha } from "@/components/mestre/botao-de-esguelha";
 import { ConfiguracoesDoMapa } from "@/components/mestre/configuracoes-do-mapa";
 import { MestreDeEsguelha } from "@/components/mestre/mestre-de-esguelha";
+import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { PlayersChip } from "@/components/mestre/players-chip";
 import { TableInvite } from "@/components/mestre/table-invite";
 import { DockRow } from "@/components/mestre/dock/dock-row";
@@ -366,6 +367,9 @@ export function MestreShell() {
   useJanelaDoChat();
   useMestreShortcuts();
   useSpacePan();
+  // O modo de trabalho do mestre: no 2.5D as configurações do mapa somem da
+  // pílula, porque mapa, luz e parede se ajustam no 2D.
+  const esguelhaLigada = useEsguelhaStore((state) => state.ligada);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -486,10 +490,8 @@ export function MestreShell() {
                           vai conferir a mesa. No 2.5D as configurações somem
                           -- mapa, luz e parede se ajustam no 2D. Ver
                           `BotaoDeEsguelha`. */}
-                      {temSol(editingScene) ? (
-                        <BotaoDeEsguelha scene={editingScene} />
-                      ) : null}
-                      {editingScene.vista ? null : (
+                      {temSol(editingScene) ? <BotaoDeEsguelha /> : null}
+                      {esguelhaLigada && temSol(editingScene) ? null : (
                         <ConfiguracoesDoMapa scene={editingScene} />
                       )}
                       <span className="bg-border mx-1 h-5 w-px" />
@@ -663,7 +665,8 @@ function StageBoundary({
    * o palco de prumo, e ao lado de uma mesa de esguelha seriam botões para o
    * nada. Sem o menu de contexto: ali o botão direito gira a mesa.
    */
-  const deEsguelha = Boolean(scene && temSol(scene) && scene.vista);
+  const esguelhaLigada = useEsguelhaStore((state) => state.ligada);
+  const deEsguelha = Boolean(scene && temSol(scene) && esguelhaLigada);
   const comFerramentas = Boolean(scene && !notaAberta && !deEsguelha);
 
   return (

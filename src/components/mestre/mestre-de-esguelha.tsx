@@ -11,10 +11,10 @@ import {
   type CameraAssinavel,
 } from "@/lib/geometry/camera-orbital";
 import { clampViewport, PLANO } from "@/lib/geometry/viewport";
-import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useEsguelhaStore, type Olhar } from "@/lib/store/use-esguelha-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { sceneForTable } from "@/lib/sync/for-table";
-import { VISTA_PADRAO, type Scene, type Vista } from "@/types/scene";
+import type { Scene } from "@/types/scene";
 
 /**
  * O palco do Mestre no 2.5D: a mesa vista de esguelha, e só ela.
@@ -37,10 +37,10 @@ import { VISTA_PADRAO, type Scene, type Vista } from "@/types/scene";
  * olhando, e devolve o lugar ao 2D quando sai -- trocar de modo não perde a
  * mesa.
  *
- * Andar e aproximar ficam AQUI, no Mestre. Girar e deitar vão para a cena
- * (`Scene.vista`) quando o gesto assenta, e a mesa passa a olhar do mesmo
- * lado. Uma vez, no soltar, e não por quadro: gravar a cada quadro seria um
- * desfazer e um envio ao disco por quadro.
+ * O olhar é do MESTRE, e fica nele: andar, aproximar, girar e deitar não chegam
+ * à mesa. Quem a mesa olha é a câmera no ar -- um tripé, para vê-la assim. O
+ * giro e a inclinação ficam guardados pela sessão (`useEsguelhaStore`) quando o
+ * gesto assenta, uma vez e não por quadro.
  *
  * ## O palco
  *
@@ -50,23 +50,15 @@ import { VISTA_PADRAO, type Scene, type Vista } from "@/types/scene";
  * palco é a janela, e a cena se desenha nela.
  */
 export function MestreDeEsguelha({ scene }: { scene: Scene }) {
-  const setVista = useSceneStore((state) => state.setVista);
-  const vista = scene.vista;
+  const guardarOlhar = useEsguelhaStore((state) => state.guardarOlhar);
 
   /**
-   * De onde o Mestre olha AGORA.
-   *
-   * Local durante o gesto, e alcança a cena no soltar. Quando a vista da cena
-   * muda por outro caminho -- o botão do modo, o desfazer --, este estado
-   * alcança ela: estado derivado ajustado no render, o caminho que o React
-   * documenta, e sem o quadro intermediário que um efeito deixaria passar.
+   * De onde o Mestre olha AGORA: começa no último olhar da sessão, muda a
+   * cada quadro do giro, e vai ao store quando o gesto assenta.
    */
-  const [olhar, setOlhar] = useState(() => paraOlhar(vista));
-  const [vistaVista, setVistaVista] = useState(vista);
-  if (vista !== vistaVista) {
-    setVistaVista(vista);
-    setOlhar(paraOlhar(vista));
-  }
+  const [olhar, setOlhar] = useState<Olhar>(
+    () => useEsguelhaStore.getState().olhar,
+  );
 
   const { mesa, focal, tamanho, corrente, assinar } = useCameraOrbital({
     lente: LENTE_DA_MESA,
@@ -84,22 +76,8 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
         olhar.inclinacao,
       ),
     mapa: PLANO,
-    onAssentar: (camera) => {
-      const atual = useSceneStore
-        .getState()
-        .board?.scenes.find((cena) => cena.id === scene.id)?.vista;
-      if (!atual) return;
-      if (
-        Math.round(atual.giro) === Math.round(camera.giro) &&
-        Math.round(atual.inclinacao) === Math.round(camera.inclinacao)
-      ) {
-        return;
-      }
-      setVista(scene.id, {
-        giro: Math.round(camera.giro),
-        inclinacao: Math.round(camera.inclinacao),
-      });
-    },
+    onAssentar: (camera) =>
+      guardarOlhar({ giro: camera.giro, inclinacao: camera.inclinacao }),
     // O 2D volta olhando o pedaço em que o 2.5D estava.
     onSair: (camera, tela) =>
       useViewportStore.getState().setViewport(
@@ -118,20 +96,19 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
   const daMesa = useMemo(() => sceneForTable(scene), [scene]);
 
   /**
-   * A cena que se desenha, com o olhar de AGORA.
+   * O olhar de AGORA, com a câmera que o escreve no DOM.
    *
-   * O giro do gesto entra na vista da cena desenhada antes de chegar ao board:
-   * a ordem do pintor e as peças em pé dependem dele, e sem isto a câmera
-   * giraria com as peças olhando para o lado antigo até o soltar.
+   * O giro do gesto entra aqui a cada quadro: a ordem do pintor e as peças em
+   * pé dependem dele, e sem isto a câmera giraria com as peças olhando para o
+   * lado antigo até o soltar.
    */
-  const desenhada = useMemo(
-    () => (daMesa ? { ...daMesa, vista: olhar } : null),
-    [daMesa, olhar],
-  );
-
-  const orbital = useMemo<CameraAssinavel>(
-    () => ({ corrente, assinar, perspectiva: focal }),
-    [assinar, corrente, focal],
+  const comCamera = useMemo(
+    () => ({
+      camera: { corrente, assinar, perspectiva: focal } as CameraAssinavel,
+      giro: olhar.giro,
+      inclinacao: olhar.inclinacao,
+    }),
+    [assinar, corrente, focal, olhar],
   );
 
   return (
@@ -139,15 +116,12 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
       ref={mesa}
       className="relative min-h-0 flex-1 cursor-grab overflow-hidden rounded-md bg-black active:cursor-grabbing"
     >
-      {desenhada && tamanho && focal > 0 ? (
+      {daMesa && tamanho && focal > 0 ? (
         <PalcoSoTela largura={tamanho.largura} altura={tamanho.altura}>
-          <CenaDeEsguelha scene={desenhada} orbital={orbital} />
+          <CenaDeEsguelha scene={daMesa} olhar={comCamera} />
         </PalcoSoTela>
       ) : null}
     </div>
   );
 }
 
-function paraOlhar(vista: Vista | undefined): Vista {
-  return vista ?? VISTA_PADRAO;
-}

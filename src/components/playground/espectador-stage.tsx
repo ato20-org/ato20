@@ -47,15 +47,15 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
   const declarativo = useDeclarativoDaMesa(codigo, declarativoVersao);
 
   // Trocar de câmera corta em fade; a mesma câmera andando interpola.
-  const { cena, viewport, corte, cortando } = useCorteDeCamera(scene);
+  const { cena, viewport, tripe, corte, cortando } = useCorteDeCamera(scene);
   /**
-   * De esguelha, quem anda é o OLHO, e não o palco.
+   * Com um tripé no ar, quem anda é o OLHO, e não o palco.
    *
-   * O palco fica parado no plano inteiro e a câmera no ar vai para a
-   * `CenaDeEsguelha`, que a segue com a orbital. Recortar o palco também seria
-   * aplicar a câmera duas vezes: uma como foto, outra como olho.
+   * O palco fica parado no plano inteiro e o tripé vai para a `CenaDeEsguelha`,
+   * que o segue com voo suave. Recortar o palco também seria aplicar a câmera
+   * duas vezes: uma como foto, outra como olho. Ver `Scene.tripeNoAr`.
    */
-  const deEsguelha = Boolean(cena?.vista);
+  const deEsguelha = Boolean(tripe);
 
   return (
     <DeclarativoProvider valor={declarativo}>
@@ -85,7 +85,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
               rolagens={rolagens}
               pings={pings}
               smooth
-              camera={viewport}
+              tripe={tripe}
               corte={corte}
             />
           </div>

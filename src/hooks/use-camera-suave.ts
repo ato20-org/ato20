@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import {
-  correnteDaCamera,
+  correnteDoTripe,
   curvaBezier,
-  misturar,
-  type CameraOrbital,
+  misturarTripe,
   type Tela,
 } from "@/lib/geometry/camera-orbital";
+import type { Tripe } from "@/types/scene";
 
 /**
  * Abaixo deste intervalo entre amostras, a câmera está em FLUXO.
@@ -28,54 +28,46 @@ const SALTO = { duracao: 450, curva: curvaBezier(0.22, 0.61, 0.36, 1) };
 const FLUXO = { duracao: 150, curva: (t: number) => t };
 
 type Voo = {
-  de: CameraOrbital;
-  para: CameraOrbital;
+  de: Tripe;
+  para: Tripe;
   inicio: number;
   duracao: number;
   curva: (t: number) => number;
 };
 
 /**
- * A câmera orbital da TV: segue as amostras do mestre sem saltar entre elas.
+ * O tripé no ar, na janela do espectador: segue as amostras do mestre sem
+ * saltar entre elas.
  *
  * Na foto quem suavizava era o `SceneStage`, com `transition: transform` no
- * plano. A orbital não tem um plano que ande -- cada elemento do chão carrega a
- * câmera inteira --, então a suavização vira conta: a cada amostra, um voo da
- * câmera exibida até a nova, com a curva e a duração que a transição de CSS
+ * plano. De esguelha não há plano que ande -- cada elemento do chão carrega a
+ * câmera inteira --, então a suavização vira conta: a cada amostra, um voo do
+ * tripé exibido até o novo, com a curva e a duração que a transição de CSS
  * teria escolhido. Salto desacelera em 450 ms; fluxo anda linear em 150 ms;
  * corte entra seco, e a primeira amostra depois dele também.
  *
- * Só o alvo e o zoom voam. Giro e inclinação são os de destino na hora: quem
- * os desenha é o React (a ordem do pintor e as peças em pé dependem deles), e
- * animá-los aqui deixaria a câmera girada e as peças olhando para o lado
- * antigo durante o voo. É o que a foto fazia também.
+ * O tripé voa INTEIRO -- posição, ângulos e lente --, porque é tudo corrente
+ * escrita no DOM. Quem não voa é o que o React desenha: a ordem do pintor e as
+ * peças em pé seguem o giro de destino na hora, e por um voo de 150 ms a peça
+ * pode olhar um grau ao lado de onde a câmera está. Ninguém vê.
  */
 export function useCameraSuave(
-  destino: CameraOrbital,
+  destino: Tripe,
   tela: Tela,
   corte: number,
 ): { corrente: () => string; assinar: (aviso: () => void) => () => void } {
-  const exibida = useRef<CameraOrbital | null>(null);
-  const alvoDaVista = useRef(destino);
+  const exibido = useRef<Tripe | null>(null);
   const telaAtual = useRef(tela);
   const quadro = useRef<number | undefined>(undefined);
   const ultimaAmostraEm = useRef<number | null>(null);
   const ultimoCorte = useRef(corte);
   const ouvintes = useRef(new Set<() => void>());
 
-  const corrente = useCallback(() => {
-    const atual = exibida.current;
-    if (!atual) return "";
-
-    return correnteDaCamera(
-      {
-        ...atual,
-        giro: alvoDaVista.current.giro,
-        inclinacao: alvoDaVista.current.inclinacao,
-      },
-      telaAtual.current,
-    );
-  }, []);
+  const corrente = useCallback(
+    () =>
+      exibido.current ? correnteDoTripe(exibido.current, telaAtual.current) : "",
+    [],
+  );
 
   const assinar = useCallback((aviso: () => void) => {
     ouvintes.current.add(aviso);
@@ -88,19 +80,17 @@ export function useCameraSuave(
     for (const aviso of ouvintes.current) aviso();
   }, []);
 
-  const { x, y } = destino.alvo;
-  const { zoom, giro, inclinacao } = destino;
-
-  // Giro, inclinação e a tela valem na hora. Ver o cabeçalho.
+  // A tela vale na hora: trocar de caixa não é amostra.
   useLayoutEffect(() => {
-    alvoDaVista.current = { ...alvoDaVista.current, giro, inclinacao };
     telaAtual.current = tela;
     notificar();
-  }, [giro, inclinacao, notificar, tela]);
+  }, [notificar, tela]);
+
+  const { x, y, altura, giro, inclinacao, rolagem, lente } = destino;
 
   // Uma amostra nova: voa até ela, ou entra seca.
   useLayoutEffect(() => {
-    const para: CameraOrbital = { alvo: { x, y }, zoom, giro, inclinacao };
+    const para: Tripe = { x, y, altura, giro, inclinacao, rolagem, lente };
     const agora = performance.now();
     const cortou = corte !== ultimoCorte.current;
     ultimoCorte.current = corte;
@@ -108,19 +98,19 @@ export function useCameraSuave(
     const anterior = cortou ? null : ultimaAmostraEm.current;
     ultimaAmostraEm.current = agora;
 
-    if (!exibida.current || anterior === null) {
+    if (!exibido.current || anterior === null) {
       if (quadro.current !== undefined) cancelAnimationFrame(quadro.current);
       quadro.current = undefined;
-      exibida.current = para;
+      exibido.current = para;
       notificar();
       return;
     }
 
     const jeito = agora - anterior < FLUXO_MS ? FLUXO : SALTO;
-    // Parte de onde a câmera ESTÁ, e não de onde ia: uma amostra no meio do
-    // voo anterior recomeça dali, como a transição de CSS recomeçava.
+    // Parte de onde o tripé ESTÁ, e não de onde ia: uma amostra no meio do voo
+    // anterior recomeça dali, como a transição de CSS recomeçava.
     const voo: Voo = {
-      de: exibida.current,
+      de: exibido.current,
       para,
       inicio: agora,
       duracao: jeito.duracao,
@@ -130,15 +120,12 @@ export function useCameraSuave(
     if (quadro.current !== undefined) cancelAnimationFrame(quadro.current);
     const passo = (instante: number) => {
       const t = Math.min(1, Math.max(0, (instante - voo.inicio) / voo.duracao));
-      exibida.current = misturar(voo.de, voo.para, voo.curva(t));
+      exibido.current = misturarTripe(voo.de, voo.para, voo.curva(t));
       notificar();
       quadro.current = t < 1 ? requestAnimationFrame(passo) : undefined;
     };
     quadro.current = requestAnimationFrame(passo);
-    // Giro e inclinação entram em `para` só para a câmera ficar inteira: quem
-    // os aplica é o efeito de cima, e uma mudança só deles não é amostra.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [x, y, zoom, corte, notificar]);
+  }, [x, y, altura, giro, inclinacao, rolagem, lente, corte, notificar]);
 
   useEffect(
     () => () => {

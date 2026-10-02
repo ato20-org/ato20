@@ -8,8 +8,11 @@ import {
   curvaBezier,
   daTelaAoChao,
   focalDaLente,
-  misturar,
+  misturarTripe,
   prender,
+  profundidadeNoTripe,
+  projetarNoTripe,
+  tripeDaOrbital,
   projetar,
   type CameraOrbital,
   type LimitesDaCamera,
@@ -262,21 +265,114 @@ describe("curvaBezier", () => {
   });
 });
 
-describe("misturar", () => {
-  const de = camera({ alvo: { x: 0, y: 0 }, zoom: 1 });
-  const para = camera({ alvo: { x: 100, y: 200 }, zoom: 4, giro: 90 });
+describe("tripé", () => {
+  it("o tripé tirado da orbital projeta igual a ela", () => {
+    // A prova de que a corrente do tripé é a da orbital generalizada: o mesmo
+    // ponto, pelas duas contas, cai no mesmo pixel.
+    for (const vista of VISTAS) {
+      const cam = camera(vista);
+      const tripe = tripeDaOrbital(cam, TELA);
 
-  it("começa em uma e termina na outra", () => {
-    expect(misturar(de, para, 0).alvo).toEqual({ x: 0, y: 0 });
-    expect(misturar(de, para, 1).zoom).toBeCloseTo(4, 9);
+      for (const ponto of [
+        cam.alvo,
+        { x: cam.alvo.x + 80, y: cam.alvo.y - 40 },
+        { x: cam.alvo.x - 120, y: cam.alvo.y + 60 },
+      ]) {
+        for (const altura of [0, 110]) {
+          const pelaOrbital = projetar(cam, TELA, ponto, altura);
+          const peloTripe = projetarNoTripe(tripe, TELA, ponto, altura);
+          if (!pelaOrbital) {
+            expect(peloTripe).toBeNull();
+            continue;
+          }
+          expect(peloTripe!.x).toBeCloseTo(pelaOrbital.x, 6);
+          expect(peloTripe!.y).toBeCloseTo(pelaOrbital.y, 6);
+        }
+      }
+    }
   });
 
-  it("o zoom anda pela escala: na metade, a média geométrica", () => {
-    expect(misturar(de, para, 0.5).zoom).toBeCloseTo(2, 9);
-    expect(misturar(de, para, 0.5).alvo).toEqual({ x: 50, y: 100 });
+  it("de prumo, o tripé fica em cima do alvo, na distância do zoom", () => {
+    const cam = camera({ inclinacao: 0, zoom: 2 });
+    const tripe = tripeDaOrbital(cam, TELA);
+
+    expect(tripe.x).toBeCloseTo(cam.alvo.x, 6);
+    expect(tripe.y).toBeCloseTo(cam.alvo.y, 6);
+    expect(tripe.altura).toBeCloseTo(TELA.focal / 2, 6);
   });
 
-  it("o giro é o de destino desde o começo", () => {
-    expect(misturar(de, para, 0.1).giro).toBe(90);
+  it("o que está atrás do olho tem profundidade negativa", () => {
+    // Deitado de lado, olhando o horizonte para o alto do mapa.
+    const tripe = {
+      x: 500,
+      y: 500,
+      altura: 80,
+      giro: 0,
+      inclinacao: 90,
+      rolagem: 0,
+      lente: 45,
+    };
+
+    expect(profundidadeNoTripe(tripe, { x: 500, y: 300 }, 80)).toBeCloseTo(
+      200,
+      6,
+    );
+    expect(profundidadeNoTripe(tripe, { x: 500, y: 700 }, 80)).toBeCloseTo(
+      -200,
+      6,
+    );
+    expect(projetarNoTripe(tripe, TELA, { x: 500, y: 700 }, 80)).toBeNull();
+  });
+
+  it("lente mais fechada amplia o que está no meio", () => {
+    const base = tripeDaOrbital(camera(), TELA);
+    const ponto = { x: 980, y: 540 };
+    const aberta = projetarNoTripe(base, TELA, ponto)!;
+    const fechada = projetarNoTripe({ ...base, lente: 20 }, TELA, ponto)!;
+
+    expect(Math.abs(fechada.x - CENTRO.x)).toBeGreaterThan(
+      Math.abs(aberta.x - CENTRO.x),
+    );
+  });
+
+  it("a rolagem gira a imagem em volta do centro", () => {
+    const base = tripeDaOrbital(camera({ inclinacao: 0 }), TELA);
+    const ponto = { x: base.x + 50, y: base.y };
+    const reto = projetarNoTripe(base, TELA, ponto)!;
+    const virado = projetarNoTripe({ ...base, rolagem: 90 }, TELA, ponto)!;
+
+    // Um quarto de volta: o que estava à direita do centro vai para baixo.
+    expect(virado.x).toBeCloseTo(CENTRO.x, 6);
+    expect(virado.y - CENTRO.y).toBeCloseTo(reto.x - CENTRO.x, 6);
   });
 });
+
+describe("misturarTripe", () => {
+  const de = {
+    x: 0,
+    y: 0,
+    altura: 100,
+    giro: 350,
+    inclinacao: 40,
+    rolagem: 0,
+    lente: 45,
+  };
+  const para = { ...de, x: 100, giro: 10, lente: 25 };
+
+  it("começa num e termina no outro", () => {
+    expect(misturarTripe(de, para, 0)).toEqual(de);
+    expect(misturarTripe(de, para, 1).x).toBeCloseTo(100, 9);
+    expect(misturarTripe(de, para, 1).giro).toBeCloseTo(10, 9);
+  });
+
+  it("o giro vai pelo caminho curto", () => {
+    // De 350 a 10 passando por 0, e não por 180.
+    expect(misturarTripe(de, para, 0.5).giro).toBeCloseTo(0, 9);
+    expect(misturarTripe(de, para, 0.25).giro).toBeCloseTo(355, 9);
+  });
+
+  it("a lente anda junto", () => {
+    expect(misturarTripe(de, para, 0.5).lente).toBeCloseTo(35, 9);
+  });
+});
+

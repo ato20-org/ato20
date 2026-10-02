@@ -134,12 +134,15 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
       cameras = selectEditingScene(useSceneStore.getState())?.cameras ?? [];
     }
 
-    if (!cameras.some((camera) => camera.id === get().selecionadaId)) {
+    // Os tripés contam como câmera selecionável: a seleção é uma só para as
+    // duas espécies, e um tripé escolhido não pode voltar a ser a Câmera 1
+    // só porque a cena reabriu. Ver `Scene.tripes`.
+    const todas = [...cameras, ...(atual.tripes ?? [])];
+    if (!todas.some((camera) => camera.id === get().selecionadaId)) {
       // A que está no ar, se houver: é a que o mestre mais provavelmente quer
       // ajustar ao abrir. Senão a primeira.
       const inicial =
-        cameras.find((camera) => camera.id === scene.cameraNoArId) ??
-        cameras[0];
+        todas.find((camera) => camera.id === scene.cameraNoArId) ?? todas[0];
       if (inicial) set({ selecionadaId: inicial.id, espelhoMestre: false });
     }
   },
