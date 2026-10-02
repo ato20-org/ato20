@@ -2,8 +2,10 @@
 
 Documento de passagem. Some quando a WIP fechar.
 
-Branch limpa: `valb-mig/mapa-25d` (13 commits, tudo verde).
-Branch desta WIP: `valb-mig/wip-mapa-25d-mestre` (1 commit, **não mesclar**).
+Branch: `valb-mig/wip-mapa-25d-mestre`, rebaseada na main em 02/10. A
+investigação de deitar o palco do Mestre pela foto (o antigo commit
+`wip(palco)`) saiu do histórico na limpeza de 02/10; quem quiser revê-la tem
+`valb-mig/wip-mapa-25d-mestre-pre-rebase`, a branch de antes do rebase.
 
 Worktree: `.claude/worktrees/mapa-25d`. Rode tudo de lá.
 
@@ -31,6 +33,10 @@ só *apaga* campos, então um campo novo chega à TV por não ser apagado.
 | Cor da parede | dominante lida do mapa, com `Parede.cor` sobrepondo |
 | Gestos de câmera | agarrar o chão, inércia, zoom no cursor. **Sem orbitar** |
 | Giro no botão direito | eixo horizontal **invertido** (arrasta o olhar, não a mesa) |
+| Modelo da câmera (02/10) | **orbital**, não foto: alvo no chão + distância + giro + inclinação, sem encaixe. Testada na bancada: "muito melhor, pode virar principal" |
+| O que o 2.5D faz no Mestre (02/10) | **só mostra o mapa**. Mapa, luz, parede e o resto se editam no 2D: "para evitar trabalho pesado por enquanto" |
+| Onde se troca 2D / 2.5D (02/10) | **botão ao lado das configurações** do mapa, fora do popover |
+| Próximo passo (02/10) | **a câmera no modo 2.5D** |
 
 ---
 
@@ -64,6 +70,55 @@ sempre, porque não depende de relógio.
 
 ---
 
+## A câmera orbital (02/10)
+
+A câmera de antes era uma **foto**: a cena deitava numa caixa, `encaixeDoChao`
+encolhia para caber (inclinar 0→72° encolhia 20%; girar a 52° respirava entre
+0,71 e 0,88), e o palco deslizava e ampliava a imagem pronta. O usuário sentia
+"emulação de 3D, zoom na inclinação, não parece mesa".
+
+A orbital põe alvo e zoom DENTRO do tombo: `translate(centro da tela)
+rotateX rotateZ scale3d(zoom) translate(-alvo)`, com `perspective: focal` num
+pai do tamanho da tela. Andar move o alvo no chão (ponto agarrado fica sob o
+cursor), aproximar encurta a distância (a perspectiva abre sozinha), girar é em
+volta do centro da tela, e o chão passa da borda.
+
+- Conta pura: `src/lib/geometry/camera-orbital.ts` (+ testes).
+- Gestos: `src/hooks/use-camera-orbital.ts`. Andar e aproximar avisam quem
+  assina (`corrente`/`assinar`), e o `ChaoInclinado` escreve a câmera direto no
+  `style.transform` de cada elemento, na frente do `data-local` dele. Sem render
+  do React e **sem variável CSS**: no WebKitGTK trocar uma propriedade
+  personalizada herdada repinta a subárvore inteira -- medido, 4,2 fps pela
+  variável contra 51 pelo React e ~60 pela escrita direta. Girar passa por
+  props (ordem do pintor e peças em pé dependem do giro).
+- `ChaoInclinado` ganhou `orbital?: { corrente, assinar, perspectiva }`. Sem
+  ela, idêntico.
+- Bancada: padrão é orbital; `?camera=foto` volta à antiga para comparar.
+- Medida: cenário `chao-25d`, `--modo orbital`.
+
+**Na TV desde 02/10.** A `CenaDeEsguelha` é orbital: o `EspectadorStage` deixa
+o palco parado no plano inteiro e entrega a câmera no ar à cena, que a segue
+com `useCameraSuave` -- o voo que a transição do palco fazia na foto (salto
+450 ms em curva, fluxo 150 ms linear, corte seco), agora em conta, porque não
+há plano que ande. A `SceneLayer` aceita uma `CameraAssinavel` em `esguelha`
+(envelope do tamanho do plano, cortando o que passa) e a escreve no `div` do
+chão; o `ChaoInclinado` assina a mesma. Medido na webview: composta (o caminho
+da TV) 58,9 fps, p95 17 ms, 0,7% perdidos. Piso e paredes conferidos por CDP:
+mesma caixa, mesma perspectiva, mesma corrente.
+
+Pendências conhecidas da TV:
+- Só alvo e zoom voam; giro e inclinação mudam secos (como na foto).
+- O fundo pede a redução de 4096 px (o palco está no plano inteiro): nítido até
+  ~2,1x de zoom, mais que isso amacia.
+- Quem desenha em pixel de tela pelo `scale` do palco (anel do ping, régua)
+  sai ampliado pelo zoom da orbital.
+
+O Mestre continua com a WIP da foto (`SceneStage esguelha`), e é ela que
+mostra parede tombada sobre piso chapado. Levar o Mestre à orbital é o próximo
+passo grande: as ferramentas dele medem o ponteiro pela conta chapada.
+
+---
+
 ## O que já funciona
 
 - `/bancada25d` — a bancada, com mapa de verdade. Três modos, traçar parede,
@@ -76,52 +131,32 @@ sempre, porque não depende de relógio.
 
 ---
 
-## O BUG desta WIP
+## O Mestre no 2.5D (02/10)
 
-Deitar o palco do **Mestre**. A captura mostra **parede e item tombados sobre
-um piso chapado**, e paredes fora da área do mapa.
+Com a cena de esguelha, o palco do Mestre dá lugar a `MestreDeEsguelha`: a
+mesa como a janela do espectador a recebe (`sceneForTable`), com a câmera
+orbital da bancada (`useCameraOrbital`) dentro de um `PalcoSoTela`. Sem
+ferramenta nenhuma -- as réguas, a barra, as câmeras, o saquinho e as
+configurações somem; ficam o índice de pontos, as áreas e o handout, que são
+consulta. Sem menu de contexto: o botão direito gira.
 
-### Por que são dois caminhos
+- Andar e aproximar são LOCAIS ao Mestre. Abrem no pedaço que o 2D olhava e
+  devolvem o lugar ao 2D ao sair.
+- Girar e deitar gravam `Scene.vista` quando o gesto assenta (`onAssentar`),
+  uma vez: a janela do espectador passa a olhar do mesmo lado.
+- A troca é `BotaoDeEsguelha`, na pílula do palco ao lado das configurações.
 
-As camadas do Mestre não estão todas no mesmo plano:
+Deitar o próprio `SceneStage` do Mestre pela foto foi tentado e ficou de fora
+(ver o cabeçalho): tombava parede e item sobre um piso chapado, e o modo só de
+olhar troca o palco inteiro, então não precisa disso.
 
-- mapa e itens → chegam por **portal** ao plano de CONTEÚDO (`SceneLayer`)
-- parede, alfinete, laço → são **filhos do palco**, no plano de CONTROLES
-- postit e cartão → `planoDaMargem`, e **não devem** deitar (papel sobre a mesa)
+### O próximo passo: a câmera no 2.5D
 
-Então o tombo desce por dois caminhos que precisam concordar:
-`SceneStage esguelha` (filhos) e `MestreStage → SceneLayer esguelha` (piso).
-Os dois saem de `correnteDeEsguelha` e `PERSPECTIVA_DA_CENA`, que mora em
-`volume.ts` justamente para não existirem duas constantes.
-
-### O que já foi descartado — não repetir
-
-- **Não é erro de React.** Console limpo, só o `VaultError` de sempre, que
-  aparece em toda célula da bancada e é benigno.
-- **Não é o envelope do palco.** A célula desenhava as mesmas 57 tela-preta
-  COM e SEM `esguelha`.
-- **Era o cenário, e já está consertado**: o modo `mestre` estava aninhado
-  DENTRO do `SceneStage` que envolve os outros modos, e palco dentro de palco
-  mede zero. Agora tem `return` próprio — foi isso que fez os 163 nós
-  aparecerem e a captura ficar útil.
-
-### Onde eu parava
-
-Conferindo se `esguelhaDaCena` em `mestre-stage.tsx:321` chega mesmo à
-`SceneLayer` da linha 2697. O patch está lá (confirmado por `grep`), mas o
-piso não tombou. **A conta não foi feita — só o sintoma foi visto.**
-
-Hipóteses por ordem de barateza:
-
-1. `esguelhaDaCena` sai `undefined`. A guarda é
-   `vistaDaCena && !ehQuadro(cenaDoBoard)`. Ponha uma sonda
-   (`console.log`) e rode com `--console` — foi assim que a composição da TV
-   se confirmou.
-2. A `SceneLayer` do Mestre recebe a corrente mas o `deitado` não a aplica
-   porque ela vem por um caminho diferente do da TV (lá é `CenaDeEsguelha`
-   quem passa).
-3. O piso do Mestre **não** vem da `SceneLayer` que eu patchei. Confirme quem
-   desenha o `FundoDaCena` no Mestre antes de mexer em mais nada.
+Hoje a janela do espectador no 2.5D segue a câmera que foi posta no ar no 2D
+(`scene.camera`, convertida em alvo e zoom por `cameraDoRecorte`), com o giro
+e a inclinação que o Mestre deixou no 2.5D. O que o Mestre anda e aproxima no
+2.5D não chega à mesa, e no 2.5D não há moldura nem câmeras salvas. É isto que
+o próximo passo resolve.
 
 ---
 
@@ -130,15 +165,24 @@ Hipóteses por ordem de barateza:
 Uma parede fora do próprio rastro **não reprova nenhum teste**. Só a captura
 mostra.
 
+Meça num worktree DESTACADO e em Xvfb: o `next build` divide o `.next/` com o
+`next dev`, e derruba o app aberto. Ver a memória `next-build-derruba-tauri-dev`.
+
 ```bash
-cd .claude/worktrees/mapa-25d
-pnpm build                       # a webview serve o out/, não o dev
-python3 scripts/perf/webview.py --cenario chao-25d --modo mestre \
-  --n 6 --paredes 8 --sol --capturas /tmp/tiros
+git worktree add --detach /tmp/bancada HEAD   # e copie `git diff HEAD --name-only` + não rastreados
+cd /tmp/bancada && pnpm install --frozen-lockfile --prefer-offline
+xvfb-run -a -s "-screen 0 1600x1000x24" python3 scripts/perf/webview.py \
+  --cenario chao-25d --modo composta,orbital,chao --n 40 --paredes 40 --sol \
+  --repetir 5 --capturas /tmp/tiros
 ```
 
-Modos do cenário: `2d`, `relevo`, `chao`, `composta` (o caminho da TV),
-`mestre` (este). `--girando` gira a vista, que é o pior caso.
+Modos do cenário: `2d`, `relevo`, `chao` (a foto), `orbital` (o chão sob a
+câmera orbital) e `composta` (o caminho da janela do espectador). `--girando`
+gira a vista, que é o pior caso. Sem GPU no Xvfb: só a comparação entre linhas
+vale, e a máquina carregada mexe nos números -- repita.
+
+O Mestre no 2.5D se confere no cenário `bancada` (o `MestreShell` inteiro com
+um board falso), clicando em "Ver em 2.5D".
 
 A bancada visual, com mapa de verdade:
 
@@ -167,17 +211,3 @@ repositório.
   só quando o usuário mandar.
 
 ---
-
-## Depois que o piso tombar
-
-1. **Itens em pé no Mestre.** Hoje eles deitam com o chão (ficam estampados no
-   piso) para preservar seleção, alças, menu e arrasto — todos pendurados no
-   `CanvasItemView`. Na TV eles já se erguem. Erguê-los no Mestre custa
-   reescrever essa interação.
-2. **Alças de transformação.** `TransformHandles` e `alcas-da-area` desenham
-   gizmo em coordenada de cena. Tombados viram losangos; chapados descolam do
-   objeto. Decisão de desenho, ainda não tomada.
-3. **Peça não projeta sombra** no chão deitado — as paredes projetam, ela não,
-   e ela flutua. O app tem `SombraLayer` com silhueta; não foi ligado.
-4. **Marquee e guias de alinhamento** ainda convertem ponteiro pela conta
-   chapada.
