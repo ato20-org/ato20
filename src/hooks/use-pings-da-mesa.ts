@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import { ehTipoDePing } from "@/lib/ping";
 import { usePingsStore } from "@/lib/store/use-pings-store";
+import { enderecoDosFluxos } from "@/lib/sync/fluxos-do-mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { Ping } from "@/types/ping";
 
@@ -33,7 +34,7 @@ export function usePingsDaMesa(): void {
       ({ url }) => {
         if (cancelado) return;
 
-        source = new EventSource(`${url}/sala/pings`);
+        source = new EventSource(`${enderecoDosFluxos(url)}/sala/pings`);
 
         source.onmessage = (event) => {
           try {

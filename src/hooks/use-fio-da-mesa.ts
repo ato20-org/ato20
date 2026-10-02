@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { useFioStore } from "@/lib/store/use-fio-store";
+import { enderecoDosFluxos } from "@/lib/sync/fluxos-do-mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { RegistroDoFio } from "@/types/fio";
 
@@ -31,7 +32,7 @@ export function useFioDaMesa(): void {
       ({ url }) => {
         if (cancelado) return;
 
-        source = new EventSource(`${url}/sala/mensagens`);
+        source = new EventSource(`${enderecoDosFluxos(url)}/sala/mensagens`);
 
         source.onmessage = (event) => {
           try {
