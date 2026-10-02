@@ -1,6 +1,6 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, SocketAddr, TcpListener, UdpSocket};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
 use axum::body::Body;
@@ -289,6 +289,15 @@ pub struct Daemon {
     /// com paralelismo maior e latencia que ninguem ve, e o que se perde e a
     /// maquina inteira.
     mini_gate: tokio::sync::Semaphore,
+    /// As reducoes que NAO existem para um arquivo, lembradas para o pedido
+    /// seguinte. Ver `sem_variante_chave`.
+    ///
+    /// O recorte com transparencia nao tem variante JPEG (`variantes::ensure`
+    /// recusa, e o certo e servir o original). Sem esta lista, cada pedido
+    /// tomava o semaforo, decodificava o PNG inteiro e varria os pixels para
+    /// chegar a mesma recusa -- e o mapa da aba Mesa esperava na fila atras
+    /// dos retratos, que ela pede nessa variante a cada abertura.
+    sem_variante: Mutex<HashSet<String>>,
 }
 
 impl Daemon {
@@ -324,6 +333,7 @@ impl Daemon {
             evidence: Arc::new(RwLock::new(None)),
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
+            sem_variante: Mutex::new(HashSet::new()),
         }
     }
 
@@ -2340,6 +2350,61 @@ fn anexo_original(vault: &Vault, id: &str, autor: characters::Autor, arquivo: &s
     ([(axum::http::header::CONTENT_TYPE, mime_type)], bytes).into_response()
 }
 
+/// A chave de uma reducao recusada: a variante, o arquivo e a data da origem.
+///
+/// A data entra porque o ANEXO muda -- o mestre troca o retrato recortado por
+/// um opaco com o mesmo nome --, e a recusa lembrada do arquivo velho serviria
+/// o original para sempre. O acervo nao muda depois de importado, e a data so
+/// repete.
+fn sem_variante_chave(variante: variantes::Variante, chave: &str, origem: &Path) -> String {
+    let quando = std::fs::metadata(origem)
+        .and_then(|meta| meta.modified())
+        .ok();
+
+    format!("{}:{chave}:{quando:?}", variante.nome())
+}
+
+/// A reducao deste arquivo ja foi recusada?
+fn ja_recusada(state: &Daemon, chave: &str) -> bool {
+    state
+        .sem_variante
+        .lock()
+        .expect("sem_variante envenenado")
+        .contains(chave)
+}
+
+/// Uma reducao que nao saiu. A recusa de FORMATO (o recorte com transparencia
+/// na variante JPEG) e lembrada e vai para o log uma vez, como informacao: e o
+/// comportamento certo, e nao uma falha. Qualquer outra -- disco cheio,
+/// arquivo ilegivel -- continua aviso, e e tentada de novo no pedido seguinte.
+fn recusou(
+    state: &Daemon,
+    chave: String,
+    rotulo: &str,
+    variante: variantes::Variante,
+    cause: AppError,
+) {
+    if matches!(cause, AppError::UnsupportedKind(_)) {
+        let nova = state
+            .sem_variante
+            .lock()
+            .expect("sem_variante envenenado")
+            .insert(chave);
+        if nova {
+            log::info!(
+                "{} de {rotulo} nao existe, servindo o original: {cause}",
+                variante.nome()
+            );
+        }
+        return;
+    }
+
+    log::warn!(
+        "{} de {rotulo} nao saiu, servindo o original: {cause}",
+        variante.nome()
+    );
+}
+
 /// `GET /eu/personagens/{id}/anexos/{autor}/{arquivo}/{variante}` -- `mini` ou `tela`.
 ///
 /// A reducao do acervo, aplicada ao anexo do personagem, e existe pelo mesmo
@@ -2385,7 +2450,9 @@ async fn read_character_file_variante(
     // chegar sempre ao mesmo erro.
     let reduzivel = characters::mime_do_anexo(&arquivo).starts_with("image/");
 
-    let caminho = if !reduzivel {
+    let recusa = sem_variante_chave(variante, &chave, &origem);
+
+    let caminho = if !reduzivel || ja_recusada(&state, &recusa) {
         None
     } else if let Some(pronta) = variantes::pronta(&vault, variante, &chave, &origem) {
         // Caminho quente, e sem tomar o semaforo: depois da primeira vez isto e
@@ -2406,10 +2473,7 @@ async fn read_character_file_variante(
         {
             Ok(Ok(caminho)) => Some(caminho),
             Ok(Err(cause)) => {
-                log::warn!(
-                    "{} de {arquivo} nao saiu, servindo o original: {cause}",
-                    variante.nome()
-                );
+                recusou(&state, recusa, &arquivo, variante, cause);
                 None
             }
             Err(cause) => {
@@ -3460,10 +3524,14 @@ async fn serve_variante(
     // que abriu este GIF antes desta versao tem um JPEG parado dele no cache, e
     // e ele que o `exists` abaixo serviria. A miniatura fica de fora -- ela e o
     // primeiro quadro de proposito. Ver `animacao`.
+    let recusa = sem_variante_chave(variante, &meta.id, &original);
+
     let caminho = if variante != variantes::Variante::Mini
         && animacao::pode_animar(&meta.mime_type)
         && animada(&state, &meta, &original).await
     {
+        None
+    } else if ja_recusada(&state, &recusa) {
         None
     } else if pronta.exists() {
         Some(pronta)
@@ -3487,10 +3555,7 @@ async fn serve_variante(
         {
             Ok(Ok(caminho)) => Some(caminho),
             Ok(Err(cause)) => {
-                log::warn!(
-                    "{} de {id} nao saiu, servindo o original: {cause}",
-                    variante.nome()
-                );
+                recusou(&state, recusa, &id, variante, cause);
                 None
             }
             Err(cause) => {
@@ -3695,6 +3760,39 @@ mod tests {
             .get("content-type")
             .map(|v| v.to_str().unwrap().to_string())
             .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn recorte_com_transparencia_serve_o_original_e_nao_tenta_de_novo() {
+        let (dir, state, _) = daemon();
+
+        // O retrato "removebg": PNG com fundo transparente, que a variante de
+        // tela, JPEG, nao tem como guardar.
+        let origem = dir.path().join("juliano-removebg.png");
+        let mut imagem = image::RgbaImage::new(64, 64);
+        for (x, _, pixel) in imagem.enumerate_pixels_mut() {
+            *pixel = image::Rgba([200, 30, 30, if x < 32 { 0 } else { 255 }]);
+        }
+        imagem.save(&origem).expect("origem");
+
+        let id = {
+            let guard = state.vault.read().expect("vault");
+            let vault = guard.as_ref().expect("campanha");
+            let (aceitos, _) = assets::import(vault, &[origem], None).expect("import");
+            aceitos[0].id.clone()
+        };
+
+        // O original, com a transparencia, nas duas vezes.
+        assert_eq!(tipo_da_variante(&state, &id, "tela").await, "image/png");
+        let lembradas = state.sem_variante.lock().expect("lista").len();
+        assert_eq!(lembradas, 1, "a recusa nao foi lembrada");
+
+        assert_eq!(tipo_da_variante(&state, &id, "tela").await, "image/png");
+        assert_eq!(state.sem_variante.lock().expect("lista").len(), 1);
+
+        // A miniatura e PNG, aceita o alfa, e nao entra na lista.
+        assert_eq!(tipo_da_variante(&state, &id, "mini").await, "image/png");
+        assert_eq!(state.sem_variante.lock().expect("lista").len(), 1);
     }
 
     #[tokio::test]
