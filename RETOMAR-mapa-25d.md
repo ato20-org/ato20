@@ -17,9 +17,11 @@ Um modo em que o mapa é visto **de esguelha**: o chão deita, as paredes ficam
 em pé, e o token encara quem olha — como miniatura numa mesa. A TV virada para
 os jogadores é quem ganha com isso; o Mestre trabalha no mesmo mundo.
 
-O dado mora na cena: `Scene.vista = { giro, inclinacao }`, **em graus**,
-ausente = de prumo. Viaja para a mesa de graça — `sceneForTable` copia a cena e
-só *apaga* campos, então um campo novo chega à TV por não ser apagado.
+O dado mora na cena como CÂMERA: um tripé (`Scene.tripes`) posto no ar
+(`cameraNoArId`) leva a cópia do olho dele à mesa (`Scene.tripeNoAr`), e é
+isso que deixa a janela do espectador de esguelha. Sem tripé no ar, a mesa é
+de prumo. O 2D/2.5D do Mestre é modo de trabalho, à parte. Ver "Câmeras
+tripé".
 
 ---
 
@@ -36,7 +38,10 @@ só *apaga* campos, então um campo novo chega à TV por não ser apagado.
 | Modelo da câmera (02/10) | **orbital**, não foto: alvo no chão + distância + giro + inclinação, sem encaixe. Testada na bancada: "muito melhor, pode virar principal" |
 | O que o 2.5D faz no Mestre (02/10) | **só mostra o mapa**. Mapa, luz, parede e o resto se editam no 2D: "para evitar trabalho pesado por enquanto" |
 | Onde se troca 2D / 2.5D (02/10) | **botão ao lado das configurações** do mapa, fora do popover |
-| Próximo passo (02/10) | **a câmera no modo 2.5D** |
+| Câmera no 2.5D (02/10) | **tripé**: ponto fixo com direção e lente, registrado como câmera, separado das câmeras 2D; quem põe a mesa de esguelha é o tripé no ar, e o mestre edita no 2D enquanto ela olha |
+| Como mover o tripé (02/10) | **gizmo como em ferramenta 3D**: setas XYZ e anéis de giro, inclinação e rolagem, mais um painel numérico |
+| Escopo do tripé (02/10) | opção 2: tripé + "nova câmera daqui" (nasce exatamente onde o olhar do mestre está) + "olhar pela câmera" (**só prévia**). Rolagem entra. Seguir token e deslizar entre câmeras ficaram de fora |
+| Minimapa (02/10) | janela dentro do 2.5D: mapa de cima, personagens e tripés. **Sem luz nem animação**, só referência |
 
 ---
 
@@ -96,67 +101,79 @@ volta do centro da tela, e o chão passa da borda.
 - Bancada: padrão é orbital; `?camera=foto` volta à antiga para comparar.
 - Medida: cenário `chao-25d`, `--modo orbital`.
 
-**Na TV desde 02/10.** A `CenaDeEsguelha` é orbital: o `EspectadorStage` deixa
-o palco parado no plano inteiro e entrega a câmera no ar à cena, que a segue
-com `useCameraSuave` -- o voo que a transição do palco fazia na foto (salto
-450 ms em curva, fluxo 150 ms linear, corte seco), agora em conta, porque não
-há plano que ande. A `SceneLayer` aceita uma `CameraAssinavel` em `esguelha`
-(envelope do tamanho do plano, cortando o que passa) e a escreve no `div` do
-chão; o `ChaoInclinado` assina a mesma. Medido na webview: composta (o caminho
-da TV) 58,9 fps, p95 17 ms, 0,7% perdidos. Piso e paredes conferidos por CDP:
-mesma caixa, mesma perspectiva, mesma corrente.
-
-Pendências conhecidas da TV:
-- Só alvo e zoom voam; giro e inclinação mudam secos (como na foto).
-- O fundo pede a redução de 4096 px (o palco está no plano inteiro): nítido até
-  ~2,1x de zoom, mais que isso amacia.
-- Quem desenha em pixel de tela pelo `scale` do palco (anel do ping, régua)
-  sai ampliado pelo zoom da orbital.
-
-O Mestre continua com a WIP da foto (`SceneStage esguelha`), e é ela que
-mostra parede tombada sobre piso chapado. Levar o Mestre à orbital é o próximo
-passo grande: as ferramentas dele medem o ponteiro pela conta chapada.
+**Na janela do espectador desde 02/10, por tripé.** Ver "Câmeras tripé" abaixo:
+o 2.5D da mesa não é mais um interruptor da cena, e sim um tripé no ar.
 
 ---
 
 ## O que já funciona
 
 - `/bancada25d` — a bancada, com mapa de verdade. Três modos, traçar parede,
-  selecionar e ajustar, câmera de mesa. É onde se vê o modo funcionando.
-- **TV**: `CenaDeEsguelha` compõe `SceneLayer` deitada (piso) + `ChaoInclinado`
-  (o que sobe). Espectador ligado. Verificado por sonda e contagem de nós.
-- **Interruptor**: painel do mapa → "Mapa de esguelha", vizinho do Sol.
-- **Arrasto ciente do tombo**: `useSceneDrag` captura o ponteiro no CHÃO
-  quando a cena está deitada. Inerte de prumo.
+  selecionar e ajustar, câmera orbital (padrão) ou foto (`?camera=foto`).
+- **Mestre no 2.5D**: botão "2.5D" na pílula do palco. Só olhar (sem
+  ferramentas), câmera orbital, tripés com gizmo e painel, "olhar pela
+  câmera", minimapa.
+- **Janela do espectador**: de esguelha quando um tripé está no ar
+  (`tripeNoAr`), com voo suave entre amostras e cortina no corte.
 
 ---
 
 ## O Mestre no 2.5D (02/10)
 
-Com a cena de esguelha, o palco do Mestre dá lugar a `MestreDeEsguelha`: a
-mesa como a janela do espectador a recebe (`sceneForTable`), com a câmera
-orbital da bancada (`useCameraOrbital`) dentro de um `PalcoSoTela`. Sem
-ferramenta nenhuma -- as réguas, a barra, as câmeras, o saquinho e as
-configurações somem; ficam o índice de pontos, as áreas e o handout, que são
-consulta. Sem menu de contexto: o botão direito gira.
+O 2D/2.5D do Mestre é MODO DE TRABALHO (`useEsguelhaStore`, só da sessão), e
+não dado da cena -- `Scene.vista` saiu. Com o modo ligado o palco dá lugar a
+`MestreDeEsguelha`: a mesa como a janela do espectador a recebe
+(`sceneForTable`), sob a câmera orbital (`useCameraOrbital`) num
+`PalcoSoTela`. Sem ferramenta: réguas, barra, saquinho e configurações somem;
+ficam o índice de pontos, as áreas, o handout e os chips das câmeras. Sem menu
+de contexto: o botão direito gira. O olhar do mestre fica nele, e não chega à
+mesa.
 
-- Andar e aproximar são LOCAIS ao Mestre. Abrem no pedaço que o 2D olhava e
-  devolvem o lugar ao 2D ao sair.
-- Girar e deitar gravam `Scene.vista` quando o gesto assenta (`onAssentar`),
-  uma vez: a janela do espectador passa a olhar do mesmo lado.
-- A troca é `BotaoDeEsguelha`, na pílula do palco ao lado das configurações.
+## Câmeras tripé (02/10)
 
-Deitar o próprio `SceneStage` do Mestre pela foto foi tentado e ficou de fora
-(ver o cabeçalho): tombava parede e item sobre um piso chapado, e o modo só de
-olhar troca o palco inteiro, então não precisa disso.
+`Tripe` = `x`, `y`, `altura`, `giro`, `inclinacao`, `rolagem`, `lente`, tudo em
+unidades de cena e graus. `Scene.tripes` é uma lista à parte das `cameras`
+(a moldura, os fantasmas, o seguir e o espelho iteram `cameras` e assumem um
+recorte), e os ids dividem o mesmo `cameraNoArId`. No ar, `tripeNoAr` (só o
+olho, sem nome) vai à mesa; `sceneForTable` tira a lista.
 
-### O próximo passo: a câmera no 2.5D
+- **Conta**: `correnteDoTripe` é a orbital generalizada (um teste confere que
+  o tripé tirado da orbital projeta igual). A lente entra como escala da
+  imagem dentro da corrente, então o `perspective` da caixa é fixo.
+  `doOlhoAoMundo`, `bocaDoTripe`, `pegadaDoTripe` dão a pirâmide e o chão
+  visto.
+- **Mesa**: `useCameraSuave` voa entre tripés (salto 450 ms em curva, fluxo
+  150 ms linear, corte seco), a cortina congela o tripé, e o que está INTEIRO
+  atrás do olho sai da lista do chão.
+- **Chips**: tripés na mesma faixa, depois dos recortes, com ícone de câmera.
+  T transmite os dois; no 2.5D o "+" é "nova câmera daqui" (`tripeDaOrbital`),
+  o N cria fora do ar, o C traz o tripé para o olhar atual.
+- **Objeto no 2.5D**: `TripesNoPalco`, SVG por cima da mesa, projetado pela
+  câmera do mestre e escrito no DOM a cada aviso dela. Gizmo de tamanho de tela
+  constante; anéis com raios diferentes (vistos de frente eles se sobrepõem).
+  O arrasto escuta na JANELA: um traço de SVG redesenhado a cada quadro
+  deixava de receber o movimento capturado no Chrome.
+- **Gesto**: `useGestoStore.tripe` -- o board só sabe do tripé ao soltar; a
+  mesa acompanha no ritmo do canal se ele está no ar.
+- **Painel**: `PainelDoTripe`, sete números em metros e graus, grava ao
+  confirmar. "Olhar pela câmera" (`olhandoPor`) é prévia com a moldura 16:9 e a
+  navegação travada.
+- **Minimapa**: `MiniMapaDaEsguelha`, miniaturas sem luz nem névoa; enquadra o
+  plano mais os tripés que estiverem fora dele.
 
-Hoje a janela do espectador no 2.5D segue a câmera que foi posta no ar no 2D
-(`scene.camera`, convertida em alvo e zoom por `cameraDoRecorte`), com o giro
-e a inclinação que o Mestre deixou no 2.5D. O que o Mestre anda e aproxima no
-2.5D não chega à mesa, e no 2.5D não há moldura nem câmeras salvas. É isto que
-o próximo passo resolve.
+Medido na webview (Xvfb, máquina carregada pós-reboot, só a comparação vale):
+composta (a janela do espectador com tripé a 10 Hz) 40 fps, orbital 40, foto
+40 -- o mesmo preço da foto, sem piora.
+
+Pendências conhecidas:
+- O tripé criado "daqui" nasce no olho do mestre, então só aparece depois de
+  afastar ou girar a vista.
+- Na mesa, a ordem do pintor e as peças em pé seguem o giro de destino na hora;
+  num voo de 150 ms a peça pode olhar um grau ao lado.
+- O fundo da mesa pede a redução de 4096 px: nítido até ~2,1x de zoom.
+- Quem desenha em pixel de tela pelo `scale` do palco (anel do ping, régua) sai
+  fora de escala de esguelha.
+- O celular do jogador continua de prumo.
 
 ---
 
