@@ -59,7 +59,7 @@
     dominio do <id>: o id identifica o aplicativo, e a verificacao de posse do
     Flathub se faz por TXT no DNS, sem exigir pagina nenhuma no ar.
   -->
-  <url type="homepage">https://ato20.vercel.app</url>
+  <url type="homepage">https://ato20.valbmig.com.br</url>
   <url type="bugtracker">https://github.com/ato20-org/ato20/issues</url>
   <url type="vcs-browser">https://github.com/ato20-org/ato20</url>
 
