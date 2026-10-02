@@ -16,6 +16,11 @@ import { SceneLayer } from "@/components/playground/scene-layer";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { VolumeLayer } from "@/components/playground/volume-layer";
+import {
+  cameraDoRecorte,
+  correnteDaCamera,
+  focalDaLente,
+} from "@/lib/geometry/camera-orbital";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
 import { leandoDaCamera } from "@/lib/geometry/volume";
 import { MestreShell } from "@/components/mestre/mestre-shell";
@@ -65,7 +70,9 @@ import {
   type AssetMeta,
   type CanvasItem,
   type EfeitoDaLuz,
+  type Parede,
   type Scene,
+  type Sol,
 } from "@/types/scene";
 
 /**
@@ -1426,7 +1433,7 @@ function PalcoChao25d({
   girando,
 }: {
   n: number;
-  modo: "2d" | "relevo" | "chao" | "composta";
+  modo: "2d" | "relevo" | "chao" | "composta" | "orbital";
   girando: boolean;
 }) {
   const cena = useSceneStore(selectEditingScene);
@@ -1437,11 +1444,13 @@ function PalcoChao25d({
   useEffect(() => {
     // Sem câmeras salvas e sem nada no ar: o que se mede aqui é o CHÃO, e uma
     // moldura na tela somaria o custo dela ao número que decide outra coisa.
-    const cru = montarCena(n, 0, false);
+    const cru = montarCena(n, 0);
     // `composta` mede o caminho DE VERDADE -- o que o Espectador monta --, e
     // para isso a cena precisa da vista gravada nela, como uma cena real teria.
     const base: Scene =
-      modo === "composta" ? { ...cru, vista: { giro: 0, inclinacao: 52 } } : cru;
+      modo === "composta"
+        ? { ...cru, vista: { giro: 0, inclinacao: 52 } }
+        : cru;
 
     useSceneStore.setState({
       board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
@@ -1505,13 +1514,32 @@ function PalcoChao25d({
 
   const mapa = `/asset/${cena.backgroundAssetId}`;
 
+  // A câmera orbital, fora do palco como na bancada: a tela é a janela.
+  if (modo === "orbital") {
+    return (
+      <ChaoOrbitalDeMedida
+        paredes={cena.paredes ?? []}
+        mapaUrl={mapa}
+        giro={giro}
+        sol={cena.sol}
+        pecas={pecas}
+      />
+    );
+  }
+
   return (
-    <SceneStage viewport={viewport} onViewportChange={setViewport} limites={PLANO}>
+    <SceneStage
+      // A composta é o caminho da TV: de esguelha o palco fica parado no plano
+      // inteiro, e quem segue o passeio é o olho. Ver `EspectadorStage`.
+      viewport={modo === "composta" ? undefined : viewport}
+      onViewportChange={setViewport}
+      limites={PLANO}
+    >
       {modo === "composta" ? (
         // O caminho que o Espectador usa: piso da `SceneLayer` deitado, mais o
         // que se ergue. É o único modo desta bancada que mede o produto, e não
         // uma montagem feita só para medir.
-        <CenaDeEsguelha scene={cena} />
+        <CenaDeEsguelha scene={cena} camera={viewport} />
       ) : modo === "chao" ? (
         <ChaoInclinado
           paredes={cena.paredes ?? []}
@@ -1538,6 +1566,105 @@ function PalcoChao25d({
         </>
       )}
     </SceneStage>
+  );
+}
+
+/**
+ * O chão inclinado sob a câmera ORBITAL, com o mesmo passeio dos outros modos.
+ *
+ * O passeio é o do recorte -- `PalcoChao25d` escreve o `useViewportStore` a cada
+ * quadro --, convertido em câmera por `cameraDoRecorte`. E vai pelo MESMO
+ * caminho que o gesto de verdade usa: a corrente escrita direto no `style` de
+ * cada elemento, sem render do React. É o custo que se quer ver, porque é o que
+ * muda de modelo: na foto, andar era o palco deslizando uma imagem pronta; aqui,
+ * cada quadro reprojeta todos os elementos do chão. Ver `orbital` em
+ * `ChaoInclinado`, que guarda a medida dos caminhos que perderam.
+ */
+function ChaoOrbitalDeMedida({
+  paredes,
+  mapaUrl,
+  giro,
+  sol,
+  pecas,
+}: {
+  paredes: Parede[];
+  mapaUrl: string;
+  giro: number;
+  sol?: Sol;
+  pecas: Array<{
+    id: string;
+    x: number;
+    y: number;
+    lado: number;
+    altura: number;
+    url: string;
+  }>;
+}) {
+  const mesa = useRef<HTMLDivElement | null>(null);
+  const [altura, setAltura] = useState(0);
+  // O giro chega por prop, e a corrente o lê daqui no próximo passo do
+  // passeio -- que é a cada quadro, então ninguém vê o atraso.
+  const giroAtual = useRef(giro);
+  useEffect(() => {
+    giroAtual.current = giro;
+  }, [giro]);
+
+  const camera = useMemo(() => {
+    function corrente(): string {
+      const caixa = mesa.current?.getBoundingClientRect();
+      if (!caixa || caixa.height === 0) return "";
+      const tela = {
+        largura: caixa.width,
+        altura: caixa.height,
+        focal: focalDaLente(caixa.height, 45),
+      };
+      return correnteDaCamera(
+        cameraDoRecorte(
+          useViewportStore.getState().viewport,
+          tela,
+          giroAtual.current,
+          52,
+        ),
+        tela,
+      );
+    }
+
+    return {
+      corrente,
+      assinar: (aviso: () => void) => useViewportStore.subscribe(aviso),
+    };
+  }, []);
+
+  useEffect(() => {
+    const elemento = mesa.current;
+    if (!elemento) return;
+
+    const observador = new ResizeObserver(([entrada]) => {
+      if (entrada) setAltura(entrada.contentRect.height);
+    });
+    observador.observe(elemento);
+
+    return () => observador.disconnect();
+  }, []);
+
+  return (
+    <div ref={mesa} className="absolute inset-0 overflow-hidden">
+      {altura > 0 ? (
+        <ChaoInclinado
+          paredes={paredes}
+          mapaUrl={mapaUrl}
+          giro={giro}
+          inclinacao={52}
+          perspectiva={0}
+          escurecer={0.42}
+          sol={sol}
+          grade
+          passoDaGrade={Math.round(UNIDADES_POR_METRO)}
+          pecas={pecas}
+          orbital={{ ...camera, perspectiva: focalDaLente(altura, 45) }}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -2930,7 +3057,8 @@ function Medida({ params }: { params: URLSearchParams }) {
     | "2d"
     | "relevo"
     | "chao"
-    | "composta";
+    | "composta"
+    | "orbital";
   const girando = params.get("girando") === "1";
   /** `mestre-camera`: quantas câmeras salvas a cena tem. Uma é a moldura. */
   const cameras = Number(params.get("cameras") ?? 1);

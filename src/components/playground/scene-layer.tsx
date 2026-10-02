@@ -2,7 +2,10 @@
 
 import {
   useCallback,
+  useLayoutEffect,
   useMemo,
+  useRef,
+  useState,
   type ComponentProps,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -31,6 +34,7 @@ import { TracoLayer } from "@/components/playground/traco-layer";
 import type { EfeitoPedido, EfeitosDoPersonagem } from "@/lib/condicao";
 import { quadroDaMesa } from "@/lib/geometry/viewport";
 import type { Variante } from "@/lib/vault/assets";
+import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
 import type { CorrenteDeEsguelha } from "@/lib/geometry/volume";
 import { useChaoStore } from "@/lib/store/use-chao-store";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -186,8 +190,13 @@ type SceneLayerProps = {
    * a parede fora do próprio rastro.
    *
    * Ausente = de prumo, que é o mapa de sempre e não custa um nó a mais.
+   *
+   * Com uma `CameraAssinavel` é a câmera ORBITAL (ver `camera-orbital.ts`): o
+   * envelope tem a caixa do plano e corta o que passa dela, o olho fica no meio
+   * dele, e a corrente é escrita direto no `div` do chão a cada aviso da
+   * câmera -- sem render, e sem variável CSS, que no WebKit repinta tudo.
    */
-  esguelha?: CorrenteDeEsguelha;
+  esguelha?: CorrenteDeEsguelha | CameraAssinavel;
   /**
    * Não desenhe os itens: quem os desenha é o chão inclinado.
    *
@@ -293,13 +302,59 @@ export function SceneLayer({
    * desmontagem do nó, que é exatamente a vida do chão. Num efeito, o primeiro
    * gesto depois de ligar o modo poderia pegar o store ainda vazio.
    */
+  const chaoNo = useRef<HTMLDivElement | null>(null);
   const anunciarChao = useCallback((no: HTMLDivElement | null) => {
+    chaoNo.current = no;
     useChaoStore.getState().anunciarChao(no);
   }, []);
 
+  const orbital = esguelha && "corrente" in esguelha ? esguelha : null;
+  const foto = esguelha && "encaixe" in esguelha ? esguelha : null;
+
+  /**
+   * Onde o mapa caiu no plano, para o chão da orbital acabar nele.
+   *
+   * De esguelha a mesa é o MAPA: as faixas vazias que um mapa que não é 16:9
+   * deixa no plano girariam com a cena como uma barra escurecida. O corte é
+   * no espaço do próprio chão (`clip-path` antes do `transform`), então ele
+   * gira e deita junto, e só muda quando o mapa muda -- nada a refazer por
+   * quadro de gesto. Sem mapa, sem corte: o plano inteiro é o chão.
+   */
+  const [lugarDoFundo, setLugarDoFundo] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const corteDoChao =
+    orbital && lugarDoFundo && scene.backgroundAssetId
+      ? `inset(${lugarDoFundo.y}px ${SCENE_WIDTH - lugarDoFundo.x - lugarDoFundo.width}px ${SCENE_HEIGHT - lugarDoFundo.y - lugarDoFundo.height}px ${lugarDoFundo.x}px)`
+      : undefined;
+
+  /**
+   * Escreve a câmera orbital no chão, e reescreve a cada aviso dela.
+   *
+   * Sem lista de dependências: um commit pode trocar o `div` (ligar o modo,
+   * trocar de cena), e a câmera tem de estar nele antes da pintura.
+   */
+  useLayoutEffect(() => {
+    const no = chaoNo.current;
+    if (!orbital || !no) return;
+
+    const escrever = () => {
+      no.style.transform = orbital.corrente();
+    };
+    escrever();
+    return orbital.assinar(escrever);
+  });
+
   const conteudo = (
     <>
-      <FundoDaCena assetId={scene.backgroundAssetId} variante={variante} />
+      <FundoDaCena
+        assetId={scene.backgroundAssetId}
+        variante={variante}
+        aoEncaixar={orbital ? setLugarDoFundo : undefined}
+      />
 
       {/* Depois do fundo e ANTES dos itens: a grade é do mapa, e um token em
           cima dela é o que se conta. Por cima dos itens ela riscaria os
@@ -453,7 +508,34 @@ export function SceneLayer({
    * coordenadas o motor devolve `offsetX/offsetY`, que é o que dá a posição de
    * chão exata sem inverter homografia nenhuma. Ver `ChaoInclinado`.
    */
-  const deitado = esguelha ? (
+  const deitado = orbital ? (
+    // A orbital: a caixa de quem a recebe, cortando o que passa dela -- o chão
+    // vai além da tela, e é isso que a faz ler como mesa. O olho fica no meio
+    // da caixa. Na TV a caixa é o plano; no Mestre, a área do palco. A corrente
+    // não está no `style`: quem a põe é o efeito lá em cima.
+    <div className="absolute inset-0 overflow-hidden">
+      <div
+        className="absolute inset-0"
+        style={{
+          perspective: `${orbital.perspectiva}px`,
+          perspectiveOrigin: "50% 50%",
+        }}
+      >
+        <div
+          ref={anunciarChao}
+          className="absolute top-0 left-0"
+          style={{
+            width: SCENE_WIDTH,
+            height: SCENE_HEIGHT,
+            transformOrigin: "0 0",
+            clipPath: corteDoChao,
+          }}
+        >
+          {envelopado}
+        </div>
+      </div>
+    </div>
+  ) : foto ? (
     // Três níveis, na ordem que `CorrenteDeEsguelha` documenta: o encaixe por
     // FORA, porque ele age sobre o resultado já projetado; a perspectiva no
     // meio, porque é o pai que cria o contexto 3D; e a corrente da cena em cada
@@ -464,7 +546,7 @@ export function SceneLayer({
         width: SCENE_WIDTH,
         height: SCENE_HEIGHT,
         transformOrigin: `${SCENE_WIDTH / 2}px ${SCENE_HEIGHT / 2}px`,
-        transform: esguelha.encaixe,
+        transform: foto.encaixe,
       }}
     >
       <div
@@ -473,7 +555,7 @@ export function SceneLayer({
           width: SCENE_WIDTH,
           height: SCENE_HEIGHT,
           perspective:
-            esguelha.perspectiva > 0 ? `${esguelha.perspectiva}px` : "none",
+            foto.perspectiva > 0 ? `${foto.perspectiva}px` : "none",
           perspectiveOrigin: "50% 50%",
         }}
       >
@@ -490,7 +572,7 @@ export function SceneLayer({
             width: SCENE_WIDTH,
             height: SCENE_HEIGHT,
             transformOrigin: "0 0",
-            transform: esguelha.cena,
+            transform: foto.cena,
           }}
         >
           {envelopado}

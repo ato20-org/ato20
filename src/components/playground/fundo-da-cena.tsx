@@ -19,6 +19,16 @@ type FundoDaCenaProps = {
    * zoom — ver `useVarianteDoFundo`.
    */
   variante?: Variante;
+  /**
+   * Onde a imagem caiu no plano, a cada vez que isso muda.
+   *
+   * Existe para o 2.5D: lá a mesa é o MAPA, e não o plano de 16:9 em volta
+   * dele. Um mapa 4:3 deixa duas faixas vazias do lado, que de prumo viram a
+   * tarja de sempre e de esguelha giram com a cena -- uma barra diagonal
+   * escurecida pela névoa e pela escuridão, cortando a mesa. Quem deita o
+   * chão corta nele. Ver o envelope orbital da `SceneLayer`.
+   */
+  aoEncaixar?: (lugar: { x: number; y: number; width: number; height: number }) => void;
 };
 
 /**
@@ -41,7 +51,11 @@ type FundoDaCenaProps = {
  * `<img>` ficava montado com um `src` que ainda não tinha chegado, o que na
  * tela é o mesmo preto.
  */
-export function FundoDaCena({ assetId, variante }: FundoDaCenaProps) {
+export function FundoDaCena({
+  assetId,
+  variante,
+  aoEncaixar,
+}: FundoDaCenaProps) {
   // Sempre chamado, mesmo quando `variante` decide por fora: o palco é o único
   // lugar sem tamanho fixo, mas a regra dos hooks não admite o "só às vezes".
   const porZoom = useVarianteDoFundo();
@@ -101,15 +115,25 @@ export function FundoDaCena({ assetId, variante }: FundoDaCenaProps) {
     };
   }, [assetId, url]);
 
-  if (!assetId || pronta?.assetId !== assetId) return null;
-
   // A conta do `contain` não pode ser do CSS aqui dentro: sob `zoom` ele a faz
   // com o tamanho natural do arquivo, e erra. O porquê inteiro, com as medidas,
   // está em `caberEm`.
+  const valida = Boolean(assetId) && pronta?.assetId === assetId;
   const lugar = caberEm(
-    { largura: pronta.largura, altura: pronta.altura },
+    { largura: pronta?.largura ?? 0, altura: pronta?.altura ?? 0 },
     { width: SCENE_WIDTH, height: SCENE_HEIGHT },
   );
+
+  // Pelos NÚMEROS, e não pelo objeto: `caberEm` devolve um novo a cada render,
+  // e avisar a cada render seria um estado novo no pai a cada quadro.
+  const { x, y, width, height } = lugar;
+  useEffect(() => {
+    if (valida && width > 0 && height > 0) {
+      aoEncaixar?.({ x, y, width, height });
+    }
+  }, [aoEncaixar, height, valida, width, x, y]);
+
+  if (!valida || !pronta) return null;
 
   return (
     // eslint-disable-next-line @next/next/no-img-element

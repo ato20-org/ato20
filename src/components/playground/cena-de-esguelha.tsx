@@ -4,25 +4,45 @@ import { useMemo } from "react";
 
 import { ChaoInclinado } from "@/components/playground/chao-inclinado";
 import { SceneLayer } from "@/components/playground/scene-layer";
+import { useCameraSuave } from "@/hooks/use-camera-suave";
+import {
+  cameraDoRecorte,
+  focalDaLente,
+  LENTE_DA_MESA,
+  type CameraAssinavel,
+  type Tela,
+} from "@/lib/geometry/camera-orbital";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
-import { correnteDeEsguelha } from "@/lib/geometry/volume";
+import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { Ping } from "@/types/ping";
-import type { FichaNaCena, Portrait, Scene } from "@/types/scene";
+import {
+  itensVisiveis,
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  type FichaNaCena,
+  type Portrait,
+  type Scene,
+  type Viewport,
+} from "@/types/scene";
 
 /**
- * A distância do olho, em pixels de cena.
+ * A janela da orbital na TV: o próprio plano.
  *
- * Fixa, e não um campo da cena: a `Vista` guarda de ONDE se olha, que é a
- * pergunta que quem mestra faz. A abertura da lente é decisão de desenho, e uma
- * decisão que a bancada respondeu olhando -- 2600 é o que faz a sala ler como
- * sala sem a borda de perto engordar. Um mostrador a mais no painel seria um
- * botão para piorar o enquadramento.
+ * O palco do Espectador fica parado no plano inteiro quando a cena está de
+ * esguelha, e a orbital olha DENTRO dele -- em unidades de plano, que ali são
+ * unidades de cena. É o que mantém de pé tudo o que a `SceneLayer` pede ao
+ * palco (escala, camada da tela, retrato), sem um segundo palco.
  */
-const PERSPECTIVA = 2600;
+const TELA_DO_PLANO: Tela = {
+  largura: SCENE_WIDTH,
+  altura: SCENE_HEIGHT,
+  focal: focalDaLente(SCENE_HEIGHT, LENTE_DA_MESA),
+};
+
 
 /**
  * A cena vista de esguelha: o chão da `SceneLayer` e o que se ergue dele.
@@ -47,12 +67,20 @@ const PERSPECTIVA = 2600;
  *
  * ## O que as mantém coladas
  *
- * A corrente vem de `correnteDeEsguelha`, UMA vez, e as duas a recebem pronta.
- * Não é preciosismo: a `SceneLayer` se entrega por PORTAL ao plano de conteúdo
- * e escapa de qualquer `div` posto em volta dela, então as duas chegam ao mesmo
- * plano por caminhos diferentes. Um décimo de grau de diferença entre elas põe
- * a parede fora do próprio rastro, e o erro seria daqueles que se olha por uma
- * hora sem achar.
+ * A câmera é UMA, e as duas a assinam. Não é preciosismo: a `SceneLayer` se
+ * entrega por PORTAL ao plano de conteúdo e escapa de qualquer `div` posto em
+ * volta dela, então as duas chegam ao mesmo plano por caminhos diferentes. Um
+ * décimo de grau de diferença entre elas põe a parede fora do próprio rastro, e
+ * o erro seria daqueles que se olha por uma hora sem achar.
+ *
+ * ## A câmera é a orbital
+ *
+ * Um olho sobre a mesa, e não a foto dela -- ver `camera-orbital.ts`. Ela
+ * segue a câmera que o mestre pôs no ar (`camera`): o centro do recorte vira o
+ * ponto que se olha, e a largura dele vira a distância. Entre uma amostra e
+ * outra quem suaviza é `useCameraSuave`, com as mesmas curvas que a transição
+ * do palco usava na foto. Por isso o palco em volta fica PARADO no plano
+ * inteiro: quem anda é o olho.
  *
  * ## Os itens trocam de lado
  *
@@ -75,6 +103,9 @@ export function CenaDeEsguelha({
   pings,
   variante,
   smooth,
+  camera,
+  corte = 0,
+  orbital: deFora,
 }: {
   scene: Scene;
   portraits?: Portrait[];
@@ -84,6 +115,18 @@ export function CenaDeEsguelha({
   pings?: Ping[];
   variante?: Variante;
   smooth?: boolean;
+  /** O recorte que a câmera no ar mostra. Ausente = o plano inteiro. */
+  camera?: Viewport;
+  /** Muda a cada corte de câmera: a câmera entra seca, sem voar até lá. */
+  corte?: number;
+  /**
+   * A câmera já pronta, no lugar da que segue `camera`.
+   *
+   * É o Mestre: lá quem anda é a mão dele, com os gestos da câmera de mesa
+   * (`useCameraOrbital`), e não as amostras de uma câmera no ar. A caixa onde a
+   * cena se desenha é quem a recebe -- ver o envelope orbital da `SceneLayer`.
+   */
+  orbital?: CameraAssinavel;
 }) {
   const vista = scene.vista;
 
@@ -100,13 +143,27 @@ export function CenaDeEsguelha({
    */
   const mapaUrl = useAssetUrl(scene.backgroundAssetId, variante);
 
-  const corrente = useMemo(
+  /**
+   * Para onde o olho deve ir, pela câmera no ar.
+   *
+   * Montado sempre -- hooks não pulam --, e só usado com a cena de esguelha.
+   */
+  const destino = useMemo(
     () =>
-      vista
-        ? correnteDeEsguelha(vista.giro, vista.inclinacao, PERSPECTIVA)
-        : null,
-    [vista],
+      cameraDoRecorte(
+        camera ?? FULL_VIEWPORT,
+        TELA_DO_PLANO,
+        vista?.giro ?? 0,
+        vista?.inclinacao ?? 0,
+      ),
+    [camera, vista],
   );
+  const { corrente, assinar } = useCameraSuave(destino, TELA_DO_PLANO, corte);
+  const daTv = useMemo<CameraAssinavel>(
+    () => ({ corrente, assinar, perspectiva: TELA_DO_PLANO.focal }),
+    [assinar, corrente],
+  );
+  const orbital = deFora ?? daTv;
 
   /**
    * Os itens da cena como peças do chão.
@@ -120,7 +177,9 @@ export function CenaDeEsguelha({
    */
   const pecas = useMemo(
     () =>
-      [...scene.items]
+      // Sem os escondidos, como a `SceneLayer` faz: a TV já os recebe sem
+      // eles, e no Mestre esta é a mesa vista de esguelha. Ver `itensVisiveis`.
+      [...itensVisiveis(scene.items, scene.grupos)]
         .sort((a, b) => a.z - b.z)
         .map((item) => ({
           id: item.id,
@@ -130,12 +189,12 @@ export function CenaDeEsguelha({
           altura: item.height,
           assetId: item.assetId,
         })),
-    [scene.items],
+    [scene.grupos, scene.items],
   );
 
   // Sem vista, é o mapa de prumo de sempre -- e por este caminho ele não paga
   // nem um nó a mais, que é a propriedade que o modo tem desde o começo.
-  if (!vista || !corrente) {
+  if (!vista) {
     return (
       <SceneLayer
         scene={scene}
@@ -161,7 +220,7 @@ export function CenaDeEsguelha({
         pings={pings}
         variante={variante}
         smooth={smooth}
-        esguelha={corrente}
+        esguelha={orbital}
         semItens
       />
 
@@ -174,7 +233,8 @@ export function CenaDeEsguelha({
         semChao
         giro={vista.giro}
         inclinacao={vista.inclinacao}
-        perspectiva={PERSPECTIVA}
+        perspectiva={0}
+        orbital={orbital}
         escurecer={0.42}
         sol={scene.sol}
         // A pegada é desenho de autoria -- o mestre conferindo se a parede está

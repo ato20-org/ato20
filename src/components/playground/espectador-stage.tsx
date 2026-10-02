@@ -48,6 +48,14 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
 
   // Trocar de câmera corta em fade; a mesma câmera andando interpola.
   const { cena, viewport, corte, cortando } = useCorteDeCamera(scene);
+  /**
+   * De esguelha, quem anda é o OLHO, e não o palco.
+   *
+   * O palco fica parado no plano inteiro e a câmera no ar vai para a
+   * `CenaDeEsguelha`, que a segue com a orbital. Recortar o palco também seria
+   * aplicar a câmera duas vezes: uma como foto, outra como olho.
+   */
+  const deEsguelha = Boolean(cena?.vista);
 
   return (
     <DeclarativoProvider valor={declarativo}>
@@ -56,7 +64,11 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
       {/* A TV não tem quem opere: enquadramento vem só da câmera da cena.
           `smooth` porque aqui ninguém manipula nada — o que chega são amostras
           do Mestre, e interpolá-las é o que separa movimento de salto. */}
-      <SceneStage viewport={viewport} corte={corte} smooth>
+      <SceneStage
+        viewport={deEsguelha ? undefined : viewport}
+        corte={corte}
+        smooth
+      >
         {/* `key` na cena: trocar de cena remonta a camada, e é a remontagem
             que dispara a entrada em fade. */}
         {cena ? (
@@ -73,6 +85,8 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
               rolagens={rolagens}
               pings={pings}
               smooth
+              camera={viewport}
+              corte={corte}
             />
           </div>
         ) : null}
