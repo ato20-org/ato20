@@ -28,6 +28,7 @@ import {
 } from "@/components/mestre/forma-layer";
 import { TextoLayer } from "@/components/mestre/texto-layer";
 import { contornoDosItens } from "@/lib/mestre/contorno-dos-itens";
+import { ehDuploClique, type Toque } from "@/lib/mestre/duplo-clique";
 import { uniaoDoRetrato } from "@/lib/mestre/unioes";
 import { ancorada, caixaDoTexto, pontaEm } from "@/lib/mestre/ligacoes";
 import {
@@ -807,12 +808,22 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    * tipo -- do ponto de vista do compilador, ele pode ter mudado entre a
    * leitura e o clique.
    */
+  /**
+   * O personagem ainda existe -- ou a lista ainda não chegou, e aí a ficha
+   * abre e diz por conta própria. Token de personagem apagado não tem ficha
+   * para abrir.
+   */
+  const personagemExiste = (personagemId: string) =>
+    personagens === null ||
+    personagens.some((atual) => atual.id === personagemId);
+
   const personagemDoItem =
-    single?.personagemId &&
-    (personagens === null ||
-      personagens.some((atual) => atual.id === single.personagemId))
+    single?.personagemId && personagemExiste(single.personagemId)
       ? single.personagemId
       : undefined;
+
+  /** O toque anterior num item, para contar o duplo clique. Ver `ehDuploClique`. */
+  const ultimoToque = useRef<Toque | null>(null);
 
   /**
    * A silhueta do item selecionado, para a linha do chão automática do gizmo.
@@ -1148,7 +1159,36 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     // Shift e Ctrl somam à seleção: a pasta fechada inteira, ou o item.
     if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      ultimoToque.current = null;
       for (const id of alvo) toggle(id);
+      return;
+    }
+
+    /**
+     * Duplo clique no token abre a ficha de quem ele é: o mesmo atalho do
+     * botão da caixa de seleção, para a mão que já está na figura. Antes de
+     * armar o arrasto, e por isso vale também para o token travado. Contado
+     * no `pointerdown` -- ver `ehDuploClique`.
+     *
+     * O segundo toque NÃO arrasta: ele é o fim de um gesto, e um arrasto
+     * armado por baixo da ficha que acabou de abrir levaria o token junto com
+     * o primeiro movimento do mouse.
+     */
+    const toque = {
+      alvo: item.id,
+      t: event.timeStamp,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    const duplo = ehDuploClique(ultimoToque.current, toque);
+    ultimoToque.current = duplo ? null : toque;
+
+    if (duplo && item.personagemId && personagemExiste(item.personagemId)) {
+      // Para aqui, como o botão direito: sem isto o envelope do palco leria o
+      // mesmo gesto como clique no vazio e limparia a seleção.
+      event.stopPropagation();
+      event.preventDefault();
+      abrirJanela({ tipo: "personagem", personagemId: item.personagemId });
       return;
     }
 
