@@ -4,6 +4,7 @@ import type { Medidor } from "@/types/character";
 
 import {
   fracaoDoMedidor,
+  legendaDoMedidor,
   medidoresVisiveis,
   pontosDoMedidor,
   textoDoMedidor,
@@ -92,5 +93,37 @@ describe("medidoresVisiveis", () => {
 
   it("aceita a ausência do campo, que é o caso da campanha antiga", () => {
     expect(medidoresVisiveis(undefined)).toEqual([]);
+  });
+});
+
+describe("legendaDoMedidor", () => {
+  it("na fábrica, nome e valor -- e a porcentagem sem o valor", () => {
+    expect(legendaDoMedidor(medidor({}))).toEqual({ nome: true, valor: true });
+    expect(legendaDoMedidor(medidor({ estilo: "porcentagem" }))).toEqual({
+      nome: true,
+      valor: false,
+    });
+  });
+
+  it("com estilo de plugin, o rótulo dele manda", () => {
+    expect(legendaDoMedidor(medidor({}), {})).toEqual({ nome: true, valor: true });
+    expect(legendaDoMedidor(medidor({}), { rotulo: "nome" })).toEqual({ nome: true, valor: false });
+    expect(legendaDoMedidor(medidor({}), { rotulo: "nenhum" })).toEqual({ nome: false, valor: false });
+    // A porcentagem com moldura de plugin volta a escrever o número: a forma
+    // já não é ele.
+    expect(legendaDoMedidor(medidor({ estilo: "porcentagem" }), {})).toEqual({
+      nome: true,
+      valor: true,
+    });
+  });
+
+  it("a escolha do mestre vence o estilo, nos dois sentidos", () => {
+    expect(legendaDoMedidor(medidor({ mostrarNome: false, mostrarValor: false }))).toEqual({
+      nome: false,
+      valor: false,
+    });
+    expect(
+      legendaDoMedidor(medidor({ mostrarNome: true, mostrarValor: true }), { rotulo: "nenhum" }),
+    ).toEqual({ nome: true, valor: true });
   });
 });

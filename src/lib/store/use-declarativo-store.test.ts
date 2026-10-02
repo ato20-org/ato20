@@ -32,6 +32,37 @@ describe("o declarativo do Mestre", () => {
     expect(useDeclarativoStore.getState().versao).toBe(2);
   });
 
+  // Camadas não têm arquivo para ler: o `fetch` nem existe no teste, e o
+  // estilo tem de sair inteiro do manifesto.
+  it("publica o estilo em camadas com o plugin e a versão, sem buscar arquivo", async () => {
+    const camadas = {
+      moldura: "m/vida.webp",
+      conteudo: { modo: "barra" as const, direcao: "cima" as const, imagem: "m/sangue.gif" },
+    };
+    const ordem = {
+      id: "ordem",
+      versao: "1.2.0",
+      habilitada: true,
+      contribui: {
+        estilosDeMedidor: [{ id: "vida", titulo: "Vida", altura: 0.22, rotulo: "nome", camadas }],
+      },
+    } as unknown as Extensao;
+
+    await useDeclarativoStore.getState().sincronizar([ordem]);
+
+    expect(useDeclarativoStore.getState().estilos).toEqual({
+      "ordem/vida": {
+        tipo: "camadas",
+        titulo: "Vida",
+        altura: 0.22,
+        rotulo: "nome",
+        plugin: "ordem",
+        versao: "1.2.0",
+        camadas,
+      },
+    });
+  });
+
   it("não publica de novo quando só a ordem da lista muda", async () => {
     await useDeclarativoStore.getState().sincronizar([plugin("a", true), plugin("b", true)]);
     await useDeclarativoStore.getState().sincronizar([plugin("b", true), plugin("a", true)]);

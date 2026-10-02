@@ -3,6 +3,7 @@
 import { useDeclarativo } from "@/components/playground/declarativo";
 import {
   alturaDaForma,
+  alturaDoRotulo,
   DesenhoDoMedidor,
 } from "@/components/playground/desenho-do-medidor";
 import { SelosDaCondicao } from "@/components/playground/selos-da-condicao";
@@ -106,7 +107,10 @@ function BlocoDoToken({
   const larguraDaInfo = item.width * LARGURA_DA_INFO;
   const alturaDosMedidores = medidores.reduce(
     (soma, medidor) =>
-      soma + corpo * 1.2 + alturaDaForma(medidor, larguraDaInfo, corpo, estilos) + vao,
+      soma +
+      alturaDoRotulo(medidor, corpo, estilos) +
+      alturaDaForma(medidor, larguraDaInfo, corpo, estilos) +
+      vao,
     0,
   );
   // Os selos numa fileira que quebra: oito cabem em duas linhas sobre o nome

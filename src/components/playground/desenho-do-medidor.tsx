@@ -1,13 +1,28 @@
 "use client";
 
+import { useEffect, type CSSProperties } from "react";
+
 import { DesenhoSvg, useDeclarativo } from "@/components/playground/declarativo";
+import type {
+  ConteudoDoMedidor,
+  EncaixeDoMedidor,
+  TextoDoMedidor,
+} from "@/lib/extensoes/manifesto";
+import {
+  ENCAIXE_INTEIRO,
+  quadroDaSequencia,
+  recorteDaBarra,
+  urlDaImagemDoEstilo,
+} from "@/lib/extensoes/medidor-em-camadas";
 import { preencher } from "@/lib/extensoes/svg-modelo";
 import {
   fracaoDoMedidor,
+  legendaDoMedidor,
   pontosDoMedidor,
   textoDoMedidor,
 } from "@/lib/medidor";
 import type { EstiloDeMedidorPublicado } from "@/lib/sync/declarativo";
+import { cn } from "@/lib/utils";
 import type { Medidor } from "@/types/character";
 
 /**
@@ -30,6 +45,22 @@ export function alturaDaForma(
   if (medidor.estilo === "porcentagem") return corpo * 1.5 * 1.1;
 
   return corpo * 0.85;
+}
+
+/**
+ * A altura da linha de nome e valor, na mesma unidade. Zero quando a legenda
+ * não mostra nem um nem outro -- a caixa sobre o token encolhe junto, e não
+ * fica um vão onde ela estaria. Ver `legendaDoMedidor`.
+ */
+export function alturaDoRotulo(
+  medidor: Medidor,
+  corpo: number,
+  estilos: Record<string, EstiloDeMedidorPublicado>,
+): number {
+  const estilo = medidor.estiloExtensao ? estilos[medidor.estiloExtensao] : undefined;
+  const { nome, valor } = legendaDoMedidor(medidor, estilo);
+
+  return nome || valor ? corpo * 1.2 : 0;
 }
 
 /**
@@ -69,12 +100,20 @@ export function DesenhoDoMedidor({
    */
   sombra?: boolean;
 }) {
+  const { estilos } = useDeclarativo();
+  const doPlugin = medidor.estiloExtensao ? estilos[medidor.estiloExtensao] : undefined;
+  const legenda = legendaDoMedidor(medidor, doPlugin);
+
   const risco = sombra
     ? `0 ${corpo * 0.06}px ${corpo * 0.25}px rgba(0,0,0,0.95)`
     : undefined;
-  const relevo = sombra
-    ? `drop-shadow(0 ${corpo * 0.06}px ${corpo * 0.2}px rgba(0,0,0,0.8))`
-    : undefined;
+  // Sem relevo nas camadas: a moldura é a imagem que o autor desenhou, com o
+  // contraste que ele quis, e um `drop-shadow` sobre um GIF refaria o filtro a
+  // cada quadro da animação, em cada medidor da mesa.
+  const relevo =
+    sombra && doPlugin?.tipo !== "camadas"
+      ? `drop-shadow(0 ${corpo * 0.06}px ${corpo * 0.2}px rgba(0,0,0,0.8))`
+      : undefined;
 
   return (
     <div style={{ width: largura, filter: relevo }}>
@@ -85,47 +124,98 @@ export function DesenhoDoMedidor({
 
           A porcentagem não repete o valor aqui: nela a forma JÁ é o número, e
           escrever "70%" duas vezes na mesma peça é ruído. */}
-      <div
-        className="flex items-baseline justify-between gap-1 overflow-hidden"
-        style={{ fontSize: corpo, lineHeight: 1.2 }}
-      >
-        <span
-          className="truncate font-medium text-white/85"
-          style={{ textShadow: risco }}
+      {!legenda.nome && !legenda.valor ? null : (
+        <div
+          className={cn(
+            "flex items-baseline gap-1 overflow-hidden",
+            // Só o valor fica onde sempre esteve, à direita: o olho que já
+            // sabe onde o número mora não o procura do outro lado.
+            legenda.nome ? "justify-between" : "justify-end",
+          )}
+          style={{ fontSize: corpo, lineHeight: 1.2 }}
         >
-          {medidor.nome}
-        </span>
+          {legenda.nome ? (
+            <span
+              className="truncate font-medium text-white/85"
+              style={{ textShadow: risco }}
+            >
+              {medidor.nome}
+            </span>
+          ) : null}
 
-        {medidor.estilo === "porcentagem" ? null : (
-          <span
-            className="shrink-0 text-white/70 tabular-nums"
-            style={{ textShadow: risco }}
-          >
-            {textoDoMedidor(medidor)}
-          </span>
-        )}
-      </div>
+          {legenda.valor ? (
+            <span
+              className="shrink-0 text-white/70 tabular-nums"
+              style={{ textShadow: risco }}
+            >
+              {textoDoMedidor(medidor)}
+            </span>
+          ) : null}
+        </div>
+      )}
 
-      <Forma medidor={medidor} largura={largura} corpo={corpo} risco={risco} />
+      <Forma
+        medidor={medidor}
+        doPlugin={doPlugin}
+        largura={largura}
+        corpo={corpo}
+        risco={risco}
+      />
     </div>
   );
 }
 
+/**
+ * A forma de um estilo de plugin sozinha, meio cheia, para o seletor do
+ * Mestre mostrar o que cada estilo desenha antes do clique.
+ *
+ * Recebe o estilo pronto, e não a chave: o seletor vive em painéis fora do
+ * contexto do palco, e lê os estilos direto do store do Mestre.
+ */
+export function AmostraDoEstilo({
+  estilo,
+  cor,
+  largura,
+}: {
+  estilo: EstiloDeMedidorPublicado;
+  cor: string;
+  largura: number;
+}) {
+  // Três de cinco: na barra é a fração que se lê como medidor, nos pontos
+  // mostra cheio e vazio lado a lado, e na sequência cai num quadro do meio.
+  const medidor: Medidor = {
+    id: "amostra",
+    nome: "",
+    cor,
+    estilo: "barra",
+    atual: 3,
+    maximo: 5,
+    escondido: false,
+  };
+
+  return <Forma medidor={medidor} doPlugin={estilo} largura={largura} corpo={largura * 0.12} />;
+}
+
 function Forma({
   medidor,
+  doPlugin,
   largura,
   corpo,
   risco,
 }: {
   medidor: Medidor;
+  /**
+   * O estilo de um PLUGIN, quando o medidor pede um e a mesa o tem. Sem os
+   * dois, cai no de fábrica -- é a reserva que faz o campo poder existir.
+   */
+  doPlugin?: EstiloDeMedidorPublicado;
   largura: number;
   corpo: number;
   risco?: string;
 }) {
-  // O estilo de um PLUGIN, quando o medidor pede um e a mesa o tem. Sem os
-  // dois, cai no de fábrica -- é a reserva que faz o campo poder existir.
-  const { estilos } = useDeclarativo();
-  const doPlugin = medidor.estiloExtensao ? estilos[medidor.estiloExtensao] : undefined;
+  if (doPlugin?.tipo === "camadas") {
+    return <FormaEmCamadas medidor={medidor} estilo={doPlugin} largura={largura} />;
+  }
 
   if (doPlugin) {
     const altura = largura * doPlugin.altura;
@@ -244,5 +334,247 @@ function Pontos({
         />
       ))}
     </div>
+  );
+}
+
+type EstiloEmCamadas = Extract<EstiloDeMedidorPublicado, { tipo: "camadas" }>;
+
+/**
+ * Um medidor feito das imagens de um plugin: o conteúdo embaixo, a moldura
+ * por cima. Ver `extensoes::Camadas` para o JSON.
+ *
+ * Tudo dentro de uma caixa de `largura × altura`, e nada sai dela: a altura é
+ * a que o estilo declarou e a que `alturaDaForma` reservou na caixa sobre o
+ * token -- a regra de transbordo que derruba o palco. O encaixe é em FRAÇÃO
+ * dela, por isso a peça escala com a coluna sem conta nenhuma aqui.
+ *
+ * A máscara recorta a camada do conteúdo INTEIRA, e não só o encaixe: o autor
+ * a desenha na mesma tela da moldura, que é o jeito natural num editor de
+ * imagem -- a silhueta do coração sobre o desenho do coração.
+ */
+function FormaEmCamadas({
+  medidor,
+  estilo,
+  largura,
+}: {
+  medidor: Medidor;
+  estilo: EstiloEmCamadas;
+  largura: number;
+}) {
+  const altura = largura * estilo.altura;
+  const { moldura, mascara, conteudo } = estilo.camadas;
+  const encaixe = estilo.camadas.encaixe ?? ENCAIXE_INTEIRO;
+  const url = (arquivo: string) => urlDaImagemDoEstilo(estilo.plugin, arquivo, estilo.versao);
+
+  const recorte: CSSProperties | undefined = mascara
+    ? {
+        WebkitMaskImage: `url("${url(mascara)}")`,
+        maskImage: `url("${url(mascara)}")`,
+        WebkitMaskSize: "100% 100%",
+        maskSize: "100% 100%",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+      }
+    : undefined;
+
+  return (
+    <div
+      className="relative overflow-hidden"
+      style={{ width: largura, height: altura }}
+      aria-hidden
+    >
+      <div className="absolute inset-0" style={recorte}>
+        <div
+          className="absolute"
+          style={{
+            left: `${encaixe.x * 100}%`,
+            top: `${encaixe.y * 100}%`,
+            width: `${encaixe.largura * 100}%`,
+            height: `${encaixe.altura * 100}%`,
+          }}
+        >
+          <ConteudoEmCamadas
+            medidor={medidor}
+            conteudo={conteudo}
+            url={url}
+            largura={largura * encaixe.largura}
+            altura={altura * encaixe.altura}
+          />
+        </div>
+      </div>
+
+      {moldura ? <Imagem src={url(moldura)} className="absolute inset-0" /> : null}
+
+      {estilo.camadas.texto ? (
+        <TextoEmCamadas
+          medidor={medidor}
+          texto={estilo.camadas.texto}
+          encaixe={estilo.camadas.texto.encaixe ?? encaixe}
+          altura={altura}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * O valor dentro da forma, por cima da moldura -- o `11/13` no meio da tinta.
+ *
+ * Contorno por `text-shadow` em quatro direções, e não `-webkit-text-stroke`:
+ * o traço come o miolo da letra para dentro e afina o número justamente no
+ * tamanho pequeno da coluna do retrato. As sombras saem só para fora.
+ */
+function TextoEmCamadas({
+  medidor,
+  texto,
+  encaixe,
+  altura,
+}: {
+  medidor: Medidor;
+  texto: TextoDoMedidor;
+  encaixe: EncaixeDoMedidor;
+  /** A altura da forma inteira; o corpo é fração da altura do encaixe. */
+  altura: number;
+}) {
+  const corpo = altura * encaixe.altura * (texto.tamanho ?? 0.7);
+  const contorno = texto.contorno ?? "#0d0808";
+  const d = Math.max(0.5, corpo * 0.07);
+
+  return (
+    <span
+      className="absolute flex items-center justify-center font-semibold whitespace-nowrap tabular-nums"
+      style={{
+        left: `${encaixe.x * 100}%`,
+        top: `${encaixe.y * 100}%`,
+        width: `${encaixe.largura * 100}%`,
+        height: `${encaixe.altura * 100}%`,
+        fontSize: corpo,
+        lineHeight: 1,
+        color: texto.cor ?? "#ffffff",
+        textShadow: `${-d}px ${-d}px 0 ${contorno}, ${d}px ${-d}px 0 ${contorno}, ${-d}px ${d}px 0 ${contorno}, ${d}px ${d}px 0 ${contorno}`,
+      }}
+    >
+      {textoDoMedidor(medidor)}
+    </span>
+  );
+}
+
+function ConteudoEmCamadas({
+  medidor,
+  conteudo,
+  url,
+  largura,
+  altura,
+}: {
+  medidor: Medidor;
+  conteudo: ConteudoDoMedidor;
+  url: (arquivo: string) => string;
+  /** O tamanho do encaixe, para os pontos saberem quanto cabe. */
+  largura: number;
+  altura: number;
+}) {
+  const fracao = fracaoDoMedidor(medidor);
+
+  if (conteudo.modo === "sequencia") {
+    return <Sequencia quadros={conteudo.quadros.map(url)} fracao={fracao} />;
+  }
+
+  if (conteudo.modo === "pontos") {
+    const { total, cheios } = pontosDoMedidor(medidor);
+    // Encolhe para caber numa linha só, como os pontos de fábrica -- e pela
+    // mesma razão: a altura da peça não pode mudar com o valor.
+    const vao = altura * 0.15;
+    const lado = Math.max(0, Math.min(altura, (largura - vao * (total - 1)) / total));
+    const cheio = conteudo.cheio ? url(conteudo.cheio) : null;
+    const vazio = conteudo.vazio ? url(conteudo.vazio) : null;
+
+    return (
+      <div className="flex h-full items-center justify-center" style={{ gap: vao }}>
+        {Array.from({ length: total }, (_, indice) => {
+          const pinta = indice < cheios;
+          const tamanho = { width: lado, height: lado };
+
+          if (pinta && cheio) return <Imagem key={indice} src={cheio} className="shrink-0" style={tamanho} />;
+          if (!pinta && vazio) return <Imagem key={indice} src={vazio} className="shrink-0" style={tamanho} />;
+          // Sem a imagem de vazio, a de cheio apagada: o buraco fica com a
+          // forma do ponto, e a fileira não perde a referência de quantos eram.
+          if (!pinta && cheio)
+            return <Imagem key={indice} src={cheio} className="shrink-0 opacity-25 grayscale" style={tamanho} />;
+
+          return (
+            <span
+              key={indice}
+              className="shrink-0 rounded-full"
+              style={{ ...tamanho, background: pinta ? medidor.cor : "rgba(0,0,0,0.45)" }}
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
+  const imagem = conteudo.imagem ? url(conteudo.imagem) : null;
+
+  return (
+    <>
+      {/* O vazio inteiro embaixo, e o cheio o cobre: é o trecho de tinta mais
+          clara que sobra à direita quando a vida desce. */}
+      {conteudo.vazio ? <Imagem src={url(conteudo.vazio)} className="absolute inset-0" /> : null}
+      <span
+        className="absolute inset-0 transition-[clip-path] duration-300 ease-out motion-reduce:transition-none"
+        style={{
+          clipPath: recorteDaBarra(fracao, conteudo.direcao),
+          background: imagem ? `url("${imagem}") center / 100% 100% no-repeat` : medidor.cor,
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * Um quadro por vez, e os outros já baixados.
+ *
+ * Só o atual no DOM: um GIF escondido com `opacity: 0` continua animando, e
+ * dezesseis por medidor seriam dezesseis animações por token. Os outros vão
+ * para o cache do navegador antes de serem pedidos, para o golpe não mostrar
+ * o encaixe vazio enquanto o quadro novo chega pela rede da TV.
+ */
+function Sequencia({ quadros, fracao }: { quadros: string[]; fracao: number }) {
+  const chave = quadros.join("|");
+
+  useEffect(() => {
+    for (const src of quadros) {
+      const imagem = new Image();
+      imagem.decoding = "async";
+      imagem.src = src;
+    }
+    // `chave` e não `quadros`: a lista é refeita a cada desenho do pai.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chave]);
+
+  const src = quadros[quadroDaSequencia(fracao, quadros.length)];
+
+  return src ? <Imagem src={src} className="absolute inset-0" /> : null;
+}
+
+function Imagem({
+  src,
+  className,
+  style,
+}: {
+  src: string;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      decoding="async"
+      className={cn("pointer-events-none block h-full w-full select-none", className)}
+      style={style}
+    />
   );
 }
