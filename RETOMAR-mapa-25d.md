@@ -36,12 +36,12 @@ tripé".
 | Gestos de câmera | agarrar o chão, inércia, zoom no cursor. **Sem orbitar** |
 | Giro no botão direito | eixo horizontal **invertido** (arrasta o olhar, não a mesa) |
 | Modelo da câmera (02/10) | **orbital**, não foto: alvo no chão + distância + giro + inclinação, sem encaixe. Testada na bancada: "muito melhor, pode virar principal" |
-| O que o 2.5D faz no Mestre (02/10) | **só mostra o mapa**. Mapa, luz, parede e o resto se editam no 2D: "para evitar trabalho pesado por enquanto" |
+| O que o 2.5D faz no Mestre (02/10) | **mostra o mapa**, e a mão só pega as **peças**: marcar (caixa de tela + barra do gizmo do 2D), arrastar pelo chão, tamanho pelo canto, para onde olha (anel no chão, gira o facho), deitar/levantar. Mapa, luz, parede e o resto se editam no 2D: "para evitar trabalho pesado por enquanto" |
 | Onde se troca 2D / 2.5D (02/10) | **botão ao lado das configurações** do mapa, fora do popover |
 | Câmera no 2.5D (02/10) | **tripé**: ponto fixo com direção e lente, registrado como câmera, separado das câmeras 2D; quem põe a mesa de esguelha é o tripé no ar, e o mestre edita no 2D enquanto ela olha |
 | Como mover o tripé (02/10) | **gizmo como em ferramenta 3D**: setas XYZ e anéis de giro, inclinação e rolagem, mais um painel numérico |
 | Escopo do tripé (02/10) | opção 2: tripé + "nova câmera daqui" (nasce exatamente onde o olhar do mestre está) + "olhar pela câmera" (**só prévia**). Rolagem entra. Seguir token e deslizar entre câmeras ficaram de fora |
-| Minimapa (02/10) | janela dentro do 2.5D: mapa de cima, personagens e tripés. **Sem luz nem animação**, só referência |
+| Minimapa (02/10) | janela dentro do 2.5D: mapa de cima, personagens e tripés. **Sem luz nem animação**, só referência. Depois: roda amplia (até 8×, arrasta ampliado, duplo clique volta), arrastar o ponto do tripé o move (só x/y), marcador azul de onde o mestre olha (preso na borda quando sai) |
 
 ---
 
@@ -129,6 +129,41 @@ ficam o índice de pontos, as áreas, o handout e os chips das câmeras. Sem men
 de contexto: o botão direito gira. O olhar do mestre fica nele, e não chega à
 mesa.
 
+A exceção são as PEÇAS (pedido do usuário, 02/10): clicar marca, Shift soma,
+o chão vazio desmarca, e a seleção é a mesma do 2D. A caixa é de TELA, em volta
+da figura em pé (`cartazNaTela`, a mesma conta da peça de prumo), com a barra do gizmo do 2D em cima (espelhar,
+ficha, trava, apagar, deitar) -- `SelecaoDeEsguelha`, um SVG cujos atributos
+são escritos a cada aviso da câmera (uma `div` por `transform` deixava rastro).
+Arrastar anda pelo chão pela conta da câmera (`paraChao`), no gesto, e grava ao
+soltar. Com uma marcada: alça de tamanho no canto (o pé fica parado) e anel no
+chão com a ponta do OLHAR -- é o `rotation` do 2D, então o facho da lanterna
+gira junto (`anguloDoFacho`; Shift de 15 em 15°). `CanvasItem.deitado` põe a
+peça no piso: ela sai do `ChaoInclinado` e a `SceneLayer` a desenha no chão,
+com relevo de `drop-shadow` (no chão o WebKit pinta certo). O clique no vazio é
+ouvido na CAPTURA: o gesto da câmera para a propagação.
+
+**Nome, medidores e condições de esguelha (02/10).** O bloco do 2D
+(`medirBloco` + `CorpoDoBloco`) não vai deitado no piso: `InfoDeEsguelha` o põe
+de prumo sobre a cabeça da figura (ou sobre o meio da deitada), por `left`/`top`
+e `zoom` escritos a cada aviso da câmera -- layout, para o texto sair nítido e
+não deixar rastro. Segue o interruptor "Nome e medidores nos tokens" da cena,
+como o 2D. Os efeitos das condições entram na figura em pé pelo mesmo
+`FiguraComEfeitos` do `CanvasItemView`. Na TV o voo do tripé expõe o olho
+(`vista` do `useCameraSuave`), e com ele as peças da TV também vão de prumo.
+
+**Modo cinegrafista (Shift+L no 2.5D, pedido 02/10).** A mesma ideia do
+espelho do 2D (o que o mestre faz, a câmera faz), na espécie do modo: o mestre
+entra no tripé selecionado (sem tripé, nasce um "daqui", fora do ar). Vista do
+"olhar pela câmera", mouse preso (Pointer Lock) girando e inclinando, a roda na lente, WASD no
+plano do chão, Q/E rolam, Espaço sobe, C desce (para rente ao piso, não
+atravessa o mapa; parede atravessa), Shift devagar. Teclas ouvidas na captura
+da janela e engolidas (o C é "trazer para aqui" fora do modo); o T segue
+valendo. Por quadro só o gesto do tripé (a TV vê ao vivo se ele está no ar), o
+board ao sair. Sai por Esc, Shift+L ou saindo do 2.5D. Conta em
+`cinegrafista.ts`, laço em `useCinegrafistaDeEsguelha`. Só o WASD foi também para a
+câmera livre (opção `wasd` do `useCameraOrbital`, em alturas de tela por
+segundo, Shift devagar), a pedido dele.
+
 ## Câmeras tripé (02/10)
 
 `Tripe` = `x`, `y`, `altura`, `giro`, `inclinacao`, `rolagem`, `lente`, tudo em
@@ -145,9 +180,12 @@ olho, sem nome) vai à mesa; `sceneForTable` tira a lista.
 - **Mesa**: `useCameraSuave` voa entre tripés (salto 450 ms em curva, fluxo
   150 ms linear, corte seco), a cortina congela o tripé, e o que está INTEIRO
   atrás do olho sai da lista do chão.
-- **Chips**: tripés na mesma faixa, depois dos recortes, com ícone de câmera.
-  T transmite os dois; no 2.5D o "+" é "nova câmera daqui" (`tripeDaOrbital`),
-  o N cria fora do ar, o C traz o tripé para o olhar atual.
+- **Chips**: duas barras à vista (pedido 02/10): a do modo embaixo, inteira
+  (`camerasDoModo`: recortes no 2D, tripés no 2.5D), e a do outro em cima,
+  compacta -- só chips com REC; o clique troca de modo e seleciona. T transmite
+  os dois; no 2.5D o "+" é "nova câmera daqui" (`tripeDaOrbital`), e o tripé
+  nasce SEMPRE fora do ar, pelo "+" e pelo N (pedido do usuário). O C traz o
+  tripé para o olhar atual.
 - **Objeto no 2.5D**: `TripesNoPalco`, SVG por cima da mesa, projetado pela
   câmera do mestre e escrito no DOM a cada aviso dela. Gizmo de tamanho de tela
   constante; anéis com raios diferentes (vistos de frente eles se sobrepõem).
@@ -215,6 +253,18 @@ repositório.
 
 ## Armadilhas deste repo que valem aqui
 
+- **No Mestre, peça em pé vai de prumo, não pela corrente 3D.** O WebKitGTK
+  às vezes pinta as peças do `ChaoInclinado` como se o `perspective` da caixa
+  não existisse (pequenas perto, grandes longe, puxadas para o centro: fator
+  1/s em todas), e o chão sai certo. O DOM dizia que estava tudo no lugar --
+  medido com marcador dentro do chão, ponto 2D fixo e `maim`. Não é corte
+  (`overflow`), não é composição (`will-change` não mudou), e uma caixa interna
+  maior só disfarçou até certo zoom. Embutir `perspective()` na corrente acertou
+  o pé mas apagou uma faixa diagonal do chão. O que vale: a peça é paralela à
+  tela, então `translate rotate scale` de tela é o desenho exato
+  (`figuraNoTripe`), e a câmera dá o olho (`CameraAssinavel.olho`). Parede e
+  laje continuam 3D no Mestre e podem sofrer do mesmo -- este mapa não tem
+  parede para conferir. Xvfb não reproduz (sem GPU, outro caminho de pintura).
 - **Transbordo derruba o palco.** Filho maior que o plano infla a camada
   composta do WebKitGTK e o mapa passa a ser pintado deslocado e preto
   ampliado. Já derrubou o Mestre três vezes. `encaixeDoChao` existe para isso;
