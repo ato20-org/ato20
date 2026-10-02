@@ -32,6 +32,14 @@ type EsguelhaStore = {
    */
   olhandoPor: string | null;
   olharPor: (tripeId: string | null) => void;
+  /**
+   * A janela do minimapa: onde ela está, em pixels a partir do canto do palco,
+   * e se está aberta. Da sessão, como o olhar: quem a arrastou para um canto
+   * a reencontra lá ao voltar ao 2.5D.
+   */
+  miniMapa: { x: number; y: number; aberto: boolean };
+  moverMiniMapa: (posicao: { x: number; y: number }) => void;
+  alternarMiniMapa: () => void;
 };
 
 /**
@@ -55,4 +63,11 @@ export const useEsguelhaStore = create<EsguelhaStore>((set) => ({
   registrarOlho: (olhoAgora) => set({ olhoAgora }),
   olhandoPor: null,
   olharPor: (olhandoPor) => set({ olhandoPor }),
+  miniMapa: { x: 12, y: 52, aberto: true },
+  moverMiniMapa: ({ x, y }) =>
+    set((atual) => ({ miniMapa: { ...atual.miniMapa, x, y } })),
+  alternarMiniMapa: () =>
+    set((atual) => ({
+      miniMapa: { ...atual.miniMapa, aberto: !atual.miniMapa.aberto },
+    })),
 }));

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { MiniMapaDaEsguelha } from "@/components/mestre/mini-mapa-da-esguelha";
 import { PainelDoTripe } from "@/components/mestre/painel-do-tripe";
 import { TripesNoPalco } from "@/components/mestre/tripes-no-palco";
 import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
@@ -258,6 +259,17 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
           <PainelDoTripe sceneId={scene.id} tripe={tripeEscolhido} />
         </div>
       ) : null}
+
+      {/* A cena vista de cima, como referência: o que a mesa vê (os itens da
+          cena dela) e os tripés com o gizmo em curso. Fora da área da mesa,
+          pelo mesmo motivo do painel. Ver `MiniMapaDaEsguelha`. */}
+      <MiniMapaDaEsguelha
+        mapaId={daMesa?.backgroundAssetId}
+        itens={daMesa?.items ?? []}
+        tripes={tripes}
+        selecionadaId={selecionadaId}
+        noArId={scene.cameraNoArId}
+      />
     </>
   );
 }
