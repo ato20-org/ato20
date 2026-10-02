@@ -197,3 +197,27 @@ describe("tripés e a mesa", () => {
     expect(mesa.tripeNoAr).toBeUndefined();
   });
 });
+
+describe("o Shift+L em cada modo", () => {
+  it("no 2D, com um tripé selecionado, espelha a câmera 2D e a seleciona", () => {
+    montar();
+    const tripe = useSceneStore
+      .getState()
+      .salvarTripe("c1", { ...OLHO, nome: "Tripé 1" });
+    useCameraLockStore.setState({ selecionadaId: tripe });
+
+    useCameraLockStore.getState().alternarEspelho();
+
+    expect(useCameraLockStore.getState().selecionadaId).toBe("cam1");
+    expect(useCameraLockStore.getState().espelhoMestre).toBe(true);
+  });
+
+  it("no 2D, sem câmera 2D nenhuma, não liga nada", () => {
+    montar({ cameras: [] });
+    useCameraLockStore.setState({ selecionadaId: "apagada" });
+
+    useCameraLockStore.getState().alternarEspelho();
+
+    expect(useCameraLockStore.getState().espelhoMestre).toBe(false);
+  });
+});

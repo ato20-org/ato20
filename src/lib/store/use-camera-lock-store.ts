@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "sonner";
 import { create } from "zustand";
 
 import { boundsOfItems, type Bounds } from "@/lib/geometry/bounds";
@@ -97,6 +98,27 @@ function selecionadaDe(scene: Scene | null, id: string | null) {
 }
 
 /**
+ * A câmera 2D em que a trava age: a selecionada, se for recorte; senão a do
+ * ar, senão a primeira -- e ela passa a ser a selecionada.
+ *
+ * Existe porque a seleção é uma para as duas espécies: um tripé escolhido no
+ * 2.5D, ou a câmera apagada que ainda era a selecionada, deixavam o Shift+L e
+ * o L do 2D mudos, sem dizer por quê. No 2.5D não escolhe nada: lá a seleção
+ * é do tripé, e trocá-la por baixo seria pior que não agir.
+ */
+function recorteParaAgir(scene: Scene): CameraSalva | undefined {
+  const trava = useCameraLockStore.getState();
+  const atual = selecionadaDe(scene, trava.selecionadaId);
+  if (atual || useEsguelhaStore.getState().ligada) return atual;
+
+  const cameras = scene.cameras ?? [];
+  const escolhida =
+    cameras.find((camera) => camera.id === scene.cameraNoArId) ?? cameras[0];
+  if (escolhida) trava.selecionar(escolhida.id);
+  return escolhida;
+}
+
+/**
  * Câmeras da bancada do Mestre.
  *
  * Estado de UI da máquina do mestre, como o `useViewportStore`: qual câmera
@@ -166,8 +188,9 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
 
   prenderEm: (itemIds, base) => {
     const scene = cenaEmEdicao();
-    const selecionada = selecionadaDe(scene, get().selecionadaId);
-    if (!scene || !selecionada || itemIds.length === 0) return;
+    if (!scene || itemIds.length === 0) return;
+    const selecionada = recorteParaAgir(scene);
+    if (!selecionada) return;
 
     const alvo = scene.items.filter((item) => itemIds.includes(item.id));
     const caixa = boundsOfItems(alvo);
@@ -211,11 +234,17 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
 
   alternarEspelho: () => {
     const scene = cenaEmEdicao();
-    const selecionada = selecionadaDe(scene, get().selecionadaId);
-    if (!scene || !selecionada) return;
+    if (!scene) return;
+    const selecionada = recorteParaAgir(scene);
+    // Dizer, e não calar: o mestre apertou a tecla e a tela não mudou.
+    if (!selecionada) {
+      toast("Sem câmera 2D para espelhar. Crie uma no + da barra de câmeras.");
+      return;
+    }
 
     if (get().espelhoMestre) {
       set({ espelhoMestre: false });
+      toast("Espelho desligado.");
       return;
     }
 
@@ -227,6 +256,9 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
       alvoIds: undefined,
     });
     set({ espelhoMestre: true });
+    // Com o espelho ligado a moldura cola nas bordas do palco e some de
+    // vista; sem o aviso, parecia que a tecla não tinha feito nada.
+    toast(`${selecionada.nome} segue o teu palco. Shift+L desliga.`);
   },
 
   alternarFantasmas: () =>
