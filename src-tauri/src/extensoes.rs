@@ -43,7 +43,12 @@ use crate::error::{AppError, AppResult};
 /// numero sobe porque um plugin que chama `api.chat.postar` num ATO20 de API 3
 /// quebraria em runtime, longe do gesto de instalar. Pedindo 4, ele e recusado
 /// na entrada.
-pub const API_VERSAO: u32 = 4;
+///
+/// A 5 acrescentou ao manifesto o estilo de medidor em `camadas` de imagem e o
+/// `rotulo`. Um ATO20 de API 4 recusaria o plugin por "falta `arquivo`", que
+/// manda o autor procurar o erro no lugar errado; pedindo 5, ele ouve
+/// "atualize o ATO20".
+pub const API_VERSAO: u32 = 5;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -204,12 +209,15 @@ pub struct Pagina {
     pub arquivo: String,
 }
 
-/// Um estilo de medidor que a extensao desenhou: um `.svg` com variaveis.
+/// Um estilo de medidor que a extensao desenhou: um `.svg` com variaveis, OU
+/// `camadas` de imagem -- um dos dois, nunca os dois.
 ///
 /// DECLARATIVO, e e a razao de ele chegar a TV e ao celular: nenhum codigo do
 /// plugin roda fora do Mestre, e um SVG filtrado e dado, nao codigo. Quem le o
 /// arquivo e filtra e a tela do Mestre (`svg-modelo.ts`); o Rust so garante
-/// que o caminho fica dentro da pasta e que a altura faz sentido.
+/// que o caminho fica dentro da pasta e que a altura faz sentido. As camadas
+/// nem isso pedem: sao o proprio JSON, validado aqui, e a mesa desenha as
+/// imagens que ele aponta. Ver `Camadas`.
 ///
 /// `altura` e a altura da FORMA em fracao da largura do medidor -- 0,2 e uma
 /// barra fina, 1 e um quadrado. Declarada aqui porque a caixa sobre o token e
@@ -220,15 +228,215 @@ pub struct Pagina {
 pub struct EstiloDeMedidor {
     pub id: String,
     pub titulo: String,
-    /// O `.svg`, relativo a pasta da extensao.
-    pub arquivo: String,
+    /// O `.svg`, relativo a pasta da extensao. Ausente nas `camadas`.
+    #[serde(default)]
+    pub arquivo: Option<String>,
     pub altura: f64,
+    #[serde(default)]
+    pub camadas: Option<Camadas>,
+    /// A linha de nome e valor sobre a forma. Ver `ROTULOS`.
+    #[serde(default)]
+    pub rotulo: Option<String>,
+}
+
+impl EstiloDeMedidor {
+    /// As imagens que este estilo pede, na ordem em que aparecem.
+    ///
+    /// E a lista do que o daemon serve na rede por causa dele -- arquivo por
+    /// arquivo, e nao a pasta: um plugin que so desenha medidor nao publica o
+    /// resto do que trouxe. Ver `serve::serve_plugin`.
+    pub fn imagens(&self) -> Vec<&str> {
+        let Some(camadas) = &self.camadas else {
+            return Vec::new();
+        };
+
+        let mut imagens: Vec<&str> = Vec::new();
+        imagens.extend(camadas.moldura.as_deref());
+        imagens.extend(camadas.mascara.as_deref());
+        match &camadas.conteudo {
+            Conteudo::Barra { imagem, vazio, .. } => {
+                imagens.extend(vazio.as_deref());
+                imagens.extend(imagem.as_deref());
+            }
+            Conteudo::Pontos { cheio, vazio } => {
+                imagens.extend(cheio.as_deref());
+                imagens.extend(vazio.as_deref());
+            }
+            Conteudo::Sequencia { quadros } => imagens.extend(quadros.iter().map(String::as_str)),
+        }
+
+        imagens
+    }
 }
 
 /// Os limites da altura. Abaixo de 0,05 nao se ve; acima de 3 a forma e mais
 /// alta que tres larguras, e a coluna do retrato viraria uma torre.
 pub const ALTURA_MIN: f64 = 0.05;
 pub const ALTURA_MAX: f64 = 3.0;
+
+/// O que a linha acima da forma mostra.
+///
+/// `acima` e o de sempre, nome e valor. `nome` tira o valor, para a moldura
+/// que ja escreve o numero; `nenhum` tira a linha, para o coracao que racha e
+/// dispensa legenda. Ausente e `acima`.
+pub const ROTULOS: &[&str] = &["acima", "nome", "nenhum"];
+
+/// Um medidor feito de imagens: o conteudo embaixo, a moldura por cima.
+///
+/// E o caminho de quem desenha num editor de imagem e nao em SVG -- a moldura
+/// de pergaminho, o frasco de sangue em GIF. As coordenadas sao FRACAO da
+/// forma, e nao pixel: a forma escala com a coluna do retrato, e o encaixe
+/// escala junto sem o autor saber o tamanho de tela nenhuma.
+///
+/// Sem 9-slice de proposito. A largura do medidor muda, mas a proporcao e a
+/// `altura` declarada, entao a moldura so cresce inteira -- nunca estica.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Camadas {
+    /// Por cima de tudo, a forma inteira.
+    #[serde(default)]
+    pub moldura: Option<String>,
+    /// Recorta o conteudo pelo alfa, para formas que nao sao retangulo.
+    #[serde(default)]
+    pub mascara: Option<String>,
+    /// Onde o conteudo entra. Ausente e a forma inteira.
+    #[serde(default)]
+    pub encaixe: Option<Encaixe>,
+    pub conteudo: Conteudo,
+    /// O valor escrito DENTRO da forma, por cima de tudo. Ver `Texto`.
+    #[serde(default)]
+    pub texto: Option<Texto>,
+}
+
+/// O valor (`11/13`, `70%`) escrito dentro da forma, por cima da moldura.
+///
+/// E o que a barra de pincel de uma mesa de streaming faz: o numero no meio da
+/// tinta, sem legenda em cima. Fonte do aplicativo, e nao do plugin -- uma
+/// fonte de plugin teria de viajar para cada TV, e nao e o que separa um tema
+/// do outro. As cores sao hex e so hex: vao parar num `style`, e uma string
+/// livre ali seria CSS do plugin dentro da mesa.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Texto {
+    /// Ausente e o encaixe do conteudo.
+    #[serde(default)]
+    pub encaixe: Option<Encaixe>,
+    /// Ausente e branco.
+    #[serde(default)]
+    pub cor: Option<String>,
+    /// O contorno que separa o numero da tinta. Ausente e quase preto.
+    #[serde(default)]
+    pub contorno: Option<String>,
+    /// O corpo do texto, em fracao da altura do encaixe dele. Ausente e 0,7.
+    #[serde(default)]
+    pub tamanho: Option<f64>,
+}
+
+/// Os limites do `tamanho` do texto. Abaixo de 0,2 nao se le; acima de 1,5 o
+/// numero vaza do encaixe para cima e para baixo.
+pub const TAMANHO_DO_TEXTO_MIN: f64 = 0.2;
+pub const TAMANHO_DO_TEXTO_MAX: f64 = 1.5;
+
+/// Uma cor `#rgb`, `#rgba`, `#rrggbb` ou `#rrggbbaa`. Ver `Texto`.
+pub fn cor_hex_valida(cor: &str) -> bool {
+    let Some(digitos) = cor.strip_prefix('#') else {
+        return false;
+    };
+
+    matches!(digitos.len(), 3 | 4 | 6 | 8) && digitos.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// O encaixe cabe na forma?
+///
+/// Um milesimo de folga: `0.06 + 0.94` nao da 1 em ponto flutuante, e recusar
+/// a conta certa do autor seria pior que aceitar um encaixe que passa da borda
+/// por um fio.
+fn encaixe_cabe(encaixe: &Encaixe) -> bool {
+    let Encaixe {
+        x,
+        y,
+        largura,
+        altura,
+    } = *encaixe;
+
+    [x, y, largura, altura].iter().all(|n| n.is_finite())
+        && x >= 0.0
+        && y >= 0.0
+        && largura > 0.0
+        && altura > 0.0
+        && x + largura <= 1.001
+        && y + altura <= 1.001
+}
+
+/// Um retangulo em fracao da forma: `x` e `largura` da largura, `y` e
+/// `altura` da altura.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Encaixe {
+    pub x: f64,
+    pub y: f64,
+    pub largura: f64,
+    pub altura: f64,
+}
+
+/// Como o valor ocupa o encaixe.
+///
+/// Os tres modos sao os tres estilos de fabrica (barra, pontos) mais o que so
+/// imagem sabe fazer: trocar de quadro conforme o valor -- o coracao que
+/// racha, a sanidade que distorce. Sem imagem, barra e pontos pintam com a cor
+/// do medidor.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "modo", rename_all = "camelCase")]
+pub enum Conteudo {
+    Barra {
+        #[serde(default)]
+        direcao: Direcao,
+        #[serde(default)]
+        imagem: Option<String>,
+        /// O trecho VAZIO: desenhado inteiro embaixo, e a parte cheia o
+        /// cobre. Ausente, o vazio e transparente.
+        #[serde(default)]
+        vazio: Option<String>,
+    },
+    Pontos {
+        #[serde(default)]
+        cheio: Option<String>,
+        #[serde(default)]
+        vazio: Option<String>,
+    },
+    /// Do vazio ao cheio. O primeiro so aparece no zero.
+    Sequencia { quadros: Vec<String> },
+}
+
+/// Para onde a barra cresce.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Direcao {
+    #[default]
+    Direita,
+    Esquerda,
+    Cima,
+    Baixo,
+}
+
+/// As imagens que um estilo em camadas aceita. Raster, e so.
+///
+/// O `.svg` fica de fora por SEGURANCA, e nao por gosto: estas vao para a
+/// rede, e um SVG aberto como documento roda script na origem do daemon --
+/// que e onde o celular do jogador guarda o token. Moldura vetorial continua
+/// possivel pelo estilo `.svg`, que passa pelo filtro.
+pub const IMAGENS_DE_MEDIDOR: &[&str] = &["png", "webp", "gif", "jpg", "jpeg", "avif"];
+
+/// O teto de uma imagem de medidor, em bytes.
+///
+/// Cada TV e cada celular baixa todas, e um GIF de dez megas por medidor
+/// travaria a mesa que abre no meio da sessao. Dois megas cabem uma
+/// animacao curta de 512px, que e mais do que a coluna do retrato mostra.
+pub const IMAGEM_DE_MEDIDOR_MAX: u64 = 2 * 1024 * 1024;
+
+/// Quantos quadros uma `sequencia` pode ter. Cada quadro e um arquivo que a
+/// mesa baixa; dezesseis ja distinguem cada faixa de vida que alguem le.
+pub const QUADROS_MAX: usize = 16;
 
 /// Um item que a extensao poe num menu do aplicativo.
 ///
@@ -725,20 +933,7 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
     }
 
     for estilo in &c.estilos_de_medidor {
-        if !caminho_relativo_seguro(&estilo.arquivo)
-            || !estilo.arquivo.to_ascii_lowercase().ends_with(".svg")
-        {
-            return Err(AppError::ExtensaoInvalida(format!(
-                "o estilo {:?} aponta para {:?}; tem de ser um .svg dentro da pasta",
-                estilo.id, estilo.arquivo
-            )));
-        }
-        if !estilo.altura.is_finite() || !(ALTURA_MIN..=ALTURA_MAX).contains(&estilo.altura) {
-            return Err(AppError::ExtensaoInvalida(format!(
-                "a altura do estilo {:?} tem de ficar entre {ALTURA_MIN} e {ALTURA_MAX}",
-                estilo.id
-            )));
-        }
+        validar_estilo(estilo)?;
     }
 
     for pagina in &c.paginas {
@@ -769,6 +964,149 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
             )));
         }
         vistos.push(&substituto.alvo);
+    }
+
+    Ok(())
+}
+
+/// Um estilo de medidor desenha alguma coisa, e so com o que e da pasta?
+///
+/// So a FORMA do que foi declarado: o arquivo existir e caber no teto e da
+/// importacao (`validar_arquivos_dos_estilos`). Aqui roda a cada leitura do
+/// manifesto, e um arquivo apagado por fora nao pode tirar o plugin da lista
+/// -- e na lista que fica o botao de desinstalar.
+fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
+    let invalido = |motivo: String| {
+        Err(AppError::ExtensaoInvalida(format!(
+            "o estilo {:?} {motivo}",
+            estilo.id
+        )))
+    };
+
+    if !estilo.altura.is_finite() || !(ALTURA_MIN..=ALTURA_MAX).contains(&estilo.altura) {
+        return invalido(format!(
+            "tem de ter altura entre {ALTURA_MIN} e {ALTURA_MAX}"
+        ));
+    }
+
+    if let Some(rotulo) = &estilo.rotulo {
+        if !ROTULOS.contains(&rotulo.as_str()) {
+            return invalido(format!(
+                "pede o rotulo {rotulo:?}; os rotulos sao {}",
+                ROTULOS.join(", ")
+            ));
+        }
+    }
+
+    match (&estilo.arquivo, &estilo.camadas) {
+        (Some(arquivo), None) => {
+            if !caminho_relativo_seguro(arquivo) || !arquivo.to_ascii_lowercase().ends_with(".svg")
+            {
+                return invalido(format!(
+                    "aponta para {arquivo:?}; tem de ser um .svg dentro da pasta"
+                ));
+            }
+        }
+        (None, Some(camadas)) => {
+            let encaixes = camadas.encaixe.iter().chain(
+                camadas
+                    .texto
+                    .iter()
+                    .filter_map(|texto| texto.encaixe.as_ref()),
+            );
+            for encaixe in encaixes {
+                if !encaixe_cabe(encaixe) {
+                    return invalido(
+                        "tem um encaixe fora da forma; x, y, largura e altura sao fracoes de 0 a 1"
+                            .to_string(),
+                    );
+                }
+            }
+
+            if let Some(texto) = &camadas.texto {
+                for cor in texto.cor.iter().chain(texto.contorno.iter()) {
+                    if !cor_hex_valida(cor) {
+                        return invalido(format!(
+                            "pede a cor {cor:?} no texto; use hex, como #fff ou #1a0d0dcc"
+                        ));
+                    }
+                }
+                if let Some(tamanho) = texto.tamanho {
+                    if !tamanho.is_finite()
+                        || !(TAMANHO_DO_TEXTO_MIN..=TAMANHO_DO_TEXTO_MAX).contains(&tamanho)
+                    {
+                        return invalido(format!(
+                            "tem um texto de tamanho {tamanho}; vai de {TAMANHO_DO_TEXTO_MIN} a {TAMANHO_DO_TEXTO_MAX}"
+                        ));
+                    }
+                }
+            }
+
+            if let Conteudo::Sequencia { quadros } = &camadas.conteudo {
+                if !(2..=QUADROS_MAX).contains(&quadros.len()) {
+                    return invalido(format!(
+                        "tem uma sequencia de {} quadros; vai de 2 a {QUADROS_MAX}",
+                        quadros.len()
+                    ));
+                }
+            }
+
+            for imagem in estilo.imagens() {
+                let extensao = imagem.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+                let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
+                if !caminho_relativo_seguro(imagem) || !e_imagem {
+                    return invalido(format!(
+                        "aponta para {imagem:?}; tem de ser uma imagem dentro da pasta ({})",
+                        IMAGENS_DE_MEDIDOR.join(", ")
+                    ));
+                }
+            }
+        }
+        (Some(_), Some(_)) => {
+            return invalido("declara `arquivo` e `camadas`; escolha um dos dois".to_string());
+        }
+        (None, None) => {
+            return invalido("nao declara `arquivo` (.svg) nem `camadas`".to_string());
+        }
+    }
+
+    Ok(())
+}
+
+/// As imagens dos estilos existem e cabem no teto?
+///
+/// Na IMPORTACAO, e nao em `ler_manifesto`: e o momento em que o autor ainda
+/// esta olhando para a pasta, e o erro diz qual arquivo faltou. Depois disso
+/// uma imagem que some e so um medidor sem moldura -- o daemon responde 404 e
+/// a TV desenha o resto.
+fn validar_arquivos_dos_estilos(pasta: &Path, manifesto: &Manifesto) -> AppResult<()> {
+    for estilo in &manifesto.contribui.estilos_de_medidor {
+        for imagem in estilo.imagens() {
+            // `symlink_metadata`: a copia pula link simbolico, e uma imagem
+            // que fosse link passaria aqui e faltaria na pasta instalada.
+            let tamanho = std::fs::symlink_metadata(pasta.join(imagem))
+                .ok()
+                .filter(|meta| meta.is_file())
+                .map(|meta| meta.len());
+
+            match tamanho {
+                None => {
+                    return Err(AppError::ExtensaoInvalida(format!(
+                        "o estilo {:?} aponta para {imagem:?}, que nao esta na pasta",
+                        estilo.id
+                    )));
+                }
+                Some(bytes) if bytes > IMAGEM_DE_MEDIDOR_MAX => {
+                    return Err(AppError::ExtensaoInvalida(format!(
+                        "a imagem {imagem:?} do estilo {:?} tem {} KB; o teto e {} KB",
+                        estilo.id,
+                        bytes / 1024,
+                        IMAGEM_DE_MEDIDOR_MAX / 1024
+                    )));
+                }
+                Some(_) => {}
+            }
+        }
     }
 
     Ok(())
@@ -1043,6 +1381,7 @@ pub fn listar(dir: &Path) -> AppResult<Vec<Manifesto>> {
 /// versao nova.
 pub fn importar(dir: &Path, origem: &Path) -> AppResult<Manifesto> {
     let manifesto = ler_manifesto(origem)?;
+    validar_arquivos_dos_estilos(origem, &manifesto)?;
 
     let destino = dir.join(&manifesto.id);
 
@@ -1627,6 +1966,220 @@ mod tests {
                 "{corpo} devia ser recusado"
             );
         }
+    }
+
+    /// Um plugin que so desenha medidor: sem `principal`, sem SVG.
+    fn com_estilos(estilos: &str) -> String {
+        format!(
+            r#"{{"id":"ordem","nome":"Ordem","versao":"1.0.0","apiVersao":5,"contribui":{{"estilosDeMedidor":{estilos}}}}}"#
+        )
+    }
+
+    #[test]
+    fn estilo_em_camadas_entra_inteiro_e_dispensa_principal() {
+        let base = tempfile::tempdir().unwrap();
+
+        let m = ler(
+            base.path(),
+            &com_estilos(
+                r#"[
+                  {"id":"vida","titulo":"Vida","altura":0.22,"rotulo":"nome",
+                   "camadas":{"moldura":"m/vida.webp","mascara":"m/mascara.png",
+                     "encaixe":{"x":0.06,"y":0.25,"largura":0.94,"altura":0.5},
+                     "conteudo":{"modo":"barra","direcao":"cima","imagem":"m/sangue.gif"}}},
+                  {"id":"cargas","titulo":"Cargas","altura":0.2,
+                   "camadas":{"conteudo":{"modo":"pontos","cheio":"m/cheio.png"}}},
+                  {"id":"sanidade","titulo":"Sanidade","altura":1,"rotulo":"nenhum",
+                   "camadas":{"conteudo":{"modo":"sequencia","quadros":["s/0.png","s/1.png","s/2.png"]}}}
+                ]"#,
+            ),
+        )
+        .unwrap();
+
+        let [vida, cargas, sanidade] = &m.contribui.estilos_de_medidor[..] else {
+            panic!("tres estilos");
+        };
+
+        assert_eq!(vida.rotulo.as_deref(), Some("nome"));
+        assert_eq!(
+            vida.camadas.as_ref().unwrap().conteudo,
+            Conteudo::Barra {
+                direcao: Direcao::Cima,
+                imagem: Some("m/sangue.gif".into()),
+                vazio: None,
+            }
+        );
+        assert_eq!(
+            vida.imagens(),
+            ["m/vida.webp", "m/mascara.png", "m/sangue.gif"]
+        );
+
+        // Sem imagem de vazio, sem moldura, sem encaixe: tudo opcional.
+        assert_eq!(cargas.imagens(), ["m/cheio.png"]);
+        assert!(cargas.camadas.as_ref().unwrap().encaixe.is_none());
+
+        assert_eq!(sanidade.imagens(), ["s/0.png", "s/1.png", "s/2.png"]);
+    }
+
+    #[test]
+    fn estilo_em_camadas_so_aceita_imagem_da_pasta_e_encaixe_na_forma() {
+        let base = tempfile::tempdir().unwrap();
+        let barra = |extra: &str| {
+            com_estilos(&format!(
+                r#"[{{"id":"x","titulo":"X","altura":0.2,"camadas":{{{extra}"conteudo":{{"modo":"barra"}}}}}}]"#
+            ))
+        };
+
+        // O caso que cabe na conta do autor e nao na do ponto flutuante.
+        assert!(ler(
+            base.path(),
+            &barra(r#""encaixe":{"x":0.06,"y":0,"largura":0.94,"altura":1},"#)
+        )
+        .is_ok());
+
+        for json in [
+            // SVG nao: ele vai para a rede, e la roda script.
+            barra(r#""moldura":"moldura.svg","#),
+            barra(r#""moldura":"../fora.png","#),
+            barra(r#""moldura":"sem-extensao","#),
+            barra(r#""mascara":"mascara.html","#),
+            barra(r#""encaixe":{"x":0.5,"y":0,"largura":0.6,"altura":1},"#),
+            barra(r#""encaixe":{"x":0,"y":0,"largura":0,"altura":1},"#),
+            barra(r#""encaixe":{"x":-0.1,"y":0,"largura":0.5,"altura":1},"#),
+            com_estilos(
+                r#"[{"id":"x","titulo":"X","altura":0.2,"camadas":{"conteudo":{"modo":"sequencia","quadros":["a.png"]}}}]"#,
+            ),
+            com_estilos(&format!(
+                r#"[{{"id":"x","titulo":"X","altura":0.2,"camadas":{{"conteudo":{{"modo":"sequencia","quadros":[{}]}}}}}}]"#,
+                vec![r#""q.png""#; QUADROS_MAX + 1].join(",")
+            )),
+            com_estilos(
+                r#"[{"id":"x","titulo":"X","altura":0.2,"arquivo":"x.svg","camadas":{"conteudo":{"modo":"barra"}}}]"#,
+            ),
+            com_estilos(r#"[{"id":"x","titulo":"X","altura":0.2}]"#),
+            com_estilos(
+                r#"[{"id":"x","titulo":"X","altura":0.2,"arquivo":"x.svg","rotulo":"dentro"}]"#,
+            ),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &json).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{json} devia ser recusado"
+            );
+        }
+
+        // Modo que nao existe e erro de forma do JSON, e o serde ja diz qual.
+        let desconhecido = com_estilos(
+            r#"[{"id":"x","titulo":"X","altura":0.2,"camadas":{"conteudo":{"modo":"anel"}}}]"#,
+        );
+        assert!(matches!(
+            ler(base.path(), &desconhecido).unwrap_err(),
+            AppError::Malformed { .. }
+        ));
+    }
+
+    #[test]
+    fn estilo_em_camadas_escreve_o_valor_dentro_com_cor_hex() {
+        let base = tempfile::tempdir().unwrap();
+        let com_texto = |texto: &str| {
+            com_estilos(&format!(
+                r#"[{{"id":"pv","titulo":"PV","altura":0.15,"camadas":{{
+                    "conteudo":{{"modo":"barra","imagem":"cheio.png","vazio":"vazio.png"}},
+                    "texto":{texto}}}}}]"#
+            ))
+        };
+
+        let m = ler(
+            base.path(),
+            &com_texto(r##"{"cor":"#fff","contorno":"#1a0d0dcc","tamanho":0.6,"encaixe":{"x":0,"y":0.1,"largura":1,"altura":0.8}}"##),
+        )
+        .unwrap();
+        let estilo = &m.contribui.estilos_de_medidor[0];
+        // O vazio vem antes do cheio: e a ordem em que a mesa desenha.
+        assert_eq!(estilo.imagens(), ["vazio.png", "cheio.png"]);
+        assert_eq!(
+            estilo
+                .camadas
+                .as_ref()
+                .unwrap()
+                .texto
+                .as_ref()
+                .unwrap()
+                .tamanho,
+            Some(0.6)
+        );
+
+        assert!(ler(base.path(), &com_texto("{}")).is_ok());
+
+        for texto in [
+            r##"{"cor":"red"}"##,
+            r##"{"cor":"#ffffff; background:url(x)"}"##,
+            r##"{"contorno":"#12345"}"##,
+            r##"{"tamanho":3}"##,
+            r##"{"encaixe":{"x":0.5,"y":0,"largura":0.6,"altura":1}}"##,
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_texto(texto)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{texto} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn importar_recusa_imagem_de_medidor_que_falta_ou_pesa() {
+        let base = tempfile::tempdir().unwrap();
+        let dir = base.path().join("extensoes");
+        let pasta = base.path().join("origem-ordem");
+        escrever(
+            &pasta,
+            MANIFESTO,
+            &com_estilos(
+                r#"[{"id":"vida","titulo":"Vida","altura":0.2,
+                     "camadas":{"moldura":"m/vida.png","conteudo":{"modo":"barra"}}}]"#,
+            ),
+        );
+
+        let erro = importar(&dir, &pasta).unwrap_err();
+        assert!(erro.to_string().contains("m/vida.png"), "{erro}");
+
+        escrever(
+            &pasta.join("m"),
+            "vida.png",
+            &"x".repeat(IMAGEM_DE_MEDIDOR_MAX as usize + 1),
+        );
+        assert!(matches!(
+            importar(&dir, &pasta).unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+
+        escrever(&pasta.join("m"), "vida.png", "png");
+        importar(&dir, &pasta).unwrap();
+        assert!(dir.join("ordem/m/vida.png").is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn importar_recusa_imagem_de_medidor_que_e_link() {
+        let base = tempfile::tempdir().unwrap();
+        let pasta = base.path().join("origem-ordem");
+        escrever(
+            &pasta,
+            MANIFESTO,
+            &com_estilos(
+                r#"[{"id":"vida","titulo":"Vida","altura":0.2,
+                     "camadas":{"moldura":"vida.png","conteudo":{"modo":"barra"}}}]"#,
+            ),
+        );
+        escrever(base.path(), "fora.png", "png");
+        std::os::unix::fs::symlink(base.path().join("fora.png"), pasta.join("vida.png")).unwrap();
+
+        // A copia pularia o link, e o estilo apontaria para o nada.
+        assert!(importar(&base.path().join("extensoes"), &pasta).is_err());
     }
 
     #[test]

@@ -1,3 +1,4 @@
+import type { CamadasDoMedidor, RotuloDoMedidor } from "@/lib/extensoes/manifesto";
 import type { NoSvg } from "@/lib/extensoes/svg-modelo";
 
 /**
@@ -14,10 +15,27 @@ import type { NoSvg } from "@/lib/extensoes/svg-modelo";
  * React. Nada do plugin roda fora do Mestre.
  */
 export type EstiloDeMedidorPublicado = {
+  titulo: string;
   /** A altura da forma, em fração da largura do medidor. */
   altura: number;
-  modelo: NoSvg;
-};
+  /** Ausente é `acima`. Ver `RotuloDoMedidor`. */
+  rotulo?: RotuloDoMedidor;
+} & (
+  | { tipo: "svg"; modelo: NoSvg }
+  | {
+      /**
+       * As camadas viajam como o JSON que o plugin escreveu, e as imagens não:
+       * cada tela as busca pelo endereço dela -- o protocolo `ato20-ext` no
+       * Mestre, `/plugin/{id}/...` no daemon para a TV e o celular. Ver
+       * `urlDaImagemDoEstilo`.
+       */
+      tipo: "camadas";
+      plugin: string;
+      /** A versão do plugin, que vai na URL para a TV não desenhar a moldura velha. */
+      versao: string;
+      camadas: CamadasDoMedidor;
+    }
+);
 
 export type Declarativo = {
   versao: number;

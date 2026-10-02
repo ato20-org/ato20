@@ -1062,11 +1062,15 @@ async fn canal_de_plugin(
 /// proposito: os dois juntos deixariam o script tirar o proprio sandbox.
 const POLITICA_DE_PAGINA: &str = "sandbox allow-scripts";
 
-/// `GET /plugin/{id}/{arquivo}` -- os arquivos de um plugin que tem pagina.
+/// `GET /plugin/{id}/{arquivo}` -- os arquivos de um plugin que tem pagina, e
+/// as imagens dos estilos de medidor.
 ///
-/// So de plugin HABILITADO que DECLARA pagina. A pasta inteira e servida, e
-/// nao so o `.html`: a pagina traz o proprio JS, o CSS e a fonte ao lado. O
-/// plugin que nao declara pagina nao tem arquivo nenhum na rede.
+/// So de plugin HABILITADO. Quem DECLARA pagina tem a pasta inteira servida, e
+/// nao so o `.html`: a pagina traz o proprio JS, o CSS e a fonte ao lado. Quem
+/// declara estilo de medidor em camadas tem servidas as imagens que o estilo
+/// aponta, uma a uma -- a TV precisa delas para desenhar a moldura, e o resto
+/// da pasta continua fora da rede. O plugin que nao declara nenhum dos dois
+/// nao tem arquivo nenhum na rede.
 ///
 /// Sem codigo da mesa, como o bundle do espectador: o arquivo nao e segredo, e
 /// um `<script src>` relativo nao levaria o codigo junto. O que e da mesa -- o
@@ -1083,9 +1087,20 @@ async fn serve_plugin(
         return fail(StatusCode::NOT_FOUND, "plugin nao encontrado");
     }
     let pasta = raiz.join(&id);
-    match extensoes::ler_manifesto(&pasta) {
-        Ok(manifesto) if !manifesto.contribui.paginas.is_empty() => {}
-        _ => return fail(StatusCode::NOT_FOUND, "plugin sem pagina"),
+    let Ok(manifesto) = extensoes::ler_manifesto(&pasta) else {
+        return fail(StatusCode::NOT_FOUND, "plugin sem pagina");
+    };
+    let tem_pagina = !manifesto.contribui.paginas.is_empty();
+    // Comparado com o caminho como o manifesto o escreve: a lista ja passou
+    // por `caminho_relativo_seguro` e so tem imagem raster (ver
+    // `IMAGENS_DE_MEDIDOR`), entao nada aqui abre um `.svg` ou um `.html`.
+    let de_estilo = manifesto
+            .contribui
+            .estilos_de_medidor
+            .iter()
+            .any(|estilo| estilo.imagens().contains(&arquivo.as_str()));
+    if !tem_pagina && !de_estilo {
+        return fail(StatusCode::NOT_FOUND, "plugin sem pagina");
     }
 
     // A mesma guarda do protocolo `ato20-ext`: forma do caminho, e depois o
@@ -1099,6 +1114,14 @@ async fn serve_plugin(
     else {
         return fail(StatusCode::NOT_FOUND, "arquivo nao existe");
     };
+
+    // O teto da importacao, de novo: a pasta instalada pode ser editada por
+    // fora, e um GIF trocado por um de cem megas sairia para cada TV.
+    if de_estilo
+        && std::fs::metadata(&real).map_or(true, |meta| meta.len() > extensoes::IMAGEM_DE_MEDIDOR_MAX)
+    {
+        return fail(StatusCode::NOT_FOUND, "imagem acima do teto");
+    }
 
     // `ServeFile::new` adivinha o tipo pela extensao, e cuida de Range e ETag.
     match ServeFile::new(&real).oneshot(request).await {
@@ -1114,8 +1137,11 @@ async fn serve_plugin(
                 HeaderValue::from_static("nosniff"),
             );
             // Editar o plugin e recarregar a fonte tem de mostrar o arquivo
-            // novo, como o `no-store` do protocolo `ato20-ext`.
-            headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            // novo, como o `no-store` do protocolo `ato20-ext`. A imagem de
+            // medidor revalida em vez disso: ela volta a cada token que entra
+            // na cena, e o `304` do ETag custa um cabecalho, nao o GIF.
+            let cache = if de_estilo { "no-cache" } else { "no-store" };
+            headers.insert(CACHE_CONTROL, HeaderValue::from_static(cache));
             response
         }
         Err(cause) => {
@@ -4301,6 +4327,68 @@ mod tests {
             let response = router(Arc::clone(&state)).oneshot(pedir(uri)).await.unwrap();
             assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
         }
+    }
+
+    #[tokio::test]
+    async fn imagem_de_medidor_sai_uma_a_uma_e_o_resto_da_pasta_fica() {
+        let (dir, state, _) = daemon();
+        let raiz = dir.path().join("extensoes");
+        let state = Arc::new(
+            Arc::try_unwrap(state)
+                .ok()
+                .expect("sem outras referencias")
+                .com_extensoes(raiz.clone()),
+        );
+
+        let pasta = raiz.join("ordem");
+        std::fs::create_dir_all(pasta.join("m")).unwrap();
+        std::fs::write(
+            pasta.join("manifest.json"),
+            r#"{"id":"ordem","nome":"Ordem","versao":"1.0.0","apiVersao":4,
+                "contribui":{"estilosDeMedidor":[{"id":"vida","titulo":"Vida","altura":0.2,
+                  "camadas":{"moldura":"m/vida.png","conteudo":{"modo":"barra","imagem":"m/sangue.gif"}}}]}}"#,
+        )
+        .unwrap();
+        std::fs::write(pasta.join("m/vida.png"), "png").unwrap();
+        std::fs::write(pasta.join("m/sangue.gif"), "gif").unwrap();
+        std::fs::write(pasta.join("m/rascunho.png"), "nao declarado").unwrap();
+        std::fs::write(pasta.join("notas.txt"), "segredo do autor").unwrap();
+
+        let pedir = |uri: &str| HttpRequest::builder().uri(uri).body(Body::empty()).expect("request");
+
+        let cedo = router(Arc::clone(&state)).oneshot(pedir("/plugin/ordem/m/vida.png")).await.unwrap();
+        assert_eq!(cedo.status(), StatusCode::NOT_FOUND);
+
+        habilitar(&state, &["ordem"]).await;
+
+        for uri in ["/plugin/ordem/m/vida.png", "/plugin/ordem/m/sangue.gif"] {
+            let response = router(Arc::clone(&state)).oneshot(pedir(uri)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            assert_eq!(
+                response.headers().get("cache-control").map(|v| v.to_str().unwrap()),
+                Some("no-cache")
+            );
+        }
+
+        // So o que o estilo aponta: o resto da pasta nao foi publicado.
+        for uri in [
+            "/plugin/ordem/m/rascunho.png",
+            "/plugin/ordem/notas.txt",
+            "/plugin/ordem/manifest.json",
+            "/plugin/ordem/m/../notas.txt",
+        ] {
+            let response = router(Arc::clone(&state)).oneshot(pedir(uri)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+
+        // Trocada por fora por uma acima do teto: nao sai.
+        std::fs::write(
+            pasta.join("m/vida.png"),
+            vec![0u8; extensoes::IMAGEM_DE_MEDIDOR_MAX as usize + 1],
+        )
+        .unwrap();
+        let pesada = router(Arc::clone(&state)).oneshot(pedir("/plugin/ordem/m/vida.png")).await.unwrap();
+        assert_eq!(pesada.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

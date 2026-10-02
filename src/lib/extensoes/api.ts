@@ -50,8 +50,11 @@ import type { CanvasItem, Scene } from "@/types/scene";
  *
  * A 4 acrescentou `chat`: o fio da campanha, para o plugin escrever a linha
  * dele ("Ataque: 1d20+3 = 17") e ouvir as dos outros.
+ *
+ * A 5 não mexeu neste objeto: acrescentou ao manifesto o medidor em `camadas`
+ * de imagem e o `rotulo`. Ver `extensoes::API_VERSAO`.
  */
-export const API_VERSAO_ATUAL = 4;
+export const API_VERSAO_ATUAL = 5;
 
 /** O que o plugin sabe da cena sem poder mexer no formato dela. */
 export type CenaResumo = {

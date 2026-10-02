@@ -55,6 +55,12 @@ import { tmpdir } from "node:os";
 
 const RAIZ = resolve(import.meta.dirname, "..", "..");
 const SAIDA = join(RAIZ, "out");
+/**
+ * As imagens do plugin de mentira dos medidores em camadas, servidas em
+ * `/plugin/perf/*` como o daemon serve as de um plugin de verdade. Ver
+ * `medidoresDaMedida` na página da medida.
+ */
+const PLUGIN_DA_MEDIDA = join(RAIZ, "scripts", "perf", "medidor");
 
 const argv = process.argv.slice(2);
 
@@ -455,6 +461,20 @@ function servir(porta, pdf, imagens) {
       res.end(cache.get(id));
 
       return;
+    }
+
+    if (caminho.startsWith("/plugin/perf/")) {
+      const arquivo = join(PLUGIN_DA_MEDIDA, caminho.slice("/plugin/perf/".length));
+      if (arquivo.startsWith(PLUGIN_DA_MEDIDA) && statSync(arquivo, { throwIfNoEntry: false })?.isFile()) {
+        // `no-cache`, como o daemon responde as imagens de estilo.
+        res.writeHead(200, {
+          "content-type": TIPOS[extname(arquivo)] ?? "application/octet-stream",
+          "cache-control": "no-cache",
+        });
+        res.end(await readFile(arquivo));
+
+        return;
+      }
     }
 
     // `output: export` grava `rota.html`; o browser pede `/rota`.

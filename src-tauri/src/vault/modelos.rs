@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use super::atomic::{read_json, write_json};
-use super::characters::{Estilo, Medidor, MAX_MEDIDORES};
+use super::characters::{estilo_extensao_valido, Estilo, Medidor, MAX_MEDIDORES};
 use super::Vault;
 use crate::error::{AppError, AppResult};
 
@@ -52,6 +52,20 @@ pub struct Modelo {
     pub estilo: Estilo,
     pub maximo: i64,
     pub escondido: bool,
+    /// O estilo de plugin que o medidor materializado ja traz. Ver
+    /// `Medidor::estilo_extensao` -- o `estilo` acima segue como reserva.
+    ///
+    /// E o que deixa um sistema inteiro nascer com a cara dele: a "Vida" da
+    /// campanha de Ordem ja sai na moldura do plugin em cada ficha nova, sem
+    /// o mestre trocar uma por uma. Ausente nas campanhas de antes dele.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estilo_extensao: Option<String>,
+    /// A legenda que o medidor materializado ja traz. Ver
+    /// `Medidor::mostrar_nome`; ausente segue o estilo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mostrar_nome: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mostrar_valor: Option<bool>,
 }
 
 impl Modelo {
@@ -70,9 +84,9 @@ impl Modelo {
             atual: self.maximo,
             maximo: self.maximo,
             escondido: self.escondido,
-            // O modelo da campanha e de fabrica; o estilo de plugin se escolhe
-            // no medidor materializado, depois.
-            estilo_extensao: None,
+            estilo_extensao: self.estilo_extensao.clone(),
+            mostrar_nome: self.mostrar_nome,
+            mostrar_valor: self.mostrar_valor,
         }
     }
 }
@@ -137,6 +151,9 @@ pub fn criar(
         estilo,
         maximo,
         escondido: false,
+        estilo_extensao: None,
+        mostrar_nome: None,
+        mostrar_valor: None,
     };
     ajustar(&mut modelo);
 
@@ -155,6 +172,10 @@ pub struct PatchModelo {
     pub estilo: Option<Estilo>,
     pub maximo: Option<i64>,
     pub escondido: Option<bool>,
+    /// `Some("")` volta ao de fabrica. Mesma regra de `PatchMedidor`.
+    pub estilo_extensao: Option<String>,
+    pub mostrar_nome: Option<bool>,
+    pub mostrar_valor: Option<bool>,
 }
 
 pub fn editar(vault: &Vault, modelo_id: &str, patch: PatchModelo) -> AppResult<Modelo> {
@@ -179,6 +200,20 @@ pub fn editar(vault: &Vault, modelo_id: &str, patch: PatchModelo) -> AppResult<M
     }
     if let Some(escondido) = patch.escondido {
         modelo.escondido = escondido;
+    }
+    // Forma errada e ignorada, como no medidor: o modelo continua de fabrica.
+    if let Some(chave) = patch.estilo_extensao {
+        if chave.is_empty() {
+            modelo.estilo_extensao = None;
+        } else if estilo_extensao_valido(&chave) {
+            modelo.estilo_extensao = Some(chave);
+        }
+    }
+    if let Some(mostrar) = patch.mostrar_nome {
+        modelo.mostrar_nome = Some(mostrar);
+    }
+    if let Some(mostrar) = patch.mostrar_valor {
+        modelo.mostrar_valor = Some(mostrar);
     }
 
     ajustar(modelo);
@@ -436,6 +471,57 @@ mod tests {
 
         assert_eq!(entraram, 1);
         assert_eq!(characters::load(&vault).unwrap()[0].medidores.len(), 2);
+    }
+
+    #[test]
+    fn estilo_de_plugin_do_modelo_nasce_em_cada_ficha() {
+        let (_tmp, vault) = vault();
+        let modelo = criar(&vault, "Vida", "#ef4444", Estilo::Barra, 20).unwrap();
+        assert_eq!(modelo.estilo_extensao, None);
+
+        let com = |chave: &str| PatchModelo {
+            estilo_extensao: Some(chave.into()),
+            ..Default::default()
+        };
+
+        let modelo = editar(&vault, &modelo.id, com("ordem/vida")).unwrap();
+        assert_eq!(modelo.estilo_extensao.as_deref(), Some("ordem/vida"));
+
+        // O medidor que nasce dele ja traz a moldura, e o de fabrica fica de
+        // reserva para a TV que nao tem o plugin.
+        let medidor = modelo.materializar();
+        assert_eq!(medidor.estilo_extensao.as_deref(), Some("ordem/vida"));
+        assert_eq!(medidor.estilo, Estilo::Barra);
+
+        // Chave torta nao mexe; vazio volta ao de fabrica.
+        let modelo = editar(&vault, &modelo.id, com("../fora")).unwrap();
+        assert_eq!(modelo.estilo_extensao.as_deref(), Some("ordem/vida"));
+        let modelo = editar(&vault, &modelo.id, com("")).unwrap();
+        assert_eq!(modelo.estilo_extensao, None);
+        assert_eq!(load(&vault).unwrap()[0].estilo_extensao, None);
+    }
+
+    #[test]
+    fn legenda_do_modelo_nasce_em_cada_ficha() {
+        let (_tmp, vault) = vault();
+        let modelo = criar(&vault, "SAN", "#a855f7", Estilo::Barra, 12).unwrap();
+
+        let modelo = editar(
+            &vault,
+            &modelo.id,
+            PatchModelo {
+                mostrar_nome: Some(false),
+                mostrar_valor: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let medidor = modelo.materializar();
+        assert_eq!(
+            (medidor.mostrar_nome, medidor.mostrar_valor),
+            (Some(false), Some(false))
+        );
     }
 
     #[test]
