@@ -3,13 +3,14 @@
 import { useMemo } from "react";
 
 import { ChaoInclinado } from "@/components/playground/chao-inclinado";
+import { InfoDeEsguelha } from "@/components/playground/info-de-esguelha";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { useCameraSuave } from "@/hooks/use-camera-suave";
 import {
   focalDaLente,
   LENTE_DA_MESA,
   OLHAR_PADRAO,
-  profundidadeNoTripe,
+  vistoPeloTripe,
   type CameraAssinavel,
   type Tela,
 } from "@/lib/geometry/camera-orbital";
@@ -57,12 +58,10 @@ const SEM_TRIPE: Tripe = {
   lente: LENTE_DA_MESA,
 };
 
-/**
- * Quão perto do olho algo ainda conta como "na frente", em unidades de cena.
- * Ver `visivel` em `ChaoInclinado`.
- */
-const PERTO_DO_OLHO = 4;
-
+/** Quem sai do piso para ficar em pé no chão inclinado. Ver `CanvasItem.deitado`. */
+function emPe(item: { deitado?: boolean }): boolean {
+  return !item.deitado;
+}
 
 /**
  * A cena vista de esguelha: o chão da `SceneLayer` e o que se ergue dele.
@@ -166,14 +165,17 @@ export function CenaDeEsguelha({
 
   // O voo do tripé, montado sempre -- hooks não pulam. Sem tripé, voa para
   // lugar nenhum e ninguém assina.
-  const { corrente, assinar } = useCameraSuave(
+  const { corrente, assinar, vista } = useCameraSuave(
     tripe ?? SEM_TRIPE,
     TELA_DO_PLANO,
     corte,
   );
+  // Com o olho do voo: é por ele que a figura em pé fica de prumo na tela e o
+  // nome vai sobre a cabeça dela, no meio do voo também. Ver `olho` em
+  // `CameraAssinavel`.
   const doTripe = useMemo<CameraAssinavel>(
-    () => ({ corrente, assinar, perspectiva: TELA_DO_PLANO.focal }),
-    [assinar, corrente],
+    () => ({ corrente, assinar, perspectiva: TELA_DO_PLANO.focal, olho: vista }),
+    [assinar, corrente, vista],
   );
   const camera = olhar?.camera ?? doTripe;
   const giro = olhar?.giro ?? tripe?.giro ?? OLHAR_PADRAO.giro;
@@ -188,17 +190,15 @@ export function CenaDeEsguelha({
    * ainda pode ser projetado espelhado à frente por um motor que não corta no
    * plano do olho. O que cruza o plano fica, e quem o corta é o motor.
    *
-   * Só com tripé: o olhar do Mestre paira sobre a mesa, e andar com ele escreve
-   * a câmera no DOM sem passar por aqui.
+   * Só com tripé: o olhar do Mestre anda escrevendo a câmera no DOM sem
+   * passar por aqui, e quem corta para ele é o próprio chão, a cada aviso da
+   * câmera. Ver `olho` em `CameraAssinavel`.
    */
   const visivel = useMemo(
     () =>
       tripe && !olhar
         ? (pontos: ReadonlyArray<{ x: number; y: number; altura: number }>) =>
-            pontos.some(
-              (ponto) =>
-                profundidadeNoTripe(tripe, ponto, ponto.altura) > PERTO_DO_OLHO,
-            )
+            vistoPeloTripe(tripe, pontos)
         : undefined,
     [olhar, tripe],
   );
@@ -213,11 +213,20 @@ export function CenaDeEsguelha({
    * Ordenados por `z` como a `SceneLayer` os ordena, e isso é só o desempate: a
    * ordem que vale de esguelha é a profundidade, e quem a calcula é o chão.
    */
+  // O que as condições fazem com cada figura, por personagem. Ver
+  // `FiguraComEfeitos`.
+  const efeitosPorPersonagem = useMemo(
+    () => new Map((efeitos ?? []).map((cada) => [cada.personagemId, cada.efeitos])),
+    [efeitos],
+  );
   const pecas = useMemo(
     () =>
       // Sem os escondidos, como a `SceneLayer` faz: a TV já os recebe sem
       // eles, e no Mestre esta é a mesa vista de esguelha. Ver `itensVisiveis`.
+      // Sem os deitados: esses ficam no chão da `SceneLayer`. Ver
+      // `CanvasItem.deitado`.
       [...itensVisiveis(scene.items, scene.grupos)]
+        .filter((item) => !item.deitado)
         .sort((a, b) => a.z - b.z)
         .map((item) => ({
           id: item.id,
@@ -226,7 +235,15 @@ export function CenaDeEsguelha({
           lado: item.width,
           altura: item.height,
           assetId: item.assetId,
+          espelhada: item.flipX,
+          efeitos: item.personagemId
+            ? efeitosPorPersonagem.get(item.personagemId)
+            : undefined,
         })),
+    [efeitosPorPersonagem, scene.grupos, scene.items],
+  );
+  const visiveis = useMemo(
+    () => itensVisiveis(scene.items, scene.grupos),
     [scene.grupos, scene.items],
   );
 
@@ -253,14 +270,17 @@ export function CenaDeEsguelha({
       <SceneLayer
         scene={scene}
         portraits={portraits}
-        fichas={fichas}
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
         variante={variante}
         smooth={smooth}
         esguelha={camera}
-        semItens
+        // Os em pé sobem no chão inclinado; o deitado fica no piso.
+        semItens={emPe}
+        // O nome e os medidores não vão deitados no piso: vão de prumo sobre
+        // a cabeça, logo abaixo. Ver `InfoDeEsguelha`.
+        fichas={undefined}
       />
 
       <ChaoInclinado
@@ -286,6 +306,8 @@ export function CenaDeEsguelha({
         pecas={pecas}
         variante={variante}
       />
+
+      <InfoDeEsguelha itens={visiveis} fichas={fichas ?? []} camera={camera} />
     </>
   );
 }

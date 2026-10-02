@@ -55,7 +55,16 @@ export function useCameraSuave(
   destino: Tripe,
   tela: Tela,
   corte: number,
-): { corrente: () => string; assinar: (aviso: () => void) => () => void } {
+): {
+  corrente: () => string;
+  assinar: (aviso: () => void) => () => void;
+  /**
+   * O tripé exibido AGORA, no meio do voo, e a tela: para quem põe coisa de
+   * prumo na tela sobre ele -- a figura em pé, o nome sobre a cabeça. Ver
+   * `olho` em `CameraAssinavel`.
+   */
+  vista: () => { tripe: Tripe; tela: Tela } | null;
+} {
   const exibido = useRef<Tripe | null>(null);
   const telaAtual = useRef(tela);
   const quadro = useRef<number | undefined>(undefined);
@@ -134,5 +143,13 @@ export function useCameraSuave(
     [],
   );
 
-  return { corrente, assinar };
+  const vista = useCallback(
+    () =>
+      exibido.current
+        ? { tripe: exibido.current, tela: telaAtual.current }
+        : null,
+    [],
+  );
+
+  return { corrente, assinar, vista };
 }

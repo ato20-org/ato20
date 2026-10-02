@@ -205,9 +205,20 @@ type SceneLayerProps = {
    * e para isso precisam entrar na mesma lista ordenada das paredes -- é essa
    * lista que põe o token atrás do muro atrás do muro. Desenhá-los aqui
    * também os mostraria duas vezes, um em pé e outro deitado.
+   *
+   * Uma função diz QUAIS ficam de fora: os em pé saem, e o deitado (ver
+   * `CanvasItem.deitado`) fica aqui, no chão -- com um relevo curto para se ler
+   * que há algo sobre o piso, e não pintado nele.
    */
-  semItens?: boolean;
+  semItens?: boolean | ((item: CanvasItem) => boolean);
 };
+
+/**
+ * O relevo da figura deitada de esguelha, em unidades de cena: a borda escura
+ * que a descola do piso e a sombra curta que diz que ela tem corpo.
+ */
+const RELEVO_DO_DEITADO =
+  "drop-shadow(0 0 1px rgba(0,0,0,0.9)) drop-shadow(2px 4px 3px rgba(0,0,0,0.6))";
 
 /**
  * Desenho da cena: fundo, itens empilhados e áreas escondidas por cima. É o
@@ -381,7 +392,36 @@ export function SceneLayer({
         />
       )}
 
-      {(semItens ? [] : items).map((item) => (
+      {(semItens === true
+        ? []
+        : typeof semItens === "function"
+          ? items.filter((item) => !semItens(item))
+          : items
+      ).map((item) =>
+        esguelha ? (
+          // O relevo do que está deitado: uma borda escura rente e a sombra
+          // curta para um lado. Num envelope à parte, e não no item, para o
+          // `CanvasItemView` continuar o mesmo do mapa de prumo.
+          <div
+            key={item.id}
+            className="absolute top-0 left-0"
+            style={{ filter: RELEVO_DO_DEITADO }}
+          >
+            <CanvasItemView
+              item={item}
+              smooth={smooth}
+              naMao={item.id === naMao}
+              variante={variante}
+              contorno={contornos?.get(item.id)}
+              efeitos={
+                item.personagemId
+                  ? efeitosPorPersonagem.get(item.personagemId)
+                  : undefined
+              }
+              onPointerDown={onItemPointerDown}
+            />
+          </div>
+        ) : (
         <CanvasItemView
           key={item.id}
           item={item}
@@ -399,7 +439,8 @@ export function SceneLayer({
           }
           onPointerDown={onItemPointerDown}
         />
-      ))}
+        ),
+      )}
 
       {/* Depois dos itens e ANTES da névoa: o risco marca o mapa e o que está
           nele, então passar por cima de um token é o certo -- circular um

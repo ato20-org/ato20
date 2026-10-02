@@ -233,6 +233,15 @@ export type CanvasItem = {
    * Ver `Luz`, que é a luz sem dono.
    */
   luz?: LuzCarregada;
+  /**
+   * DEITADO no chão, no mapa de esguelha. Ausente = em pé, que é o normal.
+   *
+   * De esguelha a figura se ergue e encara quem olha; deitada ela fica no chão
+   * como no mapa de prumo, no giro dela -- o caído, o dormindo, o corpo no
+   * altar. No 2D não muda nada: visto de cima, deitado e em pé são o mesmo
+   * desenho. Ver `CenaDeEsguelha`.
+   */
+  deitado?: boolean;
 };
 
 /**

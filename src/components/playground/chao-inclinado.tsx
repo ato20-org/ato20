@@ -10,7 +10,9 @@ import {
   useRef,
 } from "react";
 
+import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import type { EfeitoPedido } from "@/lib/condicao";
 import { useCoresDasParedes } from "@/hooks/use-cores-das-paredes";
 import type { Variante } from "@/lib/vault/assets";
 import { escurecerCor } from "@/lib/cor-do-mapa";
@@ -22,7 +24,12 @@ import {
   uniaoDasCaixas,
   type CaixaDaUmbra,
 } from "@/lib/geometry/sombra";
-import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
+import {
+  figuraNoTripe,
+  vistoPeloTripe,
+  type CameraAssinavel,
+  type PontoNoMundo,
+} from "@/lib/geometry/camera-orbital";
 import {
   caixaDaFace,
   caixaDaPeca,
@@ -136,6 +143,45 @@ const VIDRO = 0.26;
 /** O que se desenha no chão: uma caixa já com a profundidade em que ela entra. */
 type Desenho = { chave: string; profundidade: number; no: React.ReactNode };
 
+/**
+ * Os pontos de um elemento no `data-cantos`, para o corte atrás do olho.
+ *
+ * Num atributo, e não num mapa ao lado, pelo mesmo motivo do `data-local`: o
+ * laço que escreve a câmera anda pelos elementos do DOM, e é deles que ele
+ * precisa saber. Lido uma vez por commit, e não por quadro. Ver `orbital`.
+ */
+function cantosEmTexto(pontos: ReadonlyArray<PontoNoMundo>): string {
+  return pontos.map(({ x, y, altura }) => `${x},${y},${altura}`).join(";");
+}
+
+/**
+ * O pé, o tamanho e o espelho de uma peça no `data-figura`, para pô-la de
+ * prumo na tela quando a câmera dá o olho. Ver `figuraNoTripe`.
+ */
+type FiguraDaPeca = {
+  x: number;
+  y: number;
+  lado: number;
+  alta: number;
+  espelhada: boolean;
+};
+
+function lerFigura(texto: string | undefined): FiguraDaPeca | null {
+  if (!texto) return null;
+  const [x = 0, y = 0, lado = 0, alta = 0, espelhada = 0] = texto
+    .split(",")
+    .map(Number);
+  return { x, y, lado, alta, espelhada: espelhada === 1 };
+}
+
+function lerCantos(texto: string | undefined): PontoNoMundo[] | null {
+  if (!texto) return null;
+  return texto.split(";").map((ponto) => {
+    const [x = 0, y = 0, altura = 0] = ponto.split(",").map(Number);
+    return { x, y, altura };
+  });
+}
+
 /** A forma de uma peça no chão de esguelha. */
 type PecaDoChao = {
   id: string;
@@ -154,6 +200,13 @@ type PecaDoChao = {
   altura?: number;
   url?: string;
   assetId?: string;
+  /** Espelhada na horizontal, como o `flipX` do item no mapa de prumo. */
+  espelhada?: boolean;
+  /**
+   * O que as condições fazem com a figura -- aura, tinta, apagado, tremendo,
+   * translúcido --, os mesmos do mapa de prumo. Ver `FiguraComEfeitos`.
+   */
+  efeitos?: ReadonlyArray<EfeitoPedido>;
 };
 
 /**
@@ -167,6 +220,12 @@ type PecaDoChao = {
  * Sem imagem não desenha nada -- nem enquanto o daemon responde, nem se ele
  * falhar. É a mesma escolha do resto da casa: a cena sai sem a figura em vez de
  * sair com um buraco branco do tamanho dela.
+ *
+ * Mas o invólucro existe desde o primeiro commit, só escondido. A URL chega
+ * depois, num render só desta peça, e a câmera orbital é escrita pelo chão nos
+ * elementos que ele achou no commit DELE: a imagem que nascesse depois ficava
+ * sem câmera, parada na tela enquanto o mapa aproximava por baixo -- o
+ * personagem voando. Ver `orbital`.
  */
 function PecaEmPe({
   peca,
@@ -174,6 +233,8 @@ function PecaEmPe({
   variante,
   transform,
   local,
+  cantos,
+  figura,
   onPointerDown,
 }: {
   peca: PecaDoChao;
@@ -182,25 +243,32 @@ function PecaEmPe({
   transform: string;
   /** A parte da corrente que é da peça, para a câmera orbital. Ver `orbital`. */
   local?: string;
+  /** Onde ela está, para o corte atrás do olho. Ver `cantosEmTexto`. */
+  cantos?: string;
+  /** O pé e o tamanho dela, para a figura de prumo. Ver `lerFigura`. */
+  figura?: string;
   onPointerDown?: (
-    event: React.PointerEvent<HTMLImageElement>,
+    event: React.PointerEvent<HTMLDivElement>,
     id: string,
   ) => void;
 }) {
   const doAcervo = useAssetUrl(peca.assetId, variante);
   const src = peca.url ?? doAcervo;
 
-  if (!src) return null;
-
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt=""
-      draggable={false}
+    // Um invólucro leva a transformação e as marcas, e a figura vai dentro
+    // dele com os efeitos das condições -- o halo da aura passa da caixa, e
+    // tremer ou esmaecer é da figura e não do lugar dela. O mesmo
+    // `FiguraComEfeitos` do `CanvasItemView`, para o 2.5D mostrar o que o 2D
+    // mostra.
+    <div
+      hidden={!src}
       data-peca={peca.id}
       data-local={local}
-      className="absolute top-0 left-0 select-none"
+      data-cantos={cantos}
+      data-figura={figura}
+      // Clicável mesmo com a caixa inerte: ver a raiz do `ChaoInclinado`.
+      className="pointer-events-auto absolute top-0 left-0 select-none"
       onPointerDown={(event) => onPointerDown?.(event, peca.id)}
       style={{
         width: peca.lado,
@@ -208,7 +276,21 @@ function PecaEmPe({
         transformOrigin: "0 0",
         transform,
       }}
-    />
+    >
+      <FiguraComEfeitos efeitos={peca.efeitos} url={src} semente={peca.id}>
+        {(fonte) =>
+          fonte ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={fonte}
+              alt=""
+              draggable={false}
+              className="pointer-events-none absolute inset-0 h-full w-full select-none"
+            />
+          ) : null
+        }
+      </FiguraComEfeitos>
+    </div>
   );
 }
 
@@ -319,7 +401,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
   chaoRef?: React.RefObject<HTMLDivElement | null>;
   onChaoPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onPecaPointerDown?: (
-    event: React.PointerEvent<HTMLImageElement>,
+    event: React.PointerEvent<HTMLDivElement>,
     id: string,
   ) => void;
   /**
@@ -397,6 +479,20 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     (parte: string) => (emOrbita ? parte : undefined),
     [emOrbita],
   );
+  /** O `data-cantos` de um elemento, que só a orbital lê. */
+  const cantosDe = useCallback(
+    (pontos: ReadonlyArray<PontoNoMundo>) =>
+      emOrbita ? cantosEmTexto(pontos) : undefined,
+    [emOrbita],
+  );
+  /** O `data-figura` de uma peça, que só a orbital lê. Ver `lerFigura`. */
+  const figuraDe = useCallback(
+    (figura: FiguraDaPeca) =>
+      emOrbita
+        ? `${figura.x},${figura.y},${figura.lado},${figura.alta},${figura.espelhada ? 1 : 0}`
+        : undefined,
+    [emOrbita],
+  );
 
   const raiz = useRef<HTMLDivElement | null>(null);
 
@@ -407,6 +503,16 @@ export const ChaoInclinado = memo(function ChaoInclinado({
    * React escreve no `style` só a parte local, e um commit que mexa num
    * elemento -- uma peça arrastada, uma parede nova -- o deixaria sem câmera.
    * Antes da pintura, então ninguém vê o meio do caminho.
+   *
+   * No mesmo laço, com a câmera que dá o `olho`, o que ficou INTEIRO atrás do
+   * olho se esconde -- ver `vistoPeloTripe`. Por `visibility`, e não tirando
+   * da lista: a cada quadro de aproximar, sem render, e a peça que volta à
+   * frente não remonta nem pede a imagem de novo. Só escreve quando muda.
+   *
+   * E com o olho as peças não levam a corrente 3D: vão DE PRUMO na tela, pela
+   * conta de `figuraNoTripe`. Paralelas à tela, é o mesmo desenho -- e o
+   * WebKitGTK do Mestre perdia o `perspective` delas, que flutuavam longe do
+   * próprio pé. O chão continua 3D, e esse ele pinta certo.
    */
   useLayoutEffect(() => {
     if (!orbital || !raiz.current) return;
@@ -414,11 +520,48 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     const elementos = [
       ...raiz.current.querySelectorAll<HTMLElement | SVGElement>("[data-local]"),
     ];
+    const cantos = elementos.map((elemento) =>
+      lerCantos(elemento.dataset.cantos),
+    );
+    const figuras = elementos.map((elemento) =>
+      lerFigura(elemento.dataset.figura),
+    );
+    const escondido = elementos.map(
+      (elemento) => elemento.style.visibility === "hidden",
+    );
     function escrever() {
       const camera = orbital!.corrente();
-      for (const elemento of elementos) {
-        elemento.style.transform = `${camera} ${elemento.dataset.local ?? ""}`;
-      }
+      const vista = orbital!.olho?.() ?? null;
+      elementos.forEach((elemento, i) => {
+        const peca = figuras[i];
+        let atras: boolean;
+        if (vista && peca) {
+          const naTela = figuraNoTripe(vista.tripe, vista.tela, peca);
+          atras = !naTela;
+          if (naTela) {
+            const { x, y, escala, giro } = naTela;
+            // No TAMANHO DE TELA, e não ampliada por `scale`: a figura mora num
+            // invólucro (ver `PecaEmPe`), e o WebKitGTK rasteriza um `div`
+            // transformado no tamanho de layout para esticar a textura depois
+            // -- quarenta pixels de cena viravam duzentos de tela, borrados.
+            // Com a caixa já do tamanho final, a imagem é desenhada nele.
+            const largura = peca.lado * escala;
+            const altura = peca.alta * escala;
+            elemento.style.width = `${largura}px`;
+            elemento.style.height = `${altura}px`;
+            elemento.style.transform = `translate(${x}px, ${y}px) rotate(${giro}deg)${peca.espelhada ? " scale(-1, 1)" : ""} translate(${-largura / 2}px, ${-altura}px)`;
+          }
+        } else {
+          elemento.style.transform = `${camera} ${elemento.dataset.local ?? ""}`;
+          const pontos = cantos[i];
+          atras = Boolean(
+            vista && pontos && !vistoPeloTripe(vista.tripe, pontos),
+          );
+        }
+        if (atras === escondido[i]) return;
+        escondido[i] = atras;
+        elemento.style.visibility = atras ? "hidden" : "";
+      });
     }
 
     escrever();
@@ -489,17 +632,13 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         const comprimento = Math.hypot(dx, dy);
         if (comprimento < 0.5) continue;
 
-        if (
-          visivel &&
-          !visivel([
-            { x: segmento.x1, y: segmento.y1, altura: 0 },
-            { x: segmento.x2, y: segmento.y2, altura: 0 },
-            { x: segmento.x1, y: segmento.y1, altura },
-            { x: segmento.x2, y: segmento.y2, altura },
-          ])
-        ) {
-          continue;
-        }
+        const cantosDaFace = [
+          { x: segmento.x1, y: segmento.y1, altura: 0 },
+          { x: segmento.x2, y: segmento.y2, altura: 0 },
+          { x: segmento.x1, y: segmento.y1, altura },
+          { x: segmento.x2, y: segmento.y2, altura },
+        ];
+        if (visivel && !visivel(cantosDaFace)) continue;
 
         const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
         const meioX = (segmento.x1 + segmento.x2) / 2;
@@ -535,6 +674,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
           no: (
             <div
               data-local={local(daFace)}
+              data-cantos={cantosDe(cantosDaFace)}
               // Inerte: a face fica ENTRE o cursor e o chão, e um clique nela
               // não chegaria ao pega-gesto -- cairia na conta do plano de
               // prumo, que numa cena deitada aponta para outro lugar. Era o que
@@ -645,17 +785,13 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         caixa = uniaoDasCaixas(caixa, caixaDaParede(parede));
       }
       if (!caixa) continue;
-      if (
-        visivel &&
-        !visivel([
-          { x: caixa.x, y: caixa.y, altura },
-          { x: caixa.x + caixa.width, y: caixa.y, altura },
-          { x: caixa.x, y: caixa.y + caixa.height, altura },
-          { x: caixa.x + caixa.width, y: caixa.y + caixa.height, altura },
-        ])
-      ) {
-        continue;
-      }
+      const cantosDaLaje = [
+        { x: caixa.x, y: caixa.y, altura },
+        { x: caixa.x + caixa.width, y: caixa.y, altura },
+        { x: caixa.x, y: caixa.y + caixa.height, altura },
+        { x: caixa.x + caixa.width, y: caixa.y + caixa.height, altura },
+      ];
+      if (visivel && !visivel(cantosDaLaje)) continue;
 
       const maisPerto = ordenadas[ordenadas.length - 1]!;
       const daLaje = `translate(${caixa.x}px, ${caixa.y}px) translateZ(${altura}px)`;
@@ -671,6 +807,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         no: (
           <svg
             data-local={local(daLaje)}
+            data-cantos={cantosDe(cantosDaLaje)}
             // Inerte: ele fica entre o cursor e o chão, e um clique nele não
             // chegaria ao pega-gesto.
             className="pointer-events-none absolute top-0 left-0"
@@ -724,17 +861,15 @@ export const ChaoInclinado = memo(function ChaoInclinado({
       const centroX = peca.x + peca.lado / 2;
       const pe = peca.y + peca.lado;
       const alta = peca.altura ?? peca.lado;
-      if (
-        visivel &&
-        !visivel([
-          { x: peca.x, y: pe, altura: 0 },
-          { x: peca.x + peca.lado, y: pe, altura: 0 },
-          { x: centroX, y: pe, altura: alta },
-        ])
-      ) {
-        continue;
-      }
-      const daPeca = `translate3d(${centroX}px, ${pe}px, 0) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)`;
+      // Só o pé, e não os cantos da caixa no chão: a figura em pé desfaz o
+      // giro e a inclinação e fica PARALELA à tela, então ela inteira está na
+      // profundidade do pé. Os cantos do chão ficam em outra profundidade, e um
+      // deles à frente segurava na tela uma figura que já estava atrás do olho.
+      const cantosDaPeca = [{ x: centroX, y: pe, altura: 0 }];
+      if (visivel && !visivel(cantosDaPeca)) continue;
+      // Espelhada em volta do próprio meio, depois de posta em pé: o pé fica
+      // onde estava, e só o desenho vira.
+      const daPeca = `translate3d(${centroX}px, ${pe}px, 0) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)${peca.espelhada ? ` translate(${peca.lado}px, 0) scale(-1, 1)` : ""}`;
 
       lista.push({
         chave: `peca-${peca.id}`,
@@ -751,6 +886,14 @@ export const ChaoInclinado = memo(function ChaoInclinado({
             // ponto -- girar em torno do canto afundaria metade no piso.
             transform={comCena(daPeca)}
             local={local(daPeca)}
+            cantos={cantosDe(cantosDaPeca)}
+            figura={figuraDe({
+              x: centroX,
+              y: pe,
+              lado: peca.lado,
+              alta,
+              espelhada: Boolean(peca.espelhada),
+            })}
           />
         ),
       });
@@ -760,6 +903,8 @@ export const ChaoInclinado = memo(function ChaoInclinado({
   }, [
     comCena,
     local,
+    cantosDe,
+    figuraDe,
     cores,
     escurecer,
     giro,
@@ -782,7 +927,14 @@ export const ChaoInclinado = memo(function ChaoInclinado({
       // da borda --, e o corte fica aqui, na caixa, para nada transbordar o
       // plano em que ela mora. Ver `debug-do-palco` §3.
       className={
-        orbital ? "absolute inset-0 overflow-hidden" : "absolute top-0 left-0"
+        // Inerte: a caixa cobre a área inteira e fica POR CIMA do piso, e o
+        // clique no vazio dela caía aqui em vez de chegar ao chão -- a figura
+        // deitada, que mora no piso da `SceneLayer`, não se deixava clicar.
+        // Quem recebe clique aqui dentro diz isso sozinho: a peça e o
+        // pega-gesto.
+        orbital
+          ? "pointer-events-none absolute inset-0 overflow-hidden"
+          : "pointer-events-none absolute top-0 left-0"
       }
       style={
         orbital
@@ -917,7 +1069,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         {onChaoPointerDown ? (
           <div
             ref={chaoRef}
-            className="absolute top-0 left-0"
+            className="pointer-events-auto absolute top-0 left-0"
             style={{
               width: SCENE_WIDTH,
               height: SCENE_HEIGHT,

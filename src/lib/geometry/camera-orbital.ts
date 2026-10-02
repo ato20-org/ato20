@@ -76,6 +76,19 @@ export type CameraAssinavel = {
   assinar: (aviso: () => void) => () => void;
   /** A focal, em pixels da caixa onde o chão é desenhado. */
   perspectiva: number;
+  /**
+   * O olho desta câmera AGORA, como tripé, e a tela da caixa em que o chão é
+   * desenhado. Lido a cada aviso.
+   *
+   * Serve a duas coisas. Esconder o que ficou inteiro atrás do olho (ver
+   * `vistoPeloTripe`): aproximar escreve a câmera no DOM sem render, e é
+   * aproximando que o olho passa por cima das peças da borda. E pôr as figuras
+   * em pé DE PRUMO na tela (ver `figuraNoTripe`), sem o `perspective` da caixa.
+   *
+   * Ausente = quem monta a cena já cortou na lista, e as figuras vão pela
+   * corrente 3D, como na janela do espectador.
+   */
+  olho?: () => { tripe: Tripe; tela: Tela } | null;
 };
 
 const GRAU = Math.PI / 180;
@@ -155,6 +168,49 @@ export function projetar(
   return {
     x: tela.largura / 2 + u1 * s,
     y: tela.altura / 2 + y * s,
+  };
+}
+
+/**
+ * A caixa na tela de uma figura EM PÉ no chão -- a peça do `ChaoInclinado`, que
+ * desfaz o giro e a inclinação e fica paralela à tela. Ou `null` se o pé está
+ * atrás do olho.
+ *
+ * Paralela à tela, a figura inteira está na profundidade do pé, e a caixa é
+ * exata: o pé projetado embaixo no meio, e a largura e a altura multiplicadas
+ * pela mesma escala da perspectiva ali. É o que o gizmo do 2.5D desenha em
+ * volta dela, sem perguntar ao DOM a cada quadro.
+ */
+export function cartazNaTela(
+  camera: CameraOrbital,
+  tela: Tela,
+  pe: Vec,
+  largura: number,
+  altura: number,
+): { x: number; y: number; largura: number; altura: number } | null {
+  const { alvo, zoom } = camera;
+  const g = camera.giro * GRAU;
+  const t = camera.inclinacao * GRAU;
+
+  const u = (pe.x - alvo.x) * zoom;
+  const v = (pe.y - alvo.y) * zoom;
+  const u1 = u * Math.cos(g) - v * Math.sin(g);
+  const v1 = u * Math.sin(g) + v * Math.cos(g);
+  const y = v1 * Math.cos(t);
+  const z = v1 * Math.sin(t);
+
+  // A mesma régua do corte do chão: perto demais do olho já não se desenha.
+  // Ver `vistoPeloTripe`.
+  if (tela.focal - z <= PERTO_DO_OLHO * zoom) return null;
+  const s = tela.focal / (tela.focal - z);
+  const w = largura * zoom * s;
+  const h = altura * zoom * s;
+
+  return {
+    x: tela.largura / 2 + u1 * s - w / 2,
+    y: tela.altura / 2 + y * s - h,
+    largura: w,
+    altura: h,
   };
 }
 
@@ -420,6 +476,64 @@ export function profundidadeNoTripe(
   altura = 0,
 ): number {
   return noOlho(tripe, ponto, altura).profundidade;
+}
+
+/**
+ * Quão perto do olho algo ainda conta como "na frente", em unidades de cena.
+ * Ver `vistoPeloTripe`.
+ */
+export const PERTO_DO_OLHO = 4;
+
+/**
+ * Algum destes pontos está à frente do olho do tripé?
+ *
+ * É o corte do chão de esguelha. Um elemento INTEIRO atrás do olho não some no
+ * WebKit: o motor não corta no plano do olho e o projeta espelhado à frente --
+ * a peça que ficou para trás aparece de ponta-cabeça no céu, e anda na direção
+ * contrária quando o olho anda. O que CRUZA o plano fica, e quem o corta é o
+ * motor.
+ */
+export function vistoPeloTripe(
+  tripe: Tripe,
+  pontos: ReadonlyArray<PontoNoMundo>,
+): boolean {
+  return pontos.some(
+    (ponto) => profundidadeNoTripe(tripe, ponto, ponto.altura) > PERTO_DO_OLHO,
+  );
+}
+
+/**
+ * Uma figura em pé, vista pelo tripé, como transformação de TELA: onde o pé
+ * cai, quantos pixels vale cada unidade da figura ali, e o giro dela na tela.
+ * Ou `null` se o pé está atrás do olho (ver `vistoPeloTripe`).
+ *
+ * A peça do `ChaoInclinado` desfaz o giro e a inclinação e fica PARALELA à
+ * tela; a figura inteira está na profundidade do pé, e a perspectiva sobre ela
+ * é só uma escala. Então `translate rotate scale` de tela a desenha exata, sem
+ * `perspective` nenhum -- e é por isso que existe: no Mestre o WebKitGTK às
+ * vezes pinta as peças da caixa com `perspective` como se ele não existisse
+ * (pequenas perto, grandes longe, puxadas para o centro), enquanto o chão sai
+ * certo. O DOM dizia que estava tudo no lugar. Com a figura de prumo não há
+ * perspectiva para o motor perder.
+ *
+ * O giro é a rolagem do tripé: a peça não a desfaz, e a figura tomba com a
+ * tela. Na orbital é zero.
+ */
+export function figuraNoTripe(
+  tripe: Tripe,
+  tela: Pick<Tela, "largura" | "altura">,
+  pe: Vec,
+): { x: number; y: number; escala: number; giro: number } | null {
+  const olho = noOlho(tripe, pe, 0);
+  if (olho.profundidade <= PERTO_DO_OLHO) return null;
+
+  const escala = focalDaLente(tela.altura, tripe.lente) / olho.profundidade;
+  return {
+    x: tela.largura / 2 + olho.lado * escala,
+    y: tela.altura / 2 + olho.cima * escala,
+    escala,
+    giro: tripe.rolagem,
+  };
 }
 
 /**

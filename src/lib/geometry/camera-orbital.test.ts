@@ -4,6 +4,8 @@ import {
   agarrarAte,
   aproximar,
   bocaDoTripe,
+  cartazNaTela,
+  figuraNoTripe,
   cameraDoRecorte,
   correnteDaCamera,
   curvaBezier,
@@ -17,6 +19,7 @@ import {
   projetarNoTripe,
   tripeDaOrbital,
   projetar,
+  vistoPeloTripe,
   type CameraOrbital,
   type LimitesDaCamera,
   type Tela,
@@ -429,3 +432,116 @@ describe("o tripé no mundo", () => {
   });
 });
 
+
+describe("o que fica atrás do olho", () => {
+  // O olhar do Mestre a 52°, mirando o meio de um mapa de 1920 de largura.
+  const deEsguelha = (zoom: number): CameraOrbital => ({
+    alvo: { x: 960, y: 540 },
+    zoom,
+    giro: 0,
+    inclinacao: 52,
+  });
+  // Uma peça na borda de perto do mapa, 500 unidades à frente do alvo.
+  const naBorda = [{ x: 960, y: 1040, altura: 0 }];
+
+  it("aproximar leva o olho por cima da peça da borda", () => {
+    const longe = tripeDaOrbital(deEsguelha(0.75), TELA);
+    const perto = tripeDaOrbital(deEsguelha(3), TELA);
+
+    expect(vistoPeloTripe(longe, naBorda)).toBe(true);
+    expect(vistoPeloTripe(perto, naBorda)).toBe(false);
+    // E é a mesma resposta da projeção: atrás do olho não cai na tela.
+    expect(projetar(deEsguelha(3), TELA, naBorda[0]!)).toBeNull();
+  });
+
+  it("o que cruza o plano do olho fica: basta um ponto à frente", () => {
+    const perto = tripeDaOrbital(deEsguelha(3), TELA);
+
+    expect(
+      vistoPeloTripe(perto, [...naBorda, { x: 960, y: 540, altura: 0 }]),
+    ).toBe(true);
+  });
+});
+
+describe("cartazNaTela", () => {
+  it("dá a caixa que a webview mediu em volta da peça em pé", () => {
+    // Medido no Mestre de verdade (getBoundingClientRect da peça), 02/10:
+    // item 42×64 com o pé em (1291, 564), a caixa 90,7×138,2 com o pé em
+    // (629,4, 324,7).
+    const camera: CameraOrbital = {
+      alvo: { x: 1223.1867582338994, y: 783.127038573616 },
+      zoom: 3.6424058645330626,
+      giro: 2.6200369548259914,
+      inclinacao: 73.76689147949219,
+    };
+    const tela: Tela = {
+      largura: 923,
+      altura: 909.984375,
+      focal: 1098.4483098363023,
+    };
+    const caixa = cartazNaTela(camera, tela, { x: 1291, y: 564 }, 42, 64)!;
+
+    expect(caixa.largura).toBeCloseTo(90.7, 0);
+    expect(caixa.altura).toBeCloseTo(138.2, 0);
+    expect(caixa.x + caixa.largura / 2).toBeCloseTo(629.4, 0);
+    expect(caixa.y + caixa.altura).toBeCloseTo(324.7, 0);
+  });
+
+  it("o pé cai onde `projetar` põe o ponto do chão", () => {
+    const camera: CameraOrbital = {
+      alvo: { x: 900, y: 500 },
+      zoom: 1.4,
+      giro: 30,
+      inclinacao: 60,
+    };
+    const pe = { x: 1000, y: 640 };
+    const caixa = cartazNaTela(camera, TELA, pe, 40, 60)!;
+    const noChao = projetar(camera, TELA, pe)!;
+
+    expect(caixa.x + caixa.largura / 2).toBeCloseTo(noChao.x, 6);
+    expect(caixa.y + caixa.altura).toBeCloseTo(noChao.y, 6);
+  });
+
+  it("atrás do olho não tem caixa", () => {
+    const camera: CameraOrbital = {
+      alvo: { x: 960, y: 540 },
+      zoom: 3,
+      giro: 0,
+      inclinacao: 52,
+    };
+    expect(cartazNaTela(camera, TELA, { x: 960, y: 1040 }, 40, 60)).toBeNull();
+  });
+});
+
+describe("figuraNoTripe", () => {
+  it("põe a figura onde a caixa do gizmo a vê, pela orbital vista como tripé", () => {
+    const camera: CameraOrbital = {
+      alvo: { x: 1250, y: 796 },
+      zoom: 4.13,
+      giro: 6.17,
+      inclinacao: 74.7,
+    };
+    const tripe = tripeDaOrbital(camera, TELA);
+    for (const pe of [
+      { x: 1291, y: 564 },
+      { x: 1215, y: 902 },
+      { x: 1303, y: 733 },
+    ]) {
+      const figura = figuraNoTripe(tripe, TELA, pe)!;
+      const caixa = cartazNaTela(camera, TELA, pe, 41, 55)!;
+
+      expect(figura.x).toBeCloseTo(caixa.x + caixa.largura / 2, 6);
+      expect(figura.y).toBeCloseTo(caixa.y + caixa.altura, 6);
+      expect(figura.escala * 41).toBeCloseTo(caixa.largura, 6);
+      expect(figura.giro).toBe(0);
+    }
+  });
+
+  it("atrás do olho não tem figura", () => {
+    const tripe = tripeDaOrbital(
+      { alvo: { x: 960, y: 540 }, zoom: 3, giro: 0, inclinacao: 52 },
+      TELA,
+    );
+    expect(figuraNoTripe(tripe, TELA, { x: 960, y: 1040 })).toBeNull();
+  });
+});

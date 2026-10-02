@@ -90,9 +90,29 @@ function BlocoDoToken({
   item: CanvasItem;
   ficha: FichaNaCena;
 }) {
+  const { estilos } = useDeclarativo();
+  const medida = medirBloco(item, ficha, estilos);
+  const { x, y } = lugarDaInfo(item, medida.altura);
+
+  return <CorpoDoBloco ficha={ficha} medida={medida} left={x} top={y} />;
+}
+
+/** O tamanho do bloco e das partes dele, em unidades de cena. */
+export type MedidaDoBloco = ReturnType<typeof medirBloco>;
+
+/**
+ * Quanto o bloco ocupa, e o tamanho de cada parte, em unidades de CENA: tudo
+ * sai da largura do token, para o bloco crescer com ele. À parte do desenho
+ * para o 2.5D, que o põe de prumo sobre a cabeça da figura em pé, medir igual.
+ * Ver `InfoDeEsguelha`.
+ */
+export function medirBloco(
+  item: Pick<CanvasItem, "width">,
+  ficha: FichaNaCena,
+  estilos: ReturnType<typeof useDeclarativo>["estilos"],
+) {
   const medidores = ficha.medidores.slice(0, TETO);
   const condicoes = ficha.condicoes ?? [];
-  const { estilos } = useDeclarativo();
 
   // Tudo em unidade de CENA, derivado da largura da peça. O corpo do texto sai
   // primeiro porque a altura da caixa é feita dele.
@@ -131,15 +151,40 @@ function BlocoDoToken({
     alturaDosSelos +
     (medidores.length > 0 ? alturaDosMedidores + vao : 0);
 
-  const { x, y, largura } = lugarDaInfo(item, altura);
+  return {
+    medidores,
+    condicoes,
+    corpo,
+    vao,
+    selo,
+    largura: larguraDaInfo,
+    altura,
+  };
+}
 
+/**
+ * O bloco desenhado: nome, selos e medidores, em coluna, no canto dado. As
+ * medidas são de `medirBloco`.
+ */
+export function CorpoDoBloco({
+  ficha,
+  medida,
+  left,
+  top,
+}: {
+  ficha: FichaNaCena;
+  medida: MedidaDoBloco;
+  left: number;
+  top: number;
+}) {
+  const { medidores, condicoes, corpo, vao, selo, largura, altura } = medida;
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute flex flex-col items-center"
       style={{
-        left: x,
-        top: y,
+        left,
+        top,
         width: largura,
         height: altura,
         gap: vao,
