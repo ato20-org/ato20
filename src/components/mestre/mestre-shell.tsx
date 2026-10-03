@@ -367,9 +367,6 @@ export function MestreShell() {
   useJanelaDoChat();
   useMestreShortcuts();
   useSpacePan();
-  // O modo de trabalho do mestre: no 2.5D as configurações do mapa somem da
-  // pílula, porque mapa, luz e parede se ajustam no 2D.
-  const esguelhaLigada = useEsguelhaStore((state) => state.ligada);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -485,15 +482,15 @@ export function MestreShell() {
                   {editingScene &&
                   (temSol(editingScene) || temGrade(editingScene)) ? (
                     <>
-                      {/* O modo ANTES das configurações, e fora delas: ele
-                          troca o palco inteiro, e é o primeiro gesto de quem
-                          vai conferir a mesa. No 2.5D as configurações somem
-                          -- mapa, luz e parede se ajustam no 2D. Ver
-                          `BotaoDeEsguelha`. */}
+                      {/* O modo ANTES das configurações: ele troca o palco
+                          inteiro, e é o primeiro gesto de quem vai conferir a
+                          mesa. As configurações ficam nos DOIS modos -- sol,
+                          escuridão, grade e a cor do vazio têm efeito à vista no
+                          2.5D, e o fundo de esguelha só se acerta olhando-o. As
+                          FERRAMENTAS -- desenhar parede, cravar luz, medir -- é
+                          que continuam só no 2D. Ver `BotaoDeEsguelha`. */}
                       {temSol(editingScene) ? <BotaoDeEsguelha /> : null}
-                      {esguelhaLigada && temSol(editingScene) ? null : (
-                        <ConfiguracoesDoMapa scene={editingScene} />
-                      )}
+                      <ConfiguracoesDoMapa scene={editingScene} />
                       <span className="bg-border mx-1 h-5 w-px" />
                     </>
                   ) : null}
