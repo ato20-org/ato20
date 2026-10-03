@@ -37,6 +37,7 @@ export function ScenePreview({
       <SceneStage
         className="size-full"
         plano={ehQuadro(scene) ? "quadro" : "mapa"}
+        corDoVazio={scene.corDoVazio}
       >
         <SceneLayer scene={scene} variante="mini" />
       </SceneStage>

@@ -66,6 +66,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
           do Mestre, e interpolá-las é o que separa movimento de salto. */}
       <SceneStage
         viewport={deEsguelha ? undefined : viewport}
+        corDoVazio={cena?.corDoVazio}
         corte={corte}
         smooth
       >

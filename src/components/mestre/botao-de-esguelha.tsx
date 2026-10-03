@@ -15,11 +15,13 @@ import { cn } from "@/lib/utils";
  * A troca entre o mapa de prumo e o de esguelha: 2D e 2.5D.
  *
  * Um botão na pílula do palco, ao lado das configurações, e não um interruptor
- * dentro delas. Não é ajuste da cena: é MODO de trabalho. No 2D se edita --
- * mapa, luz, parede, tudo o que as ferramentas fazem --; no 2.5D só se olha a
- * mesa como ela vai aparecer, com o chão deitado e as paredes em pé. Escondido
- * no popover, o modo que muda o palco inteiro ficava atrás de dois cliques e
- * ao lado do sol, como se fosse da mesma espécie.
+ * dentro delas. Não é ajuste da cena: é MODO de trabalho. No 2D se edita com as
+ * FERRAMENTAS -- desenhar mapa, cravar luz, erguer parede, medir --; no 2.5D se
+ * confere a mesa como ela vai aparecer, com o chão deitado e as paredes em pé.
+ * As configurações da cena (sol, escuridão, grade, cor do vazio) seguem nos
+ * dois modos: são estado, não ferramenta, e têm efeito à vista de esguelha.
+ * Escondido no popover, o modo que muda o palco inteiro ficava atrás de dois
+ * cliques e ao lado do sol, como se fosse da mesma espécie.
  *
  * O modo é do MESTRE, e não da cena (ver `useEsguelhaStore`): trocar aqui não
  * mexe no que a mesa vê. Quem põe a mesa de esguelha é um tripé no ar.

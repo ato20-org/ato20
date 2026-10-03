@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
+import { Frame, Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
 
 import { useState } from "react";
 
@@ -22,12 +22,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { corDoVazioDe } from "@/lib/cor";
 import { TRAVA_EM_GRAUS } from "@/lib/geometry/ceu";
 import { corDoEscuroDe, limitarEscuridao } from "@/lib/geometry/luz";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
 import {
   CORES_DO_ESCURO,
+  CORES_DO_VAZIO,
   SOL_PADRAO,
   temLuz,
   type Scene,
@@ -54,6 +56,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
   const setSol = useSceneStore((state) => state.setSol);
   const setEscuridao = useSceneStore((state) => state.setEscuridao);
   const setCorDoEscuro = useSceneStore((state) => state.setCorDoEscuro);
+  const setCorDoVazio = useSceneStore((state) => state.setCorDoVazio);
   const setInfoDosTokens = useSceneStore((state) => state.setInfoDosTokens);
 
   const sol = scene.sol;
@@ -192,6 +195,15 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           </>
         ) : null}
 
+        {/* O avesso da escuridão: ela pinta o tom de DENTRO onde a luz não
+            chega, esta pinta o que está FORA do mapa. Vizinhas porque as duas
+            são cor da cena, e não ferramenta. */}
+        <span className="bg-border block h-px w-full" />
+        <ForaDoMapa
+          cor={corDoVazioDe(scene.corDoVazio)}
+          onCor={(cor) => setCorDoVazio(scene.id, cor)}
+        />
+
         {/* O traço entre os dois: sol e grade valem os dois para a cena
             inteira, mas são assuntos diferentes -- um pinta sombra, o outro
             mede chão -- e sem a linha as duas fileiras de réguas viravam uma
@@ -252,10 +264,6 @@ function Escuridao({
   cor: string;
   onCor: (cor: string) => void;
 }) {
-  /** O seletor da cor livre, aberto dentro do popover. */
-  const [livreAberto, setLivreAberto] = useState(false);
-  const livre = !(CORES_DO_ESCURO as readonly string[]).includes(cor);
-
   return (
     <section className="space-y-2">
       <div className="flex items-baseline justify-between gap-2">
@@ -285,25 +293,101 @@ function Escuridao({
         Onde nenhuma luz chega. Você vê mais fraco que a mesa.
       </p>
 
-      {/* O tom do escuro: a luz ambiente pelo avesso. Mesmo desenho da cor
-          da luz no painel dela -- a paleta curta e a cor livre atrás --, e
-          a borda clara em volta de cada bolinha porque são quatro quase
-          pretos num fundo escuro. */}
+      {/* O tom do escuro: a luz ambiente pelo avesso. */}
+      <TomDeCor
+        rotulo="Tom"
+        cores={CORES_DO_ESCURO}
+        nomes={NOME_DO_ESCURO}
+        cor={cor}
+        onCor={onCor}
+      />
+    </section>
+  );
+}
+
+/**
+ * A cor do que está FORA do mapa -- a sala em volta do chão, no 2D e no 2.5D.
+ * Ver `Scene.corDoVazio`.
+ *
+ * O avesso da escuridão: aquela é o tom de DENTRO onde a luz não chega, esta é
+ * o que cerca o mapa. Preto é o de sempre -- o mapa é a luz, e o escuro em
+ * volta some da vista --, e quem quer uma mesa de feltro ou uma ardósia troca
+ * aqui. A imagem do mapa cobre o chão de qualquer forma; o que muda é a borda,
+ * e o chão só quando não há imagem.
+ */
+function ForaDoMapa({
+  cor,
+  onCor,
+}: {
+  /** Já validada: o breu quando não há. Ver `corDoVazioDe`. */
+  cor: string;
+  onCor: (cor: string) => void;
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-2 text-xs">
+        <Frame className="text-muted-foreground size-3.5" />
+        Fora do mapa
+      </div>
+
+      <TomDeCor
+        rotulo="Cor"
+        cores={CORES_DO_VAZIO}
+        nomes={NOME_DO_VAZIO}
+        cor={cor}
+        onCor={onCor}
+      />
+
+      <p className="text-muted-foreground text-[10px] leading-snug">
+        A cor em volta do mapa, no 2D e no 2.5D.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * Uma paleta curta de tons, e a cor livre atrás dela.
+ *
+ * O mesmo desenho da cor da luz, do tom do escuro e da cor do vazio: a paleta
+ * na frente e o seletor do sistema no fim, para o tom exato. A borda clara em
+ * volta de cada bolinha porque às vezes são quase pretos num fundo escuro.
+ */
+function TomDeCor({
+  rotulo,
+  cores,
+  nomes,
+  cor,
+  onCor,
+}: {
+  rotulo: string;
+  cores: readonly string[];
+  /** O nome de cada cor da paleta, para o rótulo acessível de cada bolinha. */
+  nomes: Record<string, string>;
+  /** Já validada. */
+  cor: string;
+  onCor: (cor: string) => void;
+}) {
+  /** O seletor da cor livre, aberto dentro do popover. */
+  const [livreAberto, setLivreAberto] = useState(false);
+  const livre = !cores.includes(cor);
+
+  return (
+    <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground text-[10px]">Tom</span>
+        <span className="text-muted-foreground text-[10px]">{rotulo}</span>
         <div
           role="radiogroup"
-          aria-label="Tom do escuro"
+          aria-label={rotulo}
           className="flex items-center gap-1.5"
         >
-          {CORES_DO_ESCURO.map((opcao) => (
+          {cores.map((opcao) => (
             <button
               key={opcao}
               type="button"
               role="radio"
               aria-checked={cor === opcao}
-              aria-label={NOME_DO_ESCURO[opcao]}
-              title={NOME_DO_ESCURO[opcao]}
+              aria-label={nomes[opcao]}
+              title={nomes[opcao]}
               className={cn(
                 "focus-visible:ring-ring size-5 rounded-full border-2 outline-none focus-visible:ring-2",
                 cor === opcao ? "border-foreground" : "border-white/25",
@@ -328,7 +412,7 @@ function Escuridao({
       </div>
 
       {livreAberto ? <SeletorDeCor cor={cor} onChange={onCor} /> : null}
-    </section>
+    </div>
   );
 }
 
@@ -338,6 +422,14 @@ const NOME_DO_ESCURO: Record<(typeof CORES_DO_ESCURO)[number], string> = {
   "#0b1330": "Noite",
   "#1c130b": "Caverna",
   "#170a24": "Abismo",
+};
+
+/** O nome de cada cor do vazio, pela sala que ela lembra. */
+const NOME_DO_VAZIO: Record<(typeof CORES_DO_VAZIO)[number], string> = {
+  "#000000": "Breu",
+  "#1c1917": "Carvão",
+  "#1e293b": "Ardósia",
+  "#14342b": "Feltro",
 };
 
 function Campo({

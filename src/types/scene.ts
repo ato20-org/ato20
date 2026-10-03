@@ -474,6 +474,21 @@ export const CORES_DO_ESCURO = [
 ] as const;
 
 /**
+ * As cores que o vazio oferece de cara. Ver `Scene.corDoVazio`.
+ *
+ * O que está FORA do mapa: a sala em volta do chão, no 2D e no 2.5D. O breu é o
+ * de sempre -- o mapa é a luz, e o escuro em volta some da vista. Os outros são
+ * salas de verdade -- o carvão, a ardósia, o feltro da mesa --, para quem quer
+ * um fundo em lugar de um buraco. O tom exato vem do seletor, atrás da paleta.
+ */
+export const CORES_DO_VAZIO = [
+  "#000000",
+  "#1c1917",
+  "#1e293b",
+  "#14342b",
+] as const;
+
+/**
  * Os recortes que uma área escondida sabe ter.
  *
  * Os mesmos nomes das formas do quadro -- `retangulo`, `elipse` --, porque é o
@@ -2471,6 +2486,20 @@ export type Scene = {
    * buraco nela como abrem no preto.
    */
   corDoEscuro?: string;
+  /**
+   * A cor do vazio -- o que está FORA do mapa --, em `#rrggbb`. Ausente =
+   * preto, o breu.
+   *
+   * A sala em volta do chão, e a mesma nos dois modos: no 2D é a borda além da
+   * imagem do mapa; no 2.5D é o fundo em volta do chão deitado. Preto é o de
+   * sempre, e é o padrão -- o mapa é a luz, e o que está fora dele some da
+   * vista. Quem quer uma mesa de feltro ou uma ardósia troca aqui. Difere da
+   * `corDoEscuro`, que é o tom de DENTRO onde nenhuma luz chega. Ver
+   * `corDoVazioDe`.
+   *
+   * CHEGA à mesa: é fundo da cena, e a TV e o celular a veem igual.
+   */
+  corDoVazio?: string;
   /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.
