@@ -652,6 +652,7 @@ function StageBoundary({
       onViewportChange={setViewport}
       panOnDrag={panMode}
       plano={scene && ehQuadro(scene) ? "quadro" : "mapa"}
+      corDoVazio={scene?.corDoVazio}
       limites={conteudo}
     >
       {scene ? <MestreStage scene={scene} /> : null}

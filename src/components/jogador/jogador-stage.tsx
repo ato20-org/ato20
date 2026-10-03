@@ -99,7 +99,13 @@ export function JogadorStage({
               "aspect-video max-h-full w-full rounded-lg",
         )}
       >
-        <SceneStage className="size-full" viewport={viewport} corte={corte} smooth>
+        <SceneStage
+          className="size-full"
+          viewport={viewport}
+          corDoVazio={cena?.corDoVazio}
+          corte={corte}
+          smooth
+        >
           {/* Mesma suavização da TV: o celular também só recebe amostras, e a
               troca de cena entra em fade em vez de estalar. */}
           {cena ? (

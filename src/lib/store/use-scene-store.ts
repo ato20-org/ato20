@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 
+import { COR_DO_VAZIO_PADRAO, corDoVazioDe } from "@/lib/cor";
 import { COR_DO_ESCURO_PADRAO, corDoEscuroDe } from "@/lib/geometry/luz";
 import { novoId } from "@/lib/id";
 import { pastaDoMembro, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
@@ -431,6 +432,8 @@ type SceneStore = {
   removeLuzes: (sceneId: string, luzIds: string[]) => void;
   /** A cor do escuro. O preto guarda como ausente. Ver `Scene.corDoEscuro`. */
   setCorDoEscuro: (sceneId: string, cor: string | undefined) => void;
+  /** A cor do vazio, fora do mapa. O preto guarda como ausente. Ver `Scene.corDoVazio`. */
+  setCorDoVazio: (sceneId: string, cor: string | undefined) => void;
   /** O quanto o mapa escurece onde não há luz. Zero guarda como ausente. */
   setEscuridao: (sceneId: string, escuridao: number) => void;
   /** Liga nome e medidores acima dos tokens. Ver `Scene.infoDosTokens`. */
@@ -1655,6 +1658,17 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         ...scene,
         corDoEscuro:
           valor && valor !== COR_DO_ESCURO_PADRAO ? valor : undefined,
+      }));
+    },
+
+    setCorDoVazio(sceneId, cor) {
+      // O breu guarda como AUSENTE, como a cor do escuro: é o vazio de sempre,
+      // e o arquivo de quem nunca trocou o fundo não ganha um campo por isso.
+      const valor = cor === undefined ? undefined : corDoVazioDe(cor);
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        corDoVazio: valor && valor !== COR_DO_VAZIO_PADRAO ? valor : undefined,
       }));
     },
 

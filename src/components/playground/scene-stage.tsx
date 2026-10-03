@@ -19,6 +19,7 @@ import {
   MiraDebug,
   useDebugDoPalco,
 } from "@/components/playground/debug-palco";
+import { corDoVazioDe } from "@/lib/cor";
 import type { Bounds } from "@/lib/geometry/bounds";
 import type { Vec } from "@/lib/geometry/transform";
 import {
@@ -315,6 +316,17 @@ type SceneStageProps = {
    */
   plano?: "mapa" | "quadro";
   /**
+   * A cor do vazio -- o que está FORA do mapa --, em `#rrggbb`. Ausente/inválida
+   * = o breu de sempre. Só no plano `"mapa"`: o quadro é folha de papel e não
+   * tem vazio. Ver `Scene.corDoVazio`.
+   *
+   * Pinta tanto a borda em volta do plano quanto o próprio plano SEM imagem --
+   * os dois são a mesma "sala em volta", e a imagem do mapa cobre o segundo
+   * quando existe. É esse mesmo fundo que o 2.5D mostra em volta do chão
+   * deitado, porque a cena de esguelha vive dentro deste palco.
+   */
+  corDoVazio?: string;
+  /**
    * A área que a cena ocupa: o plano mais o que foi colocado fora dele.
    *
    * Presente = o palco desenha o contorno dela e navega dentro dela, o que é o
@@ -363,11 +375,16 @@ export function SceneStage({
   onViewportChange,
   panOnDrag = false,
   plano = "mapa",
+  corDoVazio,
   limites,
   smooth = false,
   corte = 0,
 }: SceneStageProps) {
   const frameRef = useRef<HTMLDivElement>(null);
+  // A cor do vazio, validada. Só no mapa; o breu volta pela classe `bg-black`,
+  // então aqui `undefined` quer dizer "deixe o preto de sempre". Ver `corDoVazio`.
+  const fundoDoVazio =
+    plano !== "quadro" && corDoVazio ? corDoVazioDe(corDoVazio) : undefined;
   const planeRef = useRef<HTMLDivElement>(null);
   /**
    * O fundo do palco: um pega-gesto do tamanho da MOLDURA, atrás dos planos.
@@ -1057,11 +1074,16 @@ export function SceneStage({
       }}
       className={cn(
         "relative flex-1 overflow-hidden",
-        plano === "quadro" ? "bg-card" : "bg-black",
+        plano === "quadro" ? "bg-card" : fundoDoVazio ? undefined : "bg-black",
         className,
       )}
-      // Sem isto o browser rouba o gesto de duas mãos para dar zoom na página.
-      style={onViewportChange ? { touchAction: "none" } : undefined}
+      // Sem `touchAction` o browser rouba o gesto de duas mãos para dar zoom na
+      // página. A cor do vazio, quando escolhida, entra por aqui -- `bg-black`
+      // some da classe acima e este estilo a substitui.
+      style={{
+        ...(onViewportChange ? { touchAction: "none" } : undefined),
+        ...(fundoDoVazio ? { backgroundColor: fundoDoVazio } : undefined),
+      }}
     >
       {/* O fundo: PRIMEIRO filho, então tudo desenha por cima e ele só recebe o
           gesto que sobra -- o clique no vazio, fora do plano. Ver `fundoNo`. */}
@@ -1117,12 +1139,16 @@ export function SceneStage({
           // o plano de qualquer forma.
           className={cn(
             "pointer-events-auto relative",
-            plano === "quadro" ? "" : "bg-black",
+            plano === "quadro" ? "" : fundoDoVazio ? undefined : "bg-black",
           )}
           style={{
             width: SCENE_WIDTH,
             height: SCENE_HEIGHT,
             ...malha?.dentro,
+            // O plano SEM imagem é a mesma "sala em volta" da borda, e por isso
+            // a mesma cor: a imagem do mapa o cobre quando existe, e sem ela um
+            // retângulo preto no meio do fundo escolhido leria como furo.
+            ...(fundoDoVazio ? { backgroundColor: fundoDoVazio } : undefined),
             // As duas formas produzem a MESMA geometria: é o que deixa alternar
             // entre elas sem a cena saltar.
             ...(conteudoNoLayout
