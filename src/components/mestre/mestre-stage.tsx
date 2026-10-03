@@ -1183,13 +1183,41 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const duplo = ehDuploClique(ultimoToque.current, toque);
     ultimoToque.current = duplo ? null : toque;
 
-    if (duplo && item.personagemId && personagemExiste(item.personagemId)) {
-      // Para aqui, como o botão direito: sem isto o envelope do palco leria o
-      // mesmo gesto como clique no vazio e limparia a seleção.
-      event.stopPropagation();
-      event.preventDefault();
-      abrirJanela({ tipo: "personagem", personagemId: item.personagemId });
-      return;
+    if (duplo) {
+      /**
+       * Duplo clique ENTRA no grupo: isola o item sob o cursor, deixando a
+       * pasta. Até aqui o único "entrar no grupo" era pela LISTA -- abrir a
+       * pasta e clicar na linha --, o caminho que `alvoDoClique` descreve. É o
+       * mesmo gesto do Figma, agora também no mapa.
+       *
+       * Só quando o item ainda NÃO está sozinho na mão: com ele já isolado, o
+       * segundo duplo clique cai na ficha abaixo. Assim o token de personagem
+       * agrupado mantém o atalho -- um duplo clique entra no grupo, o outro abre
+       * quem ele é. A seleção vem FRESCA do store: entre os dois toques do duplo
+       * o primeiro já chamou `select`, e o render pode não ter alcançado o
+       * closure deste handler.
+       */
+      const noGrupo = alvo.length > 1;
+      const selecao = useSelectionStore.getState().selectedIds;
+      const isolado = selecao.length === 1 && selecao[0] === item.id;
+
+      if (noGrupo && !isolado) {
+        // Para aqui, como a ficha abaixo: sem isto o envelope do palco leria o
+        // mesmo gesto como clique no vazio e limparia a seleção.
+        event.stopPropagation();
+        event.preventDefault();
+        select([item.id]);
+        return;
+      }
+
+      if (item.personagemId && personagemExiste(item.personagemId)) {
+        // Para aqui, como o botão direito: sem isto o envelope do palco leria o
+        // mesmo gesto como clique no vazio e limparia a seleção.
+        event.stopPropagation();
+        event.preventDefault();
+        abrirJanela({ tipo: "personagem", personagemId: item.personagemId });
+        return;
+      }
     }
 
     const draggedIds = alreadySelected ? selectedIds : alvo;
