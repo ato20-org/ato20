@@ -348,6 +348,10 @@ async function lerImagens(pasta) {
     fundo: await achar("bg"),
     fundo2: await achar("bg2"),
     token: await achar("char"),
+    // A reducao do token, servida na variante `mini`: com ela a bancada mede a
+    // troca de resolucao por tamanho na tela do chao de esguelha sem precisar de
+    // um decodificador aqui. Sem `char-mini.*`, a mini cai no `char.*`.
+    tokenMini: await achar("char-mini"),
   };
 
   if (!papeis.fundo && !papeis.token) {
@@ -414,7 +418,9 @@ function servir(porta, pdf, imagens) {
           ? imagens.fundo2 ?? imagens.fundo
           : partes[0].startsWith("perf-fundo")
             ? imagens.fundo
-            : imagens.token ?? imagens.fundo;
+            : variante === "mini" && imagens.tokenMini
+              ? imagens.tokenMini
+              : imagens.token ?? imagens.fundo;
 
         if (papel) {
           res.writeHead(200, {
@@ -439,9 +445,14 @@ function servir(porta, pdf, imagens) {
         // Semente derivada do id: cada token tem textura própria, e a mesma
         // corrida repetida tem as mesmas texturas.
         const semente = [...id].reduce((soma, c) => (soma * 31 + c.charCodeAt(0)) >>> 0, 7);
+        // `LADO_TOKEN` sobe a resolução do token sintético para medir o que uma
+        // arte de verdade custa -- a de prumo encolhe no plano, mas de esguelha
+        // cada peça é uma camada com a textura inteira. Padrão 256, que mantém
+        // as corridas já medidas comparáveis. Ver `chao-25d`.
+        const ladoToken = Number(process.env.LADO_TOKEN) || 256;
         const cheia = {
-          largura: mapaGrande ? 3537 : mapa ? 2048 : fundo ? 1920 : 256,
-          altura: mapaGrande ? 3750 : mapa ? 2048 : fundo ? 1080 : 256,
+          largura: mapaGrande ? 3537 : mapa ? 2048 : fundo ? 1920 : ladoToken,
+          altura: mapaGrande ? 3750 : mapa ? 2048 : fundo ? 1080 : ladoToken,
         };
         // Mesma regra do Rust: o lado maior no alvo, sem ampliar.
         const escala = ladoDaVariante
