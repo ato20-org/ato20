@@ -7,6 +7,7 @@ import { urlDaExtensao } from "@/lib/extensoes/manifesto";
 import { lerModeloSvg } from "@/lib/extensoes/svg-modelo";
 import type { Declarativo, EstiloDeMedidorPublicado } from "@/lib/sync/declarativo";
 import { daemonAddr } from "@/lib/vault/bridge";
+import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 /**
  * O que os plugins declaram para a mesa, do lado do Mestre.
@@ -79,6 +80,27 @@ async function lerEstilos(
   return estilos;
 }
 
+/**
+ * Os efeitos dos plugins habilitados, já com o id da mesa: `{plugin}/{efeito}`.
+ *
+ * Sem arquivo para ler: é o JSON do manifesto, que o Rust validou ao ler a
+ * lista.
+ */
+function lerEfeitos(extensoes: Extensao[]): Record<string, DefinicaoDeEfeito> {
+  const efeitos: Record<string, DefinicaoDeEfeito> = {};
+
+  for (const extensao of extensoes) {
+    if (!extensao.habilitada) continue;
+
+    for (const efeito of extensao.contribui?.efeitos ?? []) {
+      const id = `${extensao.id}/${efeito.id}`;
+      efeitos[id] = { ...efeito, id };
+    }
+  }
+
+  return efeitos;
+}
+
 async function publicar(declarativo: Declarativo): Promise<void> {
   try {
     const { url, token } = await daemonAddr();
@@ -95,12 +117,15 @@ async function publicar(declarativo: Declarativo): Promise<void> {
 export const useDeclarativoStore = create<DeclarativoStore>((set, get) => ({
   versao: 0,
   estilos: {},
+  efeitos: {},
   plugins: [],
 
   async sincronizar(extensoes) {
     const meu = ++pedido;
     const estilos = await lerEstilos(extensoes);
     if (meu !== pedido) return;
+
+    const efeitos = lerEfeitos(extensoes);
 
     // Em ordem: a lista vem na ordem da tela, e reordenar não é mudança.
     const plugins = extensoes
@@ -110,15 +135,16 @@ export const useDeclarativoStore = create<DeclarativoStore>((set, get) => ({
 
     // Comparado pelo texto: é o que vai no fio, e é a única pergunta que
     // importa -- a TV precisa de outro conjunto ou não?
-    const { estilos: antes, plugins: antesPlugins } = get();
+    const { estilos: antes, efeitos: antesEfeitos, plugins: antesPlugins } = get();
     if (
       JSON.stringify(estilos) === JSON.stringify(antes) &&
+      JSON.stringify(efeitos) === JSON.stringify(antesEfeitos) &&
       JSON.stringify(plugins) === JSON.stringify(antesPlugins)
     )
       return;
 
     const versao = get().versao + 1;
-    set({ estilos, plugins, versao });
-    void publicar({ versao, estilos, plugins });
+    set({ estilos, efeitos, plugins, versao });
+    void publicar({ versao, estilos, efeitos, plugins });
   },
 }));

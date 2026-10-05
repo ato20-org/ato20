@@ -48,7 +48,12 @@ use crate::error::{AppError, AppResult};
 /// `rotulo`. Um ATO20 de API 4 recusaria o plugin por "falta `arquivo`", que
 /// manda o autor procurar o erro no lugar errado; pedindo 5, ele ouve
 /// "atualize o ATO20".
-pub const API_VERSAO: u32 = 5;
+///
+/// A 6 acrescentou os `efeitos` de condicao. Um ATO20 de API 5 ignoraria o
+/// campo e aceitaria o plugin, e as condicoes que apontam para os efeitos dele
+/// mostrariam so o selo sem aviso nenhum; pedindo 6, ele ouve "atualize o
+/// ATO20".
+pub const API_VERSAO: u32 = 6;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -186,7 +191,62 @@ pub struct Contribuicoes {
     /// Paginas que o daemon serve na rede. Ver `Pagina`.
     #[serde(default)]
     pub paginas: Vec<Pagina>,
+    /// Efeitos de condicao. Ver `Efeito`.
+    #[serde(default)]
+    pub efeitos: Vec<Efeito>,
 }
+
+/// Um efeito de condicao: o que a figura faz quando uma condicao aponta para
+/// `{extensao}/{id}`.
+///
+/// DECLARATIVO, como o estilo de medidor, e pela mesma razao: chega a TV e ao
+/// celular sem rodar codigo do plugin. E o que deixa existir o pack de efeitos
+/// so com `manifest.json`, como um pacote de texturas. O espelho em TypeScript
+/// e `DefinicaoDeEfeito`, em `types/efeito.ts`; os efeitos de fabrica sao
+/// escritos no mesmo formato.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Efeito {
+    pub id: String,
+    pub titulo: String,
+    /// Uma linha dizendo para que serve, embaixo do seletor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dica: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub figura: Option<FiguraDoEfeito>,
+}
+
+/// O que o efeito faz com a propria figura. Ver `FiguraDoEfeito` no TS, que
+/// diz o custo de cada um.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FiguraDoEfeito {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub halo: bool,
+    /// Quanto a cor da condicao cobre a figura, de 0 a 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tinta: Option<f64>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cinza: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub translucido: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tremor: bool,
+}
+
+impl FiguraDoEfeito {
+    /// Mexe em alguma coisa?
+    fn faz_algo(&self) -> bool {
+        self.halo || self.tinta.is_some() || self.cinza || self.translucido || self.tremor
+    }
+}
+
+/// O teto da dica de um efeito. Uma linha embaixo do seletor, e nao um texto.
+const MAX_DICA_DO_EFEITO: usize = 120;
+
+/// O prefixo dos efeitos que a CAMPANHA cria. Um plugin com este id
+/// disputaria os mesmos ids -- `campanha/brasa` seria dos dois.
+pub const PREFIXO_DA_CAMPANHA: &str = "campanha";
 
 /// Uma pagina do plugin, servida pelo daemon em `/plugin/{id}/{arquivo}`.
 ///
@@ -833,6 +893,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             "paginas",
             c.paginas.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
+        (
+            "efeitos",
+            c.efeitos.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
     ];
 
     for (nome, itens) in grupos {
@@ -936,6 +1000,16 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
         validar_estilo(estilo)?;
     }
 
+    if !c.efeitos.is_empty() && manifesto.id == PREFIXO_DA_CAMPANHA {
+        return Err(AppError::ExtensaoInvalida(format!(
+            "uma extensao chamada {PREFIXO_DA_CAMPANHA:?} nao pode declarar efeitos: o nome e o dos efeitos da campanha"
+        )));
+    }
+
+    for efeito in &c.efeitos {
+        validar_efeito(efeito)?;
+    }
+
     for pagina in &c.paginas {
         if !caminho_relativo_seguro(&pagina.arquivo)
             || !pagina.arquivo.to_ascii_lowercase().ends_with(".html")
@@ -964,6 +1038,39 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
             )));
         }
         vistos.push(&substituto.alvo);
+    }
+
+    Ok(())
+}
+
+/// Um efeito desenha alguma coisa, com numeros que fazem sentido?
+///
+/// Efeito que nao mexe em nada seria uma opcao no seletor que, escolhida, nao
+/// muda a figura -- e o mestre procuraria o defeito na mesa.
+fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
+    let invalido = |motivo: &str| {
+        Err(AppError::ExtensaoInvalida(format!(
+            "o efeito {:?} {motivo}",
+            efeito.id
+        )))
+    };
+
+    if efeito
+        .dica
+        .as_ref()
+        .is_some_and(|dica| dica.chars().count() > MAX_DICA_DO_EFEITO)
+    {
+        return invalido(&format!("tem dica maior que {MAX_DICA_DO_EFEITO} letras"));
+    }
+
+    let Some(figura) = efeito.figura.as_ref().filter(|figura| figura.faz_algo()) else {
+        return invalido("nao desenha nada: declare ao menos uma camada em `figura`");
+    };
+
+    if let Some(tinta) = figura.tinta {
+        if !tinta.is_finite() || !(0.0..=1.0).contains(&tinta) {
+            return invalido("tem `tinta` fora de 0 a 1");
+        }
     }
 
     Ok(())
@@ -1966,6 +2073,65 @@ mod tests {
                 "{corpo} devia ser recusado"
             );
         }
+    }
+
+    /// Um pack de efeitos: so o manifesto, sem `principal` nem arquivo.
+    fn com_efeitos(id: &str, efeitos: &str) -> String {
+        format!(
+            r#"{{"id":"{id}","nome":"Pack","versao":"1.0.0","apiVersao":6,"contribui":{{"efeitos":{efeitos}}}}}"#
+        )
+    }
+
+    #[test]
+    fn pack_de_efeitos_entra_so_com_o_manifesto() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r#"[{"id":"sangrando","titulo":"Sangrando","dica":"Escorre.","figura":{"tinta":0.6,"tremor":true}}]"#,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        assert_eq!(efeito.id, "sangrando");
+        assert_eq!(efeito.figura.as_ref().unwrap().tinta, Some(0.6));
+        assert!(efeito.figura.as_ref().unwrap().tremor);
+        assert!(!efeito.figura.as_ref().unwrap().halo);
+    }
+
+    #[test]
+    fn efeito_que_nao_desenha_ou_tem_numero_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+        let longa = "a".repeat(MAX_DICA_DO_EFEITO + 1);
+
+        for efeitos in [
+            r#"[{"id":"nada","titulo":"Nada"}]"#.to_string(),
+            r#"[{"id":"nada","titulo":"Nada","figura":{}}]"#.to_string(),
+            r#"[{"id":"forte","titulo":"Forte","figura":{"tinta":1.5}}]"#.to_string(),
+            r#"[{"id":"fraco","titulo":"Fraco","figura":{"tinta":-0.1}}]"#.to_string(),
+            r#"[{"id":"Sangue","titulo":"Sangue","figura":{"halo":true}}]"#.to_string(),
+            format!(r#"[{{"id":"falante","titulo":"Falante","dica":"{longa}","figura":{{"halo":true}}}}]"#),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_efeitos("ordem", &efeitos)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{efeitos} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn plugin_chamado_campanha_nao_declara_efeito() {
+        // `campanha/brasa` seria dele e da campanha ao mesmo tempo.
+        let base = tempfile::tempdir().unwrap();
+        let efeitos = r#"[{"id":"brasa","titulo":"Brasa","figura":{"halo":true}}]"#;
+
+        assert!(ler(base.path(), &com_efeitos(PREFIXO_DA_CAMPANHA, efeitos)).is_err());
+        assert!(ler(base.path(), &com_efeitos("ordem", efeitos)).is_ok());
     }
 
     /// Um plugin que so desenha medidor: sem `principal`, sem SVG.

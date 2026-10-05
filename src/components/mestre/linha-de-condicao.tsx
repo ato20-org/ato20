@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { definicaoDoEfeito, EFEITOS_DE_FABRICA } from "@/lib/efeitos";
+import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import type { Condicao, PatchCondicao } from "@/types/character";
@@ -61,6 +62,8 @@ export function LinhaDeCondicao({
   onApagar: () => void;
   dicaDoOlho: Dica;
 }) {
+  const deFora = useDeclarativoStore((state) => state.efeitos);
+
   return (
     <li
       className={cn(
@@ -94,7 +97,7 @@ export function LinhaDeCondicao({
       <div className="flex shrink-0 items-center gap-0.5">
         {condicao.efeito ? (
           <span className="text-muted-foreground pr-1 text-[10px]">
-            {definicaoDoEfeito(condicao.efeito)?.titulo ?? condicao.efeito}
+            {definicaoDoEfeito(condicao.efeito, deFora)?.titulo ?? condicao.efeito}
           </span>
         ) : null}
 
@@ -157,7 +160,9 @@ export function AparenciaDaCondicao({
   onEditar: (patch: PatchCondicao) => void;
 }) {
   const efeito = condicao.efeito ?? null;
-  const definicao = definicaoDoEfeito(condicao.efeito);
+  const deFora = useDeclarativoStore((state) => state.efeitos);
+  const definicao = definicaoDoEfeito(condicao.efeito, deFora);
+  const dePlugin = Object.values(deFora);
 
   return (
     <Popover>
@@ -241,18 +246,31 @@ export function AparenciaDaCondicao({
               Nenhum
             </Button>
             {EFEITOS_DE_FABRICA.map((opcao) => (
-              <Button
+              <OpcaoDeEfeito
                 key={opcao.id}
-                variant={efeito === opcao.id ? "secondary" : "ghost"}
-                size="sm"
-                aria-pressed={efeito === opcao.id}
-                className="h-7 px-1 text-[11px]"
-                onClick={() => onEditar({ efeito: opcao.id })}
-              >
-                {opcao.titulo}
-              </Button>
+                titulo={opcao.titulo}
+                escolhido={efeito === opcao.id}
+                onEscolher={() => onEditar({ efeito: opcao.id })}
+              />
             ))}
           </div>
+          {dePlugin.length > 0 ? (
+            <>
+              <p className="text-muted-foreground pt-1 text-[10px] tracking-wide uppercase">
+                Dos plugins
+              </p>
+              <div className="grid grid-cols-3 gap-1">
+                {dePlugin.map((opcao) => (
+                  <OpcaoDeEfeito
+                    key={opcao.id}
+                    titulo={opcao.titulo}
+                    escolhido={efeito === opcao.id}
+                    onEscolher={() => onEditar({ efeito: opcao.id })}
+                  />
+                ))}
+              </div>
+            </>
+          ) : null}
           {/* Uma linha só, e a do efeito escolhido: os nomes são curtos de
               propósito, e a explicação de todos ao mesmo tempo seria um
               parágrafo que ninguém lê para escolher um. */}
@@ -266,5 +284,32 @@ export function AparenciaDaCondicao({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * Um botão do seletor de efeito. O título inteiro no `title`: o de plugin pode
+ * passar da largura do botão, e cortado não se distingue do vizinho.
+ */
+function OpcaoDeEfeito({
+  titulo,
+  escolhido,
+  onEscolher,
+}: {
+  titulo: string;
+  escolhido: boolean;
+  onEscolher: () => void;
+}) {
+  return (
+    <Button
+      variant={escolhido ? "secondary" : "ghost"}
+      size="sm"
+      aria-pressed={escolhido}
+      title={titulo}
+      className="h-7 truncate px-1 text-[11px]"
+      onClick={onEscolher}
+    >
+      {titulo}
+    </Button>
   );
 }

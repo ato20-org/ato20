@@ -12,7 +12,7 @@ const plugin = (id: string, habilitada: boolean) => ({ id, habilitada }) as Exte
 
 describe("o declarativo do Mestre", () => {
   beforeEach(() => {
-    useDeclarativoStore.setState({ versao: 0, estilos: {}, plugins: [] });
+    useDeclarativoStore.setState({ versao: 0, estilos: {}, efeitos: {}, plugins: [] });
   });
 
   it("publica um plugin ligado mesmo sem estilo de medidor", async () => {
@@ -61,6 +61,26 @@ describe("o declarativo do Mestre", () => {
         camadas,
       },
     });
+  });
+
+  it("publica os efeitos dos plugins ligados com o id da mesa", async () => {
+    const sangrando = { id: "sangrando", titulo: "Sangrando", figura: { tinta: 0.6 } };
+    const ordem = (habilitada: boolean) =>
+      ({
+        id: "ordem",
+        versao: "1.0.0",
+        habilitada,
+        contribui: { efeitos: [sangrando] },
+      }) as unknown as Extensao;
+
+    await useDeclarativoStore.getState().sincronizar([ordem(true)]);
+    expect(useDeclarativoStore.getState().efeitos).toEqual({
+      "ordem/sangrando": { ...sangrando, id: "ordem/sangrando" },
+    });
+
+    // Desligado, o efeito some, e a condição que o aponta volta a ser só o selo.
+    await useDeclarativoStore.getState().sincronizar([ordem(false)]);
+    expect(useDeclarativoStore.getState().efeitos).toEqual({});
   });
 
   it("não publica de novo quando só a ordem da lista muda", async () => {
