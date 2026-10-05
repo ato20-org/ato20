@@ -73,7 +73,8 @@ export type PedidoDeArea = {
     grade: { colunas: number; linhas: number; total: number };
     focos: FocoNaFolha[];
   };
-  fagulhas?: { folha: FolhaDeParticulas; caminhos: Trajetoria[]; cor: string };
+  /** As partículas, com o sprite delas quando o efeito tem um: a caveirinha do veneno. */
+  fagulhas?: Omit<PedidoDeParticulas, "tipo" | "id">;
 };
 
 export type RespostaDoForno =
@@ -132,7 +133,7 @@ async function assarArea(pedido: PedidoDeArea): Promise<RespostaDoForno> {
   });
   if (pedido.fagulhas) {
     const { folha, caminhos, cor } = pedido.fagulhas;
-    desenharFolhaDeParticulas(ctx, folha, caminhos, cor);
+    desenharFolhaDeParticulas(ctx, folha, caminhos, cor, sprite(pedido.fagulhas));
   }
 
   return { id: pedido.id, unica: await tela.convertToBlob({ type: "image/png" }) };
@@ -150,7 +151,9 @@ function fogoSemPe(fogo: NonNullable<PedidoDeArea["fogo"]>) {
 }
 
 /** A imagem da partícula no tamanho que vale, e pintada se o efeito pediu. */
-function sprite(pedido: PedidoDeParticulas): ImagemDaFagulha | undefined {
+function sprite(
+  pedido: Pick<PedidoDeParticulas, "imagem" | "quadros" | "pintar" | "cor">,
+): ImagemDaFagulha | undefined {
   const imagem = pedido.imagem;
   if (!imagem) return undefined;
 

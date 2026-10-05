@@ -307,26 +307,13 @@ async function particulasAqui(pedido: PedidoDeParticulasAssadas): Promise<string
   const ctx = tela.getContext("2d");
   if (!ctx) throw new Error("sem canvas");
 
-  let sprite: ImagemDaFagulha | undefined;
-  if (imagem) {
-    const grade = gradeDoSprite(pedido.quadros);
-    const { largura, altura } = tamanhoDoSprite(
-      imagem.naturalWidth,
-      imagem.naturalHeight,
-      grade.colunas,
-      grade.linhas,
-    );
-    const pequena = document.createElement("canvas");
-    pequena.width = largura;
-    pequena.height = altura;
-    const pctx = pequena.getContext("2d");
-    if (pctx) {
-      if (pedido.pintar) pintarImagem(pctx, imagem, largura, altura, pedido.cor);
-      else pctx.drawImage(imagem, 0, 0, largura, altura);
-      sprite = { fonte: pequena, largura, altura, ...grade };
-    }
-  }
-  desenharFolhaDeParticulas(ctx, folha, pedido.caminhos, pedido.cor, sprite);
+  desenharFolhaDeParticulas(
+    ctx,
+    folha,
+    pedido.caminhos,
+    pedido.cor,
+    imagem ? spriteAqui(imagem, pedido) : undefined,
+  );
 
   return new Promise((resolver, recusar) =>
     tela.toBlob((blob) => {
@@ -334,6 +321,29 @@ async function particulasAqui(pedido: PedidoDeParticulasAssadas): Promise<string
       else recusar(new Error("folha não virou imagem"));
     }, "image/png"),
   );
+}
+
+/** A imagem da partícula no tamanho que vale, e pintada se o efeito pediu, na thread da janela. */
+function spriteAqui(
+  imagem: HTMLImageElement,
+  pedido: Pick<PedidoDeParticulasAssadas, "quadros" | "pintar" | "cor">,
+): ImagemDaFagulha | undefined {
+  const grade = gradeDoSprite(pedido.quadros);
+  const { largura, altura } = tamanhoDoSprite(
+    imagem.naturalWidth,
+    imagem.naturalHeight,
+    grade.colunas,
+    grade.linhas,
+  );
+  const pequena = document.createElement("canvas");
+  pequena.width = largura;
+  pequena.height = altura;
+  const pctx = pequena.getContext("2d");
+  if (!pctx) return undefined;
+
+  if (pedido.pintar) pintarImagem(pctx, imagem, largura, altura, pedido.cor);
+  else pctx.drawImage(imagem, 0, 0, largura, altura);
+  return { fonte: pequena, largura, altura, ...grade };
 }
 
 // --- a área de efeito --------------------------------------------------------
@@ -357,7 +367,8 @@ export type PedidoDeAreaAssada = {
     grade: { colunas: number; linhas: number; total: number };
     focos: FocoNaFolha[];
   };
-  fagulhas?: { folha: FolhaDeParticulas; caminhos: Trajetoria[]; cor: string };
+  /** As partículas, com a imagem delas quando o efeito tem uma. */
+  fagulhas?: PedidoDeParticulasAssadas;
 };
 
 const areasAssadas = new Map<string, Promise<string | null>>();
@@ -383,13 +394,16 @@ export function assarArea(pedido: PedidoDeAreaAssada): Promise<string | null> {
 }
 
 async function areaNoForno(pedido: PedidoDeAreaAssada): Promise<string> {
-  const [base, fogo] = await Promise.all([
+  const { fagulhas } = pedido;
+  const [base, fogo, particula] = await Promise.all([
     pedido.base ? bitmap(pedido.base.fonte) : undefined,
     pedido.fogo ? bitmap(pedido.fogo.fonte) : undefined,
+    fagulhas?.imagem ? bitmap(fagulhas.imagem) : undefined,
   ]);
   const transferir: Transferable[] = [];
   if (base) transferir.push(base);
   if (fogo) transferir.push(fogo);
+  if (particula) transferir.push(particula);
 
   const resposta = await pedirAoForno(
     {
@@ -400,7 +414,18 @@ async function areaNoForno(pedido: PedidoDeAreaAssada): Promise<string> {
       contorno: pedido.contorno,
       ...(pedido.base && base ? { base: { ...pedido.base, fonte: base } } : {}),
       ...(pedido.fogo && fogo ? { fogo: { ...pedido.fogo, fonte: fogo } } : {}),
-      ...(pedido.fagulhas ? { fagulhas: pedido.fagulhas } : {}),
+      ...(fagulhas
+        ? {
+            fagulhas: {
+              folha: fagulhas.folha,
+              caminhos: fagulhas.caminhos,
+              cor: fagulhas.cor,
+              pintar: fagulhas.pintar,
+              ...(fagulhas.quadros ? { quadros: fagulhas.quadros } : {}),
+              ...(particula ? { imagem: particula } : {}),
+            },
+          }
+        : {}),
     },
     transferir,
   );
@@ -410,9 +435,10 @@ async function areaNoForno(pedido: PedidoDeAreaAssada): Promise<string> {
 }
 
 async function areaAqui(pedido: PedidoDeAreaAssada): Promise<string> {
-  const [base, fogo] = await Promise.all([
+  const [base, fogo, particula] = await Promise.all([
     pedido.base ? carregarImagem(pedido.base.fonte) : undefined,
     pedido.fogo ? carregarImagem(pedido.fogo.fonte) : undefined,
+    pedido.fagulhas?.imagem ? carregarImagem(pedido.fagulhas.imagem) : undefined,
   ]);
   const { grade, quadro } = pedido;
   const tela = document.createElement("canvas");
@@ -433,7 +459,13 @@ async function areaAqui(pedido: PedidoDeAreaAssada): Promise<string> {
   });
   if (pedido.fagulhas) {
     const { folha, caminhos, cor } = pedido.fagulhas;
-    desenharFolhaDeParticulas(ctx, folha, caminhos, cor);
+    desenharFolhaDeParticulas(
+      ctx,
+      folha,
+      caminhos,
+      cor,
+      particula ? spriteAqui(particula, pedido.fagulhas) : undefined,
+    );
   }
 
   return new Promise((resolver, recusar) =>

@@ -461,6 +461,8 @@ export function planoDaArea(
             dy: Math.sin(angulo) * distancia,
             tamanho,
             atraso: -sorteio(`${semente}:f`) * laco,
+            // O sprite de cada uma na sua fase: as caveirinhas não riem em coro.
+            quadroInicial: sorteio(`${semente}:q`),
           };
         },
       )
@@ -531,7 +533,7 @@ export function planoDaArea(
     atraso: voo.atraso,
     angulo: 0,
     giro: 0,
-    quadroInicial: 0,
+    quadroInicial: voo.quadroInicial,
   }));
 
   return { caixa, lado, segmentos, quadro, contorno, ladrilho, focos, fagulhas };
