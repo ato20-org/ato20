@@ -504,9 +504,14 @@ pasta de `src/efeitos/` com um `efeito.json` é um efeito, DESCOBERTO no build
 código. Em `src/` e não em `public/` porque o glob do Turbopack não enumera
 fora de `src/` (compila para um objeto vazio, calado). As imagens viram
 assets do build, com nome por conteúdo, e não precisam de versão na URL. Hoje
-são dois: `chamas` ("Em chamas": o fogo, com fagulhas e luz) e `congelado`
+são três: `chamas` ("Em chamas": o fogo, com fagulhas e luz), `congelado`
 (a figura azulada, trincada por dentro e tremendo, com cristais de gelo em
-volta -- arte de `scripts/efeitos/gerar-congelado.py`). Pack com id torto ou
+volta -- arte de `scripts/efeitos/gerar-congelado.py`) e `envenenado` (a
+figura cheia de verde com o halo, a névoa tóxica subindo dos pés na cor da
+condição, com bolhas, e caveirinhas que riem escapando dela -- arte de
+`scripts/efeitos/gerar-envenenado.py`). As partículas de imagem do gelo e do
+veneno vêm já coloridas, sem `pintar`: a caveira verde chapada sumiria em
+cima do corpo verde, e o contorno escuro é o que a separa. Pack com id torto ou
 repetido fica de fora. Os climas de antes (`aura`, `tingido`, `translucido`,
 `tremendo`, `apagado`) saíram; a condição que ainda aponta para um deles
 mostra só o selo.
