@@ -62,9 +62,17 @@ function pesEmCena(plano: NonNullable<ReturnType<typeof planoDaArea>>) {
   }));
 }
 
+/** O fogo de fábrica, pelo id: a lista é em ordem de título, e o gelo vem antes. */
+const FOGO_DE_FABRICA = EFEITOS_DE_AREA.find((efeito) => efeito.id === "chamas");
+
 describe("EFEITOS_DE_AREA", () => {
-  it("são os da fábrica que declaram área: o fogo, o veneno e a água", () => {
-    expect(EFEITOS_DE_AREA.map((efeito) => efeito.id)).toEqual(["chamas", "envenenado", "molhado"]);
+  it("são os da fábrica que declaram área, em ordem de título", () => {
+    expect(EFEITOS_DE_AREA.map((efeito) => efeito.id)).toEqual([
+      "congelado",
+      "chamas",
+      "envenenado",
+      "molhado",
+    ]);
   });
 });
 
@@ -102,6 +110,7 @@ describe("efeitosDeAreaProntos", () => {
     };
 
     expect(efeitosDeAreaProntos(deFora).map((efeito) => efeito.id)).toEqual([
+      "congelado",
       "chamas",
       "envenenado",
       "molhado",
@@ -119,7 +128,7 @@ describe("ladoDoSegmento", () => {
 
 describe("divisoesDoEfeito", () => {
   it("o fogo divide a casa em quatro; sem dizer, a casa inteira", () => {
-    expect(divisoesDoEfeito(EFEITOS_DE_AREA[0])).toBe(2);
+    expect(divisoesDoEfeito(FOGO_DE_FABRICA)).toBe(2);
     expect(divisoesDoEfeito(undefined)).toBe(1);
     expect(divisoesDoEfeito({ id: "x", titulo: "X", area: { divisoes: 9 } })).toBe(4);
   });
@@ -138,7 +147,7 @@ describe("divisoesDaArea", () => {
   });
 
   it("o fogo pede quatro no menor lado", () => {
-    expect(densidadeDoEfeito(EFEITOS_DE_AREA[0])).toBe(4);
+    expect(densidadeDoEfeito(FOGO_DE_FABRICA)).toBe(4);
     expect(densidadeDoEfeito(undefined)).toBe(0);
   });
 
