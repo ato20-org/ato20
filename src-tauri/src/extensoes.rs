@@ -11,6 +11,7 @@
 //! unica que o usuario decide e que nao viaja junto com a pasta. Copiar a pasta
 //! para outra maquina tem de bastar para instalar.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -226,6 +227,90 @@ pub struct Efeito {
     /// `LuzDoEfeito`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub luz: Option<LuzDoEfeito>,
+    /// O que a figura solta: a fagulha, a gota. Passa como veio -- quem prende
+    /// cada numero e o TS, ao desenhar, como nos efeitos da campanha (ver
+    /// `vault::efeitos`); aqui so a imagem, se houver, e conferida. Antes deste
+    /// campo, a particula do plugin era descartada calada.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub particulas: Option<serde_json::Value>,
+    /// O efeito tambem serve a uma AREA do chao. Ver `AreaDoEfeito`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<AreaDoEfeito>,
+    /// O chao do efeito na area: a textura deitada. Ver `BaseDoEfeito`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<BaseDoEfeito>,
+}
+
+/// Uma grade de quadros: quantos por linha, quantos ao todo, e a velocidade.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Quadros {
+    pub colunas: u32,
+    pub total: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fps: Option<f64>,
+}
+
+/// Uma imagem animada do pack: a chama que a area repete, o chao dela. Os
+/// mesmos campos que o TS le -- ver `BaseDoEfeito` em `types/efeito.ts`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImagemAnimada {
+    pub imagem: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quadros: Option<Quadros>,
+    /// A mesma grade em outros tamanhos, pelo lado do QUADRO em pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mipmaps: Option<BTreeMap<String, String>>,
+    /// `condicao`, ou o caminho de uma rampa de cor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cores: Option<String>,
+}
+
+impl ImagemAnimada {
+    /// As imagens que ela usa: a principal, os mipmaps e a rampa.
+    fn imagens(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.imagem.as_str())
+            .chain(self.mipmaps.iter().flat_map(|mipmaps| mipmaps.values().map(String::as_str)))
+            .chain(self.cores.iter().map(String::as_str).filter(|cores| *cores != "condicao"))
+    }
+}
+
+/// O efeito numa AREA do chao: a cor de uma area nova, o FOCO que ela repete
+/// segmento a segmento, e como ela divide a casa da grade. Ver `AreaDoEfeito`
+/// em `types/efeito.ts`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AreaDoEfeito {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    /// O foco, em vezes o segmento.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escala: Option<f64>,
+    /// Segmentos por lado de casa.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub divisoes: Option<f64>,
+    /// O minimo de segmentos no menor lado da area.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub densidade: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foco: Option<ImagemAnimada>,
+}
+
+/// O chao de um efeito em area: a textura deitada, ladrilhada e recortada na
+/// forma. Ver `BaseDoEfeito` em `types/efeito.ts`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BaseDoEfeito {
+    #[serde(flatten)]
+    pub imagem: ImagemAnimada,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacidade: Option<f64>,
+    /// O ladrilho, em vezes o segmento.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escala: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escurece: Option<f64>,
 }
 
 /// A luz de um efeito. Entra na luz da cena como a lanterna do token, e vai
@@ -265,6 +350,18 @@ impl Efeito {
         let mut imagens: Vec<&str> = Vec::new();
         imagens.extend(self.externo.as_ref().map(|externo| externo.imagem.as_str()));
         imagens.extend(self.interno.as_ref().map(|interno| interno.textura.as_str()));
+        imagens.extend(
+            self.particulas
+                .as_ref()
+                .and_then(|particulas| particulas.get("imagem"))
+                .and_then(serde_json::Value::as_str),
+        );
+        if let Some(foco) = self.area.as_ref().and_then(|area| area.foco.as_ref()) {
+            imagens.extend(foco.imagens());
+        }
+        if let Some(base) = &self.base {
+            imagens.extend(base.imagem.imagens());
+        }
 
         imagens
     }
@@ -275,6 +372,9 @@ impl Efeito {
             || self.externo.is_some()
             || self.interno.is_some()
             || self.luz.is_some()
+            || self.particulas.is_some()
+            || self.area.as_ref().is_some_and(|area| area.foco.is_some())
+            || self.base.is_some()
     }
 }
 
@@ -1201,6 +1301,74 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
     Ok(())
 }
 
+/// Uma grade de quadros que faz sentido: inteira, cheia, com fps de 1 a 60.
+fn quadros_validos(quadros: &Quadros) -> bool {
+    quadros.colunas > 0
+        && quadros.total > 0
+        && quadros.total % quadros.colunas == 0
+        && quadros
+            .fps
+            .map_or(true, |fps| fps.is_finite() && (1.0..=60.0).contains(&fps))
+}
+
+/// A imagem animada: grade valida, mipmaps com o lado em numero. O caminho de
+/// cada imagem e conferido junto com as outras, em `Efeito::imagens`.
+fn imagem_animada_valida(imagem: &ImagemAnimada, campo: &str) -> Result<(), String> {
+    if imagem.quadros.as_ref().is_some_and(|quadros| !quadros_validos(quadros)) {
+        return Err(format!(
+            "tem `{campo}.quadros` torto: o total e multiplo das colunas, e o fps vai de 1 a 60"
+        ));
+    }
+    if let Some(mipmaps) = &imagem.mipmaps {
+        if mipmaps
+            .keys()
+            .any(|lado| lado.parse::<u32>().map_or(true, |lado| lado == 0))
+        {
+            return Err(format!("tem `{campo}.mipmaps` com um lado que nao e numero"));
+        }
+    }
+    Ok(())
+}
+
+/// O bloco `area` e o `base`, com numeros que fazem sentido. Os limites sao os
+/// mesmos que o TS prende ao desenhar -- ver `escalaDoFoco`, `divisoesDoEfeito`
+/// e `baseDoEfeito`.
+fn validar_area(area: Option<&AreaDoEfeito>, base: Option<&BaseDoEfeito>) -> Result<(), String> {
+    let entre = |valor: Option<f64>, min: f64, max: f64| {
+        valor.map_or(true, |v| v.is_finite() && (min..=max).contains(&v))
+    };
+
+    if let Some(area) = area {
+        if area.cor.as_deref().is_some_and(|cor| !cor_hex_valida(cor)) {
+            return Err("tem `area.cor` que nao e uma cor #rrggbb".into());
+        }
+        if !entre(area.escala, 1.0, 2.5) {
+            return Err("tem `area.escala` fora de 1 a 2,5".into());
+        }
+        if !entre(area.divisoes, 1.0, 4.0) {
+            return Err("tem `area.divisoes` fora de 1 a 4".into());
+        }
+        if !entre(area.densidade, 0.0, 16.0) {
+            return Err("tem `area.densidade` fora de 0 a 16".into());
+        }
+        if let Some(foco) = &area.foco {
+            imagem_animada_valida(foco, "area.foco")?;
+        }
+    }
+
+    if let Some(base) = base {
+        imagem_animada_valida(&base.imagem, "base")?;
+        if !entre(base.opacidade, 0.0, 1.0) || !entre(base.escurece, 0.0, 1.0) {
+            return Err("tem `base.opacidade` ou `base.escurece` fora de 0 a 1".into());
+        }
+        if !entre(base.escala, 0.5, 4.0) {
+            return Err("tem `base.escala` fora de 0,5 a 4".into());
+        }
+    }
+
+    Ok(())
+}
+
 /// Um efeito desenha alguma coisa, com numeros que fazem sentido?
 ///
 /// Efeito que nao mexe em nada seria uma opcao no seletor que, escolhida, nao
@@ -1222,7 +1390,19 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
     }
 
     if !efeito.faz_algo() {
-        return invalido("nao desenha nada: declare `figura`, `externo`, `interno` ou `luz`");
+        return invalido(
+            "nao desenha nada: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco` ou `base`",
+        );
+    }
+
+    if let Some(particulas) = &efeito.particulas {
+        if !particulas.is_object() {
+            return invalido("tem `particulas` que nao e um objeto");
+        }
+    }
+
+    if let Err(motivo) = validar_area(efeito.area.as_ref(), efeito.base.as_ref()) {
+        return invalido(&motivo);
     }
 
     let fracao = |valor: Option<f64>| valor.map_or(true, |v| v.is_finite() && (0.0..=1.0).contains(&v));
@@ -2392,6 +2572,67 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["fx/fogo.webp", "fx/brasa.png"]
         );
+    }
+
+    #[test]
+    fn efeito_em_area_entra_com_o_chao_os_elementos_e_as_particulas() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"nevoa","titulo":"Névoa",
+                     "area":{"cor":"#22c55e","escala":1.4,"divisoes":2,"densidade":4,
+                             "foco":{"imagem":"fx/bolha.webp","quadros":{"colunas":4,"total":16,"fps":12},
+                                     "mipmaps":{"64":"fx/bolha-64.webp"},"cores":"condicao"}},
+                     "base":{"imagem":"fx/chao.webp","escala":2,"escurece":0.4,"cores":"fx/rampa.png"},
+                     "particulas":{"quantidade":8,"imagem":"fx/gota.png"}}]"##,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        assert_eq!(
+            efeito.imagens(),
+            vec![
+                "fx/gota.png",
+                "fx/bolha.webp",
+                "fx/bolha-64.webp",
+                "fx/chao.webp",
+                "fx/rampa.png"
+            ]
+        );
+
+        // O que vai para o TS: os blocos inteiros, no formato que ele lê -- a
+        // base com a imagem no mesmo nível dos números dela.
+        let json = serde_json::to_value(efeito).unwrap();
+        assert_eq!(json["area"]["foco"]["quadros"]["total"], 16);
+        assert_eq!(json["base"]["imagem"], "fx/chao.webp");
+        assert_eq!(json["base"]["escurece"], 0.4);
+        assert_eq!(json["particulas"]["quantidade"], 8);
+    }
+
+    #[test]
+    fn efeito_em_area_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        for efeito in [
+            r##""area":{"cor":"verde","foco":{"imagem":"b.png"}}"##,
+            r##""area":{"divisoes":9,"foco":{"imagem":"b.png"}}"##,
+            r##""area":{"escala":5,"foco":{"imagem":"b.png"}}"##,
+            r##""area":{"foco":{"imagem":"b.svg"}}"##,
+            r##""area":{"foco":{"imagem":"b.png","quadros":{"colunas":4,"total":6}}}"##,
+            r##""area":{"foco":{"imagem":"b.png","quadros":{"colunas":4,"total":8,"fps":200}}}"##,
+            r##""area":{"foco":{"imagem":"b.png","mipmaps":{"grande":"b2.png"}}}"##,
+            r##""base":{"imagem":"../fora.png"}"##,
+            r##""base":{"imagem":"c.png","escala":10}"##,
+            r##""base":{"imagem":"c.png","escurece":2}"##,
+            r##""particulas":[1,2]"##,
+            r##""particulas":{"imagem":"/abs.png"}"##,
+        ] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X",{efeito}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{efeito}");
+        }
     }
 
     #[test]
