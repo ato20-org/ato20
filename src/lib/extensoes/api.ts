@@ -53,8 +53,10 @@ import type { CanvasItem, Scene } from "@/types/scene";
  *
  * A 5 não mexeu neste objeto: acrescentou ao manifesto o medidor em `camadas`
  * de imagem e o `rotulo`. Ver `extensoes::API_VERSAO`.
+ *
+ * A 6 também não: acrescentou aos `pontos` em camadas a `proporcao` e o `ate`.
  */
-export const API_VERSAO_ATUAL = 5;
+export const API_VERSAO_ATUAL = 6;
 
 /** O que o plugin sabe da cena sem poder mexer no formato dela. */
 export type CenaResumo = {
