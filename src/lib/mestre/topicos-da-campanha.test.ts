@@ -8,16 +8,14 @@ describe("topicosAchados", () => {
       "quadro",
       "medidores",
       "condicoes",
-      "efeitos",
       "layout",
       "posicao",
       "ajustes",
     ]);
   });
 
-  it("acha os efeitos pelo que se procura neles, e pelo nome do que se criou", () => {
-    expect(topicosAchados("fagulha", {})).toContain("efeitos");
-    expect(topicosAchados("brasa azul", { efeitos: ["Brasa azul"] })).toEqual(["efeitos"]);
+  it("quem procura o fogo acha as condições: o efeito se configura nelas", () => {
+    expect(topicosAchados("fagulha", {})).toEqual(["condicoes"]);
   });
 
   it("acha pelo título sem ligar para acento nem caixa", () => {

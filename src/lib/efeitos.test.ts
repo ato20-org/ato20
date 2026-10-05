@@ -7,8 +7,10 @@ import {
   efeitoValido,
   luzDosEfeitos,
   nivelDoExterno,
+  copiaParaACampanha,
   particulasDosEfeitos,
   TAMANHO_DO_EXTERNO,
+  urlDaImagemDaCampanha,
   tamanhoNoPlano,
 } from "./efeitos";
 
@@ -310,5 +312,35 @@ describe("os efeitos da campanha", () => {
     );
     // Id que não parece id de arquivo não vira caminho nenhum: o brilho redondo.
     expect(particulasDosEfeitos([{ efeito: "campanha/brasa", cor: "#fff" }], daCampanha)!.imagem).toBeUndefined();
+  });
+});
+
+describe("a condição que configura o fogo de fábrica", () => {
+  const copia = copiaParaACampanha(definicaoDoEfeito("chamas")!, "campanha/a1b2c3d4", "Em chamas");
+
+  it("vira um efeito da campanha, com a arte apontando para o pack", () => {
+    expect(copia.id).toBe("campanha/a1b2c3d4");
+    expect(copia.origem).toBeUndefined();
+    expect(copia.externo!.imagem).toBe("fabrica:chamas/chamas-512.webp");
+    expect(copia.externo!.mipmaps!["128"]).toBe("fabrica:chamas/chamas-128.webp");
+    expect(copia.externo!.mascara).toBe("fabrica:chamas/mascara.webp");
+    // O que não é imagem fica como era.
+    expect(copia.externo!.cores).toBe("condicao");
+    expect(copia.luz).toEqual(definicaoDoEfeito("chamas")!.luz);
+  });
+
+  it("e desenha igual: a arte do pack resolve pelo endereço do build", () => {
+    const daCampanha = { [copia.id]: { ...copia, origem: { acervo: true as const } } };
+    const externo = camadasDaFigura([{ efeito: copia.id, cor: "#3b82f6" }], daCampanha).externo!;
+
+    expect(externo.niveis.map((nivel) => nivel.lado)).toEqual([128, 256, 512]);
+    expect(externo.niveis[0]!.url).toContain("chamas-128.webp");
+    expect(externo.cores).toEqual({ cor: "#3b82f6" });
+  });
+
+  it("a referência de plugin e a torta", () => {
+    expect(urlDaImagemDaCampanha("plugin:ordem@1.2.0/fx/fogo.webp")).toBe("/plugin/ordem/fx/fogo.webp?v=1.2.0");
+    expect(urlDaImagemDaCampanha("fabrica:nao-existe/x.webp")).toBeNull();
+    expect(urlDaImagemDaCampanha("plugin:../x")).toBeNull();
   });
 });

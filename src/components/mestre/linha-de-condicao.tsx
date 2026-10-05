@@ -1,7 +1,7 @@
 "use client";
 
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { Eye, EyeOff, LayoutGrid, Trash2 } from "lucide-react";
+import { Eye, EyeOff, LayoutGrid, Settings2, Trash2 } from "lucide-react";
 
 import { NomeDoMedidor } from "@/components/mestre/linha-de-medidor";
 import {
@@ -52,6 +52,7 @@ export function LinhaDeCondicao({
   onReorderStart,
   onEditar,
   onApagar,
+  onConfigurar,
   dicaDoOlho,
 }: {
   condicao: Condicao;
@@ -60,6 +61,12 @@ export function LinhaDeCondicao({
   onReorderStart: (event: ReactPointerEvent) => void;
   onEditar: (patch: PatchCondicao) => void;
   onApagar: () => void;
+  /**
+   * Presente = a engrenagem que abre a tela da condição, com o efeito dela.
+   * É o cardápio da campanha: lá o efeito se configura, e o selo perde a
+   * escolha de efeito. Na ficha, ausente -- a condição avulsa escolhe.
+   */
+  onConfigurar?: () => void;
   dicaDoOlho: Dica;
 }) {
   const deFora = useDeclarativoStore((state) => state.efeitos);
@@ -83,6 +90,7 @@ export function LinhaDeCondicao({
         condicao={condicao}
         ocupado={ocupado}
         onEditar={onEditar}
+        comEfeito={!onConfigurar}
       />
 
       <div className="flex min-w-0 flex-1 items-center gap-0.5">
@@ -95,6 +103,24 @@ export function LinhaDeCondicao({
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5">
+        {onConfigurar ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Configurar ${condicao.nome}`}
+                  disabled={ocupado}
+                  onClick={onConfigurar}
+                >
+                  <Settings2 />
+                </Button>
+              }
+            />
+            <TooltipContent>Configurar a condição e o efeito dela</TooltipContent>
+          </Tooltip>
+        ) : null}
         {condicao.efeito ? (
           <span className="text-muted-foreground pr-1 text-[10px]">
             {definicaoDoEfeito(condicao.efeito, deFora)?.titulo ?? condicao.efeito}
@@ -154,10 +180,13 @@ export function AparenciaDaCondicao({
   condicao,
   ocupado = false,
   onEditar,
+  comEfeito = true,
 }: {
   condicao: Pick<Condicao, "nome" | "cor" | "icone" | "efeito">;
   ocupado?: boolean;
   onEditar: (patch: PatchCondicao) => void;
+  /** Ausente = com a escolha de efeito. Sem ela, o efeito é da engrenagem. */
+  comEfeito?: boolean;
 }) {
   const efeito = condicao.efeito ?? null;
   const deFora = useDeclarativoStore((state) => state.efeitos);
@@ -172,7 +201,7 @@ export function AparenciaDaCondicao({
         render={
           <button
             type="button"
-            aria-label="Ícone, cor e efeito"
+            aria-label={comEfeito ? "Ícone, cor e efeito" : "Ícone e cor"}
             disabled={ocupado}
             className="focus-visible:ring-ring shrink-0 rounded-full focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
           >
@@ -235,44 +264,45 @@ export function AparenciaDaCondicao({
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs font-normal">Efeito na figura</Label>
-          <div className="grid grid-cols-3 gap-1">
-            <Button
-              variant={efeito === null ? "secondary" : "ghost"}
-              size="sm"
-              aria-pressed={efeito === null}
-              className="h-7 px-1 text-[11px]"
-              onClick={() => onEditar({ efeito: null })}
-            >
-              Nenhum
-            </Button>
-            {EFEITOS_DE_FABRICA.map((opcao) => (
-              <OpcaoDeEfeito
-                key={opcao.id}
-                titulo={opcao.titulo}
-                escolhido={efeito === opcao.id}
-                onEscolher={() => onEditar({ efeito: opcao.id })}
-              />
-            ))}
-          </div>
-          {daCampanha.length > 0 ? (
-            <>
-              <p className="text-muted-foreground pt-1 text-[10px] tracking-wide uppercase">
-                Da campanha
-              </p>
-              <div className="grid grid-cols-3 gap-1">
-                {daCampanha.map((opcao) => (
-                  <OpcaoDeEfeito
-                    key={opcao.id}
-                    titulo={opcao.titulo}
-                    escolhido={efeito === opcao.id}
-                    onEscolher={() => onEditar({ efeito: opcao.id })}
-                  />
-                ))}
-              </div>
-            </>
-          ) : null}
+        {comEfeito ? (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-normal">Efeito na figura</Label>
+            <div className="grid grid-cols-3 gap-1">
+              <Button
+                variant={efeito === null ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={efeito === null}
+                className="h-7 px-1 text-[11px]"
+                onClick={() => onEditar({ efeito: null })}
+              >
+                Nenhum
+              </Button>
+              {EFEITOS_DE_FABRICA.map((opcao) => (
+                <OpcaoDeEfeito
+                  key={opcao.id}
+                  titulo={opcao.titulo}
+                  escolhido={efeito === opcao.id}
+                  onEscolher={() => onEditar({ efeito: opcao.id })}
+                />
+              ))}
+            </div>
+            {daCampanha.length > 0 ? (
+              <>
+                <p className="text-muted-foreground pt-1 text-[10px] tracking-wide uppercase">
+                  Da campanha
+                </p>
+                <div className="grid grid-cols-3 gap-1">
+                  {daCampanha.map((opcao) => (
+                    <OpcaoDeEfeito
+                      key={opcao.id}
+                      titulo={opcao.titulo}
+                      escolhido={efeito === opcao.id}
+                      onEscolher={() => onEditar({ efeito: opcao.id })}
+                    />
+                  ))}
+                </div>
+              </>
+        ) : null}
           {dePlugin.length > 0 ? (
             <>
               <p className="text-muted-foreground pt-1 text-[10px] tracking-wide uppercase">
@@ -301,6 +331,7 @@ export function AparenciaDaCondicao({
                 : "Um efeito que esta mesa não tem. Aparece só o selo."}
           </p>
         </div>
+        ) : null}
       </PopoverContent>
     </Popover>
   );

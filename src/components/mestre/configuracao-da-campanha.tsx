@@ -11,7 +11,6 @@ import {
   type SetStateAction,
 } from "react";
 import {
-  Flame,
   Gauge,
   LayoutTemplate,
   Move,
@@ -23,7 +22,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { EfeitosDaCampanha } from "@/components/mestre/efeitos-da-campanha";
+import { TelaDaCondicao } from "@/components/mestre/efeitos-da-campanha";
 import { toast } from "sonner";
 
 import {
@@ -63,7 +62,6 @@ import {
   type TopicoDaCampanha,
 } from "@/lib/mestre/topicos-da-campanha";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
-import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
   aplicarModelosEmTodos,
@@ -93,7 +91,6 @@ const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
   quadro: Shapes,
   medidores: Gauge,
   condicoes: Sparkles,
-  efeitos: Flame,
   layout: LayoutTemplate,
   posicao: Move,
   ajustes: SlidersHorizontal,
@@ -131,7 +128,6 @@ export function ConfiguracaoDaCampanhaBody() {
   // montado para contar.
   const medidores = useModelosDaCampanha();
   const { modelos: condicoes } = useCondicoesDaCampanha();
-  const efeitos = useEfeitosDaCampanhaStore((state) => state.efeitos);
   const definicoes = useConfiguracoesStore((state) => state.definicoes);
 
   const ajustes = useMemo(
@@ -148,7 +144,6 @@ export function ConfiguracaoDaCampanhaBody() {
     const achados = topicosAchados(busca, {
       medidores: (medidores.modelos ?? []).map((modelo) => modelo.nome),
       condicoes: (condicoes ?? []).map((condicao) => condicao.nome),
-      efeitos: (efeitos ?? []).map((efeito) => efeito.titulo),
     });
     // Ajustes só existe com algo para ajustar -- hoje, só quando um plugin
     // declara. E acha pelos próprios ajustes, com a MESMA conta da lista.
@@ -161,7 +156,7 @@ export function ConfiguracaoDaCampanhaBody() {
         ? ajustes.length > 0 && (achados.includes(chave) || ajusteAchado)
         : achados.includes(chave),
     );
-  }, [busca, medidores.modelos, condicoes, efeitos, ajustes]);
+  }, [busca, medidores.modelos, condicoes, ajustes]);
 
   // O tópico aberto pode sumir -- o plugin do único ajuste foi desligado.
   const atual = topicos.includes(aberto) ? aberto : "quadro";
@@ -282,15 +277,6 @@ function Topico({
       return <MedidoresDaCampanha {...medidores} />;
     case "condicoes":
       return <CondicoesDaCampanha />;
-    case "efeitos":
-      return (
-        <Secao
-          titulo="Efeitos"
-          descricao="O que uma condição faz com a figura. Crie aqui, e escolha no efeito da condição."
-        >
-          <EfeitosDaCampanha />
-        </Secao>
-      );
     case "layout":
       return (
         <Secao
@@ -694,6 +680,8 @@ function LinhaDeModelo({
 function CondicoesDaCampanha() {
   const { modelos, recarregar } = useCondicoesDaCampanha();
   const [ocupado, setOcupado] = useState(false);
+  /** A condição aberta na tela dela, pela engrenagem. `null` = a lista. */
+  const [configurando, setConfigurando] = useState<string | null>(null);
   /** A ordem depois de um arrasto, até o cardápio relido chegar. */
   const [arrastada, setArrastada] = useState<{
     de: Condicao[] | null;
@@ -764,6 +752,21 @@ function CondicoesDaCampanha() {
     }, "Falha ao criar as sugestões.");
   }
 
+  // A tela da condição, quando a engrenagem a abriu: o selo e o efeito dela.
+  const aberta = configurando ? lista.find((modelo) => modelo.id === configurando) : undefined;
+  if (aberta) {
+    return (
+      <TelaDaCondicao
+        modelo={aberta}
+        ocupado={ocupado}
+        onEditar={(patch) =>
+          void mexer(() => editarCondicaoDaCampanha(aberta.id, patch), "Falha ao gravar.")
+        }
+        onVoltar={() => setConfigurando(null)}
+      />
+    );
+  }
+
   return (
     <section className="space-y-2">
       <div className="flex items-center gap-1">
@@ -830,6 +833,7 @@ function CondicoesDaCampanha() {
                   "Falha ao gravar.",
                 )
               }
+              onConfigurar={() => setConfigurando(modelo.id)}
               onApagar={() =>
                 void mexer(
                   () => removerCondicaoDaCampanha(modelo.id),

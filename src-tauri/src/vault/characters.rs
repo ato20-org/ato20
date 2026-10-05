@@ -1368,6 +1368,36 @@ pub fn alternar_condicao(
     Ok(mudaram)
 }
 
+/// Aponta TODA condicao com este nome, em todos os personagens, para o efeito.
+///
+/// E o "muda junto" da condicao com efeito proprio: quando o mestre configura
+/// o efeito de "Em chamas" no cardapio, o goblin que ja esta em chamas passa a
+/// desenhar o efeito novo. So o efeito -- nome, cor e icone continuam sendo a
+/// copia da ficha, como sempre. Pelo NOME, a mesma chave de
+/// `alternar_condicao`. Grava uma vez so, e devolve quantas condicoes mudaram.
+pub fn apontar_efeito_por_nome(vault: &Vault, nome: &str, efeito: &str) -> AppResult<usize> {
+    let mut personagens = load(vault)?;
+    let chave = chave_do_nome(nome);
+    let mut mudaram = 0;
+
+    for condicao in personagens
+        .iter_mut()
+        .flat_map(|personagem| personagem.condicoes.iter_mut())
+        .filter(|condicao| chave_do_nome(&condicao.nome) == chave)
+    {
+        if condicao.efeito.as_deref() != Some(efeito) {
+            condicao.efeito = Some(efeito.to_string());
+            mudaram += 1;
+        }
+    }
+
+    if mudaram > 0 {
+        save(vault, &personagens)?;
+    }
+
+    Ok(mudaram)
+}
+
 /// Os ids de todos os personagens, para quem precisa percorrer a mesa inteira.
 pub fn todos_os_ids(vault: &Vault) -> AppResult<Vec<String>> {
     Ok(load(vault)?.into_iter().map(|p| p.id).collect())
