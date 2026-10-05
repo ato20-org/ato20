@@ -52,6 +52,7 @@ import {
 import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { itemBounds } from "@/lib/geometry/bounds";
+import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
@@ -1889,6 +1890,19 @@ function Fileira({
             onClick={() => onEscolher(opcao)}
           />
         ))}
+
+        <CorLivre
+          cor={escolhida}
+          paleta={CORES_LAPIS}
+          rotulo={`${titulo}: outra cor`}
+          className={(livre) =>
+            cn(
+              "size-5 rounded-full border transition-transform",
+              livre ? "border-foreground scale-110" : "border-white/20 hover:scale-105",
+            )
+          }
+          onCor={onEscolher}
+        />
       </div>
     </div>
   );

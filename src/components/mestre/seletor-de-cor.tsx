@@ -1,11 +1,14 @@
 "use client";
 
 import {
+  useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { ARCO_IRIS } from "@/components/mestre/menu-da-luz";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { hexParaHsv, hsvParaHex, normalizarHex, type Hsv } from "@/lib/cor";
 import { cn } from "@/lib/utils";
 
@@ -256,4 +259,82 @@ function setas(
   evento.preventDefault();
   evento.stopPropagation();
   aoAndar(andar[0], andar[1]);
+}
+
+/** Quanto o tom precisa ficar parado para ser gravado, em ms. Ver `CorLivre`. */
+const ESPERA_DO_TOM = 200;
+
+/**
+ * O TOM fora da paleta: o botão de arco-íris no fim de uma fileira de cores,
+ * que abre este seletor num popover. Pintado com o tom quando ele é o
+ * escolhido, para a fileira mostrar que a cor é livre.
+ *
+ * Num popover, e não aberto embaixo da fileira como no `TomDeCor`: ele mora
+ * em quatro lugares -- a paleta do gizmo, a aparência da condição, a luz e o
+ * efeito em área --, dois deles já dentro de um popover ou de um painel que o
+ * gizmo escala, e o popover é o que cabe igual em todos.
+ *
+ * O seletor anda AO VIVO por dentro, mas a cor só sai quando o tom PARA (ou o
+ * popover fecha): a cor da condição vai ao disco a cada gravação, e a da área
+ * vira um passo do desfazer. Arrastar o quadrado seria uma gravação por
+ * quadro.
+ */
+export function CorLivre({
+  cor,
+  paleta,
+  rotulo = "Outra cor",
+  className = (livre) =>
+    cn("size-5 rounded-full border-2", livre ? "border-foreground" : "border-transparent"),
+  onCor,
+}: {
+  /** A cor de agora. Ausente = nenhuma (a do tema, a da condição). */
+  cor: string | undefined;
+  /** As bolinhas ao lado: a cor fora delas é a livre, e o botão a mostra. */
+  paleta: readonly string[];
+  rotulo?: string;
+  /** O botão, vestido como as bolinhas da fileira em que mora. */
+  className?: (livre: boolean) => string;
+  onCor: (cor: string) => void;
+}) {
+  const livre = cor !== undefined && !paleta.includes(cor);
+  const espera = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendente = useRef<string | null>(null);
+
+  function gravar() {
+    if (espera.current) clearTimeout(espera.current);
+    espera.current = null;
+    if (pendente.current) onCor(pendente.current);
+    pendente.current = null;
+  }
+
+  return (
+    <Popover
+      onOpenChange={(aberto) => {
+        if (!aberto) gravar();
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={rotulo}
+            aria-pressed={livre}
+            title={rotulo}
+            className={cn("shrink-0", className(livre))}
+            style={{ background: livre ? cor : ARCO_IRIS }}
+          />
+        }
+      />
+      <PopoverContent className="w-60 p-2" onPointerDown={(evento) => evento.stopPropagation()}>
+        <SeletorDeCor
+          cor={cor ?? "#ffffff"}
+          onChange={(hex) => {
+            pendente.current = hex;
+            if (espera.current) clearTimeout(espera.current);
+            espera.current = setTimeout(gravar, ESPERA_DO_TOM);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
 }
