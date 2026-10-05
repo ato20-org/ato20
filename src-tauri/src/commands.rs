@@ -1393,6 +1393,17 @@ pub fn efeito_apagar(state: State<'_, AppState>, id: String) -> AppResult<()> {
     state.with_vault(|vault| efeitos::apagar(vault, &id))
 }
 
+/// Da ao modelo o efeito proprio, e aponta as copias nas fichas para ele.
+/// Ver `condicoes::vincular_efeito`.
+#[tauri::command]
+pub fn condicao_modelo_vincular_efeito(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+    efeito: String,
+) -> AppResult<characters::Condicao> {
+    state.with_vault(|vault| condicoes::vincular_efeito(vault, &modeloId, &efeito))
+}
+
 /// Poe o cardapio na ordem pedida, que e a do submenu do token.
 #[tauri::command]
 pub fn condicoes_modelos_reordenar(

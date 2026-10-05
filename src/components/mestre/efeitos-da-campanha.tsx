@@ -1,30 +1,29 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import { ImagePlus, Plus, Trash2, X } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ImagePlus, X } from "lucide-react";
+import { toast } from "sonner";
 
-import { DeclarativoDoMestre } from "@/components/mestre/declarativo-do-mestre";
+import { AparenciaDaCondicao } from "@/components/mestre/linha-de-condicao";
+import { NomeDoMedidor } from "@/components/mestre/linha-de-medidor";
+import { DeclarativoProvider } from "@/components/playground/declarativo";
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { NumberField } from "@/components/ui/number-field";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { copiaParaACampanha, definicaoDoEfeito, urlDaImagemDaCampanha } from "@/lib/efeitos";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { useCondicoesStore } from "@/lib/store/use-condicoes-store";
+import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
+import { DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import { cn } from "@/lib/utils";
 import { importAssets } from "@/lib/vault/assets";
+import { vincularEfeitoDaCondicao } from "@/lib/vault/characters";
+import type { Condicao, PatchCondicao } from "@/types/character";
 import type {
   AnimacaoDoEfeito,
   DefinicaoDeEfeito,
@@ -38,104 +37,138 @@ import type {
 import amostra from "./amostra-da-figura.png";
 
 /**
- * Os efeitos que a campanha cria: o editor.
+ * A tela de uma condição da campanha: o selo dela e o EFEITO dela, numa tela
+ * só. Abre pela engrenagem da linha no cardápio.
  *
- * Só formulário, por escolha do mestre: cada camada do efeito -- a figura, a
- * imagem em volta, as partículas, a luz -- é uma seção que liga e desliga, com
- * os controles dela, e a prévia mostra o resultado numa figura de amostra
- * enquanto o controle anda. As imagens vêm do acervo da campanha, marcadas
- * como do efeito (escondidas da biblioteca, como o fundo de cena).
+ * Cada condição tem o seu efeito (escolha do mestre): a condição que ainda usa
+ * o fogo de fábrica abre com o fogo preenchido, e a PRIMEIRA mudança faz dele
+ * uma cópia desta campanha, ligada à condição e às cópias dela nas fichas --
+ * editar o fogo de "Em chamas" muda quem já está em chamas. Abrir e olhar não
+ * cria nada. Ver `useEfeitoDaCondicao`.
  *
- * O que se mexe vai para a mesa na hora e para o disco um instante depois --
- * ver `useEfeitosDaCampanhaStore`. Os números são presos de novo quando o
- * efeito é desenhado (`resolverExterno`, `particulasDosEfeitos`), então o que
- * o formulário deixa escolher é o que a mesa sabe desenhar.
+ * Só formulário, como o mestre pediu: cada camada do efeito -- a figura, a
+ * imagem em volta, as partículas, a luz -- é uma seção que liga e desliga, e
+ * a prévia mostra o resultado na cor da condição enquanto o controle anda.
  */
-export function EfeitosDaCampanha() {
-  const efeitos = useEfeitosDaCampanhaStore((state) => state.efeitos);
-  const criar = useEfeitosDaCampanhaStore((state) => state.criar);
-  const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
-  const apagar = useEfeitosDaCampanhaStore((state) => state.apagar);
-  const [escolhido, setEscolhido] = useState<string | null>(null);
-  const [aApagar, setAApagar] = useState<DefinicaoDeEfeito | null>(null);
-
-  if (efeitos === null) {
-    return <p className="text-muted-foreground text-xs">Lendo…</p>;
-  }
-
-  const atual = efeitos.find((efeito) => efeito.id === escolhido) ?? efeitos[0] ?? null;
-
-  async function novo() {
-    const criado = await criar();
-    if (criado) setEscolhido(criado.id);
-  }
+export function TelaDaCondicao({
+  modelo,
+  ocupado,
+  onEditar,
+  onVoltar,
+}: {
+  modelo: Condicao;
+  ocupado: boolean;
+  onEditar: (patch: PatchCondicao) => void;
+  onVoltar: () => void;
+}) {
+  const { efeito, mudar, renomear } = useEfeitoDaCondicao(modelo);
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-1">
-        {efeitos.map((efeito) => (
-          <button
-            key={efeito.id}
-            type="button"
-            aria-pressed={atual?.id === efeito.id}
-            className={cn(
-              "hover:bg-muted max-w-40 truncate rounded-md border px-2 py-1 text-xs",
-              atual?.id === efeito.id ? "bg-muted border-foreground/30" : "border-transparent",
-            )}
-            onClick={() => setEscolhido(efeito.id)}
-          >
-            {efeito.titulo}
-          </button>
-        ))}
-        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void novo()}>
-          <Plus />
-          Novo efeito
-        </Button>
+      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
+        <ArrowLeft />
+        Condições
+      </Button>
+
+      <div className="flex items-center gap-2 rounded-md border p-2.5">
+        <AparenciaDaCondicao condicao={modelo} ocupado={ocupado} onEditar={onEditar} comEfeito={false} />
+        <div className="flex min-w-0 flex-1 items-center gap-0.5">
+          <NomeDoMedidor
+            nome={modelo.nome}
+            ocupado={ocupado}
+            onGravar={(nome) => {
+              onEditar({ nome });
+              renomear(nome);
+            }}
+            rotulos={{ campo: "Nome da condição", lapis: "Renomear condição" }}
+          />
+        </div>
+        <label className="flex shrink-0 items-center gap-1.5">
+          <span className="text-muted-foreground text-[11px]">A mesa vê</span>
+          <Switch
+            size="sm"
+            checked={!modelo.escondido}
+            disabled={ocupado}
+            onCheckedChange={(vê) => onEditar({ escondido: !vê })}
+          />
+        </label>
       </div>
 
-      {atual ? (
-        <EditorDeEfeito
-          key={atual.id}
-          efeito={atual}
-          onMudar={salvar}
-          onApagar={() => setAApagar(atual)}
-        />
-      ) : (
-        <p className="text-muted-foreground text-[11px] leading-snug">
-          Um efeito é o que uma condição faz com a figura: um fogo em volta, partículas
-          subindo, uma luz, a cor por cima. Crie um aqui e escolha-o no efeito de uma
-          condição.
-        </p>
-      )}
-
-      <AlertDialog
-        open={aApagar !== null}
-        onOpenChange={(aberto) => {
-          if (!aberto) setAApagar(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Apagar {aApagar?.titulo}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              As condições que usam este efeito continuam com o selo, sem efeito na figura.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (aApagar) void apagar(aApagar.id);
-                setEscolhido(null);
-              }}
-            >
-              Apagar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <EditorDeEfeito efeito={efeito} cor={modelo.cor} onMudar={mudar} />
     </div>
   );
+}
+
+/** O id do efeito que a condição ainda não tem: a prévia antes da primeira mudança. */
+const PENDENTE = "campanha/pendente";
+
+/**
+ * O efeito de uma condição do cardápio, e o gesto de mudá-lo.
+ *
+ * - Já tem efeito da campanha: é ele, e mudar grava nele.
+ * - Ainda não tem (nenhum, o de fábrica, o de um plugin): a tela mostra o
+ *   atual, copiado; a primeira mudança cria o efeito da campanha, liga à
+ *   condição e às cópias nas fichas, e grava a mudança nele. As mudanças que
+ *   chegam enquanto isso não termina ficam na última, que é a que vale.
+ */
+function useEfeitoDaCondicao(modelo: Condicao) {
+  const efeitos = useEfeitosDaCampanhaStore((state) => state.efeitos);
+  const criar = useEfeitosDaCampanhaStore((state) => state.criar);
+  const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
+  const deFora = useDeclarativoStore((state) => state.efeitos);
+  const recarregarCondicoes = useCondicoesStore((state) => state.recarregar);
+  const recarregarPersonagens = useCharactersStore((state) => state.recarregar);
+  const [rascunho, setRascunho] = useState<DefinicaoDeEfeito | null>(null);
+  const criando = useRef<Promise<string | null> | null>(null);
+  const ultimo = useRef<DefinicaoDeEfeito | null>(null);
+
+  const proprio = modelo.efeito?.startsWith("campanha/")
+    ? efeitos?.find((efeito) => efeito.id === modelo.efeito)
+    : undefined;
+
+  const atual = useMemo<DefinicaoDeEfeito>(() => {
+    const deAgora = definicaoDoEfeito(modelo.efeito, deFora);
+    return deAgora
+      ? copiaParaACampanha(deAgora, PENDENTE, modelo.nome)
+      : { id: PENDENTE, titulo: modelo.nome };
+  }, [modelo.efeito, modelo.nome, deFora]);
+
+  const efeito = proprio ?? rascunho ?? atual;
+
+  function mudar(novo: DefinicaoDeEfeito) {
+    if (proprio) {
+      salvar(novo);
+      return;
+    }
+
+    ultimo.current = novo;
+    setRascunho(novo);
+    criando.current ??= (async () => {
+      const criado = await criar();
+      if (!criado) return null;
+
+      try {
+        await vincularEfeitoDaCondicao(modelo.id, criado.id);
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : "Falha ao ligar o efeito.");
+      }
+      recarregarCondicoes();
+      recarregarPersonagens();
+      return criado.id;
+    })();
+
+    void criando.current.then((id) => {
+      if (id && ultimo.current) salvar({ ...ultimo.current, id, titulo: modelo.nome });
+      setRascunho(null);
+    });
+  }
+
+  /** O efeito leva o nome da condição: é como ele aparece no seletor da ficha. */
+  function renomear(nome: string) {
+    if (proprio) salvar({ ...proprio, titulo: nome });
+  }
+
+  return { efeito, mudar, renomear };
 }
 
 /** Um campo fora do objeto: `undefined` some, e o arquivo não ganha campo vazio. */
@@ -148,14 +181,14 @@ function com<T extends object, K extends keyof T>(objeto: T, chave: K, valor: T[
 
 function EditorDeEfeito({
   efeito,
+  cor,
   onMudar,
-  onApagar,
 }: {
   efeito: DefinicaoDeEfeito;
+  /** A cor da condição: é nela que a prévia pinta. */
+  cor: string;
   onMudar: (efeito: DefinicaoDeEfeito) => void;
-  onApagar: () => void;
 }) {
-  const [cor, setCor] = useState<string>(CORES_LAPIS[1] ?? "#f59e0b");
   const mudar = <K extends keyof DefinicaoDeEfeito>(chave: K, valor: DefinicaoDeEfeito[K] | undefined) =>
     onMudar(com(efeito, chave, valor));
 
@@ -166,50 +199,13 @@ function EditorDeEfeito({
   };
 
   return (
-    <div className="@container space-y-3">
+    <div className="@container">
       <div className="grid gap-3 @lg:grid-cols-[14rem_1fr]">
-        <div className="space-y-2 @lg:sticky @lg:top-0 @lg:self-start">
+        <div className="@lg:sticky @lg:top-0 @lg:self-start">
           <Previa efeito={efeito} cor={cor} />
-          <div className="flex items-center gap-1">
-            <span className="text-muted-foreground mr-1 text-[11px]">Cor da condição</span>
-            {CORES_LAPIS.map((opcao) => (
-              <button
-                key={opcao}
-                type="button"
-                aria-label={`Prévia na cor ${opcao}`}
-                aria-pressed={cor === opcao}
-                className={cn(
-                  "size-5 rounded-full border-2",
-                  cor === opcao ? "border-foreground" : "border-transparent",
-                )}
-                style={{ backgroundColor: opcao }}
-                onClick={() => setCor(opcao)}
-              />
-            ))}
-          </div>
         </div>
 
         <div className="space-y-3">
-          <div className="grid gap-2 @sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs">Nome</span>
-              <Input
-                value={efeito.titulo}
-                maxLength={40}
-                onChange={(evento) => mudar("titulo", evento.target.value)}
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs">Dica</span>
-              <Input
-                value={efeito.dica ?? ""}
-                maxLength={120}
-                placeholder="Uma linha, embaixo do seletor"
-                onChange={(evento) => mudar("dica", evento.target.value || undefined)}
-              />
-            </label>
-          </div>
-
           <Secao titulo="Na figura" descricao="O que acontece com a própria figura.">
             <Interruptor rotulo="Halo atrás" valor={Boolean(figura.halo)} onMudar={(v) => mudarFigura("halo", v || undefined)} />
             <Interruptor
@@ -228,16 +224,6 @@ function EditorDeEfeito({
           <SecaoDoExterno externo={efeito.externo} onMudar={(externo) => mudar("externo", externo)} />
           <SecaoDasParticulas particulas={efeito.particulas} onMudar={(p) => mudar("particulas", p)} />
           <SecaoDaLuz luz={efeito.luz} onMudar={(luz) => mudar("luz", luz)} />
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-destructive h-7 text-xs"
-            onClick={onApagar}
-          >
-            <Trash2 />
-            Apagar efeito
-          </Button>
         </div>
       </div>
     </div>
@@ -476,6 +462,16 @@ function SecaoDaLuz({
  */
 function Previa({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
   const pedidos = useMemo(() => [{ efeito: efeito.id, cor }], [efeito.id, cor]);
+  // A definição DA TELA, e não a do catálogo: antes da primeira mudança o
+  // efeito ainda não existe, e enquanto o controle anda a do catálogo está um
+  // passo atrás.
+  const declarativo = useMemo<Declarativo>(
+    () => ({
+      ...DECLARATIVO_VAZIO,
+      efeitos: { [efeito.id]: { ...efeito, origem: { acervo: true } } },
+    }),
+    [efeito],
+  );
   const lado = 88;
   const luz = efeito.luz;
   const raioDaLuz = luz ? Math.min(Math.max(luz.raio, 0.5), 10) * lado : 0;
@@ -497,9 +493,9 @@ function Previa({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
         />
       ) : null}
       <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 24, width: lado, height: lado }}>
-        {/* O declarativo do Mestre por perto: é por ele que o efeito da
-            campanha chega ao `FiguraComEfeitos`, como no palco. */}
-        <DeclarativoDoMestre>
+        {/* Um declarativo só com este efeito: é por ele que o
+            `FiguraComEfeitos` acha a definição, como no palco. */}
+        <DeclarativoProvider valor={declarativo}>
           <FiguraComEfeitos
             efeitos={pedidos}
             url={amostra.src}
@@ -516,7 +512,7 @@ function Previa({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
               />
             )}
           </FiguraComEfeitos>
-        </DeclarativoDoMestre>
+        </DeclarativoProvider>
       </div>
     </div>
   );
@@ -761,7 +757,11 @@ function ImagemDoAcervo({
   assetId: string | undefined;
   onMudar: (assetId: string | undefined) => void;
 }) {
-  const url = useAssetUrl(assetId, "mini");
+  // A arte que veio de um pack (a cópia do fogo de fábrica) não é arquivo do
+  // acervo: o endereço sai da própria referência.
+  const deUmPack = assetId?.startsWith("fabrica:") || assetId?.startsWith("plugin:");
+  const doAcervo = useAssetUrl(deUmPack ? undefined : assetId, "mini");
+  const url = deUmPack && assetId ? urlDaImagemDaCampanha(assetId) : doAcervo;
 
   async function escolher() {
     const resultado = await importAssets("image", "efeito");

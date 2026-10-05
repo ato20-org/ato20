@@ -191,22 +191,86 @@ function urlDaImagem(definicao: DefinicaoDeEfeito, arquivo: string): string | nu
   if (!origem) return null;
 
   if ("app" in origem) return origem.arquivos[arquivo] ?? null;
-  if ("acervo" in origem) return urlDoAcervo(arquivo);
+  if ("acervo" in origem) return urlDaImagemDaCampanha(arquivo);
 
   return urlDaImagemDoEstilo(origem.plugin, arquivo, origem.versao);
 }
 
 /**
- * O endereço de um arquivo do acervo para ESTA tela: relativo na TV e no
- * celular, que o daemon serve; no Mestre, o do daemon, que é outra origem.
- * Id que não parece id de arquivo não vira caminho nenhum.
+ * O endereço de uma imagem de efeito da CAMPANHA para esta tela.
+ *
+ * Três formas, porque o efeito da campanha pode ter nascido de outro:
+ *
+ * - o id de um arquivo do acervo -- relativo na TV e no celular, que o daemon
+ *   serve; no Mestre, o do daemon, que é outra origem;
+ * - `fabrica:{pasta}/{arquivo}` -- a arte de um pack de fábrica, quando a
+ *   condição configurou o fogo de "Em chamas" e a cópia ficou com a arte dele;
+ * - `plugin:{id}@{versao}/{caminho}` -- a arte de um plugin, pelo mesmo motivo.
+ *
+ * O que não é nenhuma das três não vira caminho nenhum.
  */
-function urlDoAcervo(id: string): string | null {
-  if (!/^[A-Za-z0-9-]{1,64}$/.test(id)) return null;
-  if (!isDesktop()) return `/asset/${id}`;
+export function urlDaImagemDaCampanha(referencia: string): string | null {
+  if (referencia.startsWith("fabrica:")) {
+    const [pasta, ...resto] = referencia.slice("fabrica:".length).split("/");
+    const pack = PACKS_DE_FABRICA.find((cada) => cada.pasta === pasta);
+    return pack?.arquivos[resto.join("/")] ?? null;
+  }
+
+  if (referencia.startsWith("plugin:")) {
+    const corpo = referencia.slice("plugin:".length);
+    const barra = corpo.indexOf("/");
+    const [plugin, versao = ""] = corpo.slice(0, barra).split("@");
+    if (barra < 0 || !plugin || !efeitoValido(plugin)) return null;
+    return urlDaImagemDoEstilo(plugin, corpo.slice(barra + 1), versao);
+  }
+
+  if (!/^[A-Za-z0-9-]{1,64}$/.test(referencia)) return null;
+  if (!isDesktop()) return `/asset/${referencia}`;
 
   const daemon = daemonAddrSeConhecido();
-  return daemon ? `${daemon.url}/asset/${id}` : null;
+  return daemon ? `${daemon.url}/asset/${referencia}` : null;
+}
+
+/**
+ * Uma cópia do efeito para a CAMPANHA, com outro id e outro nome: o que a
+ * condição configura quando ainda usava o fogo de fábrica ou o de um plugin. A
+ * arte não é copiada -- cada imagem passa a apontar para onde já estava (ver
+ * `urlDaImagemDaCampanha`), e a origem vira a do acervo.
+ */
+export function copiaParaACampanha(
+  definicao: DefinicaoDeEfeito,
+  id: string,
+  titulo: string,
+): DefinicaoDeEfeito {
+  const origem = definicao.origem;
+  const referencia = (arquivo: string | undefined): string | undefined => {
+    if (!arquivo || !origem) return arquivo;
+    if ("app" in origem) return `fabrica:${origem.app}/${arquivo}`;
+    if ("plugin" in origem) return `plugin:${origem.plugin}@${origem.versao}/${arquivo}`;
+    return arquivo;
+  };
+
+  const copia: DefinicaoDeEfeito = JSON.parse(JSON.stringify(definicao));
+  delete copia.origem;
+  copia.id = id;
+  copia.titulo = titulo;
+
+  if (copia.externo) {
+    const externo = copia.externo;
+    externo.imagem = referencia(externo.imagem) ?? "";
+    if (externo.mascara) externo.mascara = referencia(externo.mascara);
+    if (externo.profundidade) externo.profundidade = referencia(externo.profundidade);
+    if (externo.cores && externo.cores !== "condicao") externo.cores = referencia(externo.cores);
+    if (externo.mipmaps) {
+      externo.mipmaps = Object.fromEntries(
+        Object.entries(externo.mipmaps).map(([lado, arquivo]) => [lado, referencia(arquivo) ?? arquivo]),
+      );
+    }
+  }
+  if (copia.interno) copia.interno.textura = referencia(copia.interno.textura) ?? "";
+  if (copia.particulas?.imagem) copia.particulas.imagem = referencia(copia.particulas.imagem);
+
+  return copia;
 }
 
 /** O tamanho do externo quando o efeito não disse. Um halo largo, não um segundo token. */

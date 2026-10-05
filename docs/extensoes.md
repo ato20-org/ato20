@@ -509,15 +509,19 @@ ou repetido fica de fora. Os climas de antes (`aura`, `tingido`, `translucido`,
 `tremendo`, `apagado`) saíram; a condição que ainda aponta para um deles
 mostra só o selo.
 
-A terceira fonte é a **campanha**: o tópico "Efeitos" da configuração da
-campanha é um editor -- seções que ligam e desligam (na figura, imagem em
-volta, partículas, luz), com prévia ao vivo numa figura de amostra. O efeito
-fica em `efeitos.json` na raiz da campanha (viaja no zip), com id
-`campanha/{código}`; as imagens vêm do acervo, marcadas como do efeito e
-escondidas da biblioteca. Chega à TV e ao celular pelo mesmo canal
-declarativo dos efeitos de plugin. O Rust confere só a casca (id, título,
-tamanho, teto de 32); os números de cada camada são presos ao desenhar, como
-os de qualquer fonte.
+A terceira fonte é a **campanha**, e nela o efeito é de uma CONDIÇÃO: no
+cardápio (Configuração da campanha → Condições), a engrenagem de cada linha
+abre a tela da condição -- o selo (nome, cor, ícone, se a mesa vê) e o efeito
+dela, em seções que ligam e desligam (na figura, imagem em volta, partículas,
+luz), com prévia ao vivo na cor da condição. A condição que ainda usa o fogo
+de fábrica abre com ele preenchido; a primeira mudança faz dele uma cópia da
+campanha (a arte continua apontando para o pack: `fabrica:{pasta}/{arquivo}`)
+e liga a condição e as cópias dela nas fichas ao efeito novo -- editar o fogo
+de "Em chamas" muda quem já está em chamas. O efeito fica em `efeitos.json` na
+raiz da campanha (viaja no zip), com id `campanha/{código}`; as imagens novas
+vêm do acervo, escondidas da biblioteca. Chega à TV e ao celular pelo mesmo
+canal declarativo dos efeitos de plugin. O Rust confere só a casca (id, título,
+tamanho, teto de 32); os números de cada camada são presos ao desenhar.
 
 O fogo de fábrica usa campos que, por ora, **só a fábrica lê** (o Rust do
 plugin não os aceita ainda):

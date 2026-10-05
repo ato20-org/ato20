@@ -245,6 +245,7 @@ pub fn run() {
             commands::character_condicoes_reordenar,
             commands::condicao_alternar,
             commands::condicoes_list,
+            commands::condicao_modelo_vincular_efeito,
             commands::efeitos_list,
             commands::efeito_criar,
             commands::efeito_salvar,

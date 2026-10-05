@@ -39,15 +39,23 @@ export const TOPICOS_DA_CAMPANHA = [
     chave: "condicoes",
     titulo: "Condições",
     descricao: "O que o botão direito do token oferece.",
-    palavras: ["veneno", "caido", "token", "efeito", "icone", "sugestoes"],
-  },
-  {
-    // Logo depois das condições: um efeito é o que uma condição faz com a
-    // figura, e quem cria um vai escolhê-lo numa condição em seguida.
-    chave: "efeitos",
-    titulo: "Efeitos",
-    descricao: "O que uma condição faz com a figura: fogo, partículas, luz, cor.",
-    palavras: ["fogo", "chamas", "particula", "fagulha", "luz", "brilho", "imagem", "aura", "animacao"],
+    // O efeito de cada condição se configura aqui, pela engrenagem: quem
+    // procura o fogo ou a fagulha acha as condições.
+    palavras: [
+      "veneno",
+      "caido",
+      "token",
+      "efeito",
+      "icone",
+      "sugestoes",
+      "fogo",
+      "chamas",
+      "particula",
+      "fagulha",
+      "luz",
+      "brilho",
+      "animacao",
+    ],
   },
   {
     chave: "layout",

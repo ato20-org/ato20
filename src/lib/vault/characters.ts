@@ -486,6 +486,15 @@ export function editarCondicaoDaCampanha(
   return call<Condicao>("condicao_modelo_editar", { modeloId, patch });
 }
 
+/**
+ * Dá à condição do cardápio o efeito próprio, e aponta para ele toda cópia com
+ * o nome dela nas fichas: configurar o fogo de "Em chamas" muda também quem
+ * já está em chamas. Ver `condicoes::vincular_efeito`.
+ */
+export function vincularEfeitoDaCondicao(modeloId: string, efeito: string): Promise<Condicao> {
+  return call<Condicao>("condicao_modelo_vincular_efeito", { modeloId, efeito });
+}
+
 /** Tira a condição do cardápio. As cópias nas fichas ficam. */
 export function removerCondicaoDaCampanha(modeloId: string): Promise<void> {
   return call("condicao_modelo_remover", { modeloId });
