@@ -16,11 +16,13 @@ import {
 
 describe("EFEITOS_DE_FABRICA", () => {
   it("são as pastas de src/efeitos, descobertas, em ordem de título", () => {
-    // Em ordem de título: "Congelado", "Em chamas", "Envenenado", "Sangrando".
+    // Em ordem de título: "Congelado", "Em chamas", "Envenenado", "Molhado",
+    // "Sangrando".
     expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual([
       "congelado",
       "chamas",
       "envenenado",
+      "molhado",
       "sangrando",
     ]);
     expect(definicaoDoEfeito("chamas")?.origem).toMatchObject({ app: "chamas" });
@@ -432,6 +434,36 @@ describe("o sangrando de fábrica", () => {
     const particulas = particulasDosEfeitos(pedidos)!;
 
     expect(particulas.imagem).toContain("gota.png");
+    expect(particulas.direcao).toBe(90);
+    expect(particulas.quadros).toEqual({ colunas: 4, total: 4 });
+    expect(particulas.pintar).toBe(false);
+  });
+});
+
+describe("o molhado de fábrica", () => {
+  const pedidos = [{ efeito: "molhado", cor: "#0ea5e9" }];
+
+  it("azula a figura e prende gotas d'água na pele", () => {
+    const camadas = camadasDaFigura(pedidos);
+
+    expect(camadas.tinta).toEqual({ cor: "#0ea5e9", forca: 0.25 });
+    expect(camadas.textura!.url).toContain("gotas.png");
+    expect(camadas.textura!.forca).toBeCloseTo(0.9);
+  });
+
+  it("a poça aos pés é parada, por medida: uma imagem só, na rampa da condição", () => {
+    const externo = camadasDaFigura(pedidos).externo!;
+
+    expect(externo.quadros).toBeUndefined();
+    expect(externo.cores).toEqual({ cor: "#0ea5e9" });
+    expect(externo.lado).toBe("atras");
+    expect(externo.niveis.map((nivel) => nivel.lado)).toEqual([128, 256, 512]);
+  });
+
+  it("os pingos caem, e o sprite toca uma vez ao longo da queda", () => {
+    const particulas = particulasDosEfeitos(pedidos)!;
+
+    expect(particulas.imagem).toContain("pingo.png");
     expect(particulas.direcao).toBe(90);
     expect(particulas.quadros).toEqual({ colunas: 4, total: 4 });
     expect(particulas.pintar).toBe(false);

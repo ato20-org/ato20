@@ -1,0 +1,43 @@
+{
+  "id": "molhado",
+  "titulo": "Molhado",
+  "dica": "A figura encharcada, com gotas na pele, pingando numa poça aos pés.",
+  "figura": {
+    "tinta": 0.25
+  },
+  "interno": {
+    "textura": "gotas.png",
+    "forca": 0.9
+  },
+  "externo": {
+    "imagem": "poca-512.webp",
+    "mipmaps": {
+      "128": "poca-128.webp",
+      "256": "poca-256.webp",
+      "512": "poca-512.webp"
+    },
+    "tamanho": 1.4,
+    "ancora": "base",
+    "lado": "atras",
+    "cores": "condicao"
+  },
+  "particulas": {
+    "quantidade": 5,
+    "imagem": "pingo.png",
+    "quadros": {
+      "colunas": 4,
+      "total": 4
+    },
+    "tamanho": 0.11,
+    "variacao": 0.4,
+    "direcao": 90,
+    "abertura": 10,
+    "velocidade": 0.45,
+    "vida": 1.1,
+    "emissor": {
+      "largura": 0.7,
+      "altura": 0.5,
+      "ancora": "centro"
+    }
+  }
+}
