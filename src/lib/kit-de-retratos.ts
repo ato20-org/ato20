@@ -1,6 +1,6 @@
 import type { EfeitoPedido } from "@/lib/condicao";
 import { caixaDaComposicao } from "@/lib/geometry/portrait";
-import { EFEITOS_NA_FIGURA, type EfeitoNaFigura } from "@/types/character";
+import { efeitoValido } from "@/lib/efeitos";
 import { rotulosDoDado, TIPOS_DADO, type FacesDado, type RolagemDaMesa } from "@/types/dado";
 import { SCENE_HEIGHT, SCENE_WIDTH, type Portrait } from "@/types/scene";
 
@@ -53,11 +53,13 @@ function lerEfeitos(cru: unknown): EfeitoPedido[] {
   return cru.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const { efeito, cor } = item as Record<string, unknown>;
-    if (!EFEITOS_NA_FIGURA.includes(efeito as EfeitoNaFigura)) return [];
+    // Só a FORMA do id: o efeito de um plugin que o kit não desenha cai no
+    // nada, como em qualquer tela. Ver `definicaoDoEfeito`.
+    if (!efeitoValido(efeito)) return [];
     // A cor vai para um estilo: só a forma de cor que o aplicativo grava.
     if (typeof cor !== "string" || !/^#[0-9a-f]{3,8}$/i.test(cor)) return [];
 
-    return [{ efeito: efeito as EfeitoNaFigura, cor }];
+    return [{ efeito, cor }];
   });
 }
 

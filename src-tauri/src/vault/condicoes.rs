@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::atomic::{read_json, write_json};
-use super::characters::{ajustar_condicao, Condicao, EfeitoNaFigura, PatchCondicao};
+use super::characters::{ajustar_condicao, Condicao, PatchCondicao};
 use super::Vault;
 use crate::error::{AppError, AppResult};
 
@@ -70,7 +70,7 @@ pub fn criar(
     nome: &str,
     cor: &str,
     icone: &str,
-    efeito: Option<EfeitoNaFigura>,
+    efeito: Option<String>,
 ) -> AppResult<Condicao> {
     let mut modelos = load(vault)?;
 
@@ -175,7 +175,7 @@ mod tests {
         let (_tmp, vault) = vault();
         characters::create(&vault, "Edgar").unwrap();
 
-        criar(&vault, "Envenenado", "#22c55e", "frasco", Some(EfeitoNaFigura::Tingido)).unwrap();
+        criar(&vault, "Envenenado", "#22c55e", "frasco", Some("tingido".into())).unwrap();
 
         assert_eq!(load(&vault).unwrap().len(), 1);
         assert!(characters::load(&vault).unwrap()[0].condicoes.is_empty());
@@ -196,7 +196,7 @@ mod tests {
     fn editar_o_modelo_nao_mexe_na_copia_da_ficha() {
         let (_tmp, vault) = vault();
         let modelo =
-            criar(&vault, "Envenenado", "#22c55e", "frasco", Some(EfeitoNaFigura::Tingido)).unwrap();
+            criar(&vault, "Envenenado", "#22c55e", "frasco", Some("tingido".into())).unwrap();
         let p = characters::create(&vault, "Edgar").unwrap();
         characters::alternar_condicao(&vault, &[p.id.clone()], &modelo, true).unwrap();
 

@@ -6,11 +6,12 @@ import { faseDaFigura, type EfeitoPedido } from "@/lib/condicao";
 import {
   assarAura,
   assarPele,
+  forcaDaTinta,
   type Assado,
   type PedidoDePele,
 } from "@/lib/efeito-na-figura";
+import { camadasDaFigura } from "@/lib/efeitos";
 import { cn } from "@/lib/utils";
-import type { EfeitoNaFigura } from "@/types/character";
 
 /**
  * O período de cada animação, em segundos. Espelha o `globals.css`, e é daqui
@@ -69,7 +70,7 @@ export function FiguraComEfeitos({
   lugar,
   children,
 }: {
-  /** Já resolvidos: um de cada, sem os escondidos. Ver `efeitosDaFigura`. */
+  /** Já resolvidos, sem os escondidos. Ver `efeitosDaFigura`. */
   efeitos: ReadonlyArray<EfeitoPedido> | undefined;
   /** A figura de onde a silhueta sai. */
   url: string | null;
@@ -81,15 +82,16 @@ export function FiguraComEfeitos({
   lugar?: LugarDaFigura | null;
   children: (fonte: string | null) => ReactNode;
 }) {
-  const aura = pedido(efeitos, "aura");
-  const translucido = Boolean(pedido(efeitos, "translucido"));
-  const tremendo = Boolean(pedido(efeitos, "tremendo"));
+  const camadas = camadasDaFigura(efeitos);
+  const translucido = camadas.translucido;
+  const tremendo = camadas.tremor;
 
   const pele = usePele(url, {
-    apagado: Boolean(pedido(efeitos, "apagado")),
-    tinta: pedido(efeitos, "tingido")?.cor,
+    cinza: camadas.cinza,
+    tinta: camadas.tinta?.cor,
+    forca: camadas.tinta?.forca,
   });
-  const halo = useAura(url, aura?.cor);
+  const halo = useAura(url, camadas.halo);
 
   // Até a pele sair do forno, a figura de sempre. Um quadro colorido antes do
   // cinza é melhor que um quadro sem figura.
@@ -145,14 +147,6 @@ export function FiguraComEfeitos({
       </div>
     </>
   );
-}
-
-/** O pedido deste efeito, se há um. */
-function pedido(
-  efeitos: ReadonlyArray<EfeitoPedido> | undefined,
-  efeito: EfeitoNaFigura,
-): EfeitoPedido | undefined {
-  return efeitos?.find((atual) => atual.efeito === efeito);
 }
 
 /**
@@ -227,8 +221,8 @@ function useAssado(
 
 function usePele(url: string | null, pedido: PedidoDePele): Assado | null {
   const chave =
-    url && (pedido.apagado || pedido.tinta)
-      ? `${url}|${pedido.apagado}|${pedido.tinta ?? ""}`
+    url && (pedido.cinza || pedido.tinta)
+      ? `${url}|${pedido.cinza}|${pedido.tinta ?? ""}|${forcaDaTinta(pedido.forca)}`
       : null;
 
   return useAssado(chave, () => assarPele(url!, pedido));

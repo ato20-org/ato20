@@ -1269,7 +1269,7 @@ pub fn character_condicao_criar(
     nome: String,
     cor: String,
     icone: String,
-    efeito: Option<characters::EfeitoNaFigura>,
+    efeito: Option<String>,
 ) -> AppResult<characters::Condicao> {
     state.with_vault(|vault| characters::criar_condicao(vault, &id, &nome, &cor, &icone, efeito))
 }
@@ -1340,7 +1340,7 @@ pub fn condicao_modelo_criar(
     nome: String,
     cor: String,
     icone: String,
-    efeito: Option<characters::EfeitoNaFigura>,
+    efeito: Option<String>,
 ) -> AppResult<characters::Condicao> {
     state.with_vault(|vault| condicoes::criar(vault, &nome, &cor, &icone, efeito))
 }

@@ -13,7 +13,6 @@ import type {
   Aparencia,
   CampoPersonagem,
   Condicao,
-  EfeitoNaFigura,
   EstiloMedidor,
   Medidor,
   ModeloDeMedidor,
@@ -417,7 +416,7 @@ export function criarCondicao(
   nome: string,
   cor: string,
   icone: string,
-  efeito: EfeitoNaFigura | null,
+  efeito: string | null,
 ): Promise<Condicao> {
   return call<Condicao>("character_condicao_criar", {
     id,
@@ -474,7 +473,7 @@ export function criarCondicaoDaCampanha(
   nome: string,
   cor: string,
   icone: string,
-  efeito: EfeitoNaFigura | null,
+  efeito: string | null,
 ): Promise<Condicao> {
   return call<Condicao>("condicao_modelo_criar", { nome, cor, icone, efeito });
 }
