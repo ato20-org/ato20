@@ -14,6 +14,10 @@ import { esquecerAcervo } from "@/lib/store/use-assets-store";
 import { esquecerMarcadores } from "@/lib/store/use-marcadores-store";
 import { carregarPersonagens, esquecerPersonagens } from "@/lib/store/use-characters-store";
 import { esquecerCondicoes } from "@/lib/store/use-condicoes-store";
+import {
+  esquecerEfeitosDaCampanha,
+  useEfeitosDaCampanhaStore,
+} from "@/lib/store/use-efeitos-da-campanha-store";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { listAssets } from "@/lib/vault/assets";
 import { listFolders } from "@/lib/vault/folders";
@@ -79,6 +83,9 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       esquecerAcervo();
       esquecerPersonagens();
       esquecerCondicoes();
+      // Os efeitos que a outra campanha criou: a condição desta que apontasse
+      // para um id igual desenharia o fogo da outra mesa.
+      esquecerEfeitosDaCampanha();
       // Os marcadores são da campanha, e a menção `!rótulo` resolveria nas
       // páginas que a OUTRA mesa marcou.
       esquecerMarcadores();
@@ -96,10 +103,13 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
         // As configurações da campanha vão junto: outro arquivo independente,
         // e um que nunca falha a abertura -- ilegível vira erro na tela de
         // Configurações e os padrões seguem valendo.
+        // Os efeitos da campanha também: a condição que aponta para um deles
+        // tem de desenhar no palco e na TV desde o primeiro quadro.
         await Promise.all([
           hydratePortraits(campaign.path),
           hydrateTrack(campaign.path),
           useConfiguracoesStore.getState().carregar("campanha"),
+          useEfeitosDaCampanhaStore.getState().carregar(),
         ]);
         if (!ativo) return;
         setFase("acervo");

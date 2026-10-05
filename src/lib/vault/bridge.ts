@@ -166,7 +166,23 @@ export type DaemonAddr = {
 let addrPromise: Promise<DaemonAddr> | null = null;
 
 export function daemonAddr(): Promise<DaemonAddr> {
-  addrPromise ??= call<DaemonAddr>("daemon_addr");
+  addrPromise ??= call<DaemonAddr>("daemon_addr").then((addr) => {
+    addrConhecido = addr;
+    return addr;
+  });
 
   return addrPromise;
+}
+
+/** O endereço do daemon, se alguém já perguntou e ele respondeu. */
+let addrConhecido: DaemonAddr | null = null;
+
+/**
+ * O endereço do daemon SEM esperar, para quem resolve de forma síncrona -- o
+ * catálogo de efeitos, que desenha a imagem do acervo no meio de um render.
+ * `null` até a primeira resposta de `daemonAddr`: quem precisa espera por ela
+ * antes de pôr o efeito na mesa.
+ */
+export function daemonAddrSeConhecido(): DaemonAddr | null {
+  return addrConhecido;
 }

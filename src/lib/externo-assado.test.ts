@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { precisaDeForno } from "./externo-assado";
-import { gradeDoSprite, processarFolha, rampaDaCor, tamanhoDoSprite } from "./folha-de-efeito";
+import {
+  gradeDoSprite,
+  processarFolha,
+  rampaDaCor,
+  tamanhoDaFolha,
+  tamanhoDoSprite,
+} from "./folha-de-efeito";
 
 describe("rampaDaCor", () => {
   it("escura no frio, a cor no meio, quase branca no miolo", () => {
@@ -73,5 +79,12 @@ describe("o sprite da partícula", () => {
       fps: 12,
     });
     expect(gradeDoSprite()).toEqual({ colunas: 1, linhas: 1, total: 1 });
+  });
+});
+
+describe("tamanhoDaFolha", () => {
+  it("a foto grande do editor é assada com o quadro até 1024, e a grade fica cheia", () => {
+    expect(tamanhoDaFolha(4000, 3000, 1, 1)).toEqual({ largura: 1024, altura: 768, ql: 1024, qa: 768 });
+    expect(tamanhoDaFolha(2048, 2048, 4, 4)).toEqual({ largura: 2048, altura: 2048, ql: 512, qa: 512 });
   });
 });

@@ -11,6 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import {
+  Flame,
   Gauge,
   LayoutTemplate,
   Move,
@@ -22,6 +23,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
+import { EfeitosDaCampanha } from "@/components/mestre/efeitos-da-campanha";
 import { toast } from "sonner";
 
 import {
@@ -61,6 +63,7 @@ import {
   type TopicoDaCampanha,
 } from "@/lib/mestre/topicos-da-campanha";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
+import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
   aplicarModelosEmTodos,
@@ -90,6 +93,7 @@ const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
   quadro: Shapes,
   medidores: Gauge,
   condicoes: Sparkles,
+  efeitos: Flame,
   layout: LayoutTemplate,
   posicao: Move,
   ajustes: SlidersHorizontal,
@@ -127,6 +131,7 @@ export function ConfiguracaoDaCampanhaBody() {
   // montado para contar.
   const medidores = useModelosDaCampanha();
   const { modelos: condicoes } = useCondicoesDaCampanha();
+  const efeitos = useEfeitosDaCampanhaStore((state) => state.efeitos);
   const definicoes = useConfiguracoesStore((state) => state.definicoes);
 
   const ajustes = useMemo(
@@ -143,6 +148,7 @@ export function ConfiguracaoDaCampanhaBody() {
     const achados = topicosAchados(busca, {
       medidores: (medidores.modelos ?? []).map((modelo) => modelo.nome),
       condicoes: (condicoes ?? []).map((condicao) => condicao.nome),
+      efeitos: (efeitos ?? []).map((efeito) => efeito.titulo),
     });
     // Ajustes só existe com algo para ajustar -- hoje, só quando um plugin
     // declara. E acha pelos próprios ajustes, com a MESMA conta da lista.
@@ -155,7 +161,7 @@ export function ConfiguracaoDaCampanhaBody() {
         ? ajustes.length > 0 && (achados.includes(chave) || ajusteAchado)
         : achados.includes(chave),
     );
-  }, [busca, medidores.modelos, condicoes, ajustes]);
+  }, [busca, medidores.modelos, condicoes, efeitos, ajustes]);
 
   // O tópico aberto pode sumir -- o plugin do único ajuste foi desligado.
   const atual = topicos.includes(aberto) ? aberto : "quadro";
@@ -276,6 +282,15 @@ function Topico({
       return <MedidoresDaCampanha {...medidores} />;
     case "condicoes":
       return <CondicoesDaCampanha />;
+    case "efeitos":
+      return (
+        <Secao
+          titulo="Efeitos"
+          descricao="O que uma condição faz com a figura. Crie aqui, e escolha no efeito da condição."
+        >
+          <EfeitosDaCampanha />
+        </Secao>
+      );
     case "layout":
       return (
         <Secao

@@ -42,6 +42,14 @@ export const TOPICOS_DA_CAMPANHA = [
     palavras: ["veneno", "caido", "token", "efeito", "icone", "sugestoes"],
   },
   {
+    // Logo depois das condições: um efeito é o que uma condição faz com a
+    // figura, e quem cria um vai escolhê-lo numa condição em seguida.
+    chave: "efeitos",
+    titulo: "Efeitos",
+    descricao: "O que uma condição faz com a figura: fogo, partículas, luz, cor.",
+    palavras: ["fogo", "chamas", "particula", "fagulha", "luz", "brilho", "imagem", "aura", "animacao"],
+  },
+  {
     chave: "layout",
     titulo: "Layout dos retratos",
     descricao: "O que cada retrato mostra na mesa, e onde.",

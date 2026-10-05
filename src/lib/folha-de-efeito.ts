@@ -254,3 +254,24 @@ export function gradeDoSprite(quadros?: { colunas: number; total: number; fps?: 
     ...(quadros.fps ? { fps: quadros.fps } : {}),
   };
 }
+
+/**
+ * O tamanho em que a folha do EXTERNO é assada: cada quadro até 1024. A
+ * imagem que o mestre escolhe no editor pode ser uma foto de quatro mil
+ * pixels, e pintá-la inteira custaria segundos e dezenas de MB por cor -- num
+ * fogo que aparece com algumas centenas de pixels. A grade continua cheia.
+ */
+export function tamanhoDaFolha(
+  largura: number,
+  altura: number,
+  colunas: number,
+  linhas: number,
+): { largura: number; altura: number; ql: number; qa: number } {
+  const ql = largura / colunas;
+  const qa = altura / linhas;
+  const escala = Math.min(1, 1024 / Math.max(ql, qa, 1));
+  const qlFinal = Math.max(1, Math.round(ql * escala));
+  const qaFinal = Math.max(1, Math.round(qa * escala));
+
+  return { largura: qlFinal * colunas, altura: qaFinal * linhas, ql: qlFinal, qa: qaFinal };
+}

@@ -2,6 +2,7 @@ import type { EfeitoPedido } from "@/lib/condicao";
 import { PACKS_DE_FABRICA } from "@/efeitos";
 import { normalizarHex } from "@/lib/cor";
 import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
+import { daemonAddrSeConhecido, isDesktop } from "@/lib/vault/bridge";
 import type { ParticulasResolvidas } from "@/lib/particulas";
 import {
   EFEITOS_DA_LUZ,
@@ -190,8 +191,22 @@ function urlDaImagem(definicao: DefinicaoDeEfeito, arquivo: string): string | nu
   if (!origem) return null;
 
   if ("app" in origem) return origem.arquivos[arquivo] ?? null;
+  if ("acervo" in origem) return urlDoAcervo(arquivo);
 
   return urlDaImagemDoEstilo(origem.plugin, arquivo, origem.versao);
+}
+
+/**
+ * O endereço de um arquivo do acervo para ESTA tela: relativo na TV e no
+ * celular, que o daemon serve; no Mestre, o do daemon, que é outra origem.
+ * Id que não parece id de arquivo não vira caminho nenhum.
+ */
+function urlDoAcervo(id: string): string | null {
+  if (!/^[A-Za-z0-9-]{1,64}$/.test(id)) return null;
+  if (!isDesktop()) return `/asset/${id}`;
+
+  const daemon = daemonAddrSeConhecido();
+  return daemon ? `${daemon.url}/asset/${id}` : null;
 }
 
 /** O tamanho do externo quando o efeito não disse. Um halo largo, não um segundo token. */

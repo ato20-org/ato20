@@ -162,7 +162,9 @@ export function AparenciaDaCondicao({
   const efeito = condicao.efeito ?? null;
   const deFora = useDeclarativoStore((state) => state.efeitos);
   const definicao = definicaoDoEfeito(condicao.efeito, deFora);
-  const dePlugin = Object.values(deFora);
+  const todosDeFora = Object.values(deFora);
+  const daCampanha = todosDeFora.filter((opcao) => opcao.id.startsWith("campanha/"));
+  const dePlugin = todosDeFora.filter((opcao) => !opcao.id.startsWith("campanha/"));
 
   return (
     <Popover>
@@ -254,6 +256,23 @@ export function AparenciaDaCondicao({
               />
             ))}
           </div>
+          {daCampanha.length > 0 ? (
+            <>
+              <p className="text-muted-foreground pt-1 text-[10px] tracking-wide uppercase">
+                Da campanha
+              </p>
+              <div className="grid grid-cols-3 gap-1">
+                {daCampanha.map((opcao) => (
+                  <OpcaoDeEfeito
+                    key={opcao.id}
+                    titulo={opcao.titulo}
+                    escolhido={efeito === opcao.id}
+                    onEscolher={() => onEditar({ efeito: opcao.id })}
+                  />
+                ))}
+              </div>
+            </>
+          ) : null}
           {dePlugin.length > 0 ? (
             <>
               <p className="text-muted-foreground pt-1 text-[10px] tracking-wide uppercase">
