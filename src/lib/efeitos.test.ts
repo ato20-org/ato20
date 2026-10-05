@@ -7,14 +7,41 @@ import {
   efeitoValido,
   luzDosEfeitos,
   nivelDoExterno,
+  particulasDosEfeitos,
   TAMANHO_DO_EXTERNO,
   tamanhoNoPlano,
 } from "./efeitos";
 
 describe("EFEITOS_DE_FABRICA", () => {
-  it("é só o fogo, um pack que vem no aplicativo", () => {
+  it("são as pastas de src/efeitos, descobertas, em ordem de título", () => {
     expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual(["chamas"]);
-    expect(definicaoDoEfeito("chamas")?.origem).toEqual({ app: "efeitos/chamas", versao: "1" });
+    expect(definicaoDoEfeito("chamas")?.origem).toMatchObject({ app: "chamas" });
+  });
+
+  it("a partícula de imagem sai pintada na cor da condição, girando, com o sprite", () => {
+    const deFora = {
+      "x/simbolo": {
+        id: "x/simbolo",
+        titulo: "Símbolo",
+        origem: { plugin: "x", versao: "1" },
+        particulas: {
+          quantidade: 6,
+          imagem: "simbolo.webp",
+          pintar: true,
+          giro: 120,
+          quadros: { colunas: 4, total: 8 },
+        },
+      },
+    };
+    const particulas = particulasDosEfeitos([{ efeito: "x/simbolo", cor: "#a855f7" }], deFora);
+
+    expect(particulas).toMatchObject({
+      imagem: "/plugin/x/simbolo.webp?v=1",
+      pintar: true,
+      cor: "#a855f7",
+      giro: 120,
+      quadros: { colunas: 4, total: 8 },
+    });
   });
 
   it("os climas de antes saíram: a condição que os aponta fica só com o selo", () => {
@@ -219,12 +246,12 @@ describe("o fogo de fábrica", () => {
 
   it("vem da pasta do app, com quadros, mipmaps, cores da condição, máscara e profundidade", () => {
     expect(externo.niveis.map((nivel) => nivel.lado)).toEqual([128, 256, 512]);
-    expect(externo.niveis[0]!.url).toBe("/efeitos/chamas/chamas-128.webp?v=1");
+    expect(externo.niveis[0]!.url).toContain("chamas-128.webp");
     expect(externo.quadros).toEqual({ colunas: 4, total: 16, fps: 14 });
     // A cor da CONDIÇÃO: o mesmo fogo, azul.
     expect(externo.cores).toEqual({ cor: "#3b82f6" });
-    expect(externo.mascara).toBe("/efeitos/chamas/mascara.webp?v=1");
-    expect(externo.profundidade).toBe("/efeitos/chamas/profundidade.webp?v=1");
+    expect(externo.mascara).toContain("mascara.webp");
+    expect(externo.profundidade).toContain("profundidade.webp");
   });
 
   it("o mipmap é o menor que cobre o tamanho na tela, ou o maior", () => {
@@ -245,5 +272,23 @@ describe("o fogo de fábrica", () => {
     };
 
     expect(camadasDaFigura([{ efeito: "x/fumaca", cor: "#fff" }], torto).externo!.quadros).toBeUndefined();
+  });
+});
+
+describe("particulasDosEfeitos", () => {
+  it("as fagulhas do fogo saem na cor da condição, com os padrões preenchidos", () => {
+    const particulas = particulasDosEfeitos([{ efeito: "chamas", cor: "#3b82f6" }]);
+
+    expect(particulas).toMatchObject({ quantidade: 10, cor: "#3b82f6", direcao: 270 });
+    expect(particulas!.emissor.ancora).toBe("base");
+    expect(particulas!.imagem).toBeUndefined();
+  });
+
+  it("efeito sem partícula, ou com quantidade torta, não solta nada", () => {
+    const deFora = {
+      "x/nada": { id: "x/nada", titulo: "Nada", particulas: { quantidade: 0 } },
+    };
+
+    expect(particulasDosEfeitos([{ efeito: "x/nada", cor: "#fff" }], deFora)).toBeUndefined();
   });
 });

@@ -394,7 +394,8 @@ const EFEITOS_DA_MEDIDA: Declarativo["efeitos"] = {
   // O fogo de fábrica SEM a luz: o custo do desenho -- quadros, mipmap e as
   // duas metades assadas --, à parte do custo da luz que anda.
   "perf/fogo-sem-luz": (() => {
-    const fogo = { ...EFEITOS_DE_FABRICA[0]!, id: "perf/fogo-sem-luz" };
+    const chamas = EFEITOS_DE_FABRICA.find((efeito) => efeito.id === "chamas")!;
+    const fogo = { ...chamas, id: "perf/fogo-sem-luz" };
     delete fogo.luz;
     return fogo;
   })(),

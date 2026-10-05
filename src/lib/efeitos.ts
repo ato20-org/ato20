@@ -1,7 +1,8 @@
-import chamas from "../../public/efeitos/chamas/efeito.json";
 import type { EfeitoPedido } from "@/lib/condicao";
+import { PACKS_DE_FABRICA } from "@/efeitos";
 import { normalizarHex } from "@/lib/cor";
 import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
+import type { ParticulasResolvidas } from "@/lib/particulas";
 import {
   EFEITOS_DA_LUZ,
   SCENE_HEIGHT,
@@ -33,30 +34,40 @@ import type {
 export type EfeitosDeFora = Readonly<Record<string, DefinicaoDeEfeito>>;
 
 /**
- * Um pack de FÁBRICA: a pasta em `public/` com o `efeito.json` e as imagens --
- * o mesmo formato de um efeito de plugin, só que vem no aplicativo. A versão
- * do JSON vai na URL das imagens, para a TV não desenhar a arte velha.
+ * Um slug: minúsculas, dígitos e hífen, até 64. A regra de `id_valido`.
  */
-function daFabrica(
-  json: Omit<DefinicaoDeEfeito, "origem"> & { versao: string },
-  pasta: string,
-): DefinicaoDeEfeito {
-  const { versao, ...definicao } = json;
-
-  return { ...definicao, origem: { app: pasta, versao } };
-}
+const SLUG = /^[a-z0-9-]{1,64}$/;
 
 /**
- * Os efeitos de fábrica. Um só, por decisão: o fogo de "Em chamas" é o efeito
- * que o ATO20 traz, e é por ele que o formato -- quadros, mipmaps, mapa de
- * cores, máscara e profundidade -- se prova antes de crescer.
+ * Os efeitos de fábrica, em ordem de título: os packs de `src/efeitos/`,
+ * descobertos (ver `PACKS_DE_FABRICA`). "Em chamas" é o que o ATO20 traz, e é
+ * por ele que o formato -- quadros, mipmaps, mapa de cores, máscara,
+ * profundidade e partículas -- se provou.
+ *
+ * Pack de id torto ou repetido fica de fora: o id vira chave no disco e na
+ * rede (ver `efeito_valido`), e dois iguais disputariam a mesma condição.
  *
  * Os climas de antes do catálogo (`aura`, `tingido`, ...) saíram: a condição
  * que ainda os aponta mostra só o selo, e o id continua gravado nela.
  */
-export const EFEITOS_DE_FABRICA: ReadonlyArray<DefinicaoDeEfeito> = [
-  daFabrica(chamas as Parameters<typeof daFabrica>[0], "efeitos/chamas"),
-];
+export const EFEITOS_DE_FABRICA: ReadonlyArray<DefinicaoDeEfeito> = (() => {
+  const vistos = new Set<string>();
+
+  return PACKS_DE_FABRICA.map(
+    ({ pasta, definicao, arquivos }): DefinicaoDeEfeito => ({
+      ...definicao,
+      origem: { app: pasta, arquivos },
+    }),
+  )
+    .filter((efeito) => {
+      if (!efeitoValido(efeito.id) || efeito.id.includes("/") || vistos.has(efeito.id)) {
+        return false;
+      }
+      vistos.add(efeito.id);
+      return true;
+    })
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, "pt-BR"));
+})();
 
 const POR_ID = new Map(EFEITOS_DE_FABRICA.map((efeito) => [efeito.id, efeito]));
 
@@ -75,10 +86,6 @@ export function definicaoDoEfeito(
   return POR_ID.get(id) ?? (deFora && Object.hasOwn(deFora, id) ? deFora[id] : undefined);
 }
 
-/**
- * Um slug: minúsculas, dígitos e hífen, até 64. A regra de `id_valido`.
- */
-const SLUG = /^[a-z0-9-]{1,64}$/;
 
 /**
  * O id tem a forma de um efeito -- um slug, ou dois separados por `/`?
@@ -174,18 +181,15 @@ export function camadasDaFigura(
  * O endereço de uma imagem do efeito para ESTA tela, ou `null`.
  *
  * Do plugin, o mesmo endereço das imagens do estilo de medidor: o protocolo
- * `ato20-ext` no Mestre, o daemon na TV e no celular. Da fábrica, a pasta do
- * próprio bundle, relativa -- o Mestre e a TV leem o mesmo `out/`. As duas
- * com a versão na URL. Efeito sem origem não tem de onde puxar arquivo.
+ * `ato20-ext` no Mestre, o daemon na TV e no celular, com a versão na URL. Da
+ * fábrica, o asset do build que o pack trouxe -- o Mestre e a TV leem o mesmo
+ * `out/`. Efeito sem origem, ou arquivo que o pack não tem, não desenha.
  */
 function urlDaImagem(definicao: DefinicaoDeEfeito, arquivo: string): string | null {
   const origem = definicao.origem;
   if (!origem) return null;
 
-  if ("app" in origem) {
-    const caminho = arquivo.split("/").map(encodeURIComponent).join("/");
-    return `/${origem.app}/${caminho}?v=${encodeURIComponent(origem.versao)}`;
-  }
+  if ("app" in origem) return origem.arquivos[arquivo] ?? null;
 
   return urlDaImagemDoEstilo(origem.plugin, arquivo, origem.versao);
 }
@@ -409,3 +413,83 @@ const luzesGuardadas = new WeakMap<
   ReadonlyArray<EfeitoPedido>,
   { deFora: EfeitosDeFora | undefined; luz: LuzResolvida | undefined }
 >();
+
+/**
+ * As partículas que os efeitos de uma figura pedem, ou `undefined`.
+ *
+ * A primeira que pede fica com elas, como a luz. Guardadas pela lista de
+ * pedidos, pela razão da luz: quem pergunta é o palco, a cada render.
+ */
+export function particulasDosEfeitos(
+  efeitos: ReadonlyArray<EfeitoPedido> | undefined,
+  deFora?: EfeitosDeFora,
+): ParticulasResolvidas | undefined {
+  if (!efeitos?.length) return undefined;
+
+  const guardadas = particulasGuardadas.get(efeitos);
+  if (guardadas && guardadas.deFora === deFora) return guardadas.particulas;
+
+  let particulas: ParticulasResolvidas | undefined;
+  for (const pedido of efeitos) {
+    const definicao = definicaoDoEfeito(pedido.efeito, deFora);
+    const pedidas = definicao?.particulas;
+    if (!definicao || !pedidas) continue;
+
+    const quantidade = Math.round(Number(pedidas.quantidade));
+    if (!Number.isFinite(quantidade) || quantidade < 1) continue;
+
+    const numero = (valor: number | undefined, padrao: number, min: number, max: number) =>
+      typeof valor === "number" && Number.isFinite(valor)
+        ? Math.min(max, Math.max(min, valor))
+        : padrao;
+    const imagem = pedidas.imagem ? urlDaImagem(definicao, pedidas.imagem) : null;
+    const emissor = pedidas.emissor ?? {};
+
+    particulas = {
+      quantidade: Math.min(24, quantidade),
+      ...(imagem ? { imagem } : {}),
+      pintar: Boolean(pedidas.pintar),
+      cor: (pedidas.cor && normalizarHex(pedidas.cor)) || pedido.cor,
+      giro: numero(pedidas.giro, 0, -1440, 1440),
+      ...(imagem && quadrosDaParticula(pedidas.quadros)
+        ? { quadros: quadrosDaParticula(pedidas.quadros)! }
+        : {}),
+      tamanho: numero(pedidas.tamanho, 0.06, 0.01, 0.5),
+      variacao: fracao(pedidas.variacao, 0.5),
+      direcao: numero(pedidas.direcao, 270, -360, 720),
+      abertura: numero(pedidas.abertura, 40, 0, 360),
+      velocidade: numero(pedidas.velocidade, 1, 0, 10),
+      vida: numero(pedidas.vida, 1.5, 0.3, 6),
+      emissor: {
+        largura: numero(emissor.largura, 0.8, 0, 2),
+        altura: numero(emissor.altura, 0.3, 0, 2),
+        ancora: emissor.ancora === "centro" || emissor.ancora === "topo" ? emissor.ancora : "base",
+      },
+    };
+    break;
+  }
+
+  particulasGuardadas.set(efeitos, { deFora, particulas });
+  return particulas;
+}
+
+const particulasGuardadas = new WeakMap<
+  ReadonlyArray<EfeitoPedido>,
+  { deFora: EfeitosDeFora | undefined; particulas: ParticulasResolvidas | undefined }
+>();
+
+/**
+ * O sprite da partícula, se a grade faz sentido -- a regra da do externo,
+ * com o `fps` opcional: sem ele, o sprite toca uma vez na vida.
+ */
+function quadrosDaParticula(
+  quadros: { colunas: number; total: number; fps?: number } | undefined,
+): { colunas: number; total: number; fps?: number } | undefined {
+  if (!quadros) return undefined;
+  if (quadros.fps === undefined) {
+    const grade = quadrosValidos({ ...quadros, fps: 1 });
+    return grade ? { colunas: grade.colunas, total: grade.total } : undefined;
+  }
+
+  return quadrosValidos({ ...quadros, fps: quadros.fps });
+}

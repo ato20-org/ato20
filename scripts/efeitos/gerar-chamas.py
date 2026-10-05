@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gera a arte do efeito de fabrica "Em chamas" em public/efeitos/chamas/.
+Gera a arte do efeito de fabrica "Em chamas" em src/efeitos/chamas/.
 
 A arte e em TONS DE CINZA: o cinza e o CALOR (0 = borda fria, 1 = miolo) e o
 alfa e a forma. Quem da a cor e o app, pelo mapa de cores -- a rampa sai da
@@ -29,7 +29,7 @@ import numpy as np
 from PIL import Image
 
 RAIZ = Path(__file__).resolve().parents[2]
-SAIDA = RAIZ / "public" / "efeitos" / "chamas"
+SAIDA = RAIZ / "src" / "efeitos" / "chamas"
 
 LADO = 512
 QUADROS = 16

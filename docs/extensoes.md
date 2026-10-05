@@ -498,14 +498,19 @@ fábrica são escritos assim:
 | `translucido` | meio transparente, tremulando                          |
 | `tremor`      | treme no lugar                                         |
 
-A fábrica tem um efeito só, `chamas` ("Em chamas"), e ele é um pack como os
-de plugin: a pasta `public/efeitos/chamas/` com o `efeito.json` e as imagens,
-que vem no aplicativo. Os climas de antes (`aura`, `tingido`, `translucido`,
+Os efeitos de fábrica são packs como os de plugin, que vêm no aplicativo: cada
+pasta de `src/efeitos/` com um `efeito.json` é um efeito, DESCOBERTO no build
+(`import.meta.glob`) com as imagens dela -- criar a pasta basta, sem tocar em
+código. Em `src/` e não em `public/` porque o glob do Turbopack não enumera
+fora de `src/` (compila para um objeto vazio, calado). As imagens viram
+assets do build, com nome por conteúdo, e não precisam de versão na URL. Hoje
+é um só: `chamas` ("Em chamas": o fogo, com fagulhas e luz). Pack com id torto
+ou repetido fica de fora. Os climas de antes (`aura`, `tingido`, `translucido`,
 `tremendo`, `apagado`) saíram; a condição que ainda aponta para um deles
 mostra só o selo.
 
-O fogo de fábrica usa cinco campos do `externo` que, por ora, **só a fábrica
-lê** (o Rust do plugin não os aceita ainda):
+O fogo de fábrica usa campos que, por ora, **só a fábrica lê** (o Rust do
+plugin não os aceita ainda):
 
 - `quadros: { colunas, total, fps }` — a imagem é uma grade de quadros, tocada
   em degraus por `transform` dentro de um recorte: o compositor troca o
@@ -520,9 +525,25 @@ lê** (o Rust do plugin não os aceita ainda):
 - `profundidade` — tons de cinza, por quadro: o claro passa na frente da
   figura, o escuro fica atrás; é o que faz o fogo envolver o corpo.
 
+- `particulas` (no efeito, ao lado do `externo`) — o que a figura solta: a
+  fagulha que sobe do fogo. `quantidade` (até 24), `tamanho` e `variacao` (em
+  fração da figura), `direcao` e `abertura` (graus, 270 sobe), `velocidade`
+  (figuras por segundo), `vida` (segundos), `emissor` (a faixa da figura onde
+  nascem) e `imagem` (ausente = um brilho redondo na cor da condição). A
+  imagem vai na proporção dela; `pintar: true` a usa só como forma, na cor da
+  condição (o símbolo preto que sumiria no mapa escuro); `giro` é quanto cada
+  uma gira na vida, em graus; e `quadros: { colunas, total, fps? }` faz dela
+  um SPRITE -- com `fps`, em laço, cada partícula começando num quadro; sem,
+  uma vez ao longo da vida, a fagulha que acende e apaga. São
+  ASSADAS numa folha de quadros, como o fogo: o forno desenha o voo uma vez
+  por configuração, cor e variante (três), e cada figura toca a folha com a
+  sua fase -- uma fagulha a mais não custa nada por quadro. Medido: uma
+  camada animada por partícula levou quarenta figuras de 48 para 23 fps.
+  Perto da borda do mapa a revoada encolhe para dentro dele.
+
 Cor, máscara e profundidade são assadas uma vez por arte, cor e nível (ver
-`externo-assado.ts`); o que anda depois é só o `transform`. A arte é gerada
-por `scripts/efeitos/gerar-chamas.py`.
+`externo-assado.ts`); o que anda depois é só o `transform`. A arte do fogo é
+gerada por `scripts/efeitos/gerar-chamas.py`, direto em `src/efeitos/chamas/`.
 
 Combináveis dentro de um efeito, e com mais duas camadas que levam imagem da
 pasta do plugin (raster, até 2 MB, como as do medidor):
