@@ -5,6 +5,7 @@ import {
   gradeDoSprite,
   pintarImagem,
   processarFolha,
+  tamanhoDaFolha,
   tamanhoDoSprite,
   type ImagemDaFagulha,
 } from "@/lib/folha-de-efeito";
@@ -109,10 +110,7 @@ function sprite(pedido: PedidoDeParticulas): ImagemDaFagulha | undefined {
 
 async function assar(pedido: PedidoDeFolha): Promise<RespostaDoForno> {
   const { folha, colunas, linhas } = pedido;
-  const largura = folha.width;
-  const altura = folha.height;
-  const ql = Math.max(1, Math.floor(largura / colunas));
-  const qa = Math.max(1, Math.floor(altura / linhas));
+  const { largura, altura, ql, qa } = tamanhoDaFolha(folha.width, folha.height, colunas, linhas);
 
   const saida = processarFolha({
     px: pixels(folha, largura, altura),

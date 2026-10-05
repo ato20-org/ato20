@@ -6,6 +6,7 @@ import {
   pintarImagem,
   processarFolha,
   rampaDaCor,
+  tamanhoDaFolha,
   tamanhoDoSprite,
   type ImagemDaFagulha,
 } from "@/lib/folha-de-efeito";
@@ -289,14 +290,16 @@ async function aqui(pedido: PedidoDeExterno): Promise<ExternoAssado | null> {
     pedido.profundidade ? carregarImagem(pedido.profundidade) : undefined,
   ]);
 
-  const largura = fonte.naturalWidth;
-  const altura = fonte.naturalHeight;
-  if (!largura || !altura) return null;
+  if (!fonte.naturalWidth || !fonte.naturalHeight) return null;
 
   const colunas = pedido.colunas ?? 1;
   const linhas = pedido.linhas ?? 1;
-  const ql = Math.max(1, Math.floor(largura / colunas));
-  const qa = Math.max(1, Math.floor(altura / linhas));
+  const { largura, altura, ql, qa } = tamanhoDaFolha(
+    fonte.naturalWidth,
+    fonte.naturalHeight,
+    colunas,
+    linhas,
+  );
 
   const px = pixels(fonte, largura, altura);
   if (!px) return null;

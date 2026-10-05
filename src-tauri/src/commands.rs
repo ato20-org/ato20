@@ -21,7 +21,7 @@ use crate::vault::inventory::{self, Item};
 use crate::vault::dados_de_extensao;
 use crate::vault::{
     assets,
-    documentos, board, characters, condicoes, modelos, players, session, variantes, zip,
+    documentos, board, characters, condicoes, efeitos, modelos, players, session, variantes, zip,
     CampaignInfo,
     Vault,
 };
@@ -1362,6 +1362,35 @@ pub fn condicao_modelo_remover(
     #[allow(non_snake_case)] modeloId: String,
 ) -> AppResult<()> {
     state.with_vault(|vault| condicoes::remover(vault, &modeloId))
+}
+
+// --- efeitos da campanha ------------------------------------------------------
+
+/// Os efeitos que a campanha criou no editor. Ver `vault::efeitos`.
+#[tauri::command]
+pub fn efeitos_list(state: State<'_, AppState>) -> AppResult<Vec<serde_json::Value>> {
+    state.with_vault(efeitos::load)
+}
+
+/// Um efeito em branco, com id da campanha.
+#[tauri::command]
+pub fn efeito_criar(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    state.with_vault(efeitos::criar)
+}
+
+/// Grava o efeito inteiro, como o editor o tem, e devolve como ficou.
+#[tauri::command]
+pub fn efeito_salvar(
+    state: State<'_, AppState>,
+    efeito: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    state.with_vault(|vault| efeitos::salvar(vault, efeito))
+}
+
+/// Tira o efeito da campanha. As condicoes que o apontam ficam so com o selo.
+#[tauri::command]
+pub fn efeito_apagar(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.with_vault(|vault| efeitos::apagar(vault, &id))
 }
 
 /// Poe o cardapio na ordem pedida, que e a do submenu do token.

@@ -292,3 +292,23 @@ describe("particulasDosEfeitos", () => {
     expect(particulasDosEfeitos([{ efeito: "x/nada", cor: "#fff" }], deFora)).toBeUndefined();
   });
 });
+
+describe("os efeitos da campanha", () => {
+  it("a imagem do acervo vira o endereço do daemon, relativo fora do Mestre", () => {
+    const daCampanha = {
+      "campanha/brasa": {
+        id: "campanha/brasa",
+        titulo: "Brasa",
+        origem: { acervo: true as const },
+        externo: { imagem: "a1b2c3d4-0000-4000-8000-000000000000" },
+        particulas: { quantidade: 4, imagem: "../../etc/passwd" },
+      },
+    };
+
+    expect(camadasDaFigura([{ efeito: "campanha/brasa", cor: "#fff" }], daCampanha).externo!.url).toBe(
+      "/asset/a1b2c3d4-0000-4000-8000-000000000000",
+    );
+    // Id que não parece id de arquivo não vira caminho nenhum: o brilho redondo.
+    expect(particulasDosEfeitos([{ efeito: "campanha/brasa", cor: "#fff" }], daCampanha)!.imagem).toBeUndefined();
+  });
+});

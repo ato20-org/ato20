@@ -119,7 +119,7 @@ export type AssetFolder = {
 };
 
 /** O dono de um arquivo do acervo, quando ele tem um. */
-export type EscopoAsset = "cena" | "personagem";
+export type EscopoAsset = "cena" | "personagem" | "efeito";
 
 /** Uma imagem posicionada sobre o fundo da cena. */
 export type CanvasItem = {

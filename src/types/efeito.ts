@@ -49,10 +49,14 @@ export type DefinicaoDeEfeito = {
  * - `app`: um pack de FÁBRICA, que vem no aplicativo (ver `src/efeitos/`). As
  *   imagens são assets do build, e `arquivos` diz o endereço de cada uma -- o
  *   nome já muda com o conteúdo, e versão nenhuma é preciso.
+ * - `acervo`: um efeito da CAMPANHA, feito no editor. Cada imagem é o id de um
+ *   arquivo do acervo, servido em `/asset/{id}` -- cada tela monta o endereço
+ *   do seu jeito, e a definição que viaja não leva o do Mestre.
  */
 export type OrigemDoEfeito =
   | { plugin: string; versao: string }
-  | { app: string; arquivos: Readonly<Record<string, string>> };
+  | { app: string; arquivos: Readonly<Record<string, string>> }
+  | { acervo: true };
 
 /**
  * Uma imagem em volta da figura: o fogo, a fumaça, o círculo mágico.
