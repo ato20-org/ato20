@@ -736,8 +736,8 @@ function CondicoesDaCampanha() {
 
   /**
    * O cardápio de partida, num gesto com nome. Só existe com o cardápio vazio:
-   * no meio de uma lista que o mestre já montou, ele duplicaria "Caído" ao
-   * lado do "Caído" que o mestre recoloriu.
+   * no meio de uma lista que o mestre já montou, ele duplicaria "Em chamas"
+   * ao lado do "Em chamas" que o mestre configurou.
    */
   async function sugerir() {
     await mexer(async () => {

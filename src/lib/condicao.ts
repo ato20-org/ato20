@@ -175,22 +175,13 @@ export type SugestaoDeCondicao = Omit<Condicao, "id" | "escondido">;
  * O cardápio de partida, para quem aperta "Usar sugestões".
  *
  * Um GESTO, e não o que a campanha nova traz de fábrica: inventar condições
- * que ninguém pediu seria escolher o sistema da mesa pelo mestre. Os nomes são
- * os que atravessam sistemas — todo jogo tem alguém caído e alguém envenenado.
- * Só "Em chamas" mexe na figura: é o efeito que o ATO20 traz. Os outros são o
- * selo, até ganharem o seu.
+ * que ninguém pediu seria escolher o sistema da mesa pelo mestre. Uma só, a
+ * que tem efeito de fábrica: "Em chamas" é o que o ATO20 traz, e é por ela
+ * que o mestre descobre a engrenagem. As outras ele cria com o nome que o
+ * sistema dele usa.
  */
 export const SUGESTOES: SugestaoDeCondicao[] = [
-  { nome: "Envenenado", cor: "#22c55e", icone: "frasco" },
   { nome: "Em chamas", cor: "#f59e0b", icone: "chama", efeito: "chamas" },
-  { nome: "Molhado", cor: "#3b82f6", icone: "gota" },
-  { nome: "Sangrando", cor: "#ef4444", icone: "sangue" },
-  { nome: "Congelado", cor: "#3b82f6", icone: "floco" },
-  { nome: "Invisível", cor: "#ffffff", icone: "fantasma" },
-  { nome: "Atordoado", cor: "#f59e0b", icone: "raio" },
-  { nome: "Com medo", cor: "#a855f7", icone: "medo" },
-  { nome: "Abençoado", cor: "#f59e0b", icone: "brilho" },
-  { nome: "Caído", cor: "#ef4444", icone: "cama" },
 ];
 
 /** O teto do nome. Espelha `MAX_NOME_CONDICAO`. */
