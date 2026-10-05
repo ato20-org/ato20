@@ -39,5 +39,39 @@
       "altura": 0.5,
       "ancora": "centro"
     }
+  },
+  "area": {
+    "cor": "#0ea5e9",
+    "divisoes": 1,
+    "escala": 1,
+    "foco": {
+      "imagem": "respingo-128.webp",
+      "mipmaps": {
+        "64": "respingo-64.webp",
+        "128": "respingo-128.webp"
+      },
+      "quadros": {
+        "colunas": 4,
+        "total": 16,
+        "fps": 12
+      },
+      "cores": "condicao"
+    },
+    "densidade": 3
+  },
+  "base": {
+    "imagem": "agua-128.webp",
+    "mipmaps": {
+      "64": "agua-64.webp",
+      "128": "agua-128.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 16,
+      "fps": 12
+    },
+    "cores": "condicao",
+    "escala": 3,
+    "escurece": 0.45
   }
 }

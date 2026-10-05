@@ -507,6 +507,20 @@ describe("a base do efeito", () => {
     expect(foco.quadros).toEqual({ colunas: 4, total: 16, fps: 8 });
   });
 
+  it("a área molhada: a poça em ladrilho de três casas e o respingo, escurecendo o chão", () => {
+    const base = baseDoEfeito({ efeito: "molhado", cor: "#0ea5e9" })!;
+    const foco = focoDaArea({ efeito: "molhado", cor: "#0ea5e9" })!;
+
+    expect(base.url).toContain("agua-128");
+    expect(base.escala).toBe(3);
+    // O chão molhado é mais escuro: é o que a poça rasa deixa ver.
+    expect(base.escurece).toBeGreaterThan(0);
+    expect(foco.url).toContain("respingo-128");
+    expect(base.quadros).toEqual(foco.quadros);
+    // E não a poça parada da figura, que é o externo.
+    expect(foco.url).not.toContain("poca");
+  });
+
   it("efeito sem base não tem base", () => {
     expect(baseDoEfeito({ efeito: "congelado", cor: "#3b82f6" })).toBeUndefined();
   });
