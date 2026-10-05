@@ -31,7 +31,11 @@ import {
   TextosDaMesa,
 } from "@/components/playground/quadro-mesa-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
-import type { EfeitoPedido, EfeitosDoPersonagem } from "@/lib/condicao";
+import {
+  efeitosDoObjeto,
+  type EfeitoPedido,
+  type EfeitosDoPersonagem,
+} from "@/lib/condicao";
 import { quadroDaMesa } from "@/lib/geometry/viewport";
 import type { Variante } from "@/lib/vault/assets";
 import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
@@ -416,7 +420,7 @@ export function SceneLayer({
               efeitos={
                 item.personagemId
                   ? efeitosPorPersonagem.get(item.personagemId)
-                  : undefined
+                  : efeitosDoObjeto(item.condicoes)
               }
               onPointerDown={onItemPointerDown}
             />
@@ -435,7 +439,7 @@ export function SceneLayer({
           efeitos={
             item.personagemId
               ? efeitosPorPersonagem.get(item.personagemId)
-              : undefined
+              : efeitosDoObjeto(item.condicoes)
           }
           onPointerDown={onItemPointerDown}
         />
@@ -511,8 +515,11 @@ export function SceneLayer({
 
       {/* Depois dos itens e antes do retrato: ela desenha SOBRE as peças, e o
           retrato é HUD e fica acima de tudo. Ver `INFO_Z`. */}
-      {fichas && fichas.length > 0 ? (
-        <InfoDoToken itens={items} fichas={fichas} />
+      {/* Os objetos seguem o interruptor da cena, e só onde quem monta pediu
+          informação (`fichas` presente): a miniatura e o 2.5D, que desenha a
+          sua, passam sem. */}
+      {fichas && (fichas.length > 0 || scene.infoDosTokens) ? (
+        <InfoDoToken itens={items} fichas={fichas} objetos={Boolean(scene.infoDosTokens)} />
       ) : null}
 
       {/* Por cima de tudo que é do mapa -- névoa, medidor, nome --, e embaixo

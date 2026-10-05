@@ -1,5 +1,10 @@
+import { efeitoValido } from "@/lib/efeitos";
 import { sementeDaLuz } from "@/lib/geometry/luz";
-import type { Condicao } from "@/types/character";
+import {
+  MAX_CONDICOES,
+  type Condicao,
+  type PatchCondicao,
+} from "@/types/character";
 
 /**
  * As contas de uma condição, fora de qualquer componente.
@@ -63,6 +68,29 @@ export function efeitosDaFigura(
   }
 
   return [];
+}
+
+/**
+ * Os efeitos de um OBJETO, pelas condições dele -- a mesma regra do token.
+ *
+ * Guardado pela lista: o `CanvasItemView` é `memo`, e um array novo a cada
+ * render do palco redesenharia todo barril em chamas a cada quadro. A cena é
+ * imutável, então a lista do item é a mesma até alguém mexer nela.
+ */
+const efeitosDosObjetos = new WeakMap<ReadonlyArray<Condicao>, EfeitoPedido[]>();
+
+export function efeitosDoObjeto(
+  condicoes: ReadonlyArray<Condicao> | undefined,
+): EfeitoPedido[] | undefined {
+  if (!condicoes?.length) return undefined;
+
+  let efeitos = efeitosDosObjetos.get(condicoes);
+  if (!efeitos) {
+    efeitos = efeitosDaFigura(condicoes);
+    efeitosDosObjetos.set(condicoes, efeitos);
+  }
+
+  return efeitos;
 }
 
 /** Os efeitos de um personagem, para as telas que não têm o índice. */
@@ -161,3 +189,95 @@ export const SUGESTOES: SugestaoDeCondicao[] = [
   { nome: "Abençoado", cor: "#f59e0b", icone: "brilho", efeito: "aura" },
   { nome: "Caído", cor: "#ef4444", icone: "cama", efeito: "apagado" },
 ];
+
+/** O teto do nome. Espelha `MAX_NOME_CONDICAO`. */
+export const MAX_NOME_CONDICAO = 24;
+
+/** O teto do nome do ícone. Espelha `MAX_ICONE`. */
+const MAX_ICONE = 32;
+
+/** O ícone de quem chegou sem nenhum. Espelha `ICONE_PADRAO`. */
+const ICONE_PADRAO = "circulo";
+
+/**
+ * A condição em forma: nome curto e nunca vazio, ícone curto e nunca vazio,
+ * efeito sem forma de id vira só o selo.
+ *
+ * Espelho de `ajustar_condicao`, no Rust, para a condição de OBJETO: ela mora
+ * na cena e não passa por ele. As duas contas divergindo fariam o mesmo
+ * "Envenenado" do cardápio virar coisas diferentes no goblin e no barril.
+ */
+export function ajustarCondicao(condicao: Condicao): Condicao {
+  const nome = [...condicao.nome.trim()].slice(0, MAX_NOME_CONDICAO).join("");
+  const icone = [...condicao.icone.trim()].slice(0, MAX_ICONE).join("");
+  const efeito = condicao.efeito?.trim();
+  const ajustada: Condicao = {
+    ...condicao,
+    nome: nome || "Condição",
+    icone: icone || ICONE_PADRAO,
+  };
+
+  if (efeito && efeitoValido(efeito)) ajustada.efeito = efeito;
+  else delete ajustada.efeito;
+
+  return ajustada;
+}
+
+/** O patch aplicado e posto em forma. Espelho de `PatchCondicao::aplicar`. */
+export function aplicarPatch(condicao: Condicao, patch: PatchCondicao): Condicao {
+  const nova: Condicao = { ...condicao };
+
+  if (patch.nome !== undefined) nova.nome = patch.nome;
+  if (patch.cor !== undefined) nova.cor = patch.cor;
+  if (patch.icone !== undefined) nova.icone = patch.icone;
+  if (patch.efeito === null) delete nova.efeito;
+  else if (patch.efeito !== undefined) nova.efeito = patch.efeito;
+  if (patch.escondido !== undefined) nova.escondido = patch.escondido;
+
+  return ajustarCondicao(nova);
+}
+
+/**
+ * Liga ou desliga uma condição do cardápio numa lista, pelo nome. Espelho de
+ * `alternar_condicao`: ligar não duplica e não passa do teto, a cópia ganha
+ * id próprio, desligar tira todas as linhas com aquele nome.
+ *
+ * `null` = nada mudou, para quem chama não gravar um passo de desfazer vazio.
+ */
+export function alternarNaLista(
+  lista: ReadonlyArray<Condicao> | undefined,
+  modelo: Condicao,
+  ligar: boolean,
+  novoId: () => string,
+): Condicao[] | null {
+  const atual = lista ?? [];
+  const tem = temCondicao(atual, modelo.nome);
+
+  if (ligar) {
+    if (tem || atual.length >= MAX_CONDICOES) return null;
+
+    return [...atual, ajustarCondicao({ ...modelo, id: novoId(), escondido: false })];
+  }
+
+  if (!tem) return null;
+
+  const chave = chaveDoNome(modelo.nome);
+  return atual.filter((condicao) => chaveDoNome(condicao.nome) !== chave);
+}
+
+/**
+ * A lista na ordem pedida. Id que a ordem esquece fica no fim, na ordem de
+ * antes, e id que não existe é ignorado -- o mesmo de `reordenar_condicoes`.
+ */
+export function reordenarLista(
+  lista: ReadonlyArray<Condicao>,
+  ordem: ReadonlyArray<string>,
+): Condicao[] {
+  const porId = new Map(lista.map((condicao) => [condicao.id, condicao]));
+  const primeiro = ordem
+    .map((id) => porId.get(id))
+    .filter((condicao): condicao is Condicao => Boolean(condicao));
+  const vistos = new Set(primeiro.map((condicao) => condicao.id));
+
+  return [...primeiro, ...lista.filter((condicao) => !vistos.has(condicao.id))];
+}

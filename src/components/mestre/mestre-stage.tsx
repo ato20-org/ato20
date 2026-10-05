@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { PainelDeCondicoesDoObjeto } from "@/components/mestre/condicoes-do-objeto";
 import { AlcasDaArea } from "@/components/mestre/alcas-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
@@ -3387,6 +3388,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // boneco e o barril, só entre o que está em pé e o que é visto de
           // cima. Ver `SombraDoItem`.
           sombra={sombraDoSelecionado}
+          // O objeto -- o que não é personagem -- tem as condições dele aqui,
+          // como a opacidade e a sombra. O token as tem na ficha.
+          condicoes={
+            !single.personagemId ? <PainelDeCondicoesDoObjeto item={single} /> : undefined
+          }
           // Token abre a ficha de quem ele é. É o atalho que faltava no meio da
           // sessão: o mestre clica na figura no mapa, e não na lista de
           // personagens, porque no mapa é onde a mão dele já está.

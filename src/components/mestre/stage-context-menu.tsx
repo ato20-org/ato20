@@ -65,6 +65,7 @@ import {
   agruparSelecao,
   desagruparSelecao,
 } from "@/lib/mestre/item-actions";
+import { ehObjeto } from "@/lib/mestre/condicoes-do-objeto";
 import {
   alternarTransmissao,
   enquadrarAqui,
@@ -165,6 +166,8 @@ export function StageContextMenu({
       item.personagemId &&
       personagens?.some((personagem) => personagem.id === item.personagemId),
   );
+  /** Algum objeto -- imagem sem personagem -- na seleção: o barril também tem condição. */
+  const comObjeto = selectedItems.some(ehObjeto);
   /**
    * Só coisa do QUADRO na mão: texto solto, forma, ou os dois.
    *
@@ -391,8 +394,9 @@ export function StageContextMenu({
               />
             ) : null}
             {/* Da seleção inteira, e não só do token único: envenenar a horda
-                de uma vez é o pedido. Some quando nenhum token é de alguém. */}
-            {deAlguem ? (
+                de uma vez é o pedido. Vale para o objeto também -- o barril em
+                chamas. Some quando não há nem um nem outro. */}
+            {deAlguem || comObjeto ? (
               <>
                 <SubmenuDeCondicoes itens={selectedItems} />
                 <ContextMenuSeparator />

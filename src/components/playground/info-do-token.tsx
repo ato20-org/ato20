@@ -8,7 +8,7 @@ import {
 } from "@/components/playground/desenho-do-medidor";
 import { SelosDaCondicao } from "@/components/playground/selos-da-condicao";
 import { VAO_DO_SELO } from "@/lib/geometry/portrait";
-import { LARGURA_DA_INFO, lugarDaInfo } from "@/lib/mestre/fichas-da-cena";
+import { fichaDoObjeto, LARGURA_DA_INFO, lugarDaInfo } from "@/lib/mestre/fichas-da-cena";
 import { cn } from "@/lib/utils";
 import type { CanvasItem, FichaNaCena } from "@/types/scene";
 
@@ -54,6 +54,7 @@ const SELO = 0.95;
 export function InfoDoToken({
   itens,
   fichas,
+  objetos = false,
 }: {
   itens: ReadonlyArray<CanvasItem>;
   /**
@@ -65,15 +66,26 @@ export function InfoDoToken({
    * chance de os dois discordarem.
    */
   fichas: ReadonlyArray<FichaNaCena>;
+  /**
+   * Desenha também os selos dos OBJETOS -- o barril em chamas. É o mesmo
+   * interruptor da informação dos tokens, que chega aqui à parte porque a
+   * lista de fichas vazia não diz se ele está ligado: a cena pode não ter
+   * personagem nenhum. Ver `fichaDoObjeto`.
+   */
+  objetos?: boolean;
 }) {
-  if (fichas.length === 0) return null;
+  if (fichas.length === 0 && !objetos) return null;
 
   const porId = new Map(fichas.map((ficha) => [ficha.id, ficha]));
 
   return (
     <>
       {itens.map((item) => {
-        const ficha = item.personagemId ? porId.get(item.personagemId) : null;
+        const ficha = item.personagemId
+          ? porId.get(item.personagemId)
+          : objetos
+            ? fichaDoObjeto(item)
+            : null;
         if (!ficha) return null;
 
         return (
@@ -119,7 +131,8 @@ export function medirBloco(
   // primeiro porque a altura da caixa é feita dele.
   const corpo = item.width * 0.26;
   const vao = corpo * 0.25;
-  const alturaDoNome = corpo * 1.2;
+  // O objeto não tem nome: só os selos, encostados na peça.
+  const alturaDoNome = ficha.nome ? corpo * 1.2 : 0;
   // Cada medidor é o rótulo mais a forma, que é o que `DesenhoDoMedidor`
   // empilha -- a conta segue a peça de lá, e não um palpite daqui. A forma
   // tem a altura DELA: um estilo de plugin declara a própria, e medir a caixa
@@ -198,16 +211,18 @@ export function CorpoDoBloco({
       {/* Sem fundo, com sombra: mapa é imagem, e qualquer cor de fundo acerta
           uns mapas e erra outros. É a mesma escolha da fileira de dados e da
           coluna de medidores. */}
-      <span
-        className="max-w-full truncate font-semibold text-white"
-        style={{
-          fontSize: corpo,
-          lineHeight: 1.2,
-          textShadow: `0 ${corpo * 0.06}px ${corpo * 0.25}px rgba(0,0,0,0.95)`,
-        }}
-      >
-        {ficha.nome}
-      </span>
+      {ficha.nome ? (
+        <span
+          className="max-w-full truncate font-semibold text-white"
+          style={{
+            fontSize: corpo,
+            lineHeight: 1.2,
+            textShadow: `0 ${corpo * 0.06}px ${corpo * 0.25}px rgba(0,0,0,0.95)`,
+          }}
+        >
+          {ficha.nome}
+        </span>
+      ) : null}
 
       {/* Entre o nome e as barras: o selo diz o que aconteceu com quem, e é
           lido junto com o nome -- "o Edgar está caído". As barras são número,

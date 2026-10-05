@@ -34,7 +34,7 @@ const SO_SOB_O_CURSOR =
   "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100";
 
 /** Um título e uma linha, para os tooltips que mudam de tela para tela. */
-type Dica = { titulo: string; texto: string };
+export type Dica = { titulo: string; texto: string };
 
 /**
  * Uma condição numa linha: a alça, o selo que abre a aparência, o nome com o
