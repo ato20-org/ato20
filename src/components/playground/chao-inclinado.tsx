@@ -277,7 +277,7 @@ function PecaEmPe({
         transform,
       }}
     >
-      <FiguraComEfeitos efeitos={peca.efeitos} url={src} semente={peca.id} alcance="livre">
+      <FiguraComEfeitos efeitos={peca.efeitos} url={src} semente={peca.id} alcance={{ livre: true, largura: peca.lado }}>
         {(fonte) =>
           fonte ? (
             // eslint-disable-next-line @next/next/no-img-element

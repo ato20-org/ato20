@@ -498,9 +498,31 @@ fábrica são escritos assim:
 | `translucido` | meio transparente, tremulando                          |
 | `tremor`      | treme no lugar                                         |
 
-Os de fábrica, no mesmo formato: `aura`, `tingido`, `translucido`, `tremendo`,
-`apagado`, `chamas` (halo e luz de fogo), `molhado`, `sangrando` e
-`iluminado` (só a luz).
+A fábrica tem um efeito só, `chamas` ("Em chamas"), e ele é um pack como os
+de plugin: a pasta `public/efeitos/chamas/` com o `efeito.json` e as imagens,
+que vem no aplicativo. Os climas de antes (`aura`, `tingido`, `translucido`,
+`tremendo`, `apagado`) saíram; a condição que ainda aponta para um deles
+mostra só o selo.
+
+O fogo de fábrica usa cinco campos do `externo` que, por ora, **só a fábrica
+lê** (o Rust do plugin não os aceita ainda):
+
+- `quadros: { colunas, total, fps }` — a imagem é uma grade de quadros, tocada
+  em degraus por `transform` dentro de um recorte: o compositor troca o
+  quadro sem repintar, ao contrário do GIF.
+- `mipmaps: { "128": "...", "256": "...", "512": "..." }` — a mesma grade em
+  outros tamanhos, pelo lado do quadro; a tela escolhe o menor que cobre o
+  tamanho em que o fogo aparece.
+- `cores` — o mapa de cores: a arte vem em tons de cinza (o cinza é o calor,
+  o alfa é a forma) e `"condicao"` gera a rampa da cor da condição; o mesmo
+  fogo vira azul ou verde trocando só ela. Também aceita uma imagem de 256x1.
+- `mascara` — tons de cinza, por quadro: onde a arte pode aparecer.
+- `profundidade` — tons de cinza, por quadro: o claro passa na frente da
+  figura, o escuro fica atrás; é o que faz o fogo envolver o corpo.
+
+Cor, máscara e profundidade são assadas uma vez por arte, cor e nível (ver
+`externo-assado.ts`); o que anda depois é só o `transform`. A arte é gerada
+por `scripts/efeitos/gerar-chamas.py`.
 
 Combináveis dentro de um efeito, e com mais duas camadas que levam imagem da
 pasta do plugin (raster, até 2 MB, como as do medidor):

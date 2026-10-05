@@ -267,6 +267,17 @@
     animation: efeito-piscar 2s ease-in-out infinite;
   }
 
+  /* Os QUADROS do externo: a folha anda em degraus dentro do recorte, as
+     colunas na imagem e as linhas no invólucro. Duração e degraus vêm inline,
+     da grade do efeito. Parada, sem o movimento, fica o primeiro quadro. */
+  .efeito-colunas {
+    animation: efeito-colunas 1s steps(4) infinite;
+  }
+
+  .efeito-linhas {
+    animation: efeito-linhas 1s steps(4) infinite;
+  }
+
   /* O ping no mapa. Ver `PingLayer`.
 
      O ícone entra com um quique e sai apagando perto do fim do prazo -- 4,3 s
@@ -382,6 +393,18 @@
 
   50% {
     transform: scale(calc(1 + 0.15 * var(--efeito-intensidade, 0.5)));
+  }
+}
+
+@keyframes efeito-colunas {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes efeito-linhas {
+  to {
+    transform: translateY(-100%);
   }
 }
 

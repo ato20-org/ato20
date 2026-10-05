@@ -1,0 +1,259 @@
+"use client";
+
+import { processarFolha, rampaDaCor } from "@/lib/folha-de-efeito";
+import type { PedidoAoForno, RespostaDoForno } from "@/lib/forno-do-externo.worker";
+import { carregarImagem } from "@/lib/imagem";
+
+/**
+ * O forno do visual EXTERNO: o mapa de cores, a máscara e a profundidade,
+ * aplicados uma vez na folha de quadros.
+ *
+ * A mesma decisão da pele (`efeito-na-figura.ts`), e pela mesma medida: cada
+ * uma dessas três se escreveria em CSS -- `filter`, `mask-image`, duas
+ * camadas recortadas --, e as três custariam por quadro, numa arte que se
+ * mexe catorze vezes por segundo. Aqui viram pixel UMA vez, por arte, por cor
+ * e por nível de mipmap, e o que anda depois é só o `transform` dos quadros.
+ *
+ * O trabalho corre num WORKER (`forno-do-externo.worker.ts`): na thread da
+ * janela, uma folha custava um quadro de 300 ms. Onde não há worker com
+ * `OffscreenCanvas`, o mesmo trabalho corre aqui, mais lento mas igual.
+ *
+ * Com profundidade a folha sai em DUAS: o que passa na frente da figura e o
+ * que fica atrás. Sem ela, uma só. As contas são as de `folha-de-efeito.ts`.
+ */
+
+/** O que o forno recebe: a folha já no nível escolhido, e o resto. */
+export type PedidoDeExterno = {
+  url: string;
+  /** A grade. Ausente = a imagem é um quadro só. */
+  colunas?: number;
+  linhas?: number;
+  cores?: { cor: string } | { rampa: string };
+  mascara?: string;
+  profundidade?: string;
+};
+
+/** O que sai: endereços de imagem, prontos para a `<img>`. */
+export type ExternoAssado = { unica: string } | { atras: string; frente: string };
+
+/** Precisa de forno? Sem nenhum dos três, a folha vai como veio. */
+export function precisaDeForno(pedido: Omit<PedidoDeExterno, "url">): boolean {
+  return Boolean(pedido.cores || pedido.mascara || pedido.profundidade);
+}
+
+/**
+ * Um assado por pedido, para sempre -- as razões de `contorno.ts`: a horda
+ * pega fogo no mesmo quadro, e o que entra aqui é um punhado de folhas por
+ * cor. Guarda a PROMESSA, e não o resultado. Os endereços nunca são
+ * revogados: são o assado.
+ */
+const assados = new Map<string, Promise<ExternoAssado | null>>();
+
+export function assarExterno(pedido: PedidoDeExterno): Promise<ExternoAssado | null> {
+  const chave = JSON.stringify(pedido);
+  const feito = assados.get(chave);
+  if (feito) return feito;
+
+  // `null` em qualquer falha -- arquivo que não veio, canvas negado. O fogo
+  // não aparece, e o mapa continua: a arte crua, em cinza, seria pior.
+  // O worker que falha cai na thread da janela: mais lento, mas o fogo vem.
+  const assando = (temForno() ? noForno(pedido).catch(() => aqui(pedido)) : aqui(pedido)).catch(
+    () => null,
+  );
+  assados.set(chave, assando);
+
+  return assando;
+}
+
+/** A rampa do pedido, de uma cor (conta) ou de uma imagem (lida). */
+async function rampaDoPedido(pedido: PedidoDeExterno): Promise<Uint8ClampedArray | undefined> {
+  if (!pedido.cores) return undefined;
+  if ("cor" in pedido.cores) return rampaDaCor(pedido.cores.cor);
+
+  const imagem = await carregarImagem(pedido.cores.rampa);
+  const px = pixels(imagem, 256, 1);
+  if (!px) return undefined;
+
+  const rampa = new Uint8ClampedArray(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    rampa[i * 3] = px[i * 4]!;
+    rampa[i * 3 + 1] = px[i * 4 + 1]!;
+    rampa[i * 3 + 2] = px[i * 4 + 2]!;
+  }
+
+  return rampa;
+}
+
+// --- no worker ---------------------------------------------------------------
+
+let forno: Worker | null = null;
+/** O worker não subiu -- o script não veio, o motor recusou. Daí em diante, aqui. */
+let fornoQuebrado = false;
+let proximo = 0;
+const esperando = new Map<number, (resposta: RespostaDoForno) => void>();
+
+function temForno(): boolean {
+  return (
+    !fornoQuebrado &&
+    typeof Worker !== "undefined" &&
+    typeof OffscreenCanvas !== "undefined" &&
+    typeof createImageBitmap !== "undefined"
+  );
+}
+
+function oForno(): Worker {
+  if (forno) return forno;
+
+  // Sem `{ type: "module" }`: é a forma que o Turbopack reconhece como
+  // worker e empacota; com ela, o arquivo era copiado cru, em TypeScript.
+  forno = new Worker(new URL("./forno-do-externo.worker.ts", import.meta.url));
+  forno.onmessage = (evento: MessageEvent<RespostaDoForno>) => {
+    const responder = esperando.get(evento.data.id);
+    esperando.delete(evento.data.id);
+    responder?.(evento.data);
+  };
+  // Sem isto, um worker que não carrega deixaria cada pedido esperando para
+  // sempre, e o fogo nunca apareceria. Quem esperava recebe o erro e cai na
+  // thread da janela.
+  forno.onerror = () => {
+    fornoQuebrado = true;
+    for (const [id, responder] of esperando) responder({ id, erro: "o forno não subiu" });
+    esperando.clear();
+  };
+
+  return forno;
+}
+
+/** A imagem decodificada fora da janela: `fetch` e `createImageBitmap`. */
+async function bitmap(url: string): Promise<ImageBitmap> {
+  const resposta = await fetch(url);
+  if (!resposta.ok) throw new Error(`imagem não veio: ${url} (${resposta.status})`);
+
+  return createImageBitmap(await resposta.blob());
+}
+
+async function noForno(pedido: PedidoDeExterno): Promise<ExternoAssado | null> {
+  const [folha, rampa, mascara, profundidade] = await Promise.all([
+    bitmap(pedido.url),
+    rampaDoPedido(pedido),
+    pedido.mascara ? bitmap(pedido.mascara) : undefined,
+    pedido.profundidade ? bitmap(pedido.profundidade) : undefined,
+  ]);
+
+  const id = ++proximo;
+  const mensagem: PedidoAoForno = {
+    id,
+    folha,
+    colunas: pedido.colunas ?? 1,
+    linhas: pedido.linhas ?? 1,
+    ...(rampa ? { rampa } : {}),
+    ...(mascara ? { mascara } : {}),
+    ...(profundidade ? { profundidade } : {}),
+  };
+  const transferir: Transferable[] = [folha];
+  if (mascara) transferir.push(mascara);
+  if (profundidade) transferir.push(profundidade);
+
+  const resposta = await new Promise<RespostaDoForno>((responder) => {
+    esperando.set(id, responder);
+    oForno().postMessage(mensagem, transferir);
+  });
+
+  if ("erro" in resposta) throw new Error(resposta.erro);
+  if ("unica" in resposta) return { unica: URL.createObjectURL(resposta.unica) };
+
+  return {
+    atras: URL.createObjectURL(resposta.atras),
+    frente: URL.createObjectURL(resposta.frente),
+  };
+}
+
+// --- aqui, sem worker --------------------------------------------------------
+
+async function aqui(pedido: PedidoDeExterno): Promise<ExternoAssado | null> {
+  const [fonte, rampa, mascara, profundidade] = await Promise.all([
+    carregarImagem(pedido.url),
+    rampaDoPedido(pedido),
+    pedido.mascara ? carregarImagem(pedido.mascara) : undefined,
+    pedido.profundidade ? carregarImagem(pedido.profundidade) : undefined,
+  ]);
+
+  const largura = fonte.naturalWidth;
+  const altura = fonte.naturalHeight;
+  if (!largura || !altura) return null;
+
+  const colunas = pedido.colunas ?? 1;
+  const linhas = pedido.linhas ?? 1;
+  const ql = Math.max(1, Math.floor(largura / colunas));
+  const qa = Math.max(1, Math.floor(altura / linhas));
+
+  const px = pixels(fonte, largura, altura);
+  if (!px) return null;
+
+  const saida = processarFolha({
+    px,
+    largura,
+    altura,
+    colunas,
+    linhas,
+    rampa,
+    mascara: mascara ? luminancia(mascara, ql, qa) : undefined,
+    profundidade: profundidade ? luminancia(profundidade, ql, qa) : undefined,
+  });
+
+  if ("unica" in saida) {
+    return { unica: await paraUrl(saida.unica, largura, altura) };
+  }
+
+  const [atras, frente] = await Promise.all([
+    paraUrl(saida.atras, largura, altura),
+    paraUrl(saida.frente, largura, altura),
+  ]);
+
+  return { atras, frente };
+}
+
+/** A imagem num canvas do tamanho pedido, e os pixels dele. */
+function pixels(
+  imagem: HTMLImageElement,
+  largura: number,
+  altura: number,
+): Uint8ClampedArray | null {
+  const tela = document.createElement("canvas");
+  tela.width = largura;
+  tela.height = altura;
+
+  const ctx = tela.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+
+  ctx.drawImage(imagem, 0, 0, largura, altura);
+  return ctx.getImageData(0, 0, largura, altura).data;
+}
+
+/** Um mapa em tons de cinza, esticado para o tamanho do quadro, de 0 a 1. */
+function luminancia(imagem: HTMLImageElement, largura: number, altura: number): Float32Array {
+  const px = pixels(imagem, largura, altura);
+  const saida = new Float32Array(largura * altura);
+  if (!px) return saida.fill(1);
+
+  for (let i = 0; i < saida.length; i++) saida[i] = px[i * 4]! / 255;
+  return saida;
+}
+
+/** Os pixels de volta a uma imagem, por `toBlob`: base64 de dois mil pixels travaria. */
+function paraUrl(px: Uint8ClampedArray, largura: number, altura: number): Promise<string> {
+  const tela = document.createElement("canvas");
+  tela.width = largura;
+  tela.height = altura;
+
+  const ctx = tela.getContext("2d");
+  if (!ctx) return Promise.reject(new Error("sem canvas"));
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(px), largura, altura), 0, 0);
+
+  return new Promise((resolver, recusar) =>
+    tela.toBlob((blob) => {
+      if (blob) resolver(URL.createObjectURL(blob));
+      else recusar(new Error("folha não virou imagem"));
+    }, "image/png"),
+  );
+}
