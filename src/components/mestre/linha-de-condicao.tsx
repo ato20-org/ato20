@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tooltip";
 import { definicaoDoEfeito, EFEITOS_DE_FABRICA } from "@/lib/efeitos";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
+import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import type { Condicao, PatchCondicao } from "@/types/character";
@@ -261,6 +262,14 @@ export function AparenciaDaCondicao({
                 onClick={() => onEditar({ cor: opcao })}
               />
             ))}
+            <CorLivre
+              cor={condicao.cor}
+              paleta={CORES_LAPIS}
+              className={(livre) =>
+                cn("size-6 rounded-full border-2", livre ? "border-foreground" : "border-transparent")
+              }
+              onCor={(cor) => onEditar({ cor })}
+            />
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { ArrowLeft, ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AparenciaDaCondicao } from "@/components/mestre/linha-de-condicao";
+import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { NomeDoMedidor } from "@/components/mestre/linha-de-medidor";
 import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { DeclarativoProvider } from "@/components/playground/declarativo";
@@ -296,7 +297,7 @@ export function TelaDoEfeitoEmArea({
 function CorDoEfeito({ cor, onMudar }: { cor: string; onMudar: (cor: string) => void }) {
   return (
     <div className="flex shrink-0 items-center gap-1">
-      {CORES_LAPIS.slice(0, 6).map((opcao) => (
+      {CORES_LAPIS.map((opcao) => (
         <button
           key={opcao}
           type="button"
@@ -310,19 +311,14 @@ function CorDoEfeito({ cor, onMudar }: { cor: string; onMudar: (cor: string) => 
           onClick={() => onMudar(opcao)}
         />
       ))}
-      <label
-        className="relative size-4 cursor-pointer overflow-hidden rounded-full border"
-        style={{ backgroundColor: cor }}
-        title="Outra cor"
-      >
-        <input
-          type="color"
-          value={cor}
-          aria-label="Outra cor"
-          className="absolute inset-0 cursor-pointer opacity-0"
-          onChange={(evento) => onMudar(evento.target.value)}
-        />
-      </label>
+      <CorLivre
+        cor={cor}
+        paleta={CORES_LAPIS}
+        className={(livre) =>
+          cn("size-4 rounded-full ring-offset-1 ring-offset-background", livre && "ring-foreground ring-2")
+        }
+        onCor={onMudar}
+      />
     </div>
   );
 }
@@ -880,6 +876,12 @@ function SecaoDaLuz({
               onClick={() => mudar("cor", opcao)}
             />
           ))}
+          <CorLivre
+            cor={l.cor}
+            paleta={CORES_LAPIS}
+            rotulo="Luz em outra cor"
+            onCor={(cor) => mudar("cor", cor)}
+          />
         </div>
       </div>
     </Secao>
