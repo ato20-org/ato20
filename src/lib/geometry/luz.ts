@@ -65,6 +65,19 @@ export type FonteDeLuz = {
   cone?: ConeDaLuz;
   /** Ausente = fixa. Ver `fatorDoEfeito`. */
   efeito?: EfeitoDaLuz;
+  /**
+   * Os tokens não tapam esta luz: só as paredes. A do chão em chamas -- ver
+   * `fontesDaArea`. Fora da chave dos oclusores também: um token andando
+   * perto dela não refaz luz nenhuma.
+   */
+  semTokens?: true;
+  /**
+   * A luz tem a FORMA de uma área, e não um centro: o contorno do chão em
+   * chamas, em cena. Dentro dele a luz é inteira, e cai para fora em `raio`.
+   * O `x, y` continua sendo o meio -- é dele que as paredes tapam, numa
+   * aproximação. Ver `fontesDaArea`.
+   */
+  forma?: ReadonlyArray<Ponto>;
 };
 
 /**
@@ -190,8 +203,13 @@ export function fontesDaCena(
   luzes: ReadonlyArray<Luz> | undefined,
   items: ReadonlyArray<CanvasItem>,
   luzDoEfeito?: (item: CanvasItem) => LuzResolvida | undefined,
+  /**
+   * As que já chegam prontas: as das áreas de efeito, que não são item nem luz
+   * cravada. Ver `fontesDaArea`.
+   */
+  prontas?: ReadonlyArray<FonteDeLuz>,
 ): FonteDeLuz[] {
-  const fontes: FonteDeLuz[] = [];
+  const fontes: FonteDeLuz[] = [...(prontas ?? [])];
 
   for (const luz of luzes ?? []) {
     if (luz.desligada) continue;
@@ -293,6 +311,27 @@ export function donoDaFonte(fonte: Pick<FonteDeLuz, "id" | "dono">): string {
  * SEM lanterna andou seria pagar o canvas inteiro por nada. A chave dos
  * mesmos números é a mesma string, e o efeito do desenho não roda.
  */
+/**
+ * As luzes, com o tremor só nas de efeito cujo dono anima. A luz de efeito tem
+ * DONO -- o token em chamas, a área --, e a do dono parado fica na força
+ * cheia, sem `efeito`; sem nenhuma tremulando, o laço da animação nem roda. A
+ * luz cravada e a lanterna não são efeito, e seguem como estão. Ver
+ * `animarSo` em `SceneLayer`.
+ */
+export function tremorSoDe(
+  fontes: FonteDeLuz[],
+  animarSo: ReadonlySet<string> | undefined,
+): FonteDeLuz[] {
+  if (!animarSo) return fontes;
+
+  return fontes.map((fonte) => {
+    if (!fonte.efeito || !fonte.dono || animarSo.has(fonte.dono)) return fonte;
+    const parada = { ...fonte };
+    delete parada.efeito;
+    return parada;
+  });
+}
+
 export function chaveDasFontes(fontes: ReadonlyArray<FonteDeLuz>): string {
   return fontes
     .map(
@@ -302,6 +341,9 @@ export function chaveDasFontes(fontes: ReadonlyArray<FonteDeLuz>): string {
         // laço da animação, e a troca tem de chegar ao efeito do desenho.
         (fonte.cone
           ? `,c${fonte.cone.angulo.toFixed(1)}/${fonte.cone.abertura.toFixed(1)}`
+          : "") +
+        (fonte.forma
+          ? `,f${fonte.forma.map((ponto) => `${ponto.x.toFixed(0)}/${ponto.y.toFixed(0)}`).join(";")}`
           : "") +
         (fonte.efeito ? `,${fonte.efeito}` : ""),
     )
@@ -786,7 +828,9 @@ export function chaveDosOclusores(
   oclusores: ReadonlyArray<Oclusor>,
 ): string {
   return oclusores
-    .filter((oclusor) => fontes.some((fonte) => alcancaOclusor(fonte, oclusor)))
+    .filter((oclusor) =>
+      fontes.some((fonte) => !fonte.semTokens && alcancaOclusor(fonte, oclusor)),
+    )
     .map(({ id, caixa, assetId }) =>
       // A caixa inteira, e não só o centro: girar ou espelhar o token muda a
       // silhueta deitada, e trocar a aparência dele muda a imagem de onde ela
@@ -1035,18 +1079,26 @@ export type CaixaDaLuz = {
  * que o plano para pintar um quarto dele.
  */
 export function caixaDaFonte(
-  fonte: Pick<FonteDeLuz, "x" | "y" | "raio" | "cone">,
+  fonte: Pick<FonteDeLuz, "x" | "y" | "raio" | "cone" | "forma">,
 ): CaixaDaLuz | null {
   // O cone pede só o pedaço do quadrado que o facho cobre: o de sessenta graus
-  // pinta um quarto dos pixels do círculo de mesmo alcance.
-  const limites = fonte.cone
-    ? limitesDoCone(fonte, fonte.cone)
-    : {
-        x1: fonte.x - fonte.raio,
-        y1: fonte.y - fonte.raio,
-        x2: fonte.x + fonte.raio,
-        y2: fonte.y + fonte.raio,
-      };
+  // pinta um quarto dos pixels do círculo de mesmo alcance. A forma, o
+  // contorno dela crescido pelo raio.
+  const limites = fonte.forma?.length
+    ? {
+        x1: Math.min(...fonte.forma.map((ponto) => ponto.x)) - fonte.raio,
+        y1: Math.min(...fonte.forma.map((ponto) => ponto.y)) - fonte.raio,
+        x2: Math.max(...fonte.forma.map((ponto) => ponto.x)) + fonte.raio,
+        y2: Math.max(...fonte.forma.map((ponto) => ponto.y)) + fonte.raio,
+      }
+    : fonte.cone
+      ? limitesDoCone(fonte, fonte.cone)
+      : {
+          x1: fonte.x - fonte.raio,
+          y1: fonte.y - fonte.raio,
+          x2: fonte.x + fonte.raio,
+          y2: fonte.y + fonte.raio,
+        };
   const x1 = Math.max(0, Math.floor(limites.x1));
   const y1 = Math.max(0, Math.floor(limites.y1));
   const x2 = Math.min(SCENE_WIDTH, Math.ceil(limites.x2));

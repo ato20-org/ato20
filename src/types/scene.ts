@@ -565,6 +565,46 @@ export type FogRegion = {
 };
 
 /**
+ * Uma área de EFEITO: um pedaço do chão em chamas.
+ *
+ * A mesma caixa da área escondida -- `x, y, width, height`, o `formato`, o
+ * giro e os vértices do polígono, ver `FogRegion` --, e pela mesma razão: o
+ * gizmo, as alças de vértice e o laço servem às duas sem aprender geometria
+ * nova. O que muda é o que ela FAZ: em vez de esconder, ela pega fogo.
+ *
+ * O desenho é SEGMENTADO: a área é dividida em casas da grade (ou do tamanho
+ * da grade padrão, sem grade), e cada casa cujo centro cai dentro da forma é
+ * um foco do efeito, com a fase dele. A área grande tem mais focos -- nunca o
+ * mesmo fogo esticado. Ver `planoDaArea`.
+ *
+ * O efeito vem do catálogo, como o da condição, e só os que declaram o bloco
+ * `area` servem aqui. Ver `EFEITOS_DE_AREA`.
+ */
+export type AreaDeEfeito = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Ausente = retângulo. */
+  formato?: FormatoDeArea;
+  /** Graus, no sentido horário, em torno do centro da caixa. Ausente = 0. */
+  rotation?: number;
+  /** Só o polígono: os vértices em fração da caixa. Ver `FogRegion.pontos`. */
+  pontos?: number[];
+  /** O id do efeito no catálogo, como o de `Condicao.efeito`. */
+  efeito: string;
+  /** A cor do efeito, como a da condição: a rampa do fogo sai dela. */
+  cor: string;
+  /** Está na mesa? Ausente = só o mestre vê, como a forma num mapa. */
+  naMesa?: boolean;
+  /** Travada: o mestre não move, não redimensiona, não gira e não apaga. */
+  locked?: boolean;
+};
+
+export type NewAreaDeEfeito = Omit<AreaDeEfeito, "id">;
+
+/**
  * Grade sobre o mapa.
  *
  * Mora na CENA, e não numa preferência da máquina, porque cada mapa tem a
@@ -2484,6 +2524,14 @@ export type Scene = {
    */
   luzes?: Luz[];
   /**
+   * As áreas de efeito: o chão em chamas. Ausente = nenhuma. Ver
+   * `AreaDeEfeito`.
+   *
+   * Na mesa, só as que o mestre abriu (`naMesa`), como a forma: ver
+   * `sceneForTable`.
+   */
+  areasDeEfeito?: AreaDeEfeito[];
+  /**
    * O quanto o mapa escurece onde não há luz, de 0 a 1. Ausente = 0.
    *
    * Zero é o mapa como sempre foi, e é o padrão: uma campanha antiga reabre
@@ -2724,6 +2772,14 @@ export function temGrade(scene: Pick<Scene, "tipo">): boolean {
  * de quem explora um mapa, e o fundo existe para ser visto de uma vez.
  */
 export function temNevoa(scene: Pick<Scene, "tipo">): boolean {
+  return ehMapa(scene);
+}
+
+/**
+ * A cena tem áreas de efeito: o chão em chamas. Só o mapa -- o quadro não tem
+ * chão, e o fundo já vem pintado. Ver `AreaDeEfeito`.
+ */
+export function temAreaDeEfeito(scene: Pick<Scene, "tipo">): boolean {
   return ehMapa(scene);
 }
 

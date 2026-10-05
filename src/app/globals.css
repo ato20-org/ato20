@@ -274,6 +274,13 @@
     animation: efeito-colunas 1s steps(4) infinite;
   }
 
+  /* A chama de pé do 2.5D: uma faixa de quadros andando pela posição do
+     fundo, em degraus. Repinta um elemento pequeno a cada degrau, em vez de
+     compor duas camadas por chama a cada quadro da câmera. Ver `faixaDaFolha`. */
+  .efeito-faixa {
+    animation: efeito-faixa var(--efeito-duracao, 1s) steps(var(--efeito-quadros, 16)) infinite;
+  }
+
   .efeito-linhas {
     animation: efeito-linhas 1s steps(4) infinite;
   }
@@ -383,6 +390,38 @@
 .efeito-externo {
   opacity: var(--efeito-opacidade, 1);
   transform-origin: var(--efeito-origem, 50% 50%);
+}
+
+/* O efeito PARADO: o Mestre só anima o efeito de quem está selecionado --
+   token, área ou retrato. O resto pausa no quadro em que está, cada um na
+   sua fase, e o compositor não tem nada a refazer por quadro. A mesa (a
+   janela do espectador e o celular) não marca ninguém: lá tudo anda. Só as
+   classes de efeito, e não `*`: o surgir do token novo e o resto da cena
+   continuam como estão. Ver `animarSo` em `SceneLayer`. */
+[data-efeito-parado]
+  :is(
+    .efeito-aura,
+    .efeito-translucido,
+    .efeito-tremendo,
+    .efeito-pulsar,
+    .efeito-girar,
+    .efeito-flutuar,
+    .efeito-piscar,
+    .efeito-colunas,
+    .efeito-linhas,
+    .efeito-faixa
+  ) {
+  animation-play-state: paused;
+}
+
+@keyframes efeito-faixa {
+  from {
+    background-position-x: 0;
+  }
+
+  to {
+    background-position-x: var(--efeito-fim, 0);
+  }
 }
 
 @keyframes efeito-pulsar {

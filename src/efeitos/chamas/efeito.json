@@ -41,5 +41,39 @@
       "altura": 0.35,
       "ancora": "base"
     }
+  },
+  "area": {
+    "cor": "#f59e0b",
+    "divisoes": 2,
+    "escala": 1.7,
+    "foco": {
+      "imagem": "chama-128.webp",
+      "mipmaps": {
+        "64": "chama-64.webp",
+        "128": "chama-128.webp"
+      },
+      "quadros": {
+        "colunas": 4,
+        "total": 16,
+        "fps": 14
+      },
+      "cores": "condicao"
+    },
+    "densidade": 4
+  },
+  "base": {
+    "imagem": "chao-de-fogo-128.webp",
+    "mipmaps": {
+      "64": "chao-de-fogo-64.webp",
+      "128": "chao-de-fogo-128.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 16,
+      "fps": 14
+    },
+    "cores": "condicao",
+    "escala": 2,
+    "escurece": 0.5
   }
 }

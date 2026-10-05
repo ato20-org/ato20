@@ -90,6 +90,8 @@ type PortraitLayerProps = {
    * `SceneLayer`, que monta o mapa uma vez para o token e para o retrato.
    */
   efeitos?: ReadonlyMap<string, ReadonlyArray<EfeitoPedido>>;
+  /** Só estes retratos animam os efeitos. Ausente = todos. Ver `animarSo`. */
+  animarSo?: ReadonlySet<string>;
   onPortraitPointerDown?: (
     event: ReactPointerEvent,
     portrait: Portrait,
@@ -111,6 +113,7 @@ export function PortraitLayer({
   espaco = "cena",
   rolagens,
   efeitos,
+  animarSo,
   onPortraitPointerDown,
 }: PortraitLayerProps) {
   const isOperator = variant === "mestre";
@@ -162,6 +165,7 @@ export function PortraitLayer({
             // 10 Hz mesmo sem ninguém rolar nada.
             rolagens={porPersonagem.get(portrait.personagemId)}
             efeitos={efeitos?.get(portrait.personagemId)}
+            efeitosParados={animarSo ? !animarSo.has(portrait.id) : undefined}
             onPointerDown={onPortraitPointerDown}
           />
         );
@@ -301,6 +305,8 @@ type PortraitViewProps = {
   rolagens?: RolagemDaMesa[];
   /** O que as condições fazem com a figura. Ausente = nada. */
   efeitos?: ReadonlyArray<EfeitoPedido>;
+  /** Os efeitos pausados. Ver `CanvasItemView.efeitosParados`. */
+  efeitosParados?: boolean;
   onPointerDown?: (event: ReactPointerEvent, portrait: Portrait) => void;
 };
 
@@ -315,6 +321,7 @@ const PortraitView = memo(function PortraitView({
   espaco,
   rolagens,
   efeitos,
+  efeitosParados,
   onPointerDown,
 }: PortraitViewProps) {
   const url = useAssetUrl(portrait.assetId);
@@ -386,6 +393,7 @@ const PortraitView = memo(function PortraitView({
   return (
     <div
       data-portrait-id={portrait.id}
+      data-efeito-parado={efeitosParados ? "" : undefined}
       className={cn(
         "absolute top-0 left-0",
         interactive && "touch-none cursor-move",

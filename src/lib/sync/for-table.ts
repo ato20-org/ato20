@@ -90,6 +90,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
     !scene.grupos &&
     !scene.textos &&
     !scene.formas &&
+    !scene.areasDeEfeito &&
     !scene.ligacoes &&
     !scene.documentos
   )
@@ -122,6 +123,11 @@ export function sceneForTable(scene: Scene | null): Scene | null {
 
   paraMesa.formas = scene.formas?.filter((forma) => forma.naMesa);
   if (!paraMesa.formas?.length) delete paraMesa.formas;
+
+  // A área de efeito também nasce fechada, e é o olho do gizmo que a abre: o
+  // mestre prepara o incêndio antes de a mesa vê-lo começar.
+  paraMesa.areasDeEfeito = scene.areasDeEfeito?.filter((area) => area.naMesa);
+  if (!paraMesa.areasDeEfeito?.length) delete paraMesa.areasDeEfeito;
 
   // A seta continua sendo só do quadro: ela amarra postit a postit, e os dois
   // nunca chegam à mesa a partir de um mapa.

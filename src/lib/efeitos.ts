@@ -267,6 +267,17 @@ export function copiaParaACampanha(
       );
     }
   }
+  const imagens = (campos: { imagem: string; cores?: string; mipmaps?: Record<string, string> }) => {
+    campos.imagem = referencia(campos.imagem) ?? "";
+    if (campos.cores && campos.cores !== "condicao") campos.cores = referencia(campos.cores);
+    if (campos.mipmaps) {
+      campos.mipmaps = Object.fromEntries(
+        Object.entries(campos.mipmaps).map(([lado, arquivo]) => [lado, referencia(arquivo) ?? arquivo]),
+      );
+    }
+  };
+  if (copia.area?.foco) imagens(copia.area.foco);
+  if (copia.base) imagens(copia.base);
   if (copia.interno) copia.interno.textura = referencia(copia.interno.textura) ?? "";
   if (copia.particulas?.imagem) copia.particulas.imagem = referencia(copia.particulas.imagem);
 
@@ -290,13 +301,7 @@ function resolverExterno(
 
   const imagem = (arquivo: string | undefined) =>
     arquivo ? (urlDaImagem(definicao, arquivo) ?? undefined) : undefined;
-  const niveis = Object.entries(externo.mipmaps ?? {})
-    .map(([lado, arquivo]) => ({ lado: Number(lado), url: imagem(arquivo) }))
-    .filter(
-      (nivel): nivel is { lado: number; url: string } =>
-        Number.isFinite(nivel.lado) && nivel.lado > 0 && Boolean(nivel.url),
-    )
-    .sort((a, b) => a.lado - b.lado);
+  const niveis = niveisDe(definicao, externo.mipmaps);
   const quadros = quadrosValidos(externo.quadros);
   const mascara = imagem(externo.mascara);
   const profundidade = imagem(externo.profundidade);
@@ -320,6 +325,108 @@ function resolverExterno(
     ...(mascara ? { mascara } : {}),
     ...(profundidade ? { profundidade } : {}),
   };
+}
+
+/** Os mipmaps com endereço, do menor ao maior. Os tortos ficam de fora. */
+function niveisDe(
+  definicao: DefinicaoDeEfeito,
+  mipmaps: Record<string, string> | undefined,
+): Array<{ lado: number; url: string }> {
+  return Object.entries(mipmaps ?? {})
+    .map(([lado, arquivo]) => ({ lado: Number(lado), url: urlDaImagem(definicao, arquivo) }))
+    .filter(
+      (nivel): nivel is { lado: number; url: string } =>
+        Number.isFinite(nivel.lado) && nivel.lado > 0 && Boolean(nivel.url),
+    )
+    .sort((a, b) => a.lado - b.lado);
+}
+
+/** Uma imagem animada pronta para desenhar: a do foco da área, a da base. */
+export type ImagemResolvida = {
+  url: string;
+  /** Os mipmaps, do menor ao maior, pelo lado do QUADRO. Vazio = só `url`. */
+  niveis: ReadonlyArray<{ lado: number; url: string }>;
+  quadros?: QuadrosDoEfeito;
+  cores?: { cor: string } | { rampa: string };
+};
+
+/** Os campos de imagem que o foco e a base dividem, resolvidos para esta tela. */
+function resolverImagem(
+  definicao: DefinicaoDeEfeito,
+  campos: { imagem: string; quadros?: QuadrosDoEfeito; mipmaps?: Record<string, string>; cores?: string },
+  cor: string,
+): ImagemResolvida | undefined {
+  const url = urlDaImagem(definicao, campos.imagem);
+  if (!url) return undefined;
+
+  const quadros = quadrosValidos(campos.quadros);
+  const rampa =
+    campos.cores && campos.cores !== "condicao"
+      ? (urlDaImagem(definicao, campos.cores) ?? undefined)
+      : undefined;
+
+  return {
+    url,
+    niveis: niveisDe(definicao, campos.mipmaps),
+    ...(quadros ? { quadros } : {}),
+    ...(campos.cores === "condicao" ? { cores: { cor } } : rampa ? { cores: { rampa } } : {}),
+  };
+}
+
+/**
+ * O foco da área do efeito do pedido, com a cor dele. Ausente sem `area.foco`
+ * -- a área cai no `externo`. Ver `AreaDoEfeito.foco`.
+ */
+export function focoDaArea(
+  pedido: EfeitoPedido,
+  deFora?: EfeitosDeFora,
+): ImagemResolvida | undefined {
+  const definicao = definicaoDoEfeito(pedido.efeito, deFora);
+  const foco = definicao?.area?.foco;
+  return definicao && foco ? resolverImagem(definicao, foco, pedido.cor) : undefined;
+}
+
+/** A base pronta para desenhar: endereços desta tela, nada fora do limite. */
+export type BaseResolvida = ImagemResolvida & {
+  opacidade: number;
+  /** O ladrilho, em vezes a casa da grade. */
+  escala: number;
+  /** O chão embaixo, de 0 a 1. Ver `BaseDoEfeito.escurece`. */
+  escurece: number;
+};
+
+/**
+ * A base do efeito do pedido, com a cor dele. Ausente sem base, ou com a
+ * imagem que o pack não tem. Ver `BaseDoEfeito`.
+ */
+export function baseDoEfeito(
+  pedido: EfeitoPedido,
+  deFora?: EfeitosDeFora,
+): BaseResolvida | undefined {
+  const definicao = definicaoDoEfeito(pedido.efeito, deFora);
+  const base = definicao?.base;
+  if (!definicao || !base) return undefined;
+
+  const imagem = resolverImagem(definicao, base, pedido.cor);
+  if (!imagem) return undefined;
+
+  const escala =
+    typeof base.escala === "number" && Number.isFinite(base.escala)
+      ? Math.min(4, Math.max(0.5, base.escala))
+      : 1;
+
+  return {
+    ...imagem,
+    opacidade: fracao(base.opacidade, 1),
+    escurece: fracao(base.escurece, 0),
+    escala,
+  };
+}
+
+/** O nível de um mipmap para um quadro de `pixels` de lado. Ver `nivelDoExterno`. */
+export function nivelDaImagem(imagem: ImagemResolvida, pixels: number): string {
+  if (imagem.niveis.length === 0) return imagem.url;
+  return (imagem.niveis.find((nivel) => nivel.lado >= pixels) ?? imagem.niveis[imagem.niveis.length - 1]!).url;
 }
 
 /**

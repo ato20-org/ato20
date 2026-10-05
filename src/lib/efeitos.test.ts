@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  baseDoEfeito,
+  focoDaArea,
   camadasDaFigura,
   definicaoDoEfeito,
   EFEITOS_DE_FABRICA,
@@ -467,5 +469,39 @@ describe("o molhado de fábrica", () => {
     expect(particulas.direcao).toBe(90);
     expect(particulas.quadros).toEqual({ colunas: 4, total: 4 });
     expect(particulas.pintar).toBe(false);
+  });
+});
+
+describe("a base do efeito", () => {
+  it("o fogo de fábrica tem o chão de fogo: ladrilho de dois segmentos, na cor da área", () => {
+    const base = baseDoEfeito({ efeito: "chamas", cor: "#3b82f6" })!;
+
+    expect(base.url).toContain("chao-de-fogo-128");
+    expect(base.niveis.map((nivel) => nivel.lado)).toEqual([64, 128]);
+    expect(base.quadros).toEqual({ colunas: 4, total: 16, fps: 14 });
+    expect(base.cores).toEqual({ cor: "#3b82f6" });
+    expect(base.escala).toBe(2);
+    expect(base.escurece).toBeCloseTo(0.5);
+  });
+
+  it("a área em chamas tem o foco próprio: a chama, e não o anel da figura", () => {
+    const foco = focoDaArea({ efeito: "chamas", cor: "#f59e0b" })!;
+
+    expect(foco.url).toContain("chama-128");
+    expect(foco.niveis.map((nivel) => nivel.lado)).toEqual([64, 128]);
+    expect(foco.cores).toEqual({ cor: "#f59e0b" });
+    expect(focoDaArea({ efeito: "congelado", cor: "#fff" })).toBeUndefined();
+  });
+
+  it("efeito sem base não tem base", () => {
+    expect(baseDoEfeito({ efeito: "congelado", cor: "#3b82f6" })).toBeUndefined();
+  });
+
+  it("a cópia para a campanha aponta o chão de fogo para o pack", () => {
+    const copia = copiaParaACampanha(definicaoDoEfeito("chamas")!, "campanha/a1b2c3d4", "Em chamas");
+
+    expect(copia.base!.imagem).toBe("fabrica:chamas/chao-de-fogo-128.webp");
+    expect(copia.base!.mipmaps!["64"]).toBe("fabrica:chamas/chao-de-fogo-64.webp");
+    expect(copia.area!.foco!.imagem).toBe("fabrica:chamas/chama-128.webp");
   });
 });

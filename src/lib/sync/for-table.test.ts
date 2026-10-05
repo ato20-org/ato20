@@ -115,6 +115,29 @@ describe("sceneForTable", () => {
     expect(sceneForTable(scene)!.formas).toBeUndefined();
   });
 
+  it("a área de efeito chega à mesa só com o olho aberto", () => {
+    const scene = createScene("");
+    const fogo = { y: 0, width: 96, height: 96, efeito: "chamas", cor: "#f59e0b" };
+    scene.areasDeEfeito = [
+      { id: "preparada", x: 0, ...fogo },
+      { id: "acesa", x: 200, ...fogo, naMesa: true },
+    ];
+
+    expect(sceneForTable(scene)!.areasDeEfeito?.map((area) => area.id)).toEqual(["acesa"]);
+  });
+
+  it("uma cena só com áreas fechadas não devolve a mesma referência", () => {
+    // O guarda de identidade cobre a lista: sem ela, a área que o mestre ainda
+    // prepara voltaria inteira para a mesa.
+    const scene = createScene("");
+    scene.areasDeEfeito = [
+      { id: "a", x: 0, y: 0, width: 96, height: 96, efeito: "chamas", cor: "#f59e0b" },
+    ];
+
+    expect(sceneForTable(scene)).not.toBe(scene);
+    expect(sceneForTable(scene)!.areasDeEfeito).toBeUndefined();
+  });
+
   it("no quadro a letra e a forma passam sem precisar de olho nenhum", () => {
     const scene = createScene("Rede", "quadro");
     scene.textos = [{ id: "t", x: 0, y: 0, texto: "Edgar", tamanho: 40 }];

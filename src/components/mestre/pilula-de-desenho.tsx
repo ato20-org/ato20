@@ -8,9 +8,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { EFEITOS_DE_AREA } from "@/lib/area-de-efeito";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
-import { temNevoa, temSol, type Scene } from "@/types/scene";
+import { temAreaDeEfeito, temNevoa, temSol, type Scene } from "@/types/scene";
 
 /**
  * O DESENHO de uma coisa desenhada: o primeiro passo da pílula.
@@ -66,8 +67,23 @@ const NATUREZAS = [
   },
 ] as const;
 
+/**
+ * As naturezas que vêm do CATÁLOGO: um botão por efeito de área -- hoje, só o
+ * fogo. É o mesmo desenho, um quarto significado: o chão pega fogo. A chave
+ * leva o id do efeito, e o próximo efeito que declarar `area` entra aqui sem
+ * uma linha de código. Ver `EFEITOS_DE_AREA`.
+ */
+const NATUREZAS_DE_EFEITO = EFEITOS_DE_AREA.map((efeito) => ({
+  chave: `efeito:${efeito.id}` as const,
+  label: efeito.titulo,
+  hint: "O efeito no chão, casa a casa da grade. Nasce só para você.",
+}));
+
 /** O amarelo da parede, o mesmo de `LuzLayer`. */
 const COR_DA_PAREDE = "#facc15";
+
+/** O laranja do efeito no chão. */
+const COR_DO_EFEITO = "#f97316";
 
 /** O contorno de cada geometria, numa caixa de 18. Ver `AmostraDaForma`. */
 const DESENHOS: Record<Geometria["chave"], React.ReactNode> = {
@@ -90,6 +106,7 @@ const DESENHOS: Record<Geometria["chave"], React.ReactNode> = {
  * - `parede`  massa amarela cheia, borda sólida. É pedra.
  * - `area`    figura cheia e escura, borda tracejada. É o que tapa o mapa.
  * - `elemento` só o traço fino. É marca sobre a cena, não corpo.
+ * - `efeito:*` laranja, tracejado, com uma chama dentro. É o chão em chamas.
  *
  * `null` é a amostra neutra, para o botão da régua antes de a natureza ser
  * escolhida.
@@ -101,8 +118,16 @@ function AmostraDaForma({
   geometria: Geometria["chave"];
   natureza: Natureza | null;
 }) {
-  const pintura =
-    natureza === "parede"
+  const efeito = natureza?.startsWith("efeito:") ?? false;
+  const pintura = efeito
+    ? {
+        fill: COR_DO_EFEITO,
+        fillOpacity: 0.2,
+        stroke: COR_DO_EFEITO,
+        strokeWidth: 1.25,
+        strokeDasharray: "2.5 2",
+      }
+    : natureza === "parede"
       ? {
           fill: COR_DA_PAREDE,
           fillOpacity: 0.3,
@@ -131,11 +156,19 @@ function AmostraDaForma({
       strokeLinejoin="round"
     >
       <g {...pintura}>{DESENHOS[geometria]}</g>
+      {efeito ? (
+        <path
+          d="M9 5.5c.9 1.3 2.3 2.2 2.3 3.9a2.3 2.3 0 0 1-4.6 0c0-.8.4-1.5 1-2 .1.6.4 1 .8 1.1C8.4 7.6 8.6 6.6 9 5.5z"
+          fill={COR_DO_EFEITO}
+        />
+      ) : null}
     </svg>
   );
 }
 
-type Natureza = (typeof NATUREZAS)[number]["chave"];
+type Natureza =
+  | (typeof NATUREZAS)[number]["chave"]
+  | (typeof NATUREZAS_DE_EFEITO)[number]["chave"];
 
 /**
  * A pílula de desenho: o que se desenha na cena, em dois passos.
@@ -169,6 +202,9 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
   const setFormatoDeArea = useToolStore((state) => state.setFormatoDeArea);
   const formatoDaParede = useToolStore((state) => state.formatoDaParede);
   const setFormatoDaParede = useToolStore((state) => state.setFormatoDaParede);
+  const formatoDoEfeito = useToolStore((state) => state.formatoDoEfeito);
+  const efeitoDaArea = useToolStore((state) => state.efeitoDaArea);
+  const setAreaDeEfeito = useToolStore((state) => state.setAreaDeEfeito);
 
   /** Qual geometria está com a fileira de naturezas aberta. `null` = fechada. */
   const [aberta, setAberta] = useState<Geometria["chave"] | null>(null);
@@ -211,11 +247,15 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
    * imagem e a imagem existe para ser vista de uma vez -- as mesmas duas caem,
    * por duas razões diferentes. Sobra o elemento, que vale nos três.
    */
-  const naturezas = NATUREZAS.filter(
-    (natureza) =>
-      (natureza.chave !== "parede" || temSol(scene)) &&
-      (natureza.chave !== "area" || temNevoa(scene)),
-  );
+  const naturezas: ReadonlyArray<{ chave: Natureza; label: string; hint: string }> = [
+    ...NATUREZAS.filter(
+      (natureza) =>
+        (natureza.chave !== "parede" || temSol(scene)) &&
+        (natureza.chave !== "area" || temNevoa(scene)),
+    ),
+    // O efeito no chão é do mapa, como a parede e a névoa.
+    ...(temAreaDeEfeito(scene) ? NATUREZAS_DE_EFEITO : []),
+  ];
 
   /**
    * Sobrou UMA natureza: a pílula deixa de ter dois passos.
@@ -247,6 +287,10 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
         const geometria = de(tipoDeForma);
         return geometria ? { geometria, natureza: "elemento" } : null;
       }
+      if (tool === "efeito") {
+        const geometria = de(formatoDoEfeito);
+        return geometria ? { geometria, natureza: `efeito:${efeitoDaArea}` } : null;
+      }
 
       return null;
     })();
@@ -260,6 +304,12 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
     if (natureza === "parede") {
       setFormatoDaParede(geometria.formato);
       setTool("parede");
+    } else if (natureza.startsWith("efeito:")) {
+      setAreaDeEfeito({
+        formatoDoEfeito: geometria.formato,
+        efeitoDaArea: natureza.slice("efeito:".length),
+      });
+      setTool("efeito");
     } else if (natureza === "area") {
       // A área não tem `linha`, e nenhuma das três geometrias é uma: o
       // vocabulário da pílula já é o subconjunto que serve às três.

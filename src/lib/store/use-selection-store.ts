@@ -50,6 +50,8 @@ type SelectionStore = {
   selectedTracoIds: string[];
   /** Área escondida selecionada. Uma por vez — são poucas e não formam grupo. */
   selectedFogId: string | null;
+  /** Área de efeito selecionada. Uma por vez, pela razão da área escondida. */
+  selectedAreaDeEfeitoId: string | null;
   /**
    * Retratos selecionados.
    *
@@ -110,6 +112,8 @@ type SelectionStore = {
   }) => void;
   selectFog: (fogId: string | null) => void;
   /** `null` limpa. */
+  selectAreaDeEfeito: (areaId: string | null) => void;
+  /** `null` limpa. */
   selectMedidor: (medidorId: string | null) => void;
   /** `null` limpa. */
   selectParede: (paredeId: string | null) => void;
@@ -128,10 +132,11 @@ type SelectionStore = {
  * Seleção é estado de UI do Mestre: não é persistida no board e não viaja
  * no canal. O Jogador e o Espectador nunca sabem o que o mestre tem selecionado.
  *
- * Área escondida, retrato e medidor são seleções mutuamente exclusivas entre si
- * e com as SEIS do palco — imagem, texto solto, forma, postit, cartão de nota e
- * risco —, porque cada uma usa o mesmo gizmo na tela. As seis do palco são a
- * exceção, e andam juntas: ver `selectedTextoIds` e `selectedPostitIds`.
+ * Área escondida, área de efeito, retrato e medidor são seleções mutuamente
+ * exclusivas entre si e com as SEIS do palco — imagem, texto solto, forma,
+ * postit, cartão de nota e risco —, porque cada uma usa o mesmo gizmo na tela.
+ * As seis do palco são a exceção, e andam juntas: ver `selectedTextoIds` e
+ * `selectedPostitIds`.
  *
  * Entre as seis há uma divisão que o gizmo respeita: imagem, texto e forma
  * escalam e giram; postit, cartão e risco só ANDAM. Ver `grupo-sem-alca`.
@@ -154,6 +159,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
   selectedDocumentoIds: [],
   selectedTracoIds: [],
   selectedFogId: null,
+  selectedAreaDeEfeitoId: null,
   selectedPortraitIds: [],
   selectedMedidorId: null,
   selectedParedeId: null,
@@ -172,6 +178,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
         ? selectedIds.filter((id) => id !== itemId)
         : [...selectedIds, itemId],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -192,6 +199,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
         ? selectedTextoIds.filter((id) => id !== textoId)
         : [...selectedTextoIds, textoId],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -212,6 +220,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
         ? selectedFormaIds.filter((id) => id !== formaId)
         : [...selectedFormaIds, formaId],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -232,6 +241,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
         ? selectedPostitIds.filter((id) => id !== postitId)
         : [...selectedPostitIds, postitId],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -252,6 +262,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
         ? selectedDocumentoIds.filter((id) => id !== documentoId)
         : [...selectedDocumentoIds, documentoId],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -276,6 +287,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds: documentos,
       selectedTracoIds: tracos,
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -293,6 +305,25 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds: [],
       selectedTracoIds: [],
       selectedFogId: fogId,
+      selectedAreaDeEfeitoId: null,
+      selectedPortraitIds: [],
+      selectedMedidorId: null,
+      selectedParedeId: null,
+      selectedLuzId: null,
+      selectedPinId: null,
+    });
+  },
+
+  selectAreaDeEfeito(areaId) {
+    set({
+      selectedIds: [],
+      selectedTextoIds: [],
+      selectedFormaIds: [],
+      selectedPostitIds: [],
+      selectedDocumentoIds: [],
+      selectedTracoIds: [],
+      selectedFogId: null,
+      selectedAreaDeEfeitoId: areaId,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -310,6 +341,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds: [],
       selectedTracoIds: [],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: medidorId,
       selectedLuzId: null,
@@ -326,6 +358,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds: [],
       selectedTracoIds: [],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: paredeId,
@@ -343,6 +376,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds: [],
       selectedTracoIds: [],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -360,6 +394,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds: [],
       selectedTracoIds: [],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -381,6 +416,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds: [],
       selectedTracoIds: [],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: portraitIds,
       selectedMedidorId: null,
       selectedParedeId: null,
@@ -400,6 +436,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds: [],
       selectedTracoIds: [],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: selectedPortraitIds.includes(portraitId)
         ? selectedPortraitIds.filter((id) => id !== portraitId)
         : [...selectedPortraitIds, portraitId],
@@ -419,6 +456,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds,
       selectedTracoIds,
       selectedFogId,
+      selectedAreaDeEfeitoId,
       selectedPortraitIds,
       selectedMedidorId,
       selectedParedeId,
@@ -433,6 +471,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds.length === 0 &&
       selectedTracoIds.length === 0 &&
       selectedFogId === null &&
+      selectedAreaDeEfeitoId === null &&
       selectedPortraitIds.length === 0 &&
       selectedMedidorId === null &&
       selectedParedeId === null &&
@@ -450,6 +489,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedDocumentoIds: [],
       selectedTracoIds: [],
       selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
