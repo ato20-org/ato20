@@ -1095,10 +1095,10 @@ async fn serve_plugin(
     // por `caminho_relativo_seguro` e so tem imagem raster (ver
     // `IMAGENS_DE_MEDIDOR`), entao nada aqui abre um `.svg` ou um `.html`.
     let de_estilo = manifesto
-            .contribui
-            .estilos_de_medidor
-            .iter()
-            .any(|estilo| estilo.imagens().contains(&arquivo.as_str()));
+        .contribui
+        .imagens_servidas()
+        .iter()
+        .any(|(_, imagem)| *imagem == arquivo.as_str());
     if !tem_pagina && !de_estilo {
         return fail(StatusCode::NOT_FOUND, "plugin sem pagina");
     }

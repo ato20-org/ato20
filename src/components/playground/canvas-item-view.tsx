@@ -121,6 +121,7 @@ export const CanvasItemView = memo(function CanvasItemView({
           url={url}
           semente={item.id}
           espelho={espelho}
+          alcance={item}
         >
           {(fonte) => (
             // next/image não serve aqui: a fonte é uma blob URL do IndexedDB,

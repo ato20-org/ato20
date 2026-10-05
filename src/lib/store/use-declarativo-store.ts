@@ -94,7 +94,7 @@ function lerEfeitos(extensoes: Extensao[]): Record<string, DefinicaoDeEfeito> {
 
     for (const efeito of extensao.contribui?.efeitos ?? []) {
       const id = `${extensao.id}/${efeito.id}`;
-      efeitos[id] = { ...efeito, id };
+      efeitos[id] = { ...efeito, id, origem: { plugin: extensao.id, versao: extensao.versao } };
     }
   }
 

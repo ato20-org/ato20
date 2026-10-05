@@ -23,6 +23,65 @@ export type DefinicaoDeEfeito = {
   dica?: string;
   /** O que acontece com a própria figura. Ver `FiguraDoEfeito`. */
   figura?: FiguraDoEfeito;
+  /** Uma imagem em volta da figura. Ver `ExternoDoEfeito`. */
+  externo?: ExternoDoEfeito;
+  /** Uma textura pintada dentro da figura. Ver `InternoDoEfeito`. */
+  interno?: InternoDoEfeito;
+  /**
+   * De onde vêm as imagens. Não é o autor que escreve: quem publica preenche
+   * -- o plugin e a versão dele, que vão na URL. Ausente = sem imagem, que é
+   * o caso da fábrica; um externo sem origem não desenha.
+   */
+  origem?: OrigemDoEfeito;
+};
+
+/** O plugin dono das imagens do efeito, e a versão que vai na URL. */
+export type OrigemDoEfeito = { plugin: string; versao: string };
+
+/**
+ * Uma imagem em volta da figura: o fogo, a fumaça, o círculo mágico.
+ *
+ * Esticada na caixa da figura vezes `tamanho`, como o token se estica na
+ * dele: o pack desenha o fogo quadrado para o token quadrado. Espelho de
+ * `extensoes::Externo`, que é quem valida.
+ */
+export type ExternoDoEfeito = {
+  /** Relativa à pasta do plugin. Só raster. */
+  imagem: string;
+  /** Vezes a figura, de 0,25 a 2. Ausente = 1,5. Ver `tamanhoNoPlano`. */
+  tamanho?: number;
+  /** Ausente = `atras`. */
+  lado?: "atras" | "frente";
+  /** De onde cresce. Ausente = `centro`. */
+  ancora?: "centro" | "base" | "topo";
+  /** De 0 a 1. Ausente = 1. */
+  opacidade?: number;
+  animacao?: AnimacaoDoEfeito;
+};
+
+/**
+ * O "script de animação" de um efeito, como DADO: a TV e o celular não rodam
+ * código de plugin. Quatro movimentos, todos em `transform` e `opacity`, que
+ * são o que o compositor anima sem refazer layout.
+ */
+export type AnimacaoDoEfeito = {
+  tipo: "pulsar" | "girar" | "flutuar" | "piscar";
+  /** Segundos por ciclo, de 0,2 a 30. Ausente = 2. */
+  periodo?: number;
+  /** De 0 a 1, quanto se afasta do parado. Ausente = 0,5. */
+  intensidade?: number;
+};
+
+/**
+ * Uma textura pintada sobre a figura -- a rachadura, a escama, o musgo --, só
+ * onde há figura. Assada UMA vez na pele, como a tinta: zero nó a mais.
+ * Esticada na figura inteira.
+ */
+export type InternoDoEfeito = {
+  /** Relativa à pasta do plugin. Só raster. */
+  textura: string;
+  /** Quanto cobre, de 0 a 1. Ausente = 1. */
+  forca?: number;
 };
 
 /**

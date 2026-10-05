@@ -54,6 +54,8 @@ export type PedidoDePele = {
   tinta?: string;
   /** Quanto a tinta cobre, de 0 a 1. Ver `FiguraDoEfeito.tinta`. */
   forca?: number;
+  /** A textura de dentro: a rachadura, a escama. Ver `InternoDoEfeito`. */
+  textura?: { url: string; forca: number };
 };
 
 /**
@@ -118,12 +120,13 @@ export function assarPele(
   url: string,
   pedido: PedidoDePele,
 ): Promise<Assado | null> {
-  if (!pedido.cinza && !pedido.tinta) return Promise.resolve(null);
+  if (!pedido.cinza && !pedido.tinta && !pedido.textura) return Promise.resolve(null);
 
   const forca = forcaDaTinta(pedido.forca);
+  const textura = pedido.textura;
 
   return guardado(
-    `${url}|pele|${pedido.cinza ? "cinza" : ""}|${pedido.tinta ?? ""}|${forca}`,
+    `${url}|pele|${pedido.cinza ? "cinza" : ""}|${pedido.tinta ?? ""}|${forca}|${textura ? `${textura.url}@${textura.forca}` : ""}`,
     async () => {
       const tela = await telaDaFigura(url);
       if (!tela) return null;
@@ -141,6 +144,19 @@ export function assarPele(
         ctx.globalAlpha = forca;
         ctx.fillStyle = pedido.tinta;
         ctx.fillRect(0, 0, tela.width, tela.height);
+      }
+
+      // A textura por último, por cima da cor: a rachadura corta o veneno, e
+      // não o contrário. `source-atop` pela razão da tinta, e esticada na
+      // figura inteira -- o pack a desenha para cobrir um token. Textura que
+      // não carrega não derruba a pele: a figura sai com o resto.
+      if (textura) {
+        const imagem = await carregarImagem(textura.url).catch(() => null);
+        if (imagem) {
+          ctx.globalCompositeOperation = "source-atop";
+          ctx.globalAlpha = textura.forca;
+          ctx.drawImage(imagem, 0, 0, tela.width, tela.height);
+        }
       }
 
       return { desenho: tela.toDataURL("image/png"), margemX: 0, margemY: 0 };
