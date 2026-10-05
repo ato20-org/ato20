@@ -122,8 +122,21 @@ import {
  * refaz inteira a cada quadro, porque a profundidade de tudo muda. É gesto
  * transitório e parado volta a 60, então fica como está até alguém reclamar.
  *
- * E a escala é boa: 80 paredes dão 60,1 fps, 160 dão 54,1. Um mapa de mesa tem
- * dezenas, não centenas.
+ * E a escala das PAREDES é boa: 80 dão 60,1 fps, 160 dão 54,1. Um mapa de mesa
+ * tem dezenas, não centenas.
+ *
+ * ## A textura das PEÇAS é o que pesa quando há muitas
+ *
+ * Cada peça é uma camada composta própria (ver `PecaEmPe`), e a camada carrega a
+ * textura INTEIRA do token. Com o original -- uma arte de token tem milhões de
+ * pixels -- a webview trava assim que a câmera se move: medido no `chao-25d`
+ * (WebKitGTK 2.52.6, janela 1440x900, build), com a textura de verdade oitenta
+ * peças caem a 53 fps e cento e sessenta não entregam o quadro, contra 60 fps com
+ * a mesma contagem em 256px. O mapa de prumo não sofre porque lá o token é
+ * `transform` 2D e pinta num plano só, não numa camada por peça.
+ *
+ * O conserto é a peça pedir a variante `mini` -- ver `PecaEmPe`, e lá por que
+ * FIXA e não escolhida pelo tamanho na tela.
  */
 
 /**
@@ -267,7 +280,20 @@ function PecaEmPe({
     id: string,
   ) => void;
 }) {
-  const doAcervo = useAssetUrl(peca.assetId, variante);
+  // A variante LEVE por padrão, e não o arquivo. De esguelha cada peça é uma
+  // camada composta própria (leva `translate3d`) que carrega a textura INTEIRA
+  // do token, e uma arte de token tem milhões de pixels: dezenas de originais
+  // estouram a composição da webview assim que a câmera se move -- medido, a
+  // cheia trava com ~160 peças (a webview não entrega o quadro) e a `mini`
+  // entrega 59 fps. O mapa de prumo pede o original DE PROPÓSITO (ver
+  // `scene-layer.tsx`), e pode: lá o token é `transform` 2D e pinta num plano
+  // só, não numa camada por peça.
+  //
+  // FIXA, e não escolhida pelo tamanho na tela: trocar a resolução no meio do
+  // gesto re-decodifica a imagem de cada peça que cruza o limiar, e isso custa
+  // MAIS que a cheia -- medido, 19 fps contra 57. Quem aproxima um token para
+  // ver o detalhe tem o mapa de prumo, que carrega o original.
+  const doAcervo = useAssetUrl(peca.assetId, variante ?? "mini");
   const src = peca.fogo?.fonte ?? peca.url ?? doAcervo;
   const { fogo } = peca;
 
