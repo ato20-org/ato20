@@ -340,7 +340,179 @@ export type CamadasDaArea = {
     grade: { colunas: number; linhas: number; total: number };
     focos: ReadonlyArray<FocoNaFolha>;
   };
+  /** A borda esfumaçada da base. Ausente = o recorte seco no contorno. Ver `mascaraDaBorda`. */
+  borda?: BordaDaArea;
 };
+
+/** A borda esfumaçada: a largura em pixels do quadro, e a semente da textura dela. */
+export type BordaDaArea = { largura: number; semente: number };
+
+/** Um número de 0 a 1 que sai de três inteiros: o ruído da borda, sem tabela. */
+function ruidoNoPonto(ix: number, iy: number, semente: number): number {
+  let h = Math.imul(ix, 374_761_393) ^ Math.imul(iy, 668_265_263) ^ Math.imul(semente, 2_246_822_519);
+  h = Math.imul(h ^ (h >>> 13), 1_274_126_177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4_294_967_296;
+}
+
+/** Ruído de valor, macio: os pontos da treliça de `passo` pixels, ligados em curva. */
+function ruidoMacio(x: number, y: number, passo: number, semente: number): number {
+  const gx = x / passo;
+  const gy = y / passo;
+  const ix = Math.floor(gx);
+  const iy = Math.floor(gy);
+  const tx = gx - ix;
+  const ty = gy - iy;
+  const sx = tx * tx * (3 - 2 * tx);
+  const sy = ty * ty * (3 - 2 * ty);
+  const a = ruidoNoPonto(ix, iy, semente);
+  const b = ruidoNoPonto(ix + 1, iy, semente);
+  const c = ruidoNoPonto(ix, iy + 1, semente);
+  const d = ruidoNoPonto(ix + 1, iy + 1, semente);
+  return (a + (b - a) * sx) * (1 - sy) + (c + (d - c) * sx) * sy;
+}
+
+/**
+ * A distância de cada ponto de uma treliça de `passo` pixels até o contorno,
+ * COM SINAL: positiva dentro da forma, negativa fora. Numa treliça e não por
+ * pixel: a distância é macia, e lida em bilinear ela não perde nada -- e a
+ * conta é por aresta, que no polígono de muitos vértices pesaria por pixel.
+ */
+function distanciasAoContorno(
+  colunas: number,
+  linhas: number,
+  passo: number,
+  contorno: ReadonlyArray<{ x: number; y: number }>,
+): Float32Array {
+  const campo = new Float32Array(colunas * linhas);
+  const n = contorno.length;
+
+  for (let gy = 0; gy < linhas; gy++) {
+    const py = gy * passo;
+    for (let gx = 0; gx < colunas; gx++) {
+      const px = gx * passo;
+      let menor = Infinity;
+      let dentro = false;
+
+      for (let i = 0, j = n - 1; i < n; j = i++) {
+        const a = contorno[j]!;
+        const b = contorno[i]!;
+        // Par ou ímpar: o raio para a direita cruza a aresta?
+        if (a.y > py !== b.y > py && px < ((b.x - a.x) * (py - a.y)) / (b.y - a.y) + a.x) {
+          dentro = !dentro;
+        }
+        const ex = b.x - a.x;
+        const ey = b.y - a.y;
+        const comprimento = ex * ex + ey * ey;
+        const t = comprimento > 0 ? Math.min(1, Math.max(0, ((px - a.x) * ex + (py - a.y) * ey) / comprimento)) : 0;
+        const dx = px - (a.x + ex * t);
+        const dy = py - (a.y + ey * t);
+        menor = Math.min(menor, dx * dx + dy * dy);
+      }
+
+      campo[gy * colunas + gx] = dentro ? Math.sqrt(menor) : -Math.sqrt(menor);
+    }
+  }
+
+  return campo;
+}
+
+/**
+ * A máscara da borda esfumaçada de uma área: branco, com o alfa que a base
+ * guarda em cada pixel do quadro, em RGBA.
+ *
+ * A transição tem a `largura` da borda e fica CENTRADA na linha: na linha, a
+ * base está pela metade -- o jogador ainda lê o limite onde ele está, e a área
+ * não encolhe. Um ruído empurra a linha para dentro e para fora (até meia
+ * largura), e outro, mais fino, rói o meio da faixa: a borda sai irregular e
+ * com textura, como fumaça, e não um degradê de régua. Parada: é uma conta
+ * por área, no forno, e a base anima por baixo dela.
+ *
+ * Nada passa de uma largura além da linha -- é a margem que `planoDaArea` dá à
+ * caixa, para a fumaça não terminar num corte reto.
+ */
+export function mascaraDaBorda(
+  largura: number,
+  altura: number,
+  contorno: ReadonlyArray<{ x: number; y: number }>,
+  borda: BordaDaArea,
+): Uint8ClampedArray<ArrayBuffer> {
+  const px = new Uint8ClampedArray(largura * altura * 4);
+  const w = Math.max(1, borda.largura);
+  const passo = Math.max(2, Math.round(w / 6));
+  const colunas = Math.ceil(largura / passo) + 2;
+  const linhas = Math.ceil(altura / passo) + 2;
+  const campo = distanciasAoContorno(colunas, linhas, passo, contorno);
+  const grosso = Math.max(3, w * 0.9);
+  const fino = Math.max(2, w * 0.3);
+
+  for (let y = 0; y < altura; y++) {
+    const gy = (y + 0.5) / passo;
+    const iy = Math.min(linhas - 2, Math.floor(gy));
+    const ty = gy - iy;
+    for (let x = 0; x < largura; x++) {
+      const gx = (x + 0.5) / passo;
+      const ix = Math.min(colunas - 2, Math.floor(gx));
+      const tx = gx - ix;
+      const i0 = iy * colunas + ix;
+      const d =
+        (campo[i0]! * (1 - tx) + campo[i0 + 1]! * tx) * (1 - ty) +
+        (campo[i0 + colunas]! * (1 - tx) + campo[i0 + colunas + 1]! * tx) * ty;
+
+      const o = (y * largura + x) * 4;
+      px[o] = 255;
+      px[o + 1] = 255;
+      px[o + 2] = 255;
+      if (d >= w) {
+        px[o + 3] = 255;
+        continue;
+      }
+      if (d <= -w) continue;
+
+      const n =
+        0.65 * ruidoMacio(x, y, grosso, borda.semente) + 0.35 * ruidoMacio(x, y, grosso / 2.3, borda.semente + 1);
+      const t = Math.min(1, Math.max(0, (d + (n - 0.5) * w) / w + 0.5));
+      let alfa = t * t * (3 - 2 * t);
+      // O meio da faixa, roído: buracos e fiapos onde a fumaça é rala.
+      const meio = 4 * alfa * (1 - alfa);
+      alfa *= 1 - 0.55 * meio * (1 - ruidoMacio(x, y, fino, borda.semente + 2));
+      px[o + 3] = Math.round(alfa * 255);
+    }
+  }
+
+  return px;
+}
+
+/** Um canvas fora da tela, no worker ou na janela. */
+function telaNova(largura: number, altura: number): OffscreenCanvas | HTMLCanvasElement {
+  if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(largura, altura);
+  const tela = document.createElement("canvas");
+  tela.width = largura;
+  tela.height = altura;
+  return tela;
+}
+
+/** A máscara num canvas, e o alfa dela para quem quer ler um pixel. */
+function telaDaMascara(
+  quadro: { largura: number; altura: number },
+  contorno: ReadonlyArray<{ x: number; y: number }>,
+  borda: BordaDaArea,
+): { tela: OffscreenCanvas | HTMLCanvasElement; alfaEm: (x: number, y: number) => number } | null {
+  const { largura, altura } = quadro;
+  const tela = telaNova(largura, altura);
+  const ctx = tela.getContext("2d") as Contexto2D | null;
+  if (!ctx) return null;
+
+  const px = mascaraDaBorda(largura, altura, contorno, borda);
+  ctx.putImageData(new ImageData(px, largura, altura), 0, 0);
+  return {
+    tela,
+    alfaEm: (x, y) => {
+      const cx = Math.min(largura - 1, Math.max(0, Math.round(x)));
+      const cy = Math.min(altura - 1, Math.max(0, Math.round(y)));
+      return px[(cy * largura + cx) * 4 + 3]! / 255;
+    },
+  };
+}
 
 /**
  * A folha de uma ÁREA de efeito, quadro a quadro: a BASE ladrilhada e
@@ -353,12 +525,26 @@ export type CamadasDaArea = {
  * fogo, o laço dela fecha também.
  *
  * O recorte da base é o CONTORNO da área, e a borda escurece por dentro, como
- * chão queimado: é a linha que o jogador lê como "a área acaba aqui". Os focos
- * vêm de trás para a frente (ver `planoDaArea`), e cada quadro é recortado na
- * própria célula: nada vaza para o quadro vizinho.
+ * chão queimado: é a linha que o jogador lê como "a área acaba aqui". Com a
+ * `borda`, o recorte deixa de ser seco: a base inteira passa pela máscara
+ * esfumaçada (ver `mascaraDaBorda`), e o foco perto da borda esmaece com ela,
+ * pelo alfa no pé. Os focos vêm de trás para a frente (ver `planoDaArea`), e
+ * cada quadro é recortado na própria célula: nada vaza para o quadro vizinho
+ * -- nem o `destination-in` da máscara, que o recorte da célula segura.
  */
 export function desenharFolhaDaArea(ctx: Contexto2D, camadas: CamadasDaArea): void {
   const { quadro, grade, contorno, base, fogo } = camadas;
+  const mascara =
+    camadas.borda && camadas.borda.largura >= 1 && contorno.length >= 3
+      ? telaDaMascara(quadro, contorno, camadas.borda)
+      : null;
+  const tracar = (ox: number, oy: number) => {
+    ctx.beginPath();
+    contorno.forEach((ponto, i) =>
+      i === 0 ? ctx.moveTo(ox + ponto.x, oy + ponto.y) : ctx.lineTo(ox + ponto.x, oy + ponto.y),
+    );
+    ctx.closePath();
+  };
 
   for (let k = 0; k < grade.total; k++) {
     const ox = (k % grade.colunas) * quadro.largura;
@@ -378,17 +564,16 @@ export function desenharFolhaDaArea(ctx: Contexto2D, camadas: CamadasDaArea): vo
       const sy = Math.floor(qb / base.grade.colunas) * qa;
 
       ctx.save();
-      ctx.beginPath();
-      contorno.forEach((ponto, i) =>
-        i === 0 ? ctx.moveTo(ox + ponto.x, oy + ponto.y) : ctx.lineTo(ox + ponto.x, oy + ponto.y),
-      );
-      ctx.closePath();
-      ctx.clip();
+      tracar(ox, oy);
+      // Com a máscara, a célula inteira e a máscara recorta depois; sem ela,
+      // o contorno seco.
+      if (!mascara) ctx.clip();
 
       // O chão queimado, embaixo da textura: o carvão que a rampa não alcança.
       if (base.escurece > 0) {
         ctx.fillStyle = `rgba(14, 8, 5, ${0.6 * base.escurece})`;
-        ctx.fill();
+        if (mascara) ctx.fillRect(ox, oy, quadro.largura, quadro.altura);
+        else ctx.fill();
       }
 
       ctx.globalAlpha = base.opacidade;
@@ -401,8 +586,9 @@ export function desenharFolhaDaArea(ctx: Contexto2D, camadas: CamadasDaArea): vo
       // A borda queimada: o próprio contorno, riscado grosso e recortado --
       // só a metade de dentro aparece. Dois riscos, para escurecer em degrau.
       // Na medida do `escurece`: a base que não escurece o chão não queima a
-      // borda.
-      if (base.escurece > 0) {
+      // borda. Só no recorte seco: dentro da fumaça, o lado de dentro do risco
+      // era uma linha dura, um retângulo desenhado no meio da transição.
+      if (base.escurece > 0 && !mascara) {
         ctx.globalAlpha = 1;
         ctx.lineJoin = "round";
         ctx.strokeStyle = `rgba(18, 8, 4, ${0.35 * base.escurece})`;
@@ -411,6 +597,14 @@ export function desenharFolhaDaArea(ctx: Contexto2D, camadas: CamadasDaArea): vo
         ctx.strokeStyle = `rgba(18, 8, 4, ${0.5 * base.escurece})`;
         ctx.lineWidth = ladrilho.lado * 0.15;
         ctx.stroke();
+      }
+
+      // A borda esfumaçada: o que já está na célula fica só onde a máscara
+      // deixa. Os focos vêm depois e não passam por ela.
+      if (mascara) {
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.drawImage(mascara.tela, ox, oy);
       }
       ctx.restore();
     }
@@ -421,6 +615,11 @@ export function desenharFolhaDaArea(ctx: Contexto2D, camadas: CamadasDaArea): vo
 
       for (const foco of fogo.focos) {
         const q = (k + foco.fase) % fogo.grade.total;
+        // O foco perto da borda esmaece com ela, pelo pé: a área rareia na
+        // beira em vez de acabar numa fileira de chamas inteiras.
+        ctx.globalAlpha = mascara
+          ? Math.max(0.25, mascara.alfaEm(foco.x + foco.lado / 2, foco.y + foco.lado * 0.9))
+          : 1;
         ctx.drawImage(
           fogo.fonte,
           (q % fogo.grade.colunas) * ql,

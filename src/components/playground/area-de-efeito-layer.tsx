@@ -354,6 +354,7 @@ function useFolhaDaArea(
         quadro: plano.quadro,
         grade,
         contorno: plano.contorno,
+        ...(base && plano.borda ? { borda: plano.borda } : {}),
         ...(base && baseGrade
           ? {
               base: {

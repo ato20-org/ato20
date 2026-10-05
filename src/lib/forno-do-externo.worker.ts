@@ -10,6 +10,7 @@ import {
   processarFolha,
   tamanhoDaFolha,
   tamanhoDoSprite,
+  type BordaDaArea,
   type ImagemDaFagulha,
 } from "@/lib/folha-de-efeito";
 import type { FolhaDeParticulas, Trajetoria } from "@/lib/particulas";
@@ -60,6 +61,7 @@ export type PedidoDeArea = {
   quadro: { largura: number; altura: number };
   grade: { colunas: number; linhas: number; total: number };
   contorno: Array<{ x: number; y: number }>;
+  borda?: BordaDaArea;
   /** A base e o fogo, já assados na cor. */
   base?: {
     fonte: ImageBitmap;
@@ -126,6 +128,7 @@ async function assarArea(pedido: PedidoDeArea): Promise<RespostaDoForno> {
     quadro,
     grade,
     contorno: pedido.contorno,
+    ...(pedido.borda ? { borda: pedido.borda } : {}),
     ...(pedido.base
       ? { base: { ...pedido.base, largura: pedido.base.fonte.width, altura: pedido.base.fonte.height } }
       : {}),

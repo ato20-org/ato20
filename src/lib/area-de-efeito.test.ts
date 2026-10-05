@@ -14,6 +14,7 @@ import {
   divisoesDoEfeito,
   EFEITOS_DE_AREA,
   fontesDaArea,
+  LARGURA_DA_BORDA,
   ladoDoSegmento,
   MAX_SEGMENTOS,
   planoDaArea,
@@ -315,6 +316,32 @@ describe("planoDaArea", () => {
     // A grade passa em x = 96: o ladrilho, levado para a cena, cai numa linha dela.
     const linha = plano.caixa.x + plano.ladrilho.x / pixels;
     expect(Math.abs(((linha % 96) + 96) % 96) < 0.5 || Math.abs((((linha % 96) + 96) % 96) - 96) < 0.5).toBe(true);
+  });
+
+  it("com base, a borda esfumaçada: meia casa, e a caixa cresce para a fumaça caber", () => {
+    const sem = planoDaArea(area({ x: 192, y: 192 }), GRADE, OPCOES)!;
+    const com = planoDaArea(area({ x: 192, y: 192 }), GRADE, { ...OPCOES, escalaDaBase: 1 })!;
+    const pixels = com.quadro.largura / com.caixa.width;
+    const fumaca = 96 * LARGURA_DA_BORDA;
+
+    expect(sem.borda).toBeUndefined();
+    expect(com.borda!.largura).toBeCloseTo(fumaca * pixels, 0);
+    expect(com.caixa.x).toBeLessThanOrEqual(192 - fumaca);
+    expect(com.caixa.x + com.caixa.width).toBeGreaterThanOrEqual(192 + 192 + fumaca);
+    expect(com.caixa.y + com.caixa.height).toBeGreaterThanOrEqual(192 + 192 + fumaca);
+    // Arrastada, a mesma textura: a semente é a da área, e não a do lugar.
+    const longe = planoDaArea(area({ x: 960, y: 480 }), GRADE, { ...OPCOES, escalaDaBase: 1 })!;
+    expect(longe.borda).toEqual(com.borda);
+  });
+
+  it("na área pequena, a borda é um terço do menor lado", () => {
+    const pequena = planoDaArea(area({ x: 192, y: 192, width: 60, height: 300 }), GRADE, {
+      ...OPCOES,
+      escalaDaBase: 1,
+    })!;
+    const pixels = pequena.quadro.largura / pequena.caixa.width;
+
+    expect(pequena.borda!.largura / pixels).toBeCloseTo(20, 0);
   });
 
   it("as fagulhas nascem dentro da área e cabem no teto", () => {

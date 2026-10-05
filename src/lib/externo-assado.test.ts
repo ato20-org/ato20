@@ -3,11 +3,50 @@ import { describe, expect, it } from "vitest";
 import { precisaDeForno } from "./externo-assado";
 import {
   gradeDoSprite,
+  mascaraDaBorda,
   processarFolha,
   rampaDaCor,
   tamanhoDaFolha,
   tamanhoDoSprite,
 } from "./folha-de-efeito";
+
+describe("mascaraDaBorda", () => {
+  const quadrado = [
+    { x: 30, y: 30 },
+    { x: 130, y: 30 },
+    { x: 130, y: 130 },
+    { x: 30, y: 130 },
+  ];
+  const borda = { largura: 16, semente: 7 };
+  const mascara = mascaraDaBorda(160, 160, quadrado, borda);
+  const alfa = (x: number, y: number) => mascara[(y * 160 + x) * 4 + 3]!;
+  // A aresta de cima, longe dos cantos.
+  const linha = Array.from({ length: 70 }, (_, i) => alfa(45 + i, 30));
+
+  it("cheia por dentro, vazia por fora, e nada além de uma largura da linha", () => {
+    expect(alfa(80, 80)).toBe(255);
+    expect(alfa(80, 30 + 16)).toBe(255);
+    expect(alfa(5, 5)).toBe(0);
+    expect(alfa(80, 30 - 16)).toBe(0);
+    expect(mascara[0]).toBe(255);
+  });
+
+  it("na linha, a base pela metade, em média: a linha fica no meio da fumaça", () => {
+    const media = linha.reduce((soma, valor) => soma + valor, 0) / linha.length;
+
+    expect(media).toBeGreaterThan(70);
+    expect(media).toBeLessThan(180);
+  });
+
+  it("irregular ao longo da linha: fumaça, e não um degradê de régua", () => {
+    expect(Math.max(...linha) - Math.min(...linha)).toBeGreaterThan(80);
+  });
+
+  it("a mesma semente dá a mesma borda; outra, outra", () => {
+    expect(mascaraDaBorda(160, 160, quadrado, borda)).toEqual(mascara);
+    expect(mascaraDaBorda(160, 160, quadrado, { ...borda, semente: 8 })).not.toEqual(mascara);
+  });
+});
 
 describe("rampaDaCor", () => {
   it("escura no frio, a cor no meio, quase branca no miolo", () => {

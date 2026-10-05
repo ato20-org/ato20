@@ -11,6 +11,7 @@ import {
   rampaDaCor,
   tamanhoDaFolha,
   tamanhoDoSprite,
+  type BordaDaArea,
   type ImagemDaFagulha,
 } from "@/lib/folha-de-efeito";
 import type { PedidoAoForno, RespostaDoForno } from "@/lib/forno-do-externo.worker";
@@ -353,6 +354,7 @@ export type PedidoDeAreaAssada = {
   quadro: { largura: number; altura: number };
   grade: { colunas: number; linhas: number; total: number };
   contorno: Array<{ x: number; y: number }>;
+  borda?: BordaDaArea;
   /** O endereço da base JÁ assada na cor. */
   base?: {
     fonte: string;
@@ -412,6 +414,7 @@ async function areaNoForno(pedido: PedidoDeAreaAssada): Promise<string> {
       quadro: pedido.quadro,
       grade: pedido.grade,
       contorno: pedido.contorno,
+      ...(pedido.borda ? { borda: pedido.borda } : {}),
       ...(pedido.base && base ? { base: { ...pedido.base, fonte: base } } : {}),
       ...(pedido.fogo && fogo ? { fogo: { ...pedido.fogo, fonte: fogo } } : {}),
       ...(fagulhas
@@ -452,6 +455,7 @@ async function areaAqui(pedido: PedidoDeAreaAssada): Promise<string> {
     quadro,
     grade,
     contorno: pedido.contorno,
+    ...(pedido.borda ? { borda: pedido.borda } : {}),
     ...(pedido.base && base
       ? { base: { ...pedido.base, fonte: base, largura: base.naturalWidth, altura: base.naturalHeight } }
       : {}),
