@@ -1,3 +1,4 @@
+import type { FocoNaFolha } from "@/lib/area-de-efeito";
 import { normalizarHex } from "@/lib/cor";
 import {
   quadroDasFagulhas,
@@ -274,4 +275,166 @@ export function tamanhoDaFolha(
   const qaFinal = Math.max(1, Math.round(qa * escala));
 
   return { largura: qlFinal * colunas, altura: qaFinal * linhas, ql: qlFinal, qa: qaFinal };
+}
+
+/**
+ * O fogo com o PÉ esmaecido, numa tela do tamanho da folha: cada quadro some
+ * em degradê no último quarto de baixo.
+ *
+ * Na figura, o pé da chama fica atrás do token. No chão ele aparece -- e era
+ * uma linha reta e clara em cada foco, que somadas desenhavam as fileiras da
+ * grade de novo. Esmaecido, o fogo sai do chão. Uma vez por folha, e não por
+ * foco.
+ *
+ * UM degradê da folha inteira, com as paradas de todas as linhas da grade, e
+ * não um por linha: o `destination-in` não se limita ao retângulo pintado --
+ * ele apaga tudo o que fica fora dele, e cada linha apagava as outras. O fogo
+ * da área saía sem fogo nenhum.
+ */
+export function esmaecerOsPes(
+  ctx: Contexto2D,
+  fonte: CanvasImageSource,
+  largura: number,
+  altura: number,
+  linhas: number,
+): void {
+  ctx.drawImage(fonte, 0, 0, largura, altura);
+
+  const degrade = ctx.createLinearGradient(0, 0, 0, altura);
+  for (let linha = 0; linha < linhas; linha++) {
+    // Duas paradas no mesmo ponto fazem o corte seco entre um quadro e o de
+    // baixo: o pé apagado de um não pode esmaecer a cabeça do outro.
+    degrade.addColorStop(linha / linhas, "rgba(0,0,0,1)");
+    degrade.addColorStop((linha + 0.72) / linhas, "rgba(0,0,0,1)");
+    degrade.addColorStop((linha + 0.97) / linhas, "rgba(0,0,0,0)");
+    degrade.addColorStop((linha + 1) / linhas, "rgba(0,0,0,0)");
+  }
+
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.fillStyle = degrade;
+  ctx.fillRect(0, 0, largura, altura);
+  ctx.globalCompositeOperation = "source-over";
+}
+
+/** As camadas da folha de uma área, já com as imagens prontas para o canvas. */
+export type CamadasDaArea = {
+  /** Um quadro da folha, em pixels. */
+  quadro: { largura: number; altura: number };
+  /** A grade da SAÍDA: a do fogo, que dita o laço. */
+  grade: { colunas: number; linhas: number; total: number };
+  /** A forma da área em pixels do quadro: o recorte da base. */
+  contorno: ReadonlyArray<{ x: number; y: number }>;
+  base?: {
+    fonte: CanvasImageSource;
+    largura: number;
+    altura: number;
+    grade: { colunas: number; linhas: number; total: number };
+    ladrilho: { lado: number; x: number; y: number };
+    opacidade: number;
+    escurece: number;
+  };
+  fogo?: {
+    fonte: CanvasImageSource;
+    largura: number;
+    altura: number;
+    grade: { colunas: number; linhas: number; total: number };
+    focos: ReadonlyArray<FocoNaFolha>;
+  };
+};
+
+/**
+ * A folha de uma ÁREA de efeito, quadro a quadro: a BASE ladrilhada e
+ * recortada na forma, e por cima os FOCOS do fogo, cada um no quadro que a
+ * fase dele manda. As fagulhas vêm depois, por `desenharFolhaDeParticulas`.
+ *
+ * As fontes chegam JÁ ASSADAS na cor (`assarExterno`), e a saída tem a grade
+ * do fogo -- o laço do fogo fecha, e o da área fecha junto. A base anda no
+ * mesmo ritmo, um quadro dela por quadro da folha; se o total dela divide o do
+ * fogo, o laço dela fecha também.
+ *
+ * O recorte da base é o CONTORNO da área, e a borda escurece por dentro, como
+ * chão queimado: é a linha que o jogador lê como "a área acaba aqui". Os focos
+ * vêm de trás para a frente (ver `planoDaArea`), e cada quadro é recortado na
+ * própria célula: nada vaza para o quadro vizinho.
+ */
+export function desenharFolhaDaArea(ctx: Contexto2D, camadas: CamadasDaArea): void {
+  const { quadro, grade, contorno, base, fogo } = camadas;
+
+  for (let k = 0; k < grade.total; k++) {
+    const ox = (k % grade.colunas) * quadro.largura;
+    const oy = Math.floor(k / grade.colunas) * quadro.altura;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ox, oy, quadro.largura, quadro.altura);
+    ctx.clip();
+
+    if (base && base.ladrilho.lado >= 1 && contorno.length >= 3) {
+      const { ladrilho } = base;
+      const ql = base.largura / base.grade.colunas;
+      const qa = base.altura / base.grade.linhas;
+      const qb = k % base.grade.total;
+      const sx = (qb % base.grade.colunas) * ql;
+      const sy = Math.floor(qb / base.grade.colunas) * qa;
+
+      ctx.save();
+      ctx.beginPath();
+      contorno.forEach((ponto, i) =>
+        i === 0 ? ctx.moveTo(ox + ponto.x, oy + ponto.y) : ctx.lineTo(ox + ponto.x, oy + ponto.y),
+      );
+      ctx.closePath();
+      ctx.clip();
+
+      // O chão queimado, embaixo da textura: o carvão que a rampa não alcança.
+      if (base.escurece > 0) {
+        ctx.fillStyle = `rgba(14, 8, 5, ${0.6 * base.escurece})`;
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = base.opacidade;
+      for (let ty = ladrilho.y; ty < quadro.altura; ty += ladrilho.lado) {
+        for (let tx = ladrilho.x; tx < quadro.largura; tx += ladrilho.lado) {
+          ctx.drawImage(base.fonte, sx, sy, ql, qa, ox + tx, oy + ty, ladrilho.lado, ladrilho.lado);
+        }
+      }
+
+      // A borda queimada: o próprio contorno, riscado grosso e recortado --
+      // só a metade de dentro aparece. Dois riscos, para escurecer em degrau.
+      // Na medida do `escurece`: a base que não escurece o chão não queima a
+      // borda.
+      if (base.escurece > 0) {
+        ctx.globalAlpha = 1;
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = `rgba(18, 8, 4, ${0.35 * base.escurece})`;
+        ctx.lineWidth = ladrilho.lado * 0.35;
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(18, 8, 4, ${0.5 * base.escurece})`;
+        ctx.lineWidth = ladrilho.lado * 0.15;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (fogo) {
+      const ql = fogo.largura / fogo.grade.colunas;
+      const qa = fogo.altura / fogo.grade.linhas;
+
+      for (const foco of fogo.focos) {
+        const q = (k + foco.fase) % fogo.grade.total;
+        ctx.drawImage(
+          fogo.fonte,
+          (q % fogo.grade.colunas) * ql,
+          Math.floor(q / fogo.grade.colunas) * qa,
+          ql,
+          qa,
+          ox + foco.x,
+          oy + foco.y,
+          foco.lado,
+          foco.lado,
+        );
+      }
+    }
+
+    ctx.restore();
+  }
 }

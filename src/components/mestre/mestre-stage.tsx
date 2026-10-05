@@ -48,6 +48,7 @@ import {
   empurrarPostits,
   empurrarTracos,
 } from "@/lib/mestre/grupo-sem-alca";
+import { EFEITOS_DE_AREA } from "@/lib/area-de-efeito";
 import { areaDoPoligono } from "@/lib/geometry/area-escondida";
 import {
   alturaDaParede,
@@ -108,11 +109,13 @@ import {
   useGestoStore,
 } from "@/lib/store/use-gesto-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useSilhueta } from "@/hooks/use-silhueta";
 import {
   flipSelection,
   livre,
+  removeAreaDeEfeitoSelection,
   removeFogSelection,
   removeParedeSelection,
   removePortraitSelection,
@@ -187,6 +190,7 @@ import {
   SCENE_WIDTH,
   TEXTO_TAMANHO,
   type AncoraRetrato,
+  type AreaDeEfeito,
   type CanvasItem,
   type Documento,
   type FogRegion,
@@ -206,6 +210,10 @@ import {
 } from "@/types/scene";
 
 const NO_GUIDES: Guide[] = [];
+/** A cor de uma área de efeito cujo efeito não declara a dele. */
+const COR_DO_FOGO = "#f59e0b";
+/** Ninguém anima: o Mestre durante um gesto. Identidade estável. */
+const NINGUEM_ANIMA: ReadonlySet<string> = new Set<string>();
 /** As listas vazias das três seleções que só andam. Ver `selectedPostits`. */
 const NADA_DE_POSTIT: readonly Postit[] = [];
 const NADA_DE_DOCUMENTO: readonly Documento[] = [];
@@ -489,6 +497,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const corMedidor = useToolStore((state) => state.corMedidor);
   const tipoDeForma = useToolStore((state) => state.tipoDeForma);
   const formatoDeArea = useToolStore((state) => state.formatoDeArea);
+  const formatoDoEfeito = useToolStore((state) => state.formatoDoEfeito);
+  const efeitoDaArea = useToolStore((state) => state.efeitoDaArea);
   const corForma = useToolStore((state) => state.corForma);
   const espessuraForma = useToolStore((state) => state.espessuraForma);
   const fundoForma = useToolStore((state) => state.fundoForma);
@@ -529,6 +539,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   );
   const selectedTracoIds = useSelectionStore((state) => state.selectedTracoIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
+  const selectedAreaDeEfeitoId = useSelectionStore(
+    (state) => state.selectedAreaDeEfeitoId,
+  );
   const selectedPortraitIds = useSelectionStore(
     (state) => state.selectedPortraitIds,
   );
@@ -546,6 +559,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const toggleDocumento = useSelectionStore((state) => state.toggleDocumento);
   const selectMisto = useSelectionStore((state) => state.selectMisto);
   const selectFog = useSelectionStore((state) => state.selectFog);
+  const selectAreaDeEfeito = useSelectionStore((state) => state.selectAreaDeEfeito);
   const selectedMedidorId = useSelectionStore(
     (state) => state.selectedMedidorId,
   );
@@ -566,6 +580,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const addLuz = useSceneStore((state) => state.addLuz);
   const updateParede = useSceneStore((state) => state.updateParede);
   const updateFog = useSceneStore((state) => state.updateFog);
+  const addAreaDeEfeito = useSceneStore((state) => state.addAreaDeEfeito);
+  const updateAreaDeEfeito = useSceneStore((state) => state.updateAreaDeEfeito);
   const addTraco = useSceneStore((state) => state.addTraco);
   const removeTracos = useSceneStore((state) => state.removeTracos);
   const addPin = useSceneStore((state) => state.addPin);
@@ -860,6 +876,31 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       }
     : undefined;
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
+  const selectedAreaDeEfeito = scene.areasDeEfeito?.find(
+    (area) => area.id === selectedAreaDeEfeitoId,
+  );
+  /**
+   * Quem anima os efeitos no Mestre: só o que está selecionado -- os tokens, a
+   * área e os retratos. O resto pausa no quadro em que está, e a luz dele para
+   * de tremular. Ver `animarSo` em `SceneLayer`.
+   *
+   * E NINGUÉM durante um gesto -- arrastar o token em chamas, a área, uma
+   * alça, a caixa de seleção: o que o mestre olha no arrasto é para onde a
+   * coisa vai, e o fogo tremulando por baixo é compositor refazendo a folha a
+   * cada quadro do gesto. Ao soltar, o selecionado volta a andar.
+   */
+  const emGesto = useViewportStore((state) => state.gestos > 0);
+  const efeitosAnimados = useMemo(
+    () =>
+      emGesto
+        ? NINGUEM_ANIMA
+        : new Set<string>([
+            ...selectedIds,
+            ...selectedPortraitIds,
+            ...(selectedAreaDeEfeitoId ? [selectedAreaDeEfeitoId] : []),
+          ]),
+    [emGesto, selectedIds, selectedPortraitIds, selectedAreaDeEfeitoId],
+  );
   const selectedParede = scene.paredes?.find(
     (parede) => parede.id === selectedParedeId,
   );
@@ -1721,6 +1762,51 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     );
   }
 
+  /** Clique e arrasto numa área de efeito, como na área escondida. */
+  function handleAreaDeEfeitoPointerDown(event: ReactPointerEvent, area: AreaDeEfeito) {
+    if (event.button === 2) {
+      event.stopPropagation();
+      selectAreaDeEfeito(area.id);
+      return;
+    }
+
+    if (event.button !== 0) return;
+
+    selectAreaDeEfeito(area.id);
+    if (area.locked) {
+      event.stopPropagation();
+      return;
+    }
+
+    const origin = { x: area.x, y: area.y };
+    dragBox(
+      event,
+      boxBounds(area),
+      snapTargets((id) => id === area.id),
+      (dx, dy) =>
+        updateAreaDeEfeito(scene.id, area.id, {
+          x: Math.round(origin.x + dx),
+          y: Math.round(origin.y + dy),
+        }),
+    );
+  }
+
+  /**
+   * A área de efeito nova, com o efeito e a cor que a pílula tem na mão. A
+   * cor é a que o efeito declara para a área: o fogo nasce na cor do fogo.
+   */
+  function novaAreaDeEfeito(
+    caixa: Pick<AreaDeEfeito, "x" | "y" | "width" | "height" | "formato" | "pontos">,
+  ) {
+    const definicao = EFEITOS_DE_AREA.find((efeito) => efeito.id === efeitoDaArea);
+
+    return addAreaDeEfeito(scene.id, {
+      ...caixa,
+      efeito: efeitoDaArea,
+      cor: definicao?.area?.cor ?? COR_DO_FOGO,
+    });
+  }
+
   /**
    * Arrasto de retrato.
    *
@@ -2223,6 +2309,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
+    if (tool === "efeito") {
+      selectAreaDeEfeito(novaAreaDeEfeito({ ...area, formato: "poligono" }));
+      setTool("select");
+      return;
+    }
+
     if (tool === "forma") {
       selectFormas([
         addForma(scene.id, {
@@ -2466,10 +2558,14 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
-    if (tool === "fog") {
+    if (tool === "fog" || tool === "efeito") {
+      // A área de efeito desenha como a escondida: a mesma caixa, o mesmo
+      // formato. Muda só o que ela vira no fim do gesto.
+      const formato = tool === "fog" ? formatoDeArea : formatoDoEfeito;
+
       // A área LIVRE não é arrasto: ela se desenha vértice a vértice, e o
       // gesto todo acontece em cliques. Ver `cravarVertice`.
-      if (formatoDeArea === "poligono") {
+      if (formato === "poligono") {
         cravarVertice(anchor);
         return;
       }
@@ -2512,15 +2608,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // Clique sem arrasto criaria uma área invisível impossível de pegar.
           if (box.width < MIN_ITEM_SIZE || box.height < MIN_ITEM_SIZE) return;
 
-          selectFog(
-            addFog(scene.id, {
-              x: Math.round(box.x),
-              y: Math.round(box.y),
-              width: Math.round(box.width),
-              height: Math.round(box.height),
-              formato: formatoDeArea,
-            }),
-          );
+          const caixa = {
+            x: Math.round(box.x),
+            y: Math.round(box.y),
+            width: Math.round(box.width),
+            height: Math.round(box.height),
+            formato,
+          };
+          if (tool === "efeito") selectAreaDeEfeito(novaAreaDeEfeito(caixa));
+          else selectFog(addFog(scene.id, caixa));
           // Volta ao modo normal: desenhar duas áreas seguidas é raro, e ficar
           // preso na ferramenta faz o mestre cobrir a cena por acidente.
           setTool("select");
@@ -2842,6 +2938,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     fecharLaco,
     item: handleItemPointerDown,
     fog: handleFogPointerDown,
+    areaDeEfeito: handleAreaDeEfeitoPointerDown,
     portrait: handlePortraitPointerDown,
     texto: handleTextoPointerDown,
     forma: handleFormaPointerDown,
@@ -2854,6 +2951,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       fecharLaco,
       item: handleItemPointerDown,
       fog: handleFogPointerDown,
+      areaDeEfeito: handleAreaDeEfeitoPointerDown,
       portrait: handlePortraitPointerDown,
       texto: handleTextoPointerDown,
       forma: handleFormaPointerDown,
@@ -2942,7 +3040,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       useToolStore.subscribe((estado, anterior) => {
         if (
           estado.tool !== anterior.tool ||
-          estado.formatoDeArea !== anterior.formatoDeArea
+          estado.formatoDeArea !== anterior.formatoDeArea ||
+          estado.formatoDoEfeito !== anterior.formatoDoEfeito
         )
           setLaco(null);
       }),
@@ -2952,6 +3051,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const onFogPointerDown = useCallback(
     (event: ReactPointerEvent, region: FogRegion) => {
       handlersRef.current.fog(event, region);
+    },
+    [],
+  );
+
+  const onAreaDeEfeitoPointerDown = useCallback(
+    (event: ReactPointerEvent, area: AreaDeEfeito) => {
+      handlersRef.current.areaDeEfeito(event, area);
     },
     [],
   );
@@ -3003,7 +3109,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
   // Espaço tem precedência sobre a ferramenta: segurar espaço desloca a cena,
   // mesmo com a névoa escolhida.
-  const drawingFog = tool === "fog" && !panMode;
+  const drawingFog = (tool === "fog" || tool === "efeito") && !panMode;
   /**
    * Ferramenta de mira ativa: névoa, ponto, postit, lápis, borracha, régua —
    * ou a de uma extensão.
@@ -3112,6 +3218,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // "mover item".
           onItemPointerDown={panMode || aiming ? undefined : onItemPointerDown}
           onFogPointerDown={panMode || aiming ? undefined : onFogPointerDown}
+          onAreaDeEfeitoPointerDown={
+            panMode || aiming ? undefined : onAreaDeEfeitoPointerDown
+          }
+          animarSo={efeitosAnimados}
           onPortraitPointerDown={
             panMode || aiming ? undefined : onPortraitPointerDown
           }
@@ -3513,6 +3623,55 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         </>
       ) : null}
 
+      {selectedAreaDeEfeito && !panMode ? (
+        <>
+          <TransformHandles
+            box={{ ...selectedAreaDeEfeito, rotation: selectedAreaDeEfeito.rotation ?? 0 }}
+            // Gira como a área escondida. O fogo não gira junto -- ele sobe --,
+            // mas as casas que entram, sim. Ver `planoDaArea`.
+            onChange={(patch) =>
+              updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, patch)
+            }
+            paleta={{
+              titulo: "Cor",
+              cor: selectedAreaDeEfeito.cor,
+              semFundo: true,
+              // `null` é "de volta ao padrão": a cor que o efeito declara.
+              onChange: ({ cor }) => {
+                if (cor === undefined) return;
+                const definicao = EFEITOS_DE_AREA.find(
+                  (efeito) => efeito.id === selectedAreaDeEfeito.efeito,
+                );
+                updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, {
+                  cor: cor ?? definicao?.area?.cor ?? COR_DO_FOGO,
+                });
+              },
+            }}
+            mesa={{
+              naMesa: Boolean(selectedAreaDeEfeito.naMesa),
+              onToggle: () =>
+                updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, {
+                  naMesa: selectedAreaDeEfeito.naMesa ? undefined : true,
+                }),
+            }}
+            trava={{
+              travada: Boolean(selectedAreaDeEfeito.locked),
+              onToggle: toggleSelectionLock,
+            }}
+            onDelete={removeAreaDeEfeitoSelection}
+          />
+
+          {selectedAreaDeEfeito.formato === "poligono" && !selectedAreaDeEfeito.locked ? (
+            <AlcasDaArea
+              region={selectedAreaDeEfeito}
+              onChange={(patch) =>
+                updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, patch)
+              }
+            />
+          ) : null}
+        </>
+      ) : null}
+
       {/* Proporção travada: retrato deformado fica grotesco, e a caixa aqui
           não é a proporção do arquivo — o `object-contain` já cuida disso —,
           mas manter a razão evita o mestre criar uma faixa sem querer. */}
@@ -3648,7 +3807,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       {marquee ? (
         <MarqueeBox
           bounds={marquee}
-          redondo={tool === "fog" && formatoDeArea === "elipse"}
+          redondo={
+            (tool === "fog" && formatoDeArea === "elipse") ||
+            (tool === "efeito" && formatoDoEfeito === "elipse")
+          }
         />
       ) : null}
 

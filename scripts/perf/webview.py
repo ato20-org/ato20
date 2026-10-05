@@ -146,6 +146,13 @@ def argumentos():
     # na mesma tabela. So o cenario `amostras` (e `amostras-id`) desenha os
     # efeitos. Ver `condicoesDaMedida` na pagina.
     p.add_argument("--condicoes", default="0")
+    # Areas em chamas no chao: A areas de C por C casas. Ver `areasDaMedida`.
+    p.add_argument("--areas", default="0")
+    p.add_argument("--casas", default="4")
+    p.add_argument("--areafx", default="chamas")
+    p.add_argument("--areaforma", default="retangulo")
+    # Os efeitos pausados, como o Mestre os ve sem nada selecionado.
+    p.add_argument("--parados", action="store_true")
     p.add_argument("--figura", default="misto")
     # `chao-25d`: qual renderizador medir. Aceita lista -- e a lista e o ponto,
     # porque a pergunta nao e "quanto custa o chao inclinado" e sim "quanto ele
@@ -465,6 +472,9 @@ def main():
                                 f"&luzes={args.luzes}&paredes={args.paredes}"
                                 f"&carregadas={args.carregadas}"
                                 f"&condicoes={k}&figura={args.figura}"
+                                f"&areas={args.areas}&casas={args.casas}&areafx={args.areafx}"
+                                f"&areaforma={args.areaforma}"
+                                f"&parados={'1' if args.parados else '0'}"
                                 f"&modo={modo}"
                                 f"&girando={'1' if args.girando else '0'}"
                                 f"&medidores={med}&estilo={est}"
@@ -491,6 +501,10 @@ def main():
                                 rotulo += f" roda={r}"
                             if k != "0" or len(args.condicoes.split(",")) > 1:
                                 rotulo += f" condicoes={k} {args.figura}"
+                            if args.parados:
+                                rotulo += " parados"
+                            if args.areas != "0":
+                                rotulo += f" areas={args.areas}x{args.casas} {args.areafx}"
                             if med != "0" or len(args.medidores.split(",")) > 1:
                                 rotulo += f" medidores={med} {est}"
                             urls.append((rotulo, url))

@@ -46,6 +46,7 @@ import {
 import {
   ehQuadro,
   temAnotacao,
+  temAreaDeEfeito,
   temLuz,
   temMedida,
   temNevoa,
@@ -621,6 +622,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   // medida caem mas o alfinete FICA, e a lista única largaria os três juntos.
   useEffect(() => {
     if (tool === "fog" && !temNevoa(scene)) setTool("select");
+    if (tool === "efeito" && !temAreaDeEfeito(scene)) setTool("select");
     if (tool === "regua" && !temMedida(scene)) setTool("select");
     // Parede é do chão, e o chão que a tem é o do mapa: ver `Tool`.
     if (tool === "parede" && !temSol(scene)) setTool("select");

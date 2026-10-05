@@ -234,6 +234,14 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
       ),
     [daMesa, personagens, scene.infoDosTokens],
   );
+  // Só as peças selecionadas animam, e nenhuma com uma peça na mão: arrastando,
+  // o fogo de quem anda é compositor trabalhando no gesto. Ver o `MestreStage`.
+  const selecionados = useSelectionStore((state) => state.selectedIds);
+  const arrastando = useGestoStore((state) => state.patches !== null);
+  const animados = useMemo(
+    () => new Set(arrastando ? [] : selecionados),
+    [arrastando, selecionados],
+  );
   const efeitos = useMemo(
     () => efeitosDaCena(daMesa?.items ?? [], personagens ?? []),
     [daMesa, personagens],
@@ -432,6 +440,8 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
               olhar={pelaCamera ?? comCamera}
               fichas={fichas}
               efeitos={efeitos}
+              // Só as peças selecionadas animam: ver `animarSo` em `SceneLayer`.
+              animarSo={animados}
             />
           </PalcoSoTela>
         ) : null}

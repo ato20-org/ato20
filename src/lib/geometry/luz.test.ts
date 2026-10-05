@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   anguloEntre,
   caixaDaFonte,
+  tremorSoDe,
   chaveDasFontes,
   coneDe,
   corDoEscuroDe,
@@ -827,6 +828,22 @@ describe("a silhueta deitada pela luz", () => {
 });
 
 describe("caixaDaFonte", () => {
+  it("a luz com forma cobre o contorno crescido pelo raio, e não o círculo do meio", () => {
+    const forma = [
+      { x: 400, y: 300 },
+      { x: 800, y: 300 },
+      { x: 800, y: 400 },
+      { x: 400, y: 400 },
+    ];
+
+    expect(caixaDaFonte({ x: 600, y: 350, raio: 50, forma })).toEqual({
+      x: 350,
+      y: 250,
+      width: 500,
+      height: 200,
+    });
+  });
+
   it("é o quadrado do alcance", () => {
     expect(caixaDaFonte({ x: 500, y: 500, raio: 100 })).toEqual({
       x: 400,
@@ -1019,5 +1036,24 @@ describe("a luz dos efeitos de condição", () => {
 
   it("sem quem pergunte, só as luzes de sempre", () => {
     expect(fontesDaCena(undefined, [goblin])).toHaveLength(1);
+  });
+});
+
+describe("tremorSoDe", () => {
+  const base = { raio: 100, raioIntenso: 40, cor: "#f59e0b", intensidade: 1 };
+  const fontes = [
+    { ...base, id: "tocha", x: 0, y: 0, efeito: "fogo" as const },
+    { ...base, id: "goblin#efeito", dono: "goblin", x: 10, y: 0, efeito: "fogo" as const },
+    { ...base, id: "area#luz", dono: "area", x: 20, y: 0, efeito: "fogo" as const },
+  ];
+
+  it("sem lista, todas tremulam: é a mesa", () => {
+    expect(tremorSoDe(fontes, undefined)).toBe(fontes);
+  });
+
+  it("no Mestre, só a de efeito do selecionado tremula; a tocha cravada segue", () => {
+    const efeitos = tremorSoDe(fontes, new Set(["area"])).map((fonte) => fonte.efeito);
+
+    expect(efeitos).toEqual(["fogo", undefined, "fogo"]);
   });
 });

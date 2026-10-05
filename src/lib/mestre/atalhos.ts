@@ -12,6 +12,7 @@ import {
   nudgeSelection,
   PASSO_DE_GIRO,
   pasteClipboard,
+  removeAreaDeEfeitoSelection,
   removeFogSelection,
   removeMedidorSelection,
   removeLuzSelection,
@@ -712,6 +713,7 @@ export const ATALHOS_BASE: Atalho[] = [
           .removeLigacao(cena.id, quadro.ligacaoSelecionadaId);
         quadro.selecionarLigacao(null);
       } else if (selecao.selectedFogId) removeFogSelection();
+      else if (selecao.selectedAreaDeEfeitoId) removeAreaDeEfeitoSelection();
       else if (selecao.selectedMedidorId) removeMedidorSelection();
       // Antes do retrato e do item, e depois do medidor, pela mesma regra de
       // atenção: a parede só fica selecionada quando o mestre acabou de
@@ -870,12 +872,13 @@ function digitoDe(evento: KeyboardEvent): number | null {
 }
 
 function semSelecao(): boolean {
-  const { selectedIds, selectedFogId, selectedPortraitIds } =
+  const { selectedIds, selectedFogId, selectedAreaDeEfeitoId, selectedPortraitIds } =
     useSelectionStore.getState();
 
   return (
     selectedIds.length === 0 &&
     !selectedFogId &&
+    !selectedAreaDeEfeitoId &&
     selectedPortraitIds.length === 0
   );
 }

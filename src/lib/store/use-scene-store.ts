@@ -52,6 +52,7 @@ import {
   NOME_DO_TIPO,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
+  type AreaDeEfeito,
   type Board,
   type CameraSalva,
   type CameraTripe,
@@ -63,6 +64,7 @@ import {
   type ItemDraft,
   type MapPin,
   type NewCanvasItem,
+  type NewAreaDeEfeito,
   type NewFogRegion,
   type NewForma,
   type NewPostit,
@@ -444,6 +446,15 @@ type SceneStore = {
     patch: Partial<FogRegion>,
   ) => void;
   removeFog: (sceneId: string, fogId: string) => void;
+
+  /** Uma área de efeito nova. Devolve o id. Ver `AreaDeEfeito`. */
+  addAreaDeEfeito: (sceneId: string, area: NewAreaDeEfeito) => string;
+  updateAreaDeEfeito: (
+    sceneId: string,
+    areaId: string,
+    patch: Partial<Omit<AreaDeEfeito, "id">>,
+  ) => void;
+  removeAreaDeEfeito: (sceneId: string, areaId: string) => void;
 
   /** Crava um ponto de anotação. Devolve o id, para já abrir a nota dele. */
   addPin: (sceneId: string, pin: NewMapPin) => string;
@@ -1707,6 +1718,35 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         ...scene,
         fog: scene.fog.filter((region) => region.id !== fogId),
       }));
+    },
+
+    addAreaDeEfeito(sceneId, area) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        areasDeEfeito: [...(scene.areasDeEfeito ?? []), { ...area, id }],
+      }));
+
+      return id;
+    },
+
+    updateAreaDeEfeito(sceneId, areaId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        areasDeEfeito: (scene.areasDeEfeito ?? []).map((area) =>
+          area.id === areaId ? { ...area, ...patch } : area,
+        ),
+      }));
+    },
+
+    removeAreaDeEfeito(sceneId, areaId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.areasDeEfeito ?? []).filter((area) => area.id !== areaId);
+
+        // A lista some quando esvazia, como a das paredes: ausente é "nenhuma".
+        return { ...scene, areasDeEfeito: restantes.length > 0 ? restantes : undefined };
+      });
     },
 
     addPin(sceneId, pin) {

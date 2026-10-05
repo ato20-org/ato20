@@ -338,6 +338,11 @@ type TransformHandlesProps = {
     fundo?: string;
     onChange: (patch: { cor?: string | null; fundo?: string | null }) => void;
     /**
+     * Sem a fileira do fundo: a área de efeito tem UMA cor, a do fogo, e um
+     * fundo que não pinta nada seria um controle que não controla.
+     */
+    semFundo?: true;
+    /**
      * Presente = um slider de opacidade embaixo de cada fileira, de 0 a 1.
      * Só a forma passa: é ela que tem borda e miolo para apagar em separado.
      */
@@ -1450,13 +1455,15 @@ export function TransformHandles({
                 onChange={(traco) => paleta.opacidade?.onChange({ traco })}
               />
             ) : null}
-            <Fileira
-              titulo="Fundo"
-              escolhida={paleta.fundo}
-              padrao="∅"
-              translucido
-              onEscolher={(valor) => paleta.onChange({ fundo: valor })}
-            />
+            {paleta.semFundo ? null : (
+              <Fileira
+                titulo="Fundo"
+                escolhida={paleta.fundo}
+                padrao="∅"
+                translucido
+                onEscolher={(valor) => paleta.onChange({ fundo: valor })}
+              />
+            )}
             {/* Apagado sem fundo: não há miolo para apagar, e um slider que
                 mexe e não muda nada parece quebrado. */}
             {paleta.opacidade ? (

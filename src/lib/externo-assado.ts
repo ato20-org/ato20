@@ -1,6 +1,9 @@
 "use client";
 
+import type { FocoNaFolha } from "@/lib/area-de-efeito";
 import {
+  desenharFolhaDaArea,
+  esmaecerOsPes,
   desenharFolhaDeParticulas,
   gradeDoSprite,
   pintarImagem,
@@ -184,6 +187,59 @@ function pedirAoForno(mensagem: PedidoAoForno, transferir: Transferable[]): Prom
   });
 }
 
+/**
+ * Uma folha pronta para a tela: a que precisa de cor, máscara ou profundidade
+ * vai ao forno (e sai a `unica`); a outra vai como veio. É o fogo da área, no
+ * chão e de pé no 2.5D.
+ */
+export async function fonteAssada(pedido: PedidoDeExterno): Promise<string | null> {
+  if (!precisaDeForno(pedido)) return pedido.url;
+
+  const assado = await assarExterno(pedido);
+  return assado && "unica" in assado ? assado.unica : null;
+}
+
+/**
+ * A folha numa FAIXA: os quadros lado a lado, numa linha só. É o que deixa a
+ * chama de pé do 2.5D andar pela posição do fundo, um elemento só -- a grade
+ * de linhas e colunas pedia dois elementos animados por `transform`, e cada um
+ * virava uma camada no compositor. Uma vez por folha.
+ */
+const faixas = new Map<string, Promise<string | null>>();
+
+export function faixaDaFolha(
+  url: string,
+  grade: { colunas: number; linhas: number; total: number },
+): Promise<string | null> {
+  const chave = JSON.stringify([url, grade]);
+  const feita = faixas.get(chave);
+  if (feita) return feita;
+
+  const fazendo = (async () => {
+    const imagem = await carregarImagem(url);
+    const ql = imagem.naturalWidth / grade.colunas;
+    const qa = imagem.naturalHeight / grade.linhas;
+    const tela = document.createElement("canvas");
+    tela.width = Math.round(ql * grade.total);
+    tela.height = Math.round(qa);
+    const ctx = tela.getContext("2d");
+    if (!ctx) return null;
+
+    for (let k = 0; k < grade.total; k++) {
+      const sx = (k % grade.colunas) * ql;
+      const sy = Math.floor(k / grade.colunas) * qa;
+      ctx.drawImage(imagem, sx, sy, ql, qa, k * ql, 0, ql, qa);
+    }
+
+    return new Promise<string | null>((resolver) =>
+      tela.toBlob((blob) => resolver(blob ? URL.createObjectURL(blob) : null), "image/png"),
+    );
+  })().catch(() => null);
+  faixas.set(chave, fazendo);
+
+  return fazendo;
+}
+
 // --- as partículas -----------------------------------------------------------
 
 /** O que a folha de partículas precisa: o plano, os caminhos, a cor e a imagem. */
@@ -278,6 +334,128 @@ async function particulasAqui(pedido: PedidoDeParticulasAssadas): Promise<string
       else recusar(new Error("folha não virou imagem"));
     }, "image/png"),
   );
+}
+
+// --- a área de efeito --------------------------------------------------------
+
+/** O que a folha de uma área precisa: as fontes já assadas, a grade e o plano. */
+export type PedidoDeAreaAssada = {
+  quadro: { largura: number; altura: number };
+  grade: { colunas: number; linhas: number; total: number };
+  contorno: Array<{ x: number; y: number }>;
+  /** O endereço da base JÁ assada na cor. */
+  base?: {
+    fonte: string;
+    grade: { colunas: number; linhas: number; total: number };
+    ladrilho: { lado: number; x: number; y: number };
+    opacidade: number;
+    escurece: number;
+  };
+  /** O endereço do fogo JÁ assado na cor: o `unica` de `assarExterno`. */
+  fogo?: {
+    fonte: string;
+    grade: { colunas: number; linhas: number; total: number };
+    focos: FocoNaFolha[];
+  };
+  fagulhas?: { folha: FolhaDeParticulas; caminhos: Trajetoria[]; cor: string };
+};
+
+const areasAssadas = new Map<string, Promise<string | null>>();
+
+/**
+ * A folha de uma área de efeito, montada das camadas, uma vez por pedido. Pelo
+ * mesmo forno, e com a mesma volta para a janela.
+ *
+ * A chave não tem a POSIÇÃO da área, só o plano relativo à caixa dela: a área
+ * arrastada de casa em casa pela grade é a mesma folha, e só a caixa anda.
+ */
+export function assarArea(pedido: PedidoDeAreaAssada): Promise<string | null> {
+  const chave = JSON.stringify(pedido);
+  const feita = areasAssadas.get(chave);
+  if (feita) return feita;
+
+  const assando = (
+    temForno() ? areaNoForno(pedido).catch(() => areaAqui(pedido)) : areaAqui(pedido)
+  ).catch(() => null);
+  areasAssadas.set(chave, assando);
+
+  return assando;
+}
+
+async function areaNoForno(pedido: PedidoDeAreaAssada): Promise<string> {
+  const [base, fogo] = await Promise.all([
+    pedido.base ? bitmap(pedido.base.fonte) : undefined,
+    pedido.fogo ? bitmap(pedido.fogo.fonte) : undefined,
+  ]);
+  const transferir: Transferable[] = [];
+  if (base) transferir.push(base);
+  if (fogo) transferir.push(fogo);
+
+  const resposta = await pedirAoForno(
+    {
+      tipo: "area",
+      id: ++proximo,
+      quadro: pedido.quadro,
+      grade: pedido.grade,
+      contorno: pedido.contorno,
+      ...(pedido.base && base ? { base: { ...pedido.base, fonte: base } } : {}),
+      ...(pedido.fogo && fogo ? { fogo: { ...pedido.fogo, fonte: fogo } } : {}),
+      ...(pedido.fagulhas ? { fagulhas: pedido.fagulhas } : {}),
+    },
+    transferir,
+  );
+
+  if (!("unica" in resposta)) throw new Error("erro" in resposta ? resposta.erro : "forno");
+  return URL.createObjectURL(resposta.unica);
+}
+
+async function areaAqui(pedido: PedidoDeAreaAssada): Promise<string> {
+  const [base, fogo] = await Promise.all([
+    pedido.base ? carregarImagem(pedido.base.fonte) : undefined,
+    pedido.fogo ? carregarImagem(pedido.fogo.fonte) : undefined,
+  ]);
+  const { grade, quadro } = pedido;
+  const tela = document.createElement("canvas");
+  tela.width = quadro.largura * grade.colunas;
+  tela.height = quadro.altura * grade.linhas;
+
+  const ctx = tela.getContext("2d");
+  if (!ctx) throw new Error("sem canvas");
+
+  desenharFolhaDaArea(ctx, {
+    quadro,
+    grade,
+    contorno: pedido.contorno,
+    ...(pedido.base && base
+      ? { base: { ...pedido.base, fonte: base, largura: base.naturalWidth, altura: base.naturalHeight } }
+      : {}),
+    ...(pedido.fogo && fogo ? { fogo: { ...pedido.fogo, ...fogoSemPeAqui(fogo, pedido.fogo.grade.linhas) } } : {}),
+  });
+  if (pedido.fagulhas) {
+    const { folha, caminhos, cor } = pedido.fagulhas;
+    desenharFolhaDeParticulas(ctx, folha, caminhos, cor);
+  }
+
+  return new Promise((resolver, recusar) =>
+    tela.toBlob((blob) => {
+      if (blob) resolver(URL.createObjectURL(blob));
+      else recusar(new Error("folha não virou imagem"));
+    }, "image/png"),
+  );
+}
+
+/** O fogo com o pé esmaecido, na thread da janela. Ver `esmaecerOsPes`. */
+function fogoSemPeAqui(fogo: HTMLImageElement, linhas: number) {
+  const largura = fogo.naturalWidth;
+  const altura = fogo.naturalHeight;
+  const tela = document.createElement("canvas");
+  tela.width = largura;
+  tela.height = altura;
+  const ctx = tela.getContext("2d");
+  if (!ctx) return { fonte: fogo, largura, altura };
+
+  esmaecerOsPes(ctx, fogo, largura, altura, linhas);
+  return { fonte: tela, largura, altura };
 }
 
 // --- aqui, sem worker --------------------------------------------------------

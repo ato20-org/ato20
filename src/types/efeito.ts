@@ -34,6 +34,13 @@ export type DefinicaoDeEfeito = {
   /** O que sai voando dela: a fagulha, a gota, a cinza. Ver `ParticulasDoEfeito`. */
   particulas?: ParticulasDoEfeito;
   /**
+   * O efeito também serve a uma ÁREA do chão. Ausente = só a figura. Ver
+   * `AreaDoEfeito`.
+   */
+  area?: AreaDoEfeito;
+  /** O chão do efeito: a textura deitada que marca a área. Ver `BaseDoEfeito`. */
+  base?: BaseDoEfeito;
+  /**
    * De onde vêm as imagens. Não é o autor que escreve: quem publica preenche
    * -- o plugin e a versão dele, ou a pasta do próprio aplicativo, que vão na
    * URL. Ausente = sem imagem; um externo sem origem não desenha.
@@ -241,4 +248,75 @@ export type FiguraDoEfeito = {
   translucido?: boolean;
   /** Treme no lugar. */
   tremor?: boolean;
+};
+
+/**
+ * O efeito numa ÁREA do chão: o fogo que se alastra por um pedaço do mapa.
+ *
+ * A área usa a imagem do `externo` como o FOCO de cada segmento -- uma casa
+ * da grade --, e a `luz` do efeito, espalhada em poucas fontes. Declarado, e
+ * não deduzido de todo efeito com externo: a poça do sangue repetida em
+ * ladrilhos não é o que se quer de um chão sangrando. Ver `planoDaArea`.
+ */
+export type AreaDoEfeito = {
+  /** A cor de uma área nova. Ausente = a do fogo. */
+  cor?: string;
+  /** O foco, em vezes o segmento, de 1 a 2,5. Ausente = 1,5. */
+  escala?: number;
+  /**
+   * Quantos segmentos por lado de CASA da grade, de 1 a 4. Ausente = 1, a
+   * casa inteira. Dois é cada casa em quatro: chamas menores e mais juntas,
+   * que enchem a área pequena em vez de três focos do tamanho dela. Inteiro,
+   * e não fração, para o segmento continuar alinhado à grade.
+   */
+  divisoes?: number;
+  /**
+   * Quantos segmentos, no MÍNIMO, cabem no menor lado da área. Ausente = sem
+   * mínimo. Na área pequena a casa se divide mais -- até oito por lado -- e
+   * a chama encolhe junto: o fogo de uma fogueira e o de um salão têm o
+   * tamanho do que queima, e não o da casa da grade.
+   */
+  densidade?: number;
+  /**
+   * O FOCO: a chama que a área repete, segmento a segmento. Ausente = a
+   * imagem do `externo`. Existe porque o externo é desenhado para envolver
+   * uma figura -- o anel com as línguas altas nos lados --, e repetido em
+   * ladrilho ele desenhava fileiras. O foco é uma chama só, estreita, com o pé
+   * macio. Os mesmos campos de imagem da base.
+   */
+  foco?: Pick<BaseDoEfeito, "imagem" | "quadros" | "mipmaps" | "cores">;
+};
+
+/**
+ * A BASE de um efeito: o chão de fogo embaixo das chamas, a poça embaixo do
+ * veneno. Plana -- deitada no chão como uma malha --, e recortada na forma
+ * EXATA da área: é a única camada que diz ao jogador onde a área termina. O
+ * fogo sobe além da borda e a fagulha voa para fora; a base, não.
+ *
+ * Os mesmos campos de imagem do `externo` -- quadros, mipmaps, cores --, e
+ * LADRILHADA: a textura se repete segmento a segmento, na escala da área (ver
+ * `AreaDoEfeito.divisoes`), e por isso tem de emendar consigo mesma nas quatro
+ * bordas. Na área, a base
+ * anda no ritmo da folha do fogo: o total de quadros dela deve dividir o dele,
+ * para o laço fechar junto.
+ */
+export type BaseDoEfeito = {
+  /** Relativa à pasta do pack. Só raster, e emendável. */
+  imagem: string;
+  /** A mesma grade de quadros do externo. Ver `QuadrosDoEfeito`. */
+  quadros?: QuadrosDoEfeito;
+  /** Pelo lado do QUADRO em pixels, como os do externo. */
+  mipmaps?: Record<string, string>;
+  /** `condicao` ou o caminho de uma rampa, como no externo. */
+  cores?: string;
+  /** De 0 a 1. Ausente = 1. */
+  opacidade?: number;
+  /** O ladrilho, em vezes o segmento da área, de 0,5 a 4. Ausente = 1. */
+  escala?: number;
+  /**
+   * O quanto o chão escurece embaixo da textura, de 0 a 1, e a borda com ele.
+   * É o carvão embaixo do chão de fogo: a rampa da cor não chega ao preto, e a
+   * textura acende só o que arde. Ausente = 0, a textura sozinha.
+   */
+  escurece?: number;
 };

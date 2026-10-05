@@ -1,6 +1,9 @@
 /// <reference lib="webworker" />
 
+import type { FocoNaFolha } from "@/lib/area-de-efeito";
 import {
+  desenharFolhaDaArea,
+  esmaecerOsPes,
   desenharFolhaDeParticulas,
   gradeDoSprite,
   pintarImagem,
@@ -20,12 +23,12 @@ import type { FolhaDeParticulas, Trajetoria } from "@/lib/particulas";
  * mesmo trabalho corre ao lado, e a janela só recebe os arquivos prontos.
  *
  * Um pedido por mensagem, na ordem em que chegam. As imagens vêm como
- * `ImageBitmap`, já decodificadas fora da janela também. Dois tipos: a folha
- * do externo (cor, máscara, profundidade) e a folha das partículas, desenhada
- * do zero.
+ * `ImageBitmap`, já decodificadas fora da janela também. Três tipos: a folha
+ * do externo (cor, máscara, profundidade), a folha das partículas, desenhada
+ * do zero, e a folha de uma área de efeito, montada dos focos.
  */
 
-export type PedidoAoForno = PedidoDeFolha | PedidoDeParticulas;
+export type PedidoAoForno = PedidoDeFolha | PedidoDeParticulas | PedidoDeArea;
 
 export type PedidoDeFolha = {
   tipo: "folha";
@@ -51,6 +54,28 @@ export type PedidoDeParticulas = {
   quadros?: { colunas: number; total: number; fps?: number };
 };
 
+export type PedidoDeArea = {
+  tipo: "area";
+  id: number;
+  quadro: { largura: number; altura: number };
+  grade: { colunas: number; linhas: number; total: number };
+  contorno: Array<{ x: number; y: number }>;
+  /** A base e o fogo, já assados na cor. */
+  base?: {
+    fonte: ImageBitmap;
+    grade: { colunas: number; linhas: number; total: number };
+    ladrilho: { lado: number; x: number; y: number };
+    opacidade: number;
+    escurece: number;
+  };
+  fogo?: {
+    fonte: ImageBitmap;
+    grade: { colunas: number; linhas: number; total: number };
+    focos: FocoNaFolha[];
+  };
+  fagulhas?: { folha: FolhaDeParticulas; caminhos: Trajetoria[]; cor: string };
+};
+
 export type RespostaDoForno =
   | { id: number; unica: Blob }
   | { id: number; atras: Blob; frente: Blob }
@@ -63,7 +88,11 @@ escopo.onmessage = async (evento: MessageEvent<PedidoAoForno>) => {
 
   try {
     escopo.postMessage(
-      pedido.tipo === "particulas" ? await assarParticulas(pedido) : await assar(pedido),
+      pedido.tipo === "particulas"
+        ? await assarParticulas(pedido)
+        : pedido.tipo === "area"
+          ? await assarArea(pedido)
+          : await assar(pedido),
     );
   } catch (causa) {
     escopo.postMessage({
@@ -84,6 +113,40 @@ async function assarParticulas(pedido: PedidoDeParticulas): Promise<RespostaDoFo
 
   desenharFolhaDeParticulas(ctx, folha, pedido.caminhos, pedido.cor, sprite(pedido));
   return { id: pedido.id, unica: await tela.convertToBlob({ type: "image/png" }) };
+}
+
+async function assarArea(pedido: PedidoDeArea): Promise<RespostaDoForno> {
+  const { grade, quadro } = pedido;
+  const tela = new OffscreenCanvas(quadro.largura * grade.colunas, quadro.altura * grade.linhas);
+  const ctx = tela.getContext("2d");
+  if (!ctx) throw new Error("sem canvas no forno");
+
+  desenharFolhaDaArea(ctx, {
+    quadro,
+    grade,
+    contorno: pedido.contorno,
+    ...(pedido.base
+      ? { base: { ...pedido.base, largura: pedido.base.fonte.width, altura: pedido.base.fonte.height } }
+      : {}),
+    ...(pedido.fogo ? { fogo: { ...pedido.fogo, ...fogoSemPe(pedido.fogo) } } : {}),
+  });
+  if (pedido.fagulhas) {
+    const { folha, caminhos, cor } = pedido.fagulhas;
+    desenharFolhaDeParticulas(ctx, folha, caminhos, cor);
+  }
+
+  return { id: pedido.id, unica: await tela.convertToBlob({ type: "image/png" }) };
+}
+
+/** O fogo com o pé esmaecido. Ver `esmaecerOsPes`. */
+function fogoSemPe(fogo: NonNullable<PedidoDeArea["fogo"]>) {
+  const { width: largura, height: altura } = fogo.fonte;
+  const tela = new OffscreenCanvas(largura, altura);
+  const ctx = tela.getContext("2d");
+  if (!ctx) return { fonte: fogo.fonte, largura, altura };
+
+  esmaecerOsPes(ctx, fogo.fonte, largura, altura, fogo.grade.linhas);
+  return { fonte: tela, largura, altura };
 }
 
 /** A imagem da partícula no tamanho que vale, e pintada se o efeito pediu. */

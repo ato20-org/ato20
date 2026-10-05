@@ -58,6 +58,9 @@ export type Tool =
   // a luz não tem tamanho, tem alcance, e o alcance se ajusta no anel dela.
   // Também só do mapa. Ver `Luz`.
   | "luz"
+  // `efeito` desenha uma ÁREA DE EFEITO -- o chão em chamas --, com as mesmas
+  // três geometrias da área escondida. Só do mapa. Ver `AreaDeEfeito`.
+  | "efeito"
   // As três do QUADRO: `texto` escreve direto na folha no clique, `ligacao`
   // amarra duas coisas com uma seta em dois cliques -- de onde, para onde --, e
   // `forma` desenha retângulo, elipse ou linha no arrasto, conforme
@@ -184,6 +187,15 @@ type ToolStore = {
   formatoDeArea: FormatoDeArea;
   setFormatoDeArea: (formato: FormatoDeArea) => void;
 
+  /**
+   * O recorte e o efeito da PRÓXIMA área de efeito. Cada natureza guarda o
+   * seu, pela razão da parede: quem esconde em retângulo e incendeia em laço
+   * não quer que uma troque a outra. O efeito é um dos `EFEITOS_DE_AREA`.
+   */
+  formatoDoEfeito: FormatoDeArea;
+  efeitoDaArea: string;
+  setAreaDeEfeito: (proxima: { formatoDoEfeito?: FormatoDeArea; efeitoDaArea?: string }) => void;
+
   tipoDeForma: TipoDeForma;
   /** Ausente = a cor do tema. Ver `Forma`. */
   corForma?: string;
@@ -223,6 +235,10 @@ export const useToolStore = create<ToolStore>((set) => ({
 
   formatoDeArea: "retangulo",
   setFormatoDeArea: (formatoDeArea) => set({ formatoDeArea }),
+
+  formatoDoEfeito: "retangulo",
+  efeitoDaArea: "chamas",
+  setAreaDeEfeito: (proxima) => set(proxima),
 
   tipoDeForma: "retangulo",
   corForma: undefined,

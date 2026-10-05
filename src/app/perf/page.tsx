@@ -248,7 +248,8 @@ function sombraDaMedida(): Pick<
   // buraco por luz. Sem escuro a mesma luz é só o véu da cor, e mediria o
   // barato. `?escuridao=0` mede esse outro caso.
   const escuridao = Number(
-    params.get("escuridao") ?? (luzes > 0 || lanternasDaMedida() > 0 ? 0.8 : 0),
+    params.get("escuridao") ??
+      (luzes > 0 || lanternasDaMedida() > 0 || Number(params.get("areas") ?? 0) > 0 ? 0.8 : 0),
   );
 
   return {
@@ -282,6 +283,48 @@ function sombraDaMedida(): Pick<
             height: 160,
           }))
         : undefined,
+  };
+}
+
+/** `?parados=1`: os efeitos como o Mestre os vê sem nada selecionado. */
+const PARADOS =
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("parados") === "1";
+const NINGUEM_ANIMA: ReadonlySet<string> = new Set<string>();
+
+/**
+ * As áreas em chamas desta corrida: `?areas=A&casas=C&areafx=chamas`. A áreas
+ * de C por C casas da grade padrão (4 sem `casas`), lado a lado sem se
+ * sobrepor -- fogo em cima de fogo mediria a mesma região duas vezes --, e
+ * todas na mesa. `areafx=perf/fogo-sem-luz` mede o desenho sem a luz. Com
+ * áreas o escuro liga por padrão, como com luzes: a luz delas é o caminho
+ * caro. Ver `AreaDeEfeito`.
+ */
+function areasDaMedida(): Pick<Scene, "areasDeEfeito"> {
+  if (typeof window === "undefined") return {};
+
+  const params = new URLSearchParams(window.location.search);
+  const areas = Number(params.get("areas") ?? 0);
+  const casas = Number(params.get("casas") ?? 4);
+  const efeito = params.get("areafx") ?? "chamas";
+  const formato = params.get("areaforma") === "elipse" ? ("elipse" as const) : undefined;
+  if (!(areas > 0)) return {};
+
+  const lado = casas * 96;
+  const passo = lado + 96;
+  const colunas = Math.max(1, Math.floor((SCENE_WIDTH - 96) / passo));
+  const linhas = Math.max(1, Math.floor((SCENE_HEIGHT - 96) / passo));
+  return {
+    areasDeEfeito: Array.from({ length: areas }, (_, i) => ({
+      id: `perf-area-${i}`,
+      x: 96 + (i % colunas) * passo,
+      y: 96 + (Math.floor(i / colunas) % linhas) * passo,
+      width: lado,
+      height: lado,
+      efeito,
+      cor: "#f59e0b",
+      naMesa: true,
+      ...(formato ? { formato } : {}),
+    })),
   };
 }
 
@@ -516,6 +559,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
     items,
     fog: [],
     ...sombraDaMedida(),
+    ...areasDaMedida(),
     cameras: salvas,
     // No ar por padrão porque é assim que o mestre trabalha: ele mexe na
     // câmera que a mesa está vendo. E é o que faz o gesto gravar no board no
@@ -831,7 +875,14 @@ function PalcoEspectador({
   return (
     <DeclarativoProvider valor={DECLARATIVO_DO_ESPECTADOR}>
       <SceneStage viewport={cena.camera} smooth>
-        <SceneLayer scene={cena} smooth variante={variante} efeitos={efeitos} />
+        <SceneLayer
+          scene={cena}
+          smooth
+          variante={variante}
+          efeitos={efeitos}
+          // `?parados=1`: o Mestre sem nada selecionado -- todo efeito pausado.
+          animarSo={PARADOS ? NINGUEM_ANIMA : undefined}
+        />
       </SceneStage>
     </DeclarativoProvider>
   );
