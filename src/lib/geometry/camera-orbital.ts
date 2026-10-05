@@ -537,6 +537,50 @@ export function figuraNoTripe(
 }
 
 /**
+ * Onde o pé de uma figura em pé tem de ir para o ponto dela que o dedo pegou
+ * ficar sob o dedo. `null` se o dedo está no céu.
+ *
+ * `pega` é onde o dedo pegou, medido do pé na figura e em unidades de CENA (o
+ * pixel de tela dividido pela escala dela ali): é o que não muda enquanto ela
+ * anda. Medir o chão sob o dedo não serviria -- o dedo está sobre o corpo, e o
+ * chão atrás dele fica mais longe que o pé, onde a perspectiva encolhe o
+ * passo: a figura ficava para trás do dedo.
+ *
+ * Sem volta nem chute: a figura em pé é paralela à tela, então o ponto pegado
+ * está no espaço do olho a `pega` do pé, na MESMA profundidade -- e está no
+ * raio do dedo. Andando pelo raio, a altura do pé que sai dali é linear no
+ * passo, e o pé que pisa o chão é onde ela zera.
+ */
+export function peSobODedo(
+  tripe: Tripe,
+  tela: Pick<Tela, "largura" | "altura">,
+  dedo: Vec,
+  pega: Vec,
+): Vec | null {
+  const focal = focalDaLente(tela.altura, tripe.lente);
+  const lado = dedo.x - tela.largura / 2;
+  const cima = dedo.y - tela.altura / 2;
+  // O pé para o ponto do raio a `passo` focais do olho.
+  const pe = (passo: number) =>
+    doOlhoAoMundo(
+      tripe,
+      passo * lado - pega.x,
+      passo * cima - pega.y,
+      passo * focal,
+    );
+
+  const noOlho = pe(0).altura;
+  const subida = pe(1).altura - noOlho;
+  if (Math.abs(subida) < 1e-9) return null;
+  const passo = -noOlho / subida;
+  // Atrás do olho, ou colado nele: o dedo está no céu.
+  if (passo * focal <= PERTO_DO_OLHO) return null;
+
+  const { x, y } = pe(passo);
+  return { x, y };
+}
+
+/**
  * Onde um ponto da cena cai na tela do tripé, ou `null` se está atrás do olho.
  *
  * A mesma conta da corrente, passo a passo. Serve aos testes -- é ela que
@@ -555,6 +599,41 @@ export function projetarNoTripe(
   return {
     x: tela.largura / 2 + (olho.lado * focal) / olho.profundidade,
     y: tela.altura / 2 + (olho.cima * focal) / olho.profundidade,
+  };
+}
+
+/**
+ * O ponto do chão sob um pixel da tela do tripé, ou `null` se o pixel olha o
+ * céu.
+ *
+ * A `daTelaAoChao` do tripé, e a inversa de `projetarNoTripe` com altura zero:
+ * o raio do olho pelo pixel, cortado no piso -- a mesma conta da
+ * `pegadaDoTripe`, para um pixel em vez de quatro cantos. É o que deixa o dedo
+ * do jogador pegar o próprio token de esguelha.
+ */
+export function daTelaAoChaoNoTripe(
+  tripe: Tripe,
+  tela: Pick<Tela, "largura" | "altura">,
+  pixel: Vec,
+): Vec | null {
+  // Olho no chão ou abaixo dele: nenhum raio desce até o piso.
+  if (tripe.altura <= 0) return null;
+
+  const focal = focalDaLente(tela.altura, tripe.lente);
+  const noRaio = doOlhoAoMundo(
+    tripe,
+    pixel.x - tela.largura / 2,
+    pixel.y - tela.altura / 2,
+    focal,
+  );
+  const descida = tripe.altura - noRaio.altura;
+  // O raio sobe ou corre paralelo ao chão: o pixel está acima do horizonte.
+  if (descida <= 1e-6) return null;
+
+  const passos = tripe.altura / descida;
+  return {
+    x: tripe.x + (noRaio.x - tripe.x) * passos,
+    y: tripe.y + (noRaio.y - tripe.y) * passos,
   };
 }
 
