@@ -175,13 +175,14 @@ export type SugestaoDeCondicao = Omit<Condicao, "id" | "escondido">;
  * O cardápio de partida, para quem aperta "Usar sugestões".
  *
  * Um GESTO, e não o que a campanha nova traz de fábrica: inventar condições
- * que ninguém pediu seria escolher o sistema da mesa pelo mestre. Uma só, a
- * que tem efeito de fábrica: "Em chamas" é o que o ATO20 traz, e é por ela
- * que o mestre descobre a engrenagem. As outras ele cria com o nome que o
- * sistema dele usa.
+ * que ninguém pediu seria escolher o sistema da mesa pelo mestre. Só as que
+ * têm efeito de FÁBRICA -- "Em chamas", "Congelado": são o que o ATO20 traz,
+ * e é por elas que o mestre descobre a engrenagem. As outras ele cria com o
+ * nome que o sistema dele usa.
  */
 export const SUGESTOES: SugestaoDeCondicao[] = [
   { nome: "Em chamas", cor: "#f59e0b", icone: "chama", efeito: "chamas" },
+  { nome: "Congelado", cor: "#3b82f6", icone: "floco", efeito: "congelado" },
 ];
 
 /** O teto do nome. Espelha `MAX_NOME_CONDICAO`. */

@@ -1,0 +1,20 @@
+{
+  "id": "congelado",
+  "titulo": "Congelado",
+  "dica": "A figura azula, trinca e treme, com cristais de gelo em volta.",
+  "figura": { "tinta": 0.35, "tremor": true },
+  "interno": { "textura": "rachaduras.png", "forca": 0.85 },
+  "particulas": {
+    "quantidade": 8,
+    "imagem": "cristal.png",
+    "quadros": { "colunas": 4, "total": 4, "fps": 8 },
+    "tamanho": 0.16,
+    "variacao": 0.5,
+    "giro": 60,
+    "direcao": 270,
+    "abertura": 140,
+    "velocidade": 0.3,
+    "vida": 2.4,
+    "emissor": { "largura": 1, "altura": 0.9, "ancora": "centro" }
+  }
+}

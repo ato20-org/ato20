@@ -8,12 +8,27 @@ import { AparenciaDaCondicao } from "@/components/mestre/linha-de-condicao";
 import { NomeDoMedidor } from "@/components/mestre/linha-de-medidor";
 import { DeclarativoProvider } from "@/components/playground/declarativo";
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useAssetUrl } from "@/hooks/use-asset-url";
-import { copiaParaACampanha, definicaoDoEfeito, urlDaImagemDaCampanha } from "@/lib/efeitos";
+import {
+  copiaParaACampanha,
+  definicaoDoEfeito,
+  EFEITOS_DE_FABRICA,
+  urlDaImagemDaCampanha,
+} from "@/lib/efeitos";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useCondicoesStore } from "@/lib/store/use-condicoes-store";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
@@ -61,7 +76,13 @@ export function TelaDaCondicao({
   onEditar: (patch: PatchCondicao) => void;
   onVoltar: () => void;
 }) {
-  const { efeito, mudar, renomear } = useEfeitoDaCondicao(modelo);
+  const { efeito, mudar, renomear, temProprio } = useEfeitoDaCondicao(modelo);
+  const [trocarPor, setTrocarPor] = useState<DefinicaoDeEfeito | null>(null);
+
+  /** O efeito pronto como ponto de partida: a cópia dele, no lugar do atual. */
+  function partirDe(pronto: DefinicaoDeEfeito) {
+    mudar(copiaParaACampanha(pronto, efeito.id, modelo.nome));
+  }
 
   return (
     <div className="space-y-3">
@@ -94,7 +115,54 @@ export function TelaDaCondicao({
         </label>
       </div>
 
+      {/* Os efeitos que o ATO20 traz, como ponto de partida: é por aqui que a
+          condição criada à mão chega ao fogo ou ao gelo prontos -- o
+          cardápio não tem mais seletor de efeito. */}
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="text-muted-foreground mr-1 text-[11px]">Partir de um efeito pronto:</span>
+        {EFEITOS_DE_FABRICA.map((pronto) => (
+          <Button
+            key={pronto.id}
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            title={pronto.dica}
+            onClick={() => (temProprio ? setTrocarPor(pronto) : partirDe(pronto))}
+          >
+            {pronto.titulo}
+          </Button>
+        ))}
+      </div>
+
       <EditorDeEfeito efeito={efeito} cor={modelo.cor} onMudar={mudar} />
+
+      <AlertDialog
+        open={trocarPor !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setTrocarPor(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Trocar o efeito pelo {trocarPor?.titulo}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O que você ajustou no efeito de {modelo.nome} é substituído. Quem já está com a
+              condição passa a desenhar o efeito novo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (trocarPor) partirDe(trocarPor);
+                setTrocarPor(null);
+              }}
+            >
+              Trocar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -168,7 +236,7 @@ function useEfeitoDaCondicao(modelo: Condicao) {
     if (proprio) salvar({ ...proprio, titulo: nome });
   }
 
-  return { efeito, mudar, renomear };
+  return { efeito, mudar, renomear, temProprio: Boolean(proprio) };
 }
 
 /** Um campo fora do objeto: `undefined` some, e o arquivo não ganha campo vazio. */
