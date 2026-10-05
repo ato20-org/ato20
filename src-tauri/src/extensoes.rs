@@ -214,7 +214,108 @@ pub struct Efeito {
     pub dica: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub figura: Option<FiguraDoEfeito>,
+    /// Uma imagem em volta da figura: o fogo, a fumaca, o circulo. Ver
+    /// `Externo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub externo: Option<Externo>,
+    /// Uma textura pintada DENTRO da figura: a rachadura, a escama. Ver
+    /// `Interno`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interno: Option<Interno>,
 }
+
+impl Efeito {
+    /// As imagens que o efeito usa, relativas a pasta. Entram na lista do que
+    /// o daemon serve, como as do estilo de medidor -- ver `imagens_servidas`.
+    pub fn imagens(&self) -> Vec<&str> {
+        let mut imagens: Vec<&str> = Vec::new();
+        imagens.extend(self.externo.as_ref().map(|externo| externo.imagem.as_str()));
+        imagens.extend(self.interno.as_ref().map(|interno| interno.textura.as_str()));
+
+        imagens
+    }
+
+    /// Mexe em alguma coisa?
+    fn faz_algo(&self) -> bool {
+        self.figura.as_ref().is_some_and(FiguraDoEfeito::faz_algo)
+            || self.externo.is_some()
+            || self.interno.is_some()
+    }
+}
+
+/// Uma imagem em volta da figura, do tamanho dela vezes `tamanho`.
+///
+/// Esticada na caixa, como o token: a figura quadrada leva o fogo quadrado.
+/// `ancora` diz de onde ela cresce -- do centro (a aura), da base (a fogueira
+/// que sobe dos pes) ou do topo (a nuvem sobre a cabeca).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Externo {
+    pub imagem: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tamanho: Option<f64>,
+    /// `atras` (o de sempre) ou `frente`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lado: Option<String>,
+    /// `centro` (o de sempre), `base` ou `topo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ancora: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacidade: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub animacao: Option<Animacao>,
+}
+
+/// Uma textura pintada sobre a figura, so onde ha figura, uma vez -- vira
+/// parte da pele, como a tinta.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Interno {
+    pub textura: String,
+    /// Quanto ela cobre, de 0 a 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forca: Option<f64>,
+}
+
+/// Uma animacao DECLARADA: o "script" de um efeito e dado, e nao codigo,
+/// porque a TV e o celular nao rodam codigo de plugin. Sao quatro movimentos
+/// que o palco anima so com `transform` e `opacity`, os que o compositor faz
+/// sem refazer layout.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Animacao {
+    /// `pulsar`, `girar`, `flutuar` ou `piscar`. Ver `ANIMACOES`.
+    pub tipo: String,
+    /// Segundos por ciclo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub periodo: Option<f64>,
+    /// De 0 a 1: quanto o movimento se afasta do parado.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intensidade: Option<f64>,
+}
+
+/// Os movimentos que uma `Animacao` pode pedir.
+pub const ANIMACOES: &[&str] = &["pulsar", "girar", "flutuar", "piscar"];
+
+/// De onde o externo cresce.
+pub const ANCORAS: &[&str] = &["centro", "base", "topo"];
+
+/// De que lado da figura o externo fica.
+pub const LADOS: &[&str] = &["atras", "frente"];
+
+/// Os limites do `tamanho` do externo, em vezes a figura.
+///
+/// Dois e o teto pela regra do palco: o que sai da caixa de um plano infla a
+/// camada composta do WebKitGTK, e um fogo de cinco tokens em volta de um so
+/// seria isso. Mesmo dentro do teto, o externo encolhe perto da borda do mapa
+/// para nao sair dele -- ver `tamanhoNoPlano` no TS.
+pub const TAMANHO_DO_EXTERNO_MIN: f64 = 0.25;
+pub const TAMANHO_DO_EXTERNO_MAX: f64 = 2.0;
+
+/// Os limites do periodo de uma animacao, em segundos. Abaixo de um quinto de
+/// segundo e pisca-pisca; acima de trinta ninguem ve mexer.
+pub const PERIODO_MIN: f64 = 0.2;
+pub const PERIODO_MAX: f64 = 30.0;
 
 /// O que o efeito faz com a propria figura. Ver `FiguraDoEfeito` no TS, que
 /// diz o custo de cada um.
@@ -236,7 +337,7 @@ pub struct FiguraDoEfeito {
 
 impl FiguraDoEfeito {
     /// Mexe em alguma coisa?
-    fn faz_algo(&self) -> bool {
+    pub fn faz_algo(&self) -> bool {
         self.halo || self.tinta.is_some() || self.cinza || self.translucido || self.tremor
     }
 }
@@ -247,6 +348,28 @@ const MAX_DICA_DO_EFEITO: usize = 120;
 /// O prefixo dos efeitos que a CAMPANHA cria. Um plugin com este id
 /// disputaria os mesmos ids -- `campanha/brasa` seria dos dois.
 pub const PREFIXO_DA_CAMPANHA: &str = "campanha";
+
+impl Contribuicoes {
+    /// As imagens que o daemon serve na rede por causa do que foi declarado --
+    /// dos estilos de medidor e dos efeitos --, cada uma com quem a pediu, para
+    /// o erro dizer de quem e o arquivo que falta. Ver `serve::serve_plugin`.
+    pub fn imagens_servidas(&self) -> Vec<(String, &str)> {
+        let estilos = self.estilos_de_medidor.iter().flat_map(|estilo| {
+            estilo
+                .imagens()
+                .into_iter()
+                .map(move |imagem| (format!("o estilo {:?}", estilo.id), imagem))
+        });
+        let efeitos = self.efeitos.iter().flat_map(|efeito| {
+            efeito
+                .imagens()
+                .into_iter()
+                .map(move |imagem| (format!("o efeito {:?}", efeito.id), imagem))
+        });
+
+        estilos.chain(efeitos).collect()
+    }
+}
 
 /// Uma pagina do plugin, servida pelo daemon em `/plugin/{id}/{arquivo}`.
 ///
@@ -1063,13 +1186,80 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
         return invalido(&format!("tem dica maior que {MAX_DICA_DO_EFEITO} letras"));
     }
 
-    let Some(figura) = efeito.figura.as_ref().filter(|figura| figura.faz_algo()) else {
-        return invalido("nao desenha nada: declare ao menos uma camada em `figura`");
-    };
+    if !efeito.faz_algo() {
+        return invalido("nao desenha nada: declare `figura`, `externo` ou `interno`");
+    }
 
-    if let Some(tinta) = figura.tinta {
-        if !tinta.is_finite() || !(0.0..=1.0).contains(&tinta) {
+    let fracao = |valor: Option<f64>| valor.map_or(true, |v| v.is_finite() && (0.0..=1.0).contains(&v));
+
+    if let Some(figura) = &efeito.figura {
+        if !fracao(figura.tinta) {
             return invalido("tem `tinta` fora de 0 a 1");
+        }
+    }
+
+    for imagem in efeito.imagens() {
+        let raster = imagem
+            .rsplit_once('.')
+            .is_some_and(|(_, ext)| IMAGENS_DE_MEDIDOR.contains(&ext.to_ascii_lowercase().as_str()));
+        if !caminho_relativo_seguro(imagem) || !raster {
+            return invalido(&format!(
+                "aponta para {imagem:?}; tem de ser {} dentro da pasta",
+                IMAGENS_DE_MEDIDOR.join("/")
+            ));
+        }
+    }
+
+    if let Some(externo) = &efeito.externo {
+        if let Some(tamanho) = externo.tamanho {
+            if !tamanho.is_finite()
+                || !(TAMANHO_DO_EXTERNO_MIN..=TAMANHO_DO_EXTERNO_MAX).contains(&tamanho)
+            {
+                return invalido(&format!(
+                    "tem `externo.tamanho` fora de {TAMANHO_DO_EXTERNO_MIN} a {TAMANHO_DO_EXTERNO_MAX}"
+                ));
+            }
+        }
+        if !fracao(externo.opacidade) {
+            return invalido("tem `externo.opacidade` fora de 0 a 1");
+        }
+        for (campo, valor, aceitos) in [
+            ("lado", &externo.lado, LADOS),
+            ("ancora", &externo.ancora, ANCORAS),
+        ] {
+            if let Some(valor) = valor {
+                if !aceitos.contains(&valor.as_str()) {
+                    return invalido(&format!(
+                        "pede `externo.{campo}` {valor:?}; os valores sao {}",
+                        aceitos.join(", ")
+                    ));
+                }
+            }
+        }
+        if let Some(animacao) = &externo.animacao {
+            if !ANIMACOES.contains(&animacao.tipo.as_str()) {
+                return invalido(&format!(
+                    "pede a animacao {:?}; as animacoes sao {}",
+                    animacao.tipo,
+                    ANIMACOES.join(", ")
+                ));
+            }
+            if let Some(periodo) = animacao.periodo {
+                if !periodo.is_finite() || !(PERIODO_MIN..=PERIODO_MAX).contains(&periodo) {
+                    return invalido(&format!(
+                        "tem `periodo` fora de {PERIODO_MIN} a {PERIODO_MAX} segundos"
+                    ));
+                }
+            }
+            if !fracao(animacao.intensidade) {
+                return invalido("tem `intensidade` fora de 0 a 1");
+            }
+        }
+    }
+
+    if let Some(interno) = &efeito.interno {
+        if !fracao(interno.forca) {
+            return invalido("tem `interno.forca` fora de 0 a 1");
         }
     }
 
@@ -1079,7 +1269,7 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
 /// Um estilo de medidor desenha alguma coisa, e so com o que e da pasta?
 ///
 /// So a FORMA do que foi declarado: o arquivo existir e caber no teto e da
-/// importacao (`validar_arquivos_dos_estilos`). Aqui roda a cada leitura do
+/// importacao (`validar_imagens_declaradas`). Aqui roda a cada leitura do
 /// manifesto, e um arquivo apagado por fora nao pode tirar o plugin da lista
 /// -- e na lista que fica o botao de desinstalar.
 fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
@@ -1180,39 +1370,35 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
     Ok(())
 }
 
-/// As imagens dos estilos existem e cabem no teto?
+/// As imagens dos estilos e dos efeitos existem e cabem no teto?
 ///
 /// Na IMPORTACAO, e nao em `ler_manifesto`: e o momento em que o autor ainda
 /// esta olhando para a pasta, e o erro diz qual arquivo faltou. Depois disso
-/// uma imagem que some e so um medidor sem moldura -- o daemon responde 404 e
-/// a TV desenha o resto.
-fn validar_arquivos_dos_estilos(pasta: &Path, manifesto: &Manifesto) -> AppResult<()> {
-    for estilo in &manifesto.contribui.estilos_de_medidor {
-        for imagem in estilo.imagens() {
-            // `symlink_metadata`: a copia pula link simbolico, e uma imagem
-            // que fosse link passaria aqui e faltaria na pasta instalada.
-            let tamanho = std::fs::symlink_metadata(pasta.join(imagem))
-                .ok()
-                .filter(|meta| meta.is_file())
-                .map(|meta| meta.len());
+/// uma imagem que some e so um medidor sem moldura, ou um fogo que nao
+/// aparece -- o daemon responde 404 e a TV desenha o resto.
+fn validar_imagens_declaradas(pasta: &Path, manifesto: &Manifesto) -> AppResult<()> {
+    for (dono, imagem) in manifesto.contribui.imagens_servidas() {
+        // `symlink_metadata`: a copia pula link simbolico, e uma imagem que
+        // fosse link passaria aqui e faltaria na pasta instalada.
+        let tamanho = std::fs::symlink_metadata(pasta.join(imagem))
+            .ok()
+            .filter(|meta| meta.is_file())
+            .map(|meta| meta.len());
 
-            match tamanho {
-                None => {
-                    return Err(AppError::ExtensaoInvalida(format!(
-                        "o estilo {:?} aponta para {imagem:?}, que nao esta na pasta",
-                        estilo.id
-                    )));
-                }
-                Some(bytes) if bytes > IMAGEM_DE_MEDIDOR_MAX => {
-                    return Err(AppError::ExtensaoInvalida(format!(
-                        "a imagem {imagem:?} do estilo {:?} tem {} KB; o teto e {} KB",
-                        estilo.id,
-                        bytes / 1024,
-                        IMAGEM_DE_MEDIDOR_MAX / 1024
-                    )));
-                }
-                Some(_) => {}
+        match tamanho {
+            None => {
+                return Err(AppError::ExtensaoInvalida(format!(
+                    "{dono} aponta para {imagem:?}, que nao esta na pasta"
+                )));
             }
+            Some(bytes) if bytes > IMAGEM_DE_MEDIDOR_MAX => {
+                return Err(AppError::ExtensaoInvalida(format!(
+                    "a imagem {imagem:?} ({dono}) tem {} KB; o teto e {} KB",
+                    bytes / 1024,
+                    IMAGEM_DE_MEDIDOR_MAX / 1024
+                )));
+            }
+            Some(_) => {}
         }
     }
 
@@ -1488,7 +1674,7 @@ pub fn listar(dir: &Path) -> AppResult<Vec<Manifesto>> {
 /// versao nova.
 pub fn importar(dir: &Path, origem: &Path) -> AppResult<Manifesto> {
     let manifesto = ler_manifesto(origem)?;
-    validar_arquivos_dos_estilos(origem, &manifesto)?;
+    validar_imagens_declaradas(origem, &manifesto)?;
 
     let destino = dir.join(&manifesto.id);
 
@@ -2122,6 +2308,80 @@ mod tests {
                 "{efeitos} devia ser recusado"
             );
         }
+    }
+
+    #[test]
+    fn efeito_com_externo_interno_e_animacao_entra() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r#"[{"id":"em-chamas","titulo":"Em chamas",
+                     "externo":{"imagem":"fx/fogo.webp","tamanho":1.6,"lado":"frente","ancora":"base",
+                                "opacidade":0.9,"animacao":{"tipo":"flutuar","periodo":1.2,"intensidade":0.5}},
+                     "interno":{"textura":"fx/brasa.png","forca":0.4}}]"#,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        assert_eq!(efeito.imagens(), vec!["fx/fogo.webp", "fx/brasa.png"]);
+        assert_eq!(
+            m.contribui
+                .imagens_servidas()
+                .into_iter()
+                .map(|(_, imagem)| imagem)
+                .collect::<Vec<_>>(),
+            vec!["fx/fogo.webp", "fx/brasa.png"]
+        );
+    }
+
+    #[test]
+    fn externo_e_interno_tortos_sao_recusados() {
+        let base = tempfile::tempdir().unwrap();
+
+        for efeito in [
+            r#"{"imagem":"../fora.png"}"#,
+            r#"{"imagem":"fogo.svg"}"#,
+            r#"{"imagem":"fogo.png","tamanho":5}"#,
+            r#"{"imagem":"fogo.png","tamanho":0.1}"#,
+            r#"{"imagem":"fogo.png","lado":"dentro"}"#,
+            r#"{"imagem":"fogo.png","ancora":"meio"}"#,
+            r#"{"imagem":"fogo.png","opacidade":2}"#,
+            r#"{"imagem":"fogo.png","animacao":{"tipo":"explodir"}}"#,
+            r#"{"imagem":"fogo.png","animacao":{"tipo":"girar","periodo":0.01}}"#,
+            r#"{"imagem":"fogo.png","animacao":{"tipo":"girar","intensidade":3}}"#,
+        ] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X","externo":{efeito}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{efeito}");
+        }
+
+        for interno in [r#"{"textura":"/abs.png"}"#, r#"{"textura":"t.png","forca":1.2}"#] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X","interno":{interno}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{interno}");
+        }
+    }
+
+    #[test]
+    fn importar_cobra_a_imagem_do_efeito() {
+        let base = tempfile::tempdir().unwrap();
+        let destino = base.path().join("instaladas");
+        let origem = base.path().join("pack");
+        escrever(
+            &origem,
+            MANIFESTO,
+            &com_efeitos(
+                "ordem",
+                r#"[{"id":"fogo","titulo":"Fogo","externo":{"imagem":"fogo.png"}}]"#,
+            ),
+        );
+
+        // Sem o arquivo, a importacao diz qual faltou.
+        assert!(importar(&destino, &origem).is_err());
+
+        std::fs::write(origem.join("fogo.png"), b"png").unwrap();
+        assert!(importar(&destino, &origem).is_ok());
     }
 
     #[test]

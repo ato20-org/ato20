@@ -5,6 +5,8 @@ import {
   definicaoDoEfeito,
   EFEITOS_DE_FABRICA,
   efeitoValido,
+  TAMANHO_DO_EXTERNO,
+  tamanhoNoPlano,
 } from "./efeitos";
 
 describe("EFEITOS_DE_FABRICA", () => {
@@ -84,5 +86,80 @@ describe("camadasDaFigura", () => {
       translucido: false,
       tremor: false,
     });
+  });
+});
+
+describe("camadasDaFigura com imagem", () => {
+  const sangue = {
+    "ordem/em-chamas": {
+      id: "ordem/em-chamas",
+      titulo: "Em chamas",
+      origem: { plugin: "ordem", versao: "1.2.0" },
+      externo: { imagem: "fx/fogo.webp", lado: "frente" as const, animacao: { tipo: "flutuar" as const } },
+      interno: { textura: "fx/brasa.png", forca: 0.4 },
+    },
+  };
+
+  it("resolve o externo e a textura com o endereço do daemon e os padrões", () => {
+    // Fora do Tauri (a TV, o celular, o teste): o daemon serve em `/plugin`.
+    const camadas = camadasDaFigura([{ efeito: "ordem/em-chamas", cor: "#f59e0b" }], sangue);
+
+    expect(camadas.textura).toEqual({ url: "/plugin/ordem/fx/brasa.png?v=1.2.0", forca: 0.4 });
+    expect(camadas.externo).toEqual({
+      url: "/plugin/ordem/fx/fogo.webp?v=1.2.0",
+      tamanho: TAMANHO_DO_EXTERNO,
+      lado: "frente",
+      ancora: "centro",
+      opacidade: 1,
+      animacao: { tipo: "flutuar", periodo: 2, intensidade: 0.5 },
+    });
+  });
+
+  it("efeito com imagem e sem origem não desenha o externo", () => {
+    // A fábrica não tem de onde puxar arquivo.
+    const semOrigem = {
+      "x/y": { id: "x/y", titulo: "Y", externo: { imagem: "fogo.png" } },
+    };
+
+    expect(camadasDaFigura([{ efeito: "x/y", cor: "#fff" }], semOrigem).externo).toBeUndefined();
+  });
+});
+
+describe("tamanhoNoPlano", () => {
+  const caixa = { x: 900, y: 500, width: 100, height: 100, rotation: 0 };
+
+  it("no meio do mapa, o tamanho pedido inteiro", () => {
+    expect(tamanhoNoPlano(caixa, 2, "centro")).toBe(2);
+  });
+
+  it("encostado na borda, encolhe até tocar nela", () => {
+    // 40 até a borda esquerda: o externo centrado cresce 50 de cada lado com
+    // o tamanho 2, e só cabe até 1 + 2*40/100.
+    const naBorda = { ...caixa, x: 40 };
+
+    expect(tamanhoNoPlano(naBorda, 2, "centro")).toBeCloseTo(1.8);
+  });
+
+  it("a âncora na base só cresce para cima", () => {
+    // Encostado no chão do mapa: crescendo dos pés, não passa dele.
+    const noChao = { ...caixa, y: 1080 - 100 };
+
+    expect(tamanhoNoPlano(noChao, 2, "base")).toBe(2);
+    expect(tamanhoNoPlano(noChao, 2, "centro")).toBe(1);
+  });
+
+  it("girado, a quina conta", () => {
+    // A 45°, a quina do externo chega mais longe que o lado.
+    const girado = { ...caixa, x: 60, rotation: 45 };
+
+    expect(tamanhoNoPlano(girado, 2, "centro")).toBeLessThan(tamanhoNoPlano({ ...girado, rotation: 0 }, 2, "centro"));
+  });
+
+  it("item que já está fora do plano fica no tamanho dele", () => {
+    expect(tamanhoNoPlano({ ...caixa, x: -30 }, 2, "centro")).toBe(1);
+  });
+
+  it("pedido menor que a figura não depende do plano", () => {
+    expect(tamanhoNoPlano({ ...caixa, x: -30 }, 0.5, "centro")).toBe(0.5);
   });
 });

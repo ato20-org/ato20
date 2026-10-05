@@ -75,7 +75,11 @@ describe("o declarativo do Mestre", () => {
 
     await useDeclarativoStore.getState().sincronizar([ordem(true)]);
     expect(useDeclarativoStore.getState().efeitos).toEqual({
-      "ordem/sangrando": { ...sangrando, id: "ordem/sangrando" },
+      "ordem/sangrando": {
+        ...sangrando,
+        id: "ordem/sangrando",
+        origem: { plugin: "ordem", versao: "1.0.0" },
+      },
     });
 
     // Desligado, o efeito some, e a condição que o aponta volta a ser só o selo.

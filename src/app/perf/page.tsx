@@ -304,7 +304,9 @@ function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] 
     const efeito =
       pedido === "misto"
         ? EFEITOS_DE_FABRICA[i % EFEITOS_DE_FABRICA.length]!.id
-        : (EFEITOS_DE_FABRICA.find((cada) => cada.id === pedido)?.id ?? "aura");
+        : pedido in EFEITOS_DA_MEDIDA
+          ? pedido
+          : (EFEITOS_DE_FABRICA.find((cada) => cada.id === pedido)?.id ?? "aura");
 
     return {
       personagemId: `perf-personagem-${i}`,
@@ -364,14 +366,44 @@ function medidoresDaMedida(): { quantos: number; estilo: EstiloDaMedida } {
   return { quantos: Number(params.get("medidores") ?? 0), estilo };
 }
 
+/**
+ * Os efeitos do plugin de mentira, com as imagens que a bancada já serve.
+ * `?figura=perf/fogo` é o pior caso -- o GIF animado em volta e por cima de
+ * cada figura, flutuando --; `perf/brasa` é a textura assada e o externo
+ * parado pulsando atrás.
+ */
+const EFEITOS_DA_MEDIDA: Declarativo["efeitos"] = {
+  "perf/fogo": {
+    id: "perf/fogo",
+    titulo: "Fogo",
+    origem: { plugin: "perf", versao: "1" },
+    externo: {
+      imagem: "sangue.gif",
+      tamanho: 1.6,
+      lado: "frente",
+      animacao: { tipo: "flutuar", periodo: 1.2 },
+    },
+  },
+  "perf/brasa": {
+    id: "perf/brasa",
+    titulo: "Brasa",
+    origem: { plugin: "perf", versao: "1" },
+    interno: { textura: "sangue.png", forca: 0.5 },
+    externo: { imagem: "sangue.png", tamanho: 1.4, animacao: { tipo: "pulsar" } },
+  },
+};
+
+/** Só os efeitos, para o palco da TV. Constante: o contexto não muda por render. */
+const DECLARATIVO_DO_ESPECTADOR: Declarativo = { ...DECLARATIVO_VAZIO, efeitos: EFEITOS_DA_MEDIDA };
+
 /** O plugin de mentira que a bancada serve em `/plugin/perf/*`. */
 function declarativoDaMedida(estilo: EstiloDaMedida): Declarativo {
-  if (estilo === "fabrica") return DECLARATIVO_VAZIO;
+  if (estilo === "fabrica") return { ...DECLARATIVO_VAZIO, efeitos: EFEITOS_DA_MEDIDA };
 
   return {
     versao: 1,
     plugins: ["perf"],
-    efeitos: {},
+    efeitos: EFEITOS_DA_MEDIDA,
     estilos: {
       "perf/vida": {
         tipo: "camadas",
@@ -779,10 +811,14 @@ function PalcoEspectador({
   // quando o mestre marca ou tira uma condição.
   const efeitos = useMemo(() => condicoesDaMedida().efeitos, []);
 
+  // O declarativo da TV: é por ele que o efeito de plugin chega à figura. Sem
+  // ele, `?figura=perf/fogo` mediria a figura limpa.
   return (
-    <SceneStage viewport={cena.camera} smooth>
-      <SceneLayer scene={cena} smooth variante={variante} efeitos={efeitos} />
-    </SceneStage>
+    <DeclarativoProvider valor={DECLARATIVO_DO_ESPECTADOR}>
+      <SceneStage viewport={cena.camera} smooth>
+        <SceneLayer scene={cena} smooth variante={variante} efeitos={efeitos} />
+      </SceneStage>
+    </DeclarativoProvider>
   );
 }
 

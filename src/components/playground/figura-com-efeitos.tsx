@@ -11,7 +11,12 @@ import {
   type Assado,
   type PedidoDePele,
 } from "@/lib/efeito-na-figura";
-import { camadasDaFigura } from "@/lib/efeitos";
+import {
+  camadasDaFigura,
+  tamanhoNoPlano,
+  type CaixaNoPlano,
+  type ExternoResolvido,
+} from "@/lib/efeitos";
 import { cn } from "@/lib/utils";
 
 /**
@@ -48,10 +53,12 @@ export type LugarDaFigura = {
  *
  * ## A pilha
  *
- * De trás para a frente: a aura, e depois a figura dentro de dois invólucros
- * -- o de fora treme, o de dentro fica transparente. Dois e não um porque cada
- * invólucro carrega uma animação só; as duas no mesmo elemento disputariam a
- * propriedade `animation`, e a segunda apagaria a primeira.
+ * De trás para a frente: a aura e o externo de trás, a figura dentro de até
+ * dois invólucros -- o de fora treme, o de dentro fica transparente --, e o
+ * externo da frente. Dois e não um porque cada invólucro carrega uma animação
+ * só; as duas no mesmo elemento disputariam a propriedade `animation`, e a
+ * segunda apagaria a primeira. Cada um só existe quando pedido: o halo
+ * sozinho, ou o fogo sozinho, não paga dois nós por figura.
  *
  * A aura fica FORA dos invólucros. O halo é o que a figura emana, e ele parado
  * atrás de uma figura que treme lê melhor que os dois chacoalhando juntos. E
@@ -69,6 +76,7 @@ export function FiguraComEfeitos({
   semente,
   espelho,
   lugar,
+  alcance,
   children,
 }: {
   /** Já resolvidos, sem os escondidos. Ver `efeitosDaFigura`. */
@@ -81,6 +89,13 @@ export function FiguraComEfeitos({
   espelho?: string;
   /** Ausente = a figura ocupa a caixa inteira, que é o caso do token. */
   lugar?: LugarDaFigura | null;
+  /**
+   * Onde o visual EXTERNO pode crescer. A caixa do item no plano encolhe o
+   * externo perto da borda do mapa, para ele não sair do plano (ver
+   * `tamanhoNoPlano`); `livre` é a peça de pé do 2.5D, que não mora num plano.
+   * Ausente = sem externo, que é o retrato por ora.
+   */
+  alcance?: CaixaNoPlano | "livre";
   children: (fonte: string | null) => ReactNode;
 }) {
   // Os efeitos de plugin, do contexto que toda tela já monta. Muda quando o
@@ -94,14 +109,21 @@ export function FiguraComEfeitos({
     cinza: camadas.cinza,
     tinta: camadas.tinta?.cor,
     forca: camadas.tinta?.forca,
+    textura: camadas.textura,
   });
   const halo = useAura(url, camadas.halo);
+  const externo = alcance ? camadas.externo : undefined;
+  const tamanhoDeFora = externo
+    ? alcance === "livre"
+      ? externo.tamanho
+      : tamanhoNoPlano(alcance!, externo.tamanho, externo.ancora)
+    : 0;
 
   // Até a pele sair do forno, a figura de sempre. Um quadro colorido antes do
   // cinza é melhor que um quadro sem figura.
   const fonte = pele?.desenho ?? url;
 
-  if (!halo && !translucido && !tremendo) return <>{children(fonte)}</>;
+  if (!halo && !translucido && !tremendo && !externo) return <>{children(fonte)}</>;
 
   // Largura e altura explícitas, e não `inset: 0`: numa `<img>` absoluta o
   // `inset` sozinho não estica -- elemento substituído fica no tamanho do
@@ -130,26 +152,115 @@ export function FiguraComEfeitos({
         />
       ) : null}
 
-      <div
-        className={cn("absolute inset-0", tremendo && "efeito-tremendo")}
-        style={
-          tremendo
-            ? { animationDelay: faseDaFigura(semente, PERIODO.tremendo) }
-            : undefined
-        }
-      >
+      {externo?.lado === "atras" ? (
+        <ImagemDeFora externo={externo} tamanho={tamanhoDeFora} lugar={lugar} semente={semente} />
+      ) : null}
+
+      {tremendo ? (
         <div
-          className={cn("absolute inset-0", translucido && "efeito-translucido")}
-          style={
-            translucido
-              ? { animationDelay: faseDaFigura(semente, PERIODO.translucido) }
-              : undefined
-          }
+          className="efeito-tremendo absolute inset-0"
+          style={{ animationDelay: faseDaFigura(semente, PERIODO.tremendo) }}
         >
-          {children(fonte)}
+          {translucido ? (
+            <Translucida semente={semente}>{children(fonte)}</Translucida>
+          ) : (
+            children(fonte)
+          )}
         </div>
-      </div>
+      ) : translucido ? (
+        <Translucida semente={semente}>{children(fonte)}</Translucida>
+      ) : (
+        children(fonte)
+      )}
+
+      {externo?.lado === "frente" ? (
+        <ImagemDeFora externo={externo} tamanho={tamanhoDeFora} lugar={lugar} semente={semente} />
+      ) : null}
     </>
+  );
+}
+
+/** O invólucro de dentro: a figura meio transparente, tremulando. */
+function Translucida({ semente, children }: { semente: string; children: ReactNode }) {
+  return (
+    <div
+      className="efeito-translucido absolute inset-0"
+      style={{ animationDelay: faseDaFigura(semente, PERIODO.translucido) }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** De onde cada âncora cresce, para a animação pulsar e girar do lugar certo. */
+const ORIGEM: Record<ExternoResolvido["ancora"], string> = {
+  centro: "50% 50%",
+  base: "50% 100%",
+  topo: "50% 0%",
+};
+
+/**
+ * A imagem de fora: o fogo, a fumaça, o círculo.
+ *
+ * Uma `<img>` só, animada nela mesma, e não num `div` em volta: no 2.5D um
+ * `div` transformado com imagem dentro é rasterizado no tamanho de layout e
+ * esticado, e a figura de perto borra -- ver a nota da peça de prumo. Fora
+ * dos invólucros, pela razão da aura: o fogo não treme com quem treme.
+ *
+ * A opacidade e a intensidade vão como variáveis de CSS, e os quadros as
+ * leem: o `piscar` anima a opacidade, e a do efeito não pode se perder nele.
+ */
+function ImagemDeFora({
+  externo,
+  tamanho,
+  lugar,
+  semente,
+}: {
+  externo: ExternoResolvido;
+  tamanho: number;
+  lugar: LugarDaFigura | null | undefined;
+  semente: string;
+}) {
+  const animacao = externo.animacao;
+  const fx = (1 - tamanho) / 2;
+  const fy = externo.ancora === "base" ? 1 - tamanho : externo.ancora === "topo" ? 0 : fx;
+
+  const caixa: CSSProperties = lugar
+    ? {
+        left: lugar.left + lugar.width * fx,
+        top: lugar.top + lugar.height * fy,
+        width: lugar.width * tamanho,
+        height: lugar.height * tamanho,
+      }
+    : { left: porcento(fx), top: porcento(fy), width: porcento(tamanho), height: porcento(tamanho) };
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={externo.url}
+      alt=""
+      aria-hidden
+      draggable={false}
+      // `max-w-none` pela razão da aura; `object-fill` pela do token.
+      className={cn(
+        "efeito-externo pointer-events-none absolute max-w-none object-fill select-none",
+        animacao && `efeito-${animacao.tipo}`,
+      )}
+      style={
+        {
+          ...caixa,
+          "--efeito-opacidade": externo.opacidade,
+          "--efeito-origem": ORIGEM[externo.ancora],
+          ...(animacao
+            ? {
+                "--efeito-intensidade": animacao.intensidade,
+                animationDuration: `${animacao.periodo}s`,
+                animationDelay: faseDaFigura(semente, animacao.periodo),
+              }
+            : {}),
+        } as CSSProperties
+      }
+    />
   );
 }
 
@@ -224,9 +335,10 @@ function useAssado(
 }
 
 function usePele(url: string | null, pedido: PedidoDePele): Assado | null {
+  const textura = pedido.textura ? `${pedido.textura.url}@${pedido.textura.forca}` : "";
   const chave =
-    url && (pedido.cinza || pedido.tinta)
-      ? `${url}|${pedido.cinza}|${pedido.tinta ?? ""}|${forcaDaTinta(pedido.forca)}`
+    url && (pedido.cinza || pedido.tinta || pedido.textura)
+      ? `${url}|${pedido.cinza}|${pedido.tinta ?? ""}|${forcaDaTinta(pedido.forca)}|${textura}`
       : null;
 
   return useAssado(chave, () => assarPele(url!, pedido));

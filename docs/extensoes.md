@@ -498,10 +498,42 @@ fábrica são escritos assim:
 | `translucido` | meio transparente, tremulando                          |
 | `tremor`      | treme no lugar                                         |
 
-Combináveis dentro de um efeito. Já **entre** condições, a figura mostra só o
+Combináveis dentro de um efeito, e com mais duas camadas que levam imagem da
+pasta do plugin (raster, até 2 MB, como as do medidor):
+
+```json
+{ "id": "em-chamas", "titulo": "Em chamas",
+  "externo": { "imagem": "fx/fogo.webp", "tamanho": 1.6, "lado": "frente",
+               "ancora": "base", "opacidade": 0.9,
+               "animacao": { "tipo": "flutuar", "periodo": 1.2, "intensidade": 0.5 } },
+  "interno": { "textura": "fx/brasa.png", "forca": 0.4 } }
+```
+
+- **`externo`** é uma imagem em volta da figura, esticada na caixa dela vezes
+  `tamanho` (de `0.25` a `2`, padrão `1.5`): desenhe o fogo quadrado para o
+  token quadrado. `lado` é `atras` (padrão) ou `frente`; `ancora` diz de onde
+  ela cresce, `centro` (padrão), `base` (sobe dos pés) ou `topo`. Perto da
+  borda do mapa o externo **encolhe** para não sair dele: o que passa da caixa
+  do plano derruba o palco do Mestre (ver a skill `debug-do-palco`). No 2.5D
+  ele fica de pé com a figura. No retrato ainda não aparece.
+- **`animacao`** é o "script" do efeito, como dado: `pulsar`, `girar`,
+  `flutuar` ou `piscar`, com `periodo` em segundos (de `0.2` a `30`, padrão
+  `2`) e `intensidade` de `0` a `1` (padrão `0.5`). Só `transform` e
+  `opacity`, que o compositor anima sem refazer layout; quem pediu menos
+  movimento no sistema vê a imagem parada. Para movimento quadro a quadro, use
+  um GIF ou WebP animado no próprio `externo`.
+- **`interno`** é uma textura pintada **sobre** a figura, só onde há figura:
+  a rachadura, a escama. Esticada na figura inteira, com `forca` de `0` a `1`
+  (padrão `1`), e assada uma vez junto da tinta e do cinza, então não custa
+  nada por quadro. Numa figura animada, como a tinta, ela congela o primeiro
+  quadro.
+
+Já **entre** condições, a figura mostra só o
 efeito da **última** da lista, que é a última adicionada: veneno, fogo e medo
 empilhados não se leem de longe. O Rust recusa na importação o efeito que não
-mexe em nada, `tinta` fora de `0..1` e dica com mais de 120 letras. Um plugin
+mexe em nada, número fora do limite, imagem fora da pasta ou que não é
+raster, e dica com mais de 120 letras; a imagem que falta é cobrada na
+importação, com o nome do arquivo. Um plugin
 chamado `campanha` não declara efeitos: o prefixo é o dos efeitos que a própria
 campanha vai criar.
 
