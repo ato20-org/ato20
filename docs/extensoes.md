@@ -504,18 +504,19 @@ pasta de `src/efeitos/` com um `efeito.json` é um efeito, DESCOBERTO no build
 código. Em `src/` e não em `public/` porque o glob do Turbopack não enumera
 fora de `src/` (compila para um objeto vazio, calado). As imagens viram
 assets do build, com nome por conteúdo, e não precisam de versão na URL. Hoje
-são quatro: `chamas` ("Em chamas": o fogo, com fagulhas e luz), `congelado`
+são cinco: `chamas` ("Em chamas": o fogo, com fagulhas e luz), `congelado`
 (a figura azulada, trincada por dentro e tremendo, com cristais de gelo em
-volta -- arte de `scripts/efeitos/gerar-congelado.py`) e `envenenado` (a
-figura cheia de verde com o halo, a névoa tóxica subindo dos pés na cor da
-condição, com bolhas, e caveirinhas que riem escapando dela -- arte de
-`scripts/efeitos/gerar-envenenado.py`) e `sangrando` (talhos de garra
-escorrendo por dentro da figura, gotas que caem tocando o sprite uma vez na
-queda, e a poça PARADA aos pés, na rampa da condição -- arte de
-`scripts/efeitos/gerar-sangrando.py`). As partículas de imagem do gelo, do
-veneno e do sangue vêm já coloridas, sem `pintar`: a caveira verde chapada
-sumiria em cima do corpo verde, e o contorno escuro é o que a separa. Pack com id torto ou
-repetido fica de fora. Os climas de antes (`aura`, `tingido`, `translucido`,
+volta), `envenenado` (a figura cheia de verde com o halo, a névoa tóxica
+subindo dos pés na cor da condição, com bolhas, e caveirinhas que riem
+escapando dela), `molhado` (a figura azulada com gotas d'água presas na pele,
+pingos caindo e a poça PARADA aos pés, com poçinhas em volta -- as ondas
+animadas nela custavam 15 quadros por segundo com 40 figuras e quase não
+apareciam atrás da figura) e `sangrando` (talhos de garra escorrendo por
+dentro da figura, gotas que caem tocando o sprite uma vez na queda, e a poça
+PARADA aos pés, na rampa da condição). As partículas de imagem do gelo, do
+veneno, da água e do sangue vêm já coloridas, sem `pintar`: a caveira verde
+chapada sumiria em cima do corpo verde, e o contorno escuro é o que a separa.
+Pack com id torto ou repetido fica de fora. Os climas de antes (`aura`, `tingido`, `translucido`,
 `tremendo`, `apagado`) saíram; a condição que ainda aponta para um deles
 mostra só o selo.
 
@@ -566,8 +567,7 @@ plugin não os aceita ainda):
   Perto da borda do mapa a revoada encolhe para dentro dele.
 
 Cor, máscara e profundidade são assadas uma vez por arte, cor e nível (ver
-`externo-assado.ts`); o que anda depois é só o `transform`. A arte do fogo é
-gerada por `scripts/efeitos/gerar-chamas.py`, direto em `src/efeitos/chamas/`.
+`externo-assado.ts`); o que anda depois é só o `transform`.
 
 Combináveis dentro de um efeito, e com mais duas camadas que levam imagem da
 pasta do plugin (raster, até 2 MB, como as do medidor):
