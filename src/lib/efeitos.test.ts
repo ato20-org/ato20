@@ -16,8 +16,12 @@ import {
 
 describe("EFEITOS_DE_FABRICA", () => {
   it("são as pastas de src/efeitos, descobertas, em ordem de título", () => {
-    // Em ordem de título: "Congelado" antes de "Em chamas".
-    expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual(["congelado", "chamas"]);
+    // Em ordem de título: "Congelado", "Em chamas", "Envenenado".
+    expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual([
+      "congelado",
+      "chamas",
+      "envenenado",
+    ]);
     expect(definicaoDoEfeito("chamas")?.origem).toMatchObject({ app: "chamas" });
   });
 
@@ -365,5 +369,38 @@ describe("o congelado de fábrica", () => {
     expect(particulas.quadros).toEqual({ colunas: 4, total: 4, fps: 8 });
     expect(particulas.pintar).toBe(false);
     expect(particulas.giro).toBe(60);
+  });
+});
+
+describe("o envenenado de fábrica", () => {
+  const pedidos = [{ efeito: "envenenado", cor: "#22c55e" }];
+
+  it("enche a figura de verde e acende o halo, na cor da condição", () => {
+    const camadas = camadasDaFigura(pedidos);
+
+    expect(camadas.tinta).toEqual({ cor: "#22c55e", forca: 0.55 });
+    expect(camadas.halo).toBe("#22c55e");
+    expect(camadas.tremor).toBe(false);
+  });
+
+  it("a névoa sobe dos pés, atrás da figura: cinza na rampa da condição", () => {
+    const externo = camadasDaFigura(pedidos).externo!;
+
+    expect(externo.cores).toEqual({ cor: "#22c55e" });
+    expect(externo.quadros).toEqual({ colunas: 4, total: 24, fps: 8 });
+    expect(externo.niveis.map((nivel) => nivel.lado)).toEqual([128, 256]);
+    expect(externo.ancora).toBe("base");
+    // Sem profundidade, por medida: ela parte a névoa em duas camadas.
+    expect(externo.profundidade).toBeUndefined();
+    expect(externo.lado).toBe("atras");
+  });
+
+  it("solta caveirinhas: o sprite em laço, de pé, já verdes", () => {
+    const particulas = particulasDosEfeitos(pedidos)!;
+
+    expect(particulas.imagem).toContain("caveira.png");
+    expect(particulas.quadros).toEqual({ colunas: 4, total: 4, fps: 6 });
+    expect(particulas.pintar).toBe(false);
+    expect(particulas.giro).toBe(0);
   });
 });
