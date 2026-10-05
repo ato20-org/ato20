@@ -1,6 +1,14 @@
 /// <reference lib="webworker" />
 
-import { processarFolha } from "@/lib/folha-de-efeito";
+import {
+  desenharFolhaDeParticulas,
+  gradeDoSprite,
+  pintarImagem,
+  processarFolha,
+  tamanhoDoSprite,
+  type ImagemDaFagulha,
+} from "@/lib/folha-de-efeito";
+import type { FolhaDeParticulas, Trajetoria } from "@/lib/particulas";
 
 /**
  * O forno do externo, FORA da thread que desenha.
@@ -11,10 +19,15 @@ import { processarFolha } from "@/lib/folha-de-efeito";
  * mesmo trabalho corre ao lado, e a janela só recebe os arquivos prontos.
  *
  * Um pedido por mensagem, na ordem em que chegam. As imagens vêm como
- * `ImageBitmap`, já decodificadas fora da janela também.
+ * `ImageBitmap`, já decodificadas fora da janela também. Dois tipos: a folha
+ * do externo (cor, máscara, profundidade) e a folha das partículas, desenhada
+ * do zero.
  */
 
-export type PedidoAoForno = {
+export type PedidoAoForno = PedidoDeFolha | PedidoDeParticulas;
+
+export type PedidoDeFolha = {
+  tipo: "folha";
   id: number;
   folha: ImageBitmap;
   colunas: number;
@@ -22,6 +35,19 @@ export type PedidoAoForno = {
   rampa?: Uint8ClampedArray;
   mascara?: ImageBitmap;
   profundidade?: ImageBitmap;
+};
+
+export type PedidoDeParticulas = {
+  tipo: "particulas";
+  id: number;
+  folha: FolhaDeParticulas;
+  caminhos: Trajetoria[];
+  cor: string;
+  imagem?: ImageBitmap;
+  /** Pintar a imagem na `cor`, só a forma. */
+  pintar: boolean;
+  /** O sprite da imagem. Ausente = um quadro só. */
+  quadros?: { colunas: number; total: number; fps?: number };
 };
 
 export type RespostaDoForno =
@@ -35,7 +61,9 @@ escopo.onmessage = async (evento: MessageEvent<PedidoAoForno>) => {
   const pedido = evento.data;
 
   try {
-    escopo.postMessage(await assar(pedido));
+    escopo.postMessage(
+      pedido.tipo === "particulas" ? await assarParticulas(pedido) : await assar(pedido),
+    );
   } catch (causa) {
     escopo.postMessage({
       id: pedido.id,
@@ -44,7 +72,42 @@ escopo.onmessage = async (evento: MessageEvent<PedidoAoForno>) => {
   }
 };
 
-async function assar(pedido: PedidoAoForno): Promise<RespostaDoForno> {
+async function assarParticulas(pedido: PedidoDeParticulas): Promise<RespostaDoForno> {
+  const { folha } = pedido;
+  const tela = new OffscreenCanvas(
+    folha.celula.largura * folha.colunas,
+    folha.celula.altura * folha.linhas,
+  );
+  const ctx = tela.getContext("2d");
+  if (!ctx) throw new Error("sem canvas no forno");
+
+  desenharFolhaDeParticulas(ctx, folha, pedido.caminhos, pedido.cor, sprite(pedido));
+  return { id: pedido.id, unica: await tela.convertToBlob({ type: "image/png" }) };
+}
+
+/** A imagem da partícula no tamanho que vale, e pintada se o efeito pediu. */
+function sprite(pedido: PedidoDeParticulas): ImagemDaFagulha | undefined {
+  const imagem = pedido.imagem;
+  if (!imagem) return undefined;
+
+  const grade = gradeDoSprite(pedido.quadros);
+  const { largura, altura } = tamanhoDoSprite(
+    imagem.width,
+    imagem.height,
+    grade.colunas,
+    grade.linhas,
+  );
+  const tela = new OffscreenCanvas(largura, altura);
+  const ctx = tela.getContext("2d");
+  if (!ctx) return undefined;
+
+  if (pedido.pintar) pintarImagem(ctx, imagem, largura, altura, pedido.cor);
+  else ctx.drawImage(imagem, 0, 0, largura, altura);
+
+  return { fonte: tela, largura, altura, ...grade };
+}
+
+async function assar(pedido: PedidoDeFolha): Promise<RespostaDoForno> {
   const { folha, colunas, linhas } = pedido;
   const largura = folha.width;
   const altura = folha.height;

@@ -1,8 +1,17 @@
 "use client";
 
-import { processarFolha, rampaDaCor } from "@/lib/folha-de-efeito";
+import {
+  desenharFolhaDeParticulas,
+  gradeDoSprite,
+  pintarImagem,
+  processarFolha,
+  rampaDaCor,
+  tamanhoDoSprite,
+  type ImagemDaFagulha,
+} from "@/lib/folha-de-efeito";
 import type { PedidoAoForno, RespostaDoForno } from "@/lib/forno-do-externo.worker";
 import { carregarImagem } from "@/lib/imagem";
+import type { FolhaDeParticulas, Trajetoria } from "@/lib/particulas";
 
 /**
  * O forno do visual EXTERNO: o mapa de cores, a máscara e a profundidade,
@@ -142,6 +151,7 @@ async function noForno(pedido: PedidoDeExterno): Promise<ExternoAssado | null> {
 
   const id = ++proximo;
   const mensagem: PedidoAoForno = {
+    tipo: "folha",
     id,
     folha,
     colunas: pedido.colunas ?? 1,
@@ -154,10 +164,7 @@ async function noForno(pedido: PedidoDeExterno): Promise<ExternoAssado | null> {
   if (mascara) transferir.push(mascara);
   if (profundidade) transferir.push(profundidade);
 
-  const resposta = await new Promise<RespostaDoForno>((responder) => {
-    esperando.set(id, responder);
-    oForno().postMessage(mensagem, transferir);
-  });
+  const resposta = await pedirAoForno(mensagem, transferir);
 
   if ("erro" in resposta) throw new Error(resposta.erro);
   if ("unica" in resposta) return { unica: URL.createObjectURL(resposta.unica) };
@@ -166,6 +173,110 @@ async function noForno(pedido: PedidoDeExterno): Promise<ExternoAssado | null> {
     atras: URL.createObjectURL(resposta.atras),
     frente: URL.createObjectURL(resposta.frente),
   };
+}
+
+/** Uma mensagem ao forno, e a resposta dela. */
+function pedirAoForno(mensagem: PedidoAoForno, transferir: Transferable[]): Promise<RespostaDoForno> {
+  return new Promise<RespostaDoForno>((responder) => {
+    esperando.set(mensagem.id, responder);
+    oForno().postMessage(mensagem, transferir);
+  });
+}
+
+// --- as partículas -----------------------------------------------------------
+
+/** O que a folha de partículas precisa: o plano, os caminhos, a cor e a imagem. */
+export type PedidoDeParticulasAssadas = {
+  folha: FolhaDeParticulas;
+  caminhos: Trajetoria[];
+  cor: string;
+  /** O endereço da imagem do pack. Ausente = o brilho redondo. */
+  imagem?: string;
+  /** Pintar a imagem na `cor`, só a forma. */
+  pintar: boolean;
+  /** O sprite da imagem. Ausente = um quadro só. */
+  quadros?: { colunas: number; total: number; fps?: number };
+};
+
+const particulasAssadas = new Map<string, Promise<string | null>>();
+
+/**
+ * A folha das partículas, desenhada do zero, uma vez por pedido. Pelo mesmo
+ * forno do externo, e com a mesma volta para a janela se ele não subir.
+ */
+export function assarParticulas(pedido: PedidoDeParticulasAssadas): Promise<string | null> {
+  const chave = JSON.stringify(pedido);
+  const feita = particulasAssadas.get(chave);
+  if (feita) return feita;
+
+  const assando = (
+    temForno()
+      ? particulasNoForno(pedido).catch(() => particulasAqui(pedido))
+      : particulasAqui(pedido)
+  ).catch(() => null);
+  particulasAssadas.set(chave, assando);
+
+  return assando;
+}
+
+async function particulasNoForno(pedido: PedidoDeParticulasAssadas): Promise<string> {
+  const imagem = pedido.imagem ? await bitmap(pedido.imagem) : undefined;
+  const id = ++proximo;
+  const resposta = await pedirAoForno(
+    {
+      tipo: "particulas",
+      id,
+      folha: pedido.folha,
+      caminhos: pedido.caminhos,
+      cor: pedido.cor,
+      pintar: pedido.pintar,
+      ...(pedido.quadros ? { quadros: pedido.quadros } : {}),
+      ...(imagem ? { imagem } : {}),
+    },
+    imagem ? [imagem] : [],
+  );
+
+  if (!("unica" in resposta)) throw new Error("erro" in resposta ? resposta.erro : "forno");
+  return URL.createObjectURL(resposta.unica);
+}
+
+async function particulasAqui(pedido: PedidoDeParticulasAssadas): Promise<string> {
+  const imagem = pedido.imagem ? await carregarImagem(pedido.imagem) : undefined;
+  const { folha } = pedido;
+  const tela = document.createElement("canvas");
+  tela.width = folha.celula.largura * folha.colunas;
+  tela.height = folha.celula.altura * folha.linhas;
+
+  const ctx = tela.getContext("2d");
+  if (!ctx) throw new Error("sem canvas");
+
+  let sprite: ImagemDaFagulha | undefined;
+  if (imagem) {
+    const grade = gradeDoSprite(pedido.quadros);
+    const { largura, altura } = tamanhoDoSprite(
+      imagem.naturalWidth,
+      imagem.naturalHeight,
+      grade.colunas,
+      grade.linhas,
+    );
+    const pequena = document.createElement("canvas");
+    pequena.width = largura;
+    pequena.height = altura;
+    const pctx = pequena.getContext("2d");
+    if (pctx) {
+      if (pedido.pintar) pintarImagem(pctx, imagem, largura, altura, pedido.cor);
+      else pctx.drawImage(imagem, 0, 0, largura, altura);
+      sprite = { fonte: pequena, largura, altura, ...grade };
+    }
+  }
+  desenharFolhaDeParticulas(ctx, folha, pedido.caminhos, pedido.cor, sprite);
+
+  return new Promise((resolver, recusar) =>
+    tela.toBlob((blob) => {
+      if (blob) resolver(URL.createObjectURL(blob));
+      else recusar(new Error("folha não virou imagem"));
+    }, "image/png"),
+  );
 }
 
 // --- aqui, sem worker --------------------------------------------------------

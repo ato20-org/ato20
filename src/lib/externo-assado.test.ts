@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { precisaDeForno } from "./externo-assado";
-import { processarFolha, rampaDaCor } from "./folha-de-efeito";
+import { gradeDoSprite, processarFolha, rampaDaCor, tamanhoDoSprite } from "./folha-de-efeito";
 
 describe("rampaDaCor", () => {
   it("escura no frio, a cor no meio, quase branca no miolo", () => {
@@ -54,5 +54,24 @@ describe("precisaDeForno", () => {
     expect(precisaDeForno({})).toBe(false);
     expect(precisaDeForno({ mascara: "m.webp" })).toBe(true);
     expect(precisaDeForno({ cores: { cor: "#fff" } })).toBe(true);
+  });
+});
+
+describe("o sprite da partícula", () => {
+  it("encolhe cada quadro até 192, e a grade continua inteira", () => {
+    // Um símbolo de 755x1124, sozinho.
+    expect(tamanhoDoSprite(755, 1124)).toEqual({ largura: 129, altura: 192 });
+    // Uma grade 4x2 de quadros de 256: cada um vira 192, a folha 768x384.
+    expect(tamanhoDoSprite(1024, 512, 4, 2)).toEqual({ largura: 768, altura: 384 });
+  });
+
+  it("a grade sai da contagem, e sem ela é um quadro só", () => {
+    expect(gradeDoSprite({ colunas: 4, total: 8, fps: 12 })).toEqual({
+      colunas: 4,
+      linhas: 2,
+      total: 8,
+      fps: 12,
+    });
+    expect(gradeDoSprite()).toEqual({ colunas: 1, linhas: 1, total: 1 });
   });
 });

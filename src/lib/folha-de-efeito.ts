@@ -1,4 +1,9 @@
 import { normalizarHex } from "@/lib/cor";
+import {
+  quadroDasFagulhas,
+  type FolhaDeParticulas,
+  type Trajetoria,
+} from "@/lib/particulas";
 
 /**
  * As contas de pixel do forno do externo, sem DOM e sem canvas: a rampa de
@@ -100,4 +105,152 @@ export function processarFolha(
   }
 
   return atras ? { atras, frente } : { unica: frente };
+}
+
+/** Um contexto 2D de canvas: o da janela, ou o do worker. */
+type Contexto2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+/**
+ * A imagem da partícula, pronta: o canvas (já pintado, se for o caso), o
+ * tamanho dele, e a grade do sprite -- uma coluna e um quadro quando é uma
+ * imagem só.
+ */
+export type ImagemDaFagulha = {
+  fonte: CanvasImageSource;
+  largura: number;
+  altura: number;
+  colunas: number;
+  linhas: number;
+  total: number;
+  fps?: number;
+};
+
+/**
+ * A folha das partículas, quadro a quadro: cada fagulha onde
+ * `quadroDasFagulhas` diz, um brilho redondo -- branco no miolo, a cor, e
+ * nada na borda -- ou a imagem do pack, na proporção dela e girando. Cada
+ * quadro é recortado na própria célula, para a fagulha da borda não vazar no
+ * quadro vizinho.
+ *
+ * A imagem chega PRONTA -- já pintada, se o efeito pediu (`pintarImagem`):
+ * quem a passa sabe em que canvas está, o da janela ou o do worker.
+ */
+export function desenharFolhaDeParticulas(
+  ctx: Contexto2D,
+  folha: FolhaDeParticulas,
+  caminhos: ReadonlyArray<Trajetoria>,
+  cor: string,
+  imagem?: ImagemDaFagulha,
+): void {
+  const { largura: l, altura: a } = folha.celula;
+  const hex = normalizarHex(cor) ?? "#f59e0b";
+  const sprite =
+    imagem && imagem.total > 1
+      ? { total: imagem.total, fps: imagem.fps, vida: folha.total / folha.fps }
+      : undefined;
+  const transparente = `rgba(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(",")},0)`;
+
+  for (let quadro = 0; quadro < folha.total; quadro++) {
+    const ox = (quadro % folha.colunas) * l;
+    const oy = Math.floor(quadro / folha.colunas) * a;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ox, oy, l, a);
+    ctx.clip();
+
+    for (const fagulha of quadroDasFagulhas(caminhos, folha.regiao, quadro / folha.total, sprite)) {
+      const r = fagulha.raio * l;
+      if (fagulha.alfa <= 0 || r < 0.3) continue;
+
+      const x = ox + fagulha.x * l;
+      const y = oy + fagulha.y * a;
+      ctx.globalAlpha = fagulha.alfa;
+
+      if (imagem) {
+        // O lado MAIOR do quadro é o diâmetro: o símbolo alto não vira um
+        // quadrado espremido. O quadro do sprite é o que a fagulha pede.
+        const ql = imagem.largura / imagem.colunas;
+        const qa = imagem.altura / imagem.linhas;
+        const maior = Math.max(ql, qa) || 1;
+        const w = (r * 2 * ql) / maior;
+        const h = (r * 2 * qa) / maior;
+        const sx = (fagulha.quadro % imagem.colunas) * ql;
+        const sy = Math.floor(fagulha.quadro / imagem.colunas) * qa;
+        ctx.translate(x, y);
+        ctx.rotate(fagulha.angulo);
+        ctx.drawImage(imagem.fonte, sx, sy, ql, qa, -w / 2, -h / 2, w, h);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        continue;
+      }
+
+      const brilho = ctx.createRadialGradient(x, y, 0, x, y, r);
+      brilho.addColorStop(0, "#ffffff");
+      brilho.addColorStop(0.3, hex);
+      brilho.addColorStop(1, transparente);
+      ctx.fillStyle = brilho;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
+/**
+ * O tamanho em que a imagem da partícula vale a pena: o lado maior de cada
+ * QUADRO até 192. A fagulha é pequena na folha, e desenhar o arquivo inteiro
+ * a cada uma serrilharia a borda e gastaria o forno à toa. A grade continua
+ * inteira -- cada quadro com o mesmo tamanho.
+ */
+export function tamanhoDoSprite(
+  largura: number,
+  altura: number,
+  colunas = 1,
+  linhas = 1,
+): { largura: number; altura: number } {
+  const ql = largura / colunas;
+  const qa = altura / linhas;
+  const escala = Math.min(1, 192 / Math.max(ql, qa, 1));
+
+  return {
+    largura: Math.max(1, Math.round(ql * escala)) * colunas,
+    altura: Math.max(1, Math.round(qa * escala)) * linhas,
+  };
+}
+
+/**
+ * A imagem só como FORMA, pintada numa cor: o alfa dela, a cor da partícula.
+ * `source-in` -- a cor só cai onde já há imagem, com a borda suave dela.
+ */
+export function pintarImagem(
+  ctx: Contexto2D,
+  imagem: CanvasImageSource,
+  largura: number,
+  altura: number,
+  cor: string,
+): void {
+  ctx.drawImage(imagem, 0, 0, largura, altura);
+  ctx.globalCompositeOperation = "source-in";
+  ctx.fillStyle = normalizarHex(cor) ?? "#f59e0b";
+  ctx.fillRect(0, 0, largura, altura);
+  ctx.globalCompositeOperation = "source-over";
+}
+
+/** A grade do sprite, ou um quadro só. Linhas pela conta: a grade é cheia. */
+export function gradeDoSprite(quadros?: { colunas: number; total: number; fps?: number }): {
+  colunas: number;
+  linhas: number;
+  total: number;
+  fps?: number;
+} {
+  if (!quadros) return { colunas: 1, linhas: 1, total: 1 };
+
+  return {
+    colunas: quadros.colunas,
+    linhas: Math.ceil(quadros.total / quadros.colunas),
+    total: quadros.total,
+    ...(quadros.fps ? { fps: quadros.fps } : {}),
+  };
 }

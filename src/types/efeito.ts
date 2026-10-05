@@ -31,6 +31,8 @@ export type DefinicaoDeEfeito = {
   interno?: InternoDoEfeito;
   /** A luz que a figura emana. Ver `LuzDoEfeito`. */
   luz?: LuzDoEfeito;
+  /** O que sai voando dela: a fagulha, a gota, a cinza. Ver `ParticulasDoEfeito`. */
+  particulas?: ParticulasDoEfeito;
   /**
    * De onde vêm as imagens. Não é o autor que escreve: quem publica preenche
    * -- o plugin e a versão dele, ou a pasta do próprio aplicativo, que vão na
@@ -40,16 +42,17 @@ export type DefinicaoDeEfeito = {
 };
 
 /**
- * O dono das imagens do efeito, e a versão que vai na URL para a TV não
- * desenhar a arte velha.
+ * O dono das imagens do efeito.
  *
- * - `plugin`: a pasta do plugin, servida em `/plugin/{id}/...`.
- * - `app`: uma pasta de `public/` -- o efeito de FÁBRICA, que é um pack como
- *   os outros, só que vem no aplicativo. Ver `public/efeitos/`.
+ * - `plugin`: a pasta do plugin, servida em `/plugin/{id}/...`, com a versão
+ *   na URL para a TV não desenhar a arte velha.
+ * - `app`: um pack de FÁBRICA, que vem no aplicativo (ver `src/efeitos/`). As
+ *   imagens são assets do build, e `arquivos` diz o endereço de cada uma -- o
+ *   nome já muda com o conteúdo, e versão nenhuma é preciso.
  */
 export type OrigemDoEfeito =
   | { plugin: string; versao: string }
-  | { app: string; versao: string };
+  | { app: string; arquivos: Readonly<Record<string, string>> };
 
 /**
  * Uma imagem em volta da figura: o fogo, a fumaça, o círculo mágico.
@@ -143,6 +146,64 @@ export type LuzDoEfeito = {
   intensidade?: number;
   /** Ausente = fixa. Os mesmos da luz cravada. */
   efeito?: EfeitoDaLuz;
+};
+
+/**
+ * As PARTÍCULAS: o que a figura solta -- a fagulha que sobe do fogo, a gota
+ * que pinga, a cinza que o vento leva.
+ *
+ * Cada uma é um elemento animado só por `transform` e `opacity`, nunca um
+ * canvas no plano (que borra o mapa no zoom, ver `DadoLayer`). O caminho de
+ * cada uma sai da semente da figura: a TV e o Mestre veem as mesmas, e a horda
+ * não solta fagulha em uníssono. Muitas figuras dividem um teto -- ver
+ * `TETO_DE_PARTICULAS`.
+ *
+ * Medidas em FIGURAS, como a luz: o pack não conhece a escala do mapa.
+ */
+export type ParticulasDoEfeito = {
+  /** Quantas por figura, até 24 -- e menos quando a mesa inteira pega fogo. */
+  quantidade: number;
+  /**
+   * Uma imagem da pasta, desenhada na proporção dela. Ausente = um brilho
+   * redondo na cor.
+   */
+  imagem?: string;
+  /**
+   * A imagem vira só a FORMA, pintada na cor -- o símbolo preto que sumiria
+   * no mapa escuro sai na cor da condição. Ausente = a imagem como veio.
+   */
+  pintar?: boolean;
+  /** Ausente = a cor da condição. Vale para o brilho e para a imagem pintada. */
+  cor?: string;
+  /** Quanto cada uma gira ao longo da vida, em graus, para um lado ou outro. */
+  giro?: number;
+  /**
+   * A `imagem` é um SPRITE: uma grade de quadros, como a do externo, que cada
+   * partícula toca. Com `fps`, em laço, cada uma começando num quadro; sem,
+   * uma vez ao longo da vida -- a fagulha que acende e apaga, a gota que
+   * estoura.
+   */
+  quadros?: { colunas: number; total: number; fps?: number };
+  /** O diâmetro, em fração da largura da figura. Ausente = 0,06. */
+  tamanho?: number;
+  /** De 0 a 1, o quanto o tamanho varia de uma para outra. Ausente = 0,5. */
+  variacao?: number;
+  /**
+   * Para onde vão, em graus, no sentido horário a partir da direita -- o
+   * mesmo da luz: 270 sobe, 90 desce. Ausente = 270.
+   */
+  direcao?: number;
+  /** O leque em volta da direção, em graus. Ausente = 40. */
+  abertura?: number;
+  /** Em figuras por segundo. Ausente = 1. */
+  velocidade?: number;
+  /** Quanto cada uma dura, em segundos, de 0,3 a 6. Ausente = 1,5. */
+  vida?: number;
+  /**
+   * Onde nascem: uma faixa da figura, em frações dela, encostada na âncora.
+   * Ausente = 80% da largura e 30% da altura, na base.
+   */
+  emissor?: { largura?: number; altura?: number; ancora?: "base" | "centro" | "topo" };
 };
 
 /**

@@ -3,6 +3,8 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import { useDeclarativo } from "@/components/playground/declarativo";
+import { ParticulasDaFigura } from "@/components/playground/particulas-da-figura";
+import { QuadrosAnimados } from "@/components/playground/quadros-animados";
 import { useSceneScaleSeHouver } from "@/components/playground/scene-stage";
 import { faseDaFigura, type EfeitoPedido } from "@/lib/condicao";
 import {
@@ -15,6 +17,7 @@ import {
 import {
   camadasDaFigura,
   nivelDoExterno,
+  particulasDosEfeitos,
   tamanhoNoPlano,
   type CaixaNoPlano,
   type ExternoResolvido,
@@ -129,12 +132,15 @@ export function FiguraComEfeitos({
       : tamanhoNoPlano(alcance as CaixaNoPlano, externo.tamanho, externo.ancora)
     : 0;
   const larguraNaCena = livre ? livre.largura : alcance ? (alcance as CaixaNoPlano).width : 0;
+  // As partículas são do mapa e do 2.5D, como o externo: no retrato, não.
+  const particulas = alcance ? particulasDosEfeitos(efeitos, deFora) : undefined;
 
   // Até a pele sair do forno, a figura de sempre. Um quadro colorido antes do
   // cinza é melhor que um quadro sem figura.
   const fonte = pele?.desenho ?? url;
 
-  if (!halo && !translucido && !tremendo && !externo) return <>{children(fonte)}</>;
+  if (!halo && !translucido && !tremendo && !externo && !particulas)
+    return <>{children(fonte)}</>;
 
   // Largura e altura explícitas, e não `inset: 0`: numa `<img>` absoluta o
   // `inset` sozinho não estica -- elemento substituído fica no tamanho do
@@ -200,6 +206,10 @@ export function FiguraComEfeitos({
           lugar={lugar}
           semente={semente}
         />
+      ) : null}
+
+      {particulas && alcance ? (
+        <ParticulasDaFigura particulas={particulas} semente={semente} alcance={alcance} />
       ) : null}
     </>
   );
@@ -324,37 +334,13 @@ function ExternoDeFora({
       }
     >
       {quadros ? (
-        // As linhas descem num invólucro, as colunas andam na imagem: cada um
-        // carrega UMA animação, pela razão dos invólucros da figura. Os dois em
-        // degraus (`steps`), e por `transform` -- o compositor troca o quadro
-        // sem repintar nada.
-        <div
-          className={cn("absolute top-0 left-0 w-full", linhas > 1 && "efeito-linhas")}
-          style={{
-            height: `${linhas * 100}%`,
-            ...(linhas > 1
-              ? {
-                  animationDuration: `${quadros.total / quadros.fps}s`,
-                  animationTimingFunction: `steps(${linhas})`,
-                  animationDelay: fase,
-                }
-              : {}),
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={fonte}
-            alt=""
-            draggable={false}
-            className="efeito-colunas absolute top-0 left-0 h-full max-w-none"
-            style={{
-              width: `${colunas * 100}%`,
-              animationDuration: `${colunas / quadros.fps}s`,
-              animationTimingFunction: `steps(${colunas})`,
-              animationDelay: fase,
-            }}
-          />
-        </div>
+        <QuadrosAnimados
+          fonte={fonte}
+          colunas={colunas}
+          linhas={linhas}
+          fps={quadros.fps}
+          fase={fase}
+        />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
