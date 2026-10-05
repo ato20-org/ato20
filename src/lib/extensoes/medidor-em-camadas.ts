@@ -82,6 +82,39 @@ export function quadroDaSequencia(fracao: number, total: number): number {
 }
 
 /**
+ * Como a fileira de pontos ocupa o encaixe: o tamanho de UM ponto, o vão
+ * entre dois, e se ela virou o resumo (`×11`).
+ *
+ * Uma linha só, sempre, e a altura dela não muda com o valor -- pela razão dos
+ * pontos de fábrica: a coluna do retrato soma esta altura, e o medidor de
+ * baixo andaria sozinho. O ponto encolhe para caber; com a `proporcao`, ele
+ * encolhe pela largura dele e não pela de um quadrado, e a bala estreita cabe
+ * o dobro antes de diminuir.
+ *
+ * O resumo é decidido pelo MÁXIMO, e não pelo valor: um pente de trinta que
+ * mudasse de forma no décimo tiro faria a mesa reaprender o medidor no meio
+ * do combate. No resumo o ponto ocupa no máximo metade do encaixe, e o número
+ * fica com o resto.
+ */
+export function fileiraDePontos(
+  total: number,
+  largura: number,
+  altura: number,
+  { proporcao, ate }: { proporcao?: number | null; ate?: number | null } = {},
+): { resumo: boolean; largura: number; altura: number; vao: number } {
+  const p = proporcao ?? 1;
+  const vao = altura * 0.15;
+  const resumo = ate != null && total > ate;
+
+  const lado = resumo
+    ? Math.min(altura, (largura * 0.5) / p)
+    : Math.min(altura, (largura - vao * (total - 1)) / (total * p));
+  const alto = Math.max(0, lado);
+
+  return { resumo, largura: alto * p, altura: alto, vao };
+}
+
+/**
  * A forma de fábrica que acompanha um estilo de plugin.
  *
  * O estilo já diz o que ele é -- uma barra, uma fileira de pontos --, e a

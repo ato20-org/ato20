@@ -10,6 +10,7 @@ import type {
 } from "@/lib/extensoes/manifesto";
 import {
   ENCAIXE_INTEIRO,
+  fileiraDePontos,
   quadroDaSequencia,
   recorteDaBarra,
   urlDaImagemDoEstilo,
@@ -399,6 +400,7 @@ function FormaEmCamadas({
             url={url}
             largura={largura * encaixe.largura}
             altura={altura * encaixe.altura}
+            texto={estilo.camadas.texto ?? null}
           />
         </div>
       </div>
@@ -437,8 +439,6 @@ function TextoEmCamadas({
   altura: number;
 }) {
   const corpo = altura * encaixe.altura * (texto.tamanho ?? 0.7);
-  const contorno = texto.contorno ?? "#0d0808";
-  const d = Math.max(0.5, corpo * 0.07);
 
   return (
     <span
@@ -451,12 +451,20 @@ function TextoEmCamadas({
         fontSize: corpo,
         lineHeight: 1,
         color: texto.cor ?? "#ffffff",
-        textShadow: `${-d}px ${-d}px 0 ${contorno}, ${d}px ${-d}px 0 ${contorno}, ${-d}px ${d}px 0 ${contorno}, ${d}px ${d}px 0 ${contorno}`,
+        textShadow: contornoDoTexto(corpo, texto.contorno),
       }}
     >
       {textoDoMedidor(medidor)}
     </span>
   );
+}
+
+/** As quatro sombras do contorno, grossas na proporção do corpo da letra. */
+function contornoDoTexto(corpo: number, cor: string | null | undefined): string {
+  const c = cor ?? "#0d0808";
+  const d = Math.max(0.5, corpo * 0.07);
+
+  return `${-d}px ${-d}px 0 ${c}, ${d}px ${-d}px 0 ${c}, ${-d}px ${d}px 0 ${c}, ${d}px ${d}px 0 ${c}`;
 }
 
 function ConteudoEmCamadas({
@@ -465,6 +473,7 @@ function ConteudoEmCamadas({
   url,
   largura,
   altura,
+  texto,
 }: {
   medidor: Medidor;
   conteudo: ConteudoDoMedidor;
@@ -472,6 +481,8 @@ function ConteudoEmCamadas({
   /** O tamanho do encaixe, para os pontos saberem quanto cabe. */
   largura: number;
   altura: number;
+  /** De onde o `×11` do resumo tira a cor e o contorno. */
+  texto: TextoDoMedidor | null;
 }) {
   const fracao = fracaoDoMedidor(medidor);
 
@@ -481,34 +492,43 @@ function ConteudoEmCamadas({
 
   if (conteudo.modo === "pontos") {
     const { total, cheios } = pontosDoMedidor(medidor);
-    // Encolhe para caber numa linha só, como os pontos de fábrica -- e pela
-    // mesma razão: a altura da peça não pode mudar com o valor.
-    const vao = altura * 0.15;
-    const lado = Math.max(0, Math.min(altura, (largura - vao * (total - 1)) / total));
-    const cheio = conteudo.cheio ? url(conteudo.cheio) : null;
-    const vazio = conteudo.vazio ? url(conteudo.vazio) : null;
+    const fileira = fileiraDePontos(total, largura, altura, conteudo);
+    const tamanho = { width: fileira.largura, height: fileira.altura };
+    const ponto = (pinta: boolean, key?: number) => (
+      <PontoEmCamadas
+        key={key}
+        pinta={pinta}
+        cheio={conteudo.cheio ? url(conteudo.cheio) : null}
+        vazio={conteudo.vazio ? url(conteudo.vazio) : null}
+        cor={medidor.cor}
+        tamanho={tamanho}
+      />
+    );
+
+    if (fileira.resumo) {
+      const corpo = altura * 0.7;
+
+      return (
+        <div className="flex h-full items-center justify-center" style={{ gap: fileira.vao }}>
+          {ponto(cheios > 0)}
+          <span
+            className="font-semibold whitespace-nowrap tabular-nums"
+            style={{
+              fontSize: corpo,
+              lineHeight: 1,
+              color: texto?.cor ?? "#ffffff",
+              textShadow: contornoDoTexto(corpo, texto?.contorno),
+            }}
+          >
+            ×{cheios}
+          </span>
+        </div>
+      );
+    }
 
     return (
-      <div className="flex h-full items-center justify-center" style={{ gap: vao }}>
-        {Array.from({ length: total }, (_, indice) => {
-          const pinta = indice < cheios;
-          const tamanho = { width: lado, height: lado };
-
-          if (pinta && cheio) return <Imagem key={indice} src={cheio} className="shrink-0" style={tamanho} />;
-          if (!pinta && vazio) return <Imagem key={indice} src={vazio} className="shrink-0" style={tamanho} />;
-          // Sem a imagem de vazio, a de cheio apagada: o buraco fica com a
-          // forma do ponto, e a fileira não perde a referência de quantos eram.
-          if (!pinta && cheio)
-            return <Imagem key={indice} src={cheio} className="shrink-0 opacity-25 grayscale" style={tamanho} />;
-
-          return (
-            <span
-              key={indice}
-              className="shrink-0 rounded-full"
-              style={{ ...tamanho, background: pinta ? medidor.cor : "rgba(0,0,0,0.45)" }}
-            />
-          );
-        })}
+      <div className="flex h-full items-center justify-center" style={{ gap: fileira.vao }}>
+        {Array.from({ length: total }, (_, indice) => ponto(indice < cheios, indice))}
       </div>
     );
   }
@@ -555,6 +575,34 @@ function Sequencia({ quadros, fracao }: { quadros: string[]; fracao: number }) {
   const src = quadros[quadroDaSequencia(fracao, quadros.length)];
 
   return src ? <Imagem src={src} className="absolute inset-0" /> : null;
+}
+
+/** Um ponto da fileira em camadas: a imagem de cheio, a de vazio, ou a cor. */
+function PontoEmCamadas({
+  pinta,
+  cheio,
+  vazio,
+  cor,
+  tamanho,
+}: {
+  pinta: boolean;
+  cheio: string | null;
+  vazio: string | null;
+  cor: string;
+  tamanho: CSSProperties;
+}) {
+  if (pinta && cheio) return <Imagem src={cheio} className="shrink-0" style={tamanho} />;
+  if (!pinta && vazio) return <Imagem src={vazio} className="shrink-0" style={tamanho} />;
+  // Sem a imagem de vazio, a de cheio apagada: o buraco fica com a forma do
+  // ponto, e a fileira não perde a referência de quantos eram.
+  if (!pinta && cheio) return <Imagem src={cheio} className="shrink-0 opacity-25 grayscale" style={tamanho} />;
+
+  return (
+    <span
+      className="shrink-0 rounded-full"
+      style={{ ...tamanho, background: pinta ? cor : "rgba(0,0,0,0.45)" }}
+    />
+  );
 }
 
 function Imagem({
