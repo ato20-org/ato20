@@ -9,9 +9,14 @@ import type { DefinicaoDeEfeito } from "@/types/efeito";
  * é escrita como um plugin escreveria -- se o formato não desse conta dela,
  * não daria conta de pack nenhum.
  *
- * Por ora só a fábrica existe. Id que o catálogo não conhece -- o efeito de um
- * plugin desligado, de uma versão futura -- desenha só o selo.
+ * A fábrica mora aqui; os de plugin chegam pelo declarativo, que é o mesmo
+ * caminho na TV e no Mestre (`Declarativo.efeitos`). Id que o catálogo não
+ * conhece -- o efeito de um plugin desligado, de uma versão futura -- desenha
+ * só o selo.
  */
+
+/** Os efeitos que não são de fábrica, pelo id completo. Ver `Declarativo.efeitos`. */
+export type EfeitosDeFora = Readonly<Record<string, DefinicaoDeEfeito>>;
 
 /**
  * Os efeitos de fábrica. Só o que o aplicativo desenha sozinho, sem arquivo de
@@ -57,11 +62,19 @@ export const EFEITOS_DE_FABRICA: ReadonlyArray<DefinicaoDeEfeito> = [
 
 const POR_ID = new Map(EFEITOS_DE_FABRICA.map((efeito) => [efeito.id, efeito]));
 
-/** O efeito deste id, ou `undefined` se o catálogo não o conhece. */
+/**
+ * O efeito deste id, ou `undefined` se o catálogo não o conhece.
+ *
+ * Fábrica primeiro, e é seguro: id de fábrica não tem barra, e id de fora tem
+ * sempre -- um nunca toma o lugar do outro.
+ */
 export function definicaoDoEfeito(
   id: string | undefined,
+  deFora?: EfeitosDeFora,
 ): DefinicaoDeEfeito | undefined {
-  return id ? POR_ID.get(id) : undefined;
+  if (!id) return undefined;
+
+  return POR_ID.get(id) ?? (deFora && Object.hasOwn(deFora, id) ? deFora[id] : undefined);
 }
 
 /**
@@ -102,11 +115,12 @@ export type CamadasDaFigura = {
 
 export function camadasDaFigura(
   efeitos: ReadonlyArray<EfeitoPedido> | undefined,
+  deFora?: EfeitosDeFora,
 ): CamadasDaFigura {
   const camadas: CamadasDaFigura = { cinza: false, translucido: false, tremor: false };
 
   for (const pedido of efeitos ?? []) {
-    const figura = definicaoDoEfeito(pedido.efeito)?.figura;
+    const figura = definicaoDoEfeito(pedido.efeito, deFora)?.figura;
     if (!figura) continue;
 
     if (figura.halo && !camadas.halo) camadas.halo = pedido.cor;

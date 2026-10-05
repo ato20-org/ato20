@@ -371,6 +371,7 @@ function declarativoDaMedida(estilo: EstiloDaMedida): Declarativo {
   return {
     versao: 1,
     plugins: ["perf"],
+    efeitos: {},
     estilos: {
       "perf/vida": {
         tipo: "camadas",

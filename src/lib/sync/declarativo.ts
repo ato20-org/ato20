@@ -1,9 +1,11 @@
+import { efeitoValido } from "@/lib/efeitos";
 import type { CamadasDoMedidor, RotuloDoMedidor } from "@/lib/extensoes/manifesto";
 import type { NoSvg } from "@/lib/extensoes/svg-modelo";
+import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 /**
- * O que os plugins DECLARAM para a mesa desenhar: os estilos de medidor, e
- * quais plugins estão ligados.
+ * O que os plugins DECLARAM para a mesa desenhar: os estilos de medidor, os
+ * efeitos de condição, e quais plugins estão ligados.
  *
  * Viaja por um canal próprio (`/sala/declarativo`), e não dentro do quadro de
  * 10 Hz: o quadro leva só `declarativoVersao`, um número, e quem assiste busca
@@ -42,6 +44,11 @@ export type Declarativo = {
   /** Por `{extensaoId}/{estiloId}`, a chave que o medidor guarda. */
   estilos: Record<string, EstiloDeMedidorPublicado>;
   /**
+   * Por `{extensaoId}/{efeitoId}`, o id que a condição guarda. O `id` de cada
+   * um já vem com o prefixo. Ver `definicaoDoEfeito`.
+   */
+  efeitos: Record<string, DefinicaoDeEfeito>;
+  /**
    * Os ids dos plugins habilitados no Mestre.
    *
    * O guardado de um plugin no personagem fica no arquivo quando ele é
@@ -52,7 +59,12 @@ export type Declarativo = {
   plugins: string[];
 };
 
-export const DECLARATIVO_VAZIO: Declarativo = { versao: 0, estilos: {}, plugins: [] };
+export const DECLARATIVO_VAZIO: Declarativo = {
+  versao: 0,
+  estilos: {},
+  efeitos: {},
+  plugins: [],
+};
 
 /** Busca o declarativo atual, do lado de quem assiste. */
 export async function buscarDeclarativo(codigo: string, base = ""): Promise<Declarativo> {
@@ -64,8 +76,30 @@ export async function buscarDeclarativo(codigo: string, base = ""): Promise<Decl
   return {
     versao: typeof lido?.versao === "number" ? lido.versao : 0,
     estilos: lido?.estilos ?? {},
+    efeitos: lerEfeitos(lido?.efeitos),
     plugins: Array.isArray(lido?.plugins)
       ? lido.plugins.filter((id): id is string => typeof id === "string")
       : [],
   };
+}
+
+/**
+ * Os efeitos que chegaram pela rede, só os que têm casca de efeito.
+ *
+ * Quem publicou foi o Mestre, com o JSON que o Rust validou. A casca é
+ * conferida mesmo assim, pela razão do kit: um efeito torto não pode derrubar
+ * a TV -- cai no selo, como o efeito que ela não conhece.
+ */
+function lerEfeitos(cru: unknown): Record<string, DefinicaoDeEfeito> {
+  if (!cru || typeof cru !== "object") return {};
+
+  const efeitos: Record<string, DefinicaoDeEfeito> = {};
+  for (const [id, efeito] of Object.entries(cru)) {
+    if (!efeitoValido(id) || !efeito || typeof efeito !== "object") continue;
+    if (typeof (efeito as DefinicaoDeEfeito).titulo !== "string") continue;
+
+    efeitos[id] = { ...(efeito as DefinicaoDeEfeito), id };
+  }
+
+  return efeitos;
 }

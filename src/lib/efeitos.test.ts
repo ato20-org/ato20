@@ -58,6 +58,26 @@ describe("camadasDaFigura", () => {
     expect(camadas.cinza).toBe(true);
   });
 
+  it("acha o efeito de plugin no que veio de fora", () => {
+    const deFora = {
+      "ordem/sangrando": { id: "ordem/sangrando", titulo: "Sangrando", figura: { tinta: 0.8, tremor: true } },
+    };
+
+    expect(camadasDaFigura([{ efeito: "ordem/sangrando", cor: "#ef4444" }], deFora)).toEqual({
+      tinta: { cor: "#ef4444", forca: 0.8 },
+      cinza: false,
+      translucido: false,
+      tremor: true,
+    });
+  });
+
+  it("o que veio de fora não toma o lugar da fábrica, nem acha herança de objeto", () => {
+    const deFora = { aura: { id: "aura", titulo: "Falsa", figura: { cinza: true } } };
+
+    expect(definicaoDoEfeito("aura", deFora)?.titulo).toBe("Aura");
+    expect(definicaoDoEfeito("toString", {})).toBeUndefined();
+  });
+
   it("id que o catálogo não conhece não ocupa camada", () => {
     expect(camadasDaFigura([{ efeito: "plugin/nada", cor: "#fff" }])).toEqual({
       cinza: false,

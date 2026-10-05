@@ -83,7 +83,10 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 5 é a atual: ela acrescentou ao manifesto o estilo de
+mais do que ele tem.** A 6 é a atual: ela acrescentou os `efeitos` de condição
+(ver [Efeito de condição](#efeito-de-condição-na-tv-e-no-celular)); um ATO20
+anterior aceitaria o plugin calado, e as condições que apontam para os efeitos
+dele mostrariam só o selo. A 5 acrescentou ao manifesto o estilo de
 medidor em `camadas` de imagem e o `rotulo` (ver
 [Em camadas de imagem](#em-camadas-de-imagem)); um plugin que os usa pede 5,
 para um ATO20 anterior dizer "atualize" em vez de reclamar de um campo que
@@ -460,6 +463,52 @@ O medidor guarda `estiloExtensao: "meu-plugin/coracao"` **ao lado** do
 campo existir sem quebrar `personagens.json` em lugar nenhum. Quem o define é o
 plugin, por `ajustarMedidor(..., { estiloExtensao })`, e só com estilo dele
 mesmo; `""` volta ao de fábrica.
+
+## Efeito de condição, na TV e no celular
+
+O que uma condição faz com a figura (o halo do abençoado, o verde do
+envenenado, o tremor do apavorado) é um **efeito**, e o plugin pode declarar os
+seus. Um pack de efeitos é só o manifesto, sem `principal` e sem arquivo, como
+um pacote de texturas:
+
+```json
+"apiVersao": 6,
+"contribui": {
+  "efeitos": [
+    { "id": "sangrando", "titulo": "Sangrando", "dica": "Escorre vermelho e treme.",
+      "figura": { "tinta": 0.6, "tremor": true } }
+  ]
+}
+```
+
+Na mesa ele vira `meu-plugin/sangrando`, e é esse id que a condição guarda em
+`efeito`. A cor é da **condição**, não do efeito: o mesmo "Sangrando" serve ao
+vermelho e ao preto. O mestre escolhe o efeito no seletor da condição (na
+ficha e no cardápio da campanha), onde os dos plugins ligados aparecem embaixo
+dos de fábrica.
+
+`figura` é o que o efeito faz com a própria figura, e os cinco efeitos de
+fábrica são escritos assim:
+
+| Campo         | O que faz                                              |
+| ------------- | ------------------------------------------------------ |
+| `halo`        | halo na cor da condição, respirando atrás da figura    |
+| `tinta`       | a cor da condição por cima, de `0` a `1` (o de fábrica usa `0.5`) |
+| `cinza`       | cinza e escura                                         |
+| `translucido` | meio transparente, tremulando                          |
+| `tremor`      | treme no lugar                                         |
+
+Combináveis dentro de um efeito. Já **entre** condições, a figura mostra só o
+efeito da **última** da lista, que é a última adicionada: veneno, fogo e medo
+empilhados não se leem de longe. O Rust recusa na importação o efeito que não
+mexe em nada, `tinta` fora de `0..1` e dica com mais de 120 letras. Um plugin
+chamado `campanha` não declara efeitos: o prefixo é o dos efeitos que a própria
+campanha vai criar.
+
+Os efeitos viajam no mesmo canal declarativo dos estilos de medidor. Plugin
+desligado tira os efeitos da mesa, e a condição que apontava para um deles
+volta a ser só o selo, sem perder o id: religar o plugin traz o efeito de
+volta.
 
 ## A seção do plugin no celular, e o botão que chega ao Mestre
 

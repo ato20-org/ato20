@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
+import { useDeclarativo } from "@/components/playground/declarativo";
 import { faseDaFigura, type EfeitoPedido } from "@/lib/condicao";
 import {
   assarAura,
@@ -82,7 +83,10 @@ export function FiguraComEfeitos({
   lugar?: LugarDaFigura | null;
   children: (fonte: string | null) => ReactNode;
 }) {
-  const camadas = camadasDaFigura(efeitos);
+  // Os efeitos de plugin, do contexto que toda tela já monta. Muda quando o
+  // mestre liga ou desliga um plugin, e não a cada quadro.
+  const { efeitos: deFora } = useDeclarativo();
+  const camadas = camadasDaFigura(efeitos, deFora);
   const translucido = camadas.translucido;
   const tremendo = camadas.tremor;
 
