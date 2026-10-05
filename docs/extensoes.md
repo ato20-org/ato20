@@ -665,7 +665,8 @@ camada animada na tela, tenha a área quatro pontos ou mil):
   três por segmento, sorteados, com o pé dentro da forma. `area.escala` é o
   tamanho dela em segmentos (de `1` a `2.5`, padrão `1.5`). Sem `foco`, a área
   usa a imagem do `externo`.
-- **`particulas`** -- o que sobe da área, no laço da folha.
+- **`particulas`** -- o que sobe da área, no laço da folha, com a `imagem`
+  delas quando o efeito tem uma (a caveirinha do veneno de fábrica).
 
 E a **`luz`**, uma por área, com a FORMA dela: forte dentro, caindo para fora
 em `raio` casas. Os tokens não a tapam -- só as paredes.

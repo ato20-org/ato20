@@ -493,6 +493,20 @@ describe("a base do efeito", () => {
     expect(focoDaArea({ efeito: "congelado", cor: "#fff" })).toBeUndefined();
   });
 
+  it("a área venenosa: o lodo em ladrilho de três casas e o vapor, no laço lento do veneno", () => {
+    const base = baseDoEfeito({ efeito: "envenenado", cor: "#a855f7" })!;
+    const foco = focoDaArea({ efeito: "envenenado", cor: "#a855f7" })!;
+
+    expect(base.url).toContain("lodo-128");
+    expect(base.cores).toEqual({ cor: "#a855f7" });
+    expect(base.escala).toBe(3);
+    expect(foco.url).toContain("vapor-128");
+    expect(foco.niveis.map((nivel) => nivel.lado)).toEqual([64, 128]);
+    // O mesmo laço nas duas: a área assa as duas camadas numa folha só.
+    expect(base.quadros).toEqual(foco.quadros);
+    expect(foco.quadros).toEqual({ colunas: 4, total: 16, fps: 8 });
+  });
+
   it("efeito sem base não tem base", () => {
     expect(baseDoEfeito({ efeito: "congelado", cor: "#3b82f6" })).toBeUndefined();
   });

@@ -320,8 +320,8 @@ function areasDaMedida(): Pick<Scene, "areasDeEfeito"> {
       y: 96 + (Math.floor(i / colunas) % linhas) * passo,
       width: lado,
       height: lado,
+      // Sem cor própria: a área segue a do efeito, como a área nova no mapa.
       efeito,
-      cor: "#f59e0b",
       naMesa: true,
       ...(formato ? { formato } : {}),
     })),

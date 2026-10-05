@@ -376,6 +376,9 @@ function useFolhaDaArea(
                 },
                 caminhos: plano.fagulhas,
                 cor: particulas.cor,
+                pintar: particulas.pintar,
+                ...(particulas.quadros ? { quadros: particulas.quadros } : {}),
+                ...(particulas.imagem ? { imagem: particulas.imagem } : {}),
               },
             }
           : {}),

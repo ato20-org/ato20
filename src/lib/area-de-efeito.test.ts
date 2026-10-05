@@ -62,8 +62,8 @@ function pesEmCena(plano: NonNullable<ReturnType<typeof planoDaArea>>) {
 }
 
 describe("EFEITOS_DE_AREA", () => {
-  it("são os da fábrica que declaram área: hoje, só o fogo", () => {
-    expect(EFEITOS_DE_AREA.map((efeito) => efeito.id)).toEqual(["chamas"]);
+  it("são os da fábrica que declaram área: o fogo e o veneno", () => {
+    expect(EFEITOS_DE_AREA.map((efeito) => efeito.id)).toEqual(["chamas", "envenenado"]);
   });
 });
 
@@ -100,7 +100,11 @@ describe("efeitosDeAreaProntos", () => {
       "campanha/x": { id: "campanha/x", titulo: "X", area: {}, origem: { acervo: true as const } },
     };
 
-    expect(efeitosDeAreaProntos(deFora).map((efeito) => efeito.id)).toEqual(["chamas", "ordem/nevoa"]);
+    expect(efeitosDeAreaProntos(deFora).map((efeito) => efeito.id)).toEqual([
+      "chamas",
+      "envenenado",
+      "ordem/nevoa",
+    ]);
   });
 });
 
