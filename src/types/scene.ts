@@ -577,8 +577,10 @@ export type FogRegion = {
  * um foco do efeito, com a fase dele. A área grande tem mais focos -- nunca o
  * mesmo fogo esticado. Ver `planoDaArea`.
  *
- * O efeito vem do catálogo, como o da condição, e só os que declaram o bloco
- * `area` servem aqui. Ver `EFEITOS_DE_AREA`.
+ * O efeito vem do catálogo, como o da condição: um dos efeitos em área da
+ * campanha (ver `efeitosEmAreaDaCampanha`), que o mestre escolhe no gizmo. A
+ * área NASCE sem efeito -- é um pedaço do chão marcado, e o que acontece nele
+ * é a escolha seguinte.
  */
 export type AreaDeEfeito = {
   id: string;
@@ -592,10 +594,17 @@ export type AreaDeEfeito = {
   rotation?: number;
   /** Só o polígono: os vértices em fração da caixa. Ver `FogRegion.pontos`. */
   pontos?: number[];
-  /** O id do efeito no catálogo, como o de `Condicao.efeito`. */
-  efeito: string;
-  /** A cor do efeito, como a da condição: a rampa do fogo sai dela. */
-  cor: string;
+  /**
+   * O id do efeito no catálogo, como o de `Condicao.efeito`. Ausente = sem
+   * efeito ainda: o Mestre vê o contorno, a mesa não vê nada.
+   */
+  efeito?: string;
+  /**
+   * A cor desta área, quando o mestre escolheu uma no gizmo. Ausente = a do
+   * efeito (`area.cor`), e é o comum: editar a cor do efeito na campanha muda
+   * todas as áreas que o usam. Ver `corDaArea`.
+   */
+  cor?: string;
   /** Está na mesa? Ausente = só o mestre vê, como a forma num mapa. */
   naMesa?: boolean;
   /** Travada: o mestre não move, não redimensiona, não gira e não apaga. */

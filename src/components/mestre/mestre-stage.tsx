@@ -8,9 +8,12 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { WandSparkles } from "lucide-react";
 
 import { PainelDeCondicoesDoObjeto } from "@/components/mestre/condicoes-do-objeto";
+import { PainelDeCondicoesDoPersonagem } from "@/components/mestre/condicoes-personagem";
 import { AlcasDaArea } from "@/components/mestre/alcas-da-area";
+import { EscolhaDoEfeitoDaArea } from "@/components/mestre/efeito-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
 import { LuzMarcadores } from "@/components/mestre/luz-marcadores";
@@ -48,7 +51,6 @@ import {
   empurrarPostits,
   empurrarTracos,
 } from "@/lib/mestre/grupo-sem-alca";
-import { EFEITOS_DE_AREA } from "@/lib/area-de-efeito";
 import { areaDoPoligono } from "@/lib/geometry/area-escondida";
 import {
   alturaDaParede,
@@ -210,8 +212,6 @@ import {
 } from "@/types/scene";
 
 const NO_GUIDES: Guide[] = [];
-/** A cor de uma área de efeito cujo efeito não declara a dele. */
-const COR_DO_FOGO = "#f59e0b";
 /** Ninguém anima: o Mestre durante um gesto. Identidade estável. */
 const NINGUEM_ANIMA: ReadonlySet<string> = new Set<string>();
 /** As listas vazias das três seleções que só andam. Ver `selectedPostits`. */
@@ -498,7 +498,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const tipoDeForma = useToolStore((state) => state.tipoDeForma);
   const formatoDeArea = useToolStore((state) => state.formatoDeArea);
   const formatoDoEfeito = useToolStore((state) => state.formatoDoEfeito);
-  const efeitoDaArea = useToolStore((state) => state.efeitoDaArea);
   const corForma = useToolStore((state) => state.corForma);
   const espessuraForma = useToolStore((state) => state.espessuraForma);
   const fundoForma = useToolStore((state) => state.fundoForma);
@@ -1792,19 +1791,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   }
 
   /**
-   * A área de efeito nova, com o efeito e a cor que a pílula tem na mão. A
-   * cor é a que o efeito declara para a área: o fogo nasce na cor do fogo.
+   * A área de efeito nova: só a caixa. Ela nasce SEM efeito -- um pedaço do
+   * chão marcado --, e o efeito se escolhe no gizmo, entre os da campanha.
    */
   function novaAreaDeEfeito(
     caixa: Pick<AreaDeEfeito, "x" | "y" | "width" | "height" | "formato" | "pontos">,
   ) {
-    const definicao = EFEITOS_DE_AREA.find((efeito) => efeito.id === efeitoDaArea);
-
-    return addAreaDeEfeito(scene.id, {
-      ...caixa,
-      efeito: efeitoDaArea,
-      cor: definicao?.area?.cor ?? COR_DO_FOGO,
-    });
+    return addAreaDeEfeito(scene.id, caixa);
   }
 
   /**
@@ -3498,10 +3491,14 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // boneco e o barril, só entre o que está em pé e o que é visto de
           // cima. Ver `SombraDoItem`.
           sombra={sombraDoSelecionado}
-          // O objeto -- o que não é personagem -- tem as condições dele aqui,
-          // como a opacidade e a sombra. O token as tem na ficha.
+          // As condições, aqui como a opacidade e a sombra: as do objeto, no
+          // item da cena; as do token, no personagem -- a mesma lista da ficha.
           condicoes={
-            !single.personagemId ? <PainelDeCondicoesDoObjeto item={single} /> : undefined
+            single.personagemId ? (
+              <PainelDeCondicoesDoPersonagem personagemId={single.personagemId} />
+            ) : (
+              <PainelDeCondicoesDoObjeto item={single} />
+            )
           }
           // Token abre a ficha de quem ele é. É o atalho que faltava no meio da
           // sessão: o mestre clica na figura no mapa, e não na lista de
@@ -3634,19 +3631,28 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             }
             paleta={{
               titulo: "Cor",
+              // A cor DESTA área, quando o mestre escolheu uma. Ausente, ela
+              // segue a do efeito -- e o primeiro botão da paleta volta a isso.
               cor: selectedAreaDeEfeito.cor,
               semFundo: true,
-              // `null` é "de volta ao padrão": a cor que o efeito declara.
               onChange: ({ cor }) => {
                 if (cor === undefined) return;
-                const definicao = EFEITOS_DE_AREA.find(
-                  (efeito) => efeito.id === selectedAreaDeEfeito.efeito,
-                );
                 updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, {
-                  cor: cor ?? definicao?.area?.cor ?? COR_DO_FOGO,
+                  cor: cor ?? undefined,
                 });
               },
             }}
+            // O efeito da área, no lugar das condições: é o que ela faz. Os
+            // efeitos em área da campanha, ou nenhum. Ver `EscolhaDoEfeitoDaArea`.
+            condicoes={
+              <EscolhaDoEfeitoDaArea
+                area={selectedAreaDeEfeito}
+                onEscolher={(efeito) =>
+                  updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, { efeito })
+                }
+              />
+            }
+            botaoDoPainel={{ rotulo: "Efeito", icone: WandSparkles }}
             mesa={{
               naMesa: Boolean(selectedAreaDeEfeito.naMesa),
               onToggle: () =>

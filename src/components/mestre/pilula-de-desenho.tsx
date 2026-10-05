@@ -8,7 +8,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { EFEITOS_DE_AREA } from "@/lib/area-de-efeito";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import { temAreaDeEfeito, temNevoa, temSol, type Scene } from "@/types/scene";
@@ -68,16 +67,18 @@ const NATUREZAS = [
 ] as const;
 
 /**
- * As naturezas que vêm do CATÁLOGO: um botão por efeito de área -- hoje, só o
- * fogo. É o mesmo desenho, um quarto significado: o chão pega fogo. A chave
- * leva o id do efeito, e o próximo efeito que declarar `area` entra aqui sem
- * uma linha de código. Ver `EFEITOS_DE_AREA`.
+ * O quarto significado: um pedaço do chão para um EFEITO -- o fogo, a névoa.
+ * Um botão só, e não um por efeito: a área nasce sem efeito, e o efeito se
+ * escolhe no gizmo dela, entre os efeitos em área da campanha. Ver
+ * `AreaDeEfeito`.
  */
-const NATUREZAS_DE_EFEITO = EFEITOS_DE_AREA.map((efeito) => ({
-  chave: `efeito:${efeito.id}` as const,
-  label: efeito.titulo,
-  hint: "O efeito no chão, casa a casa da grade. Nasce só para você.",
-}));
+const NATUREZAS_DE_EFEITO = [
+  {
+    chave: "efeito",
+    label: "Efeito em área",
+    hint: "Um pedaço do chão para um efeito. Ele se escolhe no gizmo. Nasce só para você.",
+  },
+] as const;
 
 /** O amarelo da parede, o mesmo de `LuzLayer`. */
 const COR_DA_PAREDE = "#facc15";
@@ -106,7 +107,7 @@ const DESENHOS: Record<Geometria["chave"], React.ReactNode> = {
  * - `parede`  massa amarela cheia, borda sólida. É pedra.
  * - `area`    figura cheia e escura, borda tracejada. É o que tapa o mapa.
  * - `elemento` só o traço fino. É marca sobre a cena, não corpo.
- * - `efeito:*` laranja, tracejado, com uma chama dentro. É o chão em chamas.
+ * - `efeito` laranja, tracejado, com uma estrela dentro. É o chão de um efeito.
  *
  * `null` é a amostra neutra, para o botão da régua antes de a natureza ser
  * escolhida.
@@ -118,7 +119,7 @@ function AmostraDaForma({
   geometria: Geometria["chave"];
   natureza: Natureza | null;
 }) {
-  const efeito = natureza?.startsWith("efeito:") ?? false;
+  const efeito = natureza === "efeito";
   const pintura = efeito
     ? {
         fill: COR_DO_EFEITO,
@@ -157,10 +158,7 @@ function AmostraDaForma({
     >
       <g {...pintura}>{DESENHOS[geometria]}</g>
       {efeito ? (
-        <path
-          d="M9 5.5c.9 1.3 2.3 2.2 2.3 3.9a2.3 2.3 0 0 1-4.6 0c0-.8.4-1.5 1-2 .1.6.4 1 .8 1.1C8.4 7.6 8.6 6.6 9 5.5z"
-          fill={COR_DO_EFEITO}
-        />
+        <path d="M9 5.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z" fill={COR_DO_EFEITO} />
       ) : null}
     </svg>
   );
@@ -203,8 +201,7 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
   const formatoDaParede = useToolStore((state) => state.formatoDaParede);
   const setFormatoDaParede = useToolStore((state) => state.setFormatoDaParede);
   const formatoDoEfeito = useToolStore((state) => state.formatoDoEfeito);
-  const efeitoDaArea = useToolStore((state) => state.efeitoDaArea);
-  const setAreaDeEfeito = useToolStore((state) => state.setAreaDeEfeito);
+  const setFormatoDoEfeito = useToolStore((state) => state.setFormatoDoEfeito);
 
   /** Qual geometria está com a fileira de naturezas aberta. `null` = fechada. */
   const [aberta, setAberta] = useState<Geometria["chave"] | null>(null);
@@ -289,7 +286,7 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
       }
       if (tool === "efeito") {
         const geometria = de(formatoDoEfeito);
-        return geometria ? { geometria, natureza: `efeito:${efeitoDaArea}` } : null;
+        return geometria ? { geometria, natureza: "efeito" } : null;
       }
 
       return null;
@@ -304,11 +301,8 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
     if (natureza === "parede") {
       setFormatoDaParede(geometria.formato);
       setTool("parede");
-    } else if (natureza.startsWith("efeito:")) {
-      setAreaDeEfeito({
-        formatoDoEfeito: geometria.formato,
-        efeitoDaArea: natureza.slice("efeito:".length),
-      });
+    } else if (natureza === "efeito") {
+      setFormatoDoEfeito(geometria.formato);
       setTool("efeito");
     } else if (natureza === "area") {
       // A área não tem `linha`, e nenhuma das três geometrias é uma: o

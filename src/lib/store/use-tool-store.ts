@@ -188,13 +188,13 @@ type ToolStore = {
   setFormatoDeArea: (formato: FormatoDeArea) => void;
 
   /**
-   * O recorte e o efeito da PRÓXIMA área de efeito. Cada natureza guarda o
-   * seu, pela razão da parede: quem esconde em retângulo e incendeia em laço
-   * não quer que uma troque a outra. O efeito é um dos `EFEITOS_DE_AREA`.
+   * O recorte da PRÓXIMA área de efeito. Cada natureza guarda o seu, pela
+   * razão da parede: quem esconde em retângulo e incendeia em laço não quer
+   * que uma troque a outra. O efeito não: a área nasce sem, e ele se escolhe
+   * no gizmo.
    */
   formatoDoEfeito: FormatoDeArea;
-  efeitoDaArea: string;
-  setAreaDeEfeito: (proxima: { formatoDoEfeito?: FormatoDeArea; efeitoDaArea?: string }) => void;
+  setFormatoDoEfeito: (formato: FormatoDeArea) => void;
 
   tipoDeForma: TipoDeForma;
   /** Ausente = a cor do tema. Ver `Forma`. */
@@ -237,8 +237,7 @@ export const useToolStore = create<ToolStore>((set) => ({
   setFormatoDeArea: (formatoDeArea) => set({ formatoDeArea }),
 
   formatoDoEfeito: "retangulo",
-  efeitoDaArea: "chamas",
-  setAreaDeEfeito: (proxima) => set(proxima),
+  setFormatoDoEfeito: (formatoDoEfeito) => set({ formatoDoEfeito }),
 
   tipoDeForma: "retangulo",
   corForma: undefined,

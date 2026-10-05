@@ -22,7 +22,9 @@ import {
   Wand2,
   X,
 } from "lucide-react";
+import { useEfeitosEmAreaDaCampanha } from "@/components/mestre/efeito-da-area";
 import { TelaDaCondicao } from "@/components/mestre/efeitos-da-campanha";
+import { EfeitosEmAreaDaCampanha } from "@/components/mestre/efeitos-em-area-da-campanha";
 import { toast } from "sonner";
 
 import {
@@ -42,6 +44,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -90,7 +93,7 @@ const MAXIMO_INICIAL = 10;
 const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
   quadro: Shapes,
   medidores: Gauge,
-  condicoes: Sparkles,
+  efeitos: Sparkles,
   layout: LayoutTemplate,
   posicao: Move,
   ajustes: SlidersHorizontal,
@@ -128,6 +131,7 @@ export function ConfiguracaoDaCampanhaBody() {
   // montado para contar.
   const medidores = useModelosDaCampanha();
   const { modelos: condicoes } = useCondicoesDaCampanha();
+  const efeitosEmArea = useEfeitosEmAreaDaCampanha();
   const definicoes = useConfiguracoesStore((state) => state.definicoes);
 
   const ajustes = useMemo(
@@ -143,7 +147,10 @@ export function ConfiguracaoDaCampanhaBody() {
   const topicos = useMemo(() => {
     const achados = topicosAchados(busca, {
       medidores: (medidores.modelos ?? []).map((modelo) => modelo.nome),
-      condicoes: (condicoes ?? []).map((condicao) => condicao.nome),
+      efeitos: [
+        ...(condicoes ?? []).map((condicao) => condicao.nome),
+        ...efeitosEmArea.map((efeito) => efeito.titulo),
+      ],
     });
     // Ajustes só existe com algo para ajustar -- hoje, só quando um plugin
     // declara. E acha pelos próprios ajustes, com a MESMA conta da lista.
@@ -156,7 +163,7 @@ export function ConfiguracaoDaCampanhaBody() {
         ? ajustes.length > 0 && (achados.includes(chave) || ajusteAchado)
         : achados.includes(chave),
     );
-  }, [busca, medidores.modelos, condicoes, ajustes]);
+  }, [busca, medidores.modelos, condicoes, efeitosEmArea, ajustes]);
 
   // O tópico aberto pode sumir -- o plugin do único ajuste foi desligado.
   const atual = topicos.includes(aberto) ? aberto : "quadro";
@@ -275,8 +282,8 @@ function Topico({
       return <PadraoDoQuadro />;
     case "medidores":
       return <MedidoresDaCampanha {...medidores} />;
-    case "condicoes":
-      return <CondicoesDaCampanha />;
+    case "efeitos":
+      return <EfeitosDaCampanha />;
     case "layout":
       return (
         <Secao
@@ -665,6 +672,32 @@ function LinhaDeModelo({
         />
       }
     />
+  );
+}
+
+/**
+ * O tópico Efeitos: as condições do token e os efeitos em área, em duas abas.
+ * Os dois são o mesmo formato de efeito e o mesmo editor, e o mestre que
+ * procura "o fogo" não deveria ter de saber em qual dos dois ele mora.
+ */
+function EfeitosDaCampanha() {
+  const [aba, setAba] = useState<"condicoes" | "area">("condicoes");
+
+  return (
+    <div className="space-y-3">
+      <Tabs value={aba} onValueChange={(valor) => setAba(valor as typeof aba)}>
+        <TabsList className="w-full">
+          <TabsTrigger value="condicoes" className="flex-1">
+            Condições
+          </TabsTrigger>
+          <TabsTrigger value="area" className="flex-1">
+            Efeito em área
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {aba === "condicoes" ? <CondicoesDaCampanha /> : <EfeitosEmAreaDaCampanha />}
+    </div>
   );
 }
 

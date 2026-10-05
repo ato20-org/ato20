@@ -7,19 +7,20 @@ describe("topicosAchados", () => {
     expect(topicosAchados("  ", {})).toEqual([
       "quadro",
       "medidores",
-      "condicoes",
+      "efeitos",
       "layout",
       "posicao",
       "ajustes",
     ]);
   });
 
-  it("quem procura o fogo acha as condições: o efeito se configura nelas", () => {
-    expect(topicosAchados("fagulha", {})).toEqual(["condicoes"]);
+  it("quem procura o fogo acha os efeitos: o da condição e o da área moram lá", () => {
+    expect(topicosAchados("fagulha", {})).toEqual(["efeitos"]);
+    expect(topicosAchados("área", {})).toEqual(["efeitos"]);
   });
 
-  it("acha pelo título sem ligar para acento nem caixa", () => {
-    expect(topicosAchados("CONDICOES", {})).toEqual(["condicoes"]);
+  it("acha pelo nome da aba sem ligar para acento nem caixa", () => {
+    expect(topicosAchados("CONDICOES", {})).toEqual(["efeitos"]);
   });
 
   it("acha pela palavra de quem não sabe o nome do tópico", () => {
@@ -28,8 +29,8 @@ describe("topicosAchados", () => {
 
   it("acha pelo que o mestre criou dentro do tópico", () => {
     expect(
-      topicosAchados("envenen", { condicoes: ["Envenenado", "Caído"] }),
-    ).toEqual(["condicoes"]);
+      topicosAchados("envenen", { efeitos: ["Envenenado", "Caído"] }),
+    ).toEqual(["efeitos"]);
   });
 
   it("um termo pode achar mais de um tópico", () => {

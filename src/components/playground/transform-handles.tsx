@@ -29,6 +29,7 @@ import {
   PanelTopDashed,
   Trash2,
   Underline,
+  type LucideIcon,
 } from "lucide-react";
 
 import {
@@ -258,13 +259,19 @@ type TransformHandlesProps = {
    */
   sombra?: SombraNoGizmo;
   /**
-   * Presente = mostra o botão das CONDIÇÕES do objeto, e este é o painel que
-   * ele abre. Só o objeto passa -- o token leva as do personagem, na ficha.
+   * Presente = mostra o botão das CONDIÇÕES, e este é o painel que ele abre:
+   * as do objeto, no item da cena; as do token, no personagem. A área de
+   * efeito usa o mesmo lugar para o efeito dela (ver `botaoDoPainel`).
    *
    * O conteúdo vem pronto de quem monta o gizmo: as condições gravam na cena
    * pelo store do Mestre, e o gizmo não precisa saber disso.
    */
   condicoes?: ReactNode;
+  /**
+   * O botão do painel de baixo quando ele NÃO é o das condições: a área de
+   * efeito usa o mesmo lugar para escolher o efeito dela. Ausente = Condições.
+   */
+  botaoDoPainel?: { rotulo: string; icone: LucideIcon };
   /**
    * Presente = mostra os botões de ênfase da letra, na mesma fileira do
    * espelhar e do excluir.
@@ -456,6 +463,7 @@ export function TransformHandles({
   opacidade,
   sombra,
   condicoes,
+  botaoDoPainel,
   estilo,
   paleta,
   fonte,
@@ -501,6 +509,7 @@ export function TransformHandles({
    * uma fecha a outra.
    */
   const [condicoesAbertas, setCondicoesAbertas] = useState(false);
+  const IconeDoPainel = botaoDoPainel?.icone ?? Sparkles;
 
   /**
    * A caixa e a fileira de botões: o que um painel que pula de lado não pode
@@ -985,7 +994,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Condições"
+                    aria-label={botaoDoPainel?.rotulo ?? "Condições"}
                     aria-expanded={condicoesAbertas}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1000,7 +1009,7 @@ export function TransformHandles({
                       setSombraAberta(false);
                     }}
                   >
-                    <Sparkles
+                    <IconeDoPainel
                       style={{
                         width: HANDLE_PX * 1.2,
                         height: HANDLE_PX * 1.2,
@@ -1009,7 +1018,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Condições</TooltipContent>
+              <TooltipContent>{botaoDoPainel?.rotulo ?? "Condições"}</TooltipContent>
             </Tooltip>
           ) : null}
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { useDeclarativo } from "@/components/playground/declarativo";
 import {
+  corDaArea,
   densidadeDoEfeito,
   divisoesDoEfeito,
   fontesDaArea,
@@ -217,9 +218,13 @@ export function LuzLayer({
   const dasAreas = useMemo(
     () =>
       (areasDeEfeito ?? []).flatMap((area) => {
-        const luz = luzDosEfeitos([{ efeito: area.efeito, cor: area.cor }], deFora);
-        if (!luz) return [];
+        if (!area.efeito) return [];
         const definicao = definicaoDoEfeito(area.efeito, deFora);
+        const luz = luzDosEfeitos(
+          [{ efeito: area.efeito, cor: corDaArea(area, definicao) }],
+          deFora,
+        );
+        if (!luz) return [];
         const segmentos = segmentosDaArea(
           area,
           grid,

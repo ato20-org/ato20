@@ -40,10 +40,55 @@ import {
  * fica numa caixa sem giro, e é ela que vai para o plano.
  */
 
-/** Os efeitos que servem a uma área: os da fábrica que declaram `area`. */
+/** Os efeitos de FÁBRICA que servem a uma área: os que declaram `area`. */
 export const EFEITOS_DE_AREA: ReadonlyArray<DefinicaoDeEfeito> = EFEITOS_DE_FABRICA.filter(
-  (efeito) => efeito.area && efeito.externo,
+  (efeito) => efeito.area,
 );
+
+/** A cor de uma área quando nem ela nem o efeito dizem a sua: a do fogo. */
+export const COR_DA_AREA = "#f59e0b";
+
+/**
+ * A cor em que a área pinta: a que o mestre escolheu para ESTA área, ou a do
+ * efeito, ou a padrão. Ausente na área é o comum -- e é o que faz editar a cor
+ * do efeito na campanha mudar todas as áreas que o usam.
+ */
+export function corDaArea(
+  area: Pick<AreaDeEfeito, "cor">,
+  definicao: DefinicaoDeEfeito | undefined,
+): string {
+  return area.cor ?? definicao?.area?.cor ?? COR_DA_AREA;
+}
+
+/**
+ * Os efeitos em área DESTA campanha: os dela que declaram `area`, menos os
+ * que uma condição do cardápio usa.
+ *
+ * Os dois moram no mesmo `efeitos.json` -- o efeito da condição e o da área
+ * são o mesmo formato --, e a condição que copiou o fogo de fábrica antes da
+ * separação levou o bloco `area` junto. Sem tirar os dela, o fogo de "Em
+ * chamas" apareceria duas vezes: na condição e na lista de áreas.
+ */
+export function efeitosEmAreaDaCampanha(
+  efeitos: ReadonlyArray<DefinicaoDeEfeito> | null | undefined,
+  dasCondicoes: ReadonlySet<string>,
+): DefinicaoDeEfeito[] {
+  return (efeitos ?? []).filter((efeito) => efeito.area && !dasCondicoes.has(efeito.id));
+}
+
+/**
+ * Os efeitos em área PRONTOS: os de fábrica e os dos plugins ligados que
+ * declaram `area`. É de onde a campanha parte -- "Usar sugestões" traz os de
+ * fábrica, "Partir de um efeito pronto" oferece todos.
+ */
+export function efeitosDeAreaProntos(
+  deFora: Readonly<Record<string, DefinicaoDeEfeito>> | undefined,
+): DefinicaoDeEfeito[] {
+  const dosPlugins = Object.values(deFora ?? {}).filter(
+    (efeito) => efeito.area && efeito.origem && "plugin" in efeito.origem,
+  );
+  return [...EFEITOS_DE_AREA, ...dosPlugins];
+}
 
 /** O foco, em vezes o segmento, quando o efeito não diz. */
 export const ESCALA_DO_FOCO = 1.5;

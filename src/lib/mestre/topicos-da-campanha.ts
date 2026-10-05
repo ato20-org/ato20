@@ -36,12 +36,14 @@ export const TOPICOS_DA_CAMPANHA = [
     palavras: ["vida", "pv", "mana", "barra", "porcentagem", "maximo", "ficha"],
   },
   {
-    chave: "condicoes",
-    titulo: "Condições",
-    descricao: "O que o botão direito do token oferece.",
-    // O efeito de cada condição se configura aqui, pela engrenagem: quem
-    // procura o fogo ou a fagulha acha as condições.
+    chave: "efeitos",
+    titulo: "Efeitos",
+    descricao: "As condições do token e os efeitos em área.",
+    // Duas abas: as condições, com o efeito de cada uma pela engrenagem, e os
+    // efeitos em área. Quem procura o fogo, a fagulha ou a área acha aqui.
     palavras: [
+      "condicao",
+      "condicoes",
       "veneno",
       "caido",
       "token",
@@ -55,6 +57,10 @@ export const TOPICOS_DA_CAMPANHA = [
       "luz",
       "brilho",
       "animacao",
+      "area",
+      "chao",
+      "incendio",
+      "nevoa",
     ],
   },
   {
