@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { AparenciaDaCondicao } from "@/components/mestre/linha-de-condicao";
 import { NomeDoMedidor } from "@/components/mestre/linha-de-medidor";
+import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { DeclarativoProvider } from "@/components/playground/declarativo";
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import {
@@ -23,6 +24,7 @@ import { NumberField } from "@/components/ui/number-field";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { COR_DA_AREA, efeitosDeAreaProntos } from "@/lib/area-de-efeito";
 import {
   copiaParaACampanha,
   definicaoDoEfeito,
@@ -81,7 +83,7 @@ export function TelaDaCondicao({
 
   /** O efeito pronto como ponto de partida: a cópia dele, no lugar do atual. */
   function partirDe(pronto: DefinicaoDeEfeito) {
-    mudar(copiaParaACampanha(pronto, efeito.id, modelo.nome));
+    mudar(daFigura(copiaParaACampanha(pronto, efeito.id, modelo.nome)));
   }
 
   return (
@@ -167,6 +169,186 @@ export function TelaDaCondicao({
   );
 }
 
+/**
+ * A tela de um EFEITO EM ÁREA da campanha: o nome, a cor e as camadas dele.
+ * Abre pela engrenagem da linha na lista (Efeitos, Efeito em área).
+ *
+ * O efeito já é da campanha -- a lista só tem os dela --, e cada mudança
+ * grava nele: todas as áreas que o usam mudam junto, na mesa também, porque a
+ * área guarda o id e o catálogo resolve. A cor mora no efeito (`area.cor`), e
+ * é a das áreas que não escolheram a sua no gizmo.
+ */
+export function TelaDoEfeitoEmArea({
+  efeito,
+  onVoltar,
+}: {
+  efeito: DefinicaoDeEfeito;
+  onVoltar: () => void;
+}) {
+  const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
+  const deFora = useDeclarativoStore((state) => state.efeitos);
+  const [trocarPor, setTrocarPor] = useState<DefinicaoDeEfeito | null>(null);
+  const cor = efeito.area?.cor ?? COR_DA_AREA;
+  // Alguma camada ajustada: trocar pelo pronto pede confirmação, como na condição.
+  const temCamadas = Boolean(
+    efeito.base || efeito.area?.foco || efeito.externo || efeito.particulas || efeito.luz,
+  );
+
+  function partirDe(pronto: DefinicaoDeEfeito) {
+    const copia = copiaParaACampanha(pronto, efeito.id, efeito.titulo);
+    salvar({ ...copia, area: { ...copia.area, cor } });
+  }
+
+  return (
+    <div className="space-y-3">
+      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
+        <ArrowLeft />
+        Efeitos em área
+      </Button>
+
+      <div className="flex items-center gap-2 rounded-md border p-2.5">
+        <CorDoEfeito cor={cor} onMudar={(nova) => salvar({ ...efeito, area: { ...efeito.area, cor: nova } })} />
+        <div className="flex min-w-0 flex-1 items-center gap-0.5">
+          <NomeDoMedidor
+            nome={efeito.titulo}
+            ocupado={false}
+            onGravar={(titulo) => salvar({ ...efeito, titulo })}
+            rotulos={{ campo: "Nome do efeito", lapis: "Renomear efeito" }}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="text-muted-foreground mr-1 text-[11px]">Partir de um efeito pronto:</span>
+        {efeitosDeAreaProntos(deFora).map((pronto) => (
+          <Button
+            key={pronto.id}
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            title={pronto.dica}
+            onClick={() => (temCamadas ? setTrocarPor(pronto) : partirDe(pronto))}
+          >
+            {pronto.titulo}
+          </Button>
+        ))}
+      </div>
+
+      <div className="@container">
+        <div className="grid gap-3 @lg:grid-cols-[14rem_1fr]">
+          <div className="@lg:sticky @lg:top-0 @lg:self-start">
+            <PreviaDaArea efeito={efeito} />
+          </div>
+          <div className="space-y-3">
+            <SecaoDasParticulas
+              particulas={efeito.particulas}
+              onMudar={(particulas) => salvar(com(efeito, "particulas", particulas))}
+            />
+            <SecaoDaLuz luz={efeito.luz} onMudar={(luz) => salvar(com(efeito, "luz", luz))} />
+          </div>
+        </div>
+      </div>
+
+      <AlertDialog
+        open={trocarPor !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setTrocarPor(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Trocar o efeito pelo {trocarPor?.titulo}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O que você ajustou em {efeito.titulo} é substituído. As áreas que o usam passam a
+              desenhar o efeito novo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (trocarPor) partirDe(trocarPor);
+                setTrocarPor(null);
+              }}
+            >
+              Trocar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/** As cores de partida de um efeito em área: as do lápis, que é a paleta da casa. */
+function CorDoEfeito({ cor, onMudar }: { cor: string; onMudar: (cor: string) => void }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {CORES_LAPIS.slice(0, 6).map((opcao) => (
+        <button
+          key={opcao}
+          type="button"
+          aria-label={`Cor ${opcao}`}
+          aria-pressed={opcao === cor}
+          className={cn(
+            "size-4 rounded-full ring-offset-1 ring-offset-background",
+            opcao === cor && "ring-foreground ring-2",
+          )}
+          style={{ backgroundColor: opcao }}
+          onClick={() => onMudar(opcao)}
+        />
+      ))}
+      <label
+        className="relative size-4 cursor-pointer overflow-hidden rounded-full border"
+        style={{ backgroundColor: cor }}
+        title="Outra cor"
+      >
+        <input
+          type="color"
+          value={cor}
+          aria-label="Outra cor"
+          className="absolute inset-0 cursor-pointer opacity-0"
+          onChange={(evento) => onMudar(evento.target.value)}
+        />
+      </label>
+    </div>
+  );
+}
+
+/**
+ * A prévia de um efeito em área: um pedaço de chão com uma área de três casas
+ * por duas, desenhada como a mesa a vê. A definição é a DA TELA, por um
+ * declarativo só dela, como na prévia da condição.
+ */
+function PreviaDaArea({ efeito }: { efeito: DefinicaoDeEfeito }) {
+  const declarativo = useMemo<Declarativo>(
+    () => ({
+      ...DECLARATIVO_VAZIO,
+      efeitos: { [efeito.id]: { ...efeito, origem: { acervo: true } } },
+    }),
+    [efeito],
+  );
+  const area = useMemo(
+    () => [{ id: "previa-da-area", x: 48, y: 72, width: 288, height: 192, efeito: efeito.id, naMesa: true }],
+    [efeito.id],
+  );
+  // O chão de 384 por 288 unidades, na caixa da prévia.
+  const escala = 224 / 384;
+
+  return (
+    <div className="relative h-[168px] w-full overflow-hidden rounded-md bg-neutral-900">
+      <div
+        className="absolute top-0 left-0"
+        style={{ width: 384, height: 288, transform: `scale(${escala})`, transformOrigin: "0 0" }}
+      >
+        <DeclarativoProvider valor={declarativo}>
+          <AreaDeEfeitoLayer areas={area} grid={undefined} variant="mesa" />
+        </DeclarativoProvider>
+      </div>
+    </div>
+  );
+}
+
 /** O id do efeito que a condição ainda não tem: a prévia antes da primeira mudança. */
 const PENDENTE = "campanha/pendente";
 
@@ -197,7 +379,7 @@ function useEfeitoDaCondicao(modelo: Condicao) {
   const atual = useMemo<DefinicaoDeEfeito>(() => {
     const deAgora = definicaoDoEfeito(modelo.efeito, deFora);
     return deAgora
-      ? copiaParaACampanha(deAgora, PENDENTE, modelo.nome)
+      ? daFigura(copiaParaACampanha(deAgora, PENDENTE, modelo.nome))
       : { id: PENDENTE, titulo: modelo.nome };
   }, [modelo.efeito, modelo.nome, deFora]);
 
@@ -237,6 +419,19 @@ function useEfeitoDaCondicao(modelo: Condicao) {
   }
 
   return { efeito, mudar, renomear, temProprio: Boolean(proprio) };
+}
+
+/**
+ * O efeito só com o que serve a uma FIGURA: sem a área e sem a base. A condição
+ * que copia o fogo de fábrica não leva o chão em chamas -- senão o efeito dela
+ * apareceria também na lista de efeitos em área da campanha, que são os que
+ * declaram `area`. Ver `efeitosEmAreaDaCampanha`.
+ */
+function daFigura(efeito: DefinicaoDeEfeito): DefinicaoDeEfeito {
+  const copia = { ...efeito };
+  delete copia.area;
+  delete copia.base;
+  return copia;
 }
 
 /** Um campo fora do objeto: `undefined` some, e o arquivo não ganha campo vazio. */

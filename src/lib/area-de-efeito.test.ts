@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   ALTURA_DA_CHAMA_DE_PE,
   chamasDePe,
+  COR_DA_AREA,
+  corDaArea,
+  efeitosDeAreaProntos,
+  efeitosEmAreaDaCampanha,
   densidadeDoEfeito,
   MAX_CHAMAS_DE_PE,
   dentroDaArea,
@@ -60,6 +64,43 @@ function pesEmCena(plano: NonNullable<ReturnType<typeof planoDaArea>>) {
 describe("EFEITOS_DE_AREA", () => {
   it("são os da fábrica que declaram área: hoje, só o fogo", () => {
     expect(EFEITOS_DE_AREA.map((efeito) => efeito.id)).toEqual(["chamas"]);
+  });
+});
+
+describe("corDaArea", () => {
+  it("a da área, senão a do efeito, senão a do fogo", () => {
+    const fogo = { id: "f", titulo: "F", area: { cor: "#ff0000" } };
+
+    expect(corDaArea({ cor: "#00ff00" }, fogo)).toBe("#00ff00");
+    expect(corDaArea({}, fogo)).toBe("#ff0000");
+    expect(corDaArea({}, undefined)).toBe(COR_DA_AREA);
+  });
+});
+
+describe("efeitosEmAreaDaCampanha", () => {
+  it("os da campanha com área, menos os que uma condição usa", () => {
+    const efeitos = [
+      { id: "campanha/a", titulo: "Incêndio", area: {} },
+      { id: "campanha/b", titulo: "Fogo da condição", area: {} },
+      { id: "campanha/c", titulo: "Só da figura" },
+    ];
+
+    expect(
+      efeitosEmAreaDaCampanha(efeitos, new Set(["campanha/b"])).map((efeito) => efeito.id),
+    ).toEqual(["campanha/a"]);
+    expect(efeitosEmAreaDaCampanha(null, new Set())).toEqual([]);
+  });
+});
+
+describe("efeitosDeAreaProntos", () => {
+  it("os de fábrica, e os de plugin que declaram área", () => {
+    const deFora = {
+      "ordem/nevoa": { id: "ordem/nevoa", titulo: "Névoa", area: {}, origem: { plugin: "ordem", versao: "1" } },
+      "ordem/aura": { id: "ordem/aura", titulo: "Aura", origem: { plugin: "ordem", versao: "1" } },
+      "campanha/x": { id: "campanha/x", titulo: "X", area: {}, origem: { acervo: true as const } },
+    };
+
+    expect(efeitosDeAreaProntos(deFora).map((efeito) => efeito.id)).toEqual(["chamas", "ordem/nevoa"]);
   });
 });
 

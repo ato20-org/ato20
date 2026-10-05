@@ -8,6 +8,7 @@ import { useSceneScale } from "@/components/playground/scene-stage";
 import type { PecaDoChao } from "@/components/playground/chao-inclinado";
 import {
   chamasDePe,
+  corDaArea,
   densidadeDoEfeito,
   divisoesDoEfeito,
   ESCALA_DO_FOCO,
@@ -127,14 +128,18 @@ const AreaDeEfeitoView = memo(function AreaDeEfeitoView({
   onPointerDown?: (event: ReactPointerEvent, area: AreaDeEfeito) => void;
 }) {
   const { efeitos: deFora } = useDeclarativo();
-  const definicao = definicaoDoEfeito(area.efeito, deFora);
+  const definicao = area.efeito ? definicaoDoEfeito(area.efeito, deFora) : undefined;
   const escala = escalaDoFoco(definicao?.area?.escala);
   const divisoes = divisoesDoEfeito(definicao);
   const densidade = densidadeDoEfeito(definicao);
+  const cor = corDaArea(area, definicao);
   // As três camadas do efeito, na cor da área: o chão, o fogo e a fagulha.
   // O fogo é o FOCO da área, ou o externo da figura quando o efeito não tem um.
+  // Sem efeito, nenhuma: a área é só o contorno, no Mestre.
   const { fogo, base, particulas } = useMemo(() => {
-    const pedido = [{ efeito: area.efeito, cor: area.cor }];
+    if (!area.efeito) return { fogo: undefined, base: undefined, particulas: undefined };
+
+    const pedido = [{ efeito: area.efeito, cor }];
     return {
       fogo: soBase
         ? undefined
@@ -142,7 +147,7 @@ const AreaDeEfeitoView = memo(function AreaDeEfeitoView({
       base: baseDoEfeito(pedido[0]!, deFora),
       particulas: soBase ? undefined : particulasDosEfeitos(pedido, deFora),
     };
-  }, [area.efeito, area.cor, deFora, soBase]);
+  }, [area.efeito, cor, deFora, soBase]);
   // O laço é o do fogo; sem fogo, o da base.
   const quadros = fogo?.quadros ?? base?.quadros ?? { colunas: 1, total: 1, fps: 1 };
   const plano = useMemo(
@@ -437,7 +442,11 @@ export function useChamasDePe(
   const pedidos = useMemo(
     () =>
       (areas ?? []).flatMap((area) => {
-        const pedido = { efeito: area.efeito, cor: area.cor };
+        if (!area.efeito) return [];
+        const pedido = {
+          efeito: area.efeito,
+          cor: corDaArea(area, definicaoDoEfeito(area.efeito, deFora)),
+        };
         const fogo = focoDaArea(pedido, deFora) ?? camadasDaFigura([pedido], deFora).externo;
         if (!fogo) return [];
 
@@ -451,7 +460,7 @@ export function useChamasDePe(
           ...(fogo.cores ? { cores: fogo.cores } : {}),
           ...(mascara ? { mascara } : {}),
         };
-        return [{ area, quadros, fonte, definicao: definicaoDoEfeito(area.efeito, deFora) }];
+        return [{ area, quadros, fonte, definicao: definicaoDoEfeito(pedido.efeito, deFora) }];
       }),
     [areas, deFora],
   );
