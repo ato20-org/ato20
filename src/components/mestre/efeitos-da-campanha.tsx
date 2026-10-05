@@ -43,6 +43,8 @@ import { vincularEfeitoDaCondicao } from "@/lib/vault/characters";
 import type { Condicao, PatchCondicao } from "@/types/character";
 import type {
   AnimacaoDoEfeito,
+  AreaDoEfeito,
+  BaseDoEfeito,
   DefinicaoDeEfeito,
   ExternoDoEfeito,
   FiguraDoEfeito,
@@ -240,11 +242,21 @@ export function TelaDoEfeitoEmArea({
             <PreviaDaArea efeito={efeito} />
           </div>
           <div className="space-y-3">
+            <SecaoDoChao base={efeito.base} onMudar={(base) => salvar(com(efeito, "base", base))} />
+            <SecaoDosElementos
+              area={efeito.area ?? {}}
+              onMudar={(area) => salvar({ ...efeito, area })}
+            />
             <SecaoDasParticulas
               particulas={efeito.particulas}
               onMudar={(particulas) => salvar(com(efeito, "particulas", particulas))}
+              descricao="O que sobe da área: a fagulha, a bolha, a cinza."
             />
-            <SecaoDaLuz luz={efeito.luz} onMudar={(luz) => salvar(com(efeito, "luz", luz))} />
+            <SecaoDaLuz
+              luz={efeito.luz}
+              onMudar={(luz) => salvar(com(efeito, "luz", luz))}
+              descricao="A área clareia em volta, com a forma dela, e as paredes tapam. Num mapa sem escuro, é um véu da cor."
+            />
           </div>
         </div>
       </div>
@@ -517,7 +529,13 @@ function SecaoDoExterno({
       ligado={ligado}
       onLigar={(v) => onMudar(v ? { imagem: "" } : undefined)}
     >
-      <ImagemDoAcervo rotulo="Imagem" assetId={e.imagem || undefined} onMudar={(id) => mudar("imagem", id ?? "")} />
+      <ImagemDoAcervo
+        rotulo="Imagem"
+        assetId={e.imagem || undefined}
+        // Os mipmaps são da imagem ANTIGA -- a cópia do fogo de fábrica os
+        // traz --, e o nível escolhido pelo zoom desenharia o fogo velho.
+        onMudar={(id) => onMudar(com(com(e, "mipmaps", undefined), "imagem", id ?? ""))}
+      />
       {/* `comFps`: o externo toca sempre em laço, e a grade sai com a velocidade. */}
       <Quadros
         quadros={e.quadros}
@@ -587,12 +605,161 @@ function SecaoDoExterno({
   );
 }
 
+/**
+ * O CHÃO de um efeito em área: a textura deitada, recortada na forma exata da
+ * área -- é a camada que diz ao jogador onde a área termina. Ver
+ * `BaseDoEfeito`.
+ */
+function SecaoDoChao({
+  base,
+  onMudar,
+}: {
+  base: BaseDoEfeito | undefined;
+  onMudar: (base: BaseDoEfeito | undefined) => void;
+}) {
+  const b = base ?? { imagem: "" };
+  const mudar = <K extends keyof BaseDoEfeito>(chave: K, valor: BaseDoEfeito[K] | undefined) =>
+    onMudar(com(b, chave, valor));
+
+  return (
+    <Secao
+      titulo="Chão"
+      descricao="A textura deitada no chão da área, recortada na forma dela: é o que mostra onde a área termina."
+      ligado={base !== undefined}
+      onLigar={(v) => onMudar(v ? { imagem: "" } : undefined)}
+    >
+      <ImagemDoAcervo
+        rotulo="Textura"
+        dica="Uma imagem que emenda nas quatro bordas: ela se repete pelo chão."
+        assetId={b.imagem || undefined}
+        onMudar={(id) => onMudar(com(com(b, "mipmaps", undefined), "imagem", id ?? ""))}
+      />
+      <Quadros
+        quadros={b.quadros}
+        onMudar={(q) => mudar("quadros", q as QuadrosDoEfeito | undefined)}
+        comFps
+      />
+      <Faixa
+        rotulo="Tamanho do ladrilho"
+        valor={b.escala ?? 1}
+        min={0.5}
+        max={4}
+        passo={0.25}
+        sufixo="×"
+        onMudar={(v) => mudar("escala", v === 1 ? undefined : v)}
+      />
+      <Faixa
+        rotulo="Escurecer o chão"
+        valor={b.escurece ?? 0}
+        min={0}
+        max={1}
+        passo={0.05}
+        porcento
+        onMudar={(v) => mudar("escurece", v > 0 ? v : undefined)}
+      />
+      <Faixa
+        rotulo="Opacidade"
+        valor={b.opacidade ?? 1}
+        min={0.05}
+        max={1}
+        passo={0.05}
+        porcento
+        onMudar={(v) => mudar("opacidade", v >= 1 ? undefined : v)}
+      />
+      <Interruptor
+        rotulo="Pintar na cor do efeito"
+        dica="A textura em tons de cinza ganha a cor do efeito: o mesmo chão vira brasa ou veneno."
+        valor={b.cores === "condicao"}
+        onMudar={(v) => mudar("cores", v ? "condicao" : undefined)}
+      />
+    </Secao>
+  );
+}
+
+/**
+ * Os ELEMENTOS de um efeito em área: o foco que a área repete, segmento a
+ * segmento -- a chama do fogo, a bolha do veneno, o cristal do gelo --, e como
+ * ela divide o chão. "Elementos", e não "Chama": a seção é de todo efeito em
+ * área, e o fogo é só o primeiro. Ver `AreaDoEfeito`.
+ */
+function SecaoDosElementos({
+  area,
+  onMudar,
+}: {
+  area: AreaDoEfeito;
+  onMudar: (area: AreaDoEfeito) => void;
+}) {
+  const foco = area.foco ?? { imagem: "" };
+  const mudarFoco = <K extends keyof NonNullable<AreaDoEfeito["foco"]>>(
+    chave: K,
+    valor: NonNullable<AreaDoEfeito["foco"]>[K] | undefined,
+  ) => onMudar({ ...area, foco: com(foco, chave, valor) });
+  const mudar = <K extends keyof AreaDoEfeito>(chave: K, valor: AreaDoEfeito[K] | undefined) =>
+    onMudar(com(area, chave, valor));
+
+  return (
+    <Secao
+      titulo="Elementos"
+      descricao="O que se levanta do chão e se repete pela área: a chama, a bolha, o cristal. Muitos pequenos, e não um esticado."
+      ligado={area.foco !== undefined}
+      onLigar={(v) => onMudar(v ? { ...area, foco: { imagem: "" } } : com(area, "foco", undefined))}
+    >
+      <ImagemDoAcervo
+        rotulo="Imagem"
+        dica="Um elemento só, estreito, com o pé macio: a área o repete."
+        assetId={foco.imagem || undefined}
+        onMudar={(id) =>
+          onMudar({ ...area, foco: com(com(foco, "mipmaps", undefined), "imagem", id ?? "") })
+        }
+      />
+      <Quadros
+        quadros={foco.quadros}
+        onMudar={(q) => mudarFoco("quadros", q as QuadrosDoEfeito | undefined)}
+        comFps
+      />
+      <Interruptor
+        rotulo="Pintar na cor do efeito"
+        valor={foco.cores === "condicao"}
+        onMudar={(v) => mudarFoco("cores", v ? "condicao" : undefined)}
+      />
+      <Faixa
+        rotulo="Tamanho"
+        valor={area.escala ?? 1.5}
+        min={1}
+        max={2.5}
+        passo={0.1}
+        sufixo="×"
+        onMudar={(v) => mudar("escala", v)}
+      />
+      <Faixa
+        rotulo="Divisões por casa"
+        valor={area.divisoes ?? 1}
+        min={1}
+        max={4}
+        passo={1}
+        onMudar={(v) => mudar("divisoes", v === 1 ? undefined : v)}
+      />
+      <Faixa
+        rotulo="Mínimo no menor lado"
+        valor={area.densidade ?? 0}
+        min={0}
+        max={8}
+        passo={1}
+        onMudar={(v) => mudar("densidade", v > 0 ? v : undefined)}
+      />
+    </Secao>
+  );
+}
+
 function SecaoDasParticulas({
   particulas,
   onMudar,
+  descricao = "O que a figura solta: a fagulha, a gota, a cinza.",
 }: {
   particulas: ParticulasDoEfeito | undefined;
   onMudar: (particulas: ParticulasDoEfeito | undefined) => void;
+  /** O texto da seção: a figura solta, ou a área solta. */
+  descricao?: string;
 }) {
   const p = particulas ?? { quantidade: 8 };
   const mudar = <K extends keyof ParticulasDoEfeito>(chave: K, valor: ParticulasDoEfeito[K] | undefined) =>
@@ -606,7 +773,7 @@ function SecaoDasParticulas({
   return (
     <Secao
       titulo="Partículas"
-      descricao="O que a figura solta: a fagulha, a gota, a cinza."
+      descricao={descricao}
       ligado={particulas !== undefined}
       onLigar={(v) => onMudar(v ? { quantidade: 8 } : undefined)}
     >
@@ -654,9 +821,12 @@ function SecaoDasParticulas({
 function SecaoDaLuz({
   luz,
   onMudar,
+  descricao = "A figura clareia em volta, e as paredes tapam. Num mapa sem escuro, é um véu da cor.",
 }: {
   luz: LuzDoEfeito | undefined;
   onMudar: (luz: LuzDoEfeito | undefined) => void;
+  /** O texto da seção: a figura clareia, ou a área clareia. */
+  descricao?: string;
 }) {
   const l = luz ?? { raio: 2.5 };
   const mudar = <K extends keyof LuzDoEfeito>(chave: K, valor: LuzDoEfeito[K] | undefined) =>
@@ -665,7 +835,7 @@ function SecaoDaLuz({
   return (
     <Secao
       titulo="Luz"
-      descricao="A figura clareia em volta, e as paredes tapam. Num mapa sem escuro, é um véu da cor."
+      descricao={descricao}
       ligado={luz !== undefined}
       onLigar={(v) => onMudar(v ? { raio: 2.5 } : undefined)}
     >

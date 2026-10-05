@@ -521,7 +521,7 @@ Pack com id torto ou repetido fica de fora. Os climas de antes (`aura`, `tingido
 mostra só o selo.
 
 A terceira fonte é a **campanha**, e nela o efeito é de uma CONDIÇÃO: no
-cardápio (Configuração da campanha → Condições), a engrenagem de cada linha
+cardápio (Configuração da campanha → Efeitos → Condições), a engrenagem de cada linha
 abre a tela da condição -- o selo (nome, cor, ícone, se a mesa vê) e o efeito
 dela, em seções que ligam e desligam (na figura, imagem em volta, partículas,
 luz), com prévia ao vivo na cor da condição. A condição que ainda usa o fogo
@@ -550,7 +550,8 @@ plugin não os aceita ainda):
 - `profundidade` — tons de cinza, por quadro: o claro passa na frente da
   figura, o escuro fica atrás; é o que faz o fogo envolver o corpo.
 
-- `particulas` (no efeito, ao lado do `externo`) — o que a figura solta: a
+- `particulas` (no efeito, ao lado do `externo`; esta o plugin TAMBÉM
+  declara, desde o efeito em área) — o que a figura solta: a
   fagulha que sobe do fogo. `quantidade` (até 24), `tamanho` e `variacao` (em
   fração da figura), `direcao` e `abertura` (graus, 270 sobe), `velocidade`
   (figuras por segundo), `vida` (segundos), `emissor` (a faixa da figura onde
@@ -630,6 +631,65 @@ Os efeitos viajam no mesmo canal declarativo dos estilos de medidor. Plugin
 desligado tira os efeitos da mesa, e a condição que apontava para um deles
 volta a ser só o selo, sem perder o id: religar o plugin traz o efeito de
 volta.
+
+## Efeito em área
+
+Um pedaço do chão com um efeito: o incêndio na sala, a névoa tóxica no
+corredor. O mestre desenha a área pela pílula (retângulo, círculo ou traço
+livre → "Efeito em área"), e ela nasce SEM efeito; o efeito se escolhe no
+gizmo dela, no botão "Efeito", entre os **efeitos em área da campanha**. Sem
+efeito, o Mestre vê o contorno e a mesa não vê nada; a área chega à mesa
+pelo olho do gizmo, como a forma.
+
+Os efeitos em área da campanha moram no mesmo `efeitos.json` dos efeitos das
+condições: um efeito da campanha que declara `area` é um efeito em área. Eles
+se editam em Configuração da campanha → Efeitos → Efeito em área -- nome,
+cor, "Partir de um efeito pronto" (os de fábrica e os dos plugins ligados) e
+as camadas, com prévia. A área guarda o id do efeito, e não uma cópia: editar
+o efeito muda todas as áreas que o usam, na mesa também. A cor da área é a do
+efeito (`area.cor`), a não ser que o mestre escolha uma só daquela área.
+
+A área é SEGMENTADA: as casas da grade (sem grade, as da grade padrão),
+divididas por `divisoes`, e mais na área pequena, pela `densidade`. Cada
+segmento é um ponto do efeito, e a área grande tem mais pontos -- nunca a
+mesma arte esticada. Três camadas, todas assadas numa folha só por área (uma
+camada animada na tela, tenha a área quatro pontos ou mil):
+
+- **`base`** -- o CHÃO, deitado e recortado na forma exata da área: é a única
+  camada que diz ao jogador onde a área termina. Uma textura que emenda nas
+  bordas, repetida em ladrilhos de `escala` segmentos (de `0.5` a `4`, padrão
+  `1`); `escurece` (de `0` a `1`) escurece o chão embaixo dela e a borda;
+  `opacidade`; e os campos de imagem (`imagem`, `quadros`, `mipmaps`, `cores`).
+- **`area.foco`** -- os ELEMENTOS que se levantam do chão e se repetem pela
+  área: a chama, a bolha, o cristal. Uma arte só, estreita, com o pé macio;
+  três por segmento, sorteados, com o pé dentro da forma. `area.escala` é o
+  tamanho dela em segmentos (de `1` a `2.5`, padrão `1.5`). Sem `foco`, a área
+  usa a imagem do `externo`.
+- **`particulas`** -- o que sobe da área, no laço da folha.
+
+E a **`luz`**, uma por área, com a FORMA dela: forte dentro, caindo para fora
+em `raio` casas. Os tokens não a tapam -- só as paredes.
+
+No 2.5D o chão fica deitado no piso, e os elementos ficam de pé, encarando a
+câmera como as peças, até doze por área e abaixo da altura de um token. No
+Mestre, a área só anima selecionada e parada; na mesa, sempre.
+
+```json
+{ "id": "nevoa", "titulo": "Névoa tóxica",
+  "area": { "cor": "#22c55e", "divisoes": 2, "densidade": 4, "escala": 1.4,
+            "foco": { "imagem": "fx/bolha.webp", "cores": "condicao",
+                      "quadros": { "colunas": 4, "total": 16, "fps": 12 } } },
+  "base": { "imagem": "fx/chao-toxico.webp", "cores": "condicao", "escala": 2,
+            "escurece": 0.3, "quadros": { "colunas": 4, "total": 16, "fps": 12 } },
+  "particulas": { "quantidade": 6, "direcao": 270, "velocidade": 0.4 } }
+```
+
+O Rust confere na importação: `area.cor` em `#rrggbb`, `divisoes` de 1 a 4,
+`densidade` de 0 a 16, `escala` nos limites acima, a grade cheia (o `total`
+múltiplo das `colunas`, `fps` de 1 a 60), os mipmaps pelo lado em número, e
+toda imagem raster e dentro da pasta -- as dos mipmaps e da rampa de cor
+também. O total de quadros da base deve dividir o dos elementos: é o laço do
+fogo que dita o da folha.
 
 ## A seção do plugin no celular, e o botão que chega ao Mestre
 
