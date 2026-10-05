@@ -15,7 +15,7 @@ import {
   type Tela,
 } from "@/lib/geometry/camera-orbital";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
-import type { EfeitosDoPersonagem } from "@/lib/condicao";
+import { efeitosDoObjeto, type EfeitosDoPersonagem } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -238,7 +238,7 @@ export function CenaDeEsguelha({
           espelhada: item.flipX,
           efeitos: item.personagemId
             ? efeitosPorPersonagem.get(item.personagemId)
-            : undefined,
+            : efeitosDoObjeto(item.condicoes),
         })),
     [efeitosPorPersonagem, scene.grupos, scene.items],
   );
@@ -307,7 +307,12 @@ export function CenaDeEsguelha({
         variante={variante}
       />
 
-      <InfoDeEsguelha itens={visiveis} fichas={fichas ?? []} camera={camera} />
+      <InfoDeEsguelha
+        itens={visiveis}
+        fichas={fichas ?? []}
+        objetos={Boolean(fichas) && Boolean(scene.infoDosTokens)}
+        camera={camera}
+      />
     </>
   );
 }

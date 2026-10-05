@@ -3,10 +3,15 @@ import { describe, expect, it } from "vitest";
 import type { Condicao } from "@/types/character";
 
 import {
+  ajustarCondicao,
+  alternarNaLista,
   condicoesVisiveis,
   efeitosDaCena,
   efeitosDaFigura,
+  efeitosDoObjeto,
   faseDaFigura,
+  MAX_NOME_CONDICAO,
+  reordenarLista,
   temCondicao,
 } from "./condicao";
 
@@ -121,5 +126,54 @@ describe("faseDaFigura", () => {
     expect(a).toBeGreaterThan(-2);
     expect(a).not.toBe(b);
     expect(faseDaFigura("goblin-1", 2)).toBe(faseDaFigura("goblin-1", 2));
+  });
+});
+
+describe("ajustarCondicao", () => {
+  it("é a conta do Rust: nome e ícone curtos e nunca vazios, efeito torto some", () => {
+    const ajustada = ajustarCondicao(
+      condicao({ nome: "   ", icone: "", efeito: "Fogo!" }),
+    );
+
+    expect(ajustada.nome).toBe("Condição");
+    expect(ajustada.icone).toBe("circulo");
+    expect(ajustada.efeito).toBeUndefined();
+    expect(ajustarCondicao(condicao({ nome: "a".repeat(40) })).nome).toHaveLength(MAX_NOME_CONDICAO);
+  });
+});
+
+describe("alternarNaLista", () => {
+  const id = () => "novo";
+
+  it("liga sem duplicar e devolve null quando nada muda", () => {
+    const lista = alternarNaLista([], condicao(), true, id)!;
+
+    expect(lista.map((c) => c.id)).toEqual(["novo"]);
+    expect(alternarNaLista(lista, condicao({ nome: "ENVENENADO" }), true, id)).toBeNull();
+    expect(alternarNaLista(lista, condicao({ nome: "Caído" }), false, id)).toBeNull();
+  });
+
+  it("a cópia nasce visível, mesmo de um modelo escondido", () => {
+    expect(alternarNaLista([], condicao({ escondido: true }), true, id)![0]!.escondido).toBe(false);
+  });
+});
+
+describe("reordenarLista", () => {
+  it("põe na ordem pedida e o esquecido vai para o fim", () => {
+    const lista = [condicao({ id: "a" }), condicao({ id: "b" }), condicao({ id: "c" })];
+
+    expect(reordenarLista(lista, ["c", "x", "a"]).map((c) => c.id)).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("efeitosDoObjeto", () => {
+  it("devolve o mesmo array para a mesma lista, e nada sem condição", () => {
+    // O `CanvasItemView` é `memo`: array novo a cada render redesenharia o barril.
+    const lista = [condicao()];
+
+    expect(efeitosDoObjeto(lista)).toBe(efeitosDoObjeto(lista));
+    expect(efeitosDoObjeto(lista)).toEqual([{ efeito: "tingido", cor: "#22c55e" }]);
+    expect(efeitosDoObjeto(undefined)).toBeUndefined();
+    expect(efeitosDoObjeto([])).toBeUndefined();
   });
 });

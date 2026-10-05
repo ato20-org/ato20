@@ -235,6 +235,20 @@ export type CanvasItem = {
    * desenho. Ver `CenaDeEsguelha`.
    */
   deitado?: boolean;
+  /**
+   * As condições de um OBJETO: o barril em chamas, a porta amaldiçoada, o baú
+   * que brilha. Ausente na imensa maioria dos itens.
+   *
+   * Só em item SEM personagem: o token leva as do personagem, que moram no
+   * índice e valem para a horda inteira de clones. O objeto não tem ficha, e a
+   * condição dele mora nele -- na cena, que é onde o barril existe. É o que
+   * dá a ela o Ctrl+Z de graça, e o que faz o barril copiado levar o fogo
+   * junto.
+   *
+   * A escondida não sai do Mestre: `itensParaMesa` a tira antes de publicar,
+   * como o item escondido. Ver `condicoesDoObjeto`.
+   */
+  condicoes?: Condicao[];
 };
 
 /**
