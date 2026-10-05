@@ -520,3 +520,20 @@ export async function flushPortraits(): Promise<void> {
 
   await savePortraits(tudo());
 }
+
+/**
+ * Fechar a janela não pode custar os últimos 400ms de trabalho.
+ *
+ * O mesmo guarda que o board já tinha (ver `use-scene-store`), e que faltava
+ * aqui: pôr um retrato no ar grava com 400ms de atraso, e o gesto de fechar cai
+ * dentro desse atraso -- mostrar um retrato e reiniciar o perdia, e a mesa
+ * reabria sem ele. `flushPortraits` até existia, mas só a troca de campanha o
+ * chamava; o encerramento passava reto.
+ */
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "hidden") return;
+
+    void flushPortraits();
+  });
+}

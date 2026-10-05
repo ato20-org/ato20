@@ -1,0 +1,79 @@
+{
+  "id": "envenenado",
+  "titulo": "Envenenado",
+  "dica": "A figura esverdeia, a névoa tóxica sobe dos pés e caveirinhas escapam dela.",
+  "figura": {
+    "tinta": 0.55,
+    "halo": true
+  },
+  "externo": {
+    "imagem": "nevoa-256.webp",
+    "mipmaps": {
+      "128": "nevoa-128.webp",
+      "256": "nevoa-256.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 24,
+      "fps": 8
+    },
+    "tamanho": 1.7,
+    "ancora": "base",
+    "cores": "condicao",
+    "lado": "atras"
+  },
+  "particulas": {
+    "quantidade": 5,
+    "imagem": "caveira.png",
+    "quadros": {
+      "colunas": 4,
+      "total": 4,
+      "fps": 6
+    },
+    "tamanho": 0.2,
+    "variacao": 0.35,
+    "direcao": 270,
+    "abertura": 50,
+    "velocidade": 0.32,
+    "vida": 2.6,
+    "emissor": {
+      "largura": 0.8,
+      "altura": 0.5,
+      "ancora": "centro"
+    }
+  },
+  "area": {
+    "cor": "#22c55e",
+    "divisoes": 1,
+    "escala": 1.3,
+    "foco": {
+      "imagem": "vapor-128.webp",
+      "mipmaps": {
+        "64": "vapor-64.webp",
+        "128": "vapor-128.webp"
+      },
+      "quadros": {
+        "colunas": 4,
+        "total": 16,
+        "fps": 8
+      },
+      "cores": "condicao"
+    },
+    "densidade": 3
+  },
+  "base": {
+    "imagem": "lodo-128.webp",
+    "mipmaps": {
+      "64": "lodo-64.webp",
+      "128": "lodo-128.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 16,
+      "fps": 8
+    },
+    "cores": "condicao",
+    "escala": 3,
+    "escurece": 0.35
+  }
+}

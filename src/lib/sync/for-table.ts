@@ -1,4 +1,4 @@
-import { itensVisiveis, temAnotacao, type Scene } from "@/types/scene";
+import { itensVisiveis, temAnotacao, type CanvasItem, type Grupo, type Scene } from "@/types/scene";
 
 /**
  * A cena como a mesa pode vê-la.
@@ -52,6 +52,9 @@ import { itensVisiveis, temAnotacao, type Scene } from "@/types/scene";
  * um item que a TV só deixasse de desenhar estaria no JSON para quem abrir o
  * inspetor. Vale no mapa e no quadro -- ver `itensVisiveis`.
  *
+ * A CONDIÇÃO ESCONDIDA de um objeto sai do item que fica: o baú amaldiçoado
+ * que o mestre ainda não revelou continua um baú. Ver `itensParaMesa`.
+ *
  * A regra para campo novo em `Scene` é uma pergunta: se um jogador ler isto,
  * estraga a surpresa? Se sim, ele entra na lista abaixo.
  */
@@ -64,7 +67,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   if (!temAnotacao(scene)) return quadroParaMesa(scene);
 
   // Antes de `grupos` sair: é pela pasta que um item some junto com ela.
-  const items = itensVisiveis(scene.items, scene.grupos);
+  const items = itensParaMesa(scene.items, scene.grupos);
 
   // Cena sem nada do mestre devolve a MESMA referência, e não uma cópia.
   //
@@ -87,6 +90,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
     !scene.grupos &&
     !scene.textos &&
     !scene.formas &&
+    !scene.areasDeEfeito &&
     !scene.ligacoes &&
     !scene.documentos
   )
@@ -119,6 +123,11 @@ export function sceneForTable(scene: Scene | null): Scene | null {
 
   paraMesa.formas = scene.formas?.filter((forma) => forma.naMesa);
   if (!paraMesa.formas?.length) delete paraMesa.formas;
+
+  // A área de efeito também nasce fechada, e é o olho do gizmo que a abre: o
+  // mestre prepara o incêndio antes de a mesa vê-lo começar.
+  paraMesa.areasDeEfeito = scene.areasDeEfeito?.filter((area) => area.naMesa);
+  if (!paraMesa.areasDeEfeito?.length) delete paraMesa.areasDeEfeito;
 
   // A seta continua sendo só do quadro: ela amarra postit a postit, e os dois
   // nunca chegam à mesa a partir de um mapa.
@@ -155,7 +164,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
 const quadrosParaMesa = new WeakMap<Scene, Scene>();
 
 function quadroParaMesa(scene: Scene): Scene {
-  const items = itensVisiveis(scene.items, scene.grupos);
+  const items = itensParaMesa(scene.items, scene.grupos);
 
   if (
     items === scene.items &&
@@ -183,4 +192,55 @@ function quadroParaMesa(scene: Scene): Scene {
   quadrosParaMesa.set(scene, paraMesa);
 
   return paraMesa;
+}
+
+/**
+ * Os itens que a mesa vê, e só com as condições que ela vê.
+ *
+ * Os itens escondidos saem inteiros (`itensVisiveis`); dos que ficam, sai a
+ * condição escondida -- o selo e o efeito dela juntos, pela razão do medidor
+ * escondido: a TV que não desenhasse a maldição ainda a teria no JSON.
+ *
+ * A MESMA lista quando nenhum item tem segredo, e o mesmo item limpo para o
+ * mesmo item: é a identidade que diz ao publicador que nada mudou. Ver o
+ * comentário de `sceneForTable`.
+ */
+export function itensParaMesa(
+  items: CanvasItem[],
+  grupos: Grupo[] | undefined,
+): CanvasItem[] {
+  const visiveis = itensVisiveis(items, grupos);
+  if (!visiveis.some(temCondicaoEscondida)) return visiveis;
+
+  // Pela lista também: sem item escondido, `itensVisiveis` devolve a lista da
+  // cena, e a cena com um segredo não pode virar uma cópia nova a cada render.
+  let paraMesa = listasLimpas.get(visiveis);
+  if (!paraMesa) {
+    paraMesa = visiveis.map(semCondicaoEscondida);
+    listasLimpas.set(visiveis, paraMesa);
+  }
+
+  return paraMesa;
+}
+
+const listasLimpas = new WeakMap<CanvasItem[], CanvasItem[]>();
+
+function temCondicaoEscondida(item: CanvasItem): boolean {
+  return Boolean(item.condicoes?.some((condicao) => condicao.escondido));
+}
+
+const limpos = new WeakMap<CanvasItem, CanvasItem>();
+
+function semCondicaoEscondida(item: CanvasItem): CanvasItem {
+  if (!temCondicaoEscondida(item)) return item;
+
+  let limpo = limpos.get(item);
+  if (!limpo) {
+    const condicoes = item.condicoes!.filter((condicao) => !condicao.escondido);
+    limpo = { ...item, condicoes };
+    if (condicoes.length === 0) delete limpo.condicoes;
+    limpos.set(item, limpo);
+  }
+
+  return limpo;
 }

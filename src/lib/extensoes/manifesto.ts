@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import type { FonteRetrato } from "@/lib/extensoes/fontes";
 import { call } from "@/lib/vault/bridge";
+import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 export {
   CANVAS_PADRAO,
@@ -34,7 +35,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 5;
+export const API_VERSAO = 6;
 
 /**
  * O que uma extensão diz de si.
@@ -92,7 +93,16 @@ export type Contribuicoes = {
   substitutos?: SubstitutoDeclarado[];
   estilosDeMedidor?: EstiloDeMedidorDeclarado[];
   paginas?: PaginaDeclarada[];
+  /** Ausente em lista lida por um Rust anterior à API 6. */
+  efeitos?: EfeitoDeclarado[];
 };
+
+/**
+ * Um efeito de condição, como o plugin escreve: o `id` é o dele, sem o prefixo.
+ * Na mesa ele vira `{plugin}/{id}` -- ver `useDeclarativoStore`. Espelho de
+ * `extensoes::Efeito`, que é quem valida.
+ */
+export type EfeitoDeclarado = DefinicaoDeEfeito;
 
 /**
  * Uma página do plugin, que o daemon serve na rede em `/plugin/{id}/{arquivo}`.

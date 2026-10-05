@@ -15,6 +15,7 @@ import {
   Bold,
   Drama,
   Eclipse,
+  Sparkles,
   Eye,
   EyeOff,
   FlipHorizontal,
@@ -28,6 +29,7 @@ import {
   PanelTopDashed,
   Trash2,
   Underline,
+  type LucideIcon,
 } from "lucide-react";
 
 import {
@@ -50,6 +52,7 @@ import {
 import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { itemBounds } from "@/lib/geometry/bounds";
+import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import {
@@ -257,6 +260,20 @@ type TransformHandlesProps = {
    */
   sombra?: SombraNoGizmo;
   /**
+   * Presente = mostra o botão das CONDIÇÕES, e este é o painel que ele abre:
+   * as do objeto, no item da cena; as do token, no personagem. A área de
+   * efeito usa o mesmo lugar para o efeito dela (ver `botaoDoPainel`).
+   *
+   * O conteúdo vem pronto de quem monta o gizmo: as condições gravam na cena
+   * pelo store do Mestre, e o gizmo não precisa saber disso.
+   */
+  condicoes?: ReactNode;
+  /**
+   * O botão do painel de baixo quando ele NÃO é o das condições: a área de
+   * efeito usa o mesmo lugar para escolher o efeito dela. Ausente = Condições.
+   */
+  botaoDoPainel?: { rotulo: string; icone: LucideIcon };
+  /**
    * Presente = mostra os botões de ênfase da letra, na mesma fileira do
    * espelhar e do excluir.
    *
@@ -328,6 +345,11 @@ type TransformHandlesProps = {
     cor?: string;
     fundo?: string;
     onChange: (patch: { cor?: string | null; fundo?: string | null }) => void;
+    /**
+     * Sem a fileira do fundo: a área de efeito tem UMA cor, a do fogo, e um
+     * fundo que não pinta nada seria um controle que não controla.
+     */
+    semFundo?: true;
     /**
      * Presente = um slider de opacidade embaixo de cada fileira, de 0 a 1.
      * Só a forma passa: é ela que tem borda e miolo para apagar em separado.
@@ -441,6 +463,8 @@ export function TransformHandles({
   onChange,
   opacidade,
   sombra,
+  condicoes,
+  botaoDoPainel,
   estilo,
   paleta,
   fonte,
@@ -480,6 +504,13 @@ export function TransformHandles({
   const [alturaAberta, setAlturaAberta] = useState(false);
   /** A sombra: outro painel, outro estado. Ver `paletaAberta`. */
   const [sombraAberta, setSombraAberta] = useState(false);
+  /**
+   * As condições do objeto, e o único par que pode abrir junto: sombra e
+   * condições são as duas da imagem, e as duas abrem embaixo da caixa. Abrir
+   * uma fecha a outra.
+   */
+  const [condicoesAbertas, setCondicoesAbertas] = useState(false);
+  const IconeDoPainel = botaoDoPainel?.icone ?? Sparkles;
 
   /**
    * A caixa e a fileira de botões: o que um painel que pula de lado não pode
@@ -502,6 +533,7 @@ export function TransformHandles({
   const naTelaPaleta = usePainelNaTela(embaixo);
   const naTelaPapel = usePainelNaTela(embaixo);
   const naTelaSombra = usePainelNaTela(embaixo);
+  const naTelaCondicoes = usePainelNaTela(embaixo);
 
   const cor = TOM[tom];
 
@@ -941,6 +973,7 @@ export function TransformHandles({
                       event.preventDefault();
                       event.stopPropagation();
                       setSombraAberta((aberta) => !aberta);
+                      setCondicoesAbertas(false);
                     }}
                   >
                     <Eclipse
@@ -953,6 +986,40 @@ export function TransformHandles({
                 }
               />
               <TooltipContent>Sombra</TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {condicoes ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={botaoDoPainel?.rotulo ?? "Condições"}
+                    aria-expanded={condicoesAbertas}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      cor.botao,
+                      condicoesAbertas && "ring-2 ring-white/70",
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setCondicoesAbertas((abertas) => !abertas);
+                      setSombraAberta(false);
+                    }}
+                  >
+                    <IconeDoPainel
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <TooltipContent>{botaoDoPainel?.rotulo ?? "Condições"}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -1398,13 +1465,15 @@ export function TransformHandles({
                 onChange={(traco) => paleta.opacidade?.onChange({ traco })}
               />
             ) : null}
-            <Fileira
-              titulo="Fundo"
-              escolhida={paleta.fundo}
-              padrao="∅"
-              translucido
-              onEscolher={(valor) => paleta.onChange({ fundo: valor })}
-            />
+            {paleta.semFundo ? null : (
+              <Fileira
+                titulo="Fundo"
+                escolhida={paleta.fundo}
+                padrao="∅"
+                translucido
+                onEscolher={(valor) => paleta.onChange({ fundo: valor })}
+              />
+            )}
             {/* Apagado sem fundo: não há miolo para apagar, e um slider que
                 mexe e não muda nada parece quebrado. */}
             {paleta.opacidade ? (
@@ -1495,6 +1564,34 @@ export function TransformHandles({
             }}
           >
             <PainelDaSombra sombra={sombra} />
+          </div>
+        </div>
+      ) : null}
+
+      {/* As condições, embaixo como a sombra e pelo mesmo motivo. */}
+      {condicoes && condicoesAbertas ? (
+        <div
+          className="pointer-events-auto absolute"
+          style={{
+            left: "50%",
+            top: "100%",
+            zIndex: 1,
+            transform: `translate(-50%, ${px(PAINEL_GAP_PX)}px) rotate(${-item.rotation}deg)`,
+            transformOrigin: "50% 0",
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div
+            ref={naTelaCondicoes}
+            className="bg-popover ring-foreground/10 rounded-lg px-2 py-2 shadow-md ring-1"
+            style={{
+              transform: `scale(${1 / scale})`,
+              transformOrigin: "50% 0",
+              // Camada própria, como a fileira. Ver o comentário lá.
+              willChange: "transform",
+            }}
+          >
+            {condicoes}
           </div>
         </div>
       ) : null}
@@ -1793,6 +1890,19 @@ function Fileira({
             onClick={() => onEscolher(opcao)}
           />
         ))}
+
+        <CorLivre
+          cor={escolhida}
+          paleta={CORES_LAPIS}
+          rotulo={`${titulo}: outra cor`}
+          className={(livre) =>
+            cn(
+              "size-5 rounded-full border transition-transform",
+              livre ? "border-foreground scale-110" : "border-white/20 hover:scale-105",
+            )
+          }
+          onCor={onEscolher}
+        />
       </div>
     </div>
   );

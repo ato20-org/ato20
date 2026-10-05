@@ -11,6 +11,7 @@
 //! unica que o usuario decide e que nao viaja junto com a pasta. Copiar a pasta
 //! para outra maquina tem de bastar para instalar.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -48,7 +49,12 @@ use crate::error::{AppError, AppResult};
 /// `rotulo`. Um ATO20 de API 4 recusaria o plugin por "falta `arquivo`", que
 /// manda o autor procurar o erro no lugar errado; pedindo 5, ele ouve
 /// "atualize o ATO20".
-pub const API_VERSAO: u32 = 5;
+///
+/// A 6 acrescentou os `efeitos` de condicao. Um ATO20 de API 5 ignoraria o
+/// campo e aceitaria o plugin, e as condicoes que apontam para os efeitos dele
+/// mostrariam so o selo sem aviso nenhum; pedindo 6, ele ouve "atualize o
+/// ATO20".
+pub const API_VERSAO: u32 = 6;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -186,6 +192,318 @@ pub struct Contribuicoes {
     /// Paginas que o daemon serve na rede. Ver `Pagina`.
     #[serde(default)]
     pub paginas: Vec<Pagina>,
+    /// Efeitos de condicao. Ver `Efeito`.
+    #[serde(default)]
+    pub efeitos: Vec<Efeito>,
+}
+
+/// Um efeito de condicao: o que a figura faz quando uma condicao aponta para
+/// `{extensao}/{id}`.
+///
+/// DECLARATIVO, como o estilo de medidor, e pela mesma razao: chega a TV e ao
+/// celular sem rodar codigo do plugin. E o que deixa existir o pack de efeitos
+/// so com `manifest.json`, como um pacote de texturas. O espelho em TypeScript
+/// e `DefinicaoDeEfeito`, em `types/efeito.ts`; os efeitos de fabrica sao
+/// escritos no mesmo formato.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Efeito {
+    pub id: String,
+    pub titulo: String,
+    /// Uma linha dizendo para que serve, embaixo do seletor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dica: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub figura: Option<FiguraDoEfeito>,
+    /// Uma imagem em volta da figura: o fogo, a fumaca, o circulo. Ver
+    /// `Externo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub externo: Option<Externo>,
+    /// Uma textura pintada DENTRO da figura: a rachadura, a escama. Ver
+    /// `Interno`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interno: Option<Interno>,
+    /// A luz que a figura emana: a tocha viva, a aura que clareia. Ver
+    /// `LuzDoEfeito`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub luz: Option<LuzDoEfeito>,
+    /// O que a figura solta: a fagulha, a gota. Passa como veio -- quem prende
+    /// cada numero e o TS, ao desenhar, como nos efeitos da campanha (ver
+    /// `vault::efeitos`); aqui so a imagem, se houver, e conferida. Antes deste
+    /// campo, a particula do plugin era descartada calada.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub particulas: Option<serde_json::Value>,
+    /// O efeito tambem serve a uma AREA do chao. Ver `AreaDoEfeito`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<AreaDoEfeito>,
+    /// O chao do efeito na area: a textura deitada. Ver `BaseDoEfeito`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<BaseDoEfeito>,
+}
+
+/// Uma grade de quadros: quantos por linha, quantos ao todo, e a velocidade.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Quadros {
+    pub colunas: u32,
+    pub total: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fps: Option<f64>,
+}
+
+/// Uma imagem animada do pack: a chama que a area repete, o chao dela. Os
+/// mesmos campos que o TS le -- ver `BaseDoEfeito` em `types/efeito.ts`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImagemAnimada {
+    pub imagem: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quadros: Option<Quadros>,
+    /// A mesma grade em outros tamanhos, pelo lado do QUADRO em pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mipmaps: Option<BTreeMap<String, String>>,
+    /// `condicao`, ou o caminho de uma rampa de cor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cores: Option<String>,
+}
+
+impl ImagemAnimada {
+    /// As imagens que ela usa: a principal, os mipmaps e a rampa.
+    fn imagens(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.imagem.as_str())
+            .chain(self.mipmaps.iter().flat_map(|mipmaps| mipmaps.values().map(String::as_str)))
+            .chain(self.cores.iter().map(String::as_str).filter(|cores| *cores != "condicao"))
+    }
+}
+
+/// O efeito numa AREA do chao: a cor de uma area nova, o FOCO que ela repete
+/// segmento a segmento, e como ela divide a casa da grade. Ver `AreaDoEfeito`
+/// em `types/efeito.ts`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AreaDoEfeito {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    /// O foco, em vezes o segmento.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escala: Option<f64>,
+    /// Segmentos por lado de casa.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub divisoes: Option<f64>,
+    /// O minimo de segmentos no menor lado da area.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub densidade: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foco: Option<ImagemAnimada>,
+}
+
+/// O chao de um efeito em area: a textura deitada, ladrilhada e recortada na
+/// forma. Ver `BaseDoEfeito` em `types/efeito.ts`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BaseDoEfeito {
+    #[serde(flatten)]
+    pub imagem: ImagemAnimada,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacidade: Option<f64>,
+    /// O ladrilho, em vezes o segmento.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escala: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escurece: Option<f64>,
+}
+
+/// A luz de um efeito. Entra na luz da cena como a lanterna do token, e vai
+/// com ele aonde ele for.
+///
+/// O `raio` e em VEZES o lado maior da figura, e nao em unidade de cena como a
+/// lanterna: o pack nao conhece a escala do mapa, e o dragao em chamas clareia
+/// mais que o rato em chamas.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LuzDoEfeito {
+    pub raio: f64,
+    /// Ausente = a cor da condicao.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    /// De 0 a 1. Ausente = inteira.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intensidade: Option<f64>,
+    /// `fogo`, `pulsando` ou `piscando`. Ausente = fixa. Ver `EFEITOS_DA_LUZ`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub efeito: Option<String>,
+}
+
+/// Como a luz de um efeito se mexe. Espelho de `EFEITOS_DA_LUZ`, em
+/// `types/scene.ts` -- os mesmos da luz cravada e da lanterna.
+pub const EFEITOS_DA_LUZ: &[&str] = &["fogo", "pulsando", "piscando"];
+
+/// Os limites do raio da luz de um efeito, em vezes a figura. Abaixo de meio
+/// a luz nao sai de baixo dela; acima de dez ela acende o mapa inteiro.
+pub const RAIO_DA_LUZ_MIN: f64 = 0.5;
+pub const RAIO_DA_LUZ_MAX: f64 = 10.0;
+
+impl Efeito {
+    /// As imagens que o efeito usa, relativas a pasta. Entram na lista do que
+    /// o daemon serve, como as do estilo de medidor -- ver `imagens_servidas`.
+    pub fn imagens(&self) -> Vec<&str> {
+        let mut imagens: Vec<&str> = Vec::new();
+        imagens.extend(self.externo.as_ref().map(|externo| externo.imagem.as_str()));
+        imagens.extend(self.interno.as_ref().map(|interno| interno.textura.as_str()));
+        imagens.extend(
+            self.particulas
+                .as_ref()
+                .and_then(|particulas| particulas.get("imagem"))
+                .and_then(serde_json::Value::as_str),
+        );
+        if let Some(foco) = self.area.as_ref().and_then(|area| area.foco.as_ref()) {
+            imagens.extend(foco.imagens());
+        }
+        if let Some(base) = &self.base {
+            imagens.extend(base.imagem.imagens());
+        }
+
+        imagens
+    }
+
+    /// Mexe em alguma coisa?
+    fn faz_algo(&self) -> bool {
+        self.figura.as_ref().is_some_and(FiguraDoEfeito::faz_algo)
+            || self.externo.is_some()
+            || self.interno.is_some()
+            || self.luz.is_some()
+            || self.particulas.is_some()
+            || self.area.as_ref().is_some_and(|area| area.foco.is_some())
+            || self.base.is_some()
+    }
+}
+
+/// Uma imagem em volta da figura, do tamanho dela vezes `tamanho`.
+///
+/// Esticada na caixa, como o token: a figura quadrada leva o fogo quadrado.
+/// `ancora` diz de onde ela cresce -- do centro (a aura), da base (a fogueira
+/// que sobe dos pes) ou do topo (a nuvem sobre a cabeca).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Externo {
+    pub imagem: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tamanho: Option<f64>,
+    /// `atras` (o de sempre) ou `frente`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lado: Option<String>,
+    /// `centro` (o de sempre), `base` ou `topo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ancora: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacidade: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub animacao: Option<Animacao>,
+}
+
+/// Uma textura pintada sobre a figura, so onde ha figura, uma vez -- vira
+/// parte da pele, como a tinta.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Interno {
+    pub textura: String,
+    /// Quanto ela cobre, de 0 a 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forca: Option<f64>,
+}
+
+/// Uma animacao DECLARADA: o "script" de um efeito e dado, e nao codigo,
+/// porque a TV e o celular nao rodam codigo de plugin. Sao quatro movimentos
+/// que o palco anima so com `transform` e `opacity`, os que o compositor faz
+/// sem refazer layout.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Animacao {
+    /// `pulsar`, `girar`, `flutuar` ou `piscar`. Ver `ANIMACOES`.
+    pub tipo: String,
+    /// Segundos por ciclo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub periodo: Option<f64>,
+    /// De 0 a 1: quanto o movimento se afasta do parado.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intensidade: Option<f64>,
+}
+
+/// Os movimentos que uma `Animacao` pode pedir.
+pub const ANIMACOES: &[&str] = &["pulsar", "girar", "flutuar", "piscar"];
+
+/// De onde o externo cresce.
+pub const ANCORAS: &[&str] = &["centro", "base", "topo"];
+
+/// De que lado da figura o externo fica.
+pub const LADOS: &[&str] = &["atras", "frente"];
+
+/// Os limites do `tamanho` do externo, em vezes a figura.
+///
+/// Dois e o teto pela regra do palco: o que sai da caixa de um plano infla a
+/// camada composta do WebKitGTK, e um fogo de cinco tokens em volta de um so
+/// seria isso. Mesmo dentro do teto, o externo encolhe perto da borda do mapa
+/// para nao sair dele -- ver `tamanhoNoPlano` no TS.
+pub const TAMANHO_DO_EXTERNO_MIN: f64 = 0.25;
+pub const TAMANHO_DO_EXTERNO_MAX: f64 = 2.0;
+
+/// Os limites do periodo de uma animacao, em segundos. Abaixo de um quinto de
+/// segundo e pisca-pisca; acima de trinta ninguem ve mexer.
+pub const PERIODO_MIN: f64 = 0.2;
+pub const PERIODO_MAX: f64 = 30.0;
+
+/// O que o efeito faz com a propria figura. Ver `FiguraDoEfeito` no TS, que
+/// diz o custo de cada um.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FiguraDoEfeito {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub halo: bool,
+    /// Quanto a cor da condicao cobre a figura, de 0 a 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tinta: Option<f64>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cinza: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub translucido: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tremor: bool,
+}
+
+impl FiguraDoEfeito {
+    /// Mexe em alguma coisa?
+    pub fn faz_algo(&self) -> bool {
+        self.halo || self.tinta.is_some() || self.cinza || self.translucido || self.tremor
+    }
+}
+
+/// O teto da dica de um efeito. Uma linha embaixo do seletor, e nao um texto.
+const MAX_DICA_DO_EFEITO: usize = 120;
+
+/// O prefixo dos efeitos que a CAMPANHA cria. Um plugin com este id
+/// disputaria os mesmos ids -- `campanha/brasa` seria dos dois.
+pub const PREFIXO_DA_CAMPANHA: &str = "campanha";
+
+impl Contribuicoes {
+    /// As imagens que o daemon serve na rede por causa do que foi declarado --
+    /// dos estilos de medidor e dos efeitos --, cada uma com quem a pediu, para
+    /// o erro dizer de quem e o arquivo que falta. Ver `serve::serve_plugin`.
+    pub fn imagens_servidas(&self) -> Vec<(String, &str)> {
+        let estilos = self.estilos_de_medidor.iter().flat_map(|estilo| {
+            estilo
+                .imagens()
+                .into_iter()
+                .map(move |imagem| (format!("o estilo {:?}", estilo.id), imagem))
+        });
+        let efeitos = self.efeitos.iter().flat_map(|efeito| {
+            efeito
+                .imagens()
+                .into_iter()
+                .map(move |imagem| (format!("o efeito {:?}", efeito.id), imagem))
+        });
+
+        estilos.chain(efeitos).collect()
+    }
 }
 
 /// Uma pagina do plugin, servida pelo daemon em `/plugin/{id}/{arquivo}`.
@@ -833,6 +1151,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             "paginas",
             c.paginas.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
+        (
+            "efeitos",
+            c.efeitos.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
     ];
 
     for (nome, itens) in grupos {
@@ -936,6 +1258,16 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
         validar_estilo(estilo)?;
     }
 
+    if !c.efeitos.is_empty() && manifesto.id == PREFIXO_DA_CAMPANHA {
+        return Err(AppError::ExtensaoInvalida(format!(
+            "uma extensao chamada {PREFIXO_DA_CAMPANHA:?} nao pode declarar efeitos: o nome e o dos efeitos da campanha"
+        )));
+    }
+
+    for efeito in &c.efeitos {
+        validar_efeito(efeito)?;
+    }
+
     for pagina in &c.paginas {
         if !caminho_relativo_seguro(&pagina.arquivo)
             || !pagina.arquivo.to_ascii_lowercase().ends_with(".html")
@@ -969,10 +1301,212 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
     Ok(())
 }
 
+/// Uma grade de quadros que faz sentido: inteira, cheia, com fps de 1 a 60.
+fn quadros_validos(quadros: &Quadros) -> bool {
+    quadros.colunas > 0
+        && quadros.total > 0
+        && quadros.total % quadros.colunas == 0
+        && quadros
+            .fps
+            .map_or(true, |fps| fps.is_finite() && (1.0..=60.0).contains(&fps))
+}
+
+/// A imagem animada: grade valida, mipmaps com o lado em numero. O caminho de
+/// cada imagem e conferido junto com as outras, em `Efeito::imagens`.
+fn imagem_animada_valida(imagem: &ImagemAnimada, campo: &str) -> Result<(), String> {
+    if imagem.quadros.as_ref().is_some_and(|quadros| !quadros_validos(quadros)) {
+        return Err(format!(
+            "tem `{campo}.quadros` torto: o total e multiplo das colunas, e o fps vai de 1 a 60"
+        ));
+    }
+    if let Some(mipmaps) = &imagem.mipmaps {
+        if mipmaps
+            .keys()
+            .any(|lado| lado.parse::<u32>().map_or(true, |lado| lado == 0))
+        {
+            return Err(format!("tem `{campo}.mipmaps` com um lado que nao e numero"));
+        }
+    }
+    Ok(())
+}
+
+/// O bloco `area` e o `base`, com numeros que fazem sentido. Os limites sao os
+/// mesmos que o TS prende ao desenhar -- ver `escalaDoFoco`, `divisoesDoEfeito`
+/// e `baseDoEfeito`.
+fn validar_area(area: Option<&AreaDoEfeito>, base: Option<&BaseDoEfeito>) -> Result<(), String> {
+    let entre = |valor: Option<f64>, min: f64, max: f64| {
+        valor.map_or(true, |v| v.is_finite() && (min..=max).contains(&v))
+    };
+
+    if let Some(area) = area {
+        if area.cor.as_deref().is_some_and(|cor| !cor_hex_valida(cor)) {
+            return Err("tem `area.cor` que nao e uma cor #rrggbb".into());
+        }
+        if !entre(area.escala, 1.0, 2.5) {
+            return Err("tem `area.escala` fora de 1 a 2,5".into());
+        }
+        if !entre(area.divisoes, 1.0, 4.0) {
+            return Err("tem `area.divisoes` fora de 1 a 4".into());
+        }
+        if !entre(area.densidade, 0.0, 16.0) {
+            return Err("tem `area.densidade` fora de 0 a 16".into());
+        }
+        if let Some(foco) = &area.foco {
+            imagem_animada_valida(foco, "area.foco")?;
+        }
+    }
+
+    if let Some(base) = base {
+        imagem_animada_valida(&base.imagem, "base")?;
+        if !entre(base.opacidade, 0.0, 1.0) || !entre(base.escurece, 0.0, 1.0) {
+            return Err("tem `base.opacidade` ou `base.escurece` fora de 0 a 1".into());
+        }
+        if !entre(base.escala, 0.5, 4.0) {
+            return Err("tem `base.escala` fora de 0,5 a 4".into());
+        }
+    }
+
+    Ok(())
+}
+
+/// Um efeito desenha alguma coisa, com numeros que fazem sentido?
+///
+/// Efeito que nao mexe em nada seria uma opcao no seletor que, escolhida, nao
+/// muda a figura -- e o mestre procuraria o defeito na mesa.
+fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
+    let invalido = |motivo: &str| {
+        Err(AppError::ExtensaoInvalida(format!(
+            "o efeito {:?} {motivo}",
+            efeito.id
+        )))
+    };
+
+    if efeito
+        .dica
+        .as_ref()
+        .is_some_and(|dica| dica.chars().count() > MAX_DICA_DO_EFEITO)
+    {
+        return invalido(&format!("tem dica maior que {MAX_DICA_DO_EFEITO} letras"));
+    }
+
+    if !efeito.faz_algo() {
+        return invalido(
+            "nao desenha nada: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco` ou `base`",
+        );
+    }
+
+    if let Some(particulas) = &efeito.particulas {
+        if !particulas.is_object() {
+            return invalido("tem `particulas` que nao e um objeto");
+        }
+    }
+
+    if let Err(motivo) = validar_area(efeito.area.as_ref(), efeito.base.as_ref()) {
+        return invalido(&motivo);
+    }
+
+    let fracao = |valor: Option<f64>| valor.map_or(true, |v| v.is_finite() && (0.0..=1.0).contains(&v));
+
+    if let Some(figura) = &efeito.figura {
+        if !fracao(figura.tinta) {
+            return invalido("tem `tinta` fora de 0 a 1");
+        }
+    }
+
+    for imagem in efeito.imagens() {
+        let raster = imagem
+            .rsplit_once('.')
+            .is_some_and(|(_, ext)| IMAGENS_DE_MEDIDOR.contains(&ext.to_ascii_lowercase().as_str()));
+        if !caminho_relativo_seguro(imagem) || !raster {
+            return invalido(&format!(
+                "aponta para {imagem:?}; tem de ser {} dentro da pasta",
+                IMAGENS_DE_MEDIDOR.join("/")
+            ));
+        }
+    }
+
+    if let Some(externo) = &efeito.externo {
+        if let Some(tamanho) = externo.tamanho {
+            if !tamanho.is_finite()
+                || !(TAMANHO_DO_EXTERNO_MIN..=TAMANHO_DO_EXTERNO_MAX).contains(&tamanho)
+            {
+                return invalido(&format!(
+                    "tem `externo.tamanho` fora de {TAMANHO_DO_EXTERNO_MIN} a {TAMANHO_DO_EXTERNO_MAX}"
+                ));
+            }
+        }
+        if !fracao(externo.opacidade) {
+            return invalido("tem `externo.opacidade` fora de 0 a 1");
+        }
+        for (campo, valor, aceitos) in [
+            ("lado", &externo.lado, LADOS),
+            ("ancora", &externo.ancora, ANCORAS),
+        ] {
+            if let Some(valor) = valor {
+                if !aceitos.contains(&valor.as_str()) {
+                    return invalido(&format!(
+                        "pede `externo.{campo}` {valor:?}; os valores sao {}",
+                        aceitos.join(", ")
+                    ));
+                }
+            }
+        }
+        if let Some(animacao) = &externo.animacao {
+            if !ANIMACOES.contains(&animacao.tipo.as_str()) {
+                return invalido(&format!(
+                    "pede a animacao {:?}; as animacoes sao {}",
+                    animacao.tipo,
+                    ANIMACOES.join(", ")
+                ));
+            }
+            if let Some(periodo) = animacao.periodo {
+                if !periodo.is_finite() || !(PERIODO_MIN..=PERIODO_MAX).contains(&periodo) {
+                    return invalido(&format!(
+                        "tem `periodo` fora de {PERIODO_MIN} a {PERIODO_MAX} segundos"
+                    ));
+                }
+            }
+            if !fracao(animacao.intensidade) {
+                return invalido("tem `intensidade` fora de 0 a 1");
+            }
+        }
+    }
+
+    if let Some(interno) = &efeito.interno {
+        if !fracao(interno.forca) {
+            return invalido("tem `interno.forca` fora de 0 a 1");
+        }
+    }
+
+    if let Some(luz) = &efeito.luz {
+        if !luz.raio.is_finite() || !(RAIO_DA_LUZ_MIN..=RAIO_DA_LUZ_MAX).contains(&luz.raio) {
+            return invalido(&format!(
+                "tem `luz.raio` fora de {RAIO_DA_LUZ_MIN} a {RAIO_DA_LUZ_MAX} vezes a figura"
+            ));
+        }
+        if !fracao(luz.intensidade) {
+            return invalido("tem `luz.intensidade` fora de 0 a 1");
+        }
+        if luz.cor.as_deref().is_some_and(|cor| !cor_hex_valida(cor)) {
+            return invalido("tem `luz.cor` que nao e uma cor `#rrggbb`");
+        }
+        if let Some(movimento) = &luz.efeito {
+            if !EFEITOS_DA_LUZ.contains(&movimento.as_str()) {
+                return invalido(&format!(
+                    "pede `luz.efeito` {movimento:?}; os efeitos sao {}",
+                    EFEITOS_DA_LUZ.join(", ")
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Um estilo de medidor desenha alguma coisa, e so com o que e da pasta?
 ///
 /// So a FORMA do que foi declarado: o arquivo existir e caber no teto e da
-/// importacao (`validar_arquivos_dos_estilos`). Aqui roda a cada leitura do
+/// importacao (`validar_imagens_declaradas`). Aqui roda a cada leitura do
 /// manifesto, e um arquivo apagado por fora nao pode tirar o plugin da lista
 /// -- e na lista que fica o botao de desinstalar.
 fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
@@ -1073,39 +1607,35 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
     Ok(())
 }
 
-/// As imagens dos estilos existem e cabem no teto?
+/// As imagens dos estilos e dos efeitos existem e cabem no teto?
 ///
 /// Na IMPORTACAO, e nao em `ler_manifesto`: e o momento em que o autor ainda
 /// esta olhando para a pasta, e o erro diz qual arquivo faltou. Depois disso
-/// uma imagem que some e so um medidor sem moldura -- o daemon responde 404 e
-/// a TV desenha o resto.
-fn validar_arquivos_dos_estilos(pasta: &Path, manifesto: &Manifesto) -> AppResult<()> {
-    for estilo in &manifesto.contribui.estilos_de_medidor {
-        for imagem in estilo.imagens() {
-            // `symlink_metadata`: a copia pula link simbolico, e uma imagem
-            // que fosse link passaria aqui e faltaria na pasta instalada.
-            let tamanho = std::fs::symlink_metadata(pasta.join(imagem))
-                .ok()
-                .filter(|meta| meta.is_file())
-                .map(|meta| meta.len());
+/// uma imagem que some e so um medidor sem moldura, ou um fogo que nao
+/// aparece -- o daemon responde 404 e a TV desenha o resto.
+fn validar_imagens_declaradas(pasta: &Path, manifesto: &Manifesto) -> AppResult<()> {
+    for (dono, imagem) in manifesto.contribui.imagens_servidas() {
+        // `symlink_metadata`: a copia pula link simbolico, e uma imagem que
+        // fosse link passaria aqui e faltaria na pasta instalada.
+        let tamanho = std::fs::symlink_metadata(pasta.join(imagem))
+            .ok()
+            .filter(|meta| meta.is_file())
+            .map(|meta| meta.len());
 
-            match tamanho {
-                None => {
-                    return Err(AppError::ExtensaoInvalida(format!(
-                        "o estilo {:?} aponta para {imagem:?}, que nao esta na pasta",
-                        estilo.id
-                    )));
-                }
-                Some(bytes) if bytes > IMAGEM_DE_MEDIDOR_MAX => {
-                    return Err(AppError::ExtensaoInvalida(format!(
-                        "a imagem {imagem:?} do estilo {:?} tem {} KB; o teto e {} KB",
-                        estilo.id,
-                        bytes / 1024,
-                        IMAGEM_DE_MEDIDOR_MAX / 1024
-                    )));
-                }
-                Some(_) => {}
+        match tamanho {
+            None => {
+                return Err(AppError::ExtensaoInvalida(format!(
+                    "{dono} aponta para {imagem:?}, que nao esta na pasta"
+                )));
             }
+            Some(bytes) if bytes > IMAGEM_DE_MEDIDOR_MAX => {
+                return Err(AppError::ExtensaoInvalida(format!(
+                    "a imagem {imagem:?} ({dono}) tem {} KB; o teto e {} KB",
+                    bytes / 1024,
+                    IMAGEM_DE_MEDIDOR_MAX / 1024
+                )));
+            }
+            Some(_) => {}
         }
     }
 
@@ -1381,7 +1911,7 @@ pub fn listar(dir: &Path) -> AppResult<Vec<Manifesto>> {
 /// versao nova.
 pub fn importar(dir: &Path, origem: &Path) -> AppResult<Manifesto> {
     let manifesto = ler_manifesto(origem)?;
-    validar_arquivos_dos_estilos(origem, &manifesto)?;
+    validar_imagens_declaradas(origem, &manifesto)?;
 
     let destino = dir.join(&manifesto.id);
 
@@ -1966,6 +2496,225 @@ mod tests {
                 "{corpo} devia ser recusado"
             );
         }
+    }
+
+    /// Um pack de efeitos: so o manifesto, sem `principal` nem arquivo.
+    fn com_efeitos(id: &str, efeitos: &str) -> String {
+        format!(
+            r#"{{"id":"{id}","nome":"Pack","versao":"1.0.0","apiVersao":6,"contribui":{{"efeitos":{efeitos}}}}}"#
+        )
+    }
+
+    #[test]
+    fn pack_de_efeitos_entra_so_com_o_manifesto() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r#"[{"id":"sangrando","titulo":"Sangrando","dica":"Escorre.","figura":{"tinta":0.6,"tremor":true}}]"#,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        assert_eq!(efeito.id, "sangrando");
+        assert_eq!(efeito.figura.as_ref().unwrap().tinta, Some(0.6));
+        assert!(efeito.figura.as_ref().unwrap().tremor);
+        assert!(!efeito.figura.as_ref().unwrap().halo);
+    }
+
+    #[test]
+    fn efeito_que_nao_desenha_ou_tem_numero_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+        let longa = "a".repeat(MAX_DICA_DO_EFEITO + 1);
+
+        for efeitos in [
+            r#"[{"id":"nada","titulo":"Nada"}]"#.to_string(),
+            r#"[{"id":"nada","titulo":"Nada","figura":{}}]"#.to_string(),
+            r#"[{"id":"forte","titulo":"Forte","figura":{"tinta":1.5}}]"#.to_string(),
+            r#"[{"id":"fraco","titulo":"Fraco","figura":{"tinta":-0.1}}]"#.to_string(),
+            r#"[{"id":"Sangue","titulo":"Sangue","figura":{"halo":true}}]"#.to_string(),
+            format!(r#"[{{"id":"falante","titulo":"Falante","dica":"{longa}","figura":{{"halo":true}}}}]"#),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_efeitos("ordem", &efeitos)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{efeitos} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn efeito_com_externo_interno_e_animacao_entra() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r#"[{"id":"em-chamas","titulo":"Em chamas",
+                     "externo":{"imagem":"fx/fogo.webp","tamanho":1.6,"lado":"frente","ancora":"base",
+                                "opacidade":0.9,"animacao":{"tipo":"flutuar","periodo":1.2,"intensidade":0.5}},
+                     "interno":{"textura":"fx/brasa.png","forca":0.4}}]"#,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        assert_eq!(efeito.imagens(), vec!["fx/fogo.webp", "fx/brasa.png"]);
+        assert_eq!(
+            m.contribui
+                .imagens_servidas()
+                .into_iter()
+                .map(|(_, imagem)| imagem)
+                .collect::<Vec<_>>(),
+            vec!["fx/fogo.webp", "fx/brasa.png"]
+        );
+    }
+
+    #[test]
+    fn efeito_em_area_entra_com_o_chao_os_elementos_e_as_particulas() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"nevoa","titulo":"Névoa",
+                     "area":{"cor":"#22c55e","escala":1.4,"divisoes":2,"densidade":4,
+                             "foco":{"imagem":"fx/bolha.webp","quadros":{"colunas":4,"total":16,"fps":12},
+                                     "mipmaps":{"64":"fx/bolha-64.webp"},"cores":"condicao"}},
+                     "base":{"imagem":"fx/chao.webp","escala":2,"escurece":0.4,"cores":"fx/rampa.png"},
+                     "particulas":{"quantidade":8,"imagem":"fx/gota.png"}}]"##,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        assert_eq!(
+            efeito.imagens(),
+            vec![
+                "fx/gota.png",
+                "fx/bolha.webp",
+                "fx/bolha-64.webp",
+                "fx/chao.webp",
+                "fx/rampa.png"
+            ]
+        );
+
+        // O que vai para o TS: os blocos inteiros, no formato que ele lê -- a
+        // base com a imagem no mesmo nível dos números dela.
+        let json = serde_json::to_value(efeito).unwrap();
+        assert_eq!(json["area"]["foco"]["quadros"]["total"], 16);
+        assert_eq!(json["base"]["imagem"], "fx/chao.webp");
+        assert_eq!(json["base"]["escurece"], 0.4);
+        assert_eq!(json["particulas"]["quantidade"], 8);
+    }
+
+    #[test]
+    fn efeito_em_area_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        for efeito in [
+            r##""area":{"cor":"verde","foco":{"imagem":"b.png"}}"##,
+            r##""area":{"divisoes":9,"foco":{"imagem":"b.png"}}"##,
+            r##""area":{"escala":5,"foco":{"imagem":"b.png"}}"##,
+            r##""area":{"foco":{"imagem":"b.svg"}}"##,
+            r##""area":{"foco":{"imagem":"b.png","quadros":{"colunas":4,"total":6}}}"##,
+            r##""area":{"foco":{"imagem":"b.png","quadros":{"colunas":4,"total":8,"fps":200}}}"##,
+            r##""area":{"foco":{"imagem":"b.png","mipmaps":{"grande":"b2.png"}}}"##,
+            r##""base":{"imagem":"../fora.png"}"##,
+            r##""base":{"imagem":"c.png","escala":10}"##,
+            r##""base":{"imagem":"c.png","escurece":2}"##,
+            r##""particulas":[1,2]"##,
+            r##""particulas":{"imagem":"/abs.png"}"##,
+        ] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X",{efeito}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{efeito}");
+        }
+    }
+
+    #[test]
+    fn externo_e_interno_tortos_sao_recusados() {
+        let base = tempfile::tempdir().unwrap();
+
+        for efeito in [
+            r#"{"imagem":"../fora.png"}"#,
+            r#"{"imagem":"fogo.svg"}"#,
+            r#"{"imagem":"fogo.png","tamanho":5}"#,
+            r#"{"imagem":"fogo.png","tamanho":0.1}"#,
+            r#"{"imagem":"fogo.png","lado":"dentro"}"#,
+            r#"{"imagem":"fogo.png","ancora":"meio"}"#,
+            r#"{"imagem":"fogo.png","opacidade":2}"#,
+            r#"{"imagem":"fogo.png","animacao":{"tipo":"explodir"}}"#,
+            r#"{"imagem":"fogo.png","animacao":{"tipo":"girar","periodo":0.01}}"#,
+            r#"{"imagem":"fogo.png","animacao":{"tipo":"girar","intensidade":3}}"#,
+        ] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X","externo":{efeito}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{efeito}");
+        }
+
+        for interno in [r#"{"textura":"/abs.png"}"#, r#"{"textura":"t.png","forca":1.2}"#] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X","interno":{interno}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{interno}");
+        }
+    }
+
+    #[test]
+    fn importar_cobra_a_imagem_do_efeito() {
+        let base = tempfile::tempdir().unwrap();
+        let destino = base.path().join("instaladas");
+        let origem = base.path().join("pack");
+        escrever(
+            &origem,
+            MANIFESTO,
+            &com_efeitos(
+                "ordem",
+                r#"[{"id":"fogo","titulo":"Fogo","externo":{"imagem":"fogo.png"}}]"#,
+            ),
+        );
+
+        // Sem o arquivo, a importacao diz qual faltou.
+        assert!(importar(&destino, &origem).is_err());
+
+        std::fs::write(origem.join("fogo.png"), b"png").unwrap();
+        assert!(importar(&destino, &origem).is_ok());
+    }
+
+    #[test]
+    fn efeito_so_de_luz_entra_e_luz_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"tocha","titulo":"Tocha","luz":{"raio":3,"cor":"#ffaa33","intensidade":0.8,"efeito":"fogo"}}]"##,
+            ),
+        )
+        .unwrap();
+        assert_eq!(m.contribui.efeitos[0].luz.as_ref().unwrap().raio, 3.0);
+
+        for luz in [
+            r##"{"raio":0.1}"##,
+            r##"{"raio":40}"##,
+            r##"{"raio":2,"intensidade":1.5}"##,
+            r##"{"raio":2,"cor":"laranja"}"##,
+            r##"{"raio":2,"efeito":"explodindo"}"##,
+        ] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X","luz":{luz}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{luz}");
+        }
+    }
+
+    #[test]
+    fn plugin_chamado_campanha_nao_declara_efeito() {
+        // `campanha/brasa` seria dele e da campanha ao mesmo tempo.
+        let base = tempfile::tempdir().unwrap();
+        let efeitos = r#"[{"id":"brasa","titulo":"Brasa","figura":{"halo":true}}]"#;
+
+        assert!(ler(base.path(), &com_efeitos(PREFIXO_DA_CAMPANHA, efeitos)).is_err());
+        assert!(ler(base.path(), &com_efeitos("ordem", efeitos)).is_ok());
     }
 
     /// Um plugin que so desenha medidor: sem `principal`, sem SVG.

@@ -219,14 +219,21 @@ pub struct Condicao {
     /// nao pode exigir uma versao nova do Rust. Nome desconhecido vira o icone
     /// de sempre na tela -- ver `iconeDaCondicao`.
     pub icone: String,
-    /// O que a condicao faz com a figura no mapa e no retrato. Ausente = so o
-    /// selo.
+    /// O que a condicao faz com a figura no mapa e no retrato: o ID de um
+    /// efeito do catalogo. Ausente = so o selo.
+    ///
+    /// String e nao enum, pela razao do `icone`: o catalogo cresce -- a
+    /// fabrica, os plugins e a propria campanha acrescentam efeitos -- e
+    /// crescer nao pode exigir uma versao nova do Rust. Os cinco da fabrica de
+    /// antes (`aura`, `tingido`...) continuam sendo ids validos, entao a
+    /// campanha gravada antes do catalogo abre igual. Id que a tela nao
+    /// conhece desenha so o selo. Ver `efeito_valido`.
     #[serde(
         default,
         deserialize_with = "efeito_tolerante",
         skip_serializing_if = "Option::is_none"
     )]
-    pub efeito: Option<EfeitoNaFigura>,
+    pub efeito: Option<String>,
     /// A mesa nao ve -- nem o selo, nem o efeito.
     ///
     /// O mesmo caminho do medidor escondido: filtrado no daemon e no Mestre
@@ -235,39 +242,35 @@ pub struct Condicao {
     pub escondido: bool,
 }
 
-/// O que uma condicao faz com a figura.
+/// Le o efeito, e devolve `None` para o que nao e um id.
 ///
-/// Cinco climas, e nao uma regua de matiz e opacidade: o mestre escolhe
-/// "tingido" na cor do veneno, e nao "hue 120 a 40%". A conta de cada um mora
-/// na tela, que e quem desenha.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum EfeitoNaFigura {
-    /// Um halo na cor da condicao, respirando atras da figura.
-    Aura,
-    /// A figura ganha a cor por cima, so onde ha figura.
-    Tingido,
-    /// Meio transparente, tremulando. Invisivel, fantasma.
-    Translucido,
-    /// Treme no lugar. Medo, atordoado.
-    Tremendo,
-    /// Cinza e escura. Morto, inconsciente.
-    Apagado,
-}
-
-/// Le o efeito, e devolve `None` para o que nao conhece.
-///
-/// Ao contrario do `Estilo`, que derruba a leitura: a lista de efeitos e das
-/// que crescem, e um efeito de uma versao futura faria a campanha inteira
-/// deixar de abrir numa versao anterior -- o `personagens.json` e um arquivo
-/// so. Perder o efeito e cair no selo; perder o indice e perder a mesa.
-fn efeito_tolerante<'de, D>(de: D) -> Result<Option<EfeitoNaFigura>, D::Error>
+/// Ao contrario do `Estilo`, que derruba a leitura: o `personagens.json` e um
+/// arquivo so, e um efeito torto -- editado a mao, ou de uma versao com outra
+/// forma de id -- faria a campanha inteira deixar de abrir. Perder o efeito e
+/// cair no selo; perder o indice e perder a mesa.
+fn efeito_tolerante<'de, D>(de: D) -> Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let cru = Option::<serde_json::Value>::deserialize(de)?;
 
-    Ok(cru.and_then(|valor| serde_json::from_value(valor).ok()))
+    Ok(cru.and_then(|valor| efeito_em_forma(valor.as_str()?)))
+}
+
+/// O id de um efeito tem a forma de um slug -- `aura`, da fabrica -- ou de
+/// dois -- `{plugin}/{efeito}`, `campanha/{efeito}`?
+///
+/// A mesma regra da chave de estilo de medidor, e pela mesma razao: o id vira
+/// indice num catalogo que a TV recebe pela rede.
+pub(crate) fn efeito_valido(id: &str) -> bool {
+    crate::extensoes::id_valido(id) || estilo_extensao_valido(id)
+}
+
+/// O efeito sem espaco nas pontas, ou `None` se ele nao tem forma de id.
+fn efeito_em_forma(id: &str) -> Option<String> {
+    let id = id.trim();
+
+    efeito_valido(id).then(|| id.to_string())
 }
 
 /// O id da aparencia que todo personagem tem.
@@ -1127,9 +1130,11 @@ fn sem_condicao(id: &str, condicao_id: &str) -> AppError {
 }
 
 /// Poe a condicao em forma: nome curto e nunca vazio, icone curto e nunca
-/// vazio. A cor e o efeito passam como vieram -- a cor pela razao do medidor,
-/// e o efeito porque o tipo ja so aceita os cinco.
+/// vazio, e efeito sem forma de id vira so o selo. A cor passa como veio, pela
+/// razao do medidor.
 pub fn ajustar_condicao(condicao: &mut Condicao) {
+    condicao.efeito = condicao.efeito.as_deref().and_then(efeito_em_forma);
+
     condicao.nome = texto_curto(&condicao.nome, MAX_NOME_CONDICAO);
     if condicao.nome.is_empty() {
         condicao.nome = "Condição".to_string();
@@ -1153,7 +1158,7 @@ pub fn criar_condicao(
     nome: &str,
     cor: &str,
     icone: &str,
-    efeito: Option<EfeitoNaFigura>,
+    efeito: Option<String>,
 ) -> AppResult<Condicao> {
     let mut personagens = load(vault)?;
     let alvo = indice(&personagens, id)?;
@@ -1197,20 +1202,20 @@ pub struct PatchCondicao {
     #[serde(default)]
     pub icone: Option<String>,
     #[serde(default, deserialize_with = "efeito_presente")]
-    pub efeito: Option<Option<EfeitoNaFigura>>,
+    pub efeito: Option<Option<String>>,
     #[serde(default)]
     pub escondido: Option<bool>,
 }
 
 /// Distingue "campo ausente" de "campo com `null`". Ver `inventory::presente`.
 ///
-/// Estrito, ao contrario do `efeito_tolerante`: isto e um PEDIDO da tela, e
-/// um efeito que ela nao sabe nomear e erro dela, nao dado antigo a preservar.
-fn efeito_presente<'de, D>(de: D) -> Result<Option<Option<EfeitoNaFigura>>, D::Error>
+/// A forma do id quem confere e `ajustar_condicao`, no fim do `aplicar`: um id
+/// torto vira so o selo, como no disco.
+fn efeito_presente<'de, D>(de: D) -> Result<Option<Option<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    Option::<EfeitoNaFigura>::deserialize(de).map(Some)
+    Option::<String>::deserialize(de).map(Some)
 }
 
 impl PatchCondicao {
@@ -1352,6 +1357,36 @@ pub fn alternar_condicao(
             personagem
                 .condicoes
                 .retain(|c| chave_do_nome(&c.nome) != chave);
+            mudaram += 1;
+        }
+    }
+
+    if mudaram > 0 {
+        save(vault, &personagens)?;
+    }
+
+    Ok(mudaram)
+}
+
+/// Aponta TODA condicao com este nome, em todos os personagens, para o efeito.
+///
+/// E o "muda junto" da condicao com efeito proprio: quando o mestre configura
+/// o efeito de "Em chamas" no cardapio, o goblin que ja esta em chamas passa a
+/// desenhar o efeito novo. So o efeito -- nome, cor e icone continuam sendo a
+/// copia da ficha, como sempre. Pelo NOME, a mesma chave de
+/// `alternar_condicao`. Grava uma vez so, e devolve quantas condicoes mudaram.
+pub fn apontar_efeito_por_nome(vault: &Vault, nome: &str, efeito: &str) -> AppResult<usize> {
+    let mut personagens = load(vault)?;
+    let chave = chave_do_nome(nome);
+    let mut mudaram = 0;
+
+    for condicao in personagens
+        .iter_mut()
+        .flat_map(|personagem| personagem.condicoes.iter_mut())
+        .filter(|condicao| chave_do_nome(&condicao.nome) == chave)
+    {
+        if condicao.efeito.as_deref() != Some(efeito) {
+            condicao.efeito = Some(efeito.to_string());
             mudaram += 1;
         }
     }
@@ -2306,7 +2341,7 @@ mod tests {
             nome: "Envenenado".into(),
             cor: "#22c55e".into(),
             icone: "frasco".into(),
-            efeito: Some(EfeitoNaFigura::Tingido),
+            efeito: Some("tingido".into()),
             escondido: false,
         }
     }
@@ -2322,12 +2357,12 @@ mod tests {
             "Envenenado",
             "#22c55e",
             "frasco",
-            Some(EfeitoNaFigura::Tingido),
+            Some("tingido".into()),
         )
         .unwrap();
 
         assert_eq!(c.nome, "Envenenado");
-        assert_eq!(c.efeito, Some(EfeitoNaFigura::Tingido));
+        assert_eq!(c.efeito.as_deref(), Some("tingido"));
         assert!(!c.escondido);
         assert_eq!(load(&vault).unwrap()[0].condicoes.len(), 1);
     }
@@ -2368,14 +2403,14 @@ mod tests {
             "Envenenado",
             "#22c55e",
             "frasco",
-            Some(EfeitoNaFigura::Tingido),
+            Some("tingido".into()),
         )
         .unwrap();
 
         let so_nome: PatchCondicao = serde_json::from_str(r#"{"nome":"Veneno"}"#).unwrap();
         let renomeada = editar_condicao(&vault, &p.id, &c.id, so_nome).unwrap();
         assert_eq!(renomeada.nome, "Veneno");
-        assert_eq!(renomeada.efeito, Some(EfeitoNaFigura::Tingido));
+        assert_eq!(renomeada.efeito.as_deref(), Some("tingido"));
 
         let sem_efeito: PatchCondicao = serde_json::from_str(r#"{"efeito":null}"#).unwrap();
         let limpa = editar_condicao(&vault, &p.id, &c.id, sem_efeito).unwrap();
@@ -2383,22 +2418,77 @@ mod tests {
     }
 
     #[test]
-    fn efeito_desconhecido_no_disco_cai_no_selo_e_nao_derruba_o_indice() {
-        // O caso de uma campanha gravada por uma versao futura, com um efeito
-        // que esta versao nao conhece. O indice e um arquivo so: falhar aqui
-        // seria perder a mesa inteira por um halo.
+    fn efeito_que_a_versao_nao_conhece_fica_gravado() {
+        // O catalogo cresce: um efeito de plugin, ou de uma versao futura, e um
+        // id que esta versao nao desenha -- e nao um id a apagar. Quem decide
+        // que vira so o selo e a tela.
         let (_tmp, vault) = vault();
         let p = create(&vault, "Edgar").unwrap();
         criar_condicao(&vault, &p.id, "Brilhando", "#f59e0b", "estrela", None).unwrap();
 
         let cru = std::fs::read_to_string(index_path(&vault)).unwrap();
         let mut json: serde_json::Value = serde_json::from_str(&cru).unwrap();
-        json[0]["condicoes"][0]["efeito"] = serde_json::json!("cintilando");
+        json[0]["condicoes"][0]["efeito"] = serde_json::json!("ordem-paranormal/sangue");
         std::fs::write(index_path(&vault), json.to_string()).unwrap();
 
         let lido = &load(&vault).unwrap()[0];
-        assert_eq!(lido.condicoes.len(), 1);
-        assert_eq!(lido.condicoes[0].efeito, None);
+        assert_eq!(lido.condicoes[0].efeito.as_deref(), Some("ordem-paranormal/sangue"));
+    }
+
+    #[test]
+    fn efeito_torto_no_disco_cai_no_selo_e_nao_derruba_o_indice() {
+        // O indice e um arquivo so: falhar aqui seria perder a mesa inteira
+        // por um halo editado a mao.
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+        criar_condicao(&vault, &p.id, "Brilhando", "#f59e0b", "estrela", None).unwrap();
+
+        for torto in [
+            serde_json::json!(7),
+            serde_json::json!({ "id": "aura" }),
+            serde_json::json!("Aura Forte"),
+            serde_json::json!("../aura"),
+            serde_json::json!("a/b/c"),
+        ] {
+            let cru = std::fs::read_to_string(index_path(&vault)).unwrap();
+            let mut json: serde_json::Value = serde_json::from_str(&cru).unwrap();
+            json[0]["condicoes"][0]["efeito"] = torto.clone();
+            std::fs::write(index_path(&vault), json.to_string()).unwrap();
+
+            let lido = &load(&vault).unwrap()[0];
+            assert_eq!(lido.condicoes.len(), 1, "{torto}");
+            assert_eq!(lido.condicoes[0].efeito, None, "{torto}");
+        }
+    }
+
+    #[test]
+    fn efeito_tem_forma_de_um_ou_dois_slugs() {
+        assert!(efeito_valido("aura"));
+        assert!(efeito_valido("em-chamas"));
+        assert!(efeito_valido("ordem-paranormal/sangue"));
+        assert!(efeito_valido("campanha/brasa-2"));
+
+        assert!(!efeito_valido(""));
+        assert!(!efeito_valido("Aura"));
+        assert!(!efeito_valido("/aura"));
+        assert!(!efeito_valido("plugin/"));
+        assert!(!efeito_valido("a/b/c"));
+    }
+
+    #[test]
+    fn patch_com_efeito_torto_vira_so_o_selo() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+        let c = criar_condicao(&vault, &p.id, "Envenenado", "#22c55e", "frasco", None).unwrap();
+
+        let torto: PatchCondicao = serde_json::from_str(r#"{"efeito":"  Fogo!  "}"#).unwrap();
+        assert_eq!(editar_condicao(&vault, &p.id, &c.id, torto).unwrap().efeito, None);
+
+        let certo: PatchCondicao = serde_json::from_str(r#"{"efeito":" em-chamas "}"#).unwrap();
+        assert_eq!(
+            editar_condicao(&vault, &p.id, &c.id, certo).unwrap().efeito.as_deref(),
+            Some("em-chamas"),
+        );
     }
 
     #[test]
@@ -2460,7 +2550,7 @@ mod tests {
             "Amaldiçoado",
             "#a855f7",
             "caveira",
-            Some(EfeitoNaFigura::Aura),
+            Some("aura".into()),
         )
         .unwrap();
         editar_condicao(

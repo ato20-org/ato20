@@ -50,6 +50,11 @@ type CanvasItemViewProps = {
    * o mesmo array, e é o que mantém o `memo` valendo -- ver `SceneLayer`.
    */
   efeitos?: ReadonlyArray<EfeitoPedido>;
+  /**
+   * Os efeitos pausados no quadro em que estão: o Mestre só anima o de quem
+   * está selecionado. Ausente = andando, como na mesa. Ver `animarSo`.
+   */
+  efeitosParados?: boolean;
   onPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
 };
 
@@ -66,6 +71,7 @@ export const CanvasItemView = memo(function CanvasItemView({
   variante,
   contorno,
   efeitos,
+  efeitosParados,
   onPointerDown,
 }: CanvasItemViewProps) {
   const url = useAssetUrl(item.assetId, variante);
@@ -80,6 +86,7 @@ export const CanvasItemView = memo(function CanvasItemView({
   return (
     <div
       data-item-id={item.id}
+      data-efeito-parado={efeitosParados ? "" : undefined}
       className={cn(
         // Posicionado no canto e movido por `transform`: ver o `style`.
         "absolute top-0 left-0",
@@ -121,6 +128,7 @@ export const CanvasItemView = memo(function CanvasItemView({
           url={url}
           semente={item.id}
           espelho={espelho}
+          alcance={item}
         >
           {(fonte) => (
             // next/image não serve aqui: a fonte é uma blob URL do IndexedDB,

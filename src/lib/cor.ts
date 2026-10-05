@@ -28,6 +28,23 @@ export function normalizarHex(valor: string): string | null {
   return /^[0-9a-f]{6}$/.test(limpo) ? `#${limpo}` : null;
 }
 
+/** A cor do vazio quando ninguém escolheu: o breu. Ver `Scene.corDoVazio`. */
+export const COR_DO_VAZIO_PADRAO = "#000000";
+
+/**
+ * A cor do vazio -- o que está FORA do mapa --, ou o breu para o que não é cor.
+ * Ver `Scene.corDoVazio`.
+ *
+ * O valor chega pelo disco e pelo canal, e um `backgroundColor` inválido o
+ * navegador ignora em silêncio: o palco voltaria ao preto do tema, ou pior,
+ * deixaria ver o que estivesse atrás dele.
+ */
+export function corDoVazioDe(valor: unknown): string {
+  return (
+    (typeof valor === "string" && normalizarHex(valor)) || COR_DO_VAZIO_PADRAO
+  );
+}
+
 export function hexParaHsv(hex: string): Hsv | null {
   const normal = normalizarHex(hex);
   if (!normal) return null;

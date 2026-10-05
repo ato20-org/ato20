@@ -119,7 +119,7 @@ export type AssetFolder = {
 };
 
 /** O dono de um arquivo do acervo, quando ele tem um. */
-export type EscopoAsset = "cena" | "personagem";
+export type EscopoAsset = "cena" | "personagem" | "efeito";
 
 /** Uma imagem posicionada sobre o fundo da cena. */
 export type CanvasItem = {
@@ -235,6 +235,20 @@ export type CanvasItem = {
    * desenho. Ver `CenaDeEsguelha`.
    */
   deitado?: boolean;
+  /**
+   * As condições de um OBJETO: o barril em chamas, a porta amaldiçoada, o baú
+   * que brilha. Ausente na imensa maioria dos itens.
+   *
+   * Só em item SEM personagem: o token leva as do personagem, que moram no
+   * índice e valem para a horda inteira de clones. O objeto não tem ficha, e a
+   * condição dele mora nele -- na cena, que é onde o barril existe. É o que
+   * dá a ela o Ctrl+Z de graça, e o que faz o barril copiado levar o fogo
+   * junto.
+   *
+   * A escondida não sai do Mestre: `itensParaMesa` a tira antes de publicar,
+   * como o item escondido. Ver `condicoesDoObjeto`.
+   */
+  condicoes?: Condicao[];
 };
 
 /**
@@ -474,6 +488,21 @@ export const CORES_DO_ESCURO = [
 ] as const;
 
 /**
+ * As cores que o vazio oferece de cara. Ver `Scene.corDoVazio`.
+ *
+ * O que está FORA do mapa: a sala em volta do chão, no 2D e no 2.5D. O breu é o
+ * de sempre -- o mapa é a luz, e o escuro em volta some da vista. Os outros são
+ * salas de verdade -- o carvão, a ardósia, o feltro da mesa --, para quem quer
+ * um fundo em lugar de um buraco. O tom exato vem do seletor, atrás da paleta.
+ */
+export const CORES_DO_VAZIO = [
+  "#000000",
+  "#1c1917",
+  "#1e293b",
+  "#14342b",
+] as const;
+
+/**
  * Os recortes que uma área escondida sabe ter.
  *
  * Os mesmos nomes das formas do quadro -- `retangulo`, `elipse` --, porque é o
@@ -534,6 +563,55 @@ export type FogRegion = {
    */
   locked?: boolean;
 };
+
+/**
+ * Uma área de EFEITO: um pedaço do chão em chamas.
+ *
+ * A mesma caixa da área escondida -- `x, y, width, height`, o `formato`, o
+ * giro e os vértices do polígono, ver `FogRegion` --, e pela mesma razão: o
+ * gizmo, as alças de vértice e o laço servem às duas sem aprender geometria
+ * nova. O que muda é o que ela FAZ: em vez de esconder, ela pega fogo.
+ *
+ * O desenho é SEGMENTADO: a área é dividida em casas da grade (ou do tamanho
+ * da grade padrão, sem grade), e cada casa cujo centro cai dentro da forma é
+ * um foco do efeito, com a fase dele. A área grande tem mais focos -- nunca o
+ * mesmo fogo esticado. Ver `planoDaArea`.
+ *
+ * O efeito vem do catálogo, como o da condição: um dos efeitos em área da
+ * campanha (ver `efeitosEmAreaDaCampanha`), que o mestre escolhe no gizmo. A
+ * área NASCE sem efeito -- é um pedaço do chão marcado, e o que acontece nele
+ * é a escolha seguinte.
+ */
+export type AreaDeEfeito = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Ausente = retângulo. */
+  formato?: FormatoDeArea;
+  /** Graus, no sentido horário, em torno do centro da caixa. Ausente = 0. */
+  rotation?: number;
+  /** Só o polígono: os vértices em fração da caixa. Ver `FogRegion.pontos`. */
+  pontos?: number[];
+  /**
+   * O id do efeito no catálogo, como o de `Condicao.efeito`. Ausente = sem
+   * efeito ainda: o Mestre vê o contorno, a mesa não vê nada.
+   */
+  efeito?: string;
+  /**
+   * A cor desta área, quando o mestre escolheu uma no gizmo. Ausente = a do
+   * efeito (`area.cor`), e é o comum: editar a cor do efeito na campanha muda
+   * todas as áreas que o usam. Ver `corDaArea`.
+   */
+  cor?: string;
+  /** Está na mesa? Ausente = só o mestre vê, como a forma num mapa. */
+  naMesa?: boolean;
+  /** Travada: o mestre não move, não redimensiona, não gira e não apaga. */
+  locked?: boolean;
+};
+
+export type NewAreaDeEfeito = Omit<AreaDeEfeito, "id">;
 
 /**
  * Grade sobre o mapa.
@@ -2455,6 +2533,14 @@ export type Scene = {
    */
   luzes?: Luz[];
   /**
+   * As áreas de efeito: o chão em chamas. Ausente = nenhuma. Ver
+   * `AreaDeEfeito`.
+   *
+   * Na mesa, só as que o mestre abriu (`naMesa`), como a forma: ver
+   * `sceneForTable`.
+   */
+  areasDeEfeito?: AreaDeEfeito[];
+  /**
    * O quanto o mapa escurece onde não há luz, de 0 a 1. Ausente = 0.
    *
    * Zero é o mapa como sempre foi, e é o padrão: uma campanha antiga reabre
@@ -2471,6 +2557,20 @@ export type Scene = {
    * buraco nela como abrem no preto.
    */
   corDoEscuro?: string;
+  /**
+   * A cor do vazio -- o que está FORA do mapa --, em `#rrggbb`. Ausente =
+   * preto, o breu.
+   *
+   * A sala em volta do chão, e a mesma nos dois modos: no 2D é a borda além da
+   * imagem do mapa; no 2.5D é o fundo em volta do chão deitado. Preto é o de
+   * sempre, e é o padrão -- o mapa é a luz, e o que está fora dele some da
+   * vista. Quem quer uma mesa de feltro ou uma ardósia troca aqui. Difere da
+   * `corDoEscuro`, que é o tom de DENTRO onde nenhuma luz chega. Ver
+   * `corDoVazioDe`.
+   *
+   * CHEGA à mesa: é fundo da cena, e a TV e o celular a veem igual.
+   */
+  corDoVazio?: string;
   /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.
@@ -2681,6 +2781,14 @@ export function temGrade(scene: Pick<Scene, "tipo">): boolean {
  * de quem explora um mapa, e o fundo existe para ser visto de uma vez.
  */
 export function temNevoa(scene: Pick<Scene, "tipo">): boolean {
+  return ehMapa(scene);
+}
+
+/**
+ * A cena tem áreas de efeito: o chão em chamas. Só o mapa -- o quadro não tem
+ * chão, e o fundo já vem pintado. Ver `AreaDeEfeito`.
+ */
+export function temAreaDeEfeito(scene: Pick<Scene, "tipo">): boolean {
   return ehMapa(scene);
 }
 

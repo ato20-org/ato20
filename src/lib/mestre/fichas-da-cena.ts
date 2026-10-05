@@ -77,6 +77,32 @@ export function fichasDaCena(
 }
 
 /**
+ * O que desenha sobre um OBJETO: só os selos, sem nome e sem medidor.
+ *
+ * Sem filtrar as escondidas, e é seguro: a lista que chega à TV já veio sem
+ * elas (`itensParaMesa`), e a do palco do Mestre as tem de propósito, para
+ * desenhá-las apagadas -- a mesma divisão de `incluirOcultos`, decidida antes.
+ *
+ * Guardada pela lista do item, pela razão de `efeitosDoObjeto`.
+ */
+const fichasDosObjetos = new WeakMap<ReadonlyArray<Condicao>, FichaNaCena>();
+
+export function fichaDoObjeto(
+  item: Pick<CanvasItem, "id" | "personagemId" | "condicoes">,
+): FichaNaCena | null {
+  const condicoes = item.condicoes;
+  if (item.personagemId || !condicoes?.length) return null;
+
+  let ficha = fichasDosObjetos.get(condicoes);
+  if (!ficha) {
+    ficha = { id: item.id, nome: "", medidores: [], condicoes };
+    fichasDosObjetos.set(condicoes, ficha);
+  }
+
+  return ficha;
+}
+
+/**
  * Quanto do lado do token a informação ocupa, em fração da largura dele.
  *
  * Mais largo que o token de propósito: o que se escreve ali é um nome, e nome

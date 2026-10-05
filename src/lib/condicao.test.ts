@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import type { Condicao, EfeitoNaFigura } from "@/types/character";
+import type { Condicao } from "@/types/character";
 
 import {
+  ajustarCondicao,
+  alternarNaLista,
   condicoesVisiveis,
   efeitosDaCena,
   efeitosDaFigura,
+  efeitosDoObjeto,
   faseDaFigura,
+  MAX_NOME_CONDICAO,
+  reordenarLista,
   temCondicao,
 } from "./condicao";
 
@@ -39,19 +44,16 @@ describe("condicoesVisiveis", () => {
 });
 
 describe("efeitosDaFigura", () => {
-  it("dá um de cada efeito, e vence a primeira da lista", () => {
-    // Veneno e gelo tingem os dois. A figura não vira um verde-azulado que
-    // ninguém escolheu: fica com a cor de quem vem primeiro na ficha.
+  it("vale só o último efeito da lista", () => {
+    // Veneno, fogo e medo empilhados seriam uma bagunça. Fica o último a
+    // entrar -- as condições novas vão para o fim da ficha.
     const efeitos = efeitosDaFigura([
       condicao({ id: "veneno", cor: "#22c55e", efeito: "tingido" }),
-      condicao({ id: "gelo", cor: "#3b82f6", efeito: "tingido" }),
       condicao({ id: "medo", cor: "#a855f7", efeito: "tremendo" }),
+      condicao({ id: "caido", cor: "#ef4444", efeito: undefined }),
     ]);
 
-    expect(efeitos).toEqual([
-      { efeito: "tingido", cor: "#22c55e" },
-      { efeito: "tremendo", cor: "#a855f7" },
-    ]);
+    expect(efeitos).toEqual([{ efeito: "tremendo", cor: "#a855f7" }]);
   });
 
   it("nunca desenha o efeito de uma condição escondida", () => {
@@ -59,15 +61,29 @@ describe("efeitosDaFigura", () => {
     expect(efeitosDaFigura([condicao({ escondido: true })])).toEqual([]);
   });
 
+  it("a escondida não tampa o efeito de quem veio antes", () => {
+    // Trocar o verde pelo nada contaria que há um segredo por cima.
+    const efeitos = efeitosDaFigura([
+      condicao({ id: "veneno" }),
+      condicao({ id: "maldicao", efeito: "aura", escondido: true }),
+    ]);
+
+    expect(efeitos).toEqual([{ efeito: "tingido", cor: "#22c55e" }]);
+  });
+
   it("condição sem efeito é só o selo", () => {
     expect(efeitosDaFigura([condicao({ efeito: undefined })])).toEqual([]);
   });
 
-  it("ignora o efeito que esta versão não conhece", () => {
-    // O quadro de uma versão futura, que não passou pelo Rust desta.
-    const futura = condicao({ efeito: "cintilando" as EfeitoNaFigura });
+  it("o efeito que esta tela não conhece vence do mesmo jeito", () => {
+    // O catálogo é de quem desenha. Escolher outro aqui faria a TV e o Mestre
+    // mostrarem efeitos diferentes para a mesma ficha.
+    const efeitos = efeitosDaFigura([
+      condicao({ id: "veneno" }),
+      condicao({ id: "sangue", cor: "#ef4444", efeito: "ordem-paranormal/sangue" }),
+    ]);
 
-    expect(efeitosDaFigura([futura])).toEqual([]);
+    expect(efeitos).toEqual([{ efeito: "ordem-paranormal/sangue", cor: "#ef4444" }]);
   });
 });
 
@@ -110,5 +126,54 @@ describe("faseDaFigura", () => {
     expect(a).toBeGreaterThan(-2);
     expect(a).not.toBe(b);
     expect(faseDaFigura("goblin-1", 2)).toBe(faseDaFigura("goblin-1", 2));
+  });
+});
+
+describe("ajustarCondicao", () => {
+  it("é a conta do Rust: nome e ícone curtos e nunca vazios, efeito torto some", () => {
+    const ajustada = ajustarCondicao(
+      condicao({ nome: "   ", icone: "", efeito: "Fogo!" }),
+    );
+
+    expect(ajustada.nome).toBe("Condição");
+    expect(ajustada.icone).toBe("circulo");
+    expect(ajustada.efeito).toBeUndefined();
+    expect(ajustarCondicao(condicao({ nome: "a".repeat(40) })).nome).toHaveLength(MAX_NOME_CONDICAO);
+  });
+});
+
+describe("alternarNaLista", () => {
+  const id = () => "novo";
+
+  it("liga sem duplicar e devolve null quando nada muda", () => {
+    const lista = alternarNaLista([], condicao(), true, id)!;
+
+    expect(lista.map((c) => c.id)).toEqual(["novo"]);
+    expect(alternarNaLista(lista, condicao({ nome: "ENVENENADO" }), true, id)).toBeNull();
+    expect(alternarNaLista(lista, condicao({ nome: "Caído" }), false, id)).toBeNull();
+  });
+
+  it("a cópia nasce visível, mesmo de um modelo escondido", () => {
+    expect(alternarNaLista([], condicao({ escondido: true }), true, id)![0]!.escondido).toBe(false);
+  });
+});
+
+describe("reordenarLista", () => {
+  it("põe na ordem pedida e o esquecido vai para o fim", () => {
+    const lista = [condicao({ id: "a" }), condicao({ id: "b" }), condicao({ id: "c" })];
+
+    expect(reordenarLista(lista, ["c", "x", "a"]).map((c) => c.id)).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("efeitosDoObjeto", () => {
+  it("devolve o mesmo array para a mesma lista, e nada sem condição", () => {
+    // O `CanvasItemView` é `memo`: array novo a cada render redesenharia o barril.
+    const lista = [condicao()];
+
+    expect(efeitosDoObjeto(lista)).toBe(efeitosDoObjeto(lista));
+    expect(efeitosDoObjeto(lista)).toEqual([{ efeito: "tingido", cor: "#22c55e" }]);
+    expect(efeitosDoObjeto(undefined)).toBeUndefined();
+    expect(efeitosDoObjeto([])).toBeUndefined();
   });
 });

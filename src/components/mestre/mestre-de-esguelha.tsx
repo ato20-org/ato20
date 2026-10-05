@@ -11,6 +11,8 @@ import {
   SelecaoDeEsguelha,
 } from "@/components/mestre/selecao-de-esguelha";
 import { PalcoSoTela } from "@/components/playground/scene-stage";
+import { corDoVazioDe } from "@/lib/cor";
+import { cn } from "@/lib/utils";
 import { useCameraOrbital } from "@/hooks/use-camera-orbital";
 import { useCharacters } from "@/hooks/use-characters";
 import { efeitosDaCena } from "@/lib/condicao";
@@ -232,6 +234,14 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
       ),
     [daMesa, personagens, scene.infoDosTokens],
   );
+  // Só as peças selecionadas animam, e nenhuma com uma peça na mão: arrastando,
+  // o fogo de quem anda é compositor trabalhando no gesto. Ver o `MestreStage`.
+  const selecionados = useSelectionStore((state) => state.selectedIds);
+  const arrastando = useGestoStore((state) => state.patches !== null);
+  const animados = useMemo(
+    () => new Set(arrastando ? [] : selecionados),
+    [arrastando, selecionados],
+  );
   const efeitos = useMemo(
     () => efeitosDaCena(daMesa?.items ?? [], personagens ?? []),
     [daMesa, personagens],
@@ -402,15 +412,23 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
     };
   }, [focal, olhado, quadro, tamanho, vivo]);
 
+  // A cor do vazio em volta do chão deitado -- a mesma do 2D. Aqui o palco é
+  // `PalcoSoTela`, que é transparente, então o fundo é deste container. Ausente
+  // = o breu de sempre, via `bg-black`. Ver `Scene.corDoVazio`.
+  const fundoDoVazio = scene.corDoVazio
+    ? corDoVazioDe(scene.corDoVazio)
+    : undefined;
+
   return (
     <>
       <div
         ref={mesa}
-        className={
-          olhado
-            ? "relative min-h-0 flex-1 overflow-hidden rounded-md bg-black"
-            : "relative min-h-0 flex-1 cursor-grab overflow-hidden rounded-md bg-black active:cursor-grabbing"
-        }
+        className={cn(
+          "relative min-h-0 flex-1 overflow-hidden rounded-md",
+          fundoDoVazio ? undefined : "bg-black",
+          olhado ? undefined : "cursor-grab active:cursor-grabbing",
+        )}
+        style={fundoDoVazio ? { backgroundColor: fundoDoVazio } : undefined}
         onPointerDownCapture={aoApertarNoVazio}
         onPointerDown={aoApertar}
         onPointerUpCapture={aoSoltar}
@@ -422,6 +440,8 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
               olhar={pelaCamera ?? comCamera}
               fichas={fichas}
               efeitos={efeitos}
+              // Só as peças selecionadas animam: ver `animarSo` em `SceneLayer`.
+              animarSo={animados}
             />
           </PalcoSoTela>
         ) : null}

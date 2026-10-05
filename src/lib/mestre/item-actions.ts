@@ -55,6 +55,7 @@ import {
 import { postitNaArea } from "@/lib/geometry/postit";
 import { degrauDeFonte } from "@/lib/mestre/degrau-de-fonte";
 import type {
+  AreaDeEfeito,
   ConeDaLuz,
   LuzCarregada,
   CanvasItem,
@@ -237,8 +238,9 @@ function doChao(scene: Scene | null): {
   paredes: Parede[];
   areas: FogRegion[];
   luzes: Luz[];
+  areasDeEfeito: AreaDeEfeito[];
 } {
-  const { selectedParedeId, selectedFogId, selectedLuzId } =
+  const { selectedParedeId, selectedFogId, selectedLuzId, selectedAreaDeEfeitoId } =
     useSelectionStore.getState();
 
   return {
@@ -247,6 +249,9 @@ function doChao(scene: Scene | null): {
     ),
     areas: (scene?.fog ?? []).filter((area) => area.id === selectedFogId),
     luzes: (scene?.luzes ?? []).filter((luz) => luz.id === selectedLuzId),
+    areasDeEfeito: (scene?.areasDeEfeito ?? []).filter(
+      (area) => area.id === selectedAreaDeEfeitoId,
+    ),
   };
 }
 
@@ -462,10 +467,11 @@ export function cutSelection(): void {
 
   // Do chão sai só a que estava na mão: `removeSelection` não as conhece, e
   // cada uma tem o próprio apagar. Selecionar uma delas já largou o resto.
-  const { selectedParedeId, selectedFogId, selectedLuzId } =
+  const { selectedParedeId, selectedFogId, selectedLuzId, selectedAreaDeEfeitoId } =
     useSelectionStore.getState();
   if (selectedParedeId) removeParedeSelection();
   else if (selectedFogId) removeFogSelection();
+  else if (selectedAreaDeEfeitoId) removeAreaDeEfeitoSelection();
   else if (selectedLuzId) removeLuzSelection();
   else removeSelection({ semCartao: true });
 }
@@ -625,7 +631,7 @@ export function moveSelectionZ(direction: ZDirection): void {
  */
 export function toggleSelectionLock(): void {
   const { scene, selectedItems, selectedTextos, selectedFormas } = read();
-  const { paredes, areas, luzes } = doChao(scene);
+  const { paredes, areas, luzes, areasDeEfeito } = doChao(scene);
   const todos = [
     ...selectedItems,
     ...selectedTextos,
@@ -633,6 +639,7 @@ export function toggleSelectionLock(): void {
     ...paredes,
     ...areas,
     ...luzes,
+    ...areasDeEfeito,
   ];
   if (!scene || todos.length === 0) return;
 
@@ -660,6 +667,8 @@ export function toggleSelectionLock(): void {
     cena.updateParede(scene.id, parede.id, { locked });
   for (const area of areas) cena.updateFog(scene.id, area.id, { locked });
   for (const luz of luzes) cena.updateLuz(scene.id, luz.id, { locked });
+  for (const area of areasDeEfeito)
+    cena.updateAreaDeEfeito(scene.id, area.id, { locked });
 }
 
 /**
@@ -856,6 +865,17 @@ export function removeMedidorSelection(): void {
   if (!scene || !medidorId) return;
 
   useSceneStore.getState().removeMedidores(scene.id, [medidorId]);
+  useSelectionStore.getState().clear();
+}
+
+/** Apaga a área de efeito selecionada. Travada, avisa e fica. */
+export function removeAreaDeEfeitoSelection(): void {
+  const { scene } = read();
+  const areaId = useSelectionStore.getState().selectedAreaDeEfeitoId;
+  if (!scene || !areaId) return;
+  if (doChao(scene).areasDeEfeito.some((area) => area.locked)) return avisarTravado();
+
+  useSceneStore.getState().removeAreaDeEfeito(scene.id, areaId);
   useSelectionStore.getState().clear();
 }
 

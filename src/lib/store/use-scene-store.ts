@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 
+import { COR_DO_VAZIO_PADRAO, corDoVazioDe } from "@/lib/cor";
 import { COR_DO_ESCURO_PADRAO, corDoEscuroDe } from "@/lib/geometry/luz";
 import { novoId } from "@/lib/id";
 import { pastaDoMembro, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
@@ -51,6 +52,7 @@ import {
   NOME_DO_TIPO,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
+  type AreaDeEfeito,
   type Board,
   type CameraSalva,
   type CameraTripe,
@@ -62,6 +64,7 @@ import {
   type ItemDraft,
   type MapPin,
   type NewCanvasItem,
+  type NewAreaDeEfeito,
   type NewFogRegion,
   type NewForma,
   type NewPostit,
@@ -431,6 +434,8 @@ type SceneStore = {
   removeLuzes: (sceneId: string, luzIds: string[]) => void;
   /** A cor do escuro. O preto guarda como ausente. Ver `Scene.corDoEscuro`. */
   setCorDoEscuro: (sceneId: string, cor: string | undefined) => void;
+  /** A cor do vazio, fora do mapa. O preto guarda como ausente. Ver `Scene.corDoVazio`. */
+  setCorDoVazio: (sceneId: string, cor: string | undefined) => void;
   /** O quanto o mapa escurece onde não há luz. Zero guarda como ausente. */
   setEscuridao: (sceneId: string, escuridao: number) => void;
   /** Liga nome e medidores acima dos tokens. Ver `Scene.infoDosTokens`. */
@@ -441,6 +446,15 @@ type SceneStore = {
     patch: Partial<FogRegion>,
   ) => void;
   removeFog: (sceneId: string, fogId: string) => void;
+
+  /** Uma área de efeito nova. Devolve o id. Ver `AreaDeEfeito`. */
+  addAreaDeEfeito: (sceneId: string, area: NewAreaDeEfeito) => string;
+  updateAreaDeEfeito: (
+    sceneId: string,
+    areaId: string,
+    patch: Partial<Omit<AreaDeEfeito, "id">>,
+  ) => void;
+  removeAreaDeEfeito: (sceneId: string, areaId: string) => void;
 
   /** Crava um ponto de anotação. Devolve o id, para já abrir a nota dele. */
   addPin: (sceneId: string, pin: NewMapPin) => string;
@@ -1658,6 +1672,17 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       }));
     },
 
+    setCorDoVazio(sceneId, cor) {
+      // O breu guarda como AUSENTE, como a cor do escuro: é o vazio de sempre,
+      // e o arquivo de quem nunca trocou o fundo não ganha um campo por isso.
+      const valor = cor === undefined ? undefined : corDoVazioDe(cor);
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        corDoVazio: valor && valor !== COR_DO_VAZIO_PADRAO ? valor : undefined,
+      }));
+    },
+
     setEscuridao(sceneId, escuridao) {
       // Zero guarda como AUSENTE: é o mapa de sempre, e o arquivo de uma
       // campanha que nunca escureceu nada não deve ganhar um campo por isso.
@@ -1693,6 +1718,35 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         ...scene,
         fog: scene.fog.filter((region) => region.id !== fogId),
       }));
+    },
+
+    addAreaDeEfeito(sceneId, area) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        areasDeEfeito: [...(scene.areasDeEfeito ?? []), { ...area, id }],
+      }));
+
+      return id;
+    },
+
+    updateAreaDeEfeito(sceneId, areaId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        areasDeEfeito: (scene.areasDeEfeito ?? []).map((area) =>
+          area.id === areaId ? { ...area, ...patch } : area,
+        ),
+      }));
+    },
+
+    removeAreaDeEfeito(sceneId, areaId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.areasDeEfeito ?? []).filter((area) => area.id !== areaId);
+
+        // A lista some quando esvazia, como a das paredes: ausente é "nenhuma".
+        return { ...scene, areasDeEfeito: restantes.length > 0 ? restantes : undefined };
+      });
     },
 
     addPin(sceneId, pin) {

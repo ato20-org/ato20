@@ -8,8 +8,12 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { WandSparkles } from "lucide-react";
 
+import { PainelDeCondicoesDoObjeto } from "@/components/mestre/condicoes-do-objeto";
+import { PainelDeCondicoesDoPersonagem } from "@/components/mestre/condicoes-personagem";
 import { AlcasDaArea } from "@/components/mestre/alcas-da-area";
+import { EscolhaDoEfeitoDaArea } from "@/components/mestre/efeito-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
 import { LuzMarcadores } from "@/components/mestre/luz-marcadores";
@@ -107,11 +111,13 @@ import {
   useGestoStore,
 } from "@/lib/store/use-gesto-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useSilhueta } from "@/hooks/use-silhueta";
 import {
   flipSelection,
   livre,
+  removeAreaDeEfeitoSelection,
   removeFogSelection,
   removeParedeSelection,
   removePortraitSelection,
@@ -186,6 +192,7 @@ import {
   SCENE_WIDTH,
   TEXTO_TAMANHO,
   type AncoraRetrato,
+  type AreaDeEfeito,
   type CanvasItem,
   type Documento,
   type FogRegion,
@@ -205,6 +212,8 @@ import {
 } from "@/types/scene";
 
 const NO_GUIDES: Guide[] = [];
+/** Ninguém anima: o Mestre durante um gesto. Identidade estável. */
+const NINGUEM_ANIMA: ReadonlySet<string> = new Set<string>();
 /** As listas vazias das três seleções que só andam. Ver `selectedPostits`. */
 const NADA_DE_POSTIT: readonly Postit[] = [];
 const NADA_DE_DOCUMENTO: readonly Documento[] = [];
@@ -488,6 +497,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const corMedidor = useToolStore((state) => state.corMedidor);
   const tipoDeForma = useToolStore((state) => state.tipoDeForma);
   const formatoDeArea = useToolStore((state) => state.formatoDeArea);
+  const formatoDoEfeito = useToolStore((state) => state.formatoDoEfeito);
   const corForma = useToolStore((state) => state.corForma);
   const espessuraForma = useToolStore((state) => state.espessuraForma);
   const fundoForma = useToolStore((state) => state.fundoForma);
@@ -528,6 +538,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   );
   const selectedTracoIds = useSelectionStore((state) => state.selectedTracoIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
+  const selectedAreaDeEfeitoId = useSelectionStore(
+    (state) => state.selectedAreaDeEfeitoId,
+  );
   const selectedPortraitIds = useSelectionStore(
     (state) => state.selectedPortraitIds,
   );
@@ -545,6 +558,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const toggleDocumento = useSelectionStore((state) => state.toggleDocumento);
   const selectMisto = useSelectionStore((state) => state.selectMisto);
   const selectFog = useSelectionStore((state) => state.selectFog);
+  const selectAreaDeEfeito = useSelectionStore((state) => state.selectAreaDeEfeito);
   const selectedMedidorId = useSelectionStore(
     (state) => state.selectedMedidorId,
   );
@@ -565,6 +579,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const addLuz = useSceneStore((state) => state.addLuz);
   const updateParede = useSceneStore((state) => state.updateParede);
   const updateFog = useSceneStore((state) => state.updateFog);
+  const addAreaDeEfeito = useSceneStore((state) => state.addAreaDeEfeito);
+  const updateAreaDeEfeito = useSceneStore((state) => state.updateAreaDeEfeito);
   const addTraco = useSceneStore((state) => state.addTraco);
   const removeTracos = useSceneStore((state) => state.removeTracos);
   const addPin = useSceneStore((state) => state.addPin);
@@ -859,6 +875,31 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       }
     : undefined;
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
+  const selectedAreaDeEfeito = scene.areasDeEfeito?.find(
+    (area) => area.id === selectedAreaDeEfeitoId,
+  );
+  /**
+   * Quem anima os efeitos no Mestre: só o que está selecionado -- os tokens, a
+   * área e os retratos. O resto pausa no quadro em que está, e a luz dele para
+   * de tremular. Ver `animarSo` em `SceneLayer`.
+   *
+   * E NINGUÉM durante um gesto -- arrastar o token em chamas, a área, uma
+   * alça, a caixa de seleção: o que o mestre olha no arrasto é para onde a
+   * coisa vai, e o fogo tremulando por baixo é compositor refazendo a folha a
+   * cada quadro do gesto. Ao soltar, o selecionado volta a andar.
+   */
+  const emGesto = useViewportStore((state) => state.gestos > 0);
+  const efeitosAnimados = useMemo(
+    () =>
+      emGesto
+        ? NINGUEM_ANIMA
+        : new Set<string>([
+            ...selectedIds,
+            ...selectedPortraitIds,
+            ...(selectedAreaDeEfeitoId ? [selectedAreaDeEfeitoId] : []),
+          ]),
+    [emGesto, selectedIds, selectedPortraitIds, selectedAreaDeEfeitoId],
+  );
   const selectedParede = scene.paredes?.find(
     (parede) => parede.id === selectedParedeId,
   );
@@ -1183,13 +1224,41 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const duplo = ehDuploClique(ultimoToque.current, toque);
     ultimoToque.current = duplo ? null : toque;
 
-    if (duplo && item.personagemId && personagemExiste(item.personagemId)) {
-      // Para aqui, como o botão direito: sem isto o envelope do palco leria o
-      // mesmo gesto como clique no vazio e limparia a seleção.
-      event.stopPropagation();
-      event.preventDefault();
-      abrirJanela({ tipo: "personagem", personagemId: item.personagemId });
-      return;
+    if (duplo) {
+      /**
+       * Duplo clique ENTRA no grupo: isola o item sob o cursor, deixando a
+       * pasta. Até aqui o único "entrar no grupo" era pela LISTA -- abrir a
+       * pasta e clicar na linha --, o caminho que `alvoDoClique` descreve. É o
+       * mesmo gesto do Figma, agora também no mapa.
+       *
+       * Só quando o item ainda NÃO está sozinho na mão: com ele já isolado, o
+       * segundo duplo clique cai na ficha abaixo. Assim o token de personagem
+       * agrupado mantém o atalho -- um duplo clique entra no grupo, o outro abre
+       * quem ele é. A seleção vem FRESCA do store: entre os dois toques do duplo
+       * o primeiro já chamou `select`, e o render pode não ter alcançado o
+       * closure deste handler.
+       */
+      const noGrupo = alvo.length > 1;
+      const selecao = useSelectionStore.getState().selectedIds;
+      const isolado = selecao.length === 1 && selecao[0] === item.id;
+
+      if (noGrupo && !isolado) {
+        // Para aqui, como a ficha abaixo: sem isto o envelope do palco leria o
+        // mesmo gesto como clique no vazio e limparia a seleção.
+        event.stopPropagation();
+        event.preventDefault();
+        select([item.id]);
+        return;
+      }
+
+      if (item.personagemId && personagemExiste(item.personagemId)) {
+        // Para aqui, como o botão direito: sem isto o envelope do palco leria o
+        // mesmo gesto como clique no vazio e limparia a seleção.
+        event.stopPropagation();
+        event.preventDefault();
+        abrirJanela({ tipo: "personagem", personagemId: item.personagemId });
+        return;
+      }
     }
 
     const draggedIds = alreadySelected ? selectedIds : alvo;
@@ -1690,6 +1759,45 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           y: Math.round(origin.y + dy),
         }),
     );
+  }
+
+  /** Clique e arrasto numa área de efeito, como na área escondida. */
+  function handleAreaDeEfeitoPointerDown(event: ReactPointerEvent, area: AreaDeEfeito) {
+    if (event.button === 2) {
+      event.stopPropagation();
+      selectAreaDeEfeito(area.id);
+      return;
+    }
+
+    if (event.button !== 0) return;
+
+    selectAreaDeEfeito(area.id);
+    if (area.locked) {
+      event.stopPropagation();
+      return;
+    }
+
+    const origin = { x: area.x, y: area.y };
+    dragBox(
+      event,
+      boxBounds(area),
+      snapTargets((id) => id === area.id),
+      (dx, dy) =>
+        updateAreaDeEfeito(scene.id, area.id, {
+          x: Math.round(origin.x + dx),
+          y: Math.round(origin.y + dy),
+        }),
+    );
+  }
+
+  /**
+   * A área de efeito nova: só a caixa. Ela nasce SEM efeito -- um pedaço do
+   * chão marcado --, e o efeito se escolhe no gizmo, entre os da campanha.
+   */
+  function novaAreaDeEfeito(
+    caixa: Pick<AreaDeEfeito, "x" | "y" | "width" | "height" | "formato" | "pontos">,
+  ) {
+    return addAreaDeEfeito(scene.id, caixa);
   }
 
   /**
@@ -2194,6 +2302,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
+    if (tool === "efeito") {
+      selectAreaDeEfeito(novaAreaDeEfeito({ ...area, formato: "poligono" }));
+      setTool("select");
+      return;
+    }
+
     if (tool === "forma") {
       selectFormas([
         addForma(scene.id, {
@@ -2437,10 +2551,14 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
-    if (tool === "fog") {
+    if (tool === "fog" || tool === "efeito") {
+      // A área de efeito desenha como a escondida: a mesma caixa, o mesmo
+      // formato. Muda só o que ela vira no fim do gesto.
+      const formato = tool === "fog" ? formatoDeArea : formatoDoEfeito;
+
       // A área LIVRE não é arrasto: ela se desenha vértice a vértice, e o
       // gesto todo acontece em cliques. Ver `cravarVertice`.
-      if (formatoDeArea === "poligono") {
+      if (formato === "poligono") {
         cravarVertice(anchor);
         return;
       }
@@ -2483,15 +2601,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // Clique sem arrasto criaria uma área invisível impossível de pegar.
           if (box.width < MIN_ITEM_SIZE || box.height < MIN_ITEM_SIZE) return;
 
-          selectFog(
-            addFog(scene.id, {
-              x: Math.round(box.x),
-              y: Math.round(box.y),
-              width: Math.round(box.width),
-              height: Math.round(box.height),
-              formato: formatoDeArea,
-            }),
-          );
+          const caixa = {
+            x: Math.round(box.x),
+            y: Math.round(box.y),
+            width: Math.round(box.width),
+            height: Math.round(box.height),
+            formato,
+          };
+          if (tool === "efeito") selectAreaDeEfeito(novaAreaDeEfeito(caixa));
+          else selectFog(addFog(scene.id, caixa));
           // Volta ao modo normal: desenhar duas áreas seguidas é raro, e ficar
           // preso na ferramenta faz o mestre cobrir a cena por acidente.
           setTool("select");
@@ -2813,6 +2931,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     fecharLaco,
     item: handleItemPointerDown,
     fog: handleFogPointerDown,
+    areaDeEfeito: handleAreaDeEfeitoPointerDown,
     portrait: handlePortraitPointerDown,
     texto: handleTextoPointerDown,
     forma: handleFormaPointerDown,
@@ -2825,6 +2944,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       fecharLaco,
       item: handleItemPointerDown,
       fog: handleFogPointerDown,
+      areaDeEfeito: handleAreaDeEfeitoPointerDown,
       portrait: handlePortraitPointerDown,
       texto: handleTextoPointerDown,
       forma: handleFormaPointerDown,
@@ -2913,7 +3033,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       useToolStore.subscribe((estado, anterior) => {
         if (
           estado.tool !== anterior.tool ||
-          estado.formatoDeArea !== anterior.formatoDeArea
+          estado.formatoDeArea !== anterior.formatoDeArea ||
+          estado.formatoDoEfeito !== anterior.formatoDoEfeito
         )
           setLaco(null);
       }),
@@ -2923,6 +3044,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const onFogPointerDown = useCallback(
     (event: ReactPointerEvent, region: FogRegion) => {
       handlersRef.current.fog(event, region);
+    },
+    [],
+  );
+
+  const onAreaDeEfeitoPointerDown = useCallback(
+    (event: ReactPointerEvent, area: AreaDeEfeito) => {
+      handlersRef.current.areaDeEfeito(event, area);
     },
     [],
   );
@@ -2974,7 +3102,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
   // Espaço tem precedência sobre a ferramenta: segurar espaço desloca a cena,
   // mesmo com a névoa escolhida.
-  const drawingFog = tool === "fog" && !panMode;
+  const drawingFog = (tool === "fog" || tool === "efeito") && !panMode;
   /**
    * Ferramenta de mira ativa: névoa, ponto, postit, lápis, borracha, régua —
    * ou a de uma extensão.
@@ -3083,6 +3211,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // "mover item".
           onItemPointerDown={panMode || aiming ? undefined : onItemPointerDown}
           onFogPointerDown={panMode || aiming ? undefined : onFogPointerDown}
+          onAreaDeEfeitoPointerDown={
+            panMode || aiming ? undefined : onAreaDeEfeitoPointerDown
+          }
+          animarSo={efeitosAnimados}
           onPortraitPointerDown={
             panMode || aiming ? undefined : onPortraitPointerDown
           }
@@ -3359,6 +3491,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // boneco e o barril, só entre o que está em pé e o que é visto de
           // cima. Ver `SombraDoItem`.
           sombra={sombraDoSelecionado}
+          // As condições, aqui como a opacidade e a sombra: as do objeto, no
+          // item da cena; as do token, no personagem -- a mesma lista da ficha.
+          condicoes={
+            single.personagemId ? (
+              <PainelDeCondicoesDoPersonagem personagemId={single.personagemId} />
+            ) : (
+              <PainelDeCondicoesDoObjeto item={single} />
+            )
+          }
           // Token abre a ficha de quem ele é. É o atalho que faltava no meio da
           // sessão: o mestre clica na figura no mapa, e não na lista de
           // personagens, porque no mapa é onde a mão dele já está.
@@ -3474,6 +3615,64 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             <AlcasDaArea
               region={selectedFog}
               onChange={(patch) => updateFog(scene.id, selectedFog.id, patch)}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {selectedAreaDeEfeito && !panMode ? (
+        <>
+          <TransformHandles
+            box={{ ...selectedAreaDeEfeito, rotation: selectedAreaDeEfeito.rotation ?? 0 }}
+            // Gira como a área escondida. O fogo não gira junto -- ele sobe --,
+            // mas as casas que entram, sim. Ver `planoDaArea`.
+            onChange={(patch) =>
+              updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, patch)
+            }
+            paleta={{
+              titulo: "Cor",
+              // A cor DESTA área, quando o mestre escolheu uma. Ausente, ela
+              // segue a do efeito -- e o primeiro botão da paleta volta a isso.
+              cor: selectedAreaDeEfeito.cor,
+              semFundo: true,
+              onChange: ({ cor }) => {
+                if (cor === undefined) return;
+                updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, {
+                  cor: cor ?? undefined,
+                });
+              },
+            }}
+            // O efeito da área, no lugar das condições: é o que ela faz. Os
+            // efeitos em área da campanha, ou nenhum. Ver `EscolhaDoEfeitoDaArea`.
+            condicoes={
+              <EscolhaDoEfeitoDaArea
+                area={selectedAreaDeEfeito}
+                onEscolher={(efeito) =>
+                  updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, { efeito })
+                }
+              />
+            }
+            botaoDoPainel={{ rotulo: "Efeito", icone: WandSparkles }}
+            mesa={{
+              naMesa: Boolean(selectedAreaDeEfeito.naMesa),
+              onToggle: () =>
+                updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, {
+                  naMesa: selectedAreaDeEfeito.naMesa ? undefined : true,
+                }),
+            }}
+            trava={{
+              travada: Boolean(selectedAreaDeEfeito.locked),
+              onToggle: toggleSelectionLock,
+            }}
+            onDelete={removeAreaDeEfeitoSelection}
+          />
+
+          {selectedAreaDeEfeito.formato === "poligono" && !selectedAreaDeEfeito.locked ? (
+            <AlcasDaArea
+              region={selectedAreaDeEfeito}
+              onChange={(patch) =>
+                updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, patch)
+              }
             />
           ) : null}
         </>
@@ -3614,7 +3813,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       {marquee ? (
         <MarqueeBox
           bounds={marquee}
-          redondo={tool === "fog" && formatoDeArea === "elipse"}
+          redondo={
+            (tool === "fog" && formatoDeArea === "elipse") ||
+            (tool === "efeito" && formatoDoEfeito === "elipse")
+          }
         />
       ) : null}
 

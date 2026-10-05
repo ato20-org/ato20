@@ -59,7 +59,8 @@ import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
-import { EFEITOS_NA_FIGURA, type Personagem } from "@/types/character";
+import { EFEITOS_DE_FABRICA } from "@/lib/efeitos";
+import type { Personagem } from "@/types/character";
 import {
   CORES_DA_LUZ,
   RAIO_DA_LUZ_PADRAO,
@@ -247,7 +248,8 @@ function sombraDaMedida(): Pick<
   // buraco por luz. Sem escuro a mesma luz é só o véu da cor, e mediria o
   // barato. `?escuridao=0` mede esse outro caso.
   const escuridao = Number(
-    params.get("escuridao") ?? (luzes > 0 || lanternasDaMedida() > 0 ? 0.8 : 0),
+    params.get("escuridao") ??
+      (luzes > 0 || lanternasDaMedida() > 0 || Number(params.get("areas") ?? 0) > 0 ? 0.8 : 0),
   );
 
   return {
@@ -284,15 +286,64 @@ function sombraDaMedida(): Pick<
   };
 }
 
+/** `?parados=1`: os efeitos como o Mestre os vê sem nada selecionado. */
+const PARADOS =
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("parados") === "1";
+const NINGUEM_ANIMA: ReadonlySet<string> = new Set<string>();
+
+/**
+ * As áreas em chamas desta corrida: `?areas=A&casas=C&areafx=chamas`. A áreas
+ * de C por C casas da grade padrão (4 sem `casas`), lado a lado sem se
+ * sobrepor -- fogo em cima de fogo mediria a mesma região duas vezes --, e
+ * todas na mesa. `areafx=perf/fogo-sem-luz` mede o desenho sem a luz. Com
+ * áreas o escuro liga por padrão, como com luzes: a luz delas é o caminho
+ * caro. Ver `AreaDeEfeito`.
+ */
+function areasDaMedida(): Pick<Scene, "areasDeEfeito"> {
+  if (typeof window === "undefined") return {};
+
+  const params = new URLSearchParams(window.location.search);
+  const areas = Number(params.get("areas") ?? 0);
+  const casas = Number(params.get("casas") ?? 4);
+  const efeito = params.get("areafx") ?? "chamas";
+  const formato = params.get("areaforma") === "elipse" ? ("elipse" as const) : undefined;
+  if (!(areas > 0)) return {};
+
+  const lado = casas * 96;
+  const passo = lado + 96;
+  const colunas = Math.max(1, Math.floor((SCENE_WIDTH - 96) / passo));
+  const linhas = Math.max(1, Math.floor((SCENE_HEIGHT - 96) / passo));
+  return {
+    areasDeEfeito: Array.from({ length: areas }, (_, i) => ({
+      id: `perf-area-${i}`,
+      x: 96 + (i % colunas) * passo,
+      y: 96 + (Math.floor(i / colunas) % linhas) * passo,
+      width: lado,
+      height: lado,
+      // Sem cor própria: a área segue a do efeito, como a área nova no mapa.
+      efeito,
+      naMesa: true,
+      ...(formato ? { formato } : {}),
+    })),
+  };
+}
+
 /**
  * Os efeitos de condição desta corrida, lidos da URL: `?condicoes=K&figura=aura`.
  *
  * Os PRIMEIROS K tokens, pela razão das lanternas: o primeiro é o que o
- * cenário move. `misto` roda os cinco efeitos, que é a mesa de verdade -- a
- * horda não é toda envenenada do mesmo jeito. K em zero, o padrão, devolve
+ * cenário move. `misto` roda os efeitos de fábrica (ver `MISTO`); um efeito
+ * de plugin da bancada entra pelo nome (`?figura=perf/fogo`). K em zero, o padrão, devolve
  * lista vazia e a cena montada não ganha nem o `personagemId`: é o que mantém
  * esta corrida comparável com as já medidas.
  */
+/**
+ * O `misto`: os efeitos de fábrica, em rodízio. Hoje é só o fogo -- a fábrica
+ * tem um efeito --, e a medida de antes dele (os cinco climas) não se compara
+ * mais com esta.
+ */
+const MISTO = EFEITOS_DE_FABRICA.map((efeito) => efeito.id);
+
 function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] } {
   if (typeof window === "undefined") return { quantos: 0, efeitos: [] };
 
@@ -302,8 +353,10 @@ function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] 
   const efeitos: EfeitosDoPersonagem[] = Array.from({ length: quantos }, (_, i) => {
     const efeito =
       pedido === "misto"
-        ? EFEITOS_NA_FIGURA[i % EFEITOS_NA_FIGURA.length]!
-        : (EFEITOS_NA_FIGURA.find((nome) => nome === pedido) ?? "aura");
+        ? MISTO[i % MISTO.length]!
+        : pedido in EFEITOS_DA_MEDIDA
+          ? pedido
+          : (EFEITOS_DE_FABRICA.find((cada) => cada.id === pedido)?.id ?? "chamas");
 
     return {
       personagemId: `perf-personagem-${i}`,
@@ -363,13 +416,52 @@ function medidoresDaMedida(): { quantos: number; estilo: EstiloDaMedida } {
   return { quantos: Number(params.get("medidores") ?? 0), estilo };
 }
 
+/**
+ * Os efeitos do plugin de mentira, com as imagens que a bancada já serve.
+ * `?figura=perf/fogo` é o pior caso -- o GIF animado em volta e por cima de
+ * cada figura, flutuando --; `perf/brasa` é a textura assada e o externo
+ * parado pulsando atrás.
+ */
+const EFEITOS_DA_MEDIDA: Declarativo["efeitos"] = {
+  "perf/fogo": {
+    id: "perf/fogo",
+    titulo: "Fogo",
+    origem: { plugin: "perf", versao: "1" },
+    externo: {
+      imagem: "sangue.gif",
+      tamanho: 1.6,
+      lado: "frente",
+      animacao: { tipo: "flutuar", periodo: 1.2 },
+    },
+  },
+  // O fogo de fábrica SEM a luz: o custo do desenho -- quadros, mipmap e as
+  // duas metades assadas --, à parte do custo da luz que anda.
+  "perf/fogo-sem-luz": (() => {
+    const chamas = EFEITOS_DE_FABRICA.find((efeito) => efeito.id === "chamas")!;
+    const fogo = { ...chamas, id: "perf/fogo-sem-luz" };
+    delete fogo.luz;
+    return fogo;
+  })(),
+  "perf/brasa": {
+    id: "perf/brasa",
+    titulo: "Brasa",
+    origem: { plugin: "perf", versao: "1" },
+    interno: { textura: "sangue.png", forca: 0.5 },
+    externo: { imagem: "sangue.png", tamanho: 1.4, animacao: { tipo: "pulsar" } },
+  },
+};
+
+/** Só os efeitos, para o palco da TV. Constante: o contexto não muda por render. */
+const DECLARATIVO_DO_ESPECTADOR: Declarativo = { ...DECLARATIVO_VAZIO, efeitos: EFEITOS_DA_MEDIDA };
+
 /** O plugin de mentira que a bancada serve em `/plugin/perf/*`. */
 function declarativoDaMedida(estilo: EstiloDaMedida): Declarativo {
-  if (estilo === "fabrica") return DECLARATIVO_VAZIO;
+  if (estilo === "fabrica") return { ...DECLARATIVO_VAZIO, efeitos: EFEITOS_DA_MEDIDA };
 
   return {
     versao: 1,
     plugins: ["perf"],
+    efeitos: EFEITOS_DA_MEDIDA,
     estilos: {
       "perf/vida": {
         tipo: "camadas",
@@ -467,6 +559,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
     items,
     fog: [],
     ...sombraDaMedida(),
+    ...areasDaMedida(),
     cameras: salvas,
     // No ar por padrão porque é assim que o mestre trabalha: ele mexe na
     // câmera que a mesa está vendo. E é o que faz o gesto gravar no board no
@@ -777,10 +870,21 @@ function PalcoEspectador({
   // quando o mestre marca ou tira uma condição.
   const efeitos = useMemo(() => condicoesDaMedida().efeitos, []);
 
+  // O declarativo da TV: é por ele que o efeito de plugin chega à figura. Sem
+  // ele, `?figura=perf/fogo` mediria a figura limpa.
   return (
-    <SceneStage viewport={cena.camera} smooth>
-      <SceneLayer scene={cena} smooth variante={variante} efeitos={efeitos} />
-    </SceneStage>
+    <DeclarativoProvider valor={DECLARATIVO_DO_ESPECTADOR}>
+      <SceneStage viewport={cena.camera} smooth>
+        <SceneLayer
+          scene={cena}
+          smooth
+          variante={variante}
+          efeitos={efeitos}
+          // `?parados=1`: o Mestre sem nada selecionado -- todo efeito pausado.
+          animarSo={PARADOS ? NINGUEM_ANIMA : undefined}
+        />
+      </SceneStage>
+    </DeclarativoProvider>
   );
 }
 

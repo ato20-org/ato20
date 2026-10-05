@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { createScene } from "@/types/scene";
+import type { Condicao } from "@/types/character";
+import { createScene, type CanvasItem } from "@/types/scene";
 
-import { sceneForTable } from "./for-table";
+import { itensParaMesa, sceneForTable } from "./for-table";
 
 describe("sceneForTable", () => {
   it("apaga a anotação do mestre numa cena de mapa", () => {
@@ -114,6 +115,29 @@ describe("sceneForTable", () => {
     expect(sceneForTable(scene)!.formas).toBeUndefined();
   });
 
+  it("a área de efeito chega à mesa só com o olho aberto", () => {
+    const scene = createScene("");
+    const fogo = { y: 0, width: 96, height: 96, efeito: "chamas", cor: "#f59e0b" };
+    scene.areasDeEfeito = [
+      { id: "preparada", x: 0, ...fogo },
+      { id: "acesa", x: 200, ...fogo, naMesa: true },
+    ];
+
+    expect(sceneForTable(scene)!.areasDeEfeito?.map((area) => area.id)).toEqual(["acesa"]);
+  });
+
+  it("uma cena só com áreas fechadas não devolve a mesma referência", () => {
+    // O guarda de identidade cobre a lista: sem ela, a área que o mestre ainda
+    // prepara voltaria inteira para a mesa.
+    const scene = createScene("");
+    scene.areasDeEfeito = [
+      { id: "a", x: 0, y: 0, width: 96, height: 96, efeito: "chamas", cor: "#f59e0b" },
+    ];
+
+    expect(sceneForTable(scene)).not.toBe(scene);
+    expect(sceneForTable(scene)!.areasDeEfeito).toBeUndefined();
+  });
+
   it("no quadro a letra e a forma passam sem precisar de olho nenhum", () => {
     const scene = createScene("Rede", "quadro");
     scene.textos = [{ id: "t", x: 0, y: 0, texto: "Edgar", tamanho: 40 }];
@@ -160,5 +184,38 @@ describe("sceneForTable", () => {
     scene.extensoes = { "meu-plugin": 1 };
 
     expect(sceneForTable(scene)).toBe(sceneForTable(scene));
+  });
+});
+
+describe("itensParaMesa", () => {
+  const barril = (condicoes?: Condicao[]) =>
+    ({ id: "barril", assetId: "a", x: 0, y: 0, width: 80, height: 80, rotation: 0, z: 1, condicoes }) as CanvasItem;
+  const fogo: Condicao = { id: "f", nome: "Em chamas", cor: "#f59e0b", icone: "chama", efeito: "aura", escondido: false };
+  const maldicao: Condicao = { id: "m", nome: "Amaldiçoado", cor: "#a855f7", icone: "caveira", efeito: "apagado", escondido: true };
+
+  it("a condição escondida do objeto não chega à mesa, nem o efeito dela", () => {
+    const items = [barril([fogo, maldicao])];
+
+    expect(itensParaMesa(items, undefined)[0]!.condicoes).toEqual([fogo]);
+  });
+
+  it("objeto só com segredo chega sem o campo", () => {
+    expect("condicoes" in itensParaMesa([barril([maldicao])], undefined)[0]!).toBe(false);
+  });
+
+  it("sem segredo é a MESMA lista; com segredo, a mesma cópia para a mesma lista", () => {
+    // É a identidade que diz ao publicador que nada mudou.
+    const semSegredo = [barril([fogo])];
+    expect(itensParaMesa(semSegredo, undefined)).toBe(semSegredo);
+
+    const comSegredo = [barril([fogo, maldicao])];
+    expect(itensParaMesa(comSegredo, undefined)).toBe(itensParaMesa(comSegredo, undefined));
+  });
+
+  it("vale pela porta de sempre: a cena publicada", () => {
+    const scene = createScene("");
+    scene.items = [barril([maldicao])];
+
+    expect(sceneForTable(scene)!.items[0]!.condicoes).toBeUndefined();
   });
 });

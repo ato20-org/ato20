@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { FogLayer } from "@/components/playground/fog-layer";
@@ -31,7 +32,11 @@ import {
   TextosDaMesa,
 } from "@/components/playground/quadro-mesa-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
-import type { EfeitoPedido, EfeitosDoPersonagem } from "@/lib/condicao";
+import {
+  efeitosDoObjeto,
+  type EfeitoPedido,
+  type EfeitosDoPersonagem,
+} from "@/lib/condicao";
 import { quadroDaMesa } from "@/lib/geometry/viewport";
 import type { Variante } from "@/lib/vault/assets";
 import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
@@ -44,6 +49,7 @@ import {
   itensVisiveis,
   SCENE_HEIGHT,
   SCENE_WIDTH,
+  type AreaDeEfeito,
   type CanvasItem,
   type FichaNaCena,
   type FogRegion,
@@ -148,6 +154,19 @@ type SceneLayerProps = {
   /** Ausente = camada só de leitura, que é o caso do Espectador. */
   onItemPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
+  /** O clique no contorno de uma área de efeito. Só o Mestre passa. */
+  onAreaDeEfeitoPointerDown?: (event: ReactPointerEvent, area: AreaDeEfeito) => void;
+  /**
+   * Só os efeitos destes donos ANIMAM -- tokens, áreas e retratos, pelo id;
+   * os outros pausam no quadro em que estão, e a luz deles para de tremular.
+   * Ausente = tudo anda.
+   *
+   * É o Mestre, que passa a seleção: lá o efeito serve para o mestre SABER
+   * que o goblin está em chamas, e o fogo de quarenta figuras tremulando é
+   * compositor trabalhando para quem está montando a cena. A mesa -- a janela
+   * do espectador e o celular -- não passa nada: lá o efeito é o espetáculo.
+   */
+  animarSo?: ReadonlySet<string>;
   onPortraitPointerDown?: (
     event: ReactPointerEvent,
     portrait: Portrait,
@@ -226,6 +245,9 @@ const RELEVO_DO_DEITADO =
  * renderizasse por um caminho diferente, elas divergiriam no primeiro ajuste
  * de layout.
  */
+/** Ninguém anima: a miniatura. Identidade estável, para o `memo` de cada item. */
+const NINGUEM: ReadonlySet<string> = new Set<string>();
+
 export function SceneLayer({
   scene,
   variant = "mesa",
@@ -239,6 +261,8 @@ export function SceneLayer({
   efeitos,
   onItemPointerDown,
   onFogPointerDown,
+  onAreaDeEfeitoPointerDown,
+  animarSo: animarSoPedido,
   onPortraitPointerDown,
   medidorSelecionadoId,
   onMedidorPointerDown,
@@ -270,6 +294,20 @@ export function SceneLayer({
       ),
     [efeitos],
   );
+
+  /** O que as condições pedem de cada item: do personagem, ou do próprio objeto. */
+  const efeitosDoItem = useCallback(
+    (item: CanvasItem) =>
+      item.personagemId
+        ? efeitosPorPersonagem.get(item.personagemId)
+        : efeitosDoObjeto(item.condicoes),
+    [efeitosPorPersonagem],
+  );
+
+  // Na miniatura da lista, NINGUÉM anima: trinta cenas num quadrado de 56x32,
+  // e fogo nenhum ali é para ser visto andando.
+  const animarSo = variante === "mini" ? NINGUEM : animarSoPedido;
+  const parado = (id: string) => (animarSo ? !animarSo.has(id) : undefined);
 
   const pingsDaCena = useMemo(
     () => (pings ?? []).filter((ping) => ping.cenaId === scene.id),
@@ -392,6 +430,23 @@ export function SceneLayer({
         />
       )}
 
+      {/* Depois da sombra e ANTES dos itens: o fogo é do chão, e o token pisa
+          nele. Fora da prévia, pela razão da sombra: trinta cenas num quadrado
+          de 56x32, cada uma assando uma folha de fogo, é forno que ninguém
+          olha. Ver `AreaDeEfeitoLayer`. */}
+      {variante === "mini" ? null : (
+        <AreaDeEfeitoLayer
+          areas={scene.areasDeEfeito}
+          grid={scene.grid}
+          variant={variant}
+          onAreaPointerDown={onAreaDeEfeitoPointerDown}
+          animarSo={animarSo}
+          // De esguelha, o fogo fica de pé, como as peças: no piso, só a base.
+          // Ver `useChamasDePe`.
+          soBase={Boolean(esguelha)}
+        />
+      )}
+
       {(semItens === true
         ? []
         : typeof semItens === "function"
@@ -416,8 +471,9 @@ export function SceneLayer({
               efeitos={
                 item.personagemId
                   ? efeitosPorPersonagem.get(item.personagemId)
-                  : undefined
+                  : efeitosDoObjeto(item.condicoes)
               }
+              efeitosParados={parado(item.id)}
               onPointerDown={onItemPointerDown}
             />
           </div>
@@ -435,8 +491,9 @@ export function SceneLayer({
           efeitos={
             item.personagemId
               ? efeitosPorPersonagem.get(item.personagemId)
-              : undefined
+              : efeitosDoObjeto(item.condicoes)
           }
+          efeitosParados={parado(item.id)}
           onPointerDown={onItemPointerDown}
         />
         ),
@@ -467,6 +524,10 @@ export function SceneLayer({
           // A mesma dos itens e da sombra do sol: a silhueta sai do arquivo
           // que o token já baixou. Ver `useSilhuetasDosTokens`.
           variante={variante}
+          efeitosDoItem={efeitosDoItem}
+          areasDeEfeito={scene.areasDeEfeito}
+          grid={scene.grid}
+          animarSo={animarSo}
         />
       )}
 
@@ -511,8 +572,11 @@ export function SceneLayer({
 
       {/* Depois dos itens e antes do retrato: ela desenha SOBRE as peças, e o
           retrato é HUD e fica acima de tudo. Ver `INFO_Z`. */}
-      {fichas && fichas.length > 0 ? (
-        <InfoDoToken itens={items} fichas={fichas} />
+      {/* Os objetos seguem o interruptor da cena, e só onde quem monta pediu
+          informação (`fichas` presente): a miniatura e o 2.5D, que desenha a
+          sua, passam sem. */}
+      {fichas && (fichas.length > 0 || scene.infoDosTokens) ? (
+        <InfoDoToken itens={items} fichas={fichas} objetos={Boolean(scene.infoDosTokens)} />
       ) : null}
 
       {/* Por cima de tudo que é do mapa -- névoa, medidor, nome --, e embaixo
@@ -532,6 +596,7 @@ export function SceneLayer({
           espaco={variant === "mesa" ? "tela" : "cena"}
           rolagens={rolagens}
           efeitos={efeitosPorPersonagem}
+          animarSo={animarSo}
           onPortraitPointerDown={onPortraitPointerDown}
         />
       ) : null}

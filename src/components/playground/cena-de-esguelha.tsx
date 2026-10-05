@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 
+import { useChamasDePe } from "@/components/playground/area-de-efeito-layer";
 import { ChaoInclinado } from "@/components/playground/chao-inclinado";
 import { InfoDeEsguelha } from "@/components/playground/info-de-esguelha";
 import { SceneLayer } from "@/components/playground/scene-layer";
@@ -15,7 +16,7 @@ import {
   type Tela,
 } from "@/lib/geometry/camera-orbital";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
-import type { EfeitosDoPersonagem } from "@/lib/condicao";
+import { efeitosDoObjeto, type EfeitosDoPersonagem } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -125,6 +126,7 @@ export function CenaDeEsguelha({
   tripe,
   corte = 0,
   olhar,
+  animarSo,
 }: {
   scene: Scene;
   portraits?: Portrait[];
@@ -136,6 +138,8 @@ export function CenaDeEsguelha({
   smooth?: boolean;
   /** O tripé no ar, na janela do espectador. Ver `Tripe`. */
   tripe?: Tripe;
+  /** Só estes animam os efeitos. Ausente = todos. Ver `animarSo` em `SceneLayer`. */
+  animarSo?: ReadonlySet<string>;
   /** Muda a cada corte de câmera: o tripé entra seco, sem voar até lá. */
   corte?: number;
   /**
@@ -238,13 +242,21 @@ export function CenaDeEsguelha({
           espelhada: item.flipX,
           efeitos: item.personagemId
             ? efeitosPorPersonagem.get(item.personagemId)
-            : undefined,
+            : efeitosDoObjeto(item.condicoes),
+          ...(animarSo && !animarSo.has(item.id) ? { parado: true } : {}),
         })),
-    [efeitosPorPersonagem, scene.grupos, scene.items],
+    [efeitosPorPersonagem, scene.grupos, scene.items, animarSo],
   );
   const visiveis = useMemo(
     () => itensVisiveis(scene.items, scene.grupos),
     [scene.grupos, scene.items],
+  );
+  // O fogo das áreas, de pé: as chamas entram no chão com as peças, e a
+  // profundidade as ordena junto com os tokens e as paredes.
+  const chamas = useChamasDePe(scene.areasDeEfeito, scene.grid, animarSo);
+  const pecasComChamas = useMemo(
+    () => (chamas.length > 0 ? [...pecas, ...chamas] : pecas),
+    [pecas, chamas],
   );
 
   // Sem quem olhe de esguelha, é o mapa de prumo de sempre -- e por este
@@ -261,6 +273,7 @@ export function CenaDeEsguelha({
         pings={pings}
         variante={variante}
         smooth={smooth}
+        animarSo={animarSo}
       />
     );
   }
@@ -276,6 +289,7 @@ export function CenaDeEsguelha({
         variante={variante}
         smooth={smooth}
         esguelha={camera}
+        animarSo={animarSo}
         // Os em pé sobem no chão inclinado; o deitado fica no piso.
         semItens={emPe}
         // O nome e os medidores não vão deitados no piso: vão de prumo sobre
@@ -303,11 +317,16 @@ export function CenaDeEsguelha({
         pegadas={false}
         grade={false}
         passoDaGrade={Math.round(UNIDADES_POR_METRO)}
-        pecas={pecas}
+        pecas={pecasComChamas}
         variante={variante}
       />
 
-      <InfoDeEsguelha itens={visiveis} fichas={fichas ?? []} camera={camera} />
+      <InfoDeEsguelha
+        itens={visiveis}
+        fichas={fichas ?? []}
+        objetos={Boolean(fichas) && Boolean(scene.infoDosTokens)}
+        camera={camera}
+      />
     </>
   );
 }

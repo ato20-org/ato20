@@ -13,7 +13,6 @@ import type {
   Aparencia,
   CampoPersonagem,
   Condicao,
-  EfeitoNaFigura,
   EstiloMedidor,
   Medidor,
   ModeloDeMedidor,
@@ -417,7 +416,7 @@ export function criarCondicao(
   nome: string,
   cor: string,
   icone: string,
-  efeito: EfeitoNaFigura | null,
+  efeito: string | null,
 ): Promise<Condicao> {
   return call<Condicao>("character_condicao_criar", {
     id,
@@ -474,7 +473,7 @@ export function criarCondicaoDaCampanha(
   nome: string,
   cor: string,
   icone: string,
-  efeito: EfeitoNaFigura | null,
+  efeito: string | null,
 ): Promise<Condicao> {
   return call<Condicao>("condicao_modelo_criar", { nome, cor, icone, efeito });
 }
@@ -485,6 +484,15 @@ export function editarCondicaoDaCampanha(
   patch: PatchCondicao,
 ): Promise<Condicao> {
   return call<Condicao>("condicao_modelo_editar", { modeloId, patch });
+}
+
+/**
+ * Dá à condição do cardápio o efeito próprio, e aponta para ele toda cópia com
+ * o nome dela nas fichas: configurar o fogo de "Em chamas" muda também quem
+ * já está em chamas. Ver `condicoes::vincular_efeito`.
+ */
+export function vincularEfeitoDaCondicao(modeloId: string, efeito: string): Promise<Condicao> {
+  return call<Condicao>("condicao_modelo_vincular_efeito", { modeloId, efeito });
 }
 
 /** Tira a condição do cardápio. As cópias nas fichas ficam. */

@@ -8,6 +8,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  type CSSProperties,
 } from "react";
 
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
@@ -177,14 +178,19 @@ type FiguraDaPeca = {
   lado: number;
   alta: number;
   espelhada: boolean;
+  /**
+   * Vai ao tamanho de tela por `scale`, e não pela caixa: a CHAMA de pé. Ver
+   * a escrita de cada quadro em `escrever`.
+   */
+  escalada?: boolean;
 };
 
 function lerFigura(texto: string | undefined): FiguraDaPeca | null {
   if (!texto) return null;
-  const [x = 0, y = 0, lado = 0, alta = 0, espelhada = 0] = texto
+  const [x = 0, y = 0, lado = 0, alta = 0, espelhada = 0, escalada = 0] = texto
     .split(",")
     .map(Number);
-  return { x, y, lado, alta, espelhada: espelhada === 1 };
+  return { x, y, lado, alta, espelhada: espelhada === 1, escalada: escalada === 1 };
 }
 
 function lerCantos(texto: string | undefined): PontoNoMundo[] | null {
@@ -196,7 +202,7 @@ function lerCantos(texto: string | undefined): PontoNoMundo[] | null {
 }
 
 /** A forma de uma peça no chão de esguelha. */
-type PecaDoChao = {
+export type PecaDoChao = {
   id: string;
   x: number;
   y: number;
@@ -220,6 +226,15 @@ type PecaDoChao = {
    * translúcido --, os mesmos do mapa de prumo. Ver `FiguraComEfeitos`.
    */
   efeitos?: ReadonlyArray<EfeitoPedido>;
+  /** Os efeitos pausados: o Mestre só anima o do selecionado. Ver `animarSo`. */
+  parado?: boolean;
+  /**
+   * A peça é uma CHAMA de pé, e não uma figura: a da área em chamas no 2.5D
+   * (ver `chamasDePe`). Toca a FAIXA do fogo, já na cor (ver `faixaDaFolha`),
+   * em vez da imagem, e não recebe clique -- quem se seleciona é a área, no
+   * chão.
+   */
+  fogo?: { fonte: string; total: number; fps: number; fase: string };
 };
 
 /**
@@ -279,7 +294,8 @@ function PecaEmPe({
   // MAIS que a cheia -- medido, 19 fps contra 57. Quem aproxima um token para
   // ver o detalhe tem o mapa de prumo, que carrega o original.
   const doAcervo = useAssetUrl(peca.assetId, variante ?? "mini");
-  const src = peca.url ?? doAcervo;
+  const src = peca.fogo?.fonte ?? peca.url ?? doAcervo;
+  const { fogo } = peca;
 
   return (
     // Um invólucro leva a transformação e as marcas, e a figura vai dentro
@@ -290,12 +306,14 @@ function PecaEmPe({
     <div
       hidden={!src}
       data-peca={peca.id}
+      data-efeito-parado={peca.parado ? "" : undefined}
       data-local={local}
       data-cantos={cantos}
       data-figura={figura}
-      // Clicável mesmo com a caixa inerte: ver a raiz do `ChaoInclinado`.
-      className="pointer-events-auto absolute top-0 left-0 select-none"
-      onPointerDown={(event) => onPointerDown?.(event, peca.id)}
+      // Clicável mesmo com a caixa inerte: ver a raiz do `ChaoInclinado`. A
+      // chama, não: o clique dela atravessa para o que está atrás.
+      className={`${fogo ? "pointer-events-none" : "pointer-events-auto"} absolute top-0 left-0 select-none`}
+      onPointerDown={fogo ? undefined : (event) => onPointerDown?.(event, peca.id)}
       style={{
         width: peca.lado,
         height: alta,
@@ -303,19 +321,45 @@ function PecaEmPe({
         transform,
       }}
     >
-      <FiguraComEfeitos efeitos={peca.efeitos} url={src} semente={peca.id}>
-        {(fonte) =>
-          fonte ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={fonte}
-              alt=""
-              draggable={false}
-              className="pointer-events-none absolute inset-0 h-full w-full select-none"
-            />
-          ) : null
-        }
-      </FiguraComEfeitos>
+      {fogo ? (
+        // UM elemento, e a faixa andando pela posição do fundo: medido, a chama
+        // com a grade animada por `transform` -- recorte, linhas, colunas --
+        // eram três camadas no compositor por chama, e nove chamas levavam a
+        // mesa de 61 a 30 fps, animando ou não. Ver `faixaDaFolha`.
+        <div
+          className="efeito-faixa absolute inset-0"
+          style={
+            {
+              backgroundImage: `url(${fogo.fonte})`,
+              backgroundSize: `${fogo.total * 100}% 100%`,
+              backgroundRepeat: "no-repeat",
+              animationDelay: fogo.fase,
+              "--efeito-duracao": `${fogo.total / fogo.fps}s`,
+              "--efeito-quadros": fogo.total,
+              "--efeito-fim": `${-fogo.total * peca.lado}px`,
+            } as CSSProperties
+          }
+        />
+      ) : (
+        <FiguraComEfeitos
+          efeitos={peca.efeitos}
+          url={src}
+          semente={peca.id}
+          alcance={{ livre: true, largura: peca.lado }}
+        >
+          {(fonte) =>
+            fonte ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={fonte}
+                alt=""
+                draggable={false}
+                className="pointer-events-none absolute inset-0 h-full w-full select-none"
+              />
+            ) : null
+          }
+        </FiguraComEfeitos>
+      )}
     </div>
   );
 }
@@ -515,7 +559,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
   const figuraDe = useCallback(
     (figura: FiguraDaPeca) =>
       emOrbita
-        ? `${figura.x},${figura.y},${figura.lado},${figura.alta},${figura.espelhada ? 1 : 0}`
+        ? `${figura.x},${figura.y},${figura.lado},${figura.alta},${figura.espelhada ? 1 : 0},${figura.escalada ? 1 : 0}`
         : undefined,
     [emOrbita],
   );
@@ -564,7 +608,17 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         if (vista && peca) {
           const naTela = figuraNoTripe(vista.tripe, vista.tela, peca);
           atras = !naTela;
-          if (naTela) {
+          if (naTela && peca.escalada) {
+            // A CHAMA de pé fica no tamanho de cena e vai ao de tela por
+            // `scale`, ao contrário da figura logo abaixo. Medido: a chama é
+            // uma folha de quadros dezesseis vezes a caixa dela, e redimensionar
+            // a caixa a cada quadro da câmera rasterizava a folha inteira de
+            // novo, por chama -- uma área de nove chamas levava a mesa de 61 a
+            // 34 fps. Esticada pelo compositor ela borra de perto, e fogo é
+            // borrado de nascença.
+            const { x, y, escala, giro } = naTela;
+            elemento.style.transform = `translate(${x}px, ${y}px) rotate(${giro}deg) scale(${escala}) translate(${-peca.lado / 2}px, ${-peca.alta}px)`;
+          } else if (naTela) {
             const { x, y, escala, giro } = naTela;
             // No TAMANHO DE TELA, e não ampliada por `scale`: a figura mora num
             // invólucro (ver `PecaEmPe`), e o WebKitGTK rasteriza um `div`
@@ -919,6 +973,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
               lado: peca.lado,
               alta,
               espelhada: Boolean(peca.espelhada),
+              escalada: Boolean(peca.fogo),
             })}
           />
         ),

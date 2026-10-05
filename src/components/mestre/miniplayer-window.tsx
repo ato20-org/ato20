@@ -126,7 +126,12 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
     // cortina e o aviso são `absolute` e não podem sair da janela.
     <DeclarativoProvider valor={declarativo}>
     <div className="relative isolate flex aspect-video min-h-0 w-full flex-1 flex-col overflow-hidden bg-black">
-      <SceneStage viewport={viewport} corte={corte} smooth>
+      <SceneStage
+        viewport={viewport}
+        corDoVazio={cena?.corDoVazio}
+        corte={corte}
+        smooth
+      >
         {cena ? (
           <div key={cena.id} className="scene-fade-in absolute inset-0">
             <SceneLayer

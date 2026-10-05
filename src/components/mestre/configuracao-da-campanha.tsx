@@ -22,6 +22,9 @@ import {
   Wand2,
   X,
 } from "lucide-react";
+import { useEfeitosEmAreaDaCampanha } from "@/components/mestre/efeito-da-area";
+import { TelaDaCondicao } from "@/components/mestre/efeitos-da-campanha";
+import { EfeitosEmAreaDaCampanha } from "@/components/mestre/efeitos-em-area-da-campanha";
 import { toast } from "sonner";
 
 import {
@@ -41,6 +44,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -89,7 +93,7 @@ const MAXIMO_INICIAL = 10;
 const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
   quadro: Shapes,
   medidores: Gauge,
-  condicoes: Sparkles,
+  efeitos: Sparkles,
   layout: LayoutTemplate,
   posicao: Move,
   ajustes: SlidersHorizontal,
@@ -127,6 +131,7 @@ export function ConfiguracaoDaCampanhaBody() {
   // montado para contar.
   const medidores = useModelosDaCampanha();
   const { modelos: condicoes } = useCondicoesDaCampanha();
+  const efeitosEmArea = useEfeitosEmAreaDaCampanha();
   const definicoes = useConfiguracoesStore((state) => state.definicoes);
 
   const ajustes = useMemo(
@@ -142,7 +147,10 @@ export function ConfiguracaoDaCampanhaBody() {
   const topicos = useMemo(() => {
     const achados = topicosAchados(busca, {
       medidores: (medidores.modelos ?? []).map((modelo) => modelo.nome),
-      condicoes: (condicoes ?? []).map((condicao) => condicao.nome),
+      efeitos: [
+        ...(condicoes ?? []).map((condicao) => condicao.nome),
+        ...efeitosEmArea.map((efeito) => efeito.titulo),
+      ],
     });
     // Ajustes só existe com algo para ajustar -- hoje, só quando um plugin
     // declara. E acha pelos próprios ajustes, com a MESMA conta da lista.
@@ -155,7 +163,7 @@ export function ConfiguracaoDaCampanhaBody() {
         ? ajustes.length > 0 && (achados.includes(chave) || ajusteAchado)
         : achados.includes(chave),
     );
-  }, [busca, medidores.modelos, condicoes, ajustes]);
+  }, [busca, medidores.modelos, condicoes, efeitosEmArea, ajustes]);
 
   // O tópico aberto pode sumir -- o plugin do único ajuste foi desligado.
   const atual = topicos.includes(aberto) ? aberto : "quadro";
@@ -274,8 +282,8 @@ function Topico({
       return <PadraoDoQuadro />;
     case "medidores":
       return <MedidoresDaCampanha {...medidores} />;
-    case "condicoes":
-      return <CondicoesDaCampanha />;
+    case "efeitos":
+      return <EfeitosDaCampanha />;
     case "layout":
       return (
         <Secao
@@ -668,6 +676,32 @@ function LinhaDeModelo({
 }
 
 /**
+ * O tópico Efeitos: as condições do token e os efeitos em área, em duas abas.
+ * Os dois são o mesmo formato de efeito e o mesmo editor, e o mestre que
+ * procura "o fogo" não deveria ter de saber em qual dos dois ele mora.
+ */
+function EfeitosDaCampanha() {
+  const [aba, setAba] = useState<"condicoes" | "area">("condicoes");
+
+  return (
+    <div className="space-y-3">
+      <Tabs value={aba} onValueChange={(valor) => setAba(valor as typeof aba)}>
+        <TabsList className="w-full">
+          <TabsTrigger value="condicoes" className="flex-1">
+            Condições
+          </TabsTrigger>
+          <TabsTrigger value="area" className="flex-1">
+            Efeito em área
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {aba === "condicoes" ? <CondicoesDaCampanha /> : <EfeitosEmAreaDaCampanha />}
+    </div>
+  );
+}
+
+/**
  * O cardápio de condições: o que o menu do token oferece.
  *
  * CARDÁPIO, e não molde -- o avesso dos medidores logo acima. Criar uma
@@ -679,6 +713,8 @@ function LinhaDeModelo({
 function CondicoesDaCampanha() {
   const { modelos, recarregar } = useCondicoesDaCampanha();
   const [ocupado, setOcupado] = useState(false);
+  /** A condição aberta na tela dela, pela engrenagem. `null` = a lista. */
+  const [configurando, setConfigurando] = useState<string | null>(null);
   /** A ordem depois de um arrasto, até o cardápio relido chegar. */
   const [arrastada, setArrastada] = useState<{
     de: Condicao[] | null;
@@ -733,8 +769,8 @@ function CondicoesDaCampanha() {
 
   /**
    * O cardápio de partida, num gesto com nome. Só existe com o cardápio vazio:
-   * no meio de uma lista que o mestre já montou, ele duplicaria "Caído" ao
-   * lado do "Caído" que o mestre recoloriu.
+   * no meio de uma lista que o mestre já montou, ele duplicaria "Em chamas"
+   * ao lado do "Em chamas" que o mestre configurou.
    */
   async function sugerir() {
     await mexer(async () => {
@@ -747,6 +783,21 @@ function CondicoesDaCampanha() {
         );
       }
     }, "Falha ao criar as sugestões.");
+  }
+
+  // A tela da condição, quando a engrenagem a abriu: o selo e o efeito dela.
+  const aberta = configurando ? lista.find((modelo) => modelo.id === configurando) : undefined;
+  if (aberta) {
+    return (
+      <TelaDaCondicao
+        modelo={aberta}
+        ocupado={ocupado}
+        onEditar={(patch) =>
+          void mexer(() => editarCondicaoDaCampanha(aberta.id, patch), "Falha ao gravar.")
+        }
+        onVoltar={() => setConfigurando(null)}
+      />
+    );
   }
 
   return (
@@ -815,6 +866,7 @@ function CondicoesDaCampanha() {
                   "Falha ao gravar.",
                 )
               }
+              onConfigurar={() => setConfigurando(modelo.id)}
               onApagar={() =>
                 void mexer(
                   () => removerCondicaoDaCampanha(modelo.id),

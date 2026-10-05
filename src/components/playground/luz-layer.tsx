@@ -2,6 +2,17 @@
 
 import { useEffect, useMemo, useRef } from "react";
 
+import { useDeclarativo } from "@/components/playground/declarativo";
+import {
+  corDaArea,
+  densidadeDoEfeito,
+  divisoesDoEfeito,
+  fontesDaArea,
+  ladoDaCasa,
+  segmentosDaArea,
+} from "@/lib/area-de-efeito";
+import type { EfeitoPedido } from "@/lib/condicao";
+import { definicaoDoEfeito, luzDosEfeitos } from "@/lib/efeitos";
 import {
   useSilhuetasDosTokens,
   type SilhuetaPronta,
@@ -30,7 +41,9 @@ import {
   paradasDoCone,
   segmentosDasParedes,
   sementeDaLuz,
+  tremorSoDe,
   umbrasDaLuz,
+  donoDaFonte,
   type Afim,
   type CaixaDaLuz,
   type FonteDeLuz,
@@ -42,9 +55,11 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type CanvasItem,
+  type AreaDeEfeito,
   type EfeitoDaLuz,
   type Luz,
   type Parede,
+  type SceneGrid,
 } from "@/types/scene";
 
 /**
@@ -154,6 +169,10 @@ export function LuzLayer({
   smooth = false,
   naMao,
   variante,
+  efeitosDoItem,
+  areasDeEfeito,
+  grid,
+  animarSo,
 }: {
   items: CanvasItem[];
   luzes?: Luz[];
@@ -175,8 +194,54 @@ export function LuzLayer({
    * atrás do dedo. As outras continuam deslizando.
    */
   naMao?: string;
+  /**
+   * Os efeitos de condição de cada item, para a luz que eles emanam -- o
+   * goblin em chamas clareia o corredor. Ausente = só as luzes de sempre.
+   * Ver `luzDosEfeitos`.
+   */
+  efeitosDoItem?: (item: CanvasItem) => ReadonlyArray<EfeitoPedido> | undefined;
+  /** As áreas de efeito, que acendem as luzes delas. Ver `fontesDaArea`. */
+  areasDeEfeito?: AreaDeEfeito[];
+  /** A grade, que dá o segmento das áreas. */
+  grid?: SceneGrid;
+  /**
+   * Só a luz de efeito destes donos tremula; a dos outros fica parada na força
+   * cheia. Ausente = todas tremulam. É o Mestre, que só anima o efeito do
+   * selecionado: sem nenhuma luz tremulando, o laço da animação nem roda. A
+   * luz cravada e a lanterna não são efeito, e seguem como estão.
+   */
+  animarSo?: ReadonlySet<string>;
 }) {
-  const fontes = fontesDaCena(luzes, items);
+  const { efeitos: deFora } = useDeclarativo();
+  // Fora do quadro do arrasto: a área não anda quando um token anda, e os
+  // segmentos só mudam quando ela ou a grade mudam.
+  const dasAreas = useMemo(
+    () =>
+      (areasDeEfeito ?? []).flatMap((area) => {
+        if (!area.efeito) return [];
+        const definicao = definicaoDoEfeito(area.efeito, deFora);
+        const luz = luzDosEfeitos(
+          [{ efeito: area.efeito, cor: corDaArea(area, definicao) }],
+          deFora,
+        );
+        if (!luz) return [];
+        const segmentos = segmentosDaArea(
+          area,
+          grid,
+          divisoesDoEfeito(definicao),
+          densidadeDoEfeito(definicao),
+        );
+        return fontesDaArea(area, segmentos, luz, ladoDaCasa(grid));
+      }),
+    [areasDeEfeito, grid, deFora],
+  );
+  const todas = fontesDaCena(
+    luzes,
+    items,
+    efeitosDoItem ? (item) => luzDosEfeitos(efeitosDoItem(item), deFora) : undefined,
+    dasAreas,
+  );
+  const fontes = tremorSoDe(todas, animarSo);
   // Os tokens tapam luz. Entram na chave só os que alguma luz alcança: o
   // goblin arrastado do outro lado do mapa não repinta nada. Ver
   // `chaveDosOclusores`.
@@ -196,7 +261,7 @@ export function LuzLayer({
   const silhuetas = useSilhuetasDosTokens(
     oclusores
       .filter((oclusor) =>
-        fontes.some((fonte) => alcancaOclusor(fonte, oclusor)),
+        fontes.some((fonte) => !fonte.semTokens && alcancaOclusor(fonte, oclusor)),
       )
       .map((oclusor) => oclusor.assetId),
     variante,
@@ -298,7 +363,7 @@ function CanvasDaLuz({
     const partida = desenhadas.current;
     const partidaDosCorpos = tapados.current;
     const desliza = (fonte: FonteDeLuz) =>
-      fonte.id !== naMao && mudou(partida.get(fonte.id), fonte);
+      donoDaFonte(fonte) !== naMao && mudou(partida.get(fonte.id), fonte);
     const deslizaCorpo = (corpo: Oclusor) =>
       corpo.id !== naMao && corpoMudou(partidaDosCorpos.get(corpo.id), corpo);
     const anda =
@@ -321,7 +386,7 @@ function CanvasDaLuz({
         const t = Math.min(1, (agora - inicio) / DURACAO_DA_CHEGADA);
         formar(
           fontes.map((fonte) =>
-            fonte.id === naMao ? fonte : entre(partida.get(fonte.id), fonte, t),
+            donoDaFonte(fonte) === naMao ? fonte : entre(partida.get(fonte.id), fonte, t),
           ),
           oclusores.map((corpo) =>
             corpo.id === naMao
@@ -612,23 +677,27 @@ function luzRecortada(
 ) {
   const contexto = prepararRascunho(rascunho, caixa);
 
-  const degrade = contexto.createRadialGradient(
-    fonte.x,
-    fonte.y,
-    0,
-    fonte.x,
-    fonte.y,
-    fonte.raio,
-  );
-  // O raio forte e a área, e a intensidade multiplicando tudo: a brasa fraca é
-  // fraca de ponta a ponta, e o véu da cor, que sai desta forma, enfraquece
-  // junto. Ver `paradasDaLuz`.
-  for (const [onde, forca] of paradasDaLuz(fonte)) {
-    degrade.addColorStop(onde, `rgba(255,255,255,${forca})`);
-  }
+  if (fonte.forma && fonte.forma.length >= 3) {
+    luzDaForma(contexto, fonte, fonte.forma);
+  } else {
+    const degrade = contexto.createRadialGradient(
+      fonte.x,
+      fonte.y,
+      0,
+      fonte.x,
+      fonte.y,
+      fonte.raio,
+    );
+    // O raio forte e a área, e a intensidade multiplicando tudo: a brasa fraca
+    // é fraca de ponta a ponta, e o véu da cor, que sai desta forma, enfraquece
+    // junto. Ver `paradasDaLuz`.
+    for (const [onde, forca] of paradasDaLuz(fonte)) {
+      degrade.addColorStop(onde, `rgba(255,255,255,${forca})`);
+    }
 
-  contexto.fillStyle = degrade;
-  contexto.fillRect(caixa.x, caixa.y, caixa.width, caixa.height);
+    contexto.fillStyle = degrade;
+    contexto.fillRect(caixa.x, caixa.y, caixa.width, caixa.height);
+  }
 
   // O cone: um degradê que dá a volta no centro, inteiro dentro do facho e
   // zero fora, multiplicado pela forma. Depois as paredes e os tokens tapam
@@ -649,7 +718,12 @@ function luzRecortada(
     contexto.globalCompositeOperation = "source-over";
   }
 
-  const umbras = umbrasDaLuz(segmentos, fonte);
+  // A luz com forma alcança do contorno, e não do meio: as paredes que ela
+  // pega são as até o canto mais longe da caixa. Ver `alcanceDaForma`.
+  const umbras = umbrasDaLuz(
+    segmentos,
+    fonte.forma ? { ...fonte, raio: alcanceDaForma(fonte, fonte.forma) } : fonte,
+  );
   if (umbras.length > 0) {
     // Um caminho só, com todas as sombras: todas no mesmo sentido de giro,
     // então o cruzamento de duas não abre buraco. Ver `umbraDoSegmento`.
@@ -672,8 +746,8 @@ function luzRecortada(
   // não entregou, a sombra curta do pé. O token que CARREGA esta luz não tapa
   // a si mesmo: as duas contas devolvem `null` com a luz dentro do pé.
   contexto.globalCompositeOperation = "destination-out";
-  for (const oclusor of oclusores) {
-    if (oclusor.id === fonte.id) continue;
+  for (const oclusor of fonte.semTokens ? [] : oclusores) {
+    if (oclusor.id === donoDaFonte(fonte)) continue;
 
     const pronta = silhuetas.get(oclusor.assetId);
     if (pronta) {
@@ -928,6 +1002,53 @@ function prepararRascunhoDoVulto(
   );
 
   return { contexto, largura, altura };
+}
+
+/**
+ * A luz com a FORMA de uma área: o contorno cheio, e a queda para fora em
+ * `raio` -- o chão em chamas clareia em retângulo, em círculo, em laço, e não
+ * em manchas redondas.
+ *
+ * A queda é a SOMBRA desfocada do contorno, pintada uma vez quando a luz se
+ * forma (e não a cada quadro: o laço da animação só compõe os rascunhos). O
+ * contorno é desenhado longe, fora do rascunho, e só a sombra dele cai no
+ * lugar. O `shadowBlur` e o deslocamento são em pixels do canvas, que a
+ * transformação não escala: daí o `RESOLUCAO`.
+ */
+function luzDaForma(
+  contexto: CanvasRenderingContext2D,
+  fonte: FonteDeLuz,
+  forma: ReadonlyArray<{ x: number; y: number }>,
+) {
+  const contorno = (dx: number) => {
+    contexto.beginPath();
+    forma.forEach((ponto, i) =>
+      i === 0 ? contexto.moveTo(ponto.x + dx, ponto.y) : contexto.lineTo(ponto.x + dx, ponto.y),
+    );
+    contexto.closePath();
+  };
+  const longe = SCENE_WIDTH * 4;
+
+  // A sombra DUAS vezes, e não o contorno cheio por cima: cheio, ele fazia um
+  // degrau na borda -- inteiro dentro, metade logo fora -- e a área virava um
+  // vidro aceso. Duas sombras chegam à força cheia no miolo e caem sem degrau.
+  contexto.save();
+  contexto.shadowColor = `rgba(255,255,255,${fonte.intensidade})`;
+  contexto.shadowBlur = fonte.raio * RESOLUCAO;
+  contexto.shadowOffsetX = longe * RESOLUCAO;
+  contexto.fillStyle = "#fff";
+  for (let vez = 0; vez < 2; vez++) {
+    contorno(-longe);
+    contexto.fill();
+  }
+  contexto.restore();
+}
+
+/** Até onde a luz com forma alcança, a partir do meio: o contorno mais longe, mais o raio. */
+function alcanceDaForma(fonte: FonteDeLuz, forma: ReadonlyArray<{ x: number; y: number }>): number {
+  return (
+    Math.max(...forma.map((ponto) => Math.hypot(ponto.x - fonte.x, ponto.y - fonte.y))) + fonte.raio
+  );
 }
 
 function prepararRascunho(
