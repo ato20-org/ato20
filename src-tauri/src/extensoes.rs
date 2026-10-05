@@ -222,7 +222,41 @@ pub struct Efeito {
     /// `Interno`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interno: Option<Interno>,
+    /// A luz que a figura emana: a tocha viva, a aura que clareia. Ver
+    /// `LuzDoEfeito`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub luz: Option<LuzDoEfeito>,
 }
+
+/// A luz de um efeito. Entra na luz da cena como a lanterna do token, e vai
+/// com ele aonde ele for.
+///
+/// O `raio` e em VEZES o lado maior da figura, e nao em unidade de cena como a
+/// lanterna: o pack nao conhece a escala do mapa, e o dragao em chamas clareia
+/// mais que o rato em chamas.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LuzDoEfeito {
+    pub raio: f64,
+    /// Ausente = a cor da condicao.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    /// De 0 a 1. Ausente = inteira.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intensidade: Option<f64>,
+    /// `fogo`, `pulsando` ou `piscando`. Ausente = fixa. Ver `EFEITOS_DA_LUZ`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub efeito: Option<String>,
+}
+
+/// Como a luz de um efeito se mexe. Espelho de `EFEITOS_DA_LUZ`, em
+/// `types/scene.ts` -- os mesmos da luz cravada e da lanterna.
+pub const EFEITOS_DA_LUZ: &[&str] = &["fogo", "pulsando", "piscando"];
+
+/// Os limites do raio da luz de um efeito, em vezes a figura. Abaixo de meio
+/// a luz nao sai de baixo dela; acima de dez ela acende o mapa inteiro.
+pub const RAIO_DA_LUZ_MIN: f64 = 0.5;
+pub const RAIO_DA_LUZ_MAX: f64 = 10.0;
 
 impl Efeito {
     /// As imagens que o efeito usa, relativas a pasta. Entram na lista do que
@@ -240,6 +274,7 @@ impl Efeito {
         self.figura.as_ref().is_some_and(FiguraDoEfeito::faz_algo)
             || self.externo.is_some()
             || self.interno.is_some()
+            || self.luz.is_some()
     }
 }
 
@@ -1187,7 +1222,7 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
     }
 
     if !efeito.faz_algo() {
-        return invalido("nao desenha nada: declare `figura`, `externo` ou `interno`");
+        return invalido("nao desenha nada: declare `figura`, `externo`, `interno` ou `luz`");
     }
 
     let fracao = |valor: Option<f64>| valor.map_or(true, |v| v.is_finite() && (0.0..=1.0).contains(&v));
@@ -1260,6 +1295,28 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
     if let Some(interno) = &efeito.interno {
         if !fracao(interno.forca) {
             return invalido("tem `interno.forca` fora de 0 a 1");
+        }
+    }
+
+    if let Some(luz) = &efeito.luz {
+        if !luz.raio.is_finite() || !(RAIO_DA_LUZ_MIN..=RAIO_DA_LUZ_MAX).contains(&luz.raio) {
+            return invalido(&format!(
+                "tem `luz.raio` fora de {RAIO_DA_LUZ_MIN} a {RAIO_DA_LUZ_MAX} vezes a figura"
+            ));
+        }
+        if !fracao(luz.intensidade) {
+            return invalido("tem `luz.intensidade` fora de 0 a 1");
+        }
+        if luz.cor.as_deref().is_some_and(|cor| !cor_hex_valida(cor)) {
+            return invalido("tem `luz.cor` que nao e uma cor `#rrggbb`");
+        }
+        if let Some(movimento) = &luz.efeito {
+            if !EFEITOS_DA_LUZ.contains(&movimento.as_str()) {
+                return invalido(&format!(
+                    "pede `luz.efeito` {movimento:?}; os efeitos sao {}",
+                    EFEITOS_DA_LUZ.join(", ")
+                ));
+            }
         }
     }
 
@@ -2382,6 +2439,31 @@ mod tests {
 
         std::fs::write(origem.join("fogo.png"), b"png").unwrap();
         assert!(importar(&destino, &origem).is_ok());
+    }
+
+    #[test]
+    fn efeito_so_de_luz_entra_e_luz_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"tocha","titulo":"Tocha","luz":{"raio":3,"cor":"#ffaa33","intensidade":0.8,"efeito":"fogo"}}]"##,
+            ),
+        )
+        .unwrap();
+        assert_eq!(m.contribui.efeitos[0].luz.as_ref().unwrap().raio, 3.0);
+
+        for luz in [
+            r##"{"raio":0.1}"##,
+            r##"{"raio":40}"##,
+            r##"{"raio":2,"intensidade":1.5}"##,
+            r##"{"raio":2,"cor":"laranja"}"##,
+            r##"{"raio":2,"efeito":"explodindo"}"##,
+        ] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X","luz":{luz}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{luz}");
+        }
     }
 
     #[test]

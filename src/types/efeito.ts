@@ -1,3 +1,5 @@
+import type { EfeitoDaLuz } from "@/types/scene";
+
 /**
  * Um efeito: o que uma condição faz com a figura, DECLARADO.
  *
@@ -27,6 +29,8 @@ export type DefinicaoDeEfeito = {
   externo?: ExternoDoEfeito;
   /** Uma textura pintada dentro da figura. Ver `InternoDoEfeito`. */
   interno?: InternoDoEfeito;
+  /** A luz que a figura emana. Ver `LuzDoEfeito`. */
+  luz?: LuzDoEfeito;
   /**
    * De onde vêm as imagens. Não é o autor que escreve: quem publica preenche
    * -- o plugin e a versão dele, que vão na URL. Ausente = sem imagem, que é
@@ -70,6 +74,26 @@ export type AnimacaoDoEfeito = {
   periodo?: number;
   /** De 0 a 1, quanto se afasta do parado. Ausente = 0,5. */
   intensidade?: number;
+};
+
+/**
+ * A luz que a figura emana: a tocha viva, a aura que clareia o corredor.
+ *
+ * Entra na luz da cena como a lanterna do token -- tapada pelas paredes, e
+ * indo com a figura aonde ela for. O `raio` é em VEZES o lado maior da figura,
+ * e não em unidade de cena como a lanterna: o pack não conhece a escala do
+ * mapa, e o dragão em chamas clareia mais que o rato. Espelho de
+ * `extensoes::LuzDoEfeito`.
+ */
+export type LuzDoEfeito = {
+  /** De 0,5 a 10 vezes a figura. */
+  raio: number;
+  /** Ausente = a cor da condição. */
+  cor?: string;
+  /** De 0 a 1. Ausente = inteira. */
+  intensidade?: number;
+  /** Ausente = fixa. Os mesmos da luz cravada. */
+  efeito?: EfeitoDaLuz;
 };
 
 /**

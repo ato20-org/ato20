@@ -177,11 +177,14 @@ export type SugestaoDeCondicao = Omit<Condicao, "id" | "escondido">;
  * Um GESTO, e não o que a campanha nova traz de fábrica: inventar condições
  * que ninguém pediu seria escolher o sistema da mesa pelo mestre. Os nomes são
  * os que atravessam sistemas — todo jogo tem alguém caído e alguém envenenado
- * —, e cada um mostra um efeito, para o mestre ver os cinco na primeira sessão.
+ * —, e cada um mostra um efeito, para o mestre ver os de fábrica na primeira
+ * sessão.
  */
 export const SUGESTOES: SugestaoDeCondicao[] = [
   { nome: "Envenenado", cor: "#22c55e", icone: "frasco", efeito: "tingido" },
-  { nome: "Em chamas", cor: "#f59e0b", icone: "chama", efeito: "aura" },
+  { nome: "Em chamas", cor: "#f59e0b", icone: "chama", efeito: "chamas" },
+  { nome: "Molhado", cor: "#3b82f6", icone: "gota", efeito: "molhado" },
+  { nome: "Sangrando", cor: "#ef4444", icone: "sangue", efeito: "sangrando" },
   { nome: "Congelado", cor: "#3b82f6", icone: "floco", efeito: "tingido" },
   { nome: "Invisível", cor: "#ffffff", icone: "fantasma", efeito: "translucido" },
   { nome: "Atordoado", cor: "#f59e0b", icone: "raio", efeito: "tremendo" },

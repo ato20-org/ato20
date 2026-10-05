@@ -289,11 +289,16 @@ function sombraDaMedida(): Pick<
  * Os efeitos de condição desta corrida, lidos da URL: `?condicoes=K&figura=aura`.
  *
  * Os PRIMEIROS K tokens, pela razão das lanternas: o primeiro é o que o
- * cenário move. `misto` roda os efeitos de fábrica, que é a mesa de verdade -- a
- * horda não é toda envenenada do mesmo jeito. K em zero, o padrão, devolve
+ * cenário move. `misto` roda os cinco climas de antes do catálogo, que é a
+ * mesa de verdade -- a horda não é toda envenenada do mesmo jeito -- e a
+ * medida comparável com as já feitas. Os de luz entram pelo nome
+ * (`?figura=chamas`): luz que anda é outro custo. K em zero, o padrão, devolve
  * lista vazia e a cena montada não ganha nem o `personagemId`: é o que mantém
  * esta corrida comparável com as já medidas.
  */
+/** Os cinco climas de antes do catálogo: o `misto` das medidas já feitas. */
+const MISTO = ["aura", "tingido", "translucido", "tremendo", "apagado"] as const;
+
 function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] } {
   if (typeof window === "undefined") return { quantos: 0, efeitos: [] };
 
@@ -303,7 +308,7 @@ function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] 
   const efeitos: EfeitosDoPersonagem[] = Array.from({ length: quantos }, (_, i) => {
     const efeito =
       pedido === "misto"
-        ? EFEITOS_DE_FABRICA[i % EFEITOS_DE_FABRICA.length]!.id
+        ? MISTO[i % MISTO.length]!
         : pedido in EFEITOS_DA_MEDIDA
           ? pedido
           : (EFEITOS_DE_FABRICA.find((cada) => cada.id === pedido)?.id ?? "aura");
