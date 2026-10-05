@@ -1,0 +1,43 @@
+{
+  "id": "sangrando",
+  "titulo": "Sangrando",
+  "dica": "Talhos abertos na figura, o sangue pingando dela e a poça aos pés.",
+  "figura": {
+    "tinta": 0.15
+  },
+  "interno": {
+    "textura": "feridas.png",
+    "forca": 0.9
+  },
+  "externo": {
+    "imagem": "poca-512.webp",
+    "mipmaps": {
+      "128": "poca-128.webp",
+      "256": "poca-256.webp",
+      "512": "poca-512.webp"
+    },
+    "tamanho": 1.4,
+    "ancora": "base",
+    "lado": "atras",
+    "cores": "condicao"
+  },
+  "particulas": {
+    "quantidade": 6,
+    "imagem": "gota.png",
+    "quadros": {
+      "colunas": 4,
+      "total": 4
+    },
+    "tamanho": 0.1,
+    "variacao": 0.4,
+    "direcao": 90,
+    "abertura": 16,
+    "velocidade": 0.5,
+    "vida": 1.2,
+    "emissor": {
+      "largura": 0.55,
+      "altura": 0.45,
+      "ancora": "centro"
+    }
+  }
+}

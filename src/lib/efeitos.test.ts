@@ -16,11 +16,12 @@ import {
 
 describe("EFEITOS_DE_FABRICA", () => {
   it("são as pastas de src/efeitos, descobertas, em ordem de título", () => {
-    // Em ordem de título: "Congelado", "Em chamas", "Envenenado".
+    // Em ordem de título: "Congelado", "Em chamas", "Envenenado", "Sangrando".
     expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual([
       "congelado",
       "chamas",
       "envenenado",
+      "sangrando",
     ]);
     expect(definicaoDoEfeito("chamas")?.origem).toMatchObject({ app: "chamas" });
   });
@@ -402,5 +403,37 @@ describe("o envenenado de fábrica", () => {
     expect(particulas.quadros).toEqual({ colunas: 4, total: 4, fps: 6 });
     expect(particulas.pintar).toBe(false);
     expect(particulas.giro).toBe(0);
+  });
+});
+
+describe("o sangrando de fábrica", () => {
+  const pedidos = [{ efeito: "sangrando", cor: "#dc2626" }];
+
+  it("avermelha de leve e abre os talhos por dentro da figura", () => {
+    const camadas = camadasDaFigura(pedidos);
+
+    expect(camadas.tinta).toEqual({ cor: "#dc2626", forca: 0.15 });
+    expect(camadas.textura!.url).toContain("feridas.png");
+    expect(camadas.textura!.forca).toBeCloseTo(0.9);
+    expect(camadas.halo).toBeUndefined();
+  });
+
+  it("a poça aos pés é parada: uma imagem só, na rampa da condição", () => {
+    const externo = camadasDaFigura(pedidos).externo!;
+
+    expect(externo.quadros).toBeUndefined();
+    expect(externo.animacao).toBeUndefined();
+    expect(externo.cores).toEqual({ cor: "#dc2626" });
+    expect(externo.lado).toBe("atras");
+    expect(externo.niveis.map((nivel) => nivel.lado)).toEqual([128, 256, 512]);
+  });
+
+  it("as gotas caem, e o sprite toca uma vez ao longo da queda", () => {
+    const particulas = particulasDosEfeitos(pedidos)!;
+
+    expect(particulas.imagem).toContain("gota.png");
+    expect(particulas.direcao).toBe(90);
+    expect(particulas.quadros).toEqual({ colunas: 4, total: 4 });
+    expect(particulas.pintar).toBe(false);
   });
 });
