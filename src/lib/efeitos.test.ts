@@ -14,19 +14,33 @@ import {
 
 describe("EFEITOS_DE_FABRICA", () => {
   it("são as pastas de src/efeitos, descobertas, em ordem de título", () => {
-    expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual(["chamas", "sigilo"]);
+    expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual(["chamas"]);
     expect(definicaoDoEfeito("chamas")?.origem).toMatchObject({ app: "chamas" });
-    expect(definicaoDoEfeito("sigilo")?.origem).toMatchObject({ app: "sigilo" });
   });
 
-  it("o sigilo solta o símbolo pintado na cor da condição, girando", () => {
-    const particulas = particulasDosEfeitos([{ efeito: "sigilo", cor: "#a855f7" }]);
+  it("a partícula de imagem sai pintada na cor da condição, girando, com o sprite", () => {
+    const deFora = {
+      "x/simbolo": {
+        id: "x/simbolo",
+        titulo: "Símbolo",
+        origem: { plugin: "x", versao: "1" },
+        particulas: {
+          quantidade: 6,
+          imagem: "simbolo.webp",
+          pintar: true,
+          giro: 120,
+          quadros: { colunas: 4, total: 8 },
+        },
+      },
+    };
+    const particulas = particulasDosEfeitos([{ efeito: "x/simbolo", cor: "#a855f7" }], deFora);
 
     expect(particulas).toMatchObject({
-      imagem: expect.stringContaining("sigilo.webp"),
+      imagem: "/plugin/x/simbolo.webp?v=1",
       pintar: true,
       cor: "#a855f7",
       giro: 120,
+      quadros: { colunas: 4, total: 8 },
     });
   });
 
