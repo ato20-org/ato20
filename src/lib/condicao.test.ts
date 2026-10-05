@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Condicao, EfeitoNaFigura } from "@/types/character";
+import type { Condicao } from "@/types/character";
 
 import {
   condicoesVisiveis,
@@ -39,19 +39,16 @@ describe("condicoesVisiveis", () => {
 });
 
 describe("efeitosDaFigura", () => {
-  it("dá um de cada efeito, e vence a primeira da lista", () => {
-    // Veneno e gelo tingem os dois. A figura não vira um verde-azulado que
-    // ninguém escolheu: fica com a cor de quem vem primeiro na ficha.
+  it("vale só o último efeito da lista", () => {
+    // Veneno, fogo e medo empilhados seriam uma bagunça. Fica o último a
+    // entrar -- as condições novas vão para o fim da ficha.
     const efeitos = efeitosDaFigura([
       condicao({ id: "veneno", cor: "#22c55e", efeito: "tingido" }),
-      condicao({ id: "gelo", cor: "#3b82f6", efeito: "tingido" }),
       condicao({ id: "medo", cor: "#a855f7", efeito: "tremendo" }),
+      condicao({ id: "caido", cor: "#ef4444", efeito: undefined }),
     ]);
 
-    expect(efeitos).toEqual([
-      { efeito: "tingido", cor: "#22c55e" },
-      { efeito: "tremendo", cor: "#a855f7" },
-    ]);
+    expect(efeitos).toEqual([{ efeito: "tremendo", cor: "#a855f7" }]);
   });
 
   it("nunca desenha o efeito de uma condição escondida", () => {
@@ -59,15 +56,29 @@ describe("efeitosDaFigura", () => {
     expect(efeitosDaFigura([condicao({ escondido: true })])).toEqual([]);
   });
 
+  it("a escondida não tampa o efeito de quem veio antes", () => {
+    // Trocar o verde pelo nada contaria que há um segredo por cima.
+    const efeitos = efeitosDaFigura([
+      condicao({ id: "veneno" }),
+      condicao({ id: "maldicao", efeito: "aura", escondido: true }),
+    ]);
+
+    expect(efeitos).toEqual([{ efeito: "tingido", cor: "#22c55e" }]);
+  });
+
   it("condição sem efeito é só o selo", () => {
     expect(efeitosDaFigura([condicao({ efeito: undefined })])).toEqual([]);
   });
 
-  it("ignora o efeito que esta versão não conhece", () => {
-    // O quadro de uma versão futura, que não passou pelo Rust desta.
-    const futura = condicao({ efeito: "cintilando" as EfeitoNaFigura });
+  it("o efeito que esta tela não conhece vence do mesmo jeito", () => {
+    // O catálogo é de quem desenha. Escolher outro aqui faria a TV e o Mestre
+    // mostrarem efeitos diferentes para a mesma ficha.
+    const efeitos = efeitosDaFigura([
+      condicao({ id: "veneno" }),
+      condicao({ id: "sangue", cor: "#ef4444", efeito: "ordem-paranormal/sangue" }),
+    ]);
 
-    expect(efeitosDaFigura([futura])).toEqual([]);
+    expect(efeitos).toEqual([{ efeito: "ordem-paranormal/sangue", cor: "#ef4444" }]);
   });
 });
 

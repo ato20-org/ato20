@@ -59,7 +59,8 @@ import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
-import { EFEITOS_NA_FIGURA, type Personagem } from "@/types/character";
+import { EFEITOS_DE_FABRICA } from "@/lib/efeitos";
+import type { Personagem } from "@/types/character";
 import {
   CORES_DA_LUZ,
   RAIO_DA_LUZ_PADRAO,
@@ -288,7 +289,7 @@ function sombraDaMedida(): Pick<
  * Os efeitos de condição desta corrida, lidos da URL: `?condicoes=K&figura=aura`.
  *
  * Os PRIMEIROS K tokens, pela razão das lanternas: o primeiro é o que o
- * cenário move. `misto` roda os cinco efeitos, que é a mesa de verdade -- a
+ * cenário move. `misto` roda os efeitos de fábrica, que é a mesa de verdade -- a
  * horda não é toda envenenada do mesmo jeito. K em zero, o padrão, devolve
  * lista vazia e a cena montada não ganha nem o `personagemId`: é o que mantém
  * esta corrida comparável com as já medidas.
@@ -302,8 +303,8 @@ function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] 
   const efeitos: EfeitosDoPersonagem[] = Array.from({ length: quantos }, (_, i) => {
     const efeito =
       pedido === "misto"
-        ? EFEITOS_NA_FIGURA[i % EFEITOS_NA_FIGURA.length]!
-        : (EFEITOS_NA_FIGURA.find((nome) => nome === pedido) ?? "aura");
+        ? EFEITOS_DE_FABRICA[i % EFEITOS_DE_FABRICA.length]!.id
+        : (EFEITOS_DE_FABRICA.find((cada) => cada.id === pedido)?.id ?? "aura");
 
     return {
       personagemId: `perf-personagem-${i}`,

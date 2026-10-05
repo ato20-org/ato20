@@ -1,9 +1,5 @@
 import { sementeDaLuz } from "@/lib/geometry/luz";
-import {
-  EFEITOS_NA_FIGURA,
-  type Condicao,
-  type EfeitoNaFigura,
-} from "@/types/character";
+import type { Condicao } from "@/types/character";
 
 /**
  * As contas de uma condição, fora de qualquer componente.
@@ -26,38 +22,47 @@ export function condicoesVisiveis(
   return (condicoes ?? []).filter((condicao) => !condicao.escondido);
 }
 
-/** Um efeito na figura, com a cor de quem o pediu. */
-export type EfeitoPedido = { efeito: EfeitoNaFigura; cor: string };
+/**
+ * Um efeito na figura, com a cor de quem o pediu. O `efeito` é um id do
+ * catálogo -- ver `definicaoDoEfeito`.
+ */
+export type EfeitoPedido = { efeito: string; cor: string };
 
 /**
  * O que a figura mostra, dadas as condições dela.
  *
- * UM de cada efeito: duas condições que tingem — veneno e gelo — não viram
- * um verde-azulado que ninguém escolheu. Vence a PRIMEIRA da lista, e a ordem
- * é a que o mestre arruma na ficha; é o mesmo gesto que ordena os selos.
+ * SÓ O ÚLTIMO efeito: duas condições que mexem na figura -- o veneno que tinge
+ * e o fogo que arde -- empilhadas viram uma bagunça que ninguém lê de longe.
+ * Vale a última condição da lista com efeito, que é a última adicionada: as
+ * novas entram no fim. O mestre que quiser outra reordena a ficha, o mesmo
+ * gesto que ordena os selos.
+ *
+ * Lista, e não um valor só, de propósito: voltar a compor efeitos é mudar
+ * esta regra, e mais nada -- quem desenha já junta o que receber. Ver
+ * `FiguraComEfeitos`.
  *
  * Os ESCONDIDOS ficam de fora sempre, inclusive no palco do Mestre. O selo
  * escondido aparece apagado para ele, mas o efeito não: uma figura tingida no
- * palco dele diria "a mesa está vendo isto", e ela não está.
+ * palco dele diria "a mesa está vendo isto", e ela não está. E um escondido
+ * não tampa o efeito de quem veio antes dele, pela mesma razão.
  *
- * Efeito que esta versão não conhece — o quadro de uma versão futura — é
- * ignorado, e a condição continua valendo como selo.
+ * Não consulta o catálogo: o efeito de um plugin que esta tela não tem vence
+ * do mesmo jeito, e ali desenha só o selo. Escolher outro conforme a tela
+ * faria a TV e o Mestre mostrarem efeitos diferentes para a mesma ficha.
  */
 export function efeitosDaFigura(
   condicoes: ReadonlyArray<Condicao> | undefined,
 ): EfeitoPedido[] {
-  const saida: EfeitoPedido[] = [];
+  const lista = condicoes ?? [];
 
-  for (const condicao of condicoes ?? []) {
-    const efeito = condicao.efeito;
-    if (condicao.escondido || !efeito) continue;
-    if (!EFEITOS_NA_FIGURA.includes(efeito)) continue;
-    if (saida.some((pedido) => pedido.efeito === efeito)) continue;
+  for (let i = lista.length - 1; i >= 0; i--) {
+    const condicao = lista[i]!;
+    if (condicao.escondido || !condicao.efeito) continue;
 
-    saida.push({ efeito, cor: condicao.cor });
+    return [{ efeito: condicao.efeito, cor: condicao.cor }];
   }
 
-  return saida;
+  return [];
 }
 
 /** Os efeitos de um personagem, para as telas que não têm o índice. */
@@ -134,24 +139,6 @@ export function faseDaFigura(id: string, periodo: number): string {
   const fracao = sementeDaLuz(id) / 4_294_967_296;
   return `${(-fracao * periodo).toFixed(3)}s`;
 }
-
-/** Como o seletor chama cada efeito. */
-export const NOME_DO_EFEITO: Record<EfeitoNaFigura, string> = {
-  aura: "Aura",
-  tingido: "Tingido",
-  translucido: "Translúcido",
-  tremendo: "Tremendo",
-  apagado: "Apagado",
-};
-
-/** Uma linha para cada efeito, dizendo para que ele serve. */
-export const DICA_DO_EFEITO: Record<EfeitoNaFigura, string> = {
-  aura: "Um halo na cor da condição, atrás da figura.",
-  tingido: "A figura ganha a cor da condição por cima.",
-  translucido: "Meio transparente, tremulando.",
-  tremendo: "A figura treme no lugar.",
-  apagado: "Cinza e escura.",
-};
 
 /** O que uma sugestão cria. É uma condição sem id. */
 export type SugestaoDeCondicao = Omit<Condicao, "id" | "escondido">;

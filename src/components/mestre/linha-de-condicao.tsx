@@ -20,14 +20,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DICA_DO_EFEITO, NOME_DO_EFEITO } from "@/lib/condicao";
+import { definicaoDoEfeito, EFEITOS_DE_FABRICA } from "@/lib/efeitos";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
-import {
-  EFEITOS_NA_FIGURA,
-  type Condicao,
-  type PatchCondicao,
-} from "@/types/character";
+import type { Condicao, PatchCondicao } from "@/types/character";
 
 /**
  * Esconder e apagar só aparecem sob o cursor, como na linha do medidor. O olho
@@ -98,7 +94,7 @@ export function LinhaDeCondicao({
       <div className="flex shrink-0 items-center gap-0.5">
         {condicao.efeito ? (
           <span className="text-muted-foreground pr-1 text-[10px]">
-            {NOME_DO_EFEITO[condicao.efeito] ?? condicao.efeito}
+            {definicaoDoEfeito(condicao.efeito)?.titulo ?? condicao.efeito}
           </span>
         ) : null}
 
@@ -161,6 +157,7 @@ export function AparenciaDaCondicao({
   onEditar: (patch: PatchCondicao) => void;
 }) {
   const efeito = condicao.efeito ?? null;
+  const definicao = definicaoDoEfeito(condicao.efeito);
 
   return (
     <Popover>
@@ -243,26 +240,28 @@ export function AparenciaDaCondicao({
             >
               Nenhum
             </Button>
-            {EFEITOS_NA_FIGURA.map((opcao) => (
+            {EFEITOS_DE_FABRICA.map((opcao) => (
               <Button
-                key={opcao}
-                variant={efeito === opcao ? "secondary" : "ghost"}
+                key={opcao.id}
+                variant={efeito === opcao.id ? "secondary" : "ghost"}
                 size="sm"
-                aria-pressed={efeito === opcao}
+                aria-pressed={efeito === opcao.id}
                 className="h-7 px-1 text-[11px]"
-                onClick={() => onEditar({ efeito: opcao })}
+                onClick={() => onEditar({ efeito: opcao.id })}
               >
-                {NOME_DO_EFEITO[opcao]}
+                {opcao.titulo}
               </Button>
             ))}
           </div>
-          {/* Uma linha só, e a do efeito escolhido: os cinco nomes são
-              curtos de propósito, e a explicação de todos ao mesmo tempo
-              seria um parágrafo que ninguém lê para escolher um. */}
+          {/* Uma linha só, e a do efeito escolhido: os nomes são curtos de
+              propósito, e a explicação de todos ao mesmo tempo seria um
+              parágrafo que ninguém lê para escolher um. */}
           <p className="text-muted-foreground text-[11px] leading-snug">
-            {efeito
-              ? DICA_DO_EFEITO[efeito]
-              : "Só o selo, sem mexer na figura."}
+            {!efeito
+              ? "Só o selo, sem mexer na figura."
+              : definicao
+                ? definicao.dica
+                : "Um efeito que esta mesa não tem. Aparece só o selo."}
           </p>
         </div>
       </PopoverContent>

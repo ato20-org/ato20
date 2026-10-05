@@ -36,7 +36,7 @@ describe("lerPedidoDeRetratos", () => {
     expect(pedido?.tipo === "mostrar" && pedido.retratos.map((r) => r.id)).toEqual(["ana"]);
   });
 
-  it("todo retrato pedido aparece, e só efeito da lista com cor de verdade", () => {
+  it("todo retrato pedido aparece, e só efeito com forma de id e cor de verdade", () => {
     const pedido = lerPedidoDeRetratos({
       ato20: "retratos",
       mostrar: [
@@ -45,7 +45,10 @@ describe("lerPedidoDeRetratos", () => {
           visible: false,
           efeitos: [
             { efeito: "aura", cor: "#22c55e" },
-            { efeito: "explodir", cor: "#fff" },
+            { efeito: "../explodir", cor: "#fff" },
+            // Forma certa, efeito que o kit não desenha: passa, e cai no selo
+            // lá dentro, como em qualquer tela.
+            { efeito: "ordem-paranormal/sangue", cor: "#ef4444" },
             { efeito: "tingido", cor: "red; background:url(x)" },
           ],
         },
@@ -54,7 +57,10 @@ describe("lerPedidoDeRetratos", () => {
 
     if (pedido?.tipo !== "mostrar") throw new Error("devia mostrar");
     expect(pedido.retratos[0].visible).toBe(true);
-    expect(pedido.retratos[0].efeitos).toEqual([{ efeito: "aura", cor: "#22c55e" }]);
+    expect(pedido.retratos[0].efeitos).toEqual([
+      { efeito: "aura", cor: "#22c55e" },
+      { efeito: "ordem-paranormal/sangue", cor: "#ef4444" },
+    ]);
   });
 
   it("rolagem sem personagem ou com face que o dado não tem some", () => {
