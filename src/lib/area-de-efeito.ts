@@ -7,6 +7,7 @@ import {
   sementeDaLuz,
   type FonteDeLuz,
 } from "@/lib/geometry/luz";
+import type { BordaDaArea } from "@/lib/folha-de-efeito";
 import type { Vec } from "@/lib/geometry/transform";
 import type { ParticulasResolvidas, Trajetoria } from "@/lib/particulas";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
@@ -99,6 +100,13 @@ export const ESCALA_DO_FOCO = 1.5;
  * maiores. É o que prende o forno: cada foco é um `drawImage` por quadro.
  */
 export const MAX_SEGMENTOS = 600;
+
+/**
+ * A largura da borda esfumaçada da base, em casas: metade para dentro da
+ * linha, metade para fora. Fixa para todo efeito. Na área pequena, no máximo
+ * um terço do menor lado -- a fumaça não come a área inteira.
+ */
+export const LARGURA_DA_BORDA = 0.5;
 
 /** Pixels por segmento na folha, no máximo. O fogo é borrado; mais seria memória. */
 const PIXELS_POR_SEGMENTO = 64;
@@ -303,6 +311,8 @@ export type PlanoDaArea = {
   focos: FocoNaFolha[];
   /** Em fração da caixa, como `quadroDasFagulhas` lê. Vazio = sem fagulha. */
   fagulhas: Trajetoria[];
+  /** A borda esfumaçada da base, em pixels do quadro. Ausente = sem base. Ver `mascaraDaBorda`. */
+  borda?: BordaDaArea;
 };
 
 /** O que o plano precisa do efeito, além da área. */
@@ -468,17 +478,23 @@ export function planoDaArea(
       )
     : [];
 
+  // A borda esfumaçada, só com base: é a base que ela esfuma. A caixa ganha a
+  // largura dela em volta do contorno -- a fumaça vai até lá para fora, e a
+  // caixa justa a cortaria num retângulo.
+  const borda =
+    opcoes.escalaDaBase === undefined ? 0 : Math.min(ladoDaCasa(grid) * LARGURA_DA_BORDA, teto / 3);
+
   // A caixa que cerca as três camadas, presa ao plano: o que passa dele
   // derruba o palco no zoom (ver `tamanhoNoPlano`). O que é cortado na borda
   // do mapa perde a ponta, e o mapa continua.
   const contornoCena = contornoEmCena(area);
   const xs = [
-    ...contornoCena.map((ponto) => ponto.x),
+    ...contornoCena.flatMap((ponto) => [ponto.x - borda, ponto.x + borda]),
     ...sprites.flatMap((sprite) => [sprite.x, sprite.x + sprite.tamanho]),
     ...voos.flatMap((voo) => [voo.pe.x - voo.tamanho, voo.pe.x + voo.dx + voo.tamanho]),
   ];
   const ys = [
-    ...contornoCena.map((ponto) => ponto.y),
+    ...contornoCena.flatMap((ponto) => [ponto.y - borda, ponto.y + borda]),
     ...sprites.flatMap((sprite) => [sprite.y, sprite.y + sprite.tamanho]),
     ...voos.flatMap((voo) => [voo.pe.y + voo.tamanho, voo.pe.y + voo.dy - voo.tamanho]),
   ];
@@ -536,7 +552,17 @@ export function planoDaArea(
     quadroInicial: voo.quadroInicial,
   }));
 
-  return { caixa, lado, segmentos, quadro, contorno, ladrilho, focos, fagulhas };
+  return {
+    caixa,
+    lado,
+    segmentos,
+    quadro,
+    contorno,
+    ladrilho,
+    focos,
+    fagulhas,
+    ...(borda > 0 ? { borda: { largura: r(borda * pixels), semente: sementeDaLuz(area.id) } } : {}),
+  };
 }
 
 /**

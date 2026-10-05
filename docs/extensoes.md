@@ -655,11 +655,13 @@ segmento é um ponto do efeito, e a área grande tem mais pontos -- nunca a
 mesma arte esticada. Três camadas, todas assadas numa folha só por área (uma
 camada animada na tela, tenha a área quatro pontos ou mil):
 
-- **`base`** -- o CHÃO, deitado e recortado na forma exata da área: é a única
-  camada que diz ao jogador onde a área termina. Uma textura que emenda nas
+- **`base`** -- o CHÃO, deitado e recortado na forma da área: é a única
+  camada que diz ao jogador onde a área termina. A borda sai esfumaçada, com
+  textura, em meia casa centrada na linha (metade para dentro, metade para
+  fora); os elementos perto dela esmaecem junto. Uma textura que emenda nas
   bordas, repetida em ladrilhos de `escala` segmentos (de `0.5` a `4`, padrão
-  `1`); `escurece` (de `0` a `1`) escurece o chão embaixo dela e a borda;
-  `opacidade`; e os campos de imagem (`imagem`, `quadros`, `mipmaps`, `cores`).
+  `1`); `escurece` (de `0` a `1`) escurece o chão embaixo dela; `opacidade`; e
+  os campos de imagem (`imagem`, `quadros`, `mipmaps`, `cores`).
 - **`area.foco`** -- os ELEMENTOS que se levantam do chão e se repetem pela
   área: a chama, a bolha, o cristal. Uma arte só, estreita, com o pé macio;
   três por segmento, sorteados, com o pé dentro da forma. `area.escala` é o
