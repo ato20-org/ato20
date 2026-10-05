@@ -6,15 +6,20 @@ import {
   EFEITOS_DE_FABRICA,
   efeitoValido,
   luzDosEfeitos,
+  nivelDoExterno,
   TAMANHO_DO_EXTERNO,
   tamanhoNoPlano,
 } from "./efeitos";
 
 describe("EFEITOS_DE_FABRICA", () => {
-  it("mantém os ids de antes do catálogo", () => {
-    // Uma campanha gravada antes dele abre com os mesmos efeitos.
+  it("é só o fogo, um pack que vem no aplicativo", () => {
+    expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual(["chamas"]);
+    expect(definicaoDoEfeito("chamas")?.origem).toEqual({ app: "efeitos/chamas", versao: "1" });
+  });
+
+  it("os climas de antes saíram: a condição que os aponta fica só com o selo", () => {
     for (const id of ["aura", "tingido", "translucido", "tremendo", "apagado"]) {
-      expect(definicaoDoEfeito(id)?.id).toBe(id);
+      expect(definicaoDoEfeito(id)).toBeUndefined();
     }
   });
 
@@ -40,8 +45,14 @@ describe("efeitoValido", () => {
 });
 
 describe("camadasDaFigura", () => {
-  it("o tingido é tinta na cor da condição, na força de fábrica", () => {
-    expect(camadasDaFigura([{ efeito: "tingido", cor: "#22c55e" }])).toEqual({
+  const climas = {
+    "x/tingido": { id: "x/tingido", titulo: "Tingido", figura: { tinta: 0.5 } },
+    "x/aura": { id: "x/aura", titulo: "Aura", figura: { halo: true } },
+    "x/apagado": { id: "x/apagado", titulo: "Apagado", figura: { cinza: true } },
+  };
+
+  it("a tinta é na cor da condição, na força do efeito", () => {
+    expect(camadasDaFigura([{ efeito: "x/tingido", cor: "#22c55e" }], climas)).toEqual({
       tinta: { cor: "#22c55e", forca: 0.5 },
       cinza: false,
       translucido: false,
@@ -51,11 +62,14 @@ describe("camadasDaFigura", () => {
 
   it("a primeira que pede uma camada fica com ela", () => {
     // Hoje chega um pedido só; isto é o que deixa voltar a compor.
-    const camadas = camadasDaFigura([
-      { efeito: "aura", cor: "#f59e0b" },
-      { efeito: "aura", cor: "#a855f7" },
-      { efeito: "apagado", cor: "#ef4444" },
-    ]);
+    const camadas = camadasDaFigura(
+      [
+        { efeito: "x/aura", cor: "#f59e0b" },
+        { efeito: "x/aura", cor: "#a855f7" },
+        { efeito: "x/apagado", cor: "#ef4444" },
+      ],
+      climas,
+    );
 
     expect(camadas.halo).toBe("#f59e0b");
     expect(camadas.cinza).toBe(true);
@@ -75,9 +89,9 @@ describe("camadasDaFigura", () => {
   });
 
   it("o que veio de fora não toma o lugar da fábrica, nem acha herança de objeto", () => {
-    const deFora = { aura: { id: "aura", titulo: "Falsa", figura: { cinza: true } } };
+    const deFora = { chamas: { id: "chamas", titulo: "Falsa", figura: { cinza: true } } };
 
-    expect(definicaoDoEfeito("aura", deFora)?.titulo).toBe("Aura");
+    expect(definicaoDoEfeito("chamas", deFora)?.titulo).toBe("Em chamas");
     expect(definicaoDoEfeito("toString", {})).toBeUndefined();
   });
 
@@ -108,6 +122,7 @@ describe("camadasDaFigura com imagem", () => {
     expect(camadas.textura).toEqual({ url: "/plugin/ordem/fx/brasa.png?v=1.2.0", forca: 0.4 });
     expect(camadas.externo).toEqual({
       url: "/plugin/ordem/fx/fogo.webp?v=1.2.0",
+      niveis: [],
       tamanho: TAMANHO_DO_EXTERNO,
       lado: "frente",
       ancora: "centro",
@@ -196,5 +211,39 @@ describe("luzDosEfeitos", () => {
 
     expect(luzDosEfeitos([{ efeito: "tingido", cor: "#fff" }])).toBeUndefined();
     expect(luzDosEfeitos(pedidos)).toBe(luzDosEfeitos(pedidos));
+  });
+});
+
+describe("o fogo de fábrica", () => {
+  const externo = camadasDaFigura([{ efeito: "chamas", cor: "#3b82f6" }]).externo!;
+
+  it("vem da pasta do app, com quadros, mipmaps, cores da condição, máscara e profundidade", () => {
+    expect(externo.niveis.map((nivel) => nivel.lado)).toEqual([128, 256, 512]);
+    expect(externo.niveis[0]!.url).toBe("/efeitos/chamas/chamas-128.webp?v=1");
+    expect(externo.quadros).toEqual({ colunas: 4, total: 16, fps: 14 });
+    // A cor da CONDIÇÃO: o mesmo fogo, azul.
+    expect(externo.cores).toEqual({ cor: "#3b82f6" });
+    expect(externo.mascara).toBe("/efeitos/chamas/mascara.webp?v=1");
+    expect(externo.profundidade).toBe("/efeitos/chamas/profundidade.webp?v=1");
+  });
+
+  it("o mipmap é o menor que cobre o tamanho na tela, ou o maior", () => {
+    expect(nivelDoExterno(externo, 60)).toContain("chamas-128");
+    expect(nivelDoExterno(externo, 200)).toContain("chamas-256");
+    expect(nivelDoExterno(externo, 300)).toContain("chamas-512");
+    expect(nivelDoExterno(externo, 4000)).toContain("chamas-512");
+  });
+
+  it("grade torta vira imagem parada, e não meio quadro", () => {
+    const torto = {
+      "x/fumaca": {
+        id: "x/fumaca",
+        titulo: "Fumaça",
+        origem: { plugin: "x", versao: "1" },
+        externo: { imagem: "f.webp", quadros: { colunas: 3, total: 10, fps: 12 } },
+      },
+    };
+
+    expect(camadasDaFigura([{ efeito: "x/fumaca", cor: "#fff" }], torto).externo!.quadros).toBeUndefined();
   });
 });

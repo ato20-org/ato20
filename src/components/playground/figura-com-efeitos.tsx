@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import { useDeclarativo } from "@/components/playground/declarativo";
+import { useSceneScaleSeHouver } from "@/components/playground/scene-stage";
 import { faseDaFigura, type EfeitoPedido } from "@/lib/condicao";
 import {
   assarAura,
@@ -13,10 +14,17 @@ import {
 } from "@/lib/efeito-na-figura";
 import {
   camadasDaFigura,
+  nivelDoExterno,
   tamanhoNoPlano,
   type CaixaNoPlano,
   type ExternoResolvido,
 } from "@/lib/efeitos";
+import {
+  assarExterno,
+  precisaDeForno,
+  type ExternoAssado,
+  type PedidoDeExterno,
+} from "@/lib/externo-assado";
 import { cn } from "@/lib/utils";
 
 /**
@@ -92,10 +100,11 @@ export function FiguraComEfeitos({
   /**
    * Onde o visual EXTERNO pode crescer. A caixa do item no plano encolhe o
    * externo perto da borda do mapa, para ele não sair do plano (ver
-   * `tamanhoNoPlano`); `livre` é a peça de pé do 2.5D, que não mora num plano.
+   * `tamanhoNoPlano`); `livre` é a peça de pé do 2.5D, que não mora num plano,
+   * com a largura dela -- é por ela que o mipmap se escolhe.
    * Ausente = sem externo, que é o retrato por ora.
    */
-  alcance?: CaixaNoPlano | "livre";
+  alcance?: CaixaNoPlano | { livre: true; largura: number };
   children: (fonte: string | null) => ReactNode;
 }) {
   // Os efeitos de plugin, do contexto que toda tela já monta. Muda quando o
@@ -113,11 +122,13 @@ export function FiguraComEfeitos({
   });
   const halo = useAura(url, camadas.halo);
   const externo = alcance ? camadas.externo : undefined;
+  const livre = alcance && "livre" in alcance ? alcance : null;
   const tamanhoDeFora = externo
-    ? alcance === "livre"
+    ? livre
       ? externo.tamanho
-      : tamanhoNoPlano(alcance!, externo.tamanho, externo.ancora)
+      : tamanhoNoPlano(alcance as CaixaNoPlano, externo.tamanho, externo.ancora)
     : 0;
+  const larguraNaCena = livre ? livre.largura : alcance ? (alcance as CaixaNoPlano).width : 0;
 
   // Até a pele sair do forno, a figura de sempre. Um quadro colorido antes do
   // cinza é melhor que um quadro sem figura.
@@ -152,8 +163,15 @@ export function FiguraComEfeitos({
         />
       ) : null}
 
-      {externo?.lado === "atras" ? (
-        <ImagemDeFora externo={externo} tamanho={tamanhoDeFora} lugar={lugar} semente={semente} />
+      {externo ? (
+        <ExternoDeFora
+          onde="atras"
+          externo={externo}
+          tamanho={tamanhoDeFora}
+          larguraNaCena={larguraNaCena}
+          lugar={lugar}
+          semente={semente}
+        />
       ) : null}
 
       {tremendo ? (
@@ -173,8 +191,15 @@ export function FiguraComEfeitos({
         children(fonte)
       )}
 
-      {externo?.lado === "frente" ? (
-        <ImagemDeFora externo={externo} tamanho={tamanhoDeFora} lugar={lugar} semente={semente} />
+      {externo ? (
+        <ExternoDeFora
+          onde="frente"
+          externo={externo}
+          tamanho={tamanhoDeFora}
+          larguraNaCena={larguraNaCena}
+          lugar={lugar}
+          semente={semente}
+        />
       ) : null}
     </>
   );
@@ -200,31 +225,66 @@ const ORIGEM: Record<ExternoResolvido["ancora"], string> = {
 };
 
 /**
- * A imagem de fora: o fogo, a fumaça, o círculo.
+ * Um lado do visual externo: o que fica ATRÁS da figura, ou o que passa na
+ * FRENTE dela. A figura monta os dois, um de cada lado dela na pilha.
  *
- * Uma `<img>` só, animada nela mesma, e não num `div` em volta: no 2.5D um
- * `div` transformado com imagem dentro é rasterizado no tamanho de layout e
- * esticado, e a figura de perto borra -- ver a nota da peça de prumo. Fora
- * dos invólucros, pela razão da aura: o fogo não treme com quem treme.
+ * Com profundidade, cada lado desenha a sua metade da folha assada. Sem ela, só
+ * o lado que o efeito pediu desenha, e o outro não monta nada.
  *
- * A opacidade e a intensidade vão como variáveis de CSS, e os quadros as
- * leem: o `piscar` anima a opacidade, e a do efeito não pode se perder nele.
+ * O zoom mora AQUI, e não na figura: o nível de mipmap depende do tamanho em
+ * que o fogo aparece na tela, e ler a escala na figura redesenharia a horda
+ * inteira a cada passo da roda. Aqui, só quem está em chamas.
  */
-function ImagemDeFora({
+function ExternoDeFora({
+  onde,
   externo,
   tamanho,
+  larguraNaCena,
   lugar,
   semente,
 }: {
+  onde: "atras" | "frente";
   externo: ExternoResolvido;
   tamanho: number;
+  larguraNaCena: number;
   lugar: LugarDaFigura | null | undefined;
   semente: string;
 }) {
+  const escala = useSceneScaleSeHouver()?.scale ?? 1;
+  const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+  const url = nivelDoExterno(externo, larguraNaCena * tamanho * escala * dpr);
+  const quadros = externo.quadros;
+  const colunas = quadros?.colunas ?? 1;
+  const linhas = quadros ? quadros.total / quadros.colunas : 1;
+
+  const pedido: PedidoDeExterno | null = precisaDeForno(externo)
+    ? {
+        url,
+        colunas,
+        linhas,
+        ...(externo.cores ? { cores: externo.cores } : {}),
+        ...(externo.mascara ? { mascara: externo.mascara } : {}),
+        ...(externo.profundidade ? { profundidade: externo.profundidade } : {}),
+      }
+    : null;
+  const assado = useExternoAssado(pedido);
+
+  const fonte = !pedido
+    ? externo.lado === onde
+      ? url
+      : null
+    : !assado
+      ? null
+      : "unica" in assado
+        ? externo.lado === onde
+          ? assado.unica
+          : null
+        : assado[onde];
+  if (!fonte) return null;
+
   const animacao = externo.animacao;
   const fx = (1 - tamanho) / 2;
   const fy = externo.ancora === "base" ? 1 - tamanho : externo.ancora === "topo" ? 0 : fx;
-
   const caixa: CSSProperties = lugar
     ? {
         left: lugar.left + lugar.width * fx,
@@ -234,16 +294,18 @@ function ImagemDeFora({
       }
     : { left: porcento(fx), top: porcento(fy), width: porcento(tamanho), height: porcento(tamanho) };
 
+  // A fase dos quadros, a mesma para as duas metades e para os dois eixos: o
+  // fogo da frente e o de trás são o mesmo quadro, e a horda não lambe em
+  // uníssono.
+  const fase = quadros ? faseDaFigura(semente, quadros.total / quadros.fps) : undefined;
+
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={externo.url}
-      alt=""
+    <div
       aria-hidden
-      draggable={false}
-      // `max-w-none` pela razão da aura; `object-fill` pela do token.
+      // O recorte é o QUADRO: a folha inteira mora dentro dele e anda.
       className={cn(
-        "efeito-externo pointer-events-none absolute max-w-none object-fill select-none",
+        "efeito-externo pointer-events-none absolute select-none",
+        quadros && "overflow-hidden",
         animacao && `efeito-${animacao.tipo}`,
       )}
       style={
@@ -260,8 +322,78 @@ function ImagemDeFora({
             : {}),
         } as CSSProperties
       }
-    />
+    >
+      {quadros ? (
+        // As linhas descem num invólucro, as colunas andam na imagem: cada um
+        // carrega UMA animação, pela razão dos invólucros da figura. Os dois em
+        // degraus (`steps`), e por `transform` -- o compositor troca o quadro
+        // sem repintar nada.
+        <div
+          className={cn("absolute top-0 left-0 w-full", linhas > 1 && "efeito-linhas")}
+          style={{
+            height: `${linhas * 100}%`,
+            ...(linhas > 1
+              ? {
+                  animationDuration: `${quadros.total / quadros.fps}s`,
+                  animationTimingFunction: `steps(${linhas})`,
+                  animationDelay: fase,
+                }
+              : {}),
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={fonte}
+            alt=""
+            draggable={false}
+            className="efeito-colunas absolute top-0 left-0 h-full max-w-none"
+            style={{
+              width: `${colunas * 100}%`,
+              animationDuration: `${colunas / quadros.fps}s`,
+              animationTimingFunction: `steps(${colunas})`,
+              animationDelay: fase,
+            }}
+          />
+        </div>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={fonte}
+          alt=""
+          draggable={false}
+          // `object-fill` pela razão do token: a arte estica na caixa.
+          className="absolute inset-0 size-full max-w-none object-fill"
+        />
+      )}
+    </div>
   );
+}
+
+/**
+ * A folha assada, e a ANTERIOR enquanto a nova não sai: trocar de nível de
+ * mipmap no meio do zoom não pode apagar o fogo por um quadro. `null` = nada
+ * a assar, ou o primeiro forno ainda quente.
+ */
+function useExternoAssado(pedido: PedidoDeExterno | null): ExternoAssado | null {
+  const chave = pedido ? JSON.stringify(pedido) : null;
+  const [pronto, setPronto] = useState<{ chave: string; assado: ExternoAssado } | null>(null);
+
+  useEffect(() => {
+    if (!chave || !pedido) return;
+
+    let ativo = true;
+    void assarExterno(pedido).then((assado) => {
+      if (ativo && assado) setPronto({ chave, assado });
+    });
+
+    return () => {
+      ativo = false;
+    };
+    // A chave diz tudo o que o forno recebe. Ver `useAssado`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chave]);
+
+  return chave ? (pronto?.assado ?? null) : null;
 }
 
 /**

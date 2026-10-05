@@ -33,14 +33,23 @@ export type DefinicaoDeEfeito = {
   luz?: LuzDoEfeito;
   /**
    * De onde vêm as imagens. Não é o autor que escreve: quem publica preenche
-   * -- o plugin e a versão dele, que vão na URL. Ausente = sem imagem, que é
-   * o caso da fábrica; um externo sem origem não desenha.
+   * -- o plugin e a versão dele, ou a pasta do próprio aplicativo, que vão na
+   * URL. Ausente = sem imagem; um externo sem origem não desenha.
    */
   origem?: OrigemDoEfeito;
 };
 
-/** O plugin dono das imagens do efeito, e a versão que vai na URL. */
-export type OrigemDoEfeito = { plugin: string; versao: string };
+/**
+ * O dono das imagens do efeito, e a versão que vai na URL para a TV não
+ * desenhar a arte velha.
+ *
+ * - `plugin`: a pasta do plugin, servida em `/plugin/{id}/...`.
+ * - `app`: uma pasta de `public/` -- o efeito de FÁBRICA, que é um pack como
+ *   os outros, só que vem no aplicativo. Ver `public/efeitos/`.
+ */
+export type OrigemDoEfeito =
+  | { plugin: string; versao: string }
+  | { app: string; versao: string };
 
 /**
  * Uma imagem em volta da figura: o fogo, a fumaça, o círculo mágico.
@@ -61,6 +70,46 @@ export type ExternoDoEfeito = {
   /** De 0 a 1. Ausente = 1. */
   opacidade?: number;
   animacao?: AnimacaoDoEfeito;
+  /**
+   * A imagem é uma GRADE de quadros, tocada em ordem: o fogo que lambe, a
+   * fumaça que sobe. Animada pelo compositor -- um `translate` em degraus
+   * dentro de um recorte --, sem repintar nada, ao contrário do GIF.
+   */
+  quadros?: QuadrosDoEfeito;
+  /**
+   * A mesma grade em outros tamanhos, pelo lado do QUADRO em pixels:
+   * `{ "128": "fogo-128.webp", "512": "fogo-512.webp" }`. A tela escolhe o
+   * menor que cobre o tamanho em que o efeito aparece -- a horda pequena não
+   * decodifica a arte grande, e o zoom alto não borra. Ausente = só a `imagem`.
+   */
+  mipmaps?: Record<string, string>;
+  /**
+   * O MAPA DE CORES: a arte vem em tons de cinza -- o cinza é o calor, o alfa
+   * é a forma --, e a cor sai daqui. `condicao` = uma rampa gerada da cor da
+   * condição, e o mesmo fogo vira azul ou verde trocando só ela; ou o caminho
+   * de uma rampa, uma imagem de 256x1 lida da esquerda (frio) para a direita.
+   */
+  cores?: string;
+  /**
+   * Onde a arte pode aparecer, em tons de cinza: o claro deixa, o escuro
+   * apaga. Uma imagem do tamanho de um quadro, que vale para todos.
+   */
+  mascara?: string;
+  /**
+   * A PROFUNDIDADE, em tons de cinza: o claro passa na FRENTE da figura, o
+   * escuro fica ATRÁS. É o que deixa o fogo envolver o corpo -- as chamas dos
+   * pés na frente, o resto subindo por trás. Com ela, o `lado` não vale.
+   */
+  profundidade?: string;
+};
+
+/** Uma grade de quadros: quantos por linha, quantos ao todo, e a velocidade. */
+export type QuadrosDoEfeito = {
+  colunas: number;
+  /** Múltiplo de `colunas`: a grade é cheia. */
+  total: number;
+  /** Quadros por segundo. */
+  fps: number;
 };
 
 /**

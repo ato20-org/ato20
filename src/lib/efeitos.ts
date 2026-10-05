@@ -1,3 +1,4 @@
+import chamas from "../../public/efeitos/chamas/efeito.json";
 import type { EfeitoPedido } from "@/lib/condicao";
 import { normalizarHex } from "@/lib/cor";
 import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
@@ -11,6 +12,7 @@ import type {
   AnimacaoDoEfeito,
   DefinicaoDeEfeito,
   ExternoDoEfeito,
+  QuadrosDoEfeito,
 } from "@/types/efeito";
 
 /**
@@ -31,73 +33,29 @@ import type {
 export type EfeitosDeFora = Readonly<Record<string, DefinicaoDeEfeito>>;
 
 /**
- * Os efeitos de fábrica. Só o que o aplicativo desenha sozinho, sem arquivo de
- * imagem: a arte fica para os packs.
+ * Um pack de FÁBRICA: a pasta em `public/` com o `efeito.json` e as imagens --
+ * o mesmo formato de um efeito de plugin, só que vem no aplicativo. A versão
+ * do JSON vai na URL das imagens, para a TV não desenhar a arte velha.
+ */
+function daFabrica(
+  json: Omit<DefinicaoDeEfeito, "origem"> & { versao: string },
+  pasta: string,
+): DefinicaoDeEfeito {
+  const { versao, ...definicao } = json;
+
+  return { ...definicao, origem: { app: pasta, versao } };
+}
+
+/**
+ * Os efeitos de fábrica. Um só, por decisão: o fogo de "Em chamas" é o efeito
+ * que o ATO20 traz, e é por ele que o formato -- quadros, mipmaps, mapa de
+ * cores, máscara e profundidade -- se prova antes de crescer.
  *
- * Os cinco primeiros são os climas de antes do catálogo, com os mesmos ids:
- * uma campanha gravada antes dele abre com os mesmos efeitos.
+ * Os climas de antes do catálogo (`aura`, `tingido`, ...) saíram: a condição
+ * que ainda os aponta mostra só o selo, e o id continua gravado nela.
  */
 export const EFEITOS_DE_FABRICA: ReadonlyArray<DefinicaoDeEfeito> = [
-  {
-    id: "aura",
-    titulo: "Aura",
-    dica: "Um halo na cor da condição, atrás da figura.",
-    figura: { halo: true },
-  },
-  {
-    id: "tingido",
-    titulo: "Tingido",
-    dica: "A figura ganha a cor da condição por cima.",
-    // Metade: a figura continua sendo quem é, e a cor diz o que aconteceu com
-    // ela. Cheia, o goblin envenenado virava um vulto verde.
-    figura: { tinta: 0.5 },
-  },
-  {
-    id: "translucido",
-    titulo: "Translúcido",
-    dica: "Meio transparente, tremulando.",
-    figura: { translucido: true },
-  },
-  {
-    id: "tremendo",
-    titulo: "Tremendo",
-    dica: "A figura treme no lugar.",
-    figura: { tremor: true },
-  },
-  {
-    id: "apagado",
-    titulo: "Apagado",
-    dica: "Cinza e escura.",
-    figura: { cinza: true },
-  },
-  // Os presets do board de efeitos: o que mais mesa pede, montado com as
-  // mesmas peças que um pack usaria. As partículas, quando existirem, entram
-  // aqui também -- a gota do molhado, a fagulha das chamas.
-  {
-    id: "chamas",
-    titulo: "Em chamas",
-    dica: "Halo e luz de fogo, tremulando em volta.",
-    figura: { halo: true },
-    luz: { raio: 2.5, efeito: "fogo", intensidade: 0.85 },
-  },
-  {
-    id: "molhado",
-    titulo: "Molhado",
-    dica: "Um véu leve da cor por cima.",
-    figura: { tinta: 0.3 },
-  },
-  {
-    id: "sangrando",
-    titulo: "Sangrando",
-    dica: "A cor por cima, e a figura treme.",
-    figura: { tinta: 0.4, tremor: true },
-  },
-  {
-    id: "iluminado",
-    titulo: "Iluminado",
-    dica: "Clareia em volta, sem mudar a figura.",
-    luz: { raio: 3, intensidade: 0.9 },
-  },
+  daFabrica(chamas as Parameters<typeof daFabrica>[0], "efeitos/chamas"),
 ];
 
 const POR_ID = new Map(EFEITOS_DE_FABRICA.map((efeito) => [efeito.id, efeito]));
@@ -157,10 +115,24 @@ export type CamadasDaFigura = {
   tremor: boolean;
 };
 
-/** O externo pronto para desenhar: nenhum campo ausente, nenhum fora do limite. */
-export type ExternoResolvido = Required<Omit<ExternoDoEfeito, "imagem" | "animacao">> & {
+/**
+ * O externo pronto para desenhar: os endereços já desta tela, nenhum número
+ * fora do limite. O que precisa de forno -- o mapa de cores, a máscara, a
+ * profundidade -- vai como pedido para `assarExterno`.
+ */
+export type ExternoResolvido = Required<
+  Pick<ExternoDoEfeito, "tamanho" | "lado" | "ancora" | "opacidade">
+> & {
+  /** A `imagem`: o nível que vale quando não há mipmap. */
   url: string;
+  /** Os mipmaps, do menor ao maior, pelo lado do QUADRO. Vazio = só `url`. */
+  niveis: ReadonlyArray<{ lado: number; url: string }>;
   animacao?: Required<AnimacaoDoEfeito>;
+  quadros?: QuadrosDoEfeito;
+  /** A cor da rampa (`condicao`), ou o endereço da imagem da rampa. */
+  cores?: { cor: string } | { rampa: string };
+  mascara?: string;
+  profundidade?: string;
 };
 
 export function camadasDaFigura(
@@ -191,7 +163,7 @@ export function camadasDaFigura(
       if (url) camadas.textura = { url, forca: fracao(definicao.interno.forca, 1) };
     }
     if (definicao.externo && !camadas.externo) {
-      camadas.externo = resolverExterno(definicao, definicao.externo);
+      camadas.externo = resolverExterno(definicao, definicao.externo, pedido.cor);
     }
   }
 
@@ -201,13 +173,19 @@ export function camadasDaFigura(
 /**
  * O endereço de uma imagem do efeito para ESTA tela, ou `null`.
  *
- * O mesmo endereço das imagens do estilo de medidor: o protocolo `ato20-ext`
- * no Mestre, o daemon na TV e no celular, com a versão do plugin na URL.
- * Efeito sem origem -- o de fábrica -- não tem de onde puxar arquivo.
+ * Do plugin, o mesmo endereço das imagens do estilo de medidor: o protocolo
+ * `ato20-ext` no Mestre, o daemon na TV e no celular. Da fábrica, a pasta do
+ * próprio bundle, relativa -- o Mestre e a TV leem o mesmo `out/`. As duas
+ * com a versão na URL. Efeito sem origem não tem de onde puxar arquivo.
  */
 function urlDaImagem(definicao: DefinicaoDeEfeito, arquivo: string): string | null {
   const origem = definicao.origem;
   if (!origem) return null;
+
+  if ("app" in origem) {
+    const caminho = arquivo.split("/").map(encodeURIComponent).join("/");
+    return `/${origem.app}/${caminho}?v=${encodeURIComponent(origem.versao)}`;
+  }
 
   return urlDaImagemDoEstilo(origem.plugin, arquivo, origem.versao);
 }
@@ -222,9 +200,24 @@ const TAMANHO_MAX = 2;
 function resolverExterno(
   definicao: DefinicaoDeEfeito,
   externo: ExternoDoEfeito,
+  cor: string,
 ): ExternoResolvido | undefined {
   const url = urlDaImagem(definicao, externo.imagem);
   if (!url) return undefined;
+
+  const imagem = (arquivo: string | undefined) =>
+    arquivo ? (urlDaImagem(definicao, arquivo) ?? undefined) : undefined;
+  const niveis = Object.entries(externo.mipmaps ?? {})
+    .map(([lado, arquivo]) => ({ lado: Number(lado), url: imagem(arquivo) }))
+    .filter(
+      (nivel): nivel is { lado: number; url: string } =>
+        Number.isFinite(nivel.lado) && nivel.lado > 0 && Boolean(nivel.url),
+    )
+    .sort((a, b) => a.lado - b.lado);
+  const quadros = quadrosValidos(externo.quadros);
+  const mascara = imagem(externo.mascara);
+  const profundidade = imagem(externo.profundidade);
+  const rampa = externo.cores && externo.cores !== "condicao" ? imagem(externo.cores) : undefined;
 
   const tamanho =
     typeof externo.tamanho === "number" && Number.isFinite(externo.tamanho)
@@ -237,8 +230,40 @@ function resolverExterno(
     lado: externo.lado === "frente" ? "frente" : "atras",
     ancora: externo.ancora === "base" || externo.ancora === "topo" ? externo.ancora : "centro",
     opacidade: fracao(externo.opacidade, 1),
+    niveis,
     ...(externo.animacao ? { animacao: resolverAnimacao(externo.animacao) } : {}),
+    ...(quadros ? { quadros } : {}),
+    ...(externo.cores === "condicao" ? { cores: { cor } } : rampa ? { cores: { rampa } } : {}),
+    ...(mascara ? { mascara } : {}),
+    ...(profundidade ? { profundidade } : {}),
   };
+}
+
+/**
+ * A grade, se ela faz sentido: colunas e total inteiros, total múltiplo das
+ * colunas, fps entre 1 e 60. Torta = imagem parada, inteira, e não um recorte
+ * que mostra metade de um quadro.
+ */
+function quadrosValidos(quadros: QuadrosDoEfeito | undefined): QuadrosDoEfeito | undefined {
+  if (!quadros) return undefined;
+
+  const { colunas, total, fps } = quadros;
+  const inteiro = (n: number) => Number.isInteger(n) && n > 0;
+  if (!inteiro(colunas) || !inteiro(total) || total % colunas !== 0) return undefined;
+  if (typeof fps !== "number" || !(fps >= 1 && fps <= 60)) return undefined;
+
+  return { colunas, total, fps };
+}
+
+/**
+ * O nível de mipmap para um quadro que aparece com `pixels` de lado na tela:
+ * o menor que o cobre, ou o maior se nenhum cobre. Sem níveis, a `url`.
+ */
+export function nivelDoExterno(externo: ExternoResolvido, pixels: number): string {
+  const { niveis } = externo;
+  if (niveis.length === 0) return externo.url;
+
+  return (niveis.find((nivel) => nivel.lado >= pixels) ?? niveis[niveis.length - 1]!).url;
 }
 
 function resolverAnimacao(animacao: AnimacaoDoEfeito): Required<AnimacaoDoEfeito> {

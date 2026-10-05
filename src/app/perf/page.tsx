@@ -289,15 +289,17 @@ function sombraDaMedida(): Pick<
  * Os efeitos de condição desta corrida, lidos da URL: `?condicoes=K&figura=aura`.
  *
  * Os PRIMEIROS K tokens, pela razão das lanternas: o primeiro é o que o
- * cenário move. `misto` roda os cinco climas de antes do catálogo, que é a
- * mesa de verdade -- a horda não é toda envenenada do mesmo jeito -- e a
- * medida comparável com as já feitas. Os de luz entram pelo nome
- * (`?figura=chamas`): luz que anda é outro custo. K em zero, o padrão, devolve
+ * cenário move. `misto` roda os efeitos de fábrica (ver `MISTO`); um efeito
+ * de plugin da bancada entra pelo nome (`?figura=perf/fogo`). K em zero, o padrão, devolve
  * lista vazia e a cena montada não ganha nem o `personagemId`: é o que mantém
  * esta corrida comparável com as já medidas.
  */
-/** Os cinco climas de antes do catálogo: o `misto` das medidas já feitas. */
-const MISTO = ["aura", "tingido", "translucido", "tremendo", "apagado"] as const;
+/**
+ * O `misto`: os efeitos de fábrica, em rodízio. Hoje é só o fogo -- a fábrica
+ * tem um efeito --, e a medida de antes dele (os cinco climas) não se compara
+ * mais com esta.
+ */
+const MISTO = EFEITOS_DE_FABRICA.map((efeito) => efeito.id);
 
 function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] } {
   if (typeof window === "undefined") return { quantos: 0, efeitos: [] };
@@ -311,7 +313,7 @@ function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] 
         ? MISTO[i % MISTO.length]!
         : pedido in EFEITOS_DA_MEDIDA
           ? pedido
-          : (EFEITOS_DE_FABRICA.find((cada) => cada.id === pedido)?.id ?? "aura");
+          : (EFEITOS_DE_FABRICA.find((cada) => cada.id === pedido)?.id ?? "chamas");
 
     return {
       personagemId: `perf-personagem-${i}`,
@@ -389,6 +391,13 @@ const EFEITOS_DA_MEDIDA: Declarativo["efeitos"] = {
       animacao: { tipo: "flutuar", periodo: 1.2 },
     },
   },
+  // O fogo de fábrica SEM a luz: o custo do desenho -- quadros, mipmap e as
+  // duas metades assadas --, à parte do custo da luz que anda.
+  "perf/fogo-sem-luz": (() => {
+    const fogo = { ...EFEITOS_DE_FABRICA[0]!, id: "perf/fogo-sem-luz" };
+    delete fogo.luz;
+    return fogo;
+  })(),
   "perf/brasa": {
     id: "perf/brasa",
     titulo: "Brasa",
