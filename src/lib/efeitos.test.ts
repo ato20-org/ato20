@@ -16,7 +16,8 @@ import {
 
 describe("EFEITOS_DE_FABRICA", () => {
   it("são as pastas de src/efeitos, descobertas, em ordem de título", () => {
-    expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual(["chamas"]);
+    // Em ordem de título: "Congelado" antes de "Em chamas".
+    expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual(["congelado", "chamas"]);
     expect(definicaoDoEfeito("chamas")?.origem).toMatchObject({ app: "chamas" });
   });
 
@@ -342,5 +343,27 @@ describe("a condição que configura o fogo de fábrica", () => {
     expect(urlDaImagemDaCampanha("plugin:ordem@1.2.0/fx/fogo.webp")).toBe("/plugin/ordem/fx/fogo.webp?v=1.2.0");
     expect(urlDaImagemDaCampanha("fabrica:nao-existe/x.webp")).toBeNull();
     expect(urlDaImagemDaCampanha("plugin:../x")).toBeNull();
+  });
+});
+
+describe("o congelado de fábrica", () => {
+  const pedidos = [{ efeito: "congelado", cor: "#3b82f6" }];
+
+  it("azula, trinca e treme a figura", () => {
+    const camadas = camadasDaFigura(pedidos);
+
+    expect(camadas.tinta).toEqual({ cor: "#3b82f6", forca: 0.35 });
+    expect(camadas.tremor).toBe(true);
+    expect(camadas.textura!.url).toContain("rachaduras.png");
+    expect(camadas.textura!.forca).toBeCloseTo(0.85);
+  });
+
+  it("solta cristais: o sprite em laço, girando, na cor do gelo", () => {
+    const particulas = particulasDosEfeitos(pedidos)!;
+
+    expect(particulas.imagem).toContain("cristal.png");
+    expect(particulas.quadros).toEqual({ colunas: 4, total: 4, fps: 8 });
+    expect(particulas.pintar).toBe(false);
+    expect(particulas.giro).toBe(60);
   });
 });
