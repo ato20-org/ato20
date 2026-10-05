@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { useChamasDePe } from "@/components/playground/area-de-efeito-layer";
 import { ChaoInclinado } from "@/components/playground/chao-inclinado";
@@ -127,6 +127,8 @@ export function CenaDeEsguelha({
   corte = 0,
   olhar,
   animarSo,
+  naMao,
+  sobre,
 }: {
   scene: Scene;
   portraits?: Portrait[];
@@ -152,6 +154,14 @@ export function CenaDeEsguelha({
    * quem a recebe -- ver o envelope orbital da `SceneLayer`.
    */
   olhar?: { camera: CameraAssinavel; giro: number; inclinacao: number };
+  /** O item que o dedo do jogador segura. Ver `naMao` em `SceneLayer`. */
+  naMao?: string;
+  /**
+   * O que vai por cima de tudo, com a câmera em mãos: as alças do celular, que
+   * precisam do olho do VOO para ficar sobre a figura, e não do tripé de
+   * destino. Só de esguelha; de prumo quem chama desenha as suas.
+   */
+  sobre?: (camera: CameraAssinavel) => ReactNode;
 }) {
 
   /**
@@ -274,6 +284,7 @@ export function CenaDeEsguelha({
         variante={variante}
         smooth={smooth}
         animarSo={animarSo}
+        naMao={naMao}
       />
     );
   }
@@ -290,6 +301,7 @@ export function CenaDeEsguelha({
         smooth={smooth}
         esguelha={camera}
         animarSo={animarSo}
+        naMao={naMao}
         // Os em pé sobem no chão inclinado; o deitado fica no piso.
         semItens={emPe}
         // O nome e os medidores não vão deitados no piso: vão de prumo sobre
@@ -329,6 +341,8 @@ export function CenaDeEsguelha({
         objetos={Boolean(fichas) && Boolean(scene.infoDosTokens)}
         camera={camera}
       />
+
+      {sobre?.(camera)}
     </>
   );
 }
