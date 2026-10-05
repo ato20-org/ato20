@@ -7,7 +7,7 @@ import {
   CortinaDeCorte,
   useCorteDeCamera,
 } from "@/components/playground/corte-de-camera";
-import { SceneLayer } from "@/components/playground/scene-layer";
+import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { useSubscription } from "@/hooks/use-scene-broadcast";
 import {
@@ -113,7 +113,12 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
 
   // Mesmo corte da TV: trocar de câmera fecha a cortina; a mesma câmera andando
   // interpola. É o que faz este quadro bater com o da mesa também no tempo.
-  const { cena, viewport, corte, cortando } = useCorteDeCamera(scene);
+  const { cena, viewport, tripe, corte, cortando } = useCorteDeCamera(scene);
+  // Com um tripé no ar a mesa vê de esguelha, e esta janela também: o palco
+  // fica parado no plano inteiro e quem anda é o olho. Mesma regra do
+  // `EspectadorStage` -- sem ela, a janela mostrava o mapa de prumo enquanto a
+  // TV mostrava o 2.5D.
+  const deEsguelha = Boolean(tripe);
 
   return (
     // `aspect-video` E `flex-1`: a janela flutuante nasce sem altura e cresce
@@ -127,14 +132,15 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
     <DeclarativoProvider valor={declarativo}>
     <div className="relative isolate flex aspect-video min-h-0 w-full flex-1 flex-col overflow-hidden bg-black">
       <SceneStage
-        viewport={viewport}
+        viewport={deEsguelha ? undefined : viewport}
         corDoVazio={cena?.corDoVazio}
         corte={corte}
         smooth
       >
         {cena ? (
           <div key={cena.id} className="scene-fade-in absolute inset-0">
-            <SceneLayer
+            {/* Sem tripé no ar, devolve a mesma `SceneLayer` de antes. */}
+            <CenaDeEsguelha
               scene={cena}
               portraits={portraits}
               fichas={fichas}
@@ -142,6 +148,8 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
               pings={pings}
               variante="tela"
               smooth
+              tripe={tripe}
+              corte={corte}
             />
           </div>
         ) : null}

@@ -317,8 +317,10 @@ export function CenaDeEsguelha({
         pegadas={false}
         grade={false}
         passoDaGrade={Math.round(UNIDADES_POR_METRO)}
+        // Sem `variante`: ela escolhe o tamanho do MAPA. A peça em pé fica na
+        // `mini` dela -- ver `PecaEmPe` --, e a `tela` que a janela Mesa do
+        // Mestre pede para o chão daria a cada peça uma camada de 1920px.
         pecas={pecasComChamas}
-        variante={variante}
       />
 
       <InfoDeEsguelha
