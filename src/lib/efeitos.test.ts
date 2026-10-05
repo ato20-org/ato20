@@ -490,7 +490,7 @@ describe("a base do efeito", () => {
     expect(foco.url).toContain("chama-128");
     expect(foco.niveis.map((nivel) => nivel.lado)).toEqual([64, 128]);
     expect(foco.cores).toEqual({ cor: "#f59e0b" });
-    expect(focoDaArea({ efeito: "congelado", cor: "#fff" })).toBeUndefined();
+    expect(focoDaArea({ efeito: "sangrando", cor: "#fff" })).toBeUndefined();
   });
 
   it("a área venenosa: o lodo em ladrilho de três casas e o vapor, no laço lento do veneno", () => {
@@ -521,8 +521,20 @@ describe("a base do efeito", () => {
     expect(foco.url).not.toContain("poca");
   });
 
+  it("a área congelada: o gelo trincado em ladrilho de três casas e os cristais de pé", () => {
+    const base = baseDoEfeito({ efeito: "congelado", cor: "#3b82f6" })!;
+    const foco = focoDaArea({ efeito: "congelado", cor: "#3b82f6" })!;
+
+    expect(base.url).toContain("gelo-128");
+    expect(base.escala).toBe(3);
+    // Gelo é claro: não escurece o chão.
+    expect(base.escurece).toBe(0);
+    expect(foco.url).toContain("cristal-128");
+    expect(base.quadros).toEqual(foco.quadros);
+  });
+
   it("efeito sem base não tem base", () => {
-    expect(baseDoEfeito({ efeito: "congelado", cor: "#3b82f6" })).toBeUndefined();
+    expect(baseDoEfeito({ efeito: "sangrando", cor: "#dc2626" })).toBeUndefined();
   });
 
   it("a cópia para a campanha aponta o chão de fogo para o pack", () => {

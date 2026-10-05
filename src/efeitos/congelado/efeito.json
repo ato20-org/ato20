@@ -16,5 +16,38 @@
     "velocidade": 0.3,
     "vida": 2.4,
     "emissor": { "largura": 1, "altura": 0.9, "ancora": "centro" }
+  },
+  "area": {
+    "cor": "#3b82f6",
+    "divisoes": 1,
+    "escala": 1,
+    "foco": {
+      "imagem": "cristal-128.webp",
+      "mipmaps": {
+        "64": "cristal-64.webp",
+        "128": "cristal-128.webp"
+      },
+      "quadros": {
+        "colunas": 4,
+        "total": 16,
+        "fps": 8
+      },
+      "cores": "condicao"
+    },
+    "densidade": 3
+  },
+  "base": {
+    "imagem": "gelo-128.webp",
+    "mipmaps": {
+      "64": "gelo-64.webp",
+      "128": "gelo-128.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 16,
+      "fps": 8
+    },
+    "cores": "condicao",
+    "escala": 3
   }
 }
