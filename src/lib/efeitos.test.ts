@@ -5,6 +5,7 @@ import {
   definicaoDoEfeito,
   EFEITOS_DE_FABRICA,
   efeitoValido,
+  luzDosEfeitos,
   TAMANHO_DO_EXTERNO,
   tamanhoNoPlano,
 } from "./efeitos";
@@ -161,5 +162,39 @@ describe("tamanhoNoPlano", () => {
 
   it("pedido menor que a figura não depende do plano", () => {
     expect(tamanhoNoPlano({ ...caixa, x: -30 }, 0.5, "centro")).toBe(0.5);
+  });
+});
+
+describe("luzDosEfeitos", () => {
+  it("as chamas de fábrica acendem um fogo na cor da condição", () => {
+    expect(luzDosEfeitos([{ efeito: "chamas", cor: "#f59e0b" }])).toEqual({
+      raio: 2.5,
+      cor: "#f59e0b",
+      intensidade: 0.85,
+      efeito: "fogo",
+    });
+  });
+
+  it("a cor da luz do pack vence a da condição, e o número torto é preso", () => {
+    const deFora = {
+      "ordem/tocha": {
+        id: "ordem/tocha",
+        titulo: "Tocha",
+        luz: { raio: 99, cor: "#ABC", intensidade: 3, efeito: "explodindo" as never },
+      },
+    };
+
+    expect(luzDosEfeitos([{ efeito: "ordem/tocha", cor: "#fff" }], deFora)).toEqual({
+      raio: 10,
+      cor: "#aabbcc",
+      intensidade: 1,
+    });
+  });
+
+  it("efeito sem luz não acende nada, e a mesma lista dá a mesma luz", () => {
+    const pedidos = [{ efeito: "chamas", cor: "#f59e0b" }];
+
+    expect(luzDosEfeitos([{ efeito: "tingido", cor: "#fff" }])).toBeUndefined();
+    expect(luzDosEfeitos(pedidos)).toBe(luzDosEfeitos(pedidos));
   });
 });

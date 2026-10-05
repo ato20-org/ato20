@@ -498,6 +498,10 @@ fábrica são escritos assim:
 | `translucido` | meio transparente, tremulando                          |
 | `tremor`      | treme no lugar                                         |
 
+Os de fábrica, no mesmo formato: `aura`, `tingido`, `translucido`, `tremendo`,
+`apagado`, `chamas` (halo e luz de fogo), `molhado`, `sangrando` e
+`iluminado` (só a luz).
+
 Combináveis dentro de um efeito, e com mais duas camadas que levam imagem da
 pasta do plugin (raster, até 2 MB, como as do medidor):
 
@@ -527,6 +531,24 @@ pasta do plugin (raster, até 2 MB, como as do medidor):
   (padrão `1`), e assada uma vez junto da tinta e do cinza, então não custa
   nada por quadro. Numa figura animada, como a tinta, ela congela o primeiro
   quadro.
+
+E uma que não desenha nada na figura, mas clareia em volta dela:
+
+```json
+{ "id": "tocha-viva", "titulo": "Tocha viva",
+  "luz": { "raio": 2.5, "cor": "#ffaa33", "intensidade": 0.85, "efeito": "fogo" } }
+```
+
+- **`luz`** entra na luz da cena como a lanterna do token: tapada pelas
+  paredes, com a figura não fazendo sombra na própria luz, e indo com ela.
+  `raio` é em **vezes o lado maior da figura** (de `0.5` a `10`), e não em
+  unidade de cena: o pack não conhece a escala do mapa, e o dragão em chamas
+  clareia mais que o rato. Com teto, o alcance padrão da lanterna do token
+  (260 unidades): luz que anda custa pela área, e a do efeito nunca custa mais
+  que uma lanterna comum. `cor` ausente é a cor da condição; `intensidade`
+  de `0` a `1` (padrão `1`); `efeito` é `fogo`, `pulsando` ou `piscando`, os
+  mesmos da luz cravada. Num mapa sem escuro a luz ainda pinta o véu da cor
+  dela em volta da figura.
 
 Já **entre** condições, a figura mostra só o
 efeito da **última** da lista, que é a última adicionada: veneno, fogo e medo

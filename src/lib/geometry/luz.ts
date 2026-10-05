@@ -1,4 +1,5 @@
 import { normalizarHex } from "@/lib/cor";
+import type { LuzResolvida } from "@/lib/efeitos";
 import {
   paredeDeVerdade,
   segmentosDaParede,
@@ -45,6 +46,13 @@ export type Ponto = { x: number; y: number };
 export type FonteDeLuz = {
   /** O da luz solta, ou o do item que a carrega. */
   id: string;
+  /**
+   * O item que carrega a luz, quando não é o `id`: a luz do EFEITO de uma
+   * condição tem id próprio -- o token pode ter a lanterna e o fogo ao mesmo
+   * tempo --, mas continua sendo do token. É por ele que o token não faz
+   * sombra na própria luz, e que a luz anda junto do dedo. Ver `donoDaFonte`.
+   */
+  dono?: string;
   x: number;
   y: number;
   raio: number;
@@ -181,6 +189,7 @@ export function efeitoDe(valor: unknown): EfeitoDaLuz | undefined {
 export function fontesDaCena(
   luzes: ReadonlyArray<Luz> | undefined,
   items: ReadonlyArray<CanvasItem>,
+  luzDoEfeito?: (item: CanvasItem) => LuzResolvida | undefined,
 ): FonteDeLuz[] {
   const fontes: FonteDeLuz[] = [];
 
@@ -229,7 +238,51 @@ export function fontesDaCena(
     });
   }
 
+  // A luz das condições: o fogo que o goblin em chamas espalha. Do centro do
+  // item, como a lanterna, e do tamanho dele -- o raio do efeito é em vezes a
+  // figura --, até o teto. Ver `luzDosEfeitos` e `RAIO_MAXIMO_DO_EFEITO`.
+  if (luzDoEfeito) {
+    for (const item of items) {
+      const luz = luzDoEfeito(item);
+      if (!luz) continue;
+
+      const raio = Math.min(
+        RAIO_MAXIMO_DO_EFEITO,
+        luz.raio * Math.max(item.width, item.height),
+      );
+      fontes.push({
+        id: `${item.id}#efeito`,
+        dono: item.id,
+        x: item.x + item.width / 2,
+        y: item.y + item.height / 2,
+        raio,
+        raioIntenso: raioIntensoDe(raio, undefined),
+        cor: luz.cor,
+        intensidade: limitarIntensidade(luz.intensidade),
+        ...(luz.efeito ? { efeito: luz.efeito } : {}),
+      });
+    }
+  }
+
   return fontes.filter(fonteValida);
+}
+
+/**
+ * Até onde a luz de um efeito alcança, em unidade de cena: o alcance com que
+ * a lanterna do token acende (`ALCANCE_DA_LANTERNA_PADRAO`).
+ *
+ * Teto por MEDIDA, e não por gosto. O raio do efeito é em vezes a figura, e o
+ * custo de uma luz que anda cresce com a área dela. Na bancada, cinco figuras
+ * grandes em chamas -- raio de 450 a 800 -- puseram a mesa a 10 fps; com teto
+ * de 420, 14; cinco lanternas de 260, 24. Com o teto na lanterna padrão, a
+ * luz de um efeito nunca custa mais que uma lanterna comum, e abaixo dele o
+ * dragão continua clareando mais que o rato.
+ */
+export const RAIO_MAXIMO_DO_EFEITO = 260;
+
+/** O item que carrega a fonte, ou ela mesma. Ver `FonteDeLuz.dono`. */
+export function donoDaFonte(fonte: Pick<FonteDeLuz, "id" | "dono">): string {
+  return fonte.dono ?? fonte.id;
 }
 
 /**

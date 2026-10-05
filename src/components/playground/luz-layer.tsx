@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef } from "react";
 
+import { useDeclarativo } from "@/components/playground/declarativo";
+import type { EfeitoPedido } from "@/lib/condicao";
+import { luzDosEfeitos } from "@/lib/efeitos";
 import {
   useSilhuetasDosTokens,
   type SilhuetaPronta,
@@ -31,6 +34,7 @@ import {
   segmentosDasParedes,
   sementeDaLuz,
   umbrasDaLuz,
+  donoDaFonte,
   type Afim,
   type CaixaDaLuz,
   type FonteDeLuz,
@@ -154,6 +158,7 @@ export function LuzLayer({
   smooth = false,
   naMao,
   variante,
+  efeitosDoItem,
 }: {
   items: CanvasItem[];
   luzes?: Luz[];
@@ -175,8 +180,19 @@ export function LuzLayer({
    * atrás do dedo. As outras continuam deslizando.
    */
   naMao?: string;
+  /**
+   * Os efeitos de condição de cada item, para a luz que eles emanam -- o
+   * goblin em chamas clareia o corredor. Ausente = só as luzes de sempre.
+   * Ver `luzDosEfeitos`.
+   */
+  efeitosDoItem?: (item: CanvasItem) => ReadonlyArray<EfeitoPedido> | undefined;
 }) {
-  const fontes = fontesDaCena(luzes, items);
+  const { efeitos: deFora } = useDeclarativo();
+  const fontes = fontesDaCena(
+    luzes,
+    items,
+    efeitosDoItem ? (item) => luzDosEfeitos(efeitosDoItem(item), deFora) : undefined,
+  );
   // Os tokens tapam luz. Entram na chave só os que alguma luz alcança: o
   // goblin arrastado do outro lado do mapa não repinta nada. Ver
   // `chaveDosOclusores`.
@@ -298,7 +314,7 @@ function CanvasDaLuz({
     const partida = desenhadas.current;
     const partidaDosCorpos = tapados.current;
     const desliza = (fonte: FonteDeLuz) =>
-      fonte.id !== naMao && mudou(partida.get(fonte.id), fonte);
+      donoDaFonte(fonte) !== naMao && mudou(partida.get(fonte.id), fonte);
     const deslizaCorpo = (corpo: Oclusor) =>
       corpo.id !== naMao && corpoMudou(partidaDosCorpos.get(corpo.id), corpo);
     const anda =
@@ -321,7 +337,7 @@ function CanvasDaLuz({
         const t = Math.min(1, (agora - inicio) / DURACAO_DA_CHEGADA);
         formar(
           fontes.map((fonte) =>
-            fonte.id === naMao ? fonte : entre(partida.get(fonte.id), fonte, t),
+            donoDaFonte(fonte) === naMao ? fonte : entre(partida.get(fonte.id), fonte, t),
           ),
           oclusores.map((corpo) =>
             corpo.id === naMao
@@ -673,7 +689,7 @@ function luzRecortada(
   // a si mesmo: as duas contas devolvem `null` com a luz dentro do pé.
   contexto.globalCompositeOperation = "destination-out";
   for (const oclusor of oclusores) {
-    if (oclusor.id === fonte.id) continue;
+    if (oclusor.id === donoDaFonte(fonte)) continue;
 
     const pronta = silhuetas.get(oclusor.assetId);
     if (pronta) {

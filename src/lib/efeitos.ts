@@ -1,6 +1,12 @@
 import type { EfeitoPedido } from "@/lib/condicao";
+import { normalizarHex } from "@/lib/cor";
 import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
-import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
+import {
+  EFEITOS_DA_LUZ,
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  type EfeitoDaLuz,
+} from "@/types/scene";
 import type {
   AnimacaoDoEfeito,
   DefinicaoDeEfeito,
@@ -63,6 +69,34 @@ export const EFEITOS_DE_FABRICA: ReadonlyArray<DefinicaoDeEfeito> = [
     titulo: "Apagado",
     dica: "Cinza e escura.",
     figura: { cinza: true },
+  },
+  // Os presets do board de efeitos: o que mais mesa pede, montado com as
+  // mesmas peças que um pack usaria. As partículas, quando existirem, entram
+  // aqui também -- a gota do molhado, a fagulha das chamas.
+  {
+    id: "chamas",
+    titulo: "Em chamas",
+    dica: "Halo e luz de fogo, tremulando em volta.",
+    figura: { halo: true },
+    luz: { raio: 2.5, efeito: "fogo", intensidade: 0.85 },
+  },
+  {
+    id: "molhado",
+    titulo: "Molhado",
+    dica: "Um véu leve da cor por cima.",
+    figura: { tinta: 0.3 },
+  },
+  {
+    id: "sangrando",
+    titulo: "Sangrando",
+    dica: "A cor por cima, e a figura treme.",
+    figura: { tinta: 0.4, tremor: true },
+  },
+  {
+    id: "iluminado",
+    titulo: "Iluminado",
+    dica: "Clareia em volta, sem mudar a figura.",
+    luz: { raio: 3, intensidade: 0.9 },
   },
 ];
 
@@ -300,3 +334,53 @@ export function tamanhoNoPlano(
 
   return Math.max(1, teto);
 }
+
+/** A luz de um efeito pronta para entrar na cena: tudo preenchido e no limite. */
+export type LuzResolvida = {
+  /** Em vezes o lado maior da figura. Ver `LuzDoEfeito.raio`. */
+  raio: number;
+  cor: string;
+  intensidade: number;
+  efeito?: EfeitoDaLuz;
+};
+
+/**
+ * A luz que os efeitos de uma figura pedem, ou `undefined`.
+ *
+ * A primeira que pede fica com ela, como as outras camadas. Separada de
+ * `camadasDaFigura` porque quem a lê é a `LuzLayer`, a cada render do palco, e
+ * ela não precisa de URL de imagem nenhuma -- e guardada pela lista de
+ * pedidos, que é a mesma enquanto a condição não muda.
+ */
+export function luzDosEfeitos(
+  efeitos: ReadonlyArray<EfeitoPedido> | undefined,
+  deFora?: EfeitosDeFora,
+): LuzResolvida | undefined {
+  if (!efeitos?.length) return undefined;
+
+  const guardada = luzesGuardadas.get(efeitos);
+  if (guardada && guardada.deFora === deFora) return guardada.luz;
+
+  let luz: LuzResolvida | undefined;
+  for (const pedido of efeitos) {
+    const pedida = definicaoDoEfeito(pedido.efeito, deFora)?.luz;
+    if (!pedida || typeof pedida.raio !== "number" || !Number.isFinite(pedida.raio)) continue;
+
+    const efeito = EFEITOS_DA_LUZ.find((cada) => cada === pedida.efeito);
+    luz = {
+      raio: Math.min(10, Math.max(0.5, pedida.raio)),
+      cor: (pedida.cor && normalizarHex(pedida.cor)) || pedido.cor,
+      intensidade: fracao(pedida.intensidade, 1),
+      ...(efeito ? { efeito } : {}),
+    };
+    break;
+  }
+
+  luzesGuardadas.set(efeitos, { deFora, luz });
+  return luz;
+}
+
+const luzesGuardadas = new WeakMap<
+  ReadonlyArray<EfeitoPedido>,
+  { deFora: EfeitosDeFora | undefined; luz: LuzResolvida | undefined }
+>();

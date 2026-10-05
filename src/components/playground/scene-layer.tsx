@@ -275,6 +275,15 @@ export function SceneLayer({
     [efeitos],
   );
 
+  /** O que as condições pedem de cada item: do personagem, ou do próprio objeto. */
+  const efeitosDoItem = useCallback(
+    (item: CanvasItem) =>
+      item.personagemId
+        ? efeitosPorPersonagem.get(item.personagemId)
+        : efeitosDoObjeto(item.condicoes),
+    [efeitosPorPersonagem],
+  );
+
   const pingsDaCena = useMemo(
     () => (pings ?? []).filter((ping) => ping.cenaId === scene.id),
     [pings, scene.id],
@@ -471,6 +480,7 @@ export function SceneLayer({
           // A mesma dos itens e da sombra do sol: a silhueta sai do arquivo
           // que o token já baixou. Ver `useSilhuetasDosTokens`.
           variante={variante}
+          efeitosDoItem={efeitosDoItem}
         />
       )}
 
