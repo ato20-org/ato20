@@ -19,6 +19,7 @@ import { PinLayer } from "@/components/mestre/pin-layer";
 import { LuzMarcadores } from "@/components/mestre/luz-marcadores";
 import { PainelDaLuz } from "@/components/mestre/painel-da-luz";
 import { ParedeLayer } from "@/components/mestre/parede-layer";
+import { PortaMarcadores } from "@/components/mestre/porta-marcadores";
 import {
   AncorasDeSeta,
   RAIO_DE_ENCAIXE_PX,
@@ -51,6 +52,7 @@ import {
 } from "@/lib/mestre/grupo-sem-alca";
 import { areaDoPoligono } from "@/lib/geometry/area-escondida";
 import {
+  ALTURA_DA_PAREDE,
   alturaDaParede,
   baseDaSombra,
   METROS_DA_PAREDE_PADRAO,
@@ -60,6 +62,11 @@ import {
   UNIDADES_POR_METRO,
 } from "@/lib/geometry/sombra";
 import { caixaDoTraco } from "@/lib/geometry/limites";
+import {
+  alternarPorta,
+  pontaDaPorta,
+  portaDoTraco,
+} from "@/lib/geometry/porta";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { reguaVazia, moverRegua } from "@/lib/geometry/regua";
 import type { PontaDoMedidor } from "@/components/playground/regua-layer";
@@ -115,6 +122,7 @@ import {
   removeAreaDeEfeitoSelection,
   removeFogSelection,
   removeParedeSelection,
+  removePortaSelection,
   removeSelection,
   setSelectionOpacity,
   setSelectionSombra,
@@ -184,6 +192,7 @@ import {
   type NewForma,
   type TipoDeForma,
   type NewParede,
+  type NewPorta,
   type PontaDeLigacao,
   type Scene,
   type SceneGrid,
@@ -353,6 +362,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const gestoDocumentos = useGestoStore((state) => state.documentos);
   const gestoTracos = useGestoStore((state) => state.tracos);
   const gestoCamera = useGestoStore((state) => state.camera);
+  const gestoPorta = useGestoStore((state) => state.porta);
   const scene = useMemo(
     () =>
       aplicarGesto(cenaDoBoard, {
@@ -364,6 +374,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         documentos: gestoDocumentos,
         tracos: gestoTracos,
         camera: gestoCamera,
+        porta: gestoPorta,
       }),
     [
       cenaDoBoard,
@@ -375,6 +386,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       gestoDocumentos,
       gestoTracos,
       gestoCamera,
+      gestoPorta,
     ],
   );
 
@@ -420,6 +432,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const [rascunhoDaParede, setRascunhoDaParede] = useState<NewParede | null>(
     null,
   );
+  /** A porta que o arrasto está traçando. Ver `PortaMarcadores`. */
+  const [rascunhoDaPorta, setRascunhoDaPorta] = useState<NewPorta | null>(null);
 
   /**
    * O laço da área escondida livre: os vértices já cravados, em coordenadas de
@@ -520,7 +534,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const selectMedidor = useSelectionStore((state) => state.selectMedidor);
   const selectParede = useSelectionStore((state) => state.selectParede);
   const selectLuz = useSelectionStore((state) => state.selectLuz);
+  const selectPorta = useSelectionStore((state) => state.selectPorta);
   const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
+  const selectedPortaId = useSelectionStore((state) => state.selectedPortaId);
   const clear = useSelectionStore((state) => state.clear);
 
   const addFog = useSceneStore((state) => state.addFog);
@@ -529,7 +545,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const removeMedidores = useSceneStore((state) => state.removeMedidores);
   const addParede = useSceneStore((state) => state.addParede);
   const addLuz = useSceneStore((state) => state.addLuz);
+  const addPorta = useSceneStore((state) => state.addPorta);
   const updateParede = useSceneStore((state) => state.updateParede);
+  const updatePorta = useSceneStore((state) => state.updatePorta);
   const updateFog = useSceneStore((state) => state.updateFog);
   const addAreaDeEfeito = useSceneStore((state) => state.addAreaDeEfeito);
   const updateAreaDeEfeito = useSceneStore((state) => state.updateAreaDeEfeito);
@@ -794,6 +812,17 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const selectedParede = scene.paredes?.find(
     (parede) => parede.id === selectedParedeId,
   );
+  const selectedPorta = scene.portas?.find(
+    (porta) => porta.id === selectedPortaId,
+  );
+  /**
+   * A caixa da porta FECHADA, da dobradiça à ponta: é sobre ela que a fileira
+   * do gizmo fica. A do batente, e não a da folha, para os botões não andarem
+   * enquanto a porta abre.
+   */
+  const caixaDaPortaNaMao = selectedPorta
+    ? boundsToBox(boundsFromPoints(selectedPorta, pontaDaPorta(selectedPorta, true)))
+    : null;
   /**
    * A caixa que cerca o que está na mão, quando é mais de um.
    *
@@ -1774,6 +1803,39 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     });
   }
 
+  /**
+   * Traça uma porta: o clique crava a dobradiça, e o arrasto leva a ponta.
+   * Shift cai no múltiplo de 45, que é como as portas correm num mapa.
+   */
+  function tracarPorta(event: ReactPointerEvent, dobradica: Vec) {
+    startDrag(event, {
+      onMove: (delta, native) =>
+        setRascunhoDaPorta(
+          portaDoTraco(
+            dobradica,
+            { x: dobradica.x + delta.x, y: dobradica.y + delta.y },
+            native.shiftKey,
+          ),
+        ),
+      onEnd: (native) => {
+        setRascunhoDaPorta(null);
+
+        // Clique sem arrasto não deixa porta: uma de zero não teria onde pegar.
+        const porta = portaDoTraco(
+          dobradica,
+          toScene(native.clientX, native.clientY),
+          native.shiftKey,
+        );
+        if (!porta) return;
+
+        selectPorta(addPorta(scene.id, porta));
+        // De volta à seta, como a parede: o gesto seguinte é abrir a porta
+        // para conferir a luz, e é com a seta que a alça responde.
+        setTool("select");
+      },
+    });
+  }
+
   /** Clique num medidor: seleciona e, se arrastar, move inteiro. */
   function onMedidorPointerDown(event: ReactPointerEvent, medidor: Regua) {
     if (event.button !== 0) return;
@@ -2233,6 +2295,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     if (tool === "parede") {
       erguerParede(event, anchor);
+      return;
+    }
+
+    if (tool === "porta") {
+      tracarPorta(event, anchor);
       return;
     }
 
@@ -2816,6 +2883,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         tool === "regua" ||
         tool === "parede" ||
         tool === "luz" ||
+        tool === "porta" ||
         Boolean(ferramentaDeExtensao(tool))));
   // Mão aberta sempre que o espaço estiver segurado.
   //
@@ -2868,6 +2936,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           apagando={apagando}
           scene={scene}
           variant="mestre"
+          portaNaMao={gestoPorta?.portaId}
           pings={pings}
           fichas={fichasNoPalco}
           efeitos={efeitosNoPalco}
@@ -2921,6 +2990,14 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           desenha na TV. O que a mesa recebe é a SOMBRA, não a parede que a
           fez. Ver `ParedeLayer` e `SombraLayer`. */}
       <ParedeLayer scene={scene} fantasma={rascunhoDaParede} />
+
+      {/* A folha, a dobradiça e a alça de cada porta. Fora do `SceneLayer`
+          pela razão da parede: a mesa vê a luz passar, e não a porta. */}
+      <PortaMarcadores
+        scene={scene}
+        panMode={panMode}
+        fantasma={rascunhoDaPorta}
+      />
 
       {/* O ponto e o alcance de cada luz cravada. Fora do `SceneLayer` pela
           razão da parede: a mesa vê a luz, não o marcador dela. */}
@@ -3242,6 +3319,42 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             />
           ) : null}
         </>
+      ) : null}
+
+      {/* A fileira da porta: abrir e fechar, altura, cadeado e lixeira. Só
+          a fileira -- sem caixa, alças nem giro: as alças da porta são as
+          dela, em volta da dobradiça. Ver `PortaMarcadores`. */}
+      {selectedPorta && caixaDaPortaNaMao && !panMode ? (
+        <TransformHandles
+          key={selectedPorta.id}
+          box={{ ...caixaDaPortaNaMao, rotation: 0 }}
+          handles={[]}
+          rotatable={false}
+          outline={false}
+          onChange={() => {}}
+          porta={{
+            aberta: selectedPorta.abertura !== undefined,
+            onToggle: () =>
+              updatePorta(scene.id, selectedPorta.id, alternarPorta(selectedPorta)),
+          }}
+          altura={{
+            doQue: "porta",
+            metros: (selectedPorta.altura ?? ALTURA_DA_PAREDE) / UNIDADES_POR_METRO,
+            onChange: (metros) =>
+              updatePorta(scene.id, selectedPorta.id, {
+                // Ausente na altura da parede, como nela: é a porta de sempre.
+                altura:
+                  metros === METROS_DA_PAREDE_PADRAO
+                    ? undefined
+                    : metros * UNIDADES_POR_METRO,
+              }),
+          }}
+          trava={{
+            travada: Boolean(selectedPorta.locked),
+            onToggle: toggleSelectionLock,
+          }}
+          onDelete={removePortaSelection}
+        />
       ) : null}
 
       {/* As alças de vértice da forma em LAÇO. A caixa dela já é governada

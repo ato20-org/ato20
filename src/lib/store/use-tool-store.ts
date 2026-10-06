@@ -58,6 +58,9 @@ export type Tool =
   // a luz não tem tamanho, tem alcance, e o alcance se ajusta no anel dela.
   // Também só do mapa. Ver `Luz`.
   | "luz"
+  // `porta` traça a folha no arrasto, da dobradiça à ponta. Só do mapa, como
+  // a parede de que ela é um pedaço. Ver `Porta`.
+  | "porta"
   // `efeito` desenha uma ÁREA DE EFEITO -- o chão em chamas --, com as mesmas
   // três geometrias da área escondida. Só do mapa. Ver `AreaDeEfeito`.
   | "efeito"

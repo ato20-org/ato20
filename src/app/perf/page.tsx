@@ -24,6 +24,7 @@ import {
   LENTE_DA_MESA,
   tripeDaOrbital,
 } from "@/lib/geometry/camera-orbital";
+import { paredesComPortas } from "@/lib/geometry/porta";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
 import { leandoDaCamera } from "@/lib/geometry/volume";
 import { MestreShell } from "@/components/mestre/mestre-shell";
@@ -76,6 +77,7 @@ import {
   type CanvasItem,
   type EfeitoDaLuz,
   type Parede,
+  type Porta,
   type Scene,
   type Sol,
   type Tripe,
@@ -284,6 +286,54 @@ function sombraDaMedida(): Pick<
           }))
         : undefined,
   };
+}
+
+/**
+ * As portas desta corrida, pelo experimento: `portas` põe as portas no caminho
+ * delas, e `portasnaparede` mistura as MESMAS às paredes -- o caminho ingênuo,
+ * em que a lista de segmentos muda a cada amostra e toda luz se forma de novo.
+ * Uma porta ao lado de cada luz, e só a primeira gira: o mestre abrindo a porta
+ * da cela num mapa cheio de tochas. `portabotao` é a mesma porta pelo BOTÃO:
+ * abre e fecha a cada 1,2 s, e cada tela a faz girar -- ver `usePortasNoGiro`.
+ * Sem um dos três, `{}` e a cena de sempre.
+ *
+ * Pelo experimento, e não por um parâmetro novo: as duas variantes saem do
+ * mesmo build numa corrida só (`--experimento portas,portasnaparede`).
+ */
+function portasDaMedida(
+  t: number,
+  paredes: Parede[] | undefined,
+): Pick<Scene, "paredes" | "portas"> {
+  if (typeof window === "undefined") return {};
+
+  const params = new URLSearchParams(window.location.search);
+  const experimento = params.get("experimento") ?? "";
+  if (
+    experimento !== "portas" &&
+    experimento !== "portasnaparede" &&
+    experimento !== "portabotao"
+  )
+    return {};
+
+  const luzes = Math.max(1, Number(params.get("luzes") ?? 0));
+  const portas: Porta[] = Array.from({ length: luzes }, (_, i) => ({
+    id: `perf-porta-${i}`,
+    x: ((i * 389 + 160) % SCENE_WIDTH) + 60,
+    y: ((i * 233 + 120) % SCENE_HEIGHT) - 40,
+    comprimento: 80,
+    angulo: 90,
+    ...(i !== 0
+      ? {}
+      : experimento === "portabotao"
+        ? Math.floor(t / 1200) % 2 === 1
+          ? { abertura: 90 }
+          : {}
+        : { abertura: Math.round(80 * Math.sin(t / 400)) }),
+  }));
+
+  return experimento !== "portasnaparede"
+    ? { portas }
+    : { paredes: paredesComPortas(paredes, portas) };
 }
 
 /** `?parados=1`: os efeitos como o Mestre os vê sem nada selecionado. */
@@ -854,7 +904,7 @@ function PalcoEspectador({
         return igual ? antes : proximo;
       });
 
-      const nova = { ...base, items };
+      const nova = { ...base, items, ...portasDaMedida(t, base.paredes) };
       anterior.current = nova;
       setCena(nova);
       // A cadência é a do Mestre de verdade -- 10 Hz. Ver

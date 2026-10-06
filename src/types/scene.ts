@@ -1565,6 +1565,72 @@ export function semIdDaParede(parede: Parede): NewParede {
   };
 }
 
+/**
+ * Uma porta: um pedaço de parede que gira.
+ *
+ * Geometria de luz, como a parede, e pela mesma razão: a porta já está pintada
+ * no arquivo do mapa, e o que esta diz é onde a luz para. A mesa nunca vê a
+ * folha -- vê a sala do outro lado acender quando ela abre.
+ *
+ * A DOBRADIÇA é a verdade, e não uma caixa como na parede: a porta gira em
+ * volta de uma ponta, e a caixa girada em volta do centro brigaria com esse
+ * gesto a cada quadro. Mover é trocar `x, y`; abrir é trocar `abertura`; o
+ * comprimento e o ângulo da porta fechada só mudam quando o mestre refaz o
+ * traço pela dobradiça.
+ *
+ * Na hora da luz, do sol e do 2.5D ela vira uma parede `linha` na posição em
+ * que está -- ver `paredeDaPorta` --, e nada daquela geometria aprendeu porta.
+ *
+ * Não para o TOKEN, pela razão da parede.
+ */
+export type Porta = {
+  id: string;
+  /** A dobradiça, em coordenadas de cena. */
+  x: number;
+  y: number;
+  /** Da dobradiça à ponta da folha, em unidades de cena. */
+  comprimento: number;
+  /** Para onde a folha aponta FECHADA: graus, no sentido horário, a partir do leste. */
+  angulo: number;
+  /**
+   * Quanto ela está aberta, em graus somados ao `angulo`. O sinal diz para que
+   * lado. Ausente = fechada, que é como toda porta nasce.
+   */
+  abertura?: number;
+  /**
+   * A última abertura antes de fechar: é para ali que o botão "Abrir" a leva.
+   * Ausente = nunca abriu, e o botão abre a 90 graus.
+   *
+   * Existe porque o LADO importa: a porta da cela abre para o corredor, e o
+   * botão que a abrisse sempre para o mesmo lado a jogaria por dentro da
+   * parede metade das vezes.
+   */
+  ultimaAbertura?: number;
+  /**
+   * Quão alta ela sobe no 2.5D, e quão longa é a sombra dela ao sol, em
+   * unidades de cena. Ausente = a altura da parede. Ver `Parede.altura`.
+   */
+  altura?: number;
+  /** Travada, como a parede. Ver `Parede.locked`. */
+  locked?: boolean;
+};
+
+export type NewPorta = Omit<Porta, "id">;
+
+/** A porta sem o id, campo a campo. Pela razão de `semIdDaForma`. */
+export function semIdDaPorta(porta: Porta): NewPorta {
+  return {
+    x: porta.x,
+    y: porta.y,
+    comprimento: porta.comprimento,
+    angulo: porta.angulo,
+    abertura: porta.abertura,
+    ultimaAbertura: porta.ultimaAbertura,
+    altura: porta.altura,
+    locked: porta.locked,
+  };
+}
+
 export type NewLuz = Omit<Luz, "id">;
 
 /** A luz sem o id, campo a campo. Pela razão de `semIdDaForma`. */
@@ -2539,6 +2605,14 @@ export type Scene = {
    * assim a sombra não depende de o canal republicar a cena a cada passo.
    */
   paredes?: Parede[];
+  /**
+   * As portas da cena. Ausente = nenhuma. Ver `Porta`.
+   *
+   * Lista própria, e não paredes com um campo a mais: a porta gira pela
+   * dobradiça, e a parede é uma caixa. Viaja para a mesa pela razão das
+   * paredes.
+   */
+  portas?: Porta[];
   /**
    * O sol da cena. Ausente = sem sol, que é o normal. Ver `Sol`.
    *

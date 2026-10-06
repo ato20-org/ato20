@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { aplicarGesto, moverNoGesto, useGestoStore } from "@/lib/store/use-gesto-store";
+import {
+  aplicarGesto,
+  moverNoGesto,
+  moverPortaNoGesto,
+  terminarGestoDaPorta,
+  useGestoStore,
+} from "@/lib/store/use-gesto-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import type { Scene } from "@/types/scene";
 
@@ -136,6 +142,69 @@ describe("moverNoGesto", () => {
     expect(useGestoStore.getState().patches).toEqual([{ id: "a", patch: { x: 80 } }]);
 
     useGestoStore.getState().terminar();
+    useSceneStore.setState({ board: null, status: "idle" });
+  });
+});
+
+describe("o gesto da porta", () => {
+  const comPorta = {
+    ...cena,
+    portas: [
+      { id: "p", x: 100, y: 100, comprimento: 50, angulo: 0 },
+      { id: "q", x: 300, y: 100, comprimento: 50, angulo: 0 },
+    ],
+  } as unknown as Scene;
+
+  it("abre só a porta do gesto, e a outra continua a mesma", () => {
+    const vista = aplicarGesto(comPorta, {
+      sceneId: "c1",
+      patches: null,
+      textos: null,
+      formas: null,
+      camera: null,
+      porta: { portaId: "p", patch: { abertura: 90 } },
+    });
+
+    expect(vista.portas?.[0]).toMatchObject({ abertura: 90, angulo: 0 });
+    expect(vista.portas?.[1]).toBe(comPorta.portas?.[1]);
+    expect(vista.items).toBe(comPorta.items);
+  });
+
+  it("gira sem gravar, e grava um passo só ao soltar", () => {
+    useSceneStore.setState({
+      board: { scenes: [comPorta], editingSceneId: "c1", liveSceneId: "c1" },
+      status: "ready",
+    });
+    const antes = useSceneStore.getState().board;
+
+    moverPortaNoGesto("c1", "p", { abertura: 30 });
+    moverPortaNoGesto("c1", "p", { abertura: 75 });
+    expect(useSceneStore.getState().board).toBe(antes);
+
+    terminarGestoDaPorta();
+    const depois = useSceneStore.getState().board!.scenes[0]!;
+    expect(depois.portas?.[0]?.abertura).toBe(75);
+    expect(useGestoStore.getState().porta).toBeNull();
+    expect(useGestoStore.getState().sceneId).toBeNull();
+
+    useSceneStore.setState({ board: null, status: "idle" });
+  });
+
+  it("fechar pelo ímã grava a porta sem abertura", () => {
+    const aberta = {
+      ...comPorta,
+      portas: [{ id: "p", x: 100, y: 100, comprimento: 50, angulo: 0, abertura: 60 }],
+    } as unknown as Scene;
+    useSceneStore.setState({
+      board: { scenes: [aberta], editingSceneId: "c1", liveSceneId: "c1" },
+      status: "ready",
+    });
+
+    moverPortaNoGesto("c1", "p", { abertura: undefined });
+    terminarGestoDaPorta();
+
+    expect(useSceneStore.getState().board!.scenes[0]!.portas?.[0]?.abertura).toBeUndefined();
+
     useSceneStore.setState({ board: null, status: "idle" });
   });
 });

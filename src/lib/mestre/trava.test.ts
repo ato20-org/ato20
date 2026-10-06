@@ -6,6 +6,7 @@ import {
   removeFogSelection,
   removeLuzSelection,
   removeParedeSelection,
+  removePortaSelection,
   removeSelection,
   selectAllItems,
   toggleSelectionLock,
@@ -19,6 +20,7 @@ import type {
   Forma,
   Luz,
   Parede,
+  Porta,
   Scene,
   Texto,
 } from "@/types/scene";
@@ -52,6 +54,7 @@ const area: FogRegion = {
   revealed: false,
 };
 const luz: Luz = { id: "l", x: 500, y: 300, raio: 260, cor: "#fb923c" };
+const porta: Porta = { id: "p", x: 600, y: 200, comprimento: 80, angulo: 0 };
 const forma: Forma = {
   id: "f",
   tipo: "retangulo",
@@ -73,6 +76,7 @@ function montar(mudar: Partial<Scene> = {}) {
           items: [boss],
           fog: [area],
           paredes: [parede],
+          portas: [porta],
           luzes: [luz],
           formas: [forma],
           textos: [texto],
@@ -119,6 +123,17 @@ describe("o cadeado", () => {
     expect(atual().luzes![0]!.locked).toBe(true);
   });
 
+  it("trava e destrava a porta", () => {
+    montar();
+    useSelectionStore.getState().selectPorta("p");
+
+    toggleSelectionLock();
+    expect(atual().portas![0]!.locked).toBe(true);
+
+    toggleSelectionLock();
+    expect(atual().portas![0]!.locked).toBeUndefined();
+  });
+
   it("com um livre na mão, o toque trava todos", () => {
     montar();
     useSelectionStore
@@ -151,6 +166,18 @@ describe("travado não sai", () => {
     expect(atual().paredes).toHaveLength(1);
     expect(atual().fog).toHaveLength(1);
     expect(atual().luzes).toHaveLength(1);
+  });
+
+  it("o Delete não apaga a porta travada, e apaga a livre", () => {
+    montar({ portas: [{ ...porta, locked: true }] });
+    useSelectionStore.getState().selectPorta("p");
+    removePortaSelection();
+    expect(atual().portas).toHaveLength(1);
+
+    montar();
+    useSelectionStore.getState().selectPorta("p");
+    removePortaSelection();
+    expect(atual().portas ?? []).toHaveLength(0);
   });
 
   it("numa mão misturada, sai só o que está livre", () => {
