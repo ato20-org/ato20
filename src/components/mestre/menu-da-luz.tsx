@@ -47,6 +47,7 @@ import {
   toggleSelectionLock,
   setSelectionLanterna,
 } from "@/lib/mestre/item-actions";
+import { t } from "@/lib/i18n/ferramentas";
 import { cn } from "@/lib/utils";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import {
@@ -64,13 +65,16 @@ import {
  * hexadecimal no menu obrigaria a olhar a bolinha para saber o que é.
  */
 export const NOME_DA_COR: Record<(typeof CORES_DA_LUZ)[number], string> = {
-  "#fb923c": "Chama",
-  "#fde68a": "Vela",
-  "#93c5fd": "Lua",
-  "#c4b5fd": "Magia",
-  "#86efac": "Veneno",
-  "#fca5a5": "Sangue",
+  "#fb923c": t.luz.chama,
+  "#fde68a": t.luz.vela,
+  "#93c5fd": t.luz.lua,
+  "#c4b5fd": t.luz.magia,
+  "#86efac": t.luz.veneno,
+  "#fca5a5": t.luz.sangue,
 };
+
+/** A tecla de remover, como o menu a mostra: nome de tecla não se traduz. */
+const TECLA_DE_REMOVER = "Del";
 
 /** O arco-íris que diz "qualquer cor" antes de haver uma escolhida. */
 export const ARCO_IRIS =
@@ -88,10 +92,10 @@ export const OPCOES_DE_EFEITO: ReadonlyArray<{
   rotulo: string;
   Icone: LucideIcon;
 }> = [
-  { valor: "fixa", rotulo: "Fixa", Icone: Lightbulb },
-  { valor: "fogo", rotulo: "Fogo", Icone: Flame },
-  { valor: "pulsando", rotulo: "Pulsando", Icone: Activity },
-  { valor: "piscando", rotulo: "Piscando", Icone: Siren },
+  { valor: "fixa", rotulo: t.luz.fixa, Icone: Lightbulb },
+  { valor: "fogo", rotulo: t.luz.fogo, Icone: Flame },
+  { valor: "pulsando", rotulo: t.luz.pulsando, Icone: Activity },
+  { valor: "piscando", rotulo: t.luz.piscando, Icone: Siren },
 ];
 
 /** Do valor do menu para o campo da luz: a fixa grava como ausente. */
@@ -119,7 +123,7 @@ function GrupoDoEfeito({
 }) {
   return (
     <ContextMenuRadioGroup
-      aria-label="Efeito da luz"
+      aria-label={t.luz.efeitoDaLuz}
       value={valor}
       onValueChange={(escolhido: ValorDoEfeito) =>
         onChange(efeitoDoValor(escolhido))
@@ -162,7 +166,7 @@ function SubmenuDaCorLivre({
           className="size-3 shrink-0 rounded-full border border-black/30"
           style={{ background: naPaleta(cor) ? ARCO_IRIS : cor }}
         />
-        Personalizada
+        {t.luz.personalizada}
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-56 p-2">
         <SeletorDeCor cor={cor} onChange={onChange} />
@@ -187,14 +191,14 @@ function OpcaoDeCor({ cor }: { cor: (typeof CORES_DA_LUZ)[number] }) {
 
 /** A seta de cada direção da rosa, pelo ângulo na figura. */
 const SETA: Record<number, { Icone: LucideIcon; rotulo: string }> = {
-  270: { Icone: ArrowUp, rotulo: "Para cima" },
-  315: { Icone: ArrowUpRight, rotulo: "Para cima e à direita" },
-  0: { Icone: ArrowRight, rotulo: "Para a direita" },
-  45: { Icone: ArrowDownRight, rotulo: "Para baixo e à direita" },
-  90: { Icone: ArrowDown, rotulo: "Para baixo" },
-  135: { Icone: ArrowDownLeft, rotulo: "Para baixo e à esquerda" },
-  180: { Icone: ArrowLeft, rotulo: "Para a esquerda" },
-  225: { Icone: ArrowUpLeft, rotulo: "Para cima e à esquerda" },
+  270: { Icone: ArrowUp, rotulo: t.luz.paraCima },
+  315: { Icone: ArrowUpRight, rotulo: t.luz.paraCimaDireita },
+  0: { Icone: ArrowRight, rotulo: t.luz.paraDireita },
+  45: { Icone: ArrowDownRight, rotulo: t.luz.paraBaixoDireita },
+  90: { Icone: ArrowDown, rotulo: t.luz.paraBaixo },
+  135: { Icone: ArrowDownLeft, rotulo: t.luz.paraBaixoEsquerda },
+  180: { Icone: ArrowLeft, rotulo: t.luz.paraEsquerda },
+  225: { Icone: ArrowUpLeft, rotulo: t.luz.paraCimaEsquerda },
 };
 
 /** Um rótulo solto, e não `ContextMenuLabel`: aquele só existe dentro de um grupo. */
@@ -233,7 +237,7 @@ export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
     <ContextMenuSub>
       <ContextMenuSubTrigger>
         <Flame />
-        Lanterna
+        {t.luz.lanterna}
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="min-w-32">
         <ContextMenuRadioGroup
@@ -250,7 +254,9 @@ export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
             setSelectionLanterna(valor === "apagada" ? null : { cor: valor })
           }
         >
-          <ContextMenuRadioItem value="apagada">Apagada</ContextMenuRadioItem>
+          <ContextMenuRadioItem value="apagada">
+            {t.luz.apagada}
+          </ContextMenuRadioItem>
           {CORES_DA_LUZ.map((cor) => (
             <OpcaoDeCor key={cor} cor={cor} />
           ))}
@@ -261,9 +267,9 @@ export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
         />
 
         <ContextMenuSeparator />
-        <Rotulo>Alcance</Rotulo>
+        <Rotulo>{t.luz.alcance}</Rotulo>
         <ContextMenuRadioGroup
-          aria-label="Alcance da lanterna"
+          aria-label={t.luz.alcanceDaLanterna}
           value={lanterna ? lanterna.raio : null}
           onValueChange={(raio: number) => setSelectionLanterna({ raio })}
         >
@@ -279,7 +285,7 @@ export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
         <ContextMenuSub>
           <ContextMenuSubTrigger>
             <Sparkles />
-            Efeito
+            {t.luz.efeito}
           </ContextMenuSubTrigger>
           <ContextMenuSubContent className="min-w-32">
             <GrupoDoEfeito
@@ -313,11 +319,11 @@ function SubmenuDaForma({
     <ContextMenuSub>
       <ContextMenuSubTrigger>
         <Circle />
-        Forma
+        {t.luz.forma}
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="min-w-40">
         <ContextMenuRadioGroup
-          aria-label="Forma da lanterna"
+          aria-label={t.luz.formaDaLanterna}
           value={facho.forma}
           onValueChange={(forma: string) =>
             forma === "cone"
@@ -325,16 +331,18 @@ function SubmenuDaForma({
               : setSelectionLanterna({ cone: undefined })
           }
         >
-          <ContextMenuRadioItem value="circulo">Círculo</ContextMenuRadioItem>
-          <ContextMenuRadioItem value="cone">Cone</ContextMenuRadioItem>
+          <ContextMenuRadioItem value="circulo">
+            {t.luz.circulo}
+          </ContextMenuRadioItem>
+          <ContextMenuRadioItem value="cone">{t.luz.cone}</ContextMenuRadioItem>
         </ContextMenuRadioGroup>
 
         {facho.forma === "cone" ? (
           <>
             <ContextMenuSeparator />
-            <Rotulo>Para onde aponta</Rotulo>
+            <Rotulo>{t.luz.paraOndeAponta}</Rotulo>
             <ContextMenuRadioGroup
-              aria-label="Para onde a lanterna aponta"
+              aria-label={t.luz.paraOndeALanternaAponta}
               value={facho.angulo}
               onValueChange={(angulo: number) => apontarLanterna({ angulo })}
               className="grid w-max grid-cols-3 gap-0.5 px-1.5 pb-1"
@@ -355,13 +363,13 @@ function SubmenuDaForma({
               )}
             </ContextMenuRadioGroup>
             <p className="text-muted-foreground max-w-40 px-1.5 pb-1 text-[11px] leading-snug">
-              Para onde o desenho olha. Girar o token gira a luz.
+              {t.luz.paraOndeAjuda}
             </p>
 
             <ContextMenuSeparator />
-            <Rotulo>Abertura</Rotulo>
+            <Rotulo>{t.luz.abertura}</Rotulo>
             <ContextMenuRadioGroup
-              aria-label="Abertura do facho"
+              aria-label={t.luz.aberturaDoFacho}
               value={facho.abertura}
               onValueChange={(abertura: number) =>
                 apontarLanterna({ abertura })
@@ -426,12 +434,12 @@ export function BlocoDaLuz({ sceneId, luz }: { sceneId: string; luz: Luz }) {
         onClick={() => updateLuz(sceneId, luz.id, patchDoInterruptor(luz))}
       >
         {luz.desligada ? <Power /> : <PowerOff />}
-        {luz.desligada ? "Ligar luz" : "Desligar luz"}
+        {luz.desligada ? t.luz.ligarLuz : t.luz.desligarLuz}
       </ContextMenuItem>
       <ContextMenuSub>
         <ContextMenuSubTrigger>
           <Palette />
-          Cor da luz
+          {t.luz.corDaLuz}
         </ContextMenuSubTrigger>
         <ContextMenuSubContent className="min-w-32">
           <ContextMenuRadioGroup
@@ -451,7 +459,7 @@ export function BlocoDaLuz({ sceneId, luz }: { sceneId: string; luz: Luz }) {
       <ContextMenuSub>
         <ContextMenuSubTrigger>
           <Circle />
-          Forma
+          {t.luz.forma}
         </ContextMenuSubTrigger>
         <ContextMenuSubContent className="min-w-32">
           <ContextMenuRadioGroup
@@ -460,15 +468,19 @@ export function BlocoDaLuz({ sceneId, luz }: { sceneId: string; luz: Luz }) {
               updateLuz(sceneId, luz.id, patchDaForma(forma === "cone"))
             }
           >
-            <ContextMenuRadioItem value="circulo">Círculo</ContextMenuRadioItem>
-            <ContextMenuRadioItem value="cone">Cone</ContextMenuRadioItem>
+            <ContextMenuRadioItem value="circulo">
+              {t.luz.circulo}
+            </ContextMenuRadioItem>
+            <ContextMenuRadioItem value="cone">
+              {t.luz.cone}
+            </ContextMenuRadioItem>
           </ContextMenuRadioGroup>
         </ContextMenuSubContent>
       </ContextMenuSub>
       <ContextMenuSub>
         <ContextMenuSubTrigger>
           <Sparkles />
-          Efeito
+          {t.luz.efeito}
         </ContextMenuSubTrigger>
         <ContextMenuSubContent className="min-w-32">
           <GrupoDoEfeito
@@ -479,7 +491,7 @@ export function BlocoDaLuz({ sceneId, luz }: { sceneId: string; luz: Luz }) {
       </ContextMenuSub>
       <ContextMenuItem onClick={toggleSelectionLock}>
         {luz.locked ? <LockOpen /> : <Lock />}
-        {luz.locked ? "Destravar" : "Travar"}
+        {luz.locked ? t.luz.destravar : t.luz.travar}
       </ContextMenuItem>
       {/* Apagado, e não sumido, na travada: o mestre procura o remover onde
           ele sempre esteve, e o cinza diz por que não dá. */}
@@ -489,8 +501,8 @@ export function BlocoDaLuz({ sceneId, luz }: { sceneId: string; luz: Luz }) {
         onClick={removeLuzSelection}
       >
         <Trash2 />
-        Remover luz
-        <ContextMenuShortcut>Del</ContextMenuShortcut>
+        {t.luz.removerLuz}
+        <ContextMenuShortcut>{TECLA_DE_REMOVER}</ContextMenuShortcut>
       </ContextMenuItem>
 
       <ContextMenuSeparator />

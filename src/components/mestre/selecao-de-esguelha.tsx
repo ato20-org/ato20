@@ -32,6 +32,7 @@ import {
   raioDoAnel,
 } from "@/lib/geometry/peca-de-esguelha";
 import type { Vec } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/ferramentas";
 import {
   flipSelection,
   removeSelection,
@@ -414,7 +415,7 @@ export function SelecaoDeEsguelha({
               style={{ pointerEvents: "all" }}
               onPointerDown={girar}
             >
-              <title>Para onde olha (Shift: de 15 em 15°)</title>
+              <title>{t.esguelha.paraOndeOlha}</title>
             </circle>
             <rect
               ref={alca}
@@ -429,7 +430,7 @@ export function SelecaoDeEsguelha({
               style={{ pointerEvents: "all" }}
               onPointerDown={redimensionar}
             >
-              <title>Tamanho</title>
+              <title>{t.esguelha.tamanho}</title>
             </rect>
           </g>
         ) : null}
@@ -442,7 +443,7 @@ export function SelecaoDeEsguelha({
       >
         {unico && !unico.locked ? (
           <Botao
-            rotulo="Espelhar na horizontal"
+            rotulo={t.esguelha.espelhar}
             classe={cor.botao}
             aoApertar={() => flipSelection("x")}
           >
@@ -451,7 +452,7 @@ export function SelecaoDeEsguelha({
         ) : null}
         {livres.length > 0 ? (
           <Botao
-            rotulo={deitados ? "Levantar" : "Deitar no chão"}
+            rotulo={deitados ? t.esguelha.levantar : t.esguelha.deitar}
             classe={cor.botao}
             aoApertar={alternarDeitado}
           >
@@ -464,7 +465,7 @@ export function SelecaoDeEsguelha({
         ) : null}
         {personagemId ? (
           <Botao
-            rotulo="Abrir a ficha do personagem"
+            rotulo={t.esguelha.abrirFicha}
             classe={cor.botao}
             aoApertar={() => abrirJanela({ tipo: "personagem", personagemId })}
           >
@@ -472,7 +473,7 @@ export function SelecaoDeEsguelha({
           </Botao>
         ) : null}
         <Botao
-          rotulo={travada ? "Destravar" : "Travar"}
+          rotulo={travada ? t.esguelha.destravar : t.esguelha.travar}
           classe={travada ? "bg-amber-500 text-neutral-950" : cor.botao}
           aoApertar={toggleSelectionLock}
         >
@@ -483,7 +484,7 @@ export function SelecaoDeEsguelha({
           )}
         </Botao>
         <Botao
-          rotulo="Excluir"
+          rotulo={t.esguelha.excluir}
           classe="bg-red-600 text-white"
           aoApertar={() => removeSelection()}
         >

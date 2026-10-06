@@ -14,6 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/ferramentas";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import {
   CORES_LAPIS,
@@ -61,7 +62,7 @@ export function PencilControl() {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Cor e espessura"
+                  aria-label={t.lapis.corEEspessura}
                 >
                   <span
                     className="size-4 rounded-full border border-white/30"
@@ -73,20 +74,22 @@ export function PencilControl() {
           }
         />
         <TooltipContent>
-          <p>Cor e espessura</p>
+          <p>{t.lapis.corEEspessura}</p>
         </TooltipContent>
       </Tooltip>
 
       <PopoverContent align="start" className="w-56 space-y-3 p-3" side="top">
         <div className="space-y-1.5">
-          <span className="text-muted-foreground text-[10px]">Cor</span>
+          <span className="text-muted-foreground text-[10px]">
+            {t.lapis.cor}
+          </span>
 
           <div className="flex items-center gap-1.5">
             {CORES_LAPIS.map((opcao) => (
               <button
                 key={opcao}
                 type="button"
-                aria-label={`Cor ${opcao}`}
+                aria-label={t.lapis.corOpcao(opcao)}
                 aria-pressed={opcao === cor}
                 className={cn(
                   "size-6 rounded-full border transition-transform",
@@ -103,7 +106,9 @@ export function PencilControl() {
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-[10px]">Espessura</span>
+            <span className="text-muted-foreground text-[10px]">
+              {t.lapis.espessura}
+            </span>
             {/* A amostra na medida real da cena não caberia aqui; o que vale é
                 comparar uma escolha com a outra. */}
             <span
@@ -127,7 +132,7 @@ export function PencilControl() {
             min={0}
             max={ESPESSURAS_LAPIS.length - 1}
             step={1}
-            aria-label="Espessura"
+            aria-label={t.lapis.espessura}
             onValueChange={(valor) => {
               const indice = Array.isArray(valor) ? valor[0] : valor;
               setLapis({ espessura: ESPESSURAS_LAPIS[indice ?? 1] });
@@ -150,7 +155,7 @@ export function PencilControl() {
             }
           >
             <Trash2 />
-            Apagar os {apagandoTudo.length} riscos
+            {t.lapis.apagarRiscos(apagandoTudo.length)}
           </Button>
         ) : null}
       </PopoverContent>

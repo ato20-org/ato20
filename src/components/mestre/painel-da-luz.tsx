@@ -17,6 +17,7 @@ import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { limitarIntensidade } from "@/lib/geometry/luz";
+import { t } from "@/lib/i18n/ferramentas";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
@@ -148,7 +149,7 @@ export function PainelDaLuz({
           da preparação. Desligada, a luz some da mesa e o ponto dela fica
           vazado no Mestre. */}
       <label className="flex items-center justify-between gap-2">
-        <span className="text-xs">Acesa</span>
+        <span className="text-xs">{t.luz.acesa}</span>
         <Switch
           size="sm"
           checked={!luz.desligada}
@@ -161,7 +162,7 @@ export function PainelDaLuz({
           não aparência. Travada, o ponto não arrasta, os anéis não esticam e
           o Delete não a apaga -- a tocha da parede fica na parede. */}
       <label className="flex items-center justify-between gap-2">
-        <span className="text-xs">Travada</span>
+        <span className="text-xs">{t.luz.travada}</span>
         <Switch
           size="sm"
           checked={Boolean(luz.locked)}
@@ -175,7 +176,7 @@ export function PainelDaLuz({
 
       <div
         role="radiogroup"
-        aria-label="Cor da luz"
+        aria-label={t.luz.corDaLuz}
         className="flex justify-between gap-1"
       >
         {CORES_DA_LUZ.map((cor) => (
@@ -201,9 +202,9 @@ export function PainelDaLuz({
             outras. */}
         <button
           type="button"
-          aria-label="Cor personalizada"
+          aria-label={t.luz.corPersonalizada}
           aria-expanded={livreAberto}
-          title="Cor personalizada"
+          title={t.luz.corPersonalizada}
           className={cn(
             "focus-visible:ring-ring size-6 shrink-0 rounded-full border-2 outline-none focus-visible:ring-2",
             livre || livreAberto ? "border-foreground" : "border-transparent",
@@ -222,13 +223,13 @@ export function PainelDaLuz({
 
       <div className="space-y-1.5">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-xs">Intensidade</span>
+          <span className="text-xs">{t.luz.intensidade}</span>
           <span className="text-muted-foreground text-[10px] tabular-nums">
             {intensidade}%
           </span>
         </div>
         <Slider
-          aria-label="Intensidade da luz"
+          aria-label={t.luz.intensidadeDaLuz}
           value={[intensidade]}
           min={INTENSIDADE_MINIMA}
           max={100}
@@ -245,45 +246,45 @@ export function PainelDaLuz({
       </div>
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs">Forma</span>
+        <span className="text-xs">{t.luz.forma}</span>
         {/* O cone se mira no mapa, pela ponta dele -- aqui só se escolhe
             que é cone. Ver `LuzMarcadores`. */}
         <div
           role="radiogroup"
-          aria-label="Forma da luz"
+          aria-label={t.luz.formaDaLuz}
           className="bg-muted flex w-28 rounded-md p-0.5"
         >
           <Opcao
             marcada={!luz.cone}
-            rotulo="Círculo"
+            rotulo={t.luz.circulo}
             onClick={() => updateLuz(scene.id, luz.id, patchDaForma(false))}
           >
-            Círculo
+            {t.luz.circulo}
           </Opcao>
           <Opcao
             marcada={Boolean(luz.cone)}
-            rotulo="Cone"
+            rotulo={t.luz.cone}
             onClick={() => {
               // Já cone, fica o cone que está: clicar de novo não pode
               // desfazer a mira.
               if (!luz.cone) updateLuz(scene.id, luz.id, patchDaForma(true));
             }}
           >
-            Cone
+            {t.luz.cone}
           </Opcao>
         </div>
       </div>
 
       <div className="space-y-1.5">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-xs">Efeito</span>
+          <span className="text-xs">{t.luz.efeito}</span>
           <span className="text-muted-foreground text-[10px]">
             {OPCOES_DE_EFEITO.find((opcao) => opcao.valor === efeito)?.rotulo}
           </span>
         </div>
         <div
           role="radiogroup"
-          aria-label="Efeito da luz"
+          aria-label={t.luz.efeitoDaLuz}
           className="bg-muted flex rounded-md p-0.5"
         >
           {OPCOES_DE_EFEITO.map(({ valor, rotulo, Icone }) => (

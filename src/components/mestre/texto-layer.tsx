@@ -12,6 +12,7 @@ import { useSceneScale } from "@/components/playground/scene-stage";
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { boundsToBox } from "@/lib/geometry/bounds";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/ferramentas";
 import { TAMANHO_MINIMO_DO_TEXTO } from "@/lib/mestre/grupo-de-textos";
 import { ALTURA_DA_LINHA, caixaRetaDoTexto } from "@/lib/mestre/ligacoes";
 import { medidaDoTexto } from "@/lib/mestre/medida-do-texto";
@@ -287,8 +288,8 @@ const TextoSolto = memo(function TextoSolto({
             ref={campo}
             className="text-foreground block resize-none overflow-hidden bg-transparent whitespace-pre outline-none"
             style={tipografia}
-            aria-label="Texto solto"
-            placeholder="Escreva…"
+            aria-label={t.texto.rotulo}
+            placeholder={t.texto.placeholder}
             rows={linhas.length}
             // Nunca menor que o placeholder: vazio, a caixa de uma coluna
             // cortaria a dica e o texto pareceria não ter nascido.
@@ -337,7 +338,7 @@ const TextoSolto = memo(function TextoSolto({
             onChange: (patch) => updateTexto(sceneId, texto.id, patch),
           }}
           paleta={{
-            titulo: "Letra",
+            titulo: t.texto.letra,
             cor: texto.cor,
             fundo: texto.fundo,
             onChange: ({ cor, fundo }) =>
@@ -351,10 +352,10 @@ const TextoSolto = memo(function TextoSolto({
             // nasceu é o da campanha; aqui é a exceção. Ver `padraoDoQuadro`.
             extras: (
               <Chave
-                titulo="Letra de mão"
+                titulo={t.texto.letraDeMao}
                 ligada={!!texto.aMao}
-                desligada={{ rotulo: "Letra da interface", Icone: Type }}
-                ligadaComo={{ rotulo: "Letra de mão", Icone: Signature }}
+                desligada={{ rotulo: t.texto.letraDaInterface, Icone: Type }}
+                ligadaComo={{ rotulo: t.texto.letraDeMao, Icone: Signature }}
                 onMudar={(valor) =>
                   updateTexto(sceneId, texto.id, {
                     aMao: valor ? true : undefined,

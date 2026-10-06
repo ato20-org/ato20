@@ -11,6 +11,7 @@ import {
   passoDaGrade,
   periodoDaGrade,
 } from "@/lib/geometry/grid";
+import { t } from "@/lib/i18n/ferramentas";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
 import {
@@ -74,7 +75,7 @@ export function GridControl({ scene }: { scene: Scene }) {
           htmlFor="grade-da-cena"
         >
           <Grid3x3 className="text-muted-foreground size-3.5" />
-          Grade sobre o mapa
+          {t.grade.titulo}
         </Label>
         <Switch
           id="grade-da-cena"
@@ -90,7 +91,7 @@ export function GridControl({ scene }: { scene: Scene }) {
           o desenho valer a pena, e é de onde a régua tira o metro. Ver
           `METROS_POR_QUADRADO`. */}
       <p className="text-muted-foreground text-[10px] leading-snug">
-        Cada casa vale {METROS_POR_QUADRADO} m na régua.
+        {t.grade.cadaCasaVale(METROS_POR_QUADRADO)}
       </p>
 
       {/* O ajuste só existe com a grade ligada: réguas de tamanho e
@@ -107,7 +108,7 @@ export function GridControl({ scene }: { scene: Scene }) {
               htmlFor="grade-encaixe"
             >
               <Magnet className="text-muted-foreground size-3.5" />
-              Encaixar na grade
+              {t.grade.encaixar}
             </Label>
             <Switch
               id="grade-encaixe"
@@ -117,7 +118,7 @@ export function GridControl({ scene }: { scene: Scene }) {
           </div>
 
           <p className="text-muted-foreground text-[10px] leading-snug">
-            O token cai no meio da casa. Alt solta livre.
+            {t.grade.encaixarAjuda}
           </p>
 
           {/* A forma antes do tamanho: é a primeira coisa a casar com o desenho
@@ -125,7 +126,7 @@ export function GridControl({ scene }: { scene: Scene }) {
               o deslocamento. */}
           <div
             role="group"
-            aria-label="Forma da casa"
+            aria-label={t.grade.formaDaCasa}
             className="grid grid-cols-3 gap-1"
           >
             {FORMAS.map((opcao) => {
@@ -155,13 +156,15 @@ export function GridControl({ scene }: { scene: Scene }) {
           </div>
 
           <Campo
-            rotulo="Tamanho da casa"
+            rotulo={t.grade.tamanhoDaCasa}
             // Em unidades de cena, e mostrado como fração do plano: "96" não
             // diz nada sozinho, "20 colunas" diz.
-            valor={`${Math.round(SCENE_WIDTH / larguraDaColuna(grid))} colunas`}
+            valor={t.grade.colunas(
+              Math.round(SCENE_WIDTH / larguraDaColuna(grid)),
+            )}
           >
             <Slider
-              aria-label="Tamanho da casa"
+              aria-label={t.grade.tamanhoDaCasa}
               value={[grid.size]}
               min={24}
               max={320}
@@ -174,11 +177,11 @@ export function GridControl({ scene }: { scene: Scene }) {
               ela quase nunca começa no canto exato da imagem. Um período
               cobre qualquer alinhamento — além disso repete. */}
           <Campo
-            rotulo="Deslocar na horizontal"
+            rotulo={t.grade.deslocarHorizontal}
             valor={`${Math.round(grid.offsetX)}`}
           >
             <Slider
-              aria-label="Deslocar na horizontal"
+              aria-label={t.grade.deslocarHorizontal}
               value={[grid.offsetX]}
               min={0}
               max={periodoDaGrade(grid).x}
@@ -188,11 +191,11 @@ export function GridControl({ scene }: { scene: Scene }) {
           </Campo>
 
           <Campo
-            rotulo="Deslocar na vertical"
+            rotulo={t.grade.deslocarVertical}
             valor={`${Math.round(grid.offsetY)}`}
           >
             <Slider
-              aria-label="Deslocar na vertical"
+              aria-label={t.grade.deslocarVertical}
               value={[grid.offsetY]}
               min={0}
               max={periodoDaGrade(grid).y}
@@ -202,11 +205,11 @@ export function GridControl({ scene }: { scene: Scene }) {
           </Campo>
 
           <Campo
-            rotulo="Força da linha"
+            rotulo={t.grade.forcaDaLinha}
             valor={`${Math.round(grid.opacity * 100)}%`}
           >
             <Slider
-              aria-label="Força da linha"
+              aria-label={t.grade.forcaDaLinha}
               value={[Math.round(grid.opacity * 100)]}
               min={5}
               max={100}
@@ -219,7 +222,7 @@ export function GridControl({ scene }: { scene: Scene }) {
 
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs font-normal" htmlFor="grid-dark">
-              Linha escura
+              {t.grade.linhaEscura}
             </Label>
             <Switch
               id="grid-dark"
@@ -240,7 +243,7 @@ export function GridControl({ scene }: { scene: Scene }) {
             onClick={() => ajustar(DEFAULT_GRID)}
           >
             <RotateCcw className="size-3" />
-            Voltar à grade padrão
+            {t.grade.gradePadrao}
           </Button>
         </div>
       ) : null}
@@ -257,20 +260,20 @@ const FORMAS: {
 }[] = [
   {
     forma: undefined,
-    rotulo: "Quadrado",
-    descricao: "Casa quadrada",
+    rotulo: t.grade.quadrado,
+    descricao: t.grade.quadradoDescricao,
     Icone: Square,
   },
   {
     forma: "hex-ponta",
-    rotulo: "Hex ponta",
-    descricao: "Hexágono com a ponta para cima",
+    rotulo: t.grade.hexPonta,
+    descricao: t.grade.hexPontaDescricao,
     Icone: Hexagon,
   },
   {
     forma: "hex-lado",
-    rotulo: "Hex lado",
-    descricao: "Hexágono com o lado para cima",
+    rotulo: t.grade.hexLado,
+    descricao: t.grade.hexLadoDescricao,
     Icone: Hexagon,
   },
 ];

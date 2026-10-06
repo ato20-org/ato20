@@ -12,6 +12,7 @@ import {
   sombraDoPonteiro,
   TRAVA_EM_GRAUS,
 } from "@/lib/geometry/ceu";
+import { t } from "@/lib/i18n/ferramentas";
 import { cn } from "@/lib/utils";
 import type { Sol } from "@/types/scene";
 
@@ -174,7 +175,7 @@ export function CeuDoSol({
     <svg
       ref={ref}
       role="application"
-      aria-label="Direção e altura do sol"
+      aria-label={t.ceuDoSol.rotulo}
       aria-disabled={desabilitado}
       tabIndex={desabilitado ? -1 : 0}
       viewBox={`${-LADO / 2} ${-LADO / 2} ${LADO} ${LADO}`}

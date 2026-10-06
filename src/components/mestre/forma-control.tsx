@@ -24,6 +24,7 @@ import {
   definirPadraoDoQuadro,
   usePadraoDoQuadro,
 } from "@/lib/configuracoes/quadro";
+import { t } from "@/lib/i18n/ferramentas";
 import { cn } from "@/lib/utils";
 
 /**
@@ -65,7 +66,11 @@ export function FormaControl({
           render={
             <PopoverTrigger
               render={
-                <Button variant="ghost" size="icon-sm" aria-label="Cor da forma">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t.forma.corDaForma}
+                >
                   {/* Sem cor escolhida, o gatilho mostra a do tema -- que é a
                       que a forma vai ter. Ver `Forma`. */}
                   <span
@@ -81,20 +86,22 @@ export function FormaControl({
           }
         />
         <TooltipContent>
-          <p>Cor, espessura e fundo</p>
+          <p>{t.forma.corEspessuraFundo}</p>
         </TooltipContent>
       </Tooltip>
 
       <PopoverContent align="start" className="w-56 space-y-3 p-3" side={lado}>
         <div className="space-y-1.5">
-          <span className="text-muted-foreground text-[10px]">Traço</span>
+          <span className="text-muted-foreground text-[10px]">
+            {t.forma.traco}
+          </span>
 
           <div className="flex items-center gap-1.5">
             {/* O padrão na frente, como na paleta do gizmo: é a cor do tema, e
                 sem este botão escolher uma cor seria caminho sem volta. */}
             <button
               type="button"
-              aria-label="Traço padrão"
+              aria-label={t.forma.tracoPadrao}
               aria-pressed={cor === undefined}
               className={cn(
                 "grid size-6 place-items-center rounded-full border text-[10px] transition-transform",
@@ -104,13 +111,13 @@ export function FormaControl({
               )}
               onClick={() => setForma({ corForma: null })}
             >
-              A
+              {t.forma.padraoLetra}
             </button>
             {CORES_LAPIS.map((opcao) => (
               <button
                 key={opcao}
                 type="button"
-                aria-label={`Traço ${opcao}`}
+                aria-label={t.forma.tracoCor(opcao)}
                 aria-pressed={opcao === cor}
                 className={cn(
                   "size-6 rounded-full border transition-transform",
@@ -126,13 +133,15 @@ export function FormaControl({
         </div>
 
         <div className="space-y-1.5">
-          <span className="text-muted-foreground text-[10px]">Fundo</span>
+          <span className="text-muted-foreground text-[10px]">
+            {t.forma.fundo}
+          </span>
 
           <div className="flex items-center gap-1.5">
             {/* O vazado primeiro: é o padrão, e é o que se escolhe de volta. */}
             <button
               type="button"
-              aria-label="Sem fundo"
+              aria-label={t.forma.semFundo}
               aria-pressed={fundo === undefined}
               className={cn(
                 "grid size-6 place-items-center rounded-full border text-[10px] transition-transform",
@@ -148,7 +157,7 @@ export function FormaControl({
               <button
                 key={opcao}
                 type="button"
-                aria-label={`Fundo ${opcao}`}
+                aria-label={t.forma.fundoCor(opcao)}
                 aria-pressed={opcao === fundo}
                 className={cn(
                   "size-6 rounded-full border transition-transform",
@@ -169,25 +178,30 @@ export function FormaControl({
             sem efeito nenhum. */}
         {tipo === "retangulo" || tipo === "poligono" ? (
           <Chave
-            titulo="Cantos"
+            titulo={t.forma.cantos}
             ligada={arredondado}
-            desligada={{ rotulo: "Cantos retos", Icone: Square }}
-            ligadaComo={{ rotulo: "Cantos arredondados", Icone: SquareRoundCorner }}
+            desligada={{ rotulo: t.forma.cantosRetos, Icone: Square }}
+            ligadaComo={{
+              rotulo: t.forma.cantosArredondados,
+              Icone: SquareRoundCorner,
+            }}
             onMudar={(valor) => definirPadraoDoQuadro({ arredondado: valor })}
           />
         ) : null}
 
         <Chave
-          titulo="Estilo"
+          titulo={t.forma.estilo}
           ligada={aMao}
-          desligada={{ rotulo: "Traço limpo", Icone: Minus }}
-          ligadaComo={{ rotulo: "Traço à mão", Icone: Signature }}
+          desligada={{ rotulo: t.forma.tracoLimpo, Icone: Minus }}
+          ligadaComo={{ rotulo: t.forma.tracoAMao, Icone: Signature }}
           onMudar={(valor) => definirPadraoDoQuadro({ aMao: valor })}
         />
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-[10px]">Espessura</span>
+            <span className="text-muted-foreground text-[10px]">
+              {t.forma.espessura}
+            </span>
             <span
               className="bg-foreground rounded-full"
               style={{
@@ -209,7 +223,7 @@ export function FormaControl({
             min={0}
             max={ESPESSURAS_LAPIS.length - 1}
             step={1}
-            aria-label="Espessura"
+            aria-label={t.forma.espessura}
             onValueChange={(valor) => {
               const indice = Array.isArray(valor) ? valor[0] : valor;
               setForma({ espessuraForma: ESPESSURAS_LAPIS[indice ?? 1] });

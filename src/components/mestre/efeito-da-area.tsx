@@ -9,6 +9,7 @@ import {
   efeitosEmAreaDosPlugins,
 } from "@/lib/area-de-efeito";
 import { definicaoDoEfeito } from "@/lib/efeitos";
+import { t } from "@/lib/i18n/ferramentas";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
@@ -100,7 +101,7 @@ export function EscolhaDoEfeitoDaArea({
 
   return (
     <div className="w-56 space-y-1.5">
-      <p className="text-xs font-medium">Efeito da área</p>
+      <p className="text-xs font-medium">{t.efeitoDaArea.titulo}</p>
 
       <ul className="space-y-0.5">
         {foraDaLista ? (
@@ -139,7 +140,7 @@ export function EscolhaDoEfeitoDaArea({
             onClick={() => onEscolher(undefined)}
           >
             <span className="border-muted-foreground/50 size-3 shrink-0 rounded-full border border-dashed" />
-            <span className="flex-1 truncate">Nenhum</span>
+            <span className="flex-1 truncate">{t.efeitoDaArea.nenhum}</span>
             {!area.efeito ? <Check className="size-3.5" /> : null}
           </button>
         </li>
@@ -147,8 +148,7 @@ export function EscolhaDoEfeitoDaArea({
 
       {lista.length === 0 ? (
         <p className="text-muted-foreground text-[11px] leading-snug">
-          A campanha ainda não tem efeitos em área. Eles se criam na Configuração da campanha, em
-          Efeitos, Efeito em área.
+          {t.efeitoDaArea.semEfeitos}
         </p>
       ) : null}
     </div>

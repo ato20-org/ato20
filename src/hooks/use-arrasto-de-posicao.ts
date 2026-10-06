@@ -2,6 +2,8 @@
 
 import { useRef, useState, type ComponentProps } from "react";
 
+import { t } from "@/lib/i18n/ferramentas";
+
 /**
  * Quanto uma seta anda na faixa, em segundos.
  *
@@ -74,11 +76,11 @@ export function useArrastoDePosicao({
   }
 
   const comum = {
-    "aria-label": `Posição de ${rotulo}`,
+    "aria-label": t.posicao.rotulo(rotulo),
     "aria-valuemin": 0,
     "aria-valuemax": Math.round(duration),
     "aria-valuenow": Math.round(mostrado),
-    "aria-valuetext": `${Math.round(mostrado)} de ${Math.round(duration)} segundos`,
+    "aria-valuetext": t.posicao.valor(Math.round(mostrado), Math.round(duration)),
   } satisfies ComponentProps<"div">;
 
   // Só mostra: nada de foco nem de eventos. Um `slider` que não busca seria uma

@@ -57,8 +57,24 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
+import { t } from "@/lib/i18n/ferramentas";
 import { cn } from "@/lib/utils";
 import { camerasDoModo, type Scene } from "@/types/scene";
+
+/**
+ * As teclas que o menu mostra ao lado de cada comando. Fora do dicionário de
+ * propósito: nome de tecla é o que está gravado nela, e não muda com o idioma.
+ */
+const TECLA = {
+  trazer: "C",
+  irAte: "Home",
+  enquadrar: "F",
+  seguir: "L",
+  espelhar: "Shift+L",
+  cenaInteira: "Shift+C",
+  transmitir: "T",
+  renomear: "F2",
+} as const;
 
 /**
  * As câmeras da cena, como chips numerados ao lado do zoom.
@@ -174,7 +190,9 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
         cenaNoAr={cenaNoAr}
       />
       <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-        <RotuloDaBarra>{deEsguelha ? "Tripés" : "Câmeras"}</RotuloDaBarra>
+        <RotuloDaBarra>
+          {deEsguelha ? t.camerasSalvas.tripes : t.camerasSalvas.cameras}
+        </RotuloDaBarra>
         {/* A faixa das câmeras rola dentro de uma largura fixa; o novo, o
           transmitir e o menu ficam à vista ao lado. Sem o teto, a pílula
           crescia com cada câmera até atravessar a tela. Agora ela para, e as
@@ -209,7 +227,11 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
                 variant="ghost"
                 size="icon-sm"
                 className="shrink-0"
-                aria-label={deEsguelha ? "Nova câmera daqui" : "Nova câmera"}
+                aria-label={
+                  deEsguelha
+                    ? t.camerasSalvas.novaCameraDaqui
+                    : t.camerasSalvas.novaCamera
+                }
                 onClick={() => novaCamera()}
               >
                 <Plus />
@@ -218,12 +240,14 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
           />
           <TooltipContent>
             <p className="font-medium">
-              {deEsguelha ? "Nova câmera daqui" : "Nova câmera"}
+              {deEsguelha
+                ? t.camerasSalvas.novaCameraDaqui
+                : t.camerasSalvas.novaCamera}
             </p>
             <p className="text-muted-foreground max-w-52">
               {deEsguelha
-                ? "Um tripé no lugar de onde você está olhando, fora do ar. O T o transmite, e aí a janela do espectador passa a ver de esguelha por ele."
-                : "Nasce sobre a selecionada, ou sobre o que você vê, e já no ar."}
+                ? t.camerasSalvas.novaCameraDaquiAjuda
+                : t.camerasSalvas.novaCameraAjuda}
             </p>
           </TooltipContent>
         </Tooltip>
@@ -247,10 +271,10 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
                 )}
                 aria-label={
                   transmissao === "no-ar"
-                    ? "Tirar do ar"
+                    ? t.camerasSalvas.tirarDoAr
                     : transmissao === "preparada"
-                      ? "Desfazer a preparação"
-                      : "Transmitir a câmera selecionada"
+                      ? t.camerasSalvas.desfazerPreparacao
+                      : t.camerasSalvas.transmitirSelecionada
                 }
                 disabled={!selecionada}
                 onClick={alternarTransmissao}
@@ -262,17 +286,17 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
           <TooltipContent>
             <p className="font-medium">
               {transmissao === "no-ar"
-                ? "Tirar do ar"
+                ? t.camerasSalvas.tirarDoAr
                 : transmissao === "preparada"
-                  ? "Preparada"
-                  : "Transmitir"}
+                  ? t.camerasSalvas.preparada
+                  : t.camerasSalvas.transmitir}
             </p>
             <p className="text-muted-foreground max-w-52">
               {transmissao === "no-ar"
-                ? "A mesa volta a ver o mapa inteiro."
+                ? t.camerasSalvas.tirarDoArAjuda
                 : transmissao === "preparada"
-                  ? "A mesa vê esta câmera quando o mapa for ao ar. Clique desfaz."
-                  : "A mesa passa a ver a câmera selecionada."}
+                  ? t.camerasSalvas.preparadaAjuda
+                  : t.camerasSalvas.transmitirAjuda}
             </p>
           </TooltipContent>
         </Tooltip>
@@ -284,7 +308,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
                 variant="ghost"
                 size="icon-sm"
                 className="shrink-0"
-                aria-label="Mais comandos da câmera"
+                aria-label={t.camerasSalvas.maisComandos}
                 disabled={!selecionada}
               >
                 <MoreVertical />
@@ -297,24 +321,24 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
             {recorte || deEsguelha ? (
               <DropdownMenuItem onClick={enquadrarAqui}>
                 <ScanSearch />
-                Trazer para aqui
-                <DropdownMenuShortcut>C</DropdownMenuShortcut>
+                {t.camerasSalvas.trazerParaAqui}
+                <DropdownMenuShortcut>{TECLA.trazer}</DropdownMenuShortcut>
               </DropdownMenuItem>
             ) : null}
             {recorte ? (
               <>
                 <DropdownMenuItem onClick={irParaCamera}>
                   <LocateFixed />
-                  Ir até a câmera
-                  <DropdownMenuShortcut>Home</DropdownMenuShortcut>
+                  {t.camerasSalvas.irAteCamera}
+                  <DropdownMenuShortcut>{TECLA.irAte}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!temSelecao}
                   onClick={enquadrarSelecao}
                 >
                   <Focus />
-                  Enquadrar a seleção
-                  <DropdownMenuShortcut>F</DropdownMenuShortcut>
+                  {t.camerasSalvas.enquadrarSelecao}
+                  <DropdownMenuShortcut>{TECLA.enquadrar}</DropdownMenuShortcut>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
@@ -327,16 +351,18 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
                   }
                 >
                   <Crosshair />
-                  Seguir a seleção
-                  <DropdownMenuShortcut>L</DropdownMenuShortcut>
+                  {t.camerasSalvas.seguirSelecao}
+                  <DropdownMenuShortcut>{TECLA.seguir}</DropdownMenuShortcut>
                 </DropdownMenuCheckboxItem>
                 <DropdownMenuCheckboxItem
                   checked={espelhoMestre}
                   onCheckedChange={alternarEspelho}
                 >
                   <Eye />
-                  Espelhar o palco
-                  <DropdownMenuShortcut>Shift+L</DropdownMenuShortcut>
+                  {t.camerasSalvas.espelharPalco}
+                  <DropdownMenuShortcut>
+                    {TECLA.espelhar}
+                  </DropdownMenuShortcut>
                 </DropdownMenuCheckboxItem>
               </>
             ) : null}
@@ -345,7 +371,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
               onCheckedChange={alternarFantasmas}
             >
               {fantasmasVisiveis ? <Eye /> : <EyeOff />}
-              Outras câmeras no mapa
+              {t.camerasSalvas.outrasCameras}
             </DropdownMenuCheckboxItem>
 
             {scene.cameraNoArId ? (
@@ -353,8 +379,10 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={mostrarCenaInteira}>
                   <Maximize />
-                  Mostrar a cena inteira
-                  <DropdownMenuShortcut>Shift+C</DropdownMenuShortcut>
+                  {t.camerasSalvas.mostrarCenaInteira}
+                  <DropdownMenuShortcut>
+                    {TECLA.cenaInteira}
+                  </DropdownMenuShortcut>
                 </DropdownMenuItem>
               </>
             ) : null}
@@ -368,7 +396,7 @@ export function CamerasSalvas({ scene }: { scene: Scene }) {
               }}
             >
               <Trash2 />
-              Remover a câmera
+              {t.camerasSalvas.removerCamera}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -410,7 +438,9 @@ function BarraDoOutroModo({
 
   return (
     <div className="bg-background/70 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-      <RotuloDaBarra>{deEsguelha ? "Câmeras" : "Tripés"}</RotuloDaBarra>
+      <RotuloDaBarra>
+        {deEsguelha ? t.camerasSalvas.cameras : t.camerasSalvas.tripes}
+      </RotuloDaBarra>
       <div className="rolagem-limpa flex max-w-xl items-center gap-0.5 overflow-x-auto">
         {lista.map((camera, index) => (
           <Chip
@@ -481,7 +511,7 @@ function Chip({
         autoFocus
         defaultValue={camera.nome}
         className="bg-accent h-7 w-24 rounded-md px-2 text-xs outline-none"
-        aria-label="Nome da câmera"
+        aria-label={t.camerasSalvas.nomeDaCamera}
         onFocus={(event) => event.currentTarget.select()}
         onBlur={(event) => confirmar(event.currentTarget.value)}
         onKeyDown={(event) => {
@@ -512,8 +542,8 @@ function Chip({
           className="flex h-full min-w-0 items-center gap-1 pr-1 pl-2"
           title={
             doOutroModo
-              ? `${camera.nome}: clique para ir ao ${tipo === "tripe" ? "2.5D" : "2D"}`
-              : `${camera.nome} (Shift+${posicao})`
+              ? t.camerasSalvas.irAoOutroModo(camera.nome, tipo === "tripe")
+              : t.camerasSalvas.comAtalho(camera.nome, posicao)
           }
           onClick={() => {
             // A troca primeiro: ela escolhe a câmera do modo novo, e a do
@@ -550,8 +580,8 @@ function Chip({
         <button
           type="button"
           className="mr-1 flex size-4 shrink-0 items-center justify-center rounded-sm opacity-60 hover:bg-black/15 hover:opacity-100"
-          aria-label={`Remover ${camera.nome}`}
-          title="Remover a câmera"
+          aria-label={t.camerasSalvas.removerNome(camera.nome)}
+          title={t.camerasSalvas.removerCamera}
           onClick={() => removerCamera(sceneId, camera.id)}
         >
           <X className="size-3" />
@@ -565,11 +595,13 @@ function Chip({
         >
           <Radio />
           {transmissao === "no-ar"
-            ? "Tirar do ar"
+            ? t.camerasSalvas.tirarDoAr
             : transmissao === "preparada"
-              ? "Desfazer a preparação"
-              : "Transmitir"}
-          {selecionada ? <ContextMenuShortcut>T</ContextMenuShortcut> : null}
+              ? t.camerasSalvas.desfazerPreparacao
+              : t.camerasSalvas.transmitir}
+          {selecionada ? (
+            <ContextMenuShortcut>{TECLA.transmitir}</ContextMenuShortcut>
+          ) : null}
         </ContextMenuItem>
         {doOutroModo ? null : (
           <ContextMenuItem
@@ -579,14 +611,16 @@ function Chip({
             }}
           >
             <ScanSearch />
-            Trazer para onde estou
-            {selecionada ? <ContextMenuShortcut>C</ContextMenuShortcut> : null}
+            {t.camerasSalvas.trazerParaOndeEstou}
+            {selecionada ? (
+              <ContextMenuShortcut>{TECLA.trazer}</ContextMenuShortcut>
+            ) : null}
           </ContextMenuItem>
         )}
         <ContextMenuItem onClick={renomear.pedir}>
           <TextCursorInput />
-          Renomear
-          <ContextMenuShortcut>F2</ContextMenuShortcut>
+          {t.camerasSalvas.renomear}
+          <ContextMenuShortcut>{TECLA.renomear}</ContextMenuShortcut>
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -596,7 +630,7 @@ function Chip({
           onClick={() => removerCamera(sceneId, camera.id)}
         >
           <Trash2 />
-          Remover
+          {t.camerasSalvas.remover}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
