@@ -17,7 +17,7 @@ import {
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
+import { abrirNota } from "@/lib/mestre/abrir-nota";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { useGestoStore } from "@/lib/store/use-gesto-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -195,7 +195,6 @@ const CartaoDeDocumento = memo(function CartaoDeDocumento({
 
   const updateDocumento = useSceneStore((state) => state.updateDocumento);
   const removeDocumento = useSceneStore((state) => state.removeDocumento);
-  const abrirNota = useArquivoAbertoStore((state) => state.abrirNota);
 
   const selecionado = useSelectionStore((state) =>
     state.selectedDocumentoIds.includes(documento.id),

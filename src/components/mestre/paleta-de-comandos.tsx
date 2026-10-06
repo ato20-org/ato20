@@ -38,7 +38,7 @@ import { rolarNaMesa } from "@/lib/mestre/dados-actions";
 import { lerNotacaoDeDados } from "@/lib/mestre/notacao-de-dados";
 import { normaliza } from "@/lib/search";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
-import { useLeitorStore } from "@/lib/store/use-leitor-store";
+import { usePaineisStore } from "@/lib/store/use-paineis-store";
 import { usePaletaStore } from "@/lib/store/use-paleta-store";
 import { selectLiveScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -236,7 +236,7 @@ function useComandos(consulta: string): Comando[] {
   const select = useSelectionStore((state) => state.select);
 
   const { livros } = useEstante();
-  const abrirNoSplit = useLeitorStore((state) => state.abrirNoSplit);
+  const abrirNoPainel = usePaineisStore((state) => state.abrir);
 
   const { assets } = useAssetList("image");
 
@@ -311,12 +311,13 @@ function useComandos(consulta: string): Comando[] {
     for (const livro of livros) {
       if (!casa(`livro ${livro.titulo}`)) continue;
       lista.push({
-        id: `livro-split-${livro.id}`,
+        id: `livro-painel-${livro.id}`,
         grupo: "Livros",
         titulo: livro.titulo,
-        detalhe: "no split",
+        detalhe: "num painel",
         icone: Columns2,
-        executar: () => abrirNoSplit(livro.id),
+        executar: () =>
+          abrirNoPainel({ tipo: "livro", livroId: livro.id, titulo: livro.titulo }),
       });
       lista.push({
         id: `livro-janela-${livro.id}`,
@@ -401,7 +402,7 @@ function useComandos(consulta: string): Comando[] {
     addItem,
     select,
     livros,
-    abrirNoSplit,
+    abrirNoPainel,
     assets,
     extensoes,
   ]);

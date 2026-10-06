@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useLeitorStore } from "./use-leitor-store";
 
 describe("salto de página", () => {
-  beforeEach(() => useLeitorStore.setState({ saltos: {}, livroId: null }));
+  beforeEach(() => useLeitorStore.setState({ saltos: {} }));
 
   it("dois pedidos da mesma página têm vezes diferentes", () => {
     const { saltar } = useLeitorStore.getState();

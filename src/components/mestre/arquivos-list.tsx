@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  Columns2,
   CopyPlus,
   FilePlus,
   FileText,
@@ -56,6 +57,14 @@ import { useTokenDrag } from "@/hooks/use-token-drag";
 import { achatarArvore, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 import { buscarArquivos, type Trecho } from "@/lib/mestre/busca-de-arquivos";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
+import { usePaineisStore } from "@/lib/store/use-paineis-store";
+import { zonaDeSplitSob } from "@/components/mestre/paineis/zona-de-split";
+import type { ForaDaLista } from "@/hooks/use-list-reorder";
+import {
+  abrirNota as abrirNotaOndeEstiver,
+  abrirNotaAoLado,
+  fecharNotaEmTodaParte,
+} from "@/lib/mestre/abrir-nota";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -106,6 +115,20 @@ export function ArquivosList({ ready }: { ready: boolean }) {
   const editingSceneId = useSceneStore((state) => state.board?.editingSceneId);
   const liveSceneId = useSceneStore((state) => state.board?.liveSceneId);
   const notaAbertaId = useArquivoAbertoStore((state) => state.notaId);
+  // As notas divididas ao lado do mapa também contam como abertas. Um
+  // conjunto, e não uma pergunta por linha: a lista tem uma linha por nota.
+  const ordemDosPaineis = usePaineisStore((state) => state.ordem);
+  const notasAoLado = useMemo(
+    () =>
+      new Set(
+        ordemDosPaineis.flatMap((painel) =>
+          painel.tipo === "abas"
+            ? painel.abas.flatMap((aba) => (aba.tipo === "nota" ? [aba.notaId] : []))
+            : [],
+        ),
+      ),
+    [ordemDosPaineis],
+  );
   const medidas = useMedidasDasNotas(ready, notas ?? []);
 
   const quadros = useMemo(
@@ -148,6 +171,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
     },
     // A linha SOB o cursor: soltar em cima da pasta é entrar nela.
     "sobre",
+    QUADRO_PARA_O_SPLIT,
   );
 
   // A árvore é alvo do arrasto de nota também: soltar sobre uma pasta move.
@@ -325,7 +349,9 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                     nota={achado.nota}
                     pastas={pastas}
                     depth={achado.depth}
-                    aberta={achado.nota.id === notaAbertaId}
+                    aberta={
+                      achado.nota.id === notaAbertaId || notasAoLado.has(achado.nota.id)
+                    }
                     medida={medidas.get(achado.nota.arquivo)}
                     trecho={achado.trecho}
                   />
@@ -365,7 +391,9 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                     nota={linha.nota}
                     pastas={pastas}
                     depth={linha.depth}
-                    aberta={linha.nota.id === notaAbertaId}
+                    aberta={
+                      linha.nota.id === notaAbertaId || notasAoLado.has(linha.nota.id)
+                    }
                     medida={medidas.get(linha.nota.arquivo)}
                   />
                 ) : (
@@ -579,6 +607,40 @@ function TrechoAchado({ trecho }: { trecho: Trecho }) {
 /** A busca não reordena. Ver a lista de achados em `ArquivosList`. */
 const SEM_REORDENAR = () => undefined;
 
+/**
+ * O quadro arrastado para FORA da lista vai para a área de split, ao lado do
+ * mapa, só para ver. Pasta não: ela não abre em lugar nenhum.
+ *
+ * Pelo gesto de reordenar, que já é o do quadro nesta lista -- trocar por
+ * outro tiraria o reordenar. Ver `ForaDaLista` e `ZonasDeSplit`.
+ */
+const QUADRO_PARA_O_SPLIT: ForaDaLista<string> = {
+  mover(id, native) {
+    if (id.startsWith(PREFIXO_PASTA)) return;
+
+    const paineis = usePaineisStore.getState();
+    if (!native) {
+      paineis.mirarSplit(null);
+      return;
+    }
+
+    paineis.pegarParaSplit({ tipo: "quadro", sceneId: id });
+    paineis.mirarSplit(zonaDeSplitSob(native.clientX, native.clientY));
+  },
+  soltar(id, native) {
+    if (id.startsWith(PREFIXO_PASTA)) return false;
+
+    const alvo = zonaDeSplitSob(native.clientX, native.clientY);
+    if (!alvo) return false;
+
+    usePaineisStore.getState().abrirEm({ tipo: "quadro", sceneId: id }, alvo);
+    return true;
+  },
+  fim() {
+    usePaineisStore.getState().largarSplit();
+  },
+};
+
 /** A pasta do Arquivos é alvo da nota arrastada. Ver `destinoSob`. */
 const ALVO_DE_NOTA = { "data-pasta-arquivos": "" };
 
@@ -662,6 +724,15 @@ function QuadroRow({
         <Item onClick={abrir}>
           <Presentation />
           Abrir
+        </Item>
+        {/* Só para ver: editar é no palco, que é um só. Ver `VistaDoQuadro`. */}
+        <Item
+          onClick={() =>
+            usePaineisStore.getState().abrir({ tipo: "quadro", sceneId: scene.id })
+          }
+        >
+          <Columns2 />
+          Abrir ao lado do mapa
         </Item>
         <Item disabled={noAr} onClick={() => store().setLiveSceneId(scene.id)}>
           <Radio />
@@ -830,11 +901,13 @@ function NotaRowSemMemo({
     [textoVivo, medida],
   );
 
-  const abrir = () => useArquivoAbertoStore.getState().abrirNota(nota.id);
+  // Onde ela já estiver -- ao lado do mapa, se o mestre a dividiu --, e no
+  // centro se em lugar nenhum. Ver `abrirNota` em `lib/mestre/abrir-nota`.
+  const abrir = () => abrirNotaOndeEstiver(nota.id);
   const [confirmando, setConfirmando] = useState(false);
 
   function apagar() {
-    useArquivoAbertoStore.getState().fechar();
+    fecharNotaEmTodaParte(nota.id);
     store().removerNota(nota.id);
     void apagarDocumento(nota.arquivo).catch((cause: unknown) => {
       console.error("falha ao apagar a nota", cause);
@@ -848,6 +921,10 @@ function NotaRowSemMemo({
         <Item onClick={abrir}>
           <FileText />
           Abrir
+        </Item>
+        <Item onClick={() => abrirNotaAoLado(nota.id)}>
+          <Columns2 />
+          Abrir ao lado do mapa
         </Item>
         <Separator />
         <Item onClick={renomear.pedir}>

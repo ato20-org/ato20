@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo } from "react";
 import Image from "next/image";
-import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
 
 import logo from "@/assets/logo-white.png";
 
@@ -14,6 +13,7 @@ import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { PlayersChip } from "@/components/mestre/players-chip";
 import { TableInvite } from "@/components/mestre/table-invite";
 import { DockRow } from "@/components/mestre/dock/dock-row";
+import { FileiraDePaineis } from "@/components/mestre/paineis/fileira-de-paineis";
 import { TrackBar } from "@/components/mestre/track-bar";
 import { WindowLayer } from "@/components/mestre/window-layer";
 import { OnAirControl } from "@/components/mestre/on-air-control";
@@ -35,13 +35,7 @@ import { ViewportControls } from "@/components/mestre/viewport-controls";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { useSomDaMesa } from "@/hooks/use-som-da-mesa";
 import { SceneStage } from "@/components/playground/scene-stage";
-import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useCharacters } from "@/hooks/use-characters";
 import { useEscopoDosAssets } from "@/hooks/use-escopo-dos-assets";
 import { useUnioesDeRetratos } from "@/hooks/use-unioes-de-retratos";
@@ -62,7 +56,6 @@ import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
-import { useLeitorStore } from "@/lib/store/use-leitor-store";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { useHandoutStore } from "@/lib/store/use-handout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
@@ -148,17 +141,12 @@ export function MestreShell() {
     [itensDaCenaNoAr, pastasDaCenaNoAr],
   );
 
-  const leftOpen = usePanelsStore((state) => state.left);
-  const rightOpen = usePanelsStore((state) => state.right);
-  const toggleLeft = usePanelsStore((state) => state.toggleLeft);
-  const toggleRight = usePanelsStore((state) => state.toggleRight);
   const restorePanels = usePanelsStore((state) => state.restore);
   const restorePinNotes = usePinWindowStore((state) => state.restaurar);
   const restoreSaquinho = useDadosStore((state) => state.restaurar);
   const restoreHandout = useHandoutStore((state) => state.restaurar);
   const restoreLayout = useLayoutStore((state) => state.restaurar);
   const restoreWindows = useWindowStore((state) => state.restaurar);
-  const restoreLeitor = useLeitorStore((state) => state.restaurar);
 
   const track = useTrackStore((state) => state.track);
   // Os quatro faders vêm da preferência da MÁQUINA e não da campanha, mas
@@ -280,7 +268,6 @@ export function MestreShell() {
     restoreLayout();
     restoreSaquinho();
     restoreHandout();
-    restoreLeitor();
   }, [
     restorePanels,
     restorePinNotes,
@@ -288,7 +275,6 @@ export function MestreShell() {
     restoreLayout,
     restoreSaquinho,
     restoreHandout,
-    restoreLeitor,
   ]);
 
   // Publica a cena NO AR, não a que está sendo editada — é o que permite
@@ -407,113 +393,94 @@ export function MestreShell() {
           cobrindo qualquer das duas esconderia controle de sessão atrás de
           consulta de ficha. */}
       <div className="relative flex min-h-0 min-w-0 flex-1">
+        {/* As colunas do dock nas bordas da janela, e os painéis entre elas:
+            o mapa é um painel como os outros, e reorganizar não leva as
+            colunas junto. Ver `FileiraDePaineis`. */}
         <DockRow>
-          <main className="relative flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
-            {/* Painel fechado deixa um alvo flutuando no canto de cima do palco,
-                do lado dele. É o caminho de volta: sem isso, fechar um painel o
-                deixaria inalcançável. */}
-            {/* Canto de cima à esquerda: o caminho de volta do painel fechado, e
-                o índice de pontos.
+          <FileiraDePaineis>
+            <main className="relative flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
+              {/* Canto de cima à esquerda: o índice de pontos e o das áreas.
+                  Alcançar o que está fora da vista -- um ponto de anotação ou
+                  uma área fora do enquadramento --, e nenhum é gesto sobre o
+                  mapa, que é o que mora embaixo.
 
-                Os dois são a mesma coisa — alcançar o que está fora da vista:
-                um devolve o painel recolhido, o outro leva a um ponto de
-                anotação que pode estar fora do enquadramento. E nenhum é gesto
-                sobre o mapa, que é o que mora embaixo.
+                  O caminho de volta das colunas recolhidas morava aqui, e foi
+                  para as bordas da janela: o palco deixou de encostar nelas.
+                  Ver `AlcaDeGaveta`. */}
+              <div className="absolute top-2 left-2 z-10 flex items-center gap-2">
+                {/* Quadro não tem ponto de anotação: o índice deles some com ele. */}
+                {editingScene && !lendoNota && temAnotacao(editingScene) ? (
+                  <PinIndex scene={editingScene} />
+                ) : null}
 
-                Na mesma fila e não em blocos separados porque eles se
-                sobreporiam: este bloco fica na folga do `main`, e o palco
-                começa 16 pixels adentro. */}
-            <div className="absolute top-2 left-2 z-10 flex items-center gap-2">
-              {leftOpen ? null : (
-                <FloatingPanelToggle
-                  onToggle={toggleLeft}
-                  // "o painel esquerdo", e não o nome do que está nele: o que
-                  // mora na coluna é escolha do mestre, e o rótulo mentiria no
-                  // dia em que ele arrastasse Cenas para o outro lado.
-                  label="o painel esquerdo"
-                  icon={<PanelLeftOpen />}
-                />
+                {/* E ao lado dele as áreas, que eram uma aba do painel de Cenas.
+                    Os dois são consulta sobre a cena ABERTA, e revelar área é
+                    gesto de mesa -- acontece olhando o mapa. Ver `AreasIndex`. */}
+                {editingScene && !lendoNota && temNevoa(editingScene) ? (
+                  <AreasIndex scene={editingScene} />
+                ) : null}
+              </div>
+
+              {/* Quem está na mesa fica aqui, e não no cabeçalho: é consulta, como
+                  o índice de pontos, e a contagem só serve se estiver à vista o
+                  tempo todo. Fora do `StageBoundary`: uma mesa cheia continua
+                  cheia sem cena nenhuma selecionada. */}
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+                {/* Só jogadores. Personagens tinha uma pílula ao lado desta, e ela
+                    saiu quando a lista virou aba padrão da bancada: um atalho no
+                    canto do palco para uma tela que já está à vista é um segundo
+                    caminho para o mesmo lugar, e o contador dela repetia o que a
+                    própria lista mostra.
+
+                    Jogadores fica: quem entrou pelo Jogador não tem aba nenhuma,
+                    e a contagem é o que responde "quantos entraram?" sem abrir
+                    nada. O chip sai sem moldura; a moldura é esta. */}
+                {/* Rolagens não tem mais chip aqui: a janela abre sozinha quando
+                    chega dado (ver `useJanelaDeRolagens`) e vive no catálogo do
+                    dock. Um botão para o que já se abre era mobília. */}
+                {lendoNota ? null : (
+                  <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+                    {/* Na mesma moldura do chip, e antes dele: os dois são
+                        consulta e ajuste, não gesto sobre o mapa. O traço entre
+                        eles é o que separa o que é da CENA -- e troca quando o
+                        mestre troca de mapa -- do que é da SESSÃO, que continua
+                        igual a cena toda.
+
+                        As DUAS capacidades, porque o painel guarda as duas: a
+                        grade veio da régua para cá, onde ela é estado da cena e
+                        não ferramenta na mão. Hoje mapa tem as duas e os outros
+                        não têm nenhuma, então a pergunta dobrada não muda nada
+                        -- e é justamente por isso que ela deve estar escrita
+                        agora, e não no dia em que um tipo tiver só uma. */}
+                    {editingScene &&
+                    (temSol(editingScene) || temGrade(editingScene)) ? (
+                      <>
+                        {/* O modo ANTES das configurações: ele troca o palco
+                            inteiro, e é o primeiro gesto de quem vai conferir a
+                            mesa. As configurações ficam nos DOIS modos -- sol,
+                            escuridão, grade e a cor do vazio têm efeito à vista no
+                            2.5D, e o fundo de esguelha só se acerta olhando-o. As
+                            FERRAMENTAS -- desenhar parede, cravar luz, medir -- é
+                            que continuam só no 2D. Ver `BotaoDeEsguelha`. */}
+                        {temSol(editingScene) ? <BotaoDeEsguelha /> : null}
+                        <ConfiguracoesDoMapa scene={editingScene} />
+                        <span className="bg-border mx-1 h-5 w-px" />
+                      </>
+                    ) : null}
+                    <PlayersChip />
+                  </div>
+                )}
+              </div>
+
+              {status === "error" ? (
+                <p className="text-destructive m-auto max-w-sm text-center text-sm">
+                  {error}
+                </p>
+              ) : (
+                <StageBoundary scene={editingScene} status={status} />
               )}
-
-              {/* Quadro não tem ponto de anotação: o índice deles some com ele. */}
-              {editingScene && !lendoNota && temAnotacao(editingScene) ? (
-                <PinIndex scene={editingScene} />
-              ) : null}
-
-              {/* E ao lado dele as áreas, que eram uma aba do painel de Cenas.
-                  Os dois são consulta sobre a cena ABERTA, e revelar área é
-                  gesto de mesa -- acontece olhando o mapa. Ver `AreasIndex`. */}
-              {editingScene && !lendoNota && temNevoa(editingScene) ? (
-                <AreasIndex scene={editingScene} />
-              ) : null}
-            </div>
-
-            {/* Quem está na mesa fica aqui, e não no cabeçalho: é consulta, como
-                o índice de pontos, e a contagem só serve se estiver à vista o
-                tempo todo. Fora do `StageBoundary`: uma mesa cheia continua
-                cheia sem cena nenhuma selecionada. */}
-            <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-              {/* Só jogadores. Personagens tinha uma pílula ao lado desta, e ela
-                  saiu quando a lista virou aba padrão da bancada: um atalho no
-                  canto do palco para uma tela que já está à vista é um segundo
-                  caminho para o mesmo lugar, e o contador dela repetia o que a
-                  própria lista mostra.
-
-                  Jogadores fica: quem entrou pelo Jogador não tem aba nenhuma,
-                  e a contagem é o que responde "quantos entraram?" sem abrir
-                  nada. O chip sai sem moldura; a moldura é esta. */}
-              {/* Rolagens não tem mais chip aqui: a janela abre sozinha quando
-                  chega dado (ver `useJanelaDeRolagens`) e vive no catálogo do
-                  dock. Um botão para o que já se abre era mobília. */}
-              {lendoNota ? null : (
-                <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-                  {/* Na mesma moldura do chip, e antes dele: os dois são
-                      consulta e ajuste, não gesto sobre o mapa. O traço entre
-                      eles é o que separa o que é da CENA -- e troca quando o
-                      mestre troca de mapa -- do que é da SESSÃO, que continua
-                      igual a cena toda.
-
-                      As DUAS capacidades, porque o painel guarda as duas: a
-                      grade veio da régua para cá, onde ela é estado da cena e
-                      não ferramenta na mão. Hoje mapa tem as duas e os outros
-                      não têm nenhuma, então a pergunta dobrada não muda nada
-                      -- e é justamente por isso que ela deve estar escrita
-                      agora, e não no dia em que um tipo tiver só uma. */}
-                  {editingScene &&
-                  (temSol(editingScene) || temGrade(editingScene)) ? (
-                    <>
-                      {/* O modo ANTES das configurações: ele troca o palco
-                          inteiro, e é o primeiro gesto de quem vai conferir a
-                          mesa. As configurações ficam nos DOIS modos -- sol,
-                          escuridão, grade e a cor do vazio têm efeito à vista no
-                          2.5D, e o fundo de esguelha só se acerta olhando-o. As
-                          FERRAMENTAS -- desenhar parede, cravar luz, medir -- é
-                          que continuam só no 2D. Ver `BotaoDeEsguelha`. */}
-                      {temSol(editingScene) ? <BotaoDeEsguelha /> : null}
-                      <ConfiguracoesDoMapa scene={editingScene} />
-                      <span className="bg-border mx-1 h-5 w-px" />
-                    </>
-                  ) : null}
-                  <PlayersChip />
-                </div>
-              )}
-              {rightOpen ? null : (
-                <FloatingPanelToggle
-                  onToggle={toggleRight}
-                  label="o painel direito"
-                  icon={<PanelRightOpen />}
-                />
-              )}
-            </div>
-
-            {status === "error" ? (
-              <p className="text-destructive m-auto max-w-sm text-center text-sm">
-                {error}
-              </p>
-            ) : (
-              <StageBoundary scene={editingScene} status={status} />
-            )}
-          </main>
+            </main>
+          </FileiraDePaineis>
         </DockRow>
 
         {/* Por último na marcação: as janelas ficam acima de tudo o que está
@@ -539,48 +506,6 @@ export function MestreShell() {
         volumeDisparo={volumeDisparo}
       />
     </div>
-  );
-}
-
-/**
- * O alvo que devolve um painel fechado.
- *
- * Flutua sobre o canto de cima do palco, do lado do painel que ele reabre —
- * quem o posiciona é o grupo que o envolve.
- * Substituiu os dois botões que viviam nas pontas do cabeçalho: eles ficavam
- * longe do que controlavam, e eram dois dos itens que faziam a barra parecer
- * cheia.
- */
-function FloatingPanelToggle({
-  onToggle,
-  label,
-  icon,
-}: {
-  onToggle: () => void;
-  label: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="secondary"
-            size="icon-sm"
-            // Sem sombra e semitransparente: ele fica sobre a cena, e um
-            // botão opaco ali competiria com o mapa.
-            className="bg-background/85 backdrop-blur"
-            aria-label={`Mostrar ${label}`}
-            onClick={onToggle}
-          >
-            {icon}
-          </Button>
-        }
-      />
-      <TooltipContent>
-        <p>Mostrar {label}</p>
-      </TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -672,9 +597,11 @@ function StageBoundary({
       {/* Nota aberta ocupa o lugar do palco, como o Obsidian abre um arquivo
           no painel principal. O palco continua montado por baixo? Não: uma
           nota por vez, e o palco volta ao abrir uma cena. Ver
-          `useArquivoAbertoStore`. */}
+          `useArquivoAbertoStore`. Para ler a nota OLHANDO o mapa, o botão de
+          dividir do editor a leva para um painel ao lado -- ver
+          `FileiraDePaineis`. */}
       {notaAberta ? (
-        <NotaEditor key={notaAberta.id} nota={notaAberta} />
+        <NotaEditor key={notaAberta.id} nota={notaAberta} onde="centro" />
       ) : scene && deEsguelha ? (
         <MestreDeEsguelha scene={scene} />
       ) : scene ? (

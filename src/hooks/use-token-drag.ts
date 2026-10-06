@@ -264,6 +264,16 @@ function destinoSob(
 }
 
 function ler(sob: Element): DestinoDoArrasto | null {
+  // A área de split antes de tudo: ela só existe no meio do gesto, e fica POR
+  // CIMA do que está embaixo dela -- quem a vê acesa espera que soltar ali
+  // divida. Ver `ZonasDeSplit`.
+  const split = sob.closest<HTMLElement>("[data-zona-de-split]");
+  if (split?.dataset.painel && split.dataset.zona) {
+    const zona = split.dataset.zona;
+    if (zona === "esquerda" || zona === "direita" || zona === "centro")
+      return { tipo: "split", painel: split.dataset.painel, zona };
+  }
+
   const pasta = sob.closest<HTMLElement>("[data-pasta-acervo]");
   // A pasta é lida ANTES do palco de propósito: o painel do acervo é uma janela
   // da bancada, e ela fica por cima do mapa. Quem está por cima é quem recebe.
