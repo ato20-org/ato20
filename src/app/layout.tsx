@@ -53,8 +53,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   // Tema travado no escuro: a ferramenta roda em mesa de jogo com luz baixa e
   // projetada em TV, onde fundo claro ofusca.
   return (
+    // `lang` do build, e o `idioma.ts` o troca na carga quando a tela é em
+    // inglês -- daí o `suppressHydrationWarning`, que vale só para os
+    // atributos desta tag.
     <html
       lang="pt-BR"
+      suppressHydrationWarning
       className={`dark ${GeistSans.variable} ${GeistMono.variable} ${Kalam.variable} h-full antialiased`}
     >
       <body className="bg-background text-foreground flex min-h-full flex-col">

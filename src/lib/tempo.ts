@@ -1,5 +1,8 @@
+import { comum } from "@/lib/i18n/comum";
+import { idioma } from "@/lib/i18n/idioma";
+
 /**
- * Há quanto tempo, em português.
+ * Há quanto tempo, no idioma da tela.
  *
  * `Intl.RelativeTimeFormat` com `numeric: "auto"`, e é por causa do `auto` que
  * vale usar a plataforma em vez de montar a string à mão: em pt-BR ele devolve
@@ -10,7 +13,7 @@
  * semanas" responde a pergunta que se faz olhando uma lista de campanhas, e
  * "há 22 dias" obriga a dividir de cabeça.
  */
-const FORMATO = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
+const FORMATO = new Intl.RelativeTimeFormat(idioma, { numeric: "auto" });
 
 /** Da menor para a maior, com o tamanho de cada uma em segundos. */
 const ESCALAS = [
@@ -31,7 +34,7 @@ const ESCALAS = [
  */
 export function desde(ms: number): string {
   const segundos = Math.round((Date.now() - ms) / 1000);
-  if (segundos < 45) return "agora há pouco";
+  if (segundos < 45) return comum.tempo.agoraHaPouco;
 
   let escolhida: (typeof ESCALAS)[number] = ESCALAS[0];
   for (const escala of ESCALAS) {
@@ -60,7 +63,7 @@ export function desde(ms: number): string {
  */
 export function duracao(ms: number): string {
   const minutos = Math.floor(ms / 60_000);
-  if (minutos < 1) return "menos de 1 min";
+  if (minutos < 1) return comum.tempo.menosDeUmMinuto;
   if (minutos < 60) return `${minutos} min`;
 
   const horas = Math.floor(minutos / 60);
@@ -86,5 +89,5 @@ export function duracao(ms: number): string {
  * E não a data com barras, que depende de quem lê saber se o mês vem antes.
  */
 export function dataCurta(ms: number): string {
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(ms);
+  return new Intl.DateTimeFormat(idioma, { dateStyle: "medium" }).format(ms);
 }
