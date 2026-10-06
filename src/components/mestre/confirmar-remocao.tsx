@@ -12,6 +12,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/mestre";
+import { rico } from "@/lib/i18n/rico";
 
 /**
  * "Tem certeza?" antes de apagar cena, quadro ou nota.
@@ -31,7 +34,7 @@ export function ConfirmarRemocao({
   titulo,
   itens,
   ressalva,
-  acao = "Apagar",
+  acao = t.confirmarRemocao.apagar,
   onConfirmar,
 }: {
   aberto: boolean;
@@ -62,8 +65,14 @@ export function ConfirmarRemocao({
               do lugar sem erro nenhum no console. */}
           <AlertDialogDescription render={<div className="space-y-2" />}>
             <p>
-              Ao {acao.toLowerCase()} você vai{" "}
-              <strong className="text-foreground">remover</strong>
+              {rico(t.confirmarRemocao.aoFazer, {
+                acao: acao.toLowerCase(),
+                remover: (
+                  <strong className="text-foreground">
+                    {t.confirmarRemocao.remover}
+                  </strong>
+                ),
+              })}
             </p>
 
             <ul className="text-foreground marker:text-muted-foreground/40 list-disc space-y-0.5 pl-4">
@@ -87,12 +96,12 @@ export function ConfirmarRemocao({
                 className="size-4 shrink-0 text-amber-400"
                 aria-hidden
               />
-              Ctrl+Z não traz de volta
+              {t.confirmarRemocao.semVolta}
             </p>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
           <AlertDialogAction onClick={onConfirmar}>{acao}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

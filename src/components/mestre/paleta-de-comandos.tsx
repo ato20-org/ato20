@@ -33,6 +33,7 @@ import { useAssetList } from "@/hooks/use-asset-list";
 import { useEstante } from "@/hooks/use-estante";
 import { executarComando } from "@/lib/extensoes/carregar";
 import { centeredBox } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/mestre";
 import { atalhos } from "@/lib/mestre/atalhos";
 import { rolarNaMesa } from "@/lib/mestre/dados-actions";
 import { lerNotacaoDeDados } from "@/lib/mestre/notacao-de-dados";
@@ -92,10 +93,9 @@ export function PaletaDeComandos() {
         // da tela cobre o palco; no alto ela fica onde o olho já procura.
         className="mt-[12vh] gap-0 self-start p-0 sm:max-w-[min(36rem,calc(100%-2rem))]"
       >
-        <DialogTitle className="sr-only">Paleta de comandos</DialogTitle>
+        <DialogTitle className="sr-only">{t.paleta.titulo}</DialogTitle>
         <DialogDescription className="sr-only">
-          Digite para achar uma janela, cena, livro, imagem ou atalho. Uma
-          notação como 2d6 joga dados na mesa.
+          {t.paleta.descricao}
         </DialogDescription>
         {aberta && <Miolo aoExecutar={fechar} />}
       </DialogContent>
@@ -151,8 +151,8 @@ function Miolo({ aoExecutar }: { aoExecutar: () => void }) {
             setAtivo(0);
           }}
           onKeyDown={aoTeclar}
-          placeholder="Janela, cena, livro, imagem, atalho… ou 2d6"
-          aria-label="Comando"
+          placeholder={t.paleta.placeholder}
+          aria-label={t.paleta.comando}
           aria-controls="paleta-lista"
           aria-activedescendant={
             comandos[ativo] ? `paleta-${comandos[ativo].id}` : undefined
@@ -169,7 +169,7 @@ function Miolo({ aoExecutar }: { aoExecutar: () => void }) {
       >
         {comandos.length === 0 && (
           <li className="text-muted-foreground px-2 py-6 text-center text-sm">
-            Nada com esse nome.
+            {t.paleta.nada}
           </li>
         )}
         {comandos.map((comando, indice) => {
@@ -254,9 +254,9 @@ function useComandos(consulta: string): Comando[] {
     if (jogada) {
       lista.push({
         id: `dado-${jogada.quantidade}d${jogada.faces}`,
-        grupo: "Dados",
-        titulo: `Rolar ${jogada.quantidade}d${jogada.faces}`,
-        detalhe: "na mesa",
+        grupo: t.paleta.dados,
+        titulo: t.paleta.rolar(`${jogada.quantidade}d${jogada.faces}`),
+        detalhe: t.paleta.naMesa,
         icone: Dices,
         executar: () => void rolarNaMesa(jogada),
       });
@@ -264,11 +264,11 @@ function useComandos(consulta: string): Comando[] {
 
     if (live && editingSceneId && live.id !== editingSceneId) {
       const editando = scenes?.find((scene) => scene.id === editingSceneId);
-      if (editando && casa(`transmitir a cena atual ${editando.name}`)) {
+      if (editando && casa(t.paleta.buscaTransmitirAtual(editando.name))) {
         lista.push({
           id: "transmitir-atual",
-          grupo: "Cenas",
-          titulo: "Transmitir a cena atual",
+          grupo: t.paleta.cenas,
+          titulo: t.paleta.transmitirAtual,
           detalhe: editando.name,
           icone: Radio,
           executar: () => setLiveSceneId(editando.id),
@@ -277,20 +277,20 @@ function useComandos(consulta: string): Comando[] {
     }
 
     for (const scene of scenes ?? []) {
-      if (scene.id !== editingSceneId && casa(`editar cena ${scene.name}`)) {
+      if (scene.id !== editingSceneId && casa(t.paleta.buscaEditar(scene.name))) {
         lista.push({
           id: `editar-${scene.id}`,
-          grupo: "Cenas",
-          titulo: `Editar: ${scene.name}`,
+          grupo: t.paleta.cenas,
+          titulo: t.paleta.editar(scene.name),
           icone: Pencil,
           executar: () => setEditingSceneId(scene.id),
         });
       }
-      if (scene.id !== live?.id && casa(`transmitir cena ${scene.name}`)) {
+      if (scene.id !== live?.id && casa(t.paleta.buscaTransmitir(scene.name))) {
         lista.push({
           id: `transmitir-${scene.id}`,
-          grupo: "Cenas",
-          titulo: `Transmitir: ${scene.name}`,
+          grupo: t.paleta.cenas,
+          titulo: t.paleta.transmitir(scene.name),
           icone: Radio,
           executar: () => setLiveSceneId(scene.id),
         });
@@ -298,32 +298,32 @@ function useComandos(consulta: string): Comando[] {
     }
 
     for (const tela of telas) {
-      if (!casa(`abrir janela ${tela.titulo}`)) continue;
+      if (!casa(t.paleta.buscaAbrir(tela.titulo))) continue;
       lista.push({
         id: `tela-${JSON.stringify(tela.conteudo)}`,
-        grupo: "Janelas",
-        titulo: `Abrir: ${tela.titulo}`,
+        grupo: t.paleta.janelas,
+        titulo: t.paleta.abrir(tela.titulo),
         icone: AppWindow,
         executar: () => abrirJanela(tela.conteudo),
       });
     }
 
     for (const livro of livros) {
-      if (!casa(`livro ${livro.titulo}`)) continue;
+      if (!casa(t.paleta.buscaLivro(livro.titulo))) continue;
       lista.push({
         id: `livro-painel-${livro.id}`,
-        grupo: "Livros",
+        grupo: t.paleta.livros,
         titulo: livro.titulo,
-        detalhe: "num painel",
+        detalhe: t.paleta.numPainel,
         icone: Columns2,
         executar: () =>
           abrirNoPainel({ tipo: "livro", livroId: livro.id, titulo: livro.titulo }),
       });
       lista.push({
         id: `livro-janela-${livro.id}`,
-        grupo: "Livros",
+        grupo: t.paleta.livros,
         titulo: livro.titulo,
-        detalhe: "em janela",
+        detalhe: t.paleta.emJanela,
         icone: BookOpen,
         executar: () =>
           abrirJanela({
@@ -337,10 +337,10 @@ function useComandos(consulta: string): Comando[] {
     if (!vazia && editingSceneId) {
       // Só o que não tem dono, como a biblioteca. Ver `AssetMeta.escopo`.
       for (const asset of assets) {
-        if (asset.escopo || !casa(`imagem na mesa ${asset.name}`)) continue;
+        if (asset.escopo || !casa(t.paleta.buscaImagem(asset.name))) continue;
         lista.push({
           id: `imagem-${asset.id}`,
-          grupo: "Imagem na mesa",
+          grupo: t.paleta.imagemNaMesa,
           titulo: asset.name,
           icone: ImageIcon,
           executar: () => {

@@ -4,6 +4,8 @@ import { FolderX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useCaminhoCurto } from "@/hooks/use-caminho-curto";
+import { t } from "@/lib/i18n/mestre";
+import { rico } from "@/lib/i18n/rico";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import type { CampaignInfo } from "@/lib/vault/campaign";
 
@@ -30,11 +32,16 @@ export function CampanhaPerdida({ campaign }: { campaign: CampaignInfo }) {
       <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
         <FolderX className="text-destructive size-8" aria-hidden />
         <h1 className="text-2xl font-semibold tracking-tight">
-          A pasta da campanha sumiu
+          {t.campanhaPerdida.titulo}
         </h1>
         <p className="text-muted-foreground text-sm">
-          <span className="text-foreground font-medium">{campaign.nome}</span>{" "}
-          estava em
+          {rico(t.campanhaPerdida.estavaEm, {
+            nome: (
+              <span className="text-foreground font-medium">
+                {campaign.nome}
+              </span>
+            ),
+          })}
         </p>
         <code
           className="bg-input/30 border-border w-full truncate rounded-lg border px-3 py-2 text-left text-xs"
@@ -43,13 +50,10 @@ export function CampanhaPerdida({ campaign }: { campaign: CampaignInfo }) {
           {encurtar(campaign.path)}
         </code>
         <p className="text-muted-foreground text-sm">
-          Nada foi gravado desde então, e nada será: gravar agora recriaria a
-          pasta pela metade. O que está na tela continua aqui, e a TV e os
-          celulares seguem vendo a cena. Se a pasta voltar para o mesmo lugar,
-          abra a campanha de novo pela lista.
+          {t.campanhaPerdida.explicacao}
         </p>
         <Button variant="outline" size="sm" onClick={close}>
-          Escolher outra campanha
+          {t.campanhaPerdida.escolherOutra}
         </Button>
       </div>
     </div>

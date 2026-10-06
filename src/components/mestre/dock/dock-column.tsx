@@ -9,6 +9,7 @@ import {
   useLayoutStore,
   type Lado,
 } from "@/lib/store/use-layout-store";
+import { t } from "@/lib/i18n/mestre";
 import { cn } from "@/lib/utils";
 
 /**
@@ -117,7 +118,7 @@ export function DockColumn({
             <Splitter
               direcao="horizontal"
               aparente={perto}
-              rotulo="Redimensionar as regiões"
+              rotulo={t.dock.redimensionarRegioes}
               aoArrastar={(delta) => {
                 if (inicio.current.altura === 0) {
                   inicio.current = {

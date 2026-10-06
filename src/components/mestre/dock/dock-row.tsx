@@ -11,6 +11,7 @@ import {
   useLayoutStore,
   type Lado,
 } from "@/lib/store/use-layout-store";
+import { t } from "@/lib/i18n/mestre";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 
 /**
@@ -114,7 +115,11 @@ function LarguraSplitter({
     <Splitter
       direcao="vertical"
       aparente={aparente}
-      rotulo={`Largura do painel ${lado === "esquerda" ? "esquerdo" : "direito"}`}
+      rotulo={
+        lado === "esquerda"
+          ? t.dock.larguraDoPainelEsquerdo
+          : t.dock.larguraDoPainelDireito
+      }
       aoArrastar={(delta) => {
         if (inicio.current === 0) inicio.current = largura;
 

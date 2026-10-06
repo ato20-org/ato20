@@ -15,6 +15,7 @@ import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { useLivro } from "@/hooks/use-estante";
 import { usePdfDoc } from "@/hooks/use-pdf-doc";
+import { t } from "@/lib/i18n/mestre";
 import { useLeitorStore } from "@/lib/store/use-leitor-store";
 import { selectLivroAberto, usePaineisStore } from "@/lib/store/use-paineis-store";
 import { chaveDe } from "@/lib/store/use-window-store";
@@ -137,11 +138,9 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={
-                    noPainel ? "Soltar como janela" : "Abrir num painel ao lado do mapa"
-                  }
+                  aria-label={noPainel ? t.leitor.soltar : t.leitor.abrirNoPainel}
                   onClick={() => {
-                    const titulo = livro?.titulo ?? "Livro";
+                    const titulo = livro?.titulo ?? t.leitor.livro;
 
                     if (noPainel) {
                       fecharDoPainel({ tipo: "livro", livroId, titulo });
@@ -162,7 +161,7 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
             />
             <TooltipContent>
               <p>
-                {noPainel ? "Soltar como janela" : "Abrir num painel ao lado do mapa"}
+                {noPainel ? t.leitor.soltar : t.leitor.abrirNoPainel}
               </p>
             </TooltipContent>
           </Tooltip>

@@ -30,6 +30,7 @@ import {
   quatDoEixo,
   quatMul,
 } from "@/lib/geometry/dado";
+import { t } from "@/lib/i18n/mestre";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { cn } from "@/lib/utils";
 import {
@@ -193,9 +194,7 @@ export function SaquinhoDados() {
                   ref={bolinha}
                   type="button"
                   onPointerDown={pegarBolinha}
-                  aria-label={
-                    aberto ? "Fechar o saquinho" : "Saquinho de dados"
-                  }
+                  aria-label={aberto ? t.saquinho.fechar : t.saquinho.titulo}
                   aria-expanded={aberto}
                   className={cn(
                     "bg-background/85 pointer-events-auto absolute z-30 grid place-items-center rounded-full border shadow-lg backdrop-blur transition-transform",
@@ -252,9 +251,9 @@ export function SaquinhoDados() {
           }
         />
         <TooltipContent side="left">
-          <p className="font-medium">Saquinho de dados</p>
+          <p className="font-medium">{t.saquinho.titulo}</p>
           <p className="text-muted-foreground max-w-48">
-            Os dados desta mesa.
+            {t.saquinho.dica}
           </p>
         </TooltipContent>
       </Tooltip>
@@ -370,9 +369,9 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <p className="text-sm font-medium">Saquinho de dados</p>
+        <p className="text-sm font-medium">{t.saquinho.titulo}</p>
         <p className="text-muted-foreground text-xs">
-          Arremesse no mapa, ou clique para jogar no meio.
+          {t.saquinho.instrucao}
         </p>
       </div>
 
@@ -407,7 +406,7 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
       {pousados.length >= 2 || (pousados.length >= 1 && noAr.size > 0) ? (
         <div className="flex items-baseline gap-2 border-t pt-2.5">
           <span className="text-muted-foreground flex-1 text-xs font-medium">
-            Na mesa
+            {t.saquinho.naMesa}
           </span>
 
           {/* Os termos, na ordem em que caíram: é o que deixa conferir a conta
@@ -426,7 +425,7 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
               que é um aviso sobre o que ainda falta cair. */}
           {noAr.size > 0 ? (
             <span className="text-muted-foreground/60 text-[11px]">
-              ({noAr.size} no ar)
+              {t.saquinho.noAr(noAr.size)}
             </span>
           ) : null}
           <span className="text-base leading-none font-semibold tabular-nums">
@@ -438,7 +437,7 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
       {historico.length > 0 ? (
         <div className="space-y-1.5 border-t pt-2.5">
           <p className="text-muted-foreground text-xs font-medium">
-            Últimas rolagens
+            {t.saquinho.ultimas}
           </p>
 
           <ul className="space-y-0.5">
@@ -503,7 +502,7 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
           onClick={() => recolher(boca())}
         >
           <Trash2 />
-          Recolher {dados.length === 1 ? "o dado" : `os ${dados.length} dados`}
+          {t.saquinho.recolher(dados.length)}
         </Button>
       ) : null}
     </div>

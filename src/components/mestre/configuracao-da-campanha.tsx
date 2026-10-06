@@ -52,6 +52,7 @@ import {
 import { useCharacters } from "@/hooks/use-characters";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import { SUGESTOES } from "@/lib/condicao";
+import { t } from "@/lib/i18n/mestre";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import {
   definirPadraoDoQuadro,
@@ -201,15 +202,15 @@ export function ConfiguracaoDaCampanhaBody() {
                 setBusca("");
               }
             }}
-            placeholder="Buscar configuração"
-            aria-label="Buscar configuração da campanha"
+            placeholder={t.configuracao.buscar}
+            aria-label={t.configuracao.buscarRotulo}
             className="h-8 pr-8 pl-8 text-sm"
           />
           {busca ? (
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label="Limpar a busca"
+              aria-label={t.configuracao.limparBusca}
               className="absolute top-1/2 right-1 -translate-y-1/2"
               onClick={() => setBusca("")}
             >
@@ -224,11 +225,13 @@ export function ConfiguracaoDaCampanhaBody() {
             `rolagem-limpa` porque a barra de rolagem de uma fileira de cinco
             botões seria mais alta que a vontade de rolá-la. */}
         <nav
-          aria-label="Tópicos"
+          aria-label={t.configuracao.topicos}
           className="rolagem-limpa bg-muted/30 flex shrink-0 gap-0.5 overflow-x-auto border-b p-1.5 @[30rem]/config:w-44 @[30rem]/config:flex-col @[30rem]/config:overflow-x-visible @[30rem]/config:border-r @[30rem]/config:border-b-0"
         >
           {topicos.map((chave) => {
-            const topico = TOPICOS_DA_CAMPANHA.find((t) => t.chave === chave)!;
+            const topico = TOPICOS_DA_CAMPANHA.find(
+              (item) => item.chave === chave,
+            )!;
             const Icone = ICONE[chave];
             const ativo = !buscando && chave === atual;
 
@@ -254,7 +257,7 @@ export function ConfiguracaoDaCampanhaBody() {
           <div className="space-y-4 p-3">
             {mostrados.length === 0 ? (
               <p className="text-muted-foreground px-1 py-6 text-center text-xs">
-                Nada com esse nome
+                {t.configuracao.nadaComEsseNome}
               </p>
             ) : (
               mostrados.map((chave, indice) => (
@@ -295,8 +298,8 @@ function Topico({
     case "ajustes":
       return (
         <Secao
-          titulo="Ajustes da campanha"
-          descricao="O que o ATO20 e os plugins deixam ajustar só nesta campanha. Vence o da máquina."
+          titulo={t.configuracao.ajustes}
+          descricao={t.configuracao.ajustesDescricao}
         >
           {/* A busca desce para a lista só quando ela não achou o TÓPICO: quem
               digitou "plugin" quer ver todos os ajustes, e filtrá-los pelo
@@ -322,19 +325,19 @@ function PadraoDoQuadro() {
 
   return (
     <Secao
-      titulo="Quadro"
-      descricao="Como os elementos novos nascem. O que já está no quadro fica como está, e cada um troca o seu no próprio gizmo."
+      titulo={t.configuracao.quadro}
+      descricao={t.configuracao.quadroDescricao}
     >
       <ul className="divide-y">
         <LinhaDePadrao
-          titulo="Cantos arredondados"
-          descricao="Retângulos e polígonos nascem com canto redondo."
+          titulo={t.configuracao.cantosArredondados}
+          descricao={t.configuracao.cantosArredondadosDescricao}
           ligada={arredondado}
           onMudar={(valor) => definirPadraoDoQuadro({ arredondado: valor })}
         />
         <LinhaDePadrao
-          titulo="Traço à mão"
-          descricao="Formas e setas saem tremidas, como rabisco a lápis, e o texto solto nasce em letra de mão."
+          titulo={t.configuracao.tracoAMao}
+          descricao={t.configuracao.tracoAMaoDescricao}
           ligada={aMao}
           onMudar={(valor) => definirPadraoDoQuadro({ aMao: valor })}
         />
@@ -411,7 +414,7 @@ function useModelosDaCampanha(): ModelosDaCampanha {
     listarModelos().then(setModelos, (cause: unknown) => {
       setModelos([]);
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao ler os medidores.",
+        cause instanceof Error ? cause.message : t.configuracao.falhaAoLerMedidores,
       );
     });
   }, []);
@@ -473,7 +476,7 @@ function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) 
       setModelos(arrumada);
       void mexer(
         () => reordenarModelos(arrumada.map((modelo) => modelo.id)),
-        "Falha ao reordenar.",
+        t.configuracao.falhaAoReordenar,
       );
     },
   );
@@ -481,7 +484,7 @@ function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) 
   async function criar() {
     await mexer(async () => {
       const { alcancados } = await criarModelo(
-        lista.length === 0 ? "Vida" : "Medidor",
+        lista.length === 0 ? t.configuracao.vida : t.configuracao.medidor,
         CORES_LAPIS[lista.length % CORES_LAPIS.length] ?? CORES_LAPIS[0],
         "barra",
         MAXIMO_INICIAL,
@@ -489,29 +492,29 @@ function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) 
 
       toast.success(
         alcancados === 0
-          ? "Medidor criado."
-          : `Medidor criado em ${alcancados} ${alcancados === 1 ? "personagem" : "personagens"}.`,
+          ? t.configuracao.medidorCriado
+          : t.configuracao.medidorCriadoEm(alcancados),
       );
-    }, "Falha ao criar o medidor.");
+    }, t.configuracao.falhaAoCriarMedidor);
   }
 
   async function aplicar() {
     await mexer(async () => {
       const { alcancados } = await aplicarModelosEmTodos();
 
-      toast.success(
-        `Aplicado em ${alcancados} de ${quantos} ${quantos === 1 ? "personagem" : "personagens"}.`,
-      );
-    }, "Falha ao aplicar.");
+      toast.success(t.configuracao.aplicadoEm(alcancados, quantos));
+    }, t.configuracao.falhaAoAplicar);
   }
 
   return (
     <section className="space-y-2">
       <div className="flex items-center gap-1">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">Medidores da campanha</h3>
+          <h3 className="text-sm font-medium">
+            {t.configuracao.medidoresDaCampanha}
+          </h3>
           <p className="text-muted-foreground text-[11px] leading-snug">
-            Todo personagem começa com estes.
+            {t.configuracao.medidoresDaCampanhaNota}
           </p>
         </div>
 
@@ -527,7 +530,7 @@ function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) 
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Aplicar em todos os personagens"
+                  aria-label={t.configuracao.aplicarEmTodos}
                   disabled={ocupado || quantos === 0}
                   onClick={() => void aplicar()}
                 >
@@ -536,9 +539,9 @@ function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) 
               }
             />
             <TooltipContent>
-              <p className="font-medium">Aplicar em todos os personagens</p>
+              <p className="font-medium">{t.configuracao.aplicarEmTodos}</p>
               <p className="text-muted-foreground max-w-56">
-                Quem já tem um medidor com o mesmo nome não ganha outro.
+                {t.configuracao.aplicarEmTodosNota}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -550,7 +553,7 @@ function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) 
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Criar medidor da campanha"
+                aria-label={t.configuracao.criarMedidor}
                 disabled={cheio || ocupado}
                 onClick={() => void criar()}
               >
@@ -559,10 +562,10 @@ function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) 
             }
           />
           <TooltipContent>
-            <p className="font-medium">Criar medidor da campanha</p>
+            <p className="font-medium">{t.configuracao.criarMedidor}</p>
             {cheio ? (
               <p className="text-muted-foreground max-w-48">
-                Limite de {MAX_MODELOS} medidores.
+                {t.configuracao.limiteDeMedidores(MAX_MODELOS)}
               </p>
             ) : null}
           </TooltipContent>
@@ -570,9 +573,11 @@ function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) 
       </div>
 
       {modelos === null ? (
-        <p className="text-muted-foreground text-[11px]">Lendo…</p>
+        <p className="text-muted-foreground text-[11px]">
+          {t.configuracao.lendo}
+        </p>
       ) : lista.length === 0 ? (
-        <PainelVazio icone={Gauge}>Nenhum medidor registrado</PainelVazio>
+        <PainelVazio icone={Gauge}>{t.configuracao.nenhumMedidor}</PainelVazio>
       ) : (
         <ul ref={listRef} className="space-y-1">
           {lista.map((modelo, index) => (
@@ -585,13 +590,13 @@ function MedidoresDaCampanha({ modelos, setModelos, reler }: ModelosDaCampanha) 
               onEditar={(patch) =>
                 void mexer(
                   () => editarModelo(modelo.id, patch),
-                  "Falha ao gravar.",
+                  t.configuracao.falhaAoGravar,
                 )
               }
               onApagar={() =>
                 void mexer(
                   () => removerModelo(modelo.id),
-                  "Falha ao apagar o medidor.",
+                  t.configuracao.falhaAoApagarMedidor,
                 )
               }
             />
@@ -633,8 +638,10 @@ function LinhaDeModelo({
       onEditar={onEditar}
       onApagar={onApagar}
       dicaDoOlho={{
-        titulo: modelo.escondido ? "Começa escondido" : "Começa à vista",
-        texto: "Não muda as fichas que já têm este medidor.",
+        titulo: modelo.escondido
+          ? t.configuracao.comecaEscondido
+          : t.configuracao.comecaAVista,
+        texto: t.configuracao.olhoDoMedidor,
       }}
       valores={
         // Só o MÁXIMO, sem valor atual. O atual é do personagem -- é o que
@@ -647,14 +654,14 @@ function LinhaDeModelo({
           // ainda existe, e é a escala da conta: o campo abre com ele.
           texto={porcentagem ? "100%" : modelo.maximo}
           dica={{
-            titulo: `Máximo: ${modelo.maximo}`,
+            titulo: t.configuracao.maximo(modelo.maximo),
             texto: porcentagem
-              ? "A porcentagem é contada sobre ele. Clique para trocar."
-              : "Começa cheio. Clique para trocar.",
+              ? t.configuracao.maximoPorcentagem
+              : t.configuracao.maximoCheio,
           }}
           campos={[
             {
-              rotulo: "Valor máximo",
+              rotulo: t.configuracao.valorMaximo,
               valor: modelo.maximo,
               onGravar: (maximo) => onEditar({ maximo }),
             },
@@ -678,10 +685,10 @@ function EfeitosDaCampanha() {
       <Tabs value={aba} onValueChange={(valor) => setAba(valor as typeof aba)}>
         <TabsList className="w-full">
           <TabsTrigger value="condicoes" className="flex-1">
-            Condições
+            {t.configuracao.condicoes}
           </TabsTrigger>
           <TabsTrigger value="area" className="flex-1">
-            Efeito em área
+            {t.configuracao.efeitoEmArea}
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -739,7 +746,7 @@ function CondicoesDaCampanha() {
       setArrastada({ de: modelos, lista: arrumada });
       void mexer(
         () => reordenarCondicoesDaCampanha(arrumada.map((modelo) => modelo.id)),
-        "Falha ao reordenar.",
+        t.configuracao.falhaAoReordenar,
       );
     },
   );
@@ -748,12 +755,12 @@ function CondicoesDaCampanha() {
     await mexer(
       () =>
         criarCondicaoDaCampanha(
-          "Condição",
+          t.configuracao.condicao,
           CORES_LAPIS[lista.length % CORES_LAPIS.length] ?? CORES_LAPIS[0],
           "circulo",
           null,
         ),
-      "Falha ao criar a condição.",
+      t.configuracao.falhaAoCriarCondicao,
     );
   }
 
@@ -772,7 +779,7 @@ function CondicoesDaCampanha() {
           sugestao.efeito ?? null,
         );
       }
-    }, "Falha ao criar as sugestões.");
+    }, t.configuracao.falhaAoCriarSugestoes);
   }
 
   // A tela da condição, quando a engrenagem a abriu: o selo e o efeito dela.
@@ -783,7 +790,10 @@ function CondicoesDaCampanha() {
         modelo={aberta}
         ocupado={ocupado}
         onEditar={(patch) =>
-          void mexer(() => editarCondicaoDaCampanha(aberta.id, patch), "Falha ao gravar.")
+          void mexer(
+            () => editarCondicaoDaCampanha(aberta.id, patch),
+            t.configuracao.falhaAoGravar,
+          )
         }
         onVoltar={() => setConfigurando(null)}
       />
@@ -794,9 +804,11 @@ function CondicoesDaCampanha() {
     <section className="space-y-2">
       <div className="flex items-center gap-1">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">Condições da campanha</h3>
+          <h3 className="text-sm font-medium">
+            {t.configuracao.condicoesDaCampanha}
+          </h3>
           <p className="text-muted-foreground text-[11px] leading-snug">
-            O que o botão direito do token oferece.
+            {t.configuracao.condicoesDaCampanhaNota}
           </p>
         </div>
 
@@ -806,7 +818,7 @@ function CondicoesDaCampanha() {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Criar condição da campanha"
+                aria-label={t.configuracao.criarCondicao}
                 disabled={cheio || ocupado}
                 onClick={() => void criar()}
               >
@@ -815,11 +827,10 @@ function CondicoesDaCampanha() {
             }
           />
           <TooltipContent>
-            <p className="font-medium">Criar condição da campanha</p>
+            <p className="font-medium">{t.configuracao.criarCondicao}</p>
             {cheio ? (
               <p className="text-muted-foreground max-w-48">
-                Limite de {MAX_MODELOS_DE_CONDICAO} condições: mais que isso e
-                o menu do token vira uma lista que se rola.
+                {t.configuracao.limiteDeCondicoes(MAX_MODELOS_DE_CONDICAO)}
               </p>
             ) : null}
           </TooltipContent>
@@ -827,10 +838,14 @@ function CondicoesDaCampanha() {
       </div>
 
       {modelos === null ? (
-        <p className="text-muted-foreground text-[11px]">Lendo…</p>
+        <p className="text-muted-foreground text-[11px]">
+          {t.configuracao.lendo}
+        </p>
       ) : lista.length === 0 ? (
         <div className="space-y-2">
-          <PainelVazio icone={Sparkles}>Nenhuma condição registrada</PainelVazio>
+          <PainelVazio icone={Sparkles}>
+            {t.configuracao.nenhumaCondicao}
+          </PainelVazio>
           <Button
             variant="outline"
             size="sm"
@@ -838,7 +853,7 @@ function CondicoesDaCampanha() {
             disabled={ocupado}
             onClick={() => void sugerir()}
           >
-            Usar sugestões
+            {t.configuracao.usarSugestoes}
           </Button>
         </div>
       ) : (
@@ -853,20 +868,21 @@ function CondicoesDaCampanha() {
               onEditar={(patch) =>
                 void mexer(
                   () => editarCondicaoDaCampanha(modelo.id, patch),
-                  "Falha ao gravar.",
+                  t.configuracao.falhaAoGravar,
                 )
               }
               onConfigurar={() => setConfigurando(modelo.id)}
               onApagar={() =>
                 void mexer(
                   () => removerCondicaoDaCampanha(modelo.id),
-                  "Falha ao apagar a condição.",
+                  t.configuracao.falhaAoApagarCondicao,
                 )
               }
               dicaDoOlho={{
-                titulo: modelo.escondido ? "Chega escondida" : "Chega à vista",
-                texto:
-                  "Vale para as próximas vezes que ela for marcada. Não muda quem já a tem.",
+                titulo: modelo.escondido
+                  ? t.configuracao.chegaEscondida
+                  : t.configuracao.chegaAVista,
+                texto: t.configuracao.olhoDaCondicao,
               }}
             />
           ))}

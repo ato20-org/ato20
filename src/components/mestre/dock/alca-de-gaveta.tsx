@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { t } from "@/lib/i18n/mestre";
 import { cn } from "@/lib/utils";
 
 /** A altura da onda, em pixel. */
@@ -92,7 +93,9 @@ export function AlcaDeGaveta({
   }, [esquerda]);
 
   const Seta = esquerda ? ChevronRight : ChevronLeft;
-  const rotulo = `Mostrar o painel ${esquerda ? "esquerdo" : "direito"}`;
+  const rotulo = esquerda
+    ? t.dock.mostrarPainelEsquerdo
+    : t.dock.mostrarPainelDireito;
 
   // Desenhada para a borda esquerda; a direita é o espelho.
   const curva = `M0 0 C0 ${ALTURA * 0.25} ${FUNDO} ${ALTURA * 0.3} ${FUNDO} ${ALTURA / 2} C${FUNDO} ${ALTURA * 0.7} 0 ${ALTURA * 0.75} 0 ${ALTURA}`;

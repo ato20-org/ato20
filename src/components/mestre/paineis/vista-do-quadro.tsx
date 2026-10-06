@@ -7,6 +7,7 @@ import { SceneLayer } from "@/components/playground/scene-layer";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { Button } from "@/components/ui/button";
 import { limitesDoConteudo } from "@/lib/geometry/limites";
+import { t } from "@/lib/i18n/mestre";
 import { viewportQueCabe } from "@/lib/geometry/viewport";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { usePaineisStore } from "@/lib/store/use-paineis-store";
@@ -48,7 +49,7 @@ export function VistaDoQuadro({ sceneId }: { sceneId: string }) {
   if (!visivel || !limites) {
     return (
       <p className="text-muted-foreground grid flex-1 place-items-center p-4 text-center text-xs">
-        Este quadro não existe mais.
+        {t.paineis.quadroSumiu}
       </p>
     );
   }
@@ -78,11 +79,11 @@ export function VistaDoQuadro({ sceneId }: { sceneId: string }) {
         variant="secondary"
         size="sm"
         className="absolute top-2 right-2 z-10 h-7 gap-1.5 px-2 text-xs shadow"
-        title="Abrir este quadro no palco para editar"
+        title={t.paineis.editarNoPalcoDica}
         onClick={editarNoPalco}
       >
         <Pencil className="size-3.5" />
-        Editar no palco
+        {t.paineis.editarNoPalco}
       </Button>
     </div>
   );

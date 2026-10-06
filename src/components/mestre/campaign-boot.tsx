@@ -19,6 +19,7 @@ import {
   useEfeitosDaCampanhaStore,
 } from "@/lib/store/use-efeitos-da-campanha-store";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
+import { t } from "@/lib/i18n/mestre";
 import { listAssets } from "@/lib/vault/assets";
 import { listFolders } from "@/lib/vault/folders";
 import type { CampaignInfo } from "@/lib/vault/campaign";
@@ -39,9 +40,9 @@ const MINIMO_MS = 500;
 type Fase = "board" | "sessao" | "acervo" | "pronto";
 
 const ROTULOS: Record<Exclude<Fase, "pronto">, string> = {
-  board: "Lendo os mapas",
-  sessao: "Retratos e trilha",
-  acervo: "Acervo de imagens e sons",
+  board: t.abertura.lendoMapas,
+  sessao: t.abertura.retratosETrilha,
+  acervo: t.abertura.acervo,
 };
 
 const ORDEM: Array<Exclude<Fase, "pronto">> = ["board", "sessao", "acervo"];
@@ -149,7 +150,7 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
           setErro(
             cause instanceof Error
               ? cause.message
-              : "Falha ao abrir a campanha",
+              : t.abertura.falhou,
           );
       }
     }

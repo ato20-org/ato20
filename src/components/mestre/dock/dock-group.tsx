@@ -10,6 +10,7 @@ import {
   useTelas,
   useRotuloJanela,
 } from "@/components/mestre/dock/window-content";
+import { t } from "@/lib/i18n/mestre";
 import { iconeDaJanela } from "@/lib/mestre/icone-da-janela";
 import { PanelCollapse } from "@/components/mestre/panel-collapse";
 import { Button } from "@/components/ui/button";
@@ -70,7 +71,7 @@ export function DockGroup({
       // largura mínima do grupo, e uma ficha larga atracada numa coluna estreita
       // arrasta a linha inteira atrás dela.
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-      aria-label={`Região ${grupo.id}`}
+      aria-label={t.dock.regiao(grupo.id)}
     >
       {/* `items-end` e sem `pb`: a tira de abas encosta na linha de baixo, que
           é o que permite a aba ativa cobri-la e virar uma coisa só com o corpo.
@@ -80,7 +81,7 @@ export function DockGroup({
         {/* À esquerda o botão fica depois das abas, à direita antes: ele encosta
             na borda que a coluna dela toca. Era assim nos dois painéis. */}
         {comRecolher && lado === "direita" ? (
-          <PanelCollapse side="right" label="este painel" />
+          <PanelCollapse side="right" label={t.dock.estePainel} />
         ) : null}
 
         {/* A tira ROLA, e as abas não encolhem: com cinco abas numa coluna de
@@ -89,7 +90,7 @@ export function DockGroup({
             barra fica escondida porque ela comeria metade da altura da tira. */}
         <div
           role="tablist"
-          aria-label={`Abas de ${grupo.id}`}
+          aria-label={t.dock.abasDe(grupo.id)}
           className="rolagem-limpa scroll-fade-x flex min-w-0 flex-1 items-end gap-px overflow-x-auto"
         >
           {grupo.abas.map((aba) => (
@@ -106,7 +107,7 @@ export function DockGroup({
         <Adicionar lado={lado} grupoId={grupo.id} />
 
         {comRecolher && lado === "esquerda" ? (
-          <PanelCollapse side="left" label="este painel" />
+          <PanelCollapse side="left" label={t.dock.estePainel} />
         ) : null}
       </div>
 
@@ -173,7 +174,7 @@ function Adicionar({ lado, grupoId }: { lado: Lado; grupoId: string }) {
             variant="ghost"
             size="icon-xs"
             className="text-muted-foreground shrink-0"
-            aria-label="Trazer um painel para esta região"
+            aria-label={t.dock.trazerPainel}
           >
             <Plus />
           </Button>
@@ -369,7 +370,7 @@ function Aba({
           `focus-within` na casca mantém o alcance de quem chega por Tab. */}
       <button
         type="button"
-        aria-label={`Fechar ${titulo}`}
+        aria-label={t.dock.fechar(titulo)}
         className="hover:bg-foreground/10 hover:text-foreground focus-visible:ring-ring shrink-0 rounded-sm p-0.5 opacity-0 transition-opacity group-hover/aba:opacity-100 group-focus-within/aba:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
         // Para antes do arrasto: a casca inteira é alça, e sem isto mirar o X
         // já levantava a aba para fora da coluna.
