@@ -100,6 +100,102 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.2.0" date="2026-10-06">
+      <description>
+        <p>
+          ATO20 1.2 speaks English and brings effects to conditions and to areas
+          on the floor, doors that open and block the light, notes and boards
+          beside the map, and the Portraits window. Fixes close the list.
+        </p>
+        <ul>
+          <li>
+            ATO20 speaks English. In Settings → General → Language. The first
+            launch follows the system language. The spectator window and the
+            phones follow the GM, and each player can pick the language of their
+            own phone, in the menu or on the join screen.
+          </li>
+          <li>
+            Conditions have effects: fire, ice, poison, blood and water around
+            the figure. On fire, Frozen, Poisoned, Bleeding and Wet come ready,
+            and the fire lights up its surroundings. In Campaign settings, the
+            gear on each condition opens its effect, to tweak it or to make a
+            new one starting from a ready-made effect. The effect shows on the
+            spectator window and on the phones.
+          </li>
+          <li>
+            Map objects can take conditions too. Any image that is not a
+            character, a barrel or a crate, gets conditions from the right-click
+            menu or the gizmo, with a badge, an effect and the option to hide it
+            from the table.
+          </li>
+          <li>
+            Area effects on the floor: flames, poison sludge, cracked ice and
+            puddles. In the drawing pill, "Area effect" marks a patch of floor,
+            and the effect is picked in its gizmo. It works in 2D and in 2.5D,
+            and area effects are set up in the campaign, like condition effects.
+          </li>
+          <li>
+            Doors that open, block the light and stand up in 2.5D. The Door tool
+            sits under Light: drag from the hinge to the tip. The gizmo button
+            opens and closes it, and the door swings on every screen. Closed, it
+            blocks the light and the sun like a wall.
+          </li>
+          <li>
+            Notes, books and boards side by side with the map. With the columns
+            button in the editor and the reader, "Open beside the map" in the
+            Files menu, or by dragging the file to the edge of the stage. Panels
+            have tabs and are remembered per campaign.
+          </li>
+          <li>
+            Everything about portraits in the Portraits window, and a cleaner GM
+            map. The window shows the table screen in 16:9, with the portraits
+            as the table sees them, and below it Cast, Layout and Position. The
+            GM map no longer draws the heads or the outline around tokens.
+          </li>
+          <li>
+            The phone sees the side-on view when a tripod is on air. Like the
+            spectator window. Players can still drag their own token, now by the
+            floor under their finger.
+          </li>
+          <li>
+            Any color in every color row. The rainbow button at the end of the
+            row opens a picker with a square, a hue strip and hex: in the gizmo,
+            the condition, the effect light and the area effect.
+          </li>
+          <li>
+            The color outside the map is set in the map settings. Pitch black,
+            charcoal, slate, felt or any shade, in 2D and in 2.5D. The map
+            settings also show in 2.5D.
+          </li>
+          <li>
+            Double-clicking a grouped item enters the group. And selects just
+            that item on the map, without opening the list. A second double
+            click opens the sheet, as before.
+          </li>
+          <li>
+            Many figures with effects no longer weigh down the spectator window.
+            With forty figures on fire, it went from 5 to 22 frames per second,
+            and 2.5D pieces got lighter.
+          </li>
+          <li>
+            Plugins bring effects and speak more than one language. With API 6,
+            a plugin declares condition and area effects. With API 7, every text
+            in the manifest can come per language, and the plugin code knows the
+            screen language.
+          </li>
+          <li>
+            Fixed: the portrait on air turned off when the app closed. Closing
+            right after putting a portrait on air lost the choice, and the app
+            reopened with it off. It now comes back on air.
+          </li>
+          <li>
+            Fixed: the Table window didn't show 2.5D with a tripod on air. It
+            stayed on the top-down map while the spectator window showed the
+            side-on view. It now shows what the table sees.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-10-02">
       <description>
         <p>

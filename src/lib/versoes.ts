@@ -71,6 +71,171 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.2.0",
+    data: "2026-10-06",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: { pt: "O ATO20 fala inglês", en: "ATO20 speaks English" },
+        detalhe: {
+          pt: "Em Configurações → Geral → Idioma. A primeira abertura segue o idioma do sistema. A janela do espectador e os celulares acompanham o Mestre, e cada jogador pode escolher o idioma do próprio celular, no menu ou na tela de entrada.",
+          en: "In Settings → General → Language. The first launch follows the system language. The spectator window and the phones follow the GM, and each player can pick the language of their own phone, in the menu or on the join screen.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Condições ganharam efeito: fogo, gelo, veneno, sangue e água em volta da figura",
+          en: "Conditions have effects: fire, ice, poison, blood and water around the figure",
+        },
+        detalhe: {
+          pt: "Em chamas, Congelado, Envenenado, Sangrando e Molhado vêm prontos, e o fogo ilumina em volta. Na Configuração da campanha, a engrenagem de cada condição abre o efeito dela, para ajustar ou criar um novo partindo de um pronto. O efeito aparece na janela do espectador e no celular.",
+          en: "On fire, Frozen, Poisoned, Bleeding and Wet come ready, and the fire lights up its surroundings. In Campaign settings, the gear on each condition opens its effect, to tweak it or to make a new one starting from a ready-made effect. The effect shows on the spectator window and on the phones.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Objetos do mapa também recebem condição",
+          en: "Map objects can take conditions too",
+        },
+        detalhe: {
+          pt: "Qualquer imagem que não é personagem, um barril ou uma caixa, ganha condição pelo botão direito ou pelo gizmo, com selo, efeito e a opção de esconder da mesa.",
+          en: "Any image that is not a character, a barrel or a crate, gets conditions from the right-click menu or the gizmo, with a badge, an effect and the option to hide it from the table.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Efeito em área no chão: chamas, lodo venenoso, gelo trincado e poça",
+          en: "Area effects on the floor: flames, poison sludge, cracked ice and puddles",
+        },
+        detalhe: {
+          pt: "Na pílula de desenho, \"Efeito em área\" marca um pedaço do chão, e o efeito se escolhe no gizmo dele. Vale no 2D e no 2.5D, e os efeitos em área se configuram na campanha, como os das condições.",
+          en: "In the drawing pill, \"Area effect\" marks a patch of floor, and the effect is picked in its gizmo. It works in 2D and in 2.5D, and area effects are set up in the campaign, like condition effects.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Portas que abrem, tapam a luz e ficam em pé no 2.5D",
+          en: "Doors that open, block the light and stand up in 2.5D",
+        },
+        detalhe: {
+          pt: "A ferramenta Porta fica embaixo da Luz: arraste da dobradiça à ponta. O botão do gizmo abre e fecha, e a porta gira em todas as telas. Fechada, ela tapa a luz e o sol como uma parede.",
+          en: "The Door tool sits under Light: drag from the hinge to the tip. The gizmo button opens and closes it, and the door swings on every screen. Closed, it blocks the light and the sun like a wall.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Nota, livro e quadro lado a lado com o mapa",
+          en: "Notes, books and boards side by side with the map",
+        },
+        detalhe: {
+          pt: "Pelo botão de colunas no editor e no leitor, por \"Abrir ao lado do mapa\" no menu de Arquivos, ou arrastando o arquivo para a borda do palco. Os painéis têm abas e são lembrados por campanha.",
+          en: "With the columns button in the editor and the reader, \"Open beside the map\" in the Files menu, or by dragging the file to the edge of the stage. Panels have tabs and are remembered per campaign.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Tudo de retrato na janela Retratos, e o mapa do Mestre mais limpo",
+          en: "Everything about portraits in the Portraits window, and a cleaner GM map",
+        },
+        detalhe: {
+          pt: "A janela mostra a tela da mesa em 16:9, com os retratos como a mesa vê, e embaixo Elenco, Layout e Posição. O mapa do Mestre não desenha mais as cabeças nem o contorno em volta dos tokens.",
+          en: "The window shows the table screen in 16:9, with the portraits as the table sees them, and below it Cast, Layout and Position. The GM map no longer draws the heads or the outline around tokens.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O celular vê de esguelha quando um tripé está no ar",
+          en: "The phone sees the side-on view when a tripod is on air",
+        },
+        detalhe: {
+          pt: "Como a janela do espectador. O jogador continua arrastando o próprio token, agora pelo chão sob o dedo.",
+          en: "Like the spectator window. Players can still drag their own token, now by the floor under their finger.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: { pt: "Cor livre em toda fileira de cor", en: "Any color in every color row" },
+        detalhe: {
+          pt: "O botão de arco-íris no fim da fileira abre um seletor com quadrado, faixa de matiz e hexadecimal: no gizmo, na condição, na luz do efeito e no efeito em área.",
+          en: "The rainbow button at the end of the row opens a picker with a square, a hue strip and hex: in the gizmo, the condition, the effect light and the area effect.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A cor fora do mapa se escolhe nas configurações do mapa",
+          en: "The color outside the map is set in the map settings",
+        },
+        detalhe: {
+          pt: "Breu, carvão, ardósia, feltro ou qualquer tom, no 2D e no 2.5D. As configurações do mapa também aparecem no 2.5D.",
+          en: "Pitch black, charcoal, slate, felt or any shade, in 2D and in 2.5D. The map settings also show in 2.5D.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Duplo clique num item agrupado entra no grupo",
+          en: "Double-clicking a grouped item enters the group",
+        },
+        detalhe: {
+          pt: "E seleciona só aquele item no mapa, sem abrir a lista. O segundo duplo clique abre a ficha, como antes.",
+          en: "And selects just that item on the map, without opening the list. A second double click opens the sheet, as before.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Muitas figuras com efeito não pesam mais a janela do espectador",
+          en: "Many figures with effects no longer weigh down the spectator window",
+        },
+        detalhe: {
+          pt: "Com quarenta figuras em chamas, ela passou de 5 para 22 quadros por segundo, e as peças do 2.5D ficaram mais leves.",
+          en: "With forty figures on fire, it went from 5 to 22 frames per second, and 2.5D pieces got lighter.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Plugins trazem efeitos e falam mais de um idioma",
+          en: "Plugins bring effects and speak more than one language",
+        },
+        detalhe: {
+          pt: "Na API 6, um plugin declara efeitos de condição e em área. Na API 7, todo texto do manifesto pode vir por idioma, e o código do plugin sabe o idioma da tela.",
+          en: "With API 6, a plugin declares condition and area effects. With API 7, every text in the manifest can come per language, and the plugin code knows the screen language.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O retrato no ar desligava ao fechar o aplicativo",
+          en: "The portrait on air turned off when the app closed",
+        },
+        detalhe: {
+          pt: "Fechar logo depois de pôr um retrato no ar perdia a escolha, e o aplicativo reabria com ele desligado. Agora ele volta no ar.",
+          en: "Closing right after putting a portrait on air lost the choice, and the app reopened with it off. It now comes back on air.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "A janela Mesa não mostrava o 2.5D com um tripé no ar",
+          en: "The Table window didn't show 2.5D with a tripod on air",
+        },
+        detalhe: {
+          pt: "Ela seguia no mapa de prumo enquanto a janela do espectador via de esguelha. Agora mostra o mesmo que a mesa.",
+          en: "It stayed on the top-down map while the spectator window showed the side-on view. It now shows what the table sees.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.1.0",
     data: "2026-10-02",
     mudancas: [
