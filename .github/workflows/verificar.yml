@@ -10,11 +10,22 @@
 
 name: verificar
 
+# Texto e mídia não compilam nem têm teste: um GIF novo em `docs/midia` ou uma
+# frase no README rodavam a WebKitGTK, o build e o Rust inteiros para nada.
 on:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "**.md"]
   pull_request:
     branches: [main]
+    paths-ignore: ["docs/**", "**.md"]
+
+# Um push novo na PR cancela a execução que ainda verificava o anterior: o
+# resultado dela já não diz nada sobre o que vai ser mesclado. Na `main` não
+# cancela -- cada commit dela fica com o próprio resultado.
+concurrency:
+  group: verificar-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verificar:
@@ -23,9 +34,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # O Rust só na PR que mexe nele, e sempre no push da `main`.
+      #
+      # Compilar o app para o `cargo test` é o passo mais caro daqui (os
+      # testes em si levam seis segundos), e uma PR só de interface pagava
+      # isso inteiro, mais a WebKitGTK do apt, sem tocar uma linha de Rust. O
+      # próprio workflow entra na lista: mudar a CI tem de passar pela CI
+      # inteira.
+      #
+      # Pela API e não por `git diff`: o checkout é raso, e buscar o histórico
+      # todo traria junto o peso da mídia antiga. Se a pergunta falhar, roda
+      # -- pular por engano é pior que rodar à toa.
+      - name: Mudou o Rust?
+        id: rust
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "mudou=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! arquivos=$(gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[].filename'); then
+            echo "mudou=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if echo "$arquivos" | grep -qE '^(src-tauri/|\.github/workflows/)'; then
+            echo "mudou=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "mudou=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Do que a webview precisa para o Rust compilar. Mesmos pacotes do
-      # ambiente de desenvolvimento -- o `tauri` linka contra a WebKitGTK.
+      # ambiente de desenvolvimento -- o `tauri` linka contra a WebKitGTK. O
+      # build do web não usa nenhum deles.
       - name: Dependências do sistema
+        if: steps.rust.outputs.mudou == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -45,8 +92,10 @@ jobs:
           cache: pnpm
 
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.rust.outputs.mudou == 'true'
 
       - uses: Swatinem/rust-cache@v2
+        if: steps.rust.outputs.mudou == 'true'
         with:
           workspaces: src-tauri
 
@@ -61,4 +110,5 @@ jobs:
         run: pnpm pdfjs && pnpm build
 
       - name: Testes do Rust
+        if: steps.rust.outputs.mudou == 'true'
         run: cargo test --manifest-path src-tauri/Cargo.toml
