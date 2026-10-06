@@ -20,7 +20,7 @@ import {
  *
  * ASSADAS numa folha de quadros, como o fogo (ver `particulas.ts`, que tem a
  * medida): o forno desenha o voo uma vez por configuração, cor e variante, e
- * aqui a folha só toca -- um recorte e os mesmos dois invólucros do externo,
+ * aqui a folha só toca -- um elemento, o mesmo do externo (`QuadrosAnimados`),
  * seja uma fagulha ou vinte e quatro.
  *
  * Cada figura pega uma das variantes pela semente, com a fase dela e, uma sim
@@ -90,7 +90,7 @@ export function ParticulasDaFigura({
   };
 
   return (
-    <div aria-hidden className="pointer-events-none absolute overflow-hidden select-none" style={caixa}>
+    <div aria-hidden className="pointer-events-none absolute select-none" style={caixa}>
       <QuadrosAnimados
         fonte={fonte}
         colunas={folha.colunas}

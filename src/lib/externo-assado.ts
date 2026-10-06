@@ -26,7 +26,8 @@ import type { FolhaDeParticulas, Trajetoria } from "@/lib/particulas";
  * uma dessas três se escreveria em CSS -- `filter`, `mask-image`, duas
  * camadas recortadas --, e as três custariam por quadro, numa arte que se
  * mexe catorze vezes por segundo. Aqui viram pixel UMA vez, por arte, por cor
- * e por nível de mipmap, e o que anda depois é só o `transform` dos quadros.
+ * e por nível de mipmap, e o que anda depois é só a posição do fundo, em
+ * degraus (`QuadrosAnimados`).
  *
  * O trabalho corre num WORKER (`forno-do-externo.worker.ts`): na thread da
  * janela, uma folha custava um quadro de 300 ms. Onde não há worker com

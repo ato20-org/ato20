@@ -267,22 +267,11 @@
     animation: efeito-piscar 2s ease-in-out infinite;
   }
 
-  /* Os QUADROS do externo: a folha anda em degraus dentro do recorte, as
-     colunas na imagem e as linhas no invólucro. Duração e degraus vêm inline,
-     da grade do efeito. Parada, sem o movimento, fica o primeiro quadro. */
-  .efeito-colunas {
-    animation: efeito-colunas 1s steps(4) infinite;
-  }
-
   /* A chama de pé do 2.5D: uma faixa de quadros andando pela posição do
      fundo, em degraus. Repinta um elemento pequeno a cada degrau, em vez de
      compor duas camadas por chama a cada quadro da câmera. Ver `faixaDaFolha`. */
   .efeito-faixa {
     animation: efeito-faixa var(--efeito-duracao, 1s) steps(var(--efeito-quadros, 16)) infinite;
-  }
-
-  .efeito-linhas {
-    animation: efeito-linhas 1s steps(4) infinite;
   }
 
   /* O ping no mapa. Ver `PingLayer`.
@@ -407,8 +396,7 @@
     .efeito-girar,
     .efeito-flutuar,
     .efeito-piscar,
-    .efeito-colunas,
-    .efeito-linhas,
+    .efeito-grade,
     .efeito-faixa
   ) {
   animation-play-state: paused;
@@ -435,15 +423,18 @@
   }
 }
 
-@keyframes efeito-colunas {
+/* Os QUADROS de uma folha (`QuadrosAnimados`): as colunas no `x` e as linhas
+   no `y` da posição do fundo, cada eixo em degraus. O fim vem inline, da
+   grade. Parada, sem o movimento, fica o primeiro quadro. */
+@keyframes efeito-grade-x {
   to {
-    transform: translateX(-100%);
+    background-position-x: var(--grade-fim-x, 0%);
   }
 }
 
-@keyframes efeito-linhas {
+@keyframes efeito-grade-y {
   to {
-    transform: translateY(-100%);
+    background-position-y: var(--grade-fim-y, 0%);
   }
 }
 

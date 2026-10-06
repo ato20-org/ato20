@@ -79,9 +79,9 @@ type AreaDeEfeitoLayerProps = {
  *
  * Cada área é UMA camada animada, tenha quatro ou quarenta focos: o forno
  * monta todos numa folha só (`assarArea`), e aqui a folha só toca -- o mesmo
- * `translate` em degraus do fogo da figura. Medido no fogo e no veneno: cada
- * camada animada a mais por figura custou de 6 a 15 fps com 40 figuras; uma
- * por foco faria da área uma horda.
+ * fundo em degraus do fogo da figura (`QuadrosAnimados`). Medido no fogo e no
+ * veneno: cada camada animada a mais por figura custou de 6 a 15 fps com 40
+ * figuras; uma por foco faria da área uma horda.
  */
 export function AreaDeEfeitoLayer({
   areas,
@@ -171,7 +171,7 @@ const AreaDeEfeitoView = memo(function AreaDeEfeitoView({
         <div
           aria-hidden
           data-efeito-parado={parada ? "" : undefined}
-          className="pointer-events-none absolute top-0 left-0 overflow-hidden select-none"
+          className="pointer-events-none absolute top-0 left-0 select-none"
           style={{
             transform: `translate(${plano.caixa.x}px, ${plano.caixa.y}px)`,
             width: plano.caixa.width,
