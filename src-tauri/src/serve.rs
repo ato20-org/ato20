@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, SocketAddr, TcpListener, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use axum::extract::{
@@ -11,7 +12,7 @@ use axum::extract::{
 use axum::http::header::{
     ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, LOCATION,
 };
-use axum::http::{HeaderValue, Request, StatusCode, Uri};
+use axum::http::{HeaderMap, HeaderValue, Request, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -82,6 +83,112 @@ pub struct DaemonAddr {
 }
 
 const TOKEN_HEADER: &str = "x-ato20-token";
+
+/// Os cabecalhos que um proxy local poe ao repassar uma requisicao de fora.
+///
+/// O Funnel do Tailscale, o cloudflared e o ngrok chegam ao daemon PELO
+/// loopback, e cada um anuncia o cliente de verdade num destes. A presenca de
+/// qualquer um diz que a requisicao atravessou a rua, por mais que o socket
+/// diga 127.0.0.1.
+const CABECALHOS_DE_PROXY: [&str; 4] = [
+    "x-forwarded-for",
+    "forwarded",
+    "x-real-ip",
+    "cf-connecting-ip",
+];
+
+/// A requisicao nasceu nesta maquina, sem proxy no meio.
+///
+/// E o que `is_loopback` sozinho dizia enquanto a porta so ia ate o Wi-Fi.
+/// Com a mesa na internet por um tunel local, o socket passou a mentir: o
+/// jogador de outra cidade chega de 127.0.0.1. Um tunel TCP cru (`ssh -R`,
+/// bore) nao poe cabecalho nenhum e continua passando por aqui -- e por isso
+/// que os fluxos do Mestre pedem o token alem disto. Ver `require_mestre`.
+fn desta_maquina(addr: &SocketAddr, headers: &HeaderMap) -> bool {
+    addr.ip().is_loopback()
+        && !CABECALHOS_DE_PROXY
+            .iter()
+            .any(|nome| headers.contains_key(*nome))
+}
+
+/// Quem pede, para contar os erros de codigo.
+///
+/// Atras de um proxy local, o cliente de verdade vem no cabecalho, e so se
+/// confia nele vindo do loopback: de fora, qualquer um o escreveria para
+/// zerar a propria conta.
+fn cliente_de(addr: &SocketAddr, headers: &HeaderMap) -> IpAddr {
+    if addr.ip().is_loopback() {
+        let anunciado = ["x-forwarded-for", "cf-connecting-ip", "x-real-ip"]
+            .iter()
+            .find_map(|nome| {
+                headers
+                    .get(*nome)?
+                    .to_str()
+                    .ok()?
+                    .split(',')
+                    .next()?
+                    .trim()
+                    .parse()
+                    .ok()
+            });
+        if let Some(ip) = anunciado {
+            return ip;
+        }
+    }
+
+    addr.ip()
+}
+
+/// Os erros de codigo da mesa, por cliente.
+///
+/// O codigo tem 31^6 combinacoes, perto de 900 milhoes. Na rede de casa isso
+/// bastava; na internet, sem limite, um script varre em dias. Com dez erros a
+/// cada dez minutos por endereco, sao seculos. Quem acerta nunca encosta no
+/// limite, e o jogador que erra a digitacao tres vezes nem sabe que ele existe.
+struct Tentativas(Mutex<HashMap<IpAddr, (u32, Instant)>>);
+
+const ERROS_POR_JANELA: u32 = 10;
+const JANELA_DE_ERROS: Duration = Duration::from_secs(10 * 60);
+/// Quantos clientes se lembra. Cheio, saem os de janela vencida; ainda
+/// cheio, a conta recomeca. E o que impede uma varredura de muitos IPs de
+/// crescer o mapa sem fim.
+const CLIENTES_LEMBRADOS: usize = 4096;
+
+impl Tentativas {
+    fn new() -> Self {
+        Self(Mutex::new(HashMap::new()))
+    }
+
+    fn bloqueado(&self, cliente: IpAddr, agora: Instant) -> bool {
+        let mapa = self.0.lock().expect("tentativas envenenadas");
+
+        mapa.get(&cliente).is_some_and(|(erros, desde)| {
+            *erros >= ERROS_POR_JANELA && agora.duration_since(*desde) < JANELA_DE_ERROS
+        })
+    }
+
+    fn errou(&self, cliente: IpAddr, agora: Instant) {
+        let mut mapa = self.0.lock().expect("tentativas envenenadas");
+
+        if mapa.len() >= CLIENTES_LEMBRADOS && !mapa.contains_key(&cliente) {
+            mapa.retain(|_, (_, desde)| agora.duration_since(*desde) < JANELA_DE_ERROS);
+            if mapa.len() >= CLIENTES_LEMBRADOS {
+                mapa.clear();
+            }
+        }
+
+        let (erros, desde) = mapa.entry(cliente).or_insert((0, agora));
+        if agora.duration_since(*desde) >= JANELA_DE_ERROS {
+            *erros = 0;
+            *desde = agora;
+        }
+        *erros += 1;
+    }
+}
+
+/// Marca a resposta de codigo errado, para o `limitar_codigo` contar.
+#[derive(Clone, Copy)]
+struct CodigoErrado;
 
 /// Quantos estados o canal guarda para quem esta lendo devagar.
 ///
@@ -301,6 +408,8 @@ pub struct Daemon {
     /// chegar a mesma recusa -- e o mapa da aba Mesa esperava na fila atras
     /// dos retratos, que ela pede nessa variante a cada abertura.
     sem_variante: Mutex<HashSet<String>>,
+    /// Os erros de codigo da mesa. Ver `limitar_codigo`.
+    tentativas: Tentativas,
 }
 
 impl Daemon {
@@ -337,6 +446,7 @@ impl Daemon {
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
             sem_variante: Mutex::new(HashSet::new()),
+            tentativas: Tentativas::new(),
         }
     }
 
@@ -632,14 +742,37 @@ pub fn router(state: Arc<Daemon>) -> Router {
             ),
         )
         .route("/plugin/{id}/{*arquivo}", get(serve_plugin))
-        .route("/sala/rolagens", get(rolls))
-        .route("/sala/movimentos", get(moves))
-        .route("/sala/acoes", get(actions))
+        .route(
+            "/sala/rolagens",
+            get(rolls).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_mestre,
+            )),
+        )
+        .route(
+            "/sala/movimentos",
+            get(moves).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_mestre,
+            )),
+        )
+        .route(
+            "/sala/acoes",
+            get(actions).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_mestre,
+            )),
+        )
         .route(
             "/sala/mensagens",
             // O GET e da janela do Mestre (loopback, como `/sala/rolagens`); o
             // POST tambem, mas escreve na campanha, e por isso leva o token.
-            get(fio_do_mestre).merge(
+            get(fio_do_mestre)
+                .layer(middleware::from_fn_with_state(
+                    Arc::clone(&state),
+                    require_mestre,
+                ))
+                .merge(
                 post(fala_do_mestre)
                     .layer(DefaultBodyLimit::max(FALA_DO_MESTRE_MAX_BYTES))
                     .layer(middleware::from_fn_with_state(
@@ -655,7 +788,13 @@ pub fn router(state: Arc<Daemon>) -> Router {
                 require_token,
             )),
         )
-        .route("/sala/pings", get(pings))
+        .route(
+            "/sala/pings",
+            get(pings).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_mestre,
+            )),
+        )
         .nest("/eu", player_routes(Arc::clone(&state)))
         .route(
             "/sala/publicar",
@@ -688,6 +827,10 @@ pub fn router(state: Arc<Daemon>) -> Router {
         .route("/plateia/", get(|uri: Uri| async move { renomeada(uri, "/jogador") }))
         // Tudo que nao casou com as rotas acima e a tela do espectador.
         .fallback(get(serve_web))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            limitar_codigo,
+        ))
         // A janela do Mestre roda em outra origem (`http://localhost:3000` em
         // dev, o protocolo do Tauri empacotado), entao o `fetch` dela e
         // cross-origin. Liberar e seguro porque quem autoriza escrita e o
@@ -816,6 +959,89 @@ async fn require_token(
     next.run(request).await
 }
 
+#[derive(Debug, Deserialize)]
+struct TokenQuery {
+    token: Option<String>,
+}
+
+/// Exige o MESTRE: esta maquina, sem proxy, e com o token.
+///
+/// Para os fluxos que so a janela do Mestre le: as rolagens cruas, o fio com
+/// os sussurros, as acoes, os movimentos e os pings. Loopback bastava enquanto
+/// a porta so ia ate o Wi-Fi. Com a mesa na internet por um tunel local o
+/// socket mente, e o token e a prova que nao atravessa a rua: ele nasce no
+/// processo, e so a janela o recebe, pelo IPC.
+///
+/// Token na query, alem do cabecalho, porque `EventSource` nao manda
+/// cabecalho. A URL fica na janela do Mestre e no loopback.
+///
+/// Sem `ConnectInfo` e recusa, como no `publish`: endereco ausente nao pode
+/// virar permissao por omissao.
+async fn require_mestre(
+    State(state): State<Arc<Daemon>>,
+    Query(query): Query<TokenQuery>,
+    request: AxumRequest,
+    next: Next,
+) -> Response {
+    let daqui = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .is_some_and(|ConnectInfo(addr)| desta_maquina(addr, request.headers()));
+    if !daqui {
+        return fail(StatusCode::FORBIDDEN, "so a janela do Mestre le isto");
+    }
+
+    let provided = request
+        .headers()
+        .get(TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .or(query.token.as_deref());
+    if provided != Some(state.token.as_str()) {
+        return fail(StatusCode::UNAUTHORIZED, "token ausente ou invalido");
+    }
+
+    next.run(request).await
+}
+
+/// Recusa quem errou o codigo da mesa vezes demais. Ver `Tentativas`.
+///
+/// Uma camada no roteador inteiro, e nao uma checagem em cada rota que pede
+/// codigo: `code_matches` marca a recusa, e e aqui que ela se conta. Uma rota
+/// nova com codigo nasce limitada.
+///
+/// Esta maquina, sem proxy, nunca e barrada: e a janela do Mestre e a TV dele,
+/// e uma enxurrada de erros vinda de fora nao pode trancar o mestre da propria
+/// mesa.
+async fn limitar_codigo(
+    State(state): State<Arc<Daemon>>,
+    request: AxumRequest,
+    next: Next,
+) -> Response {
+    let cliente = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .filter(|ConnectInfo(addr)| !desta_maquina(addr, request.headers()))
+        .map(|ConnectInfo(addr)| cliente_de(addr, request.headers()));
+
+    let Some(cliente) = cliente else {
+        return next.run(request).await;
+    };
+
+    if state.tentativas.bloqueado(cliente, Instant::now()) {
+        return fail(
+            StatusCode::TOO_MANY_REQUESTS,
+            "codigo errado vezes demais; espere alguns minutos",
+        );
+    }
+
+    let resposta = next.run(request).await;
+    if resposta.extensions().get::<CodigoErrado>().is_some() {
+        state.tentativas.errou(cliente, Instant::now());
+    }
+
+    resposta
+}
+
 /// Resolve o token do jogador e o deixa na requisicao.
 ///
 /// `Authorization: Bearer <token>`. O jogador nunca diz QUEM e -- ele apresenta
@@ -921,7 +1147,10 @@ fn code_matches(state: &Daemon, provided: Option<&str>) -> Result<(), Response> 
         return Ok(());
     }
 
-    Err(fail(StatusCode::FORBIDDEN, "codigo da mesa invalido"))
+    let mut recusa = fail(StatusCode::FORBIDDEN, "codigo da mesa invalido");
+    recusa.extensions_mut().insert(CodigoErrado);
+
+    Err(recusa)
 }
 
 /// O que o espectador precisa saber da mesa que encontrou.
@@ -966,9 +1195,10 @@ async fn check(
 async fn publish(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     body: String,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "publicar so a partir desta maquina");
     }
 
@@ -995,9 +1225,10 @@ async fn publish(
 async fn publish_declarativo(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     body: String,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "publicar so a partir desta maquina");
     }
 
@@ -1055,10 +1286,11 @@ impl CanalDePlugin {
 async fn publicar_no_canal(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     AxumPath((id, canal)): AxumPath<(String, String)>,
     body: String,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "publicar so a partir desta maquina");
     }
     if !extensoes::id_valido(&id) || !extensoes::id_valido(&canal) {
@@ -1295,8 +1527,9 @@ async fn debug_palco_post(State(state): State<Arc<Daemon>>, body: String) -> Res
 async fn debug_palco_get(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "so a partir desta maquina");
     }
 
@@ -1439,8 +1672,9 @@ async fn roll(
 async fn rolls(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "as rolagens sao desta maquina"));
     }
 
@@ -1638,8 +1872,9 @@ async fn fio_do_jogador(
 async fn fio_do_mestre(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "o fio inteiro e desta maquina"));
     }
 
@@ -1689,9 +1924,10 @@ pub struct FalaDoMestreBody {
 async fn fala_do_mestre(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     axum::Json(body): axum::Json<FalaDoMestreBody>,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "o Mestre fala desta maquina");
     }
 
@@ -1762,9 +1998,10 @@ async fn fala_do_mestre(
 async fn apagar_do_fio(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "o Mestre apaga desta maquina");
     }
     if id.len() > ID_MAX {
@@ -1976,8 +2213,9 @@ async fn act(
 async fn actions(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "as acoes sao desta maquina"));
     }
 
@@ -2022,8 +2260,9 @@ async fn character_extensoes(
 async fn moves(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "os movimentos sao desta maquina"));
     }
 
@@ -2138,8 +2377,9 @@ async fn ping(
 async fn pings(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "os pings sao desta maquina"));
     }
 
@@ -3807,6 +4047,179 @@ mod tests {
         assert_eq!(rede("192.168.7.40"), Rede::Local);
         assert_eq!(rede("10.147.17.5"), Rede::Local);
         assert_eq!(rede("fd7a:115c:a1e0::1"), Rede::Local);
+    }
+
+    #[test]
+    fn o_proxy_no_loopback_nao_e_esta_maquina() {
+        let loopback: SocketAddr = "127.0.0.1:50000".parse().expect("addr");
+        let wifi: SocketAddr = "192.168.7.99:50000".parse().expect("addr");
+        let mut funnel = HeaderMap::new();
+        funnel.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("203.0.113.5, 100.100.100.100"),
+        );
+
+        assert!(desta_maquina(&loopback, &HeaderMap::new()));
+        assert!(!desta_maquina(&loopback, &funnel));
+        assert!(!desta_maquina(&wifi, &HeaderMap::new()));
+
+        // O cliente de verdade vem do cabecalho so pelo loopback: de fora,
+        // quem o escrevesse zeraria a propria conta.
+        assert_eq!(
+            cliente_de(&loopback, &funnel),
+            "203.0.113.5".parse::<IpAddr>().expect("ip")
+        );
+        assert_eq!(cliente_de(&wifi, &funnel), wifi.ip());
+    }
+
+    /// Um GET de quem chega pelo Funnel: loopback, com o cliente no cabecalho.
+    fn pelo_funnel(uri: &str, cliente: &str) -> HttpRequest<Body> {
+        from_ip(
+            HttpRequest::builder()
+                .uri(uri)
+                .header("x-forwarded-for", cliente)
+                .body(Body::empty())
+                .expect("request"),
+            "127.0.0.1",
+        )
+    }
+
+    #[tokio::test]
+    async fn os_fluxos_do_mestre_pedem_o_token_e_recusam_o_proxy() {
+        let (_dir, state, _codigo) = daemon();
+
+        for rota in [
+            "/sala/rolagens",
+            "/sala/movimentos",
+            "/sala/acoes",
+            "/sala/pings",
+            "/sala/mensagens",
+        ] {
+            // Loopback sem token: um tunel TCP cru chega assim, sem cabecalho.
+            let sem_token = router(Arc::clone(&state))
+                .oneshot(from_ip(
+                    HttpRequest::builder()
+                        .uri(rota)
+                        .body(Body::empty())
+                        .expect("request"),
+                    "127.0.0.1",
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(sem_token.status(), StatusCode::UNAUTHORIZED, "{rota}");
+
+            // Pelo Funnel, nem com o token: o token nunca deveria estar la fora.
+            let pelo_proxy = router(Arc::clone(&state))
+                .oneshot(pelo_funnel(&format!("{rota}?token=segredo"), "203.0.113.5"))
+                .await
+                .expect("resposta");
+            assert_eq!(pelo_proxy.status(), StatusCode::FORBIDDEN, "{rota}");
+
+            let mestre = router(Arc::clone(&state))
+                .oneshot(from_ip(
+                    HttpRequest::builder()
+                        .uri(format!("{rota}?token=segredo"))
+                        .body(Body::empty())
+                        .expect("request"),
+                    "127.0.0.1",
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(mestre.status(), StatusCode::OK, "{rota}");
+        }
+    }
+
+    #[tokio::test]
+    async fn quem_erra_o_codigo_demais_espera() {
+        let (_dir, state, codigo) = daemon();
+
+        let pedir = |codigo: &str, ip: &str| {
+            from_ip(
+                HttpRequest::builder()
+                    .uri(format!("/sala?codigo={codigo}"))
+                    .body(Body::empty())
+                    .expect("request"),
+                ip,
+            )
+        };
+
+        for _ in 0..ERROS_POR_JANELA {
+            let errado = router(Arc::clone(&state))
+                .oneshot(pedir("ZZZZZZ", "192.168.7.99"))
+                .await
+                .expect("resposta");
+            assert_eq!(errado.status(), StatusCode::FORBIDDEN);
+        }
+
+        // Barrado mesmo com o codigo certo: senao a varredura so pararia de
+        // contar no acerto.
+        let barrado = router(Arc::clone(&state))
+            .oneshot(pedir(&codigo, "192.168.7.99"))
+            .await
+            .expect("resposta");
+        assert_eq!(barrado.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let vizinho = router(Arc::clone(&state))
+            .oneshot(pedir(&codigo, "192.168.7.50"))
+            .await
+            .expect("resposta");
+        assert_eq!(vizinho.status(), StatusCode::OK);
+
+        // Pelo Funnel todos chegam do loopback, e a conta e por cliente.
+        for _ in 0..ERROS_POR_JANELA {
+            router(Arc::clone(&state))
+                .oneshot(pelo_funnel("/sala?codigo=ZZZZZZ", "203.0.113.5"))
+                .await
+                .expect("resposta");
+        }
+        let de_fora = router(Arc::clone(&state))
+            .oneshot(pelo_funnel(
+                &format!("/sala?codigo={codigo}"),
+                "203.0.113.5",
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(de_fora.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let outro_de_fora = router(Arc::clone(&state))
+            .oneshot(pelo_funnel(
+                &format!("/sala?codigo={codigo}"),
+                "203.0.113.6",
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(outro_de_fora.status(), StatusCode::OK);
+
+        // Esta maquina nunca e trancada para fora da propria mesa.
+        for _ in 0..ERROS_POR_JANELA * 2 {
+            router(Arc::clone(&state))
+                .oneshot(pedir("ZZZZZZ", "127.0.0.1"))
+                .await
+                .expect("resposta");
+        }
+        let mestre = router(state)
+            .oneshot(pedir(&codigo, "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(mestre.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn a_janela_de_erros_vence_e_a_conta_recomeca() {
+        let tentativas = Tentativas::new();
+        let cliente: IpAddr = "203.0.113.5".parse().expect("ip");
+        let inicio = Instant::now();
+
+        for _ in 0..ERROS_POR_JANELA {
+            tentativas.errou(cliente, inicio);
+        }
+        assert!(tentativas.bloqueado(cliente, inicio));
+
+        let depois = inicio + JANELA_DE_ERROS;
+        assert!(!tentativas.bloqueado(cliente, depois));
+
+        tentativas.errou(cliente, depois);
+        assert!(!tentativas.bloqueado(cliente, depois));
     }
 
     #[test]
@@ -5852,7 +6265,7 @@ mod tests {
         let aceito = router(state)
             .oneshot(from_ip(
                 HttpRequest::builder()
-                    .uri("/sala/rolagens")
+                    .uri("/sala/rolagens?token=segredo")
                     .body(Body::empty())
                     .expect("request"),
                 "127.0.0.1",
@@ -5911,7 +6324,7 @@ mod tests {
 
     async fn fio_do_mestre_agora(state: &Arc<Daemon>) -> Vec<serde_json::Value> {
         let response = router(Arc::clone(state))
-            .oneshot(como_mestre(None, "GET", "/sala/mensagens", None, "127.0.0.1"))
+            .oneshot(como_mestre(Some("segredo"), "GET", "/sala/mensagens", None, "127.0.0.1"))
             .await
             .expect("resposta");
 
@@ -6477,7 +6890,7 @@ mod tests {
         let pedir = |ip: &str| {
             from_ip(
                 HttpRequest::builder()
-                    .uri("/sala/movimentos")
+                    .uri("/sala/movimentos?token=segredo")
                     .body(Body::empty())
                     .expect("request"),
                 ip,

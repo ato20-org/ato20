@@ -19,3 +19,15 @@
 export function enderecoDosFluxos(url: string): string {
   return url.replace(/^http:\/\/127\.0\.0\.1:/, "http://localhost:");
 }
+
+/**
+ * Um fluxo do Mestre, com o token na query.
+ *
+ * O daemon pede o token nestes fluxos desde que a mesa pode ir para a
+ * internet: um túnel local (o Funnel do Tailscale) entrega o jogador de fora
+ * pelo loopback, e a trava de IP sozinha o deixaria ler os sussurros. Na
+ * query porque `EventSource` não manda cabeçalho. Ver `require_mestre`.
+ */
+export function fluxoDoMestre(url: string, token: string, caminho: string): string {
+  return `${enderecoDosFluxos(url)}${caminho}?token=${encodeURIComponent(token)}`;
+}

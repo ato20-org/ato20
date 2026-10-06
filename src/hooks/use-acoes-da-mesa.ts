@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 import { executarAcao, type AcaoDoJogador } from "@/lib/extensoes/carregar";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
-import { enderecoDosFluxos } from "@/lib/sync/fluxos-do-mestre";
+import { fluxoDoMestre } from "@/lib/sync/fluxos-do-mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
 
 /**
@@ -26,10 +26,10 @@ export function useAcoesDaMesa(): void {
     let cancelado = false;
 
     void daemonAddr().then(
-      ({ url }) => {
+      ({ url, token }) => {
         if (cancelado) return;
 
-        source = new EventSource(`${enderecoDosFluxos(url)}/sala/acoes`);
+        source = new EventSource(fluxoDoMestre(url, token, "/sala/acoes"));
         source.onmessage = (event) => {
           let acao: AcaoDoJogador;
           try {

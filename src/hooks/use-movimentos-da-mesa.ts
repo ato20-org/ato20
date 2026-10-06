@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { destinoAceito, type MovimentoDoJogador } from "@/lib/sync/movimento";
-import { enderecoDosFluxos } from "@/lib/sync/fluxos-do-mestre";
+import { fluxoDoMestre } from "@/lib/sync/fluxos-do-mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
 
 /**
@@ -38,10 +38,10 @@ export function useMovimentosDaMesa(): void {
     let cancelado = false;
 
     void daemonAddr().then(
-      ({ url }) => {
+      ({ url, token }) => {
         if (cancelado) return;
 
-        source = new EventSource(`${enderecoDosFluxos(url)}/sala/movimentos`);
+        source = new EventSource(fluxoDoMestre(url, token, "/sala/movimentos"));
 
         source.onmessage = (event) => {
           let movimento: MovimentoDoJogador;

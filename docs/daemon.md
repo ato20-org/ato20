@@ -71,10 +71,24 @@ A escolha fica no `configuracoes.json` da **máquina** (`rede.convite`,
 `rede.enderecoProprio`), e não da campanha: o endereço da tailnet é deste computador.
 
 **O código continua sendo o mesmo código.** Numa VPN só entra quem o mestre convidou, e o
-risco é o do Wi-Fi de casa. Uma porta aberta para a internet (redirecionamento no roteador,
-um túnel público) é outra conversa: seis caracteres sem limite de tentativas não seguram
-uma varredura, e `/asset/{id}` nem pede código. O convite diz isso quando o endereço é
-digitado à mão.
+risco é o do Wi-Fi de casa. Uma porta aberta para a internet é outra conversa, e foi ela que
+pediu o limite de tentativas (ver "O código da mesa"). `/asset/{id}` segue sem código: o id é
+um UUID v4, 122 bits que ninguém adivinha.
+
+**O túnel chega pelo loopback.** O Funnel, o cloudflared e o ngrok entregam a requisição de
+fora a partir de 127.0.0.1, e o loopback era a prova de que quem pedia era o Mestre. Duas
+travas fecham isso:
+
+- `desta_maquina` = loopback **e** nenhum cabeçalho de proxy (`X-Forwarded-For`,
+  `Forwarded`, `X-Real-IP`, `CF-Connecting-IP`). Substituiu o `is_loopback` em toda rota.
+- Os fluxos que só a janela do Mestre lê (`/sala/rolagens`, `/sala/movimentos`,
+  `/sala/acoes`, `/sala/pings` e o `GET /sala/mensagens`, que leva os sussurros) pedem o
+  **token** também, por `?token=` porque `EventSource` não manda cabeçalho. Um túnel TCP cru
+  (`ssh -R`, bore) não põe cabeçalho nenhum e passaria pela primeira trava; o token não sai
+  desta máquina.
+
+O `GET /debug/palco` fica só com `desta_maquina`, porque o `ler-palco.py` o lê sem token, e o
+`POST` continua aberto de propósito: a TV e o celular também mandam medida.
 
 ## Uma origem só
 
@@ -148,10 +162,17 @@ entrega o status da resposta ao JavaScript, então um 403 chegaria como `onerror
 indistinguível de queda de rede — e ele reconectaria em loop contra um código que nunca vai
 passar.
 
-**O código não é senha forte, e vale dizer o que ele é.** Seis caracteres, ditados em voz
-alta no começo da sessão, sem limite de tentativas. Ele impede que um aparelho do mesmo
-Wi-Fi caia na cena por acaso ao varrer portas. Contra alguém determinado na tua rede, não
-defende.
+**O código não é senha forte, e vale dizer o que ele é.** Seis caracteres de um alfabeto de
+31, perto de 900 milhões de combinações, ditados em voz alta no começo da sessão. Ele impede
+que um aparelho do mesmo Wi-Fi caia na cena por acaso ao varrer portas.
+
+**Dez erros a cada dez minutos por cliente**, e depois `429` em tudo até a janela vencer,
+mesmo com o código certo. Sem isso, na internet, um script varreria o espaço em dias; com
+isso, são séculos por endereço. É uma camada no roteador inteiro (`limitar_codigo`), e não
+uma checagem por rota: `code_matches` marca a recusa e a camada conta, então rota nova com
+código nasce limitada. Atrás de um túnel local o cliente é o `X-Forwarded-For`, aceito só
+vindo do loopback. Esta máquina sem proxy nunca é barrada: a janela e a TV do mestre não
+podem ser trancadas fora da própria mesa por uma enxurrada vinda de fora.
 
 **O daemon serve arquivo, e não recebe.** Ele é a razão de o endereço de um arquivo ser
 **um só** para as três telas — antes eram dois caminhos, blob URL do IndexedDB no Mestre e
