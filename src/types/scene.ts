@@ -8,6 +8,7 @@
  */
 
 import { novoId } from "@/lib/id";
+import { t as textoDeCenas } from "@/lib/i18n/cenas";
 import type { Condicao, Medidor } from "@/types/character";
 
 export const SCENE_WIDTH = 1920;
@@ -2935,11 +2936,16 @@ export function temAnotacao(scene: Pick<Scene, "tipo">): boolean {
   return !ehQuadro(scene);
 }
 
-/** Como cada tipo se chama quando o mestre não batiza a cena. */
+/**
+ * Como cada tipo se chama quando o mestre não batiza a cena.
+ *
+ * No idioma da tela: é rótulo e começo de nome, nunca chave -- quem compara
+ * tipo compara `Scene.tipo`. O nome que já foi gravado fica como foi.
+ */
 export const NOME_DO_TIPO: Record<"mapa" | TipoDeCena, string> = {
-  mapa: "Mapa",
-  fundo: "Fundo",
-  quadro: "Quadro",
+  mapa: textoDeCenas.tipos.mapa,
+  fundo: textoDeCenas.tipos.fundo,
+  quadro: textoDeCenas.tipos.quadro,
 };
 
 export function createScene(name: string, tipo?: TipoDeCena): Scene {
@@ -3030,6 +3036,6 @@ export function cloneScene(source: Scene, name: string): Scene {
 }
 
 export function createEmptyBoard(): Board {
-  const first = createScene("Mapa 1");
+  const first = createScene(textoDeCenas.nomesPadrao.cena(NOME_DO_TIPO.mapa, 1));
   return { scenes: [first], editingSceneId: first.id, liveSceneId: first.id };
 }

@@ -11,6 +11,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { t } from "@/lib/i18n/cenas";
 import { escolherFundoDaCena, useFundoEmVoo } from "@/lib/mestre/scene-background";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
@@ -53,7 +54,7 @@ export function NovoMapaDialog({
         if (trocou) onFechar();
       })
       .catch((cause: unknown) =>
-        toast.error(cause instanceof Error ? cause.message : "Falha ao importar."),
+        toast.error(cause instanceof Error ? cause.message : t.geral.falhaAoImportar),
       );
   }
 
@@ -71,10 +72,8 @@ export function NovoMapaDialog({
   return (
     <Dialog open={sceneId !== null} onOpenChange={(aberto) => !aberto && onFechar()}>
       <DialogContent className="max-w-md">
-        <DialogTitle>Novo mapa</DialogTitle>
-        <DialogDescription>
-          De onde vem o chão deste mapa? Dá para trocar depois, no menu do mapa.
-        </DialogDescription>
+        <DialogTitle>{t.novoMapaDialog.titulo}</DialogTitle>
+        <DialogDescription>{t.novoMapaDialog.descricao}</DialogDescription>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <button
@@ -88,21 +87,25 @@ export function NovoMapaDialog({
             ) : (
               <ImageIcon className="size-8" />
             )}
-            <span className="font-medium">Uma imagem</span>
+            <span className="font-medium">{t.novoMapaDialog.umaImagem}</span>
             <span className="text-muted-foreground text-xs">
-              Escolha o arquivo do mapa. Ele entra na campanha e vira o fundo.
+              {t.novoMapaDialog.umaImagemDica}
             </span>
           </button>
 
           <div className="flex flex-col gap-2 rounded-lg border p-4">
             <div className="flex flex-col items-center gap-2 text-center">
               <Grid3x3 className="size-8" />
-              <span className="font-medium">Sem mapa</span>
+              <span className="font-medium">{t.novoMapaDialog.semMapa}</span>
               <span className="text-muted-foreground text-xs">
-                Tabuleiro preto com grade. Escolha quantos quadrados cabem na largura.
+                {t.novoMapaDialog.semMapaDica}
               </span>
             </div>
-            <div className="grid grid-cols-4 gap-1" role="radiogroup" aria-label="Quadrados na largura">
+            <div
+              className="grid grid-cols-4 gap-1"
+              role="radiogroup"
+              aria-label={t.novoMapaDialog.quadradosNaLargura}
+            >
               {LADOS.map((opcao) => (
                 <button
                   key={opcao}
@@ -122,7 +125,7 @@ export function NovoMapaDialog({
               ))}
             </div>
             <Button size="sm" onClick={semMapa}>
-              Criar tabuleiro
+              {t.novoMapaDialog.criarTabuleiro}
             </Button>
           </div>
         </div>

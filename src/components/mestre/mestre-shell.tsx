@@ -43,6 +43,8 @@ import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { useMestreShortcuts } from "@/hooks/use-mestre-shortcuts";
 import { limitesDoConteudo } from "@/lib/geometry/limites";
 import { PLANO } from "@/lib/geometry/viewport";
+import { t as textoDaBancada } from "@/lib/i18n/bancada";
+import { t } from "@/lib/i18n/cenas";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useJanelaDeRolagens } from "@/hooks/use-janela-de-rolagens";
@@ -717,14 +719,18 @@ function StageBoundary({
  * PRECEDÊNCIA de captura, não por importância, e filtrar cinco dela por
  * `tecla` seria uma lista que se desfaz no dia em que alguém remapear uma. O
  * preço é lembrar deste arquivo ao trocar uma tecla -- e é por isso que os
- * rótulos são os mesmos da tabela.
+ * rótulos são os mesmos da tabela: os que ela tem igual vêm de `t.atalhos`, e
+ * os que aqui se escrevem diferente moram no dicionário das cenas.
  */
 const ATALHOS_DO_VAZIO = [
-  { tecla: "Ctrl+K", rotulo: "Abrir a paleta de comandos" },
-  { tecla: "Espaço + arrastar", rotulo: "Mover o palco" },
-  { tecla: "Ctrl+0", rotulo: "Enquadrar o mapa" },
-  { tecla: "= / -", rotulo: "Aproximar e afastar a câmera" },
-  { tecla: "T", rotulo: "Transmitir a câmera selecionada" },
+  { tecla: "Ctrl+K", rotulo: textoDaBancada.atalhos.abrirPaleta },
+  {
+    tecla: t.mestreShell.atalhos.espacoArrastar,
+    rotulo: t.mestreShell.atalhos.moverPalco,
+  },
+  { tecla: "Ctrl+0", rotulo: textoDaBancada.atalhos.enquadrarMapa },
+  { tecla: "= / -", rotulo: t.mestreShell.atalhos.aproximarEAfastar },
+  { tecla: "T", rotulo: t.mestreShell.atalhos.transmitirCamera },
 ] as const;
 
 /**
@@ -753,9 +759,7 @@ function PalcoVazio({ carregando }: { carregando: boolean }) {
           className="h-12 w-auto opacity-40"
         />
         <p className="text-base">
-          {carregando
-            ? "Carregando\u2026"
-            : "Abra um mapa ou um arquivo para visualizar aqui"}
+          {carregando ? t.mestreShell.carregando : t.mestreShell.vazio}
         </p>
       </div>
 

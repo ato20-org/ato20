@@ -890,7 +890,7 @@ const en: typeof pt = {
   },
 
   fundoDaCena: {
-    jaRecebendo: "This scene is already getting a backdrop.",
+    jaRecebendo: "This scene is already getting a background.",
     nadaImportado: "Nothing was imported.",
   },
 
