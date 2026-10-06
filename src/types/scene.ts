@@ -2090,6 +2090,14 @@ export type LayoutDoRetrato = {
   /** Ausente = automático: no alto, dentro da figura, centrada. */
   lugarDasCondicoes?: LugarDaPeca;
   /**
+   * Onde o rosto fica, em fração da caixa. Ausente = centrado nela.
+   *
+   * O rosto é uma peça como as outras: se arrasta e muda de tamanho no mini
+   * palco. A caixa continua sendo a régua -- é ela que o mestre arrasta no
+   * quadro, que a fila enfileira e de onde as outras peças penduram.
+   */
+  lugarDoRetrato?: LugarDaPeca;
+  /**
    * Quanto a coluna de medidores cresce ou encolhe. 1 é o tamanho de fábrica.
    *
    * Um fator e não uma largura: a coluna se mede contra a ALTURA do retrato --
@@ -2134,6 +2142,20 @@ export type LayoutDoRetrato = {
    * retrato de outro tamanho.
    */
   escalaCondicoes: number;
+  /**
+   * Quanto o rosto ocupa da caixa do retrato. 1 é a caixa inteira.
+   *
+   * Só encolhe: a caixa continua do tamanho que o mestre deu -- é dela que as
+   * peças penduram, e é ela que reserva lugar na fila --, e o que diminui é a
+   * figura. É o pedido de "o rosto menor e as barras do mesmo tamanho", que
+   * escalar a caixa não atende: a caixa leva as peças junto. Onde o rosto
+   * menor fica é `lugarDoRetrato`.
+   *
+   * Preso entre `ESCALA_DO_ROSTO_MIN` e 1 na hora de usar, pela razão das
+   * outras escalas. Um layout de uma versão anterior não o traz, e quem lê põe
+   * `LAYOUT_PADRAO` por baixo.
+   */
+  escalaRetrato: number;
 };
 
 /**
@@ -2155,6 +2177,7 @@ export const LAYOUT_PADRAO: LayoutDoRetrato = {
   escalaDados: 1,
   escalaNome: 1,
   escalaCondicoes: 1,
+  escalaRetrato: 1,
 };
 
 /**

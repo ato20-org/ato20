@@ -19,7 +19,11 @@ import { RolagensDoRetrato } from "@/components/playground/rolagens-do-retrato";
 import { SelosDoRetrato } from "@/components/playground/selos-do-retrato";
 import type { EfeitoPedido } from "@/lib/condicao";
 import { caberEm } from "@/lib/geometry/caber";
-import { portraitBox } from "@/lib/geometry/portrait";
+import {
+  limitarEscalaDoRosto,
+  portraitBox,
+  quadroDoRosto,
+} from "@/lib/geometry/portrait";
 import { FULL_VIEWPORT } from "@/lib/geometry/viewport";
 import { cn } from "@/lib/utils";
 import type { Condicao, Medidor } from "@/types/character";
@@ -212,21 +216,30 @@ function PaginaViva({
   url,
   largura,
   altura,
-  caixa,
+  quadro,
 }: {
   url: string;
   largura: number;
   altura: number;
-  caixa: { width: number; height: number };
+  /** O lugar do rosto na caixa. Ver `quadroDoRosto`. */
+  quadro: { x: number; y: number; width: number; height: number };
 }) {
-  const escala = Math.min(caixa.width / largura, caixa.height / altura);
+  const escala = Math.min(quadro.width / largura, quadro.height / altura);
 
   // O que sobra do `contain`, dividido nos dois lados.
-  const folgaX = (caixa.width - largura * escala) / 2;
-  const folgaY = (caixa.height - altura * escala) / 2;
+  const folgaX = (quadro.width - largura * escala) / 2;
+  const folgaY = (quadro.height - altura * escala) / 2;
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div
+      className="pointer-events-none absolute overflow-hidden"
+      style={{
+        left: quadro.x,
+        top: quadro.y,
+        width: quadro.width,
+        height: quadro.height,
+      }}
+    >
       <iframe
         src={url}
         title=""
@@ -360,7 +373,55 @@ const PortraitView = memo(function PortraitView({
     largura: number;
     altura: number;
   } | null>(null);
-  const lugar = natural ? caberEm(natural, box) : null;
+  /**
+   * O que este retrato mostra.
+   *
+   * O quadro publicado já traz o layout resolvido -- ver `retratosDaCena` --, e
+   * o `LAYOUT_PADRAO` aqui é para a cena de uma versão anterior, que não traz
+   * o campo. Ler a ausência como "mostra tudo" é o que faz uma sessão gravada
+   * antes desta feature reabrir igual.
+   */
+  const layout = { ...LAYOUT_PADRAO, ...portrait.layout };
+  /**
+   * Onde o rosto cabe, relativo à caixa: do tamanho e no lugar que o layout
+   * diz -- ver `quadroDoRosto`.
+   *
+   * Posto, ele fica preso ao RECORTE como as outras peças: o mestre larga o
+   * rosto ao lado da caixa, e o retrato encostado na borda da tela o jogaria
+   * para fora dela. No automático ele está dentro da caixa, e a caixa já é
+   * responsabilidade de quem a arrasta.
+   */
+  const quadro = (() => {
+    const livre = quadroDoRosto(
+      box,
+      limitarEscalaDoRosto(layout.escalaRetrato),
+      layout.lugarDoRetrato,
+    );
+    if (!layout.lugarDoRetrato) return livre;
+
+    const preso = (valor: number, minimo: number, maximo: number) =>
+      Math.max(minimo, Math.min(maximo, valor));
+
+    return {
+      ...livre,
+      x: preso(
+        livre.x,
+        recorte.x - box.x,
+        recorte.x + recorte.width - box.x - livre.width,
+      ),
+      y: preso(
+        livre.y,
+        recorte.y - box.y,
+        recorte.y + recorte.height - box.y - livre.height,
+      ),
+    };
+  })();
+  const lugar = (() => {
+    if (!natural) return null;
+
+    const cabido = caberEm(natural, quadro);
+    return { ...cabido, x: quadro.x + cabido.x, y: quadro.y + cabido.y };
+  })();
 
   /**
    * Guarda a medida do arquivo, quando ela muda.
@@ -380,15 +441,6 @@ const PortraitView = memo(function PortraitView({
   // seria a página de erro do serviço. Ver `usePaginaVivaSuportada`.
   const paginaVivaOk = usePaginaVivaSuportada();
 
-  /**
-   * O que este retrato mostra.
-   *
-   * O quadro publicado já traz o layout resolvido -- ver `retratosDaCena` --, e
-   * o `LAYOUT_PADRAO` aqui é para a cena de uma versão anterior, que não traz
-   * o campo. Ler a ausência como "mostra tudo" é o que faz uma sessão gravada
-   * antes desta feature reabrir igual.
-   */
-  const layout = { ...LAYOUT_PADRAO, ...portrait.layout };
 
   return (
     <div
@@ -489,7 +541,7 @@ const PortraitView = memo(function PortraitView({
           url={portrait.url}
           largura={portrait.urlLargura ?? CANVAS_PADRAO.largura}
           altura={portrait.urlAltura ?? CANVAS_PADRAO.altura}
-          caixa={box}
+          quadro={quadro}
         />
       ) : null}
 
@@ -531,6 +583,7 @@ const PortraitView = memo(function PortraitView({
           largura={box.width}
           altura={box.height}
           topoDaFigura={lugar?.y ?? 0}
+          centroDaFigura={lugar ? lugar.x + lugar.width / 2 : undefined}
           lugar={layout.lugarDasCondicoes}
           escala={layout.escalaCondicoes}
           // As folgas do RECORTE, como as do nome, do dado e da coluna.
