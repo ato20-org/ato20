@@ -1,16 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { Check } from "lucide-react";
 
 import {
   COR_DA_AREA,
   efeitosEmAreaDaCampanha,
+  efeitosEmAreaDosPlugins,
 } from "@/lib/area-de-efeito";
 import { definicaoDoEfeito } from "@/lib/efeitos";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { cn } from "@/lib/utils";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
 import type { AreaDeEfeito } from "@/types/scene";
@@ -34,12 +36,46 @@ export function useEfeitosEmAreaDaCampanha(): DefinicaoDeEfeito[] {
   );
 }
 
+/** Os efeitos em área de UM plugin ligado, com o nome dele para a tela. */
+export type EfeitosEmAreaDoPlugin = {
+  plugin: string;
+  nome: string;
+  efeitos: DefinicaoDeEfeito[];
+};
+
+/**
+ * Os efeitos em área dos plugins ligados, um grupo por plugin. Ver
+ * `efeitosEmAreaDosPlugins`.
+ */
+export function useEfeitosEmAreaDosPlugins(): EfeitosEmAreaDoPlugin[] {
+  const deFora = useDeclarativoStore((state) => state.efeitos);
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+
+  return useMemo(() => {
+    const grupos = new Map<string, EfeitosEmAreaDoPlugin>();
+
+    for (const efeito of efeitosEmAreaDosPlugins(deFora)) {
+      const plugin = efeito.origem && "plugin" in efeito.origem ? efeito.origem.plugin : "";
+      const grupo = grupos.get(plugin) ?? {
+        plugin,
+        nome: extensoes.find((extensao) => extensao.id === plugin)?.nome ?? plugin,
+        efeitos: [],
+      };
+      grupo.efeitos.push(efeito);
+      grupos.set(plugin, grupo);
+    }
+
+    return [...grupos.values()];
+  }, [deFora, extensoes]);
+}
+
 /**
  * O painel do gizmo da área: qual efeito ela tem.
  *
- * Os da CAMPANHA, e só eles (escolha do mestre): é na configuração da
+ * Os da CAMPANHA, e depois os dos plugins ligados: é na configuração da
  * campanha que o fogo ganha nome, cor e camadas, e aqui ele só se aplica --
  * como a condição, que se marca no botão direito e se configura no cardápio.
+ * Os de plugin vêm prontos, e valem enquanto o plugin estiver ligado.
  * A área que já tem um efeito de fora da lista (o fogo de fábrica, de antes da
  * lista existir) o mostra marcado no alto, para o mestre saber o que ela tem.
  */
@@ -52,9 +88,15 @@ export function EscolhaDoEfeitoDaArea({
   onEscolher: (efeito: string | undefined) => void;
 }) {
   const lista = useEfeitosEmAreaDaCampanha();
+  const dosPlugins = useEfeitosEmAreaDosPlugins();
   const deFora = useDeclarativoStore((state) => state.efeitos);
   const atual = area.efeito ? definicaoDoEfeito(area.efeito, deFora) : undefined;
-  const foraDaLista = atual && !lista.some((efeito) => efeito.id === atual.id) ? atual : undefined;
+  const foraDaLista =
+    atual &&
+    !lista.some((efeito) => efeito.id === atual.id) &&
+    !dosPlugins.some((grupo) => grupo.efeitos.some((efeito) => efeito.id === atual.id))
+      ? atual
+      : undefined;
 
   return (
     <div className="w-56 space-y-1.5">
@@ -71,6 +113,21 @@ export function EscolhaDoEfeitoDaArea({
             escolhida={efeito.id === area.efeito}
             onEscolher={() => onEscolher(efeito.id)}
           />
+        ))}
+        {dosPlugins.map((grupo) => (
+          <Fragment key={grupo.plugin}>
+            <li className="text-muted-foreground truncate px-1.5 pt-1 text-[10px]">
+              {grupo.nome}
+            </li>
+            {grupo.efeitos.map((efeito) => (
+              <Opcao
+                key={efeito.id}
+                efeito={efeito}
+                escolhida={efeito.id === area.efeito}
+                onEscolher={() => onEscolher(efeito.id)}
+              />
+            ))}
+          </Fragment>
         ))}
         <li>
           <button

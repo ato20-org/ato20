@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Settings2, Trash2, WandSparkles } from "lucide-react";
+import { Plus, Puzzle, Settings2, Trash2, WandSparkles } from "lucide-react";
 
-import { useEfeitosEmAreaDaCampanha } from "@/components/mestre/efeito-da-area";
+import {
+  useEfeitosEmAreaDaCampanha,
+  useEfeitosEmAreaDosPlugins,
+} from "@/components/mestre/efeito-da-area";
 import { TelaDoEfeitoEmArea } from "@/components/mestre/efeitos-da-campanha";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import {
@@ -38,9 +41,14 @@ const MAX_EFEITOS = 32;
  * Moram no `efeitos.json` da campanha, ao lado dos das condições: um efeito
  * da campanha que declara `area` é um efeito em área. Ver
  * `efeitosEmAreaDaCampanha`.
+ *
+ * Os dos plugins ligados vêm embaixo, fora da lista e sem engrenagem: não são
+ * da campanha, existem enquanto o plugin estiver ligado, e quem os muda é o
+ * plugin. Ver `efeitosEmAreaDosPlugins`.
  */
 export function EfeitosEmAreaDaCampanha() {
   const lista = useEfeitosEmAreaDaCampanha();
+  const dosPlugins = useEfeitosEmAreaDosPlugins();
   const efeitos = useEfeitosDaCampanhaStore((state) => state.efeitos);
   const criar = useEfeitosDaCampanhaStore((state) => state.criar);
   const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
@@ -170,6 +178,33 @@ export function EfeitosEmAreaDaCampanha() {
           ))}
         </ul>
       )}
+
+      {dosPlugins.map((grupo) => (
+        <div key={grupo.plugin} className="space-y-1 border-t pt-2">
+          <div className="flex items-center gap-1.5">
+            <Puzzle className="text-muted-foreground size-3.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <h4 className="truncate text-xs font-medium">{grupo.nome}</h4>
+              <p className="text-muted-foreground text-[11px] leading-snug">
+                Vêm do plugin e não se editam.
+              </p>
+            </div>
+          </div>
+          <ul className="space-y-0.5">
+            {grupo.efeitos.map((efeito) => (
+              <li key={efeito.id} className="flex items-center gap-2 rounded-md px-1.5 py-1">
+                <span
+                  className="size-3.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: efeito.area?.cor ?? COR_DA_AREA }}
+                />
+                <span className="min-w-0 flex-1 truncate text-xs" title={efeito.dica}>
+                  {efeito.titulo}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
 
       <AlertDialog
         open={apagando !== null}

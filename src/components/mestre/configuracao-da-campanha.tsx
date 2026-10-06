@@ -22,7 +22,10 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { useEfeitosEmAreaDaCampanha } from "@/components/mestre/efeito-da-area";
+import {
+  useEfeitosEmAreaDaCampanha,
+  useEfeitosEmAreaDosPlugins,
+} from "@/components/mestre/efeito-da-area";
 import { TelaDaCondicao } from "@/components/mestre/efeitos-da-campanha";
 import { EfeitosEmAreaDaCampanha } from "@/components/mestre/efeitos-em-area-da-campanha";
 import { toast } from "sonner";
@@ -132,6 +135,7 @@ export function ConfiguracaoDaCampanhaBody() {
   const medidores = useModelosDaCampanha();
   const { modelos: condicoes } = useCondicoesDaCampanha();
   const efeitosEmArea = useEfeitosEmAreaDaCampanha();
+  const efeitosEmAreaDosPlugins = useEfeitosEmAreaDosPlugins();
   const definicoes = useConfiguracoesStore((state) => state.definicoes);
 
   const ajustes = useMemo(
@@ -150,6 +154,9 @@ export function ConfiguracaoDaCampanhaBody() {
       efeitos: [
         ...(condicoes ?? []).map((condicao) => condicao.nome),
         ...efeitosEmArea.map((efeito) => efeito.titulo),
+        ...efeitosEmAreaDosPlugins.flatMap((grupo) =>
+          grupo.efeitos.map((efeito) => efeito.titulo),
+        ),
       ],
     });
     // Ajustes só existe com algo para ajustar -- hoje, só quando um plugin
@@ -163,7 +170,14 @@ export function ConfiguracaoDaCampanhaBody() {
         ? ajustes.length > 0 && (achados.includes(chave) || ajusteAchado)
         : achados.includes(chave),
     );
-  }, [busca, medidores.modelos, condicoes, efeitosEmArea, ajustes]);
+  }, [
+    busca,
+    medidores.modelos,
+    condicoes,
+    efeitosEmArea,
+    efeitosEmAreaDosPlugins,
+    ajustes,
+  ]);
 
   // O tópico aberto pode sumir -- o plugin do único ajuste foi desligado.
   const atual = topicos.includes(aberto) ? aberto : "quadro";
