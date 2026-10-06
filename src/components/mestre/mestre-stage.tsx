@@ -31,7 +31,6 @@ import {
   FormaLayer,
 } from "@/components/mestre/forma-layer";
 import { TextoLayer } from "@/components/mestre/texto-layer";
-import { contornoDosItens } from "@/lib/mestre/contorno-dos-itens";
 import { ehDuploClique, type Toque } from "@/lib/mestre/duplo-clique";
 import { ancorada, caixaDoTexto, pontaEm } from "@/lib/mestre/ligacoes";
 import {
@@ -86,7 +85,6 @@ import { SelectionBox } from "@/components/playground/selection-box";
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
-import { usePersonagensDeJogador } from "@/hooks/use-personagens-de-jogador";
 import { useModoCinegrafista } from "@/hooks/use-modo-cinegrafista";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import {
@@ -479,7 +477,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const panMode = usePanMode();
   const abrirJanela = useAbrirJanela();
   const { personagens } = useCharacters();
-  const personagensDeJogador = usePersonagensDeJogador();
 
   /** Os pings da mesa, os do mestre e os dos jogadores. Ver `PingLayer`. */
   const pings = usePingsStore((state) => state.ativos);
@@ -644,22 +641,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     selectedIds.includes(item.id),
   );
 
-  /**
-   * De quem é cada figura do mapa, dita pelo contorno.
-   *
-   * Não depende da seleção. Chegou a sumir com algo selecionado, para não
-   * competir com o gizmo, e estava errado: o traço é o mapa dizendo QUEM é
-   * quem, e essa leitura some justamente na hora em que o mestre está
-   * trabalhando o mapa -- clicar num token apagava a informação sobre os
-   * outros trinta e nove. Quem marca o selecionado é a caixa com alças, que é
-   * outro desenho e não disputa com este.
-   *
-   * Só aqui: a TV e o celular recebem a cena sem isto. Ver `contornoDosItens`.
-   */
-  const contornos = useMemo(
-    () => contornoDosItens(visiveis, personagensDeJogador),
-    [visiveis, personagensDeJogador],
-  );
   const selectedTextos = (scene.textos ?? []).filter((texto) =>
     selectedTextoIds.includes(texto.id),
   );
@@ -2854,7 +2835,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           gesto é o listener de deslocamento do `SceneStage`, que fica num
           ancestral e dispararia junto se este também respondesse. */}
       <SceneLayer
-          contornos={contornos}
           // O envelope do palco desce junto com o conteúdo, para o plano de
           // baixo: em cima ele cobriria os tokens e engoliria o clique que
           // deveria pegá-los. Ver `palco` no `SceneLayer`.
