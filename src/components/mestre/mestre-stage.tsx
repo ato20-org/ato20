@@ -78,6 +78,8 @@ import { SceneLayer } from "@/components/playground/scene-layer";
 import { efeitosDaCena } from "@/lib/condicao";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
 import { transmissaoDaCamera } from "@/lib/mestre/camera-actions";
+// `texto`, e não `t`: o palco tem `t` de conta, a fração ao longo do segmento.
+import { t as texto } from "@/lib/i18n/bancada";
 import {
   anotarPonteiro,
   esquecerPonteiro,
@@ -2979,7 +2981,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             x: ponto.x,
             y: ponto.y,
             autorId: AUTOR_MESTRE,
-            autor: "Mestre",
+            autor: texto.mestreStage.autorDoPing,
             quando: Date.now(),
           })
         }
@@ -3408,7 +3410,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
               updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, patch)
             }
             paleta={{
-              titulo: "Cor",
+              titulo: texto.mestreStage.cor,
               // A cor DESTA área, quando o mestre escolheu uma. Ausente, ela
               // segue a do efeito -- e o primeiro botão da paleta volta a isso.
               cor: selectedAreaDeEfeito.cor,
@@ -3430,7 +3432,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
                 }
               />
             }
-            botaoDoPainel={{ rotulo: "Efeito", icone: WandSparkles }}
+            botaoDoPainel={{ rotulo: texto.mestreStage.efeito, icone: WandSparkles }}
             mesa={{
               naMesa: Boolean(selectedAreaDeEfeito.naMesa),
               onToggle: () =>

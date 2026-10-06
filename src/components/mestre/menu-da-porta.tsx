@@ -8,6 +8,7 @@ import {
   ContextMenuShortcut,
 } from "@/components/ui/context-menu";
 import { alternarPorta } from "@/lib/geometry/porta";
+import { t } from "@/lib/i18n/bancada";
 import {
   removePortaSelection,
   toggleSelectionLock,
@@ -38,11 +39,13 @@ export function BlocoDaPorta({
         onClick={() => updatePorta(sceneId, porta.id, alternarPorta(porta))}
       >
         {porta.abertura !== undefined ? <DoorClosed /> : <DoorOpen />}
-        {porta.abertura !== undefined ? "Fechar porta" : "Abrir porta"}
+        {porta.abertura !== undefined
+          ? t.menuDaPorta.fechar
+          : t.menuDaPorta.abrir}
       </ContextMenuItem>
       <ContextMenuItem onClick={toggleSelectionLock}>
         {porta.locked ? <LockOpen /> : <Lock />}
-        {porta.locked ? "Destravar" : "Travar"}
+        {porta.locked ? t.menuDaPorta.destravar : t.menuDaPorta.travar}
       </ContextMenuItem>
       {/* Apagado, e não sumido, na travada: a razão do bloco da luz. */}
       <ContextMenuItem
@@ -51,7 +54,7 @@ export function BlocoDaPorta({
         onClick={removePortaSelection}
       >
         <Trash2 />
-        Remover porta
+        {t.menuDaPorta.remover}
         <ContextMenuShortcut>Del</ContextMenuShortcut>
       </ContextMenuItem>
 
