@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, QrCode, WifiOff } from "lucide-react";
 import QRCode from "qrcode";
 
@@ -12,14 +12,29 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  escolherRede,
+  gravarEnderecoProprio,
+  useEnderecoProprio,
+  useEscolhaDeRede,
+} from "@/lib/configuracoes/rede";
+import {
+  baseDoEndereco,
+  escolherEndereco,
+  ESCOLHAS_DE_REDE,
+  NOME_DA_REDE,
+  type EnderecoDetectado,
+  type EscolhaDeRede,
+} from "@/lib/endereco-da-mesa";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
-import { daemonAddr } from "@/lib/vault/bridge";
+import { daemonAddr, enderecosDetectados } from "@/lib/vault/bridge";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,46 +53,56 @@ import { cn } from "@/lib/utils";
  *
  * O código vai no endereço nos dois casos, e é por isso que não há nenhum campo
  * de código em lugar nenhum.
+ *
+ * E a REDE é escolha do mestre: a local, uma VPN de jogo que esteja ligada
+ * nesta máquina (a mesa pela internet, sem servidor de ninguém no meio), ou um
+ * endereço que ele cola. Ver `lib/endereco-da-mesa.ts`.
  */
 /** As duas portas da mesa: o celular de quem joga, e a TV que todos veem. */
 type Aba = "jogador" | "espectador";
 
+/** O que o Rust respondeu da última vez que se perguntou pelas redes. */
+type Redes = { porta: number; detectados: EnderecoDetectado[] };
+
 export function TableInvite() {
   const campaign = useCampaignStore((state) => state.campaign);
-  const [lanUrl, setLanUrl] = useState<string | null>(null);
+  const escolha = useEscolhaDeRede();
+  const texto = useEnderecoProprio();
+  const [redes, setRedes] = useState<Redes | null>(null);
   // A aba escolhida vira estado porque a descrição do diálogo muda com
   // ela: o `Tabs` sozinho guardaria a escolha, mas não a conta a quem
   // está fora dele.
   const [aba, setAba] = useState<Aba>("jogador");
   const [carregado, setCarregado] = useState(false);
 
-  useEffect(() => {
-    let ativo = true;
-
-    void daemonAddr().then(
-      ({ lanUrl }) => {
-        if (!ativo) return;
-
-        setLanUrl(lanUrl);
+  // De novo a cada abertura do diálogo, e não só na montagem: a VPN ligada no
+  // meio da tarde tem de aparecer sem reabrir o aplicativo, e a que caiu tem
+  // de sumir antes de alguém fotografar um QR morto.
+  const detectar = useCallback(() => {
+    void Promise.all([daemonAddr(), enderecosDetectados()]).then(
+      ([{ porta }, detectados]) => {
+        setRedes({ porta, detectados });
         setCarregado(true);
       },
-      () => {
-        if (ativo) setCarregado(true);
-      },
+      () => setCarregado(true),
     );
-
-    return () => {
-      ativo = false;
-    };
   }, []);
+
+  useEffect(() => detectar(), [detectar]);
 
   if (!campaign || !carregado) return null;
 
+  const proprio = redes ? baseDoEndereco(texto, redes.porta) : null;
+
   // Sem rota de rede a mesa não alcança esta máquina, e um endereço que não
   // responde é pior que dizer o que está faltando.
-  if (!lanUrl) {
+  if (!redes || (redes.detectados.length === 0 && !proprio)) {
     return (
-      <Tooltip>
+      <Tooltip
+        onOpenChange={(aberto) => {
+          if (aberto) detectar();
+        }}
+      >
         <TooltipTrigger
           render={
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
@@ -88,17 +113,37 @@ export function TableInvite() {
         />
         <TooltipContent>
           <p className="max-w-52">
-            Esta máquina não está numa rede local, então a TV e os celulares não
-            têm como alcançá-la. Conecte o Wi-Fi ou o cabo e reabra o
-            aplicativo.
+            Esta máquina não está em rede nenhuma, então a TV e os celulares não
+            têm como alcançá-la. Conecte o Wi-Fi, o cabo ou a VPN.
           </p>
         </TooltipContent>
       </Tooltip>
     );
   }
 
+  const mesa = escolherEndereco(escolha, redes.detectados, proprio);
+  // "Outro" sem endereço que preste não cai para a rede local como uma VPN
+  // desligada: o mestre está digitando, e um QR de outra rede no meio disso
+  // seria o convite errado com cara de certo.
+  const esperandoEndereco = escolha === "outro" && !proprio;
+  const usada = esperandoEndereco ? null : mesa;
+
+  // A escolha aparece mesmo quando não respondeu, para o mestre ver o que
+  // está marcado e por que o convite mostra outra coisa.
+  const opcoes = ESCOLHAS_DE_REDE.filter(
+    (opcao) =>
+      opcao === "outro" ||
+      opcao === escolha ||
+      redes.detectados.some((endereco) => endereco.rede === opcao),
+  );
+  const temVpn = redes.detectados.some((endereco) => endereco.rede !== "local");
+
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(aberto) => {
+        if (aberto) detectar();
+      }}
+    >
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
@@ -123,47 +168,116 @@ export function TableInvite() {
             : "Digite este endereço no navegador da TV."}
         </DialogDescription>
 
-        <Tabs
-          value={aba}
-          onValueChange={(valor) => setAba(valor as Aba)}
-          className="min-w-0 gap-3"
-        >
-          <TabsList>
-            <TabsTrigger value="jogador">Jogador</TabsTrigger>
-            <TabsTrigger value="espectador">TV</TabsTrigger>
-          </TabsList>
+        {/* Botões e não um select: com a rede local e o "Outro" sempre ali, a
+            VPN ligada aparece como uma opção a mais à vista, e é assim que o
+            mestre descobre que a mesa vai pela internet. */}
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Rede">
+          {opcoes.map((opcao) => (
+            <Button
+              key={opcao}
+              size="xs"
+              variant={opcao === escolha ? "secondary" : "ghost"}
+              aria-pressed={opcao === escolha}
+              onClick={() => escolherRede(opcao)}
+            >
+              {NOME_DA_REDE[opcao]}
+            </Button>
+          ))}
+        </div>
 
-          <TabsContent value="jogador" className="min-w-0 space-y-3">
-            <Alvo url={`${lanUrl}/jogador?code=${campaign.codigo}`} />
-          </TabsContent>
-
-          {/* Sem QR: a TV não tem câmera para apontar para coisa nenhuma. O que
-              acontece ali é alguém digitando o endereço no navegador dela, com
-              um controle remoto — então o que a tela precisa dar é o endereço
-              legível e inteiro, não um quadrado preto.
-
-              E sem instrução escrita: a aba se chama TV, mostra um endereço e
-              um botão de copiar. O parágrafo que havia aqui explicava o que os
-              três já dizem. */}
-          <TabsContent value="espectador" className="min-w-0 space-y-3">
-            <Endereco
-              url={`${lanUrl}/espectador?code=${campaign.codigo}`}
-              grande
+        {escolha === "outro" && (
+          <div className="space-y-1">
+            <Input
+              value={texto}
+              onChange={(evento) => gravarEnderecoProprio(evento.target.value)}
+              placeholder="pc.tailnet.ts.net ou 10.147.17.5"
+              aria-label={NOME_DA_REDE.outro}
+              aria-invalid={esperandoEndereco && texto.trim() !== ""}
+              className="h-8 text-sm"
             />
-          </TabsContent>
-        </Tabs>
+            {esperandoEndereco && texto.trim() !== "" && (
+              <p className="text-destructive text-xs">Esse endereço não dá para usar.</p>
+            )}
+          </div>
+        )}
+
+        {usada?.caiu && (
+          <p className="text-muted-foreground text-xs">{avisoDeQueda(escolha, usada.rede)}</p>
+        )}
+
+        {usada && (
+          <Tabs
+            value={aba}
+            onValueChange={(valor) => setAba(valor as Aba)}
+            className="min-w-0 gap-3"
+          >
+            <TabsList>
+              <TabsTrigger value="jogador">Jogador</TabsTrigger>
+              <TabsTrigger value="espectador">TV</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="jogador" className="min-w-0 space-y-3">
+              <Alvo url={`${usada.url}/jogador?code=${campaign.codigo}`} />
+            </TabsContent>
+
+            {/* Sem QR: a TV não tem câmera para apontar para coisa nenhuma. O que
+                acontece ali é alguém digitando o endereço no navegador dela, com
+                um controle remoto — então o que a tela precisa dar é o endereço
+                legível e inteiro, não um quadrado preto.
+
+                E sem instrução escrita: a aba se chama TV, mostra um endereço e
+                um botão de copiar. O parágrafo que havia aqui explicava o que os
+                três já dizem. */}
+            <TabsContent value="espectador" className="min-w-0 space-y-3">
+              <Endereco
+                url={`${usada.url}/espectador?code=${campaign.codigo}`}
+                grande
+              />
+            </TabsContent>
+          </Tabs>
+        )}
 
         {/* Mais apagado que a tela: é a letra miúda do convite, e quem a
-            procura já parou para ler. A segunda frase fica porque é a única
-            ressalva que muda uma decisão -- quem acha que o código protege a
-            mesa de um vizinho precisa saber que não. */}
+            procura já parou para ler. A ressalva do código fica porque é a
+            única que muda uma decisão -- quem acha que ele protege a mesa de
+            um vizinho precisa saber que não. */}
         <p className="text-muted-foreground/60 border-t pt-3 text-xs">
-          Vale só na mesma rede. O código evita a entrada por acaso, não alguém
-          decidido no seu Wi-Fi.
+          {letraMiuda(usada?.rede ?? escolha, temVpn)}
         </p>
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Por que o convite não mostra a rede que está marcada. */
+function avisoDeQueda(escolha: EscolhaDeRede, usada: EscolhaDeRede): string {
+  const quem = escolha === "local" ? "A rede local" : `O ${NOME_DA_REDE[escolha]}`;
+  const onde = usada === "local" ? "a rede local" : `o ${NOME_DA_REDE[usada]}`;
+
+  return `${quem} não respondeu nesta máquina, então o convite usa ${onde}.`;
+}
+
+/**
+ * Quem o endereço alcança, e o que o código protege, rede por rede.
+ *
+ * Na VPN, a dica é a do firewall porque é a que mais trava: o Windows costuma
+ * tratar o adaptador dela como rede pública, e a permissão dada na primeira
+ * abertura do ATO20 vale só para a privada.
+ */
+function letraMiuda(rede: EscolhaDeRede, temVpn: boolean): string {
+  switch (rede) {
+    case "local":
+      return (
+        "Vale só na mesma rede. O código evita a entrada por acaso, não alguém decidido no seu Wi-Fi." +
+        (temVpn
+          ? ""
+          : " Para jogar pela internet, ligue o Tailscale, o Hamachi ou o Radmin aqui e nos aparelhos da mesa: a rede aparece nesta lista.")
+      );
+    case "outro":
+      return "Vale para quem alcança esse endereço. Se ele estiver aberto na internet, o código não segura alguém decidido.";
+    default:
+      return `Vale para quem entrou na sua rede do ${NOME_DA_REDE[rede]}. Se alguém não conseguir abrir, libere o ATO20 no firewall do Windows também para rede pública.`;
+  }
 }
 
 /**

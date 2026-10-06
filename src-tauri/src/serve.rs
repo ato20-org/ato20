@@ -69,6 +69,9 @@ pub struct DaemonAddr {
     /// `None` quando nao ha rota de rede -- maquina sem Wi-Fi nem cabo. A tela
     /// diz isso, em vez de mostrar um endereco que nao responderia.
     pub lan_url: Option<String>,
+    /// A porta onde o daemon escuta. Vai no endereco que o mestre digita sem
+    /// porta, e nos que `enderecos` monta.
+    pub porta: u16,
     /// Segredo exigido nas rotas que ESCREVEM.
     ///
     /// A porta agora esta na REDE, e nao mais so em loopback: sem o token,
@@ -443,6 +446,7 @@ pub fn spawn(
         addr: DaemonAddr {
             url: format!("http://127.0.0.1:{port}"),
             lan_url,
+            porta: port,
             token,
         },
         evidence,
@@ -485,23 +489,95 @@ fn bind() -> AppResult<TcpListener> {
 fn lan_ip() -> Option<IpAddr> {
     // Dois alvos: um publico, e um privado para o caso de a casa nao ter saida
     // para a internet. Nenhum dos dois recebe nada.
-    for target in ["1.1.1.1:80", "192.168.0.1:80"] {
-        let Ok(socket) = UdpSocket::bind("0.0.0.0:0") else {
-            continue;
-        };
+    ALVOS_DA_REDE_LOCAL.into_iter().find_map(ip_de_saida)
+}
 
-        if socket.connect(target).is_err() {
-            continue;
-        }
+const ALVOS_DA_REDE_LOCAL: [&str; 2] = ["1.1.1.1:80", "192.168.0.1:80"];
 
-        if let Ok(addr) = socket.local_addr() {
-            if !addr.ip().is_loopback() && !addr.ip().is_unspecified() {
-                return Some(addr.ip());
-            }
-        }
+/// O IP desta maquina que o sistema usaria para chegar a `alvo`.
+///
+/// O truque do `lan_ip`: `connect` em UDP so consulta a tabela de rotas, e
+/// nenhum pacote sai.
+fn ip_de_saida(alvo: &str) -> Option<IpAddr> {
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect(alvo).ok()?;
+    let ip = socket.local_addr().ok()?.ip();
+
+    (!ip.is_loopback() && !ip.is_unspecified()).then_some(ip)
+}
+
+/// Uma rede por onde a mesa alcanca esta maquina.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Rede {
+    Local,
+    Tailscale,
+    Hamachi,
+    Radmin,
+}
+
+/// O daemon numa dessas redes.
+#[derive(Debug, Clone, Serialize)]
+pub struct Endereco {
+    pub rede: Rede,
+    pub url: String,
+}
+
+/// De que rede e este IP, pela faixa.
+///
+/// As VPNs de jogo se reconhecem pela faixa que cada uma toma para si: o
+/// Tailscale usa o 100.64.0.0/10 (o espaco de CGNAT), o Hamachi o 25.0.0.0/8 e
+/// o Radmin o 26.0.0.0/8. O ZeroTier nao entra: cada rede dele escolhe a
+/// propria faixa, e o mestre digita o endereco no convite.
+///
+/// O resto e rede local. Uma maquina ligada direto num CGNAT de operadora (um
+/// modem USB, raro) seria lida como Tailscale -- o endereco ainda funcionaria,
+/// so com o nome errado no botao.
+fn classificar(ip: IpAddr) -> Rede {
+    let IpAddr::V4(ip) = ip else {
+        return Rede::Local;
+    };
+
+    match ip.octets() {
+        [100, b, ..] if (64..128).contains(&b) => Rede::Tailscale,
+        [25, ..] => Rede::Hamachi,
+        [26, ..] => Rede::Radmin,
+        _ => Rede::Local,
     }
+}
 
-    None
+/// Os enderecos do daemon em cada rede que responde agora.
+///
+/// Calculado a cada pergunta, e nao na abertura como o `lan_url`: a VPN se
+/// liga com o aplicativo ja aberto, e o mestre que ligou o Tailscale no meio da
+/// tarde nao deveria ter de reabrir nada para o convite mostra-la.
+///
+/// Um alvo por rede: a rota ate ele diz por que interface se sai, e a faixa do
+/// IP dela diz se e a rede procurada. Sem a VPN, a rota ate 25.0.0.1 cai no
+/// gateway da casa, o IP volta como rede local, e o Hamachi fica de fora.
+pub fn enderecos(porta: u16) -> Vec<Endereco> {
+    let sondas: [(Rede, &[&str]); 4] = [
+        (Rede::Local, &ALVOS_DA_REDE_LOCAL),
+        // O endereco de servico do proprio Tailscale: so tem rota pela
+        // interface dele quando ele esta de pe.
+        (Rede::Tailscale, &["100.100.100.100:80"]),
+        (Rede::Hamachi, &["25.0.0.1:80"]),
+        (Rede::Radmin, &["26.0.0.1:80"]),
+    ];
+
+    sondas
+        .into_iter()
+        .filter_map(|(rede, alvos)| {
+            alvos
+                .iter()
+                .filter_map(|alvo| ip_de_saida(alvo))
+                .find(|ip| classificar(*ip) == rede)
+                .map(|ip| Endereco {
+                    rede,
+                    url: format!("http://{ip}:{porta}"),
+                })
+        })
+        .collect()
 }
 
 /// As rotas.
@@ -3715,6 +3791,49 @@ mod tests {
     use super::*;
     use axum::body::to_bytes;
     use axum::http::Request as HttpRequest;
+
+    #[test]
+    fn a_faixa_diz_de_que_vpn_e_o_ip() {
+        let rede = |ip: &str| classificar(ip.parse().expect("ip"));
+
+        assert_eq!(rede("100.72.208.2"), Rede::Tailscale);
+        assert_eq!(rede("100.64.0.1"), Rede::Tailscale);
+        assert_eq!(rede("100.127.255.254"), Rede::Tailscale);
+        // Fora do /10: 100.63 e 100.128 sao enderecos publicos comuns.
+        assert_eq!(rede("100.63.0.1"), Rede::Local);
+        assert_eq!(rede("100.128.0.1"), Rede::Local);
+        assert_eq!(rede("25.12.34.56"), Rede::Hamachi);
+        assert_eq!(rede("26.1.2.3"), Rede::Radmin);
+        assert_eq!(rede("192.168.7.40"), Rede::Local);
+        assert_eq!(rede("10.147.17.5"), Rede::Local);
+        assert_eq!(rede("fd7a:115c:a1e0::1"), Rede::Local);
+    }
+
+    #[test]
+    fn so_entra_a_rede_que_respondeu_pela_faixa_dela() {
+        // A maquina do teste pode ter qualquer rede, ou nenhuma. O que vale
+        // sempre: cada endereco e da rede que diz ser, e nenhuma aparece duas
+        // vezes.
+        let enderecos = enderecos(20200);
+        let mut vistas = Vec::new();
+
+        for endereco in &enderecos {
+            let ip = endereco
+                .url
+                .trim_start_matches("http://")
+                .trim_end_matches(":20200")
+                .parse()
+                .expect("ip no endereco");
+
+            assert_eq!(classificar(ip), endereco.rede, "{}", endereco.url);
+            assert!(
+                !vistas.contains(&endereco.rede),
+                "{:?} repetida",
+                endereco.rede
+            );
+            vistas.push(endereco.rede);
+        }
+    }
 
     fn daemon() -> (tempfile::TempDir, Arc<Daemon>, String) {
         let dir = tempfile::tempdir().expect("tempdir");

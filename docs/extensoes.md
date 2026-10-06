@@ -792,7 +792,8 @@ escondidos, e o nome só com a peça "nome" ligada. `dePersonagem` entrega o de
 quem não está no ar também. O formato é o do kit de retratos: o plugin passa
 adiante sem mexer. `api.mesa.enderecos()` e `api.mesa.linkDaPagina("camera", { rede,
 busca })` — o link pronto, com o código, pelo endereço desta máquina ou pelo da
-rede.
+rede. O "da rede" é o do convite: a rede que o mestre marcou lá (a local, uma VPN
+ligada, ou o endereço que ele digitou), e não sempre o IP do Wi-Fi.
 
 **4. O kit de dados.** A física da queda e os sólidos são código do aplicativo,
 e nenhum plugin deveria copiá-los. A página embute `/kit/dados` num `<iframe>`

@@ -11,7 +11,7 @@ use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
 use crate::estante;
 use crate::extensoes::{self, Extensao};
-use crate::serve::{DaemonAddr, Evidence, SharedEvidence, SharedVault};
+use crate::serve::{self, DaemonAddr, Endereco, Evidence, SharedEvidence, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
 use crate::vault::board::{Board, BoardPatch};
 use crate::vault::session::Json;
@@ -93,6 +93,15 @@ async fn em_segundo_plano<T: Send + 'static>(
 #[tauri::command]
 pub fn daemon_addr(state: State<'_, AppState>) -> DaemonAddr {
     state.daemon.clone()
+}
+
+/// Os enderecos desta maquina em cada rede que a mesa pode usar agora.
+///
+/// Comando a parte do `daemon_addr`, e nao um campo dele: aquele e fixo desde
+/// a abertura, e este se recalcula a cada pergunta -- ver `serve::enderecos`.
+#[tauri::command]
+pub fn enderecos_da_mesa(state: State<'_, AppState>) -> Vec<Endereco> {
+    serve::enderecos(state.daemon.porta)
 }
 
 /// Este pacote sabe se atualizar sozinho.

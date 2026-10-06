@@ -42,6 +42,40 @@ endereço roteável não envia pacote nenhum, e faz o sistema escolher a interfa
 pela própria tabela de rotas. É essa que se quer — a interface por onde os celulares da
 casa chegam — e não a primeira da lista, que costuma ser docker ou uma VPN.
 
+## A mesa pela internet
+
+Escutar em `0.0.0.0` já põe o daemon em qualquer VPN que a máquina tenha ligada. A mesa
+pela internet é isso, e nada mais: o mestre e os jogadores entram na mesma rede virtual
+(Tailscale, Hamachi, Radmin, ZeroTier), e para o daemon eles são o celular da sala. Não há
+servidor do ATO20 no meio, nem túnel aberto pelo aplicativo.
+
+O que o aplicativo faz é **saber o endereço**. Pelo IPC, e não por rota: `enderecos_da_mesa`
+repete o truque do UDP com um alvo por rede, e a faixa do IP que volta diz de quem é a
+interface:
+
+```
+rede        alvo                 aceito se o IP estiver em
+local       1.1.1.1, 192.168.0.1 nenhuma das faixas abaixo
+tailscale   100.100.100.100      100.64.0.0/10
+hamachi     25.0.0.1             25.0.0.0/8
+radmin      26.0.0.1             26.0.0.0/8
+```
+
+Sem a VPN, a rota até o alvo dela cai no gateway da casa, o IP volta como rede local, e a
+sondagem fica sem resposta. É calculado a cada pergunta, e não na abertura como o `lanUrl`:
+a VPN se liga com o aplicativo aberto. O ZeroTier não entra porque cada rede dele escolhe a
+própria faixa; ele vai pelo endereço que o mestre digita no convite, como um nome do
+MagicDNS ou do DuckDNS.
+
+A escolha fica no `configuracoes.json` da **máquina** (`rede.convite`,
+`rede.enderecoProprio`), e não da campanha: o endereço da tailnet é deste computador.
+
+**O código continua sendo o mesmo código.** Numa VPN só entra quem o mestre convidou, e o
+risco é o do Wi-Fi de casa. Uma porta aberta para a internet (redirecionamento no roteador,
+um túnel público) é outra conversa: seis caracteres sem limite de tentativas não seguram
+uma varredura, e `/asset/{id}` nem pede código. O convite diz isso quando o endereço é
+digitado à mão.
+
 ## Uma origem só
 
 O espectador é servido **pelo daemon**, e não pelo Next. É isso que o deixa na mesma origem

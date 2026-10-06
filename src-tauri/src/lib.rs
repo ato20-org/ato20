@@ -175,6 +175,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::daemon_addr,
+            commands::enderecos_da_mesa,
             commands::updater_embutido,
             commands::abrir_no_navegador,
             commands::campaign_recents,
