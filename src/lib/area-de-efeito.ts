@@ -78,6 +78,22 @@ export function efeitosEmAreaDaCampanha(
 }
 
 /**
+ * Os efeitos em área dos plugins ligados: os que declaram `area`, na ordem
+ * dos manifestos.
+ *
+ * Não são da campanha: existem enquanto o plugin estiver ligado, e não se
+ * editam -- quem muda é o plugin. A área guarda o id `{plugin}/{efeito}`, e
+ * o mesmo plugin na mesa desenha o mesmo efeito.
+ */
+export function efeitosEmAreaDosPlugins(
+  deFora: Readonly<Record<string, DefinicaoDeEfeito>> | undefined,
+): DefinicaoDeEfeito[] {
+  return Object.values(deFora ?? {}).filter(
+    (efeito) => efeito.area && efeito.origem && "plugin" in efeito.origem,
+  );
+}
+
+/**
  * Os efeitos em área PRONTOS: os de fábrica e os dos plugins ligados que
  * declaram `area`. É de onde a campanha parte -- "Usar sugestões" traz os de
  * fábrica, "Partir de um efeito pronto" oferece todos.
@@ -85,10 +101,7 @@ export function efeitosEmAreaDaCampanha(
 export function efeitosDeAreaProntos(
   deFora: Readonly<Record<string, DefinicaoDeEfeito>> | undefined,
 ): DefinicaoDeEfeito[] {
-  const dosPlugins = Object.values(deFora ?? {}).filter(
-    (efeito) => efeito.area && efeito.origem && "plugin" in efeito.origem,
-  );
-  return [...EFEITOS_DE_AREA, ...dosPlugins];
+  return [...EFEITOS_DE_AREA, ...efeitosEmAreaDosPlugins(deFora)];
 }
 
 /** O foco, em vezes o segmento, quando o efeito não diz. */

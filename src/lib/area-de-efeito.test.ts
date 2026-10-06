@@ -7,6 +7,7 @@ import {
   corDaArea,
   efeitosDeAreaProntos,
   efeitosEmAreaDaCampanha,
+  efeitosEmAreaDosPlugins,
   densidadeDoEfeito,
   MAX_CHAMAS_DE_PE,
   dentroDaArea,
@@ -116,6 +117,19 @@ describe("efeitosDeAreaProntos", () => {
       "molhado",
       "ordem/nevoa",
     ]);
+  });
+});
+
+describe("efeitosEmAreaDosPlugins", () => {
+  it("só os de plugin que declaram área, nem fábrica nem campanha", () => {
+    const deFora = {
+      "ordem/nevoa": { id: "ordem/nevoa", titulo: "Névoa", area: {}, origem: { plugin: "ordem", versao: "1" } },
+      "ordem/aura": { id: "ordem/aura", titulo: "Aura", origem: { plugin: "ordem", versao: "1" } },
+      "campanha/x": { id: "campanha/x", titulo: "X", area: {}, origem: { acervo: true as const } },
+    };
+
+    expect(efeitosEmAreaDosPlugins(deFora).map((efeito) => efeito.id)).toEqual(["ordem/nevoa"]);
+    expect(efeitosEmAreaDosPlugins(undefined)).toEqual([]);
   });
 });
 
