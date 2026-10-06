@@ -1235,7 +1235,10 @@ pub fn character_extensao_ler(
     #[allow(non_snake_case)] extensaoId: String,
 ) -> AppResult<dados_de_extensao::Guardado> {
     if !extensoes::id_valido(&extensaoId) {
-        return Err(AppError::ExtensaoInvalida(format!("id invalido: {extensaoId:?}")));
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "id invalido: {extensaoId:?}",
+            "invalid id: {extensaoId:?}"
+        )));
     }
 
     state.with_vault(|vault| dados_de_extensao::ler(vault, &id, &extensaoId))
@@ -1251,7 +1254,10 @@ pub fn character_extensao_gravar(
     publico: Option<Json>,
 ) -> AppResult<dados_de_extensao::Guardado> {
     if !extensoes::id_valido(&extensaoId) {
-        return Err(AppError::ExtensaoInvalida(format!("id invalido: {extensaoId:?}")));
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "id invalido: {extensaoId:?}",
+            "invalid id: {extensaoId:?}"
+        )));
     }
 
     state.with_vault(|vault| {
@@ -2091,7 +2097,10 @@ pub fn extensao_habilitar(
     habilitada: bool,
 ) -> AppResult<()> {
     if !extensoes::id_valido(&id) {
-        return Err(AppError::ExtensaoInvalida(format!("id invalido: {id:?}")));
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "id invalido: {id:?}",
+            "invalid id: {id:?}"
+        )));
     }
 
     state.db.extensao_marcar(&id, habilitada)
