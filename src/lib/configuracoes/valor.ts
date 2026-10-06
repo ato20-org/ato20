@@ -36,6 +36,12 @@ export type Definicao = {
   escopo: EscopoConfiguracao;
   /** As opções de uma `escolha`. */
   opcoes?: string[];
+  /**
+   * O que a tela mostra no lugar de cada opção. A opção é o valor gravado no
+   * arquivo e não muda com o idioma; o rótulo muda. Opção sem rótulo aparece
+   * crua.
+   */
+  rotulos?: Record<string, string>;
   /** O intervalo e o passo de um `numero`. */
   minimo?: number;
   maximo?: number;

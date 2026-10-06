@@ -23,6 +23,7 @@ import {
   type Escopo,
 } from "@/lib/configuracoes/valor";
 import { normaliza } from "@/lib/search";
+import { t } from "@/lib/i18n/desktop";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { abrirArquivoDeConfiguracoes } from "@/lib/vault/configuracoes";
 
@@ -124,14 +125,14 @@ export function AjustesDaCampanha({ busca }: { busca: string }) {
 
   if (!carregada)
     return (
-      <p className="text-muted-foreground text-[11px]">Lendo…</p>
+      <p className="text-muted-foreground text-[11px]">{t.ajustes.lendo}</p>
     );
 
   return (
     <div className="flex flex-col gap-3">
       {erro ? (
         <p className="text-destructive text-xs" role="alert">
-          O arquivo não pôde ser lido, e nada será gravado nele até ser consertado:{" "}
+          {t.ajustes.arquivoIlegivel}{" "}
           <span className="font-mono">{erro}</span>
         </p>
       ) : null}
@@ -172,10 +173,10 @@ export function ListaDeConfiguracoes() {
       <Tabs value={escopo} onValueChange={(valor) => setEscopo(valor as Escopo)}>
         <TabsList className="w-full">
           <TabsTrigger value="maquina" className="flex-1">
-            Máquina
+            {t.ajustes.maquina}
           </TabsTrigger>
           <TabsTrigger value="campanha" className="flex-1">
-            Campanha
+            {t.ajustes.campanha}
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -189,16 +190,16 @@ export function ListaDeConfiguracoes() {
           <Input
             value={busca}
             onChange={(evento) => setBusca(evento.target.value)}
-            placeholder="Buscar configuração"
-            aria-label="Buscar configuração"
+            placeholder={t.ajustes.buscar}
+            aria-label={t.ajustes.buscar}
             className="h-8 pl-8 text-sm"
           />
         </div>
         <Button
           variant="outline"
           size="icon-sm"
-          aria-label="Abrir o arquivo no editor"
-          title="Abrir o arquivo no editor"
+          aria-label={t.ajustes.abrirArquivo}
+          title={t.ajustes.abrirArquivo}
           onClick={() => void abrirArquivoDeConfiguracoes(escopo).catch(() => {})}
           disabled={semCampanha}
         >
@@ -208,18 +209,18 @@ export function ListaDeConfiguracoes() {
 
       {erro[escopo] ? (
         <p className="text-destructive text-xs" role="alert">
-          O arquivo não pôde ser lido, e nada será gravado nele até ser consertado:{" "}
+          {t.ajustes.arquivoIlegivel}{" "}
           <span className="font-mono">{erro[escopo]}</span>
         </p>
       ) : null}
 
       {semCampanha ? (
         <p className="text-muted-foreground px-1 py-6 text-center text-xs">
-          Abra uma campanha para ajustar o que vale só nela.
+          {t.ajustes.semCampanha}
         </p>
       ) : grupos.length === 0 ? (
         <p className="text-muted-foreground px-1 py-6 text-center text-xs">
-          {busca ? "Nada com esse nome" : "Nada para ajustar neste escopo"}
+          {busca ? t.ajustes.nadaComEsseNome : t.ajustes.nadaParaAjustar}
         </p>
       ) : (
         <Grupos grupos={grupos} nomeDoDono={nomeDoDono} escopo={escopo} />
@@ -263,7 +264,10 @@ function Linha({
           {definicao.chave}
           {outroManda ? (
             <span className="text-muted-foreground ml-2 font-sans">
-              · vale o da {origem === "campanha" ? "campanha" : "máquina"}
+              ·{" "}
+              {origem === "campanha"
+                ? t.ajustes.valeOdaCampanha
+                : t.ajustes.valeOdaMaquina}
             </span>
           ) : null}
         </p>
@@ -274,8 +278,8 @@ function Linha({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label="Voltar ao padrão"
-            title="Voltar ao padrão"
+            aria-label={t.ajustes.voltarAoPadrao}
+            title={t.ajustes.voltarAoPadrao}
             onClick={() => limpar(definicao.chave, escopo)}
           >
             <RotateCcw />
@@ -336,6 +340,7 @@ function Controle({
     case "escolha":
       return (
         <Select<string>
+          items={definicao.rotulos}
           value={typeof valor === "string" ? valor : null}
           onValueChange={(novo) => {
             if (novo) onChange(novo);
@@ -347,7 +352,7 @@ function Controle({
           <SelectContent>
             {(definicao.opcoes ?? []).map((opcao) => (
               <SelectItem key={opcao} value={opcao} className="text-sm">
-                {opcao}
+                {definicao.rotulos?.[opcao] ?? opcao}
               </SelectItem>
             ))}
           </SelectContent>

@@ -13,6 +13,7 @@ import {
 } from "@/lib/configuracoes/valor";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
 import { gravarConfiguracoes, lerConfiguracoes } from "@/lib/vault/configuracoes";
+import { comum } from "@/lib/i18n/comum";
 
 /**
  * O registro de configurações: o que existe para ajustar, e o que vale.
@@ -78,7 +79,7 @@ function mensagem(causa: unknown): string {
   if (causa instanceof VaultError) return causa.message;
   if (causa instanceof Error) return causa.message;
 
-  return "Falha ao falar com o aplicativo.";
+  return comum.erros.semAplicativo;
 }
 
 /** As gravações à espera, uma por escopo. */
@@ -99,6 +100,31 @@ function agendar(escopo: Escopo): void {
       }));
     });
   }, ESPERA_MS);
+}
+
+/**
+ * Grava agora o que está à espera, sem os 400 ms.
+ *
+ * Para quem vai recarregar a janela logo em seguida -- a troca de idioma: o
+ * `setTimeout` morreria com a página, e a escolha que pediu a recarga seria
+ * justamente a que não chegou ao arquivo.
+ */
+export async function descarregarConfiguracoes(): Promise<void> {
+  const escopos = Object.keys(pendentes) as Escopo[];
+
+  await Promise.all(
+    escopos.map(async (escopo) => {
+      clearTimeout(pendentes[escopo]);
+      delete pendentes[escopo];
+      const { valores, erro } = useConfiguracoesStore.getState();
+      if (erro[escopo]) return;
+
+      await gravarConfiguracoes(escopo, valores[escopo]).catch(() => {
+        // Melhor esforço: quem chama vai recarregar de qualquer jeito, e o
+        // espelho do `localStorage` já leva a escolha para a próxima abertura.
+      });
+    }),
+  );
 }
 
 export const useConfiguracoesStore = create<ConfiguracoesStore>((set, get) => ({

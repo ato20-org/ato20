@@ -9,6 +9,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
+import { t } from "@/lib/i18n/desktop";
 import {
   type QualVolume,
   usePreferenciasStore,
@@ -34,23 +35,23 @@ import {
 const FADERES: { qual: QualVolume; rotulo: string; descricao: string }[] = [
   {
     qual: "volumeSistema",
-    rotulo: "Sistema",
-    descricao: "Todo o som da aplicação, em todas as telas.",
+    rotulo: t.volume.sistema,
+    descricao: t.volume.sistemaDescricao,
   },
   {
     qual: "volumeTrilha",
-    rotulo: "Trilha",
-    descricao: "A música da sessão, seja qual for a faixa.",
+    rotulo: t.volume.trilha,
+    descricao: t.volume.trilhaDescricao,
   },
   {
     qual: "volumeAmbiente",
-    rotulo: "Ambiente",
-    descricao: "Todos os sons de ambiente de uma vez.",
+    rotulo: t.volume.ambiente,
+    descricao: t.volume.ambienteDescricao,
   },
   {
     qual: "volumeDisparo",
-    rotulo: "Disparo",
-    descricao: "Todos os efeitos disparados.",
+    rotulo: t.volume.disparo,
+    descricao: t.volume.disparoDescricao,
   },
 ];
 
@@ -68,7 +69,7 @@ export function VolumePopover() {
       <PopoverTrigger
         render={
           <ChromeButton
-            label="Volume"
+            label={t.volume.titulo}
             icon={<Icone className="size-3.5" />}
           />
         }
@@ -77,7 +78,7 @@ export function VolumePopover() {
           componente é abrir para cima, e ali não há para cima. */}
       <PopoverContent side="bottom" align="end" className="w-64 p-3">
         <p className="text-muted-foreground pb-2 text-[10px] font-medium tracking-wide uppercase">
-          Volume geral
+          {t.volume.geral}
         </p>
 
         {FADERES.map((fader) => (

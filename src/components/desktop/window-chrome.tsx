@@ -17,6 +17,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { isDesktop } from "@/lib/vault/bridge";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/desktop";
 import { versaoAtual } from "@/lib/versoes";
 import { cn } from "@/lib/utils";
 
@@ -201,7 +203,7 @@ export function WindowChrome({
                 className="text-muted-foreground size-3.5 shrink-0"
                 aria-hidden
               />
-              <span className="truncate">Editando {subtitulo}</span>
+              <span className="truncate">{t.janela.editando(subtitulo)}</span>
             </span>
           ) : null}
         </span>
@@ -210,12 +212,12 @@ export function WindowChrome({
           {acoes}
 
           <ChromeButton
-            label="Minimizar"
+            label={t.janela.minimizar}
             onClick={() => void janela.minimize()}
             icon={<Minus className="size-3.5" />}
           />
           <ChromeButton
-            label={maximizada ? "Restaurar" : "Maximizar"}
+            label={maximizada ? t.janela.restaurar : t.janela.maximizar}
             onClick={() => void janela.toggleMaximize()}
             icon={
               maximizada ? (
@@ -226,7 +228,7 @@ export function WindowChrome({
             }
           />
           <ChromeButton
-            label="Fechar"
+            label={t.janela.fechar}
             // Vermelho só neste: é o único irreversível dos três, e é o vizinho
             // imediato do maximizar.
             className="hover:bg-destructive hover:text-destructive-foreground"
@@ -239,17 +241,16 @@ export function WindowChrome({
       <AlertDialog open={confirmando} onOpenChange={setConfirmando}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Fechar o ATO20?</AlertDialogTitle>
+            <AlertDialogTitle>{t.janela.confirmarFechar}</AlertDialogTitle>
             <AlertDialogDescription>
-              A campanha fecha junto, e a TV e os celulares perdem a conexão com
-              a mesa.
+              {t.janela.confirmarFecharExplicacao}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction onClick={() => void janela.close()}>
-              Fechar
+              {t.janela.fechar}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
