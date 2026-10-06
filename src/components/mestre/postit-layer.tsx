@@ -22,6 +22,7 @@ import {
 } from "@/components/playground/scene-stage";
 import { useMencoesDoMestre } from "@/hooks/use-mencoes-do-mestre";
 import { postitNaArea, postitNoTamanho } from "@/lib/geometry/postit";
+import { t } from "@/lib/i18n/arquivos";
 import { useHistoricoDeTexto } from "@/lib/mestre/historico-de-texto";
 import {
   aplicaSugestao,
@@ -634,8 +635,8 @@ const PostitPapel = memo(function PostitPapel({
               // e verde some, e a seleção parecia não existir.
               className="absolute inset-0 size-full resize-none bg-transparent text-neutral-900 outline-none selection:bg-sky-400/50"
               style={tipografia}
-              aria-label="Texto do postit"
-              placeholder="@personagem  /arquivo  >mapa  **negrito**"
+              aria-label={t.postit.textoDoPostit}
+              placeholder={t.postit.placeholder}
               value={postit.texto}
               onChange={(event) => {
                 onChange({ texto: event.target.value });
@@ -764,8 +765,8 @@ const PostitPapel = memo(function PostitPapel({
             // gesto é de arrasto.
             className="absolute inset-0 overflow-hidden text-left text-neutral-900 select-text selection:bg-sky-400/50"
             style={{ ...medidaDoCorpo, ...tipografia }}
-            aria-label="Escrever neste postit"
-            title="Duplo clique para escrever"
+            aria-label={t.postit.escrever}
+            title={t.postit.duploClique}
             // Sem `stopPropagation` aqui: o pointerdown tem de CHEGAR ao papel,
             // que é quem arrasta agora. Quem impede o palco de ler o gesto como
             // clique no vazio -- e colar outro postit por cima deste com uma
@@ -784,7 +785,7 @@ const PostitPapel = memo(function PostitPapel({
               <PostitTextoView texto={postit.texto} vinculos={vinculos} />
             ) : (
               <span className="text-neutral-500 italic">
-                Duplo clique para escrever
+                {t.postit.duploClique}
               </span>
             )}
           </div>
@@ -838,7 +839,7 @@ const PostitPapel = memo(function PostitPapel({
             escolhida: postit.cor,
             opcoes: CORES_POSTIT.map((cor) => ({
               valor: cor,
-              rotulo: `Papel ${cor}`,
+              rotulo: t.postit.papel(t.postit.cores[cor]),
               classe: TINTA[cor],
             })),
             onEscolher: (cor) => onChange({ cor: cor as CorPostit }),
@@ -869,20 +870,7 @@ const PostitPapel = memo(function PostitPapel({
 });
 
 /** Uma linha da ajuda: o gesto ou o sinal, e o que ele faz. */
-const COMANDOS: Array<[string, string]> = [
-  ["@nome", "Personagem. Clique abre a ficha; mouse em cima mostra o retrato."],
-  ["/arquivo", "Imagem ou som do acervo. Imagem abre numa janela ao clicar."],
-  [">mapa", "Mapa ou quadro. Clique leva para ele; mouse em cima mostra a prévia."],
-  ["**texto**", "Negrito."],
-  ["# Título, ## Sub", "No começo da linha: título e subtítulo."],
-  ["- item", "No começo da linha: item de lista."],
-  ["Tab, →", "Aceita a sugestão em cinza enquanto digita."],
-  ["↑ ↓, Enter", "Anda na lista de sugestões e escolhe."],
-  ["Esc", "Fecha a lista; de novo, sai da edição."],
-  ["Papel", "Arrastar em qualquer ponto move; duplo clique abre para escrever."],
-  ["Bolinhas", "Com o papel na mão: tamanho da letra, cor, ajuda e tirar do mapa."],
-  ["Cantos", "Com o papel na mão: as alças redimensionam."],
-];
+const COMANDOS: Array<[string, string]> = t.postit.comandos;
 
 /**
  * A ajuda do postit: os sinais e os gestos que ele entende.
@@ -898,7 +886,7 @@ const COMANDOS: Array<[string, string]> = [
 function AjudaDoPostit() {
   return (
     <>
-      <p className="mb-2 text-xs font-medium">O que dá para escrever aqui</p>
+      <p className="mb-2 text-xs font-medium">{t.postit.ajudaTitulo}</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
         {COMANDOS.map(([sinal, faz]) => (
           <Fragment key={sinal}>

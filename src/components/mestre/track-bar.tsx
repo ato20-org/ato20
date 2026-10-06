@@ -21,6 +21,7 @@ import { TrackWave } from "@/components/mestre/track-wave";
 import { chaveDaTrilha } from "@/components/playground/session-audio";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useTrackPeaks } from "@/hooks/use-track-peaks";
+import { t } from "@/lib/i18n/arquivos";
 import { mmss } from "@/lib/mestre/tempo";
 import { useAudioStore, useProgresso } from "@/lib/store/use-audio-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
@@ -71,7 +72,7 @@ export function TrackBar() {
 
   if (!track) return null;
 
-  const nome = asset?.name ?? "Arquivo removido";
+  const nome = asset?.name ?? t.geral.arquivoRemovido;
   const conhecida = duration > 0;
 
   return (
@@ -79,7 +80,7 @@ export function TrackBar() {
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label={track.playing ? "Pausar trilha" : "Retomar trilha"}
+        aria-label={track.playing ? t.trackBar.pausar : t.trackBar.retomar}
         onClick={() => setPlaying(!track.playing)}
       >
         {track.playing ? <Pause /> : <Play />}
@@ -123,7 +124,7 @@ export function TrackBar() {
               variant="ghost"
               size="icon-sm"
               aria-label={
-                track.loop ? "A faixa está repetindo" : "A faixa toca uma vez"
+                track.loop ? t.trackBar.repetindo : t.trackBar.tocaUmaVez
               }
               aria-pressed={track.loop}
               className={cn(
@@ -136,7 +137,7 @@ export function TrackBar() {
           }
         />
         <TooltipContent>
-          <p>{track.loop ? "Repetindo" : "Toca uma vez"}</p>
+          <p>{track.loop ? t.geral.repetindo : t.geral.tocaUmaVez}</p>
         </TooltipContent>
       </Tooltip>
 
@@ -155,7 +156,7 @@ export function TrackBar() {
       <div className="flex w-32 shrink-0 items-center gap-2">
         <Slider
           className="flex-1"
-          aria-label="Volume da trilha, em todas as telas"
+          aria-label={t.trackBar.volume}
           value={[Math.round(volumeTrilha * 100)]}
           max={100}
           step={1}
@@ -178,7 +179,7 @@ export function TrackBar() {
               variant="ghost"
               size="icon-sm"
               aria-label={
-                enabled ? "Silenciar esta tela" : "Ligar o som desta tela"
+                enabled ? t.trackBar.silenciar : t.trackBar.ligarSom
               }
               aria-pressed={!enabled}
               onClick={() => setEnabled(!enabled)}
@@ -189,9 +190,7 @@ export function TrackBar() {
         />
         <TooltipContent>
           <p className="max-w-48">
-            {enabled
-              ? "Silencia só esta tela. A TV e os celulares continuam ouvindo."
-              : "Esta tela está muda. A mesa continua ouvindo."}
+            {enabled ? t.trackBar.silenciaDica : t.trackBar.mudaDica}
           </p>
         </TooltipContent>
       </Tooltip>
@@ -201,14 +200,14 @@ export function TrackBar() {
       {blocked ? (
         <Button variant="secondary" size="sm" onClick={retry}>
           <Volume2 />
-          Ativar som
+          {t.trackBar.ativarSom}
         </Button>
       ) : null}
 
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Tirar a trilha"
+        aria-label={t.trackBar.tirarTrilha}
         onClick={clear}
       >
         <Square />

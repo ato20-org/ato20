@@ -17,6 +17,8 @@ import type { Vinculos } from "@/components/mestre/postit-texto-view";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { t } from "@/lib/i18n/arquivos";
+import { rico } from "@/lib/i18n/rico";
 import { mencoesDaNota, type MencaoDaNota } from "@/lib/markdown/mencoes-da-nota";
 import type { TipoNoPostit } from "@/lib/mestre/postit-mencoes";
 import { MINIATURA } from "@/lib/miniatura";
@@ -45,18 +47,13 @@ type Resolvida = {
 type Grupo = { titulo: string; icone: LucideIcon; itens: Resolvida[] };
 
 const GRUPO: Record<TipoNoPostit, { titulo: string; icone: LucideIcon }> = {
-  personagem: { titulo: "Personagens", icone: VenetianMask },
-  arquivo: { titulo: "Arquivos", icone: ImageIcon },
-  cena: { titulo: "Cenas", icone: Camera },
-  marcador: { titulo: "Páginas marcadas", icone: BookMarked },
+  personagem: { titulo: t.mencoesDaNota.grupos.personagem, icone: VenetianMask },
+  arquivo: { titulo: t.mencoesDaNota.grupos.arquivo, icone: ImageIcon },
+  cena: { titulo: t.mencoesDaNota.grupos.cena, icone: Camera },
+  marcador: { titulo: t.mencoesDaNota.grupos.marcador, icone: BookMarked },
 };
 
-const NENHUM: Record<TipoNoPostit, string> = {
-  personagem: "Nenhum personagem com esse nome",
-  arquivo: "Nenhum arquivo com esse nome",
-  cena: "Nenhuma cena com esse nome",
-  marcador: "Nenhuma página marcada com esse rótulo",
-};
+const NENHUM: Record<TipoNoPostit, string> = t.mencoesDaNota.nenhum;
 
 /** A menção resolvida pelos mesmos vínculos do chip, ou `null` se o nome não existe. */
 function resolver(mencao: MencaoDaNota, vinculos: Vinculos): Resolvida | null {
@@ -68,8 +65,11 @@ function resolver(mencao: MencaoDaNota, vinculos: Vinculos): Resolvida | null {
         mencao,
         nome: achado.nome,
         detalhe: achado.dono
-          ? `${achado.dono} · ${achado.presente ? "na mesa" : "ausente"}`
-          : "Sem jogador",
+          ? t.geral.donoEPresenca(
+              achado.dono,
+              achado.presente ? t.geral.naMesa : t.geral.ausente,
+            )
+          : t.geral.semJogador,
         abrir: () => vinculos.abrirJanela({ tipo: "personagem", personagemId: achado.id }),
         termo: achado.nome,
         ...(achado.retrato ? { miniatura: achado.retrato } : {}),
@@ -83,7 +83,7 @@ function resolver(mencao: MencaoDaNota, vinculos: Vinculos): Resolvida | null {
       return {
         mencao,
         nome: asset.name,
-        detalhe: imagem ? "Imagem" : "Som · é da trilha, aqui é referência",
+        detalhe: imagem ? t.mencoesDaNota.imagem : t.mencoesDaNota.somReferencia,
         // Som não abre nada, como no chip: som na mesa é a trilha.
         abrir: imagem
           ? () => vinculos.abrirJanela({ tipo: "asset", assetId: asset.id, nome: asset.name })
@@ -99,7 +99,7 @@ function resolver(mencao: MencaoDaNota, vinculos: Vinculos): Resolvida | null {
       return {
         mencao,
         nome: cena.name,
-        detalhe: cena.tipo === "quadro" ? "Quadro" : "Mapa",
+        detalhe: cena.tipo === "quadro" ? t.mencoesDaNota.quadro : t.mencoesDaNota.mapa,
         abrir: () => vinculos.irParaCena(cena.id),
         termo: cena.name,
         ...(cena.backgroundAssetId ? { miniatura: cena.backgroundAssetId } : {}),
@@ -113,7 +113,7 @@ function resolver(mencao: MencaoDaNota, vinculos: Vinculos): Resolvida | null {
       return {
         mencao,
         nome: marcador.rotulo,
-        detalhe: `${livro.titulo} · p. ${marcador.pagina}`,
+        detalhe: t.geral.paginaDoLivro(livro.titulo, marcador.pagina),
         abrir: () => vinculos.abrirLivro(livro.id, livro.titulo, marcador.pagina),
         termo: marcador.rotulo,
         icone: BookMarked,
@@ -171,19 +171,26 @@ export function PainelDeMencoes({
 
   return (
     <aside
-      aria-label="Menções da nota"
+      aria-label={t.mencoesDaNota.mencoesDaNota}
       className="bg-background/60 flex w-64 shrink-0 flex-col border-l text-xs"
     >
       <div className="flex shrink-0 items-center gap-1 border-b px-3 py-1.5">
-        <span className="flex-1 font-medium">Menções</span>
+        <span className="flex-1 font-medium">{t.mencoesDaNota.mencoes}</span>
         <Convencoes />
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
         {mencoes.length === 0 ? (
           <p className="text-muted-foreground leading-relaxed">
-            Nenhuma menção nesta nota. Escreva <code>@</code> para citar um personagem, ou veja as
-            convenções no <CircleHelp className="inline size-3.5 align-[-0.15em]" aria-label="botão de ajuda" />.
+            {rico(t.mencoesDaNota.nenhumaMencao, {
+              arroba: <code>@</code>,
+              ajuda: (
+                <CircleHelp
+                  className="inline size-3.5 align-[-0.15em]"
+                  aria-label={t.mencoesDaNota.botaoDeAjuda}
+                />
+              ),
+            })}
           </p>
         ) : null}
 
@@ -209,8 +216,8 @@ export function PainelDeMencoes({
         ))}
 
         {soltas.length > 0 ? (
-          <section aria-label="Sem vínculo">
-            <Cabecalho icone={Unlink} titulo="Sem vínculo" total={soltas.length} />
+          <section aria-label={t.mencoesDaNota.semVinculo}>
+            <Cabecalho icone={Unlink} titulo={t.mencoesDaNota.semVinculo} total={soltas.length} />
             <ul className="space-y-2">
               {soltas.map((mencao) => (
                 <Item
@@ -293,8 +300,8 @@ function Miniatura({
     <button
       type="button"
       className={cn(caixa, "hover:ring-foreground/30 cursor-pointer hover:ring-2")}
-      title={`Abrir ${nome}`}
-      aria-label={`Abrir ${nome}`}
+      title={t.geral.abrirNome(nome)}
+      aria-label={t.geral.abrirNome(nome)}
       onClick={abrir}
     >
       {conteudo}
@@ -340,7 +347,7 @@ function Item({
           <button
             type="button"
             className="min-w-0 flex-1 truncate text-left font-medium hover:underline"
-            title={`Abrir ${nome}`}
+            title={t.geral.abrirNome(nome)}
             onClick={abrir}
           >
             {nome}
@@ -350,14 +357,14 @@ function Item({
             {nome}
           </span>
         )}
-        <span className="text-muted-foreground shrink-0 text-[10px] tabular-nums" title="Vezes na nota">
+        <span className="text-muted-foreground shrink-0 text-[10px] tabular-nums" title={t.mencoesDaNota.vezesNaNota}>
           {mencao.vezes}×
         </span>
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={`Onde aparece ${nome}`}
-          title="Destacar na nota (Ctrl+F)"
+          aria-label={t.mencoesDaNota.ondeAparece(nome)}
+          title={t.mencoesDaNota.destacar}
           onClick={aoProcurar}
         >
           <Search />
@@ -370,10 +377,10 @@ function Item({
             key={indice}
             type="button"
             className="bg-foreground/5 hover:bg-accent rounded px-1 text-[10px] tabular-nums"
-            title={`Ir para a linha ${indice + 1}`}
+            title={t.mencoesDaNota.irParaLinha(indice + 1)}
             onClick={() => aoIrParaLinha(indice)}
           >
-            L{indice + 1}
+            {t.mencoesDaNota.linhaCurta(indice + 1)}
           </button>
         ))}
         {resto > 0 ? (
@@ -408,31 +415,35 @@ function Convencoes() {
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label="Convenções das menções"
-            title="Como marcar personagem, arquivo, cena e página"
+            aria-label={t.mencoesDaNota.convencoesDasMencoes}
+            title={t.mencoesDaNota.comoMarcar}
           />
         }
       >
         <CircleHelp />
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="w-80 text-xs">
-        <p className="mb-2 font-medium">Como citar o que existe na campanha</p>
+        <p className="mb-2 font-medium">{t.mencoesDaNota.comoCitar}</p>
         <ul className="space-y-1.5">
-          <Convencao escrita="@Thalor">Um personagem. Clique abre a ficha.</Convencao>
-          <Convencao escrita="/porao.jpg">Uma imagem ou um som do acervo. A extensão é opcional.</Convencao>
-          <Convencao escrita=">Porão">Uma cena: mapa ou quadro. Clique leva até ela.</Convencao>
-          <Convencao escrita="!Agarrar">Uma página marcada de um livro da estante, pelo rótulo.</Convencao>
-          <Convencao escrita={'@"Pé-de-Ferro"'}>Nome com espaço vai entre aspas.</Convencao>
+          {t.mencoesDaNota.convencoes.map(([escrita, faz]) => (
+            <Convencao key={escrita} escrita={escrita}>
+              {faz}
+            </Convencao>
+          ))}
         </ul>
-        <p className="mt-3 mb-2 font-medium">Na linha</p>
+        <p className="mt-3 mb-2 font-medium">{t.mencoesDaNota.naLinha}</p>
         <ul className="space-y-1.5">
-          <Convencao escrita="@Thalor">Sozinha na linha, vira prévia: retrato, imagem, mapa ou página.</Convencao>
-          <Convencao escrita="/porao.jpg|320">A largura da imagem na prévia. A alça no canto também muda.</Convencao>
+          {t.mencoesDaNota.convencoesNaLinha.map(([escrita, faz]) => (
+            <Convencao key={escrita} escrita={escrita}>
+              {faz}
+            </Convencao>
+          ))}
         </ul>
         <p className="text-muted-foreground mt-3 leading-relaxed">
-          O sinal só vale no começo da linha ou depois de um espaço: <code>e-mail@casa</code> e{" "}
-          <code>3/4</code> continuam texto. Arrastar um personagem, uma imagem ou uma cena para a
-          nota escreve a menção.
+          {rico(t.mencoesDaNota.sinalSoVale, {
+            email: <code>{t.mencoesDaNota.exemploEmail}</code>,
+            fracao: <code>3/4</code>,
+          })}
         </p>
       </PopoverContent>
     </Popover>

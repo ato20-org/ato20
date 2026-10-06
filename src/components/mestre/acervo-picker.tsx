@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { t } from "@/lib/i18n/arquivos";
 import { MINIATURA } from "@/lib/miniatura";
 import { assetUrl, listAssets } from "@/lib/vault/assets";
 import type { AssetMeta } from "@/types/scene";
@@ -39,10 +40,8 @@ export function AcervoPicker({
   return (
     <Dialog open={aberto} onOpenChange={(open) => !open && onFechar()}>
       <DialogContent className="sm:max-w-lg">
-        <DialogTitle>Escolher do acervo</DialogTitle>
-        <DialogDescription>
-          As imagens que já estão na campanha. Escolher não copia o arquivo.
-        </DialogDescription>
+        <DialogTitle>{t.acervoPicker.titulo}</DialogTitle>
+        <DialogDescription>{t.acervoPicker.descricao}</DialogDescription>
 
         {/* A lista monta com o diálogo, e é o que a faz reler a cada abertura:
             o mestre pode ter importado uma imagem entre uma abertura e outra, e
@@ -60,7 +59,7 @@ function Imagens({ onEscolher }: { onEscolher: (assetId: string) => void }) {
   useEffect(() => {
     listAssets("image").then(setImagens, (cause: unknown) => {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao ler o acervo.",
+        cause instanceof Error ? cause.message : t.acervoPicker.falhaAoLer,
       );
       setImagens([]);
     });
@@ -68,14 +67,14 @@ function Imagens({ onEscolher }: { onEscolher: (assetId: string) => void }) {
 
   if (imagens === null) {
     return (
-      <p className="text-muted-foreground py-8 text-center text-xs">Lendo…</p>
+      <p className="text-muted-foreground py-8 text-center text-xs">{t.geral.lendo}</p>
     );
   }
 
   if (imagens.length === 0) {
     return (
       <p className="text-muted-foreground py-8 text-center text-xs">
-        O acervo ainda não tem imagem nenhuma.
+        {t.acervoPicker.vazio}
       </p>
     );
   }

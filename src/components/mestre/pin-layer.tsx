@@ -10,6 +10,7 @@ import { PinTethers } from "@/components/mestre/pin-tethers";
 import { PinWindow } from "@/components/mestre/pin-window";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { t } from "@/lib/i18n/arquivos";
 import {
   ALFINETE_Z,
   usePinWindowStore,
@@ -165,6 +166,7 @@ export function PinLayer({
       {pins.map((pin, index) => {
         const aberta = abertas.some((nota) => nota.pinId === pin.id);
         const selecionado = pin.id === selectedPinId;
+        const nome = pin.title || t.nomesPadrao.ponto(index + 1);
 
         return (
           <button
@@ -173,12 +175,8 @@ export function PinLayer({
             // Título no `title` além do cartão: passar o mouse pelos alfinetes
             // é como se acha o certo num mapa com doze deles, e abrir cada um
             // para descobrir qual é seria pior.
-            title={
-              aberta
-                ? `${pin.title || `Ponto ${index + 1}`} — clique para fechar a nota`
-                : pin.title || `Ponto ${index + 1}`
-            }
-            aria-label={pin.title || `Ponto ${index + 1}`}
+            title={aberta ? t.pinLayer.fecharNota(nome) : nome}
+            aria-label={nome}
             // Alterna: diz a quem ouve a tela que este alvo abre e fecha.
             aria-pressed={aberta}
             className={cn(

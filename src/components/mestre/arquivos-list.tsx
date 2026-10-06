@@ -70,6 +70,7 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
+import { t } from "@/lib/i18n/arquivos";
 import { cn } from "@/lib/utils";
 import {
   apagarDocumento,
@@ -194,11 +195,11 @@ export function ArquivosList({ ready }: { ready: boolean }) {
         <>
           <Item onClick={() => criar.quadro(pastaId)}>
             <Presentation />
-            Novo quadro aqui
+            {t.arquivosList.novoQuadroAqui}
           </Item>
           <Item onClick={() => criar.nota(pastaId)}>
             <FilePlus />
-            Nova nota aqui
+            {t.arquivosList.novaNotaAqui}
           </Item>
         </>
       );
@@ -256,29 +257,29 @@ export function ArquivosList({ ready }: { ready: boolean }) {
         <CampoDeBusca
           valor={busca}
           onMudar={setBusca}
-          placeholder="Buscar nome ou texto"
-          rotulo="Buscar nos quadros e nas notas"
-          dica="Acha pelo nome e pelo que está escrito: o texto das notas e dos postits. Esc limpa."
+          placeholder={t.arquivosList.buscarPlaceholder}
+          rotulo={t.arquivosList.buscarRotulo}
+          dica={t.arquivosList.buscarDica}
         />
         <BotaoDeCriar
-          rotulo="Novo quadro"
-          dica="Um quadro: folha para imagens, notas e setas."
+          rotulo={t.arquivosList.novoQuadro}
+          dica={t.arquivosList.novoQuadroDica}
           disabled={!ready}
           onClick={() => criar.quadro()}
         >
           <Presentation />
         </BotaoDeCriar>
         <BotaoDeCriar
-          rotulo="Nova nota"
-          dica="Uma nota: arquivo .md que abre no editor."
+          rotulo={t.arquivosList.novaNota}
+          dica={t.arquivosList.novaNotaDica}
           disabled={!ready}
           onClick={() => criar.nota()}
         >
           <FilePlus />
         </BotaoDeCriar>
         <BotaoDeCriar
-          rotulo="Nova pasta"
-          dica="Uma pasta. Arraste quadros e notas para dentro."
+          rotulo={t.geral.novaPasta}
+          dica={t.arquivosList.novaPastaDica}
           disabled={!ready}
           onClick={() => criar.pasta()}
         >
@@ -295,15 +296,15 @@ export function ArquivosList({ ready }: { ready: boolean }) {
             <ContextMenuContent className="w-48">
               <ContextMenuItem onClick={() => criar.quadro()}>
                 <Presentation />
-                Novo quadro
+                {t.arquivosList.novoQuadro}
               </ContextMenuItem>
               <ContextMenuItem onClick={() => criar.nota()}>
                 <FilePlus />
-                Nova nota
+                {t.arquivosList.novaNota}
               </ContextMenuItem>
               <ContextMenuItem onClick={() => criar.pasta()}>
                 <FolderPlus />
-                Nova pasta
+                {t.geral.novaPasta}
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
@@ -314,17 +315,21 @@ export function ArquivosList({ ready }: { ready: boolean }) {
               Nova pasta", que e justamente o que se quer ali. */}
           {ready && linhas.length === 0 && !buscando ? (
             <PainelVazio conteudo={{ tipo: "quadros" }} className="pointer-events-none absolute inset-0">
-              Crie um quadro ou uma nota
+              {t.arquivosList.vazio}
             </PainelVazio>
           ) : null}
 
           {achados ? (
             <ul className="relative z-10 space-y-0.5 p-2 pt-0">
               {lendoNotas ? (
-                <li className="text-muted-foreground px-2 py-1 text-[10px]">Lendo as notas…</li>
+                <li className="text-muted-foreground px-2 py-1 text-[10px]">
+                  {t.arquivosList.lendoNotas}
+                </li>
               ) : null}
               {achados.length === 0 && !lendoNotas ? (
-                <li className="text-muted-foreground px-2 py-2 text-xs">Nada com “{busca.trim()}”.</li>
+                <li className="text-muted-foreground px-2 py-2 text-xs">
+                  {t.geral.nadaCom(busca.trim())}
+                </li>
               ) : null}
               {/* Sem reordenar enquanto busca: soltar numa lista filtrada
                   deixaria o lugar ambíguo -- "depois deste" na lista de
@@ -482,7 +487,7 @@ function useCriar(totalDePastas: number, totalDeNotas: number) {
       fitViewport();
     },
     nota(pastaId?: string) {
-      const titulo = `Nota ${totalDeNotas + 1}`;
+      const titulo = t.nomesPadrao.nota(totalDeNotas + 1);
       void criarDocumento(titulo)
         .then((arquivo) => {
           const id = useSceneStore.getState().addNota({ titulo, arquivo, pastaId });
@@ -496,7 +501,7 @@ function useCriar(totalDePastas: number, totalDeNotas: number) {
     pasta(parentId?: string) {
       const store = useSceneStore.getState();
       if (parentId) store.atualizarPasta(parentId, { recolhido: false });
-      store.criarPasta(`Pasta ${totalDePastas + 1}`, parentId);
+      store.criarPasta(t.nomesPadrao.pasta(totalDePastas + 1), parentId);
     },
   };
 }
@@ -723,7 +728,7 @@ function QuadroRow({
       <>
         <Item onClick={abrir}>
           <Presentation />
-          Abrir
+          {t.geral.abrir}
         </Item>
         {/* Só para ver: editar é no palco, que é um só. Ver `VistaDoQuadro`. */}
         <Item
@@ -732,20 +737,20 @@ function QuadroRow({
           }
         >
           <Columns2 />
-          Abrir ao lado do mapa
+          {t.geral.abrirAoLado}
         </Item>
         <Item disabled={noAr} onClick={() => store().setLiveSceneId(scene.id)}>
           <Radio />
-          Colocar no ar
+          {t.arquivosList.colocarNoAr}
         </Item>
         <Separator />
         <Item onClick={renomear.pedir}>
           <TextCursorInput />
-          Renomear
+          {t.geral.renomear}
         </Item>
         <Item onClick={() => store().duplicateScene(scene.id)}>
           <CopyPlus />
-          Duplicar
+          {t.arquivosList.duplicar}
         </Item>
         <ItensDeMover
           kit={kit}
@@ -756,7 +761,7 @@ function QuadroRow({
         <Separator />
         <Item variant="destructive" onClick={() => setConfirmando(true)}>
           <Trash2 />
-          Remover o quadro
+          {t.arquivosList.removerQuadro}
         </Item>
 
         <ItensDeExtensao
@@ -788,7 +793,7 @@ function QuadroRow({
         {renomeando ? (
           <CampoDeNome
             valor={scene.name}
-            rotulo="Nome do quadro"
+            rotulo={t.arquivosList.nomeDoQuadro}
             onConfirmar={(nome) => {
               const limpo = nome.trim();
               if (limpo && limpo !== scene.name) store().renameScene(scene.id, limpo);
@@ -811,7 +816,7 @@ function QuadroRow({
               {noAr ? (
                 <span
                   className="ml-1 size-2 shrink-0 rounded-full bg-red-500 shadow-[0_0_6px] shadow-red-500/70"
-                  aria-label="No ar"
+                  aria-label={t.arquivosList.noAr}
                 />
               ) : null}
             </span>
@@ -819,7 +824,7 @@ function QuadroRow({
               <TrechoAchado trecho={trecho} />
             ) : (
               <Detalhe>
-                {elementos} {elementos === 1 ? "elemento" : "elementos"} ·{" "}
+                {t.arquivosList.contarElementos(elementos)} ·{" "}
                 {tamanhoCurto(bytesDoQuadro(scene))}
               </Detalhe>
             )}
@@ -833,12 +838,12 @@ function QuadroRow({
     <ConfirmarRemocao
       aberto={confirmando}
       onAberto={setConfirmando}
-      titulo={`Deseja remover ${scene.name}?`}
+      titulo={t.arquivosList.removerTitulo(scene.name)}
       itens={[
-        "O quadro",
-        `Os ${elementos} elementos dentro dele`,
+        t.arquivosList.removerOQuadro,
+        t.arquivosList.removerElementos(elementos),
       ]}
-      acao="Remover"
+      acao={t.geral.remover}
       onConfirmar={() => store().removeScene(scene.id)}
     />
     </>
@@ -920,16 +925,16 @@ function NotaRowSemMemo({
       <>
         <Item onClick={abrir}>
           <FileText />
-          Abrir
+          {t.geral.abrir}
         </Item>
         <Item onClick={() => abrirNotaAoLado(nota.id)}>
           <Columns2 />
-          Abrir ao lado do mapa
+          {t.geral.abrirAoLado}
         </Item>
         <Separator />
         <Item onClick={renomear.pedir}>
           <TextCursorInput />
-          Renomear
+          {t.geral.renomear}
         </Item>
         <ItensDeMover
           kit={kit}
@@ -940,7 +945,7 @@ function NotaRowSemMemo({
         <Separator />
         <Item variant="destructive" onClick={() => setConfirmando(true)}>
           <Trash2 />
-          Apagar a nota
+          {t.arquivosList.apagarNota}
         </Item>
 
         <ItensDeExtensao
@@ -983,7 +988,7 @@ function NotaRowSemMemo({
         {renomeando ? (
           <CampoDeNome
             valor={nota.titulo}
-            rotulo="Título da nota"
+            rotulo={t.geral.tituloDaNota}
             onConfirmar={(titulo) => {
               store().renomearNota(nota.id, titulo);
               setRenomeando(false);
@@ -1004,9 +1009,8 @@ function NotaRowSemMemo({
               <TrechoAchado trecho={trecho} />
             ) : numeros ? (
               <Detalhe>
-                {tamanhoCurto(numeros.bytes)} · {numeros.linhas}{" "}
-                {numeros.linhas === 1 ? "linha" : "linhas"} · {numeros.palavras}{" "}
-                {numeros.palavras === 1 ? "palavra" : "palavras"}
+                {tamanhoCurto(numeros.bytes)} · {t.arquivosList.contarLinhas(numeros.linhas)} ·{" "}
+                {t.arquivosList.contarPalavras(numeros.palavras)}
               </Detalhe>
             ) : null}
           </button>
@@ -1019,8 +1023,8 @@ function NotaRowSemMemo({
     <ConfirmarRemocao
       aberto={confirmando}
       onAberto={setConfirmando}
-      titulo={`Deseja apagar ${nota.titulo}?`}
-      itens={["O arquivo .md", "Os cartões desta nota nos quadros"]}
+      titulo={t.geral.apagarNotaTitulo(nota.titulo)}
+      itens={[t.geral.apagarNotaArquivo, t.geral.apagarNotaCartoes]}
       onConfirmar={apagar}
     />
     </>

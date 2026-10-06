@@ -2,6 +2,8 @@
 
 import { toast } from "sonner";
 
+import { t } from "@/lib/i18n/arquivos";
+import { idioma } from "@/lib/i18n/idioma";
 import { cn } from "@/lib/utils";
 
 /** O que o Rust emite a cada bloco copiado. Espelho de `ProgressoImportacao`. */
@@ -96,12 +98,12 @@ export class AvisoDeImportacao {
     const total = this.paths.length;
 
     if (cancelado) {
-      toast.info("Importação cancelada", {
+      toast.info(t.importacao.cancelada, {
         id: this.id,
         description:
           entraram > 0
-            ? `${entraram} de ${total} ${entraram === 1 ? "entrou" : "entraram"} antes de parar`
-            : "Nada entrou",
+            ? t.importacao.antesDeParar(entraram, total)
+            : t.importacao.nadaEntrou,
         action: undefined,
       });
       return;
@@ -110,8 +112,8 @@ export class AvisoDeImportacao {
     if (recusados.length === 0) {
       toast.success(
         total === 1
-          ? `${nomeDoArquivo(this.paths[0])} importado`
-          : `${entraram} arquivos importados`,
+          ? t.importacao.importado(nomeDoArquivo(this.paths[0]))
+          : t.importacao.importados(entraram),
         { id: this.id, description: undefined, action: undefined },
       );
       return;
@@ -120,10 +122,12 @@ export class AvisoDeImportacao {
     // Recusa é aviso, não erro do aplicativo: o arquivo era o problema. Os
     // motivos, um por arquivo, quem mostra é `absorverImportacao` — aqui só a
     // conta, para o resumo caber numa linha.
-    const conta = `${recusados.length} recusado${recusados.length > 1 ? "s" : ""}`;
+    const conta = t.importacao.recusados(recusados.length);
 
     toast.warning(
-      entraram === 0 ? `Nada entrou: ${conta}` : `${entraram} de ${total} importados`,
+      entraram === 0
+        ? t.importacao.nadaEntrouPorque(conta)
+        : t.importacao.deTotalImportados(entraram, total),
       {
         id: this.id,
         description: entraram === 0 ? undefined : conta,
@@ -133,11 +137,11 @@ export class AvisoDeImportacao {
   }
 
   morreu(entraram: number) {
-    toast.error("A importação parou no meio", {
+    toast.error(t.importacao.parouNoMeio, {
       id: this.id,
       description:
         entraram > 0
-          ? `${entraram} de ${this.paths.length} entraram antes da falha`
+          ? t.importacao.antesDaFalha(entraram, this.paths.length)
           : undefined,
       action: undefined,
     });
@@ -147,10 +151,10 @@ export class AvisoDeImportacao {
     const total = this.paths.length;
     const nome = evento?.arquivo ?? nomeDoArquivo(this.paths[this.indice]);
     const titulo = this.cancelando
-      ? "Parando…"
+      ? t.importacao.parando
       : total === 1
-        ? `Importando ${nome}`
-        : `Importando ${this.indice + 1} de ${total}`;
+        ? t.importacao.importando(nome)
+        : t.importacao.importandoDe(this.indice + 1, total);
 
     toast.loading(titulo, {
       id: this.id,
@@ -168,7 +172,7 @@ export class AvisoDeImportacao {
       action: this.cancelando
         ? undefined
         : {
-            label: "Cancelar",
+            label: t.importacao.cancelar,
             onClick: (event) => {
               // O toast fecharia ao clicar; ele tem de ficar para virar o
               // "cancelada" quando o Rust responder.
@@ -219,10 +223,10 @@ function Andamento({
       </div>
       <span className="text-muted-foreground tabular-nums">
         {miniatura
-          ? "Copiado · gerando miniatura…"
+          ? t.importacao.gerandoMiniatura
           : total > 0
-            ? `${formatarBytes(copiado)} de ${formatarBytes(total)}`
-            : "Preparando…"}
+            ? t.importacao.deBytes(formatarBytes(copiado), formatarBytes(total))
+            : t.importacao.preparando}
         {!miniatura && velocidade !== null && total > 0
           ? ` · ${formatarBytes(velocidade)}/s`
           : null}
@@ -233,15 +237,20 @@ function Andamento({
 
 /** Só o nome, no separador do sistema de quem opera: barra ou contrabarra. */
 export function nomeDoArquivo(path: string): string {
-  return path.split(/[\\/]/).pop() || "arquivo";
+  return path.split(/[\\/]/).pop() || t.importacao.arquivo;
 }
+
+/** Uma casa decimal, na vírgula ou no ponto do idioma da tela. */
+const UMA_CASA = new Intl.NumberFormat(idioma, {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+  useGrouping: false,
+});
 
 /** "12,3 MB", "840 KB", "12 B". Uma casa só acima de megabyte. */
 export function formatarBytes(bytes: number): string {
-  if (bytes >= 1_073_741_824)
-    return `${(bytes / 1_073_741_824).toFixed(1).replace(".", ",")} GB`;
-  if (bytes >= 1_048_576)
-    return `${(bytes / 1_048_576).toFixed(1).replace(".", ",")} MB`;
+  if (bytes >= 1_073_741_824) return `${UMA_CASA.format(bytes / 1_073_741_824)} GB`;
+  if (bytes >= 1_048_576) return `${UMA_CASA.format(bytes / 1_048_576)} MB`;
   if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
 
   return `${Math.round(bytes)} B`;

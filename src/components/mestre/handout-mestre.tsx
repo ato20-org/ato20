@@ -42,6 +42,7 @@ import { useHandoutStore } from "@/lib/store/use-handout-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
+import { t } from "@/lib/i18n/arquivos";
 import { cn } from "@/lib/utils";
 import { importAssets } from "@/lib/vault/assets";
 import type { AssetMeta, Scene } from "@/types/scene";
@@ -235,7 +236,9 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
                   type="button"
                   data-handout
                   onPointerDown={pegarBolinha}
-                  aria-label={aberto ? "Fechar o handout" : "Handout do mapa"}
+                  aria-label={
+                    aberto ? t.handoutMestre.fecharHandout : t.handoutMestre.handoutDoMapa
+                  }
                   aria-expanded={aberto}
                   className={cn(
                     "bg-background/85 pointer-events-auto absolute z-30 grid place-items-center rounded-full border shadow-lg backdrop-blur transition-transform",
@@ -280,10 +283,8 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
           }
         />
         <TooltipContent side="left">
-          <p className="font-medium">Handout da cena</p>
-          <p className="text-muted-foreground max-w-48">
-            As imagens que a mesa pode receber.
-          </p>
+          <p className="font-medium">{t.handoutMestre.handoutDaCena}</p>
+          <p className="text-muted-foreground max-w-48">{t.handoutMestre.dica}</p>
         </TooltipContent>
       </Tooltip>
 
@@ -298,10 +299,10 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
         {/* O título diz o que é a caixa antes de a primeira imagem entrar: um
             painel só com miniaturas não se apresenta. */}
         <div className="mb-2 flex items-baseline justify-between">
-          <h3 className="text-sm font-medium">Handout da cena</h3>
+          <h3 className="text-sm font-medium">{t.handoutMestre.handoutDaCena}</h3>
           {quantos > 0 ? (
             <span className="text-muted-foreground text-xs tabular-nums">
-              {quantos} {quantos === 1 ? "imagem" : "imagens"}
+              {t.handoutMestre.contarImagens(quantos)}
             </span>
           ) : null}
         </div>
@@ -363,7 +364,7 @@ function ConteudoDoHandout({
             aria-hidden
           />
         </span>
-        <p className="text-xs leading-snug">Arraste imagens para cá</p>
+        <p className="text-xs leading-snug">{t.geral.arrasteImagens}</p>
       </button>
     );
   }
@@ -390,7 +391,7 @@ function ConteudoDoHandout({
         <button
           type="button"
           onClick={escolher}
-          aria-label="Escolher imagens do computador"
+          aria-label={t.geral.escolherImagens}
           className="text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex aspect-square w-full items-center justify-center rounded-md border border-dashed focus-visible:ring-2 focus-visible:outline-none"
         >
           <Plus className="size-4" aria-hidden />
@@ -421,7 +422,7 @@ function CelulaDoHandout({
   const transmit = useSpotlightStore((state) => state.transmit);
   const clear = useSpotlightStore((state) => state.clear);
 
-  const nome = asset?.name ?? "Arquivo que saiu do acervo";
+  const nome = asset?.name ?? t.geral.arquivoForaDoAcervo;
 
   return (
     <li
@@ -432,7 +433,7 @@ function CelulaDoHandout({
         // quando o item sai do palco.
         naMesa && "opacity-40",
       )}
-      title={naMesa ? `${nome} (na mesa)` : nome}
+      title={naMesa ? t.handoutMestre.naMesa(nome) : nome}
       onPointerDown={(event) => {
         if (!asset) return;
 
@@ -459,7 +460,7 @@ function CelulaDoHandout({
             variant={noAr ? "default" : "secondary"}
             size="icon-xs"
             aria-label={
-              noAr ? `Tirar ${nome} da evidência` : `Mostrar ${nome} na TV`
+              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNaTv(nome)
             }
             onPointerDown={(event) => event.stopPropagation()}
             onClick={noAr ? clear : () => transmit(assetId)}
@@ -472,7 +473,7 @@ function CelulaDoHandout({
         <Button
           variant="secondary"
           size="icon-xs"
-          aria-label={`Tirar ${nome} do handout`}
+          aria-label={t.handoutMestre.tirarDoHandout(nome)}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => tirar(sceneId, assetId)}
         >
