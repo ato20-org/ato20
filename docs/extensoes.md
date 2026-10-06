@@ -309,13 +309,15 @@ e implementados no módulo, e uma ferramenta mais completa.
 **Item de menu** — `itensDeMenu: [{ id, titulo, alvo, icone }]`. O `alvo` diz
 qual menu: `palco.token`, `palco.luz`, `palco.area`, `palco.quadro`,
 `palco.parede`, `palco.retrato`, `palco.vazio` para o botão direito no palco
-pelo que está na mão; `linha.cena`, `linha.personagem`, `linha.retrato`,
+pelo que está na mão (o retrato não mora mais no palco: `palco.retrato` é o
+botão direito nele no quadro da janela Retratos, com o mesmo contexto); `linha.cena`, `linha.personagem`, `linha.retrato`,
 `linha.imagem`, `linha.quadro`, `linha.nota` para as linhas das listas — botão
 direito e três pontos, os dois, pelo mesmo `Kit` que as linhas já usam. O item
 aparece pelo manifesto e o clique importa o módulo, como o comando; `quando`
-esconde o item num contexto em que ele não se aplica. **Parede e retrato não
-têm menu de fábrica**: eles ganham um só quando algum plugin declarou item para
-eles, e sem plugin nada muda. Postit e cartão passaram a aceitar o botão
+esconde o item num contexto em que ele não se aplica. **Parede não tem menu de
+fábrica**: ganha um só quando algum plugin declarou item para ela, e sem plugin
+nada muda. O retrato tem um menu de fábrica no quadro da janela Retratos, e os
+itens de `palco.retrato` entram nele. Postit e cartão passaram a aceitar o botão
 direito, que antes caía no vazio.
 
 **Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra depois

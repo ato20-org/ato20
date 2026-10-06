@@ -8,8 +8,6 @@ describe("topicosAchados", () => {
       "quadro",
       "medidores",
       "efeitos",
-      "layout",
-      "posicao",
       "ajustes",
     ]);
   });
@@ -34,7 +32,13 @@ describe("topicosAchados", () => {
   });
 
   it("um termo pode achar mais de um tópico", () => {
-    expect(topicosAchados("retrato", {})).toEqual(["layout", "posicao"]);
+    expect(
+      topicosAchados("fogo", { medidores: ["Fogo interior"] }),
+    ).toEqual(["medidores", "efeitos"]);
+  });
+
+  it("o retrato não mora mais aqui: layout e posição são da janela Retratos", () => {
+    expect(topicosAchados("retrato", {})).toEqual([]);
   });
 
   it("o plugin se acha pelo nome do tópico que o guarda", () => {

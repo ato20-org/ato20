@@ -12,8 +12,6 @@ import {
 } from "react";
 import {
   Gauge,
-  LayoutTemplate,
-  Move,
   Plus,
   Search,
   Shapes,
@@ -31,14 +29,12 @@ import {
   AjustesDaCampanha,
   bateNaBusca,
 } from "@/components/desktop/lista-de-configuracoes";
-import { LayoutDoRetratoPainel } from "@/components/mestre/layout-do-retrato";
 import { LinhaDeCondicao } from "@/components/mestre/linha-de-condicao";
 import {
   LinhaDeMedidor,
   SeloDoMedidor,
 } from "@/components/mestre/linha-de-medidor";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
-import { PosicaoDosRetratos } from "@/components/mestre/posicao-dos-retratos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -94,8 +90,6 @@ const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
   quadro: Shapes,
   medidores: Gauge,
   efeitos: Sparkles,
-  layout: LayoutTemplate,
-  posicao: Move,
   ajustes: SlidersHorizontal,
 };
 
@@ -284,24 +278,6 @@ function Topico({
       return <MedidoresDaCampanha {...medidores} />;
     case "efeitos":
       return <EfeitosDaCampanha />;
-    case "layout":
-      return (
-        <Secao
-          titulo="Layout dos retratos"
-          descricao="O que cada retrato mostra na mesa, e onde."
-        >
-          <LayoutDoRetratoPainel selecionado={null} />
-        </Secao>
-      );
-    case "posicao":
-      return (
-        <Secao
-          titulo="Posição dos retratos"
-          descricao="Apertar arruma os retratos soltos e faz os novos nascerem ali."
-        >
-          <PosicaoDosRetratos />
-        </Secao>
-      );
     case "ajustes":
       return (
         <Secao

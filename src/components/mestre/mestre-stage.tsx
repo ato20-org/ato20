@@ -33,7 +33,6 @@ import {
 import { TextoLayer } from "@/components/mestre/texto-layer";
 import { contornoDosItens } from "@/lib/mestre/contorno-dos-itens";
 import { ehDuploClique, type Toque } from "@/lib/mestre/duplo-clique";
-import { uniaoDoRetrato } from "@/lib/mestre/unioes";
 import { ancorada, caixaDoTexto, pontaEm } from "@/lib/mestre/ligacoes";
 import {
   empurrarTextos,
@@ -69,7 +68,6 @@ import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
 import { CamerasFantasma } from "@/components/playground/camera-fantasma";
 import { MarqueeBox } from "@/components/playground/marquee-box";
-import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { efeitosDaCena } from "@/lib/condicao";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
@@ -79,7 +77,6 @@ import {
   esquecerPonteiro,
   registrarConversor,
 } from "@/lib/mestre/ponteiro-no-palco";
-import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { usePingsStore } from "@/lib/store/use-pings-store";
 import { RodaDePing } from "@/components/playground/roda-de-ping";
 import { novoId } from "@/lib/id";
@@ -120,7 +117,6 @@ import {
   removeAreaDeEfeitoSelection,
   removeFogSelection,
   removeParedeSelection,
-  removePortraitSelection,
   removeSelection,
   setSelectionOpacity,
   setSelectionSombra,
@@ -146,17 +142,8 @@ import {
 import { CamadasDeExtensoes } from "@/components/mestre/camadas-de-extensoes";
 import { ArquivoFantasma } from "@/components/mestre/arquivo-fantasma";
 import { TokenFantasma } from "@/components/mestre/token-fantasma";
-import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
-import {
-  areasDeRetrato,
-  portraitBox,
-  portraitFraction,
-  portraitsBounds,
-  retratosDaCena,
-  scalePortraitGroup,
-} from "@/lib/geometry/portrait";
 import { encaixarNaGrade, gradeDoEncaixe } from "@/lib/geometry/grid";
 import {
   computeSnap,
@@ -164,13 +151,11 @@ import {
   type Guide,
 } from "@/lib/geometry/snap";
 import { CORNER_HANDLES, MIN_ITEM_SIZE, type Vec } from "@/lib/geometry/transform";
-import { quadroDaMesa, temFormatoDaMesa } from "@/lib/geometry/viewport";
+import { temFormatoDaMesa } from "@/lib/geometry/viewport";
 
-import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
-import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
   useSceneStore,
   type FormaPatch,
@@ -191,7 +176,6 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   TEXTO_TAMANHO,
-  type AncoraRetrato,
   type AreaDeEfeito,
   type CanvasItem,
   type Documento,
@@ -203,12 +187,10 @@ import {
   type TipoDeForma,
   type NewParede,
   type PontaDeLigacao,
-  type Portrait,
   type Scene,
   type SceneGrid,
   type Texto,
   type Traco,
-  type UniaoDeRetratos,
 } from "@/types/scene";
 
 const NO_GUIDES: Guide[] = [];
@@ -410,19 +392,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     [scene.items, scene.grupos],
   );
 
-  /**
-   * Onde o retrato vive: o 16:9 da tela da mesa em volta da câmera no ar.
-   *
-   * Não é o recorte da câmera, desde que ela tem formato próprio. A TV encaixa
-   * a torre em pé com tarja dos lados, e o retrato é HUD da TELA: ele fica
-   * sobre a tarja, e não espremido em cima da torre. Ver `quadroDaMesa`. Com a
-   * câmera 16:9 é a própria câmera, o mesmo objeto.
-   */
-  const telaDaMesa = useMemo(
-    () => (scene.camera ? quadroDaMesa(scene.camera) : undefined),
-    [scene.camera],
-  );
-
   const [marquee, setMarquee] = useState<Bounds | null>(null);
   /**
    * O item TRAVADO sob o último pointerdown, esperando o palco decidir.
@@ -512,14 +481,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const { personagens } = useCharacters();
   const personagensDeJogador = usePersonagensDeJogador();
 
-  /**
-   * Os dados que os jogadores jogaram, para pendurar nos retratos.
-   *
-   * A bandeja, e não o histórico: é o que está NA MESA agora, e é a mesma
-   * lista que a fileira do canto desenha e que o quadro publicado leva para a
-   * TV e para os celulares. Ver `useRolagensStore`.
-   */
-  const bandeja = useRolagensStore((state) => state.bandeja);
   /** Os pings da mesa, os do mestre e os dos jogadores. Ver `PingLayer`. */
   const pings = usePingsStore((state) => state.ativos);
 
@@ -540,9 +501,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const selectedAreaDeEfeitoId = useSelectionStore(
     (state) => state.selectedAreaDeEfeitoId,
-  );
-  const selectedPortraitIds = useSelectionStore(
-    (state) => state.selectedPortraitIds,
   );
   const select = useSelectionStore((state) => state.select);
   const toggle = useSelectionStore((state) => state.toggle);
@@ -566,9 +524,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const selectParede = useSelectionStore((state) => state.selectParede);
   const selectLuz = useSelectionStore((state) => state.selectLuz);
   const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
-  const selectPortrait = useSelectionStore((state) => state.selectPortrait);
-  const selectPortraits = useSelectionStore((state) => state.selectPortraits);
-  const togglePortrait = useSelectionStore((state) => state.togglePortrait);
   const clear = useSelectionStore((state) => state.clear);
 
   const addFog = useSceneStore((state) => state.addFog);
@@ -653,9 +608,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     onGestureEnd: terminarGestoDaCamera,
   });
 
-  const guardados = usePortraitStore((state) => state.portraits);
-  const layoutDaSessao = usePortraitStore((state) => state.layout);
-
   /**
    * Nome e medidores sobre a cabeça dos tokens, no palco do mestre.
    *
@@ -687,47 +639,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     () => efeitosDaCena(visiveis, personagens ?? []),
     [visiveis, personagens],
   );
-  const unioes = usePortraitStore((state) => state.unioes);
-  const ajustarUniaoDeRetratos = usePortraitStore((state) => state.ajustar);
-
-  // As fontes das extensões, para o retrato ao vivo saber em que canvas a
-  // página foi desenhada. Ver `useFontesDeRetrato`.
-  const fontes = useFontesDeRetrato();
-
-  /**
-   * Os retratos desta cena, com a imagem resolvida da ficha.
-   *
-   * Derivado e não a lista crua do store: retrato agora é de personagem, e quem
-   * decide se ele existe nesta cena é o token dele estar nela. Ver
-   * `retratosDaCena` -- o painel e o publicador usam a mesma função, cada um
-   * com a sua cena.
-   */
-  const portraits = retratosDaCena(
-    guardados,
-    visiveis,
-    personagens ?? [],
-    fontes,
-    // Com os medidores ESCONDIDOS, e este é o único palco que os pede. Eles
-    // desenham apagados na coluna -- o relógio da desgraça está correndo, e o
-    // mestre precisa vê-lo correr sem que a mesa o veja. Ver
-    // `MedidoresDoRetrato`.
-    true,
-    layoutDaSessao,
-  );
-  // A aba aberta declara a intenção: em Retratos, o mestre está mexendo neles,
-  // e ver todos de uma vez é o que torna o ajuste possível. Fora dela, o mapa
-  // é o assunto e só o selecionado aparece.
-  /**
-   * Retrato só é editável no palco quando a LISTA dele está à vista.
-   *
-   * Era `leftTab === "retratos"`: uma aba fixa do painel esquerdo. Com o dock, a
-   * lista pode estar em qualquer grupo de qualquer coluna, então a pergunta
-   * deixou de ser "qual aba do painel esquerdo" e passou a ser "esta aba está
-   * ativa em algum lugar". Ver `selectAbaAtiva`.
-   */
-  const editingPortraits = useLayoutStore(selectAbaAtiva("retratos"));
-  const updatePortrait = usePortraitStore((state) => state.update);
-  const updatePortraits = usePortraitStore((state) => state.updateMany);
 
   const selectedItems = visiveis.filter((item) =>
     selectedIds.includes(item.id),
@@ -879,8 +790,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     (area) => area.id === selectedAreaDeEfeitoId,
   );
   /**
-   * Quem anima os efeitos no Mestre: só o que está selecionado -- os tokens, a
-   * área e os retratos. O resto pausa no quadro em que está, e a luz dele para
+   * Quem anima os efeitos no Mestre: só o que está selecionado -- os tokens e
+   * a área. O resto pausa no quadro em que está, e a luz dele para
    * de tremular. Ver `animarSo` em `SceneLayer`.
    *
    * E NINGUÉM durante um gesto -- arrastar o token em chamas, a área, uma
@@ -895,65 +806,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         ? NINGUEM_ANIMA
         : new Set<string>([
             ...selectedIds,
-            ...selectedPortraitIds,
             ...(selectedAreaDeEfeitoId ? [selectedAreaDeEfeitoId] : []),
           ]),
-    [emGesto, selectedIds, selectedPortraitIds, selectedAreaDeEfeitoId],
+    [emGesto, selectedIds, selectedAreaDeEfeitoId],
   );
   const selectedParede = scene.paredes?.find(
     (parede) => parede.id === selectedParedeId,
   );
-  const selectedPortraits = portraits.filter((portrait) =>
-    selectedPortraitIds.includes(portrait.id),
-  );
-  const singlePortrait =
-    selectedPortraits.length === 1 ? selectedPortraits[0] : undefined;
-  /**
-   * Os membros de uma união que estão NO AR, na ordem dela.
-   *
-   * São os que `useUnioesDeRetratos` posiciona: fora do ar não ocupa vaga na
-   * fila, e retrato solto tem posição própria. A ordem é a da união, e não a
-   * dos tokens -- é ela que diz quem fica à esquerda de quem.
-   */
-  const membrosNoAr = (uniao: UniaoDeRetratos): Portrait[] =>
-    uniao.retratos
-      .map((id) => portraits.find((atual) => atual.id === id))
-      .filter((atual): atual is Portrait => Boolean(atual?.visible));
-
-  /**
-   * A união inteiramente selecionada, se a seleção for exatamente uma.
-   *
-   * Decide o rótulo da caixa e a regra de escala: numa união, o gizmo manda no
-   * tamanho e a união manda na posição.
-   */
-  const uniaoSelecionada =
-    unioes.find((uniao) => {
-      const membros = membrosNoAr(uniao);
-
-      return (
-        membros.length > 0 &&
-        membros.length === selectedPortraitIds.length &&
-        membros.every((retrato) => selectedPortraitIds.includes(retrato.id))
-      );
-    }) ?? null;
-
-  const portraitGroupBounds =
-    selectedPortraits.length > 1
-      ? portraitsBounds(selectedPortraits, telaDaMesa)
-      : null;
-
-  /**
-   * Retrato do grupo no início do gesto.
-   *
-   * Mesmo motivo do grupo de itens: o gizmo entrega a caixa nova sempre
-   * relativa ao começo do arrasto, e aplicá-la sobre retratos já escalados
-   * comporia o fator.
-   */
-  const portraitSnapshot = useRef<{
-    portraits: Portrait[];
-    bounds: Bounds;
-  } | null>(null);
-
   /**
    * A caixa que cerca o que está na mão, quando é mais de um.
    *
@@ -1056,16 +915,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const previa = useRef<SVGPolylineElement | null>(null);
 
   const [apagando, setApagando] = useState<ReadonlySet<string>>(NADA_APAGANDO);
-
-  /**
-   * A área sob o ponteiro enquanto a fila de retratos é arrastada.
-   *
-   * `null` fora do gesto, e é o que faz as seis áreas não existirem no resto do
-   * tempo: são retângulos sobre o mapa, e à vista o tempo todo poluiriam a
-   * imagem que a mesa está olhando.
-   */
-  const [areaDaUniao, setAreaDaUniao] = useState<AncoraRetrato | null>(null);
-  const [arrastandoUniao, setArrastandoUniao] = useState(false);
 
   /** Evita re-render por frame quando não há guia nenhuma para mostrar. */
   function clearGuides() {
@@ -1450,7 +1299,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     // Sem snap para imagem: as guias tipo Figma atrapalhavam mais do que
     // ajudavam num mapa -- token não precisa alinhar borda com estátua. A
-    // névoa e o retrato continuam alinhando, porque ali borda é o que importa.
+    // névoa continua alinhando, porque ali borda é o que importa.
     //
     // A GRADE é outra conversa, e por isso entra mesmo aqui: ela não é alinhar
     // a peça à estátua ao lado, é a casa em que a peça mora -- e só existe se
@@ -1801,97 +1650,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   }
 
   /**
-   * Arrasto de retrato.
-   *
-   * O gesto acontece em coordenadas de cena, mas o retrato é guardado em
-   * fração da câmera: o delta é dividido pelo tamanho do recorte antes de
-   * entrar. Sem snap de propósito — retrato não se alinha a token de mapa, e
-   * as guias só poluiriam o gesto.
-   */
-  function handlePortraitPointerDown(
-    event: ReactPointerEvent,
-    portrait: Portrait,
-  ) {
-    const alreadySelected = selectedPortraitIds.includes(portrait.id);
-
-    if (event.button === 2) {
-      // Botão direito aponta para o retrato clicado, mas não desfaz uma
-      // seleção múltipla que já o inclua -- e para aqui, como o item: ver
-      // `handleItemPointerDown`.
-      event.stopPropagation();
-      if (!alreadySelected) selectPortrait(portrait.id);
-      return;
-    }
-
-    if (event.button !== 0) return;
-
-    if (event.shiftKey) {
-      togglePortrait(portrait.id);
-      return;
-    }
-
-    // Arrastar um do grupo move o grupo: quem selecionou vários quer mexer nos
-    // vários, e reduzir para um seria desfazer o trabalho de selecionar.
-    const moving = alreadySelected ? selectedPortraits : [portrait];
-    if (!alreadySelected) selectPortrait(portrait.id);
-
-    // Retrato de união não se mexe sozinho: a posição dele é da união.
-    // Arrastá-lo livremente faria a figura voltar no quadro seguinte, quando o
-    // efeito reaplicasse o layout.
-    //
-    // Então o clique seleciona A UNIÃO INTEIRA. É o que torna o grupo evidente
-    // sem precisar de aviso: aparece a caixa pontilhada em volta dos cinco, com
-    // o nome da união, e o gizmo que sobe é o do grupo -- que escala todos por
-    // um fator só. Selecionar um e mexer nos outros seria o mesmo efeito com
-    // aparência de defeito.
-    //
-    // Fora do ar não: aí ele é o fantasma que o mestre posiciona à mão, e a
-    // união não governa quem ninguém está vendo.
-    const uniaoDoAlvo = portrait.visible
-      ? uniaoDoRetrato(unioes, portrait.id)
-      : null;
-
-    if (uniaoDoAlvo) {
-      selectPortraits(membrosNoAr(uniaoDoAlvo).map((atual) => atual.id));
-      arrastarUniao(event, uniaoDoAlvo);
-      return;
-    }
-
-    const origins = moving.map(({ id, x, y }) => ({ id, x, y }));
-
-    const movendo = new Set(moving.map((atual) => atual.id));
-    const caixa = portraitsBounds(moving, telaDaMesa);
-
-    // Alinha aos OUTROS retratos e à tela da mesa, e não aos itens do mapa:
-    // retrato é preso à câmera, e um item do mapa passa por baixo dele quando o
-    // mestre desloca a cena -- grudar num alvo que anda seria pior que não
-    // grudar.
-    const alvos = portraits
-      .filter((atual) => !movendo.has(atual.id))
-      .map((atual) => boxBounds(portraitBox(atual, telaDaMesa)));
-
-    if (!caixa) return;
-
-    dragBox(
-      event,
-      caixa,
-      alvos,
-      (dx, dy) =>
-        updatePortraits(
-          origins.map((origin) => ({
-            id: origin.id,
-            patch: {
-              // De volta para fração da tela, que é onde o retrato mora.
-              x: origin.x + dx / (telaDaMesa?.width ?? SCENE_WIDTH),
-              y: origin.y + dy / (telaDaMesa?.height ?? SCENE_HEIGHT),
-            },
-          })),
-        ),
-      telaDaMesa ? boundsFromBox(telaDaMesa) : undefined,
-    );
-  }
-
-  /**
    * Mede a distância entre dois pontos, em metros.
    *
    * Sem grade não mede: é o quadrado que diz quanto vale um metro. O botão da
@@ -2171,50 +1929,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       onEnd: () => {
         setApagando(NADA_APAGANDO);
         removeTracos(scene.id, [...alvos]);
-      },
-    });
-  }
-
-  /**
-   * Leva uma união de retratos para outra área.
-   *
-   * A união não segue o ponteiro: as seis áreas acendem, a de baixo do cursor
-   * destaca, e soltar troca a âncora. Seguir o ponteiro exigiria um layout por
-   * quadro para uma escolha que tem seis respostas possíveis -- movimento a
-   * mais para a mesma decisão.
-   *
-   * Largar numa área que já tem outra união não é recusado: as duas empilham,
-   * a que chegou depois atrás da que já estava. Ver `filasDeUnioes`.
-   */
-  function arrastarUniao(event: ReactPointerEvent, uniao: UniaoDeRetratos) {
-    const areas = areasDeRetrato(telaDaMesa);
-
-    const sob = (clientX: number, clientY: number) => {
-      const ponto = toScene(clientX, clientY);
-
-      return (
-        areas.find(
-          ({ box }) =>
-            ponto.x >= box.x &&
-            ponto.x <= box.x + box.width &&
-            ponto.y >= box.y &&
-            ponto.y <= box.y + box.height,
-        )?.ancora ?? null
-      );
-    };
-
-    setArrastandoUniao(true);
-    setAreaDaUniao(sob(event.clientX, event.clientY));
-
-    startDrag(event, {
-      onMove: (_delta, native) =>
-        setAreaDaUniao(sob(native.clientX, native.clientY)),
-      onEnd: (native) => {
-        const escolhida = sob(native.clientX, native.clientY);
-        if (escolhida) ajustarUniaoDeRetratos(uniao.id, { ancora: escolhida });
-
-        setArrastandoUniao(false);
-        setAreaDaUniao(null);
       },
     });
   }
@@ -2932,7 +2646,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     item: handleItemPointerDown,
     fog: handleFogPointerDown,
     areaDeEfeito: handleAreaDeEfeitoPointerDown,
-    portrait: handlePortraitPointerDown,
     texto: handleTextoPointerDown,
     forma: handleFormaPointerDown,
     papel: handlePapelPointerDown,
@@ -2945,8 +2658,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       item: handleItemPointerDown,
       fog: handleFogPointerDown,
       areaDeEfeito: handleAreaDeEfeitoPointerDown,
-      portrait: handlePortraitPointerDown,
-      texto: handleTextoPointerDown,
+        texto: handleTextoPointerDown,
       forma: handleFormaPointerDown,
       papel: handlePapelPointerDown,
       pega: handlePegaPointerDown,
@@ -3051,13 +2763,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const onAreaDeEfeitoPointerDown = useCallback(
     (event: ReactPointerEvent, area: AreaDeEfeito) => {
       handlersRef.current.areaDeEfeito(event, area);
-    },
-    [],
-  );
-
-  const onPortraitPointerDown = useCallback(
-    (event: ReactPointerEvent, portrait: Portrait) => {
-      handlersRef.current.portrait(event, portrait);
     },
     [],
   );
@@ -3183,29 +2888,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           apagando={apagando}
           scene={scene}
           variant="mestre"
-          // Os dados dos jogadores pendurados nos retratos, aqui também.
-          //
-          // O palco do mestre ficou de fora quando isto nasceu, com o
-          // argumento de que a fileira do canto já os mostra e repetir daria
-          // dois lugares para a mesma coisa. O argumento caiu quando o dado
-          // passou a CAIR no retrato: a fileira diz o que foi rolado, e o
-          // retrato diz de quem é, com a queda acontecendo no rosto da pessoa.
-          // São duas leituras diferentes do mesmo fato, e o mestre precisa das
-          // duas -- ele é quem narra o resultado para a mesa.
-          rolagens={bandeja}
           pings={pings}
           fichas={fichasNoPalco}
           efeitos={efeitosNoPalco}
-          // Todos enquanto a aba Retratos está aberta; fora dela, só o
-          // selecionado. Desenhar todos sempre punha cabeça flutuando sobre a
-          // moldura da câmera justamente enquanto o mestre monta o mapa.
-          portraits={
-            editingPortraits
-              ? portraits
-              : selectedPortraits.length > 0
-                ? selectedPortraits
-                : undefined
-          }
+          // Sem retratos: eles moram no quadro da janela Retratos, e é lá que
+          // o dado cai no rosto de quem rolou. Sobre o mapa, as cabeças
+          // disputavam a atenção com o que o mestre estava montando.
           // Com ferramenta de mira escolhida, o gesto sempre vale para ela:
           // repassar os handlers faria clicar sobre um item existente virar
           // "mover item".
@@ -3215,9 +2903,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             panMode || aiming ? undefined : onAreaDeEfeitoPointerDown
           }
           animarSo={efeitosAnimados}
-          onPortraitPointerDown={
-            panMode || aiming ? undefined : onPortraitPointerDown
-          }
           medidorSelecionadoId={selectedMedidorId}
           onMedidorPointerDown={
             panMode || aiming ? undefined : onMedidorPointerDown
@@ -3676,108 +3361,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             />
           ) : null}
         </>
-      ) : null}
-
-      {/* Proporção travada: retrato deformado fica grotesco, e a caixa aqui
-          não é a proporção do arquivo — o `object-contain` já cuida disso —,
-          mas manter a razão evita o mestre criar uma faixa sem querer. */}
-      {singlePortrait && !panMode ? (
-        <TransformHandles
-          box={{ ...portraitBox(singlePortrait, telaDaMesa), rotation: 0 }}
-          rotatable={false}
-          handles={CORNER_HANDLES}
-          keepAspect
-          onChange={(patch) => {
-            const current = portraitBox(singlePortrait, telaDaMesa);
-
-            updatePortrait(
-              singlePortrait.id,
-              portraitFraction(
-                {
-                  x: patch.x ?? current.x,
-                  y: patch.y ?? current.y,
-                  width: patch.width ?? current.width,
-                  height: patch.height ?? current.height,
-                },
-                telaDaMesa,
-              ),
-            );
-          }}
-          onFlip={() =>
-            updatePortrait(singlePortrait.id, { flipX: !singlePortrait.flipX })
-          }
-          // Mesma ação do atalho e do menu: implementações separadas divergem
-          // no primeiro ajuste.
-          onDelete={removePortraitSelection}
-        />
-      ) : null}
-
-      {/* Grupo de retratos: um fator só para todos, tirado da largura. É o que
-          mantém os rostos coerentes entre si — escalar cada um à mão sempre
-          termina com um NPC maior que o outro sem motivo. */}
-      {portraitGroupBounds && !panMode ? (
-        <TransformHandles
-          box={{ ...boundsToBox(portraitGroupBounds), rotation: 0 }}
-          rotatable={false}
-          handles={CORNER_HANDLES}
-          keepAspect
-          outline={false}
-          onGestureStart={() => {
-            portraitSnapshot.current = {
-              portraits: selectedPortraits,
-              bounds: portraitGroupBounds,
-            };
-          }}
-          onChange={(patch) => {
-            const frozen = portraitSnapshot.current;
-            if (!frozen || patch.x === undefined || patch.width === undefined)
-              return;
-
-            const escalados = scalePortraitGroup(
-              frozen.portraits,
-              frozen.bounds,
-              boundsFromBox({
-                x: patch.x,
-                y: patch.y ?? frozen.bounds.minY,
-                width: patch.width,
-                height: patch.height ?? 0,
-              }),
-              telaDaMesa,
-            );
-
-            // Sendo uma união, o gizmo só manda no TAMANHO: a posição é dela,
-            // e deixar os dois escreverem no mesmo quadro faz o retrato pular
-            // -- o gizmo o põe onde a escala calculou, e o efeito o traz de
-            // volta para a fila no quadro seguinte.
-            updatePortraits(
-              uniaoSelecionada
-                ? escalados.map(({ id, patch: mudanca }) => ({
-                    id,
-                    patch: { width: mudanca.width, height: mudanca.height },
-                  }))
-                : escalados,
-            );
-          }}
-          onDelete={removePortraitSelection}
-        />
-      ) : null}
-
-      {/* A caixa do grupo de retratos, que o gizmo dele não desenha -- ele só
-          põe as alças nos cantos. Sem ela, mexer em cinco rostos de uma vez não
-          tinha nenhum sinal na tela de que cinco estavam em jogo. */}
-      {portraitGroupBounds && !panMode ? (
-        <SelectionBox
-          bounds={portraitGroupBounds}
-          rotulo={
-            uniaoSelecionada
-              ? `${uniaoSelecionada.nome} · ${selectedPortraitIds.length}`
-              : `${selectedPortraitIds.length} retratos`
-          }
-        />
-      ) : null}
-
-      {arrastandoUniao ? (
-        <PortraitAnchors camera={telaDaMesa} alvo={areaDaUniao} />
       ) : null}
 
       {/* O risco em curso, antes de virar traço da cena. Desenhado aqui e não

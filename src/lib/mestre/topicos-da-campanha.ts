@@ -64,18 +64,6 @@ export const TOPICOS_DA_CAMPANHA = [
     ],
   },
   {
-    chave: "layout",
-    titulo: "Layout dos retratos",
-    descricao: "O que cada retrato mostra na mesa, e onde.",
-    palavras: ["retrato", "nome", "cargas", "dados", "tv", "mesa"],
-  },
-  {
-    chave: "posicao",
-    titulo: "Posição dos retratos",
-    descricao: "Apertar arruma os retratos soltos e faz os novos nascerem ali.",
-    palavras: ["retrato", "canto", "esquerda", "direita", "arrumar"],
-  },
-  {
     // "Ajustes", o nome da mesma lista nas Configurações gerais. Hoje só
     // plugin declara ajuste por campanha, mas o ATO20 pode declarar um amanhã,
     // e ele cairia aqui debaixo de um título que mentiria.

@@ -120,15 +120,17 @@ export function StageContextMenu({
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const selectedLuzId = useSelectionStore((state) => state.selectedLuzId);
   const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
-  const selectedPortraitIds = useSelectionStore((state) => state.selectedPortraitIds);
   /**
-   * Parede e retrato não têm menu de fábrica, e o botão direito neles caía no
-   * menu do vazio. Ganham um bloco SÓ quando algum plugin declarou item para
-   * eles: sem plugin, nada muda -- e é o que separa "abrir o encaixe" de
-   * "decidir que parede tem menu", que é outra decisão.
+   * Parede não tem menu de fábrica, e o botão direito nela caía no menu do
+   * vazio. Ganha um bloco SÓ quando algum plugin declarou item para ela: sem
+   * plugin, nada muda -- e é o que separa "abrir o encaixe" de "decidir que
+   * parede tem menu", que é outra decisão.
+   *
+   * O retrato tinha um bloco igual aqui, e saiu: o botão direito nele agora é
+   * no quadro da janela Retratos, e o encaixe `palco.retrato` foi junto. Ver
+   * `QuadroDosRetratos`.
    */
   const paredeComItens = useTemItensDeExtensao("palco.parede");
-  const retratoComItens = useTemItensDeExtensao("palco.retrato");
   const hasClipboard = useClipboardStore(temAlgoParaColar);
   /**
    * A moldura de câmera que levou o botão direito, se foi numa.
@@ -243,7 +245,6 @@ export function StageContextMenu({
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedLuz = scene.luzes?.find((luz) => luz.id === selectedLuzId);
   const paredeNaMao = Boolean(selectedParedeId) && paredeComItens;
-  const retratoNaMao = selectedPortraitIds.length > 0 && retratoComItens;
   /** Nada selecionado: o botão direito foi no vazio. Ver o bloco da cena. */
   const nadaNaMao =
     !naCamera &&
@@ -251,8 +252,7 @@ export function StageContextMenu({
     !soQuadro &&
     !selectedFog &&
     !selectedLuz &&
-    !paredeNaMao &&
-    !retratoNaMao;
+    !paredeNaMao;
 
   return (
     <ContextMenu
@@ -600,22 +600,12 @@ export function StageContextMenu({
           </>
         ) : null}
 
-        {/* Parede e retrato: só o que os plugins trouxeram. Ver `paredeComItens`. */}
+        {/* Parede: só o que os plugins trouxeram. Ver `paredeComItens`. */}
         {paredeNaMao && selectedParedeId && !naCamera ? (
           <>
             <ItensDeExtensao
               alvo="palco.parede"
               contexto={{ alvo: "palco.parede", paredeId: selectedParedeId }}
-              kit={KIT_CONTEXTO}
-            />
-            <ContextMenuSeparator />
-          </>
-        ) : null}
-        {retratoNaMao && !naCamera ? (
-          <>
-            <ItensDeExtensao
-              alvo="palco.retrato"
-              contexto={{ alvo: "palco.retrato", retratoIds: selectedPortraitIds }}
               kit={KIT_CONTEXTO}
             />
             <ContextMenuSeparator />

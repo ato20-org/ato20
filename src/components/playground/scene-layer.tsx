@@ -591,8 +591,8 @@ export function SceneLayer({
           smooth={smooth}
           // Na mesa o retrato é OVERLAY: ninguém o manipula ali, e o que se
           // pede dele é que fique parado enquanto a câmera passa por baixo.
-          // No Mestre ele continua no plano, porque lá ele é arrastado,
-          // escalado e enfileirado -- tudo em coordenada de cena. Ver `espaco`.
+          // O palco do Mestre não passa retrato nenhum -- ele é arrastado e
+          // escalado no quadro da janela Retratos. Ver `QuadroDosRetratos`.
           espaco={variant === "mesa" ? "tela" : "cena"}
           rolagens={rolagens}
           efeitos={efeitosPorPersonagem}

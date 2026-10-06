@@ -110,7 +110,7 @@ type Queda = { uniaoId: string | null; indice: number };
  * A união é o mesmo poder dito por uma BORDA: os que estão dentro da moldura
  * colorida se enfileiram juntos, na ordem em que aparecem, na área escrita no
  * cabeçalho dela. Quem está abaixo, sem moldura, está solto — e solto não tem
- * regra nenhuma, fica onde foi largado no palco.
+ * regra nenhuma, fica onde foi largado no quadro de cima.
  *
  * A cena EM EDIÇÃO, e não a que está no ar: é aqui que o mestre monta a
  * próxima. O que a mesa vê é filtrado pela cena no ar, em `MestreShell` —
@@ -786,9 +786,8 @@ function PortraitRow({
             }}
           >
             {/* A miniatura seleciona: é o caminho para as alças aparecerem no
-                palco quando o retrato está atrás de outro, ou fora do
-                enquadramento atual. Fora do ar não há o que selecionar, então
-                ela vira só a imagem. */}
+                quadro de cima quando o retrato está atrás de outro. Sem
+                registro não há o que selecionar, então ela vira só a imagem. */}
             <button
               type="button"
               aria-label={`Selecionar retrato de ${personagem.nome}`}
@@ -836,7 +835,7 @@ function PortraitRow({
                 noAr
                   ? "A mesa está vendo este retrato."
                   : retrato
-                    ? "Fora do ar: aparece apagado só no teu palco, onde você o deixou."
+                    ? "Fora do ar: aparece apagado só no quadro de cima, onde você o deixou."
                     : "Entra no canto de baixo, solto, e você arrasta daí."
               }
               onClick={() => {

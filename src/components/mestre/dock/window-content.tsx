@@ -10,7 +10,7 @@ import { EstanteBody } from "@/components/mestre/estante-window";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
 import { LayerList } from "@/components/mestre/layer-list";
-import { PortraitList } from "@/components/mestre/portrait-list";
+import { RetratosWindow } from "@/components/mestre/retratos-window";
 import { ChatBody } from "@/components/mestre/chat-window";
 import { RolagensBody } from "@/components/mestre/rolagens-window";
 import { ArquivosList } from "@/components/mestre/arquivos-list";
@@ -201,6 +201,10 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
   switch (conteudo.tipo) {
     case "chat":
       return 420;
+    // Deitada, o quadro cabe na altura que a janela TEM, e sem altura ela
+    // cresceria com a lista ao lado -- o quadro ficaria do tamanho do elenco.
+    case "retratos":
+      return 440;
     default:
       return undefined;
   }
@@ -230,6 +234,11 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
     // canto do palco sem esconder o que o mestre está editando.
     case "miniplayer":
       return 320;
+    // Deitada: o quadro da tela da mesa à esquerda, as abas numa coluna à
+    // direita -- ver `RetratosWindow`. Atracada, vale a coluna, e o quadro
+    // volta para cima das abas.
+    case "retratos":
+      return 760;
     default:
       return 288;
   }
@@ -355,7 +364,7 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
       return <ArquivosList ready={pronta} />;
     // Retrato não depende de cena: ele é da sessão e atravessa a troca.
     case "retratos":
-      return <PortraitList />;
+      return <RetratosWindow />;
     // Acervo é da campanha, não da cena: lista sem cena nenhuma, e a cena
     // aberta só decide se o `+` de "pôr na cena" aparece.
     case "imagens":

@@ -396,7 +396,10 @@ const PortraitView = memo(function PortraitView({
       data-efeito-parado={efeitosParados ? "" : undefined}
       className={cn(
         "absolute top-0 left-0",
-        interactive && "touch-none cursor-move",
+        // `pointer-events-auto` porque o quadro da janela Retratos desenha no
+        // `planoDaTela`, que não ouve o ponteiro -- é overlay da mesa, e lá
+        // ninguém clica. As peças continuam surdas, cada uma pela sua classe.
+        interactive && "touch-none cursor-move pointer-events-auto",
         // Apagado e pontilhado: diz "existe, mas a mesa não está vendo" sem
         // precisar de legenda.
         ghost && "opacity-40 outline-dashed outline-white/40",

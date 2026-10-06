@@ -129,12 +129,10 @@ const EXEMPLO_DE_CONDICOES: Condicao[] = [
 /**
  * O layout dos retratos: o que cada um mostra, e onde.
  *
- * Mora na configuração da campanha e edita o padrão da MESA. Já foi uma aba da
- * janela de Retratos, seguindo o retrato selecionado, mas o layout é decisão da
- * campanha inteira, e a janela de Retratos voltou a ser só o elenco.
- *
- * `selecionado` continua aqui para o layout próprio de um retrato
- * (`Portrait.layout`). Hoje nenhuma tela o passa.
+ * Uma aba da janela Retratos. Edita o padrão da MESA, ou só o retrato
+ * escolhido no quadro de cima, quando há exatamente um -- ver `RetratosWindow`,
+ * que é quem diz qual dos dois está em edição. Passou uma temporada na
+ * configuração da campanha, longe de qualquer retrato para olhar.
  *
  * ## Os três estados de um interruptor
  *
@@ -194,12 +192,6 @@ export function LayoutDoRetratoPainel({
 
   return (
     <div className="space-y-4">
-      {selecionado ? (
-        <p className="text-muted-foreground text-[11px] leading-snug">
-          Só deste retrato. O resto segue o padrão da mesa.
-        </p>
-      ) : null}
-
       <div className="space-y-1">
         <Peca
           icone={User}
