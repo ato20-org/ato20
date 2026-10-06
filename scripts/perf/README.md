@@ -590,6 +590,45 @@ O que pesa é ligar nome e medidores em vinte tokens com o palco andando, e isso
 já era assim antes das camadas: é a primeira coisa a medir na webview de
 verdade se a reclamação vier.
 
+## Os efeitos na horda e no chão (06/10/2026)
+
+A pergunta: quanto custam os efeitos de condição em muitos personagens e as
+áreas de efeito. `amostras` (a TV, tudo animando, um token andando), 40
+tokens, `--segundos 14 --repetir 3`, Xvfb. O aquecimento da página subiu para
+6 s SÓ nesta bateria: com 2,5 s a medida pegava os fornos ainda assando a
+horda, e a mesma célula dava 4,8 numa corrida e 17 na outra.
+
+| figuras com o efeito | antes | luz por assinatura | e a folha num elemento |
+| --- | --- | --- | --- |
+| 10 em chamas | 13,5 | 47 | 50,5 |
+| 40 em chamas | 5,4 | 22,4 | 31,4 |
+| 40 em chamas, sem a luz | 28,1 | -- | 49 |
+| 40 envenenadas | 32,3 | -- | 51,4 |
+| 40 congeladas, molhadas, sangrando | 57 a 60 | -- | -- |
+
+**A luz era quase tudo.** Cada amostra muda a chave do canvas, e o deslize
+da luz formava DE NOVO as quarenta tochas a cada quadro -- quarenta degradês e
+as sombras de todos os tokens que cada uma alcança. Contado na webview, sem a
+correção: 73% do tempo em `formarLuzes`, 520 luzes formadas em 2,3 s. Agora
+cada luz guarda a assinatura do que a formou (`assinaturaDaLuz`) e só a que
+mudou se refaz: 2367 puladas contra 73 formadas na mesma janela. O tremor a
+30 Hz não pesa: a 15 Hz deu o mesmo número, e a luz parada também.
+
+**A folha de quadros era o resto.** Dois elementos andando por `transform`
+(linhas e colunas) eram duas camadas no compositor por folha, e a figura em
+chamas tem três (fogo atrás, fogo na frente, fagulhas). Um elemento só, com a
+posição do fundo em degraus (`QuadrosAnimados`): +20 fps no fogo sem luz, +18
+no veneno. Com `will-change` para cada folha virar camada própria, empatou na
+figura e derrubou o Mestre com seis áreas de 49 para 37 fps: fica sem.
+
+As áreas não são o gargalo: seis áreas de 5x5 casas em chamas deram 56,6 na TV
+(controle 62) e 49 no Mestre com a câmera andando, antes e depois.
+
+O que sobra nas 40 chamas é a luz do token que ANDA, refeita a cada quadro do
+deslize com a sombra dos vizinhos: com `semTokens` na luz do efeito da figura
+(como já é a da área), 31,4 viraria 38,9. Não entrou: é mudança de desenho, o
+fogo do goblin deixaria de projetar a sombra dos tokens em volta.
+
 ## Como medir: o passo a passo
 
 ### O cenário certo

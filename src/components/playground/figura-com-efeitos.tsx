@@ -312,10 +312,8 @@ function ExternoDeFora({
   return (
     <div
       aria-hidden
-      // O recorte é o QUADRO: a folha inteira mora dentro dele e anda.
       className={cn(
         "efeito-externo pointer-events-none absolute select-none",
-        quadros && "overflow-hidden",
         animacao && `efeito-${animacao.tipo}`,
       )}
       style={
