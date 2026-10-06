@@ -86,6 +86,11 @@ type SceneLayerProps = {
    */
   naMao?: string;
   /**
+   * A porta que a mão do mestre está girando, por id. Ela vai direto, e as
+   * outras giram até a abertura nova. Ver `usePortasNoGiro`.
+   */
+  portaNaMao?: string;
+  /**
    * Qual tamanho dos arquivos desenhar. Ausente = os arquivos -- com uma
    * exceção, o FUNDO, que passou a escolher sozinho entre a redução de palco e
    * o original conforme o zoom. Ver `useVarianteDoFundo`.
@@ -244,6 +249,7 @@ export function SceneLayer({
   variant = "mesa",
   smooth = false,
   naMao,
+  portaNaMao,
   variante,
   portraits,
   rolagens,
@@ -303,6 +309,7 @@ export function SceneLayer({
     () => (pings ?? []).filter((ping) => ping.cenaId === scene.id),
     [pings, scene.id],
   );
+
 
   /**
    * O espaço do retrato: o 16:9 da tela da mesa em volta da câmera, e não o
@@ -413,6 +420,8 @@ export function SceneLayer({
         <SombraLayer
           items={items}
           paredes={scene.paredes}
+          portas={scene.portas}
+          portaNaMao={portaNaMao}
           sol={scene.sol}
           // A mesma dos itens: a sombra de uma figura é a figura, e ela lê o
           // arquivo que o token já baixou. Ver `SombraDaFigura`.
@@ -501,6 +510,8 @@ export function SceneLayer({
           items={items}
           luzes={scene.luzes}
           paredes={scene.paredes}
+          portas={scene.portas}
+          portaNaMao={portaNaMao}
           escuridao={scene.escuridao}
           corDoEscuro={scene.corDoEscuro}
           variant={variant}

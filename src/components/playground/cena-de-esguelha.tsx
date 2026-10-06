@@ -311,6 +311,7 @@ export function CenaDeEsguelha({
 
       <ChaoInclinado
         paredes={scene.paredes ?? []}
+        portas={scene.portas}
         // Não para desenhar o piso -- `semChao` cuida disso --, mas para a cor
         // das faces. Enquanto o daemon não responde a face cai na textura de
         // reserva, que é pior e não quebrada.
