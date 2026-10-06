@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Braces, FileJson, RotateCcw, Search } from "lucide-react";
+import { FileJson, RotateCcw, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,11 +15,9 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import {
   escoposDe,
-  linhaDoErro,
   resolver,
   type Definicao,
   type Escopo,
@@ -145,10 +143,10 @@ export function AjustesDaCampanha({ busca }: { busca: string }) {
 /**
  * Tudo que dá para ajustar, gerado do registro.
  *
- * É a tela de Settings do VSCode, nas duas formas dela: a lista de campos
- * desenhada a partir do que cada dono declarou, e o arquivo cru para quem
- * prefere editar JSON. As duas mexem no mesmo `configuracoes.json`, e trocar
- * de uma para a outra mostra o mesmo estado.
+ * É a tela de Settings do VSCode: a lista de campos desenhada a partir do que
+ * cada dono declarou. Quem prefere o arquivo cru o abre no editor do sistema,
+ * pelo botão ao lado da busca -- um editor de JSON aqui dentro era uma segunda
+ * tela para o mesmo `configuracoes.json`.
  *
  * Dois escopos em abas, e não os dois misturados: uma linha por chave com
  * duas colunas de valor confundiria qual vale. Na aba da máquina a linha diz
@@ -164,7 +162,6 @@ export function ListaDeConfiguracoes() {
 
   const [escopo, setEscopo] = useState<Escopo>("maquina");
   const [busca, setBusca] = useState("");
-  const [modoJson, setModoJson] = useState(false);
 
   const { grupos, nomeDoDono } = useGruposDeAjustes(escopo, busca);
 
@@ -195,19 +192,8 @@ export function ListaDeConfiguracoes() {
             placeholder="Buscar configuração"
             aria-label="Buscar configuração"
             className="h-8 pl-8 text-sm"
-            disabled={modoJson}
           />
         </div>
-        <Button
-          variant={modoJson ? "secondary" : "outline"}
-          size="sm"
-          aria-pressed={modoJson}
-          onClick={() => setModoJson((atual) => !atual)}
-          disabled={semCampanha}
-        >
-          <Braces />
-          JSON
-        </Button>
         <Button
           variant="outline"
           size="icon-sm"
@@ -231,8 +217,6 @@ export function ListaDeConfiguracoes() {
         <p className="text-muted-foreground px-1 py-6 text-center text-xs">
           Abra uma campanha para ajustar o que vale só nela.
         </p>
-      ) : modoJson ? (
-        <EditorJson escopo={escopo} />
       ) : grupos.length === 0 ? (
         <p className="text-muted-foreground px-1 py-6 text-center text-xs">
           {busca ? "Nada com esse nome" : "Nada para ajustar neste escopo"}
@@ -372,98 +356,4 @@ function Controle({
     case "lista":
       return null;
   }
-}
-
-/**
- * O arquivo cru, para editar à mão.
- *
- * Um `textarea` em monoespaçada, e não um editor de código: o projeto não tem
- * nenhum, e trazer um pela primeira vez para um arquivo de dez linhas pesaria
- * no bundle do Mestre para todo mundo. O que um editor daria a mais é
- * realce -- e a validação, que aqui existe: JSON inválido não salva, e a linha
- * do erro aparece embaixo quando o motor a dá.
- *
- * Salva o objeto INTEIRO, chave desconhecida inclusive: o mestre pode estar
- * escrevendo a de um plugin que vai instalar depois.
- */
-function EditorJson({ escopo }: { escopo: Escopo }) {
-  const valores = useConfiguracoesStore((state) => state.valores[escopo]);
-  const substituir = useConfiguracoesStore((state) => state.substituir);
-
-  const noDisco = useMemo(() => JSON.stringify(valores, null, 2), [valores]);
-  const [texto, setTexto] = useState(noDisco);
-  const [falha, setFalha] = useState<string | null>(null);
-  const [salvando, setSalvando] = useState(false);
-
-  const mudou = texto !== noDisco;
-
-  const erroDeSintaxe = useMemo(() => {
-    try {
-      const lido: unknown = JSON.parse(texto);
-      if (typeof lido !== "object" || lido === null || Array.isArray(lido))
-        return "A raiz tem de ser um objeto.";
-
-      return null;
-    } catch (causa) {
-      const linha = linhaDoErro(texto, causa);
-      const mensagem = causa instanceof Error ? causa.message : String(causa);
-
-      return linha ? `Linha ${linha}: ${mensagem}` : mensagem;
-    }
-  }, [texto]);
-
-  async function salvar() {
-    if (erroDeSintaxe || !mudou) return;
-
-    setSalvando(true);
-    setFalha(null);
-    try {
-      await substituir(escopo, JSON.parse(texto) as Record<string, unknown>);
-    } catch (causa) {
-      setFalha(causa instanceof Error ? causa.message : "Falha ao gravar.");
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <Textarea
-        value={texto}
-        onChange={(evento) => setTexto(evento.target.value)}
-        spellCheck={false}
-        aria-label="Configurações em JSON"
-        className="min-h-64 font-mono text-xs leading-relaxed"
-      />
-
-      {erroDeSintaxe || falha ? (
-        <p className="text-destructive text-xs" role="alert">
-          {erroDeSintaxe ?? falha}
-        </p>
-      ) : (
-        <p className="text-muted-foreground text-xs">
-          Só o que difere do padrão fica aqui. Chave de plugin que ainda não está
-          instalado pode ficar: ela passa a valer quando ele entrar.
-        </p>
-      )}
-
-      <div className="flex justify-end gap-1.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={!mudou || salvando}
-          onClick={() => setTexto(noDisco)}
-        >
-          Descartar
-        </Button>
-        <Button
-          size="sm"
-          disabled={!mudou || Boolean(erroDeSintaxe) || salvando}
-          onClick={() => void salvar()}
-        >
-          Salvar
-        </Button>
-      </div>
-    </div>
-  );
 }

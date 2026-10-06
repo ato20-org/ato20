@@ -20,7 +20,7 @@ import { gravarConfiguracoes, lerConfiguracoes } from "@/lib/vault/configuracoes
  * UM registro para o aplicativo e para os plugins, como o do VSCode. O
  * aplicativo declara as dele (`ato20.zoom`, `ato20.avisarAtualizacao`, os
  * faders) e cada plugin declara as suas no manifesto; a tela de Configurações
- * desenha todas a partir daqui, e o editor JSON edita o mesmo arquivo. Antes
+ * desenha todas a partir daqui, e o arquivo também se edita à mão. Antes
  * cada preferência era um campo escrito à mão num store e uma seção escrita à
  * mão na tela, e um plugin não tinha onde guardar nem onde mostrar a dele.
  *
@@ -71,12 +71,6 @@ type ConfiguracoesStore = {
   gravar: (chave: string, valor: unknown, escopo?: Escopo) => boolean;
   /** Tira o valor de um escopo. O que vale passa a ser o próximo. */
   limpar: (chave: string, escopo: Escopo) => void;
-  /**
-   * Substitui o arquivo inteiro. É o que o editor JSON faz ao salvar, e por
-   * isso aceita chave que ninguém declarou: o mestre pode estar escrevendo a
-   * de um plugin que vai instalar depois, como no VSCode.
-   */
-  substituir: (escopo: Escopo, objeto: Record<string, unknown>) => Promise<void>;
 };
 
 /** A mensagem de um erro do Rust, ou o que houver. */
@@ -198,21 +192,6 @@ export const useConfiguracoesStore = create<ConfiguracoesStore>((set, get) => ({
       return { valores: { ...atual.valores, [escopo]: copia } };
     });
     agendar(escopo);
-  },
-
-  async substituir(escopo, objeto) {
-    clearTimeout(pendentes[escopo]);
-    delete pendentes[escopo];
-
-    // Direto, sem espera, e ANTES de mexer no estado: quem salvou no editor
-    // quer ver o resultado, e um arquivo que o Rust recusou (grande demais)
-    // não pode ficar valendo na tela como se tivesse sido gravado.
-    if (isDesktop()) await gravarConfiguracoes(escopo, objeto);
-
-    set((atual) => ({
-      valores: { ...atual.valores, [escopo]: objeto },
-      erro: { ...atual.erro, [escopo]: null },
-    }));
   },
 }));
 

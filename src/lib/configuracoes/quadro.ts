@@ -71,8 +71,8 @@ export function usePadraoDoQuadro(): PadraoDoQuadro {
  * Muda o padrão da campanha.
  *
  * Voltar ao padrão de fábrica APAGA a chave em vez de gravar `false`: o
- * arquivo da campanha guarda só o que difere, e é o que o editor de JSON
- * promete a quem o abre.
+ * arquivo da campanha guarda só o que difere, e é o que ele promete a quem o
+ * abre à mão.
  */
 export function definirPadraoDoQuadro(patch: Partial<PadraoDoQuadro>): void {
   const { gravar, limpar } = useConfiguracoesStore.getState();
