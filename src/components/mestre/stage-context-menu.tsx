@@ -86,6 +86,7 @@ import {
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { temCamera, temLuz, type CameraSalva, type Scene } from "@/types/scene";
 import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
+import { BlocoDaPorta } from "@/components/mestre/menu-da-porta";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 import { SubmenuDeCondicoes } from "@/components/mestre/menu-de-condicoes";
 import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
@@ -120,6 +121,7 @@ export function StageContextMenu({
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const selectedLuzId = useSelectionStore((state) => state.selectedLuzId);
   const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
+  const selectedPortaId = useSelectionStore((state) => state.selectedPortaId);
   /**
    * Parede não tem menu de fábrica, e o botão direito nela caía no menu do
    * vazio. Ganha um bloco SÓ quando algum plugin declarou item para ela: sem
@@ -244,6 +246,9 @@ export function StageContextMenu({
   const opacidade = opacidadeDaSelecao(selectedItems);
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedLuz = scene.luzes?.find((luz) => luz.id === selectedLuzId);
+  const selectedPorta = scene.portas?.find(
+    (porta) => porta.id === selectedPortaId,
+  );
   const paredeNaMao = Boolean(selectedParedeId) && paredeComItens;
   /** Nada selecionado: o botão direito foi no vazio. Ver o bloco da cena. */
   const nadaNaMao =
@@ -252,6 +257,7 @@ export function StageContextMenu({
     !soQuadro &&
     !selectedFog &&
     !selectedLuz &&
+    !selectedPorta &&
     !paredeNaMao;
 
   return (
@@ -290,6 +296,10 @@ export function StageContextMenu({
               kit={KIT_CONTEXTO}
             />
           </>
+        ) : null}
+
+        {selectedPorta && !naCamera ? (
+          <BlocoDaPorta sceneId={scene.id} porta={selectedPorta} />
         ) : null}
 
         {selectedFog && !naCamera ? (

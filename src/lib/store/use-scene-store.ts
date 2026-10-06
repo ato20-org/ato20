@@ -82,8 +82,10 @@ import {
   type NovaRegua,
   type NewLuz,
   type NewParede,
+  type NewPorta,
   type Luz,
   type Parede,
+  type Porta,
   type Sol,
   type NewTexto,
   type ListaDePastas,
@@ -411,6 +413,19 @@ type SceneStore = {
   ) => void;
   /** Apaga várias de uma vez, como a borracha faz com os riscos. */
   removeParedes: (sceneId: string, paredeIds: string[]) => void;
+  /**
+   * Traça uma porta. Ver `Porta`.
+   *
+   * Pelo histórico, como a parede. Abrir também passa por aqui, uma vez ao
+   * soltar: o arrasto mora no gesto -- ver `moverPortaNoGesto`.
+   */
+  addPorta: (sceneId: string, porta: NewPorta) => string;
+  updatePorta: (
+    sceneId: string,
+    portaId: string,
+    patch: Partial<Omit<Porta, "id">>,
+  ) => void;
+  removePortas: (sceneId: string, portaIds: string[]) => void;
   /**
    * Liga, ajusta ou desliga o sol da cena. `undefined` desliga.
    *
@@ -1615,6 +1630,43 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         return {
           ...scene,
           paredes: restantes.length > 0 ? restantes : undefined,
+        };
+      });
+    },
+
+    addPorta(sceneId, porta) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        portas: [...(scene.portas ?? []), { ...porta, id }],
+      }));
+
+      return id;
+    },
+
+    updatePorta(sceneId, portaId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        portas: (scene.portas ?? []).map((porta) =>
+          porta.id === portaId ? { ...porta, ...patch } : porta,
+        ),
+      }));
+    },
+
+    removePortas(sceneId, portaIds) {
+      if (portaIds.length === 0) return;
+
+      const apagar = new Set(portaIds);
+
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.portas ?? []).filter(
+          (porta) => !apagar.has(porta.id),
+        );
+
+        return {
+          ...scene,
+          portas: restantes.length > 0 ? restantes : undefined,
         };
       });
     },

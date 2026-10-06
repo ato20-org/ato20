@@ -15,6 +15,7 @@ import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { EfeitoPedido } from "@/lib/condicao";
 import { useCoresDasParedes } from "@/hooks/use-cores-das-paredes";
+import { usePortasNoGiro } from "@/hooks/use-portas-no-giro";
 import type { Variante } from "@/lib/vault/assets";
 import { escurecerCor } from "@/lib/cor-do-mapa";
 import {
@@ -39,10 +40,12 @@ import {
   profundidadeNaVista,
   tapa,
 } from "@/lib/geometry/volume";
+import { paredesComPortas } from "@/lib/geometry/porta";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type Parede,
+  type Porta,
   type Sol,
 } from "@/types/scene";
 
@@ -365,7 +368,8 @@ function PecaEmPe({
 }
 
 export const ChaoInclinado = memo(function ChaoInclinado({
-  paredes,
+  paredes: soParedes,
+  portas,
   mapaUrl,
   giro,
   inclinacao,
@@ -387,6 +391,11 @@ export const ChaoInclinado = memo(function ChaoInclinado({
   visivel,
 }: {
   paredes: Parede[];
+  /**
+   * As portas, que sobem como parede `linha` na posição em que estão. Ver
+   * `paredeDaPorta`. Ausente = nenhuma.
+   */
+  portas?: Porta[];
   mapaUrl: string;
   /** Giro da câmera em torno do eixo vertical, em graus. */
   giro: number;
@@ -516,6 +525,29 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     cantos: ReadonlyArray<{ x: number; y: number; altura: number }>,
   ) => boolean;
 }) {
+  // A folha gira até a abertura nova, junto com a luz do chão. Ver
+  // `usePortasNoGiro`.
+  const portasNoGiro = usePortasNoGiro(portas);
+  const paredes = useMemo(
+    () => paredesComPortas(soParedes, portasNoGiro) ?? [],
+    [soParedes, portasNoGiro],
+  );
+  // A cor da porta é lida onde ela está FECHADA: é ali que o mapa a pintou, e
+  // aberta ela leria o chão do cômodo. Pela chave da porta fechada, e não pela
+  // lista: abrir troca a lista a cada quadro do gesto, e não muda cor nenhuma.
+  const chaveDasFechadas = (portas ?? [])
+    .map((porta) => `${porta.id},${porta.x},${porta.y},${porta.comprimento},${porta.angulo}`)
+    .join("|");
+  const paraACor = useMemo(
+    () =>
+      paredesComPortas(
+        soParedes,
+        portas?.map((porta) => ({ ...porta, abertura: undefined })),
+      ) ?? [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a chave É a geometria fechada das portas
+    [soParedes, chaveDasFechadas],
+  );
+
   /**
    * A corrente da CENA, que todo elemento carrega na frente da sua.
    *
@@ -648,7 +680,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     return orbital.assinar(escrever);
   });
 
-  const cores = useCoresDasParedes(paredes, mapaUrl);
+  const cores = useCoresDasParedes(paraACor, mapaUrl);
 
   // `useId` traz dois-pontos, e dois-pontos dentro de um `url(#...)` não é
   // seletor válido. Mesma raspagem da `ParedeLayer`. Prefixo por instância

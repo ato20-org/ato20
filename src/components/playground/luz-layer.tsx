@@ -49,6 +49,8 @@ import {
   type FonteDeLuz,
   type Oclusor,
 } from "@/lib/geometry/luz";
+import { usePortasNoGiro } from "@/hooks/use-portas-no-giro";
+import { folhasNaCaixa, segmentosDasPortas } from "@/lib/geometry/porta";
 import { deitarDaFigura, type Segmento } from "@/lib/geometry/sombra";
 import type { Variante } from "@/lib/vault/assets";
 import {
@@ -59,6 +61,7 @@ import {
   type EfeitoDaLuz,
   type Luz,
   type Parede,
+  type Porta,
   type SceneGrid,
 } from "@/types/scene";
 
@@ -163,6 +166,8 @@ export function LuzLayer({
   items,
   luzes,
   paredes,
+  portas,
+  portaNaMao,
   escuridao,
   corDoEscuro,
   variant,
@@ -177,6 +182,14 @@ export function LuzLayer({
   items: CanvasItem[];
   luzes?: Luz[];
   paredes?: Parede[];
+  /**
+   * As portas, à parte das paredes: a folha gira no gesto, e misturada a elas
+   * trocaria a lista de segmentos a cada quadro -- o que refaz TODAS as luzes.
+   * À parte, ela só refaz as que alcança. Ver `formarLuzes`.
+   */
+  portas?: Porta[];
+  /** A porta que a mão do mestre gira: vai direto. Ver `usePortasNoGiro`. */
+  portaNaMao?: string;
   escuridao?: number;
   /** Ausente = o breu. Ver `Scene.corDoEscuro`. */
   corDoEscuro?: string;
@@ -255,6 +268,13 @@ export function LuzLayer({
   // Parede não se mexe quando um token anda: o quadro do arrasto não
   // recalcula segmento nenhum.
   const segmentos = useMemo(() => segmentosDasParedes(paredes), [paredes]);
+  // A folha gira até a abertura nova; só as luzes que ela alcança se formam
+  // de novo a cada quadro do giro. Ver `formarLuzes`.
+  const portasNoGiro = usePortasNoGiro(portas, portaNaMao);
+  const folhas = useMemo(
+    () => segmentosDasPortas(portasNoGiro),
+    [portasNoGiro],
+  );
 
   // As silhuetas só de quem alguma luz alcança: o resto do mapa não precisa
   // de forno nenhum para isto.
@@ -290,6 +310,7 @@ export function LuzLayer({
           silhuetas={silhuetas}
           chave={chave}
           segmentos={segmentos}
+          folhas={folhas}
           escuro={escuro}
           cor={cor}
           smooth={smooth}
@@ -306,6 +327,7 @@ function CanvasDaLuz({
   silhuetas,
   chave,
   segmentos,
+  folhas,
   escuro,
   cor,
   smooth,
@@ -321,6 +343,8 @@ function CanvasDaLuz({
    */
   chave: string;
   segmentos: Segmento[];
+  /** As folhas das portas. Ver `LuzLayer`. */
+  folhas: Segmento[];
   escuro: number;
   /** A cor do escuro, já validada. Ver `corDoEscuroDe`. */
   cor: string;
@@ -349,7 +373,7 @@ function CanvasDaLuz({
 
     let prontas: LuzPronta[] = [];
     const formar = (quais: FonteDeLuz[], corpos: Oclusor[]) => {
-      prontas = formarLuzes(quais, corpos, silhuetas, segmentos, papel);
+      prontas = formarLuzes(quais, corpos, silhuetas, segmentos, folhas, papel);
       desenhadas.current = new Map(quais.map((fonte) => [fonte.id, fonte]));
       tapados.current = new Map(corpos.map((corpo) => [corpo.id, corpo]));
     };
@@ -409,7 +433,7 @@ function CanvasDaLuz({
 
     return () => cancelAnimationFrame(quadro);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a chave É a lista: ela muda quando, e só quando, alguma fonte muda
-  }, [chave, silhuetas, segmentos, escuro, cor, smooth, naMao]);
+  }, [chave, silhuetas, segmentos, folhas, escuro, cor, smooth, naMao]);
 
   return (
     <canvas
@@ -556,6 +580,10 @@ type LuzPronta = PapeisDaLuz & {
  * chamas e um andando: 3,8 fps formando todas a cada quadro do deslize, 17
  * formando só a dele e as das tochas cujos tokens ele tapa.
  *
+ * As portas entram pela mesma porta dos tokens, e não pela das paredes: a
+ * folha que gira só refaz a luz em cuja caixa ela cai. Abrir a porta da cela
+ * não forma de novo as tochas do outro lado do mapa.
+ *
  * O rascunho de uma luz que saiu da cena -- removida ou desligada -- sai
  * junto: sem isso, cada tocha cravada e removida numa sessão deixaria dois
  * canvas para trás.
@@ -565,6 +593,7 @@ function formarLuzes(
   oclusores: ReadonlyArray<Oclusor>,
   silhuetas: ReadonlyMap<string, SilhuetaPronta>,
   segmentos: ReadonlyArray<Segmento>,
+  folhas: ReadonlyArray<Segmento>,
   papel: Rascunhos,
 ): LuzPronta[] {
   const prontas: LuzPronta[] = [];
@@ -587,14 +616,16 @@ function formarLuzes(
     }
     vistas.add(fonte.id);
 
-    const assinatura = assinaturaDaLuz(fonte, oclusores);
+    const portas = folhasNaCaixa(caixa, folhas);
+    const assinatura =
+      assinaturaDaLuz(fonte, oclusores) + assinaturaDasFolhas(portas);
     if (!mesmoMundo || papeis.assinatura !== assinatura) {
       luzRecortada(
         papeis.forma,
         papel.vulto,
         fonte,
         caixa,
-        segmentos,
+        portas.length > 0 ? [...segmentos, ...portas] : segmentos,
         oclusores,
         silhuetas,
       );
@@ -615,6 +646,15 @@ function formarLuzes(
   }
 
   return prontas;
+}
+
+/** As folhas de porta que caem numa luz, na forma de um pedaço da assinatura dela. */
+function assinaturaDasFolhas(folhas: ReadonlyArray<Segmento>): string {
+  let assinatura = "";
+  for (const folha of folhas) {
+    assinatura += `#${folha.x1},${folha.y1},${folha.x2},${folha.y2}`;
+  }
+  return assinatura;
 }
 
 /**

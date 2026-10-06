@@ -13,6 +13,8 @@ import {
   AArrowUp,
   Blend,
   Bold,
+  DoorClosed,
+  DoorOpen,
   Drama,
   Eclipse,
   Sparkles,
@@ -419,7 +421,16 @@ type TransformHandlesProps = {
   altura?: {
     metros: number;
     onChange: (metros: number) => void;
+    /** O que sobe: "parede", "porta". Ausente = parede. */
+    doQue?: string;
   };
+  /**
+   * Presente = mostra o botão que abre e fecha a PORTA. Só a porta passa.
+   *
+   * Um par estado/ação como o teto: aceso = aberta. Abrir leva à última
+   * abertura -- ver `alternarPorta` --, e a folha gira até lá em cada tela.
+   */
+  porta?: { aberta: boolean; onToggle: () => void };
   /**
    * Presente = mostra o botão que abre a ficha de quem este item é.
    *
@@ -473,6 +484,7 @@ export function TransformHandles({
   mesa,
   teto,
   altura,
+  porta,
   trava,
 }: TransformHandlesProps) {
   const travada = trava?.travada ?? false;
@@ -650,6 +662,7 @@ export function TransformHandles({
       mesa ||
       teto ||
       altura ||
+      porta ||
       trava ||
       onDelete ? (
         <div
@@ -1134,6 +1147,53 @@ export function TransformHandles({
             </Tooltip>
           ) : null}
 
+          {/* Abrir e fechar a porta, na frente da fileira: é o gesto da sessão,
+              e o resto -- altura, cadeado, lixeira -- é de quem prepara. */}
+          {porta ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={porta.aberta ? "Fechar a porta" : "Abrir a porta"}
+                    aria-pressed={porta.aberta}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      porta.aberta
+                        ? "bg-amber-500 text-neutral-950"
+                        : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      porta.onToggle();
+                    }}
+                  >
+                    {porta.aberta ? (
+                      <DoorOpen
+                        style={{
+                          width: HANDLE_PX * 1.2,
+                          height: HANDLE_PX * 1.2,
+                        }}
+                      />
+                    ) : (
+                      <DoorClosed
+                        style={{
+                          width: HANDLE_PX * 1.2,
+                          height: HANDLE_PX * 1.2,
+                        }}
+                      />
+                    )}
+                  </button>
+                }
+              />
+              <TooltipContent>
+                {porta.aberta ? "Fechar a porta" : "Abrir a porta"}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
           {/* A altura, antes do teto: primeiro quão alta é a parede, depois se
               ela é coberta. O botão fica aceso enquanto a régua está aberta,
               como o da opacidade. */}
@@ -1143,7 +1203,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Altura da parede"
+                    aria-label={`Altura da ${altura.doQue ?? "parede"}`}
                     aria-pressed={alturaAberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1168,7 +1228,9 @@ export function TransformHandles({
                 }
               />
               <TooltipContent>
-                <p className="font-medium">Altura da parede</p>
+                <p className="font-medium">
+                  Altura da {altura.doQue ?? "parede"}
+                </p>
                 <p className="text-muted-foreground max-w-52">
                   Quanto ela sobe. É o que decide o comprimento da sombra que
                   ela joga no mapa.
@@ -1406,7 +1468,7 @@ export function TransformHandles({
               {altura.metros.toFixed(1).replace(".", ",")} m
             </span>
             <Slider
-              aria-label="Altura da parede, em metros"
+              aria-label={`Altura da ${altura.doQue ?? "parede"}, em metros`}
               orientation="vertical"
               value={[altura.metros]}
               min={ALTURA_MINIMA_M}
