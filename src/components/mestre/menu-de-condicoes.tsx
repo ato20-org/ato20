@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { chaveDoNome, temCondicao } from "@/lib/condicao";
+import { t } from "@/lib/i18n/personagens";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import {
   alternarCondicaoNosObjetos,
@@ -96,10 +97,10 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
         recarregar();
       }
       if (ligar && mudaram === 0) {
-        toast.error("Ninguém da seleção tem lugar para mais uma condição.");
+        toast.error(t.menuDeCondicoes.semLugar);
       }
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao marcar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.marcar);
     }
   }
 
@@ -112,7 +113,7 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
         removerCondicaoDoObjeto(objetos[0].id, condicao.id);
       }
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao tirar.");
+      toast.error(cause instanceof Error ? cause.message : t.menuDeCondicoes.falhaAoTirar);
     }
   }
 
@@ -120,7 +121,7 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
     <ContextMenuSub>
       <ContextMenuSubTrigger>
         <Sparkles />
-        Condições
+        {t.geral.condicoes}
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="min-w-44">
         {cardapio.map((modelo) => {
@@ -167,7 +168,7 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
         {cardapio.length === 0 && avulsas.length === 0 ? (
           <ContextMenuItem disabled>
             <span className="size-4" aria-hidden />
-            Nenhuma condição na campanha
+            {t.menuDeCondicoes.nenhuma}
           </ContextMenuItem>
         ) : null}
 
@@ -178,7 +179,7 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
             um submenu, que fecha ao primeiro movimento errado do mouse. */}
         <ContextMenuItem onClick={() => abrirJanela({ tipo: "configuracao" })}>
           <Settings2 />
-          Condições da campanha…
+          {t.menuDeCondicoes.daCampanha}
         </ContextMenuItem>
       </ContextMenuSubContent>
     </ContextMenuSub>

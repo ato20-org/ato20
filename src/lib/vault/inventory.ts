@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { call } from "@/lib/vault/bridge";
 import { shareCharacterAttachment } from "@/lib/vault/evidence";
+import { t } from "@/lib/i18n/personagens";
 import type { AssetMeta } from "@/types/scene";
 import type { ItemInventario, NovoItem, PatchItem } from "@/types/inventory";
 
@@ -73,10 +74,10 @@ export async function escolherImagemDoDisco(
 ): Promise<ItemInventario | null> {
   const escolhido = await open({
     multiple: false,
-    title: "Escolha a imagem do item",
+    title: t.arquivos.escolhaAImagemDoItem,
     filters: [
       {
-        name: "Imagem",
+        name: t.arquivos.filtroDeImagem,
         extensions: ["png", "apng", "jpg", "jpeg", "webp", "gif", "avif"],
       },
     ],
@@ -149,7 +150,7 @@ export async function transmitirItem(
   item: ItemInventario,
 ): Promise<{ assetId?: string; sharedId?: string }> {
   if (!item.imagem)
-    throw new Error("Este item não tem imagem para transmitir.");
+    throw new Error(t.arquivos.itemSemImagem);
 
   if (item.imagem.tipo === "asset") return { assetId: item.imagem.id };
 
