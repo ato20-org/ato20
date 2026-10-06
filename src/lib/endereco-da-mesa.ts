@@ -16,14 +16,18 @@
 /** Uma rede que o Rust reconhece pela faixa. Espelha `serve::Rede`. */
 export type Rede = "local" | "tailscale" | "hamachi" | "radmin";
 
-/** O que o mestre escolhe no convite: uma rede detectada, ou o endereço dele. */
-export type EscolhaDeRede = Rede | "outro";
+/**
+ * O que o mestre escolhe no convite: uma rede detectada, a internet pelo
+ * Funnel do Tailscale, ou o endereço dele.
+ */
+export type EscolhaDeRede = Rede | "internet" | "outro";
 
 export const ESCOLHAS_DE_REDE: EscolhaDeRede[] = [
   "local",
   "tailscale",
   "hamachi",
   "radmin",
+  "internet",
   "outro",
 ];
 
@@ -32,11 +36,54 @@ export const NOME_DA_REDE: Record<EscolhaDeRede, string> = {
   tailscale: "Tailscale",
   hamachi: "Hamachi",
   radmin: "Radmin",
+  internet: "Internet",
   outro: "Outro endereço",
 };
 
 /** Um endereço do daemon numa rede que respondeu agora. Espelha `serve::Endereco`. */
 export type EnderecoDetectado = { rede: Rede; url: string };
+
+/** Um endereço que o convite pode usar, detectado ou não. */
+export type Endereco = { rede: EscolhaDeRede; url: string };
+
+/** Por que o Funnel não abre. Espelha `tailscale::Problema`. */
+export type ProblemaDoTailscale =
+  | { tipo: "desconectado" }
+  | { tipo: "funilNaoLiberado"; link: string }
+  | { tipo: "semOperador"; comando: string }
+  | { tipo: "portaOcupada" }
+  | { tipo: "outro"; mensagem: string };
+
+/** O Tailscale desta máquina. Espelha `tailscale::Estado`. */
+export type EstadoDoTailscale = {
+  instalado: boolean;
+  online: boolean;
+  nome: string | null;
+  /** O endereço público, quando o Funnel aponta para a mesa. */
+  funil: string | null;
+  problema: ProblemaDoTailscale | null;
+};
+
+/**
+ * Os endereços que valem agora, juntando a rota com o que a CLI do Tailscale
+ * diz.
+ *
+ * A rota sozinha mente num caso: a máquina removida da tailnet continua com a
+ * interface e o IP, e a sondagem a acha. A CLI sabe que ninguém a alcança, e
+ * o endereço sai. Sem a CLI (Tailscale de loja, PATH estranho), fica o que a
+ * rota disse.
+ */
+export function disponiveis(
+  detectados: EnderecoDetectado[],
+  tailscale: EstadoDoTailscale | null,
+): Endereco[] {
+  const vivos = detectados.filter(
+    (endereco) =>
+      endereco.rede !== "tailscale" || !tailscale?.instalado || tailscale.online,
+  );
+
+  return tailscale?.funil ? [...vivos, { rede: "internet", url: tailscale.funil }] : vivos;
+}
 
 export type EnderecoDaMesa = {
   rede: EscolhaDeRede;
@@ -92,7 +139,7 @@ export function baseDoEndereco(texto: string, porta: number): string | null {
  */
 export function escolherEndereco(
   escolha: EscolhaDeRede,
-  detectados: EnderecoDetectado[],
+  detectados: Endereco[],
   proprio: string | null,
 ): EnderecoDaMesa | null {
   if (escolha === "outro") {

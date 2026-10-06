@@ -2,7 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import type { EnderecoDetectado } from "@/lib/endereco-da-mesa";
+import type { EnderecoDetectado, EstadoDoTailscale } from "@/lib/endereco-da-mesa";
 
 /**
  * A costura com o processo nativo.
@@ -201,4 +201,23 @@ export function daemonAddrSeConhecido(): DaemonAddr | null {
  */
 export function enderecosDetectados(): Promise<EnderecoDetectado[]> {
   return call<EnderecoDetectado[]>("enderecos_da_mesa");
+}
+
+/**
+ * O Tailscale desta máquina, pela CLI dele: logado, online, e se o Funnel
+ * está aberto para a mesa. Sem cache pelo mesmo motivo de
+ * `enderecosDetectados`.
+ */
+export function tailscaleEstado(): Promise<EstadoDoTailscale> {
+  return call<EstadoDoTailscale>("tailscale_estado");
+}
+
+/** Abre a mesa para a internet pelo Funnel. Devolve como ficou. */
+export function abrirFunil(): Promise<EstadoDoTailscale> {
+  return call<EstadoDoTailscale>("funil_abrir");
+}
+
+/** Fecha o Funnel da mesa. Devolve como ficou. */
+export function fecharFunil(): Promise<EstadoDoTailscale> {
+  return call<EstadoDoTailscale>("funil_fechar");
 }

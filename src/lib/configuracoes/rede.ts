@@ -6,12 +6,13 @@ import {
 import type { Definicao } from "@/lib/configuracoes/valor";
 import {
   baseDoEndereco,
+  disponiveis,
   escolherEndereco,
   ESCOLHAS_DE_REDE,
   type EnderecoDaMesa,
   type EscolhaDeRede,
 } from "@/lib/endereco-da-mesa";
-import { daemonAddr, enderecosDetectados } from "@/lib/vault/bridge";
+import { daemonAddr, enderecosDetectados, tailscaleEstado } from "@/lib/vault/bridge";
 
 /**
  * Por qual rede o convite chama a mesa.
@@ -33,7 +34,7 @@ const DEFINICOES_DA_REDE: Definicao[] = [
     chave: CHAVE_DA_REDE.escolha,
     titulo: "Rede do convite",
     descricao:
-      "Por onde a mesa entra. As VPNs aparecem no convite quando estão ligadas nesta máquina.",
+      "Por onde a mesa entra. As VPNs aparecem no convite quando estão ligadas nesta máquina, e a internet quando o Tailscale está logado.",
     tipo: "escolha",
     opcoes: ESCOLHAS_DE_REDE,
     padrao: "local",
@@ -95,12 +96,18 @@ export function gravarEnderecoProprio(texto: string): void {
  * caído desde a última.
  */
 export async function enderecoDaMesa(): Promise<EnderecoDaMesa | null> {
-  const [{ porta }, detectados] = await Promise.all([daemonAddr(), enderecosDetectados()]);
+  const [{ porta }, detectados, tailscale] = await Promise.all([
+    daemonAddr(),
+    enderecosDetectados(),
+    // Sem a CLI a mesa ainda tem a rede local: a falha dela não derruba o
+    // endereço, só tira o Funnel da conta.
+    tailscaleEstado().catch(() => null),
+  ]);
   const texto = valorDe<string>(CHAVE_DA_REDE.endereco) ?? "";
 
   return escolherEndereco(
     comoEscolha(valorDe(CHAVE_DA_REDE.escolha)),
-    detectados,
+    disponiveis(detectados, tailscale),
     baseDoEndereco(texto, porta),
   );
 }

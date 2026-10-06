@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   baseDoEndereco,
+  disponiveis,
   escolherEndereco,
   type EnderecoDetectado,
+  type EstadoDoTailscale,
 } from "@/lib/endereco-da-mesa";
 
 describe("baseDoEndereco", () => {
@@ -85,5 +87,41 @@ describe("escolherEndereco", () => {
   it("nada respondeu", () => {
     expect(escolherEndereco("local", [], null)).toBeNull();
     expect(escolherEndereco("outro", [], null)).toBeNull();
+  });
+});
+
+describe("disponiveis", () => {
+  const local: EnderecoDetectado = { rede: "local", url: "http://192.168.7.40:20200" };
+  const tailscale: EnderecoDetectado = {
+    rede: "tailscale",
+    url: "http://100.72.208.2:20200",
+  };
+  const estado = (parcial: Partial<EstadoDoTailscale>): EstadoDoTailscale => ({
+    instalado: true,
+    online: true,
+    nome: "valb.tail59085e.ts.net",
+    funil: null,
+    problema: null,
+    ...parcial,
+  });
+
+  it("sem a CLI, vale o que a rota achou", () => {
+    expect(disponiveis([local, tailscale], null)).toEqual([local, tailscale]);
+    expect(disponiveis([local, tailscale], estado({ instalado: false, online: false }))).toEqual([
+      local,
+      tailscale,
+    ]);
+  });
+
+  it("a máquina fora da tailnet perde o endereço do Tailscale", () => {
+    expect(
+      disponiveis([local, tailscale], estado({ online: false, problema: { tipo: "desconectado" } })),
+    ).toEqual([local]);
+  });
+
+  it("o Funnel aberto vira a rede da internet", () => {
+    expect(
+      disponiveis([local, tailscale], estado({ funil: "https://valb.tail59085e.ts.net" })),
+    ).toEqual([local, tailscale, { rede: "internet", url: "https://valb.tail59085e.ts.net" }]);
   });
 });

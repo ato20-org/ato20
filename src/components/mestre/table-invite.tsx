@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Check, Copy, QrCode, WifiOff } from "lucide-react";
 import QRCode from "qrcode";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,14 +29,24 @@ import {
 } from "@/lib/configuracoes/rede";
 import {
   baseDoEndereco,
+  disponiveis,
   escolherEndereco,
   ESCOLHAS_DE_REDE,
   NOME_DA_REDE,
   type EnderecoDetectado,
   type EscolhaDeRede,
+  type EstadoDoTailscale,
+  type ProblemaDoTailscale,
 } from "@/lib/endereco-da-mesa";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
-import { daemonAddr, enderecosDetectados } from "@/lib/vault/bridge";
+import {
+  abrirFunil,
+  call,
+  daemonAddr,
+  enderecosDetectados,
+  fecharFunil,
+  tailscaleEstado,
+} from "@/lib/vault/bridge";
 import { cn } from "@/lib/utils";
 
 /**
@@ -55,8 +67,9 @@ import { cn } from "@/lib/utils";
  * de código em lugar nenhum.
  *
  * E a REDE é escolha do mestre: a local, uma VPN de jogo que esteja ligada
- * nesta máquina (a mesa pela internet, sem servidor de ninguém no meio), ou um
- * endereço que ele cola. Ver `lib/endereco-da-mesa.ts`.
+ * nesta máquina, a internet pelo Funnel do Tailscale (o jogador só abre o
+ * link), ou um endereço que ele cola. Nenhum servidor do ATO20 no meio. Ver
+ * `lib/endereco-da-mesa.ts` e `src-tauri/src/tailscale.rs`.
  */
 /** As duas portas da mesa: o celular de quem joga, e a TV que todos veem. */
 type Aba = "jogador" | "espectador";
@@ -69,6 +82,10 @@ export function TableInvite() {
   const escolha = useEscolhaDeRede();
   const texto = useEnderecoProprio();
   const [redes, setRedes] = useState<Redes | null>(null);
+  const [tailscale, setTailscale] = useState<EstadoDoTailscale | null>(null);
+  // Abrindo ou fechando o Funnel: a CLI leva segundos na primeira vez, e o
+  // botão parado nesse meio tempo seria clicado de novo.
+  const [mexendo, setMexendo] = useState(false);
   // A aba escolhida vira estado porque a descrição do diálogo muda com
   // ela: o `Tabs` sozinho guardaria a escolha, mas não a conta a quem
   // está fora dele.
@@ -86,7 +103,29 @@ export function TableInvite() {
       },
       () => setCarregado(true),
     );
+    // À parte, e não no mesmo `Promise.all`: a CLI do Tailscale pode levar
+    // segundos, e a rede local não tem por que esperar por ela.
+    void tailscaleEstado().then(setTailscale, () => setTailscale(null));
   }, []);
+
+  const mexerNoFunil = (acao: () => Promise<EstadoDoTailscale>) => {
+    setMexendo(true);
+    void acao()
+      .then(setTailscale, (causa: unknown) =>
+        setTailscale((anterior) =>
+          anterior
+            ? {
+                ...anterior,
+                problema: {
+                  tipo: "outro",
+                  mensagem: causa instanceof Error ? causa.message : String(causa),
+                },
+              }
+            : anterior,
+        ),
+      )
+      .finally(() => setMexendo(false));
+  };
 
   useEffect(() => detectar(), [detectar]);
 
@@ -96,7 +135,9 @@ export function TableInvite() {
 
   // Sem rota de rede a mesa não alcança esta máquina, e um endereço que não
   // responde é pior que dizer o que está faltando.
-  if (!redes || (redes.detectados.length === 0 && !proprio)) {
+  const enderecos = redes ? disponiveis(redes.detectados, tailscale) : [];
+
+  if (!redes || (enderecos.length === 0 && !proprio)) {
     return (
       <Tooltip
         onOpenChange={(aberto) => {
@@ -121,22 +162,27 @@ export function TableInvite() {
     );
   }
 
-  const mesa = escolherEndereco(escolha, redes.detectados, proprio);
+  const mesa = escolherEndereco(escolha, enderecos, proprio);
   // "Outro" sem endereço que preste não cai para a rede local como uma VPN
   // desligada: o mestre está digitando, e um QR de outra rede no meio disso
-  // seria o convite errado com cara de certo.
+  // seria o convite errado com cara de certo. A internet fechada também não:
+  // o que falta ali é abrir, e o painel dela diz como.
   const esperandoEndereco = escolha === "outro" && !proprio;
-  const usada = esperandoEndereco ? null : mesa;
+  const esperandoFunil = escolha === "internet" && !tailscale?.funil;
+  const usada = esperandoEndereco || esperandoFunil ? null : mesa;
 
   // A escolha aparece mesmo quando não respondeu, para o mestre ver o que
-  // está marcado e por que o convite mostra outra coisa.
+  // está marcado e por que o convite mostra outra coisa. A internet aparece
+  // com o Tailscale logado, aberta ou não: é dali que ela se abre.
   const opcoes = ESCOLHAS_DE_REDE.filter(
     (opcao) =>
       opcao === "outro" ||
       opcao === escolha ||
-      redes.detectados.some((endereco) => endereco.rede === opcao),
+      (opcao === "internet"
+        ? tailscale?.online === true
+        : enderecos.some((endereco) => endereco.rede === opcao)),
   );
-  const temVpn = redes.detectados.some((endereco) => endereco.rede !== "local");
+  const temVpn = enderecos.some((endereco) => endereco.rede !== "local");
 
   return (
     <Dialog
@@ -201,6 +247,15 @@ export function TableInvite() {
           </div>
         )}
 
+        {escolha === "internet" && (
+          <PainelDoFunil
+            tailscale={tailscale}
+            mexendo={mexendo}
+            onAbrir={() => mexerNoFunil(abrirFunil)}
+            onFechar={() => mexerNoFunil(fecharFunil)}
+          />
+        )}
+
         {usada?.caiu && (
           <p className="text-muted-foreground text-xs">{avisoDeQueda(escolha, usada.rede)}</p>
         )}
@@ -251,7 +306,12 @@ export function TableInvite() {
 
 /** Por que o convite não mostra a rede que está marcada. */
 function avisoDeQueda(escolha: EscolhaDeRede, usada: EscolhaDeRede): string {
-  const quem = escolha === "local" ? "A rede local" : `O ${NOME_DA_REDE[escolha]}`;
+  const quem =
+    escolha === "local"
+      ? "A rede local"
+      : escolha === "internet"
+        ? "A internet"
+        : `O ${NOME_DA_REDE[escolha]}`;
   const onde = usada === "local" ? "a rede local" : `o ${NOME_DA_REDE[usada]}`;
 
   return `${quem} não respondeu nesta máquina, então o convite usa ${onde}.`;
@@ -275,6 +335,8 @@ function letraMiuda(rede: EscolhaDeRede, temVpn: boolean): string {
       );
     case "outro":
       return "Vale para quem alcança esse endereço. Se ele estiver aberto na internet, o código não segura alguém decidido.";
+    case "internet":
+      return "Vale para qualquer pessoa com o link e o código, de qualquer lugar. O ATO20 fecha a porta quando você sai dele.";
     default:
       return `Vale para quem entrou na sua rede do ${NOME_DA_REDE[rede]}. Se alguém não conseguir abrir, libere o ATO20 no firewall do Windows também para rede pública.`;
   }
@@ -386,4 +448,120 @@ function Endereco({ url, grande }: { url: string; grande?: boolean }) {
       </Button>
     </div>
   );
+}
+
+/**
+ * Abrir e fechar a mesa para a internet.
+ *
+ * Fechada, diz o que abrir significa ANTES do clique: qualquer pessoa com o
+ * link e o código entra, e isso é uma decisão, não um detalhe. Aberta, o QR
+ * logo abaixo já é o endereço público, e aqui fica só o botão de fechar.
+ *
+ * Cada problema vem com a saída dele, e não com a mensagem da CLI: quem joga
+ * RPG não tem obrigação de saber o que é um operador do tailscaled.
+ */
+function PainelDoFunil({
+  tailscale,
+  mexendo,
+  onAbrir,
+  onFechar,
+}: {
+  tailscale: EstadoDoTailscale | null;
+  mexendo: boolean;
+  onAbrir: () => void;
+  onFechar: () => void;
+}) {
+  if (!tailscale) {
+    return <p className="text-muted-foreground text-xs">Perguntando ao Tailscale…</p>;
+  }
+
+  if (tailscale.funil) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-muted-foreground min-w-0 truncate text-xs">
+          Aberta em {tailscale.funil.replace("https://", "")}
+        </p>
+        <Button size="xs" variant="ghost" disabled={mexendo} onClick={onFechar}>
+          {mexendo ? "Fechando…" : "Fechar"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {tailscale.problema ? (
+        <ProblemaDoFunil problema={tailscale.problema} />
+      ) : (
+        <p className="text-muted-foreground text-xs">
+          A mesa fica aberta para qualquer pessoa com o link e o código, até você fechar ou
+          sair do ATO20.
+        </p>
+      )}
+      {tailscale.online && (
+        <Button size="sm" variant="secondary" disabled={mexendo} onClick={onAbrir}>
+          {mexendo ? "Abrindo…" : "Abrir para a internet"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * O painel do Tailscale no navegador do sistema. As mesmas duas portas do
+ * link do chat: o `opener`, e o Rust quando ele desiste. Se as duas falharem,
+ * o link vai no aviso para ser copiado, em vez de o botão não fazer nada.
+ */
+function abrirLink(url: string): void {
+  void openUrl(url).catch(() =>
+    call<string>("abrir_no_navegador", { url }).catch(() =>
+      toast.error("Não foi possível abrir o navegador.", { description: url }),
+    ),
+  );
+}
+
+function ProblemaDoFunil({ problema }: { problema: ProblemaDoTailscale }) {
+  switch (problema.tipo) {
+    case "desconectado":
+      return (
+        <p className="text-muted-foreground text-xs">
+          O Tailscale desta máquina está desconectado. Entre nele e abra o convite de novo.
+        </p>
+      );
+    case "funilNaoLiberado":
+      return (
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-xs">
+            Falta liberar o Funnel na sua conta do Tailscale. Libere e clique em abrir de
+            novo.
+          </p>
+          <Button size="xs" variant="ghost" onClick={() => abrirLink(problema.link)}>
+            Liberar o Funnel
+          </Button>
+        </div>
+      );
+    case "semOperador":
+      return (
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-xs">
+            O Linux só deixa o Tailscale abrir a porta para quem é operador dele. Rode isto
+            uma vez no terminal e clique em abrir de novo:
+          </p>
+          <code className="bg-muted block rounded-md px-2 py-1 text-xs select-all">
+            {problema.comando}
+          </code>
+        </div>
+      );
+    case "portaOcupada":
+      return (
+        <p className="text-muted-foreground text-xs">
+          O Funnel desta máquina já serve outra coisa na porta 443. Feche aquilo para abrir
+          a mesa.
+        </p>
+      );
+    case "outro":
+      return (
+        <p className="text-destructive text-xs">O Tailscale não abriu: {problema.mensagem}</p>
+      );
+  }
 }

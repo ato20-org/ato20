@@ -10,6 +10,7 @@ use crate::configuracoes::{self, Escopo};
 use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
 use crate::estante;
+use crate::tailscale;
 use crate::extensoes::{self, Extensao};
 use crate::serve::{self, DaemonAddr, Endereco, Evidence, SharedEvidence, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
@@ -104,6 +105,30 @@ pub fn enderecos_da_mesa(state: State<'_, AppState>) -> Vec<Endereco> {
     serve::enderecos(state.daemon.porta)
 }
 
+/// O Tailscale desta maquina: logado, online, e se o Funnel e da mesa.
+///
+/// Os tres comandos do Funnel rodam fora da thread da janela: cada um chama a
+/// CLI, e a abertura pode esperar segundos pelo certificado.
+#[tauri::command]
+pub async fn tailscale_estado(state: State<'_, AppState>) -> AppResult<tailscale::Estado> {
+    let porta = state.daemon.porta;
+    em_segundo_plano(move || Ok(tailscale::estado(porta))).await
+}
+
+/// Abre a mesa para a internet pelo Funnel.
+#[tauri::command]
+pub async fn funil_abrir(state: State<'_, AppState>) -> AppResult<tailscale::Estado> {
+    let porta = state.daemon.porta;
+    em_segundo_plano(move || Ok(tailscale::abrir(porta))).await
+}
+
+/// Fecha o Funnel da mesa. O de outra coisa do mestre fica onde esta.
+#[tauri::command]
+pub async fn funil_fechar(state: State<'_, AppState>) -> AppResult<tailscale::Estado> {
+    let porta = state.daemon.porta;
+    em_segundo_plano(move || Ok(tailscale::fechar(porta))).await
+}
+
 /// Este pacote sabe se atualizar sozinho.
 ///
 /// Falso nas versoes de loja -- Flathub, Snap --, onde quem atualiza e a loja e
@@ -156,15 +181,18 @@ const ABRIDORES: &[(&str, &[&str])] = &[
     ("microsoft-edge", &[]),
 ];
 
-/// So endereco do proprio daemon, em loopback.
+/// So endereco do proprio daemon, em loopback, ou o painel do Tailscale.
 ///
 /// Este comando executa programa da maquina com um argumento vindo da webview,
-/// e por isso ele NAO e um "abra o que eu mandar": o unico uso e o Espectador
-/// desta instancia, que mora em `http://127.0.0.1:<porta>`. A mesma cerca que o
-/// `opener` ja tem na capability -- ver `capabilities/default.json` --, repetida
-/// aqui porque este caminho nao passa por ela.
+/// e por isso ele NAO e um "abra o que eu mandar": os usos sao o Espectador
+/// desta instancia, que mora em `http://127.0.0.1:<porta>`, e o link que a CLI
+/// do Tailscale da para liberar o Funnel. A mesma cerca que o `opener` ja tem
+/// na capability -- ver `capabilities/default.json` --, repetida aqui porque
+/// este caminho nao passa por ela.
 fn e_do_daemon(url: &str) -> bool {
-    let loopback = url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:");
+    let loopback = url.starts_with("http://127.0.0.1:")
+        || url.starts_with("http://localhost:")
+        || url.starts_with("https://login.tailscale.com/");
 
     // Nada de espaco, quebra de linha ou caractere de controle: o argumento vai
     // direto para o `exec` (sem shell no caminho), mas um endereco com controle

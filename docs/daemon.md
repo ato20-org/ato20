@@ -75,6 +75,22 @@ risco é o do Wi-Fi de casa. Uma porta aberta para a internet é outra conversa,
 pediu o limite de tentativas (ver "O código da mesa"). `/asset/{id}` segue sem código: o id é
 um UUID v4, 122 bits que ninguém adivinha.
 
+### O Funnel
+
+Com o Tailscale logado, o convite ganha a rede **Internet**: um botão roda
+`tailscale funnel --bg --yes <porta>`, e o QR passa a ser `https://<máquina>.<tailnet>.ts.net`.
+O jogador abre no navegador, de qualquer lugar, sem instalar nada. O aplicativo só fala com a
+CLI que o mestre instalou (`src-tauri/src/tailscale.rs`): não guarda conta nem credencial.
+
+- **Só a 443, e só livre ou nossa.** Um Funnel que o mestre usa para outra coisa não é
+  tomado, e fechar é `--https=443 off`, não `funnel reset`, que apagaria a configuração dele.
+- **Fecha sozinho** na saída do aplicativo e na abertura seguinte a um travamento: o `--bg`
+  sobrevive ao processo e até a reiniciar a máquina.
+- **A máquina removida da tailnet** continua com a interface e o IP, e a sondagem por rota a
+  acha. É a CLI (`Self.Online`) que a tira do convite.
+- **Sem botão de testar.** Da máquina do mestre, o nome `.ts.net` resolve para o IP da
+  tailnet, e o teste não passaria pela internet. O teste é o celular no 4G.
+
 **O túnel chega pelo loopback.** O Funnel, o cloudflared e o ngrok entregam a requisição de
 fora a partir de 127.0.0.1, e o loopback era a prova de que quem pedia era o Mestre. Duas
 travas fecham isso:
