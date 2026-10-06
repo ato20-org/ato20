@@ -1,5 +1,6 @@
 "use client";
 
+import type { Idioma } from "@/lib/i18n/idioma";
 import type { ComponentType } from "react";
 import type { DadoNaMesaLido } from "@/lib/extensoes/mesa";
 import type { RetratoParaKit as RetratoLido } from "@/lib/kit-de-retratos";
@@ -52,9 +53,13 @@ import type { CanvasItem, Scene } from "@/types/scene";
  * dele ("Ataque: 1d20+3 = 17") e ouvir as dos outros.
  *
  * A 5 não mexeu neste objeto: acrescentou ao manifesto o medidor em `camadas`
- * de imagem e o `rotulo`. Ver `extensoes::API_VERSAO`.
+ * de imagem e o `rotulo`. Ver `extensoes::API_VERSAO`. A 6 também não.
+ *
+ * A 7 acrescentou `idioma`, o da tela em que o plugin roda, para o código do
+ * plugin escolher o próprio texto; no manifesto, todo texto pode vir como mapa
+ * por idioma -- ver `TextoDePlugin`.
  */
-export const API_VERSAO_ATUAL = 5;
+export const API_VERSAO_ATUAL = 7;
 
 /** O que o plugin sabe da cena sem poder mexer no formato dela. */
 export type CenaResumo = {
@@ -247,6 +252,12 @@ export type Ato20Api = {
 
   /** O MESMO React da interface. Não empacote outro. */
   react: typeof import("react");
+
+  /**
+   * O idioma da tela: `"pt-BR"` ou `"en"`. Constante enquanto o plugin vive --
+   * trocar de idioma recarrega a janela, e o plugin com ela. API 7.
+   */
+  idioma: Idioma;
 
   extensao: {
     id: string;
