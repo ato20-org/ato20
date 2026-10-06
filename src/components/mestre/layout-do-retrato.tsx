@@ -6,7 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Dices, Gauge, Minus, Plus, RotateCcw, Sparkles, Type, User } from "lucide-react";
+import { Dices, Gauge, RotateCcw, Sparkles, Type, User } from "lucide-react";
 
 import { DadoParado } from "@/components/playground/dado-parado";
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
@@ -23,12 +23,14 @@ import {
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import {
   alturaDoNome,
+  ESCALA_DO_ROSTO_MIN,
   ESCALA_MAX,
   ESCALA_MIN,
   larguraDaColuna,
   larguraDoNome,
   larguraDosDados,
   larguraDosSelos,
+  limitarEscalaDoRosto,
   tamanhoDoSelo,
 } from "@/lib/geometry/portrait";
 import { condicoesVisiveis } from "@/lib/condicao";
@@ -59,12 +61,20 @@ import {
 const ALCANCE = { x: [-0.35, 2.65], y: [-0.4, 1.6] } as const;
 
 /**
- * Quanto um toque no + ou no - mexe no tamanho de uma peça.
+ * Quanto a peça fica longe da borda do mini, em pixel.
  *
- * Um décimo. Menos que isso pede muitos toques para uma diferença que se
- * enxergue na TV; mais salta por cima do tamanho certo. A régua que havia aqui
- * antes andava de cinco em cinco e ocupava três linhas permanentes do painel --
- * os dois botões aparecem só na peça escolhida.
+ * O contorno da peça é desenhado POR FORA dela, e o mini corta o que passa da
+ * borda: encostada no limite, a peça perdia o traço daquele lado e parecia
+ * cortada.
+ */
+const MARGEM_DO_MINI = 2;
+
+/**
+ * Quanto uma seta do teclado mexe no tamanho, na alça de uma peça.
+ *
+ * Um décimo: menos pede muitos toques para uma diferença que se enxergue na
+ * TV, mais salta por cima do tamanho certo. O ponteiro não usa isto -- ele
+ * arrasta, e o tamanho segue a mão.
  */
 const PASSO = 0.1;
 
@@ -129,12 +139,10 @@ const EXEMPLO_DE_CONDICOES: Condicao[] = [
 /**
  * O layout dos retratos: o que cada um mostra, e onde.
  *
- * Mora na configuração da campanha e edita o padrão da MESA. Já foi uma aba da
- * janela de Retratos, seguindo o retrato selecionado, mas o layout é decisão da
- * campanha inteira, e a janela de Retratos voltou a ser só o elenco.
- *
- * `selecionado` continua aqui para o layout próprio de um retrato
- * (`Portrait.layout`). Hoje nenhuma tela o passa.
+ * Uma aba da janela Retratos. Edita o padrão da MESA, ou só o retrato
+ * escolhido no quadro de cima, quando há exatamente um -- ver `RetratosWindow`,
+ * que é quem diz qual dos dois está em edição. Passou uma temporada na
+ * configuração da campanha, longe de qualquer retrato para olhar.
  *
  * ## Os três estados de um interruptor
  *
@@ -171,6 +179,11 @@ export function LayoutDoRetratoPainel({
   /** As peças que saíram do automático, e por isso têm o que desfazer. */
   const livres = [
     {
+      nome: "Retrato",
+      solta: efetivo.lugarDoRetrato !== undefined,
+      limpar: () => trocar({ lugarDoRetrato: null }),
+    },
+    {
       nome: "Nome",
       solta: efetivo.lugarDoNome !== undefined,
       limpar: () => trocar({ lugarDoNome: null }),
@@ -194,12 +207,6 @@ export function LayoutDoRetratoPainel({
 
   return (
     <div className="space-y-4">
-      {selecionado ? (
-        <p className="text-muted-foreground text-[11px] leading-snug">
-          Só deste retrato. O resto segue o padrão da mesa.
-        </p>
-      ) : null}
-
       <div className="space-y-1">
         <Peca
           icone={User}
@@ -284,7 +291,9 @@ export function LayoutDoRetratoPainel({
                   ? { lugarDosDados: lugar }
                   : peca === "condicoes"
                     ? { lugarDasCondicoes: lugar }
-                    : { lugarDoNome: lugar },
+                    : peca === "retrato"
+                      ? { lugarDoRetrato: lugar }
+                      : { lugarDoNome: lugar },
             )
           }
           onRedimensionar={(peca, escala) =>
@@ -295,7 +304,9 @@ export function LayoutDoRetratoPainel({
                   ? { escalaDados: escala }
                   : peca === "condicoes"
                     ? { escalaCondicoes: escala }
-                    : { escalaNome: escala },
+                    : peca === "retrato"
+                      ? { escalaRetrato: escala }
+                      : { escalaNome: escala },
             )
           }
         />
@@ -389,8 +400,11 @@ function Peca({
   );
 }
 
-/** As peças que se arrasta. A figura fica parada — ela É a referência. */
-type PecaArrastavel = "medidores" | "dados" | "nome" | "condicoes";
+/**
+ * As peças que se arrasta. O rosto é uma delas: a referência é a CAIXA, que
+ * não aparece no mini -- é o retângulo que o mestre arrasta no quadro.
+ */
+type PecaArrastavel = "medidores" | "dados" | "nome" | "condicoes" | "retrato";
 
 /**
  * O retrato e as peças dele, desenhados como a mesa os verá.
@@ -428,11 +442,24 @@ function MiniPalco({
   /**
    * Qual peça está escolhida. `null` = nenhuma, e o mini só mostra a prévia.
    *
-   * Escolher é o que faz o - e o + aparecerem NELA. Eles não ficam à vista o
-   * tempo todo porque são quatro botõezinhos sobre uma prévia de duzentos
-   * pixels -- eles cobririam justamente o que a prévia existe para mostrar.
+   * Escolher é o que faz a alça de tamanho aparecer NELA. Ela não fica à vista
+   * o tempo todo porque seriam cinco pontos sobre uma prévia de duzentos
+   * pixels, cobrindo justamente o que a prévia existe para mostrar.
    */
   const [escolhida, setEscolhida] = useState<PecaArrastavel | null>(null);
+  /**
+   * Onde, dentro da peça, o ponteiro a pegou -- em caixas, como o lugar.
+   *
+   * Sem isto o canto de cima à esquerda da peça pulava para baixo do cursor no
+   * primeiro toque: o arrasto gravava o PONTEIRO como lugar da peça, e o lugar
+   * é o canto dela. Pegar pelo meio tem de continuar segurando pelo meio.
+   *
+   * O tamanho da peça vai junto, medido no toque: é ele que prende o CORPO
+   * inteiro dentro do mini, e não só o canto -- preso pelo canto, a coluna de
+   * medidores saía pela direita e os dados sumiam por baixo.
+   */
+  const pega = useRef({ dx: 0, dy: 0, largura: 0, altura: 0 });
+  const rosto = limitarEscalaDoRosto(layout.escalaRetrato);
   const largura = useLargura(caixa);
 
   const url = useAssetUrl(selecionado?.assetId ?? "");
@@ -484,28 +511,67 @@ function MiniPalco({
     return proprias.length > 0 ? proprias : EXEMPLO_DE_CONDICOES;
   })();
 
+  /** Um tamanho em pixel do mini, em caixas. Zero antes de o mini existir. */
+  function emCaixas(px: number, py: number) {
+    const retangulo = caixa.current?.getBoundingClientRect();
+    if (!retangulo || retangulo.width === 0 || retangulo.height === 0)
+      return { x: 0, y: 0 };
+
+    return {
+      x: (px / retangulo.width) * larguraX,
+      y: (py / retangulo.height) * alturaY,
+    };
+  }
+
+  /** O ponteiro em caixas, na régua do lugar das peças. */
+  function noMini(clientX: number, clientY: number) {
+    const retangulo = caixa.current?.getBoundingClientRect();
+    if (!retangulo || retangulo.width === 0 || retangulo.height === 0)
+      return null;
+
+    return {
+      x: ALCANCE.x[0] + ((clientX - retangulo.left) / retangulo.width) * larguraX,
+      y: ALCANCE.y[0] + ((clientY - retangulo.top) / retangulo.height) * alturaY,
+    };
+  }
+
   function mover(evento: ReactPointerEvent, peca: PecaArrastavel) {
-    const no = caixa.current;
-    if (!no) return;
+    const ponto = noMini(evento.clientX, evento.clientY);
+    if (!ponto) return;
 
-    const retangulo = no.getBoundingClientRect();
-    const x =
-      ALCANCE.x[0] +
-      ((evento.clientX - retangulo.left) / retangulo.width) * larguraX;
-    const y =
-      ALCANCE.y[0] +
-      ((evento.clientY - retangulo.top) / retangulo.height) * alturaY;
+    const { dx, dy, largura, altura } = pega.current;
+    const margem = emCaixas(MARGEM_DO_MINI, MARGEM_DO_MINI);
 
-    // Preso ao que o mini mostra. Fora dele o mestre estaria mirando um lugar
-    // que não vê, e o recorte do palco puxaria a peça de volta sem explicar.
+    // Preso ao que o mini mostra, pelo corpo todo. Fora dele o mestre estaria
+    // mirando um lugar que não vê, e o recorte do palco puxaria a peça de
+    // volta sem explicar.
     onMover(peca, {
-      x: Number(Math.min(ALCANCE.x[1], Math.max(ALCANCE.x[0], x)).toFixed(3)),
-      y: Number(Math.min(ALCANCE.y[1], Math.max(ALCANCE.y[0], y)).toFixed(3)),
+      x: Number(
+        preso(
+          ponto.x - dx,
+          ALCANCE.x[0] + margem.x,
+          ALCANCE.x[1] - margem.x - largura,
+        ).toFixed(3),
+      ),
+      y: Number(
+        preso(
+          ponto.y - dy,
+          ALCANCE.y[0] + margem.y,
+          ALCANCE.y[1] - margem.y - altura,
+        ).toFixed(3),
+      ),
     });
   }
 
   /** Onde uma peça está agora, já com o automático resolvido para desenho. */
   function lugarDe(peca: PecaArrastavel): LugarDaPeca {
+    if (peca === "retrato") {
+      // O automático é o centro da caixa. Ver `quadroDoRosto`.
+      return (
+        layout.lugarDoRetrato ?? { x: (1 - rosto) / 2, y: (1 - rosto) / 2 }
+      );
+    }
+
     if (peca === "medidores") {
       return layout.lugarDosMedidores ?? { x: 1.05, y: 0.25 };
     }
@@ -531,15 +597,45 @@ function MiniPalco({
         layout.escalaCondicoes,
       );
 
+      // Em cima do ROSTO, e não da caixa: o rosto anda e encolhe, e a fileira
+      // vai junto, como no palco -- ver `centroDaFigura` em `SelosDoRetrato`.
+      const doRosto = lugarDe("retrato");
+
       return (
         layout.lugarDasCondicoes ?? {
-          x: (1 - largura) / 2,
-          y: tamanhoDoSelo(1, layout.escalaCondicoes) * 0.3,
+          x: doRosto.x + rosto / 2 - largura / 2,
+          y: doRosto.y + tamanhoDoSelo(1, layout.escalaCondicoes) * 0.3,
         }
       );
     }
 
     return layout.lugarDosDados ?? { x: 0, y: 1.05 };
+  }
+
+  /**
+   * Começa o arrasto de uma peça, guardando onde ela foi pega.
+   *
+   * O toque sozinho não grava nada: só escolhe. Gravar no toque tirava a peça
+   * do automático com um clique dado só para chegar à alça de tamanho.
+   */
+  function pegar(evento: ReactPointerEvent<HTMLDivElement>, peca: PecaArrastavel) {
+    evento.stopPropagation();
+    evento.currentTarget.setPointerCapture(evento.pointerId);
+
+    const ponto = noMini(evento.clientX, evento.clientY);
+    const atual = lugarDe(peca);
+    const no = evento.currentTarget.getBoundingClientRect();
+    const tamanho = emCaixas(no.width, no.height);
+
+    pega.current = {
+      dx: ponto ? ponto.x - atual.x : 0,
+      dy: ponto ? ponto.y - atual.y : 0,
+      largura: tamanho.x,
+      altura: tamanho.y,
+    };
+
+    setEscolhida(peca);
+    setArrastando(peca);
   }
 
   /** De fração da caixa para porcento do mini. Os dois eixos, uma conta cada. */
@@ -553,6 +649,7 @@ function MiniPalco({
   return (
     <div
       ref={caixa}
+      data-mini-palco=""
       // Fundo escuro, e não o do painel: a composição desenha sobre o MAPA, e o
       // branco e a sombra das peças foram escolhidos para isso. Numa prévia
       // clara elas pareceriam ilegíveis sem ser.
@@ -567,42 +664,66 @@ function MiniPalco({
       // fechar, e é a que o mestre tenta primeiro.
       //
       // Sem comparar alvos: as peças param o `pointerdown` delas, então este só
-      // roda quando o toque foi no fundo ou na figura. Comparar
-      // `target === currentTarget` deixava a figura de fora, e clicar nela não
-      // desescolhia nada.
+      // roda quando o toque foi no fundo.
       onPointerDown={() => setEscolhida(null)}
     >
-      {/* A figura. Desligada, o lugar dela continua marcado a tracejado: é o
-          que o Mestre vê no palco, e é o que explica por que as barras seguem
-          ancoradas num rosto que não está lá. */}
-      <div
-        className={cn(
-          "absolute overflow-hidden rounded-sm",
-          layout.retrato
-            ? "bg-white/5"
-            : "border border-dashed border-white/25",
-        )}
-        style={{
-          left: `${figuraNoMini.left}%`,
-          top: `${figuraNoMini.top}%`,
-          width: `${figuraNoMini.width}%`,
-          height: `${figuraNoMini.height}%`,
-        }}
-      >
-        {layout.retrato && url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={url}
-            alt=""
-            draggable={false}
-            className="size-full object-contain select-none"
-          />
-        ) : (
-          <span className="grid size-full place-items-center text-[9px] text-white/40">
-            {layout.retrato ? "retrato" : "sem rosto"}
-          </span>
-        )}
-      </div>
+      {/* O rosto, peça como as outras: arrasta pelo corpo e muda de tamanho
+          pelo ponto. Primeiro na ordem, para ficar ATRÁS das peças -- como no
+          palco, onde as barras desenham por cima da figura.
+          Desligado, sobra a marca tracejada da caixa: é o que o Mestre vê no
+          palco, e o que explica por que as barras seguem ancoradas num rosto
+          que não está lá. */}
+      {layout.retrato ? (
+        umaCaixa > 0 ? (
+          <Peso
+            rotulo="Retrato"
+            left={emX(lugarDe("retrato").x)}
+            top={emY(lugarDe("retrato").y)}
+            largura={rosto * umaCaixa}
+            automatico={layout.lugarDoRetrato === undefined}
+            ativa={arrastando === "retrato"}
+            escolhida={escolhida === "retrato"}
+            escala={rosto}
+            minimo={ESCALA_DO_ROSTO_MIN}
+            maximo={1}
+            // No automático o rosto fica no centro da caixa, e é em volta dele
+            // que cresce: ancorar no canto faria o ponto fugir da mão.
+            cresceDoCentro={layout.lugarDoRetrato === undefined}
+            onEscala={(escala) => onRedimensionar("retrato", escala)}
+            onPegar={(evento) => pegar(evento, "retrato")}
+          >
+            <div
+              className="grid place-items-center overflow-hidden rounded-sm bg-white/5"
+              style={{ width: rosto * umaCaixa, height: rosto * umaCaixa }}
+            >
+              {url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={url}
+                  alt=""
+                  draggable={false}
+                  className="size-full object-contain select-none"
+                />
+              ) : (
+                <span className="text-[9px] text-white/40">retrato</span>
+              )}
+            </div>
+          </Peso>
+        ) : null
+      ) : (
+        <div
+          aria-hidden
+          className="absolute grid place-items-center rounded-sm border border-dashed border-white/25 text-[9px] text-white/40"
+          style={{
+            left: `${figuraNoMini.left}%`,
+            top: `${figuraNoMini.top}%`,
+            width: `${figuraNoMini.width}%`,
+            height: `${figuraNoMini.height}%`,
+          }}
+        >
+          sem rosto
+        </div>
+      )}
 
       {/* As peças só existem no mini quando existem na mesa: o interruptor
           desligado tira a coisa da prévia, que é a resposta honesta a "como vai
@@ -618,13 +739,7 @@ function MiniPalco({
           escolhida={escolhida === "nome"}
           escala={layout.escalaNome}
           onEscala={(escala) => onRedimensionar("nome", escala)}
-          onPegar={(evento) => {
-            evento.stopPropagation();
-            evento.currentTarget.setPointerCapture(evento.pointerId);
-            setEscolhida("nome");
-            setArrastando("nome");
-            mover(evento, "nome");
-          }}
+          onPegar={(evento) => pegar(evento, "nome")}
         >
           <TextoDoNome
             nome={selecionado?.nome ?? "Nome"}
@@ -648,13 +763,7 @@ function MiniPalco({
           escolhida={escolhida === "condicoes"}
           escala={layout.escalaCondicoes}
           onEscala={(escala) => onRedimensionar("condicoes", escala)}
-          onPegar={(evento) => {
-            evento.stopPropagation();
-            evento.currentTarget.setPointerCapture(evento.pointerId);
-            setEscolhida("condicoes");
-            setArrastando("condicoes");
-            mover(evento, "condicoes");
-          }}
+          onPegar={(evento) => pegar(evento, "condicoes")}
         >
           <SelosDaCondicao
             condicoes={condicoesDaPrevia}
@@ -675,13 +784,7 @@ function MiniPalco({
           escolhida={escolhida === "medidores"}
           escala={layout.escalaMedidores}
           onEscala={(escala) => onRedimensionar("medidores", escala)}
-          onPegar={(evento) => {
-            evento.stopPropagation();
-            evento.currentTarget.setPointerCapture(evento.pointerId);
-            setEscolhida("medidores");
-            setArrastando("medidores");
-            mover(evento, "medidores");
-          }}
+          onPegar={(evento) => pegar(evento, "medidores")}
         >
           <div
             className="flex flex-col"
@@ -713,13 +816,7 @@ function MiniPalco({
           escolhida={escolhida === "dados"}
           escala={layout.escalaDados}
           onEscala={(escala) => onRedimensionar("dados", escala)}
-          onPegar={(evento) => {
-            evento.stopPropagation();
-            evento.currentTarget.setPointerCapture(evento.pointerId);
-            setEscolhida("dados");
-            setArrastando("dados");
-            mover(evento, "dados");
-          }}
+          onPegar={(evento) => pegar(evento, "dados")}
         >
           {/* Um d20 parado no 17, nas mesmas proporções da fileira de verdade:
               o dado grande vale 0,34 da largura da figura. Parado e não
@@ -758,9 +855,9 @@ function MiniPalco({
  * medidores são mais altos que um —, e o alvo precisa acompanhar isso sem
  * ninguém informar um número.
  *
- * Um `div` e não um `button`, e a razão é o - e o +: eles são botões de
- * verdade, e botão dentro de botão não é HTML válido. O papel e o foco entram à
- * mão para o alvo continuar alcançável pelo teclado.
+ * Um `div` e não um `button`, e a razão é a alça de tamanho: ela é um controle
+ * de verdade, e controle dentro de botão não é HTML válido. O papel e o foco
+ * entram à mão para o alvo continuar alcançável pelo teclado.
  *
  * Só a moldura recebe ponteiro. O conteúdo é `pointer-events-none` por vir de
  * componentes que não sabem que estão num painel: um `img` ou um `svg`
@@ -775,6 +872,9 @@ function Peso({
   ativa,
   escolhida,
   escala,
+  minimo = ESCALA_MIN,
+  maximo = ESCALA_MAX,
+  cresceDoCentro = false,
   onEscala,
   onPegar,
   children,
@@ -786,9 +886,14 @@ function Peso({
   /** Ainda no automático: moldura pontilhada, porque o lugar é uma previsão. */
   automatico: boolean;
   ativa: boolean;
-  /** Escolhida: é nela que o - e o + aparecem. */
+  /** Escolhida: é nela que a alça de tamanho aparece. */
   escolhida: boolean;
   escala: number;
+  /** Os limites do tamanho. Padrão: os das peças, de metade ao dobro. */
+  minimo?: number;
+  maximo?: number;
+  /** A âncora do tamanho no meio da peça, e não no canto de cima à esquerda. */
+  cresceDoCentro?: boolean;
   onEscala: (escala: number) => void;
   onPegar: (evento: ReactPointerEvent<HTMLDivElement>) => void;
   children: React.ReactNode;
@@ -809,76 +914,209 @@ function Peso({
     >
       <span className="pointer-events-none block">{children}</span>
 
-      {/* Uma FAIXA no topo, e não uma camada sobre a peça inteira.
-          Com `inset-0` os botões cobriam cada pixel dela, e a peça deixava de
-          poder ser arrastada: o único alvo que sobrava era o que parava o
-          ponteiro. A faixa ocupa o que precisa e o corpo abaixo continua sendo
-          a alça.
-          No topo e dentro: ao lado ou embaixo eles sairiam do mini quando a
-          peça está numa borda, que é justamente onde o mestre a larga. */}
+      {/* Um ponto no canto de baixo à direita, e o resto da peça continua
+          sendo a pega do arrasto. A âncora é o canto oposto: a peça mora pelo
+          canto de cima à esquerda, e é ele que fica parado. */}
       {escolhida ? (
-        <div
-          className="absolute top-0 left-0 flex w-fit items-center gap-0.5 rounded-sm rounded-br bg-black/85 px-0.5"
-          // O ponteiro para aqui: sem isto, tocar no - começaria um arrasto da
-          // peça e o número andaria junto com o dedo.
-          onPointerDown={(evento) => evento.stopPropagation()}
-        >
-          <Degrau
-            rotulo={`Diminuir ${rotulo}`}
-            icone={Minus}
-            desabilitado={escala <= ESCALA_MIN}
-            onClick={() => onEscala(passo(escala, -PASSO))}
-          />
-          <span className="text-[8px] leading-none text-white tabular-nums">
-            {Math.round(escala * 100)}%
-          </span>
-          <Degrau
-            rotulo={`Aumentar ${rotulo}`}
-            icone={Plus}
-            desabilitado={escala >= ESCALA_MAX}
-            onClick={() => onEscala(passo(escala, PASSO))}
-          />
-        </div>
+        <AlcaDeTamanho
+          rotulo={`de ${rotulo}`}
+          escala={escala}
+          minimo={minimo}
+          maximo={maximo}
+          ancora={(alca) => {
+            const peca = alca.parentElement?.getBoundingClientRect();
+            if (!peca) return null;
+
+            return cresceDoCentro
+              ? { x: peca.left + peca.width / 2, y: peca.top + peca.height / 2 }
+              : { x: peca.left, y: peca.top };
+          }}
+          style={{ left: "100%", top: "100%" }}
+          onEscala={onEscala}
+        />
       ) : null}
     </div>
   );
 }
 
-function Degrau({
+/**
+ * O ponto que muda o tamanho de uma peça escolhida: arrastar para fora cresce,
+ * para dentro encolhe.
+ *
+ * O tamanho segue a DISTÂNCIA do ponteiro à âncora, comparada à do começo do
+ * gesto: puxar o ponto para o dobro da distância dobra a peça. Assim a conta não
+ * precisa saber o formato da peça -- a coluna de medidores e o dado têm
+ * proporções diferentes, e o rosto cresce em volta do centro, não do canto.
+ *
+ * Teclado também: as setas andam um décimo, como o - e o + que havia aqui.
+ */
+function AlcaDeTamanho({
   rotulo,
-  icone: Icone,
-  desabilitado,
-  onClick,
+  escala,
+  minimo,
+  maximo,
+  ancora,
+  style,
+  onEscala,
 }: {
   rotulo: string;
-  icone: typeof Minus;
-  desabilitado: boolean;
-  onClick: () => void;
+  escala: number;
+  minimo: number;
+  maximo: number;
+  /** O ponto que fica parado, em coordenada de tela. Lido no começo do gesto. */
+  ancora: (alca: HTMLElement) => { x: number; y: number } | null;
+  style: React.CSSProperties;
+  onEscala: (escala: number) => void;
 }) {
+  const gesto = useRef<{
+    x: number;
+    y: number;
+    distancia: number;
+    escala: number;
+    /** O maior tamanho que ainda cabe no mini, medido no toque. */
+    teto: number;
+  } | null>(null);
+  const [mexendo, setMexendo] = useState(false);
+  const porcento = Math.round(escala * 100);
+
+  function soltar() {
+    gesto.current = null;
+    setMexendo(false);
+  }
+
   return (
-    <button
-      type="button"
-      aria-label={rotulo}
-      disabled={desabilitado}
-      className="grid size-3.5 shrink-0 place-items-center rounded-sm bg-white/20 text-white disabled:opacity-30"
-      onClick={onClick}
+    <span
+      role="slider"
+      tabIndex={0}
+      aria-label={`Tamanho ${rotulo}`}
+      aria-valuemin={Math.round(minimo * 100)}
+      aria-valuemax={Math.round(maximo * 100)}
+      aria-valuenow={porcento}
+      aria-valuetext={`${porcento}%`}
+      className="bg-primary absolute z-10 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize touch-none rounded-full border border-white/80 shadow-sm"
+      style={style}
+      // O ponteiro para aqui: sem isto, pegar o ponto começaria o arrasto da
+      // peça, e ela andaria em vez de crescer.
+      onPointerDown={(evento) => {
+        evento.stopPropagation();
+
+        const centro = ancora(evento.currentTarget);
+        if (!centro) return;
+
+        const distancia = Math.hypot(
+          evento.clientX - centro.x,
+          evento.clientY - centro.y,
+        );
+        // Colado na âncora não há régua: qualquer tremida viraria um salto.
+        if (distancia < 4) return;
+
+        evento.currentTarget.setPointerCapture(evento.pointerId);
+        gesto.current = {
+          ...centro,
+          distancia,
+          escala,
+          teto: tetoNaBorda(evento.currentTarget, centro, escala, maximo),
+        };
+        setMexendo(true);
+      }}
+      onPointerMove={(evento) => {
+        const atual = gesto.current;
+        if (!atual) return;
+
+        evento.stopPropagation();
+
+        const distancia = Math.hypot(
+          evento.clientX - atual.x,
+          evento.clientY - atual.y,
+        );
+
+        onEscala(
+          limitar(
+            atual.escala * (distancia / atual.distancia),
+            minimo,
+            atual.teto,
+          ),
+        );
+      }}
+      onPointerUp={soltar}
+      onPointerCancel={soltar}
+      onKeyDown={(evento) => {
+        const delta =
+          evento.key === "ArrowUp" || evento.key === "ArrowRight"
+            ? PASSO
+            : evento.key === "ArrowDown" || evento.key === "ArrowLeft"
+              ? -PASSO
+              : 0;
+        if (!delta) return;
+
+        evento.preventDefault();
+        evento.stopPropagation();
+        onEscala(limitar(escala + delta, minimo, maximo));
+      }}
     >
-      <Icone className="size-2.5" />
-    </button>
+      {/* O tamanho aparece só enquanto a mão está no ponto: parado, ele seria
+          um número a mais em cima da prévia. */}
+      {mexendo ? (
+        <span className="pointer-events-none absolute top-full left-full ml-0.5 rounded-sm bg-black/85 px-0.5 text-[8px] leading-tight text-white tabular-nums">
+          {porcento}%
+        </span>
+      ) : null}
+    </span>
   );
 }
 
 /**
- * Um degrau de tamanho, preso aos limites e sem lixo de ponto flutuante.
+ * O maior tamanho com que a peça ainda cabe no mini, crescendo da âncora.
+ *
+ * Medido no toque, contra o retângulo da peça e o do mini: a peça cresce em
+ * proporção, então a folga até a borda mais próxima diz quantas vezes ela
+ * ainda pode crescer. Nunca abaixo do tamanho de agora -- a peça que já passa
+ * da borda pode encolher, mas não ficar presa.
+ */
+function tetoNaBorda(
+  alca: HTMLElement,
+  ancora: { x: number; y: number },
+  escala: number,
+  maximo: number,
+): number {
+  const peca = alca.parentElement?.getBoundingClientRect();
+  const mini = alca.closest("[data-mini-palco]")?.getBoundingClientRect();
+  if (!peca || !mini || peca.width === 0 || peca.height === 0) return maximo;
+
+  const direita = mini.right - MARGEM_DO_MINI;
+  const baixo = mini.bottom - MARGEM_DO_MINI;
+  const esquerda = mini.left + MARGEM_DO_MINI;
+  const cima = mini.top + MARGEM_DO_MINI;
+
+  // Quanto cada lado da peça, medido da âncora, ainda pode esticar.
+  const folgas = [
+    (direita - ancora.x) / (peca.right - ancora.x),
+    (baixo - ancora.y) / (peca.bottom - ancora.y),
+    ...(peca.left < ancora.x ? [(ancora.x - esquerda) / (ancora.x - peca.left)] : []),
+    ...(peca.top < ancora.y ? [(ancora.y - cima) / (ancora.y - peca.top)] : []),
+  ].filter((folga) => Number.isFinite(folga) && folga > 0);
+
+  if (folgas.length === 0) return maximo;
+
+  return Math.min(maximo, Math.max(escala, escala * Math.min(...folgas)));
+}
+
+/** Um número entre dois limites. Com o teto abaixo do piso, vale o piso. */
+function preso(valor: number, minimo: number, maximo: number): number {
+  return Math.max(minimo, Math.min(maximo, valor));
+}
+
+/**
+ * Um tamanho preso aos limites e sem lixo de ponto flutuante.
  *
  * `1 - 0.1 - 0.1` dá 0,7999999999999999 em binário, e esse número iria para o
  * disco e para a rede assim. Arredondar em centésimos devolve a escala que o
- * mestre pediu, que é a que o rótulo mostra.
+ * mestre vê no rótulo.
  */
-function passo(escala: number, delta: number): number {
-  const novo = Math.round((escala + delta) * 100) / 100;
+function limitar(escala: number, minimo: number, maximo: number): number {
+  const redondo = Math.round(escala * 100) / 100;
 
-  return Math.min(ESCALA_MAX, Math.max(ESCALA_MIN, novo));
+  return Math.min(maximo, Math.max(minimo, redondo));
 }
 
 /**

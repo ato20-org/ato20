@@ -102,13 +102,15 @@ function padrao(): Layout {
         {
           id: "esquerda-1",
           // Personagens entra aqui, e não numa pílula no canto do palco: as
-          // quatro são "o que existe na sessão", e a de personagens é a que
-          // alimenta as outras -- token no mapa vem dela, e a de retratos
-          // deriva dos tokens.
+          // três são "o que existe na sessão", e a de personagens é a que
+          // alimenta as outras -- token no mapa vem dela.
+          //
+          // Retratos não: a porta dela é o botão ao lado do + de Personagens,
+          // e ela nasce flutuando, larga o bastante para o quadro da tela da
+          // mesa que mora em cima dela.
           abas: [
             { tipo: "cenas" },
             { tipo: "quadros" },
-            { tipo: "retratos" },
             { tipo: "personagens" },
           ],
           ativa: "cenas",
@@ -168,31 +170,12 @@ function ler(): Layout {
     if (!eColuna(esquerda) || !eColuna(direita)) return padrao();
 
     return comQuadros({
-      esquerda: semAreas(semRetratos(esquerda)),
-      direita: semAreas(semRetratos(direita)),
+      esquerda: semAreas(esquerda),
+      direita: semAreas(direita),
     });
   } catch {
     return padrao();
   }
-}
-
-/**
- * Nenhum grupo volta do disco com Retratos ativo.
- *
- * A aba ativa tem EFEITO no palco: com a lista de retratos à vista, o palco
- * desenha todos eles para o mestre arrastar — ver `selectAbaAtiva`. Abrir o
- * aplicativo já nesse estado surpreenderia quem só quer montar a cena, e era
- * justamente por isso que a aba do painel esquerdo nunca foi persistida.
- * Guardar a escolha das outras abas não tem efeito nenhum além dela mesma, e
- * por isso continua guardada.
- */
-function semRetratos(coluna: Coluna): Coluna {
-  return {
-    ...coluna,
-    grupos: coluna.grupos.map((grupo) =>
-      grupo.ativa === "retratos" ? { ...grupo, ativa: chaveDe(grupo.abas[0]) } : grupo,
-    ),
-  };
 }
 
 /**
@@ -518,18 +501,3 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
   },
 }));
 
-/**
- * A aba está atracada E ativa em algum lado?
- *
- * Existe por causa dos retratos: o palco só os desenha editáveis quando a lista
- * deles está à vista, e antes isso era `leftTab === "retratos"` no
- * `usePanelsStore`. Com o dock, "à vista" deixou de ser uma aba fixa do painel
- * esquerdo e passou a ser esta pergunta — a lista pode estar em qualquer grupo
- * de qualquer coluna, ou flutuando.
- */
-export function selectAbaAtiva(chave: string) {
-  return (state: LayoutStore): boolean =>
-    (["esquerda", "direita"] as const).some((lado) =>
-      state.layout[lado].grupos.some((grupo) => grupo.ativa === chave),
-    );
-}

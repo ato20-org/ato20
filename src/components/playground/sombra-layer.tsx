@@ -136,10 +136,9 @@ const SombraDaFigura = memo(function SombraDaFigura({
             alt=""
             aria-hidden
             draggable={false}
-            // `max-w-none` pela mesma razão do traço do token: o preflight do
-            // Tailwind põe `max-width: 100%` em toda imagem, e esta PRECISA
-            // passar da caixa -- a margem é onde o desfoque mora. Ver
-            // `ContornoDoItem`.
+            // `max-w-none` porque o preflight do Tailwind põe `max-width: 100%`
+            // em toda imagem, e esta PRECISA passar da caixa -- a margem é
+            // onde o desfoque mora.
             className="absolute max-w-none select-none"
             style={{
               left: porcento(-silhueta.margemX),

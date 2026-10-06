@@ -14,6 +14,7 @@ import {
   Pencil,
   PersonStanding,
   Plus,
+  SquareUser,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -793,6 +794,31 @@ export function CharactersBody() {
             }
           />
           <TooltipContent>Criar personagem</TooltipContent>
+        </Tooltip>
+
+        {/* Ao lado do +, e não num menu: o retrato é do personagem, e quem
+            acabou de criar um é quem vai querer ver onde ele aparece na mesa.
+            Abre onde a janela estiver, ou flutuando. Ver `abrirJanela`. */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 rounded-full"
+                aria-label="Retratos"
+                onClick={() => abrir({ tipo: "retratos" })}
+              >
+                <SquareUser />
+              </Button>
+            }
+          />
+          <TooltipContent>
+            <p className="font-medium">Retratos</p>
+            <p className="text-muted-foreground">
+              Onde cada retrato aparece na mesa, e o que ele mostra.
+            </p>
+          </TooltipContent>
         </Tooltip>
       </div>
 

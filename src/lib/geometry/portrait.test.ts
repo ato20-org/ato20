@@ -13,6 +13,8 @@ import {
   larguraDaColuna,
   larguraDosSelos,
   larguraNaFila,
+  limitarEscalaDoRosto,
+  quadroDoRosto,
   retratosDaCena,
 } from "./portrait";
 
@@ -329,6 +331,44 @@ describe("larguraDaColuna", () => {
   });
 });
 
+describe("quadroDoRosto", () => {
+  const caixa = { width: 80, height: 100 };
+
+  it("na escala 1, sem lugar, é a caixa inteira", () => {
+    expect(quadroDoRosto(caixa, 1)).toEqual({ x: 0, y: 0, width: 80, height: 100 });
+  });
+
+  it("no automático encolhe para o centro da caixa", () => {
+    const quadro = quadroDoRosto(caixa, 0.5);
+
+    expect(quadro).toEqual({ x: 20, y: 25, width: 40, height: 50 });
+    expect(quadro.x + quadro.width / 2).toBe(caixa.width / 2);
+  });
+
+  it("posto, o canto de cima à esquerda vai para o lugar, em fração da caixa", () => {
+    expect(quadroDoRosto(caixa, 0.5, { x: 1.1, y: -0.2 })).toEqual({
+      x: 88,
+      y: -20,
+      width: 40,
+      height: 50,
+    });
+  });
+});
+
+describe("limitarEscalaDoRosto", () => {
+  it("não passa da caixa nem fica menor que o piso", () => {
+    expect(limitarEscalaDoRosto(1.4)).toBe(1);
+    expect(limitarEscalaDoRosto(0.05)).toBe(0.3);
+    expect(limitarEscalaDoRosto(0.6)).toBe(0.6);
+  });
+
+  it("o que não é número vira a caixa inteira", () => {
+    expect(limitarEscalaDoRosto(undefined)).toBe(1);
+    expect(limitarEscalaDoRosto(Number.NaN)).toBe(1);
+    expect(limitarEscalaDoRosto("0.5")).toBe(1);
+  });
+});
+
 function selo(id: string): Condicao {
   return { id, nome: id, cor: "#22c55e", icone: "frasco", escondido: false };
 }
@@ -363,6 +403,23 @@ describe("caixaDaComposicao", () => {
       recuo: 0,
       largura: 0.2 + COLUNA,
     });
+  });
+
+  it("rosto no automático fica dentro da caixa e não reserva nada", () => {
+    const com = retrato("a", { layout: { escalaRetrato: 0.5 } });
+
+    expect(caixaDaComposicao(com)).toEqual({ recuo: 0, largura: 0.2 });
+  });
+
+  it("rosto posto para fora da caixa conta na fila, como as peças", () => {
+    // Meia figura de rosto, começando meia figura antes da borda esquerda.
+    const com = retrato("a", {
+      layout: { escalaRetrato: 0.5, lugarDoRetrato: { x: -0.5, y: 0 } },
+    });
+
+    const caixa = caixaDaComposicao(com);
+    expect(caixa.recuo).toBeCloseTo(0.1);
+    expect(caixa.largura).toBeCloseTo(0.3);
   });
 
   it("medidores desligados não reservam nada", () => {
@@ -525,6 +582,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaDados: 1,
       escalaNome: 1,
       escalaCondicoes: 1,
+      escalaRetrato: 1,
     });
   });
 
@@ -541,6 +599,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaDados: 1,
       escalaNome: 1,
       escalaCondicoes: 1,
+      escalaRetrato: 1,
     });
 
     // `retrato` veio do registro, `medidores` da sessão, `dados` de nenhum dos
@@ -555,6 +614,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaDados: 1,
       escalaNome: 1,
       escalaCondicoes: 1,
+      escalaRetrato: 1,
     });
   });
 
@@ -570,6 +630,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaDados: 1,
       escalaNome: 1,
       escalaCondicoes: 1,
+      escalaRetrato: 1,
     });
 
     expect(saida?.layout).toEqual({
@@ -582,6 +643,7 @@ describe("retratosDaCena resolve o layout", () => {
       escalaDados: 1,
       escalaNome: 1,
       escalaCondicoes: 1,
+      escalaRetrato: 1,
     });
   });
 });

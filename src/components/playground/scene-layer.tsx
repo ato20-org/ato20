@@ -67,15 +67,6 @@ type SceneLayerProps = {
    * meio-apagado — a remoção chega pronta na publicação seguinte.
    */
   apagando?: ReadonlySet<string>;
-  /**
-   * A cor do contorno de cada item que deve ter um, por id de item.
-   *
-   * Só o palco do MESTRE passa, e passa sempre -- seleção não apaga o traço de
-   * ninguém. A mesa nunca recebe: o contorno responde "de quem é esta figura",
-   * e para a mesa saber de fora do jogo quem é NPC é justamente o que não se
-   * quer contar. Ver `contornoDosItens`.
-   */
-  contornos?: ReadonlyMap<string, string>;
   /** `mesa` é o que a mesa vê. `mestre` deixa o mestre atravessar a névoa. */
   variant?: "mestre" | "mesa";
   /**
@@ -268,7 +259,6 @@ export function SceneLayer({
   onMedidorPointerDown,
   onMedidorAlcaPointerDown,
   apagando,
-  contornos,
   palco,
   esguelha,
   semItens,
@@ -467,7 +457,6 @@ export function SceneLayer({
               smooth={smooth}
               naMao={item.id === naMao}
               variante={variante}
-              contorno={contornos?.get(item.id)}
               efeitos={
                 item.personagemId
                   ? efeitosPorPersonagem.get(item.personagemId)
@@ -484,10 +473,6 @@ export function SceneLayer({
           smooth={smooth}
           naMao={item.id === naMao}
           variante={variante}
-          // Uma string, e não o mapa: o `CanvasItemView` é `memo`, e passar o
-          // mapa inteiro faria os quarenta itens redesenharem a cada quadro em
-          // que qualquer um deles muda.
-          contorno={contornos?.get(item.id)}
           efeitos={
             item.personagemId
               ? efeitosPorPersonagem.get(item.personagemId)
@@ -591,8 +576,8 @@ export function SceneLayer({
           smooth={smooth}
           // Na mesa o retrato é OVERLAY: ninguém o manipula ali, e o que se
           // pede dele é que fique parado enquanto a câmera passa por baixo.
-          // No Mestre ele continua no plano, porque lá ele é arrastado,
-          // escalado e enfileirado -- tudo em coordenada de cena. Ver `espaco`.
+          // O palco do Mestre não passa retrato nenhum -- ele é arrastado e
+          // escalado no quadro da janela Retratos. Ver `QuadroDosRetratos`.
           espaco={variant === "mesa" ? "tela" : "cena"}
           rolagens={rolagens}
           efeitos={efeitosPorPersonagem}
