@@ -10,10 +10,12 @@ import {
   correnteDaCamera,
   curvaBezier,
   daTelaAoChao,
+  daTelaAoChaoNoTripe,
   doOlhoAoMundo,
   focalDaLente,
   misturarTripe,
   pegadaDoTripe,
+  peSobODedo,
   prender,
   profundidadeNoTripe,
   projetarNoTripe,
@@ -421,6 +423,45 @@ describe("o tripé no mundo", () => {
     expect(cantos[0]!.y).toBeCloseTo(0, 4);
     expect(cantos[2]!.x).toBeCloseTo(1600, 4);
     expect(cantos[2]!.y).toBeCloseTo(900, 4);
+  });
+
+  it("o pixel volta ao ponto do chão que o projetou", () => {
+    for (const chao of [
+      { x: 600, y: 400 },
+      { x: 720, y: 330 },
+      { x: 480, y: 290 },
+    ]) {
+      const naTela = projetarNoTripe(tripe, TELA, chao)!;
+      const volta = daTelaAoChaoNoTripe(tripe, TELA, naTela)!;
+
+      expect(volta.x).toBeCloseTo(chao.x, 6);
+      expect(volta.y).toBeCloseTo(chao.y, 6);
+    }
+  });
+
+  it("o pé que põe o ponto pegado da figura de volta sob o dedo", () => {
+    for (const [pe, pega] of [
+      [{ x: 600, y: 400 }, { x: 0, y: -30 }],
+      [{ x: 720, y: 330 }, { x: 8, y: -50 }],
+      [{ x: 480, y: 290 }, { x: -12, y: -5 }],
+    ] as const) {
+      const figura = figuraNoTripe(tripe, TELA, pe)!;
+      const dedo = {
+        x: figura.x + pega.x * figura.escala,
+        y: figura.y + pega.y * figura.escala,
+      };
+      const achado = peSobODedo(tripe, TELA, dedo, pega)!;
+
+      expect(achado.x).toBeCloseTo(pe.x, 2);
+      expect(achado.y).toBeCloseTo(pe.y, 2);
+    }
+  });
+
+  it("acima do horizonte não há chão", () => {
+    // Quase deitado: o alto da tela olha por cima do horizonte.
+    const deitado = { ...tripe, inclinacao: 85, rolagem: 0 };
+    expect(daTelaAoChaoNoTripe(deitado, TELA, { x: 720, y: 0 })).toBeNull();
+    expect(daTelaAoChaoNoTripe({ ...tripe, altura: 0 }, TELA, CENTRO)).toBeNull();
   });
 
   it("a pegada fica no chão, e some quando o tripé olha o céu", () => {

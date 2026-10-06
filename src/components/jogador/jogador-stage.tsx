@@ -74,7 +74,10 @@ export function JogadorStage({
   const { expanded, toggle } = useFullscreen();
   const frameRef = useRef<HTMLDivElement>(null);
   // Trocar de câmera corta em fade; a mesma câmera andando interpola.
-  const { cena, viewport, corte, cortando } = useCorteDeCamera(scene);
+  const { cena, viewport, tripe, corte, cortando } = useCorteDeCamera(scene);
+  // Com um tripé no ar quem anda é o olho, e o palco fica no plano inteiro,
+  // como o da TV. Ver `EspectadorStage`.
+  const deEsguelha = Boolean(tripe);
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2">
@@ -101,7 +104,7 @@ export function JogadorStage({
       >
         <SceneStage
           className="size-full"
-          viewport={viewport}
+          viewport={deEsguelha ? undefined : viewport}
           corDoVazio={cena?.corDoVazio}
           corte={corte}
           smooth
@@ -118,6 +121,8 @@ export function JogadorStage({
                 efeitos={efeitos}
                 rolagens={rolagens}
                 pings={pings}
+                tripe={tripe}
+                corte={corte}
               />
             </div>
           ) : null}

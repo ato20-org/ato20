@@ -135,11 +135,19 @@ type Esperando = {
 export function RodaDePing({
   modo,
   onEscolher,
+  paraCena,
 }: {
   modo: ModoDaRoda;
   onEscolher: (tipo: TipoDePing, ponto: Vec) => void;
+  /**
+   * O ponto da cena sob um pixel da janela, quando não é o do plano: de
+   * esguelha é o chão do tripé, e `null` é o céu -- ali a roda não abre, porque
+   * não há onde o ping cair. Ausente = o `toScene` do palco.
+   */
+  paraCena?: (clientX: number, clientY: number) => Vec | null;
 }) {
-  const { moldura, toScene, recorteDaCamera } = useSceneScale();
+  const { moldura, toScene: doPlano, recorteDaCamera } = useSceneScale();
+  const toScene = paraCena ?? doPlano;
   const [aberta, setAberta] = useState<Aberta | null>(null);
 
   /**
@@ -210,10 +218,13 @@ export function RodaDePing({
     ) {
       desistir();
 
+      const ponto = viva.current.toScene(origem.x, origem.y);
+      if (!ponto) return;
+
       mudar({
         centro: dentroDaJanela(origem),
         origem,
-        ponto: viva.current.toScene(origem.x, origem.y),
+        ponto,
         arrastando,
         escolhida: null,
         fonte,

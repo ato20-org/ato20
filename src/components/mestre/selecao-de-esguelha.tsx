@@ -23,7 +23,14 @@ import {
   type CameraOrbital,
   type Tela,
 } from "@/lib/geometry/camera-orbital";
-import { anguloDoFacho } from "@/lib/geometry/luz";
+import {
+  cantosDeitado,
+  centroDe,
+  olharDe,
+  peDe,
+  pivoDe,
+  raioDoAnel,
+} from "@/lib/geometry/peca-de-esguelha";
 import type { Vec } from "@/lib/geometry/transform";
 import {
   flipSelection,
@@ -38,11 +45,7 @@ import {
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { cn } from "@/lib/utils";
-import {
-  CONE_DA_LANTERNA,
-  type CanvasItem,
-  type Scene,
-} from "@/types/scene";
+import type { CanvasItem, Scene } from "@/types/scene";
 
 /**
  * O que é da mão no 2.5D, e não da câmera: o gizmo e as peças, em pé no chão
@@ -64,60 +67,6 @@ const PASSO_DO_GIRO = 15;
 const LADO_MINIMO = 8;
 
 type Camera = { camera: CameraOrbital; tela: Tela };
-
-/** O pé da figura em pé, onde o `ChaoInclinado` a põe. Ver `PecaDoChao`. */
-function peDe(item: CanvasItem): Vec {
-  return { x: item.x + item.width / 2, y: item.y + item.width };
-}
-
-function centroDe(item: CanvasItem): Vec {
-  return { x: item.x + item.width / 2, y: item.y + item.height / 2 };
-}
-
-/**
- * Em volta de onde a peça gira, no chão: o pé da que está em pé, o meio da
- * deitada.
- */
-function pivoDe(item: CanvasItem): Vec {
-  return item.deitado ? centroDe(item) : peDe(item);
-}
-
-/** O raio do anel do olhar, no chão, em unidades de cena. */
-function raioDoAnel(item: CanvasItem): number {
-  return item.deitado
-    ? Math.max(item.width, item.height) * 0.65
-    : Math.max(item.width, 24) * 0.9;
-}
-
-/**
- * Para onde a figura olha, em graus no sentido do sol. É o facho da lanterna
- * dela, ou o padrão do facho quando não há lanterna: girar o olhar aqui é o
- * mesmo `rotation` do 2D, que é o que leva o facho junto. Ver `anguloDoFacho`.
- */
-function olharDe(item: CanvasItem): number {
-  return anguloDoFacho(
-    item,
-    item.luz?.cone?.angulo ?? CONE_DA_LANTERNA.angulo,
-  );
-}
-
-/** Os quatro cantos da peça deitada no chão, no giro dela. */
-function cantosDeitado(item: CanvasItem): Vec[] {
-  const centro = centroDe(item);
-  const giro = (item.rotation * Math.PI) / 180;
-  const cos = Math.cos(giro);
-  const sen = Math.sin(giro);
-  const meia = { x: item.width / 2, y: item.height / 2 };
-  return [
-    { x: -meia.x, y: -meia.y },
-    { x: meia.x, y: -meia.y },
-    { x: meia.x, y: meia.y },
-    { x: -meia.x, y: meia.y },
-  ].map(({ x, y }) => ({
-    x: centro.x + x * cos - y * sen,
-    y: centro.y + x * sen + y * cos,
-  }));
-}
 
 /**
  * O contorno da peça na tela: o retângulo da figura em pé (`cartazNaTela`), ou
