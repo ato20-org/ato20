@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 
+import { t } from "@/lib/i18n/jogador";
 import {
   fetchMe,
   forget,
@@ -49,7 +50,7 @@ type PlayerStore = {
 };
 
 function descreve(cause: unknown): string {
-  return cause instanceof Error ? cause.message : "Falha ao falar com a mesa";
+  return cause instanceof Error ? cause.message : t.erros.semMesa;
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({

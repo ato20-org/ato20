@@ -7,6 +7,8 @@
 
 # ATO20
 
+**Português** · [English](README.en.md)
+
 O ATO20 é um VTT (*virtual tabletop*) open source, pensado para facilitar a organização e o
 gerenciamento de campanhas de RPG. Na mesa, o controle de câmera avançado traz imersão de
 verdade aos jogadores; fora dela, o mestre mantém os documentos atualizados e a história

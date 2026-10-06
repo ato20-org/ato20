@@ -8,6 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/mestre";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 
 /**
@@ -41,7 +42,7 @@ export function PanelCollapse({
             variant="ghost"
             size="icon-sm"
             className="text-muted-foreground shrink-0"
-            aria-label={`Esconder ${label}`}
+            aria-label={t.dock.esconder(label)}
             onClick={side === "left" ? toggleLeft : toggleRight}
           >
             <Icon />
@@ -49,7 +50,7 @@ export function PanelCollapse({
         }
       />
       <TooltipContent>
-        <p>Esconder {label}</p>
+        <p>{t.dock.esconder(label)}</p>
       </TooltipContent>
     </Tooltip>
   );

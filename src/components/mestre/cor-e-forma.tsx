@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { reservaDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
+import { t } from "@/lib/i18n/ferramentas";
 import { legendaDoMedidor } from "@/lib/medidor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
@@ -25,15 +26,15 @@ import type { EstiloMedidor } from "@/types/character";
 
 /** Os três estilos, como aparecem no seletor. Ver `EstiloMedidor`. */
 const ESTILOS: Array<{ estilo: EstiloMedidor; rotulo: string }> = [
-  { estilo: "barra", rotulo: "Barra" },
-  { estilo: "pontos", rotulo: "Pontos" },
-  { estilo: "porcentagem", rotulo: "Porcentagem" },
+  { estilo: "barra", rotulo: t.corEForma.barra },
+  { estilo: "pontos", rotulo: t.corEForma.pontos },
+  { estilo: "porcentagem", rotulo: t.corEForma.porcentagem },
 ];
 
 const NOME: Record<EstiloMedidor, string> = {
-  barra: "Barra",
-  pontos: "Pontos",
-  porcentagem: "Porcentagem",
+  barra: t.corEForma.barra,
+  pontos: t.corEForma.pontos,
+  porcentagem: t.corEForma.porcentagem,
 };
 
 /**
@@ -119,7 +120,7 @@ export function CorEForma({
                 gatilho ?? (
                   <button
                     type="button"
-                    aria-label={`Cor e forma: ${nomeAgora}`}
+                    aria-label={t.corEForma.botao(nomeAgora)}
                     className="border-border hover:border-foreground/40 focus-visible:ring-ring grid size-6 shrink-0 place-items-center rounded border bg-black/40 focus-visible:ring-2 focus-visible:outline-none"
                   >
                     <Amostra cor={cor} estilo={estilo} />
@@ -130,16 +131,16 @@ export function CorEForma({
           }
         />
         <TooltipContent>
-          <p className="font-medium">Cor e forma</p>
+          <p className="font-medium">{t.corEForma.titulo}</p>
           <p className="text-muted-foreground max-w-48">
-            Agora: {nomeAgora}. Clique para trocar.
+            {t.corEForma.agora(nomeAgora)}
           </p>
         </TooltipContent>
       </Tooltip>
 
       <PopoverContent align="start" className="w-56 space-y-3" side="bottom">
         <div className="space-y-1.5">
-          <Label className="text-xs font-normal">Forma</Label>
+          <Label className="text-xs font-normal">{t.corEForma.forma}</Label>
           {/* Uma grade só, de fábrica e de plugin: as duas respondem a mesma
               pergunta -- como a mesa vê este medidor --, e o estilo de plugin
               já traz o tipo dele. Ver `reservaDoEstilo`. */}
@@ -181,20 +182,19 @@ export function CorEForma({
           </div>
           {ausente ? (
             <p className="text-muted-foreground text-[11px] leading-snug">
-              O plugin do estilo escolhido está desligado. A mesa vê esta forma
-              até ele voltar.
+              {t.corEForma.pluginDesligado}
             </p>
           ) : null}
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-normal">Cor</Label>
+          <Label className="text-xs font-normal">{t.corEForma.cor}</Label>
           <div className="flex gap-1">
             {CORES_LAPIS.map((opcao) => (
               <button
                 key={opcao}
                 type="button"
-                aria-label={`Cor ${opcao}`}
+                aria-label={t.corEForma.corOpcao(opcao)}
                 aria-pressed={cor === opcao}
                 className={cn(
                   "size-6 rounded-full border-2",
@@ -209,11 +209,21 @@ export function CorEForma({
 
         {onLegenda ? (
           <div className="space-y-1.5">
-            <Label className="text-xs font-normal">Legenda</Label>
+            <Label className="text-xs font-normal">
+              {t.corEForma.legenda}
+            </Label>
             {(
               [
-                { chave: "mostrarNome", rotulo: "Nome", ligado: legenda.nome },
-                { chave: "mostrarValor", rotulo: "Valor", ligado: legenda.valor },
+                {
+                  chave: "mostrarNome",
+                  rotulo: t.corEForma.nome,
+                  ligado: legenda.nome,
+                },
+                {
+                  chave: "mostrarValor",
+                  rotulo: t.corEForma.valor,
+                  ligado: legenda.valor,
+                },
               ] as const
             ).map((opcao) => (
               <label

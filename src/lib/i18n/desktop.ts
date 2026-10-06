@@ -1,0 +1,265 @@
+import { escolher } from "@/lib/i18n/idioma";
+
+/**
+ * O texto da moldura do aplicativo: barra da janela, Configurações, novidades
+ * e volume -- `components/desktop`.
+ */
+const pt = {
+  janela: {
+    editando: (cena: string) => `Editando ${cena}`,
+    minimizar: "Minimizar",
+    maximizar: "Maximizar",
+    restaurar: "Restaurar",
+    fechar: "Fechar",
+    confirmarFechar: "Fechar o ATO20?",
+    confirmarFecharExplicacao:
+      "A campanha fecha junto, e a TV e os celulares perdem a conexão com a mesa.",
+  },
+
+  configuracoes: {
+    titulo: "Configurações",
+    descricao: "Configurações gerais do ATO20.",
+    secoes: {
+      geral: "Geral",
+      ajustes: "Ajustes",
+      versao: "Versão",
+      teclado: "Teclado",
+      plugins: "Plugins",
+    },
+    ajustesAjuda:
+      "O que o ATO20 e os plugins deixam ajustar, por máquina e por campanha. A campanha vence.",
+    zoom: {
+      titulo: "Zoom da interface",
+      explicacao:
+        "Escala a janela inteira, o palco incluído. A câmera sobre o mapa continua no zoom dela.",
+      diminuir: "Diminuir o zoom da interface",
+      aumentar: "Aumentar o zoom da interface",
+    },
+    tema: {
+      titulo: "Tema",
+      explicacao:
+        "Só o escuro, por ora: a ferramenta roda em mesa com luz baixa e projetada em TV, onde fundo claro ofusca.",
+      escuro: "Escuro",
+      padrao: "padrão",
+    },
+    idioma: {
+      titulo: "Idioma",
+      explicacao:
+        "Trocar reinicia a janela. A campanha aberta volta sozinha, e a TV e os celulares acompanham.",
+      doSistema: (nome: string) => `Do sistema (${nome})`,
+    },
+    versao: {
+      titulo: (versao: string) => `Versão ${versao}`,
+      ajuda: "Histórico de versões do ATO20",
+      avisar: "Avisar quando sair versão nova",
+      avisarExplicacao:
+        "Desligado, o aplicativo não procura atualização nenhuma e você fica nesta versão até baixar outra por conta própria.",
+      pelaLoja:
+        "Este pacote é atualizado pela loja onde você o instalou. O ATO20 não procura versão nova por conta própria.",
+      historico: "Histórico",
+    },
+    tecladoAjuda: "Lista dos atalhos existentes no sistema.",
+    plugins: {
+      ajuda: "Plugins customizados para personalizar o sistema, e melhorar a experiência.",
+      importar: "Importar plugin",
+      nenhum: "Nenhum plugin instalado",
+      oQueE: "Um plugin é uma pasta com {manifest} dentro. Importar é copiá-la para cá.",
+      temas: "Temas",
+      temasNota: "Só aparência: cores, cantos e fonte da interface.",
+      funcionalidades: "Funcionalidades",
+      funcionalidadesNota:
+        "Estendem o que o ATO20 faz. Podem executar código com o alcance da janela.",
+      habilitar: (nome: string) => `Habilitar ${nome}`,
+      desinstalar: (nome: string) => `Desinstalar ${nome}`,
+      tambemTema: "Esta extensão também traz um tema.",
+      tema: "Tema",
+    },
+  },
+
+  ajustes: {
+    lendo: "Lendo…",
+    arquivoIlegivel:
+      "O arquivo não pôde ser lido, e nada será gravado nele até ser consertado:",
+    maquina: "Máquina",
+    campanha: "Campanha",
+    buscar: "Buscar configuração",
+    abrirArquivo: "Abrir o arquivo no editor",
+    semCampanha: "Abra uma campanha para ajustar o que vale só nela.",
+    nadaComEsseNome: "Nada com esse nome",
+    nadaParaAjustar: "Nada para ajustar neste escopo",
+    valeOdaCampanha: "vale o da campanha",
+    valeOdaMaquina: "vale o da máquina",
+    voltarAoPadrao: "Voltar ao padrão",
+  },
+
+  /** As configurações que o próprio ATO20 declara no registro. */
+  definicoes: {
+    zoom: "Zoom da interface",
+    zoomDescricao: "Escala a janela inteira, o palco incluído. Um dos degraus: 0.8 a 1.5.",
+    avisar: "Avisar quando sair versão nova",
+    avisarDescricao:
+      "Procura versão nova ao abrir. Desligado, o aplicativo não pergunta nada à rede sobre si.",
+    volumeSistema: "Volume do sistema",
+    volumeTrilha: "Volume da trilha",
+    volumeAmbiente: "Volume do ambiente",
+    volumeDisparo: "Volume dos disparos",
+    idioma: "Idioma",
+    idiomaDescricao: "O idioma da interface. Do sistema segue o sistema operacional.",
+  },
+
+  novidades: {
+    oQueMudou: "O que mudou",
+    estaVersao: "esta versão",
+    antesDisso: "Antes disso",
+    novidades: "Novidades",
+    correcoes: "Correções",
+    contarNovidades: (n: number) => (n === 1 ? "1 novidade" : `${n} novidades`),
+    contarCorrecoes: (n: number) => (n === 1 ? "1 correção" : `${n} correções`),
+    releasesNoGithub: "Releases no GitHub",
+    semNavegador: "Não foi possível abrir o navegador.",
+  },
+
+  volume: {
+    titulo: "Volume",
+    geral: "Volume geral",
+    sistema: "Sistema",
+    sistemaDescricao: "Todo o som da aplicação, em todas as telas.",
+    trilha: "Trilha",
+    trilhaDescricao: "A música da sessão, seja qual for a faixa.",
+    ambiente: "Ambiente",
+    ambienteDescricao: "Todos os sons de ambiente de uma vez.",
+    disparo: "Disparo",
+    disparoDescricao: "Todos os efeitos disparados.",
+  },
+};
+
+const en: typeof pt = {
+  janela: {
+    editando: (cena) => `Editing ${cena}`,
+    minimizar: "Minimize",
+    maximizar: "Maximize",
+    restaurar: "Restore",
+    fechar: "Close",
+    confirmarFechar: "Close ATO20?",
+    confirmarFecharExplicacao:
+      "The campaign closes too, and the spectator window and the phones lose their connection to the table.",
+  },
+
+  configuracoes: {
+    titulo: "Settings",
+    descricao: "General ATO20 settings.",
+    secoes: {
+      geral: "General",
+      ajustes: "Options",
+      versao: "Version",
+      teclado: "Keyboard",
+      plugins: "Plugins",
+    },
+    ajustesAjuda:
+      "Everything ATO20 and its plugins let you adjust, per machine and per campaign. The campaign wins.",
+    zoom: {
+      titulo: "Interface zoom",
+      explicacao:
+        "Scales the whole window, stage included. The camera over the map keeps its own zoom.",
+      diminuir: "Zoom the interface out",
+      aumentar: "Zoom the interface in",
+    },
+    tema: {
+      titulo: "Theme",
+      explicacao:
+        "Dark only, for now: the tool runs at tables with low light and on a TV, where a light background glares.",
+      escuro: "Dark",
+      padrao: "default",
+    },
+    idioma: {
+      titulo: "Language",
+      explicacao:
+        "Switching restarts the window. The open campaign comes back on its own, and the spectator window and the phones follow.",
+      doSistema: (nome) => `System (${nome})`,
+    },
+    versao: {
+      titulo: (versao) => `Version ${versao}`,
+      ajuda: "ATO20 version history",
+      avisar: "Tell me when a new version is out",
+      avisarExplicacao:
+        "When off, the app never looks for updates and you stay on this version until you download another one yourself.",
+      pelaLoja:
+        "This package is updated by the store you installed it from. ATO20 does not look for new versions on its own.",
+      historico: "History",
+    },
+    tecladoAjuda: "Every shortcut in the app.",
+    plugins: {
+      ajuda: "Plugins that customize the app and extend what it does.",
+      importar: "Import plugin",
+      nenhum: "No plugins installed",
+      oQueE: "A plugin is a folder with a {manifest} inside. Importing copies it here.",
+      temas: "Themes",
+      temasNota: "Looks only: colors, corners and the interface font.",
+      funcionalidades: "Features",
+      funcionalidadesNota:
+        "Extend what ATO20 does. They can run code with the reach of the window.",
+      habilitar: (nome) => `Enable ${nome}`,
+      desinstalar: (nome) => `Uninstall ${nome}`,
+      tambemTema: "This plugin also ships a theme.",
+      tema: "Theme",
+    },
+  },
+
+  ajustes: {
+    lendo: "Reading…",
+    arquivoIlegivel: "The file could not be read, and nothing will be written to it until it is fixed:",
+    maquina: "Machine",
+    campanha: "Campaign",
+    buscar: "Search settings",
+    abrirArquivo: "Open the file in the editor",
+    semCampanha: "Open a campaign to adjust what applies only to it.",
+    nadaComEsseNome: "Nothing by that name",
+    nadaParaAjustar: "Nothing to adjust in this scope",
+    valeOdaCampanha: "the campaign's value applies",
+    valeOdaMaquina: "the machine's value applies",
+    voltarAoPadrao: "Reset to default",
+  },
+
+  definicoes: {
+    zoom: "Interface zoom",
+    zoomDescricao: "Scales the whole window, stage included. One of the steps: 0.8 to 1.5.",
+    avisar: "Tell me when a new version is out",
+    avisarDescricao:
+      "Looks for a new version on launch. When off, the app asks the network nothing about itself.",
+    volumeSistema: "System volume",
+    volumeTrilha: "Music volume",
+    volumeAmbiente: "Ambience volume",
+    volumeDisparo: "Sound cue volume",
+    idioma: "Language",
+    idiomaDescricao: "The interface language. System follows the operating system.",
+  },
+
+  novidades: {
+    oQueMudou: "What's new",
+    estaVersao: "this version",
+    antesDisso: "Before that",
+    novidades: "New",
+    correcoes: "Fixes",
+    contarNovidades: (n) => (n === 1 ? "1 new feature" : `${n} new features`),
+    contarCorrecoes: (n) => (n === 1 ? "1 fix" : `${n} fixes`),
+    releasesNoGithub: "Releases on GitHub",
+    semNavegador: "Could not open the browser.",
+  },
+
+  volume: {
+    titulo: "Volume",
+    geral: "Master volume",
+    sistema: "System",
+    sistemaDescricao: "All of the app's sound, on every screen.",
+    trilha: "Music",
+    trilhaDescricao: "The session's music, whatever the track.",
+    ambiente: "Ambience",
+    ambienteDescricao: "Every ambience sound at once.",
+    disparo: "Sound cues",
+    disparoDescricao: "Every sound cue fired.",
+  },
+};
+
+export const dicionarios = { "pt-BR": pt, en };
+
+export const t = escolher(dicionarios);

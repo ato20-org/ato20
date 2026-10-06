@@ -2,6 +2,9 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
+import { comum } from "@/lib/i18n/comum";
+import { idioma } from "@/lib/i18n/idioma";
+
 /**
  * A costura com o processo nativo.
  *
@@ -89,16 +92,14 @@ export async function call<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   if (!isDesktop()) {
-    throw new VaultError(
-      "sem-aplicativo",
-      "Esta tela precisa do aplicativo ATO20, não de uma aba do navegador.",
-    );
+    throw new VaultError("sem-aplicativo", comum.erros.precisaDoAplicativo);
   }
 
   try {
     return await invoke<T>(command, args);
   } catch (cause) {
-    // O Rust serializa `{ code, message }`. Qualquer outra coisa é falha do
+    // O Rust serializa `{ code, message, messageEn }`: a mensagem nos dois
+    // idiomas, e quem escolhe é esta tela. Qualquer outra coisa é falha do
     // próprio IPC, e aí a mensagem crua é o que há.
     if (
       cause &&
@@ -106,7 +107,9 @@ export async function call<T>(
       "code" in cause &&
       "message" in cause
     ) {
-      const erro = new VaultError(String(cause.code), String(cause.message));
+      const mensagem =
+        idioma === "en" && "messageEn" in cause ? cause.messageEn : cause.message;
+      const erro = new VaultError(String(cause.code), String(mensagem));
 
       if (isCampanhaSumiu(erro)) {
         for (const ouvinte of ouvintesDeSumico) ouvinte(erro.message);
@@ -117,7 +120,7 @@ export async function call<T>(
 
     throw new VaultError(
       "ipc",
-      typeof cause === "string" ? cause : "Falha ao falar com o aplicativo",
+      typeof cause === "string" ? cause : comum.erros.semAplicativo,
     );
   }
 }

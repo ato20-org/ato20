@@ -11,6 +11,8 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { useCharacters } from "@/hooks/use-characters";
+import { t } from "@/lib/i18n/personagens";
+import { rico } from "@/lib/i18n/rico";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 
@@ -75,13 +77,13 @@ export function RetratosWindow() {
             className="h-auto w-full justify-start rounded-none border-b px-2 py-1"
           >
             <TabsTrigger value="elenco" className="flex-none text-xs">
-              Elenco
+              {t.janelaDeRetratos.elenco}
             </TabsTrigger>
             <TabsTrigger value="layout" className="flex-none text-xs">
-              Layout
+              {t.janelaDeRetratos.layout}
             </TabsTrigger>
             <TabsTrigger value="posicao" className="flex-none text-xs">
-              Posição
+              {t.janelaDeRetratos.posicao}
             </TabsTrigger>
           </TabsList>
 
@@ -100,24 +102,25 @@ export function RetratosWindow() {
             {paraLayout ? (
               <div className="bg-muted/40 flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px]">
                 <span className="min-w-0 flex-1 truncate">
-                  Só de{" "}
-                  <span className="font-medium">
-                    {nomeDoSelecionado ?? "este retrato"}
-                  </span>
-                  . O resto segue a mesa.
+                  {rico(t.janelaDeRetratos.soDe, {
+                    nome: (
+                      <span className="font-medium">
+                        {nomeDoSelecionado ?? t.janelaDeRetratos.esteRetrato}
+                      </span>
+                    ),
+                  })}
                 </span>
                 <button
                   type="button"
                   className="text-muted-foreground hover:text-foreground shrink-0 underline decoration-dotted underline-offset-2"
                   onClick={() => selectPortraits([])}
                 >
-                  Editar a mesa
+                  {t.janelaDeRetratos.editarAMesa}
                 </button>
               </div>
             ) : (
               <p className="text-muted-foreground text-[11px] leading-snug">
-                O padrão da mesa. Escolha um retrato no quadro para mudar só o
-                dele.
+                {t.janelaDeRetratos.padraoDaMesa}
               </p>
             )}
 
@@ -129,7 +132,7 @@ export function RetratosWindow() {
             className="min-h-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto p-2"
           >
             <p className="text-muted-foreground text-[11px] leading-snug">
-              Apertar arruma os retratos soltos e faz os novos nascerem ali.
+              {t.janelaDeRetratos.apertarArruma}
             </p>
 
             <PosicaoDosRetratos />

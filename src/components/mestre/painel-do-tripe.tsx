@@ -4,6 +4,7 @@ import { Eye, EyeOff, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
+import { t } from "@/lib/i18n/ferramentas";
 import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
@@ -34,13 +35,13 @@ const EM_GRAUS = {
  * 3D -- o gizmo leva o tripé até perto, e o número acerta.
  */
 const CAMPOS: Campo[] = [
-  { chave: "x", rotulo: "X", sufixo: "m", passo: 0.1, ...EM_METROS },
-  { chave: "y", rotulo: "Y", sufixo: "m", passo: 0.1, ...EM_METROS },
-  { chave: "altura", rotulo: "Altura", sufixo: "m", passo: 0.1, ...EM_METROS },
-  { chave: "giro", rotulo: "Giro", sufixo: "°", passo: 1, ...EM_GRAUS },
-  { chave: "inclinacao", rotulo: "Inclinação", sufixo: "°", passo: 1, ...EM_GRAUS },
-  { chave: "rolagem", rotulo: "Rolagem", sufixo: "°", passo: 1, ...EM_GRAUS },
-  { chave: "lente", rotulo: "Lente", sufixo: "°", passo: 1, ...EM_GRAUS },
+  { chave: "x", rotulo: t.tripe.x, sufixo: "m", passo: 0.1, ...EM_METROS },
+  { chave: "y", rotulo: t.tripe.y, sufixo: "m", passo: 0.1, ...EM_METROS },
+  { chave: "altura", rotulo: t.tripe.altura, sufixo: "m", passo: 0.1, ...EM_METROS },
+  { chave: "giro", rotulo: t.tripe.giro, sufixo: "°", passo: 1, ...EM_GRAUS },
+  { chave: "inclinacao", rotulo: t.tripe.inclinacao, sufixo: "°", passo: 1, ...EM_GRAUS },
+  { chave: "rolagem", rotulo: t.tripe.rolagem, sufixo: "°", passo: 1, ...EM_GRAUS },
+  { chave: "lente", rotulo: t.tripe.lente, sufixo: "°", passo: 1, ...EM_GRAUS },
 ];
 
 /** Até onde cada número vai, para o painel não aceitar um tripé que não se vê. */
@@ -148,7 +149,7 @@ export function PainelDoTripe({
         onClick={() => olharPor(olhando ? null : tripe.id)}
       >
         {olhando ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-        {olhando ? "Voltar à navegação" : "Olhar pela câmera"}
+        {olhando ? t.tripe.voltarANavegacao : t.tripe.olharPelaCamera}
       </Button>
     </div>
   );

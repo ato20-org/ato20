@@ -15,6 +15,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import { temCondicao } from "@/lib/condicao";
+import { t } from "@/lib/i18n/personagens";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { MAX_CONDICOES, type Condicao, type PatchCondicao } from "@/types/character";
@@ -81,7 +82,7 @@ export function ListaDeCondicoes({ dono }: { dono: DonoDeCondicoes }) {
     setArrastada({ de: dono.condicoes, lista: arrumada });
     void tentar(
       () => dono.reordenar(arrumada.map((condicao) => condicao.id)),
-      "Falha ao reordenar.",
+      t.geral.falhas.reordenar,
     ).then((gravou) => {
       if (!gravou) setArrastada(null);
     });
@@ -98,9 +99,9 @@ export function ListaDeCondicoes({ dono }: { dono: DonoDeCondicoes }) {
           dropTarget={dropIndex === index}
           onReorderStart={(event) => startReorder(event, condicao.id)}
           onEditar={(patch) =>
-            void tentar(() => dono.editar(condicao.id, patch), "Falha ao gravar.")
+            void tentar(() => dono.editar(condicao.id, patch), t.geral.falhas.gravar)
           }
-          onApagar={() => void tentar(() => dono.remover(condicao.id), "Falha ao apagar.")}
+          onApagar={() => void tentar(() => dono.remover(condicao.id), t.geral.falhas.apagar)}
           dicaDoOlho={dono.dicaDoOlho(condicao.escondido)}
         />
       ))}
@@ -128,9 +129,9 @@ export function AcrescentarCondicao({ dono }: { dono: DonoDeCondicoes }) {
       // quem está cheio para a horda não parar no primeiro. Aqui, com um só,
       // o silêncio seria um clique que não fez nada.
       if (ligar && mudaram === 0) {
-        toast.error(`${MAX_CONDICOES} condições é o limite.`);
+        toast.error(t.listaDeCondicoes.limite(MAX_CONDICOES));
       }
-    }, "Falha ao marcar.");
+    }, t.geral.falhas.marcar);
   }
 
   async function avulsa() {
@@ -140,11 +141,11 @@ export function AcrescentarCondicao({ dono }: { dono: DonoDeCondicoes }) {
     await tentar(
       () =>
         dono.criarAvulsa({
-          nome: "Condição",
+          nome: t.listaDeCondicoes.nova,
           cor: CORES_LAPIS[quantas % CORES_LAPIS.length] ?? CORES_LAPIS[0],
           icone: "circulo",
         }),
-      "Falha ao criar.",
+      t.geral.falhas.criar,
     );
   }
 
@@ -152,7 +153,7 @@ export function AcrescentarCondicao({ dono }: { dono: DonoDeCondicoes }) {
     <Popover open={aberto} onOpenChange={setAberto}>
       <PopoverTrigger
         render={
-          <Button variant="ghost" size="icon-xs" aria-label="Marcar condição">
+          <Button variant="ghost" size="icon-xs" aria-label={t.listaDeCondicoes.marcar}>
             <Plus />
           </Button>
         }
@@ -160,11 +161,10 @@ export function AcrescentarCondicao({ dono }: { dono: DonoDeCondicoes }) {
 
       <PopoverContent align="end" className="w-56 space-y-1 p-1.5" side="bottom">
         {modelos === null ? (
-          <p className="text-muted-foreground px-1.5 py-1 text-[11px]">Lendo…</p>
+          <p className="text-muted-foreground px-1.5 py-1 text-[11px]">{t.geral.lendo}</p>
         ) : modelos.length === 0 ? (
           <p className="text-muted-foreground px-1.5 py-1 text-[11px] leading-snug">
-            A campanha ainda não tem condições. Crie as de sempre na configuração
-            da campanha, ou uma só para {dono.nome} aqui embaixo.
+            {t.listaDeCondicoes.semCondicoes(dono.nome)}
           </p>
         ) : (
           <ul className="space-y-0.5">
@@ -201,7 +201,7 @@ export function AcrescentarCondicao({ dono }: { dono: DonoDeCondicoes }) {
           onClick={() => void avulsa()}
         >
           <Plus className="size-3.5" />
-          Só para {dono.nome}
+          {t.listaDeCondicoes.soPara(dono.nome)}
         </button>
       </PopoverContent>
     </Popover>

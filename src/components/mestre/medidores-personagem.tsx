@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useListReorder } from "@/hooks/use-list-reorder";
+import { t } from "@/lib/i18n/personagens";
 import { textoDoMedidor } from "@/lib/medidor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
@@ -97,7 +98,7 @@ export function MedidoresPersonagem({
       ).then(onChanged, (cause: unknown) => {
         setArrastada(null);
         toast.error(
-          cause instanceof Error ? cause.message : "Falha ao reordenar.",
+          cause instanceof Error ? cause.message : t.geral.falhas.reordenar,
         );
       });
     },
@@ -110,7 +111,7 @@ export function MedidoresPersonagem({
         // O primeiro é quase sempre vida, e acertar o nome mais provável
         // economiza o gesto mais comum. Do segundo em diante não há palpite
         // honesto a dar.
-        lista.length === 0 ? "Vida" : "Medidor",
+        lista.length === 0 ? t.medidores.vida : t.medidores.medidor,
         // Cor diferente da anterior, ciclando a paleta: dois medidores
         // vermelhos ao lado do mesmo rosto se leem como um só partido em dois.
         CORES_LAPIS[lista.length % CORES_LAPIS.length] ?? CORES_LAPIS[0],
@@ -119,7 +120,7 @@ export function MedidoresPersonagem({
       );
       onChanged();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao criar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.criar);
     }
   }
 
@@ -130,7 +131,7 @@ export function MedidoresPersonagem({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label="Criar medidor"
+            aria-label={t.medidores.criar}
             disabled={cheio}
             onClick={() => void criar()}
           >
@@ -139,11 +140,10 @@ export function MedidoresPersonagem({
         }
       />
       <TooltipContent>
-        <p className="font-medium">Criar medidor</p>
+        <p className="font-medium">{t.medidores.criar}</p>
         {cheio ? (
           <p className="text-muted-foreground max-w-48">
-            {MAX_MEDIDORES} é o limite: mais que isso, a coluna fica mais alta
-            que o retrato ao lado dela.
+            {t.medidores.limite(MAX_MEDIDORES)}
           </p>
         ) : null}
       </TooltipContent>
@@ -153,14 +153,13 @@ export function MedidoresPersonagem({
   return (
     <SecaoFicha
       secao="medidores"
-      titulo="Medidores"
+      titulo={t.medidores.titulo}
       contagem={lista.length}
       acao={novo}
     >
       {lista.length === 0 ? (
         <p className="text-muted-foreground text-[11px] leading-snug">
-          Um número que sobe e desce: vida, sanidade, munição, tochas. Aparece
-          ao lado do retrato de {personagem.nome} na mesa.
+          {t.medidores.vazio(personagem.nome)}
         </p>
       ) : (
         <ul ref={listRef} className="space-y-1">
@@ -201,7 +200,7 @@ function LinhaDaFicha({
       onChanged();
       return true;
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao gravar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.gravar);
       return false;
     }
   }
@@ -217,7 +216,7 @@ function LinhaDaFicha({
       await removerMedidor(personagemId, medidor.id);
       onChanged();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao apagar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.apagar);
     }
   }
 
@@ -230,9 +229,8 @@ function LinhaDaFicha({
       onEditar={(patch) => void editar(patch)}
       onApagar={() => void apagar()}
       dicaDoOlho={{
-        titulo: medidor.escondido ? "Só você vê" : "A mesa vê",
-        texto:
-          "Escondido não sai do aplicativo — nem para o celular do dono do personagem.",
+        titulo: medidor.escondido ? t.geral.soVoceVe : t.geral.aMesaVe,
+        texto: t.medidores.escondido,
       }}
       valores={
         // Os passos de um em um, e não uma régua: o dano da mesa é dito em
@@ -242,20 +240,20 @@ function LinhaDaFicha({
         <SeloDoMedidor
           texto={textoDoMedidor(mostrado)}
           dica={{
-            titulo: `${mostrado.atual} de ${mostrado.maximo}`,
+            titulo: t.medidores.deMaximo(mostrado.atual, mostrado.maximo),
             texto:
               mostrado.estilo === "porcentagem"
-                ? "A porcentagem é contada sobre o máximo. Clique para trocar."
-                : "Clique para trocar o atual e o máximo.",
+                ? t.medidores.porcentagemDica
+                : t.medidores.trocarDica,
           }}
           campos={[
             {
-              rotulo: "Valor atual",
+              rotulo: t.medidores.valorAtual,
               valor: mostrado.atual,
               onGravar: (atual) => void editar({ atual }),
             },
             {
-              rotulo: "Valor máximo",
+              rotulo: t.medidores.valorMaximo,
               valor: medidor.maximo,
               onGravar: (maximo) => void editar({ maximo }),
             },

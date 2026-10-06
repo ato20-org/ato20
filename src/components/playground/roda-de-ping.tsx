@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import { IconeDoPing } from "@/components/playground/icone-do-ping";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import type { Vec } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/palco";
 import { ponteiroNaTela } from "@/lib/mestre/ponteiro-no-palco";
 import {
   anguloDaOpcao,
@@ -552,9 +553,9 @@ function RodaAberta({
     ? APARENCIA_DO_PING[escolhida].rotulo
     : arrastando
       ? fonte.tipo === "tecla"
-        ? "Aponte e solte a tecla"
-        : "Arraste até um ping"
-      : "Escolha um ping";
+        ? t.rodaDePing.aponteESolte
+        : t.rodaDePing.arrasteAte
+      : t.rodaDePing.escolha;
 
   return (
     <div
@@ -576,7 +577,7 @@ function RodaAberta({
 
       <div
         role="menu"
-        aria-label="Pings"
+        aria-label={t.rodaDePing.pings}
         className="roda-de-ping absolute"
         style={{
           left: centro.x - DISCO_PX,
@@ -636,7 +637,7 @@ function RodaAberta({
 
         <button
           type="button"
-          aria-label="Fechar sem marcar"
+          aria-label={t.rodaDePing.fecharSemMarcar}
           className="absolute grid size-9 place-items-center rounded-full bg-white/10 text-white/70"
           style={{ left: DISCO_PX - 18, top: DISCO_PX - 18 }}
           onPointerDown={(event) => {

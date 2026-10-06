@@ -54,7 +54,14 @@ use crate::error::{AppError, AppResult};
 /// campo e aceitaria o plugin, e as condicoes que apontam para os efeitos dele
 /// mostrariam so o selo sem aviso nenhum; pedindo 6, ele ouve "atualize o
 /// ATO20".
-pub const API_VERSAO: u32 = 6;
+///
+/// A 7 acrescentou o texto por idioma no manifesto -- todo texto mostrado
+/// pode ser um mapa, `{ "pt-BR": ..., "en": ... }`, ver `TextoDePlugin` -- e
+/// os `rotulos` de configuracao, o texto mostrado de cada opcao. Um ATO20 de
+/// API 6 recusaria o mapa como JSON ilegivel, que manda o autor procurar o
+/// erro no arquivo; e ignoraria os `rotulos`, mostrando o valor cru de cada
+/// opcao sem aviso. Pedindo 7, ele ouve "atualize o ATO20".
+pub const API_VERSAO: u32 = 7;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -95,6 +102,103 @@ pub fn id_valido(id: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
 
+/// Um texto que o plugin MOSTRA: uma string, como sempre, ou um mapa por
+/// idioma -- `{ "pt-BR": "Iniciativa", "en": "Initiative" }`.
+///
+/// Volta para a tela no MESMO formato em que veio, e quem escolhe o idioma e
+/// o front, pelo idioma da tela. O Rust nao sabe qual e, e nao precisa: so
+/// aceita, confere as chaves e repassa. Resolver aqui obrigaria a reler os
+/// manifestos a cada troca de idioma.
+///
+/// So para texto que alguem LE. Id, valor gravado (`Configuracao::opcoes`) e
+/// modo (`EstiloDeMedidor::rotulo`) continuam `String`: traduzir um deles
+/// mudaria o que o plugin grava ou o que a mesa desenha.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TextoDePlugin {
+    Um(String),
+    PorIdioma(BTreeMap<String, String>),
+}
+
+impl TextoDePlugin {
+    /// O texto de quem nao escolhe idioma: a ordenacao, o log, os testes.
+    ///
+    /// No mapa, `pt-BR`, `pt`, `en` e o primeiro que houver, nessa ordem --
+    /// a lingua de origem do aplicativo antes da que o mundo le. Mapa vazio
+    /// da vazio, e a validacao ja o recusa onde o texto e obrigatorio.
+    pub fn principal(&self) -> &str {
+        match self {
+            Self::Um(texto) => texto,
+            Self::PorIdioma(mapa) => ["pt-BR", "pt", "en"]
+                .iter()
+                .find_map(|idioma| mapa.get(*idioma))
+                .or_else(|| mapa.values().next())
+                .map_or("", String::as_str),
+        }
+    }
+
+    /// Sem nada para mostrar em ALGUM idioma.
+    ///
+    /// Um valor em branco no mapa conta: a aba sem nome apareceria so para
+    /// quem usa aquele idioma, e o autor, testando no dele, nunca a veria.
+    pub fn vazio(&self) -> bool {
+        match self {
+            Self::Um(texto) => texto.trim().is_empty(),
+            Self::PorIdioma(mapa) => {
+                mapa.is_empty() || mapa.values().any(|texto| texto.trim().is_empty())
+            }
+        }
+    }
+
+    /// O maior numero de letras entre os idiomas. Um teto de tamanho vale
+    /// para todos: a dica longa em ingles quebra a linha do mesmo jeito.
+    pub fn maior_comprimento(&self) -> usize {
+        match self {
+            Self::Um(texto) => texto.chars().count(),
+            Self::PorIdioma(mapa) => mapa
+                .values()
+                .map(|texto| texto.chars().count())
+                .max()
+                .unwrap_or(0),
+        }
+    }
+
+    /// A primeira chave do mapa que nao e um codigo de idioma.
+    fn idioma_invalido(&self) -> Option<&str> {
+        match self {
+            Self::Um(_) => None,
+            Self::PorIdioma(mapa) => mapa
+                .keys()
+                .map(String::as_str)
+                .find(|idioma| !codigo_de_idioma_valido(idioma)),
+        }
+    }
+}
+
+/// `assert_eq!(ferramenta.titulo, "Pincel")`: compara o `principal`, e e o
+/// que deixa quem manda string continuar se comparando com string.
+impl PartialEq<&str> for TextoDePlugin {
+    fn eq(&self, outro: &&str) -> bool {
+        self.principal() == *outro
+    }
+}
+
+/// `pt`, `en`, `pt-BR`, `en-US`: duas minusculas e, se houver, hifen e duas
+/// maiusculas. Fechado assim porque a chave e o que o front compara com o
+/// idioma da tela, e `PT_br` ou `portugues` seriam um texto que nunca aparece.
+fn codigo_de_idioma_valido(codigo: &str) -> bool {
+    let b = codigo.as_bytes();
+    match b.len() {
+        2 => b.iter().all(u8::is_ascii_lowercase),
+        5 => {
+            b[..2].iter().all(u8::is_ascii_lowercase)
+                && b[2] == b'-'
+                && b[3..].iter().all(u8::is_ascii_uppercase)
+        }
+        _ => false,
+    }
+}
+
 /// O que uma extensao diz de si.
 ///
 /// Este tipo atravessa o IPC -- o espelho dele em TypeScript e `Manifesto`, em
@@ -108,7 +212,7 @@ pub fn id_valido(id: &str) -> bool {
 #[serde(rename_all = "camelCase")]
 pub struct Manifesto {
     pub id: String,
-    pub nome: String,
+    pub nome: TextoDePlugin,
     pub versao: String,
     #[serde(default)]
     pub autor: Option<String>,
@@ -116,7 +220,7 @@ pub struct Manifesto {
     #[serde(default)]
     pub repositorio: Option<String>,
     #[serde(default)]
-    pub descricao: Option<String>,
+    pub descricao: Option<TextoDePlugin>,
     pub api_versao: u32,
     /// O CSS, relativo a pasta da extensao.
     #[serde(default)]
@@ -134,6 +238,97 @@ pub struct Manifesto {
     /// dispara o comando. Ver `ATIVACOES`.
     #[serde(default)]
     pub ativacao: Option<String>,
+}
+
+impl Manifesto {
+    /// Todo texto que o plugin mostra, com o caminho dele no manifesto.
+    ///
+    /// Uma lista so, e nao uma checagem em cada validacao: campo de texto novo
+    /// entra aqui com uma linha, e a guarda das chaves de idioma vale para ele
+    /// sem ninguem lembrar. O caminho vai para a mensagem de erro, e e o mesmo
+    /// nas duas linguas porque e o JSON que o autor escreveu.
+    fn textos(&self) -> Vec<(String, &TextoDePlugin)> {
+        let mut textos: Vec<(String, &TextoDePlugin)> = vec![("nome".into(), &self.nome)];
+        textos.extend(
+            self.descricao
+                .iter()
+                .map(|texto| ("descricao".into(), texto)),
+        );
+
+        for fonte in &self.retratos {
+            textos.push((format!("retratos[{}].rotulo", fonte.fonte), &fonte.rotulo));
+            textos.push((format!("retratos[{}].campo", fonte.fonte), &fonte.campo));
+        }
+
+        let c = &self.contribui;
+        let caminho =
+            |grupo: &str, id: &str, campo: &str| format!("contribui.{grupo}[{id}].{campo}");
+
+        for x in &c.paineis {
+            textos.push((caminho("paineis", &x.id, "titulo"), &x.titulo));
+            if let Some(subtitulo) = &x.subtitulo {
+                textos.push((caminho("paineis", &x.id, "subtitulo"), subtitulo));
+            }
+        }
+        for x in &c.comandos {
+            textos.push((caminho("comandos", &x.id, "titulo"), &x.titulo));
+            if let Some(grupo) = &x.grupo {
+                textos.push((caminho("comandos", &x.id, "grupo"), grupo));
+            }
+        }
+        for x in &c.ferramentas {
+            textos.push((caminho("ferramentas", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.camadas {
+            textos.push((caminho("camadas", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.itens_de_menu {
+            textos.push((caminho("itensDeMenu", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.secoes {
+            textos.push((caminho("secoes", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.estilos_de_medidor {
+            textos.push((caminho("estilosDeMedidor", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.paginas {
+            textos.push((caminho("paginas", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.efeitos {
+            textos.push((caminho("efeitos", &x.id, "titulo"), &x.titulo));
+            if let Some(dica) = &x.dica {
+                textos.push((caminho("efeitos", &x.id, "dica"), dica));
+            }
+        }
+        for x in &c.configuracoes {
+            textos.push((caminho("configuracoes", &x.chave, "titulo"), &x.titulo));
+            if let Some(descricao) = &x.descricao {
+                textos.push((caminho("configuracoes", &x.chave, "descricao"), descricao));
+            }
+            for (opcao, rotulo) in &x.rotulos {
+                textos.push((
+                    caminho("configuracoes", &x.chave, &format!("rotulos.{opcao}")),
+                    rotulo,
+                ));
+            }
+        }
+
+        textos
+    }
+}
+
+/// As chaves dos textos por idioma sao codigos de idioma?
+fn validar_idiomas(manifesto: &Manifesto) -> AppResult<()> {
+    for (campo, texto) in manifesto.textos() {
+        if let Some(idioma) = texto.idioma_invalido() {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "`{campo}` tem a chave {idioma:?}, que nao e um codigo de idioma; use como \"pt-BR\" ou \"en\"",
+                "`{campo}` has the key {idioma:?}, which is not a language code; use one like \"pt-BR\" or \"en\""
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 /// Os momentos em que um plugin pode pedir para ser importado.
@@ -209,10 +404,10 @@ pub struct Contribuicoes {
 #[serde(rename_all = "camelCase")]
 pub struct Efeito {
     pub id: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
     /// Uma linha dizendo para que serve, embaixo do seletor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dica: Option<String>,
+    pub dica: Option<TextoDePlugin>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub figura: Option<FiguraDoEfeito>,
     /// Uma imagem em volta da figura: o fogo, a fumaca, o circulo. Ver
@@ -488,18 +683,22 @@ impl Contribuicoes {
     /// As imagens que o daemon serve na rede por causa do que foi declarado --
     /// dos estilos de medidor e dos efeitos --, cada uma com quem a pediu, para
     /// o erro dizer de quem e o arquivo que falta. Ver `serve::serve_plugin`.
-    pub fn imagens_servidas(&self) -> Vec<(String, &str)> {
+    pub fn imagens_servidas(&self) -> Vec<(crate::error::Texto, &str)> {
         let estilos = self.estilos_de_medidor.iter().flat_map(|estilo| {
-            estilo
-                .imagens()
-                .into_iter()
-                .map(move |imagem| (format!("o estilo {:?}", estilo.id), imagem))
+            estilo.imagens().into_iter().map(move |imagem| {
+                (
+                    crate::texto!("o estilo {:?}", "the meter style {:?}", estilo.id),
+                    imagem,
+                )
+            })
         });
         let efeitos = self.efeitos.iter().flat_map(|efeito| {
-            efeito
-                .imagens()
-                .into_iter()
-                .map(move |imagem| (format!("o efeito {:?}", efeito.id), imagem))
+            efeito.imagens().into_iter().map(move |imagem| {
+                (
+                    crate::texto!("o efeito {:?}", "the effect {:?}", efeito.id),
+                    imagem,
+                )
+            })
         });
 
         estilos.chain(efeitos).collect()
@@ -522,7 +721,7 @@ impl Contribuicoes {
 #[serde(rename_all = "camelCase")]
 pub struct Pagina {
     pub id: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
     /// O `.html`, relativo a pasta da extensao.
     pub arquivo: String,
 }
@@ -545,7 +744,7 @@ pub struct Pagina {
 #[serde(rename_all = "camelCase")]
 pub struct EstiloDeMedidor {
     pub id: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
     /// O `.svg`, relativo a pasta da extensao. Ausente nas `camadas`.
     #[serde(default)]
     pub arquivo: Option<String>,
@@ -769,7 +968,7 @@ pub const QUADROS_MAX: usize = 16;
 #[serde(rename_all = "camelCase")]
 pub struct ItemDeMenu {
     pub id: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
     pub alvo: String,
     /// Nome de icone da lista do aplicativo -- ver `lib/extensoes/icones.ts`.
     #[serde(default)]
@@ -801,7 +1000,7 @@ pub const ALVOS_DE_MENU: &[&str] = &[
 #[serde(rename_all = "camelCase")]
 pub struct Secao {
     pub id: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
     /// So `ficha` por ora. O campo existe para a proxima nao pedir migracao.
     pub alvo: String,
 }
@@ -874,17 +1073,24 @@ pub fn alvo_de_substituto_valido(alvo: &str) -> bool {
 #[serde(rename_all = "camelCase")]
 pub struct Configuracao {
     pub chave: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
     #[serde(default)]
-    pub descricao: Option<String>,
+    pub descricao: Option<TextoDePlugin>,
     pub tipo: TipoConfiguracao,
     pub padrao: serde_json::Value,
     /// Onde ela pode ser gravada. Ausente = nos dois, e a campanha vence.
     #[serde(default)]
     pub escopo: EscopoConfiguracao,
     /// As opcoes de uma `escolha`. Vazio nos outros tipos.
+    ///
+    /// Sao VALORES -- o que fica gravado --, e por isso `String` e nao
+    /// `TextoDePlugin`: traduzir a opcao mudaria o que o plugin le de volta.
+    /// O que a tela MOSTRA de cada uma e `rotulos`.
     #[serde(default)]
     pub opcoes: Vec<String>,
+    /// O texto mostrado de cada opcao, pela opcao. Ausente = a propria opcao.
+    #[serde(default)]
+    pub rotulos: BTreeMap<String, TextoDePlugin>,
     /// O intervalo de um `numero`. Ausente = sem limite.
     #[serde(default)]
     pub minimo: Option<f64>,
@@ -917,17 +1123,17 @@ pub enum EscopoConfiguracao {
 #[serde(rename_all = "camelCase")]
 pub struct Painel {
     pub id: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
     /// A linha de baixo na aba, quando ha.
     #[serde(default)]
-    pub subtitulo: Option<String>,
+    pub subtitulo: Option<TextoDePlugin>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Comando {
     pub id: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
     /// Como o atalho se escreve -- "Ctrl+Shift+F". Opcional.
     ///
     /// NAO pode roubar um atalho de fabrica, e nao precisa ser conferido aqui
@@ -938,14 +1144,14 @@ pub struct Comando {
     pub atalho: Option<String>,
     /// Sob que titulo ele aparece na lista de Configuracoes.
     #[serde(default)]
-    pub grupo: Option<String>,
+    pub grupo: Option<TextoDePlugin>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Ferramenta {
     pub id: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
     /// Arquivo de icone dentro da pasta da extensao.
     #[serde(default)]
     pub icone: Option<String>,
@@ -962,7 +1168,7 @@ pub struct Ferramenta {
 #[serde(rename_all = "camelCase")]
 pub struct Camada {
     pub id: String,
-    pub titulo: String,
+    pub titulo: TextoDePlugin,
 }
 
 /// Uma fonte de retrato ao vivo: como montar a URL de um servico, e em que
@@ -983,11 +1189,11 @@ pub struct FonteRetrato {
     /// O id curto da fonte, no mesmo formato de um id de extensao.
     pub fonte: String,
     /// Como ela se chama para quem escolhe no menu.
-    pub rotulo: String,
+    pub rotulo: TextoDePlugin,
     /// O molde da URL, com `{codigo}` onde entra o que o mestre cola.
     pub modelo: String,
     /// O nome do campo que o mestre preenche -- "Codigo do agente".
-    pub campo: String,
+    pub campo: TextoDePlugin,
     /// O canvas de projeto da pagina, em pixels.
     pub largura: u32,
     pub altura: u32,
@@ -1022,8 +1228,9 @@ pub fn ler_manifesto(pasta: &Path) -> AppResult<Manifesto> {
 
     let cru = std::fs::read_to_string(&caminho).map_err(|cause| {
         if cause.kind() == std::io::ErrorKind::NotFound {
-            AppError::ExtensaoInvalida(format!(
-                "a pasta nao tem {MANIFESTO} -- nao e uma extensao do ATO20"
+            AppError::ExtensaoInvalida(crate::texto!(
+                "a pasta nao tem {MANIFESTO} -- nao e uma extensao do ATO20",
+                "the folder has no {MANIFESTO}: it is not an ATO20 plugin"
             ))
         } else {
             AppError::Io(cause)
@@ -1036,8 +1243,9 @@ pub fn ler_manifesto(pasta: &Path) -> AppResult<Manifesto> {
     })?;
 
     if !id_valido(&manifesto.id) {
-        return Err(AppError::ExtensaoInvalida(format!(
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
             "o id {:?} nao serve: so minusculas, digitos e hifen, ate 64",
+            "the id {:?} is not valid: only lowercase letters, digits and hyphens, up to 64",
             manifesto.id
         )));
     }
@@ -1058,8 +1266,9 @@ pub fn ler_manifesto(pasta: &Path) -> AppResult<Manifesto> {
     ] {
         if let Some(rel) = valor {
             if !caminho_relativo_seguro(rel) {
-                return Err(AppError::ExtensaoInvalida(format!(
-                    "o caminho de {campo} ({rel:?}) sai da pasta da extensao"
+                return Err(AppError::ExtensaoInvalida(crate::texto!(
+                    "o caminho de {campo} ({rel:?}) sai da pasta da extensao",
+                    "the path in {campo} ({rel:?}) leaves the plugin folder"
                 )));
             }
         }
@@ -1070,20 +1279,23 @@ pub fn ler_manifesto(pasta: &Path) -> AppResult<Manifesto> {
     }
 
     validar_contribuicoes(&manifesto)?;
+    validar_idiomas(&manifesto)?;
 
     if let Some(ativacao) = &manifesto.ativacao {
         if !ATIVACOES.contains(&ativacao.as_str()) {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "a ativacao {ativacao:?} nao existe; as ativacoes sao {}",
+                "unknown `ativacao` {ativacao:?}; the options are {}",
                 ATIVACOES.join(", ")
             )));
         }
         // Subir na abertura e importar o `principal`. Sem ele, o plugin
         // pediria para carregar algo que nao existe.
         if manifesto.principal.is_none() {
-            return Err(AppError::ExtensaoInvalida(
-                "a extensao pede `ativacao` mas nao tem `principal`".to_string(),
-            ));
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "a extensao pede `ativacao` mas nao tem `principal`",
+                "the plugin sets `ativacao` but has no `principal`"
+            )));
         }
     }
 
@@ -1110,15 +1322,15 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
     // uma aba na lista de telas que abre vazia, e um comando no menu que nao
     // faz nada -- e a causa estaria num arquivo que nao existe.
     if declarou_algo && manifesto.principal.is_none() {
-        return Err(AppError::ExtensaoInvalida(
-            "a extensao declara contribuicoes mas nao tem `principal`; nada as implementaria"
-                .to_string(),
-        ));
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "a extensao declara contribuicoes mas nao tem `principal`; nada as implementaria",
+            "the plugin declares contributions but has no `principal`; nothing would implement them"
+        )));
     }
 
     // `Vec` e nao array de tamanho fixo: cada tipo novo de contribuicao entra
     // aqui com uma linha, e o compilador nao cobra o numero.
-    let grupos: Vec<(&str, Vec<(&String, &String)>)> = vec![
+    let grupos: Vec<(&str, Vec<(&String, &TextoDePlugin)>)> = vec![
         (
             "paineis",
             c.paineis.iter().map(|x| (&x.id, &x.titulo)).collect(),
@@ -1159,8 +1371,9 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
 
     for (nome, itens) in grupos {
         if itens.len() > MAX_CONTRIBUICOES {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "`{nome}` declara {} itens; o teto e {MAX_CONTRIBUICOES}",
+                "`{nome}` declares {} items; the limit is {MAX_CONTRIBUICOES}",
                 itens.len()
             )));
         }
@@ -1172,15 +1385,18 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             // em chave de janela e em id de ferramenta, que viram texto em
             // lugares que nao esperam barra nem espaco.
             if !id_valido(id) {
-                return Err(AppError::ExtensaoInvalida(format!(
-                    "o id {id:?} em `{nome}` nao serve: so minusculas, digitos e hifen"
+                return Err(AppError::ExtensaoInvalida(crate::texto!(
+                    "o id {id:?} em `{nome}` nao serve: so minusculas, digitos e hifen",
+                    "the id {id:?} in `{nome}` is not valid: only lowercase letters, digits and hyphens"
                 )));
             }
 
             // Titulo vazio daria uma aba sem nome, impossivel de achar de novo.
-            if titulo.trim().is_empty() {
-                return Err(AppError::ExtensaoInvalida(format!(
-                    "a contribuicao {id:?} em `{nome}` esta sem titulo"
+            // Em qualquer idioma: ver `TextoDePlugin::vazio`.
+            if titulo.vazio() {
+                return Err(AppError::ExtensaoInvalida(crate::texto!(
+                    "a contribuicao {id:?} em `{nome}` esta sem titulo",
+                    "the contribution {id:?} in `{nome}` has no `titulo`"
                 )));
             }
 
@@ -1189,8 +1405,9 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             // grupos nao ha conflito -- um painel e uma ferramenta chamados
             // `notas` sao coisas diferentes.
             if vistos.contains(&id.as_str()) {
-                return Err(AppError::ExtensaoInvalida(format!(
-                    "o id {id:?} aparece duas vezes em `{nome}`"
+                return Err(AppError::ExtensaoInvalida(crate::texto!(
+                    "o id {id:?} aparece duas vezes em `{nome}`",
+                    "the id {id:?} appears twice in `{nome}`"
                 )));
             }
 
@@ -1206,8 +1423,9 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
     for ferramenta in &c.ferramentas {
         if let Some(icone) = &ferramenta.icone {
             if !caminho_relativo_seguro(icone) {
-                return Err(AppError::ExtensaoInvalida(format!(
+                return Err(AppError::ExtensaoInvalida(crate::texto!(
                     "o icone de {:?} ({icone:?}) sai da pasta da extensao",
+                    "the icon of {:?} ({icone:?}) leaves the plugin folder",
                     ferramenta.id
                 )));
             }
@@ -1227,8 +1445,9 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
 
     for item in &c.itens_de_menu {
         if !ALVOS_DE_MENU.contains(&item.alvo.as_str()) {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "o item de menu {:?} aponta para {:?}; os alvos sao {}",
+                "the menu item {:?} points to {:?}; the targets are {}",
                 item.id,
                 item.alvo,
                 ALVOS_DE_MENU.join(", ")
@@ -1238,8 +1457,9 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
 
     for secao in &c.secoes {
         if !ALVOS_DE_SECAO.contains(&secao.alvo.as_str()) {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "a secao {:?} aponta para {:?}; os alvos sao {}",
+                "the section {:?} points to {:?}; the targets are {}",
                 secao.id,
                 secao.alvo,
                 ALVOS_DE_SECAO.join(", ")
@@ -1248,8 +1468,9 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
     }
 
     if c.substitutos.len() > MAX_CONTRIBUICOES {
-        return Err(AppError::ExtensaoInvalida(format!(
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
             "`substitutos` declara {} itens; o teto e {MAX_CONTRIBUICOES}",
+            "`substitutos` declares {} items; the limit is {MAX_CONTRIBUICOES}",
             c.substitutos.len()
         )));
     }
@@ -1259,8 +1480,9 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
     }
 
     if !c.efeitos.is_empty() && manifesto.id == PREFIXO_DA_CAMPANHA {
-        return Err(AppError::ExtensaoInvalida(format!(
-            "uma extensao chamada {PREFIXO_DA_CAMPANHA:?} nao pode declarar efeitos: o nome e o dos efeitos da campanha"
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "uma extensao chamada {PREFIXO_DA_CAMPANHA:?} nao pode declarar efeitos: o nome e o dos efeitos da campanha",
+            "a plugin named {PREFIXO_DA_CAMPANHA:?} cannot declare effects: that name belongs to the campaign's own effects"
         )));
     }
 
@@ -1272,9 +1494,11 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
         if !caminho_relativo_seguro(&pagina.arquivo)
             || !pagina.arquivo.to_ascii_lowercase().ends_with(".html")
         {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "a pagina {:?} aponta para {:?}; tem de ser um .html dentro da pasta",
-                pagina.id, pagina.arquivo
+                "the page {:?} points to {:?}; it must be an .html file inside the folder",
+                pagina.id,
+                pagina.arquivo
             )));
         }
     }
@@ -1282,16 +1506,18 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
     let mut vistos: Vec<&str> = Vec::new();
     for substituto in &c.substitutos {
         if !alvo_de_substituto_valido(&substituto.alvo) {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "o substituto aponta para {:?}; use `secao:{{{}}}` ou `janela:{{{}}}`",
+                "the replacement points to {:?}; use `secao:{{{}}}` or `janela:{{{}}}`",
                 substituto.alvo,
                 SECOES_DE_FABRICA.join("|"),
                 JANELAS_DE_FABRICA.join("|")
             )));
         }
         if vistos.contains(&substituto.alvo.as_str()) {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "o substituto {:?} aparece duas vezes",
+                "the replacement {:?} appears twice",
                 substituto.alvo
             )));
         }
@@ -1313,10 +1539,11 @@ fn quadros_validos(quadros: &Quadros) -> bool {
 
 /// A imagem animada: grade valida, mipmaps com o lado em numero. O caminho de
 /// cada imagem e conferido junto com as outras, em `Efeito::imagens`.
-fn imagem_animada_valida(imagem: &ImagemAnimada, campo: &str) -> Result<(), String> {
+fn imagem_animada_valida(imagem: &ImagemAnimada, campo: &str) -> Result<(), crate::error::Texto> {
     if imagem.quadros.as_ref().is_some_and(|quadros| !quadros_validos(quadros)) {
-        return Err(format!(
-            "tem `{campo}.quadros` torto: o total e multiplo das colunas, e o fps vai de 1 a 60"
+        return Err(crate::texto!(
+            "tem `{campo}.quadros` torto: o total e multiplo das colunas, e o fps vai de 1 a 60",
+            "has a malformed `{campo}.quadros`: `total` must be a multiple of `colunas`, and `fps` goes from 1 to 60"
         ));
     }
     if let Some(mipmaps) = &imagem.mipmaps {
@@ -1324,7 +1551,10 @@ fn imagem_animada_valida(imagem: &ImagemAnimada, campo: &str) -> Result<(), Stri
             .keys()
             .any(|lado| lado.parse::<u32>().map_or(true, |lado| lado == 0))
         {
-            return Err(format!("tem `{campo}.mipmaps` com um lado que nao e numero"));
+            return Err(crate::texto!(
+                "tem `{campo}.mipmaps` com um lado que nao e numero",
+                "has `{campo}.mipmaps` with a size that is not a number"
+            ));
         }
     }
     Ok(())
@@ -1333,23 +1563,38 @@ fn imagem_animada_valida(imagem: &ImagemAnimada, campo: &str) -> Result<(), Stri
 /// O bloco `area` e o `base`, com numeros que fazem sentido. Os limites sao os
 /// mesmos que o TS prende ao desenhar -- ver `escalaDoFoco`, `divisoesDoEfeito`
 /// e `baseDoEfeito`.
-fn validar_area(area: Option<&AreaDoEfeito>, base: Option<&BaseDoEfeito>) -> Result<(), String> {
+fn validar_area(
+    area: Option<&AreaDoEfeito>,
+    base: Option<&BaseDoEfeito>,
+) -> Result<(), crate::error::Texto> {
     let entre = |valor: Option<f64>, min: f64, max: f64| {
         valor.map_or(true, |v| v.is_finite() && (min..=max).contains(&v))
     };
 
     if let Some(area) = area {
         if area.cor.as_deref().is_some_and(|cor| !cor_hex_valida(cor)) {
-            return Err("tem `area.cor` que nao e uma cor #rrggbb".into());
+            return Err(crate::texto!(
+                "tem `area.cor` que nao e uma cor #rrggbb",
+                "has `area.cor` that is not a #rrggbb color"
+            ));
         }
         if !entre(area.escala, 1.0, 2.5) {
-            return Err("tem `area.escala` fora de 1 a 2,5".into());
+            return Err(crate::texto!(
+                "tem `area.escala` fora de 1 a 2,5",
+                "has `area.escala` out of range (1 to 2.5)"
+            ));
         }
         if !entre(area.divisoes, 1.0, 4.0) {
-            return Err("tem `area.divisoes` fora de 1 a 4".into());
+            return Err(crate::texto!(
+                "tem `area.divisoes` fora de 1 a 4",
+                "has `area.divisoes` out of range (1 to 4)"
+            ));
         }
         if !entre(area.densidade, 0.0, 16.0) {
-            return Err("tem `area.densidade` fora de 0 a 16".into());
+            return Err(crate::texto!(
+                "tem `area.densidade` fora de 0 a 16",
+                "has `area.densidade` out of range (0 to 16)"
+            ));
         }
         if let Some(foco) = &area.foco {
             imagem_animada_valida(foco, "area.foco")?;
@@ -1359,10 +1604,16 @@ fn validar_area(area: Option<&AreaDoEfeito>, base: Option<&BaseDoEfeito>) -> Res
     if let Some(base) = base {
         imagem_animada_valida(&base.imagem, "base")?;
         if !entre(base.opacidade, 0.0, 1.0) || !entre(base.escurece, 0.0, 1.0) {
-            return Err("tem `base.opacidade` ou `base.escurece` fora de 0 a 1".into());
+            return Err(crate::texto!(
+                "tem `base.opacidade` ou `base.escurece` fora de 0 a 1",
+                "has `base.opacidade` or `base.escurece` out of range (0 to 1)"
+            ));
         }
         if !entre(base.escala, 0.5, 4.0) {
-            return Err("tem `base.escala` fora de 0,5 a 4".into());
+            return Err(crate::texto!(
+                "tem `base.escala` fora de 0,5 a 4",
+                "has `base.escala` out of range (0.5 to 4)"
+            ));
         }
     }
 
@@ -1374,42 +1625,54 @@ fn validar_area(area: Option<&AreaDoEfeito>, base: Option<&BaseDoEfeito>) -> Res
 /// Efeito que nao mexe em nada seria uma opcao no seletor que, escolhida, nao
 /// muda a figura -- e o mestre procuraria o defeito na mesa.
 fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
-    let invalido = |motivo: &str| {
-        Err(AppError::ExtensaoInvalida(format!(
-            "o efeito {:?} {motivo}",
-            efeito.id
-        )))
+    // O motivo chega nas duas linguas e ganha o sujeito em cada uma; por isso
+    // o `Texto` montado a mao, e nao o `texto!`, que usa os mesmos argumentos.
+    let invalido = |motivo: crate::error::Texto| {
+        Err(AppError::ExtensaoInvalida(crate::error::Texto {
+            pt: format!("o efeito {:?} {}", efeito.id, motivo.pt),
+            en: format!("the effect {:?} {}", efeito.id, motivo.en),
+        }))
     };
 
     if efeito
         .dica
         .as_ref()
-        .is_some_and(|dica| dica.chars().count() > MAX_DICA_DO_EFEITO)
+        .is_some_and(|dica| dica.maior_comprimento() > MAX_DICA_DO_EFEITO)
     {
-        return invalido(&format!("tem dica maior que {MAX_DICA_DO_EFEITO} letras"));
+        return invalido(crate::texto!(
+            "tem dica maior que {MAX_DICA_DO_EFEITO} letras",
+            "has a `dica` longer than {MAX_DICA_DO_EFEITO} characters"
+        ));
     }
 
     if !efeito.faz_algo() {
-        return invalido(
+        return invalido(crate::texto!(
             "nao desenha nada: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco` ou `base`",
-        );
+            "draws nothing: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco` or `base`"
+        ));
     }
 
     if let Some(particulas) = &efeito.particulas {
         if !particulas.is_object() {
-            return invalido("tem `particulas` que nao e um objeto");
+            return invalido(crate::texto!(
+                "tem `particulas` que nao e um objeto",
+                "has `particulas` that is not an object"
+            ));
         }
     }
 
     if let Err(motivo) = validar_area(efeito.area.as_ref(), efeito.base.as_ref()) {
-        return invalido(&motivo);
+        return invalido(motivo);
     }
 
     let fracao = |valor: Option<f64>| valor.map_or(true, |v| v.is_finite() && (0.0..=1.0).contains(&v));
 
     if let Some(figura) = &efeito.figura {
         if !fracao(figura.tinta) {
-            return invalido("tem `tinta` fora de 0 a 1");
+            return invalido(crate::texto!(
+                "tem `tinta` fora de 0 a 1",
+                "has `tinta` out of range (0 to 1)"
+            ));
         }
     }
 
@@ -1418,8 +1681,9 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
             .rsplit_once('.')
             .is_some_and(|(_, ext)| IMAGENS_DE_MEDIDOR.contains(&ext.to_ascii_lowercase().as_str()));
         if !caminho_relativo_seguro(imagem) || !raster {
-            return invalido(&format!(
+            return invalido(crate::texto!(
                 "aponta para {imagem:?}; tem de ser {} dentro da pasta",
+                "points to {imagem:?}; it must be a {} file inside the folder",
                 IMAGENS_DE_MEDIDOR.join("/")
             ));
         }
@@ -1430,13 +1694,17 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
             if !tamanho.is_finite()
                 || !(TAMANHO_DO_EXTERNO_MIN..=TAMANHO_DO_EXTERNO_MAX).contains(&tamanho)
             {
-                return invalido(&format!(
-                    "tem `externo.tamanho` fora de {TAMANHO_DO_EXTERNO_MIN} a {TAMANHO_DO_EXTERNO_MAX}"
+                return invalido(crate::texto!(
+                    "tem `externo.tamanho` fora de {TAMANHO_DO_EXTERNO_MIN} a {TAMANHO_DO_EXTERNO_MAX}",
+                    "has `externo.tamanho` out of range ({TAMANHO_DO_EXTERNO_MIN} to {TAMANHO_DO_EXTERNO_MAX})"
                 ));
             }
         }
         if !fracao(externo.opacidade) {
-            return invalido("tem `externo.opacidade` fora de 0 a 1");
+            return invalido(crate::texto!(
+                "tem `externo.opacidade` fora de 0 a 1",
+                "has `externo.opacidade` out of range (0 to 1)"
+            ));
         }
         for (campo, valor, aceitos) in [
             ("lado", &externo.lado, LADOS),
@@ -1444,8 +1712,9 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
         ] {
             if let Some(valor) = valor {
                 if !aceitos.contains(&valor.as_str()) {
-                    return invalido(&format!(
+                    return invalido(crate::texto!(
                         "pede `externo.{campo}` {valor:?}; os valores sao {}",
+                        "sets `externo.{campo}` to {valor:?}; the options are {}",
                         aceitos.join(", ")
                     ));
                 }
@@ -1453,47 +1722,63 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
         }
         if let Some(animacao) = &externo.animacao {
             if !ANIMACOES.contains(&animacao.tipo.as_str()) {
-                return invalido(&format!(
+                return invalido(crate::texto!(
                     "pede a animacao {:?}; as animacoes sao {}",
+                    "asks for the animation {:?}; the animations are {}",
                     animacao.tipo,
                     ANIMACOES.join(", ")
                 ));
             }
             if let Some(periodo) = animacao.periodo {
                 if !periodo.is_finite() || !(PERIODO_MIN..=PERIODO_MAX).contains(&periodo) {
-                    return invalido(&format!(
-                        "tem `periodo` fora de {PERIODO_MIN} a {PERIODO_MAX} segundos"
+                    return invalido(crate::texto!(
+                        "tem `periodo` fora de {PERIODO_MIN} a {PERIODO_MAX} segundos",
+                        "has `periodo` out of range ({PERIODO_MIN} to {PERIODO_MAX} seconds)"
                     ));
                 }
             }
             if !fracao(animacao.intensidade) {
-                return invalido("tem `intensidade` fora de 0 a 1");
+                return invalido(crate::texto!(
+                    "tem `intensidade` fora de 0 a 1",
+                    "has `intensidade` out of range (0 to 1)"
+                ));
             }
         }
     }
 
     if let Some(interno) = &efeito.interno {
         if !fracao(interno.forca) {
-            return invalido("tem `interno.forca` fora de 0 a 1");
+            return invalido(crate::texto!(
+                "tem `interno.forca` fora de 0 a 1",
+                "has `interno.forca` out of range (0 to 1)"
+            ));
         }
     }
 
     if let Some(luz) = &efeito.luz {
         if !luz.raio.is_finite() || !(RAIO_DA_LUZ_MIN..=RAIO_DA_LUZ_MAX).contains(&luz.raio) {
-            return invalido(&format!(
-                "tem `luz.raio` fora de {RAIO_DA_LUZ_MIN} a {RAIO_DA_LUZ_MAX} vezes a figura"
+            return invalido(crate::texto!(
+                "tem `luz.raio` fora de {RAIO_DA_LUZ_MIN} a {RAIO_DA_LUZ_MAX} vezes a figura",
+                "has `luz.raio` out of range ({RAIO_DA_LUZ_MIN} to {RAIO_DA_LUZ_MAX} times the figure)"
             ));
         }
         if !fracao(luz.intensidade) {
-            return invalido("tem `luz.intensidade` fora de 0 a 1");
+            return invalido(crate::texto!(
+                "tem `luz.intensidade` fora de 0 a 1",
+                "has `luz.intensidade` out of range (0 to 1)"
+            ));
         }
         if luz.cor.as_deref().is_some_and(|cor| !cor_hex_valida(cor)) {
-            return invalido("tem `luz.cor` que nao e uma cor `#rrggbb`");
+            return invalido(crate::texto!(
+                "tem `luz.cor` que nao e uma cor `#rrggbb`",
+                "has `luz.cor` that is not a `#rrggbb` color"
+            ));
         }
         if let Some(movimento) = &luz.efeito {
             if !EFEITOS_DA_LUZ.contains(&movimento.as_str()) {
-                return invalido(&format!(
+                return invalido(crate::texto!(
                     "pede `luz.efeito` {movimento:?}; os efeitos sao {}",
+                    "sets `luz.efeito` to {movimento:?}; the options are {}",
                     EFEITOS_DA_LUZ.join(", ")
                 ));
             }
@@ -1510,23 +1795,26 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
 /// manifesto, e um arquivo apagado por fora nao pode tirar o plugin da lista
 /// -- e na lista que fica o botao de desinstalar.
 fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
-    let invalido = |motivo: String| {
-        Err(AppError::ExtensaoInvalida(format!(
-            "o estilo {:?} {motivo}",
-            estilo.id
-        )))
+    // Como em `validar_efeito`: o sujeito entra em cada lingua do motivo.
+    let invalido = |motivo: crate::error::Texto| {
+        Err(AppError::ExtensaoInvalida(crate::error::Texto {
+            pt: format!("o estilo {:?} {}", estilo.id, motivo.pt),
+            en: format!("the meter style {:?} {}", estilo.id, motivo.en),
+        }))
     };
 
     if !estilo.altura.is_finite() || !(ALTURA_MIN..=ALTURA_MAX).contains(&estilo.altura) {
-        return invalido(format!(
-            "tem de ter altura entre {ALTURA_MIN} e {ALTURA_MAX}"
+        return invalido(crate::texto!(
+            "tem de ter altura entre {ALTURA_MIN} e {ALTURA_MAX}",
+            "must have `altura` between {ALTURA_MIN} and {ALTURA_MAX}"
         ));
     }
 
     if let Some(rotulo) = &estilo.rotulo {
         if !ROTULOS.contains(&rotulo.as_str()) {
-            return invalido(format!(
+            return invalido(crate::texto!(
                 "pede o rotulo {rotulo:?}; os rotulos sao {}",
+                "sets `rotulo` to {rotulo:?}; the options are {}",
                 ROTULOS.join(", ")
             ));
         }
@@ -1536,8 +1824,9 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
         (Some(arquivo), None) => {
             if !caminho_relativo_seguro(arquivo) || !arquivo.to_ascii_lowercase().ends_with(".svg")
             {
-                return invalido(format!(
-                    "aponta para {arquivo:?}; tem de ser um .svg dentro da pasta"
+                return invalido(crate::texto!(
+                    "aponta para {arquivo:?}; tem de ser um .svg dentro da pasta",
+                    "points to {arquivo:?}; it must be an .svg file inside the folder"
                 ));
             }
         }
@@ -1550,18 +1839,19 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
             );
             for encaixe in encaixes {
                 if !encaixe_cabe(encaixe) {
-                    return invalido(
-                        "tem um encaixe fora da forma; x, y, largura e altura sao fracoes de 0 a 1"
-                            .to_string(),
-                    );
+                    return invalido(crate::texto!(
+                        "tem um encaixe fora da forma; x, y, largura e altura sao fracoes de 0 a 1",
+                        "has an `encaixe` outside the shape; x, y, largura and altura are fractions from 0 to 1"
+                    ));
                 }
             }
 
             if let Some(texto) = &camadas.texto {
                 for cor in texto.cor.iter().chain(texto.contorno.iter()) {
                     if !cor_hex_valida(cor) {
-                        return invalido(format!(
-                            "pede a cor {cor:?} no texto; use hex, como #fff ou #1a0d0dcc"
+                        return invalido(crate::texto!(
+                            "pede a cor {cor:?} no texto; use hex, como #fff ou #1a0d0dcc",
+                            "uses the color {cor:?} in `texto`; use hex, like #fff or #1a0d0dcc"
                         ));
                     }
                 }
@@ -1569,8 +1859,9 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
                     if !tamanho.is_finite()
                         || !(TAMANHO_DO_TEXTO_MIN..=TAMANHO_DO_TEXTO_MAX).contains(&tamanho)
                     {
-                        return invalido(format!(
-                            "tem um texto de tamanho {tamanho}; vai de {TAMANHO_DO_TEXTO_MIN} a {TAMANHO_DO_TEXTO_MAX}"
+                        return invalido(crate::texto!(
+                            "tem um texto de tamanho {tamanho}; vai de {TAMANHO_DO_TEXTO_MIN} a {TAMANHO_DO_TEXTO_MAX}",
+                            "has a `texto` of size {tamanho}; the range is {TAMANHO_DO_TEXTO_MIN} to {TAMANHO_DO_TEXTO_MAX}"
                         ));
                     }
                 }
@@ -1578,8 +1869,9 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
 
             if let Conteudo::Sequencia { quadros } = &camadas.conteudo {
                 if !(2..=QUADROS_MAX).contains(&quadros.len()) {
-                    return invalido(format!(
+                    return invalido(crate::texto!(
                         "tem uma sequencia de {} quadros; vai de 2 a {QUADROS_MAX}",
+                        "has a sequence of {} frames; the range is 2 to {QUADROS_MAX}",
                         quadros.len()
                     ));
                 }
@@ -1589,18 +1881,25 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
                 let extensao = imagem.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
                 let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
                 if !caminho_relativo_seguro(imagem) || !e_imagem {
-                    return invalido(format!(
+                    return invalido(crate::texto!(
                         "aponta para {imagem:?}; tem de ser uma imagem dentro da pasta ({})",
+                        "points to {imagem:?}; it must be an image inside the folder ({})",
                         IMAGENS_DE_MEDIDOR.join(", ")
                     ));
                 }
             }
         }
         (Some(_), Some(_)) => {
-            return invalido("declara `arquivo` e `camadas`; escolha um dos dois".to_string());
+            return invalido(crate::texto!(
+                "declara `arquivo` e `camadas`; escolha um dos dois",
+                "declares both `arquivo` and `camadas`; pick one"
+            ));
         }
         (None, None) => {
-            return invalido("nao declara `arquivo` (.svg) nem `camadas`".to_string());
+            return invalido(crate::texto!(
+                "nao declara `arquivo` (.svg) nem `camadas`",
+                "declares neither `arquivo` (.svg) nor `camadas`"
+            ));
         }
     }
 
@@ -1623,17 +1922,31 @@ fn validar_imagens_declaradas(pasta: &Path, manifesto: &Manifesto) -> AppResult<
             .map(|meta| meta.len());
 
         match tamanho {
+            // O `dono` ja vem nas duas linguas: o `Texto` e montado a mao.
             None => {
-                return Err(AppError::ExtensaoInvalida(format!(
-                    "{dono} aponta para {imagem:?}, que nao esta na pasta"
-                )));
+                return Err(AppError::ExtensaoInvalida(crate::error::Texto {
+                    pt: format!("{} aponta para {imagem:?}, que nao esta na pasta", dono.pt),
+                    en: format!(
+                        "{} points to {imagem:?}, which is not in the folder",
+                        dono.en
+                    ),
+                }));
             }
             Some(bytes) if bytes > IMAGEM_DE_MEDIDOR_MAX => {
-                return Err(AppError::ExtensaoInvalida(format!(
-                    "a imagem {imagem:?} ({dono}) tem {} KB; o teto e {} KB",
-                    bytes / 1024,
-                    IMAGEM_DE_MEDIDOR_MAX / 1024
-                )));
+                return Err(AppError::ExtensaoInvalida(crate::error::Texto {
+                    pt: format!(
+                        "a imagem {imagem:?} ({}) tem {} KB; o teto e {} KB",
+                        dono.pt,
+                        bytes / 1024,
+                        IMAGEM_DE_MEDIDOR_MAX / 1024
+                    ),
+                    en: format!(
+                        "the image {imagem:?} ({}) is {} KB; the limit is {} KB",
+                        dono.en,
+                        bytes / 1024,
+                        IMAGEM_DE_MEDIDOR_MAX / 1024
+                    ),
+                }));
             }
             Some(_) => {}
         }
@@ -1650,8 +1963,9 @@ fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
     let lista = &manifesto.contribui.configuracoes;
 
     if lista.len() > MAX_CONTRIBUICOES {
-        return Err(AppError::ExtensaoInvalida(format!(
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
             "`configuracoes` declara {} itens; o teto e {MAX_CONTRIBUICOES}",
+            "`configuracoes` declares {} items; the limit is {MAX_CONTRIBUICOES}",
             lista.len()
         )));
     }
@@ -1663,8 +1977,9 @@ fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
         // O prefixo e a cerca: `cor` viraria disputa entre plugins, e
         // `ato20.zoom` deixaria um plugin redefinir o padrao do aplicativo.
         let nome = c.chave.strip_prefix(&prefixo).ok_or_else(|| {
-            AppError::ExtensaoInvalida(format!(
+            AppError::ExtensaoInvalida(crate::texto!(
                 "a chave {:?} tem de comecar com {prefixo:?}",
+                "the key {:?} must start with {prefixo:?}",
                 c.chave
             ))
         })?;
@@ -1676,22 +1991,25 @@ fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
                 .split('.')
                 .all(|parte| !parte.is_empty() && id_valido(parte))
         {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "a chave {:?} nao serve: depois do prefixo, so minusculas, digitos, hifen e ponto",
+                "the key {:?} is not valid: after the prefix, only lowercase letters, digits, hyphens and dots",
                 c.chave
             )));
         }
 
-        if c.titulo.trim().is_empty() {
-            return Err(AppError::ExtensaoInvalida(format!(
+        if c.titulo.vazio() {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "a configuracao {:?} esta sem titulo",
+                "the setting {:?} has no `titulo`",
                 c.chave
             )));
         }
 
         if vistas.contains(&c.chave.as_str()) {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "a chave {:?} aparece duas vezes",
+                "the key {:?} appears twice",
                 c.chave
             )));
         }
@@ -1711,8 +2029,9 @@ fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
                 .is_some_and(|itens| itens.iter().all(|item| item.is_string())),
         };
         if !do_tipo {
-            return Err(AppError::ExtensaoInvalida(format!(
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
                 "o padrao de {:?} nao e do tipo declarado",
+                "the `padrao` of {:?} does not match its `tipo`",
                 c.chave
             )));
         }
@@ -1720,15 +2039,17 @@ fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
         match c.tipo {
             TipoConfiguracao::Escolha => {
                 if c.opcoes.is_empty() {
-                    return Err(AppError::ExtensaoInvalida(format!(
+                    return Err(AppError::ExtensaoInvalida(crate::texto!(
                         "a escolha {:?} nao tem opcoes",
+                        "the choice {:?} has no `opcoes`",
                         c.chave
                     )));
                 }
                 let padrao = c.padrao.as_str().unwrap_or_default();
                 if !c.opcoes.iter().any(|o| o == padrao) {
-                    return Err(AppError::ExtensaoInvalida(format!(
+                    return Err(AppError::ExtensaoInvalida(crate::texto!(
                         "o padrao de {:?} nao esta entre as opcoes",
+                        "the `padrao` of {:?} is not one of its `opcoes`",
                         c.chave
                     )));
                 }
@@ -1737,8 +2058,9 @@ fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
                 let padrao = c.padrao.as_f64().unwrap_or_default();
                 if let (Some(min), Some(max)) = (c.minimo, c.maximo) {
                     if min > max {
-                        return Err(AppError::ExtensaoInvalida(format!(
+                        return Err(AppError::ExtensaoInvalida(crate::texto!(
                             "o intervalo de {:?} esta invertido",
+                            "the range of {:?} is reversed (`minimo` above `maximo`)",
                             c.chave
                         )));
                     }
@@ -1746,13 +2068,34 @@ fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
                 if c.minimo.is_some_and(|min| padrao < min)
                     || c.maximo.is_some_and(|max| padrao > max)
                 {
-                    return Err(AppError::ExtensaoInvalida(format!(
+                    return Err(AppError::ExtensaoInvalida(crate::texto!(
                         "o padrao de {:?} esta fora do intervalo",
+                        "the `padrao` of {:?} is outside its range",
                         c.chave
                     )));
                 }
             }
             _ => {}
+        }
+
+        // Rotulo de opcao que nao existe e erro de digitacao na chave: a
+        // opcao de verdade apareceria com o valor cru, e o autor nao veria
+        // por que. Fora de `escolha` nao ha opcoes, e qualquer rotulo cai aqui.
+        for (opcao, rotulo) in &c.rotulos {
+            if !c.opcoes.contains(opcao) {
+                return Err(AppError::ExtensaoInvalida(crate::texto!(
+                    "o rotulo {opcao:?} de {:?} nao esta entre as opcoes",
+                    "the `rotulos` entry {opcao:?} of {:?} is not one of its `opcoes`",
+                    c.chave
+                )));
+            }
+            if rotulo.vazio() {
+                return Err(AppError::ExtensaoInvalida(crate::texto!(
+                    "o rotulo da opcao {opcao:?} de {:?} esta vazio",
+                    "the label of option {opcao:?} in {:?} is empty",
+                    c.chave
+                )));
+            }
         }
     }
 
@@ -1767,8 +2110,9 @@ fn validar_configuracoes(manifesto: &Manifesto) -> AppResult<()> {
 /// cabeca de quem clicou.
 fn validar_fonte(fonte: &FonteRetrato) -> AppResult<()> {
     if !id_valido(&fonte.fonte) {
-        return Err(AppError::ExtensaoInvalida(format!(
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
             "a fonte de retrato {:?} nao serve: so minusculas, digitos e hifen",
+            "the portrait source {:?} is not valid: only lowercase letters, digits and hyphens",
             fonte.fonte
         )));
     }
@@ -1778,15 +2122,17 @@ fn validar_fonte(fonte: &FonteRetrato) -> AppResult<()> {
     // por quem estiver nela. Nao e o modelo de ameaca deste projeto, mas
     // recusar aqui custa uma linha.
     if !fonte.modelo.starts_with("https://") {
-        return Err(AppError::ExtensaoInvalida(format!(
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
             "o modelo da fonte {:?} precisa comecar com https://",
+            "the `modelo` of source {:?} must start with https://",
             fonte.fonte
         )));
     }
 
     if !fonte.modelo.contains("{codigo}") {
-        return Err(AppError::ExtensaoInvalida(format!(
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
             "o modelo da fonte {:?} nao tem {{codigo}}, entao daria a mesma URL para todo personagem",
+            "the `modelo` of source {:?} has no {{codigo}}, so every character would get the same URL",
             fonte.fonte
         )));
     }
@@ -1796,8 +2142,9 @@ fn validar_fonte(fonte: &FonteRetrato) -> AppResult<()> {
         || fonte.largura > CANVAS_MAX
         || fonte.altura > CANVAS_MAX
     {
-        return Err(AppError::ExtensaoInvalida(format!(
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
             "o canvas da fonte {:?} precisa estar entre 1 e {CANVAS_MAX}",
+            "the canvas of source {:?} must be between 1 and {CANVAS_MAX}",
             fonte.fonte
         )));
     }
@@ -1891,7 +2238,12 @@ pub fn listar(dir: &Path) -> AppResult<Vec<Manifesto>> {
     // Por nome, e nao na ordem do `read_dir`, que e a do sistema de arquivos e
     // muda sozinha: lista que se reordena entre duas aberturas faz o usuario
     // procurar de novo o que ele ja tinha achado.
-    achadas.sort_by(|a, b| a.nome.to_lowercase().cmp(&b.nome.to_lowercase()));
+    achadas.sort_by(|a, b| {
+        a.nome
+            .principal()
+            .to_lowercase()
+            .cmp(&b.nome.principal().to_lowercase())
+    });
 
     Ok(achadas)
 }
@@ -1972,7 +2324,10 @@ fn copiar_arvore(origem: &Path, destino: &Path) -> AppResult<()> {
 /// linha impossivel de remover pela tela.
 pub fn remover(dir: &Path, id: &str) -> AppResult<()> {
     if !id_valido(id) {
-        return Err(AppError::ExtensaoInvalida(format!("id invalido: {id:?}")));
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "id invalido: {id:?}",
+            "invalid id: {id:?}"
+        )));
     }
 
     match std::fs::remove_dir_all(dir.join(id)) {
@@ -2061,7 +2416,7 @@ mod tests {
 
         // O compromisso da API: subir a versao nao pode recusar quem pede a
         // anterior. Um tema escrito para a 1 continua instalando na 2.
-        for versao in [1, 2, 3] {
+        for versao in 1..=API_VERSAO {
             let pasta = base.path().join(format!("v{versao}"));
             escrever(
                 &pasta,
@@ -3209,5 +3564,291 @@ mod tests {
             remover(&dir, "../../..").unwrap_err(),
             AppError::ExtensaoInvalida(_)
         ));
+    }
+
+    // --- texto por idioma (API 7) -------------------------------------------
+
+    /// Um manifesto de API 7 com um painel, uma configuracao de escolha e uma
+    /// fonte de retrato, e os textos que se quer trocar.
+    fn com_idiomas(nome: &str, titulo_do_painel: &str, rotulos: &str) -> String {
+        format!(
+            r#"{{"id":"plug","nome":{nome},"versao":"1.0.0","apiVersao":7,"principal":"main.js",
+                "descricao":{{"pt-BR":"Rola a iniciativa","en":"Rolls initiative"}},
+                "retratos":[{{"fonte":"cris","rotulo":{{"pt-BR":"Agente","en":"Agent"}},
+                              "modelo":"https://exemplo.com/s/{{codigo}}",
+                              "campo":{{"pt-BR":"Codigo do agente","en":"Agent code"}},
+                              "largura":1920,"altura":1100}}],
+                "contribui":{{
+                  "paineis":[{{"id":"ordem","titulo":{titulo_do_painel},"subtitulo":{{"en":"Order"}}}}],
+                  "comandos":[{{"id":"rolar","titulo":"Rolar","grupo":{{"pt":"Combate","en":"Combat"}}}}],
+                  "configuracoes":[{{"chave":"plug.modo","titulo":{{"pt-BR":"Modo","en":"Mode"}},
+                                     "tipo":"escolha","padrao":"auto","opcoes":["auto","manual"],
+                                     "rotulos":{rotulos}}}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn texto_por_idioma_entra_e_volta_no_mesmo_formato() {
+        let base = tempfile::tempdir().unwrap();
+        let json = com_idiomas(
+            r#"{"pt-BR":"Iniciativa","en":"Initiative"}"#,
+            r#"{"pt-BR":"Ordem","en":"Order"}"#,
+            r#"{"auto":{"pt-BR":"Automatico","en":"Automatic"},"manual":"Manual"}"#,
+        );
+        let m = ler(base.path(), &json).unwrap();
+
+        assert_eq!(m.nome, "Iniciativa");
+        assert_eq!(m.contribui.paineis[0].titulo, "Ordem");
+        // Sem `pt-BR` nem `pt`, o principal e o ingles.
+        assert_eq!(m.contribui.paineis[0].subtitulo.as_ref().unwrap(), &"Order");
+        assert_eq!(m.contribui.comandos[0].grupo.as_ref().unwrap(), &"Combate");
+        assert_eq!(m.retratos[0].campo, "Codigo do agente");
+        assert_eq!(m.contribui.configuracoes[0].rotulos["manual"], "Manual");
+
+        // A tela escolhe o idioma, entao o mapa tem de chegar como mapa -- e a
+        // string, como string.
+        let ida = serde_json::to_value(&m).unwrap();
+        let cru: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(ida["nome"], cru["nome"]);
+        assert_eq!(ida["descricao"], cru["descricao"]);
+        assert_eq!(ida["retratos"][0]["rotulo"], cru["retratos"][0]["rotulo"]);
+        assert_eq!(ida["retratos"][0]["campo"], cru["retratos"][0]["campo"]);
+        assert_eq!(ida["contribui"]["paineis"], cru["contribui"]["paineis"]);
+        assert_eq!(
+            ida["contribui"]["comandos"][0]["grupo"],
+            cru["contribui"]["comandos"][0]["grupo"]
+        );
+        assert_eq!(ida["contribui"]["comandos"][0]["titulo"], "Rolar");
+        assert_eq!(
+            ida["contribui"]["configuracoes"][0]["rotulos"],
+            cru["contribui"]["configuracoes"][0]["rotulos"]
+        );
+
+        // E o que voltou le de novo igual: o front pode devolver o manifesto.
+        let volta: Manifesto = serde_json::from_value(ida).unwrap();
+        assert_eq!(volta, m);
+    }
+
+    #[test]
+    fn texto_em_string_continua_valendo_e_sem_rotulos() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_config(
+                r#"{"chave":"plug.cor","titulo":"Cor","descricao":"A cor da mesa","tipo":"escolha","padrao":"azul","opcoes":["azul","rubi"]}"#,
+            ),
+        )
+        .unwrap();
+
+        let c = &m.contribui.configuracoes[0];
+        assert_eq!(c.titulo, TextoDePlugin::Um("Cor".into()));
+        assert!(c.rotulos.is_empty());
+
+        let ida = serde_json::to_value(&m).unwrap();
+        assert_eq!(ida["nome"], "Plug");
+        assert_eq!(ida["contribui"]["configuracoes"][0]["titulo"], "Cor");
+        assert_eq!(
+            ida["contribui"]["configuracoes"][0]["descricao"],
+            "A cor da mesa"
+        );
+        assert_eq!(
+            ida["contribui"]["configuracoes"][0]["rotulos"],
+            serde_json::json!({})
+        );
+    }
+
+    #[test]
+    fn principal_prefere_portugues_depois_ingles_depois_o_primeiro() {
+        let mapa = |pares: &[(&str, &str)]| {
+            TextoDePlugin::PorIdioma(
+                pares
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            )
+        };
+
+        assert_eq!(
+            mapa(&[("en", "Order"), ("pt-BR", "Ordem")]).principal(),
+            "Ordem"
+        );
+        assert_eq!(
+            mapa(&[("en", "Order"), ("pt", "Ordem")]).principal(),
+            "Ordem"
+        );
+        assert_eq!(
+            mapa(&[("es", "Orden"), ("en", "Order")]).principal(),
+            "Order"
+        );
+        assert_eq!(
+            mapa(&[("es", "Orden"), ("fr", "Ordre")]).principal(),
+            "Orden"
+        );
+        assert_eq!(mapa(&[]).principal(), "");
+        assert_eq!(TextoDePlugin::Um("Ordem".into()).principal(), "Ordem");
+    }
+
+    #[test]
+    fn chave_de_idioma_que_nao_e_codigo_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+
+        for chave in [
+            "portugues",
+            "PT",
+            "pt_BR",
+            "pt-br",
+            "ptb",
+            "",
+            "p",
+            "pt-BRA",
+            "1a",
+        ] {
+            let nome = format!(r#"{{"{chave}":"Iniciativa"}}"#);
+            let erro = ler(base.path(), &com_idiomas(&nome, r#""Ordem""#, "{}")).unwrap_err();
+            assert!(
+                matches!(erro, AppError::ExtensaoInvalida(_)),
+                "{chave:?} devia ser recusada"
+            );
+            // A mensagem diz onde e qual, nas duas linguas.
+            assert!(erro.to_string().contains("`nome`"), "{erro}");
+            assert!(
+                erro.em_ingles().contains(&format!("{chave:?}")),
+                "{}",
+                erro.em_ingles()
+            );
+        }
+
+        // Em qualquer texto, e nao so no nome: no rotulo de uma opcao tambem.
+        let erro = ler(
+            base.path(),
+            &com_idiomas(
+                r#""Iniciativa""#,
+                r#""Ordem""#,
+                r#"{"auto":{"ingles":"Automatic"}}"#,
+            ),
+        )
+        .unwrap_err();
+        assert!(erro.to_string().contains("rotulos.auto"), "{erro}");
+
+        for chave in ["pt", "en", "pt-BR", "en-US", "es"] {
+            let nome = format!(r#"{{"{chave}":"Iniciativa"}}"#);
+            assert!(
+                ler(base.path(), &com_idiomas(&nome, r#""Ordem""#, "{}")).is_ok(),
+                "{chave:?} devia passar"
+            );
+        }
+    }
+
+    #[test]
+    fn titulo_por_idioma_vazio_conta_como_sem_titulo() {
+        let base = tempfile::tempdir().unwrap();
+
+        // Mapa vazio, ou um idioma em branco: a aba sem nome apareceria para
+        // quem usa aquele idioma.
+        for titulo in ["{}", r#"{"pt-BR":"Ordem","en":"  "}"#, r#"{"en":""}"#] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_idiomas(r#""Iniciativa""#, titulo, "{}")).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{titulo} devia ser recusado"
+            );
+        }
+
+        // O mesmo na configuracao, que e conferida por outro caminho.
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_config(
+                    r#"{"chave":"plug.cor","titulo":{"pt-BR":"Cor","en":" "},"tipo":"texto","padrao":""}"#
+                )
+            )
+            .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    #[test]
+    fn dica_por_idioma_respeita_o_teto_em_todos() {
+        let base = tempfile::tempdir().unwrap();
+        let longa = "a".repeat(MAX_DICA_DO_EFEITO + 1);
+
+        // O portugues cabe, o ingles nao: o teto vale para o maior.
+        let json = com_efeitos(
+            "ordem",
+            &format!(
+                r#"[{{"id":"falante","titulo":"Falante","dica":{{"pt-BR":"Curta","en":"{longa}"}},"figura":{{"halo":true}}}}]"#
+            ),
+        );
+        assert!(matches!(
+            ler(base.path(), &json).unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    #[test]
+    fn rotulo_de_opcao_que_nao_existe_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        // `automatico` nao e opcao: erro de digitacao na chave, e a opcao de
+        // verdade apareceria com o valor cru.
+        let erro = ler(
+            base.path(),
+            &com_idiomas(
+                r#""Iniciativa""#,
+                r#""Ordem""#,
+                r#"{"automatico":"Automatico"}"#,
+            ),
+        )
+        .unwrap_err();
+        assert!(matches!(erro, AppError::ExtensaoInvalida(_)));
+        assert!(erro.to_string().contains("automatico"), "{erro}");
+
+        // Rotulo em branco tambem: uma opcao sem nome nao se escolhe.
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_idiomas(
+                    r#""Iniciativa""#,
+                    r#""Ordem""#,
+                    r#"{"auto":{"pt-BR":"Auto","en":""}}"#
+                ),
+            )
+            .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+
+        // Fora de `escolha` nao ha opcao para rotular.
+        assert!(matches!(
+            ler(
+                base.path(),
+                &com_config(
+                    r#"{"chave":"plug.ligado","titulo":"Ligado","tipo":"booleano","padrao":true,"rotulos":{"true":"Sim"}}"#
+                )
+            )
+            .unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    #[test]
+    fn lista_ordena_pelo_nome_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let dir = dir(base.path());
+
+        for (id, nome) in [
+            ("zeta", r#"{"en":"Alpha","pt-BR":"Zeta"}"#),
+            ("beta", r#""beta""#),
+            ("alfa", r#"{"en":"Zulu","pt":"Alfa"}"#),
+        ] {
+            escrever(
+                &dir.join(id),
+                MANIFESTO,
+                &format!(r#"{{"id":"{id}","nome":{nome},"versao":"1.0.0","apiVersao":7}}"#),
+            );
+        }
+
+        let ids: Vec<String> = listar(&dir).unwrap().into_iter().map(|m| m.id).collect();
+        assert_eq!(ids, vec!["alfa", "beta", "zeta"]);
     }
 }

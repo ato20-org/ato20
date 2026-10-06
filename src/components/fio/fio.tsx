@@ -39,6 +39,8 @@ import {
   type Sugestao,
 } from "@/lib/mencoes/sugestao";
 import { normaliza } from "@/lib/search";
+import { idioma } from "@/lib/i18n/idioma";
+import { t as textos } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
 import type { LinhaDoFio, RolagemNoFio } from "@/types/fio";
 
@@ -63,12 +65,12 @@ const DADOS_DESENHADOS = 6;
  */
 const FOLGA_DO_FIM_PX = 48;
 
-const HORA = new Intl.DateTimeFormat("pt-BR", {
+const HORA = new Intl.DateTimeFormat(idioma, {
   hour: "2-digit",
   minute: "2-digit",
 });
 
-const DIA = new Intl.DateTimeFormat("pt-BR", {
+const DIA = new Intl.DateTimeFormat(idioma, {
   weekday: "long",
   day: "numeric",
   month: "long",
@@ -254,7 +256,9 @@ function LinhaView({
             </span>
 
             {linha.autor.tipo === "plugin" ? (
-              <span className="text-muted-foreground shrink-0 text-[10px]">plugin</span>
+              <span className="text-muted-foreground shrink-0 text-[10px]">
+                {textos.fio.plugin}
+              </span>
             ) : null}
 
             {aviso ? (
@@ -299,7 +303,7 @@ function LinhaView({
             // No foco também, e não só no hover: quem chega por teclado precisa
             // alcançar o mesmo gesto.
             className="bg-card absolute top-1 right-1 opacity-0 transition-opacity group-hover/linha:opacity-100 group-focus-within/linha:opacity-100"
-            aria-label={`Apagar a linha de ${nomeDoAutor(linha.autor)}`}
+            aria-label={textos.fio.apagarLinha(nomeDoAutor(linha.autor))}
             onClick={() => onApagar(linha)}
           >
             <Trash2 />
@@ -383,7 +387,7 @@ function RolagemView({
           className="text-muted-foreground self-center text-[10px] leading-tight transition-opacity duration-200 [grid-area:1/1]"
           style={{ opacity: assentou ? 0 : 1 }}
         >
-          Rolando…
+          {textos.dados.rolando}
         </span>
       </span>
     </div>
@@ -492,14 +496,16 @@ function Mencao({
     return (
       <span
         className="text-muted-foreground underline decoration-dashed underline-offset-2"
-        title="Nenhum personagem com este nome"
+        title={textos.fio.nenhumPersonagem}
       >
         {bruto}
       </span>
     );
   }
 
-  const legenda = achado.dono ? `${achado.nome} — ${achado.dono}` : `${achado.nome} — sem jogador`;
+  const legenda = achado.dono
+    ? textos.fio.comJogador(achado.nome, achado.dono)
+    : textos.fio.semJogador(achado.nome);
   const conteudo = (
     <>
       <VenetianMask
@@ -525,7 +531,7 @@ function Mencao({
     <button
       type="button"
       className="inline-flex cursor-pointer items-baseline gap-[0.2em] font-medium text-sky-300 underline decoration-sky-300/40 decoration-dotted underline-offset-2 hover:decoration-solid"
-      title={`Abrir a ficha de ${legenda}`}
+      title={textos.fio.abrirFicha(legenda)}
       onClick={() => abrir(achado.id)}
     >
       {conteudo}
@@ -546,7 +552,7 @@ export function CampoDoFio({
   denso = false,
   antes,
   personagens = [],
-  tituloDosPersonagens = "Personagens",
+  tituloDosPersonagens = textos.fio.personagens,
 }: {
   onEnviar: (texto: string) => Promise<void>;
   placeholder: string;
@@ -628,7 +634,7 @@ export function CampoDoFio({
       await onEnviar(limpo);
       setTexto("");
     } catch (causa) {
-      setErro(causa instanceof Error ? causa.message : "A mesa não recebeu a mensagem.");
+      setErro(causa instanceof Error ? causa.message : textos.fio.naoRecebeu);
     } finally {
       setEnviando(false);
     }
@@ -714,7 +720,7 @@ export function CampoDoFio({
           rows={1}
           enterKeyHint="send"
           placeholder={placeholder}
-          aria-label="Mensagem"
+          aria-label={textos.fio.mensagem}
           className={cn(
             "max-h-32 min-h-0 resize-none",
             denso && "py-1.5 text-xs md:text-xs",
@@ -724,7 +730,7 @@ export function CampoDoFio({
           type="submit"
           size={denso ? "icon-sm" : "icon"}
           disabled={texto.trim() === "" || enviando}
-          aria-label="Enviar"
+          aria-label={textos.fio.enviar}
         >
           <SendHorizontal />
         </Button>

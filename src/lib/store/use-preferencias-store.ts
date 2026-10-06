@@ -8,6 +8,7 @@ import {
   valorDe,
 } from "@/lib/configuracoes/registro";
 import type { Definicao } from "@/lib/configuracoes/valor";
+import { t } from "@/lib/i18n/desktop";
 import { isDesktop } from "@/lib/vault/bridge";
 import {
   DEFAULT_SESSION_VOLUME,
@@ -132,8 +133,8 @@ const volume = (chave: string, titulo: string, padrao: number): Definicao => ({
 export const DEFINICOES_ATO20: Definicao[] = [
   {
     chave: CHAVE.zoom,
-    titulo: "Zoom da interface",
-    descricao: "Escala a janela inteira, o palco incluído. Um dos degraus: 0.8 a 1.5.",
+    titulo: t.definicoes.zoom,
+    descricao: t.definicoes.zoomDescricao,
     tipo: "numero",
     padrao: ZOOM_PADRAO,
     minimo: DEGRAUS_ZOOM[0],
@@ -144,17 +145,17 @@ export const DEFINICOES_ATO20: Definicao[] = [
   },
   {
     chave: CHAVE.avisarAtualizacao,
-    titulo: "Avisar quando sair versão nova",
-    descricao: "Procura versão nova ao abrir. Desligado, o aplicativo não pergunta nada à rede sobre si.",
+    titulo: t.definicoes.avisar,
+    descricao: t.definicoes.avisarDescricao,
     tipo: "booleano",
     padrao: true,
     escopo: "maquina",
     dono: "ato20",
   },
-  volume(CHAVE.volumeSistema, "Volume do sistema", DEFAULT_SESSION_VOLUME),
-  volume(CHAVE.volumeTrilha, "Volume da trilha", VOLUME_DE_CATEGORIA_PADRAO),
-  volume(CHAVE.volumeAmbiente, "Volume do ambiente", VOLUME_DE_CATEGORIA_PADRAO),
-  volume(CHAVE.volumeDisparo, "Volume dos disparos", VOLUME_DE_CATEGORIA_PADRAO),
+  volume(CHAVE.volumeSistema, t.definicoes.volumeSistema, DEFAULT_SESSION_VOLUME),
+  volume(CHAVE.volumeTrilha, t.definicoes.volumeTrilha, VOLUME_DE_CATEGORIA_PADRAO),
+  volume(CHAVE.volumeAmbiente, t.definicoes.volumeAmbiente, VOLUME_DE_CATEGORIA_PADRAO),
+  volume(CHAVE.volumeDisparo, t.definicoes.volumeDisparo, VOLUME_DE_CATEGORIA_PADRAO),
 ];
 
 useConfiguracoesStore.getState().definir(DEFINICOES_ATO20);

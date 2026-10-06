@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { esquecerCapa } from "@/hooks/use-capa-do-livro";
+import { t } from "@/lib/i18n/mestre";
 import { invalidarMarcadores } from "@/lib/store/use-marcadores-store";
 
 import {
@@ -46,7 +47,7 @@ export function useEstante(): EstanteApi {
       (cause) => {
         // Falha aqui é banco da máquina, não estante vazia. Avisar é o certo:
         // o mestre precisa saber que a lista não está apenas sem livros.
-        if (ativo) toast.error(cause instanceof Error ? cause.message : "Falha ao ler a estante.");
+        if (ativo) toast.error(cause instanceof Error ? cause.message : t.estante.falhaAoLer);
       },
     );
 
@@ -81,7 +82,7 @@ export function useEstante(): EstanteApi {
 
       acolher(resultado);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+      toast.error(cause instanceof Error ? cause.message : t.estante.falhaAoImportar);
     }
   }, [acolher]);
 
@@ -90,7 +91,7 @@ export function useEstante(): EstanteApi {
       try {
         acolher(await importarLivrosDe(paths));
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+        toast.error(cause instanceof Error ? cause.message : t.estante.falhaAoImportar);
       }
     },
     [acolher],
@@ -106,7 +107,7 @@ export function useEstante(): EstanteApi {
         invalidarMarcadores();
         refresh();
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Falha ao remover o livro.");
+        toast.error(cause instanceof Error ? cause.message : t.estante.falhaAoRemover);
       }
     },
     [refresh],

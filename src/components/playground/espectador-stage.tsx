@@ -14,6 +14,7 @@ import {
   DeclarativoProvider,
   useDeclarativoDaMesa,
 } from "@/components/playground/declarativo";
+import { t } from "@/lib/i18n/palco";
 
 /**
  * Visão Espectador: recebe a cena e não emite nada. Nenhum controle, nenhum
@@ -118,13 +119,13 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
       {!scene ? (
         <p className="text-muted-foreground absolute inset-0 grid place-items-center px-8 text-center text-xl">
           {synced
-            ? "O mestre não colocou nada no ar."
+            ? t.espectador.nadaNoAr
             : stalled
               ? // A mesa foi encontrada — o código passou —, então o que falta
                 // é o Mestre publicar. Dizer isso poupa procurar problema na
                 // rede, que é onde ninguém acharia nada.
-                "Sem resposta. A tela do Mestre precisa estar aberta."
-              : "Aguardando o Mestre…"}
+                t.espectador.semResposta
+              : t.espectador.aguardando}
         </p>
       ) : null}
     </main>

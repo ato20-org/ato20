@@ -1,5 +1,34 @@
 use serde::{Serialize, Serializer};
 
+/// Uma mensagem nos dois idiomas do aplicativo.
+///
+/// O Rust nao sabe em que idioma a tela esta, e nao precisa saber: manda os
+/// dois, e quem mostra escolhe -- ver `call` em `src/lib/vault/bridge.ts`. Um
+/// idioma guardado aqui seria estado a sincronizar com a configuracao da
+/// maquina, e o celular nem fala o idioma do Mestre necessariamente.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Texto {
+    pub pt: String,
+    pub en: String,
+}
+
+/// `texto!("a pasta {nome} sumiu", "the folder {nome} is gone")`: as duas
+/// linguas de uma mensagem, com os mesmos argumentos do `format!`. Cada
+/// argumento tem de aparecer nas duas, ou o `format!` recusa -- e e isso que
+/// impede o ingles de perder o nome do arquivo que o portugues mostra.
+#[macro_export]
+macro_rules! texto {
+    ($pt:literal, $en:literal $(,)?) => {
+        $crate::error::Texto { pt: format!($pt), en: format!($en) }
+    };
+    ($pt:literal, $en:literal, $($argumento:tt)+) => {
+        $crate::error::Texto {
+            pt: format!($pt, $($argumento)+),
+            en: format!($en, $($argumento)+),
+        }
+    };
+}
+
 /// Erro que atravessa o IPC.
 ///
 /// Uma variante por causa real, e nao um `String` so, porque a tela trata
@@ -27,7 +56,7 @@ pub enum AppError {
     /// O tipo de arquivo nao entra no acervo.
     UnsupportedKind(String),
     /// A pasta escolhida nao e uma extensao, ou o manifesto dela nao serve.
-    ExtensaoInvalida(String),
+    ExtensaoInvalida(Texto),
     /// Nao houve como abrir um endereco no navegador do sistema.
     ///
     /// Variante propria porque a providencia e do USUARIO e nao do aplicativo:
@@ -64,11 +93,31 @@ impl std::fmt::Display for AppError {
                 write!(f, "Nao foi possivel abrir o navegador. {motivo}")
             }
             Self::ExtensaoInvalida(motivo) => {
-                write!(f, "Extensao invalida: {motivo}")
+                write!(f, "Extensao invalida: {}", motivo.pt)
             }
             Self::ExtensaoIncompativel { pede, temos } => write!(
                 f,
                 "Esta extensao pede a API {pede} e este ATO20 fala a {temos}. Atualize o aplicativo."
+            ),
+        }
+    }
+}
+
+impl AppError {
+    /// A mesma mensagem do `Display`, em ingles. Ver `Texto`.
+    pub fn em_ingles(&self) -> String {
+        match self {
+            Self::NoCampaign => "No campaign open.".to_string(),
+            Self::NotACampaign(path) => format!("The folder {path} is not an ATO20 campaign."),
+            Self::CampanhaSumiu(path) => format!("The campaign folder is gone from the disk: {path}"),
+            Self::Io(cause) => format!("Disk error: {cause}"),
+            Self::Malformed { file, cause } => format!("The file {file} is unreadable: {cause}"),
+            Self::Db(cause) => format!("State database error: {cause}"),
+            Self::UnsupportedKind(mime) => format!("Unsupported file type: {mime}"),
+            Self::SemNavegador(motivo) => format!("Could not open the browser. {motivo}"),
+            Self::ExtensaoInvalida(motivo) => format!("Invalid plugin: {}", motivo.en),
+            Self::ExtensaoIncompativel { pede, temos } => format!(
+                "This plugin needs API {pede} and this ATO20 speaks {temos}. Update the app."
             ),
         }
     }
@@ -106,9 +155,10 @@ impl Serialize for AppError {
             Self::ExtensaoIncompativel { .. } => "extensao-incompativel",
         };
 
-        let mut out = serializer.serialize_struct("AppError", 2)?;
+        let mut out = serializer.serialize_struct("AppError", 3)?;
         out.serialize_field("code", code)?;
         out.serialize_field("message", &self.to_string())?;
+        out.serialize_field("messageEn", &self.em_ingles())?;
         out.end()
     }
 }

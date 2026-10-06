@@ -45,6 +45,7 @@ import {
   snapAngle,
   type Vec,
 } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/jogador";
 import {
   criarEnvioDeMovimentos,
   type EnvioDeMovimentos,
@@ -468,7 +469,7 @@ export function CenaDoJogador({
       cenaId: cena.id,
       x: ponto.x,
       y: ponto.y,
-    }).catch(() => toast.error("O ping não chegou à mesa."));
+    }).catch(() => toast.error(t.cena.pingNaoChegou));
   }
 
   const gesto = naMao && !naMao.solto ? naMao : null;

@@ -15,6 +15,7 @@
  * arquivos do próprio personagem lá.
  */
 
+import { t } from "@/lib/i18n/arquivos";
 import { parseMencoes, type Token } from "@/lib/mencoes/texto";
 import { fragmentoNoCursor, type Fragmento } from "@/lib/mencoes/sugestao";
 
@@ -46,10 +47,10 @@ export const SINAIS_EM_ORDEM = Object.keys(SINAIS_DO_POSTIT) as SinalDoPostit[];
 
 /** O título da lista de sugestões, por sinal. */
 export const TITULO_DO_POSTIT: Record<SinalDoPostit, string> = {
-  "@": "Personagens da campanha",
-  "/": "Arquivos da campanha",
-  ">": "Mapas e quadros",
-  "!": "Páginas marcadas",
+  "@": t.sugestoes.personagens,
+  "/": t.sugestoes.arquivos,
+  ">": t.sugestoes.cenas,
+  "!": t.sugestoes.marcadores,
 };
 
 export function parsePostit(texto: string): Array<Token<TipoNoPostit>> {

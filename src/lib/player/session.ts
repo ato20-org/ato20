@@ -1,5 +1,7 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
+
 /**
  * A sessão do jogador.
  *
@@ -113,7 +115,7 @@ export async function join(codigo: string, nome: string): Promise<PlayerSheet> {
   });
 
   if (!response.ok)
-    throw await fail(response, "Não foi possível entrar na mesa.");
+    throw await fail(response, t.erros.entrar);
 
   const {
     id,
@@ -153,7 +155,7 @@ export async function fetchMe(codigo: string): Promise<PlayerSheet | null> {
   }
 
   if (!response.ok)
-    throw await fail(response, "Não foi possível abrir a ficha.");
+    throw await fail(response, t.erros.abrirFicha);
 
   return (await response.json()) as PlayerSheet;
 }
@@ -175,14 +177,14 @@ export async function patchMe(
     body: JSON.stringify(patch),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível gravar.");
+  if (!response.ok) throw await fail(response, t.erros.gravar);
 }
 
 export async function listAttachments(codigo: string): Promise<Attachment[]> {
   const response = await fetch("/eu/anexos", { headers: authorized(codigo) });
 
   if (!response.ok)
-    throw await fail(response, "Não foi possível listar os anexos.");
+    throw await fail(response, t.erros.listarAnexos);
 
   return (await response.json()) as Attachment[];
 }
@@ -201,7 +203,7 @@ export async function uploadAttachment(
   });
 
   if (!response.ok)
-    throw await fail(response, `Não foi possível enviar ${file.name}.`);
+    throw await fail(response, t.erros.enviar(file.name));
 
   return (await response.json()) as Attachment;
 }
@@ -216,7 +218,7 @@ export async function deleteAttachment(
   });
 
   if (!response.ok)
-    throw await fail(response, "Não foi possível remover o anexo.");
+    throw await fail(response, t.erros.removerAnexo);
 }
 
 /**
@@ -245,7 +247,7 @@ export async function attachmentUrl(
   });
 
   if (!response.ok)
-    throw await fail(response, "Não foi possível abrir o anexo.");
+    throw await fail(response, t.erros.abrirAnexo);
 
   const url = URL.createObjectURL(await response.blob());
   blobCache.set(arquivo, url);

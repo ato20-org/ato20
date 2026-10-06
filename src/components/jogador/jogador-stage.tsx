@@ -11,6 +11,7 @@ import {
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
+import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -136,12 +137,12 @@ export function JogadorStage({
         {!scene ? (
           <p className="text-muted-foreground absolute inset-0 grid place-items-center px-6 text-center text-sm">
             {synced
-              ? "O mestre não colocou nada no ar."
+              ? t.palco.nadaNoAr
               : stalled
                 ? // Silêncio longo não é espera: é problema. Dizer o que fazer
                   // vale mais que reticências que nunca terminam.
-                  "Sem resposta do mestre. Ele precisa estar com a tela do Mestre aberta."
-                : "Aguardando o mestre…"}
+                  t.palco.semResposta
+                : t.palco.aguardando}
           </p>
         ) : null}
 
@@ -149,7 +150,7 @@ export function JogadorStage({
 
         <button
           type="button"
-          aria-label={expanded ? "Sair da tela cheia" : "Tela cheia"}
+          aria-label={expanded ? t.palco.sairDaTelaCheia : t.palco.telaCheia}
           // Alvo generoso e fundo próprio: por cima de mapa escuro ou claro,
           // um ícone sem contraste desaparece.
           className="absolute top-2 right-2 rounded-md bg-black/60 p-2 text-white backdrop-blur"

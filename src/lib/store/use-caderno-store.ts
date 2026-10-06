@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 
+import { t } from "@/lib/i18n/jogador";
 import {
   apagarNota,
   criarNota,
@@ -52,7 +53,7 @@ type CadernoStore = {
 };
 
 function descreve(cause: unknown): string {
-  return cause instanceof Error ? cause.message : "Falha ao falar com a mesa";
+  return cause instanceof Error ? cause.message : t.erros.semMesa;
 }
 
 /** Mais recente primeiro, que é a ordem em que o caderno é lido. */

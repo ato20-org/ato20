@@ -1,6 +1,8 @@
 import type { EfeitoPedido } from "@/lib/condicao";
 import { PACKS_DE_FABRICA } from "@/efeitos";
 import { normalizarHex } from "@/lib/cor";
+import { idioma } from "@/lib/i18n/idioma";
+import { t as textosDeFabrica } from "@/lib/i18n/efeitos";
 import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
 import { daemonAddrSeConhecido, isDesktop } from "@/lib/vault/bridge";
 import type { ParticulasResolvidas } from "@/lib/particulas";
@@ -57,6 +59,7 @@ export const EFEITOS_DE_FABRICA: ReadonlyArray<DefinicaoDeEfeito> = (() => {
   return PACKS_DE_FABRICA.map(
     ({ pasta, definicao, arquivos }): DefinicaoDeEfeito => ({
       ...definicao,
+      ...textoDeFabrica(definicao.id),
       origem: { app: pasta, arquivos },
     }),
   )
@@ -67,10 +70,24 @@ export const EFEITOS_DE_FABRICA: ReadonlyArray<DefinicaoDeEfeito> = (() => {
       vistos.add(efeito.id);
       return true;
     })
-    .sort((a, b) => a.titulo.localeCompare(b.titulo, "pt-BR"));
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, idioma));
 })();
 
 const POR_ID = new Map(EFEITOS_DE_FABRICA.map((efeito) => [efeito.id, efeito]));
+
+/**
+ * O título e a dica de um efeito de fábrica no idioma da tela.
+ *
+ * O `efeito.json` é JSON, e JSON não importa dicionário: o texto dele fica como
+ * está, e vale de reserva para o pack cujo id o dicionário não conhece -- o que
+ * acabou de ganhar pasta e ainda não ganhou tradução.
+ */
+function textoDeFabrica(id: string): { titulo: string; dica: string } | undefined {
+  const textos: Readonly<Record<string, { titulo: string; dica: string }>> =
+    textosDeFabrica;
+
+  return Object.hasOwn(textos, id) ? textos[id] : undefined;
+}
 
 /**
  * O efeito deste id, ou `undefined` se o catálogo não o conhece.

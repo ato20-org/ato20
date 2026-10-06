@@ -56,6 +56,7 @@ import {
 } from "@/hooks/use-renomear-pelo-menu";
 import { countAssetUsage } from "@/lib/mestre/asset-usage";
 import { CORES_DO_SOM } from "@/lib/mestre/cores-do-som";
+import { t } from "@/lib/i18n/arquivos";
 import { normaliza } from "@/lib/search";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
@@ -96,9 +97,9 @@ const ICONE_DO_TIPO: Record<TipoDeSom, LucideIcon> = {
  * responde a pergunta de quem está escolhendo onde pôr o arquivo.
  */
 const TIPOS: { tipo: TipoDeSom; rotulo: string; explicacao: string }[] = [
-  { tipo: "trilha", rotulo: "Trilha", explicacao: "A música da sessão" },
-  { tipo: "ambiente", rotulo: "Ambiente", explicacao: "Fundo que fica em loop" },
-  { tipo: "disparo", rotulo: "Efeito", explicacao: "Toca uma vez e some" },
+  { tipo: "trilha", ...t.audioLibrary.tipos.trilha },
+  { tipo: "ambiente", ...t.audioLibrary.tipos.ambiente },
+  { tipo: "disparo", ...t.audioLibrary.tipos.disparo },
 ];
 
 /**
@@ -109,10 +110,10 @@ const TIPOS: { tipo: TipoDeSom; rotulo: string; explicacao: string }[] = [
  * o que precisa de atenção, mas não é o que se procura no meio de uma cena.
  */
 const GRUPOS: { tipo: TipoDeSom | null; titulo: string }[] = [
-  { tipo: "trilha", titulo: "Trilhas" },
-  { tipo: "ambiente", titulo: "Ambientes" },
-  { tipo: "disparo", titulo: "Efeitos" },
-  { tipo: null, titulo: "Sem tipo" },
+  { tipo: "trilha", titulo: t.audioLibrary.grupos.trilha },
+  { tipo: "ambiente", titulo: t.audioLibrary.grupos.ambiente },
+  { tipo: "disparo", titulo: t.audioLibrary.grupos.disparo },
+  { tipo: null, titulo: t.audioLibrary.grupos.semTipo },
 ];
 
 /**
@@ -121,11 +122,14 @@ const GRUPOS: { tipo: TipoDeSom | null; titulo: string }[] = [
  * Mais de uma por tipo de propósito: o campo se chama `disparo` no código e
  * "Efeito" na tela, e quem digita uma das duas quer a mesma lista. "Musica" e
  * "loop" entram porque são o que se pensa antes de lembrar o nome da camada.
+ *
+ * As palavras dos dois idiomas, sempre: o que se procura é o que a tela
+ * mostra, e quem joga em inglês digita "ambience" e "cue".
  */
 const PALAVRAS: Record<TipoDeSom, string[]> = {
-  trilha: ["trilha", "musica", "música"],
-  ambiente: ["ambiente", "fundo", "loop"],
-  disparo: ["disparo", "efeito", "sfx"],
+  trilha: ["trilha", "musica", "música", "music", "track"],
+  ambiente: ["ambiente", "fundo", "loop", "ambience", "ambient", "background"],
+  disparo: ["disparo", "efeito", "sfx", "cue", "sound cue", "effect"],
 };
 
 /**
@@ -321,13 +325,13 @@ export function AudioLibrary() {
           className="h-7 w-full shrink-0 justify-start gap-2 px-2"
         >
           <TabsTrigger value="pads" className="flex-none text-xs">
-            Pads
+            {t.audioLibrary.abaPads}
           </TabsTrigger>
           <TabsTrigger value="atual" className="flex-none text-xs">
-            Atual
+            {t.audioLibrary.abaAtual}
           </TabsTrigger>
           <TabsTrigger value="acervo" className="flex-none text-xs">
-            Acervo
+            {t.audioLibrary.abaAcervo}
           </TabsTrigger>
         </TabsList>
 
@@ -338,7 +342,7 @@ export function AudioLibrary() {
           className="min-h-0 overflow-y-auto border-t pt-2"
         >
           <p className="text-muted-foreground px-2 pb-1.5 text-[10px]">
-            Teclado numérico
+            {t.audioLibrary.tecladoNumerico}
           </p>
 
           <div className="grid grid-cols-3 gap-1 px-2 pb-2">
@@ -380,19 +384,19 @@ export function AudioLibrary() {
           <div className="mt-1 border-t px-2 pt-2 pb-2">
             <div className="flex items-center justify-between pb-1">
               <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-                Macros
+                {t.audioLibrary.macros}
               </p>
 
               <SeletorDeSom
                 assets={assets}
                 gatilho={
-                  <Button variant="ghost" size="icon-xs" aria-label="Nova macro">
+                  <Button variant="ghost" size="icon-xs" aria-label={t.audioLibrary.novaMacro}>
                     <Plus />
                   </Button>
                 }
                 ondeEsta={(assetId) =>
                   macros.some((macro) => macro.assetId === assetId)
-                    ? "já está na lista"
+                    ? t.audioLibrary.jaNaLista
                     : undefined
                 }
                 onEscolher={(escolhido) => adicionarMacro(escolhido.id)}
@@ -409,14 +413,14 @@ export function AudioLibrary() {
               // olhar a secao vai ler, e no peso normal ela disputava atencao
               // com a grade de pads logo acima, que e o que a aba veio mostrar.
               <p className="text-muted-foreground/60 text-xs select-none">
-                Adicione um som sem tecla
+                {t.audioLibrary.semTecla}
               </p>
             ) : (
               <ul className="space-y-1">
                 {macros.map((macro) => {
                   const asset = porId.get(macro.assetId);
                   const tipo = asset?.tipoDeSom;
-                  const nome = asset?.name ?? "Arquivo removido";
+                  const nome = asset?.name ?? t.geral.arquivoRemovido;
 
                   const Icone = tipo ? ICONE_DO_TIPO[tipo] : HelpCircle;
                   const cor = tipo ? CORES_DO_SOM[tipo] : null;
@@ -437,7 +441,7 @@ export function AudioLibrary() {
                         type="button"
                         title={nome}
                         aria-label={
-                          noAr ? `Tirar ${nome}` : `Acionar ${nome}`
+                          noAr ? t.audioLibrary.tirar(nome) : t.audioLibrary.acionar(nome)
                         }
                         disabled={!tipo}
                         className={cn(
@@ -458,7 +462,7 @@ export function AudioLibrary() {
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        aria-label={`Tirar ${nome} das macros`}
+                        aria-label={t.audioLibrary.tirarDasMacros(nome)}
                         className="hidden shrink-0 group-hover:flex"
                         onClick={() => removerMacro(macro.id)}
                       >
@@ -516,8 +520,8 @@ export function AudioLibrary() {
                     aqui. */}
                 <Input
                   value={busca}
-                  placeholder="Buscar som ou tipo"
-                  aria-label="Buscar som ou tipo"
+                  placeholder={t.audioLibrary.buscarSom}
+                  aria-label={t.audioLibrary.buscarSom}
                   className="h-8 bg-transparent pl-8 text-xs dark:bg-transparent"
                   onChange={(evento) => setBusca(evento.target.value)}
                 />
@@ -535,7 +539,9 @@ export function AudioLibrary() {
                           size="icon"
                           className="shrink-0 rounded-full"
                           aria-label={
-                            importando ? "Importando sons" : "Importar sons"
+                            importando
+                              ? t.audioLibrary.importandoSons
+                              : t.audioLibrary.importarSons
                           }
                           disabled={importando}
                         >
@@ -550,7 +556,7 @@ export function AudioLibrary() {
                   }
                 />
                 <TooltipContent>
-                  {importando ? "Importando…" : "Importar sons"}
+                  {importando ? t.geral.importando : t.audioLibrary.importarSons}
                 </TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="start" className="w-56">
@@ -578,11 +584,11 @@ export function AudioLibrary() {
 
           {assets.length === 0 ? (
             <PainelVazio conteudo={{ tipo: "sons" }}>
-              Importe trilhas, ambientes e efeitos
+              {t.audioLibrary.vazio}
             </PainelVazio>
           ) : achados.length === 0 ? (
             <p className="text-muted-foreground p-3 text-xs">
-              Nada com “{busca.trim()}”.
+              {t.geral.nadaCom(busca.trim())}
             </p>
           ) : (
             GRUPOS.map(({ tipo, titulo }) => {
@@ -692,7 +698,7 @@ function SeletorDeSom({
       <PopoverContent side="bottom" align="start" className="w-64 p-0">
         {assets.length === 0 ? (
           <p className="text-muted-foreground/60 p-3 text-xs">
-            Importe sons na aba Acervo
+            {t.audioLibrary.importeNaAba}
           </p>
         ) : (
           <>
@@ -701,7 +707,7 @@ function SeletorDeSom({
               <Input
                 autoFocus
                 value={busca}
-                placeholder="Buscar som ou tipo"
+                placeholder={t.audioLibrary.buscarSom}
                 className="h-7 pl-7 text-xs"
                 onChange={(evento) => setBusca(evento.target.value)}
               />
@@ -709,7 +715,7 @@ function SeletorDeSom({
 
             {achados.length === 0 ? (
               <p className="text-muted-foreground p-3 text-xs">
-                Nada com “{busca.trim()}”.
+                {t.geral.nadaCom(busca.trim())}
               </p>
             ) : (
               <div className="max-h-64 overflow-y-auto p-1">
@@ -764,7 +770,7 @@ function SeletorDeSom({
                                 </span>
                               ) : !candidato.tipoDeSom ? (
                                 <span className="text-muted-foreground block text-[10px]">
-                                  sem tipo
+                                  {t.audioLibrary.semTipo}
                                 </span>
                               ) : null}
                             </span>
@@ -821,7 +827,7 @@ function PadCell({
         gatilho={
           <button
             type="button"
-            aria-label={`Escolher o som do pad ${tecla}`}
+            aria-label={t.audioLibrary.escolherSomDoPad(tecla)}
             className="text-muted-foreground/40 hover:bg-accent/50 hover:text-muted-foreground flex h-12 flex-col items-center justify-center rounded-md border border-dashed text-xs"
           >
             {tecla}
@@ -830,7 +836,7 @@ function PadCell({
         ondeEsta={(assetId) => {
           const emQual = teclaDoSom.get(assetId);
 
-          return emQual === undefined ? undefined : `já está no ${emQual}`;
+          return emQual === undefined ? undefined : t.audioLibrary.jaNoPad(emQual);
         }}
         onEscolher={(escolhido) =>
           onDefinir({ assetId: escolhido.id, ganho: GANHO_PADRAO })
@@ -839,7 +845,7 @@ function PadCell({
     );
   }
 
-  const nome = asset?.name ?? "Arquivo removido";
+  const nome = asset?.name ?? t.geral.arquivoRemovido;
 
   // Sem tipo — arquivo removido do acervo, ou som que ninguém classificou — a
   // tecla desenha neutra e não faz nada ao ser apertada. Ver `acionarPad`.
@@ -852,7 +858,7 @@ function PadCell({
       <button
         type="button"
         title={nome}
-        aria-label={`Pad ${tecla}: ${nome}`}
+        aria-label={t.audioLibrary.pad(tecla, nome)}
         // A moldura diz o TIPO e o fundo diz o estado, e são duas perguntas
         // diferentes: "o 7 é um tiro ou uma chuva?" se responde de relance pela
         // cor, sem ler o nome do arquivo; "a chuva ainda está caindo?" pelo
@@ -879,7 +885,7 @@ function PadCell({
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label={`Esvaziar o pad ${tecla}`}
+        aria-label={t.audioLibrary.esvaziarPad(tecla)}
         className="absolute -top-1 -right-1 hidden group-hover:flex"
         onClick={() => onDefinir(null)}
       >
@@ -968,8 +974,8 @@ function AudioRow({
           {asset.name}
         </button>
         <span className="text-muted-foreground block text-[10px]">
-          {Math.round(asset.size / 1024)} KB
-          {noAr ? " · no ar" : ""}
+          {`${Math.round(asset.size / 1024)} KB`}
+          {noAr ? ` · ${t.audioLibrary.noAr}` : ""}
         </span>
       </span>
 
@@ -980,9 +986,9 @@ function AudioRow({
           variant="ghost"
           size="icon-xs"
           aria-label={
-            noAr ? `Tirar ${asset.name}` : `Tocar ${asset.name}`
+            noAr ? t.audioLibrary.tirar(asset.name) : t.audioLibrary.tocar(asset.name)
           }
-          title={noAr ? "Tirar" : "Tocar"}
+          title={noAr ? t.audioLibrary.tirarDica : t.audioLibrary.tocarDica}
           className={CORES_DO_SOM[tipo].texto}
           onClick={onTocar}
         >
@@ -998,7 +1004,7 @@ function AudioRow({
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label={`Opções de ${asset.name}`}
+              aria-label={t.geral.opcoesDe(asset.name)}
             >
               <MoreVertical />
             </Button>
@@ -1010,7 +1016,7 @@ function AudioRow({
               importado na leva errada. */}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              {tipo ? "Tipo do som" : "Definir o tipo"}
+              {tipo ? t.audioLibrary.tipoDoSom : t.audioLibrary.definirTipo}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               {TIPOS.map(({ tipo: candidato, rotulo }) => {
@@ -1036,7 +1042,7 @@ function AudioRow({
               metadado — o arquivo não é movido nem recopiado. */}
           <DropdownMenuItem onClick={renomear.pedir}>
             <Pencil />
-            Renomear
+            {t.geral.renomear}
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
@@ -1051,7 +1057,7 @@ function AudioRow({
             onClick={onRemove}
           >
             <Trash2 />
-            {emUso ? `Em uso em ${usageCount} lugar(es)` : "Remover"}
+            {emUso ? t.audioLibrary.emUso(usageCount) : t.geral.remover}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

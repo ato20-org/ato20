@@ -35,6 +35,9 @@ import { HistoricoDeVersoes } from "@/components/desktop/versoes-lista";
 import { useUpdaterEmbutido } from "@/hooks/use-updater-embutido";
 import { versaoAtual } from "@/lib/versoes";
 import { atalhosPorGrupo } from "@/lib/mestre/atalhos";
+import { t } from "@/lib/i18n/desktop";
+import { rico } from "@/lib/i18n/rico";
+import { SecaoIdioma } from "@/components/desktop/secao-idioma";
 import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import {
@@ -49,11 +52,11 @@ import {
  * na lista ela seria a primeira impressão da tela.
  */
 const SECOES = [
-  { chave: "geral", titulo: "Geral", icone: SlidersHorizontal },
-  { chave: "ajustes", titulo: "Ajustes", icone: Settings2 },
-  { chave: "versao", titulo: "Versão", icone: History },
-  { chave: "teclado", titulo: "Teclado", icone: Keyboard },
-  { chave: "plugins", titulo: "Plugins", icone: Puzzle },
+  { chave: "geral", titulo: t.configuracoes.secoes.geral, icone: SlidersHorizontal },
+  { chave: "ajustes", titulo: t.configuracoes.secoes.ajustes, icone: Settings2 },
+  { chave: "versao", titulo: t.configuracoes.secoes.versao, icone: History },
+  { chave: "teclado", titulo: t.configuracoes.secoes.teclado, icone: Keyboard },
+  { chave: "plugins", titulo: t.configuracoes.secoes.plugins, icone: Puzzle },
 ] as const;
 
 type Chave = (typeof SECOES)[number]["chave"];
@@ -90,7 +93,7 @@ export function ConfiguracoesDialog() {
       <DialogTrigger
         render={
           <ChromeButton
-            label="Configurações"
+            label={t.configuracoes.titulo}
             icon={<Settings className="size-3.5" />}
           />
         }
@@ -113,9 +116,9 @@ export function ConfiguracoesDialog() {
               uma coluna onde "Área de transferência" não caberia. */}
           <nav className="bg-muted/30 flex w-[30%] min-w-36 shrink-0 flex-col gap-3 border-r p-2">
             <div className="px-1.5 pt-1">
-              <DialogTitle>Configurações</DialogTitle>
+              <DialogTitle>{t.configuracoes.titulo}</DialogTitle>
               <DialogDescription className="mt-1 text-xs">
-                Configurações gerais do ATO20.
+                {t.configuracoes.descricao}
               </DialogDescription>
             </div>
 
@@ -176,7 +179,9 @@ function TituloSecao({
 function PainelGeral() {
   return (
     <>
-      <TituloSecao>Geral</TituloSecao>
+      <TituloSecao>{t.configuracoes.secoes.geral}</TituloSecao>
+      <SecaoIdioma />
+      <Separator />
       <SecaoZoom />
       <Separator />
       <SecaoTema />
@@ -195,8 +200,8 @@ function PainelGeral() {
 function PainelAjustes() {
   return (
     <>
-      <TituloSecao ajuda="O que o ATO20 e os plugins deixam ajustar, por máquina e por campanha. A campanha vence.">
-        Ajustes
+      <TituloSecao ajuda={t.configuracoes.ajustesAjuda}>
+        {t.configuracoes.secoes.ajustes}
       </TituloSecao>
       <ListaDeConfiguracoes />
     </>
@@ -219,10 +224,9 @@ function SecaoZoom() {
   return (
     <section className="flex flex-col gap-2">
       <div>
-        <p className="text-sm font-medium">Zoom da interface</p>
+        <p className="text-sm font-medium">{t.configuracoes.zoom.titulo}</p>
         <p className="text-muted-foreground text-xs">
-          Escala a janela inteira, o palco incluído. A câmera sobre o mapa
-          continua no zoom dela.
+          {t.configuracoes.zoom.explicacao}
         </p>
       </div>
 
@@ -230,7 +234,7 @@ function SecaoZoom() {
         <Button
           variant="outline"
           size="icon-sm"
-          aria-label="Diminuir o zoom da interface"
+          aria-label={t.configuracoes.zoom.diminuir}
           disabled={indice <= 0}
           onClick={() => definirZoom(DEGRAUS_ZOOM[indice - 1])}
         >
@@ -246,7 +250,7 @@ function SecaoZoom() {
         <Button
           variant="outline"
           size="icon-sm"
-          aria-label="Aumentar o zoom da interface"
+          aria-label={t.configuracoes.zoom.aumentar}
           disabled={indice >= DEGRAUS_ZOOM.length - 1}
           onClick={() => definirZoom(DEGRAUS_ZOOM[indice + 1])}
         >
@@ -269,17 +273,18 @@ function SecaoTema() {
   return (
     <section className="flex flex-col gap-2">
       <div>
-        <p className="text-sm font-medium">Tema</p>
+        <p className="text-sm font-medium">{t.configuracoes.tema.titulo}</p>
         <p className="text-muted-foreground text-xs">
-          Só o escuro, por ora: a ferramenta roda em mesa com luz baixa e
-          projetada em TV, onde fundo claro ofusca.
+          {t.configuracoes.tema.explicacao}
         </p>
       </div>
 
       <div className="bg-muted/40 flex items-center gap-2 rounded-lg border px-2.5 py-2">
         <Moon className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-        <span className="text-sm">Escuro</span>
-        <span className="text-muted-foreground ml-auto text-xs">padrão</span>
+        <span className="text-sm">{t.configuracoes.tema.escuro}</span>
+        <span className="text-muted-foreground ml-auto text-xs">
+          {t.configuracoes.tema.padrao}
+        </span>
       </div>
     </section>
   );
@@ -315,8 +320,8 @@ function PainelVersao() {
 
   return (
     <>
-      <TituloSecao ajuda="Histórico de versões do ATO20">
-        Versão {versao?.versao ?? ""}
+      <TituloSecao ajuda={t.configuracoes.versao.ajuda}>
+        {t.configuracoes.versao.titulo(versao?.versao ?? "")}
       </TituloSecao>
 
       {/* A chave só existe onde ela faz alguma coisa.
@@ -334,16 +339,17 @@ function PainelVersao() {
           <Switch
             checked={avisar}
             onCheckedChange={definirAvisar}
-            aria-label="Avisar quando sair versão nova"
+            aria-label={t.configuracoes.versao.avisar}
           />
           <span className="min-w-0">
-            <span className="block text-sm">Avisar quando sair versão nova</span>
+            <span className="block text-sm">
+              {t.configuracoes.versao.avisar}
+            </span>
             {/* Diz o que o desligado GARANTE, e não só o que ele evita: quem
                 desliga isto quer ficar na versão que tem, e a frase é o que
                 confirma que ficar é uma opção sustentada. */}
             <span className="text-muted-foreground block text-xs">
-              Desligado, o aplicativo não procura atualização nenhuma e você
-              fica nesta versão até baixar outra por conta própria.
+              {t.configuracoes.versao.avisarExplicacao}
             </span>
           </span>
         </label>
@@ -351,14 +357,13 @@ function PainelVersao() {
 
       {embutido === false && (
         <p className="text-muted-foreground text-xs">
-          Este pacote é atualizado pela loja onde você o instalou. O ATO20 não
-          procura versão nova por conta própria.
+          {t.configuracoes.versao.pelaLoja}
         </p>
       )}
 
       <Separator />
 
-      <TituloSecao>Histórico</TituloSecao>
+      <TituloSecao>{t.configuracoes.versao.historico}</TituloSecao>
       <HistoricoDeVersoes />
     </>
   );
@@ -374,8 +379,8 @@ function PainelTeclado() {
 
   return (
     <>
-      <TituloSecao ajuda="Lista dos atalhos existentes no sistema.">
-        Teclado
+      <TituloSecao ajuda={t.configuracoes.tecladoAjuda}>
+        {t.configuracoes.secoes.teclado}
       </TituloSecao>
 
       <div className="flex flex-col gap-4">
@@ -430,8 +435,8 @@ function PainelPlugins() {
 
   return (
     <>
-      <TituloSecao ajuda="Plugins customizados para personalizar o sistema, e melhorar a experiência.">
-        Plugins
+      <TituloSecao ajuda={t.configuracoes.plugins.ajuda}>
+        {t.configuracoes.secoes.plugins}
       </TituloSecao>
 
       <Button
@@ -442,7 +447,7 @@ function PainelPlugins() {
         onClick={() => void importar()}
       >
         <Puzzle />
-        Importar plugin
+        {t.configuracoes.plugins.importar}
       </Button>
 
       {erro ? (
@@ -463,10 +468,13 @@ function PainelPlugins() {
            não tem. */
         <div className="text-muted-foreground flex flex-col items-center gap-1.5 px-4 py-10 text-center">
           <Box className="size-5 shrink-0" aria-hidden />
-          <p className="text-foreground text-sm">Nenhum plugin instalado</p>
+          <p className="text-foreground text-sm">
+            {t.configuracoes.plugins.nenhum}
+          </p>
           <p className="text-muted-foreground/70 text-xs">
-            Um plugin é uma pasta com <code>manifest.json</code> dentro.
-            Importar é copiá-la para cá.
+            {rico(t.configuracoes.plugins.oQueE, {
+              manifest: <code>manifest.json</code>,
+            })}
           </p>
         </div>
       ) : (
@@ -503,21 +511,21 @@ function Grupos({ extensoes }: { extensoes: Extensao[] }) {
   return (
     <div className="flex flex-col gap-4">
       <Grupo
-        titulo="Temas"
+        titulo={t.configuracoes.plugins.temas}
         icone={Palette}
         extensoes={temas}
-        nota="Só aparência: cores, cantos e fonte da interface."
+        nota={t.configuracoes.plugins.temasNota}
       />
 
       <Grupo
-        titulo="Funcionalidades"
+        titulo={t.configuracoes.plugins.funcionalidades}
         icone={Blocks}
         extensoes={funcionalidades}
         // A ressalva do código não carregado desceu para a LINHA, e não vale
         // para o grupo inteiro: um plugin declarativo -- fontes de retrato, por
         // exemplo -- é funcionalidade e já funciona. A nota aqui diria que ele
         // não roda, o que seria falso.
-        nota="Estendem o que o ATO20 faz. Podem executar código com o alcance da janela."
+        nota={t.configuracoes.plugins.funcionalidadesNota}
       />
     </div>
   );
@@ -580,7 +588,7 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
       <Switch
         checked={extensao.habilitada}
         onCheckedChange={(ligada) => void habilitar(extensao.id, ligada)}
-        aria-label={`Habilitar ${extensao.nome}`}
+        aria-label={t.configuracoes.plugins.habilitar(extensao.nome)}
       />
 
       <div className="min-w-0 flex-1">
@@ -597,10 +605,10 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
       {tambemTema ? (
         <span
           className="text-muted-foreground flex shrink-0 items-center gap-1 text-[10px] uppercase"
-          title="Esta extensão também traz um tema."
+          title={t.configuracoes.plugins.tambemTema}
         >
           <Palette className="size-3" aria-hidden />
-          Tema
+          {t.configuracoes.plugins.tema}
         </span>
       ) : null}
 
@@ -608,7 +616,7 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
         variant="ghost"
         size="icon"
         className="text-muted-foreground hover:text-destructive size-7 shrink-0"
-        aria-label={`Desinstalar ${extensao.nome}`}
+        aria-label={t.configuracoes.plugins.desinstalar(extensao.nome)}
         onClick={() => void remover(extensao.id)}
       >
         <Trash2 className="size-3.5" />

@@ -41,6 +41,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useTokenDrag } from "@/hooks/use-token-drag";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/personagens";
 import { MINIATURA } from "@/lib/miniatura";
 import { fitInitialSize } from "@/lib/geometry/transform";
 import {
@@ -123,7 +125,7 @@ export function InventarioPersonagem({
   const recarregar = useCallback(() => {
     listInventory(personagem.id).then(setItens, (cause: unknown) => {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao ler o inventário.",
+        cause instanceof Error ? cause.message : t.inventario.falhaAoLer,
       );
       setItens([]);
     });
@@ -152,10 +154,10 @@ export function InventarioPersonagem({
         mudou();
         invalidar(de);
 
-        toast.success(`${item.nome} chegou em ${personagem.nome}.`);
+        toast.success(t.inventario.chegou(item.nome, personagem.nome));
       } catch (cause) {
         toast.error(
-          cause instanceof Error ? cause.message : "Falha ao mover o item.",
+          cause instanceof Error ? cause.message : t.inventario.falhaAoMover,
         );
       }
     },
@@ -189,7 +191,7 @@ export function InventarioPersonagem({
 
   async function criar() {
     try {
-      const item = await addItem(personagem.id, { nome: "Item sem nome" });
+      const item = await addItem(personagem.id, { nome: t.inventario.semNome });
       recarregar();
 
       // Abre já no item criado: o gesto do mestre é "adicionar um item", e
@@ -197,7 +199,7 @@ export function InventarioPersonagem({
       setAberto(item);
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao criar o item.",
+        cause instanceof Error ? cause.message : t.inventario.falhaAoCriar,
       );
     }
   }
@@ -209,7 +211,7 @@ export function InventarioPersonagem({
     <Button
       variant="ghost"
       size="icon-xs"
-      aria-label="Adicionar item"
+      aria-label={t.inventario.adicionar}
       onClick={() => void criar()}
     >
       <Plus />
@@ -218,8 +220,8 @@ export function InventarioPersonagem({
 
   if (itens === null) {
     return (
-      <SecaoFicha secao="inventario" titulo="Inventário" acao={adicionar}>
-        <p className="text-muted-foreground text-xs">Lendo…</p>
+      <SecaoFicha secao="inventario" titulo={t.inventario.titulo} acao={adicionar}>
+        <p className="text-muted-foreground text-xs">{t.geral.lendo}</p>
       </SecaoFicha>
     );
   }
@@ -227,7 +229,7 @@ export function InventarioPersonagem({
   return (
     <SecaoFicha
       secao="inventario"
-      titulo="Inventário"
+      titulo={t.inventario.titulo}
       contagem={itens.length}
       acao={adicionar}
     >
@@ -376,7 +378,7 @@ function ItemTile({
       onChanged();
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao mudar a quantidade.",
+        cause instanceof Error ? cause.message : t.inventario.falhaQuantidade,
       );
     } finally {
       setOcupado(false);
@@ -391,7 +393,7 @@ function ItemTile({
       onChanged();
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao mudar o item.",
+        cause instanceof Error ? cause.message : t.inventario.falhaAoMudar,
       );
     } finally {
       setOcupado(false);
@@ -404,7 +406,7 @@ function ItemTile({
       onChanged();
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao remover o item.",
+        cause instanceof Error ? cause.message : t.inventario.falhaAoRemover,
       );
     }
   }
@@ -460,8 +462,8 @@ function ItemTile({
       <button
         type="button"
         onClick={onAbrir}
-        aria-label={`${item.nome}${item.escondido ? " (escondido)" : ""}`}
-        title={item.imagem ? `${item.nome} — arraste para a mesa` : item.nome}
+        aria-label={item.escondido ? t.inventario.escondido(item.nome) : item.nome}
+        title={item.imagem ? t.inventario.arrasteParaAMesa(item.nome) : item.nome}
         className={cn(
           "focus-visible:ring-ring absolute inset-0 flex flex-col items-center justify-end gap-0.5 p-1 text-center focus-visible:ring-2 focus-visible:outline-none",
           // A opacidade é do CONTEÚDO, e não do quadro inteiro: no quadro ela
@@ -494,7 +496,7 @@ function ItemTile({
 
         <div className="bg-background/90 hidden items-center rounded border shadow-sm group-hover/item:flex group-focus-within/item:flex">
           <Passo
-            rotulo={`Menos um ${item.nome}`}
+            rotulo={t.inventario.menosUm(item.nome)}
             Icone={Minus}
             desabilitado={ocupado || item.quantidade <= 1}
             onClick={() => void mexer(-1)}
@@ -505,7 +507,7 @@ function ItemTile({
           </span>
 
           <Passo
-            rotulo={`Mais um ${item.nome}`}
+            rotulo={t.inventario.maisUm(item.nome)}
             Icone={Plus}
             desabilitado={ocupado}
             onClick={() => void mexer(1)}
@@ -529,8 +531,8 @@ function ItemTile({
                 size="icon-xs"
                 aria-label={
                   item.escondido
-                    ? `Mostrar ${item.nome} ao jogador`
-                    : `Esconder ${item.nome} do jogador`
+                    ? t.inventario.mostrarAoJogador(item.nome)
+                    : t.inventario.esconderDoJogador(item.nome)
                 }
                 aria-pressed={item.escondido}
                 disabled={ocupado}
@@ -549,8 +551,8 @@ function ItemTile({
           <TooltipContent>
             <p className="max-w-48">
               {item.escondido
-                ? "O jogador não vê. Clique para revelar."
-                : "O jogador vê. Clique para esconder."}
+                ? t.inventario.jogadorNaoVe
+                : t.inventario.jogadorVe}
             </p>
           </TooltipContent>
         </Tooltip>
@@ -580,7 +582,7 @@ function ItemTile({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Mais ações para ${item.nome}`}
+                aria-label={t.inventario.maisAcoes(item.nome)}
                 className="bg-background/90 hover:bg-background size-5 border shadow-sm"
               >
                 <MoreHorizontal />
@@ -598,7 +600,7 @@ function ItemTile({
                 onClick={alternarTransmissao}
               >
                 {noAr ? <RadioTower /> : <Radio />}
-                {noAr ? "Tirar" : "Mostrar"}
+                {noAr ? t.inventario.tirar : t.inventario.mostrar}
               </DropdownMenuItem>
             ) : null}
 
@@ -608,7 +610,7 @@ function ItemTile({
               onClick={() => void apagar()}
             >
               <Trash2 />
-              Remover
+              {t.inventario.remover}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -647,7 +649,7 @@ function SlotVazio({ onAdicionar }: { onAdicionar: () => void }) {
     <button
       type="button"
       onClick={onAdicionar}
-      aria-label="Adicionar item"
+      aria-label={t.inventario.adicionar}
       className="text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex aspect-square items-center justify-center rounded border border-dashed focus-visible:ring-2 focus-visible:outline-none"
     >
       <Plus className="size-4" aria-hidden />
@@ -833,7 +835,7 @@ function QuadroDaImagem({
       const novo = await escolherImagemDoDisco(personagemId, item.id);
       if (novo) onTrocada(novo);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+      toast.error(cause instanceof Error ? cause.message : t.inventario.falhaAoImportar);
     } finally {
       setEscolhendo(false);
     }
@@ -845,9 +847,9 @@ function QuadroDaImagem({
       onClick={() => void escolher()}
       disabled={escolhendo}
       aria-label={
-        item.imagem ? "Trocar a imagem do item" : "Escolher a imagem do item"
+        item.imagem ? t.inventario.trocarImagemDoItem : t.inventario.escolherImagemDoItem
       }
-      title={item.imagem ? "Trocar a imagem" : "Escolher uma imagem do disco"}
+      title={item.imagem ? t.inventario.trocarImagem : t.inventario.escolherDoDisco}
       className={cn(
         "group hover:border-ring focus-visible:ring-ring relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded border focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60",
         !item.imagem &&
@@ -864,14 +866,14 @@ function QuadroDaImagem({
 
           <span className="bg-background/80 absolute inset-0 hidden flex-col items-center justify-center gap-0.5 group-hover:flex group-focus-visible:flex">
             <ImagePlus className="size-4" aria-hidden />
-            <span className="text-[10px] leading-none font-medium">Trocar</span>
+            <span className="text-[10px] leading-none font-medium">{t.inventario.trocar}</span>
           </span>
         </>
       ) : (
         <span className="flex flex-col items-center gap-1">
           <ImagePlus className="size-5" aria-hidden />
           <span className="text-[10px] leading-none font-medium">
-            Pôr imagem
+            {t.inventario.porImagem}
           </span>
         </span>
       )}
@@ -898,7 +900,7 @@ function ItemForm({
       onChanged();
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao salvar o item.",
+        cause instanceof Error ? cause.message : t.inventario.falhaAoSalvar,
       );
     }
   }
@@ -910,7 +912,7 @@ function ItemForm({
       onFechar();
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao remover o item.",
+        cause instanceof Error ? cause.message : t.inventario.falhaAoRemover,
       );
     }
   }
@@ -919,7 +921,7 @@ function ItemForm({
     <>
       <DialogTitle className="sr-only">{atual.nome}</DialogTitle>
       <DialogDescription className="sr-only">
-        Nome, descrição, quantidade e imagem do item.
+        {t.inventario.sobreODialogo}
       </DialogDescription>
 
       <div className="flex gap-3">
@@ -936,7 +938,7 @@ function ItemForm({
           <div className="flex items-center gap-1">
             <Input
               defaultValue={atual.nome}
-              aria-label="Nome do item"
+              aria-label={t.inventario.nome}
               className="flex-1"
               onBlur={(event) => void salvar({ nome: event.target.value })}
             />
@@ -946,7 +948,7 @@ function ItemForm({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Fechar"
+                  aria-label={comum.fechar}
                   className="shrink-0"
                 />
               }
@@ -957,7 +959,7 @@ function ItemForm({
 
           <div className="flex items-center gap-2">
             <Label htmlFor={`qtd-${item.id}`} className="text-xs">
-              Quantidade
+              {t.inventario.quantidade}
             </Label>
             <Input
               id={`qtd-${item.id}`}
@@ -975,8 +977,8 @@ function ItemForm({
 
       <Textarea
         defaultValue={atual.descricao}
-        placeholder="O que é, o que faz, de onde veio."
-        aria-label="Descrição do item"
+        placeholder={t.inventario.descricaoExemplo}
+        aria-label={t.inventario.descricao}
         className="min-h-20 text-sm"
         onBlur={(event) => void salvar({ descricao: event.target.value })}
       />
@@ -1002,7 +1004,7 @@ function ItemForm({
           ) : (
             <Eye className="size-3.5" />
           )}
-          {atual.escondido ? "Escondido do jogador" : "O jogador vê"}
+          {atual.escondido ? t.inventario.escondidoDoJogador : t.inventario.oJogadorVe}
         </label>
 
         <Button
@@ -1011,7 +1013,7 @@ function ItemForm({
           className="text-destructive"
           onClick={() => void apagar()}
         >
-          <Trash2 /> Remover
+          <Trash2 /> {t.inventario.remover}
         </Button>
       </DialogFooter>
     </>
@@ -1066,7 +1068,7 @@ function useTransmissaoDoItem(personagemId: string, item: ItemInventario) {
       }
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao transmitir.",
+        cause instanceof Error ? cause.message : t.geral.falhas.transmitir,
       );
     }
   }
@@ -1096,15 +1098,13 @@ function TransmitirItem({
             onClick={alternar}
           >
             {noAr ? <RadioTower /> : <Radio />}
-            {noAr ? "No ar" : "Mostrar"}
+            {noAr ? t.inventario.noAr : t.inventario.mostrar}
           </Button>
         }
       />
       <TooltipContent>
         <p className="max-w-48">
-          {noAr
-            ? "No ar agora. Clique para tirar."
-            : "Põe a imagem deste item na frente de tudo, na mesa."}
+          {noAr ? t.geral.noArAgora : t.inventario.poeAImagem}
         </p>
       </TooltipContent>
     </Tooltip>

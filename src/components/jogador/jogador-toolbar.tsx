@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { SaquinhoJogador } from "@/components/jogador/saquinho-jogador";
+import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 
 /**
@@ -78,7 +79,7 @@ export function ToolbarItem({
       // `aria-current`, e não `role="tab"`: os painéis são trocados por estado,
       // sem as setas e o foco que um conjunto de abas de verdade promete.
       aria-current={ativo ? "page" : undefined}
-      aria-label={aviso ? `${rotulo}, há mensagem nova` : undefined}
+      aria-label={aviso ? t.barra.comAviso(rotulo) : undefined}
       className={cn(
         "relative flex min-w-16 flex-col items-center gap-0.5 rounded-2xl px-3 py-1.5 text-[11px] font-medium transition-colors",
         "[&_svg]:size-5 [&_svg]:shrink-0",

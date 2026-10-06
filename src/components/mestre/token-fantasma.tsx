@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { boxAround } from "@/lib/geometry/transform";
+import { idioma } from "@/lib/i18n/idioma";
+import { t } from "@/lib/i18n/ferramentas";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import {
@@ -137,7 +139,7 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
             toast.error(
               cause instanceof Error
                 ? cause.message
-                : "Não deu para pôr o item na mesa.",
+                : t.fantasma.naoDeuItem,
             ),
         );
 
@@ -241,8 +243,13 @@ function medida(
 ): string {
   if (!grid || grid.size <= 0) return `${largura} × ${altura}`;
 
+  // Uma casa decimal sempre, e a vírgula ou o ponto do idioma.
   const quadrados = (medida: number) =>
-    (medida / grid.size).toFixed(1).replace(".", ",");
+    (medida / grid.size).toLocaleString(idioma, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+      useGrouping: false,
+    });
 
-  return `${quadrados(largura)} × ${quadrados(altura)} na grade`;
+  return t.fantasma.naGrade(quadrados(largura), quadrados(altura));
 }

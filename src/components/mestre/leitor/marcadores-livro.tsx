@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMarcadores } from "@/hooks/use-marcadores";
 import { aoApertarF2 } from "@/hooks/use-renomear-pelo-menu";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/mestre";
 
 /**
  * Os marcadores da campanha aberta, como tira lateral.
@@ -32,10 +34,7 @@ export function MarcadoresLivro({
 
   if (semCampanha) {
     return (
-      <p className="text-muted-foreground text-xs">
-        Marcar página pede uma campanha aberta: o marcador é da mesa, e o livro
-        é da máquina. A leitura continua funcionando sem isso.
-      </p>
+      <p className="text-muted-foreground text-xs">{t.leitor.semCampanha}</p>
     );
   }
 
@@ -47,12 +46,12 @@ export function MarcadoresLivro({
         onClick={() => void marcar(paginaAtual, "")}
       >
         <BookmarkPlus />
-        Marcar a página {paginaAtual}
+        {t.leitor.marcarPagina(paginaAtual)}
       </Button>
 
       {marcadores.length === 0 ? (
         <p className="text-muted-foreground text-xs">
-          Nenhuma página marcada nesta campanha.
+          {t.leitor.nenhumaMarcada}
         </p>
       ) : null}
 
@@ -75,14 +74,14 @@ export function MarcadoresLivro({
                   value={rascunho}
                   onChange={(evento) => setRascunho(evento.target.value)}
                   autoFocus
-                  aria-label="Rótulo do marcador"
+                  aria-label={t.leitor.rotuloDoMarcador}
                   className="h-7 text-xs"
                 />
                 <Button
                   type="submit"
                   variant="ghost"
                   size="icon-xs"
-                  aria-label="Confirmar"
+                  aria-label={t.leitor.confirmar}
                 >
                   <Check />
                 </Button>
@@ -90,7 +89,7 @@ export function MarcadoresLivro({
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  aria-label="Cancelar"
+                  aria-label={comum.cancelar}
                   onClick={() => setEditando(null)}
                 >
                   <X />
@@ -112,7 +111,7 @@ export function MarcadoresLivro({
                   aria-current={marcador.pagina === paginaAtual}
                 >
                   <span className="text-muted-foreground text-[0.7rem] tabular-nums">
-                    p. {marcador.pagina}
+                    {t.leitor.pagina(marcador.pagina)}
                   </span>
                   <span className="block truncate text-xs">
                     {marcador.rotulo}
@@ -125,7 +124,7 @@ export function MarcadoresLivro({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Renomear ${marcador.rotulo}`}
+                    aria-label={t.leitor.renomear(marcador.rotulo)}
                     onClick={() => {
                       setEditando(marcador.id);
                       setRascunho(marcador.rotulo);
@@ -136,7 +135,7 @@ export function MarcadoresLivro({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Remover ${marcador.rotulo}`}
+                    aria-label={t.leitor.remover(marcador.rotulo)}
                     onClick={() => void remover(marcador.id)}
                   >
                     <Trash2 />

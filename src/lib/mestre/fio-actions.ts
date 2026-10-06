@@ -5,6 +5,7 @@ import {
   useConfiguracoesStore,
   valorDe,
 } from "@/lib/configuracoes/registro";
+import { t } from "@/lib/i18n/mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { Dado } from "@/types/dado";
 import type { LinhaDoFio, RolagemNoFio } from "@/types/fio";
@@ -59,7 +60,7 @@ async function sala(
 
   if (!response.ok) {
     const texto = await response.text().catch(() => "");
-    throw new FioError(response.status, texto || "o fio não recebeu a linha");
+    throw new FioError(response.status, texto || t.chat.naoRecebeu);
   }
 
   return response;
@@ -94,9 +95,8 @@ export const CHAVE_DADOS_ABERTOS = "ato20.dados.abertos";
 useConfiguracoesStore.getState().definir([
   {
     chave: CHAVE_DADOS_ABERTOS,
-    titulo: "Rolar aberto para a mesa",
-    descricao:
-      "Os dados do saquinho e da paleta entram no chat para todos. Desligado, entram só para o Mestre.",
+    titulo: t.definicoes.dadosAbertos,
+    descricao: t.definicoes.dadosAbertosDescricao,
     tipo: "booleano",
     padrao: false,
     escopo: "campanha",

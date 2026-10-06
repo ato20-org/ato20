@@ -16,6 +16,7 @@ import {
   terminarGesto,
   useGestoStore,
 } from "@/lib/store/use-gesto-store";
+import { t } from "@/lib/i18n/ferramentas";
 import { FORMA_Z } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -196,7 +197,7 @@ const FormaDaCena = memo(function FormaDaCena({
           }}
           handles={RESIZE_HANDLES}
           paleta={{
-            titulo: "Traço",
+            titulo: t.forma.traco,
             cor: forma.cor,
             fundo: forma.fundo,
             onChange: ({ cor, fundo }) =>
@@ -300,9 +301,11 @@ function EstiloDaForma({
   return (
     <>
       <div className="space-y-1.5">
-        <span className="text-muted-foreground text-[10px]">Espessura</span>
+        <span className="text-muted-foreground text-[10px]">
+          {t.forma.espessura}
+        </span>
         <Slider
-          aria-label="Espessura"
+          aria-label={t.forma.espessura}
           value={[degrau]}
           min={0}
           max={ESPESSURAS_LAPIS.length - 1}
@@ -317,19 +320,22 @@ function EstiloDaForma({
       {/* Só onde há canto: elipse e linha não têm. */}
       {forma.tipo === "retangulo" || forma.tipo === "poligono" ? (
         <Chave
-          titulo="Cantos"
+          titulo={t.forma.cantos}
           ligada={!!forma.arredondado}
-          desligada={{ rotulo: "Cantos retos", Icone: Square }}
-          ligadaComo={{ rotulo: "Cantos arredondados", Icone: SquareRoundCorner }}
+          desligada={{ rotulo: t.forma.cantosRetos, Icone: Square }}
+          ligadaComo={{
+            rotulo: t.forma.cantosArredondados,
+            Icone: SquareRoundCorner,
+          }}
           onMudar={(valor) => onChange({ arredondado: valor ? true : undefined })}
         />
       ) : null}
 
       <Chave
-        titulo="Traço"
+        titulo={t.forma.traco}
         ligada={!!forma.aMao}
-        desligada={{ rotulo: "Traço limpo", Icone: Minus }}
-        ligadaComo={{ rotulo: "Traço à mão", Icone: Signature }}
+        desligada={{ rotulo: t.forma.tracoLimpo, Icone: Minus }}
+        ligadaComo={{ rotulo: t.forma.tracoAMao, Icone: Signature }}
         onMudar={(valor) => onChange({ aMao: valor ? true : undefined })}
       />
     </>

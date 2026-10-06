@@ -59,6 +59,9 @@ import { useCharacters } from "@/hooks/use-characters";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { fonteDaUrl, urlDaFonte } from "@/lib/extensoes/fontes";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/personagens";
+import { rico } from "@/lib/i18n/rico";
 import { usePaginaVivaSuportada } from "@/lib/motor";
 import { MINIATURA } from "@/lib/miniatura";
 import {
@@ -147,7 +150,7 @@ export function CharacterBody({ personagemId }: { personagemId: string }) {
   }, [personagens, personagem, fecharJanela, chave]);
 
   if (!personagem) {
-    return <p className="text-muted-foreground p-4 text-xs">Lendo…</p>;
+    return <p className="text-muted-foreground p-4 text-xs">{t.geral.lendo}</p>;
   }
 
   return (
@@ -219,7 +222,7 @@ function Ficha({
 
         setAnexos([]);
         toast.error(
-          cause instanceof Error ? cause.message : "Falha ao ler os arquivos.",
+          cause instanceof Error ? cause.message : t.ficha.falhaAoLerArquivos,
         );
       },
     );
@@ -256,7 +259,7 @@ function Ficha({
       for (const motivo of resultado.recusados) toast.error(motivo);
       if (resultado.aceitos.length > 0) relerAnexos();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao anexar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.anexar);
     } finally {
       setAnexando(false);
     }
@@ -291,7 +294,7 @@ function Ficha({
             {/* Os dois: preencher a ficha muda o ÍNDICE (o campo) e a pasta de
                 anexos (o arquivo). Chamando só `onChanged`, a lista de arquivos
                 ficava dizendo "nada anexado" com a ficha já posta. */}
-            <SecaoFicha secao="campos" titulo="Campos do personagem">
+            <SecaoFicha secao="campos" titulo={t.ficha.campos}>
               <Slots
                 personagem={personagem}
                 onChanged={() => {
@@ -428,7 +431,9 @@ export function OQueVaiJunto() {
   return (
     <>
       <p>
-        Ao apagar você vai <strong className="text-foreground">remover</strong>
+        {rico(t.ficha.aoApagar, {
+          remover: <strong className="text-foreground">{t.ficha.remover}</strong>,
+        })}
       </p>
 
       {/* Substantivo solto, sem artigo e sem oracao. A lista responde "o que
@@ -437,20 +442,20 @@ export function OQueVaiJunto() {
           quatro linhas para ler quatro coisas. Aqui o olho bate na primeira
           palavra de cada uma e ja sabe. */}
       <ul className="text-foreground marker:text-muted-foreground/40 list-disc space-y-0.5 pl-4">
-        <li>Ficha</li>
-        <li>Arquivos em anexo</li>
-        <li>Arquivos do jogador</li>
-        <li>Anotações</li>
+        <li>{t.ficha.vaiJunto.ficha}</li>
+        <li>{t.ficha.vaiJunto.anexos}</li>
+        <li>{t.ficha.vaiJunto.doJogador}</li>
+        <li>{t.ficha.vaiJunto.anotacoes}</li>
       </ul>
 
       {/* O que NAO vai junto, e a pergunta que se faz no meio da sessao: o
           token ja posto no mapa nao some com o personagem. Fica fora da lista
           de proposito -- a lista e do que se perde. */}
-      <p>O token no mapa continua lá, como imagem.</p>
+      <p>{t.ficha.tokenContinua}</p>
 
       <p className="text-foreground flex items-center gap-1.5 font-medium">
         <TriangleAlert className="size-4 shrink-0 text-amber-400" aria-hidden />
-        Não tem como desfazer isso
+        {t.ficha.semVolta}
       </p>
     </>
   );
@@ -502,7 +507,7 @@ function Identidade({
             <Input
               className="h-8 min-w-0 flex-1 text-sm font-medium"
               defaultValue={personagem.nome}
-              aria-label="Nome do personagem"
+              aria-label={t.ficha.nomeDoPersonagem}
               // O campo nasce com o foco e com o texto todo marcado: quem
               // clicou no lápis quer escrever, e não posicionar cursor primeiro.
               autoFocus
@@ -552,7 +557,7 @@ function Identidade({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={`Renomear ${personagem.nome}`}
+                aria-label={t.ficha.renomear(personagem.nome)}
                 onClick={() => setEditando(true)}
               >
                 <Pencil />
@@ -576,7 +581,7 @@ function Identidade({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Apagar este personagem"
+                  aria-label={t.ficha.apagarEste}
                 >
                   <Trash2 />
                 </Button>
@@ -586,7 +591,7 @@ function Identidade({
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  Deseja apagar {personagem.nome}?
+                  {t.ficha.desejaApagar(personagem.nome)}
                 </AlertDialogTitle>
                 {/* `render` de `div`: a descricao nasce `<p>`, e uma `<ul>`
                     dentro de um `<p>` o navegador fecha sozinho antes da
@@ -597,7 +602,7 @@ function Identidade({
               </AlertDialogHeader>
 
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => {
                     void removeCharacter(personagem.id).then(
@@ -606,12 +611,12 @@ function Identidade({
                         toast.error(
                           cause instanceof Error
                             ? cause.message
-                            : "Falha ao apagar.",
+                            : t.geral.falhas.apagar,
                         ),
                     );
                   }}
                 >
-                  Apagar
+                  {t.geral.apagar}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -623,7 +628,7 @@ function Identidade({
             estava a oitocentos pixels de rolagem dentro de uma secao. La embaixo
             continua a lista que se EDITA; aqui e so o que ela diz. */}
         <p className="text-muted-foreground truncate text-[11px]">
-          {donos.length === 0 ? "Sem dono" : donos.join(", ")}
+          {donos.length === 0 ? t.ficha.semDono : donos.join(", ")}
         </p>
       </div>
     </div>
@@ -655,12 +660,11 @@ function Files({
   );
 
   return (
-    <SecaoFicha secao="arquivos" titulo="Arquivos" contagem={soltos.length}>
+    <SecaoFicha secao="arquivos" titulo={t.ficha.arquivos} contagem={soltos.length}>
       <div className="space-y-2">
         {soltos.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            Nada além dos campos. O que entrar aqui o jogador vinculado também
-            lê.
+            {t.ficha.nadaAlemDosCampos}
           </p>
         ) : (
           <ul className="space-y-1">
@@ -711,7 +715,7 @@ function Files({
                         : "bg-amber-400/15 text-amber-300",
                     )}
                   >
-                    {doJogador(anexo) ? "do jogador" : "seu"}
+                    {doJogador(anexo) ? t.ficha.doJogador : t.ficha.seu}
                   </span>
 
                   <span className="text-muted-foreground shrink-0 text-[10px] tabular-nums">
@@ -730,7 +734,7 @@ function Files({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Apagar ${anexo.arquivo}`}
+                    aria-label={t.ficha.apagarArquivo(anexo.arquivo)}
                     onClick={() => void onRemover(anexo)}
                   >
                     <Trash2 />
@@ -755,11 +759,12 @@ function Files({
             }
           >
             {anexando ? <Loader2 className="animate-spin" /> : <Paperclip />}
-            Anexar arquivos
+            {t.ficha.anexarArquivos}
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-64">
-            Ficam em <code>personagens/{personagemId}/anexos/</code>, separados
-            por quem os pôs ali. O jogador vinculado também os lê.
+            {rico(t.ficha.ondeFicam, {
+              pasta: <code>personagens/{personagemId}/anexos/</code>,
+            })}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -803,7 +808,7 @@ function Transmitir({
       transmitShared(id, anexo.arquivo);
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao transmitir.",
+        cause instanceof Error ? cause.message : t.geral.falhas.transmitir,
       );
     }
   }
@@ -815,7 +820,7 @@ function Transmitir({
           <Button
             variant={noAr ? "default" : "ghost"}
             size="icon-xs"
-            aria-label={noAr ? "Tirar da evidência" : "Transmitir para a mesa"}
+            aria-label={noAr ? t.ficha.tirarDaEvidencia : t.ficha.transmitirParaAMesa}
             aria-pressed={noAr}
             onClick={() => (noAr ? clear() : void transmitir())}
           >
@@ -825,9 +830,7 @@ function Transmitir({
       />
       <TooltipContent>
         <p className="max-w-48">
-          {noAr
-            ? "No ar agora. Clique para tirar."
-            : "Põe este arquivo na frente de tudo."}
+          {noAr ? t.geral.noArAgora : t.ficha.poeNaFrente}
         </p>
       </TooltipContent>
     </Tooltip>
@@ -848,21 +851,9 @@ function Transmitir({
  */
 const CAMPOS: Array<{ campo: CampoPersonagem; titulo: string; nota: string }> =
   [
-    {
-      campo: "ficha",
-      titulo: "Ficha",
-      nota: "Documento. Fica no personagem, e só quem está vinculado lê.",
-    },
-    {
-      campo: "retrato",
-      titulo: "Retrato",
-      nota: "Imagem. Entra no acervo, porque a TV alcança imagem só por lá.",
-    },
-    {
-      campo: "miniatura",
-      titulo: "Miniatura",
-      nota: "A peça dele no mapa. Também entra no acervo, pela mesma razão.",
-    },
+    { campo: "ficha", ...t.ficha.slots.ficha },
+    { campo: "retrato", ...t.ficha.slots.retrato },
+    { campo: "miniatura", ...t.ficha.slots.miniatura },
   ];
 
 /**
@@ -918,7 +909,7 @@ function RetratoAoVivo({
       onChanged();
     } catch (causa) {
       toast.error(
-        causa instanceof Error ? causa.message : "Não deu para gravar.",
+        causa instanceof Error ? causa.message : t.ficha.naoDeuParaGravar,
       );
     } finally {
       setSalvando(false);
@@ -936,8 +927,8 @@ function RetratoAoVivo({
                   type="button"
                   aria-label={
                     salva
-                      ? "Retrato ao vivo, configurado"
-                      : "Pôr um retrato ao vivo"
+                      ? t.ficha.retratoAoVivo.configurado
+                      : t.ficha.retratoAoVivo.por
                   }
                   className={cn(
                     "focus-visible:ring-ring absolute top-1 right-1 z-10 flex size-5 items-center justify-center rounded focus-visible:ring-2 focus-visible:outline-none",
@@ -958,19 +949,17 @@ function RetratoAoVivo({
         <TooltipContent>
           <p className="max-w-48">
             {salva
-              ? "Retrato ao vivo no ar. Clique para trocar."
-              : "Retrato ao vivo"}
+              ? t.ficha.retratoAoVivo.noAr
+              : t.ficha.retratoAoVivo.titulo}
           </p>
         </TooltipContent>
       </Tooltip>
 
       <PopoverContent align="start" className="w-80 space-y-2">
         <div>
-          <h3 className="text-xs font-medium">Retrato ao vivo</h3>
+          <h3 className="text-xs font-medium">{t.ficha.retratoAoVivo.titulo}</h3>
           <p className="text-muted-foreground text-[11px]">
-            Uma página que se atualiza sozinha — vida, sanidade, o que o serviço
-            mostrar. Sem internet ela não carrega, e o Retrato do acervo aparece
-            no lugar.
+            {t.ficha.retratoAoVivo.explicacao}
           </p>
         </div>
 
@@ -984,10 +973,10 @@ function RetratoAoVivo({
                 setFonteId(evento.target.value);
                 setTexto("");
               }}
-              aria-label="Fonte do retrato"
+              aria-label={t.ficha.retratoAoVivo.fonte}
               className="border-input bg-background h-8 shrink-0 rounded-md border px-2 text-xs"
             >
-              <option value="">URL completa</option>
+              <option value="">{t.ficha.retratoAoVivo.urlCompleta}</option>
               {fontes.map((atual) => (
                 <option key={atual.fonte} value={atual.fonte}>
                   {atual.rotulo}
@@ -1000,7 +989,7 @@ function RetratoAoVivo({
             value={texto}
             onChange={(evento) => setTexto(evento.target.value)}
             placeholder={fonte ? (fonte.exemplo ?? fonte.campo) : "https://…"}
-            aria-label={fonte ? fonte.campo : "URL do retrato ao vivo"}
+            aria-label={fonte ? fonte.campo : t.ficha.retratoAoVivo.url}
             className="h-8 min-w-0 flex-1 text-xs"
             // Enter grava: o campo tem um valor só, e pedir um clique depois de
             // colar é um passo a mais para a coisa mais frequente aqui.
@@ -1016,7 +1005,7 @@ function RetratoAoVivo({
             disabled={salvando || !mudou || !alvo}
             onClick={() => alvo && void gravar(alvo)}
           >
-            Usar
+            {t.ficha.retratoAoVivo.usar}
           </Button>
 
           {salva ? (
@@ -1024,7 +1013,7 @@ function RetratoAoVivo({
               size="icon"
               variant="ghost"
               className="text-muted-foreground hover:text-destructive size-8 shrink-0"
-              aria-label="Tirar o retrato ao vivo"
+              aria-label={t.ficha.retratoAoVivo.tirar}
               disabled={salvando}
               onClick={() => {
                 setTexto("");
@@ -1054,13 +1043,13 @@ function RetratoAoVivo({
           que o link está errado -- quando ele está certo, e a mesa está vendo. */}
         {salva && !paginaVivaOk ? (
           <p className="text-muted-foreground text-[11px]">
-            Esta tela não desenha página viva — ela usa o motor WebKit, e é uma
-            limitação do serviço, não do link. Aqui aparece o Retrato do acervo.
-            <strong className="font-medium">
-              {" "}
-              A TV e os celulares Android mostram normalmente
-            </strong>
-            ; iPhone, não, porque todo navegador de iOS é WebKit.
+            {rico(t.ficha.retratoAoVivo.semPaginaViva, {
+              destaque: (
+                <strong className="font-medium">
+                  {t.ficha.retratoAoVivo.destaque}
+                </strong>
+              ),
+            })}
           </p>
         ) : null}
       </PopoverContent>
@@ -1202,7 +1191,7 @@ function Slot({
       );
       if (preenchido) onChanged();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao anexar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.anexar);
     } finally {
       setOcupado(false);
     }
@@ -1226,7 +1215,7 @@ function Slot({
 
       onChanged();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao limpar.");
+      toast.error(cause instanceof Error ? cause.message : t.ficha.falhaAoLimpar);
     }
   }
 
@@ -1279,7 +1268,7 @@ function Slot({
             type="button"
             // O nome vive no `title` do quadro e no cabeçalho da janela: em
             // oitenta pixels ele viraria três letras e reticências.
-            aria-label={`Abrir ${fichaAnexo.arquivo}`}
+            aria-label={t.ficha.abrir(fichaAnexo.arquivo)}
             onClick={() => onAbrirAnexo(fichaAnexo)}
             className="hover:bg-accent focus-visible:ring-ring absolute inset-0 grid size-full place-items-center focus-visible:ring-2 focus-visible:outline-none"
           >
@@ -1319,7 +1308,7 @@ function Slot({
                   variant="ghost"
                   size="icon-xs"
                   className="text-white hover:bg-white/20 hover:text-white"
-                  aria-label={`${preenchido ? "Trocar" : "Anexar"} ${titulo}`}
+                  aria-label={preenchido ? t.ficha.trocar(titulo) : t.ficha.anexar(titulo)}
                   disabled={ocupado}
                   onClick={() => void escolher()}
                 >
@@ -1333,7 +1322,7 @@ function Slot({
             />
             <TooltipContent>
               <p className="max-w-48">
-                {preenchido ? `Trocar ${titulo}` : nota}
+                {preenchido ? t.ficha.trocar(titulo) : nota}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -1343,7 +1332,7 @@ function Slot({
               variant="ghost"
               size="icon-xs"
               className="text-white hover:bg-white/20 hover:text-white"
-              aria-label={`Limpar ${titulo}`}
+              aria-label={t.ficha.limpar(titulo)}
               onClick={() => void limpar()}
             >
               <X />
@@ -1519,7 +1508,7 @@ function Thumb({
         moldura,
         "hover:ring-ring focus-visible:ring-ring cursor-zoom-in hover:ring-2 focus-visible:ring-2 focus-visible:outline-none",
       )}
-      aria-label={`Ver ${alt}`}
+      aria-label={t.ficha.ver(alt)}
       onClick={onAbrir}
     >
       {imagem}
@@ -1599,12 +1588,12 @@ function PlayerNote({
           )}
           aria-hidden
         />
-        <span className="shrink-0">Nota</span>
+        <span className="shrink-0">{t.ficha.nota}</span>
         <span className="min-w-0 flex-1 truncate italic">
-          {resumo || "vazia"}
+          {resumo || t.ficha.vazia}
         </span>
         {salvo ? (
-          <span className="text-emerald-500 shrink-0 not-italic">salvo</span>
+          <span className="text-emerald-500 shrink-0 not-italic">{t.ficha.salvo}</span>
         ) : null}
       </button>
 
@@ -1613,8 +1602,8 @@ function PlayerNote({
           id={id}
           autoFocus
           className="min-h-16 resize-y text-xs"
-          placeholder={`Sua nota sobre ${jogador.nome} neste personagem`}
-          aria-label={`Sua nota sobre ${jogador.nome}`}
+          placeholder={t.ficha.notaSobre(jogador.nome)}
+          aria-label={t.ficha.notaSobreCurta(jogador.nome)}
           defaultValue={texto}
           onBlur={(event) => {
             if (event.target.value === texto) return;
@@ -1630,7 +1619,7 @@ function PlayerNote({
               },
               (cause) =>
                 toast.error(
-                  cause instanceof Error ? cause.message : "Falha ao gravar.",
+                  cause instanceof Error ? cause.message : t.geral.falhas.gravar,
                 ),
             );
           }}
@@ -1670,15 +1659,15 @@ function Owners({
   return (
     <SecaoFicha
       secao="nota"
-      titulo="Quem joga com ele"
+      titulo={t.ficha.quemJoga}
       contagem={vinculados.length}
     >
       <div className="space-y-2">
         {vinculados.length === 0 ? (
           <p className="text-muted-foreground text-xs">
             {jogadores.length === 0
-              ? "Ninguém entrou na mesa ainda."
-              : "Ninguém vinculado. Vinculado, o jogador vê os arquivos e escreve notas."}
+              ? t.ficha.ninguemEntrou
+              : t.ficha.ninguemVinculado}
           </p>
         ) : (
           <ul className="space-y-1">
@@ -1694,7 +1683,7 @@ function Owners({
                       type="button"
                       onClick={() => setEscolhido(jogador.id)}
                       className="hover:bg-muted flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left focus-visible:ring-2 focus-visible:outline-none"
-                      aria-label={`Abrir ${jogador.nome}`}
+                      aria-label={t.ficha.abrir(jogador.nome)}
                     >
                       <span
                         className={cn(
@@ -1707,13 +1696,13 @@ function Owners({
                         {jogador.nome}
                       </span>
                       <span className="text-muted-foreground shrink-0 text-[10px]">
-                        {naMesa ? "na mesa" : `visto ${desde(jogador.vistoEm)}`}
+                        {naMesa ? t.ficha.naMesa : t.ficha.visto(desde(jogador.vistoEm))}
                       </span>
                     </button>
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`Desvincular ${jogador.nome}`}
+                      aria-label={t.ficha.desvincular(jogador.nome)}
                       onClick={() => {
                         void unlinkCharacter(jogador.id, personagem.id).then(
                           onChanged,
@@ -1742,9 +1731,9 @@ function Owners({
           >
             <SelectTrigger
               className="w-full text-xs"
-              aria-label="Vincular a um jogador"
+              aria-label={t.ficha.vincularAUmJogador}
             >
-              <SelectValue placeholder="Vincular a…" />
+              <SelectValue placeholder={t.ficha.vincularA} />
             </SelectTrigger>
             {/* Abaixo do gatilho, e não por cima: sem valor escolhido não há
                 item para alinhar, e o popup cobria o próprio "Vincular a…". */}

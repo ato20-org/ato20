@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { t } from "@/lib/i18n/palco";
 import { filaDasMiniaturas, pegarDocDoLivro } from "@/lib/leitor/doc-do-livro";
 import { cn } from "@/lib/utils";
 
@@ -100,7 +101,7 @@ export function MiniaturaDaPagina({
       />
       {estado === "pronta" ? null : (
         <span className="absolute inset-0 flex items-center justify-center text-xs text-neutral-500">
-          {estado === "abrindo" ? "Abrindo…" : "Não abriu"}
+          {estado === "abrindo" ? t.leitor.abrindo : t.leitor.naoAbriu}
         </span>
       )}
     </div>

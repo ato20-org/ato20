@@ -41,6 +41,8 @@ import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useEstante } from "@/hooks/use-estante";
 import { Livro3D } from "@/components/mestre/livro-3d";
 import { abrirLivroNoSistema } from "@/lib/vault/estante";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/mestre";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { dataCurta, desde, duracao } from "@/lib/tempo";
 import { cn } from "@/lib/utils";
@@ -84,12 +86,10 @@ function NoApp() {
     <Centered>
       <MonitorOff className="text-muted-foreground size-8" aria-hidden />
       <h1 className="text-2xl font-semibold tracking-tight">
-        Abra pelo aplicativo
+        {t.porta.abraPeloAplicativo}
       </h1>
       <p className="text-muted-foreground text-sm">
-        O Mestre lê e grava a campanha numa pasta do computador, e uma aba do
-        navegador não alcança o disco. Quem baixou o aplicativo é o mestre; ele
-        abre direto nesta tela.
+        {t.porta.abraPeloAplicativoExplicacao}
       </p>
 
       {/* Para as duas telas que FUNCIONAM aqui: quem caiu neste endereço pelo
@@ -105,7 +105,7 @@ function NoApp() {
           size="sm"
         >
           <Tv aria-hidden />
-          A TV da mesa
+          {t.porta.tvDaMesa}
         </Button>
         <Button
           render={<Link href="/jogador" />}
@@ -114,7 +114,7 @@ function NoApp() {
           size="sm"
         >
           <Smartphone aria-hidden />
-          O teu celular
+          {t.porta.teuCelular}
         </Button>
       </div>
     </Centered>
@@ -178,7 +178,7 @@ function CampaignDoor() {
     if (zips[0]) void importarZip(zips[0]);
 
     if (pdfs.length === 0 && zips.length === 0)
-      toast.error("Aqui entram PDF, para a estante, e zip de campanha.");
+      toast.error(t.porta.soltarInvalido);
   });
 
   if (creating) return <CreateForm onCancel={() => setCreating(false)} />;
@@ -215,7 +215,7 @@ function CampaignDoor() {
             de apresentação e o peso dos botões. Lado a lado as duas pareciam
             telas diferentes do mesmo aplicativo, e a porta é UMA. */}
         <h1 className="text-2xl font-semibold tracking-tight">
-          Bem-vindo ao ATO20
+          {t.porta.bemVindo}
         </h1>
       </header>
 
@@ -235,7 +235,7 @@ function CampaignDoor() {
           onClick={() => void openFolder()}
         >
           {busy ? <Loader2 className="animate-spin" /> : <FolderSearch />}
-          Encontrar campanha
+          {t.porta.encontrarCampanha}
         </Button>
 
         <Button
@@ -244,7 +244,7 @@ function CampaignDoor() {
           onClick={() => setCreating(true)}
         >
           <FolderPlus />
-          Criar campanha
+          {t.porta.criarCampanha}
         </Button>
 
         {/* Importar mora aqui, e não atrás da campanha aberta: quem recebeu um
@@ -256,12 +256,12 @@ function CampaignDoor() {
           onClick={() => void importar()}
         >
           <FileArchive />
-          Importar de um zip
+          {t.porta.importarZip}
         </Button>
       </div>
 
       {ultima ? (
-        <Secao titulo="Continuar">
+        <Secao titulo={t.porta.continuar}>
           <CampanhaLinha
             entry={ultima}
             destaque
@@ -273,7 +273,7 @@ function CampaignDoor() {
       ) : null}
 
       {outras.length > 0 ? (
-        <Secao titulo="Outras campanhas">
+        <Secao titulo={t.porta.outrasCampanhas}>
           {outras.map((entry) => (
             <CampanhaLinha
               key={entry.path}
@@ -328,7 +328,7 @@ function Estante({
     <section className="space-y-1.5">
       <div className="flex items-center gap-2 px-1">
         <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          Na estante
+          {t.porta.naEstante}
         </h2>
         <Button
           variant="ghost"
@@ -337,7 +337,7 @@ function Estante({
           onClick={onAdicionar}
         >
           <BookPlus />
-          Adicionar livro
+          {t.porta.adicionarLivro}
         </Button>
       </div>
 
@@ -358,11 +358,9 @@ function Estante({
           className="border-border/70 text-muted-foreground hover:border-primary/60 hover:bg-primary/5 hover:text-foreground focus-visible:ring-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors focus-visible:ring-2 focus-visible:outline-none"
         >
           <BookPlus className="size-5 shrink-0" aria-hidden />
-          <span className="text-sm">
-            Solte um PDF aqui, ou clique para achar
-          </span>
+          <span className="text-sm">{t.porta.estanteVazia}</span>
           <span className="text-xs text-muted-foreground/70">
-            Só PDF entra, e ele fica nesta máquina, fora do zip da campanha.
+            {t.porta.estanteVaziaNota}
           </span>
         </button>
       ) : null}
@@ -382,7 +380,7 @@ function Estante({
             <Button
               variant="secondary"
               size="icon-xs"
-              aria-label={`Tirar ${livro.arquivo} da estante`}
+              aria-label={t.porta.tirarDaEstante(livro.arquivo)}
               className="absolute top-1 right-1 z-10 rounded-full opacity-0 shadow group-hover:opacity-100 focus-visible:opacity-100"
               onClick={() => onRemover(livro.id)}
             >
@@ -395,7 +393,7 @@ function Estante({
                   toast.error(
                     cause instanceof Error
                       ? cause.message
-                      : "Não foi possível abrir o livro.",
+                      : t.porta.livroNaoAbriu,
                   ),
                 );
               }}
@@ -511,14 +509,14 @@ function CampanhaLinha({
         <span className="text-muted-foreground relative w-full truncate text-xs font-normal">
           {entry.existe
             ? encurtar(entry.path)
-            : `${encurtar(entry.path)} — não encontrada`}
+            : t.porta.naoEncontrada(encurtar(entry.path))}
         </span>
 
         {destaque && entry.existe ? (
           <span className="relative mt-3 grid w-full grid-cols-3 gap-3 border-t border-border/60 pt-3">
             <Numero
               icone={Clock}
-              rotulo="Última sessão"
+              rotulo={t.porta.ultimaSessao}
               valor={desde(entry.abertaEm)}
             />
 
@@ -529,7 +527,7 @@ function CampanhaLinha({
                 tipo. */}
             <Numero
               icone={CalendarDays}
-              rotulo="Criada em"
+              rotulo={t.porta.criadaEm}
               valor={entry.criadaEm ? dataCurta(entry.criadaEm) : "—"}
               nota={entry.criadaEm ? desde(entry.criadaEm) : undefined}
             />
@@ -540,7 +538,7 @@ function CampanhaLinha({
                 recém-nascida. */}
             <Numero
               icone={Hourglass}
-              rotulo="Tempo aberta"
+              rotulo={t.porta.tempoAberta}
               valor={entry.tempoMs > 0 ? duracao(entry.tempoMs) : "—"}
             />
           </span>
@@ -550,7 +548,7 @@ function CampanhaLinha({
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label={`Tirar ${entry.nome} da lista`}
+        aria-label={t.porta.tirarDaListaRotulo(entry.nome)}
         className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
         onClick={() => setTirando(true)}
       >
@@ -560,18 +558,18 @@ function CampanhaLinha({
       <AlertDialog open={tirando} onOpenChange={setTirando}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Tirar {entry.nome} da lista?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t.porta.tirarDaListaTitulo(entry.nome)}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              A pasta continua no disco, e a campanha volta à lista quando for
-              aberta por &quot;Encontrar campanha&quot;. O tempo aberta
-              contado até aqui se perde.
+              {t.porta.tirarDaListaExplicacao}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction onClick={() => void onForget(entry.path)}>
-              Tirar da lista
+              {t.porta.tirarDaLista}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -672,7 +670,7 @@ function Porta({
           className="border-primary/70 bg-primary/5 pointer-events-none absolute inset-3 flex items-center justify-center rounded-xl border-2 border-dashed"
         >
           <p className="bg-background/90 rounded-md border px-3 py-1.5 text-sm shadow">
-            Solte: PDF vai para a estante, zip vira campanha
+            {t.porta.soltar}
           </p>
         </div>
       ) : null}
@@ -697,9 +695,11 @@ function CreateForm({ onCancel }: { onCancel: () => void }) {
   return (
     <Centered>
       <FolderPlus className="text-muted-foreground size-8" aria-hidden />
-      <h1 className="text-2xl font-semibold tracking-tight">Nova campanha</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">
+        {t.porta.novaCampanha}
+      </h1>
       <p className="text-muted-foreground text-sm">
-        Crie uma nova campanha no ATO20
+        {t.porta.novaCampanhaExplicacao}
       </p>
 
       <form
@@ -710,14 +710,14 @@ function CreateForm({ onCancel }: { onCancel: () => void }) {
         }}
       >
         <div className="space-y-1.5">
-          <Label htmlFor="campaign-name">Nome da campanha</Label>
+          <Label htmlFor="campaign-name">{t.porta.nomeDaCampanha}</Label>
           <Input
             id="campaign-name"
             value={nome}
             onChange={(event) => setNome(event.target.value)}
             autoComplete="off"
             spellCheck={false}
-            placeholder="Ex.: Ato 1 — A Cidade do Medo"
+            placeholder={t.porta.nomeExemplo}
           />
         </div>
 
@@ -729,12 +729,12 @@ function CreateForm({ onCancel }: { onCancel: () => void }) {
           disabled={nome.trim().length === 0 || busy}
         >
           {busy ? <Loader2 className="animate-spin" /> : null}
-          Escolher a pasta
+          {t.porta.escolherPasta}
         </Button>
       </form>
 
       <Button variant="ghost" size="sm" disabled={busy} onClick={onCancel}>
-        Voltar
+        {t.porta.voltar}
       </Button>
     </Centered>
   );

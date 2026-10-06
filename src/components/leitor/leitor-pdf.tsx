@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { PdfDoc } from "@/hooks/use-pdf-doc";
 import { useRolagemDoLivro } from "@/hooks/use-rolagem-do-livro";
+import { t } from "@/lib/i18n/palco";
 
 /**
  * Os degraus do zoom.
@@ -285,7 +286,7 @@ export function LeitorPdf({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Página anterior"
+          aria-label={t.leitor.anterior}
           disabled={atual <= 1}
           onClick={() => ir(atual - 1)}
         >
@@ -310,18 +311,18 @@ export function LeitorPdf({
             name="pagina"
             defaultValue={atual}
             inputMode="numeric"
-            aria-label="Ir para a página"
+            aria-label={t.leitor.irPara}
             className="h-7 w-14 text-center text-xs tabular-nums"
           />
           <span className="text-muted-foreground text-xs tabular-nums">
-            de {paginas > 0 ? paginas : "…"}
+            {t.leitor.deTotal(paginas > 0 ? String(paginas) : "…")}
           </span>
         </form>
 
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Próxima página"
+          aria-label={t.leitor.proxima}
           disabled={paginas <= 0 || atual >= paginas}
           onClick={() => ir(atual + 1)}
         >
@@ -333,7 +334,7 @@ export function LeitorPdf({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Diminuir o zoom"
+          aria-label={t.leitor.diminuirZoom}
           onClick={() => degrau(-1)}
         >
           <ZoomOut />
@@ -341,15 +342,15 @@ export function LeitorPdf({
         <Button
           variant="ghost"
           size="sm"
-          aria-label="Ajustar à largura"
+          aria-label={t.leitor.ajustarLargura}
           onClick={() => setZoom("largura")}
         >
-          {zoom === "largura" ? "Largura" : `${Math.round(zoom * 100)}%`}
+          {zoom === "largura" ? t.leitor.largura : `${Math.round(zoom * 100)}%`}
         </Button>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Aumentar o zoom"
+          aria-label={t.leitor.aumentarZoom}
           onClick={() => degrau(1)}
         >
           <ZoomIn />
@@ -361,7 +362,7 @@ export function LeitorPdf({
               <Button
                 variant={lupa ? "secondary" : "ghost"}
                 size="icon-sm"
-                aria-label="Lupa"
+                aria-label={t.leitor.lupa}
                 aria-pressed={lupa}
                 onClick={() => setLupa((armada) => !armada)}
               >
@@ -370,7 +371,7 @@ export function LeitorPdf({
             }
           />
           <TooltipContent>
-            <p>Lupa: segure sobre a página, roda ajusta ({ampliacao}×)</p>
+            <p>{t.leitor.lupaDica(ampliacao)}</p>
           </TooltipContent>
         </Tooltip>
 
@@ -382,7 +383,7 @@ export function LeitorPdf({
           <Button
             variant={lateral === "marcadores" ? "secondary" : "ghost"}
             size="icon-sm"
-            aria-label="Marcadores"
+            aria-label={t.leitor.marcadores}
             aria-pressed={lateral === "marcadores"}
             onClick={() =>
               setLateral(lateral === "marcadores" ? null : "marcadores")
@@ -395,7 +396,7 @@ export function LeitorPdf({
         <Button
           variant={lateral === "busca" ? "secondary" : "ghost"}
           size="icon-sm"
-          aria-label="Buscar no texto"
+          aria-label={t.leitor.buscar}
           aria-pressed={lateral === "busca"}
           onClick={() => setLateral(lateral === "busca" ? null : "busca")}
         >
@@ -471,7 +472,7 @@ export function LeitorPdf({
               <div className="grid h-40 place-items-center">
                 <Loader2
                   className="text-muted-foreground size-5 animate-spin"
-                  aria-label="Abrindo o documento"
+                  aria-label={t.leitor.abrindoDocumento}
                 />
               </div>
             )}

@@ -7,6 +7,7 @@ import {
   ListaDeCondicoes,
   type DonoDeCondicoes,
 } from "@/components/mestre/lista-de-condicoes";
+import { t } from "@/lib/i18n/personagens";
 import {
   alternarCondicaoNosObjetos,
   criarCondicaoNoObjeto,
@@ -26,7 +27,7 @@ import type { CanvasItem } from "@/types/scene";
 export function PainelDeCondicoesDoObjeto({ item }: { item: CanvasItem }) {
   const dono = useMemo<DonoDeCondicoes>(
     () => ({
-      nome: "este objeto",
+      nome: t.condicoesDoObjeto.esteObjeto,
       condicoes: item.condicoes,
       editar: (condicaoId, patch) => editarCondicaoDoObjeto(item.id, condicaoId, patch),
       remover: (condicaoId) => removerCondicaoDoObjeto(item.id, condicaoId),
@@ -34,12 +35,12 @@ export function PainelDeCondicoesDoObjeto({ item }: { item: CanvasItem }) {
       alternar: (modelo, ligar) => alternarCondicaoNosObjetos([item.id], modelo, ligar),
       criarAvulsa: (condicao) => {
         if (!criarCondicaoNoObjeto(item.id, condicao)) {
-          throw new Error("Este objeto já tem o máximo de condições.");
+          throw new Error(t.condicoesDoObjeto.cheio);
         }
       },
       dicaDoOlho: (escondido) => ({
-        titulo: escondido ? "Só você vê" : "A mesa vê",
-        texto: "Escondida, nem o selo nem o efeito saem do aplicativo.",
+        titulo: escondido ? t.geral.soVoceVe : t.geral.aMesaVe,
+        texto: t.condicoesDoObjeto.escondida,
       }),
     }),
     [item.id, item.condicoes],
@@ -48,7 +49,7 @@ export function PainelDeCondicoesDoObjeto({ item }: { item: CanvasItem }) {
   return (
     <div className="w-64 space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium">Condições</p>
+        <p className="text-xs font-medium">{t.geral.condicoes}</p>
         <AcrescentarCondicao dono={dono} />
       </div>
 
@@ -56,8 +57,7 @@ export function PainelDeCondicoesDoObjeto({ item }: { item: CanvasItem }) {
         <ListaDeCondicoes dono={dono} />
       ) : (
         <p className="text-muted-foreground text-[11px] leading-snug">
-          O barril em chamas, a porta amaldiçoada: um selo sobre o objeto e um
-          efeito na imagem. Marca-se aqui ou no botão direito.
+          {t.condicoesDoObjeto.vazio}
         </p>
       )}
     </div>

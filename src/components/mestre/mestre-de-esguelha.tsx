@@ -38,6 +38,7 @@ import {
 } from "@/lib/store/use-gesto-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { clampViewport, PLANO } from "@/lib/geometry/viewport";
+import { t } from "@/lib/i18n/ferramentas";
 import { useEsguelhaStore, type Olhar } from "@/lib/store/use-esguelha-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { sceneForTable } from "@/lib/sync/for-table";
@@ -450,12 +451,10 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
           // As teclas do modo, à vista enquanto ele dura: é um jeito de mexer
           // que não existe em nenhum outro lugar do app.
           <div className="pointer-events-none absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-md bg-black/70 px-3 py-1.5 text-xs text-white/90 backdrop-blur">
-            <span className="font-medium">Cinegrafista · {olhado.nome}</span>
-            <span className="text-white/60">
-              {" "}
-              · WASD anda · mouse olha · roda muda a lente · Q E rolam · Espaço
-              sobe · C desce · Shift devagar · Esc sai
+            <span className="font-medium">
+              {t.esguelha.cinegrafista(olhado.nome)}
             </span>
+            <span className="text-white/60"> · {t.esguelha.teclas}</span>
           </div>
         ) : null}
 

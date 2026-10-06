@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { toast } from "sonner";
 
+import { t } from "@/lib/i18n/personagens";
 import { listCharacters } from "@/lib/vault/characters";
 import { listPlayers, type Player } from "@/lib/vault/players";
 import type { Personagem } from "@/types/character";
@@ -187,7 +188,7 @@ function buscar(set: Set, get: Get): Promise<void> {
       // Lista vazia, e não `null`: `null` faria cada tela mostrar "Lendo…" para
       // sempre. Vazio é um estado que elas sabem desenhar.
       set({ personagens: [], versao: get().versao + 1, emVoo: false });
-      toast.error(cause instanceof Error ? cause.message : "Falha ao ler os personagens.");
+      toast.error(cause instanceof Error ? cause.message : t.stores.falhaAoLerPersonagens);
     },
   );
 }

@@ -3,6 +3,7 @@
 import { toast } from "sonner";
 import { create } from "zustand";
 
+import { t } from "@/lib/i18n/mestre";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { daemonAddr, isDesktop } from "@/lib/vault/bridge";
 import {
@@ -63,7 +64,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       if (get().pedido !== meu) return;
       set({ efeitos: [] });
       publicar([]);
-      toast.error(cause instanceof Error ? cause.message : "Falha ao ler os efeitos.");
+      toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoLer);
     }
   },
 
@@ -82,7 +83,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       publicar(efeitos);
       return novo;
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao criar o efeito.");
+      toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoCriar);
       return null;
     }
   },
@@ -99,7 +100,9 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       setTimeout(() => {
         gravacoes.delete(efeito.id);
         salvarEfeitoDaCampanha(efeito).catch((cause: unknown) =>
-          toast.error(cause instanceof Error ? cause.message : "Falha ao gravar o efeito."),
+          toast.error(
+            cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoGravar,
+          ),
         );
       }, ESPERA_PARA_GRAVAR),
     );
@@ -116,7 +119,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       set({ efeitos });
       publicar(efeitos);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao apagar o efeito.");
+      toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoApagar);
     }
   },
 }));

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useDeclarativo } from "@/components/playground/declarativo";
 import { Button } from "@/components/ui/button";
 import { iconeDeExtensao } from "@/lib/extensoes/icones";
+import { t } from "@/lib/i18n/jogador";
 import { dadosPublicos, enviarAcao } from "@/lib/player/extensoes";
 import { lerSecaoPublica, type SecaoPublica } from "@/lib/player/secao-publica";
 import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
@@ -147,7 +148,7 @@ function Botao({
       onClick={() => {
         setEnviando(true);
         onClick()
-          .catch((causa) => toast.error(causa instanceof Error ? causa.message : "A mesa não recebeu."))
+          .catch((causa) => toast.error(causa instanceof Error ? causa.message : t.plugins.naoRecebeu))
           .finally(() => setEnviando(false));
       }}
     >

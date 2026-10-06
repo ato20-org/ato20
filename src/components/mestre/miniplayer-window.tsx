@@ -15,6 +15,7 @@ import {
   useDeclarativoDaMesa,
 } from "@/components/playground/declarativo";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
+import { t } from "@/lib/i18n/mestre";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { Spotlight } from "@/types/scene";
@@ -71,7 +72,7 @@ export function MiniplayerBody() {
   if (!codigo) {
     return (
       <p className="text-muted-foreground p-3 text-xs">
-        Abra uma campanha para ver o que a mesa vê.
+        {t.miniplayer.semCampanha}
       </p>
     );
   }
@@ -80,7 +81,7 @@ export function MiniplayerBody() {
     return (
       <div className="aspect-video w-full bg-black" aria-busy>
         <p className="text-muted-foreground grid h-full place-items-center px-4 text-center text-xs">
-          Procurando o daemon…
+          {t.miniplayer.procurandoDaemon}
         </p>
       </div>
     );
@@ -165,10 +166,10 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
       {!scene ? (
         <p className="text-muted-foreground absolute inset-0 grid place-items-center px-4 text-center text-xs">
           {synced
-            ? "Nada no ar."
+            ? t.miniplayer.nadaNoAr
             : stalled
-              ? "Sem resposta do daemon."
-              : "Aguardando…"}
+              ? t.miniplayer.semResposta
+              : t.miniplayer.aguardando}
         </p>
       ) : null}
     </div>
@@ -194,7 +195,7 @@ function EvidenciaEmMiniatura({ spotlight }: { spotlight: Spotlight | null }) {
       ) : null}
       <span className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/90">
         <Eye className="size-3" aria-hidden />
-        Em evidência
+        {t.miniplayer.emEvidencia}
       </span>
     </div>
   );

@@ -83,7 +83,10 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 6 é a atual: ela acrescentou os `efeitos` de condição
+mais do que ele tem.** A 7 é a atual: ela deixou todo texto do manifesto vir
+por idioma e deu `api.idioma` ao código (ver
+[Texto em mais de um idioma](#texto-em-mais-de-um-idioma)); um ATO20 anterior
+recusaria o mapa como JSON ilegível. A 6 acrescentou os `efeitos` de condição
 (ver [Efeito de condição](#efeito-de-condição-na-tv-e-no-celular)); um ATO20
 anterior aceitaria o plugin calado, e as condições que apontam para os efeitos
 dele mostrariam só o selo. A 5 acrescentou ao manifesto o estilo de
@@ -836,6 +839,52 @@ do plugin, que sabe o que os itens são, ou o `configuracoes.json` aberto à mã
 O plugin OBS ([valb-mig/ato20.obs.plugin](https://github.com/valb-mig/ato20.obs.plugin)) é o exemplo completo: `main.js` com o painel
 Transmissão e o filtro, `camera.html` com os dados e `retratos.html` com os
 retratos (o grupo no ar e o card de cada personagem de jogador).
+
+## Texto em mais de um idioma
+
+O ATO20 fala português e inglês, e da **API 7** em diante o plugin também pode
+falar. Todo texto que o manifesto declara para alguém ler (o `nome` e a
+`descricao` do plugin, o `titulo` de painel, comando, ferramenta, camada,
+item de menu, seção, página, estilo de medidor, efeito e configuração, a
+`descricao` da configuração, o
+`subtitulo`, o `grupo`, a `dica`, o `rotulo` e o `campo` das fontes de
+retrato) aceita uma string, como sempre, **ou um mapa por idioma**:
+
+```json
+"apiVersao": 7,
+"nome": { "pt-BR": "Iniciativa", "en": "Initiative" },
+"contribui": {
+  "comandos": [
+    { "id": "rolar", "titulo": { "pt-BR": "Rolar iniciativa", "en": "Roll initiative" } }
+  ]
+}
+```
+
+A tela escolhe na chegada: a chave exata do idioma dela (`pt-BR`, `en`),
+depois qualquer variante da mesma língua (`pt`, `en-US`), depois português,
+depois inglês, e por fim o primeiro que houver. Plugin escrito numa língua só
+não muda nada: a string vale para todos os idiomas. A chave do mapa é um
+código de idioma (`en`, `pt-BR`); outra coisa o Rust recusa na importação.
+
+A `escolha` de uma configuração ganhou `rotulos`: o que a tela mostra no lugar
+de cada opção. A opção continua sendo o valor gravado no arquivo, e não muda
+com o idioma; o rótulo muda.
+
+```json
+{ "chave": "meu-plugin.cor", "titulo": { "pt-BR": "Cor", "en": "Color" },
+  "tipo": "escolha", "padrao": "azul", "opcoes": ["azul", "rubi"],
+  "rotulos": { "azul": { "pt-BR": "Azul", "en": "Blue" }, "rubi": "Rubi" },
+  "escopo": "campanha" }
+```
+
+No código, `api.idioma` diz o idioma da tela (`"pt-BR"` ou `"en"`), para o
+plugin escolher o texto dos avisos, das linhas do chat e da seção do celular.
+Ele não muda enquanto o plugin vive: trocar de idioma recarrega a janela, e o
+plugin carrega de novo junto.
+
+O que o Mestre publica para a mesa (o título de um efeito, de um estilo de
+medidor) sai no idioma do Mestre. O celular e a janela do espectador recebem
+o texto já escolhido, e não o mapa.
 
 ## Atalho de plugin não rouba atalho do aplicativo
 

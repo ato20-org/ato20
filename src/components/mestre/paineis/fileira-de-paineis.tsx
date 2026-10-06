@@ -17,6 +17,7 @@ import { Splitter } from "@/components/mestre/dock/splitter";
 import { NotaEditor } from "@/components/mestre/editor-markdown";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { VistaDoQuadro } from "@/components/mestre/paineis/vista-do-quadro";
+import { t } from "@/lib/i18n/mestre";
 import { abrirNotaEm } from "@/lib/mestre/abrir-nota";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
 import {
@@ -453,7 +454,7 @@ function DivisorDePaineis({
     <div className="flex" style={{ order: indice * 2 - 1 }}>
       <Splitter
         direcao="vertical"
-        rotulo="Largura dos painéis"
+        rotulo={t.paineis.largura}
         aoArrastar={(delta) => {
           const linha = document.querySelector<HTMLElement>("[data-fileira-de-paineis]");
           const noEsquerdo = linha?.querySelector<HTMLElement>(
@@ -542,9 +543,13 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
       case "livro":
         return aba.titulo;
       case "nota":
-        return notas?.find((nota) => nota.id === aba.notaId)?.titulo ?? "Nota";
+        return (
+          notas?.find((nota) => nota.id === aba.notaId)?.titulo ?? t.paineis.nota
+        );
       case "quadro":
-        return cenas?.find((cena) => cena.id === aba.sceneId)?.name ?? "Quadro";
+        return (
+          cenas?.find((cena) => cena.id === aba.sceneId)?.name ?? t.paineis.quadro
+        );
     }
   };
 
@@ -552,7 +557,7 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
     <section
       data-painel-lateral
       tabIndex={-1}
-      aria-label="Painel de notas, livros e quadros"
+      aria-label={t.paineis.painel}
       className="bg-background flex min-h-0 min-w-0 flex-1 flex-col border-x outline-none"
     >
       {/* A tira com o desenho das abas do dock -- ver `DockGroup` --, para o
@@ -565,7 +570,7 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
       <div className="flex items-end gap-1 px-1.5 pt-1.5">
         <div
           role="tablist"
-          aria-label="Abas do painel"
+          aria-label={t.paineis.abas}
           className="rolagem-limpa scroll-fade-x flex min-w-0 flex-1 cursor-grab items-end gap-px self-stretch overflow-x-auto"
           onPointerDown={(event) => {
             if (event.target !== event.currentTarget) return;
@@ -574,7 +579,7 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
               event,
               { tipo: "painel", painelId: painel.id },
               painel.abas.length > 1
-                ? `${painel.abas.length} abas`
+                ? t.paineis.contarAbas(painel.abas.length)
                 : tituloDe(painel.abas[0]!),
               () => {},
             );
@@ -640,7 +645,7 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
                 </button>
                 <button
                   type="button"
-                  aria-label={`Fechar ${titulo}`}
+                  aria-label={t.paineis.fechar(titulo)}
                   className="hover:bg-foreground/10 hover:text-foreground focus-visible:ring-ring shrink-0 rounded-sm p-0.5 opacity-0 transition-opacity group-hover/aba:opacity-100 group-focus-within/aba:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
                   // Para aqui: o toque no X não pode começar o arrasto da aba.
                   onPointerDown={(event) => event.stopPropagation()}

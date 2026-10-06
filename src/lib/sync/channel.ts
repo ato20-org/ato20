@@ -1,3 +1,4 @@
+import type { Idioma } from "@/lib/i18n/idioma";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { Ping } from "@/types/ping";
@@ -141,6 +142,15 @@ export type LiveState = {
    * ausência como mapa sem ping.
    */
   pings?: Ping[];
+  /**
+   * O idioma do Mestre. A janela do espectador recarrega nele quando muda, e o
+   * celular também, enquanto o jogador não escolheu outro. Ver
+   * `seguirIdiomaDaMesa`.
+   *
+   * Opcional, como `pings`: o quadro de uma versão anterior não o traz, e a
+   * tela fica no idioma em que abriu.
+   */
+  idioma?: Idioma;
 };
 
 /**

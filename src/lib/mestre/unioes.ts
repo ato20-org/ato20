@@ -1,5 +1,6 @@
 import { novoId } from "@/lib/id";
 import { areaMaisProxima, FOLGA_PADRAO, limitarFolga } from "@/lib/geometry/portrait";
+import { dicionarios, t } from "@/lib/i18n/ferramentas";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import type { AncoraRetrato, Portrait, UniaoDeRetratos } from "@/types/scene";
 
@@ -254,7 +255,7 @@ export function uniaoDaFilaAntiga(
   return [
     {
       id: novoId(),
-      nome: "Fila",
+      nome: t.nomes.fila,
       cor: CORES_LAPIS[0],
       ancora: ANCORAS.has(ancora) ? ancora : "baixo-centro",
       folga: limitarFolga(folga),
@@ -283,19 +284,22 @@ function semOsMembros(
  *
  * Pelo tamanho, desfazer a primeira de duas faria a próxima nascer "União 2"
  * ao lado de uma "União 2" que já existe.
+ *
+ * O nome nasce no idioma ativo, mas o número ocupado é lido nos DOIS: a
+ * campanha criada em português e aberta em inglês tem "União 1", e a próxima
+ * não pode nascer "Group 1" como se a primeira não existisse.
  */
 function proximoNome(unioes: ReadonlyArray<UniaoDeRetratos>): string {
-  const usados = new Set(
-    unioes
-      .map((uniao) => /^União (\d+)$/.exec(uniao.nome)?.[1])
-      .filter((numero) => numero !== undefined)
-      .map(Number),
-  );
+  const nomes = new Set(unioes.map((uniao) => uniao.nome));
+  const ocupado = (numero: number) =>
+    Object.values(dicionarios).some((dicionario) =>
+      nomes.has(dicionario.nomes.uniao(numero)),
+    );
 
   let numero = 1;
-  while (usados.has(numero)) numero += 1;
+  while (ocupado(numero)) numero += 1;
 
-  return `União ${numero}`;
+  return t.nomes.uniao(numero);
 }
 
 /**

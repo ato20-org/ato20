@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { deleteAsset, importAssets, importarBytes } from "@/lib/vault/assets";
 import { call } from "@/lib/vault/bridge";
+import { t } from "@/lib/i18n/personagens";
 import type { AssetMeta } from "@/types/scene";
 import type {
   AnexoAutor,
@@ -95,7 +96,7 @@ export async function preencherCampoComArquivo(
 
     const primeiro = resultado.aceitos[0];
     if (!primeiro)
-      throw new Error(resultado.recusados[0] ?? "Nada foi anexado.");
+      throw new Error(resultado.recusados[0] ?? t.arquivos.nadaAnexado);
 
     await setCharacterCampo(id, campo, primeiro.arquivo);
 
@@ -111,7 +112,7 @@ export async function preencherCampoComArquivo(
 
   const primeiro = resultado.aceitos[0];
   if (!primeiro)
-    throw new Error(resultado.recusados[0] ?? "Nada foi importado.");
+    throw new Error(resultado.recusados[0] ?? t.arquivos.nadaImportado);
 
   const escolhido =
     recortar && !primeiro.animada
@@ -178,7 +179,7 @@ async function passarPeloRecorte(
     );
     const novo = recortado.aceitos[0];
     if (!novo)
-      throw new Error(recortado.recusados[0] ?? "O recorte não entrou no acervo.");
+      throw new Error(recortado.recusados[0] ?? t.arquivos.recorteForaDoAcervo);
 
     return novo.id;
   } finally {
@@ -532,7 +533,7 @@ export async function attachToCharacter(
 ): Promise<AnexoImport | null> {
   const escolhidos = await open({
     multiple: true,
-    title: "Escolha os arquivos do personagem",
+    title: t.arquivos.escolhaOsArquivos,
   });
   if (!escolhidos) return null;
 

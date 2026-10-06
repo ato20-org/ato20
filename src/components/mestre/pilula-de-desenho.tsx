@@ -8,6 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/ferramentas";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import { temAreaDeEfeito, temNevoa, temSol, type Scene } from "@/types/scene";
@@ -23,20 +24,20 @@ const GEOMETRIAS = [
   {
     chave: "quadrado",
     formato: "retangulo",
-    label: "Quadrado",
-    hint: "Arraste de canto a canto. Shift trava o quadrado.",
+    label: t.pilulaDeDesenho.quadrado,
+    hint: t.pilulaDeDesenho.quadradoDica,
   },
   {
     chave: "circulo",
     formato: "elipse",
-    label: "Círculo",
-    hint: "Arraste de canto a canto. Shift trava o círculo.",
+    label: t.pilulaDeDesenho.circulo,
+    hint: t.pilulaDeDesenho.circuloDica,
   },
   {
     chave: "livre",
     formato: "poligono",
-    label: "Traço livre",
-    hint: "Contorna vértice a vértice. O clique no primeiro fecha.",
+    label: t.pilulaDeDesenho.livre,
+    hint: t.pilulaDeDesenho.livreDica,
   },
 ] as const;
 
@@ -51,18 +52,18 @@ type Geometria = (typeof GEOMETRIAS)[number];
 const NATUREZAS = [
   {
     chave: "parede",
-    label: "Parede",
-    hint: "A luz para nela. A mesa só vê a sombra que ela faz.",
+    label: t.pilulaDeDesenho.parede,
+    hint: t.pilulaDeDesenho.paredeDica,
   },
   {
     chave: "area",
-    label: "Área",
-    hint: "Esconde a região. A mesa vê preto sólido.",
+    label: t.pilulaDeDesenho.area,
+    hint: t.pilulaDeDesenho.areaDica,
   },
   {
     chave: "elemento",
-    label: "Elemento",
-    hint: "Desenha sobre a cena. Nasce só para você.",
+    label: t.pilulaDeDesenho.elemento,
+    hint: t.pilulaDeDesenho.elementoDica,
   },
 ] as const;
 
@@ -75,8 +76,8 @@ const NATUREZAS = [
 const NATUREZAS_DE_EFEITO = [
   {
     chave: "efeito",
-    label: "Efeito em área",
-    hint: "Um pedaço do chão para um efeito. Ele se escolhe no gizmo. Nasce só para você.",
+    label: t.pilulaDeDesenho.efeito,
+    hint: t.pilulaDeDesenho.efeitoDica,
   },
 ] as const;
 
@@ -370,7 +371,7 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
             {!unica && aberta === geometria.chave ? (
               <div
                 role="toolbar"
-                aria-label={`${geometria.label}: o que desenhar`}
+                aria-label={t.pilulaDeDesenho.oQueDesenhar(geometria.label)}
                 className="bg-background/85 absolute top-0 left-full z-10 ml-1 flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur"
               >
                 {naturezas.map((natureza) => {
@@ -385,7 +386,10 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
                           <Button
                             variant={ativa ? "secondary" : "ghost"}
                             size="icon-sm"
-                            aria-label={`${geometria.label} como ${natureza.label}`}
+                            aria-label={t.pilulaDeDesenho.comoNatureza(
+                              geometria.label,
+                              natureza.label,
+                            )}
                             aria-pressed={ativa}
                             className={cn(!ativa && "text-muted-foreground")}
                             onClick={() => pegar(geometria, natureza.chave)}

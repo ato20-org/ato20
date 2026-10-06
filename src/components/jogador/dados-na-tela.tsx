@@ -8,6 +8,7 @@ import {
   type EspacoDoDado,
   type Jogada,
 } from "@/components/mestre/dado-layer";
+import { t } from "@/lib/i18n/jogador";
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import { rolarDado } from "@/lib/player/rolagens";
 import { useDadosStore } from "@/lib/store/use-dados-store";
@@ -141,9 +142,7 @@ export function DadosNaTela({ codigo }: { codigo: string }) {
           // mostraria um número que ninguém mais viu -- e ele seria cantado
           // em voz alta como se valesse.
           toast.error(
-            cause instanceof Error
-              ? cause.message
-              : "A mesa não recebeu o dado",
+            cause instanceof Error ? cause.message : t.dados.naoRecebeu,
           );
         });
     },

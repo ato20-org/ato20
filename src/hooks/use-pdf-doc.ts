@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
+import { t } from "@/lib/i18n/palco";
 import { pdfjs, RUNTIME } from "@/lib/leitor/pdfjs";
 
 /**
@@ -137,15 +138,14 @@ export function usePdfDoc(
  * português por quem as levantou.
  */
 const RECUSAS: Record<string, string> = {
-  PasswordException: "Este PDF pede senha, e o leitor não tem onde recebê-la.",
-  InvalidPDFException:
-    "Este arquivo não é um PDF que o leitor entenda: ou está corrompido, ou veio truncado.",
-  MissingPDFException: "Este arquivo não está mais onde estava.",
-  UnexpectedResponseException: "Não foi possível baixar este arquivo.",
+  PasswordException: t.leitor.pedeSenha,
+  InvalidPDFException: t.leitor.invalido,
+  MissingPDFException: t.leitor.sumiu,
+  UnexpectedResponseException: t.leitor.naoBaixou,
 };
 
 function motivoDe(cause: unknown): string {
-  if (!(cause instanceof Error)) return "Não foi possível abrir este PDF.";
+  if (!(cause instanceof Error)) return t.leitor.naoAbriuPdf;
 
   return RECUSAS[cause.name] ?? cause.message;
 }

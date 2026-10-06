@@ -5,6 +5,8 @@ import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PontoDeAviso } from "@/components/jogador/jogador-toolbar";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 
 /**
@@ -76,7 +78,7 @@ export function DockButton({
       ref={ref}
       variant="ghost"
       size="icon"
-      aria-label={aviso ? `${rotulo}, há mensagem nova` : rotulo}
+      aria-label={aviso ? t.barra.comAviso(rotulo) : rotulo}
       aria-pressed={ativo}
       onClick={onClick}
       className={cn(
@@ -146,7 +148,7 @@ export function Drawer({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Fechar"
+          aria-label={comum.fechar}
           onClick={onFechar}
         >
           <X />

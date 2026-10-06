@@ -13,6 +13,7 @@ import {
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useEstante } from "@/hooks/use-estante";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
+import { t } from "@/lib/i18n/mestre";
 import { selectLivroAberto, usePaineisStore } from "@/lib/store/use-paineis-store";
 import { chaveDe } from "@/lib/store/use-window-store";
 import type { Livro } from "@/lib/vault/estante";
@@ -46,21 +47,21 @@ export function EstanteBody() {
                 variant="outline"
                 size="icon"
                 className="shrink-0 rounded-full"
-                aria-label="Importar livros"
+                aria-label={t.estante.importar}
                 onClick={() => void importar()}
               >
                 <Upload />
               </Button>
             }
           />
-          <TooltipContent>Importar livros</TooltipContent>
+          <TooltipContent>{t.estante.importar}</TooltipContent>
         </Tooltip>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
         {livros.length === 0 ? (
           <PainelVazio conteudo={{ tipo: "estante" }}>
-            Importe o primeiro livro
+            {t.estante.vazia}
           </PainelVazio>
         ) : (
           <ul className="space-y-1 p-2">
@@ -113,7 +114,9 @@ function LivroRow({ livro, onRemove }: { livro: Livro; onRemove: () => void }) {
             {tamanhoLegivel(livro.tamanho)}
             {/* A página só aparece depois de a primeira abertura contar o
                 documento: quem copia o arquivo é o Rust, e ele não o abre. */}
-            {livro.paginas ? ` · p. ${livro.pagina} de ${livro.paginas}` : null}
+            {livro.paginas
+              ? t.estante.pagina(livro.pagina, livro.paginas)
+              : null}
           </span>
         </span>
       </button>
@@ -125,7 +128,7 @@ function LivroRow({ livro, onRemove }: { livro: Livro; onRemove: () => void }) {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Abrir ${livro.titulo} ao lado do mapa`}
+                aria-label={t.estante.abrirAoLado(livro.titulo)}
                 onClick={() => {
                   // Uma casa por vez: dois leitores do mesmo PDF gravariam a
                   // página um por cima do outro.
@@ -138,14 +141,14 @@ function LivroRow({ livro, onRemove }: { livro: Livro; onRemove: () => void }) {
             }
           />
           <TooltipContent>
-            <p>Abrir ao lado do mapa</p>
+            <p>{t.estante.abrirAoLadoDica}</p>
           </TooltipContent>
         </Tooltip>
 
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={`Tirar ${livro.titulo} da estante`}
+          aria-label={t.estante.tirar(livro.titulo)}
           onClick={() => {
             // As duas casas fecham ANTES de o arquivo sair do disco: um leitor
             // aberto sobre um livro removido continuaria pedindo faixas de um
