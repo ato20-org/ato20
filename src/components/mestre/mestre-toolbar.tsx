@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DoorOpen,
   Eraser,
   Flame,
   Hand,
@@ -151,6 +152,19 @@ const FERRAMENTA_LUZ: Ferramenta = {
   label: "Luz",
   hint: "Crava uma luz. Acende o escuro em volta dela.",
   icon: Flame,
+};
+
+/**
+ * A porta: traça a folha da dobradiça até a ponta.
+ *
+ * Embaixo da luz porque é a luz que ela deixa passar: o mestre acende a sala,
+ * fecha a porta e confere o escuro do outro lado, sem atravessar a barra.
+ */
+const FERRAMENTA_PORTA: Ferramenta = {
+  tool: "porta",
+  label: "Porta",
+  hint: "Arraste da dobradiça até a outra ponta. Depois, a ponta abre e fecha.",
+  icon: DoorOpen,
 };
 
 /**
@@ -426,6 +440,9 @@ export function ReguaDoMapa({ scene }: { scene: Scene }) {
       {temLuz(scene) ? (
         <BotaoDeFerramenta ferramenta={FERRAMENTA_LUZ} dica="left" />
       ) : null}
+      {temSol(scene) ? (
+        <BotaoDeFerramenta ferramenta={FERRAMENTA_PORTA} dica="left" />
+      ) : null}
 
       {/* A medida depois do ponto e do papel: ela é sobre o CHÃO e não sobre
           o que se crava nele.
@@ -627,6 +644,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     // Parede é do chão, e o chão que a tem é o do mapa: ver `Tool`.
     if (tool === "parede" && !temSol(scene)) setTool("select");
     if (tool === "luz" && !temLuz(scene)) setTool("select");
+    if (tool === "porta" && !temSol(scene)) setTool("select");
     if (tool === "pin" && !temAnotacao(scene)) setTool("select");
     // A letra e a forma atravessam a troca de cena porque valem nos três --
     // ver `FERRAMENTAS_DE_DESENHO` --, e largá-las aqui faria o mestre perder
