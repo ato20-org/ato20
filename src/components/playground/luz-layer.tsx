@@ -510,6 +510,8 @@ function entre(
 type PapeisDaLuz = {
   forma: HTMLCanvasElement;
   tinta: HTMLCanvasElement;
+  /** O que formou estes rascunhos da última vez. Ver `assinaturaDaLuz`. */
+  assinatura?: string;
 };
 
 /**
@@ -518,10 +520,15 @@ type PapeisDaLuz = {
  *
  * Um par POR LUZ, e não um par que todas reusam: é o que deixa o laço da
  * animação compor sem formar de novo. Ver `LuzLayer`, "A luz que se mexe".
+ *
+ * As paredes e as silhuetas com que as luzes foram formadas ficam aqui: elas
+ * valem para todas, e trocar uma refaz todas.
  */
 type Rascunhos = {
   porLuz: Map<string, PapeisDaLuz>;
   vulto: HTMLCanvasElement;
+  segmentos?: ReadonlyArray<Segmento>;
+  silhuetas?: ReadonlyMap<string, SilhuetaPronta>;
 };
 
 function criarRascunhos(): Rascunhos {
@@ -542,6 +549,13 @@ type LuzPronta = PapeisDaLuz & {
  * Forma cada luz no rascunho dela: o degradê, o cone, as sombras. É a parte
  * cara do desenho, e só roda quando a luz muda.
  *
+ * SÓ a luz que mudou: a chave do canvas é a cena inteira, e um token andando
+ * a mudava para as quarenta tochas do mapa. Cada luz guarda a assinatura do
+ * que a formou -- ela, e os tokens que ela alcança --, e a que bate com a de
+ * agora fica com os rascunhos que tem. Medido na TV, quarenta goblins em
+ * chamas e um andando: 3,8 fps formando todas a cada quadro do deslize, 17
+ * formando só a dele e as das tochas cujos tokens ele tapa.
+ *
  * O rascunho de uma luz que saiu da cena -- removida ou desligada -- sai
  * junto: sem isso, cada tocha cravada e removida numa sessão deixaria dois
  * canvas para trás.
@@ -555,6 +569,9 @@ function formarLuzes(
 ): LuzPronta[] {
   const prontas: LuzPronta[] = [];
   const vistas = new Set<string>();
+  const mesmoMundo = papel.segmentos === segmentos && papel.silhuetas === silhuetas;
+  papel.segmentos = segmentos;
+  papel.silhuetas = silhuetas;
 
   for (const fonte of fontes) {
     const caixa = caixaDaFonte(fonte);
@@ -570,16 +587,20 @@ function formarLuzes(
     }
     vistas.add(fonte.id);
 
-    luzRecortada(
-      papeis.forma,
-      papel.vulto,
-      fonte,
-      caixa,
-      segmentos,
-      oclusores,
-      silhuetas,
-    );
-    naCorDaLuz(papeis.tinta, papeis.forma, fonte.cor);
+    const assinatura = assinaturaDaLuz(fonte, oclusores);
+    if (!mesmoMundo || papeis.assinatura !== assinatura) {
+      luzRecortada(
+        papeis.forma,
+        papel.vulto,
+        fonte,
+        caixa,
+        segmentos,
+        oclusores,
+        silhuetas,
+      );
+      naCorDaLuz(papeis.tinta, papeis.forma, fonte.cor);
+      papeis.assinatura = assinatura;
+    }
 
     prontas.push({
       ...papeis,
@@ -594,6 +615,27 @@ function formarLuzes(
   }
 
   return prontas;
+}
+
+/**
+ * Tudo o que entra na forma de UMA luz: ela inteira, menos o efeito -- que só
+ * muda a força com que ela é composta --, e cada token que ela alcança, com a
+ * caixa de onde a silhueta sai. O que `luzRecortada` não lê não entra, e o que
+ * ela lê de todas as luzes (paredes, silhuetas) fica em `Rascunhos`.
+ *
+ * Os tokens pela mesma conta que as sombras usam (`alcancaOclusor`): um token
+ * fora do alcance não tapa nada, e andar com ele não refaz esta luz.
+ */
+function assinaturaDaLuz(fonte: FonteDeLuz, oclusores: ReadonlyArray<Oclusor>): string {
+  let assinatura = JSON.stringify(fonte, (campo, valor) => (campo === "efeito" ? undefined : valor));
+  if (fonte.semTokens) return assinatura;
+
+  const dono = donoDaFonte(fonte);
+  for (const oclusor of oclusores) {
+    if (oclusor.id === dono || !alcancaOclusor(fonte, oclusor)) continue;
+    assinatura += `|${oclusor.id},${oclusor.x},${oclusor.y},${oclusor.raio},${oclusor.assetId},${JSON.stringify(oclusor.caixa)}`;
+  }
+  return assinatura;
 }
 
 /**
