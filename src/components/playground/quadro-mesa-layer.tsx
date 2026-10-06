@@ -15,6 +15,7 @@ import {
   sementeDe,
 } from "@/lib/geometry/traco-a-mao";
 import { documentoUrl } from "@/lib/vault/documentos";
+import { t } from "@/lib/i18n/palco";
 import {
   emPixelDeTela,
   useSceneScale,
@@ -125,7 +126,7 @@ function AlfinetesDaMesa({ scene }: { scene: Scene }) {
   return pins.map((pin, index) => (
     <div
       key={pin.id}
-      title={pin.title || `Ponto ${index + 1}`}
+      title={pin.title || t.quadroMesa.ponto(index + 1)}
       className="pointer-events-none absolute grid place-items-center rounded-full bg-amber-400 font-semibold text-amber-950 tabular-nums shadow-md ring-2 ring-neutral-900/70 select-none"
       style={{
         left: pin.x,

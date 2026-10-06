@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
+import { t } from "@/lib/i18n/palco";
 import { filaDoLeitor } from "@/lib/leitor/fila-de-render";
 
 /**
@@ -436,7 +437,7 @@ export function PaginaFolha({
         lupa && pronta ? "cursor-zoom-in touch-none select-none" : ""
       }`}
       style={{ width: largura, height: altura }}
-      aria-label={`Página ${numero}`}
+      aria-label={t.leitor.pagina(numero)}
       onPointerDown={(evento) => {
         if (!lupa || !pronta || evento.button !== 0) return;
 

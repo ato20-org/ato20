@@ -10,6 +10,8 @@ import {
   ALTURA_DA_FIGURA_MIN,
 } from "@/lib/geometry/sombra";
 import { handleCursor, rotateVec } from "@/lib/geometry/transform";
+import { idioma } from "@/lib/i18n/idioma";
+import { t } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
 import type { ModoDaSombra } from "@/types/scene";
 
@@ -53,23 +55,29 @@ const MODOS: ReadonlyArray<{
 }> = [
   {
     valor: "base",
-    rotulo: "Na base",
-    dica: "Em pé: a sombra nasce da linha do chão e se deita para longe da luz.",
+    rotulo: t.sombra.naBase,
+    dica: t.sombra.naBaseDica,
     Icone: PersonStanding,
   },
   {
     valor: "inteira",
-    rotulo: "Inteira",
-    dica: "Vista de cima: o objeto inteiro deita a sombra, colada nele.",
+    rotulo: t.sombra.inteira,
+    dica: t.sombra.inteiraDica,
     Icone: Cylinder,
   },
   {
     valor: "nenhuma",
-    rotulo: "Nenhuma",
-    dica: "Pintado no chão: tapete, mancha, área de efeito.",
+    rotulo: t.sombra.nenhuma,
+    dica: t.sombra.nenhumaDica,
     Icone: CircleOff,
   },
 ];
+
+/** A altura com uma casa, na vírgula ou no ponto do idioma: `1,5×`, `1.5×`. */
+const UM_DECIMAL = new Intl.NumberFormat(idioma, {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
 
 /**
  * O que vai dentro do painel da sombra: o jeito de deitar e o ajuste dele.
@@ -82,11 +90,11 @@ const MODOS: ReadonlyArray<{
 export function PainelDaSombra({ sombra }: { sombra: SombraNoGizmo }) {
   return (
     <div className="flex w-56 flex-col gap-2">
-      <span className="text-muted-foreground text-[10px]">Sombra</span>
+      <span className="text-muted-foreground text-[10px]">{t.sombra.titulo}</span>
 
       <div
         role="radiogroup"
-        aria-label="Como este item deita a sombra"
+        aria-label={t.sombra.comoDeita}
         className="bg-muted flex rounded-md p-0.5"
       >
         {MODOS.map(({ valor, rotulo, dica, Icone }) => (
@@ -106,8 +114,7 @@ export function PainelDaSombra({ sombra }: { sombra: SombraNoGizmo }) {
       {sombra.modo === "base" ? (
         <div className="flex items-start justify-between gap-2">
           <p className="text-muted-foreground text-[10px] leading-snug">
-            Arraste a linha amarela até onde a figura pisa. O que fica abaixo
-            dela é chão.
+            {t.sombra.arrasteALinha}
           </p>
           {sombra.baseManual ? (
             <button
@@ -115,7 +122,7 @@ export function PainelDaSombra({ sombra }: { sombra: SombraNoGizmo }) {
               className="text-foreground hover:bg-muted shrink-0 rounded px-1.5 py-0.5 text-[10px] underline-offset-2 hover:underline"
               onClick={() => sombra.onBase(null)}
             >
-              Automática
+              {t.sombra.automatica}
             </button>
           ) : null}
         </div>
@@ -124,13 +131,13 @@ export function PainelDaSombra({ sombra }: { sombra: SombraNoGizmo }) {
       {sombra.modo === "inteira" ? (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-[10px]">Altura</span>
+            <span className="text-muted-foreground text-[10px]">{t.sombra.altura}</span>
             <span className="text-muted-foreground text-[10px] tabular-nums">
-              {sombra.altura.toFixed(1).replace(".", ",")}×
+              {UM_DECIMAL.format(sombra.altura)}×
             </span>
           </div>
           <Slider
-            aria-label="Altura do objeto, em múltiplos da largura"
+            aria-label={t.sombra.alturaDescricao}
             value={[sombra.altura]}
             min={ALTURA_DA_FIGURA_MIN}
             max={ALTURA_DA_FIGURA_MAX}
@@ -144,7 +151,7 @@ export function PainelDaSombra({ sombra }: { sombra: SombraNoGizmo }) {
 
       {!sombra.acesa && sombra.modo !== "nenhuma" ? (
         <p className="text-muted-foreground text-[10px] leading-snug italic">
-          Sem sol nem luz nesta cena: a sombra aparece quando houver.
+          {t.sombra.semLuz}
         </p>
       ) : null}
     </div>
@@ -240,7 +247,7 @@ export function LinhaDoChao({
   return (
     <div
       role="slider"
-      aria-label="Linha do chão"
+      aria-label={t.sombra.linhaDoChao}
       aria-orientation="vertical"
       aria-valuemin={0}
       aria-valuemax={100}

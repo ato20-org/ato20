@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n/palco";
+
 /**
  * Os dados de mesa.
  *
@@ -82,7 +84,7 @@ export const TIPOS_DADO: readonly TipoDado[] = [
   { faces: 4, nome: "d4", hex: "#e7e5e4", tinta: "#44403c", escala: 1.22 },
   // Por último, porque não é dado. Dourada, com a tinta escura: moeda é a
   // única coisa do saquinho que a mesa reconhece pelo brilho antes da forma.
-  { faces: 2, nome: "Moeda", hex: "#ca8a04", tinta: "#422006", escala: 1.1 },
+  { faces: 2, nome: t.dados.moeda, hex: "#ca8a04", tinta: "#422006", escala: 1.1 },
 ];
 
 export function tipoDado(faces: FacesDado): TipoDado {
@@ -125,7 +127,7 @@ export function rotulosDoDado(faces: FacesDado): number[] {
  */
 export function textoDaFace(faces: FacesDado, gravado: number): string {
   if (faces === 100) return String(gravado).padStart(2, "0");
-  if (faces === 2) return gravado === 1 ? "CARA" : "COROA";
+  if (faces === 2) return gravado === 1 ? t.dados.caraNaFace : t.dados.coroaNaFace;
   return String(gravado);
 }
 
@@ -136,7 +138,7 @@ export function textoDaFace(faces: FacesDado, gravado: number): string {
  * `valorDaRolagem` escrito -- então o d10 no zero aparece como dez aqui também.
  */
 export function textoDoResultado(faces: FacesDado, gravado: number): string {
-  if (faces === 2) return gravado === 1 ? "Cara" : "Coroa";
+  if (faces === 2) return gravado === 1 ? t.dados.cara : t.dados.coroa;
   return String(valorDaRolagem(faces, gravado));
 }
 

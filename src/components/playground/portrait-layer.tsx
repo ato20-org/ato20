@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { CANVAS_PADRAO } from "@/lib/extensoes/fontes";
+import { t } from "@/lib/i18n/palco";
 import { usePaginaVivaSuportada } from "@/lib/motor";
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { MedidoresDoRetrato } from "@/components/playground/medidores-do-retrato";
@@ -295,9 +296,9 @@ function MarcaPaginaViva({ escala }: { escala: number }) {
         className="text-white/50"
         style={{ fontSize: 12 / escala, lineHeight: 1.3, textAlign: "center" }}
       >
-        Página viva
+        {t.retrato.paginaViva}
         <br />
-        aparece na mesa
+        {t.retrato.apareceNaMesa}
       </span>
     </div>
   );

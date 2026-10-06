@@ -2,6 +2,7 @@
 
 import type { DadoCaido } from "@/lib/extensoes/dados";
 import { gravadoDoValor } from "@/lib/fio";
+import { t } from "@/lib/i18n/palco";
 import { falarNoFio } from "@/lib/mestre/fio-actions";
 import { useFioStore } from "@/lib/store/use-fio-store";
 import { TIPOS_DADO } from "@/types/dado";
@@ -56,9 +57,7 @@ export async function postarParaPlugin(
       !Array.isArray(dados) ||
       !dados.every((dado) => FACES.has(dado?.faces) && Number.isInteger(dado?.valor))
     )
-      throw new Error(
-        "rolagem inválida: passe o que `api.dados.rolar` devolveu, ou `{ dados: [{ faces, valor }] }`.",
-      );
+      throw new Error(t.apiDePlugin.rolagemInvalida);
 
     rolagem = {
       // O fio guarda o GRAVADO, como toda rolagem da casa. Ver `gravadoDoValor`.
@@ -72,7 +71,7 @@ export async function postarParaPlugin(
   }
 
   if (!texto?.trim() && !rolagem)
-    throw new Error("linha vazia: passe `texto`, `rolagem`, ou os dois.");
+    throw new Error(t.apiDePlugin.linhaVazia);
 
   return falarNoFio({
     texto,

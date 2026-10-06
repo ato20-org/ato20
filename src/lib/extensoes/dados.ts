@@ -1,6 +1,7 @@
 "use client";
 
 import { duracaoDaQueda } from "@/lib/geometry/dado";
+import { t } from "@/lib/i18n/palco";
 import { lancarNaMesa } from "@/lib/mestre/dados-actions";
 import { lerNotacaoDeDados, type Jogada } from "@/lib/mestre/notacao-de-dados";
 import { entraNaSoma, valorDaRolagem, type FacesDado } from "@/types/dado";
@@ -36,17 +37,17 @@ export type ResultadoDaRolagem = {
  * Só o Mestre vê os dados. Levá-los à TV é outra decisão, ainda não tomada.
  */
 export async function rolarParaPlugin(notacoes: readonly string[]): Promise<ResultadoDaRolagem> {
-  if (notacoes.length === 0) throw new Error("nenhuma notação: passe ao menos uma, como \"1d20\".");
+  if (notacoes.length === 0) throw new Error(t.apiDePlugin.semNotacao);
 
   const jogadas: Jogada[] = notacoes.map((texto) => {
     const jogada = lerNotacaoDeDados(texto);
-    if (!jogada) throw new Error(`notação inválida: ${JSON.stringify(texto)}. Use "2d6", "d20"; o modificador é conta do plugin.`);
+    if (!jogada) throw new Error(t.apiDePlugin.notacaoInvalida(JSON.stringify(texto)));
 
     return jogada;
   });
 
   const lancados = jogadas.flatMap((jogada) => lancarNaMesa(jogada));
-  if (lancados.length === 0) throw new Error("a mesa está cheia: recolha os dados antes de rolar.");
+  if (lancados.length === 0) throw new Error(t.apiDePlugin.mesaCheia);
 
   // Espera o ÚLTIMO a parar: o total só vale quando a mesa inteira parou.
   const espera = Math.max(...lancados.map((dado) => duracaoDaQueda(dado))) * 1000;

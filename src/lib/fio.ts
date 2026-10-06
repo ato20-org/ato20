@@ -5,6 +5,7 @@ import {
   valorDaRolagem,
   type FacesDado,
 } from "@/types/dado";
+import { t } from "@/lib/i18n/palco";
 import { parseMencoes, type Token } from "@/lib/mencoes/texto";
 import type {
   AutorDoFio,
@@ -171,7 +172,7 @@ export function notacaoDaRolagem(rolagem: RolagemNoFio): string {
     const nome = tipoDado(faces).nome;
     // "d20", "Moeda": o nome do saquinho, com a quantidade na frente quando há
     // mais de um. A moeda não vira "1Moeda".
-    if (faces === 2) return quantos === 1 ? nome : `${quantos} moedas`;
+    if (faces === 2) return quantos === 1 ? nome : t.dados.moedas(quantos);
     return `${quantos}${nome}`;
   });
 
@@ -234,10 +235,10 @@ export function avisoDoSussurro(
 ): string | null {
   const para = linha.para;
   if (!para) return null;
-  if (para.tipo === "mestre") return "só o Mestre";
-  if (leitor.tipo === "jogador" && leitor.id === para.id) return "só para você";
+  if (para.tipo === "mestre") return t.fio.soOMestre;
+  if (leitor.tipo === "jogador" && leitor.id === para.id) return t.fio.soParaVoce;
 
-  return `para ${para.nome}`;
+  return t.fio.para(para.nome);
 }
 
 /**
@@ -274,7 +275,7 @@ export function mesmoDia(a: number, b: number): boolean {
 
 /** Como o autor aparece na linha. */
 export function nomeDoAutor(autor: AutorDoFio): string {
-  return autor.tipo === "mestre" ? "Mestre" : autor.nome;
+  return autor.tipo === "mestre" ? t.fio.mestre : autor.nome;
 }
 
 /**
