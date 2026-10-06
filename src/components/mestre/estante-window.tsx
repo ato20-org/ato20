@@ -13,7 +13,7 @@ import {
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useEstante } from "@/hooks/use-estante";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
-import { useLeitorStore } from "@/lib/store/use-leitor-store";
+import { selectLivroAberto, usePaineisStore } from "@/lib/store/use-paineis-store";
 import { chaveDe } from "@/lib/store/use-window-store";
 import type { Livro } from "@/lib/vault/estante";
 
@@ -86,23 +86,21 @@ function tamanhoLegivel(bytes: number): string {
 function LivroRow({ livro, onRemove }: { livro: Livro; onRemove: () => void }) {
   const abrirJanela = useAbrirJanela();
   const fecharJanela = useFecharJanela();
-  const abrirNoSplit = useLeitorStore((state) => state.abrirNoSplit);
-  const noSplit = useLeitorStore((state) => state.livroId === livro.id);
-  const fecharSplit = useLeitorStore((state) => state.fecharSplit);
+  const abrirNoPainel = usePaineisStore((state) => state.abrir);
+  const noPainel = usePaineisStore(selectLivroAberto(livro.id));
+  const fecharDoPainel = usePaineisStore((state) => state.fechar);
+  const conteudo = { tipo: "livro", livroId: livro.id, titulo: livro.titulo } as const;
 
   return (
     <li className="group/livro hover:bg-accent/50 flex items-center gap-1 rounded-md p-1">
       <button
         type="button"
         // O clique na linha abre como JANELA, que é a casa que empilha: dois
-        // manuais abertos ao mesmo tempo é o caso comum de comparar regra. O
-        // split, que é um por vez, tem botão próprio.
+        // manuais abertos ao mesmo tempo é o caso comum de comparar regra.
+        // Dividir ao lado do mapa tem botão próprio. Já dividido, o clique
+        // traz a aba dele à frente em vez de abrir uma segunda cópia.
         onClick={() =>
-          abrirJanela({
-            tipo: "livro",
-            livroId: livro.id,
-            titulo: livro.titulo,
-          })
+          noPainel ? abrirNoPainel(conteudo) : abrirJanela(conteudo)
         }
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
@@ -127,15 +125,20 @@ function LivroRow({ livro, onRemove }: { livro: Livro; onRemove: () => void }) {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Abrir ${livro.titulo} ao lado do palco`}
-                onClick={() => abrirNoSplit(livro.id)}
+                aria-label={`Abrir ${livro.titulo} ao lado do mapa`}
+                onClick={() => {
+                  // Uma casa por vez: dois leitores do mesmo PDF gravariam a
+                  // página um por cima do outro.
+                  fecharJanela(chaveDe(conteudo));
+                  abrirNoPainel(conteudo);
+                }}
               >
                 <Columns2 />
               </Button>
             }
           />
           <TooltipContent>
-            <p>Abrir ao lado do palco</p>
+            <p>Abrir ao lado do mapa</p>
           </TooltipContent>
         </Tooltip>
 
@@ -147,15 +150,9 @@ function LivroRow({ livro, onRemove }: { livro: Livro; onRemove: () => void }) {
             // As duas casas fecham ANTES de o arquivo sair do disco: um leitor
             // aberto sobre um livro removido continuaria pedindo faixas de um
             // PDF que já não existe, e o mestre veria a página em branco sem
-            // pista do motivo. Vale para a janela e para o split.
-            fecharJanela(
-              chaveDe({
-                tipo: "livro",
-                livroId: livro.id,
-                titulo: livro.titulo,
-              }),
-            );
-            if (noSplit) fecharSplit();
+            // pista do motivo. Vale para a janela e para o painel.
+            fecharJanela(chaveDe(conteudo));
+            fecharDoPainel(conteudo);
 
             onRemove();
           }}

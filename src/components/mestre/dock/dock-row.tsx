@@ -2,9 +2,9 @@
 
 import { useRef, useState, type ReactNode } from "react";
 
+import { AlcaDeGaveta } from "@/components/mestre/dock/alca-de-gaveta";
 import { DockColumn } from "@/components/mestre/dock/dock-column";
 import { Splitter } from "@/components/mestre/dock/splitter";
-import { LeitorSplit } from "@/components/mestre/leitor/leitor-split";
 import {
   MAX_LARGURA_PX,
   MIN_LARGURA_PX,
@@ -14,10 +14,13 @@ import {
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 
 /**
- * A linha do meio: coluna, palco, coluna.
+ * A linha do meio: coluna, painéis, coluna.
  *
- * O palco entra como `children` em vez de ser um tipo de janela: ele é o que a
- * bancada cerca, não uma peça que se atraca. Uma cena não pode virar aba de uma
+ * O meio entra como `children` -- a fileira de painéis, com o palco e o que foi
+ * dividido ao lado dele (ver `FileiraDePaineis`). As colunas ficam nas bordas
+ * da janela, e não presas ao mapa: levar o livro para o outro lado do palco não
+ * as arrasta junto. O palco não é um tipo de janela: ele é o que a bancada
+ * cerca, não uma peça que se atraca. Uma cena não pode virar aba de uma
  * coluna nem ser fechada — sem palco não há o que operar —, e um caso desses
  * dentro da árvore obrigaria cada ação do dock a perguntar "isso é o palco?".
  *
@@ -42,6 +45,7 @@ export function DockRow({ children }: { children: ReactNode }) {
 
   const esquerdaAberta = usePanelsStore((state) => state.left);
   const direitaAberta = usePanelsStore((state) => state.right);
+  const mostrar = usePanelsStore((state) => state.show);
 
   // Coluna recolhida OU sem região nenhuma não desenha nada, divisor incluído:
   // um divisor sem os dois lados seria uma alça de 4 pixels encostada no palco,
@@ -56,6 +60,15 @@ export function DockRow({ children }: { children: ReactNode }) {
 
   return (
     <>
+      {/* O caminho de volta da coluna recolhida, na borda da janela onde ela
+          sai. Ver `AlcaDeGaveta`. */}
+      {!esquerdaAberta && esquerda ? (
+        <AlcaDeGaveta lado="esquerda" aoAbrir={() => mostrar("left")} />
+      ) : null}
+      {!direitaAberta && direita ? (
+        <AlcaDeGaveta lado="direita" aoAbrir={() => mostrar("right")} />
+      ) : null}
+
       {esquerdaAberta && esquerda ? (
         <>
           <DockColumn
@@ -77,12 +90,6 @@ export function DockRow({ children }: { children: ReactNode }) {
           />
         </>
       ) : null}
-
-      {/* O leitor de Regras na PONTA da linha, depois da coluna direita, e não
-          entre ela e o palco: as duas colunas cercam o mapa, e enfiar meia tela
-          de manual no meio empurraria a coluna direita para longe do que ela
-          controla. Só existe quando há livro no split. Ver `LeitorSplit`. */}
-      <LeitorSplit />
     </>
   );
 }

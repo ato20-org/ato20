@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
   Code,
+  Columns2,
   FileText,
   Heading1,
   Heading2,
@@ -29,6 +30,7 @@ import {
   PanelLeftOpen,
   ListOrdered,
   ListTodo,
+  Maximize2,
   SeparatorHorizontal,
   SquareCode,
   TextQuote,
@@ -71,7 +73,11 @@ import { normaliza } from "@/lib/search";
 import { useMencoesDoMestre } from "@/hooks/use-mencoes-do-mestre";
 import { Button } from "@/components/ui/button";
 import { aoApertarF2 } from "@/hooks/use-renomear-pelo-menu";
-import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
+import {
+  abrirNotaAoLado,
+  fecharNotaEmTodaParte,
+  trazerNotaAoCentro,
+} from "@/lib/mestre/abrir-nota";
 import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import {
@@ -103,13 +109,22 @@ const FONTE_PASSO = 2;
  * vem do `useDocumentoStore`, o mesmo que os cartões do quadro leem -- a nota
  * é uma, os cartões são N.
  */
-export function NotaEditor({ nota }: { nota: Nota }) {
+export function NotaEditor({
+  nota,
+  onde,
+}: {
+  nota: Nota;
+  /**
+   * Onde ela está aberta: no CENTRO, no lugar do palco, ou num painel ao lado
+   * do mapa. Decide para onde o botão de dividir a leva. Ver `abrir-nota`.
+   */
+  onde: "centro" | "painel";
+}) {
   const texto = useDocumentoStore((state) => state.textos[nota.arquivo]);
   const carregar = useDocumentoStore((state) => state.carregar);
   const escrever = useDocumentoStore((state) => state.escrever);
   const renomearNota = useSceneStore((state) => state.renomearNota);
   const removerNota = useSceneStore((state) => state.removerNota);
-  const fechar = useArquivoAbertoStore((state) => state.fechar);
   const { vinculos, candidatos } = useMencoesDoMestre();
 
   useEffect(() => {
@@ -144,6 +159,8 @@ export function NotaEditor({ nota }: { nota: Nota }) {
     }
   }
   const [linhaAtiva, setLinhaAtiva] = useState<string | null>(null);
+  /** A raiz do editor: é por ela que se sabe se o foco está nesta nota. */
+  const raiz = useRef<HTMLDivElement | null>(null);
 
   /**
    * Ctrl+F procura na nota. Sai do texto cru, se estava nele: a busca lê o
@@ -154,13 +171,25 @@ export function NotaEditor({ nota }: { nota: Nota }) {
    * é o texto que se quer maior.
    *
    * Na CAPTURA e no `window`, antes de todo mundo: os mesmos atalhos são o zoom
-   * do palco em `atalhos.ts`, e o palco não está montado com a nota aberta --
-   * sem barrar aqui, o toque mexeria na câmera de uma cena que ninguém vê. E
-   * antes do campo da linha, para valer também no meio da escrita.
+   * do palco em `atalhos.ts`, e antes do campo da linha, para valer também no
+   * meio da escrita.
+   *
+   * Numa nota dividida ao lado do mapa, só com o foco no painel DELA: sem a
+   * pergunta, o Ctrl+= no mapa mudaria a letra da nota, e duas notas abertas
+   * brigariam pela mesma tecla. No centro, sempre -- a não ser que o foco
+   * esteja num painel lateral, que é de outra nota ou de um livro. O painel
+   * recebe o foco ao ser clicado -- ver `PainelDeAbas`.
    */
   useEffect(() => {
     function teclas(event: KeyboardEvent) {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+
+      const foco = document.activeElement;
+      const painel = raiz.current?.closest("[data-painel-lateral]");
+      const minha = painel
+        ? painel.contains(foco)
+        : !foco?.closest("[data-painel-lateral]");
+      if (!minha) return;
 
       if (event.key.toLowerCase() === "f" && !event.shiftKey) {
         event.preventDefault();
@@ -202,7 +231,7 @@ export function NotaEditor({ nota }: { nota: Nota }) {
   const [confirmando, setConfirmando] = useState(false);
 
   function apagar() {
-    fechar();
+    fecharNotaEmTodaParte(nota.id);
     removerNota(nota.id);
     void apagarDocumento(nota.arquivo).catch((cause: unknown) => {
       console.error("falha ao apagar a nota", cause);
@@ -211,7 +240,7 @@ export function NotaEditor({ nota }: { nota: Nota }) {
 
   return (
     <VinculosContext value={vinculos}>
-    <div className="bg-background flex min-h-0 flex-1 flex-col">
+    <div ref={raiz} className="bg-background flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
         <FileText className="text-muted-foreground size-4 shrink-0" aria-hidden />
         {renomeando ? (
@@ -243,6 +272,24 @@ export function NotaEditor({ nota }: { nota: Nota }) {
           </button>
         )}
         <span className="text-muted-foreground shrink-0 text-xs">{nota.arquivo}</span>
+        {/* Dividir: a nota sai do lugar do palco e vai para um painel ao lado
+            do mapa, e o mapa volta. No painel, o mesmo botão a traz de volta
+            ao centro. Ver `abrir-nota`. */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={onde === "centro" ? "Abrir ao lado do mapa" : "Abrir no centro"}
+          title={
+            onde === "centro"
+              ? "Abrir ao lado do mapa, para ler olhando a mesa"
+              : "Abrir no centro, no lugar do mapa"
+          }
+          onClick={() =>
+            onde === "centro" ? abrirNotaAoLado(nota.id) : trazerNotaAoCentro(nota.id)
+          }
+        >
+          {onde === "centro" ? <Columns2 /> : <Maximize2 />}
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"
