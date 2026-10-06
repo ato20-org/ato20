@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
 import { authorized, fail } from "@/lib/player/session";
 import type { FacesDado, RolagemDaMesa } from "@/types/dado";
 
@@ -31,7 +32,7 @@ export async function rolarDado(
     body: JSON.stringify({ faces }),
   });
 
-  if (!response.ok) throw await fail(response, "a mesa não recebeu o dado");
+  if (!response.ok) throw await fail(response, t.erros.dadoNaoChegou);
 
   return (await response.json()) as RolagemDaMesa;
 }

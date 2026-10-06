@@ -33,6 +33,7 @@ import {
   type Subscription,
 } from "@/hooks/use-scene-broadcast";
 import { useFioDoJogador } from "@/hooks/use-fio-do-jogador";
+import { t } from "@/lib/i18n/jogador";
 import { useFioStore } from "@/lib/store/use-fio-store";
 import { usePlayerStore } from "@/lib/store/use-player-store";
 import { cn } from "@/lib/utils";
@@ -57,12 +58,32 @@ type StackedTab = (typeof STACKED_TABS)[number];
 
 /** As ferramentas das trilhas da tela deitada. */
 const FERRAMENTAS = {
-  personagem: { lado: "esquerda", rotulo: "Personagem", icone: <User /> },
-  inventario: { lado: "esquerda", rotulo: "Inventário", icone: <Package /> },
-  arquivos: { lado: "esquerda", rotulo: "Arquivos", icone: <FolderOpen /> },
-  dados: { lado: "direita", rotulo: "Saquinho", icone: <Dices /> },
-  chat: { lado: "direita", rotulo: "Chat", icone: <MessagesSquare /> },
-  anotacoes: { lado: "direita", rotulo: "Anotações", icone: <NotebookPen /> },
+  personagem: {
+    lado: "esquerda",
+    rotulo: t.ferramentas.personagem,
+    icone: <User />,
+  },
+  inventario: {
+    lado: "esquerda",
+    rotulo: t.ferramentas.inventario,
+    icone: <Package />,
+  },
+  arquivos: {
+    lado: "esquerda",
+    rotulo: t.ferramentas.arquivos,
+    icone: <FolderOpen />,
+  },
+  dados: { lado: "direita", rotulo: t.ferramentas.saquinho, icone: <Dices /> },
+  chat: {
+    lado: "direita",
+    rotulo: t.ferramentas.chat,
+    icone: <MessagesSquare />,
+  },
+  anotacoes: {
+    lado: "direita",
+    rotulo: t.ferramentas.anotacoes,
+    icone: <NotebookPen />,
+  },
 } as const;
 
 type Ferramenta = keyof typeof FERRAMENTAS;
@@ -402,7 +423,7 @@ function StackedLayout({ codigo, live, emCena }: LayoutProps) {
           <ToolbarItem
             ativo={tab === "personagem"}
             icone={<User />}
-            rotulo="Personagem"
+            rotulo={t.ferramentas.personagem}
             onClick={() => setTab("personagem")}
           />
         }
@@ -411,14 +432,14 @@ function StackedLayout({ codigo, live, emCena }: LayoutProps) {
             <ToolbarItem
               ativo={tab === "chat"}
               icone={<MessagesSquare />}
-              rotulo="Chat"
+              rotulo={t.ferramentas.chat}
               aviso={tab !== "chat" && naoLidas > 0}
               onClick={() => setTab("chat")}
             />
             <ToolbarItem
               ativo={tab === "anotacoes"}
               icone={<NotebookPen />}
-              rotulo="Anotações"
+              rotulo={t.ferramentas.anotacoes}
               onClick={() => setTab("anotacoes")}
             />
           </>

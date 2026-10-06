@@ -8,6 +8,8 @@ import {
   type SceneChannel,
 } from "@/lib/sync";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
+import { seguirIdiomaDaMesa } from "@/lib/i18n/da-mesa";
+import { idioma } from "@/lib/i18n/idioma";
 import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -152,6 +154,9 @@ export function usePublisher(state: LiveState, pronto = true): void {
       fichasVersao: state.fichasVersao,
       rolagens: state.rolagens,
       pings: state.pings,
+      // Do módulo, e não do estado: o idioma é constante enquanto a janela
+      // vive, e trocá-lo recarrega o Mestre -- que volta publicando o novo.
+      idioma,
     };
 
     stateRef.current = paraMesa;
@@ -258,6 +263,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     let answered = false;
 
     const unsubscribe = channel.subscribe((state) => {
+      seguirIdiomaDaMesa(state.idioma);
       answered = true;
       setLive(state);
       setSynced(true);

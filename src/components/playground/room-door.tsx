@@ -6,7 +6,11 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { t } from "@/lib/i18n/jogador";
 import { CODE_LENGTH, useMesaStore } from "@/lib/store/use-mesa-store";
+
+/** Um código de exemplo no campo vazio: o formato, e não uma palavra. */
+const EXEMPLO_DE_CODIGO = "ABC234";
 
 /**
  * A porta das telas de espectador.
@@ -49,7 +53,7 @@ export function RoomDoor({
   }, [boot]);
 
   if (status === "aberta" && codigoAceito) {
-    return <>{children(codigoAceito, nome ?? "Mesa")}</>;
+    return <>{children(codigoAceito, nome ?? t.porta.mesaPadrao)}</>;
   }
 
   // `idle` é o instante entre a montagem e a leitura da URL. Mostrar a porta
@@ -59,7 +63,7 @@ export function RoomDoor({
       <main className="flex flex-1 items-center justify-center">
         <Loader2
           className="text-muted-foreground size-5 animate-spin"
-          aria-label="Procurando a mesa"
+          aria-label={t.porta.procurando}
         />
       </main>
     );
@@ -70,7 +74,7 @@ export function RoomDoor({
       {icone}
       <h1 className="text-2xl font-semibold tracking-tight">{titulo}</h1>
       <p className="text-muted-foreground text-sm">
-        Digite o código que o mestre está mostrando na tela dele.
+        {t.porta.instrucao}
       </p>
 
       <form
@@ -80,7 +84,7 @@ export function RoomDoor({
           void conferir(digitado);
         }}
       >
-        <Label htmlFor="room-code">Código da mesa</Label>
+        <Label htmlFor="room-code">{t.porta.codigo}</Label>
         <Input
           id="room-code"
           value={digitado}
@@ -89,7 +93,7 @@ export function RoomDoor({
           autoCapitalize="characters"
           autoComplete="off"
           spellCheck={false}
-          placeholder="ABC234"
+          placeholder={EXEMPLO_DE_CODIGO}
           className="text-center text-lg tracking-[0.4em]"
         />
 
@@ -105,7 +109,7 @@ export function RoomDoor({
           {status === "conferindo" ? (
             <Loader2 className="animate-spin" />
           ) : null}
-          Entrar
+          {t.porta.entrar}
         </Button>
       </form>
     </main>

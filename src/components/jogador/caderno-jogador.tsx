@@ -53,6 +53,9 @@ import {
   type SinalDaNota,
 } from "@/lib/player/caderno-mencoes";
 import { normaliza } from "@/lib/search";
+import { idioma } from "@/lib/i18n/idioma";
+import { dicionarios, t } from "@/lib/i18n/jogador";
+import { rico } from "@/lib/i18n/rico";
 import { useCadernoStore } from "@/lib/store/use-caderno-store";
 import { cn } from "@/lib/utils";
 
@@ -60,7 +63,25 @@ import { cn } from "@/lib/utils";
 const DEBOUNCE_MS = 800;
 
 /** Como uma nota sem título aparece na lista e na menção. */
-const SEM_TITULO = "Sem título";
+const SEM_TITULO = t.caderno.semTitulo;
+
+/**
+ * O nome da nota sem título em TODOS os idiomas, para a menção achá-la.
+ *
+ * A menção grava o nome que se via ao escrevê-la: `#Sem título` escrito em
+ * português continua no texto quando o celular passa para o inglês, e tem de
+ * continuar achando a mesma nota.
+ */
+const SEM_TITULO_EM_QUALQUER_IDIOMA = new Set(
+  Object.values(dicionarios).map((cada) => cada.caderno.semTitulo),
+);
+
+/** A nota que uma menção `#titulo` aponta. */
+function bateComTitulo(titulo: string, procurado: string): boolean {
+  if (titulo) return titulo === procurado;
+
+  return SEM_TITULO_EM_QUALQUER_IDIOMA.has(procurado);
+}
 
 /**
  * O caderno do jogador.
@@ -131,7 +152,7 @@ export function CadernoJogador({
       setAbrindo(arquivo);
       void characterFileUrl(codigo, arquivo.personagemId, arquivo.anexo).then(
         setUrl,
-        () => toast.error("Não foi possível abrir o arquivo."),
+        () => toast.error(t.erros.abrirArquivo),
       );
     },
     [codigo],
@@ -164,7 +185,7 @@ export function CadernoJogador({
       arquivo: (nome) => mencoes.arquivosPorNome.get(nome) ?? null,
       nota: (titulo) => {
         const achada = notas.find(
-          (nota) => (nota.titulo || SEM_TITULO) === titulo,
+          (nota) => bateComTitulo(nota.titulo, titulo),
         );
 
         return achada
@@ -193,7 +214,7 @@ export function CadernoJogador({
     // Abre já na nota criada: o gesto foi "quero escrever agora", e uma nota
     // vazia no topo de uma lista é o meio do caminho, não o fim dele.
     if (nota) setAberta(nota.id);
-    else toast.error("Não foi possível abrir a nota.");
+    else toast.error(t.erros.abrirNota);
   }
 
   const notaAberta = notas.find((nota) => nota.id === aberta) ?? null;
@@ -282,7 +303,7 @@ function Lista({
 
     for (const nota of notas) for (const tag of nota.tags) todas.add(tag);
 
-    return [...todas].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    return [...todas].sort((a, b) => a.localeCompare(b, idioma));
   }, [notas]);
 
   const filtradas = useMemo(() => {
@@ -309,7 +330,7 @@ function Lista({
           className="text-muted-foreground size-4 shrink-0"
           aria-hidden
         />
-        <p className="flex-1 text-sm font-medium">Caderno</p>
+        <p className="flex-1 text-sm font-medium">{t.caderno.titulo}</p>
 
         <Button
           size="sm"
@@ -318,7 +339,7 @@ function Lista({
           onClick={onNova}
         >
           {criando ? <Loader2 className="animate-spin" /> : <Plus />}
-          Nova nota
+          {t.caderno.novaNota}
         </Button>
       </div>
 
@@ -332,7 +353,7 @@ function Lista({
           />
           <Input
             className="pl-8"
-            placeholder="Procurar no caderno"
+            placeholder={t.caderno.procurar}
             value={busca}
             onChange={(event) => setBusca(event.target.value)}
           />
@@ -412,10 +433,10 @@ function Lista({
           {filtradas.length === 0 ? (
             <li className="text-muted-foreground px-1 py-6 text-center text-xs leading-relaxed">
               {carregando
-                ? "Abrindo o caderno…"
+                ? t.caderno.abrindo
                 : notas.length === 0
-                  ? "Nada escrito ainda. O que você descobrir, quem mentiu, o que não pode esquecer."
-                  : "Nenhuma nota com isso."}
+                  ? t.caderno.vazio
+                  : t.caderno.nenhuma}
             </li>
           ) : null}
         </ul>
@@ -604,7 +625,7 @@ function Editor({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Voltar para o caderno"
+          aria-label={t.caderno.voltar}
           onClick={sair}
         >
           <ArrowLeft />
@@ -617,17 +638,17 @@ function Editor({
           {gravando ? (
             <>
               <Loader2 className="size-3 animate-spin" aria-hidden />
-              Gravando
+              {t.caderno.gravando}
             </>
           ) : falhou ? (
             <span className="flex items-center gap-1 text-amber-300">
               <TriangleAlert className="size-3" aria-hidden />
-              Não gravou
+              {t.caderno.naoGravou}
             </span>
           ) : (
             <>
               <Check className="size-3" aria-hidden />
-              Gravado
+              {t.caderno.gravado}
             </>
           )}
         </span>
@@ -635,14 +656,14 @@ function Editor({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Apagar esta nota"
+          aria-label={t.caderno.apagar}
           onClick={() => {
             // Sem diálogo de confirmação: a nota volta pela lista se a remoção
             // falhar, e o que se perde no toque errado é uma nota que o jogador
             // acabou de ver na tela. Um "tem certeza?" a cada gesto do polegar
             // custaria mais que o engano.
             onApagar();
-            toast.success("Nota apagada.");
+            toast.success(t.caderno.apagada);
           }}
         >
           <Trash2 />
@@ -651,7 +672,7 @@ function Editor({
 
       <Input
         className="shrink-0 text-base font-medium"
-        placeholder="Título da nota"
+        placeholder={t.caderno.tituloDaNota}
         value={titulo}
         maxLength={120}
         onChange={(event) => {
@@ -674,7 +695,7 @@ function Editor({
               ref={campo}
               autoFocus
               className="h-full resize-none text-base leading-relaxed"
-              placeholder="@personagem  /arquivo  #nota  **negrito**"
+              placeholder={t.caderno.dicaDoTexto}
               value={texto}
               maxLength={20_000}
               spellCheck={false}
@@ -788,8 +809,11 @@ function Editor({
               <NotaTextoView texto={texto} vinculos={vinculos} />
             ) : (
               <p className="text-muted-foreground text-sm">
-                Toque para escrever. <code>@</code> chama um personagem da mesa,{" "}
-                <code>/</code> um arquivo seu, <code>#</code> outra nota.
+                {rico(t.caderno.tocarParaEscrever, {
+                  arroba: <code>@</code>,
+                  barra: <code>/</code>,
+                  cerquilha: <code>#</code>,
+                })}
               </p>
             )}
           </div>
@@ -799,7 +823,7 @@ function Editor({
             está no texto e não vai para lugar nenhum — só aparece. */}
         {fantasma ? (
           <span className="text-muted-foreground pointer-events-none absolute right-3 bottom-2 text-[11px]">
-            Enter completa {fantasma}
+            {t.caderno.completa(fantasma)}
           </span>
         ) : null}
       </div>
@@ -853,7 +877,7 @@ function Etiquetas({
           {tag}
           <button
             type="button"
-            aria-label={`Tirar a etiqueta ${tag}`}
+            aria-label={t.caderno.tirarEtiqueta(tag)}
             className="hover:text-foreground"
             onClick={() => onMudar(tags.filter((outra) => outra !== tag))}
           >
@@ -866,7 +890,7 @@ function Etiquetas({
         <Input
           autoFocus
           className="h-7 w-32 text-xs"
-          placeholder="etiqueta"
+          placeholder={t.caderno.novaEtiqueta}
           value={nova}
           maxLength={24}
           onChange={(event) => setNova(event.target.value)}
@@ -890,7 +914,7 @@ function Etiquetas({
           onClick={() => setAbrindo(true)}
         >
           <Tag className="size-3" aria-hidden />
-          Etiqueta
+          {t.caderno.etiqueta}
         </button>
       )}
     </div>

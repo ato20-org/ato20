@@ -5,6 +5,10 @@ import { Loader2, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { escolherIdiomaDoJogador } from "@/lib/i18n/escolha-do-jogador";
+import { IDIOMAS, NOME_DO_IDIOMA, idioma } from "@/lib/i18n/idioma";
+import { t } from "@/lib/i18n/jogador";
+import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/lib/store/use-player-store";
 
 /**
@@ -38,7 +42,7 @@ export function PlayerEntrada({ codigo }: { codigo: string }) {
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-destructive text-sm">{erro}</p>
         <Button variant="outline" onClick={() => void boot(codigo)}>
-          Tentar de novo
+          {t.entrada.tentarDeNovo}
         </Button>
       </div>
     );
@@ -55,11 +59,9 @@ export function PlayerEntrada({ codigo }: { codigo: string }) {
             className="text-muted-foreground mx-auto size-8"
             aria-hidden
           />
-          <h1 className="text-xl font-medium">Quem está jogando?</h1>
+          <h1 className="text-xl font-medium">{t.entrada.quemJoga}</h1>
           <p className="text-muted-foreground text-sm text-balance">
-            O nome é só para o mestre saber quem é quem. Não há cadastro: este
-            aparelho guarda a credencial, e é ela que mantém a tua ficha
-            separada da dos outros.
+            {t.entrada.explicacao}
           </p>
         </div>
 
@@ -77,7 +79,7 @@ export function PlayerEntrada({ codigo }: { codigo: string }) {
             autoComplete="name"
             autoFocus
             spellCheck={false}
-            placeholder="Teu nome"
+            placeholder={t.entrada.teuNome}
             maxLength={60}
             // Alvo de dedo, não de cursor: `h-11` e texto de 16px, que é o
             // tamanho abaixo do qual o iOS dá zoom sozinho ao focar o campo.
@@ -96,9 +98,35 @@ export function PlayerEntrada({ codigo }: { codigo: string }) {
             {status === "entrando" ? (
               <Loader2 className="animate-spin" />
             ) : null}
-            Entrar na mesa
+            {t.entrada.entrar}
           </Button>
         </form>
+
+        {/* A troca de idioma também aqui, e não só no menu: o menu só existe
+            depois de entrar, e quem não lê o idioma do mestre precisa dela
+            justamente para entender esta tela. Cada idioma escrito nele
+            mesmo. */}
+        <nav
+          aria-label={t.menu.idioma}
+          className="text-muted-foreground flex items-center justify-center gap-3 text-xs"
+        >
+          {IDIOMAS.map((cada) => (
+            <button
+              key={cada}
+              type="button"
+              lang={cada}
+              aria-current={cada === idioma ? "true" : undefined}
+              disabled={cada === idioma}
+              onClick={() => escolherIdiomaDoJogador(cada)}
+              className={cn(
+                "underline-offset-4 hover:underline",
+                cada === idioma && "text-foreground no-underline",
+              )}
+            >
+              {NOME_DO_IDIOMA[cada]}
+            </button>
+          ))}
+        </nav>
       </div>
     </div>
   );

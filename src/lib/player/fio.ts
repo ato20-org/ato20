@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
 import { authorized, fail } from "@/lib/player/session";
 import type { LinhaDoFio, RegistroDoFio } from "@/types/fio";
 
@@ -26,7 +27,7 @@ export async function falarNoFio(
     body: JSON.stringify({ texto, soParaOMestre }),
   });
 
-  if (!response.ok) throw await fail(response, "A mesa não recebeu a mensagem.");
+  if (!response.ok) throw await fail(response, t.erros.mensagemNaoChegou);
 
   return (await response.json()) as LinhaDoFio;
 }

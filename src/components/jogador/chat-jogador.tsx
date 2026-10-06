@@ -4,6 +4,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 
 import { CampoDoFio, ListaDoFio, type MencoesDoFio } from "@/components/fio/fio";
 import { Switch } from "@/components/ui/switch";
+import { t } from "@/lib/i18n/jogador";
 import { personagensDaMesa, type PersonagemDaMesa } from "@/lib/player/caderno";
 import { falarNoFio } from "@/lib/player/fio";
 import { normaliza } from "@/lib/search";
@@ -101,17 +102,15 @@ export const ChatJogador = memo(function ChatJogador({
         mencoes={mencoes}
         vazio={
           <p className="text-muted-foreground text-center text-sm">
-            {pronto
-              ? "Ninguém escreveu nem rolou nada ainda. O que a mesa disser aqui fica guardado na campanha."
-              : "Abrindo a conversa da mesa…"}
+            {pronto ? t.chat.vazio : t.chat.abrindo}
           </p>
         }
       />
 
       <CampoDoFio
         personagens={candidatos}
-        tituloDosPersonagens="Personagens da mesa"
-        placeholder={soParaOMestre ? "Só para o Mestre" : "Escrever para a mesa"}
+        tituloDosPersonagens={t.mencoes.personagens}
+        placeholder={soParaOMestre ? t.chat.soParaOMestre : t.chat.escreverParaAMesa}
         onEnviar={async (texto) => {
           await falarNoFio(codigo, texto, soParaOMestre);
           // Volta para a mesa depois de cada sussurro: preso no sussurro, o
@@ -125,7 +124,7 @@ export const ChatJogador = memo(function ChatJogador({
               checked={soParaOMestre}
               onCheckedChange={setSoParaOMestre}
             />
-            Só para o Mestre
+            {t.chat.soParaOMestre}
           </label>
         }
       />

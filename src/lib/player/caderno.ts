@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
 import { authorized, fail } from "@/lib/player/session";
 import type { Nota } from "@/types/caderno";
 
@@ -40,8 +41,7 @@ export type PersonagemDaMesa = {
 export async function listNotas(codigo: string): Promise<Nota[]> {
   const response = await fetch("/eu/notas", { headers: authorized(codigo) });
 
-  if (!response.ok)
-    throw await fail(response, "Não foi possível abrir o caderno.");
+  if (!response.ok) throw await fail(response, t.erros.abrirCaderno);
 
   return (await response.json()) as Nota[];
 }
@@ -63,8 +63,7 @@ export async function criarNota(
     body: JSON.stringify(base),
   });
 
-  if (!response.ok)
-    throw await fail(response, "Não foi possível abrir a nota.");
+  if (!response.ok) throw await fail(response, t.erros.abrirNota);
 
   return (await response.json()) as Nota;
 }
@@ -89,8 +88,7 @@ export async function mudarNota(
     body: JSON.stringify(patch),
   });
 
-  if (!response.ok)
-    throw await fail(response, "Não foi possível gravar a nota.");
+  if (!response.ok) throw await fail(response, t.erros.gravarNota);
 
   return (await response.json()) as Nota;
 }
@@ -101,8 +99,7 @@ export async function apagarNota(codigo: string, id: string): Promise<void> {
     headers: authorized(codigo),
   });
 
-  if (!response.ok)
-    throw await fail(response, "Não foi possível apagar a nota.");
+  if (!response.ok) throw await fail(response, t.erros.apagarNota);
 }
 
 /** Os personagens que o caderno pode mencionar. Ver `PersonagemDaMesa`. */
@@ -113,7 +110,7 @@ export async function personagensDaMesa(
     headers: authorized(codigo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível ler a mesa.");
+  if (!response.ok) throw await fail(response, t.erros.lerMesa);
 
   return (await response.json()) as PersonagemDaMesa[];
 }

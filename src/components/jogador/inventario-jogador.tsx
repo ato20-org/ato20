@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NumberField } from "@/components/ui/number-field";
 import { Textarea } from "@/components/ui/textarea";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/jogador";
 import { MINIATURA } from "@/lib/miniatura";
 import { characterFileThumbUrl } from "@/lib/player/characters";
 import {
@@ -62,13 +64,13 @@ export function InventarioJogador({
   async function criar() {
     try {
       const item = await addItem(codigo, personagemId, {
-        nome: "Item sem nome",
+        nome: t.inventario.itemSemNome,
       });
       recarregar();
       setAberto(item);
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao criar o item.",
+        cause instanceof Error ? cause.message : t.inventario.falhaCriar,
       );
     }
   }
@@ -84,11 +86,11 @@ export function InventarioJogador({
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium tracking-wide uppercase">
           <Package className="size-3" aria-hidden />
-          Inventário
+          {t.inventario.titulo}
         </p>
 
         <Button variant="ghost" size="sm" onClick={() => void criar()}>
-          <Plus /> Item
+          <Plus /> {t.inventario.item}
         </Button>
       </div>
 
@@ -112,7 +114,7 @@ export function InventarioJogador({
             key={`vazio-${n}`}
             type="button"
             onClick={() => void criar()}
-            aria-label="Adicionar item"
+            aria-label={t.inventario.adicionar}
             className="text-muted-foreground hover:text-foreground flex aspect-square items-center justify-center rounded border border-dashed"
           >
             <Plus className="size-4" aria-hidden />
@@ -299,7 +301,7 @@ function ItemForm({
       setAtual(await updateItem(codigo, personagemId, item.id, patch));
       onChanged();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao salvar.");
+      toast.error(cause instanceof Error ? cause.message : t.erros.falhaSalvar);
     }
   }
 
@@ -309,7 +311,7 @@ function ItemForm({
       onChanged();
       onFechar();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao remover.");
+      toast.error(cause instanceof Error ? cause.message : t.erros.falhaRemover);
     }
   }
 
@@ -323,7 +325,7 @@ function ItemForm({
       onChanged();
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao enviar a foto.",
+        cause instanceof Error ? cause.message : t.inventario.falhaFoto,
       );
     } finally {
       setEnviando(false);
@@ -337,9 +339,7 @@ function ItemForm({
     <>
       <DialogTitle className="sr-only">{atual.nome}</DialogTitle>
       <DialogDescription className="sr-only">
-        {meu
-          ? "Nome, descrição, quantidade e foto do item."
-          : "O que o mestre pôs no inventário."}
+        {meu ? t.inventario.descricaoMeu : t.inventario.descricaoDoMestre}
       </DialogDescription>
 
       {/* `capture` ausente de propósito: o jogador tanto tira a foto na hora
@@ -367,9 +367,7 @@ function ItemForm({
             onClick={() => entrada.current?.click()}
             disabled={enviando}
             aria-label={
-              atual.imagem
-                ? "Trocar a foto do item"
-                : "Escolher a foto do item"
+              atual.imagem ? t.inventario.trocarFoto : t.inventario.escolherFoto
             }
             className={cn(
               "relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded border disabled:opacity-60",
@@ -393,21 +391,21 @@ function ItemForm({
                     acabou de mandar. */}
                 <span className="bg-background/80 absolute right-0.5 bottom-0.5 flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] leading-none font-medium">
                   <ImagePlus className="size-2.5" aria-hidden />
-                  Trocar
+                  {t.inventario.trocar}
                 </span>
               </>
             ) : (
               <span className="flex flex-col items-center gap-1">
                 <ImagePlus className="size-5" aria-hidden />
                 <span className="text-[10px] leading-none font-medium">
-                  Pôr foto
+                  {t.inventario.porFoto}
                 </span>
               </span>
             )}
 
             {enviando ? (
               <span className="bg-background/70 absolute inset-0 flex items-center justify-center text-[10px]">
-                Enviando…
+                {t.inventario.enviando}
               </span>
             ) : null}
           </button>
@@ -428,7 +426,7 @@ function ItemForm({
             {meu ? (
               <Input
                 defaultValue={atual.nome}
-                aria-label="Nome do item"
+                aria-label={t.inventario.nome}
                 className="flex-1"
                 onBlur={(event) => void salvar({ nome: event.target.value })}
               />
@@ -441,7 +439,7 @@ function ItemForm({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Fechar"
+                  aria-label={comum.fechar}
                   className="shrink-0"
                 />
               }
@@ -452,7 +450,7 @@ function ItemForm({
 
           <div className="flex items-center gap-2">
             <Label htmlFor={`qtd-${item.id}`} className="text-xs">
-              Quantidade
+              {t.inventario.quantidade}
             </Label>
             {meu ? (
               <NumberField
@@ -476,8 +474,8 @@ function ItemForm({
       {meu ? (
         <Textarea
           defaultValue={atual.descricao}
-          placeholder="O que é, o que faz, de onde veio."
-          aria-label="Descrição do item"
+          placeholder={t.inventario.descricaoDica}
+          aria-label={t.inventario.descricao}
           className="min-h-20 text-sm"
           onBlur={(event) => void salvar({ descricao: event.target.value })}
         />
@@ -495,12 +493,12 @@ function ItemForm({
             className="text-destructive"
             onClick={() => void apagar()}
           >
-            <Trash2 /> Remover
+            <Trash2 /> {t.inventario.remover}
           </Button>
         </DialogFooter>
       ) : (
         <p className="text-muted-foreground text-[10px]">
-          Este item foi o mestre que pôs aqui.
+          {t.inventario.doMestre}
         </p>
       )}
     </>
