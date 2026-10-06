@@ -54,9 +54,25 @@ import {
  */
 export type ModoDeAlvo = "inserir" | "sobre";
 
+/**
+ * O que o gesto faz quando o ponteiro sai da lista.
+ *
+ * Opcional, e só a lista de Arquivos usa: um quadro arrastado para fora dela
+ * vai para a área de split, ao lado do mapa. `mover` recebe `null` quando o
+ * ponteiro volta para dentro; `soltar` devolve se cuidou da queda -- `false`
+ * é soltar fora de qualquer alvo, e aí vale o reordenar de sempre.
+ */
+export type ForaDaLista<T> = {
+  mover: (id: T, native: PointerEvent | null) => void;
+  soltar: (id: T, native: PointerEvent) => boolean;
+  /** No fim do gesto, com ou sem queda lá fora. */
+  fim: () => void;
+};
+
 export function useListReorder<T>(
   onDrop: (id: T, index: number) => void,
   modo: ModoDeAlvo = "inserir",
+  fora?: ForaDaLista<T>,
 ) {
   const listRef = useRef<HTMLUListElement>(null);
   /** Índice sob o cursor durante o arrasto, para a linha de inserção. */
@@ -64,10 +80,12 @@ export function useListReorder<T>(
 
   const onDropRef = useRef(onDrop);
   const modoRef = useRef(modo);
+  const foraRef = useRef(fora);
   useEffect(() => {
     onDropRef.current = onDrop;
     modoRef.current = modo;
-  }, [onDrop, modo]);
+    foraRef.current = fora;
+  }, [onDrop, modo, fora]);
 
   const startReorder = useCallback(function startReorder(
     event: ReactPointerEvent,
@@ -160,7 +178,27 @@ export function useListReorder<T>(
         target.setPointerCapture(pointerId);
       }
 
+      if (foraRef.current && foraDaLista(native)) {
+        foraRef.current.mover(id, native);
+        setDropIndex(null);
+        return;
+      }
+
+      foraRef.current?.mover(id, null);
       setDropIndex(indexFor(native.clientY));
+    };
+
+    /** O ponteiro saiu do retângulo da lista? */
+    const foraDaLista = (native: PointerEvent): boolean => {
+      const caixa = listRef.current?.getBoundingClientRect();
+      if (!caixa) return false;
+
+      return (
+        native.clientX < caixa.left ||
+        native.clientX > caixa.right ||
+        native.clientY < caixa.top ||
+        native.clientY > caixa.bottom
+      );
     };
 
     const handleEnd = (native: PointerEvent) => {
@@ -178,9 +216,14 @@ export function useListReorder<T>(
         // ele cai na LINHA -- onde mora o "selecionar". Sem comê-lo, arrastar
         // três linhas selecionadas terminava com uma só selecionada.
         comerOProximoClique();
-        if (native.type === "pointerup")
+        const cuidouLaFora =
+          native.type === "pointerup" &&
+          foraDaLista(native) &&
+          (foraRef.current?.soltar(id, native) ?? false);
+        if (native.type === "pointerup" && !cuidouLaFora)
           onDropRef.current(id, indexFor(native.clientY));
       }
+      foraRef.current?.fim();
       setDropIndex(null);
     };
 
