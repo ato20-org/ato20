@@ -20,7 +20,7 @@ import {
  * Este store é a FACHADA: os valores moram no registro de configurações
  * (`lib/configuracoes/registro.ts`), gravados em
  * `{config do app}/configuracoes.json` ao lado dos de qualquer plugin, e é lá
- * que a tela de Configurações e o editor JSON os mostram. O store existe para
+ * que a tela de Configurações e o arquivo aberto à mão os mostram. O store existe para
  * quem já lia `zoom` ou `volumeTrilha` daqui não precisar aprender o registro,
  * e para os dois efeitos que uma preferência tem fora do arquivo: aplicar o
  * zoom na webview e responder ao dedo antes de o disco responder.
@@ -334,8 +334,8 @@ async function restaurar(set: (parcial: Partial<Guardado>) => void): Promise<voi
   // anterior por conta própria, e nesse caso 100% aqui é uma correção.
   aplicar(lido.zoom);
 
-  // Dali em diante o registro manda: o editor JSON e a lista gerada gravam
-  // lá, e o que muda lá tem de chegar a quem lê daqui -- e à webview.
+  // Dali em diante o registro manda: a lista gerada grava lá, e o que muda lá
+  // tem de chegar a quem lê daqui -- e à webview.
   if (!assinado) {
     assinado = true;
     useConfiguracoesStore.subscribe(() => {

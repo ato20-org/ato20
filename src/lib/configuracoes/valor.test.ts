@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   escopoPadrao,
   escoposDe,
-  linhaDoErro,
   resolver,
   valido,
   type Definicao,
@@ -101,20 +100,5 @@ describe("resolver", () => {
     expect(escopoPadrao(def)).toBe("maquina");
     expect(escopoPadrao({ ...def, escopo: "campanha" })).toBe("campanha");
     expect(escoposDe(def)).toEqual(["campanha", "maquina"]);
-  });
-});
-
-describe("linhaDoErro", () => {
-  it("conta a linha a partir da posição, quando o motor a dá", () => {
-    const texto = '{\n  "a": 1,\n  "b": \n}';
-    expect(linhaDoErro(texto, new Error("Unexpected token } in JSON at position 20"))).toBe(4);
-  });
-
-  it("prefere a linha dita pelo motor", () => {
-    expect(linhaDoErro("", new Error("Expected ',' (line 7 column 2)"))).toBe(7);
-  });
-
-  it("devolve null quando não há como saber", () => {
-    expect(linhaDoErro("{", new Error("JSON Parse error: Unexpected EOF"))).toBeNull();
   });
 });

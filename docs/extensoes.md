@@ -828,7 +828,8 @@ sobe com o Mestre. Exige `principal`.
 
 **O tipo `lista`** de configuração guarda uma lista de textos (quem fica de fora
 da live, por exemplo). Não tem controle na tela gerada: quem a edita é o painel
-do plugin, que sabe o que os itens são, e o editor JSON.
+do plugin, que sabe o que os itens são, ou o `configuracoes.json` aberto à mão
+(o botão ao lado da busca nas Configurações abre o arquivo no editor do sistema).
 
 O plugin OBS ([valb-mig/ato20.obs.plugin](https://github.com/valb-mig/ato20.obs.plugin)) é o exemplo completo: `main.js` com o painel
 Transmissão e o filtro, `camera.html` com os dados e `retratos.html` com os
