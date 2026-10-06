@@ -46,6 +46,7 @@ import {
   semIdDaForma,
   semIdDaLuz,
   semIdDaParede,
+  semIdDaPorta,
   semIdDoPostit,
   semIdDoTexto,
   temLuz,
@@ -69,10 +70,12 @@ import type {
   NewForma,
   NewLuz,
   NewParede,
+  NewPorta,
   NewPostit,
   NewTexto,
   NewTraco,
   Parede,
+  Porta,
   Postit,
   Scene,
   SombraDoItem,
@@ -236,16 +239,25 @@ function tracoDeslocado(traco: NewTraco): NewTraco {
  */
 function doChao(scene: Scene | null): {
   paredes: Parede[];
+  portas: Porta[];
   areas: FogRegion[];
   luzes: Luz[];
   areasDeEfeito: AreaDeEfeito[];
 } {
-  const { selectedParedeId, selectedFogId, selectedLuzId, selectedAreaDeEfeitoId } =
-    useSelectionStore.getState();
+  const {
+    selectedParedeId,
+    selectedPortaId,
+    selectedFogId,
+    selectedLuzId,
+    selectedAreaDeEfeitoId,
+  } = useSelectionStore.getState();
 
   return {
     paredes: (scene?.paredes ?? []).filter(
       (parede) => parede.id === selectedParedeId,
+    ),
+    portas: (scene?.portas ?? []).filter(
+      (porta) => porta.id === selectedPortaId,
     ),
     areas: (scene?.fog ?? []).filter((area) => area.id === selectedFogId),
     luzes: (scene?.luzes ?? []).filter((luz) => luz.id === selectedLuzId),
@@ -281,6 +293,21 @@ function luzDeslocada(luz: NewLuz): NewLuz {
   );
 
   return { ...luz, x, y };
+}
+
+/** A porta anda pela dobradiça, como a luz pelo centro: um ponto sem caixa. */
+function portaDeslocada(porta: NewPorta): NewPorta {
+  const { x, y } = offsetInsideScene(
+    {
+      x: Math.min(Math.max(porta.x, 0), SCENE_WIDTH),
+      y: Math.min(Math.max(porta.y, 0), SCENE_HEIGHT),
+      width: 0,
+      height: 0,
+    },
+    PASTE_OFFSET,
+  );
+
+  return { ...porta, x, y };
 }
 
 function offsetDraft(item: CanvasItem): ItemDraft {
@@ -325,7 +352,7 @@ export function copySelection(): void {
     selectedPostits,
     selectedTracos,
   } = read();
-  const { paredes, areas, luzes } = doChao(scene);
+  const { paredes, portas, areas, luzes } = doChao(scene);
   if (
     selectedItems.length === 0 &&
     selectedTextos.length === 0 &&
@@ -333,6 +360,7 @@ export function copySelection(): void {
     selectedPostits.length === 0 &&
     selectedTracos.length === 0 &&
     paredes.length === 0 &&
+    portas.length === 0 &&
     areas.length === 0 &&
     luzes.length === 0
   )
@@ -345,6 +373,7 @@ export function copySelection(): void {
     postits: selectedPostits,
     tracos: selectedTracos,
     paredes,
+    portas,
     areas,
     luzes,
   });
@@ -467,9 +496,15 @@ export function cutSelection(): void {
 
   // Do chão sai só a que estava na mão: `removeSelection` não as conhece, e
   // cada uma tem o próprio apagar. Selecionar uma delas já largou o resto.
-  const { selectedParedeId, selectedFogId, selectedLuzId, selectedAreaDeEfeitoId } =
-    useSelectionStore.getState();
+  const {
+    selectedParedeId,
+    selectedPortaId,
+    selectedFogId,
+    selectedLuzId,
+    selectedAreaDeEfeitoId,
+  } = useSelectionStore.getState();
   if (selectedParedeId) removeParedeSelection();
+  else if (selectedPortaId) removePortaSelection();
   else if (selectedFogId) removeFogSelection();
   else if (selectedAreaDeEfeitoId) removeAreaDeEfeitoSelection();
   else if (selectedLuzId) removeLuzSelection();
@@ -497,6 +532,7 @@ export function pasteClipboard(): void {
     postits: guardado.postits.map(postitDeslocado),
     tracos: guardado.tracos.map(tracoDeslocado),
     paredes: guardado.paredes.map(paredeDeslocada),
+    portas: guardado.portas.map(portaDeslocada),
     areas: guardado.areas.map(areaDeslocada),
     luzes: guardado.luzes.map(luzDeslocada),
   });
@@ -511,7 +547,7 @@ export function duplicateSelection(): void {
     selectedPostits,
     selectedTracos,
   } = read();
-  const { paredes, areas, luzes } = doChao(scene);
+  const { paredes, portas, areas, luzes } = doChao(scene);
   if (
     !scene ||
     (selectedItems.length === 0 &&
@@ -520,6 +556,7 @@ export function duplicateSelection(): void {
       selectedPostits.length === 0 &&
       selectedTracos.length === 0 &&
       paredes.length === 0 &&
+      portas.length === 0 &&
       areas.length === 0 &&
       luzes.length === 0)
   )
@@ -536,6 +573,7 @@ export function duplicateSelection(): void {
       tracoDeslocado({ pontos, cor, espessura }),
     ),
     paredes: paredes.map((parede) => paredeDeslocada(semIdDaParede(parede))),
+    portas: portas.map((porta) => portaDeslocada(semIdDaPorta(porta))),
     areas: areas.map((area) => areaDeslocada(semIdDaArea(area))),
     luzes: luzes.map((luz) => luzDeslocada(semIdDaLuz(luz))),
   });
@@ -557,6 +595,7 @@ function colarNaCena(
     postits: NewPostit[];
     tracos: NewTraco[];
     paredes: NewParede[];
+    portas: NewPorta[];
     areas: NewFogRegion[];
     luzes: NewLuz[];
   },
@@ -586,6 +625,9 @@ function colarNaCena(
   const paredes = temSol(scene)
     ? copias.paredes.map((parede) => cena.addParede(sceneId, parede))
     : [];
+  const portas = temSol(scene)
+    ? copias.portas.map((porta) => cena.addPorta(sceneId, porta))
+    : [];
   const areas = temNevoa(scene)
     ? copias.areas.map((area) => cena.addFog(sceneId, area))
     : [];
@@ -605,6 +647,7 @@ function colarNaCena(
   // (ver `selectParede`). O Ctrl+C delas veio sozinho pela mesma razão, e é a
   // cópia delas que fica na mão quando é só ela que chegou.
   if (doResto === 0 && paredes[0]) selecao.selectParede(paredes[0]);
+  else if (doResto === 0 && portas[0]) selecao.selectPorta(portas[0]);
   else if (doResto === 0 && areas[0]) selecao.selectFog(areas[0]);
   else if (doResto === 0 && luzes[0]) selecao.selectLuz(luzes[0]);
   else selecao.selectMisto({ itens, textos, formas, postits, tracos });
@@ -631,12 +674,13 @@ export function moveSelectionZ(direction: ZDirection): void {
  */
 export function toggleSelectionLock(): void {
   const { scene, selectedItems, selectedTextos, selectedFormas } = read();
-  const { paredes, areas, luzes, areasDeEfeito } = doChao(scene);
+  const { paredes, portas, areas, luzes, areasDeEfeito } = doChao(scene);
   const todos = [
     ...selectedItems,
     ...selectedTextos,
     ...selectedFormas,
     ...paredes,
+    ...portas,
     ...areas,
     ...luzes,
     ...areasDeEfeito,
@@ -665,6 +709,7 @@ export function toggleSelectionLock(): void {
     );
   for (const parede of paredes)
     cena.updateParede(scene.id, parede.id, { locked });
+  for (const porta of portas) cena.updatePorta(scene.id, porta.id, { locked });
   for (const area of areas) cena.updateFog(scene.id, area.id, { locked });
   for (const luz of luzes) cena.updateLuz(scene.id, luz.id, { locked });
   for (const area of areasDeEfeito)
@@ -812,6 +857,17 @@ export function removeParedeSelection(): void {
     return avisarTravado();
 
   useSceneStore.getState().removeParedes(scene.id, [paredeId]);
+  useSelectionStore.getState().clear();
+}
+
+/** Apaga a porta selecionada. */
+export function removePortaSelection(): void {
+  const { scene } = read();
+  const portaId = useSelectionStore.getState().selectedPortaId;
+  if (!scene || !portaId) return;
+  if (doChao(scene).portas.some((porta) => porta.locked)) return avisarTravado();
+
+  useSceneStore.getState().removePortas(scene.id, [portaId]);
   useSelectionStore.getState().clear();
 }
 

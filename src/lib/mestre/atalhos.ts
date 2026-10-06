@@ -18,6 +18,7 @@ import {
   removeLuzSelection,
   removePinSelection,
   removeParedeSelection,
+  removePortaSelection,
   removePortraitSelection,
   removeSelection,
   rotateSelection,
@@ -719,6 +720,7 @@ export const ATALHOS_BASE: Atalho[] = [
       // atenção: a parede só fica selecionada quando o mestre acabou de
       // encostar nela.
       else if (selecao.selectedParedeId) removeParedeSelection();
+      else if (selecao.selectedPortaId) removePortaSelection();
       // A luz, pela mesma regra: só fica selecionada quando o mestre acabou
       // de encostar no ponto dela.
       else if (selecao.selectedLuzId) removeLuzSelection();
