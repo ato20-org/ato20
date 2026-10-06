@@ -34,7 +34,7 @@ import { useEstante } from "@/hooks/use-estante";
 import { executarComando } from "@/lib/extensoes/carregar";
 import { centeredBox } from "@/lib/geometry/transform";
 import { t } from "@/lib/i18n/mestre";
-import { atalhos } from "@/lib/mestre/atalhos";
+import { atalhos, rotuloDoGrupo } from "@/lib/mestre/atalhos";
 import { rolarNaMesa } from "@/lib/mestre/dados-actions";
 import { lerNotacaoDeDados } from "@/lib/mestre/notacao-de-dados";
 import { normaliza } from "@/lib/search";
@@ -361,7 +361,7 @@ function useComandos(consulta: string): Comando[] {
         if (atalho.grupo === "Paleta" || !casa(atalho.rotulo)) continue;
         lista.push({
           id: `atalho-${atalho.grupo}-${atalho.tecla}`,
-          grupo: atalho.grupo,
+          grupo: rotuloDoGrupo(atalho.grupo),
           titulo: atalho.rotulo,
           detalhe: atalho.tecla,
           icone: Keyboard,

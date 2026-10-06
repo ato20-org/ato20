@@ -34,7 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { HistoricoDeVersoes } from "@/components/desktop/versoes-lista";
 import { useUpdaterEmbutido } from "@/hooks/use-updater-embutido";
 import { versaoAtual } from "@/lib/versoes";
-import { atalhosPorGrupo } from "@/lib/mestre/atalhos";
+import { atalhosPorGrupo, rotuloDoGrupo } from "@/lib/mestre/atalhos";
 import { t } from "@/lib/i18n/desktop";
 import { rico } from "@/lib/i18n/rico";
 import { SecaoIdioma } from "@/components/desktop/secao-idioma";
@@ -387,7 +387,7 @@ function PainelTeclado() {
         {grupos.map(({ grupo, atalhos }) => (
           <section key={grupo} className="flex flex-col gap-1">
             <p className="text-muted-foreground text-[10px] font-medium uppercase">
-              {grupo}
+              {rotuloDoGrupo(grupo)}
             </p>
 
             <ul className="flex flex-col">

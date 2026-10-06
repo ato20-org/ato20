@@ -37,6 +37,7 @@ import { garantirCarregada } from "@/lib/extensoes/carregar";
 import { iconeDeExtensao } from "@/lib/extensoes/icones";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
+import { t } from "@/lib/i18n/bancada";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import {
@@ -90,26 +91,26 @@ type Ferramenta = {
 const FERRAMENTAS_PALCO: Ferramenta[] = [
   {
     tool: "select",
-    label: "Selecionar",
-    hint: "Clique escolhe. Arraste no vazio para marcar vários.",
+    label: t.mestreToolbar.selecionar,
+    hint: t.mestreToolbar.selecionarDica,
     icon: MousePointer2,
   },
   {
     tool: "hand",
-    label: "Deslocar",
-    hint: "Arraste para percorrer o mapa. Segurar Espaço faz o mesmo.",
+    label: t.mestreToolbar.deslocar,
+    hint: t.mestreToolbar.deslocarDica,
     icon: Hand,
   },
   {
     tool: "lapis",
-    label: "Lápis",
-    hint: "Risca o mapa à mão livre. A mesa vê.",
+    label: t.mestreToolbar.lapis,
+    hint: t.mestreToolbar.lapisDica,
     icon: Pencil,
   },
   {
     tool: "borracha",
-    label: "Borracha",
-    hint: "Passe sobre um risco para apagá-lo inteiro.",
+    label: t.mestreToolbar.borracha,
+    hint: t.mestreToolbar.borrachaDica,
     icon: Eraser,
   },
 ];
@@ -128,14 +129,14 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
 const FERRAMENTAS_MAPA: Ferramenta[] = [
   {
     tool: "pin",
-    label: "Ponto",
-    hint: "Crava um ponto com nota e anexos. Só você vê.",
+    label: t.mestreToolbar.ponto,
+    hint: t.mestreToolbar.pontoDica,
     icon: MapPin,
   },
   {
     tool: "postit",
-    label: "Postit",
-    hint: "Cola um papel com texto à vista. Só você vê.",
+    label: t.mestreToolbar.postit,
+    hint: t.mestreToolbar.postitDica,
     icon: StickyNote,
   },
 ];
@@ -149,8 +150,8 @@ const FERRAMENTAS_MAPA: Ferramenta[] = [
  */
 const FERRAMENTA_LUZ: Ferramenta = {
   tool: "luz",
-  label: "Luz",
-  hint: "Crava uma luz. Acende o escuro em volta dela.",
+  label: t.mestreToolbar.luz,
+  hint: t.mestreToolbar.luzDica,
   icon: Flame,
 };
 
@@ -162,8 +163,8 @@ const FERRAMENTA_LUZ: Ferramenta = {
  */
 const FERRAMENTA_PORTA: Ferramenta = {
   tool: "porta",
-  label: "Porta",
-  hint: "Arraste da dobradiça até a outra ponta. Depois, a ponta abre e fecha.",
+  label: t.mestreToolbar.porta,
+  hint: t.mestreToolbar.portaDica,
   icon: DoorOpen,
 };
 
@@ -181,8 +182,8 @@ const FERRAMENTA_PORTA: Ferramenta = {
 const FERRAMENTAS_DE_DESENHO: Ferramenta[] = [
   {
     tool: "texto",
-    label: "Texto",
-    hint: "Escreve direto na cena, sem papel. Nasce só para você.",
+    label: t.mestreToolbar.texto,
+    hint: t.mestreToolbar.textoDica,
     icon: Type,
   },
 ];
@@ -197,8 +198,8 @@ const FERRAMENTAS_DE_DESENHO: Ferramenta[] = [
 const FERRAMENTAS_QUADRO: Ferramenta[] = [
   {
     tool: "ligacao",
-    label: "Seta",
-    hint: "Liga duas coisas do quadro. Clique num ponto de encaixe e depois no outro.",
+    label: t.mestreToolbar.seta,
+    hint: t.mestreToolbar.setaDica,
     icon: Spline,
   },
 ];
@@ -393,12 +394,12 @@ function BotaoDeFerramenta({
 function reguaDeMedir(scene: Scene): Ferramenta {
   return {
     tool: "regua",
-    label: "Régua",
+    label: t.mestreToolbar.regua,
     hint: scene.grid
-      ? `Mede distância e área. Cada quadrado vale ${METROS_POR_QUADRADO} m.`
+      ? t.mestreToolbar.reguaDica(METROS_POR_QUADRADO)
       : // Onde ela mora agora, e não só "ligue a grade": o botão que a ligava
         // era o vizinho de cima, e quem o procurar aqui não vai achar.
-        "Ligue a grade nas configurações do mapa, no canto de cima.",
+        t.mestreToolbar.reguaSemGrade,
     icon: Ruler,
   };
 }
@@ -674,8 +675,8 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
   return (
     <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
       <Bolsa
-        nome="Ferramentas do palco"
-        dica="Selecionar, deslocar, lápis e borracha."
+        nome={t.mestreToolbar.ferramentasDoPalco}
+        dica={t.mestreToolbar.ferramentasDoPalcoDica}
         aberta={aberta === "palco"}
         onAberta={(v) => setAberta(v ? "palco" : null)}
         ativa={daBolsa(FERRAMENTAS_PALCO)}
@@ -707,7 +708,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Largar a ferramenta"
+                aria-label={t.mestreToolbar.largar}
                 onClick={() => {
                   setTool("select");
                   fechar();
@@ -717,7 +718,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
               </Button>
             }
           />
-          <TooltipContent>Largar a ferramenta (Esc)</TooltipContent>
+          <TooltipContent>{t.mestreToolbar.largarComTecla}</TooltipContent>
         </Tooltip>
       ) : null}
     </div>
@@ -773,7 +774,7 @@ function Bolsa({
         <TooltipContent>
           <p className="font-medium">{ativa ? ativa.label : nome}</p>
           <p className="text-muted-foreground max-w-48">
-            {ativa ? `${nome}. Clique para trocar.` : dica}
+            {ativa ? t.mestreToolbar.cliqueParaTrocar(nome) : dica}
           </p>
         </TooltipContent>
       </Tooltip>

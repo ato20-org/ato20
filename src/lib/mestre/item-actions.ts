@@ -83,6 +83,8 @@ import type {
   Traco,
 } from "@/types/scene";
 import { sombraParaGravar } from "@/lib/geometry/sombra";
+import { t } from "@/lib/i18n/bancada";
+import { t as textoDeArquivos } from "@/lib/i18n/arquivos";
 
 /** Deslocamento do "colar" e do "duplicar", para a cópia não sumir sob o original. */
 export const PASTE_OFFSET = 32;
@@ -395,7 +397,7 @@ export function livre(coisa: { locked?: boolean }): boolean {
  * para quem já está olhando para ele.
  */
 function avisarTravado(): void {
-  toast("Está travado. Destrave no cadeado para apagar.");
+  toast(t.itemActions.travado);
 }
 
 export function removeSelection(opcoes?: { semCartao?: boolean }): void {
@@ -734,7 +736,12 @@ export function agruparSelecao(): string | undefined {
 
   return useSceneStore
     .getState()
-    .criarGrupo(scene.id, `Pasta ${ordem}`, selectedIds, parentId);
+    .criarGrupo(
+      scene.id,
+      textoDeArquivos.nomesPadrao.pasta(ordem),
+      selectedIds,
+      parentId,
+    );
 }
 
 /**
@@ -1068,9 +1075,9 @@ export function setSelectionSombra(pedido: PedidoDeSombra): void {
  * vela, a tocha, o lampião. Ajuste fino fica para a luz cravada, que tem anel.
  */
 export const ALCANCES_DA_LANTERNA = [
-  { raio: 160, rotulo: "Curto" },
-  { raio: 260, rotulo: "Médio" },
-  { raio: 420, rotulo: "Longo" },
+  { raio: 160, rotulo: t.itemActions.alcanceCurto },
+  { raio: 260, rotulo: t.itemActions.alcanceMedio },
+  { raio: 420, rotulo: t.itemActions.alcanceLongo },
 ] as const;
 
 /** O alcance com que uma lanterna acende pela primeira vez: o do meio. */
@@ -1083,9 +1090,9 @@ const ALCANCE_DA_LANTERNA_PADRAO = 260;
  * -- a lanterna de foco, a de mão, o farol. O do meio é o do cone de sempre.
  */
 export const ABERTURAS_DA_LANTERNA = [
-  { abertura: 35, rotulo: "Estreito" },
-  { abertura: 60, rotulo: "Médio" },
-  { abertura: 100, rotulo: "Largo" },
+  { abertura: 35, rotulo: t.itemActions.aberturaEstreita },
+  { abertura: 60, rotulo: t.itemActions.aberturaMedia },
+  { abertura: 100, rotulo: t.itemActions.aberturaLarga },
 ] as const;
 
 /**

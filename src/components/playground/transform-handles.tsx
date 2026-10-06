@@ -54,6 +54,7 @@ import {
 import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { itemBounds } from "@/lib/geometry/bounds";
+import { t } from "@/lib/i18n/palco";
 import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
@@ -421,8 +422,11 @@ type TransformHandlesProps = {
   altura?: {
     metros: number;
     onChange: (metros: number) => void;
-    /** O que sobe: "parede", "porta". Ausente = parede. */
-    doQue?: string;
+    /**
+     * O que sobe: "parede", "porta". Ausente = parede. É chave e não texto: o
+     * rótulo sai do dicionário, no idioma da tela.
+     */
+    doQue?: keyof typeof t.transformHandles.alturaDa;
   };
   /**
    * Presente = mostra o botão que abre e fecha a PORTA. Só a porta passa.
@@ -548,6 +552,9 @@ export function TransformHandles({
   const naTelaCondicoes = usePainelNaTela(embaixo);
 
   const cor = TOM[tom];
+
+  /** "Altura da parede", "Altura da porta": o botão, a dica e a régua. */
+  const rotuloDaAltura = t.transformHandles.alturaDa[altura?.doQue ?? "parede"];
 
   /** Pixels de tela convertidos para unidades de cena. */
   const px = (value: number) => value / scale;
@@ -742,7 +749,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Espelhar na horizontal"
+                    aria-label={t.transformHandles.espelhar}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
                       cor.botao,
@@ -763,7 +770,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Espelhar na horizontal</TooltipContent>
+              <TooltipContent>{t.transformHandles.espelhar}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -775,7 +782,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Abrir a ficha do personagem"
+                    aria-label={t.transformHandles.abrirFicha}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
                       cor.botao,
@@ -796,7 +803,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Abrir a ficha do personagem</TooltipContent>
+              <TooltipContent>{t.transformHandles.abrirFicha}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -805,11 +812,19 @@ export function TransformHandles({
           {estilo
             ? (
                 [
-                  { chave: "negrito", rotulo: "Negrito", Icone: Bold },
-                  { chave: "italico", rotulo: "Itálico", Icone: Italic },
+                  {
+                    chave: "negrito",
+                    rotulo: t.transformHandles.negrito,
+                    Icone: Bold,
+                  },
+                  {
+                    chave: "italico",
+                    rotulo: t.transformHandles.italico,
+                    Icone: Italic,
+                  },
                   {
                     chave: "sublinhado",
-                    rotulo: "Sublinhado",
+                    rotulo: t.transformHandles.sublinhado,
                     Icone: Underline,
                   },
                 ] as const
@@ -854,13 +869,13 @@ export function TransformHandles({
                 [
                   {
                     chave: "menor",
-                    rotulo: "Diminuir a fonte",
+                    rotulo: t.transformHandles.diminuirFonte,
                     Icone: AArrowDown,
                     acao: fonte.menor,
                   },
                   {
                     chave: "maior",
-                    rotulo: "Aumentar a fonte",
+                    rotulo: t.transformHandles.aumentarFonte,
                     Icone: AArrowUp,
                     acao: fonte.maior,
                   },
@@ -904,7 +919,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Estilo"
+                    aria-label={t.transformHandles.estilo}
                     aria-expanded={paletaAberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -927,7 +942,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Estilo</TooltipContent>
+              <TooltipContent>{t.transformHandles.estilo}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -937,7 +952,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Opacidade da imagem"
+                    aria-label={t.transformHandles.opacidadeDaImagem}
                     aria-expanded={painelAberto}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -962,7 +977,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Opacidade da imagem</TooltipContent>
+              <TooltipContent>{t.transformHandles.opacidadeDaImagem}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -974,7 +989,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Sombra"
+                    aria-label={t.transformHandles.sombra}
                     aria-expanded={sombraAberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -998,7 +1013,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Sombra</TooltipContent>
+              <TooltipContent>{t.transformHandles.sombra}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -1008,7 +1023,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label={botaoDoPainel?.rotulo ?? "Condições"}
+                    aria-label={botaoDoPainel?.rotulo ?? t.transformHandles.condicoes}
                     aria-expanded={condicoesAbertas}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1032,7 +1047,9 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>{botaoDoPainel?.rotulo ?? "Condições"}</TooltipContent>
+              <TooltipContent>
+                {botaoDoPainel?.rotulo ?? t.transformHandles.condicoes}
+              </TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -1042,7 +1059,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Cor do papel"
+                    aria-label={t.transformHandles.corDoPapel}
                     aria-expanded={papelAberto}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1065,7 +1082,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Cor do papel</TooltipContent>
+              <TooltipContent>{t.transformHandles.corDoPapel}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -1078,7 +1095,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Como escrever aqui"
+                    aria-label={t.transformHandles.comoEscrever}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
                       cor.botao,
@@ -1113,7 +1130,9 @@ export function TransformHandles({
                   <button
                     type="button"
                     aria-label={
-                      mesa.naMesa ? "Tirar da mesa" : "Mostrar para a mesa"
+                      mesa.naMesa
+                        ? t.transformHandles.tirarDaMesa
+                        : t.transformHandles.mostrarParaAMesa
                     }
                     aria-pressed={mesa.naMesa}
                     className={cn(
@@ -1141,8 +1160,8 @@ export function TransformHandles({
               />
               <TooltipContent>
                 {mesa.naMesa
-                  ? "A mesa está vendo. Clique para esconder."
-                  : "Só você vê. Clique para mostrar na TV e nos celulares."}
+                  ? t.transformHandles.mesaVendoDica
+                  : t.transformHandles.soVoceVeDica}
               </TooltipContent>
             </Tooltip>
           ) : null}
@@ -1155,7 +1174,11 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label={porta.aberta ? "Fechar a porta" : "Abrir a porta"}
+                    aria-label={
+                      porta.aberta
+                        ? t.transformHandles.fecharPorta
+                        : t.transformHandles.abrirPorta
+                    }
                     aria-pressed={porta.aberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1189,7 +1212,9 @@ export function TransformHandles({
                 }
               />
               <TooltipContent>
-                {porta.aberta ? "Fechar a porta" : "Abrir a porta"}
+                {porta.aberta
+                  ? t.transformHandles.fecharPorta
+                  : t.transformHandles.abrirPorta}
               </TooltipContent>
             </Tooltip>
           ) : null}
@@ -1203,7 +1228,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label={`Altura da ${altura.doQue ?? "parede"}`}
+                    aria-label={rotuloDaAltura}
                     aria-pressed={alturaAberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1228,12 +1253,9 @@ export function TransformHandles({
                 }
               />
               <TooltipContent>
-                <p className="font-medium">
-                  Altura da {altura.doQue ?? "parede"}
-                </p>
+                <p className="font-medium">{rotuloDaAltura}</p>
                 <p className="text-muted-foreground max-w-52">
-                  Quanto ela sobe. É o que decide o comprimento da sombra que
-                  ela joga no mapa.
+                  {t.transformHandles.alturaDica}
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -1249,7 +1271,11 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label={teto.coberta ? "Tirar o teto" : "Pôr um teto"}
+                    aria-label={
+                      teto.coberta
+                        ? t.transformHandles.tirarTeto
+                        : t.transformHandles.porTeto
+                    }
                     aria-pressed={teto.coberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1284,8 +1310,8 @@ export function TransformHandles({
               />
               <TooltipContent>
                 {teto.coberta
-                  ? "Coberta: a sombra não entra nela, porque o miolo é a pedra do mapa."
-                  : "A céu aberto: a sombra dos muros cai dentro dela, como cai para fora."}
+                  ? t.transformHandles.cobertaDica
+                  : t.transformHandles.ceuAbertoDica}
               </TooltipContent>
             </Tooltip>
           ) : null}
@@ -1299,7 +1325,11 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label={travada ? "Destravar" : "Travar"}
+                    aria-label={
+                      travada
+                        ? t.transformHandles.destravar
+                        : t.transformHandles.travar
+                    }
                     aria-pressed={travada}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1332,8 +1362,8 @@ export function TransformHandles({
               />
               <TooltipContent>
                 {travada
-                  ? "Travado: não move, não muda de tamanho e não apaga. Clique para destravar."
-                  : "Travar no lugar, para não mexer sem querer."}
+                  ? t.transformHandles.travadoDica
+                  : t.transformHandles.travarDica}
               </TooltipContent>
             </Tooltip>
           ) : null}
@@ -1344,7 +1374,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Excluir"
+                    aria-label={t.transformHandles.excluir}
                     className="pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full bg-red-600 text-white"
                     style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
                     // `pointerdown` e não `click`: o palco inteiro reage a
@@ -1364,7 +1394,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Excluir do mapa</TooltipContent>
+              <TooltipContent>{t.transformHandles.excluirDoMapa}</TooltipContent>
             </Tooltip>
           ) : null}
         </div>
@@ -1420,7 +1450,7 @@ export function TransformHandles({
               {Math.round(opacidade.valor * 100)}%
             </span>
             <Slider
-              aria-label="Opacidade da imagem"
+              aria-label={t.transformHandles.opacidadeDaImagem}
               orientation="vertical"
               value={[Math.round(opacidade.valor * 100)]}
               min={OPACIDADE_MINIMA}
@@ -1465,10 +1495,10 @@ export function TransformHandles({
             }}
           >
             <span className="text-muted-foreground text-[10px] tabular-nums">
-              {altura.metros.toFixed(1).replace(".", ",")} m
+              {t.transformHandles.metros(altura.metros)}
             </span>
             <Slider
-              aria-label={`Altura da ${altura.doQue ?? "parede"}, em metros`}
+              aria-label={t.transformHandles.emMetros(rotuloDaAltura)}
               orientation="vertical"
               value={[altura.metros]}
               min={ALTURA_MINIMA_M}
@@ -1517,19 +1547,19 @@ export function TransformHandles({
               escolhida={paleta.cor}
               // O padrão volta pelo primeiro botão, e ele existe nas duas
               // fileiras: sem ele, escolher uma cor seria um caminho sem volta.
-              padrao="A"
+              padrao={t.transformHandles.padraoLetra}
               onEscolher={(valor) => paleta.onChange({ cor: valor })}
             />
             {paleta.opacidade ? (
               <Opacidade
-                rotulo={`Opacidade do ${paleta.titulo.toLowerCase()}`}
+                rotulo={t.transformHandles.opacidadeDe(paleta.titulo)}
                 valor={paleta.opacidade.traco}
                 onChange={(traco) => paleta.opacidade?.onChange({ traco })}
               />
             ) : null}
             {paleta.semFundo ? null : (
               <Fileira
-                titulo="Fundo"
+                titulo={t.transformHandles.fundo}
                 escolhida={paleta.fundo}
                 padrao="∅"
                 translucido
@@ -1540,7 +1570,7 @@ export function TransformHandles({
                 mexe e não muda nada parece quebrado. */}
             {paleta.opacidade ? (
               <Opacidade
-                rotulo="Opacidade do fundo"
+                rotulo={t.transformHandles.opacidadeDoFundo}
                 valor={paleta.opacidade.fundo}
                 desligada={paleta.fundo === undefined}
                 onChange={(fundo) => paleta.opacidade?.onChange({ fundo })}
@@ -1680,7 +1710,7 @@ export function TransformHandles({
             <div
               key={`rotate-${handle}`}
               role="button"
-              aria-label={`Rotacionar pelo canto ${handle}`}
+              aria-label={t.transformHandles.girarPeloCanto(handle)}
               className="pointer-events-auto absolute touch-none"
               style={{
                 left: ROTATE_ZONE_POSITION[handle].left,
@@ -1702,7 +1732,7 @@ export function TransformHandles({
         <button
           key={handle}
           type="button"
-          aria-label={`Redimensionar ${handle}`}
+          aria-label={t.transformHandles.redimensionar(handle)}
           className="bg-background pointer-events-auto absolute touch-none rounded-[1px]"
           style={{
             ...HANDLE_POSITION[handle],
@@ -1923,7 +1953,7 @@ function Fileira({
       <div className="flex items-center gap-1">
         <button
           type="button"
-          aria-label={`${titulo}: padrão`}
+          aria-label={t.transformHandles.padrao(titulo)}
           aria-pressed={escolhida === undefined}
           className={cn(
             "grid size-5 place-items-center rounded-full border text-[9px] transition-transform",
@@ -1956,7 +1986,7 @@ function Fileira({
         <CorLivre
           cor={escolhida}
           paleta={CORES_LAPIS}
-          rotulo={`${titulo}: outra cor`}
+          rotulo={t.transformHandles.outraCor(titulo)}
           className={(livre) =>
             cn(
               "size-5 rounded-full border transition-transform",

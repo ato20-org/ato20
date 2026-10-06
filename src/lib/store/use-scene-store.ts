@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import { COR_DO_VAZIO_PADRAO, corDoVazioDe } from "@/lib/cor";
 import { COR_DO_ESCURO_PADRAO, corDoEscuroDe } from "@/lib/geometry/luz";
+import { t as textoDeCenas } from "@/lib/i18n/cenas";
 import { novoId } from "@/lib/id";
 import { pastaDoMembro, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 
@@ -803,7 +804,9 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         set({
           status: "error",
           error:
-            cause instanceof Error ? cause.message : "Falha ao abrir o board",
+            cause instanceof Error
+              ? cause.message
+              : textoDeCenas.sceneStore.falhaAoAbrir,
         });
       }
     },
@@ -850,7 +853,8 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       const iguais =
         board?.scenes.filter((scene) => scene.tipo === tipo).length ?? 0;
       const scene = createScene(
-        name ?? `${NOME_DO_TIPO[tipo ?? "mapa"]} ${iguais + 1}`,
+        name ??
+          textoDeCenas.nomesPadrao.cena(NOME_DO_TIPO[tipo ?? "mapa"], iguais + 1),
         tipo,
       );
       const base = board ?? {
@@ -873,7 +877,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       const source = board?.scenes.find((scene) => scene.id === sceneId);
       if (!board || !source) return null;
 
-      const copy = cloneScene(source, `${source.name} (cópia)`);
+      const copy = cloneScene(source, textoDeCenas.nomesPadrao.copia(source.name));
       commit(insertSceneAfter(board, sceneId, copy));
 
       // Que ambientes a cena acende mora FORA do board, no `TrackStore`, para

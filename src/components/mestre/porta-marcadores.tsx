@@ -5,6 +5,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { usePortasNoGiro } from "@/hooks/use-portas-no-giro";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { t } from "@/lib/i18n/bancada";
 import {
   aberturaAte,
   patchDaAbertura,
@@ -266,7 +267,7 @@ export function PortaMarcadores({
               }}
               onPointerDown={(event) => mover(event, porta)}
             >
-              <title>Porta</title>
+              <title>{t.portaMarcadores.porta}</title>
             </line>
 
             <circle
@@ -282,7 +283,7 @@ export function PortaMarcadores({
               }}
               onPointerDown={(event) => mover(event, porta)}
             >
-              <title>Dobradiça</title>
+              <title>{t.portaMarcadores.dobradica}</title>
             </circle>
 
             {comLosango ? (
@@ -301,7 +302,7 @@ export function PortaMarcadores({
                 }}
                 onPointerDown={(event) => girarEsticar(event, porta)}
               >
-                <title>Girar e mudar o tamanho</title>
+                <title>{t.portaMarcadores.girarEEsticar}</title>
               </rect>
             ) : null}
 
@@ -318,7 +319,11 @@ export function PortaMarcadores({
               }}
               onPointerDown={(event) => abrir(event, porta)}
             >
-              <title>{aberta ? "Arraste para fechar" : "Arraste para abrir"}</title>
+              <title>
+                {aberta
+                  ? t.portaMarcadores.arrasteParaFechar
+                  : t.portaMarcadores.arrasteParaAbrir}
+              </title>
             </circle>
           </g>
         );
