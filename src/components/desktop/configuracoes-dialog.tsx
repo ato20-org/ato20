@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { CatalogoDePlugins } from "@/components/desktop/catalogo-de-plugins";
 import { ListaDeConfiguracoes } from "@/components/desktop/lista-de-configuracoes";
 import { ChromeButton } from "@/components/desktop/window-chrome";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HistoricoDeVersoes } from "@/components/desktop/versoes-lista";
 import { useUpdaterEmbutido } from "@/hooks/use-updater-embutido";
 import { versaoAtual } from "@/lib/versoes";
@@ -420,14 +422,13 @@ function PainelTeclado() {
  * A lista é lida ao ABRIR a seção, e não uma vez na montagem do diálogo:
  * instalar uma extensão é copiar uma pasta, e quem faz isso por fora do
  * aplicativo espera achá-la aqui sem reabrir a janela.
+ *
+ * Instalados primeiro, e o Catálogo na aba ao lado: quem abre a seção quase
+ * sempre vem ligar ou desligar o que já tem, e o catálogo é o único pedaço da
+ * tela que fala com a rede. Ver `CatalogoDePlugins`.
  */
 function PainelPlugins() {
-  const extensoes = useExtensoesStore((state) => state.extensoes);
-  const carregada = useExtensoesStore((state) => state.carregada);
-  const ocupada = useExtensoesStore((state) => state.ocupada);
-  const erro = useExtensoesStore((state) => state.erro);
   const carregar = useExtensoesStore((state) => state.carregar);
-  const importar = useExtensoesStore((state) => state.importar);
 
   useEffect(() => {
     void carregar();
@@ -439,6 +440,38 @@ function PainelPlugins() {
         {t.configuracoes.secoes.plugins}
       </TituloSecao>
 
+      <Tabs defaultValue="instalados" className="gap-3">
+        <TabsList variant="line" className="h-7 justify-start gap-2">
+          <TabsTrigger value="instalados" className="flex-none text-xs">
+            {t.configuracoes.plugins.abaInstalados}
+          </TabsTrigger>
+          <TabsTrigger value="catalogo" className="flex-none text-xs">
+            {t.configuracoes.plugins.abaCatalogo}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="instalados" className="flex flex-col gap-4">
+          <Instalados />
+        </TabsContent>
+
+        <TabsContent value="catalogo">
+          <CatalogoDePlugins />
+        </TabsContent>
+      </Tabs>
+    </>
+  );
+}
+
+/** O que está nesta máquina: importar, e a lista separada por natureza. */
+function Instalados() {
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+  const carregada = useExtensoesStore((state) => state.carregada);
+  const ocupada = useExtensoesStore((state) => state.ocupada);
+  const erro = useExtensoesStore((state) => state.erro);
+  const importar = useExtensoesStore((state) => state.importar);
+
+  return (
+    <>
       <Button
         variant="outline"
         size="sm"
