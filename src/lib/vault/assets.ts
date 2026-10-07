@@ -13,6 +13,7 @@ import type {
   AssetKind,
   AssetMeta,
   EscopoAsset,
+  SomDoYoutube,
   TipoDeSom,
 } from "@/types/scene";
 
@@ -111,6 +112,35 @@ export function setAssetTipoDeSom(
  */
 export function renameAsset(id: string, name: string): Promise<void> {
   return call("asset_rename", { id, name });
+}
+
+/** Um vídeo que vai entrar no acervo: o título dele e o trecho. */
+export type NovoDoYoutube = SomDoYoutube & { nome: string };
+
+/**
+ * Põe no acervo sons que tocam do YouTube, todos do mesmo tipo.
+ *
+ * Uma chamada para a leva toda: a playlist inteira é UMA gravação do índice, e
+ * não uma por vídeo. Ver `assets::add_youtube`.
+ */
+export function addYoutube(
+  sons: NovoDoYoutube[],
+  tipo: Exclude<TipoDeSom, "disparo">,
+): Promise<AssetMeta[]> {
+  return call<AssetMeta[]>("asset_add_youtube", { sons, tipo });
+}
+
+/** Troca o trecho de um som do YouTube. `undefined` nas duas = o vídeo todo. */
+export function setTrechoDoYoutube(
+  id: string,
+  inicio: number | undefined,
+  fim: number | undefined,
+): Promise<void> {
+  return call("asset_set_trecho_youtube", {
+    id,
+    inicio: inicio ?? null,
+    fim: fim ?? null,
+  });
 }
 
 /** Move para uma pasta. `undefined` devolve à raiz. */
