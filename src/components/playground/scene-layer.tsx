@@ -23,6 +23,7 @@ import {
   type PontaDoMedidor,
 } from "@/components/playground/regua-layer";
 import { InfoDoToken } from "@/components/playground/info-do-token";
+import { LaserLayer } from "@/components/playground/laser-layer";
 import { PingLayer } from "@/components/playground/ping-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { SombraLayer } from "@/components/playground/sombra-layer";
@@ -43,6 +44,7 @@ import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
 import type { CorrenteDeEsguelha } from "@/lib/geometry/volume";
 import { useChaoStore } from "@/lib/store/use-chao-store";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
 import {
   ehQuadro,
@@ -132,6 +134,14 @@ type SceneLayerProps = {
    * `Ping.cenaId`.
    */
   pings?: Ping[];
+  /**
+   * O laser do mestre, como chegou no quadro. Filtrado aqui pela cena, como os
+   * pings.
+   *
+   * `undefined` é a tela que não recebe laser nenhum -- o próprio Mestre, que
+   * desenha o dele na hora, no plano de controles. Ali a camada nem monta.
+   */
+  laser?: LaserNaMesa | null;
   /**
    * Nome e medidores para desenhar sobre a cabeça dos tokens.
    *
@@ -254,6 +264,7 @@ export function SceneLayer({
   portraits,
   rolagens,
   pings,
+  laser,
   fichas,
   efeitos,
   onItemPointerDown,
@@ -587,6 +598,10 @@ export function SceneLayer({
       {/* Por cima de tudo que é do mapa -- névoa, medidor, nome --, e embaixo
           do retrato, que é HUD. Ver `PingLayer`. */}
       <PingLayer pings={pingsDaCena} />
+
+      {laser !== undefined ? (
+        <LaserLayer laser={laser?.cenaId === scene.id ? laser : null} />
+      ) : null}
 
       {portraits && portraits.length > 0 ? (
         <PortraitLayer

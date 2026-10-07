@@ -85,6 +85,9 @@ const pt = {
     selecionarDica: "Clique escolhe. Arraste no vazio para marcar vários.",
     deslocar: "Deslocar",
     deslocarDica: "Arraste para percorrer o mapa. Segurar Espaço faz o mesmo.",
+    laser: "Laser",
+    laserDica:
+      "Segure e risque para apontar. O rastro some sozinho, e a mesa vê na cena no ar.",
     lapis: "Lápis",
     lapisDica: "Risca o mapa à mão livre. A mesa vê.",
     borracha: "Borracha",
@@ -265,6 +268,9 @@ const en: typeof pt = {
     selecionarDica: "Click to pick. Drag on empty space to select several.",
     deslocar: "Pan",
     deslocarDica: "Drag to move around the map. Holding Space does the same.",
+    laser: "Laser",
+    laserDica:
+      "Hold and drag to point. The trail fades on its own, and the table sees it in the scene on air.",
     lapis: "Pencil",
     lapisDica: "Draws freehand on the map. The table sees it.",
     borracha: "Eraser",

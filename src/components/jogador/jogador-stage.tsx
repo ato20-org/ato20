@@ -15,6 +15,7 @@ import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
 import type { FichaNaCena, Portrait, Scene } from "@/types/scene";
 
@@ -48,6 +49,7 @@ export function JogadorStage({
   efeitos,
   rolagens,
   pings,
+  laser,
   synced,
   stalled,
 }: {
@@ -69,6 +71,8 @@ export function JogadorStage({
   rolagens: RolagemDaMesa[];
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** O laser do mestre. Ver `LiveState.laser`. */
+  laser: LaserNaMesa | null;
   synced: boolean;
   stalled: boolean;
 }) {
@@ -122,6 +126,7 @@ export function JogadorStage({
                 efeitos={efeitos}
                 rolagens={rolagens}
                 pings={pings}
+                laser={laser}
                 tripe={tripe}
                 corte={corte}
               />

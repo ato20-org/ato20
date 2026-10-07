@@ -13,6 +13,7 @@ import { idioma } from "@/lib/i18n/idioma";
 import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
 import {
   type Ambiente,
@@ -85,6 +86,30 @@ export function publicarCenaAoVivo(scene: Scene): void {
   publicadorAoVivo?.(scene);
 }
 
+/**
+ * O laser do mestre, pela mesma porta lateral do gesto.
+ *
+ * O rastro muda a cada amostra do mouse, e passar por estado do `MestreShell`
+ * seria um render da janela inteira por amostra -- o custo que o gesto já
+ * aprendeu a não pagar. O palco entrega o rastro aqui, e o publicador troca só
+ * este campo na última embalagem. Quem segura a cadência é o transporte, a
+ * 10 Hz, como a cena do arrasto.
+ *
+ * Fica guardado no módulo, e não só na última embalagem: qualquer quadro que
+ * o Mestre monte por outro motivo -- um ping, um retrato -- leva o rastro
+ * junto, em vez de apagá-lo da TV por um quadro.
+ *
+ * `undefined` tira o laser do quadro. Ver `LiveState.laser`.
+ */
+let laserNaMesa: LaserNaMesa | undefined;
+
+let publicadorDoLaser: (() => void) | null = null;
+
+export function publicarLaser(laser: LaserNaMesa | undefined): void {
+  laserNaMesa = laser;
+  publicadorDoLaser?.();
+}
+
 export function usePublisher(state: LiveState, pronto = true): void {
   const channelRef = useRef<SceneChannel | null>(null);
 
@@ -116,8 +141,18 @@ export function usePublisher(state: LiveState, pronto = true): void {
       channel.publish(paraMesa);
     };
 
+    publicadorDoLaser = () => {
+      const channel = channelRef.current;
+      if (!channel || !pronto) return;
+
+      const paraMesa: LiveState = { ...stateRef.current, laser: laserNaMesa };
+      stateRef.current = paraMesa;
+      channel.publish(paraMesa);
+    };
+
     return () => {
       publicadorAoVivo = null;
+      publicadorDoLaser = null;
     };
   }, [pronto]);
 
@@ -154,6 +189,9 @@ export function usePublisher(state: LiveState, pronto = true): void {
       fichasVersao: state.fichasVersao,
       rolagens: state.rolagens,
       pings: state.pings,
+      // Do módulo, como o idioma logo abaixo: o laser não passa pelo estado.
+      // Ver `publicarLaser`.
+      laser: laserNaMesa,
       // Do módulo, e não do estado: o idioma é constante enquanto a janela
       // vive, e trocá-lo recarrega o Mestre -- que volta publicando o novo.
       idioma,
@@ -224,6 +262,8 @@ export type Subscription = {
   rolagens: RolagemDaMesa[];
   /** Os pings no mapa agora. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** O laser do mestre, enquanto aceso. `null` = nenhum. Ver `LiveState.laser`. */
+  laser: LaserNaMesa | null;
   /** A versão do declarativo dos plugins. Zero = nada. Ver `LiveState`. */
   declarativoVersao: number;
   /** A versão do elenco no Mestre. Ver `LiveState`. */
@@ -304,6 +344,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     spotlight: live.spotlight,
     rolagens: live.rolagens ?? [],
     pings: live.pings ?? SEM_PINGS,
+    laser: live.laser ?? null,
     declarativoVersao: live.declarativoVersao ?? 0,
     fichasVersao: live.fichasVersao ?? 0,
     synced,
