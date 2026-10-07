@@ -979,13 +979,11 @@ function PalcoEspectador({
  * outra tela: o conteúdo é texto e vetor, vive no plano de CONTROLES (ver
  * `scene-stage`) e não tem bitmap nenhum para rasterizar. Esta medida nasceu
  * para responder se os dois planos precisam trocar de forma de ampliação
- * juntos quando o mestre arrasta um elemento -- o plano de conteúdo precisa,
- * porque um item em `zoom` paga layout por quadro; o de controles talvez não,
- * e é ele que carrega o quadro inteiro.
+ * juntos quando o mestre arrasta um elemento. Desde 07/10/2026 nenhum dos
+ * dois troca no gesto: ver `conteudoNoLayout` em `scene-stage`.
  *
  * O gesto fica LIGADO a corrida toda (`comecarGesto`), que é o que reproduz a
- * mão no elemento: sem isso o palco assenta em `zoom` e a medida seria de uma
- * tela parada.
+ * mão no elemento: os efeitos animados pausam como pausariam na mão.
  */
 function PalcoQuadro({
   n,
@@ -1995,6 +1993,9 @@ function ChaoOrbitalDeMedida({
  *                 `Fantasma` chama `atualizarCamera` direto, e cada quadro é
  *                 um commit de board inteiro. É a suspeita que a medida existe
  *                 para confirmar ou desmentir.
+ * `token`         não é a câmera: o item 0, posto no meio do plano e por cima
+ *                 de todos, arrastado pela mão. Com `?zoom=` é o gesto que
+ *                 pesa o plano nítido contra o borrado.
  *
  * O ponteiro é sintético, e é a única concessão: no Wayland não há como
  * injetar mouse de verdade numa janela, e sem gesto nenhum destes caminhos
@@ -2008,12 +2009,20 @@ function PalcoGestoDeCamera({
   gesto,
   sonda,
   roda,
+  zoom,
 }: {
   n: number;
   cameras: number;
   gesto: Gesto;
   sonda: boolean;
   roda: number;
+  /**
+   * A ampliação do palco do mestre durante o gesto. `1` deixa o enquadramento
+   * de sempre (a câmera com folga, ~1,1x); acima disso a câmera da mão encolhe
+   * até o enquadramento dela dar essa ampliação, e o `token` amplia o centro
+   * do plano. É onde o borrão do `transform` aparece, e onde o `zoom` cobra.
+   */
+  zoom: number;
 }) {
   const cena = useSceneStore(selectEditingScene);
   const viewport = useViewportStore((state) => state.viewport);
@@ -2021,6 +2030,33 @@ function PalcoGestoDeCamera({
 
   useEffect(() => {
     const base = montarCena(n, cameras);
+
+    /**
+     * `token`: o item 0 vai para o meio do plano e para cima de todos, que é
+     * onde o robô o pega. Sem isso ele mora no canto (0,0), por baixo, e o
+     * arrasto o levaria para fora do plano -- o que mediria os limites do
+     * conteúdo crescendo, e não a pintura do item andando.
+     */
+    const primeiro = base.items[0];
+    if (gesto === "token" && primeiro)
+      base.items[0] = {
+        ...primeiro,
+        x: SCENE_WIDTH / 2 - primeiro.width / 2,
+        y: SCENE_HEIGHT / 2 - primeiro.height / 2,
+        z: n + 1,
+      };
+
+    const mao = base.cameras?.[gesto === "fantasma" ? 1 : 0];
+    if (zoom > 1 && mao && gesto !== "token") {
+      const width = SCENE_WIDTH / (zoom * 1.45);
+      const height = (width * SCENE_HEIGHT) / SCENE_WIDTH;
+      mao.viewport = {
+        x: mao.viewport.x + mao.viewport.width / 2 - width / 2,
+        y: mao.viewport.y + mao.viewport.height / 2 - height / 2,
+        width,
+        height,
+      };
+    }
 
     useSceneStore.setState({
       board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
@@ -2043,22 +2079,27 @@ function PalcoGestoDeCamera({
       FULL_VIEWPORT;
     const folga = 1.45;
     useViewportStore.getState().setViewport(
-      clampViewport(
-        {
-          x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
-          y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
-          width: alvo.width * folga,
-          height: alvo.height * folga,
-        },
-        PLANO,
-      ),
+      gesto === "token"
+        ? zoomViewport(FULL_VIEWPORT, zoom, {
+            x: SCENE_WIDTH / 2,
+            y: SCENE_HEIGHT / 2,
+          })
+        : clampViewport(
+            {
+              x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
+              y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
+              width: alvo.width * folga,
+              height: alvo.height * folga,
+            },
+            PLANO,
+          ),
     );
 
     return () => {
       useViewportStore.getState().setViewport(FULL_VIEWPORT);
       useSceneStore.setState({ board: null, status: "idle", campaignPath: null });
     };
-  }, [n, cameras, gesto]);
+  }, [n, cameras, gesto, zoom]);
 
   if (!cena) return null;
 
@@ -2231,6 +2272,8 @@ type Gesto =
   | "cartao"
   | "cartao-livre"
   | "redimensionar"
+  /** `camera-gesto`: o mestre arrasta um TOKEN, e não a moldura. */
+  | "token"
   | "zoom"
   | "fantasma"
   | "cinegrafista"
@@ -2457,6 +2500,25 @@ function MaoSintetica({
       // uma medida que estava correndo bem.
       if (doPalco) return useViewportStore.getState().viewport;
 
+      // O token anda no `useGestoStore` e só chega ao board no soltar -- e o
+      // robô solta onde pegou, depois de uma volta inteira. Quem diz se ele
+      // andou é o patch do gesto em curso.
+      if (gesto === "token") {
+        const item = selectEditingScene(useSceneStore.getState())?.items.find(
+          (i) => i.id === "perf-item-0",
+        );
+        const patch = useGestoStore
+          .getState()
+          .patches?.find((p) => p.id === "perf-item-0")?.patch;
+        if (!item) return null;
+        return {
+          x: patch?.x ?? item.x,
+          y: patch?.y ?? item.y,
+          width: 0,
+          height: 0,
+        };
+      }
+
       const scene = selectEditingScene(useSceneStore.getState());
       const selecionadaId = useCameraLockStore.getState().selecionadaId;
       const camera =
@@ -2492,6 +2554,15 @@ function MaoSintetica({
      * que esteja dentro da janela e tenha alguém debaixo.
      */
     const mira = (): { x: number; y: number }[] => {
+      if (gesto === "token") {
+        const token = document
+          .querySelector('[data-item-id="perf-item-0"]')
+          ?.getBoundingClientRect();
+        return token
+          ? [{ x: token.left + token.width / 2, y: token.top + token.height / 2 }]
+          : [];
+      }
+
       const caixa = molduraNaTela(gesto);
       if (!caixa) return [];
 
@@ -3554,6 +3625,7 @@ function Medida({ params }: { params: URLSearchParams }) {
           gesto={gesto}
           sonda={sonda}
           roda={roda}
+          zoom={zoomDoPalco}
         />
       ) : cenario === "bancada" ? (
         <PalcoBancada

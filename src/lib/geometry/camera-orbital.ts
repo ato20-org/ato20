@@ -567,6 +567,68 @@ export function figuraNoTripe(
 }
 
 /**
+ * Uma figura DEITADA, vista pelo tripé, como caixa de TELA: o tamanho que ela
+ * ocupa ali e o `matrix3d` que leva essa caixa ao quadrilátero dela no chão.
+ * Ou `null` se algum canto está atrás do olho.
+ *
+ * Irmã de `figuraNoTripe`, e pelo mesmo motivo. Deitada no piso, a figura é
+ * pintada na textura do chão, que tem o tamanho do plano: um token de dez
+ * unidades vira dez pixels de textura, esticados para cem na tela quando a
+ * câmera chega perto. Aqui ela é uma caixa própria do tamanho em que aparece,
+ * e a perspectiva vai DENTRO da matriz, e não no `perspective` de uma caixa
+ * que o WebKitGTK do Mestre às vezes esquece.
+ *
+ * A matriz é a homografia de quatro cantos: a caixa `largura x altura` vai a
+ * `cantos` (na ordem de `cantosDeitado`: cima-esquerda, cima-direita,
+ * baixo-direita, baixo-esquerda) projetados. Com todos os cantos à frente do
+ * olho o divisor é positivo na caixa inteira, e o motor desenha sem cortar.
+ */
+export function deitadoNoTripe(
+  tripe: Tripe,
+  tela: Pick<Tela, "largura" | "altura">,
+  cantos: ReadonlyArray<Vec>,
+): { largura: number; altura: number; matriz: string } | null {
+  const focal = focalDaLente(tela.altura, tripe.lente);
+  const p: Vec[] = [];
+  for (const canto of cantos) {
+    const olho = noOlho(tripe, canto, 0);
+    if (olho.profundidade <= PERTO_DO_OLHO) return null;
+    p.push({
+      x: tela.largura / 2 + (olho.lado * focal) / olho.profundidade,
+      y: tela.altura / 2 + (olho.cima * focal) / olho.profundidade,
+    });
+  }
+  const [p0, p1, p2, p3] = p as [Vec, Vec, Vec, Vec];
+
+  // A caixa do tamanho médio dos lados na tela: é a resolução em que o motor
+  // rasteriza a figura, e a homografia estica pouco em volta dela.
+  const lado = (de: Vec, ate: Vec) => Math.hypot(ate.x - de.x, ate.y - de.y);
+  const largura = Math.max(1, Math.ceil((lado(p0, p1) + lado(p3, p2)) / 2));
+  const altura = Math.max(1, Math.ceil((lado(p0, p3) + lado(p1, p2)) / 2));
+
+  // Do quadrado unitário ao quadrilátero (Heckbert): x = (a u + b v + c) /
+  // (g u + h v + 1), e o mesmo com d, e, f para y.
+  const dx1 = p1.x - p2.x;
+  const dx2 = p3.x - p2.x;
+  const dx3 = p0.x - p1.x + p2.x - p3.x;
+  const dy1 = p1.y - p2.y;
+  const dy2 = p3.y - p2.y;
+  const dy3 = p0.y - p1.y + p2.y - p3.y;
+  const det = dx1 * dy2 - dx2 * dy1;
+  const g = det === 0 ? 0 : (dx3 * dy2 - dx2 * dy3) / det;
+  const h = det === 0 ? 0 : (dx1 * dy3 - dx3 * dy1) / det;
+  const a = p1.x - p0.x + g * p1.x;
+  const b = p3.x - p0.x + h * p3.x;
+  const d = p1.y - p0.y + g * p1.y;
+  const e = p3.y - p0.y + h * p3.y;
+
+  // Da caixa ao quadrado (u = x / largura, v = y / altura), em colunas, como
+  // o CSS lê: x' e y' nas duas primeiras linhas, o divisor na quarta, e z fica.
+  const matriz = `matrix3d(${a / largura}, ${d / largura}, 0, ${g / largura}, ${b / altura}, ${e / altura}, 0, ${h / altura}, 0, 0, 1, 0, ${p0.x}, ${p0.y}, 0, 1)`;
+  return { largura, altura, matriz };
+}
+
+/**
  * Onde o pé de uma figura em pé tem de ir para o ponto dela que o dedo pegou
  * ficar sob o dedo. `null` se o dedo está no céu.
  *
