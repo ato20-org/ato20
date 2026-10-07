@@ -5,7 +5,11 @@ import {
   figuraNoTripe,
   profundidadeNoTripe,
 } from "@/lib/geometry/camera-orbital";
-import { peDe, sobeDe } from "@/lib/geometry/peca-de-esguelha";
+import {
+  espelhadaPeloOlhar,
+  peDe,
+  sobeDe,
+} from "@/lib/geometry/peca-de-esguelha";
 import { ceuNaTela } from "@/lib/geometry/panorama-do-ceu";
 import type { Vec } from "@/lib/geometry/transform";
 import { sceneForTable } from "@/lib/sync/for-table";
@@ -225,7 +229,9 @@ export async function fotografarTripe(
     contexto.setTransform(1, 0, 0, 1, 0, 0);
     contexto.translate(naTela.x, naTela.y);
     if (naTela.giro) contexto.rotate((naTela.giro * Math.PI) / 180);
-    if (item.flipX) contexto.scale(-1, 1);
+    // Com o giro do tripé: quem espelha pelo olhar vira para o lado da tela
+    // para onde olha. Ver `espelhadaPeloOlhar`.
+    if (espelhadaPeloOlhar(item, tripe.giro)) contexto.scale(-1, 1);
     contexto.globalAlpha = item.opacity ?? 1;
     contexto.drawImage(imagem, -largura / 2, -altura, largura, altura);
   }

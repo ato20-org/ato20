@@ -325,6 +325,7 @@ function offsetDraft(item: CanvasItem): ItemDraft {
     locked: item.locked,
     flipX: item.flipX,
     flipY: item.flipY,
+    espelharPeloOlhar: item.espelharPeloOlhar,
     opacity: item.opacity,
     // A cópia do caixote vista de cima continua vista de cima, e a do boneco
     // com a linha do chão posta continua pisando no mesmo lugar.

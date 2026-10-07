@@ -46,6 +46,7 @@ import {
   profundidadeNaVista,
   tapa,
 } from "@/lib/geometry/volume";
+import { olhaParaEsquerda } from "@/lib/geometry/peca-de-esguelha";
 import { GROSSURA_DA_PORTA, paredesComPortas } from "@/lib/geometry/porta";
 import {
   SCENE_HEIGHT,
@@ -248,6 +249,11 @@ export type PecaDoChao = {
   assetId?: string;
   /** Espelhada na horizontal, como o `flipX` do item no mapa de prumo. */
   espelhada?: boolean;
+  /**
+   * Para onde ela olha no mapa, em graus, quando espelha pelo olhar. Ausente =
+   * não espelha pelo olhar. Ver `espelhadaPeloOlhar`.
+   */
+  olhaPara?: number;
   /**
    * O que as condições fazem com a figura -- aura, tinta, apagado, tremendo,
    * translúcido --, os mesmos do mapa de prumo. Ver `FiguraComEfeitos`.
@@ -1158,7 +1164,13 @@ export const ChaoInclinado = memo(function ChaoInclinado({
       if (visivel && !visivel(cantosDaPeca)) continue;
       // Espelhada em volta do próprio meio, depois de posta em pé: o pé fica
       // onde estava, e só o desenho vira.
-      const daPeca = `translate3d(${centroX}px, ${pe}px, ${sobe}px) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)${peca.espelhada ? ` translate(${peca.lado}px, 0) scale(-1, 1)` : ""}`;
+      // O espelho manual, trocado quando ela espelha pelo olhar e o olhar
+      // aponta para a esquerda da tela. Ver `espelhadaPeloOlhar`.
+      const espelhada =
+        peca.olhaPara === undefined
+          ? Boolean(peca.espelhada)
+          : Boolean(peca.espelhada) !== olhaParaEsquerda(peca.olhaPara, giro);
+      const daPeca = `translate3d(${centroX}px, ${pe}px, ${sobe}px) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)${espelhada ? ` translate(${peca.lado}px, 0) scale(-1, 1)` : ""}`;
 
       const noChao = profundidadeNaVista(centroX, pe, giro);
       // No teto, ela entra DEPOIS da laje em que pisa: o pé dela está dentro da
@@ -1188,7 +1200,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
               y: pe,
               lado: peca.lado,
               alta,
-              espelhada: Boolean(peca.espelhada),
+              espelhada,
               escalada: Boolean(peca.fogo),
               sobe,
             })}

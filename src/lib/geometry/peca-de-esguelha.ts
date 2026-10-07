@@ -51,11 +51,48 @@ export function raioDoAnel(item: CanvasItem): number {
  * dela, ou o padrão do facho quando não há lanterna: girar o olhar aqui é o
  * mesmo `rotation` do 2D, que é o que leva o facho junto. Ver `anguloDoFacho`.
  */
-export function olharDe(item: CanvasItem): number {
+export function olharDe(
+  item: Pick<CanvasItem, "rotation" | "flipX" | "flipY" | "luz">,
+): number {
   return anguloDoFacho(
     item,
     item.luz?.cone?.angulo ?? CONE_DA_LANTERNA.angulo,
   );
+}
+
+/**
+ * A figura em pé sai espelhada na tela? O `flipX` dela, trocado quando ela
+ * espelha pelo olhar e o olhar aponta para a ESQUERDA da tela. Ver
+ * `CanvasItem.espelharPeloOlhar`.
+ *
+ * "Esquerda da tela" é o sinal do `x` do olhar depois do giro da câmera: a
+ * mesma conta de `lateralNaVista`, que para uma direção de ângulo `a` dá
+ * `cos(a + giro)`. Girar o token ou a câmera passa o olhar para o outro lado,
+ * e a figura vira junto.
+ *
+ * O olhar é o do facho, com o espelho dentro (`olharDe`). Com o cone padrão
+ * -- 90°, para baixo na figura -- espelhar não o muda, e é por isso que o
+ * `flipX` fica livre para dizer só de que lado a arte olha.
+ */
+export function espelhadaPeloOlhar(
+  item: Pick<
+    CanvasItem,
+    "flipX" | "flipY" | "rotation" | "luz" | "espelharPeloOlhar" | "deitado"
+  >,
+  giro: number,
+): boolean {
+  const manual = Boolean(item.flipX);
+  if (!item.espelharPeloOlhar || item.deitado) return manual;
+
+  return manual !== olhaParaEsquerda(olharDe(item), giro);
+}
+
+/**
+ * Um olhar de `olhar` graus no mapa aponta para a esquerda da tela, com a
+ * câmera em `giro`? Ver `espelhadaPeloOlhar`.
+ */
+export function olhaParaEsquerda(olhar: number, giro: number): boolean {
+  return Math.cos(((olhar + giro) * Math.PI) / 180) < 0;
 }
 
 /** Os quatro cantos da peça deitada no chão, no giro dela. */

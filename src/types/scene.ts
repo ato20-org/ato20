@@ -182,6 +182,20 @@ export type CanvasItem = {
   flipX?: boolean;
   flipY?: boolean;
   /**
+   * No 2.5D, a figura em pé espelha para o lado da tela para onde OLHA.
+   * Ausente = desligado, a figura fica como o `flipX` a pôs.
+   *
+   * O olhar é o do facho (`olharDe`): girar o token ou a câmera troca o lado.
+   * Ligado, o `flipX` passa a dizer de que lado a ARTE olha -- quem aparece de
+   * costas se acerta apertando Espelhar uma vez. Só o desenho espelha: o dado
+   * não muda com a câmera, e o 2D, a luz e o desfazer não sentem nada. Ver
+   * `espelhadaPeloOlhar`.
+   *
+   * Por token, e não da cena: arte de frente ou simétrica -- um baú, uma
+   * estátua -- não tem lado para virar.
+   */
+  espelharPeloOlhar?: boolean;
+  /**
    * Opacidade da imagem, de 0 a 1. Ausente = opaca.
    *
    * Viaja com a cena, e não é um esmaecido só do palco do mestre: o uso é
@@ -2446,6 +2460,7 @@ export type ItemDraft = NewCanvasItem &
       | "locked"
       | "flipX"
       | "flipY"
+      | "espelharPeloOlhar"
       | "opacity"
       | "semSombra"
       | "sombra"
