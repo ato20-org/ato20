@@ -34,6 +34,14 @@ export const TOPICOS_DA_CAMPANHA = [
     palavras: t.topicos.efeitos.palavras,
   },
   {
+    // A imagem da TV: brilho, contraste e cor da janela do espectador. Quem
+    // procura "projetor" ou "sepia" acha aqui -- ver as palavras.
+    chave: "espectador",
+    titulo: t.topicos.espectador.titulo,
+    descricao: t.topicos.espectador.descricao,
+    palavras: t.topicos.espectador.palavras,
+  },
+  {
     // "Ajustes", o nome da mesma lista nas Configurações gerais. Hoje só
     // plugin declara ajuste por campanha, mas o ATO20 pode declarar um amanhã,
     // e ele cairia aqui debaixo de um título que mentiria.

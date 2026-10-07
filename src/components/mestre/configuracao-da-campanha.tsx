@@ -17,6 +17,7 @@ import {
   Shapes,
   SlidersHorizontal,
   Sparkles,
+  Tv,
   Wand2,
   X,
 } from "lucide-react";
@@ -38,6 +39,7 @@ import {
   SeloDoMedidor,
 } from "@/components/mestre/linha-de-medidor";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
+import { ReguasDaImagem } from "@/components/mestre/reguas-da-imagem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -54,6 +56,10 @@ import { useListReorder } from "@/hooks/use-list-reorder";
 import { SUGESTOES } from "@/lib/condicao";
 import { t } from "@/lib/i18n/mestre";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
+import {
+  definirImagemDaCampanha,
+  useImagemDaCampanha,
+} from "@/lib/configuracoes/espectador";
 import {
   definirPadraoDoQuadro,
   usePadraoDoQuadro,
@@ -94,6 +100,7 @@ const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
   quadro: Shapes,
   medidores: Gauge,
   efeitos: Sparkles,
+  espectador: Tv,
   ajustes: SlidersHorizontal,
 };
 
@@ -295,6 +302,8 @@ function Topico({
       return <MedidoresDaCampanha {...medidores} />;
     case "efeitos":
       return <EfeitosDaCampanha />;
+    case "espectador":
+      return <ImagemDaCampanha />;
     case "ajustes":
       return (
         <Secao
@@ -342,6 +351,26 @@ function PadraoDoQuadro() {
           onMudar={(valor) => definirPadraoDoQuadro({ aMao: valor })}
         />
       </ul>
+    </Secao>
+  );
+}
+
+/**
+ * O ajuste de imagem da campanha na janela do espectador.
+ *
+ * Réguas à mão, como o padrão do quadro: a lista gerada de Ajustes também
+ * mostra os quatro números, mas é aqui que o mestre vem procurar, e é aqui que
+ * fica o atalho para a Janela Mesa, a prévia. Ver `lib/imagem-do-espectador`.
+ */
+function ImagemDaCampanha() {
+  const imagem = useImagemDaCampanha();
+
+  return (
+    <Secao
+      titulo={t.configuracao.espectador}
+      descricao={t.configuracao.espectadorDescricao}
+    >
+      <ReguasDaImagem valor={imagem} onChange={definirImagemDaCampanha} />
     </Secao>
   );
 }

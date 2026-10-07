@@ -1,6 +1,14 @@
 "use client";
 
-import { Frame, Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
+import {
+  Frame,
+  Moon,
+  RotateCcw,
+  Settings2,
+  Sun,
+  Tags,
+  Tv,
+} from "lucide-react";
 
 import { useState } from "react";
 import { toast } from "sonner";
@@ -9,6 +17,7 @@ import { CeuDoSol } from "@/components/mestre/ceu-do-sol";
 import { Opcao } from "@/components/mestre/painel-do-pincel";
 import { GridControl } from "@/components/mestre/grid-control";
 import { ARCO_IRIS } from "@/components/mestre/menu-da-luz";
+import { ReguasDaImagem } from "@/components/mestre/reguas-da-imagem";
 import { SeletorDeCor } from "@/components/mestre/seletor-de-cor";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -29,6 +38,7 @@ import { corDoVazioDe } from "@/lib/cor";
 import { TRAVA_EM_GRAUS } from "@/lib/geometry/ceu";
 import { corDoEscuroDe, limitarEscuridao } from "@/lib/geometry/luz";
 import { t } from "@/lib/i18n/ferramentas";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import {
   escolherCeuDaCena,
   tirarCeuDaCena,
@@ -67,6 +77,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
   const setCorDoEscuro = useSceneStore((state) => state.setCorDoEscuro);
   const setCorDoVazio = useSceneStore((state) => state.setCorDoVazio);
   const setInfoDosTokens = useSceneStore((state) => state.setInfoDosTokens);
+  const setImagem = useSceneStore((state) => state.setImagem);
 
   const sol = scene.sol;
   const ligado = Boolean(sol);
@@ -216,6 +227,14 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
         />
         <CeuDoMapa scene={scene} />
 
+        {/* Ainda cor da cena, mas só na TV: o mapa que o mestre vê aqui não
+            muda, e a prévia é a Janela Mesa, pelo botão das réguas. */}
+        <span className="bg-border block h-px w-full" />
+        <ImagemDoMapa
+          valor={scene.imagem}
+          onChange={(imagem) => setImagem(scene.id, imagem)}
+        />
+
         {/* O traço entre os dois: sol e grade valem os dois para a cena
             inteira, mas são assuntos diferentes -- um pinta sombra, o outro
             mede chão -- e sem a linha as duas fileiras de réguas viravam uma
@@ -352,6 +371,36 @@ function ForaDoMapa({
 
       <p className="text-muted-foreground text-[10px] leading-snug">
         {t.configuracoesDoMapa.foraDoMapaAjuda}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * O ajuste de imagem DESTE mapa na janela do espectador: a masmorra mais
+ * clara, o flashback sem cor. Ver `Scene.imagem`.
+ *
+ * Por cima do ajuste da campanha, que é a calibração da TV: os dois valem, e
+ * multiplicam -- ver `compor`. Só no mapa, como o resto deste painel.
+ */
+function ImagemDoMapa({
+  valor,
+  onChange,
+}: {
+  valor: AjusteDeImagem | undefined;
+  onChange: (imagem: AjusteDeImagem | undefined) => void;
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-2 text-xs">
+        <Tv className="text-muted-foreground size-3.5" />
+        {t.configuracoesDoMapa.imagem}
+      </div>
+
+      <ReguasDaImagem valor={valor} onChange={onChange} />
+
+      <p className="text-muted-foreground text-[10px] leading-snug">
+        {t.configuracoesDoMapa.imagemAjuda}
       </p>
     </section>
   );

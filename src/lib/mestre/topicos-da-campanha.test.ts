@@ -8,6 +8,7 @@ describe("topicosAchados", () => {
       "quadro",
       "medidores",
       "efeitos",
+      "espectador",
       "ajustes",
     ]);
   });
@@ -47,6 +48,15 @@ describe("topicosAchados", () => {
 
   it("o canto arredondado se acha pela palavra de quem procura", () => {
     expect(topicosAchados("borda", {})).toEqual(["quadro"]);
+  });
+
+  it("quem procura a TV ou o projetor acha a imagem do espectador", () => {
+    expect(topicosAchados("projetor", {})).toEqual(["espectador"]);
+    expect(topicosAchados("SÉPIA", {})).toEqual(["espectador"]);
+  });
+
+  it("o brilho mora nos dois: o da fagulha e o da TV", () => {
+    expect(topicosAchados("brilho", {})).toEqual(["efeitos", "espectador"]);
   });
 
   it("nada bate, nada volta", () => {
