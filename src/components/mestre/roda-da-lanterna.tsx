@@ -19,7 +19,8 @@ import {
   terminarGesto,
   useGestoStore,
 } from "@/lib/store/use-gesto-store";
-import type { CanvasItem } from "@/types/scene";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
+import { SCENE_HEIGHT, SCENE_WIDTH, type CanvasItem } from "@/types/scene";
 
 /** O lado do bico, em pixels de tela: o da ponta da roda do 2.5D. */
 const BICO_PX = 12;
@@ -42,11 +43,27 @@ const RODA_Z = 10_001;
  * caminho do token arrastado. A luz e a névoa dinâmica leem a cena com o gesto
  * por cima, então o facho anda junto com a mão.
  *
- * Na MARGEM, como o gizmo: a roda de um token na borda do mapa passa do plano,
- * e filho que transborda o plano infla a camada composta. Ver `planoDaMargem`
- * e `debug-do-palco` §3. O bico é uma `div` com camada própria e
- * `scale(1 / scale)`, como as alças do gizmo, para ficar nítido ampliado; a
- * roda é traço fino de guia, e fica no SVG.
+ * Em dois lugares. O BICO mora na MARGEM, como o gizmo: uma `div` com camada
+ * própria e `scale(1 / scale)`, como as alças, para ficar nítido ampliado. A
+ * roda e a haste moram no plano de CONTROLES: na margem, que amplia sempre por
+ * `transform`, o traço era rasterizado com `1,5 / scale` de textura e esticado
+ * de volta -- borrado em qualquer ampliação, e a gente só o via fino afastando.
+ * O plano de controles assenta em `zoom` com a câmera parada, e o traço sai na
+ * resolução da tela. Um círculo não se faz com as barras do `TracoDaCaixa`, e
+ * uma camada própria em pixel de tela passaria do teto de textura ampliada.
+ *
+ * O SVG tem o tamanho EXATO do plano e corta o que passa dele: a roda de um
+ * token na borda do mapa passaria do plano, e filho que transborda o plano
+ * infla a camada composta (`debug-do-palco` §3). Cortada na borda, ela mostra
+ * o mesmo que a luz, que também só existe dentro do plano.
+ *
+ * Só PARADA. Com um gesto em curso -- o token arrastado, o bico girando -- o
+ * traço volta para a margem e desliza por `transform`, borrado enquanto anda.
+ * No plano ele custava caro: o círculo andando repinta a caixa dele em
+ * resolução de tela a cada quadro, e a 8x a caixa é a tela inteira. Medido na
+ * webview (`camera-gesto --gesto token --carregadas 1`, 1440x900, mediana de
+ * cinco): arrastar o token caía de 59,2 para 48,6 fps a 4x e de 59,8 para 40
+ * a 8x. Ver `gestos` em `useViewportStore`.
  */
 export function RodaDaLanterna({
   sceneId,
@@ -60,6 +77,7 @@ export function RodaDaLanterna({
 }) {
   const { scale, toScene, planoDaMargem } = useSceneScale();
   const arrastar = useSceneDrag();
+  const emGesto = useViewportStore((state) => state.gestos > 0);
 
   const luz = item.luz;
   if (!luz || scale === 0) return null;
@@ -101,45 +119,65 @@ export function RodaDaLanterna({
     });
   }
 
-  const conteudo = (
+  // O canto do SVG na cena: o do plano parado, o da caixa da roda no gesto.
+  const canto = emGesto
+    ? { x: centro.x - raio, y: centro.y - raio }
+    : { x: 0, y: 0 };
+  // O traço nos FILHOS, e não na raiz: o WebKit multiplica o `stroke-width` da
+  // raiz pela ampliação.
+  const desenho = (
+    <>
+      <circle
+        cx={centro.x - canto.x}
+        cy={centro.y - canto.y}
+        r={raio}
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity={0.7}
+        strokeWidth={px(TRACO_PX)}
+        strokeDasharray={`${px(4)} ${px(3)}`}
+      />
+      <line
+        x1={centro.x - canto.x + (dx / comprimento) * meio}
+        y1={centro.y - canto.y + (dy / comprimento) * meio}
+        x2={bico.x - canto.x}
+        y2={bico.y - canto.y}
+        stroke="currentColor"
+        strokeWidth={px(2)}
+        strokeLinecap="round"
+      />
+    </>
+  );
+
+  const traco = emGesto ? (
+    <svg
+      className="absolute top-0 left-0 overflow-visible"
+      width={raio * 2}
+      height={raio * 2}
+      // Pela posição em `transform`, e não em `left`/`top`: a roda anda com o
+      // token arrastado, e em caixa isso refazia o layout a cada quadro. Ver
+      // `TransformHandles`.
+      style={{ transform: `translate(${canto.x}px, ${canto.y}px)` }}
+    >
+      {desenho}
+    </svg>
+  ) : (
+    <svg
+      className="pointer-events-none absolute top-0 left-0"
+      width={SCENE_WIDTH}
+      height={SCENE_HEIGHT}
+      style={{ zIndex: RODA_Z, color: cor }}
+    >
+      {desenho}
+    </svg>
+  );
+
+  const ponta = (
     <div
       className="pointer-events-none absolute top-0 left-0"
       style={{ zIndex: RODA_Z, color: cor }}
     >
-      <svg
-        className="absolute top-0 left-0 overflow-visible"
-        width={raio * 2}
-        height={raio * 2}
-        // Pela posição em `transform`, e não em `left`/`top`: a roda anda com o
-        // token arrastado, e em caixa isso refazia o layout a cada quadro. Ver
-        // `TransformHandles`.
-        style={{
-          transform: `translate(${centro.x - raio}px, ${centro.y - raio}px)`,
-        }}
-      >
-        {/* O traço nos FILHOS, e não na raiz: o WebKit multiplica o
-            `stroke-width` da raiz pela ampliação. */}
-        <circle
-          cx={raio}
-          cy={raio}
-          r={raio}
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity={0.7}
-          strokeWidth={px(TRACO_PX)}
-          strokeDasharray={`${px(4)} ${px(3)}`}
-        />
-        <line
-          x1={raio + (dx / comprimento) * meio}
-          y1={raio + (dy / comprimento) * meio}
-          x2={raio + dx}
-          y2={raio + dy}
-          stroke="currentColor"
-          strokeWidth={px(2)}
-          strokeLinecap="round"
-        />
-      </svg>
-
+      {emGesto ? traco : null}
       <div
         aria-label={t.luz.rodaDaLanterna}
         title={t.luz.rodaDaLanterna}
@@ -159,5 +197,10 @@ export function RodaDaLanterna({
     </div>
   );
 
-  return planoDaMargem ? createPortal(conteudo, planoDaMargem) : conteudo;
+  return (
+    <>
+      {emGesto ? null : traco}
+      {planoDaMargem ? createPortal(ponta, planoDaMargem) : ponta}
+    </>
+  );
 }
