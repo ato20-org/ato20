@@ -198,6 +198,8 @@ pub fn run() {
             commands::asset_delete,
             commands::asset_rename,
             commands::asset_set_tipo_de_som,
+            commands::asset_add_youtube,
+            commands::asset_set_trecho_youtube,
             commands::asset_set_folder,
             commands::asset_set_peaks,
             commands::folder_list,

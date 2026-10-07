@@ -427,6 +427,27 @@ pub fn asset_set_tipo_de_som(
     state.with_vault(|vault| assets::set_tipo_de_som(vault, &id, tipo.clone()))
 }
 
+/// Poe no acervo sons que tocam do YouTube. Ver `assets::add_youtube`.
+#[tauri::command]
+pub fn asset_add_youtube(
+    state: State<'_, AppState>,
+    sons: Vec<assets::NovoDoYoutube>,
+    tipo: String,
+) -> AppResult<Vec<AssetMeta>> {
+    state.with_vault(|vault| assets::add_youtube(vault, sons, &tipo))
+}
+
+/// Troca o trecho de um som do YouTube. Ver `assets::set_trecho_youtube`.
+#[tauri::command]
+pub fn asset_set_trecho_youtube(
+    state: State<'_, AppState>,
+    id: String,
+    inicio: Option<f64>,
+    fim: Option<f64>,
+) -> AppResult<()> {
+    state.with_vault(|vault| assets::set_trecho_youtube(vault, &id, inicio, fim))
+}
+
 /// Troca o nome de exibicao de um arquivo do acervo.
 #[tauri::command]
 pub fn asset_rename(state: State<'_, AppState>, id: String, name: String) -> AppResult<()> {

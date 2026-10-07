@@ -88,7 +88,53 @@ pub struct AssetMeta {
     /// arquivos que ja existiam. Ver `preencher_animadas`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub animada: Option<bool>,
+    /// O som nao tem arquivo: toca do YouTube. So `audio`.
+    ///
+    /// Presente, o asset e um LINK -- `size` e zero, `asset_path` aponta para
+    /// um arquivo que nunca existiu, e quem toca e um player do YouTube em cada
+    /// aparelho. Mora no acervo, e nao numa lista a parte, porque tudo o que o
+    /// som faz e pelo `id`: trilha, ambiente, pad, macro, pasta, busca. Uma
+    /// lista propria seria a segunda copia de cada uma dessas portas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub youtube: Option<SomDoYoutube>,
 }
+
+/// Um video do YouTube tocado como som, e o trecho dele que vale.
+///
+/// O trecho e o recorte que um arquivo faria cortando, e aqui sai de graca:
+/// o player so busca o pedaco que toca, entao um ambiente de dez horas custa o
+/// mesmo que um de dez minutos.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SomDoYoutube {
+    /// Os onze caracteres depois de `watch?v=`. Nunca a URL: quem monta o
+    /// endereco e a ponte, e um link livre gravado aqui seria um endereco
+    /// qualquer carregado em todo aparelho da mesa.
+    pub video: String,
+    /// Onde o trecho comeca, em segundos. Ausente = do comeco do video.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inicio: Option<f64>,
+    /// Onde o trecho acaba, em segundos. Ausente = ate o fim do video.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fim: Option<f64>,
+}
+
+/// O que a tela manda para por um video no acervo.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NovoDoYoutube {
+    /// O titulo do video, que vira o nome do som.
+    pub nome: String,
+    #[serde(flatten)]
+    pub som: SomDoYoutube,
+}
+
+/// O `mime_type` de um som do YouTube.
+///
+/// Nao e de arquivo nenhum, e e por isso que existe: `kind_for` e o
+/// `extension_for` caem no generico com ele, e quem le o indice a mao ve o que
+/// a linha e sem procurar o campo `youtube`.
+pub const MIME_DO_YOUTUBE: &str = "audio/x-youtube";
 
 /// Pasta do acervo. Pasta dentro de pasta pelo `parent_id`; ausente = raiz.
 ///
@@ -471,6 +517,7 @@ pub fn import_acompanhado(
             tipo_de_som: None,
             // Respondido depois da copia, do arquivo que ja esta no acervo.
             animada: None,
+            youtube: None,
         };
 
         // Binario primeiro, indice depois -- mesma ordem de `adopt`, e pelo
@@ -577,7 +624,9 @@ pub fn set_peaks(vault: &Vault, id: &str, peaks: Vec<u8>) -> AppResult<()> {
         return Ok(());
     };
 
-    if asset.kind != "audio" {
+    // O som do YouTube nao tem arquivo para medir. A tela nem tenta, e isto e
+    // so a porta fechada do lado de ca.
+    if asset.kind != "audio" || asset.youtube.is_some() {
         return Ok(());
     }
 
@@ -631,9 +680,149 @@ pub fn set_tipo_de_som(vault: &Vault, id: &str, tipo: Option<String>) -> AppResu
         return Ok(());
     }
 
+    // Efeito do YouTube nao existe: o player leva um ou dois segundos para
+    // comecar, e um tiro que soa dois segundos depois da tecla deixou de ser
+    // tiro. A tela nem oferece; isto e o indice nao aceitar por outra porta.
+    if asset.youtube.is_some() && tipo.as_deref() == Some("disparo") {
+        return Ok(());
+    }
+
     asset.tipo_de_som = tipo;
 
     write_index(vault, &assets)
+}
+
+/// Poe no acervo sons que tocam do YouTube, todos do mesmo tipo.
+///
+/// Uma lista, e nao um por chamada, porque a playlist entra inteira: cada
+/// chamada reescreve o `assets.json` inteiro, e cinquenta videos seriam
+/// cinquenta gravacoes do indice em vez de uma.
+///
+/// Confere tudo antes de gravar qualquer coisa. Um video ruim no meio recusa a
+/// leva, e nao entra metade: a tela ja validou, e chegar aqui com lixo e
+/// defeito dela -- melhor um erro na cara do que um acervo pela metade.
+///
+/// So `trilha` e `ambiente`. Ver o comentario em `set_tipo_de_som`.
+pub fn add_youtube(
+    vault: &Vault,
+    sons: Vec<NovoDoYoutube>,
+    tipo: &str,
+) -> AppResult<Vec<AssetMeta>> {
+    if !matches!(tipo, "trilha" | "ambiente") {
+        return Err(AppError::SomInvalido(crate::texto!(
+            "Som do YouTube toca como trilha ou ambiente, nao como {}.",
+            "A YouTube sound plays as music or ambience, not as {}.",
+            curto(tipo),
+        )));
+    }
+
+    let mut novos = Vec::with_capacity(sons.len());
+
+    for novo in sons {
+        let som = validar_youtube(novo.som)?;
+        let nome: String = novo.nome.trim().chars().take(200).collect();
+
+        novos.push(AssetMeta {
+            id: uuid::Uuid::new_v4().to_string(),
+            kind: "audio".to_string(),
+            // Video sem titulo e raro -- o oEmbed sempre traz um --, mas a linha
+            // da lista E o nome, e uma linha em branco seria um som que ninguem
+            // acha.
+            name: if nome.is_empty() { format!("YouTube {}", som.video) } else { nome },
+            mime_type: MIME_DO_YOUTUBE.to_string(),
+            size: 0,
+            created_at: now_ms(),
+            natural_width: None,
+            natural_height: None,
+            folder_id: None,
+            escopo: None,
+            peaks: None,
+            tipo_de_som: Some(tipo.to_string()),
+            animada: None,
+            youtube: Some(som),
+        });
+    }
+
+    if novos.is_empty() {
+        return Ok(novos);
+    }
+
+    let mut assets = index(vault)?;
+    assets.extend(novos.iter().cloned());
+    write_index(vault, &assets)?;
+
+    Ok(novos)
+}
+
+/// Troca o trecho de um som do YouTube. `None` nas duas pontas = o video todo.
+///
+/// Id que nao existe, ou que nao e do YouTube, sai em silencio, como nas
+/// outras trocas de metadado. Trecho torto e erro: esse veio de um campo que o
+/// mestre preencheu, e ele precisa saber que nao entrou.
+pub fn set_trecho_youtube(
+    vault: &Vault,
+    id: &str,
+    inicio: Option<f64>,
+    fim: Option<f64>,
+) -> AppResult<()> {
+    let mut assets = index(vault)?;
+
+    let Some(asset) = assets.iter_mut().find(|asset| asset.id == id) else {
+        return Ok(());
+    };
+
+    let Some(atual) = asset.youtube.clone() else {
+        return Ok(());
+    };
+
+    asset.youtube = Some(validar_youtube(SomDoYoutube { video: atual.video, inicio, fim })?);
+
+    write_index(vault, &assets)
+}
+
+/// Confere o id e acerta o trecho.
+///
+/// O id tem onze caracteres de base64 de URL -- letra, numero, `-` e `_`. E o
+/// que impede um endereco arbitrario de entrar no indice e ser carregado na
+/// ponte de cada aparelho.
+///
+/// Ponta zero, negativa ou que nao e numero vira ausente em vez de erro: "do
+/// comeco" e "comeca no 0" sao a mesma coisa, e o campo vazio da tela chega
+/// como um dos dois.
+fn validar_youtube(som: SomDoYoutube) -> AppResult<SomDoYoutube> {
+    let id_valido = som.video.len() == 11
+        && som
+            .video
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+
+    if !id_valido {
+        return Err(AppError::SomInvalido(crate::texto!(
+            "{} nao e um video do YouTube.",
+            "{} is not a YouTube video.",
+            curto(&som.video),
+        )));
+    }
+
+    let ponta = |valor: Option<f64>| valor.filter(|s| s.is_finite() && *s > 0.0);
+    let inicio = ponta(som.inicio);
+    let fim = ponta(som.fim);
+
+    if let (Some(inicio), Some(fim)) = (inicio, fim) {
+        if fim <= inicio {
+            return Err(AppError::SomInvalido(crate::texto!(
+                "O trecho acaba antes de comecar.",
+                "The clip ends before it starts.",
+            )));
+        }
+    }
+
+    Ok(SomDoYoutube { video: som.video, inicio, fim })
+}
+
+/// O comeco de um texto que veio de fora, para caber numa mensagem de erro.
+fn curto(texto: &str) -> String {
+    texto.chars().take(40).collect()
 }
 
 /// Troca o nome de exibicao do arquivo.
@@ -1213,5 +1402,117 @@ mod tests {
         let nomes: Vec<String> =
             folders(&vault).expect("folders").into_iter().map(|f| f.name).collect();
         assert_eq!(nomes, vec!["Fichas", "mapas", "Retratos"]);
+    }
+
+    fn do_youtube(video: &str, inicio: Option<f64>, fim: Option<f64>) -> NovoDoYoutube {
+        NovoDoYoutube {
+            nome: format!("  Chuva {video}  "),
+            som: SomDoYoutube { video: video.to_string(), inicio, fim },
+        }
+    }
+
+    #[test]
+    fn youtube_entra_como_audio_sem_arquivo() {
+        let (_dir, vault) = campanha();
+
+        let novos = add_youtube(
+            &vault,
+            vec![do_youtube("dQw4w9WgXcQ", Some(12.5), None), do_youtube("a_b-C1d2E3f", None, None)],
+            "ambiente",
+        )
+        .expect("add");
+
+        assert_eq!(novos.len(), 2);
+
+        let lidos = list(&vault, Some("audio")).expect("list");
+        let chuva = lidos.iter().find(|a| a.id == novos[0].id).expect("no indice");
+
+        assert_eq!(chuva.name, "Chuva dQw4w9WgXcQ");
+        assert_eq!(chuva.mime_type, MIME_DO_YOUTUBE);
+        assert_eq!(chuva.tipo_de_som.as_deref(), Some("ambiente"));
+        assert_eq!(
+            chuva.youtube,
+            Some(SomDoYoutube { video: "dQw4w9WgXcQ".into(), inicio: Some(12.5), fim: None })
+        );
+        assert!(!asset_path(&vault, chuva).exists());
+
+        // Apagar um som sem arquivo nao pode falhar por falta do arquivo.
+        delete(&vault, &chuva.id).expect("delete");
+        assert_eq!(list(&vault, Some("audio")).expect("list").len(), 1);
+    }
+
+    #[test]
+    fn youtube_recusa_id_que_nao_e_de_video() {
+        let (_dir, vault) = campanha();
+
+        for ruim in ["", "curto", "https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXc!", "dQw4w9WgXcQQ"] {
+            let saida = add_youtube(&vault, vec![do_youtube(ruim, None, None)], "trilha");
+            assert!(matches!(saida, Err(AppError::SomInvalido(_))), "{ruim:?} passou");
+        }
+
+        // Um ruim na leva recusa a leva inteira: nada entra pela metade.
+        let saida = add_youtube(
+            &vault,
+            vec![do_youtube("dQw4w9WgXcQ", None, None), do_youtube("nao serve", None, None)],
+            "trilha",
+        );
+        assert!(saida.is_err());
+        assert!(list(&vault, Some("audio")).expect("list").is_empty());
+    }
+
+    #[test]
+    fn youtube_nao_e_efeito() {
+        let (_dir, vault) = campanha();
+
+        let saida = add_youtube(&vault, vec![do_youtube("dQw4w9WgXcQ", None, None)], "disparo");
+        assert!(matches!(saida, Err(AppError::SomInvalido(_))));
+
+        let novos =
+            add_youtube(&vault, vec![do_youtube("dQw4w9WgXcQ", None, None)], "trilha").expect("add");
+
+        // Trocar para efeito depois tambem nao pega; para ambiente pega.
+        set_tipo_de_som(&vault, &novos[0].id, Some("disparo".into())).expect("tipo");
+        assert_eq!(find(&vault, &novos[0].id).expect("find").expect("som").tipo_de_som.as_deref(), Some("trilha"));
+
+        set_tipo_de_som(&vault, &novos[0].id, Some("ambiente".into())).expect("tipo");
+        assert_eq!(find(&vault, &novos[0].id).expect("find").expect("som").tipo_de_som.as_deref(), Some("ambiente"));
+    }
+
+    #[test]
+    fn trecho_do_youtube() {
+        let (_dir, vault) = campanha();
+
+        let novos =
+            add_youtube(&vault, vec![do_youtube("dQw4w9WgXcQ", None, None)], "trilha").expect("add");
+        let id = &novos[0].id;
+        let trecho = |vault: &Vault| find(vault, id).expect("find").expect("som").youtube.expect("youtube");
+
+        set_trecho_youtube(&vault, id, Some(30.0), Some(90.0)).expect("trecho");
+        assert_eq!((trecho(&vault).inicio, trecho(&vault).fim), (Some(30.0), Some(90.0)));
+
+        // Zero e negativo sao "do comeco", e nao erro.
+        set_trecho_youtube(&vault, id, Some(0.0), Some(-3.0)).expect("trecho");
+        assert_eq!((trecho(&vault).inicio, trecho(&vault).fim), (None, None));
+
+        // Acabar antes de comecar e erro, e o trecho de antes fica.
+        set_trecho_youtube(&vault, id, Some(60.0), Some(90.0)).expect("trecho");
+        assert!(set_trecho_youtube(&vault, id, Some(90.0), Some(60.0)).is_err());
+        assert_eq!((trecho(&vault).inicio, trecho(&vault).fim), (Some(60.0), Some(90.0)));
+
+        // Onda nao se grava em som sem arquivo.
+        set_peaks(&vault, id, vec![1, 2, 3]).expect("peaks");
+        assert!(find(&vault, id).expect("find").expect("som").peaks.is_none());
+    }
+
+    #[test]
+    fn novo_do_youtube_le_o_que_a_tela_manda() {
+        let novo: NovoDoYoutube = serde_json::from_str(
+            r#"{"nome":"Taverna","video":"dQw4w9WgXcQ","inicio":30,"fim":null}"#,
+        )
+        .expect("json");
+
+        assert_eq!(novo.nome, "Taverna");
+        assert_eq!(novo.som.inicio, Some(30.0));
+        assert_eq!(novo.som.fim, None);
     }
 }
