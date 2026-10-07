@@ -70,6 +70,7 @@ const pt = {
     subirCamada: "Subir uma camada",
     descerCamada: "Descer uma camada",
     largar: "Largar a ferramenta e a seleção, soltar a câmera",
+    tamanhoDoPincel: "Pincel menor e maior: o lápis e a borracha da névoa. Alt + roda também",
     espelharHorizontal: "Espelhar na horizontal",
     espelharVertical: "Espelhar na vertical",
     apagar: "Apagar o que está selecionado",
@@ -78,7 +79,7 @@ const pt = {
     ping: "Ping no mapa, onde o mouse está: segure, aponte e solte",
   },
 
-  /** As réguas de ferramentas e a bolsa do rodapé. */
+  /** A barra de ferramentas do topo e a régua do mapa, na borda direita. */
   mestreToolbar: {
     selecionar: "Selecionar",
     selecionarDica: "Clique escolhe. Arraste no vazio para marcar vários.",
@@ -87,7 +88,7 @@ const pt = {
     lapis: "Lápis",
     lapisDica: "Risca o mapa à mão livre. A mesa vê.",
     borracha: "Borracha",
-    borrachaDica: "Passe sobre um risco para apagá-lo inteiro.",
+    borrachaDica: "Passe sobre um risco para apagar o pedaço, ou o risco inteiro: o painel escolhe.",
     ponto: "Ponto",
     pontoDica: "Crava um ponto com nota e anexos. Só você vê.",
     postit: "Postit",
@@ -106,11 +107,6 @@ const pt = {
     reguaDica: (metros: number) =>
       `Mede distância e área. Cada quadrado vale ${metros} m.`,
     reguaSemGrade: "Ligue a grade nas configurações do mapa, no canto de cima.",
-    ferramentasDoPalco: "Ferramentas do palco",
-    ferramentasDoPalcoDica: "Selecionar, deslocar, lápis e borracha.",
-    cliqueParaTrocar: (nome: string) => `${nome}. Clique para trocar.`,
-    largar: "Largar a ferramenta",
-    largarComTecla: "Largar a ferramenta (Esc)",
   },
 
   /** O menu do botão direito do palco. */
@@ -255,6 +251,7 @@ const en: typeof pt = {
     subirCamada: "Move up one layer",
     descerCamada: "Move down one layer",
     largar: "Drop the tool and the selection, release the camera",
+    tamanhoDoPincel: "Smaller and bigger brush: the pencil and the fog eraser. Alt + wheel too",
     espelharHorizontal: "Flip horizontally",
     espelharVertical: "Flip vertically",
     apagar: "Delete the selection",
@@ -271,7 +268,7 @@ const en: typeof pt = {
     lapis: "Pencil",
     lapisDica: "Draws freehand on the map. The table sees it.",
     borracha: "Eraser",
-    borrachaDica: "Drag over a stroke to erase all of it.",
+    borrachaDica: "Drag over a stroke to erase a piece of it, or the whole stroke: the panel chooses.",
     ponto: "Pin",
     pontoDica: "Drops a pin with a note and attachments. Only you see it.",
     postit: "Sticky note",
@@ -289,11 +286,6 @@ const en: typeof pt = {
     regua: "Ruler",
     reguaDica: (metros) => `Measures distance and area. Each square is ${metros} m.`,
     reguaSemGrade: "Turn on the grid in the map settings, in the top corner.",
-    ferramentasDoPalco: "Stage tools",
-    ferramentasDoPalcoDica: "Select, pan, pencil and eraser.",
-    cliqueParaTrocar: (nome) => `${nome}. Click to change.`,
-    largar: "Drop the tool",
-    largarComTecla: "Drop the tool (Esc)",
   },
 
   stageContextMenu: {

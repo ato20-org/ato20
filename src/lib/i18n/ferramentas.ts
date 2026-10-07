@@ -140,11 +140,62 @@ const pt = {
   },
 
   lapis: {
-    corEEspessura: "Cor e espessura",
+    painel: "Lápis",
     cor: "Cor",
     corOpcao: (cor: string) => `Cor ${cor}`,
-    espessura: "Espessura",
+    outraCor: "Outra cor",
+    largura: "Largura",
+    opacidade: "Opacidade",
+    suavizar: "Suavizar",
+    suavizarDica: "A ponta segue a mão com folga, e o tremido some.",
+    desligado: "Desligado",
     apagarRiscos: (n: number) => `Apagar os ${n} riscos`,
+  },
+
+  painelDeTexto: {
+    painel: "Texto",
+    cor: "Cor",
+    corPadrao: "Cor do tema",
+    corOpcao: (cor: string) => `Cor ${cor}`,
+    outraCor: "Outra cor",
+    fundo: "Fundo",
+    semFundo: "Sem fundo",
+    fundoOpcao: (cor: string) => `Fundo ${cor}`,
+    outroFundo: "Outro fundo",
+    fonte: "Fonte",
+    familia: {
+      interface: "Interface",
+      mao: "À mão",
+      codigo: "Código",
+    },
+    estilo: "Estilo",
+    negrito: "Negrito",
+    italico: "Itálico",
+    sublinhado: "Sublinhado",
+    tamanho: "Tamanho",
+    alinhamento: "Alinhamento",
+    esquerda: "À esquerda",
+    centro: "No centro",
+    direita: "À direita",
+    opacidade: "Opacidade",
+    proximoDica: "Vale para o próximo texto. Selecione um texto no mapa para mudá-lo.",
+  },
+
+  /** O que os três pincéis dividem: o lápis e as duas borrachas. */
+  pincel: {
+    atalhoDoTamanho: "Alt + roda, ou [ e ]",
+  },
+
+  borracha: {
+    painel: "Borracha",
+    painelDaNevoa: "Borracha da névoa",
+    tamanho: "Tamanho",
+    apaga: "Apaga",
+    pedaco: "Pedaço",
+    inteiro: "Risco inteiro",
+    pedacoDica: "Só o que o anel toca: o risco cortado vira dois.",
+    inteiroDica: "Todo risco que o anel encostar, de ponta a ponta.",
+    nevoaDica: "Arraste sobre a área selecionada para furar.",
   },
 
   pilulaDeDesenho: {
@@ -162,10 +213,30 @@ const pt = {
     elementoDica: "Desenha sobre a cena. Nasce só para você.",
     efeito: "Efeito em área",
     efeitoDica:
-      "Um pedaço do chão para um efeito. Ele se escolhe no gizmo. Nasce só para você.",
-    oQueDesenhar: (geometria: string) => `${geometria}: o que desenhar`,
-    comoNatureza: (geometria: string, natureza: string) =>
-      `${geometria} como ${natureza}`,
+      "Um pedaço do chão para um efeito, escolhido no painel ou no gizmo. Nasce só para você.",
+  },
+
+  elementos: {
+    botao: "Elementos",
+    botaoDica:
+      "Parede, área escondida, forma e efeito, em quadrado, círculo ou traço livre. Os ajustes ficam no painel do canto.",
+    painel: "Elementos",
+    formato: "Formato",
+    tipo: "Tipo",
+    efeito: "Efeito",
+    altura: "Altura",
+    teto: "Teto",
+    coberta: "Coberta",
+    ceuAberto: "Céu aberto",
+    tetoDica: "Coberta, a sombra não entra no miolo. A céu aberto, cai dentro dela.",
+    corDaFace: "Cor da face",
+    doMapa: "Do mapa",
+    corDaFaceDica: "A face que sobe no 2.5D. Do mapa, a cor é lida do desenho.",
+    corDaFaceOpcao: (cor: string) => `Face ${cor}`,
+    outraCor: "Outra cor",
+    nasceDinamica: "Nasce dinâmica",
+    nasceDinamicaDica: "A lanterna de cada token abre a área por onde ilumina.",
+    valemParaAProxima: "Vale para os próximos. O que já está no mapa se ajusta no gizmo.",
   },
 
   regua: {
@@ -287,7 +358,7 @@ const pt = {
     titulo: "Áreas escondidas",
     tituloAjuda: "As áreas desta cena. O olho de cada uma revela ou esconde.",
     nenhuma:
-      "Nenhuma área nesta cena. Escolha um desenho na régua da esquerda e marque-o como área escondida.",
+      "Nenhuma área nesta cena. Escolha Elementos na barra de cima e o tipo área escondida.",
   },
 
   alcasDaArea: {
@@ -310,9 +381,6 @@ const pt = {
   texto: {
     rotulo: "Texto solto",
     placeholder: "Escreva…",
-    letra: "Letra",
-    letraDeMao: "Letra de mão",
-    letraDaInterface: "Letra da interface",
   },
 
   tripe: {
@@ -523,11 +591,61 @@ const en: typeof pt = {
   },
 
   lapis: {
-    corEEspessura: "Color and thickness",
+    painel: "Pencil",
     cor: "Color",
     corOpcao: (cor) => `Color ${cor}`,
-    espessura: "Thickness",
+    outraCor: "Other color",
+    largura: "Width",
+    opacidade: "Opacity",
+    suavizar: "Smoothing",
+    suavizarDica: "The tip follows your hand with some slack, and the shake goes away.",
+    desligado: "Off",
     apagarRiscos: (n) => (n === 1 ? "Erase 1 stroke" : `Erase all ${n} strokes`),
+  },
+
+  painelDeTexto: {
+    painel: "Text",
+    cor: "Color",
+    corPadrao: "Theme color",
+    corOpcao: (cor) => `Color ${cor}`,
+    outraCor: "Other color",
+    fundo: "Background",
+    semFundo: "No background",
+    fundoOpcao: (cor) => `Background ${cor}`,
+    outroFundo: "Other background",
+    fonte: "Font",
+    familia: {
+      interface: "Interface",
+      mao: "Handwritten",
+      codigo: "Code",
+    },
+    estilo: "Style",
+    negrito: "Bold",
+    italico: "Italic",
+    sublinhado: "Underline",
+    tamanho: "Size",
+    alinhamento: "Alignment",
+    esquerda: "Left",
+    centro: "Center",
+    direita: "Right",
+    opacidade: "Opacity",
+    proximoDica: "Applies to the next text. Select a text on the map to change it.",
+  },
+
+  pincel: {
+    atalhoDoTamanho: "Alt + wheel, or [ and ]",
+  },
+
+  borracha: {
+    painel: "Eraser",
+    painelDaNevoa: "Fog eraser",
+    tamanho: "Size",
+    apaga: "Erases",
+    pedaco: "Piece",
+    inteiro: "Whole stroke",
+    pedacoDica: "Only what the ring touches: the cut stroke becomes two.",
+    inteiroDica: "Every stroke the ring touches, end to end.",
+    nevoaDica: "Drag over the selected area to cut holes.",
   },
 
   pilulaDeDesenho: {
@@ -545,9 +663,30 @@ const en: typeof pt = {
     elementoDica: "Draws over the scene. Starts visible only to you.",
     efeito: "Area effect",
     efeitoDica:
-      "A patch of ground for an effect, chosen in the gizmo. Starts visible only to you.",
-    oQueDesenhar: (geometria) => `${geometria}: what to draw`,
-    comoNatureza: (geometria, natureza) => `${geometria} as ${natureza}`,
+      "A patch of ground for an effect, chosen in the panel or the gizmo. Starts visible only to you.",
+  },
+
+  elementos: {
+    botao: "Elements",
+    botaoDica:
+      "Wall, fog, shape and effect, as a rectangle, circle or freeform. The settings live in the corner panel.",
+    painel: "Elements",
+    formato: "Shape",
+    tipo: "Type",
+    efeito: "Effect",
+    altura: "Height",
+    teto: "Roof",
+    coberta: "Roofed",
+    ceuAberto: "Open sky",
+    tetoDica: "Roofed, shadows don't fall inside it. Open sky, they fall inside.",
+    corDaFace: "Face color",
+    doMapa: "From map",
+    corDaFaceDica: "The face that rises in 2.5D. From map, the color is read from the drawing.",
+    corDaFaceOpcao: (cor) => `Face ${cor}`,
+    outraCor: "Other color",
+    nasceDinamica: "Starts dynamic",
+    nasceDinamicaDica: "Each token's lantern opens the area wherever it shines.",
+    valemParaAProxima: "Applies to the next ones. What's already on the map is adjusted in its gizmo.",
   },
 
   regua: {
@@ -671,7 +810,7 @@ const en: typeof pt = {
     titulo: "Fog",
     tituloAjuda: "This scene's hidden areas. The eye on each one reveals or hides it.",
     nenhuma:
-      "No hidden areas in this scene. Pick a drawing in the left toolbar and mark it as fog.",
+      "No hidden areas in this scene. Pick Elements in the top toolbar and the fog type.",
   },
 
   alcasDaArea: {
@@ -694,9 +833,6 @@ const en: typeof pt = {
   texto: {
     rotulo: "Free text",
     placeholder: "Write…",
-    letra: "Text",
-    letraDeMao: "Handwriting",
-    letraDaInterface: "Interface font",
   },
 
   tripe: {

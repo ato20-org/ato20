@@ -18,11 +18,11 @@ import { TrackBar } from "@/components/mestre/track-bar";
 import { WindowLayer } from "@/components/mestre/window-layer";
 import { OnAirControl } from "@/components/mestre/on-air-control";
 import { MestreStage } from "@/components/mestre/mestre-stage";
-import {
-  MestreToolbar,
-  ReguaDeDesenho,
-  ReguaDoMapa,
-} from "@/components/mestre/mestre-toolbar";
+import { MestreToolbar, ReguaDoMapa } from "@/components/mestre/mestre-toolbar";
+import { PainelDeElementos } from "@/components/mestre/painel-de-elementos";
+import { useFotografoDasCameras } from "@/hooks/use-fotografo-das-cameras";
+import { PainelDeTexto } from "@/components/mestre/painel-de-texto";
+import { PainelDoPincel } from "@/components/mestre/painel-do-pincel";
 import { PaletaDeComandos } from "@/components/mestre/paleta-de-comandos";
 import { AreasIndex } from "@/components/mestre/areas-index";
 import { PinIndex } from "@/components/mestre/pin-index";
@@ -30,7 +30,7 @@ import { HandoutMestre } from "@/components/mestre/handout-mestre";
 import { SaquinhoDados } from "@/components/mestre/saquinho-dados";
 import { SpotlightChip } from "@/components/mestre/spotlight-chip";
 import { StageContextMenu } from "@/components/mestre/stage-context-menu";
-import { CamerasSalvas } from "@/components/mestre/cameras-salvas";
+import { BarraDeCameras } from "@/components/mestre/cameras-salvas";
 import { ViewportControls } from "@/components/mestre/viewport-controls";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { useSomDaMesa } from "@/hooks/use-som-da-mesa";
@@ -119,6 +119,9 @@ export function MestreShell() {
   const error = useSceneStore((state) => state.error);
   // Duas cenas distintas: a que o mestre edita e a que a mesa vê.
   const editingScene = useSceneStore(selectEditingScene);
+  // As fotos das câmeras da cena aberta, quando ela para de mudar: o que a
+  // lista de cenas e a faixa de câmeras mostram. Ver `useFotografoDasCameras`.
+  useFotografoDasCameras(editingScene);
   // Com nota aberta o palco não está na tela: índice de pontos e chip de
   // jogadores são do palco, e sobre um editor de texto seriam mobília.
   const lendoNota = useArquivoAbertoStore((state) => state.notaId !== null);
@@ -401,75 +404,74 @@ export function MestreShell() {
         <DockRow>
           <FileiraDePaineis>
             <main className="relative flex min-w-0 flex-1 flex-col bg-neutral-950 p-4">
-              {/* Canto de cima à esquerda: o índice de pontos e o das áreas.
-                  Alcançar o que está fora da vista -- um ponto de anotação ou
-                  uma área fora do enquadramento --, e nenhum é gesto sobre o
-                  mapa, que é o que mora embaixo.
+              {/* Canto de cima à esquerda, numa pílula só: o índice de pontos,
+                  o das áreas e quem está na mesa. Os três são CONSULTA -- o que
+                  está fora da vista, o que está escondido, quem entrou --, e
+                  nenhum é gesto sobre o mapa, que é o que mora embaixo.
+
+                  Os jogadores vieram do canto direito para cá: lá ficam o modo
+                  e as configurações, que são AJUSTE da cena. A contagem de
+                  quem entrou só serve se estiver à vista o tempo todo, e fica
+                  fora do `StageBoundary`: uma mesa cheia continua cheia sem
+                  cena nenhuma selecionada.
 
                   O caminho de volta das colunas recolhidas morava aqui, e foi
                   para as bordas da janela: o palco deixou de encostar nelas.
                   Ver `AlcaDeGaveta`. */}
-              <div className="absolute top-2 left-2 z-10 flex items-center gap-2">
-                {/* Quadro não tem ponto de anotação: o índice deles some com ele. */}
-                {editingScene && !lendoNota && temAnotacao(editingScene) ? (
-                  <PinIndex scene={editingScene} />
-                ) : null}
-
-                {/* E ao lado dele as áreas, que eram uma aba do painel de Cenas.
-                    Os dois são consulta sobre a cena ABERTA, e revelar área é
-                    gesto de mesa -- acontece olhando o mapa. Ver `AreasIndex`. */}
-                {editingScene && !lendoNota && temNevoa(editingScene) ? (
-                  <AreasIndex scene={editingScene} />
-                ) : null}
-              </div>
-
-              {/* Quem está na mesa fica aqui, e não no cabeçalho: é consulta, como
-                  o índice de pontos, e a contagem só serve se estiver à vista o
-                  tempo todo. Fora do `StageBoundary`: uma mesa cheia continua
-                  cheia sem cena nenhuma selecionada. */}
-              <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-                {/* Só jogadores. Personagens tinha uma pílula ao lado desta, e ela
-                    saiu quando a lista virou aba padrão da bancada: um atalho no
-                    canto do palco para uma tela que já está à vista é um segundo
-                    caminho para o mesmo lugar, e o contador dela repetia o que a
-                    própria lista mostra.
-
-                    Jogadores fica: quem entrou pelo Jogador não tem aba nenhuma,
-                    e a contagem é o que responde "quantos entraram?" sem abrir
-                    nada. O chip sai sem moldura; a moldura é esta. */}
-                {/* Rolagens não tem mais chip aqui: a janela abre sozinha quando
-                    chega dado (ver `useJanelaDeRolagens`) e vive no catálogo do
-                    dock. Um botão para o que já se abre era mobília. */}
-                {lendoNota ? null : (
+              {lendoNota ? null : (
+                <div className="absolute top-2 left-2 z-10 flex items-center">
                   <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-                    {/* Na mesma moldura do chip, e antes dele: os dois são
-                        consulta e ajuste, não gesto sobre o mapa. O traço entre
-                        eles é o que separa o que é da CENA -- e troca quando o
-                        mestre troca de mapa -- do que é da SESSÃO, que continua
-                        igual a cena toda.
-
-                        As DUAS capacidades, porque o painel guarda as duas: a
-                        grade veio da régua para cá, onde ela é estado da cena e
-                        não ferramenta na mão. Hoje mapa tem as duas e os outros
-                        não têm nenhuma, então a pergunta dobrada não muda nada
-                        -- e é justamente por isso que ela deve estar escrita
-                        agora, e não no dia em que um tipo tiver só uma. */}
-                    {editingScene &&
-                    (temSol(editingScene) || temGrade(editingScene)) ? (
+                    {/* Quadro não tem ponto de anotação: o índice deles some
+                        com ele. */}
+                    {editingScene && temAnotacao(editingScene) ? (
                       <>
-                        {/* O modo ANTES das configurações: ele troca o palco
-                            inteiro, e é o primeiro gesto de quem vai conferir a
-                            mesa. As configurações ficam nos DOIS modos -- sol,
-                            escuridão, grade e a cor do vazio têm efeito à vista no
-                            2.5D, e o fundo de esguelha só se acerta olhando-o. As
-                            FERRAMENTAS -- desenhar parede, cravar luz, medir -- é
-                            que continuam só no 2D. Ver `BotaoDeEsguelha`. */}
-                        {temSol(editingScene) ? <BotaoDeEsguelha /> : null}
-                        <ConfiguracoesDoMapa scene={editingScene} />
+                        <PinIndex scene={editingScene} />
                         <span className="bg-border mx-1 h-5 w-px" />
                       </>
                     ) : null}
+                    {/* As áreas, que eram uma aba do painel de Cenas: revelar
+                        área é gesto de mesa, e acontece olhando o mapa. Ver
+                        `AreasIndex`. */}
+                    {editingScene && temNevoa(editingScene) ? (
+                      <>
+                        <AreasIndex scene={editingScene} />
+                        <span className="bg-border mx-1 h-5 w-px" />
+                      </>
+                    ) : null}
+                    {/* Só jogadores. Personagens tinha uma pílula ao lado
+                        desta, e ela saiu quando a lista virou aba padrão da
+                        bancada: um atalho para uma tela que já está à vista é
+                        um segundo caminho para o mesmo lugar. Jogadores fica:
+                        quem entrou pelo Jogador não tem aba nenhuma, e a
+                        contagem responde "quantos entraram?" sem abrir nada. */}
                     <PlayersChip />
+                  </div>
+                </div>
+              )}
+
+              {/* Canto de cima à direita: o modo e as configurações da cena.
+                  Os jogadores moravam aqui, e foram para a pílula da esquerda,
+                  com o que também é consulta. */}
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+                {lendoNota ||
+                !editingScene ||
+                !(temSol(editingScene) || temGrade(editingScene)) ? null : (
+                  // As DUAS capacidades, porque o painel guarda as duas: a grade
+                  // veio da régua para cá, onde ela é estado da cena e não
+                  // ferramenta na mão. Hoje mapa tem as duas e os outros não
+                  // têm nenhuma, então a pergunta dobrada não muda nada -- e é
+                  // justamente por isso que ela deve estar escrita agora, e não
+                  // no dia em que um tipo tiver só uma.
+                  <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+                    {/* O modo ANTES das configurações: ele troca o palco
+                        inteiro, e é o primeiro gesto de quem vai conferir a
+                        mesa. As configurações ficam nos DOIS modos -- sol,
+                        escuridão, grade e a cor do vazio têm efeito à vista no
+                        2.5D, e o fundo de esguelha só se acerta olhando-o. As
+                        FERRAMENTAS -- desenhar parede, cravar luz, medir -- é
+                        que continuam só no 2D. Ver `BotaoDeEsguelha`. */}
+                    {temSol(editingScene) ? <BotaoDeEsguelha /> : null}
+                    <ConfiguracoesDoMapa scene={editingScene} />
                   </div>
                 )}
               </div>
@@ -595,113 +597,125 @@ function StageBoundary({
   const comFerramentas = Boolean(scene && !notaAberta && !deEsguelha);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      {/* Nota aberta ocupa o lugar do palco, como o Obsidian abre um arquivo
-          no painel principal. O palco continua montado por baixo? Não: uma
-          nota por vez, e o palco volta ao abrir uma cena. Ver
-          `useArquivoAbertoStore`. Para ler a nota OLHANDO o mapa, o botão de
-          dividir do editor a leva para um painel ao lado -- ver
-          `FileiraDePaineis`. */}
-      {notaAberta ? (
-        <NotaEditor key={notaAberta.id} nota={notaAberta} onde="centro" />
-      ) : scene && deEsguelha ? (
-        <MestreDeEsguelha scene={scene} />
-      ) : scene ? (
-        <StageContextMenu scene={scene}>{stage}</StageContextMenu>
-      ) : (
-        /* Sem cena, o palco NÃO é montado: o vazio ocupa o lugar dele.
+    // A coluna do palco: ele em cima, com tudo o que flutua sobre ele, e a
+    // faixa das câmeras encaixada embaixo. Encaixada, e não por cima: quando
+    // ela cresce o palco encolhe, e nenhum canto flutuante passa a cobri-la.
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* Nota aberta ocupa o lugar do palco, como o Obsidian abre um arquivo
+            no painel principal. O palco continua montado por baixo? Não: uma
+            nota por vez, e o palco volta ao abrir uma cena. Ver
+            `useArquivoAbertoStore`. Para ler a nota OLHANDO o mapa, o botão de
+            dividir do editor a leva para um painel ao lado -- ver
+            `FileiraDePaineis`. */}
+        {notaAberta ? (
+          <NotaEditor key={notaAberta.id} nota={notaAberta} onde="centro" />
+        ) : scene && deEsguelha ? (
+          <MestreDeEsguelha scene={scene} />
+        ) : scene ? (
+          <StageContextMenu scene={scene}>{stage}</StageContextMenu>
+        ) : (
+          /* Sem cena, o palco NÃO é montado: o vazio ocupa o lugar dele.
 
-           O `SceneStage` vazio desenhava a grade de bolinhas e respondia à
-           roda e ao espaço -- zoom e arrasto de um plano sem nada em cima, e
-           o aviso flutuando por cima dele ficava parado enquanto o fundo se
-           mexia. Nada dependia do palco montado aqui: o menu de contexto e o
-           arquivo solto do sistema já exigiam cena. O aviso em pixel de tela,
-           fora de qualquer plano escalado, continua a valer -- ver a §3 da
-           `debug-do-palco`, que é o motivo de ele nunca ter sido filho do
-           palco. */
-        <PalcoVazio carregando={status !== "ready"} />
-      )}
+             O `SceneStage` vazio desenhava a grade de bolinhas e respondia à
+             roda e ao espaço -- zoom e arrasto de um plano sem nada em cima, e
+             o aviso flutuando por cima dele ficava parado enquanto o fundo se
+             mexia. Nada dependia do palco montado aqui: o menu de contexto e o
+             arquivo solto do sistema já exigiam cena. O aviso em pixel de tela,
+             fora de qualquer plano escalado, continua a valer -- ver a §3 da
+             `debug-do-palco`, que é o motivo de ele nunca ter sido filho do
+             palco. */
+          <PalcoVazio carregando={status !== "ready"} />
+        )}
 
-      {/* Fora do gatilho do menu de contexto, e independente de haver cena: uma
-          imagem transmitida continua no ar mesmo sem cena nenhuma no palco, e é
-          justamente aí que esquecê-la é mais fácil. */}
-      <SpotlightChip />
+        {/* Fora do gatilho do menu de contexto: botão direito sobre os controles
+            não deve abrir o menu da cena.
 
-      {/* Fora do gatilho do menu de contexto: botão direito sobre os controles
-          não deve abrir o menu da cena.
+            Com uma nota aberta o palco não está na tela, e ferramenta de palco
+            sobre um editor de texto seria botão para o nada. O chip do que está
+            em evidência fica nos dois ramos, e independente de haver cena: uma
+            imagem transmitida continua no ar mesmo sem cena nenhuma no palco, e
+            é justamente aí que esquecê-la é mais fácil. */}
+        {scene && comFerramentas ? (
+          <>
+            {/* A barra de ferramentas, no TOPO e ao centro: Seta, Mão, Lápis,
+                Borracha, Texto e Elementos numa fileira só. Ver `MestreToolbar`.
+                O chip do que está em evidência vem logo abaixo dela, no mesmo
+                eixo -- era ali, no topo, que ele morava sozinho.
 
-          As ferramentas à esquerda e o zoom à direita, um canto para cada
-          grupo. Estavam juntas à esquerda, e o lápis com a borracha levaram a
-          fila a seis alvos: com o zoom emendado, a barra atravessava metade do
-          palco e as duas pontas dela não tinham relação nenhuma. */}
-      {/* Com uma nota aberta o palco não está na tela, e ferramenta de palco
-          sobre um editor de texto seria botão para o nada. */}
-      {scene && comFerramentas ? (
-        <div className="absolute bottom-3 left-3 flex items-center gap-2">
-          <MestreToolbar scene={scene} />
-        </div>
-      ) : null}
+                As bordas em NEGATIVO, aqui e nos outros cantos do palco: as
+                pílulas de canto moram no `main`, a `top-2` da borda dele, e o
+                palco começa 16px para dentro (`p-4`). `-top-2` daqui é a mesma
+                linha delas; `top-3` deixava esta 20px mais perto do centro. */}
+            <div className="absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
+              <MestreToolbar scene={scene} />
+              <SpotlightChip abaixoDaBarra />
+            </div>
 
-      {/* A régua de desenho, encostada na borda esquerda e no meio da altura.
+            {/* Os painéis do canto: o do pincel com o lápis ou uma das
+                borrachas na mão, o de Elementos com parede, área, forma ou
+                efeito, o de texto com a ferramenta T ou um texto selecionado.
+                Um de cada vez, porque é uma ferramenta de cada vez. Ancorados
+                embaixo, crescem para cima. */}
+            <div className="absolute bottom-3 -left-2 flex flex-col items-start gap-2">
+              <PainelDoPincel />
+              <PainelDeElementos scene={scene} />
+              <PainelDeTexto />
+            </div>
+          </>
+        ) : (
+          <SpotlightChip />
+        )}
 
-          À vista, e não numa bolsa do rodapé: desenhar é trocar de ferramenta a
-          cada gesto, e a bolsa cobrava dois cliques por troca. À esquerda
-          porque é a borda que todo editor de desenho usa para isto, porque fica
-          longe do zoom e das câmeras da direita, e porque deixa o rodapé
-          inteiro para o que é do PALCO -- selecionar, deslocar, riscar.
+        {/* A régua do MAPA, na borda direita: o que se marca no chão
+            -- ponto, postit, grade, medida -- à vista na borda direita, no
+            lugar da bolsa do rodapé que só dizia o que tinha dentro depois de
+            aberta.
 
-          Nos DOIS tipos de cena: o que muda é o que ela carrega. Ver
-          `ReguaDeDesenho`. */}
-      {scene && comFerramentas ? (
-        <div className="absolute top-1/2 left-3 -translate-y-1/2">
-          <ReguaDeDesenho scene={scene} />
-        </div>
-      ) : null}
+            Só no mapa: quadro não tem chão. Ver `ReguaDoMapa`. */}
+        {scene && comFerramentas && temAnotacao(scene) ? (
+          <div className="absolute top-1/2 -right-2 -translate-y-1/2">
+            <ReguaDoMapa scene={scene} />
+          </div>
+        ) : null}
 
-      {/* A régua do MAPA, de frente para a de desenho: o que se marca no chão
-          -- ponto, postit, grade, medida -- à vista na borda direita, no
-          lugar da bolsa do rodapé que só dizia o que tinha dentro depois de
-          aberta.
+        {/* As câmeras ficam nos DOIS modos: é no 2.5D que nasce o tripé, e é do
+            2D que o mestre muitas vezes troca o que a mesa vê enquanto edita.
+            O zoom é do palco de prumo, e some no 2.5D. */}
+        {/* O zoom fica sozinho no canto: as câmeras desceram para a faixa
+            embaixo do palco -- ver `BarraDeCameras`. Ele é do palco do mestre, e
+            não da mesa, e vale nos dois tipos de cena. */}
+        {scene && !notaAberta && !deEsguelha ? (
+          <div className="absolute -right-2 bottom-3 flex items-end gap-2">
+            <ViewportControls />
+          </div>
+        ) : null}
 
-          Só no mapa: quadro não tem chão. Ver `ReguaDoMapa`. */}
-      {scene && comFerramentas && temAnotacao(scene) ? (
-        <div className="absolute top-1/2 right-3 -translate-y-1/2">
-          <ReguaDoMapa scene={scene} />
-        </div>
-      ) : null}
+        {/* Flutuante, sem canto fixo: os quatro já têm dono, e o mestre leva a
+            bolinha para o vazio do mapa dele. Ver `SaquinhoDados`.
 
-      {/* As câmeras ficam nos DOIS modos: é no 2.5D que nasce o tripé, e é do
-          2D que o mestre muitas vezes troca o que a mesa vê enquanto edita.
-          O zoom é do palco de prumo, e some no 2.5D. */}
-      {scene && !notaAberta ? (
-        // `items-end`: com as duas barras de câmera empilhadas, o zoom fica
-        // na linha da de baixo, que é a do modo.
-        <div className="absolute right-3 bottom-3 flex items-end gap-2">
-          {/* Os chips de câmera só no MAPA: o quadro vai inteiro para a mesa,
-              e enquadrar um pedaço dele é o contrário do que ele serve para
-              fazer. Os controles de zoom ficam nos dois -- eles são do palco
-              do mestre, e não da mesa. Ver `lerCena` em `camera-actions`. */}
-          {temCamera(scene) ? <CamerasSalvas scene={scene} /> : null}
-          {deEsguelha ? null : <ViewportControls />}
-        </div>
-      ) : null}
+            Só com cena: o dado cai SOBRE o mapa, e sem mapa a jogada não teria
+            onde pousar -- a camada que a desenha vive dentro do palco. */}
+        {scene && comFerramentas ? <SaquinhoDados /> : null}
 
-      {/* Flutuante, sem canto fixo: os quatro já têm dono, e o mestre leva a
-          bolinha para o vazio do mapa dele. Ver `SaquinhoDados`.
+        {/* A carta na manga, irmã do saquinho: mesma bolinha, e por cena.
 
-          Só com cena: o dado cai SOBRE o mapa, e sem mapa a jogada não teria
-          onde pousar -- a camada que a desenha vive dentro do palco. */}
-      {scene && comFerramentas ? <SaquinhoDados /> : null}
+            Só em MAPA. O handout é o que o mestre separou para MOSTRAR à mesa --
+            a carta do vilão, o retrato da testemunha --, e o quadro é a mesa de
+            trabalho dele: lá a imagem que ele quer à mão já entra como cartão ou
+            como token, à vista, e a bolinha só somava um alvo permanente sobre a
+            folha que ele está montando. */}
+        {scene && !notaAberta && temAnotacao(scene) ? (
+          <HandoutMestre scene={scene} />
+        ) : null}
+      </div>
 
-      {/* A carta na manga, irmã do saquinho: mesma bolinha, e por cena.
-
-          Só em MAPA. O handout é o que o mestre separou para MOSTRAR à mesa --
-          a carta do vilão, o retrato da testemunha --, e o quadro é a mesa de
-          trabalho dele: lá a imagem que ele quer à mão já entra como cartão ou
-          como token, à vista, e a bolinha só somava um alvo permanente sobre a
-          folha que ele está montando. */}
-      {scene && !notaAberta && temAnotacao(scene) ? (
-        <HandoutMestre scene={scene} />
+      {/* As câmeras só no MAPA: o quadro vai inteiro para a mesa, e enquadrar
+          um pedaço dele é o contrário do que ele serve para fazer. Ver
+          `lerCena` em `camera-actions`. Nos dois modos: é no 2.5D que nasce o
+          tripé, e é do 2D que o mestre troca o que a mesa vê. */}
+      {scene && !notaAberta && temCamera(scene) ? (
+        <BarraDeCameras scene={scene} />
       ) : null}
     </div>
   );

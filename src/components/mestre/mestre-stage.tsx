@@ -13,6 +13,7 @@ import { WandSparkles } from "lucide-react";
 import { PainelDeCondicoesDoObjeto } from "@/components/mestre/condicoes-do-objeto";
 import { PainelDeCondicoesDoPersonagem } from "@/components/mestre/condicoes-personagem";
 import { AlcasDaArea } from "@/components/mestre/alcas-da-area";
+import { AnelDoPincel } from "@/components/mestre/anel-do-pincel";
 import { EscolhaDoEfeitoDaArea } from "@/components/mestre/efeito-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
@@ -158,7 +159,26 @@ import {
   SNAP_THRESHOLD_PX,
   type Guide,
 } from "@/lib/geometry/snap";
-import { CORNER_HANDLES, MIN_ITEM_SIZE, type Vec } from "@/lib/geometry/transform";
+import {
+  caminhoMacio,
+  CORDA_MAXIMA_PX,
+  cortarRisco,
+  pontaNaCorda,
+} from "@/lib/geometry/risco";
+import { camposDaParedeNova } from "@/lib/mestre/elementos";
+import { camposDoTextoNovo } from "@/lib/mestre/texto-actions";
+import {
+  furoDoTraco,
+  furosNaCaixaNova,
+  passadaTocaAArea,
+  tokenSobOPonto,
+} from "@/lib/geometry/nevoa-dinamica";
+import {
+  CORNER_HANDLES,
+  MIN_ITEM_SIZE,
+  type ResizeHandle,
+  type Vec,
+} from "@/lib/geometry/transform";
 import { temFormatoDaMesa } from "@/lib/geometry/viewport";
 
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
@@ -172,6 +192,9 @@ import {
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
+import { useBorrachaDaNevoaStore } from "@/lib/store/use-borracha-da-nevoa-store";
+import { useBorrachaDosRiscosStore } from "@/lib/store/use-borracha-dos-riscos-store";
+import { usePincelNaRoda } from "@/hooks/use-pincel-na-roda";
 import { padraoDoQuadro } from "@/lib/configuracoes/quadro";
 import {
   CORES_DA_LUZ,
@@ -188,6 +211,7 @@ import {
   type CanvasItem,
   type Documento,
   type FogRegion,
+  type NewFogRegion,
   type Forma,
   type Regua,
   type Postit,
@@ -214,20 +238,22 @@ const NADA_DE_TRACO: readonly Traco[] = [];
 const NADA_APAGANDO: ReadonlySet<string> = new Set<string>();
 
 /**
+ * A amostra das borrachas no meio do palco, enquanto a régua de tamanho anda:
+ * um véu claro, e não uma cor -- a borracha não pinta, ela tira. Ver
+ * `AnelDoPincel`.
+ */
+const AMOSTRA_DA_BORRACHA = { cor: "#ffffff", opacidade: 0.2 };
+
+/** O gizmo da área com a borracha na mão: sem alça. Ver `furarNevoa`. */
+const SEM_ALCAS: readonly ResizeHandle[] = [];
+
+/**
  * Distância mínima entre duas amostras de um risco, em pixels de TELA.
  *
  * Em pixel de tela e não de cena: riscar ampliado guarda mais detalhe, que é o
  * que se quer quando se amplia justamente para marcar algo pequeno.
  */
 const AMOSTRA_PX = 3;
-
-/**
- * Folga da borracha além da própria espessura, em pixels de tela.
- *
- * Existe porque acertar um fio de três unidades com o ponteiro exigiria
- * pontaria, e apagar é gesto de correção -- quem apaga já errou uma vez.
- */
-const ALCANCE_BORRACHA_PX = 6;
 
 /**
  * Quão perto do PRIMEIRO vértice o clique fecha o laço, em pixels de tela.
@@ -475,6 +501,17 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const tool = useToolStore((state) => state.tool);
   const cor = useToolStore((state) => state.cor);
   const espessura = useToolStore((state) => state.espessura);
+  const opacidadeDoLapis = useToolStore((state) => state.opacidade);
+  const suavizarDoLapis = useToolStore((state) => state.suavizar);
+  const tamanhoEmAjuste = useToolStore((state) => state.tamanhoEmAjuste);
+  const raioDaBorracha = useToolStore((state) => state.raioDaBorracha);
+  const efeitoDaArea = useToolStore((state) => state.efeitoDaArea);
+  const paredeNova = useToolStore((state) => state.paredeNova);
+  const nevoaNovaDinamica = useToolStore((state) => state.nevoaNovaDinamica);
+  const modoDaBorracha = useToolStore((state) => state.modoDaBorracha);
+  const raioDaBorrachaDaNevoa = useBorrachaDaNevoaStore((state) => state.raio);
+  // Alt+roda muda o pincel na mão, antes de a roda virar zoom.
+  usePincelNaRoda();
   const corPostit = useToolStore((state) => state.corPostit);
   const formaMedidor = useToolStore((state) => state.formaMedidor);
   const corMedidor = useToolStore((state) => state.corMedidor);
@@ -555,6 +592,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const updateAreaDeEfeito = useSceneStore((state) => state.updateAreaDeEfeito);
   const addTraco = useSceneStore((state) => state.addTraco);
   const removeTracos = useSceneStore((state) => state.removeTracos);
+  const substituirTracos = useSceneStore((state) => state.substituirTracos);
   const addPin = useSceneStore((state) => state.addPin);
   const addPostit = useSceneStore((state) => state.addPostit);
   const addTexto = useSceneStore((state) => state.addTexto);
@@ -787,6 +825,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       }
     : undefined;
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
+  /** A borracha da névoa na mão. Ela fura a área selecionada, e só ela. */
+  const furando = tool === "borrachaDaNevoa";
+  // A área saiu da mão -- desfeita, apagada, travada pela lista -- e a
+  // borracha ficou sem o que furar: volta à seleção, em vez de deixar o
+  // próximo clique no mapa sem efeito nenhum.
+  const semAlvoParaFurar = furando && (!selectedFog || selectedFog.locked);
+  useEffect(() => {
+    if (semAlvoParaFurar) setTool("select");
+  }, [semAlvoParaFurar, setTool]);
   const selectedAreaDeEfeito = scene.areasDeEfeito?.find(
     (area) => area.id === selectedAreaDeEfeitoId,
   );
@@ -924,7 +971,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    */
   const [riscando, setRiscando] = useState(false);
 
-  const previa = useRef<SVGPolylineElement | null>(null);
+  const previa = useRef<SVGPathElement | null>(null);
 
   const [apagando, setApagando] = useState<ReadonlySet<string>>(NADA_APAGANDO);
 
@@ -1593,6 +1640,21 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   }
 
   function handleFogPointerDown(event: ReactPointerEvent, region: FogRegion) {
+    // Na névoa dinâmica os tokens ANDAM lá dentro, e o mestre precisa pegá-los
+    // ali: o clique sobre um token vai para ele, com qualquer botão -- o menu
+    // também é dele --, e só o resto da área a seleciona. A área parada
+    // continua como sempre foi: cobre tudo.
+    if (region.dinamica && !region.revealed) {
+      const token = tokenSobOPonto(
+        visiveis,
+        toScene(event.clientX, event.clientY),
+      );
+      if (token) {
+        handleItemPointerDown(event, token);
+        return;
+      }
+    }
+
     if (event.button === 2) {
       // Para aqui, como o item: ver `handleItemPointerDown`.
       event.stopPropagation();
@@ -1652,13 +1714,25 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   }
 
   /**
-   * A área de efeito nova: só a caixa. Ela nasce SEM efeito -- um pedaço do
-   * chão marcado --, e o efeito se escolhe no gizmo, entre os da campanha.
+   * A área de efeito nova: a caixa, e o efeito que o painel de Elementos
+   * escolheu. Sem escolha ela nasce SEM efeito -- um pedaço do chão marcado --,
+   * e o efeito se escolhe depois no gizmo, entre os da campanha.
    */
   function novaAreaDeEfeito(
     caixa: Pick<AreaDeEfeito, "x" | "y" | "width" | "height" | "formato" | "pontos">,
   ) {
-    return addAreaDeEfeito(scene.id, caixa);
+    return addAreaDeEfeito(scene.id, {
+      ...caixa,
+      ...(efeitoDaArea ? { efeito: efeitoDaArea } : {}),
+    });
+  }
+
+  /** A área escondida nova, já dinâmica se o painel de Elementos pediu. */
+  function novaNevoa(caixa: NewFogRegion) {
+    return addFog(scene.id, {
+      ...caixa,
+      ...(nevoaNovaDinamica ? { dinamica: true as const } : {}),
+    });
   }
 
   /**
@@ -1796,7 +1870,12 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             : box.width < PAREDE_MINIMA || box.height < PAREDE_MINIMA;
         if (magra) return;
 
-        selectParede(addParede(scene.id, rascunho(fim)));
+        selectParede(
+          addParede(scene.id, {
+            ...rascunho(fim),
+            ...camposDaParedeNova(paredeNova, formatoDaParede),
+          }),
+        );
         // Volta ao modo normal, como todas as outras do palco: o gesto seguinte
         // a erguer uma parede é conferir a sombra que ela fez, e não erguer
         // outra por cima. É a regra do Excalidraw, e agora vale para as seis.
@@ -1896,23 +1975,31 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   function riscar(event: ReactPointerEvent, anchor: { x: number; y: number }) {
     const pontos = [Math.round(anchor.x), Math.round(anchor.y)];
     const passo = AMOSTRA_PX / scale;
+    // A corda do estabilizador, em pixel de TELA como a amostra: o tremido é
+    // da mão, e a mão é a mesma em qualquer ampliação. Ver `pontaNaCorda`.
+    const corda = (suavizarDoLapis * CORDA_MAXIMA_PX) / scale;
+    let ponta: Vec = anchor;
 
     setRiscando(true);
 
     startDrag(event, {
       onMove: (_delta, native) => {
-        const ponto = toScene(native.clientX, native.clientY);
+        ponta = pontaNaCorda(
+          ponta,
+          toScene(native.clientX, native.clientY),
+          corda,
+        );
 
         const ultimoX = pontos[pontos.length - 2] ?? 0;
         const ultimoY = pontos[pontos.length - 1] ?? 0;
 
-        if (Math.hypot(ponto.x - ultimoX, ponto.y - ultimoY) < passo) return;
+        if (Math.hypot(ponta.x - ultimoX, ponta.y - ultimoY) < passo) return;
 
-        pontos.push(Math.round(ponto.x), Math.round(ponto.y));
+        pontos.push(Math.round(ponta.x), Math.round(ponta.y));
 
         // Direto no atributo, como os gestos das janelas: pelo estado, cada
         // amostra custaria um render do palco inteiro.
-        previa.current?.setAttribute("points", pontos.join(" "));
+        previa.current?.setAttribute("d", caminhoMacio(pontos));
       },
       onEnd: () => {
         setRiscando(false);
@@ -1921,42 +2008,47 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         // bolinha no mapa que ninguém pediu.
         if (pontos.length < 4) return;
 
-        addTraco(scene.id, { pontos, cor, espessura });
+        addTraco(scene.id, {
+          pontos,
+          cor,
+          espessura,
+          // Cheio não grava o campo: é o risco de sempre, e o arquivo da cena
+          // não carrega um `1` em cada um.
+          ...(opacidadeDoLapis < 1 ? { opacidade: opacidadeDoLapis } : {}),
+        });
       },
     });
   }
 
   /**
-   * Apaga os riscos por onde a borracha passar.
-   *
-   * O traço INTEIRO que ela tocar, e não o pedaço: cortar uma polilinha em duas
-   * a cada passada exigiria recriar traços a cada quadro, e desfazer deixaria
-   * de ser "o risco volta" para ser "o risco volta remendado".
+   * A borracha dos riscos, no modo que o painel escolheu: o PEDAÇO por onde o
+   * anel passa, ou o risco INTEIRO que ele encostar. Ver `ModoDaBorracha`.
+   */
+  function apagar(event: ReactPointerEvent, anchor: Vec) {
+    if (modoDaBorracha === "pedaco") cortarRiscos(event, anchor);
+    else apagarRiscosInteiros(event, anchor);
+  }
+
+  /**
+   * Apaga INTEIRO todo risco que o anel encostar.
    *
    * Marca durante o gesto e remove ao soltar, numa vez: a borracha atravessa
    * três riscos numa passada, e removê-los um por um daria três entradas no
    * desfazer para um gesto só. Enquanto isso eles ficam translúcidos, senão o
    * mestre não saberia o que vai levar.
    */
-  function apagar(event: ReactPointerEvent, anchor: { x: number; y: number }) {
+  function apagarRiscosInteiros(event: ReactPointerEvent, anchor: Vec) {
     const alvos = new Set<string>();
 
-    // A folga é em pixel de TELA: acertar um fio de três unidades com o ponteiro
-    // exigiria pontaria, e apagar é gesto de correção -- quem apaga já errou uma
-    // vez. Constante no zoom porque a mão é a mesma em qualquer ampliação.
-    const folga = ALCANCE_BORRACHA_PX / scale;
-
-    const tocar = (ponto: { x: number; y: number }) => {
+    const tocar = (ponto: Vec) => {
       const antes = alvos.size;
 
       for (const traco of scene.tracos ?? []) {
         if (alvos.has(traco.id)) continue;
 
-        // O alcance sai da espessura DO RISCO, e não do lápis: com o lápis fino
-        // escolhido, um risco grosso ficava difícil de acertar -- e a borracha
-        // deixou de ler a espessura do lápis quando as duas viraram ferramentas
-        // separadas.
-        if (tracoAlcancado(traco, ponto, traco.espessura / 2 + folga))
+        // O anel mais a metade do risco: o risco grosso é tocado pela borda,
+        // e não só quando o anel chega à linha do meio dele.
+        if (tracoAlcancado(traco, ponto, raioDaBorracha + traco.espessura / 2))
           alvos.add(traco.id);
       }
 
@@ -1974,6 +2066,138 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       onEnd: () => {
         setApagando(NADA_APAGANDO);
         removeTracos(scene.id, [...alvos]);
+      },
+    });
+  }
+
+  /**
+   * Corta dos riscos o PEDAÇO por onde o anel passa: o risco atravessado vira
+   * dois, e o que sobra continua com a cor, a largura e a opacidade dele.
+   *
+   * Corta a cada amostra, pelo trecho novo da passada -- da amostra anterior
+   * até esta --, e não pela passada inteira de novo: o custo de uma amostra é o
+   * do trecho, e uma passada de três segundos não fica mais lenta no fim. O
+   * corte em curso vive no `useBorrachaDosRiscosStore`, que só a camada dos
+   * riscos assina, e entra na cena UMA vez, ao soltar: um Ctrl+Z por passada.
+   * Ver `cortarRisco`.
+   */
+  function cortarRiscos(event: ReactPointerEvent, anchor: Vec) {
+    const tracos = scene.tracos ?? [];
+    // A caixa de cada risco, uma vez por gesto: o pedaço nunca sai da caixa do
+    // risco de que veio, e o risco longe da passada sai na primeira conta.
+    const caixas = new Map(tracos.map((traco) => [traco.id, caixaDoTraco(traco)]));
+    const pedacos = new Map<string, number[][]>();
+    const borracha = useBorrachaDosRiscosStore.getState();
+    let anterior = anchor;
+
+    const passar = (passada: Vec[]) => {
+      const xs = passada.map((ponto) => ponto.x);
+      const ys = passada.map((ponto) => ponto.y);
+      let mudou = false;
+
+      for (const traco of tracos) {
+        const alcance = raioDaBorracha + traco.espessura / 2;
+        const caixa = caixas.get(traco.id);
+        if (
+          !caixa ||
+          Math.max(...xs) < caixa.minX - alcance ||
+          Math.min(...xs) > caixa.maxX + alcance ||
+          Math.max(...ys) < caixa.minY - alcance ||
+          Math.min(...ys) > caixa.maxY + alcance
+        )
+          continue;
+
+        const atuais = pedacos.get(traco.id) ?? [traco.pontos];
+        const novos: number[][] = [];
+        let tocou = false;
+        for (const pedaco of atuais) {
+          const cortado = cortarRisco(pedaco, passada, alcance);
+          if (cortado) tocou = true;
+          novos.push(...(cortado ?? [pedaco]));
+        }
+
+        if (tocou) {
+          pedacos.set(traco.id, novos);
+          mudou = true;
+        }
+      }
+
+      if (mudou) borracha.setPedacos(new Map(pedacos));
+    };
+
+    passar([anchor]);
+
+    startDrag(event, {
+      onMove: (_delta, native) => {
+        const ponto = toScene(native.clientX, native.clientY);
+        passar([anterior, ponto]);
+        anterior = ponto;
+      },
+      onEnd: () => {
+        // Na cena ANTES de a prévia sair, como o furo da névoa: na ordem
+        // contrária, o risco inteiro voltaria por um quadro antes de sumir.
+        if (pedacos.size > 0) {
+          const porId = new Map(tracos.map((traco) => [traco.id, traco]));
+          substituirTracos(
+            scene.id,
+            new Map(
+              [...pedacos].map(([id, lista]) => {
+                const { cor, espessura, opacidade } = porId.get(id)!;
+                return [
+                  id,
+                  lista.map((pontos) => ({
+                    pontos,
+                    cor,
+                    espessura,
+                    ...(opacidade !== undefined ? { opacidade } : {}),
+                  })),
+                ];
+              }),
+            ),
+          );
+        }
+        borracha.setPedacos(null);
+      },
+    });
+  }
+
+  /**
+   * Fura a área escondida SELECIONADA por onde a borracha passar.
+   *
+   * Só ela: a borracha entra pelo gizmo da área, e a passada que escorrega
+   * para a vizinha não a abre sem querer. O traço vive no
+   * `useBorrachaDaNevoaStore` durante o gesto -- só o canvas da área repinta
+   * a cada amostra -- e entra na cena UMA vez, ao soltar: uma passada, um
+   * Ctrl+Z, uma publicação para a mesa. Ver `FogRegion.furos`.
+   */
+  function furarNevoa(event: ReactPointerEvent, anchor: Vec) {
+    const area = selectedFog;
+    // Sem área na mão, ou travada, a ferramenta não tem o que furar: volta à
+    // seleção, que é o que o clique no vazio quer dizer.
+    if (!area || area.locked) {
+      setTool("select");
+      return;
+    }
+
+    const borracha = useBorrachaDaNevoaStore.getState();
+    borracha.comecar(area.id, anchor);
+
+    startDrag(event, {
+      onMove: (_delta, native) =>
+        borracha.acrescentar(toScene(native.clientX, native.clientY)),
+      onEnd: () => {
+        // O furo entra na cena ANTES de o traço sair da mão: na ordem
+        // contrária, a área sem furo nenhum voltaria a ser o bloco cheio por
+        // um quadro, e o buraco piscaria fechado antes de reabrir.
+        const traco = useBorrachaDaNevoaStore.getState().traco;
+        const furo =
+          traco && passadaTocaAArea(area, traco.pontos, traco.raio)
+            ? furoDoTraco(area, traco.pontos, traco.raio)
+            : null;
+        if (furo)
+          updateFog(scene.id, area.id, { furos: [...(area.furos ?? []), furo] });
+
+        useBorrachaDaNevoaStore.getState().terminar();
       },
     });
   }
@@ -1999,10 +2223,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const ponto = toScene(event.clientX, event.clientY);
     // Meia linha acima do ponto: o cursor nasce onde o mouse está, e não com o
     // topo da letra nele -- é onde a pessoa está olhando.
+    const campos = camposDoTextoNovo();
     const id = addTexto(scene.id, {
       x: Math.round(ponto.x),
-      y: Math.round(ponto.y - TEXTO_TAMANHO / 2),
-      ...(padraoDoQuadro().aMao ? { aMao: true as const } : {}),
+      y: Math.round(ponto.y - (campos.tamanho ?? TEXTO_TAMANHO) / 2),
+      ...campos,
     });
     useQuadroStore.getState().editarTexto(id);
   }
@@ -2055,6 +2280,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         addParede(scene.id, {
           ...area,
           formato: "poligono",
+          ...camposDaParedeNova(paredeNova, "poligono"),
         }),
       );
       setTool("select");
@@ -2085,7 +2311,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
-    selectFog(addFog(scene.id, area));
+    selectFog(novaNevoa(area));
     // Volta ao modo normal, como as outras áreas: o gesto seguinte é conferir
     // o que se escondeu, e não esconder mais um pedaço.
     setTool("select");
@@ -2222,10 +2448,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     // edição, porque texto vazio não é nada. Volta ao modo normal pela mesma
     // razão do alfinete.
     if (tool === "texto") {
+      // O que o painel de texto escolheu, e a letra da campanha quando ele
+      // não escolheu. Meia linha acima do ponto, na altura de quem vai nascer.
+      const campos = camposDoTextoNovo();
       const id = addTexto(scene.id, {
         x: Math.round(anchor.x),
-        y: Math.round(anchor.y - TEXTO_TAMANHO / 2),
-        ...(padraoDoQuadro().aMao ? { aMao: true as const } : {}),
+        y: Math.round(anchor.y - (campos.tamanho ?? TEXTO_TAMANHO) / 2),
+        ...campos,
       });
       useQuadroStore.getState().editarTexto(id);
       setTool("select");
@@ -2315,6 +2544,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
+    if (tool === "borrachaDaNevoa") {
+      furarNevoa(event, anchor);
+      return;
+    }
+
     if (tool === "fog" || tool === "efeito") {
       // A área de efeito desenha como a escondida: a mesma caixa, o mesmo
       // formato. Muda só o que ela vira no fim do gesto.
@@ -2373,7 +2607,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             formato,
           };
           if (tool === "efeito") selectAreaDeEfeito(novaAreaDeEfeito(caixa));
-          else selectFog(addFog(scene.id, caixa));
+          else selectFog(novaNevoa(caixa));
           // Volta ao modo normal: desenhar duas áreas seguidas é raro, e ficar
           // preso na ferramenta faz o mestre cobrir a cena por acidente.
           setTool("select");
@@ -2882,6 +3116,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         tool === "forma" ||
         tool === "lapis" ||
         tool === "borracha" ||
+        tool === "borrachaDaNevoa" ||
         tool === "regua" ||
         tool === "parede" ||
         tool === "luz" ||
@@ -3378,9 +3613,31 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         <>
           <TransformHandles
             box={{ ...selectedFog, rotation: selectedFog.rotation ?? 0 }}
+            // Com a borracha na mão, nem alça nem giro: o canto da área é
+            // justamente onde se passa a borracha, e a alça engoliria o
+            // arrasto. Fica a fileira, que é por onde se sai.
+            handles={furando ? SEM_ALCAS : undefined}
+            rotatable={!furando}
             // Gira como o item: corredor, mesa e parede raramente correm no
             // eixo da tela, e sem giro cobrir um deles cobria meio mapa junto.
             onChange={(patch) => updateFog(scene.id, selectedFog.id, patch)}
+            dinamica={{
+              ligada: Boolean(selectedFog.dinamica),
+              onToggle: () =>
+                updateFog(scene.id, selectedFog.id, {
+                  dinamica: selectedFog.dinamica ? undefined : true,
+                }),
+            }}
+            // Travada não fura, como não move nem apaga.
+            borracha={
+              selectedFog.locked
+                ? undefined
+                : {
+                    ativa: furando,
+                    onToggle: () =>
+                      setTool(furando ? "select" : "borrachaDaNevoa"),
+                  }
+            }
             trava={{
               travada: Boolean(selectedFog.locked),
               onToggle: toggleSelectionLock,
@@ -3390,11 +3647,38 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
           {/* As alças de vértice, só da área recortada: nas outras duas o
               contorno É a caixa, e o gizmo já a controla inteira. Travada,
-              nenhuma. */}
-          {selectedFog.formato === "poligono" && !selectedFog.locked ? (
+              nenhuma; com a borracha na mão, também não.
+
+              O vértice que sai da caixa faz OUTRA caixa, e os furos, que são
+              fração dela, pulariam junto: vão reescritos para a nova sem sair
+              do lugar no mapa. Ver `furosNaCaixaNova`. */}
+          {selectedFog.formato === "poligono" &&
+          !selectedFog.locked &&
+          !furando ? (
             <AlcasDaArea
               region={selectedFog}
-              onChange={(patch) => updateFog(scene.id, selectedFog.id, patch)}
+              onChange={(patch) =>
+                updateFog(scene.id, selectedFog.id, {
+                  ...patch,
+                  ...(selectedFog.furos?.length
+                    ? {
+                        furos: furosNaCaixaNova(
+                          selectedFog,
+                          { ...selectedFog, ...patch },
+                          selectedFog.furos,
+                        ),
+                      }
+                    : {}),
+                })
+              }
+            />
+          ) : null}
+
+          {furando ? (
+            <AnelDoPincel
+              raio={raioDaBorrachaDaNevoa}
+              noCentro={tamanhoEmAjuste}
+              amostra={AMOSTRA_DA_BORRACHA}
             />
           ) : null}
         </>
@@ -3426,7 +3710,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             // efeitos em área da campanha, ou nenhum. Ver `EscolhaDoEfeitoDaArea`.
             condicoes={
               <EscolhaDoEfeitoDaArea
-                area={selectedAreaDeEfeito}
+                efeito={selectedAreaDeEfeito.efeito}
                 onEscolher={(efeito) =>
                   updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, { efeito })
                 }
@@ -3461,6 +3745,29 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       {/* O risco em curso, antes de virar traço da cena. Desenhado aqui e não
           na camada compartilhada porque ele não existe na cena ainda -- e a
           mesa não deve ver a linha crescendo. */}
+      {/* O anel do lápis: a largura do risco, antes de riscar. Fica durante
+          o risco também -- é a ponta da caneta. Com espaço segurado sai: a mão
+          aberta não risca. */}
+      {/* O anel da borracha dos riscos: o alcance dela, no modo pedaço e no
+          inteiro. */}
+      {tool === "borracha" && !panMode ? (
+        <AnelDoPincel
+          raio={raioDaBorracha}
+          noCentro={tamanhoEmAjuste}
+          amostra={AMOSTRA_DA_BORRACHA}
+        />
+      ) : null}
+
+      {tool === "lapis" && !panMode ? (
+        <AnelDoPincel
+          raio={espessura / 2}
+          // A régua de largura na mão: o anel vai para o meio do palco,
+          // cheio, como o risco vai sair. Ver `tamanhoEmAjuste`.
+          noCentro={tamanhoEmAjuste}
+          amostra={{ cor, opacidade: opacidadeDoLapis }}
+        />
+      ) : null}
+
       {riscando ? (
         <svg
           aria-hidden
@@ -3477,13 +3784,16 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // névoa e escorregaria para baixo dela ao soltar.
           style={{ zIndex: 4_000 }}
         >
-          <polyline
+          {/* O mesmo `path` macio do risco gravado, e a mesma opacidade: a
+              prévia é o risco, e soltar não pode mudar o desenho. */}
+          <path
             ref={previa}
             fill="none"
             stroke={cor}
             strokeWidth={espessura}
             strokeLinecap="round"
             strokeLinejoin="round"
+            opacity={opacidadeDoLapis}
           />
         </svg>
       ) : null}
