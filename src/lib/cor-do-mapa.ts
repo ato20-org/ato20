@@ -31,6 +31,7 @@
  * de doze pixels. Mesma ideia de uma paleta reduzida, sem a paleta.
  */
 
+import { caberEm } from "@/lib/geometry/caber";
 import { carregarImagem } from "@/lib/imagem";
 import type { Vec } from "@/lib/geometry/transform";
 import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
@@ -75,7 +76,32 @@ export type AmostraDoMapa = {
  * `try` está aqui porque o preço de errar é a tela preta e o de acertar é uma
  * chave.
  */
-export async function amostraDoMapa(url: string): Promise<AmostraDoMapa | null> {
+export function amostraDoMapa(url: string): Promise<AmostraDoMapa | null> {
+  // O chão e o gizmo da parede pedem o MESMO mapa, e cada pedido é um fetch,
+  // um decode e um passe de pixels. A promessa fica guardada, e o segundo
+  // pedido recebe a mesma.
+  const guardada = assados.get(url);
+  if (guardada) return guardada;
+
+  const promessa = assar(url);
+  assados.set(url, promessa);
+  // Falha não fica guardada: o daemon que não respondeu agora pode responder
+  // no próximo pedido.
+  void promessa.then((amostra) => {
+    if (!amostra && assados.get(url) === promessa) assados.delete(url);
+  });
+  // Duas: a cena de agora e a de antes. Trocar de cena e voltar não reassa, e
+  // um mapa de oito mil pixels não fica preso na memória para sempre.
+  while (assados.size > 2) {
+    assados.delete(assados.keys().next().value!);
+  }
+  return promessa;
+}
+
+/** Os retratos já assados, pela url. Ver `amostraDoMapa`. */
+const assados = new Map<string, Promise<AmostraDoMapa | null>>();
+
+async function assar(url: string): Promise<AmostraDoMapa | null> {
   try {
     const img = await carregarImagem(url);
 
@@ -106,33 +132,37 @@ export async function amostraDoMapa(url: string): Promise<AmostraDoMapa | null> 
   }
 }
 
+type Balde = { n: number; r: number; g: number; b: number };
+
 /**
- * A cor dominante do mapa nos pontos dados, em coordenadas de CENA.
+ * O pixel do retrato sob um ponto de CENA, ou `null` fora do mapa.
  *
- * Os pontos são amostras, e não uma região: quem chama sabe onde a parede é
- * grossa e onde ela é um traço, e passar a forma para cá seria ensinar geometria
- * de parede a um módulo que só sabe ler imagem.
- *
- * `null` quando nenhum ponto cai dentro do mapa -- uma parede arrastada para
- * fora do plano, que é gesto legítimo enquanto se desenha.
+ * O mapa CABE no plano, sem esticar -- é a conta de `FundoDaCena`. Um mapa que
+ * não é 16:9 deixa faixas dos lados, e ler o ponto como fração do plano
+ * inteiro pegava a cor de um pedaço ao lado da parede, tanto mais longe quanto
+ * mais perto da borda. O retrato tem a proporção do arquivo, e é o que basta
+ * para refazer o encaixe.
  */
-export function corDominante(
-  amostra: AmostraDoMapa,
-  pontos: Vec[],
-): string | null {
-  const contagem = new Map<number, { n: number; r: number; g: number; b: number }>();
+function pixelSob(amostra: AmostraDoMapa, ponto: Vec): { x: number; y: number } | null {
+  const lugar = caberEm(
+    { largura: amostra.largura, altura: amostra.altura },
+    { width: SCENE_WIDTH, height: SCENE_HEIGHT },
+  );
+  const x = Math.floor(((ponto.x - lugar.x) / lugar.width) * amostra.largura);
+  const y = Math.floor(((ponto.y - lugar.y) / lugar.height) * amostra.altura);
+  if (x < 0 || y < 0 || x >= amostra.largura || y >= amostra.altura) return null;
+  return { x, y };
+}
+
+/** Os pontos contados em baldes de cor grossa. Ver `BITS`. */
+function baldesDe(amostra: AmostraDoMapa, pontos: Vec[]): Balde[] {
+  const contagem = new Map<number, Balde>();
 
   for (const ponto of pontos) {
-    // O mapa é esticado no plano inteiro (`backgroundSize` de SCENE), então a
-    // conversão é fração de plano vezes lado do retrato -- e não uma razão de
-    // pixels, que suporia o arquivo do tamanho da cena.
-    const cx = Math.floor((ponto.x / SCENE_WIDTH) * amostra.largura);
-    const cy = Math.floor((ponto.y / SCENE_HEIGHT) * amostra.altura);
-    if (cx < 0 || cy < 0 || cx >= amostra.largura || cy >= amostra.altura) {
-      continue;
-    }
+    const pixel = pixelSob(amostra, ponto);
+    if (!pixel) continue;
 
-    const i = (cy * amostra.largura + cx) * 4;
+    const i = (pixel.y * amostra.largura + pixel.x) * 4;
     const r = amostra.dados[i]!;
     const g = amostra.dados[i + 1]!;
     const b = amostra.dados[i + 2]!;
@@ -155,19 +185,116 @@ export function corDominante(
     }
   }
 
-  let vencedor: { n: number; r: number; g: number; b: number } | null = null;
-  for (const bucket of contagem.values()) {
-    if (!vencedor || bucket.n > vencedor.n) vencedor = bucket;
+  return [...contagem.values()];
+}
+
+function emHex(r: number, g: number, b: number): string {
+  const canal = (valor: number) =>
+    Math.round(valor).toString(16).padStart(2, "0");
+  return `#${canal(r)}${canal(g)}${canal(b)}`;
+}
+
+/** A cor média de um balde: a de quem caiu nele, e não a do meio do balde. */
+function corDoBalde(balde: Balde): string {
+  return emHex(balde.r / balde.n, balde.g / balde.n, balde.b / balde.n);
+}
+
+/**
+ * A cor dominante do mapa nos pontos dados, em coordenadas de CENA.
+ *
+ * Os pontos são amostras, e não uma região: quem chama sabe onde a parede é
+ * grossa e onde ela é um traço, e passar a forma para cá seria ensinar geometria
+ * de parede a um módulo que só sabe ler imagem.
+ *
+ * `null` quando nenhum ponto cai dentro do mapa -- uma parede arrastada para
+ * fora do plano, que é gesto legítimo enquanto se desenha.
+ */
+export function corDominante(
+  amostra: AmostraDoMapa,
+  pontos: Vec[],
+): string | null {
+  let vencedor: Balde | null = null;
+  for (const balde of baldesDe(amostra, pontos)) {
+    if (!vencedor || balde.n > vencedor.n) vencedor = balde;
   }
 
-  if (!vencedor) return null;
+  return vencedor ? corDoBalde(vencedor) : null;
+}
 
-  const canal = (soma: number) =>
-    Math.round(soma / vencedor!.n)
-      .toString(16)
-      .padStart(2, "0");
+/**
+ * Quão longe duas cores ficam para contarem como DUAS sugestões, na régua RGB.
+ *
+ * Os baldes de três bits já separam tons vizinhos em lugares diferentes, e o
+ * mesmo telhado em luz e sombra caía em dois -- duas bolinhas que o olho lê
+ * como uma. Abaixo disto, fica a mais cheia.
+ */
+const DISTANCIA_ENTRE_SUGESTOES = 48;
 
-  return `#${canal(vencedor.r)}${canal(vencedor.g)}${canal(vencedor.b)}`;
+/**
+ * As cores que MAIS aparecem nos pontos, da mais cheia para a menos, sem
+ * repetir tom: as sugestões de cor da face, tiradas do pedaço de mapa que a
+ * parede cobre.
+ *
+ * É a `corDominante` com o pódio inteiro. O primeiro lugar é a cor que a face
+ * já sobe sozinha; os outros são o que a mesma área tem de segundo e terceiro
+ * -- a telha e a sombra dela, o reboco e a madeira do beiral --, e é entre eles
+ * que o palpite costuma errar.
+ */
+export function paletaDaArea(
+  amostra: AmostraDoMapa,
+  pontos: Vec[],
+  quantas: number,
+): string[] {
+  const escolhidos: Balde[] = [];
+
+  for (const balde of baldesDe(amostra, pontos).sort((a, b) => b.n - a.n)) {
+    if (escolhidos.length >= quantas) break;
+    const perto = escolhidos.some(
+      (outro) =>
+        Math.hypot(
+          balde.r / balde.n - outro.r / outro.n,
+          balde.g / balde.n - outro.g / outro.n,
+          balde.b / balde.n - outro.b / outro.n,
+        ) < DISTANCIA_ENTRE_SUGESTOES,
+    );
+    if (!perto) escolhidos.push(balde);
+  }
+
+  return escolhidos.map(corDoBalde);
+}
+
+/**
+ * A cor do mapa num ponto de cena: o conta-gotas.
+ *
+ * A média dos nove pixels em volta, e não o do meio: o retrato é pequeno (ver
+ * `LADO_MAX`), e um pixel só pega o grão do desenho -- o rejunte entre duas
+ * telhas, a borda escura de um traço. Nove dão o tom que o olho vê ali.
+ *
+ * `null` fora do mapa, ou sobre buraco transparente.
+ */
+export function corNoPonto(amostra: AmostraDoMapa, ponto: Vec): string | null {
+  const centro = pixelSob(amostra, ponto);
+  if (!centro) return null;
+
+  let n = 0;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      const x = centro.x + dx;
+      const y = centro.y + dy;
+      if (x < 0 || y < 0 || x >= amostra.largura || y >= amostra.altura) continue;
+      const i = (y * amostra.largura + x) * 4;
+      if (amostra.dados[i + 3]! < 128) continue;
+      n += 1;
+      r += amostra.dados[i]!;
+      g += amostra.dados[i + 1]!;
+      b += amostra.dados[i + 2]!;
+    }
+  }
+
+  return n > 0 ? emHex(r / n, g / n, b / n) : null;
 }
 
 /**

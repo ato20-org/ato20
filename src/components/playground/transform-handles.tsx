@@ -216,6 +216,11 @@ type TransformHandlesProps = {
    * proporção é uma regra e não uma preferência, como a câmera da mesa.
    */
   keepAspect?: boolean;
+  /**
+   * O menor lado a que as alças deixam a caixa chegar. Ausente = o piso de
+   * item. Ver `minimo` em `resizeItem`.
+   */
+  minimo?: number;
   /** Empilhamento, para o gizmo da câmera ficar acima do da seleção. */
   zIndex?: number;
   /**
@@ -484,6 +489,7 @@ export function TransformHandles({
   rotatable = true,
   handles = RESIZE_HANDLES,
   keepAspect = false,
+  minimo,
   zIndex = GIZMO_Z,
   tom = "default",
   outline = true,
@@ -604,6 +610,7 @@ export function TransformHandles({
           resizeItem(snapshot, handle, delta, {
             keepAspect: keepAspect || native.shiftKey,
             round,
+            minimo,
           }),
         ),
       onEnd: () => onGestureEnd?.(),

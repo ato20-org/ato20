@@ -139,13 +139,21 @@ export type ResizeOptions = {
    * unidade por gesto.
    */
   round?: boolean;
+  /**
+   * O menor lado, em unidades de cena. Padrão: `MIN_ITEM_SIZE`.
+   *
+   * A parede passa o dela: um muro de verdade pode ser bem mais fino que um
+   * token, e a `linha` tem um lado zero por natureza -- o piso de item a
+   * entortava ao primeiro arrasto de alça. Ver `ladoMinimoDaParede`.
+   */
+  minimo?: number;
 };
 
 export function resizeItem(
   item: TransformBox,
   handle: ResizeHandle,
   delta: Vec,
-  { keepAspect = false, round = true }: ResizeOptions = {},
+  { keepAspect = false, round = true, minimo = MIN_ITEM_SIZE }: ResizeOptions = {},
 ): ItemBox {
   const direction = HANDLE_DIRECTION[handle];
   const local = rotateVec(delta, -item.rotation);
@@ -171,8 +179,11 @@ export function resizeItem(
   // fica com o piso proporcional.
   const aspectLocked = keepAspect && direction.x !== 0 && direction.y !== 0;
   const ratio = item.height / item.width;
-  const minWidth = aspectLocked ? Math.max(MIN_ITEM_SIZE, MIN_ITEM_SIZE / ratio) : MIN_ITEM_SIZE;
-  const minHeight = aspectLocked ? Math.max(MIN_ITEM_SIZE, MIN_ITEM_SIZE * ratio) : MIN_ITEM_SIZE;
+  // Sem proporção de verdade -- a `linha` deitada tem altura zero -- o piso é
+  // o mesmo nos dois eixos: dividir por ela daria infinito, ou NaN com piso 0.
+  const proporcional = aspectLocked && ratio > 0 && Number.isFinite(ratio);
+  const minWidth = proporcional ? Math.max(minimo, minimo / ratio) : minimo;
+  const minHeight = proporcional ? Math.max(minimo, minimo * ratio) : minimo;
 
   const width = Math.max(minWidth, item.width + deltaWidth);
   const height = Math.max(minHeight, item.height + deltaHeight);
