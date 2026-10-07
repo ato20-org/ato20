@@ -15,6 +15,7 @@ import {
   type CameraAssinavel,
   type Tela,
 } from "@/lib/geometry/camera-orbital";
+import { olharDe } from "@/lib/geometry/peca-de-esguelha";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
 import { efeitosDoObjeto, type EfeitosDoPersonagem } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
@@ -254,6 +255,9 @@ export function CenaDeEsguelha({
           altura: item.height,
           assetId: item.assetId,
           espelhada: item.flipX,
+          // Para onde ela olha, só de quem espelha pelo olhar: o lado da tela
+          // depende do giro, e quem o sabe é o chão. Ver `espelhadaPeloOlhar`.
+          ...(item.espelharPeloOlhar ? { olhaPara: olharDe(item) } : {}),
           efeitos: item.personagemId
             ? efeitosPorPersonagem.get(item.personagemId)
             : efeitosDoObjeto(item.condicoes),

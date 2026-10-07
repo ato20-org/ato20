@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 import {
+  ArrowLeftRight,
   BedSingle,
   Drama,
   FlipHorizontal,
@@ -259,6 +260,10 @@ export function SelecaoDeEsguelha({
   const livres = itens.filter((item) => !item.locked);
   const travada = itens.every((item) => item.locked);
   const deitados = itens.every((item) => item.deitado);
+  // Só quem está de pé tem lado da tela para onde olhar.
+  const emPe = livres.filter((item) => !item.deitado);
+  const espelhamPeloOlhar =
+    emPe.length > 0 && emPe.every((item) => item.espelharPeloOlhar);
   const personagemId = unico?.personagemId;
   // Azul quando é gente, como o gizmo do 2D: ver `tom` em `TransformHandles`.
   const cor = personagemId
@@ -389,6 +394,22 @@ export function SelecaoDeEsguelha({
     );
   }
 
+  /**
+   * Liga ou desliga o espelhar pelo olhar da seleção em pé, menos o travado.
+   * Ver `CanvasItem.espelharPeloOlhar`.
+   */
+  function alternarEspelharPeloOlhar() {
+    if (emPe.length === 0) return;
+    useSceneStore.getState().updateItems(
+      scene.id,
+      emPe.map((item) => ({
+        id: item.id,
+        // `undefined` e não `false`: desligado é o padrão.
+        patch: { espelharPeloOlhar: espelhamPeloOlhar ? undefined : true },
+      })),
+    );
+  }
+
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       <svg
@@ -483,6 +504,24 @@ export function SelecaoDeEsguelha({
             ) : (
               <BedSingle className="size-3" />
             )}
+          </Botao>
+        ) : null}
+        {emPe.length > 0 ? (
+          <Botao
+            rotulo={
+              espelhamPeloOlhar
+                ? t.esguelha.pararDeEspelharPeloOlhar
+                : t.esguelha.espelharPeloOlhar
+            }
+            // Ligado com o anel claro em volta: é um interruptor, e não uma
+            // ação, e o estado tem de se ler sem passar o mouse.
+            classe={cn(
+              cor.botao,
+              espelhamPeloOlhar ? "ring-2 ring-white" : "opacity-60",
+            )}
+            aoApertar={alternarEspelharPeloOlhar}
+          >
+            <ArrowLeftRight className="size-3" />
           </Botao>
         ) : null}
         {personagemId ? (
