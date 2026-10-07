@@ -187,6 +187,8 @@ export function cartazNaTela(
   pe: Vec,
   largura: number,
   altura: number,
+  /** O pé erguido do chão, em cima de uma parede. Ver `apoioDoPe`. */
+  sobe = 0,
 ): { x: number; y: number; largura: number; altura: number } | null {
   const { alvo, zoom } = camera;
   const g = camera.giro * GRAU;
@@ -194,10 +196,11 @@ export function cartazNaTela(
 
   const u = (pe.x - alvo.x) * zoom;
   const v = (pe.y - alvo.y) * zoom;
+  const ergue = sobe * zoom;
   const u1 = u * Math.cos(g) - v * Math.sin(g);
   const v1 = u * Math.sin(g) + v * Math.cos(g);
-  const y = v1 * Math.cos(t);
-  const z = v1 * Math.sin(t);
+  const y = v1 * Math.cos(t) - ergue * Math.sin(t);
+  const z = v1 * Math.sin(t) + ergue * Math.cos(t);
 
   // A mesma régua do corte do chão: perto demais do olho já não se desenha.
   // Ver `vistoPeloTripe`.
@@ -226,16 +229,39 @@ export function daTelaAoChao(
   tela: Tela,
   pixel: Vec,
 ): Vec | null {
+  return daTelaAoPlano(camera, tela, pixel, 0);
+}
+
+/**
+ * O ponto sob um pixel da tela num plano DEITADO a `altura` do chão, ou `null`
+ * se o raio não o corta à frente do olho.
+ *
+ * É `daTelaAoChao` com o chão erguido, e existe para a mão no alto de uma
+ * parede: a alça do topo arrastada pelo chão andaria mais que o cursor, porque
+ * o chão sob o pixel fica atrás dela. Inversa exata de `projetar` com a mesma
+ * `altura`.
+ */
+export function daTelaAoPlano(
+  camera: CameraOrbital,
+  tela: Tela,
+  pixel: Vec,
+  altura: number,
+): Vec | null {
   const t = camera.inclinacao * GRAU;
   const sx = pixel.x - tela.largura / 2;
   const sy = pixel.y - tela.altura / 2;
+  const w = altura * camera.zoom;
 
   // Abaixo de zero o raio sobe: o pixel está acima do horizonte.
   const denominador = tela.focal * Math.cos(t) + sy * Math.sin(t);
   if (denominador <= 1e-6) return null;
 
-  const v1 = (sy * tela.focal) / denominador;
-  return voltarAoChao(camera, tela, sx, v1);
+  const v1 =
+    (sy * (tela.focal - w * Math.cos(t)) + tela.focal * w * Math.sin(t)) /
+    denominador;
+  // O ponto achado está atrás do olho: o plano erguido acima dele.
+  if (v1 * Math.sin(t) + w * Math.cos(t) >= tela.focal) return null;
+  return voltarAoChao(camera, tela, sx, v1, w);
 }
 
 /** Desfaz a escala da perspectiva, o giro e o zoom de um ponto já deitado. */
@@ -244,11 +270,13 @@ function voltarAoChao(
   tela: Tela,
   sx: number,
   v1: number,
+  w = 0,
 ): Vec {
   const g = camera.giro * GRAU;
   const t = camera.inclinacao * GRAU;
 
-  const u1 = (sx * (tela.focal - v1 * Math.sin(t))) / tela.focal;
+  const u1 =
+    (sx * (tela.focal - v1 * Math.sin(t) - w * Math.cos(t))) / tela.focal;
 
   const u = u1 * Math.cos(g) + v1 * Math.sin(g);
   const v = -u1 * Math.sin(g) + v1 * Math.cos(g);
@@ -523,8 +551,10 @@ export function figuraNoTripe(
   tripe: Tripe,
   tela: Pick<Tela, "largura" | "altura">,
   pe: Vec,
+  /** O pé erguido do chão, em cima de uma parede. Ver `apoioDoPe`. */
+  sobe = 0,
 ): { x: number; y: number; escala: number; giro: number } | null {
-  const olho = noOlho(tripe, pe, 0);
+  const olho = noOlho(tripe, pe, sobe);
   if (olho.profundidade <= PERTO_DO_OLHO) return null;
 
   const escala = focalDaLente(tela.altura, tripe.lente) / olho.profundidade;
@@ -556,6 +586,11 @@ export function peSobODedo(
   tela: Pick<Tela, "largura" | "altura">,
   dedo: Vec,
   pega: Vec,
+  /**
+   * A altura em que o pé pisa: a do chão, ou a do teto em que a figura foi
+   * pega. Ver `apoioDoPe`.
+   */
+  sobe = 0,
 ): Vec | null {
   const focal = focalDaLente(tela.altura, tripe.lente);
   const lado = dedo.x - tela.largura / 2;
@@ -572,7 +607,7 @@ export function peSobODedo(
   const noOlho = pe(0).altura;
   const subida = pe(1).altura - noOlho;
   if (Math.abs(subida) < 1e-9) return null;
-  const passo = -noOlho / subida;
+  const passo = (sobe - noOlho) / subida;
   // Atrás do olho, ou colado nele: o dedo está no céu.
   if (passo * focal <= PERTO_DO_OLHO) return null;
 

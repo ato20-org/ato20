@@ -3,8 +3,10 @@
 import { Frame, Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
 
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { CeuDoSol } from "@/components/mestre/ceu-do-sol";
+import { Opcao } from "@/components/mestre/painel-do-pincel";
 import { GridControl } from "@/components/mestre/grid-control";
 import { ARCO_IRIS } from "@/components/mestre/menu-da-luz";
 import { SeletorDeCor } from "@/components/mestre/seletor-de-cor";
@@ -22,10 +24,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAssetUrl } from "@/hooks/use-asset-url";
 import { corDoVazioDe } from "@/lib/cor";
 import { TRAVA_EM_GRAUS } from "@/lib/geometry/ceu";
 import { corDoEscuroDe, limitarEscuridao } from "@/lib/geometry/luz";
 import { t } from "@/lib/i18n/ferramentas";
+import {
+  escolherCeuDaCena,
+  tirarCeuDaCena,
+  useFundoEmVoo,
+} from "@/lib/mestre/scene-background";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
 import {
@@ -206,6 +214,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           cor={corDoVazioDe(scene.corDoVazio)}
           onCor={(cor) => setCorDoVazio(scene.id, cor)}
         />
+        <CeuDoMapa scene={scene} />
 
         {/* O traço entre os dois: sol e grade valem os dois para a cena
             inteira, mas são assuntos diferentes -- um pinta sombra, o outro
@@ -343,6 +352,91 @@ function ForaDoMapa({
 
       <p className="text-muted-foreground text-[10px] leading-snug">
         {t.configuracoesDoMapa.foraDoMapaAjuda}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * O céu do 2.5D: a cor de fora do mapa, ou uma imagem. Ver `Scene.ceuAssetId`.
+ *
+ * Embaixo da cor de fora, e não no lugar dela: a cor continua valendo no 2D e
+ * por trás da imagem enquanto ela carrega. A escolha é o que fica atrás do chão
+ * DEITADO -- e é por isso que se chama céu, e não fundo.
+ *
+ * "Imagem" sem céu ainda abre o seletor de arquivo na hora: escolher o modo e
+ * depois procurar o botão de escolher seria um clique a mais para nada. Voltar
+ * para "Cor" tira o céu e leva o arquivo junto, como tirar o mapa.
+ */
+function CeuDoMapa({ scene }: { scene: Scene }) {
+  const comImagem = Boolean(scene.ceuAssetId);
+  const miniatura = useAssetUrl(scene.ceuAssetId, "mini");
+  const recebendo = useFundoEmVoo((state) =>
+    state.cenas.includes(`ceu:${scene.id}`),
+  );
+
+  function escolher() {
+    void escolherCeuDaCena(scene.id).catch((causa: unknown) =>
+      toast.error(
+        causa instanceof Error ? causa.message : t.configuracoesDoMapa.falhaNoCeu,
+      ),
+    );
+  }
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs">{t.configuracoesDoMapa.ceu}</span>
+        <div
+          role="radiogroup"
+          aria-label={t.configuracoesDoMapa.ceu}
+          className="bg-muted flex w-36 rounded-md p-0.5"
+        >
+          <Opcao
+            marcada={!comImagem}
+            onClick={() => {
+              if (comImagem) void tirarCeuDaCena(scene.id);
+            }}
+          >
+            {t.configuracoesDoMapa.cor}
+          </Opcao>
+          <Opcao
+            marcada={comImagem}
+            onClick={() => {
+              if (!comImagem && !recebendo) escolher();
+            }}
+          >
+            {t.configuracoesDoMapa.ceuImagem}
+          </Opcao>
+        </div>
+      </div>
+
+      {comImagem ? (
+        <div className="flex items-center gap-2">
+          {miniatura ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={miniatura}
+              alt=""
+              draggable={false}
+              className="h-8 w-16 rounded-sm border border-white/15 object-cover"
+            />
+          ) : (
+            <span className="bg-muted h-8 w-16 rounded-sm" />
+          )}
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={recebendo}
+            onClick={escolher}
+          >
+            {t.configuracoesDoMapa.trocarCeu}
+          </Button>
+        </div>
+      ) : null}
+
+      <p className="text-muted-foreground text-[10px] leading-snug">
+        {t.configuracoesDoMapa.ceuAjuda}
       </p>
     </section>
   );

@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MiniMapaDaEsguelha } from "@/components/mestre/mini-mapa-da-esguelha";
 import { PainelDoTripe } from "@/components/mestre/painel-do-tripe";
+import {
+  arrastarParede,
+  ParedeDeEsguelha,
+} from "@/components/mestre/parede-de-esguelha";
 import { TripesNoPalco } from "@/components/mestre/tripes-no-palco";
 import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
 import {
@@ -29,6 +33,11 @@ import {
   tripeDaOrbital,
   type CameraAssinavel,
 } from "@/lib/geometry/camera-orbital";
+import {
+  noPlano,
+  paredeSobOPixel,
+  type ParedeNaMira,
+} from "@/lib/geometry/parede-de-esguelha";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import {
   aplicarGesto,
@@ -58,7 +67,8 @@ const PROPORCAO_DA_MESA = 16 / 9;
  * perspectiva é reescrever a interação inteira. Aqui se confere a mesa.
  *
  * A exceção são as peças, a pedido dele: marcar, a barra do gizmo e arrastar
- * pelo chão. Ver `aoApertar` e `SelecaoDeEsguelha`.
+ * pelo chão. Ver `aoApertar` e `SelecaoDeEsguelha`. E as paredes, depois:
+ * marcar, mover e mudar de tamanho e de altura. Ver `ParedeDeEsguelha`.
  *
  * E é a mesa MESMO: `sceneForTable`, o que a janela do espectador recebe, sem
  * o que está escondido. Conferir com o que só o mestre vê seria conferir outra
@@ -140,12 +150,13 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
     onGirar: setOlhar,
     arrastar: false,
     // Sem ferramenta na mão: o botão esquerdo é da câmera -- menos sobre um
-    // tripé ou o gizmo dele, que são da mão.
-    podeAgarrar: (alvo) =>
+    // tripé ou o gizmo dele, que são da mão, e sobre a parede marcada, que
+    // anda com a mão. Ver `paredeNaMao`.
+    podeAgarrar: (alvo, evento) =>
       !(
         alvo instanceof Element &&
         alvo.closest(`[data-tripe-alvo], ${ALVO_DA_MAO}`)
-      ),
+      ) && !paredeNaMao(evento),
     inicial: (tela) =>
       cameraDoRecorte(
         useViewportStore.getState().viewport,
@@ -266,6 +277,49 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
    * desenhada no piso pela `SceneLayer`.
    */
   const noVazio = useRef<{ x: number; y: number } | null>(null);
+
+  /** O pixel do ponteiro na área da câmera. */
+  function naMesa(evento: { clientX: number; clientY: number }) {
+    const caixa = mesa.current?.getBoundingClientRect();
+    return {
+      x: evento.clientX - (caixa?.left ?? 0),
+      y: evento.clientY - (caixa?.top ?? 0),
+    };
+  }
+
+  /**
+   * A parede sob o ponteiro, a mais perto. A parede de esguelha não recebe
+   * ponteiro -- é inerte, ver `ChaoInclinado` --, então é conta. Ver
+   * `paredeSobOPixel`.
+   */
+  function paredeSob(
+    evento: { clientX: number; clientY: number },
+    paredes = scene.paredes ?? [],
+  ): ParedeNaMira | null {
+    const agora = instante();
+    if (!agora || olhado) return null;
+    return paredeSobOPixel(paredes, agora, naMesa(evento));
+  }
+
+  /**
+   * A parede MARCADA sob o ponteiro, se ela anda.
+   *
+   * Só a marcada: num mapa com casas, quase todo o chão de perto é parede, e
+   * se qualquer uma pegasse o arrasto a câmera deixava de andar. O primeiro
+   * clique marca (ver `aoSoltar`), e daí o corpo dela é da mão. Perguntada
+   * sozinha, e não entre as outras: marcada, ela se pega mesmo atrás de outra.
+   */
+  function paredeNaMao(evento: {
+    clientX: number;
+    clientY: number;
+  }): ParedeNaMira | null {
+    const id = useSelectionStore.getState().selectedParedeId;
+    const marcada = id
+      ? (scene.paredes ?? []).find((parede) => parede.id === id)
+      : undefined;
+    if (!marcada || marcada.locked) return null;
+    return paredeSob(evento, [marcada]);
+  }
   function aoApertarNoVazio(event: React.PointerEvent<HTMLDivElement>) {
     const alvo = event.target instanceof Element ? event.target : null;
     // O gizmo do tripé, a barra e as peças são da mão, e não do chão vazio.
@@ -279,7 +333,10 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
     if (event.button !== 0 || olhado) return;
     const alvo = event.target instanceof Element ? event.target : null;
     const peca = alvo?.closest<HTMLElement>("[data-peca], [data-item-id]");
-    if (!peca) return;
+    if (!peca) {
+      arrastarAParede(event);
+      return;
+    }
 
     const id = peca.dataset.peca ?? peca.dataset.itemId;
     if (!id) return;
@@ -327,12 +384,53 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
     area.addEventListener("pointerup", soltar);
     area.addEventListener("pointercancel", soltar);
   }
+  /**
+   * O corpo da parede marcada anda com a mão, medido no plano em que ela foi
+   * pega -- o topo, ou o meio da face --, para andar sob o cursor e não sob o
+   * chão atrás dela. Ver `paredeSobOPixel`.
+   */
+  function arrastarAParede(event: React.PointerEvent<HTMLDivElement>) {
+    // O gizmo e a fileira da cor ficam por cima da parede, e são da mão.
+    if (event.target instanceof Element && event.target.closest(ALVO_DA_MAO)) {
+      return;
+    }
+    const mira = paredeNaMao(event);
+    const agora = instante();
+    if (!mira || !agora) return;
+    const { parede, plano } = mira;
+    const inicio = noPlano(agora, naMesa(event), plano);
+    if (!inicio) return;
+
+    arrastarParede({
+      evento: event,
+      area: event.currentTarget,
+      instante,
+      sceneId: scene.id,
+      paredeId: parede.id,
+      passo: (pixel, _nativo, camera) => {
+        const aqui = noPlano(camera, pixel, plano);
+        return aqui
+          ? {
+              x: Math.round(parede.x + aqui.x - inicio.x),
+              y: Math.round(parede.y + aqui.y - inicio.y),
+            }
+          : null;
+      },
+    });
+  }
+
+  /**
+   * O clique no vazio: numa parede, marca a parede -- a de mais perto, como o
+   * 2D marca a de cima --; no chão, desmarca tudo.
+   */
   function aoSoltar(event: React.PointerEvent<HTMLDivElement>) {
     const vazio = noVazio.current;
     noVazio.current = null;
     if (!vazio) return;
     if (Math.hypot(event.clientX - vazio.x, event.clientY - vazio.y) > 4) return;
-    useSelectionStore.getState().clear();
+    const mira = paredeSob(event);
+    if (mira) useSelectionStore.getState().selectParede(mira.parede.id);
+    else useSelectionStore.getState().clear();
   }
 
   /**
@@ -475,6 +573,11 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
               assinar={assinar}
               instante={instante}
               paraChao={paraChao}
+            />
+            <ParedeDeEsguelha
+              scene={scene}
+              assinar={assinar}
+              instante={instante}
             />
             <TripesNoPalco
             sceneId={scene.id}

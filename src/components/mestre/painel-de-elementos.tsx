@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { CorDaFace } from "@/components/mestre/cor-da-face";
 import { EscolhaDoEfeitoDaArea } from "@/components/mestre/efeito-da-area";
 import { AjustesDaForma } from "@/components/mestre/forma-control";
 import {
@@ -17,7 +18,6 @@ import {
   naturezasDaCena,
   pegarElemento,
 } from "@/components/mestre/pilula-de-desenho";
-import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -30,21 +30,6 @@ import type { Scene } from "@/types/scene";
 /** A altura que a régua da parede oferece, em metros: a mesma do gizmo. */
 const ALTURA_MINIMA_M = 0.5;
 const ALTURA_MAXIMA_M = 8;
-
-/**
- * Os tons que a face da parede oferece de cara, no mapa de esguelha.
- *
- * Materiais, e não cores: a pedra, a pedra clara da cal, a pedra escura, a
- * madeira e a hera. O primeiro botão, antes deles, é "Do mapa" -- a cor lida
- * do desenho, que acerta na maioria das vezes. O tom exato vem da cor livre.
- */
-const CORES_DA_FACE = [
-  "#78716c",
-  "#d6d3d1",
-  "#44403c",
-  "#92400e",
-  "#3f6212",
-] as const;
 
 /**
  * O painel de Elementos: o que se desenha, em que formato, e com quê.
@@ -248,44 +233,10 @@ function AjustesDaParede() {
       ) : null}
 
       <Linha rotulo={t.elementos.corDaFace} dica={t.elementos.corDaFaceDica}>
-        <div className="flex items-center gap-1.5">
-          {/* Do mapa na frente: é o padrão, e é o que se escolhe de volta. */}
-          <button
-            type="button"
-            aria-pressed={nova.cor === undefined}
-            className={cn(
-              "h-5 rounded-full border px-2 text-[10px] transition-transform",
-              nova.cor === undefined
-                ? "border-foreground"
-                : "text-muted-foreground border-white/20 hover:scale-105",
-            )}
-            onClick={() => setParedeNova({ cor: null })}
-          >
-            {t.elementos.doMapa}
-          </button>
-          {CORES_DA_FACE.map((opcao) => (
-            <button
-              key={opcao}
-              type="button"
-              aria-label={t.elementos.corDaFaceOpcao(opcao)}
-              aria-pressed={opcao === nova.cor}
-              className={cn(
-                "size-5 rounded-full border transition-transform",
-                opcao === nova.cor
-                  ? "border-foreground scale-110"
-                  : "border-white/20 hover:scale-105",
-              )}
-              style={{ background: opcao }}
-              onClick={() => setParedeNova({ cor: opcao })}
-            />
-          ))}
-          <CorLivre
-            cor={nova.cor}
-            paleta={CORES_DA_FACE}
-            rotulo={t.elementos.outraCor}
-            onCor={(cor) => setParedeNova({ cor })}
-          />
-        </div>
+        <CorDaFace
+          cor={nova.cor}
+          onCor={(cor) => setParedeNova({ cor: cor ?? null })}
+        />
       </Linha>
     </>
   );

@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 
 import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
+import { CeuPanoramico } from "@/components/playground/ceu-panoramico";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { FogLayer } from "@/components/playground/fog-layer";
 import { FundoDaCena } from "@/components/playground/fundo-da-cena";
@@ -640,6 +641,16 @@ export function SceneLayer({
     // da caixa. Na TV a caixa é o plano; no Mestre, a área do palco. A corrente
     // não está no `style`: quem a põe é o efeito lá em cima.
     <div className="absolute inset-0 overflow-hidden">
+      {/* O céu, antes de tudo: atrás do chão, e da caixa da câmera, que é a
+          tela no Mestre e o plano na TV. Sem ele, o vazio é a cor da cena.
+          Ver `Scene.ceuAssetId`. */}
+      {scene.ceuAssetId ? (
+        <CeuPanoramico
+          assetId={scene.ceuAssetId}
+          variante={variante === "mini" ? "tela" : variante}
+          camera={orbital}
+        />
+      ) : null}
       <div
         className="absolute inset-0"
         style={{

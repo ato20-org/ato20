@@ -2782,6 +2782,22 @@ export type Scene = {
    */
   corDoVazio?: string;
   /**
+   * O CÉU do 2.5D: uma imagem panorâmica, de 360 graus, atrás do chão deitado.
+   * Ausente = o vazio fica na `corDoVazio`, como sempre.
+   *
+   * É a escolha do mestre entre cor e imagem para o mesmo lugar: o que aparece
+   * por trás do chão quando a câmera levanta o olho. A imagem gira com a câmera
+   * e sobe e desce com a inclinação, com o horizonte dela no horizonte do chão
+   * -- ver `ceuNaTela`. O panorama equirretangular (2:1) é o que fecha a volta
+   * sem emenda; outra imagem também serve, e a emenda aparece ao dar a volta.
+   *
+   * Só de esguelha. No 2D não há céu -- olha-se de cima --, e a borda além do
+   * mapa continua a `corDoVazio`.
+   *
+   * CHEGA à mesa, como a cor: a TV e o celular veem o mesmo céu.
+   */
+  ceuAssetId?: string;
+  /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.
    */

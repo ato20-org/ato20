@@ -56,6 +56,7 @@ import {
   ALTURA_DA_PAREDE,
   alturaDaParede,
   baseDaSombra,
+  ladoMinimoDaParede,
   METROS_DA_PAREDE_PADRAO,
   modoDaSombra,
   pontoNaParede,
@@ -3627,6 +3628,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             onChange={(patch) =>
               updateParede(scene.id, selectedParede.id, patch)
             }
+            // Parede encolhe abaixo do piso de item: o mapa pinta pilar e
+            // mureta mais finos que um token. Ver `ladoMinimoDaParede`.
+            minimo={ladoMinimoDaParede(selectedParede)}
             // Quão alto o tijolo sobe. Em metros no controle e em unidade de
             // cena na cena: ver `UNIDADES_POR_METRO`.
             altura={{

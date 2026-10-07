@@ -1,6 +1,7 @@
 import { anguloDoFacho } from "@/lib/geometry/luz";
 import type { Vec } from "@/lib/geometry/transform";
-import { CONE_DA_LANTERNA, type CanvasItem } from "@/types/scene";
+import { apoioDoPe } from "@/lib/geometry/volume";
+import { CONE_DA_LANTERNA, type CanvasItem, type Parede } from "@/types/scene";
 
 /**
  * Onde uma peça está no chão de esguelha, para quem a pega com a mão: o gizmo
@@ -10,6 +11,20 @@ import { CONE_DA_LANTERNA, type CanvasItem } from "@/types/scene";
 /** O pé da figura em pé, onde o `ChaoInclinado` a põe. Ver `PecaDoChao`. */
 export function peDe(item: CanvasItem): Vec {
   return { x: item.x + item.width / 2, y: item.y + item.width };
+}
+
+/**
+ * Quanto o pé da peça em pé está acima do chão: a altura da parede coberta em
+ * que ela pisa, ou zero. A deitada fica no piso. Ver `apoioDoPe`.
+ *
+ * Quem desenha a peça e quem a acompanha -- o gizmo, o nome sobre a cabeça, a
+ * alça do jogador -- perguntam aqui, para concordarem sobre onde ela está.
+ */
+export function sobeDe(
+  item: CanvasItem,
+  paredes: ReadonlyArray<Parede> | undefined,
+): number {
+  return item.deitado ? 0 : (apoioDoPe(paredes, peDe(item))?.altura ?? 0);
 }
 
 export function centroDe(item: CanvasItem): Vec {

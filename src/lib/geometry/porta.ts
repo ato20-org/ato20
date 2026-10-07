@@ -32,6 +32,15 @@ export const PASSO_DA_PORTA = 45;
 /** Para onde o botão abre a porta que nunca abriu: em ângulo reto. */
 export const ABERTURA_PADRAO = 90;
 
+/**
+ * A grossura da folha no 2.5D, em unidades de cena -- uns sete centímetros.
+ *
+ * A porta vira parede `linha`, e a linha sobe com a grossura do muro desenhado
+ * (`GROSSURA_DA_LINHA`, 22). Numa porta de 16 isso dava um bloco mais grosso
+ * que comprido. No mapa ela é um traço só, então de pé ela é uma tábua.
+ */
+export const GROSSURA_DA_PORTA = 4;
+
 type GeometriaDaPorta = Pick<
   Porta,
   "x" | "y" | "comprimento" | "angulo" | "abertura"

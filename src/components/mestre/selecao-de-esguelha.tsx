@@ -30,6 +30,7 @@ import {
   peDe,
   pivoDe,
   raioDoAnel,
+  sobeDe,
 } from "@/lib/geometry/peca-de-esguelha";
 import type { Vec } from "@/lib/geometry/transform";
 import { t } from "@/lib/i18n/ferramentas";
@@ -73,7 +74,11 @@ type Camera = { camera: CameraOrbital; tela: Tela };
  * O contorno da peça na tela: o retângulo da figura em pé (`cartazNaTela`), ou
  * os quatro cantos da deitada projetados no chão. `null` se ela não se vê.
  */
-function contornoNaTela(agora: Camera, item: CanvasItem): Vec[] | null {
+function contornoNaTela(
+  agora: Camera,
+  item: CanvasItem,
+  sobe: number,
+): Vec[] | null {
   if (item.deitado) {
     const cantos: Vec[] = [];
     for (const canto of cantosDeitado(item)) {
@@ -89,6 +94,7 @@ function contornoNaTela(agora: Camera, item: CanvasItem): Vec[] | null {
     peDe(item),
     item.width,
     item.height,
+    sobe,
   );
   if (!caixa) return null;
   const { x, y, largura, altura } = caixa;
@@ -159,23 +165,32 @@ export function SelecaoDeEsguelha({
 
       const pivo = pivoDe(unico);
       const raio = raioDoAnel(unico);
+      // No teto em que ela pisa, quando pisa num: o anel é do pé dela.
+      const sobe = sobeDe(unico, scene.paredes);
       const volta: Vec[] = [];
       for (let i = 0; i < PONTOS_DO_ANEL; i += 1) {
         const a = (i / PONTOS_DO_ANEL) * Math.PI * 2;
-        const naTela = projetar(agora.camera, agora.tela, {
-          x: pivo.x + Math.cos(a) * raio,
-          y: pivo.y + Math.sin(a) * raio,
-        });
+        const naTela = projetar(
+          agora.camera,
+          agora.tela,
+          { x: pivo.x + Math.cos(a) * raio, y: pivo.y + Math.sin(a) * raio },
+          sobe,
+        );
         if (!naTela) return esconder();
         volta.push(naTela);
       }
       const olhar = (olharDe(unico) * Math.PI) / 180;
-      const centro = projetar(agora.camera, agora.tela, pivo);
-      const bico = projetar(agora.camera, agora.tela, {
-        x: pivo.x + Math.cos(olhar) * raio * 1.25,
-        y: pivo.y + Math.sin(olhar) * raio * 1.25,
-      });
-      const contorno = contornoNaTela(agora, unico);
+      const centro = projetar(agora.camera, agora.tela, pivo, sobe);
+      const bico = projetar(
+        agora.camera,
+        agora.tela,
+        {
+          x: pivo.x + Math.cos(olhar) * raio * 1.25,
+          y: pivo.y + Math.sin(olhar) * raio * 1.25,
+        },
+        sobe,
+      );
+      const contorno = contornoNaTela(agora, unico, sobe);
       if (!centro || !bico || !contorno) return esconder();
 
       partes.forEach((parte) => parte?.removeAttribute("visibility"));
@@ -204,7 +219,9 @@ export function SelecaoDeEsguelha({
       for (const item of itens) {
         const no = contornos.current.get(item.id);
         if (!no) continue;
-        const pontos = agora ? contornoNaTela(agora, item) : null;
+        const pontos = agora
+          ? contornoNaTela(agora, item, sobeDe(item, scene.paredes))
+          : null;
         if (!pontos) {
           no.setAttribute("visibility", "hidden");
           continue;
@@ -298,7 +315,12 @@ export function SelecaoDeEsguelha({
     const agora = instante();
     if (!unico || !agora) return;
     const item = unico;
-    const ancora = projetar(agora.camera, agora.tela, pivoDe(item));
+    const ancora = projetar(
+      agora.camera,
+      agora.tela,
+      pivoDe(item),
+      sobeDe(item, scene.paredes),
+    );
     if (!ancora) return;
     const inicio = naArea(evento);
     const d0 = Math.hypot(inicio.x - ancora.x, inicio.y - ancora.y);

@@ -5,7 +5,8 @@ import {
   figuraNoTripe,
   profundidadeNoTripe,
 } from "@/lib/geometry/camera-orbital";
-import { peDe } from "@/lib/geometry/peca-de-esguelha";
+import { peDe, sobeDe } from "@/lib/geometry/peca-de-esguelha";
+import { ceuNaTela } from "@/lib/geometry/panorama-do-ceu";
 import type { Vec } from "@/lib/geometry/transform";
 import { sceneForTable } from "@/lib/sync/for-table";
 import { assetUrl, type Variante } from "@/lib/vault/assets";
@@ -39,7 +40,7 @@ const QUALIDADE = 0.5;
  * fina custaria mais que tirar a foto de novo.
  */
 export function assinaturaDaFoto(
-  scene: Pick<Scene, "updatedAt" | "backgroundAssetId">,
+  scene: Pick<Scene, "updatedAt" | "backgroundAssetId" | "ceuAssetId">,
   recorte: Viewport,
 ): string {
   return [
@@ -54,7 +55,7 @@ export function assinaturaDaFoto(
 
 /** A assinatura da foto de um TRIPÉ: o olho inteiro, e a cena. */
 export function assinaturaDoTripe(
-  scene: Pick<Scene, "updatedAt" | "backgroundAssetId">,
+  scene: Pick<Scene, "updatedAt" | "backgroundAssetId" | "ceuAssetId">,
   tripe: Tripe,
 ): string {
   return [
@@ -68,6 +69,7 @@ export function assinaturaDoTripe(
     tripe.lente,
     scene.updatedAt,
     scene.backgroundAssetId ?? "",
+    scene.ceuAssetId ?? "",
   ].join("|");
 }
 
@@ -192,6 +194,9 @@ export async function fotografarTripe(
   contexto.fillStyle = daMesa.corDoVazio ?? "#000000";
   contexto.fillRect(0, 0, LARGURA_DA_FOTO, ALTURA_DA_FOTO);
 
+  // O céu, atrás do chão, com a mesma conta da tela. Ver `CeuPanoramico`.
+  if (imagens.ceu) desenharCeu(contexto, imagens.ceu, tripe);
+
   projetarChao(contexto, textura, tripe);
 
   // As figuras em pé, da mais longe para a mais perto.
@@ -206,7 +211,13 @@ export async function fotografarTripe(
 
   const tela = { largura: LARGURA_DA_FOTO, altura: ALTURA_DA_FOTO };
   for (const { item, imagem } of emPe) {
-    const naTela = figuraNoTripe(tripe, tela, peDe(item));
+    // No teto em que pisa, como o chão de esguelha a desenha. Ver `sobeDe`.
+    const naTela = figuraNoTripe(
+      tripe,
+      tela,
+      peDe(item),
+      sobeDe(item, daMesa.paredes),
+    );
     if (!naTela || !imagem) continue;
 
     const largura = item.width * naTela.escala;
@@ -377,13 +388,42 @@ function paraJpeg(canvas: HTMLCanvasElement): string | null {
  * ordem de `items`.
  */
 async function imagensDaCena(daMesa: Scene) {
-  const [fundo, ...itens] = await Promise.all([
+  const [fundo, ceu, ...itens] = await Promise.all([
     daMesa.backgroundAssetId
       ? carregar(daMesa.backgroundAssetId, "tela")
       : Promise.resolve(null),
+    // O céu só sai na foto do tripé, mas carregar de graça quando não há não
+    // custa nada: o `carregar` guarda.
+    daMesa.ceuAssetId ? carregar(daMesa.ceuAssetId, "tela") : Promise.resolve(null),
     ...daMesa.items.map((item) => carregar(item.assetId, "mini")),
   ]);
-  return { fundo, itens };
+  return { fundo, ceu, itens };
+}
+
+/**
+ * O panorama do céu na foto do tripé: a conta de `ceuNaTela`, repetida na
+ * horizontal até cobrir a largura, e girada pela rolagem em volta do meio.
+ */
+function desenharCeu(
+  contexto: CanvasRenderingContext2D,
+  imagem: HTMLImageElement,
+  tripe: Tripe,
+) {
+  const ceu = ceuNaTela(tripe, {
+    largura: LARGURA_DA_FOTO,
+    altura: ALTURA_DA_FOTO,
+  });
+
+  contexto.save();
+  if (ceu.rolagem) {
+    contexto.translate(LARGURA_DA_FOTO / 2, ALTURA_DA_FOTO / 2);
+    contexto.rotate((ceu.rolagem * Math.PI) / 180);
+    contexto.translate(-LARGURA_DA_FOTO / 2, -ALTURA_DA_FOTO / 2);
+  }
+  for (let x = ceu.x; x < LARGURA_DA_FOTO; x += ceu.largura) {
+    contexto.drawImage(imagem, x, ceu.y, ceu.largura, ceu.altura);
+  }
+  contexto.restore();
 }
 
 /**
