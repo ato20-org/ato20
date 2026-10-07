@@ -629,6 +629,68 @@ deslize com a sombra dos vizinhos: com `semTokens` na luz do efeito da figura
 (como já é a da área), 31,4 viraria 38,9. Não entrou: é mudança de desenho, o
 fogo do goblin deixaria de projetar a sombra dos tokens em volta.
 
+## A névoa dinâmica (07/10/2026)
+
+A área escondida com furo ou dinâmica deixou de ser um `div` preto e passou a
+ser PINTADA num canvas do tamanho da caixa dela: a forma, menos os furos da
+borracha, menos o alcance de cada lanterna recortado pelas paredes. A área sem
+nenhum dos dois continua o `div` de sempre. A bancada ganhou `--nevoa K`: K
+áreas dinâmicas em faixas que cobrem o plano inteiro, o pior caso -- a
+lanterna que o arrasto move atravessa todas.
+
+40 tokens, 8 paredes, 3 lanternas (`--carregadas 3`), `--repetir 3`, Xvfb:
+
+| cenário | sem névoa | `--nevoa 4` |
+| --- | --- | --- |
+| `arrasto` (o Mestre arrasta a lanterna) | 59,8 fps, 0,9% | 59,1 fps, 2,5% |
+| `amostras` (a TV, a lanterna deslizando) | 60 fps, 1,2% | 59,8 fps, 0,6% |
+
+Com uma lanterna só, as duas colunas empatam (60 fps, 0,6%). Cada área repinta
+só quando a chave dela muda -- a geometria, os furos e as lanternas que a
+alcançam --, e cada lanterna limpa e copia só a janela que cobre no rascunho.
+Uma passada isolada de 3 s, com captura, chegou a dar 10,7% no `arrasto`: é o
+aquecimento, e foi a `--repetir 3` que desmentiu.
+
+## As fotos das câmeras (07/10/2026)
+
+A lista de cenas e a faixa de câmeras mostram uma FOTO de cada câmera: um
+canvas de 192x108 montado a partir dos dados da cena (o recorte de mesa, com
+fundo, tokens, riscos e a névoa preta), guardado como JPEG a 0,5 no
+`localStorage`. Não é ao vivo -- `useFotografoDasCameras` tira as fotos da cena
+aberta 800 ms depois de ela parar de mudar, no tempo ocioso. O cenário `fotos`
+mede o pior caso: o palco do `arrasto` com uma foto a cada 300 ms, sem parar.
+
+40 tokens, `--repetir 3`, Xvfb:
+
+| cenário | fps | perdidos | p95 |
+| --- | --- | --- | --- |
+| `arrasto` | 60,9 | 0% | 18 ms |
+| `fotos` (uma foto a cada 300 ms) | 60,8 | 0,3% | 18 ms |
+
+Uma foto: 2 ms de mediana e 5,5 KB. A primeira de cada corrida levou de 70 a
+700 ms, que é a espera pelas imagens dos tokens chegarem -- assíncrona, fora do
+quadro: o relógio de quadros não acusou nada. Daí o cartão da faixa de câmeras
+ter trocado o `SceneStage` recortado (um palco por cartão) pela foto, que é um
+`<img>`.
+
+O tempo de cada foto sai no console a cada dez: `--console`.
+
+**O tripé.** A foto do 2.5D usa as mesmas contas puras do 2.5D
+(`camera-orbital`): o chão é desenhado visto de cima numa textura de 480x270
+(o mapa, os deitados, os riscos e a névoa) e projetado na tela do tripé em 24
+faixas de dois triângulos afins; as figuras em pé vêm por cima, com o pé e a
+escala de `figuraNoTripe`. `--tripe` alterna fotos de tripé e de recorte, e o
+canto da página mostra a última de tripé para a captura conferir a
+perspectiva:
+
+| cenário | fps | perdidos | p95 | foto |
+| --- | --- | --- | --- | --- |
+| `fotos` | 60,8 | 0,3% | 18 ms | 2 ms, 5,5 KB |
+| `fotos --tripe` | 60,8 | 0,3% | 18 ms | 2 a 3 ms, 5,2 KB |
+
+A mediana não se mexeu com metade das fotos sendo de tripé. Sem o volume das
+paredes, a luz e a sombra: em 192 pixels o chão e quem está nele bastam.
+
 ## Como medir: o passo a passo
 
 ### O cenário certo
