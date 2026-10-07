@@ -18,6 +18,7 @@ import { EscolhaDoEfeitoDaArea } from "@/components/mestre/efeito-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
 import { LuzMarcadores } from "@/components/mestre/luz-marcadores";
+import { RodaDaLanterna } from "@/components/mestre/roda-da-lanterna";
 import { PainelDaLuz } from "@/components/mestre/painel-da-luz";
 import { ParedeLayer } from "@/components/mestre/parede-layer";
 import { PortaMarcadores } from "@/components/mestre/porta-marcadores";
@@ -3614,6 +3615,18 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           }
           trava={{ travada: single.locked, onToggle: toggleSelectionLock }}
           onDelete={removeSelection}
+        />
+      ) : null}
+
+      {/* A roda da lanterna, por cima do gizmo: para onde o token olha e até
+          onde a luz dele vai. Travado não gira, como no 2.5D. Sem `key`: ela
+          não guarda estado, e a do item já é a do gizmo, irmão daqui -- chave
+          repetida entre irmãos faz o React deixar cópias do gizmo no DOM. */}
+      {single?.luz && !single.locked && !panMode ? (
+        <RodaDaLanterna
+          sceneId={scene.id}
+          item={single}
+          azul={Boolean(personagemDoItem)}
         />
       ) : null}
 

@@ -177,6 +177,24 @@ export function anguloDoFacho(
   return (((angulo + giro) % 360) + 360) % 360;
 }
 
+/**
+ * O inverso de `anguloDoFacho`: o ângulo NA FIGURA que põe o facho apontando
+ * para `noMapa`. Desfaz na ordem contrária -- o giro primeiro, depois os
+ * espelhos, que desfazem a si mesmos.
+ */
+export function anguloNaFigura(
+  item: Pick<CanvasItem, "rotation" | "flipX" | "flipY">,
+  noMapa: number,
+): number {
+  const giro = Number.isFinite(item.rotation) ? item.rotation : 0;
+
+  let angulo = noMapa - giro;
+  if (item.flipY) angulo = -angulo;
+  if (item.flipX) angulo = 180 - angulo;
+
+  return ((angulo % 360) + 360) % 360;
+}
+
 /** O efeito, se for um que existe. O de uma versão futura acende fixo. */
 export function efeitoDe(valor: unknown): EfeitoDaLuz | undefined {
   return (EFEITOS_DA_LUZ as readonly unknown[]).includes(valor)

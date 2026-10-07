@@ -287,9 +287,9 @@ const pt = {
     paraCimaEsquerda: "Para cima e à esquerda",
     lanterna: "Lanterna",
     apagada: "Apagada",
-    alcance: "Alcance",
-    alcanceDaLanterna: "Alcance da lanterna",
     intensidadeDaLanterna: "Intensidade da lanterna",
+    rodaDaLanterna:
+      "Arraste em volta para mirar a lanterna, para longe para alcançar mais (Shift: de 15 em 15°)",
     efeito: "Efeito",
     forma: "Forma",
     formaDaLanterna: "Forma da lanterna",
@@ -754,9 +754,9 @@ const en: typeof pt = {
     paraCimaEsquerda: "Up and left",
     lanterna: "Lantern",
     apagada: "Off",
-    alcance: "Range",
-    alcanceDaLanterna: "Lantern range",
     intensidadeDaLanterna: "Lantern intensity",
+    rodaDaLanterna:
+      "Drag around to aim the lantern, outward to reach farther (Shift: 15° steps)",
     efeito: "Effect",
     forma: "Shape",
     formaDaLanterna: "Lantern shape",

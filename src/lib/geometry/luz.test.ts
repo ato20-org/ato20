@@ -10,6 +10,7 @@ import {
   fatorDoEfeito,
   FUNDO_DO_PULSO,
   anguloDoFacho,
+  anguloNaFigura,
   fontesDaCena,
   inicioDoCone,
   ladoDaLuz,
@@ -122,6 +123,33 @@ describe("anguloDoFacho", () => {
     // A imagem espelha dentro do contêiner que gira. Na ordem inversa o
     // resultado seria 180 - (0 + 90) = 90, e o facho sairia para o lado errado.
     expect(anguloDoFacho({ rotation: 90, flipX: true }, 0)).toBe(270);
+  });
+});
+
+describe("anguloNaFigura", () => {
+  const casos = [
+    { rotation: 0 },
+    { rotation: 30 },
+    { rotation: 0, flipX: true },
+    { rotation: 0, flipY: true },
+    { rotation: 90, flipX: true },
+    { rotation: -45, flipX: true, flipY: true },
+  ];
+
+  it("desfaz o anguloDoFacho em qualquer giro e espelho", () => {
+    for (const item of casos) {
+      for (const noMapa of [0, 45, 90, 200, 315]) {
+        expect(anguloDoFacho(item, anguloNaFigura(item, noMapa))).toBeCloseTo(
+          noMapa,
+        );
+      }
+    }
+  });
+
+  it("devolve entre 0 e 360", () => {
+    const angulo = anguloNaFigura({ rotation: 300 }, 10);
+
+    expect(angulo).toBe(70);
   });
 });
 

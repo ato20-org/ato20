@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/context-menu";
 import {
   ABERTURAS_DA_LANTERNA,
-  ALCANCES_DA_LANTERNA,
   DIRECOES_DA_LANTERNA,
   INTENSIDADES_DA_LANTERNA,
   apontarLanterna,
@@ -215,8 +214,9 @@ function Rotulo({ children }: { children: string }) {
 }
 
 /**
- * A lanterna dos tokens selecionados: a cor, o alcance, a intensidade, a forma
- * e o efeito.
+ * A lanterna dos tokens selecionados: a cor, a intensidade, a forma e o
+ * efeito. O alcance e a mira ficam na roda em volta do token, que mostra o
+ * tamanho de verdade sobre o mapa -- ver `RodaDaLanterna`.
  *
  * Vizinha da opacidade, e não do travar: as duas mudam o que a MESA vê do
  * token. Fica no menu do token porque é dele -- ela anda com ele, e cravar uma
@@ -228,8 +228,8 @@ function Rotulo({ children }: { children: string }) {
  *
  * Forma e efeito num nível a mais, como no menu da luz cravada. Com o cone o
  * efeito aberto aqui somaria doze linhas às dezenove de antes; assim a lista
- * encurtou, e a cor, o alcance e a intensidade -- o que se troca toda hora --
- * continuam a um nível só.
+ * encurtou, e a cor e a intensidade -- o que se troca toda hora -- continuam a
+ * um nível só.
  */
 export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
   const lanterna = lanternaDaSelecao(itens);
@@ -267,20 +267,6 @@ export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
           cor={lanterna?.cor ?? CORES_DA_LUZ[0]}
           onChange={(cor) => setSelectionLanterna({ cor })}
         />
-
-        <ContextMenuSeparator />
-        <Rotulo>{t.luz.alcance}</Rotulo>
-        <ContextMenuRadioGroup
-          aria-label={t.luz.alcanceDaLanterna}
-          value={lanterna ? lanterna.raio : null}
-          onValueChange={(raio: number) => setSelectionLanterna({ raio })}
-        >
-          {ALCANCES_DA_LANTERNA.map((alcance) => (
-            <ContextMenuRadioItem key={alcance.raio} value={alcance.raio}>
-              {alcance.rotulo}
-            </ContextMenuRadioItem>
-          ))}
-        </ContextMenuRadioGroup>
 
         <ContextMenuSeparator />
         <Rotulo>{t.luz.intensidade}</Rotulo>

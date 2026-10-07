@@ -1074,19 +1074,18 @@ export function setSelectionSombra(pedido: PedidoDeSombra): void {
 }
 
 /**
- * Os alcances que a lanterna de um token oferece, em unidade de cena.
+ * O alcance mais curto e o mais longo da lanterna de um token, em unidade de
+ * cena. Ela se ajusta pela roda em volta do token, e não pelo menu: ver
+ * `passoDaRoda`.
  *
- * Três degraus, e não uma régua: o menu é o único lugar em que a lanterna do
- * token se ajusta, e "curta, média, longa" é a pergunta que a mesa faz -- a
- * vela, a tocha, o lampião. Ajuste fino fica para a luz cravada, que tem anel.
+ * O curto é pequeno porque num mapa de cidade inteira o token tem poucas
+ * unidades de cena. O longo é o teto de antes, por MEDIDA: o custo de uma luz
+ * que anda cresce com a área dela -- ver `RAIO_MAXIMO_DO_EFEITO`.
  */
-export const ALCANCES_DA_LANTERNA = [
-  { raio: 160, rotulo: t.itemActions.alcanceCurto },
-  { raio: 260, rotulo: t.itemActions.alcanceMedio },
-  { raio: 420, rotulo: t.itemActions.alcanceLongo },
-] as const;
+export const ALCANCE_MINIMO_DA_LANTERNA = 10;
+export const ALCANCE_MAXIMO_DA_LANTERNA = 420;
 
-/** O alcance com que uma lanterna acende pela primeira vez: o do meio. */
+/** O alcance com que uma lanterna acende pela primeira vez. */
 const ALCANCE_DA_LANTERNA_PADRAO = 260;
 
 /**
