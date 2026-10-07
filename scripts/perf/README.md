@@ -691,6 +691,66 @@ perspectiva:
 A mediana não se mexeu com metade das fotos sendo de tripé. Sem o volume das
 paredes, a luz e a sombra: em 192 pixels o chão e quem está nele bastam.
 
+## O gesto deixa de borrar o mapa (07/10/2026)
+
+Qualquer arrasto no palco -- token, alça da câmera, a caixa de seleção que um
+clique no vazio abre -- mandava os dois planos para `transform` até 350 ms
+depois de soltar: o mapa ampliado borrava a cada clique. Agora o plano só troca
+de forma pela ampliação (ver `conteudoNoLayout`). O `camera-gesto` ganhou o
+gesto `token` (o item 0 no meio do plano, por cima, arrastado pela mão
+sintética) e passou a ler `--zoom` (a câmera da mão encolhe até o
+enquadramento dar essa ampliação; o `token` amplia o centro do plano).
+
+Webview, Xvfb, `--repetir 5`, quadro perdido em 1440x900. Cena pesada = 40
+tokens, `--luzes 3 --carregadas 1 --paredes 8 --nevoa 4`:
+
+| gesto | zoom | borrado (antes) | nítido (agora) |
+| --- | --- | --- | --- |
+| `token` | 4x | 2,4% | 2,4% |
+| `token` | 8x | 1,8% | 3,0% |
+| `redimensionar` | 4x | 0,6% | 1,8% |
+| `redimensionar` | 8x | 0,6% | 0,9% |
+
+Em 2560x1440 o Xvfb satura dos dois lados (95% de quadro perdido), e só os fps
+comparam. `token`, 4x:
+
+| cena | borrado | nítido | nítido + token em camada própria |
+| --- | --- | --- | --- |
+| limpa | 38,0 | 38,6 | 37,5 |
+| luz, paredes, névoa | 33,2 | 28,8 | 28,9 |
+
+O custo do nítido mora na luz: o token mexe na sombra dela, e o canvas da luz
+repinta em resolução cheia. Promover o token (`will-change`) não muda nada.
+
+**A roda da lanterna.** Na margem (sempre `transform`) o traço borrava em
+qualquer ampliação. Passada para o plano de controles, que assenta em `zoom`,
+sai nítida -- mas o círculo andando com o token repinta a caixa dele em
+resolução de tela. `token --carregadas 1`, 1440x900, mediana de cinco:
+
+| roda | 4x | 8x |
+| --- | --- | --- |
+| na margem (antes) | 59,2 fps, 4,6% | 59,8 fps, 3% |
+| no plano, sempre | 48,6 fps, 42,6% | 40 fps, 95,2% |
+| no plano parada, na margem no gesto | 57,5 fps, 10,7% | 59,3 fps, 4,6% |
+
+O que sobra na última linha é a troca de lugar no começo e no fim de cada
+gesto, e a mão sintética faz um a cada 1,5 s.
+
+**O piso do 2.5D a 2x, medido e descartado.** O piso da orbital é um `div`
+com transform 3D, e a textura dele tem o tamanho do plano: o token deitado
+borrava de perto. `chao-25d --modo orbital --girando`, mediana de cinco,
+`--experimento ,piso2`:
+
+| cena | 1x | 2x |
+| --- | --- | --- |
+| 40 tokens | 60 fps, 0,9% | 60 fps, 1,5% |
+| 40 tokens, 3 luzes de fogo | 60 fps, 0,3% | 60 fps, 1,2% |
+
+Barato, e não resolvia: na campanha real o deitado tinha 10x19 unidades e a
+câmera chegava a uns 10x -- o piso precisaria de 19 mil pixels de textura. O
+deitado saiu do piso no Mestre (`DeitadosNaTela`), numa caixa do tamanho de
+tela levada ao chão por `matrix3d` (`deitadoNoTripe`), como a figura em pé.
+
 ## Como medir: o passo a passo
 
 ### O cenário certo
