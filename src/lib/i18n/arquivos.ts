@@ -436,6 +436,7 @@ const pt = {
 
   fundoDaCena: {
     jaRecebendo: "Esta cena já está recebendo um fundo.",
+    jaRecebendoCeu: "Esta cena já está recebendo um céu.",
     nadaImportado: "Nada foi importado.",
   },
 
@@ -891,6 +892,7 @@ const en: typeof pt = {
 
   fundoDaCena: {
     jaRecebendo: "This scene is already getting a background.",
+    jaRecebendoCeu: "This scene is already getting a sky.",
     nadaImportado: "Nothing was imported.",
   },
 

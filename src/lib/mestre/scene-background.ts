@@ -139,6 +139,59 @@ export async function importarCapaDaCampanha(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Escolhe o CÉU do 2.5D da cena, a partir de um arquivo do disco.
+ *
+ * O mesmo gesto e a mesma casa do mapa -- ver `escolherFundoDaCena`: importa
+ * com escopo `cena`, para o arquivo não aparecer na biblioteca, e o céu trocado
+ * sai da campanha junto com a troca. Ver `Scene.ceuAssetId`.
+ *
+ * A trava de uma troca por vez é a do fundo, com uma chave própria: a lista de
+ * cenas lê a do fundo para mostrar o giro na linha, e um céu chegando não é um
+ * mapa chegando.
+ */
+export async function escolherCeuDaCena(sceneId: string): Promise<boolean> {
+  const chave = `ceu:${sceneId}`;
+  if (useFundoEmVoo.getState().cenas.includes(chave)) {
+    toast.info(t.fundoDaCena.jaRecebendoCeu);
+    return false;
+  }
+
+  useFundoEmVoo.getState().entrou(chave);
+
+  try {
+    const resultado = await importAssets("image", "cena");
+    if (!resultado || resultado.cancelado) return false;
+
+    const primeiro = resultado.aceitos[0];
+    if (!primeiro)
+      throw new Error(resultado.recusados[0] ?? t.fundoDaCena.nadaImportado);
+
+    const anterior = ceuAtual(sceneId);
+    invalidarAcervo("image");
+    useSceneStore.getState().setCeu(sceneId, primeiro.id);
+    await descartarFundo(anterior);
+    return true;
+  } finally {
+    useFundoEmVoo.getState().saiu(chave);
+  }
+}
+
+/** Tira o céu da cena -- o vazio volta à cor --, e leva o arquivo junto. */
+export async function tirarCeuDaCena(sceneId: string): Promise<void> {
+  const anterior = ceuAtual(sceneId);
+
+  useSceneStore.getState().setCeu(sceneId, undefined);
+
+  await descartarFundo(anterior);
+}
+
+function ceuAtual(sceneId: string): string | undefined {
+  return useSceneStore
+    .getState()
+    .board?.scenes.find((cena) => cena.id === sceneId)?.ceuAssetId;
+}
+
 /** Tira o fundo da cena, e leva o arquivo junto. */
 export async function tirarFundoDaCena(sceneId: string): Promise<void> {
   const anterior = fundoAtual(sceneId);
@@ -177,7 +230,13 @@ async function descartarFundo(assetId: string | undefined): Promise<void> {
 
   const cenas = useSceneStore.getState().board?.scenes ?? [];
 
-  if (cenas.some((cena) => cena.backgroundAssetId === assetId)) return;
+  // Fundo ou céu de outra cena -- a duplicada aponta para o mesmo arquivo.
+  if (
+    cenas.some(
+      (cena) => cena.backgroundAssetId === assetId || cena.ceuAssetId === assetId,
+    )
+  )
+    return;
 
   if (usadoForaDoFundo(assetId, cenas)) {
     await setAssetEscopo(assetId, undefined);

@@ -236,6 +236,11 @@ type SceneStore = {
    * que devolver. Desfazer uma troca é trocar de novo, pelo menu da cena.
    */
   setBackground: (sceneId: string, assetId: string | undefined) => void;
+  /**
+   * O céu do 2.5D. Fora do histórico pela razão do fundo: trocar o céu apaga o
+   * arquivo velho. Ver `Scene.ceuAssetId`.
+   */
+  setCeu: (sceneId: string, assetId: string | undefined) => void;
   /** `undefined` devolve a mesa ao plano inteiro. */
   setSceneCamera: (sceneId: string, camera: Viewport | undefined) => void;
   /** Cria uma câmera. Devolve o id. */
@@ -628,6 +633,10 @@ export function soConteudo(atual: Board, alvo: Board): Board {
       if (scene.backgroundAssetId !== undefined)
         restaurada.backgroundAssetId = scene.backgroundAssetId;
       else delete restaurada.backgroundAssetId;
+      // O céu, pela mesma razão: trocá-lo apaga o arquivo velho.
+      if (scene.ceuAssetId !== undefined)
+        restaurada.ceuAssetId = scene.ceuAssetId;
+      else delete restaurada.ceuAssetId;
       return restaurada;
     }),
   };
@@ -1196,6 +1205,23 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           scenes: board.scenes.map((scene) =>
             scene.id === sceneId
               ? { ...scene, backgroundAssetId: assetId, updatedAt: Date.now() }
+              : scene,
+          ),
+        },
+      });
+    },
+
+    setCeu(sceneId, assetId) {
+      const { board } = get();
+      if (!board) return;
+
+      // `set` e não `commit`, como o fundo: ver a declaração.
+      set({
+        board: {
+          ...board,
+          scenes: board.scenes.map((scene) =>
+            scene.id === sceneId
+              ? { ...scene, ceuAssetId: assetId, updatedAt: Date.now() }
               : scene,
           ),
         },
