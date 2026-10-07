@@ -49,7 +49,7 @@ export function PostitControl({
    * régua do mapa, encostada na direita -- para cima, das duas, o painel
    * subiria por cima das próprias ferramentas.
    */
-  lado?: "top" | "right" | "left";
+  lado?: "top" | "right" | "left" | "bottom";
 } = {}) {
   const tool = useToolStore((state) => state.tool);
   const corPostit = useToolStore((state) => state.corPostit);

@@ -376,6 +376,20 @@ type SceneStore = {
   /** Crava um risco. Passa pelo histórico: riscar é edição da cena. */
   addTraco: (sceneId: string, traco: NewTraco) => string;
   /**
+   * Troca cada risco da lista pelos pedaços dele, de uma vez: a passada da
+   * borracha que corta. Lista vazia apaga o risco. Os pedaços ficam no LUGAR
+   * do risco na ordem de pintura, e não no fim: o que estava embaixo de outro
+   * risco continua embaixo.
+   *
+   * Uma mudança só, e não `removeTracos` seguido de `addTraco`: cada chamada
+   * é um passo no desfazer, e cortar três riscos numa passada daria sete
+   * Ctrl+Z para um gesto.
+   */
+  substituirTracos: (
+    sceneId: string,
+    trocas: ReadonlyMap<string, readonly NewTraco[]>,
+  ) => void;
+  /**
    * Apaga vários riscos de uma vez.
    *
    * Vários e não um: a borracha atravessa três riscos numa passada, e apagar um
@@ -1535,6 +1549,20 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       }));
 
       return id;
+    },
+
+    substituirTracos(sceneId, trocas) {
+      if (trocas.size === 0) return;
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        tracos: (scene.tracos ?? []).flatMap((traco) => {
+          const pedacos = trocas.get(traco.id);
+          return pedacos
+            ? pedacos.map((pedaco) => ({ ...pedaco, id: novoId() }))
+            : [traco];
+        }),
+      }));
     },
 
     removeTracos(sceneId, tracoIds) {

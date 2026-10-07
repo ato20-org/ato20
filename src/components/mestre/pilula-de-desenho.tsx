@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -9,7 +7,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { t } from "@/lib/i18n/ferramentas";
-import { useToolStore } from "@/lib/store/use-tool-store";
+import {
+  useToolStore,
+  type NaturezaDoElemento,
+} from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import { temAreaDeEfeito, temNevoa, temSol, type Scene } from "@/types/scene";
 
@@ -20,7 +21,7 @@ import { temAreaDeEfeito, temNevoa, temSol, type Scene } from "@/types/scene";
  * guarda o nome que já usava -- `retangulo`, `elipse`, `poligono` --, e é só
  * isso que estas chaves traduzem.
  */
-const GEOMETRIAS = [
+export const GEOMETRIAS = [
   {
     chave: "quadrado",
     formato: "retangulo",
@@ -41,7 +42,7 @@ const GEOMETRIAS = [
   },
 ] as const;
 
-type Geometria = (typeof GEOMETRIAS)[number];
+export type Geometria = (typeof GEOMETRIAS)[number];
 
 /**
  * O que a coisa É: o segundo passo.
@@ -113,7 +114,7 @@ const DESENHOS: Record<Geometria["chave"], React.ReactNode> = {
  * `null` é a amostra neutra, para o botão da régua antes de a natureza ser
  * escolhida.
  */
-function AmostraDaForma({
+export function AmostraDaForma({
   geometria,
   natureza,
 }: {
@@ -165,87 +166,21 @@ function AmostraDaForma({
   );
 }
 
-type Natureza =
-  | (typeof NATUREZAS)[number]["chave"]
-  | (typeof NATUREZAS_DE_EFEITO)[number]["chave"];
+export type Natureza = NaturezaDoElemento;
 
 /**
- * A pílula de desenho: o que se desenha na cena, em dois passos.
+ * As naturezas que esta cena aceita, na ordem do painel.
  *
- * Primeiro a GEOMETRIA -- quadrado, círculo, traço livre --, depois o que
- * aquele desenho SIGNIFICA -- parede, área escondida, elemento. Eram sete
- * botões na barra fazendo as duas perguntas ao mesmo tempo, um por par: três de
- * área escondida, três de forma e a parede. Aqui cada pergunta é feita uma vez,
- * e a segunda abre para a direita.
- *
- * A ordem importa e foi escolhida: primeiro o desenho, porque é o que a mão vai
- * fazer daqui a um segundo, e o mestre que quer contornar uma sala já sabe que
- * vai contornar antes de saber se aquilo vai virar parede ou névoa. Perguntar
- * a natureza primeiro obrigaria a decidir o significado antes do gesto.
- *
- * O que a unificação comprou, além da barra: o TRAÇO LIVRE. Ele existia só na
- * área escondida, e contornar à mão o que não é quadrado nem redondo é a mesma
- * necessidade nas três -- a parede de uma caverna, a mancha de uma clareira.
- * Com o vocabulário compartilhado, ele entrou nas três de uma vez.
- *
- * O que NÃO entrou: alfinete, postit, régua, lápis e borracha. Nenhum
- * deles responde às duas perguntas daqui -- são cravar, colar, acender, medir,
- * riscar e apagar, e cada um já é um alvo direto onde está.
+ * Cada natureza pergunta pela capacidade que ela usa, e não pelo tipo da
+ * cena. No QUADRO não há chão: nem parede para a luz parar, nem região do
+ * mapa para esconder da mesa. No FUNDO há chão, mas a luz já vem pintada na
+ * imagem e a imagem existe para ser vista de uma vez -- as mesmas duas caem,
+ * por duas razões diferentes. Sobra o elemento, que vale nos três.
  */
-export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
-  const tool = useToolStore((state) => state.tool);
-  const setTool = useToolStore((state) => state.setTool);
-  const tipoDeForma = useToolStore((state) => state.tipoDeForma);
-  const setForma = useToolStore((state) => state.setForma);
-  const formatoDeArea = useToolStore((state) => state.formatoDeArea);
-  const setFormatoDeArea = useToolStore((state) => state.setFormatoDeArea);
-  const formatoDaParede = useToolStore((state) => state.formatoDaParede);
-  const setFormatoDaParede = useToolStore((state) => state.setFormatoDaParede);
-  const formatoDoEfeito = useToolStore((state) => state.formatoDoEfeito);
-  const setFormatoDoEfeito = useToolStore((state) => state.setFormatoDoEfeito);
-
-  /** Qual geometria está com a fileira de naturezas aberta. `null` = fechada. */
-  const [aberta, setAberta] = useState<Geometria["chave"] | null>(null);
-  const pilula = useRef<HTMLDivElement>(null);
-
-  /**
-   * Clique fora da pílula fecha a fileira, e o Esc também.
-   *
-   * Ela FICA aberta ao escolher (ver `pegar`), e sem isto ficava para sempre:
-   * o mestre escolhia a parede, ia desenhar, e a tira seguia pendurada sobre o
-   * palco até alguém clicar de novo no quadrado. O gesto seguinte a escolher é
-   * desenhar, e é ele que fecha.
-   *
-   * Na CAPTURA: o palco, os itens e as alças param a propagação do
-   * pointerdown, e um ouvinte na volta nunca ouviria o clique que mais importa.
-   */
-  useEffect(() => {
-    if (!aberta) return;
-
-    const aoApertar = (evento: PointerEvent) => {
-      if (!pilula.current?.contains(evento.target as Node)) setAberta(null);
-    };
-    const aoTeclar = (evento: KeyboardEvent) => {
-      if (evento.key === "Escape") setAberta(null);
-    };
-
-    window.addEventListener("pointerdown", aoApertar, true);
-    window.addEventListener("keydown", aoTeclar);
-
-    return () => {
-      window.removeEventListener("pointerdown", aoApertar, true);
-      window.removeEventListener("keydown", aoTeclar);
-    };
-  }, [aberta]);
-
-  /**
-   * Cada natureza pergunta pela capacidade que ela usa, e não pelo tipo da
-   * cena. No QUADRO não há chão: nem parede para a luz parar, nem região do
-   * mapa para esconder da mesa. No FUNDO há chão, mas a luz já vem pintada na
-   * imagem e a imagem existe para ser vista de uma vez -- as mesmas duas caem,
-   * por duas razões diferentes. Sobra o elemento, que vale nos três.
-   */
-  const naturezas: ReadonlyArray<{ chave: Natureza; label: string; hint: string }> = [
+export function naturezasDaCena(
+  scene: Pick<Scene, "tipo">,
+): ReadonlyArray<{ chave: Natureza; label: string; hint: string }> {
+  return [
     ...NATUREZAS.filter(
       (natureza) =>
         (natureza.chave !== "parede" || temSol(scene)) &&
@@ -254,167 +189,143 @@ export function PilulaDeDesenho({ scene }: { scene: Pick<Scene, "tipo"> }) {
     // O efeito no chão é do mapa, como a parede e a névoa.
     ...(temAreaDeEfeito(scene) ? NATUREZAS_DE_EFEITO : []),
   ];
+}
 
-  /**
-   * Sobrou UMA natureza: a pílula deixa de ter dois passos.
-   *
-   * No mapa a pergunta "o que isto vai ser" é real -- parede, área escondida
-   * ou elemento. No fundo e no quadro sobra o elemento, e a fileira abria com
-   * um botão só: um clique para escolher o que já estava escolhido, e a
-   * resposta da régua atravessada por uma tira que não decide nada.
-   *
-   * Com uma, o botão da geometria É a ferramenta, e a fileira não abre.
-   */
-  const unica = naturezas.length === 1 ? naturezas[0]! : null;
+/** A ferramenta de cada natureza. */
+const FERRAMENTA_DA_NATUREZA = {
+  parede: "parede",
+  area: "fog",
+  elemento: "forma",
+  efeito: "efeito",
+} as const satisfies Record<Natureza, string>;
 
-  /** O par que está na mão AGORA, lido do store -- não de estado local. */
-  const naMao: { geometria: Geometria["chave"]; natureza: Natureza } | null =
-    (() => {
-      const de = (formato: string) =>
-        GEOMETRIAS.find((geometria) => geometria.formato === formato)?.chave;
+/** A natureza da ferramenta na mão. `null` se não é de elemento. */
+export function naturezaDaFerramenta(tool: string): Natureza | null {
+  const achada = (
+    Object.entries(FERRAMENTA_DA_NATUREZA) as Array<[Natureza, string]>
+  ).find(([, ferramenta]) => ferramenta === tool);
+  return achada ? achada[0] : null;
+}
 
-      if (tool === "parede") {
-        const geometria = de(formatoDaParede);
-        return geometria ? { geometria, natureza: "parede" } : null;
-      }
-      if (tool === "fog") {
-        const geometria = de(formatoDeArea);
-        return geometria ? { geometria, natureza: "area" } : null;
-      }
-      if (tool === "forma") {
-        const geometria = de(tipoDeForma);
-        return geometria ? { geometria, natureza: "elemento" } : null;
-      }
-      if (tool === "efeito") {
-        const geometria = de(formatoDoEfeito);
-        return geometria ? { geometria, natureza: "efeito" } : null;
-      }
+/** A geometria de um formato guardado, ou `null` se não é uma das três. */
+function geometriaDe(formato: string): Geometria["chave"] | null {
+  return GEOMETRIAS.find((geometria) => geometria.formato === formato)?.chave ?? null;
+}
 
-      return null;
-    })();
+/**
+ * A geometria que a natureza guarda: cada uma lembra o seu formato, pela razão
+ * de `formatoDaParede` -- quem traça paredes em laço e esconde áreas em
+ * retângulo não quer que uma troque a outra.
+ */
+export function geometriaDaNatureza(
+  natureza: Natureza,
+  estado: Pick<
+    ReturnType<typeof useToolStore.getState>,
+    "formatoDaParede" | "formatoDeArea" | "tipoDeForma" | "formatoDoEfeito"
+  >,
+): Geometria["chave"] | null {
+  if (natureza === "parede") return geometriaDe(estado.formatoDaParede);
+  if (natureza === "area") return geometriaDe(estado.formatoDeArea);
+  if (natureza === "efeito") return geometriaDe(estado.formatoDoEfeito);
+  return geometriaDe(estado.tipoDeForma);
+}
 
-  /**
-   * Escolher a natureza é escolher a ferramenta: é aqui que os dois passos
-   * viram um par, e é o único lugar em que o vocabulário da pílula encosta nos
-   * três campos que cada natureza guarda.
-   */
-  function pegar(geometria: Geometria, natureza: Natureza) {
-    if (natureza === "parede") {
-      setFormatoDaParede(geometria.formato);
-      setTool("parede");
-    } else if (natureza === "efeito") {
-      setFormatoDoEfeito(geometria.formato);
-      setTool("efeito");
-    } else if (natureza === "area") {
-      // A área não tem `linha`, e nenhuma das três geometrias é uma: o
-      // vocabulário da pílula já é o subconjunto que serve às três.
-      setFormatoDeArea(geometria.formato);
-      setTool("fog");
-    } else {
-      setForma({ tipoDeForma: geometria.formato });
-      setTool("forma");
-    }
+/**
+ * Pega a ferramenta de um elemento: a geometria e a natureza viram um par, e
+ * é o único lugar em que o vocabulário do painel encosta nos quatro campos que
+ * cada natureza guarda.
+ */
+export function pegarElemento(
+  geometria: Geometria["chave"],
+  natureza: Natureza,
+): void {
+  const ferramentas = useToolStore.getState();
+  const formato = GEOMETRIAS.find((g) => g.chave === geometria)!.formato;
 
-    // A fileira FICA aberta: trocar de natureza sem redesenhar é o gesto de
-    // quem está decidindo, e fechá-la a cada escolha custaria um clique para
-    // voltar. Com uma natureza só não há fileira, e não há o que manter aberto.
-    setAberta(unica ? null : geometria.chave);
-  }
+  if (natureza === "parede") ferramentas.setFormatoDaParede(formato);
+  else if (natureza === "efeito") ferramentas.setFormatoDoEfeito(formato);
+  // A área não tem `linha`, e nenhuma das três geometrias é uma: o vocabulário
+  // daqui já é o subconjunto que serve às quatro.
+  else if (natureza === "area") ferramentas.setFormatoDeArea(formato);
+  else ferramentas.setForma({ tipoDeForma: formato });
+
+  ferramentas.setNaturezaDoElemento(natureza);
+  ferramentas.setTool(FERRAMENTA_DA_NATUREZA[natureza]);
+}
+
+/**
+ * O botão ELEMENTOS da barra: o que se desenha na cena, num ícone só.
+ *
+ * Eram três botões de geometria, e cada um abria para a direita uma fileira
+ * com as naturezas -- parede, área escondida, elemento, efeito. A geometria, a
+ * natureza e o que cada natureza ajusta (a cor da forma, o efeito, a altura e
+ * o teto da parede) moram agora no painel do canto, como os do lápis: ver
+ * `PainelDeElementos`. A barra ficou com uma pergunta só, "vou desenhar?".
+ *
+ * O botão desenha O QUE VAI SER DESENHADO -- a geometria e o material do par
+ * na mão, ou do último usado --, e a barra sozinha continua respondendo "o que
+ * estou prestes a desenhar". Clicar pega o último par de volta; com um
+ * elemento na mão, clicar larga.
+ *
+ * O que NÃO entrou: alfinete, postit, régua, lápis e borracha. Nenhum deles
+ * responde às duas perguntas daqui -- são cravar, colar, acender, medir,
+ * riscar e apagar, e cada um já é um alvo direto onde está.
+ */
+export function BotaoDeElementos({
+  scene,
+  dica = "right",
+}: {
+  scene: Pick<Scene, "tipo">;
+  /** De que lado a dica abre: para baixo na barra do topo. */
+  dica?: "right" | "bottom";
+}) {
+  const tool = useToolStore((state) => state.tool);
+  const setTool = useToolStore((state) => state.setTool);
+  const lembrada = useToolStore((state) => state.naturezaDoElemento);
+  const formatoDaParede = useToolStore((state) => state.formatoDaParede);
+  const formatoDeArea = useToolStore((state) => state.formatoDeArea);
+  const tipoDeForma = useToolStore((state) => state.tipoDeForma);
+  const formatoDoEfeito = useToolStore((state) => state.formatoDoEfeito);
+
+  const naturezas = naturezasDaCena(scene);
+  const naMao = naturezaDaFerramenta(tool);
+  // A lembrada, se esta cena a aceita: a parede escolhida no mapa não vale
+  // no quadro, e lá o ícone volta ao elemento.
+  const natureza: Natureza =
+    naMao ??
+    (naturezas.some((opcao) => opcao.chave === lembrada)
+      ? lembrada
+      : (naturezas[0]?.chave ?? "elemento"));
+  const geometria =
+    geometriaDaNatureza(natureza, {
+      formatoDaParede,
+      formatoDeArea,
+      tipoDeForma,
+      formatoDoEfeito,
+    }) ?? "quadrado";
 
   return (
-    <div ref={pilula} className="flex flex-col items-center gap-0.5">
-      {GEOMETRIAS.map((geometria) => {
-        const escolhida = naMao?.geometria === geometria.chave;
-
-        return (
-          /* `relative` aqui e a fileira em `absolute left-full`: a pílula mora
-             na RÉGUA, que é uma coluna estreita na borda esquerda do palco, e
-             uma fileira de botões dentro dela esticaria a régua inteira. Assim
-             a coluna continua com a largura de um botão e as opções crescem
-             para a direita, por cima do palco, que é onde há espaço. */
-          <div key={geometria.chave} className="relative">
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant={escolhida ? "secondary" : "ghost"}
-                    size="icon-sm"
-                    aria-label={geometria.label}
-                    aria-expanded={unica ? undefined : aberta === geometria.chave}
-                    className={cn(!escolhida && "text-muted-foreground")}
-                    onClick={() =>
-                      unica
-                        ? pegar(geometria, unica.chave)
-                        : setAberta(
-                            aberta === geometria.chave ? null : geometria.chave,
-                          )
-                    }
-                  >
-                    {/* O botão da régua já mostra o MATERIAL quando esta
-                        geometria está na mão: assim a régua sozinha responde
-                        "o que estou prestes a desenhar". */}
-                    <AmostraDaForma
-                      geometria={geometria.chave}
-                      natureza={escolhida ? naMao!.natureza : null}
-                    />
-                  </Button>
-                }
-              />
-              <TooltipContent side="right">
-                <p className="font-medium">{geometria.label}</p>
-                <p className="text-muted-foreground max-w-48">
-                  {geometria.hint}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-
-            {!unica && aberta === geometria.chave ? (
-              <div
-                role="toolbar"
-                aria-label={t.pilulaDeDesenho.oQueDesenhar(geometria.label)}
-                className="bg-background/85 absolute top-0 left-full z-10 ml-1 flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur"
-              >
-                {naturezas.map((natureza) => {
-                  const ativa =
-                    naMao?.geometria === geometria.chave &&
-                    naMao.natureza === natureza.chave;
-
-                  return (
-                    <Tooltip key={natureza.chave}>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            variant={ativa ? "secondary" : "ghost"}
-                            size="icon-sm"
-                            aria-label={t.pilulaDeDesenho.comoNatureza(
-                              geometria.label,
-                              natureza.label,
-                            )}
-                            aria-pressed={ativa}
-                            className={cn(!ativa && "text-muted-foreground")}
-                            onClick={() => pegar(geometria, natureza.chave)}
-                          >
-                            <AmostraDaForma
-                              geometria={geometria.chave}
-                              natureza={natureza.chave}
-                            />
-                          </Button>
-                        }
-                      />
-                      <TooltipContent side="top">
-                        <p className="font-medium">{natureza.label}</p>
-                        <p className="text-muted-foreground max-w-48">
-                          {natureza.hint}
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={naMao ? "secondary" : "ghost"}
+            size="icon-sm"
+            aria-label={t.elementos.botao}
+            aria-pressed={Boolean(naMao)}
+            className={cn(!naMao && "text-muted-foreground")}
+            onClick={() =>
+              naMao ? setTool("select") : pegarElemento(geometria, natureza)
+            }
+          >
+            <AmostraDaForma geometria={geometria} natureza={natureza} />
+          </Button>
+        }
+      />
+      <TooltipContent side={dica}>
+        <p className="font-medium">{t.elementos.botao}</p>
+        <p className="text-muted-foreground max-w-48">{t.elementos.botaoDica}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }

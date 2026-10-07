@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef } from "react";
-import { Signature, Type } from "lucide-react";
 
 import {
   giroDoTexto,
@@ -27,7 +26,6 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import { temAnotacao, type Scene, type Texto } from "@/types/scene";
-import { Chave } from "@/components/mestre/chave-de-estilo";
 
 /** Quanto a letra se apaga enquanto a mesa não a vê. A mesma da forma. */
 const APAGADA = 0.45;
@@ -329,41 +327,9 @@ const TextoSolto = memo(function TextoSolto({
           }}
           handles={CORNER_HANDLES}
           keepAspect
-          // A caixa de opções da letra, na mesma fileira em que a imagem mostra
-          // espelhar e excluir: é onde a mão já procura depois de clicar.
-          estilo={{
-            negrito: texto.negrito,
-            italico: texto.italico,
-            sublinhado: texto.sublinhado,
-            onChange: (patch) => updateTexto(sceneId, texto.id, patch),
-          }}
-          paleta={{
-            titulo: t.texto.letra,
-            cor: texto.cor,
-            fundo: texto.fundo,
-            onChange: ({ cor, fundo }) =>
-              updateTexto(sceneId, texto.id, {
-                // `null` é "de volta ao padrão", e no modelo o padrão é o campo
-                // ausente. Ver `Texto`.
-                ...(cor !== undefined ? { cor: cor ?? undefined } : {}),
-                ...(fundo !== undefined ? { fundo: fundo ?? undefined } : {}),
-              }),
-            // A letra de mão do postit, para este texto. O padrão com que ele
-            // nasceu é o da campanha; aqui é a exceção. Ver `padraoDoQuadro`.
-            extras: (
-              <Chave
-                titulo={t.texto.letraDeMao}
-                ligada={!!texto.aMao}
-                desligada={{ rotulo: t.texto.letraDaInterface, Icone: Type }}
-                ligadaComo={{ rotulo: t.texto.letraDeMao, Icone: Signature }}
-                onMudar={(valor) =>
-                  updateTexto(sceneId, texto.id, {
-                    aMao: valor ? true : undefined,
-                  })
-                }
-              />
-            ),
-          }}
+          // A cor, o fundo, o estilo e a letra moram no painel de texto, no
+          // canto -- ver `PainelDeTexto`. O gizmo fica com o que é dele: mover,
+          // girar, escalar, o olho da mesa, o cadeado e a lixeira.
           /**
            * Pelo GESTO, e não pelo board: aumentar a letra arrastando o canto
            * gravava a cena a cada quadro, e cada gravação é um commit inteiro

@@ -8,26 +8,18 @@ import {
   MapPin,
   MousePointer2,
   Pencil,
-  X,
   Ruler,
   Spline,
   StickyNote,
   Type,
 } from "lucide-react";
-import { createElement, useEffect, useMemo, useState } from "react";
+import { createElement, useEffect, useMemo } from "react";
 
 import { BarreiraDeExtensao } from "@/components/mestre/barreira-de-extensao";
-import { FormaControl } from "@/components/mestre/forma-control";
-import { PencilControl } from "@/components/mestre/pencil-control";
-import { PilulaDeDesenho } from "@/components/mestre/pilula-de-desenho";
+import { BotaoDeElementos } from "@/components/mestre/pilula-de-desenho";
 import { ReguaControl } from "@/components/mestre/regua-control";
 import { PostitControl } from "@/components/mestre/postit-control";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -119,12 +111,12 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
  * As do MAPA: marcam o chão -- pontos e papéis. Junto delas fica a régua, que
  * também é sobre o mapa e não sobre o que anda nele.
  *
- * A área escondida e a parede saíram daqui para a pílula de desenho: as duas
- * são REGIÕES, e a pergunta "qual o desenho dela" passou a ser a mesma nas
- * três naturezas. Ver `PilulaDeDesenho`.
+ * A área escondida e a parede saíram daqui para os Elementos: as duas são
+ * REGIÕES, e a pergunta "qual o desenho dela" passou a ser a mesma nas quatro
+ * naturezas. Ver `BotaoDeElementos`.
  *
  * Moram na régua da borda direita, à vista -- ver `ReguaDoMapa`. No quadro só o
- * postit sobrevive, e sobe para a régua da esquerda: ver `DA_REGUA`.
+ * postit sobrevive, e sobe para a barra do topo: ver `DO_QUADRO`.
  */
 const FERRAMENTAS_MAPA: Ferramenta[] = [
   {
@@ -205,30 +197,6 @@ const FERRAMENTAS_QUADRO: Ferramenta[] = [
 ];
 
 /**
- * O que a régua leva em cada tipo de cena.
- *
- * No QUADRO: o postit -- que ali é conteúdo, e não anotação -- mais a letra, as
- * formas e a seta. A névoa e o alfinete ficam de fora: quadro não tem chão para
- * esconder, e o ponto é nota fechada atrás de um alfinete, que não faz sentido
- * onde a nota já é o cartão.
- *
- * No MAPA: só as de desenhar. O ponto e o postit são do CHÃO, e o chão tem
- * régua própria na borda oposta -- ver `ReguaDoMapa`. Uma barra para cada
- * pergunta: à esquerda o que eu desenho, à direita o que eu marco.
- */
-const DA_REGUA: Record<"quadro" | "mapa", Ferramenta[]> = {
-  quadro: [
-    // Do que é do mapa, só o POSTIT sobe para a régua do quadro: ali ele é
-    // conteúdo, e não anotação. O alfinete não tem o que fazer numa folha, e a
-    // área escondida e a parede saíram para a pílula.
-    ...FERRAMENTAS_MAPA.filter((f) => f.tool === "postit"),
-    ...FERRAMENTAS_DE_DESENHO,
-    ...FERRAMENTAS_QUADRO,
-  ],
-  mapa: FERRAMENTAS_DE_DESENHO,
-};
-
-/**
  * Esta ferramenta é a que está na mão? O tipo de forma e o formato de área
  * entram na conta — são eles que separam botões que compartilham a ferramenta.
  */
@@ -298,7 +266,7 @@ function ControleDeExtensao() {
 
   return (
     <>
-      <span className="bg-border my-1 h-px w-5" />
+      <Separador />
       <BarreiraDeExtensao nome={extensao.nome} reserva={null}>
         {createElement(registrada.opcoes)}
       </BarreiraDeExtensao>
@@ -310,7 +278,7 @@ function ControleDeExtensao() {
  * Um botão de ferramenta, com o nome e o que ela faz no `tooltip`.
  *
  * Lê o store por conta própria em vez de receber "está ativa?" de fora: ele
- * aparece nas duas réguas e na bolsa do rodapé, e a versão que recebia a
+ * aparece na barra do topo e na régua do mapa, e a versão que recebia a
  * resposta pronta obrigava cada dono a repetir a mesma comparação -- que é
  * justamente onde o tipo de forma seria esquecido.
  */
@@ -323,11 +291,11 @@ function BotaoDeFerramenta({
   ferramenta: Ferramenta;
   desabilitada?: boolean;
   /**
-   * De que lado a dica abre. Ausente = em cima, que é o do rodapé. A régua do
-   * mapa pede `left`: encostada na borda direita, a dica em cima cobriria o
-   * botão de cima da própria régua.
+   * De que lado a dica abre. Ausente = em cima. A régua do mapa pede `left`:
+   * encostada na borda direita, a dica em cima cobriria o botão de cima da
+   * própria régua. A barra do topo pede `bottom`: em cima não há palco.
    */
-  dica?: "top" | "left";
+  dica?: "top" | "left" | "bottom";
   /** Depois de escolher. É por aqui que a bolsa se fecha. */
   aoEscolher?: () => void;
 }) {
@@ -411,13 +379,12 @@ function reguaDeMedir(scene: Scene): Ferramenta {
  * do rodapé, atrás de dois cliques, e a bolsa dizia o que tinha dentro só
  * depois de aberta -- num mapa novo, ninguém descobre o que nunca viu.
  *
- * À DIREITA, de frente para a régua de desenho: as duas são barras expostas e
- * as duas respondem perguntas diferentes -- a da esquerda, "o que eu desenho";
- * esta, "o que eu marco no chão". Um canto para cada, e nenhuma delas atravessa
- * o rodapé, que continua sendo do PALCO.
+ * À DIREITA, à parte da barra do topo: as duas respondem perguntas diferentes
+ * -- a do topo, "o que eu faço com a mão e o que eu desenho"; esta, "o que eu
+ * marco no chão". Ver `MestreToolbar`.
  *
  * Fora do QUADRO, que não tem chão: nem ponto, nem medida. O postit dele é
- * conteúdo, e por isso mora na régua da esquerda -- ver `DA_REGUA`.
+ * conteúdo, e por isso mora na barra do topo -- ver `DO_QUADRO`.
  *
  * No FUNDO ela aparece pela metade: ponto e postit ficam -- anotar sobre a
  * imagem é o mesmo gesto de anotar sobre o mapa --, e a medida sai com o
@@ -510,126 +477,42 @@ function ControleDoMapa() {
 }
 
 /**
- * A régua de DESENHO, encostada na borda esquerda do palco.
- *
- * À vista, e não dentro de uma bolsa: desenhar é trocar de ferramenta a cada
- * gesto -- escreve o rótulo, cerca a região, risca o eixo --, e a bolsa cobrava
- * dois cliques por troca e ainda exigia saber que a régua morava atrás de um
- * ícone.
- *
- * À esquerda e no meio da altura, e não no rodapé junto das outras: é a borda
- * que o editor de desenho usa para isto desde sempre, fica longe do zoom e das
- * câmeras, e deixa o rodapé para o que é do PALCO -- selecionar, deslocar,
- * riscar --, que continua valendo em mapa e em quadro.
- *
- * Nos DOIS tipos de cena, e o que muda é só o que ela carrega -- ver `DA_REGUA`.
- * Ela nasceu só no quadro porque só o quadro tinha o que desenhar; com a letra
- * e a forma valendo também no mapa, deixá-la no quadro obrigaria as mesmas
- * ferramentas a morar em dois lugares diferentes conforme a cena, que é
- * exatamente o que faz alguém não achar uma delas.
- *
- * O controle da ferramenta ativa vem no fim da régua, e não no rodapé: escolher
- * o quadrado e ter de atravessar o palco para trocar a cor dele seria separar
- * duas metades do mesmo gesto.
+ * O que o QUADRO acrescenta à barra, depois das seis de sempre: o postit -- que
+ * ali é conteúdo, e não anotação -- e a seta entre duas coisas. No mapa o
+ * postit mora na régua da direita, e a seta não existe: ver `ReguaDoMapa` e
+ * `FERRAMENTAS_QUADRO`.
  */
-export function ReguaDeDesenho({ scene }: { scene: Scene }) {
-  const dasExtensoes = useFerramentasDeExtensao();
-  const quadro = ehQuadro(scene);
-
-  return (
-    <div className="bg-background/85 pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-      {/* A pílula primeiro, porque ela é a porta do que se DESENHA: quadrado,
-          círculo e traço livre, cada um virando parede, área escondida ou
-          elemento. O que sobra na régua abaixo dela são os alvos diretos, que
-          não têm desenho a escolher. Ver `PilulaDeDesenho`. */}
-      <PilulaDeDesenho scene={scene} />
-
-      <span className="bg-border my-1 h-px w-5" />
-
-      {DA_REGUA[quadro ? "quadro" : "mapa"].map((ferramenta) => (
-        <BotaoDeFerramenta
-          key={
-            ferramenta.tipoDeForma ??
-            ferramenta.formatoDeArea ??
-            ferramenta.tool
-          }
-          ferramenta={ferramenta}
-        />
-      ))}
-
-      {/* As de plugin acompanham a régua só no quadro. No mapa elas já estão na
-          régua da direita, e o mesmo botão em dois cantos do palco seria duas
-          respostas para a pergunta de onde ele mora. */}
-      {quadro && dasExtensoes.length > 0 ? (
-        <>
-          <span className="bg-border my-1 h-px w-5" />
-          {dasExtensoes.map((ferramenta) => (
-            <BotaoDeFerramenta key={ferramenta.tool} ferramenta={ferramenta} />
-          ))}
-        </>
-      ) : null}
-
-      {/* Os controles se escondem sozinhos quando não é a vez deles, e por isso
-          o separador também precisa saber: sem ele, a régua ficaria com um
-          risco solto no pé metade do tempo. */}
-      <SeparadorDoControle quadro={quadro} />
-      {quadro ? <ControleDeExtensao /> : null}
-    </div>
-  );
-}
+const DO_QUADRO: Ferramenta[] = [
+  ...FERRAMENTAS_MAPA.filter((f) => f.tool === "postit"),
+  ...FERRAMENTAS_QUADRO,
+];
 
 /**
- * O risco e o controle da ferramenta na mão, ou nada.
+ * A barra de ferramentas, no TOPO do palco, ao centro.
  *
- * O da forma acompanha a régua nos dois tipos de cena, porque é na régua que a
- * forma é escolhida. O do postit só no quadro: no mapa o papel é escolhido na
- * régua da direita, e a cor dele fica ao lado de onde a escolha aconteceu.
- */
-function SeparadorDoControle({ quadro }: { quadro: boolean }) {
-  const tool = useToolStore((state) => state.tool);
-  const postit = quadro && tool === "postit";
-
-  if (!postit && tool !== "forma") return null;
-
-  return (
-    <>
-      <span className="bg-border my-1 h-px w-5" />
-      {postit ? <PostitControl lado="right" /> : null}
-      <FormaControl lado="right" />
-    </>
-  );
-}
-
-/**
- * As ferramentas do RODAPÉ: a bolsa do PALCO, e só ela.
+ * Seta, Mão, Lápis, Borracha, Texto, Elementos: o que se faz com a mão a cada
+ * minuto e o que se desenha, numa fileira só, à vista. Eram duas barras e uma
+ * bolsa -- o palco no rodapé, atrás de um botão que abria a fileira; o desenho
+ * numa régua na borda esquerda --, e trocar do lápis para o texto atravessava
+ * a tela. A régua do MAPA continua na borda direita: o que se marca no chão é
+ * outra pergunta, e ela segue respondida lá.
  *
- * Como pasta de aplicativos no celular: um botão à vista, e ele abre a fileira
- * do grupo por cima. O que mora aqui é o que se faz com a MÃO a cada minuto --
- * escolher, deslocar, riscar, apagar --, e vale nos dois tipos de cena.
+ * No topo e não no rodapé: o canto de baixo à esquerda ficou para os painéis
+ * da ferramenta na mão -- o do pincel, o de Elementos, o de texto --, que
+ * crescem para cima. A barra em cima e o painel embaixo nunca disputam o
+ * mesmo lugar.
  *
- * As outras duas famílias saíram para as bordas, cada uma numa barra exposta: o
- * que se DESENHA à esquerda (`ReguaDeDesenho`) e o que se marca no CHÃO à
- * direita (`ReguaDoMapa`). A bolsa do mapa era a última que sobrava, e ela
- * cobrava dois cliques por troca e só dizia o que tinha dentro depois de
- * aberta.
+ * Sem o botão de largar que o rodapé tinha: a Seta está sempre à vista na
+ * barra, e escolhê-la é largar o que estava na mão. O Esc continua.
  *
- * O botão da bolsa mostra a ferramenta ATIVA dela, e não um ícone fixo: com a
- * bolsa fechada, o que está na mão é a única informação que importa. Escolher
- * uma ferramenta fecha a bolsa — escolheu, vai usar.
- *
- * A cor do lápis fica FORA da bolsa, ao lado dos botões: dentro, sumiria junto
- * com ela no instante em que o mestre escolhesse a ferramenta que a pede. A
- * regra é sempre a mesma -- o controle fica ao lado de onde a ferramenta foi
- * escolhida --, e é ela que leva a cor da forma para a régua da esquerda e a do
- * postit e do medidor para a régua do mapa.
+ * No QUADRO, depois de um separador, vêm as que só existem lá -- o postit e a
+ * seta --, as dos plugins e o controle da que está na mão.
  */
 export function MestreToolbar({ scene }: { scene: Scene }) {
   const tool = useToolStore((state) => state.tool);
   const setTool = useToolStore((state) => state.setTool);
-  const tipoDeForma = useToolStore((state) => state.tipoDeForma);
-  const formatoDeArea = useToolStore((state) => state.formatoDeArea);
-
-  const [aberta, setAberta] = useState<"palco" | null>(null);
+  const dasExtensoes = useFerramentasDeExtensao();
+  const quadro = ehQuadro(scene);
 
   // Trocar de um mapa para um quadro com a névoa na mão deixaria a ferramenta
   // ativa sem botão na barra -- e o clique seguinte cobriria o quadro de preto.
@@ -666,128 +549,44 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     if (!dona?.habilitada) setTool("select");
   }, [extensoes, tool, setTool]);
 
-  // A ferramenta ativa da bolsa, para o botão dela mostrar.
-  const daBolsa = (lista: Ferramenta[]) =>
-    lista.find((f) => ehAtiva(f, tool, tipoDeForma, formatoDeArea));
-
-  const fechar = () => setAberta(null);
-
   return (
     <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
-      <Bolsa
-        nome={t.mestreToolbar.ferramentasDoPalco}
-        dica={t.mestreToolbar.ferramentasDoPalcoDica}
-        aberta={aberta === "palco"}
-        onAberta={(v) => setAberta(v ? "palco" : null)}
-        ativa={daBolsa(FERRAMENTAS_PALCO)}
-        icone={MousePointer2}
-      >
-        {FERRAMENTAS_PALCO.map((ferramenta) => (
-          <BotaoDeFerramenta
-            key={ferramenta.tool}
-            ferramenta={ferramenta}
-            aoEscolher={fechar}
-          />
-        ))}
-      </Bolsa>
+      {FERRAMENTAS_PALCO.map((ferramenta) => (
+        <BotaoDeFerramenta key={ferramenta.tool} ferramenta={ferramenta} dica="bottom" />
+      ))}
+      {FERRAMENTAS_DE_DESENHO.map((ferramenta) => (
+        <BotaoDeFerramenta key={ferramenta.tool} ferramenta={ferramenta} dica="bottom" />
+      ))}
+      <BotaoDeElementos scene={scene} dica="bottom" />
 
-      {/* Só com o LÁPIS na mão, e ele se esconde sozinho. É o único controle
-          que sobrou no rodapé, pela regra de sempre: o lápis é escolhido aqui.
-          A cor da forma acompanha a régua da esquerda; a do postit e a do
-          medidor, a régua do mapa. */}
-      <PencilControl />
-
-      {/* Largar a ferramenta, para quem escolheu e desistiu. O Esc faz o mesmo,
-          mas um botão à vista é o que diz que dá para desistir. Só aparece com
-          algo na mão -- sem ferramenta não há o que largar, e um X permanente
-          na barra leria como "fechar a barra". */}
-      {tool !== "select" ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t.mestreToolbar.largar}
-                onClick={() => {
-                  setTool("select");
-                  fechar();
-                }}
-              >
-                <X />
-              </Button>
-            }
-          />
-          <TooltipContent>{t.mestreToolbar.largarComTecla}</TooltipContent>
-        </Tooltip>
+      {quadro ? (
+        <>
+          <Separador />
+          {DO_QUADRO.map((ferramenta) => (
+            <BotaoDeFerramenta key={ferramenta.tool} ferramenta={ferramenta} dica="bottom" />
+          ))}
+          {/* As de plugin acompanham a barra só no quadro. No mapa elas já
+              estão na régua da direita, e o mesmo botão em dois cantos do
+              palco seria duas respostas para a pergunta de onde ele mora. */}
+          {dasExtensoes.map((ferramenta) => (
+            <BotaoDeFerramenta key={ferramenta.tool} ferramenta={ferramenta} dica="bottom" />
+          ))}
+          {/* O controle da que está na mão, ao lado de onde ela foi
+              escolhida: a cor do postit, as opções do plugin. */}
+          {tool === "postit" ? (
+            <>
+              <Separador />
+              <PostitControl lado="bottom" />
+            </>
+          ) : null}
+          <ControleDeExtensao />
+        </>
       ) : null}
     </div>
   );
 }
 
-/**
- * Um botão que abre a fileira do grupo por cima.
- *
- * Com uma ferramenta do grupo na mão, o botão vira ela — mesmo desenho e mesma
- * cor de "apertado" que ela teria na fileira. Sem nenhuma, mostra o ícone do
- * grupo, apagado.
- */
-function Bolsa({
-  nome,
-  dica,
-  aberta,
-  onAberta,
-  ativa,
-  icone: Icone,
-  children,
-}: {
-  nome: string;
-  dica: string;
-  aberta: boolean;
-  onAberta: (aberta: boolean) => void;
-  ativa: Ferramenta | undefined;
-  icone: typeof MousePointer2;
-  children: React.ReactNode;
-}) {
-  const Ativo = ativa?.icon ?? Icone;
-
-  return (
-    <Popover open={aberta} onOpenChange={onAberta}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <PopoverTrigger
-              render={
-                <Button
-                  variant={ativa ? "secondary" : "ghost"}
-                  size="icon-sm"
-                  aria-label={nome}
-                  aria-expanded={aberta}
-                  className={ativa ? undefined : "text-muted-foreground"}
-                >
-                  <Ativo />
-                </Button>
-              }
-            />
-          }
-        />
-        <TooltipContent>
-          <p className="font-medium">{ativa ? ativa.label : nome}</p>
-          <p className="text-muted-foreground max-w-48">
-            {ativa ? t.mestreToolbar.cliqueParaTrocar(nome) : dica}
-          </p>
-        </TooltipContent>
-      </Tooltip>
-
-      <PopoverContent
-        align="start"
-        side="top"
-        className="flex w-auto items-center gap-0.5 p-1"
-        role="toolbar"
-        aria-label={nome}
-      >
-        {children}
-      </PopoverContent>
-    </Popover>
-  );
+/** O risco entre dois grupos da barra. */
+function Separador() {
+  return <span className="bg-border mx-1 h-5 w-px" />;
 }

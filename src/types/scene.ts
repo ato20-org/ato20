@@ -563,6 +563,38 @@ export type FogRegion = {
    * filtros de "quem anda" servirem a todos. Ver `trava` em `TransformHandles`.
    */
   locked?: boolean;
+  /**
+   * Os furos que a borracha abriu. Ausente = nenhum, que é o normal.
+   *
+   * Na área, e não uma lista da cena: o furo é um pedaço DESTA névoa, e mover,
+   * escalar, girar, copiar e desfazer a área têm de levá-lo junto sem ninguém
+   * atualizar duas coisas. Ver `FuroDaArea`.
+   */
+  furos?: FuroDaArea[];
+  /**
+   * Dinâmica: a lanterna de cada token abre buraco nela enquanto alcança, e a
+   * névoa volta quando a luz vai embora. Ausente = estática, a de sempre.
+   *
+   * Sem memória do que já foi visto: o buraco é calculado em cada tela, a
+   * partir dos tokens, das paredes e das portas que ela já recebe -- nada
+   * novo atravessa o canal. As paredes e as portas param a revelação como
+   * param a luz. Ver `lanternasDaArea`.
+   */
+  dinamica?: true;
+};
+
+/**
+ * Uma passada da borracha numa área escondida: um traço de pincel redondo.
+ *
+ * Em FRAÇÃO da caixa, como os vértices do polígono, e pela mesma razão: mover,
+ * escalar e girar a área levam o furo junto, sem tocar num ponto. O raio é em
+ * fração da LARGURA -- crescer a área cresce o furo na mesma conta.
+ */
+export type FuroDaArea = {
+  /** Metade da espessura do pincel, em fração da largura da caixa. */
+  raio: number;
+  /** Achatados -- `x0, y0, x1, y1, ...` --, em fração da caixa. */
+  pontos: number[];
 };
 
 /**
@@ -876,8 +908,27 @@ export type Texto = {
   /**
    * Letra de mão, a do postit (Kalam). Ausente = a letra da interface. O mesmo
    * `aMao` da forma e da seta: é o traço à mão da campanha chegando ao texto.
+   *
+   * Continua gravado junto da `familia`, e é ele que diz "mão" no texto antigo:
+   * ver `familiaDoTexto`.
    */
   aMao?: true;
+  /**
+   * A família da letra. Ausente = a do `aMao`: mão com ele, a da interface sem.
+   *
+   * Um campo à parte, e não o `aMao` virando lista: o texto gravado antes de a
+   * família existir continua válido sem migração nenhuma. Ver `familiaDoTexto`.
+   */
+  familia?: FamiliaDoTexto;
+  /**
+   * Como as linhas se alinham entre si. Ausente = à esquerda, a de sempre.
+   *
+   * Só se vê com mais de uma linha: o texto não tem largura fixa, e a caixa é
+   * a da linha mais longa -- as outras se alinham dentro dela.
+   */
+  alinhamento?: "centro" | "direita";
+  /** De 0 a 1, no texto inteiro, com o fundo. Ausente = 1. */
+  opacidade?: number;
   /**
    * Está na mesa? Ausente = só o mestre vê, e é o padrão.
    *
@@ -922,6 +973,9 @@ export type NewTexto = Pick<Texto, "x" | "y"> &
       | "italico"
       | "sublinhado"
       | "aMao"
+      | "familia"
+      | "alinhamento"
+      | "opacidade"
       | "naMesa"
       | "locked"
     >
@@ -949,6 +1003,9 @@ export function semIdDoTexto(texto: Texto): NewTexto {
     italico: texto.italico,
     sublinhado: texto.sublinhado,
     aMao: texto.aMao,
+    familia: texto.familia,
+    alinhamento: texto.alinhamento,
+    opacidade: texto.opacidade,
     // Como na forma: a decisão de mostrar acompanha a cópia.
     naMesa: texto.naMesa,
     locked: texto.locked,
@@ -957,6 +1014,46 @@ export function semIdDoTexto(texto: Texto): NewTexto {
 
 /** Tamanho de fonte de um texto novo, em unidades de cena. */
 export const TEXTO_TAMANHO = 40;
+
+/**
+ * As famílias de letra de um texto: a da interface (Geist), a de mão do
+ * postit (Kalam) e a de código (Geist Mono). As três que o aplicativo já
+ * carrega -- nenhum arquivo novo no pacote do Mestre nem no do celular.
+ */
+export const FAMILIAS_DO_TEXTO = ["interface", "mao", "codigo"] as const;
+
+export type FamiliaDoTexto = (typeof FAMILIAS_DO_TEXTO)[number];
+
+/** A família de um texto, lendo o `aMao` de quem foi gravado antes dela. */
+export function familiaDoTexto(
+  texto: Pick<Texto, "familia" | "aMao">,
+): FamiliaDoTexto {
+  return texto.familia ?? (texto.aMao ? "mao" : "interface");
+}
+
+/**
+ * O que gravar para pôr um texto nesta família.
+ *
+ * O mínimo de campos: a interface é a ausência dos dois, e a mão continua
+ * sendo o `aMao` de sempre -- só o código precisa do campo novo. Assim um
+ * arquivo de cena só muda de forma quando há o que dizer, e o texto escrito à
+ * mão se lê igual numa versão do aplicativo anterior à família.
+ */
+export function patchDaFamilia(
+  familia: FamiliaDoTexto,
+): Pick<Texto, "familia" | "aMao"> {
+  return {
+    familia: familia === "codigo" ? "codigo" : undefined,
+    aMao: familia === "mao" ? true : undefined,
+  };
+}
+
+/**
+ * Os tamanhos de cara do painel de texto, em unidades de cena: pequeno, médio,
+ * grande e enorme. O médio é o de sempre (`TEXTO_TAMANHO`); o canto do gizmo
+ * continua escalando em qualquer número entre eles.
+ */
+export const TAMANHOS_DO_TEXTO = { S: 24, M: TEXTO_TAMANHO, L: 64, XL: 96 } as const;
 
 /** As formas que o quadro desenha. Ver `Forma`. */
 export const TIPOS_DE_FORMA = [
@@ -1327,7 +1424,12 @@ export type Spotlight = {
 
 /** O que o chamador informa ao desenhar uma área; `id` e `revealed` são do store. */
 export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height"> &
-  Partial<Pick<FogRegion, "formato" | "rotation" | "pontos" | "locked">>;
+  Partial<
+    Pick<
+      FogRegion,
+      "formato" | "rotation" | "pontos" | "locked" | "furos" | "dinamica"
+    >
+  >;
 
 /**
  * A área sem o id e sem o `revealed`, campo a campo -- o que copiar guarda.
@@ -1346,6 +1448,8 @@ export function semIdDaArea(area: FogRegion): NewFogRegion {
     rotation: area.rotation,
     pontos: area.pontos,
     locked: area.locked,
+    furos: area.furos,
+    dinamica: area.dinamica,
   };
 }
 
@@ -1374,9 +1478,17 @@ export type Traco = {
   cor: string;
   /** Espessura em unidades de cena, para acompanhar o zoom como o resto. */
   espessura: number;
+  /**
+   * De 0 a 1, no risco inteiro. Ausente = 1, o risco cheio de sempre.
+   *
+   * No risco, e não na cor: o trecho em que o traço cruza a si mesmo não
+   * escurece, e é a marca-texto que o mestre quer por cima do mapa, e não
+   * camadas de tinta.
+   */
+  opacidade?: number;
 };
 
-export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura">;
+export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura" | "opacidade">;
 
 /** As formas de régua. Ver `Regua`. */
 export const FORMAS_DE_REGUA = ["linha", "circulo", "cone", "retangulo"] as const;

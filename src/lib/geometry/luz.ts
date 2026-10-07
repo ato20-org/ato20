@@ -1251,3 +1251,46 @@ export function anguloEntre(de: number, ate: number, t: number): number {
   const diferenca = ((((ate - de) % 360) + 540) % 360) - 180;
   return de + diferenca * t;
 }
+
+/** A luz andou desde o último desenho? Uma que acabou de acender não anda. */
+export function luzMudou(antes: FonteDeLuz | undefined, agora: FonteDeLuz): boolean {
+  return (
+    antes !== undefined &&
+    (antes.x !== agora.x ||
+      antes.y !== agora.y ||
+      antes.raio !== agora.raio ||
+      antes.raioIntenso !== agora.raioIntenso ||
+      antes.cone?.angulo !== agora.cone?.angulo ||
+      antes.cone?.abertura !== agora.cone?.abertura)
+  );
+}
+
+/** A luz no meio do caminho entre dois desenhos. `t` de 0 a 1. */
+export function luzEntre(
+  antes: FonteDeLuz | undefined,
+  depois: FonteDeLuz,
+  t: number,
+): FonteDeLuz {
+  if (!antes) return depois;
+
+  return {
+    ...depois,
+    x: antes.x + (depois.x - antes.x) * t,
+    y: antes.y + (depois.y - antes.y) * t,
+    raio: antes.raio + (depois.raio - antes.raio) * t,
+    raioIntenso:
+      antes.raioIntenso + (depois.raioIntenso - antes.raioIntenso) * t,
+    // O cone gira pela volta curta. O que acabou de virar cone, ou de deixar
+    // de ser, chega de uma vez: não há meio caminho entre um e outro.
+    ...(antes.cone && depois.cone
+      ? {
+          cone: {
+            angulo: anguloEntre(antes.cone.angulo, depois.cone.angulo, t),
+            abertura:
+              antes.cone.abertura +
+              (depois.cone.abertura - antes.cone.abertura) * t,
+          },
+        }
+      : {}),
+  };
+}

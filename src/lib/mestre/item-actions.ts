@@ -571,8 +571,13 @@ export function duplicateSelection(): void {
     postits: selectedPostits.map((postit) =>
       postitDeslocado(semIdDoPostit(postit)),
     ),
-    tracos: selectedTracos.map(({ pontos, cor, espessura }) =>
-      tracoDeslocado({ pontos, cor, espessura }),
+    tracos: selectedTracos.map(({ pontos, cor, espessura, opacidade }) =>
+      tracoDeslocado({
+        pontos,
+        cor,
+        espessura,
+        ...(opacidade !== undefined ? { opacidade } : {}),
+      }),
     ),
     paredes: paredes.map((parede) => paredeDeslocada(semIdDaParede(parede))),
     portas: portas.map((porta) => portaDeslocada(semIdDaPorta(porta))),

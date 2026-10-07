@@ -17,6 +17,8 @@ import {
   DoorOpen,
   Drama,
   Eclipse,
+  Eraser,
+  Flashlight,
   Sparkles,
   Eye,
   EyeOff,
@@ -436,6 +438,22 @@ type TransformHandlesProps = {
    */
   porta?: { aberta: boolean; onToggle: () => void };
   /**
+   * Presente = mostra a LANTERNA, que liga a névoa dinâmica. Só a área
+   * escondida passa.
+   *
+   * Um par estado/ação como o teto: aceso = a lanterna de cada token abre esta
+   * área enquanto alcança. Ver `FogRegion.dinamica`.
+   */
+  dinamica?: { ligada: boolean; onToggle: () => void };
+  /**
+   * Presente = mostra a BORRACHA, que fura esta área no arrasto. Só a área
+   * escondida passa.
+   *
+   * Aceso enquanto ela está na mão: o gesto sobre o palco passa a furar, e é
+   * pelo mesmo botão que se volta à seleção. Ver `FogRegion.furos`.
+   */
+  borracha?: { ativa: boolean; onToggle: () => void };
+  /**
    * Presente = mostra o botão que abre a ficha de quem este item é.
    *
    * Só aparece em token, que é item com `personagemId`. Uma imagem de mobília
@@ -489,6 +507,8 @@ export function TransformHandles({
   teto,
   altura,
   porta,
+  dinamica,
+  borracha,
   trava,
 }: TransformHandlesProps) {
   const travada = trava?.travada ?? false;
@@ -670,6 +690,8 @@ export function TransformHandles({
       teto ||
       altura ||
       porta ||
+      dinamica ||
+      borracha ||
       trava ||
       onDelete ? (
         <div
@@ -1215,6 +1237,97 @@ export function TransformHandles({
                 {porta.aberta
                   ? t.transformHandles.fecharPorta
                   : t.transformHandles.abrirPorta}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {/* A névoa dinâmica e a borracha, depois da porta e pela mesma razão:
+              são gestos da sessão -- abrir o corredor que os jogadores acabaram
+              de explorar --, e o resto da fileira é de quem prepara. */}
+          {dinamica ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={
+                      dinamica.ligada
+                        ? t.transformHandles.desligarNevoaDinamica
+                        : t.transformHandles.ligarNevoaDinamica
+                    }
+                    aria-pressed={dinamica.ligada}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      dinamica.ligada
+                        ? "bg-amber-500 text-neutral-950"
+                        : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      dinamica.onToggle();
+                    }}
+                  >
+                    <Flashlight
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <TooltipContent>
+                <p className="text-muted-foreground max-w-56">
+                  {dinamica.ligada
+                    ? t.transformHandles.nevoaDinamicaDica
+                    : t.transformHandles.nevoaParadaDica}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {borracha ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={
+                      borracha.ativa
+                        ? t.transformHandles.sairDaBorracha
+                        : t.transformHandles.borracha
+                    }
+                    aria-pressed={borracha.ativa}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      borracha.ativa
+                        ? "bg-amber-500 text-neutral-950"
+                        : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      borracha.onToggle();
+                    }}
+                  >
+                    <Eraser
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <TooltipContent>
+                <p className="text-muted-foreground max-w-56">
+                  {borracha.ativa
+                    ? t.transformHandles.borrachaAtivaDica
+                    : t.transformHandles.borrachaDica}
+                </p>
               </TooltipContent>
             </Tooltip>
           ) : null}

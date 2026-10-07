@@ -60,6 +60,10 @@ import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
+import {
+  fotografarCamera,
+  fotografarTripe,
+} from "@/lib/mestre/foto-da-camera";
 import { EFEITOS_DE_FABRICA } from "@/lib/efeitos";
 import type { Personagem } from "@/types/character";
 import {
@@ -76,6 +80,7 @@ import {
   type AssetMeta,
   type CanvasItem,
   type EfeitoDaLuz,
+  type FogRegion,
   type Parede,
   type Porta,
   type Scene,
@@ -204,6 +209,7 @@ type Cenario =
   | "biblioteca"
   | "lista"
   | "lista-mesmo-mapa"
+  | "fotos"
   | "camadas"
   | "camera"
   | "mestre-camera"
@@ -554,6 +560,33 @@ function personagensDaMedida(quantos: number, estilo: EstiloDaMedida): Personage
   }));
 }
 
+/**
+ * A névoa dinâmica desta corrida: `?nevoa=K`. K áreas em faixas verticais
+ * lado a lado, cobrindo o plano inteiro -- a lanterna que o arrasto move
+ * atravessa uma a uma, e cada área que ela alcança repinta. Com K em um, a
+ * área é o plano todo: o maior canvas que a névoa chega a ter. Ver
+ * `FogRegion.dinamica`.
+ */
+function nevoaDaMedida(): FogRegion[] {
+  if (typeof window === "undefined") return [];
+
+  const quantas = Number(
+    new URLSearchParams(window.location.search).get("nevoa") ?? 0,
+  );
+  if (!(quantas > 0)) return [];
+
+  const largura = SCENE_WIDTH / quantas;
+  return Array.from({ length: quantas }, (_, i) => ({
+    id: `perf-nevoa-${i}`,
+    x: Math.round(i * largura),
+    y: 0,
+    width: Math.round(largura),
+    height: SCENE_HEIGHT,
+    revealed: false,
+    dinamica: true,
+  }));
+}
+
 function lanternasDaMedida(): number {
   if (typeof window === "undefined") return 0;
 
@@ -607,7 +640,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
     name: "medida",
     backgroundAssetId: "perf-fundo",
     items,
-    fog: [],
+    fog: nevoaDaMedida(),
     ...sombraDaMedida(),
     ...areasDaMedida(),
     cameras: salvas,
@@ -2998,6 +3031,89 @@ function PalcoComLista({ n, mesmoMapa }: { n: number; mesmoMapa: boolean }) {
 }
 
 /**
+ * As FOTOS das câmeras tiradas sem parar, com o palco do `arrasto` andando:
+ * `?cenario=fotos&n=40`. O pior caso de `useFotografoDasCameras`, que no
+ * aplicativo só fotografa depois de a cena parar -- aqui fotografa a cada
+ * 300 ms, com um item andando a cada quadro, para o relógio de quadros pegar o
+ * custo se ele existir.
+ *
+ * Quatro recortes, um por quadrante: o tamanho de câmera mais comum. O tempo
+ * de cada foto e o tamanho dela saem no console (`--console`), a cada dez.
+ */
+function PalcoComFotos({ n, comTripe }: { n: number; comTripe: boolean }) {
+  // A última foto, à vista no canto: é ela que a captura da bancada mostra,
+  // e é assim que se confere que a perspectiva do tripé saiu certa.
+  const [ultima, setUltima] = useState<string | null>(null);
+
+  useEffect(() => {
+    const recortes = [0, 1, 2, 3].map((i) => ({
+      x: (i % 2) * (SCENE_WIDTH / 2),
+      y: Math.floor(i / 2) * (SCENE_HEIGHT / 2),
+      width: SCENE_WIDTH / 2,
+      height: SCENE_HEIGHT / 2,
+    }));
+    const tempos: number[] = [];
+    const tamanhos: number[] = [];
+    let vez = 0;
+    let ocupado = false;
+
+    const tirar = async () => {
+      const cena = selectEditingScene(useSceneStore.getState());
+      if (!cena || ocupado) return;
+      ocupado = true;
+      const inicio = performance.now();
+      // Com `?tripe=1`, uma de cada duas é do tripé: abaixo da borda de baixo,
+      // olhando o mapa para o norte, como o mestre o põe ao entrar no 2.5D.
+      const doTripe = comTripe && vez % 2 === 0;
+      const url = doTripe
+        ? await fotografarTripe(cena, {
+            x: SCENE_WIDTH / 2,
+            y: SCENE_HEIGHT + 300,
+            altura: 700,
+            giro: 0,
+            inclinacao: 55,
+            rolagem: 0,
+            lente: 45,
+          })
+        : await fotografarCamera(cena, recortes[vez % recortes.length]!);
+      // Com tripé, o canto mostra só a dele: é a perspectiva que se confere.
+      if (url && (doTripe || !comTripe)) setUltima(url);
+      tempos.push(performance.now() - inicio);
+      if (url) tamanhos.push(url.length);
+      vez += 1;
+      ocupado = false;
+
+      if (vez % 10 === 0) {
+        const ordenados = [...tempos].sort((a, b) => a - b);
+        const em = (fracao: number) =>
+          ordenados[Math.min(ordenados.length - 1, Math.floor(ordenados.length * fracao))]!;
+        const kb = tamanhos.reduce((soma, cada) => soma + cada, 0) / tamanhos.length / 1024;
+        console.log(
+          `[fotos] n=${n} tripe=${comTripe ? 1 : 0} fotos=${vez} mediana=${em(0.5).toFixed(1)}ms p95=${em(0.95).toFixed(1)}ms pior=${ordenados[ordenados.length - 1]!.toFixed(1)}ms kb=${kb.toFixed(1)}`,
+        );
+      }
+    };
+
+    const relogio = setInterval(() => void tirar(), 300);
+    return () => clearInterval(relogio);
+  }, [n, comTripe]);
+
+  return (
+    <>
+      <PalcoMestre n={n} />
+      {ultima ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={ultima}
+          alt=""
+          className="pointer-events-none fixed top-2 right-2 z-50 w-[384px] rounded border border-white/30"
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
  * A janela de camadas ao lado do palco, com o mesmo gesto de arrasto.
  *
  * A cena sai do store -- a MESMA que `PalcoMestre` monta e mexe --, e não de
@@ -3441,6 +3557,8 @@ function Medida({ params }: { params: URLSearchParams }) {
         />
       ) : cenario === "dados" ? (
         <PalcoDados n={n} zoom={zoomDoPalco} />
+      ) : cenario === "fotos" ? (
+        <PalcoComFotos n={n} comTripe={params.get("tripe") === "1"} />
       ) : cenario === "lista" || cenario === "lista-mesmo-mapa" ? (
         <PalcoComLista n={n} mesmoMapa={cenario === "lista-mesmo-mapa"} />
       ) : cenario === "camadas" ? (
