@@ -191,6 +191,7 @@ import {
 import {
   CORNER_HANDLES,
   MIN_ITEM_SIZE,
+  MIN_SCENE_ITEM_SIZE,
   type ResizeHandle,
   type Vec,
 } from "@/lib/geometry/transform";
@@ -3571,6 +3572,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           box={single}
           handles={CORNER_HANDLES}
           keepAspect
+          // O piso de item de cena, o mesmo do 2.5D: token de mapa grande é
+          // pequeno, e o mestre aproxima a câmera para pegá-lo.
+          minimo={MIN_SCENE_ITEM_SIZE}
           // Azul quando é token: numa cena com mobília, mapa e quatro tokens,
           // saber que a caixa em volta é de uma PESSOA muda o que o mestre vai
           // fazer com ela.

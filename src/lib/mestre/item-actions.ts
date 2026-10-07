@@ -3,7 +3,7 @@
 import { toast } from "sonner";
 
 import {
-  MIN_ITEM_SIZE,
+  MIN_SCENE_ITEM_SIZE,
   normalizeAngle,
   offsetInsideScene,
 } from "@/lib/geometry/transform";
@@ -1314,8 +1314,8 @@ export function escalarPatches(
   const livres = items.filter((item) => !item.locked);
   const cabe = livres.every(
     (item) =>
-      item.width * fator >= MIN_ITEM_SIZE &&
-      item.height * fator >= MIN_ITEM_SIZE,
+      item.width * fator >= MIN_SCENE_ITEM_SIZE &&
+      item.height * fator >= MIN_SCENE_ITEM_SIZE,
   );
   if (!cabe) return [];
 

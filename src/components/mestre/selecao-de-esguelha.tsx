@@ -33,7 +33,7 @@ import {
   raioDoAnel,
   sobeDe,
 } from "@/lib/geometry/peca-de-esguelha";
-import type { Vec } from "@/lib/geometry/transform";
+import { MIN_SCENE_ITEM_SIZE, type Vec } from "@/lib/geometry/transform";
 import { t } from "@/lib/i18n/ferramentas";
 import {
   flipSelection,
@@ -71,8 +71,6 @@ const ALCA_PX = 9;
 const PONTOS_DO_ANEL = 40;
 /** O passo do giro com Shift, em graus. */
 const PASSO_DO_GIRO = 15;
-/** O tamanho mínimo de uma peça, em unidades de cena. */
-const LADO_MINIMO = 8;
 
 type Camera = { camera: CameraOrbital; tela: Tela };
 
@@ -339,7 +337,7 @@ export function SelecaoDeEsguelha({
     arrastar(evento, (nativo) => {
       const aqui = naArea(nativo);
       const fator = Math.hypot(aqui.x - ancora.x, aqui.y - ancora.y) / d0;
-      const largura = Math.max(LADO_MINIMO, item.width * fator);
+      const largura = Math.max(MIN_SCENE_ITEM_SIZE, item.width * fator);
       const altura = (largura / item.width) * item.height;
       if (item.deitado) {
         const centro = centroDe(item);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MIN_ITEM_SIZE,
+  MIN_SCENE_ITEM_SIZE,
   resizeItem,
   travarNoEixo,
 } from "@/lib/geometry/transform";
@@ -16,6 +17,21 @@ describe("resizeItem", () => {
     expect(out.width).toBe(MIN_ITEM_SIZE);
     expect(out.height).toBe(MIN_ITEM_SIZE * 2);
     expect(out.height / out.width).toBeCloseTo(alto.height / alto.width);
+  });
+
+  it("o token encolhe abaixo do piso de item, até o piso de cena", () => {
+    // O caso do mapa de cidade: um token de 24 x 47 que o 2D não deixava
+    // encolher mais, e o 2.5D deixava.
+    const token = { x: 0, y: 0, width: 24, height: 47, rotation: 0 };
+    const out = resizeItem(
+      token,
+      "se",
+      { x: -1000, y: -1000 },
+      { keepAspect: true, round: false, minimo: MIN_SCENE_ITEM_SIZE },
+    );
+
+    expect(out.width).toBe(MIN_SCENE_ITEM_SIZE);
+    expect(out.height / out.width).toBeCloseTo(47 / 24);
   });
 
   it("sem proporção travada, cada eixo para no piso sozinho", () => {

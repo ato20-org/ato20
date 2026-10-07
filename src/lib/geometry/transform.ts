@@ -34,6 +34,16 @@ export const CORNER_HANDLES: readonly ResizeHandle[] = ["nw", "ne", "se", "sw"];
 /** Menor lado permitido, em unidades de cena. Abaixo disso a alça some sob o item. */
 export const MIN_ITEM_SIZE = 24;
 
+/**
+ * O menor lado de um item de CENA -- token, mobília --, em unidades de cena.
+ *
+ * Abaixo do `MIN_ITEM_SIZE`: num mapa de cidade inteira o token de gente tem
+ * poucas unidades de cena, e o 2.5D já deixava encolher até aqui. Os dois
+ * modos têm de concordar, senão o que o 2.5D encolheu o 2D não deixa encolher
+ * de novo. A alça cobre o item pequeno longe; perto, a câmera resolve.
+ */
+export const MIN_SCENE_ITEM_SIZE = 8;
+
 export const ROTATION_SNAP_DEGREES = 15;
 
 /** Cursores por setor de 45 graus, começando no que aponta para a direita. */
