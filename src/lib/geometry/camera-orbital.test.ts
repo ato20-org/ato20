@@ -11,6 +11,7 @@ import {
   curvaBezier,
   daTelaAoChao,
   daTelaAoChaoNoTripe,
+  daTelaAoPlano,
   doOlhoAoMundo,
   focalDaLente,
   misturarTripe,
@@ -101,6 +102,21 @@ describe("projetar e daTelaAoChao", () => {
         const noChao = daTelaAoChao(cam, TELA, pixel);
         if (!noChao) continue;
         const deVolta = projetar(cam, TELA, noChao)!;
+
+        expect(deVolta.x).toBeCloseTo(pixel.x, 6);
+        expect(deVolta.y).toBeCloseTo(pixel.y, 6);
+      }
+    }
+  });
+
+  it("no plano erguido também: o topo de uma parede volta ao mesmo pixel", () => {
+    for (const vista of VISTAS) {
+      const cam = camera(vista);
+
+      for (const pixel of PIXELS) {
+        const noTopo = daTelaAoPlano(cam, TELA, pixel, 80);
+        if (!noTopo) continue;
+        const deVolta = projetar(cam, TELA, noTopo, 80)!;
 
         expect(deVolta.x).toBeCloseTo(pixel.x, 6);
         expect(deVolta.y).toBeCloseTo(pixel.y, 6);
@@ -457,6 +473,20 @@ describe("o tripé no mundo", () => {
     }
   });
 
+  it("com o pé num teto, o dedo segura a figura no plano dele", () => {
+    const pe = { x: 600, y: 400 };
+    const pega = { x: 4, y: -40 };
+    const figura = figuraNoTripe(tripe, TELA, pe, 60)!;
+    const dedo = {
+      x: figura.x + pega.x * figura.escala,
+      y: figura.y + pega.y * figura.escala,
+    };
+    const achado = peSobODedo(tripe, TELA, dedo, pega, 60)!;
+
+    expect(achado.x).toBeCloseTo(pe.x, 2);
+    expect(achado.y).toBeCloseTo(pe.y, 2);
+  });
+
   it("acima do horizonte não há chão", () => {
     // Quase deitado: o alto da tela olha por cima do horizonte.
     const deitado = { ...tripe, inclinacao: 85, rolagem: 0 };
@@ -541,6 +571,12 @@ describe("cartazNaTela", () => {
 
     expect(caixa.x + caixa.largura / 2).toBeCloseTo(noChao.x, 6);
     expect(caixa.y + caixa.altura).toBeCloseTo(noChao.y, 6);
+
+    // Erguido num teto, o pé cai onde `projetar` põe o ponto naquela altura.
+    const noTeto = cartazNaTela(camera, TELA, pe, 40, 60, 80)!;
+    const emCima = projetar(camera, TELA, pe, 80)!;
+    expect(noTeto.x + noTeto.largura / 2).toBeCloseTo(emCima.x, 6);
+    expect(noTeto.y + noTeto.altura).toBeCloseTo(emCima.y, 6);
   });
 
   it("atrás do olho não tem caixa", () => {

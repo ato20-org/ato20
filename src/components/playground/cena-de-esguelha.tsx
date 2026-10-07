@@ -347,6 +347,7 @@ export function CenaDeEsguelha({
         fichas={fichas ?? []}
         objetos={Boolean(fichas) && Boolean(scene.infoDosTokens)}
         camera={camera}
+        paredes={scene.paredes}
       />
 
       {sobre?.(camera)}
