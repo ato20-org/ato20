@@ -1413,9 +1413,17 @@ export type Traco = {
   cor: string;
   /** Espessura em unidades de cena, para acompanhar o zoom como o resto. */
   espessura: number;
+  /**
+   * De 0 a 1, no risco inteiro. Ausente = 1, o risco cheio de sempre.
+   *
+   * No risco, e não na cor: o trecho em que o traço cruza a si mesmo não
+   * escurece, e é a marca-texto que o mestre quer por cima do mapa, e não
+   * camadas de tinta.
+   */
+  opacidade?: number;
 };
 
-export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura">;
+export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura" | "opacidade">;
 
 /** As formas de régua. Ver `Regua`. */
 export const FORMAS_DE_REGUA = ["linha", "circulo", "cone", "retangulo"] as const;

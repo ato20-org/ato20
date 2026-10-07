@@ -61,6 +61,7 @@ import { useAudioStore } from "@/lib/store/use-audio-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { abrirRodaPelaTecla, ehTeclaDoPing } from "@/lib/ping";
+import { mudarTamanhoDoPincel, pincelNaMao } from "@/lib/mestre/pincel";
 import { t } from "@/lib/i18n/bancada";
 
 /**
@@ -704,6 +705,24 @@ export const ATALHOS_BASE: Atalho[] = [
     },
     // Escape não faz nada no browser que valha barrar.
     impedirPadrao: false,
+  },
+
+  // O tamanho do pincel, como em todo editor de imagem: a largura do lápis e
+  // o raio da borracha da névoa. Só com um deles na mão: fora disso a tecla
+  // não tem dono, e Ctrl+[ continua sendo camada. Alt+roda faz o mesmo -- ver
+  // `usePincelNaRoda`.
+  {
+    grupo: "Seleção",
+    tecla: "[  ]",
+    rotulo: t.atalhos.tamanhoDoPincel,
+    combina: (evento) =>
+      !comando(evento) &&
+      (evento.key === "[" || evento.key === "]") &&
+      pincelNaMao(),
+    executar: (evento) => {
+      mudarTamanhoDoPincel(evento.key === "]" ? 1 : -1);
+    },
+    impedirPadrao: true,
   },
 
   // Espelhar. Shift sozinho, sem Ctrl: Ctrl+V já é colar.
