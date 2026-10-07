@@ -15,11 +15,17 @@ import type { CanvasItem, FuroDaArea } from "@/types/scene";
  * Só a `luz` do item, e não a das condições: o goblin em chamas clareia o
  * corredor, mas quem revela a névoa é a lanterna. A luz cravada também fica de
  * fora -- a tocha da parede ilumina a sala, e não a abre para a mesa.
+ *
+ * Inteiras, seja qual for a intensidade: a lanterna fraca clareia pouco, mas o
+ * que ela alcança a mesa vê. Abrir a névoa pela metade deixaria um véu cinza
+ * no lugar da penumbra, e a penumbra é conta da luz, e não da névoa.
  */
 export function lanternasDosTokens(
   items: ReadonlyArray<CanvasItem>,
 ): FonteDeLuz[] {
-  return fontesDaCena(undefined, items);
+  return fontesDaCena(undefined, items).map((fonte) =>
+    fonte.intensidade === 1 ? fonte : { ...fonte, intensidade: 1 },
+  );
 }
 
 /**

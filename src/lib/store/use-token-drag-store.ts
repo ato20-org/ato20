@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import { MIN_ITEM_SIZE } from "@/lib/geometry/transform";
+import { MIN_SCENE_ITEM_SIZE } from "@/lib/geometry/transform";
 
 /**
  * A imagem no ar: o que um painel já soltou da mão e o destino ainda não
@@ -288,7 +288,7 @@ const FATOR_MAX = 4;
  * respeita -- assim o que a roda deixa soltar é o que a alça deixa encolher.
  */
 function fatorMinimo(arrasto: Pick<ArrastoDeToken, "largura" | "altura">): number {
-  return MIN_ITEM_SIZE / Math.min(arrasto.largura, arrasto.altura);
+  return MIN_SCENE_ITEM_SIZE / Math.min(arrasto.largura, arrasto.altura);
 }
 
 /** O tamanho que o token terá se for solto agora, em unidades de cena. */

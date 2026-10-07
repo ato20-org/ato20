@@ -322,7 +322,8 @@ export type SombraDoItem = {
 };
 
 /**
- * O que uma lanterna carregada guarda: até onde ela alcança e de que cor.
+ * O que uma lanterna carregada guarda: até onde ela alcança, de que cor e o
+ * quanto acende.
  *
  * Sem posição: quem a carrega dá o centro. Ver `CanvasItem.luz`.
  */
@@ -331,6 +332,12 @@ export type LuzCarregada = {
   raio: number;
   /** Em `#rrggbb`. A paleta é `CORES_DA_LUZ`, mas qualquer cor vale. */
   cor: string;
+  /**
+   * O quanto ela acende, de 0 a 1. Ausente = 1, a lanterna de antes de a
+   * intensidade existir. A mesma conta de `Luz.intensidade`: é a vela no fim,
+   * e não uma vela menor -- para essa existe o `raio`.
+   */
+  intensidade?: number;
   /**
    * Como ela se mexe. Ausente = fixa. A tocha na mão do guerreiro tremula como
    * a da parede, e é por isso que o efeito vale para as duas. Ver `EfeitoDaLuz`.

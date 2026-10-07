@@ -48,6 +48,14 @@ describe("lanternasDosTokens", () => {
     expect(fontes).toHaveLength(1);
     expect(fontes[0]).toMatchObject({ id: "com", x: 45, y: 65, raio: 80 });
   });
+
+  it("a lanterna fraca abre a névoa inteira, e não pela metade", () => {
+    const [fonte] = lanternasDosTokens([
+      item("fraca", { luz: { raio: 80, cor: "#fb923c", intensidade: 0.35 } }),
+    ]);
+
+    expect(fonte?.intensidade).toBe(1);
+  });
 });
 
 describe("alcancaArea", () => {

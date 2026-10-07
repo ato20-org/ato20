@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { fachoDaSelecao, lanternaDaSelecao } from "@/lib/mestre/item-actions";
-import type { CanvasItem, LuzCarregada } from "@/types/scene";
+import {
+  apontarLanterna,
+  fachoDaSelecao,
+  lanternaDaSelecao,
+  setSelectionLanterna,
+} from "@/lib/mestre/item-actions";
+import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useSelectionStore } from "@/lib/store/use-selection-store";
+import type { CanvasItem, LuzCarregada, Scene } from "@/types/scene";
 
 function token(id: string, luz?: LuzCarregada): CanvasItem {
   return {
@@ -56,6 +63,26 @@ describe("lanternaDaSelecao", () => {
     expect(lanternaDaSelecao([])).toBeUndefined();
   });
 
+  it("mesma lanterna com intensidade diferente discorda", () => {
+    expect(
+      lanternaDaSelecao([
+        token("a", chama),
+        token("b", { ...chama, intensidade: 0.35 }),
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("intensidade ausente e inteira são a mesma lanterna", () => {
+    // A cena de antes da intensidade não grava o campo, e a forte do menu
+    // também não: as duas têm de marcar "Forte" juntas.
+    expect(
+      lanternaDaSelecao([
+        token("a", chama),
+        token("b", { ...chama, intensidade: 1 }),
+      ]),
+    ).toEqual(chama);
+  });
+
   it("mesma lanterna com fachos para lados diferentes discorda", () => {
     expect(
       lanternaDaSelecao([
@@ -106,5 +133,78 @@ describe("fachoDaSelecao", () => {
 
   it("apagada não é círculo nem cone", () => {
     expect(fachoDaSelecao([token("a")]).forma).toBeNull();
+  });
+});
+
+describe("setSelectionLanterna", () => {
+  function montar(...itens: CanvasItem[]) {
+    useSceneStore.setState({
+      board: {
+        scenes: [
+          { id: "c1", items: itens, fog: [], pins: [] } as unknown as Scene,
+        ],
+        editingSceneId: "c1",
+        liveSceneId: "c1",
+      },
+      status: "ready",
+    } as never);
+    useSelectionStore.getState().select(itens.map((item) => item.id));
+  }
+
+  const luzDe = (id: string) =>
+    useSceneStore
+      .getState()
+      .board!.scenes[0]!.items.find((item) => item.id === id)!.luz;
+
+  afterEach(() => {
+    useSceneStore.setState({ board: null, status: "idle" } as never);
+    useSelectionStore.getState().clear();
+  });
+
+  it("baixar a intensidade não mexe no alcance nem na cor", () => {
+    montar(token("a", { ...chama, raio: 420 }));
+
+    setSelectionLanterna({ intensidade: 0.35 });
+
+    expect(luzDe("a")).toEqual({
+      raio: 420,
+      cor: chama.cor,
+      intensidade: 0.35,
+    });
+  });
+
+  it("a forte grava como ausente, como a fixa e o círculo", () => {
+    montar(token("a", { ...chama, intensidade: 0.35 }));
+
+    setSelectionLanterna({ intensidade: 1 });
+
+    expect(luzDe("a")).not.toHaveProperty("intensidade");
+  });
+
+  it("trocar a cor não acende de novo a lanterna fraca", () => {
+    montar(token("a", { ...chama, intensidade: 0.35 }));
+
+    setSelectionLanterna({ cor: "#93c5fd" });
+
+    expect(luzDe("a")?.intensidade).toBe(0.35);
+  });
+
+  it("escolher a intensidade de uma apagada a acende", () => {
+    montar(token("a"));
+
+    setSelectionLanterna({ intensidade: 0.65 });
+
+    expect(luzDe("a")).toMatchObject({ raio: 260, intensidade: 0.65 });
+  });
+
+  it("apontar o facho guarda a intensidade", () => {
+    montar(token("a", { ...chama, intensidade: 0.65 }));
+
+    apontarLanterna({ angulo: 0 });
+
+    expect(luzDe("a")).toMatchObject({
+      intensidade: 0.65,
+      cone: { angulo: 0 },
+    });
   });
 });

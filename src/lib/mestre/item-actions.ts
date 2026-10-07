@@ -3,7 +3,7 @@
 import { toast } from "sonner";
 
 import {
-  MIN_ITEM_SIZE,
+  MIN_SCENE_ITEM_SIZE,
   normalizeAngle,
   offsetInsideScene,
 } from "@/lib/geometry/transform";
@@ -1074,20 +1074,32 @@ export function setSelectionSombra(pedido: PedidoDeSombra): void {
 }
 
 /**
- * Os alcances que a lanterna de um token oferece, em unidade de cena.
+ * O alcance mais curto e o mais longo da lanterna de um token, em unidade de
+ * cena. Ela se ajusta pela roda em volta do token, e não pelo menu: ver
+ * `passoDaRoda`.
  *
- * Três degraus, e não uma régua: o menu é o único lugar em que a lanterna do
- * token se ajusta, e "curta, média, longa" é a pergunta que a mesa faz -- a
- * vela, a tocha, o lampião. Ajuste fino fica para a luz cravada, que tem anel.
+ * O curto é pequeno porque num mapa de cidade inteira o token tem poucas
+ * unidades de cena. O longo é o teto de antes, por MEDIDA: o custo de uma luz
+ * que anda cresce com a área dela -- ver `RAIO_MAXIMO_DO_EFEITO`.
  */
-export const ALCANCES_DA_LANTERNA = [
-  { raio: 160, rotulo: t.itemActions.alcanceCurto },
-  { raio: 260, rotulo: t.itemActions.alcanceMedio },
-  { raio: 420, rotulo: t.itemActions.alcanceLongo },
-] as const;
+export const ALCANCE_MINIMO_DA_LANTERNA = 10;
+export const ALCANCE_MAXIMO_DA_LANTERNA = 420;
 
-/** O alcance com que uma lanterna acende pela primeira vez: o do meio. */
+/** O alcance com que uma lanterna acende pela primeira vez. */
 const ALCANCE_DA_LANTERNA_PADRAO = 260;
+
+/**
+ * As intensidades que a lanterna de um token oferece, de 0 a 1.
+ *
+ * Três, pela razão do alcance: "fraca, média, forte" é a pergunta da mesa --
+ * a brasa que mal clareia quem a segura, a tocha, a lanterna de sempre. A
+ * forte é a inteira, a de antes de a intensidade existir.
+ */
+export const INTENSIDADES_DA_LANTERNA = [
+  { intensidade: 0.35, rotulo: t.itemActions.intensidadeFraca },
+  { intensidade: 0.65, rotulo: t.itemActions.intensidadeMedia },
+  { intensidade: 1, rotulo: t.itemActions.intensidadeForte },
+] as const;
 
 /**
  * As aberturas que o facho da lanterna oferece, em graus.
@@ -1139,8 +1151,8 @@ export function setSelectionLanterna(
       };
       // A fixa grava como AUSENTE, e não como `efeito: undefined`: é a
       // lanterna de sempre, e o arquivo não ganha um campo por isso. O círculo
-      // é a ausência do cone, pela mesma razão.
-      const { efeito, cone, ...resto } = { ...atual, ...patch };
+      // é a ausência do cone, e a inteira a da intensidade, pela mesma razão.
+      const { efeito, cone, intensidade, ...resto } = { ...atual, ...patch };
 
       return {
         id: item.id,
@@ -1149,6 +1161,9 @@ export function setSelectionLanterna(
             ...resto,
             ...(efeito ? { efeito } : {}),
             ...(cone ? { cone } : {}),
+            ...(intensidade !== undefined && intensidade < 1
+              ? { intensidade }
+              : {}),
           },
         },
       };
@@ -1206,6 +1221,7 @@ export function lanternaDaSelecao(
       ? luz === undefined
       : luz?.cor === primeira.cor &&
         luz.raio === primeira.raio &&
+        (luz.intensidade ?? 1) === (primeira.intensidade ?? 1) &&
         luz.efeito === primeira.efeito &&
         luz.cone?.angulo === primeira.cone?.angulo &&
         luz.cone?.abertura === primeira.cone?.abertura;
@@ -1298,8 +1314,8 @@ export function escalarPatches(
   const livres = items.filter((item) => !item.locked);
   const cabe = livres.every(
     (item) =>
-      item.width * fator >= MIN_ITEM_SIZE &&
-      item.height * fator >= MIN_ITEM_SIZE,
+      item.width * fator >= MIN_SCENE_ITEM_SIZE &&
+      item.height * fator >= MIN_SCENE_ITEM_SIZE,
   );
   if (!cabe) return [];
 

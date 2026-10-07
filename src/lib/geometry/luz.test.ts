@@ -10,6 +10,7 @@ import {
   fatorDoEfeito,
   FUNDO_DO_PULSO,
   anguloDoFacho,
+  anguloNaFigura,
   fontesDaCena,
   inicioDoCone,
   ladoDaLuz,
@@ -122,6 +123,33 @@ describe("anguloDoFacho", () => {
     // A imagem espelha dentro do contêiner que gira. Na ordem inversa o
     // resultado seria 180 - (0 + 90) = 90, e o facho sairia para o lado errado.
     expect(anguloDoFacho({ rotation: 90, flipX: true }, 0)).toBe(270);
+  });
+});
+
+describe("anguloNaFigura", () => {
+  const casos = [
+    { rotation: 0 },
+    { rotation: 30 },
+    { rotation: 0, flipX: true },
+    { rotation: 0, flipY: true },
+    { rotation: 90, flipX: true },
+    { rotation: -45, flipX: true, flipY: true },
+  ];
+
+  it("desfaz o anguloDoFacho em qualquer giro e espelho", () => {
+    for (const item of casos) {
+      for (const noMapa of [0, 45, 90, 200, 315]) {
+        expect(anguloDoFacho(item, anguloNaFigura(item, noMapa))).toBeCloseTo(
+          noMapa,
+        );
+      }
+    }
+  });
+
+  it("devolve entre 0 e 360", () => {
+    const angulo = anguloNaFigura({ rotation: 300 }, 10);
+
+    expect(angulo).toBe(70);
   });
 });
 
@@ -247,6 +275,33 @@ describe("fontesDaCena", () => {
 
     expect(fonte).not.toHaveProperty("cone");
     expect(fonte).not.toHaveProperty("efeito");
+  });
+
+  it("a lanterna do token acende na intensidade dela", () => {
+    const [fraca, antiga] = fontesDaCena(
+      [],
+      [
+        item("t1", { luz: { raio: 150, cor: "#fb923c", intensidade: 0.35 } }),
+        // Sem o campo é a lanterna de antes de a intensidade existir.
+        item("t2", { luz: { raio: 150, cor: "#fb923c" } }),
+      ],
+    );
+
+    expect(fraca?.intensidade).toBe(0.35);
+    expect(antiga?.intensidade).toBe(1);
+  });
+
+  it("a lanterna com intensidade podre acende inteira", () => {
+    const [fonte] = fontesDaCena(
+      [],
+      [
+        item("t1", {
+          luz: { raio: 150, cor: "#fb923c", intensidade: Number.NaN },
+        }),
+      ],
+    );
+
+    expect(fonte?.intensidade).toBe(1);
   });
 
   it("a lanterna do token também tremula", () => {

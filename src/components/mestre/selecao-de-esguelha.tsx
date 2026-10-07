@@ -33,13 +33,18 @@ import {
   raioDoAnel,
   sobeDe,
 } from "@/lib/geometry/peca-de-esguelha";
-import type { Vec } from "@/lib/geometry/transform";
+import { MIN_SCENE_ITEM_SIZE, type Vec } from "@/lib/geometry/transform";
 import { t } from "@/lib/i18n/ferramentas";
 import {
   flipSelection,
   removeSelection,
   toggleSelectionLock,
 } from "@/lib/mestre/item-actions";
+import {
+  LIMIAR_PARA_APONTAR,
+  giroEmVolta,
+  miraDaLanterna,
+} from "@/lib/mestre/roda-da-lanterna";
 import {
   moverNoGesto,
   terminarGesto,
@@ -66,8 +71,6 @@ const ALCA_PX = 9;
 const PONTOS_DO_ANEL = 40;
 /** O passo do giro com Shift, em graus. */
 const PASSO_DO_GIRO = 15;
-/** O tamanho mínimo de uma peça, em unidades de cena. */
-const LADO_MINIMO = 8;
 
 type Camera = { camera: CameraOrbital; tela: Tela };
 
@@ -334,7 +337,7 @@ export function SelecaoDeEsguelha({
     arrastar(evento, (nativo) => {
       const aqui = naArea(nativo);
       const fator = Math.hypot(aqui.x - ancora.x, aqui.y - ancora.y) / d0;
-      const largura = Math.max(LADO_MINIMO, item.width * fator);
+      const largura = Math.max(MIN_SCENE_ITEM_SIZE, item.width * fator);
       const altura = (largura / item.width) * item.height;
       if (item.deitado) {
         const centro = centroDe(item);
@@ -356,27 +359,42 @@ export function SelecaoDeEsguelha({
   }
 
   /**
-   * A ponta do anel: o olhar segue a mão em volta do pé, pelo chão. Gira o
-   * `rotation`, e com ele o facho. Shift anda de quinze em quinze graus.
+   * A ponta do anel: o olhar segue a mão em volta do pé, pelo chão. Shift anda
+   * de quinze em quinze graus.
+   *
+   * Com lanterna, mira o FACHO e o token não gira -- a mesma mira da roda do
+   * 2D (`miraDaLanterna`): girar o `rotation` aqui virava o desenho no 2D, e o
+   * que o mestre pediu foi para onde a luz olha. Sem lanterna o olhar não tem
+   * facho onde morar, e gira a figura, como sempre.
    */
   function girar(evento: React.PointerEvent) {
     if (!unico) return;
     const item = unico;
     const pivo = pivoDe(item);
-    const angulo = (ponto: Vec) =>
-      (Math.atan2(ponto.y - pivo.y, ponto.x - pivo.x) * 180) / Math.PI;
     const inicio = paraChao(evento.clientX, evento.clientY);
     if (!inicio) return;
-    const a0 = angulo(inicio);
+    // Passou do limiar uma vez, é mira até soltar. Ver `LIMIAR_PARA_APONTAR`.
+    let apontou = false;
 
     arrastar(evento, (nativo) => {
       const aqui = paraChao(nativo.clientX, nativo.clientY);
       if (!aqui) return null;
-      let giro = item.rotation + angulo(aqui) - a0;
-      if (nativo.shiftKey) {
-        giro = Math.round(giro / PASSO_DO_GIRO) * PASSO_DO_GIRO;
+      const giro = giroEmVolta(pivo, inicio, aqui);
+
+      if (item.luz) {
+        apontou ||= Math.abs(giro) >= LIMIAR_PARA_APONTAR;
+        const luz = miraDaLanterna(item, giro, {
+          encaixar: nativo.shiftKey,
+          apontar: apontou,
+        });
+        return luz ? { luz } : null;
       }
-      return { rotation: ((giro % 360) + 360) % 360 };
+
+      let rotacao = item.rotation + giro;
+      if (nativo.shiftKey) {
+        rotacao = Math.round(rotacao / PASSO_DO_GIRO) * PASSO_DO_GIRO;
+      }
+      return { rotation: ((rotacao % 360) + 360) % 360 };
     });
   }
 

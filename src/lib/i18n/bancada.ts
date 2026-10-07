@@ -186,9 +186,9 @@ const pt = {
   /** As ações sobre a seleção, e as opções da lanterna do token. */
   itemActions: {
     travado: "Está travado. Destrave no cadeado para apagar.",
-    alcanceCurto: "Curto",
-    alcanceMedio: "Médio",
-    alcanceLongo: "Longo",
+    intensidadeFraca: "Fraca",
+    intensidadeMedia: "Média",
+    intensidadeForte: "Forte",
     aberturaEstreita: "Estreito",
     aberturaMedia: "Médio",
     aberturaLarga: "Largo",
@@ -360,9 +360,9 @@ const en: typeof pt = {
 
   itemActions: {
     travado: "It's locked. Unlock the padlock to delete it.",
-    alcanceCurto: "Short",
-    alcanceMedio: "Medium",
-    alcanceLongo: "Long",
+    intensidadeFraca: "Dim",
+    intensidadeMedia: "Medium",
+    intensidadeForte: "Bright",
     aberturaEstreita: "Narrow",
     aberturaMedia: "Medium",
     aberturaLarga: "Wide",

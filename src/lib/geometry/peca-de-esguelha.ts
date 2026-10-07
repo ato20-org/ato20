@@ -48,8 +48,9 @@ export function raioDoAnel(item: CanvasItem): number {
 
 /**
  * Para onde a figura olha, em graus no sentido do sol. É o facho da lanterna
- * dela, ou o padrão do facho quando não há lanterna: girar o olhar aqui é o
- * mesmo `rotation` do 2D, que é o que leva o facho junto. Ver `anguloDoFacho`.
+ * dela, ou o padrão do facho quando não há lanterna. As rodas miram o facho
+ * (`miraDaLanterna`) e deixam o token parado; só a figura sem lanterna gira o
+ * `rotation` para olhar. Ver `anguloDoFacho`.
  */
 export function olharDe(
   item: Pick<CanvasItem, "rotation" | "flipX" | "flipY" | "luz">,
