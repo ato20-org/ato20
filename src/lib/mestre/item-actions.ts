@@ -1090,6 +1090,19 @@ export const ALCANCES_DA_LANTERNA = [
 const ALCANCE_DA_LANTERNA_PADRAO = 260;
 
 /**
+ * As intensidades que a lanterna de um token oferece, de 0 a 1.
+ *
+ * Três, pela razão do alcance: "fraca, média, forte" é a pergunta da mesa --
+ * a brasa que mal clareia quem a segura, a tocha, a lanterna de sempre. A
+ * forte é a inteira, a de antes de a intensidade existir.
+ */
+export const INTENSIDADES_DA_LANTERNA = [
+  { intensidade: 0.35, rotulo: t.itemActions.intensidadeFraca },
+  { intensidade: 0.65, rotulo: t.itemActions.intensidadeMedia },
+  { intensidade: 1, rotulo: t.itemActions.intensidadeForte },
+] as const;
+
+/**
  * As aberturas que o facho da lanterna oferece, em graus.
  *
  * Três, pela razão do alcance: "estreito, médio, largo" é a pergunta da mesa
@@ -1139,8 +1152,8 @@ export function setSelectionLanterna(
       };
       // A fixa grava como AUSENTE, e não como `efeito: undefined`: é a
       // lanterna de sempre, e o arquivo não ganha um campo por isso. O círculo
-      // é a ausência do cone, pela mesma razão.
-      const { efeito, cone, ...resto } = { ...atual, ...patch };
+      // é a ausência do cone, e a inteira a da intensidade, pela mesma razão.
+      const { efeito, cone, intensidade, ...resto } = { ...atual, ...patch };
 
       return {
         id: item.id,
@@ -1149,6 +1162,9 @@ export function setSelectionLanterna(
             ...resto,
             ...(efeito ? { efeito } : {}),
             ...(cone ? { cone } : {}),
+            ...(intensidade !== undefined && intensidade < 1
+              ? { intensidade }
+              : {}),
           },
         },
       };
@@ -1206,6 +1222,7 @@ export function lanternaDaSelecao(
       ? luz === undefined
       : luz?.cor === primeira.cor &&
         luz.raio === primeira.raio &&
+        (luz.intensidade ?? 1) === (primeira.intensidade ?? 1) &&
         luz.efeito === primeira.efeito &&
         luz.cone?.angulo === primeira.cone?.angulo &&
         luz.cone?.abertura === primeira.cone?.abertura;

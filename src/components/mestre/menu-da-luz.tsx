@@ -40,6 +40,7 @@ import {
   ABERTURAS_DA_LANTERNA,
   ALCANCES_DA_LANTERNA,
   DIRECOES_DA_LANTERNA,
+  INTENSIDADES_DA_LANTERNA,
   apontarLanterna,
   fachoDaSelecao,
   lanternaDaSelecao,
@@ -214,7 +215,8 @@ function Rotulo({ children }: { children: string }) {
 }
 
 /**
- * A lanterna dos tokens selecionados: a cor, o alcance, a forma e o efeito.
+ * A lanterna dos tokens selecionados: a cor, o alcance, a intensidade, a forma
+ * e o efeito.
  *
  * Vizinha da opacidade, e não do travar: as duas mudam o que a MESA vê do
  * token. Fica no menu do token porque é dele -- ela anda com ele, e cravar uma
@@ -226,8 +228,8 @@ function Rotulo({ children }: { children: string }) {
  *
  * Forma e efeito num nível a mais, como no menu da luz cravada. Com o cone o
  * efeito aberto aqui somaria doze linhas às dezenove de antes; assim a lista
- * encurtou, e a cor e o alcance -- o que se troca toda hora -- continuam a um
- * nível só.
+ * encurtou, e a cor, o alcance e a intensidade -- o que se troca toda hora --
+ * continuam a um nível só.
  */
 export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
   const lanterna = lanternaDaSelecao(itens);
@@ -276,6 +278,25 @@ export function SubmenuDaLanterna({ itens }: { itens: CanvasItem[] }) {
           {ALCANCES_DA_LANTERNA.map((alcance) => (
             <ContextMenuRadioItem key={alcance.raio} value={alcance.raio}>
               {alcance.rotulo}
+            </ContextMenuRadioItem>
+          ))}
+        </ContextMenuRadioGroup>
+
+        <ContextMenuSeparator />
+        <Rotulo>{t.luz.intensidade}</Rotulo>
+        <ContextMenuRadioGroup
+          aria-label={t.luz.intensidadeDaLanterna}
+          value={lanterna ? (lanterna.intensidade ?? 1) : null}
+          onValueChange={(intensidade: number) =>
+            setSelectionLanterna({ intensidade })
+          }
+        >
+          {INTENSIDADES_DA_LANTERNA.map((opcao) => (
+            <ContextMenuRadioItem
+              key={opcao.intensidade}
+              value={opcao.intensidade}
+            >
+              {opcao.rotulo}
             </ContextMenuRadioItem>
           ))}
         </ContextMenuRadioGroup>

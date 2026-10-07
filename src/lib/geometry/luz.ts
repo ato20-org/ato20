@@ -59,7 +59,7 @@ export type FonteDeLuz = {
   /** Até onde a luz é forte, já preso entre 0 e o `raio`. */
   raioIntenso: number;
   cor: string;
-  /** De 0 a 1, já preso. A lanterna de um token acende sempre inteira. */
+  /** De 0 a 1, já preso. */
   intensidade: number;
   /** Ausente = círculo. A abertura já vem presa. Ver `coneDe`. */
   cone?: ConeDaLuz;
@@ -243,7 +243,7 @@ export function fontesDaCena(
       raio: item.luz.raio,
       raioIntenso: raioIntensoDe(item.luz.raio, undefined),
       cor: item.luz.cor,
-      intensidade: 1,
+      intensidade: limitarIntensidade(item.luz.intensidade),
       ...(facho
         ? {
             cone: {

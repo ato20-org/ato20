@@ -249,6 +249,33 @@ describe("fontesDaCena", () => {
     expect(fonte).not.toHaveProperty("efeito");
   });
 
+  it("a lanterna do token acende na intensidade dela", () => {
+    const [fraca, antiga] = fontesDaCena(
+      [],
+      [
+        item("t1", { luz: { raio: 150, cor: "#fb923c", intensidade: 0.35 } }),
+        // Sem o campo é a lanterna de antes de a intensidade existir.
+        item("t2", { luz: { raio: 150, cor: "#fb923c" } }),
+      ],
+    );
+
+    expect(fraca?.intensidade).toBe(0.35);
+    expect(antiga?.intensidade).toBe(1);
+  });
+
+  it("a lanterna com intensidade podre acende inteira", () => {
+    const [fonte] = fontesDaCena(
+      [],
+      [
+        item("t1", {
+          luz: { raio: 150, cor: "#fb923c", intensidade: Number.NaN },
+        }),
+      ],
+    );
+
+    expect(fonte?.intensidade).toBe(1);
+  });
+
   it("a lanterna do token também tremula", () => {
     const [fonte] = fontesDaCena(
       [],
