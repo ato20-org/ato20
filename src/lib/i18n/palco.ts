@@ -257,6 +257,16 @@ const pt = {
     soVoceVeDica: "Só você vê. Clique para mostrar na TV e nos celulares.",
     fecharPorta: "Fechar a porta",
     abrirPorta: "Abrir a porta",
+    ligarNevoaDinamica: "Ligar a névoa dinâmica",
+    desligarNevoaDinamica: "Desligar a névoa dinâmica",
+    nevoaDinamicaDica:
+      "Névoa dinâmica: a lanterna de cada token abre esta área enquanto alcança, e as paredes param. Clique para desligar.",
+    nevoaParadaDica:
+      "Ligar a névoa dinâmica: a lanterna de cada token passa a abrir esta área por onde ilumina.",
+    borracha: "Borracha",
+    sairDaBorracha: "Sair da borracha",
+    borrachaAtivaDica: "Arraste sobre a área para furar. [ e ] mudam o pincel, Esc sai.",
+    borrachaDica: "Borracha: fura esta área por onde passar. Ctrl+Z desfaz a passada.",
     /** Pela chave `doQue` que o chamador passa, e que não é texto. */
     alturaDa: {
       parede: "Altura da parede",
@@ -535,6 +545,16 @@ const en: typeof pt = {
       "Only you can see it. Click to show it on the spectator window and the phones.",
     fecharPorta: "Close the door",
     abrirPorta: "Open the door",
+    ligarNevoaDinamica: "Turn on dynamic fog",
+    desligarNevoaDinamica: "Turn off dynamic fog",
+    nevoaDinamicaDica:
+      "Dynamic fog: each token's lantern opens this area while it reaches, and walls stop it. Click to turn off.",
+    nevoaParadaDica:
+      "Turn on dynamic fog: each token's lantern opens this area wherever it shines.",
+    borracha: "Eraser",
+    sairDaBorracha: "Leave the eraser",
+    borrachaAtivaDica: "Drag over the area to cut holes. [ and ] change the brush, Esc leaves.",
+    borrachaDica: "Eraser: cuts holes in this area wherever it passes. Ctrl+Z undoes the stroke.",
     alturaDa: {
       parede: "Wall height",
       porta: "Door height",

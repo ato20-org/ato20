@@ -563,6 +563,38 @@ export type FogRegion = {
    * filtros de "quem anda" servirem a todos. Ver `trava` em `TransformHandles`.
    */
   locked?: boolean;
+  /**
+   * Os furos que a borracha abriu. Ausente = nenhum, que é o normal.
+   *
+   * Na área, e não uma lista da cena: o furo é um pedaço DESTA névoa, e mover,
+   * escalar, girar, copiar e desfazer a área têm de levá-lo junto sem ninguém
+   * atualizar duas coisas. Ver `FuroDaArea`.
+   */
+  furos?: FuroDaArea[];
+  /**
+   * Dinâmica: a lanterna de cada token abre buraco nela enquanto alcança, e a
+   * névoa volta quando a luz vai embora. Ausente = estática, a de sempre.
+   *
+   * Sem memória do que já foi visto: o buraco é calculado em cada tela, a
+   * partir dos tokens, das paredes e das portas que ela já recebe -- nada
+   * novo atravessa o canal. As paredes e as portas param a revelação como
+   * param a luz. Ver `lanternasDaArea`.
+   */
+  dinamica?: true;
+};
+
+/**
+ * Uma passada da borracha numa área escondida: um traço de pincel redondo.
+ *
+ * Em FRAÇÃO da caixa, como os vértices do polígono, e pela mesma razão: mover,
+ * escalar e girar a área levam o furo junto, sem tocar num ponto. O raio é em
+ * fração da LARGURA -- crescer a área cresce o furo na mesma conta.
+ */
+export type FuroDaArea = {
+  /** Metade da espessura do pincel, em fração da largura da caixa. */
+  raio: number;
+  /** Achatados -- `x0, y0, x1, y1, ...` --, em fração da caixa. */
+  pontos: number[];
 };
 
 /**
@@ -1327,7 +1359,12 @@ export type Spotlight = {
 
 /** O que o chamador informa ao desenhar uma área; `id` e `revealed` são do store. */
 export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height"> &
-  Partial<Pick<FogRegion, "formato" | "rotation" | "pontos" | "locked">>;
+  Partial<
+    Pick<
+      FogRegion,
+      "formato" | "rotation" | "pontos" | "locked" | "furos" | "dinamica"
+    >
+  >;
 
 /**
  * A área sem o id e sem o `revealed`, campo a campo -- o que copiar guarda.
@@ -1346,6 +1383,8 @@ export function semIdDaArea(area: FogRegion): NewFogRegion {
     rotation: area.rotation,
     pontos: area.pontos,
     locked: area.locked,
+    furos: area.furos,
+    dinamica: area.dinamica,
   };
 }
 

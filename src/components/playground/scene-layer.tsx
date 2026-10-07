@@ -527,11 +527,20 @@ export function SceneLayer({
         />
       )}
 
+      {/* As lanternas abrem a névoa dinâmica, e as paredes e portas param a
+          revelação como param a luz -- a mesma lista que a `LuzLayer` lê.
+          Na prévia, o bloco de sempre: ver `simples`. */}
       <FogLayer
         fog={scene.fog}
         variant={variant}
         smooth={smooth}
         onFogPointerDown={onFogPointerDown}
+        items={items}
+        paredes={scene.paredes}
+        portas={scene.portas}
+        portaNaMao={portaNaMao}
+        naMao={naMao}
+        simples={variante === "mini"}
       />
 
       {/* Depois da névoa: o medidor é instrumento sobre o mapa, e medir por
