@@ -9,6 +9,7 @@
 
 import { novoId } from "@/lib/id";
 import { t as textoDeCenas } from "@/lib/i18n/cenas";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { Condicao, Medidor } from "@/types/character";
 
 export const SCENE_WIDTH = 1920;
@@ -2819,6 +2820,18 @@ export type Scene = {
    * CHEGA à mesa, como a cor: a TV e o celular veem o mesmo céu.
    */
   ceuAssetId?: string;
+  /**
+   * O ajuste de imagem DESTA cena na janela do espectador: a masmorra mais
+   * clara, o flashback sem cor. Ausente = neutro, e só os canais mexidos são
+   * guardados -- ver `ajusteParaGuardar`.
+   *
+   * Multiplica o ajuste da campanha, que viaja à parte no `LiveState`. Ver
+   * `compor`.
+   *
+   * CHEGA à mesa, mas só a janela do espectador aplica: o jogador vê o mapa
+   * como ele é, e o Mestre também.
+   */
+  imagem?: AjusteDeImagem;
   /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.

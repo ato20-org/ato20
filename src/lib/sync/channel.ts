@@ -1,5 +1,6 @@
 import type { Idioma } from "@/lib/i18n/idioma";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
@@ -163,6 +164,14 @@ export type LiveState = {
    * tela fica no idioma em que abriu.
    */
   idioma?: Idioma;
+  /**
+   * O ajuste de imagem da CAMPANHA na janela do espectador. O da cena vai
+   * dentro dela, em `Scene.imagem`, e os dois se multiplicam -- ver `compor`.
+   *
+   * Só a janela do espectador e a Janela Mesa aplicam; o jogador recebe e
+   * ignora. Ausente = neutro, e é o que um quadro de uma versão anterior diz.
+   */
+  imagem?: AjusteDeImagem;
 };
 
 /**

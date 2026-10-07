@@ -65,6 +65,7 @@ import { useWindowStore } from "@/lib/store/use-window-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { retratosDaCena } from "@/lib/geometry/portrait";
 import { efeitosDaCena } from "@/lib/condicao";
+import { useImagemDaCampanha } from "@/lib/configuracoes/espectador";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
 import type { Personagem } from "@/types/character";
 
@@ -261,6 +262,9 @@ export function MestreShell() {
   const declarativoVersao = useDeclarativoStore((state) => state.versao);
   // O contador do elenco, para o celular saber quando reler a ficha.
   const fichasVersao = useCharactersStore((state) => state.versao);
+  // O ajuste de imagem da campanha, para a janela do espectador. O da cena
+  // viaja dentro dela. Ver `LiveState.imagem`.
+  const imagem = useImagemDaCampanha();
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale
@@ -312,6 +316,7 @@ export function MestreShell() {
       fichasVersao,
       rolagens,
       pings,
+      imagem,
     },
     // `null` é "o índice de personagens ainda não foi lido", e não "a campanha
     // não tem personagem" -- ver `useCharactersStore`. A diferença importa
