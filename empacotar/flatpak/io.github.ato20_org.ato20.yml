@@ -62,6 +62,13 @@ finish-args:
   - --filesystem=/run/media
   - --filesystem=/mnt
 
+  # O cartao do Discord -- ver `src-tauri/src/presenca.rs`. E um socket local,
+  # nao rede: o primeiro e o do Discord nativo, o segundo o do Discord de
+  # Flatpak, que abre o dele dentro da propria pasta. Sem eles o aplicativo
+  # funciona igual, so nao aparece no perfil.
+  - --filesystem=xdg-run/discord-ipc-0
+  - --filesystem=xdg-run/app/com.discordapp.Discord:create
+
 modules:
   - name: ato20
     buildsystem: simple

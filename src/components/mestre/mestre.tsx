@@ -13,6 +13,7 @@ import { CampaignBoot } from "@/components/mestre/campaign-boot";
 import { CampanhaPerdida } from "@/components/mestre/campanha-perdida";
 import { CampaignSplash } from "@/components/mestre/campaign-splash";
 import { MestreGate } from "@/components/mestre/mestre-gate";
+import { PresencaDoMestre } from "@/components/mestre/presenca-do-mestre";
 import { Button } from "@/components/ui/button";
 import { t } from "@/lib/i18n/mestre";
 import { acompanharIdioma } from "@/lib/i18n/trocar";
@@ -79,6 +80,8 @@ export function Mestre() {
     // couber rola dentro de quem o mostra -- o palco, o painel, a coluna da
     // porta --, e nunca arrastando a barra de título embora.
     <div className="flex h-dvh flex-col overflow-hidden">
+      {/* Fora do `Conteudo`: o título e o Discord valem para a porta também. */}
+      <PresencaDoMestre />
       <WindowChrome
         // A campanha na ponta esquerda, junto do nome: ela é o que a janela é,
         // e não um controle de gesto que dispute espaço com a barra de

@@ -126,6 +126,30 @@ const pt = {
     volumeDisparo: "Volume dos disparos",
     idioma: "Idioma",
     idiomaDescricao: "O idioma da interface. Do sistema segue o sistema operacional.",
+    discord: "Mostrar no Discord",
+    discordDescricao:
+      "O que você está fazendo aparece no seu perfil, como \"Jogando ATO20\". Só com o Discord aberto nesta máquina.",
+    discordCampanha: "Mostrar o nome da campanha no Discord",
+    discordCampanhaDescricao:
+      "Desligado, o perfil diz só o que você faz. O nome da cena nunca aparece: quem joga com você poderia ler.",
+  },
+
+  /**
+   * O título da janela e o cartão do Discord. Cada coisa que o mestre faz tem
+   * duas formas: a longa é a primeira linha quando ele está sozinho, e a curta
+   * vai na segunda quando a primeira já diz "Mestrando".
+   */
+  presenca: {
+    noMenu: "No menu",
+    preparando: "Preparando campanha",
+    mapa: { longo: "Editando mapa", curto: "No mapa" },
+    quadro: { longo: "Editando quadro", curto: "No quadro" },
+    fundo: { longo: "Editando cena", curto: "Na cena" },
+    esguelha: { longo: "Mesa 2.5D", curto: "Na mesa 2.5D" },
+    regras: { longo: "Lendo as regras", curto: "Nas regras" },
+    mestrando: "Mestrando campanha",
+    mestrandoNome: (campanha: string) => `Mestrando ${campanha}`,
+    conhecer: "Conhecer o ATO20",
   },
 
   novidades: {
@@ -274,6 +298,25 @@ const en: typeof pt = {
     volumeDisparo: "Sound cue volume",
     idioma: "Language",
     idiomaDescricao: "The interface language. System follows the operating system.",
+    discord: "Show on Discord",
+    discordDescricao:
+      "What you are doing shows on your profile, as \"Playing ATO20\". Only with Discord open on this machine.",
+    discordCampanha: "Show the campaign name on Discord",
+    discordCampanhaDescricao:
+      "When off, your profile only says what you are doing. The scene name never shows: your players could read it.",
+  },
+
+  presenca: {
+    noMenu: "In the menu",
+    preparando: "Preparing a campaign",
+    mapa: { longo: "Editing a map", curto: "On the map" },
+    quadro: { longo: "Editing a board", curto: "On the board" },
+    fundo: { longo: "Editing a scene", curto: "In a scene" },
+    esguelha: { longo: "2.5D table", curto: "At the 2.5D table" },
+    regras: { longo: "Reading the rules", curto: "In the rules" },
+    mestrando: "Running a campaign",
+    mestrandoNome: (campanha) => `Running ${campanha}`,
+    conhecer: "Check out ATO20",
   },
 
   novidades: {
