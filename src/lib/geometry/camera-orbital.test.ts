@@ -12,6 +12,7 @@ import {
   daTelaAoChao,
   daTelaAoChaoNoTripe,
   daTelaAoPlano,
+  deitadoNoTripe,
   doOlhoAoMundo,
   focalDaLente,
   misturarTripe,
@@ -620,5 +621,81 @@ describe("figuraNoTripe", () => {
       TELA,
     );
     expect(figuraNoTripe(tripe, TELA, { x: 960, y: 1040 })).toBeNull();
+  });
+});
+
+describe("deitadoNoTripe", () => {
+  const tripe = tripeDaOrbital(
+    { alvo: { x: 960, y: 540 }, zoom: 6, giro: 23, inclinacao: 58 },
+    TELA,
+  );
+
+  /** O ponto da caixa pela matriz, como o CSS a aplica: colunas, e o divisor. */
+  function pelaMatriz(matriz: string, x: number, y: number) {
+    const m = matriz.slice("matrix3d(".length, -1).split(",").map(Number);
+    const w = m[3]! * x + m[7]! * y + m[15]!;
+    return {
+      x: (m[0]! * x + m[4]! * y + m[12]!) / w,
+      y: (m[1]! * x + m[5]! * y + m[13]!) / w,
+    };
+  }
+
+  it("leva os cantos da caixa aos cantos do chão projetados", () => {
+    // Um token girado, como `cantosDeitado` devolve: a ordem é a da caixa.
+    const cantos = [
+      { x: 950, y: 520 },
+      { x: 968, y: 527 },
+      { x: 961, y: 545 },
+      { x: 943, y: 538 },
+    ];
+    const deitado = deitadoNoTripe(tripe, TELA, cantos)!;
+    const { largura, altura } = deitado;
+    const daCaixa = [
+      [0, 0],
+      [largura, 0],
+      [largura, altura],
+      [0, altura],
+    ] as const;
+
+    cantos.forEach((canto, i) => {
+      const esperado = projetarNoTripe(tripe, TELA, canto)!;
+      const [x, y] = daCaixa[i]!;
+      const achado = pelaMatriz(deitado.matriz, x, y);
+      expect(achado.x).toBeCloseTo(esperado.x, 4);
+      expect(achado.y).toBeCloseTo(esperado.y, 4);
+    });
+  });
+
+  it("a caixa tem o tamanho em que a figura aparece", () => {
+    const cantos = [
+      { x: 955, y: 535 },
+      { x: 965, y: 535 },
+      { x: 965, y: 545 },
+      { x: 955, y: 545 },
+    ];
+    const deitado = deitadoNoTripe(tripe, TELA, cantos)!;
+    const a = projetarNoTripe(tripe, TELA, cantos[0]!)!;
+    const b = projetarNoTripe(tripe, TELA, cantos[1]!)!;
+
+    // Dez unidades a 6x de zoom: perto de sessenta pixels, e não dez.
+    expect(deitado.largura).toBeGreaterThan(40);
+    expect(Math.abs(deitado.largura - Math.hypot(b.x - a.x, b.y - a.y))).toBeLessThan(
+      deitado.largura * 0.2,
+    );
+  });
+
+  it("com um canto atrás do olho não tem caixa", () => {
+    const perto = tripeDaOrbital(
+      { alvo: { x: 960, y: 540 }, zoom: 3, giro: 0, inclinacao: 52 },
+      TELA,
+    );
+    expect(
+      deitadoNoTripe(perto, TELA, [
+        { x: 950, y: 1030 },
+        { x: 970, y: 1030 },
+        { x: 970, y: 1050 },
+        { x: 950, y: 1050 },
+      ]),
+    ).toBeNull();
   });
 });
