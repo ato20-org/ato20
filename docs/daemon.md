@@ -150,6 +150,15 @@ com a música. O ajuste **viaja** no mesmo quadro da cena — o mestre regula nu
 e os celulares seguem. Ajuste fino por aparelho é o volume do próprio sistema, que todo
 aparelho já tem.
 
+**Som do YouTube não passa por aqui.** O acervo guarda só o id do vídeo e o trecho
+(`AssetMeta.youtube`); `/asset/{id}` de um som desses é 404, e ninguém pede. Quem toca é um
+player do YouTube em cada aparelho, num iframe de um pixel, e o id viaja junto da trilha e
+do ambiente no quadro da cena. O daemon entra só como **origem**: o YouTube recusa embutir o
+player em `tauri://localhost` (erro 153, medido no WebKitGTK), então o Mestre empacotado abre
+`/ponte-youtube.html` daqui, em loopback, e fala com ela por `postMessage`. A TV e os
+celulares já estão em http e abrem a mesma ponte pelo caminho relativo. Ela é arquivo de
+`public/`, então só chega à TV depois de um `pnpm build`.
+
 ## O token de escrita
 
 `POST /sala/publicar` e `GET /livro/{id}` exigem o cabeçalho `x-ato20-token`, gerado a cada

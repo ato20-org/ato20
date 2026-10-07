@@ -11,6 +11,7 @@ import {
   GANHO_PADRAO,
   MAX_AMBIENTES,
   type Pad,
+  type SomDoYoutube,
 } from "@/types/scene";
 
 /**
@@ -183,6 +184,16 @@ type TrackStore = SessionAudio & {
    * acervo por causa de um susto.
    */
   cortarSons: () => void;
+
+  /**
+   * O trecho de um som do YouTube mudou no acervo: a trilha e os ambientes que
+   * tocam esse som passam a tocar o trecho novo.
+   *
+   * Necessário porque o som no ar guarda uma CÓPIA — ver
+   * `SessionTrack.youtube` —, e sem isto a mesa só ouviria o trecho novo na
+   * próxima vez que o som fosse acionado.
+   */
+  trocarYoutube: (assetId: string, youtube: SomDoYoutube) => void;
 };
 
 export const useTrackStore = create<TrackStore>((set, get) => ({
@@ -226,13 +237,13 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     // o da faixa anterior faria a música nova entrar abafada porque a de antes
     // estava baixa durante uma conversa que já acabou.
     gravar(set, get, {
-      track: {
+      track: comYoutube({
         assetId,
         loop: true,
         playing: true,
         ganho: GANHO_PADRAO,
         startedAt: Date.now(),
-      },
+      }),
     });
   },
 
@@ -286,13 +297,13 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     // diferentes do loop soam como eco, não como "mais chuva".
     if (ambientes.some((atual) => atual.assetId === assetId)) return;
 
-    const novo: Ambiente = {
+    const novo: Ambiente = comYoutube({
       id: novoId(),
       assetId,
       ganho: limitar(ganho),
       tocando: true,
       startedAt: Date.now(),
-    };
+    });
 
     // No teto, o mais VELHO sai. Recusar em silêncio deixaria a tecla do pad
     // sem efeito nenhum, e o mestre apertando-a de novo no meio da sessão sem
@@ -342,6 +353,10 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   },
 
   disparar(assetId, ganho = GANHO_PADRAO) {
+    // Efeito do YouTube não existe — ver `AssetMeta.youtube`. O acervo nem
+    // oferece; isto fecha as portas que não passam por ele.
+    if (youtubeDo(assetId)) return;
+
     // Não passa por `gravar`: disparo não vai para o disco. Ver `SessionAudio`.
     set((state) => ({
       disparos: [
@@ -467,7 +482,45 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     set({ disparos: [] });
     trocarAmbientes(set, get, []);
   },
+
+  trocarYoutube(assetId, youtube) {
+    const { track, ambientes, ambientesPorCena } = get();
+    const troca = <T extends { assetId: string }>(som: T): T =>
+      som.assetId === assetId ? { ...som, youtube } : som;
+
+    gravar(set, get, {
+      track: track ? troca(track) : null,
+      ambientes: ambientes.map(troca),
+      ambientesPorCena: Object.fromEntries(
+        Object.entries(ambientesPorCena).map(([cena, lista]) => [
+          cena,
+          lista.map(troca),
+        ]),
+      ),
+    });
+  },
 }));
+
+/** O vídeo de um som do acervo, se ele for do YouTube. */
+function youtubeDo(assetId: string): SomDoYoutube | undefined {
+  return useAssetsStore
+    .getState()
+    .audio.assets?.find((asset) => asset.id === assetId)?.youtube;
+}
+
+/**
+ * Copia o vídeo do acervo para o som que vai ao ar.
+ *
+ * Quem toca não tem o acervo — a TV e os celulares recebem só o canal —, então
+ * o vídeo viaja junto. Ver `SessionTrack.youtube`.
+ */
+function comYoutube<T extends { assetId: string; youtube?: SomDoYoutube }>(
+  som: T,
+): T {
+  const youtube = youtubeDo(som.assetId);
+
+  return youtube ? { ...som, youtube } : som;
+}
 
 /**
  * Aciona um som pelo TIPO do arquivo dele.

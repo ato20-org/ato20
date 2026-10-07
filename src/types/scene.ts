@@ -96,6 +96,34 @@ export type AssetMeta = {
    * campanha responde por todo o acervo.
    */
   animada?: boolean;
+  /**
+   * O som não tem arquivo: toca do YouTube. Só para `kind: "audio"`. Espelho
+   * de `AssetMeta::youtube` no Rust.
+   *
+   * Presente, o asset é um link: `size` é zero e `/asset/{id}` responde 404.
+   * Quem toca é um player do YouTube em cada aparelho — ver `CanalDoYoutube`.
+   * Mora no acervo, e não numa lista à parte, porque tudo o que um som faz é
+   * pelo `id`: trilha, ambiente, pad, macro, pasta, busca.
+   *
+   * Nunca é `disparo`: o player leva um ou dois segundos para começar, e um
+   * tiro atrasado deixou de ser tiro.
+   */
+  youtube?: SomDoYoutube;
+};
+
+/**
+ * Um vídeo do YouTube tocado como som, e o trecho dele que vale.
+ *
+ * O trecho é o recorte que um arquivo faria cortando, e aqui sai de graça: o
+ * player só busca o pedaço que toca.
+ */
+export type SomDoYoutube = {
+  /** Os onze caracteres depois de `watch?v=`. Nunca a URL. */
+  video: string;
+  /** Onde o trecho começa, em segundos. Ausente = do começo. */
+  inicio?: number;
+  /** Onde o trecho acaba, em segundos. Ausente = até o fim do vídeo. */
+  fim?: number;
 };
 
 /**
@@ -1787,6 +1815,14 @@ export type SessionTrack = {
    * certa, em vez de começar a faixa do zero enquanto a mesa está no refrão.
    */
   startedAt: number;
+  /**
+   * A faixa toca do YouTube. Cópia de `AssetMeta.youtube`, feita no `start`.
+   *
+   * Copiada, e não lida do acervo na hora de tocar, porque quem toca não tem
+   * o acervo: a TV e os celulares recebem só o que viaja no canal, e o
+   * `/asset/{id}` de um link é 404.
+   */
+  youtube?: SomDoYoutube;
 };
 
 /**
@@ -1831,6 +1867,8 @@ export type Ambiente = {
    * e dois aparelhos em pontos diferentes dele soam como eco.
    */
   startedAt: number;
+  /** O ambiente toca do YouTube. Ver `SessionTrack.youtube`. */
+  youtube?: SomDoYoutube;
 };
 
 /**

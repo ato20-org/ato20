@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>ATO20 · YouTube</title>
+    <style>
+      html,
+      body,
+      #player {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="player"></div>
+    <script>
+      /*
+       * A ponte entre o ATO20 e o player do YouTube.
+       *
+       * Existe por causa da ORIGEM. O Mestre empacotado roda em
+       * `tauri://localhost`, e o YouTube recusa embutir o player numa página
+       * de origem que não é http -- erro 153, medido no WebKitGTK. Esta
+       * página é servida pelo daemon em http, embute o player, e conversa com
+       * quem a abriu por `postMessage`. A TV e os celulares já estão em http,
+       * e usam a mesma ponte para haver um caminho só.
+       *
+       * Burra de propósito: repassa comandos e reporta tempo e estado, em
+       * segundos DO VÍDEO. O trecho, o loop e o fim moram no
+       * `PlayerDoYoutube`, no TypeScript, onde há teste.
+       *
+       * Dois modos, pelo endereço:
+       *   ?v=ID&t=SEGUNDOS  toca um vídeo, começando em t
+       *   ?lista=ID         só lista os vídeos de uma playlist, e não toca
+       */
+      (function () {
+        var VIDEO = /^[A-Za-z0-9_-]{11}$/;
+        var LISTA = /^[A-Za-z0-9_-]{2,64}$/;
+        var TOCANDO = 1;
+
+        var busca = new URLSearchParams(location.search);
+        var video = busca.get("v");
+        var lista = busca.get("lista");
+        var inicio = Math.max(0, Math.floor(Number(busca.get("t")) || 0));
+
+        if (video && !VIDEO.test(video)) video = null;
+        if (lista && !LISTA.test(lista)) lista = null;
+
+        /** Fala com quem abriu a ponte. Nada aqui é segredo: tempo e estado. */
+        function avisa(dado) {
+          parent.postMessage(dado, "*");
+        }
+
+        if (!video && !lista) {
+          avisa({ ato20: "erro", codigo: "endereco" });
+          return;
+        }
+
+        var player = null;
+        var relogio = null;
+
+        // Sem rede, o script do YouTube nunca chega, e sem este prazo a linha
+        // ficaria esperando para sempre em vez de dizer o que houve.
+        var semResposta = setTimeout(function () {
+          avisa({ ato20: "erro", codigo: "rede" });
+        }, 15000);
+
+        function respondeu() {
+          clearTimeout(semResposta);
+        }
+
+        function reportaTempo() {
+          avisa({
+            ato20: "tempo",
+            t: player.getCurrentTime(),
+            duracao: player.getDuration(),
+          });
+        }
+
+        window.onYouTubeIframeAPIReady = function () {
+          var opcoes = {
+            width: "100%",
+            height: "100%",
+            host: "https://www.youtube-nocookie.com",
+            playerVars: {
+              controls: 0,
+              disablekb: 1,
+              fs: 0,
+              iv_load_policy: 3,
+              playsinline: 1,
+              rel: 0,
+              origin: location.origin,
+            },
+            events: {},
+          };
+
+          if (lista) {
+            opcoes.playerVars.listType = "playlist";
+            opcoes.playerVars.list = lista;
+            opcoes.events.onReady = function () {
+              respondeu();
+              listar(0);
+            };
+          } else {
+            opcoes.videoId = video;
+            if (inicio > 0) opcoes.playerVars.start = inicio;
+            opcoes.events.onReady = function () {
+              respondeu();
+              // Nasce mudo quando o navegador decide sozinho; quem regula o
+              // volume é o ATO20, e o primeiro `volume` chega logo depois.
+              player.unMute();
+              avisa({ ato20: "pronto", duracao: player.getDuration() });
+            };
+            opcoes.events.onStateChange = function (evento) {
+              // Quatro batidas por segundo enquanto toca, e nenhuma parado: é
+              // a cadência do `timeupdate` de um `<audio>`, e a barra do pé
+              // não precisa de mais.
+              clearInterval(relogio);
+              if (evento.data === TOCANDO) relogio = setInterval(reportaTempo, 250);
+
+              avisa({
+                ato20: "estado",
+                estado: evento.data,
+                t: player.getCurrentTime(),
+              });
+            };
+          }
+
+          opcoes.events.onError = function (evento) {
+            respondeu();
+            avisa({ ato20: "erro", codigo: evento.data });
+          };
+
+          player = new YT.Player("player", opcoes);
+        };
+
+        /**
+         * Os ids da playlist. O player os conhece um instante depois de
+         * pronto, e não no `onReady`: tenta por uns seis segundos.
+         */
+        function listar(tentativa) {
+          var ids = player.getPlaylist();
+
+          if (ids && ids.length > 0) {
+            avisa({ ato20: "lista", ids: ids });
+            return;
+          }
+
+          if (tentativa >= 20) {
+            avisa({ ato20: "erro", codigo: "lista" });
+            return;
+          }
+
+          setTimeout(function () {
+            listar(tentativa + 1);
+          }, 300);
+        }
+
+        window.addEventListener("message", function (evento) {
+          // Só quem abriu a ponte manda nela. Outra janela que a embutisse
+          // tocaria um vídeo dentro de si mesma, o que não é perigo, mas
+          // também não é assunto desta página.
+          if (evento.source !== parent || !player || !player.playVideo) return;
+
+          var dado = evento.data;
+          if (!dado || typeof dado !== "object") return;
+
+          if (dado.ato20 === "play") player.playVideo();
+          else if (dado.ato20 === "pause") player.pauseVideo();
+          // Sem relatar o tempo logo depois do seek: o `getCurrentTime` ainda
+          // devolve o instante de antes, e quem pediu o seek leria que voltou
+          // para lá. O próximo `estado` traz o tempo novo.
+          else if (dado.ato20 === "seek" && isFinite(dado.s)) {
+            player.seekTo(Math.max(0, dado.s), true);
+          } else if (dado.ato20 === "volume" && isFinite(dado.v)) {
+            var volume = Math.max(0, Math.min(100, Math.round(dado.v)));
+            player.setVolume(volume);
+            if (volume > 0 && player.isMuted()) player.unMute();
+          }
+        });
+
+        var script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        script.onerror = function () {
+          respondeu();
+          avisa({ ato20: "erro", codigo: "rede" });
+        };
+        document.head.appendChild(script);
+      })();
+    </script>
+  </body>
+</html>
