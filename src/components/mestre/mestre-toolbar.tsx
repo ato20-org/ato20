@@ -12,6 +12,7 @@ import {
   Spline,
   StickyNote,
   Type,
+  WandSparkles,
 } from "lucide-react";
 import { createElement, useEffect, useMemo } from "react";
 
@@ -75,6 +76,9 @@ type Ferramenta = {
  * As do PALCO: mexem no que está em cena — escolher, arrastar, riscar, apagar.
  * São as da mão, as que o mestre troca a cada minuto.
  *
+ * O laser mora entre elas, e não na régua do mapa: apontar vale no quadro
+ * tanto quanto no mapa, e é gesto de sessão, não de preparação.
+ *
  * O lápis e a borracha ficam aqui e não na pílula de desenho, embora as duas
  * também marquem o mapa: a pílula faz duas perguntas -- qual o desenho, e o que
  * ele significa --, e nenhuma das duas cabe no risco à mão livre. Ele não tem
@@ -92,6 +96,12 @@ const FERRAMENTAS_PALCO: Ferramenta[] = [
     label: t.mestreToolbar.deslocar,
     hint: t.mestreToolbar.deslocarDica,
     icon: Hand,
+  },
+  {
+    tool: "laser",
+    label: t.mestreToolbar.laser,
+    hint: t.mestreToolbar.laserDica,
+    icon: WandSparkles,
   },
   {
     tool: "lapis",

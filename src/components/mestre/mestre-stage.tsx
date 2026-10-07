@@ -76,6 +76,10 @@ import { CameraFrame } from "@/components/playground/camera-frame";
 import { CamerasFantasma } from "@/components/playground/camera-fantasma";
 import { MarqueeBox } from "@/components/playground/marquee-box";
 import { SceneLayer } from "@/components/playground/scene-layer";
+import {
+  SvgDoLaser,
+  useDesenhoDoLaser,
+} from "@/components/playground/laser-layer";
 import { efeitosDaCena } from "@/lib/condicao";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
 import { transmissaoDaCamera } from "@/lib/mestre/camera-actions";
@@ -116,6 +120,15 @@ import {
   useGestoStore,
 } from "@/lib/store/use-gesto-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { publicarLaser } from "@/hooks/use-scene-broadcast";
+import {
+  AMOSTRA_DO_LASER_PX,
+  laserParaMesa,
+  podarRastro,
+  SEM_RASTRO,
+  VIDA_DO_LASER_MS,
+  type RastroDoLaser,
+} from "@/lib/laser";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useSilhueta } from "@/hooks/use-silhueta";
@@ -972,6 +985,40 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const [riscando, setRiscando] = useState(false);
 
   const previa = useRef<SVGPathElement | null>(null);
+
+  /**
+   * O laser: o rastro na mão e o desenho dele, os dois fora do estado pelo
+   * mesmo motivo da `previa` -- muda a cada amostra, e cada amostra seria um
+   * render do palco inteiro. Ver `apontar`.
+   */
+  const laser = useDesenhoDoLaser(0);
+  const rastroDoLaser = useRef<RastroDoLaser>(SEM_RASTRO);
+  /** O relógio que tira o laser do quadro quando o rastro acaba de apagar. */
+  const laserSaiDaMesa = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const acenderLaser = laser.acender;
+
+  // Trocar de cena larga o rastro: ele é da cena em que foi riscado, e não
+  // pode seguir aceso por cima do mapa seguinte.
+  useEffect(() => {
+    if (rastroDoLaser.current.riscos.length === 0) return;
+
+    rastroDoLaser.current = SEM_RASTRO;
+    acenderLaser(SEM_RASTRO);
+  }, [scene.id, acenderLaser]);
+
+  // O palco que sai leva o laser do quadro junto: o relógio que o tiraria
+  // morre com ele, e o daemon seguiria entregando o rastro a quem conectar.
+  useEffect(() => {
+    const relogio = laserSaiDaMesa;
+
+    return () => {
+      if (relogio.current === null) return;
+
+      clearTimeout(relogio.current);
+      relogio.current = null;
+      publicarLaser(undefined);
+    };
+  }, []);
 
   const [apagando, setApagando] = useState<ReadonlySet<string>>(NADA_APAGANDO);
 
@@ -2021,6 +2068,73 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   }
 
   /**
+   * Aponta com o laser: um rastro que apaga sozinho e não entra na cena.
+   *
+   * Nada vai para o board nem para o histórico -- é gesto, como apontar com o
+   * dedo. O mestre vê o próprio rastro na hora, desenhado no plano de
+   * controles; a mesa o recebe pelo quadro, e só se esta é a cena no ar.
+   *
+   * Amostra por distância, como o lápis, mas sem a corda do estabilizador: o
+   * laser acompanha a mão, e o tremido dela faz parte de apontar.
+   *
+   * O relógio que tira o laser do quadro só começa a contar ao soltar. Um
+   * risco novo antes disso o cancela: o rastro de antes ainda está apagando, e
+   * segue no quadro junto com o novo.
+   */
+  function apontar(event: ReactPointerEvent, anchor: Vec) {
+    if (scale === 0) return;
+
+    const cenaId = scene.id;
+    const naMesa = cenaNoAr;
+    const passo = AMOSTRA_DO_LASER_PX / scale;
+
+    if (laserSaiDaMesa.current !== null) {
+      clearTimeout(laserSaiDaMesa.current);
+      laserSaiDaMesa.current = null;
+    }
+
+    const mostrar = (rastro: RastroDoLaser) => {
+      const agora = Date.now();
+      rastroDoLaser.current = podarRastro(rastro, agora);
+      acenderLaser(rastroDoLaser.current);
+
+      if (naMesa)
+        publicarLaser(laserParaMesa(rastroDoLaser.current, cenaId, agora));
+    };
+
+    mostrar({
+      riscos: [...rastroDoLaser.current.riscos, [{ ...anchor, t: Date.now() }]],
+      aceso: true,
+    });
+
+    startDrag(event, {
+      onMove: (_delta, native) => {
+        const { riscos } = rastroDoLaser.current;
+        const atual = riscos[riscos.length - 1];
+        const ultimo = atual?.[atual.length - 1];
+        if (!atual || !ultimo) return;
+
+        const ponto = toScene(native.clientX, native.clientY);
+        if (Math.hypot(ponto.x - ultimo.x, ponto.y - ultimo.y) < passo) return;
+
+        mostrar({
+          riscos: [...riscos.slice(0, -1), [...atual, { ...ponto, t: Date.now() }]],
+          aceso: true,
+        });
+      },
+      onEnd: () => {
+        mostrar({ ...rastroDoLaser.current, aceso: false });
+        if (!naMesa) return;
+
+        laserSaiDaMesa.current = setTimeout(() => {
+          laserSaiDaMesa.current = null;
+          publicarLaser(undefined);
+        }, VIDA_DO_LASER_MS);
+      },
+    });
+  }
+
+  /**
    * A borracha dos riscos, no modo que o painel escolheu: o PEDAÇO por onde o
    * anel passa, ou o risco INTEIRO que ele encostar. Ver `ModoDaBorracha`.
    */
@@ -2531,6 +2645,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     if (tool === "porta") {
       tracarPorta(event, anchor);
+      return;
+    }
+
+    if (tool === "laser") {
+      apontar(event, anchor);
       return;
     }
 
@@ -3114,6 +3233,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         tool === "texto" ||
         tool === "ligacao" ||
         tool === "forma" ||
+        tool === "laser" ||
         tool === "lapis" ||
         tool === "borracha" ||
         tool === "borrachaDaNevoa" ||
@@ -3767,6 +3887,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           amostra={{ cor, opacidade: opacidadeDoLapis }}
         />
       ) : null}
+
+      {/* O laser do próprio mestre, na hora, sem o atraso da mesa. Sempre
+          montado: o rastro termina de apagar mesmo que a ferramenta troque no
+          meio. Vazio, é um SVG sem nada dentro. Ver `apontar`. */}
+      <SvgDoLaser desenho={laser} />
 
       {riscando ? (
         <svg

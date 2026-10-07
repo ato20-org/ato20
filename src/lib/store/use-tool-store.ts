@@ -51,6 +51,9 @@ import {
 export type Tool =
   | "select"
   | "hand"
+  // `laser` aponta sem marcar: o rastro some sozinho, e nada entra na cena.
+  // Ver `RastroDoLaser`.
+  | "laser"
   | "fog"
   // `borrachaDaNevoa` fura, no arrasto, a área escondida SELECIONADA -- só
   // ela, para a passada não abrir a área vizinha sem querer. Não mora na
