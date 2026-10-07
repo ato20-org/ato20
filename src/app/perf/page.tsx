@@ -3514,7 +3514,18 @@ function Medida({ params }: { params: URLSearchParams }) {
   }, []);
 
   return (
-    <main className="flex h-dvh flex-col bg-black">
+    <main
+      className="flex h-dvh flex-col bg-black"
+      // `?experimento=filtro`: o ajuste de imagem da janela do espectador na
+      // tela inteira, com os quatro canais mexidos -- o pior caso, uma passada
+      // fora da tela por quadro. Para comparar com e sem num build só:
+      // `--experimento ,filtro`. Ver `filtroDaImagem`.
+      style={{
+        filter: (params.get("experimento") ?? "").split("+").includes("filtro")
+          ? "brightness(1.2) contrast(1.1) saturate(0.7) hue-rotate(15deg)"
+          : undefined,
+      }}
+    >
       {cenario === "leitor" ? (
         <PalcoLeitor pagina={pagina} degraus={degraus} rajada={rajada} />
       ) : cenario === "arrasto" ? (
