@@ -31,8 +31,10 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   DOCUMENTO_FONTE,
+  familiaDoTexto,
   POSTIT_FONTE,
   type CorPostit,
+  type FamiliaDoTexto,
   type Documento,
   type NewForma,
   type Postit,
@@ -152,6 +154,16 @@ function AlfinetesDaMesa({ scene }: { scene: Scene }) {
  * WebKit tem um piso de 9px para fonte encolhida por `zoom`, e sem isto um
  * título afastado para de encolher. Ver `PostitPapel.medidaDoCorpo`.
  */
+/**
+ * A pilha de fontes de cada família. A da interface é `undefined`: o texto
+ * herda a do aplicativo, como sempre herdou.
+ */
+const FONTE_DA_FAMILIA: Record<FamiliaDoTexto, string | undefined> = {
+  interface: undefined,
+  mao: "var(--font-postit)",
+  codigo: "var(--font-mono)",
+};
+
 export function tipografiaDoTexto(
   texto: Texto,
   scale: number,
@@ -171,9 +183,18 @@ export function tipografiaDoTexto(
       color: texto.cor,
       fontWeight: texto.negrito ? 700 : undefined,
       fontStyle: texto.italico ? "italic" : undefined,
-      // A letra do postit. Aqui, e não numa classe do desenho, pela razão do
-      // negrito logo acima: o campo de edição recebe este mesmo objeto.
-      fontFamily: texto.aMao ? "var(--font-postit)" : undefined,
+      // A família: a do postit, a de código ou a da interface. Aqui, e não
+      // numa classe do desenho, pela razão do negrito logo acima: o campo de
+      // edição recebe este mesmo objeto.
+      fontFamily: FONTE_DA_FAMILIA[familiaDoTexto(texto)],
+      textAlign: texto.alinhamento === "centro"
+        ? "center"
+        : texto.alinhamento === "direita"
+          ? "right"
+          : undefined,
+      // No texto inteiro, com o fundo: é o rótulo que se apaga sobre o mapa,
+      // e não só a tinta da letra.
+      opacity: texto.opacidade,
       textDecoration: texto.sublinhado ? "underline" : undefined,
       background: texto.fundo,
       // Em `em` e não em pixel: a folga do marca-texto tem de crescer junto com

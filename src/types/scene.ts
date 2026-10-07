@@ -908,8 +908,27 @@ export type Texto = {
   /**
    * Letra de mão, a do postit (Kalam). Ausente = a letra da interface. O mesmo
    * `aMao` da forma e da seta: é o traço à mão da campanha chegando ao texto.
+   *
+   * Continua gravado junto da `familia`, e é ele que diz "mão" no texto antigo:
+   * ver `familiaDoTexto`.
    */
   aMao?: true;
+  /**
+   * A família da letra. Ausente = a do `aMao`: mão com ele, a da interface sem.
+   *
+   * Um campo à parte, e não o `aMao` virando lista: o texto gravado antes de a
+   * família existir continua válido sem migração nenhuma. Ver `familiaDoTexto`.
+   */
+  familia?: FamiliaDoTexto;
+  /**
+   * Como as linhas se alinham entre si. Ausente = à esquerda, a de sempre.
+   *
+   * Só se vê com mais de uma linha: o texto não tem largura fixa, e a caixa é
+   * a da linha mais longa -- as outras se alinham dentro dela.
+   */
+  alinhamento?: "centro" | "direita";
+  /** De 0 a 1, no texto inteiro, com o fundo. Ausente = 1. */
+  opacidade?: number;
   /**
    * Está na mesa? Ausente = só o mestre vê, e é o padrão.
    *
@@ -954,6 +973,9 @@ export type NewTexto = Pick<Texto, "x" | "y"> &
       | "italico"
       | "sublinhado"
       | "aMao"
+      | "familia"
+      | "alinhamento"
+      | "opacidade"
       | "naMesa"
       | "locked"
     >
@@ -981,6 +1003,9 @@ export function semIdDoTexto(texto: Texto): NewTexto {
     italico: texto.italico,
     sublinhado: texto.sublinhado,
     aMao: texto.aMao,
+    familia: texto.familia,
+    alinhamento: texto.alinhamento,
+    opacidade: texto.opacidade,
     // Como na forma: a decisão de mostrar acompanha a cópia.
     naMesa: texto.naMesa,
     locked: texto.locked,
@@ -989,6 +1014,46 @@ export function semIdDoTexto(texto: Texto): NewTexto {
 
 /** Tamanho de fonte de um texto novo, em unidades de cena. */
 export const TEXTO_TAMANHO = 40;
+
+/**
+ * As famílias de letra de um texto: a da interface (Geist), a de mão do
+ * postit (Kalam) e a de código (Geist Mono). As três que o aplicativo já
+ * carrega -- nenhum arquivo novo no pacote do Mestre nem no do celular.
+ */
+export const FAMILIAS_DO_TEXTO = ["interface", "mao", "codigo"] as const;
+
+export type FamiliaDoTexto = (typeof FAMILIAS_DO_TEXTO)[number];
+
+/** A família de um texto, lendo o `aMao` de quem foi gravado antes dela. */
+export function familiaDoTexto(
+  texto: Pick<Texto, "familia" | "aMao">,
+): FamiliaDoTexto {
+  return texto.familia ?? (texto.aMao ? "mao" : "interface");
+}
+
+/**
+ * O que gravar para pôr um texto nesta família.
+ *
+ * O mínimo de campos: a interface é a ausência dos dois, e a mão continua
+ * sendo o `aMao` de sempre -- só o código precisa do campo novo. Assim um
+ * arquivo de cena só muda de forma quando há o que dizer, e o texto escrito à
+ * mão se lê igual numa versão do aplicativo anterior à família.
+ */
+export function patchDaFamilia(
+  familia: FamiliaDoTexto,
+): Pick<Texto, "familia" | "aMao"> {
+  return {
+    familia: familia === "codigo" ? "codigo" : undefined,
+    aMao: familia === "mao" ? true : undefined,
+  };
+}
+
+/**
+ * Os tamanhos de cara do painel de texto, em unidades de cena: pequeno, médio,
+ * grande e enorme. O médio é o de sempre (`TEXTO_TAMANHO`); o canto do gizmo
+ * continua escalando em qualquer número entre eles.
+ */
+export const TAMANHOS_DO_TEXTO = { S: 24, M: TEXTO_TAMANHO, L: 64, XL: 96 } as const;
 
 /** As formas que o quadro desenha. Ver `Forma`. */
 export const TIPOS_DE_FORMA = [
