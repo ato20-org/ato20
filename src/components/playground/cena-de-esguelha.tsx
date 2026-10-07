@@ -20,6 +20,7 @@ import { efeitosDoObjeto, type EfeitosDoPersonagem } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
 import {
   itensVisiveis,
@@ -121,6 +122,7 @@ export function CenaDeEsguelha({
   efeitos,
   rolagens,
   pings,
+  laser,
   variante,
   smooth,
   tripe,
@@ -136,6 +138,8 @@ export function CenaDeEsguelha({
   efeitos?: EfeitosDoPersonagem[];
   rolagens?: RolagemDaMesa[];
   pings?: Ping[];
+  /** O laser do mestre. Ver `SceneLayer`. */
+  laser?: LaserNaMesa | null;
   variante?: Variante;
   smooth?: boolean;
   /** O tripé no ar, na janela do espectador. Ver `Tripe`. */
@@ -281,6 +285,7 @@ export function CenaDeEsguelha({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        laser={laser}
         variante={variante}
         smooth={smooth}
         animarSo={animarSo}
@@ -297,6 +302,7 @@ export function CenaDeEsguelha({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        laser={laser}
         variante={variante}
         smooth={smooth}
         esguelha={camera}

@@ -103,6 +103,7 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
     spotlight,
     rolagens,
     pings,
+    laser,
     declarativoVersao,
     synced,
     stalled,
@@ -147,6 +148,7 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
               fichas={fichas}
               rolagens={rolagens}
               pings={pings}
+              laser={laser}
               variante="tela"
               smooth
               tripe={tripe}

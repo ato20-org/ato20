@@ -1,6 +1,7 @@
 import type { Idioma } from "@/lib/i18n/idioma";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
 import type {
   Ambiente,
@@ -142,6 +143,17 @@ export type LiveState = {
    * ausência como mapa sem ping.
    */
   pings?: Ping[];
+  /**
+   * O laser do mestre, enquanto o rastro está aceso. Ver `LaserNaMesa`.
+   *
+   * Some do quadro quando o rastro apaga, e não fica até o próximo: o daemon
+   * reentrega o último quadro a quem conecta, e o batimento o repete. Um
+   * rastro esquecido aqui acenderia de novo na TV vinte segundos depois.
+   *
+   * Opcional: ausente é a mesa sem laser, e é o que um quadro de uma versão
+   * anterior diz.
+   */
+  laser?: LaserNaMesa;
   /**
    * O idioma do Mestre. A janela do espectador recarrega nele quando muda, e o
    * celular também, enquanto o jogador não escolheu outro. Ver

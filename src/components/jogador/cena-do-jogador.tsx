@@ -59,6 +59,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping, TipoDePing } from "@/types/ping";
 import {
   ehQuadro,
@@ -182,6 +183,7 @@ export function CenaDoJogador({
   efeitos,
   rolagens,
   pings,
+  laser,
   tripe,
   corte,
 }: {
@@ -195,6 +197,8 @@ export function CenaDoJogador({
   rolagens: RolagemDaMesa[];
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** O laser do mestre. Ver `LiveState.laser`. */
+  laser: LaserNaMesa | null;
   /**
    * O tripé no ar, quando a mesa vê de esguelha. Aí o celular também vê, e o
    * dedo pega o token pelo chão do tripé. Ver `AlcasDeEsguelha`.
@@ -485,6 +489,7 @@ export function CenaDoJogador({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        laser={laser}
         // Pela mesma razão do mapa de prumo, logo abaixo.
         variante="tela"
         smooth
@@ -518,6 +523,7 @@ export function CenaDoJogador({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        laser={laser}
         smooth
         naMao={naMao?.itemId}
         variante="tela"
