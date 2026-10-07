@@ -45,6 +45,11 @@ const pt = {
   sceneList: {
     abaMapas: "Mapas",
     abaFundos: "Fundos",
+    mostrarCameras: "Mostrar as câmeras",
+    esconderCameras: "Esconder as câmeras",
+    camerasDe: (nome: string) => `Câmeras de ${nome}`,
+    abrirNaCamera: (nome: string) => `Abrir em ${nome}`,
+    semFotoAinda: "Sem foto ainda: ela sai quando a cena for aberta.",
     contarItens: (n: number) => `${n} itens`,
     contarAreas: (n: number) => `${n} áreas`,
     semImagem: "sem imagem",
@@ -144,6 +149,11 @@ const en: typeof pt = {
   sceneList: {
     abaMapas: "Maps",
     abaFundos: "Backdrops",
+    mostrarCameras: "Show cameras",
+    esconderCameras: "Hide cameras",
+    camerasDe: (nome) => `Cameras of ${nome}`,
+    abrirNaCamera: (nome) => `Open at ${nome}`,
+    semFotoAinda: "No snapshot yet: it is taken when the scene is opened.",
     contarItens: (n) => (n === 1 ? "1 item" : `${n} items`),
     contarAreas: (n) => (n === 1 ? "1 fog area" : `${n} fog areas`),
     semImagem: "no image",

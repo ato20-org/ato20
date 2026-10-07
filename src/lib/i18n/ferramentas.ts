@@ -9,6 +9,11 @@ const pt = {
   camerasSalvas: {
     tripes: "Tripés",
     cameras: "Câmeras",
+    todos: "Todos",
+    barra: "Câmeras da cena",
+    mostrarPrevias: "Mostrar as prévias",
+    recolher: "Recolher",
+    alturaDaBarra: "Arraste para mudar a altura",
     novaCameraDaqui: "Nova câmera daqui",
     novaCamera: "Nova câmera",
     novaCameraDaquiAjuda:
@@ -385,6 +390,11 @@ const en: typeof pt = {
   camerasSalvas: {
     tripes: "Tripods",
     cameras: "Cameras",
+    todos: "All",
+    barra: "Scene cameras",
+    mostrarPrevias: "Show previews",
+    recolher: "Collapse",
+    alturaDaBarra: "Drag to change the height",
     novaCameraDaqui: "New camera from here",
     novaCamera: "New camera",
     novaCameraDaquiAjuda:
