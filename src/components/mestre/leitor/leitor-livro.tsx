@@ -109,67 +109,72 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
   }, []);
 
   return (
-    <LeitorPdf
-      // `key` no livro: trocar o livro do split troca a PROP de um leitor que
-      // continua montado, e a retomada da página, o zoom e a lupa são do
-      // documento, não da moldura.
-      key={livroId}
-      documento={documento}
-      // `null` enquanto a linha do banco não chegou: é o que faz o leitor
-      // esperar em vez de abrir na primeira página e saltar depois. Sem a linha
-      // — leitura que falhou —, `useLivro` fica `null` e o livro abre na 1 sem
-      // gravar nada, que é o comportamento honesto.
-      paginaInicial={livro ? livro.pagina : null}
-      salto={salto}
-      aoSaltar={aoSaltar}
-      aoMudarPagina={aoMudarPagina}
-      marcadores={({ paginaAtual, aoEscolher }) => (
-        <MarcadoresLivro
-          livroId={livroId}
-          paginaAtual={paginaAtual}
-          aoEscolher={aoEscolher}
-        />
-      )}
-      acoes={
-        <>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={noPainel ? t.leitor.soltar : t.leitor.abrirNoPainel}
-                  onClick={() => {
-                    const titulo = livro?.titulo ?? t.leitor.livro;
+    // A marca do "Lendo as regras" no Discord: o clique aqui dentro diz que
+    // o mestre está no livro. `contents` para a caixa não existir no layout
+    // -- o leitor continua filho direto do painel. Ver `PresencaDoMestre`.
+    <div data-presenca-livro="" className="contents">
+      <LeitorPdf
+        // `key` no livro: trocar o livro do split troca a PROP de um leitor que
+        // continua montado, e a retomada da página, o zoom e a lupa são do
+        // documento, não da moldura.
+        key={livroId}
+        documento={documento}
+        // `null` enquanto a linha do banco não chegou: é o que faz o leitor
+        // esperar em vez de abrir na primeira página e saltar depois. Sem a linha
+        // — leitura que falhou —, `useLivro` fica `null` e o livro abre na 1 sem
+        // gravar nada, que é o comportamento honesto.
+        paginaInicial={livro ? livro.pagina : null}
+        salto={salto}
+        aoSaltar={aoSaltar}
+        aoMudarPagina={aoMudarPagina}
+        marcadores={({ paginaAtual, aoEscolher }) => (
+          <MarcadoresLivro
+            livroId={livroId}
+            paginaAtual={paginaAtual}
+            aoEscolher={aoEscolher}
+          />
+        )}
+        acoes={
+          <>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={noPainel ? t.leitor.soltar : t.leitor.abrirNoPainel}
+                    onClick={() => {
+                      const titulo = livro?.titulo ?? t.leitor.livro;
 
-                    if (noPainel) {
-                      fecharDoPainel({ tipo: "livro", livroId, titulo });
-                      abrirJanela({ tipo: "livro", livroId, titulo });
-                      return;
-                    }
+                      if (noPainel) {
+                        fecharDoPainel({ tipo: "livro", livroId, titulo });
+                        abrirJanela({ tipo: "livro", livroId, titulo });
+                        return;
+                      }
 
-                    // A janela sai de cena ao ir para o painel: o mesmo livro
-                    // nas duas casas seriam dois leitores do mesmo PDF, cada um
-                    // com sua página, gravando por cima do outro.
-                    fecharJanela(chaveDe({ tipo: "livro", livroId, titulo: "" }));
-                    abrirNoPainel({ tipo: "livro", livroId, titulo });
-                  }}
-                >
-                  {noPainel ? <PictureInPicture2 /> : <Columns2 />}
-                </Button>
-              }
-            />
-            <TooltipContent>
-              <p>
-                {noPainel ? t.leitor.soltar : t.leitor.abrirNoPainel}
-              </p>
-            </TooltipContent>
-          </Tooltip>
+                      // A janela sai de cena ao ir para o painel: o mesmo livro
+                      // nas duas casas seriam dois leitores do mesmo PDF, cada um
+                      // com sua página, gravando por cima do outro.
+                      fecharJanela(chaveDe({ tipo: "livro", livroId, titulo: "" }));
+                      abrirNoPainel({ tipo: "livro", livroId, titulo });
+                    }}
+                  >
+                    {noPainel ? <PictureInPicture2 /> : <Columns2 />}
+                  </Button>
+                }
+              />
+              <TooltipContent>
+                <p>
+                  {noPainel ? t.leitor.soltar : t.leitor.abrirNoPainel}
+                </p>
+              </TooltipContent>
+            </Tooltip>
 
-          {/* Sem fechar aqui dentro: a janela tem o X da moldura e o painel o
-              da aba -- um segundo seriam dois alvos para o mesmo gesto. */}
-        </>
-      }
-    />
+            {/* Sem fechar aqui dentro: a janela tem o X da moldura e o painel o
+                da aba -- um segundo seriam dois alvos para o mesmo gesto. */}
+          </>
+        }
+      />
+    </div>
   );
 }
