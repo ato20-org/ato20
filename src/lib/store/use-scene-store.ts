@@ -6,6 +6,10 @@ import { COR_DO_VAZIO_PADRAO, corDoVazioDe } from "@/lib/cor";
 import { COR_DO_ESCURO_PADRAO, corDoEscuroDe } from "@/lib/geometry/luz";
 import { t as textoDeCenas } from "@/lib/i18n/cenas";
 import { novoId } from "@/lib/id";
+import {
+  ajusteParaGuardar,
+  type AjusteDeImagem,
+} from "@/lib/imagem-do-espectador";
 import { pastaDoMembro, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 
 import {
@@ -475,6 +479,8 @@ type SceneStore = {
   setEscuridao: (sceneId: string, escuridao: number) => void;
   /** Liga nome e medidores acima dos tokens. Ver `Scene.infoDosTokens`. */
   setInfoDosTokens: (sceneId: string, ligado: boolean) => void;
+  /** O ajuste de imagem da cena no espectador. Neutro guarda como ausente. Ver `Scene.imagem`. */
+  setImagem: (sceneId: string, imagem: AjusteDeImagem | undefined) => void;
   updateFog: (
     sceneId: string,
     fogId: string,
@@ -1812,6 +1818,14 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         ...scene,
         infoDosTokens: ligado ? true : undefined,
       }));
+    },
+
+    setImagem(sceneId, imagem) {
+      // Neutro guarda como AUSENTE, como a escuridão em zero: a régua devolvida
+      // ao meio não deixa campo na cena.
+      const valor = ajusteParaGuardar(imagem);
+
+      get().updateScene(sceneId, (scene) => ({ ...scene, imagem: valor }));
     },
 
     updateFog(sceneId, fogId, patch) {

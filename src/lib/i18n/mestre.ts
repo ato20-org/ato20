@@ -102,6 +102,9 @@ const pt = {
     tracoAMao: "Traço à mão",
     tracoAMaoDescricao:
       "Formas e setas saem tremidas, como rabisco a lápis, e o texto solto nasce em letra de mão.",
+    espectador: "Imagem no espectador",
+    espectadorDescricao:
+      "Brilho e cor da TV ou do projetor. Só a janela do espectador muda: você e os jogadores veem o mapa como ele é. Cada mapa ainda pode ter o próprio ajuste, por cima deste.",
     falhaAoLerMedidores: "Falha ao ler os medidores.",
     falhaAoReordenar: "Falha ao reordenar.",
     falhaAoGravar: "Falha ao gravar.",
@@ -628,6 +631,26 @@ const pt = {
         "nevoa",
       ],
     },
+    espectador: {
+      titulo: "Espectador",
+      descricao: "Brilho, contraste e cor da janela do espectador.",
+      palavras: [
+        "brilho",
+        "contraste",
+        "saturacao",
+        "matiz",
+        "cor",
+        "imagem",
+        "tv",
+        "projetor",
+        "calibrar",
+        "claro",
+        "escuro",
+        "preto",
+        "branco",
+        "sepia",
+      ],
+    },
     ajustes: {
       titulo: "Ajustes",
       descricao: "O que o ATO20 e os plugins deixam ajustar só nesta campanha.",
@@ -672,6 +695,24 @@ const pt = {
     dadosAbertos: "Rolar aberto para a mesa",
     dadosAbertosDescricao:
       "Os dados do saquinho e da paleta entram no chat para todos. Desligado, entram só para o Mestre.",
+    imagem: {
+      brilho: "Brilho no espectador",
+      contraste: "Contraste no espectador",
+      saturacao: "Saturação no espectador",
+      matiz: "Matiz no espectador",
+    },
+    imagemDescricao:
+      "Só a janela do espectador muda. Cada mapa pode ter o próprio ajuste, por cima deste.",
+  },
+
+  /** As réguas do ajuste de imagem da janela do espectador. */
+  imagemDoEspectador: {
+    brilho: "Brilho",
+    contraste: "Contraste",
+    saturacao: "Saturação",
+    matiz: "Matiz",
+    restaurar: "Restaurar",
+    verNaJanelaMesa: "Ver na Janela Mesa",
   },
 
   /** Avisos do carregador de plugins (`lib/extensoes/carregar.ts`). */
@@ -789,6 +830,9 @@ const en: typeof pt = {
     tracoAMao: "Hand-drawn stroke",
     tracoAMaoDescricao:
       "Shapes and arrows come out wobbly, like a pencil sketch, and loose text is born in handwriting.",
+    espectador: "Spectator image",
+    espectadorDescricao:
+      "Brightness and color for the TV or projector. Only the spectator window changes: you and the players see the map as it is. Each map can still have its own adjustment on top of this one.",
     falhaAoLerMedidores: "Could not read the meters.",
     falhaAoReordenar: "Could not reorder.",
     falhaAoGravar: "Could not save.",
@@ -1287,6 +1331,27 @@ const en: typeof pt = {
         "fog",
       ],
     },
+    espectador: {
+      titulo: "Spectator",
+      descricao: "Brightness, contrast and color of the spectator window.",
+      palavras: [
+        "brightness",
+        "contrast",
+        "saturation",
+        "hue",
+        "color",
+        "colour",
+        "image",
+        "tv",
+        "projector",
+        "calibrate",
+        "bright",
+        "dark",
+        "black",
+        "white",
+        "sepia",
+      ],
+    },
     ajustes: {
       titulo: "Options",
       descricao: "What ATO20 and its plugins let you adjust in this campaign only.",
@@ -1328,6 +1393,23 @@ const en: typeof pt = {
     dadosAbertos: "Roll openly to the table",
     dadosAbertosDescricao:
       "Dice from the dice bag and the palette go into the chat for everyone. When off, they go to the GM only.",
+    imagem: {
+      brilho: "Spectator brightness",
+      contraste: "Spectator contrast",
+      saturacao: "Spectator saturation",
+      matiz: "Spectator hue",
+    },
+    imagemDescricao:
+      "Only the spectator window changes. Each map can have its own adjustment on top of this one.",
+  },
+
+  imagemDoEspectador: {
+    brilho: "Brightness",
+    contraste: "Contrast",
+    saturacao: "Saturation",
+    matiz: "Hue",
+    restaurar: "Reset",
+    verNaJanelaMesa: "View in Table window",
   },
   carregador: {
     semPrincipal: "The plugin does not declare `principal`.",

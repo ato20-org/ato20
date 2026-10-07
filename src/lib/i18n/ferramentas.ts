@@ -69,6 +69,9 @@ const pt = {
     ceuAjuda:
       "Atrás do chão, girando com a câmera. Um panorama 360° (2:1) dá a volta sem emenda.",
     falhaNoCeu: "Não deu para importar o céu.",
+    imagem: "Imagem no espectador",
+    imagemAjuda:
+      "Só neste mapa, por cima do ajuste da campanha. Você e os jogadores veem o mapa como ele é.",
     tomPersonalizado: "Tom personalizado",
     breu: "Breu",
     noite: "Noite",
@@ -536,6 +539,9 @@ const en: typeof pt = {
     ceuAjuda:
       "Behind the floor, turning with the camera. A 360° panorama (2:1) wraps around without a seam.",
     falhaNoCeu: "Couldn't import the sky.",
+    imagem: "Spectator image",
+    imagemAjuda:
+      "This map only, on top of the campaign adjustment. You and the players see the map as it is.",
     tomPersonalizado: "Custom tint",
     breu: "Pitch black",
     noite: "Night",

@@ -10,6 +10,7 @@ import {
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import { seguirIdiomaDaMesa } from "@/lib/i18n/da-mesa";
 import { idioma } from "@/lib/i18n/idioma";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -195,6 +196,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
       // Do módulo, e não do estado: o idioma é constante enquanto a janela
       // vive, e trocá-lo recarrega o Mestre -- que volta publicando o novo.
       idioma,
+      imagem: state.imagem,
     };
 
     stateRef.current = paraMesa;
@@ -226,6 +228,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
     state.fichasVersao,
     state.rolagens,
     state.pings,
+    state.imagem,
   ]);
 
   useEffect(() => {
@@ -268,6 +271,8 @@ export type Subscription = {
   declarativoVersao: number;
   /** A versão do elenco no Mestre. Ver `LiveState`. */
   fichasVersao: number;
+  /** O ajuste de imagem da campanha. `undefined` = neutro. Ver `LiveState.imagem`. */
+  imagem: AjusteDeImagem | undefined;
   /** Já chegou alguma coisa do daemon. */
   synced: boolean;
   /** Passou tempo demais sem nada. */
@@ -347,6 +352,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     laser: live.laser ?? null,
     declarativoVersao: live.declarativoVersao ?? 0,
     fichasVersao: live.fichasVersao ?? 0,
+    imagem: live.imagem,
     synced,
     stalled,
   };
