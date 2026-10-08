@@ -1024,12 +1024,40 @@ why plugin code reaches only the GM window. The deliberate exception is
 `paginas`: only those of the plugins that declare them, and sandboxed. See
 [Pages on the network](#pages-on-the-network-the-plugin-outside-the-gm-window).
 
+## Installing from the catalog
+
+The Catalog tab in Settings → Plugins lists the site's `plugins.json`, and each
+card has **Install**. Rust downloads the zip of the repository's default branch
+(`codeload.github.com/{owner}/{repo}/zip/HEAD`, the same as "Code → Download
+ZIP"), unzips it into a temporary folder and runs it through the same
+`extensoes::importar` as the Import button: the validation is the same. See
+`src-tauri/src/catalogo.rs`.
+
+- Only `https://github.com/{owner}/{repo}`. The zip address is built in Rust;
+  the screen never hands over a URL to download.
+- The manifest can sit at the root of the zip or inside the single folder
+  GitHub wraps around it (`repo-HEAD/`).
+- The manifest `id` must match the card's. Import overwrites by id, and a
+  repository carrying another plugin's id would wipe the wrong plugin.
+- Limits: 50 MB of zip, 200 MB unzipped, 5 thousand files. Zip-slip and
+  symbolic links are left out, as in the campaign import.
+- A plugin that runs code asks for confirmation first: when the catalog says
+  so, or when the repository's `manifest.json` has `principal`.
+
+Once installed, the card reads the repository's `manifest.json`
+(`raw.githubusercontent.com`) and shows **Update** when the `versao` there is
+newer than the installed one. Updating is installing again on top, and the old
+module is unloaded first. For your plugin to offer updates, bump the manifest
+`versao` with every change on the default branch.
+
 ## Trust
 
-There is no store, no review and no sandbox. Installing a code plugin means
-running the code of whoever wrote it, with the full reach of the window. The
-screen tells you what is a theme and what is a feature, and shows the author and
-the repository; the rest is the same trust you give to an editor extension.
+There is no store, no review and no sandbox. The catalog is a list, not an
+endorsement. Installing a code plugin means running the code of whoever wrote
+it, with the full reach of the window. The screen tells you what is a theme and
+what is a feature, shows the author and the repository and, in the catalog,
+asks for confirmation before installing code; the rest is the same trust you
+give to an editor extension.
 
 The guards that exist are against **malformed** plugins, not malicious ones:
 path traversal, a symbolic link planted in the folder, a URL template without

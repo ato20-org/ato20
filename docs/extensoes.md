@@ -935,12 +935,39 @@ dentro da webview desta janela — que é também a razão de o código do plugi
 alcançar só o Mestre. A exceção decidida são as `paginas`: só as de quem as
 declara, e em sandbox. Ver "Páginas na rede".
 
+## Instalar pelo catálogo
+
+A aba Catálogo de Configurações → Plugins lista o `plugins.json` do site, e cada
+card tem **Instalar**. O Rust baixa o zip da branch principal do repositório
+(`codeload.github.com/{dono}/{repo}/zip/HEAD`, o mesmo do "Code → Download ZIP"),
+extrai numa pasta temporária e passa pelo mesmo `extensoes::importar` do botão
+Importar: a validação é a mesma. Ver `src-tauri/src/catalogo.rs`.
+
+- Só `https://github.com/{dono}/{repo}`. O endereço do zip é montado no Rust; a
+  tela nunca passa uma URL para baixar.
+- O manifesto pode estar na raiz do zip ou dentro da pasta única que o GitHub
+  põe em volta (`repo-HEAD/`).
+- O `id` do manifesto tem de ser o do card. Importar sobrescreve pelo id, e um
+  repositório que trouxesse o id de outro plugin apagaria o plugin errado.
+- Tetos: 50 MB de zip, 200 MB descompactado, 5 mil arquivos. Zip-slip e link
+  simbólico ficam de fora, como no import de campanha.
+- Plugin que executa código pede confirmação antes: quando o catálogo diz, ou
+  quando o `manifest.json` do repositório tem `principal`.
+
+Depois de instalado, o card lê o `manifest.json` do repositório
+(`raw.githubusercontent.com`) e mostra **Atualizar** quando a `versao` de lá
+passa da instalada. Atualizar é instalar de novo por cima, e o módulo velho é
+descarregado antes. Para o seu plugin oferecer atualização, suba a `versao` do
+manifesto a cada mudança na branch principal.
+
 ## Confiança
 
-Não há loja, não há revisão e não há sandbox. Quem instala um plugin de código
-está executando o código de quem o escreveu, com o alcance da janela. A tela
-avisa o que é tema e o que é funcionalidade, e mostra autor e repositório — o
-resto é a mesma confiança que se dá a uma extensão de editor.
+Não há loja, não há revisão e não há sandbox. O catálogo é uma lista, não um
+aval. Quem instala um plugin de código está executando o código de quem o
+escreveu, com o alcance da janela. A tela avisa o que é tema e o que é
+funcionalidade, mostra autor e repositório e, no catálogo, pede confirmação
+antes de instalar código; o resto é a mesma confiança que se dá a uma extensão
+de editor.
 
 As guardas que existem são contra plugin **malformado**, não contra plugin
 malicioso: travessia de caminho, link simbólico plantado na pasta, molde de URL
