@@ -58,6 +58,7 @@ import {
   POSTIT_ALTURA,
   POSTIT_LARGURA,
   type AreaDeEfeito,
+  type Ambiente,
   type Board,
   type CameraSalva,
   type CameraTripe,
@@ -189,6 +190,17 @@ type SceneStore = {
   addScene: (name?: string, tipo?: TipoDeCena) => string;
   renameScene: (sceneId: string, name: string) => void;
   duplicateScene: (sceneId: string) => string | null;
+  /**
+   * Põe no board as cenas que vieram de um pacote, como cópias: id novo para
+   * a cena e o que há nela, nome repetido ganha "(2)", e a pasta de origem é
+   * achada pelo nome ou criada. Abre a primeira. Devolve os ids novos.
+   * Ver `vault/pacote.rs`.
+   */
+  importarCenas: (importado: {
+    cenas: Scene[];
+    pastas: Pasta[];
+    ambientes: Record<string, Ambiente[]>;
+  }) => string[];
   /** Posição na lista de cenas. É o que o arrasto da lista emite. */
   moveSceneToIndex: (sceneId: string, index: number) => void;
   removeScene: (sceneId: string) => void;
@@ -934,6 +946,66 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       }
 
       return copy.id;
+    },
+
+    importarCenas({ cenas, pastas, ambientes }) {
+      if (cenas.length === 0) return [];
+
+      const base = get().board ?? { scenes: [], editingSceneId: null, liveSceneId: null };
+      const todasAsPastas = [...(base.pastas ?? [])];
+
+      // Da raiz para baixo, como o pacote as manda: a mãe já tem destino
+      // quando a filha chega.
+      const destinoDaPasta = new Map<string, string>();
+      for (const pasta of pastas) {
+        const parentId = pasta.parentId ? destinoDaPasta.get(pasta.parentId) : undefined;
+        const igual = todasAsPastas.find(
+          (atual) =>
+            atual.nome === pasta.nome &&
+            atual.lista === pasta.lista &&
+            atual.parentId === parentId,
+        );
+        if (igual) {
+          destinoDaPasta.set(pasta.id, igual.id);
+          continue;
+        }
+
+        const nova: Pasta = { id: novoId(), nome: pasta.nome };
+        if (parentId) nova.parentId = parentId;
+        if (pasta.lista) nova.lista = pasta.lista;
+        todasAsPastas.push(nova);
+        destinoDaPasta.set(pasta.id, nova.id);
+      }
+
+      const nomes = new Set(base.scenes.map((scene) => scene.name));
+      const livre = (nome: string) => {
+        let candidato = nome;
+        for (let n = 2; nomes.has(candidato); n++) candidato = `${nome} (${n})`;
+        nomes.add(candidato);
+        return candidato;
+      };
+
+      let proximo: Board = { ...base, pastas: todasAsPastas };
+      const novas: Array<{ de: string; para: string }> = [];
+
+      for (const cena of cenas) {
+        const copia = cloneScene(cena, livre(cena.name));
+        const pastaId = cena.pastaId ? destinoDaPasta.get(cena.pastaId) : undefined;
+        if (pastaId) copia.pastaId = pastaId;
+        else delete copia.pastaId;
+
+        proximo = appendScene(proximo, copia);
+        novas.push({ de: cena.id, para: copia.id });
+      }
+
+      commit({ ...proximo, editingSceneId: novas[0].para });
+
+      for (const { de, para } of novas) {
+        const lista = ambientes[de];
+        if (lista) useTrackStore.getState().adotarAmbientes(para, lista);
+      }
+
+      return novas.map(({ para }) => para);
     },
 
     moveSceneToIndex(sceneId, index) {

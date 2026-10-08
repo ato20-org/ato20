@@ -57,6 +57,49 @@ const pt = {
       "O código desta campanha. Ele viaja no zip, então continua o mesmo depois de importar noutra máquina.",
   },
 
+  /** Exportar e importar partes da campanha. Ver `vault/pacote.rs`. */
+  pacote: {
+    exportarItem: "Exportar…",
+    importarItem: "Importar…",
+    exportarTitulo: "Exportar",
+    exportarExplicacao:
+      "O que for marcado vai num pacote. Cada mapa leva junto a imagem, os sons de ambiente e os efeitos da campanha que usa.",
+    mapas: "Mapas",
+    fundos: "Fundos",
+    todos: "Todos",
+    nenhumaCena: "Nenhum nesta campanha.",
+    marcados: (marcados: number, total: number) => `${marcados} de ${total}`,
+    exportar: "Exportar",
+    exportando: "Exportando…",
+    exportadoEm: (destino: string) => `Pacote salvo em ${destino}`,
+    exportarFalhou: "Não foi possível exportar.",
+    salvar: "Salvar o pacote",
+    escolher: "Escolher um pacote ou uma campanha exportada",
+    abrindo: "Abrindo o pacote…",
+    abrirFalhou: "Não foi possível abrir o pacote.",
+    importarTitulo: (campanha: string) => (campanha ? `Importar de ${campanha}` : "Importar"),
+    importarExplicacao:
+      "Escolha o que entra nesta campanha. Nada daqui é sobrescrito: o que entra vem como novo, e nome repetido ganha um número.",
+    vazio: "Este pacote não tem mapas nem fundos.",
+    importar: "Importar",
+    importando: "Importando…",
+    importado: (quantos: number) =>
+      quantos === 1 ? "1 cena importada." : `${quantos} cenas importadas.`,
+    importarFalhou: "Não foi possível importar.",
+    pulado: {
+      efeitoJaExiste: (nome: string) =>
+        `Efeito "${nome}": a campanha já tem um com esse nome, e ficou o dela.`,
+      efeitosNoMaximo: (nome: string) =>
+        `Efeito "${nome}": a campanha já está no máximo de efeitos.`,
+      arquivoFaltando: (nome: string) => `Arquivo "${nome}": não veio no pacote.`,
+    },
+    sufixo: {
+      mapas: "mapas",
+      fundos: "fundos",
+      pacote: "pacote",
+    },
+  },
+
   /** A abertura: o splash enquanto a lista e a campanha são lidas. */
   abertura: {
     procurando: "Procurando as campanhas",
@@ -756,6 +799,46 @@ const en: typeof pt = {
     fechar: "Close campaign",
     codigoAjuda:
       "This campaign's code. It travels in the zip, so it stays the same after importing on another machine.",
+  },
+
+  pacote: {
+    exportarItem: "Export…",
+    importarItem: "Import…",
+    exportarTitulo: "Export",
+    exportarExplicacao:
+      "Whatever you check goes into a package. Each map takes along its image, its ambient sounds and the campaign effects it uses.",
+    mapas: "Maps",
+    fundos: "Backdrops",
+    todos: "All",
+    nenhumaCena: "None in this campaign.",
+    marcados: (marcados, total) => `${marcados} of ${total}`,
+    exportar: "Export",
+    exportando: "Exporting…",
+    exportadoEm: (destino) => `Package saved to ${destino}`,
+    exportarFalhou: "Could not export.",
+    salvar: "Save the package",
+    escolher: "Choose a package or an exported campaign",
+    abrindo: "Opening the package…",
+    abrirFalhou: "Could not open the package.",
+    importarTitulo: (campanha) => (campanha ? `Import from ${campanha}` : "Import"),
+    importarExplicacao:
+      "Choose what comes into this campaign. Nothing here is overwritten: what comes in arrives as new, and a repeated name gets a number.",
+    vazio: "This package has no maps or backdrops.",
+    importar: "Import",
+    importando: "Importing…",
+    importado: (quantos) => (quantos === 1 ? "1 scene imported." : `${quantos} scenes imported.`),
+    importarFalhou: "Could not import.",
+    pulado: {
+      efeitoJaExiste: (nome) =>
+        `Effect "${nome}": the campaign already has one with that name, and kept its own.`,
+      efeitosNoMaximo: (nome) => `Effect "${nome}": the campaign is at its effect limit.`,
+      arquivoFaltando: (nome) => `File "${nome}": not in the package.`,
+    },
+    sufixo: {
+      mapas: "maps",
+      fundos: "backdrops",
+      pacote: "package",
+    },
   },
 
   abertura: {
