@@ -21,7 +21,8 @@ use crate::vault::inventory::{self, Item};
 use crate::vault::dados_de_extensao;
 use crate::vault::{
     assets,
-    documentos, board, characters, condicoes, efeitos, modelos, players, session, variantes, zip,
+    atributos, documentos, board, characters, condicoes, efeitos, modelos, players, session,
+    variantes, zip,
     CampaignInfo,
     Vault,
 };
@@ -1043,8 +1044,15 @@ pub fn character_create(state: State<'_, AppState>, nome: String) -> AppResult<P
             characters::acrescentar_medidores(vault, &personagem.id, novos)?;
         }
 
+        // E com os atributos dela, pelo mesmo caminho e pela mesma razao.
+        let lista = atributos::load(vault)?;
+        if !lista.is_empty() {
+            let novos = lista.iter().map(|modelo| modelo.materializar()).collect();
+            characters::acrescentar_atributos(vault, &personagem.id, novos)?;
+        }
+
         // Relido, e nao o `personagem` de cima: a tela desenha a ficha com o que
-        // volta daqui, e o de cima ainda esta sem medidor nenhum.
+        // volta daqui, e o de cima ainda esta sem medidor nem atributo.
         characters::load(vault)?
             .into_iter()
             .find(|p| p.id == personagem.id)
@@ -1259,6 +1267,136 @@ fn aplicar(vault: &Vault, lista: &[modelos::Modelo]) -> AppResult<usize> {
     }
 
     Ok(alcancados)
+}
+
+// --- atributos da campanha ---------------------------------------------------
+
+/// Os atributos de fabrica desta campanha. Ver `vault::atributos`.
+#[tauri::command]
+pub fn atributos_da_campanha_list(state: State<'_, AppState>) -> AppResult<Vec<atributos::Modelo>> {
+    state.with_vault(|vault| atributos::load(vault))
+}
+
+/// Cria um atributo de fabrica e o materializa em TODO personagem que ja existe.
+///
+/// Os dois no mesmo comando, como `modelo_criar`: "esta mesa tem FOR" e um
+/// pedido so. Quem ja tem um FOR nao ganha outro -- ver
+/// `acrescentar_atributos`.
+#[tauri::command]
+pub fn atributo_da_campanha_criar(
+    state: State<'_, AppState>,
+    sigla: String,
+    valor: i64,
+    descricao: Option<String>,
+) -> AppResult<AplicacaoDeAtributo> {
+    state.with_vault(|vault| {
+        let modelo = atributos::criar(vault, &sigla, valor, descricao.as_deref())?;
+        let alcancados = aplicar_atributos(vault, &[modelo.clone()])?;
+
+        Ok(AplicacaoDeAtributo {
+            modelo: Some(modelo),
+            alcancados,
+        })
+    })
+}
+
+/// Poe TODOS os atributos de fabrica em TODOS os personagens, de novo.
+///
+/// O par de `modelos_aplicar_em_todos`: o personagem que ja existia antes do
+/// atributo, ou a campanha importada. IDEMPOTENTE pela sigla -- quem ja tem um
+/// FOR nao ganha outro, e o FOR que ele tem fica com o valor dele.
+#[tauri::command]
+pub fn atributos_da_campanha_aplicar_em_todos(
+    state: State<'_, AppState>,
+) -> AppResult<AplicacaoDeAtributo> {
+    state.with_vault(|vault| {
+        let lista = atributos::load(vault)?;
+        let alcancados = aplicar_atributos(vault, &lista)?;
+
+        Ok(AplicacaoDeAtributo {
+            modelo: None,
+            alcancados,
+        })
+    })
+}
+
+/// O resultado de materializar atributos: o criado, quando houve, e em quantas
+/// fichas entrou ao menos um.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AplicacaoDeAtributo {
+    pub modelo: Option<atributos::Modelo>,
+    pub alcancados: usize,
+}
+
+/// Poe estes atributos em toda ficha. Ver `aplicar`, o dos medidores.
+fn aplicar_atributos(vault: &Vault, lista: &[atributos::Modelo]) -> AppResult<usize> {
+    if lista.is_empty() {
+        return Ok(0);
+    }
+
+    let mut alcancados = 0;
+
+    for id in characters::todos_os_ids(vault)? {
+        let novos = lista.iter().map(|modelo| modelo.materializar()).collect();
+
+        if characters::acrescentar_atributos(vault, &id, novos)? > 0 {
+            alcancados += 1;
+        }
+    }
+
+    Ok(alcancados)
+}
+
+/// Edita um atributo de fabrica. NAO mexe nas fichas -- ver `vault::atributos`.
+#[tauri::command]
+pub fn atributo_da_campanha_editar(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+    patch: atributos::PatchModelo,
+) -> AppResult<atributos::Modelo> {
+    state.with_vault(|vault| atributos::editar(vault, &modeloId, patch))
+}
+
+/// Tira o atributo da campanha. Os que ele produziu ficam nas fichas.
+#[tauri::command]
+pub fn atributo_da_campanha_remover(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| atributos::remover(vault, &modeloId))
+}
+
+// --- atributos ---------------------------------------------------------------
+
+#[tauri::command]
+pub fn character_atributo_criar(
+    state: State<'_, AppState>,
+    id: String,
+    sigla: String,
+    valor: i64,
+) -> AppResult<characters::Atributo> {
+    state.with_vault(|vault| characters::criar_atributo(vault, &id, &sigla, valor))
+}
+
+/// Edita um atributo e devolve como ele ficou DEPOIS do ajuste.
+#[tauri::command]
+pub fn character_atributo_editar(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] atributoId: String,
+    patch: characters::PatchAtributo,
+) -> AppResult<characters::Atributo> {
+    state.with_vault(|vault| characters::editar_atributo(vault, &id, &atributoId, patch))
+}
+
+#[tauri::command]
+pub fn character_atributo_remover(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] atributoId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| characters::remover_atributo(vault, &id, &atributoId))
 }
 
 // --- medidores ---------------------------------------------------------------

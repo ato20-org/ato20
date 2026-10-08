@@ -93,10 +93,14 @@ does can be listed and loaded late; one that only finds out by running forces
 the app to run all of them to know what exists.
 
 **`apiVersao` says what the plugin asks for, and the app refuses only a plugin
-that asks for more than it has.** Version 8 is the current one: it added
-`proporcao` (proportion) and `ate` (up to) to the layered `pontos` (see
-[In image layers](#in-image-layers)), which an earlier ATO20 would ignore
-silently (the narrow bullet would come out stretched into a square). Version 7
+that asks for more than it has.** Version 9 is the current one: it added the
+sheet attributes, the `secao:atributos` replacement and the `atributos` field
+on the character from `personagens.listar` (the abbreviation, the number and
+the optional description: STR 4). An earlier ATO20 would refuse the replacement as an unknown target.
+Version 8 added `proporcao` (proportion) and `ate` (up to) to the layered
+`pontos` (see [In image layers](#in-image-layers)), which an earlier ATO20
+would ignore silently (the narrow bullet would come out stretched into a
+square). Version 7
 let every text in the manifest come per language and gave the code
 `api.idioma` (see
 [Text in more than one language](#text-in-more-than-one-language)); an earlier
@@ -257,8 +261,8 @@ an attack button that already deals the damage, an abilities tab that rolls
 and applies. None of this exists out of the box, on purpose: what exists is the
 reach.
 
-`api.personagens.listar()` returns the **whole** character, meters and
-conditions included, hidden ones too: the reader is the GM, and the GM is the
+`api.personagens.listar()` returns the **whole** character, meters,
+conditions and attributes included, hidden ones too: the reader is the GM, and the GM is the
 one who decides what the table sees. `assinar` notifies on every reread of the
 cast.
 
@@ -371,9 +375,9 @@ it. Sticky notes and cards now accept right-click, which used to fall through
 to empty space.
 
 **Section on the sheet**: `secoes: [{ id, titulo, alvo: "ficha" }]`. It goes
-after the conditions and before the files, with the same frame as the built-in
-sections: it collapses, and remembers that it was collapsed. The body receives
-`personagemId`.
+in the Sheet tab, after the built-in sections and across the full width of the
+window, with the same frame as the built-in sections: it collapses, and
+remembers that it was collapsed. The body receives `personagemId`.
 
 **Replacement**: `substitutos: [{ alvo }]`, with `secao:medidores` (the body of
 a sheet section) or `janela:personagem` (the whole window). It is what lets a
@@ -383,7 +387,10 @@ registered, body that threw. Two plugins on the same target: the **first in
 name order** wins, which is predictable and needs no configuration; whoever
 wants the other one disables the first. The single point for the window is
 `JanelaCorpo`, floating and docked; for the section it is `SecaoFicha`. Without
-plugins, neither of them adds a single node to the tree.
+plugins, neither of them adds a single node to the tree. `secao:campos` and
+`secao:nota` still work, but they are no longer sections: the first is the body
+of the popover behind the header thumbnails, and the second the body of the
+button for who plays the character.
 
 **Tool**: the manifest `icone` is now a name from the `icones.ts` list (it used
 to be ignored); `opcoes` is a component that shows up as a pill next to the

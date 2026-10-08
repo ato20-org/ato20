@@ -116,6 +116,17 @@ pub struct Personagem {
     /// condicoes pedem o mesmo efeito na figura, quem vence e a primeira.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub condicoes: Vec<Condicao>,
+    /// Os atributos deste personagem: FOR 4, AGI 2, INT 1.
+    ///
+    /// No INDICE, e nao num arquivo da pasta como o inventario: o celular do
+    /// jogador ja recebe o personagem inteiro por `GET /eu/personagens`, e os
+    /// atributos chegam nele sem rota nova. E e pouco -- uma sigla e um numero
+    /// por linha, doze no maximo.
+    ///
+    /// Ausente nas campanhas de antes deles, e `default` le essas sem migracao:
+    /// o campo so chega ao arquivo na primeira vez que alguem cria um.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub atributos: Vec<Atributo>,
     #[serde(rename = "criadoEm")]
     pub criado_em: i64,
 }
@@ -193,6 +204,36 @@ impl Default for Estilo {
     fn default() -> Self {
         Self::Barra
     }
+}
+
+/// Um atributo: uma sigla curta e um numero.
+///
+/// Generico de proposito, como o medidor. A sigla e do sistema -- FOR, AGI e
+/// VIG no Ordem, FOR, DES e CON no D&D --, e o app nao sabe nenhuma: quem diz
+/// quais existem e o mestre, um por ficha ou de uma vez pela campanha (ver
+/// `vault::atributos`).
+///
+/// Sem teto e sem forma, que e o que o separa do medidor: o atributo nao sobe
+/// e desce no meio da cena como a vida. E o numero que se consulta.
+///
+/// `valor` e inteiro, e cobre o 4 do Ordem, o 16 do D&D e o 60 do Chamado de
+/// Cthulhu. Dado como valor ("d8") fica de fora: texto livre perderia a conta
+/// que um plugin faria com ele para rolar.
+///
+/// O espelho em TypeScript e `Atributo`, em `types/character.ts`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Atributo {
+    pub id: String,
+    pub sigla: String,
+    pub valor: i64,
+    /// O que o atributo quer dizer, para quem nao conhece o sistema: "VIG --
+    /// Vigor, a resistencia do corpo". Aparece no hover do cartao.
+    ///
+    /// Opcional, e ausente nas fichas de antes dele: a sigla basta para quem ja
+    /// joga, e a descricao e para a mesa que esta aprendendo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descricao: Option<String>,
 }
 
 /// Uma condicao: um selo com nome, icone e cor, e o que ele faz com a figura.
@@ -478,6 +519,7 @@ pub fn create(vault: &Vault, nome: &str) -> AppResult<Personagem> {
         aparencia_ativa: Some(APARENCIA_PADRAO.to_string()),
         medidores: Vec::new(),
         condicoes: Vec::new(),
+        atributos: Vec::new(),
         criado_em: now_ms(),
     };
 
@@ -1115,6 +1157,199 @@ pub fn acrescentar_medidores(vault: &Vault, id: &str, novos: Vec<Medidor>) -> Ap
 /// acha o "envenenado" que a ficha ja tem.
 pub fn chave_do_nome(nome: &str) -> String {
     nome.trim().to_lowercase()
+}
+
+// --- atributos --------------------------------------------------------------
+
+/// Quantos atributos cabem num personagem.
+///
+/// Doze. Limite de LAYOUT: os cartoes desenham em fileiras de quatro na ficha,
+/// e tres fileiras ja passam de qualquer sistema de mesa que se joga. Mais que
+/// isso seria pericia, e pericia e lista, nao cartao.
+pub const MAX_ATRIBUTOS: usize = 12;
+
+/// O teto da sigla. Seis cabe "SANID" e "ESPIR", e ainda cabe no cartao.
+const MAX_SIGLA: usize = 6;
+
+/// O teto da descricao. E um balao de hover, e nao a pagina do manual.
+pub const MAX_DESCRICAO_ATRIBUTO: usize = 280;
+
+/// O teto do valor, para cima e para baixo.
+///
+/// Negativo existe -- o modificador que o sistema escreve na ficha, o -1 de
+/// quem tem FOR baixa. 999 e folgado para qualquer escala e cabe no cartao sem
+/// cortar digito.
+pub const MAX_VALOR_ATRIBUTO: i64 = 999;
+
+fn sem_atributo(id: &str, atributo_id: &str) -> AppError {
+    AppError::Malformed {
+        file: "personagens.json".into(),
+        cause: format!("personagem {id} nao tem o atributo {atributo_id}"),
+    }
+}
+
+/// Poe o atributo em forma: sigla curta e nao vazia, valor dentro do teto.
+///
+/// Aqui e nao na tela, como o `ajustar` do medidor: a tela e onde o valor e
+/// digitado, nao onde ele e decidido.
+pub fn ajustar_atributo(atributo: &mut Atributo) {
+    atributo.sigla = texto_curto(&atributo.sigla, MAX_SIGLA);
+    if atributo.sigla.is_empty() {
+        atributo.sigla = "ATR".to_string();
+    }
+
+    let teto = MAX_VALOR_ATRIBUTO;
+    atributo.valor = atributo.valor.clamp(-teto, teto);
+
+    // Vazia vira ausente: um balao em branco no hover seria pior que nenhum.
+    atributo.descricao = atributo
+        .descricao
+        .as_deref()
+        .map(|texto| texto_curto(texto, MAX_DESCRICAO_ATRIBUTO))
+        .filter(|texto| !texto.is_empty());
+}
+
+/// Cria um atributo no fim da lista.
+pub fn criar_atributo(vault: &Vault, id: &str, sigla: &str, valor: i64) -> AppResult<Atributo> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    if personagem.atributos.len() >= MAX_ATRIBUTOS {
+        return Err(AppError::Malformed {
+            file: "personagens.json".into(),
+            cause: format!("o personagem ja tem {MAX_ATRIBUTOS} atributos"),
+        });
+    }
+
+    let mut atributo = Atributo {
+        id: uuid::Uuid::new_v4().to_string(),
+        sigla: sigla.to_string(),
+        valor,
+        descricao: None,
+    };
+    ajustar_atributo(&mut atributo);
+
+    personagem.atributos.push(atributo.clone());
+    save(vault, &personagens)?;
+
+    Ok(atributo)
+}
+
+/// O que se pode trocar num atributo. Ausente nao mexe.
+///
+/// Campos opcionais pela mesma razao do `PatchMedidor`: o gesto comum e mexer
+/// so no valor, e mandar o registro inteiro deixaria uma tela desatualizada
+/// reescrever a sigla que outra acabou de trocar.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchAtributo {
+    pub sigla: Option<String>,
+    pub valor: Option<i64>,
+    /// `Some("")` apaga a descricao.
+    pub descricao: Option<String>,
+}
+
+/// Edita um atributo e devolve como ele ficou depois do ajuste.
+///
+/// Devolve o registro porque o valor gravado pode nao ser o mandado: 5000 vira
+/// 999, e a tela que nao soubesse disso mostraria o numero que pediu.
+pub fn editar_atributo(
+    vault: &Vault,
+    id: &str,
+    atributo_id: &str,
+    patch: PatchAtributo,
+) -> AppResult<Atributo> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+
+    let atributo = personagens[alvo]
+        .atributos
+        .iter_mut()
+        .find(|a| a.id == atributo_id)
+        .ok_or_else(|| sem_atributo(id, atributo_id))?;
+
+    if let Some(sigla) = patch.sigla {
+        atributo.sigla = sigla;
+    }
+    if let Some(valor) = patch.valor {
+        atributo.valor = valor;
+    }
+    if let Some(descricao) = patch.descricao {
+        atributo.descricao = Some(descricao);
+    }
+    ajustar_atributo(atributo);
+    let saida = atributo.clone();
+
+    save(vault, &personagens)?;
+
+    Ok(saida)
+}
+
+/// Tira um atributo da lista.
+pub fn remover_atributo(vault: &Vault, id: &str, atributo_id: &str) -> AppResult<()> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    if !personagem.atributos.iter().any(|a| a.id == atributo_id) {
+        return Err(sem_atributo(id, atributo_id));
+    }
+
+    personagem.atributos.retain(|a| a.id != atributo_id);
+
+    save(vault, &personagens)
+}
+
+/// Acrescenta atributos ao fim, pulando a sigla que o personagem ja tem.
+///
+/// O caminho dos modelos da campanha, e a guarda e a mesma de
+/// `acrescentar_medidores`: quem ja tem FOR nao ganha um segundo, sem
+/// diferenciar caixa. Personagem cheio recebe o que cabe. Devolve quantos
+/// entraram.
+pub fn acrescentar_atributos(vault: &Vault, id: &str, novos: Vec<Atributo>) -> AppResult<usize> {
+    let mut personagens = load(vault)?;
+    let alvo = indice(&personagens, id)?;
+    let personagem = &mut personagens[alvo];
+
+    let cabem = MAX_ATRIBUTOS.saturating_sub(personagem.atributos.len());
+    if cabem == 0 {
+        return Ok(0);
+    }
+
+    let mut tomadas: Vec<String> = personagem
+        .atributos
+        .iter()
+        .map(|atributo| chave_do_nome(&atributo.sigla))
+        .collect();
+
+    let mut entrando: Vec<Atributo> = Vec::new();
+
+    for mut atributo in novos {
+        if entrando.len() >= cabem {
+            break;
+        }
+
+        ajustar_atributo(&mut atributo);
+
+        let chave = chave_do_nome(&atributo.sigla);
+        if tomadas.contains(&chave) {
+            continue;
+        }
+
+        tomadas.push(chave);
+        entrando.push(atributo);
+    }
+
+    let quantos = entrando.len();
+    if quantos == 0 {
+        return Ok(0);
+    }
+
+    personagem.atributos.extend(entrando);
+    save(vault, &personagens)?;
+
+    Ok(quantos)
 }
 
 // --- condicoes ---------------------------------------------------------------
@@ -2593,5 +2828,134 @@ mod tests {
         assert!(!cru.contains("condicoes"));
 
         assert!(load(&vault).unwrap()[0].condicoes.is_empty());
+    }
+
+    #[test]
+    fn campanha_antiga_abre_sem_atributo_nenhum() {
+        // O indice de antes dos atributos, escrito a mao: sem o campo, ele
+        // tem de ler, e o arquivo nao pode ganhar o campo so por ter sido lido.
+        let (_tmp, vault) = vault();
+        let antigo = r#"[{"id":"p1","nome":"Edgar","criadoEm":1}]"#;
+        std::fs::write(index_path(&vault), antigo).unwrap();
+
+        assert!(load(&vault).unwrap()[0].atributos.is_empty());
+
+        create(&vault, "Mira").unwrap();
+        let cru = std::fs::read_to_string(index_path(&vault)).unwrap();
+        assert!(!cru.contains("atributos"));
+    }
+
+    #[test]
+    fn atributo_ajusta_sigla_e_valor() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        let longo = criar_atributo(&vault, &p.id, "  Sanidade ", 5000).unwrap();
+        assert_eq!(longo.sigla, "Sanida");
+        assert_eq!(longo.valor, MAX_VALOR_ATRIBUTO);
+
+        let vazio = criar_atributo(&vault, &p.id, "   ", -5000).unwrap();
+        assert_eq!(vazio.sigla, "ATR");
+        assert_eq!(vazio.valor, -MAX_VALOR_ATRIBUTO);
+
+        let editado = editar_atributo(
+            &vault,
+            &p.id,
+            &longo.id,
+            PatchAtributo {
+                valor: Some(4),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // Mexer so no valor nao toca a sigla.
+        assert_eq!(editado.sigla, "Sanida");
+        assert_eq!(editado.valor, 4);
+
+        let lido = &load(&vault).unwrap()[0].atributos;
+        assert_eq!(lido.len(), 2);
+        assert_eq!(lido[0].valor, 4);
+    }
+
+    #[test]
+    fn atributo_tem_teto_e_remove() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+
+        let primeiro = criar_atributo(&vault, &p.id, "A0", 1).unwrap();
+        for i in 1..MAX_ATRIBUTOS {
+            criar_atributo(&vault, &p.id, &format!("A{i}"), 1).unwrap();
+        }
+        assert!(criar_atributo(&vault, &p.id, "Mais", 1).is_err());
+
+        remover_atributo(&vault, &p.id, &primeiro.id).unwrap();
+        assert_eq!(load(&vault).unwrap()[0].atributos.len(), MAX_ATRIBUTOS - 1);
+        assert!(remover_atributo(&vault, &p.id, &primeiro.id).is_err());
+    }
+
+    #[test]
+    fn acrescentar_atributos_pula_sigla_repetida() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+        criar_atributo(&vault, &p.id, "FOR", 3).unwrap();
+
+        let novo = |sigla: &str| Atributo {
+            id: uuid::Uuid::new_v4().to_string(),
+            sigla: sigla.to_string(),
+            valor: 1,
+            descricao: None,
+        };
+
+        // "for" e o FOR que ele ja tem; o segundo AGI e o mesmo do primeiro.
+        let entraram =
+            acrescentar_atributos(&vault, &p.id, vec![novo("for"), novo("AGI"), novo("agi")])
+                .unwrap();
+        assert_eq!(entraram, 1);
+
+        let lido = &load(&vault).unwrap()[0].atributos;
+        let siglas: Vec<&str> = lido.iter().map(|a| a.sigla.as_str()).collect();
+        assert_eq!(siglas, ["FOR", "AGI"]);
+        // O FOR que ja estava na ficha fica com o valor dele.
+        assert_eq!(lido[0].valor, 3);
+    }
+
+    #[test]
+    fn descricao_do_atributo_corta_e_vazia_apaga() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+        let atributo = criar_atributo(&vault, &p.id, "VIG", 1).unwrap();
+        assert!(atributo.descricao.is_none());
+
+        let patch = |descricao: &str| PatchAtributo {
+            descricao: Some(descricao.to_string()),
+            ..Default::default()
+        };
+
+        let longa = "a".repeat(MAX_DESCRICAO_ATRIBUTO + 50);
+        let editado = editar_atributo(&vault, &p.id, &atributo.id, patch(&longa)).unwrap();
+        assert_eq!(
+            editado.descricao.map(|texto| texto.chars().count()),
+            Some(MAX_DESCRICAO_ATRIBUTO)
+        );
+
+        let editado = editar_atributo(&vault, &p.id, &atributo.id, patch("  Vigor  ")).unwrap();
+        assert_eq!(editado.descricao.as_deref(), Some("Vigor"));
+
+        let editado = editar_atributo(&vault, &p.id, &atributo.id, patch("   ")).unwrap();
+        assert!(editado.descricao.is_none());
+
+        // Mexer so no valor nao apaga a descricao.
+        editar_atributo(&vault, &p.id, &atributo.id, patch("Vigor")).unwrap();
+        let editado = editar_atributo(
+            &vault,
+            &p.id,
+            &atributo.id,
+            PatchAtributo {
+                valor: Some(3),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(editado.descricao.as_deref(), Some("Vigor"));
     }
 }
