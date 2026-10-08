@@ -298,7 +298,7 @@ export function FormaView({
   const recuo = Math.min(espessura / 2, width / 2, height / 2);
 
   /**
-   * O traço à mão, quando a forma o tem. A semente é o id: a forma que está no
+   * O traço à mão, que toda forma tem. A semente é o id: a forma que está no
    * quadro tem um, e a prévia do gesto -- que ainda não tem -- treme com uma
    * semente fixa até nascer. Ver `rabiscoDaForma`.
    *
@@ -306,25 +306,12 @@ export function FormaView({
    * figura onde ela está, e não onde a tremida a levou nesse trecho.
    */
   const id = "id" in forma && typeof forma.id === "string" ? forma.id : "";
-  const rabisco = useMemo(
-    () => (forma.aMao ? rabiscoDaForma(forma, sementeDe(id)) : null),
-    [forma, id],
-  );
+  const rabisco = useMemo(() => rabiscoDaForma(forma, sementeDe(id)), [forma, id]);
 
-  const traco = {
-    fill: fundo ?? "none",
-    // `currentColor` e não uma cor fixa: sem escolha, a forma é da cor da
-    // letra do tema -- ver `Forma`. Quem herda é o envelope, que carrega
-    // `text-foreground` nos dois lados.
-    stroke: cor ?? "currentColor",
-    strokeWidth: espessura,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    // No elemento, e não um `opacity` no `<svg>`: traço e fundo são dois
-    // valores, e o `opacity` de fora apagaria os dois juntos.
-    strokeOpacity: forma.opacidadeDoTraco,
-    fillOpacity: forma.opacidadeDoFundo,
-  } as const;
+  // `currentColor` e não uma cor fixa: sem escolha, a forma é da cor da letra
+  // do tema -- ver `Forma`. Quem herda é o envelope, que carrega
+  // `text-foreground` nos dois lados.
+  const tinta = cor ?? "currentColor";
 
   const mira = {
     fill: fundo ? "transparent" : "none",
@@ -340,7 +327,8 @@ export function FormaView({
     cursor: "move",
   } as const;
 
-  const desenho = (pintura: typeof traco | typeof mira) => {
+  /** A geometria limpa, com o canto redondo do rabisco. Só para a mira. */
+  const desenho = (pintura: typeof mira) => {
     if (forma.tipo === "linha") {
       const sobe = forma.diagonal === "secundaria";
       return (
@@ -357,19 +345,11 @@ export function FormaView({
 
     if (forma.tipo === "poligono") {
       const vertices = pontosNaCaixa(forma, forma.pontos ?? []);
-      // Arredondado vira `<path>`: o `<polygon>` não tem raio. O raio é o da
-      // CAIXA, como no retângulo -- ver `raioDoCanto`.
-      if (forma.arredondado)
-        return (
-          <path
-            d={caminhoArredondado(vertices, raioDoCanto(width, height))}
-            {...pintura}
-          />
-        );
-
+      // `<path>`, porque o `<polygon>` não tem raio. O raio é o da CAIXA, como
+      // no retângulo -- ver `raioDoCanto`.
       return (
-        <polygon
-          points={vertices.map((ponto) => `${ponto.x},${ponto.y}`).join(" ")}
+        <path
+          d={caminhoArredondado(vertices, raioDoCanto(width, height))}
           {...pintura}
         />
       );
@@ -390,7 +370,7 @@ export function FormaView({
     const altura = Math.max(0, height - recuo * 2);
     // Da caixa por DENTRO do recuo: é essa a que se vê, e é nela que o canto
     // tem de caber.
-    const raio = forma.arredondado ? raioDoCanto(largura, altura) : 0;
+    const raio = raioDoCanto(largura, altura);
 
     return (
       <rect
@@ -415,32 +395,28 @@ export function FormaView({
       // inteira, e ela não é a figura.
       style={{ pointerEvents: "none" }}
     >
-      {rabisco ? (
-        <>
-          {rabisco.miolo ? (
-            <path
-              d={rabisco.miolo}
-              fill={fundo}
-              fillOpacity={traco.fillOpacity}
-              stroke="none"
-            />
-          ) : null}
-          {/* UM caminho com as duas passadas do rabisco, e não dois: a
-              opacidade do traço vale para o caminho inteiro, e onde as
-              passadas se cruzam a borda não escurece. */}
-          <path
-            d={rabisco.contorno}
-            fill="none"
-            stroke={traco.stroke}
-            strokeOpacity={traco.strokeOpacity}
-            strokeWidth={espessura}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </>
-      ) : (
-        desenho(traco)
-      )}
+      {/* Opacidade no elemento, e não um `opacity` no `<svg>`: traço e fundo
+          são dois valores, e o `opacity` de fora apagaria os dois juntos. */}
+      {rabisco.miolo ? (
+        <path
+          d={rabisco.miolo}
+          fill={fundo}
+          fillOpacity={forma.opacidadeDoFundo}
+          stroke="none"
+        />
+      ) : null}
+      {/* UM caminho com as duas passadas do rabisco, e não dois: a opacidade
+          do traço vale para o caminho inteiro, e onde as passadas se cruzam a
+          borda não escurece. */}
+      <path
+        d={rabisco.contorno}
+        fill="none"
+        stroke={tinta}
+        strokeOpacity={forma.opacidadeDoTraco}
+        strokeWidth={espessura}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       {interativa ? desenho(mira) : null}
     </svg>
   );
@@ -547,11 +523,12 @@ export function SetaSvg({
   const { ligacao } = seta;
   const meio = pontoNaSeta(seta, 0.5);
   const curva = caminhoDaSeta(seta);
-  // Tremida pelo id, como a forma: a mesma nos dois lados da mesa. A ponta
-  // continua o triângulo limpo, preso ao fim do rabisco pelo `markerEnd`.
+  // Toda seta é à mão, tremida pelo id como a forma: a mesma nos dois lados da
+  // mesa. A ponta continua o triângulo limpo, preso ao fim do rabisco pelo
+  // `markerEnd`.
   const d = useMemo(
-    () => (ligacao.aMao ? rabiscoDoCaminho(curva, sementeDe(ligacao.id)) : curva),
-    [curva, ligacao.aMao, ligacao.id],
+    () => rabiscoDoCaminho(curva, sementeDe(ligacao.id)),
+    [curva, ligacao.id],
   );
 
   return (

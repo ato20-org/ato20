@@ -1,23 +1,17 @@
 "use client";
 
-import { Minus, Signature, Square, SquareRoundCorner } from "lucide-react";
-
-import { Chave } from "@/components/mestre/chave-de-estilo";
 import { Slider } from "@/components/ui/slider";
 import {
   CORES_LAPIS,
   ESPESSURAS_LAPIS,
   useToolStore,
 } from "@/lib/store/use-tool-store";
-import {
-  definirPadraoDoQuadro,
-  usePadraoDoQuadro,
-} from "@/lib/configuracoes/quadro";
 import { t } from "@/lib/i18n/ferramentas";
 import { cn } from "@/lib/utils";
 
 /**
- * A cor, o fundo, os cantos e a espessura da próxima forma.
+ * A cor, o fundo e a espessura da próxima forma. Canto e traço não são
+ * escolha: toda forma nasce à mão, com canto redondo -- ver `rabiscoDaForma`.
  *
  * Conteúdo, e não um popover: mora no painel de Elementos, no canto de baixo
  * à esquerda, aberto enquanto a forma está na mão -- ver `PainelDeElementos`.
@@ -31,10 +25,6 @@ export function AjustesDaForma() {
   const cor = useToolStore((state) => state.corForma);
   const espessura = useToolStore((state) => state.espessuraForma);
   const fundo = useToolStore((state) => state.fundoForma);
-  const tipo = useToolStore((state) => state.tipoDeForma);
-  // Canto e traço não são da sessão, como a cor: são o padrão da CAMPANHA, e
-  // mexer aqui é mexer nele. Ver `padraoDoQuadro`.
-  const { arredondado, aMao } = usePadraoDoQuadro();
   const setForma = useToolStore((state) => state.setForma);
 
   return (
@@ -121,29 +111,6 @@ export function AjustesDaForma() {
           ))}
         </div>
       </div>
-
-      {/* Só onde há canto: elipse e linha não têm, e a escolha ficaria ali
-          sem efeito nenhum. */}
-      {tipo === "retangulo" || tipo === "poligono" ? (
-        <Chave
-          titulo={t.forma.cantos}
-          ligada={arredondado}
-          desligada={{ rotulo: t.forma.cantosRetos, Icone: Square }}
-          ligadaComo={{
-            rotulo: t.forma.cantosArredondados,
-            Icone: SquareRoundCorner,
-          }}
-          onMudar={(valor) => definirPadraoDoQuadro({ arredondado: valor })}
-        />
-      ) : null}
-
-      <Chave
-        titulo={t.forma.estilo}
-        ligada={aMao}
-        desligada={{ rotulo: t.forma.tracoLimpo, Icone: Minus }}
-        ligadaComo={{ rotulo: t.forma.tracoAMao, Icone: Signature }}
-        onMudar={(valor) => definirPadraoDoQuadro({ aMao: valor })}
-      />
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">

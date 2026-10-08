@@ -13,13 +13,6 @@ import { normaliza } from "@/lib/search";
  */
 export const TOPICOS_DA_CAMPANHA = [
   {
-    // Primeiro: é o "Geral" desta janela, o jeito da mesa inteira.
-    chave: "quadro",
-    titulo: t.topicos.quadro.titulo,
-    descricao: t.topicos.quadro.descricao,
-    palavras: t.topicos.quadro.palavras,
-  },
-  {
     chave: "medidores",
     titulo: t.topicos.medidores.titulo,
     descricao: t.topicos.medidores.descricao,
