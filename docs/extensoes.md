@@ -326,9 +326,9 @@ nada muda. O retrato tem um menu de fábrica no quadro da janela Retratos, e os
 itens de `palco.retrato` entram nele. Postit e cartão passaram a aceitar o botão
 direito, que antes caía no vazio.
 
-**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra depois
-das condições e antes dos arquivos, com a moldura das de fábrica: fecha,
-lembra que fechou. O corpo recebe `personagemId`.
+**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra na aba
+Ficha, depois das de fábrica e na largura toda da janela, com a moldura das de
+fábrica: fecha, lembra que fechou. O corpo recebe `personagemId`.
 
 **Substituto** — `substitutos: [{ alvo }]`, com `secao:medidores` (o miolo de
 uma seção da ficha) ou `janela:personagem` (a janela inteira). É o que deixa
@@ -338,6 +338,9 @@ que estourou. Dois plugins no mesmo alvo: vale o **primeiro por ordem de
 nome** — previsível e sem configuração; quem quiser o outro desliga o primeiro.
 O ponto único da janela é `JanelaCorpo`, flutuante e atracada; o da seção é
 `SecaoFicha`. Sem plugin, nenhum dos dois ganha um nó a mais na árvore.
+`secao:campos` e `secao:nota` continuam valendo, mas deixaram de ser seções: o
+primeiro é o miolo do popover das miniaturas do cabeçalho, e o segundo o do
+botão de quem joga com o personagem.
 
 **Ferramenta** — o `icone` do manifesto passa a ser um nome da lista de
 `icones.ts` (antes era ignorado); `opcoes` é um componente que aparece como

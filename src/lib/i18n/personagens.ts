@@ -45,6 +45,13 @@ const pt = {
   ficha: {
     falhaAoLerArquivos: "Falha ao ler os arquivos.",
     campos: "Campos do personagem",
+    abas: {
+      rotulo: "Partes da ficha",
+      ficha: "Ficha",
+    },
+    abrirFicha: (arquivo: string) => `Abrir a ficha (${arquivo})`,
+    anexarFicha: "Anexar a ficha",
+    verCampos: "Ficha, retrato e miniatura",
     aoApagar: "Ao apagar você vai {remover}",
     remover: "remover",
     vaiJunto: {
@@ -500,6 +507,13 @@ const en: typeof pt = {
   ficha: {
     falhaAoLerArquivos: "Could not read the files.",
     campos: "Character fields",
+    abas: {
+      rotulo: "Sheet sections",
+      ficha: "Sheet",
+    },
+    abrirFicha: (arquivo: string) => `Open the sheet (${arquivo})`,
+    anexarFicha: "Attach the sheet",
+    verCampos: "Sheet, portrait and token",
     aoApagar: "Deleting will {remover}",
     remover: "remove",
     vaiJunto: {

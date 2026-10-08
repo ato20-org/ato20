@@ -371,9 +371,9 @@ it. Sticky notes and cards now accept right-click, which used to fall through
 to empty space.
 
 **Section on the sheet**: `secoes: [{ id, titulo, alvo: "ficha" }]`. It goes
-after the conditions and before the files, with the same frame as the built-in
-sections: it collapses, and remembers that it was collapsed. The body receives
-`personagemId`.
+in the Sheet tab, after the built-in sections and across the full width of the
+window, with the same frame as the built-in sections: it collapses, and
+remembers that it was collapsed. The body receives `personagemId`.
 
 **Replacement**: `substitutos: [{ alvo }]`, with `secao:medidores` (the body of
 a sheet section) or `janela:personagem` (the whole window). It is what lets a
@@ -383,7 +383,10 @@ registered, body that threw. Two plugins on the same target: the **first in
 name order** wins, which is predictable and needs no configuration; whoever
 wants the other one disables the first. The single point for the window is
 `JanelaCorpo`, floating and docked; for the section it is `SecaoFicha`. Without
-plugins, neither of them adds a single node to the tree.
+plugins, neither of them adds a single node to the tree. `secao:campos` and
+`secao:nota` still work, but they are no longer sections: the first is the body
+of the popover behind the header thumbnails, and the second the body of the
+button for who plays the character.
 
 **Tool**: the manifest `icone` is now a name from the `icones.ts` list (it used
 to be ignored); `opcoes` is a component that shows up as a pill next to the
