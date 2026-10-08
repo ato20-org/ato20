@@ -61,7 +61,11 @@ use crate::error::{AppError, AppResult};
 /// API 6 recusaria o mapa como JSON ilegivel, que manda o autor procurar o
 /// erro no arquivo; e ignoraria os `rotulos`, mostrando o valor cru de cada
 /// opcao sem aviso. Pedindo 7, ele ouve "atualize o ATO20".
-pub const API_VERSAO: u32 = 7;
+///
+/// A 8 acrescentou aos `pontos` a `proporcao` do ponto e o `ate`. Um ATO20 de
+/// API 7 ignoraria os dois calado: a bala estreita sairia esticada num
+/// quadrado, e o pente de trinta, em trinta pontos de um pixel.
+pub const API_VERSAO: u32 = 8;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -775,7 +779,7 @@ impl EstiloDeMedidor {
                 imagens.extend(vazio.as_deref());
                 imagens.extend(imagem.as_deref());
             }
-            Conteudo::Pontos { cheio, vazio } => {
+            Conteudo::Pontos { cheio, vazio, .. } => {
                 imagens.extend(cheio.as_deref());
                 imagens.extend(vazio.as_deref());
             }
@@ -920,6 +924,15 @@ pub enum Conteudo {
         cheio: Option<String>,
         #[serde(default)]
         vazio: Option<String>,
+        /// A largura de cada ponto em fracao da altura dele. Ausente e 1, o
+        /// quadrado; a bala de pe e estreita, e no quadrado ela estica.
+        #[serde(default)]
+        proporcao: Option<f64>,
+        /// Com o MAXIMO acima disto, a fileira vira um ponto e o numero
+        /// (`×11`). Pelo maximo e nao pelo valor: o medidor nao troca de forma
+        /// no meio do combate. Ausente, a fileira encolhe sem teto.
+        #[serde(default)]
+        ate: Option<u32>,
     },
     /// Do vazio ao cheio. O primeiro so aparece no zero.
     Sequencia { quadros: Vec<String> },
@@ -950,6 +963,11 @@ pub const IMAGENS_DE_MEDIDOR: &[&str] = &["png", "webp", "gif", "jpg", "jpeg", "
 /// travaria a mesa que abre no meio da sessao. Dois megas cabem uma
 /// animacao curta de 512px, que e mais do que a coluna do retrato mostra.
 pub const IMAGEM_DE_MEDIDOR_MAX: u64 = 2 * 1024 * 1024;
+
+/// Os limites da `proporcao` de um ponto. Abaixo de 0,1 a bala vira um risco;
+/// acima de 4 o ponto e uma barra, e para isso existe o modo `barra`.
+pub const PROPORCAO_DO_PONTO_MIN: f64 = 0.1;
+pub const PROPORCAO_DO_PONTO_MAX: f64 = 4.0;
 
 /// Quantos quadros uma `sequencia` pode ter. Cada quadro e um arquivo que a
 /// mesa baixa; dezesseis ja distinguem cada faixa de vida que alguem le.
@@ -1873,6 +1891,21 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
                         "tem uma sequencia de {} quadros; vai de 2 a {QUADROS_MAX}",
                         "has a sequence of {} frames; the range is 2 to {QUADROS_MAX}",
                         quadros.len()
+                    ));
+                }
+            }
+
+            if let Conteudo::Pontos {
+                proporcao: Some(proporcao),
+                ..
+            } = camadas.conteudo
+            {
+                if !proporcao.is_finite()
+                    || !(PROPORCAO_DO_PONTO_MIN..=PROPORCAO_DO_PONTO_MAX).contains(&proporcao)
+                {
+                    return invalido(crate::texto!(
+                        "tem pontos de proporcao {proporcao}; vai de {PROPORCAO_DO_PONTO_MIN} a {PROPORCAO_DO_PONTO_MAX}",
+                        "has points of proportion {proporcao}; the range is {PROPORCAO_DO_PONTO_MIN} to {PROPORCAO_DO_PONTO_MAX}"
                     ));
                 }
             }
@@ -3230,6 +3263,61 @@ mod tests {
                     AppError::ExtensaoInvalida(_)
                 ),
                 "{texto} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn pontos_em_camadas_aceitam_ponto_estreito_e_teto() {
+        let base = tempfile::tempdir().unwrap();
+        let pontos = |extra: &str| {
+            com_estilos(&format!(
+                r#"[{{"id":"municao","titulo":"Municao","altura":0.18,
+                     "camadas":{{"conteudo":{{"modo":"pontos","cheio":"b.png"{extra}}}}}}}]"#
+            ))
+        };
+
+        let m = ler(base.path(), &pontos(r#","proporcao":0.44,"ate":12"#)).unwrap();
+        assert_eq!(
+            m.contribui.estilos_de_medidor[0]
+                .camadas
+                .as_ref()
+                .unwrap()
+                .conteudo,
+            Conteudo::Pontos {
+                cheio: Some("b.png".into()),
+                vazio: None,
+                proporcao: Some(0.44),
+                ate: Some(12),
+            }
+        );
+
+        // Os dois sao opcionais, e o zero do `ate` e "sempre o numero".
+        assert!(ler(base.path(), &pontos("")).is_ok());
+        assert!(ler(base.path(), &pontos(r#","ate":0"#)).is_ok());
+
+        for extra in [
+            r#","proporcao":0"#,
+            r#","proporcao":5"#,
+            r#","proporcao":-1"#,
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &pontos(extra)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{extra} devia ser recusado"
+            );
+        }
+
+        // Teto negativo ou quebrado e erro de forma, e o serde ja diz qual.
+        for extra in [r#","ate":-1"#, r#","ate":2.5"#] {
+            assert!(
+                matches!(
+                    ler(base.path(), &pontos(extra)).unwrap_err(),
+                    AppError::Malformed { .. }
+                ),
+                "{extra} devia ser recusado"
             );
         }
     }

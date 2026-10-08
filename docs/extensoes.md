@@ -83,8 +83,11 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 7 é a atual: ela deixou todo texto do manifesto vir
-por idioma e deu `api.idioma` ao código (ver
+mais do que ele tem.** A 8 é a atual: ela acrescentou aos `pontos` em camadas
+a `proporcao` e o `ate` (ver [Em camadas de imagem](#em-camadas-de-imagem)),
+que um ATO20 anterior ignoraria calado (a bala estreita sairia esticada num
+quadrado). A 7 deixou todo texto do manifesto vir por idioma e deu
+`api.idioma` ao código (ver
 [Texto em mais de um idioma](#texto-em-mais-de-um-idioma)); um ATO20 anterior
 recusaria o mapa como JSON ilegível. A 6 acrescentou os `efeitos` de condição
 (ver [Efeito de condição](#efeito-de-condição-na-tv-e-no-celular)); um ATO20
@@ -417,7 +420,19 @@ onde o conteúdo entra:
     tinta mais rala à direita da barra).
   - `pontos`: um ponto por unidade, numa linha que encolhe para caber. `cheio`
     e `vazio` são imagens; sem `vazio`, o vazio é o `cheio` apagado; sem
-    nenhuma, bolinhas na cor do medidor.
+    nenhuma, bolinhas na cor do medidor. `proporcao` é a largura do ponto em
+    fração da altura dele, de 0,1 a 4 (ausente é 1, o quadrado): a bala de pé
+    é estreita, desenhada numa tela da mesma proporção, e cabe o dobro antes de
+    encolher. `ate` é o teto: com o **máximo** acima dele, a fileira vira um
+    ponto e o número (`×11`), na cor e no contorno do `texto` se houver. Pelo
+    máximo e não pelo valor, para o pente de trinta não trocar de forma no
+    décimo tiro; `0` é sempre o número. Quem usa um dos dois pede
+    `apiVersao` 8.
+
+    ```json
+    "conteudo": { "modo": "pontos", "cheio": "balas/bala.png", "vazio": "balas/estojo.png",
+                  "proporcao": 0.44, "ate": 12 }
+    ```
   - `sequencia`: `quadros`, de 2 a 16, do vazio ao cheio. O primeiro só
     aparece no zero; os outros dividem o resto em faixas iguais. É o coração
     que racha conforme a vida cai.

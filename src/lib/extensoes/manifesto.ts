@@ -36,7 +36,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 7;
+export const API_VERSAO = 8;
 
 /**
  * O que uma extensão diz de si.
@@ -187,7 +187,15 @@ export type ConteudoDoMedidor =
       /** O trecho vazio, desenhado inteiro embaixo do cheio. */
       vazio?: string | null;
     }
-  | { modo: "pontos"; cheio?: string | null; vazio?: string | null }
+  | {
+      modo: "pontos";
+      cheio?: string | null;
+      vazio?: string | null;
+      /** A largura do ponto em fração da altura dele. Ausente é 1, o quadrado. */
+      proporcao?: number | null;
+      /** Com o máximo acima disto, um ponto e o número (`×11`). Ausente, sem teto. */
+      ate?: number | null;
+    }
   /** Do vazio ao cheio. O primeiro só aparece no zero. */
   | { modo: "sequencia"; quadros: string[] };
 

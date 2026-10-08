@@ -58,8 +58,11 @@ import type { CanvasItem, Scene } from "@/types/scene";
  * A 7 acrescentou `idioma`, o da tela em que o plugin roda, para o código do
  * plugin escolher o próprio texto; no manifesto, todo texto pode vir como mapa
  * por idioma -- ver `TextoDePlugin`.
+ *
+ * A 8 não mexeu neste objeto: acrescentou aos `pontos` em camadas a
+ * `proporcao` e o `ate`.
  */
-export const API_VERSAO_ATUAL = 7;
+export const API_VERSAO_ATUAL = 8;
 
 /** O que o plugin sabe da cena sem poder mexer no formato dela. */
 export type CenaResumo = {
