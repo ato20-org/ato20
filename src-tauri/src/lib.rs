@@ -5,6 +5,7 @@ mod db;
 mod error;
 mod estante;
 mod extensoes;
+mod importar;
 mod presenca;
 mod serve;
 mod vault;
@@ -284,6 +285,9 @@ pub fn run() {
             commands::campaign_import,
             commands::estante_list,
             commands::estante_import,
+            commands::importar_ler_pasta,
+            commands::importar_ler_arquivos,
+            commands::importar_identificar,
             commands::estante_pagina,
             commands::estante_remover,
             commands::estante_abrir,
