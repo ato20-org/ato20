@@ -6,6 +6,7 @@ import {
   type Extensao,
   habilitarExtensao,
   importarExtensao,
+  instalarDoCatalogo,
   listarExtensoes,
   removerExtensao,
 } from "@/lib/extensoes/manifesto";
@@ -39,11 +40,19 @@ type ExtensoesStore = {
   carregada: boolean;
   /** Uma operação está em curso. Segura os botões. */
   ocupada: boolean;
+  /** O id do plugin que o catálogo está baixando agora. Um por vez. */
+  instalando: string | null;
   /** A última falha, para a tela mostrar. `null` quando não há. */
   erro: string | null;
 
   carregar: () => Promise<void>;
   importar: () => Promise<void>;
+  /**
+   * Baixa do repositório e instala, ou atualiza o que já estava. Devolve a
+   * mensagem do erro, ou `null` se deu certo: quem pede é o card do catálogo,
+   * que mostra o erro ali mesmo, e não a aba Instalados.
+   */
+  instalar: (id: string, repositorio: string) => Promise<string | null>;
   remover: (id: string) => Promise<void>;
   habilitar: (id: string, habilitada: boolean) => Promise<void>;
 };
@@ -59,6 +68,7 @@ export const useExtensoesStore = create<ExtensoesStore>((set, get) => ({
   extensoes: [],
   carregada: false,
   ocupada: false,
+  instalando: null,
   erro: null,
 
   async carregar() {
@@ -73,6 +83,28 @@ export const useExtensoesStore = create<ExtensoesStore>((set, get) => ({
       set({ extensoes: await listarExtensoes(), carregada: true, erro: null });
     } catch (causa) {
       set({ carregada: true, erro: mensagem(causa) });
+    }
+  },
+
+  async instalar(id, repositorio) {
+    if (get().instalando) return null;
+
+    const atualizando = get().extensoes.some((extensao) => extensao.id === id);
+    set({ instalando: id });
+
+    try {
+      await instalarDoCatalogo(repositorio, id);
+      // O módulo velho sai antes da lista nova chegar. Com ela, quem sobe na
+      // abertura sobe de novo, pela URL da versão nova; sem isto, o plugin
+      // seguiria rodando o código antigo até o aplicativo reabrir.
+      if (atualizando) descarregar(id);
+      await get().carregar();
+
+      return null;
+    } catch (causa) {
+      return mensagem(causa);
+    } finally {
+      set({ instalando: null });
     }
   },
 
