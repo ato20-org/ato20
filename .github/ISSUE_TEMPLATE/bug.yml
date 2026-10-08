@@ -1,0 +1,64 @@
+name: Bug
+description: Algo não funciona como deveria · Something isn't working
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Escreva em português ou em inglês. · Write in Portuguese or English.
+  - type: input
+    id: versao
+    attributes:
+      label: Versão do ATO20 · ATO20 version
+      description: Aparece na barra do topo, ao lado do logo. · Shown in the title bar, next to the logo.
+      placeholder: "1.3.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: sistema
+    attributes:
+      label: Sistema · System
+      options:
+        - Linux
+        - Windows
+        - Outro · Other
+    validations:
+      required: true
+  - type: dropdown
+    id: onde
+    attributes:
+      label: Onde acontece · Where it happens
+      multiple: true
+      options:
+        - Mestre · GM
+        - Janela do espectador · Spectator window
+        - Celular do jogador · Player's phone
+        - Plugin
+        - Instalação ou atualização · Install or update
+        - Outro · Other
+  - type: textarea
+    id: passos
+    attributes:
+      label: Passos para reproduzir · Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que esperava · What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: aconteceu
+    attributes:
+      label: O que aconteceu · What happened
+    validations:
+      required: true
+  - type: textarea
+    id: anexos
+    attributes:
+      label: Print, vídeo ou log · Screenshot, video or log
+      description: Arraste o arquivo para cá. · Drag the file here.

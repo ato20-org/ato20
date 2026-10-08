@@ -1,0 +1,36 @@
+name: Sugestão · Feature request
+description: Uma ideia para o ATO20 · An idea for ATO20
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Escreva em português ou em inglês. · Write in Portuguese or English.
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qual o problema · What's the problem
+      description: O que você tenta fazer na mesa e hoje não dá. · What you try to do at the table and can't today.
+    validations:
+      required: true
+  - type: textarea
+    id: ideia
+    attributes:
+      label: Como imagina · How you picture it
+    validations:
+      required: true
+  - type: dropdown
+    id: onde
+    attributes:
+      label: Onde · Where
+      multiple: true
+      options:
+        - Mestre · GM
+        - Janela do espectador · Spectator window
+        - Celular do jogador · Player's phone
+        - Plugin
+        - Outro · Other
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Como resolve hoje · How you get by today
+      description: Opcional. Outro app, gambiarra, nada. · Optional. Another app, a workaround, nothing.
