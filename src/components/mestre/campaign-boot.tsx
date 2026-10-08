@@ -21,7 +21,6 @@ import {
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { t } from "@/lib/i18n/mestre";
 import { listAssets } from "@/lib/vault/assets";
-import { listFolders } from "@/lib/vault/folders";
 import type { CampaignInfo } from "@/lib/vault/campaign";
 
 /**
@@ -134,7 +133,6 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
           carregarPersonagens(),
           listAssets("image"),
           listAssets("audio"),
-          listFolders(),
         ]);
         if (!ativo) return;
 

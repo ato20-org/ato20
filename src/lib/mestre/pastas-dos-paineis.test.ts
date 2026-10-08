@@ -116,9 +116,28 @@ describe("removerPasta", () => {
 
     expect(store().board!.scenes[0]!.pastaId).toBeUndefined();
   });
+
+  it("a nota sobe para a mãe, e não para a raiz", () => {
+    montar([
+      { id: "ato", nome: "Ato 1" },
+      { id: "sessao", nome: "Sessão 2", parentId: "ato" },
+    ]);
+    const id = store().addNota({ titulo: "Pistas", arquivo: "pistas.md", pastaId: "sessao" });
+    store().removerPasta("sessao");
+
+    expect(store().board!.notas!.find((nota) => nota.id === id)?.pastaId).toBe("ato");
+  });
 });
 
 describe("o arrasto até a pasta", () => {
+  it("a pasta do Arquivos recebe a nota e o arquivo do acervo", () => {
+    const destino = { tipo: "pasta-arquivos", pastaId: "p" } as const;
+
+    expect(aceita({ tipo: "nota", notaId: "n", arquivo: "n.md", titulo: "N" }, destino)).toBe(true);
+    expect(aceita({ tipo: "acervo", assetId: "a" }, destino)).toBe(true);
+    expect(aceita({ tipo: "cena", sceneId: "m1", nome: "Porão", lista: "mapas" }, destino)).toBe(false);
+  });
+
   it("a cena entra só na pasta da mesma aba", () => {
     const mapa = { tipo: "cena", sceneId: "m1", nome: "Porão", lista: "mapas" } as const;
 

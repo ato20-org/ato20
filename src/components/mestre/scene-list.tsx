@@ -731,7 +731,7 @@ function SceneRow({
     <>
     {/* Os filhos FORA do `render`, como nas linhas de Arquivos: e a forma
         que deixa o dropdown dos tres pontos, la dentro, continuar
-        disparando. Ver a nota em `asset-library`. */}
+        disparando. Ver as linhas de `arquivos-list`. */}
     <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
       <ContextMenuTrigger
         render={

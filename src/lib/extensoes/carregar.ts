@@ -320,6 +320,10 @@ function conteudoDe(extensaoId: string, janela: JanelaDeExtensao): ConteudoJanel
     return { tipo: "personagem", personagemId: janela.personagemId };
   }
 
+  // A Biblioteca virou parte de Arquivos: o plugin que pede a tela dela abre a
+  // árvore onde as imagens estão agora.
+  if (janela.tela === "imagens") return { tipo: "quadros" };
+
   return { tipo: janela.tela };
 }
 

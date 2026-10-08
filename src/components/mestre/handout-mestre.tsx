@@ -28,7 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { tamanhoNaCena } from "@/components/mestre/asset-library";
+import { tamanhoNaCena } from "@/lib/mestre/tamanho-na-cena";
 import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useScreenDrag } from "@/hooks/use-screen-drag";

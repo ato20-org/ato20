@@ -15,7 +15,6 @@ minha-campanha/
     a1b2c3.webp        os binários, nomeados pelo id
     trilha.ogg
   assets.json          nome, tipo, medidas e pasta de cada arquivo
-  pastas.json
   documentos/
     rumores.md         os cartões de Markdown dos quadros
   personagens.json     o elenco, com medidores e condições de cada um
@@ -120,18 +119,30 @@ campanhas recentes; `{campanha}/.ato20/estado.db` guarda o estado da sessão. A 
 forçada pelo modelo: uma lista de campanhas não pode morar dentro de uma das campanhas que
 lista.
 
-## Pastas do acervo
+## O acervo mora na árvore de Arquivos
 
-A Biblioteca agrupa por pasta, com pasta dentro de pasta pelo `parentId`. Mora em
-`pastas.json`, no Rust, porque o arquivo que ela organiza também mora lá.
+Desde a versão 2 do formato, imagem e arquivo do acervo ficam nas mesmas pastas que a nota
+e o quadro, no painel Arquivos. A pasta de um arquivo é o `folderId` dele em `assets.json`,
+e esse id é o de uma pasta de `board.pastas` sem `lista`, a mesma árvore das notas. O Rust
+grava o `folderId` sem conferir o id: a árvore é do TypeScript, e um id que não existe mais
+faz o arquivo aparecer na raiz.
 
-Arquivo entra na pasta arrastando a linha para o cabeçalho dela. Upload novo cai na raiz.
-A busca acha pelo nome do arquivo e pelo caminho da pasta, e mostra os achados agrupados
-pela pasta de cada um.
+Dentro de cada pasta a ordem é por tipo: subpastas, quadros na ordem que o mestre arrasta,
+notas por título, e por último imagens e arquivos por nome. O som não entra na árvore, ele
+mora no painel Sons. O que tem dono (retrato, fundo de cena, imagem de efeito) também não:
+ver `AssetMeta.escopo`.
 
 Pasta guarda o id e não o nome, para renomear não obrigar a reescrever todos os arquivos
-dentro. E **apagar pasta não apaga arquivo**: o conteúdo volta para a raiz, porque perder um
-mapa por causa de um clique em "apagar pasta" seria dano desproporcional ao gesto.
+dentro. E **desfazer pasta não apaga nada**: o conteúdo sobe um nível, o que está no board
+pelo `removerPasta` e os arquivos do acervo pelo `asset_set_folder`, porque perder um mapa
+por causa de um clique em "desfazer pasta" seria dano desproporcional ao gesto.
+
+**A migração da versão 1.** Até a 1, o acervo tinha pastas próprias, em `pastas.json`, e o
+painel Biblioteca. Ao abrir uma campanha da versão 1 (`campaign_open`, ou o import de um
+zip), o Rust cria a pasta "Biblioteca" na raiz de Arquivos, recolhida, recria dentro dela
+cada pasta do acervo com o mesmo id, e põe nela o que estava solto. O `pastas.json` fica
+guardado como `pastas.antigo.json`. A lista de campanhas recentes, que abre cada campanha
+para ler a capa, não migra nada. Ver `vault/migrar.rs`.
 
 ## Pastas dos painéis
 

@@ -13,7 +13,7 @@ use crate::estante;
 use crate::extensoes::{self, Extensao};
 use crate::importar;
 use crate::serve::{DaemonAddr, Evidence, SharedEvidence, SharedVault};
-use crate::vault::assets::{AssetFolder, AssetMeta};
+use crate::vault::assets::AssetMeta;
 use crate::vault::board::{Board, BoardPatch};
 use crate::vault::session::Json;
 use crate::vault::characters::{Anexo, Aparencia, Autor, Campo, Personagem};
@@ -347,7 +347,10 @@ pub fn campaign_forget(state: State<'_, AppState>, path: String) -> AppResult<()
 
 #[tauri::command]
 pub fn campaign_open(state: State<'_, AppState>, path: String) -> AppResult<CampaignInfo> {
-    let vault = Vault::open(&path)?;
+    let mut vault = Vault::open(&path)?;
+    // Antes de qualquer tela ler o indice: a campanha de antes chega ja no
+    // formato de agora. Ver `Vault::migrar`.
+    vault.migrar()?;
     let info = vault.info();
 
     state.db.remember(&info.path, &info.nome)?;
@@ -452,39 +455,6 @@ pub fn asset_set_peaks(
     peaks: Vec<u8>,
 ) -> AppResult<()> {
     state.with_vault(|vault| assets::set_peaks(vault, &id, peaks.clone()))
-}
-
-#[tauri::command]
-pub fn folder_list(state: State<'_, AppState>) -> AppResult<Vec<AssetFolder>> {
-    state.with_vault(|vault| assets::folders(vault))
-}
-
-#[tauri::command]
-pub fn folder_create(
-    state: State<'_, AppState>,
-    name: String,
-    parent_id: Option<String>,
-) -> AppResult<AssetFolder> {
-    state.with_vault(|vault| assets::create_folder(vault, &name, parent_id.clone()))
-}
-
-#[tauri::command]
-pub fn folder_move(
-    state: State<'_, AppState>,
-    id: String,
-    parent_id: Option<String>,
-) -> AppResult<()> {
-    state.with_vault(|vault| assets::move_folder(vault, &id, parent_id.clone()))
-}
-
-#[tauri::command]
-pub fn folder_rename(state: State<'_, AppState>, id: String, name: String) -> AppResult<()> {
-    state.with_vault(|vault| assets::rename_folder(vault, &id, &name))
-}
-
-#[tauri::command]
-pub fn folder_delete(state: State<'_, AppState>, id: String) -> AppResult<()> {
-    state.with_vault(|vault| assets::delete_folder(vault, &id))
 }
 
 // --- sessao -----------------------------------------------------------------
@@ -667,10 +637,13 @@ pub fn campaign_import(
     zip_path: String,
     parent: String,
 ) -> AppResult<CampaignInfo> {
-    let vault = zip::import(
+    let mut vault = zip::import(
         std::path::Path::new(&zip_path),
         std::path::Path::new(&parent),
     )?;
+    // O zip pode ser de uma versao de antes, e a campanha entra ja aberta, sem
+    // passar pelo `campaign_open`. Ver `Vault::migrar`.
+    vault.migrar()?;
 
     let info = vault.info();
 

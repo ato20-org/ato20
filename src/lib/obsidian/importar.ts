@@ -15,7 +15,6 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { ESPESSURAS_LAPIS } from "@/lib/store/use-tool-store";
 import { importarCaminhos, setAssetFolder } from "@/lib/vault/assets";
 import { criarDocumento, gravarDocumento } from "@/lib/vault/documentos";
-import { createFolder, pastasMudaram } from "@/lib/vault/folders";
 import type { LeituraDeFora } from "@/lib/vault/importar";
 import { TAMANHOS_DO_TEXTO, type RefLigacao } from "@/types/scene";
 
@@ -28,8 +27,9 @@ import { TAMANHOS_DO_TEXTO, type RefLigacao } from "@/types/scene";
  * conversão não muda nada. Ver `converterNota`.
  *
  * Cópia, sem vínculo: a origem não é tocada, e importar de novo cria outra
- * pasta. A pasta escolhida entra numa pasta com o nome dela -- em Arquivos e
- * no acervo --, com as subpastas espelhadas dentro, e apagar o import é apagar
+ * pasta. A pasta escolhida entra numa pasta com o nome dela na árvore de
+ * Arquivos -- notas, quadros e imagens juntos, como estavam --, com as subpastas
+ * espelhadas dentro, e apagar o import é apagar
  * uma pasta. Arquivos soltos entram na raiz.
  *
  * Pelas MESMAS ações que os botões usam (`criarPasta`, `addNota`,
@@ -79,6 +79,19 @@ export async function importarDeFora(leitura: LeituraDeFora): Promise<ResultadoD
   // Arquivos soltos não têm pasta: nada se espelha. Ver `ler_arquivos`.
   const soltos = !leitura.nome;
 
+  // --- a árvore -----------------------------------------------------------
+
+  // Uma árvore só, como no vault: a imagem fica na mesma pasta que a nota que
+  // a mostra. Desde a versão 2 da campanha o acervo mora na árvore de
+  // Arquivos -- ver `vault/migrar.rs`.
+  const pastas = soltos
+    ? NA_RAIZ
+    : await espelharPastas(
+        [...leitura.notas, ...leitura.boards, ...leitura.anexos].map((arquivo) => arquivo.caminho),
+        cenas.criarPasta(leitura.nome),
+        (nome, mae) => cenas.criarPasta(nome, mae),
+      );
+
   // --- anexos -------------------------------------------------------------
 
   const anexos = new Map<string, AnexoImportado>();
@@ -86,14 +99,6 @@ export async function importarDeFora(leitura: LeituraDeFora): Promise<ResultadoD
   let cancelado = false;
 
   if (leitura.anexos.length > 0) {
-    const pastasDoAcervo = soltos
-      ? NA_RAIZ
-      : await espelharPastas(
-          leitura.anexos.map((anexo) => anexo.caminho),
-          (await createFolder(leitura.nome)).id,
-          async (nome, mae) => (await createFolder(nome, mae)).id,
-        );
-
     const porOrigem = new Map(leitura.anexos.map((anexo) => [anexo.absoluto, anexo.caminho]));
     const resultado = await importarCaminhos(
       leitura.anexos.map((anexo) => anexo.absoluto),
@@ -111,7 +116,7 @@ export async function importarDeFora(leitura: LeituraDeFora): Promise<ResultadoD
 
     // Em série: cada chamada reescreve o índice do acervo inteiro.
     for (const [caminho, id] of assetIds) {
-      const pasta = pastasDoAcervo.get(pastaDoArquivo(caminho));
+      const pasta = pastas.get(pastaDoArquivo(caminho));
       if (!pasta) continue;
       try {
         await setAssetFolder(id, pasta);
@@ -124,18 +129,9 @@ export async function importarDeFora(leitura: LeituraDeFora): Promise<ResultadoD
       if (!assetIds.has(anexo.caminho)) falhas.push(anexo.caminho);
 
     absorverImportacao(resultado);
-    pastasMudaram();
   }
 
   // --- notas --------------------------------------------------------------
-
-  const pastas = soltos
-    ? NA_RAIZ
-    : await espelharPastas(
-        [...leitura.notas, ...leitura.boards].map((arquivo) => arquivo.caminho),
-        cenas.criarPasta(leitura.nome),
-        (nome, mae) => cenas.criarPasta(nome, mae),
-      );
 
   const contexto: ContextoDaNota = {
     resolver: criarResolvedor([

@@ -121,7 +121,7 @@ function padrao(): Layout {
     direita: {
       largura: 288,
       grupos: [
-        { id: "direita-1", abas: [{ tipo: "imagens" }, { tipo: "sons" }], ativa: "imagens" },
+        { id: "direita-1", abas: [{ tipo: "sons" }], ativa: "sons" },
         { id: "direita-2", abas: [{ tipo: "camadas" }], ativa: "camadas" },
       ],
       fracoes: [0.6, 0.4],
@@ -169,10 +169,12 @@ function ler(): Layout {
     const { esquerda, direita } = lido as Layout;
     if (!eColuna(esquerda) || !eColuna(direita)) return padrao();
 
-    return comQuadros({
-      esquerda: semAreas(esquerda),
-      direita: semAreas(direita),
-    });
+    return comQuadros(
+      semBiblioteca({
+        esquerda: semAreas(esquerda),
+        direita: semAreas(direita),
+      }),
+    );
   } catch {
     return padrao();
   }
@@ -248,6 +250,14 @@ function comQuadros(layout: Layout): Layout {
  * sozinha num grupo perde o grupo, não a bancada.
  */
 function semAreas(coluna: Coluna): Coluna {
+  return semAbas(coluna, "areas" as ConteudoJanela["tipo"]);
+}
+
+/**
+ * Tira de uma coluna toda aba de um tipo que deixou de existir, levando junto
+ * o grupo que ficar vazio. A conta de `semAreas` e de `semBiblioteca`.
+ */
+function semAbas(coluna: Coluna, tipo: ConteudoJanela["tipo"]): Coluna {
   // Índice preservado junto: a fração de um grupo mora numa lista paralela, e
   // filtrar as duas separadamente as desalinharia -- o grupo que sobrou
   // herdaria a altura do que saiu.
@@ -255,7 +265,7 @@ function semAreas(coluna: Coluna): Coluna {
     .map((grupo, indice) => ({
       grupo: {
         ...grupo,
-        abas: grupo.abas.filter((aba) => aba.tipo !== ("areas" as ConteudoJanela["tipo"])),
+        abas: grupo.abas.filter((aba) => aba.tipo !== tipo),
       },
       fracao: coluna.fracoes[indice] ?? 1,
     }))
@@ -282,6 +292,47 @@ function semAreas(coluna: Coluna): Coluna {
     // coluna abriria com uma faixa vazia embaixo.
     fracoes: normalizaFracoes(sobrando.map(({ fracao }) => fracao)),
   };
+}
+
+/**
+ * A aba Biblioteca sai do layout que voltou do disco com ela.
+ *
+ * O acervo entrou na árvore de Arquivos: imagem e arquivo moram nas mesmas
+ * pastas que a nota e o quadro. Quem tinha a Biblioteca aberta não pode ficar
+ * sem as imagens, então ela vira a aba Arquivos ONDE ESTAVA -- se a bancada
+ * ainda não tem Arquivos em lugar nenhum. Tendo, ela só sai, como as Áreas:
+ * duas abas Arquivos seriam a mesma lista duas vezes.
+ *
+ * Idempotente, como o `semAreas`: depois da primeira leitura não há mais
+ * Biblioteca para achar.
+ */
+export function semBiblioteca(layout: Layout): Layout {
+  const BIBLIOTECA = "imagens" as ConteudoJanela["tipo"];
+  const temBiblioteca = (coluna: Coluna) =>
+    coluna.grupos.some((grupo) => grupo.abas.some((aba) => aba.tipo === BIBLIOTECA));
+  if (!temBiblioteca(layout.esquerda) && !temBiblioteca(layout.direita)) return layout;
+
+  const temArquivos = [layout.esquerda, layout.direita].some((coluna) =>
+    coluna.grupos.some((grupo) => grupo.abas.some((aba) => aba.tipo === "quadros")),
+  );
+
+  // Sem Arquivos: a primeira Biblioteca vira Arquivos, no mesmo lugar.
+  let trocada = temArquivos;
+  const trocar = (coluna: Coluna): Coluna => ({
+    ...coluna,
+    grupos: coluna.grupos.map((grupo) => ({
+      ...grupo,
+      abas: grupo.abas.map((aba) => {
+        if (aba.tipo !== BIBLIOTECA || trocada) return aba;
+        trocada = true;
+        return { tipo: "quadros" } as ConteudoJanela;
+      }),
+      ativa: grupo.ativa === BIBLIOTECA && !temArquivos ? "quadros" : grupo.ativa,
+    })),
+  });
+
+  const sem = (coluna: Coluna) => semAbas(trocar(coluna), BIBLIOTECA);
+  return { esquerda: sem(layout.esquerda), direita: sem(layout.direita) };
 }
 
 function gravar(layout: Layout) {

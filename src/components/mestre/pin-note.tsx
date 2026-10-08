@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { tamanhoNaCena } from "@/components/mestre/asset-library";
+import { tamanhoNaCena } from "@/lib/mestre/tamanho-na-cena";
 import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

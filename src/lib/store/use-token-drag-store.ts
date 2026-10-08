@@ -80,8 +80,6 @@ export type FonteDoArrasto =
  */
 export type DestinoDoArrasto =
   | { tipo: "palco" }
-  /** Uma pasta do acervo. `folderId` ausente é a raiz, "Fora de pasta". */
-  | { tipo: "pasta"; folderId: string | undefined }
   /** A grade de inventário de outro personagem. */
   | { tipo: "inventario"; personagemId: string }
   /** A bolinha do handout da cena em edição. */
@@ -141,8 +139,6 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
   switch (destino.tipo) {
     case "palco":
       return "palco";
-    case "pasta":
-      return "acervo";
     case "inventario":
       return `inventario:${destino.personagemId}`;
     case "handout":
@@ -172,8 +168,8 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
  * as duas têm de concordar. Quando divergiam, a borda prometia um movimento que
  * o destino recusava.
  *
- * - pasta do acervo só recebe imagem do acervo: ali o gesto é "guarde este
- *   arquivo aqui", e item de inventário e miniatura de personagem não são
+ * - pasta de Arquivos só recebe nota e arquivo do acervo: ali o gesto é
+ *   "guarde isto aqui", e item de inventário e miniatura de personagem não são
  *   arquivos que se guardem — a casa deles é a ficha;
  * - inventário só recebe item, e nunca o do próprio dono: mover um item para
  *   onde ele já está é um gesto sem efeito, e o Rust o recusa.
@@ -198,15 +194,15 @@ export function aceita(
         fonte.tipo === "personagem" ||
         fonte.tipo === "cena"
       );
-    case "pasta":
-      return fonte.tipo === "acervo";
     case "split":
       // A nota é o que se divide ao lado do mapa. O quadro também, mas ele
       // chega pelo gesto de reordenar a lista -- ver `naMao` em
       // `usePaineisStore`.
       return fonte.tipo === "nota";
     case "pasta-arquivos":
-      return fonte.tipo === "nota";
+      // A árvore é uma só: a nota e o arquivo do acervo mudam de pasta pelo
+      // mesmo gesto. O quadro muda pelo reordenar da lista.
+      return fonte.tipo === "nota" || fonte.tipo === "acervo";
     case "pasta-cenas":
       return fonte.tipo === "cena" && fonte.lista === destino.lista;
     case "pasta-personagens":
