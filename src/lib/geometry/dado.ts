@@ -1179,10 +1179,7 @@ export function duracaoDaQueda(dado: {
   const forca = forcaDoImpulso(dado.impulso);
   const subida = ARREMESSO_ALTO * forca;
 
-  // Tempo até tocar o chão: `h0 + v0·t − g·t²/2 = 0`, raiz positiva.
-  let total =
-    (subida + Math.sqrt(subida * subida + 2 * GRAVIDADE * ALTURA_DA_MAO)) /
-    GRAVIDADE;
+  let total = tempoAteOChao(subida);
 
   let v = GRAVIDADE * total - subida;
   for (let i = 0; i < batidasDoImpulso(forca); i++) {
@@ -1192,6 +1189,25 @@ export function duracaoDaQueda(dado: {
   }
 
   return total + ASSENTO;
+}
+
+/**
+ * Quando o dado bate na mesa pela primeira vez, em segundos desde o arremesso.
+ *
+ * É o instante do som: a jogada gravada toca com o primeiro impacto dela aqui.
+ */
+export function primeiraBatida(dado: {
+  impulso: { x: number; y: number };
+}): number {
+  return tempoAteOChao(ARREMESSO_ALTO * forcaDoImpulso(dado.impulso));
+}
+
+/** Tempo até tocar o chão: `h0 + v0·t − g·t²/2 = 0`, raiz positiva. */
+function tempoAteOChao(subida: number): number {
+  return (
+    (subida + Math.sqrt(subida * subida + 2 * GRAVIDADE * ALTURA_DA_MAO)) /
+    GRAVIDADE
+  );
 }
 
 /**
@@ -1218,9 +1234,7 @@ function alturaEm(
   forca: number,
 ): { altura: number; batida: number } {
   const subida = ARREMESSO_ALTO * forca;
-  const primeira =
-    (subida + Math.sqrt(subida * subida + 2 * GRAVIDADE * ALTURA_DA_MAO)) /
-    GRAVIDADE;
+  const primeira = tempoAteOChao(subida);
 
   if (t < primeira) {
     return {
