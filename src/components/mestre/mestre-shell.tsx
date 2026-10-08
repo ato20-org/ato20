@@ -49,6 +49,7 @@ import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useJanelaDeRolagens } from "@/hooks/use-janela-de-rolagens";
 import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
+import { useSomDosDados } from "@/hooks/use-som-dos-dados";
 import { useFioDaMesa } from "@/hooks/use-fio-da-mesa";
 import { useJanelaDoChat } from "@/hooks/use-janela-do-chat";
 import { usePingsDaMesa } from "@/hooks/use-pings-da-mesa";
@@ -358,6 +359,8 @@ export function MestreShell() {
   // chega do outro lado da mesa, e ninguém desta bancada pediu por ele. Ver
   // `useJanelaDeRolagens`.
   useJanelaDeRolagens();
+  // E o barulho deles, os do tabuleiro e os que chegam. Ver `useSomDosDados`.
+  useSomDosDados();
   // E a do chat, pelo mesmo motivo, quando um jogador escreve. Ver
   // `useJanelaDoChat`.
   useJanelaDoChat();
