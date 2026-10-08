@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  aoMudarPastas,
   createFolder,
   deleteFolder,
   listFolders,
@@ -52,6 +53,9 @@ export function useFolderList(onChanged?: () => void): FolderListApi {
       active = false;
     };
   }, [version]);
+
+  // A árvore mudada por fora desta lista: ver `pastasMudaram`.
+  useEffect(() => aoMudarPastas(() => setVersion((atual) => atual + 1)), []);
 
   const refresh = useCallback(() => {
     setVersion((current) => current + 1);

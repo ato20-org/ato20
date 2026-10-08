@@ -40,3 +40,25 @@ export function renameFolder(id: string, name: string): Promise<void> {
 export function deleteFolder(id: string): Promise<void> {
   return call("folder_delete", { id });
 }
+
+const ouvintes = new Set<() => void>();
+
+/**
+ * Avisa as listas de pastas abertas que a árvore mudou por fora delas.
+ *
+ * Cada `useFolderList` lê as pastas ao montar e depois só relê o que ela
+ * mesma muda. Quem cria pasta sem passar por uma -- o import do Obsidian, que
+ * espelha a árvore do vault -- chama isto no fim, e o acervo aberto ao lado
+ * mostra as pastas novas sem ser fechado e aberto de novo.
+ */
+export function pastasMudaram(): void {
+  for (const ouvinte of ouvintes) ouvinte();
+}
+
+/** Ouve o `pastasMudaram`. Devolve o desligar. */
+export function aoMudarPastas(ouvinte: () => void): () => void {
+  ouvintes.add(ouvinte);
+  return () => {
+    ouvintes.delete(ouvinte);
+  };
+}

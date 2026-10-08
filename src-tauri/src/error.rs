@@ -76,6 +76,9 @@ pub enum AppError {
     /// de novo mais tarde, e nao falar com quem o escreveu. O zip que chegou e
     /// nao serve e `ExtensaoInvalida`. Ver `catalogo::instalar`.
     DownloadFalhou(Texto),
+    /// A pasta escolhida para importar nao serve: nao e pasta, ou e grande
+    /// demais para ser o que se quer importar. Ver `importar::ler_pasta`.
+    PastaInvalida(Texto),
 }
 
 impl std::fmt::Display for AppError {
@@ -109,6 +112,7 @@ impl std::fmt::Display for AppError {
             Self::DownloadFalhou(motivo) => {
                 write!(f, "Nao foi possivel baixar o plugin: {}.", motivo.pt)
             }
+            Self::PastaInvalida(motivo) => write!(f, "{}", motivo.pt),
         }
     }
 }
@@ -132,6 +136,7 @@ impl AppError {
             Self::DownloadFalhou(motivo) => {
                 format!("Could not download the plugin: {}.", motivo.en)
             }
+            Self::PastaInvalida(motivo) => motivo.en.clone(),
         }
     }
 }
@@ -167,6 +172,7 @@ impl Serialize for AppError {
             Self::ExtensaoInvalida(_) => "extensao-invalida",
             Self::ExtensaoIncompativel { .. } => "extensao-incompativel",
             Self::DownloadFalhou(_) => "download",
+            Self::PastaInvalida(_) => "pasta-invalida",
         };
 
         let mut out = serializer.serialize_struct("AppError", 3)?;

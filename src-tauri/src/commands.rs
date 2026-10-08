@@ -11,6 +11,7 @@ use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
 use crate::estante;
 use crate::extensoes::{self, Extensao};
+use crate::importar;
 use crate::serve::{DaemonAddr, Evidence, SharedEvidence, SharedVault};
 use crate::vault::assets::{AssetFolder, AssetMeta};
 use crate::vault::board::{Board, BoardPatch};
@@ -2593,6 +2594,31 @@ mod tests {
         assert!(!e_do_daemon("http://127.0.0.1:45231/a b"));
         assert!(!e_do_daemon("http://127.0.0.1:45231/a\nb"));
     }
+}
+
+// --- importar de fora ----------------------------------------------------
+
+/// Le uma pasta de notas ou um vault do Obsidian para a tela importar. So le:
+/// ver `importar`.
+///
+/// Fora da thread principal, como a copia do acervo: uma pasta grande sao
+/// centenas de arquivos lidos, e a janela nao pode congelar enquanto isso.
+#[tauri::command]
+pub async fn importar_ler_pasta(pasta: String) -> AppResult<importar::Leitura> {
+    em_segundo_plano(move || importar::ler_pasta(&PathBuf::from(pasta))).await
+}
+
+/// O mesmo, para arquivos soltos escolhidos no seletor.
+#[tauri::command]
+pub async fn importar_ler_arquivos(caminhos: Vec<String>) -> AppResult<importar::Leitura> {
+    em_segundo_plano(move || importar::ler_arquivos(&caminhos)).await
+}
+
+/// O que cada caminho arrastado e -- pasta, vault ou arquivo --, para o painel
+/// dizer antes de soltar. Ver `importar::identificar`.
+#[tauri::command]
+pub async fn importar_identificar(caminhos: Vec<String>) -> AppResult<Vec<importar::Identidade>> {
+    em_segundo_plano(move || Ok(importar::identificar(&caminhos))).await
 }
 
 // --- documentos do quadro ------------------------------------------------
