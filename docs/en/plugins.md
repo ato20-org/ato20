@@ -93,8 +93,12 @@ does can be listed and loaded late; one that only finds out by running forces
 the app to run all of them to know what exists.
 
 **`apiVersao` says what the plugin asks for, and the app refuses only a plugin
-that asks for more than it has.** Version 7 is the current one: it lets every
-text in the manifest come per language and gives the code `api.idioma` (see
+that asks for more than it has.** Version 8 is the current one: it added
+`proporcao` (proportion) and `ate` (up to) to the layered `pontos` (see
+[In image layers](#in-image-layers)), which an earlier ATO20 would ignore
+silently (the narrow bullet would come out stretched into a square). Version 7
+let every text in the manifest come per language and gave the code
+`api.idioma` (see
 [Text in more than one language](#text-in-more-than-one-language)); an earlier
 ATO20 would refuse the map as unreadable JSON. Version 6 added
 condition `efeitos` (effects) (see
@@ -469,7 +473,20 @@ and the slot says where the content goes:
     part (the paler ink to the right of the bar).
   - `pontos` (points): one point per unit, in a row that shrinks to fit.
     `cheio` (full) and `vazio` (empty) are images; without `vazio`, empty is
-    the faded `cheio`; with neither, dots in the meter color.
+    the faded `cheio`; with neither, dots in the meter color. `proporcao` is
+    the point's width as a fraction of its height, from 0.1 to 4 (absent is 1,
+    the square): a standing bullet is narrow, drawn on a canvas of the same
+    proportion, and twice as many fit before it shrinks. `ate` is the cap:
+    with the **maximum** above it, the row becomes one point and the number
+    (`×11`), in the color and outline of `texto` if there is one. By the
+    maximum and not the value, so a thirty-round magazine does not change
+    shape on the tenth shot; `0` is always the number. Using either one asks
+    for `apiVersao` 8.
+
+    ```json
+    "conteudo": { "modo": "pontos", "cheio": "balas/bala.png", "vazio": "balas/estojo.png",
+                  "proporcao": 0.44, "ate": 12 }
+    ```
   - `sequencia` (sequence): `quadros` (frames), from 2 to 16, from empty to
     full. The first one only shows at zero; the others split the rest into
     equal bands. It is the heart that cracks as health drops.
