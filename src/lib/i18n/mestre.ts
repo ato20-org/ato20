@@ -94,14 +94,6 @@ const pt = {
     ajustes: "Ajustes da campanha",
     ajustesDescricao:
       "O que o ATO20 e os plugins deixam ajustar só nesta campanha. Vence o da máquina.",
-    quadro: "Quadro",
-    quadroDescricao:
-      "Como os elementos novos nascem. O que já está no quadro fica como está, e cada um troca o seu no próprio gizmo.",
-    cantosArredondados: "Cantos arredondados",
-    cantosArredondadosDescricao: "Retângulos e polígonos nascem com canto redondo.",
-    tracoAMao: "Traço à mão",
-    tracoAMaoDescricao:
-      "Formas e setas saem tremidas, como rabisco a lápis, e o texto solto nasce em letra de mão.",
     espectador: "Imagem no espectador",
     espectadorDescricao:
       "Brilho e cor da TV ou do projetor. Só a janela do espectador muda: você e os jogadores veem o mapa como ele é. Cada mapa ainda pode ter o próprio ajuste, por cima deste.",
@@ -127,6 +119,26 @@ const pt = {
     criarMedidor: "Criar medidor da campanha",
     limiteDeMedidores: (n: number) => `Limite de ${n} medidores.`,
     nenhumMedidor: "Nenhum medidor registrado",
+    atributosDaCampanha: "Atributos da campanha",
+    atributosDaCampanhaNota:
+      "Todo personagem começa com estes, no valor que estiver aqui. Mudar depois não mexe nas fichas.",
+    criarAtributo: "Criar atributo da campanha",
+    limiteDeAtributos: (n: number) => `Limite de ${n} atributos.`,
+    nenhumAtributo: "Nenhum atributo registrado",
+    siglaDoAtributo: "Sigla",
+    exemploDeSigla: "FOR",
+    valorInicial: "Valor inicial",
+    descricaoDoAtributo: "Descrição (opcional)",
+    aplicarAtributosEmTodos: "Aplicar em todos os personagens",
+    aplicarAtributosEmTodosNota:
+      "Quem já tem um atributo com a mesma sigla não ganha outro, e o que já tem fica com o valor dele.",
+    criar: "Criar",
+    atributoCriado: "Atributo criado.",
+    atributoCriadoEm: (n: number) =>
+      `Atributo criado em ${n} ${n === 1 ? "personagem" : "personagens"}.`,
+    falhaAoLerAtributos: "Falha ao ler os atributos.",
+    falhaAoCriarAtributo: "Falha ao criar o atributo.",
+    falhaAoApagarAtributo: "Falha ao apagar o atributo.",
     comecaEscondido: "Começa escondido",
     comecaAVista: "Começa à vista",
     olhoDoMedidor: "Não muda as fichas que já têm este medidor.",
@@ -585,26 +597,15 @@ const pt = {
    * compara sem acento dos dois lados.
    */
   topicos: {
-    quadro: {
-      titulo: "Quadro",
-      descricao: "Como os elementos novos do quadro nascem.",
-      palavras: [
-        "forma",
-        "canto",
-        "arredondado",
-        "borda",
-        "mao",
-        "rabisco",
-        "excalidraw",
-        "seta",
-        "letra",
-        "padrao",
-      ],
-    },
     medidores: {
       titulo: "Medidores",
       descricao: "Todo personagem começa com estes.",
       palavras: ["vida", "pv", "mana", "barra", "porcentagem", "maximo", "ficha"],
+    },
+    atributos: {
+      titulo: "Atributos",
+      descricao: "A sigla e o número com que toda ficha nasce.",
+      palavras: ["for", "agi", "int", "forca", "agilidade", "atributo", "ficha"],
     },
     efeitos: {
       titulo: "Efeitos",
@@ -687,11 +688,6 @@ const pt = {
 
   /** As configurações da campanha que o Mestre declara no registro. */
   definicoes: {
-    cantosArredondados: "Cantos arredondados",
-    cantosArredondadosDescricao: "Retângulos e polígonos novos nascem com canto redondo.",
-    tracoAMao: "Traço à mão",
-    tracoAMaoDescricao:
-      "Formas e setas novas saem com traço tremido, e o texto solto nasce em letra de mão.",
     dadosAbertos: "Rolar aberto para a mesa",
     dadosAbertosDescricao:
       "Os dados do saquinho e da paleta entram no chat para todos. Desligado, entram só para o Mestre.",
@@ -822,14 +818,6 @@ const en: typeof pt = {
     ajustes: "Campaign options",
     ajustesDescricao:
       "What ATO20 and its plugins let you adjust in this campaign only. It wins over the machine's.",
-    quadro: "Board",
-    quadroDescricao:
-      "How new elements are born. What is already on the board stays as it is, and each one changes its own in its gizmo.",
-    cantosArredondados: "Rounded corners",
-    cantosArredondadosDescricao: "Rectangles and polygons are born with round corners.",
-    tracoAMao: "Hand-drawn stroke",
-    tracoAMaoDescricao:
-      "Shapes and arrows come out wobbly, like a pencil sketch, and loose text is born in handwriting.",
     espectador: "Spectator image",
     espectadorDescricao:
       "Brightness and color for the TV or projector. Only the spectator window changes: you and the players see the map as it is. Each map can still have its own adjustment on top of this one.",
@@ -853,6 +841,26 @@ const en: typeof pt = {
     criarMedidor: "Create campaign meter",
     limiteDeMedidores: (n) => `Limit of ${n} meters.`,
     nenhumMedidor: "No meters yet",
+    atributosDaCampanha: "Campaign attributes",
+    atributosDaCampanhaNota:
+      "Every character starts with these, at the value set here. Changing them later does not touch the sheets.",
+    criarAtributo: "Create campaign attribute",
+    limiteDeAtributos: (n) => `Limit of ${n} attributes.`,
+    nenhumAtributo: "No attributes yet",
+    siglaDoAtributo: "Abbreviation",
+    exemploDeSigla: "STR",
+    valorInicial: "Starting value",
+    descricaoDoAtributo: "Description (optional)",
+    aplicarAtributosEmTodos: "Apply to every character",
+    aplicarAtributosEmTodosNota:
+      "Characters that already have an attribute with the same abbreviation don't get another, and theirs keeps its value.",
+    criar: "Create",
+    atributoCriado: "Attribute created.",
+    atributoCriadoEm: (n) =>
+      `Attribute created on ${n} ${n === 1 ? "character" : "characters"}.`,
+    falhaAoLerAtributos: "Could not read the attributes.",
+    falhaAoCriarAtributo: "Could not create the attribute.",
+    falhaAoApagarAtributo: "Could not delete the attribute.",
     comecaEscondido: "Starts hidden",
     comecaAVista: "Starts visible",
     olhoDoMedidor: "Does not change the sheets that already have this meter.",
@@ -1284,26 +1292,15 @@ const en: typeof pt = {
   },
 
   topicos: {
-    quadro: {
-      titulo: "Board",
-      descricao: "How new board elements are born.",
-      palavras: [
-        "shape",
-        "corner",
-        "rounded",
-        "border",
-        "hand",
-        "sketch",
-        "excalidraw",
-        "arrow",
-        "letter",
-        "default",
-      ],
-    },
     medidores: {
       titulo: "Meters",
       descricao: "Every character starts with these.",
       palavras: ["health", "hp", "mana", "bar", "percentage", "maximum", "sheet"],
+    },
+    atributos: {
+      titulo: "Attributes",
+      descricao: "The abbreviation and number every sheet starts with.",
+      palavras: ["str", "dex", "int", "strength", "agility", "attribute", "sheet"],
     },
     efeitos: {
       titulo: "Effects",
@@ -1385,11 +1382,6 @@ const en: typeof pt = {
   },
 
   definicoes: {
-    cantosArredondados: "Rounded corners",
-    cantosArredondadosDescricao: "New rectangles and polygons are born with round corners.",
-    tracoAMao: "Hand-drawn stroke",
-    tracoAMaoDescricao:
-      "New shapes and arrows come out with a wobbly stroke, and loose text is born in handwriting.",
     dadosAbertos: "Roll openly to the table",
     dadosAbertosDescricao:
       "Dice from the dice bag and the palette go into the chat for everyone. When off, they go to the GM only.",

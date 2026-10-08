@@ -83,7 +83,10 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 8 é a atual: ela acrescentou aos `pontos` em camadas
+mais do que ele tem.** A 9 é a atual: ela acrescentou os atributos da ficha,
+o substituto `secao:atributos` e o campo `atributos` no personagem de
+`personagens.listar` (a sigla, o número e a descrição opcional: FOR 4). Um ATO20 anterior recusaria o
+substituto como alvo desconhecido. A 8 acrescentou aos `pontos` em camadas
 a `proporcao` e o `ate` (ver [Em camadas de imagem](#em-camadas-de-imagem)),
 que um ATO20 anterior ignoraria calado (a bala estreita sairia esticada num
 quadrado). A 7 deixou todo texto do manifesto vir por idioma e deu
@@ -229,8 +232,8 @@ abertura desta versão, copiada para o arquivo e apagada.
 ataque que já dá o dano, aba de habilidades que rola e aplica. Nada disso
 existe de fábrica, e é de propósito — o que existe é o alcance.
 
-`api.personagens.listar()` devolve o personagem **inteiro**, medidores e
-condições incluídos, escondidos também: quem lê é o Mestre, e é ele quem decide
+`api.personagens.listar()` devolve o personagem **inteiro**, medidores,
+condições e atributos incluídos, escondidos também: quem lê é o Mestre, e é ele quem decide
 o que a mesa vê. `assinar` avisa a cada releitura do elenco.
 
 **Medidor se ajusta em lote.** `ajustarMedidor(personagemId, medidorId,
@@ -326,9 +329,9 @@ nada muda. O retrato tem um menu de fábrica no quadro da janela Retratos, e os
 itens de `palco.retrato` entram nele. Postit e cartão passaram a aceitar o botão
 direito, que antes caía no vazio.
 
-**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra depois
-das condições e antes dos arquivos, com a moldura das de fábrica: fecha,
-lembra que fechou. O corpo recebe `personagemId`.
+**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra na aba
+Ficha, depois das de fábrica e na largura toda da janela, com a moldura das de
+fábrica: fecha, lembra que fechou. O corpo recebe `personagemId`.
 
 **Substituto** — `substitutos: [{ alvo }]`, com `secao:medidores` (o miolo de
 uma seção da ficha) ou `janela:personagem` (a janela inteira). É o que deixa
@@ -338,6 +341,9 @@ que estourou. Dois plugins no mesmo alvo: vale o **primeiro por ordem de
 nome** — previsível e sem configuração; quem quiser o outro desliga o primeiro.
 O ponto único da janela é `JanelaCorpo`, flutuante e atracada; o da seção é
 `SecaoFicha`. Sem plugin, nenhum dos dois ganha um nó a mais na árvore.
+`secao:campos` e `secao:nota` continuam valendo, mas deixaram de ser seções: o
+primeiro é o miolo do popover das miniaturas do cabeçalho, e o segundo o do
+botão de quem joga com o personagem.
 
 **Ferramenta** — o `icone` do manifesto passa a ser um nome da lista de
 `icones.ts` (antes era ignorado); `opcoes` é um componente que aparece como

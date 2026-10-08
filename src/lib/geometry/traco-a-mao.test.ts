@@ -43,14 +43,12 @@ describe("rabiscoDaForma", () => {
     ).toBeTruthy();
   });
 
-  it("desenha os quatro tipos, com e sem canto, sem NaN", () => {
+  it("desenha os quatro tipos, com o canto redondo, sem NaN", () => {
     const formas: NewForma[] = [
       retangulo,
-      { ...retangulo, arredondado: true },
       { ...retangulo, tipo: "elipse" },
       { ...retangulo, tipo: "linha", diagonal: "secundaria" },
       { ...retangulo, tipo: "poligono", pontos: [0, 0, 1, 0.2, 0.5, 1] },
-      { ...retangulo, tipo: "poligono", pontos: [0, 0, 1, 0.2, 0.5, 1], arredondado: true },
     ];
 
     for (const forma of formas) {

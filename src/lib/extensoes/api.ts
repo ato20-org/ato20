@@ -61,8 +61,12 @@ import type { CanvasItem, Scene } from "@/types/scene";
  *
  * A 8 não mexeu neste objeto: acrescentou aos `pontos` em camadas a
  * `proporcao` e o `ate`.
+ *
+ * A 9 acrescentou `atributos` ao personagem de `personagens.listar` (a sigla,
+ * o número e a descrição opcional: FOR 4) e o substituto `secao:atributos` no
+ * manifesto.
  */
-export const API_VERSAO_ATUAL = 8;
+export const API_VERSAO_ATUAL = 9;
 
 /** O que o plugin sabe da cena sem poder mexer no formato dela. */
 export type CenaResumo = {

@@ -10,7 +10,6 @@ import {
   TEXTO_TAMANHO,
   type NewTexto,
 } from "@/types/scene";
-import { padraoDoQuadro } from "@/lib/configuracoes/quadro";
 
 /**
  * Texto vindo de FORA do app -- do editor, do navegador, do PDF -- vira um
@@ -27,8 +26,8 @@ import { padraoDoQuadro } from "@/lib/configuracoes/quadro";
  */
 /**
  * Os campos com que o PRÓXIMO texto nasce: o que o painel de texto escolheu,
- * e a família da campanha quando ele não escolheu nenhuma -- a letra de mão do
- * quadro, que é como o texto sempre nasceu. O que é padrão não vira campo.
+ * e a letra da interface quando ele não escolheu nenhuma. O traço à mão das
+ * formas e das setas não chega ao texto. O que é padrão não vira campo.
  *
  * Um lugar só para os três jeitos de nascer um texto: a ferramenta T, o duplo
  * clique no quadro e o texto colado de fora.
@@ -36,9 +35,7 @@ import { padraoDoQuadro } from "@/lib/configuracoes/quadro";
 export function camposDoTextoNovo(): Omit<NewTexto, "x" | "y"> {
   const { textoNovo } = useToolStore.getState();
   const { familia, tamanho, ...resto } = textoNovo;
-  const daFamilia = patchDaFamilia(
-    familia ?? (padraoDoQuadro().aMao ? "mao" : "interface"),
-  );
+  const daFamilia = patchDaFamilia(familia ?? "interface");
 
   return Object.fromEntries(
     Object.entries({

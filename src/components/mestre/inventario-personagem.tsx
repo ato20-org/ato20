@@ -70,26 +70,24 @@ import { chaveDaImagem } from "@/types/inventory";
 import { SecaoFicha } from "./secao-ficha";
 
 /**
- * O inventário do personagem, na janela do mestre.
+ * O que a ficha sabe do inventário: os itens, e o gesto de receber um.
  *
- * A grade é de LISTA, não de slots fixos: os itens ocupam as posições em ordem
- * de criação, e um quadro vazio no fim é onde se clica para somar outro. Slot
- * fixo pediria uma capacidade para o mestre configurar — uma pergunta que a mesa
- * não faz — e deixaria buraco no meio quando um item saísse.
- *
- * Mostra os escondidos, e é o único lugar que mostra: o escondido existe para o
- * mestre ver o que o jogador não vê, e o daemon o corta antes de responder ao
- * celular.
- *
- * É também ALVO de arrasto: um item largado aqui vindo da ficha de outro
- * personagem muda de dono — e, desde que o "Mover" saiu do diálogo, é o único
- * caminho para essa transferência.
+ * Mora na FICHA, e não na grade, desde que o inventário virou aba. A aba
+ * fechada desmonta a grade, e duas coisas não podiam ir junto: a contagem no
+ * rótulo da aba, que precisa dos itens, e o alvo de arrasto, que precisa estar
+ * registrado para o item largado no rótulo chegar. Uma leitura só, levantada,
+ * em vez de uma na ficha para contar e outra na grade para mostrar.
  */
-export function InventarioPersonagem({
-  personagem,
-  onChangedAnexos,
-}: {
-  personagem: Personagem;
+export type InventarioDaFicha = {
+  /** `null` enquanto lê. */
+  itens: ItemInventario[] | null;
+  recarregar: () => void;
+  /** O inventário mudou, e com ele o que a lista de arquivos deve esconder. */
+  mudou: () => void;
+};
+
+export function useInventarioDaFicha(
+  personagem: Personagem,
   /**
    * A lista de ARQUIVOS do personagem precisa reler.
    *
@@ -98,27 +96,9 @@ export function InventarioPersonagem({
    * aviso, apagar um item devolvia a imagem dele à lista de arquivos só depois
    * de fechar e reabrir a ficha.
    */
-  onChangedAnexos: () => void;
-}) {
+  onChangedAnexos: () => void,
+): InventarioDaFicha {
   const [itens, setItens] = useState<ItemInventario[] | null>(null);
-  const [aberto, setAberto] = useState<ItemInventario | "novo" | null>(null);
-
-  /**
-   * Um item de outra ficha está pairando sobre esta grade.
-   *
-   * Booleano tirado do arrasto, e não estado próprio alimentado por
-   * `dragenter`/`dragleave`: o gesto já sabe sobre que alvo o ponteiro está, e
-   * quem decide se este inventário aceita é `aceita`, num lugar só. Antes eram
-   * duas respostas para a mesma pergunta — a borda acendia pela marca de
-   * módulo, o drop conferia o conteúdo — e elas podiam discordar.
-   */
-  const recebendo = useTokenDragStore((state) => {
-    const destino = state.arrasto?.destino;
-
-    return (
-      destino?.tipo === "inventario" && destino.personagemId === personagem.id
-    );
-  });
 
   const invalidar = useInventarioStore((state) => state.invalidar);
 
@@ -131,7 +111,6 @@ export function InventarioPersonagem({
     });
   }, [personagem.id]);
 
-  /** O inventário mudou, e com ele o que a lista de arquivos deve esconder. */
   const mudou = useCallback(() => {
     recarregar();
     onChangedAnexos();
@@ -165,12 +144,15 @@ export function InventarioPersonagem({
   );
 
   /**
-   * Esta grade como destino do gesto.
+   * Este inventário como destino do gesto.
    *
    * Uma chave por personagem, porque há mais de uma ficha aberta ao mesmo
    * tempo e cada uma recebe na própria pasta. Quem recusa o item do próprio
    * dono é `aceita`, no store -- aqui a conferência é a do CONTEÚDO, que é a
    * verdade, e sobrevive à ficha ter fechado no meio do gesto.
+   *
+   * Quem se anuncia como alvo na tela é a grade E o rótulo da aba, pelos
+   * mesmos `data-inventario`: os dois caem aqui.
    */
   useEffect(
     () =>
@@ -188,6 +170,53 @@ export function InventarioPersonagem({
         }),
     [personagem.id, receber],
   );
+
+  return { itens, recarregar, mudou };
+}
+
+/**
+ * Um item de outra ficha está pairando sobre este inventário.
+ *
+ * Booleano tirado do arrasto, e não estado próprio alimentado por
+ * `dragenter`/`dragleave`: o gesto já sabe sobre que alvo o ponteiro está, e
+ * quem decide se este inventário aceita é `aceita`, num lugar só. Antes eram
+ * duas respostas para a mesma pergunta — a borda acendia pela marca de
+ * módulo, o drop conferia o conteúdo — e elas podiam discordar.
+ */
+export function useRecebendoItem(personagemId: string): boolean {
+  return useTokenDragStore((state) => {
+    const destino = state.arrasto?.destino;
+
+    return destino?.tipo === "inventario" && destino.personagemId === personagemId;
+  });
+}
+
+/**
+ * O inventário do personagem, na janela do mestre.
+ *
+ * A grade é de LISTA, não de slots fixos: os itens ocupam as posições em ordem
+ * de criação, e um quadro vazio no fim é onde se clica para somar outro. Slot
+ * fixo pediria uma capacidade para o mestre configurar — uma pergunta que a mesa
+ * não faz — e deixaria buraco no meio quando um item saísse.
+ *
+ * Mostra os escondidos, e é o único lugar que mostra: o escondido existe para o
+ * mestre ver o que o jogador não vê, e o daemon o corta antes de responder ao
+ * celular.
+ *
+ * É também ALVO de arrasto: um item largado aqui vindo da ficha de outro
+ * personagem muda de dono — e, desde que o "Mover" saiu do diálogo, é o único
+ * caminho para essa transferência.
+ */
+export function InventarioPersonagem({
+  personagem,
+  inventario,
+}: {
+  personagem: Personagem;
+  inventario: InventarioDaFicha;
+}) {
+  const { itens, recarregar, mudou } = inventario;
+  const [aberto, setAberto] = useState<ItemInventario | "novo" | null>(null);
+  const recebendo = useRecebendoItem(personagem.id);
 
   async function criar() {
     try {
