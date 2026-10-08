@@ -15,6 +15,7 @@ import { CampaignSplash } from "@/components/mestre/campaign-splash";
 import { MestreGate } from "@/components/mestre/mestre-gate";
 import { PresencaDoMestre } from "@/components/mestre/presenca-do-mestre";
 import { Button } from "@/components/ui/button";
+import { useTabSemFoco } from "@/hooks/use-tab-sem-foco";
 import { t } from "@/lib/i18n/mestre";
 import { acompanharIdioma } from "@/lib/i18n/trocar";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
@@ -48,6 +49,9 @@ export function Mestre() {
   // A cena em edição vira o subtítulo da janela. `undefined` na porta, onde
   // ainda não há campanha aberta — e aí a barra mostra só o nome.
   const editando = useSceneStore(selectEditingScene)?.name;
+
+  // Aqui e não no `MestreShell`: vale para a porta também. Ver `useTabSemFoco`.
+  useTabSemFoco();
 
   useEffect(() => {
     // O zoom antes da campanha, e não no `MestreShell` como as outras
