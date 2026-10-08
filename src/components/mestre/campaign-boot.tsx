@@ -14,6 +14,7 @@ import { esquecerAcervo } from "@/lib/store/use-assets-store";
 import { esquecerMarcadores } from "@/lib/store/use-marcadores-store";
 import { carregarPersonagens, esquecerPersonagens } from "@/lib/store/use-characters-store";
 import { esquecerCondicoes } from "@/lib/store/use-condicoes-store";
+import { esquecerMoldeDeDetalhes } from "@/lib/store/use-molde-de-detalhes-store";
 import {
   esquecerEfeitosDaCampanha,
   useEfeitosDaCampanhaStore,
@@ -84,6 +85,7 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       esquecerAcervo();
       esquecerPersonagens();
       esquecerCondicoes();
+      esquecerMoldeDeDetalhes();
       // Os efeitos que a outra campanha criou: a condição desta que apontasse
       // para um id igual desenharia o fogo da outra mesa.
       esquecerEfeitosDaCampanha();

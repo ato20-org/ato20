@@ -321,7 +321,7 @@ function DescricaoDoAtributo({
  * clique que TROUXE o foco -- mantém a marcação; num campo já focado, o clique
  * posiciona o cursor como sempre.
  */
-function useMarcarAoFocar() {
+export function useMarcarAoFocar() {
   /** O `mousedown` que está trazendo o foco para cá, e não um num campo já focado. */
   const focandoPeloMouse = useRef(false);
 
@@ -345,7 +345,7 @@ function useMarcarAoFocar() {
  * Esc desiste e Enter grava, pelo mesmo `blur`: uma escrita só, num lugar só.
  * A marca de desistência é um `ref` porque ela é lida no `blur` do mesmo gesto.
  */
-function aoTeclar(
+export function aoTeclar(
   evento: KeyboardEvent<HTMLInputElement>,
   desistiu: RefObject<boolean>,
 ) {

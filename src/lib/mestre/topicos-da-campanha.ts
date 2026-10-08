@@ -25,6 +25,14 @@ export const TOPICOS_DA_CAMPANHA = [
     palavras: t.topicos.atributos.palavras,
   },
   {
+    // Identidade, Perícias, Poderes: quem procura "classe" ou "pericia" acha
+    // aqui, e também pelos nomes dos grupos e detalhes que o mestre criou.
+    chave: "detalhes",
+    titulo: t.topicos.detalhes.titulo,
+    descricao: t.topicos.detalhes.descricao,
+    palavras: t.topicos.detalhes.palavras,
+  },
+  {
     chave: "efeitos",
     titulo: t.topicos.efeitos.titulo,
     descricao: t.topicos.efeitos.descricao,
