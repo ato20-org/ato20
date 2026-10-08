@@ -132,6 +132,9 @@ const pt = {
     discordCampanha: "Mostrar o nome da campanha no Discord",
     discordCampanhaDescricao:
       "Desligado, o perfil diz só o que você faz. O nome da cena nunca aparece: quem joga com você poderia ler.",
+    somDosDados: "Som dos dados",
+    somDosDadosDescricao:
+      "Os dados que caem no Mestre fazem barulho, os seus e os dos jogadores. Segue o volume do sistema.",
   },
 
   /**
@@ -304,6 +307,9 @@ const en: typeof pt = {
     discordCampanha: "Show the campaign name on Discord",
     discordCampanhaDescricao:
       "When off, your profile only says what you are doing. The scene name never shows: your players could read it.",
+    somDosDados: "Dice sounds",
+    somDosDadosDescricao:
+      "Dice falling on the GM screen make noise, yours and your players'. Follows the system volume.",
   },
 
   presenca: {

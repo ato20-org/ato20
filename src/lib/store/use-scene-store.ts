@@ -586,8 +586,6 @@ type SceneStore = {
     sceneId: string,
     de: PontaDeLigacao,
     para: PontaDeLigacao,
-    /** O jeito com que ela nasce. Ver `padraoDoQuadro`. */
-    jeito?: Pick<Ligacao, "aMao">,
   ) => string | null;
   /**
    * Rótulo, dobra, ou uma ponta movida -- para outro ponto, ou para outra
@@ -2259,7 +2257,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       });
     },
 
-    addLigacao(sceneId, de, para, jeito) {
+    addLigacao(sceneId, de, para) {
       if (mesmaPonta(de, para)) return null;
 
       const scene = get().board?.scenes.find((atual) => atual.id === sceneId);
@@ -2290,7 +2288,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         ...atual,
         ligacoes: [
           ...(atual.ligacoes ?? []),
-          { id, de, para, ...(jeito?.aMao ? { aMao: true as const } : {}) },
+          { id, de, para },
         ],
       }));
 
