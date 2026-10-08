@@ -451,6 +451,17 @@ export async function importarExtensao(
   return noIdiomaDaTela(await call<Extensao>("extensao_importar", { caminho: escolhida }));
 }
 
+/**
+ * Baixa do GitHub o plugin que o catálogo aponta e o importa, como o
+ * `importarExtensao`. O Rust monta o endereço do zip a partir do repositório e
+ * recusa o zip cujo manifesto tem outro id. Ver `catalogo.rs`.
+ */
+export async function instalarDoCatalogo(repositorio: string, id: string): Promise<Extensao> {
+  return noIdiomaDaTela(
+    await call<Extensao>("extensao_instalar_do_catalogo", { repositorio, id }),
+  );
+}
+
 /** Desinstala: a pasta sai do disco e a linha sai do banco. */
 export function removerExtensao(id: string): Promise<void> {
   return call<void>("extensao_remover", { id });

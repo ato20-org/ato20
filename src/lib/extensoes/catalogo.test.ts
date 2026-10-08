@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { lerCatalogo } from "@/lib/extensoes/catalogo";
+import {
+  filtrarCatalogo,
+  lerCatalogo,
+  repositorioDoGithub,
+  versaoMaisNova,
+} from "@/lib/extensoes/catalogo";
 
 const BASE = "https://ato20.valbmig.com.br/plugins.json";
 
@@ -78,5 +83,83 @@ describe("lerCatalogo", () => {
   it("casca ilegível lança", () => {
     expect(() => lerCatalogo("<html>", BASE)).toThrow();
     expect(() => lerCatalogo({ formato: 1 }, BASE)).toThrow();
+  });
+});
+
+describe("filtrarCatalogo", () => {
+  const ORDEM = {
+    ...OBS,
+    id: "ordem-segredo-na-floresta",
+    nome: "Ordem Paranormal: Segredo na Floresta",
+    descricao: { "pt-BR": "A névoa do Outro Lado.", en: "The Other Side's fog." },
+    executaCodigo: false,
+    tags: ["ordem-paranormal", "tema"],
+  };
+  const plugins = lista([ORDEM, OBS]);
+  const ids = (busca: string) => filtrarCatalogo(plugins, busca).map((plugin) => plugin.id);
+
+  it("sem busca devolve a lista inteira, na ordem", () => {
+    expect(ids("")).toEqual(["ordem-segredo-na-floresta", "obs"]);
+    expect(ids("   ")).toEqual(["ordem-segredo-na-floresta", "obs"]);
+  });
+
+  it("ignora acento e caixa", () => {
+    expect(ids("NEVOA")).toEqual(["ordem-segredo-na-floresta"]);
+    expect(ids("névoa")).toEqual(["ordem-segredo-na-floresta"]);
+  });
+
+  it("exige todas as palavras, em qualquer ordem", () => {
+    expect(ids("tema ordem")).toEqual(["ordem-segredo-na-floresta"]);
+    expect(ids("ordem live")).toEqual([]);
+  });
+
+  it("acha pelo autor, pela tag e pelo id", () => {
+    expect(ids("valb")).toEqual(["ordem-segredo-na-floresta", "obs"]);
+    expect(ids("live")).toEqual(["obs"]);
+    expect(ids("segredo-na")).toEqual(["ordem-segredo-na-floresta"]);
+  });
+});
+
+describe("repositorioDoGithub", () => {
+  it("lê dono e repositório, com / ou .git no fim", () => {
+    const obs = { dono: "valb-mig", repo: "ato20.obs.plugin" };
+    expect(repositorioDoGithub("https://github.com/valb-mig/ato20.obs.plugin")).toEqual(obs);
+    expect(repositorioDoGithub("https://github.com/valb-mig/ato20.obs.plugin/")).toEqual(obs);
+    expect(repositorioDoGithub("https://github.com/valb-mig/plugin.git")).toEqual({
+      dono: "valb-mig",
+      repo: "plugin",
+    });
+  });
+
+  it("recusa o que não é a raiz de um repositório", () => {
+    for (const url of [
+      "http://github.com/a/b",
+      "https://github.com/a",
+      "https://github.com/a/b/tree/main",
+      "https://github.com/a/..",
+      "https://github.com/-a/b",
+      "https://github.com.evil.com/a/b",
+    ]) {
+      expect(repositorioDoGithub(url), url).toBeNull();
+    }
+  });
+});
+
+describe("versaoMaisNova", () => {
+  it("compara número a número", () => {
+    expect(versaoMaisNova("0.6.0", "0.5.0")).toBe(true);
+    expect(versaoMaisNova("0.10.0", "0.9.1")).toBe(true);
+    expect(versaoMaisNova("1.0", "1.0.0")).toBe(false);
+  });
+
+  it("não chama de nova a versão mais velha", () => {
+    // O raw do GitHub ainda com a anterior, logo depois de atualizar.
+    expect(versaoMaisNova("0.5.0", "0.6.0")).toBe(false);
+    expect(versaoMaisNova("0.6.0", "0.6.0")).toBe(false);
+  });
+
+  it("versão que não é número cai na comparação de texto", () => {
+    expect(versaoMaisNova("beta", "alfa")).toBe(true);
+    expect(versaoMaisNova("beta", "beta")).toBe(false);
   });
 });

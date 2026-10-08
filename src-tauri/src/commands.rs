@@ -2157,6 +2157,24 @@ pub fn extensoes_listar(state: State<'_, AppState>) -> AppResult<Vec<Extensao>> 
 pub fn extensao_importar(state: State<'_, AppState>, caminho: String) -> AppResult<Extensao> {
     let manifesto = extensoes::importar(&state.extensoes, std::path::Path::new(&caminho))?;
 
+    registrar_importada(&state, manifesto)
+}
+
+/// Baixa o plugin do repositorio que o catalogo aponta e importa como o
+/// `extensao_importar`, com a mesma regra de ligado e desligado. Ver
+/// `catalogo::instalar`.
+#[tauri::command]
+pub async fn extensao_instalar_do_catalogo(
+    state: State<'_, AppState>,
+    repositorio: String,
+    id: String,
+) -> AppResult<Extensao> {
+    let manifesto = crate::catalogo::instalar(state.extensoes.clone(), repositorio, id).await?;
+
+    registrar_importada(&state, manifesto)
+}
+
+fn registrar_importada(state: &AppState, manifesto: extensoes::Manifesto) -> AppResult<Extensao> {
     let conhecida = state
         .db
         .extensoes_estado()?
