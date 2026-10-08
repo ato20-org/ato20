@@ -21,7 +21,7 @@ use crate::vault::inventory::{self, Item};
 use crate::vault::dados_de_extensao;
 use crate::vault::{
     assets,
-    atributos, documentos, board, characters, condicoes, efeitos, modelos, players, session,
+    atributos, detalhes, documentos, board, characters, condicoes, efeitos, modelos, players, session,
     variantes, zip,
     CampaignInfo,
     Vault,
@@ -1051,6 +1051,13 @@ pub fn character_create(state: State<'_, AppState>, nome: String) -> AppResult<P
             characters::acrescentar_atributos(vault, &personagem.id, novos)?;
         }
 
+        // E com os detalhes do molde: Identidade, Pericias, o que a campanha
+        // montou.
+        let molde = detalhes::molde(vault)?;
+        if !molde.modelos.is_empty() {
+            detalhes::acrescentar(vault, &personagem.id, detalhes::materializar_molde(&molde))?;
+        }
+
         // Relido, e nao o `personagem` de cima: a tela desenha a ficha com o que
         // volta daqui, e o de cima ainda esta sem medidor nem atributo.
         characters::load(vault)?
@@ -1365,6 +1372,171 @@ pub fn atributo_da_campanha_remover(
     #[allow(non_snake_case)] modeloId: String,
 ) -> AppResult<()> {
     state.with_vault(|vault| atributos::remover(vault, &modeloId))
+}
+
+// --- detalhes da ficha ------------------------------------------------------
+
+/// Os detalhes de um personagem. Ver `vault::detalhes`.
+#[tauri::command]
+pub fn detalhes_list(state: State<'_, AppState>, id: String) -> AppResult<Vec<detalhes::Detalhe>> {
+    state.with_vault(|vault| detalhes::load(vault, &id))
+}
+
+#[tauri::command]
+pub fn detalhe_criar(
+    state: State<'_, AppState>,
+    id: String,
+    novo: detalhes::NovoDetalhe,
+) -> AppResult<detalhes::Detalhe> {
+    state.with_vault(|vault| detalhes::criar(vault, &id, novo))
+}
+
+/// Edita um detalhe e devolve como ele ficou DEPOIS do ajuste ao tipo.
+#[tauri::command]
+pub fn detalhe_editar(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] detalheId: String,
+    patch: detalhes::PatchDetalhe,
+) -> AppResult<detalhes::Detalhe> {
+    state.with_vault(|vault| detalhes::editar(vault, &id, &detalheId, patch))
+}
+
+#[tauri::command]
+pub fn detalhe_remover(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] detalheId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| detalhes::remover(vault, &id, &detalheId))
+}
+
+#[tauri::command]
+pub fn detalhes_reordenar(
+    state: State<'_, AppState>,
+    id: String,
+    ordem: Vec<String>,
+) -> AppResult<Vec<detalhes::Detalhe>> {
+    state.with_vault(|vault| detalhes::reordenar(vault, &id, &ordem))
+}
+
+/// O molde da ficha desta campanha: grupos e modelos.
+#[tauri::command]
+pub fn detalhes_da_campanha(state: State<'_, AppState>) -> AppResult<detalhes::Molde> {
+    state.with_vault(|vault| detalhes::molde(vault))
+}
+
+#[tauri::command]
+pub fn grupo_de_detalhes_criar(
+    state: State<'_, AppState>,
+    patch: detalhes::PatchGrupo,
+) -> AppResult<detalhes::Grupo> {
+    state.with_vault(|vault| detalhes::criar_grupo(vault, patch))
+}
+
+/// Troca um grupo. Renomear alcanca as fichas; devolve quantas mudaram.
+#[tauri::command]
+pub fn grupo_de_detalhes_editar(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] grupoId: String,
+    patch: detalhes::PatchGrupo,
+) -> AppResult<GrupoEditado> {
+    state.with_vault(|vault| {
+        let (grupo, fichas) = detalhes::editar_grupo(vault, &grupoId, patch)?;
+        Ok(GrupoEditado { grupo, fichas })
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrupoEditado {
+    pub grupo: detalhes::Grupo,
+    pub fichas: usize,
+}
+
+#[tauri::command]
+pub fn grupo_de_detalhes_remover(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] grupoId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| detalhes::remover_grupo(vault, &grupoId))
+}
+
+#[tauri::command]
+pub fn grupos_de_detalhes_reordenar(
+    state: State<'_, AppState>,
+    ordem: Vec<String>,
+) -> AppResult<detalhes::Molde> {
+    state.with_vault(|vault| detalhes::reordenar_grupos(vault, &ordem))
+}
+
+/// Cria um detalhe de fabrica. So no molde: as fichas que ja existem NAO o
+/// ganham ate o mestre pedir ("Por em todo personagem"); o personagem novo
+/// nasce com ele. Pedido dele: montar o molde sem mexer nas fichas da mesa.
+#[tauri::command]
+pub fn detalhe_da_campanha_criar(
+    state: State<'_, AppState>,
+    novo: detalhes::NovoDetalhe,
+) -> AppResult<detalhes::Modelo> {
+    state.with_vault(|vault| detalhes::criar_modelo(vault, novo))
+}
+
+/// O molde inteiro em todas as fichas, de novo. Idempotente por grupo e
+/// rotulo: o que a ficha ja tem fica com o valor dela.
+#[tauri::command]
+pub fn detalhes_da_campanha_aplicar_em_todos(
+    state: State<'_, AppState>,
+) -> AppResult<AplicacaoDeDetalhe> {
+    state.with_vault(|vault| {
+        Ok(AplicacaoDeDetalhe {
+            modelo: None,
+            alcancados: detalhes::aplicar_em_todos(vault)?,
+        })
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AplicacaoDeDetalhe {
+    pub modelo: Option<detalhes::Modelo>,
+    pub alcancados: usize,
+}
+
+/// Edita um detalhe de fabrica. So as opcoes de uma escolha alcancam as
+/// fichas; `fichas` diz quantas mudaram.
+#[tauri::command]
+pub fn detalhe_da_campanha_editar(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+    patch: detalhes::PatchDetalhe,
+) -> AppResult<ModeloEditado> {
+    state.with_vault(|vault| {
+        let (modelo, fichas) = detalhes::editar_modelo(vault, &modeloId, patch)?;
+        Ok(ModeloEditado { modelo, fichas })
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeloEditado {
+    pub modelo: detalhes::Modelo,
+    pub fichas: usize,
+}
+
+#[tauri::command]
+pub fn detalhe_da_campanha_remover(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| detalhes::remover_modelo(vault, &modeloId))
+}
+
+#[tauri::command]
+pub fn detalhes_da_campanha_reordenar(
+    state: State<'_, AppState>,
+    ordem: Vec<String>,
+) -> AppResult<detalhes::Molde> {
+    state.with_vault(|vault| detalhes::reordenar_modelos(vault, &ordem))
 }
 
 // --- atributos ---------------------------------------------------------------
