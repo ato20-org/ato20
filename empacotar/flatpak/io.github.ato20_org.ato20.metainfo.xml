@@ -100,6 +100,97 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.3.0" date="2026-10-08">
+      <description>
+        <p>
+          ATO20 1.3 gives the GM a toolbar at the top, a laser to point at the
+          map, dynamic fog that the lanterns open, editable walls and a sky in
+          2.5D, image controls for the spectator window, Discord presence and
+          the plugin catalog inside the app. A blur fix closes the list.
+        </p>
+        <ul>
+          <li>
+            The GM tools sit in a bar at the top. Select, Pan, Laser, Pencil,
+            Eraser, Text and Elements in a single bar, at the top and centered.
+            In the top corners, what you look up (pins, areas, players) is on
+            the left and what adjusts the scene is on the right. Each tool opens
+            its own panel in the bottom corner.
+          </li>
+          <li>
+            A smooth pencil, an eraser that cuts and a text panel. The pencil
+            gained width, opacity and smoothing, and strokes come out as soft
+            curves. The eraser removes only the piece it passes over, or the
+            whole stroke. Text gained font, size, alignment and opacity. Alt +
+            wheel, or [ and ], change the brush size.
+          </li>
+          <li>
+            Dynamic fog: token lanterns reveal the map. A dynamic fog area opens
+            wherever a token's lantern reaches and closes when the light leaves.
+            Walls and doors stop the reveal. And the fog eraser, in the area's
+            gizmo, cuts holes in that area only.
+          </li>
+          <li>
+            A laser to point at the map without marking anything. In the top
+            bar: hold and drag, and the table sees a red trail that fades on its
+            own. Held still, it stays as a lit dot. Nothing goes into the scene.
+          </li>
+          <li>
+            Saved cameras have a photo now, in a strip below the stage. The
+            strip collapses, changes height and splits Cameras and Tripods. Each
+            card shows what the camera frames.
+          </li>
+          <li>
+            Editable walls and a sky in 2.5D. In 2.5D, click a wall to move it,
+            change its size and height, rotate it and change its face color,
+            with suggestions taken from the map and an eyedropper. In Map
+            settings → Outside the map, the Sky in 2.5D can be a color or a
+            panoramic image that turns with the camera.
+          </li>
+          <li>
+            Standing figures turn toward where they face. In 2.5D, the arrows
+            button in the piece's gizmo turns on "Mirror toward where it faces".
+          </li>
+          <li>
+            Token lanterns have an intensity and a wheel to aim. In the lantern
+            menu, Dim, Medium or Bright. With the token selected, its reach
+            shows around it: drag the tip around to aim, and farther or closer
+            to change the reach. In 2.5D, the facing ring aims the lantern too.
+            And tokens and furniture can now get very small in 2D, as in 2.5D.
+          </li>
+          <li>
+            Brightness, contrast, saturation and hue in the spectator window. To
+            get the picture right on the table's TV, monitor or projector
+            without touching the map. It works for the whole campaign, in
+            Campaign settings → Spectator, and for a single map, in Map
+            settings. The GM screen and the phones do not change.
+          </li>
+          <li>
+            Discord shows what the GM is doing. "Playing ATO20" on your profile,
+            with what you are doing (Editing a map, Running a campaign), the
+            session time and how many players are at the table. The window title
+            says the same. Turn it off in Settings → Options → Show on Discord,
+            and the campaign name only shows if you turn it on.
+          </li>
+          <li>
+            The plugin catalog inside the app. In Settings → Plugins, the
+            Catalog tab shows the plugins from the website, with what each one
+            does, whether it runs code and whether it is already installed.
+          </li>
+          <li>
+            Plugins can draw ammo one bullet at a time. The points of a plugin
+            meter can be narrow, like a standing bullet, and turn into one point
+            with "×30" when the maximum goes past a cap, so a full magazine fits
+            on the sheet.
+          </li>
+          <li>
+            Fixed: the zoomed-in map no longer blurs while dragging or
+            selecting. Dragging a token, pulling the camera or clicking on empty
+            space left the map blurry when zoomed in. The lantern wheel and
+            tokens lying down in the GM's 2.5D are sharp now too.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.0" date="2026-10-06">
       <description>
         <p>

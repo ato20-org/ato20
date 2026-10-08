@@ -71,6 +71,155 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.3.0",
+    data: "2026-10-08",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As ferramentas do Mestre ficam numa barra no topo",
+          en: "The GM tools sit in a bar at the top",
+        },
+        detalhe: {
+          pt: "Selecionar, Deslocar, Laser, Lápis, Borracha, Texto e Elementos numa barra só, no topo e ao centro. Nos cantos de cima, à esquerda o que é consulta (pontos, áreas, jogadores) e à direita o que ajusta a cena. Cada ferramenta abre o painel dela no canto de baixo.",
+          en: "Select, Pan, Laser, Pencil, Eraser, Text and Elements in a single bar, at the top and centered. In the top corners, what you look up (pins, areas, players) is on the left and what adjusts the scene is on the right. Each tool opens its own panel in the bottom corner.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Lápis macio, borracha que corta e um painel de texto",
+          en: "A smooth pencil, an eraser that cuts and a text panel",
+        },
+        detalhe: {
+          pt: "O lápis ganhou largura, opacidade e suavizar, e o risco sai em curva macia. A borracha apaga só o pedaço por onde passa, ou o risco inteiro. O texto ganhou fonte, tamanho, alinhamento e opacidade. Alt + roda, ou [ e ], mudam o tamanho do pincel.",
+          en: "The pencil gained width, opacity and smoothing, and strokes come out as soft curves. The eraser removes only the piece it passes over, or the whole stroke. Text gained font, size, alignment and opacity. Alt + wheel, or [ and ], change the brush size.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Névoa dinâmica: a lanterna dos tokens revela o mapa",
+          en: "Dynamic fog: token lanterns reveal the map",
+        },
+        detalhe: {
+          pt: "Uma área de névoa dinâmica abre onde a lanterna de um token alcança e fecha quando a luz sai. Paredes e portas param a revelação. E a borracha da névoa, no gizmo da área, fura só aquela área.",
+          en: "A dynamic fog area opens wherever a token's lantern reaches and closes when the light leaves. Walls and doors stop the reveal. And the fog eraser, in the area's gizmo, cuts holes in that area only.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Laser para apontar no mapa sem marcar nada",
+          en: "A laser to point at the map without marking anything",
+        },
+        detalhe: {
+          pt: "Na barra do topo: segure e risque, e a mesa vê um rastro vermelho que some sozinho. Parado com o botão apertado, fica um ponto aceso. Nada entra na cena.",
+          en: "In the top bar: hold and drag, and the table sees a red trail that fades on its own. Held still, it stays as a lit dot. Nothing goes into the scene.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As câmeras salvas ganharam foto, numa faixa embaixo do palco",
+          en: "Saved cameras have a photo now, in a strip below the stage",
+        },
+        detalhe: {
+          pt: "A faixa recolhe, muda de altura e separa Câmeras e Tripés. Cada cartão mostra o que a câmera enquadra.",
+          en: "The strip collapses, changes height and splits Cameras and Tripods. Each card shows what the camera frames.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Paredes editáveis e céu no 2.5D",
+          en: "Editable walls and a sky in 2.5D",
+        },
+        detalhe: {
+          pt: "No 2.5D, clique numa parede para mover, mudar de tamanho e de altura, girar e trocar a cor da face, com sugestões tiradas do mapa e conta-gotas. Em Configurações do mapa → Fora do mapa, o Céu no 2.5D pode ser uma cor ou uma imagem panorâmica que gira com a câmera.",
+          en: "In 2.5D, click a wall to move it, change its size and height, rotate it and change its face color, with suggestions taken from the map and an eyedropper. In Map settings → Outside the map, the Sky in 2.5D can be a color or a panoramic image that turns with the camera.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A figura em pé vira para o lado em que olha",
+          en: "Standing figures turn toward where they face",
+        },
+        detalhe: {
+          pt: "No 2.5D, o botão de setas no gizmo da peça liga \"Espelhar para onde olha\".",
+          en: "In 2.5D, the arrows button in the piece's gizmo turns on \"Mirror toward where it faces\".",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A lanterna do token tem intensidade e uma roda para mirar",
+          en: "Token lanterns have an intensity and a wheel to aim",
+        },
+        detalhe: {
+          pt: "No menu da lanterna, fraca, média ou forte. Com o token selecionado, o alcance aparece em volta dele: arraste a ponta em volta para mirar, e para longe ou para perto para mudar o alcance. No 2.5D, a roda do olhar também mira a lanterna. E tokens e mobília agora ficam bem pequenos no 2D, como no 2.5D.",
+          en: "In the lantern menu, Dim, Medium or Bright. With the token selected, its reach shows around it: drag the tip around to aim, and farther or closer to change the reach. In 2.5D, the facing ring aims the lantern too. And tokens and furniture can now get very small in 2D, as in 2.5D.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Brilho, contraste, saturação e matiz na janela do espectador",
+          en: "Brightness, contrast, saturation and hue in the spectator window",
+        },
+        detalhe: {
+          pt: "Para acertar a imagem na TV, no monitor ou no projetor da mesa sem mexer no mapa. Vale para a campanha toda, em Configuração da campanha → Espectador, e para um mapa só, em Configurações do mapa. O Mestre e os celulares não mudam.",
+          en: "To get the picture right on the table's TV, monitor or projector without touching the map. It works for the whole campaign, in Campaign settings → Spectator, and for a single map, in Map settings. The GM screen and the phones do not change.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O Discord mostra o que o Mestre está fazendo",
+          en: "Discord shows what the GM is doing",
+        },
+        detalhe: {
+          pt: "\"Jogando ATO20\" no perfil, com o que você está fazendo (Editando mapa, Mestrando campanha), o tempo de sessão e quantos jogadores estão na mesa. O título da janela diz o mesmo. Desliga em Configurações → Ajustes → Mostrar no Discord, e o nome da campanha só aparece se você ligar.",
+          en: "\"Playing ATO20\" on your profile, with what you are doing (Editing a map, Running a campaign), the session time and how many players are at the table. The window title says the same. Turn it off in Settings → Options → Show on Discord, and the campaign name only shows if you turn it on.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O catálogo de plugins dentro do aplicativo",
+          en: "The plugin catalog inside the app",
+        },
+        detalhe: {
+          pt: "Em Configurações → Plugins, a aba Catálogo mostra os plugins do site, com o que cada um faz, se executa código e se já está instalado.",
+          en: "In Settings → Plugins, the Catalog tab shows the plugins from the website, with what each one does, whether it runs code and whether it is already installed.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Plugins desenham munição bala por bala",
+          en: "Plugins can draw ammo one bullet at a time",
+        },
+        detalhe: {
+          pt: "Os pontos de um medidor de plugin podem ser estreitos, como uma bala de pé, e virar um ponto com \"×30\" quando o máximo passa de um teto, para o pente cheio caber na ficha.",
+          en: "The points of a plugin meter can be narrow, like a standing bullet, and turn into one point with \"×30\" when the maximum goes past a cap, so a full magazine fits on the sheet.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O mapa ampliado não borra mais ao arrastar ou selecionar",
+          en: "The zoomed-in map no longer blurs while dragging or selecting",
+        },
+        detalhe: {
+          pt: "Arrastar um token, puxar a câmera ou clicar no vazio deixava o mapa embaçado no zoom. A roda da lanterna e o token deitado no 2.5D do Mestre também ficaram nítidos.",
+          en: "Dragging a token, pulling the camera or clicking on empty space left the map blurry when zoomed in. The lantern wheel and tokens lying down in the GM's 2.5D are sharp now too.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.2.0",
     data: "2026-10-06",
     mudancas: [
