@@ -132,6 +132,16 @@ const pt = {
         `Modelo de medidor "${nome}": a campanha já está no máximo de modelos.`,
     },
     retratosAjustados: "Layout dos retratos: a campanha já tem o dela, e ficou o dela.",
+    pluginsFaltando: "Plugins que faltam",
+    pluginsFaltandoNota:
+      "O que usa estes plugins aparece no padrão enquanto eles faltarem. Baixe, ou remova para importar sem eles.",
+    baixar: "Baixar",
+    baixando: "Baixando…",
+    remover: "Remover",
+    desfazer: "Desfazer",
+    instalado: "Instalado",
+    semRepositorio: (nome: string) =>
+      `${nome} não está no catálogo e o pacote não diz de onde baixar. Remova, ou instale à mão.`,
     sufixo: {
       mapas: "mapas",
       fundos: "fundos",
@@ -914,6 +924,16 @@ const en: typeof pt = {
       medidoresNoMaximo: (nome) => `Meter template "${nome}": the campaign is at its template limit.`,
     },
     retratosAjustados: "Portrait layout: the campaign already has its own, and kept it.",
+    pluginsFaltando: "Missing plugins",
+    pluginsFaltandoNota:
+      "Whatever uses these plugins shows the default while they are missing. Download them, or remove them to import without them.",
+    baixar: "Download",
+    baixando: "Downloading…",
+    remover: "Remove",
+    desfazer: "Undo",
+    instalado: "Installed",
+    semRepositorio: (nome) =>
+      `${nome} is not in the catalog and the package does not say where to get it. Remove it, or install it by hand.`,
     sufixo: {
       mapas: "maps",
       fundos: "backdrops",

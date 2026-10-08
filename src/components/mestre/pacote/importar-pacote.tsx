@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ListaDeCenas, marcar } from "@/components/mestre/pacote/lista-de-cenas";
+import { PluginsFaltando } from "@/components/mestre/pacote/plugins-faltando";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,7 +27,13 @@ import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-s
 import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
-import { importarPacote, type IdDaSecao, type PacoteAberto, type Pulado } from "@/lib/vault/pacote";
+import {
+  importarPacote,
+  type IdDaSecao,
+  type PacoteAberto,
+  type PluginDoPacote,
+  type Pulado,
+} from "@/lib/vault/pacote";
 import type { AncoraRetrato, LayoutDoRetrato } from "@/types/scene";
 
 /**
@@ -60,6 +67,7 @@ function Corpo({
   );
   // A da máquina vem desmarcada: ela troca os ajustes desta máquina.
   const [ato20, setAto20] = useState(false);
+  const [removidos, setRemovidos] = useState<Set<string>>(() => new Set());
   const [importando, setImportando] = useState(false);
 
   const mapas = resumo.cenas.filter((cena) => cena.tipo !== "fundo");
@@ -73,6 +81,25 @@ function Corpo({
   const secoes = resumo.configuracao
     .filter((secao) => marcadas.has(secao.id))
     .map((secao) => secao.id as IdDaSecao);
+  // Os plugins que o que está marcado cita e esta máquina não tinha quando o
+  // pacote abriu. Os da configuração do ATO20 são a lista da outra máquina.
+  const citados = new Set<string>(
+    [
+      ...resumo.cenas.filter((cena) => marcadas.has(cena.id)),
+      ...resumo.personagens.filter((personagem) => marcadas.has(personagem.id)),
+      ...resumo.configuracao.filter((secao) => marcadas.has(secao.id)),
+    ].flatMap((item) => item.plugins),
+  );
+  const faltando = new Map<string, PluginDoPacote>();
+  for (const plugin of resumo.plugins) {
+    if (!plugin.instalado && citados.has(plugin.id)) faltando.set(plugin.id, plugin);
+  }
+  if (ato20) {
+    for (const plugin of resumo.ato20?.plugins ?? []) {
+      if (!plugin.instalado && !faltando.has(plugin.id)) faltando.set(plugin.id, plugin);
+    }
+  }
+
   const algo =
     resumo.cenas.some((cena) => marcadas.has(cena.id)) ||
     resumo.personagens.some((personagem) => marcadas.has(personagem.id)) ||
@@ -89,7 +116,7 @@ function Corpo({
           .map((personagem) => personagem.id),
         secoes,
         ato20,
-        removerPlugins: [],
+        removerPlugins: [...removidos].filter((id) => faltando.has(id)),
       });
 
       const novas = useSceneStore.getState().importarCenas(importado);
@@ -184,6 +211,11 @@ function Corpo({
                 </span>
               </label>
             ) : null}
+            <PluginsFaltando
+              plugins={[...faltando.values()]}
+              removidos={removidos}
+              onRemover={(id, remover) => setRemovidos((atual) => marcar(atual, [id], remover))}
+            />
           </div>
         </ScrollArea>
       )}
