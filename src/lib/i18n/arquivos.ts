@@ -83,6 +83,50 @@ const pt = {
     contarPalavras: (n: number) => (n === 1 ? "1 palavra" : `${n} palavras`),
   },
 
+  /** Trazer de fora para a campanha: pasta, arquivos ou vault. Ver `lib/obsidian/importar`. */
+  importarDeFora: {
+    botao: "Importar",
+    dica: "Traz notas, imagens e arquivos de fora: uma pasta, arquivos soltos ou um vault do Obsidian.",
+    pasta: "Pasta do sistema",
+    arquivos: "Arquivos do sistema",
+    obsidian: "Vault do Obsidian",
+    escolhaPasta: "Escolha a pasta para importar",
+    escolhaArquivos: "Escolha os arquivos para importar",
+    escolhaVault: "Escolha a pasta do vault do Obsidian",
+    lendo: "Lendo…",
+    importando: (nome: string) => `Importando ${nome}…`,
+    tituloDaPasta: (nome: string) => `Importar ${nome}?`,
+    tituloDosArquivos: "Importar os arquivos?",
+    tituloDoArrasto: "Importar o que foi solto?",
+    ondeMisto: (pastas: string) =>
+      `Cada pasta entra numa pasta com o nome dela (${pastas}), e os arquivos soltos, na raiz. A origem não é alterada, e os links [[ ]] viram texto.`,
+    vemVault: (nome: string) => `Vault do Obsidian · ${nome}`,
+    vemPasta: (nome: string) => `Pasta · ${nome}`,
+    vemArquivo: (nome: string) => `Arquivo · ${nome}`,
+    vemPastas: (n: number) => (n === 1 ? "1 pasta" : `${n} pastas`),
+    vemArquivos: (n: number) => (n === 1 ? "1 arquivo" : `${n} arquivos`),
+    soltarParaImportar: "Solte para importar",
+    notas: (n: number) => (n === 1 ? "1 nota" : `${n} notas`),
+    anexos: (n: number) => (n === 1 ? "1 imagem ou arquivo" : `${n} imagens e arquivos`),
+    quadros: (n: number) => (n === 1 ? "1 board, que vira quadro" : `${n} boards, que viram quadros`),
+    ondeNaPasta: (nome: string) =>
+      `Tudo entra numa pasta ${nome}, em Arquivos e no acervo. A origem não é alterada, e os links [[ ]] viram texto.`,
+    ondeNaRaiz:
+      "As notas entram na raiz de Arquivos, e as imagens e arquivos, na raiz do acervo. A origem não é alterada.",
+    naoEVault: "Essa pasta não tem .obsidian: não parece um vault, e entra como pasta comum.",
+    ignorados: (n: number) =>
+      n === 1
+        ? "1 arquivo fica de fora: não é nota, imagem, som, vídeo nem PDF."
+        : `${n} arquivos ficam de fora: não são nota, imagem, som, vídeo nem PDF.`,
+    importar: "Importar",
+    vazio: "Não há nota, board nem imagem para importar.",
+    pronto: (resumo: string) => `Importado: ${resumo}.`,
+    falhas: (n: number, primeiros: string) =>
+      n === 1 ? `1 arquivo não entrou: ${primeiros}` : `${n} arquivos não entraram: ${primeiros}`,
+    parado: "A cópia das imagens parou no meio; as notas entraram com o que já tinha chegado.",
+    falhou: "O import parou no meio.",
+  },
+
   arvoreDePastas: {
     moverPara: "Mover para",
     raiz: "Raiz",
@@ -543,6 +587,49 @@ const en: typeof pt = {
     apagarNota: "Delete the note",
     contarLinhas: (n) => (n === 1 ? "1 line" : `${n} lines`),
     contarPalavras: (n) => (n === 1 ? "1 word" : `${n} words`),
+  },
+
+  importarDeFora: {
+    botao: "Import",
+    dica: "Brings notes, images and files from outside: a folder, loose files or an Obsidian vault.",
+    pasta: "System folder",
+    arquivos: "System files",
+    obsidian: "Obsidian vault",
+    escolhaPasta: "Choose the folder to import",
+    escolhaArquivos: "Choose the files to import",
+    escolhaVault: "Choose the Obsidian vault folder",
+    lendo: "Reading…",
+    importando: (nome: string) => `Importing ${nome}…`,
+    tituloDaPasta: (nome: string) => `Import ${nome}?`,
+    tituloDosArquivos: "Import the files?",
+    tituloDoArrasto: "Import what was dropped?",
+    ondeMisto: (pastas: string) =>
+      `Each folder goes into a folder with its name (${pastas}), and loose files to the root. The source is not changed, and [[ ]] links become text.`,
+    vemVault: (nome: string) => `Obsidian vault · ${nome}`,
+    vemPasta: (nome: string) => `Folder · ${nome}`,
+    vemArquivo: (nome: string) => `File · ${nome}`,
+    vemPastas: (n: number) => (n === 1 ? "1 folder" : `${n} folders`),
+    vemArquivos: (n: number) => (n === 1 ? "1 file" : `${n} files`),
+    soltarParaImportar: "Drop to import",
+    notas: (n: number) => (n === 1 ? "1 note" : `${n} notes`),
+    anexos: (n: number) => (n === 1 ? "1 image or file" : `${n} images and files`),
+    quadros: (n: number) => (n === 1 ? "1 canvas, which becomes a board" : `${n} canvases, which become boards`),
+    ondeNaPasta: (nome: string) =>
+      `Everything goes into a ${nome} folder, in Files and in the library. The source is not changed, and [[ ]] links become text.`,
+    ondeNaRaiz:
+      "Notes go to the root of Files, and images and files to the root of the library. The source is not changed.",
+    naoEVault: "This folder has no .obsidian: it does not look like a vault, and comes in as a plain folder.",
+    ignorados: (n: number) =>
+      n === 1
+        ? "1 file is left out: it is not a note, image, sound, video or PDF."
+        : `${n} files are left out: they are not notes, images, sounds, videos or PDFs.`,
+    importar: "Import",
+    vazio: "There is no note, canvas or image to import.",
+    pronto: (resumo: string) => `Imported: ${resumo}.`,
+    falhas: (n: number, primeiros: string) =>
+      n === 1 ? `1 file did not come in: ${primeiros}` : `${n} files did not come in: ${primeiros}`,
+    parado: "The image copy stopped halfway; the notes came in with what had already arrived.",
+    falhou: "The import stopped halfway.",
   },
 
   arvoreDePastas: {

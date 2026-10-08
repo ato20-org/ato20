@@ -14,6 +14,7 @@ import {
   FilePlus,
   FileText,
   FolderPlus,
+  Import,
   Presentation,
   Radio,
   TextCursorInput,
@@ -32,6 +33,13 @@ import {
 } from "@/components/mestre/arvore-de-pastas";
 import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
+import {
+  BotaoDeImportar,
+  ICONE_DA_ORIGEM,
+  ORIGENS,
+  useImportarDeFora,
+  useRotuloDoArrasto,
+} from "@/components/mestre/importar-de-fora";
 import { KIT_CONTEXTO, type Kit } from "@/components/ui/menu-kit";
 import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
@@ -40,6 +48,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -48,6 +57,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import {
   aoApertarF2,
@@ -86,6 +96,9 @@ import {
   type Pasta,
   type Scene,
 } from "@/types/scene";
+
+/** A marca do painel que aceita o arquivo do sistema. Ver `useArrastoDeArquivo`. */
+const ZONA_DE_ARQUIVOS = "[data-arquivos-solto]";
 
 /**
  * A aba Arquivos: quadros e notas na mesma árvore de pastas, como o painel de
@@ -210,6 +223,14 @@ export function ArquivosList({ ready }: { ready: boolean }) {
    * `buscarArquivos` para o que cada tipo acha e por quê.
    */
   const [busca, setBusca] = useState("");
+  const importar = useImportarDeFora();
+  // O que vem do sistema e cai no painel: pasta, vault ou arquivos, pelo mesmo
+  // import do botão. Sempre na raiz, como no acervo: o arrasto do sistema não
+  // tem retorno visual fino o bastante para mirar uma pasta da árvore.
+  const noAr = useArrastoDeArquivo(ZONA_DE_ARQUIVOS, (caminhos) => {
+    if (ready) importar.soltar(caminhos);
+  });
+  const vem = useRotuloDoArrasto(noAr?.caminhos);
   const buscando = busca.trim() !== "";
 
   // O texto das notas entra na PRIMEIRA tecla, e não antes: só a nota aberta e
@@ -240,7 +261,15 @@ export function ArquivosList({ ready }: { ready: boolean }) {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      data-arquivos-solto
+      className={cn(
+        "flex min-h-0 flex-1 flex-col",
+        // Por dentro, como o do acervo: o painel atracado encosta na borda da
+        // coluna, e um anel por fora sairia cortado.
+        noAr && "ring-primary/60 bg-primary/5 ring-2 ring-inset",
+      )}
+    >
       {/* Três botões iguais: criar é criar, seja o que for. O que cada um cria
           está no ícone e na dica; o título da aba já diz "Arquivos".
 
@@ -285,7 +314,19 @@ export function ArquivosList({ ready }: { ready: boolean }) {
         >
           <FolderPlus />
         </BotaoDeCriar>
+        {/* Junto dos de criar: importar é o outro jeito de encher esta lista.
+            Um botão só, com as origens no menu. Ver `useImportarDeFora`. */}
+        <BotaoDeImportar disabled={!ready} onEscolher={importar.iniciar} />
       </div>
+
+      {/* O que está vindo, antes de soltar: a borda acesa diz que o painel
+          aceita; esta linha diz o quê. */}
+      {noAr && vem ? (
+        <p className="border-primary/60 bg-primary/10 mx-2 mb-2 flex items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-[11px]">
+          <Import className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{vem}</span>
+        </p>
+      ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
         {/* O fundo da lista, e SÓ ele, é o gatilho do menu do vazio. Envolver
@@ -293,7 +334,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
         <div className="relative min-h-full">
           <ContextMenu>
             <ContextMenuTrigger render={<div className="absolute inset-0" aria-hidden />} />
-            <ContextMenuContent className="w-48">
+            <ContextMenuContent className="w-60">
               <ContextMenuItem onClick={() => criar.quadro()}>
                 <Presentation />
                 {t.arquivosList.novoQuadro}
@@ -306,6 +347,16 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                 <FolderPlus />
                 {t.geral.novaPasta}
               </ContextMenuItem>
+              <ContextMenuSeparator />
+              {ORIGENS.map((origem) => {
+                const Icone = ICONE_DA_ORIGEM[origem];
+                return (
+                  <ContextMenuItem key={origem} onClick={() => importar.iniciar(origem)}>
+                    <Icone />
+                    {t.importarDeFora.botao}: {t.importarDeFora[origem].toLowerCase()}
+                  </ContextMenuItem>
+                );
+              })}
             </ContextMenuContent>
           </ContextMenu>
 
@@ -423,6 +474,8 @@ export function ArquivosList({ ready }: { ready: boolean }) {
           <FimDaLista ativo={dropIndex === linhas.length} />
         </div>
       </ScrollArea>
+
+      {importar.dialogo}
     </div>
   );
 }

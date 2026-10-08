@@ -266,7 +266,12 @@ export function importarBytes(
 export async function importarCaminhos(
   paths: string[],
   escopo?: EscopoAsset,
-  aoEntrar?: (asset: AssetMeta) => void,
+  /**
+   * Cada arquivo que entrou, com o caminho de onde veio: quem importa uma
+   * pasta inteira precisa saber qual asset nasceu de qual arquivo -- o import
+   * do Obsidian troca o `![[Poço.jpg]]` da nota pelo nome do asset.
+   */
+  aoEntrar?: (asset: AssetMeta, origem: string) => void,
 ): Promise<ImportResult> {
   const aceitos: AssetMeta[] = [];
   const recusados: string[] = [];
@@ -302,7 +307,7 @@ export async function importarCaminhos(
       aceitos.push(...parcial.aceitos);
       recusados.push(...parcial.recusados);
 
-      for (const asset of parcial.aceitos) aoEntrar?.(asset);
+      for (const asset of parcial.aceitos) aoEntrar?.(asset, path);
 
       // Cancelado neste arquivo: os seguintes nem vão ao Rust.
       if (parcial.cancelado) {
