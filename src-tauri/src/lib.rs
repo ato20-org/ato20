@@ -10,6 +10,7 @@ mod importar;
 mod presenca;
 mod serve;
 mod vault;
+mod webkit;
 
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -26,6 +27,9 @@ pub fn run() {
     // no `LD_PRELOAD`, e daqui nao se volta. Nada pode existir ainda -- nem
     // thread, nem janela, nem banco.
     appimage::corrigir_wayland();
+
+    // O WebKitGTK 2.54 pisca o que anima ao entrar e ao sair. Ver o modulo.
+    webkit::compor_como_o_252();
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
