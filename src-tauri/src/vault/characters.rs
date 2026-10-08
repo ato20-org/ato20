@@ -477,6 +477,21 @@ fn exige(vault: &Vault, id: &str) -> AppResult<()> {
     })
 }
 
+/// Acrescenta personagens que vieram de um pacote, ja com id novo e com a
+/// pasta copiada por quem chamou. Ver `vault::pacote`.
+pub fn adotar(vault: &Vault, novos: Vec<Personagem>) -> AppResult<()> {
+    if novos.is_empty() {
+        return Ok(());
+    }
+
+    let mut personagens = load(vault)?;
+    personagens.extend(novos.into_iter().map(|mut personagem| {
+        normalizar(&mut personagem);
+        personagem
+    }));
+    save(vault, &personagens)
+}
+
 pub fn create(vault: &Vault, nome: &str) -> AppResult<Personagem> {
     let mut personagens = load(vault)?;
 

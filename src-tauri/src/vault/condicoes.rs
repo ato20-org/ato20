@@ -58,6 +58,26 @@ fn sem_modelo(id: &str) -> AppError {
 }
 
 /// O modelo, ou o erro que diz que ele nao existe.
+/// Acrescenta condicoes que vieram de um pacote, cada uma com id novo. As que
+/// passam do teto ficam de fora: quem chamou ja contou as vagas e avisou.
+pub fn adotar(vault: &Vault, novas: Vec<Condicao>) -> AppResult<()> {
+    if novas.is_empty() {
+        return Ok(());
+    }
+
+    let mut modelos = load(vault)?;
+    for mut condicao in novas {
+        if modelos.len() >= MAX_MODELOS {
+            break;
+        }
+        condicao.id = uuid::Uuid::new_v4().to_string();
+        ajustar_condicao(&mut condicao);
+        modelos.push(condicao);
+    }
+
+    save(vault, &modelos)
+}
+
 pub fn buscar(vault: &Vault, modelo_id: &str) -> AppResult<Condicao> {
     load(vault)?
         .into_iter()

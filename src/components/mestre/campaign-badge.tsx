@@ -4,6 +4,8 @@ import { useState } from "react";
 import type * as React from "react";
 import {
   ChevronDown,
+  FileDown,
+  FileUp,
   FolderSymlink,
   PackageOpen,
   SlidersHorizontal,
@@ -37,6 +39,7 @@ import {
 } from "@/components/ui/tooltip";
 import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/mestre";
+import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 
 /**
@@ -130,6 +133,16 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
           <DropdownMenuItem onClick={exportarCampanha}>
             <PackageOpen />
             {t.campanha.exportar}
+          </DropdownMenuItem>
+          {/* Partes da campanha, num pacote que outra campanha importa. Ver
+              `vault/pacote.rs`. */}
+          <DropdownMenuItem onClick={() => usePacoteStore.getState().abrirExportar()}>
+            <FileUp />
+            {t.pacote.exportarItem}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void usePacoteStore.getState().escolherPacote()}>
+            <FileDown />
+            {t.pacote.importarItem}
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />

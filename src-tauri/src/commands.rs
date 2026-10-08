@@ -680,6 +680,105 @@ pub fn campaign_import(
     Ok(info)
 }
 
+// --- pacote -------------------------------------------------------------------
+
+/// Grava em `destino` um pacote com o que foi escolhido. Ver `vault::pacote`.
+///
+/// A tela grava o board antes de chamar: o pacote sai do disco.
+#[tauri::command]
+pub async fn pacote_exportar(
+    state: State<'_, AppState>,
+    destino: String,
+    escolha: crate::vault::pacote::EscolhaDeExportacao,
+) -> AppResult<()> {
+    let shared = state.vault.clone();
+    let extensoes = state.extensoes.clone();
+
+    em_segundo_plano(move || {
+        com_vault(&shared, |vault| {
+            crate::vault::pacote::exportar(
+                vault,
+                &extensoes,
+                std::path::Path::new(&destino),
+                &escolha,
+            )
+        })
+    })
+    .await
+}
+
+/// Um pacote aberto, esperando o mestre escolher o que entra.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PacoteAberto {
+    /// Nome da pasta temporaria onde ele foi extraido. Volta em `pacote_importar`
+    /// e `pacote_fechar`.
+    pub token: String,
+    pub resumo: crate::vault::pacote::Resumo,
+}
+
+/// Onde um pacote aberto fica extraido. O token vem da tela, entao so passa
+/// se for o uuid que `pacote_abrir` sorteou.
+fn pasta_do_pacote(token: &str) -> AppResult<PathBuf> {
+    if token.len() != 36 || !token.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
+        return Err(AppError::Malformed {
+            file: "pacote".into(),
+            cause: "token de pacote invalido".into(),
+        });
+    }
+
+    Ok(std::env::temp_dir().join(format!("ato20-pacote-{token}")))
+}
+
+/// Extrai um pacote (ou uma campanha exportada) e diz o que ele tem.
+#[tauri::command]
+pub async fn pacote_abrir(state: State<'_, AppState>, caminho: String) -> AppResult<PacoteAberto> {
+    let extensoes = state.extensoes.clone();
+    let token = uuid::Uuid::new_v4().to_string();
+    let pasta = pasta_do_pacote(&token)?;
+
+    em_segundo_plano(move || {
+        let resumo =
+            crate::vault::pacote::abrir(std::path::Path::new(&caminho), &pasta, &extensoes);
+        if resumo.is_err() {
+            let _ = std::fs::remove_dir_all(&pasta);
+        }
+
+        Ok(PacoteAberto { token, resumo: resumo? })
+    })
+    .await
+}
+
+/// Traz para a campanha aberta o que foi escolhido, e apaga a pasta extraida.
+#[tauri::command]
+pub async fn pacote_importar(
+    state: State<'_, AppState>,
+    token: String,
+    escolha: crate::vault::pacote::EscolhaDeImportacao,
+) -> AppResult<crate::vault::pacote::Importado> {
+    let shared = state.vault.clone();
+    let pasta = pasta_do_pacote(&token)?;
+
+    em_segundo_plano(move || {
+        let importado = com_vault(&shared, |vault| {
+            crate::vault::pacote::importar(vault, &pasta, &escolha)
+        });
+        let _ = std::fs::remove_dir_all(&pasta);
+        importado
+    })
+    .await
+}
+
+/// Desiste de um pacote aberto: a pasta extraida sai do disco.
+#[tauri::command]
+pub fn pacote_fechar(token: String) -> AppResult<()> {
+    let pasta = pasta_do_pacote(&token)?;
+    if pasta.exists() {
+        std::fs::remove_dir_all(pasta)?;
+    }
+    Ok(())
+}
+
 /// O que a importacao devolve para a tela.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

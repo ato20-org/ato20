@@ -12,6 +12,7 @@ pub mod fio;
 pub mod inventory;
 pub mod mime;
 pub mod modelos;
+pub mod pacote;
 pub mod variantes;
 pub mod players;
 pub mod session;
