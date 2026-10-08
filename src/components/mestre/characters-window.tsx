@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  FileUp,
   FolderPlus,
   MoreVertical,
   Pencil,
@@ -82,7 +83,9 @@ import { useListReorder } from "@/hooks/use-list-reorder";
 import { OQueVaiJunto } from "@/components/mestre/character-window";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
 import { comum } from "@/lib/i18n/comum";
+import { t as textoDoMestre } from "@/lib/i18n/mestre";
 import { t } from "@/lib/i18n/personagens";
+import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import { useTokenDrag } from "@/hooks/use-token-drag";
 import {
   achatarArvore,
@@ -563,6 +566,13 @@ export function CharactersBody() {
             )}
           </SubContent>
         </Sub>
+
+        <Item
+          onClick={() => usePacoteStore.getState().abrirExportar({ personagens: [personagem.id] })}
+        >
+          <FileUp />
+          {textoDoMestre.pacote.exportarItem}
+        </Item>
 
         <Separator />
 

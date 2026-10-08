@@ -45,6 +45,13 @@ const pt = {
   ficha: {
     falhaAoLerArquivos: "Falha ao ler os arquivos.",
     campos: "Campos do personagem",
+    abas: {
+      rotulo: "Partes da ficha",
+      ficha: "Ficha",
+    },
+    abrirFicha: (arquivo: string) => `Abrir a ficha (${arquivo})`,
+    anexarFicha: "Anexar a ficha",
+    verCampos: "Ficha, retrato e miniatura",
     aoApagar: "Ao apagar você vai {remover}",
     remover: "remover",
     vaiJunto: {
@@ -212,6 +219,24 @@ const pt = {
     oJogadorVe: "O jogador vê",
     noAr: "No ar",
     poeAImagem: "Põe a imagem deste item na frente de tudo, na mesa.",
+  },
+
+  atributos: {
+    titulo: "Atributos",
+    criar: "Criar atributo",
+    /** A sigla com que um atributo nasce, marcada para escrever por cima. */
+    siglaNova: "ATR",
+    limite: (maximo: number) =>
+      `${maximo} é o limite. Passando disso já é perícia, e perícia é lista.`,
+    vazio:
+      "O número que a ficha consulta: FOR, AGI, INT. Para todo personagem nascer com os mesmos, crie na configuração da campanha.",
+    sigla: (sigla: string) => `Sigla de ${sigla}`,
+    valor: (sigla: string) => `Valor de ${sigla}`,
+    apagar: (sigla: string) => `Apagar ${sigla}`,
+    descricao: (sigla: string) => `Descrição de ${sigla}`,
+    semDescricao: "Sem descrição. Clique para escrever.",
+    editarDescricao: "Clique para editar.",
+    exemploDeDescricao: "Vigor: a resistência do corpo.",
   },
 
   medidores: {
@@ -500,6 +525,13 @@ const en: typeof pt = {
   ficha: {
     falhaAoLerArquivos: "Could not read the files.",
     campos: "Character fields",
+    abas: {
+      rotulo: "Sheet sections",
+      ficha: "Sheet",
+    },
+    abrirFicha: (arquivo: string) => `Open the sheet (${arquivo})`,
+    anexarFicha: "Attach the sheet",
+    verCampos: "Sheet, portrait and token",
     aoApagar: "Deleting will {remover}",
     remover: "remove",
     vaiJunto: {
@@ -665,6 +697,23 @@ const en: typeof pt = {
     oJogadorVe: "The player sees it",
     noAr: "On air",
     poeAImagem: "Puts this item's image in front of everything, on the table.",
+  },
+
+  atributos: {
+    titulo: "Attributes",
+    criar: "Create attribute",
+    siglaNova: "ATR",
+    limite: (maximo) =>
+      `${maximo} is the limit. Beyond that it is a skill, and skills are a list.`,
+    vazio:
+      "The number the sheet looks up: STR, AGI, INT. To have every character start with the same ones, create them in the campaign settings.",
+    sigla: (sigla) => `Abbreviation of ${sigla}`,
+    valor: (sigla) => `Value of ${sigla}`,
+    apagar: (sigla) => `Delete ${sigla}`,
+    descricao: (sigla) => `Description of ${sigla}`,
+    semDescricao: "No description. Click to write one.",
+    editarDescricao: "Click to edit.",
+    exemploDeDescricao: "Vigor: how tough the body is.",
   },
 
   medidores: {

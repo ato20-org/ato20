@@ -36,7 +36,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 8;
+export const API_VERSAO = 9;
 
 /**
  * O que uma extensão diz de si.
@@ -449,6 +449,17 @@ export async function importarExtensao(
   if (typeof escolhida !== "string") return null;
 
   return noIdiomaDaTela(await call<Extensao>("extensao_importar", { caminho: escolhida }));
+}
+
+/**
+ * Baixa do GitHub o plugin que o catálogo aponta e o importa, como o
+ * `importarExtensao`. O Rust monta o endereço do zip a partir do repositório e
+ * recusa o zip cujo manifesto tem outro id. Ver `catalogo.rs`.
+ */
+export async function instalarDoCatalogo(repositorio: string, id: string): Promise<Extensao> {
+  return noIdiomaDaTela(
+    await call<Extensao>("extensao_instalar_do_catalogo", { repositorio, id }),
+  );
 }
 
 /** Desinstala: a pasta sai do disco e a linha sai do banco. */

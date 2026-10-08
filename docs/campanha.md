@@ -23,11 +23,13 @@ minha-campanha/
     c4d5.../
       _notas.json      a nota do personagem
       _inventario.json
+      _extensoes.json  os dados de cada plugin nesta ficha
       anexos/
         mestre/        o que o mestre anexou à ficha
         jogador/       o que o jogador anexou à ficha
   medidores.json       os modelos de medidor da campanha
   condicoes.json       o cardápio de condições
+  efeitos.json         os efeitos da campanha, de condição e de área
   retratos.json        quem está no ar, em que canto, de que tamanho
   trilha.json
   configuracoes.json   o que vale só nesta campanha; vence o da máquina
@@ -191,3 +193,56 @@ Uma coisa que um teste ensinou: um `estado.db` ilegível **não** derruba o expo
 derrubava, e isso estava errado — as cenas, o acervo e os anexos estão intactos em arquivos
 ao lado, e quem exporta costuma estar exportando justamente porque algo deu errado. Perde-se
 o texto dos jogadores, que era o que estava ilegível de todo jeito.
+
+## Exportar e importar partes: o pacote
+
+Além da campanha inteira, o mestre leva **partes** dela para outra campanha: mapas e
+fundos (todos ou um a um), personagens e a configuração da campanha por seção (efeitos,
+modelos de medidor, condições, ajuste de imagem do espectador, ajustes, configurações de
+plugins e layout dos retratos). A configuração do ATO20 (zoom, volumes, idioma, Discord,
+som dos dados, configurações de plugin e a lista de plugins da máquina) vai junto se for
+marcada. Fica no menu da campanha, em Exportar… e Importar…, e na linha de cada mapa,
+fundo e personagem.
+
+**O pacote tem o desenho da pasta de campanha**, só com o que foi escolhido, mais um
+`pacote.json` que diz o que tem dentro e que plugins o conteúdo cita (id, nome, versão e
+repositório). Com o mesmo desenho, abrir um pacote e abrir a exportação de uma campanha
+inteira são a mesma leitura: dá para puxar um mapa de uma campanha antiga sem abri-la.
+Ver `src-tauri/src/vault/pacote.rs`.
+
+**As referências são achadas por varredura**, e não campo a campo: todo texto do JSON
+igual a um id do acervo de origem é um asset, `campanha/…` é um efeito da campanha,
+`personagemId` é um personagem, e `{plugin}/…` num `efeito` ou `estiloExtensao`,
+`plugin:{id}@…` numa imagem e as chaves de `extensoes` são plugins. Um campo novo da cena
+viaja sem o pacote saber dele. Um mapa leva a imagem, o céu, os tokens, os anexos dos
+pins, o handout, os sons de ambiente e os efeitos da campanha que usa; um personagem leva
+a ficha, a pasta dele e os retratos, menos as notas dos jogadores e o vínculo com jogador.
+
+**Importar nunca sobrescreve.**
+
+- Asset, cena e personagem entram com id novo; nome repetido ganha "(2)".
+- Efeito, condição e modelo de medidor com o mesmo nome de um da campanha ficam de fora,
+  e o que apontava para eles passa a apontar para o da campanha. O import avisa, e
+  respeita os tetos (32 efeitos, 16 condições, 6 modelos).
+- Chave da configuração da campanha só entra onde a campanha ainda não tem valor; o layout
+  dos retratos, só se a campanha ainda está no de fábrica.
+- A configuração do ATO20 é a exceção: marcada, troca os ajustes desta máquina. Rede e
+  convite não viajam, porque são da máquina de origem.
+
+**A cena importada entra pelo store da tela**, e não por escrita em `cenas/`: o autosave
+grava a lista do store como a verdade e apagaria o arquivo que chegasse por fora. O Rust
+grava o que é dele (acervo, efeitos, condições, modelos, personagens) e devolve as cenas,
+os ambientes e as chaves do registro para a tela pôr no lugar.
+
+**Plugins que faltam.** O diálogo de importar lista os plugins que o conteúdo marcado cita
+e esta máquina não tem (e, com a configuração do ATO20 marcada, os que a outra máquina
+tinha). **Baixar** instala pelo Catálogo, com o repositório do catálogo ou o que o pacote
+anotou. **Remover** tira o plugin do que entra: a área de efeito dele sai, a condição fica
+sem o efeito, o estilo de medidor volta ao de fábrica, e os dados e configurações dele não
+entram. Sem nenhum dos dois, a referência entra igual, e o ATO20 desenha o de fábrica até
+o plugin chegar.
+
+As defesas são as do import de campanha (`enclosed_name`, só componente normal, link
+simbólico pulado, 5 GB e 50 mil entradas contados no que sai), mais uma: o `id` do asset
+e o `arquivo` da cena vêm do pacote e viram caminho, então só passam se forem nome simples,
+sem barra e sem `..`.

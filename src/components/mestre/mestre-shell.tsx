@@ -24,6 +24,8 @@ import { useFotografoDasCameras } from "@/hooks/use-fotografo-das-cameras";
 import { PainelDeTexto } from "@/components/mestre/painel-de-texto";
 import { PainelDoPincel } from "@/components/mestre/painel-do-pincel";
 import { PaletaDeComandos } from "@/components/mestre/paleta-de-comandos";
+import { ExportarPacote } from "@/components/mestre/pacote/exportar-pacote";
+import { ImportarPacote } from "@/components/mestre/pacote/importar-pacote";
 import { AreasIndex } from "@/components/mestre/areas-index";
 import { PinIndex } from "@/components/mestre/pin-index";
 import { HandoutMestre } from "@/components/mestre/handout-mestre";
@@ -372,6 +374,10 @@ export function MestreShell() {
       {/* Ctrl+K. Vive aqui, e não em `mestre.tsx`, porque lista cenas, livros e
           acervo: só existe com a campanha aberta. */}
       <PaletaDeComandos />
+      {/* Exportar e importar partes da campanha: abertos pelo menu da
+          campanha e pela linha de um mapa. Ver `use-pacote-store`. */}
+      <ExportarPacote />
+      <ImportarPacote />
       {/* `flex-wrap`: abaixo de ~1000px a barra quebra em duas linhas em vez
           de comprimir os controles ou vazar para fora da tela. Duas linhas em
           janela estreita é honesto; controle inalcançável não é. */}

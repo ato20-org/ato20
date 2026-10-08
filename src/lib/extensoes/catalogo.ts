@@ -1,4 +1,5 @@
-import type { TextoDePlugin } from "@/lib/extensoes/texto";
+import { resolverTexto, type TextoDePlugin } from "@/lib/extensoes/texto";
+import { normaliza } from "@/lib/search";
 
 /**
  * O catálogo de plugins: a vitrine do site, lida pela aba Catálogo da tela de
@@ -159,4 +160,120 @@ export function buscarCatalogo(): Promise<Catalogo> {
 /** O que já voltou nesta sessão, para reabrir a aba sem passar por "buscando". */
 export function catalogoJaLido(): Catalogo | null {
   return lido;
+}
+
+/**
+ * Os plugins que batem com a busca, na ordem da lista.
+ *
+ * Cada palavra digitada tem de aparecer no plugin, em qualquer ordem e sem
+ * acento: "ordem tema" acha o plugin de Ordem pelo nome e pela tag. Procura no
+ * nome e na descrição no idioma da tela, no autor, nas tags e no id. A mesma
+ * regra da busca de `/plugins` no site.
+ */
+export function filtrarCatalogo(
+  plugins: PluginDoCatalogo[],
+  busca: string,
+): PluginDoCatalogo[] {
+  const termos = normaliza(busca).split(/\s+/).filter(Boolean);
+  if (termos.length === 0) return plugins;
+
+  return plugins.filter((plugin) => {
+    const texto = normaliza(
+      [
+        plugin.id,
+        resolverTexto(plugin.nome),
+        resolverTexto(plugin.descricao),
+        plugin.autor,
+        ...plugin.tags,
+      ].join(" "),
+    );
+
+    return termos.every((termo) => texto.includes(termo));
+  });
+}
+
+/**
+ * `dono` e `repo` de `https://github.com/{dono}/{repo}`, com `/` ou `.git` no
+ * fim tolerados. A mesma regra do Rust (`repositorio_do_github`), que é quem
+ * decide de verdade: esta só monta o endereço do manifesto.
+ */
+export function repositorioDoGithub(url: string): { dono: string; repo: string } | null {
+  const casou = /^https:\/\/github\.com\/([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9._-]{1,100}?)(?:\.git)?\/?$/.exec(url);
+  if (!casou || casou[2] === "." || casou[2] === "..") return null;
+
+  return { dono: casou[1], repo: casou[2] };
+}
+
+/** O que o card precisa saber do manifesto que está no repositório. */
+export type ManifestoDoRepositorio = {
+  versao: string;
+  /** Tem `principal`: traz JavaScript, diga o catálogo o que disser. */
+  executaCodigo: boolean;
+};
+
+const manifestos = new Map<string, Promise<ManifestoDoRepositorio | null>>();
+
+/**
+ * O `manifest.json` da branch principal do repositório, uma vez por sessão.
+ *
+ * Pelo `raw.githubusercontent.com`, que libera CORS para a webview (o zip, não:
+ * esse o Rust baixa). Serve para dois juízos do card: se a versão do
+ * repositório é mais nova que a instalada, e se o plugin executa código mesmo
+ * quando o catálogo diz que não. `null` quando não deu para ler: o card fica
+ * com o que o catálogo diz.
+ */
+export function lerManifestoDoRepositorio(
+  repositorio: string,
+): Promise<ManifestoDoRepositorio | null> {
+  const jaPedido = manifestos.get(repositorio);
+  if (jaPedido) return jaPedido;
+
+  const partes = repositorioDoGithub(repositorio);
+  if (!partes) return Promise.resolve(null);
+
+  const pedido = fetch(
+    `https://raw.githubusercontent.com/${partes.dono}/${partes.repo}/HEAD/manifest.json`,
+    { cache: "no-store", signal: AbortSignal.timeout(10_000) },
+  )
+    .then((resposta) => (resposta.ok ? resposta.json() : null))
+    .then((cru: unknown) => {
+      if (!cru || typeof cru !== "object") return null;
+      const { versao, principal } = cru as Record<string, unknown>;
+      if (typeof versao !== "string") return null;
+
+      return { versao, executaCodigo: typeof principal === "string" && principal !== "" };
+    })
+    .catch(() => {
+      // Falha não fica guardada: a próxima vez que a aba abrir tenta de novo.
+      manifestos.delete(repositorio);
+      return null;
+    });
+
+  manifestos.set(repositorio, pedido);
+
+  return pedido;
+}
+
+/**
+ * A versão do repositório passa da instalada.
+ *
+ * "Mais nova" e não "diferente": o `raw.githubusercontent.com` guarda o arquivo
+ * por alguns minutos, e logo depois de instalar a versão que o zip trouxe ele
+ * ainda pode mostrar a anterior. Com "diferente", o botão Atualizar voltaria
+ * para um plugin já atualizado. Compara número a número (`0.10.0` passa de
+ * `0.9.1`); versão que não é número cai na comparação de texto.
+ */
+export function versaoMaisNova(doRepositorio: string, instalada: string): boolean {
+  const numeros = (versao: string) => versao.replace(/^v/, "").split(/[.-]/).map(Number);
+  const a = numeros(doRepositorio);
+  const b = numeros(instalada);
+
+  if (a.some(Number.isNaN) || b.some(Number.isNaN)) return doRepositorio !== instalada;
+
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diferenca = (a[i] ?? 0) - (b[i] ?? 0);
+    if (diferenca !== 0) return diferenca > 0;
+  }
+
+  return false;
 }

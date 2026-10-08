@@ -133,6 +133,13 @@ getrandom = "0.3"
 # lzma e bzip2 para dentro do binario, e o que se comprime aqui e JSON e imagem
 # ja comprimida -- deflate resolve o primeiro e nao piora o segundo.
 zip = { version = "4", default-features = false, features = ["deflate"] }
+# Baixa o zip de um plugin do catalogo (ver `catalogo.rs`). Com as mesmas
+# features que o `tauri-plugin-updater` ja liga, e nao as padrao: assim nao
+# entra crate novo no lock, e a versao da loja, que compila sem o atualizador,
+# continua tendo um cliente HTTP so para isto. Sem provedor de criptografia
+# embutido: `catalogo::cliente` instala o `ring`, como o atualizador faz.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "system-proxy"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # Guarda-se o HASH do token, nunca ele. Um `.ato20/estado.db` que vaza -- num
 # zip, num backup, num Dropbox -- nao pode entregar as credenciais da mesa.

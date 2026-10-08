@@ -2,18 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Check, ExternalLink, RotateCw } from "lucide-react";
+import { Check, Download, ExternalLink, Loader2, RotateCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   buscarCatalogo,
   type Catalogo,
   catalogoJaLido,
+  filtrarCatalogo,
+  lerManifestoDoRepositorio,
+  type ManifestoDoRepositorio,
   type PluginDoCatalogo,
+  versaoMaisNova,
 } from "@/lib/extensoes/catalogo";
-import { API_VERSAO } from "@/lib/extensoes/manifesto";
+import { API_VERSAO, type Extensao } from "@/lib/extensoes/manifesto";
 import { resolverTexto } from "@/lib/extensoes/texto";
+import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/desktop";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 
@@ -22,10 +38,9 @@ type Estado = { tipo: "buscando" } | { tipo: "erro" } | Catalogo;
 /**
  * A vitrine do site dentro da tela de Plugins.
  *
- * Só mostra, e ainda não instala: o botão do card leva ao repositório, e a
- * instalação continua sendo o "Importar plugin" da aba ao lado. Baixar o zip
- * daqui é o passo seguinte, e pede um cliente HTTP no Rust que hoje só existe
- * com o atualizador.
+ * Cada card instala o plugin direto do repositório (o Rust baixa o zip, ver
+ * `catalogo.rs`) e, depois de instalado, oferece Atualizar quando a versão do
+ * repositório passa da instalada.
  *
  * Montado só com a aba aberta (o painel do `Tabs` desmonta a aba escondida):
  * é isso que faz o catálogo não buscar nada para quem nunca o abre.
@@ -33,6 +48,7 @@ type Estado = { tipo: "buscando" } | { tipo: "erro" } | Catalogo;
 export function CatalogoDePlugins() {
   const [estado, setEstado] = useState<Estado>(() => catalogoJaLido() ?? { tipo: "buscando" });
   const [tentativa, setTentativa] = useState(0);
+  const [busca, setBusca] = useState("");
   const instalados = useExtensoesStore((state) => state.extensoes);
 
   useEffect(() => {
@@ -80,19 +96,48 @@ export function CatalogoDePlugins() {
     return <Aviso>{t.configuracoes.plugins.catalogo.vazio}</Aviso>;
   }
 
-  const ids = new Set(instalados.map((extensao) => extensao.id));
+  const porId = new Map(instalados.map((extensao) => [extensao.id, extensao]));
+  const texto = t.configuracoes.plugins.catalogo;
+  const visiveis = filtrarCatalogo(estado.plugins, busca);
+  const buscando = busca.trim() !== "";
 
   return (
     <div className="@container flex flex-col gap-3">
-      <p className="text-muted-foreground text-xs">
-        {t.configuracoes.plugins.catalogo.comoInstalar}
-      </p>
+      <p className="text-muted-foreground text-xs">{texto.comoInstalar}</p>
 
-      <ul className="grid gap-3 @md:grid-cols-2">
-        {estado.plugins.map((plugin) => (
-          <CardDoPlugin key={plugin.id} plugin={plugin} instalado={ids.has(plugin.id)} />
-        ))}
-      </ul>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
+          <Input
+            type="search"
+            value={busca}
+            onChange={(evento) => setBusca(evento.target.value)}
+            placeholder={texto.buscar}
+            aria-label={texto.buscarRotulo}
+            className="pl-7"
+          />
+        </div>
+        {buscando ? (
+          <span className="text-muted-foreground shrink-0 text-xs tabular-nums" aria-live="polite">
+            {texto.achados(visiveis.length, estado.plugins.length)}
+          </span>
+        ) : null}
+      </div>
+
+      {visiveis.length === 0 ? (
+        <Aviso>
+          {texto.nada(busca.trim())}
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => setBusca("")}>
+            {texto.limparBusca}
+          </Button>
+        </Aviso>
+      ) : (
+        <ul className="grid gap-3 @md:grid-cols-2">
+          {visiveis.map((plugin) => (
+            <CardDoPlugin key={plugin.id} plugin={plugin} instalada={porId.get(plugin.id)} />
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -131,18 +176,79 @@ function useImagem(url: string | null) {
   return { url: falhou ? null : url, aoFalhar: () => setFalhou(true) };
 }
 
+/**
+ * O manifesto do repositório de um plugin já instalado: é dele que sai o
+ * Atualizar. O que não está instalado não pergunta nada à rede até o clique.
+ */
+function useManifestoDoRepositorio(repositorio: string, instalado: boolean) {
+  const [lido, setLido] = useState<ManifestoDoRepositorio | null>(null);
+
+  useEffect(() => {
+    if (!instalado) return;
+
+    let montado = true;
+    void lerManifestoDoRepositorio(repositorio).then((manifesto) => montado && setLido(manifesto));
+
+    return () => {
+      montado = false;
+    };
+  }, [repositorio, instalado]);
+
+  return instalado ? lido : null;
+}
+
 function CardDoPlugin({
   plugin,
-  instalado,
+  instalada,
 }: {
   plugin: PluginDoCatalogo;
-  instalado: boolean;
+  instalada: Extensao | undefined;
 }) {
   const nome = resolverTexto(plugin.nome);
   const descricao = resolverTexto(plugin.descricao);
   const capa = useImagem(plugin.capa);
   const icone = useImagem(plugin.icone);
   const texto = t.configuracoes.plugins.catalogo;
+  const instalado = instalada !== undefined;
+
+  const remoto = useManifestoDoRepositorio(plugin.repositorio, instalado);
+  const instalando = useExtensoesStore((state) => state.instalando);
+  const instalar = useExtensoesStore((state) => state.instalar);
+  const [lendo, setLendo] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+
+  const novoDemais = plugin.apiVersao > API_VERSAO;
+  const acao = !instalada
+    ? "instalar"
+    : remoto && versaoMaisNova(remoto.versao, instalada.versao)
+      ? "atualizar"
+      : null;
+  const esteInstalando = instalando === plugin.id;
+
+  async function executar() {
+    const erro = await instalar(plugin.id, plugin.repositorio);
+
+    if (erro) {
+      toast.error(texto.falhou(nome), { description: erro });
+      return;
+    }
+    toast.success(acao === "atualizar" ? texto.atualizado(nome) : texto.instaladoAgora(nome));
+  }
+
+  // Pergunta antes quando o catálogo diz que executa código, ou quando o
+  // manifesto do repositório tem `principal`, diga o catálogo o que disser:
+  // o catálogo é escrito à mão, e o manifesto é o que vai rodar.
+  async function pedir() {
+    setLendo(true);
+    const real = await lerManifestoDoRepositorio(plugin.repositorio);
+    setLendo(false);
+
+    if (plugin.executaCodigo || real?.executaCodigo) {
+      setConfirmando(true);
+      return;
+    }
+    await executar();
+  }
 
   return (
     <li className="bg-muted/20 flex flex-col overflow-hidden rounded-lg border">
@@ -226,26 +332,72 @@ function CardDoPlugin({
             </span>
           ) : null}
 
-          {instalado ? (
-            <span className="text-muted-foreground flex items-center gap-1 px-0.5">
+          {instalada ? (
+            <span
+              title={texto.versaoInstalada(instalada.versao)}
+              className="text-muted-foreground flex items-center gap-1 px-0.5"
+            >
               <Check className="size-3" aria-hidden />
               {texto.instalado}
             </span>
           ) : null}
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-1"
-          onClick={() => {
-            void openUrl(plugin.repositorio).catch(() => toast.error(t.novidades.semNavegador));
-          }}
-        >
-          <ExternalLink />
-          {texto.verNoGithub}
-        </Button>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {acao ? (
+            <Button
+              size="sm"
+              className="flex-1"
+              disabled={novoDemais || instalando !== null || lendo}
+              title={novoDemais ? texto.pedeVersaoNovaNota(plugin.apiVersao, API_VERSAO) : undefined}
+              onClick={() => void pedir()}
+            >
+              {esteInstalando || lendo ? <Loader2 className="animate-spin" /> : <Download />}
+              {esteInstalando
+                ? acao === "atualizar"
+                  ? texto.atualizando
+                  : texto.instalando
+                : acao === "atualizar"
+                  ? texto.atualizar
+                  : texto.instalar}
+            </Button>
+          ) : null}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => {
+              void openUrl(plugin.repositorio).catch(() => toast.error(t.novidades.semNavegador));
+            }}
+          >
+            <ExternalLink />
+            {texto.verNoGithub}
+          </Button>
+        </div>
       </div>
+
+      <AlertDialog open={confirmando} onOpenChange={setConfirmando}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {acao === "atualizar" ? texto.confirmarAtualizar(nome) : texto.confirmarInstalar(nome)}
+            </AlertDialogTitle>
+            <AlertDialogDescription>{texto.confirmarTexto}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <p className="text-muted-foreground text-xs">
+            {texto.por(plugin.autor)}
+            <br />
+            <span className="font-mono break-all">{plugin.repositorio}</span>
+          </p>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void executar()}>
+              {acao === "atualizar" ? texto.atualizar : texto.instalar}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </li>
   );
 }

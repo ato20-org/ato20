@@ -18,6 +18,19 @@ import { cn } from "@/lib/utils";
 export const PersonagemDaFichaContext = createContext<string | undefined>(undefined);
 
 /**
+ * Onde a seção está desenhada.
+ *
+ * `painel` é a grade da aba Ficha: moldura própria, título, fecha. `aba` é a
+ * seção que ocupa uma aba inteira -- Inventário, Arquivos --, e ali o título e
+ * a seta seriam a segunda vez que a mesma palavra aparece, logo abaixo da aba
+ * que a mostra. Fechar a única coisa de uma aba deixaria a aba em branco.
+ *
+ * Contexto, e não prop: a `SecaoFicha` mora dentro do inventário e da lista de
+ * arquivos, e quem sabe onde ela está é a ficha, dois níveis acima.
+ */
+export const ModoDaSecaoContext = createContext<"painel" | "aba">("painel");
+
+/**
  * Uma seção da ficha, que fecha.
  *
  * Existe porque a ficha passou a empilhar seis blocos: campos, arquivos,
@@ -25,9 +38,9 @@ export const PersonagemDaFichaContext = createContext<string | undefined>(undefi
  * altura — e o mestre que só queria conferir o inventário rolava por cima de
  * tudo o que já sabia.
  *
- * Fechar, e não esconder atrás de abas: a contagem no título continua dizendo o
- * que há lá dentro com a seção fechada. "Arquivos (2)" fechado ainda informa; a
- * aba "Arquivos" não diz se há algum.
+ * Fechar continua valendo dentro da aba Ficha: a contagem no título diz o que
+ * há lá dentro com a seção fechada. As abas que vieram depois carregam a mesma
+ * contagem no rótulo -- "Arquivos (2)" -- pelo mesmo motivo.
  *
  * O estado é global e sobrevive ao fechar o aplicativo — ver `useSecoesStore`.
  */
@@ -49,11 +62,28 @@ export function SecaoFicha({
   const aberta = useSecaoAberta(secao);
   const alternar = useSecoesStore((state) => state.alternar);
   const personagemId = useContext(PersonagemDaFichaContext);
+  const modo = useContext(ModoDaSecaoContext);
 
   const id = `secao-${secao}`;
 
+  // O miolo de uma seção de fábrica pode ser trocado por um plugin -- é o
+  // `secao:medidores` do manifesto. Só as de fábrica: a seção de um plugin já
+  // é dele. Sem plugin, isto é `children`.
+  const miolo = secao.startsWith("ext:") ? (
+    children
+  ) : (
+    <Substituto alvo={`secao:${secao}`} personagemId={personagemId}>
+      {children}
+    </Substituto>
+  );
+
+  // Sem cabeçalho e sempre aberta: quem dá nome e contagem é a aba. A ação do
+  // cabeçalho também sai -- o inventário e os arquivos já têm o lugar de
+  // somar dentro do miolo, o quadro vazio e o "Anexar arquivos".
+  if (modo === "aba") return <section>{miolo}</section>;
+
   return (
-    <section className="space-y-2">
+    <section className="bg-muted/20 space-y-2 rounded-lg border p-2.5">
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -93,16 +123,7 @@ export function SecaoFicha({
           id={id}
           className="animate-in fade-in-0 duration-100 motion-reduce:animate-none"
         >
-          {/* O miolo de uma seção de fábrica pode ser trocado por um plugin
-              -- é o `secao:medidores` do manifesto. Só as de fábrica: a seção
-              de um plugin já é dele. Sem plugin, isto é `children`. */}
-          {secao.startsWith("ext:") ? (
-            children
-          ) : (
-            <Substituto alvo={`secao:${secao}`} personagemId={personagemId}>
-              {children}
-            </Substituto>
-          )}
+          {miolo}
         </div>
       ) : null}
     </section>

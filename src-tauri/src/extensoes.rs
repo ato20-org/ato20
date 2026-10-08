@@ -65,7 +65,12 @@ use crate::error::{AppError, AppResult};
 /// A 8 acrescentou aos `pontos` a `proporcao` do ponto e o `ate`. Um ATO20 de
 /// API 7 ignoraria os dois calado: a bala estreita sairia esticada num
 /// quadrado, e o pente de trinta, em trinta pontos de um pixel.
-pub const API_VERSAO: u32 = 8;
+///
+/// A 9 acrescentou os atributos: o alvo `secao:atributos` de substituto, e o
+/// campo `atributos` no personagem que `personagens.listar` entrega. Um ATO20
+/// de API 8 recusaria o substituto por "alvo desconhecido", que manda o autor
+/// procurar o erro na grafia; pedindo 9, ele ouve "atualize o ATO20".
+pub const API_VERSAO: u32 = 9;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -1039,6 +1044,7 @@ pub struct Substituto {
 
 pub const SECOES_DE_FABRICA: &[&str] = &[
     "campos",
+    "atributos",
     "aparencias",
     "medidores",
     "condicoes",

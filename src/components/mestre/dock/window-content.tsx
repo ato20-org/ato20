@@ -231,8 +231,11 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
   switch (conteudo.tipo) {
     case "personagens":
       return 256;
+    // Larga o bastante para as duas colunas da aba Ficha: as linhas de medidor
+    // e de condição guardam lugar para o olho e a lixeira mesmo escondidos, e
+    // abaixo disto o nome de cada uma virava duas letras.
     case "personagem":
-      return 512;
+      return 720;
     case "anexo":
     case "asset":
       return 560;

@@ -376,6 +376,39 @@ function CharacterCard({
     ) : null;
 
   /**
+   * Os atributos deste personagem: a sigla e o número, FOR 4.
+   *
+   * Só leitura, como os medidores, e pela mesma razão: quem escreve é o mestre.
+   * Em cartões, como na ficha dele, para o jogador achar o FOR na hora de rolar
+   * sem ler uma lista.
+   */
+  const atributos = personagem.atributos ?? [];
+  const blocoDeAtributos =
+    atributos.length > 0 ? (
+      <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
+        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+          {t.personagens.atributos}
+        </p>
+
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(3rem,1fr))] gap-1.5">
+          {atributos.map((atributo) => (
+            <li
+              key={atributo.id}
+              className="bg-background/40 flex flex-col items-center rounded-md border py-1"
+            >
+              <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+                {atributo.sigla}
+              </span>
+              <span className="text-xl leading-tight font-medium tabular-nums">
+                {atributo.valor}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
+
+  /**
    * As condições deste personagem, com o nome ao lado do selo.
    *
    * Com o NOME, ao contrário da TV: lá o selo é lido de longe, pelo desenho e
@@ -627,6 +660,7 @@ function CharacterCard({
             {retratoGrande("block w-full")}
             {blocoDeCondicoes}
             {blocoDeMedidores}
+            {blocoDeAtributos}
             <BlocosDePlugin codigo={codigo} personagemId={personagem.id} />
             {blocoDeArquivos}
           </>
@@ -658,17 +692,17 @@ function CharacterCard({
           Seis linhas desde que as condições entraram, e cinco desde os
           medidores: as `auto` que ninguém ocupa somem sozinhas, e é isso que
           mantém o cartão de um personagem sem medidor nem condição igual ao
-          que ele era. */}
+          que ele era. Oito desde os atributos. */}
       <div
         className={cn(
           "grid items-start gap-x-3 gap-y-2",
           heroi
-            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
+            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_auto_auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
             : "grid-cols-1",
         )}
       >
-        {/* Sete linhas desde as seções de plugin -- ver a nota acima. */}
-        {retratoGrande("row-span-7 h-full")}
+        {/* Oito linhas desde os atributos -- ver a nota acima. */}
+        {retratoGrande("row-span-8 h-full")}
 
         <h3 className="min-w-0 truncate text-2xl leading-tight font-semibold">
           {personagem.nome}
@@ -677,6 +711,10 @@ function CharacterCard({
         {blocoDeCondicoes}
 
         {blocoDeMedidores}
+
+        {/* Depois dos medidores: eles mudam a cada turno e o atributo só na
+            hora de rolar, e o que se confere mais vem antes. */}
+        {blocoDeAtributos}
 
         {/* As seções dos plugins, entre os medidores e os arquivos: são o
             personagem em cena, como eles. Sem plugin o componente devolve

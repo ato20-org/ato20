@@ -69,6 +69,13 @@ pub enum AppError {
     /// porque a providencia e outra: aqui quem esta velho e o ATO20, e a tela
     /// tem de dizer isso em vez de mandar falar com quem escreveu a extensao.
     ExtensaoIncompativel { pede: u32, temos: u32 },
+    /// Nao deu para baixar um plugin do catalogo: sem rede, GitHub fora, zip
+    /// grande demais.
+    ///
+    /// Variante propria porque a providencia e de REDE e nao do plugin: tentar
+    /// de novo mais tarde, e nao falar com quem o escreveu. O zip que chegou e
+    /// nao serve e `ExtensaoInvalida`. Ver `catalogo::instalar`.
+    DownloadFalhou(Texto),
     /// A pasta escolhida para importar nao serve: nao e pasta, ou e grande
     /// demais para ser o que se quer importar. Ver `importar::ler_pasta`.
     PastaInvalida(Texto),
@@ -102,6 +109,9 @@ impl std::fmt::Display for AppError {
                 f,
                 "Esta extensao pede a API {pede} e este ATO20 fala a {temos}. Atualize o aplicativo."
             ),
+            Self::DownloadFalhou(motivo) => {
+                write!(f, "Nao foi possivel baixar o plugin: {}.", motivo.pt)
+            }
             Self::PastaInvalida(motivo) => write!(f, "{}", motivo.pt),
         }
     }
@@ -123,6 +133,9 @@ impl AppError {
             Self::ExtensaoIncompativel { pede, temos } => format!(
                 "This plugin needs API {pede} and this ATO20 speaks {temos}. Update the app."
             ),
+            Self::DownloadFalhou(motivo) => {
+                format!("Could not download the plugin: {}.", motivo.en)
+            }
             Self::PastaInvalida(motivo) => motivo.en.clone(),
         }
     }
@@ -158,6 +171,7 @@ impl Serialize for AppError {
             Self::SemNavegador(_) => "sem-navegador",
             Self::ExtensaoInvalida(_) => "extensao-invalida",
             Self::ExtensaoIncompativel { .. } => "extensao-incompativel",
+            Self::DownloadFalhou(_) => "download",
             Self::PastaInvalida(_) => "pasta-invalida",
         };
 

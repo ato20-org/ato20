@@ -1,4 +1,5 @@
 mod appimage;
+mod catalogo;
 mod commands;
 mod configuracoes;
 mod db;
@@ -232,6 +233,14 @@ pub fn run() {
             commands::character_aparencia_renomear,
             commands::character_aparencia_remover,
             commands::character_aparencia_ativar,
+            commands::character_atributo_criar,
+            commands::character_atributo_editar,
+            commands::character_atributo_remover,
+            commands::atributos_da_campanha_list,
+            commands::atributo_da_campanha_criar,
+            commands::atributo_da_campanha_editar,
+            commands::atributo_da_campanha_remover,
+            commands::atributos_da_campanha_aplicar_em_todos,
             commands::character_medidor_criar,
             commands::character_medidor_editar,
             commands::character_medidor_remover,
@@ -283,6 +292,10 @@ pub fn run() {
             commands::campaign_export_name,
             commands::campaign_export,
             commands::campaign_import,
+            commands::pacote_exportar,
+            commands::pacote_abrir,
+            commands::pacote_importar,
+            commands::pacote_fechar,
             commands::estante_list,
             commands::estante_import,
             commands::importar_ler_pasta,
@@ -297,6 +310,7 @@ pub fn run() {
             commands::marcador_remover,
             commands::extensoes_listar,
             commands::extensao_importar,
+            commands::extensao_instalar_do_catalogo,
             commands::extensao_remover,
             commands::extensao_habilitar,
             commands::configuracoes_ler,

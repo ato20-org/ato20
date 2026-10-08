@@ -3164,6 +3164,16 @@ export function cloneScene(source: Scene, name: string): Scene {
     updatedAt: now,
   };
 
+  // A câmera que segue itens passa a seguir as CÓPIAS deles: com os ids
+  // antigos, ela não acharia ninguém na cena nova.
+  if (source.cameras) {
+    copia.cameras = source.cameras.map((camera) =>
+      camera.alvoIds
+        ? { ...camera, alvoIds: camera.alvoIds.map((id) => novos.get(id) ?? id) }
+        : camera,
+    );
+  }
+
   // A marca de capa NÃO se copia: é uma por campanha, e duplicar o fundo da
   // taverna deixaria duas cenas dizendo que são a capa -- com a que a mesa vê
   // decidida pela ordem da lista.

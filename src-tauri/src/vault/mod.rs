@@ -1,6 +1,7 @@
 pub mod animacao;
 pub mod assets;
 pub mod atomic;
+pub mod atributos;
 pub mod board;
 pub mod characters;
 pub mod condicoes;
@@ -11,6 +12,7 @@ pub mod fio;
 pub mod inventory;
 pub mod mime;
 pub mod modelos;
+pub mod pacote;
 pub mod variantes;
 pub mod players;
 pub mod session;
