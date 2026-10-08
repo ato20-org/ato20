@@ -110,6 +110,11 @@ type PortraitStore = {
   /** Troca o layout da sessão inteira. */
   ajustarLayout: (patch: Partial<LayoutDoRetrato>) => void;
   /**
+   * O layout que veio num pacote, só se a campanha ainda está no de fábrica:
+   * importar não desfaz um ajuste que o mestre já fez. Devolve se aplicou.
+   */
+  aplicarLayoutDoPacote: (layout?: LayoutDoRetrato, ancora?: AncoraRetrato) => boolean;
+  /**
    * Troca o layout DESTE retrato. `null` num campo volta a seguir a sessão.
    *
    * `null` e não `undefined`: o patch é espalhado sobre o que já existe, e um
@@ -281,6 +286,17 @@ export const usePortraitStore = create<PortraitStore>((set, get) => ({
       ),
       set,
     );
+  },
+
+  aplicarLayoutDoPacote(layout, ancora) {
+    const deFabrica =
+      JSON.stringify(get().layout) === JSON.stringify(LAYOUT_PADRAO) &&
+      get().ancoraPadrao === ANCORA_PADRAO;
+    if (!deFabrica) return false;
+
+    if (layout) get().ajustarLayout(layout);
+    if (ancora) get().escolherAreaPadrao(ancora);
+    return true;
   },
 
   escolherAreaPadrao(ancora) {

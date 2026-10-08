@@ -127,6 +127,38 @@ export async function descarregarConfiguracoes(): Promise<void> {
   );
 }
 
+/**
+ * Põe no registro valores que vieram de um pacote e grava.
+ *
+ * Sem passar pela definição de cada chave, ao contrário do `gravar`: o pacote
+ * pode trazer a chave de um plugin que ainda não carregou nesta máquina, e o
+ * valor tem de esperar por ele no arquivo, como espera o de um plugin
+ * desligado. `sobrescrever` falso só preenche a chave que ainda não tem valor
+ * -- é a regra da campanha, que nunca perde um ajuste por importar outro.
+ * Devolve quantas chaves entraram.
+ */
+export function mesclarConfiguracoes(
+  escopo: Escopo,
+  valores: Record<string, unknown>,
+  sobrescrever: boolean,
+): number {
+  const atuais = useConfiguracoesStore.getState().valores[escopo];
+  const novas = Object.entries(valores).filter(
+    ([chave]) => sobrescrever || atuais[chave] === undefined,
+  );
+  if (novas.length === 0) return 0;
+
+  useConfiguracoesStore.setState((atual) => ({
+    valores: {
+      ...atual.valores,
+      [escopo]: { ...atual.valores[escopo], ...Object.fromEntries(novas) },
+    },
+  }));
+  agendar(escopo);
+
+  return novas.length;
+}
+
 export const useConfiguracoesStore = create<ConfiguracoesStore>((set, get) => ({
   definicoes: {},
   valores: { maquina: {}, campanha: {} },

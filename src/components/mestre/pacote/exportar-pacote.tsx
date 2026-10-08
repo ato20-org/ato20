@@ -16,12 +16,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/mestre";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { useCondicoesStore } from "@/lib/store/use-condicoes-store";
+import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { usePacoteStore } from "@/lib/store/use-pacote-store";
+import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { flushBoard, useSceneStore } from "@/lib/store/use-scene-store";
-import { exportarPacote } from "@/lib/vault/pacote";
+import { listarModelos } from "@/lib/vault/characters";
+import {
+  exportarPacote,
+  secaoDaChave,
+  type IdDaSecao,
+  type SecaoDoRegistro,
+  type SecaoDoRust,
+} from "@/lib/vault/pacote";
 import { ehFundo, ehMapa, type Scene } from "@/types/scene";
 
 /**
@@ -59,9 +71,24 @@ function Corpo({ iniciais, onFechar }: { iniciais: string[]; onFechar: () => voi
   const garantirElenco = useCharactersStore((state) => state.garantir);
   const [marcadas, setMarcadas] = useState<Set<string>>(() => new Set(iniciais));
   const [levarPersonagens, setLevarPersonagens] = useState(true);
+  const [ato20, setAto20] = useState(false);
   const [exportando, setExportando] = useState(false);
+  const efeitos = useEfeitosDaCampanhaStore((state) => state.efeitos);
+  const condicoes = useCondicoesStore((state) => state.modelos);
+  const chavesDaCampanha = useConfiguracoesStore((state) => state.valores.campanha);
+  const [medidores, setMedidores] = useState(0);
 
   useEffect(() => garantirElenco(), [garantirElenco]);
+  useEffect(() => {
+    if (useEfeitosDaCampanhaStore.getState().efeitos === null) {
+      void useEfeitosDaCampanhaStore.getState().carregar();
+    }
+    useCondicoesStore.getState().garantir();
+    listarModelos().then(
+      (modelos) => setMedidores(modelos.length),
+      () => setMedidores(0),
+    );
+  }, []);
 
   const pastas = new Map((board?.pastas ?? []).map((pasta) => [pasta.id, pasta.nome]));
   const linha = (scene: Scene): LinhaDeCena => ({
@@ -78,11 +105,34 @@ function Corpo({ iniciais, onFechar }: { iniciais: string[]; onFechar: () => voi
     pasta: null,
   }));
 
+  // A configuração da campanha, uma linha por seção que tem alguma coisa. Os
+  // ids das seções vivem no mesmo conjunto das cenas: não colidem com um uuid.
+  const porSecao = (secao: SecaoDoRegistro) =>
+    Object.keys(chavesDaCampanha).filter((chave) => secaoDaChave(chave) === secao).length;
+  const itensDaSecao: Record<IdDaSecao, number> = {
+    efeitos: efeitos?.length ?? 0,
+    medidores,
+    condicoes: condicoes?.length ?? 0,
+    espectador: porSecao("espectador"),
+    ajustes: porSecao("ajustes"),
+    plugins: porSecao("plugins"),
+    retratos: 1,
+  };
+  const configuracao: LinhaDeCena[] = (Object.keys(itensDaSecao) as IdDaSecao[])
+    .filter((secao) => itensDaSecao[secao] > 0)
+    .map((secao) => ({
+      id: secao,
+      nome: t.pacote.secoes[secao],
+      pasta: secao === "retratos" ? null : String(itensDaSecao[secao]),
+    }));
+
   const escolhidas = [...mapas, ...fundos].filter((cena) => marcadas.has(cena.id));
   const fichas = personagens.filter((personagem) => marcadas.has(personagem.id));
+  const secoes = configuracao.filter((secao) => marcadas.has(secao.id)).map((secao) => secao.id as IdDaSecao);
+  const algo = escolhidas.length + fichas.length + secoes.length > 0 || ato20;
 
   async function exportar() {
-    if (escolhidas.length + fichas.length === 0) return;
+    if (!algo) return;
 
     setExportando(true);
     try {
@@ -94,6 +144,34 @@ function Corpo({ iniciais, onFechar }: { iniciais: string[]; onFechar: () => voi
           cenas: escolhidas.map((cena) => cena.id),
           personagens: fichas.map((personagem) => personagem.id),
           levarPersonagens,
+          secoes: secoes.filter((secao): secao is SecaoDoRust =>
+            ["efeitos", "medidores", "condicoes"].includes(secao),
+          ),
+          // O registro e os retratos vão como a tela os tem: ela é a dona, e
+          // grava com atraso.
+          configuracoes: Object.fromEntries(
+            Object.entries(chavesDaCampanha).filter(([chave]) =>
+              secoes.includes(secaoDaChave(chave)),
+            ),
+          ),
+          retratos: secoes.includes("retratos")
+            ? {
+                layout: usePortraitStore.getState().layout,
+                ancoraPadrao: usePortraitStore.getState().ancoraPadrao,
+              }
+            : undefined,
+          ato20: ato20
+            ? {
+                configuracoes: useConfiguracoesStore.getState().valores.maquina,
+                plugins: useExtensoesStore.getState().extensoes.map((extensao) => ({
+                  id: extensao.id,
+                  nome: extensao.nome,
+                  versao: extensao.versao,
+                  repositorio: extensao.repositorio,
+                  habilitada: extensao.habilitada,
+                })),
+              }
+            : undefined,
         },
         sufixo(escolhidas, fichas, mapas),
       );
@@ -129,6 +207,21 @@ function Corpo({ iniciais, onFechar }: { iniciais: string[]; onFechar: () => voi
             marcadas={marcadas}
             onMarcar={alternar}
           />
+          <ListaDeCenas
+            titulo={t.pacote.configuracaoDaCampanha}
+            cenas={configuracao}
+            marcadas={marcadas}
+            onMarcar={alternar}
+          />
+          <label className="flex items-start gap-2 text-sm font-medium">
+            <Checkbox className="mt-0.5" checked={ato20} onCheckedChange={setAto20} />
+            <span className="flex flex-col gap-0.5">
+              {t.pacote.configuracaoDoAto20}
+              <span className="text-muted-foreground text-xs font-normal">
+                {t.pacote.ato20ExportarNota}
+              </span>
+            </span>
+          </label>
         </div>
       </ScrollArea>
 
@@ -151,10 +244,7 @@ function Corpo({ iniciais, onFechar }: { iniciais: string[]; onFechar: () => voi
         <Button variant="outline" onClick={onFechar}>
           {comum.cancelar}
         </Button>
-        <Button
-          disabled={escolhidas.length + fichas.length === 0 || exportando}
-          onClick={() => void exportar()}
-        >
+        <Button disabled={!algo || exportando} onClick={() => void exportar()}>
           {exportando ? <Loader2 className="animate-spin" /> : null}
           {exportando ? t.pacote.exportando : t.pacote.exportar}
         </Button>
@@ -178,6 +268,7 @@ function slug(nome: string): string {
  */
 function sufixo(cenas: LinhaDeCena[], personagens: LinhaDeCena[], mapas: LinhaDeCena[]): string {
   const todas = [...cenas, ...personagens];
+  if (todas.length === 0) return t.pacote.sufixo.configuracao;
   if (todas.length === 1) return slug(todas[0].nome) || t.pacote.sufixo.pacote;
 
   if (cenas.length === 0) return t.pacote.sufixo.personagens;

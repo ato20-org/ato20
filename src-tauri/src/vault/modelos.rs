@@ -121,6 +121,33 @@ fn ajustar(modelo: &mut Modelo) {
     modelo.maximo = modelo.maximo.clamp(1, MAX_VALOR);
 }
 
+/// Acrescenta modelos de medidor que vieram de um pacote, cada um com id novo.
+/// Estilo de plugin que nao e um id valido volta ao de fabrica.
+pub fn adotar(vault: &Vault, novos: Vec<Modelo>) -> AppResult<()> {
+    if novos.is_empty() {
+        return Ok(());
+    }
+
+    let mut modelos = load(vault)?;
+    for mut modelo in novos {
+        if modelos.len() >= MAX_MODELOS {
+            break;
+        }
+        modelo.id = uuid::Uuid::new_v4().to_string();
+        if modelo
+            .estilo_extensao
+            .as_deref()
+            .is_some_and(|estilo| !estilo_extensao_valido(estilo))
+        {
+            modelo.estilo_extensao = None;
+        }
+        ajustar(&mut modelo);
+        modelos.push(modelo);
+    }
+
+    save(vault, &modelos)
+}
+
 fn sem_modelo(id: &str) -> AppError {
     AppError::Malformed {
         file: ARQUIVO.into(),

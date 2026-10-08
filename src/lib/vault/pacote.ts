@@ -14,7 +14,41 @@ export type EscolhaDeExportacao = {
   personagens: string[];
   /** Leva também os personagens dos tokens das cenas escolhidas. */
   levarPersonagens: boolean;
+  /** Partes que moram em arquivo do Rust: efeitos, medidores, condicoes. */
+  secoes: SecaoDoRust[];
+  /** Chaves da configuração da campanha, já escolhidas por seção. */
+  configuracoes?: Record<string, unknown>;
+  /** O layout dos retratos, como o store o tem. */
+  retratos?: { layout: unknown; ancoraPadrao: unknown };
+  ato20?: Ato20DoPacote;
 };
+
+export type SecaoDoRust = "efeitos" | "medidores" | "condicoes";
+export type SecaoDoRegistro = "espectador" | "ajustes" | "plugins";
+export type IdDaSecao = SecaoDoRust | SecaoDoRegistro | "retratos";
+
+/** A configuração da máquina que viaja: os ajustes e a lista de plugins. */
+export type Ato20DoPacote = {
+  configuracoes: Record<string, unknown>;
+  plugins: Array<{
+    id: string;
+    nome: unknown;
+    versao: string;
+    repositorio: string | null;
+    habilitada: boolean;
+  }>;
+};
+
+/**
+ * A seção de uma chave da configuração da campanha. A mesma regra do Rust
+ * (`secao_da_chave`): chave de plugin começa com o id dele.
+ */
+export function secaoDaChave(chave: string): SecaoDoRegistro {
+  const prefixo = chave.split(".")[0];
+  if (prefixo === "espectador") return "espectador";
+  if (["ato20", "quadro", "rede"].includes(prefixo)) return "ajustes";
+  return "plugins";
+}
 
 export type CenaDoPacote = {
   id: string;
@@ -39,10 +73,14 @@ export type PluginDoPacote = {
   instalado: boolean;
 };
 
+export type SecaoDoPacote = { id: IdDaSecao; itens: number; plugins: string[] };
+
 export type ResumoDoPacote = {
   campanha: string;
   cenas: CenaDoPacote[];
   personagens: PersonagemDoPacote[];
+  configuracao: SecaoDoPacote[];
+  ato20: { chaves: number; plugins: PluginDoPacote[] } | null;
   plugins: PluginDoPacote[];
 };
 
@@ -51,12 +89,22 @@ export type PacoteAberto = { token: string; resumo: ResumoDoPacote };
 export type EscolhaDeImportacao = {
   cenas: string[];
   personagens: string[];
+  secoes: IdDaSecao[];
+  ato20: boolean;
   removerPlugins: string[];
 };
 
 /** O que ficou de fora e por quê. A frase é montada na tela, nos dois idiomas. */
 export type Pulado = {
-  motivo: "efeitoJaExiste" | "efeitosNoMaximo" | "arquivoFaltando" | "personagemIlegivel";
+  motivo:
+    | "efeitoJaExiste"
+    | "efeitosNoMaximo"
+    | "arquivoFaltando"
+    | "personagemIlegivel"
+    | "condicaoJaExiste"
+    | "condicoesNoMaximo"
+    | "medidorJaExiste"
+    | "medidoresNoMaximo";
   nome: string;
 };
 
@@ -68,6 +116,15 @@ export type ImportadoDoPacote = {
   ambientes: Record<string, Ambiente[]>;
   /** Quantos personagens entraram. Já estão no disco; a tela só relê. */
   personagens: number;
+  efeitos: number;
+  condicoes: number;
+  medidores: number;
+  /** Chaves da campanha para preencher onde não há. */
+  configuracoes: Record<string, unknown>;
+  /** O layout dos retratos, para aplicar se a campanha está no de fábrica. */
+  retratos: { layout?: unknown; ancoraPadrao?: unknown } | null;
+  /** As chaves do ATO20, para aplicar. */
+  ato20: Record<string, unknown> | null;
   pulados: Pulado[];
 };
 

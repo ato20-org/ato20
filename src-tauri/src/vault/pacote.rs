@@ -31,7 +31,7 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 use super::assets::{self, AssetMeta};
 use super::atomic::{read_json, write_json};
 use super::board::{Order, SceneEntry};
-use super::{characters, efeitos, Vault};
+use super::{characters, condicoes, efeitos, modelos, Vault};
 use crate::error::{AppError, AppResult};
 
 /// Versao do `pacote.json`. Um pacote de formato mais novo e recusado.
@@ -54,6 +54,10 @@ pub struct Manifesto {
     pub criado_em: i64,
     /// Nome da campanha de onde veio, para o dialogo dizer "de Floresta Brutal".
     pub campanha: String,
+    /// As partes da configuracao da campanha que o mestre marcou. Uma campanha
+    /// exportada inteira nao tem manifesto, e tudo dela conta como marcado.
+    #[serde(default)]
+    pub secoes: Vec<String>,
     #[serde(default)]
     pub plugins: Vec<PluginCitado>,
 }
@@ -83,6 +87,44 @@ pub struct EscolhaDeExportacao {
     /// Leva tambem os personagens dos tokens das cenas escolhidas.
     #[serde(default)]
     pub levar_personagens: bool,
+    /// Partes da configuracao da campanha que moram em arquivo do Rust:
+    /// `efeitos`, `medidores`, `condicoes`.
+    #[serde(default)]
+    pub secoes: Vec<String>,
+    /// Chaves da configuracao da campanha, ja escolhidas pela tela. Ela e a
+    /// dona do registro e grava com atraso: o disco pode estar atras.
+    #[serde(default)]
+    pub configuracoes: Option<Map<String, Value>>,
+    /// O layout dos retratos (`layout`, `ancoraPadrao`), como a tela o tem.
+    #[serde(default)]
+    pub retratos: Option<Value>,
+    /// A configuracao do ATO20, como a tela a tem.
+    #[serde(default)]
+    pub ato20: Option<Ato20>,
+}
+
+/// A configuracao da maquina que viaja: os ajustes e a lista de plugins.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ato20 {
+    #[serde(default)]
+    pub configuracoes: Map<String, Value>,
+    #[serde(default)]
+    pub plugins: Vec<PluginInstalado>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginInstalado {
+    pub id: String,
+    #[serde(default)]
+    pub nome: Option<Value>,
+    #[serde(default)]
+    pub versao: Option<String>,
+    #[serde(default)]
+    pub repositorio: Option<String>,
+    #[serde(default)]
+    pub habilitada: bool,
 }
 
 /// O que o dialogo de importar mostra.
@@ -92,6 +134,29 @@ pub struct Resumo {
     pub campanha: String,
     pub cenas: Vec<CenaDoPacote>,
     pub personagens: Vec<PersonagemDoPacote>,
+    /// As partes da configuracao da campanha que o pacote traz.
+    pub configuracao: Vec<SecaoDoPacote>,
+    /// A configuracao do ATO20, se o pacote a traz.
+    pub ato20: Option<Ato20DoPacote>,
+    pub plugins: Vec<PluginDoPacote>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecaoDoPacote {
+    /// `efeitos`, `medidores`, `condicoes`, `espectador`, `ajustes`,
+    /// `plugins` ou `retratos`.
+    pub id: String,
+    /// Quantas coisas: efeitos, modelos, condicoes ou chaves.
+    pub itens: usize,
+    pub plugins: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ato20DoPacote {
+    pub chaves: usize,
+    /// Os plugins que a maquina de origem tinha.
     pub plugins: Vec<PluginDoPacote>,
 }
 
@@ -136,6 +201,12 @@ pub struct EscolhaDeImportacao {
     pub cenas: Vec<String>,
     #[serde(default)]
     pub personagens: Vec<String>,
+    /// Partes da configuracao da campanha, pelos ids de `SecaoDoPacote`.
+    #[serde(default)]
+    pub secoes: Vec<String>,
+    /// Traz a configuracao do ATO20.
+    #[serde(default)]
+    pub ato20: bool,
     /// Plugins que o mestre tirou da lista: o que os cita entra sem eles.
     #[serde(default)]
     pub remover_plugins: Vec<String>,
@@ -154,6 +225,17 @@ pub struct Importado {
     pub ambientes: BTreeMap<String, Value>,
     /// Quantos personagens entraram. Eles ja estao no disco; a tela so rele.
     pub personagens: usize,
+    /// Efeitos, condicoes e modelos de medidor que entraram.
+    pub efeitos: usize,
+    pub condicoes: usize,
+    pub medidores: usize,
+    /// Chaves da configuracao da campanha para a tela preencher onde nao ha.
+    pub configuracoes: Map<String, Value>,
+    /// O layout dos retratos, para a tela aplicar se a campanha esta no de
+    /// fabrica.
+    pub retratos: Option<Value>,
+    /// As chaves da configuracao do ATO20, para a tela aplicar.
+    pub ato20: Option<Map<String, Value>>,
     /// O que ficou de fora, uma linha por coisa.
     pub pulados: Vec<Pulado>,
 }
@@ -163,8 +245,9 @@ pub struct Importado {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Pulado {
-    /// `efeitoJaExiste`, `efeitosNoMaximo`, `arquivoFaltando` ou
-    /// `personagemIlegivel`.
+    /// `efeitoJaExiste`, `efeitosNoMaximo`, `arquivoFaltando`,
+    /// `personagemIlegivel`, `condicaoJaExiste`, `condicoesNoMaximo`,
+    /// `medidorJaExiste` ou `medidoresNoMaximo`.
     pub motivo: String,
     pub nome: String,
 }
@@ -333,6 +416,33 @@ fn efeito_depende_de(efeito: &Value, plugins: &HashSet<String>) -> bool {
     citados.iter().any(|plugin| plugins.contains(plugin))
 }
 
+// --- chaves de configuracao -------------------------------------------------
+
+/// Os prefixos de chave que sao do aplicativo. O resto e de plugin: a chave de
+/// plugin comeca com o id dele (`obs.prazo`).
+const PREFIXOS_DO_APP: [&str; 4] = ["ato20", "espectador", "quadro", "rede"];
+
+/// A secao de uma chave da configuracao da campanha.
+fn secao_da_chave(chave: &str) -> &'static str {
+    match chave.split('.').next().unwrap_or_default() {
+        "espectador" => "espectador",
+        prefixo if PREFIXOS_DO_APP.contains(&prefixo) => "ajustes",
+        _ => "plugins",
+    }
+}
+
+/// O plugin dono de uma chave, se ela for de plugin.
+fn plugin_da_chave(chave: &str) -> Option<&str> {
+    let prefixo = chave.split('.').next()?;
+    (!prefixo.is_empty() && !PREFIXOS_DO_APP.contains(&prefixo)).then_some(prefixo)
+}
+
+/// A configuracao da maquina que nao viaja: a rede e o convite sao desta
+/// maquina, e copiados para outra apontariam para o lugar errado.
+fn chave_da_maquina(chave: &str) -> bool {
+    chave.starts_with("rede.")
+}
+
 // --- leitura de uma pasta de campanha (a aberta ou a extraida) ---------------
 
 /// O que um pacote ou uma campanha tem, lido da pasta.
@@ -346,6 +456,13 @@ struct Fonte {
     efeitos: Vec<Value>,
     trilha: Option<Value>,
     personagens: Vec<Value>,
+    medidores: Vec<Value>,
+    condicoes: Vec<Value>,
+    configuracoes: Map<String, Value>,
+    retratos: Option<Value>,
+    ato20: Option<Ato20>,
+    /// As secoes que o pacote declara, ou todas, numa campanha exportada.
+    secoes: Option<Vec<String>>,
     plugins: Vec<PluginCitado>,
 }
 
@@ -437,6 +554,22 @@ impl Fonte {
                         .is_some_and(nome_simples)
                 })
                 .collect(),
+            medidores: read_json(&raiz.join("medidores.json"))?.unwrap_or_default(),
+            condicoes: read_json(&raiz.join("condicoes.json"))?.unwrap_or_default(),
+            configuracoes: read_json(&raiz.join("configuracoes.json"))?.unwrap_or_default(),
+            // So o layout: numa campanha exportada inteira o arquivo traz
+            // tambem os retratos no ar e as unioes, que sao da sessao.
+            retratos: read_json::<Value>(&raiz.join("retratos.json"))?.and_then(|retratos| {
+                let mut layout = Map::new();
+                for campo in ["layout", "ancoraPadrao"] {
+                    if let Some(valor) = retratos.get(campo) {
+                        layout.insert(campo.into(), valor.clone());
+                    }
+                }
+                (!layout.is_empty()).then_some(Value::Object(layout))
+            }),
+            ato20: read_json(&raiz.join("ato20.json"))?,
+            secoes: manifesto.as_ref().map(|manifesto| manifesto.secoes.clone()),
             plugins: manifesto
                 .map(|manifesto| manifesto.plugins)
                 .unwrap_or_default(),
@@ -487,6 +620,74 @@ impl Fonte {
             plugins_citados(efeito, &mut plugins);
         }
         Ok(plugins)
+    }
+
+    fn tem_secao(&self, id: &str) -> bool {
+        self.secoes
+            .as_ref()
+            .is_none_or(|secoes| secoes.iter().any(|secao| secao == id))
+    }
+
+    /// As chaves da configuracao da campanha de uma secao.
+    fn chaves_da_secao(&self, secao: &str) -> Map<String, Value> {
+        self.configuracoes
+            .iter()
+            .filter(|(chave, _)| secao_da_chave(chave) == secao)
+            .map(|(chave, valor)| (chave.clone(), valor.clone()))
+            .collect()
+    }
+
+    /// As secoes de configuracao que o pacote traz, com o que cada uma cita.
+    fn secoes_presentes(&self) -> Vec<SecaoDoPacote> {
+        let mut secoes = Vec::new();
+        let mut lista = |id: &str, valores: &[Value]| {
+            if self.tem_secao(id) && !valores.is_empty() {
+                let mut plugins = BTreeSet::new();
+                for valor in valores {
+                    plugins_citados(valor, &mut plugins);
+                    let mut efeitos = BTreeSet::new();
+                    efeitos_citados(valor, &mut efeitos);
+                    for efeito in efeitos.iter().filter_map(|id| self.efeito(id)) {
+                        plugins_citados(efeito, &mut plugins);
+                    }
+                }
+                secoes.push(SecaoDoPacote {
+                    id: id.to_string(),
+                    itens: valores.len(),
+                    plugins: plugins.into_iter().collect(),
+                });
+            }
+        };
+        lista("efeitos", &self.efeitos);
+        lista("medidores", &self.medidores);
+        lista("condicoes", &self.condicoes);
+
+        for id in ["espectador", "ajustes", "plugins"] {
+            let chaves = self.chaves_da_secao(id);
+            if self.tem_secao(id) && !chaves.is_empty() {
+                secoes.push(SecaoDoPacote {
+                    id: id.to_string(),
+                    itens: chaves.len(),
+                    plugins: chaves
+                        .keys()
+                        .filter_map(|chave| plugin_da_chave(chave))
+                        .map(str::to_string)
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
+                        .collect(),
+                });
+            }
+        }
+
+        if self.tem_secao("retratos") && self.retratos.is_some() {
+            secoes.push(SecaoDoPacote {
+                id: "retratos".into(),
+                itens: 1,
+                plugins: Vec::new(),
+            });
+        }
+
+        secoes
     }
 
     fn ambientes(&self, cena: &str) -> Option<&Value> {
@@ -598,21 +799,24 @@ fn eh_quadro(cena: &Value) -> bool {
     cena.get("tipo").and_then(Value::as_str) == Some("quadro")
 }
 
+/// Um texto de manifesto: a string, ou o portugues de um mapa por idioma (API
+/// 7), ou o primeiro que houver.
+fn texto_no_idioma(valor: &Value) -> Option<String> {
+    match valor {
+        Value::String(texto) => Some(texto.clone()),
+        Value::Object(por_idioma) => por_idioma
+            .get("pt-BR")
+            .or_else(|| por_idioma.values().next())
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        _ => None,
+    }
+}
+
 /// Nome, versao e repositorio do plugin instalado, se estiver.
 fn plugin_instalado(extensoes: &Path, id: &str) -> Option<PluginCitado> {
     let manifesto: Value = read_json(&extensoes.join(id).join("manifest.json")).ok()??;
-    let texto = |campo: &str| -> Option<String> {
-        match manifesto.get(campo)? {
-            Value::String(texto) => Some(texto.clone()),
-            // Nome por idioma (API 7): o portugues, ou o primeiro.
-            Value::Object(por_idioma) => por_idioma
-                .get("pt-BR")
-                .or_else(|| por_idioma.values().next())
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            _ => None,
-        }
-    };
+    let texto = |campo: &str| manifesto.get(campo).and_then(texto_no_idioma);
 
     Some(PluginCitado {
         id: id.to_string(),
@@ -682,7 +886,57 @@ pub fn exportar(
         ));
     }
 
-    if cenas.is_empty() && personagens.is_empty() {
+    // A configuracao da campanha: o que mora em arquivo do Rust e lido daqui;
+    // o que e do registro e dos retratos vem pronto da tela.
+    let marcadas: BTreeSet<&str> = escolha.secoes.iter().map(String::as_str).collect();
+    if marcadas.contains("efeitos") {
+        for efeito in &fonte.efeitos {
+            if let Some(id) = efeito.get("id").and_then(Value::as_str) {
+                efeitos.insert(id.to_string());
+            }
+        }
+    }
+    let medidores = if marcadas.contains("medidores") {
+        fonte.medidores.clone()
+    } else {
+        Vec::new()
+    };
+    let condicoes = if marcadas.contains("condicoes") {
+        fonte.condicoes.clone()
+    } else {
+        Vec::new()
+    };
+    for condicao in &condicoes {
+        efeitos_citados(condicao, &mut efeitos);
+    }
+    let configuracoes = escolha.configuracoes.clone().unwrap_or_default();
+    let retratos = escolha.retratos.clone();
+    let ato20 = escolha.ato20.clone().map(|mut ato20| {
+        ato20
+            .configuracoes
+            .retain(|chave, _| !chave_da_maquina(chave));
+        ato20
+    });
+
+    let mut secoes: BTreeSet<String> = marcadas.iter().map(|id| id.to_string()).collect();
+    secoes.extend(
+        configuracoes
+            .keys()
+            .map(|chave| secao_da_chave(chave).to_string()),
+    );
+    if retratos.is_some() {
+        secoes.insert("retratos".into());
+    }
+
+    if cenas.is_empty()
+        && personagens.is_empty()
+        && efeitos.is_empty()
+        && medidores.is_empty()
+        && condicoes.is_empty()
+        && configuracoes.is_empty()
+        && retratos.is_none()
+        && ato20.is_none()
+    {
         return Err(AppError::Malformed {
             file: "pacote".into(),
             cause: "nada para exportar".into(),
@@ -711,10 +965,18 @@ pub fn exportar(
                 .iter()
                 .flat_map(|(_, ficha, extras)| std::iter::once(ficha).chain(extras)),
         )
+        .chain(medidores.iter())
+        .chain(condicoes.iter())
     {
         assets_citados(valor, &conhecidos, &mut citados_assets);
         plugins_citados(valor, &mut citados_plugins);
     }
+    citados_plugins.extend(
+        configuracoes
+            .keys()
+            .filter_map(|chave| plugin_da_chave(chave))
+            .map(str::to_string),
+    );
     for (id, ficha, _) in &personagens {
         citados_plugins.extend(fonte.plugins_do_personagem(ficha, id)?);
     }
@@ -731,6 +993,7 @@ pub fn exportar(
         ato20: env!("CARGO_PKG_VERSION").to_string(),
         criado_em: super::now_ms(),
         campanha: fonte.nome.clone(),
+        secoes: secoes.into_iter().collect(),
         plugins: citados_plugins
             .iter()
             .map(|id| {
@@ -773,6 +1036,21 @@ pub fn exportar(
     }
     if let Some(trilha) = &trilha {
         gravar_json(&mut zip, opcoes, "trilha.json", trilha)?;
+    }
+    if !medidores.is_empty() {
+        gravar_json(&mut zip, opcoes, "medidores.json", &medidores)?;
+    }
+    if !condicoes.is_empty() {
+        gravar_json(&mut zip, opcoes, "condicoes.json", &condicoes)?;
+    }
+    if !configuracoes.is_empty() {
+        gravar_json(&mut zip, opcoes, "configuracoes.json", &configuracoes)?;
+    }
+    if let Some(retratos) = &retratos {
+        gravar_json(&mut zip, opcoes, "retratos.json", retratos)?;
+    }
+    if let Some(ato20) = &ato20 {
+        gravar_json(&mut zip, opcoes, "ato20.json", ato20)?;
     }
     if !personagens.is_empty() {
         let fichas: Vec<&Value> = personagens.iter().map(|(_, ficha, _)| ficha).collect();
@@ -970,6 +1248,29 @@ fn resumir(raiz: &Path, extensoes: &Path) -> AppResult<Resumo> {
         });
     }
 
+    let configuracao = fonte.secoes_presentes();
+    for secao in &configuracao {
+        todos.extend(secao.plugins.iter().cloned());
+    }
+
+    let ato20 = fonte.ato20.as_ref().map(|ato20| Ato20DoPacote {
+        chaves: ato20.configuracoes.len(),
+        plugins: ato20
+            .plugins
+            .iter()
+            .filter(|plugin| nome_simples(&plugin.id))
+            .map(|plugin| PluginDoPacote {
+                citado: PluginCitado {
+                    id: plugin.id.clone(),
+                    nome: plugin.nome.as_ref().and_then(texto_no_idioma),
+                    versao: plugin.versao.clone(),
+                    repositorio: plugin.repositorio.clone(),
+                },
+                instalado: plugin_instalado(extensoes, &plugin.id).is_some(),
+            })
+            .collect(),
+    });
+
     let plugins = todos
         .into_iter()
         .map(|id| {
@@ -998,6 +1299,8 @@ fn resumir(raiz: &Path, extensoes: &Path) -> AppResult<Resumo> {
         campanha: fonte.nome,
         cenas,
         personagens,
+        configuracao,
+        ato20,
         plugins,
     })
 }
@@ -1043,12 +1346,40 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
 
     // Os efeitos da campanha que as cenas e as fichas citam, e o destino de
     // cada um.
+    // As partes da configuracao que o mestre marcou e o pacote traz.
+    let secoes: BTreeSet<&str> = escolha
+        .secoes
+        .iter()
+        .map(String::as_str)
+        .filter(|id| fonte.tem_secao(id))
+        .collect();
+    let mut condicoes_novas: Vec<Value> = if secoes.contains("condicoes") {
+        fonte.condicoes.clone()
+    } else {
+        Vec::new()
+    };
+    let mut medidores_novos: Vec<Value> = if secoes.contains("medidores") {
+        fonte.medidores.clone()
+    } else {
+        Vec::new()
+    };
+
     let mut citados = BTreeSet::new();
     for (_, cena) in &cenas {
         efeitos_citados(cena, &mut citados);
     }
     for personagem in &personagens {
         efeitos_citados(&personagem.ficha, &mut citados);
+    }
+    for condicao in &condicoes_novas {
+        efeitos_citados(condicao, &mut citados);
+    }
+    if secoes.contains("efeitos") {
+        for efeito in &fonte.efeitos {
+            if let Some(id) = efeito.get("id").and_then(Value::as_str) {
+                citados.insert(id.to_string());
+            }
+        }
     }
 
     let existentes = efeitos::load(vault)?;
@@ -1121,6 +1452,9 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
             dados.retain(|plugin, _| !removidos.contains(plugin));
         }
     }
+    for valor in condicoes_novas.iter_mut().chain(medidores_novos.iter_mut()) {
+        tirar_plugins(valor, &removidos, &efeitos_fora);
+    }
 
     // Os assets que tudo isso cita, adotados com id novo.
     let conhecidos: HashSet<&str> = fonte.assets.iter().map(|meta| meta.id.as_str()).collect();
@@ -1131,6 +1465,8 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         .chain(novos_efeitos.iter())
         .chain(ambientes.values())
         .chain(personagens.iter().flat_map(PersonagemImportado::valores))
+        .chain(condicoes_novas.iter())
+        .chain(medidores_novos.iter())
     {
         assets_citados(valor, &conhecidos, &mut citados_assets);
     }
@@ -1180,8 +1516,110 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
             trocar_textos(dados, &trocar);
         }
     }
+    for valor in condicoes_novas.iter_mut().chain(medidores_novos.iter_mut()) {
+        trocar_textos(valor, &trocar);
+    }
 
+    let quantos_efeitos = novos_efeitos.len();
     efeitos::adotar(vault, novos_efeitos)?;
+
+    // Condicoes e modelos de medidor: o de mesmo nome fica o da campanha.
+    let nome_de = |valor: &Value| -> String {
+        valor
+            .get("nome")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase()
+    };
+    let mut condicoes = Vec::new();
+    let mut nomes_de_condicao: HashSet<String> = condicoes::load(vault)?
+        .iter()
+        .map(|condicao| condicao.nome.trim().to_lowercase())
+        .collect();
+    let mut vagas_de_condicao = condicoes::MAX_MODELOS.saturating_sub(nomes_de_condicao.len());
+    for valor in condicoes_novas {
+        let nome = valor
+            .get("nome")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        if !nomes_de_condicao.insert(nome_de(&valor)) {
+            pulados.push(pulado("condicaoJaExiste", &nome));
+            continue;
+        }
+        if vagas_de_condicao == 0 {
+            pulados.push(pulado("condicoesNoMaximo", &nome));
+            continue;
+        }
+        if let Ok(condicao) = serde_json::from_value::<characters::Condicao>(valor) {
+            vagas_de_condicao -= 1;
+            condicoes.push(condicao);
+        }
+    }
+    let quantas_condicoes = condicoes.len();
+    condicoes::adotar(vault, condicoes)?;
+
+    let mut medidores = Vec::new();
+    let mut nomes_de_medidor: HashSet<String> = modelos::load(vault)?
+        .iter()
+        .map(|modelo| modelo.nome.trim().to_lowercase())
+        .collect();
+    let mut vagas_de_medidor = modelos::MAX_MODELOS.saturating_sub(nomes_de_medidor.len());
+    for valor in medidores_novos {
+        let nome = valor
+            .get("nome")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        if !nomes_de_medidor.insert(nome_de(&valor)) {
+            pulados.push(pulado("medidorJaExiste", &nome));
+            continue;
+        }
+        if vagas_de_medidor == 0 {
+            pulados.push(pulado("medidoresNoMaximo", &nome));
+            continue;
+        }
+        if let Ok(modelo) = serde_json::from_value::<modelos::Modelo>(valor) {
+            vagas_de_medidor -= 1;
+            medidores.push(modelo);
+        }
+    }
+    let quantos_medidores = medidores.len();
+    modelos::adotar(vault, medidores)?;
+
+    // O que e da tela volta para ela: as chaves do registro e o layout dos
+    // retratos. Chave de plugin removido nao volta.
+    let sem_plugin_removido =
+        |chave: &String| plugin_da_chave(chave).is_none_or(|plugin| !removidos.contains(plugin));
+    let mut configuracoes = Map::new();
+    for id in ["espectador", "ajustes", "plugins"] {
+        if secoes.contains(id) {
+            configuracoes.extend(
+                fonte
+                    .chaves_da_secao(id)
+                    .into_iter()
+                    .filter(|(chave, _)| sem_plugin_removido(chave)),
+            );
+        }
+    }
+    let retratos = if secoes.contains("retratos") {
+        fonte.retratos.clone()
+    } else {
+        None
+    };
+    let ato20 = if escolha.ato20 {
+        fonte.ato20.as_ref().map(|ato20| {
+            ato20
+                .configuracoes
+                .iter()
+                .filter(|(chave, _)| !chave_da_maquina(chave) && sem_plugin_removido(chave))
+                .map(|(chave, valor)| (chave.clone(), valor.clone()))
+                .collect()
+        })
+    } else {
+        None
+    };
 
     // Os personagens: nome livre, pasta copiada, ficha no indice.
     let mut nomes: HashSet<String> = characters::load(vault)?
@@ -1242,6 +1680,12 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         pastas,
         ambientes,
         personagens: quantos_personagens,
+        efeitos: quantos_efeitos,
+        condicoes: quantas_condicoes,
+        medidores: quantos_medidores,
+        configuracoes,
+        retratos,
+        ato20,
         pulados,
     })
 }
@@ -1558,6 +2002,127 @@ mod tests {
         assert_eq!(
             importado.cenas[0]["items"][0]["personagemId"],
             json!(copia.id)
+        );
+    }
+
+    #[test]
+    fn a_configuracao_vai_por_secao_e_nunca_sobrescreve() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = origem(dir.path());
+        write_json(
+            &vault.root.join("condicoes.json"),
+            &json!([
+                { "id": "c1", "nome": "Envenenado", "cor": "#00ff00", "icone": "skull", "efeito": "campanha/abc12345", "escondido": false },
+                { "id": "c2", "nome": "Lodo", "cor": "#000000", "icone": "droplet", "efeito": "ordem/lodo", "escondido": false }
+            ]),
+        )
+        .expect("condicoes");
+        write_json(
+            &vault.root.join("medidores.json"),
+            &json!([
+                { "id": "m1", "nome": "PV", "cor": "#ff0000", "estilo": "barra", "maximo": 10, "escondido": false, "estiloExtensao": "ordem/pv" },
+                { "id": "m2", "nome": "Sanidade", "cor": "#0000ff", "estilo": "barra", "maximo": 50, "escondido": false }
+            ]),
+        )
+        .expect("medidores");
+
+        let zip = dir.path().join("config.ato20.zip");
+        let escolha = EscolhaDeExportacao {
+            secoes: vec!["efeitos".into(), "medidores".into(), "condicoes".into()],
+            configuracoes: Some(
+                json!({ "espectador.brilho": 1.1, "ato20.dados.abertos": true, "obs.prazo": 5 })
+                    .as_object()
+                    .cloned()
+                    .expect("mapa"),
+            ),
+            retratos: Some(json!({ "layout": { "escala": 2 }, "ancoraPadrao": "topo" })),
+            ato20: Some(Ato20 {
+                configuracoes: json!({ "ato20.zoom": 1.2, "rede.convite": "x", "obs.nome": true })
+                    .as_object()
+                    .cloned()
+                    .expect("mapa"),
+                plugins: vec![],
+            }),
+            ..Default::default()
+        };
+        exportar(&vault, &dir.path().join("extensoes"), &zip, &escolha).expect("exportar");
+        let extraido = dir.path().join("extraido");
+        let resumo = abrir(&zip, &extraido, &dir.path().join("extensoes")).expect("abrir");
+
+        let ids: Vec<&str> = resumo
+            .configuracao
+            .iter()
+            .map(|secao| secao.id.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                "efeitos",
+                "medidores",
+                "condicoes",
+                "espectador",
+                "ajustes",
+                "plugins",
+                "retratos"
+            ]
+        );
+        // A rede e desta maquina, e nao viaja.
+        assert_eq!(resumo.ato20.as_ref().expect("ato20").chaves, 2);
+
+        // O destino ja tem uma Sanidade.
+        let destino = Vault::create(dir.path().join("destino"), "Outra").expect("destino");
+        write_json(
+            &destino.root.join("medidores.json"),
+            &json!([{ "id": "x", "nome": "sanidade", "cor": "#000000", "estilo": "barra", "maximo": 5, "escondido": false }]),
+        )
+        .expect("medidor do destino");
+
+        let escolha = EscolhaDeImportacao {
+            secoes: ids.iter().map(|id| id.to_string()).collect(),
+            ato20: true,
+            remover_plugins: vec!["ordem".into(), "obs".into()],
+            ..Default::default()
+        };
+        let importado = importar(&destino, &extraido, &escolha).expect("importar");
+
+        assert_eq!(importado.efeitos, 1);
+        assert_eq!(importado.condicoes, 2);
+        assert_eq!(importado.medidores, 1);
+        assert!(importado
+            .pulados
+            .contains(&pulado("medidorJaExiste", "Sanidade")));
+
+        let condicoes = condicoes::load(&destino).expect("condicoes");
+        let envenenado = condicoes
+            .iter()
+            .find(|c| c.nome == "Envenenado")
+            .expect("envenenado");
+        assert_ne!(envenenado.efeito.as_deref(), Some("campanha/abc12345"));
+        assert!(condicoes
+            .iter()
+            .find(|c| c.nome == "Lodo")
+            .expect("lodo")
+            .efeito
+            .is_none());
+        let pv = modelos::load(&destino).expect("modelos");
+        assert!(pv
+            .iter()
+            .find(|m| m.nome == "PV")
+            .expect("pv")
+            .estilo_extensao
+            .is_none());
+
+        assert_eq!(
+            Value::Object(importado.configuracoes),
+            json!({ "espectador.brilho": 1.1, "ato20.dados.abertos": true })
+        );
+        assert_eq!(
+            importado.retratos,
+            Some(json!({ "layout": { "escala": 2 }, "ancoraPadrao": "topo" }))
+        );
+        assert_eq!(
+            importado.ato20.map(Value::Object),
+            Some(json!({ "ato20.zoom": 1.2 }))
         );
     }
 
