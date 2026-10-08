@@ -111,6 +111,12 @@ def argumentos():
     # Que colunas laterais ficam à vista: ambos, esquerdo, direito, nenhum.
     # Lista, porque a pergunta é quanto cada uma custa no mesmo gesto.
     p.add_argument("--painel", default="ambos")
+    # `bancada`: a arvore de Arquivos (itens), o acervo (imagens) e a aba ativa
+    # da coluna da esquerda -- `--aba quadros --arvore 260` pesa o painel
+    # Arquivos no gesto. Ver `arvoreDaMedida` em `src/app/perf/page.tsx`.
+    p.add_argument("--arvore", default="0")
+    p.add_argument("--acervo", default="0")
+    p.add_argument("--aba", default="")
     # Repassado ao `medir.mjs`: a pasta com bg.*, bg2.* e char.* de verdade.
     p.add_argument("--imagens", default=None)
 
@@ -486,6 +492,7 @@ def main():
                                 f"&girando={'1' if args.girando else '0'}"
                                 f"&medidores={med}&estilo={est}"
                                 f"&rotulo={args.rotulo}"
+                                f"&arvore={args.arvore}&acervo={args.acervo}&aba={args.aba}"
                             )
                             if args.escuridao is not None:
                                 url += f"&escuridao={args.escuridao}"
@@ -500,6 +507,8 @@ def main():
                                 rotulo += f" gesto={g}"
                             if cenario in ("bancada", "quadro"):
                                 rotulo += f" painel={painel}"
+                            if args.aba or args.arvore != "0" or args.acervo != "0":
+                                rotulo += f" aba={args.aba or '-'} arvore={args.arvore} acervo={args.acervo}"
                             if cenario == "quadro":
                                 rotulo += f" docs={d}"
                             if exp:
