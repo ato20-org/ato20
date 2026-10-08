@@ -9,6 +9,7 @@ import {
 import {
   BookImage,
   CopyPlus,
+  FileUp,
   FolderPlus,
   GripVertical,
   Image as ImageIcon,
@@ -76,6 +77,8 @@ import {
 } from "@/hooks/use-renomear-pelo-menu";
 import { t as textoDeArquivos } from "@/lib/i18n/arquivos";
 import { t } from "@/lib/i18n/cenas";
+import { t as textoDoMestre } from "@/lib/i18n/mestre";
+import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import {
   achatarArvore,
   caminhoDaPasta,
@@ -642,6 +645,12 @@ function SceneRow({
       <Item onClick={() => duplicateScene(scene.id)}>
         <CopyPlus />
         {t.sceneList.duplicar}
+      </Item>
+      {/* Esta lista é de mapas e fundos; o quadro mora em Arquivos e não
+          viaja em pacote. */}
+      <Item onClick={() => usePacoteStore.getState().abrirExportar({ cenas: [scene.id] })}>
+        <FileUp />
+        {textoDoMestre.pacote.exportarItem}
       </Item>
       <ItensDeMover
         kit={kit}

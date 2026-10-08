@@ -120,9 +120,65 @@ fn kind_for(mime: &str) -> AppResult<&'static str> {
 /// Caminho do binario. Derivado do id e do tipo, nunca do nome que o usuario
 /// deu -- nome de arquivo vindo de fora nao toca caminho.
 pub fn asset_path(vault: &Vault, meta: &AssetMeta) -> PathBuf {
-    vault
-        .assets_dir()
-        .join(format!("{}.{}", meta.id, super::mime::extension_for(&meta.mime_type)))
+    asset_path_em(&vault.root, meta)
+}
+
+/// O mesmo caminho dentro de outra pasta com o desenho de campanha: um pacote
+/// extraido. Quem chama confere antes que o `id` e um nome simples.
+pub fn asset_path_em(raiz: &std::path::Path, meta: &AssetMeta) -> PathBuf {
+    raiz.join("assets").join(format!(
+        "{}.{}",
+        meta.id,
+        super::mime::extension_for(&meta.mime_type)
+    ))
+}
+
+/// Traz para o acervo arquivos que vieram de outra campanha (um pacote), cada
+/// um com id NOVO e o resto da ficha igual: nome, escopo, medidas, picos, tipo
+/// de som. A pasta do acervo nao vem, porque as pastas sao da outra campanha.
+///
+/// Devolve id antigo -> id novo, para quem importou reescrever as referencias.
+/// Um arquivo que nao copia fica de fora com aviso no log, sem derrubar o resto.
+pub fn adotar(
+    vault: &Vault,
+    entradas: &[(PathBuf, AssetMeta)],
+) -> AppResult<std::collections::HashMap<String, String>> {
+    let mut trocas = std::collections::HashMap::new();
+    if entradas.is_empty() {
+        return Ok(trocas);
+    }
+
+    std::fs::create_dir_all(vault.assets_dir())?;
+    let mut indice = index(vault)?;
+
+    for (origem, meta) in entradas {
+        let mut novo = meta.clone();
+        novo.id = uuid::Uuid::new_v4().to_string();
+        novo.folder_id = None;
+        novo.created_at = now_ms();
+
+        let destino = asset_path(vault, &novo);
+        match std::fs::copy(origem, &destino) {
+            Ok(tamanho) => novo.size = tamanho,
+            Err(cause) => {
+                log::warn!("acervo: {} nao entrou: {cause}", meta.name);
+                continue;
+            }
+        }
+
+        if novo.kind == "image" {
+            if let Err(cause) = super::variantes::ensure(vault, super::variantes::Variante::Mini, &novo) {
+                log::warn!("acervo: {} entrou sem miniatura: {cause}", novo.name);
+            }
+        }
+
+        trocas.insert(meta.id.clone(), novo.id.clone());
+        indice.push(novo);
+    }
+
+    write_index(vault, &indice)?;
+
+    Ok(trocas)
 }
 
 pub fn index(vault: &Vault) -> AppResult<Vec<AssetMeta>> {

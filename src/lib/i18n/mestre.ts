@@ -57,6 +57,100 @@ const pt = {
       "O código desta campanha. Ele viaja no zip, então continua o mesmo depois de importar noutra máquina.",
   },
 
+  /** Exportar e importar partes da campanha. Ver `vault/pacote.rs`. */
+  pacote: {
+    exportarItem: "Exportar…",
+    importarItem: "Importar…",
+    exportarTitulo: "Exportar",
+    exportarExplicacao:
+      "O que for marcado vai num pacote. Cada mapa leva junto a imagem, os sons de ambiente e os efeitos da campanha que usa.",
+    mapas: "Mapas",
+    fundos: "Fundos",
+    personagens: "Personagens",
+    levarPersonagens: "Levar os personagens dos tokens",
+    levarPersonagensNota:
+      "A ficha inteira de quem tem token nos mapas marcados vai junto. Desmarcado, o token chega como imagem solta.",
+    configuracaoDaCampanha: "Configuração da campanha",
+    secoes: {
+      efeitos: "Efeitos da campanha",
+      medidores: "Modelos de medidor",
+      condicoes: "Condições",
+      espectador: "Ajuste de imagem do espectador",
+      ajustes: "Ajustes da campanha",
+      plugins: "Configurações de plugins",
+      retratos: "Layout dos retratos",
+    },
+    configuracaoDoAto20: "Configuração do ATO20",
+    ato20ExportarNota:
+      "Zoom, volumes, idioma, Discord, som dos dados, configurações de plugin e a lista de plugins desta máquina.",
+    ato20ImportarNota:
+      "Troca os ajustes desta máquina pelos do pacote. Se o idioma for outro, o ATO20 recarrega.",
+    todos: "Todos",
+    nenhumaCena: "Nenhum nesta campanha.",
+    marcados: (marcados: number, total: number) => `${marcados} de ${total}`,
+    exportar: "Exportar",
+    exportando: "Exportando…",
+    exportadoEm: (destino: string) => `Pacote salvo em ${destino}`,
+    exportarFalhou: "Não foi possível exportar.",
+    salvar: "Salvar o pacote",
+    escolher: "Escolher um pacote ou uma campanha exportada",
+    abrindo: "Abrindo o pacote…",
+    abrirFalhou: "Não foi possível abrir o pacote.",
+    importarTitulo: (campanha: string) => (campanha ? `Importar de ${campanha}` : "Importar"),
+    importarExplicacao:
+      "Escolha o que entra nesta campanha. Nada daqui é sobrescrito: o que entra vem como novo, e nome repetido ganha um número.",
+    vazio: "Este pacote não tem mapas, fundos nem personagens.",
+    importar: "Importar",
+    importando: "Importando…",
+    importado: (partes: string[]) =>
+      partes.length === 0
+        ? "Nada novo entrou."
+        : `Importado: ${partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(", ")} e ${partes[partes.length - 1]}`}.`,
+    partes: {
+      cenas: (n: number) => (n === 1 ? "1 cena" : `${n} cenas`),
+      personagens: (n: number) => (n === 1 ? "1 personagem" : `${n} personagens`),
+      efeitos: (n: number) => (n === 1 ? "1 efeito" : `${n} efeitos`),
+      condicoes: (n: number) => (n === 1 ? "1 condição" : `${n} condições`),
+      medidores: (n: number) => (n === 1 ? "1 modelo de medidor" : `${n} modelos de medidor`),
+      configuracao: "a configuração da campanha",
+      ato20: "a configuração do ATO20",
+    },
+    importarFalhou: "Não foi possível importar.",
+    pulado: {
+      efeitoJaExiste: (nome: string) =>
+        `Efeito "${nome}": a campanha já tem um com esse nome, e ficou o dela.`,
+      efeitosNoMaximo: (nome: string) =>
+        `Efeito "${nome}": a campanha já está no máximo de efeitos.`,
+      arquivoFaltando: (nome: string) => `Arquivo "${nome}": não veio no pacote.`,
+      personagemIlegivel: (nome: string) => `Personagem "${nome}": a ficha não abriu.`,
+      condicaoJaExiste: (nome: string) =>
+        `Condição "${nome}": a campanha já tem uma com esse nome, e ficou a dela.`,
+      condicoesNoMaximo: (nome: string) => `Condição "${nome}": a campanha já está no máximo de condições.`,
+      medidorJaExiste: (nome: string) =>
+        `Modelo de medidor "${nome}": a campanha já tem um com esse nome, e ficou o dela.`,
+      medidoresNoMaximo: (nome: string) =>
+        `Modelo de medidor "${nome}": a campanha já está no máximo de modelos.`,
+    },
+    retratosAjustados: "Layout dos retratos: a campanha já tem o dela, e ficou o dela.",
+    pluginsFaltando: "Plugins que faltam",
+    pluginsFaltandoNota:
+      "O que usa estes plugins aparece no padrão enquanto eles faltarem. Baixe, ou remova para importar sem eles.",
+    baixar: "Baixar",
+    baixando: "Baixando…",
+    remover: "Remover",
+    desfazer: "Desfazer",
+    instalado: "Instalado",
+    semRepositorio: (nome: string) =>
+      `${nome} não está no catálogo e o pacote não diz de onde baixar. Remova, ou instale à mão.`,
+    sufixo: {
+      mapas: "mapas",
+      fundos: "fundos",
+      personagens: "personagens",
+      configuracao: "configuracao",
+      pacote: "pacote",
+    },
+  },
+
   /** A abertura: o splash enquanto a lista e a campanha são lidas. */
   abertura: {
     procurando: "Procurando as campanhas",
@@ -119,6 +213,26 @@ const pt = {
     criarMedidor: "Criar medidor da campanha",
     limiteDeMedidores: (n: number) => `Limite de ${n} medidores.`,
     nenhumMedidor: "Nenhum medidor registrado",
+    atributosDaCampanha: "Atributos da campanha",
+    atributosDaCampanhaNota:
+      "Todo personagem começa com estes, no valor que estiver aqui. Mudar depois não mexe nas fichas.",
+    criarAtributo: "Criar atributo da campanha",
+    limiteDeAtributos: (n: number) => `Limite de ${n} atributos.`,
+    nenhumAtributo: "Nenhum atributo registrado",
+    siglaDoAtributo: "Sigla",
+    exemploDeSigla: "FOR",
+    valorInicial: "Valor inicial",
+    descricaoDoAtributo: "Descrição (opcional)",
+    aplicarAtributosEmTodos: "Aplicar em todos os personagens",
+    aplicarAtributosEmTodosNota:
+      "Quem já tem um atributo com a mesma sigla não ganha outro, e o que já tem fica com o valor dele.",
+    criar: "Criar",
+    atributoCriado: "Atributo criado.",
+    atributoCriadoEm: (n: number) =>
+      `Atributo criado em ${n} ${n === 1 ? "personagem" : "personagens"}.`,
+    falhaAoLerAtributos: "Falha ao ler os atributos.",
+    falhaAoCriarAtributo: "Falha ao criar o atributo.",
+    falhaAoApagarAtributo: "Falha ao apagar o atributo.",
     comecaEscondido: "Começa escondido",
     comecaAVista: "Começa à vista",
     olhoDoMedidor: "Não muda as fichas que já têm este medidor.",
@@ -580,6 +694,11 @@ const pt = {
       descricao: "Todo personagem começa com estes.",
       palavras: ["vida", "pv", "mana", "barra", "porcentagem", "maximo", "ficha"],
     },
+    atributos: {
+      titulo: "Atributos",
+      descricao: "A sigla e o número com que toda ficha nasce.",
+      palavras: ["for", "agi", "int", "forca", "agilidade", "atributo", "ficha"],
+    },
     efeitos: {
       titulo: "Efeitos",
       descricao: "As condições do token e os efeitos em área.",
@@ -756,6 +875,97 @@ const en: typeof pt = {
       "This campaign's code. It travels in the zip, so it stays the same after importing on another machine.",
   },
 
+  pacote: {
+    exportarItem: "Export…",
+    importarItem: "Import…",
+    exportarTitulo: "Export",
+    exportarExplicacao:
+      "Whatever you check goes into a package. Each map takes along its image, its ambient sounds and the campaign effects it uses.",
+    mapas: "Maps",
+    fundos: "Backdrops",
+    personagens: "Characters",
+    levarPersonagens: "Take the characters of the tokens",
+    levarPersonagensNota:
+      "The full sheet of whoever has a token on the checked maps goes along. Unchecked, the token arrives as a plain image.",
+    configuracaoDaCampanha: "Campaign settings",
+    secoes: {
+      efeitos: "Campaign effects",
+      medidores: "Meter templates",
+      condicoes: "Conditions",
+      espectador: "Spectator image adjustment",
+      ajustes: "Campaign options",
+      plugins: "Plugin settings",
+      retratos: "Portrait layout",
+    },
+    configuracaoDoAto20: "ATO20 settings",
+    ato20ExportarNota:
+      "Zoom, volumes, language, Discord, dice sounds, plugin settings and the list of plugins on this machine.",
+    ato20ImportarNota:
+      "Replaces this machine's settings with the package's. If the language is different, ATO20 reloads.",
+    todos: "All",
+    nenhumaCena: "None in this campaign.",
+    marcados: (marcados, total) => `${marcados} of ${total}`,
+    exportar: "Export",
+    exportando: "Exporting…",
+    exportadoEm: (destino) => `Package saved to ${destino}`,
+    exportarFalhou: "Could not export.",
+    salvar: "Save the package",
+    escolher: "Choose a package or an exported campaign",
+    abrindo: "Opening the package…",
+    abrirFalhou: "Could not open the package.",
+    importarTitulo: (campanha) => (campanha ? `Import from ${campanha}` : "Import"),
+    importarExplicacao:
+      "Choose what comes into this campaign. Nothing here is overwritten: what comes in arrives as new, and a repeated name gets a number.",
+    vazio: "This package has no maps, backdrops or characters.",
+    importar: "Import",
+    importando: "Importing…",
+    importado: (partes) =>
+      partes.length === 0
+        ? "Nothing new came in."
+        : `Imported ${partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(", ")} and ${partes[partes.length - 1]}`}.`,
+    partes: {
+      cenas: (n) => (n === 1 ? "1 scene" : `${n} scenes`),
+      personagens: (n) => (n === 1 ? "1 character" : `${n} characters`),
+      efeitos: (n) => (n === 1 ? "1 effect" : `${n} effects`),
+      condicoes: (n) => (n === 1 ? "1 condition" : `${n} conditions`),
+      medidores: (n) => (n === 1 ? "1 meter template" : `${n} meter templates`),
+      configuracao: "the campaign settings",
+      ato20: "the ATO20 settings",
+    },
+    importarFalhou: "Could not import.",
+    pulado: {
+      efeitoJaExiste: (nome) =>
+        `Effect "${nome}": the campaign already has one with that name, and kept its own.`,
+      efeitosNoMaximo: (nome) => `Effect "${nome}": the campaign is at its effect limit.`,
+      arquivoFaltando: (nome) => `File "${nome}": not in the package.`,
+      personagemIlegivel: (nome) => `Character "${nome}": the sheet would not open.`,
+      condicaoJaExiste: (nome) =>
+        `Condition "${nome}": the campaign already has one with that name, and kept its own.`,
+      condicoesNoMaximo: (nome) => `Condition "${nome}": the campaign is at its condition limit.`,
+      medidorJaExiste: (nome) =>
+        `Meter template "${nome}": the campaign already has one with that name, and kept its own.`,
+      medidoresNoMaximo: (nome) => `Meter template "${nome}": the campaign is at its template limit.`,
+    },
+    retratosAjustados: "Portrait layout: the campaign already has its own, and kept it.",
+    pluginsFaltando: "Missing plugins",
+    pluginsFaltandoNota:
+      "Whatever uses these plugins shows the default while they are missing. Download them, or remove them to import without them.",
+    baixar: "Download",
+    baixando: "Downloading…",
+    remover: "Remove",
+    desfazer: "Undo",
+    instalado: "Installed",
+    semRepositorio: (nome) =>
+      `${nome} is not in the catalog and the package does not say where to get it. Remove it, or install it by hand.`,
+    sufixo: {
+      mapas: "maps",
+      fundos: "backdrops",
+      personagens: "characters",
+      configuracao: "settings",
+      pacote: "package",
+    },
+  },
+
   abertura: {
     procurando: "Looking for campaigns",
     abrindo: "Opening the campaign",
@@ -814,6 +1024,26 @@ const en: typeof pt = {
     criarMedidor: "Create campaign meter",
     limiteDeMedidores: (n) => `Limit of ${n} meters.`,
     nenhumMedidor: "No meters yet",
+    atributosDaCampanha: "Campaign attributes",
+    atributosDaCampanhaNota:
+      "Every character starts with these, at the value set here. Changing them later does not touch the sheets.",
+    criarAtributo: "Create campaign attribute",
+    limiteDeAtributos: (n) => `Limit of ${n} attributes.`,
+    nenhumAtributo: "No attributes yet",
+    siglaDoAtributo: "Abbreviation",
+    exemploDeSigla: "STR",
+    valorInicial: "Starting value",
+    descricaoDoAtributo: "Description (optional)",
+    aplicarAtributosEmTodos: "Apply to every character",
+    aplicarAtributosEmTodosNota:
+      "Characters that already have an attribute with the same abbreviation don't get another, and theirs keeps its value.",
+    criar: "Create",
+    atributoCriado: "Attribute created.",
+    atributoCriadoEm: (n) =>
+      `Attribute created on ${n} ${n === 1 ? "character" : "characters"}.`,
+    falhaAoLerAtributos: "Could not read the attributes.",
+    falhaAoCriarAtributo: "Could not create the attribute.",
+    falhaAoApagarAtributo: "Could not delete the attribute.",
     comecaEscondido: "Starts hidden",
     comecaAVista: "Starts visible",
     olhoDoMedidor: "Does not change the sheets that already have this meter.",
@@ -1247,6 +1477,11 @@ const en: typeof pt = {
       titulo: "Meters",
       descricao: "Every character starts with these.",
       palavras: ["health", "hp", "mana", "bar", "percentage", "maximum", "sheet"],
+    },
+    atributos: {
+      titulo: "Attributes",
+      descricao: "The abbreviation and number every sheet starts with.",
+      palavras: ["str", "dex", "int", "strength", "agility", "attribute", "sheet"],
     },
     efeitos: {
       titulo: "Effects",

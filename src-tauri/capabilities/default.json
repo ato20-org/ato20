@@ -19,7 +19,7 @@
           "url": "http://localhost:*/*"
         },
         {
-          "url": "https://github.com/ato20-org/ato20/*"
+          "url": "https://github.com/*"
         }
       ]
     },

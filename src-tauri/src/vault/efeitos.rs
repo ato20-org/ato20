@@ -108,6 +108,54 @@ pub fn criar(vault: &Vault) -> AppResult<Value> {
     Ok(novo)
 }
 
+/// Um id `campanha/…` que nao esta nem na campanha nem entre os que estao
+/// para entrar.
+pub fn id_novo(existentes: &[Value], novos: &[Value]) -> String {
+    loop {
+        let sorteio = uuid::Uuid::new_v4().simple().to_string();
+        let candidato = format!("{PREFIXO}{}", &sorteio[..8]);
+        let usado = existentes
+            .iter()
+            .chain(novos)
+            .any(|efeito| efeito.get("id").and_then(Value::as_str) == Some(&candidato));
+        if !usado {
+            return candidato;
+        }
+    }
+}
+
+/// Acrescenta efeitos prontos, vindos de um pacote, com os ids que quem
+/// importou ja sorteou (`id_novo`). Os que nao cabem no teto, nao tem id da
+/// campanha ou passam do tamanho ficam de fora: quem chamou ja contou as vagas.
+pub fn adotar(vault: &Vault, novos: Vec<Value>) -> AppResult<()> {
+    if novos.is_empty() {
+        return Ok(());
+    }
+
+    let mut efeitos = load(vault)?;
+
+    for efeito in novos {
+        let Value::Object(mut campos) = efeito else {
+            continue;
+        };
+        campos.remove("origem");
+        let id_ok = campos
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(id_da_campanha);
+        let efeito = Value::Object(campos);
+        let bytes = serde_json::to_vec(&efeito)
+            .map(|v| v.len())
+            .unwrap_or(usize::MAX);
+
+        if id_ok && bytes <= MAX_BYTES && efeitos.len() < MAX_EFEITOS {
+            efeitos.push(efeito);
+        }
+    }
+
+    save(vault, &efeitos)
+}
+
 /// Grava o efeito inteiro, como o editor o tem, no lugar do que tinha o mesmo
 /// id. Devolve como ficou: titulo e dica aparados.
 pub fn salvar(vault: &Vault, efeito: Value) -> AppResult<Value> {
