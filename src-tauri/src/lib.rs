@@ -1,4 +1,5 @@
 mod appimage;
+mod catalogo;
 mod commands;
 mod configuracoes;
 mod db;
@@ -301,6 +302,7 @@ pub fn run() {
             commands::marcador_remover,
             commands::extensoes_listar,
             commands::extensao_importar,
+            commands::extensao_instalar_do_catalogo,
             commands::extensao_remover,
             commands::extensao_habilitar,
             commands::configuracoes_ler,
