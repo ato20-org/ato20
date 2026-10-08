@@ -211,7 +211,6 @@ import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
 import { useBorrachaDaNevoaStore } from "@/lib/store/use-borracha-da-nevoa-store";
 import { useBorrachaDosRiscosStore } from "@/lib/store/use-borracha-dos-riscos-store";
 import { usePincelNaRoda } from "@/hooks/use-pincel-na-roda";
-import { padraoDoQuadro } from "@/lib/configuracoes/quadro";
 import {
   CORES_DA_LUZ,
   ehQuadro,
@@ -232,7 +231,6 @@ import {
   type Regua,
   type Postit,
   type NewForma,
-  type TipoDeForma,
   type NewParede,
   type NewPorta,
   type PontaDeLigacao,
@@ -367,23 +365,6 @@ const PAREDE_MINIMA = 8;
  * `travadoSobOClique`.
  */
 const CLIQUE_NO_TRAVADO_PX = 4;
-
-/**
- * O jeito com que uma forma NOVA nasce: o padrão da campanha, lido na hora.
- *
- * Canto só onde há canto -- elipse e linha não guardam um campo que não
- * desenham. Ver `padraoDoQuadro`.
- */
-function jeitoDaForma(tipo: TipoDeForma): Pick<NewForma, "arredondado" | "aMao"> {
-  const padrao = padraoDoQuadro();
-
-  return {
-    ...(padrao.arredondado && (tipo === "retangulo" || tipo === "poligono")
-      ? { arredondado: true as const }
-      : {}),
-    ...(padrao.aMao ? { aMao: true as const } : {}),
-  };
-}
 
 export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const { scale, toScene } = useSceneScale();
@@ -2373,9 +2354,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     )
       return;
 
-    const id = addLigacao(scene.id, de, para, {
-      ...(padraoDoQuadro().aMao ? { aMao: true as const } : {}),
-    });
+    const id = addLigacao(scene.id, de, para);
     if (!id) return;
 
     quadro.selecionarLigacao(id);
@@ -2419,7 +2398,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           cor: corForma,
           espessura: espessuraForma,
           fundo: fundoForma,
-          ...jeitoDaForma("poligono"),
         }),
       ]);
       // Larga a ferramenta, como as outras formas: a regra do Excalidraw, e a
@@ -2789,7 +2767,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           cor: corForma,
           espessura: espessuraForma,
           fundo: fundoForma,
-          ...jeitoDaForma(tipoDeForma),
           // A linha desce ou sobe conforme o arrasto: é a única coisa que a
           // caixa sozinha não conta. Ver `Forma`.
           ...((fim.x - anchor.x) * (fim.y - anchor.y) < 0

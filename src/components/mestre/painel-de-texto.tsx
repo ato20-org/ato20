@@ -13,7 +13,6 @@ import type { ReactNode } from "react";
 import { Linha, Opcao, Painel } from "@/components/mestre/painel-do-pincel";
 import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { Slider } from "@/components/ui/slider";
-import { usePadraoDoQuadro } from "@/lib/configuracoes/quadro";
 import { t } from "@/lib/i18n/ferramentas";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -65,7 +64,6 @@ export function PainelDeTexto() {
   const tool = useToolStore((state) => state.tool);
   const textoNovo = useToolStore((state) => state.textoNovo);
   const setTextoNovo = useToolStore((state) => state.setTextoNovo);
-  const { aMao: maoDaCampanha } = usePadraoDoQuadro();
 
   const scene = useSceneStore(selectEditingScene);
   const updateTextos = useSceneStore((state) => state.updateTextos);
@@ -77,10 +75,10 @@ export function PainelDeTexto() {
   const editando = tool === "select" && selecionados.length > 0;
   if (!scene || (tool !== "texto" && !editando)) return null;
 
-  // O próximo texto como se fosse um: a família ausente é a da campanha.
+  // O próximo texto como se fosse um: a família ausente é a da interface.
   const proximo: Pick<Texto, keyof TextoNovo | "aMao"> = {
     ...textoNovo,
-    familia: textoNovo.familia ?? (maoDaCampanha ? "mao" : "interface"),
+    familia: textoNovo.familia ?? "interface",
   };
   const alvos = editando ? selecionados : [proximo];
 

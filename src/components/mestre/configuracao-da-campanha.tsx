@@ -14,7 +14,6 @@ import {
   Gauge,
   Plus,
   Search,
-  Shapes,
   SlidersHorizontal,
   Sparkles,
   Tv,
@@ -44,7 +43,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
@@ -60,10 +58,6 @@ import {
   definirImagemDaCampanha,
   useImagemDaCampanha,
 } from "@/lib/configuracoes/espectador";
-import {
-  definirPadraoDoQuadro,
-  usePadraoDoQuadro,
-} from "@/lib/configuracoes/quadro";
 import { escoposDe } from "@/lib/configuracoes/valor";
 import {
   TOPICOS_DA_CAMPANHA,
@@ -97,7 +91,6 @@ const MAXIMO_INICIAL = 10;
 
 /** O ícone de cada tópico, na barra. Os textos moram em `TOPICOS_DA_CAMPANHA`. */
 const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
-  quadro: Shapes,
   medidores: Gauge,
   efeitos: Sparkles,
   espectador: Tv,
@@ -128,7 +121,7 @@ const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
  * por campanha, então moram aqui; a janela de Retratos fica com o elenco.
  */
 export function ConfiguracaoDaCampanhaBody() {
-  const [aberto, setAberto] = useState<TopicoDaCampanha>("quadro");
+  const [aberto, setAberto] = useState<TopicoDaCampanha>("medidores");
   const [busca, setBusca] = useState("");
 
   // No alto, e não dentro de cada tópico: a busca precisa dos nomes do que foi
@@ -182,7 +175,7 @@ export function ConfiguracaoDaCampanhaBody() {
   ]);
 
   // O tópico aberto pode sumir -- o plugin do único ajuste foi desligado.
-  const atual = topicos.includes(aberto) ? aberto : "quadro";
+  const atual = topicos.includes(aberto) ? aberto : "medidores";
   const mostrados = buscando ? topicos : [atual];
 
   function abrir(chave: TopicoDaCampanha) {
@@ -296,8 +289,6 @@ function Topico({
   medidores: ModelosDaCampanha;
 }) {
   switch (chave) {
-    case "quadro":
-      return <PadraoDoQuadro />;
     case "medidores":
       return <MedidoresDaCampanha {...medidores} />;
     case "efeitos":
@@ -322,45 +313,11 @@ function Topico({
 }
 
 /**
- * O jeito com que os elementos NOVOS do quadro nascem nesta campanha.
- *
- * Controles desenhados à mão para os dois padrões, como o zoom nas
- * Configurações gerais: a lista gerada de Ajustes também os mostra, mas é aqui
- * que o mestre vem procurar. A frase de baixo é a que responde "e o que já
- * está no quadro?", que é a primeira pergunta de quem liga.
- */
-function PadraoDoQuadro() {
-  const { arredondado, aMao } = usePadraoDoQuadro();
-
-  return (
-    <Secao
-      titulo={t.configuracao.quadro}
-      descricao={t.configuracao.quadroDescricao}
-    >
-      <ul className="divide-y">
-        <LinhaDePadrao
-          titulo={t.configuracao.cantosArredondados}
-          descricao={t.configuracao.cantosArredondadosDescricao}
-          ligada={arredondado}
-          onMudar={(valor) => definirPadraoDoQuadro({ arredondado: valor })}
-        />
-        <LinhaDePadrao
-          titulo={t.configuracao.tracoAMao}
-          descricao={t.configuracao.tracoAMaoDescricao}
-          ligada={aMao}
-          onMudar={(valor) => definirPadraoDoQuadro({ aMao: valor })}
-        />
-      </ul>
-    </Secao>
-  );
-}
-
-/**
  * O ajuste de imagem da campanha na janela do espectador.
  *
- * Réguas à mão, como o padrão do quadro: a lista gerada de Ajustes também
- * mostra os quatro números, mas é aqui que o mestre vem procurar, e é aqui que
- * fica o atalho para a Janela Mesa, a prévia. Ver `lib/imagem-do-espectador`.
+ * Réguas desenhadas à mão: a lista gerada de Ajustes também mostra os quatro
+ * números, mas é aqui que o mestre vem procurar, e é aqui que fica o atalho
+ * para a Janela Mesa, a prévia. Ver `lib/imagem-do-espectador`.
  */
 function ImagemDaCampanha() {
   const imagem = useImagemDaCampanha();
@@ -372,33 +329,6 @@ function ImagemDaCampanha() {
     >
       <ReguasDaImagem valor={imagem} onChange={definirImagemDaCampanha} />
     </Secao>
-  );
-}
-
-/** Uma chave com o que ela faz ao lado, como as das Configurações gerais. */
-function LinhaDePadrao({
-  titulo,
-  descricao,
-  ligada,
-  onMudar,
-}: {
-  titulo: string;
-  descricao: string;
-  ligada: boolean;
-  onMudar: (ligada: boolean) => void;
-}) {
-  return (
-    <li>
-      <label className="flex items-start gap-3 py-2">
-        <Switch checked={ligada} onCheckedChange={onMudar} aria-label={titulo} />
-        <span className="min-w-0">
-          <span className="block text-sm">{titulo}</span>
-          <span className="text-muted-foreground block text-[11px] leading-snug">
-            {descricao}
-          </span>
-        </span>
-      </label>
-    </li>
   );
 }
 

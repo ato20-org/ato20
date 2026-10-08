@@ -928,8 +928,7 @@ export type Texto = {
   italico?: boolean;
   sublinhado?: boolean;
   /**
-   * Letra de mão, a do postit (Kalam). Ausente = a letra da interface. O mesmo
-   * `aMao` da forma e da seta: é o traço à mão da campanha chegando ao texto.
+   * Letra de mão, a do postit (Kalam). Ausente = a letra da interface.
    *
    * Continua gravado junto da `familia`, e é ele que diz "mão" no texto antigo:
    * ver `familiaDoTexto`.
@@ -1143,24 +1142,6 @@ export type Forma = {
   opacidadeDoTraco?: number;
   opacidadeDoFundo?: number;
   /**
-   * Cantos arredondados. Só vale no retângulo e no polígono, os dois que têm
-   * canto; elipse e linha ignoram.
-   *
-   * Um estado e não um raio: o raio sai do tamanho da forma, ver
-   * `raioDoCanto`. Ausente = reto, e é o padrão -- a forma gravada antes disto
-   * continua exatamente como foi desenhada, sem migração.
-   */
-  arredondado?: true;
-  /**
-   * Traço tremido, como no Excalidraw. Ausente = o traço limpo.
-   *
-   * Como o canto: um estado que o elemento guarda, com o padrão de nascimento
-   * vindo da campanha (ver `padraoDoQuadro`). A tremida sai do id da forma, e
-   * por isso é a mesma no Mestre e na TV sem nada novo viajar -- ver
-   * `rabiscoDaForma`.
-   */
-  aMao?: true;
-  /**
    * Só a linha: ela corre do canto superior esquerdo ao inferior direito
    * (ausente) ou do inferior esquerdo ao superior direito (`"secundaria"`).
    */
@@ -1206,8 +1187,6 @@ export function semIdDaForma(forma: Forma): NewForma {
     fundo: forma.fundo,
     opacidadeDoTraco: forma.opacidadeDoTraco,
     opacidadeDoFundo: forma.opacidadeDoFundo,
-    arredondado: forma.arredondado,
-    aMao: forma.aMao,
     diagonal: forma.diagonal,
     // Sem eles o polígono colado não tinha vértice nenhum: a cópia chegava como
     // uma caixa vazia, que o mestre via como "o Ctrl+C não pegou".
@@ -1387,11 +1366,6 @@ export type Ligacao = {
    * numa seta de 100. A fração dobra o mesmo tanto nas duas.
    */
   curva?: number;
-  /**
-   * Traço tremido, como a forma à mão. Ausente = a curva limpa. A tremida sai
-   * do id da seta, igual nos dois lados da mesa: ver `rabiscoDoCaminho`.
-   */
-  aMao?: true;
 };
 
 /**
