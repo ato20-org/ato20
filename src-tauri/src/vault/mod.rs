@@ -1,6 +1,7 @@
 pub mod animacao;
 pub mod assets;
 pub mod atomic;
+pub mod atributos;
 pub mod board;
 pub mod characters;
 pub mod condicoes;

@@ -119,6 +119,7 @@ import type {
 } from "@/types/character";
 import { doJogador } from "@/types/character";
 import { AparenciasPersonagem } from "@/components/mestre/aparencias-personagem";
+import { AtributosPersonagem } from "@/components/mestre/atributos-personagem";
 import { CondicoesPersonagem } from "@/components/mestre/condicoes-personagem";
 import { MedidoresPersonagem } from "@/components/mestre/medidores-personagem";
 
@@ -375,6 +376,11 @@ function Ficha({
                   virava três letras. Abaixo de 640, uma coluna. */}
               <div className="grid gap-3 @[640px]/ficha:grid-cols-2">
                 <div className="min-w-0 space-y-3">
+                  <AtributosPersonagem
+                    personagem={personagem}
+                    onChanged={onChanged}
+                  />
+
                   <MedidoresPersonagem
                     personagem={personagem}
                     onChanged={onChanged}
