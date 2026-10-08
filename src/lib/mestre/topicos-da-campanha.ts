@@ -26,6 +26,12 @@ export const TOPICOS_DA_CAMPANHA = [
     palavras: t.topicos.medidores.palavras,
   },
   {
+    chave: "atributos",
+    titulo: t.topicos.atributos.titulo,
+    descricao: t.topicos.atributos.descricao,
+    palavras: t.topicos.atributos.palavras,
+  },
+  {
     chave: "efeitos",
     titulo: t.topicos.efeitos.titulo,
     descricao: t.topicos.efeitos.descricao,

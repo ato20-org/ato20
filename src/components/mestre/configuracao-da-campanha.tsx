@@ -12,6 +12,7 @@ import {
 } from "react";
 import {
   Gauge,
+  Hash,
   Plus,
   Search,
   Shapes,
@@ -26,6 +27,11 @@ import {
   useEfeitosEmAreaDosPlugins,
 } from "@/components/mestre/efeito-da-area";
 import { TelaDaCondicao } from "@/components/mestre/efeitos-da-campanha";
+import {
+  AtributosDaCampanha,
+  useAtributosDaCampanha,
+  type AtributosDaCampanhaLidos,
+} from "@/components/mestre/atributos-da-campanha";
 import { EfeitosEmAreaDaCampanha } from "@/components/mestre/efeitos-em-area-da-campanha";
 import { toast } from "sonner";
 
@@ -99,6 +105,7 @@ const MAXIMO_INICIAL = 10;
 const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
   quadro: Shapes,
   medidores: Gauge,
+  atributos: Hash,
   efeitos: Sparkles,
   espectador: Tv,
   ajustes: SlidersHorizontal,
@@ -135,6 +142,7 @@ export function ConfiguracaoDaCampanhaBody() {
   // criado -- "Envenenado" acha Condições --, e o tópico fechado não está
   // montado para contar.
   const medidores = useModelosDaCampanha();
+  const atributos = useAtributosDaCampanha();
   const { modelos: condicoes } = useCondicoesDaCampanha();
   const efeitosEmArea = useEfeitosEmAreaDaCampanha();
   const efeitosEmAreaDosPlugins = useEfeitosEmAreaDosPlugins();
@@ -153,6 +161,7 @@ export function ConfiguracaoDaCampanhaBody() {
   const topicos = useMemo(() => {
     const achados = topicosAchados(busca, {
       medidores: (medidores.modelos ?? []).map((modelo) => modelo.nome),
+      atributos: (atributos.modelos ?? []).map((modelo) => modelo.sigla),
       efeitos: [
         ...(condicoes ?? []).map((condicao) => condicao.nome),
         ...efeitosEmArea.map((efeito) => efeito.titulo),
@@ -175,6 +184,7 @@ export function ConfiguracaoDaCampanhaBody() {
   }, [
     busca,
     medidores.modelos,
+    atributos.modelos,
     condicoes,
     efeitosEmArea,
     efeitosEmAreaDosPlugins,
@@ -274,6 +284,7 @@ export function ConfiguracaoDaCampanhaBody() {
                     chave={chave}
                     busca={busca}
                     medidores={medidores}
+                    atributos={atributos}
                   />
                 </div>
               ))
@@ -290,16 +301,20 @@ function Topico({
   chave,
   busca,
   medidores,
+  atributos,
 }: {
   chave: TopicoDaCampanha;
   busca: string;
   medidores: ModelosDaCampanha;
+  atributos: AtributosDaCampanhaLidos;
 }) {
   switch (chave) {
     case "quadro":
       return <PadraoDoQuadro />;
     case "medidores":
       return <MedidoresDaCampanha {...medidores} />;
+    case "atributos":
+      return <AtributosDaCampanha {...atributos} />;
     case "efeitos":
       return <EfeitosDaCampanha />;
     case "espectador":
