@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import { MIN_ITEM_SIZE } from "@/lib/geometry/transform";
+import { MIN_SCENE_ITEM_SIZE } from "@/lib/geometry/transform";
 
 /**
  * A imagem no ar: o que um painel já soltou da mão e o destino ainda não
@@ -106,7 +106,10 @@ export type DestinoDoArrasto =
       pastaId: string | undefined;
     }
   // O editor de uma nota: o que cai vira menção no texto.
-  | { tipo: "nota" };
+  | { tipo: "nota" }
+  // A área de split: abre a nota ao lado do mapa, ou como aba de um painel.
+  // Ver `FileiraDePaineis`.
+  | { tipo: "split"; painel: string; zona: "esquerda" | "direita" | "centro" };
 
 export type ArrastoDeToken = {
   fonte: FonteDoArrasto;
@@ -156,6 +159,8 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
       return `cenas:${destino.lista}`;
     case "nota":
       return "nota";
+    case "split":
+      return "split";
   }
 }
 
@@ -195,6 +200,11 @@ export function aceita(
       );
     case "pasta":
       return fonte.tipo === "acervo";
+    case "split":
+      // A nota é o que se divide ao lado do mapa. O quadro também, mas ele
+      // chega pelo gesto de reordenar a lista -- ver `naMao` em
+      // `usePaineisStore`.
+      return fonte.tipo === "nota";
     case "pasta-arquivos":
       return fonte.tipo === "nota";
     case "pasta-cenas":
@@ -278,7 +288,7 @@ const FATOR_MAX = 4;
  * respeita -- assim o que a roda deixa soltar é o que a alça deixa encolher.
  */
 function fatorMinimo(arrasto: Pick<ArrastoDeToken, "largura" | "altura">): number {
-  return MIN_ITEM_SIZE / Math.min(arrasto.largura, arrasto.altura);
+  return MIN_SCENE_ITEM_SIZE / Math.min(arrasto.largura, arrasto.altura);
 }
 
 /** O tamanho que o token terá se for solto agora, em unidades de cena. */

@@ -7,7 +7,10 @@ import { myCharacters } from "@/lib/player/characters";
 /** De quanto em quanto tempo o celular pergunta de novo. Ver abaixo. */
 const RELEITURA_MS = 15_000;
 
-/** Nenhum personagem, e sempre o MESMO conjunto: ver `usePersonagensDeJogador`. */
+/**
+ * Nenhum personagem, e sempre o MESMO conjunto: um `Set` novo a cada falha faria
+ * quem depende dele recalcular à toa.
+ */
 const NENHUM: ReadonlySet<string> = new Set();
 
 /**
@@ -16,7 +19,7 @@ const NENHUM: ReadonlySet<string> = new Set();
  * Relê por conta própria, e é o ponto. Entregar o personagem é gesto do mestre
  * noutra janela, e o celular não fica sabendo: o `/sala/live` é anônimo, e pôr
  * ali quem joga com quem contaria à mesa quais tokens são PNJ -- que é
- * justamente o que o contorno do mestre não publica. Então o celular pergunta:
+ * justamente o que a mesa não deve saber. Então o celular pergunta:
  *
  * - quando `chave` muda, que é quem chama dizendo "os personagens no mapa
  *   mudaram" -- o mestre soltou um token novo, ou trocou de cena;

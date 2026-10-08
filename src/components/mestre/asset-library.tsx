@@ -68,6 +68,7 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
+import { t } from "@/lib/i18n/arquivos";
 import { normaliza } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import type { AssetFolder, AssetMeta, Scene } from "@/types/scene";
@@ -379,7 +380,7 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
             {creatingIn === folder.id ? (
               <li>
                 <FolderNameInput
-                  placeholder="Nome da subpasta"
+                  placeholder={t.assetLibrary.nomeDaSubpasta}
                   onCommit={(name) => {
                     void create(name, folder.id);
                     setCreatingIn(null);
@@ -414,7 +415,7 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
       <div className="flex flex-col gap-2 p-2">
         {creating ? (
           <FolderNameInput
-            placeholder="Nome da pasta"
+            placeholder={t.geral.nomeDaPasta}
             onCommit={(name) => {
               const levar = creatingComSelecao ? selecionadosRef.current : [];
               void create(name).then((pasta) => {
@@ -435,8 +436,8 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
             <CampoDeBusca
               valor={busca}
               onMudar={setBusca}
-              placeholder="Buscar arquivo ou pasta"
-              rotulo="Buscar na biblioteca"
+              placeholder={t.assetLibrary.buscarPlaceholder}
+              rotulo={t.assetLibrary.buscarRotulo}
             />
             <Tooltip>
               <TooltipTrigger
@@ -445,14 +446,14 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
                     variant="outline"
                     size="icon"
                     className="shrink-0 rounded-full"
-                    aria-label="Nova pasta"
+                    aria-label={t.geral.novaPasta}
                     onClick={() => setCreating(true)}
                   >
                     <FolderPlus />
                   </Button>
                 }
               />
-              <TooltipContent>Nova pasta</TooltipContent>
+              <TooltipContent>{t.geral.novaPasta}</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -463,7 +464,9 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
                     size="icon"
                     className="shrink-0 rounded-full"
                     aria-label={
-                      importando ? "Importando arquivos" : "Importar arquivos"
+                      importando
+                        ? t.assetLibrary.importandoArquivos
+                        : t.assetLibrary.importarArquivos
                     }
                     disabled={importando}
                     onClick={() => void importar()}
@@ -477,7 +480,7 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
                 }
               />
               <TooltipContent>
-                {importando ? "Importando…" : "Importar arquivos"}
+                {importando ? t.geral.importando : t.assetLibrary.importarArquivos}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -508,7 +511,7 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
             <ContextMenuContent>
               <ContextMenuItem onClick={() => setCreating(true)}>
                 <FolderPlus />
-                Nova pasta
+                {t.geral.novaPasta}
               </ContextMenuItem>
               {selecionados.length > 0 ? (
                 <ContextMenuItem
@@ -518,9 +521,7 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
                   }}
                 >
                   <FolderPlus />
-                  {selecionados.length === 1
-                    ? "Nova pasta com a selecionada"
-                    : `Nova pasta com as ${selecionados.length} selecionadas`}
+                  {t.assetLibrary.novaPastaComSelecao(selecionados.length)}
                 </ContextMenuItem>
               ) : null}
               <ContextMenuItem
@@ -528,7 +529,7 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
                 onClick={() => void importar()}
               >
                 <Upload />
-                Importar arquivos
+                {t.assetLibrary.importarArquivos}
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
@@ -537,11 +538,11 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
             <div className="relative z-10 space-y-2 p-2">
               {achados.length === 0 ? (
                 <p className="text-muted-foreground px-2 py-2 text-xs">
-                  Nada com “{busca.trim()}”.
+                  {t.geral.nadaCom(busca.trim())}
                 </p>
               ) : null}
               {gruposDeAchados.map(([caminho, grupo]) => (
-                <section key={caminho} aria-label={caminho || "Fora de pasta"}>
+                <section key={caminho} aria-label={caminho || t.assetLibrary.foraDePasta}>
                   {caminho ? (
                     <h4 className="text-muted-foreground flex items-center gap-1 px-1 pb-1 text-[10px] font-medium">
                       <FolderClosed className="size-3 shrink-0" aria-hidden />
@@ -555,7 +556,7 @@ export function AssetLibrary({ scene }: { scene?: Scene | null }) {
             </div>
           ) : assets.length === 0 && folders.length === 0 ? (
             <PainelVazio conteudo={{ tipo: "imagens" }} className="pointer-events-none absolute inset-0">
-              Importe mapas, tokens e retratos
+              {t.assetLibrary.vazio}
             </PainelVazio>
           ) : (
             <div className="relative z-10 space-y-2 p-2">
@@ -589,11 +590,7 @@ function avisarOsSons(aceitos: AssetMeta[]) {
   const sons = aceitos.filter((asset) => asset.kind !== "image").length;
   if (sons === 0) return;
 
-  toast.info(
-    sons === 1
-      ? "1 som entrou no acervo. Ele está no painel de sons."
-      : `${sons} sons entraram no acervo. Eles estão no painel de sons.`,
-  );
+  toast.info(t.assetLibrary.sonsEntraram(sons));
 }
 
 /**
@@ -828,11 +825,11 @@ function FolderGroup({
         }}
       >
         <FolderPlus />
-        Nova subpasta
+        {t.geral.novaSubpasta}
       </Item>
       <Item onClick={renomear.pedir}>
         <Pencil />
-        Renomear
+        {t.geral.renomear}
       </Item>
 
       {destinos.length > 0 || folder.parentId ? (
@@ -841,13 +838,13 @@ function FolderGroup({
           {folder.parentId ? (
             <Item onClick={() => onMove(undefined)}>
               <FolderClosed />
-              Tirar para a raiz
+              {t.assetLibrary.tirarParaRaiz}
             </Item>
           ) : null}
           {destinos.map((outra) => (
             <Item key={outra.id} onClick={() => onMove(outra.id)}>
               <FolderClosed />
-              <span className="truncate">Mover para {outra.name}</span>
+              <span className="truncate">{t.assetLibrary.moverParaPasta(outra.name)}</span>
             </Item>
           ))}
         </>
@@ -856,7 +853,7 @@ function FolderGroup({
       <Separator />
       <Item variant="destructive" onClick={onDelete}>
         <Trash2 />
-        Apagar pasta
+        {t.assetLibrary.apagarPasta}
       </Item>
     </>
   );
@@ -890,7 +887,9 @@ function FolderGroup({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={open ? `Fechar ${folder.name}` : `Abrir ${folder.name}`}
+            aria-label={
+              open ? t.geral.fecharNome(folder.name) : t.geral.abrirNome(folder.name)
+            }
             aria-expanded={open}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => setOpen(!open)}
@@ -934,7 +933,7 @@ function FolderGroup({
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`Opções de ${folder.name}`}
+                      aria-label={t.geral.opcoesDe(folder.name)}
                       onPointerDown={(event) => event.stopPropagation()}
                       // Escondido até o ponteiro chegar ou o foco entrar: renomear
                       // e apagar pasta são gestos raros, e três pontos em cada
@@ -1000,7 +999,7 @@ function RootDrop({
     >
       {vazio && receiving ? (
         <p className="text-muted-foreground px-1 py-2 text-xs">
-          Solte aqui para tirar da pasta.
+          {t.assetLibrary.solteParaTirar}
         </p>
       ) : null}
       <ul className="space-y-1">{children}</ul>
@@ -1126,7 +1125,7 @@ function AssetRow({
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={`Adicionar ${asset.name} à cena`}
+          aria-label={t.assetLibrary.adicionarACena(asset.name)}
           onClick={onAdd}
         >
           <Plus />
@@ -1146,7 +1145,7 @@ function AssetRow({
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label={`Opções de ${asset.name}`}
+              aria-label={t.geral.opcoesDe(asset.name)}
             >
               <MoreVertical />
             </Button>
@@ -1164,7 +1163,7 @@ function AssetRow({
           {imagem ? (
             <DropdownMenuItem onClick={noAr ? clear : () => transmit(asset.id)}>
               {noAr ? <RadioTower /> : <Radio />}
-              {noAr ? "Tirar da evidência" : "Transmitir para a mesa"}
+              {noAr ? t.assetLibrary.tirarDaEvidencia : t.assetLibrary.transmitirParaMesa}
             </DropdownMenuItem>
           ) : (
             // Arquivo que não é imagem abre por fora, no programa do sistema:
@@ -1174,11 +1173,11 @@ function AssetRow({
               onClick={() =>
                 void assetUrl(asset.id)
                   .then((url) => openUrl(url))
-                  .catch(() => toast.error("Não deu para abrir o arquivo."))
+                  .catch(() => toast.error(t.assetLibrary.naoAbriu))
               }
             >
               <ExternalLink />
-              Abrir
+              {t.geral.abrir}
             </DropdownMenuItem>
           )}
 
@@ -1194,7 +1193,7 @@ function AssetRow({
             onClick={onRemove}
           >
             <Trash2 />
-            {usageCount > 0 ? `Em uso em ${usageCount} cena(s)` : "Remover"}
+            {usageCount > 0 ? t.assetLibrary.emUso(usageCount) : t.geral.remover}
           </DropdownMenuItem>
 
           <ItensDeExtensao

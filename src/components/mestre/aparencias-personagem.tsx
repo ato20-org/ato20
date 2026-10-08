@@ -39,6 +39,8 @@ import {
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/personagens";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import {
   ativarAparencia,
@@ -103,7 +105,7 @@ export function AparenciasPersonagem({
       setNomeNovo("");
       onChanged();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao criar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.criar);
     }
   }
 
@@ -111,7 +113,7 @@ export function AparenciasPersonagem({
     <Button
       variant="ghost"
       size="icon-xs"
-      aria-label="Criar aparência"
+      aria-label={t.aparencias.criar}
       onClick={() => {
         setNomeNovo("");
         setCriando(true);
@@ -124,7 +126,7 @@ export function AparenciasPersonagem({
   return (
     <SecaoFicha
       secao="aparencias"
-      titulo="Aparências"
+      titulo={t.aparencias.titulo}
       contagem={lista.length}
       acao={novo}
     >
@@ -142,16 +144,15 @@ export function AparenciasPersonagem({
 
       <Dialog open={criando} onOpenChange={setCriando}>
         <DialogContent className="sm:max-w-sm">
-          <DialogTitle>Nova aparência</DialogTitle>
+          <DialogTitle>{t.aparencias.nova}</DialogTitle>
           <DialogDescription>
-            Ela começa com a cara que {personagem.nome} tem agora. Troque o
-            retrato e a miniatura nos campos depois de pôr esta no ar.
+            {t.aparencias.novaExplicacao(personagem.nome)}
           </DialogDescription>
 
           <Input
             autoFocus
             value={nomeNovo}
-            placeholder="Ferido, Lobo, Encapuzado…"
+            placeholder={t.aparencias.exemplos}
             onChange={(evento) => setNomeNovo(evento.target.value)}
             onKeyDown={(evento) => {
               if (evento.key === "Enter") void criar();
@@ -160,10 +161,10 @@ export function AparenciasPersonagem({
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => setCriando(false)}>
-              Cancelar
+              {comum.cancelar}
             </Button>
             <Button disabled={!nomeNovo.trim()} onClick={() => void criar()}>
-              Criar
+              {t.geral.criar}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -176,16 +177,14 @@ export function AparenciasPersonagem({
         }}
       >
         <DialogContent className="sm:max-w-sm">
-          <DialogTitle>Apagar {aApagar?.nome}?</DialogTitle>
+          <DialogTitle>{t.aparencias.apagarTitulo(aApagar?.nome ?? "")}</DialogTitle>
           <DialogDescription>
-            As imagens continuam no acervo — some a aparência, não os arquivos.
-            Se ela estiver no ar, {personagem.nome} volta para a primeira da
-            lista.
+            {t.aparencias.apagarExplicacao(personagem.nome)}
           </DialogDescription>
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => setAApagar(null)}>
-              Cancelar
+              {comum.cancelar}
             </Button>
             <Button
               variant="destructive"
@@ -197,7 +196,7 @@ export function AparenciasPersonagem({
                 void apagar(personagem, alvo, onChanged);
               }}
             >
-              Apagar
+              {t.geral.apagar}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -229,7 +228,7 @@ export async function trocarAparencia(
     useSceneStore.getState().aplicarAparencia(personagem.id, trocado.miniatura);
     onChanged();
   } catch (cause) {
-    toast.error(cause instanceof Error ? cause.message : "Falha ao trocar.");
+    toast.error(cause instanceof Error ? cause.message : t.aparencias.falhaAoTrocar);
   }
 }
 
@@ -259,7 +258,7 @@ export function SubmenuDeAparencias({
     <kit.Sub>
       <kit.SubTrigger>
         <Shirt />
-        Aparência
+        {t.aparencias.aparencia}
       </kit.SubTrigger>
       <kit.SubContent>
         {lista.map((aparencia) => {
@@ -302,7 +301,7 @@ async function apagar(
 
     onChanged();
   } catch (cause) {
-    toast.error(cause instanceof Error ? cause.message : "Falha ao apagar.");
+    toast.error(cause instanceof Error ? cause.message : t.geral.falhas.apagar);
   }
 }
 
@@ -343,7 +342,7 @@ function LinhaDeAparencia({
         onChanged,
         (cause: unknown) =>
           toast.error(
-            cause instanceof Error ? cause.message : "Falha ao renomear.",
+            cause instanceof Error ? cause.message : t.geral.falhas.renomear,
           ),
       );
     },
@@ -354,12 +353,12 @@ function LinhaDeAparencia({
     <>
       <kit.Item onClick={() => void ativar()} disabled={noAr}>
         <Check />
-        Pôr no ar
+        {t.geral.porNoAr}
       </kit.Item>
 
       <kit.Item onClick={renomear.pedir}>
         <Pencil />
-        Renomear
+        {t.geral.renomear}
       </kit.Item>
 
       {/* A Padrão não sai: é para onde a ficha volta quando a aparência no ar é
@@ -369,7 +368,7 @@ function LinhaDeAparencia({
           <kit.Separator />
           <kit.Item variant="destructive" onClick={onApagar}>
             <Trash2 />
-            Apagar aparência
+            {t.aparencias.apagarAparencia}
           </kit.Item>
         </>
       )}
@@ -431,7 +430,7 @@ function LinhaDeAparencia({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Ações de ${aparencia.nome}`}
+                aria-label={t.aparencias.acoesDe(aparencia.nome)}
                 className="opacity-0 group-hover/aparencia:opacity-100 group-focus-within/aparencia:opacity-100"
               >
                 <MoreHorizontal />

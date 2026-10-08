@@ -5,8 +5,10 @@ import { RadioTower, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
+import { t } from "@/lib/i18n/mestre";
 import { MINIATURA } from "@/lib/miniatura";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
+import { cn } from "@/lib/utils";
 
 /**
  * O que está em evidência na mesa, visto do lado do mestre.
@@ -26,7 +28,16 @@ import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
  * isto é sobre o que a mesa vê — o mesmo assunto dos controles que moram no
  * palco.
  */
-export function SpotlightChip() {
+export function SpotlightChip({
+  abaixoDaBarra = false,
+}: {
+  /**
+   * Dentro da coluna do topo, logo abaixo da barra de ferramentas: aí a
+   * coluna o posiciona. Sem a barra -- nota aberta, palco de esguelha, sem
+   * cena --, ele se posiciona sozinho no topo, como sempre.
+   */
+  abaixoDaBarra?: boolean;
+} = {}) {
   const spotlight = useSpotlightStore((state) => state.spotlight);
   const clear = useSpotlightStore((state) => state.clear);
 
@@ -45,10 +56,15 @@ export function SpotlightChip() {
     origem ?? assets.find((asset) => asset.id === spotlight.assetId)?.name;
 
   return (
-    <div className="bg-background/90 pointer-events-auto absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-lg border py-1 pr-1 pl-2 shadow-sm backdrop-blur">
+    <div
+      className={cn(
+        "bg-background/90 pointer-events-auto flex items-center gap-2 rounded-lg border py-1 pr-1 pl-2 shadow-sm backdrop-blur",
+        !abaixoDaBarra && "absolute -top-2 left-1/2 z-10 -translate-x-1/2",
+      )}
+    >
       <RadioTower className="size-3.5 shrink-0 text-amber-500" aria-hidden />
 
-      <span className="text-[11px] font-medium">Em evidência na mesa</span>
+      <span className="text-[11px] font-medium">{t.palco.emEvidencia}</span>
 
       {/* A miniatura responde "qual imagem?" sem obrigar a abrir o ponto de
           onde ela saiu — que é a pergunta de quem transmitiu três coisas na
@@ -67,13 +83,13 @@ export function SpotlightChip() {
       </span>
 
       <span className="text-muted-foreground max-w-40 truncate text-[11px]">
-        {nome ?? "imagem"}
+        {nome ?? t.palco.imagem}
       </span>
 
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Tirar da evidência"
+        aria-label={t.palco.tirarDaEvidencia}
         onClick={clear}
       >
         <X />

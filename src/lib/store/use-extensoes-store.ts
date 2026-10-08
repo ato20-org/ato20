@@ -15,6 +15,8 @@ import { descarregar, garantirCarregada } from "@/lib/extensoes/carregar";
 import { aplicarTemas } from "@/lib/extensoes/tema";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/mestre";
 
 /**
  * As extensões instaladas nesta máquina.
@@ -50,7 +52,7 @@ type ExtensoesStore = {
 function mensagem(causa: unknown): string {
   if (causa instanceof VaultError) return causa.message;
 
-  return "Falha ao falar com o aplicativo.";
+  return comum.erros.semAplicativo;
 }
 
 export const useExtensoesStore = create<ExtensoesStore>((set, get) => ({
@@ -80,7 +82,7 @@ export const useExtensoesStore = create<ExtensoesStore>((set, get) => ({
     set({ ocupada: true, erro: null });
 
     try {
-      const nova = await importarExtensao();
+      const nova = await importarExtensao(t.dialogos.escolherExtensao);
 
       // `null` é o diálogo fechado sem escolher. Cancelar não é falha, e
       // recarregar a lista por causa dele seria trabalho por nada.
@@ -189,6 +191,7 @@ function sincronizarConfiguracoes(extensoes: Extensao[]): void {
         padrao: c.padrao,
         escopo: c.escopo,
         opcoes: c.opcoes.length > 0 ? c.opcoes : undefined,
+        rotulos: c.rotulos,
         minimo: c.minimo ?? undefined,
         maximo: c.maximo ?? undefined,
         dono: extensao.id,

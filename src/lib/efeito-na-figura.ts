@@ -5,7 +5,7 @@ import { carregarImagem } from "@/lib/imagem";
 /**
  * Os efeitos de condição que precisam da SILHUETA da figura, assados uma vez.
  *
- * Três dos cinco efeitos mexem na cor da figura -- a aura em volta dela, a
+ * Três camadas de efeito mexem na cor da figura -- o halo em volta dela, a
  * tinta por cima e o cinza --, e os três se escrevem em uma linha de CSS:
  * `drop-shadow`, `mask-image` e `grayscale`. Nenhum dos três entra, e a razão
  * é a do contorno do item, que já foi medida neste palco: filtro custa passes
@@ -49,9 +49,13 @@ export type Assado = {
 
 /** O que a pele leva. Os dois juntos são o morto envenenado. */
 export type PedidoDePele = {
-  apagado: boolean;
+  cinza: boolean;
   /** A cor da tinta. Ausente = sem tinta. */
   tinta?: string;
+  /** Quanto a tinta cobre, de 0 a 1. Ver `FiguraDoEfeito.tinta`. */
+  forca?: number;
+  /** A textura de dentro: a rachadura, a escama. Ver `InternoDoEfeito`. */
+  textura?: { url: string; forca: number };
 };
 
 /**
@@ -62,11 +66,7 @@ export type PedidoDePele = {
  */
 const LADO_MAX = 768;
 
-/**
- * Quanto a tinta cobre a figura. Metade: a figura continua sendo quem é, e a
- * cor diz o que aconteceu com ela. Cheia, o goblin envenenado virava um vulto
- * verde.
- */
+/** Quanto a tinta cobre, quando o efeito não disse. A do "Tingido" de fábrica. */
 const FORCA_DA_TINTA = 0.5;
 
 /**
@@ -120,10 +120,13 @@ export function assarPele(
   url: string,
   pedido: PedidoDePele,
 ): Promise<Assado | null> {
-  if (!pedido.apagado && !pedido.tinta) return Promise.resolve(null);
+  if (!pedido.cinza && !pedido.tinta && !pedido.textura) return Promise.resolve(null);
+
+  const forca = forcaDaTinta(pedido.forca);
+  const textura = pedido.textura;
 
   return guardado(
-    `${url}|pele|${pedido.apagado ? "cinza" : ""}|${pedido.tinta ?? ""}`,
+    `${url}|pele|${pedido.cinza ? "cinza" : ""}|${pedido.tinta ?? ""}|${forca}|${textura ? `${textura.url}@${textura.forca}` : ""}`,
     async () => {
       const tela = await telaDaFigura(url);
       if (!tela) return null;
@@ -131,21 +134,44 @@ export function assarPele(
       const ctx = tela.getContext("2d");
       if (!ctx) return null;
 
-      if (pedido.apagado) cinza(ctx, tela.width, tela.height);
+      if (pedido.cinza) cinza(ctx, tela.width, tela.height);
 
       // `source-atop`: a cor só cai onde já há figura, com o alfa DELA -- a
       // borda suave do arquivo continua suave, e o fundo transparente continua
       // transparente.
       if (pedido.tinta) {
         ctx.globalCompositeOperation = "source-atop";
-        ctx.globalAlpha = FORCA_DA_TINTA;
+        ctx.globalAlpha = forca;
         ctx.fillStyle = pedido.tinta;
         ctx.fillRect(0, 0, tela.width, tela.height);
+      }
+
+      // A textura por último, por cima da cor: a rachadura corta o veneno, e
+      // não o contrário. `source-atop` pela razão da tinta, e esticada na
+      // figura inteira -- o pack a desenha para cobrir um token. Textura que
+      // não carrega não derruba a pele: a figura sai com o resto.
+      if (textura) {
+        const imagem = await carregarImagem(textura.url).catch(() => null);
+        if (imagem) {
+          ctx.globalCompositeOperation = "source-atop";
+          ctx.globalAlpha = textura.forca;
+          ctx.drawImage(imagem, 0, 0, tela.width, tela.height);
+        }
       }
 
       return { desenho: tela.toDataURL("image/png"), margemX: 0, margemY: 0 };
     },
   );
+}
+
+/**
+ * A força pedida, presa entre 0 e 1. Ausente ou torta -- o JSON de um pack
+ * escrito à mão -- vira a de fábrica.
+ */
+export function forcaDaTinta(pedida: number | undefined): number {
+  if (typeof pedida !== "number" || !Number.isFinite(pedida)) return FORCA_DA_TINTA;
+
+  return Math.min(1, Math.max(0, pedida));
 }
 
 /**

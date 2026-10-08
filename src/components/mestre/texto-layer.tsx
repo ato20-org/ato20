@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef } from "react";
-import { Signature, Type } from "lucide-react";
 
 import {
   giroDoTexto,
@@ -12,6 +11,7 @@ import { useSceneScale } from "@/components/playground/scene-stage";
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { boundsToBox } from "@/lib/geometry/bounds";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/ferramentas";
 import { TAMANHO_MINIMO_DO_TEXTO } from "@/lib/mestre/grupo-de-textos";
 import { ALTURA_DA_LINHA, caixaRetaDoTexto } from "@/lib/mestre/ligacoes";
 import { medidaDoTexto } from "@/lib/mestre/medida-do-texto";
@@ -26,7 +26,6 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import { temAnotacao, type Scene, type Texto } from "@/types/scene";
-import { Chave } from "@/components/mestre/chave-de-estilo";
 
 /** Quanto a letra se apaga enquanto a mesa não a vê. A mesma da forma. */
 const APAGADA = 0.45;
@@ -287,8 +286,8 @@ const TextoSolto = memo(function TextoSolto({
             ref={campo}
             className="text-foreground block resize-none overflow-hidden bg-transparent whitespace-pre outline-none"
             style={tipografia}
-            aria-label="Texto solto"
-            placeholder="Escreva…"
+            aria-label={t.texto.rotulo}
+            placeholder={t.texto.placeholder}
             rows={linhas.length}
             // Nunca menor que o placeholder: vazio, a caixa de uma coluna
             // cortaria a dica e o texto pareceria não ter nascido.
@@ -328,41 +327,9 @@ const TextoSolto = memo(function TextoSolto({
           }}
           handles={CORNER_HANDLES}
           keepAspect
-          // A caixa de opções da letra, na mesma fileira em que a imagem mostra
-          // espelhar e excluir: é onde a mão já procura depois de clicar.
-          estilo={{
-            negrito: texto.negrito,
-            italico: texto.italico,
-            sublinhado: texto.sublinhado,
-            onChange: (patch) => updateTexto(sceneId, texto.id, patch),
-          }}
-          paleta={{
-            titulo: "Letra",
-            cor: texto.cor,
-            fundo: texto.fundo,
-            onChange: ({ cor, fundo }) =>
-              updateTexto(sceneId, texto.id, {
-                // `null` é "de volta ao padrão", e no modelo o padrão é o campo
-                // ausente. Ver `Texto`.
-                ...(cor !== undefined ? { cor: cor ?? undefined } : {}),
-                ...(fundo !== undefined ? { fundo: fundo ?? undefined } : {}),
-              }),
-            // A letra de mão do postit, para este texto. O padrão com que ele
-            // nasceu é o da campanha; aqui é a exceção. Ver `padraoDoQuadro`.
-            extras: (
-              <Chave
-                titulo="Letra de mão"
-                ligada={!!texto.aMao}
-                desligada={{ rotulo: "Letra da interface", Icone: Type }}
-                ligadaComo={{ rotulo: "Letra de mão", Icone: Signature }}
-                onMudar={(valor) =>
-                  updateTexto(sceneId, texto.id, {
-                    aMao: valor ? true : undefined,
-                  })
-                }
-              />
-            ),
-          }}
+          // A cor, o fundo, o estilo e a letra moram no painel de texto, no
+          // canto -- ver `PainelDeTexto`. O gizmo fica com o que é dele: mover,
+          // girar, escalar, o olho da mesa, o cadeado e a lixeira.
           /**
            * Pelo GESTO, e não pelo board: aumentar a letra arrastando o canto
            * gravava a cena a cada quadro, e cada gravação é um commit inteiro

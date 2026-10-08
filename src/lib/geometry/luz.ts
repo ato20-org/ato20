@@ -1,4 +1,5 @@
 import { normalizarHex } from "@/lib/cor";
+import type { LuzResolvida } from "@/lib/efeitos";
 import {
   paredeDeVerdade,
   segmentosDaParede,
@@ -45,18 +46,38 @@ export type Ponto = { x: number; y: number };
 export type FonteDeLuz = {
   /** O da luz solta, ou o do item que a carrega. */
   id: string;
+  /**
+   * O item que carrega a luz, quando não é o `id`: a luz do EFEITO de uma
+   * condição tem id próprio -- o token pode ter a lanterna e o fogo ao mesmo
+   * tempo --, mas continua sendo do token. É por ele que o token não faz
+   * sombra na própria luz, e que a luz anda junto do dedo. Ver `donoDaFonte`.
+   */
+  dono?: string;
   x: number;
   y: number;
   raio: number;
   /** Até onde a luz é forte, já preso entre 0 e o `raio`. */
   raioIntenso: number;
   cor: string;
-  /** De 0 a 1, já preso. A lanterna de um token acende sempre inteira. */
+  /** De 0 a 1, já preso. */
   intensidade: number;
   /** Ausente = círculo. A abertura já vem presa. Ver `coneDe`. */
   cone?: ConeDaLuz;
   /** Ausente = fixa. Ver `fatorDoEfeito`. */
   efeito?: EfeitoDaLuz;
+  /**
+   * Os tokens não tapam esta luz: só as paredes. A do chão em chamas -- ver
+   * `fontesDaArea`. Fora da chave dos oclusores também: um token andando
+   * perto dela não refaz luz nenhuma.
+   */
+  semTokens?: true;
+  /**
+   * A luz tem a FORMA de uma área, e não um centro: o contorno do chão em
+   * chamas, em cena. Dentro dele a luz é inteira, e cai para fora em `raio`.
+   * O `x, y` continua sendo o meio -- é dele que as paredes tapam, numa
+   * aproximação. Ver `fontesDaArea`.
+   */
+  forma?: ReadonlyArray<Ponto>;
 };
 
 /**
@@ -156,6 +177,24 @@ export function anguloDoFacho(
   return (((angulo + giro) % 360) + 360) % 360;
 }
 
+/**
+ * O inverso de `anguloDoFacho`: o ângulo NA FIGURA que põe o facho apontando
+ * para `noMapa`. Desfaz na ordem contrária -- o giro primeiro, depois os
+ * espelhos, que desfazem a si mesmos.
+ */
+export function anguloNaFigura(
+  item: Pick<CanvasItem, "rotation" | "flipX" | "flipY">,
+  noMapa: number,
+): number {
+  const giro = Number.isFinite(item.rotation) ? item.rotation : 0;
+
+  let angulo = noMapa - giro;
+  if (item.flipY) angulo = -angulo;
+  if (item.flipX) angulo = 180 - angulo;
+
+  return ((angulo % 360) + 360) % 360;
+}
+
 /** O efeito, se for um que existe. O de uma versão futura acende fixo. */
 export function efeitoDe(valor: unknown): EfeitoDaLuz | undefined {
   return (EFEITOS_DA_LUZ as readonly unknown[]).includes(valor)
@@ -181,8 +220,14 @@ export function efeitoDe(valor: unknown): EfeitoDaLuz | undefined {
 export function fontesDaCena(
   luzes: ReadonlyArray<Luz> | undefined,
   items: ReadonlyArray<CanvasItem>,
+  luzDoEfeito?: (item: CanvasItem) => LuzResolvida | undefined,
+  /**
+   * As que já chegam prontas: as das áreas de efeito, que não são item nem luz
+   * cravada. Ver `fontesDaArea`.
+   */
+  prontas?: ReadonlyArray<FonteDeLuz>,
 ): FonteDeLuz[] {
-  const fontes: FonteDeLuz[] = [];
+  const fontes: FonteDeLuz[] = [...(prontas ?? [])];
 
   for (const luz of luzes ?? []) {
     if (luz.desligada) continue;
@@ -216,7 +261,7 @@ export function fontesDaCena(
       raio: item.luz.raio,
       raioIntenso: raioIntensoDe(item.luz.raio, undefined),
       cor: item.luz.cor,
-      intensidade: 1,
+      intensidade: limitarIntensidade(item.luz.intensidade),
       ...(facho
         ? {
             cone: {
@@ -229,7 +274,51 @@ export function fontesDaCena(
     });
   }
 
+  // A luz das condições: o fogo que o goblin em chamas espalha. Do centro do
+  // item, como a lanterna, e do tamanho dele -- o raio do efeito é em vezes a
+  // figura --, até o teto. Ver `luzDosEfeitos` e `RAIO_MAXIMO_DO_EFEITO`.
+  if (luzDoEfeito) {
+    for (const item of items) {
+      const luz = luzDoEfeito(item);
+      if (!luz) continue;
+
+      const raio = Math.min(
+        RAIO_MAXIMO_DO_EFEITO,
+        luz.raio * Math.max(item.width, item.height),
+      );
+      fontes.push({
+        id: `${item.id}#efeito`,
+        dono: item.id,
+        x: item.x + item.width / 2,
+        y: item.y + item.height / 2,
+        raio,
+        raioIntenso: raioIntensoDe(raio, undefined),
+        cor: luz.cor,
+        intensidade: limitarIntensidade(luz.intensidade),
+        ...(luz.efeito ? { efeito: luz.efeito } : {}),
+      });
+    }
+  }
+
   return fontes.filter(fonteValida);
+}
+
+/**
+ * Até onde a luz de um efeito alcança, em unidade de cena: o alcance com que
+ * a lanterna do token acende (`ALCANCE_DA_LANTERNA_PADRAO`).
+ *
+ * Teto por MEDIDA, e não por gosto. O raio do efeito é em vezes a figura, e o
+ * custo de uma luz que anda cresce com a área dela. Na bancada, cinco figuras
+ * grandes em chamas -- raio de 450 a 800 -- puseram a mesa a 10 fps; com teto
+ * de 420, 14; cinco lanternas de 260, 24. Com o teto na lanterna padrão, a
+ * luz de um efeito nunca custa mais que uma lanterna comum, e abaixo dele o
+ * dragão continua clareando mais que o rato.
+ */
+export const RAIO_MAXIMO_DO_EFEITO = 260;
+
+/** O item que carrega a fonte, ou ela mesma. Ver `FonteDeLuz.dono`. */
+export function donoDaFonte(fonte: Pick<FonteDeLuz, "id" | "dono">): string {
+  return fonte.dono ?? fonte.id;
 }
 
 /**
@@ -240,6 +329,27 @@ export function fontesDaCena(
  * SEM lanterna andou seria pagar o canvas inteiro por nada. A chave dos
  * mesmos números é a mesma string, e o efeito do desenho não roda.
  */
+/**
+ * As luzes, com o tremor só nas de efeito cujo dono anima. A luz de efeito tem
+ * DONO -- o token em chamas, a área --, e a do dono parado fica na força
+ * cheia, sem `efeito`; sem nenhuma tremulando, o laço da animação nem roda. A
+ * luz cravada e a lanterna não são efeito, e seguem como estão. Ver
+ * `animarSo` em `SceneLayer`.
+ */
+export function tremorSoDe(
+  fontes: FonteDeLuz[],
+  animarSo: ReadonlySet<string> | undefined,
+): FonteDeLuz[] {
+  if (!animarSo) return fontes;
+
+  return fontes.map((fonte) => {
+    if (!fonte.efeito || !fonte.dono || animarSo.has(fonte.dono)) return fonte;
+    const parada = { ...fonte };
+    delete parada.efeito;
+    return parada;
+  });
+}
+
 export function chaveDasFontes(fontes: ReadonlyArray<FonteDeLuz>): string {
   return fontes
     .map(
@@ -249,6 +359,9 @@ export function chaveDasFontes(fontes: ReadonlyArray<FonteDeLuz>): string {
         // laço da animação, e a troca tem de chegar ao efeito do desenho.
         (fonte.cone
           ? `,c${fonte.cone.angulo.toFixed(1)}/${fonte.cone.abertura.toFixed(1)}`
+          : "") +
+        (fonte.forma
+          ? `,f${fonte.forma.map((ponto) => `${ponto.x.toFixed(0)}/${ponto.y.toFixed(0)}`).join(";")}`
           : "") +
         (fonte.efeito ? `,${fonte.efeito}` : ""),
     )
@@ -733,7 +846,9 @@ export function chaveDosOclusores(
   oclusores: ReadonlyArray<Oclusor>,
 ): string {
   return oclusores
-    .filter((oclusor) => fontes.some((fonte) => alcancaOclusor(fonte, oclusor)))
+    .filter((oclusor) =>
+      fontes.some((fonte) => !fonte.semTokens && alcancaOclusor(fonte, oclusor)),
+    )
     .map(({ id, caixa, assetId }) =>
       // A caixa inteira, e não só o centro: girar ou espelhar o token muda a
       // silhueta deitada, e trocar a aparência dele muda a imagem de onde ela
@@ -982,18 +1097,26 @@ export type CaixaDaLuz = {
  * que o plano para pintar um quarto dele.
  */
 export function caixaDaFonte(
-  fonte: Pick<FonteDeLuz, "x" | "y" | "raio" | "cone">,
+  fonte: Pick<FonteDeLuz, "x" | "y" | "raio" | "cone" | "forma">,
 ): CaixaDaLuz | null {
   // O cone pede só o pedaço do quadrado que o facho cobre: o de sessenta graus
-  // pinta um quarto dos pixels do círculo de mesmo alcance.
-  const limites = fonte.cone
-    ? limitesDoCone(fonte, fonte.cone)
-    : {
-        x1: fonte.x - fonte.raio,
-        y1: fonte.y - fonte.raio,
-        x2: fonte.x + fonte.raio,
-        y2: fonte.y + fonte.raio,
-      };
+  // pinta um quarto dos pixels do círculo de mesmo alcance. A forma, o
+  // contorno dela crescido pelo raio.
+  const limites = fonte.forma?.length
+    ? {
+        x1: Math.min(...fonte.forma.map((ponto) => ponto.x)) - fonte.raio,
+        y1: Math.min(...fonte.forma.map((ponto) => ponto.y)) - fonte.raio,
+        x2: Math.max(...fonte.forma.map((ponto) => ponto.x)) + fonte.raio,
+        y2: Math.max(...fonte.forma.map((ponto) => ponto.y)) + fonte.raio,
+      }
+    : fonte.cone
+      ? limitesDoCone(fonte, fonte.cone)
+      : {
+          x1: fonte.x - fonte.raio,
+          y1: fonte.y - fonte.raio,
+          x2: fonte.x + fonte.raio,
+          y2: fonte.y + fonte.raio,
+        };
   const x1 = Math.max(0, Math.floor(limites.x1));
   const y1 = Math.max(0, Math.floor(limites.y1));
   const x2 = Math.min(SCENE_WIDTH, Math.ceil(limites.x2));
@@ -1145,4 +1268,47 @@ export function fatorDoEfeito(
 export function anguloEntre(de: number, ate: number, t: number): number {
   const diferenca = ((((ate - de) % 360) + 540) % 360) - 180;
   return de + diferenca * t;
+}
+
+/** A luz andou desde o último desenho? Uma que acabou de acender não anda. */
+export function luzMudou(antes: FonteDeLuz | undefined, agora: FonteDeLuz): boolean {
+  return (
+    antes !== undefined &&
+    (antes.x !== agora.x ||
+      antes.y !== agora.y ||
+      antes.raio !== agora.raio ||
+      antes.raioIntenso !== agora.raioIntenso ||
+      antes.cone?.angulo !== agora.cone?.angulo ||
+      antes.cone?.abertura !== agora.cone?.abertura)
+  );
+}
+
+/** A luz no meio do caminho entre dois desenhos. `t` de 0 a 1. */
+export function luzEntre(
+  antes: FonteDeLuz | undefined,
+  depois: FonteDeLuz,
+  t: number,
+): FonteDeLuz {
+  if (!antes) return depois;
+
+  return {
+    ...depois,
+    x: antes.x + (depois.x - antes.x) * t,
+    y: antes.y + (depois.y - antes.y) * t,
+    raio: antes.raio + (depois.raio - antes.raio) * t,
+    raioIntenso:
+      antes.raioIntenso + (depois.raioIntenso - antes.raioIntenso) * t,
+    // O cone gira pela volta curta. O que acabou de virar cone, ou de deixar
+    // de ser, chega de uma vez: não há meio caminho entre um e outro.
+    ...(antes.cone && depois.cone
+      ? {
+          cone: {
+            angulo: anguloEntre(antes.cone.angulo, depois.cone.angulo, t),
+            abertura:
+              antes.cone.abertura +
+              (depois.cone.abertura - antes.cone.abertura) * t,
+          },
+        }
+      : {}),
+  };
 }

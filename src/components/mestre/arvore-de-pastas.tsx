@@ -27,6 +27,7 @@ import {
   aoApertarF2,
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
+import { t } from "@/lib/i18n/arquivos";
 import { descendentes } from "@/lib/mestre/arvore-de-pastas";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
@@ -104,7 +105,7 @@ export function TresPontos({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={`Opções de ${rotulo}`}
+            aria-label={t.geral.opcoesDe(rotulo)}
             onPointerDown={(event) => event.stopPropagation()}
             className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100"
           >
@@ -136,11 +137,11 @@ export function ItensDeMover({
     <Sub>
       <SubTrigger>
         <FolderClosed />
-        Mover para
+        {t.arvoreDePastas.moverPara}
       </SubTrigger>
       <SubContent className="w-48">
         <Item disabled={!atual} onClick={() => onMover(undefined)}>
-          Raiz
+          {t.arvoreDePastas.raiz}
         </Item>
         {destinos.length > 0 ? <Separator /> : null}
         {destinos.map((pasta) => (
@@ -216,16 +217,16 @@ export function PastaRow({
         <Item
           onClick={() => {
             store().atualizarPasta(pasta.id, { recolhido: false });
-            store().criarPasta(`Pasta ${pastas.length + 1}`, pasta.id);
+            store().criarPasta(t.nomesPadrao.pasta(pastas.length + 1), pasta.id);
           }}
         >
           <FolderPlus />
-          Nova subpasta
+          {t.geral.novaSubpasta}
         </Item>
         <Separator />
         <Item onClick={renomear.pedir}>
           <TextCursorInput />
-          Renomear
+          {t.geral.renomear}
         </Item>
         <ItensDeMover
           kit={kit}
@@ -238,7 +239,7 @@ export function PastaRow({
             está dentro: é organização, não remoção. */}
         <Item onClick={() => store().removerPasta(pasta.id)}>
           <Ungroup />
-          Desfazer pasta
+          {t.arvoreDePastas.desfazerPasta}
         </Item>
       </>
     );
@@ -269,7 +270,9 @@ export function PastaRow({
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={pasta.recolhido ? `Abrir ${pasta.nome}` : `Fechar ${pasta.nome}`}
+          aria-label={
+            pasta.recolhido ? t.geral.abrirNome(pasta.nome) : t.geral.fecharNome(pasta.nome)
+          }
           aria-expanded={aberta || !pasta.recolhido}
           disabled={aberta}
           onPointerDown={(event) => event.stopPropagation()}
@@ -281,7 +284,7 @@ export function PastaRow({
         {renomeando ? (
           <CampoDeNome
             valor={pasta.nome}
-            rotulo="Nome da pasta"
+            rotulo={t.geral.nomeDaPasta}
             onConfirmar={(nome) => {
               const limpo = nome.trim();
               if (limpo && limpo !== pasta.nome)
@@ -334,7 +337,7 @@ export function FimDaLista({
     >
       {ativo ? (
         <p className="text-muted-foreground px-2 py-2 text-[10px]">
-          Solte aqui para tirar da pasta
+          {t.arvoreDePastas.solteParaTirar}
         </p>
       ) : null}
     </div>

@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, GripHorizontal, X } from "lucide-react";
 import { useDockDrag } from "@/components/mestre/dock/dock-drag";
 import { Button } from "@/components/ui/button";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
+import { t } from "@/lib/i18n/mestre";
 import {
   encaixar,
   TAB_PX,
@@ -238,7 +239,9 @@ export function InnerWindow({
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={recolhida ? `Expandir ${titulo}` : `Recolher ${titulo}`}
+          aria-label={
+            recolhida ? t.janela.expandir(titulo) : t.janela.recolher(titulo)
+          }
           aria-expanded={!recolhida}
           onClick={() => alternarRecolhida(janela.chave)}
         >
@@ -248,7 +251,7 @@ export function InnerWindow({
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={`Fechar ${titulo}`}
+          aria-label={t.janela.fechar(titulo)}
           onClick={() => fechar(janela.chave)}
         >
           <X />
@@ -271,7 +274,7 @@ export function InnerWindow({
               primeiro pixel. */}
           <span
             role="separator"
-            aria-label={`Redimensionar ${titulo}`}
+            aria-label={t.janela.redimensionar(titulo)}
             aria-orientation="vertical"
             className="hover:bg-accent absolute right-0 bottom-0 z-10 size-4 cursor-se-resize touch-none rounded-tl-sm"
             onPointerDown={(event) => {

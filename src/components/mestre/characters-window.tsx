@@ -14,6 +14,7 @@ import {
   Pencil,
   PersonStanding,
   Plus,
+  SquareUser,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -80,6 +81,8 @@ import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import { OQueVaiJunto } from "@/components/mestre/character-window";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/personagens";
 import { useTokenDrag } from "@/hooks/use-token-drag";
 import {
   achatarArvore,
@@ -186,7 +189,7 @@ function CampoDoNome({
       autoFocus
       {...campo}
       className="h-7 flex-1 text-xs"
-      aria-label={`Novo nome de ${personagem.nome}`}
+      aria-label={t.lista.novoNomeDe(personagem.nome)}
     />
   );
 }
@@ -298,8 +301,8 @@ export function CharactersBody() {
     // pasta vazia recém-criada, esperando quem entre nela.
     return (
       [
-        { tag: "Players", secao: "players", personagens: jogadores },
-        { tag: "NPCs", secao: "npcs", personagens: pnjs },
+        { tag: t.lista.players, secao: "players", personagens: jogadores },
+        { tag: t.lista.npcs, secao: "npcs", personagens: pnjs },
       ] as const
     ).filter(
       (grupo) =>
@@ -337,7 +340,7 @@ export function CharactersBody() {
   function criarPasta(secao: Secao) {
     useSceneStore
       .getState()
-      .criarPasta(`Pasta ${pastasDe[secao].length + 1}`, undefined, secao);
+      .criarPasta(t.lista.novaPasta(pastasDe[secao].length + 1), undefined, secao);
   }
 
   const abertas = useWindowStore((state) => state.janelas);
@@ -392,7 +395,7 @@ export function CharactersBody() {
       // Ja com a ficha aberta: o gesto seguinte e anexar a ficha dele.
       abrir({ tipo: "personagem", personagemId: novo.id });
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao criar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.criar);
     }
   }
 
@@ -427,7 +430,7 @@ export function CharactersBody() {
         recarregar();
       },
       (cause) =>
-        toast.error(cause instanceof Error ? cause.message : "Falha ao apagar."),
+        toast.error(cause instanceof Error ? cause.message : t.geral.falhas.apagar),
     );
   }
 
@@ -465,13 +468,13 @@ export function CharactersBody() {
    */
   function gravarRenome(personagem: Personagem, nome: string) {
     void renameCharacter(personagem.id, nome).then(recarregar, (cause) =>
-      toast.error(cause instanceof Error ? cause.message : "Falha ao renomear."),
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.renomear),
     );
   }
 
   function entregar(personagem: Personagem, jogadorId: string) {
     void linkCharacter(jogadorId, personagem.id).then(recarregar, (cause) =>
-      toast.error(cause instanceof Error ? cause.message : "Falha ao entregar."),
+      toast.error(cause instanceof Error ? cause.message : t.lista.falhaAoEntregar),
     );
   }
 
@@ -507,12 +510,12 @@ export function CharactersBody() {
       <>
         <Item onClick={() => pedirRenome(personagem)}>
           <Pencil />
-          Renomear
+          {t.geral.renomear}
         </Item>
 
         <Item disabled={impedimento !== null} onClick={porNoMapa}>
           <PersonStanding />
-          Pôr no mapa
+          {t.lista.porNoMapa}
         </Item>
 
         {/* Ao lado de "Pôr no mapa" porque os dois falam da peça: um a põe lá,
@@ -539,14 +542,14 @@ export function CharactersBody() {
         <Sub>
           <SubTrigger>
             <UserPlus />
-            Entregar a
+            {t.lista.entregarA}
           </SubTrigger>
           <SubContent>
             {livres.length === 0 ? (
               <Item disabled>
                 {jogadores.length === 0
-                  ? "Ninguém entrou na mesa ainda"
-                  : "Já está com todo mundo"}
+                  ? t.lista.ninguemEntrou
+                  : t.lista.jaEstaComTodos}
               </Item>
             ) : (
               livres.map((jogador) => (
@@ -565,7 +568,7 @@ export function CharactersBody() {
 
         <Item variant="destructive" onClick={() => setAApagar(personagem)}>
           <Trash2 />
-          Apagar personagem
+          {t.lista.apagarPersonagem}
         </Item>
 
         <ItensDeExtensao
@@ -728,7 +731,7 @@ export function CharactersBody() {
                       variant="ghost"
                       size="icon-xs"
                       className="text-muted-foreground shrink-0"
-                      aria-label={`Opções de ${personagem.nome}`}
+                      aria-label={t.lista.opcoesDe(personagem.nome)}
                     >
                       <MoreVertical />
                     </Button>
@@ -773,9 +776,9 @@ export function CharactersBody() {
         <CampoDeBusca
           valor={busca}
           onMudar={setBusca}
-          placeholder="Buscar personagem ou jogador"
-          rotulo="Buscar personagem ou jogador"
-          dica="Acha pelo nome do personagem, de quem joga e da pasta. Esc limpa."
+          placeholder={t.lista.buscar}
+          rotulo={t.lista.buscar}
+          dica={t.lista.buscarDica}
         />
 
         <Tooltip>
@@ -785,14 +788,37 @@ export function CharactersBody() {
                 variant="outline"
                 size="icon"
                 className="shrink-0 rounded-full"
-                aria-label="Criar personagem"
+                aria-label={t.lista.criarPersonagem}
                 onClick={abrirCriacao}
               >
                 <Plus />
               </Button>
             }
           />
-          <TooltipContent>Criar personagem</TooltipContent>
+          <TooltipContent>{t.lista.criarPersonagem}</TooltipContent>
+        </Tooltip>
+
+        {/* Ao lado do +, e não num menu: o retrato é do personagem, e quem
+            acabou de criar um é quem vai querer ver onde ele aparece na mesa.
+            Abre onde a janela estiver, ou flutuando. Ver `abrirJanela`. */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 rounded-full"
+                aria-label={t.lista.retratos}
+                onClick={() => abrir({ tipo: "retratos" })}
+              >
+                <SquareUser />
+              </Button>
+            }
+          />
+          <TooltipContent>
+            <p className="font-medium">{t.lista.retratos}</p>
+            <p className="text-muted-foreground">{t.lista.retratosDica}</p>
+          </TooltipContent>
         </Tooltip>
       </div>
 
@@ -807,14 +833,14 @@ export function CharactersBody() {
             <div className="flex min-h-0 flex-1 flex-col">
               <ScrollArea className="min-h-0 flex-1">
                 {personagens === null || achados === null ? (
-                  <p className="text-muted-foreground p-3 text-xs">Lendo…</p>
+                  <p className="text-muted-foreground p-3 text-xs">{t.geral.lendo}</p>
                 ) : personagens.length === 0 ? (
                   <PainelVazio conteudo={{ tipo: "personagens" }}>
-                    Crie o primeiro personagem
+                    {t.lista.primeiro}
                   </PainelVazio>
                 ) : achados.length === 0 ? (
                   <p className="text-muted-foreground p-3 text-xs">
-                    Nenhum personagem com esse nome.
+                    {t.lista.nenhumComEsseNome}
                   </p>
                 ) : (
                   <div className="space-y-2 p-2 pt-0">
@@ -841,17 +867,17 @@ export function CharactersBody() {
         <ContextMenuContent>
           <ContextMenuItem onClick={abrirCriacao}>
             <Plus />
-            Criar personagem
+            {t.lista.criarPersonagem}
           </ContextMenuItem>
           {/* As duas, porque o vazio não é de seção nenhuma: a pasta tem de
               saber de qual é para nascer no lugar certo. */}
           <ContextMenuItem onClick={() => criarPasta("npcs")}>
             <FolderPlus />
-            Nova pasta em NPCs
+            {t.lista.novaPastaEm(t.lista.npcs)}
           </ContextMenuItem>
           <ContextMenuItem onClick={() => criarPasta("players")}>
             <FolderPlus />
-            Nova pasta em Players
+            {t.lista.novaPastaEm(t.lista.players)}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -866,23 +892,21 @@ export function CharactersBody() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Criar novo personagem</DialogTitle>
+            <DialogTitle>{t.lista.criarNovo}</DialogTitle>
             {/* Diz o que ESTE dialogo espera, e nao o que se pode fazer depois
                 dele: aqui estava a dica de que F2 renomeia, que e verdade e nao
                 e da hora -- quem abriu quer criar, e leu uma instrucao sobre
                 editar. A linha agora responde a unica pergunta da tela: por que
                 ela pede alguma coisa antes de criar. */}
-            <DialogDescription>
-              O novo personagem precisa de um nome primeiro
-            </DialogDescription>
+            <DialogDescription>{t.lista.precisaDeNome}</DialogDescription>
           </DialogHeader>
 
           <Input
             autoFocus
             value={nomeNovo}
             onChange={(event) => setNomeNovo(event.target.value)}
-            placeholder="Nome do personagem"
-            aria-label="Nome do personagem"
+            placeholder={t.ficha.nomeDoPersonagem}
+            aria-label={t.ficha.nomeDoPersonagem}
             onKeyDown={(event) => {
               if (event.key === "Enter") void criar();
             }}
@@ -890,12 +914,12 @@ export function CharactersBody() {
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => setCriando(false)}>
-              Cancelar
+              {comum.cancelar}
             </Button>
             {/* Desabilitado sem nome: e a mesma regra do Enter, dita antes do
                 clique em vez de depois. */}
             <Button disabled={!nomeNovo.trim()} onClick={() => void criar()}>
-              Criar
+              {t.geral.criar}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -913,7 +937,7 @@ export function CharactersBody() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Deseja apagar {aApagar?.nome}?</AlertDialogTitle>
+            <AlertDialogTitle>{t.ficha.desejaApagar(aApagar?.nome ?? "")}</AlertDialogTitle>
             {/* Ver a gemea na ficha: a descricao nasce `<p>`, e a lista
                 precisa de um elemento que aceite `<ul>` dentro. */}
             <AlertDialogDescription render={<div className="space-y-2" />}>
@@ -922,13 +946,13 @@ export function CharactersBody() {
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (aApagar) apagar(aApagar);
               }}
             >
-              Apagar
+              {t.geral.apagar}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1011,14 +1035,14 @@ function SecaoDaLista({
                 variant="ghost"
                 size="icon-xs"
                 className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-                aria-label={`Nova pasta em ${tag}`}
+                aria-label={t.lista.novaPastaEm(tag)}
                 onClick={onCriarPasta}
               >
                 <FolderPlus />
               </Button>
             }
           />
-          <TooltipContent>Nova pasta em {tag}</TooltipContent>
+          <TooltipContent>{t.lista.novaPastaEm(tag)}</TooltipContent>
         </Tooltip>
       </h3>
 
@@ -1135,8 +1159,8 @@ function impedimentoDeMapa(
   miniatura: AssetMeta | undefined,
   temMapa: boolean,
 ): string | null {
-  if (!personagem.miniatura) return "Sem miniatura. Anexe uma na ficha dele.";
-  if (!temMapa) return "Nenhum mapa aberto.";
+  if (!personagem.miniatura) return t.lista.semMiniatura;
+  if (!temMapa) return t.lista.nenhumMapa;
 
   // Sem o registro do acervo nao se sabe a proporcao da imagem, e por o token
   // com tamanho chutado o deixa esticado PARA SEMPRE: o gizmo do item trava a
@@ -1146,7 +1170,7 @@ function impedimentoDeMapa(
   // respondeu, ou a imagem foi apagada de la. No segundo, desabilitar e o
   // certo de qualquer jeito: nao ha imagem para por no mapa.
   if (!miniatura) {
-    return "Lendo o acervo. Se insistir, a imagem da miniatura pode ter sido apagada.";
+    return t.lista.lendoAcervo;
   }
 
   return null;
@@ -1169,7 +1193,7 @@ function PorNoMapa({
             variant="ghost"
             size="icon-xs"
             className="text-muted-foreground shrink-0"
-            aria-label={`Por o token de ${personagem.nome} no mapa`}
+            aria-label={t.lista.porTokenDe(personagem.nome)}
             disabled={impedimento !== null}
             onClick={onPor}
           >
@@ -1179,8 +1203,7 @@ function PorNoMapa({
       />
       <TooltipContent>
         <p className="max-w-48">
-          {impedimento ??
-            `Por ${personagem.nome} no centro do mapa. Arraste a linha para escolher o lugar, e role a roda no ar para o tamanho.`}
+          {impedimento ?? t.lista.porNoCentro(personagem.nome)}
         </p>
       </TooltipContent>
     </Tooltip>

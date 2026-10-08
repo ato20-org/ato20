@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { Columns2, PictureInPicture2, X } from "lucide-react";
+import { Columns2, PictureInPicture2 } from "lucide-react";
 
 import { LeitorPdf } from "@/components/leitor/leitor-pdf";
 import { MarcadoresLivro } from "@/components/mestre/leitor/marcadores-livro";
@@ -15,7 +15,9 @@ import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { useLivro } from "@/hooks/use-estante";
 import { usePdfDoc } from "@/hooks/use-pdf-doc";
+import { t } from "@/lib/i18n/mestre";
 import { useLeitorStore } from "@/lib/store/use-leitor-store";
+import { selectLivroAberto, usePaineisStore } from "@/lib/store/use-paineis-store";
 import { chaveDe } from "@/lib/store/use-window-store";
 import { createTrailingThrottle } from "@/lib/sync/throttle";
 import { livroFonte, marcarPagina } from "@/lib/vault/estante";
@@ -40,15 +42,15 @@ const GRAVAR_MS = 1_200;
  * marcadores da campanha e os dois botões de mover — a mesma peça abre a ficha
  * em PDF de um personagem, e lá nada disso existe. Ver `PdfBody`.
  *
- * Ele não sabe em qual moldura está — a janela (flutuante ou atracada) ou o
- * split que divide a linha com o palco. O que sabe é se ESTE livro é o que está
- * no split, e é isso que decide qual dos dois botões de mover aparece.
+ * Ele não sabe em qual moldura está — a janela (flutuante ou atracada) ou um
+ * painel ao lado do mapa. O que sabe é se ESTE livro está num painel, e é isso
+ * que decide para onde o botão de mover o leva.
  */
 export function LeitorLivro({ livroId }: { livroId: string }) {
   const livro = useLivro(livroId);
   const documento = usePdfDoc(livroId, livroFonte);
 
-  const noSplit = useLeitorStore((state) => state.livroId === livroId);
+  const noPainel = usePaineisStore(selectLivroAberto(livroId));
   // A página que uma menção `!rótulo` pediu. Ver `abrirLivroNaPagina`.
   const salto = useLeitorStore((state) => state.saltos[livroId] ?? null);
   const descartarSalto = useLeitorStore((state) => state.descartarSalto);
@@ -56,8 +58,8 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
     (vez: number) => descartarSalto(livroId, vez),
     [descartarSalto, livroId],
   );
-  const abrirNoSplit = useLeitorStore((state) => state.abrirNoSplit);
-  const fecharSplit = useLeitorStore((state) => state.fecharSplit);
+  const abrirNoPainel = usePaineisStore((state) => state.abrir);
+  const fecharDoPainel = usePaineisStore((state) => state.fechar);
 
   const abrirJanela = useAbrirJanela();
   const fecharJanela = useFecharJanela();
@@ -107,81 +109,72 @@ export function LeitorLivro({ livroId }: { livroId: string }) {
   }, []);
 
   return (
-    <LeitorPdf
-      // `key` no livro: trocar o livro do split troca a PROP de um leitor que
-      // continua montado, e a retomada da página, o zoom e a lupa são do
-      // documento, não da moldura.
-      key={livroId}
-      documento={documento}
-      // `null` enquanto a linha do banco não chegou: é o que faz o leitor
-      // esperar em vez de abrir na primeira página e saltar depois. Sem a linha
-      // — leitura que falhou —, `useLivro` fica `null` e o livro abre na 1 sem
-      // gravar nada, que é o comportamento honesto.
-      paginaInicial={livro ? livro.pagina : null}
-      salto={salto}
-      aoSaltar={aoSaltar}
-      aoMudarPagina={aoMudarPagina}
-      marcadores={({ paginaAtual, aoEscolher }) => (
-        <MarcadoresLivro
-          livroId={livroId}
-          paginaAtual={paginaAtual}
-          aoEscolher={aoEscolher}
-        />
-      )}
-      acoes={
-        <>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={
-                    noSplit ? "Soltar como janela" : "Abrir ao lado do palco"
-                  }
-                  onClick={() => {
-                    if (noSplit) {
-                      fecharSplit();
-                      abrirJanela({
-                        tipo: "livro",
-                        livroId,
-                        titulo: livro?.titulo ?? "Livro",
-                      });
-                      return;
-                    }
+    // A marca do "Lendo as regras" no Discord: o clique aqui dentro diz que
+    // o mestre está no livro. `contents` para a caixa não existir no layout
+    // -- o leitor continua filho direto do painel. Ver `PresencaDoMestre`.
+    <div data-presenca-livro="" className="contents">
+      <LeitorPdf
+        // `key` no livro: trocar o livro do split troca a PROP de um leitor que
+        // continua montado, e a retomada da página, o zoom e a lupa são do
+        // documento, não da moldura.
+        key={livroId}
+        documento={documento}
+        // `null` enquanto a linha do banco não chegou: é o que faz o leitor
+        // esperar em vez de abrir na primeira página e saltar depois. Sem a linha
+        // — leitura que falhou —, `useLivro` fica `null` e o livro abre na 1 sem
+        // gravar nada, que é o comportamento honesto.
+        paginaInicial={livro ? livro.pagina : null}
+        salto={salto}
+        aoSaltar={aoSaltar}
+        aoMudarPagina={aoMudarPagina}
+        marcadores={({ paginaAtual, aoEscolher }) => (
+          <MarcadoresLivro
+            livroId={livroId}
+            paginaAtual={paginaAtual}
+            aoEscolher={aoEscolher}
+          />
+        )}
+        acoes={
+          <>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={noPainel ? t.leitor.soltar : t.leitor.abrirNoPainel}
+                    onClick={() => {
+                      const titulo = livro?.titulo ?? t.leitor.livro;
 
-                    // A janela sai de cena ao ir para o split: o mesmo livro nas
-                    // duas casas seriam dois leitores do mesmo PDF, cada um com
-                    // sua página, gravando por cima do outro.
-                    fecharJanela(
-                      chaveDe({ tipo: "livro", livroId, titulo: "" }),
-                    );
-                    abrirNoSplit(livroId);
-                  }}
-                >
-                  {noSplit ? <PictureInPicture2 /> : <Columns2 />}
-                </Button>
-              }
-            />
-            <TooltipContent>
-              <p>{noSplit ? "Soltar como janela" : "Abrir ao lado do palco"}</p>
-            </TooltipContent>
-          </Tooltip>
+                      if (noPainel) {
+                        fecharDoPainel({ tipo: "livro", livroId, titulo });
+                        abrirJanela({ tipo: "livro", livroId, titulo });
+                        return;
+                      }
 
-          {/* Só no split: a janela já tem o X da própria moldura, e um segundo
-              fechar dentro do corpo dela seriam dois alvos para o mesmo gesto. */}
-          {noSplit ? (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Fechar o leitor"
-              onClick={() => fecharSplit()}
-            >
-              <X />
-            </Button>
-          ) : null}
-        </>
-      }
-    />
+                      // A janela sai de cena ao ir para o painel: o mesmo livro
+                      // nas duas casas seriam dois leitores do mesmo PDF, cada um
+                      // com sua página, gravando por cima do outro.
+                      fecharJanela(chaveDe({ tipo: "livro", livroId, titulo: "" }));
+                      abrirNoPainel({ tipo: "livro", livroId, titulo });
+                    }}
+                  >
+                    {noPainel ? <PictureInPicture2 /> : <Columns2 />}
+                  </Button>
+                }
+              />
+              <TooltipContent>
+                <p>
+                  {noPainel ? t.leitor.soltar : t.leitor.abrirNoPainel}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Sem fechar aqui dentro: a janela tem o X da moldura e o painel o
+                da aba -- um segundo seriam dois alvos para o mesmo gesto. */}
+          </>
+        }
+      />
+    </div>
   );
 }

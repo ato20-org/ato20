@@ -15,6 +15,7 @@ import {
   sementeDe,
 } from "@/lib/geometry/traco-a-mao";
 import { documentoUrl } from "@/lib/vault/documentos";
+import { t } from "@/lib/i18n/palco";
 import {
   emPixelDeTela,
   useSceneScale,
@@ -30,8 +31,10 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   DOCUMENTO_FONTE,
+  familiaDoTexto,
   POSTIT_FONTE,
   type CorPostit,
+  type FamiliaDoTexto,
   type Documento,
   type NewForma,
   type Postit,
@@ -125,7 +128,7 @@ function AlfinetesDaMesa({ scene }: { scene: Scene }) {
   return pins.map((pin, index) => (
     <div
       key={pin.id}
-      title={pin.title || `Ponto ${index + 1}`}
+      title={pin.title || t.quadroMesa.ponto(index + 1)}
       className="pointer-events-none absolute grid place-items-center rounded-full bg-amber-400 font-semibold text-amber-950 tabular-nums shadow-md ring-2 ring-neutral-900/70 select-none"
       style={{
         left: pin.x,
@@ -151,6 +154,16 @@ function AlfinetesDaMesa({ scene }: { scene: Scene }) {
  * WebKit tem um piso de 9px para fonte encolhida por `zoom`, e sem isto um
  * título afastado para de encolher. Ver `PostitPapel.medidaDoCorpo`.
  */
+/**
+ * A pilha de fontes de cada família. A da interface é `undefined`: o texto
+ * herda a do aplicativo, como sempre herdou.
+ */
+const FONTE_DA_FAMILIA: Record<FamiliaDoTexto, string | undefined> = {
+  interface: undefined,
+  mao: "var(--font-postit)",
+  codigo: "var(--font-mono)",
+};
+
 export function tipografiaDoTexto(
   texto: Texto,
   scale: number,
@@ -170,9 +183,18 @@ export function tipografiaDoTexto(
       color: texto.cor,
       fontWeight: texto.negrito ? 700 : undefined,
       fontStyle: texto.italico ? "italic" : undefined,
-      // A letra do postit. Aqui, e não numa classe do desenho, pela razão do
-      // negrito logo acima: o campo de edição recebe este mesmo objeto.
-      fontFamily: texto.aMao ? "var(--font-postit)" : undefined,
+      // A família: a do postit, a de código ou a da interface. Aqui, e não
+      // numa classe do desenho, pela razão do negrito logo acima: o campo de
+      // edição recebe este mesmo objeto.
+      fontFamily: FONTE_DA_FAMILIA[familiaDoTexto(texto)],
+      textAlign: texto.alinhamento === "centro"
+        ? "center"
+        : texto.alinhamento === "direita"
+          ? "right"
+          : undefined,
+      // No texto inteiro, com o fundo: é o rótulo que se apaga sobre o mapa,
+      // e não só a tinta da letra.
+      opacity: texto.opacidade,
       textDecoration: texto.sublinhado ? "underline" : undefined,
       background: texto.fundo,
       // Em `em` e não em pixel: a folga do marca-texto tem de crescer junto com

@@ -2,6 +2,7 @@
 
 import { Volume2, VolumeX } from "lucide-react";
 
+import { t } from "@/lib/i18n/palco";
 import { useAudioStore } from "@/lib/store/use-audio-store";
 import { cn } from "@/lib/utils";
 
@@ -28,13 +29,7 @@ export function SoundToggle({ className }: { className?: string }) {
   return (
     <button
       type="button"
-      aria-label={
-        needsGesture
-          ? "Tocar o som"
-          : enabled
-            ? "Desligar o som desta tela"
-            : "Ligar o som desta tela"
-      }
+      aria-label={needsGesture ? t.som.tocar : enabled ? t.som.desligar : t.som.ligar}
       aria-pressed={enabled && !blocked}
       className={cn(
         "rounded-md p-2 backdrop-blur",

@@ -83,9 +83,16 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 6 é a atual: ela acrescentou aos `pontos` em camadas
-a `proporcao` e o `ate`, que um ATO20 de API 5 ignoraria calado (a bala
-estreita sairia esticada num quadrado). A 5 acrescentou ao manifesto o estilo de
+mais do que ele tem.** A 8 é a atual: ela acrescentou aos `pontos` em camadas
+a `proporcao` e o `ate` (ver [Em camadas de imagem](#em-camadas-de-imagem)),
+que um ATO20 anterior ignoraria calado (a bala estreita sairia esticada num
+quadrado). A 7 deixou todo texto do manifesto vir por idioma e deu
+`api.idioma` ao código (ver
+[Texto em mais de um idioma](#texto-em-mais-de-um-idioma)); um ATO20 anterior
+recusaria o mapa como JSON ilegível. A 6 acrescentou os `efeitos` de condição
+(ver [Efeito de condição](#efeito-de-condição-na-tv-e-no-celular)); um ATO20
+anterior aceitaria o plugin calado, e as condições que apontam para os efeitos
+dele mostrariam só o selo. A 5 acrescentou ao manifesto o estilo de
 medidor em `camadas` de imagem e o `rotulo` (ver
 [Em camadas de imagem](#em-camadas-de-imagem)); um plugin que os usa pede 5,
 para um ATO20 anterior dizer "atualize" em vez de reclamar de um campo que
@@ -308,13 +315,15 @@ e implementados no módulo, e uma ferramenta mais completa.
 **Item de menu** — `itensDeMenu: [{ id, titulo, alvo, icone }]`. O `alvo` diz
 qual menu: `palco.token`, `palco.luz`, `palco.area`, `palco.quadro`,
 `palco.parede`, `palco.retrato`, `palco.vazio` para o botão direito no palco
-pelo que está na mão; `linha.cena`, `linha.personagem`, `linha.retrato`,
+pelo que está na mão (o retrato não mora mais no palco: `palco.retrato` é o
+botão direito nele no quadro da janela Retratos, com o mesmo contexto); `linha.cena`, `linha.personagem`, `linha.retrato`,
 `linha.imagem`, `linha.quadro`, `linha.nota` para as linhas das listas — botão
 direito e três pontos, os dois, pelo mesmo `Kit` que as linhas já usam. O item
 aparece pelo manifesto e o clique importa o módulo, como o comando; `quando`
-esconde o item num contexto em que ele não se aplica. **Parede e retrato não
-têm menu de fábrica**: eles ganham um só quando algum plugin declarou item para
-eles, e sem plugin nada muda. Postit e cartão passaram a aceitar o botão
+esconde o item num contexto em que ele não se aplica. **Parede não tem menu de
+fábrica**: ganha um só quando algum plugin declarou item para ela, e sem plugin
+nada muda. O retrato tem um menu de fábrica no quadro da janela Retratos, e os
+itens de `palco.retrato` entram nele. Postit e cartão passaram a aceitar o botão
 direito, que antes caía no vazio.
 
 **Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra depois
@@ -417,7 +426,8 @@ onde o conteúdo entra:
     encolher. `ate` é o teto: com o **máximo** acima dele, a fileira vira um
     ponto e o número (`×11`), na cor e no contorno do `texto` se houver. Pelo
     máximo e não pelo valor, para o pente de trinta não trocar de forma no
-    décimo tiro; `0` é sempre o número.
+    décimo tiro; `0` é sempre o número. Quem usa um dos dois pede
+    `apiVersao` 8.
 
     ```json
     "conteudo": { "modo": "pontos", "cheio": "balas/bala.png", "vazio": "balas/estojo.png",
@@ -473,6 +483,236 @@ O medidor guarda `estiloExtensao: "meu-plugin/coracao"` **ao lado** do
 campo existir sem quebrar `personagens.json` em lugar nenhum. Quem o define é o
 plugin, por `ajustarMedidor(..., { estiloExtensao })`, e só com estilo dele
 mesmo; `""` volta ao de fábrica.
+
+## Efeito de condição, na TV e no celular
+
+O que uma condição faz com a figura (o halo do abençoado, o verde do
+envenenado, o tremor do apavorado) é um **efeito**, e o plugin pode declarar os
+seus. Um pack de efeitos é só o manifesto, sem `principal` e sem arquivo, como
+um pacote de texturas:
+
+```json
+"apiVersao": 6,
+"contribui": {
+  "efeitos": [
+    { "id": "sangrando", "titulo": "Sangrando", "dica": "Escorre vermelho e treme.",
+      "figura": { "tinta": 0.6, "tremor": true } }
+  ]
+}
+```
+
+Na mesa ele vira `meu-plugin/sangrando`, e é esse id que a condição guarda em
+`efeito`. A cor é da **condição**, não do efeito: o mesmo "Sangrando" serve ao
+vermelho e ao preto. O mestre escolhe o efeito no seletor da condição (na
+ficha e no cardápio da campanha), onde os dos plugins ligados aparecem embaixo
+dos de fábrica.
+
+`figura` é o que o efeito faz com a própria figura, e os cinco efeitos de
+fábrica são escritos assim:
+
+| Campo         | O que faz                                              |
+| ------------- | ------------------------------------------------------ |
+| `halo`        | halo na cor da condição, respirando atrás da figura    |
+| `tinta`       | a cor da condição por cima, de `0` a `1` (o de fábrica usa `0.5`) |
+| `cinza`       | cinza e escura                                         |
+| `translucido` | meio transparente, tremulando                          |
+| `tremor`      | treme no lugar                                         |
+
+Os efeitos de fábrica são packs como os de plugin, que vêm no aplicativo: cada
+pasta de `src/efeitos/` com um `efeito.json` é um efeito, DESCOBERTO no build
+(`import.meta.glob`) com as imagens dela -- criar a pasta basta, sem tocar em
+código. Em `src/` e não em `public/` porque o glob do Turbopack não enumera
+fora de `src/` (compila para um objeto vazio, calado). As imagens viram
+assets do build, com nome por conteúdo, e não precisam de versão na URL. Hoje
+são cinco: `chamas` ("Em chamas": o fogo, com fagulhas e luz), `congelado`
+(a figura azulada, trincada por dentro e tremendo, com cristais de gelo em
+volta), `envenenado` (a figura cheia de verde com o halo, a névoa tóxica
+subindo dos pés na cor da condição, com bolhas, e caveirinhas que riem
+escapando dela), `molhado` (a figura azulada com gotas d'água presas na pele,
+pingos caindo e a poça PARADA aos pés, com poçinhas em volta -- as ondas
+animadas nela custavam 15 quadros por segundo com 40 figuras e quase não
+apareciam atrás da figura) e `sangrando` (talhos de garra escorrendo por
+dentro da figura, gotas que caem tocando o sprite uma vez na queda, e a poça
+PARADA aos pés, na rampa da condição). As partículas de imagem do gelo, do
+veneno, da água e do sangue vêm já coloridas, sem `pintar`: a caveira verde
+chapada sumiria em cima do corpo verde, e o contorno escuro é o que a separa.
+Pack com id torto ou repetido fica de fora. Os climas de antes (`aura`, `tingido`, `translucido`,
+`tremendo`, `apagado`) saíram; a condição que ainda aponta para um deles
+mostra só o selo.
+
+A terceira fonte é a **campanha**, e nela o efeito é de uma CONDIÇÃO: no
+cardápio (Configuração da campanha → Efeitos → Condições), a engrenagem de cada linha
+abre a tela da condição -- o selo (nome, cor, ícone, se a mesa vê) e o efeito
+dela, em seções que ligam e desligam (na figura, imagem em volta, partículas,
+luz), com prévia ao vivo na cor da condição. A condição que ainda usa o fogo
+de fábrica abre com ele preenchido; a primeira mudança faz dele uma cópia da
+campanha (a arte continua apontando para o pack: `fabrica:{pasta}/{arquivo}`)
+e liga a condição e as cópias dela nas fichas ao efeito novo -- editar o fogo
+de "Em chamas" muda quem já está em chamas. O efeito fica em `efeitos.json` na
+raiz da campanha (viaja no zip), com id `campanha/{código}`; as imagens novas
+vêm do acervo, escondidas da biblioteca. Chega à TV e ao celular pelo mesmo
+canal declarativo dos efeitos de plugin. O Rust confere só a casca (id, título,
+tamanho, teto de 32); os números de cada camada são presos ao desenhar.
+
+O fogo de fábrica usa campos que, por ora, **só a fábrica lê** (o Rust do
+plugin não os aceita ainda):
+
+- `quadros: { colunas, total, fps }` — a imagem é uma grade de quadros, tocada
+  em degraus por `transform` dentro de um recorte: o compositor troca o
+  quadro sem repintar, ao contrário do GIF.
+- `mipmaps: { "128": "...", "256": "...", "512": "..." }` — a mesma grade em
+  outros tamanhos, pelo lado do quadro; a tela escolhe o menor que cobre o
+  tamanho em que o fogo aparece.
+- `cores` — o mapa de cores: a arte vem em tons de cinza (o cinza é o calor,
+  o alfa é a forma) e `"condicao"` gera a rampa da cor da condição; o mesmo
+  fogo vira azul ou verde trocando só ela. Também aceita uma imagem de 256x1.
+- `mascara` — tons de cinza, por quadro: onde a arte pode aparecer.
+- `profundidade` — tons de cinza, por quadro: o claro passa na frente da
+  figura, o escuro fica atrás; é o que faz o fogo envolver o corpo.
+
+- `particulas` (no efeito, ao lado do `externo`; esta o plugin TAMBÉM
+  declara, desde o efeito em área) — o que a figura solta: a
+  fagulha que sobe do fogo. `quantidade` (até 24), `tamanho` e `variacao` (em
+  fração da figura), `direcao` e `abertura` (graus, 270 sobe), `velocidade`
+  (figuras por segundo), `vida` (segundos), `emissor` (a faixa da figura onde
+  nascem) e `imagem` (ausente = um brilho redondo na cor da condição). A
+  imagem vai na proporção dela; `pintar: true` a usa só como forma, na cor da
+  condição (o símbolo preto que sumiria no mapa escuro); `giro` é quanto cada
+  uma gira na vida, em graus; e `quadros: { colunas, total, fps? }` faz dela
+  um SPRITE -- com `fps`, em laço, cada partícula começando num quadro; sem,
+  uma vez ao longo da vida, a fagulha que acende e apaga. São
+  ASSADAS numa folha de quadros, como o fogo: o forno desenha o voo uma vez
+  por configuração, cor e variante (três), e cada figura toca a folha com a
+  sua fase -- uma fagulha a mais não custa nada por quadro. Medido: uma
+  camada animada por partícula levou quarenta figuras de 48 para 23 fps.
+  Perto da borda do mapa a revoada encolhe para dentro dele.
+
+Cor, máscara e profundidade são assadas uma vez por arte, cor e nível (ver
+`externo-assado.ts`); o que anda depois é só o `transform`.
+
+Combináveis dentro de um efeito, e com mais duas camadas que levam imagem da
+pasta do plugin (raster, até 2 MB, como as do medidor):
+
+```json
+{ "id": "em-chamas", "titulo": "Em chamas",
+  "externo": { "imagem": "fx/fogo.webp", "tamanho": 1.6, "lado": "frente",
+               "ancora": "base", "opacidade": 0.9,
+               "animacao": { "tipo": "flutuar", "periodo": 1.2, "intensidade": 0.5 } },
+  "interno": { "textura": "fx/brasa.png", "forca": 0.4 } }
+```
+
+- **`externo`** é uma imagem em volta da figura, esticada na caixa dela vezes
+  `tamanho` (de `0.25` a `2`, padrão `1.5`): desenhe o fogo quadrado para o
+  token quadrado. `lado` é `atras` (padrão) ou `frente`; `ancora` diz de onde
+  ela cresce, `centro` (padrão), `base` (sobe dos pés) ou `topo`. Perto da
+  borda do mapa o externo **encolhe** para não sair dele: o que passa da caixa
+  do plano derruba o palco do Mestre (ver a skill `debug-do-palco`). No 2.5D
+  ele fica de pé com a figura. No retrato ainda não aparece.
+- **`animacao`** é o "script" do efeito, como dado: `pulsar`, `girar`,
+  `flutuar` ou `piscar`, com `periodo` em segundos (de `0.2` a `30`, padrão
+  `2`) e `intensidade` de `0` a `1` (padrão `0.5`). Só `transform` e
+  `opacity`, que o compositor anima sem refazer layout; quem pediu menos
+  movimento no sistema vê a imagem parada. Para movimento quadro a quadro, use
+  um GIF ou WebP animado no próprio `externo`.
+- **`interno`** é uma textura pintada **sobre** a figura, só onde há figura:
+  a rachadura, a escama. Esticada na figura inteira, com `forca` de `0` a `1`
+  (padrão `1`), e assada uma vez junto da tinta e do cinza, então não custa
+  nada por quadro. Numa figura animada, como a tinta, ela congela o primeiro
+  quadro.
+
+E uma que não desenha nada na figura, mas clareia em volta dela:
+
+```json
+{ "id": "tocha-viva", "titulo": "Tocha viva",
+  "luz": { "raio": 2.5, "cor": "#ffaa33", "intensidade": 0.85, "efeito": "fogo" } }
+```
+
+- **`luz`** entra na luz da cena como a lanterna do token: tapada pelas
+  paredes, com a figura não fazendo sombra na própria luz, e indo com ela.
+  `raio` é em **vezes o lado maior da figura** (de `0.5` a `10`), e não em
+  unidade de cena: o pack não conhece a escala do mapa, e o dragão em chamas
+  clareia mais que o rato. Com teto, o alcance padrão da lanterna do token
+  (260 unidades): luz que anda custa pela área, e a do efeito nunca custa mais
+  que uma lanterna comum. `cor` ausente é a cor da condição; `intensidade`
+  de `0` a `1` (padrão `1`); `efeito` é `fogo`, `pulsando` ou `piscando`, os
+  mesmos da luz cravada. Num mapa sem escuro a luz ainda pinta o véu da cor
+  dela em volta da figura.
+
+Já **entre** condições, a figura mostra só o
+efeito da **última** da lista, que é a última adicionada: veneno, fogo e medo
+empilhados não se leem de longe. O Rust recusa na importação o efeito que não
+mexe em nada, número fora do limite, imagem fora da pasta ou que não é
+raster, e dica com mais de 120 letras; a imagem que falta é cobrada na
+importação, com o nome do arquivo. Um plugin
+chamado `campanha` não declara efeitos: o prefixo é o dos efeitos que a própria
+campanha vai criar.
+
+Os efeitos viajam no mesmo canal declarativo dos estilos de medidor. Plugin
+desligado tira os efeitos da mesa, e a condição que apontava para um deles
+volta a ser só o selo, sem perder o id: religar o plugin traz o efeito de
+volta.
+
+## Efeito em área
+
+Um pedaço do chão com um efeito: o incêndio na sala, a névoa tóxica no
+corredor. O mestre desenha a área pela pílula (retângulo, círculo ou traço
+livre → "Efeito em área"), e ela nasce SEM efeito; o efeito se escolhe no
+gizmo dela, no botão "Efeito", entre os **efeitos em área da campanha**. Sem
+efeito, o Mestre vê o contorno e a mesa não vê nada; a área chega à mesa
+pelo olho do gizmo, como a forma.
+
+Os efeitos em área da campanha moram no mesmo `efeitos.json` dos efeitos das
+condições: um efeito da campanha que declara `area` é um efeito em área. Eles
+se editam em Configuração da campanha → Efeitos → Efeito em área -- nome,
+cor, "Partir de um efeito pronto" (os de fábrica e os dos plugins ligados) e
+as camadas, com prévia. A área guarda o id do efeito, e não uma cópia: editar
+o efeito muda todas as áreas que o usam, na mesa também. A cor da área é a do
+efeito (`area.cor`), a não ser que o mestre escolha uma só daquela área.
+
+A área é SEGMENTADA: as casas da grade (sem grade, as da grade padrão),
+divididas por `divisoes`, e mais na área pequena, pela `densidade`. Cada
+segmento é um ponto do efeito, e a área grande tem mais pontos -- nunca a
+mesma arte esticada. Três camadas, todas assadas numa folha só por área (uma
+camada animada na tela, tenha a área quatro pontos ou mil):
+
+- **`base`** -- o CHÃO, deitado e recortado na forma da área: é a única
+  camada que diz ao jogador onde a área termina. A borda sai esfumaçada, com
+  textura, em meia casa centrada na linha (metade para dentro, metade para
+  fora); os elementos perto dela esmaecem junto. Uma textura que emenda nas
+  bordas, repetida em ladrilhos de `escala` segmentos (de `0.5` a `4`, padrão
+  `1`); `escurece` (de `0` a `1`) escurece o chão embaixo dela; `opacidade`; e
+  os campos de imagem (`imagem`, `quadros`, `mipmaps`, `cores`).
+- **`area.foco`** -- os ELEMENTOS que se levantam do chão e se repetem pela
+  área: a chama, a bolha, o cristal. Uma arte só, estreita, com o pé macio;
+  três por segmento, sorteados, com o pé dentro da forma. `area.escala` é o
+  tamanho dela em segmentos (de `1` a `2.5`, padrão `1.5`). Sem `foco`, a área
+  usa a imagem do `externo`.
+- **`particulas`** -- o que sobe da área, no laço da folha, com a `imagem`
+  delas quando o efeito tem uma (a caveirinha do veneno de fábrica).
+
+E a **`luz`**, uma por área, com a FORMA dela: forte dentro, caindo para fora
+em `raio` casas. Os tokens não a tapam -- só as paredes.
+
+No 2.5D o chão fica deitado no piso, e os elementos ficam de pé, encarando a
+câmera como as peças, até doze por área e abaixo da altura de um token. No
+Mestre, a área só anima selecionada e parada; na mesa, sempre.
+
+```json
+{ "id": "nevoa", "titulo": "Névoa tóxica",
+  "area": { "cor": "#22c55e", "divisoes": 2, "densidade": 4, "escala": 1.4,
+            "foco": { "imagem": "fx/bolha.webp", "cores": "condicao",
+                      "quadros": { "colunas": 4, "total": 16, "fps": 12 } } },
+  "base": { "imagem": "fx/chao-toxico.webp", "cores": "condicao", "escala": 2,
+            "escurece": 0.3, "quadros": { "colunas": 4, "total": 16, "fps": 12 } },
+  "particulas": { "quantidade": 6, "direcao": 270, "velocidade": 0.4 } }
+```
+
+O Rust confere na importação: `area.cor` em `#rrggbb`, `divisoes` de 1 a 4,
+`densidade` de 0 a 16, `escala` nos limites acima, a grade cheia (o `total`
+múltiplo das `colunas`, `fps` de 1 a 60), os mipmaps pelo lado em número, e
+toda imagem raster e dentro da pasta -- as dos mipmaps e da rampa de cor
+também. O total de quadros da base deve dividir o dos elementos: é o laço do
+fogo que dita o da folha.
 
 ## A seção do plugin no celular, e o botão que chega ao Mestre
 
@@ -608,11 +848,58 @@ sobe com o Mestre. Exige `principal`.
 
 **O tipo `lista`** de configuração guarda uma lista de textos (quem fica de fora
 da live, por exemplo). Não tem controle na tela gerada: quem a edita é o painel
-do plugin, que sabe o que os itens são, e o editor JSON.
+do plugin, que sabe o que os itens são, ou o `configuracoes.json` aberto à mão
+(o botão ao lado da busca nas Configurações abre o arquivo no editor do sistema).
 
 O plugin OBS ([valb-mig/ato20.obs.plugin](https://github.com/valb-mig/ato20.obs.plugin)) é o exemplo completo: `main.js` com o painel
 Transmissão e o filtro, `camera.html` com os dados e `retratos.html` com os
 retratos (o grupo no ar e o card de cada personagem de jogador).
+
+## Texto em mais de um idioma
+
+O ATO20 fala português e inglês, e da **API 7** em diante o plugin também pode
+falar. Todo texto que o manifesto declara para alguém ler (o `nome` e a
+`descricao` do plugin, o `titulo` de painel, comando, ferramenta, camada,
+item de menu, seção, página, estilo de medidor, efeito e configuração, a
+`descricao` da configuração, o
+`subtitulo`, o `grupo`, a `dica`, o `rotulo` e o `campo` das fontes de
+retrato) aceita uma string, como sempre, **ou um mapa por idioma**:
+
+```json
+"apiVersao": 7,
+"nome": { "pt-BR": "Iniciativa", "en": "Initiative" },
+"contribui": {
+  "comandos": [
+    { "id": "rolar", "titulo": { "pt-BR": "Rolar iniciativa", "en": "Roll initiative" } }
+  ]
+}
+```
+
+A tela escolhe na chegada: a chave exata do idioma dela (`pt-BR`, `en`),
+depois qualquer variante da mesma língua (`pt`, `en-US`), depois português,
+depois inglês, e por fim o primeiro que houver. Plugin escrito numa língua só
+não muda nada: a string vale para todos os idiomas. A chave do mapa é um
+código de idioma (`en`, `pt-BR`); outra coisa o Rust recusa na importação.
+
+A `escolha` de uma configuração ganhou `rotulos`: o que a tela mostra no lugar
+de cada opção. A opção continua sendo o valor gravado no arquivo, e não muda
+com o idioma; o rótulo muda.
+
+```json
+{ "chave": "meu-plugin.cor", "titulo": { "pt-BR": "Cor", "en": "Color" },
+  "tipo": "escolha", "padrao": "azul", "opcoes": ["azul", "rubi"],
+  "rotulos": { "azul": { "pt-BR": "Azul", "en": "Blue" }, "rubi": "Rubi" },
+  "escopo": "campanha" }
+```
+
+No código, `api.idioma` diz o idioma da tela (`"pt-BR"` ou `"en"`), para o
+plugin escolher o texto dos avisos, das linhas do chat e da seção do celular.
+Ele não muda enquanto o plugin vive: trocar de idioma recarrega a janela, e o
+plugin carrega de novo junto.
+
+O que o Mestre publica para a mesa (o título de um efeito, de um estilo de
+medidor) sai no idioma do Mestre. O celular e a janela do espectador recebem
+o texto já escolhido, e não o mapa.
 
 ## Atalho de plugin não rouba atalho do aplicativo
 

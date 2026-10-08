@@ -2,9 +2,15 @@
 
 import { create } from "zustand";
 
+import { RAIO_DA_BORRACHA_DOS_RISCOS_PADRAO } from "@/lib/geometry/pincel";
+import { METROS_DA_PAREDE_PADRAO } from "@/lib/geometry/sombra";
+
 import {
   CORES_POSTIT,
   FORMA_ESPESSURA,
+  TEXTO_TAMANHO,
+  type FamiliaDoTexto,
+  type Texto,
   type CorPostit,
   type FormaDaRegua,
   type FormatoDeArea,
@@ -45,7 +51,14 @@ import {
 export type Tool =
   | "select"
   | "hand"
+  // `laser` aponta sem marcar: o rastro some sozinho, e nada entra na cena.
+  // Ver `RastroDoLaser`.
+  | "laser"
   | "fog"
+  // `borrachaDaNevoa` fura, no arrasto, a área escondida SELECIONADA -- só
+  // ela, para a passada não abrir a área vizinha sem querer. Não mora na
+  // barra: entra e sai pelo botão do gizmo da área. Ver `FogRegion.furos`.
+  | "borrachaDaNevoa"
   | "pin"
   | "postit"
   | "lapis"
@@ -58,6 +71,12 @@ export type Tool =
   // a luz não tem tamanho, tem alcance, e o alcance se ajusta no anel dela.
   // Também só do mapa. Ver `Luz`.
   | "luz"
+  // `porta` traça a folha no arrasto, da dobradiça à ponta. Só do mapa, como
+  // a parede de que ela é um pedaço. Ver `Porta`.
+  | "porta"
+  // `efeito` desenha uma ÁREA DE EFEITO -- o chão em chamas --, com as mesmas
+  // três geometrias da área escondida. Só do mapa. Ver `AreaDeEfeito`.
+  | "efeito"
   // As três do QUADRO: `texto` escreve direto na folha no clique, `ligacao`
   // amarra duas coisas com uma seta em dois cliques -- de onde, para onde --, e
   // `forma` desenha retângulo, elipse ou linha no arrasto, conforme
@@ -87,6 +106,33 @@ export function ferramentaDeExtensao(
   return extensaoId && ferramentaId ? { extensaoId, ferramentaId } : null;
 }
 
+/** O que o painel de texto escolhe para o próximo texto. Ver `textoNovo`. */
+export type TextoNovo = Pick<
+  Texto,
+  | "cor"
+  | "fundo"
+  | "negrito"
+  | "italico"
+  | "sublinhado"
+  | "alinhamento"
+  | "opacidade"
+> & {
+  tamanho: number;
+  familia?: FamiliaDoTexto;
+};
+
+/**
+ * As quatro naturezas de um elemento desenhado: a mesma geometria, quatro
+ * significados. Ver `PainelDeElementos`.
+ */
+export type NaturezaDoElemento = "parede" | "area" | "elemento" | "efeito";
+
+/**
+ * O que a borracha dos riscos apaga: o pedaço por onde o anel passa -- o risco
+ * cortado vira dois -- ou o risco inteiro que ele encostar.
+ */
+export type ModoDaBorracha = "pedaco" | "inteiro";
+
 /**
  * As cores do lápis.
  *
@@ -104,7 +150,13 @@ export const CORES_LAPIS = [
   "#ffffff",
 ] as const;
 
-/** Espessuras, em unidades de cena. A do meio é o padrão. */
+/**
+ * Espessuras, em unidades de cena. A do meio é o padrão.
+ *
+ * Os degraus da FORMA do quadro. O lápis tinha os mesmos, e passou a ter uma
+ * régua contínua -- ver `LARGURA_DO_LAPIS_MAXIMA` --, porque com Alt+roda e o
+ * marca-texto largo quatro degraus não bastavam.
+ */
 export const ESPESSURAS_LAPIS = [3, 6, 12, 24] as const;
 
 type ToolStore = {
@@ -112,18 +164,52 @@ type ToolStore = {
   setTool: (tool: Tool) => void;
 
   /**
-   * A cor e a espessura do próximo risco.
+   * O próximo risco: a cor, a largura, a opacidade e o quanto a ponta é
+   * suavizada.
    *
    * No store da ferramenta e não na cena: é preferência de quem desenha, e vale
    * para a cena seguinte também. O risco guarda a cópia do que estava escolhido
    * quando ele nasceu — mudar a cor depois não repinta o que já está no mapa.
+   * O suavizar não chega ao risco: ele age na mão, enquanto o risco é traçado.
    *
    * Não persiste: escolher a cor é um clique, e restaurá-la ao abrir o
    * aplicativo não vale um arquivo.
    */
   cor: string;
+  /** Em unidade de cena, de `LARGURA_DO_LAPIS_MINIMA` a `_MAXIMA`. */
   espessura: number;
-  setLapis: (lapis: { cor?: string; espessura?: number }) => void;
+  /** De 0,1 a 1. */
+  opacidade: number;
+  /** De 0 a 1: zero é o lápis cru. Ver `pontaNaCorda`. */
+  suavizar: number;
+  setLapis: (lapis: {
+    cor?: string;
+    espessura?: number;
+    opacidade?: number;
+    suavizar?: number;
+  }) => void;
+  /**
+   * A régua de tamanho do painel está na mão -- a largura do lápis, o raio de
+   * uma das borrachas. Enquanto está, o anel do pincel sai do ponteiro, que
+   * está no painel, longe do mapa, e vai para o meio do palco: a referência do
+   * tamanho real, no zoom de agora. Ver `AnelDoPincel`.
+   */
+  tamanhoEmAjuste: boolean;
+  setTamanhoEmAjuste: (tamanhoEmAjuste: boolean) => void;
+
+  /**
+   * A borracha dos riscos: o raio do anel, em unidade de cena, e o que ela
+   * apaga -- só o PEDAÇO por onde passa, ou o risco INTEIRO que encostar.
+   *
+   * Raio próprio, e não o da borracha da névoa: risco pede pincel fino, névoa
+   * pede largo, e trocar de ferramenta não pode desfazer o ajuste da outra.
+   */
+  raioDaBorracha: number;
+  modoDaBorracha: ModoDaBorracha;
+  setBorracha: (borracha: {
+    raio?: number;
+    modo?: ModoDaBorracha;
+  }) => void;
 
   /**
    * A cor do PRÓXIMO postit colado.
@@ -184,6 +270,57 @@ type ToolStore = {
   formatoDeArea: FormatoDeArea;
   setFormatoDeArea: (formato: FormatoDeArea) => void;
 
+  /**
+   * O recorte da PRÓXIMA área de efeito. Cada natureza guarda o seu, pela
+   * razão da parede: quem esconde em retângulo e incendeia em laço não quer
+   * que uma troque a outra.
+   */
+  formatoDoEfeito: FormatoDeArea;
+  setFormatoDoEfeito: (formato: FormatoDeArea) => void;
+
+  /**
+   * O que o PRÓXIMO elemento desenhado é: parede, área escondida, forma ou
+   * área de efeito. É a última escolhida no painel de Elementos, e é o que o
+   * ícone da barra pega de volta ao ser clicado. Ver `PainelDeElementos`.
+   */
+  naturezaDoElemento: NaturezaDoElemento;
+  setNaturezaDoElemento: (natureza: NaturezaDoElemento) => void;
+
+  /**
+   * Com que a PRÓXIMA área de efeito nasce. Ausente = sem efeito, como ela
+   * sempre nasceu -- e o gizmo continua trocando depois.
+   */
+  efeitoDaArea?: string;
+  setEfeitoDaArea: (efeito: string | undefined) => void;
+
+  /**
+   * Com que a PRÓXIMA parede nasce: a altura, em metros como no gizmo, se tem
+   * teto, e a cor da face no mapa de esguelha (ausente = lida do mapa). Cada
+   * parede guarda a cópia: mudar aqui não mexe nas que já estão no mapa.
+   */
+  paredeNova: { metros: number; comTeto: boolean; cor?: string };
+  setParedeNova: (parede: {
+    metros?: number;
+    comTeto?: boolean;
+    /** `null` volta à cor lida do mapa. */
+    cor?: string | null;
+  }) => void;
+
+  /** A PRÓXIMA área escondida já nasce dinâmica. Ver `FogRegion.dinamica`. */
+  nevoaNovaDinamica: boolean;
+  setNevoaNovaDinamica: (dinamica: boolean) => void;
+
+  /**
+   * Como o PRÓXIMO texto nasce: o painel de texto com a ferramenta T na mão.
+   * Cada texto guarda a cópia, como o risco: mudar aqui não mexe nos que já
+   * estão no mapa -- esses o mesmo painel edita quando estão selecionados.
+   *
+   * `familia` ausente = a da campanha (a letra de mão do quadro), que é como o
+   * texto sempre nasceu. Ver `camposDoTextoNovo`.
+   */
+  textoNovo: TextoNovo;
+  setTextoNovo: (patch: Partial<TextoNovo>) => void;
+
   tipoDeForma: TipoDeForma;
   /** Ausente = a cor do tema. Ver `Forma`. */
   corForma?: string;
@@ -205,7 +342,23 @@ export const useToolStore = create<ToolStore>((set) => ({
 
   cor: CORES_LAPIS[0],
   espessura: ESPESSURAS_LAPIS[1],
+  opacidade: 1,
+  // Um pouco ligado: com o mouse, o risco cru sai tremido, e quem quer o
+  // traço exato desliga com um gesto.
+  suavizar: 0.3,
   setLapis: (lapis) => set(lapis),
+  tamanhoEmAjuste: false,
+  setTamanhoEmAjuste: (tamanhoEmAjuste) => set({ tamanhoEmAjuste }),
+
+  raioDaBorracha: RAIO_DA_BORRACHA_DOS_RISCOS_PADRAO,
+  // O pedaço por padrão: é o que uma borracha faz. O risco inteiro é o atalho
+  // de quem quer limpar rápido, e fica a um clique no painel.
+  modoDaBorracha: "pedaco",
+  setBorracha: ({ raio, modo }) =>
+    set({
+      ...(raio !== undefined ? { raioDaBorracha: raio } : {}),
+      ...(modo !== undefined ? { modoDaBorracha: modo } : {}),
+    }),
 
   corPostit: CORES_POSTIT[0],
   setCorPostit: (corPostit) => set({ corPostit }),
@@ -223,6 +376,33 @@ export const useToolStore = create<ToolStore>((set) => ({
 
   formatoDeArea: "retangulo",
   setFormatoDeArea: (formatoDeArea) => set({ formatoDeArea }),
+
+  formatoDoEfeito: "retangulo",
+  setFormatoDoEfeito: (formatoDoEfeito) => set({ formatoDoEfeito }),
+
+  // A forma: é a única que vale nos três tipos de cena, e o primeiro clique
+  // no ícone tem de dar algo que se desenha em qualquer um.
+  naturezaDoElemento: "elemento",
+  setNaturezaDoElemento: (naturezaDoElemento) => set({ naturezaDoElemento }),
+
+  efeitoDaArea: undefined,
+  setEfeitoDaArea: (efeitoDaArea) => set({ efeitoDaArea }),
+
+  paredeNova: { metros: METROS_DA_PAREDE_PADRAO, comTeto: true },
+  setParedeNova: ({ cor, ...resto }) =>
+    set((estado) => {
+      const proxima = { ...estado.paredeNova, ...resto };
+      if (cor === null) delete proxima.cor;
+      else if (cor !== undefined) proxima.cor = cor;
+      return { paredeNova: proxima };
+    }),
+
+  nevoaNovaDinamica: false,
+  setNevoaNovaDinamica: (nevoaNovaDinamica) => set({ nevoaNovaDinamica }),
+
+  textoNovo: { tamanho: TEXTO_TAMANHO },
+  setTextoNovo: (patch) =>
+    set((estado) => ({ textoNovo: { ...estado.textoNovo, ...patch } })),
 
   tipoDeForma: "retangulo",
   corForma: undefined,

@@ -8,18 +8,24 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  type CSSProperties,
 } from "react";
 
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { EfeitoPedido } from "@/lib/condicao";
 import { useCoresDasParedes } from "@/hooks/use-cores-das-paredes";
+import { useLugarDoMapa } from "@/hooks/use-lugar-do-mapa";
+import { usePortasNoGiro } from "@/hooks/use-portas-no-giro";
 import type { Variante } from "@/lib/vault/assets";
 import { escurecerCor } from "@/lib/cor-do-mapa";
 import {
   alturaDaParede,
   caixaDaParede,
   corpoDaParede,
+  faixaDaLinha,
+  GROSSURA_DA_LINHA,
+  poligonoOrientado,
   umbrasDoSol,
   uniaoDasCaixas,
   type CaixaDaUmbra,
@@ -31,17 +37,22 @@ import {
   type PontoNoMundo,
 } from "@/lib/geometry/camera-orbital";
 import {
+  apoioDoPe,
   caixaDaFace,
   caixaDaPeca,
+  caixaDoTopo,
   correnteDeEsguelha,
   facesDaParede,
   profundidadeNaVista,
   tapa,
 } from "@/lib/geometry/volume";
+import { olhaParaEsquerda } from "@/lib/geometry/peca-de-esguelha";
+import { GROSSURA_DA_PORTA, paredesComPortas } from "@/lib/geometry/porta";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type Parede,
+  type Porta,
   type Sol,
 } from "@/types/scene";
 
@@ -121,8 +132,21 @@ import {
  * refaz inteira a cada quadro, porque a profundidade de tudo muda. É gesto
  * transitório e parado volta a 60, então fica como está até alguém reclamar.
  *
- * E a escala é boa: 80 paredes dão 60,1 fps, 160 dão 54,1. Um mapa de mesa tem
- * dezenas, não centenas.
+ * E a escala das PAREDES é boa: 80 dão 60,1 fps, 160 dão 54,1. Um mapa de mesa
+ * tem dezenas, não centenas.
+ *
+ * ## A textura das PEÇAS é o que pesa quando há muitas
+ *
+ * Cada peça é uma camada composta própria (ver `PecaEmPe`), e a camada carrega a
+ * textura INTEIRA do token. Com o original -- uma arte de token tem milhões de
+ * pixels -- a webview trava assim que a câmera se move: medido no `chao-25d`
+ * (WebKitGTK 2.52.6, janela 1440x900, build), com a textura de verdade oitenta
+ * peças caem a 53 fps e cento e sessenta não entregam o quadro, contra 60 fps com
+ * a mesma contagem em 256px. O mapa de prumo não sofre porque lá o token é
+ * `transform` 2D e pinta num plano só, não numa camada por peça.
+ *
+ * O conserto é a peça pedir a variante `mini` -- ver `PecaEmPe`, e lá por que
+ * FIXA e não escolhida pelo tamanho na tela.
  */
 
 /**
@@ -133,12 +157,14 @@ import {
  * cabe -- e a mesa precisa entender que a pessoa está num cômodo fechado, e não
  * num descampado. É o que o The Sims faz: o muro não some, ele vira vidro.
  *
- * O topo NÃO acompanha. Ele fica opaco, e isso é escolha: a laje é o traço que
- * diz onde a planta tem parede, e é justamente o que se quer manter à vista
- * quando o corpo do muro sai da frente. É também como o Sims lê com as paredes
- * baixadas -- o risco no chão continua lá.
+ * O topo acompanha, pela mesma regra: a laje pintada por cima da peça também
+ * deixa passar. Antes ela ficava opaca, e a peça atrás de uma casa sumia
+ * debaixo do telhado mesmo com as paredes já de vidro.
  */
 const VIDRO = 0.26;
+
+/** O mapa enquanto o arquivo não diz a proporção dele. Ver `useLugarDoMapa`. */
+const PLANO_INTEIRO = { x: 0, y: 0, width: SCENE_WIDTH, height: SCENE_HEIGHT };
 
 /** O que se desenha no chão: uma caixa já com a profundidade em que ela entra. */
 type Desenho = { chave: string; profundidade: number; no: React.ReactNode };
@@ -164,14 +190,35 @@ type FiguraDaPeca = {
   lado: number;
   alta: number;
   espelhada: boolean;
+  /**
+   * Vai ao tamanho de tela por `scale`, e não pela caixa: a CHAMA de pé. Ver
+   * a escrita de cada quadro em `escrever`.
+   */
+  escalada?: boolean;
+  /** O pé erguido do chão, no teto de uma parede. Ver `apoioDoPe`. */
+  sobe?: number;
 };
 
 function lerFigura(texto: string | undefined): FiguraDaPeca | null {
   if (!texto) return null;
-  const [x = 0, y = 0, lado = 0, alta = 0, espelhada = 0] = texto
-    .split(",")
-    .map(Number);
-  return { x, y, lado, alta, espelhada: espelhada === 1 };
+  const [
+    x = 0,
+    y = 0,
+    lado = 0,
+    alta = 0,
+    espelhada = 0,
+    escalada = 0,
+    sobe = 0,
+  ] = texto.split(",").map(Number);
+  return {
+    x,
+    y,
+    lado,
+    alta,
+    espelhada: espelhada === 1,
+    escalada: escalada === 1,
+    sobe,
+  };
 }
 
 function lerCantos(texto: string | undefined): PontoNoMundo[] | null {
@@ -183,7 +230,7 @@ function lerCantos(texto: string | undefined): PontoNoMundo[] | null {
 }
 
 /** A forma de uma peça no chão de esguelha. */
-type PecaDoChao = {
+export type PecaDoChao = {
   id: string;
   x: number;
   y: number;
@@ -203,10 +250,24 @@ type PecaDoChao = {
   /** Espelhada na horizontal, como o `flipX` do item no mapa de prumo. */
   espelhada?: boolean;
   /**
+   * Para onde ela olha no mapa, em graus, quando espelha pelo olhar. Ausente =
+   * não espelha pelo olhar. Ver `espelhadaPeloOlhar`.
+   */
+  olhaPara?: number;
+  /**
    * O que as condições fazem com a figura -- aura, tinta, apagado, tremendo,
    * translúcido --, os mesmos do mapa de prumo. Ver `FiguraComEfeitos`.
    */
   efeitos?: ReadonlyArray<EfeitoPedido>;
+  /** Os efeitos pausados: o Mestre só anima o do selecionado. Ver `animarSo`. */
+  parado?: boolean;
+  /**
+   * A peça é uma CHAMA de pé, e não uma figura: a da área em chamas no 2.5D
+   * (ver `chamasDePe`). Toca a FAIXA do fogo, já na cor (ver `faixaDaFolha`),
+   * em vez da imagem, e não recebe clique -- quem se seleciona é a área, no
+   * chão.
+   */
+  fogo?: { fonte: string; total: number; fps: number; fase: string };
 };
 
 /**
@@ -252,8 +313,22 @@ function PecaEmPe({
     id: string,
   ) => void;
 }) {
-  const doAcervo = useAssetUrl(peca.assetId, variante);
-  const src = peca.url ?? doAcervo;
+  // A variante LEVE por padrão, e não o arquivo. De esguelha cada peça é uma
+  // camada composta própria (leva `translate3d`) que carrega a textura INTEIRA
+  // do token, e uma arte de token tem milhões de pixels: dezenas de originais
+  // estouram a composição da webview assim que a câmera se move -- medido, a
+  // cheia trava com ~160 peças (a webview não entrega o quadro) e a `mini`
+  // entrega 59 fps. O mapa de prumo pede o original DE PROPÓSITO (ver
+  // `scene-layer.tsx`), e pode: lá o token é `transform` 2D e pinta num plano
+  // só, não numa camada por peça.
+  //
+  // FIXA, e não escolhida pelo tamanho na tela: trocar a resolução no meio do
+  // gesto re-decodifica a imagem de cada peça que cruza o limiar, e isso custa
+  // MAIS que a cheia -- medido, 19 fps contra 57. Quem aproxima um token para
+  // ver o detalhe tem o mapa de prumo, que carrega o original.
+  const doAcervo = useAssetUrl(peca.assetId, variante ?? "mini");
+  const src = peca.fogo?.fonte ?? peca.url ?? doAcervo;
+  const { fogo } = peca;
 
   return (
     // Um invólucro leva a transformação e as marcas, e a figura vai dentro
@@ -264,12 +339,14 @@ function PecaEmPe({
     <div
       hidden={!src}
       data-peca={peca.id}
+      data-efeito-parado={peca.parado ? "" : undefined}
       data-local={local}
       data-cantos={cantos}
       data-figura={figura}
-      // Clicável mesmo com a caixa inerte: ver a raiz do `ChaoInclinado`.
-      className="pointer-events-auto absolute top-0 left-0 select-none"
-      onPointerDown={(event) => onPointerDown?.(event, peca.id)}
+      // Clicável mesmo com a caixa inerte: ver a raiz do `ChaoInclinado`. A
+      // chama, não: o clique dela atravessa para o que está atrás.
+      className={`${fogo ? "pointer-events-none" : "pointer-events-auto"} absolute top-0 left-0 select-none`}
+      onPointerDown={fogo ? undefined : (event) => onPointerDown?.(event, peca.id)}
       style={{
         width: peca.lado,
         height: alta,
@@ -277,25 +354,52 @@ function PecaEmPe({
         transform,
       }}
     >
-      <FiguraComEfeitos efeitos={peca.efeitos} url={src} semente={peca.id}>
-        {(fonte) =>
-          fonte ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={fonte}
-              alt=""
-              draggable={false}
-              className="pointer-events-none absolute inset-0 h-full w-full select-none"
-            />
-          ) : null
-        }
-      </FiguraComEfeitos>
+      {fogo ? (
+        // UM elemento, e a faixa andando pela posição do fundo: medido, a chama
+        // com a grade animada por `transform` -- recorte, linhas, colunas --
+        // eram três camadas no compositor por chama, e nove chamas levavam a
+        // mesa de 61 a 30 fps, animando ou não. Ver `faixaDaFolha`.
+        <div
+          className="efeito-faixa absolute inset-0"
+          style={
+            {
+              backgroundImage: `url(${fogo.fonte})`,
+              backgroundSize: `${fogo.total * 100}% 100%`,
+              backgroundRepeat: "no-repeat",
+              animationDelay: fogo.fase,
+              "--efeito-duracao": `${fogo.total / fogo.fps}s`,
+              "--efeito-quadros": fogo.total,
+              "--efeito-fim": `${-fogo.total * peca.lado}px`,
+            } as CSSProperties
+          }
+        />
+      ) : (
+        <FiguraComEfeitos
+          efeitos={peca.efeitos}
+          url={src}
+          semente={peca.id}
+          alcance={{ livre: true, largura: peca.lado }}
+        >
+          {(fonte) =>
+            fonte ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={fonte}
+                alt=""
+                draggable={false}
+                className="pointer-events-none absolute inset-0 h-full w-full select-none"
+              />
+            ) : null
+          }
+        </FiguraComEfeitos>
+      )}
     </div>
   );
 }
 
 export const ChaoInclinado = memo(function ChaoInclinado({
-  paredes,
+  paredes: soParedes,
+  portas,
   mapaUrl,
   giro,
   inclinacao,
@@ -317,6 +421,11 @@ export const ChaoInclinado = memo(function ChaoInclinado({
   visivel,
 }: {
   paredes: Parede[];
+  /**
+   * As portas, que sobem como parede `linha` na posição em que estão. Ver
+   * `paredeDaPorta`. Ausente = nenhuma.
+   */
+  portas?: Porta[];
   mapaUrl: string;
   /** Giro da câmera em torno do eixo vertical, em graus. */
   giro: number;
@@ -446,6 +555,35 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     cantos: ReadonlyArray<{ x: number; y: number; altura: number }>,
   ) => boolean;
 }) {
+  // A folha gira até a abertura nova, junto com a luz do chão. Ver
+  // `usePortasNoGiro`.
+  const portasNoGiro = usePortasNoGiro(portas);
+  // A porta chega aqui como parede `linha`, com o id dela. É por ele que a
+  // folha sobe fina, e não com a grossura de muro. Ver `GROSSURA_DA_PORTA`.
+  const idsDasPortas = useMemo(
+    () => new Set((portas ?? []).map((porta) => porta.id)),
+    [portas],
+  );
+  const paredes = useMemo(
+    () => paredesComPortas(soParedes, portasNoGiro) ?? [],
+    [soParedes, portasNoGiro],
+  );
+  // A cor da porta é lida onde ela está FECHADA: é ali que o mapa a pintou, e
+  // aberta ela leria o chão do cômodo. Pela chave da porta fechada, e não pela
+  // lista: abrir troca a lista a cada quadro do gesto, e não muda cor nenhuma.
+  const chaveDasFechadas = (portas ?? [])
+    .map((porta) => `${porta.id},${porta.x},${porta.y},${porta.comprimento},${porta.angulo}`)
+    .join("|");
+  const paraACor = useMemo(
+    () =>
+      paredesComPortas(
+        soParedes,
+        portas?.map((porta) => ({ ...porta, abertura: undefined })),
+      ) ?? [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a chave É a geometria fechada das portas
+    [soParedes, chaveDasFechadas],
+  );
+
   /**
    * A corrente da CENA, que todo elemento carrega na frente da sua.
    *
@@ -489,7 +627,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
   const figuraDe = useCallback(
     (figura: FiguraDaPeca) =>
       emOrbita
-        ? `${figura.x},${figura.y},${figura.lado},${figura.alta},${figura.espelhada ? 1 : 0}`
+        ? `${figura.x},${figura.y},${figura.lado},${figura.alta},${figura.espelhada ? 1 : 0},${figura.escalada ? 1 : 0},${figura.sobe ?? 0}`
         : undefined,
     [emOrbita],
   );
@@ -536,9 +674,19 @@ export const ChaoInclinado = memo(function ChaoInclinado({
         const peca = figuras[i];
         let atras: boolean;
         if (vista && peca) {
-          const naTela = figuraNoTripe(vista.tripe, vista.tela, peca);
+          const naTela = figuraNoTripe(vista.tripe, vista.tela, peca, peca.sobe);
           atras = !naTela;
-          if (naTela) {
+          if (naTela && peca.escalada) {
+            // A CHAMA de pé fica no tamanho de cena e vai ao de tela por
+            // `scale`, ao contrário da figura logo abaixo. Medido: a chama é
+            // uma folha de quadros dezesseis vezes a caixa dela, e redimensionar
+            // a caixa a cada quadro da câmera rasterizava a folha inteira de
+            // novo, por chama -- uma área de nove chamas levava a mesa de 61 a
+            // 34 fps. Esticada pelo compositor ela borra de perto, e fogo é
+            // borrado de nascença.
+            const { x, y, escala, giro } = naTela;
+            elemento.style.transform = `translate(${x}px, ${y}px) rotate(${giro}deg) scale(${escala}) translate(${-peca.lado / 2}px, ${-peca.alta}px)`;
+          } else if (naTela) {
             const { x, y, escala, giro } = naTela;
             // No TAMANHO DE TELA, e não ampliada por `scale`: a figura mora num
             // invólucro (ver `PecaEmPe`), e o WebKitGTK rasteriza um `div`
@@ -568,7 +716,13 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     return orbital.assinar(escrever);
   });
 
-  const cores = useCoresDasParedes(paredes, mapaUrl);
+  const cores = useCoresDasParedes(paraACor, mapaUrl);
+
+  // Onde o mapa CABE no plano, que é onde o chão o desenha. Quem pinta pedaço
+  // do mapa por fora do piso -- a laje, a face de reserva -- tem de lê-lo deste
+  // lugar, e não do plano inteiro. Ver `useLugarDoMapa`.
+  const lugarDoMapa = useLugarDoMapa(mapaUrl || undefined);
+  const mapa = lugarDoMapa ?? PLANO_INTEIRO;
 
   // `useId` traz dois-pontos, e dois-pontos dentro de um `url(#...)` não é
   // seletor válido. Mesma raspagem da `ParedeLayer`. Prefixo por instância
@@ -592,11 +746,79 @@ export const ChaoInclinado = memo(function ChaoInclinado({
      * camada não se monta no meio da iteração das paredes que a compõem.
      */
     const lajes = new Map<number, Parede[]>();
+    /**
+     * Em que profundidade cada laje entrou na lista, para a peça no teto entrar
+     * DEPOIS dela. Ver o laço das peças.
+     */
+    const profundidadeDaLaje = new Map<number, number>();
     for (const parede of paredes) {
+      // O pátio não tem laje: o miolo dele é chão à vista, e as faces de
+      // dentro já sobem (ver `escondeCostas` em `facesDaParede`). Com a laje,
+      // o quintal saía tampado pelo próprio chão erguido. A `linha` fica: o
+      // teto não vale para ela, e a faixa em cima é a crista do muro.
+      if (parede.semTeto && parede.formato !== "linha") continue;
       const altura = alturaDaParede(parede);
       const grupo = lajes.get(altura);
       if (grupo) grupo.push(parede);
       else lajes.set(altura, [parede]);
+    }
+
+    /**
+     * O que tampa uma parede, em cima (a laje) e embaixo (a base): o corpo
+     * dela, ou a faixa FINA da porta -- a mesma de que as faces sobem.
+     */
+    const tampaDe = (parede: Parede) =>
+      idsDasPortas.has(parede.id)
+        ? faixaDaLinha(parede, GROSSURA_DA_PORTA).map(poligonoOrientado).join("")
+        : corpoDaParede(parede);
+
+    /**
+     * A BASE das paredes cobertas: o chão debaixo delas, preto.
+     *
+     * Existe por causa do vidro. Com o teto transparente sobre uma peça, o que
+     * aparecia por ele era o mapa no chão -- e o mapa ali é o próprio telhado,
+     * desenhado de cima. Lia como o telhado afundado até o chão. Preta, a base
+     * diz o que ela é: o oco da parede, que ninguém desenhou.
+     *
+     * Uma camada só para todas, no chão, e a primeira da lista: tudo o que
+     * sobe é pintado por cima dela. Fora da vista ela não custa nada à
+     * leitura -- a laje opaca e as faces a cobrem inteira. O pátio fica de
+     * fora: o miolo dele é chão à vista.
+     */
+    const cobertas = [...lajes.values()].flat();
+    let caixaDaBase: CaixaDaUmbra | null = null;
+    for (const parede of cobertas) {
+      caixaDaBase = uniaoDasCaixas(caixaDaBase, caixaDaParede(parede));
+    }
+    if (caixaDaBase) {
+      const { x, y, width, height } = caixaDaBase;
+      const cantosDaBase = [
+        { x, y, altura: 0 },
+        { x: x + width, y, altura: 0 },
+        { x, y: y + height, altura: 0 },
+        { x: x + width, y: y + height, altura: 0 },
+      ];
+      if (!visivel || visivel(cantosDaBase)) {
+        const daBase = `translate(${x}px, ${y}px)`;
+        lista.push({
+          chave: "base-das-paredes",
+          profundidade: -Infinity,
+          no: (
+            <svg
+              data-local={local(daBase)}
+              data-cantos={cantosDe(cantosDaBase)}
+              // Inerte, como a laje: fica entre o cursor e o chão.
+              className="pointer-events-none absolute top-0 left-0"
+              width={width}
+              height={height}
+              viewBox={`${x} ${y} ${width} ${height}`}
+              style={{ transformOrigin: "0 0", transform: comCena(daBase) }}
+            >
+              <path d={cobertas.map(tampaDe).join("")} fill="#000" />
+            </svg>
+          ),
+        });
+      }
     }
 
     /**
@@ -606,8 +828,24 @@ export const ChaoInclinado = memo(function ChaoInclinado({
      * e recalcular a caixa da peça dentro do laço seria refazê-la uma vez por
      * face de cada muro do mapa.
      */
+    /**
+     * Em que cada peça pisa: o chão, ou o teto da parede coberta sob o pé dela.
+     * Ver `apoioDoPe`.
+     *
+     * Pelas paredes SEM as portas: a peça no batente passa pela porta, e não
+     * sobe nela. E não a chama de pé: ela é da área em chamas, que é chão.
+     */
+    const apoios = pecas.map((peca) =>
+      peca.fogo
+        ? null
+        : apoioDoPe(soParedes, {
+            x: peca.x + peca.lado / 2,
+            y: peca.y + peca.lado,
+          }),
+    );
+
     const caixasDasPecas = vidro
-      ? pecas.map((peca) =>
+      ? pecas.map((peca, k) =>
           caixaDaPeca(
             peca.x + peca.lado / 2,
             peca.y + peca.lado,
@@ -615,6 +853,7 @@ export const ChaoInclinado = memo(function ChaoInclinado({
             peca.altura ?? peca.lado,
             giro,
             inclinacao,
+            apoios[k]?.altura ?? 0,
           ),
         )
       : [];
@@ -625,8 +864,15 @@ export const ChaoInclinado = memo(function ChaoInclinado({
 
       const corDaParede = cores.get(parede.id);
 
-      // Com o giro: as faces de costas não são montadas. Ver `facesDaParede`.
-      for (const segmento of facesDaParede(parede, sol ?? null, giro)) {
+      // Com o giro: as faces de costas não são montadas. A `linha` sobe em
+      // caixa da grossura da laje dela, e não como um plano com uma tampa
+      // larga em cima. Ver `facesDaParede`.
+      for (const segmento of facesDaParede(
+        parede,
+        sol ?? null,
+        giro,
+        idsDasPortas.has(parede.id) ? GROSSURA_DA_PORTA : GROSSURA_DA_LINHA,
+      )) {
         const dx = segmento.x2 - segmento.x1;
         const dy = segmento.y2 - segmento.y1;
         const comprimento = Math.hypot(dx, dy);
@@ -663,7 +909,11 @@ export const ChaoInclinado = memo(function ChaoInclinado({
             ? caixaDaFace(segmento, altura, giro, inclinacao)
             : null;
         const vidrou = caixa
-          ? caixasDasPecas.some((daPeca) => tapa(caixa, daPeca))
+          ? caixasDasPecas.some(
+              // A parede em que a peça pisa não a tapa: ela está em cima.
+              (daPeca, k) =>
+                apoios[k]?.paredeId !== parede.id && tapa(caixa, daPeca),
+            )
           : false;
 
         const daFace = `translate3d(${segmento.x1}px, ${segmento.y1}px, 0) rotate(${angulo}deg) rotateX(90deg)`;
@@ -715,10 +965,11 @@ export const ChaoInclinado = memo(function ChaoInclinado({
                 backgroundImage: corDaParede ? undefined : `url(${mapaUrl})`,
                 backgroundSize: corDaParede
                   ? undefined
-                  : `${SCENE_WIDTH}px ${SCENE_HEIGHT}px`,
+                  : `${mapa.width}px ${mapa.height}px`,
                 backgroundPosition: corDaParede
                   ? undefined
-                  : `${-segmento.x1}px ${-segmento.y1}px`,
+                  : `${mapa.x - segmento.x1}px ${mapa.y - segmento.y1}px`,
+                backgroundRepeat: corDaParede ? undefined : "no-repeat",
                 boxShadow: corDaParede
                   ? undefined
                   : `inset 0 0 0 ${SCENE_WIDTH}px rgba(0,0,0,${escurecer})`,
@@ -795,15 +1046,48 @@ export const ChaoInclinado = memo(function ChaoInclinado({
 
       const maisPerto = ordenadas[ordenadas.length - 1]!;
       const daLaje = `translate(${caixa.x}px, ${caixa.y}px) translateZ(${altura}px)`;
+      const profundidadeDestaLaje =
+        profundidadeNaVista(
+          maisPerto.x + maisPerto.width / 2,
+          maisPerto.y + maisPerto.height / 2,
+          giro,
+        ) + 0.5;
+      profundidadeDaLaje.set(altura, profundidadeDestaLaje);
+
+      /**
+       * As paredes deste grupo cujo TOPO foi pintado por cima de uma peça.
+       *
+       * Pela profundidade do GRUPO, que é a que a laje tem na lista: é ela que
+       * decide se a laje veio depois da peça. Isso pega também o caso que a
+       * troca do grupo aceitou -- o telhado de longe pintado por cima de quem
+       * está na frente dele --, e lá o vidro é o conserto certo. A parede em
+       * que a peça pisa não conta: ela está em cima.
+       */
+      const vidradas = new Set(
+        ordenadas
+          .filter((parede) => {
+            if (caixasDasPecas.length === 0) return false;
+            const topo = caixaDoTopo(
+              parede,
+              altura,
+              giro,
+              inclinacao,
+              profundidadeDestaLaje,
+            );
+            return (
+              topo !== null &&
+              caixasDasPecas.some(
+                (daPeca, k) =>
+                  apoios[k]?.paredeId !== parede.id && tapa(topo, daPeca),
+              )
+            );
+          })
+          .map((parede) => parede.id),
+      );
 
       lista.push({
         chave: `laje-${altura}`,
-        profundidade:
-          profundidadeNaVista(
-            maisPerto.x + maisPerto.width / 2,
-            maisPerto.y + maisPerto.height / 2,
-            giro,
-          ) + 0.5,
+        profundidade: profundidadeDestaLaje,
         no: (
           <svg
             data-local={local(daLaje)}
@@ -831,16 +1115,21 @@ export const ChaoInclinado = memo(function ChaoInclinado({
               <pattern
                 id={`laje-${base}-${altura}`}
                 patternUnits="userSpaceOnUse"
-                width={SCENE_WIDTH}
-                height={SCENE_HEIGHT}
+                // No LUGAR do mapa, e não no plano inteiro: o chão o encaixa
+                // sem deformar, e um mapa que não é 16:9 esticado aqui punha
+                // no teto o pedaço ao lado da parede. Ver `useLugarDoMapa`.
+                x={mapa.x}
+                y={mapa.y}
+                width={mapa.width}
+                height={mapa.height}
               >
                 <image
-                  // Vazio enquanto o daemon não responde: sem `href` em vez de
-                  // `href=""`, que o React recusa e o navegador lê como "esta
-                  // página".
-                  href={mapaUrl || undefined}
-                  width={SCENE_WIDTH}
-                  height={SCENE_HEIGHT}
+                  // Vazio enquanto o daemon não responde, e enquanto o arquivo
+                  // não diz a proporção dele: sem `href` em vez de `href=""`,
+                  // que o React recusa e o navegador lê como "esta página".
+                  href={(lugarDoMapa && mapaUrl) || undefined}
+                  width={mapa.width}
+                  height={mapa.height}
                   preserveAspectRatio="none"
                 />
               </pattern>
@@ -848,7 +1137,11 @@ export const ChaoInclinado = memo(function ChaoInclinado({
             {ordenadas.map((parede) => (
               <path
                 key={parede.id}
-                d={corpoDaParede(parede)}
+                // O topo que tapa uma peça vira vidro, como a face. Ver
+                // `VIDRO`. Amaciado pela mesma razão dela.
+                opacity={vidradas.has(parede.id) ? VIDRO : undefined}
+                style={{ transition: "opacity 140ms linear" }}
+                d={tampaDe(parede)}
                 fill={`url(#laje-${base}-${altura})`}
               />
             ))}
@@ -857,23 +1150,38 @@ export const ChaoInclinado = memo(function ChaoInclinado({
       });
     }
 
-    for (const peca of pecas) {
+    for (const [k, peca] of pecas.entries()) {
       const centroX = peca.x + peca.lado / 2;
       const pe = peca.y + peca.lado;
       const alta = peca.altura ?? peca.lado;
+      // No teto da parede em que pisa, ou no chão. Ver `apoioDoPe`.
+      const sobe = apoios[k]?.altura ?? 0;
       // Só o pé, e não os cantos da caixa no chão: a figura em pé desfaz o
       // giro e a inclinação e fica PARALELA à tela, então ela inteira está na
       // profundidade do pé. Os cantos do chão ficam em outra profundidade, e um
       // deles à frente segurava na tela uma figura que já estava atrás do olho.
-      const cantosDaPeca = [{ x: centroX, y: pe, altura: 0 }];
+      const cantosDaPeca = [{ x: centroX, y: pe, altura: sobe }];
       if (visivel && !visivel(cantosDaPeca)) continue;
       // Espelhada em volta do próprio meio, depois de posta em pé: o pé fica
       // onde estava, e só o desenho vira.
-      const daPeca = `translate3d(${centroX}px, ${pe}px, 0) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)${peca.espelhada ? ` translate(${peca.lado}px, 0) scale(-1, 1)` : ""}`;
+      // O espelho manual, trocado quando ela espelha pelo olhar e o olhar
+      // aponta para a esquerda da tela. Ver `espelhadaPeloOlhar`.
+      const espelhada =
+        peca.olhaPara === undefined
+          ? Boolean(peca.espelhada)
+          : Boolean(peca.espelhada) !== olhaParaEsquerda(peca.olhaPara, giro);
+      const daPeca = `translate3d(${centroX}px, ${pe}px, ${sobe}px) rotateZ(${-giro}deg) rotateX(${-inclinacao}deg) translate(${-peca.lado / 2}px, ${-alta}px)${espelhada ? ` translate(${peca.lado}px, 0) scale(-1, 1)` : ""}`;
+
+      const noChao = profundidadeNaVista(centroX, pe, giro);
+      // No teto, ela entra DEPOIS da laje em que pisa: o pé dela está dentro da
+      // pegada da parede, e pela profundidade do pé a laje -- que entra pela
+      // parede mais perto do grupo -- a pintaria por cima.
+      const daLajeSob = sobe > 0 ? profundidadeDaLaje.get(sobe) : undefined;
 
       lista.push({
         chave: `peca-${peca.id}`,
-        profundidade: profundidadeNaVista(centroX, pe, giro),
+        profundidade:
+          daLajeSob === undefined ? noChao : Math.max(noChao, daLajeSob + 0.25),
         no: (
           <PecaEmPe
             peca={peca}
@@ -892,7 +1200,9 @@ export const ChaoInclinado = memo(function ChaoInclinado({
               y: pe,
               lado: peca.lado,
               alta,
-              espelhada: Boolean(peca.espelhada),
+              espelhada,
+              escalada: Boolean(peca.fogo),
+              sobe,
             })}
           />
         ),
@@ -908,11 +1218,15 @@ export const ChaoInclinado = memo(function ChaoInclinado({
     cores,
     escurecer,
     giro,
+    idsDasPortas,
     inclinacao,
+    lugarDoMapa,
+    mapa,
     mapaUrl,
     onPecaPointerDown,
     base,
     paredes,
+    soParedes,
     pecas,
     sol,
     variante,
@@ -974,12 +1288,14 @@ export const ChaoInclinado = memo(function ChaoInclinado({
           draggable={false}
           className="absolute top-0 left-0 select-none"
           style={{
-            width: SCENE_WIDTH,
-            height: SCENE_HEIGHT,
+            // Encaixado como o `FundoDaCena`, e não esticado: é o mesmo lugar
+            // de onde a laje lê o teto.
+            width: mapa.width,
+            height: mapa.height,
             transformOrigin: "0 0",
-            transform: cena,
+            transform: comCena(`translate(${mapa.x}px, ${mapa.y}px)`),
           }}
-          data-local={local("")}
+          data-local={local(`translate(${mapa.x}px, ${mapa.y}px)`)}
         />
 
         {/* A sombra das paredes, DEITADA NO CHÃO com ele.

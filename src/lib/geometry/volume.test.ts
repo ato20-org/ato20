@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { ALTURA_DA_PAREDE } from "@/lib/geometry/sombra";
 import {
+  amostrasDaArea,
   amostrasDaParede,
+  apoioDoPe,
   caixaDaFace,
   caixaDaPeca,
+  caixaDoTopo,
   empurraoDaVista,
   encaixeDoChao,
   facesDaParede,
@@ -207,6 +210,44 @@ describe("facesDaParede", () => {
     expect(daqui[0]!.brilho).toBeCloseTo(de_la[0]!.brilho, 5);
   });
 
+  describe("a linha em caixa", () => {
+    // Uma reta de (100,100) a (300,100): a faixa de 22 vai de y = 89 a 111.
+    const reta: Parede = {
+      id: "r",
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 0,
+      formato: "linha",
+    };
+    /** Sombra para o sul: a luz vem do NORTE. */
+    const DO_NORTE: Sol = { angulo: 90, comprimento: 0.4, forca: 0.4 };
+
+    it("sobe das bordas da faixa, e não do meio do traço", () => {
+      const faces = facesDaParede(reta, DO_NORTE, undefined, 22);
+
+      expect(faces).toHaveLength(4);
+      const ys = faces
+        .filter((f) => f.y1 === f.y2)
+        .map((f) => f.y1)
+        .sort((a, b) => a - b);
+      expect(ys).toEqual([89, 111]);
+    });
+
+    it("tem lado de fora: a face do norte acende e a do sul não", () => {
+      const faces = facesDaParede(reta, DO_NORTE, undefined, 22);
+      const norte = faces.find((f) => f.y1 === 89 && f.y2 === 89)!;
+      const sul = faces.find((f) => f.y1 === 111 && f.y2 === 111)!;
+
+      expect(norte.brilho).toBeGreaterThan(sul.brilho);
+    });
+
+    it("esconde as costas, como a parede fechada", () => {
+      // Olhando de sudeste: a face do sul e a ponta do leste, e só.
+      expect(facesDaParede(reta, DO_NORTE, 45, 22)).toHaveLength(2);
+    });
+  });
+
   it("sem sol continua havendo relevo: a luz fixa não deixa tudo igual", () => {
     const brilhos = facesDaParede(MURO, null).map((face) => face.brilho);
     expect(new Set(brilhos).size).toBeGreaterThan(1);
@@ -226,6 +267,62 @@ describe("facesDaParede", () => {
       Math.max(...facesDaParede(parede, DO_OESTE).map((f) => f.brilho));
 
     expect(claroDe(horario)).toBeCloseTo(claroDe(antihorario), 5);
+  });
+});
+
+describe("apoioDoPe", () => {
+  it("o pé dentro da parede coberta pisa no teto dela", () => {
+    expect(apoioDoPe([MURO], { x: 550, y: 500 })).toEqual({
+      paredeId: "m",
+      altura: ALTURA_DA_PAREDE,
+    });
+  });
+
+  it("fora de parede, e no miolo do pátio, é chão", () => {
+    expect(apoioDoPe([MURO], { x: 100, y: 100 })).toBeNull();
+    expect(apoioDoPe([{ ...MURO, semTeto: true }], { x: 550, y: 500 })).toBeNull();
+  });
+
+  it("entre duas, a mais alta: quem está sob a torre está na torre", () => {
+    const torre: Parede = { ...MURO, id: "t", altura: ALTURA_DA_PAREDE * 2 };
+
+    expect(apoioDoPe([MURO, torre], { x: 550, y: 500 })?.paredeId).toBe("t");
+    expect(apoioDoPe([torre, MURO], { x: 550, y: 500 })?.paredeId).toBe("t");
+  });
+
+  it("na faixa da linha também: ela sobe maciça", () => {
+    const reta: Parede = {
+      id: "r",
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 0,
+      formato: "linha",
+    };
+
+    expect(apoioDoPe([reta], { x: 200, y: 105 })?.paredeId).toBe("r");
+    expect(apoioDoPe([reta], { x: 200, y: 130 })).toBeNull();
+  });
+});
+
+describe("amostrasDaArea", () => {
+  it("cobre o miolo, e não só a borda", () => {
+    const pontos = amostrasDaArea(MURO);
+
+    expect(pontos.length).toBeGreaterThan(100);
+    expect(
+      pontos.some((p) => Math.abs(p.x - 550) < 20 && Math.abs(p.y - 500) < 20),
+    ).toBe(true);
+  });
+
+  it("fica dentro do formato: a elipse não leva os cantos da caixa", () => {
+    const elipse: Parede = { ...MURO, formato: "elipse" };
+
+    for (const ponto of amostrasDaArea(elipse)) {
+      const nx = (ponto.x - 550) / 150;
+      const ny = (ponto.y - 500) / 100;
+      expect(nx * nx + ny * ny).toBeLessThanOrEqual(1.05);
+    }
   });
 });
 
@@ -277,6 +374,37 @@ describe("tapa", () => {
 
   /** Um muro atravessado na frente, de 600 a 900 em x, na linha y = 700. */
   const MURO_NA_FRENTE = { x1: 600, y1: 700, x2: 900, y2: 700 };
+
+  it("o topo da casa na frente tapa a peça logo atrás dela", () => {
+    // Uma casa de 600 a 900 em x e 660 a 760 em y; a peça atrás, em y = 640.
+    const casa: Parede = {
+      id: "casa",
+      x: 600,
+      y: 660,
+      width: 300,
+      height: 100,
+      formato: "retangulo",
+    };
+    const peca = caixaDaPeca(750, 640, 96, 96, GIRO, INCLINACAO);
+    const topo = caixaDoTopo(casa, ALTURA_DA_PAREDE, GIRO, INCLINACAO, 710)!;
+
+    expect(tapa(topo, peca)).toBe(true);
+  });
+
+  it("o topo da casa atrás não tapa a peça na frente", () => {
+    const casa: Parede = {
+      id: "casa",
+      x: 600,
+      y: 400,
+      width: 300,
+      height: 100,
+      formato: "retangulo",
+    };
+    const peca = caixaDaPeca(750, 640, 96, 96, GIRO, INCLINACAO);
+    const topo = caixaDoTopo(casa, ALTURA_DA_PAREDE, GIRO, INCLINACAO, 450)!;
+
+    expect(tapa(topo, peca)).toBe(false);
+  });
 
   it("a face na frente tapa a peça que está atrás dela", () => {
     const face = caixaDaFace(MURO_NA_FRENTE, ALTURA_DA_PAREDE, GIRO, INCLINACAO);

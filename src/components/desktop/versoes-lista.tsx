@@ -13,8 +13,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { t } from "@/lib/i18n/desktop";
+import { idioma } from "@/lib/i18n/idioma";
 import { cn } from "@/lib/utils";
-import { VERSOES, type Mudanca } from "@/lib/versoes";
+import { VERSOES, type Mudanca, type Texto } from "@/lib/versoes";
 
 /** A página de releases do repositório. Permitida em `capabilities/default.json`. */
 const RELEASES_URL = "https://github.com/ato20-org/ato20/releases";
@@ -48,17 +50,27 @@ const RELEASES_URL = "https://github.com/ato20-org/ato20/releases";
  * clique. Nada é escondido — tudo continua alcançável sem sair da tela.
  */
 
-/** A data em `AAAA-MM-DD` escrita como quem fala. */
+/** O texto do histórico no idioma da tela. */
+function noIdioma(texto: Texto): string {
+  return idioma === "en" ? texto.en : texto.pt;
+}
+
+/**
+ * A data em `AAAA-MM-DD` escrita como quem fala.
+ *
+ * Em inglês, mês por extenso e não com barras: `10/06/2026` lê 6 de outubro nos
+ * Estados Unidos e 10 de junho no resto do mundo que fala inglês.
+ */
 function dataLegivel(iso: string): string {
   const [ano, mes, dia] = iso.split("-");
   if (!ano || !mes || !dia) return iso;
+  if (idioma === "pt-BR") return `${dia}/${mes}/${ano}`;
 
-  return `${dia}/${mes}/${ano}`;
-}
-
-/** "1 correção", "8 correções" — o plural é do português, não do `+ "s"`. */
-function contar(quantos: number, singular: string, plural: string): string {
-  return `${quantos} ${quantos === 1 ? singular : plural}`;
+  // Meio-dia em UTC: a data é um dia do calendário, e não um instante, e
+  // qualquer fuso a lê no mesmo dia.
+  return new Intl.DateTimeFormat(idioma, { dateStyle: "medium", timeZone: "UTC" }).format(
+    Date.UTC(Number(ano), Number(mes) - 1, Number(dia), 12),
+  );
 }
 
 /**
@@ -93,10 +105,10 @@ const VERSOES_PRONTAS: VersaoPronta[] = VERSOES.map((versao) => {
 
   const partes: string[] = [];
   if (novidades.length > 0) {
-    partes.push(contar(novidades.length, "novidade", "novidades"));
+    partes.push(t.novidades.contarNovidades(novidades.length));
   }
   if (correcoes.length > 0) {
-    partes.push(contar(correcoes.length, "correção", "correções"));
+    partes.push(t.novidades.contarCorrecoes(correcoes.length));
   }
 
   return {
@@ -143,7 +155,7 @@ function LinhaDeMudanca({ mudanca }: { mudanca: Mudanca }) {
     return (
       <li className="flex gap-2.5 px-1.5 py-1">
         <Icone className={cn(corDoIcone, "mt-0.5 size-3.5 shrink-0")} aria-hidden />
-        <span className="text-foreground text-sm">{mudanca.titulo}</span>
+        <span className="text-foreground text-sm">{noIdioma(mudanca.titulo)}</span>
       </li>
     );
   }
@@ -158,7 +170,7 @@ function LinhaDeMudanca({ mudanca }: { mudanca: Mudanca }) {
       >
         <Icone className={cn(corDoIcone, "mt-0.5 size-3.5 shrink-0")} aria-hidden />
         <span className="text-foreground min-w-0 flex-1 text-sm">
-          {mudanca.titulo}
+          {noIdioma(mudanca.titulo)}
         </span>
         <Seta aberto={aberto} className="mt-0.5" />
       </button>
@@ -168,7 +180,7 @@ function LinhaDeMudanca({ mudanca }: { mudanca: Mudanca }) {
           existir no documento para ser alcançado. */}
       {aberto ? (
         <p className="text-muted-foreground px-1.5 pb-1.5 pl-[1.625rem] text-xs leading-relaxed">
-          {mudanca.detalhe}
+          {noIdioma(mudanca.detalhe)}
         </p>
       ) : null}
     </li>
@@ -192,7 +204,7 @@ function GrupoDeMudancas({
       </h4>
       <ul className="flex flex-col">
         {mudancas.map((mudanca) => (
-          <LinhaDeMudanca key={mudanca.titulo} mudanca={mudanca} />
+          <LinhaDeMudanca key={noIdioma(mudanca.titulo)} mudanca={mudanca} />
         ))}
       </ul>
     </div>
@@ -203,8 +215,8 @@ function GrupoDeMudancas({
 function MudancasDaVersao({ versao }: { versao: VersaoPronta }) {
   return (
     <div className="flex flex-col gap-3">
-      <GrupoDeMudancas titulo="Novidades" mudancas={versao.novidades} />
-      <GrupoDeMudancas titulo="Correções" mudancas={versao.correcoes} />
+      <GrupoDeMudancas titulo={t.novidades.novidades} mudancas={versao.novidades} />
+      <GrupoDeMudancas titulo={t.novidades.correcoes} mudancas={versao.correcoes} />
     </div>
   );
 }
@@ -280,7 +292,7 @@ export function NovidadesDialog() {
       <DialogTrigger
         render={
           <ChromeButton
-            label="O que mudou"
+            label={t.novidades.oQueMudou}
             icon={<Sparkles className="size-3.5" />}
           />
         }
@@ -294,7 +306,9 @@ export function NovidadesDialog() {
           {/* `pr-12`: o X do diálogo mora no canto de cima à direita, por cima
               do cabeçalho, e sem a folga a data ficava embaixo dele. */}
           <header className="flex shrink-0 items-baseline gap-2 border-b py-3 pr-12 pl-5">
-            <DialogTitle className="text-sm font-medium">O que mudou</DialogTitle>
+            <DialogTitle className="text-sm font-medium">
+              {t.novidades.oQueMudou}
+            </DialogTitle>
             <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
               {atual.data}
             </span>
@@ -307,7 +321,7 @@ export function NovidadesDialog() {
                   {atual.versao}
                 </h3>
                 <span className="text-muted-foreground text-xs">
-                  esta versão
+                  {t.novidades.estaVersao}
                 </span>
                 <span className="text-muted-foreground ml-auto shrink-0 text-xs">
                   {atual.resumo}
@@ -320,7 +334,7 @@ export function NovidadesDialog() {
             {anteriores.length > 0 ? (
               <div className="flex flex-col gap-0.5">
                 <h3 className="text-muted-foreground px-1.5 text-[0.65rem] tracking-wide uppercase">
-                  Antes disso
+                  {t.novidades.antesDisso}
                 </h3>
 
                 {anteriores.map((versao) => (
@@ -339,12 +353,12 @@ export function NovidadesDialog() {
               size="sm"
               onClick={() => {
                 void openUrl(RELEASES_URL).catch(() =>
-                  toast.error("Não foi possível abrir o navegador."),
+                  toast.error(t.novidades.semNavegador),
                 );
               }}
             >
               <ExternalLink />
-              Releases no GitHub
+              {t.novidades.releasesNoGithub}
             </Button>
           </footer>
         </div>
@@ -388,7 +402,7 @@ export function HistoricoDeVersoes() {
       {anteriores.length > 0 ? (
         <div className="flex flex-col gap-0.5">
           <h3 className="text-muted-foreground px-1.5 text-[0.65rem] tracking-wide uppercase">
-            Antes disso
+            {t.novidades.antesDisso}
           </h3>
 
           {anteriores.map((versao) => (

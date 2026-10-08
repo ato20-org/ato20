@@ -25,6 +25,7 @@ import { MiniaturaDaPagina } from "@/components/leitor/miniatura-da-pagina";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { useSceneScaleSeHouver } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { t } from "@/lib/i18n/palco";
 import { LARGURA_BASE, type Alinhamento, type Bloco } from "@/lib/markdown/linha";
 import { FORA_DA_BUSCA } from "@/components/mestre/procurar-na-nota";
 import { MARCA_MENCAO } from "@/lib/mestre/clique-da-mencao";
@@ -222,9 +223,9 @@ function Abre({
 
 /** Os botões de alinhamento da imagem, na ordem da linha. */
 const ALINHAMENTOS: Array<{ valor: Alinhamento; icone: LucideIcon; rotulo: string }> = [
-  { valor: "esquerda", icone: AlignLeft, rotulo: "Imagem à esquerda" },
-  { valor: "centro", icone: AlignCenter, rotulo: "Imagem no centro · |centro" },
-  { valor: "direita", icone: AlignRight, rotulo: "Imagem à direita · |direita" },
+  { valor: "esquerda", icone: AlignLeft, rotulo: t.previaDaMencao.imagemEsquerda },
+  { valor: "centro", icone: AlignCenter, rotulo: t.previaDaMencao.imagemCentro },
+  { valor: "direita", icone: AlignRight, rotulo: t.previaDaMencao.imagemDireita },
 ];
 
 /** A imagem não encolhe abaixo disto, em pixel na fonte base: some a alça. */
@@ -339,7 +340,7 @@ function PreviaDeImagem({
         style={{ width: alvo ? `${alvo / LARGURA_BASE}em` : "100%" }}
       >
         <Abre
-          titulo={`Abrir ${asset.name}`}
+          titulo={t.previaDaMencao.abrir(asset.name)}
           aoAbrir={() =>
             abrirJanela({ tipo: "asset", assetId: asset.id, nome: asset.name })
           }
@@ -365,7 +366,7 @@ function PreviaDeImagem({
         {aoAjustar ? (
           <span
             role="group"
-            aria-label="Alinhamento da imagem"
+            aria-label={t.previaDaMencao.alinhamento}
             className="bg-background/90 absolute top-[0.3em] left-[0.3em] flex gap-px rounded-[0.3em] p-px opacity-0 shadow group-hover:opacity-100 focus-within:opacity-100"
           >
             {ALINHAMENTOS.map(({ valor, icone: Icone, rotulo }) => (
@@ -395,8 +396,8 @@ function PreviaDeImagem({
           <span
             role="separator"
             aria-orientation="vertical"
-            aria-label={`Largura de ${asset.name}`}
-            title="Arraste para mudar o tamanho"
+            aria-label={t.previaDaMencao.largura(asset.name)}
+            title={t.previaDaMencao.arrasteTamanho}
             className={cn(
               "bg-background border-foreground/40 absolute -right-1 -bottom-1 size-3 cursor-nwse-resize rounded-sm border shadow",
               // Só sob o mouse, ou com a alça na mão: numa nota com seis
@@ -429,13 +430,13 @@ function PreviaDePersonagem({
   const url = useAssetUrl(achado.retrato, "mini");
   const traco = useTracoDoIcone();
   const legenda = achado.dono
-    ? `${achado.dono} · ${achado.presente ? "na mesa" : "ausente"}`
-    : "Sem jogador";
+    ? `${achado.dono} · ${achado.presente ? t.previaDaMencao.naMesa : t.previaDaMencao.ausente}`
+    : t.previaDaMencao.semJogador;
 
   return (
     <div className="my-[0.3em]" {...{ [FORA_DA_BUSCA]: "" }}>
       <Abre
-        titulo={`Abrir a ficha de ${achado.nome}`}
+        titulo={t.previaDaMencao.abrirFicha(achado.nome)}
         aoAbrir={() => abrirJanela({ tipo: "personagem", personagemId: achado.id })}
         className={cn(CAIXA, "inline-flex items-center gap-[0.6em] pr-[2em]")}
       >
@@ -489,7 +490,7 @@ function PreviaDeCena({
   return (
     <div className="my-[0.3em]" {...{ [FORA_DA_BUSCA]: "" }}>
       <Abre
-        titulo={`Abrir a cena ${cena.name} na bancada`}
+        titulo={t.previaDaMencao.abrirCena(cena.name)}
         aoAbrir={() => irParaCena(cena.id)}
         className={cn(CAIXA, "inline-flex w-[18em] flex-col gap-[0.3em]")}
       >
@@ -527,7 +528,7 @@ function PreviaDeMarcador({
   return (
     <div className="my-[0.3em]" {...{ [FORA_DA_BUSCA]: "" }}>
       <Abre
-        titulo={`Abrir ${livro.titulo} na página ${marcador.pagina}`}
+        titulo={t.previaDaMencao.abrirLivro(livro.titulo, marcador.pagina)}
         aoAbrir={() => abrirLivro(livro.id, livro.titulo, marcador.pagina)}
         className={cn(
           CAIXA,
@@ -548,7 +549,7 @@ function PreviaDeMarcador({
         <span className="min-w-0 px-[0.2em]">
           <span className="block truncate font-semibold">{marcador.rotulo}</span>
           <span className="block truncate text-[0.85em] opacity-70">
-            {livro.titulo} · p. {marcador.pagina}
+            {livro.titulo} · {t.leitor.paginaCurta(marcador.pagina)}
           </span>
         </span>
       </Abre>

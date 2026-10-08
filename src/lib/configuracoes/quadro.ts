@@ -4,6 +4,7 @@ import {
   valorDe,
 } from "@/lib/configuracoes/registro";
 import type { Definicao } from "@/lib/configuracoes/valor";
+import { t } from "@/lib/i18n/mestre";
 
 /**
  * Como os elementos NOVOS do quadro nascem nesta campanha.
@@ -28,8 +29,8 @@ export const CHAVE_DO_QUADRO = {
 const DEFINICOES_DO_QUADRO: Definicao[] = [
   {
     chave: CHAVE_DO_QUADRO.arredondado,
-    titulo: "Cantos arredondados",
-    descricao: "Retângulos e polígonos novos nascem com canto redondo.",
+    titulo: t.definicoes.cantosArredondados,
+    descricao: t.definicoes.cantosArredondadosDescricao,
     tipo: "booleano",
     padrao: false,
     escopo: "campanha",
@@ -37,9 +38,8 @@ const DEFINICOES_DO_QUADRO: Definicao[] = [
   },
   {
     chave: CHAVE_DO_QUADRO.aMao,
-    titulo: "Traço à mão",
-    descricao:
-      "Formas e setas novas saem com traço tremido, e o texto solto nasce em letra de mão.",
+    titulo: t.definicoes.tracoAMao,
+    descricao: t.definicoes.tracoAMaoDescricao,
     tipo: "booleano",
     padrao: false,
     escopo: "campanha",
@@ -71,8 +71,8 @@ export function usePadraoDoQuadro(): PadraoDoQuadro {
  * Muda o padrão da campanha.
  *
  * Voltar ao padrão de fábrica APAGA a chave em vez de gravar `false`: o
- * arquivo da campanha guarda só o que difere, e é o que o editor de JSON
- * promete a quem o abre.
+ * arquivo da campanha guarda só o que difere, e é o que ele promete a quem o
+ * abre à mão.
  */
 export function definirPadraoDoQuadro(patch: Partial<PadraoDoQuadro>): void {
   const { gravar, limpar } = useConfiguracoesStore.getState();

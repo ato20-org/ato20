@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { deleteAsset, importAssets, importarBytes } from "@/lib/vault/assets";
 import { call } from "@/lib/vault/bridge";
+import { t } from "@/lib/i18n/personagens";
 import type { AssetMeta } from "@/types/scene";
 import type {
   AnexoAutor,
@@ -13,7 +14,6 @@ import type {
   Aparencia,
   CampoPersonagem,
   Condicao,
-  EfeitoNaFigura,
   EstiloMedidor,
   Medidor,
   ModeloDeMedidor,
@@ -96,7 +96,7 @@ export async function preencherCampoComArquivo(
 
     const primeiro = resultado.aceitos[0];
     if (!primeiro)
-      throw new Error(resultado.recusados[0] ?? "Nada foi anexado.");
+      throw new Error(resultado.recusados[0] ?? t.arquivos.nadaAnexado);
 
     await setCharacterCampo(id, campo, primeiro.arquivo);
 
@@ -112,7 +112,7 @@ export async function preencherCampoComArquivo(
 
   const primeiro = resultado.aceitos[0];
   if (!primeiro)
-    throw new Error(resultado.recusados[0] ?? "Nada foi importado.");
+    throw new Error(resultado.recusados[0] ?? t.arquivos.nadaImportado);
 
   const escolhido =
     recortar && !primeiro.animada
@@ -179,7 +179,7 @@ async function passarPeloRecorte(
     );
     const novo = recortado.aceitos[0];
     if (!novo)
-      throw new Error(recortado.recusados[0] ?? "O recorte não entrou no acervo.");
+      throw new Error(recortado.recusados[0] ?? t.arquivos.recorteForaDoAcervo);
 
     return novo.id;
   } finally {
@@ -417,7 +417,7 @@ export function criarCondicao(
   nome: string,
   cor: string,
   icone: string,
-  efeito: EfeitoNaFigura | null,
+  efeito: string | null,
 ): Promise<Condicao> {
   return call<Condicao>("character_condicao_criar", {
     id,
@@ -474,7 +474,7 @@ export function criarCondicaoDaCampanha(
   nome: string,
   cor: string,
   icone: string,
-  efeito: EfeitoNaFigura | null,
+  efeito: string | null,
 ): Promise<Condicao> {
   return call<Condicao>("condicao_modelo_criar", { nome, cor, icone, efeito });
 }
@@ -485,6 +485,15 @@ export function editarCondicaoDaCampanha(
   patch: PatchCondicao,
 ): Promise<Condicao> {
   return call<Condicao>("condicao_modelo_editar", { modeloId, patch });
+}
+
+/**
+ * Dá à condição do cardápio o efeito próprio, e aponta para ele toda cópia com
+ * o nome dela nas fichas: configurar o fogo de "Em chamas" muda também quem
+ * já está em chamas. Ver `condicoes::vincular_efeito`.
+ */
+export function vincularEfeitoDaCondicao(modeloId: string, efeito: string): Promise<Condicao> {
+  return call<Condicao>("condicao_modelo_vincular_efeito", { modeloId, efeito });
 }
 
 /** Tira a condição do cardápio. As cópias nas fichas ficam. */
@@ -524,7 +533,7 @@ export async function attachToCharacter(
 ): Promise<AnexoImport | null> {
   const escolhidos = await open({
     multiple: true,
-    title: "Escolha os arquivos do personagem",
+    title: t.arquivos.escolhaOsArquivos,
   });
   if (!escolhidos) return null;
 

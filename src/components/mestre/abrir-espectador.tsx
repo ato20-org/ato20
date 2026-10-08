@@ -5,6 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { t } from "@/lib/i18n/mestre";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { call, daemonAddr } from "@/lib/vault/bridge";
 
@@ -78,13 +79,13 @@ export function AbrirEspectador() {
       toast.error(
         cause instanceof Error
           ? cause.message
-          : `Não foi possível abrir ${alvo}`,
+          : t.espectador.naoAbriu(alvo),
         {
           description: alvo || undefined,
           duration: 12_000,
           action: alvo
             ? {
-                label: "Copiar endereço",
+                label: t.espectador.copiarEndereco,
                 onClick: () =>
                   void navigator.clipboard.writeText(alvo).catch(() => {}),
               }
@@ -98,11 +99,11 @@ export function AbrirEspectador() {
     <Button
       variant="outline"
       size="sm"
-      aria-label="Abrir Espectador no navegador"
+      aria-label={t.espectador.abrirNoNavegador}
       onClick={() => void abrir()}
     >
       <ExternalLink />
-      <span className="hidden xl:inline">Abrir Espectador</span>
+      <span className="hidden xl:inline">{t.espectador.abrir}</span>
     </Button>
   );
 }

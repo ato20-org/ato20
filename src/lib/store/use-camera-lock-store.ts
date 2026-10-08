@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { create } from "zustand";
 
 import { boundsOfItems, type Bounds } from "@/lib/geometry/bounds";
+import { t } from "@/lib/i18n/ferramentas";
 import {
   clampCamera,
   formatoDentroDe,
@@ -158,7 +159,7 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
       // Cena antiga com recorte e sem câmeras: o recorte vira a Câmera 1 e
       // continua no ar, para a TV não pular ao abrir o app novo.
       const id = store.salvarCamera(scene.id, {
-        nome: "Câmera 1",
+        nome: t.nomes.camera(1),
         viewport: atual.camera,
       });
       store.transmitirCamera(scene.id, id);
@@ -238,13 +239,13 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
     const selecionada = recorteParaAgir(scene);
     // Dizer, e não calar: o mestre apertou a tecla e a tela não mudou.
     if (!selecionada) {
-      toast("Sem câmera 2D para espelhar. Crie uma no + da barra de câmeras.");
+      toast(t.espelho.semCamera);
       return;
     }
 
     if (get().espelhoMestre) {
       set({ espelhoMestre: false });
-      toast("Espelho desligado.");
+      toast(t.espelho.desligado);
       return;
     }
 
@@ -258,7 +259,7 @@ export const useCameraLockStore = create<CameraLockStore>((set, get) => ({
     set({ espelhoMestre: true });
     // Com o espelho ligado a moldura cola nas bordas do palco e some de
     // vista; sem o aviso, parecia que a tecla não tinha feito nada.
-    toast(`${selecionada.nome} segue o teu palco. Shift+L desliga.`);
+    toast(t.espelho.ligado(selecionada.nome));
   },
 
   alternarFantasmas: () =>

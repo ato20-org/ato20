@@ -19,6 +19,7 @@ import { useMencoesDoMestre } from "@/hooks/use-mencoes-do-mestre";
 import { usePlayers } from "@/hooks/use-players";
 import { useConfiguracao } from "@/lib/configuracoes/registro";
 import { textoDaRolagem } from "@/lib/fio";
+import { t } from "@/lib/i18n/mestre";
 import type { Sugestao } from "@/lib/mencoes/sugestao";
 import {
   apagarDoFio,
@@ -89,7 +90,7 @@ export function ChatBody() {
         mencoes={mencoes}
         vazio={
           <PainelVazio conteudo={{ tipo: "chat" }}>
-            Nada escrito nem rolado ainda
+            {t.chat.vazio}
           </PainelVazio>
         }
       />
@@ -101,7 +102,7 @@ export function ChatBody() {
         onAberto={(aberto) => {
           if (!aberto) setApagando(null);
         }}
-        titulo="Apagar esta linha do chat?"
+        titulo={t.chat.apagarTitulo}
         itens={[
           apagando?.texto
             ? `"${resumo(apagando.texto)}"`
@@ -109,14 +110,14 @@ export function ChatBody() {
               ? textoDaRolagem(apagando.rolagem)
               : "",
         ]}
-        ressalva="Some da tela de todos os jogadores. O arquivo chat.jsonl da campanha guarda que ela foi apagada."
+        ressalva={t.chat.apagarRessalva}
         onConfirmar={() => {
           const alvo = apagando;
           setApagando(null);
           if (!alvo) return;
 
           void apagarDoFio(alvo.id).catch((causa) =>
-            toast.error("O chat não apagou a linha.", {
+            toast.error(t.chat.naoApagou, {
               description: causa instanceof Error ? causa.message : undefined,
             }),
           );
@@ -139,7 +140,7 @@ function resumo(texto: string): string {
 function abrirNoNavegador(url: string): void {
   void openUrl(url).catch(() =>
     call<string>("abrir_no_navegador", { url }).catch(() =>
-      toast.error("Não foi possível abrir o link.", { description: url }),
+      toast.error(t.chat.linkNaoAbriu, { description: url }),
     ),
   );
 }
@@ -179,10 +180,10 @@ function CampoDoMestre({ personagens }: { personagens: Sugestao[] }) {
   }
 
   const rotulos: Record<string, string> = {
-    mesa: "Para a mesa",
-    mestre: "Só para mim",
+    mesa: t.chat.paraAMesa,
+    mestre: t.chat.soParaMim,
     ...Object.fromEntries(
-      players.map((jogador) => [`jogador:${jogador.id}`, `Só para ${jogador.nome}`]),
+      players.map((jogador) => [`jogador:${jogador.id}`, t.chat.soPara(jogador.nome)]),
     ),
   };
 
@@ -190,9 +191,11 @@ function CampoDoMestre({ personagens }: { personagens: Sugestao[] }) {
     <CampoDoFio
       denso
       personagens={personagens}
-      tituloDosPersonagens="Personagens da campanha"
+      tituloDosPersonagens={t.chat.personagensDaCampanha}
       placeholder={
-        destinoValido === "mesa" ? "Escrever para a mesa" : `${rotulos[destinoValido]}…`
+        destinoValido === "mesa"
+          ? t.chat.escreverParaAMesa
+          : `${rotulos[destinoValido]}…`
       }
       onEnviar={async (texto) => {
         await falarNoFio({ texto, para: para() });
@@ -209,7 +212,7 @@ function CampoDoMestre({ personagens }: { personagens: Sugestao[] }) {
             <SelectTrigger
               size="sm"
               className="h-6 min-w-0 flex-1 text-xs"
-              aria-label="Para quem"
+              aria-label={t.chat.paraQuem}
             >
               <SelectValue>
                 {(valor: string) => rotulos[valor] ?? rotulos.mesa}
@@ -241,9 +244,9 @@ function CampoDoMestre({ personagens }: { personagens: Sugestao[] }) {
               size="sm"
               checked={abertos}
               onCheckedChange={definirDadosAbertos}
-              aria-label="Meus dados abertos para a mesa"
+              aria-label={t.chat.dadosAbertosRotulo}
             />
-            Dados abertos
+            {t.chat.dadosAbertos}
           </label>
         </>
       }

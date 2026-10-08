@@ -93,8 +93,8 @@ export function useSceneDrag() {
 
       target.setPointerCapture(pointerId);
 
-      // O palco fica sabendo que há gesto: com isso o plano de conteúdo desce
-      // para o compositor enquanto o ponteiro anda. Ver `gestos` no store.
+      // O palco fica sabendo que há gesto: com isso os efeitos animados pausam
+      // enquanto o ponteiro anda. Ver `gestos` no store.
       useViewportStore.getState().comecarGesto();
 
       /**

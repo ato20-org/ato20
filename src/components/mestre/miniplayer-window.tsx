@@ -7,7 +7,7 @@ import {
   CortinaDeCorte,
   useCorteDeCamera,
 } from "@/components/playground/corte-de-camera";
-import { SceneLayer } from "@/components/playground/scene-layer";
+import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { useSubscription } from "@/hooks/use-scene-broadcast";
 import {
@@ -15,6 +15,8 @@ import {
   useDeclarativoDaMesa,
 } from "@/components/playground/declarativo";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
+import { t } from "@/lib/i18n/mestre";
+import { compor, filtroDaImagem } from "@/lib/imagem-do-espectador";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { Spotlight } from "@/types/scene";
@@ -71,7 +73,7 @@ export function MiniplayerBody() {
   if (!codigo) {
     return (
       <p className="text-muted-foreground p-3 text-xs">
-        Abra uma campanha para ver o que a mesa vê.
+        {t.miniplayer.semCampanha}
       </p>
     );
   }
@@ -80,7 +82,7 @@ export function MiniplayerBody() {
     return (
       <div className="aspect-video w-full bg-black" aria-busy>
         <p className="text-muted-foreground grid h-full place-items-center px-4 text-center text-xs">
-          Procurando o daemon…
+          {t.miniplayer.procurandoDaemon}
         </p>
       </div>
     );
@@ -102,7 +104,9 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
     spotlight,
     rolagens,
     pings,
+    laser,
     declarativoVersao,
+    imagem,
     synced,
     stalled,
   } = useSubscription(codigo, base);
@@ -113,7 +117,16 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
 
   // Mesmo corte da TV: trocar de câmera fecha a cortina; a mesma câmera andando
   // interpola. É o que faz este quadro bater com o da mesa também no tempo.
-  const { cena, viewport, corte, cortando } = useCorteDeCamera(scene);
+  const { cena, viewport, tripe, corte, cortando } = useCorteDeCamera(scene);
+  // Com um tripé no ar a mesa vê de esguelha, e esta janela também: o palco
+  // fica parado no plano inteiro e quem anda é o olho. Mesma regra do
+  // `EspectadorStage` -- sem ela, a janela mostrava o mapa de prumo enquanto a
+  // TV mostrava o 2.5D.
+  const deEsguelha = Boolean(tripe);
+  // O ajuste de imagem da TV, igual ao do `EspectadorStage`: esta janela é a
+  // prévia dele. O palco do Mestre fica com o mapa como é, e sem ela o mestre
+  // mexeria nas réguas às cegas, olhando para a sala.
+  const filtro = filtroDaImagem(compor(imagem, cena?.imagem));
 
   return (
     // `aspect-video` E `flex-1`: a janela flutuante nasce sem altura e cresce
@@ -124,24 +137,34 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
     //
     // `overflow-hidden` e `isolate`: o palco faz o próprio recorte, mas a
     // cortina e o aviso são `absolute` e não podem sair da janela.
+    //
+    // O ajuste de imagem na caixa inteira, como a TV faz no palco, na cortina
+    // e na evidência. O aviso de "nada no ar" vai junto, e só aparece sem cena.
     <DeclarativoProvider valor={declarativo}>
-    <div className="relative isolate flex aspect-video min-h-0 w-full flex-1 flex-col overflow-hidden bg-black">
+    <div
+      className="relative isolate flex aspect-video min-h-0 w-full flex-1 flex-col overflow-hidden bg-black"
+      style={{ filter: filtro }}
+    >
       <SceneStage
-        viewport={viewport}
+        viewport={deEsguelha ? undefined : viewport}
         corDoVazio={cena?.corDoVazio}
         corte={corte}
         smooth
       >
         {cena ? (
           <div key={cena.id} className="scene-fade-in absolute inset-0">
-            <SceneLayer
+            {/* Sem tripé no ar, devolve a mesma `SceneLayer` de antes. */}
+            <CenaDeEsguelha
               scene={cena}
               portraits={portraits}
               fichas={fichas}
               rolagens={rolagens}
               pings={pings}
+              laser={laser}
               variante="tela"
               smooth
+              tripe={tripe}
+              corte={corte}
             />
           </div>
         ) : null}
@@ -157,10 +180,10 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
       {!scene ? (
         <p className="text-muted-foreground absolute inset-0 grid place-items-center px-4 text-center text-xs">
           {synced
-            ? "Nada no ar."
+            ? t.miniplayer.nadaNoAr
             : stalled
-              ? "Sem resposta do daemon."
-              : "Aguardando…"}
+              ? t.miniplayer.semResposta
+              : t.miniplayer.aguardando}
         </p>
       ) : null}
     </div>
@@ -186,7 +209,7 @@ function EvidenciaEmMiniatura({ spotlight }: { spotlight: Spotlight | null }) {
       ) : null}
       <span className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/90">
         <Eye className="size-3" aria-hidden />
-        Em evidência
+        {t.miniplayer.emEvidencia}
       </span>
     </div>
   );

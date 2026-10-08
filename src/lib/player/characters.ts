@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
 import { authorized, fail } from "@/lib/player/session";
 import type { AnexoPersonagem, Personagem } from "@/types/character";
 
@@ -19,7 +20,7 @@ import type { AnexoPersonagem, Personagem } from "@/types/character";
 export async function myCharacters(codigo: string): Promise<Personagem[]> {
   const response = await fetch("/eu/personagens", { headers: authorized(codigo) });
 
-  if (!response.ok) throw await fail(response, "Não foi possível listar os personagens.");
+  if (!response.ok) throw await fail(response, t.erros.listarPersonagens);
 
   return (await response.json()) as Personagem[];
 }
@@ -32,7 +33,7 @@ export async function characterFiles(
     headers: authorized(codigo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível listar os arquivos.");
+  if (!response.ok) throw await fail(response, t.erros.listarArquivos);
 
   return (await response.json()) as AnexoPersonagem[];
 }
@@ -58,7 +59,7 @@ export async function uploadCharacterFile(
     body,
   });
 
-  if (!response.ok) throw await fail(response, `Não foi possível enviar ${file.name}.`);
+  if (!response.ok) throw await fail(response, t.erros.enviar(file.name));
 
   return (await response.json()) as AnexoPersonagem;
 }
@@ -80,7 +81,7 @@ export async function deleteCharacterFile(
     { method: "DELETE", headers: authorized(codigo) },
   );
 
-  if (!response.ok) throw await fail(response, "Não foi possível remover o arquivo.");
+  if (!response.ok) throw await fail(response, t.erros.removerArquivo);
 }
 
 /**
@@ -115,7 +116,7 @@ export async function characterFileUrl(
     { headers: authorized(codigo) },
   );
 
-  if (!response.ok) throw await fail(response, "Não foi possível abrir o arquivo.");
+  if (!response.ok) throw await fail(response, t.erros.abrirArquivo);
 
   const url = URL.createObjectURL(await response.blob());
   blobCache.set(chave(id, anexo), url);
@@ -164,7 +165,7 @@ export async function characterFileThumbUrl(
     { headers: authorized(codigo) },
   );
 
-  if (!response.ok) throw await fail(response, "Não foi possível abrir a miniatura.");
+  if (!response.ok) throw await fail(response, t.erros.abrirMiniatura);
 
   const url = URL.createObjectURL(await response.blob());
   miniCache.set(chave, url);
@@ -187,7 +188,7 @@ export async function characterNote(codigo: string, id: string): Promise<string>
     headers: authorized(codigo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível ler a nota.");
+  if (!response.ok) throw await fail(response, t.erros.lerNota);
 
   return ((await response.json()) as { texto: string }).texto;
 }
@@ -203,5 +204,5 @@ export async function writeCharacterNote(
     body: JSON.stringify({ texto }),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível gravar a nota.");
+  if (!response.ok) throw await fail(response, t.erros.gravarNota);
 }

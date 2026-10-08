@@ -95,8 +95,12 @@ export function useCameraOrbital({
    *
    * Quem monta decide, porque depende da ferramenta: com "mover" na mão, o
    * chão vazio anda a câmera e a peça anda a peça.
+   *
+   * O evento vai junto para quem precisa da POSIÇÃO e não só do alvo: a parede
+   * de esguelha não recebe ponteiro, e saber se a mão está nela é conta. Ver
+   * `paredeSobOPixel`.
    */
-  podeAgarrar: (alvo: EventTarget | null) => boolean;
+  podeAgarrar: (alvo: EventTarget | null, evento: PointerEvent) => boolean;
   /** De onde o alvo não sai, em unidades de cena. */
   mapa: Bounds;
   /** Devolve a câmera ao sair, para quem monta não perder o lugar. */
@@ -384,7 +388,7 @@ export function useCameraOrbital({
       const daCamera =
         evento.button === 1 ||
         (evento.button === 0 &&
-          (agora.current.arrastar || agora.current.podeAgarrar(evento.target)));
+          (agora.current.arrastar || agora.current.podeAgarrar(evento.target, evento)));
       if (!daCamera || !camera.current || !tela.current) return;
 
       const ponto = daTelaAoChao(camera.current, tela.current, noPixel(evento));

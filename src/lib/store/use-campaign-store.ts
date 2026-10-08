@@ -6,6 +6,7 @@ import { flushPortraits } from "@/lib/store/use-portrait-store";
 import { flushBoard } from "@/lib/store/use-scene-store";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
+import { t } from "@/lib/i18n/mestre";
 import { aoSumirCampanha, isDesktop, VaultError } from "@/lib/vault/bridge";
 import {
   createCampaign,
@@ -115,7 +116,7 @@ function describe(cause: unknown): string {
   if (cause instanceof VaultError) return cause.message;
   if (cause instanceof Error) return cause.message;
 
-  return "Falha ao abrir a campanha";
+  return t.abertura.falhou;
 }
 
 /**
@@ -139,6 +140,45 @@ async function fecharOAnterior(): Promise<void> {
     ]);
   } catch {
     // Ver acima.
+  }
+}
+
+/** A campanha a reabrir depois de o próprio aplicativo recarregar a janela. */
+const REABRIR = "ato20.reabrir";
+
+/**
+ * Grava o pendente e deixa marcada a campanha aberta, para a janela recarregar
+ * e voltar a ela.
+ *
+ * Só a troca de idioma recarrega a janela de propósito, e ela é pedida de
+ * DENTRO da campanha, em Configurações. Cair na porta depois seria cobrar um
+ * clique a mais por ter mudado uma chave. `sessionStorage` porque a marca vale
+ * para esta janela e para a próxima carga dela, e mais nada: fechar o
+ * aplicativo a apaga, e a próxima abertura continua na porta.
+ */
+export async function prepararRecarga(): Promise<void> {
+  await fecharOAnterior();
+
+  const aberta = useCampaignStore.getState().campaign;
+  if (!aberta) return;
+
+  try {
+    sessionStorage.setItem(REABRIR, aberta.path);
+  } catch {
+    // Sem armazenamento a janela recarrega na porta, que é o comportamento de
+    // sempre.
+  }
+}
+
+/** Lê e apaga a marca: ela vale uma recarga só. */
+function tirarReabertura(): string | null {
+  try {
+    const caminho = sessionStorage.getItem(REABRIR);
+    sessionStorage.removeItem(REABRIR);
+
+    return caminho;
+  } catch {
+    return null;
   }
 }
 
@@ -226,6 +266,16 @@ export const useCampaignStore = create<CampaignStore>((set, get) => {
         // `ready`, e o store sobrevive à remontagem por ser de módulo. Quem chega
         // até este ponto ou abriu o aplicativo, ou recarregou a janela -- e as
         // duas querem a porta.
+        //
+        // A exceção é a recarga que o PRÓPRIO aplicativo pediu, e ela deixa a
+        // marca de qual campanha estava aberta: ver `prepararRecarga`.
+        const reabrir = tirarReabertura();
+        if (reabrir) {
+          set({ recents: await refreshRecents() });
+          await get().choose(reabrir);
+          return;
+        }
+
         set({
           campaign: null,
           recents: await refreshRecents(),
@@ -263,7 +313,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => {
     async openFolder() {
       if (get().busy) return;
 
-      const path = await pickFolder("Escolha a pasta da campanha");
+      const path = await pickFolder(t.dialogos.escolherPasta);
       // Diálogo fechado sem escolher não é erro, e não deve deixar a porta
       // ocupada nem mostrar mensagem.
       if (!path) return;
@@ -274,7 +324,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => {
     async create(nome) {
       if (get().busy) return;
 
-      const parent = await pickFolder("Onde criar a campanha");
+      const parent = await pickFolder(t.dialogos.ondeCriar);
       if (!parent) return;
 
       // Depois do seletor, nunca antes: enquanto o diálogo do sistema está aberto
@@ -336,7 +386,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => {
       if (get().busy) return;
 
       // Só o segundo diálogo: o zip a mão já escolheu, ao soltá-lo na porta.
-      const parent = await pickFolder("Onde criar a campanha importada");
+      const parent = await pickFolder(t.dialogos.ondeImportar);
       if (!parent) return;
 
       await descompactar({ zipPath, parent });

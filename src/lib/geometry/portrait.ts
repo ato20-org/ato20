@@ -10,6 +10,7 @@ import {
   SCENE_WIDTH,
   type AncoraRetrato,
   type LayoutDoRetrato,
+  type LugarDaPeca,
   type Portrait,
   type UniaoDeRetratos,
   type Viewport,
@@ -423,6 +424,45 @@ export function limitarEscala(escala: unknown): number {
 }
 
 /**
+ * O menor rosto que a escala deixa, em fração da caixa.
+ *
+ * Abaixo de um terço o rosto vira um ponto na TV, e a caixa em volta dele vira
+ * um buraco no mapa com as barras penduradas longe de quem elas são.
+ */
+export const ESCALA_DO_ROSTO_MIN = 0.3;
+
+/**
+ * Prende a escala do rosto entre `ESCALA_DO_ROSTO_MIN` e 1, ou devolve 1 para
+ * o que não é número. Irmã de `limitarEscala`, com teto na caixa: o rosto
+ * maior que ela sairia por cima das peças que penduram na borda.
+ */
+export function limitarEscalaDoRosto(escala: unknown): number {
+  return typeof escala === "number" && Number.isFinite(escala)
+    ? Math.min(1, Math.max(ESCALA_DO_ROSTO_MIN, escala))
+    : 1;
+}
+
+/**
+ * O quadro em que o rosto cabe, relativo à caixa do retrato.
+ *
+ * `escala` da caixa, no `lugar` escolhido ou centrado nela. É um QUADRO, e não
+ * a imagem: quem desenha ainda encaixa o arquivo nele pela proporção -- ver
+ * `caberEm` --, como sempre encaixou na caixa inteira.
+ */
+export function quadroDoRosto(
+  caixa: { width: number; height: number },
+  escala: number,
+  lugar?: LugarDaPeca,
+): { x: number; y: number; width: number; height: number } {
+  return {
+    x: (lugar?.x ?? (1 - escala) / 2) * caixa.width,
+    y: (lugar?.y ?? (1 - escala) / 2) * caixa.height,
+    width: caixa.width * escala,
+    height: caixa.height * escala,
+  };
+}
+
+/**
  * A largura da fileira de dados, em fração da LARGURA do retrato.
  *
  * A fileira é a coluna do histórico mais o dado de agora, e os dois saem da
@@ -562,6 +602,17 @@ export function caixaDaComposicao(
       // é que a largura roubada do vizinho seja a mesma nos dois casos.
       direita += coluna;
     }
+  }
+
+  // O rosto só ocupa algo além da caixa quando foi posto: no automático ele
+  // fica centrado dentro dela, e escala acima de um não existe.
+  const lugarDoRetrato = layout.lugarDoRetrato;
+  if (layout.retrato && lugarDoRetrato) {
+    const inicio = lugarDoRetrato.x * retrato.width;
+    const largura = retrato.width * limitarEscalaDoRosto(layout.escalaRetrato);
+
+    esquerda = Math.min(esquerda, inicio);
+    direita = Math.max(direita, inicio + largura);
   }
 
   const lugarDosDados = layout.lugarDosDados;

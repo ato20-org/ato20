@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Extensao } from "@/lib/extensoes/manifesto";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
@@ -12,7 +12,7 @@ const plugin = (id: string, habilitada: boolean) => ({ id, habilitada }) as Exte
 
 describe("o declarativo do Mestre", () => {
   beforeEach(() => {
-    useDeclarativoStore.setState({ versao: 0, estilos: {}, plugins: [] });
+    useDeclarativoStore.setState({ versao: 0, estilos: {}, efeitos: {}, plugins: [] });
   });
 
   it("publica um plugin ligado mesmo sem estilo de medidor", async () => {
@@ -60,6 +60,66 @@ describe("o declarativo do Mestre", () => {
         versao: "1.2.0",
         camadas,
       },
+    });
+  });
+
+  it("publica os efeitos dos plugins ligados com o id da mesa", async () => {
+    const sangrando = { id: "sangrando", titulo: "Sangrando", figura: { tinta: 0.6 } };
+    const ordem = (habilitada: boolean) =>
+      ({
+        id: "ordem",
+        versao: "1.0.0",
+        habilitada,
+        contribui: { efeitos: [sangrando] },
+      }) as unknown as Extensao;
+
+    await useDeclarativoStore.getState().sincronizar([ordem(true)]);
+    expect(useDeclarativoStore.getState().efeitos).toEqual({
+      "ordem/sangrando": {
+        ...sangrando,
+        id: "ordem/sangrando",
+        origem: { plugin: "ordem", versao: "1.0.0" },
+      },
+    });
+
+    // Desligado, o efeito some, e a condição que o aponta volta a ser só o selo.
+    await useDeclarativoStore.getState().sincronizar([ordem(false)]);
+    expect(useDeclarativoStore.getState().efeitos).toEqual({});
+  });
+
+  describe("os efeitos da campanha", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it("viajam junto, com a origem do acervo, e a versão sobe só depois do envio", async () => {
+      useDeclarativoStore
+        .getState()
+        .definirEfeitosDaCampanha([{ id: "campanha/brasa", titulo: "Brasa", luz: { raio: 2 } }]);
+
+      // O Mestre desenha na hora...
+      expect(useDeclarativoStore.getState().efeitos["campanha/brasa"]).toEqual({
+        id: "campanha/brasa",
+        titulo: "Brasa",
+        luz: { raio: 2 },
+        origem: { acervo: true },
+      });
+      // ...mas a TV só é avisada quando o conjunto já foi enviado.
+      expect(useDeclarativoStore.getState().versao).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(useDeclarativoStore.getState().versao).toBe(1);
+    });
+
+    it("uma rajada de mudanças vira um envio só", async () => {
+      for (let raio = 1; raio <= 10; raio++) {
+        useDeclarativoStore
+          .getState()
+          .definirEfeitosDaCampanha([{ id: "campanha/brasa", titulo: "Brasa", luz: { raio } }]);
+      }
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(useDeclarativoStore.getState().versao).toBe(1);
+      expect(useDeclarativoStore.getState().efeitos["campanha/brasa"]!.luz!.raio).toBe(10);
     });
   });
 

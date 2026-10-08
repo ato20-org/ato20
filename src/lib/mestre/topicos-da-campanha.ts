@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/mestre";
 import { normaliza } from "@/lib/search";
 
 /**
@@ -14,53 +15,40 @@ export const TOPICOS_DA_CAMPANHA = [
   {
     // Primeiro: é o "Geral" desta janela, o jeito da mesa inteira.
     chave: "quadro",
-    titulo: "Quadro",
-    descricao: "Como os elementos novos do quadro nascem.",
-    palavras: [
-      "forma",
-      "canto",
-      "arredondado",
-      "borda",
-      "mao",
-      "rabisco",
-      "excalidraw",
-      "seta",
-      "letra",
-      "padrao",
-    ],
+    titulo: t.topicos.quadro.titulo,
+    descricao: t.topicos.quadro.descricao,
+    palavras: t.topicos.quadro.palavras,
   },
   {
     chave: "medidores",
-    titulo: "Medidores",
-    descricao: "Todo personagem começa com estes.",
-    palavras: ["vida", "pv", "mana", "barra", "porcentagem", "maximo", "ficha"],
+    titulo: t.topicos.medidores.titulo,
+    descricao: t.topicos.medidores.descricao,
+    palavras: t.topicos.medidores.palavras,
   },
   {
-    chave: "condicoes",
-    titulo: "Condições",
-    descricao: "O que o botão direito do token oferece.",
-    palavras: ["veneno", "caido", "token", "efeito", "icone", "sugestoes"],
+    chave: "efeitos",
+    titulo: t.topicos.efeitos.titulo,
+    descricao: t.topicos.efeitos.descricao,
+    // Duas abas: as condições, com o efeito de cada uma pela engrenagem, e os
+    // efeitos em área. Quem procura o fogo, a fagulha ou a área acha aqui.
+    palavras: t.topicos.efeitos.palavras,
   },
   {
-    chave: "layout",
-    titulo: "Layout dos retratos",
-    descricao: "O que cada retrato mostra na mesa, e onde.",
-    palavras: ["retrato", "nome", "cargas", "dados", "tv", "mesa"],
-  },
-  {
-    chave: "posicao",
-    titulo: "Posição dos retratos",
-    descricao: "Apertar arruma os retratos soltos e faz os novos nascerem ali.",
-    palavras: ["retrato", "canto", "esquerda", "direita", "arrumar"],
+    // A imagem da TV: brilho, contraste e cor da janela do espectador. Quem
+    // procura "projetor" ou "sepia" acha aqui -- ver as palavras.
+    chave: "espectador",
+    titulo: t.topicos.espectador.titulo,
+    descricao: t.topicos.espectador.descricao,
+    palavras: t.topicos.espectador.palavras,
   },
   {
     // "Ajustes", o nome da mesma lista nas Configurações gerais. Hoje só
     // plugin declara ajuste por campanha, mas o ATO20 pode declarar um amanhã,
     // e ele cairia aqui debaixo de um título que mentiria.
     chave: "ajustes",
-    titulo: "Ajustes",
-    descricao: "O que o ATO20 e os plugins deixam ajustar só nesta campanha.",
-    palavras: ["plugin", "extensao", "configuracao"],
+    titulo: t.topicos.ajustes.titulo,
+    descricao: t.topicos.ajustes.descricao,
+    palavras: t.topicos.ajustes.palavras,
   },
 ] as const;
 

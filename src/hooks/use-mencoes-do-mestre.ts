@@ -9,6 +9,7 @@ import { useCharacters } from "@/hooks/use-characters";
 import { usePlayers, presente } from "@/hooks/use-players";
 import type { Sugestao } from "@/lib/mencoes/sugestao";
 import type { SinalDoPostit } from "@/lib/mestre/postit-mencoes";
+import { t } from "@/lib/i18n/personagens";
 import { abrirLivroNaPagina } from "@/lib/leitor/abrir-na-pagina";
 import { normaliza } from "@/lib/search";
 import { useMarcadoresStore } from "@/lib/store/use-marcadores-store";
@@ -211,21 +212,21 @@ export function useMencoesDoMestre(): {
         )
         .map((personagem) => ({
           nome: personagem.nome,
-          detalhe: donos.get(personagem.id)?.[0] ?? "sem jogador",
+          detalhe: donos.get(personagem.id)?.[0] ?? t.mencoes.semJogador,
         })),
       "/": [
-        ...imagens.map((asset) => ({ nome: asset.name, detalhe: "imagem" })),
-        ...audios.map((asset) => ({ nome: asset.name, detalhe: "som" })),
+        ...imagens.map((asset) => ({ nome: asset.name, detalhe: t.mencoes.imagem })),
+        ...audios.map((asset) => ({ nome: asset.name, detalhe: t.mencoes.som })),
       ],
       ">": (scenes ?? []).map((scene) => ({
         nome: scene.name,
-        detalhe: "cena",
+        detalhe: t.mencoes.cena,
       })),
       // O livro e a página no detalhe: o rótulo sozinho não diz de onde é, e
       // "Pagina 192" de dois manuais só se distingue por ele.
       "!": (marcadores ?? []).map(({ marcador, livro }) => ({
         nome: marcador.rotulo,
-        detalhe: `${livro.titulo} · p. ${marcador.pagina}`,
+        detalhe: t.mencoes.pagina(livro.titulo, marcador.pagina),
       })),
     }),
     [personagens, presencaPorPersonagem, donos, imagens, audios, scenes, marcadores],

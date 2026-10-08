@@ -11,10 +11,10 @@ import {
   MonitorPlay,
   Music,
   Paperclip,
-  PersonStanding,
   Puzzle,
   ScrollText,
   SlidersHorizontal,
+  SquareUser,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -52,8 +52,9 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
     case "quadros":
       // Arquivos, como no Obsidian: quadros e notas na mesma árvore.
       return Files;
+    // O mesmo do botão ao lado do + de Personagens, que é a porta dela.
     case "retratos":
-      return PersonStanding;
+      return SquareUser;
     case "camadas":
       return Layers;
     case "imagens":

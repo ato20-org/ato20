@@ -1,8 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
+import { useChamasDePe } from "@/components/playground/area-de-efeito-layer";
 import { ChaoInclinado } from "@/components/playground/chao-inclinado";
+import {
+  DeitadosNaTela,
+  type Deitado,
+} from "@/components/playground/deitados-na-tela";
 import { InfoDeEsguelha } from "@/components/playground/info-de-esguelha";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { useCameraSuave } from "@/hooks/use-camera-suave";
@@ -14,11 +19,13 @@ import {
   type CameraAssinavel,
   type Tela,
 } from "@/lib/geometry/camera-orbital";
+import { olharDe } from "@/lib/geometry/peca-de-esguelha";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
-import type { EfeitosDoPersonagem } from "@/lib/condicao";
+import { efeitosDoObjeto, type EfeitosDoPersonagem } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
 import {
   itensVisiveis,
@@ -120,11 +127,15 @@ export function CenaDeEsguelha({
   efeitos,
   rolagens,
   pings,
+  laser,
   variante,
   smooth,
   tripe,
   corte = 0,
   olhar,
+  animarSo,
+  naMao,
+  sobre,
 }: {
   scene: Scene;
   portraits?: Portrait[];
@@ -132,10 +143,14 @@ export function CenaDeEsguelha({
   efeitos?: EfeitosDoPersonagem[];
   rolagens?: RolagemDaMesa[];
   pings?: Ping[];
+  /** O laser do mestre. Ver `SceneLayer`. */
+  laser?: LaserNaMesa | null;
   variante?: Variante;
   smooth?: boolean;
   /** O tripé no ar, na janela do espectador. Ver `Tripe`. */
   tripe?: Tripe;
+  /** Só estes animam os efeitos. Ausente = todos. Ver `animarSo` em `SceneLayer`. */
+  animarSo?: ReadonlySet<string>;
   /** Muda a cada corte de câmera: o tripé entra seco, sem voar até lá. */
   corte?: number;
   /**
@@ -148,6 +163,14 @@ export function CenaDeEsguelha({
    * quem a recebe -- ver o envelope orbital da `SceneLayer`.
    */
   olhar?: { camera: CameraAssinavel; giro: number; inclinacao: number };
+  /** O item que o dedo do jogador segura. Ver `naMao` em `SceneLayer`. */
+  naMao?: string;
+  /**
+   * O que vai por cima de tudo, com a câmera em mãos: as alças do celular, que
+   * precisam do olho do VOO para ficar sobre a figura, e não do tripé de
+   * destino. Só de esguelha; de prumo quem chama desenha as suas.
+   */
+  sobre?: (camera: CameraAssinavel) => ReactNode;
 }) {
 
   /**
@@ -236,15 +259,47 @@ export function CenaDeEsguelha({
           altura: item.height,
           assetId: item.assetId,
           espelhada: item.flipX,
+          // Para onde ela olha, só de quem espelha pelo olhar: o lado da tela
+          // depende do giro, e quem o sabe é o chão. Ver `espelhadaPeloOlhar`.
+          ...(item.espelharPeloOlhar ? { olhaPara: olharDe(item) } : {}),
           efeitos: item.personagemId
             ? efeitosPorPersonagem.get(item.personagemId)
-            : undefined,
+            : efeitosDoObjeto(item.condicoes),
+          ...(animarSo && !animarSo.has(item.id) ? { parado: true } : {}),
         })),
-    [efeitosPorPersonagem, scene.grupos, scene.items],
+    [efeitosPorPersonagem, scene.grupos, scene.items, animarSo],
   );
   const visiveis = useMemo(
     () => itensVisiveis(scene.items, scene.grupos),
     [scene.grupos, scene.items],
+  );
+  /**
+   * As deitadas fora do piso, na resolução da tela: só no Mestre, e só com o
+   * olho, que é o que põe a figura em pé de prumo. Ver `DeitadosNaTela`.
+   */
+  const deitadoNaTela = !smooth && Boolean(camera.olho);
+  const deitados = useMemo<Deitado[]>(
+    () =>
+      deitadoNaTela
+        ? visiveis
+            .filter((item) => item.deitado)
+            .sort((a, b) => a.z - b.z)
+            .map((item) => ({
+              item,
+              efeitos: item.personagemId
+                ? efeitosPorPersonagem.get(item.personagemId)
+                : efeitosDoObjeto(item.condicoes),
+              ...(animarSo && !animarSo.has(item.id) ? { parado: true } : {}),
+            }))
+        : [],
+    [animarSo, deitadoNaTela, efeitosPorPersonagem, visiveis],
+  );
+  // O fogo das áreas, de pé: as chamas entram no chão com as peças, e a
+  // profundidade as ordena junto com os tokens e as paredes.
+  const chamas = useChamasDePe(scene.areasDeEfeito, scene.grid, animarSo);
+  const pecasComChamas = useMemo(
+    () => (chamas.length > 0 ? [...pecas, ...chamas] : pecas),
+    [pecas, chamas],
   );
 
   // Sem quem olhe de esguelha, é o mapa de prumo de sempre -- e por este
@@ -259,8 +314,11 @@ export function CenaDeEsguelha({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        laser={laser}
         variante={variante}
         smooth={smooth}
+        animarSo={animarSo}
+        naMao={naMao}
       />
     );
   }
@@ -273,18 +331,27 @@ export function CenaDeEsguelha({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        laser={laser}
         variante={variante}
         smooth={smooth}
         esguelha={camera}
-        // Os em pé sobem no chão inclinado; o deitado fica no piso.
-        semItens={emPe}
+        animarSo={animarSo}
+        naMao={naMao}
+        // Os em pé sobem no chão inclinado; o deitado fica no piso, ou sai
+        // dele para a tela no Mestre. Ver `DeitadosNaTela`.
+        semItens={deitadoNaTela ? true : emPe}
         // O nome e os medidores não vão deitados no piso: vão de prumo sobre
         // a cabeça, logo abaixo. Ver `InfoDeEsguelha`.
         fichas={undefined}
       />
 
+      {deitadoNaTela ? (
+        <DeitadosNaTela deitados={deitados} camera={camera} />
+      ) : null}
+
       <ChaoInclinado
         paredes={scene.paredes ?? []}
+        portas={scene.portas}
         // Não para desenhar o piso -- `semChao` cuida disso --, mas para a cor
         // das faces. Enquanto o daemon não responde a face cai na textura de
         // reserva, que é pior e não quebrada.
@@ -303,11 +370,21 @@ export function CenaDeEsguelha({
         pegadas={false}
         grade={false}
         passoDaGrade={Math.round(UNIDADES_POR_METRO)}
-        pecas={pecas}
-        variante={variante}
+        // Sem `variante`: ela escolhe o tamanho do MAPA. A peça em pé fica na
+        // `mini` dela -- ver `PecaEmPe` --, e a `tela` que a janela Mesa do
+        // Mestre pede para o chão daria a cada peça uma camada de 1920px.
+        pecas={pecasComChamas}
       />
 
-      <InfoDeEsguelha itens={visiveis} fichas={fichas ?? []} camera={camera} />
+      <InfoDeEsguelha
+        itens={visiveis}
+        fichas={fichas ?? []}
+        objetos={Boolean(fichas) && Boolean(scene.infoDosTokens)}
+        camera={camera}
+        paredes={scene.paredes}
+      />
+
+      {sobre?.(camera)}
     </>
   );
 }

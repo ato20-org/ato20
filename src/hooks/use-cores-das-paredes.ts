@@ -32,6 +32,35 @@ export function useCoresDasParedes(
   paredes: Parede[],
   mapaUrl: string | undefined,
 ): Map<string, string> {
+  const amostra = useAmostraDoMapa(mapaUrl);
+
+  return useMemo(() => {
+    const cores = new Map<string, string>();
+
+    for (const parede of paredes) {
+      if (parede.cor) {
+        cores.set(parede.id, parede.cor);
+        continue;
+      }
+
+      if (!amostra) continue;
+
+      const cor = corDominante(amostra, amostrasDaParede(parede));
+      if (cor) cores.set(parede.id, cor);
+    }
+
+    return cores;
+  }, [amostra, paredes]);
+}
+
+/**
+ * O retrato pequeno do mapa, para ler cor dele. `null` enquanto assa, e para
+ * sempre se falhar. Ver `amostraDoMapa`, que guarda o retrato pela url: o chão
+ * e o gizmo da parede pedem o mesmo e recebem o mesmo.
+ */
+export function useAmostraDoMapa(
+  mapaUrl: string | null | undefined,
+): AmostraDoMapa | null {
   const [assado, setAssado] = useState<Assado | null>(null);
 
   useEffect(() => {
@@ -51,23 +80,5 @@ export function useCoresDasParedes(
   // A url assada é conferida na saída, como no `useSilhueta`: trocar o mapa
   // mostraria as cores do anterior por um quadro, e parede da cor da sala
   // errada é pior que parede sem cor.
-  const amostra = assado && assado.url === mapaUrl ? assado.amostra : null;
-
-  return useMemo(() => {
-    const cores = new Map<string, string>();
-
-    for (const parede of paredes) {
-      if (parede.cor) {
-        cores.set(parede.id, parede.cor);
-        continue;
-      }
-
-      if (!amostra) continue;
-
-      const cor = corDominante(amostra, amostrasDaParede(parede));
-      if (cor) cores.set(parede.id, cor);
-    }
-
-    return cores;
-  }, [amostra, paredes]);
+  return assado && assado.url === mapaUrl ? assado.amostra : null;
 }

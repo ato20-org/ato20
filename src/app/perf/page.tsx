@@ -24,6 +24,7 @@ import {
   LENTE_DA_MESA,
   tripeDaOrbital,
 } from "@/lib/geometry/camera-orbital";
+import { paredesComPortas } from "@/lib/geometry/porta";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
 import { leandoDaCamera } from "@/lib/geometry/volume";
 import { MestreShell } from "@/components/mestre/mestre-shell";
@@ -59,7 +60,12 @@ import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
-import { EFEITOS_NA_FIGURA, type Personagem } from "@/types/character";
+import {
+  fotografarCamera,
+  fotografarTripe,
+} from "@/lib/mestre/foto-da-camera";
+import { EFEITOS_DE_FABRICA } from "@/lib/efeitos";
+import type { Personagem } from "@/types/character";
 import {
   CORES_DA_LUZ,
   RAIO_DA_LUZ_PADRAO,
@@ -74,7 +80,9 @@ import {
   type AssetMeta,
   type CanvasItem,
   type EfeitoDaLuz,
+  type FogRegion,
   type Parede,
+  type Porta,
   type Scene,
   type Sol,
   type Tripe,
@@ -201,6 +209,7 @@ type Cenario =
   | "biblioteca"
   | "lista"
   | "lista-mesmo-mapa"
+  | "fotos"
   | "camadas"
   | "camera"
   | "mestre-camera"
@@ -247,7 +256,8 @@ function sombraDaMedida(): Pick<
   // buraco por luz. Sem escuro a mesma luz é só o véu da cor, e mediria o
   // barato. `?escuridao=0` mede esse outro caso.
   const escuridao = Number(
-    params.get("escuridao") ?? (luzes > 0 || lanternasDaMedida() > 0 ? 0.8 : 0),
+    params.get("escuridao") ??
+      (luzes > 0 || lanternasDaMedida() > 0 || Number(params.get("areas") ?? 0) > 0 ? 0.8 : 0),
   );
 
   return {
@@ -285,14 +295,111 @@ function sombraDaMedida(): Pick<
 }
 
 /**
+ * As portas desta corrida, pelo experimento: `portas` põe as portas no caminho
+ * delas, e `portasnaparede` mistura as MESMAS às paredes -- o caminho ingênuo,
+ * em que a lista de segmentos muda a cada amostra e toda luz se forma de novo.
+ * Uma porta ao lado de cada luz, e só a primeira gira: o mestre abrindo a porta
+ * da cela num mapa cheio de tochas. `portabotao` é a mesma porta pelo BOTÃO:
+ * abre e fecha a cada 1,2 s, e cada tela a faz girar -- ver `usePortasNoGiro`.
+ * Sem um dos três, `{}` e a cena de sempre.
+ *
+ * Pelo experimento, e não por um parâmetro novo: as duas variantes saem do
+ * mesmo build numa corrida só (`--experimento portas,portasnaparede`).
+ */
+function portasDaMedida(
+  t: number,
+  paredes: Parede[] | undefined,
+): Pick<Scene, "paredes" | "portas"> {
+  if (typeof window === "undefined") return {};
+
+  const params = new URLSearchParams(window.location.search);
+  const experimento = params.get("experimento") ?? "";
+  if (
+    experimento !== "portas" &&
+    experimento !== "portasnaparede" &&
+    experimento !== "portabotao"
+  )
+    return {};
+
+  const luzes = Math.max(1, Number(params.get("luzes") ?? 0));
+  const portas: Porta[] = Array.from({ length: luzes }, (_, i) => ({
+    id: `perf-porta-${i}`,
+    x: ((i * 389 + 160) % SCENE_WIDTH) + 60,
+    y: ((i * 233 + 120) % SCENE_HEIGHT) - 40,
+    comprimento: 80,
+    angulo: 90,
+    ...(i !== 0
+      ? {}
+      : experimento === "portabotao"
+        ? Math.floor(t / 1200) % 2 === 1
+          ? { abertura: 90 }
+          : {}
+        : { abertura: Math.round(80 * Math.sin(t / 400)) }),
+  }));
+
+  return experimento !== "portasnaparede"
+    ? { portas }
+    : { paredes: paredesComPortas(paredes, portas) };
+}
+
+/** `?parados=1`: os efeitos como o Mestre os vê sem nada selecionado. */
+const PARADOS =
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("parados") === "1";
+const NINGUEM_ANIMA: ReadonlySet<string> = new Set<string>();
+
+/**
+ * As áreas em chamas desta corrida: `?areas=A&casas=C&areafx=chamas`. A áreas
+ * de C por C casas da grade padrão (4 sem `casas`), lado a lado sem se
+ * sobrepor -- fogo em cima de fogo mediria a mesma região duas vezes --, e
+ * todas na mesa. `areafx=perf/fogo-sem-luz` mede o desenho sem a luz. Com
+ * áreas o escuro liga por padrão, como com luzes: a luz delas é o caminho
+ * caro. Ver `AreaDeEfeito`.
+ */
+function areasDaMedida(): Pick<Scene, "areasDeEfeito"> {
+  if (typeof window === "undefined") return {};
+
+  const params = new URLSearchParams(window.location.search);
+  const areas = Number(params.get("areas") ?? 0);
+  const casas = Number(params.get("casas") ?? 4);
+  const efeito = params.get("areafx") ?? "chamas";
+  const formato = params.get("areaforma") === "elipse" ? ("elipse" as const) : undefined;
+  if (!(areas > 0)) return {};
+
+  const lado = casas * 96;
+  const passo = lado + 96;
+  const colunas = Math.max(1, Math.floor((SCENE_WIDTH - 96) / passo));
+  const linhas = Math.max(1, Math.floor((SCENE_HEIGHT - 96) / passo));
+  return {
+    areasDeEfeito: Array.from({ length: areas }, (_, i) => ({
+      id: `perf-area-${i}`,
+      x: 96 + (i % colunas) * passo,
+      y: 96 + (Math.floor(i / colunas) % linhas) * passo,
+      width: lado,
+      height: lado,
+      // Sem cor própria: a área segue a do efeito, como a área nova no mapa.
+      efeito,
+      naMesa: true,
+      ...(formato ? { formato } : {}),
+    })),
+  };
+}
+
+/**
  * Os efeitos de condição desta corrida, lidos da URL: `?condicoes=K&figura=aura`.
  *
  * Os PRIMEIROS K tokens, pela razão das lanternas: o primeiro é o que o
- * cenário move. `misto` roda os cinco efeitos, que é a mesa de verdade -- a
- * horda não é toda envenenada do mesmo jeito. K em zero, o padrão, devolve
+ * cenário move. `misto` roda os efeitos de fábrica (ver `MISTO`); um efeito
+ * de plugin da bancada entra pelo nome (`?figura=perf/fogo`). K em zero, o padrão, devolve
  * lista vazia e a cena montada não ganha nem o `personagemId`: é o que mantém
  * esta corrida comparável com as já medidas.
  */
+/**
+ * O `misto`: os efeitos de fábrica, em rodízio. Hoje é só o fogo -- a fábrica
+ * tem um efeito --, e a medida de antes dele (os cinco climas) não se compara
+ * mais com esta.
+ */
+const MISTO = EFEITOS_DE_FABRICA.map((efeito) => efeito.id);
+
 function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] } {
   if (typeof window === "undefined") return { quantos: 0, efeitos: [] };
 
@@ -302,8 +409,10 @@ function condicoesDaMedida(): { quantos: number; efeitos: EfeitosDoPersonagem[] 
   const efeitos: EfeitosDoPersonagem[] = Array.from({ length: quantos }, (_, i) => {
     const efeito =
       pedido === "misto"
-        ? EFEITOS_NA_FIGURA[i % EFEITOS_NA_FIGURA.length]!
-        : (EFEITOS_NA_FIGURA.find((nome) => nome === pedido) ?? "aura");
+        ? MISTO[i % MISTO.length]!
+        : pedido in EFEITOS_DA_MEDIDA
+          ? pedido
+          : (EFEITOS_DE_FABRICA.find((cada) => cada.id === pedido)?.id ?? "chamas");
 
     return {
       personagemId: `perf-personagem-${i}`,
@@ -363,13 +472,52 @@ function medidoresDaMedida(): { quantos: number; estilo: EstiloDaMedida } {
   return { quantos: Number(params.get("medidores") ?? 0), estilo };
 }
 
+/**
+ * Os efeitos do plugin de mentira, com as imagens que a bancada já serve.
+ * `?figura=perf/fogo` é o pior caso -- o GIF animado em volta e por cima de
+ * cada figura, flutuando --; `perf/brasa` é a textura assada e o externo
+ * parado pulsando atrás.
+ */
+const EFEITOS_DA_MEDIDA: Declarativo["efeitos"] = {
+  "perf/fogo": {
+    id: "perf/fogo",
+    titulo: "Fogo",
+    origem: { plugin: "perf", versao: "1" },
+    externo: {
+      imagem: "sangue.gif",
+      tamanho: 1.6,
+      lado: "frente",
+      animacao: { tipo: "flutuar", periodo: 1.2 },
+    },
+  },
+  // O fogo de fábrica SEM a luz: o custo do desenho -- quadros, mipmap e as
+  // duas metades assadas --, à parte do custo da luz que anda.
+  "perf/fogo-sem-luz": (() => {
+    const chamas = EFEITOS_DE_FABRICA.find((efeito) => efeito.id === "chamas")!;
+    const fogo = { ...chamas, id: "perf/fogo-sem-luz" };
+    delete fogo.luz;
+    return fogo;
+  })(),
+  "perf/brasa": {
+    id: "perf/brasa",
+    titulo: "Brasa",
+    origem: { plugin: "perf", versao: "1" },
+    interno: { textura: "sangue.png", forca: 0.5 },
+    externo: { imagem: "sangue.png", tamanho: 1.4, animacao: { tipo: "pulsar" } },
+  },
+};
+
+/** Só os efeitos, para o palco da TV. Constante: o contexto não muda por render. */
+const DECLARATIVO_DO_ESPECTADOR: Declarativo = { ...DECLARATIVO_VAZIO, efeitos: EFEITOS_DA_MEDIDA };
+
 /** O plugin de mentira que a bancada serve em `/plugin/perf/*`. */
 function declarativoDaMedida(estilo: EstiloDaMedida): Declarativo {
-  if (estilo === "fabrica") return DECLARATIVO_VAZIO;
+  if (estilo === "fabrica") return { ...DECLARATIVO_VAZIO, efeitos: EFEITOS_DA_MEDIDA };
 
   return {
     versao: 1,
     plugins: ["perf"],
+    efeitos: EFEITOS_DA_MEDIDA,
     estilos: {
       "perf/vida": {
         tipo: "camadas",
@@ -409,6 +557,33 @@ function personagensDaMedida(quantos: number, estilo: EstiloDaMedida): Personage
       escondido: false,
       ...(estiloExtensao ? { estiloExtensao } : {}),
     })),
+  }));
+}
+
+/**
+ * A névoa dinâmica desta corrida: `?nevoa=K`. K áreas em faixas verticais
+ * lado a lado, cobrindo o plano inteiro -- a lanterna que o arrasto move
+ * atravessa uma a uma, e cada área que ela alcança repinta. Com K em um, a
+ * área é o plano todo: o maior canvas que a névoa chega a ter. Ver
+ * `FogRegion.dinamica`.
+ */
+function nevoaDaMedida(): FogRegion[] {
+  if (typeof window === "undefined") return [];
+
+  const quantas = Number(
+    new URLSearchParams(window.location.search).get("nevoa") ?? 0,
+  );
+  if (!(quantas > 0)) return [];
+
+  const largura = SCENE_WIDTH / quantas;
+  return Array.from({ length: quantas }, (_, i) => ({
+    id: `perf-nevoa-${i}`,
+    x: Math.round(i * largura),
+    y: 0,
+    width: Math.round(largura),
+    height: SCENE_HEIGHT,
+    revealed: false,
+    dinamica: true,
   }));
 }
 
@@ -465,8 +640,9 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
     name: "medida",
     backgroundAssetId: "perf-fundo",
     items,
-    fog: [],
+    fog: nevoaDaMedida(),
     ...sombraDaMedida(),
+    ...areasDaMedida(),
     cameras: salvas,
     // No ar por padrão porque é assim que o mestre trabalha: ele mexe na
     // câmera que a mesa está vendo. E é o que faz o gesto gravar no board no
@@ -761,7 +937,7 @@ function PalcoEspectador({
         return igual ? antes : proximo;
       });
 
-      const nova = { ...base, items };
+      const nova = { ...base, items, ...portasDaMedida(t, base.paredes) };
       anterior.current = nova;
       setCena(nova);
       // A cadência é a do Mestre de verdade -- 10 Hz. Ver
@@ -777,10 +953,21 @@ function PalcoEspectador({
   // quando o mestre marca ou tira uma condição.
   const efeitos = useMemo(() => condicoesDaMedida().efeitos, []);
 
+  // O declarativo da TV: é por ele que o efeito de plugin chega à figura. Sem
+  // ele, `?figura=perf/fogo` mediria a figura limpa.
   return (
-    <SceneStage viewport={cena.camera} smooth>
-      <SceneLayer scene={cena} smooth variante={variante} efeitos={efeitos} />
-    </SceneStage>
+    <DeclarativoProvider valor={DECLARATIVO_DO_ESPECTADOR}>
+      <SceneStage viewport={cena.camera} smooth>
+        <SceneLayer
+          scene={cena}
+          smooth
+          variante={variante}
+          efeitos={efeitos}
+          // `?parados=1`: o Mestre sem nada selecionado -- todo efeito pausado.
+          animarSo={PARADOS ? NINGUEM_ANIMA : undefined}
+        />
+      </SceneStage>
+    </DeclarativoProvider>
   );
 }
 
@@ -792,13 +979,11 @@ function PalcoEspectador({
  * outra tela: o conteúdo é texto e vetor, vive no plano de CONTROLES (ver
  * `scene-stage`) e não tem bitmap nenhum para rasterizar. Esta medida nasceu
  * para responder se os dois planos precisam trocar de forma de ampliação
- * juntos quando o mestre arrasta um elemento -- o plano de conteúdo precisa,
- * porque um item em `zoom` paga layout por quadro; o de controles talvez não,
- * e é ele que carrega o quadro inteiro.
+ * juntos quando o mestre arrasta um elemento. Desde 07/10/2026 nenhum dos
+ * dois troca no gesto: ver `conteudoNoLayout` em `scene-stage`.
  *
  * O gesto fica LIGADO a corrida toda (`comecarGesto`), que é o que reproduz a
- * mão no elemento: sem isso o palco assenta em `zoom` e a medida seria de uma
- * tela parada.
+ * mão no elemento: os efeitos animados pausam como pausariam na mão.
  */
 function PalcoQuadro({
   n,
@@ -1808,6 +1993,9 @@ function ChaoOrbitalDeMedida({
  *                 `Fantasma` chama `atualizarCamera` direto, e cada quadro é
  *                 um commit de board inteiro. É a suspeita que a medida existe
  *                 para confirmar ou desmentir.
+ * `token`         não é a câmera: o item 0, posto no meio do plano e por cima
+ *                 de todos, arrastado pela mão. Com `?zoom=` é o gesto que
+ *                 pesa o plano nítido contra o borrado.
  *
  * O ponteiro é sintético, e é a única concessão: no Wayland não há como
  * injetar mouse de verdade numa janela, e sem gesto nenhum destes caminhos
@@ -1821,12 +2009,20 @@ function PalcoGestoDeCamera({
   gesto,
   sonda,
   roda,
+  zoom,
 }: {
   n: number;
   cameras: number;
   gesto: Gesto;
   sonda: boolean;
   roda: number;
+  /**
+   * A ampliação do palco do mestre durante o gesto. `1` deixa o enquadramento
+   * de sempre (a câmera com folga, ~1,1x); acima disso a câmera da mão encolhe
+   * até o enquadramento dela dar essa ampliação, e o `token` amplia o centro
+   * do plano. É onde o borrão do `transform` aparece, e onde o `zoom` cobra.
+   */
+  zoom: number;
 }) {
   const cena = useSceneStore(selectEditingScene);
   const viewport = useViewportStore((state) => state.viewport);
@@ -1834,6 +2030,33 @@ function PalcoGestoDeCamera({
 
   useEffect(() => {
     const base = montarCena(n, cameras);
+
+    /**
+     * `token`: o item 0 vai para o meio do plano e para cima de todos, que é
+     * onde o robô o pega. Sem isso ele mora no canto (0,0), por baixo, e o
+     * arrasto o levaria para fora do plano -- o que mediria os limites do
+     * conteúdo crescendo, e não a pintura do item andando.
+     */
+    const primeiro = base.items[0];
+    if (gesto === "token" && primeiro)
+      base.items[0] = {
+        ...primeiro,
+        x: SCENE_WIDTH / 2 - primeiro.width / 2,
+        y: SCENE_HEIGHT / 2 - primeiro.height / 2,
+        z: n + 1,
+      };
+
+    const mao = base.cameras?.[gesto === "fantasma" ? 1 : 0];
+    if (zoom > 1 && mao && gesto !== "token") {
+      const width = SCENE_WIDTH / (zoom * 1.45);
+      const height = (width * SCENE_HEIGHT) / SCENE_WIDTH;
+      mao.viewport = {
+        x: mao.viewport.x + mao.viewport.width / 2 - width / 2,
+        y: mao.viewport.y + mao.viewport.height / 2 - height / 2,
+        width,
+        height,
+      };
+    }
 
     useSceneStore.setState({
       board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
@@ -1856,22 +2079,27 @@ function PalcoGestoDeCamera({
       FULL_VIEWPORT;
     const folga = 1.45;
     useViewportStore.getState().setViewport(
-      clampViewport(
-        {
-          x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
-          y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
-          width: alvo.width * folga,
-          height: alvo.height * folga,
-        },
-        PLANO,
-      ),
+      gesto === "token"
+        ? zoomViewport(FULL_VIEWPORT, zoom, {
+            x: SCENE_WIDTH / 2,
+            y: SCENE_HEIGHT / 2,
+          })
+        : clampViewport(
+            {
+              x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
+              y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
+              width: alvo.width * folga,
+              height: alvo.height * folga,
+            },
+            PLANO,
+          ),
     );
 
     return () => {
       useViewportStore.getState().setViewport(FULL_VIEWPORT);
       useSceneStore.setState({ board: null, status: "idle", campaignPath: null });
     };
-  }, [n, cameras, gesto]);
+  }, [n, cameras, gesto, zoom]);
 
   if (!cena) return null;
 
@@ -2044,6 +2272,8 @@ type Gesto =
   | "cartao"
   | "cartao-livre"
   | "redimensionar"
+  /** `camera-gesto`: o mestre arrasta um TOKEN, e não a moldura. */
+  | "token"
   | "zoom"
   | "fantasma"
   | "cinegrafista"
@@ -2270,6 +2500,25 @@ function MaoSintetica({
       // uma medida que estava correndo bem.
       if (doPalco) return useViewportStore.getState().viewport;
 
+      // O token anda no `useGestoStore` e só chega ao board no soltar -- e o
+      // robô solta onde pegou, depois de uma volta inteira. Quem diz se ele
+      // andou é o patch do gesto em curso.
+      if (gesto === "token") {
+        const item = selectEditingScene(useSceneStore.getState())?.items.find(
+          (i) => i.id === "perf-item-0",
+        );
+        const patch = useGestoStore
+          .getState()
+          .patches?.find((p) => p.id === "perf-item-0")?.patch;
+        if (!item) return null;
+        return {
+          x: patch?.x ?? item.x,
+          y: patch?.y ?? item.y,
+          width: 0,
+          height: 0,
+        };
+      }
+
       const scene = selectEditingScene(useSceneStore.getState());
       const selecionadaId = useCameraLockStore.getState().selecionadaId;
       const camera =
@@ -2305,6 +2554,15 @@ function MaoSintetica({
      * que esteja dentro da janela e tenha alguém debaixo.
      */
     const mira = (): { x: number; y: number }[] => {
+      if (gesto === "token") {
+        const token = document
+          .querySelector('[data-item-id="perf-item-0"]')
+          ?.getBoundingClientRect();
+        return token
+          ? [{ x: token.left + token.width / 2, y: token.top + token.height / 2 }]
+          : [];
+      }
+
       const caixa = molduraNaTela(gesto);
       if (!caixa) return [];
 
@@ -2844,6 +3102,89 @@ function PalcoComLista({ n, mesmoMapa }: { n: number; mesmoMapa: boolean }) {
 }
 
 /**
+ * As FOTOS das câmeras tiradas sem parar, com o palco do `arrasto` andando:
+ * `?cenario=fotos&n=40`. O pior caso de `useFotografoDasCameras`, que no
+ * aplicativo só fotografa depois de a cena parar -- aqui fotografa a cada
+ * 300 ms, com um item andando a cada quadro, para o relógio de quadros pegar o
+ * custo se ele existir.
+ *
+ * Quatro recortes, um por quadrante: o tamanho de câmera mais comum. O tempo
+ * de cada foto e o tamanho dela saem no console (`--console`), a cada dez.
+ */
+function PalcoComFotos({ n, comTripe }: { n: number; comTripe: boolean }) {
+  // A última foto, à vista no canto: é ela que a captura da bancada mostra,
+  // e é assim que se confere que a perspectiva do tripé saiu certa.
+  const [ultima, setUltima] = useState<string | null>(null);
+
+  useEffect(() => {
+    const recortes = [0, 1, 2, 3].map((i) => ({
+      x: (i % 2) * (SCENE_WIDTH / 2),
+      y: Math.floor(i / 2) * (SCENE_HEIGHT / 2),
+      width: SCENE_WIDTH / 2,
+      height: SCENE_HEIGHT / 2,
+    }));
+    const tempos: number[] = [];
+    const tamanhos: number[] = [];
+    let vez = 0;
+    let ocupado = false;
+
+    const tirar = async () => {
+      const cena = selectEditingScene(useSceneStore.getState());
+      if (!cena || ocupado) return;
+      ocupado = true;
+      const inicio = performance.now();
+      // Com `?tripe=1`, uma de cada duas é do tripé: abaixo da borda de baixo,
+      // olhando o mapa para o norte, como o mestre o põe ao entrar no 2.5D.
+      const doTripe = comTripe && vez % 2 === 0;
+      const url = doTripe
+        ? await fotografarTripe(cena, {
+            x: SCENE_WIDTH / 2,
+            y: SCENE_HEIGHT + 300,
+            altura: 700,
+            giro: 0,
+            inclinacao: 55,
+            rolagem: 0,
+            lente: 45,
+          })
+        : await fotografarCamera(cena, recortes[vez % recortes.length]!);
+      // Com tripé, o canto mostra só a dele: é a perspectiva que se confere.
+      if (url && (doTripe || !comTripe)) setUltima(url);
+      tempos.push(performance.now() - inicio);
+      if (url) tamanhos.push(url.length);
+      vez += 1;
+      ocupado = false;
+
+      if (vez % 10 === 0) {
+        const ordenados = [...tempos].sort((a, b) => a - b);
+        const em = (fracao: number) =>
+          ordenados[Math.min(ordenados.length - 1, Math.floor(ordenados.length * fracao))]!;
+        const kb = tamanhos.reduce((soma, cada) => soma + cada, 0) / tamanhos.length / 1024;
+        console.log(
+          `[fotos] n=${n} tripe=${comTripe ? 1 : 0} fotos=${vez} mediana=${em(0.5).toFixed(1)}ms p95=${em(0.95).toFixed(1)}ms pior=${ordenados[ordenados.length - 1]!.toFixed(1)}ms kb=${kb.toFixed(1)}`,
+        );
+      }
+    };
+
+    const relogio = setInterval(() => void tirar(), 300);
+    return () => clearInterval(relogio);
+  }, [n, comTripe]);
+
+  return (
+    <>
+      <PalcoMestre n={n} />
+      {ultima ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={ultima}
+          alt=""
+          className="pointer-events-none fixed top-2 right-2 z-50 w-[384px] rounded border border-white/30"
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
  * A janela de camadas ao lado do palco, com o mesmo gesto de arrasto.
  *
  * A cena sai do store -- a MESMA que `PalcoMestre` monta e mexe --, e não de
@@ -3244,7 +3585,18 @@ function Medida({ params }: { params: URLSearchParams }) {
   }, []);
 
   return (
-    <main className="flex h-dvh flex-col bg-black">
+    <main
+      className="flex h-dvh flex-col bg-black"
+      // `?experimento=filtro`: o ajuste de imagem da janela do espectador na
+      // tela inteira, com os quatro canais mexidos -- o pior caso, uma passada
+      // fora da tela por quadro. Para comparar com e sem num build só:
+      // `--experimento ,filtro`. Ver `filtroDaImagem`.
+      style={{
+        filter: (params.get("experimento") ?? "").split("+").includes("filtro")
+          ? "brightness(1.2) contrast(1.1) saturate(0.7) hue-rotate(15deg)"
+          : undefined,
+      }}
+    >
       {cenario === "leitor" ? (
         <PalcoLeitor pagina={pagina} degraus={degraus} rajada={rajada} />
       ) : cenario === "arrasto" ? (
@@ -3273,6 +3625,7 @@ function Medida({ params }: { params: URLSearchParams }) {
           gesto={gesto}
           sonda={sonda}
           roda={roda}
+          zoom={zoomDoPalco}
         />
       ) : cenario === "bancada" ? (
         <PalcoBancada
@@ -3287,6 +3640,8 @@ function Medida({ params }: { params: URLSearchParams }) {
         />
       ) : cenario === "dados" ? (
         <PalcoDados n={n} zoom={zoomDoPalco} />
+      ) : cenario === "fotos" ? (
+        <PalcoComFotos n={n} comTripe={params.get("tripe") === "1"} />
       ) : cenario === "lista" || cenario === "lista-mesmo-mapa" ? (
         <PalcoComLista n={n} mesmoMapa={cenario === "lista-mesmo-mapa"} />
       ) : cenario === "camadas" ? (

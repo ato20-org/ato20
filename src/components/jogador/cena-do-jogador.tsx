@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,19 +12,41 @@ import {
 
 import { toast } from "sonner";
 
+import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
 import { RodaDePing } from "@/components/playground/roda-de-ping";
 import { SceneLayer } from "@/components/playground/scene-layer";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useMeusPersonagens } from "@/hooks/use-meus-personagens";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import {
+  daTelaAoChaoNoTripe,
+  figuraNoTripe,
+  PERTO_DO_OLHO,
+  peSobODedo,
+  profundidadeNoTripe,
+  projetarNoTripe,
+  type CameraAssinavel,
+  type Tela,
+} from "@/lib/geometry/camera-orbital";
 import { encaixarNaGrade, gradeDoEncaixe } from "@/lib/geometry/grid";
+import {
+  cantosDeitado,
+  centroDe,
+  olharDe,
+  peDe,
+  pivoDe,
+  raioDoAnel,
+  sobeDe,
+} from "@/lib/geometry/peca-de-esguelha";
 import {
   angleTo,
   cursorDeGiro,
   itemCenter,
   normalizeAngle,
   snapAngle,
+  type Vec,
 } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/jogador";
 import {
   criarEnvioDeMovimentos,
   type EnvioDeMovimentos,
@@ -36,13 +60,16 @@ import {
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
-import type { Ping } from "@/types/ping";
+import type { LaserNaMesa } from "@/types/laser";
+import type { Ping, TipoDePing } from "@/types/ping";
 import {
   ehQuadro,
   type CanvasItem,
   type FichaNaCena,
+  type Parede,
   type Portrait,
   type Scene,
+  type Tripe,
 } from "@/types/scene";
 
 /**
@@ -89,8 +116,24 @@ const CURSOR_DE_GIRO = cursorDeGiro(0);
 const SOB_O_PONTEIRO =
   "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100";
 
+/** Quantos pontos o anel de giro tem no chão, de esguelha. */
+const PONTOS_DO_ANEL = 40;
+
 /** O que o dedo está fazendo com o token: andando com ele, ou virando ele. */
 type Gesto = "mover" | "girar";
+
+/**
+ * O ponto da cena sob um pixel da janela. De prumo é o `toScene` do palco; de
+ * esguelha, o chão do tripé -- e `null` quando o dedo está no céu.
+ */
+type NaCena = (clientX: number, clientY: number) => Vec | null;
+
+/**
+ * Onde fica o canto do token com o dedo neste pixel, ou `null` se ali ele não
+ * vai. Montado no toque, porque depende de onde o dedo pegou. Ver
+ * `AlcasDeEsguelha`.
+ */
+type Levar = (clientX: number, clientY: number) => Vec | null;
 
 type NaMao = {
   itemId: string;
@@ -142,6 +185,9 @@ export function CenaDoJogador({
   efeitos,
   rolagens,
   pings,
+  laser,
+  tripe,
+  corte,
 }: {
   codigo: string;
   cena: Scene;
@@ -153,6 +199,15 @@ export function CenaDoJogador({
   rolagens: RolagemDaMesa[];
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** O laser do mestre. Ver `LiveState.laser`. */
+  laser: LaserNaMesa | null;
+  /**
+   * O tripé no ar, quando a mesa vê de esguelha. Aí o celular também vê, e o
+   * dedo pega o token pelo chão do tripé. Ver `AlcasDeEsguelha`.
+   */
+  tripe?: Tripe;
+  /** Muda a cada corte de câmera. Ver `CenaDeEsguelha`. */
+  corte?: number;
 }) {
   const quadro = ehQuadro(cena);
 
@@ -292,8 +347,14 @@ export function CenaDoJogador({
     }, ESPERA_MS);
   }
 
-  /** Dedo no meio do token: ele anda, e o ângulo dele não muda. */
-  function mover(event: ReactPointerEvent, item: CanvasItem) {
+  /**
+   * Dedo no meio do token: ele anda, e o ângulo dele não muda.
+   *
+   * De esguelha quem diz onde o token vai é `levar`, pela conta do chão: o
+   * delta da tela não serve, porque a perspectiva estica o passo perto e o
+   * encolhe longe.
+   */
+  function mover(event: ReactPointerEvent, item: CanvasItem, levar?: Levar) {
     const personagemId = item.personagemId;
     if (!personagemId) return;
 
@@ -317,8 +378,12 @@ export function CenaDoJogador({
     setNaMao(atual);
 
     startDrag(event, {
-      onMove: (delta) => {
-        const solto = { x: origem.x + delta.x, y: origem.y + delta.y };
+      onMove: (delta, nativo) => {
+        // No céu o token fica onde estava: não há chão para levá-lo.
+        const solto = levar
+          ? levar(nativo.clientX, nativo.clientY)
+          : { x: origem.x + delta.x, y: origem.y + delta.y };
+        if (!solto) return;
         // Encaixa e SO ENTAO prende, na mesma ordem de `destinoAceito`: o que o
         // dedo ve aqui tem de ser o que o mestre aceita la, senao o token anda
         // uma casa e volta quando o eco chega.
@@ -344,16 +409,23 @@ export function CenaDoJogador({
    * não anda enquanto o token gira, então ele é o eixo o gesto inteiro; e a
    * diferença entre o ângulo do dedo e o do token é guardada no início para o
    * token não saltar para debaixo do dedo no primeiro quadro.
+   *
+   * De esguelha (`noChao`) o dedo é medido no CHÃO, e o eixo é o pé da figura
+   * -- o mesmo do anel do olhar no 2.5D do Mestre: é em volta dele que ela
+   * está de pé.
    */
-  function girar(event: ReactPointerEvent, item: CanvasItem) {
+  function girar(event: ReactPointerEvent, item: CanvasItem, noChao?: NaCena) {
     const personagemId = item.personagemId;
     if (!personagemId) return;
 
+    const naCena: NaCena = noChao ?? toScene;
+    const centro = noChao ? pivoDe(item) : itemCenter(item);
+    const pegou = naCena(event.clientX, event.clientY);
+    if (!pegou) return;
+
     clearTimeout(esperaRef.current);
 
-    const centro = itemCenter(item);
-    const pegada =
-      angleTo(centro, toScene(event.clientX, event.clientY)) - item.rotation;
+    const pegada = angleTo(centro, pegou) - item.rotation;
     let atual: NaMao = {
       itemId: item.id,
       x: item.x,
@@ -368,7 +440,9 @@ export function CenaDoJogador({
 
     startDrag(event, {
       onMove: (_delta, native) => {
-        const bruto = angleTo(centro, toScene(native.clientX, native.clientY));
+        const aqui = naCena(native.clientX, native.clientY);
+        if (!aqui) return;
+        const bruto = angleTo(centro, aqui);
         // Arredonda ANTES de normalizar: `Math.round(359.7)` é 360, e 360
         // gravado no board voltaria como 0 -- o eco nunca bateria com o que foi
         // mandado, e o token voltaria sozinho ao fim da espera.
@@ -393,6 +467,52 @@ export function CenaDoJogador({
     });
   }
 
+  // O ping volta pelo quadro, como o de todo mundo: é isso que confirma que a
+  // mesa o viu. Ver `marcarPing`.
+  function marcar(tipo: TipoDePing, ponto: Vec) {
+    void marcarPing(codigo, {
+      tipo,
+      cenaId: cena.id,
+      x: ponto.x,
+      y: ponto.y,
+    }).catch(() => toast.error(t.cena.pingNaoChegou));
+  }
+
+  const gesto = naMao && !naMao.solto ? naMao : null;
+
+  // Com um tripé no ar o celular vê o que a TV vê, de esguelha, e as alças vão
+  // para a tela por cima das figuras em pé. Ver `AlcasDeEsguelha`.
+  if (tripe) {
+    return (
+      <CenaDeEsguelha
+        scene={exibida}
+        portraits={portraits}
+        fichas={fichas}
+        efeitos={efeitos}
+        rolagens={rolagens}
+        pings={pings}
+        laser={laser}
+        // Pela mesma razão do mapa de prumo, logo abaixo.
+        variante="tela"
+        smooth
+        tripe={tripe}
+        corte={corte}
+        naMao={naMao?.itemId}
+        sobre={(camera) => (
+          <AlcasDeEsguelha
+            camera={camera}
+            itens={pegaveis}
+            paredes={exibida.paredes}
+            gesto={gesto}
+            onMover={mover}
+            onGirar={girar}
+            onPing={marcar}
+          />
+        )}
+      />
+    );
+  }
+
   return (
     <>
       {/* `tela`: o celular recebe a mesma cena que a TV, e desenha numa tela
@@ -406,34 +526,21 @@ export function CenaDoJogador({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        laser={laser}
         smooth
         naMao={naMao?.itemId}
         variante="tela"
       />
 
-      {/* Segurar o dedo no mapa abre os pings. O ping volta pelo quadro, como
-          o de todo mundo: é isso que confirma que a mesa o viu. Ver
-          `marcarPing`. */}
-      <RodaDePing
-        modo="jogador"
-        onEscolher={(tipo, ponto) => {
-          void marcarPing(codigo, {
-            tipo,
-            cenaId: cena.id,
-            x: ponto.x,
-            y: ponto.y,
-          }).catch(() => toast.error("O ping não chegou à mesa."));
-        }}
-      />
+      {/* Segurar o dedo no mapa abre os pings. */}
+      <RodaDePing modo="jogador" onEscolher={marcar} />
 
       {pegaveis.map((item) => (
         <AlcaDoToken
           key={item.id}
           item={item}
           scale={scale}
-          gesto={
-            naMao?.itemId === item.id && !naMao.solto ? naMao.gesto : undefined
-          }
+          gesto={gesto?.itemId === item.id ? gesto.gesto : undefined}
           onMover={mover}
           onGirar={girar}
         />
@@ -569,5 +676,362 @@ function AlcaDoToken({
         />
       </div>
     </div>
+  );
+}
+
+/** As alças de uma peça de esguelha, em pixels do plano. Ver `AlcasDeEsguelha`. */
+type DesenhoDaAlca = {
+  /** O contorno da figura: o cartaz da que está em pé, os cantos da deitada. */
+  contorno: Vec[];
+  /** O meio do contorno, onde mora o alvo mínimo do dedo. */
+  meio: Vec;
+  /** O anel de giro no chão e o rumo do olhar. `null` com um pedaço atrás do olho. */
+  anel: { pontos: Vec[]; pivo: Vec; bico: Vec } | null;
+};
+
+function desenhoDaAlca(
+  item: CanvasItem,
+  tripe: Tripe,
+  tela: Tela,
+  /** O pé no teto em que ele pisa, ou zero. Ver `sobeDe`. */
+  sobe = 0,
+): DesenhoDaAlca | null {
+  // O que está perto demais do olho não se projeta: ver `vistoPeloTripe`.
+  const naTela = (ponto: Vec) =>
+    profundidadeNoTripe(tripe, ponto, sobe) > PERTO_DO_OLHO
+      ? projetarNoTripe(tripe, tela, ponto, sobe)
+      : null;
+
+  const contorno: Vec[] = [];
+  let meio: Vec | null;
+  if (item.deitado) {
+    for (const canto of cantosDeitado(item)) {
+      const ponto = naTela(canto);
+      if (!ponto) return null;
+      contorno.push(ponto);
+    }
+    meio = naTela(centroDe(item));
+  } else {
+    // A figura em pé é paralela à tela: o contorno é o retângulo dela ali,
+    // pelo pé, na escala daquela profundidade e tombado com a rolagem.
+    const figura = figuraNoTripe(tripe, tela, peDe(item), sobe);
+    if (!figura) return null;
+    const largura = item.width * figura.escala;
+    const altura = item.height * figura.escala;
+    const giro = (figura.giro * Math.PI) / 180;
+    const cos = Math.cos(giro);
+    const sen = Math.sin(giro);
+    const doPe = (x: number, y: number) => ({
+      x: figura.x + x * cos - y * sen,
+      y: figura.y + x * sen + y * cos,
+    });
+    contorno.push(
+      doPe(-largura / 2, -altura),
+      doPe(largura / 2, -altura),
+      doPe(largura / 2, 0),
+      doPe(-largura / 2, 0),
+    );
+    meio = doPe(0, -altura / 2);
+  }
+  if (!meio) return null;
+
+  const pivo = pivoDe(item);
+  const raio = raioDoAnel(item);
+  const olhar = (olharDe(item) * Math.PI) / 180;
+  const pontos: Vec[] = [];
+  for (let i = 0; i < PONTOS_DO_ANEL; i += 1) {
+    const a = (i / PONTOS_DO_ANEL) * Math.PI * 2;
+    const ponto = naTela({
+      x: pivo.x + Math.cos(a) * raio,
+      y: pivo.y + Math.sin(a) * raio,
+    });
+    if (!ponto) return { contorno, meio, anel: null };
+    pontos.push(ponto);
+  }
+  const centro = naTela(pivo);
+  const bico = naTela({
+    x: pivo.x + Math.cos(olhar) * raio * 1.25,
+    y: pivo.y + Math.sin(olhar) * raio * 1.25,
+  });
+
+  return {
+    contorno,
+    meio,
+    anel: centro && bico ? { pontos, pivo: centro, bico } : null,
+  };
+}
+
+function emTexto(pontos: Vec[]): string {
+  return pontos.map(({ x, y }) => `${x},${y}`).join(" ");
+}
+
+/**
+ * As alças do jogador de esguelha: o mesmo gesto do `AlcaDoToken` -- o meio
+ * anda, a borda gira --, posto na TELA sobre a figura em pé.
+ *
+ * De prumo as alças moram no plano, em unidades de cena, e o palco as amplia
+ * junto com o mapa. De esguelha não há plano que as leve: o chão está
+ * inclinado e a figura se ergue dele. Então elas são desenhadas em pixels do
+ * plano parado -- com o tripé no ar o palco do celular fica no plano inteiro,
+ * como o da TV -- e reescritas a cada aviso da câmera, sem render. O desenho é
+ * o do 2.5D do Mestre (`SelecaoDeEsguelha`): o contorno de tela em volta da
+ * figura, o anel tracejado no chão em volta do pé, e a haste do olhar.
+ *
+ * O dedo vira ponto do chão pelo olho do VOO (`camera.olho`), o mesmo que põe
+ * a figura onde ela está desenhada. Pelo tripé de destino o dedo erraria
+ * durante os 450 ms de um salto da câmera.
+ *
+ * A roda de ping vem junto porque precisa da mesma conta: o ping cai no chão
+ * sob o dedo, e não no plano atrás dele.
+ */
+function AlcasDeEsguelha({
+  camera,
+  itens,
+  paredes,
+  gesto,
+  onMover,
+  onGirar,
+  onPing,
+}: {
+  camera: CameraAssinavel;
+  /** Os tokens deste jogador. Ver `podePegar`. */
+  itens: CanvasItem[];
+  /** Para a alça subir com o token que pisa num teto. Ver `sobeDe`. */
+  paredes: Parede[] | undefined;
+  /** O token na mão agora, e o que o dedo faz com ele. */
+  gesto: { itemId: string; gesto: Gesto } | null;
+  onMover: (event: ReactPointerEvent, item: CanvasItem, levar: Levar) => void;
+  onGirar: (event: ReactPointerEvent, item: CanvasItem, noChao: NaCena) => void;
+  onPing: (tipo: TipoDePing, ponto: Vec) => void;
+}) {
+  const { scale, toScene } = useSceneScale();
+  const grupos = useRef(new Map<string, SVGGElement>());
+
+  const noChao = useCallback<NaCena>(
+    (clientX, clientY) => {
+      const vista = camera.olho?.();
+      if (!vista) return null;
+      return daTelaAoChaoNoTripe(
+        vista.tripe,
+        vista.tela,
+        toScene(clientX, clientY),
+      );
+    },
+    [camera, toScene],
+  );
+
+  /**
+   * O dedo no corpo do token: monta quem o leva, a partir de onde pegou.
+   *
+   * Em pé, o ponto pegado da FIGURA fica sob o dedo (`peSobODedo`): o dedo
+   * está sobre o corpo, e o chão atrás dele não é onde ela pisa. Deitada, o
+   * ponto pegado do CHÃO -- ela é o chão, e ali o chão sob o dedo é exato.
+   */
+  function pegar(event: ReactPointerEvent, item: CanvasItem) {
+    const vista = camera.olho?.();
+    if (!vista) return;
+    const dedo = toScene(event.clientX, event.clientY);
+    const pivo = pivoDe(item);
+
+    let pivoSob: (tripe: Tripe, tela: Tela, dedo: Vec) => Vec | null;
+    if (item.deitado) {
+      const pegou = daTelaAoChaoNoTripe(vista.tripe, vista.tela, dedo);
+      if (!pegou) return;
+      pivoSob = (tripe, tela, aqui) => {
+        const chao = daTelaAoChaoNoTripe(tripe, tela, aqui);
+        return chao
+          ? { x: pivo.x + chao.x - pegou.x, y: pivo.y + chao.y - pegou.y }
+          : null;
+      };
+    } else {
+      // Pego no teto, o pé anda no plano dele: o dedo segura a figura onde ela
+      // está desenhada. Ver `sobeDe`.
+      const sobe = sobeDe(item, paredes);
+      const figura = figuraNoTripe(vista.tripe, vista.tela, pivo, sobe);
+      if (!figura) return;
+      const pega = {
+        x: (dedo.x - figura.x) / figura.escala,
+        y: (dedo.y - figura.y) / figura.escala,
+      };
+      pivoSob = (tripe, tela, aqui) =>
+        peSobODedo(tripe, tela, aqui, pega, sobe);
+    }
+
+    // Pelo olho de AGORA a cada passo: a câmera pode andar no meio do gesto.
+    onMover(event, item, (clientX, clientY) => {
+      const agora = camera.olho?.();
+      if (!agora) return null;
+      const novo = pivoSob(agora.tripe, agora.tela, toScene(clientX, clientY));
+      return novo
+        ? { x: item.x + novo.x - pivo.x, y: item.y + novo.y - pivo.y }
+        : null;
+    });
+  }
+
+  // Sem lista de dependências, como o chão: um commit pode ter trazido o token
+  // num lugar novo, e a alça tem de estar com ele antes da pintura.
+  useLayoutEffect(() => {
+    function escrever() {
+      const vista = camera.olho?.() ?? null;
+      for (const item of itens) {
+        const grupo = grupos.current.get(item.id);
+        if (!grupo) continue;
+        const desenho = vista
+          ? desenhoDaAlca(item, vista.tripe, vista.tela, sobeDe(item, paredes))
+          : null;
+        if (!desenho) {
+          grupo.setAttribute("display", "none");
+          continue;
+        }
+        grupo.removeAttribute("display");
+
+        const contorno = emTexto(desenho.contorno);
+        for (const parte of grupo.querySelectorAll("[data-contorno]")) {
+          parte.setAttribute("points", contorno);
+        }
+        const alvo = grupo.querySelector("[data-alvo]");
+        alvo?.setAttribute("cx", `${desenho.meio.x}`);
+        alvo?.setAttribute("cy", `${desenho.meio.y}`);
+
+        const { anel } = desenho;
+        for (const parte of grupo.querySelectorAll("[data-anel]")) {
+          if (!anel) {
+            parte.setAttribute("display", "none");
+            continue;
+          }
+          parte.removeAttribute("display");
+          if (parte.tagName === "polygon") {
+            parte.setAttribute("points", emTexto(anel.pontos));
+          } else if (parte.tagName === "line") {
+            parte.setAttribute("x1", `${anel.pivo.x}`);
+            parte.setAttribute("y1", `${anel.pivo.y}`);
+            parte.setAttribute("x2", `${anel.bico.x}`);
+            parte.setAttribute("y2", `${anel.bico.y}`);
+          } else {
+            parte.setAttribute("cx", `${anel.bico.x}`);
+            parte.setAttribute("cy", `${anel.bico.y}`);
+          }
+        }
+      }
+    }
+
+    escrever();
+    return camera.assinar(escrever);
+  });
+
+  // Um pixel de tela, em pixels do plano: o palco amplia tudo aqui dentro.
+  const px = scale > 0 ? 1 / scale : 0;
+
+  return (
+    <>
+      <RodaDePing modo="jogador" paraCena={noChao} onEscolher={onPing} />
+
+      {itens.length > 0 ? (
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute inset-0 h-full w-full touch-none overflow-visible"
+        >
+          {itens.map((item) => {
+            const segurando =
+              gesto?.itemId === item.id ? gesto.gesto : undefined;
+            const visivel = cn(
+              "transition-opacity duration-150",
+              segurando ? "opacity-100" : SOB_O_PONTEIRO,
+            );
+
+            return (
+              <g
+                key={item.id}
+                ref={(no) => {
+                  if (no) grupos.current.set(item.id, no);
+                  else grupos.current.delete(item.id);
+                }}
+                // Segurar o próprio token é pegar o token, e não abrir os pings.
+                data-sem-ping
+                className="group"
+              >
+                {/* A faixa de giro: o anel do chão engrossado até o dedo, e
+                    transparente -- quem se vê é o tracejado logo abaixo. Por
+                    `visibleStroke`: com `stroke` o anel escondido continuaria
+                    pegando o dedo. */}
+                <polygon
+                  data-anel
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={ANEL_PX * px}
+                  strokeLinejoin="round"
+                  style={{ pointerEvents: "visibleStroke", cursor: CURSOR_DE_GIRO }}
+                  onPointerDown={(event) => onGirar(event, item, noChao)}
+                />
+
+                <g className={visivel} style={{ pointerEvents: "none" }}>
+                  <polygon
+                    data-anel
+                    fill="none"
+                    stroke="rgb(0 0 0 / 0.5)"
+                    strokeWidth={3 * px}
+                    strokeLinejoin="round"
+                  />
+                  <polygon
+                    data-anel
+                    fill="none"
+                    stroke="white"
+                    strokeOpacity={segurando === "girar" ? 0.95 : 0.7}
+                    strokeWidth={1.5 * px}
+                    strokeDasharray={`${4 * px} ${3 * px}`}
+                    strokeLinejoin="round"
+                  />
+                  {/* O rumo do olhar: sem ele a figura gira sem dar sinal. */}
+                  <line
+                    data-anel
+                    stroke="white"
+                    strokeWidth={2 * px}
+                    strokeLinecap="round"
+                  />
+                  <circle
+                    data-anel
+                    r={4 * px}
+                    fill="white"
+                    stroke="rgb(0 0 0 / 0.5)"
+                    strokeWidth={1.5 * px}
+                  />
+                  <polygon
+                    data-contorno
+                    fill="none"
+                    stroke="rgb(0 0 0 / 0.55)"
+                    strokeWidth={(segurando === "mover" ? 5 : 3.5) * px}
+                    strokeLinejoin="round"
+                  />
+                </g>
+
+                {/* O que anda: a figura inteira, e por cima do anel onde os
+                    dois se encostam. Branco com o halo escuro de baixo, como
+                    o disco do mapa de prumo. */}
+                <polygon
+                  data-contorno
+                  fill="transparent"
+                  stroke="white"
+                  strokeOpacity={segurando === "mover" ? 0.95 : 0.55}
+                  strokeWidth={(segurando === "mover" ? 2.5 : 1.5) * px}
+                  strokeLinejoin="round"
+                  className={visivel}
+                  style={{ pointerEvents: "visibleFill", cursor: "grab" }}
+                  onPointerDown={(event) => pegar(event, item)}
+                />
+                {/* E um dedo no meio dela: a figura de longe fica menor que a
+                    ponta do dedo. Ver `ALVO_PX`. */}
+                <circle
+                  data-alvo
+                  r={(ALVO_PX * px) / 2}
+                  fill="transparent"
+                  style={{ pointerEvents: "visibleFill", cursor: "grab" }}
+                  onPointerDown={(event) => pegar(event, item)}
+                />
+              </g>
+            );
+          })}
+        </svg>
+      ) : null}
+    </>
   );
 }

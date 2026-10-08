@@ -7,6 +7,7 @@ import {
   semIdDaForma,
   semIdDaLuz,
   semIdDaParede,
+  semIdDaPorta,
   semIdDoPostit,
   semIdDoTexto,
 } from "@/types/scene";
@@ -20,9 +21,11 @@ import type {
   NewForma,
   NewLuz,
   NewParede,
+  NewPorta,
   NewTexto,
   NewTraco,
   Parede,
+  Porta,
   Postit,
   Texto,
   Traco,
@@ -36,6 +39,7 @@ type Copia = {
   postits?: Postit[];
   tracos?: Traco[];
   paredes?: Parede[];
+  portas?: Porta[];
   areas?: FogRegion[];
   luzes?: Luz[];
 };
@@ -66,6 +70,8 @@ type ClipboardStore = {
    * colar não precisa saber quantas são.
    */
   paredes: NewParede[];
+  /** Com a abertura: a porta copiada aberta nasce aberta, como estava. */
+  portas: NewPorta[];
   /**
    * Sem o `revealed`: a cópia nasce ESCONDENDO, como toda área nova. Copiar a
    * área de uma sala já aberta é pegar o formato para a próxima que a mesa
@@ -93,6 +99,7 @@ export function temAlgoParaColar(
     | "postits"
     | "tracos"
     | "paredes"
+    | "portas"
     | "areas"
     | "luzes"
   >,
@@ -104,6 +111,7 @@ export function temAlgoParaColar(
     guardado.postits.length > 0 ||
     guardado.tracos.length > 0 ||
     guardado.paredes.length > 0 ||
+    guardado.portas.length > 0 ||
     guardado.areas.length > 0 ||
     guardado.luzes.length > 0
   );
@@ -122,6 +130,7 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
   postits: [],
   tracos: [],
   paredes: [],
+  portas: [],
   areas: [],
   luzes: [],
 
@@ -132,21 +141,24 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
     postits = [],
     tracos = [],
     paredes = [],
+    portas = [],
     areas = [],
     luzes = [],
   }) {
     set({
       paredes: paredes.map(semIdDaParede),
+      portas: portas.map(semIdDaPorta),
       areas: areas.map(semIdDaArea),
       luzes: luzes.map(semIdDaLuz),
       formas: formas.map(semIdDaForma),
       // Com a cor, o fundo e a ênfase: ver `semIdDoTexto`.
       textos: textos.map(semIdDoTexto),
       postits: postits.map(semIdDoPostit),
-      tracos: tracos.map(({ pontos, cor, espessura }) => ({
+      tracos: tracos.map(({ pontos, cor, espessura, opacidade }) => ({
         pontos,
         cor,
         espessura,
+        ...(opacidade !== undefined ? { opacidade } : {}),
       })),
       drafts: itens.map(
         ({
@@ -159,6 +171,7 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
           locked,
           flipX,
           flipY,
+          espelharPeloOlhar,
           opacity,
           semSombra,
           sombra,
@@ -172,6 +185,7 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
           locked,
           flipX,
           flipY,
+          espelharPeloOlhar,
           opacity,
           semSombra,
           sombra,

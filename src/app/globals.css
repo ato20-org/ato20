@@ -248,6 +248,32 @@
     animation: efeito-tremendo 0.45s linear infinite;
   }
 
+  /* As animações DECLARADAS do visual externo de um efeito -- o "script" que
+     o pack escreve como dado. O período vem inline, do JSON; a intensidade, de
+     `--efeito-intensidade`. Ver `ImagemDeFora`. */
+  .efeito-pulsar {
+    animation: efeito-pulsar 2s ease-in-out infinite;
+  }
+
+  .efeito-girar {
+    animation: efeito-girar 2s linear infinite;
+  }
+
+  .efeito-flutuar {
+    animation: efeito-flutuar 2s ease-in-out infinite;
+  }
+
+  .efeito-piscar {
+    animation: efeito-piscar 2s ease-in-out infinite;
+  }
+
+  /* A chama de pé do 2.5D: uma faixa de quadros andando pela posição do
+     fundo, em degraus. Repinta um elemento pequeno a cada degrau, em vez de
+     compor duas camadas por chama a cada quadro da câmera. Ver `faixaDaFolha`. */
+  .efeito-faixa {
+    animation: efeito-faixa var(--efeito-duracao, 1s) steps(var(--efeito-quadros, 16)) infinite;
+  }
+
   /* O ping no mapa. Ver `PingLayer`.
 
      O ícone entra com um quique e sai apagando perto do fim do prazo -- 4,3 s
@@ -346,6 +372,103 @@
 
 .efeito-translucido {
   opacity: 0.4;
+}
+
+/* A opacidade do externo é a do efeito; o `piscar` a usa como teto. A origem
+   segue a âncora: o fogo que sobe dos pés pulsa a partir dos pés. */
+.efeito-externo {
+  opacity: var(--efeito-opacidade, 1);
+  transform-origin: var(--efeito-origem, 50% 50%);
+}
+
+/* O efeito PARADO: o Mestre só anima o efeito de quem está selecionado --
+   token, área ou retrato. O resto pausa no quadro em que está, cada um na
+   sua fase, e o compositor não tem nada a refazer por quadro. A mesa (a
+   janela do espectador e o celular) não marca ninguém: lá tudo anda. Só as
+   classes de efeito, e não `*`: o surgir do token novo e o resto da cena
+   continuam como estão. Ver `animarSo` em `SceneLayer`. */
+[data-efeito-parado]
+  :is(
+    .efeito-aura,
+    .efeito-translucido,
+    .efeito-tremendo,
+    .efeito-pulsar,
+    .efeito-girar,
+    .efeito-flutuar,
+    .efeito-piscar,
+    .efeito-grade,
+    .efeito-faixa
+  ) {
+  animation-play-state: paused;
+}
+
+@keyframes efeito-faixa {
+  from {
+    background-position-x: 0;
+  }
+
+  to {
+    background-position-x: var(--efeito-fim, 0);
+  }
+}
+
+@keyframes efeito-pulsar {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(calc(1 + 0.15 * var(--efeito-intensidade, 0.5)));
+  }
+}
+
+/* Os QUADROS de uma folha (`QuadrosAnimados`): as colunas no `x` e as linhas
+   no `y` da posição do fundo, cada eixo em degraus. O fim vem inline, da
+   grade. Parada, sem o movimento, fica o primeiro quadro. */
+@keyframes efeito-grade-x {
+  to {
+    background-position-x: var(--grade-fim-x, 0%);
+  }
+}
+
+@keyframes efeito-grade-y {
+  to {
+    background-position-y: var(--grade-fim-y, 0%);
+  }
+}
+
+@keyframes efeito-girar {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Em porcentagem da própria caixa, pela razão do tremor. */
+@keyframes efeito-flutuar {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(calc(-12% * var(--efeito-intensidade, 0.5)));
+  }
+}
+
+@keyframes efeito-piscar {
+  0%,
+  100% {
+    opacity: var(--efeito-opacidade, 1);
+  }
+
+  50% {
+    opacity: calc(var(--efeito-opacidade, 1) * (1 - var(--efeito-intensidade, 0.5)));
+  }
 }
 
 @keyframes efeito-aura {

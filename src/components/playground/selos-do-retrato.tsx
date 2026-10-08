@@ -30,6 +30,7 @@ export function SelosDoRetrato({
   largura,
   altura,
   topoDaFigura,
+  centroDaFigura,
   lugar,
   escala,
   folgaDireita,
@@ -50,6 +51,14 @@ export function SelosDoRetrato({
    * transparente, longe da cabeça que ela descreve.
    */
   topoDaFigura: number;
+  /**
+   * O meio do rosto, de lado, relativo à caixa. Ausente = o meio da caixa.
+   *
+   * O rosto agora se arrasta dentro da composição, e a fileira no automático
+   * fica em cima DELE -- no meio da caixa ela ficaria sobre o vão que o rosto
+   * deixou.
+   */
+  centroDaFigura?: number;
   /** Ausente é o automático. Ver `LayoutDoRetrato.lugarDasCondicoes`. */
   lugar?: LugarDaPeca;
   escala?: number;
@@ -71,7 +80,9 @@ export function SelosDoRetrato({
       className="pointer-events-none absolute flex-nowrap"
       style={{
         left: pecaNoRecorte({
-          desejado: lugar ? lugar.x * largura : (largura - peca) / 2,
+          desejado: lugar
+            ? lugar.x * largura
+            : (centroDaFigura ?? largura / 2) - peca / 2,
           coluna: peca,
           largura,
           folgaDireita,

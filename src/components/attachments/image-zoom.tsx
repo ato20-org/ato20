@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Maximize, ZoomIn, ZoomOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { t } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
 import {
   clampZoomState,
@@ -205,7 +206,7 @@ export function ImageZoom({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Menos zoom"
+          aria-label={t.zoomDaImagem.menos}
           disabled={fitted}
           onClick={() => step(1 / BUTTON_STEP)}
         >
@@ -217,7 +218,7 @@ export function ImageZoom({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Mais zoom"
+          aria-label={t.zoomDaImagem.mais}
           disabled={state.zoom >= MAX_IMAGE_ZOOM}
           onClick={() => step(BUTTON_STEP)}
         >
@@ -226,7 +227,7 @@ export function ImageZoom({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Encaixar na tela"
+          aria-label={t.zoomDaImagem.encaixar}
           disabled={fitted}
           onClick={() => setState(FIT)}
         >

@@ -16,6 +16,7 @@ import {
   transmissaoDaCamera,
   type Transmissao,
 } from "@/lib/mestre/camera-actions";
+import { t } from "@/lib/i18n/palco";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -234,11 +235,7 @@ function Fantasma({
             cursor,
             ...emPixelDeTela(scale),
           }}
-          title={
-            editavel
-              ? `Clique seleciona (Shift+${posicao}). ${segue ? "Segue tokens." : "Arraste move."}`
-              : undefined
-          }
+          title={editavel ? t.cameraFantasma.dica(posicao, segue) : undefined}
           onPointerDown={pegar}
         >
           <span className="opacity-60">{posicao}</span>

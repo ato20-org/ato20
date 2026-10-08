@@ -7,6 +7,7 @@ import { DeclarativoProvider } from "@/components/playground/declarativo";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { PalcoSoTela } from "@/components/playground/scene-stage";
 import type { EfeitoPedido } from "@/lib/condicao";
+import { t } from "@/lib/i18n/palco";
 import { encaixarRetratos, lerPedidoDeRetratos, type RetratoParaKit } from "@/lib/kit-de-retratos";
 import { buscarDeclarativo, DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -53,8 +54,9 @@ export function KitDeRetratos({ codigo, encaixar }: { codigo: string | null; enc
     return () => window.removeEventListener("message", ouvir);
   }, []);
 
-  // Estilo de plugin que o kit não conhece: relê o declarativo. É o que traz o
-  // coração que esvazia em vez da barra de fábrica.
+  // Estilo ou efeito de plugin que o kit não conhece: relê o declarativo. É o
+  // que traz o coração que esvazia em vez da barra de fábrica, e o sangue do
+  // pack de efeitos em vez do retrato limpo.
   const estilosPedidos = useMemo(
     () =>
       [...new Set(retratos.flatMap((r) => (r.medidores ?? []).map((m) => m.estiloExtensao)))]
@@ -63,9 +65,21 @@ export function KitDeRetratos({ codigo, encaixar }: { codigo: string | null; enc
         .join("|"),
     [retratos],
   );
+  const efeitosPedidos = useMemo(
+    () =>
+      [...new Set(retratos.flatMap((r) => (r.efeitos ?? []).map((e) => e.efeito)))]
+        // Só os de fora: o de fábrica o kit já desenha. Id de fora tem barra.
+        .filter((efeito) => efeito.includes("/"))
+        .sort()
+        .join("|"),
+    [retratos],
+  );
   useEffect(() => {
-    if (!codigo || !estilosPedidos) return;
-    if (estilosPedidos.split("|").every((estilo) => estilo in declarativo.estilos)) return;
+    if (!codigo || (!estilosPedidos && !efeitosPedidos)) return;
+    const falta = (pedidos: string, conhecidos: object) =>
+      Boolean(pedidos) && pedidos.split("|").some((chave) => !Object.hasOwn(conhecidos, chave));
+    if (!falta(estilosPedidos, declarativo.estilos) && !falta(efeitosPedidos, declarativo.efeitos))
+      return;
 
     const agora = Date.now();
     if (agora - ultimaLeitura.current < RELER_DECLARATIVO_MS) return;
@@ -79,7 +93,7 @@ export function KitDeRetratos({ codigo, encaixar }: { codigo: string | null; enc
     return () => {
       ativo = false;
     };
-  }, [codigo, estilosPedidos, declarativo]);
+  }, [codigo, estilosPedidos, efeitosPedidos, declarativo]);
 
   const tela = useTamanhoDaJanela();
   const arrumados = useMemo(
@@ -103,7 +117,7 @@ export function KitDeRetratos({ codigo, encaixar }: { codigo: string | null; enc
         {/* Um retrato torto some com o resto até o próximo pedido, e o kit
             continua ouvindo. Sem aviso: numa live, o aviso seria pior que o
             buraco. */}
-        <BarreiraDeExtensao nome="Kit de retratos" chave={String(pedidos)} reserva={null}>
+        <BarreiraDeExtensao nome={t.kit.retratos} chave={String(pedidos)} reserva={null}>
           <PortraitLayer
             portraits={arrumados}
             variant="mesa"

@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
   Code,
+  Columns2,
   FileText,
   Heading1,
   Heading2,
@@ -29,6 +30,7 @@ import {
   PanelLeftOpen,
   ListOrdered,
   ListTodo,
+  Maximize2,
   SeparatorHorizontal,
   SquareCode,
   TextQuote,
@@ -54,6 +56,7 @@ import {
   type MarcaDaBarra,
 } from "@/lib/markdown/formatar";
 import { bloco, comAjuste } from "@/lib/markdown/linha";
+import { t } from "@/lib/i18n/arquivos";
 import { pontoNoCru, type PontoNoCru } from "@/lib/markdown/ponto-no-cru";
 import { cn } from "@/lib/utils";
 import {
@@ -71,7 +74,11 @@ import { normaliza } from "@/lib/search";
 import { useMencoesDoMestre } from "@/hooks/use-mencoes-do-mestre";
 import { Button } from "@/components/ui/button";
 import { aoApertarF2 } from "@/hooks/use-renomear-pelo-menu";
-import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
+import {
+  abrirNotaAoLado,
+  fecharNotaEmTodaParte,
+  trazerNotaAoCentro,
+} from "@/lib/mestre/abrir-nota";
 import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import {
@@ -103,13 +110,22 @@ const FONTE_PASSO = 2;
  * vem do `useDocumentoStore`, o mesmo que os cartões do quadro leem -- a nota
  * é uma, os cartões são N.
  */
-export function NotaEditor({ nota }: { nota: Nota }) {
+export function NotaEditor({
+  nota,
+  onde,
+}: {
+  nota: Nota;
+  /**
+   * Onde ela está aberta: no CENTRO, no lugar do palco, ou num painel ao lado
+   * do mapa. Decide para onde o botão de dividir a leva. Ver `abrir-nota`.
+   */
+  onde: "centro" | "painel";
+}) {
   const texto = useDocumentoStore((state) => state.textos[nota.arquivo]);
   const carregar = useDocumentoStore((state) => state.carregar);
   const escrever = useDocumentoStore((state) => state.escrever);
   const renomearNota = useSceneStore((state) => state.renomearNota);
   const removerNota = useSceneStore((state) => state.removerNota);
-  const fechar = useArquivoAbertoStore((state) => state.fechar);
   const { vinculos, candidatos } = useMencoesDoMestre();
 
   useEffect(() => {
@@ -144,6 +160,8 @@ export function NotaEditor({ nota }: { nota: Nota }) {
     }
   }
   const [linhaAtiva, setLinhaAtiva] = useState<string | null>(null);
+  /** A raiz do editor: é por ela que se sabe se o foco está nesta nota. */
+  const raiz = useRef<HTMLDivElement | null>(null);
 
   /**
    * Ctrl+F procura na nota. Sai do texto cru, se estava nele: a busca lê o
@@ -154,13 +172,25 @@ export function NotaEditor({ nota }: { nota: Nota }) {
    * é o texto que se quer maior.
    *
    * Na CAPTURA e no `window`, antes de todo mundo: os mesmos atalhos são o zoom
-   * do palco em `atalhos.ts`, e o palco não está montado com a nota aberta --
-   * sem barrar aqui, o toque mexeria na câmera de uma cena que ninguém vê. E
-   * antes do campo da linha, para valer também no meio da escrita.
+   * do palco em `atalhos.ts`, e antes do campo da linha, para valer também no
+   * meio da escrita.
+   *
+   * Numa nota dividida ao lado do mapa, só com o foco no painel DELA: sem a
+   * pergunta, o Ctrl+= no mapa mudaria a letra da nota, e duas notas abertas
+   * brigariam pela mesma tecla. No centro, sempre -- a não ser que o foco
+   * esteja num painel lateral, que é de outra nota ou de um livro. O painel
+   * recebe o foco ao ser clicado -- ver `PainelDeAbas`.
    */
   useEffect(() => {
     function teclas(event: KeyboardEvent) {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+
+      const foco = document.activeElement;
+      const painel = raiz.current?.closest("[data-painel-lateral]");
+      const minha = painel
+        ? painel.contains(foco)
+        : !foco?.closest("[data-painel-lateral]");
+      if (!minha) return;
 
       if (event.key.toLowerCase() === "f" && !event.shiftKey) {
         event.preventDefault();
@@ -202,7 +232,7 @@ export function NotaEditor({ nota }: { nota: Nota }) {
   const [confirmando, setConfirmando] = useState(false);
 
   function apagar() {
-    fechar();
+    fecharNotaEmTodaParte(nota.id);
     removerNota(nota.id);
     void apagarDocumento(nota.arquivo).catch((cause: unknown) => {
       console.error("falha ao apagar a nota", cause);
@@ -211,7 +241,7 @@ export function NotaEditor({ nota }: { nota: Nota }) {
 
   return (
     <VinculosContext value={vinculos}>
-    <div className="bg-background flex min-h-0 flex-1 flex-col">
+    <div ref={raiz} className="bg-background flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
         <FileText className="text-muted-foreground size-4 shrink-0" aria-hidden />
         {renomeando ? (
@@ -219,7 +249,7 @@ export function NotaEditor({ nota }: { nota: Nota }) {
             autoFocus
             defaultValue={nota.titulo}
             className="bg-card min-w-0 flex-1 rounded px-2 py-0.5 text-lg font-semibold outline-none"
-            aria-label="Título da nota"
+            aria-label={t.geral.tituloDaNota}
             onFocus={(event) => event.currentTarget.select()}
             onBlur={(event) => {
               renomearNota(nota.id, event.currentTarget.value);
@@ -235,7 +265,7 @@ export function NotaEditor({ nota }: { nota: Nota }) {
           <button
             type="button"
             className="min-w-0 flex-1 truncate text-left text-lg font-semibold"
-            title="Clique para renomear"
+            title={t.editorMarkdown.cliqueParaRenomear}
             onClick={() => setRenomeando(true)}
             onKeyDown={aoApertarF2(() => setRenomeando(true))}
           >
@@ -243,11 +273,29 @@ export function NotaEditor({ nota }: { nota: Nota }) {
           </button>
         )}
         <span className="text-muted-foreground shrink-0 text-xs">{nota.arquivo}</span>
+        {/* Dividir: a nota sai do lugar do palco e vai para um painel ao lado
+            do mapa, e o mapa volta. No painel, o mesmo botão a traz de volta
+            ao centro. Ver `abrir-nota`. */}
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Apagar esta nota"
-          title="Apaga a nota, o arquivo .md e os cartões dela nos quadros"
+          aria-label={onde === "centro" ? t.geral.abrirAoLado : t.editorMarkdown.abrirNoCentro}
+          title={
+            onde === "centro"
+              ? t.editorMarkdown.abrirAoLadoDica
+              : t.editorMarkdown.abrirNoCentroDica
+          }
+          onClick={() =>
+            onde === "centro" ? abrirNotaAoLado(nota.id) : trazerNotaAoCentro(nota.id)
+          }
+        >
+          {onde === "centro" ? <Columns2 /> : <Maximize2 />}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t.editorMarkdown.apagarEstaNota}
+          title={t.editorMarkdown.apagarDica}
           onClick={() => setConfirmando(true)}
         >
           <Trash2 />
@@ -255,8 +303,8 @@ export function NotaEditor({ nota }: { nota: Nota }) {
         <ConfirmarRemocao
           aberto={confirmando}
           onAberto={setConfirmando}
-          titulo={`Deseja apagar ${nota.titulo}?`}
-          itens={["O arquivo .md", "Os cartões desta nota nos quadros"]}
+          titulo={t.geral.apagarNotaTitulo(nota.titulo)}
+          itens={[t.geral.apagarNotaArquivo, t.geral.apagarNotaCartoes]}
           onConfirmar={apagar}
         />
       </div>
@@ -272,8 +320,8 @@ export function NotaEditor({ nota }: { nota: Nota }) {
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Mostrar o sumário"
-              title="Mostrar o sumário: os títulos e as listas da nota"
+              aria-label={t.editorMarkdown.mostrarSumario}
+              title={t.editorMarkdown.mostrarSumarioDica}
               onClick={() => recolherSumario(false)}
             >
               <PanelLeftOpen />
@@ -286,11 +334,11 @@ export function NotaEditor({ nota }: { nota: Nota }) {
             size="sm"
             className="h-7 gap-1.5 px-2 text-xs"
             aria-pressed={mencoesAbertas}
-            title="Quem e o que esta nota cita, e onde"
+            title={t.editorMarkdown.mencoesDica}
             onClick={() => setMencoesAbertas((aberto) => !aberto)}
           >
             <AtSign />
-            Menções
+            {t.editorMarkdown.mencoes}
           </Button>
         }
       />
@@ -341,7 +389,7 @@ export function NotaEditor({ nota }: { nota: Nota }) {
             className={cn("mx-auto max-w-3xl", procura !== null && "select-text")}
           >
             {texto === undefined ? (
-              <span className="text-muted-foreground italic">Abrindo…</span>
+              <span className="text-muted-foreground italic">{t.geral.abrindo}</span>
             ) : (
               <EditorAoVivo
                 texto={texto}
@@ -379,21 +427,21 @@ export function NotaEditor({ nota }: { nota: Nota }) {
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label="Diminuir a fonte"
-          title="Diminuir a fonte · Ctrl+-"
+          aria-label={t.editorMarkdown.diminuirFonte}
+          title={t.editorMarkdown.diminuirFonteDica}
           disabled={fonte <= FONTE_MIN}
           onClick={() => setFonte((f) => Math.max(FONTE_MIN, f - FONTE_PASSO))}
         >
           <AArrowDown />
         </Button>
-        <span className="min-w-6 text-center tabular-nums" title="Ctrl+0 volta ao tamanho padrão">
+        <span className="min-w-6 text-center tabular-nums" title={t.editorMarkdown.tamanhoPadraoDica}>
           {fonte}
         </span>
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label="Aumentar a fonte"
-          title="Aumentar a fonte · Ctrl+="
+          aria-label={t.editorMarkdown.aumentarFonte}
+          title={t.editorMarkdown.aumentarFonteDica}
           disabled={fonte >= FONTE_MAX}
           onClick={() => setFonte((f) => Math.min(FONTE_MAX, f + FONTE_PASSO))}
         >
@@ -402,15 +450,15 @@ export function NotaEditor({ nota }: { nota: Nota }) {
         <Button
           variant={cru ? "secondary" : "ghost"}
           size="icon-xs"
-          aria-label={cru ? "Voltar à prévia" : "Ver o texto cru"}
-          title={cru ? "Voltar à prévia ao vivo (Esc)" : "Texto cru: o arquivo inteiro num campo só (Ctrl+A)"}
+          aria-label={cru ? t.editorMarkdown.voltarAPrevia : t.editorMarkdown.verCru}
+          title={cru ? t.editorMarkdown.voltarAPreviaDica : t.editorMarkdown.verCruDica}
           aria-pressed={cru}
           onClick={() => setCru((atual) => !atual)}
         >
           <Code />
         </Button>
         <span className="flex-1 text-right tabular-nums">
-          {palavras} palavras · {linhas} linhas
+          {t.editorMarkdown.contagem(palavras, linhas)}
         </span>
       </div>
     </div>
@@ -428,26 +476,27 @@ type BotaoDaBarra = {
 };
 
 /** Os botões, em grupos: título, marca de dentro da linha, bloco, e o resto. */
+const { botoes: B, regras: R } = t.editorMarkdown;
 const BOTOES: BotaoDaBarra[][] = [
   [
-    { acao: { tipo: "bloco", bloco: "h1" }, icone: Heading1, rotulo: "Título", regra: "# no começo da linha" },
-    { acao: { tipo: "bloco", bloco: "h2" }, icone: Heading2, rotulo: "Subtítulo", regra: "## no começo da linha" },
-    { acao: { tipo: "bloco", bloco: "h3" }, icone: Heading3, rotulo: "Título menor", regra: "### no começo da linha" },
+    { acao: { tipo: "bloco", bloco: "h1" }, icone: Heading1, rotulo: B.titulo, regra: R.noComeco("#") },
+    { acao: { tipo: "bloco", bloco: "h2" }, icone: Heading2, rotulo: B.subtitulo, regra: R.noComeco("##") },
+    { acao: { tipo: "bloco", bloco: "h3" }, icone: Heading3, rotulo: B.tituloMenor, regra: R.noComeco("###") },
   ],
   [
-    { acao: { tipo: "marca", marca: "negrito" }, icone: Bold, rotulo: "Negrito", regra: "**texto**", atalho: "Ctrl+B" },
-    { acao: { tipo: "marca", marca: "italico" }, icone: Italic, rotulo: "Itálico", regra: "*texto*", atalho: "Ctrl+I" },
-    { acao: { tipo: "marca", marca: "codigo" }, icone: SquareCode, rotulo: "Código", regra: "`texto`" },
+    { acao: { tipo: "marca", marca: "negrito" }, icone: Bold, rotulo: B.negrito, regra: R.negrito, atalho: "Ctrl+B" },
+    { acao: { tipo: "marca", marca: "italico" }, icone: Italic, rotulo: B.italico, regra: R.italico, atalho: "Ctrl+I" },
+    { acao: { tipo: "marca", marca: "codigo" }, icone: SquareCode, rotulo: B.codigo, regra: R.codigo },
   ],
   [
-    { acao: { tipo: "bloco", bloco: "item" }, icone: List, rotulo: "Lista", regra: "- no começo da linha" },
-    { acao: { tipo: "bloco", bloco: "numero" }, icone: ListOrdered, rotulo: "Lista numerada", regra: "1. no começo da linha" },
-    { acao: { tipo: "bloco", bloco: "tarefa" }, icone: ListTodo, rotulo: "Tarefa", regra: "- [ ] no começo da linha" },
-    { acao: { tipo: "bloco", bloco: "citacao" }, icone: TextQuote, rotulo: "Citação", regra: "> no começo da linha" },
+    { acao: { tipo: "bloco", bloco: "item" }, icone: List, rotulo: B.lista, regra: R.noComeco("-") },
+    { acao: { tipo: "bloco", bloco: "numero" }, icone: ListOrdered, rotulo: B.listaNumerada, regra: R.noComeco("1.") },
+    { acao: { tipo: "bloco", bloco: "tarefa" }, icone: ListTodo, rotulo: B.tarefa, regra: R.noComeco("- [ ]") },
+    { acao: { tipo: "bloco", bloco: "citacao" }, icone: TextQuote, rotulo: B.citacao, regra: R.noComeco(">") },
   ],
   [
-    { acao: { tipo: "link" }, icone: Link, rotulo: "Link", regra: "[texto](endereço)" },
-    { acao: { tipo: "regua" }, icone: SeparatorHorizontal, rotulo: "Linha divisória", regra: "--- numa linha sozinha" },
+    { acao: { tipo: "link" }, icone: Link, rotulo: B.link, regra: R.link },
+    { acao: { tipo: "regua" }, icone: SeparatorHorizontal, rotulo: B.linhaDivisoria, regra: R.regua },
   ],
 ];
 
@@ -484,8 +533,8 @@ function BarraDeFormatacao({
     <div
       {...{ [MARCA_BARRA]: "" }}
       role="toolbar"
-      aria-label="Formatação"
-      title={desligada ? "No texto cru o Markdown é digitado. Esc volta à prévia." : undefined}
+      aria-label={t.editorMarkdown.formatacao}
+      title={desligada ? t.editorMarkdown.cruDesligada : undefined}
       className="flex shrink-0 flex-wrap items-center gap-0.5 border-b px-3 py-1"
       onMouseDown={(event) => event.preventDefault()}
     >
@@ -600,18 +649,18 @@ function Sumario({
 
   return (
     <nav
-      aria-label="Sumário da nota"
+      aria-label={t.editorMarkdown.sumarioDaNota}
       className="bg-background/60 w-56 shrink-0 overflow-y-auto border-r px-2 pt-1.5 pb-3 text-xs"
     >
       <div className="mb-1 flex items-center gap-1 pl-1">
         <span className="text-muted-foreground flex-1 text-[11px] font-medium tracking-wide uppercase">
-          Sumário
+          {t.editorMarkdown.sumario}
         </span>
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label="Recolher o sumário"
-          title="Recolher o sumário: a nota ganha a largura toda"
+          aria-label={t.editorMarkdown.recolherSumario}
+          title={t.editorMarkdown.recolherSumarioDica}
           onClick={aoRecolher}
         >
           <PanelLeftClose />
@@ -627,7 +676,11 @@ function Sumario({
             {entrada.temFilhos ? (
               <button
                 type="button"
-                aria-label={recolhidos.has(entrada.indice) ? "Abrir a seção" : "Recolher a seção"}
+                aria-label={
+                  recolhidos.has(entrada.indice)
+                    ? t.editorMarkdown.abrirSecao
+                    : t.editorMarkdown.recolherSecao
+                }
                 aria-expanded={!recolhidos.has(entrada.indice)}
                 className="text-muted-foreground hover:text-foreground shrink-0"
                 onClick={() => alternar(entrada.indice)}
@@ -1409,7 +1462,7 @@ export function EditorAoVivo({
           sem nada não diz que é um editor. */}
       {vazio && !ativa ? (
         <p className="text-muted-foreground pointer-events-none absolute italic">
-          Clique aqui e comece a escrever. # título, - lista, @personagem…
+          {t.editorMarkdown.dicaVazia}
         </p>
       ) : null}
       {linhas.map((linha, indice) =>
@@ -1432,7 +1485,7 @@ export function EditorAoVivo({
                 ref={campo}
                 rows={1}
                 value={linhaAtiva}
-                aria-label={noTrecho ? "Trecho em edição" : "Linha em edição"}
+                aria-label={noTrecho ? t.editorMarkdown.trechoEmEdicao : t.editorMarkdown.linhaEmEdicao}
                 className="text-foreground relative block w-full resize-none overflow-hidden bg-transparent font-mono text-[0.95em] [tab-size:4] outline-none"
                 onChange={(event) => {
                   trocar(indice, event.target.value);
@@ -1568,7 +1621,7 @@ function TextoCru({
     <textarea
       ref={campo}
       value={texto}
-      aria-label="Texto cru da nota"
+      aria-label={t.editorMarkdown.textoCru}
       className="text-foreground block min-h-[60vh] w-full resize-none bg-transparent font-mono text-[0.95em] [tab-size:4] outline-none"
       onChange={(event) => {
         onChange(event.target.value);

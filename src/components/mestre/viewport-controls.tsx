@@ -4,6 +4,7 @@ import { ZoomIn, ZoomOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cabeTudo, viewportZoom } from "@/lib/geometry/viewport";
+import { t } from "@/lib/i18n/mestre";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 
 /**
@@ -29,7 +30,7 @@ export function ViewportControls() {
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Menos zoom"
+        aria-label={t.palco.menosZoom}
         disabled={atFit}
         onClick={zoomOut}
       >
@@ -39,7 +40,7 @@ export function ViewportControls() {
       <button
         type="button"
         className="hover:bg-accent w-14 rounded-md px-1 py-1 text-xs tabular-nums"
-        aria-label="Encaixar tudo o que existe"
+        aria-label={t.palco.encaixarTudo}
         onClick={fit}
       >
         {Math.round(zoom * 100)}%
@@ -48,7 +49,7 @@ export function ViewportControls() {
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Mais zoom"
+        aria-label={t.palco.maisZoom}
         onClick={zoomIn}
       >
         <ZoomIn />

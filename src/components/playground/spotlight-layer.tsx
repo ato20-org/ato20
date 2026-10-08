@@ -5,6 +5,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { ImageZoom } from "@/components/attachments/image-zoom";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
+import { t } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
 import type { Spotlight } from "@/types/scene";
 
@@ -67,7 +68,7 @@ export function SpotlightLayer({
         onClick={() => setEscondido(null)}
       >
         <Eye className="size-3.5" aria-hidden />
-        Ver a imagem do mestre
+        {t.evidencia.ver}
       </button>
     );
   }
@@ -94,14 +95,14 @@ export function SpotlightLayer({
           // herdar o recorte da anterior.
           <ImageZoom
             src={url}
-            alt="Imagem em evidência"
+            alt={t.evidencia.imagem}
             className="min-h-0 w-full flex-1"
           />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={url}
-            alt="Imagem em evidência"
+            alt={t.evidencia.imagem}
             draggable={false}
             // `object-contain` com teto de altura: documento em pé e mapa
             // deitado passam pelo mesmo caminho, e cortar qualquer um dos dois
@@ -121,7 +122,7 @@ export function SpotlightLayer({
           onClick={() => setEscondido(spotlight.since)}
         >
           <EyeOff className="size-3.5" aria-hidden />
-          Esconder
+          {t.evidencia.esconder}
         </button>
       ) : null}
     </div>

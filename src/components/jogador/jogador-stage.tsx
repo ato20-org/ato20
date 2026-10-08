@@ -11,9 +11,11 @@ import {
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
+import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
 import type { FichaNaCena, Portrait, Scene } from "@/types/scene";
 
@@ -47,6 +49,7 @@ export function JogadorStage({
   efeitos,
   rolagens,
   pings,
+  laser,
   synced,
   stalled,
 }: {
@@ -68,13 +71,18 @@ export function JogadorStage({
   rolagens: RolagemDaMesa[];
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** O laser do mestre. Ver `LiveState.laser`. */
+  laser: LaserNaMesa | null;
   synced: boolean;
   stalled: boolean;
 }) {
   const { expanded, toggle } = useFullscreen();
   const frameRef = useRef<HTMLDivElement>(null);
   // Trocar de câmera corta em fade; a mesma câmera andando interpola.
-  const { cena, viewport, corte, cortando } = useCorteDeCamera(scene);
+  const { cena, viewport, tripe, corte, cortando } = useCorteDeCamera(scene);
+  // Com um tripé no ar quem anda é o olho, e o palco fica no plano inteiro,
+  // como o da TV. Ver `EspectadorStage`.
+  const deEsguelha = Boolean(tripe);
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2">
@@ -101,7 +109,7 @@ export function JogadorStage({
       >
         <SceneStage
           className="size-full"
-          viewport={viewport}
+          viewport={deEsguelha ? undefined : viewport}
           corDoVazio={cena?.corDoVazio}
           corte={corte}
           smooth
@@ -118,6 +126,9 @@ export function JogadorStage({
                 efeitos={efeitos}
                 rolagens={rolagens}
                 pings={pings}
+                laser={laser}
+                tripe={tripe}
+                corte={corte}
               />
             </div>
           ) : null}
@@ -131,12 +142,12 @@ export function JogadorStage({
         {!scene ? (
           <p className="text-muted-foreground absolute inset-0 grid place-items-center px-6 text-center text-sm">
             {synced
-              ? "O mestre não colocou nada no ar."
+              ? t.palco.nadaNoAr
               : stalled
                 ? // Silêncio longo não é espera: é problema. Dizer o que fazer
                   // vale mais que reticências que nunca terminam.
-                  "Sem resposta do mestre. Ele precisa estar com a tela do Mestre aberta."
-                : "Aguardando o mestre…"}
+                  t.palco.semResposta
+                : t.palco.aguardando}
           </p>
         ) : null}
 
@@ -144,7 +155,7 @@ export function JogadorStage({
 
         <button
           type="button"
-          aria-label={expanded ? "Sair da tela cheia" : "Tela cheia"}
+          aria-label={expanded ? t.palco.sairDaTelaCheia : t.palco.telaCheia}
           // Alvo generoso e fundo próprio: por cima de mapa escuro ou claro,
           // um ícone sem contraste desaparece.
           className="absolute top-2 right-2 rounded-md bg-black/60 p-2 text-white backdrop-blur"

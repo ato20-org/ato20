@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   anguloEntre,
   caixaDaFonte,
+  tremorSoDe,
   chaveDasFontes,
   coneDe,
   corDoEscuroDe,
   fatorDoEfeito,
   FUNDO_DO_PULSO,
   anguloDoFacho,
+  anguloNaFigura,
   fontesDaCena,
   inicioDoCone,
   ladoDaLuz,
@@ -31,6 +33,8 @@ import {
   umbrasDaLuz,
   type Oclusor,
   type Ponto,
+  donoDaFonte,
+  RAIO_MAXIMO_DO_EFEITO,
 } from "@/lib/geometry/luz";
 import { escorrerDaFigura, segmentosDaParede } from "@/lib/geometry/sombra";
 import type { CanvasItem, Luz, Parede } from "@/types/scene";
@@ -119,6 +123,33 @@ describe("anguloDoFacho", () => {
     // A imagem espelha dentro do contêiner que gira. Na ordem inversa o
     // resultado seria 180 - (0 + 90) = 90, e o facho sairia para o lado errado.
     expect(anguloDoFacho({ rotation: 90, flipX: true }, 0)).toBe(270);
+  });
+});
+
+describe("anguloNaFigura", () => {
+  const casos = [
+    { rotation: 0 },
+    { rotation: 30 },
+    { rotation: 0, flipX: true },
+    { rotation: 0, flipY: true },
+    { rotation: 90, flipX: true },
+    { rotation: -45, flipX: true, flipY: true },
+  ];
+
+  it("desfaz o anguloDoFacho em qualquer giro e espelho", () => {
+    for (const item of casos) {
+      for (const noMapa of [0, 45, 90, 200, 315]) {
+        expect(anguloDoFacho(item, anguloNaFigura(item, noMapa))).toBeCloseTo(
+          noMapa,
+        );
+      }
+    }
+  });
+
+  it("devolve entre 0 e 360", () => {
+    const angulo = anguloNaFigura({ rotation: 300 }, 10);
+
+    expect(angulo).toBe(70);
   });
 });
 
@@ -244,6 +275,33 @@ describe("fontesDaCena", () => {
 
     expect(fonte).not.toHaveProperty("cone");
     expect(fonte).not.toHaveProperty("efeito");
+  });
+
+  it("a lanterna do token acende na intensidade dela", () => {
+    const [fraca, antiga] = fontesDaCena(
+      [],
+      [
+        item("t1", { luz: { raio: 150, cor: "#fb923c", intensidade: 0.35 } }),
+        // Sem o campo é a lanterna de antes de a intensidade existir.
+        item("t2", { luz: { raio: 150, cor: "#fb923c" } }),
+      ],
+    );
+
+    expect(fraca?.intensidade).toBe(0.35);
+    expect(antiga?.intensidade).toBe(1);
+  });
+
+  it("a lanterna com intensidade podre acende inteira", () => {
+    const [fonte] = fontesDaCena(
+      [],
+      [
+        item("t1", {
+          luz: { raio: 150, cor: "#fb923c", intensidade: Number.NaN },
+        }),
+      ],
+    );
+
+    expect(fonte?.intensidade).toBe(1);
   });
 
   it("a lanterna do token também tremula", () => {
@@ -825,6 +883,22 @@ describe("a silhueta deitada pela luz", () => {
 });
 
 describe("caixaDaFonte", () => {
+  it("a luz com forma cobre o contorno crescido pelo raio, e não o círculo do meio", () => {
+    const forma = [
+      { x: 400, y: 300 },
+      { x: 800, y: 300 },
+      { x: 800, y: 400 },
+      { x: 400, y: 400 },
+    ];
+
+    expect(caixaDaFonte({ x: 600, y: 350, raio: 50, forma })).toEqual({
+      x: 350,
+      y: 250,
+      width: 500,
+      height: 200,
+    });
+  });
+
   it("é o quadrado do alcance", () => {
     expect(caixaDaFonte({ x: 500, y: 500, raio: 100 })).toEqual({
       x: 400,
@@ -962,5 +1036,79 @@ describe("corDoEscuroDe", () => {
     expect(corDoEscuroDe(undefined)).toBe("#000000");
     expect(corDoEscuroDe("azul")).toBe("#000000");
     expect(corDoEscuroDe(42)).toBe("#000000");
+  });
+});
+
+describe("a luz dos efeitos de condição", () => {
+  const goblin = {
+    id: "goblin",
+    assetId: "a",
+    x: 100,
+    y: 200,
+    width: 80,
+    height: 60,
+    rotation: 0,
+    z: 1,
+    luz: { raio: 160, cor: "#ffffff" },
+  } as CanvasItem;
+
+  it("vira uma fonte do item, ao lado da lanterna, medida pela figura", () => {
+    const fontes = fontesDaCena(undefined, [goblin], () => ({
+      raio: 2.5,
+      cor: "#f59e0b",
+      intensidade: 0.8,
+      efeito: "fogo",
+    }));
+
+    expect(fontes).toHaveLength(2);
+    const doEfeito = fontes.find((fonte) => fonte.id === "goblin#efeito")!;
+    // Do centro, e o raio em vezes o lado maior.
+    expect(doEfeito).toMatchObject({ x: 140, y: 230, raio: 200, cor: "#f59e0b", efeito: "fogo" });
+    expect(doEfeito.intensidade).toBeCloseTo(0.8);
+  });
+
+  it("continua sendo do item: é por ele que o token não tapa a própria luz", () => {
+    const [lanterna, fogo] = fontesDaCena(undefined, [goblin], () => ({
+      raio: 2,
+      cor: "#f59e0b",
+      intensidade: 1,
+    }));
+
+    expect(donoDaFonte(lanterna!)).toBe("goblin");
+    expect(donoDaFonte(fogo!)).toBe("goblin");
+  });
+
+  it("figura grande não acende o mapa inteiro: o raio tem teto", () => {
+    const dragao = { ...goblin, width: 300, height: 300 };
+    const [, fogo] = fontesDaCena(undefined, [dragao], () => ({
+      raio: 10,
+      cor: "#f59e0b",
+      intensidade: 1,
+    }));
+
+    expect(fogo!.raio).toBe(RAIO_MAXIMO_DO_EFEITO);
+  });
+
+  it("sem quem pergunte, só as luzes de sempre", () => {
+    expect(fontesDaCena(undefined, [goblin])).toHaveLength(1);
+  });
+});
+
+describe("tremorSoDe", () => {
+  const base = { raio: 100, raioIntenso: 40, cor: "#f59e0b", intensidade: 1 };
+  const fontes = [
+    { ...base, id: "tocha", x: 0, y: 0, efeito: "fogo" as const },
+    { ...base, id: "goblin#efeito", dono: "goblin", x: 10, y: 0, efeito: "fogo" as const },
+    { ...base, id: "area#luz", dono: "area", x: 20, y: 0, efeito: "fogo" as const },
+  ];
+
+  it("sem lista, todas tremulam: é a mesa", () => {
+    expect(tremorSoDe(fontes, undefined)).toBe(fontes);
+  });
+
+  it("no Mestre, só a de efeito do selecionado tremula; a tocha cravada segue", () => {
+    const efeitos = tremorSoDe(fontes, new Set(["area"])).map((fonte) => fonte.efeito);
+
+    expect(efeitos).toEqual(["fogo", undefined, "fogo"]);
   });
 });

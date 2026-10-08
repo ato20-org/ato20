@@ -8,6 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/cenas";
 import { selectCapa, selectLiveScene, useSceneStore } from "@/lib/store/use-scene-store";
 import type { Scene } from "@/types/scene";
 
@@ -64,7 +65,7 @@ export function OnAirControl({ editing }: { editing: Scene | null }) {
                 {/* "Capa" e não o nome dela: é uma por campanha, e o nome do
                     fundo não acrescenta nada na barra. Quem quiser saber qual
                     lê no tooltip. */}
-                {live ? live.name : capa ? "Capa" : "Fora do ar"}
+                {live ? live.name : capa ? t.onAirControl.capa : t.onAirControl.foraDoAr}
               </span>
             </span>
           }
@@ -72,10 +73,10 @@ export function OnAirControl({ editing }: { editing: Scene | null }) {
         <TooltipContent>
           <p className="max-w-52">
             {live
-              ? `A mesa está vendo "${live.name}".`
+              ? t.onAirControl.mesaVendo(live.name)
               : capa
-                ? `Nada no ar: a mesa está vendo a capa, "${capa.name}".`
-                : "A mesa não está vendo mapa nenhum."}
+                ? t.onAirControl.mesaVendoCapa(capa.name)
+                : t.onAirControl.mesaSemMapa}
           </p>
         </TooltipContent>
       </Tooltip>
@@ -84,11 +85,11 @@ export function OnAirControl({ editing }: { editing: Scene | null }) {
         <Button
           variant="secondary"
           size="sm"
-          aria-label="Colocar no ar"
+          aria-label={t.geral.colocarNoAr}
           onClick={() => setLiveSceneId(editing.id)}
         >
           <Radio />
-          <span className="hidden lg:inline">Colocar no ar</span>
+          <span className="hidden lg:inline">{t.geral.colocarNoAr}</span>
         </Button>
       ) : null}
 
@@ -99,7 +100,7 @@ export function OnAirControl({ editing }: { editing: Scene | null }) {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Sair do ar"
+                aria-label={t.onAirControl.sairDoAr}
                 onClick={() => setLiveSceneId(null)}
               >
                 <Square />
@@ -109,8 +110,8 @@ export function OnAirControl({ editing }: { editing: Scene | null }) {
           <TooltipContent>
             <p className="max-w-52">
               {capa
-                ? "Tira a cena do ar e deixa a capa da campanha na tela."
-                : "Tira a mesa do ar. Útil em intervalo."}
+                ? t.onAirControl.sairDoArComCapa
+                : t.onAirControl.sairDoArSemCapa}
             </p>
           </TooltipContent>
         </Tooltip>

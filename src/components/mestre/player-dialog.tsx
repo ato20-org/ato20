@@ -46,6 +46,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/mestre";
 import { MINIATURA } from "@/lib/miniatura";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
@@ -331,7 +333,7 @@ function Ficha({
         abertas.current = { ...abertas.current, [anexo.arquivo]: url };
         setUrls({ ...abertas.current });
       } catch {
-        toast.error(`Não foi possível abrir ${anexo.arquivo}.`);
+        toast.error(t.jogador.naoAbriu(anexo.arquivo));
       }
     },
     [player.id],
@@ -362,7 +364,7 @@ function Ficha({
       setPartilhados((atual) => ({ ...atual, [anexo.arquivo]: sharedId }));
       transmitShared(sharedId, anexo.arquivo);
     } catch {
-      toast.error(`Não foi possível transmitir ${anexo.arquivo}.`);
+      toast.error(t.jogador.naoTransmitiu(anexo.arquivo));
     }
   }
 
@@ -372,7 +374,7 @@ function Ficha({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Voltar à lista"
+          aria-label={t.jogador.voltarALista}
           className="-ml-1 shrink-0"
           onClick={onVoltar}
         >
@@ -383,16 +385,19 @@ function Ficha({
           <DialogTitle className="flex items-center gap-2">
             <span
               className={`size-2 shrink-0 rounded-full ${presente ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
-              aria-label={presente ? "na mesa agora" : "não visto há um tempo"}
+              aria-label={
+                presente ? t.jogadores.naMesaAgora : t.jogadores.naoVisto
+              }
             />
             <span className="truncate">{player.nome}</span>
           </DialogTitle>
           {/* Quanto, e não "há um tempo": o dado existe, e é o que o mestre
               quer saber quando o jogador sumiu — se foi a conexão ou a noite. */}
           <DialogDescription className="mt-1">
-            {presente ? "Na mesa agora" : `Visto ${desde(player.vistoEm)}`}
-            {" · entrou "}
-            {desde(player.entrouEm)}
+            {presente
+              ? t.jogador.naMesaAgora
+              : t.jogador.visto(desde(player.vistoEm))}
+            {t.jogador.entrou(desde(player.entrouEm))}
           </DialogDescription>
         </div>
       </div>
@@ -406,9 +411,9 @@ function Ficha({
           mestre troca o personagem de mãos, e não vira mentira quando ele
           esquece de atualizar. Quem vincula é o diálogo de personagens. */}
       <Secao
-        titulo="Personagens"
-        vazio={dele.length === 0 ? "nenhum" : null}
-        dica="É o vínculo que dá a ele acesso à ficha, aos arquivos e às notas do personagem."
+        titulo={t.jogador.personagens}
+        vazio={dele.length === 0 ? t.jogador.nenhum : null}
+        dica={t.jogador.personagensDica}
         acao={
           semDono.length > 0 ? (
             <Select<string>
@@ -420,15 +425,15 @@ function Ficha({
                   // esta lista, a ficha do personagem e a lista de jogadores
                   // verem o vínculo novo.
                   () => recarregar(),
-                  () => toast.error("Não foi possível entregar o personagem."),
+                  () => toast.error(t.jogador.naoEntregou),
                 );
               }}
             >
               <SelectTrigger
                 className="h-6 text-[11px]"
-                aria-label="Entregar um personagem"
+                aria-label={t.jogador.entregarRotulo}
               >
-                <SelectValue placeholder="Entregar…" />
+                <SelectValue placeholder={t.jogador.entregar} />
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
                 {semDono.map((personagem) => (
@@ -469,11 +474,15 @@ function Ficha({
       </Secao>
 
       <Secao
-        titulo="Arquivos"
+        titulo={t.jogador.arquivos}
         vazio={
-          anexos === null ? "lendo…" : anexos.length === 0 ? "nenhum" : null
+          anexos === null
+            ? t.jogador.lendo
+            : anexos.length === 0
+              ? t.jogador.nenhum
+              : null
         }
-        dica="Retrato, ficha, mapa rabiscado: o que ele anexa na aba Personagem do celular."
+        dica={t.jogador.arquivosDica}
       >
         {anexos && anexos.length > 0 ? (
           <div className="space-y-2">
@@ -493,7 +502,7 @@ function Ficha({
                       <button
                         type="button"
                         className="hover:border-primary/60 focus-visible:ring-ring block w-full overflow-hidden rounded-md border text-left focus-visible:ring-2 focus-visible:outline-none"
-                        aria-label={`Ampliar ${anexo.arquivo}`}
+                        aria-label={t.jogador.ampliar(anexo.arquivo)}
                         onClick={() => setVendo(anexo)}
                       >
                         {urls[anexo.arquivo] ? (
@@ -536,8 +545,8 @@ function Ficha({
                               }
                               aria-label={
                                 noAr
-                                  ? `Tirar ${anexo.arquivo} da evidência`
-                                  : `Transmitir ${anexo.arquivo} para a mesa`
+                                  ? t.jogador.tirarDaEvidencia(anexo.arquivo)
+                                  : t.jogador.transmitir(anexo.arquivo)
                               }
                               aria-pressed={noAr}
                               // Clicar de novo no que já está no ar TIRA, como no
@@ -557,8 +566,8 @@ function Ficha({
                         <TooltipContent>
                           <p className="max-w-48">
                             {noAr
-                              ? "No ar agora. Clique para tirar."
-                              : "Põe este arquivo na frente de tudo, na TV e nos celulares. O endereço morre quando sair do ar."}
+                              ? t.jogador.noAr
+                              : t.jogador.transmitirDica}
                           </p>
                         </TooltipContent>
                       </Tooltip>
@@ -609,9 +618,9 @@ function Ficha({
       {/* Da sessão, e só dela: o histórico da mesa vive na memória desta
           janela, não no cofre. Ver `useRolagensStore`. */}
       <Secao
-        titulo="O que ele tirou"
-        vazio={rolagens.length === 0 ? "nenhum dado nesta sessão" : null}
-        dica="Só desta sessão. O daemon sorteia, não o celular."
+        titulo={t.jogador.rolagens}
+        vazio={rolagens.length === 0 ? t.jogador.rolagensVazio : null}
+        dica={t.jogador.rolagensDica}
       >
         {rolagens.length > 0 ? (
           <ul className="flex flex-wrap gap-1">
@@ -645,9 +654,9 @@ function Ficha({
           Só leitura, e não um campo editável: escrever na anotação alheia é
           outra coisa, e não é uma que o mestre precise fazer. */}
       <Secao
-        titulo="Caderno dele"
-        vazio={caderno.length === 0 ? "nada escrito" : null}
-        dica="Só leitura. O que ele escreveu no celular, em texto cru."
+        titulo={t.jogador.caderno}
+        vazio={caderno.length === 0 ? t.jogador.cadernoVazio : null}
+        dica={t.jogador.cadernoDica}
       >
         {caderno.length > 0 ? <Caderno notas={caderno} /> : null}
       </Secao>
@@ -668,21 +677,24 @@ function Ficha({
           render={
             <Button variant="destructive" size="sm" className="w-full">
               <Trash2 />
-              Tirar {player.nome} da mesa
+              {t.jogador.tirarDaMesa(player.nome)}
             </Button>
           }
         />
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Tirar {player.nome} da mesa?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t.jogador.tirarDaMesaTitulo(player.nome)}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Vão com ele {contar(anexos?.length ?? 0, "arquivo")},{" "}
-              {contar(caderno.length, "nota")} do caderno e o acesso pelo
-              celular. Os personagens ficam, sem dono. Não tem como desfazer.
+              {t.jogador.tirarDaMesaExplicacao(
+                anexos?.length ?? 0,
+                caderno.length,
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 void removePlayer(player.id).then(
@@ -691,11 +703,11 @@ function Ficha({
                     onVoltar();
                   },
                   () =>
-                    toast.error("Não foi possível tirar o jogador da mesa."),
+                    toast.error(t.jogador.naoTirou),
                 );
               }}
             >
-              Tirar da mesa
+              {t.jogador.tirarDaMesaConfirmar}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -719,7 +731,11 @@ function Ficha({
  */
 function Caderno({ notas }: { notas: Nota[] }) {
   if (notas.length === 0) {
-    return <p className="text-muted-foreground text-xs">Nada escrito ainda.</p>;
+    return (
+      <p className="text-muted-foreground text-xs">
+        {t.jogador.nadaEscritoAinda}
+      </p>
+    );
   }
 
   return (
@@ -728,7 +744,7 @@ function Caderno({ notas }: { notas: Nota[] }) {
         <li key={nota.id} className="rounded border px-2 py-1.5">
           <div className="flex items-baseline gap-2">
             <p className="min-w-0 flex-1 truncate text-xs font-medium">
-              {nota.titulo || "Sem título"}
+              {nota.titulo || t.jogador.semTitulo}
             </p>
             <span className="text-muted-foreground shrink-0 text-[10px]">
               {desde(nota.atualizadoEm)}
@@ -800,8 +816,4 @@ function Secao({
       {vazio ? null : children}
     </section>
   );
-}
-
-function contar(n: number, singular: string): string {
-  return n === 1 ? `1 ${singular}` : `${n} ${singular}s`;
 }

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/popover";
 import { useDadosNaMesa } from "@/hooks/use-dados-na-mesa";
 import { useGestoDeArremesso } from "@/hooks/use-gesto-de-arremesso";
+import { t } from "@/lib/i18n/jogador";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { cn } from "@/lib/utils";
 import {
@@ -113,7 +114,7 @@ export function SaquinhoJogador() {
           <button
             ref={bolinha}
             type="button"
-            aria-label={aberto ? "Fechar o saquinho" : "Saquinho de dados"}
+            aria-label={aberto ? t.saquinho.fechar : t.saquinho.abrir}
             aria-expanded={aberto}
             className={cn(
               "relative grid shrink-0 place-items-center rounded-full border transition-transform active:scale-95",
@@ -254,11 +255,8 @@ export function ConteudoDoSaquinho({
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <p className="text-sm font-medium">Saquinho</p>
-        <p className="text-muted-foreground text-xs">
-          Arraste um dado para a tela e solte — quanto mais forte, mais longe
-          ele rola. Toque para jogar no meio.
-        </p>
+        <p className="text-sm font-medium">{t.saquinho.titulo}</p>
+        <p className="text-muted-foreground text-xs">{t.saquinho.ajuda}</p>
       </div>
 
       {/* Três por linha: os seis são SÓLIDOS diferentes, e distinguir um
@@ -292,7 +290,7 @@ export function ConteudoDoSaquinho({
       {dados.length >= 2 ? (
         <div className="flex items-baseline gap-2 border-t pt-2.5">
           <span className="text-muted-foreground flex-1 text-xs font-medium">
-            Na tela
+            {t.saquinho.naTela}
           </span>
           <span className="text-base leading-none font-semibold tabular-nums">
             {soma}
@@ -312,7 +310,7 @@ export function ConteudoDoSaquinho({
           }
         >
           <Trash2 />
-          Recolher {dados.length === 1 ? "o dado" : `os ${dados.length} dados`}
+          {t.saquinho.recolher(dados.length)}
         </Button>
       ) : null}
     </div>

@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { t } from "@/lib/i18n/jogador";
 import { MINIATURA } from "@/lib/miniatura";
 
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
@@ -115,14 +116,13 @@ export function MyCharacters({
   }, [codigo, versao]);
 
   if (personagens === null) {
-    return <p className="text-muted-foreground text-xs">Lendo…</p>;
+    return <p className="text-muted-foreground text-xs">{t.personagens.lendo}</p>;
   }
 
   if (personagens.length === 0) {
     return (
       <p className="text-muted-foreground text-xs leading-snug">
-        Nenhum personagem ainda. O mestre é quem entrega um a você — quando isso
-        acontecer, a ficha e os arquivos dele aparecem aqui.
+        {t.personagens.nenhum}
       </p>
     );
   }
@@ -200,7 +200,7 @@ function CharacterCard({
     (anexo: AnexoPersonagem) => {
       setAbrindo(anexo);
       void characterFileUrl(codigo, personagem.id, anexo).then(setUrl, () =>
-        toast.error("Não foi possível abrir o arquivo."),
+        toast.error(t.erros.abrirArquivo),
       );
     },
     [codigo, personagem.id],
@@ -251,7 +251,7 @@ function CharacterCard({
       if (file.size > MAX_ATTACHMENT_BYTES) {
         encerra(
           file.name,
-          `Passa do limite de ${formatBytes(MAX_ATTACHMENT_BYTES)}.`,
+          t.personagens.passaDoLimite(formatBytes(MAX_ATTACHMENT_BYTES)),
         );
         continue;
       }
@@ -262,7 +262,7 @@ function CharacterCard({
       } catch (cause) {
         encerra(
           file.name,
-          cause instanceof Error ? cause.message : "Falha ao enviar.",
+          cause instanceof Error ? cause.message : t.erros.falhaEnviar,
         );
       }
     }
@@ -296,7 +296,7 @@ function CharacterCard({
     return (
       <section className="space-y-1">
         <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-          Sobre {personagem.nome}
+          {t.personagens.sobre(personagem.nome)}
         </p>
         <CharacterNote codigo={codigo} personagemId={personagem.id} />
       </section>
@@ -310,11 +310,13 @@ function CharacterCard({
         type="button"
         onClick={() =>
           setZoom({
-            titulo: personagem.miniatura ? "Miniatura" : "Retrato",
+            titulo: personagem.miniatura
+              ? t.personagens.miniatura
+              : t.personagens.retrato,
             assetId: heroi,
           })
         }
-        aria-label={`Ampliar a imagem de ${personagem.nome}`}
+        aria-label={t.personagens.ampliarImagem(personagem.nome)}
         className={className}
       >
         {/* `/asset/{id}` inteiro, e não a variante `mini`: aqui a imagem é o
@@ -353,7 +355,7 @@ function CharacterCard({
     medidores.length > 0 ? (
       <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
         <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-          Medidores
+          {t.personagens.medidores}
         </p>
 
         {/* A mesma peça que desenha ao lado do retrato na TV, e é o ponto:
@@ -386,7 +388,7 @@ function CharacterCard({
     condicoes.length > 0 ? (
       <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
         <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-          Condições
+          {t.personagens.condicoes}
         </p>
 
         <ul className="flex flex-wrap gap-x-3 gap-y-1.5">
@@ -411,7 +413,7 @@ function CharacterCard({
     personagem.ficha || personagem.retrato || personagem.miniatura ? (
       <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
         <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-          Arquivos do personagem
+          {t.personagens.arquivosDoPersonagem}
         </p>
 
         <ul className="flex flex-wrap items-start gap-2">
@@ -424,15 +426,15 @@ function CharacterCard({
                 onAbrir={abrirAnexo}
               />
               <span className="text-muted-foreground block text-[10px]">
-                Ficha
+                {t.personagens.ficha}
               </span>
             </li>
           ) : null}
 
           {(
             [
-              ["Retrato", personagem.retrato],
-              ["Miniatura", personagem.miniatura],
+              [t.personagens.retrato, personagem.retrato],
+              [t.personagens.miniatura, personagem.miniatura],
             ] as const
           )
             .filter(([, assetId]) => Boolean(assetId))
@@ -445,7 +447,7 @@ function CharacterCard({
                 <button
                   type="button"
                   onClick={() => setZoom({ titulo, assetId: assetId! })}
-                  aria-label={`Ampliar ${titulo}`}
+                  aria-label={t.personagens.ampliar(titulo)}
                   className="bg-muted hover:bg-accent block size-20 overflow-hidden rounded border"
                 >
                   {/* A miniatura de 80px continua vindo da variante `mini`: o
@@ -472,7 +474,7 @@ function CharacterCard({
   const listaDeArquivos = (
     <>
       {doMestre.length > 0 ? (
-        <Grupo titulo="Do mestre">
+        <Grupo titulo={t.personagens.doMestre}>
           {doMestre.map((anexo) => (
             <LinhaAnexo
               key={`mestre/${anexo.arquivo}`}
@@ -485,7 +487,7 @@ function CharacterCard({
         </Grupo>
       ) : null}
 
-      <Grupo titulo="Seus arquivos">
+      <Grupo titulo={t.personagens.seusArquivos}>
         {meus.map((anexo) => (
           <LinhaAnexo
             key={`jogador/${anexo.arquivo}`}
@@ -504,7 +506,7 @@ function CharacterCard({
                 anexo.arquivo,
               ).then(reler, (cause) =>
                 toast.error(
-                  cause instanceof Error ? cause.message : "Falha ao remover.",
+                  cause instanceof Error ? cause.message : t.erros.falhaRemover,
                 ),
               );
             }}
@@ -535,7 +537,7 @@ function CharacterCard({
                   envio.erro ? "text-amber-300" : "text-muted-foreground",
                 )}
               >
-                {envio.erro ?? "Enviando…"}
+                {envio.erro ?? t.personagens.enviando}
               </span>
             </span>
 
@@ -546,7 +548,7 @@ function CharacterCard({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Dispensar o aviso de ${envio.nome}`}
+                aria-label={t.personagens.dispensar(envio.nome)}
                 onClick={() =>
                   setFila((atual) => atual.filter((outro) => outro !== envio))
                 }
@@ -559,8 +561,7 @@ function CharacterCard({
 
         {meus.length === 0 && fila.length === 0 ? (
           <li className="text-muted-foreground px-1 text-[11px] leading-snug">
-            Nada ainda. O que você mandar daqui fica com o personagem, e o
-            mestre vê.
+            {t.personagens.nadaAinda}
           </li>
         ) : null}
       </Grupo>
@@ -581,7 +582,7 @@ function CharacterCard({
         onClick={() => entrada.current?.click()}
       >
         {enviando ? <Loader2 className="animate-spin" /> : <Paperclip />}
-        Enviar arquivo
+        {t.personagens.enviarArquivo}
       </Button>
     </>
   );
@@ -783,7 +784,7 @@ function LinhaAnexo({
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={`Apagar ${anexo.arquivo}`}
+          aria-label={t.personagens.apagar(anexo.arquivo)}
           onClick={onApagar}
         >
           {/* Lixeira: isto apaga o arquivo do disco do mestre, e não o tira de
@@ -920,7 +921,7 @@ function FichaTile({
       // O nome do arquivo vive no rótulo acessível e no título do visualizador:
       // dentro de um quadrado de oitenta pixels ele viraria três letras e
       // reticências. Retrato e miniatura também não mostram nome.
-      aria-label={`Abrir ${arquivo}`}
+      aria-label={t.personagens.abrir(arquivo)}
       onClick={() => onAbrir(anexo)}
     >
       <AnexoThumb
@@ -984,12 +985,12 @@ function CharacterNote({
         className="text-muted-foreground text-[10px]"
         htmlFor={`nota-${personagemId}`}
       >
-        Suas anotações
+        {t.personagens.suasAnotacoes}
       </label>
       <Textarea
         id={`nota-${personagemId}`}
         className="min-h-20 resize-y text-sm"
-        placeholder="O que você descobriu, o que quer lembrar."
+        placeholder={t.personagens.anotacoesDica}
         defaultValue={texto}
         onChange={(event) => {
           const valor = event.target.value;
@@ -997,7 +998,7 @@ function CharacterNote({
           clearTimeout(timer.current);
           timer.current = setTimeout(() => {
             void writeCharacterNote(codigo, personagemId, valor).catch(() =>
-              toast.error("Não foi possível gravar a anotação."),
+              toast.error(t.personagens.naoGravouAnotacao),
             );
           }, DEBOUNCE_MS);
         }}

@@ -8,6 +8,8 @@
  */
 
 import { novoId } from "@/lib/id";
+import { t as textoDeCenas } from "@/lib/i18n/cenas";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { Condicao, Medidor } from "@/types/character";
 
 export const SCENE_WIDTH = 1920;
@@ -119,7 +121,7 @@ export type AssetFolder = {
 };
 
 /** O dono de um arquivo do acervo, quando ele tem um. */
-export type EscopoAsset = "cena" | "personagem";
+export type EscopoAsset = "cena" | "personagem" | "efeito";
 
 /** Uma imagem posicionada sobre o fundo da cena. */
 export type CanvasItem = {
@@ -181,6 +183,20 @@ export type CanvasItem = {
   flipX?: boolean;
   flipY?: boolean;
   /**
+   * No 2.5D, a figura em pé espelha para o lado da tela para onde OLHA.
+   * Ausente = desligado, a figura fica como o `flipX` a pôs.
+   *
+   * O olhar é o do facho (`olharDe`): girar o token ou a câmera troca o lado.
+   * Ligado, o `flipX` passa a dizer de que lado a ARTE olha -- quem aparece de
+   * costas se acerta apertando Espelhar uma vez. Só o desenho espelha: o dado
+   * não muda com a câmera, e o 2D, a luz e o desfazer não sentem nada. Ver
+   * `espelhadaPeloOlhar`.
+   *
+   * Por token, e não da cena: arte de frente ou simétrica -- um baú, uma
+   * estátua -- não tem lado para virar.
+   */
+  espelharPeloOlhar?: boolean;
+  /**
    * Opacidade da imagem, de 0 a 1. Ausente = opaca.
    *
    * Viaja com a cena, e não é um esmaecido só do palco do mestre: o uso é
@@ -235,6 +251,20 @@ export type CanvasItem = {
    * desenho. Ver `CenaDeEsguelha`.
    */
   deitado?: boolean;
+  /**
+   * As condições de um OBJETO: o barril em chamas, a porta amaldiçoada, o baú
+   * que brilha. Ausente na imensa maioria dos itens.
+   *
+   * Só em item SEM personagem: o token leva as do personagem, que moram no
+   * índice e valem para a horda inteira de clones. O objeto não tem ficha, e a
+   * condição dele mora nele -- na cena, que é onde o barril existe. É o que
+   * dá a ela o Ctrl+Z de graça, e o que faz o barril copiado levar o fogo
+   * junto.
+   *
+   * A escondida não sai do Mestre: `itensParaMesa` a tira antes de publicar,
+   * como o item escondido. Ver `condicoesDoObjeto`.
+   */
+  condicoes?: Condicao[];
 };
 
 /**
@@ -293,7 +323,8 @@ export type SombraDoItem = {
 };
 
 /**
- * O que uma lanterna carregada guarda: até onde ela alcança e de que cor.
+ * O que uma lanterna carregada guarda: até onde ela alcança, de que cor e o
+ * quanto acende.
  *
  * Sem posição: quem a carrega dá o centro. Ver `CanvasItem.luz`.
  */
@@ -302,6 +333,12 @@ export type LuzCarregada = {
   raio: number;
   /** Em `#rrggbb`. A paleta é `CORES_DA_LUZ`, mas qualquer cor vale. */
   cor: string;
+  /**
+   * O quanto ela acende, de 0 a 1. Ausente = 1, a lanterna de antes de a
+   * intensidade existir. A mesma conta de `Luz.intensidade`: é a vela no fim,
+   * e não uma vela menor -- para essa existe o `raio`.
+   */
+  intensidade?: number;
   /**
    * Como ela se mexe. Ausente = fixa. A tocha na mão do guerreiro tremula como
    * a da parede, e é por isso que o efeito vale para as duas. Ver `EfeitoDaLuz`.
@@ -548,7 +585,88 @@ export type FogRegion = {
    * filtros de "quem anda" servirem a todos. Ver `trava` em `TransformHandles`.
    */
   locked?: boolean;
+  /**
+   * Os furos que a borracha abriu. Ausente = nenhum, que é o normal.
+   *
+   * Na área, e não uma lista da cena: o furo é um pedaço DESTA névoa, e mover,
+   * escalar, girar, copiar e desfazer a área têm de levá-lo junto sem ninguém
+   * atualizar duas coisas. Ver `FuroDaArea`.
+   */
+  furos?: FuroDaArea[];
+  /**
+   * Dinâmica: a lanterna de cada token abre buraco nela enquanto alcança, e a
+   * névoa volta quando a luz vai embora. Ausente = estática, a de sempre.
+   *
+   * Sem memória do que já foi visto: o buraco é calculado em cada tela, a
+   * partir dos tokens, das paredes e das portas que ela já recebe -- nada
+   * novo atravessa o canal. As paredes e as portas param a revelação como
+   * param a luz. Ver `lanternasDaArea`.
+   */
+  dinamica?: true;
 };
+
+/**
+ * Uma passada da borracha numa área escondida: um traço de pincel redondo.
+ *
+ * Em FRAÇÃO da caixa, como os vértices do polígono, e pela mesma razão: mover,
+ * escalar e girar a área levam o furo junto, sem tocar num ponto. O raio é em
+ * fração da LARGURA -- crescer a área cresce o furo na mesma conta.
+ */
+export type FuroDaArea = {
+  /** Metade da espessura do pincel, em fração da largura da caixa. */
+  raio: number;
+  /** Achatados -- `x0, y0, x1, y1, ...` --, em fração da caixa. */
+  pontos: number[];
+};
+
+/**
+ * Uma área de EFEITO: um pedaço do chão em chamas.
+ *
+ * A mesma caixa da área escondida -- `x, y, width, height`, o `formato`, o
+ * giro e os vértices do polígono, ver `FogRegion` --, e pela mesma razão: o
+ * gizmo, as alças de vértice e o laço servem às duas sem aprender geometria
+ * nova. O que muda é o que ela FAZ: em vez de esconder, ela pega fogo.
+ *
+ * O desenho é SEGMENTADO: a área é dividida em casas da grade (ou do tamanho
+ * da grade padrão, sem grade), e cada casa cujo centro cai dentro da forma é
+ * um foco do efeito, com a fase dele. A área grande tem mais focos -- nunca o
+ * mesmo fogo esticado. Ver `planoDaArea`.
+ *
+ * O efeito vem do catálogo, como o da condição: um dos efeitos em área da
+ * campanha (ver `efeitosEmAreaDaCampanha`), que o mestre escolhe no gizmo. A
+ * área NASCE sem efeito -- é um pedaço do chão marcado, e o que acontece nele
+ * é a escolha seguinte.
+ */
+export type AreaDeEfeito = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Ausente = retângulo. */
+  formato?: FormatoDeArea;
+  /** Graus, no sentido horário, em torno do centro da caixa. Ausente = 0. */
+  rotation?: number;
+  /** Só o polígono: os vértices em fração da caixa. Ver `FogRegion.pontos`. */
+  pontos?: number[];
+  /**
+   * O id do efeito no catálogo, como o de `Condicao.efeito`. Ausente = sem
+   * efeito ainda: o Mestre vê o contorno, a mesa não vê nada.
+   */
+  efeito?: string;
+  /**
+   * A cor desta área, quando o mestre escolheu uma no gizmo. Ausente = a do
+   * efeito (`area.cor`), e é o comum: editar a cor do efeito na campanha muda
+   * todas as áreas que o usam. Ver `corDaArea`.
+   */
+  cor?: string;
+  /** Está na mesa? Ausente = só o mestre vê, como a forma num mapa. */
+  naMesa?: boolean;
+  /** Travada: o mestre não move, não redimensiona, não gira e não apaga. */
+  locked?: boolean;
+};
+
+export type NewAreaDeEfeito = Omit<AreaDeEfeito, "id">;
 
 /**
  * Grade sobre o mapa.
@@ -812,8 +930,27 @@ export type Texto = {
   /**
    * Letra de mão, a do postit (Kalam). Ausente = a letra da interface. O mesmo
    * `aMao` da forma e da seta: é o traço à mão da campanha chegando ao texto.
+   *
+   * Continua gravado junto da `familia`, e é ele que diz "mão" no texto antigo:
+   * ver `familiaDoTexto`.
    */
   aMao?: true;
+  /**
+   * A família da letra. Ausente = a do `aMao`: mão com ele, a da interface sem.
+   *
+   * Um campo à parte, e não o `aMao` virando lista: o texto gravado antes de a
+   * família existir continua válido sem migração nenhuma. Ver `familiaDoTexto`.
+   */
+  familia?: FamiliaDoTexto;
+  /**
+   * Como as linhas se alinham entre si. Ausente = à esquerda, a de sempre.
+   *
+   * Só se vê com mais de uma linha: o texto não tem largura fixa, e a caixa é
+   * a da linha mais longa -- as outras se alinham dentro dela.
+   */
+  alinhamento?: "centro" | "direita";
+  /** De 0 a 1, no texto inteiro, com o fundo. Ausente = 1. */
+  opacidade?: number;
   /**
    * Está na mesa? Ausente = só o mestre vê, e é o padrão.
    *
@@ -858,6 +995,9 @@ export type NewTexto = Pick<Texto, "x" | "y"> &
       | "italico"
       | "sublinhado"
       | "aMao"
+      | "familia"
+      | "alinhamento"
+      | "opacidade"
       | "naMesa"
       | "locked"
     >
@@ -885,6 +1025,9 @@ export function semIdDoTexto(texto: Texto): NewTexto {
     italico: texto.italico,
     sublinhado: texto.sublinhado,
     aMao: texto.aMao,
+    familia: texto.familia,
+    alinhamento: texto.alinhamento,
+    opacidade: texto.opacidade,
     // Como na forma: a decisão de mostrar acompanha a cópia.
     naMesa: texto.naMesa,
     locked: texto.locked,
@@ -893,6 +1036,46 @@ export function semIdDoTexto(texto: Texto): NewTexto {
 
 /** Tamanho de fonte de um texto novo, em unidades de cena. */
 export const TEXTO_TAMANHO = 40;
+
+/**
+ * As famílias de letra de um texto: a da interface (Geist), a de mão do
+ * postit (Kalam) e a de código (Geist Mono). As três que o aplicativo já
+ * carrega -- nenhum arquivo novo no pacote do Mestre nem no do celular.
+ */
+export const FAMILIAS_DO_TEXTO = ["interface", "mao", "codigo"] as const;
+
+export type FamiliaDoTexto = (typeof FAMILIAS_DO_TEXTO)[number];
+
+/** A família de um texto, lendo o `aMao` de quem foi gravado antes dela. */
+export function familiaDoTexto(
+  texto: Pick<Texto, "familia" | "aMao">,
+): FamiliaDoTexto {
+  return texto.familia ?? (texto.aMao ? "mao" : "interface");
+}
+
+/**
+ * O que gravar para pôr um texto nesta família.
+ *
+ * O mínimo de campos: a interface é a ausência dos dois, e a mão continua
+ * sendo o `aMao` de sempre -- só o código precisa do campo novo. Assim um
+ * arquivo de cena só muda de forma quando há o que dizer, e o texto escrito à
+ * mão se lê igual numa versão do aplicativo anterior à família.
+ */
+export function patchDaFamilia(
+  familia: FamiliaDoTexto,
+): Pick<Texto, "familia" | "aMao"> {
+  return {
+    familia: familia === "codigo" ? "codigo" : undefined,
+    aMao: familia === "mao" ? true : undefined,
+  };
+}
+
+/**
+ * Os tamanhos de cara do painel de texto, em unidades de cena: pequeno, médio,
+ * grande e enorme. O médio é o de sempre (`TEXTO_TAMANHO`); o canto do gizmo
+ * continua escalando em qualquer número entre eles.
+ */
+export const TAMANHOS_DO_TEXTO = { S: 24, M: TEXTO_TAMANHO, L: 64, XL: 96 } as const;
 
 /** As formas que o quadro desenha. Ver `Forma`. */
 export const TIPOS_DE_FORMA = [
@@ -1263,7 +1446,12 @@ export type Spotlight = {
 
 /** O que o chamador informa ao desenhar uma área; `id` e `revealed` são do store. */
 export type NewFogRegion = Pick<FogRegion, "x" | "y" | "width" | "height"> &
-  Partial<Pick<FogRegion, "formato" | "rotation" | "pontos" | "locked">>;
+  Partial<
+    Pick<
+      FogRegion,
+      "formato" | "rotation" | "pontos" | "locked" | "furos" | "dinamica"
+    >
+  >;
 
 /**
  * A área sem o id e sem o `revealed`, campo a campo -- o que copiar guarda.
@@ -1282,6 +1470,8 @@ export function semIdDaArea(area: FogRegion): NewFogRegion {
     rotation: area.rotation,
     pontos: area.pontos,
     locked: area.locked,
+    furos: area.furos,
+    dinamica: area.dinamica,
   };
 }
 
@@ -1310,9 +1500,17 @@ export type Traco = {
   cor: string;
   /** Espessura em unidades de cena, para acompanhar o zoom como o resto. */
   espessura: number;
+  /**
+   * De 0 a 1, no risco inteiro. Ausente = 1, o risco cheio de sempre.
+   *
+   * No risco, e não na cor: o trecho em que o traço cruza a si mesmo não
+   * escurece, e é a marca-texto que o mestre quer por cima do mapa, e não
+   * camadas de tinta.
+   */
+  opacidade?: number;
 };
 
-export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura">;
+export type NewTraco = Pick<Traco, "pontos" | "cor" | "espessura" | "opacidade">;
 
 /** As formas de régua. Ver `Regua`. */
 export const FORMAS_DE_REGUA = ["linha", "circulo", "cone", "retangulo"] as const;
@@ -1499,6 +1697,72 @@ export function semIdDaParede(parede: Parede): NewParede {
     altura: parede.altura,
     semTeto: parede.semTeto,
     locked: parede.locked,
+  };
+}
+
+/**
+ * Uma porta: um pedaço de parede que gira.
+ *
+ * Geometria de luz, como a parede, e pela mesma razão: a porta já está pintada
+ * no arquivo do mapa, e o que esta diz é onde a luz para. A mesa nunca vê a
+ * folha -- vê a sala do outro lado acender quando ela abre.
+ *
+ * A DOBRADIÇA é a verdade, e não uma caixa como na parede: a porta gira em
+ * volta de uma ponta, e a caixa girada em volta do centro brigaria com esse
+ * gesto a cada quadro. Mover é trocar `x, y`; abrir é trocar `abertura`; o
+ * comprimento e o ângulo da porta fechada só mudam quando o mestre refaz o
+ * traço pela dobradiça.
+ *
+ * Na hora da luz, do sol e do 2.5D ela vira uma parede `linha` na posição em
+ * que está -- ver `paredeDaPorta` --, e nada daquela geometria aprendeu porta.
+ *
+ * Não para o TOKEN, pela razão da parede.
+ */
+export type Porta = {
+  id: string;
+  /** A dobradiça, em coordenadas de cena. */
+  x: number;
+  y: number;
+  /** Da dobradiça à ponta da folha, em unidades de cena. */
+  comprimento: number;
+  /** Para onde a folha aponta FECHADA: graus, no sentido horário, a partir do leste. */
+  angulo: number;
+  /**
+   * Quanto ela está aberta, em graus somados ao `angulo`. O sinal diz para que
+   * lado. Ausente = fechada, que é como toda porta nasce.
+   */
+  abertura?: number;
+  /**
+   * A última abertura antes de fechar: é para ali que o botão "Abrir" a leva.
+   * Ausente = nunca abriu, e o botão abre a 90 graus.
+   *
+   * Existe porque o LADO importa: a porta da cela abre para o corredor, e o
+   * botão que a abrisse sempre para o mesmo lado a jogaria por dentro da
+   * parede metade das vezes.
+   */
+  ultimaAbertura?: number;
+  /**
+   * Quão alta ela sobe no 2.5D, e quão longa é a sombra dela ao sol, em
+   * unidades de cena. Ausente = a altura da parede. Ver `Parede.altura`.
+   */
+  altura?: number;
+  /** Travada, como a parede. Ver `Parede.locked`. */
+  locked?: boolean;
+};
+
+export type NewPorta = Omit<Porta, "id">;
+
+/** A porta sem o id, campo a campo. Pela razão de `semIdDaForma`. */
+export function semIdDaPorta(porta: Porta): NewPorta {
+  return {
+    x: porta.x,
+    y: porta.y,
+    comprimento: porta.comprimento,
+    angulo: porta.angulo,
+    abertura: porta.abertura,
+    ultimaAbertura: porta.ultimaAbertura,
+    altura: porta.altura,
+    locked: porta.locked,
   };
 }
 
@@ -2027,6 +2291,14 @@ export type LayoutDoRetrato = {
   /** Ausente = automático: no alto, dentro da figura, centrada. */
   lugarDasCondicoes?: LugarDaPeca;
   /**
+   * Onde o rosto fica, em fração da caixa. Ausente = centrado nela.
+   *
+   * O rosto é uma peça como as outras: se arrasta e muda de tamanho no mini
+   * palco. A caixa continua sendo a régua -- é ela que o mestre arrasta no
+   * quadro, que a fila enfileira e de onde as outras peças penduram.
+   */
+  lugarDoRetrato?: LugarDaPeca;
+  /**
    * Quanto a coluna de medidores cresce ou encolhe. 1 é o tamanho de fábrica.
    *
    * Um fator e não uma largura: a coluna se mede contra a ALTURA do retrato --
@@ -2071,6 +2343,20 @@ export type LayoutDoRetrato = {
    * retrato de outro tamanho.
    */
   escalaCondicoes: number;
+  /**
+   * Quanto o rosto ocupa da caixa do retrato. 1 é a caixa inteira.
+   *
+   * Só encolhe: a caixa continua do tamanho que o mestre deu -- é dela que as
+   * peças penduram, e é ela que reserva lugar na fila --, e o que diminui é a
+   * figura. É o pedido de "o rosto menor e as barras do mesmo tamanho", que
+   * escalar a caixa não atende: a caixa leva as peças junto. Onde o rosto
+   * menor fica é `lugarDoRetrato`.
+   *
+   * Preso entre `ESCALA_DO_ROSTO_MIN` e 1 na hora de usar, pela razão das
+   * outras escalas. Um layout de uma versão anterior não o traz, e quem lê põe
+   * `LAYOUT_PADRAO` por baixo.
+   */
+  escalaRetrato: number;
 };
 
 /**
@@ -2092,6 +2378,7 @@ export const LAYOUT_PADRAO: LayoutDoRetrato = {
   escalaDados: 1,
   escalaNome: 1,
   escalaCondicoes: 1,
+  escalaRetrato: 1,
 };
 
 /**
@@ -2181,6 +2468,7 @@ export type ItemDraft = NewCanvasItem &
       | "locked"
       | "flipX"
       | "flipY"
+      | "espelharPeloOlhar"
       | "opacity"
       | "semSombra"
       | "sombra"
@@ -2454,6 +2742,14 @@ export type Scene = {
    */
   paredes?: Parede[];
   /**
+   * As portas da cena. Ausente = nenhuma. Ver `Porta`.
+   *
+   * Lista própria, e não paredes com um campo a mais: a porta gira pela
+   * dobradiça, e a parede é uma caixa. Viaja para a mesa pela razão das
+   * paredes.
+   */
+  portas?: Porta[];
+  /**
    * O sol da cena. Ausente = sem sol, que é o normal. Ver `Sol`.
    *
    * Um, e não uma lista: dois sóis são duas direções, e duas direções sobre o
@@ -2469,6 +2765,14 @@ export type Scene = {
    * listas se juntam na hora de desenhar, em `fontesDaCena`.
    */
   luzes?: Luz[];
+  /**
+   * As áreas de efeito: o chão em chamas. Ausente = nenhuma. Ver
+   * `AreaDeEfeito`.
+   *
+   * Na mesa, só as que o mestre abriu (`naMesa`), como a forma: ver
+   * `sceneForTable`.
+   */
+  areasDeEfeito?: AreaDeEfeito[];
   /**
    * O quanto o mapa escurece onde não há luz, de 0 a 1. Ausente = 0.
    *
@@ -2500,6 +2804,34 @@ export type Scene = {
    * CHEGA à mesa: é fundo da cena, e a TV e o celular a veem igual.
    */
   corDoVazio?: string;
+  /**
+   * O CÉU do 2.5D: uma imagem panorâmica, de 360 graus, atrás do chão deitado.
+   * Ausente = o vazio fica na `corDoVazio`, como sempre.
+   *
+   * É a escolha do mestre entre cor e imagem para o mesmo lugar: o que aparece
+   * por trás do chão quando a câmera levanta o olho. A imagem gira com a câmera
+   * e sobe e desce com a inclinação, com o horizonte dela no horizonte do chão
+   * -- ver `ceuNaTela`. O panorama equirretangular (2:1) é o que fecha a volta
+   * sem emenda; outra imagem também serve, e a emenda aparece ao dar a volta.
+   *
+   * Só de esguelha. No 2D não há céu -- olha-se de cima --, e a borda além do
+   * mapa continua a `corDoVazio`.
+   *
+   * CHEGA à mesa, como a cor: a TV e o celular veem o mesmo céu.
+   */
+  ceuAssetId?: string;
+  /**
+   * O ajuste de imagem DESTA cena na janela do espectador: a masmorra mais
+   * clara, o flashback sem cor. Ausente = neutro, e só os canais mexidos são
+   * guardados -- ver `ajusteParaGuardar`.
+   *
+   * Multiplica o ajuste da campanha, que viaja à parte no `LiveState`. Ver
+   * `compor`.
+   *
+   * CHEGA à mesa, mas só a janela do espectador aplica: o jogador vê o mapa
+   * como ele é, e o Mestre também.
+   */
+  imagem?: AjusteDeImagem;
   /**
    * Enquadramento que o Jogador e o Espectador usam. Ausente = plano inteiro.
    * O zoom do Mestre só chega aqui quando ele manda, pelo botão de enquadrar.
@@ -2714,6 +3046,14 @@ export function temNevoa(scene: Pick<Scene, "tipo">): boolean {
 }
 
 /**
+ * A cena tem áreas de efeito: o chão em chamas. Só o mapa -- o quadro não tem
+ * chão, e o fundo já vem pintado. Ver `AreaDeEfeito`.
+ */
+export function temAreaDeEfeito(scene: Pick<Scene, "tipo">): boolean {
+  return ehMapa(scene);
+}
+
+/**
  * A cena tem sol e paredes. Ver `Sol` e `Parede`.
  *
  * Sem chão não há onde a sombra cair, e uma parede que não para luz nenhuma
@@ -2759,11 +3099,16 @@ export function temAnotacao(scene: Pick<Scene, "tipo">): boolean {
   return !ehQuadro(scene);
 }
 
-/** Como cada tipo se chama quando o mestre não batiza a cena. */
+/**
+ * Como cada tipo se chama quando o mestre não batiza a cena.
+ *
+ * No idioma da tela: é rótulo e começo de nome, nunca chave -- quem compara
+ * tipo compara `Scene.tipo`. O nome que já foi gravado fica como foi.
+ */
 export const NOME_DO_TIPO: Record<"mapa" | TipoDeCena, string> = {
-  mapa: "Mapa",
-  fundo: "Fundo",
-  quadro: "Quadro",
+  mapa: textoDeCenas.tipos.mapa,
+  fundo: textoDeCenas.tipos.fundo,
+  quadro: textoDeCenas.tipos.quadro,
 };
 
 export function createScene(name: string, tipo?: TipoDeCena): Scene {
@@ -2854,6 +3199,6 @@ export function cloneScene(source: Scene, name: string): Scene {
 }
 
 export function createEmptyBoard(): Board {
-  const first = createScene("Mapa 1");
+  const first = createScene(textoDeCenas.nomesPadrao.cena(NOME_DO_TIPO.mapa, 1));
   return { scenes: [first], editingSceneId: first.id, liveSceneId: first.id };
 }

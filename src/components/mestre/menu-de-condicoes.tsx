@@ -13,7 +13,13 @@ import {
 } from "@/components/ui/context-menu";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { chaveDoNome, temCondicao } from "@/lib/condicao";
+import { t } from "@/lib/i18n/personagens";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
+import {
+  alternarCondicaoNosObjetos,
+  ehObjeto,
+  removerCondicaoDoObjeto,
+} from "@/lib/mestre/condicoes-do-objeto";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
 import { alternarCondicao, removerCondicao } from "@/lib/vault/characters";
 import type { Condicao, Personagem } from "@/types/character";
@@ -33,6 +39,10 @@ import type { CanvasItem } from "@/types/scene";
  *
  * O menu NÃO fecha ao marcar, pela razão da opacidade: marcar é olhar o mapa e
  * corrigir, e dois cliques por condição cobrariam o combate inteiro.
+ *
+ * Vale também para os OBJETOS da seleção -- o barril, a porta --, que levam a
+ * condição no próprio item. Uma seleção mista marca os dois de uma vez: o
+ * personagem pelo índice, o objeto pela cena. Ver `condicoes-do-objeto`.
  */
 export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
   const personagens = useCharactersStore((state) => state.personagens);
@@ -52,45 +62,58 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
   const alvos = ids
     .map((id) => personagens?.find((personagem) => personagem.id === id))
     .filter((personagem): personagem is Personagem => Boolean(personagem));
+  const objetos = itens.filter(ehObjeto);
+  const total = alvos.length + objetos.length;
 
-  if (alvos.length === 0) return null;
+  if (total === 0) return null;
 
   const cardapio = modelos ?? [];
   const nomesDoCardapio = new Set(cardapio.map((modelo) => chaveDoNome(modelo.nome)));
 
-  // Com UM personagem, as condições dele que não estão no cardápio -- a
-  // maldição que só ele tem -- aparecem também, para sair pelo mesmo menu.
-  // Com vários, não: "tirar a maldição do Edgar" num menu de cinco tokens é um
-  // gesto que ninguém procura ali.
-  const avulsas =
-    alvos.length === 1
-      ? (alvos[0]!.condicoes ?? []).filter(
-          (condicao) => !nomesDoCardapio.has(chaveDoNome(condicao.nome)),
-        )
-      : [];
+  // Com UM alvo, as condições dele que não estão no cardápio -- a maldição
+  // que só ele tem -- aparecem também, para sair pelo mesmo menu. Com vários,
+  // não: "tirar a maldição do Edgar" num menu de cinco tokens é um gesto que
+  // ninguém procura ali.
+  const doUnico = total === 1 ? (alvos[0]?.condicoes ?? objetos[0]?.condicoes ?? []) : [];
+  const avulsas = doUnico.filter(
+    (condicao) => !nomesDoCardapio.has(chaveDoNome(condicao.nome)),
+  );
 
   async function alternar(modelo: Condicao, ligar: boolean) {
     try {
-      const mudaram = await alternarCondicao(
-        alvos.map((alvo) => alvo.id),
-        modelo.id,
+      // Os objetos primeiro: são do store, não falham, e um erro do Rust não
+      // pode deixar a metade da seleção sem a marca que o mestre pediu.
+      let mudaram = alternarCondicaoNosObjetos(
+        objetos.map((item) => item.id),
+        modelo,
         ligar,
       );
-      if (ligar && mudaram === 0) {
-        toast.error("Ninguém da seleção tem lugar para mais uma condição.");
+      if (alvos.length > 0) {
+        mudaram += await alternarCondicao(
+          alvos.map((alvo) => alvo.id),
+          modelo.id,
+          ligar,
+        );
+        recarregar();
       }
-      recarregar();
+      if (ligar && mudaram === 0) {
+        toast.error(t.menuDeCondicoes.semLugar);
+      }
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao marcar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.marcar);
     }
   }
 
   async function tirarAvulsa(condicao: Condicao) {
     try {
-      await removerCondicao(alvos[0]!.id, condicao.id);
-      recarregar();
+      if (alvos[0]) {
+        await removerCondicao(alvos[0].id, condicao.id);
+        recarregar();
+      } else if (objetos[0]) {
+        removerCondicaoDoObjeto(objetos[0].id, condicao.id);
+      }
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao tirar.");
+      toast.error(cause instanceof Error ? cause.message : t.menuDeCondicoes.falhaAoTirar);
     }
   }
 
@@ -98,14 +121,14 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
     <ContextMenuSub>
       <ContextMenuSubTrigger>
         <Sparkles />
-        Condições
+        {t.geral.condicoes}
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="min-w-44">
         {cardapio.map((modelo) => {
-          const quantos = alvos.filter((alvo) =>
-            temCondicao(alvo.condicoes, modelo.nome),
-          ).length;
-          const todos = quantos === alvos.length;
+          const quantos =
+            alvos.filter((alvo) => temCondicao(alvo.condicoes, modelo.nome)).length +
+            objetos.filter((item) => temCondicao(item.condicoes, modelo.nome)).length;
+          const todos = quantos === total;
 
           return (
             <ContextMenuItem
@@ -145,7 +168,7 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
         {cardapio.length === 0 && avulsas.length === 0 ? (
           <ContextMenuItem disabled>
             <span className="size-4" aria-hidden />
-            Nenhuma condição na campanha
+            {t.menuDeCondicoes.nenhuma}
           </ContextMenuItem>
         ) : null}
 
@@ -156,7 +179,7 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
             um submenu, que fecha ao primeiro movimento errado do mouse. */}
         <ContextMenuItem onClick={() => abrirJanela({ tipo: "configuracao" })}>
           <Settings2 />
-          Condições da campanha…
+          {t.menuDeCondicoes.daCampanha}
         </ContextMenuItem>
       </ContextMenuSubContent>
     </ContextMenuSub>

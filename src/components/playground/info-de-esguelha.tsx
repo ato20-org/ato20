@@ -11,7 +11,9 @@ import {
   figuraNoTripe,
   type CameraAssinavel,
 } from "@/lib/geometry/camera-orbital";
-import type { CanvasItem, FichaNaCena } from "@/types/scene";
+import { sobeDe } from "@/lib/geometry/peca-de-esguelha";
+import { fichaDoObjeto } from "@/lib/mestre/fichas-da-cena";
+import type { CanvasItem, FichaNaCena, Parede } from "@/types/scene";
 
 /** Entre o topo da figura e o bloco, em fração da largura dela, como no 2D. */
 const FOLGA = 0.12;
@@ -36,17 +38,27 @@ const FOLGA = 0.12;
 export function InfoDeEsguelha({
   itens,
   fichas,
+  objetos = false,
   camera,
+  paredes,
 }: {
   itens: ReadonlyArray<CanvasItem>;
+  /** Para o bloco subir com a figura que pisa num teto. Ver `sobeDe`. */
+  paredes?: ReadonlyArray<Parede>;
   fichas: ReadonlyArray<FichaNaCena>;
+  /** Os selos dos objetos também. Ver `InfoDoToken`. */
+  objetos?: boolean;
   camera: CameraAssinavel;
 }) {
   const { estilos } = useDeclarativo();
   const lugares = useRef(new Map<string, HTMLDivElement>());
   const porId = new Map(fichas.map((ficha) => [ficha.id, ficha]));
   const comFicha = itens.flatMap((item) => {
-    const ficha = item.personagemId ? porId.get(item.personagemId) : undefined;
+    const ficha = item.personagemId
+      ? porId.get(item.personagemId)
+      : objetos
+        ? fichaDoObjeto(item)
+        : null;
     return ficha ? [{ item, ficha }] : [];
   });
 
@@ -63,7 +75,9 @@ export function InfoDeEsguelha({
         const ancora = item.deitado
           ? { x: item.x + item.width / 2, y: item.y + item.height / 2 }
           : { x: item.x + item.width / 2, y: item.y + item.width };
-        const naTela = vista ? figuraNoTripe(vista.tripe, vista.tela, ancora) : null;
+        const naTela = vista
+          ? figuraNoTripe(vista.tripe, vista.tela, ancora, sobeDe(item, paredes))
+          : null;
         if (!naTela) {
           no.style.display = "none";
           continue;

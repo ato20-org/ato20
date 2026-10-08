@@ -13,7 +13,8 @@ import {
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useEstante } from "@/hooks/use-estante";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
-import { useLeitorStore } from "@/lib/store/use-leitor-store";
+import { t } from "@/lib/i18n/mestre";
+import { selectLivroAberto, usePaineisStore } from "@/lib/store/use-paineis-store";
 import { chaveDe } from "@/lib/store/use-window-store";
 import type { Livro } from "@/lib/vault/estante";
 
@@ -46,21 +47,21 @@ export function EstanteBody() {
                 variant="outline"
                 size="icon"
                 className="shrink-0 rounded-full"
-                aria-label="Importar livros"
+                aria-label={t.estante.importar}
                 onClick={() => void importar()}
               >
                 <Upload />
               </Button>
             }
           />
-          <TooltipContent>Importar livros</TooltipContent>
+          <TooltipContent>{t.estante.importar}</TooltipContent>
         </Tooltip>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
         {livros.length === 0 ? (
           <PainelVazio conteudo={{ tipo: "estante" }}>
-            Importe o primeiro livro
+            {t.estante.vazia}
           </PainelVazio>
         ) : (
           <ul className="space-y-1 p-2">
@@ -86,23 +87,21 @@ function tamanhoLegivel(bytes: number): string {
 function LivroRow({ livro, onRemove }: { livro: Livro; onRemove: () => void }) {
   const abrirJanela = useAbrirJanela();
   const fecharJanela = useFecharJanela();
-  const abrirNoSplit = useLeitorStore((state) => state.abrirNoSplit);
-  const noSplit = useLeitorStore((state) => state.livroId === livro.id);
-  const fecharSplit = useLeitorStore((state) => state.fecharSplit);
+  const abrirNoPainel = usePaineisStore((state) => state.abrir);
+  const noPainel = usePaineisStore(selectLivroAberto(livro.id));
+  const fecharDoPainel = usePaineisStore((state) => state.fechar);
+  const conteudo = { tipo: "livro", livroId: livro.id, titulo: livro.titulo } as const;
 
   return (
     <li className="group/livro hover:bg-accent/50 flex items-center gap-1 rounded-md p-1">
       <button
         type="button"
         // O clique na linha abre como JANELA, que é a casa que empilha: dois
-        // manuais abertos ao mesmo tempo é o caso comum de comparar regra. O
-        // split, que é um por vez, tem botão próprio.
+        // manuais abertos ao mesmo tempo é o caso comum de comparar regra.
+        // Dividir ao lado do mapa tem botão próprio. Já dividido, o clique
+        // traz a aba dele à frente em vez de abrir uma segunda cópia.
         onClick={() =>
-          abrirJanela({
-            tipo: "livro",
-            livroId: livro.id,
-            titulo: livro.titulo,
-          })
+          noPainel ? abrirNoPainel(conteudo) : abrirJanela(conteudo)
         }
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
@@ -115,7 +114,9 @@ function LivroRow({ livro, onRemove }: { livro: Livro; onRemove: () => void }) {
             {tamanhoLegivel(livro.tamanho)}
             {/* A página só aparece depois de a primeira abertura contar o
                 documento: quem copia o arquivo é o Rust, e ele não o abre. */}
-            {livro.paginas ? ` · p. ${livro.pagina} de ${livro.paginas}` : null}
+            {livro.paginas
+              ? t.estante.pagina(livro.pagina, livro.paginas)
+              : null}
           </span>
         </span>
       </button>
@@ -127,35 +128,34 @@ function LivroRow({ livro, onRemove }: { livro: Livro; onRemove: () => void }) {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Abrir ${livro.titulo} ao lado do palco`}
-                onClick={() => abrirNoSplit(livro.id)}
+                aria-label={t.estante.abrirAoLado(livro.titulo)}
+                onClick={() => {
+                  // Uma casa por vez: dois leitores do mesmo PDF gravariam a
+                  // página um por cima do outro.
+                  fecharJanela(chaveDe(conteudo));
+                  abrirNoPainel(conteudo);
+                }}
               >
                 <Columns2 />
               </Button>
             }
           />
           <TooltipContent>
-            <p>Abrir ao lado do palco</p>
+            <p>{t.estante.abrirAoLadoDica}</p>
           </TooltipContent>
         </Tooltip>
 
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={`Tirar ${livro.titulo} da estante`}
+          aria-label={t.estante.tirar(livro.titulo)}
           onClick={() => {
             // As duas casas fecham ANTES de o arquivo sair do disco: um leitor
             // aberto sobre um livro removido continuaria pedindo faixas de um
             // PDF que já não existe, e o mestre veria a página em branco sem
-            // pista do motivo. Vale para a janela e para o split.
-            fecharJanela(
-              chaveDe({
-                tipo: "livro",
-                livroId: livro.id,
-                titulo: livro.titulo,
-              }),
-            );
-            if (noSplit) fecharSplit();
+            // pista do motivo. Vale para a janela e para o painel.
+            fecharJanela(chaveDe(conteudo));
+            fecharDoPainel(conteudo);
 
             onRemove();
           }}

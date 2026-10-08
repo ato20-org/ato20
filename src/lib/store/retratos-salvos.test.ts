@@ -77,6 +77,7 @@ describe("lerRetratosSalvos", () => {
       escalaDados: 1,
       escalaNome: 1,
       escalaCondicoes: 1,
+      escalaRetrato: 1,
     });
     expect(lido.ancoraPadrao).toBe("cima-esquerda");
   });
@@ -103,6 +104,7 @@ describe("lerRetratosSalvos", () => {
       escalaDados: 1,
       escalaNome: 1,
       escalaCondicoes: 1,
+      escalaRetrato: 1,
     });
   });
 
@@ -123,6 +125,7 @@ describe("lerRetratosSalvos", () => {
       escalaDados: 1,
       escalaNome: 1,
       escalaCondicoes: 1,
+      escalaRetrato: 1,
     });
   });
 });

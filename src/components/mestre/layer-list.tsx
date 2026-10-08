@@ -56,6 +56,7 @@ import {
   itensDoGrupo,
   selecionarGrupo,
 } from "@/lib/mestre/item-actions";
+import { t } from "@/lib/i18n/ferramentas";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -236,15 +237,15 @@ export function LayerList({ scene }: { scene: Scene }) {
 
   function novaPasta() {
     const ordem = (scene.grupos?.length ?? 0) + 1;
-    useSceneStore.getState().criarGrupo(scene.id, `Pasta ${ordem}`, []);
+    useSceneStore.getState().criarGrupo(scene.id, t.camadas.pasta(ordem), []);
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 px-3 py-2">
-        <span className="text-xs font-medium">Em cena</span>
+        <span className="text-xs font-medium">{t.camadas.emCena}</span>
         <span className="text-muted-foreground min-w-0 flex-1 truncate text-[10px]">
-          {ordered.length > 0 ? `${ordered.length} · frente no topo` : null}
+          {ordered.length > 0 ? t.camadas.contagem(ordered.length) : null}
         </span>
         {/* Pasta vazia, para arrastar itens para dentro depois. É o outro
             caminho além de "selecionar e Ctrl+G": quem organiza antes de
@@ -252,7 +253,7 @@ export function LayerList({ scene }: { scene: Scene }) {
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label="Nova pasta"
+          aria-label={t.camadas.novaPasta}
           disabled={ordered.length === 0}
           onClick={() => novaPasta()}
         >
@@ -265,7 +266,7 @@ export function LayerList({ scene }: { scene: Scene }) {
         // primeira linha e deixava o resto do painel morto. Centralizado, ele
         // e o painel inteiro dizendo que nao ha nada, como nos outros.
         <PainelVazio conteudo={{ tipo: "camadas" }} className="min-h-0 flex-1">
-          Nenhuma camada encontrada
+          {t.camadas.nenhuma}
         </PainelVazio>
       ) : (
         <ScrollArea className="min-h-0 flex-1">
@@ -284,17 +285,15 @@ export function LayerList({ scene }: { scene: Scene }) {
               <ContextMenuContent>
                 <ContextMenuItem onClick={() => novaPasta()}>
                   <FolderPlus />
-                  Nova pasta
+                  {t.camadas.novaPasta}
                 </ContextMenuItem>
                 <ContextMenuItem
                   disabled={selectedIds.length === 0}
                   onClick={() => void agruparSelecao()}
                 >
                   <Group />
-                  {selectedIds.length > 1
-                    ? `Nova pasta com os ${selectedIds.length} selecionados`
-                    : "Nova pasta com o selecionado"}
-                  <ContextMenuShortcut>Ctrl+G</ContextMenuShortcut>
+                  {t.camadas.novaPastaCom(selectedIds.length)}
+                  <ContextMenuShortcut>{TECLA_DE_AGRUPAR}</ContextMenuShortcut>
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
@@ -344,7 +343,7 @@ export function LayerList({ scene }: { scene: Scene }) {
           >
             {dropIndex === linhas.length ? (
               <p className="text-muted-foreground px-2 py-2 text-[10px]">
-                Solte aqui para tirar da pasta
+                {t.camadas.solteAqui}
               </p>
             ) : null}
           </div>
@@ -460,6 +459,9 @@ function achatar(
 /** Recuo por nível, em pixels. */
 const RECUO_PX = 14;
 
+/** A tecla de agrupar, como o menu a mostra: nome de tecla não se traduz. */
+const TECLA_DE_AGRUPAR = "Ctrl+G";
+
 /**
  * Quanto o ponteiro anda antes de a linha inteira virar arrasto. Abaixo disso
  * é clique, e clique seleciona. Ver `useListReorder`.
@@ -562,7 +564,9 @@ function GroupRow({
   function novaSubpasta() {
     const ordem = (cenaAtual()?.grupos?.length ?? 0) + 1;
     useSceneStore.getState().atualizarGrupo(sceneId, grupo.id, { recolhido: false });
-    useSceneStore.getState().criarGrupo(sceneId, `Pasta ${ordem}`, [], grupo.id);
+    useSceneStore
+      .getState()
+      .criarGrupo(sceneId, t.camadas.pasta(ordem), [], grupo.id);
   }
 
   return (
@@ -586,7 +590,11 @@ function GroupRow({
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label={grupo.recolhido ? `Abrir ${grupo.nome}` : `Fechar ${grupo.nome}`}
+        aria-label={
+          grupo.recolhido
+            ? t.camadas.abrir(grupo.nome)
+            : t.camadas.fechar(grupo.nome)
+        }
         aria-expanded={!grupo.recolhido}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={() =>
@@ -611,7 +619,7 @@ function GroupRow({
           autoFocus
           defaultValue={grupo.nome}
           className="bg-background h-6 min-w-0 flex-1 rounded px-1.5 text-xs outline-none"
-          aria-label="Nome da pasta"
+          aria-label={t.camadas.nomeDaPasta}
           onPointerDown={(event) => event.stopPropagation()}
           onFocus={(event) => event.currentTarget.select()}
           onBlur={(event) => confirmar(event.currentTarget.value)}
@@ -630,7 +638,7 @@ function GroupRow({
               foraDeVista && "text-muted-foreground",
             )}
             aria-current={selected}
-            title="Clique seleciona tudo dela no palco. Ctrl soma. Duplo clique renomeia."
+            title={t.camadas.pastaDica}
             onClick={(event) => {
               if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
                 selecionarGrupo(grupo.id);
@@ -659,7 +667,9 @@ function GroupRow({
             variant="ghost"
             size="icon-xs"
             aria-label={
-              grupo.escondido ? `Mostrar ${grupo.nome}` : `Esconder ${grupo.nome}`
+              grupo.escondido
+                ? t.camadas.mostrar(grupo.nome)
+                : t.camadas.esconder(grupo.nome)
             }
             aria-pressed={Boolean(grupo.escondido)}
             onPointerDown={(event) => event.stopPropagation()}
@@ -678,7 +688,7 @@ function GroupRow({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  aria-label={`Opções de ${grupo.nome}`}
+                  aria-label={t.camadas.opcoes(grupo.nome)}
                   onPointerDown={(event) => event.stopPropagation()}
                   // Escondido até o ponteiro chegar ou o foco entrar, como no
                   // acervo: três pontos em cada linha viram ruído.
@@ -691,22 +701,22 @@ function GroupRow({
             <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuItem onClick={novaSubpasta}>
                 <FolderPlus />
-                Nova subpasta
+                {t.camadas.novaSubpasta}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={renomear.pedir}>
                 <TextCursorInput />
-                Renomear
+                {t.camadas.renomear}
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />
 
               <DropdownMenuItem onClick={() => selecionarGrupo(grupo.id)}>
                 <MousePointerSquareDashed />
-                Selecionar tudo dela
+                {t.camadas.selecionarTudo}
               </DropdownMenuItem>
               <DropdownMenuItem disabled={total === 0} onClick={seguirComCamera}>
                 <Crosshair />
-                Câmera segue esta pasta
+                {t.camadas.cameraSegue}
               </DropdownMenuItem>
 
               {destinos.length > 0 || grupo.parentId ? (
@@ -721,7 +731,7 @@ function GroupRow({
                       }
                     >
                       <FolderClosed />
-                      Tirar para a raiz
+                      {t.camadas.tirarParaRaiz}
                     </DropdownMenuItem>
                   ) : null}
                   {destinos.map((outra) => (
@@ -734,7 +744,9 @@ function GroupRow({
                       }
                     >
                       <FolderClosed />
-                      <span className="truncate">Mover para {outra.nome}</span>
+                      <span className="truncate">
+                        {t.camadas.moverPara(outra.nome)}
+                      </span>
                     </DropdownMenuItem>
                   ))}
                 </>
@@ -750,7 +762,7 @@ function GroupRow({
                 }
               >
                 <Ungroup />
-                Desfazer pasta
+                {t.camadas.desfazerPasta}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -869,15 +881,15 @@ const LayerRow = memo(function LayerRow({
             )}
           >
             {/* Asset apagado deixa o item órfão; o nome some mas a camada continua. */}
-            {name ?? "Imagem removida"}
+            {name ?? t.camadas.imagemRemovida}
           </span>
           {/* Uma linha só: com o olho e o cadeado, o painel estreito quebrava
               "travada · escondida" e a linha dobrava de altura. */}
           <span className="text-muted-foreground block truncate text-[10px]">
             {Math.round(item.width)} × {Math.round(item.height)}
             {item.rotation ? ` · ${Math.round(item.rotation)}°` : ""}
-            {item.locked ? " · travada" : ""}
-            {item.escondido ? " · escondida" : ""}
+            {item.locked ? t.camadas.travada : ""}
+            {item.escondido ? t.camadas.escondida : ""}
           </span>
         </span>
       </button>
@@ -885,7 +897,7 @@ const LayerRow = memo(function LayerRow({
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label={`Trazer ${name ?? "imagem"} para frente`}
+        aria-label={t.camadas.trazerParaFrente(name ?? t.camadas.imagem)}
         onPointerDown={(event) => event.stopPropagation()}
         disabled={atFront}
         onClick={() =>
@@ -897,7 +909,7 @@ const LayerRow = memo(function LayerRow({
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label={`Enviar ${name ?? "imagem"} para trás`}
+        aria-label={t.camadas.enviarParaTras(name ?? t.camadas.imagem)}
         onPointerDown={(event) => event.stopPropagation()}
         disabled={atBack}
         onClick={() =>
@@ -913,8 +925,8 @@ const LayerRow = memo(function LayerRow({
         size="icon-xs"
         aria-label={
           item.escondido
-            ? `Mostrar ${name ?? "imagem"}`
-            : `Esconder ${name ?? "imagem"}`
+            ? t.camadas.mostrar(name ?? t.camadas.imagem)
+            : t.camadas.esconder(name ?? t.camadas.imagem)
         }
         aria-pressed={Boolean(item.escondido)}
         onPointerDown={(event) => event.stopPropagation()}
@@ -929,7 +941,7 @@ const LayerRow = memo(function LayerRow({
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label={item.locked ? "Destravar" : "Travar"}
+        aria-label={item.locked ? t.camadas.destravar : t.camadas.travar}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={() =>
           useSceneStore
@@ -942,7 +954,7 @@ const LayerRow = memo(function LayerRow({
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label="Remover do mapa"
+        aria-label={t.camadas.removerDoMapa}
         // Travada não sai, como no palco: o cadeado ao lado destrava.
         disabled={item.locked}
         onPointerDown={(event) => event.stopPropagation()}

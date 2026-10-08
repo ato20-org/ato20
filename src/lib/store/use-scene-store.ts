@@ -4,7 +4,12 @@ import { create } from "zustand";
 
 import { COR_DO_VAZIO_PADRAO, corDoVazioDe } from "@/lib/cor";
 import { COR_DO_ESCURO_PADRAO, corDoEscuroDe } from "@/lib/geometry/luz";
+import { t as textoDeCenas } from "@/lib/i18n/cenas";
 import { novoId } from "@/lib/id";
+import {
+  ajusteParaGuardar,
+  type AjusteDeImagem,
+} from "@/lib/imagem-do-espectador";
 import { pastaDoMembro, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 
 import {
@@ -52,6 +57,7 @@ import {
   NOME_DO_TIPO,
   POSTIT_ALTURA,
   POSTIT_LARGURA,
+  type AreaDeEfeito,
   type Board,
   type CameraSalva,
   type CameraTripe,
@@ -63,6 +69,7 @@ import {
   type ItemDraft,
   type MapPin,
   type NewCanvasItem,
+  type NewAreaDeEfeito,
   type NewFogRegion,
   type NewForma,
   type NewPostit,
@@ -80,8 +87,10 @@ import {
   type NovaRegua,
   type NewLuz,
   type NewParede,
+  type NewPorta,
   type Luz,
   type Parede,
+  type Porta,
   type Sol,
   type NewTexto,
   type ListaDePastas,
@@ -231,6 +240,11 @@ type SceneStore = {
    * que devolver. Desfazer uma troca é trocar de novo, pelo menu da cena.
    */
   setBackground: (sceneId: string, assetId: string | undefined) => void;
+  /**
+   * O céu do 2.5D. Fora do histórico pela razão do fundo: trocar o céu apaga o
+   * arquivo velho. Ver `Scene.ceuAssetId`.
+   */
+  setCeu: (sceneId: string, assetId: string | undefined) => void;
   /** `undefined` devolve a mesa ao plano inteiro. */
   setSceneCamera: (sceneId: string, camera: Viewport | undefined) => void;
   /** Cria uma câmera. Devolve o id. */
@@ -371,6 +385,20 @@ type SceneStore = {
   /** Crava um risco. Passa pelo histórico: riscar é edição da cena. */
   addTraco: (sceneId: string, traco: NewTraco) => string;
   /**
+   * Troca cada risco da lista pelos pedaços dele, de uma vez: a passada da
+   * borracha que corta. Lista vazia apaga o risco. Os pedaços ficam no LUGAR
+   * do risco na ordem de pintura, e não no fim: o que estava embaixo de outro
+   * risco continua embaixo.
+   *
+   * Uma mudança só, e não `removeTracos` seguido de `addTraco`: cada chamada
+   * é um passo no desfazer, e cortar três riscos numa passada daria sete
+   * Ctrl+Z para um gesto.
+   */
+  substituirTracos: (
+    sceneId: string,
+    trocas: ReadonlyMap<string, readonly NewTraco[]>,
+  ) => void;
+  /**
    * Apaga vários riscos de uma vez.
    *
    * Vários e não um: a borracha atravessa três riscos numa passada, e apagar um
@@ -410,6 +438,19 @@ type SceneStore = {
   /** Apaga várias de uma vez, como a borracha faz com os riscos. */
   removeParedes: (sceneId: string, paredeIds: string[]) => void;
   /**
+   * Traça uma porta. Ver `Porta`.
+   *
+   * Pelo histórico, como a parede. Abrir também passa por aqui, uma vez ao
+   * soltar: o arrasto mora no gesto -- ver `moverPortaNoGesto`.
+   */
+  addPorta: (sceneId: string, porta: NewPorta) => string;
+  updatePorta: (
+    sceneId: string,
+    portaId: string,
+    patch: Partial<Omit<Porta, "id">>,
+  ) => void;
+  removePortas: (sceneId: string, portaIds: string[]) => void;
+  /**
    * Liga, ajusta ou desliga o sol da cena. `undefined` desliga.
    *
    * Um só por cena, então não há id nem lista: é uma troca de valor, e não uma
@@ -438,12 +479,23 @@ type SceneStore = {
   setEscuridao: (sceneId: string, escuridao: number) => void;
   /** Liga nome e medidores acima dos tokens. Ver `Scene.infoDosTokens`. */
   setInfoDosTokens: (sceneId: string, ligado: boolean) => void;
+  /** O ajuste de imagem da cena no espectador. Neutro guarda como ausente. Ver `Scene.imagem`. */
+  setImagem: (sceneId: string, imagem: AjusteDeImagem | undefined) => void;
   updateFog: (
     sceneId: string,
     fogId: string,
     patch: Partial<FogRegion>,
   ) => void;
   removeFog: (sceneId: string, fogId: string) => void;
+
+  /** Uma área de efeito nova. Devolve o id. Ver `AreaDeEfeito`. */
+  addAreaDeEfeito: (sceneId: string, area: NewAreaDeEfeito) => string;
+  updateAreaDeEfeito: (
+    sceneId: string,
+    areaId: string,
+    patch: Partial<Omit<AreaDeEfeito, "id">>,
+  ) => void;
+  removeAreaDeEfeito: (sceneId: string, areaId: string) => void;
 
   /** Crava um ponto de anotação. Devolve o id, para já abrir a nota dele. */
   addPin: (sceneId: string, pin: NewMapPin) => string;
@@ -587,6 +639,10 @@ export function soConteudo(atual: Board, alvo: Board): Board {
       if (scene.backgroundAssetId !== undefined)
         restaurada.backgroundAssetId = scene.backgroundAssetId;
       else delete restaurada.backgroundAssetId;
+      // O céu, pela mesma razão: trocá-lo apaga o arquivo velho.
+      if (scene.ceuAssetId !== undefined)
+        restaurada.ceuAssetId = scene.ceuAssetId;
+      else delete restaurada.ceuAssetId;
       return restaurada;
     }),
   };
@@ -777,7 +833,9 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         set({
           status: "error",
           error:
-            cause instanceof Error ? cause.message : "Falha ao abrir o board",
+            cause instanceof Error
+              ? cause.message
+              : textoDeCenas.sceneStore.falhaAoAbrir,
         });
       }
     },
@@ -824,7 +882,8 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       const iguais =
         board?.scenes.filter((scene) => scene.tipo === tipo).length ?? 0;
       const scene = createScene(
-        name ?? `${NOME_DO_TIPO[tipo ?? "mapa"]} ${iguais + 1}`,
+        name ??
+          textoDeCenas.nomesPadrao.cena(NOME_DO_TIPO[tipo ?? "mapa"], iguais + 1),
         tipo,
       );
       const base = board ?? {
@@ -847,7 +906,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       const source = board?.scenes.find((scene) => scene.id === sceneId);
       if (!board || !source) return null;
 
-      const copy = cloneScene(source, `${source.name} (cópia)`);
+      const copy = cloneScene(source, textoDeCenas.nomesPadrao.copia(source.name));
       commit(insertSceneAfter(board, sceneId, copy));
 
       // Que ambientes a cena acende mora FORA do board, no `TrackStore`, para
@@ -1152,6 +1211,23 @@ export const useSceneStore = create<SceneStore>((set, get) => {
           scenes: board.scenes.map((scene) =>
             scene.id === sceneId
               ? { ...scene, backgroundAssetId: assetId, updatedAt: Date.now() }
+              : scene,
+          ),
+        },
+      });
+    },
+
+    setCeu(sceneId, assetId) {
+      const { board } = get();
+      if (!board) return;
+
+      // `set` e não `commit`, como o fundo: ver a declaração.
+      set({
+        board: {
+          ...board,
+          scenes: board.scenes.map((scene) =>
+            scene.id === sceneId
+              ? { ...scene, ceuAssetId: assetId, updatedAt: Date.now() }
               : scene,
           ),
         },
@@ -1507,6 +1583,20 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       return id;
     },
 
+    substituirTracos(sceneId, trocas) {
+      if (trocas.size === 0) return;
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        tracos: (scene.tracos ?? []).flatMap((traco) => {
+          const pedacos = trocas.get(traco.id);
+          return pedacos
+            ? pedacos.map((pedaco) => ({ ...pedaco, id: novoId() }))
+            : [traco];
+        }),
+      }));
+    },
+
     removeTracos(sceneId, tracoIds) {
       if (tracoIds.length === 0) return;
 
@@ -1608,6 +1698,43 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       });
     },
 
+    addPorta(sceneId, porta) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        portas: [...(scene.portas ?? []), { ...porta, id }],
+      }));
+
+      return id;
+    },
+
+    updatePorta(sceneId, portaId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        portas: (scene.portas ?? []).map((porta) =>
+          porta.id === portaId ? { ...porta, ...patch } : porta,
+        ),
+      }));
+    },
+
+    removePortas(sceneId, portaIds) {
+      if (portaIds.length === 0) return;
+
+      const apagar = new Set(portaIds);
+
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.portas ?? []).filter(
+          (porta) => !apagar.has(porta.id),
+        );
+
+        return {
+          ...scene,
+          portas: restantes.length > 0 ? restantes : undefined,
+        };
+      });
+    },
+
     setSol(sceneId, sol) {
       get().updateScene(sceneId, (scene) => ({ ...scene, sol }));
     },
@@ -1693,6 +1820,14 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       }));
     },
 
+    setImagem(sceneId, imagem) {
+      // Neutro guarda como AUSENTE, como a escuridão em zero: a régua devolvida
+      // ao meio não deixa campo na cena.
+      const valor = ajusteParaGuardar(imagem);
+
+      get().updateScene(sceneId, (scene) => ({ ...scene, imagem: valor }));
+    },
+
     updateFog(sceneId, fogId, patch) {
       get().updateScene(sceneId, (scene) => ({
         ...scene,
@@ -1707,6 +1842,35 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         ...scene,
         fog: scene.fog.filter((region) => region.id !== fogId),
       }));
+    },
+
+    addAreaDeEfeito(sceneId, area) {
+      const id = novoId();
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        areasDeEfeito: [...(scene.areasDeEfeito ?? []), { ...area, id }],
+      }));
+
+      return id;
+    },
+
+    updateAreaDeEfeito(sceneId, areaId, patch) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        areasDeEfeito: (scene.areasDeEfeito ?? []).map((area) =>
+          area.id === areaId ? { ...area, ...patch } : area,
+        ),
+      }));
+    },
+
+    removeAreaDeEfeito(sceneId, areaId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.areasDeEfeito ?? []).filter((area) => area.id !== areaId);
+
+        // A lista some quando esvazia, como a das paredes: ausente é "nenhuma".
+        return { ...scene, areasDeEfeito: restantes.length > 0 ? restantes : undefined };
+      });
     },
 
     addPin(sceneId, pin) {

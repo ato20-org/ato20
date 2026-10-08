@@ -61,7 +61,13 @@ export function CampaignSplash({
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
               ) : null}
             </span>
+            {/* `suppressHydrationWarning`: o splash é a única tela que o
+                `next build` pré-renderiza com texto, e o HTML estático sai em
+                português. Em inglês, o primeiro rótulo hidrata diferente do
+                que o build escreveu -- e é texto de carregamento, que troca
+                um instante depois. Ver `lib/i18n/idioma.ts`. */}
             <span
+              suppressHydrationWarning
               className={cn(
                 estado === "espera" && "text-muted-foreground/40",
                 estado === "pronto" && "text-muted-foreground",

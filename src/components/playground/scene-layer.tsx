@@ -11,7 +11,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
+import { CeuPanoramico } from "@/components/playground/ceu-panoramico";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { FogLayer } from "@/components/playground/fog-layer";
 import { FundoDaCena } from "@/components/playground/fundo-da-cena";
@@ -22,6 +24,7 @@ import {
   type PontaDoMedidor,
 } from "@/components/playground/regua-layer";
 import { InfoDoToken } from "@/components/playground/info-do-token";
+import { LaserLayer } from "@/components/playground/laser-layer";
 import { PingLayer } from "@/components/playground/ping-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { SombraLayer } from "@/components/playground/sombra-layer";
@@ -31,19 +34,25 @@ import {
   TextosDaMesa,
 } from "@/components/playground/quadro-mesa-layer";
 import { TracoLayer } from "@/components/playground/traco-layer";
-import type { EfeitoPedido, EfeitosDoPersonagem } from "@/lib/condicao";
+import {
+  efeitosDoObjeto,
+  type EfeitoPedido,
+  type EfeitosDoPersonagem,
+} from "@/lib/condicao";
 import { quadroDaMesa } from "@/lib/geometry/viewport";
 import type { Variante } from "@/lib/vault/assets";
 import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
 import type { CorrenteDeEsguelha } from "@/lib/geometry/volume";
 import { useChaoStore } from "@/lib/store/use-chao-store";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
 import {
   ehQuadro,
   itensVisiveis,
   SCENE_HEIGHT,
   SCENE_WIDTH,
+  type AreaDeEfeito,
   type CanvasItem,
   type FichaNaCena,
   type FogRegion,
@@ -61,15 +70,6 @@ type SceneLayerProps = {
    * meio-apagado — a remoção chega pronta na publicação seguinte.
    */
   apagando?: ReadonlySet<string>;
-  /**
-   * A cor do contorno de cada item que deve ter um, por id de item.
-   *
-   * Só o palco do MESTRE passa, e passa sempre -- seleção não apaga o traço de
-   * ninguém. A mesa nunca recebe: o contorno responde "de quem é esta figura",
-   * e para a mesa saber de fora do jogo quem é NPC é justamente o que não se
-   * quer contar. Ver `contornoDosItens`.
-   */
-  contornos?: ReadonlyMap<string, string>;
   /** `mesa` é o que a mesa vê. `mestre` deixa o mestre atravessar a névoa. */
   variant?: "mestre" | "mesa";
   /**
@@ -88,6 +88,11 @@ type SceneLayerProps = {
    * como o arrasto do mestre, e interpolado ele correria 150ms atrás do dedo.
    */
   naMao?: string;
+  /**
+   * A porta que a mão do mestre está girando, por id. Ela vai direto, e as
+   * outras giram até a abertura nova. Ver `usePortasNoGiro`.
+   */
+  portaNaMao?: string;
   /**
    * Qual tamanho dos arquivos desenhar. Ausente = os arquivos -- com uma
    * exceção, o FUNDO, que passou a escolher sozinho entre a redução de palco e
@@ -131,6 +136,14 @@ type SceneLayerProps = {
    */
   pings?: Ping[];
   /**
+   * O laser do mestre, como chegou no quadro. Filtrado aqui pela cena, como os
+   * pings.
+   *
+   * `undefined` é a tela que não recebe laser nenhum -- o próprio Mestre, que
+   * desenha o dele na hora, no plano de controles. Ali a camada nem monta.
+   */
+  laser?: LaserNaMesa | null;
+  /**
    * Nome e medidores para desenhar sobre a cabeça dos tokens.
    *
    * Vazia com o interruptor da cena desligado, e é assim que ela chega às telas
@@ -148,6 +161,19 @@ type SceneLayerProps = {
   /** Ausente = camada só de leitura, que é o caso do Espectador. */
   onItemPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
   onFogPointerDown?: (event: ReactPointerEvent, region: FogRegion) => void;
+  /** O clique no contorno de uma área de efeito. Só o Mestre passa. */
+  onAreaDeEfeitoPointerDown?: (event: ReactPointerEvent, area: AreaDeEfeito) => void;
+  /**
+   * Só os efeitos destes donos ANIMAM -- tokens, áreas e retratos, pelo id;
+   * os outros pausam no quadro em que estão, e a luz deles para de tremular.
+   * Ausente = tudo anda.
+   *
+   * É o Mestre, que passa a seleção: lá o efeito serve para o mestre SABER
+   * que o goblin está em chamas, e o fogo de quarenta figuras tremulando é
+   * compositor trabalhando para quem está montando a cena. A mesa -- a janela
+   * do espectador e o celular -- não passa nada: lá o efeito é o espetáculo.
+   */
+  animarSo?: ReadonlySet<string>;
   onPortraitPointerDown?: (
     event: ReactPointerEvent,
     portrait: Portrait,
@@ -226,25 +252,31 @@ const RELEVO_DO_DEITADO =
  * renderizasse por um caminho diferente, elas divergiriam no primeiro ajuste
  * de layout.
  */
+/** Ninguém anima: a miniatura. Identidade estável, para o `memo` de cada item. */
+const NINGUEM: ReadonlySet<string> = new Set<string>();
+
 export function SceneLayer({
   scene,
   variant = "mesa",
   smooth = false,
   naMao,
+  portaNaMao,
   variante,
   portraits,
   rolagens,
   pings,
+  laser,
   fichas,
   efeitos,
   onItemPointerDown,
   onFogPointerDown,
+  onAreaDeEfeitoPointerDown,
+  animarSo: animarSoPedido,
   onPortraitPointerDown,
   medidorSelecionadoId,
   onMedidorPointerDown,
   onMedidorAlcaPointerDown,
   apagando,
-  contornos,
   palco,
   esguelha,
   semItens,
@@ -271,10 +303,25 @@ export function SceneLayer({
     [efeitos],
   );
 
+  /** O que as condições pedem de cada item: do personagem, ou do próprio objeto. */
+  const efeitosDoItem = useCallback(
+    (item: CanvasItem) =>
+      item.personagemId
+        ? efeitosPorPersonagem.get(item.personagemId)
+        : efeitosDoObjeto(item.condicoes),
+    [efeitosPorPersonagem],
+  );
+
+  // Na miniatura da lista, NINGUÉM anima: trinta cenas num quadrado de 56x32,
+  // e fogo nenhum ali é para ser visto andando.
+  const animarSo = variante === "mini" ? NINGUEM : animarSoPedido;
+  const parado = (id: string) => (animarSo ? !animarSo.has(id) : undefined);
+
   const pingsDaCena = useMemo(
     () => (pings ?? []).filter((ping) => ping.cenaId === scene.id),
     [pings, scene.id],
   );
+
 
   /**
    * O espaço do retrato: o 16:9 da tela da mesa em volta da câmera, e não o
@@ -385,10 +432,29 @@ export function SceneLayer({
         <SombraLayer
           items={items}
           paredes={scene.paredes}
+          portas={scene.portas}
+          portaNaMao={portaNaMao}
           sol={scene.sol}
           // A mesma dos itens: a sombra de uma figura é a figura, e ela lê o
           // arquivo que o token já baixou. Ver `SombraDaFigura`.
           variante={variante}
+        />
+      )}
+
+      {/* Depois da sombra e ANTES dos itens: o fogo é do chão, e o token pisa
+          nele. Fora da prévia, pela razão da sombra: trinta cenas num quadrado
+          de 56x32, cada uma assando uma folha de fogo, é forno que ninguém
+          olha. Ver `AreaDeEfeitoLayer`. */}
+      {variante === "mini" ? null : (
+        <AreaDeEfeitoLayer
+          areas={scene.areasDeEfeito}
+          grid={scene.grid}
+          variant={variant}
+          onAreaPointerDown={onAreaDeEfeitoPointerDown}
+          animarSo={animarSo}
+          // De esguelha, o fogo fica de pé, como as peças: no piso, só a base.
+          // Ver `useChamasDePe`.
+          soBase={Boolean(esguelha)}
         />
       )}
 
@@ -412,12 +478,12 @@ export function SceneLayer({
               smooth={smooth}
               naMao={item.id === naMao}
               variante={variante}
-              contorno={contornos?.get(item.id)}
               efeitos={
                 item.personagemId
                   ? efeitosPorPersonagem.get(item.personagemId)
-                  : undefined
+                  : efeitosDoObjeto(item.condicoes)
               }
+              efeitosParados={parado(item.id)}
               onPointerDown={onItemPointerDown}
             />
           </div>
@@ -428,15 +494,12 @@ export function SceneLayer({
           smooth={smooth}
           naMao={item.id === naMao}
           variante={variante}
-          // Uma string, e não o mapa: o `CanvasItemView` é `memo`, e passar o
-          // mapa inteiro faria os quarenta itens redesenharem a cada quadro em
-          // que qualquer um deles muda.
-          contorno={contornos?.get(item.id)}
           efeitos={
             item.personagemId
               ? efeitosPorPersonagem.get(item.personagemId)
-              : undefined
+              : efeitosDoObjeto(item.condicoes)
           }
+          efeitosParados={parado(item.id)}
           onPointerDown={onItemPointerDown}
         />
         ),
@@ -459,6 +522,8 @@ export function SceneLayer({
           items={items}
           luzes={scene.luzes}
           paredes={scene.paredes}
+          portas={scene.portas}
+          portaNaMao={portaNaMao}
           escuridao={scene.escuridao}
           corDoEscuro={scene.corDoEscuro}
           variant={variant}
@@ -467,14 +532,27 @@ export function SceneLayer({
           // A mesma dos itens e da sombra do sol: a silhueta sai do arquivo
           // que o token já baixou. Ver `useSilhuetasDosTokens`.
           variante={variante}
+          efeitosDoItem={efeitosDoItem}
+          areasDeEfeito={scene.areasDeEfeito}
+          grid={scene.grid}
+          animarSo={animarSo}
         />
       )}
 
+      {/* As lanternas abrem a névoa dinâmica, e as paredes e portas param a
+          revelação como param a luz -- a mesma lista que a `LuzLayer` lê.
+          Na prévia, o bloco de sempre: ver `simples`. */}
       <FogLayer
         fog={scene.fog}
         variant={variant}
         smooth={smooth}
         onFogPointerDown={onFogPointerDown}
+        items={items}
+        paredes={scene.paredes}
+        portas={scene.portas}
+        portaNaMao={portaNaMao}
+        naMao={naMao}
+        simples={variante === "mini"}
       />
 
       {/* Depois da névoa: o medidor é instrumento sobre o mapa, e medir por
@@ -511,13 +589,20 @@ export function SceneLayer({
 
       {/* Depois dos itens e antes do retrato: ela desenha SOBRE as peças, e o
           retrato é HUD e fica acima de tudo. Ver `INFO_Z`. */}
-      {fichas && fichas.length > 0 ? (
-        <InfoDoToken itens={items} fichas={fichas} />
+      {/* Os objetos seguem o interruptor da cena, e só onde quem monta pediu
+          informação (`fichas` presente): a miniatura e o 2.5D, que desenha a
+          sua, passam sem. */}
+      {fichas && (fichas.length > 0 || scene.infoDosTokens) ? (
+        <InfoDoToken itens={items} fichas={fichas} objetos={Boolean(scene.infoDosTokens)} />
       ) : null}
 
       {/* Por cima de tudo que é do mapa -- névoa, medidor, nome --, e embaixo
           do retrato, que é HUD. Ver `PingLayer`. */}
       <PingLayer pings={pingsDaCena} />
+
+      {laser !== undefined ? (
+        <LaserLayer laser={laser?.cenaId === scene.id ? laser : null} />
+      ) : null}
 
       {portraits && portraits.length > 0 ? (
         <PortraitLayer
@@ -527,11 +612,12 @@ export function SceneLayer({
           smooth={smooth}
           // Na mesa o retrato é OVERLAY: ninguém o manipula ali, e o que se
           // pede dele é que fique parado enquanto a câmera passa por baixo.
-          // No Mestre ele continua no plano, porque lá ele é arrastado,
-          // escalado e enfileirado -- tudo em coordenada de cena. Ver `espaco`.
+          // O palco do Mestre não passa retrato nenhum -- ele é arrastado e
+          // escalado no quadro da janela Retratos. Ver `QuadroDosRetratos`.
           espaco={variant === "mesa" ? "tela" : "cena"}
           rolagens={rolagens}
           efeitos={efeitosPorPersonagem}
+          animarSo={animarSo}
           onPortraitPointerDown={onPortraitPointerDown}
         />
       ) : null}
@@ -555,6 +641,16 @@ export function SceneLayer({
     // da caixa. Na TV a caixa é o plano; no Mestre, a área do palco. A corrente
     // não está no `style`: quem a põe é o efeito lá em cima.
     <div className="absolute inset-0 overflow-hidden">
+      {/* O céu, antes de tudo: atrás do chão, e da caixa da câmera, que é a
+          tela no Mestre e o plano na TV. Sem ele, o vazio é a cor da cena.
+          Ver `Scene.ceuAssetId`. */}
+      {scene.ceuAssetId ? (
+        <CeuPanoramico
+          assetId={scene.ceuAssetId}
+          variante={variante === "mini" ? "tela" : variante}
+          camera={orbital}
+        />
+      ) : null}
       <div
         className="absolute inset-0"
         style={{

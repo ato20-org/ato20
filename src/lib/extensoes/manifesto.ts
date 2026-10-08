@@ -3,7 +3,9 @@
 import { open } from "@tauri-apps/plugin-dialog";
 
 import type { FonteRetrato } from "@/lib/extensoes/fontes";
+import { resolverOpcional, resolverTexto } from "@/lib/extensoes/texto";
 import { call } from "@/lib/vault/bridge";
+import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 export {
   CANVAS_PADRAO,
@@ -34,7 +36,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 6;
+export const API_VERSAO = 8;
 
 /**
  * O que uma extensão diz de si.
@@ -92,7 +94,16 @@ export type Contribuicoes = {
   substitutos?: SubstitutoDeclarado[];
   estilosDeMedidor?: EstiloDeMedidorDeclarado[];
   paginas?: PaginaDeclarada[];
+  /** Ausente em lista lida por um Rust anterior à API 6. */
+  efeitos?: EfeitoDeclarado[];
 };
+
+/**
+ * Um efeito de condição, como o plugin escreve: o `id` é o dele, sem o prefixo.
+ * Na mesa ele vira `{plugin}/{id}` -- ver `useDeclarativoStore`. Espelho de
+ * `extensoes::Efeito`, que é quem valida.
+ */
+export type EfeitoDeclarado = DefinicaoDeEfeito;
 
 /**
  * Uma página do plugin, que o daemon serve na rede em `/plugin/{id}/{arquivo}`.
@@ -241,6 +252,11 @@ export type ConfiguracaoDeclarada = {
   padrao: unknown;
   escopo: "maquina" | "campanha" | "ambos";
   opcoes: string[];
+  /**
+   * O que a tela mostra no lugar de cada opção, quando o valor gravado não é
+   * a palavra que se quer ler. API 7.
+   */
+  rotulos?: Record<string, string>;
   minimo: number | null;
   maximo: number | null;
 };
@@ -339,8 +355,73 @@ export function urlDaExtensao(
   return versao ? `${base}?v=${encodeURIComponent(versao)}` : base;
 }
 
-export function listarExtensoes(): Promise<Extensao[]> {
-  return call<Extensao[]>("extensoes_listar");
+/**
+ * A extensão com o texto do manifesto no idioma da tela.
+ *
+ * Da API 7 em diante, todo campo de texto do manifesto pode vir como mapa por
+ * idioma -- ver `TextoDePlugin`. O Rust valida e devolve o mapa como veio; é
+ * AQUI, na chegada, que cada um vira a string do idioma desta tela. Daqui para
+ * dentro o aplicativo inteiro lê `string`, como sempre leu, e nenhuma tela
+ * precisa saber que o plugin fala duas línguas.
+ *
+ * O tipo de entrada é `Extensao` por conveniência: é o formato que o IPC
+ * devolve, só que com mapas onde aqui se promete string. Esta função é o que
+ * torna a promessa verdadeira.
+ */
+export function noIdiomaDaTela(extensao: Extensao): Extensao {
+  const titulo = <T extends { titulo: string }>(item: T): T => ({
+    ...item,
+    titulo: resolverTexto(item.titulo),
+  });
+  const c = extensao.contribui;
+
+  return {
+    ...extensao,
+    nome: resolverTexto(extensao.nome),
+    descricao: resolverOpcional(extensao.descricao),
+    retratos: (extensao.retratos ?? []).map((fonte) => ({
+      ...fonte,
+      rotulo: resolverTexto(fonte.rotulo),
+      campo: resolverTexto(fonte.campo),
+    })),
+    contribui: c && {
+      ...c,
+      paineis: (c.paineis ?? []).map((painel) => ({
+        ...titulo(painel),
+        subtitulo: resolverOpcional(painel.subtitulo),
+      })),
+      comandos: (c.comandos ?? []).map((comando) => ({
+        ...titulo(comando),
+        grupo: resolverOpcional(comando.grupo),
+      })),
+      ferramentas: (c.ferramentas ?? []).map(titulo),
+      camadas: (c.camadas ?? []).map(titulo),
+      configuracoes: c.configuracoes?.map((configuracao) => ({
+        ...titulo(configuracao),
+        descricao: resolverOpcional(configuracao.descricao),
+        rotulos:
+          configuracao.rotulos &&
+          Object.fromEntries(
+            Object.entries(configuracao.rotulos).map(([opcao, rotulo]) => [
+              opcao,
+              resolverTexto(rotulo),
+            ]),
+          ),
+      })),
+      itensDeMenu: c.itensDeMenu?.map(titulo),
+      secoes: c.secoes?.map(titulo),
+      estilosDeMedidor: c.estilosDeMedidor?.map(titulo),
+      paginas: c.paginas?.map(titulo),
+      efeitos: c.efeitos?.map((efeito) => ({
+        ...titulo(efeito),
+        dica: efeito.dica === undefined ? undefined : resolverTexto(efeito.dica),
+      })),
+    },
+  };
+}
+
+export async function listarExtensoes(): Promise<Extensao[]> {
+  return (await call<Extensao[]>("extensoes_listar")).map(noIdiomaDaTela);
 }
 
 /**
@@ -352,17 +433,22 @@ export function listarExtensoes(): Promise<Extensao[]> {
  * Pasta e não zip nesta etapa: uma extensão é uma pasta com `manifest.json`
  * dentro, e quem clona do GitHub já tem exatamente isso. O zip entra quando
  * houver de onde baixar sem clonar.
+ *
+ * O título do diálogo vem de quem chama: este módulo também é lido pelo
+ * celular e pela TV, e o texto do Mestre não tem por que ir junto.
  */
-export async function importarExtensao(): Promise<Extensao | null> {
+export async function importarExtensao(
+  titulo: string,
+): Promise<Extensao | null> {
   const escolhida = await open({
     directory: true,
     multiple: false,
-    title: "Escolha a pasta da extensão",
+    title: titulo,
   });
 
   if (typeof escolhida !== "string") return null;
 
-  return call<Extensao>("extensao_importar", { caminho: escolhida });
+  return noIdiomaDaTela(await call<Extensao>("extensao_importar", { caminho: escolhida }));
 }
 
 /** Desinstala: a pasta sai do disco e a linha sai do banco. */

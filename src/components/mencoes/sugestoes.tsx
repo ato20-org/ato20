@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
+import { t } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
 import type { Sugestao } from "@/lib/mencoes/sugestao";
 
@@ -178,7 +179,7 @@ export function ListaDeSugestoes({
       </ul>
 
       <p className="text-muted-foreground border-t px-2 py-1 text-[10px]">
-        ↑↓ escolhe · Enter confirma · Esc fecha
+        {t.sugestoes.rodape}
       </p>
     </div>,
     document.body,

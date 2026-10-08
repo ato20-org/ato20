@@ -2,7 +2,6 @@
 
 import { memo, type PointerEvent as ReactPointerEvent } from "react";
 
-import { ContornoDoItem } from "@/components/playground/contorno-do-item";
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { EfeitoPedido } from "@/lib/condicao";
@@ -34,22 +33,17 @@ type CanvasItemViewProps = {
    */
   naMao?: boolean;
   /**
-   * A cor do traço em volta da figura, quando ela deve ter um.
-   *
-   * Só o palco do mestre passa: é a leitura "quem é de jogador e quem é meu"
-   * sem clicar em ninguém, e por isso ela não depende de clique nenhum --
-   * seleção não apaga o traço de ninguém, nem do próprio selecionado. Ausente
-   * -- a mesa inteira -- não monta nada. Ver `ContornoDoItem` e
-   * `contornoDosItens`.
-   */
-  contorno?: string;
-  /**
    * O que as condições do personagem fazem com esta figura. Ausente = nada.
    *
    * A lista do PERSONAGEM, e não uma cópia por token: a horda de clones recebe
    * o mesmo array, e é o que mantém o `memo` valendo -- ver `SceneLayer`.
    */
   efeitos?: ReadonlyArray<EfeitoPedido>;
+  /**
+   * Os efeitos pausados no quadro em que estão: o Mestre só anima o de quem
+   * está selecionado. Ausente = andando, como na mesa. Ver `animarSo`.
+   */
+  efeitosParados?: boolean;
   onPointerDown?: (event: ReactPointerEvent, item: CanvasItem) => void;
 };
 
@@ -64,8 +58,8 @@ export const CanvasItemView = memo(function CanvasItemView({
   smooth = false,
   naMao = false,
   variante,
-  contorno,
   efeitos,
+  efeitosParados,
   onPointerDown,
 }: CanvasItemViewProps) {
   const url = useAssetUrl(item.assetId, variante);
@@ -80,6 +74,7 @@ export const CanvasItemView = memo(function CanvasItemView({
   return (
     <div
       data-item-id={item.id}
+      data-efeito-parado={efeitosParados ? "" : undefined}
       className={cn(
         // Posicionado no canto e movido por `transform`: ver o `style`.
         "absolute top-0 left-0",
@@ -121,6 +116,7 @@ export const CanvasItemView = memo(function CanvasItemView({
           url={url}
           semente={item.id}
           espelho={espelho}
+          alcance={item}
         >
           {(fonte) => (
             // next/image não serve aqui: a fonte é uma blob URL do IndexedDB,
@@ -143,26 +139,6 @@ export const CanvasItemView = memo(function CanvasItemView({
         </FiguraComEfeitos>
       ) : null}
 
-      {/* Depois da figura, e por isso POR CIMA dela: os dois estão na mesma
-          pilha, e ali quem vem depois cobre quem veio antes.
-
-          Por cima e não atrás porque muito token traz uma sombra própria
-          pintada no PNG, deslocada para um lado. Atrás, essa sombra caía sobre
-          o traço daquele lado e o pintava de cinza -- o contorno saía torto,
-          nítido de um lado e sumido do outro. O traço nasce fora da silhueta
-          opaca da figura (ver `contornoDaImagem`), então por cima ele não tem
-          figura nenhuma para cobrir: cobre a franja lisa da borda e o começo da
-          sombra, que é o que um adesivo faz. */}
-      {url && contorno ? (
-        <ContornoDoItem
-          assetId={item.assetId}
-          cor={contorno}
-          largura={item.width}
-          altura={item.height}
-          flipX={item.flipX}
-          flipY={item.flipY}
-        />
-      ) : null}
     </div>
   );
 });

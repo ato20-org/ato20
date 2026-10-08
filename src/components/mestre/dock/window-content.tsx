@@ -10,12 +10,13 @@ import { EstanteBody } from "@/components/mestre/estante-window";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
 import { LayerList } from "@/components/mestre/layer-list";
-import { PortraitList } from "@/components/mestre/portrait-list";
+import { RetratosWindow } from "@/components/mestre/retratos-window";
 import { ChatBody } from "@/components/mestre/chat-window";
 import { RolagensBody } from "@/components/mestre/rolagens-window";
 import { ArquivosList } from "@/components/mestre/arquivos-list";
 import { SceneList } from "@/components/mestre/scene-list";
 import { useCharacters } from "@/hooks/use-characters";
+import { t } from "@/lib/i18n/mestre";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useMemo } from "react";
 
@@ -56,17 +57,17 @@ export type Rotulo = { titulo: string; subtitulo?: string };
  * uma lista de livros abertos é a Estante, não um menu de painéis.
  */
 export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
-  { conteudo: { tipo: "cenas" }, titulo: "Cenas" },
-  { conteudo: { tipo: "quadros" }, titulo: "Arquivos" },
-  { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
-  { conteudo: { tipo: "camadas" }, titulo: "Camadas" },
-  { conteudo: { tipo: "imagens" }, titulo: "Biblioteca" },
-  { conteudo: { tipo: "sons" }, titulo: "Sons" },
-  { conteudo: { tipo: "personagens" }, titulo: "Personagens" },
-  { conteudo: { tipo: "rolagens" }, titulo: "Rolagens" },
-  { conteudo: { tipo: "chat" }, titulo: "Chat" },
-  { conteudo: { tipo: "estante" }, titulo: "Estante" },
-  { conteudo: { tipo: "miniplayer" }, titulo: "Mesa" },
+  { conteudo: { tipo: "cenas" }, titulo: t.janelas.cenas },
+  { conteudo: { tipo: "quadros" }, titulo: t.janelas.arquivos },
+  { conteudo: { tipo: "retratos" }, titulo: t.janelas.retratos },
+  { conteudo: { tipo: "camadas" }, titulo: t.janelas.camadas },
+  { conteudo: { tipo: "imagens" }, titulo: t.janelas.biblioteca },
+  { conteudo: { tipo: "sons" }, titulo: t.janelas.sons },
+  { conteudo: { tipo: "personagens" }, titulo: t.janelas.personagens },
+  { conteudo: { tipo: "rolagens" }, titulo: t.janelas.rolagens },
+  { conteudo: { tipo: "chat" }, titulo: t.janelas.chat },
+  { conteudo: { tipo: "estante" }, titulo: t.janelas.estante },
+  { conteudo: { tipo: "miniplayer" }, titulo: t.janelas.mesa },
 ];
 
 /**
@@ -117,7 +118,10 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
 
   switch (conteudo.tipo) {
     case "personagens":
-      return { titulo: "Personagens", subtitulo: "Ficha, miniaturas e donos" };
+      return {
+        titulo: t.janelas.personagens,
+        subtitulo: t.janelas.personagensSub,
+      };
     case "personagem": {
       const nome = personagens?.find(
         (atual) => atual.id === conteudo.personagemId,
@@ -125,50 +129,56 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
 
       // "Personagem" enquanto o índice não chegou, e não vazio: título que
       // aparece depois faz a largura da aba pular na frente de quem olha.
-      return { titulo: nome ?? "Personagem", subtitulo: "Ficha do personagem" };
+      return {
+        titulo: nome ?? t.janelas.personagem,
+        subtitulo: t.janelas.personagemSub,
+      };
     }
     case "anexo":
       return {
         titulo: conteudo.anexo.arquivo,
         subtitulo:
           conteudo.anexo.autor === "jogador"
-            ? "Anexo do jogador"
-            : "Anexo do mestre",
+            ? t.janelas.anexoDoJogador
+            : t.janelas.anexoDoMestre,
       };
     case "asset":
-      return { titulo: conteudo.nome, subtitulo: "Imagem do acervo" };
+      return { titulo: conteudo.nome, subtitulo: t.janelas.imagemDoAcervo };
     case "configuracao":
       return {
-        titulo: "Configuração da campanha",
-        subtitulo: "O que vale para a campanha inteira",
+        titulo: t.janelas.configuracao,
+        subtitulo: t.janelas.configuracaoSub,
       };
     case "estante":
       return {
-        titulo: "Estante",
-        subtitulo: "Os livros de regras desta máquina",
+        titulo: t.janelas.estante,
+        subtitulo: t.janelas.estanteSub,
       };
     case "livro":
-      return { titulo: conteudo.titulo, subtitulo: "Livro de regras" };
+      return { titulo: conteudo.titulo, subtitulo: t.janelas.livroSub };
     case "miniplayer":
-      return { titulo: "Mesa", subtitulo: "O que a mesa está vendo" };
+      return { titulo: t.janelas.mesa, subtitulo: t.janelas.mesaSub };
     case "rolagens":
-      return { titulo: "Rolagens", subtitulo: "O que a mesa tirou" };
+      return { titulo: t.janelas.rolagens, subtitulo: t.janelas.rolagensSub };
     case "chat":
-      return { titulo: "Chat", subtitulo: "A conversa da campanha" };
+      return { titulo: t.janelas.chat, subtitulo: t.janelas.chatSub };
     case "cenas":
       // "Cenas" e não "Mapas": o painel passou a ter as duas naturezas, e o
       // nome antigo escondia os fundos atrás da palavra do vizinho.
-      return { titulo: "Cenas", subtitulo: "Mapas e fundos da campanha" };
+      return { titulo: t.janelas.cenas, subtitulo: t.janelas.cenasSub };
     case "quadros":
-      return { titulo: "Arquivos", subtitulo: "Quadros e notas da campanha" };
+      return { titulo: t.janelas.arquivos, subtitulo: t.janelas.arquivosSub };
     case "retratos":
-      return { titulo: "Retratos" };
+      return { titulo: t.janelas.retratos };
     case "imagens":
-      return { titulo: "Biblioteca", subtitulo: "Imagens e arquivos da campanha" };
+      return {
+        titulo: t.janelas.biblioteca,
+        subtitulo: t.janelas.bibliotecaSub,
+      };
     case "sons":
-      return { titulo: "Sons" };
+      return { titulo: t.janelas.sons };
     case "camadas":
-      return { titulo: "Camadas" };
+      return { titulo: t.janelas.camadas };
     case "extensao": {
       const painel = extensoes
         .find((extensao) => extensao.id === conteudo.extensaoId)
@@ -180,7 +190,7 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       // a esta janela em particular ("Edgar"), e o manifesto só sabe o do
       // painel ("Ficha").
       return {
-        titulo: conteudo.titulo ?? painel?.titulo ?? "Plugin",
+        titulo: conteudo.titulo ?? painel?.titulo ?? t.janelas.plugin,
         subtitulo: conteudo.titulo ? painel?.titulo : (painel?.subtitulo ?? undefined),
       };
     }
@@ -201,6 +211,10 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
   switch (conteudo.tipo) {
     case "chat":
       return 420;
+    // Deitada, o quadro cabe na altura que a janela TEM, e sem altura ela
+    // cresceria com a lista ao lado -- o quadro ficaria do tamanho do elenco.
+    case "retratos":
+      return 440;
     default:
       return undefined;
   }
@@ -230,6 +244,11 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
     // canto do palco sem esconder o que o mestre está editando.
     case "miniplayer":
       return 320;
+    // Deitada: o quadro da tela da mesa à esquerda, as abas numa coluna à
+    // direita -- ver `RetratosWindow`. Atracada, vale a coluna, e o quadro
+    // volta para cima das abas.
+    case "retratos":
+      return 760;
     default:
       return 288;
   }
@@ -355,7 +374,7 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
       return <ArquivosList ready={pronta} />;
     // Retrato não depende de cena: ele é da sessão e atravessa a troca.
     case "retratos":
-      return <PortraitList />;
+      return <RetratosWindow />;
     // Acervo é da campanha, não da cena: lista sem cena nenhuma, e a cena
     // aberta só decide se o `+` de "pôr na cena" aparece.
     case "imagens":
@@ -375,7 +394,7 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
         <LayerList scene={scene} />
       ) : (
         <p className="text-muted-foreground p-3 text-xs">
-          Nenhuma camada encontrada na tela.
+          {t.janelas.nenhumaCamada}
         </p>
       );
   }

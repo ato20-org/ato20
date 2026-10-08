@@ -187,6 +187,8 @@ export function cartazNaTela(
   pe: Vec,
   largura: number,
   altura: number,
+  /** O pé erguido do chão, em cima de uma parede. Ver `apoioDoPe`. */
+  sobe = 0,
 ): { x: number; y: number; largura: number; altura: number } | null {
   const { alvo, zoom } = camera;
   const g = camera.giro * GRAU;
@@ -194,10 +196,11 @@ export function cartazNaTela(
 
   const u = (pe.x - alvo.x) * zoom;
   const v = (pe.y - alvo.y) * zoom;
+  const ergue = sobe * zoom;
   const u1 = u * Math.cos(g) - v * Math.sin(g);
   const v1 = u * Math.sin(g) + v * Math.cos(g);
-  const y = v1 * Math.cos(t);
-  const z = v1 * Math.sin(t);
+  const y = v1 * Math.cos(t) - ergue * Math.sin(t);
+  const z = v1 * Math.sin(t) + ergue * Math.cos(t);
 
   // A mesma régua do corte do chão: perto demais do olho já não se desenha.
   // Ver `vistoPeloTripe`.
@@ -226,16 +229,39 @@ export function daTelaAoChao(
   tela: Tela,
   pixel: Vec,
 ): Vec | null {
+  return daTelaAoPlano(camera, tela, pixel, 0);
+}
+
+/**
+ * O ponto sob um pixel da tela num plano DEITADO a `altura` do chão, ou `null`
+ * se o raio não o corta à frente do olho.
+ *
+ * É `daTelaAoChao` com o chão erguido, e existe para a mão no alto de uma
+ * parede: a alça do topo arrastada pelo chão andaria mais que o cursor, porque
+ * o chão sob o pixel fica atrás dela. Inversa exata de `projetar` com a mesma
+ * `altura`.
+ */
+export function daTelaAoPlano(
+  camera: CameraOrbital,
+  tela: Tela,
+  pixel: Vec,
+  altura: number,
+): Vec | null {
   const t = camera.inclinacao * GRAU;
   const sx = pixel.x - tela.largura / 2;
   const sy = pixel.y - tela.altura / 2;
+  const w = altura * camera.zoom;
 
   // Abaixo de zero o raio sobe: o pixel está acima do horizonte.
   const denominador = tela.focal * Math.cos(t) + sy * Math.sin(t);
   if (denominador <= 1e-6) return null;
 
-  const v1 = (sy * tela.focal) / denominador;
-  return voltarAoChao(camera, tela, sx, v1);
+  const v1 =
+    (sy * (tela.focal - w * Math.cos(t)) + tela.focal * w * Math.sin(t)) /
+    denominador;
+  // O ponto achado está atrás do olho: o plano erguido acima dele.
+  if (v1 * Math.sin(t) + w * Math.cos(t) >= tela.focal) return null;
+  return voltarAoChao(camera, tela, sx, v1, w);
 }
 
 /** Desfaz a escala da perspectiva, o giro e o zoom de um ponto já deitado. */
@@ -244,11 +270,13 @@ function voltarAoChao(
   tela: Tela,
   sx: number,
   v1: number,
+  w = 0,
 ): Vec {
   const g = camera.giro * GRAU;
   const t = camera.inclinacao * GRAU;
 
-  const u1 = (sx * (tela.focal - v1 * Math.sin(t))) / tela.focal;
+  const u1 =
+    (sx * (tela.focal - v1 * Math.sin(t) - w * Math.cos(t))) / tela.focal;
 
   const u = u1 * Math.cos(g) + v1 * Math.sin(g);
   const v = -u1 * Math.sin(g) + v1 * Math.cos(g);
@@ -523,8 +551,10 @@ export function figuraNoTripe(
   tripe: Tripe,
   tela: Pick<Tela, "largura" | "altura">,
   pe: Vec,
+  /** O pé erguido do chão, em cima de uma parede. Ver `apoioDoPe`. */
+  sobe = 0,
 ): { x: number; y: number; escala: number; giro: number } | null {
-  const olho = noOlho(tripe, pe, 0);
+  const olho = noOlho(tripe, pe, sobe);
   if (olho.profundidade <= PERTO_DO_OLHO) return null;
 
   const escala = focalDaLente(tela.altura, tripe.lente) / olho.profundidade;
@@ -534,6 +564,117 @@ export function figuraNoTripe(
     escala,
     giro: tripe.rolagem,
   };
+}
+
+/**
+ * Uma figura DEITADA, vista pelo tripé, como caixa de TELA: o tamanho que ela
+ * ocupa ali e o `matrix3d` que leva essa caixa ao quadrilátero dela no chão.
+ * Ou `null` se algum canto está atrás do olho.
+ *
+ * Irmã de `figuraNoTripe`, e pelo mesmo motivo. Deitada no piso, a figura é
+ * pintada na textura do chão, que tem o tamanho do plano: um token de dez
+ * unidades vira dez pixels de textura, esticados para cem na tela quando a
+ * câmera chega perto. Aqui ela é uma caixa própria do tamanho em que aparece,
+ * e a perspectiva vai DENTRO da matriz, e não no `perspective` de uma caixa
+ * que o WebKitGTK do Mestre às vezes esquece.
+ *
+ * A matriz é a homografia de quatro cantos: a caixa `largura x altura` vai a
+ * `cantos` (na ordem de `cantosDeitado`: cima-esquerda, cima-direita,
+ * baixo-direita, baixo-esquerda) projetados. Com todos os cantos à frente do
+ * olho o divisor é positivo na caixa inteira, e o motor desenha sem cortar.
+ */
+export function deitadoNoTripe(
+  tripe: Tripe,
+  tela: Pick<Tela, "largura" | "altura">,
+  cantos: ReadonlyArray<Vec>,
+): { largura: number; altura: number; matriz: string } | null {
+  const focal = focalDaLente(tela.altura, tripe.lente);
+  const p: Vec[] = [];
+  for (const canto of cantos) {
+    const olho = noOlho(tripe, canto, 0);
+    if (olho.profundidade <= PERTO_DO_OLHO) return null;
+    p.push({
+      x: tela.largura / 2 + (olho.lado * focal) / olho.profundidade,
+      y: tela.altura / 2 + (olho.cima * focal) / olho.profundidade,
+    });
+  }
+  const [p0, p1, p2, p3] = p as [Vec, Vec, Vec, Vec];
+
+  // A caixa do tamanho médio dos lados na tela: é a resolução em que o motor
+  // rasteriza a figura, e a homografia estica pouco em volta dela.
+  const lado = (de: Vec, ate: Vec) => Math.hypot(ate.x - de.x, ate.y - de.y);
+  const largura = Math.max(1, Math.ceil((lado(p0, p1) + lado(p3, p2)) / 2));
+  const altura = Math.max(1, Math.ceil((lado(p0, p3) + lado(p1, p2)) / 2));
+
+  // Do quadrado unitário ao quadrilátero (Heckbert): x = (a u + b v + c) /
+  // (g u + h v + 1), e o mesmo com d, e, f para y.
+  const dx1 = p1.x - p2.x;
+  const dx2 = p3.x - p2.x;
+  const dx3 = p0.x - p1.x + p2.x - p3.x;
+  const dy1 = p1.y - p2.y;
+  const dy2 = p3.y - p2.y;
+  const dy3 = p0.y - p1.y + p2.y - p3.y;
+  const det = dx1 * dy2 - dx2 * dy1;
+  const g = det === 0 ? 0 : (dx3 * dy2 - dx2 * dy3) / det;
+  const h = det === 0 ? 0 : (dx1 * dy3 - dx3 * dy1) / det;
+  const a = p1.x - p0.x + g * p1.x;
+  const b = p3.x - p0.x + h * p3.x;
+  const d = p1.y - p0.y + g * p1.y;
+  const e = p3.y - p0.y + h * p3.y;
+
+  // Da caixa ao quadrado (u = x / largura, v = y / altura), em colunas, como
+  // o CSS lê: x' e y' nas duas primeiras linhas, o divisor na quarta, e z fica.
+  const matriz = `matrix3d(${a / largura}, ${d / largura}, 0, ${g / largura}, ${b / altura}, ${e / altura}, 0, ${h / altura}, 0, 0, 1, 0, ${p0.x}, ${p0.y}, 0, 1)`;
+  return { largura, altura, matriz };
+}
+
+/**
+ * Onde o pé de uma figura em pé tem de ir para o ponto dela que o dedo pegou
+ * ficar sob o dedo. `null` se o dedo está no céu.
+ *
+ * `pega` é onde o dedo pegou, medido do pé na figura e em unidades de CENA (o
+ * pixel de tela dividido pela escala dela ali): é o que não muda enquanto ela
+ * anda. Medir o chão sob o dedo não serviria -- o dedo está sobre o corpo, e o
+ * chão atrás dele fica mais longe que o pé, onde a perspectiva encolhe o
+ * passo: a figura ficava para trás do dedo.
+ *
+ * Sem volta nem chute: a figura em pé é paralela à tela, então o ponto pegado
+ * está no espaço do olho a `pega` do pé, na MESMA profundidade -- e está no
+ * raio do dedo. Andando pelo raio, a altura do pé que sai dali é linear no
+ * passo, e o pé que pisa o chão é onde ela zera.
+ */
+export function peSobODedo(
+  tripe: Tripe,
+  tela: Pick<Tela, "largura" | "altura">,
+  dedo: Vec,
+  pega: Vec,
+  /**
+   * A altura em que o pé pisa: a do chão, ou a do teto em que a figura foi
+   * pega. Ver `apoioDoPe`.
+   */
+  sobe = 0,
+): Vec | null {
+  const focal = focalDaLente(tela.altura, tripe.lente);
+  const lado = dedo.x - tela.largura / 2;
+  const cima = dedo.y - tela.altura / 2;
+  // O pé para o ponto do raio a `passo` focais do olho.
+  const pe = (passo: number) =>
+    doOlhoAoMundo(
+      tripe,
+      passo * lado - pega.x,
+      passo * cima - pega.y,
+      passo * focal,
+    );
+
+  const noOlho = pe(0).altura;
+  const subida = pe(1).altura - noOlho;
+  if (Math.abs(subida) < 1e-9) return null;
+  const passo = (sobe - noOlho) / subida;
+  // Atrás do olho, ou colado nele: o dedo está no céu.
+  if (passo * focal <= PERTO_DO_OLHO) return null;
+
+  const { x, y } = pe(passo);
+  return { x, y };
 }
 
 /**
@@ -555,6 +696,41 @@ export function projetarNoTripe(
   return {
     x: tela.largura / 2 + (olho.lado * focal) / olho.profundidade,
     y: tela.altura / 2 + (olho.cima * focal) / olho.profundidade,
+  };
+}
+
+/**
+ * O ponto do chão sob um pixel da tela do tripé, ou `null` se o pixel olha o
+ * céu.
+ *
+ * A `daTelaAoChao` do tripé, e a inversa de `projetarNoTripe` com altura zero:
+ * o raio do olho pelo pixel, cortado no piso -- a mesma conta da
+ * `pegadaDoTripe`, para um pixel em vez de quatro cantos. É o que deixa o dedo
+ * do jogador pegar o próprio token de esguelha.
+ */
+export function daTelaAoChaoNoTripe(
+  tripe: Tripe,
+  tela: Pick<Tela, "largura" | "altura">,
+  pixel: Vec,
+): Vec | null {
+  // Olho no chão ou abaixo dele: nenhum raio desce até o piso.
+  if (tripe.altura <= 0) return null;
+
+  const focal = focalDaLente(tela.altura, tripe.lente);
+  const noRaio = doOlhoAoMundo(
+    tripe,
+    pixel.x - tela.largura / 2,
+    pixel.y - tela.altura / 2,
+    focal,
+  );
+  const descida = tripe.altura - noRaio.altura;
+  // O raio sobe ou corre paralelo ao chão: o pixel está acima do horizonte.
+  if (descida <= 1e-6) return null;
+
+  const passos = tripe.altura / descida;
+  return {
+    x: tripe.x + (noRaio.x - tripe.x) * passos,
+    y: tripe.y + (noRaio.y - tripe.y) * passos,
   };
 }
 

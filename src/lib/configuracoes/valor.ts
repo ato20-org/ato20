@@ -15,7 +15,7 @@ export type { Escopo };
  * `lista` é uma lista de textos -- quem fica de fora da live, por exemplo. Não
  * tem controle na lista gerada, porque um interruptor por item só existe para
  * quem sabe o que os itens são: quem a edita é o painel do plugin (ou a tela
- * dona dela), e o editor JSON.
+ * dona dela), e o arquivo aberto à mão.
  */
 export type TipoConfiguracao = "booleano" | "numero" | "texto" | "escolha" | "lista";
 
@@ -36,6 +36,12 @@ export type Definicao = {
   escopo: EscopoConfiguracao;
   /** As opções de uma `escolha`. */
   opcoes?: string[];
+  /**
+   * O que a tela mostra no lugar de cada opção. A opção é o valor gravado no
+   * arquivo e não muda com o idioma; o rótulo muda. Opção sem rótulo aparece
+   * crua.
+   */
+  rotulos?: Record<string, string>;
   /** O intervalo e o passo de um `numero`. */
   minimo?: number;
   maximo?: number;
@@ -100,27 +106,4 @@ export function resolver(
   }
 
   return { valor: definicao.padrao, origem: "padrao" };
-}
-
-/**
- * A linha de um erro de `JSON.parse`, quando o motor a entrega.
- *
- * O V8 diz "at position N" (e, nas versões novas, "line X column Y"); o
- * JavaScriptCore do WebKitGTK costuma dizer só o que estranhou, sem posição.
- * Devolve `null` quando não há como saber -- o editor mostra a mensagem crua,
- * que ainda é melhor que nada.
- */
-export function linhaDoErro(texto: string, erro: unknown): number | null {
-  const mensagem = erro instanceof Error ? erro.message : String(erro);
-
-  const linha = /line (\d+)/i.exec(mensagem);
-  if (linha) return Number(linha[1]);
-
-  const posicao = /position (\d+)/i.exec(mensagem);
-  if (posicao) {
-    const ate = texto.slice(0, Number(posicao[1]));
-    return ate.split("\n").length;
-  }
-
-  return null;
 }

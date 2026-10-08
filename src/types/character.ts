@@ -237,33 +237,6 @@ export type PatchModelo = {
 export const MAX_MODELOS = MAX_MEDIDORES;
 
 /**
- * O que uma condição faz com a figura, no mapa e no retrato.
- *
- * - `aura`: um halo na cor da condição, respirando atrás da figura. Abençoado,
- *   em fúria, sob um feitiço.
- * - `tingido`: a figura ganha a cor por cima, só onde há figura. Veneno,
- *   congelado, petrificado.
- * - `translucido`: meio transparente, tremulando. Invisível, fantasma.
- * - `tremendo`: treme no lugar. Com medo, atordoado.
- * - `apagado`: cinza e escura. Morto, inconsciente.
- *
- * Cinco climas, e não uma régua de matiz e opacidade: o mestre escolhe
- * "tingido" na cor do veneno, e não "hue 120 a 40%". É a mesma escolha que
- * `EfeitoDaLuz` fez.
- *
- * O espelho em Rust é `vault::characters::EfeitoNaFigura`.
- */
-export const EFEITOS_NA_FIGURA = [
-  "aura",
-  "tingido",
-  "translucido",
-  "tremendo",
-  "apagado",
-] as const;
-
-export type EfeitoNaFigura = (typeof EFEITOS_NA_FIGURA)[number];
-
-/**
  * Um selo com nome, ícone e cor, e o que ele faz com a figura.
  *
  * EXIBIÇÃO, e nada além: o núcleo mostra que o goblin está envenenado. Quem
@@ -290,8 +263,12 @@ export type Condicao = {
    * desconhecido desenha o ícone de sempre. Ver `iconeDaCondicao`.
    */
   icone: string;
-  /** Ausente = só o selo. */
-  efeito?: EfeitoNaFigura;
+  /**
+   * O que a condição faz com a figura: o id de um efeito do catálogo. Ausente
+   * = só o selo; id que esta tela não conhece também. Ver `DefinicaoDeEfeito`
+   * e `definicaoDoEfeito`.
+   */
+  efeito?: string;
   /**
    * A mesa não vê: nem o selo, nem o efeito.
    *
@@ -310,7 +287,7 @@ export type PatchCondicao = {
   nome?: string;
   cor?: string;
   icone?: string;
-  efeito?: EfeitoNaFigura | null;
+  efeito?: string | null;
   escondido?: boolean;
 };
 

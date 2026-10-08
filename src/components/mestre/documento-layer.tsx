@@ -17,7 +17,8 @@ import {
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { CORNER_HANDLES } from "@/lib/geometry/transform";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
+import { t } from "@/lib/i18n/arquivos";
+import { abrirNota } from "@/lib/mestre/abrir-nota";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { useGestoStore } from "@/lib/store/use-gesto-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -195,7 +196,6 @@ const CartaoDeDocumento = memo(function CartaoDeDocumento({
 
   const updateDocumento = useSceneStore((state) => state.updateDocumento);
   const removeDocumento = useSceneStore((state) => state.removeDocumento);
-  const abrirNota = useArquivoAbertoStore((state) => state.abrirNota);
 
   const selecionado = useSelectionStore((state) =>
     state.selectedDocumentoIds.includes(documento.id),
@@ -335,7 +335,7 @@ const CartaoDeDocumento = memo(function CartaoDeDocumento({
         // cartão não pode colar um postit nele.
         onPointerDown={arrastar}
         onDoubleClick={abrir}
-        title={documento.notaId ? "Duplo clique abre a nota" : undefined}
+        title={documento.notaId ? t.documentoLayer.duploCliqueAbre : undefined}
       >
         <div
           ref={corpo}
@@ -357,10 +357,10 @@ const CartaoDeDocumento = memo(function CartaoDeDocumento({
           }}
         >
           {texto === undefined ? (
-            <span className="text-muted-foreground italic">Abrindo…</span>
+            <span className="text-muted-foreground italic">{t.geral.abrindo}</span>
           ) : texto.trim() === "" ? (
             <span className="text-muted-foreground italic">
-              Vazia. Duplo clique para escrever.
+              {t.documentoLayer.vazia}
             </span>
           ) : (
             <MarkdownView texto={texto} />

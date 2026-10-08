@@ -51,6 +51,9 @@ import { useAssetList } from "@/hooks/use-asset-list";
 import { useCharacters } from "@/hooks/use-characters";
 import { useCharacterOwners } from "@/hooks/use-character-owners";
 import { FOLGA_MAX, FOLGA_MIN, FOLGA_PADRAO } from "@/lib/geometry/portrait";
+import { idioma } from "@/lib/i18n/idioma";
+import { t } from "@/lib/i18n/personagens";
+import { rico } from "@/lib/i18n/rico";
 import {
   caminhoDaPasta,
   pastaDoMembro,
@@ -67,14 +70,7 @@ import type { AncoraRetrato, Portrait, UniaoDeRetratos } from "@/types/scene";
 import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
 
 /** O nome da área, para o cabeçalho de cada união. */
-const LUGAR: Record<AncoraRetrato, string> = {
-  "cima-esquerda": "cima, à esquerda",
-  "cima-centro": "cima, ao centro",
-  "cima-direita": "cima, à direita",
-  "baixo-esquerda": "baixo, à esquerda",
-  "baixo-centro": "baixo, ao centro",
-  "baixo-direita": "baixo, à direita",
-};
+const LUGAR: Record<AncoraRetrato, string> = t.lugar;
 
 /** As seis, na ordem em que aparecem no seletor: duas linhas de três. */
 const AREAS: AncoraRetrato[] = [
@@ -110,7 +106,7 @@ type Queda = { uniaoId: string | null; indice: number };
  * A união é o mesmo poder dito por uma BORDA: os que estão dentro da moldura
  * colorida se enfileiram juntos, na ordem em que aparecem, na área escrita no
  * cabeçalho dela. Quem está abaixo, sem moldura, está solto — e solto não tem
- * regra nenhuma, fica onde foi largado no palco.
+ * regra nenhuma, fica onde foi largado no quadro de cima.
  *
  * A cena EM EDIÇÃO, e não a que está no ar: é aqui que o mestre monta a
  * próxima. O que a mesa vê é filtrado pela cena no ar, em `MestreShell` —
@@ -261,17 +257,13 @@ export function PortraitList() {
           onClick={() => unir(selecionados)}
         >
           <Group className="size-3.5" />
-          Grid
+          {t.listaDeRetratos.grid}
         </Button>
 
         <span className="text-muted-foreground flex min-w-0 flex-1 items-center gap-1 truncate text-[10px]">
-          {selecionados.length > 0 ? (
-            `${selecionados.length} escolhido${selecionados.length > 1 ? "s" : ""}`
-          ) : (
-            <>
-              <Kbd>Shift</Kbd> + clique escolhe vários
-            </>
-          )}
+          {selecionados.length > 0
+            ? t.listaDeRetratos.escolhidos(selecionados.length)
+            : rico(t.listaDeRetratos.shiftClique, { shift: <Kbd>Shift</Kbd> })}
         </span>
       </div>
 
@@ -282,15 +274,15 @@ export function PortraitList() {
         <CampoDeBusca
           valor={busca}
           onMudar={setBusca}
-          placeholder="Buscar personagem ou pasta"
-          rotulo="Buscar nos retratos da cena"
+          placeholder={t.listaDeRetratos.buscar}
+          rotulo={t.listaDeRetratos.buscarRotulo}
         />
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
         {elenco.length === 0 ? (
           <PainelVazio conteudo={{ tipo: "retratos" }}>
-            Nenhum retrato encontrado
+            {t.listaDeRetratos.nenhum}
           </PainelVazio>
         ) : (
           <div className="space-y-2 p-2">
@@ -321,7 +313,7 @@ export function PortraitList() {
               }),
             ) ? (
               <p className="text-muted-foreground px-2 py-1 text-xs">
-                Nada com “{busca.trim()}”.
+                {t.listaDeRetratos.nadaCom(busca.trim())}
               </p>
             ) : null}
 
@@ -345,8 +337,8 @@ export function PortraitList() {
               {unioes.length > 0 ? (
                 <p className="text-muted-foreground px-1 pb-1 text-[10px]">
                   {soltos.length > 0
-                    ? "Soltos: cada um onde você largou"
-                    : "Arraste para cá para soltar de uma união"}
+                    ? t.listaDeRetratos.soltos
+                    : t.listaDeRetratos.arrasteParaSoltar}
                 </p>
               ) : null}
 
@@ -442,7 +434,7 @@ function BlocoDaUniao({
             encheria o painel de caixas. */}
         <input
           {...nomeDaUniao}
-          aria-label="Nome da união"
+          aria-label={t.listaDeRetratos.nomeDaUniao}
           className="min-w-0 flex-1 truncate bg-transparent text-xs font-medium outline-none"
         />
 
@@ -455,8 +447,7 @@ function BlocoDaUniao({
 
       {membros.length === 0 ? (
         <p className="text-muted-foreground px-1 pb-1 text-[10px] leading-snug">
-          Ninguém desta união está nesta cena. Ela continua guardada, e volta
-          a valer na cena em que eles tiverem token.
+          {t.listaDeRetratos.ninguemNaCena}
         </p>
       ) : (
         <ul className="space-y-1">
@@ -478,9 +469,7 @@ function BlocoDaUniao({
 
       {foraDaCena > 0 ? (
         <p className="text-muted-foreground px-1 pt-1 text-[10px]">
-          {foraDaCena === 1
-            ? "e mais um, fora desta cena"
-            : `e mais ${foraDaCena}, fora desta cena`}
+          {t.listaDeRetratos.maisForaDaCena(foraDaCena)}
         </p>
       ) : null}
     </div>
@@ -505,7 +494,7 @@ function MenuDaUniao({ uniao }: { uniao: UniaoDeRetratos }) {
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={`Ajustar a união ${uniao.nome}`}
+            aria-label={t.listaDeRetratos.ajustarUniao(uniao.nome)}
             className="text-muted-foreground shrink-0"
           >
             <Palette />
@@ -514,7 +503,7 @@ function MenuDaUniao({ uniao }: { uniao: UniaoDeRetratos }) {
       />
       <PopoverContent align="end" className="w-64 space-y-3">
         <div className="space-y-1.5">
-          <Label className="text-xs font-normal">Onde esta união encosta</Label>
+          <Label className="text-xs font-normal">{t.listaDeRetratos.ondeEncosta}</Label>
           {/* Duas linhas de três, que é o desenho das seis áreas na tela: o
               botão de cima à esquerda é o canto de cima à esquerda. Uma lista
               obrigaria a ler seis nomes para achar um canto. */}
@@ -524,7 +513,7 @@ function MenuDaUniao({ uniao }: { uniao: UniaoDeRetratos }) {
                 key={area}
                 variant={uniao.ancora === area ? "secondary" : "outline"}
                 size="sm"
-                aria-label={`Encostar em ${LUGAR[area]}`}
+                aria-label={t.listaDeRetratos.encostarEm(LUGAR[area])}
                 aria-pressed={uniao.ancora === area}
                 className="h-7 text-[10px]"
                 onClick={() => ajustar(uniao.id, { ancora: area })}
@@ -538,7 +527,7 @@ function MenuDaUniao({ uniao }: { uniao: UniaoDeRetratos }) {
 
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
-            <Label className="text-xs font-normal">Entre um e o vizinho</Label>
+            <Label className="text-xs font-normal">{t.listaDeRetratos.entreVizinhos}</Label>
             <span className="text-muted-foreground text-[10px] tabular-nums">
               {emPorcento(uniao.folga)}
             </span>
@@ -547,7 +536,7 @@ function MenuDaUniao({ uniao }: { uniao: UniaoDeRetratos }) {
               folga é uma fração pequena da câmera: passar 0.015 direto daria um
               controle de dois passos. */}
           <Slider
-            aria-label="Espaçamento entre os retratos desta união"
+            aria-label={t.listaDeRetratos.espacamento}
             value={[Math.round(uniao.folga * 1000)]}
             min={Math.round(FOLGA_MIN * 1000)}
             max={Math.round(FOLGA_MAX * 1000)}
@@ -558,8 +547,7 @@ function MenuDaUniao({ uniao }: { uniao: UniaoDeRetratos }) {
           />
           <div className="flex items-center justify-between gap-2">
             <p className="text-muted-foreground text-[10px] leading-snug">
-              Negativo sobrepõe de propósito — é o que dá o elenco ombro a
-              ombro.
+              {t.listaDeRetratos.negativo}
             </p>
             <Button
               variant="ghost"
@@ -568,19 +556,19 @@ function MenuDaUniao({ uniao }: { uniao: UniaoDeRetratos }) {
               onClick={() => ajustar(uniao.id, { folga: FOLGA_PADRAO })}
             >
               <RotateCcw className="size-3" />
-              Padrão
+              {t.listaDeRetratos.padrao}
             </Button>
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-normal">Cor da moldura</Label>
+          <Label className="text-xs font-normal">{t.listaDeRetratos.corDaMoldura}</Label>
           <div className="flex gap-1">
             {CORES_LAPIS.map((cor) => (
               <button
                 key={cor}
                 type="button"
-                aria-label={`Cor ${cor}`}
+                aria-label={t.geral.cor(cor)}
                 aria-pressed={uniao.cor === cor}
                 className={cn(
                   "size-6 rounded-full border-2",
@@ -602,7 +590,7 @@ function MenuDaUniao({ uniao }: { uniao: UniaoDeRetratos }) {
           onClick={() => desunir(uniao.id)}
         >
           <Ungroup className="size-3.5" />
-          Desfazer união
+          {t.listaDeRetratos.desfazerUniao}
         </Button>
       </PopoverContent>
     </Popover>
@@ -709,7 +697,7 @@ function PortraitRow({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs">{personagem.nome}</span>
           <span className="text-muted-foreground block truncate text-[10px]">
-            Sem retrato na ficha
+            {t.listaDeRetratos.semRetrato}
           </span>
         </span>
       </li>
@@ -786,12 +774,11 @@ function PortraitRow({
             }}
           >
             {/* A miniatura seleciona: é o caminho para as alças aparecerem no
-                palco quando o retrato está atrás de outro, ou fora do
-                enquadramento atual. Fora do ar não há o que selecionar, então
-                ela vira só a imagem. */}
+                quadro de cima quando o retrato está atrás de outro. Sem
+                registro não há o que selecionar, então ela vira só a imagem. */}
             <button
               type="button"
-              aria-label={`Selecionar retrato de ${personagem.nome}`}
+              aria-label={t.listaDeRetratos.selecionar(personagem.nome)}
               aria-pressed={selected}
               disabled={!retrato}
               className="bg-muted relative size-10 shrink-0 overflow-hidden rounded"
@@ -821,7 +808,11 @@ function PortraitRow({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs">{personagem.nome}</span>
               <span className="text-muted-foreground block truncate text-[10px]">
-                {noAr ? "no ar" : retrato ? "só você vê" : "fora da tela"}
+                {noAr
+                  ? t.listaDeRetratos.noAr
+                  : retrato
+                    ? t.listaDeRetratos.soVoceVe
+                    : t.listaDeRetratos.foraDaTela}
               </span>
             </span>
 
@@ -829,15 +820,15 @@ function PortraitRow({
               active={noAr}
               label={
                 noAr
-                  ? `Tirar ${personagem.nome} do ar`
-                  : `Pôr ${personagem.nome} no ar`
+                  ? t.listaDeRetratos.tirarDoAr(personagem.nome)
+                  : t.listaDeRetratos.porNoAr(personagem.nome)
               }
               hint={
                 noAr
-                  ? "A mesa está vendo este retrato."
+                  ? t.listaDeRetratos.dicaNoAr
                   : retrato
-                    ? "Fora do ar: aparece apagado só no teu palco, onde você o deixou."
-                    : "Entra no canto de baixo, solto, e você arrasta daí."
+                    ? t.listaDeRetratos.dicaForaDoAr
+                    : t.listaDeRetratos.dicaNovo
               }
               onClick={() => {
                 if (noAr) desarmar(personagem.id);
@@ -862,8 +853,8 @@ function PortraitRow({
               <>
                 <Toggle
                   active={Boolean(retrato.flipX)}
-                  label="Espelhar"
-                  hint="Vira o retrato para o lado da tela em que ele está."
+                  label={t.geral.espelhar}
+                  hint={t.listaDeRetratos.espelharDica}
                   onClick={() => update(retrato.id, { flipX: !retrato.flipX })}
                 >
                   <FlipHorizontal />
@@ -875,7 +866,7 @@ function PortraitRow({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  aria-label={`Esquecer a posição do retrato de ${personagem.nome}`}
+                  aria-label={t.listaDeRetratos.esquecerPosicao(personagem.nome)}
                   onClick={(event) => {
                     event.stopPropagation();
                     remove(retrato.id);
@@ -897,15 +888,15 @@ function PortraitRow({
           <ContextMenuItem onClick={() => unir(alvos)}>
             <Group />
             {alvos.length > 1
-              ? `Unir os ${alvos.length} escolhidos`
-              : `Unir ${personagem.nome} num grupo`}
+              ? t.listaDeRetratos.unirEscolhidos(alvos.length)
+              : t.listaDeRetratos.unirNumGrupo(personagem.nome)}
           </ContextMenuItem>
 
           {unioes.length > 0 ? (
             <ContextMenuSub>
               <ContextMenuSubTrigger>
                 <Group />
-                Juntar a
+                {t.listaDeRetratos.juntarA}
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
                 {unioes.map((alvo) => (
@@ -938,25 +929,25 @@ function PortraitRow({
                 onClick={() => mover(retrato.id, uniao.id, indice - 1)}
               >
                 <ChevronLeft />
-                Mover para a esquerda
+                {t.listaDeRetratos.moverParaAEsquerda}
               </ContextMenuItem>
               <ContextMenuItem
                 disabled={indice >= total - 1}
                 onClick={() => mover(retrato.id, uniao.id, indice + 2)}
               >
                 <ChevronRight />
-                Mover para a direita
+                {t.listaDeRetratos.moverParaADireita}
               </ContextMenuItem>
 
               <ContextMenuSeparator />
 
               <ContextMenuItem onClick={() => soltar(retrato.id)}>
                 <Ungroup />
-                Tirar da união
+                {t.listaDeRetratos.tirarDaUniao}
               </ContextMenuItem>
               <ContextMenuItem onClick={() => desunir(uniao.id)}>
                 <Ungroup />
-                Desfazer {uniao.nome}
+                {t.listaDeRetratos.desfazer(uniao.nome)}
               </ContextMenuItem>
             </>
           ) : null}
@@ -980,12 +971,19 @@ function PortraitRow({
  * O espaçamento como ele aparece no painel.
  *
  * Por cento com uma casa, e o sinal explícito no positivo: o controle vai dos
- * dois lados do zero, e "1,5%" sem sinal não diz de que lado está.
+ * dois lados do zero, e "1,5%" sem sinal não diz de que lado está. O zero vai
+ * sem sinal nenhum, nem o "-0,0" do negativo pequeno arredondado.
+ *
+ * A vírgula ou o ponto são do idioma da tela.
  */
-function emPorcento(folga: number): string {
-  const valor = (folga * 100).toFixed(1).replace(".", ",");
+const PORCENTO = new Intl.NumberFormat(idioma, {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+  signDisplay: "exceptZero",
+});
 
-  return folga > 0 ? `+${valor}%` : valor.replace("-0,0", "0,0") + "%";
+function emPorcento(folga: number): string {
+  return `${PORCENTO.format(folga * 100)}%`;
 }
 
 function primeiro(valor: number | readonly number[]): number {

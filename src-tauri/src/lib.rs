@@ -5,6 +5,7 @@ mod db;
 mod error;
 mod estante;
 mod extensoes;
+mod presenca;
 mod serve;
 mod vault;
 
@@ -169,6 +170,10 @@ pub fn run() {
                 config_dir,
             });
 
+            // Fora do `AppState`: nao e campanha, nem disco, nem daemon. Ver
+            // `presenca`.
+            app.manage(presenca::Presenca::iniciar());
+
             relogio_da_mesa(app.handle().clone());
 
             Ok(())
@@ -245,6 +250,11 @@ pub fn run() {
             commands::character_condicoes_reordenar,
             commands::condicao_alternar,
             commands::condicoes_list,
+            commands::condicao_modelo_vincular_efeito,
+            commands::efeitos_list,
+            commands::efeito_criar,
+            commands::efeito_salvar,
+            commands::efeito_apagar,
             commands::condicao_modelo_criar,
             commands::condicao_modelo_editar,
             commands::condicao_modelo_remover,
@@ -288,6 +298,7 @@ pub fn run() {
             commands::configuracoes_ler,
             commands::configuracoes_gravar,
             commands::configuracoes_abrir_arquivo,
+            presenca::definir_presenca,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

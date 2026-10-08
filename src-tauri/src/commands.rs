@@ -21,7 +21,7 @@ use crate::vault::inventory::{self, Item};
 use crate::vault::dados_de_extensao;
 use crate::vault::{
     assets,
-    documentos, board, characters, condicoes, modelos, players, session, variantes, zip,
+    documentos, board, characters, condicoes, efeitos, modelos, players, session, variantes, zip,
     CampaignInfo,
     Vault,
 };
@@ -1235,7 +1235,10 @@ pub fn character_extensao_ler(
     #[allow(non_snake_case)] extensaoId: String,
 ) -> AppResult<dados_de_extensao::Guardado> {
     if !extensoes::id_valido(&extensaoId) {
-        return Err(AppError::ExtensaoInvalida(format!("id invalido: {extensaoId:?}")));
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "id invalido: {extensaoId:?}",
+            "invalid id: {extensaoId:?}"
+        )));
     }
 
     state.with_vault(|vault| dados_de_extensao::ler(vault, &id, &extensaoId))
@@ -1251,7 +1254,10 @@ pub fn character_extensao_gravar(
     publico: Option<Json>,
 ) -> AppResult<dados_de_extensao::Guardado> {
     if !extensoes::id_valido(&extensaoId) {
-        return Err(AppError::ExtensaoInvalida(format!("id invalido: {extensaoId:?}")));
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "id invalido: {extensaoId:?}",
+            "invalid id: {extensaoId:?}"
+        )));
     }
 
     state.with_vault(|vault| {
@@ -1269,7 +1275,7 @@ pub fn character_condicao_criar(
     nome: String,
     cor: String,
     icone: String,
-    efeito: Option<characters::EfeitoNaFigura>,
+    efeito: Option<String>,
 ) -> AppResult<characters::Condicao> {
     state.with_vault(|vault| characters::criar_condicao(vault, &id, &nome, &cor, &icone, efeito))
 }
@@ -1340,7 +1346,7 @@ pub fn condicao_modelo_criar(
     nome: String,
     cor: String,
     icone: String,
-    efeito: Option<characters::EfeitoNaFigura>,
+    efeito: Option<String>,
 ) -> AppResult<characters::Condicao> {
     state.with_vault(|vault| condicoes::criar(vault, &nome, &cor, &icone, efeito))
 }
@@ -1362,6 +1368,46 @@ pub fn condicao_modelo_remover(
     #[allow(non_snake_case)] modeloId: String,
 ) -> AppResult<()> {
     state.with_vault(|vault| condicoes::remover(vault, &modeloId))
+}
+
+// --- efeitos da campanha ------------------------------------------------------
+
+/// Os efeitos que a campanha criou no editor. Ver `vault::efeitos`.
+#[tauri::command]
+pub fn efeitos_list(state: State<'_, AppState>) -> AppResult<Vec<serde_json::Value>> {
+    state.with_vault(efeitos::load)
+}
+
+/// Um efeito em branco, com id da campanha.
+#[tauri::command]
+pub fn efeito_criar(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    state.with_vault(efeitos::criar)
+}
+
+/// Grava o efeito inteiro, como o editor o tem, e devolve como ficou.
+#[tauri::command]
+pub fn efeito_salvar(
+    state: State<'_, AppState>,
+    efeito: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    state.with_vault(|vault| efeitos::salvar(vault, efeito))
+}
+
+/// Tira o efeito da campanha. As condicoes que o apontam ficam so com o selo.
+#[tauri::command]
+pub fn efeito_apagar(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.with_vault(|vault| efeitos::apagar(vault, &id))
+}
+
+/// Da ao modelo o efeito proprio, e aponta as copias nas fichas para ele.
+/// Ver `condicoes::vincular_efeito`.
+#[tauri::command]
+pub fn condicao_modelo_vincular_efeito(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+    efeito: String,
+) -> AppResult<characters::Condicao> {
+    state.with_vault(|vault| condicoes::vincular_efeito(vault, &modeloId, &efeito))
 }
 
 /// Poe o cardapio na ordem pedida, que e a do submenu do token.
@@ -2051,7 +2097,10 @@ pub fn extensao_habilitar(
     habilitada: bool,
 ) -> AppResult<()> {
     if !extensoes::id_valido(&id) {
-        return Err(AppError::ExtensaoInvalida(format!("id invalido: {id:?}")));
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "id invalido: {id:?}",
+            "invalid id: {id:?}"
+        )));
     }
 
     state.db.extensao_marcar(&id, habilitada)

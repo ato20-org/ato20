@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import { IconeDoPing } from "@/components/playground/icone-do-ping";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import type { Vec } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/palco";
 import { ponteiroNaTela } from "@/lib/mestre/ponteiro-no-palco";
 import {
   anguloDaOpcao,
@@ -135,11 +136,19 @@ type Esperando = {
 export function RodaDePing({
   modo,
   onEscolher,
+  paraCena,
 }: {
   modo: ModoDaRoda;
   onEscolher: (tipo: TipoDePing, ponto: Vec) => void;
+  /**
+   * O ponto da cena sob um pixel da janela, quando não é o do plano: de
+   * esguelha é o chão do tripé, e `null` é o céu -- ali a roda não abre, porque
+   * não há onde o ping cair. Ausente = o `toScene` do palco.
+   */
+  paraCena?: (clientX: number, clientY: number) => Vec | null;
 }) {
-  const { moldura, toScene, recorteDaCamera } = useSceneScale();
+  const { moldura, toScene: doPlano, recorteDaCamera } = useSceneScale();
+  const toScene = paraCena ?? doPlano;
   const [aberta, setAberta] = useState<Aberta | null>(null);
 
   /**
@@ -210,10 +219,13 @@ export function RodaDePing({
     ) {
       desistir();
 
+      const ponto = viva.current.toScene(origem.x, origem.y);
+      if (!ponto) return;
+
       mudar({
         centro: dentroDaJanela(origem),
         origem,
-        ponto: viva.current.toScene(origem.x, origem.y),
+        ponto,
         arrastando,
         escolhida: null,
         fonte,
@@ -541,9 +553,9 @@ function RodaAberta({
     ? APARENCIA_DO_PING[escolhida].rotulo
     : arrastando
       ? fonte.tipo === "tecla"
-        ? "Aponte e solte a tecla"
-        : "Arraste até um ping"
-      : "Escolha um ping";
+        ? t.rodaDePing.aponteESolte
+        : t.rodaDePing.arrasteAte
+      : t.rodaDePing.escolha;
 
   return (
     <div
@@ -565,7 +577,7 @@ function RodaAberta({
 
       <div
         role="menu"
-        aria-label="Pings"
+        aria-label={t.rodaDePing.pings}
         className="roda-de-ping absolute"
         style={{
           left: centro.x - DISCO_PX,
@@ -625,7 +637,7 @@ function RodaAberta({
 
         <button
           type="button"
-          aria-label="Fechar sem marcar"
+          aria-label={t.rodaDePing.fecharSemMarcar}
           className="absolute grid size-9 place-items-center rounded-full bg-white/10 text-white/70"
           style={{ left: DISCO_PX - 18, top: DISCO_PX - 18 }}
           onPointerDown={(event) => {

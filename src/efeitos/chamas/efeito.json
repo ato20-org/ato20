@@ -1,0 +1,79 @@
+{
+  "id": "chamas",
+  "titulo": "Em chamas",
+  "dica": "Fogo em volta da figura, na cor da condição, com a luz tremulando.",
+  "figura": {
+    "tinta": 0.12
+  },
+  "externo": {
+    "imagem": "chamas-512.webp",
+    "mipmaps": {
+      "128": "chamas-128.webp",
+      "256": "chamas-256.webp",
+      "512": "chamas-512.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 16,
+      "fps": 14
+    },
+    "tamanho": 1.5,
+    "ancora": "base",
+    "cores": "condicao",
+    "mascara": "mascara.webp",
+    "profundidade": "profundidade.webp"
+  },
+  "luz": {
+    "raio": 2.5,
+    "efeito": "fogo",
+    "intensidade": 0.85
+  },
+  "particulas": {
+    "quantidade": 10,
+    "tamanho": 0.045,
+    "variacao": 0.6,
+    "direcao": 270,
+    "abertura": 50,
+    "velocidade": 0.9,
+    "vida": 1.4,
+    "emissor": {
+      "largura": 0.8,
+      "altura": 0.35,
+      "ancora": "base"
+    }
+  },
+  "area": {
+    "cor": "#f59e0b",
+    "divisoes": 2,
+    "escala": 1.7,
+    "foco": {
+      "imagem": "chama-128.webp",
+      "mipmaps": {
+        "64": "chama-64.webp",
+        "128": "chama-128.webp"
+      },
+      "quadros": {
+        "colunas": 4,
+        "total": 16,
+        "fps": 14
+      },
+      "cores": "condicao"
+    },
+    "densidade": 4
+  },
+  "base": {
+    "imagem": "chao-de-fogo-128.webp",
+    "mipmaps": {
+      "64": "chao-de-fogo-64.webp",
+      "128": "chao-de-fogo-128.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 16,
+      "fps": 14
+    },
+    "cores": "condicao",
+    "escala": 2,
+    "escurece": 0.5
+  }
+}

@@ -12,6 +12,7 @@ import {
   type Marcador,
 } from "@/lib/vault/estante";
 import { invalidarMarcadores } from "@/lib/store/use-marcadores-store";
+import { t } from "@/lib/i18n/mestre";
 
 type MarcadoresApi = {
   marcadores: Marcador[];
@@ -58,7 +59,7 @@ export function useMarcadores(livroId: string): MarcadoresApi {
         setSemCampanha(isNoCampaign(cause));
 
         if (!isNoCampaign(cause)) {
-          toast.error(cause instanceof Error ? cause.message : "Falha ao ler os marcadores.");
+          toast.error(cause instanceof Error ? cause.message : t.leitor.falhaAoLer);
         }
       },
     );
@@ -91,7 +92,7 @@ export function useMarcadores(livroId: string): MarcadoresApi {
           return;
         }
 
-        toast.error(cause instanceof Error ? cause.message : "Falha ao marcar a página.");
+        toast.error(cause instanceof Error ? cause.message : t.leitor.falhaAoMarcar);
       }
     },
     [livroId],
@@ -110,7 +111,7 @@ export function useMarcadores(livroId: string): MarcadoresApi {
         atuais.map((marcador) => (marcador.id === id ? { ...marcador, rotulo: limpo } : marcador)),
       );
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao renomear.");
+      toast.error(cause instanceof Error ? cause.message : t.leitor.falhaAoRenomear);
     }
   }, []);
 
@@ -120,7 +121,7 @@ export function useMarcadores(livroId: string): MarcadoresApi {
       invalidarMarcadores();
       setMarcadores((atuais) => atuais.filter((marcador) => marcador.id !== id));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao remover o marcador.");
+      toast.error(cause instanceof Error ? cause.message : t.leitor.falhaAoRemover);
     }
   }, []);
 

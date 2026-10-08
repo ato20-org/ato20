@@ -13,7 +13,10 @@ import { CampaignBoot } from "@/components/mestre/campaign-boot";
 import { CampanhaPerdida } from "@/components/mestre/campanha-perdida";
 import { CampaignSplash } from "@/components/mestre/campaign-splash";
 import { MestreGate } from "@/components/mestre/mestre-gate";
+import { PresencaDoMestre } from "@/components/mestre/presenca-do-mestre";
 import { Button } from "@/components/ui/button";
+import { t } from "@/lib/i18n/mestre";
+import { acompanharIdioma } from "@/lib/i18n/trocar";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
@@ -52,6 +55,10 @@ export function Mestre() {
     // troca de tamanho é menos incômoda de se ver acontecer -- `setZoom` é IPC,
     // então o primeiro quadro nasce em 100% e salta.
     restaurarPreferencias();
+    // O idioma logo depois: ele espera o mesmo arquivo da máquina que o zoom
+    // acabou de pedir, e recarrega a janela se o arquivo disser outro idioma
+    // que o espelho com que esta carga nasceu.
+    acompanharIdioma();
     // As extensões junto com o zoom, e pela mesma razão: o tema delas vale para
     // a porta e para a tela de erro, que é justamente onde a campanha não abriu
     // e o mestre ainda precisa ler a interface. Carregar só ao abrir a mesa
@@ -73,6 +80,8 @@ export function Mestre() {
     // couber rola dentro de quem o mostra -- o palco, o painel, a coluna da
     // porta --, e nunca arrastando a barra de título embora.
     <div className="flex h-dvh flex-col overflow-hidden">
+      {/* Fora do `Conteudo`: o título e o Discord valem para a porta também. */}
+      <PresencaDoMestre />
       <WindowChrome
         // A campanha na ponta esquerda, junto do nome: ela é o que a janela é,
         // e não um controle de gesto que dispute espaço com a barra de
@@ -145,7 +154,7 @@ function Conteudo({
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-destructive max-w-sm text-sm">{error}</p>
         <Button variant="outline" size="sm" onClick={onRetry}>
-          Tentar de novo
+          {t.abertura.tentarDeNovo}
         </Button>
       </div>
     );
@@ -162,7 +171,7 @@ function Conteudo({
         passos={[
           {
             chave: "campanhas",
-            rotulo: "Procurando as campanhas",
+            rotulo: t.abertura.procurando,
             estado: "fazendo",
           },
         ]}
@@ -182,7 +191,7 @@ function Conteudo({
         passos={[
           {
             chave: "campanha",
-            rotulo: "Abrindo a campanha",
+            rotulo: t.abertura.abrindo,
             estado: "fazendo",
           },
         ]}

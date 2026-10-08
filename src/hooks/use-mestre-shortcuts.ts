@@ -15,6 +15,31 @@ function isTyping(target: EventTarget | null): boolean {
 }
 
 /**
+ * A tecla nasceu num painel de nota ou de livro, ao lado do mapa?
+ *
+ * O painel recebe o foco quando é clicado (ver `PainelDeAbas`), e é isso que
+ * põe a tecla aqui dentro em vez de no `body`. Lendo o livro, o Delete não
+ * pode apagar o token selecionado no mapa, nem a seta andar com a câmera.
+ */
+function noPainelLateral(target: EventTarget | null): boolean {
+  return Boolean((target as HTMLElement | null)?.closest?.("[data-painel-lateral]"));
+}
+
+/**
+ * Os grupos que agem sobre o PALCO, e por isso calam com o foco num painel.
+ * Paleta, som e os comandos de plugin continuam valendo: são da sessão, e não
+ * do mapa.
+ */
+const GRUPOS_DO_PALCO: ReadonlySet<string> = new Set([
+  "Desfazer",
+  "Área de transferência",
+  "Câmera",
+  "Camadas",
+  "Seleção",
+  "Mesa",
+]);
+
+/**
  * Atalhos do Mestre.
  *
  * O listener é um laço sobre a tabela de `atalhos.ts`, e não um encadeado de
@@ -34,7 +59,11 @@ export function useMestreShortcuts(): void {
       // tabela É a precedência. Ver a nota em `ATALHOS_BASE`. A tabela é
       // consultada a cada tecla e não capturada no efeito: os comandos dos
       // plugins entram e saem dela conforme extensões são ligadas.
-      const atalho = atalhos().find(({ combina }) => combina(event));
+      const doPainel = noPainelLateral(event.target);
+      const atalho = atalhos().find(
+        ({ combina, grupo }) =>
+          !(doPainel && GRUPOS_DO_PALCO.has(grupo)) && combina(event),
+      );
       if (!atalho) return;
 
       if (atalho.impedirPadrao) event.preventDefault();
@@ -46,7 +75,7 @@ export function useMestreShortcuts(): void {
     // atalho deixa a tecla passar quando não tem nada interno, e o browser
     // dispara `paste` com o texto pronto. Ver `colarTextoDoSistema`.
     const handlePaste = (event: ClipboardEvent) => {
-      if (isTyping(event.target)) return;
+      if (isTyping(event.target) || noPainelLateral(event.target)) return;
 
       // Imagem ANTES do texto, e a ordem é a regra: um endereço de imagem
       // também é texto, e o ramo de baixo o transformaria numa nota no quadro

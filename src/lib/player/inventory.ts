@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
 import { authorized, fail } from "@/lib/player/session";
 import type { ItemInventario, NovoItem, PatchItem } from "@/types/inventory";
 
@@ -25,7 +26,7 @@ export async function myInventory(
     headers: authorized(codigo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível ler o inventário.");
+  if (!response.ok) throw await fail(response, t.erros.lerInventario);
 
   return (await response.json()) as ItemInventario[];
 }
@@ -49,7 +50,7 @@ export async function addItem(
     body: JSON.stringify(novo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível criar o item.");
+  if (!response.ok) throw await fail(response, t.erros.criarItem);
 
   return (await response.json()) as ItemInventario;
 }
@@ -76,7 +77,7 @@ export async function updateItem(
     },
   );
 
-  if (!response.ok) throw await fail(response, "Não foi possível salvar o item.");
+  if (!response.ok) throw await fail(response, t.erros.salvarItem);
 
   return (await response.json()) as ItemInventario;
 }
@@ -91,7 +92,7 @@ export async function removeItem(
     { method: "DELETE", headers: authorized(codigo) },
   );
 
-  if (!response.ok) throw await fail(response, "Não foi possível remover o item.");
+  if (!response.ok) throw await fail(response, t.erros.removerItem);
 }
 
 /**
@@ -121,7 +122,7 @@ export async function uploadItemImage(
     { method: "PUT", headers: authorized(codigo), body },
   );
 
-  if (!response.ok) throw await fail(response, `Não foi possível enviar ${file.name}.`);
+  if (!response.ok) throw await fail(response, t.erros.enviar(file.name));
 
   return (await response.json()) as ItemInventario;
 }

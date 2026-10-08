@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Loader2, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, Languages, Loader2, LogOut, UserRound } from "lucide-react";
 
 import {
   AlertDialog,
@@ -26,11 +26,20 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { comum } from "@/lib/i18n/comum";
+import { escolherIdiomaDoJogador } from "@/lib/i18n/escolha-do-jogador";
+import { IDIOMAS, NOME_DO_IDIOMA, idioma, normalizar } from "@/lib/i18n/idioma";
+import { t } from "@/lib/i18n/jogador";
 import { useCadernoStore } from "@/lib/store/use-caderno-store";
 import { usePlayerStore } from "@/lib/store/use-player-store";
 
@@ -63,7 +72,7 @@ export function PlayerMenu({ codigo }: { codigo: string }) {
               variant="ghost"
               size="sm"
               className="h-7 min-w-0 max-w-40 gap-1 px-1.5 font-normal"
-              aria-label="Tua conta nesta mesa"
+              aria-label={t.menu.conta}
             >
               <UserRound className="shrink-0 opacity-70" />
               <span className="truncate">{sheet.nome}</span>
@@ -75,8 +84,34 @@ export function PlayerMenu({ codigo }: { codigo: string }) {
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuItem onClick={() => setRenomeando(true)}>
             <UserRound />
-            Mudar de nome
+            {t.menu.mudarNome}
           </DropdownMenuItem>
+
+          {/* O idioma DESTE celular. O do mestre chega pelo convite e pelo
+              quadro; um jogador de fora numa mesa brasileira troca aqui uma
+              vez, e o aparelho lembra. Cada idioma escrito nele mesmo, para
+              achar o seu sem ler o da tela. */}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Languages />
+              {t.menu.idioma}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup
+                value={idioma}
+                onValueChange={(valor) => {
+                  const escolha = normalizar(valor);
+                  if (escolha && escolha !== idioma) escolherIdiomaDoJogador(escolha);
+                }}
+              >
+                {IDIOMAS.map((cada) => (
+                  <DropdownMenuRadioItem key={cada} value={cada} lang={cada}>
+                    {NOME_DO_IDIOMA[cada]}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
 
           <DropdownMenuSeparator />
 
@@ -116,24 +151,23 @@ function SairItem({ onSair }: { onSair: () => void }) {
     <>
       <DropdownMenuItem variant="destructive" onClick={() => setAberto(true)}>
         <LogOut />
-        Sair da mesa
+        {t.menu.sair}
       </DropdownMenuItem>
 
       <AlertDialog open={aberto} onOpenChange={setAberto}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sair desta mesa?</AlertDialogTitle>
+            <AlertDialogTitle>{t.menu.sairTitulo}</AlertDialogTitle>
             <AlertDialogDescription>
-              Este aparelho esquece a credencial e volta a pedir um nome. O que
-              você já mandou para a mesa fica lá, mas entrar de novo cria um
-              jogador novo — o mestre precisa te ligar de volta ao teu
-              personagem.
+              {t.menu.sairExplicacao}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={onSair}>Sair</AlertDialogAction>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
+            <AlertDialogAction onClick={onSair}>
+              {t.menu.sairConfirmar}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -199,15 +233,12 @@ function RenomearForm({
       }}
     >
       <DialogHeader>
-        <DialogTitle>Mudar de nome</DialogTitle>
-        <DialogDescription>
-          É o nome que o mestre vê na lista da mesa. Trocar não mexe no teu
-          personagem.
-        </DialogDescription>
+        <DialogTitle>{t.menu.mudarNome}</DialogTitle>
+        <DialogDescription>{t.menu.renomearExplicacao}</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="player-nome">Teu nome</Label>
+        <Label htmlFor="player-nome">{t.menu.teuNome}</Label>
         <Input
           id="player-nome"
           value={nome}
@@ -220,11 +251,11 @@ function RenomearForm({
 
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onPronto}>
-          Cancelar
+          {comum.cancelar}
         </Button>
         <Button type="submit" disabled={inalterado || salvando}>
           {salvando ? <Loader2 className="animate-spin" /> : null}
-          Salvar
+          {t.menu.salvar}
         </Button>
       </DialogFooter>
     </form>

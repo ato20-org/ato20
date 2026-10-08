@@ -34,6 +34,16 @@ export const CORNER_HANDLES: readonly ResizeHandle[] = ["nw", "ne", "se", "sw"];
 /** Menor lado permitido, em unidades de cena. Abaixo disso a alça some sob o item. */
 export const MIN_ITEM_SIZE = 24;
 
+/**
+ * O menor lado de um item de CENA -- token, mobília --, em unidades de cena.
+ *
+ * Abaixo do `MIN_ITEM_SIZE`: num mapa de cidade inteira o token de gente tem
+ * poucas unidades de cena, e o 2.5D já deixava encolher até aqui. Os dois
+ * modos têm de concordar, senão o que o 2.5D encolheu o 2D não deixa encolher
+ * de novo. A alça cobre o item pequeno longe; perto, a câmera resolve.
+ */
+export const MIN_SCENE_ITEM_SIZE = 8;
+
 export const ROTATION_SNAP_DEGREES = 15;
 
 /** Cursores por setor de 45 graus, começando no que aponta para a direita. */
@@ -139,13 +149,21 @@ export type ResizeOptions = {
    * unidade por gesto.
    */
   round?: boolean;
+  /**
+   * O menor lado, em unidades de cena. Padrão: `MIN_ITEM_SIZE`.
+   *
+   * A parede passa o dela: um muro de verdade pode ser bem mais fino que um
+   * token, e a `linha` tem um lado zero por natureza -- o piso de item a
+   * entortava ao primeiro arrasto de alça. Ver `ladoMinimoDaParede`.
+   */
+  minimo?: number;
 };
 
 export function resizeItem(
   item: TransformBox,
   handle: ResizeHandle,
   delta: Vec,
-  { keepAspect = false, round = true }: ResizeOptions = {},
+  { keepAspect = false, round = true, minimo = MIN_ITEM_SIZE }: ResizeOptions = {},
 ): ItemBox {
   const direction = HANDLE_DIRECTION[handle];
   const local = rotateVec(delta, -item.rotation);
@@ -171,8 +189,11 @@ export function resizeItem(
   // fica com o piso proporcional.
   const aspectLocked = keepAspect && direction.x !== 0 && direction.y !== 0;
   const ratio = item.height / item.width;
-  const minWidth = aspectLocked ? Math.max(MIN_ITEM_SIZE, MIN_ITEM_SIZE / ratio) : MIN_ITEM_SIZE;
-  const minHeight = aspectLocked ? Math.max(MIN_ITEM_SIZE, MIN_ITEM_SIZE * ratio) : MIN_ITEM_SIZE;
+  // Sem proporção de verdade -- a `linha` deitada tem altura zero -- o piso é
+  // o mesmo nos dois eixos: dividir por ela daria infinito, ou NaN com piso 0.
+  const proporcional = aspectLocked && ratio > 0 && Number.isFinite(ratio);
+  const minWidth = proporcional ? Math.max(minimo, minimo / ratio) : minimo;
+  const minHeight = proporcional ? Math.max(minimo, minimo * ratio) : minimo;
 
   const width = Math.max(minWidth, item.width + deltaWidth);
   const height = Math.max(minHeight, item.height + deltaHeight);

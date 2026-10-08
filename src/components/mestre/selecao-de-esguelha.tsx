@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 import {
+  ArrowLeftRight,
   BedSingle,
   Drama,
   FlipHorizontal,
@@ -23,13 +24,27 @@ import {
   type CameraOrbital,
   type Tela,
 } from "@/lib/geometry/camera-orbital";
-import { anguloDoFacho } from "@/lib/geometry/luz";
-import type { Vec } from "@/lib/geometry/transform";
+import {
+  cantosDeitado,
+  centroDe,
+  olharDe,
+  peDe,
+  pivoDe,
+  raioDoAnel,
+  sobeDe,
+} from "@/lib/geometry/peca-de-esguelha";
+import { MIN_SCENE_ITEM_SIZE, type Vec } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/ferramentas";
 import {
   flipSelection,
   removeSelection,
   toggleSelectionLock,
 } from "@/lib/mestre/item-actions";
+import {
+  LIMIAR_PARA_APONTAR,
+  giroEmVolta,
+  miraDaLanterna,
+} from "@/lib/mestre/roda-da-lanterna";
 import {
   moverNoGesto,
   terminarGesto,
@@ -38,11 +53,7 @@ import {
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { cn } from "@/lib/utils";
-import {
-  CONE_DA_LANTERNA,
-  type CanvasItem,
-  type Scene,
-} from "@/types/scene";
+import type { CanvasItem, Scene } from "@/types/scene";
 
 /**
  * O que é da mão no 2.5D, e não da câmera: o gizmo e as peças, em pé no chão
@@ -60,70 +71,18 @@ const ALCA_PX = 9;
 const PONTOS_DO_ANEL = 40;
 /** O passo do giro com Shift, em graus. */
 const PASSO_DO_GIRO = 15;
-/** O tamanho mínimo de uma peça, em unidades de cena. */
-const LADO_MINIMO = 8;
 
 type Camera = { camera: CameraOrbital; tela: Tela };
-
-/** O pé da figura em pé, onde o `ChaoInclinado` a põe. Ver `PecaDoChao`. */
-function peDe(item: CanvasItem): Vec {
-  return { x: item.x + item.width / 2, y: item.y + item.width };
-}
-
-function centroDe(item: CanvasItem): Vec {
-  return { x: item.x + item.width / 2, y: item.y + item.height / 2 };
-}
-
-/**
- * Em volta de onde a peça gira, no chão: o pé da que está em pé, o meio da
- * deitada.
- */
-function pivoDe(item: CanvasItem): Vec {
-  return item.deitado ? centroDe(item) : peDe(item);
-}
-
-/** O raio do anel do olhar, no chão, em unidades de cena. */
-function raioDoAnel(item: CanvasItem): number {
-  return item.deitado
-    ? Math.max(item.width, item.height) * 0.65
-    : Math.max(item.width, 24) * 0.9;
-}
-
-/**
- * Para onde a figura olha, em graus no sentido do sol. É o facho da lanterna
- * dela, ou o padrão do facho quando não há lanterna: girar o olhar aqui é o
- * mesmo `rotation` do 2D, que é o que leva o facho junto. Ver `anguloDoFacho`.
- */
-function olharDe(item: CanvasItem): number {
-  return anguloDoFacho(
-    item,
-    item.luz?.cone?.angulo ?? CONE_DA_LANTERNA.angulo,
-  );
-}
-
-/** Os quatro cantos da peça deitada no chão, no giro dela. */
-function cantosDeitado(item: CanvasItem): Vec[] {
-  const centro = centroDe(item);
-  const giro = (item.rotation * Math.PI) / 180;
-  const cos = Math.cos(giro);
-  const sen = Math.sin(giro);
-  const meia = { x: item.width / 2, y: item.height / 2 };
-  return [
-    { x: -meia.x, y: -meia.y },
-    { x: meia.x, y: -meia.y },
-    { x: meia.x, y: meia.y },
-    { x: -meia.x, y: meia.y },
-  ].map(({ x, y }) => ({
-    x: centro.x + x * cos - y * sen,
-    y: centro.y + x * sen + y * cos,
-  }));
-}
 
 /**
  * O contorno da peça na tela: o retângulo da figura em pé (`cartazNaTela`), ou
  * os quatro cantos da deitada projetados no chão. `null` se ela não se vê.
  */
-function contornoNaTela(agora: Camera, item: CanvasItem): Vec[] | null {
+function contornoNaTela(
+  agora: Camera,
+  item: CanvasItem,
+  sobe: number,
+): Vec[] | null {
   if (item.deitado) {
     const cantos: Vec[] = [];
     for (const canto of cantosDeitado(item)) {
@@ -139,6 +98,7 @@ function contornoNaTela(agora: Camera, item: CanvasItem): Vec[] | null {
     peDe(item),
     item.width,
     item.height,
+    sobe,
   );
   if (!caixa) return null;
   const { x, y, largura, altura } = caixa;
@@ -209,23 +169,32 @@ export function SelecaoDeEsguelha({
 
       const pivo = pivoDe(unico);
       const raio = raioDoAnel(unico);
+      // No teto em que ela pisa, quando pisa num: o anel é do pé dela.
+      const sobe = sobeDe(unico, scene.paredes);
       const volta: Vec[] = [];
       for (let i = 0; i < PONTOS_DO_ANEL; i += 1) {
         const a = (i / PONTOS_DO_ANEL) * Math.PI * 2;
-        const naTela = projetar(agora.camera, agora.tela, {
-          x: pivo.x + Math.cos(a) * raio,
-          y: pivo.y + Math.sin(a) * raio,
-        });
+        const naTela = projetar(
+          agora.camera,
+          agora.tela,
+          { x: pivo.x + Math.cos(a) * raio, y: pivo.y + Math.sin(a) * raio },
+          sobe,
+        );
         if (!naTela) return esconder();
         volta.push(naTela);
       }
       const olhar = (olharDe(unico) * Math.PI) / 180;
-      const centro = projetar(agora.camera, agora.tela, pivo);
-      const bico = projetar(agora.camera, agora.tela, {
-        x: pivo.x + Math.cos(olhar) * raio * 1.25,
-        y: pivo.y + Math.sin(olhar) * raio * 1.25,
-      });
-      const contorno = contornoNaTela(agora, unico);
+      const centro = projetar(agora.camera, agora.tela, pivo, sobe);
+      const bico = projetar(
+        agora.camera,
+        agora.tela,
+        {
+          x: pivo.x + Math.cos(olhar) * raio * 1.25,
+          y: pivo.y + Math.sin(olhar) * raio * 1.25,
+        },
+        sobe,
+      );
+      const contorno = contornoNaTela(agora, unico, sobe);
       if (!centro || !bico || !contorno) return esconder();
 
       partes.forEach((parte) => parte?.removeAttribute("visibility"));
@@ -254,7 +223,9 @@ export function SelecaoDeEsguelha({
       for (const item of itens) {
         const no = contornos.current.get(item.id);
         if (!no) continue;
-        const pontos = agora ? contornoNaTela(agora, item) : null;
+        const pontos = agora
+          ? contornoNaTela(agora, item, sobeDe(item, scene.paredes))
+          : null;
         if (!pontos) {
           no.setAttribute("visibility", "hidden");
           continue;
@@ -292,6 +263,10 @@ export function SelecaoDeEsguelha({
   const livres = itens.filter((item) => !item.locked);
   const travada = itens.every((item) => item.locked);
   const deitados = itens.every((item) => item.deitado);
+  // Só quem está de pé tem lado da tela para onde olhar.
+  const emPe = livres.filter((item) => !item.deitado);
+  const espelhamPeloOlhar =
+    emPe.length > 0 && emPe.every((item) => item.espelharPeloOlhar);
   const personagemId = unico?.personagemId;
   // Azul quando é gente, como o gizmo do 2D: ver `tom` em `TransformHandles`.
   const cor = personagemId
@@ -348,7 +323,12 @@ export function SelecaoDeEsguelha({
     const agora = instante();
     if (!unico || !agora) return;
     const item = unico;
-    const ancora = projetar(agora.camera, agora.tela, pivoDe(item));
+    const ancora = projetar(
+      agora.camera,
+      agora.tela,
+      pivoDe(item),
+      sobeDe(item, scene.paredes),
+    );
     if (!ancora) return;
     const inicio = naArea(evento);
     const d0 = Math.hypot(inicio.x - ancora.x, inicio.y - ancora.y);
@@ -357,7 +337,7 @@ export function SelecaoDeEsguelha({
     arrastar(evento, (nativo) => {
       const aqui = naArea(nativo);
       const fator = Math.hypot(aqui.x - ancora.x, aqui.y - ancora.y) / d0;
-      const largura = Math.max(LADO_MINIMO, item.width * fator);
+      const largura = Math.max(MIN_SCENE_ITEM_SIZE, item.width * fator);
       const altura = (largura / item.width) * item.height;
       if (item.deitado) {
         const centro = centroDe(item);
@@ -379,27 +359,42 @@ export function SelecaoDeEsguelha({
   }
 
   /**
-   * A ponta do anel: o olhar segue a mão em volta do pé, pelo chão. Gira o
-   * `rotation`, e com ele o facho. Shift anda de quinze em quinze graus.
+   * A ponta do anel: o olhar segue a mão em volta do pé, pelo chão. Shift anda
+   * de quinze em quinze graus.
+   *
+   * Com lanterna, mira o FACHO e o token não gira -- a mesma mira da roda do
+   * 2D (`miraDaLanterna`): girar o `rotation` aqui virava o desenho no 2D, e o
+   * que o mestre pediu foi para onde a luz olha. Sem lanterna o olhar não tem
+   * facho onde morar, e gira a figura, como sempre.
    */
   function girar(evento: React.PointerEvent) {
     if (!unico) return;
     const item = unico;
     const pivo = pivoDe(item);
-    const angulo = (ponto: Vec) =>
-      (Math.atan2(ponto.y - pivo.y, ponto.x - pivo.x) * 180) / Math.PI;
     const inicio = paraChao(evento.clientX, evento.clientY);
     if (!inicio) return;
-    const a0 = angulo(inicio);
+    // Passou do limiar uma vez, é mira até soltar. Ver `LIMIAR_PARA_APONTAR`.
+    let apontou = false;
 
     arrastar(evento, (nativo) => {
       const aqui = paraChao(nativo.clientX, nativo.clientY);
       if (!aqui) return null;
-      let giro = item.rotation + angulo(aqui) - a0;
-      if (nativo.shiftKey) {
-        giro = Math.round(giro / PASSO_DO_GIRO) * PASSO_DO_GIRO;
+      const giro = giroEmVolta(pivo, inicio, aqui);
+
+      if (item.luz) {
+        apontou ||= Math.abs(giro) >= LIMIAR_PARA_APONTAR;
+        const luz = miraDaLanterna(item, giro, {
+          encaixar: nativo.shiftKey,
+          apontar: apontou,
+        });
+        return luz ? { luz } : null;
       }
-      return { rotation: ((giro % 360) + 360) % 360 };
+
+      let rotacao = item.rotation + giro;
+      if (nativo.shiftKey) {
+        rotacao = Math.round(rotacao / PASSO_DO_GIRO) * PASSO_DO_GIRO;
+      }
+      return { rotation: ((rotacao % 360) + 360) % 360 };
     });
   }
 
@@ -413,6 +408,22 @@ export function SelecaoDeEsguelha({
         // `undefined` e não `false`: em pé é o padrão, e o campo ausente é
         // como ele se escreve na cena.
         patch: { deitado: deitados ? undefined : true },
+      })),
+    );
+  }
+
+  /**
+   * Liga ou desliga o espelhar pelo olhar da seleção em pé, menos o travado.
+   * Ver `CanvasItem.espelharPeloOlhar`.
+   */
+  function alternarEspelharPeloOlhar() {
+    if (emPe.length === 0) return;
+    useSceneStore.getState().updateItems(
+      scene.id,
+      emPe.map((item) => ({
+        id: item.id,
+        // `undefined` e não `false`: desligado é o padrão.
+        patch: { espelharPeloOlhar: espelhamPeloOlhar ? undefined : true },
       })),
     );
   }
@@ -465,7 +476,7 @@ export function SelecaoDeEsguelha({
               style={{ pointerEvents: "all" }}
               onPointerDown={girar}
             >
-              <title>Para onde olha (Shift: de 15 em 15°)</title>
+              <title>{t.esguelha.paraOndeOlha}</title>
             </circle>
             <rect
               ref={alca}
@@ -480,7 +491,7 @@ export function SelecaoDeEsguelha({
               style={{ pointerEvents: "all" }}
               onPointerDown={redimensionar}
             >
-              <title>Tamanho</title>
+              <title>{t.esguelha.tamanho}</title>
             </rect>
           </g>
         ) : null}
@@ -493,7 +504,7 @@ export function SelecaoDeEsguelha({
       >
         {unico && !unico.locked ? (
           <Botao
-            rotulo="Espelhar na horizontal"
+            rotulo={t.esguelha.espelhar}
             classe={cor.botao}
             aoApertar={() => flipSelection("x")}
           >
@@ -502,7 +513,7 @@ export function SelecaoDeEsguelha({
         ) : null}
         {livres.length > 0 ? (
           <Botao
-            rotulo={deitados ? "Levantar" : "Deitar no chão"}
+            rotulo={deitados ? t.esguelha.levantar : t.esguelha.deitar}
             classe={cor.botao}
             aoApertar={alternarDeitado}
           >
@@ -513,9 +524,27 @@ export function SelecaoDeEsguelha({
             )}
           </Botao>
         ) : null}
+        {emPe.length > 0 ? (
+          <Botao
+            rotulo={
+              espelhamPeloOlhar
+                ? t.esguelha.pararDeEspelharPeloOlhar
+                : t.esguelha.espelharPeloOlhar
+            }
+            // Ligado com o anel claro em volta: é um interruptor, e não uma
+            // ação, e o estado tem de se ler sem passar o mouse.
+            classe={cn(
+              cor.botao,
+              espelhamPeloOlhar ? "ring-2 ring-white" : "opacity-60",
+            )}
+            aoApertar={alternarEspelharPeloOlhar}
+          >
+            <ArrowLeftRight className="size-3" />
+          </Botao>
+        ) : null}
         {personagemId ? (
           <Botao
-            rotulo="Abrir a ficha do personagem"
+            rotulo={t.esguelha.abrirFicha}
             classe={cor.botao}
             aoApertar={() => abrirJanela({ tipo: "personagem", personagemId })}
           >
@@ -523,7 +552,7 @@ export function SelecaoDeEsguelha({
           </Botao>
         ) : null}
         <Botao
-          rotulo={travada ? "Destravar" : "Travar"}
+          rotulo={travada ? t.esguelha.destravar : t.esguelha.travar}
           classe={travada ? "bg-amber-500 text-neutral-950" : cor.botao}
           aoApertar={toggleSelectionLock}
         >
@@ -534,7 +563,7 @@ export function SelecaoDeEsguelha({
           )}
         </Botao>
         <Botao
-          rotulo="Excluir"
+          rotulo={t.esguelha.excluir}
           classe="bg-red-600 text-white"
           aoApertar={() => removeSelection()}
         >

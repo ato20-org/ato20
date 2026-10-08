@@ -38,6 +38,7 @@ import {
   absorverImportacao,
   importarCaminhosNoAcervo,
 } from "@/lib/mestre/importar-arquivos";
+import { t } from "@/lib/i18n/arquivos";
 import { removePin } from "@/lib/mestre/item-actions";
 import { cn } from "@/lib/utils";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
@@ -132,7 +133,7 @@ export function PinNote({
         absorverImportacao(resultado).map((asset) => asset.id),
       );
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao anexar.");
+      toast.error(cause instanceof Error ? cause.message : t.pinNote.falhaAoAnexar);
     } finally {
       setImportando(false);
     }
@@ -232,8 +233,8 @@ export function PinNote({
             <Input
               autoFocus
               className="h-5 w-full min-w-0 rounded-none border-0 bg-transparent px-0 text-xs font-medium shadow-none focus-visible:ring-0"
-              placeholder="Sem título"
-              aria-label="Título do ponto"
+              placeholder={t.pinNote.semTitulo}
+              aria-label={t.pinNote.tituloDoPonto}
               value={pin.title}
               onChange={(event) =>
                 updatePin(sceneId, pin.id, { title: event.target.value })
@@ -255,13 +256,13 @@ export function PinNote({
                 !pin.title && "text-muted-foreground italic",
               )}
             >
-              {pin.title || "Sem título"}
+              {pin.title || t.pinNote.semTitulo}
             </span>
           )}
           {/* O subtítulo sai quando recolhida, como na janela da bancada. */}
           {recolhida ? null : (
             <span className="text-muted-foreground block truncate text-[10px]">
-              Só você vê. A mesa recebe o que você transmitir.
+              {t.pinNote.soVoceVe}
             </span>
           )}
         </span>
@@ -270,7 +271,7 @@ export function PinNote({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label="Editar o título do ponto"
+            aria-label={t.pinNote.editarTitulo}
             className="text-muted-foreground hover:text-foreground"
             onClick={() => setEditandoTitulo(true)}
           >
@@ -281,7 +282,7 @@ export function PinNote({
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={recolhida ? "Expandir a nota" : "Recolher a nota"}
+          aria-label={recolhida ? t.pinNote.expandir : t.pinNote.recolher}
           aria-expanded={!recolhida}
           onClick={() => setRecolhida((atual) => !atual)}
         >
@@ -294,7 +295,7 @@ export function PinNote({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label="Tirar esta nota da tela"
+                aria-label={t.pinNote.tirarDaTela}
                 // Um X, e não o alfinete cortado: o `PinOff` desenhava um
                 // alfinete de 16 pixels com uma barra por cima, e nesse tamanho
                 // ele lia como "alfinete" e não como "fechar" -- o mestre o
@@ -313,10 +314,7 @@ export function PinNote({
             }
           />
           <TooltipContent>
-            <p className="max-w-48">
-              Tira a nota da tela. O ponto continua no mapa — clicar nele de
-              novo fecha e abre esta nota.
-            </p>
+            <p className="max-w-48">{t.pinNote.tirarDaTelaDica}</p>
           </TooltipContent>
         </Tooltip>
 
@@ -329,8 +327,8 @@ export function PinNote({
         <div className="space-y-3 p-3">
           <Textarea
             className="min-h-24 resize-y text-sm"
-            placeholder="O que tem aqui, o que acontece, o que os jogadores não sabem."
-            aria-label="Nota do ponto"
+            placeholder={t.pinNote.notaPlaceholder}
+            aria-label={t.pinNote.notaDoPonto}
             value={pin.note}
             onChange={(event) =>
               updatePin(sceneId, pin.id, { note: event.target.value })
@@ -360,7 +358,7 @@ export function PinNote({
             onClick={() => removePin(sceneId, pin.id)}
           >
             <Trash2 />
-            Apagar este ponto
+            {t.pinNote.apagarPonto}
           </Button>
         </div>
       )}
@@ -425,7 +423,7 @@ function AnexosDoPonto({
         ) : (
           <ImagePlus className="size-4" aria-hidden />
         )}
-        Arraste imagens para cá
+        {t.geral.arrasteImagens}
       </button>
     );
   }
@@ -459,7 +457,7 @@ function AnexosDoPonto({
           type="button"
           onClick={onEscolher}
           disabled={importando}
-          aria-label="Escolher imagens do computador"
+          aria-label={t.geral.escolherImagens}
           className={cn(
             "text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex aspect-square w-full items-center justify-center rounded-md border border-dashed focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none",
             recebendo && "border-primary text-primary",
@@ -512,7 +510,7 @@ function Anexo({
   const transmit = useSpotlightStore((state) => state.transmit);
   const clear = useSpotlightStore((state) => state.clear);
 
-  const nome = asset?.name ?? "Arquivo que saiu do acervo";
+  const nome = asset?.name ?? t.geral.arquivoForaDoAcervo;
 
   return (
     <li
@@ -523,7 +521,7 @@ function Anexo({
         // a TV está mostrando?", e ela não pode depender de passar por cima.
         noAr && "ring-primary ring-2",
       )}
-      title={noAr ? `${nome} (no ar)` : nome}
+      title={noAr ? t.pinNote.noAr(nome) : nome}
       // O arrasto vai na célula, e não no botão da imagem: é a célula que vai
       // ao mapa. A imagem continua anexada ao ponto depois de solta, como a do
       // handout continua no handout.
@@ -549,7 +547,7 @@ function Anexo({
       <button
         type="button"
         disabled={!asset}
-        aria-label={`Abrir ${nome} numa janela`}
+        aria-label={t.pinNote.abrirNumaJanela(nome)}
         className="focus-visible:ring-ring absolute inset-0 block size-full cursor-[inherit] focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
         onClick={() => abrirJanela({ tipo: "asset", assetId, nome })}
       >
@@ -575,7 +573,7 @@ function Anexo({
             size="icon-xs"
             className={cn(!noAr && REVELAR)}
             aria-label={
-              noAr ? `Tirar ${nome} da evidência` : `Mostrar ${nome} na TV`
+              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNaTv(nome)
             }
             aria-pressed={noAr}
             // Apertar o botão não levanta a célula: sem isto, o tremor da mão
@@ -597,7 +595,7 @@ function Anexo({
           variant="secondary"
           size="icon-xs"
           className={REVELAR}
-          aria-label={`Tirar ${nome} deste ponto`}
+          aria-label={t.pinNote.tirarDoPonto(nome)}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => {
             // Tirar do ar junto: desanexar é dizer que este arquivo não

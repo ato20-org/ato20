@@ -590,6 +590,167 @@ O que pesa é ligar nome e medidores em vinte tokens com o palco andando, e isso
 já era assim antes das camadas: é a primeira coisa a medir na webview de
 verdade se a reclamação vier.
 
+## Os efeitos na horda e no chão (06/10/2026)
+
+A pergunta: quanto custam os efeitos de condição em muitos personagens e as
+áreas de efeito. `amostras` (a TV, tudo animando, um token andando), 40
+tokens, `--segundos 14 --repetir 3`, Xvfb. O aquecimento da página subiu para
+6 s SÓ nesta bateria: com 2,5 s a medida pegava os fornos ainda assando a
+horda, e a mesma célula dava 4,8 numa corrida e 17 na outra.
+
+| figuras com o efeito | antes | luz por assinatura | e a folha num elemento |
+| --- | --- | --- | --- |
+| 10 em chamas | 13,5 | 47 | 50,5 |
+| 40 em chamas | 5,4 | 22,4 | 31,4 |
+| 40 em chamas, sem a luz | 28,1 | -- | 49 |
+| 40 envenenadas | 32,3 | -- | 51,4 |
+| 40 congeladas, molhadas, sangrando | 57 a 60 | -- | -- |
+
+**A luz era quase tudo.** Cada amostra muda a chave do canvas, e o deslize
+da luz formava DE NOVO as quarenta tochas a cada quadro -- quarenta degradês e
+as sombras de todos os tokens que cada uma alcança. Contado na webview, sem a
+correção: 73% do tempo em `formarLuzes`, 520 luzes formadas em 2,3 s. Agora
+cada luz guarda a assinatura do que a formou (`assinaturaDaLuz`) e só a que
+mudou se refaz: 2367 puladas contra 73 formadas na mesma janela. O tremor a
+30 Hz não pesa: a 15 Hz deu o mesmo número, e a luz parada também.
+
+**A folha de quadros era o resto.** Dois elementos andando por `transform`
+(linhas e colunas) eram duas camadas no compositor por folha, e a figura em
+chamas tem três (fogo atrás, fogo na frente, fagulhas). Um elemento só, com a
+posição do fundo em degraus (`QuadrosAnimados`): +20 fps no fogo sem luz, +18
+no veneno. Com `will-change` para cada folha virar camada própria, empatou na
+figura e derrubou o Mestre com seis áreas de 49 para 37 fps: fica sem.
+
+As áreas não são o gargalo: seis áreas de 5x5 casas em chamas deram 56,6 na TV
+(controle 62) e 49 no Mestre com a câmera andando, antes e depois.
+
+O que sobra nas 40 chamas é a luz do token que ANDA, refeita a cada quadro do
+deslize com a sombra dos vizinhos: com `semTokens` na luz do efeito da figura
+(como já é a da área), 31,4 viraria 38,9. Não entrou: é mudança de desenho, o
+fogo do goblin deixaria de projetar a sombra dos tokens em volta.
+
+## A névoa dinâmica (07/10/2026)
+
+A área escondida com furo ou dinâmica deixou de ser um `div` preto e passou a
+ser PINTADA num canvas do tamanho da caixa dela: a forma, menos os furos da
+borracha, menos o alcance de cada lanterna recortado pelas paredes. A área sem
+nenhum dos dois continua o `div` de sempre. A bancada ganhou `--nevoa K`: K
+áreas dinâmicas em faixas que cobrem o plano inteiro, o pior caso -- a
+lanterna que o arrasto move atravessa todas.
+
+40 tokens, 8 paredes, 3 lanternas (`--carregadas 3`), `--repetir 3`, Xvfb:
+
+| cenário | sem névoa | `--nevoa 4` |
+| --- | --- | --- |
+| `arrasto` (o Mestre arrasta a lanterna) | 59,8 fps, 0,9% | 59,1 fps, 2,5% |
+| `amostras` (a TV, a lanterna deslizando) | 60 fps, 1,2% | 59,8 fps, 0,6% |
+
+Com uma lanterna só, as duas colunas empatam (60 fps, 0,6%). Cada área repinta
+só quando a chave dela muda -- a geometria, os furos e as lanternas que a
+alcançam --, e cada lanterna limpa e copia só a janela que cobre no rascunho.
+Uma passada isolada de 3 s, com captura, chegou a dar 10,7% no `arrasto`: é o
+aquecimento, e foi a `--repetir 3` que desmentiu.
+
+## As fotos das câmeras (07/10/2026)
+
+A lista de cenas e a faixa de câmeras mostram uma FOTO de cada câmera: um
+canvas de 192x108 montado a partir dos dados da cena (o recorte de mesa, com
+fundo, tokens, riscos e a névoa preta), guardado como JPEG a 0,5 no
+`localStorage`. Não é ao vivo -- `useFotografoDasCameras` tira as fotos da cena
+aberta 800 ms depois de ela parar de mudar, no tempo ocioso. O cenário `fotos`
+mede o pior caso: o palco do `arrasto` com uma foto a cada 300 ms, sem parar.
+
+40 tokens, `--repetir 3`, Xvfb:
+
+| cenário | fps | perdidos | p95 |
+| --- | --- | --- | --- |
+| `arrasto` | 60,9 | 0% | 18 ms |
+| `fotos` (uma foto a cada 300 ms) | 60,8 | 0,3% | 18 ms |
+
+Uma foto: 2 ms de mediana e 5,5 KB. A primeira de cada corrida levou de 70 a
+700 ms, que é a espera pelas imagens dos tokens chegarem -- assíncrona, fora do
+quadro: o relógio de quadros não acusou nada. Daí o cartão da faixa de câmeras
+ter trocado o `SceneStage` recortado (um palco por cartão) pela foto, que é um
+`<img>`.
+
+O tempo de cada foto sai no console a cada dez: `--console`.
+
+**O tripé.** A foto do 2.5D usa as mesmas contas puras do 2.5D
+(`camera-orbital`): o chão é desenhado visto de cima numa textura de 480x270
+(o mapa, os deitados, os riscos e a névoa) e projetado na tela do tripé em 24
+faixas de dois triângulos afins; as figuras em pé vêm por cima, com o pé e a
+escala de `figuraNoTripe`. `--tripe` alterna fotos de tripé e de recorte, e o
+canto da página mostra a última de tripé para a captura conferir a
+perspectiva:
+
+| cenário | fps | perdidos | p95 | foto |
+| --- | --- | --- | --- | --- |
+| `fotos` | 60,8 | 0,3% | 18 ms | 2 ms, 5,5 KB |
+| `fotos --tripe` | 60,8 | 0,3% | 18 ms | 2 a 3 ms, 5,2 KB |
+
+A mediana não se mexeu com metade das fotos sendo de tripé. Sem o volume das
+paredes, a luz e a sombra: em 192 pixels o chão e quem está nele bastam.
+
+## O gesto deixa de borrar o mapa (07/10/2026)
+
+Qualquer arrasto no palco -- token, alça da câmera, a caixa de seleção que um
+clique no vazio abre -- mandava os dois planos para `transform` até 350 ms
+depois de soltar: o mapa ampliado borrava a cada clique. Agora o plano só troca
+de forma pela ampliação (ver `conteudoNoLayout`). O `camera-gesto` ganhou o
+gesto `token` (o item 0 no meio do plano, por cima, arrastado pela mão
+sintética) e passou a ler `--zoom` (a câmera da mão encolhe até o
+enquadramento dar essa ampliação; o `token` amplia o centro do plano).
+
+Webview, Xvfb, `--repetir 5`, quadro perdido em 1440x900. Cena pesada = 40
+tokens, `--luzes 3 --carregadas 1 --paredes 8 --nevoa 4`:
+
+| gesto | zoom | borrado (antes) | nítido (agora) |
+| --- | --- | --- | --- |
+| `token` | 4x | 2,4% | 2,4% |
+| `token` | 8x | 1,8% | 3,0% |
+| `redimensionar` | 4x | 0,6% | 1,8% |
+| `redimensionar` | 8x | 0,6% | 0,9% |
+
+Em 2560x1440 o Xvfb satura dos dois lados (95% de quadro perdido), e só os fps
+comparam. `token`, 4x:
+
+| cena | borrado | nítido | nítido + token em camada própria |
+| --- | --- | --- | --- |
+| limpa | 38,0 | 38,6 | 37,5 |
+| luz, paredes, névoa | 33,2 | 28,8 | 28,9 |
+
+O custo do nítido mora na luz: o token mexe na sombra dela, e o canvas da luz
+repinta em resolução cheia. Promover o token (`will-change`) não muda nada.
+
+**A roda da lanterna.** Na margem (sempre `transform`) o traço borrava em
+qualquer ampliação. Passada para o plano de controles, que assenta em `zoom`,
+sai nítida -- mas o círculo andando com o token repinta a caixa dele em
+resolução de tela. `token --carregadas 1`, 1440x900, mediana de cinco:
+
+| roda | 4x | 8x |
+| --- | --- | --- |
+| na margem (antes) | 59,2 fps, 4,6% | 59,8 fps, 3% |
+| no plano, sempre | 48,6 fps, 42,6% | 40 fps, 95,2% |
+| no plano parada, na margem no gesto | 57,5 fps, 10,7% | 59,3 fps, 4,6% |
+
+O que sobra na última linha é a troca de lugar no começo e no fim de cada
+gesto, e a mão sintética faz um a cada 1,5 s.
+
+**O piso do 2.5D a 2x, medido e descartado.** O piso da orbital é um `div`
+com transform 3D, e a textura dele tem o tamanho do plano: o token deitado
+borrava de perto. `chao-25d --modo orbital --girando`, mediana de cinco,
+`--experimento ,piso2`:
+
+| cena | 1x | 2x |
+| --- | --- | --- |
+| 40 tokens | 60 fps, 0,9% | 60 fps, 1,5% |
+| 40 tokens, 3 luzes de fogo | 60 fps, 0,3% | 60 fps, 1,2% |
+
+Barato, e não resolvia: na campanha real o deitado tinha 10x19 unidades e a
+câmera chegava a uns 10x -- o piso precisaria de 19 mil pixels de textura. O
+deitado saiu do piso no Mestre (`DeitadosNaTela`), numa caixa do tamanho de
+tela levada ao chão por `matrix3d` (`deitadoNoTripe`), como a figura em pé.
+
 ## Como medir: o passo a passo
 
 ### O cenário certo

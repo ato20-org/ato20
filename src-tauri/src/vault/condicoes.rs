@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::atomic::{read_json, write_json};
-use super::characters::{ajustar_condicao, Condicao, EfeitoNaFigura, PatchCondicao};
+use super::characters::{ajustar_condicao, Condicao, PatchCondicao};
 use super::Vault;
 use crate::error::{AppError, AppResult};
 
@@ -70,7 +70,7 @@ pub fn criar(
     nome: &str,
     cor: &str,
     icone: &str,
-    efeito: Option<EfeitoNaFigura>,
+    efeito: Option<String>,
 ) -> AppResult<Condicao> {
     let mut modelos = load(vault)?;
 
@@ -110,6 +110,34 @@ pub fn editar(vault: &Vault, modelo_id: &str, patch: PatchCondicao) -> AppResult
     let saida = modelo.clone();
 
     save(vault, &modelos)?;
+
+    Ok(saida)
+}
+
+/// Da ao modelo o efeito proprio dele, e aponta para o mesmo efeito toda copia
+/// com o nome dele nas fichas: configurar o fogo de "Em chamas" muda tambem
+/// quem ja esta em chamas. Ver `characters::apontar_efeito_por_nome`.
+///
+/// O efeito tem de ter forma de id -- a mesma regra da condicao.
+pub fn vincular_efeito(vault: &Vault, modelo_id: &str, efeito: &str) -> AppResult<Condicao> {
+    if !super::characters::efeito_valido(efeito) {
+        return Err(AppError::Malformed {
+            file: ARQUIVO.into(),
+            cause: format!("{efeito:?} nao e um id de efeito"),
+        });
+    }
+
+    let mut modelos = load(vault)?;
+    let modelo = modelos
+        .iter_mut()
+        .find(|m| m.id == modelo_id)
+        .ok_or_else(|| sem_modelo(modelo_id))?;
+
+    modelo.efeito = Some(efeito.to_string());
+    let saida = modelo.clone();
+    save(vault, &modelos)?;
+
+    super::characters::apontar_efeito_por_nome(vault, &saida.nome, efeito)?;
 
     Ok(saida)
 }
@@ -175,7 +203,7 @@ mod tests {
         let (_tmp, vault) = vault();
         characters::create(&vault, "Edgar").unwrap();
 
-        criar(&vault, "Envenenado", "#22c55e", "frasco", Some(EfeitoNaFigura::Tingido)).unwrap();
+        criar(&vault, "Envenenado", "#22c55e", "frasco", Some("tingido".into())).unwrap();
 
         assert_eq!(load(&vault).unwrap().len(), 1);
         assert!(characters::load(&vault).unwrap()[0].condicoes.is_empty());
@@ -196,7 +224,7 @@ mod tests {
     fn editar_o_modelo_nao_mexe_na_copia_da_ficha() {
         let (_tmp, vault) = vault();
         let modelo =
-            criar(&vault, "Envenenado", "#22c55e", "frasco", Some(EfeitoNaFigura::Tingido)).unwrap();
+            criar(&vault, "Envenenado", "#22c55e", "frasco", Some("tingido".into())).unwrap();
         let p = characters::create(&vault, "Edgar").unwrap();
         characters::alternar_condicao(&vault, &[p.id.clone()], &modelo, true).unwrap();
 
@@ -238,5 +266,34 @@ mod tests {
 
         let ids: Vec<_> = ordem.iter().map(|m| m.id.clone()).collect();
         assert_eq!(ids, vec![c.id, a.id, b.id]);
+    }
+
+    #[test]
+    fn vincular_da_o_efeito_ao_modelo_e_as_copias_com_o_nome_dele() {
+        // O "muda junto": quem ja estava em chamas passa a desenhar o efeito
+        // configurado. Quem tem outra condicao nao muda.
+        let (_tmp, vault) = vault();
+        let modelo = criar(&vault, "Em chamas", "#f59e0b", "chama", Some("chamas".into())).unwrap();
+        let p = characters::create(&vault, "Goblin").unwrap();
+        characters::alternar_condicao(&vault, &[p.id.clone()], &modelo, true).unwrap();
+        characters::criar_condicao(&vault, &p.id, "Envenenado", "#22c55e", "frasco", None).unwrap();
+
+        let ligado = vincular_efeito(&vault, &modelo.id, "campanha/a1b2c3d4").unwrap();
+
+        assert_eq!(ligado.efeito.as_deref(), Some("campanha/a1b2c3d4"));
+        assert_eq!(load(&vault).unwrap()[0].efeito.as_deref(), Some("campanha/a1b2c3d4"));
+        let condicoes = &characters::load(&vault).unwrap()[0].condicoes;
+        let por_nome = |nome: &str| condicoes.iter().find(|c| c.nome == nome).unwrap().efeito.clone();
+        assert_eq!(por_nome("Em chamas").as_deref(), Some("campanha/a1b2c3d4"));
+        assert_eq!(por_nome("Envenenado"), None);
+    }
+
+    #[test]
+    fn vincular_recusa_efeito_sem_forma_de_id() {
+        let (_tmp, vault) = vault();
+        let modelo = criar(&vault, "Em chamas", "#f59e0b", "chama", None).unwrap();
+
+        assert!(vincular_efeito(&vault, &modelo.id, "../fogo").is_err());
+        assert!(vincular_efeito(&vault, "nao-existe", "campanha/a1b2c3d4").is_err());
     }
 }

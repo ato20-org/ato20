@@ -3,6 +3,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { t } from "@/lib/i18n/arquivos";
 import {
   AvisoDeImportacao,
   type ProgressoImportacao,
@@ -174,15 +175,15 @@ export async function importAssets(
     multiple: true,
     title:
       kind === "image"
-        ? "Escolha as imagens"
+        ? t.seletor.escolhaImagens
         : kind === "audio"
-          ? "Escolha os sons"
-          : "Escolha os arquivos",
+          ? t.seletor.escolhaSons
+          : t.seletor.escolhaArquivos,
     filters:
       kind === "image"
         ? [
             {
-              name: "Imagens",
+              name: t.seletor.imagens,
               extensions: [
                 "png",
                 "apng",
@@ -198,7 +199,7 @@ export async function importAssets(
         : kind === "audio"
           ? [
               {
-                name: "Sons",
+                name: t.seletor.sons,
                 extensions: ["mp3", "ogg", "oga", "opus", "wav", "flac", "m4a", "aac"],
               },
             ]

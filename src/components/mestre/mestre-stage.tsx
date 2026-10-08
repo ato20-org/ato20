@@ -8,13 +8,20 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { WandSparkles } from "lucide-react";
 
+import { PainelDeCondicoesDoObjeto } from "@/components/mestre/condicoes-do-objeto";
+import { PainelDeCondicoesDoPersonagem } from "@/components/mestre/condicoes-personagem";
 import { AlcasDaArea } from "@/components/mestre/alcas-da-area";
+import { AnelDoPincel } from "@/components/mestre/anel-do-pincel";
+import { EscolhaDoEfeitoDaArea } from "@/components/mestre/efeito-da-area";
 import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
 import { LuzMarcadores } from "@/components/mestre/luz-marcadores";
+import { RodaDaLanterna } from "@/components/mestre/roda-da-lanterna";
 import { PainelDaLuz } from "@/components/mestre/painel-da-luz";
 import { ParedeLayer } from "@/components/mestre/parede-layer";
+import { PortaMarcadores } from "@/components/mestre/porta-marcadores";
 import {
   AncorasDeSeta,
   RAIO_DE_ENCAIXE_PX,
@@ -27,9 +34,7 @@ import {
   FormaLayer,
 } from "@/components/mestre/forma-layer";
 import { TextoLayer } from "@/components/mestre/texto-layer";
-import { contornoDosItens } from "@/lib/mestre/contorno-dos-itens";
 import { ehDuploClique, type Toque } from "@/lib/mestre/duplo-clique";
-import { uniaoDoRetrato } from "@/lib/mestre/unioes";
 import { ancorada, caixaDoTexto, pontaEm } from "@/lib/mestre/ligacoes";
 import {
   empurrarTextos,
@@ -49,8 +54,10 @@ import {
 } from "@/lib/mestre/grupo-sem-alca";
 import { areaDoPoligono } from "@/lib/geometry/area-escondida";
 import {
+  ALTURA_DA_PAREDE,
   alturaDaParede,
   baseDaSombra,
+  ladoMinimoDaParede,
   METROS_DA_PAREDE_PADRAO,
   modoDaSombra,
   pontoNaParede,
@@ -58,6 +65,11 @@ import {
   UNIDADES_POR_METRO,
 } from "@/lib/geometry/sombra";
 import { caixaDoTraco } from "@/lib/geometry/limites";
+import {
+  alternarPorta,
+  pontaDaPorta,
+  portaDoTraco,
+} from "@/lib/geometry/porta";
 import { postitNaArea } from "@/lib/geometry/postit";
 import { reguaVazia, moverRegua } from "@/lib/geometry/regua";
 import type { PontaDoMedidor } from "@/components/playground/regua-layer";
@@ -65,17 +77,21 @@ import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
 import { CamerasFantasma } from "@/components/playground/camera-fantasma";
 import { MarqueeBox } from "@/components/playground/marquee-box";
-import { PortraitAnchors } from "@/components/playground/portrait-anchors";
 import { SceneLayer } from "@/components/playground/scene-layer";
+import {
+  SvgDoLaser,
+  useDesenhoDoLaser,
+} from "@/components/playground/laser-layer";
 import { efeitosDaCena } from "@/lib/condicao";
 import { fichasDaCena } from "@/lib/mestre/fichas-da-cena";
 import { transmissaoDaCamera } from "@/lib/mestre/camera-actions";
+// `texto`, e não `t`: o palco tem `t` de conta, a fração ao longo do segmento.
+import { t as texto } from "@/lib/i18n/bancada";
 import {
   anotarPonteiro,
   esquecerPonteiro,
   registrarConversor,
 } from "@/lib/mestre/ponteiro-no-palco";
-import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { usePingsStore } from "@/lib/store/use-pings-store";
 import { RodaDePing } from "@/components/playground/roda-de-ping";
 import { novoId } from "@/lib/id";
@@ -85,7 +101,6 @@ import { SelectionBox } from "@/components/playground/selection-box";
 import { TransformHandles } from "@/components/playground/transform-handles";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacters } from "@/hooks/use-characters";
-import { usePersonagensDeJogador } from "@/hooks/use-personagens-de-jogador";
 import { useModoCinegrafista } from "@/hooks/use-modo-cinegrafista";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import {
@@ -107,14 +122,25 @@ import {
   useGestoStore,
 } from "@/lib/store/use-gesto-store";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { publicarLaser } from "@/hooks/use-scene-broadcast";
+import {
+  AMOSTRA_DO_LASER_PX,
+  laserParaMesa,
+  podarRastro,
+  SEM_RASTRO,
+  VIDA_DO_LASER_MS,
+  type RastroDoLaser,
+} from "@/lib/laser";
+import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useSilhueta } from "@/hooks/use-silhueta";
 import {
   flipSelection,
   livre,
+  removeAreaDeEfeitoSelection,
   removeFogSelection,
   removeParedeSelection,
-  removePortraitSelection,
+  removePortaSelection,
   removeSelection,
   setSelectionOpacity,
   setSelectionSombra,
@@ -140,31 +166,40 @@ import {
 import { CamadasDeExtensoes } from "@/components/mestre/camadas-de-extensoes";
 import { ArquivoFantasma } from "@/components/mestre/arquivo-fantasma";
 import { TokenFantasma } from "@/components/mestre/token-fantasma";
-import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
-import {
-  areasDeRetrato,
-  portraitBox,
-  portraitFraction,
-  portraitsBounds,
-  retratosDaCena,
-  scalePortraitGroup,
-} from "@/lib/geometry/portrait";
 import { encaixarNaGrade, gradeDoEncaixe } from "@/lib/geometry/grid";
 import {
   computeSnap,
   SNAP_THRESHOLD_PX,
   type Guide,
 } from "@/lib/geometry/snap";
-import { CORNER_HANDLES, MIN_ITEM_SIZE, type Vec } from "@/lib/geometry/transform";
-import { quadroDaMesa, temFormatoDaMesa } from "@/lib/geometry/viewport";
+import {
+  caminhoMacio,
+  CORDA_MAXIMA_PX,
+  cortarRisco,
+  pontaNaCorda,
+} from "@/lib/geometry/risco";
+import { camposDaParedeNova } from "@/lib/mestre/elementos";
+import { camposDoTextoNovo } from "@/lib/mestre/texto-actions";
+import {
+  furoDoTraco,
+  furosNaCaixaNova,
+  passadaTocaAArea,
+  tokenSobOPonto,
+} from "@/lib/geometry/nevoa-dinamica";
+import {
+  CORNER_HANDLES,
+  MIN_ITEM_SIZE,
+  MIN_SCENE_ITEM_SIZE,
+  type ResizeHandle,
+  type Vec,
+} from "@/lib/geometry/transform";
+import { temFormatoDaMesa } from "@/lib/geometry/viewport";
 
-import { selectAbaAtiva, useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { usePostitStore } from "@/lib/store/use-postit-store";
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
-import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import {
   useSceneStore,
   type FormaPatch,
@@ -173,6 +208,9 @@ import {
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
+import { useBorrachaDaNevoaStore } from "@/lib/store/use-borracha-da-nevoa-store";
+import { useBorrachaDosRiscosStore } from "@/lib/store/use-borracha-dos-riscos-store";
+import { usePincelNaRoda } from "@/hooks/use-pincel-na-roda";
 import { padraoDoQuadro } from "@/lib/configuracoes/quadro";
 import {
   CORES_DA_LUZ,
@@ -185,26 +223,28 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   TEXTO_TAMANHO,
-  type AncoraRetrato,
+  type AreaDeEfeito,
   type CanvasItem,
   type Documento,
   type FogRegion,
+  type NewFogRegion,
   type Forma,
   type Regua,
   type Postit,
   type NewForma,
   type TipoDeForma,
   type NewParede,
+  type NewPorta,
   type PontaDeLigacao,
-  type Portrait,
   type Scene,
   type SceneGrid,
   type Texto,
   type Traco,
-  type UniaoDeRetratos,
 } from "@/types/scene";
 
 const NO_GUIDES: Guide[] = [];
+/** Ninguém anima: o Mestre durante um gesto. Identidade estável. */
+const NINGUEM_ANIMA: ReadonlySet<string> = new Set<string>();
 /** As listas vazias das três seleções que só andam. Ver `selectedPostits`. */
 const NADA_DE_POSTIT: readonly Postit[] = [];
 const NADA_DE_DOCUMENTO: readonly Documento[] = [];
@@ -214,20 +254,22 @@ const NADA_DE_TRACO: readonly Traco[] = [];
 const NADA_APAGANDO: ReadonlySet<string> = new Set<string>();
 
 /**
+ * A amostra das borrachas no meio do palco, enquanto a régua de tamanho anda:
+ * um véu claro, e não uma cor -- a borracha não pinta, ela tira. Ver
+ * `AnelDoPincel`.
+ */
+const AMOSTRA_DA_BORRACHA = { cor: "#ffffff", opacidade: 0.2 };
+
+/** O gizmo da área com a borracha na mão: sem alça. Ver `furarNevoa`. */
+const SEM_ALCAS: readonly ResizeHandle[] = [];
+
+/**
  * Distância mínima entre duas amostras de um risco, em pixels de TELA.
  *
  * Em pixel de tela e não de cena: riscar ampliado guarda mais detalhe, que é o
  * que se quer quando se amplia justamente para marcar algo pequeno.
  */
 const AMOSTRA_PX = 3;
-
-/**
- * Folga da borracha além da própria espessura, em pixels de tela.
- *
- * Existe porque acertar um fio de três unidades com o ponteiro exigiria
- * pontaria, e apagar é gesto de correção -- quem apaga já errou uma vez.
- */
-const ALCANCE_BORRACHA_PX = 6;
 
 /**
  * Quão perto do PRIMEIRO vértice o clique fecha o laço, em pixels de tela.
@@ -364,6 +406,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const gestoDocumentos = useGestoStore((state) => state.documentos);
   const gestoTracos = useGestoStore((state) => state.tracos);
   const gestoCamera = useGestoStore((state) => state.camera);
+  const gestoPorta = useGestoStore((state) => state.porta);
   const scene = useMemo(
     () =>
       aplicarGesto(cenaDoBoard, {
@@ -375,6 +418,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         documentos: gestoDocumentos,
         tracos: gestoTracos,
         camera: gestoCamera,
+        porta: gestoPorta,
       }),
     [
       cenaDoBoard,
@@ -386,6 +430,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       gestoDocumentos,
       gestoTracos,
       gestoCamera,
+      gestoPorta,
     ],
   );
 
@@ -399,19 +444,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const visiveis = useMemo(
     () => itensVisiveis(scene.items, scene.grupos),
     [scene.items, scene.grupos],
-  );
-
-  /**
-   * Onde o retrato vive: o 16:9 da tela da mesa em volta da câmera no ar.
-   *
-   * Não é o recorte da câmera, desde que ela tem formato próprio. A TV encaixa
-   * a torre em pé com tarja dos lados, e o retrato é HUD da TELA: ele fica
-   * sobre a tarja, e não espremido em cima da torre. Ver `quadroDaMesa`. Com a
-   * câmera 16:9 é a própria câmera, o mesmo objeto.
-   */
-  const telaDaMesa = useMemo(
-    () => (scene.camera ? quadroDaMesa(scene.camera) : undefined),
-    [scene.camera],
   );
 
   const [marquee, setMarquee] = useState<Bounds | null>(null);
@@ -444,6 +476,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const [rascunhoDaParede, setRascunhoDaParede] = useState<NewParede | null>(
     null,
   );
+  /** A porta que o arrasto está traçando. Ver `PortaMarcadores`. */
+  const [rascunhoDaPorta, setRascunhoDaPorta] = useState<NewPorta | null>(null);
 
   /**
    * O laço da área escondida livre: os vértices já cravados, em coordenadas de
@@ -483,11 +517,23 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const tool = useToolStore((state) => state.tool);
   const cor = useToolStore((state) => state.cor);
   const espessura = useToolStore((state) => state.espessura);
+  const opacidadeDoLapis = useToolStore((state) => state.opacidade);
+  const suavizarDoLapis = useToolStore((state) => state.suavizar);
+  const tamanhoEmAjuste = useToolStore((state) => state.tamanhoEmAjuste);
+  const raioDaBorracha = useToolStore((state) => state.raioDaBorracha);
+  const efeitoDaArea = useToolStore((state) => state.efeitoDaArea);
+  const paredeNova = useToolStore((state) => state.paredeNova);
+  const nevoaNovaDinamica = useToolStore((state) => state.nevoaNovaDinamica);
+  const modoDaBorracha = useToolStore((state) => state.modoDaBorracha);
+  const raioDaBorrachaDaNevoa = useBorrachaDaNevoaStore((state) => state.raio);
+  // Alt+roda muda o pincel na mão, antes de a roda virar zoom.
+  usePincelNaRoda();
   const corPostit = useToolStore((state) => state.corPostit);
   const formaMedidor = useToolStore((state) => state.formaMedidor);
   const corMedidor = useToolStore((state) => state.corMedidor);
   const tipoDeForma = useToolStore((state) => state.tipoDeForma);
   const formatoDeArea = useToolStore((state) => state.formatoDeArea);
+  const formatoDoEfeito = useToolStore((state) => state.formatoDoEfeito);
   const corForma = useToolStore((state) => state.corForma);
   const espessuraForma = useToolStore((state) => state.espessuraForma);
   const fundoForma = useToolStore((state) => state.fundoForma);
@@ -500,16 +546,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const panMode = usePanMode();
   const abrirJanela = useAbrirJanela();
   const { personagens } = useCharacters();
-  const personagensDeJogador = usePersonagensDeJogador();
 
-  /**
-   * Os dados que os jogadores jogaram, para pendurar nos retratos.
-   *
-   * A bandeja, e não o histórico: é o que está NA MESA agora, e é a mesma
-   * lista que a fileira do canto desenha e que o quadro publicado leva para a
-   * TV e para os celulares. Ver `useRolagensStore`.
-   */
-  const bandeja = useRolagensStore((state) => state.bandeja);
   /** Os pings da mesa, os do mestre e os dos jogadores. Ver `PingLayer`. */
   const pings = usePingsStore((state) => state.ativos);
 
@@ -528,8 +565,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   );
   const selectedTracoIds = useSelectionStore((state) => state.selectedTracoIds);
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
-  const selectedPortraitIds = useSelectionStore(
-    (state) => state.selectedPortraitIds,
+  const selectedAreaDeEfeitoId = useSelectionStore(
+    (state) => state.selectedAreaDeEfeitoId,
   );
   const select = useSelectionStore((state) => state.select);
   const toggle = useSelectionStore((state) => state.toggle);
@@ -545,16 +582,16 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const toggleDocumento = useSelectionStore((state) => state.toggleDocumento);
   const selectMisto = useSelectionStore((state) => state.selectMisto);
   const selectFog = useSelectionStore((state) => state.selectFog);
+  const selectAreaDeEfeito = useSelectionStore((state) => state.selectAreaDeEfeito);
   const selectedMedidorId = useSelectionStore(
     (state) => state.selectedMedidorId,
   );
   const selectMedidor = useSelectionStore((state) => state.selectMedidor);
   const selectParede = useSelectionStore((state) => state.selectParede);
   const selectLuz = useSelectionStore((state) => state.selectLuz);
+  const selectPorta = useSelectionStore((state) => state.selectPorta);
   const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
-  const selectPortrait = useSelectionStore((state) => state.selectPortrait);
-  const selectPortraits = useSelectionStore((state) => state.selectPortraits);
-  const togglePortrait = useSelectionStore((state) => state.togglePortrait);
+  const selectedPortaId = useSelectionStore((state) => state.selectedPortaId);
   const clear = useSelectionStore((state) => state.clear);
 
   const addFog = useSceneStore((state) => state.addFog);
@@ -563,10 +600,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const removeMedidores = useSceneStore((state) => state.removeMedidores);
   const addParede = useSceneStore((state) => state.addParede);
   const addLuz = useSceneStore((state) => state.addLuz);
+  const addPorta = useSceneStore((state) => state.addPorta);
   const updateParede = useSceneStore((state) => state.updateParede);
+  const updatePorta = useSceneStore((state) => state.updatePorta);
   const updateFog = useSceneStore((state) => state.updateFog);
+  const addAreaDeEfeito = useSceneStore((state) => state.addAreaDeEfeito);
+  const updateAreaDeEfeito = useSceneStore((state) => state.updateAreaDeEfeito);
   const addTraco = useSceneStore((state) => state.addTraco);
   const removeTracos = useSceneStore((state) => state.removeTracos);
+  const substituirTracos = useSceneStore((state) => state.substituirTracos);
   const addPin = useSceneStore((state) => state.addPin);
   const addPostit = useSceneStore((state) => state.addPostit);
   const addTexto = useSceneStore((state) => state.addTexto);
@@ -637,9 +679,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     onGestureEnd: terminarGestoDaCamera,
   });
 
-  const guardados = usePortraitStore((state) => state.portraits);
-  const layoutDaSessao = usePortraitStore((state) => state.layout);
-
   /**
    * Nome e medidores sobre a cabeça dos tokens, no palco do mestre.
    *
@@ -671,68 +710,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     () => efeitosDaCena(visiveis, personagens ?? []),
     [visiveis, personagens],
   );
-  const unioes = usePortraitStore((state) => state.unioes);
-  const ajustarUniaoDeRetratos = usePortraitStore((state) => state.ajustar);
-
-  // As fontes das extensões, para o retrato ao vivo saber em que canvas a
-  // página foi desenhada. Ver `useFontesDeRetrato`.
-  const fontes = useFontesDeRetrato();
-
-  /**
-   * Os retratos desta cena, com a imagem resolvida da ficha.
-   *
-   * Derivado e não a lista crua do store: retrato agora é de personagem, e quem
-   * decide se ele existe nesta cena é o token dele estar nela. Ver
-   * `retratosDaCena` -- o painel e o publicador usam a mesma função, cada um
-   * com a sua cena.
-   */
-  const portraits = retratosDaCena(
-    guardados,
-    visiveis,
-    personagens ?? [],
-    fontes,
-    // Com os medidores ESCONDIDOS, e este é o único palco que os pede. Eles
-    // desenham apagados na coluna -- o relógio da desgraça está correndo, e o
-    // mestre precisa vê-lo correr sem que a mesa o veja. Ver
-    // `MedidoresDoRetrato`.
-    true,
-    layoutDaSessao,
-  );
-  // A aba aberta declara a intenção: em Retratos, o mestre está mexendo neles,
-  // e ver todos de uma vez é o que torna o ajuste possível. Fora dela, o mapa
-  // é o assunto e só o selecionado aparece.
-  /**
-   * Retrato só é editável no palco quando a LISTA dele está à vista.
-   *
-   * Era `leftTab === "retratos"`: uma aba fixa do painel esquerdo. Com o dock, a
-   * lista pode estar em qualquer grupo de qualquer coluna, então a pergunta
-   * deixou de ser "qual aba do painel esquerdo" e passou a ser "esta aba está
-   * ativa em algum lugar". Ver `selectAbaAtiva`.
-   */
-  const editingPortraits = useLayoutStore(selectAbaAtiva("retratos"));
-  const updatePortrait = usePortraitStore((state) => state.update);
-  const updatePortraits = usePortraitStore((state) => state.updateMany);
 
   const selectedItems = visiveis.filter((item) =>
     selectedIds.includes(item.id),
   );
 
-  /**
-   * De quem é cada figura do mapa, dita pelo contorno.
-   *
-   * Não depende da seleção. Chegou a sumir com algo selecionado, para não
-   * competir com o gizmo, e estava errado: o traço é o mapa dizendo QUEM é
-   * quem, e essa leitura some justamente na hora em que o mestre está
-   * trabalhando o mapa -- clicar num token apagava a informação sobre os
-   * outros trinta e nove. Quem marca o selecionado é a caixa com alças, que é
-   * outro desenho e não disputa com este.
-   *
-   * Só aqui: a TV e o celular recebem a cena sem isto. Ver `contornoDosItens`.
-   */
-  const contornos = useMemo(
-    () => contornoDosItens(visiveis, personagensDeJogador),
-    [visiveis, personagensDeJogador],
-  );
   const selectedTextos = (scene.textos ?? []).filter((texto) =>
     selectedTextoIds.includes(texto.id),
   );
@@ -859,60 +841,53 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       }
     : undefined;
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
+  /** A borracha da névoa na mão. Ela fura a área selecionada, e só ela. */
+  const furando = tool === "borrachaDaNevoa";
+  // A área saiu da mão -- desfeita, apagada, travada pela lista -- e a
+  // borracha ficou sem o que furar: volta à seleção, em vez de deixar o
+  // próximo clique no mapa sem efeito nenhum.
+  const semAlvoParaFurar = furando && (!selectedFog || selectedFog.locked);
+  useEffect(() => {
+    if (semAlvoParaFurar) setTool("select");
+  }, [semAlvoParaFurar, setTool]);
+  const selectedAreaDeEfeito = scene.areasDeEfeito?.find(
+    (area) => area.id === selectedAreaDeEfeitoId,
+  );
+  /**
+   * Quem anima os efeitos no Mestre: só o que está selecionado -- os tokens e
+   * a área. O resto pausa no quadro em que está, e a luz dele para
+   * de tremular. Ver `animarSo` em `SceneLayer`.
+   *
+   * E NINGUÉM durante um gesto -- arrastar o token em chamas, a área, uma
+   * alça, a caixa de seleção: o que o mestre olha no arrasto é para onde a
+   * coisa vai, e o fogo tremulando por baixo é compositor refazendo a folha a
+   * cada quadro do gesto. Ao soltar, o selecionado volta a andar.
+   */
+  const emGesto = useViewportStore((state) => state.gestos > 0);
+  const efeitosAnimados = useMemo(
+    () =>
+      emGesto
+        ? NINGUEM_ANIMA
+        : new Set<string>([
+            ...selectedIds,
+            ...(selectedAreaDeEfeitoId ? [selectedAreaDeEfeitoId] : []),
+          ]),
+    [emGesto, selectedIds, selectedAreaDeEfeitoId],
+  );
   const selectedParede = scene.paredes?.find(
     (parede) => parede.id === selectedParedeId,
   );
-  const selectedPortraits = portraits.filter((portrait) =>
-    selectedPortraitIds.includes(portrait.id),
+  const selectedPorta = scene.portas?.find(
+    (porta) => porta.id === selectedPortaId,
   );
-  const singlePortrait =
-    selectedPortraits.length === 1 ? selectedPortraits[0] : undefined;
   /**
-   * Os membros de uma união que estão NO AR, na ordem dela.
-   *
-   * São os que `useUnioesDeRetratos` posiciona: fora do ar não ocupa vaga na
-   * fila, e retrato solto tem posição própria. A ordem é a da união, e não a
-   * dos tokens -- é ela que diz quem fica à esquerda de quem.
+   * A caixa da porta FECHADA, da dobradiça à ponta: é sobre ela que a fileira
+   * do gizmo fica. A do batente, e não a da folha, para os botões não andarem
+   * enquanto a porta abre.
    */
-  const membrosNoAr = (uniao: UniaoDeRetratos): Portrait[] =>
-    uniao.retratos
-      .map((id) => portraits.find((atual) => atual.id === id))
-      .filter((atual): atual is Portrait => Boolean(atual?.visible));
-
-  /**
-   * A união inteiramente selecionada, se a seleção for exatamente uma.
-   *
-   * Decide o rótulo da caixa e a regra de escala: numa união, o gizmo manda no
-   * tamanho e a união manda na posição.
-   */
-  const uniaoSelecionada =
-    unioes.find((uniao) => {
-      const membros = membrosNoAr(uniao);
-
-      return (
-        membros.length > 0 &&
-        membros.length === selectedPortraitIds.length &&
-        membros.every((retrato) => selectedPortraitIds.includes(retrato.id))
-      );
-    }) ?? null;
-
-  const portraitGroupBounds =
-    selectedPortraits.length > 1
-      ? portraitsBounds(selectedPortraits, telaDaMesa)
-      : null;
-
-  /**
-   * Retrato do grupo no início do gesto.
-   *
-   * Mesmo motivo do grupo de itens: o gizmo entrega a caixa nova sempre
-   * relativa ao começo do arrasto, e aplicá-la sobre retratos já escalados
-   * comporia o fator.
-   */
-  const portraitSnapshot = useRef<{
-    portraits: Portrait[];
-    bounds: Bounds;
-  } | null>(null);
-
+  const caixaDaPortaNaMao = selectedPorta
+    ? boundsToBox(boundsFromPoints(selectedPorta, pontaDaPorta(selectedPorta, true)))
+    : null;
   /**
    * A caixa que cerca o que está na mão, quando é mais de um.
    *
@@ -1012,19 +987,43 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
    */
   const [riscando, setRiscando] = useState(false);
 
-  const previa = useRef<SVGPolylineElement | null>(null);
-
-  const [apagando, setApagando] = useState<ReadonlySet<string>>(NADA_APAGANDO);
+  const previa = useRef<SVGPathElement | null>(null);
 
   /**
-   * A área sob o ponteiro enquanto a fila de retratos é arrastada.
-   *
-   * `null` fora do gesto, e é o que faz as seis áreas não existirem no resto do
-   * tempo: são retângulos sobre o mapa, e à vista o tempo todo poluiriam a
-   * imagem que a mesa está olhando.
+   * O laser: o rastro na mão e o desenho dele, os dois fora do estado pelo
+   * mesmo motivo da `previa` -- muda a cada amostra, e cada amostra seria um
+   * render do palco inteiro. Ver `apontar`.
    */
-  const [areaDaUniao, setAreaDaUniao] = useState<AncoraRetrato | null>(null);
-  const [arrastandoUniao, setArrastandoUniao] = useState(false);
+  const laser = useDesenhoDoLaser(0);
+  const rastroDoLaser = useRef<RastroDoLaser>(SEM_RASTRO);
+  /** O relógio que tira o laser do quadro quando o rastro acaba de apagar. */
+  const laserSaiDaMesa = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const acenderLaser = laser.acender;
+
+  // Trocar de cena larga o rastro: ele é da cena em que foi riscado, e não
+  // pode seguir aceso por cima do mapa seguinte.
+  useEffect(() => {
+    if (rastroDoLaser.current.riscos.length === 0) return;
+
+    rastroDoLaser.current = SEM_RASTRO;
+    acenderLaser(SEM_RASTRO);
+  }, [scene.id, acenderLaser]);
+
+  // O palco que sai leva o laser do quadro junto: o relógio que o tiraria
+  // morre com ele, e o daemon seguiria entregando o rastro a quem conectar.
+  useEffect(() => {
+    const relogio = laserSaiDaMesa;
+
+    return () => {
+      if (relogio.current === null) return;
+
+      clearTimeout(relogio.current);
+      relogio.current = null;
+      publicarLaser(undefined);
+    };
+  }, []);
+
+  const [apagando, setApagando] = useState<ReadonlySet<string>>(NADA_APAGANDO);
 
   /** Evita re-render por frame quando não há guia nenhuma para mostrar. */
   function clearGuides() {
@@ -1409,7 +1408,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
     // Sem snap para imagem: as guias tipo Figma atrapalhavam mais do que
     // ajudavam num mapa -- token não precisa alinhar borda com estátua. A
-    // névoa e o retrato continuam alinhando, porque ali borda é o que importa.
+    // névoa continua alinhando, porque ali borda é o que importa.
     //
     // A GRADE é outra conversa, e por isso entra mesmo aqui: ela não é alinhar
     // a peça à estátua ao lado, é a casa em que a peça mora -- e só existe se
@@ -1691,6 +1690,21 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   }
 
   function handleFogPointerDown(event: ReactPointerEvent, region: FogRegion) {
+    // Na névoa dinâmica os tokens ANDAM lá dentro, e o mestre precisa pegá-los
+    // ali: o clique sobre um token vai para ele, com qualquer botão -- o menu
+    // também é dele --, e só o resto da área a seleciona. A área parada
+    // continua como sempre foi: cobre tudo.
+    if (region.dinamica && !region.revealed) {
+      const token = tokenSobOPonto(
+        visiveis,
+        toScene(event.clientX, event.clientY),
+      );
+      if (token) {
+        handleItemPointerDown(event, token);
+        return;
+      }
+    }
+
     if (event.button === 2) {
       // Para aqui, como o item: ver `handleItemPointerDown`.
       event.stopPropagation();
@@ -1720,95 +1734,55 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     );
   }
 
-  /**
-   * Arrasto de retrato.
-   *
-   * O gesto acontece em coordenadas de cena, mas o retrato é guardado em
-   * fração da câmera: o delta é dividido pelo tamanho do recorte antes de
-   * entrar. Sem snap de propósito — retrato não se alinha a token de mapa, e
-   * as guias só poluiriam o gesto.
-   */
-  function handlePortraitPointerDown(
-    event: ReactPointerEvent,
-    portrait: Portrait,
-  ) {
-    const alreadySelected = selectedPortraitIds.includes(portrait.id);
-
+  /** Clique e arrasto numa área de efeito, como na área escondida. */
+  function handleAreaDeEfeitoPointerDown(event: ReactPointerEvent, area: AreaDeEfeito) {
     if (event.button === 2) {
-      // Botão direito aponta para o retrato clicado, mas não desfaz uma
-      // seleção múltipla que já o inclua -- e para aqui, como o item: ver
-      // `handleItemPointerDown`.
       event.stopPropagation();
-      if (!alreadySelected) selectPortrait(portrait.id);
+      selectAreaDeEfeito(area.id);
       return;
     }
 
     if (event.button !== 0) return;
 
-    if (event.shiftKey) {
-      togglePortrait(portrait.id);
+    selectAreaDeEfeito(area.id);
+    if (area.locked) {
+      event.stopPropagation();
       return;
     }
 
-    // Arrastar um do grupo move o grupo: quem selecionou vários quer mexer nos
-    // vários, e reduzir para um seria desfazer o trabalho de selecionar.
-    const moving = alreadySelected ? selectedPortraits : [portrait];
-    if (!alreadySelected) selectPortrait(portrait.id);
-
-    // Retrato de união não se mexe sozinho: a posição dele é da união.
-    // Arrastá-lo livremente faria a figura voltar no quadro seguinte, quando o
-    // efeito reaplicasse o layout.
-    //
-    // Então o clique seleciona A UNIÃO INTEIRA. É o que torna o grupo evidente
-    // sem precisar de aviso: aparece a caixa pontilhada em volta dos cinco, com
-    // o nome da união, e o gizmo que sobe é o do grupo -- que escala todos por
-    // um fator só. Selecionar um e mexer nos outros seria o mesmo efeito com
-    // aparência de defeito.
-    //
-    // Fora do ar não: aí ele é o fantasma que o mestre posiciona à mão, e a
-    // união não governa quem ninguém está vendo.
-    const uniaoDoAlvo = portrait.visible
-      ? uniaoDoRetrato(unioes, portrait.id)
-      : null;
-
-    if (uniaoDoAlvo) {
-      selectPortraits(membrosNoAr(uniaoDoAlvo).map((atual) => atual.id));
-      arrastarUniao(event, uniaoDoAlvo);
-      return;
-    }
-
-    const origins = moving.map(({ id, x, y }) => ({ id, x, y }));
-
-    const movendo = new Set(moving.map((atual) => atual.id));
-    const caixa = portraitsBounds(moving, telaDaMesa);
-
-    // Alinha aos OUTROS retratos e à tela da mesa, e não aos itens do mapa:
-    // retrato é preso à câmera, e um item do mapa passa por baixo dele quando o
-    // mestre desloca a cena -- grudar num alvo que anda seria pior que não
-    // grudar.
-    const alvos = portraits
-      .filter((atual) => !movendo.has(atual.id))
-      .map((atual) => boxBounds(portraitBox(atual, telaDaMesa)));
-
-    if (!caixa) return;
-
+    const origin = { x: area.x, y: area.y };
     dragBox(
       event,
-      caixa,
-      alvos,
+      boxBounds(area),
+      snapTargets((id) => id === area.id),
       (dx, dy) =>
-        updatePortraits(
-          origins.map((origin) => ({
-            id: origin.id,
-            patch: {
-              // De volta para fração da tela, que é onde o retrato mora.
-              x: origin.x + dx / (telaDaMesa?.width ?? SCENE_WIDTH),
-              y: origin.y + dy / (telaDaMesa?.height ?? SCENE_HEIGHT),
-            },
-          })),
-        ),
-      telaDaMesa ? boundsFromBox(telaDaMesa) : undefined,
+        updateAreaDeEfeito(scene.id, area.id, {
+          x: Math.round(origin.x + dx),
+          y: Math.round(origin.y + dy),
+        }),
     );
+  }
+
+  /**
+   * A área de efeito nova: a caixa, e o efeito que o painel de Elementos
+   * escolheu. Sem escolha ela nasce SEM efeito -- um pedaço do chão marcado --,
+   * e o efeito se escolhe depois no gizmo, entre os da campanha.
+   */
+  function novaAreaDeEfeito(
+    caixa: Pick<AreaDeEfeito, "x" | "y" | "width" | "height" | "formato" | "pontos">,
+  ) {
+    return addAreaDeEfeito(scene.id, {
+      ...caixa,
+      ...(efeitoDaArea ? { efeito: efeitoDaArea } : {}),
+    });
+  }
+
+  /** A área escondida nova, já dinâmica se o painel de Elementos pediu. */
+  function novaNevoa(caixa: NewFogRegion) {
+    return addFog(scene.id, {
+      ...caixa,
+      ...(nevoaNovaDinamica ? { dinamica: true as const } : {}),
+    });
   }
 
   /**
@@ -1946,10 +1920,48 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             : box.width < PAREDE_MINIMA || box.height < PAREDE_MINIMA;
         if (magra) return;
 
-        selectParede(addParede(scene.id, rascunho(fim)));
+        selectParede(
+          addParede(scene.id, {
+            ...rascunho(fim),
+            ...camposDaParedeNova(paredeNova, formatoDaParede),
+          }),
+        );
         // Volta ao modo normal, como todas as outras do palco: o gesto seguinte
         // a erguer uma parede é conferir a sombra que ela fez, e não erguer
         // outra por cima. É a regra do Excalidraw, e agora vale para as seis.
+        setTool("select");
+      },
+    });
+  }
+
+  /**
+   * Traça uma porta: o clique crava a dobradiça, e o arrasto leva a ponta.
+   * Shift cai no múltiplo de 45, que é como as portas correm num mapa.
+   */
+  function tracarPorta(event: ReactPointerEvent, dobradica: Vec) {
+    startDrag(event, {
+      onMove: (delta, native) =>
+        setRascunhoDaPorta(
+          portaDoTraco(
+            dobradica,
+            { x: dobradica.x + delta.x, y: dobradica.y + delta.y },
+            native.shiftKey,
+          ),
+        ),
+      onEnd: (native) => {
+        setRascunhoDaPorta(null);
+
+        // Clique sem arrasto não deixa porta: uma de zero não teria onde pegar.
+        const porta = portaDoTraco(
+          dobradica,
+          toScene(native.clientX, native.clientY),
+          native.shiftKey,
+        );
+        if (!porta) return;
+
+        selectPorta(addPorta(scene.id, porta));
+        // De volta à seta, como a parede: o gesto seguinte é abrir a porta
+        // para conferir a luz, e é com a seta que a alça responde.
         setTool("select");
       },
     });
@@ -2013,23 +2025,31 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   function riscar(event: ReactPointerEvent, anchor: { x: number; y: number }) {
     const pontos = [Math.round(anchor.x), Math.round(anchor.y)];
     const passo = AMOSTRA_PX / scale;
+    // A corda do estabilizador, em pixel de TELA como a amostra: o tremido é
+    // da mão, e a mão é a mesma em qualquer ampliação. Ver `pontaNaCorda`.
+    const corda = (suavizarDoLapis * CORDA_MAXIMA_PX) / scale;
+    let ponta: Vec = anchor;
 
     setRiscando(true);
 
     startDrag(event, {
       onMove: (_delta, native) => {
-        const ponto = toScene(native.clientX, native.clientY);
+        ponta = pontaNaCorda(
+          ponta,
+          toScene(native.clientX, native.clientY),
+          corda,
+        );
 
         const ultimoX = pontos[pontos.length - 2] ?? 0;
         const ultimoY = pontos[pontos.length - 1] ?? 0;
 
-        if (Math.hypot(ponto.x - ultimoX, ponto.y - ultimoY) < passo) return;
+        if (Math.hypot(ponta.x - ultimoX, ponta.y - ultimoY) < passo) return;
 
-        pontos.push(Math.round(ponto.x), Math.round(ponto.y));
+        pontos.push(Math.round(ponta.x), Math.round(ponta.y));
 
         // Direto no atributo, como os gestos das janelas: pelo estado, cada
         // amostra custaria um render do palco inteiro.
-        previa.current?.setAttribute("points", pontos.join(" "));
+        previa.current?.setAttribute("d", caminhoMacio(pontos));
       },
       onEnd: () => {
         setRiscando(false);
@@ -2038,42 +2058,114 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         // bolinha no mapa que ninguém pediu.
         if (pontos.length < 4) return;
 
-        addTraco(scene.id, { pontos, cor, espessura });
+        addTraco(scene.id, {
+          pontos,
+          cor,
+          espessura,
+          // Cheio não grava o campo: é o risco de sempre, e o arquivo da cena
+          // não carrega um `1` em cada um.
+          ...(opacidadeDoLapis < 1 ? { opacidade: opacidadeDoLapis } : {}),
+        });
       },
     });
   }
 
   /**
-   * Apaga os riscos por onde a borracha passar.
+   * Aponta com o laser: um rastro que apaga sozinho e não entra na cena.
    *
-   * O traço INTEIRO que ela tocar, e não o pedaço: cortar uma polilinha em duas
-   * a cada passada exigiria recriar traços a cada quadro, e desfazer deixaria
-   * de ser "o risco volta" para ser "o risco volta remendado".
+   * Nada vai para o board nem para o histórico -- é gesto, como apontar com o
+   * dedo. O mestre vê o próprio rastro na hora, desenhado no plano de
+   * controles; a mesa o recebe pelo quadro, e só se esta é a cena no ar.
+   *
+   * Amostra por distância, como o lápis, mas sem a corda do estabilizador: o
+   * laser acompanha a mão, e o tremido dela faz parte de apontar.
+   *
+   * O relógio que tira o laser do quadro só começa a contar ao soltar. Um
+   * risco novo antes disso o cancela: o rastro de antes ainda está apagando, e
+   * segue no quadro junto com o novo.
+   */
+  function apontar(event: ReactPointerEvent, anchor: Vec) {
+    if (scale === 0) return;
+
+    const cenaId = scene.id;
+    const naMesa = cenaNoAr;
+    const passo = AMOSTRA_DO_LASER_PX / scale;
+
+    if (laserSaiDaMesa.current !== null) {
+      clearTimeout(laserSaiDaMesa.current);
+      laserSaiDaMesa.current = null;
+    }
+
+    const mostrar = (rastro: RastroDoLaser) => {
+      const agora = Date.now();
+      rastroDoLaser.current = podarRastro(rastro, agora);
+      acenderLaser(rastroDoLaser.current);
+
+      if (naMesa)
+        publicarLaser(laserParaMesa(rastroDoLaser.current, cenaId, agora));
+    };
+
+    mostrar({
+      riscos: [...rastroDoLaser.current.riscos, [{ ...anchor, t: Date.now() }]],
+      aceso: true,
+    });
+
+    startDrag(event, {
+      onMove: (_delta, native) => {
+        const { riscos } = rastroDoLaser.current;
+        const atual = riscos[riscos.length - 1];
+        const ultimo = atual?.[atual.length - 1];
+        if (!atual || !ultimo) return;
+
+        const ponto = toScene(native.clientX, native.clientY);
+        if (Math.hypot(ponto.x - ultimo.x, ponto.y - ultimo.y) < passo) return;
+
+        mostrar({
+          riscos: [...riscos.slice(0, -1), [...atual, { ...ponto, t: Date.now() }]],
+          aceso: true,
+        });
+      },
+      onEnd: () => {
+        mostrar({ ...rastroDoLaser.current, aceso: false });
+        if (!naMesa) return;
+
+        laserSaiDaMesa.current = setTimeout(() => {
+          laserSaiDaMesa.current = null;
+          publicarLaser(undefined);
+        }, VIDA_DO_LASER_MS);
+      },
+    });
+  }
+
+  /**
+   * A borracha dos riscos, no modo que o painel escolheu: o PEDAÇO por onde o
+   * anel passa, ou o risco INTEIRO que ele encostar. Ver `ModoDaBorracha`.
+   */
+  function apagar(event: ReactPointerEvent, anchor: Vec) {
+    if (modoDaBorracha === "pedaco") cortarRiscos(event, anchor);
+    else apagarRiscosInteiros(event, anchor);
+  }
+
+  /**
+   * Apaga INTEIRO todo risco que o anel encostar.
    *
    * Marca durante o gesto e remove ao soltar, numa vez: a borracha atravessa
    * três riscos numa passada, e removê-los um por um daria três entradas no
    * desfazer para um gesto só. Enquanto isso eles ficam translúcidos, senão o
    * mestre não saberia o que vai levar.
    */
-  function apagar(event: ReactPointerEvent, anchor: { x: number; y: number }) {
+  function apagarRiscosInteiros(event: ReactPointerEvent, anchor: Vec) {
     const alvos = new Set<string>();
 
-    // A folga é em pixel de TELA: acertar um fio de três unidades com o ponteiro
-    // exigiria pontaria, e apagar é gesto de correção -- quem apaga já errou uma
-    // vez. Constante no zoom porque a mão é a mesma em qualquer ampliação.
-    const folga = ALCANCE_BORRACHA_PX / scale;
-
-    const tocar = (ponto: { x: number; y: number }) => {
+    const tocar = (ponto: Vec) => {
       const antes = alvos.size;
 
       for (const traco of scene.tracos ?? []) {
         if (alvos.has(traco.id)) continue;
 
-        // O alcance sai da espessura DO RISCO, e não do lápis: com o lápis fino
-        // escolhido, um risco grosso ficava difícil de acertar -- e a borracha
-        // deixou de ler a espessura do lápis quando as duas viraram ferramentas
-        // separadas.
-        if (tracoAlcancado(traco, ponto, traco.espessura / 2 + folga))
+        // O anel mais a metade do risco: o risco grosso é tocado pela borda,
+        // e não só quando o anel chega à linha do meio dele.
+        if (tracoAlcancado(traco, ponto, raioDaBorracha + traco.espessura / 2))
           alvos.add(traco.id);
       }
 
@@ -2096,45 +2188,133 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   }
 
   /**
-   * Leva uma união de retratos para outra área.
+   * Corta dos riscos o PEDAÇO por onde o anel passa: o risco atravessado vira
+   * dois, e o que sobra continua com a cor, a largura e a opacidade dele.
    *
-   * A união não segue o ponteiro: as seis áreas acendem, a de baixo do cursor
-   * destaca, e soltar troca a âncora. Seguir o ponteiro exigiria um layout por
-   * quadro para uma escolha que tem seis respostas possíveis -- movimento a
-   * mais para a mesma decisão.
-   *
-   * Largar numa área que já tem outra união não é recusado: as duas empilham,
-   * a que chegou depois atrás da que já estava. Ver `filasDeUnioes`.
+   * Corta a cada amostra, pelo trecho novo da passada -- da amostra anterior
+   * até esta --, e não pela passada inteira de novo: o custo de uma amostra é o
+   * do trecho, e uma passada de três segundos não fica mais lenta no fim. O
+   * corte em curso vive no `useBorrachaDosRiscosStore`, que só a camada dos
+   * riscos assina, e entra na cena UMA vez, ao soltar: um Ctrl+Z por passada.
+   * Ver `cortarRisco`.
    */
-  function arrastarUniao(event: ReactPointerEvent, uniao: UniaoDeRetratos) {
-    const areas = areasDeRetrato(telaDaMesa);
+  function cortarRiscos(event: ReactPointerEvent, anchor: Vec) {
+    const tracos = scene.tracos ?? [];
+    // A caixa de cada risco, uma vez por gesto: o pedaço nunca sai da caixa do
+    // risco de que veio, e o risco longe da passada sai na primeira conta.
+    const caixas = new Map(tracos.map((traco) => [traco.id, caixaDoTraco(traco)]));
+    const pedacos = new Map<string, number[][]>();
+    const borracha = useBorrachaDosRiscosStore.getState();
+    let anterior = anchor;
 
-    const sob = (clientX: number, clientY: number) => {
-      const ponto = toScene(clientX, clientY);
+    const passar = (passada: Vec[]) => {
+      const xs = passada.map((ponto) => ponto.x);
+      const ys = passada.map((ponto) => ponto.y);
+      let mudou = false;
 
-      return (
-        areas.find(
-          ({ box }) =>
-            ponto.x >= box.x &&
-            ponto.x <= box.x + box.width &&
-            ponto.y >= box.y &&
-            ponto.y <= box.y + box.height,
-        )?.ancora ?? null
-      );
+      for (const traco of tracos) {
+        const alcance = raioDaBorracha + traco.espessura / 2;
+        const caixa = caixas.get(traco.id);
+        if (
+          !caixa ||
+          Math.max(...xs) < caixa.minX - alcance ||
+          Math.min(...xs) > caixa.maxX + alcance ||
+          Math.max(...ys) < caixa.minY - alcance ||
+          Math.min(...ys) > caixa.maxY + alcance
+        )
+          continue;
+
+        const atuais = pedacos.get(traco.id) ?? [traco.pontos];
+        const novos: number[][] = [];
+        let tocou = false;
+        for (const pedaco of atuais) {
+          const cortado = cortarRisco(pedaco, passada, alcance);
+          if (cortado) tocou = true;
+          novos.push(...(cortado ?? [pedaco]));
+        }
+
+        if (tocou) {
+          pedacos.set(traco.id, novos);
+          mudou = true;
+        }
+      }
+
+      if (mudou) borracha.setPedacos(new Map(pedacos));
     };
 
-    setArrastandoUniao(true);
-    setAreaDaUniao(sob(event.clientX, event.clientY));
+    passar([anchor]);
+
+    startDrag(event, {
+      onMove: (_delta, native) => {
+        const ponto = toScene(native.clientX, native.clientY);
+        passar([anterior, ponto]);
+        anterior = ponto;
+      },
+      onEnd: () => {
+        // Na cena ANTES de a prévia sair, como o furo da névoa: na ordem
+        // contrária, o risco inteiro voltaria por um quadro antes de sumir.
+        if (pedacos.size > 0) {
+          const porId = new Map(tracos.map((traco) => [traco.id, traco]));
+          substituirTracos(
+            scene.id,
+            new Map(
+              [...pedacos].map(([id, lista]) => {
+                const { cor, espessura, opacidade } = porId.get(id)!;
+                return [
+                  id,
+                  lista.map((pontos) => ({
+                    pontos,
+                    cor,
+                    espessura,
+                    ...(opacidade !== undefined ? { opacidade } : {}),
+                  })),
+                ];
+              }),
+            ),
+          );
+        }
+        borracha.setPedacos(null);
+      },
+    });
+  }
+
+  /**
+   * Fura a área escondida SELECIONADA por onde a borracha passar.
+   *
+   * Só ela: a borracha entra pelo gizmo da área, e a passada que escorrega
+   * para a vizinha não a abre sem querer. O traço vive no
+   * `useBorrachaDaNevoaStore` durante o gesto -- só o canvas da área repinta
+   * a cada amostra -- e entra na cena UMA vez, ao soltar: uma passada, um
+   * Ctrl+Z, uma publicação para a mesa. Ver `FogRegion.furos`.
+   */
+  function furarNevoa(event: ReactPointerEvent, anchor: Vec) {
+    const area = selectedFog;
+    // Sem área na mão, ou travada, a ferramenta não tem o que furar: volta à
+    // seleção, que é o que o clique no vazio quer dizer.
+    if (!area || area.locked) {
+      setTool("select");
+      return;
+    }
+
+    const borracha = useBorrachaDaNevoaStore.getState();
+    borracha.comecar(area.id, anchor);
 
     startDrag(event, {
       onMove: (_delta, native) =>
-        setAreaDaUniao(sob(native.clientX, native.clientY)),
-      onEnd: (native) => {
-        const escolhida = sob(native.clientX, native.clientY);
-        if (escolhida) ajustarUniaoDeRetratos(uniao.id, { ancora: escolhida });
+        borracha.acrescentar(toScene(native.clientX, native.clientY)),
+      onEnd: () => {
+        // O furo entra na cena ANTES de o traço sair da mão: na ordem
+        // contrária, a área sem furo nenhum voltaria a ser o bloco cheio por
+        // um quadro, e o buraco piscaria fechado antes de reabrir.
+        const traco = useBorrachaDaNevoaStore.getState().traco;
+        const furo =
+          traco && passadaTocaAArea(area, traco.pontos, traco.raio)
+            ? furoDoTraco(area, traco.pontos, traco.raio)
+            : null;
+        if (furo)
+          updateFog(scene.id, area.id, { furos: [...(area.furos ?? []), furo] });
 
-        setArrastandoUniao(false);
-        setAreaDaUniao(null);
+        useBorrachaDaNevoaStore.getState().terminar();
       },
     });
   }
@@ -2160,10 +2340,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     const ponto = toScene(event.clientX, event.clientY);
     // Meia linha acima do ponto: o cursor nasce onde o mouse está, e não com o
     // topo da letra nele -- é onde a pessoa está olhando.
+    const campos = camposDoTextoNovo();
     const id = addTexto(scene.id, {
       x: Math.round(ponto.x),
-      y: Math.round(ponto.y - TEXTO_TAMANHO / 2),
-      ...(padraoDoQuadro().aMao ? { aMao: true as const } : {}),
+      y: Math.round(ponto.y - (campos.tamanho ?? TEXTO_TAMANHO) / 2),
+      ...campos,
     });
     useQuadroStore.getState().editarTexto(id);
   }
@@ -2216,8 +2397,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         addParede(scene.id, {
           ...area,
           formato: "poligono",
+          ...camposDaParedeNova(paredeNova, "poligono"),
         }),
       );
+      setTool("select");
+      return;
+    }
+
+    if (tool === "efeito") {
+      selectAreaDeEfeito(novaAreaDeEfeito({ ...area, formato: "poligono" }));
       setTool("select");
       return;
     }
@@ -2240,7 +2428,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
-    selectFog(addFog(scene.id, area));
+    selectFog(novaNevoa(area));
     // Volta ao modo normal, como as outras áreas: o gesto seguinte é conferir
     // o que se escondeu, e não esconder mais um pedaço.
     setTool("select");
@@ -2377,10 +2565,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     // edição, porque texto vazio não é nada. Volta ao modo normal pela mesma
     // razão do alfinete.
     if (tool === "texto") {
+      // O que o painel de texto escolheu, e a letra da campanha quando ele
+      // não escolheu. Meia linha acima do ponto, na altura de quem vai nascer.
+      const campos = camposDoTextoNovo();
       const id = addTexto(scene.id, {
         x: Math.round(anchor.x),
-        y: Math.round(anchor.y - TEXTO_TAMANHO / 2),
-        ...(padraoDoQuadro().aMao ? { aMao: true as const } : {}),
+        y: Math.round(anchor.y - (campos.tamanho ?? TEXTO_TAMANHO) / 2),
+        ...campos,
       });
       useQuadroStore.getState().editarTexto(id);
       setTool("select");
@@ -2455,6 +2646,16 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
+    if (tool === "porta") {
+      tracarPorta(event, anchor);
+      return;
+    }
+
+    if (tool === "laser") {
+      apontar(event, anchor);
+      return;
+    }
+
     if (tool === "lapis") {
       riscar(event, anchor);
       return;
@@ -2465,10 +2666,19 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
-    if (tool === "fog") {
+    if (tool === "borrachaDaNevoa") {
+      furarNevoa(event, anchor);
+      return;
+    }
+
+    if (tool === "fog" || tool === "efeito") {
+      // A área de efeito desenha como a escondida: a mesma caixa, o mesmo
+      // formato. Muda só o que ela vira no fim do gesto.
+      const formato = tool === "fog" ? formatoDeArea : formatoDoEfeito;
+
       // A área LIVRE não é arrasto: ela se desenha vértice a vértice, e o
       // gesto todo acontece em cliques. Ver `cravarVertice`.
-      if (formatoDeArea === "poligono") {
+      if (formato === "poligono") {
         cravarVertice(anchor);
         return;
       }
@@ -2511,15 +2721,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // Clique sem arrasto criaria uma área invisível impossível de pegar.
           if (box.width < MIN_ITEM_SIZE || box.height < MIN_ITEM_SIZE) return;
 
-          selectFog(
-            addFog(scene.id, {
-              x: Math.round(box.x),
-              y: Math.round(box.y),
-              width: Math.round(box.width),
-              height: Math.round(box.height),
-              formato: formatoDeArea,
-            }),
-          );
+          const caixa = {
+            x: Math.round(box.x),
+            y: Math.round(box.y),
+            width: Math.round(box.width),
+            height: Math.round(box.height),
+            formato,
+          };
+          if (tool === "efeito") selectAreaDeEfeito(novaAreaDeEfeito(caixa));
+          else selectFog(novaNevoa(caixa));
           // Volta ao modo normal: desenhar duas áreas seguidas é raro, e ficar
           // preso na ferramenta faz o mestre cobrir a cena por acidente.
           setTool("select");
@@ -2841,7 +3051,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     fecharLaco,
     item: handleItemPointerDown,
     fog: handleFogPointerDown,
-    portrait: handlePortraitPointerDown,
+    areaDeEfeito: handleAreaDeEfeitoPointerDown,
     texto: handleTextoPointerDown,
     forma: handleFormaPointerDown,
     papel: handlePapelPointerDown,
@@ -2853,8 +3063,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       fecharLaco,
       item: handleItemPointerDown,
       fog: handleFogPointerDown,
-      portrait: handlePortraitPointerDown,
-      texto: handleTextoPointerDown,
+      areaDeEfeito: handleAreaDeEfeitoPointerDown,
+        texto: handleTextoPointerDown,
       forma: handleFormaPointerDown,
       papel: handlePapelPointerDown,
       pega: handlePegaPointerDown,
@@ -2941,7 +3151,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       useToolStore.subscribe((estado, anterior) => {
         if (
           estado.tool !== anterior.tool ||
-          estado.formatoDeArea !== anterior.formatoDeArea
+          estado.formatoDeArea !== anterior.formatoDeArea ||
+          estado.formatoDoEfeito !== anterior.formatoDoEfeito
         )
           setLaco(null);
       }),
@@ -2955,9 +3166,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     [],
   );
 
-  const onPortraitPointerDown = useCallback(
-    (event: ReactPointerEvent, portrait: Portrait) => {
-      handlersRef.current.portrait(event, portrait);
+  const onAreaDeEfeitoPointerDown = useCallback(
+    (event: ReactPointerEvent, area: AreaDeEfeito) => {
+      handlersRef.current.areaDeEfeito(event, area);
     },
     [],
   );
@@ -3002,7 +3213,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
   // Espaço tem precedência sobre a ferramenta: segurar espaço desloca a cena,
   // mesmo com a névoa escolhida.
-  const drawingFog = tool === "fog" && !panMode;
+  const drawingFog = (tool === "fog" || tool === "efeito") && !panMode;
   /**
    * Ferramenta de mira ativa: névoa, ponto, postit, lápis, borracha, régua —
    * ou a de uma extensão.
@@ -3025,11 +3236,14 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         tool === "texto" ||
         tool === "ligacao" ||
         tool === "forma" ||
+        tool === "laser" ||
         tool === "lapis" ||
         tool === "borracha" ||
+        tool === "borrachaDaNevoa" ||
         tool === "regua" ||
         tool === "parede" ||
         tool === "luz" ||
+        tool === "porta" ||
         Boolean(ferramentaDeExtensao(tool))));
   // Mão aberta sempre que o espaço estiver segurado.
   //
@@ -3049,7 +3263,6 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           gesto é o listener de deslocamento do `SceneStage`, que fica num
           ancestral e dispararia junto se este também respondesse. */}
       <SceneLayer
-          contornos={contornos}
           // O envelope do palco desce junto com o conteúdo, para o plano de
           // baixo: em cima ele cobriria os tokens e engoliria o clique que
           // deveria pegá-los. Ver `palco` no `SceneLayer`.
@@ -3083,37 +3296,22 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           apagando={apagando}
           scene={scene}
           variant="mestre"
-          // Os dados dos jogadores pendurados nos retratos, aqui também.
-          //
-          // O palco do mestre ficou de fora quando isto nasceu, com o
-          // argumento de que a fileira do canto já os mostra e repetir daria
-          // dois lugares para a mesma coisa. O argumento caiu quando o dado
-          // passou a CAIR no retrato: a fileira diz o que foi rolado, e o
-          // retrato diz de quem é, com a queda acontecendo no rosto da pessoa.
-          // São duas leituras diferentes do mesmo fato, e o mestre precisa das
-          // duas -- ele é quem narra o resultado para a mesa.
-          rolagens={bandeja}
+          portaNaMao={gestoPorta?.portaId}
           pings={pings}
           fichas={fichasNoPalco}
           efeitos={efeitosNoPalco}
-          // Todos enquanto a aba Retratos está aberta; fora dela, só o
-          // selecionado. Desenhar todos sempre punha cabeça flutuando sobre a
-          // moldura da câmera justamente enquanto o mestre monta o mapa.
-          portraits={
-            editingPortraits
-              ? portraits
-              : selectedPortraits.length > 0
-                ? selectedPortraits
-                : undefined
-          }
+          // Sem retratos: eles moram no quadro da janela Retratos, e é lá que
+          // o dado cai no rosto de quem rolou. Sobre o mapa, as cabeças
+          // disputavam a atenção com o que o mestre estava montando.
           // Com ferramenta de mira escolhida, o gesto sempre vale para ela:
           // repassar os handlers faria clicar sobre um item existente virar
           // "mover item".
           onItemPointerDown={panMode || aiming ? undefined : onItemPointerDown}
           onFogPointerDown={panMode || aiming ? undefined : onFogPointerDown}
-          onPortraitPointerDown={
-            panMode || aiming ? undefined : onPortraitPointerDown
+          onAreaDeEfeitoPointerDown={
+            panMode || aiming ? undefined : onAreaDeEfeitoPointerDown
           }
+          animarSo={efeitosAnimados}
           medidorSelecionadoId={selectedMedidorId}
           onMedidorPointerDown={
             panMode || aiming ? undefined : onMedidorPointerDown
@@ -3141,7 +3339,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             x: ponto.x,
             y: ponto.y,
             autorId: AUTOR_MESTRE,
-            autor: "Mestre",
+            autor: texto.mestreStage.autorDoPing,
             quando: Date.now(),
           })
         }
@@ -3152,6 +3350,14 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           desenha na TV. O que a mesa recebe é a SOMBRA, não a parede que a
           fez. Ver `ParedeLayer` e `SombraLayer`. */}
       <ParedeLayer scene={scene} fantasma={rascunhoDaParede} />
+
+      {/* A folha, a dobradiça e a alça de cada porta. Fora do `SceneLayer`
+          pela razão da parede: a mesa vê a luz passar, e não a porta. */}
+      <PortaMarcadores
+        scene={scene}
+        panMode={panMode}
+        fantasma={rascunhoDaPorta}
+      />
 
       {/* O ponto e o alcance de cada luz cravada. Fora do `SceneLayer` pela
           razão da parede: a mesa vê a luz, não o marcador dela. */}
@@ -3366,6 +3572,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           box={single}
           handles={CORNER_HANDLES}
           keepAspect
+          // O piso de item de cena, o mesmo do 2.5D: token de mapa grande é
+          // pequeno, e o mestre aproxima a câmera para pegá-lo.
+          minimo={MIN_SCENE_ITEM_SIZE}
           // Azul quando é token: numa cena com mobília, mapa e quatro tokens,
           // saber que a caixa em volta é de uma PESSOA muda o que o mestre vai
           // fazer com ela.
@@ -3387,6 +3596,15 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // boneco e o barril, só entre o que está em pé e o que é visto de
           // cima. Ver `SombraDoItem`.
           sombra={sombraDoSelecionado}
+          // As condições, aqui como a opacidade e a sombra: as do objeto, no
+          // item da cena; as do token, no personagem -- a mesma lista da ficha.
+          condicoes={
+            single.personagemId ? (
+              <PainelDeCondicoesDoPersonagem personagemId={single.personagemId} />
+            ) : (
+              <PainelDeCondicoesDoObjeto item={single} />
+            )
+          }
           // Token abre a ficha de quem ele é. É o atalho que faltava no meio da
           // sessão: o mestre clica na figura no mapa, e não na lista de
           // personagens, porque no mapa é onde a mão dele já está.
@@ -3404,6 +3622,18 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         />
       ) : null}
 
+      {/* A roda da lanterna, por cima do gizmo: para onde o token olha e até
+          onde a luz dele vai. Travado não gira, como no 2.5D. Sem `key`: ela
+          não guarda estado, e a do item já é a do gizmo, irmão daqui -- chave
+          repetida entre irmãos faz o React deixar cópias do gizmo no DOM. */}
+      {single?.luz && !single.locked && !panMode ? (
+        <RodaDaLanterna
+          sceneId={scene.id}
+          item={single}
+          azul={Boolean(personagemDoItem)}
+        />
+      ) : null}
+
       {/* O gizmo da PAREDE, irmão do da área e pela mesma razão: a caixa é a
           verdade dela nos quatro formatos, então mover, escalar e girar são o
           mesmo controle que já existe. Foi o que a caixa comprou -- a primeira
@@ -3415,6 +3645,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             onChange={(patch) =>
               updateParede(scene.id, selectedParede.id, patch)
             }
+            // Parede encolhe abaixo do piso de item: o mapa pinta pilar e
+            // mureta mais finos que um token. Ver `ladoMinimoDaParede`.
+            minimo={ladoMinimoDaParede(selectedParede)}
             // Quão alto o tijolo sobe. Em metros no controle e em unidade de
             // cena na cena: ver `UNIDADES_POR_METRO`.
             altura={{
@@ -3466,6 +3699,42 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         </>
       ) : null}
 
+      {/* A fileira da porta: abrir e fechar, altura, cadeado e lixeira. Só
+          a fileira -- sem caixa, alças nem giro: as alças da porta são as
+          dela, em volta da dobradiça. Ver `PortaMarcadores`. */}
+      {selectedPorta && caixaDaPortaNaMao && !panMode ? (
+        <TransformHandles
+          key={selectedPorta.id}
+          box={{ ...caixaDaPortaNaMao, rotation: 0 }}
+          handles={[]}
+          rotatable={false}
+          outline={false}
+          onChange={() => {}}
+          porta={{
+            aberta: selectedPorta.abertura !== undefined,
+            onToggle: () =>
+              updatePorta(scene.id, selectedPorta.id, alternarPorta(selectedPorta)),
+          }}
+          altura={{
+            doQue: "porta",
+            metros: (selectedPorta.altura ?? ALTURA_DA_PAREDE) / UNIDADES_POR_METRO,
+            onChange: (metros) =>
+              updatePorta(scene.id, selectedPorta.id, {
+                // Ausente na altura da parede, como nela: é a porta de sempre.
+                altura:
+                  metros === METROS_DA_PAREDE_PADRAO
+                    ? undefined
+                    : metros * UNIDADES_POR_METRO,
+              }),
+          }}
+          trava={{
+            travada: Boolean(selectedPorta.locked),
+            onToggle: toggleSelectionLock,
+          }}
+          onDelete={removePortaSelection}
+        />
+      ) : null}
+
       {/* As alças de vértice da forma em LAÇO. A caixa dela já é governada
           pelo gizmo do palco, junto com o resto da seleção; o que falta é
           mexer num canto, e é a mesma camada das outras duas. */}
@@ -3485,9 +3754,31 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         <>
           <TransformHandles
             box={{ ...selectedFog, rotation: selectedFog.rotation ?? 0 }}
+            // Com a borracha na mão, nem alça nem giro: o canto da área é
+            // justamente onde se passa a borracha, e a alça engoliria o
+            // arrasto. Fica a fileira, que é por onde se sai.
+            handles={furando ? SEM_ALCAS : undefined}
+            rotatable={!furando}
             // Gira como o item: corredor, mesa e parede raramente correm no
             // eixo da tela, e sem giro cobrir um deles cobria meio mapa junto.
             onChange={(patch) => updateFog(scene.id, selectedFog.id, patch)}
+            dinamica={{
+              ligada: Boolean(selectedFog.dinamica),
+              onToggle: () =>
+                updateFog(scene.id, selectedFog.id, {
+                  dinamica: selectedFog.dinamica ? undefined : true,
+                }),
+            }}
+            // Travada não fura, como não move nem apaga.
+            borracha={
+              selectedFog.locked
+                ? undefined
+                : {
+                    ativa: furando,
+                    onToggle: () =>
+                      setTool(furando ? "select" : "borrachaDaNevoa"),
+                  }
+            }
             trava={{
               travada: Boolean(selectedFog.locked),
               onToggle: toggleSelectionLock,
@@ -3497,121 +3788,132 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
           {/* As alças de vértice, só da área recortada: nas outras duas o
               contorno É a caixa, e o gizmo já a controla inteira. Travada,
-              nenhuma. */}
-          {selectedFog.formato === "poligono" && !selectedFog.locked ? (
+              nenhuma; com a borracha na mão, também não.
+
+              O vértice que sai da caixa faz OUTRA caixa, e os furos, que são
+              fração dela, pulariam junto: vão reescritos para a nova sem sair
+              do lugar no mapa. Ver `furosNaCaixaNova`. */}
+          {selectedFog.formato === "poligono" &&
+          !selectedFog.locked &&
+          !furando ? (
             <AlcasDaArea
               region={selectedFog}
-              onChange={(patch) => updateFog(scene.id, selectedFog.id, patch)}
+              onChange={(patch) =>
+                updateFog(scene.id, selectedFog.id, {
+                  ...patch,
+                  ...(selectedFog.furos?.length
+                    ? {
+                        furos: furosNaCaixaNova(
+                          selectedFog,
+                          { ...selectedFog, ...patch },
+                          selectedFog.furos,
+                        ),
+                      }
+                    : {}),
+                })
+              }
+            />
+          ) : null}
+
+          {furando ? (
+            <AnelDoPincel
+              raio={raioDaBorrachaDaNevoa}
+              noCentro={tamanhoEmAjuste}
+              amostra={AMOSTRA_DA_BORRACHA}
             />
           ) : null}
         </>
       ) : null}
 
-      {/* Proporção travada: retrato deformado fica grotesco, e a caixa aqui
-          não é a proporção do arquivo — o `object-contain` já cuida disso —,
-          mas manter a razão evita o mestre criar uma faixa sem querer. */}
-      {singlePortrait && !panMode ? (
-        <TransformHandles
-          box={{ ...portraitBox(singlePortrait, telaDaMesa), rotation: 0 }}
-          rotatable={false}
-          handles={CORNER_HANDLES}
-          keepAspect
-          onChange={(patch) => {
-            const current = portraitBox(singlePortrait, telaDaMesa);
+      {selectedAreaDeEfeito && !panMode ? (
+        <>
+          <TransformHandles
+            box={{ ...selectedAreaDeEfeito, rotation: selectedAreaDeEfeito.rotation ?? 0 }}
+            // Gira como a área escondida. O fogo não gira junto -- ele sobe --,
+            // mas as casas que entram, sim. Ver `planoDaArea`.
+            onChange={(patch) =>
+              updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, patch)
+            }
+            paleta={{
+              titulo: texto.mestreStage.cor,
+              // A cor DESTA área, quando o mestre escolheu uma. Ausente, ela
+              // segue a do efeito -- e o primeiro botão da paleta volta a isso.
+              cor: selectedAreaDeEfeito.cor,
+              semFundo: true,
+              onChange: ({ cor }) => {
+                if (cor === undefined) return;
+                updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, {
+                  cor: cor ?? undefined,
+                });
+              },
+            }}
+            // O efeito da área, no lugar das condições: é o que ela faz. Os
+            // efeitos em área da campanha, ou nenhum. Ver `EscolhaDoEfeitoDaArea`.
+            condicoes={
+              <EscolhaDoEfeitoDaArea
+                efeito={selectedAreaDeEfeito.efeito}
+                onEscolher={(efeito) =>
+                  updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, { efeito })
+                }
+              />
+            }
+            botaoDoPainel={{ rotulo: texto.mestreStage.efeito, icone: WandSparkles }}
+            mesa={{
+              naMesa: Boolean(selectedAreaDeEfeito.naMesa),
+              onToggle: () =>
+                updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, {
+                  naMesa: selectedAreaDeEfeito.naMesa ? undefined : true,
+                }),
+            }}
+            trava={{
+              travada: Boolean(selectedAreaDeEfeito.locked),
+              onToggle: toggleSelectionLock,
+            }}
+            onDelete={removeAreaDeEfeitoSelection}
+          />
 
-            updatePortrait(
-              singlePortrait.id,
-              portraitFraction(
-                {
-                  x: patch.x ?? current.x,
-                  y: patch.y ?? current.y,
-                  width: patch.width ?? current.width,
-                  height: patch.height ?? current.height,
-                },
-                telaDaMesa,
-              ),
-            );
-          }}
-          onFlip={() =>
-            updatePortrait(singlePortrait.id, { flipX: !singlePortrait.flipX })
-          }
-          // Mesma ação do atalho e do menu: implementações separadas divergem
-          // no primeiro ajuste.
-          onDelete={removePortraitSelection}
-        />
-      ) : null}
-
-      {/* Grupo de retratos: um fator só para todos, tirado da largura. É o que
-          mantém os rostos coerentes entre si — escalar cada um à mão sempre
-          termina com um NPC maior que o outro sem motivo. */}
-      {portraitGroupBounds && !panMode ? (
-        <TransformHandles
-          box={{ ...boundsToBox(portraitGroupBounds), rotation: 0 }}
-          rotatable={false}
-          handles={CORNER_HANDLES}
-          keepAspect
-          outline={false}
-          onGestureStart={() => {
-            portraitSnapshot.current = {
-              portraits: selectedPortraits,
-              bounds: portraitGroupBounds,
-            };
-          }}
-          onChange={(patch) => {
-            const frozen = portraitSnapshot.current;
-            if (!frozen || patch.x === undefined || patch.width === undefined)
-              return;
-
-            const escalados = scalePortraitGroup(
-              frozen.portraits,
-              frozen.bounds,
-              boundsFromBox({
-                x: patch.x,
-                y: patch.y ?? frozen.bounds.minY,
-                width: patch.width,
-                height: patch.height ?? 0,
-              }),
-              telaDaMesa,
-            );
-
-            // Sendo uma união, o gizmo só manda no TAMANHO: a posição é dela,
-            // e deixar os dois escreverem no mesmo quadro faz o retrato pular
-            // -- o gizmo o põe onde a escala calculou, e o efeito o traz de
-            // volta para a fila no quadro seguinte.
-            updatePortraits(
-              uniaoSelecionada
-                ? escalados.map(({ id, patch: mudanca }) => ({
-                    id,
-                    patch: { width: mudanca.width, height: mudanca.height },
-                  }))
-                : escalados,
-            );
-          }}
-          onDelete={removePortraitSelection}
-        />
-      ) : null}
-
-      {/* A caixa do grupo de retratos, que o gizmo dele não desenha -- ele só
-          põe as alças nos cantos. Sem ela, mexer em cinco rostos de uma vez não
-          tinha nenhum sinal na tela de que cinco estavam em jogo. */}
-      {portraitGroupBounds && !panMode ? (
-        <SelectionBox
-          bounds={portraitGroupBounds}
-          rotulo={
-            uniaoSelecionada
-              ? `${uniaoSelecionada.nome} · ${selectedPortraitIds.length}`
-              : `${selectedPortraitIds.length} retratos`
-          }
-        />
-      ) : null}
-
-      {arrastandoUniao ? (
-        <PortraitAnchors camera={telaDaMesa} alvo={areaDaUniao} />
+          {selectedAreaDeEfeito.formato === "poligono" && !selectedAreaDeEfeito.locked ? (
+            <AlcasDaArea
+              region={selectedAreaDeEfeito}
+              onChange={(patch) =>
+                updateAreaDeEfeito(scene.id, selectedAreaDeEfeito.id, patch)
+              }
+            />
+          ) : null}
+        </>
       ) : null}
 
       {/* O risco em curso, antes de virar traço da cena. Desenhado aqui e não
           na camada compartilhada porque ele não existe na cena ainda -- e a
           mesa não deve ver a linha crescendo. */}
+      {/* O anel do lápis: a largura do risco, antes de riscar. Fica durante
+          o risco também -- é a ponta da caneta. Com espaço segurado sai: a mão
+          aberta não risca. */}
+      {/* O anel da borracha dos riscos: o alcance dela, no modo pedaço e no
+          inteiro. */}
+      {tool === "borracha" && !panMode ? (
+        <AnelDoPincel
+          raio={raioDaBorracha}
+          noCentro={tamanhoEmAjuste}
+          amostra={AMOSTRA_DA_BORRACHA}
+        />
+      ) : null}
+
+      {tool === "lapis" && !panMode ? (
+        <AnelDoPincel
+          raio={espessura / 2}
+          // A régua de largura na mão: o anel vai para o meio do palco,
+          // cheio, como o risco vai sair. Ver `tamanhoEmAjuste`.
+          noCentro={tamanhoEmAjuste}
+          amostra={{ cor, opacidade: opacidadeDoLapis }}
+        />
+      ) : null}
+
+      {/* O laser do próprio mestre, na hora, sem o atraso da mesa. Sempre
+          montado: o rastro termina de apagar mesmo que a ferramenta troque no
+          meio. Vazio, é um SVG sem nada dentro. Ver `apontar`. */}
+      <SvgDoLaser desenho={laser} />
+
       {riscando ? (
         <svg
           aria-hidden
@@ -3628,13 +3930,16 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // névoa e escorregaria para baixo dela ao soltar.
           style={{ zIndex: 4_000 }}
         >
-          <polyline
+          {/* O mesmo `path` macio do risco gravado, e a mesma opacidade: a
+              prévia é o risco, e soltar não pode mudar o desenho. */}
+          <path
             ref={previa}
             fill="none"
             stroke={cor}
             strokeWidth={espessura}
             strokeLinecap="round"
             strokeLinejoin="round"
+            opacity={opacidadeDoLapis}
           />
         </svg>
       ) : null}
@@ -3642,7 +3947,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       {marquee ? (
         <MarqueeBox
           bounds={marquee}
-          redondo={tool === "fog" && formatoDeArea === "elipse"}
+          redondo={
+            (tool === "fog" && formatoDeArea === "elipse") ||
+            (tool === "efeito" && formatoDoEfeito === "elipse")
+          }
         />
       ) : null}
 

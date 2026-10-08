@@ -7,15 +7,19 @@ describe("topicosAchados", () => {
     expect(topicosAchados("  ", {})).toEqual([
       "quadro",
       "medidores",
-      "condicoes",
-      "layout",
-      "posicao",
+      "efeitos",
+      "espectador",
       "ajustes",
     ]);
   });
 
-  it("acha pelo título sem ligar para acento nem caixa", () => {
-    expect(topicosAchados("CONDICOES", {})).toEqual(["condicoes"]);
+  it("quem procura o fogo acha os efeitos: o da condição e o da área moram lá", () => {
+    expect(topicosAchados("fagulha", {})).toEqual(["efeitos"]);
+    expect(topicosAchados("área", {})).toEqual(["efeitos"]);
+  });
+
+  it("acha pelo nome da aba sem ligar para acento nem caixa", () => {
+    expect(topicosAchados("CONDICOES", {})).toEqual(["efeitos"]);
   });
 
   it("acha pela palavra de quem não sabe o nome do tópico", () => {
@@ -24,12 +28,18 @@ describe("topicosAchados", () => {
 
   it("acha pelo que o mestre criou dentro do tópico", () => {
     expect(
-      topicosAchados("envenen", { condicoes: ["Envenenado", "Caído"] }),
-    ).toEqual(["condicoes"]);
+      topicosAchados("envenen", { efeitos: ["Envenenado", "Caído"] }),
+    ).toEqual(["efeitos"]);
   });
 
   it("um termo pode achar mais de um tópico", () => {
-    expect(topicosAchados("retrato", {})).toEqual(["layout", "posicao"]);
+    expect(
+      topicosAchados("fogo", { medidores: ["Fogo interior"] }),
+    ).toEqual(["medidores", "efeitos"]);
+  });
+
+  it("o retrato não mora mais aqui: layout e posição são da janela Retratos", () => {
+    expect(topicosAchados("retrato", {})).toEqual([]);
   });
 
   it("o plugin se acha pelo nome do tópico que o guarda", () => {
@@ -38,6 +48,15 @@ describe("topicosAchados", () => {
 
   it("o canto arredondado se acha pela palavra de quem procura", () => {
     expect(topicosAchados("borda", {})).toEqual(["quadro"]);
+  });
+
+  it("quem procura a TV ou o projetor acha a imagem do espectador", () => {
+    expect(topicosAchados("projetor", {})).toEqual(["espectador"]);
+    expect(topicosAchados("SÉPIA", {})).toEqual(["espectador"]);
+  });
+
+  it("o brilho mora nos dois: o da fagulha e o da TV", () => {
+    expect(topicosAchados("brilho", {})).toEqual(["efeitos", "espectador"]);
   });
 
   it("nada bate, nada volta", () => {

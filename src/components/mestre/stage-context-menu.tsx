@@ -65,6 +65,7 @@ import {
   agruparSelecao,
   desagruparSelecao,
 } from "@/lib/mestre/item-actions";
+import { ehObjeto } from "@/lib/mestre/condicoes-do-objeto";
 import {
   alternarTransmissao,
   enquadrarAqui,
@@ -85,6 +86,7 @@ import {
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { temCamera, temLuz, type CameraSalva, type Scene } from "@/types/scene";
 import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
+import { BlocoDaPorta } from "@/components/mestre/menu-da-porta";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 import { SubmenuDeCondicoes } from "@/components/mestre/menu-de-condicoes";
 import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
@@ -93,6 +95,7 @@ import {
   useTemItensDeExtensao,
 } from "@/components/mestre/itens-de-extensao";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { t } from "@/lib/i18n/bancada";
 
 /**
  * Menu de botão direito do palco. Um único menu para a cena inteira em vez de
@@ -119,15 +122,18 @@ export function StageContextMenu({
   const selectedFogId = useSelectionStore((state) => state.selectedFogId);
   const selectedLuzId = useSelectionStore((state) => state.selectedLuzId);
   const selectedParedeId = useSelectionStore((state) => state.selectedParedeId);
-  const selectedPortraitIds = useSelectionStore((state) => state.selectedPortraitIds);
+  const selectedPortaId = useSelectionStore((state) => state.selectedPortaId);
   /**
-   * Parede e retrato não têm menu de fábrica, e o botão direito neles caía no
-   * menu do vazio. Ganham um bloco SÓ quando algum plugin declarou item para
-   * eles: sem plugin, nada muda -- e é o que separa "abrir o encaixe" de
-   * "decidir que parede tem menu", que é outra decisão.
+   * Parede não tem menu de fábrica, e o botão direito nela caía no menu do
+   * vazio. Ganha um bloco SÓ quando algum plugin declarou item para ela: sem
+   * plugin, nada muda -- e é o que separa "abrir o encaixe" de "decidir que
+   * parede tem menu", que é outra decisão.
+   *
+   * O retrato tinha um bloco igual aqui, e saiu: o botão direito nele agora é
+   * no quadro da janela Retratos, e o encaixe `palco.retrato` foi junto. Ver
+   * `QuadroDosRetratos`.
    */
   const paredeComItens = useTemItensDeExtensao("palco.parede");
-  const retratoComItens = useTemItensDeExtensao("palco.retrato");
   const hasClipboard = useClipboardStore(temAlgoParaColar);
   /**
    * A moldura de câmera que levou o botão direito, se foi numa.
@@ -165,6 +171,8 @@ export function StageContextMenu({
       item.personagemId &&
       personagens?.some((personagem) => personagem.id === item.personagemId),
   );
+  /** Algum objeto -- imagem sem personagem -- na seleção: o barril também tem condição. */
+  const comObjeto = selectedItems.some(ehObjeto);
   /**
    * Só coisa do QUADRO na mão: texto solto, forma, ou os dois.
    *
@@ -239,8 +247,10 @@ export function StageContextMenu({
   const opacidade = opacidadeDaSelecao(selectedItems);
   const selectedFog = scene.fog.find((region) => region.id === selectedFogId);
   const selectedLuz = scene.luzes?.find((luz) => luz.id === selectedLuzId);
+  const selectedPorta = scene.portas?.find(
+    (porta) => porta.id === selectedPortaId,
+  );
   const paredeNaMao = Boolean(selectedParedeId) && paredeComItens;
-  const retratoNaMao = selectedPortraitIds.length > 0 && retratoComItens;
   /** Nada selecionado: o botão direito foi no vazio. Ver o bloco da cena. */
   const nadaNaMao =
     !naCamera &&
@@ -248,8 +258,8 @@ export function StageContextMenu({
     !soQuadro &&
     !selectedFog &&
     !selectedLuz &&
-    !paredeNaMao &&
-    !retratoNaMao;
+    !selectedPorta &&
+    !paredeNaMao;
 
   return (
     <ContextMenu
@@ -289,17 +299,23 @@ export function StageContextMenu({
           </>
         ) : null}
 
+        {selectedPorta && !naCamera ? (
+          <BlocoDaPorta sceneId={scene.id} porta={selectedPorta} />
+        ) : null}
+
         {selectedFog && !naCamera ? (
           <>
             <ContextMenuItem onClick={() => toggleFogRevealed()}>
               {selectedFog.revealed ? <EyeOff /> : <Eye />}
               {selectedFog.revealed
-                ? "Esconder de novo"
-                : "Revelar para a mesa"}
+                ? t.stageContextMenu.esconderDeNovo
+                : t.stageContextMenu.revelarParaMesa}
             </ContextMenuItem>
             <ContextMenuItem onClick={toggleSelectionLock}>
               {selectedFog.locked ? <LockOpen /> : <Lock />}
-              {selectedFog.locked ? "Destravar" : "Travar"}
+              {selectedFog.locked
+                ? t.stageContextMenu.destravar
+                : t.stageContextMenu.travar}
             </ContextMenuItem>
             {/* Apagado na travada, e não sumido: ver o da luz. */}
             <ContextMenuItem
@@ -308,7 +324,7 @@ export function StageContextMenu({
               onClick={removeFogSelection}
             >
               <Trash2 />
-              Remover área
+              {t.stageContextMenu.removerArea}
               <ContextMenuShortcut>Del</ContextMenuShortcut>
             </ContextMenuItem>
             <ItensDeExtensao
@@ -331,17 +347,17 @@ export function StageContextMenu({
               <>
                 <ContextMenuItem onClick={copySelection}>
                   <Copy />
-                  Copiar
+                  {t.stageContextMenu.copiar}
                   <ContextMenuShortcut>Ctrl+C</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuItem onClick={cutSelection}>
                   <Scissors />
-                  Recortar
+                  {t.stageContextMenu.recortar}
                   <ContextMenuShortcut>Ctrl+X</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuItem onClick={duplicateSelection}>
                   <CopyPlus />
-                  Duplicar
+                  {t.stageContextMenu.duplicar}
                   <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
                 </ContextMenuItem>
               </>
@@ -349,7 +365,9 @@ export function StageContextMenu({
             {doQuadroNaMao.length > 0 ? (
               <ContextMenuItem onClick={toggleSelectionLock}>
                 {quadroTravado ? <LockOpen /> : <Lock />}
-                {quadroTravado ? "Destravar" : "Travar"}
+                {quadroTravado
+                  ? t.stageContextMenu.destravar
+                  : t.stageContextMenu.travar}
               </ContextMenuItem>
             ) : null}
             <ContextMenuItem
@@ -358,7 +376,7 @@ export function StageContextMenu({
               onClick={() => removeSelection()}
             >
               <Trash2 />
-              Remover
+              {t.stageContextMenu.remover}
               <ContextMenuShortcut>Del</ContextMenuShortcut>
             </ContextMenuItem>
             <ItensDeExtensao
@@ -391,8 +409,9 @@ export function StageContextMenu({
               />
             ) : null}
             {/* Da seleção inteira, e não só do token único: envenenar a horda
-                de uma vez é o pedido. Some quando nenhum token é de alguém. */}
-            {deAlguem ? (
+                de uma vez é o pedido. Vale para o objeto também -- o barril em
+                chamas. Some quando não há nem um nem outro. */}
+            {deAlguem || comObjeto ? (
               <>
                 <SubmenuDeCondicoes itens={selectedItems} />
                 <ContextMenuSeparator />
@@ -401,17 +420,17 @@ export function StageContextMenu({
 
             <ContextMenuItem onClick={copySelection}>
               <Copy />
-              Copiar
+              {t.stageContextMenu.copiar}
               <ContextMenuShortcut>Ctrl+C</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuItem onClick={cutSelection}>
               <Scissors />
-              Recortar
+              {t.stageContextMenu.recortar}
               <ContextMenuShortcut>Ctrl+X</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuItem onClick={duplicateSelection}>
               <CopyPlus />
-              Duplicar
+              {t.stageContextMenu.duplicar}
               <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
             </ContextMenuItem>
 
@@ -424,17 +443,17 @@ export function StageContextMenu({
             <ContextMenuSub>
               <ContextMenuSubTrigger>
                 <FlipHorizontal />
-                Espelhar
+                {t.stageContextMenu.espelhar}
               </ContextMenuSubTrigger>
               <ContextMenuSubContent className="min-w-40">
                 <ContextMenuItem onClick={() => flipSelection("x")}>
                   <FlipHorizontal />
-                  Na horizontal
+                  {t.stageContextMenu.naHorizontal}
                   <ContextMenuShortcut>Shift+H</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => flipSelection("y")}>
                   <FlipVertical />
-                  Na vertical
+                  {t.stageContextMenu.naVertical}
                   <ContextMenuShortcut>Shift+V</ContextMenuShortcut>
                 </ContextMenuItem>
               </ContextMenuSubContent>
@@ -443,7 +462,7 @@ export function StageContextMenu({
             <ContextMenuSub>
               <ContextMenuSubTrigger>
                 <Blend />
-                Opacidade
+                {t.stageContextMenu.opacidade}
               </ContextMenuSubTrigger>
               {/* O submenu NÃO fecha ao escolher — é o padrão do item de
                   rádio, e aqui ele vale: escolher opacidade é olhar o palco e
@@ -458,7 +477,9 @@ export function StageContextMenu({
                 >
                   {DEGRAUS_OPACIDADE.map((degrau) => (
                     <ContextMenuRadioItem key={degrau} value={degrau}>
-                      {degrau === 1 ? "Normal" : `${Math.round(degrau * 100)}%`}
+                      {degrau === 1
+                        ? t.stageContextMenu.normal
+                        : `${Math.round(degrau * 100)}%`}
                     </ContextMenuRadioItem>
                   ))}
                 </ContextMenuRadioGroup>
@@ -480,7 +501,7 @@ export function StageContextMenu({
                 <ContextMenuSub>
                   <ContextMenuSubTrigger disabled={!cameraSelecionada}>
                     <Focus />
-                    Câmera
+                    {t.stageContextMenu.camera}
                   </ContextMenuSubTrigger>
                   <ContextMenuSubContent className="min-w-48">
                     <ContextMenuItem
@@ -488,17 +509,13 @@ export function StageContextMenu({
                     >
                       <Crosshair />
                       {segue
-                        ? "Deixar de seguir"
-                        : selectedItems.length > 1
-                          ? "Seguir estes"
-                          : "Seguir este"}
+                        ? t.stageContextMenu.deixarDeSeguir
+                        : t.stageContextMenu.seguir(selectedItems.length)}
                       <ContextMenuShortcut>L</ContextMenuShortcut>
                     </ContextMenuItem>
                     <ContextMenuItem onClick={enquadrarSelecao}>
                       <Focus />
-                      {selectedItems.length > 1
-                        ? "Enquadrar estes"
-                        : "Enquadrar este"}
+                      {t.stageContextMenu.enquadrar(selectedItems.length)}
                       <ContextMenuShortcut>F</ContextMenuShortcut>
                     </ContextMenuItem>
                   </ContextMenuSubContent>
@@ -515,46 +532,48 @@ export function StageContextMenu({
             <ContextMenuSub>
               <ContextMenuSubTrigger>
                 <Layers />
-                Ordem
+                {t.stageContextMenu.ordem}
               </ContextMenuSubTrigger>
               <ContextMenuSubContent className="min-w-56">
                 <ContextMenuItem onClick={() => moveSelectionZ("front")}>
                   <ChevronsUp />
-                  Trazer para a frente
+                  {t.stageContextMenu.trazerParaFrente}
                   <ContextMenuShortcut>Ctrl+Shift+]</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => moveSelectionZ("forward")}>
                   <ArrowUp />
-                  Avançar
+                  {t.stageContextMenu.avancar}
                   <ContextMenuShortcut>Ctrl+]</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => moveSelectionZ("backward")}>
                   <ArrowDown />
-                  Recuar
+                  {t.stageContextMenu.recuar}
                   <ContextMenuShortcut>Ctrl+[</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => moveSelectionZ("back")}>
                   <ChevronsDown />
-                  Enviar para trás
+                  {t.stageContextMenu.enviarParaTras}
                   <ContextMenuShortcut>Ctrl+Shift+[</ContextMenuShortcut>
                 </ContextMenuItem>
               </ContextMenuSubContent>
             </ContextMenuSub>
             <ContextMenuItem onClick={() => void agruparSelecao()}>
               <Group />
-              Agrupar
+              {t.stageContextMenu.agrupar}
               <ContextMenuShortcut>Ctrl+G</ContextMenuShortcut>
             </ContextMenuItem>
             {selectedItems.some((item) => item.grupoId) ? (
               <ContextMenuItem onClick={desagruparSelecao}>
                 <Ungroup />
-                Desagrupar
+                {t.stageContextMenu.desagrupar}
                 <ContextMenuShortcut>Ctrl+Shift+G</ContextMenuShortcut>
               </ContextMenuItem>
             ) : null}
             <ContextMenuItem onClick={toggleSelectionLock}>
               {allLocked ? <LockOpen /> : <Lock />}
-              {allLocked ? "Destravar" : "Travar"}
+              {allLocked
+                ? t.stageContextMenu.destravar
+                : t.stageContextMenu.travar}
             </ContextMenuItem>
             {/* Atalho do arrasto até a bolinha: sai da mesa, fica na manga.
                 Token de personagem não vai -- ver `guardarNoHandout` --, e
@@ -564,7 +583,7 @@ export function StageContextMenu({
             {selectedItems.some((item) => !item.personagemId) ? (
               <ContextMenuItem onClick={guardarSelecaoNoHandout}>
                 <Images />
-                Guardar no handout
+                {t.stageContextMenu.guardarNoHandout}
               </ContextMenuItem>
             ) : null}
             <ContextMenuItem
@@ -577,7 +596,7 @@ export function StageContextMenu({
               onClick={() => removeSelection()}
             >
               <Trash2 />
-              Remover
+              {t.stageContextMenu.remover}
               <ContextMenuShortcut>Del</ContextMenuShortcut>
             </ContextMenuItem>
             <ItensDeExtensao
@@ -596,22 +615,12 @@ export function StageContextMenu({
           </>
         ) : null}
 
-        {/* Parede e retrato: só o que os plugins trouxeram. Ver `paredeComItens`. */}
+        {/* Parede: só o que os plugins trouxeram. Ver `paredeComItens`. */}
         {paredeNaMao && selectedParedeId && !naCamera ? (
           <>
             <ItensDeExtensao
               alvo="palco.parede"
               contexto={{ alvo: "palco.parede", paredeId: selectedParedeId }}
-              kit={KIT_CONTEXTO}
-            />
-            <ContextMenuSeparator />
-          </>
-        ) : null}
-        {retratoNaMao && !naCamera ? (
-          <>
-            <ItensDeExtensao
-              alvo="palco.retrato"
-              contexto={{ alvo: "palco.retrato", retratoIds: selectedPortraitIds }}
               kit={KIT_CONTEXTO}
             />
             <ContextMenuSeparator />
@@ -628,7 +637,7 @@ export function StageContextMenu({
             {/* Tudo o que foi copiado volta junto, como no Ctrl+V. */}
             <ContextMenuItem disabled={!hasClipboard} onClick={pasteClipboard}>
               <ClipboardPaste />
-              Colar
+              {t.stageContextMenu.colar}
               <ContextMenuShortcut>Ctrl+V</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuItem
@@ -640,7 +649,7 @@ export function StageContextMenu({
               onClick={selectAllItems}
             >
               <MousePointerSquareDashed />
-              Selecionar tudo
+              {t.stageContextMenu.selecionarTudo}
               <ContextMenuShortcut>Ctrl+A</ContextMenuShortcut>
             </ContextMenuItem>
 
@@ -653,12 +662,12 @@ export function StageContextMenu({
                   onClick={enquadrarAqui}
                 >
                   <ScanSearch />
-                  Trazer a câmera para aqui
+                  {t.stageContextMenu.trazerCameraParaAqui}
                   <ContextMenuShortcut>C</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => void novaCamera()}>
                   <Plus />
-                  Nova câmera
+                  {t.stageContextMenu.novaCamera}
                   <ContextMenuShortcut>N</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuItem
@@ -667,16 +676,16 @@ export function StageContextMenu({
                 >
                   <Radio />
                   {transmissao === "no-ar"
-                    ? "Tirar do ar"
+                    ? t.stageContextMenu.tirarDoAr
                     : transmissao === "preparada"
-                      ? "Desfazer a preparação"
-                      : "Transmitir a câmera"}
+                      ? t.stageContextMenu.desfazerPreparacao
+                      : t.stageContextMenu.transmitirCamera}
                   <ContextMenuShortcut>T</ContextMenuShortcut>
                 </ContextMenuItem>
                 {scene.cameraNoArId ? (
                   <ContextMenuItem onClick={mostrarCenaInteira}>
                     <Maximize />
-                    Mostrar a cena inteira
+                    {t.stageContextMenu.mostrarCenaInteira}
                     <ContextMenuShortcut>Shift+C</ContextMenuShortcut>
                   </ContextMenuItem>
                 ) : null}
@@ -732,10 +741,10 @@ function BlocoDaCamera({
       >
         <Radio />
         {transmissao === "no-ar"
-          ? "Tirar do ar"
+          ? t.stageContextMenu.tirarDoAr
           : transmissao === "preparada"
-            ? "Desfazer a preparação"
-            : "Transmitir"}
+            ? t.stageContextMenu.desfazerPreparacao
+            : t.stageContextMenu.transmitir}
         {selecionada ? <ContextMenuShortcut>T</ContextMenuShortcut> : null}
       </ContextMenuItem>
       <ContextMenuItem
@@ -745,7 +754,7 @@ function BlocoDaCamera({
         }}
       >
         <ScanSearch />
-        Trazer para onde estou
+        {t.stageContextMenu.trazerParaOndeEstou}
         {selecionada ? <ContextMenuShortcut>C</ContextMenuShortcut> : null}
       </ContextMenuItem>
       <ContextMenuItem
@@ -755,7 +764,7 @@ function BlocoDaCamera({
         }}
       >
         <LocateFixed />
-        Ir até a câmera
+        {t.stageContextMenu.irAteCamera}
         {selecionada ? <ContextMenuShortcut>Home</ContextMenuShortcut> : null}
       </ContextMenuItem>
       {/* Só quando há o que desfazer: na câmera 16:9 o item não faria nada, e
@@ -768,7 +777,7 @@ function BlocoDaCamera({
           }}
         >
           <RectangleHorizontal />
-          Voltar a 16:9
+          {t.stageContextMenu.voltarA169}
         </ContextMenuItem>
       )}
 
@@ -779,7 +788,7 @@ function BlocoDaCamera({
         onClick={() => removerCamera(scene.id, camera.id)}
       >
         <Trash2 />
-        Remover câmera
+        {t.stageContextMenu.removerCamera}
       </ContextMenuItem>
     </>
   );
