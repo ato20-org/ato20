@@ -81,6 +81,11 @@ const pt = {
     apagarNota: "Apagar a nota",
     contarLinhas: (n: number) => (n === 1 ? "1 linha" : `${n} linhas`),
     contarPalavras: (n: number) => (n === 1 ? "1 palavra" : `${n} palavras`),
+    adicionarACena: "Adicionar à cena",
+    nomeDoArquivo: "Nome do arquivo",
+    apagarArquivo: "Apagar o arquivo",
+    apagarArquivoTitulo: (nome: string) => `Deseja apagar ${nome}?`,
+    apagarArquivoItem: "O arquivo, do acervo da campanha",
   },
 
   /** Trazer de fora para a campanha: pasta, arquivos ou vault. Ver `lib/obsidian/importar`. */
@@ -110,9 +115,9 @@ const pt = {
     anexos: (n: number) => (n === 1 ? "1 imagem ou arquivo" : `${n} imagens e arquivos`),
     quadros: (n: number) => (n === 1 ? "1 board, que vira quadro" : `${n} boards, que viram quadros`),
     ondeNaPasta: (nome: string) =>
-      `Tudo entra numa pasta ${nome}, em Arquivos e no acervo. A origem não é alterada, e os links [[ ]] viram texto.`,
+      `Tudo entra numa pasta ${nome} em Arquivos, com as subpastas dentro. A origem não é alterada, e os links [[ ]] viram texto.`,
     ondeNaRaiz:
-      "As notas entram na raiz de Arquivos, e as imagens e arquivos, na raiz do acervo. A origem não é alterada.",
+      "Tudo entra na raiz de Arquivos. A origem não é alterada.",
     naoEVault: "Essa pasta não tem .obsidian: não parece um vault, e entra como pasta comum.",
     ignorados: (n: number) =>
       n === 1
@@ -135,24 +140,6 @@ const pt = {
   },
 
   assetLibrary: {
-    nomeDaSubpasta: "Nome da subpasta",
-    buscarPlaceholder: "Buscar arquivo ou pasta",
-    buscarRotulo: "Buscar na biblioteca",
-    importandoArquivos: "Importando arquivos",
-    importarArquivos: "Importar arquivos",
-    novaPastaComSelecao: (n: number) =>
-      n === 1 ? "Nova pasta com a selecionada" : `Nova pasta com as ${n} selecionadas`,
-    foraDePasta: "Fora de pasta",
-    vazio: "Importe mapas, tokens e retratos",
-    sonsEntraram: (n: number) =>
-      n === 1
-        ? "1 som entrou no acervo. Ele está no painel de sons."
-        : `${n} sons entraram no acervo. Eles estão no painel de sons.`,
-    tirarParaRaiz: "Tirar para a raiz",
-    moverParaPasta: (nome: string) => `Mover para ${nome}`,
-    apagarPasta: "Apagar pasta",
-    solteParaTirar: "Solte aqui para tirar da pasta.",
-    adicionarACena: (nome: string) => `Adicionar ${nome} à cena`,
     tirarDaEvidencia: "Tirar da evidência",
     transmitirParaMesa: "Transmitir para a mesa",
     naoAbriu: "Não deu para abrir o arquivo.",
@@ -587,6 +574,11 @@ const en: typeof pt = {
     apagarNota: "Delete the note",
     contarLinhas: (n) => (n === 1 ? "1 line" : `${n} lines`),
     contarPalavras: (n) => (n === 1 ? "1 word" : `${n} words`),
+    adicionarACena: "Add to the scene",
+    nomeDoArquivo: "File name",
+    apagarArquivo: "Delete the file",
+    apagarArquivoTitulo: (nome) => `Delete ${nome}?`,
+    apagarArquivoItem: "The file, from the campaign library",
   },
 
   importarDeFora: {
@@ -615,9 +607,9 @@ const en: typeof pt = {
     anexos: (n: number) => (n === 1 ? "1 image or file" : `${n} images and files`),
     quadros: (n: number) => (n === 1 ? "1 canvas, which becomes a board" : `${n} canvases, which become boards`),
     ondeNaPasta: (nome: string) =>
-      `Everything goes into a ${nome} folder, in Files and in the library. The source is not changed, and [[ ]] links become text.`,
+      `Everything goes into a ${nome} folder in Files, with its subfolders inside. The source is not changed, and [[ ]] links become text.`,
     ondeNaRaiz:
-      "Notes go to the root of Files, and images and files to the root of the library. The source is not changed.",
+      "Everything goes to the root of Files. The source is not changed.",
     naoEVault: "This folder has no .obsidian: it does not look like a vault, and comes in as a plain folder.",
     ignorados: (n: number) =>
       n === 1
@@ -640,24 +632,6 @@ const en: typeof pt = {
   },
 
   assetLibrary: {
-    nomeDaSubpasta: "Subfolder name",
-    buscarPlaceholder: "Search file or folder",
-    buscarRotulo: "Search the library",
-    importandoArquivos: "Importing files",
-    importarArquivos: "Import files",
-    novaPastaComSelecao: (n) =>
-      n === 1 ? "New folder with the selected file" : `New folder with the ${n} selected files`,
-    foraDePasta: "Not in a folder",
-    vazio: "Import maps, tokens and portraits",
-    sonsEntraram: (n) =>
-      n === 1
-        ? "1 sound went into the library. It is in the sounds panel."
-        : `${n} sounds went into the library. They are in the sounds panel.`,
-    tirarParaRaiz: "Move to the root",
-    moverParaPasta: (nome) => `Move to ${nome}`,
-    apagarPasta: "Delete folder",
-    solteParaTirar: "Drop here to take it out of the folder.",
-    adicionarACena: (nome) => `Add ${nome} to the scene`,
     tirarDaEvidencia: "Take off the spotlight",
     transmitirParaMesa: "Show to the table",
     naoAbriu: "Could not open the file.",

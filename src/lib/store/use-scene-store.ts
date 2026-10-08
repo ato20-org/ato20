@@ -1041,6 +1041,13 @@ export const useSceneStore = create<SceneStore>((set, get) => {
             ? { ...scene, pastaId: alvo.parentId }
             : scene,
         ),
+        // As notas sobem também, para a mãe -- e não para a raiz, que é onde a
+        // nota com `pastaId` morto ia parar pela árvore. Os arquivos do acervo
+        // sobem por quem chama: a pasta deles é gravada no Rust, fora do board.
+        // Ver `aoDesfazer` em `PastaRow`.
+        notas: board.notas?.map((nota) =>
+          nota.pastaId === pastaId ? { ...nota, pastaId: alvo.parentId } : nota,
+        ),
       });
     },
 

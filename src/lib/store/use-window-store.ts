@@ -57,7 +57,8 @@ export type ConteudoJanela =
   // A mesma lista, filtrada pelo outro tipo de cena. Ver `TipoDeCena`.
   | { tipo: "quadros" }
   | { tipo: "retratos" }
-  | { tipo: "imagens" }
+  // A Biblioteca (`imagens`) saiu: o acervo entrou na árvore de Arquivos. O
+  // layout guardado com ela migra em `semBiblioteca`.
   | { tipo: "sons" }
   | { tipo: "camadas" }
   // A tela que uma EXTENSAO trouxe. Dois campos e nao um id concatenado: quem
@@ -116,7 +117,6 @@ export function chaveDe(conteudo: ConteudoJanela): string {
     case "cenas":
     case "quadros":
     case "retratos":
-    case "imagens":
     case "sons":
     case "camadas":
       return conteudo.tipo;

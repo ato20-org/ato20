@@ -106,6 +106,7 @@ export type JanelaDeExtensao =
         | "cenas"
         | "quadros"
         | "retratos"
+        /** A Biblioteca de antes: abre Arquivos, onde o acervo está agora. */
         | "imagens"
         | "sons"
         | "camadas"

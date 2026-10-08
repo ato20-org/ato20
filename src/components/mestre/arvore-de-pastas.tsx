@@ -175,6 +175,7 @@ export function PastaRow({
   itensDeCriar,
   alvo,
   aberta = false,
+  aoDesfazer,
 }: {
   pasta: Pasta;
   pastas: Pasta[];
@@ -198,6 +199,12 @@ export function PastaRow({
    * lista -- a nota arrastada do Arquivos, por exemplo. Ver `destinoSob`.
    */
   alvo?: Record<`data-${string}`, string>;
+  /**
+   * O que mais sobe quando a pasta é desfeita, além do que o board guarda. No
+   * Arquivos, os arquivos do acervo: a pasta deles é gravada no Rust, e o
+   * `removerPasta` do store não a alcança. Chamado ANTES de a pasta sair.
+   */
+  aoDesfazer?: (pasta: Pasta) => void;
 }) {
   const [renomeando, setRenomeando] = useState(false);
   const renomear = useRenomearPeloMenu(() => setRenomeando(true));
@@ -237,7 +244,12 @@ export function PastaRow({
         <Separator />
         {/* Desfazer solta o que há dentro um nível acima. Nunca apaga o que
             está dentro: é organização, não remoção. */}
-        <Item onClick={() => store().removerPasta(pasta.id)}>
+        <Item
+          onClick={() => {
+            aoDesfazer?.(pasta);
+            store().removerPasta(pasta.id);
+          }}
+        >
           <Ungroup />
           {t.arvoreDePastas.desfazerPasta}
         </Item>

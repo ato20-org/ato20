@@ -112,13 +112,6 @@ export type AssetMeta = {
  */
 export type TipoDeSom = "trilha" | "ambiente" | "disparo";
 
-/** Pasta do acervo. Pasta dentro de pasta pelo `parentId`; ausente = raiz. */
-export type AssetFolder = {
-  id: string;
-  name: string;
-  createdAt: number;
-  parentId?: string;
-};
 
 /** O dono de um arquivo do acervo, quando ele tem um. */
 export type EscopoAsset = "cena" | "personagem" | "efeito";

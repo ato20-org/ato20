@@ -1,6 +1,5 @@
 "use client";
 
-import { AssetLibrary } from "@/components/mestre/asset-library";
 import { AudioLibrary } from "@/components/mestre/audio-library";
 import { AnexoBody, AssetBody } from "@/components/mestre/attachment-window";
 import { CharacterBody } from "@/components/mestre/character-window";
@@ -61,7 +60,6 @@ export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "quadros" }, titulo: t.janelas.arquivos },
   { conteudo: { tipo: "retratos" }, titulo: t.janelas.retratos },
   { conteudo: { tipo: "camadas" }, titulo: t.janelas.camadas },
-  { conteudo: { tipo: "imagens" }, titulo: t.janelas.biblioteca },
   { conteudo: { tipo: "sons" }, titulo: t.janelas.sons },
   { conteudo: { tipo: "personagens" }, titulo: t.janelas.personagens },
   { conteudo: { tipo: "rolagens" }, titulo: t.janelas.rolagens },
@@ -170,11 +168,6 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: t.janelas.arquivos, subtitulo: t.janelas.arquivosSub };
     case "retratos":
       return { titulo: t.janelas.retratos };
-    case "imagens":
-      return {
-        titulo: t.janelas.biblioteca,
-        subtitulo: t.janelas.bibliotecaSub,
-      };
     case "sons":
       return { titulo: t.janelas.sons };
     case "camadas":
@@ -321,7 +314,6 @@ const SUBSTITUIVEIS = new Set<ConteudoJanela["tipo"]>([
   "cenas",
   "quadros",
   "retratos",
-  "imagens",
   "sons",
   "camadas",
 ]);
@@ -375,10 +367,6 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
     // Retrato não depende de cena: ele é da sessão e atravessa a troca.
     case "retratos":
       return <RetratosWindow />;
-    // Acervo é da campanha, não da cena: lista sem cena nenhuma, e a cena
-    // aberta só decide se o `+` de "pôr na cena" aparece.
-    case "imagens":
-      return <AssetLibrary scene={scene} />;
     // Som também não: a trilha é da sessão.
     case "sons":
       return <AudioLibrary />;

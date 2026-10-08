@@ -274,13 +274,6 @@ function ler(sob: Element): DestinoDoArrasto | null {
       return { tipo: "split", painel: split.dataset.painel, zona };
   }
 
-  const pasta = sob.closest<HTMLElement>("[data-pasta-acervo]");
-  // A pasta é lida ANTES do palco de propósito: o painel do acervo é uma janela
-  // da bancada, e ela fica por cima do mapa. Quem está por cima é quem recebe.
-  if (pasta) {
-    return { tipo: "pasta", folderId: pasta.dataset.folderId || undefined };
-  }
-
   // A bolinha do handout também fica por cima do mapa, e o painel dela idem.
   if (sob.closest("[data-handout]")) return { tipo: "handout" };
 

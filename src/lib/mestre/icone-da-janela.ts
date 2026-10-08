@@ -6,7 +6,6 @@ import {
   Image,
   Layers,
   Library,
-  LibraryBig,
   MessagesSquare,
   MonitorPlay,
   Music,
@@ -57,8 +56,6 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
       return SquareUser;
     case "camadas":
       return Layers;
-    case "imagens":
-      return LibraryBig;
     case "sons":
       return Music;
     case "personagens":

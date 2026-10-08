@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 
 import { useTelas } from "@/components/mestre/dock/window-content";
-import { tamanhoNaCena } from "@/components/mestre/asset-library";
+import { tamanhoNaCena } from "@/lib/mestre/tamanho-na-cena";
 import {
   Dialog,
   DialogContent,
