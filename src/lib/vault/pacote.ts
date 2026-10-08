@@ -9,7 +9,12 @@ import type { Ambiente, Pasta, Scene } from "@/types/scene";
  * pasta de campanha, só com o que foi escolhido. Ver `vault/pacote.rs`.
  */
 
-export type EscolhaDeExportacao = { cenas: string[] };
+export type EscolhaDeExportacao = {
+  cenas: string[];
+  personagens: string[];
+  /** Leva também os personagens dos tokens das cenas escolhidas. */
+  levarPersonagens: boolean;
+};
 
 export type CenaDoPacote = {
   id: string;
@@ -20,7 +25,11 @@ export type CenaDoPacote = {
   pasta: string | null;
   /** Plugins que a cena cita, contando os efeitos da campanha que ela usa. */
   plugins: string[];
+  /** Personagens do pacote que os tokens desta cena são. */
+  personagens: string[];
 };
+
+export type PersonagemDoPacote = { id: string; nome: string; plugins: string[] };
 
 export type PluginDoPacote = {
   id: string;
@@ -33,16 +42,21 @@ export type PluginDoPacote = {
 export type ResumoDoPacote = {
   campanha: string;
   cenas: CenaDoPacote[];
+  personagens: PersonagemDoPacote[];
   plugins: PluginDoPacote[];
 };
 
 export type PacoteAberto = { token: string; resumo: ResumoDoPacote };
 
-export type EscolhaDeImportacao = { cenas: string[]; removerPlugins: string[] };
+export type EscolhaDeImportacao = {
+  cenas: string[];
+  personagens: string[];
+  removerPlugins: string[];
+};
 
 /** O que ficou de fora e por quê. A frase é montada na tela, nos dois idiomas. */
 export type Pulado = {
-  motivo: "efeitoJaExiste" | "efeitosNoMaximo" | "arquivoFaltando";
+  motivo: "efeitoJaExiste" | "efeitosNoMaximo" | "arquivoFaltando" | "personagemIlegivel";
   nome: string;
 };
 
@@ -52,6 +66,8 @@ export type ImportadoDoPacote = {
   pastas: Pasta[];
   /** Os ambientes de cada cena, pelo id de ORIGEM dela. */
   ambientes: Record<string, Ambiente[]>;
+  /** Quantos personagens entraram. Já estão no disco; a tela só relê. */
+  personagens: number;
   pulados: Pulado[];
 };
 

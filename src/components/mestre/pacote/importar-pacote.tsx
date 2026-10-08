@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/mestre";
 import { useAssetsStore } from "@/lib/store/use-assets-store";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -49,18 +50,22 @@ function Corpo({
 }) {
   const { resumo, token } = aberto;
   const [marcadas, setMarcadas] = useState<Set<string>>(
-    () => new Set(resumo.cenas.map((cena) => cena.id)),
+    () => new Set([...resumo.cenas, ...resumo.personagens].map((item) => item.id)),
   );
   const [importando, setImportando] = useState(false);
 
   const mapas = resumo.cenas.filter((cena) => cena.tipo !== "fundo");
   const fundos = resumo.cenas.filter((cena) => cena.tipo === "fundo");
+  const personagens = resumo.personagens.map((personagem) => ({ ...personagem, pasta: null }));
 
   async function importar() {
     setImportando(true);
     try {
       const importado = await importarPacote(token, {
         cenas: resumo.cenas.filter((cena) => marcadas.has(cena.id)).map((cena) => cena.id),
+        personagens: resumo.personagens
+          .filter((personagem) => marcadas.has(personagem.id))
+          .map((personagem) => personagem.id),
         removerPlugins: [],
       });
 
@@ -68,8 +73,9 @@ function Corpo({
       // O acervo e os efeitos mudaram no disco: as listas abertas releem.
       useAssetsStore.getState().recarregar();
       void useEfeitosDaCampanhaStore.getState().carregar();
+      if (importado.personagens > 0) useCharactersStore.getState().recarregar();
 
-      toast.success(t.pacote.importado(novas.length), {
+      toast.success(t.pacote.importado(novas.length, importado.personagens), {
         description: importado.pulados.length > 0 ? importado.pulados.map(frase).join("\n") : undefined,
       });
       // A pasta extraída o Rust já apagou.
@@ -92,13 +98,19 @@ function Corpo({
         <DialogDescription>{t.pacote.importarExplicacao}</DialogDescription>
       </DialogHeader>
 
-      {resumo.cenas.length === 0 ? (
+      {resumo.cenas.length + resumo.personagens.length === 0 ? (
         <p className="text-muted-foreground py-6 text-center text-sm">{t.pacote.vazio}</p>
       ) : (
         <ScrollArea className="max-h-[50vh]">
           <div className="flex flex-col gap-4 pr-3">
             <ListaDeCenas titulo={t.pacote.mapas} cenas={mapas} marcadas={marcadas} onMarcar={alternar} />
             <ListaDeCenas titulo={t.pacote.fundos} cenas={fundos} marcadas={marcadas} onMarcar={alternar} />
+            <ListaDeCenas
+              titulo={t.pacote.personagens}
+              cenas={personagens}
+              marcadas={marcadas}
+              onMarcar={alternar}
+            />
           </div>
         </ScrollArea>
       )}

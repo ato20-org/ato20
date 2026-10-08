@@ -14,9 +14,9 @@ import { abrirPacote, fecharPacote, type PacoteAberto } from "@/lib/vault/pacote
  * mapa, no painel. Os dois diálogos moram uma vez só, no `mestre-shell`.
  */
 type PacoteStore = {
-  /** O diálogo de exportar, com as cenas que já vêm marcadas. `null` = fechado. */
-  exportando: { cenas: string[] } | null;
-  abrirExportar: (cenas?: string[]) => void;
+  /** O diálogo de exportar, com o que já vem marcado. `null` = fechado. */
+  exportando: Marcados | null;
+  abrirExportar: (marcados?: Partial<Marcados>) => void;
   fecharExportar: () => void;
 
   /** O pacote aberto, esperando o mestre escolher o que entra. */
@@ -31,9 +31,14 @@ type PacoteStore = {
   fecharImportar: (descartar: boolean) => void;
 };
 
+type Marcados = { cenas: string[]; personagens: string[] };
+
 export const usePacoteStore = create<PacoteStore>((set, get) => ({
   exportando: null,
-  abrirExportar: (cenas) => set({ exportando: { cenas: cenas ?? [] } }),
+  abrirExportar: (marcados) =>
+    set({
+      exportando: { cenas: marcados?.cenas ?? [], personagens: marcados?.personagens ?? [] },
+    }),
   fecharExportar: () => set({ exportando: null }),
 
   aberto: null,

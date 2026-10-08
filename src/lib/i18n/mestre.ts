@@ -66,6 +66,10 @@ const pt = {
       "O que for marcado vai num pacote. Cada mapa leva junto a imagem, os sons de ambiente e os efeitos da campanha que usa.",
     mapas: "Mapas",
     fundos: "Fundos",
+    personagens: "Personagens",
+    levarPersonagens: "Levar os personagens dos tokens",
+    levarPersonagensNota:
+      "A ficha inteira de quem tem token nos mapas marcados vai junto. Desmarcado, o token chega como imagem solta.",
     todos: "Todos",
     nenhumaCena: "Nenhum nesta campanha.",
     marcados: (marcados: number, total: number) => `${marcados} de ${total}`,
@@ -80,11 +84,16 @@ const pt = {
     importarTitulo: (campanha: string) => (campanha ? `Importar de ${campanha}` : "Importar"),
     importarExplicacao:
       "Escolha o que entra nesta campanha. Nada daqui é sobrescrito: o que entra vem como novo, e nome repetido ganha um número.",
-    vazio: "Este pacote não tem mapas nem fundos.",
+    vazio: "Este pacote não tem mapas, fundos nem personagens.",
     importar: "Importar",
     importando: "Importando…",
-    importado: (quantos: number) =>
-      quantos === 1 ? "1 cena importada." : `${quantos} cenas importadas.`,
+    importado: (cenas: number, personagens: number) => {
+      const deCenas = cenas === 1 ? "1 cena" : `${cenas} cenas`;
+      const dePersonagens = personagens === 1 ? "1 personagem" : `${personagens} personagens`;
+      if (personagens === 0) return `${deCenas} ${cenas === 1 ? "importada" : "importadas"}.`;
+      if (cenas === 0) return `${dePersonagens} ${personagens === 1 ? "importado" : "importados"}.`;
+      return `${deCenas} e ${dePersonagens} importados.`;
+    },
     importarFalhou: "Não foi possível importar.",
     pulado: {
       efeitoJaExiste: (nome: string) =>
@@ -92,10 +101,12 @@ const pt = {
       efeitosNoMaximo: (nome: string) =>
         `Efeito "${nome}": a campanha já está no máximo de efeitos.`,
       arquivoFaltando: (nome: string) => `Arquivo "${nome}": não veio no pacote.`,
+      personagemIlegivel: (nome: string) => `Personagem "${nome}": a ficha não abriu.`,
     },
     sufixo: {
       mapas: "mapas",
       fundos: "fundos",
+      personagens: "personagens",
       pacote: "pacote",
     },
   },
@@ -809,6 +820,10 @@ const en: typeof pt = {
       "Whatever you check goes into a package. Each map takes along its image, its ambient sounds and the campaign effects it uses.",
     mapas: "Maps",
     fundos: "Backdrops",
+    personagens: "Characters",
+    levarPersonagens: "Take the characters of the tokens",
+    levarPersonagensNota:
+      "The full sheet of whoever has a token on the checked maps goes along. Unchecked, the token arrives as a plain image.",
     todos: "All",
     nenhumaCena: "None in this campaign.",
     marcados: (marcados, total) => `${marcados} of ${total}`,
@@ -823,20 +838,28 @@ const en: typeof pt = {
     importarTitulo: (campanha) => (campanha ? `Import from ${campanha}` : "Import"),
     importarExplicacao:
       "Choose what comes into this campaign. Nothing here is overwritten: what comes in arrives as new, and a repeated name gets a number.",
-    vazio: "This package has no maps or backdrops.",
+    vazio: "This package has no maps, backdrops or characters.",
     importar: "Import",
     importando: "Importing…",
-    importado: (quantos) => (quantos === 1 ? "1 scene imported." : `${quantos} scenes imported.`),
+    importado: (cenas, personagens) =>
+      [
+        cenas === 0 ? null : cenas === 1 ? "1 scene" : `${cenas} scenes`,
+        personagens === 0 ? null : personagens === 1 ? "1 character" : `${personagens} characters`,
+      ]
+        .filter(Boolean)
+        .join(" and ") + " imported.",
     importarFalhou: "Could not import.",
     pulado: {
       efeitoJaExiste: (nome) =>
         `Effect "${nome}": the campaign already has one with that name, and kept its own.`,
       efeitosNoMaximo: (nome) => `Effect "${nome}": the campaign is at its effect limit.`,
       arquivoFaltando: (nome) => `File "${nome}": not in the package.`,
+      personagemIlegivel: (nome) => `Character "${nome}": the sheet would not open.`,
     },
     sufixo: {
       mapas: "maps",
       fundos: "backdrops",
+      personagens: "characters",
       pacote: "package",
     },
   },

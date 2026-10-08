@@ -648,7 +648,7 @@ function SceneRow({
       </Item>
       {/* Esta lista é de mapas e fundos; o quadro mora em Arquivos e não
           viaja em pacote. */}
-      <Item onClick={() => usePacoteStore.getState().abrirExportar([scene.id])}>
+      <Item onClick={() => usePacoteStore.getState().abrirExportar({ cenas: [scene.id] })}>
         <FileUp />
         {textoDoMestre.pacote.exportarItem}
       </Item>

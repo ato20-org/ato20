@@ -29,9 +29,9 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use super::assets::{self, AssetMeta};
-use super::atomic::read_json;
+use super::atomic::{read_json, write_json};
 use super::board::{Order, SceneEntry};
-use super::{efeitos, Vault};
+use super::{characters, efeitos, Vault};
 use crate::error::{AppError, AppResult};
 
 /// Versao do `pacote.json`. Um pacote de formato mais novo e recusado.
@@ -78,6 +78,11 @@ pub struct PluginCitado {
 pub struct EscolhaDeExportacao {
     #[serde(default)]
     pub cenas: Vec<String>,
+    #[serde(default)]
+    pub personagens: Vec<String>,
+    /// Leva tambem os personagens dos tokens das cenas escolhidas.
+    #[serde(default)]
+    pub levar_personagens: bool,
 }
 
 /// O que o dialogo de importar mostra.
@@ -86,7 +91,17 @@ pub struct EscolhaDeExportacao {
 pub struct Resumo {
     pub campanha: String,
     pub cenas: Vec<CenaDoPacote>,
+    pub personagens: Vec<PersonagemDoPacote>,
     pub plugins: Vec<PluginDoPacote>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonagemDoPacote {
+    pub id: String,
+    pub nome: String,
+    /// Plugins que a ficha cita: estilo de medidor, efeito de condicao, dados.
+    pub plugins: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -100,6 +115,8 @@ pub struct CenaDoPacote {
     pub pasta: Option<String>,
     /// Plugins que esta cena cita, contando os efeitos da campanha que ela usa.
     pub plugins: Vec<String>,
+    /// Personagens do pacote que os tokens desta cena sao.
+    pub personagens: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -117,6 +134,8 @@ pub struct PluginDoPacote {
 pub struct EscolhaDeImportacao {
     #[serde(default)]
     pub cenas: Vec<String>,
+    #[serde(default)]
+    pub personagens: Vec<String>,
     /// Plugins que o mestre tirou da lista: o que os cita entra sem eles.
     #[serde(default)]
     pub remover_plugins: Vec<String>,
@@ -133,6 +152,8 @@ pub struct Importado {
     pub pastas: Vec<Value>,
     /// Os ambientes de cada cena, pelo id de ORIGEM da cena.
     pub ambientes: BTreeMap<String, Value>,
+    /// Quantos personagens entraram. Eles ja estao no disco; a tela so rele.
+    pub personagens: usize,
     /// O que ficou de fora, uma linha por coisa.
     pub pulados: Vec<Pulado>,
 }
@@ -142,7 +163,8 @@ pub struct Importado {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Pulado {
-    /// `efeitoJaExiste`, `efeitosNoMaximo` ou `arquivoFaltando`.
+    /// `efeitoJaExiste`, `efeitosNoMaximo`, `arquivoFaltando` ou
+    /// `personagemIlegivel`.
     pub motivo: String,
     pub nome: String,
 }
@@ -200,6 +222,26 @@ fn efeitos_citados(valor: &Value, achados: &mut BTreeSet<String>) {
             achados.insert(texto.to_string());
         }
     });
+}
+
+/// Os personagens que os tokens do valor sao (`personagemId`).
+fn personagens_citados(valor: &Value, achados: &mut BTreeSet<String>) {
+    match valor {
+        Value::Array(lista) => lista
+            .iter()
+            .for_each(|item| personagens_citados(item, achados)),
+        Value::Object(campos) => {
+            for (chave, item) in campos {
+                match (chave.as_str(), item) {
+                    ("personagemId", Value::String(id)) => {
+                        achados.insert(id.clone());
+                    }
+                    _ => personagens_citados(item, achados),
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 /// O plugin de um id de efeito ou de estilo (`{plugin}/{nome}`). Efeito de
@@ -303,8 +345,16 @@ struct Fonte {
     assets: Vec<AssetMeta>,
     efeitos: Vec<Value>,
     trilha: Option<Value>,
+    personagens: Vec<Value>,
     plugins: Vec<PluginCitado>,
 }
+
+/// Os arquivos da pasta do personagem que nao se copiam como estao: as notas
+/// sao de cada jogador e nao viajam; inventario e dados de plugin passam pela
+/// troca de ids e pela remocao de plugin antes de entrar.
+const NOTAS_DO_PERSONAGEM: &str = "_notas.json";
+const INVENTARIO: &str = "_inventario.json";
+const DADOS_DE_PLUGIN: &str = "_extensoes.json";
 
 impl Fonte {
     fn ler(raiz: &Path) -> AppResult<Self> {
@@ -321,11 +371,24 @@ impl Fonte {
             }
         }
 
-        let ordem: Order =
-            read_json(&raiz.join("ordem.json"))?.ok_or_else(|| AppError::Malformed {
-                file: "ordem.json".into(),
-                cause: "o arquivo nao e um pacote nem uma campanha do ATO20".into(),
-            })?;
+        // Pacote so de personagens nao tem `ordem.json`; campanha sempre tem.
+        let ordem: Order = match (read_json(&raiz.join("ordem.json"))?, &manifesto) {
+            (Some(ordem), _) => ordem,
+            (None, Some(_)) => Order {
+                versao: super::VAULT_VERSION,
+                cenas: Vec::new(),
+                editando: None,
+                no_ar: None,
+                pastas: None,
+                notas: None,
+            },
+            (None, None) => {
+                return Err(AppError::Malformed {
+                    file: "ordem.json".into(),
+                    cause: "o arquivo nao e um pacote nem uma campanha do ATO20".into(),
+                })
+            }
+        };
 
         let mut cenas = Vec::with_capacity(ordem.cenas.len());
         for entrada in &ordem.cenas {
@@ -364,6 +427,16 @@ impl Fonte {
                 .collect(),
             efeitos: read_json(&raiz.join("efeitos.json"))?.unwrap_or_default(),
             trilha: read_json(&raiz.join("trilha.json"))?,
+            personagens: read_json::<Vec<Value>>(&raiz.join("personagens.json"))?
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|personagem| {
+                    personagem
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .is_some_and(nome_simples)
+                })
+                .collect(),
             plugins: manifesto
                 .map(|manifesto| manifesto.plugins)
                 .unwrap_or_default(),
@@ -379,6 +452,41 @@ impl Fonte {
         self.efeitos
             .iter()
             .find(|efeito| efeito.get("id").and_then(Value::as_str) == Some(id))
+    }
+
+    fn personagem(&self, id: &str) -> Option<&Value> {
+        self.personagens
+            .iter()
+            .find(|personagem| personagem.get("id").and_then(Value::as_str) == Some(id))
+    }
+
+    fn pasta_do_personagem(&self, id: &str) -> PathBuf {
+        self.raiz.join("personagens").join(id)
+    }
+
+    /// O inventario e os dados de plugin do personagem, quando ha.
+    fn extras_do_personagem(&self, id: &str) -> AppResult<(Option<Value>, Option<Value>)> {
+        let pasta = self.pasta_do_personagem(id);
+        Ok((
+            read_json(&pasta.join(INVENTARIO))?,
+            read_json(&pasta.join(DADOS_DE_PLUGIN))?,
+        ))
+    }
+
+    /// Os plugins de um personagem: os da ficha, as chaves dos dados de plugin
+    /// e os dos efeitos da campanha que as condicoes dele usam.
+    fn plugins_do_personagem(&self, personagem: &Value, id: &str) -> AppResult<BTreeSet<String>> {
+        let mut plugins = BTreeSet::new();
+        plugins_citados(personagem, &mut plugins);
+        if let (_, Some(Value::Object(dados))) = self.extras_do_personagem(id)? {
+            plugins.extend(dados.keys().cloned());
+        }
+        let mut efeitos = BTreeSet::new();
+        efeitos_citados(personagem, &mut efeitos);
+        for efeito in efeitos.iter().filter_map(|id| self.efeito(id)) {
+            plugins_citados(efeito, &mut plugins);
+        }
+        Ok(plugins)
     }
 
     fn ambientes(&self, cena: &str) -> Option<&Value> {
@@ -432,6 +540,58 @@ impl Fonte {
 /// `id` do asset e o `arquivo` da cena vem do pacote, e o pacote vem de fora.
 fn nome_simples(nome: &str) -> bool {
     !nome.is_empty() && nome != "." && nome != ".." && !nome.contains(['/', '\\', '\0'])
+}
+
+/// Copia uma pasta, pulando link simbolico, arquivo oculto e os nomes de `fora`.
+fn copiar_pasta(origem: &Path, destino: &Path, fora: &[&str]) -> AppResult<()> {
+    if !origem.is_dir() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(destino)?;
+
+    for entrada in std::fs::read_dir(origem)? {
+        let entrada = entrada?;
+        let nome = entrada.file_name().to_string_lossy().to_string();
+        let tipo = entrada.file_type()?;
+        if nome.starts_with('.') || tipo.is_symlink() || fora.contains(&nome.as_str()) {
+            continue;
+        }
+
+        if tipo.is_dir() {
+            copiar_pasta(&entrada.path(), &destino.join(&nome), &[])?;
+        } else {
+            std::fs::copy(entrada.path(), destino.join(&nome))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Cada arquivo de uma pasta, com o caminho relativo a `raiz`.
+fn cada_arquivo(
+    raiz: &Path,
+    pasta: &Path,
+    fora: &[&str],
+    visitar: &mut impl FnMut(&Path, &Path) -> AppResult<()>,
+) -> AppResult<()> {
+    if !pasta.is_dir() {
+        return Ok(());
+    }
+    for entrada in std::fs::read_dir(pasta)? {
+        let entrada = entrada?;
+        let nome = entrada.file_name().to_string_lossy().to_string();
+        let tipo = entrada.file_type()?;
+        if nome.starts_with('.') || tipo.is_symlink() || fora.contains(&nome.as_str()) {
+            continue;
+        }
+        let caminho = entrada.path();
+        if tipo.is_dir() {
+            cada_arquivo(raiz, &caminho, &[], visitar)?;
+        } else if let Ok(relativo) = caminho.strip_prefix(raiz) {
+            visitar(relativo, &caminho)?;
+        }
+    }
+    Ok(())
 }
 
 fn eh_quadro(cena: &Value) -> bool {
@@ -501,7 +661,28 @@ pub fn exportar(
         cenas.push((entrada.clone(), cena.clone()));
     }
 
-    if cenas.is_empty() {
+    // Os escolhidos, e os dos tokens quando o mestre pediu.
+    let mut ids_personagens: BTreeSet<String> = escolha.personagens.iter().cloned().collect();
+    if escolha.levar_personagens {
+        for (_, cena) in &cenas {
+            personagens_citados(cena, &mut ids_personagens);
+        }
+    }
+    let mut personagens: Vec<(String, Value, Vec<Value>)> = Vec::new();
+    for id in &ids_personagens {
+        let Some(personagem) = fonte.personagem(id) else {
+            continue;
+        };
+        let (inventario, dados) = fonte.extras_do_personagem(id)?;
+        efeitos_citados(personagem, &mut efeitos);
+        personagens.push((
+            id.clone(),
+            personagem.clone(),
+            inventario.into_iter().chain(dados).collect(),
+        ));
+    }
+
+    if cenas.is_empty() && personagens.is_empty() {
         return Err(AppError::Malformed {
             file: "pacote".into(),
             cause: "nada para exportar".into(),
@@ -525,9 +706,17 @@ pub fn exportar(
         .map(|(_, cena)| cena)
         .chain(efeitos.iter())
         .chain(trilha.iter())
+        .chain(
+            personagens
+                .iter()
+                .flat_map(|(_, ficha, extras)| std::iter::once(ficha).chain(extras)),
+        )
     {
         assets_citados(valor, &conhecidos, &mut citados_assets);
         plugins_citados(valor, &mut citados_plugins);
+    }
+    for (id, ficha, _) in &personagens {
+        citados_plugins.extend(fonte.plugins_do_personagem(ficha, id)?);
     }
 
     let metas: Vec<AssetMeta> = fonte
@@ -584,6 +773,25 @@ pub fn exportar(
     }
     if let Some(trilha) = &trilha {
         gravar_json(&mut zip, opcoes, "trilha.json", trilha)?;
+    }
+    if !personagens.is_empty() {
+        let fichas: Vec<&Value> = personagens.iter().map(|(_, ficha, _)| ficha).collect();
+        gravar_json(&mut zip, opcoes, "personagens.json", &fichas)?;
+    }
+    // A pasta de cada um vai como esta (anexos, inventario, dados de plugin),
+    // menos as notas dos jogadores, que sao deles e nao da ficha.
+    for (id, _, _) in &personagens {
+        cada_arquivo(
+            &vault.root,
+            &fonte.pasta_do_personagem(id),
+            &[NOTAS_DO_PERSONAGEM],
+            &mut |relativo, caminho| {
+                zip.start_file(relativo.to_string_lossy().replace('\\', "/"), opcoes)
+                    .map_err(erro_de_zip)?;
+                std::io::copy(&mut BufReader::new(File::open(caminho)?), &mut zip)?;
+                Ok(())
+            },
+        )?;
     }
 
     for meta in &metas {
@@ -732,9 +940,35 @@ fn resumir(raiz: &Path, extensoes: &Path) -> AppResult<Resumo> {
                     .and_then(|pasta| pasta.get("nome").and_then(Value::as_str))
                     .map(str::to_string),
                 plugins: plugins.into_iter().collect(),
+                personagens: {
+                    let mut ids = BTreeSet::new();
+                    personagens_citados(cena, &mut ids);
+                    ids.into_iter()
+                        .filter(|id| fonte.personagem(id).is_some())
+                        .collect()
+                },
             }
         })
         .collect();
+
+    let mut personagens = Vec::new();
+    for personagem in &fonte.personagens {
+        let id = personagem
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let plugins = fonte.plugins_do_personagem(personagem, id)?;
+        todos.extend(plugins.iter().cloned());
+        personagens.push(PersonagemDoPacote {
+            id: id.to_string(),
+            nome: personagem
+                .get("nome")
+                .and_then(Value::as_str)
+                .unwrap_or("personagem")
+                .to_string(),
+            plugins: plugins.into_iter().collect(),
+        });
+    }
 
     let plugins = todos
         .into_iter()
@@ -763,6 +997,7 @@ fn resumir(raiz: &Path, extensoes: &Path) -> AppResult<Resumo> {
     Ok(Resumo {
         campanha: fonte.nome,
         cenas,
+        personagens,
         plugins,
     })
 }
@@ -790,10 +1025,30 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         .filter_map(|(id, _)| fonte.ambientes(id).map(|lista| (id.clone(), lista.clone())))
         .collect();
 
-    // Os efeitos da campanha que as cenas citam, e o destino de cada um.
+    // Os personagens escolhidos: a ficha, o inventario e os dados de plugin.
+    let mut personagens: Vec<PersonagemImportado> = Vec::new();
+    for id in &escolha.personagens {
+        let Some(ficha) = fonte.personagem(id) else {
+            continue;
+        };
+        let (inventario, dados) = fonte.extras_do_personagem(id)?;
+        personagens.push(PersonagemImportado {
+            origem: id.clone(),
+            novo: uuid::Uuid::new_v4().to_string(),
+            ficha: ficha.clone(),
+            inventario,
+            dados,
+        });
+    }
+
+    // Os efeitos da campanha que as cenas e as fichas citam, e o destino de
+    // cada um.
     let mut citados = BTreeSet::new();
     for (_, cena) in &cenas {
         efeitos_citados(cena, &mut citados);
+    }
+    for personagem in &personagens {
+        efeitos_citados(&personagem.ficha, &mut citados);
     }
 
     let existentes = efeitos::load(vault)?;
@@ -857,6 +1112,15 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
     for lista in ambientes.values_mut() {
         tirar_plugins(lista, &removidos, &efeitos_fora);
     }
+    for personagem in &mut personagens {
+        tirar_plugins(&mut personagem.ficha, &removidos, &efeitos_fora);
+        if let Some(inventario) = &mut personagem.inventario {
+            tirar_plugins(inventario, &removidos, &efeitos_fora);
+        }
+        if let Some(Value::Object(dados)) = &mut personagem.dados {
+            dados.retain(|plugin, _| !removidos.contains(plugin));
+        }
+    }
 
     // Os assets que tudo isso cita, adotados com id novo.
     let conhecidos: HashSet<&str> = fonte.assets.iter().map(|meta| meta.id.as_str()).collect();
@@ -866,6 +1130,7 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         .map(|(_, cena)| cena)
         .chain(novos_efeitos.iter())
         .chain(ambientes.values())
+        .chain(personagens.iter().flat_map(PersonagemImportado::valores))
     {
         assets_citados(valor, &conhecidos, &mut citados_assets);
     }
@@ -886,10 +1151,15 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         .collect();
     let destino_do_asset = assets::adotar(vault, &entradas)?;
 
+    let destino_do_personagem: HashMap<String, String> = personagens
+        .iter()
+        .map(|personagem| (personagem.origem.clone(), personagem.novo.clone()))
+        .collect();
     let trocar = |texto: &str| -> Option<String> {
         destino_do_asset
             .get(texto)
             .or_else(|| destino_do_efeito.get(texto))
+            .or_else(|| destino_do_personagem.get(texto))
             .cloned()
     };
     for (_, cena) in &mut cenas {
@@ -901,8 +1171,62 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
     for lista in ambientes.values_mut() {
         trocar_textos(lista, &trocar);
     }
+    for personagem in &mut personagens {
+        trocar_textos(&mut personagem.ficha, &trocar);
+        if let Some(inventario) = &mut personagem.inventario {
+            trocar_textos(inventario, &trocar);
+        }
+        if let Some(dados) = &mut personagem.dados {
+            trocar_textos(dados, &trocar);
+        }
+    }
 
     efeitos::adotar(vault, novos_efeitos)?;
+
+    // Os personagens: nome livre, pasta copiada, ficha no indice.
+    let mut nomes: HashSet<String> = characters::load(vault)?
+        .into_iter()
+        .map(|personagem| personagem.nome)
+        .collect();
+    let mut fichas = Vec::new();
+    for personagem in personagens {
+        let nome_de_origem = personagem
+            .ficha
+            .get("nome")
+            .and_then(Value::as_str)
+            .unwrap_or("Personagem")
+            .to_string();
+        let nome = nome_livre(&nome_de_origem, &mut nomes);
+        let mut ficha = personagem.ficha;
+        if let Value::Object(campos) = &mut ficha {
+            campos.insert("id".into(), Value::String(personagem.novo.clone()));
+            campos.insert("nome".into(), Value::String(nome));
+        }
+
+        let Ok(ficha) = serde_json::from_value::<characters::Personagem>(ficha) else {
+            pulados.push(pulado("personagemIlegivel", &nome_de_origem));
+            continue;
+        };
+
+        let destino = characters::dir(vault, &personagem.novo);
+        copiar_pasta(
+            &fonte.pasta_do_personagem(&personagem.origem),
+            &destino,
+            &[NOTAS_DO_PERSONAGEM, INVENTARIO, DADOS_DE_PLUGIN],
+        )?;
+        if let Some(inventario) = &personagem.inventario {
+            std::fs::create_dir_all(&destino)?;
+            write_json(&destino.join(INVENTARIO), inventario)?;
+        }
+        if let Some(dados) = &personagem.dados {
+            std::fs::create_dir_all(&destino)?;
+            write_json(&destino.join(DADOS_DE_PLUGIN), dados)?;
+        }
+
+        fichas.push(ficha);
+    }
+    let quantos_personagens = fichas.len();
+    characters::adotar(vault, fichas)?;
 
     let mut pastas: Vec<Value> = Vec::new();
     for (_, cena) in &cenas {
@@ -917,8 +1241,38 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         cenas: cenas.into_iter().map(|(_, cena)| cena).collect(),
         pastas,
         ambientes,
+        personagens: quantos_personagens,
         pulados,
     })
+}
+
+/// Um personagem do pacote a caminho da campanha.
+struct PersonagemImportado {
+    origem: String,
+    novo: String,
+    ficha: Value,
+    inventario: Option<Value>,
+    dados: Option<Value>,
+}
+
+impl PersonagemImportado {
+    fn valores(&self) -> impl Iterator<Item = &Value> {
+        std::iter::once(&self.ficha)
+            .chain(self.inventario.iter())
+            .chain(self.dados.iter())
+    }
+}
+
+/// O nome, ou o nome com " (2)", " (3)"... se ja houver. Guarda o escolhido.
+fn nome_livre(nome: &str, usados: &mut HashSet<String>) -> String {
+    let mut candidato = nome.to_string();
+    let mut n = 2;
+    while usados.contains(&candidato) {
+        candidato = format!("{nome} ({n})");
+        n += 1;
+    }
+    usados.insert(candidato.clone());
+    candidato
 }
 
 #[cfg(test)]
@@ -1059,6 +1413,7 @@ mod tests {
         let zip = dir.join("igreja.ato20.zip");
         let escolha = EscolhaDeExportacao {
             cenas: vec!["s1".into(), "s2".into()],
+            ..Default::default()
         };
         exportar(vault, &dir.join("extensoes"), &zip, &escolha).expect("exportar");
 
@@ -1087,6 +1442,7 @@ mod tests {
         let escolha = EscolhaDeImportacao {
             cenas: vec!["s1".into()],
             remover_plugins: vec!["ordem".into()],
+            ..Default::default()
         };
         let importado = importar(&destino, &extraido, &escolha).expect("importar");
 
@@ -1129,6 +1485,7 @@ mod tests {
         let escolha = EscolhaDeImportacao {
             cenas: vec!["s1".into()],
             remover_plugins: vec![],
+            ..Default::default()
         };
         let importado = importar(&destino, &extraido, &escolha).expect("importar");
 
@@ -1138,6 +1495,70 @@ mod tests {
         );
         assert_eq!(efeitos::load(&destino).expect("efeitos").len(), 1);
         assert_eq!(importado.pulados.len(), 1);
+    }
+
+    #[test]
+    fn o_personagem_do_token_vai_junto_e_ganha_id_novo() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = origem(dir.path());
+
+        let corvo = characters::create(&vault, "Corvo").expect("personagem");
+        characters::set_campo(&vault, &corvo.id, characters::Campo::Miniatura, Some("a9"))
+            .expect("miniatura");
+        characters::write_anexo(&vault, &corvo.id, "ficha.pdf", b"pdf").expect("anexo");
+        std::fs::write(
+            characters::dir(&vault, &corvo.id).join(NOTAS_DO_PERSONAGEM),
+            b"{}",
+        )
+        .expect("notas");
+        let mut cena: Value = read_json(&vault.scenes_dir().join("igreja.json"))
+            .expect("ler")
+            .expect("cena");
+        cena["items"][0]["personagemId"] = json!(corvo.id);
+        write_json(&vault.scenes_dir().join("igreja.json"), &cena).expect("gravar");
+
+        let zip = dir.path().join("com-corvo.ato20.zip");
+        let escolha = EscolhaDeExportacao {
+            cenas: vec!["s1".into()],
+            levar_personagens: true,
+            ..Default::default()
+        };
+        exportar(&vault, &dir.path().join("extensoes"), &zip, &escolha).expect("exportar");
+        let extraido = dir.path().join("extraido");
+        let resumo = abrir(&zip, &extraido, &dir.path().join("extensoes")).expect("abrir");
+
+        assert_eq!(resumo.personagens.len(), 1);
+        assert_eq!(resumo.cenas[0].personagens, [corvo.id.clone()]);
+        assert!(!extraido
+            .join("personagens")
+            .join(&corvo.id)
+            .join(NOTAS_DO_PERSONAGEM)
+            .exists());
+
+        // Importado na MESMA campanha: entra como outro, com nome livre.
+        let escolha = EscolhaDeImportacao {
+            cenas: vec!["s1".into()],
+            personagens: vec![corvo.id.clone()],
+            ..Default::default()
+        };
+        let importado = importar(&vault, &extraido, &escolha).expect("importar");
+        assert_eq!(importado.personagens, 1);
+
+        let lista = characters::load(&vault).expect("lista");
+        let copia = lista.iter().find(|p| p.nome == "Corvo (2)").expect("copia");
+        assert_ne!(copia.id, corvo.id);
+        assert_ne!(copia.miniatura.as_deref(), Some("a9"));
+        assert!(characters::anexo_caminho(
+            &vault,
+            &copia.id,
+            characters::Autor::Jogador,
+            "ficha.pdf"
+        )
+        .is_file());
+        assert_eq!(
+            importado.cenas[0]["items"][0]["personagemId"],
+            json!(copia.id)
+        );
     }
 
     #[test]
