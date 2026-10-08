@@ -9,6 +9,7 @@ pub mod dados_de_extensao;
 pub mod documentos;
 pub mod fio;
 pub mod inventory;
+pub mod migrar;
 pub mod mime;
 pub mod modelos;
 pub mod variantes;
@@ -30,7 +31,10 @@ use atomic::{read_json, write_json};
 /// antiga em vez de abri-la errada em silencio. Uma campanha com versao MAIOR
 /// que esta e recusada: abrir com codigo velho um formato novo grava por cima
 /// do que nao entende.
-pub const VAULT_VERSION: u32 = 1;
+///
+/// 2: o acervo entrou na arvore de Arquivos, e as pastas dele com ele. Ver
+/// `migrar::acervo_na_arvore`.
+pub const VAULT_VERSION: u32 = 2;
 
 /// Identidade da campanha, no `config.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +177,25 @@ impl Vault {
         }
 
         Ok(Self { root, config })
+    }
+
+    /// Leva a campanha aberta ao formato atual, se ela for de antes.
+    ///
+    /// Separado do `open` de proposito: quem abre so para ler -- a capa na
+    /// lista de recentes -- nao pode reescrever a campanha de ninguem. Quem
+    /// chama e o `campaign_open`, quando o mestre de fato entra nela.
+    ///
+    /// A versao nova so vai para o `config.json` depois de todos os passos:
+    /// cair no meio e repetir na proxima abertura. Ver `migrar`.
+    pub fn migrar(&mut self) -> AppResult<()> {
+        if self.config.versao >= VAULT_VERSION {
+            return Ok(());
+        }
+
+        migrar::migrar(self, self.config.versao)?;
+
+        self.config.versao = VAULT_VERSION;
+        write_json(&Self::config_path(&self.root), &self.config)
     }
 
     /// Cria a campanha em `root`.
