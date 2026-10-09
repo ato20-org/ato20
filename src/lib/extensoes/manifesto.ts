@@ -5,6 +5,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { FonteRetrato } from "@/lib/extensoes/fontes";
 import { resolverOpcional, resolverTexto } from "@/lib/extensoes/texto";
 import { call } from "@/lib/vault/bridge";
+import type { EstiloMedidor } from "@/types/character";
+import type { ExibicaoDeGrupo, TipoDeDetalhe } from "@/types/detalhe";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 export {
@@ -36,7 +38,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 9;
+export const API_VERSAO = 10;
 
 /**
  * O que uma extensão diz de si.
@@ -96,7 +98,88 @@ export type Contribuicoes = {
   paginas?: PaginaDeclarada[];
   /** Ausente em lista lida por um Rust anterior à API 6. */
   efeitos?: EfeitoDeclarado[];
+  /** Ausente em lista lida por um Rust anterior à API 10. */
+  fichasPdf?: FichaPdfDeclarada[];
+  sistemas?: SistemaDeclarado[];
 };
+
+/**
+ * Um sistema de jogo: o padrão que uma campanha dele ganha -- atributos,
+ * medidores, o molde dos detalhes e o cardápio de condições. O mestre o
+ * APLICA numa campanha, e aplicar junta ao que ela já tem. Espelho de
+ * `extensoes::Sistema`; o Rust devolve os ausentes já preenchidos.
+ */
+export type SistemaDeclarado = {
+  id: string;
+  titulo: string;
+  atributos: Array<{ sigla: string; valor: number; descricao?: string | null }>;
+  medidores: Array<{
+    nome: string;
+    cor: string;
+    estilo: EstiloMedidor;
+    maximo: number;
+    escondido: boolean;
+    estiloExtensao?: string | null;
+  }>;
+  detalhes: {
+    grupos: Array<{ nome: string; exibicao: ExibicaoDeGrupo }>;
+    modelos: Array<{
+      grupo: string;
+      rotulo: string;
+      tipo: TipoDeDetalhe;
+      valor?: string | number | null;
+      opcoes: string[];
+      descricao?: string | null;
+    }>;
+  };
+  condicoes: Array<{ nome: string; cor: string; icone?: string | null; efeito?: string | null }>;
+};
+
+/**
+ * Uma ficha em PDF que o plugin sabe ler: o formulário de um modelo conhecido,
+ * campo a campo. Espelho de `extensoes::FichaPdf`, que é quem valida. Quem lê o
+ * PDF e traduz é `lib/fichas-pdf/`.
+ */
+export type FichaPdfDeclarada = {
+  id: string;
+  titulo: string;
+  /** Os campos que o PDF tem de ter, TODOS, para ser esta ficha. */
+  reconhecer: string[];
+  /** O campo do nome do personagem. */
+  nome: string;
+  atributos?: Array<{ sigla: string; campo: LeituraDeCampo }>;
+  medidores?: Array<{
+    nome: string;
+    /** Ausente = cheio. */
+    atual?: LeituraDeCampo | null;
+    maximo: LeituraDeCampo;
+    cor?: string | null;
+  }>;
+  detalhes?: Array<{
+    grupo: string;
+    rotulo: string;
+    /** O valor curto. */
+    campo?: LeituraDeCampo | null;
+    /** O texto longo, que abre embaixo do detalhe. */
+    descricao?: LeituraDeCampo | null;
+    tipo?: "texto" | "numero" | null;
+  }>;
+  /**
+   * As linhas de uma tabela da ficha (Habilidades, Poderes, Ataques): cada uma
+   * vira um detalhe do `grupo`, com o rótulo tirado do campo `nome`. Linha com
+   * o nome vazio fica de fora.
+   */
+  listas?: Array<{
+    grupo: string;
+    itens: Array<{ nome: string; campo?: LeituraDeCampo | null; descricao?: LeituraDeCampo | null }>;
+  }>;
+};
+
+/**
+ * Um campo; caixas, das quais vale quantas estão marcadas; ou campos para
+ * juntar -- o histórico escrito em cinco linhas, um campo por linha.
+ */
+export type LeituraDeCampo = string | { caixas: string[] } | { juntar: string[] };
 
 /**
  * Um efeito de condição, como o plugin escreve: o `id` é o dele, sem o prefixo.
@@ -416,6 +499,8 @@ export function noIdiomaDaTela(extensao: Extensao): Extensao {
         ...titulo(efeito),
         dica: efeito.dica === undefined ? undefined : resolverTexto(efeito.dica),
       })),
+      fichasPdf: c.fichasPdf?.map(titulo),
+      sistemas: c.sistemas?.map(titulo),
     },
   };
 }
