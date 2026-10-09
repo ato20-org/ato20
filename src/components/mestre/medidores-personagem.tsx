@@ -9,6 +9,7 @@ import {
   SeloDoMedidor,
   useArrastoDoAtual,
 } from "@/components/mestre/linha-de-medidor";
+import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
 import { Button } from "@/components/ui/button";
 import {
@@ -212,6 +213,12 @@ function LinhaDaFicha({
   );
 
   async function apagar() {
+    const confirmado = await confirmarApagar({
+      titulo: t.medidores.apagarTitulo(medidor.nome),
+      itens: t.medidores.apagarItens(medidor.nome),
+    });
+    if (!confirmado) return;
+
     try {
       await removerMedidor(personagemId, medidor.id);
       onChanged();

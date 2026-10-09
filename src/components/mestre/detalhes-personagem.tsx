@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { Check, ChevronRight, GripVertical, MessageSquareText, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
 import { aoTeclar, useMarcarAoFocar } from "@/components/mestre/atributos-personagem";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
 import { Button } from "@/components/ui/button";
@@ -174,6 +175,13 @@ function GrupoDaFicha({
   }
 
   async function apagar(detalheId: string) {
+    const rotulo = lista.find((detalhe) => detalhe.id === detalheId)?.rotulo ?? "";
+    const confirmado = await confirmarApagar({
+      titulo: t.detalhes.apagarTitulo(rotulo),
+      itens: t.detalhes.apagarItens(rotulo),
+    });
+    if (!confirmado) return;
+
     try {
       await removerDetalhe(personagemId, detalheId);
       onChanged();

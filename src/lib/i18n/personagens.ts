@@ -209,6 +209,8 @@ const pt = {
   },
 
   inventario: {
+    apagarTitulo: (nome: string) => `Apagar ${nome}?`,
+    apagarItens: (nome: string) => [`o item ${nome} do inventário`],
     titulo: "Inventário",
     falhaAoLer: "Falha ao ler o inventário.",
     chegou: (item: string, personagem: string) => `${item} chegou em ${personagem}.`,
@@ -251,6 +253,9 @@ const pt = {
   },
 
   atributos: {
+    apagarTitulo: (sigla: string) => `Apagar ${sigla}?`,
+    apagarItens: (sigla: string) => [`o atributo ${sigla} desta ficha`],
+    apagarRessalva: "O atributo da campanha continua lá, para as fichas novas.",
     titulo: "Atributos",
     criar: "Criar atributo",
     /** A sigla com que um atributo nasce, marcada para escrever por cima. */
@@ -270,6 +275,8 @@ const pt = {
 
   /** Os detalhes da ficha: Identidade, Perícias, Poderes. Ver `vault/detalhes.rs`. */
   detalhes: {
+    apagarTitulo: (rotulo: string) => `Apagar ${rotulo}?`,
+    apagarItens: (rotulo: string) => [`o detalhe ${rotulo} desta ficha`, "o valor e a descrição dele"],
     novo: "Novo",
     criar: (grupo: string) => `Criar em ${grupo}`,
     limite: (maximo: number) => `A ficha já tem ${maximo} detalhes, o limite.`,
@@ -296,6 +303,8 @@ const pt = {
   },
 
   medidores: {
+    apagarTitulo: (nome: string) => `Apagar ${nome}?`,
+    apagarItens: (nome: string) => [`o medidor ${nome} desta ficha`, "a barra dele na mesa"],
     titulo: "Medidores",
     /** O nome do primeiro medidor, que vira dado na ficha. */
     vida: "Vida",
@@ -742,6 +751,8 @@ const en: typeof pt = {
   },
 
   inventario: {
+    apagarTitulo: (nome) => `Delete ${nome}?`,
+    apagarItens: (nome) => [`the ${nome} item from the inventory`],
     titulo: "Inventory",
     falhaAoLer: "Could not read the inventory.",
     chegou: (item, personagem) => `${item} moved to ${personagem}.`,
@@ -784,6 +795,9 @@ const en: typeof pt = {
   },
 
   atributos: {
+    apagarTitulo: (sigla) => `Delete ${sigla}?`,
+    apagarItens: (sigla) => [`the ${sigla} attribute from this sheet`],
+    apagarRessalva: "The campaign attribute stays, for new sheets.",
     titulo: "Attributes",
     criar: "Create attribute",
     siglaNova: "ATR",
@@ -801,6 +815,8 @@ const en: typeof pt = {
   },
 
   detalhes: {
+    apagarTitulo: (rotulo) => `Delete ${rotulo}?`,
+    apagarItens: (rotulo) => [`the ${rotulo} detail from this sheet`, "its value and description"],
     novo: "New",
     criar: (grupo) => `Create in ${grupo}`,
     limite: (maximo) => `The sheet already has ${maximo} details, the limit.`,
@@ -827,6 +843,8 @@ const en: typeof pt = {
   },
 
   medidores: {
+    apagarTitulo: (nome) => `Delete ${nome}?`,
+    apagarItens: (nome) => [`the ${nome} meter from this sheet`, "its bar at the table"],
     titulo: "Meters",
     vida: "HP",
     medidor: "Meter",
