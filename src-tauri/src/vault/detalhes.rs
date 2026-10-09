@@ -52,6 +52,8 @@ pub const MAX_OPCOES: usize = 32;
 const MAX_NOME_DO_GRUPO: usize = 24;
 /// Pericia em porcentagem (Call of Cthulhu) cabe; mais que isso e erro.
 pub const MAX_NUMERO: i64 = 99_999;
+/// A expressao de rolagem e uma linha: `1d20+5-2*5/2` cabe com folga.
+pub const MAX_ROLAGEM: usize = 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -91,6 +93,16 @@ pub struct Detalhe {
     pub opcoes: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub descricao: Option<String>,
+    /// A expressao de rolagem DESTE personagem: `2d20+10`. Ausente = ainda
+    /// nao escrita.
+    ///
+    /// Na ficha, e nao no molde, porque o modificador e de quem rola: a Luta
+    /// do Dante e `+10`, a da Lyra e `+3`. Se o detalhe ROLA quem diz e o
+    /// molde (`Modelo::rolavel`), lido ao vivo pela tela -- ver a nota la.
+    /// Aqui o Rust so guarda o texto aparado e curto; quem le a expressao e o
+    /// TS (`expressao-de-rolagem.ts`), que e quem rola.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rolagem: Option<String>,
 }
 
 fn texto_curto(valor: &str, teto: usize) -> String {
@@ -171,6 +183,11 @@ pub fn ajustar(detalhe: &mut Detalhe) {
                 .collect::<String>()
         })
         .filter(|descricao| !descricao.is_empty());
+    detalhe.rolagem = detalhe
+        .rolagem
+        .take()
+        .map(|rolagem| texto_curto(&rolagem, MAX_ROLAGEM))
+        .filter(|rolagem| !rolagem.is_empty());
 }
 
 /// A chave que diz que dois detalhes sao o mesmo: grupo e rotulo, sem caixa.
@@ -223,6 +240,8 @@ pub struct NovoDetalhe {
     pub opcoes: Vec<String>,
     #[serde(default)]
     pub descricao: Option<String>,
+    #[serde(default)]
+    pub rolagem: Option<String>,
 }
 
 impl NovoDetalhe {
@@ -235,6 +254,7 @@ impl NovoDetalhe {
             valor: self.valor,
             opcoes: self.opcoes,
             descricao: self.descricao,
+            rolagem: self.rolagem,
         };
         ajustar(&mut detalhe);
         detalhe
@@ -267,6 +287,10 @@ pub struct PatchDetalhe {
     pub valor: Option<Value>,
     pub opcoes: Option<Vec<String>>,
     pub descricao: Option<String>,
+    /// `Some("")` apaga a expressao.
+    pub rolagem: Option<String>,
+    /// So do molde: liga ou desliga o d20 do detalhe. Ver `Modelo::rolavel`.
+    pub rolavel: Option<bool>,
 }
 
 fn aplicar_patch(detalhe: &mut Detalhe, patch: PatchDetalhe) {
@@ -287,6 +311,9 @@ fn aplicar_patch(detalhe: &mut Detalhe, patch: PatchDetalhe) {
     }
     if let Some(descricao) = patch.descricao {
         detalhe.descricao = Some(descricao);
+    }
+    if let Some(rolagem) = patch.rolagem {
+        detalhe.rolagem = Some(rolagem);
     }
     ajustar(detalhe);
 }
@@ -406,6 +433,15 @@ pub struct Modelo {
     pub opcoes: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub descricao: Option<String>,
+    /// O detalhe ROLA: a ficha mostra o d20 e a expressao de cada personagem.
+    ///
+    /// A excecao ao "molde, nao vinculo", como as opcoes de uma escolha: e a
+    /// FORMA do campo, e nao o valor dele. A tela le este campo ao vivo, pelo
+    /// grupo e rotulo, em vez de copia-lo para cada ficha -- ligar o d20 no
+    /// molde tem de aparecer na ficha que ja existe, e desligar tem de sumir
+    /// com ele sem apagar a expressao que o personagem ja tinha.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rolavel: bool,
 }
 
 impl Modelo {
@@ -419,6 +455,7 @@ impl Modelo {
             valor: self.valor.clone(),
             opcoes: self.opcoes.clone(),
             descricao: self.descricao.clone(),
+            rolagem: None,
         };
         ajustar(&mut detalhe);
         detalhe
@@ -619,6 +656,7 @@ pub fn criar_modelo(vault: &Vault, novo: NovoDetalhe) -> AppResult<Modelo> {
         valor: novo.valor,
         opcoes: novo.opcoes,
         descricao: novo.descricao,
+        rolavel: false,
     };
     modelo.ajustar();
     atual.modelos.push(modelo.clone());
@@ -645,6 +683,9 @@ pub fn editar_modelo(
         .ok_or_else(|| erro_do_molde(format!("a campanha nao tem o detalhe {modelo_id}")))?;
 
     let mudam_opcoes = patch.opcoes.is_some();
+    if let Some(rolavel) = patch.rolavel {
+        modelo.rolavel = rolavel;
+    }
     let mut como_detalhe = modelo.materializar();
     aplicar_patch(&mut como_detalhe, patch);
     modelo.rotulo = como_detalhe.rotulo;
@@ -700,6 +741,51 @@ pub fn reordenar_modelos(vault: &Vault, ordem: &[String]) -> AppResult<Molde> {
 }
 
 /// Os detalhes que o molde inteiro poe numa ficha nova.
+/// Um detalhe que rola, de algum personagem. Ver `rolagens`.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RolagemDaFicha {
+    pub personagem_id: String,
+    pub grupo: String,
+    pub rotulo: String,
+    pub rolagem: String,
+}
+
+/// As rolagens da campanha inteira: os detalhes com expressao cujo modelo esta
+/// rolavel no molde. E o que a paleta de comandos lista para rolar pelo nome --
+/// "luta" acha a Luta de cada personagem. A expressao sem o d20 ligado no
+/// molde fica guardada e nao aparece, como na ficha.
+pub fn rolagens(vault: &Vault) -> AppResult<Vec<RolagemDaFicha>> {
+    let rolaveis: Vec<(String, String)> = molde(vault)?
+        .modelos
+        .iter()
+        .filter(|m| m.rolavel)
+        .map(|m| chave(&m.grupo, &m.rotulo))
+        .collect();
+    if rolaveis.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut saida = Vec::new();
+    for personagem in characters::todos_os_ids(vault)? {
+        for detalhe in load(vault, &personagem)? {
+            let Some(rolagem) = detalhe.rolagem else {
+                continue;
+            };
+            if rolaveis.contains(&chave(&detalhe.grupo, &detalhe.rotulo)) {
+                saida.push(RolagemDaFicha {
+                    personagem_id: personagem.clone(),
+                    grupo: detalhe.grupo,
+                    rotulo: detalhe.rotulo,
+                    rolagem,
+                });
+            }
+        }
+    }
+
+    Ok(saida)
+}
+
 pub fn materializar_molde(molde: &Molde) -> Vec<Detalhe> {
     molde.modelos.iter().map(Modelo::materializar).collect()
 }
@@ -740,6 +826,7 @@ mod tests {
             valor,
             opcoes: Vec::new(),
             descricao: None,
+            rolagem: None,
         }
     }
 
@@ -1022,5 +1109,88 @@ mod tests {
         remover_grupo(&vault, &grupo.id).unwrap();
 
         assert_eq!(molde(&vault).unwrap(), Molde::default());
+    }
+
+    #[test]
+    fn a_expressao_e_aparada_cortada_e_apagada_com_vazio() {
+        let mut detalhe = NovoDetalhe {
+            rolagem: Some("  2d20+10  ".into()),
+            ..novo("Perícias", "Luta", Tipo::Numero, None)
+        }
+        .detalhe();
+        assert_eq!(detalhe.rolagem.as_deref(), Some("2d20+10"));
+
+        aplicar_patch(
+            &mut detalhe,
+            PatchDetalhe {
+                rolagem: Some("1".repeat(MAX_ROLAGEM + 9)),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            detalhe.rolagem.as_ref().map(|r| r.chars().count()),
+            Some(MAX_ROLAGEM)
+        );
+
+        aplicar_patch(
+            &mut detalhe,
+            PatchDetalhe {
+                rolagem: Some("   ".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(detalhe.rolagem, None);
+    }
+
+    #[test]
+    fn rolavel_mora_no_molde_e_a_paleta_so_ve_o_que_rola() {
+        let (_dir, vault) = vault();
+        let corvo = characters::create(&vault, "Corvo").unwrap();
+        criar_grupo(
+            &vault,
+            PatchGrupo {
+                nome: Some("Perícias".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let luta = criar_modelo(&vault, novo("Perícias", "Luta", Tipo::Numero, None)).unwrap();
+        criar_modelo(&vault, novo("Perícias", "Furtividade", Tipo::Numero, None)).unwrap();
+        aplicar_em_todos(&vault).unwrap();
+
+        for detalhe in load(&vault, &corvo.id).unwrap() {
+            editar(
+                &vault,
+                &corvo.id,
+                &detalhe.id,
+                PatchDetalhe {
+                    rolagem: Some("1d20+5".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+
+        // Sem nada rolavel no molde, a expressao fica guardada e nao aparece.
+        assert!(rolagens(&vault).unwrap().is_empty());
+
+        let (modelo, fichas) = editar_modelo(
+            &vault,
+            &luta.id,
+            PatchDetalhe {
+                rolavel: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(modelo.rolavel);
+        // Ligar o d20 nao reescreve ficha nenhuma: a tela le o molde.
+        assert_eq!(fichas, 0);
+
+        let lista = rolagens(&vault).unwrap();
+        assert_eq!(lista.len(), 1);
+        assert_eq!(lista[0].rotulo, "Luta");
+        assert_eq!(lista[0].rolagem, "1d20+5");
+        assert_eq!(lista[0].personagem_id, corvo.id);
     }
 }
