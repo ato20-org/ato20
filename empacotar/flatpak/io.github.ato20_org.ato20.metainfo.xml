@@ -100,6 +100,129 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.4.0" date="2026-10-09">
+      <description>
+        <p>
+          ATO20 1.4 turns fillable PDF sheets into characters, brings game
+          systems through plugins, gives the character window tabs, attributes
+          and sheet details, rolls from the sheet and on the phone, installs
+          plugins from the catalog, moves content between campaigns and imports
+          Obsidian vaults. Fixes for condition effects, missing images and
+          flickering on Linux close the list.
+        </p>
+        <ul>
+          <li>
+            A PDF sheet becomes a character. In the Characters list, Import PDF
+            sheet reads the fillable sheet and shows first what becomes an
+            attribute, meter and detail. A plugin teaches how to read each
+            sheet: Tormenta20 and Ordem Paranormal are already in the Catalog.
+          </li>
+          <li>
+            The game system comes from a plugin. Create campaign gains a Game
+            system field, and Campaign settings a System topic: the system's
+            attributes, meters, sheet details and conditions go into the
+            campaign, and whatever is missing can go to the characters that
+            already exist. The Ordem Paranormal one writes the attributes on the
+            ritual circle.
+          </li>
+          <li>
+            The character window has tabs, attributes and sheet details. The
+            portrait, the name and who plays stay at the top, with the Sheet,
+            Inventory and Files tabs below. Attributes like STR 4, and details
+            like skills and powers in groups, in a sidebar with search. The
+            template lives in Campaign settings, under Attributes and Sheet
+            details, with apply to all.
+          </li>
+          <li>
+            Roll from the sheet, and expressions with modifiers. A detail can
+            roll that character's expression, like 2d20+10, with one click on
+            the sheet or on the phone. In the palette (Ctrl+K) and the dice bag,
+            1d20+5 and 2d6+1d4+3 roll the dice and add the rest.
+          </li>
+          <li>
+            The whole sheet on the phone, on a redone screen. Players see
+            attributes and sheet details, with search, and roll details from
+            there. Backpack and dice bag become floating bubbles, a phone held
+            sideways gets a sidebar, and each character has its own notebook.
+          </li>
+          <li>
+            Search, install and update plugins from the Catalog. In Settings →
+            Plugins → Catalog: search by name or tag, install with one click and
+            get told when an installed plugin has a new version. A plugin that
+            runs code asks for confirmation first.
+          </li>
+          <li>
+            Take maps, characters and settings from one campaign to another.
+            Export… and Import… in the campaign menu, the map list and the
+            character list: choose what goes into a zip, with the images, sounds
+            and effects it uses. Importing never overwrites what the campaign
+            already has, and offers to download missing plugins.
+          </li>
+          <li>
+            Import a folder, loose files or an Obsidian vault. With the Import
+            button in Files, or by dragging from your file manager onto the
+            panel. From Obsidian, notes, boards (.canvas) and attachments come
+            in with the same folder tree, and a summary shows everything before
+            saving.
+          </li>
+          <li>
+            Images and files live in Files, with notes and boards. The Library
+            tab is gone, and your collection became a folder inside Files.
+            Sounds stay in Sounds. A campaign opened in this version no longer
+            opens in earlier ones.
+          </li>
+          <li>
+            Dice make a sound when they fall. A real roll on impact and a ping
+            when it stops, on the GM screen. It follows the System volume and
+            turns off in Settings → Options → Dice sounds.
+          </li>
+          <li>
+            The sheet asks before deleting an attribute, detail, meter or item.
+            The sheet has no Ctrl+Z, and one extra click on the trash can
+            deleted it for good.
+          </li>
+          <li>
+            Board shapes and arrows are always hand-drawn, with rounded corners.
+            The option is gone: everything on the board has the sketchy stroke,
+            including what was already drawn.
+          </li>
+          <li>
+            Fixed: conditions draw flames, sparks and areas again. Since 1.2.0,
+            no condition effect showed up on the stage.
+          </li>
+          <li>
+            Fixed: tokens whose image fails to load no longer vanish from the
+            stage. A deleted file, a map moved off the disk or an icon without
+            network turns into a magenta and black checkerboard, on all three
+            screens.
+          </li>
+          <li>
+            Fixed: on Linux, menus and tooltips no longer flicker when opening
+            and closing. With WebKitGTK 2.54, tooltips, menus, popovers and
+            hover icons flickered on the first and last frame of the animation.
+          </li>
+          <li>
+            Fixed: tooltips no longer block clicks on what is underneath.
+          </li>
+          <li>
+            Fixed: Tab no longer walks the focus across the buttons. And a Space
+            after that pressed the highlighted button without anyone asking.
+          </li>
+          <li>
+            Fixed: long text and wide images no longer spill out of a note. And
+            dropping an image from Files on the empty space below the text works
+            now.
+          </li>
+          <li>
+            Fixed: cameras that follow tokens work on a duplicated map. It kept
+            looking for the original's tokens.
+          </li>
+          <li>
+            Fixed: View on GitHub in the Catalog opens the plugin's repository.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.3.0" date="2026-10-08">
       <description>
         <p>

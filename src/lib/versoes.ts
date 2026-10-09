@@ -71,6 +71,224 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.4.0",
+    data: "2026-10-09",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A ficha em PDF vira personagem",
+          en: "A PDF sheet becomes a character",
+        },
+        detalhe: {
+          pt: "Na lista de Personagens, Importar ficha em PDF lê a ficha editável e mostra antes o que vira atributo, medidor e detalhe. Quem ensina a ler cada ficha é um plugin: Tormenta20 e Ordem Paranormal já estão no Catálogo.",
+          en: "In the Characters list, Import PDF sheet reads the fillable sheet and shows first what becomes an attribute, meter and detail. A plugin teaches how to read each sheet: Tormenta20 and Ordem Paranormal are already in the Catalog.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O sistema de jogo vem de um plugin",
+          en: "The game system comes from a plugin",
+        },
+        detalhe: {
+          pt: "Criar campanha ganha o campo Sistema de jogo, e a Configuração da campanha o tópico Sistema: atributos, medidores, detalhes da ficha e condições do sistema entram na campanha, e o que faltar pode ir para os personagens que já existem. O de Ordem Paranormal escreve os atributos no círculo do ritual.",
+          en: "Create campaign gains a Game system field, and Campaign settings a System topic: the system's attributes, meters, sheet details and conditions go into the campaign, and whatever is missing can go to the characters that already exist. The Ordem Paranormal one writes the attributes on the ritual circle.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A janela do personagem ganhou abas, atributos e detalhes da ficha",
+          en: "The character window has tabs, attributes and sheet details",
+        },
+        detalhe: {
+          pt: "O retrato, o nome e quem joga ficam no alto, com as abas Ficha, Inventário e Arquivos embaixo. Atributos como FOR 4, e detalhes como perícias e poderes em grupos, numa barra lateral com busca. O molde fica na Configuração da campanha, em Atributos e Detalhes da ficha, com aplicar em todos.",
+          en: "The portrait, the name and who plays stay at the top, with the Sheet, Inventory and Files tabs below. Attributes like STR 4, and details like skills and powers in groups, in a sidebar with search. The template lives in Campaign settings, under Attributes and Sheet details, with apply to all.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Rolar pela ficha, e expressões com modificador",
+          en: "Roll from the sheet, and expressions with modifiers",
+        },
+        detalhe: {
+          pt: "Um detalhe pode rolar a expressão daquele personagem, como 2d20+10, com um clique na ficha ou no celular. Na paleta (Ctrl+K) e no saquinho, 1d20+5 e 2d6+1d4+3 rolam os dados e somam o resto.",
+          en: "A detail can roll that character's expression, like 2d20+10, with one click on the sheet or on the phone. In the palette (Ctrl+K) and the dice bag, 1d20+5 and 2d6+1d4+3 roll the dice and add the rest.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A ficha inteira no celular, numa tela refeita",
+          en: "The whole sheet on the phone, on a redone screen",
+        },
+        detalhe: {
+          pt: "O jogador vê atributos e detalhes da ficha, com busca, e rola os detalhes dali. Mochila e saquinho viram bolinhas flutuantes, o celular deitado ganha uma barra lateral, e cada personagem tem o próprio caderno.",
+          en: "Players see attributes and sheet details, with search, and roll details from there. Backpack and dice bag become floating bubbles, a phone held sideways gets a sidebar, and each character has its own notebook.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Buscar, instalar e atualizar plugins pelo Catálogo",
+          en: "Search, install and update plugins from the Catalog",
+        },
+        detalhe: {
+          pt: "Em Configurações → Plugins → Catálogo: busca por nome ou tag, instala com um clique e avisa quando o plugin instalado tem versão nova. Plugin que executa código pede confirmação antes.",
+          en: "In Settings → Plugins → Catalog: search by name or tag, install with one click and get told when an installed plugin has a new version. A plugin that runs code asks for confirmation first.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Levar mapas, personagens e configurações de uma campanha para outra",
+          en: "Take maps, characters and settings from one campaign to another",
+        },
+        detalhe: {
+          pt: "Exportar… e Importar… no menu da campanha, na lista de mapas e na de personagens: escolha o que vai num zip, com as imagens, os sons e os efeitos que aquilo usa. Importar nunca sobrescreve o que a campanha já tem, e oferece baixar os plugins que faltam.",
+          en: "Export… and Import… in the campaign menu, the map list and the character list: choose what goes into a zip, with the images, sounds and effects it uses. Importing never overwrites what the campaign already has, and offers to download missing plugins.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Importar uma pasta, arquivos soltos ou um vault do Obsidian",
+          en: "Import a folder, loose files or an Obsidian vault",
+        },
+        detalhe: {
+          pt: "Pelo botão Importar em Arquivos, ou arrastando do gerenciador de arquivos para o painel. Do Obsidian, notas, boards (.canvas) e anexos entram na mesma árvore de pastas, e um resumo mostra tudo antes de gravar.",
+          en: "With the Import button in Files, or by dragging from your file manager onto the panel. From Obsidian, notes, boards (.canvas) and attachments come in with the same folder tree, and a summary shows everything before saving.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Imagens e arquivos moram em Arquivos, junto das notas e dos quadros",
+          en: "Images and files live in Files, with notes and boards",
+        },
+        detalhe: {
+          pt: "A aba Biblioteca saiu, e o acervo virou uma pasta dentro de Arquivos. Os sons continuam em Sons. Campanha aberta nesta versão não abre mais nas anteriores.",
+          en: "The Library tab is gone, and your collection became a folder inside Files. Sounds stay in Sounds. A campaign opened in this version no longer opens in earlier ones.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O dado faz barulho ao cair",
+          en: "Dice make a sound when they fall",
+        },
+        detalhe: {
+          pt: "Uma jogada de verdade no impacto e um plim quando ele para, no Mestre. Segue o volume Sistema e desliga em Configurações → Ajustes → Som dos dados.",
+          en: "A real roll on impact and a ping when it stops, on the GM screen. It follows the System volume and turns off in Settings → Options → Dice sounds.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A ficha pergunta antes de apagar atributo, detalhe, medidor ou item",
+          en: "The sheet asks before deleting an attribute, detail, meter or item",
+        },
+        detalhe: {
+          pt: "A ficha não tem Ctrl+Z, e um clique a mais na lixeira apagava sem volta.",
+          en: "The sheet has no Ctrl+Z, and one extra click on the trash can deleted it for good.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Formas e setas do quadro sempre à mão, com canto redondo",
+          en: "Board shapes and arrows are always hand-drawn, with rounded corners",
+        },
+        detalhe: {
+          pt: "A opção saiu: tudo no quadro tem o traço rabiscado, também o que já estava desenhado.",
+          en: "The option is gone: everything on the board has the sketchy stroke, including what was already drawn.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "As condições voltaram a desenhar chama, fagulha e área",
+          en: "Conditions draw flames, sparks and areas again",
+        },
+        detalhe: {
+          pt: "Desde a 1.2.0, nenhum efeito de condição aparecia no palco.",
+          en: "Since 1.2.0, no condition effect showed up on the stage.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O token com imagem que não abre não some mais do palco",
+          en: "Tokens whose image fails to load no longer vanish from the stage",
+        },
+        detalhe: {
+          pt: "Arquivo apagado, mapa que saiu do disco ou ícone sem rede viram um xadrez magenta e preto, nas três telas.",
+          en: "A deleted file, a map moved off the disk or an icon without network turns into a magenta and black checkerboard, on all three screens.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "No Linux, menus e balões não piscam mais ao abrir e fechar",
+          en: "On Linux, menus and tooltips no longer flicker when opening and closing",
+        },
+        detalhe: {
+          pt: "Com o WebKitGTK 2.54, balão, menu, popover e ícones de hover piscavam no primeiro e no último quadro da animação.",
+          en: "With WebKitGTK 2.54, tooltips, menus, popovers and hover icons flickered on the first and last frame of the animation.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O balão de dica não tapa mais o clique no que está embaixo",
+          en: "Tooltips no longer block clicks on what is underneath",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O Tab não passeia mais o foco pelos botões",
+          en: "Tab no longer walks the focus across the buttons",
+        },
+        detalhe: {
+          pt: "E um Espaço depois disso apertava o botão marcado sem ninguém pedir.",
+          en: "And a Space after that pressed the highlighted button without anyone asking.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "Texto longo e imagem larga não vazam mais da nota",
+          en: "Long text and wide images no longer spill out of a note",
+        },
+        detalhe: {
+          pt: "E soltar uma imagem de Arquivos no espaço vazio abaixo do texto agora funciona.",
+          en: "And dropping an image from Files on the empty space below the text works now.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "A câmera que segue tokens funciona no mapa duplicado",
+          en: "Cameras that follow tokens work on a duplicated map",
+        },
+        detalhe: {
+          pt: "Ela continuava procurando os tokens do original.",
+          en: "It kept looking for the original's tokens.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O Ver no GitHub do Catálogo abre o repositório do plugin",
+          en: "View on GitHub in the Catalog opens the plugin's repository",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.3.0",
     data: "2026-10-08",
     mudancas: [
