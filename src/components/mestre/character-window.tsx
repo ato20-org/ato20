@@ -46,7 +46,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -99,7 +98,6 @@ import {
   attachToCharacter,
   characterAttachmentUrl,
   characterAttachments,
-  characterNote,
   characterPlayers,
   detachFromCharacter,
   linkCharacter,
@@ -107,10 +105,10 @@ import {
   renameCharacter,
   preencherCampoComArquivo,
   setCharacterCampo,
-  setCharacterNote,
   unlinkCharacter,
 } from "@/lib/vault/characters";
-import type { Player } from "@/lib/vault/players";
+import { playerNotes, type Player } from "@/lib/vault/players";
+import type { Nota } from "@/types/caderno";
 import { cn } from "@/lib/utils";
 import type {
   AnexoPersonagem,
@@ -387,7 +385,12 @@ function Ficha({
                     onChanged={onChanged}
                   />
 
-                  <GruposDeDetalhes personagemId={personagem.id} personagemNome={personagem.nome} detalhes={detalhes} />
+                  <GruposDeDetalhes
+                    personagemId={personagem.id}
+                    personagemNome={personagem.nome}
+                    detalhes={detalhes}
+                    aoGravar={onChanged}
+                  />
                 </div>
 
                 <div className="min-w-0 space-y-3">
@@ -1825,113 +1828,96 @@ function Thumb({
 }
 
 /**
- * A nota que um jogador escreveu, editável pelo mestre.
+ * O caderno que um jogador escreve sobre este personagem, para o mestre LER.
  *
- * O mestre escreve na nota DO JOGADOR, e não numa nota própria: é o que foi
- * pedido, e o `jogadorId` na chamada diz de quem é o texto, não quem está
- * digitando. Sem esse par, a nota do Edgar e a da Mira sobre o mesmo
- * personagem seriam o mesmo campo.
+ * Só leitura, como na ficha do jogador: o caderno é de quem o escreveu. Era
+ * uma nota solta que o mestre podia reescrever; virou o caderno do personagem
+ * no celular, com título e etiquetas, e reescrever a nota alheia não é gesto
+ * que o mestre precise.
  *
- * Grava no `blur`, e não a cada tecla: é IPC para dentro do SQLite, e o mestre
- * digitando um parágrafo não deveria abrir uma transação por letra. O jogador
- * tem debounce porque escreve pela rede numa aba que pode fechar; aqui a janela
- * é a mesma que grava.
+ * Fechado por padrão: cinco jogadores vinculados eram cinco caixas empilhadas.
+ * A linha diz quantas notas há, e abrir relê -- o jogador escreve no meio da
+ * sessão, e a contagem de quando a janela abriu já estaria velha.
  */
-function PlayerNote({
+function CadernoDoJogador({
   personagemId,
   jogador,
 }: {
   personagemId: string;
   jogador: Player;
 }) {
-  const [texto, setTexto] = useState<string | null>(null);
-  // Fechada por padrão: cinco jogadores vinculados eram cinco caixas vazias
-  // de 64px empilhadas. O resumo na linha diz se há algo dentro.
-  const [aberta, setAberta] = useState(false);
-  const [salvo, setSalvo] = useState(false);
+  const [notas, setNotas] = useState<Nota[] | null>(null);
+  const [aberto, setAberto] = useState(false);
 
   useEffect(() => {
     let ativo = true;
 
-    void characterNote(personagemId, jogador.id).then(
-      (lido) => {
-        if (ativo) setTexto(lido);
+    void playerNotes(jogador.id).then(
+      (todas) => {
+        if (ativo) setNotas(todas.filter((nota) => nota.personagemId === personagemId));
       },
       () => {
-        // Nota ilegível não pode esconder o resto da ficha: campo vazio, e o
-        // mestre pode escrever por cima.
-        if (ativo) setTexto("");
+        // Caderno ilegível não pode esconder o resto da ficha.
+        if (ativo) setNotas([]);
       },
     );
 
     return () => {
       ativo = false;
     };
-  }, [personagemId, jogador.id]);
+  }, [personagemId, jogador.id, aberto]);
 
-  useEffect(() => {
-    if (!salvo) return;
-    const timer = setTimeout(() => setSalvo(false), 2000);
-    return () => clearTimeout(timer);
-  }, [salvo]);
+  if (notas === null) return null;
 
-  if (texto === null) return null;
-
-  const resumo = texto.trim().split("\n")[0] ?? "";
-  const id = `nota-${personagemId}-${jogador.id}`;
+  const id = `caderno-${personagemId}-${jogador.id}`;
 
   return (
     <div className="space-y-1">
       <button
         type="button"
-        onClick={() => setAberta((v) => !v)}
-        aria-expanded={aberta}
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
         aria-controls={id}
-        className="text-muted-foreground hover:text-foreground flex w-full min-w-0 items-center gap-1 rounded px-0.5 text-left text-[11px] focus-visible:ring-2 focus-visible:outline-none"
+        disabled={notas.length === 0}
+        className="text-muted-foreground enabled:hover:text-foreground flex w-full min-w-0 items-center gap-1 rounded px-0.5 text-left text-[11px] focus-visible:ring-2 focus-visible:outline-none"
       >
         <ChevronRight
           className={cn(
             "size-3 shrink-0 transition-transform motion-reduce:transition-none",
-            aberta && "rotate-90",
+            aberto && "rotate-90",
+            notas.length === 0 && "opacity-0",
           )}
           aria-hidden
         />
-        <span className="shrink-0">{t.ficha.nota}</span>
+        <span className="shrink-0">{t.ficha.caderno}</span>
         <span className="min-w-0 flex-1 truncate italic">
-          {resumo || t.ficha.vazia}
+          {notas.length === 0 ? t.ficha.cadernoVazio : t.ficha.notas(notas.length)}
         </span>
-        {salvo ? (
-          <span className="text-emerald-500 shrink-0 not-italic">{t.ficha.salvo}</span>
-        ) : null}
       </button>
 
-      {aberta ? (
-        <Textarea
-          id={id}
-          autoFocus
-          className="min-h-16 resize-y text-xs"
-          placeholder={t.ficha.notaSobre(jogador.nome)}
-          aria-label={t.ficha.notaSobreCurta(jogador.nome)}
-          defaultValue={texto}
-          onBlur={(event) => {
-            if (event.target.value === texto) return;
-
-            void setCharacterNote(
-              personagemId,
-              jogador.id,
-              event.target.value,
-            ).then(
-              () => {
-                setTexto(event.target.value);
-                setSalvo(true);
-              },
-              (cause) =>
-                toast.error(
-                  cause instanceof Error ? cause.message : t.geral.falhas.gravar,
-                ),
-            );
-          }}
-        />
+      {aberto && notas.length > 0 ? (
+        <ul id={id} className="scroll-fade max-h-56 space-y-1.5 overflow-y-auto">
+          {notas.map((nota) => (
+            <li key={nota.id} className="rounded border px-2 py-1.5">
+              <div className="flex items-baseline gap-2">
+                <p className="min-w-0 flex-1 truncate text-xs font-medium">
+                  {nota.titulo || t.ficha.semTitulo}
+                </p>
+                <span className="text-muted-foreground shrink-0 text-[10px]">
+                  {desde(nota.atualizadoEm)}
+                </span>
+              </div>
+              {nota.tags.length > 0 ? (
+                <p className="text-muted-foreground mt-0.5 text-[10px]">{nota.tags.join(" · ")}</p>
+              ) : null}
+              {nota.texto ? (
+                <p className="mt-1 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
+                  {nota.texto}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );
@@ -2017,7 +2003,7 @@ function Owners({
                     </Button>
                   </div>
 
-                  <PlayerNote personagemId={personagem.id} jogador={jogador} />
+                  <CadernoDoJogador personagemId={personagem.id} jogador={jogador} />
                 </li>
               );
             })}

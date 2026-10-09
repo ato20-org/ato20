@@ -2030,33 +2030,6 @@ pub fn character_players(state: State<'_, AppState>, id: String) -> AppResult<Ve
     state.with_vault(|vault| players::players_of(vault, &id))
 }
 
-// --- notas de personagem ----------------------------------------------------
-
-/// A nota que um jogador escreveu sobre um personagem.
-#[tauri::command]
-pub fn character_note(
-    state: State<'_, AppState>,
-    id: String,
-    #[allow(non_snake_case)] jogadorId: String,
-) -> AppResult<String> {
-    state.with_vault(|vault| players::note(vault, &id, &jogadorId))
-}
-
-/// O mestre reescreve a nota de um jogador.
-///
-/// Existe porque o mestre edita o que o jogador escreveu -- e o `jogadorId` diz
-/// de QUEM e a nota, nao quem esta escrevendo. Sem esse par, a nota do Edgar e
-/// a da Mira sobre o mesmo personagem seriam o mesmo texto.
-#[tauri::command]
-pub fn character_set_note(
-    state: State<'_, AppState>,
-    id: String,
-    #[allow(non_snake_case)] jogadorId: String,
-    texto: String,
-) -> AppResult<()> {
-    state.with_vault(|vault| players::set_note(vault, &id, &jogadorId, &texto))
-}
-
 // --- inventario -------------------------------------------------------------
 
 /// O inventario de um personagem, INTEIRO.

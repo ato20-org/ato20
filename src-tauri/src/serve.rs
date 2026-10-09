@@ -25,12 +25,15 @@ use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
+mod expressao;
 mod page;
 
 use crate::error::{AppError, AppResult};
 use crate::estante;
 use crate::extensoes;
-use crate::vault::{animacao, assets, characters, documentos, fio, inventory, players, variantes, Vault};
+use crate::vault::{
+    animacao, assets, characters, detalhes, documentos, fio, inventory, players, variantes, Vault,
+};
 use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
@@ -695,7 +698,6 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             "/personagens/{id}/anexos/{autor}/{arquivo}/{variante}",
             get(read_character_file_variante),
         )
-        .route("/personagens/{id}/nota", get(read_character_note).put(write_character_note))
         // O caderno: notas do JOGADOR, que nao sao de personagem nenhum. Sem
         // `ligado` pelo meio -- o dono e o token, e ele entra no `where` de
         // cada consulta.
@@ -711,6 +713,13 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
         .route(
             "/personagens/{id}/inventario/{itemId}",
             patch(update_inventory_item).delete(remove_inventory_item),
+        )
+        // Os detalhes da ficha, so leitura, e a rolagem dos que o molde liga.
+        // Quem le a expressao e sorteia e o daemon -- ver `roll_detail`.
+        .route("/personagens/{id}/detalhes", get(character_details))
+        .route(
+            "/personagens/{id}/detalhes/{detalheId}/rolar",
+            post(roll_detail),
         )
         .route(
             "/personagens/{id}/inventario/{itemId}/imagem",
@@ -1261,6 +1270,20 @@ pub struct Rolagem {
     /// `valorDaRolagem`, num lugar so. Ver `types/dado.ts`.
     valor: u32,
     quando: i64,
+    /// A jogada com nome de que este dado faz parte: os dois d20 da Defesa
+    /// levam o mesmo, para a bandeja do Mestre os juntar numa linha e somar o
+    /// `+5`. O dado avulso do saquinho vai sem. Ver `Lance` em `types/dado.ts`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lance: Option<Lance>,
+}
+
+/// Uma rolagem com nome: "Dante · Defesa", `2d20+5`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Lance {
+    id: String,
+    rotulo: String,
+    modificador: i64,
 }
 
 /// Os solidos que existem. Recusar o resto e o que impede um `faces: 1000000`
@@ -1302,6 +1325,7 @@ async fn roll(
         faces: body.faces,
         valor,
         quando: crate::vault::now_ms(),
+        lance: None,
     };
 
     // O fio tambem, e AQUI, e nao na janela do Mestre: quem sorteia e o
@@ -2600,86 +2624,42 @@ async fn remove_character_file(
     }
 }
 
-#[derive(Debug, Serialize)]
-struct NotaBody {
-    texto: String,
-}
-
-/// `GET /eu/personagens/{id}/nota`
-async fn read_character_note(
-    State(state): State<Arc<Daemon>>,
-    axum::Extension(player): axum::Extension<players::Player>,
-    AxumPath(id): AxumPath<String>,
-) -> Response {
-    let vault = match ligado(&state, &player.id, &id) {
-        Ok(vault) => vault,
-        Err(response) => return response,
-    };
-
-    match players::note(&vault, &id, &player.id) {
-        Ok(texto) => axum::Json(NotaBody { texto }).into_response(),
-        Err(cause) => {
-            log::error!("nota de {} sobre {id}: {cause}", player.id);
-            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler a nota")
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct WriteNota {
-    texto: String,
-}
-
-/// `PUT /eu/personagens/{id}/nota`
-///
-/// A nota e do PAR (personagem, jogador), e o jogador nunca informa o proprio
-/// id: ele vem do token. Nao ha id a trocar para escrever na nota de outro.
-async fn write_character_note(
-    State(state): State<Arc<Daemon>>,
-    axum::Extension(player): axum::Extension<players::Player>,
-    AxumPath(id): AxumPath<String>,
-    axum::Json(body): axum::Json<WriteNota>,
-) -> Response {
-    let vault = match ligado(&state, &player.id, &id) {
-        Ok(vault) => vault,
-        Err(response) => return response,
-    };
-
-    match players::set_note(&vault, &id, &player.id, &body.texto) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(cause) => {
-            log::error!("nota de {} sobre {id}: {cause}", player.id);
-            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar a nota")
-        }
-    }
-}
-
-// --- caderno do jogador -----------------------------------------------------
+// --- caderno do personagem -------------------------------------------------
 //
-// O que o jogador anota na sessao e nao e sobre ficha nenhuma. Estas rotas nao
-// passam por `ligado`, e nao e esquecimento: nota de caderno nao tem personagem
-// do outro lado. Quem separa o caderno de um jogador do de outro e o
-// `jogador_id` no `where` de cada consulta -- ver `players::update_note`.
+// O que o jogador anota na sessao, no caderno de um dos personagens dele. Ler e
+// criar passam por `ligado`: o caderno e do par jogador e personagem, e o
+// personagem tem de ser dele. Mudar e apagar vao pelo id da nota, e quem separa
+// o caderno de um jogador do de outro e o `jogador_id` no `where` de cada
+// consulta -- ver `players::update_note`.
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CorpoNota {
+    /// O personagem dono do caderno. Exigido so na criacao.
+    personagem_id: Option<String>,
     titulo: Option<String>,
     texto: Option<String>,
     tags: Option<Vec<String>>,
 }
 
-/// `GET /eu/notas` -- o caderno deste jogador.
+#[derive(Debug, Deserialize)]
+pub struct DoPersonagem {
+    personagem: String,
+}
+
+/// `GET /eu/notas?personagem={id}` -- o caderno deste jogador sobre um dos
+/// personagens dele.
 async fn my_notes(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
+    Query(query): Query<DoPersonagem>,
 ) -> Response {
-    let guard = state.vault.read().expect("vault envenenado");
-    let vault = match vault_vivo(&guard) {
+    let vault = match ligado(&state, &player.id, &query.personagem) {
         Ok(vault) => vault,
-        Err(resposta) => return resposta,
+        Err(response) => return response,
     };
 
-    match players::notes(vault, &player.id) {
+    match players::character_notes(&vault, &player.id, &query.personagem) {
         Ok(notas) => axum::Json(notas).into_response(),
         Err(cause) => {
             log::error!("caderno de {}: {cause}", player.id);
@@ -2699,15 +2679,18 @@ async fn new_note(
     axum::Extension(player): axum::Extension<players::Player>,
     axum::Json(body): axum::Json<CorpoNota>,
 ) -> Response {
-    let guard = state.vault.read().expect("vault envenenado");
-    let vault = match vault_vivo(&guard) {
+    let Some(personagem) = body.personagem_id.as_deref() else {
+        return fail(StatusCode::BAD_REQUEST, "a nota precisa de um personagem");
+    };
+    let vault = match ligado(&state, &player.id, personagem) {
         Ok(vault) => vault,
-        Err(resposta) => return resposta,
+        Err(response) => return response,
     };
 
     let criada = players::create_note(
-        vault,
+        &vault,
         &player.id,
+        personagem,
         body.titulo.as_deref().unwrap_or_default(),
         body.texto.as_deref().unwrap_or_default(),
         body.tags.as_deref().unwrap_or_default(),
@@ -2927,6 +2910,14 @@ async fn add_inventory_item(
         Ok(vault) => vault,
         Err(response) => return response,
     };
+
+    // Do celular, item so com nome. O `add` ainda batiza o vazio de "Item sem
+    // nome" para o Mestre, que cria pelo "+" e renomeia na hora; aqui a tela ja
+    // pede o nome antes de gravar, e o corpo sem nome e de cliente que pulou a
+    // tela -- o que deixava a grade cheia de "Item sem nome" que ninguem quis.
+    if novo.nome.trim().is_empty() {
+        return fail(StatusCode::BAD_REQUEST, "o item precisa de um nome");
+    }
 
     match inventory::add(&vault, &id, characters::Autor::Jogador, novo) {
         Ok(item) => (StatusCode::CREATED, axum::Json(item)).into_response(),
@@ -3238,6 +3229,234 @@ async fn remove_attachment(
             fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao remover o anexo")
         }
     }
+}
+
+// --- os detalhes da ficha ------------------------------------------------------
+
+/// Um detalhe como o celular o ve: so leitura, e sem as opcoes da escolha.
+///
+/// A expressao vai junto quando o detalhe rola, e so entao: e o que o botao
+/// mostra ("2d20+5"), para o jogador saber o que vai cair. Mostrar nao e
+/// confiar -- quem rola le a expressao da ficha de novo. Ver `roll_detail`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DetalheDoJogador {
+    id: String,
+    rotulo: String,
+    tipo: detalhes::Tipo,
+    grupo: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    valor: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    descricao: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rolagem: Option<String>,
+}
+
+/// A ficha de detalhes de um personagem, para o celular.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DetalhesDoJogador {
+    /// Na ordem do molde. O grupo que a ficha tem e o molde nao, a tela poe no
+    /// fim, como a do Mestre.
+    grupos: Vec<detalhes::Grupo>,
+    detalhes: Vec<DetalheDoJogador>,
+}
+
+/// `GET /eu/personagens/{id}/detalhes`
+///
+/// So leitura, e nao e limitacao de tela: quem escreve a ficha e o mestre,
+/// como nos medidores. Detalhe nao tem `escondido`, entao nao ha o que filtrar
+/// alem do que o celular nao usa.
+async fn character_details(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let (Ok(molde), Ok(lista)) = (detalhes::molde(&vault), detalhes::load(&vault, &id)) else {
+        log::error!("detalhes do personagem {id}: falha ao ler");
+        return fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "falha ao ler os detalhes",
+        );
+    };
+
+    let rolaveis = detalhes::Rolaveis::do_molde(&molde);
+    let detalhes = lista
+        .into_iter()
+        .map(|detalhe| DetalheDoJogador {
+            rolagem: rolaveis.expressao(&detalhe).map(str::to_string),
+            id: detalhe.id,
+            rotulo: detalhe.rotulo,
+            tipo: detalhe.tipo,
+            grupo: detalhe.grupo,
+            valor: detalhe.valor,
+            descricao: detalhe.descricao,
+        })
+        .collect();
+
+    axum::Json(DetalhesDoJogador {
+        grupos: molde.grupos,
+        detalhes,
+    })
+    .into_response()
+}
+
+/// O que volta ao celular: o lance, e os dados com a face de cada um.
+#[derive(Debug, Serialize)]
+struct RolagemDoDetalhe {
+    lance: Lance,
+    rolagens: Vec<Rolagem>,
+}
+
+/// `POST /eu/personagens/{id}/detalhes/{detalheId}/rolar` -- o jogador rola a
+/// Defesa do proprio personagem.
+///
+/// O corpo e VAZIO de proposito. O celular diz qual detalhe, e o resto sai
+/// daqui: a expressao gravada na ficha, o d20 ligado no molde, o nome do
+/// personagem no rotulo. Um corpo com a expressao deixaria um cliente
+/// modificado rolar `1d20+50` com o nome da Luta do Dante; um com o rotulo, por
+/// em nome de outro personagem uma rolagem que ele nao fez. Sorteado aqui pela
+/// mesma razao de `roll`.
+///
+/// Uma linha no fio para o gesto inteiro, e um `Rolagem` por dado na bandeja,
+/// todos com o mesmo `lance`.
+async fn roll_detail(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, detalhe_id)): AxumPath<(String, String)>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let lido = (|| -> AppResult<Option<(String, String, String)>> {
+        let rolaveis = detalhes::Rolaveis::do_molde(&detalhes::molde(&vault)?);
+        let Some(detalhe) = detalhes::load(&vault, &id)?
+            .into_iter()
+            .find(|d| d.id == detalhe_id)
+        else {
+            return Ok(None);
+        };
+        let Some(expressao) = rolaveis.expressao(&detalhe).map(str::to_string) else {
+            return Ok(None);
+        };
+        let nome = characters::load(&vault)?
+            .into_iter()
+            .find(|p| p.id == id)
+            .map(|p| p.nome)
+            .unwrap_or_default();
+        Ok(Some((expressao, nome, detalhe.rotulo)))
+    })();
+
+    let (texto, nome, rotulo) = match lido {
+        Ok(Some(lido)) => lido,
+        // O mesmo 404 para o detalhe que nao existe e para o que nao rola: o
+        // celular so oferece o botao nos que rolam, e o d20 desligado no molde
+        // entre a tela abrir e o toque chega aqui.
+        Ok(None) => return fail(StatusCode::NOT_FOUND, "este detalhe nao rola"),
+        Err(cause) => {
+            log::error!("rolagem do detalhe {detalhe_id}: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o detalhe");
+        }
+    };
+
+    // A expressao foi gravada pelo Mestre, que a leu com o leitor do TS. Ela
+    // so falha aqui se os dois leitores divergirem, ou se o arquivo foi
+    // escrito por fora.
+    let Ok(expressao) = expressao::ler(&texto) else {
+        log::warn!("detalhe {detalhe_id}: a expressao {texto:?} nao serve");
+        return fail(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "a expressao deste detalhe nao serve",
+        );
+    };
+
+    let rotulo: String = if nome.is_empty() {
+        rotulo
+    } else {
+        format!("{nome} · {rotulo}")
+    }
+    .chars()
+    .take(fio::MAX_ROTULO)
+    .collect();
+    let quando = crate::vault::now_ms();
+    let lance = Lance {
+        id: uuid::Uuid::new_v4().to_string(),
+        rotulo: rotulo.clone(),
+        modificador: expressao.modificador,
+    };
+
+    let mut rolagens = Vec::new();
+    for jogada in &expressao.dados {
+        for _ in 0..jogada.quantidade {
+            let Some(valor) = sortear_face(jogada.faces) else {
+                return fail(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "sem fonte de aleatoriedade",
+                );
+            };
+            rolagens.push(Rolagem {
+                id: uuid::Uuid::new_v4().to_string(),
+                jogador_id: player.id.clone(),
+                jogador: player.nome.clone(),
+                faces: jogada.faces,
+                valor,
+                quando,
+                lance: Some(lance.clone()),
+            });
+        }
+    }
+
+    // O id da linha e o do LANCE: a linha conta o gesto inteiro, e cada dado
+    // da bandeja tem o seu. Falhar em gravar nao recusa a rolagem, como em
+    // `roll`.
+    let linha = fio::Linha {
+        id: lance.id.clone(),
+        quando,
+        autor: fio::Autor::Jogador {
+            id: player.id.clone(),
+            nome: player.nome.clone(),
+        },
+        para: None,
+        texto: None,
+        rolagem: Some(fio::Rolagem {
+            dados: rolagens
+                .iter()
+                .map(|r| fio::Dado {
+                    faces: r.faces,
+                    valor: r.valor,
+                })
+                .collect(),
+            modificador: expressao.modificador,
+            rotulo: Some(rotulo),
+        }),
+    };
+    if let Err(resposta) = escrever_no_fio(&state, fio::Registro::Linha(linha)) {
+        log::warn!(
+            "rolagem {} ficou fora do fio: {}",
+            lance.id,
+            resposta.status()
+        );
+    }
+
+    for rolagem in &rolagens {
+        if let Ok(corpo) = serde_json::to_string(rolagem) {
+            let _ = state.rolagens_tx.send(corpo);
+        }
+    }
+
+    (
+        StatusCode::CREATED,
+        axum::Json(RolagemDoDetalhe { lance, rolagens }),
+    )
+        .into_response()
 }
 
 // --- as telas ---------------------------------------------------------------
@@ -5114,6 +5333,179 @@ mod tests {
         String::from_utf8_lossy(&bytes).to_string()
     }
 
+    // --- detalhes da ficha --------------------------------------------------
+
+    /// Um grupo Combate com a Defesa rolavel e a Protecao nao, as duas com
+    /// expressao na ficha do Corvo. Devolve o id da Defesa e o da Protecao.
+    fn ficha_de_combate(state: &Arc<Daemon>, personagem: &str) -> (String, String) {
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+
+        detalhes::criar_grupo(
+            vault,
+            detalhes::PatchGrupo {
+                nome: Some("Combate".into()),
+                exibicao: None,
+            },
+        )
+        .expect("grupo");
+
+        let novo = |rotulo: &str, rolagem: &str| detalhes::NovoDetalhe {
+            grupo: "Combate".into(),
+            rotulo: rotulo.into(),
+            tipo: detalhes::Tipo::Numero,
+            valor: Some(serde_json::json!(17)),
+            opcoes: Vec::new(),
+            descricao: Some("Quanto custa acertar".into()),
+            rolagem: Some(rolagem.into()),
+        };
+
+        let defesa = detalhes::criar_modelo(vault, novo("Defesa", "")).expect("modelo");
+        detalhes::editar_modelo(
+            vault,
+            &defesa.id,
+            detalhes::PatchDetalhe {
+                rolavel: Some(true),
+                ..Default::default()
+            },
+        )
+        .expect("rolavel");
+        detalhes::criar_modelo(vault, novo("Protecao", "")).expect("modelo");
+
+        let defesa = detalhes::criar(vault, personagem, novo("Defesa", "2d20+5")).expect("defesa");
+        let protecao =
+            detalhes::criar(vault, personagem, novo("Protecao", "1d6")).expect("protecao");
+
+        (defesa.id, protecao.id)
+    }
+
+    #[tokio::test]
+    async fn os_detalhes_chegam_com_a_expressao_so_do_que_rola() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        ficha_de_combate(&state, &personagem);
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "GET",
+                &format!("/eu/personagens/{personagem}/detalhes"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let ficha: serde_json::Value = serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(ficha["grupos"][0]["nome"], "Combate");
+
+        let lista = ficha["detalhes"].as_array().expect("detalhes");
+        let achar = |rotulo: &str| {
+            lista
+                .iter()
+                .find(|d| d["rotulo"] == rotulo)
+                .expect(rotulo)
+                .clone()
+        };
+        assert_eq!(achar("Defesa")["rolagem"], "2d20+5");
+        assert_eq!(achar("Defesa")["valor"], 17);
+        assert_eq!(achar("Defesa")["descricao"], "Quanto custa acertar");
+        // A Protecao tem expressao na ficha, mas o molde nao liga o d20 dela.
+        assert!(achar("Protecao").get("rolagem").is_none());
+    }
+
+    #[tokio::test]
+    async fn rolar_o_detalhe_cai_na_bandeja_e_numa_linha_do_fio() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let (defesa, _) = ficha_de_combate(&state, &personagem);
+        let mut bandeja = state.rolagens_tx.subscribe();
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "POST",
+                &format!("/eu/personagens/{personagem}/detalhes/{defesa}/rolar"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        let lance = &rolagem["lance"];
+        assert_eq!(lance["rotulo"], "Corvo · Defesa");
+        assert_eq!(lance["modificador"], 5);
+
+        let dados = rolagem["rolagens"].as_array().expect("rolagens");
+        assert_eq!(dados.len(), 2);
+        for dado in dados {
+            assert_eq!(dado["faces"], 20);
+            assert!((1..=20).contains(&dado["valor"].as_u64().expect("valor")));
+            assert_eq!(dado["lance"]["id"], lance["id"]);
+            assert_eq!(dado["jogador"], "Edgar");
+        }
+
+        // Os dois dados na bandeja do Mestre, com o lance.
+        for _ in 0..2 {
+            let anunciado: serde_json::Value =
+                serde_json::from_str(&bandeja.try_recv().expect("anunciado")).expect("json");
+            assert_eq!(anunciado["lance"]["id"], lance["id"]);
+        }
+
+        // Uma linha so, com o id do lance, os dois dados, o rotulo e o +5.
+        let linhas = fio_gravado(&state);
+        assert_eq!(linhas.len(), 1);
+        assert_eq!(linhas[0].id, lance["id"].as_str().expect("id"));
+        let no_fio = linhas[0].rolagem.as_ref().expect("rolagem");
+        assert_eq!(no_fio.dados.len(), 2);
+        assert_eq!(no_fio.modificador, 5);
+        assert_eq!(no_fio.rotulo.as_deref(), Some("Corvo · Defesa"));
+    }
+
+    #[tokio::test]
+    async fn so_rola_o_detalhe_que_o_molde_liga_e_que_e_dele() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let (defesa, protecao) = ficha_de_combate(&state, &personagem);
+
+        for (token, detalhe) in [
+            // O d20 desligado no molde: a expressao existe e nao rola.
+            (&token_a, &protecao),
+            // Detalhe que nao existe.
+            (&token_a, &"chute".to_string()),
+            // Personagem de outro jogador.
+            (&token_b, &defesa),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(
+                    token,
+                    "POST",
+                    &format!("/eu/personagens/{personagem}/detalhes/{detalhe}/rolar"),
+                    None,
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{detalhe}");
+        }
+
+        let leitura = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_b,
+                "GET",
+                &format!("/eu/personagens/{personagem}/detalhes"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(leitura.status(), StatusCode::NOT_FOUND);
+        assert!(
+            fio_gravado(&state).is_empty(),
+            "rolagem recusada entrou no fio"
+        );
+    }
+
     // --- inventario ---------------------------------------------------------
 
     #[tokio::test]
@@ -5232,6 +5624,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn o_celular_nao_cria_item_sem_nome() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        for corpo_json in [r#"{"nome":""}"#, r#"{"nome":"   "}"#, r#"{}"#] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(
+                    &token,
+                    "POST",
+                    &format!("/eu/personagens/{personagem}/inventario"),
+                    Some(corpo_json),
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{corpo_json}");
+        }
+
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+        assert!(inventory::load(vault, &personagem).expect("itens").is_empty());
+    }
+
+    #[tokio::test]
     async fn inventario_de_personagem_de_outro_responde_404() {
         let (_dir, state, codigo) = daemon();
         let (_, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
@@ -5335,7 +5750,7 @@ mod tests {
 
         for uri in [
             format!("/eu/personagens/{personagem}/anexos"),
-            format!("/eu/personagens/{personagem}/nota"),
+            format!("/eu/notas?personagem={personagem}"),
         ] {
             let response = router(Arc::clone(&state))
                 .oneshot(como(&token_b, "GET", &uri, None))
@@ -5349,23 +5764,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn nota_e_do_par_personagem_jogador() {
+    async fn o_caderno_e_do_personagem_e_so_do_dono_dele() {
         let (_dir, state, codigo) = daemon();
-        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
-
-        let uri = format!("/eu/personagens/{personagem}/nota");
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let corpo_nota = format!(r#"{{"personagemId":"{personagem}","texto":"o alcapao range"}}"#);
 
         let gravou = router(Arc::clone(&state))
-            .oneshot(como(&token_a, "PUT", &uri, Some(r#"{"texto":"o alcapao range"}"#)))
+            .oneshot(como(&token_a, "POST", "/eu/notas", Some(&corpo_nota)))
             .await
             .expect("resposta");
-        assert_eq!(gravou.status(), StatusCode::NO_CONTENT);
+        assert_eq!(gravou.status(), StatusCode::CREATED);
 
         let leu = router(Arc::clone(&state))
-            .oneshot(como(&token_a, "GET", &uri, None))
+            .oneshot(como(&token_a, "GET", &format!("/eu/notas?personagem={personagem}"), None))
             .await
             .expect("resposta");
         assert!(corpo(leu).await.contains("o alcapao range"));
+
+        // Sem personagem, a nota nao tem caderno onde entrar.
+        let sem = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "POST",
+                "/eu/notas",
+                Some(r#"{"texto":"solta"}"#),
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(sem.status(), StatusCode::BAD_REQUEST);
+
+        // E no caderno do personagem dos outros, nem escrever: 404, como ler.
+        let alheia = router(Arc::clone(&state))
+            .oneshot(como(&token_b, "POST", "/eu/notas", Some(&corpo_nota)))
+            .await
+            .expect("resposta");
+        assert_eq!(alheia.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
@@ -6387,16 +6820,17 @@ mod tests {
     #[tokio::test]
     async fn o_caderno_de_um_jogador_nao_alcanca_o_do_outro() {
         let (_dir, state, codigo) = daemon();
-
-        let token_a = token_de(Arc::clone(&state), &codigo, "Edgar").await;
-        let token_b = token_de(Arc::clone(&state), &codigo, "Mira").await;
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let caderno = format!("/eu/notas?personagem={personagem}");
 
         let criada = router(Arc::clone(&state))
             .oneshot(como(
                 &token_a,
                 "POST",
                 "/eu/notas",
-                Some(r#"{"titulo":"O alcapao","texto":"atras do balcao"}"#),
+                Some(&format!(
+                    r#"{{"personagemId":"{personagem}","titulo":"O alcapao","texto":"atras do balcao"}}"#
+                )),
             ))
             .await
             .expect("resposta");
@@ -6404,13 +6838,13 @@ mod tests {
         assert_eq!(criada.status(), StatusCode::CREATED);
         let nota = primeiro_id(&corpo(criada).await);
 
-        // O caderno do outro nem sabe que ela existe.
+        // O outro nem chega ao caderno: o personagem nao e dele.
         let dele = router(Arc::clone(&state))
-            .oneshot(como(&token_b, "GET", "/eu/notas", None))
+            .oneshot(como(&token_b, "GET", &caderno, None))
             .await
             .expect("resposta");
 
-        assert_eq!(corpo(dele).await, "[]");
+        assert_eq!(dele.status(), StatusCode::NOT_FOUND);
 
         // E mexer na nota alheia e 404, nao 403: dizer "existe mas nao e sua"
         // confirmaria a nota de outro a quem chutou o id.
@@ -6428,7 +6862,7 @@ mod tests {
 
         // E continua inteira para o dono.
         let minha = router(state)
-            .oneshot(como(&token_a, "GET", "/eu/notas", None))
+            .oneshot(como(&token_a, "GET", &caderno, None))
             .await
             .expect("resposta");
 
@@ -6438,14 +6872,16 @@ mod tests {
     #[tokio::test]
     async fn campo_ausente_no_patch_nao_apaga_o_que_esta_gravado() {
         let (_dir, state, codigo) = daemon();
-        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
 
         let criada = router(Arc::clone(&state))
             .oneshot(como(
                 &token,
                 "POST",
                 "/eu/notas",
-                Some(r#"{"titulo":"A taverna","texto":"o dono mentiu","tags":["pista"]}"#),
+                Some(&format!(
+                    r#"{{"personagemId":"{personagem}","titulo":"A taverna","texto":"o dono mentiu","tags":["pista"]}}"#
+                )),
             ))
             .await
             .expect("resposta");

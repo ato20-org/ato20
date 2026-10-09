@@ -90,6 +90,31 @@ export function grupoAvulso(nome: string): GrupoDeDetalhes {
 }
 
 /**
+ * Os grupos de uma ficha, na ordem em que ela se desenha: os do molde primeiro,
+ * mesmo vazios, e os que só a ficha conhece -- veio de outra campanha, ou o
+ * grupo saiu do molde -- no fim, em linhas.
+ *
+ * Aqui, e não na tela, porque são duas telas: a ficha do Mestre e o celular do
+ * jogador põem os grupos na mesma ordem.
+ */
+export function gruposDaFicha(
+  doMolde: readonly GrupoDeDetalhes[],
+  detalhes: ReadonlyArray<{ grupo: string }>,
+): GrupoDeDetalhes[] {
+  const conhecidos = new Set(doMolde.map((grupo) => chaveDoNome(grupo.nome)));
+  const avulsos = [...new Set(detalhes.map((detalhe) => detalhe.grupo))]
+    .filter((nome) => !conhecidos.has(chaveDoNome(nome)))
+    .map(grupoAvulso);
+
+  return [...doMolde, ...avulsos];
+}
+
+/** Os detalhes que caem neste grupo, pelo nome. */
+export function doGrupo<T extends { grupo: string }>(detalhes: readonly T[], grupo: GrupoDeDetalhes): T[] {
+  return detalhes.filter((detalhe) => chaveDoNome(detalhe.grupo) === chaveDoNome(grupo.nome));
+}
+
+/**
  * O tipo de um detalhe novo no grupo: o do último que ele já tem (número nas
  * perícias, texto nos poderes), ou texto. Escolha vira texto, porque as
  * opções moram no molde.

@@ -7,7 +7,9 @@ import {
 } from "react";
 import { Trash2, X } from "lucide-react";
 
+import { BolinhaFlutuante } from "@/components/jogador/bolinha-flutuante";
 import { DadoParado } from "@/components/playground/dado-parado";
+import { HistoricoDeDados, useDadosNoAr } from "@/components/playground/historico-de-dados";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -17,6 +19,7 @@ import {
 import { useDadosNaMesa } from "@/hooks/use-dados-na-mesa";
 import { useGestoDeArremesso } from "@/hooks/use-gesto-de-arremesso";
 import { t } from "@/lib/i18n/jogador";
+import { textoDoModificador } from "@/lib/mestre/expressao-de-rolagem";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { cn } from "@/lib/utils";
 import {
@@ -24,6 +27,7 @@ import {
   rotulosDoDado,
   TIPOS_DADO,
   valorDaRolagem,
+  type Lance,
   type TipoDado,
 } from "@/types/dado";
 
@@ -199,8 +203,79 @@ export function SaquinhoJogador() {
  * de todo mundo. Uma segunda lista no próprio aparelho seria a mesma coisa dita
  * duas vezes, num espaço que não sobra.
  */
+/**
+ * O saquinho da tela DEITADA: uma bolinha flutuante e arrastável, no mesmo
+ * desenho da do Mestre -- 44px, fundo translúcido, o d20 que vira X aberta e a
+ * contagem dos dados na tela. Ver `BolinhaFlutuante`.
+ *
+ * A bolinha é a BOCA: recolher suga os dados para ela, onde quer que esteja. O
+ * painel não fecha com toque fora -- o arremesso acontece fora dele, sobre a
+ * tela -- e esmaece enquanto o dado está na mão.
+ */
+export function SaquinhoFlutuante({
+  reservaEmcima,
+  reservaEmbaixo,
+}: {
+  reservaEmcima: number;
+  reservaEmbaixo: number;
+}) {
+  const naMao = useDadosStore((state) => state.naMao);
+  const engolindo = useDadosStore((state) => state.succao !== null);
+  const dados = useDadosNaMesa();
+  const bolinha = useRef<HTMLButtonElement>(null);
+
+  function boca(): { clientX: number; clientY: number } | undefined {
+    const rect = bolinha.current?.getBoundingClientRect();
+    if (!rect) return undefined;
+    return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+  }
+
+  return (
+    <BolinhaFlutuante
+      chave="ato20:jogador:bolinha-do-saquinho"
+      padrao={{ x: 0, y: 1 }}
+      reservas={{ emcima: reservaEmcima, embaixo: reservaEmbaixo }}
+      tamanho={44}
+      refDaBolinha={bolinha}
+      rotulo={(aberta) => (aberta ? t.saquinho.fechar : t.saquinho.abrir)}
+      classeDaBolinha={() =>
+        cn("bg-background/85 backdrop-blur", engolindo && "scale-[1.15]")
+      }
+      bolinha={(aberta) => (
+        <>
+          {engolindo ? (
+            <span
+              aria-hidden
+              className="border-primary/70 absolute inset-0 animate-ping rounded-full border-2"
+            />
+          ) : null}
+          {aberta ? (
+            <X className="size-5" aria-hidden />
+          ) : (
+            <DadoParado faces={20} valor={20} tamanho={30} />
+          )}
+          {dados.length > 0 ? (
+            <span className="bg-primary text-primary-foreground absolute -top-1 -right-1 grid size-4 place-items-center rounded-full text-[10px] font-semibold tabular-nums">
+              {dados.length}
+            </span>
+          ) : null}
+        </>
+      )}
+      larguraDoPainel={240}
+      fecharAoTocarFora={false}
+      classeDoPainel={cn("transition-opacity", naMao && "opacity-15")}
+      painel={() => (
+        <div className="overflow-y-auto p-4">
+          <ConteudoDoSaquinho boca={boca} />
+        </div>
+      )}
+    />
+  );
+}
+
 export function ConteudoDoSaquinho({
   boca,
+  semTitulo = false,
 }: {
   /**
    * Onde os dados são sugados ao recolher, em pixel de tela.
@@ -211,6 +286,8 @@ export function ConteudoDoSaquinho({
    * ponto daquela tela que mais se parece com a boca do saquinho.
    */
   boca?: () => { clientX: number; clientY: number } | undefined;
+  /** Sem o título: o painel da tela deitada já o traz no cabeçalho. */
+  semTitulo?: boolean;
 } = {}) {
   const pegarDado = useDadosStore((state) => state.pegarDado);
   const moverMao = useDadosStore((state) => state.moverMao);
@@ -247,15 +324,43 @@ export function ConteudoDoSaquinho({
     });
   }
 
-  /** O que já pousou, e quanto vale. O zero do d10 vale dez. */
-  const soma = dados
-    .filter((dado) => entraNaSoma(dado.faces))
-    .reduce((total, dado) => total + valorDaRolagem(dado.faces, dado.valor), 0);
+  // O histórico DESTA tela: o store grava cada dado que cai aqui, como no
+  // Mestre. Ver `HistoricoDeDados`.
+  const historico = useDadosStore((state) => state.historico[state.mesa]);
+  const noAr = useDadosNoAr(dados);
+
+  /**
+   * O que já POUSOU, e quanto vale. O zero do d10 vale dez. O dado no ar fica
+   * de fora: o valor veio do daemon antes da queda, e somá-lo entregaria o
+   * resultado antes de o dado parar -- a mesma regra do saquinho do Mestre.
+   */
+  const valores = dados
+    .filter((dado) => !noAr.has(dado.id) && entraNaSoma(dado.faces))
+    .map((dado) => valorDaRolagem(dado.faces, dado.valor));
+
+  /**
+   * Os lances dos dados na tela, um por id: o `+5` da Defesa entra UMA vez na
+   * conta, e não uma por d20. A mesma conta do saquinho do Mestre.
+   */
+  const lances = new Map<string, Lance>();
+  for (const dado of dados) if (dado.lance) lances.set(dado.lance.id, dado.lance);
+  const modificadores = [...lances.values()]
+    .map((lance) => lance.modificador)
+    .filter((modificador) => modificador !== 0);
+  const soma =
+    valores.reduce((total, valor) => total + valor, 0) +
+    modificadores.reduce((total, modificador) => total + modificador, 0);
+
+  // A tela inteira é de UM lance com nome: a linha diz de quem é a conta.
+  const doLance =
+    lances.size === 1 && dados.every((dado) => dado.lance)
+      ? [...lances.values()][0]?.rotulo
+      : undefined;
 
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <p className="text-sm font-medium">{t.saquinho.titulo}</p>
+        {semTitulo ? null : <p className="text-sm font-medium">{t.saquinho.titulo}</p>}
         <p className="text-muted-foreground text-xs">{t.saquinho.ajuda}</p>
       </div>
 
@@ -285,18 +390,37 @@ export function ConteudoDoSaquinho({
         ))}
       </div>
 
-      {/* A soma só a partir de dois: somar um dado é repetir o número que já
-          está na tela. */}
-      {dados.length >= 2 ? (
+      {/* A soma a partir de dois dados, ou de um com modificador: somar um
+          dado sozinho é repetir o número que já está na tela. */}
+      {valores.length >= 2 || (valores.length >= 1 && modificadores.length > 0) ? (
         <div className="flex items-baseline gap-2 border-t pt-2.5">
-          <span className="text-muted-foreground flex-1 text-xs font-medium">
-            {t.saquinho.naTela}
+          <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs font-medium">
+            {doLance ?? t.saquinho.naTela}
           </span>
+
+          {/* Os termos, para conferir a conta: os dados e, à parte, o bônus --
+              o 14 é 1 + 8 de dado e 5 da ficha. */}
+          <span className="text-muted-foreground/70 shrink-0 text-[11px] tabular-nums">
+            {valores.join(" + ")}
+            {modificadores.map((modificador, i) => (
+              <span key={i} className="text-foreground/80 font-medium">
+                {" "}
+                {textoDoModificador(modificador)}
+              </span>
+            ))}
+          </span>
+
           <span className="text-base leading-none font-semibold tabular-nums">
             {soma}
           </span>
         </div>
       ) : null}
+
+      <HistoricoDeDados
+        historico={historico}
+        noAr={noAr}
+        titulo={t.saquinho.ultimas}
+      />
 
       {/* Recolhe o que está NESTE aparelho. Não tira da mesa: o que a mesa viu,
           viu -- e quem tira de lá é o mestre. */}

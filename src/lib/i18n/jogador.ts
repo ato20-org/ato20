@@ -42,7 +42,6 @@ const pt = {
     removerArquivo: "Não foi possível remover o arquivo.",
     abrirArquivo: "Não foi possível abrir o arquivo.",
     abrirMiniatura: "Não foi possível abrir a miniatura.",
-    lerNota: "Não foi possível ler a nota.",
     gravarNota: "Não foi possível gravar a nota.",
     abrirCaderno: "Não foi possível abrir o caderno.",
     abrirNota: "Não foi possível abrir a nota.",
@@ -52,6 +51,7 @@ const pt = {
     acaoNaoChegou: "A mesa não recebeu a ação.",
     mensagemNaoChegou: "A mesa não recebeu a mensagem.",
     lerInventario: "Não foi possível ler o inventário.",
+    lerDetalhes: "Não foi possível ler os detalhes da ficha.",
     criarItem: "Não foi possível criar o item.",
     salvarItem: "Não foi possível salvar o item.",
     removerItem: "Não foi possível remover o item.",
@@ -89,9 +89,7 @@ const pt = {
   /** As ferramentas das docas da tela deitada e as abas da tela em pé. */
   ferramentas: {
     personagem: "Personagem",
-    inventario: "Inventário",
     arquivos: "Arquivos",
-    saquinho: "Saquinho",
     chat: "Chat",
     anotacoes: "Anotações",
   },
@@ -120,10 +118,10 @@ const pt = {
   saquinho: {
     fechar: "Fechar o saquinho",
     abrir: "Saquinho de dados",
-    titulo: "Saquinho",
-    ajuda:
-      "Arraste um dado para a tela e solte — quanto mais forte, mais longe ele rola. Toque para jogar no meio.",
+    titulo: "Saquinho de dados",
+    ajuda: "Arremesse na tela, ou toque para jogar no meio.",
     naTela: "Na tela",
+    ultimas: "Últimas rolagens",
     recolher: (n: number) => (n === 1 ? "Recolher o dado" : `Recolher os ${n} dados`),
   },
 
@@ -148,10 +146,20 @@ const pt = {
     vazio:
       "Nada escrito ainda. O que você descobrir, quem mentiu, o que não pode esquecer.",
     nenhuma: "Nenhuma nota com isso.",
-    voltar: "Voltar para o caderno",
-    gravando: "Gravando",
-    naoGravou: "Não gravou",
-    gravado: "Gravado",
+    fechar: "Fechar a nota",
+    semPersonagem:
+      "O caderno é de cada personagem. Quando o mestre te entregar um, as anotações sobre ele moram aqui.",
+    salvar: "Salvar",
+    salvando: "Salvando",
+    naoSalvou: "Não salvou",
+    naoSalvo: "Alterações não salvas",
+    salvo: "Salvo",
+    sair: {
+      titulo: "Salvar as alterações?",
+      descricao: "Esta nota tem alterações que ainda não foram salvas.",
+      continuar: "Continuar editando",
+      descartar: "Descartar",
+    },
     apagar: "Apagar esta nota",
     apagada: "Nota apagada.",
     tituloDaNota: "Título da nota",
@@ -182,7 +190,11 @@ const pt = {
   },
 
   inventario: {
-    itemSemNome: "Item sem nome",
+    novoItem: "Novo item",
+    editar: "Editar",
+    pronto: "Pronto",
+    semDescricao: "Sem descrição.",
+    adicionarBotao: "Adicionar",
     falhaCriar: "Falha ao criar o item.",
     falhaFoto: "Falha ao enviar a foto.",
     titulo: "Inventário",
@@ -203,18 +215,41 @@ const pt = {
     doMestre: "Este item foi o mestre que pôs aqui.",
   },
 
+  busca: {
+    dica: "Procure uma perícia, um poder ou um item.",
+    abrir: "Buscar (Ctrl+K)",
+  },
+
+  barraLateral: {
+    rotulo: "Teu personagem, mochila, anotações e arquivos",
+    // Curtos: a faixa das abas tem 44px, e "Personagem" virava "Persona…".
+    curtos: { personagem: "Ficha", mochila: "Mochila", chat: "Chat", anotacoes: "Notas", arquivos: "Arquivos" },
+  },
+
+  mochila: {
+    titulo: "Mochila",
+    abrir: "Abrir a mochila",
+    vazia: "Nada na mochila ainda. Toque no + para pôr o primeiro item.",
+    escolha: "Toque num item para ver o que é.",
+  },
+
   personagens: {
     lendo: "Lendo…",
     nenhum:
       "Nenhum personagem ainda. O mestre é quem entrega um a você — quando isso acontecer, a ficha e os arquivos dele aparecem aqui.",
-    sobre: (nome: string) => `Sobre ${nome}`,
     miniatura: "Miniatura",
     retrato: "Retrato",
     ampliarImagem: (nome: string) => `Ampliar a imagem de ${nome}`,
     medidores: "Medidores",
     atributos: "Atributos",
+    rolarDetalhe: (rotulo: string, expressao: string) => `Rolar ${rotulo}: ${expressao}`,
+    descricaoDe: (rotulo: string) => `Descrição de ${rotulo}`,
+    buscar: "Buscar habilidade ou item…",
+    limparBusca: "Limpar a busca",
+    nadaEncontrado: (termo: string) => `Nada encontrado para “${termo}”.`,
+    detalheVazio: "…",
+    gruposDaFicha: "Partes da ficha",
     condicoes: "Condições",
-    arquivosDoPersonagem: "Arquivos do personagem",
     ficha: "Ficha",
     ampliar: (titulo: string) => `Ampliar ${titulo}`,
     doMestre: "Do mestre",
@@ -226,9 +261,6 @@ const pt = {
     enviarArquivo: "Enviar arquivo",
     apagar: (arquivo: string) => `Apagar ${arquivo}`,
     abrir: (arquivo: string) => `Abrir ${arquivo}`,
-    suasAnotacoes: "Suas anotações",
-    anotacoesDica: "O que você descobriu, o que quer lembrar.",
-    naoGravouAnotacao: "Não foi possível gravar a anotação.",
   },
 };
 
@@ -264,7 +296,6 @@ const en: typeof pt = {
     removerArquivo: "Couldn't remove the file.",
     abrirArquivo: "Couldn't open the file.",
     abrirMiniatura: "Couldn't open the thumbnail.",
-    lerNota: "Couldn't read the note.",
     gravarNota: "Couldn't save the note.",
     abrirCaderno: "Couldn't open the notebook.",
     abrirNota: "Couldn't open the note.",
@@ -274,6 +305,7 @@ const en: typeof pt = {
     acaoNaoChegou: "The table didn't get the action.",
     mensagemNaoChegou: "The table didn't get the message.",
     lerInventario: "Couldn't read the inventory.",
+    lerDetalhes: "Couldn't read the sheet details.",
     criarItem: "Couldn't create the item.",
     salvarItem: "Couldn't save the item.",
     removerItem: "Couldn't remove the item.",
@@ -310,9 +342,7 @@ const en: typeof pt = {
 
   ferramentas: {
     personagem: "Character",
-    inventario: "Inventory",
     arquivos: "Files",
-    saquinho: "Dice bag",
     chat: "Chat",
     anotacoes: "Notes",
   },
@@ -341,9 +371,9 @@ const en: typeof pt = {
     fechar: "Close the dice bag",
     abrir: "Dice bag",
     titulo: "Dice bag",
-    ajuda:
-      "Drag a die onto the screen and let go: the harder you throw, the farther it rolls. Tap to roll in the middle.",
+    ajuda: "Throw them onto the screen, or tap to roll in the middle.",
     naTela: "On screen",
+    ultimas: "Latest rolls",
     recolher: (n) => (n === 1 ? "Pick up the die" : `Pick up the ${n} dice`),
   },
 
@@ -367,10 +397,20 @@ const en: typeof pt = {
     abrindo: "Opening the notebook…",
     vazio: "Nothing written yet. What you find out, who lied, what you can't forget.",
     nenhuma: "No notes match that.",
-    voltar: "Back to the notebook",
-    gravando: "Saving",
-    naoGravou: "Not saved",
-    gravado: "Saved",
+    fechar: "Close the note",
+    semPersonagem:
+      "Each character has its own notebook. Once the GM gives you one, your notes about it live here.",
+    salvar: "Save",
+    salvando: "Saving",
+    naoSalvou: "Couldn't save",
+    naoSalvo: "Unsaved changes",
+    salvo: "Saved",
+    sair: {
+      titulo: "Save your changes?",
+      descricao: "This note has changes that haven't been saved yet.",
+      continuar: "Keep editing",
+      descartar: "Discard",
+    },
     apagar: "Delete this note",
     apagada: "Note deleted.",
     tituloDaNota: "Note title",
@@ -400,7 +440,11 @@ const en: typeof pt = {
   },
 
   inventario: {
-    itemSemNome: "Unnamed item",
+    novoItem: "New item",
+    editar: "Edit",
+    pronto: "Done",
+    semDescricao: "No description.",
+    adicionarBotao: "Add",
     falhaCriar: "Failed to create the item.",
     falhaFoto: "Failed to upload the photo.",
     titulo: "Inventory",
@@ -421,18 +465,40 @@ const en: typeof pt = {
     doMestre: "The GM put this item here.",
   },
 
+  busca: {
+    dica: "Look for a skill, a power or an item.",
+    abrir: "Search (Ctrl+K)",
+  },
+
+  barraLateral: {
+    rotulo: "Your character, backpack, notes and files",
+    curtos: { personagem: "Sheet", mochila: "Backpack", chat: "Chat", anotacoes: "Notes", arquivos: "Files" },
+  },
+
+  mochila: {
+    titulo: "Backpack",
+    abrir: "Open the backpack",
+    vazia: "Nothing in the backpack yet. Tap + to add the first item.",
+    escolha: "Tap an item to see what it is.",
+  },
+
   personagens: {
     lendo: "Loading…",
     nenhum:
       "No characters yet. The GM is the one who gives you one; when that happens, its sheet and files show up here.",
-    sobre: (nome) => `About ${nome}`,
     miniatura: "Token",
     retrato: "Portrait",
     ampliarImagem: (nome) => `Enlarge ${nome}'s image`,
     medidores: "Meters",
     atributos: "Attributes",
+    rolarDetalhe: (rotulo: string, expressao: string) => `Roll ${rotulo}: ${expressao}`,
+    descricaoDe: (rotulo: string) => `About ${rotulo}`,
+    buscar: "Search abilities or items…",
+    limparBusca: "Clear search",
+    nadaEncontrado: (termo: string) => `Nothing found for “${termo}”.`,
+    detalheVazio: "…",
+    gruposDaFicha: "Sheet sections",
     condicoes: "Conditions",
-    arquivosDoPersonagem: "Character files",
     ficha: "Sheet",
     ampliar: (titulo) => `Enlarge ${titulo}`,
     doMestre: "From the GM",
@@ -444,9 +510,6 @@ const en: typeof pt = {
     enviarArquivo: "Upload file",
     apagar: (arquivo) => `Delete ${arquivo}`,
     abrir: (arquivo) => `Open ${arquivo}`,
-    suasAnotacoes: "Your notes",
-    anotacoesDica: "What you found out, what you want to remember.",
-    naoGravouAnotacao: "Couldn't save the note.",
   },
 };
 
