@@ -794,7 +794,7 @@ pub const MAX_MEDIDORES: usize = 6;
 ///
 /// Curto porque ele e um rotulo ao lado de uma barra, lido de longe numa TV, e
 /// nao um campo de texto. "Pontos de Vida Temporarios" ja nao cabe.
-const MAX_NOME_MEDIDOR: usize = 24;
+pub const MAX_NOME_MEDIDOR: usize = 24;
 
 /// O teto do valor.
 ///
@@ -1169,7 +1169,7 @@ pub fn chave_do_nome(nome: &str) -> String {
 pub const MAX_ATRIBUTOS: usize = 12;
 
 /// O teto da sigla. Seis cabe "SANID" e "ESPIR", e ainda cabe no cartao.
-const MAX_SIGLA: usize = 6;
+pub const MAX_SIGLA: usize = 6;
 
 /// O teto da descricao. E um balao de hover, e nao a pagina do manual.
 pub const MAX_DESCRICAO_ATRIBUTO: usize = 280;
@@ -1366,7 +1366,7 @@ pub const MAX_NOME_CONDICAO: usize = 24;
 
 /// O teto do nome do icone. Folgado para qualquer nome da lista da tela, e
 /// curto o bastante para o arquivo editado a mao nao guardar um paragrafo ali.
-const MAX_ICONE: usize = 32;
+pub const MAX_ICONE: usize = 32;
 
 /// O icone de quem chegou sem nenhum. A tela desenha o mesmo para nome
 /// desconhecido, entao os dois casos se leem igual.

@@ -5,6 +5,7 @@ import { topicosAchados } from "@/lib/mestre/topicos-da-campanha";
 describe("topicosAchados", () => {
   it("termo vazio acha todos, na ordem da barra", () => {
     expect(topicosAchados("  ", {})).toEqual([
+      "sistema",
       "medidores",
       "atributos",
       "detalhes",
@@ -51,8 +52,13 @@ describe("topicosAchados", () => {
     expect(topicosAchados("retrato", {})).toEqual([]);
   });
 
-  it("o plugin se acha pelo nome do tópico que o guarda", () => {
-    expect(topicosAchados("plugin", {})).toEqual(["ajustes"]);
+  it("o plugin se acha pelos tópicos que o guardam: o sistema e os ajustes", () => {
+    expect(topicosAchados("plugin", {})).toEqual(["sistema", "ajustes"]);
+  });
+
+  it("quem procura o jogo acha o sistema", () => {
+    expect(topicosAchados("ordem", {})).toEqual(["sistema"]);
+    expect(topicosAchados("regras", {})).toEqual(["sistema"]);
   });
 
   it("quem procura a TV ou o projetor acha a imagem do espectador", () => {

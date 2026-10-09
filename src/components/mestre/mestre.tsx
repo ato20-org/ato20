@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { ConfiguracoesDialog } from "@/components/desktop/configuracoes-dialog";
+import { ConfirmacaoDeApagar } from "@/components/mestre/confirmar-apagar";
 import { DeclarativoDoMestre } from "@/components/mestre/declarativo-do-mestre";
 import { VolumePopover } from "@/components/desktop/volume-popover";
 import { NovidadesDialog } from "@/components/desktop/versoes-lista";
@@ -111,6 +112,7 @@ export function Mestre() {
             <NovidadesDialog />
             <VolumePopover />
             <ConfiguracoesDialog />
+            <ConfirmacaoDeApagar />
           </>
         }
         subtitulo={status === "ready" ? editando : undefined}

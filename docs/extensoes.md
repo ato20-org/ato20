@@ -83,7 +83,11 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 9 é a atual: ela acrescentou os atributos da ficha,
+mais do que ele tem.** A 10 é a atual: ela acrescentou as `fichasPdf` (ver
+[Ficha em PDF](#ficha-em-pdf-o-plugin-ensina-a-ler)) e os `sistemas` (ver
+[Sistema de jogo](#sistema-de-jogo-o-padrão-da-campanha)), que um ATO20
+anterior ignoraria calado, e o plugin instalado só para isso não faria nada. A 9
+acrescentou os atributos da ficha,
 o substituto `secao:atributos` e o campo `atributos` no personagem de
 `personagens.listar` (a sigla, o número e a descrição opcional: FOR 4). Um ATO20 anterior recusaria o
 substituto como alvo desconhecido. A 8 acrescentou aos `pontos` em camadas
@@ -720,6 +724,134 @@ toda imagem raster e dentro da pasta -- as dos mipmaps e da rampa de cor
 também. O total de quadros da base deve dividir o dos elementos: é o laço do
 fogo que dita o da folha.
 
+## Ficha em PDF: o plugin ensina a ler
+
+Na lista de Personagens, **Importar ficha em PDF** cria o personagem a partir de
+uma ficha editável preenchida: nome, atributos, medidores, detalhes, e o PDF
+anexado como a ficha dele. O aplicativo lê o formulário, mas não conhece
+ficha nenhuma: quem diz que `untitled13` é a AGI do Ordem é o plugin. Um
+plugin de ficha é só o manifesto, sem `principal`, e pede a **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "fichasPdf": [{
+    "id": "jogo-do-ano",
+    "titulo": "Tormenta20 (Jogo do Ano)",
+    "reconhecer": ["NOME DO PERSONAGEM", "ModFor", "PMs Totais"],
+    "nome": "NOME DO PERSONAGEM",
+    "atributos": [{ "sigla": "FOR", "campo": "For" }],
+    "medidores": [{ "nome": "PV", "atual": "PVs Atuais", "maximo": "PVs Totais", "cor": "#ef4444" }],
+    "detalhes": [
+      { "grupo": "Identidade", "rotulo": "Classe", "campo": "CLASSE" },
+      { "grupo": "Identidade", "rotulo": "Nível", "campo": "Lv", "tipo": "numero" },
+      { "grupo": "Descrição", "rotulo": "Histórico", "descricao": { "juntar": ["Hist1", "Hist2"] } }
+    ],
+    "listas": [{
+      "grupo": "Habilidades",
+      "itens": [
+        { "nome": "Hab1", "campo": "Custo1", "descricao": "Desc1" },
+        { "nome": "Hab2", "campo": "Custo2", "descricao": "Desc2" }
+      ]
+    }]
+  }]
+}
+```
+
+- **`reconhecer`** são campos que o PDF tem de ter, TODOS, para ser esta
+  ficha. Escolha os que só ela tem: dois ou três bastam. Quando mais de uma
+  ficha reconhece o PDF, vence a que lista mais campos, e o mestre pode trocar
+  na prévia.
+- **O campo é o nome do campo do formulário**, como o PDF o guarda. Ele não
+  aparece na tela; para descobrir, abra a ficha num editor de formulário de
+  PDF, que mostra o nome de cada campo, ou leia as anotações com o pdf.js. Ficha que
+  usa nomes genéricos (`Campo de Texto15`, `untitled2`) também serve: o nome é
+  fixo naquele arquivo, e a tabela se monta uma vez, olhando a posição.
+- **Um valor sai de um campo, de caixas, ou de campos para juntar**:
+  `{ "caixas": ["FOR1", "FOR2", "FOR3"] }` vale quantas estão marcadas, que é
+  como fichas de bolinha guardam o atributo; `{ "juntar": [...] }` é o texto
+  escrito em várias linhas, um campo por linha. No valor, os pedaços ficam
+  numa linha só, separados por ` · ` (`+5 · 2d12`); na descrição, um por
+  linha. Juntado como número, vale o primeiro campo que tiver um.
+- **`listas` são as tabelas da ficha** (Habilidades & Rituais, Poderes,
+  Ataques): cada linha vira um detalhe do `grupo`, e o rótulo é o que o
+  jogador escreveu no campo `nome` ("Golpe Pesado"). Linha com o nome vazio
+  é linha que ele não usou, e fica de fora sem aviso.
+- **Número é o que começa com número**: `10`, `+2`, `-1`, `12/15` (o 12).
+  `1d8` não é número, de propósito.
+- **Casa com o que a campanha já tem.** O personagem nasce com os atributos,
+  medidores e detalhes de fábrica da campanha, e a ficha preenche em cima: a
+  mesma sigla, o mesmo nome de medidor, o mesmo grupo e rótulo de detalhe.
+  Só o que não tem par é criado. O PV da campanha continua com a cor e o
+  estilo que o mestre escolheu.
+- **`descricao` é o texto longo** do detalhe (o histórico, a habilidade). O
+  valor de texto é curto (80 letras); o que passar disso vai para a
+  descrição sozinho.
+- **Campo vazio não grava**, e a prévia diz o que veio em branco. Ficha com
+  o nome vazio é avisada como "em branco".
+
+O aplicativo recusa na instalação o que a gravação cortaria calada: sigla
+com mais de 6 letras, nome de medidor com mais de 24, mais atributos (12),
+medidores (6) ou detalhes (200, contando as linhas das listas) do que o
+personagem guarda, e a mesma sigla,
+medidor ou detalhe lidos duas vezes.
+
+Só ficha **editável** (com formulário). A impressa, a digitalizada e a
+chapada continuam entrando como anexo: ler texto pela posição na página
+seria adivinhar. E o plugin não leva o PDF da editora junto: a ficha é de
+quem a publicou, e o README do plugin aponta onde baixá-la.
+
+## Sistema de jogo: o padrão da campanha
+
+Um plugin de sistema traz o padrão de um jogo: os atributos, os medidores, o
+molde dos detalhes da ficha e o cardápio de condições. O mestre o **aplica**
+numa campanha, ao criá-la ("Sistema de jogo", na tela de nova campanha) ou
+depois, em Configuração da campanha, Sistema. Também é só o manifesto, e pede
+a **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "sistemas": [{
+    "id": "ordem",
+    "titulo": "Ordem Paranormal",
+    "atributos": [{ "sigla": "AGI", "valor": 1, "descricao": "Agilidade" }],
+    "medidores": [{ "nome": "PV", "cor": "#ef4444", "estilo": "barra", "maximo": 20 }],
+    "detalhes": {
+      "grupos": [{ "nome": "Identidade" }, { "nome": "Habilidades e rituais", "exibicao": "lista" }],
+      "modelos": [
+        { "grupo": "Identidade", "rotulo": "Classe", "tipo": "escolha",
+          "opcoes": ["Combatente", "Especialista", "Ocultista"] },
+        { "grupo": "Identidade", "rotulo": "NEX", "tipo": "numero", "valor": 5 }
+      ]
+    },
+    "condicoes": [{ "nome": "Sangrando", "cor": "#ef4444", "icone": "sangue", "efeito": "sangrando" }]
+  }]
+}
+```
+
+- **Aplicar junta, nunca substitui.** O que a campanha já tem com o mesmo
+  nome (a sigla, o medidor, o grupo e rótulo do detalhe, a condição) fica como
+  o mestre deixou, e o que passa do teto da campanha fica de fora e é avisado.
+  Aplicar duas vezes não duplica nada.
+- **Nunca entra sozinho.** Plugin é ligado na máquina inteira, e a campanha de
+  D&D da mesma máquina não pode acordar com a AGI do Ordem. E a campanha não
+  guarda de onde o padrão veio: desinstalar o plugin não mexe nela.
+- **Os personagens que já existem** recebem o que faltava se o mestre marcar
+  a opção ao aplicar, pelo mesmo "Aplicar em todos" de cada lista.
+- **Os textos são dado**, e não `TextoDePlugin`: a sigla, o rótulo, a opção e
+  o nome da condição vão para a campanha como estão.
+- **`estiloExtensao`** no medidor pode apontar para o estilo de OUTRO plugin
+  (`ordem-segredo-na-floresta/pv`); sem ele instalado, a barra sai no `estilo`.
+- **`icone`** da condição é um nome da lista de ícones da tela, e **`efeito`**
+  é um efeito de fábrica (`sangrando`) ou de plugin (`{plugin}/{efeito}`).
+- Os tetos são os da campanha: 12 atributos, 6 medidores, 16 grupos, 200
+  detalhes e 16 condições. Detalhe de `escolha` precisa de opções, e o grupo
+  de cada detalhe tem de estar declarado ao lado.
+
+Um plugin com sistema **e** ficha em PDF fecha o ciclo: use na ficha os mesmos
+grupos e rótulos do sistema, e o personagem importado cai certinho no molde.
+
 ## A seção do plugin no celular, e o botão que chega ao Mestre
 
 A metade **pública** do que um plugin guarda no personagem pode virar uma
@@ -866,7 +998,8 @@ retratos (o grupo no ar e o card de cada personagem de jogador).
 O ATO20 fala português e inglês, e da **API 7** em diante o plugin também pode
 falar. Todo texto que o manifesto declara para alguém ler (o `nome` e a
 `descricao` do plugin, o `titulo` de painel, comando, ferramenta, camada,
-item de menu, seção, página, estilo de medidor, efeito e configuração, a
+item de menu, seção, página, estilo de medidor, efeito, ficha em PDF,
+sistema e configuração, a
 `descricao` da configuração, o
 `subtitulo`, o `grupo`, a `dica`, o `rotulo` e o `campo` das fontes de
 retrato) aceita uma string, como sempre, **ou um mapa por idioma**:

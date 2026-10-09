@@ -11,6 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import {
+  Dices,
   Gauge,
   Hash,
   ListTree,
@@ -27,6 +28,7 @@ import {
   useEfeitosEmAreaDosPlugins,
 } from "@/components/mestre/efeito-da-area";
 import { TelaDaCondicao } from "@/components/mestre/efeitos-da-campanha";
+import { SistemaDaCampanha } from "@/components/mestre/sistema-da-campanha";
 import {
   AtributosDaCampanha,
   useAtributosDaCampanha,
@@ -100,6 +102,7 @@ const MAXIMO_INICIAL = 10;
 
 /** O ícone de cada tópico, na barra. Os textos moram em `TOPICOS_DA_CAMPANHA`. */
 const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
+  sistema: Dices,
   medidores: Gauge,
   atributos: Hash,
   detalhes: ListTree,
@@ -312,6 +315,15 @@ function Topico({
   atributos: AtributosDaCampanhaLidos;
 }) {
   switch (chave) {
+    case "sistema":
+      return (
+        <SistemaDaCampanha
+          aoAplicar={() => {
+            medidores.reler();
+            atributos.reler();
+          }}
+        />
+      );
     case "medidores":
       return <MedidoresDaCampanha {...medidores} />;
     case "atributos":

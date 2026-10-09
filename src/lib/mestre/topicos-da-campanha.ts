@@ -13,6 +13,15 @@ import { normaliza } from "@/lib/search";
  */
 export const TOPICOS_DA_CAMPANHA = [
   {
+    // Primeiro porque arma os outros: aplicar um sistema enche medidores,
+    // atributos, detalhes e condições de uma vez. Quem procura "ordem" ou
+    // "regras" acha aqui.
+    chave: "sistema",
+    titulo: t.topicos.sistema.titulo,
+    descricao: t.topicos.sistema.descricao,
+    palavras: t.topicos.sistema.palavras,
+  },
+  {
     chave: "medidores",
     titulo: t.topicos.medidores.titulo,
     descricao: t.topicos.medidores.descricao,

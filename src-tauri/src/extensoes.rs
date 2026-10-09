@@ -70,7 +70,12 @@ use crate::error::{AppError, AppResult};
 /// campo `atributos` no personagem que `personagens.listar` entrega. Um ATO20
 /// de API 8 recusaria o substituto por "alvo desconhecido", que manda o autor
 /// procurar o erro na grafia; pedindo 9, ele ouve "atualize o ATO20".
-pub const API_VERSAO: u32 = 9;
+///
+/// A 10 acrescentou as `fichasPdf`: o plugin ensina a ler o formulario de uma
+/// ficha, e o aplicativo cria o personagem a partir dela. Um ATO20 de API 9
+/// ignoraria a chave calado, e o plugin instalado so para isso nao faria nada;
+/// pedindo 10, ele ouve "atualize o ATO20".
+pub const API_VERSAO: u32 = 10;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -309,6 +314,12 @@ impl Manifesto {
                 textos.push((caminho("efeitos", &x.id, "dica"), dica));
             }
         }
+        for x in &c.fichas_pdf {
+            textos.push((caminho("fichasPdf", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.sistemas {
+            textos.push((caminho("sistemas", &x.id, "titulo"), &x.titulo));
+        }
         for x in &c.configuracoes {
             textos.push((caminho("configuracoes", &x.chave, "titulo"), &x.titulo));
             if let Some(descricao) = &x.descricao {
@@ -399,6 +410,12 @@ pub struct Contribuicoes {
     /// Efeitos de condicao. Ver `Efeito`.
     #[serde(default)]
     pub efeitos: Vec<Efeito>,
+    /// Fichas em PDF que o plugin sabe ler. Ver `FichaPdf`.
+    #[serde(default)]
+    pub fichas_pdf: Vec<FichaPdf>,
+    /// Sistemas de jogo que o mestre aplica numa campanha. Ver `Sistema`.
+    #[serde(default)]
+    pub sistemas: Vec<Sistema>,
 }
 
 /// Um efeito de condicao: o que a figura faz quando uma condicao aponta para
@@ -1195,6 +1212,255 @@ pub struct Camada {
     pub titulo: TextoDePlugin,
 }
 
+/// Uma ficha em PDF que o plugin sabe ler: o formulario de um modelo
+/// conhecido, campo a campo, para o que o personagem guarda.
+///
+/// DECLARATIVA, como o estilo de medidor e o efeito. O que muda de uma ficha
+/// para outra e o NOME dos campos, e isso e dado: codigo aqui pediria a API de
+/// plugin inteira para dizer que `untitled13` e a AGI. E e o que deixa o
+/// aplicativo sem tabela de ficha de editora nenhuma -- quem conhece a ficha
+/// do Ordem e o plugin do Ordem.
+///
+/// So formulario (AcroForm). Ficha chapada nao tem campo, e ler texto pela
+/// posicao na pagina seria adivinhar.
+///
+/// Nao conta como contribuicao que pede `principal`: quem le o PDF e o
+/// aplicativo, com o que esta aqui. O espelho em TypeScript e
+/// `FichaPdfDeclarada`, em `manifesto.ts`; a leitura, em `lib/fichas-pdf/`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FichaPdf {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    /// Os campos que o PDF tem de ter, TODOS, para ser esta ficha. Nome de
+    /// campo e o que distingue um modelo do outro: a ficha do Tormenta tem
+    /// `ModFor`, e a do Ordem nao.
+    pub reconhecer: Vec<String>,
+    /// O campo do nome do personagem. Vazio no PDF = ficha em branco.
+    pub nome: String,
+    #[serde(default)]
+    pub atributos: Vec<AtributoDaFicha>,
+    #[serde(default)]
+    pub medidores: Vec<MedidorDaFicha>,
+    #[serde(default)]
+    pub detalhes: Vec<DetalheDaFicha>,
+    #[serde(default)]
+    pub listas: Vec<ListaDaFicha>,
+}
+
+/// De onde sai um valor: o nome de um campo; uma lista de caixas, das quais
+/// vale QUANTAS estao marcadas -- as bolinhas do Vampiro, `FOR1` a `FOR5`, que
+/// nenhum campo soma --; ou campos para JUNTAR -- o historico escrito em cinco
+/// linhas, um campo por linha, que so faz sentido inteiro.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum LeituraDeCampo {
+    Campo(String),
+    Caixas { caixas: Vec<String> },
+    Juntar { juntar: Vec<String> },
+}
+
+impl LeituraDeCampo {
+    fn campos(&self) -> Vec<&String> {
+        match self {
+            Self::Campo(campo) => vec![campo],
+            Self::Caixas { caixas: lista } | Self::Juntar { juntar: lista } => {
+                lista.iter().collect()
+            }
+        }
+    }
+}
+
+/// Um atributo da ficha. Casa com o da campanha pela sigla.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AtributoDaFicha {
+    pub sigla: String,
+    pub campo: LeituraDeCampo,
+}
+
+/// Um medidor da ficha. Casa com o da campanha pelo nome; sem par, nasce com
+/// a `cor` -- e com a primeira da paleta, sem ela.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MedidorDaFicha {
+    pub nome: String,
+    /// Ausente = cheio, o `maximo`.
+    #[serde(default)]
+    pub atual: Option<LeituraDeCampo>,
+    pub maximo: LeituraDeCampo,
+    #[serde(default)]
+    pub cor: Option<String>,
+}
+
+/// Um detalhe da ficha: a classe, a origem, o historico. Casa com o do molde
+/// da campanha pelo grupo e pelo rotulo.
+///
+/// `campo` e o valor curto, e `descricao` o texto longo que abre embaixo --
+/// e por ela que entra o historico, porque o valor corta em `MAX_TEXTO`. Pelo
+/// menos um dos dois.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetalheDaFicha {
+    pub grupo: String,
+    pub rotulo: String,
+    #[serde(default)]
+    pub campo: Option<LeituraDeCampo>,
+    #[serde(default)]
+    pub descricao: Option<LeituraDeCampo>,
+    /// `texto` (o de sempre) ou `numero`. Ver `TIPOS_DE_DETALHE_DA_FICHA`.
+    #[serde(default)]
+    pub tipo: Option<String>,
+}
+
+/// As linhas de uma tabela da ficha -- Habilidades & Rituais, Poderes, Ataques
+/// --, cada uma virando um detalhe no `grupo`.
+///
+/// O que separa isto de `detalhes` e o ROTULO: la ele e do plugin ("Classe"),
+/// aqui ele e o que o jogador escreveu no campo `nome` ("Golpe Pesado"). Linha
+/// com o nome vazio e linha que o jogador nao usou, e fica de fora.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListaDaFicha {
+    pub grupo: String,
+    pub itens: Vec<ItemDaLista>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemDaLista {
+    /// O campo de onde sai o rotulo do detalhe.
+    pub nome: String,
+    #[serde(default)]
+    pub campo: Option<LeituraDeCampo>,
+    #[serde(default)]
+    pub descricao: Option<LeituraDeCampo>,
+}
+
+/// Os tipos que um detalhe lido de PDF pode ter. Escolha fica de fora: as
+/// opcoes viriam do molde, e o PDF nao sabe quais sao.
+pub const TIPOS_DE_DETALHE_DA_FICHA: &[&str] = &["texto", "numero"];
+
+/// Quantos campos o `reconhecer` lista. Tres ou quatro bastam para separar
+/// dois modelos; trinta e dois ja e a ficha inteira.
+pub const MAX_CAMPOS_PARA_RECONHECER: usize = 32;
+
+/// O teto do nome de um campo de formulario. O PDF nao tem limite, mas um nome
+/// que nao cabe numa linha de log nao e de ficha nenhuma.
+pub const MAX_NOME_DE_CAMPO: usize = 200;
+
+/// Um sistema de jogo: o que uma campanha dele ganha de fabrica -- os
+/// atributos, os medidores, o molde dos detalhes e o cardapio de condicoes.
+///
+/// O mestre APLICA o sistema numa campanha, na criacao ou na configuracao, e
+/// ele nunca entra sozinho: plugin e ligado na maquina inteira, e a campanha
+/// de D&D da mesma maquina nao pode acordar com a AGI do Ordem. Aplicar JUNTA
+/// ao que a campanha ja tem, pulando o que tem o mesmo nome -- o molde e do
+/// mestre desde que foi criado, como o medidor e do personagem. Ver
+/// `vault::sistema`.
+///
+/// Os textos aqui (sigla, rotulo, opcao, nome de condicao) sao DADO que vai
+/// para a campanha, e por isso `String`, e nao `TextoDePlugin`: traduzir a
+/// opcao "Combatente" faria a ficha em ingles gravar outra coisa.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sistema {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    #[serde(default)]
+    pub atributos: Vec<AtributoDoSistema>,
+    #[serde(default)]
+    pub medidores: Vec<MedidorDoSistema>,
+    #[serde(default)]
+    pub detalhes: DetalhesDoSistema,
+    #[serde(default)]
+    pub condicoes: Vec<CondicaoDoSistema>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AtributoDoSistema {
+    pub sigla: String,
+    /// O valor de partida: o 1 do Ordem, o 10 do D&D.
+    pub valor: i64,
+    #[serde(default)]
+    pub descricao: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MedidorDoSistema {
+    pub nome: String,
+    pub cor: String,
+    #[serde(default)]
+    pub estilo: crate::vault::characters::Estilo,
+    pub maximo: i64,
+    #[serde(default)]
+    pub escondido: bool,
+    /// Um estilo de plugin, `{extensao}/{estilo}` -- pode ser de OUTRO plugin,
+    /// como as barras do Segredo na Floresta. Sem ele instalado, a barra sai
+    /// no `estilo`, que e a reserva de sempre.
+    #[serde(default)]
+    pub estilo_extensao: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetalhesDoSistema {
+    #[serde(default)]
+    pub grupos: Vec<GrupoDoSistema>,
+    #[serde(default)]
+    pub modelos: Vec<ModeloDoSistema>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrupoDoSistema {
+    pub nome: String,
+    #[serde(default)]
+    pub exibicao: crate::vault::detalhes::Exibicao,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeloDoSistema {
+    /// O nome de um grupo declarado ao lado.
+    pub grupo: String,
+    pub rotulo: String,
+    #[serde(default)]
+    pub tipo: crate::vault::detalhes::Tipo,
+    #[serde(default)]
+    pub valor: Option<serde_json::Value>,
+    #[serde(default)]
+    pub opcoes: Vec<String>,
+    #[serde(default)]
+    pub descricao: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondicaoDoSistema {
+    pub nome: String,
+    pub cor: String,
+    /// Nome da lista de icones da tela. Ausente ou desconhecido, o de sempre.
+    #[serde(default)]
+    pub icone: Option<String>,
+    /// Um efeito de fabrica (`sangrando`) ou de plugin (`{plugin}/{efeito}`).
+    #[serde(default)]
+    pub efeito: Option<String>,
+}
+
+impl Sistema {
+    /// Traz alguma coisa? Sistema vazio seria um botao "Aplicar" que nao faz
+    /// nada.
+    fn traz_algo(&self) -> bool {
+        !self.atributos.is_empty()
+            || !self.medidores.is_empty()
+            || !self.detalhes.grupos.is_empty()
+            || !self.condicoes.is_empty()
+    }
+}
+
 /// Uma fonte de retrato ao vivo: como montar a URL de um servico, e em que
 /// tamanho a pagina dele foi desenhada.
 ///
@@ -1391,6 +1657,14 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             "efeitos",
             c.efeitos.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
+        (
+            "fichasPdf",
+            c.fichas_pdf.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "sistemas",
+            c.sistemas.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
     ];
 
     for (nome, itens) in grupos {
@@ -1442,6 +1716,13 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
     validar_configuracoes(manifesto)?;
     validar_encaixes(manifesto)?;
 
+    for ficha in &c.fichas_pdf {
+        validar_ficha_pdf(ficha)?;
+    }
+    for sistema in &c.sistemas {
+        validar_sistema(sistema)?;
+    }
+
     // Icone de ferramenta e caminho dentro da pasta, e vale a mesma guarda do
     // `tema` e do `principal`.
     for ferramenta in &c.ferramentas {
@@ -1452,6 +1733,470 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
                     "the icon of {:?} ({icone:?}) leaves the plugin folder",
                     ferramenta.id
                 )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// A ficha em PDF faz sentido?
+///
+/// Recusa o que a gravacao cortaria calada -- a sigla de sete letras, o
+/// medidor de vinte e cinco --, porque o autor so descobriria importando uma
+/// ficha preenchida, e o que veria seria `AGILID` no cartao. E recusa os
+/// repetidos: duas linhas para a mesma sigla gravariam as duas no mesmo
+/// atributo, e valeria a ultima sem ninguem saber qual era.
+fn validar_ficha_pdf(ficha: &FichaPdf) -> AppResult<()> {
+    use crate::vault::{characters, detalhes};
+
+    let id = &ficha.id;
+    let invalida = |texto: crate::error::Texto| Err(AppError::ExtensaoInvalida(texto));
+
+    if ficha.reconhecer.is_empty() || ficha.reconhecer.len() > MAX_CAMPOS_PARA_RECONHECER {
+        return invalida(crate::texto!(
+            "a ficha {id:?} precisa de 1 a {MAX_CAMPOS_PARA_RECONHECER} campos em `reconhecer`",
+            "the sheet {id:?} needs 1 to {MAX_CAMPOS_PARA_RECONHECER} fields in `reconhecer`"
+        ));
+    }
+    if ficha.atributos.len() > characters::MAX_ATRIBUTOS {
+        return invalida(crate::texto!(
+            "a ficha {id:?} le {} atributos; o personagem guarda {}",
+            "the sheet {id:?} reads {} attributes; a character holds {}",
+            ficha.atributos.len(),
+            characters::MAX_ATRIBUTOS
+        ));
+    }
+    if ficha.medidores.len() > characters::MAX_MEDIDORES {
+        return invalida(crate::texto!(
+            "a ficha {id:?} le {} medidores; o personagem guarda {}",
+            "the sheet {id:?} reads {} meters; a character holds {}",
+            ficha.medidores.len(),
+            characters::MAX_MEDIDORES
+        ));
+    }
+    // As linhas das listas tambem viram detalhe, e contam no mesmo teto.
+    let quantos = ficha.detalhes.len()
+        + ficha
+            .listas
+            .iter()
+            .map(|lista| lista.itens.len())
+            .sum::<usize>();
+    if quantos > detalhes::MAX_DETALHES {
+        return invalida(crate::texto!(
+            "a ficha {id:?} le {quantos} detalhes, contando as listas; o personagem guarda {}",
+            "the sheet {id:?} reads {quantos} details, lists included; a character holds {}",
+            detalhes::MAX_DETALHES
+        ));
+    }
+
+    // Todo nome de campo que a ficha cita, de todas as listas, numa so: a
+    // regra e a mesma, e a mensagem diz qual.
+    let mut campos: Vec<&String> = ficha.reconhecer.iter().collect();
+    campos.push(&ficha.nome);
+    for atributo in &ficha.atributos {
+        campos.extend(atributo.campo.campos());
+    }
+    for medidor in &ficha.medidores {
+        campos.extend(medidor.maximo.campos());
+        campos.extend(medidor.atual.iter().flat_map(LeituraDeCampo::campos));
+    }
+    for detalhe in &ficha.detalhes {
+        campos.extend(detalhe.campo.iter().flat_map(LeituraDeCampo::campos));
+        campos.extend(detalhe.descricao.iter().flat_map(LeituraDeCampo::campos));
+    }
+    for item in ficha.listas.iter().flat_map(|lista| &lista.itens) {
+        campos.push(&item.nome);
+        campos.extend(item.campo.iter().flat_map(LeituraDeCampo::campos));
+        campos.extend(item.descricao.iter().flat_map(LeituraDeCampo::campos));
+    }
+    for campo in campos {
+        if campo.trim().is_empty() || campo.chars().count() > MAX_NOME_DE_CAMPO {
+            return invalida(crate::texto!(
+                "a ficha {id:?} cita o campo {campo:?}, que precisa ter de 1 a {MAX_NOME_DE_CAMPO} letras",
+                "the sheet {id:?} names the field {campo:?}, which must have 1 to {MAX_NOME_DE_CAMPO} characters"
+            ));
+        }
+    }
+
+    let leituras = ficha
+        .atributos
+        .iter()
+        .map(|atributo| &atributo.campo)
+        .chain(
+            ficha
+                .medidores
+                .iter()
+                .flat_map(|m| std::iter::once(&m.maximo).chain(&m.atual)),
+        )
+        .chain(
+            ficha
+                .detalhes
+                .iter()
+                .flat_map(|detalhe| detalhe.campo.iter().chain(&detalhe.descricao)),
+        )
+        .chain(
+            ficha
+                .listas
+                .iter()
+                .flat_map(|lista| &lista.itens)
+                .flat_map(|item| item.campo.iter().chain(&item.descricao)),
+        );
+    for leitura in leituras {
+        if let LeituraDeCampo::Caixas { caixas: lista } | LeituraDeCampo::Juntar { juntar: lista } =
+            leitura
+        {
+            if lista.is_empty() || lista.len() > MAX_CONTRIBUICOES {
+                return invalida(crate::texto!(
+                    "a ficha {id:?} junta ou conta de 1 a {MAX_CONTRIBUICOES} campos por valor, e uma lista tem {}",
+                    "the sheet {id:?} joins or counts 1 to {MAX_CONTRIBUICOES} fields per value, and one list has {}",
+                    lista.len()
+                ));
+            }
+        }
+    }
+
+    // A chave de comparacao e a da gravacao: sem espaco nas pontas e sem caixa.
+    let chave = |texto: &str| texto.trim().to_lowercase();
+
+    let mut siglas: Vec<String> = Vec::new();
+    for atributo in &ficha.atributos {
+        let sigla = atributo.sigla.trim();
+        if sigla.is_empty() || sigla.chars().count() > characters::MAX_SIGLA {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem a sigla {sigla:?}; ela precisa ter de 1 a {} letras",
+                "the sheet {id:?} has the abbreviation {sigla:?}; it must have 1 to {} characters",
+                characters::MAX_SIGLA
+            ));
+        }
+        if siglas.contains(&chave(sigla)) {
+            return invalida(crate::texto!(
+                "a ficha {id:?} le a sigla {sigla:?} duas vezes",
+                "the sheet {id:?} reads the abbreviation {sigla:?} twice"
+            ));
+        }
+        siglas.push(chave(sigla));
+    }
+
+    let mut nomes: Vec<String> = Vec::new();
+    for medidor in &ficha.medidores {
+        let nome = medidor.nome.trim();
+        if nome.is_empty() || nome.chars().count() > characters::MAX_NOME_MEDIDOR {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem o medidor {nome:?}; o nome precisa ter de 1 a {} letras",
+                "the sheet {id:?} has the meter {nome:?}; the name must have 1 to {} characters",
+                characters::MAX_NOME_MEDIDOR
+            ));
+        }
+        if nomes.contains(&chave(nome)) {
+            return invalida(crate::texto!(
+                "a ficha {id:?} le o medidor {nome:?} duas vezes",
+                "the sheet {id:?} reads the meter {nome:?} twice"
+            ));
+        }
+        if let Some(cor) = &medidor.cor {
+            if !cor_hex_valida(cor) {
+                return invalida(crate::texto!(
+                    "a cor {cor:?} do medidor {nome:?} na ficha {id:?} nao e hex, como \"#ef4444\"",
+                    "the color {cor:?} of the meter {nome:?} in the sheet {id:?} is not hex, like \"#ef4444\""
+                ));
+            }
+        }
+        nomes.push(chave(nome));
+    }
+
+    let mut vistos: Vec<(String, String)> = Vec::new();
+    for detalhe in &ficha.detalhes {
+        let grupo = detalhe.grupo.trim();
+        let rotulo = detalhe.rotulo.trim();
+        if grupo.is_empty() || grupo.chars().count() > detalhes::MAX_NOME_DO_GRUPO {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem o grupo {grupo:?}; o nome precisa ter de 1 a {} letras",
+                "the sheet {id:?} has the group {grupo:?}; the name must have 1 to {} characters",
+                detalhes::MAX_NOME_DO_GRUPO
+            ));
+        }
+        if rotulo.is_empty() || rotulo.chars().count() > detalhes::MAX_ROTULO {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem o detalhe {rotulo:?}; o rotulo precisa ter de 1 a {} letras",
+                "the sheet {id:?} has the detail {rotulo:?}; the label must have 1 to {} characters",
+                detalhes::MAX_ROTULO
+            ));
+        }
+        if detalhe.campo.is_none() && detalhe.descricao.is_none() {
+            return invalida(crate::texto!(
+                "o detalhe {rotulo:?} da ficha {id:?} nao le nada; ponha `campo` ou `descricao`",
+                "the detail {rotulo:?} in the sheet {id:?} reads nothing; set `campo` or `descricao`"
+            ));
+        }
+        if let Some(tipo) = &detalhe.tipo {
+            if !TIPOS_DE_DETALHE_DA_FICHA.contains(&tipo.as_str()) {
+                return invalida(crate::texto!(
+                    "o detalhe {rotulo:?} da ficha {id:?} tem o tipo {tipo:?}; os tipos sao {}",
+                    "the detail {rotulo:?} in the sheet {id:?} has the type {tipo:?}; the types are {}",
+                    TIPOS_DE_DETALHE_DA_FICHA.join(", ")
+                ));
+            }
+        }
+        let par = (chave(grupo), chave(rotulo));
+        if vistos.contains(&par) {
+            return invalida(crate::texto!(
+                "a ficha {id:?} le o detalhe {rotulo:?} do grupo {grupo:?} duas vezes",
+                "the sheet {id:?} reads the detail {rotulo:?} of the group {grupo:?} twice"
+            ));
+        }
+        vistos.push(par);
+    }
+
+    for lista in &ficha.listas {
+        let grupo = lista.grupo.trim();
+        if grupo.is_empty() || grupo.chars().count() > detalhes::MAX_NOME_DO_GRUPO {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem a lista do grupo {grupo:?}; o nome precisa ter de 1 a {} letras",
+                "the sheet {id:?} has a list for the group {grupo:?}; the name must have 1 to {} characters",
+                detalhes::MAX_NOME_DO_GRUPO
+            ));
+        }
+        if lista.itens.is_empty() {
+            return invalida(crate::texto!(
+                "a lista do grupo {grupo:?} na ficha {id:?} nao tem itens",
+                "the list for the group {grupo:?} in the sheet {id:?} has no items"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// O sistema faz sentido?
+///
+/// Os mesmos tetos que a campanha tem, e pela mesma razao da ficha em PDF: o
+/// que a gravacao cortaria calada vira erro na instalacao, onde o autor ve. Os
+/// repetidos tambem, porque aplicar pula pelo NOME -- a segunda "AGI" nunca
+/// entraria, e o autor nao saberia por que.
+fn validar_sistema(sistema: &Sistema) -> AppResult<()> {
+    use crate::vault::{characters, condicoes, detalhes, modelos};
+
+    let id = &sistema.id;
+    let invalido = |texto: crate::error::Texto| Err(AppError::ExtensaoInvalida(texto));
+    let chave = |texto: &str| texto.trim().to_lowercase();
+    let tamanho = |texto: &str| texto.trim().chars().count();
+
+    if !sistema.traz_algo() {
+        return invalido(crate::texto!(
+            "o sistema {id:?} nao traz atributo, medidor, detalhe nem condicao",
+            "the system {id:?} brings no attribute, meter, detail or condition"
+        ));
+    }
+
+    let teto = |nome: &str, quantos: usize, maximo: usize| -> AppResult<()> {
+        if quantos > maximo {
+            return invalido(crate::texto!(
+                "o sistema {id:?} traz {quantos} {nome}; a campanha guarda {maximo}",
+                "the system {id:?} brings {quantos} {nome}; a campaign holds {maximo}"
+            ));
+        }
+        Ok(())
+    };
+    teto(
+        "atributos",
+        sistema.atributos.len(),
+        characters::MAX_ATRIBUTOS,
+    )?;
+    teto("medidores", sistema.medidores.len(), modelos::MAX_MODELOS)?;
+    teto(
+        "grupos",
+        sistema.detalhes.grupos.len(),
+        detalhes::MAX_GRUPOS,
+    )?;
+    teto(
+        "detalhes",
+        sistema.detalhes.modelos.len(),
+        detalhes::MAX_DETALHES,
+    )?;
+    teto("condicoes", sistema.condicoes.len(), condicoes::MAX_MODELOS)?;
+
+    // Nome vazio, longo ou repetido: a mesma conta para as quatro listas.
+    let nomes = |lista: &str, nomes: Vec<&str>, maximo: usize| -> AppResult<()> {
+        let mut vistos: Vec<String> = Vec::new();
+        for nome in nomes {
+            if tamanho(nome) == 0 || tamanho(nome) > maximo {
+                return invalido(crate::texto!(
+                    "o sistema {id:?} tem {nome:?} em `{lista}`; o nome precisa ter de 1 a {maximo} letras",
+                    "the system {id:?} has {nome:?} in `{lista}`; the name must have 1 to {maximo} characters"
+                ));
+            }
+            if vistos.contains(&chave(nome)) {
+                return invalido(crate::texto!(
+                    "o sistema {id:?} traz {nome:?} duas vezes em `{lista}`",
+                    "the system {id:?} brings {nome:?} twice in `{lista}`"
+                ));
+            }
+            vistos.push(chave(nome));
+        }
+        Ok(())
+    };
+    nomes(
+        "atributos",
+        sistema.atributos.iter().map(|a| a.sigla.as_str()).collect(),
+        characters::MAX_SIGLA,
+    )?;
+    nomes(
+        "medidores",
+        sistema.medidores.iter().map(|m| m.nome.as_str()).collect(),
+        characters::MAX_NOME_MEDIDOR,
+    )?;
+    nomes(
+        "detalhes.grupos",
+        sistema
+            .detalhes
+            .grupos
+            .iter()
+            .map(|g| g.nome.as_str())
+            .collect(),
+        detalhes::MAX_NOME_DO_GRUPO,
+    )?;
+    nomes(
+        "condicoes",
+        sistema.condicoes.iter().map(|c| c.nome.as_str()).collect(),
+        characters::MAX_NOME_CONDICAO,
+    )?;
+
+    for atributo in &sistema.atributos {
+        if atributo.valor.abs() > characters::MAX_VALOR_ATRIBUTO {
+            return invalido(crate::texto!(
+                "o atributo {:?} do sistema {id:?} comeca em {}; o valor vai ate {}",
+                "the attribute {:?} in the system {id:?} starts at {}; the value goes up to {}",
+                atributo.sigla,
+                atributo.valor,
+                characters::MAX_VALOR_ATRIBUTO
+            ));
+        }
+        if atributo
+            .descricao
+            .as_deref()
+            .is_some_and(|descricao| descricao.chars().count() > characters::MAX_DESCRICAO_ATRIBUTO)
+        {
+            return invalido(crate::texto!(
+                "a descricao do atributo {:?} do sistema {id:?} passa de {} letras",
+                "the description of the attribute {:?} in the system {id:?} is longer than {} characters",
+                atributo.sigla,
+                characters::MAX_DESCRICAO_ATRIBUTO
+            ));
+        }
+    }
+
+    for medidor in &sistema.medidores {
+        let nome = &medidor.nome;
+        if !cor_hex_valida(&medidor.cor) {
+            return invalido(crate::texto!(
+                "a cor {:?} do medidor {nome:?} no sistema {id:?} nao e hex, como \"#ef4444\"",
+                "the color {:?} of the meter {nome:?} in the system {id:?} is not hex, like \"#ef4444\"",
+                medidor.cor
+            ));
+        }
+        if !(1..=modelos::MAX_VALOR).contains(&medidor.maximo) {
+            return invalido(crate::texto!(
+                "o medidor {nome:?} do sistema {id:?} tem maximo {}; vai de 1 a {}",
+                "the meter {nome:?} in the system {id:?} has a maximum of {}; it goes from 1 to {}",
+                medidor.maximo,
+                modelos::MAX_VALOR
+            ));
+        }
+        if let Some(estilo) = &medidor.estilo_extensao {
+            if !characters::estilo_extensao_valido(estilo) {
+                return invalido(crate::texto!(
+                    "o medidor {nome:?} do sistema {id:?} pede o estilo {estilo:?}; escreva `plugin/estilo`",
+                    "the meter {nome:?} in the system {id:?} asks for the style {estilo:?}; write `plugin/style`"
+                ));
+            }
+        }
+    }
+
+    let grupos: Vec<String> = sistema
+        .detalhes
+        .grupos
+        .iter()
+        .map(|g| chave(&g.nome))
+        .collect();
+    let mut vistos: Vec<(String, String)> = Vec::new();
+    for modelo in &sistema.detalhes.modelos {
+        let rotulo = modelo.rotulo.trim();
+        let grupo = modelo.grupo.trim();
+        if !grupos.contains(&chave(grupo)) {
+            return invalido(crate::texto!(
+                "o detalhe {rotulo:?} do sistema {id:?} fica no grupo {grupo:?}, que o sistema nao declara",
+                "the detail {rotulo:?} in the system {id:?} sits in the group {grupo:?}, which the system does not declare"
+            ));
+        }
+        if rotulo.is_empty() || rotulo.chars().count() > detalhes::MAX_ROTULO {
+            return invalido(crate::texto!(
+                "o sistema {id:?} tem o detalhe {rotulo:?}; o rotulo precisa ter de 1 a {} letras",
+                "the system {id:?} has the detail {rotulo:?}; the label must have 1 to {} characters",
+                detalhes::MAX_ROTULO
+            ));
+        }
+        let escolha = modelo.tipo == detalhes::Tipo::Escolha;
+        if escolha && (modelo.opcoes.is_empty() || modelo.opcoes.len() > detalhes::MAX_OPCOES) {
+            return invalido(crate::texto!(
+                "o detalhe {rotulo:?} do sistema {id:?} e escolha, e precisa de 1 a {} opcoes",
+                "the detail {rotulo:?} in the system {id:?} is a choice, and needs 1 to {} options",
+                detalhes::MAX_OPCOES
+            ));
+        }
+        if !escolha && !modelo.opcoes.is_empty() {
+            return invalido(crate::texto!(
+                "o detalhe {rotulo:?} do sistema {id:?} tem opcoes, mas nao e escolha",
+                "the detail {rotulo:?} in the system {id:?} has options, but is not a choice"
+            ));
+        }
+        if modelo
+            .descricao
+            .as_deref()
+            .is_some_and(|descricao| descricao.chars().count() > detalhes::MAX_DESCRICAO)
+        {
+            return invalido(crate::texto!(
+                "a descricao do detalhe {rotulo:?} do sistema {id:?} passa de {} letras",
+                "the description of the detail {rotulo:?} in the system {id:?} is longer than {} characters",
+                detalhes::MAX_DESCRICAO
+            ));
+        }
+        let par = (chave(grupo), chave(rotulo));
+        if vistos.contains(&par) {
+            return invalido(crate::texto!(
+                "o sistema {id:?} traz o detalhe {rotulo:?} do grupo {grupo:?} duas vezes",
+                "the system {id:?} brings the detail {rotulo:?} of the group {grupo:?} twice"
+            ));
+        }
+        vistos.push(par);
+    }
+
+    for condicao in &sistema.condicoes {
+        let nome = &condicao.nome;
+        if !cor_hex_valida(&condicao.cor) {
+            return invalido(crate::texto!(
+                "a cor {:?} da condicao {nome:?} no sistema {id:?} nao e hex, como \"#ef4444\"",
+                "the color {:?} of the condition {nome:?} in the system {id:?} is not hex, like \"#ef4444\"",
+                condicao.cor
+            ));
+        }
+        if condicao
+            .icone
+            .as_deref()
+            .is_some_and(|icone| icone.chars().count() > characters::MAX_ICONE)
+        {
+            return invalido(crate::texto!(
+                "o icone da condicao {nome:?} do sistema {id:?} passa de {} letras",
+                "the icon of the condition {nome:?} in the system {id:?} is longer than {} characters",
+                characters::MAX_ICONE
+            ));
+        }
+        if let Some(efeito) = &condicao.efeito {
+            if !characters::efeito_valido(efeito) {
+                return invalido(crate::texto!(
+                    "a condicao {nome:?} do sistema {id:?} aponta para o efeito {efeito:?}, que nao tem forma de id",
+                    "the condition {nome:?} in the system {id:?} points to the effect {efeito:?}, which is not shaped like an id"
+                ));
             }
         }
     }
@@ -3944,5 +4689,233 @@ mod tests {
 
         let ids: Vec<String> = listar(&dir).unwrap().into_iter().map(|m| m.id).collect();
         assert_eq!(ids, vec!["alfa", "beta", "zeta"]);
+    }
+
+    /// Um plugin so de ficha: sem `principal`, sem tema, so o manifesto.
+    fn com_fichas(fichas: &str) -> String {
+        format!(
+            r#"{{"id":"ficha-t20","nome":"Ficha T20","versao":"1.0.0","apiVersao":10,"contribui":{{"fichasPdf":{fichas}}}}}"#
+        )
+    }
+
+    /// A ficha inteira, com um pedaco trocado por quem quer quebrar.
+    fn ficha(troca: &str) -> String {
+        let base = r##"{"id":"jogo-do-ano","titulo":"Tormenta20","reconhecer":["ModFor","PMs Totais"],"nome":"NOME DO PERSONAGEM",
+            "atributos":[{"sigla":"FOR","campo":"For"},{"sigla":"POD","campo":{"caixas":["POD1","POD2"]}}],
+            "medidores":[{"nome":"PV","atual":"PVs Atuais","maximo":"PVs Totais","cor":"#ef4444"}],
+            "detalhes":[{"grupo":"Identidade","rotulo":"Classe","campo":"CLASSE"},
+                        {"grupo":"Identidade","rotulo":"Historico","descricao":"HISTORICO"},
+                        {"grupo":"Identidade","rotulo":"Nivel","campo":"Lv","tipo":"numero"}]}"##;
+        if troca.is_empty() {
+            return format!("[{base}]");
+        }
+        let (chave, valor) = troca.split_once('=').unwrap();
+        let mut json: serde_json::Value = serde_json::from_str(base).unwrap();
+        json[chave] = serde_json::from_str(valor).unwrap();
+        format!("[{json}]")
+    }
+
+    #[test]
+    fn plugin_so_de_ficha_entra_sem_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &com_fichas(&ficha(""))).unwrap();
+
+        let lida = &m.contribui.fichas_pdf[0];
+        assert_eq!(lida.titulo, "Tormenta20");
+        assert_eq!(lida.reconhecer, vec!["ModFor", "PMs Totais"]);
+        assert_eq!(lida.atributos[0].campo, LeituraDeCampo::Campo("For".into()));
+        assert_eq!(
+            lida.atributos[1].campo,
+            LeituraDeCampo::Caixas {
+                caixas: vec!["POD1".into(), "POD2".into()]
+            }
+        );
+        assert_eq!(lida.detalhes[1].campo, None);
+        assert_eq!(
+            lida.detalhes[1].descricao,
+            Some(LeituraDeCampo::Campo("HISTORICO".into()))
+        );
+    }
+
+    #[test]
+    fn ficha_volta_ao_front_no_formato_em_que_veio() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &com_fichas(&ficha(""))).unwrap();
+        let json = serde_json::to_value(&m.contribui.fichas_pdf[0]).unwrap();
+
+        assert_eq!(json["atributos"][0]["campo"], "For");
+        assert_eq!(json["atributos"][1]["campo"]["caixas"][1], "POD2");
+    }
+
+    #[test]
+    fn ficha_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+        let longo = "x".repeat(MAX_NOME_DE_CAMPO + 1);
+
+        for troca in [
+            r#"reconhecer=[]"#.to_string(),
+            r#"nome="  ""#.to_string(),
+            format!(r#"nome="{longo}""#),
+            r#"atributos=[{"sigla":"AGILIDADE","campo":"Agi"}]"#.to_string(),
+            r#"atributos=[{"sigla":"FOR","campo":"For"},{"sigla":"for","campo":"For2"}]"#.to_string(),
+            r#"atributos=[{"sigla":"FOR","campo":{"caixas":[]}}]"#.to_string(),
+            r#"medidores=[{"nome":"PV","maximo":"PVs","cor":"vermelho"}]"#.to_string(),
+            r#"medidores=[{"nome":"PV","maximo":"A"},{"nome":"pv","maximo":"B"}]"#.to_string(),
+            r#"medidores=[{"nome":"Pontos de Vida Temporarios","maximo":"A"}]"#.to_string(),
+            r#"detalhes=[{"grupo":"Identidade","rotulo":"Classe"}]"#.to_string(),
+            r#"detalhes=[{"grupo":"Identidade","rotulo":"Classe","campo":"C","tipo":"escolha"}]"#.to_string(),
+            r#"detalhes=[{"grupo":"","rotulo":"Classe","campo":"C"}]"#.to_string(),
+            r#"detalhes=[{"grupo":"I","rotulo":"Classe","campo":"C"},{"grupo":"i","rotulo":"classe","campo":"D"}]"#.to_string(),
+            r#"id="Jogo do Ano""#.to_string(),
+            r#"titulo="""#.to_string(),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_fichas(&ficha(&troca))).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{troca} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn ficha_le_listas_e_junta_linhas() {
+        let base = tempfile::tempdir().unwrap();
+        let listas = r#"listas=[{"grupo":"Habilidades","itens":[
+            {"nome":"h1","campo":{"juntar":["custo1","pagina1"]},"descricao":{"juntar":["desc1a","desc1b"]}},
+            {"nome":"h2"}]}]"#;
+        let m = ler(base.path(), &com_fichas(&ficha(listas))).unwrap();
+
+        let lista = &m.contribui.fichas_pdf[0].listas[0];
+        assert_eq!(lista.itens.len(), 2);
+        assert_eq!(
+            lista.itens[0].campo,
+            Some(LeituraDeCampo::Juntar {
+                juntar: vec!["custo1".into(), "pagina1".into()]
+            })
+        );
+    }
+
+    #[test]
+    fn lista_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+        let muitas: Vec<String> = (0..=detalhes_max())
+            .map(|i| format!(r#"{{"nome":"n{i}"}}"#))
+            .collect();
+
+        for troca in [
+            r#"listas=[{"grupo":"","itens":[{"nome":"a"}]}]"#.to_string(),
+            r#"listas=[{"grupo":"Poderes","itens":[]}]"#.to_string(),
+            r#"listas=[{"grupo":"Poderes","itens":[{"nome":""}]}]"#.to_string(),
+            r#"listas=[{"grupo":"Poderes","itens":[{"nome":"a","campo":{"juntar":[]}}]}]"#
+                .to_string(),
+            format!(
+                r#"listas=[{{"grupo":"Poderes","itens":[{}]}}]"#,
+                muitas.join(",")
+            ),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_fichas(&ficha(&troca))).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{troca} devia ser recusado"
+            );
+        }
+    }
+
+    fn detalhes_max() -> usize {
+        crate::vault::detalhes::MAX_DETALHES
+    }
+
+    /// Um plugin so de sistema, com um pedaco trocado por quem quer quebrar.
+    fn com_sistema(troca: &str) -> String {
+        let base = r##"{"id":"ordem","titulo":"Ordem Paranormal",
+            "atributos":[{"sigla":"AGI","valor":1,"descricao":"Agilidade"}],
+            "medidores":[{"nome":"PV","cor":"#ef4444","estilo":"barra","maximo":20}],
+            "detalhes":{"grupos":[{"nome":"Identidade"},{"nome":"Habilidades","exibicao":"lista"}],
+                        "modelos":[{"grupo":"Identidade","rotulo":"Classe","tipo":"escolha","opcoes":["Combatente"]},
+                                   {"grupo":"Identidade","rotulo":"NEX","tipo":"numero","valor":5}]},
+            "condicoes":[{"nome":"Morrendo","cor":"#ef4444","icone":"caveira","efeito":"sangrando"}]}"##;
+        let mut json: serde_json::Value = serde_json::from_str(base).unwrap();
+        if let Some((chave, valor)) = troca.split_once('=') {
+            json[chave] = serde_json::from_str(valor).unwrap();
+        }
+        format!(
+            r#"{{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":10,"contribui":{{"sistemas":[{json}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn plugin_so_de_sistema_entra_sem_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &com_sistema("")).unwrap();
+
+        let sistema = &m.contribui.sistemas[0];
+        assert_eq!(sistema.titulo, "Ordem Paranormal");
+        assert_eq!(
+            sistema.detalhes.grupos[1].exibicao,
+            crate::vault::detalhes::Exibicao::Lista
+        );
+        assert_eq!(
+            sistema.detalhes.modelos[0].tipo,
+            crate::vault::detalhes::Tipo::Escolha
+        );
+        assert_eq!(sistema.condicoes[0].efeito.as_deref(), Some("sangrando"));
+    }
+
+    #[test]
+    fn sistema_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        for troca in [
+            r##"atributos=[]"##.to_string() + "",
+            r##"atributos=[{"sigla":"AGILIDADE","valor":1}]"##.to_string(),
+            r##"atributos=[{"sigla":"AGI","valor":1},{"sigla":"agi","valor":2}]"##.to_string(),
+            r##"atributos=[{"sigla":"AGI","valor":5000}]"##.to_string(),
+            r##"medidores=[{"nome":"PV","cor":"vermelho","maximo":20}]"##.to_string(),
+            r##"medidores=[{"nome":"PV","cor":"#fff","maximo":0}]"##.to_string(),
+            r##"medidores=[{"nome":"PV","cor":"#fff","maximo":5,"estiloExtensao":"sem barra"}]"##.to_string(),
+            r##"medidores=[{"nome":"PV","cor":"#fff","maximo":5,"estilo":"circulo"}]"##.to_string(),
+            r##"detalhes={"grupos":[{"nome":"A"}],"modelos":[{"grupo":"B","rotulo":"X"}]}"##.to_string(),
+            r##"detalhes={"grupos":[{"nome":"A"}],"modelos":[{"grupo":"A","rotulo":"X","tipo":"escolha"}]}"##.to_string(),
+            r##"detalhes={"grupos":[{"nome":"A"}],"modelos":[{"grupo":"A","rotulo":"X","opcoes":["a"]}]}"##.to_string(),
+            r##"detalhes={"grupos":[{"nome":"A"},{"nome":"a"}]}"##.to_string(),
+            r##"condicoes=[{"nome":"Morrendo","cor":"#fff","efeito":"../fora"}]"##.to_string(),
+        ] {
+            let json = com_sistema(&troca);
+            // A primeira tira so os atributos: o resto ainda traz algo, e o
+            // sistema entra. Ela esta aqui para provar que lista vazia nao e
+            // erro por si.
+            if troca.starts_with("atributos=[]") {
+                assert!(ler(base.path(), &json).is_ok());
+                continue;
+            }
+            assert!(
+                matches!(ler(base.path(), &json), Err(AppError::ExtensaoInvalida(_)) | Err(AppError::Malformed { .. })),
+                "{troca} devia ser recusado"
+            );
+        }
+
+        let vazio = r#"{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":10,
+            "contribui":{"sistemas":[{"id":"nada","titulo":"Nada"}]}}"#;
+        assert!(matches!(
+            ler(base.path(), vazio).unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    #[test]
+    fn ficha_conta_no_teto_de_contribuicoes() {
+        let base = tempfile::tempdir().unwrap();
+        let uma =
+            |i: usize| format!(r#"{{"id":"f{i}","titulo":"F","reconhecer":["A"],"nome":"N"}}"#);
+        let muitas: Vec<String> = (0..=MAX_CONTRIBUICOES).map(uma).collect();
+
+        assert!(matches!(
+            ler(base.path(), &com_fichas(&format!("[{}]", muitas.join(",")))).unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
     }
 }

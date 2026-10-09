@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use super::atomic::{read_json, write_json};
-use super::characters::{estilo_extensao_valido, Estilo, Medidor, MAX_MEDIDORES};
+use super::characters::{chave_do_nome, estilo_extensao_valido, Estilo, Medidor, MAX_MEDIDORES};
 use super::Vault;
 use crate::error::{AppError, AppResult};
 
@@ -35,7 +35,7 @@ const ARQUIVO: &str = "medidores.json";
 pub const MAX_MODELOS: usize = MAX_MEDIDORES;
 
 const MAX_NOME: usize = 24;
-const MAX_VALOR: i64 = 1_000_000;
+pub const MAX_VALOR: i64 = 1_000_000;
 
 /// Um medidor de fabrica: tudo que um `Medidor` tem, menos o valor.
 ///
@@ -146,6 +146,49 @@ pub fn adotar(vault: &Vault, novos: Vec<Modelo>) -> AppResult<()> {
     }
 
     save(vault, &modelos)
+}
+
+/// Junta os medidores de um sistema aos da campanha, pelo nome. Ver
+/// `vault::sistema`.
+pub fn juntar(
+    vault: &Vault,
+    novos: &[crate::extensoes::MedidorDoSistema],
+) -> AppResult<super::sistema::Juntados> {
+    let mut modelos = load(vault)?;
+    let mut juntados = super::sistema::Juntados::default();
+
+    for novo in novos {
+        let chave = chave_do_nome(&novo.nome);
+        if modelos.iter().any(|m| chave_do_nome(&m.nome) == chave) {
+            juntados.ja_havia += 1;
+        } else if modelos.len() >= MAX_MODELOS {
+            juntados.nao_couberam.push(novo.nome.trim().to_string());
+        } else {
+            let mut modelo = Modelo {
+                id: uuid::Uuid::new_v4().to_string(),
+                nome: novo.nome.clone(),
+                cor: novo.cor.clone(),
+                estilo: novo.estilo,
+                maximo: novo.maximo,
+                escondido: novo.escondido,
+                estilo_extensao: novo
+                    .estilo_extensao
+                    .clone()
+                    .filter(|estilo| estilo_extensao_valido(estilo)),
+                mostrar_nome: None,
+                mostrar_valor: None,
+            };
+            ajustar(&mut modelo);
+            modelos.push(modelo);
+            juntados.entraram += 1;
+        }
+    }
+
+    if juntados.entraram > 0 {
+        save(vault, &modelos)?;
+    }
+
+    Ok(juntados)
 }
 
 fn sem_modelo(id: &str) -> AppError {
