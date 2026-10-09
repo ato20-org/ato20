@@ -163,6 +163,35 @@ const pt = {
       `Por ${nome} no centro do mapa. Arraste a linha para escolher o lugar, e role a roda no ar para o tamanho.`,
   },
 
+  /** Criar personagem a partir de uma ficha em PDF. Ver `importar-ficha-pdf.tsx`. */
+  importarFicha: {
+    acao: "Importar ficha em PDF",
+    acaoDica:
+      "Cria o personagem a partir de uma ficha editável preenchida. Quem ensina a ler cada modelo de ficha são os plugins.",
+    escolha: "Escolha a ficha em PDF",
+    filtro: "Ficha em PDF",
+    lendo: "Lendo a ficha…",
+    falhou: "Não deu para ler este PDF.",
+    semFormulario: "Este PDF não tem campos de formulário.",
+    semFormularioDica: "Só ficha editável pode ser importada. A impressa ou digitalizada continua entrando como anexo.",
+    desconhecida: "Nenhum plugin ativo conhece esta ficha.",
+    desconhecidaDica:
+      "Plugins ensinam o ATO20 a ler fichas. Procure o do seu sistema em Configurações, Plugins, Catálogo.",
+    titulo: "Importar ficha",
+    lidaPor: (ficha: string, plugin: string) => `${ficha}, lida pelo plugin ${plugin}`,
+    modelo: "Modelo da ficha",
+    emBranco: "O nome veio vazio. A ficha parece estar em branco.",
+    atributos: "Atributos",
+    medidores: "Medidores",
+    detalhes: "Detalhes",
+    vazios: (lista: string) => `Em branco no PDF: ${lista}`,
+    nadaPreenchido: "Nada preenchido além do nome.",
+    pdfJunto: "O PDF vai junto, como a ficha do personagem.",
+    criar: "Criar personagem",
+    naoCouberam: (lista: string) => `Não couberam no personagem: ${lista}`,
+    falhouCriar: "Falha ao criar o personagem.",
+  },
+
   aparencias: {
     titulo: "Aparências",
     criar: "Criar aparência",
@@ -666,6 +695,34 @@ const en: typeof pt = {
     porTokenDe: (nome) => `Put ${nome}'s token on the map`,
     porNoCentro: (nome) =>
       `Put ${nome} in the center of the map. Drag the row to pick the spot, and scroll the wheel mid-air for the size.`,
+  },
+
+  importarFicha: {
+    acao: "Import PDF sheet",
+    acaoDica:
+      "Creates the character from a filled-in fillable sheet. Plugins teach the app how to read each sheet.",
+    escolha: "Choose the PDF sheet",
+    filtro: "PDF sheet",
+    lendo: "Reading the sheet…",
+    falhou: "Could not read this PDF.",
+    semFormulario: "This PDF has no form fields.",
+    semFormularioDica: "Only fillable sheets can be imported. A printed or scanned sheet still goes in as an attachment.",
+    desconhecida: "No active plugin knows this sheet.",
+    desconhecidaDica:
+      "Plugins teach ATO20 how to read sheets. Look for your system's in Settings, Plugins, Catalog.",
+    titulo: "Import sheet",
+    lidaPor: (ficha, plugin) => `${ficha}, read by the ${plugin} plugin`,
+    modelo: "Sheet model",
+    emBranco: "The name came back empty. The sheet looks blank.",
+    atributos: "Attributes",
+    medidores: "Meters",
+    detalhes: "Details",
+    vazios: (lista) => `Blank in the PDF: ${lista}`,
+    nadaPreenchido: "Nothing filled in besides the name.",
+    pdfJunto: "The PDF comes along, as the character's sheet.",
+    criar: "Create character",
+    naoCouberam: (lista) => `Did not fit in the character: ${lista}`,
+    falhouCriar: "Failed to create the character.",
   },
 
   aparencias: {
