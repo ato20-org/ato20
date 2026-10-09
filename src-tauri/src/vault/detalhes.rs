@@ -49,7 +49,7 @@ pub const MAX_ROTULO: usize = 40;
 pub const MAX_TEXTO: usize = 80;
 pub const MAX_DESCRICAO: usize = 2_000;
 pub const MAX_OPCOES: usize = 32;
-const MAX_NOME_DO_GRUPO: usize = 24;
+pub const MAX_NOME_DO_GRUPO: usize = 24;
 /// Pericia em porcentagem (Call of Cthulhu) cabe; mais que isso e erro.
 pub const MAX_NUMERO: i64 = 99_999;
 /// A expressao de rolagem e uma linha: `1d20+5-2*5/2` cabe com folga.
@@ -740,7 +740,6 @@ pub fn reordenar_modelos(vault: &Vault, ordem: &[String]) -> AppResult<Molde> {
     Ok(atual)
 }
 
-/// Os detalhes que o molde inteiro poe numa ficha nova.
 /// Um detalhe que rola, de algum personagem. Ver `rolagens`.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -786,6 +785,84 @@ pub fn rolagens(vault: &Vault) -> AppResult<Vec<RolagemDaFicha>> {
     Ok(saida)
 }
 
+/// Junta os grupos e os detalhes de um sistema ao molde da campanha. Grupo
+/// casa pelo nome, detalhe pelo grupo e rotulo; o detalhe cujo grupo nao coube
+/// fica de fora junto. Ver `vault::sistema`.
+pub fn juntar_molde(
+    vault: &Vault,
+    novo: &crate::extensoes::DetalhesDoSistema,
+) -> AppResult<(super::sistema::Juntados, super::sistema::Juntados)> {
+    let mut atual = molde(vault)?;
+    let mut grupos = super::sistema::Juntados::default();
+    let mut detalhes = super::sistema::Juntados::default();
+
+    for grupo in &novo.grupos {
+        let nome = nome_do_grupo(&grupo.nome);
+        if atual
+            .grupos
+            .iter()
+            .any(|g| chave_do_nome(&g.nome) == chave_do_nome(&nome))
+        {
+            grupos.ja_havia += 1;
+        } else if atual.grupos.len() >= MAX_GRUPOS {
+            grupos.nao_couberam.push(nome);
+        } else {
+            atual.grupos.push(Grupo {
+                id: uuid::Uuid::new_v4().to_string(),
+                nome,
+                exibicao: grupo.exibicao,
+            });
+            grupos.entraram += 1;
+        }
+    }
+
+    for modelo in &novo.modelos {
+        // O nome do grupo como a CAMPANHA o escreve: o detalhe guarda o nome,
+        // e "identidade" ao lado de "Identidade" seria outro grupo na ficha.
+        let Some(grupo) = atual
+            .grupos
+            .iter()
+            .find(|g| chave_do_nome(&g.nome) == chave_do_nome(&modelo.grupo))
+            .map(|g| g.nome.clone())
+        else {
+            detalhes.nao_couberam.push(modelo.rotulo.trim().to_string());
+            continue;
+        };
+
+        let par = chave(&grupo, &modelo.rotulo);
+        if atual
+            .modelos
+            .iter()
+            .any(|m| chave(&m.grupo, &m.rotulo) == par)
+        {
+            detalhes.ja_havia += 1;
+        } else if atual.modelos.len() >= MAX_DETALHES {
+            detalhes.nao_couberam.push(modelo.rotulo.trim().to_string());
+        } else {
+            let mut novo = Modelo {
+                id: uuid::Uuid::new_v4().to_string(),
+                rotulo: modelo.rotulo.clone(),
+                tipo: modelo.tipo,
+                grupo,
+                valor: modelo.valor.clone(),
+                opcoes: modelo.opcoes.clone(),
+                descricao: modelo.descricao.clone(),
+                rolavel: false,
+            };
+            novo.ajustar();
+            atual.modelos.push(novo);
+            detalhes.entraram += 1;
+        }
+    }
+
+    if grupos.entraram + detalhes.entraram > 0 {
+        save_molde(vault, &atual)?;
+    }
+
+    Ok((grupos, detalhes))
+}
+
+/// Os detalhes que o molde inteiro poe numa ficha nova.
 pub fn materializar_molde(molde: &Molde) -> Vec<Detalhe> {
     molde.modelos.iter().map(Modelo::materializar).collect()
 }

@@ -41,6 +41,13 @@ const pt = {
     nomeExemplo: "Ex.: Ato 1 — A Cidade do Medo",
     escolherPasta: "Escolher a pasta",
     voltar: "Voltar",
+    sistema: "Sistema de jogo",
+    semSistema: "Nenhum, começar vazia",
+    sistemaDica:
+      "Já cria os atributos, medidores, detalhes e condições do jogo. Dá para mudar tudo depois, em Configuração da campanha.",
+    sistemaDoPlugin: (sistema: string, plugin: string) => `${sistema} (plugin ${plugin})`,
+    sistemaFalhou:
+      "A campanha foi criada, mas o sistema não entrou. Aplique de novo em Configuração da campanha, Sistema.",
   },
 
   campanha: {
@@ -736,7 +743,42 @@ const pt = {
    * digita procurando o tópico sem saber o nome dele, sem acento: a busca
    * compara sem acento dos dois lados.
    */
+  /** O tópico Sistema da Configuração da campanha. Ver `sistema-da-campanha.tsx`. */
+  sistemaDaCampanha: {
+    titulo: "Sistema",
+    descricao:
+      "Um plugin de sistema traz o padrão de um jogo: atributos, medidores, os detalhes da ficha e as condições. Aplicar junta ao que a campanha já tem, e o que tiver o mesmo nome fica como está.",
+    nenhum: "Nenhum plugin ligado traz um sistema.",
+    nenhumDica: "Plugins de sistema, como o de Ordem Paranormal, ficam em Configurações, Plugins, Catálogo.",
+    doPlugin: (plugin: string) => `Do plugin ${plugin}`,
+    traz: (partes: string) => `Traz ${partes}.`,
+    atributos: (n: number) => `${n} ${n === 1 ? "atributo" : "atributos"}`,
+    medidores: (n: number) => `${n} ${n === 1 ? "medidor" : "medidores"}`,
+    grupos: (n: number) => `${n} ${n === 1 ? "grupo" : "grupos"} de detalhes`,
+    detalhes: (n: number) => `${n} ${n === 1 ? "detalhe" : "detalhes"}`,
+    condicoes: (n: number) => `${n} ${n === 1 ? "condição" : "condições"}`,
+    nosPersonagens: (n: number) =>
+      n === 1
+        ? "Pôr também no personagem que já existe"
+        : `Pôr também nos ${n} personagens que já existem`,
+    aplicar: "Aplicar nesta campanha",
+    aplicado: (sistema: string) => `${sistema} aplicado`,
+    entraram: (partes: string) => `Entrou: ${partes}.`,
+    nadaNovo: "Nada novo: a campanha já tinha tudo.",
+    jaHavia: (n: number) =>
+      n === 1 ? "1 já existia e ficou como estava." : `${n} já existiam e ficaram como estavam.`,
+    naoCouberam: (lista: string) => `Não couberam: ${lista}.`,
+    alcancados: (n: number) =>
+      n === 1 ? "1 personagem recebeu o que faltava." : `${n} personagens receberam o que faltava.`,
+    falhou: "Falha ao aplicar o sistema.",
+  },
+
   topicos: {
+    sistema: {
+      titulo: "Sistema",
+      descricao: "O padrão de um jogo, vindo de um plugin.",
+      palavras: ["sistema", "jogo", "plugin", "padrao", "ordem", "tormenta", "dnd", "regras"],
+    },
     medidores: {
       titulo: "Medidores",
       descricao: "Todo personagem começa com estes.",
@@ -912,6 +954,13 @@ const en: typeof pt = {
     nomeExemplo: "E.g.: Act 1, The City of Fear",
     escolherPasta: "Choose the folder",
     voltar: "Back",
+    sistema: "Game system",
+    semSistema: "None, start empty",
+    sistemaDica:
+      "Sets up the game's attributes, meters, details and conditions. You can change all of it later, in Campaign settings.",
+    sistemaDoPlugin: (sistema, plugin) => `${sistema} (${plugin} plugin)`,
+    sistemaFalhou:
+      "The campaign was created, but the system did not go in. Apply it again in Campaign settings, System.",
   },
 
   campanha: {
@@ -1572,7 +1621,39 @@ const en: typeof pt = {
     semVolta: "Ctrl+Z won't bring it back",
   },
 
+  sistemaDaCampanha: {
+    titulo: "System",
+    descricao:
+      "A system plugin brings a game's defaults: attributes, meters, the sheet details and the conditions. Applying adds to what the campaign already has, and anything with the same name stays as it is.",
+    nenhum: "No enabled plugin brings a system.",
+    nenhumDica: "System plugins, like the Ordem Paranormal one, are in Settings, Plugins, Catalog.",
+    doPlugin: (plugin) => `From the ${plugin} plugin`,
+    traz: (partes) => `Brings ${partes}.`,
+    atributos: (n) => `${n} ${n === 1 ? "attribute" : "attributes"}`,
+    medidores: (n) => `${n} ${n === 1 ? "meter" : "meters"}`,
+    grupos: (n) => `${n} detail ${n === 1 ? "group" : "groups"}`,
+    detalhes: (n) => `${n} ${n === 1 ? "detail" : "details"}`,
+    condicoes: (n) => `${n} ${n === 1 ? "condition" : "conditions"}`,
+    nosPersonagens: (n) =>
+      n === 1 ? "Also add to the existing character" : `Also add to the ${n} existing characters`,
+    aplicar: "Apply to this campaign",
+    aplicado: (sistema) => `${sistema} applied`,
+    entraram: (partes) => `Added: ${partes}.`,
+    nadaNovo: "Nothing new: the campaign already had everything.",
+    jaHavia: (n) =>
+      n === 1 ? "1 already existed and was left as it was." : `${n} already existed and were left as they were.`,
+    naoCouberam: (lista) => `Did not fit: ${lista}.`,
+    alcancados: (n) =>
+      n === 1 ? "1 character got what was missing." : `${n} characters got what was missing.`,
+    falhou: "Failed to apply the system.",
+  },
+
   topicos: {
+    sistema: {
+      titulo: "System",
+      descricao: "A game's defaults, from a plugin.",
+      palavras: ["system", "game", "plugin", "defaults", "rules", "ordem", "tormenta", "dnd"],
+    },
     medidores: {
       titulo: "Meters",
       descricao: "Every character starts with these.",

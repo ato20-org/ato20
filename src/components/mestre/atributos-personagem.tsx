@@ -11,6 +11,7 @@ import {
 import { Info, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,6 +90,14 @@ export function AtributosPersonagem({
   }
 
   async function apagar(atributoId: string) {
+    const sigla = lista.find((atributo) => atributo.id === atributoId)?.sigla ?? "";
+    const confirmado = await confirmarApagar({
+      titulo: t.atributos.apagarTitulo(sigla),
+      itens: t.atributos.apagarItens(sigla),
+      ressalva: t.atributos.apagarRessalva,
+    });
+    if (!confirmado) return;
+
     try {
       await removerAtributo(personagem.id, atributoId);
       onChanged();

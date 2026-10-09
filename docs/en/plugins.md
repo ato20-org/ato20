@@ -93,7 +93,11 @@ does can be listed and loaded late; one that only finds out by running forces
 the app to run all of them to know what exists.
 
 **`apiVersao` says what the plugin asks for, and the app refuses only a plugin
-that asks for more than it has.** Version 9 is the current one: it added the
+that asks for more than it has.** Version 10 is the current one: it added
+`fichasPdf` (see [PDF sheet](#pdf-sheet-the-plugin-teaches-the-reading)) and
+`sistemas` (see [Game system](#game-system-the-campaign-defaults)), which an
+earlier ATO20 would silently ignore, leaving a plugin installed just
+for that doing nothing. Version 9 added the
 sheet attributes, the `secao:atributos` replacement and the `atributos` field
 on the character from `personagens.listar` (the abbreviation, the number and
 the optional description: STR 4). An earlier ATO20 would refuse the replacement as an unknown target.
@@ -794,6 +798,136 @@ a number, and every image raster and inside the folder, including those of the
 mipmaps and the color ramp. The base's total frame count must divide the
 elements': the fire's loop sets the sheet's loop.
 
+## PDF sheet: the plugin teaches the reading
+
+In the Characters list, **Import PDF sheet** builds a character from a filled-in
+fillable sheet: name, attributes, meters, details, and the PDF attached as the
+character's sheet. The app reads the form, but knows no sheet at all: the
+plugin is what says that `untitled13` is AGI in Ordem Paranormal. A sheet
+plugin is just the manifest, with no `principal`, and asks for **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "fichasPdf": [{
+    "id": "jogo-do-ano",
+    "titulo": "Tormenta20 (Jogo do Ano)",
+    "reconhecer": ["NOME DO PERSONAGEM", "ModFor", "PMs Totais"],
+    "nome": "NOME DO PERSONAGEM",
+    "atributos": [{ "sigla": "FOR", "campo": "For" }],
+    "medidores": [{ "nome": "PV", "atual": "PVs Atuais", "maximo": "PVs Totais", "cor": "#ef4444" }],
+    "detalhes": [
+      { "grupo": "Identidade", "rotulo": "Classe", "campo": "CLASSE" },
+      { "grupo": "Identidade", "rotulo": "Nível", "campo": "Lv", "tipo": "numero" },
+      { "grupo": "Descrição", "rotulo": "Histórico", "descricao": { "juntar": ["Hist1", "Hist2"] } }
+    ],
+    "listas": [{
+      "grupo": "Habilidades",
+      "itens": [
+        { "nome": "Hab1", "campo": "Custo1", "descricao": "Desc1" },
+        { "nome": "Hab2", "campo": "Custo2", "descricao": "Desc2" }
+      ]
+    }]
+  }]
+}
+```
+
+- **`reconhecer`** lists fields the PDF must have, ALL of them, to be this
+  sheet. Pick ones only it has: two or three are enough. When more than one
+  sheet recognizes the PDF, the one listing more fields wins, and the GM can
+  switch in the preview.
+- **A field is the form field's name**, as the PDF stores it. It never shows
+  on screen; to find it, open the sheet in a PDF form editor, which shows each
+  field's name, or read the annotations with pdf.js. Sheets with generic names
+  (`Campo de Texto15`, `untitled2`) work too: the name is fixed in that file,
+  and the table is built once, by looking at the position.
+- **A value comes from a field, from boxes, or from fields to join**:
+  `{ "caixas": ["FOR1", "FOR2", "FOR3"] }` is how many are checked, which is
+  how dot-based sheets store an attribute; `{ "juntar": [...] }` is text
+  written across several lines, one field per line. In the value the pieces
+  stay on one line, separated by ` · ` (`+5 · 2d12`); in the description, one
+  per line. Joined as a number, the first field that has one wins.
+- **`listas` are the sheet's tables** (Abilities & Rituals, Powers, Attacks):
+  each row becomes a detail in `grupo`, and the label is what the player wrote
+  in the `nome` field ("Golpe Pesado"). A row with an empty name is a row the
+  player did not use, and is left out without a warning.
+- **A number is what starts with a number**: `10`, `+2`, `-1`, `12/15` (the
+  12). `1d8` is not a number, on purpose.
+- **It matches what the campaign already has.** The character is born with
+  the campaign's default attributes, meters and details, and the sheet fills
+  in on top: the same abbreviation, the same meter name, the same detail group
+  and label. Only what has no match is created. The campaign's HP keeps the
+  color and style the GM chose.
+- **`descricao` is the detail's long text** (the background, the ability).
+  The text value is short (80 characters); anything longer goes to the
+  description on its own.
+- **An empty field is not written**, and the preview says what came back
+  blank. A sheet with an empty name is flagged as "blank".
+
+The app refuses at install time what saving would silently cut: an
+abbreviation longer than 6 characters, a meter name longer than 24, more
+attributes (12), meters (6) or details (200, list rows included) than a
+character holds, and the same abbreviation, meter or detail read twice.
+
+Only **fillable** sheets (with a form). Printed, scanned and flat sheets still
+go in as attachments: reading text by its position on the page would be
+guessing. And the plugin does not ship the publisher's PDF: the sheet belongs
+to whoever published it, and the plugin's README points to where to get it.
+
+## Game system: the campaign defaults
+
+A system plugin brings a game's defaults: the attributes, the meters, the
+sheet details template and the conditions menu. The GM **applies** it to a
+campaign, when creating it ("Game system", on the new campaign screen) or
+later, in Campaign settings, System. It is also just the manifest, and asks
+for **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "sistemas": [{
+    "id": "ordem",
+    "titulo": "Ordem Paranormal",
+    "atributos": [{ "sigla": "AGI", "valor": 1, "descricao": "Agilidade" }],
+    "medidores": [{ "nome": "PV", "cor": "#ef4444", "estilo": "barra", "maximo": 20 }],
+    "detalhes": {
+      "grupos": [{ "nome": "Identidade" }, { "nome": "Habilidades e rituais", "exibicao": "lista" }],
+      "modelos": [
+        { "grupo": "Identidade", "rotulo": "Classe", "tipo": "escolha",
+          "opcoes": ["Combatente", "Especialista", "Ocultista"] },
+        { "grupo": "Identidade", "rotulo": "NEX", "tipo": "numero", "valor": 5 }
+      ]
+    },
+    "condicoes": [{ "nome": "Sangrando", "cor": "#ef4444", "icone": "sangue", "efeito": "sangrando" }]
+  }]
+}
+```
+
+- **Applying adds, never replaces.** Anything the campaign already has with
+  the same name (the abbreviation, the meter, the detail's group and label,
+  the condition) stays as the GM left it, and anything past the campaign's
+  limit is left out with a warning. Applying twice duplicates nothing.
+- **It never goes in on its own.** A plugin is enabled for the whole machine,
+  and a D&D campaign on the same machine cannot wake up with Ordem's AGI. And
+  the campaign does not remember where the defaults came from: uninstalling
+  the plugin does not touch it.
+- **Existing characters** get what was missing if the GM ticks the option
+  when applying, through each list's usual "Apply to all".
+- **The texts are data**, not `TextoDePlugin`: the abbreviation, label, option
+  and condition name go into the campaign as they are.
+- **`estiloExtensao`** on a meter can point to ANOTHER plugin's style
+  (`ordem-segredo-na-floresta/pv`); without it installed, the bar uses `estilo`.
+- A condition's **`icone`** is a name from the app's icon list, and
+  **`efeito`** is a built-in effect (`sangrando`) or a plugin one
+  (`{plugin}/{effect}`).
+- The limits are the campaign's: 12 attributes, 6 meters, 16 groups, 200
+  details and 16 conditions. A `escolha` (choice) detail needs options, and
+  each detail's group must be declared next to it.
+
+A plugin with a system **and** a PDF sheet closes the loop: use the system's
+groups and labels in the sheet, and the imported character lands right in the
+template.
+
 ## The plugin's section on the phone, and the button that reaches the GM
 
 The **public** half of what a plugin stores on the character can become a
@@ -955,7 +1089,7 @@ character).
 ATO20 speaks Portuguese and English, and from **API 7** on, plugins can too.
 Every piece of text the manifest declares for someone to read (the plugin's
 `nome` and `descricao`, the `titulo` of a panel, command, tool, layer, menu
-item, section, page, meter style, effect and setting, the setting
+item, section, page, meter style, effect, PDF sheet, system and setting, the setting
 `descricao`, the panel `subtitulo`,
 the command `grupo`, the effect `dica`, and the `rotulo` and `campo` of portrait
 sources) accepts a string, as always, **or a per-language map**:

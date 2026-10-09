@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::atomic::{read_json, write_json};
-use super::characters::{ajustar_condicao, Condicao, PatchCondicao};
+use super::characters::{ajustar_condicao, chave_do_nome, Condicao, PatchCondicao};
 use super::Vault;
 use crate::error::{AppError, AppResult};
 
@@ -76,6 +76,43 @@ pub fn adotar(vault: &Vault, novas: Vec<Condicao>) -> AppResult<()> {
     }
 
     save(vault, &modelos)
+}
+
+/// Junta as condicoes de um sistema ao cardapio da campanha, pelo nome. Ver
+/// `vault::sistema`.
+pub fn juntar(
+    vault: &Vault,
+    novas: &[crate::extensoes::CondicaoDoSistema],
+) -> AppResult<super::sistema::Juntados> {
+    let mut modelos = load(vault)?;
+    let mut juntados = super::sistema::Juntados::default();
+
+    for nova in novas {
+        let chave = chave_do_nome(&nova.nome);
+        if modelos.iter().any(|m| chave_do_nome(&m.nome) == chave) {
+            juntados.ja_havia += 1;
+        } else if modelos.len() >= MAX_MODELOS {
+            juntados.nao_couberam.push(nova.nome.trim().to_string());
+        } else {
+            let mut condicao = Condicao {
+                id: uuid::Uuid::new_v4().to_string(),
+                nome: nova.nome.clone(),
+                cor: nova.cor.clone(),
+                icone: nova.icone.clone().unwrap_or_default(),
+                efeito: nova.efeito.clone(),
+                escondido: false,
+            };
+            ajustar_condicao(&mut condicao);
+            modelos.push(condicao);
+            juntados.entraram += 1;
+        }
+    }
+
+    if juntados.entraram > 0 {
+        save(vault, &modelos)?;
+    }
+
+    Ok(juntados)
 }
 
 pub fn buscar(vault: &Vault, modelo_id: &str) -> AppResult<Condicao> {

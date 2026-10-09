@@ -15,6 +15,7 @@ pub mod migrar;
 pub mod mime;
 pub mod modelos;
 pub mod pacote;
+pub mod sistema;
 pub mod variantes;
 pub mod players;
 pub mod session;

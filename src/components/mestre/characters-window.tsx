@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  FileInput,
   FileUp,
   FolderPlus,
   MoreVertical,
@@ -64,6 +65,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
 import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
+import { useImportarFichaPdf } from "@/components/mestre/importar-ficha-pdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -405,6 +407,18 @@ export function CharactersBody() {
   function abrirCriacao() {
     setNomeNovo("");
     setCriando(true);
+  }
+
+  // A ficha em PDF é o outro jeito de nascer: com nome, números e o PDF
+  // anexado. Termina no mesmo lugar do Criar, com a ficha aberta.
+  const importarFicha = useImportarFichaPdf((id) => {
+    recarregar();
+    abrir({ tipo: "personagem", personagemId: id });
+  });
+
+  function importarEmVezDeDigitar() {
+    setCriando(false);
+    importarFicha.iniciar();
   }
 
   /**
@@ -879,6 +893,10 @@ export function CharactersBody() {
             <Plus />
             {t.lista.criarPersonagem}
           </ContextMenuItem>
+          <ContextMenuItem onClick={importarFicha.iniciar}>
+            <FileInput />
+            {t.importarFicha.acao}
+          </ContextMenuItem>
           {/* As duas, porque o vazio não é de seção nenhuma: a pasta tem de
               saber de qual é para nascer no lugar certo. */}
           <ContextMenuItem onClick={() => criarPasta("npcs")}>
@@ -923,6 +941,20 @@ export function CharactersBody() {
           />
 
           <DialogFooter>
+            {/* A outra porta, no lugar onde se decide criar: quem tem a ficha
+                pronta não precisa digitar o nome que ela ja traz. A esquerda,
+                longe do Criar, porque nao e a acao principal do dialogo. */}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button variant="ghost" className="sm:mr-auto" onClick={importarEmVezDeDigitar}>
+                    <FileInput />
+                    {t.importarFicha.acao}
+                  </Button>
+                }
+              />
+              <TooltipContent className="max-w-64">{t.importarFicha.acaoDica}</TooltipContent>
+            </Tooltip>
             <Button variant="ghost" onClick={() => setCriando(false)}>
               {comum.cancelar}
             </Button>
@@ -934,6 +966,8 @@ export function CharactersBody() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {importarFicha.dialogo}
 
       {/* Pergunta antes, como a lixeira da ficha pergunta -- e pelo mesmo
           motivo: apagar cena ou imagem tem desfazer, isto nao tem. O menu de

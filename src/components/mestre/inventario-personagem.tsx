@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -430,6 +431,8 @@ function ItemTile({
   }
 
   async function apagar() {
+    if (!(await confirmarItem(item.nome))) return;
+
     try {
       await removeItem(personagemId, item.id);
       onChanged();
@@ -935,6 +938,8 @@ function ItemForm({
   }
 
   async function apagar() {
+    if (!(await confirmarItem(item.nome))) return;
+
     try {
       await removeItem(personagem.id, item.id);
       onChanged();
@@ -1138,4 +1143,12 @@ function TransmitirItem({
       </TooltipContent>
     </Tooltip>
   );
+}
+
+/** As duas lixeiras do item, a da linha e a do editor, perguntam igual. */
+function confirmarItem(nome: string): Promise<boolean> {
+  return confirmarApagar({
+    titulo: t.inventario.apagarTitulo(nome),
+    itens: t.inventario.apagarItens(nome),
+  });
 }

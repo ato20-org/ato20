@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use super::atomic::{read_json, write_json};
-use super::characters::{ajustar_atributo, Atributo, MAX_ATRIBUTOS};
+use super::characters::{ajustar_atributo, chave_do_nome, Atributo, MAX_ATRIBUTOS};
 use super::Vault;
 use crate::error::{AppError, AppResult};
 
@@ -106,6 +106,41 @@ pub fn criar(vault: &Vault, sigla: &str, valor: i64, descricao: Option<&str>) ->
     save(vault, &modelos)?;
 
     Ok(modelo)
+}
+
+/// Junta os atributos de um sistema aos da campanha. A sigla que ja existe
+/// fica como esta, e o que passa do teto fica de fora. Ver `vault::sistema`.
+pub fn juntar(
+    vault: &Vault,
+    novos: &[crate::extensoes::AtributoDoSistema],
+) -> AppResult<super::sistema::Juntados> {
+    let mut modelos = load(vault)?;
+    let mut juntados = super::sistema::Juntados::default();
+
+    for novo in novos {
+        let chave = chave_do_nome(&novo.sigla);
+        if modelos.iter().any(|m| chave_do_nome(&m.sigla) == chave) {
+            juntados.ja_havia += 1;
+        } else if modelos.len() >= MAX_MODELOS {
+            juntados.nao_couberam.push(novo.sigla.trim().to_string());
+        } else {
+            let mut modelo = Modelo {
+                id: uuid::Uuid::new_v4().to_string(),
+                sigla: novo.sigla.clone(),
+                valor: novo.valor,
+                descricao: novo.descricao.clone(),
+            };
+            modelo.ajustar();
+            modelos.push(modelo);
+            juntados.entraram += 1;
+        }
+    }
+
+    if juntados.entraram > 0 {
+        save(vault, &modelos)?;
+    }
+
+    Ok(juntados)
 }
 
 /// O que se pode trocar num modelo. Ausente nao mexe.

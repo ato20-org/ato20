@@ -316,6 +316,8 @@ pub fn run() {
             commands::importar_ler_pasta,
             commands::importar_ler_arquivos,
             commands::importar_identificar,
+            commands::ficha_pdf_ler,
+            commands::sistema_aplicar,
             commands::estante_pagina,
             commands::estante_remover,
             commands::estante_abrir,

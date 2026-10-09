@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
 import { aoTeclar, useMarcarAoFocar } from "@/components/mestre/atributos-personagem";
 import { IconeD20 } from "@/components/mestre/icone-d20";
 import { RolagemDoDetalhe } from "@/components/mestre/rolagem-do-detalhe";
@@ -204,6 +205,13 @@ function GrupoDaFicha({
   }
 
   async function apagar(detalheId: string) {
+    const rotulo = lista.find((detalhe) => detalhe.id === detalheId)?.rotulo ?? "";
+    const confirmado = await confirmarApagar({
+      titulo: t.detalhes.apagarTitulo(rotulo),
+      itens: t.detalhes.apagarItens(rotulo),
+    });
+    if (!confirmado) return;
+
     try {
       await removerDetalhe(personagemId, detalheId);
       onChanged();

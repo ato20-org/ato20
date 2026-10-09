@@ -23,7 +23,7 @@ use crate::vault::dados_de_extensao;
 use crate::vault::{
     assets,
     atributos, detalhes, documentos, board, characters, condicoes, efeitos, modelos, players, session,
-    variantes, zip,
+    sistema, variantes, zip,
     CampaignInfo,
     Vault,
 };
@@ -1330,6 +1330,57 @@ fn aplicar_atributos(vault: &Vault, lista: &[atributos::Modelo]) -> AppResult<us
 }
 
 /// Edita um atributo de fabrica. NAO mexe nas fichas -- ver `vault::atributos`.
+/// Aplica um sistema de plugin na campanha aberta. Ver `vault::sistema`.
+///
+/// O sistema e lido do DISCO, pelo id, e nao recebido da tela: o que entra na
+/// campanha e o que o Rust validou na instalacao, e nao o que a webview diz
+/// que o plugin declara.
+///
+/// `nosPersonagens` e o "aplicar em todos" das tres listas que vivem na ficha
+/// -- atributos, medidores e detalhes --, com tudo o que a campanha tem depois
+/// da juncao. As condicoes sao cardapio, e ficha nenhuma as tem de nascenca.
+#[tauri::command]
+pub fn sistema_aplicar(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] extensaoId: String,
+    #[allow(non_snake_case)] sistemaId: String,
+    #[allow(non_snake_case)] nosPersonagens: bool,
+) -> AppResult<sistema::Aplicado> {
+    let sistema = extensoes::listar(&state.extensoes)?
+        .into_iter()
+        .find(|manifesto| manifesto.id == extensaoId)
+        .and_then(|manifesto| {
+            manifesto
+                .contribui
+                .sistemas
+                .into_iter()
+                .find(|sistema| sistema.id == sistemaId)
+        })
+        .ok_or_else(|| {
+            AppError::ExtensaoInvalida(crate::texto!(
+                "o plugin {extensaoId:?} nao tem o sistema {sistemaId:?} -- foi desinstalado?",
+                "the plugin {extensaoId:?} has no system {sistemaId:?}: was it uninstalled?"
+            ))
+        })?;
+
+    state.with_vault(|vault| {
+        let mut aplicado = sistema::aplicar(vault, &sistema)?;
+
+        if nosPersonagens {
+            aplicado.alcancados = [
+                aplicar_atributos(vault, &atributos::load(vault)?)?,
+                aplicar(vault, &modelos::load(vault)?)?,
+                detalhes::aplicar_em_todos(vault)?,
+            ]
+            .into_iter()
+            .max()
+            .unwrap_or(0);
+        }
+
+        Ok(aplicado)
+    })
+}
+
 #[tauri::command]
 pub fn atributo_da_campanha_editar(
     state: State<'_, AppState>,
@@ -2771,6 +2822,46 @@ pub async fn importar_ler_arquivos(caminhos: Vec<String>) -> AppResult<importar:
 #[tauri::command]
 pub async fn importar_identificar(caminhos: Vec<String>) -> AppResult<Vec<importar::Identidade>> {
     em_segundo_plano(move || Ok(importar::identificar(&caminhos))).await
+}
+
+/// O teto de uma ficha em PDF. A editavel mais pesada que se ve por ai, com
+/// arte em toda pagina, tem uns 7 MB; cinquenta e folga, e barra o livro
+/// inteiro escolhido por engano antes de ele atravessar o IPC.
+const FICHA_PDF_MAX: u64 = 50 * 1024 * 1024;
+
+/// Os bytes de uma ficha em PDF, para a tela ler o formulario. Quem le e o
+/// pdf.js, em `lib/fichas-pdf/`; aqui so o arquivo.
+///
+/// So PDF -- extensao E cabecalho -- e so ate `FICHA_PDF_MAX`. O caminho vem
+/// do seletor, mas o comando nao tem como saber disso, e sem a guarda ele
+/// entregaria a webview qualquer arquivo da maquina.
+#[tauri::command]
+pub async fn ficha_pdf_ler(caminho: String) -> AppResult<tauri::ipc::Response> {
+    em_segundo_plano(move || {
+        let caminho = PathBuf::from(caminho);
+        let e_pdf = caminho
+            .extension()
+            .and_then(|extensao| extensao.to_str())
+            .is_some_and(|extensao| extensao.eq_ignore_ascii_case("pdf"));
+        if !e_pdf {
+            return Err(AppError::UnsupportedKind("so PDF".into()));
+        }
+
+        if std::fs::metadata(&caminho)?.len() > FICHA_PDF_MAX {
+            return Err(AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "o PDF e grande demais para ser uma ficha",
+            )));
+        }
+
+        let bytes = std::fs::read(&caminho)?;
+        if !bytes.starts_with(b"%PDF-") {
+            return Err(AppError::UnsupportedKind("so PDF".into()));
+        }
+
+        Ok(tauri::ipc::Response::new(bytes))
+    })
+    .await
 }
 
 // --- documentos do quadro ------------------------------------------------

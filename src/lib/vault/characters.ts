@@ -611,6 +611,11 @@ export async function attachToCharacter(
   const paths = Array.isArray(escolhidos) ? escolhidos : [escolhidos];
   if (paths.length === 0) return null;
 
+  return anexarCaminhos(id, paths);
+}
+
+/** O mesmo, com os caminhos já escolhidos: a ficha em PDF que virou o personagem. */
+export function anexarCaminhos(id: string, paths: string[]): Promise<AnexoImport> {
   return call<AnexoImport>("character_attach", { id, paths });
 }
 
