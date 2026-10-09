@@ -243,6 +243,10 @@ const pt = {
     detalhes: {
       titulo: "Detalhes da ficha",
       nota: "Os grupos da ficha e os detalhes com que todo personagem novo nasce. Para pôr nos que já existem, use a varinha.",
+      rolavel: (rotulo: string) => `${rotulo} rola`,
+      naoRolavel: (rotulo: string) => `Fazer ${rotulo} rolar`,
+      rolavelDica:
+        "Com o d20 ligado, a ficha mostra a rolagem: cada personagem escreve a dele, como 1d20+5, e um clique rola na mesa. Vale na hora para as fichas que já existem.",
       novoGrupo: "Novo grupo",
       grupoNovo: "Grupo",
       limiteDeGrupos: (maximo: number) => `${maximo} grupos é o limite.`,
@@ -585,13 +589,16 @@ const pt = {
   paleta: {
     titulo: "Paleta de comandos",
     descricao:
-      "Digite para achar uma janela, cena, livro, imagem ou atalho. Uma notação como 2d6 joga dados na mesa.",
-    placeholder: "Janela, cena, livro, imagem, atalho… ou 2d6",
+      "Digite para achar uma janela, cena, livro, imagem, atalho ou a rolagem de uma ficha. Uma expressão como 1d20+5 joga dados na mesa.",
+    placeholder: "Janela, cena, livro, imagem, atalho… ou 1d20+5",
     comando: "Comando",
     nada: "Nada com esse nome.",
     dados: "Dados",
     rolar: (notacao: string) => `Rolar ${notacao}`,
     naMesa: "na mesa",
+    rolagens: "Rolagens das fichas",
+    rolarDe: (rotulo: string, personagem: string) => `Rolar ${rotulo} de ${personagem}`,
+    buscaRolagem: (rotulo: string, personagem: string) => `rolar ${rotulo} ${personagem}`,
     cenas: "Cenas",
     transmitirAtual: "Transmitir a cena atual",
     buscaTransmitirAtual: (nome: string) => `transmitir a cena atual ${nome}`,
@@ -1142,6 +1149,10 @@ const en: typeof pt = {
     detalhes: {
       titulo: "Sheet details",
       nota: "The sheet's groups and the details every new character starts with. To add them to existing characters, use the wand.",
+      rolavel: (rotulo) => `${rotulo} rolls`,
+      naoRolavel: (rotulo) => `Make ${rotulo} roll`,
+      rolavelDica:
+        "With the d20 on, the sheet shows the roll: each character writes their own, like 1d20+5, and one click rolls it on the table. It applies right away to existing sheets.",
       novoGrupo: "New group",
       grupoNovo: "Group",
       limiteDeGrupos: (maximo) => `${maximo} groups is the limit.`,
@@ -1470,13 +1481,16 @@ const en: typeof pt = {
   paleta: {
     titulo: "Command palette",
     descricao:
-      "Type to find a window, scene, book, image or shortcut. A notation like 2d6 rolls dice at the table.",
-    placeholder: "Window, scene, book, image, shortcut… or 2d6",
+      "Type to find a window, scene, book, image, shortcut or a sheet roll. An expression like 1d20+5 rolls dice at the table.",
+    placeholder: "Window, scene, book, image, shortcut… or 1d20+5",
     comando: "Command",
     nada: "Nothing by that name.",
     dados: "Dice",
     rolar: (notacao) => `Roll ${notacao}`,
     naMesa: "at the table",
+    rolagens: "Sheet rolls",
+    rolarDe: (rotulo, personagem) => `Roll ${personagem}'s ${rotulo}`,
+    buscaRolagem: (rotulo, personagem) => `roll ${rotulo} ${personagem}`,
     cenas: "Scenes",
     transmitirAtual: "Put the current scene on air",
     buscaTransmitirAtual: (nome) => `put on air broadcast the current scene ${nome}`,

@@ -1,13 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Check, ChevronRight, GripVertical, MessageSquareText, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  GripVertical,
+  MessageSquareText,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
 import { aoTeclar, useMarcarAoFocar } from "@/components/mestre/atributos-personagem";
+import { IconeD20 } from "@/components/mestre/icone-d20";
+import { RolagemDoDetalhe } from "@/components/mestre/rolagem-do-detalhe";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -74,9 +92,12 @@ export function useDetalhesDaFicha(personagemId: string): DetalhesDaFicha {
  */
 export function GruposDeDetalhes({
   personagemId,
+  personagemNome,
   detalhes,
 }: {
   personagemId: string;
+  /** Para o fio dizer de quem é a rolagem: "Dante · Luta". */
+  personagemNome: string;
   detalhes: DetalhesDaFicha;
 }) {
   const molde = useMoldeDeDetalhes();
@@ -97,6 +118,7 @@ export function GruposDeDetalhes({
         <GrupoDaFicha
           key={grupo.id}
           personagemId={personagemId}
+          personagemNome={personagemNome}
           grupo={grupo}
           todos={lista}
           detalhes={lista.filter((detalhe) => chaveDoNome(detalhe.grupo) === chaveDoNome(grupo.nome))}
@@ -110,6 +132,7 @@ export function GruposDeDetalhes({
 
 function GrupoDaFicha({
   personagemId,
+  personagemNome,
   grupo,
   todos,
   detalhes,
@@ -117,6 +140,7 @@ function GrupoDaFicha({
   onChanged,
 }: {
   personagemId: string;
+  personagemNome: string;
   grupo: GrupoDeDetalhes;
   todos: Detalhe[];
   detalhes: Detalhe[];
@@ -130,6 +154,12 @@ function GrupoDaFicha({
 
   const lista = arrastada && arrastada.de === todos ? arrastada.lista : detalhes;
   const cheio = todos.length >= MAX_DETALHES;
+
+  // Quem rola é o molde, lido aqui, ao vivo: ligar o d20 na configuração
+  // aparece nesta ficha sem reescrevê-la. Ver `ModeloDeDetalhe.rolavel`.
+  const rolaveis = new Set(
+    modelos.filter((modelo) => modelo.rolavel).map((modelo) => chaveDoNome(modelo.rotulo)),
+  );
 
   const { listRef, dropIndex, startReorder } = useListReorder<string>((detalheId, index) => {
     const de = lista.findIndex((detalhe) => detalhe.id === detalheId);
@@ -230,12 +260,16 @@ function GrupoDaFicha({
               detalhe,
               editarRotulo: detalhe.id === novo,
               dropTarget: dropIndex === index,
-              onReorderStart: (evento: ReactPointerEvent) => startReorder(evento, detalhe.id),
+              onReorderStart: (evento: ReactPointerEvent) => {
+                if (pegaOCartao(evento)) startReorder(evento, detalhe.id, LIMIAR_DO_ARRASTO);
+              },
               onGravar: (patch: PatchDetalhe) => {
                 if (patch.rotulo !== undefined) setNovo(null);
                 void gravar(detalhe.id, patch);
               },
               onApagar: () => void apagar(detalhe.id),
+              rolavel: rolaveis.has(chaveDoNome(detalhe.rotulo)),
+              rotuloDaRolagem: `${personagemNome} · ${detalhe.rotulo}`,
             };
             return grupo.exibicao === "lista" ? (
               <EntradaDeLista key={detalhe.id} {...comum} />
@@ -249,6 +283,33 @@ function GrupoDaFicha({
   );
 }
 
+/**
+ * A mãozinha de arrastar no cartão, e o cursor de sempre no que ele não
+ * arrasta -- o mesmo conjunto de `pegaOCartao`. O cursor é HERDADO: sem
+ * devolver o de texto ao campo e o de botão aos botões, a mão apareceria em
+ * cima do valor e dos dados, prometendo um arrasto que eles não fazem.
+ */
+const CURSOR_DO_CARTAO =
+  "cursor-grab active:cursor-grabbing [&_input]:cursor-text [&_textarea]:cursor-text [&_[role='combobox']]:cursor-default [&_button:not([data-arrasta])]:cursor-default";
+
+/**
+ * Quantos pixels o ponteiro anda antes de o cartão virar arrasto. Abaixo
+ * disso é clique: o cartão inteiro é pegável, e o toque continua tocando.
+ */
+const LIMIAR_DO_ARRASTO = 4;
+
+/**
+ * Pegar o cartão em qualquer lugar arrasta, menos no que é de digitar ou de
+ * apertar: o campo do valor (selecionar o texto não pode levar o cartão
+ * junto), os dados, o menu. O botão que é o próprio cartão -- o nome da
+ * entrada de lista, que abre e fecha -- se marca com `data-arrasta`.
+ */
+function pegaOCartao(evento: ReactPointerEvent): boolean {
+  return !(evento.target as Element).closest(
+    "input, textarea, select, [contenteditable='true'], [role='combobox'], button:not([data-arrasta])",
+  );
+}
+
 type PropsDaLinha = {
   detalhe: Detalhe;
   editarRotulo: boolean;
@@ -256,6 +317,9 @@ type PropsDaLinha = {
   onReorderStart: (evento: ReactPointerEvent) => void;
   onGravar: (patch: PatchDetalhe) => void;
   onApagar: () => void;
+  /** O molde liga o d20 deste detalhe. */
+  rolavel: boolean;
+  rotuloDaRolagem: string;
 };
 
 /** Some até o cursor entrar na linha; fica enquanto o popover dela está aberto. */
@@ -337,19 +401,32 @@ function Lapis({ rotulo, ativo = false, onClick }: { rotulo: string; ativo?: boo
  * números soltos, sem dizer qual número é de quem. A alça, o balão e a
  * lixeira aparecem sob o cursor, nos cantos.
  */
-function LinhaDeDetalhe({ detalhe, editarRotulo, dropTarget, onReorderStart, onGravar, onApagar }: PropsDaLinha) {
-  /** O nome em edição: pelo lápis, ou porque o detalhe acabou de nascer. */
+function LinhaDeDetalhe({
+  detalhe,
+  editarRotulo,
+  dropTarget,
+  onReorderStart,
+  onGravar,
+  onApagar,
+  rolavel,
+  rotuloDaRolagem,
+}: PropsDaLinha) {
+  /** O nome em edição: pelo menu, ou porque o detalhe acabou de nascer. */
   const [editando, setEditando] = useState(editarRotulo);
+  const [descricaoAberta, setDescricaoAberta] = useState(false);
+  const [editandoRolagem, setEditandoRolagem] = useState(false);
+  const menu = useDepoisDoMenu();
 
   return (
     <li
+      onPointerDown={onReorderStart}
       className={cn(
         "group/detalhe bg-muted/40 focus-within:border-ring flex min-w-0 flex-col rounded-md border px-1.5 pt-1 pb-1",
+        CURSOR_DO_CARTAO,
         dropTarget && "ring-primary ring-1",
       )}
     >
       <div className="flex min-w-0 items-center gap-0.5">
-        <Alca onReorderStart={onReorderStart} />
         {editando ? (
           <CampoDeTexto
             valor={detalhe.rotulo}
@@ -362,35 +439,124 @@ function LinhaDeDetalhe({ detalhe, editarRotulo, dropTarget, onReorderStart, onG
             className="border-input w-full min-w-0 border px-0.5 text-[11px]"
           />
         ) : (
-          <span className="text-muted-foreground min-w-0 flex-1 truncate px-0.5 text-[11px]" title={detalhe.rotulo}>
+          // A descrição no `title` do nome: o balão que a mostrava saiu do
+          // cartão (está no ⋮), e quem passa o mouse ainda a lê.
+          <span
+            className="text-muted-foreground min-w-0 flex-1 truncate px-0.5 text-[11px]"
+            title={detalhe.descricao ? `${detalhe.rotulo}\n${detalhe.descricao}` : detalhe.rotulo}
+          >
             {detalhe.rotulo}
           </span>
         )}
-        <Lapis
-          rotulo={t.detalhes.renomear(detalhe.rotulo)}
-          ativo={editando}
-          onClick={() => {
-            if (editando) {
-              soltarFoco();
-              setEditando(false);
-            } else {
-              setEditando(true);
-            }
-          }}
-        />
         <DescricaoDoDetalhe
           rotulo={detalhe.rotulo}
           descricao={detalhe.descricao}
-          sempre
+          soAncora
+          aberto={descricaoAberta}
+          onAberto={setDescricaoAberta}
           onGravar={(descricao) => onGravar({ descricao })}
         />
-        <Lixeira rotulo={detalhe.rotulo} sempre onApagar={onApagar} />
+        <MenuDoDetalhe rotulo={detalhe.rotulo} aoFechar={menu.aoFechar}>
+          <DropdownMenuItem onClick={menu.depois(() => setEditando(true))}>
+            <Pencil />
+            {t.detalhes.menu.renomear}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={menu.depois(() => setDescricaoAberta(true))}>
+            <MessageSquareText />
+            {t.detalhes.menu.descricao}
+          </DropdownMenuItem>
+          {rolavel ? (
+            <DropdownMenuItem onClick={menu.depois(() => setEditandoRolagem(true))}>
+              <IconeD20 />
+              {detalhe.rolagem ? t.detalhes.menu.editarRolagem : t.detalhes.menu.escreverRolagem}
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={menu.depois(onApagar)}>
+            <Trash2 />
+            {t.detalhes.menu.apagar}
+          </DropdownMenuItem>
+        </MenuDoDetalhe>
       </div>
-      <div className="flex min-w-0 items-center">
+      <div className="flex min-w-0 items-center gap-0.5">
         <ValorDoDetalhe detalhe={detalhe} onGravar={(valor) => onGravar({ valor })} />
+        {rolavel ? (
+          <RolagemDoDetalhe
+            detalhe={detalhe}
+            rotulo={rotuloDaRolagem}
+            onGravar={(rolagem) => onGravar({ rolagem })}
+            editando={editandoRolagem}
+            onEditando={setEditandoRolagem}
+            semLapis
+          />
+        ) : null}
       </div>
     </li>
   );
+}
+
+/**
+ * Os três pontinhos do detalhe: renomear, descrever, a rolagem e apagar.
+ *
+ * Num menu, e não em quatro botões à vista: o cartão é pequeno, e o lápis,
+ * o balão, a lixeira e o lápis da rolagem disputavam o lugar com o valor, que
+ * é o que se lê. Aparece sob o cursor, como a alça.
+ */
+function MenuDoDetalhe({
+  rotulo,
+  aoFechar,
+  children,
+}: {
+  rotulo: string;
+  aoFechar: (aberto: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <DropdownMenu onOpenChangeComplete={aoFechar}>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t.detalhes.opcoes(rotulo)}
+            className={cn(
+              "text-muted-foreground hover:text-foreground size-5 shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+              SO_NA_LINHA,
+            )}
+          >
+            <MoreVertical />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-48">
+        {children}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * O que um item do menu pede, feito DEPOIS de o menu fechar.
+ *
+ * O menu devolve o foco ao botão quando fecha, e o campo que o item abriu --
+ * o nome, a rolagem, a descrição -- nasceria e perderia o foco no mesmo
+ * quadro. É o `useRenomearPeloMenu`, para mais de um item.
+ */
+function useDepoisDoMenu() {
+  const pendente = useRef<(() => void) | null>(null);
+
+  return {
+    depois: (acao: () => void) => () => {
+      pendente.current = acao;
+    },
+    aoFechar: (aberto: boolean) => {
+      if (aberto || !pendente.current) return;
+
+      const acao = pendente.current;
+      pendente.current = null;
+      acao();
+    },
+  };
 }
 
 /**
@@ -401,23 +567,36 @@ function LinhaDeDetalhe({ detalhe, editarRotulo, dropTarget, onReorderStart, onG
  * Uma caixa de digitar sempre aberta fazia a entrada parecer um formulário
  * vazio, mesmo quando o texto já estava lá.
  */
-function EntradaDeLista({ detalhe, editarRotulo, dropTarget, onReorderStart, onGravar, onApagar }: PropsDaLinha) {
+function EntradaDeLista({
+  detalhe,
+  editarRotulo,
+  dropTarget,
+  onReorderStart,
+  onGravar,
+  onApagar,
+  rolavel,
+  rotuloDaRolagem,
+}: PropsDaLinha) {
   const [aberta, setAberta] = useState(editarRotulo);
-  /** Nome, resumo e descrição em edição, pelo lápis do cabeçalho. */
+  /** Nome, resumo e descrição em edição, pelo menu do cabeçalho. */
   const [editando, setEditando] = useState(editarRotulo);
+  const [editandoRolagem, setEditandoRolagem] = useState(false);
+  const menu = useDepoisDoMenu();
   const resumo = detalhe.valor === undefined ? "" : String(detalhe.valor);
 
   return (
     <li
+      onPointerDown={onReorderStart}
       className={cn(
         "group/detalhe bg-muted/30 rounded-md border px-1.5 py-1",
+        CURSOR_DO_CARTAO,
         dropTarget && "ring-primary ring-1",
       )}
     >
       <div className="flex min-w-0 items-center gap-1.5">
-        <Alca onReorderStart={onReorderStart} />
         <button
           type="button"
+          data-arrasta
           aria-expanded={aberta}
           aria-label={aberta ? t.detalhes.fechar(detalhe.rotulo) : t.detalhes.abrir(detalhe.rotulo)}
           onClick={() => {
@@ -444,24 +623,55 @@ function EntradaDeLista({ detalhe, editarRotulo, dropTarget, onReorderStart, onG
             className="border-input min-w-0 flex-[3] border text-xs font-medium"
           />
         ) : null}
-        <Lapis
-          rotulo={t.detalhes.editarTexto(detalhe.rotulo)}
-          ativo={editando}
-          onClick={() => {
-            if (editando) {
+        {rolavel && !editando ? (
+          <RolagemDoDetalhe
+            detalhe={detalhe}
+            rotulo={rotuloDaRolagem}
+            onGravar={(rolagem) => onGravar({ rolagem })}
+            editando={editandoRolagem}
+            onEditando={setEditandoRolagem}
+            semLapis
+          />
+        ) : null}
+        {/* O ✓ só enquanto edita: é o "pronto" de quem escreveu o resumo e
+            a descrição. Fora disso, o que se faz com a entrada está no menu. */}
+        {editando ? (
+          <Lapis
+            rotulo={t.detalhes.editarTexto(detalhe.rotulo)}
+            ativo
+            onClick={() => {
               soltarFoco();
               setEditando(false);
-            } else {
-              setEditando(true);
-              setAberta(true);
-            }
-          }}
-        />
-        <Lixeira rotulo={detalhe.rotulo} sempre onApagar={onApagar} />
+            }}
+          />
+        ) : (
+          <MenuDoDetalhe rotulo={detalhe.rotulo} aoFechar={menu.aoFechar}>
+            <DropdownMenuItem
+              onClick={menu.depois(() => {
+                setEditando(true);
+                setAberta(true);
+              })}
+            >
+              <Pencil />
+              {t.detalhes.menu.editar}
+            </DropdownMenuItem>
+            {rolavel ? (
+              <DropdownMenuItem onClick={menu.depois(() => setEditandoRolagem(true))}>
+                <IconeD20 />
+                {detalhe.rolagem ? t.detalhes.menu.editarRolagem : t.detalhes.menu.escreverRolagem}
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={menu.depois(onApagar)}>
+              <Trash2 />
+              {t.detalhes.menu.apagar}
+            </DropdownMenuItem>
+          </MenuDoDetalhe>
+        )}
       </div>
 
       {aberta ? (
-        <div className="mt-1 pl-9">
+        <div className="mt-1 pl-5">
           {editando ? (
             <div className="space-y-1.5">
               <label className="block space-y-0.5">
@@ -665,15 +875,27 @@ export function DescricaoDoDetalhe({
   descricao,
   onGravar,
   sempre = false,
+  soAncora = false,
+  aberto,
+  onAberto,
 }: {
   rotulo: string;
   descricao: string | undefined;
   onGravar: (descricao: string) => void;
   /** Sempre à vista, e não só sob o cursor quando vazia: a tabela da configuração. */
   sempre?: boolean;
+  /**
+   * Sem botão à vista: quem abre é o menu da linha (`aberto`), e o botão fica
+   * só de âncora do balão, invisível. O cartão da ficha, que já tem o ⋮.
+   */
+  soAncora?: boolean;
+  aberto?: boolean;
+  onAberto?: (aberto: boolean) => void;
 }) {
+  const ancora = soAncora;
+
   return (
-    <Popover>
+    <Popover open={aberto} onOpenChange={onAberto}>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -683,10 +905,11 @@ export function DescricaoDoDetalhe({
                   variant="ghost"
                   size="icon-xs"
                   aria-label={t.detalhes.descricao(rotulo)}
+                  tabIndex={ancora ? -1 : undefined}
                   className={cn(
                     "size-5 shrink-0 [&_svg:not([class*='size-'])]:size-3",
                     descricao ? "text-foreground" : "text-muted-foreground",
-                    !descricao && !sempre && SO_NA_LINHA,
+                    ancora ? "pointer-events-none opacity-0" : !descricao && !sempre && SO_NA_LINHA,
                   )}
                 >
                   <MessageSquareText />

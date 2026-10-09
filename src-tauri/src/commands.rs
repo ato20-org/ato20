@@ -1451,6 +1451,13 @@ pub fn detalhes_da_campanha(state: State<'_, AppState>) -> AppResult<detalhes::M
     state.with_vault(|vault| detalhes::molde(vault))
 }
 
+/// Os detalhes que rolam, de todos os personagens, para a paleta de comandos.
+/// Ver `detalhes::rolagens`.
+#[tauri::command]
+pub fn detalhes_rolagens(state: State<'_, AppState>) -> AppResult<Vec<detalhes::RolagemDaFicha>> {
+    state.with_vault(detalhes::rolagens)
+}
+
 #[tauri::command]
 pub fn grupo_de_detalhes_criar(
     state: State<'_, AppState>,

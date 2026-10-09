@@ -238,6 +238,7 @@ pub fn run() {
             commands::detalhe_remover,
             commands::detalhes_reordenar,
             commands::detalhes_da_campanha,
+            commands::detalhes_rolagens,
             commands::grupo_de_detalhes_criar,
             commands::grupo_de_detalhes_editar,
             commands::grupo_de_detalhes_remover,

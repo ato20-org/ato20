@@ -7,6 +7,7 @@ import type {
   NovoDetalhe,
   PatchDetalhe,
   PatchGrupo,
+  RolagemDaFicha,
 } from "@/types/detalhe";
 
 /** Os detalhes da ficha. Ver `vault/detalhes.rs`. */
@@ -74,6 +75,11 @@ export function editarModeloDeDetalhe(
   patch: PatchDetalhe,
 ): Promise<{ modelo: ModeloDeDetalhe; fichas: number }> {
   return call("detalhe_da_campanha_editar", { modeloId, patch });
+}
+
+/** Os detalhes que rolam, de todos os personagens. Ver `detalhes::rolagens`. */
+export function listarRolagens(): Promise<RolagemDaFicha[]> {
+  return call<RolagemDaFicha[]>("detalhes_rolagens");
 }
 
 export function removerModeloDeDetalhe(modeloId: string): Promise<void> {
