@@ -116,12 +116,23 @@ export function MyCharacters({
   }, [codigo, versao]);
 
   if (personagens === null) {
-    return <p className="text-muted-foreground text-xs">{t.personagens.lendo}</p>;
+    return (
+      <p
+        className={cn("text-muted-foreground text-xs", secao === "tudo" && "pt-3")}
+      >
+        {t.personagens.lendo}
+      </p>
+    );
   }
 
   if (personagens.length === 0) {
     return (
-      <p className="text-muted-foreground text-xs leading-snug">
+      <p
+        className={cn(
+          "text-muted-foreground text-xs leading-snug",
+          secao === "tudo" && "pt-3",
+        )}
+      >
         {t.personagens.nenhum}
       </p>
     );
@@ -353,7 +364,7 @@ function CharacterCard({
   const medidores = personagem.medidores ?? [];
   const blocoDeMedidores =
     medidores.length > 0 ? (
-      <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
+      <section className="space-y-1.5">
         <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
           {t.personagens.medidores}
         </p>
@@ -385,7 +396,7 @@ function CharacterCard({
   const atributos = personagem.atributos ?? [];
   const blocoDeAtributos =
     atributos.length > 0 ? (
-      <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
+      <section className="space-y-1.5">
         <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
           {t.personagens.atributos}
         </p>
@@ -419,7 +430,7 @@ function CharacterCard({
   const condicoes = personagem.condicoes ?? [];
   const blocoDeCondicoes =
     condicoes.length > 0 ? (
-      <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
+      <section className="space-y-1.5">
         <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
           {t.personagens.condicoes}
         </p>
@@ -442,69 +453,68 @@ function CharacterCard({
    * próprio aqui, e nos dois lugares o mesmo arquivo aparecia duas vezes — uma
    * delas com um X que o jogador nem pode usar.
    */
-  const blocoDeArquivos =
+  const camposDeArquivo =
     personagem.ficha || personagem.retrato || personagem.miniatura ? (
-      <section className="bg-muted/20 space-y-1.5 rounded-lg border p-2">
-        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-          {t.personagens.arquivosDoPersonagem}
-        </p>
+      <ul className="flex flex-wrap items-start gap-2">
+        {personagem.ficha ? (
+          <li className="space-y-0.5">
+            <FichaTile
+              codigo={codigo}
+              personagemId={personagem.id}
+              arquivo={personagem.ficha}
+              onAbrir={abrirAnexo}
+            />
+            <span className="text-muted-foreground block text-[10px]">
+              {t.personagens.ficha}
+            </span>
+          </li>
+        ) : null}
 
-        <ul className="flex flex-wrap items-start gap-2">
-          {personagem.ficha ? (
-            <li className="space-y-0.5">
-              <FichaTile
-                codigo={codigo}
-                personagemId={personagem.id}
-                arquivo={personagem.ficha}
-                onAbrir={abrirAnexo}
-              />
+        {(
+          [
+            [t.personagens.retrato, personagem.retrato],
+            [t.personagens.miniatura, personagem.miniatura],
+          ] as const
+        )
+          .filter(([, assetId]) => Boolean(assetId))
+          .map(([titulo, assetId]) => (
+            <li key={titulo} className="space-y-0.5">
+              {/* 80px, e não os 56 de antes: isto é alvo de toque num celular,
+                  e o dedo médio cobre uns 45. Eles embrulham na coluna
+                  estreita em vez de encolher — o que não cabe desce, e
+                  continua clicável. */}
+              <button
+                type="button"
+                onClick={() => setZoom({ titulo, assetId: assetId! })}
+                aria-label={t.personagens.ampliar(titulo)}
+                className="bg-muted hover:bg-accent block size-20 overflow-hidden rounded border"
+              >
+                {/* A miniatura de 80px continua vindo da variante `mini`: o
+                    que amplia é o diálogo, e só ele paga o arquivo inteiro. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/asset/${assetId}/mini`}
+                  alt={titulo}
+                  draggable={false}
+                  className="size-full object-cover"
+                  {...MINIATURA}
+                />
+              </button>
               <span className="text-muted-foreground block text-[10px]">
-                {t.personagens.ficha}
+                {titulo}
               </span>
             </li>
-          ) : null}
-
-          {(
-            [
-              [t.personagens.retrato, personagem.retrato],
-              [t.personagens.miniatura, personagem.miniatura],
-            ] as const
-          )
-            .filter(([, assetId]) => Boolean(assetId))
-            .map(([titulo, assetId]) => (
-              <li key={titulo} className="space-y-0.5">
-                {/* 80px, e não os 56 de antes: isto é alvo de toque num celular,
-                    e o dedo médio cobre uns 45. Eles embrulham na coluna
-                    estreita em vez de encolher — o que não cabe desce, e
-                    continua clicável. */}
-                <button
-                  type="button"
-                  onClick={() => setZoom({ titulo, assetId: assetId! })}
-                  aria-label={t.personagens.ampliar(titulo)}
-                  className="bg-muted hover:bg-accent block size-20 overflow-hidden rounded border"
-                >
-                  {/* A miniatura de 80px continua vindo da variante `mini`: o
-                      que amplia é o diálogo, e só ele paga o arquivo inteiro. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/asset/${assetId}/mini`}
-                    alt={titulo}
-                    draggable={false}
-                    className="size-full object-cover"
-                    {...MINIATURA}
-                  />
-                </button>
-                <span className="text-muted-foreground block text-[10px]">
-                  {titulo}
-                </span>
-              </li>
-            ))}
-        </ul>
-      </section>
+          ))}
+      </ul>
     ) : null;
 
-  /** O que o mestre entregou, o que o jogador juntou, e o botão de mandar mais. */
-  const listaDeArquivos = (
+  /** Os campos com título próprio: é como a gaveta da tela deitada os mostra. */
+  const blocoDeArquivos = camposDeArquivo ? (
+    <Secao titulo={t.personagens.arquivosDoPersonagem}>{camposDeArquivo}</Secao>
+  ) : null;
+
+  /** O que o mestre entregou e o que o jogador juntou. */
+  const gruposDeArquivos = (
     <>
       {doMestre.length > 0 ? (
         <Grupo titulo={t.personagens.doMestre}>
@@ -593,19 +603,37 @@ function CharacterCard({
         ))}
 
         {meus.length === 0 && fila.length === 0 ? (
-          <li className="text-muted-foreground px-1 text-[11px] leading-snug">
+          <li className="text-muted-foreground text-[11px] leading-snug">
             {t.personagens.nadaAinda}
           </li>
         ) : null}
       </Grupo>
+    </>
+  );
 
-      <input
-        ref={entrada}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={(event) => void enviar(event.target.files)}
-      />
+  // Uma entrada só, fora dos grupos: a gaveta chama o seletor pelo botão do
+  // pé da lista, e o cartão em pé pelo do título da seção.
+  const entradaDeArquivo = (
+    <input
+      ref={entrada}
+      type="file"
+      multiple
+      className="hidden"
+      onChange={(event) => void enviar(event.target.files)}
+    />
+  );
+
+  const iconeDeEnvio = enviando ? (
+    <Loader2 className="animate-spin" />
+  ) : (
+    <Paperclip />
+  );
+
+  /** A gaveta dos arquivos: os grupos e o botão de mandar mais embaixo. */
+  const listaDeArquivos = (
+    <>
+      {gruposDeArquivos}
+      {entradaDeArquivo}
 
       <Button
         variant="secondary"
@@ -614,7 +642,7 @@ function CharacterCard({
         disabled={enviando}
         onClick={() => entrada.current?.click()}
       >
-        {enviando ? <Loader2 className="animate-spin" /> : <Paperclip />}
+        {iconeDeEnvio}
         {t.personagens.enviarArquivo}
       </Button>
     </>
@@ -679,71 +707,117 @@ function CharacterCard({
     );
   }
 
+  // O cartão da tela em pé, SEM moldura: o painel já é a moldura, e cada caixa
+  // a mais por dentro comia largura do celular e repetia a mesma borda três
+  // vezes, uma dentro da outra. As seções se separam pelo título e por uma
+  // linha fina.
   return (
-    <section className="space-y-4 rounded-lg border p-3">
-      {/* O cartão da tela em pé: o token à esquerda, atravessando as linhas, e o
-          nome, os arquivos e o inventário do lado.
+    <section>
+      {/* Preso no alto do painel enquanto se rola: é o nome que diz de quem é o
+          inventário lá embaixo. Com dois personagens, o do segundo empurra o do
+          primeiro para fora, porque cada um só prende dentro do próprio cartão.
+          Puxado até as bordas para o fundo cobrir o que passa por baixo. */}
+      <h3 className="bg-background sticky top-0 z-10 -mx-3 truncate border-b px-3 py-2 text-lg leading-tight font-semibold">
+        {personagem.nome}
+      </h3>
 
-          Em grade e não em dois `flex`: é o que deixa o token ATRAVESSAR as
-          linhas. A ÚLTIMA linha, vazia, segura o espaçamento — sem ela a altura
-          que sobra da imagem era repartida entre as linhas ocupadas, e o nome
-          ficava boiando a uma mão de distância dos arquivos.
-
-          Seis linhas desde que as condições entraram, e cinco desde os
-          medidores: as `auto` que ninguém ocupa somem sozinhas, e é isso que
-          mantém o cartão de um personagem sem medidor nem condição igual ao
-          que ele era. Oito desde os atributos. */}
+      {/* O token à esquerda e o resto do personagem do lado. O inventário fica
+          na coluna da direita: sem medidor nem atributo, ela seria só o token
+          ao lado de um vão. Os quadros dele se medem pela largura que recebem,
+          e não ficam maiores que o próprio personagem. */}
       <div
         className={cn(
-          "grid items-start gap-x-3 gap-y-2",
-          heroi
-            ? "grid-cols-[minmax(5rem,8rem)_1fr] grid-rows-[auto_auto_auto_auto_auto_auto_auto_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]"
-            : "grid-cols-1",
+          "grid items-start gap-x-3 pt-3",
+          heroi &&
+            "grid-cols-[minmax(5rem,8rem)_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]",
         )}
       >
-        {/* Oito linhas desde os atributos -- ver a nota acima. */}
-        {retratoGrande("row-span-8 h-full")}
+        {retratoGrande("block")}
 
-        <h3 className="min-w-0 truncate text-2xl leading-tight font-semibold">
-          {personagem.nome}
-        </h3>
+        <div className={cn("min-w-0", PILHA)}>
+          {blocoDeCondicoes}
 
-        {blocoDeCondicoes}
+          {blocoDeMedidores}
 
-        {blocoDeMedidores}
+          {/* Depois dos medidores: eles mudam a cada turno e o atributo só na
+              hora de rolar, e o que se confere mais vem antes. */}
+          {blocoDeAtributos}
 
-        {/* Depois dos medidores: eles mudam a cada turno e o atributo só na
-            hora de rolar, e o que se confere mais vem antes. */}
-        {blocoDeAtributos}
+          {/* As seções dos plugins, entre os medidores e o inventário: são o
+              personagem em cena, como eles. Sem plugin o componente devolve
+              `null`, e a pilha não ganha linha. */}
+          <BlocosDePlugin codigo={codigo} personagemId={personagem.id} />
 
-        {/* As seções dos plugins, entre os medidores e os arquivos: são o
-            personagem em cena, como eles. Sem plugin o componente devolve
-            `null`, e a grade não ganha item nem linha. */}
-        <BlocosDePlugin
-          codigo={codigo}
-          personagemId={personagem.id}
-          className={cn(heroi && "col-start-2")}
-        />
-
-        {blocoDeArquivos}
-
-        {/* O inventário é do personagem, como a ficha e o token. Na coluna da
-            direita e com a mesma largura dos arquivos: passar por baixo do
-            token dava a ele a largura da tela inteira, e os quadros viravam
-            alvos maiores que o próprio personagem. */}
-        <div
-          className={cn(
-            "bg-muted/20 rounded-lg border p-2",
-            heroi && "col-start-2",
-          )}
-        >
           <InventarioJogador codigo={codigo} personagemId={personagem.id} />
         </div>
       </div>
 
-      {listaDeArquivos}
+      {/* Os arquivos todos numa seção só: a ficha que o mestre nomeou, o que ele
+          entregou e o que o jogador juntou. Eram dois lugares, um no alto e
+          outro no pé do cartão, e o botão de mandar ocupava a largura inteira
+          embaixo dos dois. */}
+      <Secao
+        className="mt-3 border-t pt-3"
+        titulo={t.ferramentas.arquivos}
+        acao={
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={enviando}
+            onClick={() => entrada.current?.click()}
+          >
+            {iconeDeEnvio}
+            {t.personagens.enviarArquivo}
+          </Button>
+        }
+      >
+        {camposDeArquivo}
+        {gruposDeArquivos}
+      </Secao>
+
+      {entradaDeArquivo}
 
       {visualizadores}
+    </section>
+  );
+}
+
+/**
+ * As seções empilhadas do cartão, com uma linha entre uma e outra.
+ *
+ * Linha só ENTRE as que aparecem: quem não tem medidor nem condição não ganha
+ * um traço sobrando no topo. O `null` de uma seção vazia não vira elemento, e é
+ * por isso que basta contar irmãos no CSS.
+ */
+const PILHA =
+  "divide-y [&>*:not(:first-child)]:pt-3 [&>*:not(:last-child)]:pb-3";
+
+/**
+ * Uma seção do cartão: o título à esquerda e, quando há, a ação à direita.
+ *
+ * O mesmo cabeçalho do inventário, que já punha o "+ Item" ali. Botão no título
+ * e não no pé: com a lista comprida, o pé fica a uma rolagem de distância.
+ */
+function Secao({
+  titulo,
+  acao,
+  className,
+  children,
+}: {
+  titulo: string;
+  acao?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={cn("space-y-2", className)}>
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+          {titulo}
+        </p>
+        {acao}
+      </div>
+      {children}
     </section>
   );
 }

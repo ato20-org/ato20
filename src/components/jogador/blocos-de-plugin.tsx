@@ -72,15 +72,12 @@ export function BlocosDePlugin({
 
   if (ligadas.length === 0) return null;
 
-  // UM item da grade do cartão, com as seções empilhadas dentro: cada seção
-  // como item próprio quebraria a conta de linhas que o retrato atravessa.
+  // UM item da pilha do cartão, com as seções empilhadas dentro. Sem moldura,
+  // como as dos medidores e dos atributos: o título já separa uma da outra.
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-3", className)}>
       {ligadas.map(({ extensaoId, secao }) => (
-        <section
-          key={extensaoId}
-          className="bg-muted/20 space-y-1.5 rounded-lg border p-2"
-        >
+        <section key={extensaoId} className="space-y-1.5">
           <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
             {secao.titulo ?? extensaoId}
           </p>

@@ -30,7 +30,7 @@ import {
 } from "@/lib/player/inventory";
 import { cn } from "@/lib/utils";
 import type { ImagemItem, ItemInventario } from "@/types/inventory";
-import { chaveDaImagem, colunasPara, meuItem, vazios } from "@/types/inventory";
+import { chaveDaImagem, meuItem } from "@/types/inventory";
 
 /**
  * O inventário do personagem, no celular do jogador.
@@ -52,8 +52,6 @@ export function InventarioJogador({
 }) {
   const [itens, setItens] = useState<ItemInventario[] | null>(null);
   const [aberto, setAberto] = useState<ItemInventario | null>(null);
-
-  const [grade, colunas] = useColunas();
 
   const recarregar = useCallback(() => {
     myInventory(codigo, personagemId).then(setItens, () => setItens([]));
@@ -94,11 +92,11 @@ export function InventarioJogador({
         </Button>
       </div>
 
-      <div
-        ref={grade}
-        className="grid gap-1.5"
-        style={{ gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` }}
-      >
+      {/* Quantas colunas couberem com quadros de no mínimo 4rem: cinco num
+          celular em pé, mais na gaveta larga do tablet. O CSS mede sozinho
+          porque não há mais conta de vazios a casar com o número de colunas --
+          ver o quadro de adicionar abaixo. */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(4rem,1fr))] gap-1.5">
         {itens.map((item) => (
           <ItemTile
             key={item.id}
@@ -109,17 +107,17 @@ export function InventarioJogador({
           />
         ))}
 
-        {Array.from({ length: vazios(itens.length, colunas) }, (_, n) => (
-          <button
-            key={`vazio-${n}`}
-            type="button"
-            onClick={() => void criar()}
-            aria-label={t.inventario.adicionar}
-            className="text-muted-foreground hover:text-foreground flex aspect-square items-center justify-center rounded border border-dashed"
-          >
-            <Plus className="size-4" aria-hidden />
-          </button>
-        ))}
+        {/* UM quadro de adicionar, no fim. Completar a última linha com
+            tracejados dava três quadrados vazios para um item só, e a seção
+            parecia maior que o que guardava. */}
+        <button
+          type="button"
+          onClick={() => void criar()}
+          aria-label={t.inventario.adicionar}
+          className="text-muted-foreground hover:text-foreground flex aspect-square items-center justify-center rounded border border-dashed"
+        >
+          <Plus className="size-4" aria-hidden />
+        </button>
       </div>
 
       <Dialog
@@ -503,40 +501,4 @@ function ItemForm({
       )}
     </>
   );
-}
-
-/**
- * Quantas colunas cabem na grade, medindo a própria grade.
- *
- * Por `ResizeObserver` e não por `media query`: quem manda é a largura do
- * ELEMENTO, e ela não é função da janela — o inventário está numa coluna que
- * divide espaço com o retrato do personagem, e a mesma tela dá larguras
- * diferentes conforme haja retrato ou não.
- *
- * O número também não pode ficar só no CSS: os quadros vazios que completam a
- * última linha são contados em JavaScript, e uma grade de quatro colunas com a
- * conta feita para três deixaria a fileira de baixo quebrada. Uma medida só,
- * usada pelos dois.
- *
- * Começa em três — o caso do celular em pé, que é a maioria — para a primeira
- * pintura não vir larga e encolher no quadro seguinte.
- */
-function useColunas(): [React.RefObject<HTMLDivElement | null>, number] {
-  const grade = useRef<HTMLDivElement>(null);
-  const [colunas, setColunas] = useState(3);
-
-  useEffect(() => {
-    const alvo = grade.current;
-    if (!alvo) return;
-
-    const observer = new ResizeObserver(([entrada]) => {
-      if (entrada) setColunas(colunasPara(entrada.contentRect.width));
-    });
-
-    observer.observe(alvo);
-
-    return () => observer.disconnect();
-  }, []);
-
-  return [grade, colunas];
 }

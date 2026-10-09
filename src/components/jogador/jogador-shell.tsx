@@ -501,7 +501,9 @@ function Painel({
   // esmaecer -- e que aqui também não serve, porque o problema não é a caixa
   // não rolar, é o conteúdo ser leitura.
   return (
-    <div className="h-full space-y-4 overflow-y-auto p-3 pb-10">
+    // Sem recuo no alto: o nome do personagem prende no topo da rolagem, e o
+    // recuo deixaria uma faixa de texto passando por cima dele.
+    <div className="h-full overflow-y-auto px-3 pb-10">
       <MyCharacters codigo={codigo} />
     </div>
   );
