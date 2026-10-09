@@ -155,7 +155,12 @@ function detectar(): Idioma {
   // O `next build` pré-renderiza as páginas, e lá não há janela. Português é
   // o que o HTML estático leva; quem pré-renderiza texto visível tem de
   // contar com isso -- ver `suppressHydrationWarning` no splash do Mestre.
-  if (typeof window === "undefined") return "pt-BR";
+  //
+  // Num worker também não há janela, mas o `typeof window` não avisa: o
+  // Turbopack troca por constante no pacote do cliente, e o worker é pacote do
+  // cliente. Daí o `document` lido de verdade -- sem ele, o forno do fogo
+  // morria na carga, calado, e nenhuma condição desenhava (1.2.0).
+  if (typeof window === "undefined" || !("document" in globalThis)) return "pt-BR";
 
   const tela = telaDe(location.pathname);
   const idioma = decidir({
