@@ -120,6 +120,7 @@ import type {
 import { doJogador } from "@/types/character";
 import { AparenciasPersonagem } from "@/components/mestre/aparencias-personagem";
 import { AtributosPersonagem } from "@/components/mestre/atributos-personagem";
+import { GruposDeDetalhes, useDetalhesDaFicha } from "@/components/mestre/detalhes-personagem";
 import { CondicoesPersonagem } from "@/components/mestre/condicoes-personagem";
 import { MedidoresPersonagem } from "@/components/mestre/medidores-personagem";
 
@@ -283,6 +284,7 @@ function Ficha({
     .map((jogador) => jogador.nome);
 
   const inventario = useInventarioDaFicha(personagem, relerAnexos);
+  const detalhes = useDetalhesDaFicha(personagem.id);
   const recebendo = useRecebendoItem(personagem.id);
   const soltos = soltosDe(anexos, personagem.ficha);
 
@@ -369,11 +371,15 @@ function Ficha({
               não montam numa ficha aberta para mexer na vida. */}
           <ScrollArea className="min-h-0 flex-1">
             <TabsContent value="ficha" className="p-3">
-              {/* Duas colunas a partir de 640: os números à esquerda, a
-                  aparência e a condição à direita. Iguais, e não a da esquerda
-                  mais larga: a linha de condição guarda lugar para o olho e a
-                  lixeira mesmo escondidos, e numa coluna estreita o nome dela
-                  virava três letras. Abaixo de 640, uma coluna. */}
+              {/* Duas colunas a partir de 640. À esquerda, o que o personagem
+                  É: atributos e, logo abaixo, os grupos de detalhes
+                  (Identidade, Perícias, Poderes), juntos porque se leem
+                  juntos. À direita, o que muda na mesa: medidores no topo,
+                  para vinte e oito perícias não empurrarem o PV para fora da
+                  vista, depois aparência e condição. Iguais, e não a da
+                  esquerda mais larga: a linha de condição guarda lugar para o
+                  olho e a lixeira mesmo escondidos. Abaixo de 640, uma
+                  coluna. */}
               <div className="grid gap-3 @[640px]/ficha:grid-cols-2">
                 <div className="min-w-0 space-y-3">
                   <AtributosPersonagem
@@ -381,13 +387,15 @@ function Ficha({
                     onChanged={onChanged}
                   />
 
+                  <GruposDeDetalhes personagemId={personagem.id} detalhes={detalhes} />
+                </div>
+
+                <div className="min-w-0 space-y-3">
                   <MedidoresPersonagem
                     personagem={personagem}
                     onChanged={onChanged}
                   />
-                </div>
 
-                <div className="min-w-0 space-y-3">
                   <AparenciasPersonagem
                     personagem={personagem}
                     onChanged={onChanged}

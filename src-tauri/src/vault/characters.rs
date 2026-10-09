@@ -466,7 +466,7 @@ fn save(vault: &Vault, personagens: &[Personagem]) -> AppResult<()> {
 /// daemon -- e um id que nao esta no indice nao deveria ganhar pasta. Sem isto,
 /// um pedido com id inventado criaria `personagens/<qualquer-coisa>/` e o
 /// diretorio ficaria la, orfao, sem nada no indice apontando para ele.
-fn exige(vault: &Vault, id: &str) -> AppResult<()> {
+pub(crate) fn exige(vault: &Vault, id: &str) -> AppResult<()> {
     if load(vault)?.iter().any(|p| p.id == id) {
         return Ok(());
     }

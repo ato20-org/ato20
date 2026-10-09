@@ -68,8 +68,9 @@ export function SecaoFicha({
 
   // O miolo de uma seção de fábrica pode ser trocado por um plugin -- é o
   // `secao:medidores` do manifesto. Só as de fábrica: a seção de um plugin já
-  // é dele. Sem plugin, isto é `children`.
-  const miolo = secao.startsWith("ext:") ? (
+  // é dele, e a de um grupo de detalhes é da campanha (o nome é dela). Sem
+  // plugin, isto é `children`.
+  const miolo = secao.startsWith("ext:") || secao.startsWith("det:") ? (
     children
   ) : (
     <Substituto alvo={`secao:${secao}`} personagemId={personagemId}>

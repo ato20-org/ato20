@@ -13,6 +13,7 @@ import {
 import {
   Gauge,
   Hash,
+  ListTree,
   Plus,
   Search,
   SlidersHorizontal,
@@ -31,6 +32,8 @@ import {
   useAtributosDaCampanha,
   type AtributosDaCampanhaLidos,
 } from "@/components/mestre/atributos-da-campanha";
+import { DetalhesDaCampanha } from "@/components/mestre/detalhes-da-campanha";
+import { useMoldeDeDetalhes } from "@/lib/store/use-molde-de-detalhes-store";
 import { EfeitosEmAreaDaCampanha } from "@/components/mestre/efeitos-em-area-da-campanha";
 import { toast } from "sonner";
 
@@ -99,6 +102,7 @@ const MAXIMO_INICIAL = 10;
 const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
   medidores: Gauge,
   atributos: Hash,
+  detalhes: ListTree,
   efeitos: Sparkles,
   espectador: Tv,
   ajustes: SlidersHorizontal,
@@ -136,6 +140,7 @@ export function ConfiguracaoDaCampanhaBody() {
   // montado para contar.
   const medidores = useModelosDaCampanha();
   const atributos = useAtributosDaCampanha();
+  const moldeDeDetalhes = useMoldeDeDetalhes();
   const { modelos: condicoes } = useCondicoesDaCampanha();
   const efeitosEmArea = useEfeitosEmAreaDaCampanha();
   const efeitosEmAreaDosPlugins = useEfeitosEmAreaDosPlugins();
@@ -155,6 +160,10 @@ export function ConfiguracaoDaCampanhaBody() {
     const achados = topicosAchados(busca, {
       medidores: (medidores.modelos ?? []).map((modelo) => modelo.nome),
       atributos: (atributos.modelos ?? []).map((modelo) => modelo.sigla),
+      detalhes: [
+        ...(moldeDeDetalhes?.grupos ?? []).map((grupo) => grupo.nome),
+        ...(moldeDeDetalhes?.modelos ?? []).map((modelo) => modelo.rotulo),
+      ],
       efeitos: [
         ...(condicoes ?? []).map((condicao) => condicao.nome),
         ...efeitosEmArea.map((efeito) => efeito.titulo),
@@ -178,6 +187,7 @@ export function ConfiguracaoDaCampanhaBody() {
     busca,
     medidores.modelos,
     atributos.modelos,
+    moldeDeDetalhes,
     condicoes,
     efeitosEmArea,
     efeitosEmAreaDosPlugins,
@@ -306,6 +316,8 @@ function Topico({
       return <MedidoresDaCampanha {...medidores} />;
     case "atributos":
       return <AtributosDaCampanha {...atributos} />;
+    case "detalhes":
+      return <DetalhesDaCampanha />;
     case "efeitos":
       return <EfeitosDaCampanha />;
     case "espectador":

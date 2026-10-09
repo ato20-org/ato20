@@ -22,12 +22,14 @@ minha-campanha/
     c4d5.../
       _notas.json      a nota do personagem
       _inventario.json
+      _detalhes.json   Identidade, perícias, poderes: os detalhes da ficha
       _extensoes.json  os dados de cada plugin nesta ficha
       anexos/
         mestre/        o que o mestre anexou à ficha
         jogador/       o que o jogador anexou à ficha
   medidores.json       os modelos de medidor da campanha
   condicoes.json       o cardápio de condições
+  detalhes.json        o molde da ficha: grupos e detalhes de fábrica
   efeitos.json         os efeitos da campanha, de condição e de área
   retratos.json        quem está no ar, em que canto, de que tamanho
   trilha.json

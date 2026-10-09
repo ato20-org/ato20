@@ -7,6 +7,7 @@ describe("topicosAchados", () => {
     expect(topicosAchados("  ", {})).toEqual([
       "medidores",
       "atributos",
+      "detalhes",
       "efeitos",
       "espectador",
       "ajustes",
@@ -28,6 +29,10 @@ describe("topicosAchados", () => {
 
   it("acha os atributos pela sigla que o mestre criou", () => {
     expect(topicosAchados("vig", { atributos: ["VIG"] })).toEqual(["atributos"]);
+  });
+
+  it("acha os detalhes pelo grupo que o mestre criou", () => {
+    expect(topicosAchados("trilha", { detalhes: ["Identidade", "Trilha"] })).toEqual(["detalhes"]);
   });
 
   it("acha pelo que o mestre criou dentro do tópico", () => {

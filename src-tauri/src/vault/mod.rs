@@ -7,6 +7,7 @@ pub mod characters;
 pub mod condicoes;
 pub mod efeitos;
 pub mod dados_de_extensao;
+pub mod detalhes;
 pub mod documentos;
 pub mod fio;
 pub mod inventory;
