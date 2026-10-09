@@ -87,27 +87,6 @@ export type PatchItem = {
 /** Quantos itens cada AUTOR pode pôr num personagem. Espelha `MAX_ITENS_POR_AUTOR`. */
 export const MAX_ITENS_POR_AUTOR = 40;
 
-/**
- * Quantas colunas a grade tem, pela largura que ela recebeu.
- *
- * Não é um número fixo porque o inventário não tem uma largura: ele vive na
- * coluna da direita da ficha, ao lado do retrato, e essa coluna vale 280px num
- * celular em pé e o dobro num tablet deitado. Cinco colunas na estreita davam
- * quadros de 50px — pequenos demais para mostrar a imagem de um item e para o
- * polegar acertar; três na larga davam quadros do tamanho do retrato.
- *
- * Os cortes saem do QUADRO, e não da tela: o alvo é ficar na casa dos 90px, o
- * mesmo dos tiles de retrato e miniatura logo acima. É por isso que a medida
- * que entra aqui é a largura da grade, medida no próprio elemento, e não a da
- * janela — a mesma tela com o painel aberto ou fechado dá duas larguras.
- */
-export function colunasPara(largura: number): number {
-  if (largura >= 460) return 5;
-  if (largura >= 360) return 4;
-
-  return 3;
-}
-
 /** O jogador pode mexer neste item. */
 export function meuItem(item: ItemInventario): boolean {
   return item.autor === "jogador";
@@ -126,18 +105,4 @@ export function chaveDaImagem(imagem: ImagemItem | undefined): string {
   if (!imagem) return "vazio";
 
   return imagem.tipo === "asset" ? `asset:${imagem.id}` : `anexo:${imagem.autor}/${imagem.arquivo}`;
-}
-
-/**
- * Quantos slots vazios completam a última linha.
- *
- * O inventário é uma LISTA que cresce, e não N quadros fixos: slot fixo pediria
- * uma capacidade a configurar e deixaria buraco no meio quando um item saísse.
- * Aqui os vazios existem só para a última linha não ficar pela metade — e há
- * sempre ao menos um, que é onde se clica para adicionar.
- */
-export function vazios(quantos: number, colunas: number): number {
-  const sobra = quantos % colunas;
-
-  return sobra === 0 ? colunas : colunas - sobra;
 }
