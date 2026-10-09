@@ -359,7 +359,9 @@ export function NotaEditor({
           />
         )}
 
-        <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* `min-w-0`: sem ele, uma palavra sem espaço ou uma imagem larga
+            alargava a coluna por cima do painel ao lado. */}
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Fora da área que rola: a busca fica no canto enquanto o texto
             passa por baixo dela. */}
         {procura !== null ? (
@@ -386,7 +388,12 @@ export function NotaEditor({
             // que não se pode selecionar -- a busca achava e contava "1 de 1",
             // e a tela não mostrava nada. Só com a busca aberta, para o resto
             // do editor continuar como era. Ver `ProcurarNaNota`.
-            className={cn("mx-auto max-w-3xl", procura !== null && "select-text")}
+            className={cn(
+              // A altura da área toda, para a caixa do editor crescer até o
+              // fim dela: ver o `grow` em `EditorAoVivo`.
+              "mx-auto flex min-h-full max-w-3xl flex-col",
+              procura !== null && "select-text",
+            )}
           >
             {texto === undefined ? (
               <span className="text-muted-foreground italic">{t.geral.abrindo}</span>
@@ -1437,7 +1444,11 @@ export function EditorAoVivo({
       ref={caixa}
       data-nota-editor=""
       className={cn(
-        "min-h-full cursor-text rounded-md",
+        // `grow`, e não `min-h-full`: o pai só tem altura mínima, e o 100%
+        // dela não vale nada. A caixa é o alvo do arrasto e do clique, e ia só
+        // até a última linha -- soltar no vazio embaixo do texto não acendia.
+        // `break-words` como na leitura (`MarkdownView`).
+        "grow cursor-text rounded-md break-words",
         // Acende enquanto algo arrastado está por cima: é o que diz "solte aqui".
         sobreNota && "ring-primary/60 bg-primary/5 ring-2",
       )}
